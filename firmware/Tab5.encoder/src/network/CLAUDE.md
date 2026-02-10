@@ -7,58 +7,79 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #11456 | 8:58 AM | 🟣 | Tab5 Encoder Zone Speed Parameters Implemented | ~770 |
-| #11407 | 8:53 AM | 🔵 | WebSocketClient Implements Rate-Limited Bidirectional Protocol with WiFi Stub Pattern | ~629 |
-| #11106 | 4:35 AM | 🔵 | Tab5 WebSocket Message Router Supports Multi-Zone LED Control | ~486 |
-| #11094 | 4:29 AM | ✅ | WiFi Conditional Compilation Added to WiFiManager | ~443 |
+| #12043 | 11:16 PM | ✅ | WsMessageRouter Header Dependency Update | ~312 |
+| #12042 | " | 🔵 | WsMessageRouter for Incoming WebSocket Message Handling | ~368 |
+| #12041 | 11:15 PM | 🟣 | Added Color Correction Config Handler to WsMessageRouter | ~402 |
+| #12040 | " | ✅ | Added colorCorrection.getConfig message routing to WsMessageRouter | ~287 |
+| #12038 | 11:14 PM | 🟣 | Added automatic color correction config request on WebSocket connection | ~328 |
+| #12037 | 11:13 PM | 🟣 | Tab5 Encoder Color Correction WebSocket Client Methods | ~433 |
+| #12036 | 11:12 PM | ✅ | Added color correction stub methods to WebSocketClient for non-WiFi builds | ~415 |
+| #12033 | " | 🟣 | Added ColorCorrectionState Struct to WebSocketClient Header | ~443 |
+| #12016 | 11:05 PM | 🔵 | Complete Integration Gap Analysis for Color Correction Parameters | ~488 |
+| #12001 | " | 🔵 | WebSocket Client Rate Limiting and Debugging Instrumentation | ~431 |
+| #11992 | 10:59 PM | 🔵 | WebSocketClient provides 18 send methods for parameter and zone commands | ~444 |
+| #11921 | 10:09 PM | 🔵 | ParameterHandler and DualEncoderService are separate, coupled systems | ~401 |
+| #11882 | 7:10 PM | 🔵 | WiFiManager Implementation with mDNS Service Discovery and Error Handling | ~647 |
+
+### Jan 28, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #22203 | 4:20 AM | 🔵 | Tab5 Communicates with v2 Device via HTTP REST API and WebSocket | ~403 |
+| #22202 | " | 🔵 | Tab5.encoder Uses HTTP Client for Network Communication | ~353 |
 
 ### Jan 30, 2026
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #23403 | 9:39 AM | 🟣 | DeviceRegistry Implementation for Multi-Device Management | ~1115 |
-| #23395 | 9:36 AM | 🟣 | Multi-Device Registry with Fingerprinting and NVS Persistence | ~949 |
-| #23388 | 9:28 AM | ⚖️ | Integration Plan for Device Selection UI in Tab5.encoder | ~939 |
-| #23322 | 9:21 AM | 🔵 | Tab5 Encoder WiFi Manager State Machine | ~915 |
-| #23207 | 7:33 AM | ⚖️ | Three-Part Implementation Plan: Dashboard API Fix, Beat Detection Diagnostic, Multi-Device Control | ~784 |
-| #23186 | 7:26 AM | 🔵 | Tab5 Encoder WebSocket Protocol and Zone Control | ~860 |
-| #23169 | " | 🔵 | Tab5 WiFiManager Header with Stub Compatibility Layer | ~524 |
-| #23134 | 7:11 AM | 🔵 | Tab5 Encoder HTTP Client Architecture | ~653 |
-| #23131 | " | 🔵 | Tab5 Encoder WiFi Manager Implementation with mDNS Resolution | ~483 |
+| #23937 | 6:14 PM | 🔄 | Tab5 Encoder Device Registry Removal | ~396 |
+| #23414 | 9:48 AM | 🟣 | DeviceRegistry Implementation Added to Tab5 Encoder | ~408 |
+| #23406 | 9:40 AM | 🔵 | Tab5 WebSocket Client Architecture | ~446 |
+| #23401 | 9:38 AM | 🔵 | DeviceRegistry Manages Multi-Device Discovery with NVS Persistence and Background Fingerprinting | ~710 |
+| #23399 | 9:37 AM | ✅ | Removed Unused network_config.h Include from DeviceRegistry | ~229 |
+| #23398 | " | 🔵 | Tab5 DeviceRegistry for Multi-Device Discovery and Selection | ~376 |
+| #23393 | 9:33 AM | 🔵 | HttpClient Multi-Strategy Device Discovery | ~712 |
+| #23369 | 9:24 AM | 🔵 | Tab5 HttpClient REST API and Discovery Architecture | ~883 |
+| #23347 | 9:23 AM | 🔵 | Tab5 WebSocket Client with Zone Support and Send Queue Architecture | ~890 |
+| #23345 | " | 🔵 | Tab5 WiFiManager Implements Non-Blocking Connection with mDNS Resolution | ~545 |
+| #23344 | " | 🔵 | Tab5 HttpClient for LightwaveOS REST API Integration | ~451 |
+| #23341 | 9:22 AM | 🔵 | Tab5 Encoder HttpClient Multi-Tier Device Discovery Architecture | ~1217 |
+| #23340 | " | 🔵 | Tab5 Encoder Complete Architecture and Device Selection Integration Points | ~1088 |
+| #23336 | 9:21 AM | 🔵 | Tab5.encoder WebSocket Client Protocol | ~624 |
+| #23332 | " | 🔵 | Tab5 Encoder HTTP Client for v2 Device REST API | ~484 |
+| #23330 | " | 🔵 | WsMessageRouter Routes WebSocket Messages to Tab5 Subsystems | ~651 |
+| #23317 | " | 🔵 | Tab5 Encoder WebSocket Client Architecture | ~669 |
+| #23314 | " | 🔵 | Tab5 WiFiManager State Machine with mDNS Resolution | ~606 |
+| #23200 | 7:29 AM | ⚖️ | Tab5 Multi-Device Selector Architecture Design | ~866 |
+| #23154 | 7:18 AM | 🔵 | Tab5 Encoder Device Discovery Architecture | ~530 |
+| #23137 | 7:11 AM | 🔵 | Tab5.encoder WebSocket Client for LightwaveOS Communication | ~431 |
 
 ### Feb 5, 2026
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #25536 | 11:55 PM | 🔵 | Tab5 requests color correction config on WebSocket connect and via throttled UI retries | ~522 |
-| #25534 | " | 🔵 | Tab5 WebSocket heartbeat parameters adjusted to 30-second intervals | ~453 |
-| #25523 | 11:38 PM | 🔵 | WiFi AUTH_EXPIRE root cause identified: auth mode mismatch between ESP32-S3 AP and ESP32-P4 STA | ~555 |
-| #25521 | 11:37 PM | ✅ | WebSocket heartbeat parameters adjusted to more conservative values | ~445 |
-| #25507 | 11:29 PM | 🟣 | WebSocket heartbeat added to attemptReconnect() in Tab5 firmware | ~433 |
-| #25506 | " | 🟣 | WebSocket heartbeat added to IP-based connection method in Tab5 | ~394 |
-| #25497 | 10:14 PM | 🔵 | Tab5 AP disconnection root cause identified: WebSocket port mismatch and heartbeat timeout | ~536 |
-| #25492 | 10:13 PM | 🔵 | Tab5 WebSocket heartbeat fully implemented across all connection methods | ~407 |
-| #25462 | 9:37 PM | ✅ | Portable Mode implementation staged for commit across all three platforms | ~447 |
-| #25430 | 9:26 PM | 🟣 | WebSocket reconnect logic hardened with full teardown and heartbeat re-enablement | ~474 |
-| #25429 | " | 🔴 | Tab5 WebSocket disconnect handler now clears pending zone refresh flag | ~438 |
-| #25410 | 8:36 PM | 🔴 | Disconnect handler now clears pending zone refresh flag | ~403 |
-| #25409 | " | 🟣 | WebSocket heartbeat added to hostname-based connection method | ~401 |
-| #25408 | 8:35 PM | 🔵 | Disconnect handler missing _pendingZonesRefresh flag clear | ~367 |
-| #25407 | " | 🔵 | WebSocket connection lacks heartbeat enablement in begin() methods | ~397 |
-| #25406 | " | 🟣 | WebSocket heartbeat and connection hardening implemented | ~489 |
+| #25532 | 11:55 PM | 🔵 | Tab5 Watchdog Timer Implementation for Blocking Operation Prevention | ~563 |
+| #25524 | 11:39 PM | 🔵 | Tab5 AUTH_EXPIRE root cause: missing explicit auth mode in v2 AP configuration | ~566 |
+| #25394 | 7:56 PM | 🔵 | Tab5 WebSocket Client Implementation with Watchdog Protection | ~506 |
+| #25393 | " | 🔵 | Tab5 WebSocket Client with Zone Support and Rate Limiting | ~580 |
+| #25390 | 7:55 PM | 🔵 | Tab5 WiFiManager Implementation Details and mDNS Resolution Logic | ~554 |
+| #25389 | 7:54 PM | 🔵 | Tab5 WiFi Currently Disabled Due to ESP32-P4/C6 Hardware Issues | ~501 |
 
 ### Feb 6, 2026
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #25695 | 3:00 AM | ✅ | Tab5 sendZonePalette() simplified to always use send queue | ~423 |
-| #25694 | " | 🔄 | Tab5 sendZoneSpeed simplified to always use send queue | ~484 |
-| #25693 | 2:59 AM | 🔄 | Tab5 WebSocket sendZoneBrightness refactored to always queue via send queue | ~477 |
-| #25690 | " | 🔴 | Tab5 sendPaletteChange() simplified to always queue instead of immediate send | ~498 |
-| #25689 | " | 🔴 | Brightness Command Simplified to Always Queue | ~661 |
-| #25685 | 2:43 AM | 🔴 | Tab5 parameter sends now always queue to prevent watchdog timeout from blocking WebSocket calls | ~704 |
-| #25684 | 2:41 AM | 🔵 | Tab5 WebSocketClient implements per-parameter rate limiting with 50ms throttle and send queue for dropped messages | ~593 |
-| #25657 | 2:01 AM | 🔵 | WebSocket Connection Timeout Set to 20 Seconds | ~590 |
-| #25611 | 1:04 AM | 🔵 | Tab5 WebSocketClient attemptReconnect implements full socket teardown and heartbeat re-enablement | ~495 |
-| #25609 | " | 🔵 | Tab5 WebSocket infinite reconnect loop root cause identified | ~677 |
+| #25700 | 3:00 AM | 🔵 | Tab5 WebSocket Send Operations Use Message Queue to Prevent Blocking | ~435 |
+| #25696 | " | 🔄 | Tab5 Zone Blend Command Moved to Send Queue | ~402 |
+| #25692 | 2:59 AM | 🔴 | Tab5 Complexity Parameter Always Queued to Prevent WebSocket Blocking | ~459 |
+| #25691 | " | 🔄 | Tab5 sendFadeAmountChange Always Queues Parameter Updates | ~431 |
+| #25656 | 2:01 AM | 🔵 | Tab5 WiFi is disabled due to ESP32-P4 SDIO pin configuration issues | ~466 |
+| #25651 | 2:00 AM | 🔵 | Tab5 Encoder WebSocket Client Implementation with Watchdog Protection | ~757 |
+| #25610 | 1:04 AM | 🔵 | WebSocket Client Connection Management Implementation | ~348 |
+
+### Feb 10, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #32991 | 11:29 PM | 🔵 | Tab5 Encoder Hub Architecture and Multi-Device Sync Analysis Complete | ~1117 |
 </claude-mem-context>

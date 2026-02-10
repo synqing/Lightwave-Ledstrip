@@ -11,6 +11,7 @@
 #include "LGPShapeBangersPack.h"
 #include "../CoreEffects.h"
 #include <FastLED.h>
+#include <esp_heap_caps.h>
 #include <cmath>
 #include <cstdint>
 
@@ -567,33 +568,42 @@ LGPLangtonHighwayEffect::LGPLangtonHighwayEffect()
 
 bool LGPLangtonHighwayEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
-    for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) m_grid[y][x] = 0;
+    if (!m_grid) {
+        m_grid = static_cast<uint8_t*>(heap_caps_malloc(H * W, MALLOC_CAP_SPIRAM));
+        if (!m_grid) return false;
+    }
+    memset(m_grid, 0, H * W);
     m_x = W/2; m_y = H/2; m_dir = 1; m_steps = 0; m_scan = 0;
     return true;
 }
 
-static inline void antStep(uint8_t grid[LGPLangtonHighwayEffect::H][LGPLangtonHighwayEffect::W],
+static inline void antStep(uint8_t* grid,
                            uint8_t& x, uint8_t& y, uint8_t& dir)
 {
+    constexpr uint8_t W = LGPLangtonHighwayEffect::W;
+    constexpr uint8_t H = LGPLangtonHighwayEffect::H;
+
     // Classic Langton's ant:
     // - On white(0): turn right, flip to black(1), move forward
     // - On black(1): turn left, flip to white(0), move forward
-    uint8_t cell = grid[y][x];
+    uint8_t cell = grid[y * W + x];
     if (cell == 0) {
         dir = (uint8_t)((dir + 1) & 3);
-        grid[y][x] = 1;
+        grid[y * W + x] = 1;
     } else {
         dir = (uint8_t)((dir + 3) & 3);
-        grid[y][x] = 0;
+        grid[y * W + x] = 0;
     }
 
-    if (dir == 0) y = (uint8_t)((y == 0) ? (LGPLangtonHighwayEffect::H - 1) : (y - 1));
-    if (dir == 1) x = (uint8_t)((x + 1) & (LGPLangtonHighwayEffect::W - 1));
-    if (dir == 2) y = (uint8_t)((y + 1) & (LGPLangtonHighwayEffect::H - 1));
-    if (dir == 3) x = (uint8_t)((x == 0) ? (LGPLangtonHighwayEffect::W - 1) : (x - 1));
+    if (dir == 0) y = (uint8_t)((y == 0) ? (H - 1) : (y - 1));
+    if (dir == 1) x = (uint8_t)((x + 1) & (W - 1));
+    if (dir == 2) y = (uint8_t)((y + 1) & (H - 1));
+    if (dir == 3) x = (uint8_t)((x == 0) ? (W - 1) : (x - 1));
 }
 
 void LGPLangtonHighwayEffect::render(plugins::EffectContext& ctx) {
+    if (!m_grid) return;
+
     const float speedNorm = ctx.speed / 50.0f;
     const float master = ctx.brightness / 255.0f;
 
@@ -615,12 +625,12 @@ void LGPLangtonHighwayEffect::render(plugins::EffectContext& ctx) {
 
         uint8_t gx = (uint8_t)((i * W) / STRIP_LENGTH);
         uint8_t gy = (uint8_t)((((int)i + (int)m_scan) * H) / STRIP_LENGTH);
-        uint8_t cell = m_grid[gy & (H - 1)][gx & (W - 1)];
+        uint8_t cell = m_grid[(gy & (H - 1)) * W + (gx & (W - 1))];
 
         // Soften a bit: local neighbourhood average
         uint8_t gx1 = (uint8_t)((gx + 1) & (W - 1));
         uint8_t gy1 = (uint8_t)((gy + 1) & (H - 1));
-        float blur = (cell + m_grid[gy][gx1] + m_grid[gy1][gx] + m_grid[gy1][gx1]) * 0.25f;
+        float blur = (cell + m_grid[gy * W + gx1] + m_grid[gy1 * W + gx] + m_grid[gy1 * W + gx1]) * 0.25f;
 
         float wave = powf(clamp01(blur), 1.35f) * glue;
 
@@ -636,7 +646,9 @@ void LGPLangtonHighwayEffect::render(plugins::EffectContext& ctx) {
     }
 }
 
-void LGPLangtonHighwayEffect::cleanup() {}
+void LGPLangtonHighwayEffect::cleanup() {
+    if (m_grid) { heap_caps_free(m_grid); m_grid = nullptr; }
+}
 
 const plugins::EffectMetadata& LGPLangtonHighwayEffect::getMetadata() const {
     static plugins::EffectMetadata meta{

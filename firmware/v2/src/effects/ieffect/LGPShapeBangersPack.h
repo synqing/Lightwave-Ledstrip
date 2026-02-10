@@ -135,7 +135,8 @@ public:
     static constexpr uint8_t H = 64;
 
 private:
-    uint8_t  m_grid[H][W];
+    // ⚠️ PSRAM-ALLOCATED — 4KB grid MUST NOT live in DRAM
+    uint8_t* m_grid = nullptr;  // PSRAM: H*W bytes, accessed as m_grid[y * W + x]
     uint8_t  m_x;
     uint8_t  m_y;
     uint8_t  m_dir;      // 0=up,1=right,2=down,3=left

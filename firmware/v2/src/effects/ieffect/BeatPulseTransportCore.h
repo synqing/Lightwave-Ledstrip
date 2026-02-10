@@ -14,9 +14,9 @@
  *  - Subpixel advection is the difference between "computed" stepping and "liquid" motion.
  *
  * Design constraints:
- *  - No heap allocations.
+ *  - Large buffers allocated in PSRAM (heap_caps_malloc/MALLOC_CAP_SPIRAM).
  *  - Per-zone state (ZoneComposer uses a shared effect instance).
- *  - Works even if init() is never called (lazy safety).
+ *  - Works even if init() is never called (lazy safety via ensurePsramAllocated).
  */
 
 #pragma once
@@ -27,6 +27,7 @@
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
+#include <esp_heap_caps.h>
 #endif
 
 #include "BeatPulseRenderUtils.h"   // clamp01, floatToByte, etc.
@@ -44,17 +45,20 @@ public:
     static constexpr uint16_t MAX_RADIAL_LEN = 160;
 
     BeatPulseTransportCore() { resetAll(); }
+    ~BeatPulseTransportCore() { freePsram(); }
 
     void resetAll() {
-        std::memset(m_hist, 0, sizeof(m_hist));
-        std::memset(m_work, 0, sizeof(m_work));
+        if (!ensurePsramAllocated()) return;
+        std::memset(m_ps->hist, 0, sizeof(m_ps->hist));
+        std::memset(m_ps->work, 0, sizeof(m_ps->work));
         std::memset(m_lastRenderMs, 0, sizeof(m_lastRenderMs));
     }
 
     void resetZone(uint8_t zoneId) {
         if (zoneId >= MAX_ZONES) return;
-        std::memset(m_hist[zoneId], 0, sizeof(m_hist[zoneId]));
-        std::memset(m_work[zoneId], 0, sizeof(m_work[zoneId]));
+        if (!m_ps) return;
+        std::memset(m_ps->hist[zoneId], 0, sizeof(m_ps->hist[zoneId]));
+        std::memset(m_ps->work[zoneId], 0, sizeof(m_ps->work[zoneId]));
         m_lastRenderMs[zoneId] = 0;
     }
 
@@ -77,6 +81,7 @@ public:
         float dtSeconds
     ) {
         if (zoneId >= MAX_ZONES) return;
+        if (!ensurePsramAllocated()) return;
         radialLen = (radialLen > MAX_RADIAL_LEN) ? MAX_RADIAL_LEN : radialLen;
         if (radialLen < 2) return;
 
@@ -86,7 +91,7 @@ public:
         if (m_lastRenderMs[zoneId] != 0) {
             const uint32_t gapMs = (m_nowMs > m_lastRenderMs[zoneId]) ? (m_nowMs - m_lastRenderMs[zoneId]) : 0;
             if (gapMs > 500) {
-                std::memset(m_hist[zoneId], 0, sizeof(m_hist[zoneId]));
+                std::memset(m_ps->hist[zoneId], 0, sizeof(m_ps->hist[zoneId]));
             }
         }
         m_lastRenderMs[zoneId] = m_nowMs;
@@ -101,7 +106,7 @@ public:
         const float dtPersist = powf(persistencePerFrame60Hz, dtScale);
 
         // Clear working buffer
-        std::memset(m_work[zoneId], 0, sizeof(RGB16) * radialLen);
+        std::memset(m_ps->work[zoneId], 0, sizeof(RGB16) * radialLen);
 
         // Semi-Lagrangian-like "push" advection using 2-tap linear interpolation.
         // Equivalent to Bloom's draw_sprite shifting prev->dest with fractional weight.
@@ -117,8 +122,8 @@ public:
             const float mixL = (1.0f - frac) * dtPersist;
             const float mixR = frac * dtPersist;
 
-            addScaled(m_work[zoneId][left],     m_hist[zoneId][i], mixL);
-            addScaled(m_work[zoneId][left + 1], m_hist[zoneId][i], mixR);
+            addScaled(m_ps->work[zoneId][left],     m_ps->hist[zoneId][i], mixL);
+            addScaled(m_ps->work[zoneId][left + 1], m_ps->hist[zoneId][i], mixR);
         }
 
         // Optional diffusion pass (tiny 1D blur) for "bloom" softness.
@@ -127,21 +132,21 @@ public:
         if (diffusion01 > 0.0001f) {
             const float k = 0.15f * diffusion01;       // neighbour contribution
             const float c = 1.0f - (2.0f * k);          // centre retention
-            // We reuse m_hist as a temp to avoid extra buffers: write into hist, then swap.
+            // We reuse hist as a temp to avoid extra buffers: write into hist, then swap.
             for (uint16_t i = 0; i < radialLen; i++) {
-                const RGB16 a = m_work[zoneId][i];
-                const RGB16 l = (i > 0) ? m_work[zoneId][i - 1] : RGB16{};
-                const RGB16 r = (i + 1 < radialLen) ? m_work[zoneId][i + 1] : RGB16{};
+                const RGB16 a = m_ps->work[zoneId][i];
+                const RGB16 l = (i > 0) ? m_ps->work[zoneId][i - 1] : RGB16{};
+                const RGB16 r = (i + 1 < radialLen) ? m_ps->work[zoneId][i + 1] : RGB16{};
 
                 RGB16 out{};
                 out.r = clampU16(static_cast<uint32_t>(a.r * c + l.r * k + r.r * k));
                 out.g = clampU16(static_cast<uint32_t>(a.g * c + l.g * k + r.g * k));
                 out.b = clampU16(static_cast<uint32_t>(a.b * c + l.b * k + r.b * k));
-                m_hist[zoneId][i] = out;
+                m_ps->hist[zoneId][i] = out;
             }
         } else {
             // Swap buffers: hist <- work
-            std::memcpy(m_hist[zoneId], m_work[zoneId], sizeof(RGB16) * radialLen);
+            std::memcpy(m_ps->hist[zoneId], m_ps->work[zoneId], sizeof(RGB16) * radialLen);
         }
 
         // Edge sink: smooth falloff in last 8 bins to prevent hard cutoff.
@@ -153,9 +158,9 @@ public:
                 const float distFromEdge = static_cast<float>(radialLen - 1 - i);
                 const float t = distFromEdge / static_cast<float>(EDGE_SINK_WIDTH);
                 const float fade = t * t;  // Quadratic: faster fade near edge
-                m_hist[zoneId][i].r = static_cast<uint16_t>(m_hist[zoneId][i].r * fade);
-                m_hist[zoneId][i].g = static_cast<uint16_t>(m_hist[zoneId][i].g * fade);
-                m_hist[zoneId][i].b = static_cast<uint16_t>(m_hist[zoneId][i].b * fade);
+                m_ps->hist[zoneId][i].r = static_cast<uint16_t>(m_ps->hist[zoneId][i].r * fade);
+                m_ps->hist[zoneId][i].g = static_cast<uint16_t>(m_ps->hist[zoneId][i].g * fade);
+                m_ps->hist[zoneId][i].b = static_cast<uint16_t>(m_ps->hist[zoneId][i].b * fade);
             }
         }
     }
@@ -180,6 +185,7 @@ public:
         float spread01
     ) {
         if (zoneId >= MAX_ZONES) return;
+        if (!m_ps) return;
         radialLen = (radialLen > MAX_RADIAL_LEN) ? MAX_RADIAL_LEN : radialLen;
         if (radialLen < 1) return;
 
@@ -205,11 +211,11 @@ public:
         const float w3 = 0.06f * spread01;           // 0.00..0.06
         const float w4 = 0.02f * spread01;           // 0.00..0.02
 
-        addScaled(m_hist[zoneId][0], e, w0);
-        if (radialLen > 1) addScaled(m_hist[zoneId][1], e, w1);
-        if (radialLen > 2) addScaled(m_hist[zoneId][2], e, w2);
-        if (radialLen > 3) addScaled(m_hist[zoneId][3], e, w3);
-        if (radialLen > 4) addScaled(m_hist[zoneId][4], e, w4);
+        addScaled(m_ps->hist[zoneId][0], e, w0);
+        if (radialLen > 1) addScaled(m_ps->hist[zoneId][1], e, w1);
+        if (radialLen > 2) addScaled(m_ps->hist[zoneId][2], e, w2);
+        if (radialLen > 3) addScaled(m_ps->hist[zoneId][3], e, w3);
+        if (radialLen > 4) addScaled(m_ps->hist[zoneId][4], e, w4);
     }
 
     /**
@@ -253,6 +259,7 @@ public:
         float paletteMix01
     ) const {
         if (zoneId >= MAX_ZONES) return;
+        if (!m_ps) return;
 
         radialLen = (radialLen > MAX_RADIAL_LEN) ? MAX_RADIAL_LEN : radialLen;
         if (radialLen < 1) return;
@@ -275,7 +282,7 @@ public:
             }
 
             // Get transported HDR colour
-            CRGB c = toCRGB8(m_hist[zoneId][dist], g);
+            CRGB c = toCRGB8(m_ps->hist[zoneId][dist], g);
 
             // Blend with palette based on distance for richer colour variation
             if (pmix > 0.001f) {
@@ -315,6 +322,35 @@ private:
         uint16_t g = 0;
         uint16_t b = 0;
     };
+
+    // ⚠️ PSRAM-ALLOCATED — large buffers MUST NOT live in DRAM (see MEMORY_ALLOCATION.md)
+    struct PsramData {
+        RGB16 hist[MAX_ZONES][MAX_RADIAL_LEN];
+        RGB16 work[MAX_ZONES][MAX_RADIAL_LEN];
+    };
+    PsramData* m_ps = nullptr;
+
+    bool ensurePsramAllocated() {
+        if (m_ps) return true;
+#ifndef NATIVE_BUILD
+        m_ps = static_cast<PsramData*>(heap_caps_malloc(sizeof(PsramData), MALLOC_CAP_SPIRAM));
+#else
+        m_ps = static_cast<PsramData*>(malloc(sizeof(PsramData)));
+#endif
+        if (m_ps) std::memset(m_ps, 0, sizeof(PsramData));
+        return m_ps != nullptr;
+    }
+
+    void freePsram() {
+        if (m_ps) {
+#ifndef NATIVE_BUILD
+            heap_caps_free(m_ps);
+#else
+            free(m_ps);
+#endif
+            m_ps = nullptr;
+        }
+    }
 
     static inline uint16_t clampU16(uint32_t v) {
         return (v > 65535u) ? 65535u : static_cast<uint16_t>(v);
@@ -374,10 +410,7 @@ private:
         return CRGB(static_cast<uint8_t>(r8), static_cast<uint8_t>(g8), static_cast<uint8_t>(b8));
     }
 
-    RGB16    m_hist[MAX_ZONES][MAX_RADIAL_LEN];
-    RGB16    m_work[MAX_ZONES][MAX_RADIAL_LEN];
     uint32_t m_lastRenderMs[MAX_ZONES] = {0,0,0,0};
-
     uint32_t m_nowMs = 0;
 };
 

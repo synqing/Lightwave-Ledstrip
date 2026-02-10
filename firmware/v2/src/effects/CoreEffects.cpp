@@ -337,6 +337,12 @@ uint8_t registerAllEffects(RendererActor* renderer) {
 
     uint8_t total = 0;
 
+    // =================================================================
+    // MEMORY NOTE: Static effect instances go into .bss (DRAM).
+    // Keep member data tiny (<64 bytes). Large buffers MUST use PSRAM
+    // allocation in init() -- see MEMORY_ALLOCATION.md section 3.5.
+    // =================================================================
+
     // =============== REGISTER ALL NATIVE V2 EFFECTS ===============
     // 68 total effects organized by category
     // Legacy v1 effects are disabled until plugins/legacy is properly integrated

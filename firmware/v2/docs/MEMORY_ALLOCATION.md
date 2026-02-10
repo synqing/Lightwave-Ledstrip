@@ -21,6 +21,7 @@ The firmware historically crashed due to **internal SRAM exhaustion** while diag
 1. [Hardware Constraints](#1-hardware-constraints)
 2. [Memory Regions](#2-memory-regions)
 3. [Allocation Rules](#3-allocation-rules)
+   - 3.5 [Effect Buffer PSRAM Policy](#35-effect-buffer-psram-policy)
 4. [Component Memory Budgets](#4-component-memory-budgets)
 5. [Diagnostic Gotchas](#5-diagnostic-gotchas)
 6. [Common Mistakes](#6-common-mistakes)
@@ -144,6 +145,70 @@ After boot, before network initialisation:
 | **PREFER** PSRAM for anything > 1 KB that isn't DMA | Preserve internal SRAM headroom |
 | **SHOULD** monitor stack high-water marks regularly | Catch stack overflows early |
 | **PREFER** pre-allocated arrays over `std::vector` in hot paths | Avoid heap fragmentation |
+
+---
+
+## 3.5 Effect Buffer PSRAM Policy
+
+> **MANDATORY**: All effect instance buffers >64 bytes MUST be allocated from PSRAM.
+> Internal DRAM use for effect data is **FORBIDDEN** unless operationally required (DMA, ISR access).
+
+### Why This Rule Exists
+
+On 2026-02-10, internal SRAM dropped to 32KB free (threshold: 30KB) causing WebServer low-heap shedding. Root cause: 146 static effect instances consumed ~50KB of internal DRAM via member arrays. The worst offenders:
+
+| Effect | DRAM Consumed | Root Cause |
+|--------|---------------|------------|
+| BloomParityEffect | 19.3 KB | 4-zone x 160-LED RGBf frame buffers |
+| KuramotoTransportEffect | 9.8 KB | Oscillator field + transport buffer |
+| BeatPulseTransportCore | 7.7 KB | HDR transport hist/work arrays |
+| WaveformParityEffect | 5.4 KB | 4-frame waveform history ring |
+| LGPLangtonHighwayEffect | 4.1 KB | 64x64 cellular automaton grid |
+| ReactionDiffusion x 3 | 7.7 KB | u/v simulation double buffers |
+
+**Total recovered: ~54 KB** by migrating to PSRAM.
+
+### Required Pattern
+
+```cpp
+class MyEffect final : public plugins::IEffect {
+private:
+    // PSRAM-ALLOCATED -- large buffers MUST NOT live in DRAM
+    struct PsramData {
+        float buffer1[160];
+        float buffer2[160];
+    };
+    PsramData* m_ps = nullptr;
+
+public:
+    bool init(plugins::EffectContext& ctx) override {
+        if (!m_ps) {
+            m_ps = static_cast<PsramData*>(
+                heap_caps_malloc(sizeof(PsramData), MALLOC_CAP_SPIRAM));
+            if (!m_ps) return false;
+        }
+        memset(m_ps, 0, sizeof(PsramData));
+        return true;
+    }
+
+    void render(plugins::EffectContext& ctx) override {
+        if (!m_ps) return;  // Safety guard
+        // Access via m_ps->buffer1[i], m_ps->buffer2[i]
+    }
+
+    void cleanup() override {
+        if (m_ps) { heap_caps_free(m_ps); m_ps = nullptr; }
+    }
+};
+```
+
+### What stays in DRAM (exceptions)
+
+- Small scalar state (<64 bytes total): `float m_t;`, `uint8_t m_mode;`, etc.
+- DMA buffers: FastLED requires internal SRAM for SPI/RMT DMA
+- ISR-accessed variables: Interrupt handlers cannot access PSRAM
+- FreeRTOS primitives: mutexes, semaphores
+- The `MALLOC_CAP_SPIRAM` flag directs allocation to PSRAM specifically
 
 ---
 
@@ -643,6 +708,6 @@ build_flags =
 
 ---
 
-*Document version: 1.0*
-*Last updated: 2026-02-06*
+*Document version: 1.1*
+*Last updated: 2026-02-10*
 *Author: LightwaveOS Team*

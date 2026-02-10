@@ -48,6 +48,10 @@ namespace limits {
  * 4. Build will fail with static_assert if counts don't match
  *
  * DO NOT duplicate this constant elsewhere. Use limits::MAX_EFFECTS.
+ *
+ * Each effect is a static instance in DRAM. Keep member data small.
+ * Large buffers (>64 bytes) MUST be PSRAM-allocated in init().
+ * See docs/MEMORY_ALLOCATION.md section 3.5 for the mandatory pattern.
  */
 constexpr uint8_t MAX_EFFECTS = 147;
 

@@ -104,12 +104,22 @@ public:
 };
 ```
 
+### PSRAM Allocation Policy (MANDATORY)
+
+All effect buffers >64 bytes MUST be allocated from PSRAM using
+`heap_caps_malloc(size, MALLOC_CAP_SPIRAM)`. Do NOT declare large arrays as
+class member variables -- they end up in internal DRAM (.bss section) and starve
+WiFi/lwIP/FreeRTOS of heap space. Use a `PsramData*` pointer, allocate in
+`init()`, free in `cleanup()`. See `firmware/v2/docs/MEMORY_ALLOCATION.md`
+section 3.5 for the full required pattern and rationale.
+
 ### Best Practices
 1. Use fadeToBlackBy() for trails
-2. Utilize angle/radius arrays for interesting patterns
+2. Utilise angle/radius arrays for interesting patterns
 3. Keep frame time under 8.3ms for 120 FPS
 4. Use ColorFromPalette() for consistent theming
 5. Implement init() for setup, cleanup() for teardown
+6. **Never** put buffers >64 bytes in class member arrays (use PSRAM -- see above)
 
 ## Performance Tips
 

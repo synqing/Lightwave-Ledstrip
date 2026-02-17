@@ -529,6 +529,40 @@ void ZoneComposerUI::loadPreset(int8_t presetId) {
 }
 
 
+void ZoneComposerUI::updateServerPresets(const PresetMeta* presets, uint8_t count) {
+    _serverPresetCount = 0;
+    _hasServerPresets = true;
+
+    for (uint8_t i = 0; i < count && i < MAX_SERVER_PRESETS; i++) {
+        // Only store presets compatible with 2-zone max hardware
+        if (presets[i].occupied && presets[i].zoneCount <= 2) {
+            _serverPresets[_serverPresetCount] = presets[i];
+            _serverPresetCount++;
+        }
+    }
+
+    Serial.printf("[ZoneComposer] Server presets: %u compatible (of %u total)\n",
+                  _serverPresetCount, count);
+
+    // Clamp preset index to valid range after server presets update
+    if (_serverPresetCount > 0 && _currentPresetIndex >= _serverPresetCount) {
+        _currentPresetIndex = 0;
+    }
+
+    markDirty();
+}
+
+void ZoneComposerUI::loadServerPreset(uint8_t presetIndex) {
+    if (presetIndex >= _serverPresetCount) return;
+
+    uint8_t serverId = _serverPresets[presetIndex].id;
+    if (_wsClient && _wsClient->isConnected()) {
+        _wsClient->sendZonePresetLoad(serverId);
+        Serial.printf("[ZoneComposer] Loading server preset %u (slot %u: %s)\n",
+                      presetIndex, serverId, _serverPresets[presetIndex].name);
+    }
+}
+
 bool ZoneComposerUI::validateLayout(const zones::ZoneSegment* segments, uint8_t count) const {
     if (!segments || count == 0 || count > zones::MAX_ZONES) {
         return false;
@@ -837,14 +871,17 @@ void ZoneComposerUI::adjustZoneParameter(uint8_t zoneIndex, int32_t delta) {
 
     switch (_activeMode) {
         case ZoneParameterMode::EFFECT: {
-            // Max effect ID from LightwaveOS v2 firmware (100 effects, IDs 0-99)
-            constexpr int MAX_EFFECT_ID = 99;
+            // Max effect ID from LightwaveOS v2 firmware (147 effects, IDs 0-146)
+            constexpr int MAX_EFFECT_ID = 146;
             int newVal = _zoneEffects[zoneIndex] + delta;
             if (newVal < 0) newVal = MAX_EFFECT_ID;
             if (newVal > MAX_EFFECT_ID) newVal = 0;
             _zoneEffects[zoneIndex] = newVal;
 
             updateEffectLabel(zoneIndex);
+
+            // Mark holdoff before sending to prevent echo snapback
+            markZoneLocalChange(zoneIndex, static_cast<uint8_t>(ZoneParameterMode::EFFECT));
 
             // Send WebSocket command to v2 firmware
             if (_wsClient && _wsClient->isConnected()) {
@@ -865,6 +902,9 @@ void ZoneComposerUI::adjustZoneParameter(uint8_t zoneIndex, int32_t delta) {
 
             updatePaletteLabel(zoneIndex);
 
+            // Mark holdoff before sending to prevent echo snapback
+            markZoneLocalChange(zoneIndex, static_cast<uint8_t>(ZoneParameterMode::PALETTE));
+
             // Send WebSocket command to v2 firmware
             if (_wsClient && _wsClient->isConnected()) {
                 _wsClient->sendZonePalette(zoneIndex, _zonePalettes[zoneIndex]);
@@ -877,10 +917,13 @@ void ZoneComposerUI::adjustZoneParameter(uint8_t zoneIndex, int32_t delta) {
         case ZoneParameterMode::SPEED: {
             int newVal = _zoneSpeeds[zoneIndex] + delta;
             if (newVal < 1) newVal = 1;
-            if (newVal > 50) newVal = 50;
+            if (newVal > 100) newVal = 100;  // Match v2 firmware range (1-100)
             _zoneSpeeds[zoneIndex] = newVal;
 
             updateSpeedLabel(zoneIndex);
+
+            // Mark holdoff before sending to prevent echo snapback
+            markZoneLocalChange(zoneIndex, static_cast<uint8_t>(ZoneParameterMode::SPEED));
 
             // Send WebSocket command to v2 firmware
             if (_wsClient && _wsClient->isConnected()) {
@@ -898,6 +941,9 @@ void ZoneComposerUI::adjustZoneParameter(uint8_t zoneIndex, int32_t delta) {
             _zoneBrightness[zoneIndex] = newVal;
 
             updateBrightnessLabel(zoneIndex);
+
+            // Mark holdoff before sending to prevent echo snapback
+            markZoneLocalChange(zoneIndex, static_cast<uint8_t>(ZoneParameterMode::BRIGHTNESS));
 
             // Send WebSocket command to v2 firmware
             if (_wsClient && _wsClient->isConnected()) {
@@ -933,27 +979,46 @@ void ZoneComposerUI::adjustZoneCount(int32_t delta) {
 }
 
 void ZoneComposerUI::adjustPreset(int32_t delta) {
-    // Pivot: only 2 presets (1-zone + 2-zone)
-    const char* presets[] = {"Unified", "Dual Split"};
-    const int presetCount = 2;
+    if (_hasServerPresets && _serverPresetCount > 0 && _wsClient && _wsClient->isConnected()) {
+        // Use server-side presets when available
+        int newIndex = _currentPresetIndex + delta;
+        if (newIndex < 0) newIndex = _serverPresetCount - 1;
+        if (newIndex >= (int)_serverPresetCount) newIndex = 0;
 
-    int newIndex = _currentPresetIndex + delta;
-    if (newIndex < 0) newIndex = presetCount - 1;  // Wrap to end
-    if (newIndex >= presetCount) newIndex = 0;     // Wrap to start
+        _currentPresetIndex = newIndex;
+        static char s_presetNameBuf[32];
+        strncpy(s_presetNameBuf, _serverPresets[_currentPresetIndex].name, sizeof(s_presetNameBuf) - 1);
+        s_presetNameBuf[sizeof(s_presetNameBuf) - 1] = '\0';
+        _presetName = s_presetNameBuf;
 
-    _currentPresetIndex = newIndex;
-    _presetName = presets[_currentPresetIndex];
+        // Load via v2 server (triggers zones.list broadcast with new layout)
+        loadServerPreset(_currentPresetIndex);
 
-    // Load the preset zone layout
-    loadPreset(_currentPresetIndex);
+        updatePresetLabel();
+        Serial.printf("[ZoneComposer] Server preset → %s (id=%u)\n",
+                      _presetName, _serverPresets[_currentPresetIndex].id);
+    } else {
+        // Fallback: local presets when disconnected
+        static constexpr const char* presets[] = {"Unified", "Dual Split"};
+        const int presetCount = 2;
 
-    // Send WebSocket command to v2 firmware
-    if (_wsClient && _wsClient->isConnected()) {
-        _wsClient->sendZonesSetLayout(_editingSegments, _editingZoneCount);
+        int newIndex = _currentPresetIndex + delta;
+        if (newIndex < 0) newIndex = presetCount - 1;
+        if (newIndex >= presetCount) newIndex = 0;
+
+        _currentPresetIndex = newIndex;
+        _presetName = presets[_currentPresetIndex];
+
+        loadPreset(_currentPresetIndex);
+
+        if (_wsClient && _wsClient->isConnected()) {
+            _wsClient->sendZonesSetLayout(_editingSegments, _editingZoneCount);
+        }
+
+        updatePresetLabel();
+        Serial.printf("[ZoneComposer] Local preset → %s (%u zones)\n",
+                      _presetName, _editingZoneCount);
     }
-
-    updatePresetLabel();
-    Serial.printf("[ZoneComposer] Preset → %s (%u zones)\n", _presetName, _editingZoneCount);
 }
 
 // Label update helpers (Phase 2 implementation)

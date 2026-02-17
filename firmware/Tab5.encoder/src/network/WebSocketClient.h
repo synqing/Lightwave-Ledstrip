@@ -105,6 +105,11 @@ public:
 
     // Get reconnect delay (for observability/debugging)
     unsigned long getReconnectDelay() const { return _reconnectDelay; }
+    uint32_t getDisconnectCount() const { return _disconnectCount; }
+    uint32_t getErrorCount() const { return _errorCount; }
+    uint32_t getReconnectAttemptCount() const { return _reconnectAttemptCount; }
+    uint32_t getConnectedCount() const { return _connectedCount; }
+    uint32_t getDuplicateDisconnectCount() const { return _duplicateDisconnectCount; }
 
     // ========================================================================
     // Global Parameter Commands (Unit A, encoders 0-7)
@@ -124,12 +129,21 @@ public:
     // ========================================================================
 
     void sendZoneEnable(bool enable);
+    void sendZoneEnableZone(uint8_t zoneId, bool enabled);
     void sendZoneEffect(uint8_t zoneId, uint8_t effectId);
     void sendZoneBrightness(uint8_t zoneId, uint8_t value);
     void sendZoneSpeed(uint8_t zoneId, uint8_t value);
     void sendZonePalette(uint8_t zoneId, uint8_t paletteId);
     void sendZoneBlend(uint8_t zoneId, uint8_t blendMode);
     void sendZonesSetLayout(const struct zones::ZoneSegment* segments, uint8_t zoneCount);
+
+    // ========================================================================
+    // Zone Preset Commands
+    // ========================================================================
+
+    void sendZonePresetList();
+    void sendZonePresetLoad(uint8_t id);
+    void sendZonePresetSave(uint8_t slot, const char* name);
 
     // ========================================================================
     // Color Correction Commands
@@ -192,10 +206,28 @@ private:
     bool _useIP;
     bool _pendingHello;
     bool _pendingZonesRefresh = false;
+    uint32_t _lastZonesGetMs = 0;
+    uint32_t _lastDisconnectEventMs = 0;
+    uint32_t _lastDisconnectLogMs = 0;
+    uint32_t _lastErrorEventMs = 0;
+    uint32_t _disconnectCount = 0;
+    uint32_t _errorCount = 0;
+    uint32_t _reconnectAttemptCount = 0;
+    uint32_t _connectedCount = 0;
+    uint32_t _duplicateDisconnectCount = 0;
 
-    // Rate limiting state (16 parameters for dual encoder units)
+    // Staggered hello: send connect-burst messages one per update() tick
+    // to avoid overwhelming the v2 SoftAP TCP send buffers.
+    uint8_t _helloStage;            // 0=idle, 1-4=pending stages
+    uint32_t _helloStageStartMs;    // Timestamp of current stage start
+    static constexpr uint32_t HELLO_STAGE_INTERVAL_MS = 120;  // 120ms between hello messages
+    static constexpr uint32_t DISCONNECT_EVENT_DEBOUNCE_MS = 500;
+    static constexpr uint32_t ERROR_EVENT_DEBOUNCE_MS = 500;
+    static constexpr uint32_t DISCONNECT_LOG_THROTTLE_MS = 1000;
+
+    // Rate limiting state (20 parameters for dual encoder units + zone AUX slots)
     struct RateLimiter {
-        unsigned long lastSend[16];
+        unsigned long lastSend[20];
     };
     RateLimiter _rateLimiter;
 
@@ -217,7 +249,7 @@ private:
             type = nullptr;
         }
     };
-    static constexpr size_t SEND_QUEUE_SIZE = 16;  // One per parameter
+    static constexpr size_t SEND_QUEUE_SIZE = 20;  // One per parameter (8 global + 4 zones * 3 each)
     PendingMessage _sendQueue[SEND_QUEUE_SIZE];
     uint32_t _consecutiveSendFailures;
     bool _sendDegraded;
@@ -228,15 +260,18 @@ private:
     static constexpr uint32_t SEND_TIMEOUT_MS = 50;  // 50ms max send time
     uint32_t _sendAttemptStartTime;
 
-    // Parameter indices for rate limiting
-    // Note: Unit B (8-15) encoders are disabled, but zone functions may still be called from UI
+    // Parameter indices for rate limiting and send queue
+    // Note: Unit B encoders are disabled, but zone functions may still be called from UI.
+    // Each zone has 3 slots: EFFECT, SPEED, AUX (AUX is shared by brightness/palette/blend
+    // since only one is active at a time via button toggle on the physical encoder).
     enum ParamIndex : uint8_t {
         EFFECT = 0, BRIGHTNESS = 1, PALETTE = 2, SPEED = 3,
         MOOD = 4, FADEAMOUNT = 5, COMPLEXITY = 6, VARIATION = 7,
-        ZONE0_EFFECT = 8, ZONE0_SPEED = 9,
-        ZONE1_EFFECT = 10, ZONE1_SPEED = 11,
-        ZONE2_EFFECT = 12, ZONE2_SPEED = 13,
-        ZONE3_EFFECT = 14, ZONE3_SPEED = 15
+        ZONE0_EFFECT = 8,  ZONE0_SPEED = 9,  ZONE0_AUX = 10,
+        ZONE1_EFFECT = 11, ZONE1_SPEED = 12, ZONE1_AUX = 13,
+        ZONE2_EFFECT = 14, ZONE2_SPEED = 15, ZONE2_AUX = 16,
+        ZONE3_EFFECT = 17, ZONE3_SPEED = 18, ZONE3_AUX = 19,
+        PARAM_COUNT = 20
     };
 
     // Fixed buffer for JSON serialization
@@ -248,6 +283,8 @@ private:
     void resetReconnectBackoff();
     void increaseReconnectBackoff();
     void sendHelloMessage();
+    void configureHeartbeat();
+    bool shouldSendZonesGetNow();
     
     // Check if parameter send is allowed (rate limiting)
     bool canSend(uint8_t paramIndex);

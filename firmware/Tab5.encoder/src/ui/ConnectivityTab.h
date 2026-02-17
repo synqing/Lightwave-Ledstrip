@@ -170,6 +170,9 @@ private:
     lv_obj_t* _connectButton = nullptr;
     lv_obj_t* _deleteButton = nullptr;
     lv_obj_t* _disconnectButton = nullptr;
+#if ENABLE_WIFI
+    lv_obj_t* _antennaButton = nullptr;  // Toggle External MMCX / Internal 3D
+#endif
     lv_obj_t* _keyboard = nullptr;  // Virtual keyboard for text input
 
     // LVGL styles
@@ -225,6 +228,10 @@ private:
     void createAvailableNetworksButtons(lv_obj_t* parent);  // SCAN, ADD buttons
     void createSavedNetworksCard(lv_obj_t* parent);
     void createSavedNetworksButtons(lv_obj_t* parent);  // CONNECT, DISCONNECT, DELETE
+#if ENABLE_WIFI
+    void createAntennaRow(lv_obj_t* parent);  // WiFi antenna: External MMCX / Internal 3D toggle
+    void updateAntennaButtonLabel();
+#endif
     void createAddNetworkDialog(lv_obj_t* parent);
     void performScanRequest();
 
@@ -271,6 +278,9 @@ private:
     static void connectButtonCb(lv_event_t* e);
     static void deleteButtonCb(lv_event_t* e);
     static void disconnectButtonCb(lv_event_t* e);
+#if ENABLE_WIFI
+    static void antennaButtonCb(lv_event_t* e);
+#endif
     static void addDialogSaveCb(lv_event_t* e);
     static void addDialogCancelCb(lv_event_t* e);
 };

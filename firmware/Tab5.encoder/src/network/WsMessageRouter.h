@@ -121,9 +121,63 @@ public:
             handleEffectsChanged(doc);
             return true;
         }
-        
+
         if (strcmp(type, "colorCorrection.getConfig") == 0) {
             handleColorCorrectionConfig(doc);
+            return true;
+        }
+
+        // Zone-specific change notifications (sent to requesting client only)
+        // These contain inline zone data in data.current, so we can update
+        // the UI directly without a zones.get round-trip.
+        if (strcmp(type, "zones.effectChanged") == 0) {
+            handleZoneFieldChanged(doc);
+            return true;
+        }
+
+        if (strcmp(type, "zone.paletteChanged") == 0) {
+            handleZoneFieldChanged(doc);
+            return true;
+        }
+
+        if (strcmp(type, "zone.blendChanged") == 0) {
+            handleZoneFieldChanged(doc);
+            return true;
+        }
+
+        if (strcmp(type, "zones.layoutChanged") == 0) {
+            handleZonesLayoutChanged(doc);
+            return true;
+        }
+
+        // Global zone enable/disable (broadcast to ALL clients via textAll)
+        if (strcmp(type, "zone.enabledChanged") == 0) {
+            handleZoneEnabledChanged(doc);
+            return true;
+        }
+
+        // Per-zone enable/disable (broadcast to ALL clients via textAll)
+        if (strcmp(type, "zone.zoneEnabledChanged") == 0) {
+            handlePerZoneEnabledChanged(doc);
+            return true;
+        }
+
+        // Zone preset responses
+        if (strcmp(type, "zonePresets.list") == 0) {
+            handleZonePresetsList(doc);
+            return true;
+        }
+
+        if (strcmp(type, "zonePresets.loaded") == 0) {
+            // v2 already broadcasts zones.list after preset load, no extra refresh needed
+            return true;
+        }
+        if (strcmp(type, "zonePresets.saved") == 0 ||
+            strcmp(type, "zonePresets.deleted") == 0) {
+            // Refresh preset list so Tab5 discovers new/removed presets
+            if (s_wsClient) {
+                s_wsClient->sendZonePresetList();
+            }
             return true;
         }
 
@@ -314,16 +368,26 @@ private:
     /**
      * @brief Handle "zones.changed" message
      *
-     * Notification that zone configuration has changed.
-     * Defer zone refresh to next update() to avoid sending inside WS receive callback
-     * (prevents deadlock / long block inside _ws.loop()).
+     * Sent to the requesting client with inline zone data.
+     * Contains data.zoneId + data.current with full zone state.
+     * We parse inline data directly to avoid a zones.get round-trip.
+     * The broadcastZoneState (zones.list) will also arrive separately.
      */
     static void handleZonesChanged(JsonDocument& doc) {
         TAB5_WS_PRINTLN("[WsRouter] Zones changed notification");
+
+        // Try to parse inline zone data from data.current
+        // Message format: {"type": "zones.changed", "data": {"zoneId": N, "current": {...}}}
+        JsonObject data = doc["data"].is<JsonObject>() ? doc["data"].as<JsonObject>() : doc.as<JsonObject>();
+        if (data["zoneId"].is<uint8_t>() && data["current"].is<JsonObject>()) {
+            applyZoneCurrentData(data["zoneId"].as<uint8_t>(), data["current"].as<JsonObject>());
+            return;
+        }
+
+        // Fallback: request full zone state if inline data not present
         if (s_wsClient) {
             s_wsClient->setPendingZonesRefresh();
         }
-        (void)doc;
     }
 
     /**
@@ -381,21 +445,41 @@ private:
                 uint8_t zoneId = zone["id"].as<uint8_t>();
                 if (zoneId >= zones::MAX_ZONES) continue;
 
-                // Update ZoneState for UI
-                ZoneState state;
-                state.effectId = zone["effectId"].as<uint8_t>();
-                if (zone["effectName"].is<const char*>()) {
-                    const char* name = zone["effectName"].as<const char*>();
-                    strncpy(state.effectName, name, sizeof(state.effectName) - 1);
-                    state.effectName[sizeof(state.effectName) - 1] = '\0';
+                // Start from current state to preserve locally-changed fields
+                ZoneState state = s_zoneComposerUI->getZoneState(zoneId);
+
+                // Anti-snapback: only update fields not under local holdoff
+                // Effect (ZoneParameterMode::EFFECT = 0)
+                if (!s_zoneComposerUI->isZoneInHoldoff(zoneId, 0)) {
+                    state.effectId = zone["effectId"].as<uint8_t>();
+                    if (zone["effectName"].is<const char*>()) {
+                        const char* name = zone["effectName"].as<const char*>();
+                        strncpy(state.effectName, name, sizeof(state.effectName) - 1);
+                        state.effectName[sizeof(state.effectName) - 1] = '\0';
+                    }
                 }
-                state.speed = zone["speed"].as<uint8_t>();
-                state.paletteId = zone["paletteId"].as<uint8_t>();
-                if (zone["paletteName"].is<const char*>()) {
-                    const char* name = zone["paletteName"].as<const char*>();
-                    strncpy(state.paletteName, name, sizeof(state.paletteName) - 1);
-                    state.paletteName[sizeof(state.paletteName) - 1] = '\0';
+
+                // Palette (ZoneParameterMode::PALETTE = 1)
+                if (!s_zoneComposerUI->isZoneInHoldoff(zoneId, 1)) {
+                    state.paletteId = zone["paletteId"].as<uint8_t>();
+                    if (zone["paletteName"].is<const char*>()) {
+                        const char* name = zone["paletteName"].as<const char*>();
+                        strncpy(state.paletteName, name, sizeof(state.paletteName) - 1);
+                        state.paletteName[sizeof(state.paletteName) - 1] = '\0';
+                    }
                 }
+
+                // Speed (ZoneParameterMode::SPEED = 2)
+                if (!s_zoneComposerUI->isZoneInHoldoff(zoneId, 2)) {
+                    state.speed = zone["speed"].as<uint8_t>();
+                }
+
+                // Brightness (ZoneParameterMode::BRIGHTNESS = 3)
+                if (!s_zoneComposerUI->isZoneInHoldoff(zoneId, 3)) {
+                    state.brightness = zone["brightness"].as<uint8_t>();
+                }
+
+                // Blend mode and enabled are not encoder-controlled, always apply
                 state.blendMode = zone["blendMode"].as<uint8_t>();
                 if (zone["blendModeName"].is<const char*>()) {
                     const char* name = zone["blendModeName"].as<const char*>();
@@ -404,8 +488,7 @@ private:
                 }
                 state.enabled = zone["enabled"].as<bool>();
 
-                // Calculate LED range from segments (if available)
-                // For now, use placeholder - will be updated from segments
+                // LED range placeholder - updated from segments
                 state.ledStart = 0;
                 state.ledEnd = 0;
 
@@ -417,6 +500,181 @@ private:
         }
 
         TAB5_WS_PRINTF("[WsRouter] Zones list: enabled=%d, count=%d\n", enabled, zoneCount);
+    }
+
+    // ========================================================================
+    // Zone Direct Broadcast Handlers (Gap 4: parse inline data)
+    // ========================================================================
+
+    /**
+     * @brief Apply zone data from a "current" object to the UI
+     *
+     * Shared helper for zones.effectChanged, zones.changed, zone.paletteChanged,
+     * zone.blendChanged — all contain data.current with zone state fields.
+     * Respects anti-snapback holdoff from ZoneComposerUI.
+     */
+    static void applyZoneCurrentData(uint8_t zoneId, JsonObject current) {
+        if (!s_zoneComposerUI || zoneId >= zones::MAX_ZONES) return;
+
+        ZoneState state = s_zoneComposerUI->getZoneState(zoneId);
+
+        // Effect (ZoneParameterMode::EFFECT = 0)
+        if (!s_zoneComposerUI->isZoneInHoldoff(zoneId, 0)) {
+            if (current["effectId"].is<uint8_t>()) {
+                state.effectId = current["effectId"].as<uint8_t>();
+            }
+            if (current["effectName"].is<const char*>()) {
+                const char* name = current["effectName"].as<const char*>();
+                strncpy(state.effectName, name, sizeof(state.effectName) - 1);
+                state.effectName[sizeof(state.effectName) - 1] = '\0';
+            }
+        }
+
+        // Palette (ZoneParameterMode::PALETTE = 1)
+        if (!s_zoneComposerUI->isZoneInHoldoff(zoneId, 1)) {
+            if (current["paletteId"].is<uint8_t>()) {
+                state.paletteId = current["paletteId"].as<uint8_t>();
+            }
+            if (current["paletteName"].is<const char*>()) {
+                const char* name = current["paletteName"].as<const char*>();
+                strncpy(state.paletteName, name, sizeof(state.paletteName) - 1);
+                state.paletteName[sizeof(state.paletteName) - 1] = '\0';
+            }
+        }
+
+        // Speed (ZoneParameterMode::SPEED = 2)
+        if (!s_zoneComposerUI->isZoneInHoldoff(zoneId, 2)) {
+            if (current["speed"].is<uint8_t>()) {
+                state.speed = current["speed"].as<uint8_t>();
+            }
+        }
+
+        // Brightness (ZoneParameterMode::BRIGHTNESS = 3)
+        if (!s_zoneComposerUI->isZoneInHoldoff(zoneId, 3)) {
+            if (current["brightness"].is<uint8_t>()) {
+                state.brightness = current["brightness"].as<uint8_t>();
+            }
+        }
+
+        // Blend mode - always apply (not encoder-controlled)
+        if (current["blendMode"].is<uint8_t>()) {
+            state.blendMode = current["blendMode"].as<uint8_t>();
+        }
+        if (current["blendModeName"].is<const char*>()) {
+            const char* name = current["blendModeName"].as<const char*>();
+            strncpy(state.blendModeName, name, sizeof(state.blendModeName) - 1);
+            state.blendModeName[sizeof(state.blendModeName) - 1] = '\0';
+        }
+
+        s_zoneComposerUI->updateZone(zoneId, state);
+        TAB5_WS_PRINTF("[WsRouter] Zone %u direct update applied\n", zoneId);
+    }
+
+    /**
+     * @brief Handle zones.effectChanged / zone.paletteChanged / zone.blendChanged
+     *
+     * All use the same data format: {zoneId, current: {effectId, speed, ...}}
+     * Sent to requesting client only (not broadcast).
+     */
+    static void handleZoneFieldChanged(JsonDocument& doc) {
+        JsonObject data = doc["data"].is<JsonObject>() ? doc["data"].as<JsonObject>() : doc.as<JsonObject>();
+        if (!data["zoneId"].is<uint8_t>()) return;
+
+        uint8_t zoneId = data["zoneId"].as<uint8_t>();
+        if (data["current"].is<JsonObject>()) {
+            applyZoneCurrentData(zoneId, data["current"].as<JsonObject>());
+        }
+    }
+
+    /**
+     * @brief Handle zones.layoutChanged
+     *
+     * Sent when zone layout (segment count) changes.
+     * Contains {zoneCount}. We defer to a full refresh since layout
+     * changes affect segments which aren't included in this message.
+     */
+    static void handleZonesLayoutChanged(JsonDocument& doc) {
+        TAB5_WS_PRINTLN("[WsRouter] Zone layout changed");
+        // Layout change requires full refresh (segments not included in this msg)
+        if (s_wsClient) {
+            s_wsClient->setPendingZonesRefresh();
+        }
+        (void)doc;
+    }
+
+    /**
+     * @brief Handle zone.enabledChanged (broadcast to ALL clients)
+     *
+     * Global zone enable/disable event.
+     * Contains {enabled: bool}.
+     */
+    static void handleZoneEnabledChanged(JsonDocument& doc) {
+        JsonObject data = doc["data"].is<JsonObject>() ? doc["data"].as<JsonObject>() : doc.as<JsonObject>();
+        bool enabled = data["enabled"] | false;
+        TAB5_WS_PRINTF("[WsRouter] Zone enabled changed: %s\n", enabled ? "ON" : "OFF");
+        // The zones.list broadcast will follow with full state, so no action needed
+        // beyond logging. The UI will update from zones.list.
+        (void)enabled;
+    }
+
+    /**
+     * @brief Handle "zonePresets.list" response
+     *
+     * Parses preset metadata array and passes to ZoneComposerUI.
+     * Response format: {data: {presets: [{id, name, zoneCount, timestamp}, ...], count, maxSlots}}
+     */
+    static void handleZonePresetsList(JsonDocument& doc) {
+        if (!s_zoneComposerUI) {
+            TAB5_WS_PRINTLN("[WsRouter] Zone presets list received (no UI)");
+            return;
+        }
+
+        JsonObject data = doc["data"].is<JsonObject>() ? doc["data"].as<JsonObject>() : doc.as<JsonObject>();
+        if (!data["presets"].is<JsonArray>()) {
+            TAB5_WS_PRINTLN("[WsRouter] Zone presets list: missing presets array");
+            return;
+        }
+
+        JsonArray presetsArray = data["presets"].as<JsonArray>();
+        ZoneComposerUI::PresetMeta presets[16];
+        uint8_t count = 0;
+
+        for (JsonObject p : presetsArray) {
+            if (count >= 16) break;
+            presets[count].id = p["id"].as<uint8_t>();
+            presets[count].zoneCount = p["zoneCount"].as<uint8_t>();
+            presets[count].occupied = true;  // All entries in the list are occupied
+            const char* name = p["name"] | "Untitled";
+            strncpy(presets[count].name, name, sizeof(presets[count].name) - 1);
+            presets[count].name[sizeof(presets[count].name) - 1] = '\0';
+            count++;
+        }
+
+        s_zoneComposerUI->updateServerPresets(presets, count);
+        TAB5_WS_PRINTF("[WsRouter] Zone presets: %u received\n", count);
+    }
+
+    /**
+     * @brief Handle "zone.zoneEnabledChanged" (broadcast to ALL clients)
+     *
+     * Per-zone enable/disable event.
+     * Contains {zoneId, enabled}.
+     */
+    static void handlePerZoneEnabledChanged(JsonDocument& doc) {
+        if (!s_zoneComposerUI) return;
+
+        JsonObject data = doc["data"].is<JsonObject>() ? doc["data"].as<JsonObject>() : doc.as<JsonObject>();
+        if (!data["zoneId"].is<uint8_t>()) return;
+
+        uint8_t zoneId = data["zoneId"].as<uint8_t>();
+        bool enabled = data["enabled"] | false;
+
+        if (zoneId < zones::MAX_ZONES) {
+            ZoneState state = s_zoneComposerUI->getZoneState(zoneId);
+            state.enabled = enabled;
+            s_zoneComposerUI->updateZone(zoneId, state);
+            TAB5_WS_PRINTF("[WsRouter] Zone %u enabled: %s\n", zoneId, enabled ? "ON" : "OFF");
+        }
     }
 
     /**

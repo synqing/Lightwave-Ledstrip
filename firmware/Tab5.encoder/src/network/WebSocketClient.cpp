@@ -18,6 +18,21 @@
 #include <cstring>
 #include "../zones/ZoneDefinition.h"
 
+namespace {
+static_assert(NetworkConfig::WS_HEARTBEAT_PING_INTERVAL_MS > NetworkConfig::WS_HEARTBEAT_PONG_TIMEOUT_MS,
+              "WS heartbeat ping interval must be greater than pong timeout");
+static_assert(NetworkConfig::WS_HEARTBEAT_PING_INTERVAL_MS >= 15000,
+              "WS heartbeat ping interval too aggressive for SoftAP stability");
+static_assert(NetworkConfig::WS_HEARTBEAT_PONG_TIMEOUT_MS >= 5000,
+              "WS heartbeat pong timeout too aggressive for SoftAP stability");
+static_assert(NetworkConfig::WS_HEARTBEAT_MISSED_LIMIT >= 1,
+              "WS heartbeat missed limit must be at least 1");
+static_assert(NetworkConfig::WS_HEARTBEAT_MISSED_LIMIT >= 2,
+              "WS heartbeat missed limit too aggressive for stable operation");
+static_assert(NetworkConfig::WS_ZONES_GET_MIN_INTERVAL_MS >= 250,
+              "zones.get minimum interval too small; reconnect bursts may return");
+}  // namespace
+
 WebSocketClient::WebSocketClient()
     : _status(WebSocketStatus::DISCONNECTED)
     , _messageCallback(nullptr)
@@ -30,13 +45,15 @@ WebSocketClient::WebSocketClient()
     , _serverPath("/ws")
     , _useIP(false)
     , _pendingHello(false)
+    , _helloStage(0)
+    , _helloStageStartMs(0)
     , _consecutiveSendFailures(0)
     , _sendDegraded(false)
     , _sendMutex(nullptr)
     , _sendAttemptStartTime(0)
 {
     // Initialize rate limiter (all parameters start at 0)
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < SEND_QUEUE_SIZE; i++) {
         _rateLimiter.lastSend[i] = 0;
     }
 
@@ -55,6 +72,21 @@ WebSocketClient::WebSocketClient()
     _ws.onEvent([this](WStype_t type, uint8_t* payload, size_t length) {
         handleEvent(type, payload, length);
     });
+}
+
+void WebSocketClient::configureHeartbeat() {
+    _ws.enableHeartbeat(NetworkConfig::WS_HEARTBEAT_PING_INTERVAL_MS,
+                        NetworkConfig::WS_HEARTBEAT_PONG_TIMEOUT_MS,
+                        NetworkConfig::WS_HEARTBEAT_MISSED_LIMIT);
+}
+
+bool WebSocketClient::shouldSendZonesGetNow() {
+    const uint32_t nowMs = millis();
+    if ((nowMs - _lastZonesGetMs) < NetworkConfig::WS_ZONES_GET_MIN_INTERVAL_MS) {
+        return false;
+    }
+    _lastZonesGetMs = nowMs;
+    return true;
 }
 
 void WebSocketClient::begin(const char* host, uint16_t port, const char* path) {
@@ -83,9 +115,8 @@ void WebSocketClient::begin(const char* host, uint16_t port, const char* path) {
     
     _ws.begin(host, port, path);
 
-    // Enable ping/pong heartbeat for dead-connection detection
-    // 15s ping interval, 10s pong timeout, 2 missed pongs = disconnect
-    _ws.enableHeartbeat(30000, 15000, 3);
+    // Enable ping/pong heartbeat using central policy constants.
+    configureHeartbeat();
 
     // CRITICAL FIX: Feed watchdog after begin() returns
     esp_task_wdt_reset();
@@ -119,8 +150,8 @@ void WebSocketClient::begin(IPAddress ip, uint16_t port, const char* path) {
     
     _ws.begin(ip, port, path);
 
-    // Enable ping/pong heartbeat for dead-connection detection
-    _ws.enableHeartbeat(30000, 15000, 3);
+    // Enable ping/pong heartbeat using central policy constants.
+    configureHeartbeat();
 
     // CRITICAL FIX: Feed watchdog after begin() returns
     esp_task_wdt_reset();
@@ -184,6 +215,37 @@ void WebSocketClient::update() {
         sendHelloMessage();
     }
 
+    // STAGGERED HELLO: Process staged hello sequence (one message per interval).
+    // This prevents overwhelming the v2 SoftAP TCP send buffers which causes
+    // the connection to drop within 100-250ms of connecting.
+    if (_helloStage > 0 && _status == WebSocketStatus::CONNECTED) {
+        const uint32_t elapsed = millis() - _helloStageStartMs;
+        if (elapsed >= HELLO_STAGE_INTERVAL_MS) {
+            _helloStageStartMs = millis();
+            switch (_helloStage) {
+                case 1:
+                    // Stage 1: getStatus already sent in sendHelloMessage()
+                    // Advance to stage 2
+                    _helloStage = 2;
+                    requestZonesState();
+                    break;
+                case 2:
+                    _helloStage = 3;
+                    sendZonePresetList();
+                    break;
+                case 3:
+                    _helloStage = 4;
+                    requestColorCorrectionConfig();
+                    break;
+                default:
+                    // All stages complete
+                    _helloStage = 0;
+                    Serial.println("[WS] Hello sequence complete");
+                    break;
+            }
+        }
+    }
+
     // Deferred zones.get (set by WsMessageRouter on "zones.changed" to avoid sending inside WS callback)
     if (_pendingZonesRefresh && _status == WebSocketStatus::CONNECTED) {
         _pendingZonesRefresh = false;
@@ -227,6 +289,12 @@ void WebSocketClient::handleEvent(WStype_t type, uint8_t* payload, size_t length
     switch (type) {
         case WStype_DISCONNECTED:
             {
+                const uint32_t nowMs = millis();
+                const bool duplicateEvent =
+                    (_lastDisconnectEventMs != 0) &&
+                    ((nowMs - _lastDisconnectEventMs) < DISCONNECT_EVENT_DEBOUNCE_MS);
+                _lastDisconnectEventMs = nowMs;
+
                 // Extract disconnect reason (if available)
                 char reason[64];
                 reason[0] = '\0';
@@ -235,12 +303,25 @@ void WebSocketClient::handleEvent(WStype_t type, uint8_t* payload, size_t length
                     memcpy(reason, payload, n);
                     reason[n] = '\0';
                 }
-                Serial.printf("[WS] Disconnected (reason: \"%s\", delay: %lu ms)\n",
-                              reason, _reconnectDelay);
+
+                if ((nowMs - _lastDisconnectLogMs) >= DISCONNECT_LOG_THROTTLE_MS) {
+                    Serial.printf("[WS] Disconnected (reason: \"%s\", delay: %lu ms)\n",
+                                  reason, _reconnectDelay);
+                    _lastDisconnectLogMs = nowMs;
+                }
+
+                // links2004 can emit repeated disconnect callbacks for one outage.
+                // Ignore duplicates to keep backoff and state transitions stable.
+                if (duplicateEvent && _status == WebSocketStatus::DISCONNECTED) {
+                    _duplicateDisconnectCount++;
+                    break;
+                }
             }
+            _disconnectCount++;
             _status = WebSocketStatus::DISCONNECTED;
             _pendingHello = false;  // Clear pending hello on disconnect
             _pendingZonesRefresh = false;  // Clear deferred zone refresh
+            _helloStage = 0;  // Cancel staggered hello sequence
             increaseReconnectBackoff();
             break;
 
@@ -253,7 +334,11 @@ void WebSocketClient::handleEvent(WStype_t type, uint8_t* payload, size_t length
                 Serial.printf("[WS] Local IP: %s\n", WiFi.localIP().toString().c_str());
             }
             _status = WebSocketStatus::CONNECTED;
+            _connectedCount++;
             resetReconnectBackoff();
+            _lastZonesGetMs = 0;
+            _lastDisconnectEventMs = 0;
+            _lastErrorEventMs = 0;
             // Defer hello message to next update() to ensure connection is fully ready
             _pendingHello = true;
             break;
@@ -276,14 +361,28 @@ void WebSocketClient::handleEvent(WStype_t type, uint8_t* payload, size_t length
 
         case WStype_ERROR:
             {
-                Serial.printf("[WS] Error occurred (delay: %lu ms)\n", _reconnectDelay);
-                Serial.printf("[WS] Target: ws://%s:%d%s\n",
-                              _useIP ? _serverIP.toString().c_str() : (_serverHost ? _serverHost : "unknown"),
-                              _serverPort, _serverPath);
-                Serial.printf("[WS] Local IP: %s, WiFi Status: %d\n", 
-                              WiFi.localIP().toString().c_str(), (int)WiFi.status());
+                const uint32_t nowMs = millis();
+                const bool duplicateError =
+                    (_lastErrorEventMs != 0) &&
+                    ((nowMs - _lastErrorEventMs) < ERROR_EVENT_DEBOUNCE_MS);
+                _lastErrorEventMs = nowMs;
+
+                if ((nowMs - _lastDisconnectLogMs) >= DISCONNECT_LOG_THROTTLE_MS) {
+                    Serial.printf("[WS] Error occurred (delay: %lu ms)\n", _reconnectDelay);
+                    Serial.printf("[WS] Target: ws://%s:%d%s\n",
+                                  _useIP ? _serverIP.toString().c_str() : (_serverHost ? _serverHost : "unknown"),
+                                  _serverPort, _serverPath);
+                    Serial.printf("[WS] Local IP: %s, WiFi Status: %d\n", 
+                                  WiFi.localIP().toString().c_str(), (int)WiFi.status());
+                    _lastDisconnectLogMs = nowMs;
+                }
+
+                if (duplicateError && _status == WebSocketStatus::DISCONNECTED) {
+                    break;
+                }
             }
-            _status = WebSocketStatus::ERROR;
+            _errorCount++;
+            _status = WebSocketStatus::DISCONNECTED;
             increaseReconnectBackoff();
             break;
 
@@ -303,6 +402,7 @@ void WebSocketClient::attemptReconnect() {
     unsigned long now = millis();
 
     if (now - _lastReconnectAttempt >= _reconnectDelay) {
+        _reconnectAttemptCount++;
         _lastReconnectAttempt = now;
         _status = WebSocketStatus::CONNECTING;
 
@@ -320,8 +420,8 @@ void WebSocketClient::attemptReconnect() {
             _ws.begin(_serverHost, _serverPort, _serverPath);
         }
 
-        // Re-enable heartbeat after fresh begin() (begin() resets library state)
-        _ws.enableHeartbeat(30000, 15000, 3);
+        // Re-enable heartbeat after fresh begin() (begin() resets library state).
+        configureHeartbeat();
 
         // CRITICAL FIX: Feed watchdog after reconnect attempt
         esp_task_wdt_reset();
@@ -333,11 +433,40 @@ void WebSocketClient::resetReconnectBackoff() {
 }
 
 void WebSocketClient::increaseReconnectBackoff() {
-    _reconnectDelay = min(_reconnectDelay * 2, (unsigned long)NetworkConfig::WS_MAX_RECONNECT_MS);
+    // Exponential step with hard cap before applying jitter.
+    uint32_t baseDelay = static_cast<uint32_t>(_reconnectDelay);
+    if (baseDelay < NetworkConfig::WS_INITIAL_RECONNECT_MS) {
+        baseDelay = NetworkConfig::WS_INITIAL_RECONNECT_MS;
+    }
+    if (baseDelay > NetworkConfig::WS_MAX_RECONNECT_MS) {
+        baseDelay = NetworkConfig::WS_MAX_RECONNECT_MS;
+    }
+
+    uint32_t nextDelay = baseDelay * 2U;
+    if (nextDelay > NetworkConfig::WS_MAX_RECONNECT_MS || nextDelay < baseDelay) {
+        nextDelay = NetworkConfig::WS_MAX_RECONNECT_MS;
+    }
+
+    // Add +/-25% jitter using signed arithmetic (avoid unsigned underflow).
+    const int32_t jitterRange = static_cast<int32_t>(nextDelay / 4U);
+    int32_t jitterOffset = 0;
+    if (jitterRange > 0) {
+        const uint32_t span = static_cast<uint32_t>(jitterRange * 2 + 1);
+        jitterOffset = static_cast<int32_t>(esp_random() % span) - jitterRange;
+    }
+
+    int32_t jittered = static_cast<int32_t>(nextDelay) + jitterOffset;
+    if (jittered < static_cast<int32_t>(NetworkConfig::WS_INITIAL_RECONNECT_MS)) {
+        jittered = static_cast<int32_t>(NetworkConfig::WS_INITIAL_RECONNECT_MS);
+    }
+    if (jittered > static_cast<int32_t>(NetworkConfig::WS_MAX_RECONNECT_MS)) {
+        jittered = static_cast<int32_t>(NetworkConfig::WS_MAX_RECONNECT_MS);
+    }
+    _reconnectDelay = static_cast<unsigned long>(jittered);
 }
 
 bool WebSocketClient::canSend(uint8_t paramIndex) {
-    if (paramIndex >= 16) return false;
+    if (paramIndex >= SEND_QUEUE_SIZE) return false;
 
     unsigned long now = millis();
     if (now - _rateLimiter.lastSend[paramIndex] >= NetworkConfig::PARAM_THROTTLE_MS) {
@@ -421,18 +550,18 @@ void WebSocketClient::sendJSONUnlocked(const char* type, JsonDocument& doc) {
 }
 
 void WebSocketClient::sendHelloMessage() {
-    // On connect, request current status from LightwaveOS
-    // This triggers a "status" broadcast that syncs our local state
+    // STAGGERED HELLO: Instead of sending all 4 requests in a burst (which
+    // overwhelms the v2 SoftAP TCP send buffers and causes disconnect within
+    // 100ms), start a staged sequence that sends one request per update() tick
+    // with HELLO_STAGE_INTERVAL_MS between each.
+    Serial.println("[WS] Starting staggered hello sequence");
+    _helloStage = 1;
+    _helloStageStartMs = millis();
+
+    // Send the first message immediately (getStatus is small and critical)
     Serial.println("[WS] Sending hello (getStatus)");
     JsonDocument doc;
-    // Empty payload - getStatus doesn't need parameters
     sendJSON("getStatus", doc);
-
-    // Also request zone state
-    requestZonesState();
-
-    // Request color correction state (for presets)
-    requestColorCorrectionConfig();
 }
 
 void WebSocketClient::requestEffectsList(uint8_t page, uint8_t limit, const char* requestId) {
@@ -456,6 +585,9 @@ void WebSocketClient::requestPalettesList(uint8_t page, uint8_t limit, const cha
 
 void WebSocketClient::requestZonesState() {
     if (!isConnected()) return;
+    if (!shouldSendZonesGetNow()) {
+        return;
+    }
     Serial.println("[WS] Requesting zone state (zones.get)");
     JsonDocument doc;
     // Empty payload - zones.get doesn't need parameters
@@ -521,33 +653,42 @@ void WebSocketClient::sendZoneEnable(bool enable) {
     sendJSON("zone.enable", doc);
 }
 
+void WebSocketClient::sendZoneEnableZone(uint8_t zoneId, bool enabled) {
+    if (!isConnected() || zoneId > 3) return;
+
+    JsonDocument doc;
+    doc["zoneId"] = zoneId;
+    doc["enabled"] = enabled;
+    sendJSON("zone.enableZone", doc);
+}
+
 void WebSocketClient::sendZoneEffect(uint8_t zoneId, uint8_t effectId) {
     if (!isConnected() || zoneId > 3) return;
-    uint8_t paramIndex = ParamIndex::ZONE0_EFFECT + (zoneId * 2);
+    uint8_t paramIndex = ParamIndex::ZONE0_EFFECT + (zoneId * 3);
     queueParameterChange(paramIndex, effectId, "zone.setEffect", zoneId);
 }
 
 void WebSocketClient::sendZoneBrightness(uint8_t zoneId, uint8_t value) {
     if (!isConnected() || zoneId > 3) return;
-    uint8_t paramIndex = ParamIndex::ZONE0_EFFECT + (zoneId * 2);
+    uint8_t paramIndex = ParamIndex::ZONE0_AUX + (zoneId * 3);
     queueParameterChange(paramIndex, value, "zone.setBrightness", zoneId);
 }
 
 void WebSocketClient::sendZoneSpeed(uint8_t zoneId, uint8_t value) {
     if (!isConnected() || zoneId > 3) return;
-    uint8_t paramIndex = ParamIndex::ZONE0_SPEED + (zoneId * 2);
+    uint8_t paramIndex = ParamIndex::ZONE0_SPEED + (zoneId * 3);
     queueParameterChange(paramIndex, value, "zone.setSpeed", zoneId);
 }
 
 void WebSocketClient::sendZonePalette(uint8_t zoneId, uint8_t paletteId) {
     if (!isConnected() || zoneId > 3) return;
-    uint8_t paramIndex = ParamIndex::ZONE0_EFFECT + (zoneId * 2);
+    uint8_t paramIndex = ParamIndex::ZONE0_AUX + (zoneId * 3);
     queueParameterChange(paramIndex, paletteId, "zone.setPalette", zoneId);
 }
 
 void WebSocketClient::sendZoneBlend(uint8_t zoneId, uint8_t blendMode) {
     if (!isConnected() || zoneId > 3 || blendMode > 7) return;
-    uint8_t paramIndex = ParamIndex::ZONE0_EFFECT + (zoneId * 2);
+    uint8_t paramIndex = ParamIndex::ZONE0_AUX + (zoneId * 3);
     queueParameterChange(paramIndex, blendMode, "zone.setBlend", zoneId);
 }
 
@@ -585,6 +726,31 @@ void WebSocketClient::sendZonesSetLayout(const struct zones::ZoneSegment* segmen
     }
 
     sendJSON("zones.setLayout", doc);
+}
+
+// ============================================================================
+// Zone Preset Commands
+// ============================================================================
+
+void WebSocketClient::sendZonePresetList() {
+    if (!isConnected()) return;
+    JsonDocument doc;
+    sendJSON("zonePresets.list", doc);
+}
+
+void WebSocketClient::sendZonePresetLoad(uint8_t id) {
+    if (!isConnected()) return;
+    JsonDocument doc;
+    doc["id"] = id;
+    sendJSON("zonePresets.load", doc);
+}
+
+void WebSocketClient::sendZonePresetSave(uint8_t slot, const char* name) {
+    if (!isConnected()) return;
+    JsonDocument doc;
+    doc["slot"] = slot;
+    doc["name"] = name ? name : "Untitled";
+    sendJSON("zonePresets.saveCurrent", doc);
 }
 
 // ============================================================================
@@ -765,6 +931,10 @@ void WebSocketClient::processSendQueue() {
                     doc["speed"] = _sendQueue[i].value;
                 } else if (strstr(_sendQueue[i].type, "setPalette") != nullptr) {
                     doc["paletteId"] = _sendQueue[i].value;
+                } else if (strstr(_sendQueue[i].type, "setBlend") != nullptr) {
+                    doc["blendMode"] = _sendQueue[i].value;
+                } else if (strstr(_sendQueue[i].type, "setBrightness") != nullptr) {
+                    doc["brightness"] = _sendQueue[i].value;
                 } else {
                     doc["value"] = _sendQueue[i].value;
                 }

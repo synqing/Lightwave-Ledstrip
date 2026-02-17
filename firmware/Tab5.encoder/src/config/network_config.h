@@ -90,14 +90,26 @@ namespace NetworkConfig {
     // System will attempt mDNS resolution this many times before using fallback
     constexpr uint8_t MDNS_MAX_ATTEMPTS = 6;  // 6 attempts × 10s = 60s
 
-    // WebSocket initial reconnect delay
-    constexpr uint32_t WS_INITIAL_RECONNECT_MS = 1000;
+    // WebSocket initial reconnect delay.
+    // MUST be > v2's CONNECT_COOLDOWN_MS (2000ms) to avoid the connect guard
+    // rejecting reconnects with "Reconnect too fast" on every first attempt.
+    constexpr uint32_t WS_INITIAL_RECONNECT_MS = 2500;
 
     // WebSocket maximum reconnect delay (exponential backoff cap)
-    constexpr uint32_t WS_MAX_RECONNECT_MS = 30000;
+    constexpr uint32_t WS_MAX_RECONNECT_MS = 20000;
 
     // WebSocket connection/handshake timeout
     constexpr uint32_t WS_CONNECTION_TIMEOUT_MS = 20000;
+
+    // WebSocket heartbeat policy (stability-first SoftAP profile).
+    // Keep these values aligned with the v2 server ping cadence to avoid
+    // false disconnect loops under transient congestion.
+    constexpr uint32_t WS_HEARTBEAT_PING_INTERVAL_MS = 30000;
+    constexpr uint32_t WS_HEARTBEAT_PONG_TIMEOUT_MS = 15000;
+    constexpr uint8_t WS_HEARTBEAT_MISSED_LIMIT = 3;
+
+    // Prevent duplicate zones.get bursts during connect and rapid state churn.
+    constexpr uint32_t WS_ZONES_GET_MIN_INTERVAL_MS = 500;
 
     // Per-parameter send throttle (minimum interval between sends)
     constexpr uint32_t PARAM_THROTTLE_MS = 50;

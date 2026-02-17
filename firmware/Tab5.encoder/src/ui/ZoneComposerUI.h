@@ -145,6 +145,65 @@ public:
     void setHeader(UIHeader* header) { _header = header; }
 
     /**
+     * Mark a zone parameter as locally changed (for anti-snapback holdoff)
+     * Call before sending WS command so incoming echoes are ignored.
+     * @param zoneId Zone index (0-3)
+     * @param paramType Parameter type (ZoneParameterMode value, 0-3)
+     */
+    void markZoneLocalChange(uint8_t zoneId, uint8_t paramType) {
+        if (zoneId < 4 && paramType < 4) {
+            _zoneLastLocalChangeMs[zoneId][paramType] = millis();
+        }
+    }
+
+    /**
+     * Check if a zone parameter is currently under local-change holdoff.
+     * When true, incoming server status for this zone+param should be ignored.
+     * @param zoneId Zone index (0-3)
+     * @param paramType Parameter type (ZoneParameterMode value, 0-3)
+     * @return true if holdoff is active
+     */
+    bool isZoneInHoldoff(uint8_t zoneId, uint8_t paramType) const {
+        if (zoneId >= 4 || paramType >= 4) return false;
+        uint32_t last = _zoneLastLocalChangeMs[zoneId][paramType];
+        if (last == 0) return false;
+        return (millis() - last) < ZONE_HOLDOFF_MS;
+    }
+
+    // ========================================================================
+    // Server-Side Zone Preset Support
+    // ========================================================================
+
+    /**
+     * Server-side preset metadata (from zonePresets.list response)
+     */
+    struct PresetMeta {
+        uint8_t id = 0;
+        char name[32] = {0};
+        uint8_t zoneCount = 0;
+        bool occupied = false;
+    };
+
+    /**
+     * Update the server-side preset list from zonePresets.list response.
+     * Filters out presets with zoneCount > 2 (hardware limit).
+     * @param presets Array of preset metadata
+     * @param count Number of presets
+     */
+    void updateServerPresets(const PresetMeta* presets, uint8_t count);
+
+    /**
+     * Get count of available server-side presets (zoneCount <= 2)
+     */
+    uint8_t getServerPresetCount() const { return _serverPresetCount; }
+
+    /**
+     * Request server preset load via callback
+     * Called when user navigates to a server preset via encoder.
+     */
+    void loadServerPreset(uint8_t presetIndex);
+
+    /**
      * Mark UI as dirty (needs redraw) - queued for next frame
      */
     void markDirty() { _pendingDirty = true; }
@@ -258,6 +317,12 @@ private:
     uint8_t _currentPresetIndex = 1;
     const char* _presetName = "Dual Split";
 
+    // Server-side preset cache (from zonePresets.list)
+    static constexpr uint8_t MAX_SERVER_PRESETS = 16;
+    PresetMeta _serverPresets[MAX_SERVER_PRESETS];
+    uint8_t _serverPresetCount = 0;       // Count of compatible presets (zoneCount <= 2)
+    bool _hasServerPresets = false;        // True after first zonePresets.list response
+
     // ========================================================================
     // LVGL Widget References (Phase 1)
     // ========================================================================
@@ -320,6 +385,16 @@ private:
     static constexpr int LED_STRIP_H = 80;
     static constexpr int ZONE_LIST_Y = 180 + Theme::STATUS_BAR_H;  // Was 180, now below header
     static constexpr int CONTROLS_Y = 520 + Theme::STATUS_BAR_H;   // Was 520, now below header
+
+    // ========================================================================
+    // Zone Anti-Snapback (mirrors ParameterHandler holdoff pattern)
+    // ========================================================================
+    // When a zone parameter is changed locally (encoder), we mark the timestamp.
+    // Incoming server broadcasts for that zone+param are ignored during the
+    // holdoff window to prevent visible flicker from the echo.
+    // [zoneId][paramType] where paramType maps to ZoneParameterMode (0-3)
+    uint32_t _zoneLastLocalChangeMs[4][4] = {{0}};
+    static constexpr uint32_t ZONE_HOLDOFF_MS = 1000;
 
     // Zone colors (matching dashboard template)
     static constexpr uint32_t ZONE_COLORS[4] = {

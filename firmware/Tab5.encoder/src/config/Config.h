@@ -29,29 +29,35 @@
 #define TAB5_WIFI_SDIO_D3    8
 #define TAB5_WIFI_SDIO_RST   15
 
+// Tab5 WiFi antenna: PI4IOE5V6408 IO expander (internal I2C), P0 = antenna select
+// Must be set BEFORE M5.begin() so ESP32-C6 latches external antenna at init.
+#define TAB5_ANTENNA_EXPANDER_I2C_ADDR  0x43
+#define TAB5_ANTENNA_EXPANDER_DIR_REG   0x03   // 0 = output
+#define TAB5_ANTENNA_EXPANDER_OUT_REG   0x05   // 1 = HIGH = external MMCX
+#define TAB5_INTERNAL_I2C_SDA           31
+#define TAB5_INTERNAL_I2C_SCL           32
+
 // ============================================================================
 // Tab5.encoder Configuration
 // ============================================================================
-// M5Stack Tab5 (ESP32-P4) with dual M5ROTATE8 units
-// Unit A: Grove Port.A (GPIO 53/54) - Parameters 0-7
-// Unit B: Custom port (GPIO 49/50) - Parameters 8-15
+// M5Stack Tab5 (ESP32-P4) with dual M5ROTATE8 units on SINGLE I2C bus.
+// Both units share Grove Port.A (GPIO 53/54) with different addresses:
+//   Unit A @ 0x42 (reprogrammed via register 0xFF) - Global parameters (0-7)
+//   Unit B @ 0x41 (factory default)                - Zone parameters (8-15)
 // ============================================================================
 
 // I2C Configuration
 namespace I2C {
-    // Primary I2C: Grove Port.A (Unit A - encoders 0-7)
+    // External I2C: Grove Port.A (both encoder units)
     // Tab5 Grove Port.A uses GPIO 53/54 for external I2C
     // These pins are obtained dynamically via M5.Ex_I2C.getSDA()/getSCL()
     // but we define constants here for reference and fallback
     constexpr uint8_t EXT_SDA_PIN = 53;
     constexpr uint8_t EXT_SCL_PIN = 54;
 
-    // Secondary I2C: Custom port on G49/G50 (Unit B - encoders 8-15)
-    constexpr uint8_t EXT2_SDA_PIN = 49;
-    constexpr uint8_t EXT2_SCL_PIN = 50;
-
-    // M5ROTATE8 I2C address (same for both units, different buses)
-    constexpr uint8_t ROTATE8_ADDRESS = 0x41;
+    // M5ROTATE8 I2C addresses (both on same bus, different addresses)
+    constexpr uint8_t ADDR_UNIT_A = 0x42;   // Reprogrammed via register 0xFF
+    constexpr uint8_t ADDR_UNIT_B = 0x41;   // Factory default
 
     // Conservative frequency (100kHz) for stability
     // The M5ROTATE8 library supports up to 400kHz, but we start safe
@@ -124,7 +130,7 @@ namespace ZoneParam {
 namespace ParamRange {
     // Unit A (0-7) - Global parameters
     constexpr uint8_t EFFECT_MIN = 0;
-    constexpr uint8_t EFFECT_MAX = 103;  // 104 effect slots (0-103) - matches v2 RendererActor::MAX_EFFECTS
+    constexpr uint8_t EFFECT_MAX = 146;  // 147 effect slots (0-146) - matches v2 limits.h MAX_EFFECTS
 
     constexpr uint8_t PALETTE_MIN = 0;
     constexpr uint8_t PALETTE_MAX = 74;  // v2 has 75 palettes (0-74)
@@ -156,9 +162,9 @@ namespace ParamRange {
     constexpr uint8_t ZONE_PALETTE_MAX = 74;  // v2 has 75 palettes (0-74)
 
     // Unit B (8-15) - Zone parameters
-    // Zone Effect: 0-99 (wraps around for continuous scrolling) - matches v2 EXPECTED_EFFECT_COUNT
+    // Zone Effect: 0-146 (wraps around for continuous scrolling) - matches v2 limits.h MAX_EFFECTS
     constexpr uint8_t ZONE_EFFECT_MIN = 0;
-    constexpr uint8_t ZONE_EFFECT_MAX = 103;  // 104 effect slots (0-103)
+    constexpr uint8_t ZONE_EFFECT_MAX = 146;  // 147 effect slots (0-146)
 
     // Zone Brightness: 0-255 (clamped, no wrap)
     constexpr uint8_t ZONE_BRIGHTNESS_MIN = 0;

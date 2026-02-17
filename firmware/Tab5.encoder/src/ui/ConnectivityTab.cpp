@@ -16,6 +16,7 @@
 #include <WiFi.h>
 #include "../hal/EspHal.h"
 #include "../network/WiFiManager.h"
+#include "../network/WiFiAntenna.h"
 #include "Theme.h"
 #include "../input/ButtonHandler.h"
 #include "../network/WebSocketClient.h"
@@ -201,6 +202,11 @@ void ConnectivityTab::createInteractiveUI(lv_obj_t* parent) {
     // Serial.flush();
     createSavedNetworksButtons(_screen);
     esp_task_wdt_reset();
+
+#if ENABLE_WIFI
+    createAntennaRow(_screen);
+    esp_task_wdt_reset();
+#endif
 
     // Serial.printf("[CT_TRACE] before createAddNetworkDialog @ %lu ms\n", millis());
     // Serial.flush();
@@ -417,6 +423,49 @@ void ConnectivityTab::createSavedNetworksButtons(lv_obj_t* parent) {
     lv_obj_center(label);
     lv_obj_add_event_cb(_deleteButton, deleteButtonCb, LV_EVENT_CLICKED, this);
 }
+
+#if ENABLE_WIFI
+// ==========================================================================
+// ANTENNA ROW - Toggle External MMCX / Internal 3D (bottom of Network Settings)
+// ==========================================================================
+void ConnectivityTab::createAntennaRow(lv_obj_t* parent) {
+    // Row at bottom: Y = 672, full width minus margins, height 44 (matches back button)
+    static constexpr int ANTENNA_ROW_Y = 672;
+    static constexpr int ANTENNA_ROW_H = 44;
+    static constexpr int ANTENNA_ROW_W = 1240;  // 1280 - 20*2
+
+    _antennaButton = lv_btn_create(parent);
+    lv_obj_set_size(_antennaButton, ANTENNA_ROW_W, ANTENNA_ROW_H);
+    lv_obj_set_pos(_antennaButton, TAB5_GRID_MARGIN, ANTENNA_ROW_Y);
+    lv_obj_set_style_bg_color(_antennaButton, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
+    lv_obj_set_style_border_color(_antennaButton, lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_border_width(_antennaButton, 2, LV_PART_MAIN);
+    lv_obj_set_style_radius(_antennaButton, 14, LV_PART_MAIN);
+
+    lv_obj_t* label = lv_label_create(_antennaButton);
+    lv_obj_center(label);
+    lv_obj_set_style_text_color(label, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_text_font(label, RAJDHANI_BOLD_24, LV_PART_MAIN);
+    updateAntennaButtonLabel();
+
+    lv_obj_add_event_cb(_antennaButton, antennaButtonCb, LV_EVENT_CLICKED, this);
+}
+
+void ConnectivityTab::updateAntennaButtonLabel() {
+    if (!_antennaButton) return;
+    lv_obj_t* label = lv_obj_get_child(_antennaButton, 0);
+    if (!label) return;
+    lv_label_set_text(label, isWiFiAntennaExternal() ? "Antenna: External MMCX (tap to switch)" : "Antenna: Internal 3D (tap to switch)");
+}
+
+void ConnectivityTab::antennaButtonCb(lv_event_t* e) {
+    ConnectivityTab* tab = static_cast<ConnectivityTab*>(lv_event_get_user_data(e));
+    if (!tab || !tab->_antennaButton) return;
+    setWiFiAntenna(!isWiFiAntennaExternal());
+    tab->updateAntennaButtonLabel();
+    Serial.println(isWiFiAntennaExternal() ? "[Antenna] Switched to external MMCX" : "[Antenna] Switched to internal 3D");
+}
+#endif
 
 void ConnectivityTab::createAddNetworkDialog(lv_obj_t* parent) {
     // TAB5 modal dialog with brand yellow border

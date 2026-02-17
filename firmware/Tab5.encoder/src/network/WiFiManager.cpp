@@ -103,12 +103,16 @@ void WiFiManager::handleConnecting() {
         Serial.printf("[WiFi] IP: %s\n", WiFi.localIP().toString().c_str());
         Serial.printf("[WiFi] RSSI: %d dBm\n", WiFi.RSSI());
 
-        // Initialize mDNS responder
-        // Use "tab5encoder" as mDNS hostname for this device
-        if (!MDNS.begin("tab5encoder")) {
-            Serial.println("[WiFi] mDNS responder failed to start");
+        // Initialise mDNS stack for host resolution only (no advertisement).
+        // Tab5 is a client device — it needs to resolve lightwaveos.local
+        // but does NOT need to advertise its own hostname on the network.
+        // Using mdns_init() directly instead of MDNS.begin("tab5encoder")
+        // avoids broadcasting "tab5encoder.local" on the AP.
+        esp_err_t mdnsErr = mdns_init();
+        if (mdnsErr != ESP_OK) {
+            Serial.printf("[WiFi] mDNS init failed: %s\n", esp_err_to_name(mdnsErr));
         } else {
-            Serial.println("[WiFi] mDNS responder started: tab5encoder.local");
+            Serial.println("[WiFi] mDNS stack ready (query-only, no advertisement)");
         }
 
         // Silence ESPmDNS internal warnings while keeping resolution active.

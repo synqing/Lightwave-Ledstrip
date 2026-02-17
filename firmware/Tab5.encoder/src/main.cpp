@@ -51,6 +51,7 @@
 #include "input/ButtonHandler.h"
 #include "input/CoarseModeManager.h"
 #include "network/WiFiManager.h"
+#include "network/WiFiAntenna.h"
 #include "network/WebSocketClient.h"
 #include "network/WsMessageRouter.h"
 #include "network/OtaHandler.h"
@@ -89,11 +90,11 @@ static void formatIPv4(const IPAddress& ip, char out[16]) {
 }
 
 // ============================================================================
-// I2C Addresses for Dual Unit Setup
+// I2C Addresses for Dual Unit Setup (canonical source: Config.h I2C namespace)
 // ============================================================================
 
-constexpr uint8_t ADDR_UNIT_A = 0x42;  // Reprogrammed via register 0xFF
-constexpr uint8_t ADDR_UNIT_B = 0x41;  // Factory default
+constexpr uint8_t ADDR_UNIT_A = I2C::ADDR_UNIT_A;
+constexpr uint8_t ADDR_UNIT_B = I2C::ADDR_UNIT_B;
 
 // NOTE: Color palette and dimColor() moved to ui/DisplayUI.h
 
@@ -114,6 +115,7 @@ AsyncWebServer* g_otaServer = nullptr;
 
 // WebSocket connection state
 bool g_wsConfigured = false;  // true after wsClient.begin() called
+static bool s_wsConnectedEdgeState = false;
 
 // Connection status LED feedback (Phase F.5)
 LedFeedback g_ledFeedback;
@@ -527,10 +529,36 @@ static void handleSerialCommand(const char* cmd) {
         return;
     }
 
+#if ENABLE_WIFI
+    if (strncmp(cmd, "antenna", 7) == 0) {
+        const char* args = cmd + 7;
+        while (*args == ' ') args++;
+        if (args[0] == '\0' || strcmp(args, "?") == 0 || strcmp(args, "status") == 0) {
+            Serial.printf("[Antenna] %s\n", isWiFiAntennaExternal() ? "external (MMCX)" : "internal (3D)");
+            return;
+        }
+        if (strcmp(args, "ext") == 0 || strcmp(args, "external") == 0 || strcmp(args, "1") == 0) {
+            setWiFiAntenna(true);
+            Serial.println("[Antenna] Switched to external MMCX (may require WiFi reconnect to take effect)");
+            return;
+        }
+        if (strcmp(args, "int") == 0 || strcmp(args, "internal") == 0 || strcmp(args, "0") == 0) {
+            setWiFiAntenna(false);
+            Serial.println("[Antenna] Switched to internal 3D (may require WiFi reconnect to take effect)");
+            return;
+        }
+        Serial.println("[Antenna] Usage: antenna | antenna ext | antenna int | antenna 1 | antenna 0");
+        return;
+    }
+#endif
+
     if (strcmp(cmd, "help") == 0) {
         Serial.println("[HELP] Commands:");
         Serial.println("  ppa on | ppa off | ppa toggle | ppa bench [N]");
         Serial.println("  net status | net sta | net ap");
+#if ENABLE_WIFI
+        Serial.println("  antenna | antenna ext | antenna int");
+#endif
         return;
     }
 }
@@ -958,6 +986,10 @@ void setup() {
                   // ESP.getFreeHeap(), ESP.getMinFreeHeap());
         // #endregion
     Serial.println("[WIFI] SDIO pins configured");
+
+    // NOTE: Do NOT call Wire1.begin(31,32) or any I2C here. On Tab5, Wire1 may be
+    // the same bus used for Grove Port.A; initialising it here breaks encoder detection.
+    // Antenna is set after M5.begin() via setWiFiAntenna(true) (IO expander via M5).
 #endif
 
     // Initialize M5Stack Tab5
@@ -970,6 +1002,12 @@ void setup() {
     auto cfg = M5.config();
     cfg.external_spk = true;
     M5.begin(cfg);
+
+    // NOTE: setWiFiAntenna() is called AFTER Wire.begin() and encoder detection.
+    // M5.getIOExpander(0) accesses the internal I2C bus and can interfere with
+    // the external I2C bus (Grove Port.A) if called before Wire.begin(53,54).
+    // Only WiFi.setPins() must precede M5.begin(); antenna selection can be deferred.
+
     // #region agent log (DISABLED)
 // #if ENABLE_WIFI
     // Serial.printf("[DEBUG] After M5.begin - Heap: free=%u minFree=%u largest=%u\n",
@@ -1059,7 +1097,46 @@ void setup() {
     LoadingScreen::update(M5.Display, "INITIALISING ENCODERS...", false, false);
     g_encoders = new DualEncoderService(&Wire, ADDR_UNIT_A, ADDR_UNIT_B);
     g_encoders->setChangeCallback(onEncoderChange);
-    bool encoderOk = g_encoders->begin();
+
+    // =========================================================================
+    // Encoder Detection with Exponential Backoff
+    // =========================================================================
+    // M5ROTATE8 units contain STM32 MCUs that need boot time (50-200ms).
+    // Retry with exponential backoff to handle transient I2C bus issues and
+    // slow peripheral startup.
+    constexpr uint8_t MAX_DETECTION_ATTEMPTS = 5;
+    constexpr uint32_t INITIAL_BACKOFF_MS = 200;
+    bool encoderOk = false;
+
+    for (uint8_t attempt = 0; attempt < MAX_DETECTION_ATTEMPTS; attempt++) {
+        encoderOk = g_encoders->begin();
+        if (encoderOk) {
+            if (attempt > 0) {
+                Serial.printf("[INIT] Encoder detection succeeded on attempt %d/%d\n",
+                              attempt + 1, MAX_DETECTION_ATTEMPTS);
+            }
+            break;
+        }
+
+        uint32_t backoff = INITIAL_BACKOFF_MS << attempt;  // 200, 400, 800, 1600, 3200
+        Serial.printf("[INIT] Encoder detection attempt %d/%d failed, retrying in %lu ms\n",
+                      attempt + 1, MAX_DETECTION_ATTEMPTS, (unsigned long)backoff);
+        LoadingScreen::update(M5.Display,
+                              attempt < 2 ? "RETRYING ENCODERS..." : "RETRYING ENCODERS (SLOW)",
+                              false, false);
+        esp_task_wdt_reset();
+        delay(backoff);
+        esp_task_wdt_reset();
+
+        // Re-scan I2C bus on retries for diagnostic output
+        if (attempt >= 1) {
+            scanI2CBus(Wire, "External I2C (retry)");
+        }
+    }
+
+    if (!encoderOk) {
+        Serial.println("[ERROR] All encoder detection attempts failed!");
+    }
 
     // Initialize ButtonHandler (handles Unit-A button resets)
     // NOTE: Unit-B buttons (8-15) are now reserved for Preset System.
@@ -1172,6 +1249,16 @@ void setup() {
         // Update loading screen - encoders not found
         LoadingScreen::update(M5.Display, "INITIALISING ENCODERS", false, false);
     }
+
+    // =========================================================================
+    // WiFi Antenna Selection (deferred from before Wire.begin)
+    // =========================================================================
+    // CRITICAL: Must happen AFTER Wire.begin() and encoder detection.
+    // M5.getIOExpander(0) accesses internal I2C and can corrupt external bus state.
+#if ENABLE_WIFI
+    setWiFiAntenna(true);
+    Serial.println("[WiFi] Using external MMCX antenna");
+#endif
 
     // =========================================================================
     // Initialize Network (Milestone F)
@@ -2157,16 +2244,17 @@ void loop() {
             }
         }
 
-        // Reset g_wsConfigured if WebSocket disconnects (allows reconnection)
-        // Use existing global s_wasWsConnected from updateConnectionLeds()
-        bool isWsConnected = g_wsClient.isConnected();
-        if (s_wasWsConnected && !isWsConnected) {
-            // WebSocket just disconnected (WiFi still connected)
-            Serial.println("[NETWORK] WebSocket disconnected, resetting connection state");
-            g_wsConfigured = false;  // Allow reconnection
-            s_mdnsLogged = false;    // Allow fresh mDNS log
+        // Detect WS connection edges for logging only.
+        // Keep this independent from LED/UI state so we don't spam logs during reconnect.
+        const bool isWsConnected = g_wsClient.isConnected();
+        if (s_wsConnectedEdgeState && !isWsConnected) {
+            Serial.printf("[NETWORK] WebSocket disconnected, library will auto-reconnect (state=%s, delay=%lu ms)\n",
+                          g_wsClient.getStatusString(),
+                          g_wsClient.getReconnectDelay());
+        } else if (!s_wsConnectedEdgeState && isWsConnected) {
+            Serial.println("[NETWORK] WebSocket reconnected");
         }
-        // Note: s_wasWsConnected is updated in updateConnectionLeds() which is called later in the loop
+        s_wsConnectedEdgeState = isWsConnected;
 
         // Once WebSocket is connected, request effect/palette name lists (paged, non-blocking)
         if (g_wsClient.isConnected()) {
@@ -2206,6 +2294,7 @@ void loop() {
             s_mdnsLogged = false;
             g_wsConfigured = false;
             s_requestedLists = false;
+            s_wsConnectedEdgeState = false;
             Serial.println("[NETWORK] WiFi disconnected");
         }
     }
@@ -2260,13 +2349,78 @@ void loop() {
     s_wasRecovering = isRecovering;
 
     // =========================================================================
-    // ENCODERS: Skip processing if service not available
+    // ENCODER RE-PROBE: Periodically check for missing/reconnected encoders
     // =========================================================================
+    // Bridges the gap where I2CRecovery can't trigger because no I2C errors
+    // are generated when encoders were never detected (_available == false).
+    static uint32_t s_lastReprobeMs = 0;
+    constexpr uint32_t REPROBE_INTERVAL_MS = 10000;  // Every 10 seconds
+
+    if (g_encoders && !g_encoders->areBothAvailable() && !isRecovering) {
+        uint32_t nowReprobe = millis();
+        if (nowReprobe - s_lastReprobeMs >= REPROBE_INTERVAL_MS) {
+            s_lastReprobeMs = nowReprobe;
+            bool changed = false;
+
+            if (!g_encoders->isUnitAAvailable()) {
+                bool ok = g_encoders->transportA().reinit();
+                if (ok) {
+                    Serial.printf("[REPROBE] Unit A (0x%02X) reconnected!\n", ADDR_UNIT_A);
+                    changed = true;
+                }
+            }
+            if (!g_encoders->isUnitBAvailable()) {
+                bool ok = g_encoders->transportB().reinit();
+                if (ok) {
+                    Serial.printf("[REPROBE] Unit B (0x%02X) reconnected!\n", ADDR_UNIT_B);
+                    changed = true;
+                }
+            }
+
+            if (changed) {
+                updateConnectionLeds();
+            } else {
+                Serial.println("[REPROBE] Encoders still unavailable");
+            }
+        }
+    }
+
+    // =========================================================================
+    // ENCODERS: Skip processing if service not available + reboot timer
+    // =========================================================================
+    static uint32_t s_noEncoderSince = 0;
+    constexpr uint32_t ENCODER_REBOOT_TIMEOUT_MS = 120000;  // 2 minutes
+
     if (!g_encoders || !g_encoders->isAnyAvailable()) {
-        esp_task_wdt_reset();  // CRITICAL: Prevent watchdog timeout during encoder unavailability
+        // Start or continue the reboot timer
+        if (s_noEncoderSince == 0) {
+            s_noEncoderSince = millis();
+            Serial.println("[ENCODER] All encoders unavailable - starting 2-minute reboot timer");
+        }
+
+        uint32_t elapsed = millis() - s_noEncoderSince;
+        if (elapsed >= ENCODER_REBOOT_TIMEOUT_MS) {
+            Serial.println("[ENCODER] No encoders for 2 minutes - rebooting!");
+            Serial.flush();
+            delay(100);
+            esp_restart();
+        }
+
+        // Log progress every 30 seconds
+        static uint32_t s_lastRebootLog = 0;
+        if (millis() - s_lastRebootLog >= 30000) {
+            s_lastRebootLog = millis();
+            Serial.printf("[ENCODER] Reboot in %lu seconds\n",
+                          (unsigned long)((ENCODER_REBOOT_TIMEOUT_MS - elapsed) / 1000));
+        }
+
+        esp_task_wdt_reset();
         delay(100);
         return;
     }
+
+    // Reset reboot timer when encoders are available
+    s_noEncoderSince = 0;
 
     // =========================================================================
     // ENCODERS: Never touch I2C devices while recovery is running
@@ -2453,11 +2607,17 @@ void loop() {
         uint8_t i2cErrors = I2CRecovery::getErrorCount();
         uint16_t i2cRecoveries = I2CRecovery::getRecoverySuccesses();
 
-        Serial.printf("[STATUS] A:%s B:%s WiFi:%s WS:%s NVS:%d I2C_err:%d I2C_rec:%d heap:%u\n",
+        Serial.printf("[STATUS] A:%s B:%s WiFi:%s WS:%s wsConn:%lu wsDisc:%lu wsErr:%lu wsReconn:%lu wsDupDisc:%lu wsDelay:%lu NVS:%d I2C_err:%d I2C_rec:%d heap:%u\n",
                       unitA ? "OK" : "FAIL",
                       unitB ? "OK" : "FAIL",
                       wifiStatus,
                       wsStatus,
+                      static_cast<unsigned long>(g_wsClient.getConnectedCount()),
+                      static_cast<unsigned long>(g_wsClient.getDisconnectCount()),
+                      static_cast<unsigned long>(g_wsClient.getErrorCount()),
+                      static_cast<unsigned long>(g_wsClient.getReconnectAttemptCount()),
+                      static_cast<unsigned long>(g_wsClient.getDuplicateDisconnectCount()),
+                      static_cast<unsigned long>(g_wsClient.getReconnectDelay()),
                       nvsPending,
                       i2cErrors,
                       i2cRecoveries,

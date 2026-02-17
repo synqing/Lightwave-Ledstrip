@@ -105,9 +105,12 @@ public:
             return 0;  // Discard corrupt value
         }
 
-        // Record success for non-zero valid reads
+        // Record success on ALL valid reads (not just non-zero).
+        // This ensures idle encoders still reset the error counter,
+        // preventing stale error counts from triggering false recoveries.
+        I2CRecovery::recordSuccess();
+
         if (value != 0) {
-            I2CRecovery::recordSuccess();
             _encoder.resetCounter(channel);
         }
 

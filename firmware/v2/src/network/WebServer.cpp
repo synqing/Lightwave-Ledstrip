@@ -60,6 +60,7 @@
 #endif
 #include "webserver/ws/WsSysCommands.h"
 #include "webserver/ws/WsTrinityCommands.h"
+#include "webserver/ws/WsShowCommands.h"
 #include "webserver/ws/WsOtaCommands.h"
 #include "webserver/ws/WsPluginCommands.h"
 #include "../config/network_config.h"
@@ -175,6 +176,7 @@ WebServer::WebServer(NodeOrchestrator& orchestrator, RendererNode* renderer)
     , m_startTime(0)
     , m_lastImmediateBroadcast(0)
     , m_broadcastPending(false)
+    , m_lastClientConnectMs(0)
     , m_apClientDisconnected(false)
     , m_lastApReinitMs(0)
     , m_lowHeapShed(false)
@@ -467,19 +469,61 @@ void WebServer::update() {
 
     // Cleanup disconnected WebSocket clients
     m_ws->cleanupClients();
+    if (m_wsGateway) {
+        static uint32_t s_lastGuardCleanupMs = 0;
+        const uint32_t nowMs = millis();
+        if ((nowMs - s_lastGuardCleanupMs) >= 1000) {
+            m_wsGateway->cleanupStaleConnections();
+            s_lastGuardCleanupMs = nowMs;
+        }
+    }
     const uint32_t nowMs = millis();
     updateLowHeapShedState(nowMs);
+
+    // Periodic WS transport diagnostics (helps classify reconnect storms quickly).
+    if (m_wsGateway) {
+        static uint32_t s_lastWsDiagLogMs = 0;
+        if ((nowMs - s_lastWsDiagLogMs) >= 10000) {
+            s_lastWsDiagLogMs = nowMs;
+            const webserver::WsGateway::Stats wsStats = m_wsGateway->getStats();
+            LW_LOGI(
+                "WS diag: active=%u ok=%lu rejCooldown=%lu rejOverlap=%lu rejLimit=%lu disc=%lu parseErr=%lu oversize=%lu unknown=%lu",
+                static_cast<unsigned>(m_ws ? m_ws->count() : 0),
+                static_cast<unsigned long>(wsStats.connectAccepted),
+                static_cast<unsigned long>(wsStats.connectRejectedCooldown),
+                static_cast<unsigned long>(wsStats.connectRejectedOverlap),
+                static_cast<unsigned long>(wsStats.connectRejectedLimit),
+                static_cast<unsigned long>(wsStats.disconnects),
+                static_cast<unsigned long>(wsStats.parseErrors),
+                static_cast<unsigned long>(wsStats.oversizedFrames),
+                static_cast<unsigned long>(wsStats.unknownCommands));
+        }
+    }
 
     // Immediate cleanup when an AP station disconnects from WiFi.
     // TCP won't notice the dead connection for 10-30s, but we know immediately
     // from the WiFi event. Close all WS clients on the AP subnet (192.168.4.x).
     if (m_apClientDisconnected) {
         m_apClientDisconnected = false;
-        if (m_wsGateway) {
-            m_wsGateway->closeClientsInSubnet(192, 168, 4, 1001 /* Going Away */, "AP station left");
-        } else if (m_ws) {
-            // Fallback: close everything (safe but heavy-handed).
-            m_ws->closeAll(1001 /* Going Away */, "AP station left");
+
+        // GUARD: Only close subnet clients if NO WiFi stations remain connected
+        // to the AP. When a station briefly drops and reconnects (e.g., Tab5
+        // auto-reconnect), the old TCP connection is dead but the new WiFi
+        // association may already be up. Nuking all 192.168.4.x WebSocket
+        // connections in that window kills the freshly-reconnected client,
+        // causing a reconnect storm. Let TCP keepalive and WebSocket ping/pong
+        // handle stale connections naturally when other stations are still present.
+        const uint8_t stationCount = WiFi.softAPgetStationNum();
+        if (stationCount == 0) {
+            if (m_wsGateway) {
+                m_wsGateway->closeClientsInSubnet(192, 168, 4, 1001 /* Going Away */, "AP station left");
+            } else if (m_ws) {
+                // Fallback: close everything (safe but heavy-handed).
+                m_ws->closeAll(1001 /* Going Away */, "AP station left");
+            }
+        } else {
+            LW_LOGI("AP station left but %u stations still connected, skipping WS cleanup",
+                     static_cast<unsigned>(stationCount));
         }
 
         // Optional recovery: restart AP to flush WPA2 PMK cache (helps some rebooted clients).
@@ -976,6 +1020,7 @@ void WebServer::setupWebSocket() {
 #endif
     webserver::ws::registerWsSysCommands(ctx);
     webserver::ws::registerWsTrinityCommands(ctx);
+    webserver::ws::registerWsShowCommands(ctx);
     webserver::ws::registerWsOtaCommands(ctx);
     webserver::ws::registerWsPluginCommands(ctx);
 
@@ -1092,13 +1137,15 @@ void WebServer::handleWsConnect(AsyncWebSocketClient* client) {
     }
 
     LW_LOGI("WS: Client %u connected from %s", client->id(), client->remoteIP().toString().c_str());
+    m_lastClientConnectMs = millis();
 
-    // QUEUE PROTECTION: Defer initial broadcasts to prevent queue saturation on connect
-    // Instead of broadcasting immediately (which can queue messages for all clients),
-    // we defer to the update() loop which has proper throttling
-    // This prevents "Too many messages queued" errors when multiple clients connect rapidly
-    m_broadcastPending = true;  // Defer status broadcast
-    // Zone state will be sent on next update() tick if needed
+    // NOTE: Do NOT set m_broadcastPending here. The previous behaviour sent a
+    // full status broadcast (textAll) immediately on connect, which overwhelms
+    // the SoftAP TCP send buffers and causes the new client to disconnect
+    // within 100-250ms. Instead, let the client explicitly request status via
+    // the "getStatus" command, which now responds with a unicast message to
+    // the requesting client only (not textAll). The periodic 5-second
+    // broadcast will also sync any clients that miss the initial state.
 
     // Track clientId → IP for disconnect cleanup (remoteIP() may become 0.0.0.0 after disconnect).
     const uint32_t clientId = client->id();
@@ -1131,6 +1178,9 @@ void WebServer::handleWsDisconnect(AsyncWebSocketClient* client) {
 
     // Cleanup LED stream subscription
     setLEDStreamSubscription(client, false);
+
+    // Cleanup beat event subscription
+    webserver::ws::removeBeatSubscriber(clientId);
 
     // Cleanup UDP stream subscriptions
     if (m_udpStreamer) {
@@ -1246,6 +1296,12 @@ void WebServer::doBroadcastStatus() {
     
     if (m_ws->count() == 0) return;
 
+    // Stabilise newly connected clients before high-frequency textAll traffic.
+    const uint32_t now = millis();
+    if (m_lastClientConnectMs != 0 && (now - m_lastClientConnectMs) < CONNECT_STABILISE_MS) {
+        return;
+    }
+
     // Cleanup disconnected clients before broadcasting
     m_ws->cleanupClients();
     if (m_ws->count() == 0) return;
@@ -1254,7 +1310,6 @@ void WebServer::doBroadcastStatus() {
     // AsyncWebSocket has internal queue limits, but we can't check them directly
     // Instead, we use time-based throttling to prevent queue saturation
     static uint32_t lastBroadcastAttempt = 0;
-    uint32_t now = millis();
     if (now - lastBroadcastAttempt < 50) {  // Minimum 50ms between broadcast attempts
         return;  // Skip this broadcast to prevent queue buildup
     }
@@ -1353,13 +1408,17 @@ void WebServer::broadcastZoneState() {
         LW_LOGW("broadcastZoneState: m_ws is null");
         return;
     }
-    
+
     if (m_ws->count() == 0 || !m_zoneComposer) return;
+
+    const uint32_t now = millis();
+    if (m_lastClientConnectMs != 0 && (now - m_lastClientConnectMs) < CONNECT_STABILISE_MS) {
+        return;
+    }
 
     // QUEUE PROTECTION: Throttle zone broadcasts before doing any JSON work.
     // zones.list is comparatively large and is called from multiple codepaths.
     static uint32_t lastZoneBroadcastAttempt = 0;
-    const uint32_t now = millis();
     if (now - lastZoneBroadcastAttempt < 250) {  // 4 Hz max
         return;
     }
@@ -1441,9 +1500,13 @@ void WebServer::broadcastSingleZoneState(uint8_t zoneId) {
 
     if (m_ws->count() == 0 || !m_zoneComposer) return;
 
+    const uint32_t now = millis();
+    if (m_lastClientConnectMs != 0 && (now - m_lastClientConnectMs) < CONNECT_STABILISE_MS) {
+        return;
+    }
+
     // QUEUE PROTECTION: Throttle rapid per-zone updates (e.g. speed slider/encoder).
     static uint32_t lastSingleZoneBroadcastAttempt = 0;
-    const uint32_t now = millis();
     if (now - lastSingleZoneBroadcastAttempt < 50) {  // 20 Hz max
         return;
     }
@@ -1621,19 +1684,18 @@ void WebServer::broadcastBeatEvent() {
     if (m_lowHeapShed) {
         return;
     }
-    // SAFETY: Validate pointers before accessing
+    // Skip entirely if nobody has sent beat.subscribe — prevents queue overflow
+    // on slow SoftAP clients (Tab5/iOS) that don't consume beat events.
+    if (!webserver::ws::hasBeatEventSubscribers()) return;
+
     if (!m_ws || m_ws->count() == 0) return;
 
-    // QUEUE PROTECTION: Throttle beat events to prevent queue saturation
+    // Throttle beat events (20 Hz max)
     static uint32_t lastBeatBroadcastAttempt = 0;
     uint32_t now = millis();
-    if (now - lastBeatBroadcastAttempt < 50) {  // Minimum 50ms between beat broadcasts (20 Hz max)
-        return;  // Skip this broadcast to prevent queue buildup
-    }
+    if (now - lastBeatBroadcastAttempt < 50) return;
     lastBeatBroadcastAttempt = now;
 
-    // Note: We need to get musical grid from cached state or another safe source
-    // For now, we'll skip if renderer is not available (this should use cached audio state)
     if (!m_renderer) return;
 
     const auto& grid = m_renderer->getLastMusicalGrid();
@@ -1655,8 +1717,8 @@ void WebServer::broadcastBeatEvent() {
     String json;
     serializeJson(doc, json);
 
-    // SAFETY: Validate m_ws is still valid before calling textAll()
     if (m_ws) {
+        if (!m_ws->availableForWriteAll()) return;
         m_ws->textAll(json);
     }
 }

@@ -25,6 +25,17 @@ namespace webserver {
  */
 class WsGateway {
 public:
+    struct Stats {
+        uint32_t connectAccepted = 0;
+        uint32_t connectRejectedCooldown = 0;
+        uint32_t connectRejectedOverlap = 0;
+        uint32_t connectRejectedLimit = 0;
+        uint32_t disconnects = 0;
+        uint32_t parseErrors = 0;
+        uint32_t oversizedFrames = 0;
+        uint32_t unknownCommands = 0;
+    };
+
     /**
      * @brief Construct gateway
      * @param ws AsyncWebSocket instance
@@ -99,6 +110,7 @@ public:
      * @param reason Optional close reason (may be nullptr)
      */
     void closeClientsInSubnet(uint8_t a, uint8_t b, uint8_t c, uint16_t code, const char* reason);
+    Stats getStats() const { return m_stats; }
 
 private:
     AsyncWebSocket* m_ws;
@@ -164,6 +176,7 @@ private:
     // Monotonic event sequence counter (for telemetry)
     // ------------------------------------------------------------------------
     static uint32_t s_eventSeq;
+    Stats m_stats{};
 
     // Helper to get or increment connection epoch for a client
     uint32_t getOrIncrementEpoch(uint32_t clientId);

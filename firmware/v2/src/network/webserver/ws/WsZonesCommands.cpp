@@ -49,6 +49,56 @@ static void handleZoneEnable(AsyncWebSocketClient* client, JsonDocument& doc, co
     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
 }
 
+/**
+ * @brief Per-zone enable/disable command
+ *
+ * Request:  {"type": "zone.enableZone", "zoneId": 0, "enabled": true}
+ * Response: {"type": "zone.zoneEnabledChanged", "success": true, "data": {"zoneId": 0, "enabled": true}}
+ * Broadcast: Full zone state via broadcastZoneState()
+ */
+static void handleZoneEnableZone(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    if (!ctx.zoneComposer) {
+        return;
+    }
+
+    const char* requestId = doc["requestId"] | "";
+
+    // Validate zoneId
+    if (!doc["zoneId"].is<uint8_t>()) {
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "Missing 'zoneId' field", requestId));
+        return;
+    }
+    uint8_t zoneId = doc["zoneId"].as<uint8_t>();
+
+    // DEFENSIVE CHECK: Validate zoneId before array access
+    zoneId = lightwaveos::network::validateZoneIdInRequest(zoneId);
+
+    if (zoneId >= ctx.zoneComposer->getZoneCount()) {
+        client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid zoneId", requestId));
+        return;
+    }
+
+    // Validate enabled
+    if (!doc["enabled"].is<bool>()) {
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "Missing 'enabled' field", requestId));
+        return;
+    }
+    bool enabled = doc["enabled"].as<bool>();
+
+    ctx.zoneComposer->setZoneEnabled(zoneId, enabled);
+
+    // Broadcast to all clients
+    if (ctx.ws) {
+        String eventOutput = buildWsResponse("zone.zoneEnabledChanged", requestId, [zoneId, enabled](JsonObject& data) {
+            data["zoneId"] = zoneId;
+            data["enabled"] = enabled;
+        });
+        ctx.ws->textAll(eventOutput);
+    }
+
+    if (ctx.broadcastZoneState) ctx.broadcastZoneState();
+}
+
 static void handleZoneSetEffect(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     JsonObjectConst root = doc.as<JsonObjectConst>();
     codec::ZoneSetEffectDecodeResult decodeResult = codec::WsZonesCodec::decodeZoneSetEffect(root);
@@ -511,6 +561,7 @@ static void handleZonesSetLayout(AsyncWebSocketClient* client, JsonDocument& doc
 
 void registerWsZonesCommands(const WebServerContext& ctx) {
     WsCommandRouter::registerCommand("zone.enable", handleZoneEnable);
+    WsCommandRouter::registerCommand("zone.enableZone", handleZoneEnableZone);
     WsCommandRouter::registerCommand("zone.setEffect", handleZoneSetEffect);
     WsCommandRouter::registerCommand("zone.setBrightness", handleZoneSetBrightness);
     WsCommandRouter::registerCommand("zone.setSpeed", handleZoneSetSpeed);

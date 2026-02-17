@@ -211,6 +211,7 @@ void WsGateway::handleConnect(AsyncWebSocketClient* client) {
                 //     if (n > 0) Serial.println(buf);
                 // }
                 // #endregion
+                m_stats.connectRejectedCooldown++;
                 client->close(1013, "Reconnect too fast");
                 return;
             }
@@ -233,6 +234,7 @@ void WsGateway::handleConnect(AsyncWebSocketClient* client) {
                 //     if (n > 0) Serial.println(buf);
                 // }
                 // #endregion
+                m_stats.connectRejectedOverlap++;
                 client->close(1008, "Only one session per device");
                 return;
             }
@@ -242,18 +244,19 @@ void WsGateway::handleConnect(AsyncWebSocketClient* client) {
     // Hard cap on connected WS clients (>=, not >)
     if (m_ws->count() >= lightwaveos::network::WebServerConfig::MAX_WS_CLIENTS) {
         LW_LOGW("WS: Max clients reached, rejecting %u", client->id());
+        m_stats.connectRejectedLimit++;
         client->close(1008, "Connection limit");
         return;
     }
 
     LW_LOGI("WS: Client %u connected from %s", client->id(), client->remoteIP().toString().c_str());
+    m_stats.connectAccepted++;
 
-    // Close clients that cannot keep up.
-    //
-    // AsyncWebSocket queues outgoing frames in internal heap. If a client is slow (poor RSSI,
-    // backgrounded app, etc.), the queue can fill and hold significant SRAM, starving WiFi/esp_timer.
-    // Closing on queue full prevents ENOMEM spirals and forces the client to reconnect cleanly.
-    client->setCloseClientOnQueueFull(true);
+    // When a slow client's outgoing queue fills, silently drop new frames instead of
+    // closing the connection.  A missed status update is harmless (next one arrives 50 ms
+    // later); a nuked connection triggers a full reconnect storm on the client side.
+    // Queue depth is controlled by WS_MAX_QUEUED_MESSAGES (platformio.ini, default 32).
+    client->setCloseClientOnQueueFull(false);
 
     // Mark active for this IP (best-effort) and set initial activity timestamp
     if (ipKey != 0) {
@@ -353,6 +356,7 @@ uint32_t WsGateway::getOrIncrementEpoch(uint32_t clientId) {
 }
 
 void WsGateway::handleDisconnect(AsyncWebSocketClient* client) {
+    m_stats.disconnects++;
     uint32_t clientId = client->id();
     LW_LOGI("WS: Client %u disconnected", clientId);
 
@@ -594,6 +598,7 @@ void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_
 
     // Parse message
     if (len > MAX_WS_MESSAGE_SIZE) {
+        m_stats.oversizedFrames++;
         // Log rejected frame (oversize)
         uint32_t clientId = client->id();
         uint32_t connEpoch = 0;
@@ -657,6 +662,7 @@ void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_
     uint32_t tsMonoms = millis();
     
     if (error) {
+        m_stats.parseErrors++;
         // Log rejected frame (parse error)
         // Create bounded payload summary from raw data (~100 chars max, escaped for JSON)
         char payloadSummaryRaw[128] = {0};
@@ -793,6 +799,7 @@ void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_
     
     // If not handled by router, send error (all commands should be registered)
     if (!handled) {
+        m_stats.unknownCommands++;
         RequestIdDecodeResult requestIdResult = WsCommonCodec::decodeRequestId(root);
         client->text(buildWsError(ErrorCodes::INVALID_VALUE, "Unknown command type", requestIdResult.requestId));
     }

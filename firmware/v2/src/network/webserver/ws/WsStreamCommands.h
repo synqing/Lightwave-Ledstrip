@@ -63,6 +63,24 @@ inline void broadcastFftFrame(const audio::ControlBusFrame& /* frame */,
 }
 #endif
 
+// ============================================================================
+// Beat Event Subscribers
+// ============================================================================
+
+/**
+ * @brief Check if any client has subscribed to beat events
+ *
+ * beat.event broadcasts use textAll() which floods slow SoftAP clients.
+ * Gating behind a subscriber check means Tab5/iOS (which never subscribe)
+ * don't receive unwanted beat traffic.
+ */
+bool hasBeatEventSubscribers();
+
+/**
+ * @brief Remove a disconnected client from beat subscriber list
+ */
+void removeBeatSubscriber(uint32_t clientId);
+
 } // namespace ws
 } // namespace webserver
 } // namespace network

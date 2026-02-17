@@ -56,6 +56,7 @@ wifi_credentials.ini
 
 # Local semantic tooling / MCP manifests (environment-specific)
 .code-context/
+**/.mcp.json
 
 # ==========================================
 # ARCHIVE FOLDERS - Not tracked in git

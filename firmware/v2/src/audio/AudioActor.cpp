@@ -183,6 +183,13 @@ void AudioActor::onStart()
         return;
     }
 
+    // Configure Stage B derived features (silence detection)
+#ifdef AUDIO_SILENCE_GATE_DISABLED
+    m_controlBus.setSilenceParameters(0.01f, 0.0f);  // Disabled
+#else
+    m_controlBus.setSilenceParameters(0.01f, 5000.0f);  // 5s hysteresis (default)
+#endif
+
     m_state = AudioActorState::RUNNING;
     LW_LOGI("ES v1.1 audio backend: INITIALISED");
 }
@@ -238,15 +245,30 @@ void AudioActor::onTick()
     // es.sample_index from EsV11Backend represents the post-hop sample index
     frame.t = AudioTime(es.sample_index, SAMPLE_RATE, now_us);
 
-    // DEBUG: CLOCK_SPINE:ES logging disabled to reduce serial spam
-    // static uint64_t lastClockSpineLog = 0;
-    // if (now_us - lastClockSpineLog >= 2000000) {  // 2 seconds
-    //     lastClockSpineLog = now_us;
-    //     LW_LOGI("[CLOCK_SPINE:ES] frame.t: sample_idx=%llu mono_us=%llu hop_seq=%u",
-    //             (unsigned long long)frame.t.sample_index,
-    //             (unsigned long long)frame.t.monotonic_us,
-    //             frame.hop_seq);
-    // }
+    // ========================================================================
+    // Stage B: Backend-agnostic derived features (chord, saliency, silence, liveliness)
+    //
+    // ES adapter produces Stage A output (normalised rms/flux/bands/chroma).
+    // Bridge tempo fields from ES-specific to standard, then run Stage B.
+    // ========================================================================
+
+    // Bridge ES tempo fields → standard fields consumed by Stage B
+    frame.tempoLocked = frame.es_tempo_confidence > 0.5f;
+    frame.tempoConfidence = frame.es_tempo_confidence;
+    frame.tempoBeatTick = frame.es_beat_tick && frame.tempoLocked;
+
+    // Derive rmsUngated from band energy average (autorange max gain ~20x,
+    // far less noise amplification than VU's 40,000x AGC).
+    float bandSum = 0.0f;
+    for (uint8_t i = 0; i < CONTROLBUS_NUM_BANDS; ++i) {
+        bandSum += frame.bands[i];
+    }
+    const float rmsUngated = bandSum / static_cast<float>(CONTROLBUS_NUM_BANDS);
+
+    // Estimate hop dt (ES publishes at 50 Hz = 20ms intervals)
+    constexpr float ES_HOP_DT = 0.020f;
+
+    m_controlBus.applyDerivedFeatures(frame, ES_HOP_DT, rmsUngated);
 
     m_controlBusBuffer.Publish(frame);
 

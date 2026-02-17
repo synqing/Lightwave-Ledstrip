@@ -61,6 +61,16 @@ private:
     float m_sbWaveformPeakScaledLast = 0.0f;
     float m_sbNoteChroma[lightwaveos::audio::CONTROLBUS_NUM_CHROMA] = {0};
     float m_sbChromaMaxVal = 0.0001f;
+
+    // --------------------------------------------------------------------
+    // Lightweight onset detection (Stage B support)
+    //
+    // LWLS path uses GoertzelAnalyzer for snare/hihat onset.
+    // ES path derives onsets from 64-bin spectrum band energy.
+    // Snare: bins 5-10 (~150-300 Hz), Hihat: bins 50-60 (~6-12 kHz)
+    // --------------------------------------------------------------------
+    float m_prevSnareEnergy = 0.0f;
+    float m_prevHihatEnergy = 0.0f;
 };
 
 } // namespace lightwaveos::audio::esv11

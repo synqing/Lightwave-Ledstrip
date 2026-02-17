@@ -344,6 +344,23 @@ public:
     float getSilenceHysteresisMs() const { return m_silence_hysteresis_ms; }
     bool isSilenceEnabled() const { return m_silence_hysteresis_ms > 0.0f; }
 
+    /**
+     * @brief Apply backend-agnostic derived features (Stage B) to a frame.
+     *
+     * Called after Stage A (backend-specific input conditioning) completes.
+     * Both LWLS path (via UpdateFromHop) and ES path (via AudioActor) call this.
+     *
+     * Requires frame to have normalised: rms, flux, fast_rms, fast_flux,
+     * chroma[0..11], tempoLocked, tempoConfidence, tempoBeatTick.
+     *
+     * Computes: chord detection, liveliness, saliency, silence detection.
+     *
+     * @param frame       Frame with Stage A fields already populated
+     * @param dt          Delta time in seconds (hop cadence)
+     * @param rmsUngated  Pre-gate RMS for silence detection (0..1)
+     */
+    void applyDerivedFeatures(ControlBusFrame& frame, float dt, float rmsUngated);
+
 private:
     ControlBusFrame m_frame{};
 
@@ -427,11 +444,11 @@ private:
                                size_t num_bands,
                                bool isBands);
 
-    // Private method for chord detection
-    void detectChord(const float* chroma);
+    // Private method for chord detection (Stage B)
+    void detectChord(const float* chroma, ChordState& outChord);
 
-    // Private method for saliency computation (Musical Intelligence System Phase 1)
-    void computeSaliency();
+    // Private method for saliency computation (Stage B, Musical Intelligence System Phase 1)
+    void computeSaliency(ControlBusFrame& frame);
 };
 
 } // namespace lightwaveos::audio

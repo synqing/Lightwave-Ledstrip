@@ -571,6 +571,10 @@ private:
     esv11::EsV11Adapter m_esAdapter;
     uint32_t m_esHopSeq = 0;
     uint8_t m_esChunkCounter = 0;  // Publish every 4 chunks (256 samples @ 12.8kHz = 50 Hz)
+
+    // ControlBus for Stage B derived features (chord, saliency, silence, liveliness)
+    // ES path bypasses Stage A (input conditioning) but needs Stage B.
+    ControlBus m_controlBus;
 #else
     // Audio capture driver
     AudioCapture m_capture;

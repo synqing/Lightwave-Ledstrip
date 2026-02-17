@@ -238,6 +238,33 @@ void EsV11Adapter::buildFrame(lightwaveos::audio::ControlBusFrame& out,
     std::memcpy(out.sb_note_chromagram, m_sbNoteChroma, sizeof(out.sb_note_chromagram));
     out.sb_chromagram_max_val = m_sbChromaMaxVal;
 
+    // ----------------------------------------------------------------
+    // Lightweight onset detection from 64-bin spectrum
+    // Snare: bins 5-10 (~150-300 Hz), Hihat: bins 50-60 (~6-12 kHz)
+    // Onset = current energy exceeds previous by threshold
+    // ----------------------------------------------------------------
+    {
+        float snareSum = 0.0f;
+        for (uint8_t i = 5; i <= 10 && i < lightwaveos::audio::ControlBusFrame::BINS_64_COUNT; ++i) {
+            snareSum += out.bins64[i];
+        }
+        out.snareEnergy = clamp01(snareSum / 6.0f);
+
+        float hihatSum = 0.0f;
+        for (uint8_t i = 50; i <= 60 && i < lightwaveos::audio::ControlBusFrame::BINS_64_COUNT; ++i) {
+            hihatSum += out.bins64[i];
+        }
+        out.hihatEnergy = clamp01(hihatSum / 11.0f);
+
+        // One-frame onset pulse: trigger when energy jumps above previous + threshold
+        constexpr float ONSET_THRESHOLD = 0.08f;
+        out.snareTrigger = (out.snareEnergy > m_prevSnareEnergy + ONSET_THRESHOLD) && (out.snareEnergy > 0.10f);
+        out.hihatTrigger = (out.hihatEnergy > m_prevHihatEnergy + ONSET_THRESHOLD) && (out.hihatEnergy > 0.05f);
+
+        m_prevSnareEnergy = out.snareEnergy;
+        m_prevHihatEnergy = out.hihatEnergy;
+    }
+
     // ES tempo extras (consumed by renderer beat clock)
     out.es_bpm = es.top_bpm;
     out.es_tempo_confidence = clamp01(es.tempo_confidence);

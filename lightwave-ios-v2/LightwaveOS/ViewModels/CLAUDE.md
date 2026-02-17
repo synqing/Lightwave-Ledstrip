@@ -20,10 +20,6 @@
 | #26264 | " | 🔵 | Post-refactor AppViewModel delegate pattern verification | ~355 |
 | #26263 | " | 🔵 | AppViewModel UDP handler callbacks lack MainActor isolation causing data race | ~400 |
 | #26260 | 2:17 PM | 🔵 | AppViewModel WebSocket Event Consumption Implementation Not Yet Visible | ~388 |
-| #26259 | " | 🔵 | DebugEntry Struct Definition and Usage for iOS App Logging | ~689 |
-| #26218 | 1:40 PM | ✅ | P0-A WebSocket Storm Fix Staged for Commit | ~404 |
-| #26203 | 12:40 PM | 🔄 | AppViewModel WebSocket Disconnection Handler Fixed to Notify ConnectionManager | ~689 |
-| #26202 | " | 🔴 | Removed duplicate WebSocket connection in loadInitialState preventing double-iteration | ~393 |
 
 ### Feb 7, 2026
 
@@ -77,4 +73,18 @@
 |----|------|---|-------|------|
 | #32982 | 11:27 PM | 🔵 | LightwaveOS iOS v2 Architecture Analysis | ~1353 |
 | #32971 | 11:17 PM | 🔵 | AppViewModel manages device connection lifecycle with UDP/WebSocket streaming fallback and lifecycle-aware reconnection | ~792 |
+
+### Feb 11, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #33217 | 8:48 PM | 🔵 | LightwaveOS iOS App Complete File Structure: 104 Swift Files Across 10 Architectural Layers | ~1865 |
+| #33176 | 8:19 PM | 🔵 | PRISM Studio vs LightwaveOS Firmware Reality Gap Analysis | ~1445 |
+| #33169 | 8:16 PM | 🔵 | LightwaveOS iOS App Architecture and Connection Management | ~1402 |
+
+### Feb 16, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #34520 | 12:53 AM | 🔵 | iOS Development and UX Architecture Review Identified Critical Issues | ~1301 |
 </claude-mem-context>

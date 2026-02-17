@@ -1,3 +1,21 @@
+# Config.h Canonical Reference
+
+## I2C Architecture: Single-Bus, Dual-Address
+
+Both M5ROTATE8 units share **one I2C bus** (Grove Port.A, GPIO 53/54) with different addresses:
+- `I2C::ADDR_UNIT_A = 0x42` (reprogrammed) -- global parameters
+- `I2C::ADDR_UNIT_B = 0x41` (factory) -- zone parameters
+
+The old two-bus design (GPIO 49/50) was removed Feb 2026. All address constants are now in `I2C::` namespace.
+
+## WiFi SDIO Pins (ESP32-C6 co-processor)
+
+GPIOs 8-15 -- no overlap with I2C. `WiFi.setPins()` must precede `M5.begin()`.
+
+## Antenna IO Expander
+
+PI4IOE5V6408 @ 0x43 on **internal** I2C (GPIO 31/32). Accessed via `M5.getIOExpander(0)`. Must be called **AFTER** `Wire.begin()` on external bus to avoid bus state corruption.
+
 <claude-mem-context>
 # Recent Activity
 
@@ -7,5 +25,36 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #10865 | 1:10 AM | 🔵 | Tab5 Encoder Firmware Codebase Structure | ~336 |
+| #11456 | 8:58 AM | 🟣 | Tab5 Encoder Zone Speed Parameters Implemented | ~770 |
+| #11187 | 8:02 AM | 🔵 | Tab5 Config Defines 16 Parameter System with Zone-Specific Mappings | ~421 |
+| #11046 | 4:20 AM | 🔵 | Config.h defines zone parameter defaults and display names for Unit B encoders | ~445 |
+
+### Jan 30, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #23403 | 9:39 AM | 🟣 | DeviceRegistry Implementation for Multi-Device Management | ~1115 |
+| #23394 | 9:36 AM | 🟣 | Tab5 Device Registry NVS Configuration Added | ~610 |
+| #23390 | 9:28 AM | 🔵 | Tab5 Encoder Multi-Tier Network Fallback Strategy | ~1237 |
+| #23388 | " | ⚖️ | Integration Plan for Device Selection UI in Tab5.encoder | ~939 |
+| #23351 | 9:23 AM | 🔵 | Tab5 Encoder ESP32-C6 WiFi Co-Processor SDIO Configuration | ~956 |
+| #23339 | 9:22 AM | 🔵 | Tab5 Encoder Parameter Configuration and Hardware Mapping | ~880 |
+
+### Feb 5, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #25520 | 11:37 PM | 🔵 | Tab5 network configuration implements multi-tier fallback with mDNS, manual IP, and AP gateway detection | ~824 |
+| #25462 | 9:37 PM | ✅ | Portable Mode implementation staged for commit across all three platforms | ~447 |
+| #25425 | 9:25 PM | 🟣 | Tab5 WiFi priority inverted to prioritize v2 AP connection in Portable Mode | ~521 |
+
+### Feb 6, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #25657 | 2:01 AM | 🔵 | WebSocket Connection Timeout Set to 20 Seconds | ~590 |
+| #25609 | 1:04 AM | 🔵 | Tab5 WebSocket infinite reconnect loop root cause identified | ~677 |
+| #25590 | 12:45 AM | ✅ | Tab5 default WiFi password changed to empty string for open AP connection | ~410 |
+| #25588 | " | 🔵 | Tab5 network_config.h defines multi-tier v2 discovery with mDNS, manual IP, and AP fallback | ~705 |
+| #25542 | 12:00 AM | 🔵 | Root cause identified for Tab5 4WAY_HANDSHAKE_TIMEOUT: ESP32 WiFi stack PMK cache retention | ~772 |
 </claude-mem-context>

@@ -7,11 +7,31 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #11471 | 9:39 AM | 🟣 | Effect Preset System Implemented with NVS Persistence and WebSocket API | ~467 |
+| #11850 | 3:11 PM | ✅ | Staged Zone Management and Preset Systems Across Firmware Versions | ~417 |
 
 ### Feb 1, 2026
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #24281 | 2:54 AM | 🔵 | Default Zone Count Configuration Across Firmware Components | ~458 |
+| #24276 | 2:54 AM | 🔵 | Zone Preset System with Dual-Zone Default Configuration | ~393 |
+
+### Feb 7, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #27082 | 1:10 AM | 🔵 | ZoneConfigManager.h reveals existing zone persistence system for runtime configuration distinct from user presets | ~839 |
+| #27060 | 1:05 AM | 🔵 | NVSManager.h provides complete NVS persistence foundation with blob storage, CRC32 validation, and thread-safe operations | ~823 |
+| #26977 | 12:55 AM | 🔵 | Firmware persistence layer consists of three manager classes for NVS storage | ~452 |
+
+### Feb 8, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #27797 | 1:01 PM | ✅ | Commit 12: CLAUDE.md agent context files added | ~418 |
+
+### Feb 11, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #33222 | 8:49 PM | ✅ | Firmware Reference Architecture Copied to PRISM Studio | ~431 |
 </claude-mem-context>

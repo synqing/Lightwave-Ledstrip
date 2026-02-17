@@ -10,6 +10,7 @@
  */
 
 #include "WsEffectsCodec.h"
+#include "../config/limits.h"
 #include <cstring>
 
 namespace lightwaveos {
@@ -23,14 +24,14 @@ EffectsSetCurrentDecodeResult WsEffectsCodec::decodeSetCurrent(JsonObjectConst r
     EffectsSetCurrentDecodeResult result;
     result.request = EffectsSetCurrentRequest();
 
-    // Step 1: Extract effectId (required, 0-127)
+    // Step 1: Extract effectId (required, 0 to MAX_EFFECTS-1)
     if (!root["effectId"].is<int>()) {
         snprintf(result.errorMsg, MAX_ERROR_MSG, "Missing required field 'effectId'");
         return result;
     }
     int effectId = root["effectId"].as<int>();
-    if (effectId < 0 || effectId > 127) {
-        snprintf(result.errorMsg, MAX_ERROR_MSG, "effectId out of range (0-127): %d", effectId);
+    if (effectId < 0 || effectId >= limits::MAX_EFFECTS) {
+        snprintf(result.errorMsg, MAX_ERROR_MSG, "effectId out of range (0-%d): %d", limits::MAX_EFFECTS - 1, effectId);
         return result;
     }
     result.request.effectId = static_cast<uint8_t>(effectId);
@@ -88,14 +89,14 @@ EffectsSetEffectDecodeResult WsEffectsCodec::decodeSetEffect(JsonObjectConst roo
     EffectsSetEffectDecodeResult result;
     result.request = EffectsSetEffectRequest();
 
-    // Extract effectId (required, 0-127)
+    // Extract effectId (required, 0 to MAX_EFFECTS-1)
     if (!root["effectId"].is<int>()) {
         snprintf(result.errorMsg, MAX_ERROR_MSG, "Missing required field 'effectId'");
         return result;
     }
     int effectId = root["effectId"].as<int>();
-    if (effectId < 0 || effectId > 127) {
-        snprintf(result.errorMsg, MAX_ERROR_MSG, "effectId out of range (0-127): %d", effectId);
+    if (effectId < 0 || effectId >= limits::MAX_EFFECTS) {
+        snprintf(result.errorMsg, MAX_ERROR_MSG, "effectId out of range (0-%d): %d", limits::MAX_EFFECTS - 1, effectId);
         return result;
     }
     result.request.effectId = static_cast<uint8_t>(effectId);
@@ -176,7 +177,7 @@ EffectsGetMetadataDecodeResult WsEffectsCodec::decodeGetMetadata(JsonObjectConst
     // Extract effectId (optional, 255 means missing/invalid)
     if (root["effectId"].is<int>()) {
         int effectId = root["effectId"].as<int>();
-        if (effectId >= 0 && effectId <= 127) {
+        if (effectId >= 0 && effectId < limits::MAX_EFFECTS) {
             result.request.effectId = static_cast<uint8_t>(effectId);
         }
         // If out of range, leave as 255 (invalid)
@@ -236,7 +237,7 @@ EffectsParametersGetDecodeResult WsEffectsCodec::decodeParametersGet(JsonObjectC
     // Extract effectId (optional, 255 means use current)
     if (root["effectId"].is<int>()) {
         int effectId = root["effectId"].as<int>();
-        if (effectId >= 0 && effectId <= 127) {
+        if (effectId >= 0 && effectId < limits::MAX_EFFECTS) {
             result.request.effectId = static_cast<uint8_t>(effectId);
         }
     }
@@ -257,7 +258,7 @@ EffectsParametersSetDecodeResult WsEffectsCodec::decodeEffectsParametersSet(Json
     // Extract effectId (optional, 255 means use current)
     if (root["effectId"].is<int>()) {
         int effectId = root["effectId"].as<int>();
-        if (effectId >= 0 && effectId <= 127) {
+        if (effectId >= 0 && effectId < limits::MAX_EFFECTS) {
             result.request.effectId = static_cast<uint8_t>(effectId);
         }
     }

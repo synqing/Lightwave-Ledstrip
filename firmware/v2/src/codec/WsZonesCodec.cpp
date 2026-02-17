@@ -10,6 +10,7 @@
  */
 
 #include "WsZonesCodec.h"
+#include "../config/limits.h"
 #ifdef NATIVE_BUILD
 #include "ZoneComposerStub.h"
 #include "RendererActorStub.h"
@@ -107,14 +108,14 @@ ZoneSetEffectDecodeResult WsZonesCodec::decodeZoneSetEffect(JsonObjectConst root
     }
     result.request.zoneId = static_cast<uint8_t>(zoneId);
     
-    // Extract effectId (required, 0-127)
+    // Extract effectId (required, 0 to MAX_EFFECTS-1)
     if (!root["effectId"].is<int>()) {
         snprintf(result.errorMsg, MAX_ERROR_MSG, "Missing required field 'effectId'");
         return result;
     }
     int effectId = root["effectId"].as<int>();
-    if (effectId < 0 || effectId > 127) {
-        snprintf(result.errorMsg, MAX_ERROR_MSG, "effectId out of range (0-127): %d", effectId);
+    if (effectId < 0 || effectId >= limits::MAX_EFFECTS) {
+        snprintf(result.errorMsg, MAX_ERROR_MSG, "effectId out of range (0-%d): %d", limits::MAX_EFFECTS - 1, effectId);
         return result;
     }
     result.request.effectId = static_cast<uint8_t>(effectId);
@@ -412,7 +413,7 @@ ZonesUpdateDecodeResult WsZonesCodec::decodeZonesUpdate(JsonObjectConst root) {
     // Extract optional fields
     if (root.containsKey("effectId") && root["effectId"].is<int>()) {
         int effectId = root["effectId"].as<int>();
-        if (effectId >= 0 && effectId <= 127) {
+        if (effectId >= 0 && effectId < limits::MAX_EFFECTS) {
             result.request.effectId = static_cast<uint8_t>(effectId);
             result.request.hasEffectId = true;
         }

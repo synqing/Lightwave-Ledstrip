@@ -91,7 +91,7 @@ struct LedConfig {
     static constexpr uint32_t FRAME_TIME_US = 1000000 / TARGET_FPS;  // ~8333us
 
     static constexpr uint8_t DEFAULT_BRIGHTNESS = 96;
-    static constexpr uint8_t MAX_BRIGHTNESS = 160;
+    static constexpr uint8_t MAX_BRIGHTNESS = 255;  // No power clamping; full range available
     static constexpr uint8_t DEFAULT_SPEED = 10;
     static constexpr uint8_t MAX_SPEED = 100;  // Extended range (was 50)
 
@@ -656,6 +656,7 @@ private:
     uint32_t m_lastFrameTime;
     uint32_t m_frameCount;
     float m_effectTimeSeconds;
+    float m_effectTimeSecondsRaw;
     float m_effectFrameAccumulator;
     uint32_t m_effectFrameCount;
 
@@ -774,8 +775,12 @@ private:
     /// Cached result of hasActiveMappings() - updated on effect change only
     bool m_effectHasAudioMappings = false;
 
+    /// Extra gate for reactive effects in high-ID range (140+).
+    float m_highIdReactiveSilenceGate = 1.0f;
+    float m_highIdReactiveActivityGate = 0.0f;
+
     /// Audio debug logging toggle (serial 'a' command)
-    bool m_audioDebugEnabled = true;
+    bool m_audioDebugEnabled = false;
 
     /// Bands debug snapshot (double buffer for lock-free read from serial handler)
     mutable BandsDebugSnapshot m_bandsDebugSnapshot[2];

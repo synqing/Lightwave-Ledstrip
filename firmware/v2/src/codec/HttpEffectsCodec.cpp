@@ -10,6 +10,7 @@
  */
 
 #include "HttpEffectsCodec.h"
+#include "../config/limits.h"
 #include <cstring>
 
 namespace lightwaveos {
@@ -23,18 +24,18 @@ HttpEffectsSetDecodeResult HttpEffectsCodec::decodeSet(JsonObjectConst root) {
     HttpEffectsSetDecodeResult result;
     result.request = HttpEffectsSetRequest();
     
-    // Extract effectId (required)
+    // Extract effectId (required, 0 to MAX_EFFECTS-1)
     if (!root["effectId"].is<int>()) {
         snprintf(result.errorMsg, MAX_ERROR_MSG, "Missing required field 'effectId'");
         return result;
     }
     int effectId = root["effectId"].as<int>();
-    if (effectId < 0 || effectId > 127) {
-        snprintf(result.errorMsg, MAX_ERROR_MSG, "effectId out of range (0-127): %d", effectId);
+    if (effectId < 0 || effectId >= limits::MAX_EFFECTS) {
+        snprintf(result.errorMsg, MAX_ERROR_MSG, "effectId out of range (0-%d): %d", limits::MAX_EFFECTS - 1, effectId);
         return result;
     }
     result.request.effectId = static_cast<uint8_t>(effectId);
-    
+
     // Extract transition flag (optional, default: false)
     result.request.useTransition = root["transition"] | false;
     
@@ -58,18 +59,18 @@ HttpEffectsParametersSetDecodeResult HttpEffectsCodec::decodeParametersSet(JsonO
     HttpEffectsParametersSetDecodeResult result;
     result.request = HttpEffectsParametersSetRequest();
     
-    // Extract effectId (required)
+    // Extract effectId (required, 0 to MAX_EFFECTS-1)
     if (!root["effectId"].is<int>()) {
         snprintf(result.errorMsg, MAX_ERROR_MSG, "Missing required field 'effectId'");
         return result;
     }
     int effectId = root["effectId"].as<int>();
-    if (effectId < 0 || effectId > 127) {
-        snprintf(result.errorMsg, MAX_ERROR_MSG, "effectId out of range (0-127): %d", effectId);
+    if (effectId < 0 || effectId >= limits::MAX_EFFECTS) {
+        snprintf(result.errorMsg, MAX_ERROR_MSG, "effectId out of range (0-%d): %d", limits::MAX_EFFECTS - 1, effectId);
         return result;
     }
     result.request.effectId = static_cast<uint8_t>(effectId);
-    
+
     // Extract parameters object (required)
     if (!root.containsKey("parameters") || !root["parameters"].is<JsonObjectConst>()) {
         snprintf(result.errorMsg, MAX_ERROR_MSG, "Missing required field 'parameters' (must be object)");

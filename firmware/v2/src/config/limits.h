@@ -32,7 +32,7 @@ namespace limits {
  * @brief Maximum number of registered effects - SINGLE SOURCE OF TRUTH
  *
  * This value must be >= the number of effects registered in registerAllEffects().
- * Current count: 147 (as of Feb 2026)
+ * Current count: 162 (as of Feb 2026)
  *
  * Referenced by:
  * - RendererActor.h: m_effects[MAX_EFFECTS] array
@@ -53,7 +53,7 @@ namespace limits {
  * Large buffers (>64 bytes) MUST be PSRAM-allocated in init().
  * See docs/MEMORY_ALLOCATION.md section 3.5 for the mandatory pattern.
  */
-constexpr uint8_t MAX_EFFECTS = 147;
+constexpr uint8_t MAX_EFFECTS = 162;
 
 // ============================================================================
 // Palette System Limits

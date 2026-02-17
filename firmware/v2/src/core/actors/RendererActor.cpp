@@ -124,6 +124,7 @@ RendererActor::RendererActor()
     , m_lastFrameTime(0)
     , m_frameCount(0)
     , m_effectTimeSeconds(0.0f)
+    , m_effectTimeSecondsRaw(0.0f)
     , m_effectFrameAccumulator(0.0f)
     , m_effectFrameCount(0)
     , m_zoneComposer(nullptr)
@@ -1259,10 +1260,12 @@ void RendererActor::renderFrame()
                     for (uint8_t i = 0; i < audio::CONTROLBUS_NUM_CHROMA; ++i) {
                         if (m_lastControlBus.es_chroma_raw[i] > maxChromaRaw) maxChromaRaw = m_lastControlBus.es_chroma_raw[i];
                     }
-                    LW_LOGI("Audio OK: seq=%u hop_seq=%u rms=%.3f flux=%.3f es_vu=%.3f es_binMax=%.3f es_chrMax=%.3f bpm=%.1f conf=%.2f",
+                    LW_LOGI("Audio OK: seq=%u hop=%u rms=%.3f flux=%.3f es_vu=%.3f binMax=%.3f chrMax=%.3f bpm=%.1f conf=%.2f sil=%.2f silent=%d gate=%.2f actGate=%.2f",
                             seq, m_lastControlBus.hop_seq, m_lastControlBus.rms, m_lastControlBus.flux,
                             m_lastControlBus.es_vu_level_raw, maxBinRaw, maxChromaRaw,
-                            m_lastControlBus.es_bpm, m_lastControlBus.es_tempo_confidence);
+                            m_lastControlBus.es_bpm, m_lastControlBus.es_tempo_confidence,
+                            m_lastControlBus.silentScale, m_lastControlBus.isSilent ? 1 : 0,
+                            m_highIdReactiveSilenceGate, m_highIdReactiveActivityGate);
 #else
                     LW_LOGI("Audio OK: seq=%u hop_seq=%u rms=%.3f flux=%.3f",
                             seq, m_lastControlBus.hop_seq, m_lastControlBus.rms, m_lastControlBus.flux);
@@ -1388,6 +1391,9 @@ void RendererActor::renderFrame()
         ctx.totalTimeMs = 0;
         ctx.deltaTimeMs = 0;
         ctx.deltaTimeSeconds = 0.0f;
+        ctx.rawTotalTimeMs = 0;
+        ctx.rawDeltaTimeMs = 0;
+        ctx.rawDeltaTimeSeconds = 0.0f;
         ctx.zoneId = 0xFF;  // Global render
         ctx.zoneStart = 0;
         ctx.zoneLength = 0;
@@ -1470,8 +1476,14 @@ void RendererActor::renderFrame()
         // Speed-scaled timing (slow motion at low speed settings)
         // =====================================================================
         float speedFactor = computeSpeedTimeFactor(ctx.speed);
-        float deltaSeconds = static_cast<float>(deltaTimeMs) * 0.001f;
-        float scaledDeltaSeconds = deltaSeconds * speedFactor;
+        float rawDeltaSeconds = static_cast<float>(deltaTimeMs) * 0.001f;
+        float scaledDeltaSeconds = rawDeltaSeconds * speedFactor;
+
+        // Unscaled timing for beat-accurate envelopes.
+        m_effectTimeSecondsRaw += rawDeltaSeconds;
+        ctx.rawDeltaTimeSeconds = rawDeltaSeconds;
+        ctx.rawDeltaTimeMs = deltaTimeMs;
+        ctx.rawTotalTimeMs = static_cast<uint32_t>(m_effectTimeSecondsRaw * 1000.0f + 0.5f);
 
         m_effectTimeSeconds += scaledDeltaSeconds;
         m_effectFrameAccumulator += speedFactor;
@@ -1536,6 +1548,67 @@ void RendererActor::showLeds()
         for (uint16_t i = 0; i < LedConfig::LEDS_PER_STRIP; ++i) {
             m_strip1[i].nscale8(scale);
             m_strip2[i].nscale8(scale);
+        }
+    }
+
+    // =========================================================================
+    // Hard silence gate for high-ID reactive effects (140+)
+    // Ensures no-audio state fades these effects to black.
+    // =========================================================================
+    {
+        const uint8_t safeEffect = validateEffectId(m_currentEffect);
+        const bool hardGateEffect = (safeEffect >= 140u) && ::PatternRegistry::isAudioReactive(safeEffect);
+        if (hardGateEffect) {
+            float dt = m_effectContext.rawDeltaTimeSeconds;
+            if (dt < 0.0001f) dt = 0.0001f;
+            if (dt > 0.05f) dt = 0.05f;
+
+            // Bezier-like ramp: debounce "audio present" into a smooth 0..1 gate.
+            // CRITICAL: Use post-gate RMS, NOT es_vu_level_raw.
+            // es_vu_level_raw is AGC-amplified (up to 40x) and stays elevated
+            // in silence because AGC pumps gain on noise floor. Post-gate RMS
+            // has noise floor subtracted and goes near-zero in true silence.
+            bool activityNow = false;
+            if (m_effectContext.audio.available) {
+                if (m_lastControlBus.isSilent) {
+                    activityNow = false;  // ControlBus says silent → force close
+                } else {
+                    const float rms = m_lastControlBus.rms;
+                    const float flux = m_lastControlBus.flux;
+                    activityNow = (rms >= 0.03f) || ((flux >= 0.10f) && (rms >= 0.01f));
+                }
+            }
+
+            constexpr float kOpenTimeS = 0.22f;   // Require sustained activity to open (spike rejection)
+            constexpr float kCloseTimeS = 0.95f;  // Smooth fade-out in silence
+            if (activityNow) {
+                m_highIdReactiveActivityGate += dt / kOpenTimeS;
+            } else {
+                m_highIdReactiveActivityGate -= dt / kCloseTimeS;
+            }
+            if (m_highIdReactiveActivityGate < 0.0f) m_highIdReactiveActivityGate = 0.0f;
+            if (m_highIdReactiveActivityGate > 1.0f) m_highIdReactiveActivityGate = 1.0f;
+
+            const float g = m_highIdReactiveActivityGate;
+            m_highIdReactiveSilenceGate = g * g * (3.0f - 2.0f * g);  // smoothstep (bezier-like S-curve)
+
+            uint8_t gateScale = static_cast<uint8_t>(m_highIdReactiveSilenceGate * 255.0f + 0.5f);
+            // Snap-to-black at the bottom to prevent low-level flicker in "silence".
+            if (gateScale <= 2u) gateScale = 0u;
+            if (gateScale < 255u) {
+                for (uint16_t i = 0; i < LedConfig::LEDS_PER_STRIP; ++i) {
+                    if (gateScale == 0u) {
+                        m_strip1[i] = CRGB::Black;
+                        m_strip2[i] = CRGB::Black;
+                    } else {
+                        m_strip1[i].nscale8(gateScale);
+                        m_strip2[i].nscale8(gateScale);
+                    }
+                }
+            }
+        } else {
+            m_highIdReactiveSilenceGate = 1.0f;
+            m_highIdReactiveActivityGate = 1.0f;
         }
     }
 #endif
@@ -1636,6 +1709,9 @@ void RendererActor::handleSetEffect(uint8_t effectId)
             initCtx.frameNumber = m_frameCount;
             initCtx.totalTimeMs = m_frameCount * 8;  // Approximate
             initCtx.deltaTimeMs = 8;  // Default
+            initCtx.rawTotalTimeMs = initCtx.totalTimeMs;
+            initCtx.rawDeltaTimeMs = initCtx.deltaTimeMs;
+            initCtx.rawDeltaTimeSeconds = initCtx.deltaTimeMs * 0.001f;
             initCtx.zoneId = 0xFF;
             initCtx.zoneStart = 0;
             initCtx.zoneLength = 0;
@@ -1658,6 +1734,26 @@ void RendererActor::handleSetEffect(uint8_t effectId)
         m_effectHasAudioMappings = audio::AudioMappingRegistry::instance().hasActiveMappings(effectId);
 #endif
 
+        // Reset high-ID reactive gate on effect change to prevent stale state carrying across patterns.
+        {
+            const uint8_t safeNew = validateEffectId(effectId);
+            const bool hardGateNew = (safeNew >= 140u) && ::PatternRegistry::isAudioReactive(safeNew);
+            if (hardGateNew) {
+                bool activityNow = false;
+                if (m_sharedAudioCtx.available && !m_lastControlBus.isSilent) {
+                    const float rms = m_lastControlBus.rms;
+                    const float flux = m_lastControlBus.flux;
+                    activityNow = (rms >= 0.03f) || ((flux >= 0.10f) && (rms >= 0.01f));
+                }
+                m_highIdReactiveActivityGate = activityNow ? 1.0f : 0.0f;
+                const float g = m_highIdReactiveActivityGate;
+                m_highIdReactiveSilenceGate = g * g * (3.0f - 2.0f * g);
+            } else {
+                m_highIdReactiveActivityGate = 1.0f;
+                m_highIdReactiveSilenceGate = 1.0f;
+            }
+        }
+
         // Publish EFFECT_CHANGED event
         Message evt(MessageType::EFFECT_CHANGED);
         evt.param1 = effectId;
@@ -1668,11 +1764,7 @@ void RendererActor::handleSetEffect(uint8_t effectId)
 
 void RendererActor::handleSetBrightness(uint8_t brightness)
 {
-    // Clamp to max brightness
-    if (brightness > LedConfig::MAX_BRIGHTNESS) {
-        brightness = LedConfig::MAX_BRIGHTNESS;
-    }
-
+    // No power clamping: full 0–255 range passed through to LED driver
     if (m_brightness != brightness) {
         m_brightness = brightness;
 

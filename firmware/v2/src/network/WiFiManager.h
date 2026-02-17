@@ -357,9 +357,9 @@ public:
     bool requestAPOnly();
 
     /**
-     * @brief Check if force AP-only mode is active (stub)
+     * @brief Check if force AP-only mode is active (runtime, not compile-time)
      */
-    bool isForceApOnlyRuntime() const { return false; }
+    bool isForceApOnlyRuntime() const { return m_forceApOnly; }
 
     /**
      * @brief Get saved networks from NVS storage
@@ -548,6 +548,7 @@ private:
     // ========================================================================
 
     bool m_apEnabled = false;
+    volatile bool m_forceApOnly = true;    ///< Boot AP-only; STA activated ONLY via serial `wifi connect`
     String m_apSSID = config::NetworkConfig::AP_SSID;
     String m_apPassword = config::NetworkConfig::AP_PASSWORD;
     uint8_t m_apChannel = 1;

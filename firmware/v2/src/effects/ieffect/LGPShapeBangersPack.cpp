@@ -9,11 +9,13 @@
  */
 
 #include "LGPShapeBangersPack.h"
+#include "LGPFilmPost.h"
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <esp_heap_caps.h>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 
 namespace lightwaveos {
 namespace effects {
@@ -60,7 +62,7 @@ static inline uint8_t luminanceToBr(float wave01, float master) {
 // ---------------------------------------------
 LGPTalbotCarpetEffect::LGPTalbotCarpetEffect() : m_t(0.0f) {}
 
-bool LGPTalbotCarpetEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; return true; }
+bool LGPTalbotCarpetEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
 
 void LGPTalbotCarpetEffect::render(plugins::EffectContext& ctx) {
     const float speedNorm = ctx.speed / 50.0f;
@@ -104,6 +106,7 @@ void LGPTalbotCarpetEffect::render(plugins::EffectContext& ctx) {
 
         writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));
     }
+    lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }
 
 void LGPTalbotCarpetEffect::cleanup() {}
@@ -122,7 +125,7 @@ const plugins::EffectMetadata& LGPTalbotCarpetEffect::getMetadata() const {
 // 2) Airy Comet
 // ---------------------------------------------
 LGPAiryCometEffect::LGPAiryCometEffect() : m_t(0.0f) {}
-bool LGPAiryCometEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; return true; }
+bool LGPAiryCometEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
 
 void LGPAiryCometEffect::render(plugins::EffectContext& ctx) {
     const float speedNorm = ctx.speed / 50.0f;
@@ -167,6 +170,7 @@ void LGPAiryCometEffect::render(plugins::EffectContext& ctx) {
 
         writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));
     }
+    lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }
 
 void LGPAiryCometEffect::cleanup() {}
@@ -185,7 +189,7 @@ const plugins::EffectMetadata& LGPAiryCometEffect::getMetadata() const {
 // 3) Moire Cathedral
 // ---------------------------------------------
 LGPMoireCathedralEffect::LGPMoireCathedralEffect() : m_t(0.0f) {}
-bool LGPMoireCathedralEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; return true; }
+bool LGPMoireCathedralEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
 
 void LGPMoireCathedralEffect::render(plugins::EffectContext& ctx) {
     const float speedNorm = ctx.speed / 50.0f;
@@ -222,6 +226,7 @@ void LGPMoireCathedralEffect::render(plugins::EffectContext& ctx) {
 
         writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));
     }
+    lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }
 
 void LGPMoireCathedralEffect::cleanup() {}
@@ -240,7 +245,7 @@ const plugins::EffectMetadata& LGPMoireCathedralEffect::getMetadata() const {
 // 4) Superformula Living Glyph
 // ---------------------------------------------
 LGPSuperformulaGlyphEffect::LGPSuperformulaGlyphEffect() : m_t(0.0f) {}
-bool LGPSuperformulaGlyphEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; return true; }
+bool LGPSuperformulaGlyphEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
 
 static inline float superformula(float phi, float m, float n1, float n2, float n3, float a=1.0f, float b=1.0f) {
     float t1 = powf(fabsf(cosf(m * phi * 0.25f) / a), n2);
@@ -287,6 +292,7 @@ void LGPSuperformulaGlyphEffect::render(plugins::EffectContext& ctx) {
 
         writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));
     }
+    lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }
 
 void LGPSuperformulaGlyphEffect::cleanup() {}
@@ -305,7 +311,7 @@ const plugins::EffectMetadata& LGPSuperformulaGlyphEffect::getMetadata() const {
 // 5) Spirograph Crown (Hypotrochoid)
 // ---------------------------------------------
 LGPSpirographCrownEffect::LGPSpirographCrownEffect() : m_t(0.0f) {}
-bool LGPSpirographCrownEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; return true; }
+bool LGPSpirographCrownEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
 
 static inline float hypotrochoid_radius(float theta, float R, float r, float d) {
     // x = (R-r)cos(theta) + d cos((R-r)/r * theta)
@@ -356,6 +362,7 @@ void LGPSpirographCrownEffect::render(plugins::EffectContext& ctx) {
 
         writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));
     }
+    lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }
 
 void LGPSpirographCrownEffect::cleanup() {}
@@ -374,7 +381,7 @@ const plugins::EffectMetadata& LGPSpirographCrownEffect::getMetadata() const {
 // 6) Rose Bloom (Rhodonea)
 // ---------------------------------------------
 LGPRoseBloomEffect::LGPRoseBloomEffect() : m_t(0.0f) {}
-bool LGPRoseBloomEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; return true; }
+bool LGPRoseBloomEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
 
 void LGPRoseBloomEffect::render(plugins::EffectContext& ctx) {
     const float speedNorm = ctx.speed / 50.0f;
@@ -412,6 +419,7 @@ void LGPRoseBloomEffect::render(plugins::EffectContext& ctx) {
 
         writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));
     }
+    lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }
 
 void LGPRoseBloomEffect::cleanup() {}
@@ -430,7 +438,7 @@ const plugins::EffectMetadata& LGPRoseBloomEffect::getMetadata() const {
 // 7) Harmonograph Halo (Lissajous aura)
 // ---------------------------------------------
 LGPHarmonographHaloEffect::LGPHarmonographHaloEffect() : m_t(0.0f) {}
-bool LGPHarmonographHaloEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; return true; }
+bool LGPHarmonographHaloEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
 
 void LGPHarmonographHaloEffect::render(plugins::EffectContext& ctx) {
     const float speedNorm = ctx.speed / 50.0f;
@@ -473,6 +481,7 @@ void LGPHarmonographHaloEffect::render(plugins::EffectContext& ctx) {
 
         writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));
     }
+    lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }
 
 void LGPHarmonographHaloEffect::cleanup() {}
@@ -494,8 +503,16 @@ LGPRule30CathedralEffect::LGPRule30CathedralEffect() : m_step(0) {}
 
 bool LGPRule30CathedralEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
-    for (int i = 0; i < STRIP_LENGTH; i++) { m_cells[i] = 0; m_next[i] = 0; }
-    m_cells[STRIP_LENGTH / 2] = 1;
+    lightwaveos::effects::cinema::reset();
+#ifndef NATIVE_BUILD
+    if (!m_ps) {
+        m_ps = static_cast<Rule30Psram*>(
+            heap_caps_malloc(sizeof(Rule30Psram), MALLOC_CAP_SPIRAM));
+        if (!m_ps) return false;
+    }
+    memset(m_ps, 0, sizeof(Rule30Psram));
+    m_ps->cells[STRIP_LENGTH / 2] = 1;
+#endif
     m_step = 0;
     return true;
 }
@@ -506,19 +523,19 @@ static inline uint8_t rule30(uint8_t l, uint8_t c, uint8_t r) {
 }
 
 void LGPRule30CathedralEffect::render(plugins::EffectContext& ctx) {
+    if (!m_ps) return;
     const float speedNorm = ctx.speed / 50.0f;
     const float master = ctx.brightness / 255.0f;
 
-    // Steps per frame (speed controls narrative)
     int steps = 1 + (int)(6.0f * speedNorm);
 
     for (int s = 0; s < steps; s++) {
         for (int i = 0; i < STRIP_LENGTH; i++) {
             int im1 = (i == 0) ? (STRIP_LENGTH - 1) : (i - 1);
             int ip1 = (i == STRIP_LENGTH - 1) ? 0 : (i + 1);
-            m_next[i] = rule30(m_cells[im1], m_cells[i], m_cells[ip1]);
+            m_ps->next[i] = rule30(m_ps->cells[im1], m_ps->cells[i], m_ps->cells[ip1]);
         }
-        for (int i = 0; i < STRIP_LENGTH; i++) m_cells[i] = m_next[i];
+        for (int i = 0; i < STRIP_LENGTH; i++) m_ps->cells[i] = m_ps->next[i];
         m_step++;
     }
 
@@ -528,25 +545,31 @@ void LGPRule30CathedralEffect::render(plugins::EffectContext& ctx) {
         float dmid = (float)i - mid;
         float glue = 0.35f + 0.65f * expf(-(dmid * dmid) * 0.0019f);
 
-        // Soften binary into "textile" (cheap blur)
         int im1 = (i == 0) ? (STRIP_LENGTH - 1) : (i - 1);
         int ip1 = (i == STRIP_LENGTH - 1) ? 0 : (i + 1);
-        float cell = (float)m_cells[i];
-        float blur = (cell + 0.7f * (float)m_cells[im1] + 0.7f * (float)m_cells[ip1]) / (1.0f + 0.7f + 0.7f);
+        float cell = (float)m_ps->cells[i];
+        float blur = (cell + 0.7f * (float)m_ps->cells[im1] + 0.7f * (float)m_ps->cells[ip1]) / (1.0f + 0.7f + 0.7f);
 
         float wave = powf(clamp01(blur), 1.35f) * glue;
 
         uint8_t br = luminanceToBr(wave, master);
 
-        // Neighbourhood tinting (adds "cathedral triangles" depth)
-        uint8_t nb = (uint8_t)((m_cells[im1] << 2) | (m_cells[i] << 1) | (m_cells[ip1]));
+        uint8_t nb = (uint8_t)((m_ps->cells[im1] << 2) | (m_ps->cells[i] << 1) | (m_ps->cells[ip1]));
         uint8_t hue = (uint8_t)(ctx.gHue + (int)(nb * 13) + (int)(wave * 55.0f));
 
         writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));
     }
+    lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }
 
-void LGPRule30CathedralEffect::cleanup() {}
+void LGPRule30CathedralEffect::cleanup() {
+#ifndef NATIVE_BUILD
+    if (m_ps) {
+        heap_caps_free(m_ps);
+        m_ps = nullptr;
+    }
+#endif
+}
 
 const plugins::EffectMetadata& LGPRule30CathedralEffect::getMetadata() const {
     static plugins::EffectMetadata meta{
@@ -568,6 +591,7 @@ LGPLangtonHighwayEffect::LGPLangtonHighwayEffect()
 
 bool LGPLangtonHighwayEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    lightwaveos::effects::cinema::reset();
     if (!m_grid) {
         m_grid = static_cast<uint8_t*>(heap_caps_malloc(H * W, MALLOC_CAP_SPIRAM));
         if (!m_grid) return false;
@@ -644,6 +668,7 @@ void LGPLangtonHighwayEffect::render(plugins::EffectContext& ctx) {
 
         writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));
     }
+    lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }
 
 void LGPLangtonHighwayEffect::cleanup() {
@@ -664,7 +689,7 @@ const plugins::EffectMetadata& LGPLangtonHighwayEffect::getMetadata() const {
 // 10) Cymatic Ladder (standing waves)
 // ---------------------------------------------
 LGPCymaticLadderEffect::LGPCymaticLadderEffect() : m_t(0.0f) {}
-bool LGPCymaticLadderEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; return true; }
+bool LGPCymaticLadderEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
 
 void LGPCymaticLadderEffect::render(plugins::EffectContext& ctx) {
     const float speedNorm = ctx.speed / 50.0f;
@@ -699,6 +724,7 @@ void LGPCymaticLadderEffect::render(plugins::EffectContext& ctx) {
 
         writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));
     }
+    lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }
 
 void LGPCymaticLadderEffect::cleanup() {}
@@ -717,7 +743,7 @@ const plugins::EffectMetadata& LGPCymaticLadderEffect::getMetadata() const {
 // 11) Mach Diamonds (shock diamonds)
 // ---------------------------------------------
 LGPMachDiamondsEffect::LGPMachDiamondsEffect() : m_t(0.0f) {}
-bool LGPMachDiamondsEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; return true; }
+bool LGPMachDiamondsEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
 
 void LGPMachDiamondsEffect::render(plugins::EffectContext& ctx) {
     const float speedNorm = ctx.speed / 50.0f;
@@ -754,6 +780,7 @@ void LGPMachDiamondsEffect::render(plugins::EffectContext& ctx) {
 
         writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));
     }
+    lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }
 
 void LGPMachDiamondsEffect::cleanup() {}

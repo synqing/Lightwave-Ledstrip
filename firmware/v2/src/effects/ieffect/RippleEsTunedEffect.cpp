@@ -8,15 +8,20 @@
 #include "../../config/features.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#endif
 
 namespace lightwaveos::effects::ieffect {
 
-RippleEsTunedEffect::RippleEsTunedEffect() {
+RippleEsTunedEffect::RippleEsTunedEffect()
+    : m_ps(nullptr)
+{
     for (uint8_t i = 0; i < MAX_RIPPLES; i++) {
         m_ripples[i] = {};
     }
-    memset(m_radial, 0, sizeof(m_radial));
-    memset(m_radialAux, 0, sizeof(m_radialAux));
 }
 
 bool RippleEsTunedEffect::init(plugins::EffectContext& ctx) {
@@ -26,8 +31,14 @@ bool RippleEsTunedEffect::init(plugins::EffectContext& ctx) {
     }
     m_lastHopSeq = 0;
     m_spawnCooldown = 0;
-    memset(m_radial, 0, sizeof(m_radial));
-    memset(m_radialAux, 0, sizeof(m_radialAux));
+#ifndef NATIVE_BUILD
+    if (!m_ps) {
+        m_ps = static_cast<RippleEsTunedPsram*>(
+            heap_caps_malloc(sizeof(RippleEsTunedPsram), MALLOC_CAP_SPIRAM));
+        if (!m_ps) return false;
+    }
+    memset(m_ps, 0, sizeof(RippleEsTunedPsram));
+#endif
     m_subBass = 0.0f;
     m_treble = 0.0f;
     m_fluxEnv = 0.0f;
@@ -49,9 +60,7 @@ void RippleEsTunedEffect::spawnRipple(uint8_t hue, uint8_t intensity, float spee
 }
 
 void RippleEsTunedEffect::render(plugins::EffectContext& ctx) {
-    // ES-tuned ripple: beat-locked spawns + FFT/flux shaping.
-    // Uses centre-origin radial buffer (no linear sweeps).
-
+    if (!m_ps) return;
     const bool hasAudio = ctx.audio.available;
     const bool tempoOk = hasAudio && (ctx.audio.tempoConfidence() >= 0.30f);
 
@@ -66,7 +75,7 @@ void RippleEsTunedEffect::render(plugins::EffectContext& ctx) {
         if (f > 58.0f) f = 58.0f;
         fade = static_cast<uint8_t>(f);
     }
-    fadeToBlackBy(m_radial, HALF_LENGTH, fade);
+    fadeToBlackBy(m_ps->radial, HALF_LENGTH, fade);
 
     bool newHop = false;
 #if FEATURE_AUDIO_SYNC
@@ -110,26 +119,14 @@ void RippleEsTunedEffect::render(plugins::EffectContext& ctx) {
                 m_fluxEnv *= 0.82f;
             }
 
-            // Chroma-anchored hue: prefer ES raw chroma when present, else LWLS chroma.
-            const float* chroma = ctx.audio.trinityActive ? nullptr : ctx.audio.controlBus.es_chroma_raw;
-            const float* chromaFallback = ctx.audio.controlBus.chroma;
+            // Both backends now produce normalised chroma via Stage A/B pipeline.
+            const float* chroma = ctx.audio.controlBus.chroma;
             float maxVal = 0.0f;
             uint8_t maxIdx = 0;
-            if (chroma) {
-                for (uint8_t i = 0; i < 12; i++) {
-                    if (chroma[i] > maxVal) {
-                        maxVal = chroma[i];
-                        maxIdx = i;
-                    }
-                }
-            }
-            if (maxVal < 0.05f) {
-                maxVal = 0.0f;
-                for (uint8_t i = 0; i < 12; i++) {
-                    if (chromaFallback[i] > maxVal) {
-                        maxVal = chromaFallback[i];
-                        maxIdx = i;
-                    }
+            for (uint8_t i = 0; i < 12; i++) {
+                if (chroma[i] > maxVal) {
+                    maxVal = chroma[i];
+                    maxIdx = i;
                 }
             }
             if (maxVal > 0.05f) {
@@ -238,22 +235,27 @@ void RippleEsTunedEffect::render(plugins::EffectContext& ctx) {
                 // Pre-scale so multiple overlapping ripples stay in range (colour corruption fix)
                 constexpr uint8_t RIPPLE_PRE_SCALE = 85;  // ~3 overlapping ripples sum to 255
                 color = color.nscale8(RIPPLE_PRE_SCALE);
-                m_radial[dist].r = qadd8(m_radial[dist].r, color.r);
-                m_radial[dist].g = qadd8(m_radial[dist].g, color.g);
-                m_radial[dist].b = qadd8(m_radial[dist].b, color.b);
+                m_ps->radial[dist].r = qadd8(m_ps->radial[dist].r, color.r);
+                m_ps->radial[dist].g = qadd8(m_ps->radial[dist].g, color.g);
+                m_ps->radial[dist].b = qadd8(m_ps->radial[dist].b, color.b);
             }
         }
     }
 
-    memcpy(m_radialAux, m_radial, sizeof(m_radial));
+    memcpy(m_ps->radialAux, m_ps->radial, sizeof(m_ps->radial));
 
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
-        SET_CENTER_PAIR(ctx, dist, m_radialAux[dist]);
+        SET_CENTER_PAIR(ctx, dist, m_ps->radialAux[dist]);
     }
 }
 
 void RippleEsTunedEffect::cleanup() {
-    // No resources to free.
+#ifndef NATIVE_BUILD
+    if (m_ps) {
+        heap_caps_free(m_ps);
+        m_ps = nullptr;
+    }
+#endif
 }
 
 const plugins::EffectMetadata& RippleEsTunedEffect::getMetadata() const {

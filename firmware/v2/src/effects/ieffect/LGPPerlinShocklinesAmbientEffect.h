@@ -21,6 +21,10 @@
 #include "../../plugins/api/EffectContext.h"
 #include <FastLED.h>
 
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#endif
+
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
@@ -38,10 +42,16 @@ public:
 
 private:
     static constexpr uint16_t STRIP_LENGTH = 160;
-    
-    // Shockwave energy buffer
-    float m_shockBuffer[STRIP_LENGTH];
-    
+
+#ifndef NATIVE_BUILD
+    struct ShocklinesPsram {
+        float shockBuffer[STRIP_LENGTH];
+    };
+    ShocklinesPsram* m_ps = nullptr;
+#else
+    void* m_ps = nullptr;
+#endif
+
     // Noise field coordinates
     uint16_t m_noiseX;
     uint16_t m_noiseY;

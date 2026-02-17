@@ -66,7 +66,7 @@ void LGPPerlinCausticsEffect::render(plugins::EffectContext& ctx) {
     float trebleNorm = 0.0f;
     float bassNorm = 0.0f;
     float midNorm = 0.0f;
-    float dt = ctx.getSafeDeltaSeconds();
+    float dt = ctx.getSafeRawDeltaSeconds();
     
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {

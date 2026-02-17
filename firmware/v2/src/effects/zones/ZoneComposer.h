@@ -242,6 +242,7 @@ private:
 
     // Per-zone time accumulators for stable slow-motion scaling.
     float m_zoneTimeSeconds[MAX_ZONES];
+    float m_zoneTimeSecondsRaw[MAX_ZONES];
     float m_zoneFrameAccumulator[MAX_ZONES];
     uint32_t m_zoneFrameCount[MAX_ZONES];
 };

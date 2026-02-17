@@ -131,11 +131,12 @@ void LGPInterferenceScannerEnhancedEffect::render(plugins::EffectContext& ctx) {
 #endif
     {
         // dt-corrected decay when audio unavailable
-        float dtFallback = enhancement::getSafeDeltaSeconds(ctx.deltaTimeSeconds);
+        float dtFallback = enhancement::getSafeDeltaSeconds(ctx.rawDeltaTimeSeconds);
         m_energyAvg *= powf(0.98f, dtFallback * 60.0f);
         m_energyDelta = 0.0f;
     }
 
+    float rawDt = enhancement::getSafeDeltaSeconds(ctx.rawDeltaTimeSeconds);
     float dt = enhancement::getSafeDeltaSeconds(ctx.deltaTimeSeconds);
     float moodNorm = ctx.getMoodNormalized();
 
@@ -143,17 +144,17 @@ void LGPInterferenceScannerEnhancedEffect::render(plugins::EffectContext& ctx) {
     if (hasAudio) {
         for (uint8_t i = 0; i < 12; i++) {
             m_chromaSmoothed[i] = m_chromaFollowers[i].updateWithMood(
-                m_chromaTargets[i], dt, moodNorm);
+                m_chromaTargets[i], rawDt, moodNorm);
         }
     }
 
     // Smooth bass and treble with AsymmetricFollower
-    m_bassWavelength = m_bassFollower.updateWithMood(m_targetBass, dt, moodNorm);
-    m_trebleOverlay = m_trebleFollower.updateWithMood(m_targetTreble, dt, moodNorm);
+    m_bassWavelength = m_bassFollower.updateWithMood(m_targetBass, rawDt, moodNorm);
+    m_trebleOverlay = m_trebleFollower.updateWithMood(m_targetTreble, rawDt, moodNorm);
 
     // True exponential smoothing with AsymmetricFollower (frame-rate independent)
-    float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, dt, moodNorm);
-    float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, dt, moodNorm);
+    float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, rawDt, moodNorm);
+    float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, rawDt, moodNorm);
 
     // Dominant bin smoothing
     float alphaBin = 1.0f - expf(-dt / 0.25f);  // True exponential, 250ms time constant

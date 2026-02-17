@@ -19,6 +19,10 @@
 #include <FastLED.h>
 #include <cmath>
 
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#endif
+
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
@@ -54,11 +58,16 @@ private:
     
     // Audio-driven momentum (Emotiscope-style)
     float m_momentum;
-    
-    // Pre-computed noise array (80 samples, one per centre distance 0-79)
-    // 16-byte aligned for SIMD (matches Emotiscope 2.0 architecture)
-    __attribute__((aligned(16))) float m_noiseArray[80];
-    
+
+#ifndef NATIVE_BUILD
+    struct PerlinBackendPsram {
+        float noiseArray[80];
+    };
+    PerlinBackendPsram* m_ps = nullptr;
+#else
+    void* m_ps = nullptr;
+#endif
+
     // Update timing (like Emotiscope 2.0's 10ms interval)
     uint32_t m_lastUpdateMs;
     static constexpr uint32_t UPDATE_INTERVAL_MS = 10;

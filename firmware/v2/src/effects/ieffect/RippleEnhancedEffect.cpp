@@ -11,13 +11,17 @@
 #include <cmath>
 #include <cstring>
 
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#endif
+
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
 RippleEnhancedEffect::RippleEnhancedEffect()
+    : m_ps(nullptr)
 {
-    // Initialize all ripples as inactive
     for (uint8_t i = 0; i < MAX_RIPPLES; i++) {
         m_ripples[i].active = false;
         m_ripples[i].radius = 0;
@@ -25,12 +29,10 @@ RippleEnhancedEffect::RippleEnhancedEffect()
         m_ripples[i].hue = 0;
         m_ripples[i].intensity = 255;
     }
-    memset(m_radial, 0, sizeof(m_radial));
-    memset(m_radialAux, 0, sizeof(m_radialAux));
 }
 
 bool RippleEnhancedEffect::init(plugins::EffectContext& ctx) {
-    // Reset all ripples
+    (void)ctx;
     for (uint8_t i = 0; i < MAX_RIPPLES; i++) {
         m_ripples[i].active = false;
         m_ripples[i].radius = 0;
@@ -46,16 +48,19 @@ bool RippleEnhancedEffect::init(plugins::EffectContext& ctx) {
     }
     m_lastBeatState = false;
     m_lastDownbeatState = false;
-    memset(m_radial, 0, sizeof(m_radial));
-    memset(m_radialAux, 0, sizeof(m_radialAux));
-    // Initialize smoothing followers
+#ifndef NATIVE_BUILD
+    if (!m_ps) {
+        m_ps = static_cast<RippleEnhancedPsram*>(
+            heap_caps_malloc(sizeof(RippleEnhancedPsram), MALLOC_CAP_SPIRAM));
+        if (!m_ps) return false;
+    }
+    memset(m_ps, 0, sizeof(RippleEnhancedPsram));
+    for (uint8_t i = 0; i < 12; i++) {
+        m_ps->chromaFollowers[i].reset(0.0f);
+    }
+#endif
     m_kickFollower.reset(0.0f);
     m_trebleFollower.reset(0.0f);
-    for (uint8_t i = 0; i < 12; i++) {
-        m_chromaFollowers[i].reset(0.0f);
-        m_chromaSmoothed[i] = 0.0f;
-        m_chromaTargets[i] = 0.0f;
-    }
     m_kickPulse = 0.0f;
     m_trebleShimmer = 0.0f;
     m_targetKick = 0.0f;
@@ -64,19 +69,14 @@ bool RippleEnhancedEffect::init(plugins::EffectContext& ctx) {
 }
 
 void RippleEnhancedEffect::render(plugins::EffectContext& ctx) {
-    // CENTER ORIGIN RIPPLE - Ripples expand from center
-    //
-    // STATEFUL EFFECT: This effect maintains ripple state (position, speed, hue) across frames
-    // in the m_ripples[] array. Ripples spawn at center and expand outward. Identified
-    // in PatternRegistry::isStatefulEffect().
-
-    // Fade radial buffer using fadeAmount parameter
-    fadeToBlackBy(m_radial, HALF_LENGTH, ctx.fadeAmount);
+    if (!m_ps) return;
+    fadeToBlackBy(m_ps->radial, HALF_LENGTH, ctx.fadeAmount);
 
     const bool hasAudio = ctx.audio.available;
     bool newHop = false;
     bool beatOnset = false;
     bool downbeatOnset = false;
+    float rawDt = ctx.getSafeRawDeltaSeconds();
     float dt = ctx.getSafeDeltaSeconds();
     float moodNorm = ctx.getMoodNormalized();
 
@@ -116,18 +116,18 @@ void RippleEnhancedEffect::render(plugins::EffectContext& ctx) {
 
             // Update chromagram targets
             for (uint8_t i = 0; i < 12; i++) {
-                m_chromaTargets[i] = ctx.audio.controlBus.heavy_chroma[i];
+                m_ps->chromaTargets[i] = ctx.audio.controlBus.heavy_chroma[i];
             }
         }
 
         // Smooth toward targets every frame with MOOD-adjusted smoothing
-        m_kickPulse = m_kickFollower.updateWithMood(m_targetKick, dt, moodNorm);
-        m_trebleShimmer = m_trebleFollower.updateWithMood(m_targetTreble, dt, moodNorm);
+        m_kickPulse = m_kickFollower.updateWithMood(m_targetKick, rawDt, moodNorm);
+        m_trebleShimmer = m_trebleFollower.updateWithMood(m_targetTreble, rawDt, moodNorm);
 
         // Smooth chromagram with AsymmetricFollower
         for (uint8_t i = 0; i < 12; i++) {
-            m_chromaSmoothed[i] = m_chromaFollowers[i].updateWithMood(
-                m_chromaTargets[i], dt, moodNorm);
+            m_ps->chromaSmoothed[i] = m_ps->chromaFollowers[i].updateWithMood(
+                m_ps->chromaTargets[i], rawDt, moodNorm);
         }
     } else {
         m_lastBeatState = false;
@@ -146,7 +146,7 @@ void RippleEnhancedEffect::render(plugins::EffectContext& ctx) {
         float chromaEnergy = 0.0f;
         float maxBinVal = 0.0f;
         for (uint8_t i = 0; i < 12; ++i) {
-            float bin = m_chromaSmoothed[i];  // Use smoothed chromagram
+            float bin = m_ps->chromaSmoothed[i];  // Use smoothed chromagram
             // FIX: Use sqrt scaling instead of squaring to preserve low-level signals
             float bright = sqrtf(bin) * 1.5f;
             if (bright > 1.0f) bright = 1.0f;
@@ -327,23 +327,28 @@ void RippleEnhancedEffect::render(plugins::EffectContext& ctx) {
                     m_ripples[r].hue + (uint8_t)dist,
                     brightness);
                 // Keep colours within palette: select brightest contributor.
-                if (brightness > m_radial[dist].getAverageLight()) {
-                    m_radial[dist] = color;
+                if (brightness > m_ps->radial[dist].getAverageLight()) {
+                    m_ps->radial[dist] = color;
                 }
             }
         }
     }
 
-    memcpy(m_radialAux, m_radial, sizeof(m_radial));
+    memcpy(m_ps->radialAux, m_ps->radial, sizeof(m_ps->radial));
 
     // Render radial history buffer to LEDs (centre-origin)
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
-        SET_CENTER_PAIR(ctx, dist, m_radialAux[dist]);
+        SET_CENTER_PAIR(ctx, dist, m_ps->radialAux[dist]);
     }
 }
 
 void RippleEnhancedEffect::cleanup() {
-    // No resources to free
+#ifndef NATIVE_BUILD
+    if (m_ps) {
+        heap_caps_free(m_ps);
+        m_ps = nullptr;
+    }
+#endif
 }
 
 const plugins::EffectMetadata& RippleEnhancedEffect::getMetadata() const {

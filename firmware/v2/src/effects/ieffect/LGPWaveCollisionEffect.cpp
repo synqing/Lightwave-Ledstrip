@@ -89,16 +89,17 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
 #endif
     {
         // dt-corrected decay when audio unavailable (matches Enhanced version)
-        float dtFallback = enhancement::getSafeDeltaSeconds(ctx.deltaTimeSeconds);
+        float dtFallback = enhancement::getSafeDeltaSeconds(ctx.rawDeltaTimeSeconds);
         m_energyAvg *= powf(0.98f, dtFallback * 60.0f);
         m_energyDelta = 0.0f;
     }
 
+    float rawDt = enhancement::getSafeDeltaSeconds(ctx.rawDeltaTimeSeconds);
     float dt = enhancement::getSafeDeltaSeconds(ctx.deltaTimeSeconds);
 
     // EMA smoothing for energyDelta (prevents pops from spiky audio features)
     const float tau = 0.05f;  // 50ms time constant
-    float alpha = 1.0f - expf(-dt / tau);
+    float alpha = 1.0f - expf(-rawDt / tau);
     
     // CRITICAL: Initialize to raw value on first frame (no ramp-from-zero)
     if (!m_energyDeltaEMAInitialized && ctx.audio.available) {
@@ -113,11 +114,11 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
 
     // True exponential smoothing with AsymmetricFollower (frame-rate independent)
     float moodNorm = ctx.mood / 255.0f;  // 0=reactive, 1=smooth
-    float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, dt, moodNorm);
-    float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(energyDeltaForSmoothing, dt, moodNorm);
+    float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, rawDt, moodNorm);
+    float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(energyDeltaForSmoothing, rawDt, moodNorm);
 
     // Dominant bin smoothing
-    float alphaBin = 1.0f - expf(-dt / 0.25f);  // True exponential, 250ms time constant
+    float alphaBin = 1.0f - expf(-rawDt / 0.25f);  // True exponential, 250ms time constant
     m_dominantBinSmooth += (m_dominantBin - m_dominantBinSmooth) * alphaBin;
     if (m_dominantBinSmooth < 0.0f) m_dominantBinSmooth = 0.0f;
     if (m_dominantBinSmooth > 11.0f) m_dominantBinSmooth = 11.0f;
@@ -157,7 +158,7 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
     if (speedTargetClamped > 1.6f) speedTargetClamped = 1.6f;  // Allow higher speed with hi-hat boost
 
     // Spring physics for speed modulation (replaces linear slew limiting)
-    float smoothedSpeed = m_speedSpring.update(speedTargetClamped, dt);
+    float smoothedSpeed = m_speedSpring.update(speedTargetClamped, rawDt);
     if (smoothedSpeed > 1.6f) smoothedSpeed = 1.6f;  // Hard clamp
     if (smoothedSpeed < 0.3f) smoothedSpeed = 0.3f;  // Prevent stalling
 

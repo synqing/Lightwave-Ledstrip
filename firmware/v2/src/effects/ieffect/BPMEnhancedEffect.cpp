@@ -65,6 +65,7 @@ void BPMEnhancedEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
     // SAFE DELTA TIME (clamped for physics stability)
     // =========================================================================
+    float rawDt = ctx.getSafeRawDeltaSeconds();
     float dt = ctx.getSafeDeltaSeconds();
     float speedNorm = ctx.speed / 50.0f;
     float moodNorm = ctx.getMoodNormalized();
@@ -104,15 +105,15 @@ void BPMEnhancedEffect::render(plugins::EffectContext& ctx) {
         }
         
         // Smooth toward targets every frame with MOOD-adjusted smoothing
-        float heavyEnergy = m_heavyEnergyFollower.updateWithMood(m_targetHeavyEnergy, dt, moodNorm);
-        float beatStrength = m_beatStrengthFollower.updateWithMood(m_targetBeatStrength, dt, moodNorm);
-        float tempoConf = m_tempoConfFollower.updateWithMood(m_targetTempoConf, dt, moodNorm);
-        subBassEnergy = m_subBassFollower.updateWithMood(m_targetSubBass, dt, moodNorm);
+        float heavyEnergy = m_heavyEnergyFollower.updateWithMood(m_targetHeavyEnergy, rawDt, moodNorm);
+        float beatStrength = m_beatStrengthFollower.updateWithMood(m_targetBeatStrength, rawDt, moodNorm);
+        float tempoConf = m_tempoConfFollower.updateWithMood(m_targetTempoConf, rawDt, moodNorm);
+        subBassEnergy = m_subBassFollower.updateWithMood(m_targetSubBass, rawDt, moodNorm);
         
         // Smooth chromagram with AsymmetricFollower
         for (uint8_t i = 0; i < 12; i++) {
             m_chromaSmoothed[i] = m_chromaFollowers[i].updateWithMood(
-                m_chromaTargets[i], dt, moodNorm);
+                m_chromaTargets[i], rawDt, moodNorm);
         }
         
         // Find dominant chroma bin for color

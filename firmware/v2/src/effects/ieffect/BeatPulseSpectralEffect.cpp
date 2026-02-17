@@ -71,7 +71,7 @@ void BeatPulseSpectralEffect::render(plugins::EffectContext& ctx) {
     // Additive combination - you see all three bands simultaneously.
     // =========================================================================
 
-    const float dt = ctx.getSafeDeltaSeconds();
+    const float dt = ctx.getSafeRawDeltaSeconds();
 
     // --- Read frequency bands ---
     float rawBass = 0.0f;
@@ -83,22 +83,15 @@ void BeatPulseSpectralEffect::render(plugins::EffectContext& ctx) {
         rawBass = clamp01(ctx.audio.bass());
         rawMid = clamp01(ctx.audio.mid());
         rawTreble = clamp01(ctx.audio.treble());
-        beatTick = ctx.audio.isOnBeat();
     } else {
         // Fallback: simulate gentle pulsing
-        const uint32_t nowMs = ctx.totalTimeMs;
         m_fallbackPhase += dt * 2.0f;
         if (m_fallbackPhase > 6.28318f) m_fallbackPhase -= 6.28318f;
         rawBass = 0.4f + 0.3f * sinf(m_fallbackPhase);
         rawMid = 0.3f + 0.2f * sinf(m_fallbackPhase * 1.5f);
         rawTreble = 0.2f + 0.15f * sinf(m_fallbackPhase * 2.5f);
-
-        const float beatIntervalMs = 60000.0f / fmaxf(30.0f, m_fallbackBpm);
-        if (m_lastFallbackBeatMs == 0 || (nowMs - m_lastFallbackBeatMs) >= static_cast<uint32_t>(beatIntervalMs)) {
-            beatTick = true;
-            m_lastFallbackBeatMs = nowMs;
-        }
     }
+    beatTick = BeatPulseTiming::computeBeatTick(ctx, m_fallbackBpm, m_lastFallbackBeatMs);
 
     // --- Smooth each band (dt-correct exponential smoothing) ---
     // Different attack/release rates per band
@@ -110,7 +103,7 @@ void BeatPulseSpectralEffect::render(plugins::EffectContext& ctx) {
     m_smoothMid += (rawMid - m_smoothMid) * midSmooth;
     m_smoothTreble += (rawTreble - m_smoothTreble) * trebleSmooth;
 
-    // --- Beat boost (brief global pump, unused in additive version but kept for continuity) ---
+    // --- Beat boost (brief global pump) ---
     if (beatTick) {
         m_beatBoost = 0.3f;
     }
@@ -121,6 +114,8 @@ void BeatPulseSpectralEffect::render(plugins::EffectContext& ctx) {
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         const float dist01 = (static_cast<float>(dist) + 0.5f) / static_cast<float>(HALF_LENGTH);
 
+        const float boost = 1.0f + m_beatBoost;
+
         // === BASS: Wide warm GLOW in outer region ===
         float bassHit = 0.0f;
         if (dist01 > BASS_START) {
@@ -128,6 +123,7 @@ void BeatPulseSpectralEffect::render(plugins::EffectContext& ctx) {
             float zonePos = (dist01 - BASS_START) / (1.0f - BASS_START);
             bassHit = (1.0f - zonePos * 0.3f) * m_smoothBass;  // Slight edge fade
         }
+        bassHit = clamp01(bassHit * boost);
 
         // === MID: Sharp ring with position modulation ===
         float midHit = 0.0f;
@@ -137,16 +133,18 @@ void BeatPulseSpectralEffect::render(plugins::EffectContext& ctx) {
             const float diff = fabsf(dist01 - modPos);
             midHit = RingProfile::hardEdge(diff, MID_WIDTH, MID_EDGE_SOFTNESS) * m_smoothMid;
         }
+        midHit = clamp01(midHit * boost);
 
         // === TREBLE: Sparkle shimmer at centre ===
         float trebleHit = 0.0f;
         if (dist01 < TREBLE_END) {
             float zonePos = dist01 / TREBLE_END;
             // High-frequency noise modulation (sparkle)
-            float noise = 0.5f + 0.5f * sinf(static_cast<float>(dist) * 23.7f + static_cast<float>(ctx.totalTimeMs) * 0.035f);
-            noise *= 0.5f + 0.5f * sinf(static_cast<float>(dist) * 11.3f - static_cast<float>(ctx.totalTimeMs) * 0.021f);
+            float noise = 0.5f + 0.5f * sinf(static_cast<float>(dist) * 23.7f + static_cast<float>(ctx.rawTotalTimeMs) * 0.035f);
+            noise *= 0.5f + 0.5f * sinf(static_cast<float>(dist) * 11.3f - static_cast<float>(ctx.rawTotalTimeMs) * 0.021f);
             trebleHit = (1.0f - zonePos) * m_smoothTreble * noise;
         }
+        trebleHit = clamp01(trebleHit * boost);
 
         // === Colour per band (different palette regions) ===
         const uint8_t bassBright = scaleBrightness(ctx.brightness, bassHit * 0.9f);

@@ -544,6 +544,11 @@ private:
     uint32_t m_lastImmediateBroadcast;
     bool m_broadcastPending;
     static constexpr uint32_t BROADCAST_COALESCE_MS = 50;
+    uint32_t m_lastClientConnectMs;
+    // Hold heavy textAll broadcasts briefly after connect so command/hello traffic
+    // can settle on SoftAP links.
+    static constexpr uint32_t CONNECT_STABILISE_MS = 600;
+    static_assert(CONNECT_STABILISE_MS >= 400, "CONNECT_STABILISE_MS must remain >= 400ms for SoftAP safety");
 
     // Low internal heap shedding (avoid esp_timer/WiFi/lwIP ENOMEM spirals).
     // Use hysteresis to prevent rapid toggling.

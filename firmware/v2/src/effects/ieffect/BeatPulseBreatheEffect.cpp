@@ -48,22 +48,10 @@ void BeatPulseBreatheEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
 
     // --- Beat source ---
-    bool beatTick = false;
-
-    if (ctx.audio.available) {
-        beatTick = ctx.audio.isOnBeat();
-    } else {
-        // Fallback: internal metronome
-        const uint32_t nowMs = ctx.totalTimeMs;
-        const float beatIntervalMs = 60000.0f / fmaxf(30.0f, m_fallbackBpm);
-        if (m_lastBeatTimeMs == 0 || (nowMs - m_lastBeatTimeMs) >= static_cast<uint32_t>(beatIntervalMs)) {
-            beatTick = true;
-            m_lastBeatTimeMs = nowMs;
-        }
-    }
+    const bool beatTick = BeatPulseTiming::computeBeatTick(ctx, m_fallbackBpm, m_lastBeatTimeMs);
 
     // --- Delta time for frame-rate independent motion ---
-    const float dt = ctx.getSafeDeltaSeconds();
+    const float dt = ctx.getSafeRawDeltaSeconds();
 
     // --- Soft attack (the "inhale") - dt-corrected ---
     if (beatTick) {

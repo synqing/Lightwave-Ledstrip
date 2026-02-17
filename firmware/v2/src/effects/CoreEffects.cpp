@@ -53,6 +53,8 @@
 #include "ieffect/LGPReactionDiffusionEffect.h"
 #include "ieffect/LGPReactionDiffusionTriangleEffect.h"
 #include "ieffect/LGPShapeBangersPack.h"
+#include "ieffect/LGPHolyShitBangersPack.h"
+#include "ieffect/LGPExperimentalAudioPack.h"
 #include "ieffect/LGPInterferenceScannerEffect.h"
 #include "ieffect/LGPWaveCollisionEffect.h"
 #include "ieffect/LGPDiamondLatticeEffect.h"
@@ -837,7 +839,7 @@ uint8_t registerAllEffects(RendererActor* renderer) {
         total++;
     }
 
-    // LGP Star Burst Narrative (ID 74) - Story conductor + chord-based color
+    // LGP Star Burst Narrative (ID 74) - Legacy core with phrase-gated harmonic colour
     static ieffect::LGPStarBurstNarrativeEffect starBurstNarrativeInstance;
     if (renderer->registerEffect(total, &starBurstNarrativeInstance)) {
         total++;
@@ -1075,7 +1077,7 @@ uint8_t registerAllEffects(RendererActor* renderer) {
         total++;
     }
 
-    // Beat Pulse (Shockwave) (ID 111) - outward pressure wave with sharp front and exponential trail
+    // Beat Pulse (Shockwave) (ID 111) - HTML parity outward ring (amplitude-driven position)
     static ieffect::BeatPulseShockwaveEffect beatPulseShockwaveInstance(false);  // false = outward
     if (renderer->registerEffect(total, &beatPulseShockwaveInstance)) {
         total++;
@@ -1128,13 +1130,19 @@ uint8_t registerAllEffects(RendererActor* renderer) {
         total++;
     }
 
-    // Beat Pulse (LGP Interference) (ID 120) - Dual-strip phase control for optical interference
+    // Beat Pulse (LGP Interference) (ID 119) - Dual-strip phase control for optical interference
     static ieffect::BeatPulseLGPInterferenceEffect beatPulseLGPInterferenceInstance;
     if (renderer->registerEffect(total, &beatPulseLGPInterferenceInstance)) {
         total++;
     }
 
-    // Beat Pulse (Bloom) (ID 121) - Sensory Bridge Bloom parity: subpixel advection transport
+    // Beat Pulse (Bloom) (ID 120) - Beat Pulse transport bloom variant.
+    static ieffect::BeatPulseBloomEffect beatPulseBloomInstance;
+    if (renderer->registerEffect(total, &beatPulseBloomInstance)) {
+        total++;
+    }
+
+    // Bloom (Parity) (ID 121) - Sensory Bridge Bloom parity: subpixel advection transport
     // Transport is the brush. History is the canvas. Audio is just pigment injection.
     static ieffect::BloomParityEffect bloomParityInstance;
     if (renderer->registerEffect(total, &bloomParityInstance)) {
@@ -1295,6 +1303,70 @@ uint8_t registerAllEffects(RendererActor* renderer) {
     // LGP Mach Diamonds (ID 146) - Shock-diamond jewellery
     static ieffect::LGPMachDiamondsEffect machDiamondsInstance;
     if (renderer->registerEffect(total, &machDiamondsInstance)) {
+        total++;
+    }
+
+    // LGP Holy Shit Bangers Pack (IDs 147-151)
+    static ieffect::LGPChimeraCrownEffect chimeraCrownInstance;
+    if (renderer->registerEffect(total, &chimeraCrownInstance)) {
+        total++;
+    }
+    static ieffect::LGPCatastropheCausticsEffect catastropheCausticsInstance;
+    if (renderer->registerEffect(total, &catastropheCausticsInstance)) {
+        total++;
+    }
+    static ieffect::LGPHyperbolicPortalEffect hyperbolicPortalInstance;
+    if (renderer->registerEffect(total, &hyperbolicPortalInstance)) {
+        total++;
+    }
+    static ieffect::LGPLorenzRibbonEffect lorenzRibbonInstance;
+    if (renderer->registerEffect(total, &lorenzRibbonInstance)) {
+        total++;
+    }
+    static ieffect::LGPIFSBioRelicEffect ifsBioRelicInstance;
+    if (renderer->registerEffect(total, &ifsBioRelicInstance)) {
+        total++;
+    }
+
+    // --- Experimental Audio Pack (152-161) ---
+    static ieffect::LGPFluxRiftEffect fluxRiftInstance;
+    if (renderer->registerEffect(total, &fluxRiftInstance)) {
+        total++;
+    }
+    static ieffect::LGPBeatPrismEffect beatPrismInstance;
+    if (renderer->registerEffect(total, &beatPrismInstance)) {
+        total++;
+    }
+    static ieffect::LGPHarmonicTideEffect harmonicTideInstance;
+    if (renderer->registerEffect(total, &harmonicTideInstance)) {
+        total++;
+    }
+    static ieffect::LGPBassQuakeEffect bassQuakeInstance;
+    if (renderer->registerEffect(total, &bassQuakeInstance)) {
+        total++;
+    }
+    static ieffect::LGPTrebleNetEffect trebleNetInstance;
+    if (renderer->registerEffect(total, &trebleNetInstance)) {
+        total++;
+    }
+    static ieffect::LGPRhythmicGateEffect rhythmicGateInstance;
+    if (renderer->registerEffect(total, &rhythmicGateInstance)) {
+        total++;
+    }
+    static ieffect::LGPSpectralKnotEffect spectralKnotInstance;
+    if (renderer->registerEffect(total, &spectralKnotInstance)) {
+        total++;
+    }
+    static ieffect::LGPSaliencyBloomEffect saliencyBloomInstance;
+    if (renderer->registerEffect(total, &saliencyBloomInstance)) {
+        total++;
+    }
+    static ieffect::LGPTransientLatticeEffect transientLatticeInstance;
+    if (renderer->registerEffect(total, &transientLatticeInstance)) {
+        total++;
+    }
+    static ieffect::LGPWaveletMirrorEffect waveletMirrorInstance;
+    if (renderer->registerEffect(total, &waveletMirrorInstance)) {
         total++;
     }
 

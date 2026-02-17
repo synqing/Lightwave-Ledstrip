@@ -45,22 +45,10 @@ void BeatPulseLGPInterferenceEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
 
     // --- Beat source ---
-    bool beatTick = false;
-
-    if (ctx.audio.available) {
-        beatTick = ctx.audio.isOnBeat();
-    } else {
-        const uint32_t nowMs = ctx.totalTimeMs;
-        const float beatIntervalMs = 60000.0f / fmaxf(30.0f, m_fallbackBpm);
-        if (m_lastBeatTimeMs == 0 ||
-            (nowMs - m_lastBeatTimeMs) >= static_cast<uint32_t>(beatIntervalMs)) {
-            beatTick = true;
-            m_lastBeatTimeMs = nowMs;
-        }
-    }
+    const bool beatTick = BeatPulseTiming::computeBeatTick(ctx, m_fallbackBpm, m_lastBeatTimeMs);
 
     // --- Update beatIntensity using HTML parity maths ---
-    const float dt = ctx.getSafeDeltaSeconds();
+    const float dt = ctx.getSafeRawDeltaSeconds();
     BeatPulseHTML::updateBeatIntensity(m_beatIntensity, beatTick, dt);
 
     // --- Update motion phase for standing wave animation ---
@@ -71,7 +59,7 @@ void BeatPulseLGPInterferenceEffect::render(plugins::EffectContext& ctx) {
 
     // --- Ring position (OUTWARD expansion) ---
     const float htmlCentre = BeatPulseHTML::ringCentre01(m_beatIntensity);
-    const float ringPos = 1.0f - htmlCentre;  // Outward: 0→1 as intensity decays
+    const float ringPos = htmlCentre;  // Centre -> edge
 
     // --- Spatial frequency for interference pattern ---
     const float spatialK = m_spatialFreq * LGP_PI / static_cast<float>(HALF_LENGTH);

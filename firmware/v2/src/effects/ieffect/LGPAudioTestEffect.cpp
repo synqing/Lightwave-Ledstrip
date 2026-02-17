@@ -75,7 +75,7 @@ void LGPAudioTestEffect::render(plugins::EffectContext& ctx) {
     m_lastBeatPhase = beatPhase;
 
     // Get dt for frame-rate independent decay
-    float dt = ctx.getSafeDeltaSeconds();
+    float dt = ctx.getSafeRawDeltaSeconds();
 
     // ========================================================================
     // Beat pulse animation (decays over time)

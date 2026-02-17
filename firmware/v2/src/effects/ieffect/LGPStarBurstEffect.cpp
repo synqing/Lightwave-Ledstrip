@@ -83,11 +83,12 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
     // Per-frame Updates (smooth animation)
     // =========================================================================
+    float rawDt = ctx.getSafeRawDeltaSeconds();
     float dt = ctx.getSafeDeltaSeconds();
     if (dt > 0.1f) dt = 0.1f;  // Clamp for safety
 
     // Smooth dominant bin (for color stability) - true exponential, tau=250ms
-    float alphaBin = 1.0f - expf(-dt / 0.25f);
+    float alphaBin = 1.0f - expf(-rawDt / 0.25f);
     m_dominantBinSmooth += (m_dominantBin - m_dominantBinSmooth) * alphaBin;
     if (m_dominantBinSmooth < 0.0f) m_dominantBinSmooth = 0.0f;
     if (m_dominantBinSmooth > 11.0f) m_dominantBinSmooth = 11.0f;
@@ -100,7 +101,7 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
         
         // EMA smoothing with frame-rate-independent alpha (tau = 50ms)
         const float tau = 0.05f;
-        float alpha = 1.0f - expf(-dt / tau);
+        float alpha = 1.0f - expf(-rawDt / tau);
         
         // CRITICAL: Initialize to raw value on first frame (no ramp-from-zero)
         if (!m_heavyBassSmoothInitialized) {
@@ -116,7 +117,7 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
 
     // Spring physics for speed modulation (natural momentum, no jitter)
     float targetSpeed = 0.7f + 0.6f * heavyEnergy;
-    float smoothedSpeed = m_phaseSpeedSpring.update(targetSpeed, dt);
+    float smoothedSpeed = m_phaseSpeedSpring.update(targetSpeed, rawDt);
     if (smoothedSpeed > 2.0f) smoothedSpeed = 2.0f;
     if (smoothedSpeed < 0.3f) smoothedSpeed = 0.3f;  // Prevent stalling
 

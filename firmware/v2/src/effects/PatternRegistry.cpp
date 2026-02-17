@@ -112,7 +112,7 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
     {PM_STR("Bass Breath"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Organic breathing driven by bass energy"), PM_STR("Bass band tracking, breathing simulation"), PM_STR("")},
     {PM_STR("Audio Waveform"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("True time-domain waveform visualization mirrored from centre"), PM_STR("Waveform samples, time-domain display"), PM_STR("")},
     {PM_STR("Audio Bloom"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Centre bloom pulses triggered by audio transients"), PM_STR("Flux detection, pulse generation, radial decay"), PM_STR("")},
-    {PM_STR("LGP Star Burst (Narrative)"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN, PM_STR("Story-driven starburst with phrase-gated chord coloring"), PM_STR("Narrative conductor, chord harmonics, phrase timing"), PM_STR("LGP Star Burst")},
+    {PM_STR("LGP Star Burst (Narrative)"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN, PM_STR("Legacy starburst core with phrase-gated harmonic colour commits"), PM_STR("Narrative phrase state, snare bursts, chord-root gating"), PM_STR("LGP Star Burst")},
     {PM_STR("Chord Glow"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Full chord detection showcase with harmonic color mapping"), PM_STR("Chord detection, root note color, quality modulation"), PM_STR("")},
     {PM_STR("Wave Reactive"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Energy-accumulating wave with audio-driven motion"), PM_STR("Beat accumulation, frequency-driven velocity, kaleidoscope integration"), PM_STR("Wave")},
 
@@ -167,8 +167,8 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
 
     // --- UI Preview Parity (110+) ---
     {PM_STR("Beat Pulse (Stack)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("UI preview parity: static palette gradient with beat-driven white push"), PM_STR("Beat envelope, white push, static centre-origin gradient"), PM_STR("Beat Pulse")},
-    {PM_STR("Beat Pulse (Shockwave)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Canonical shockwave: ring travels outward from centre on beat"), PM_STR("Time-since-beat ring position, exponential envelope, white push"), PM_STR("Beat Pulse (Stack), Beat Pulse")},
-    {PM_STR("Beat Pulse (Shockwave In)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Inward shockwave: ring travels edge→centre on beat"), PM_STR("Time-since-beat ring position (inward), exponential envelope, white push"), PM_STR("Beat Pulse (Shockwave)")},
+    {PM_STR("Beat Pulse (Shockwave)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Canonical shockwave: ring travels outward from centre on beat"), PM_STR("Amplitude-driven ring position, HTML parity envelope, white push"), PM_STR("Beat Pulse (Stack), Beat Pulse")},
+    {PM_STR("Beat Pulse (Shockwave In)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Inward shockwave: ring travels edge→centre on beat"), PM_STR("Amplitude-driven inward ring position, HTML parity envelope, white push"), PM_STR("Beat Pulse (Shockwave)")},
 
     // --- Beat Pulse Family (113-119) ---
     {PM_STR("Beat Pulse (Void)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Hard detonation in darkness: palette ring against black"), PM_STR("Parity ring maths, zero base brightness, palette-coloured detonation"), PM_STR("Beat Pulse (Stack)")},
@@ -180,8 +180,11 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
     {PM_STR("Beat Pulse (Breathe)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Warm whole-strip amplitude pump with centre-weighted glow"), PM_STR("No ring shape, centre-biased amplitude, slower decay for sustain"), PM_STR("Beat Pulse (Stack), Breathing")},
     {PM_STR("Beat Pulse (LGP Interference)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::STANDING, PM_STR("Dual-strip interference: standing waves exploit LGP optics"), PM_STR("Phase-offset strip driving, spatial frequency control, anti-phase/quadrature modes"), PM_STR("LGP Chladni Harmonics, Modal Resonance")},
 
-    // --- Beat Pulse (Bloom) - ID 121 ---
-    {PM_STR("Beat Pulse (Bloom)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP, PM_STR("Bloom-style subpixel transport (liquid trails)"), PM_STR("Stateful HDR-ish history buffer advected outward by fractional offsets (subpixel), with beat+flux centre injection."), PM_STR("Transport/Advection/Trails")},
+    // --- Beat Pulse (Bloom) - ID 120 ---
+    {PM_STR("Beat Pulse (Bloom)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::TRAVELING, PM_STR("Beat Pulse transport bloom with beat-envelope driven injection"), PM_STR("Beat-gated centre injection, raw-time transport/advection, bloom-style trail persistence and post shaping."), PM_STR("Beat Pulse (Stack), Beat Pulse (Ripple), Transport/Advection/Trails")},
+
+    // --- Bloom (Parity) - ID 121 ---
+    {PM_STR("Bloom (Parity)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP, PM_STR("Bloom-style subpixel transport (liquid trails)"), PM_STR("Stateful HDR-ish history buffer advected outward by fractional offsets (subpixel), with beat+flux centre injection."), PM_STR("Transport/Advection/Trails")},
 
     // --- Kuramoto Transport - ID 122 ---
     {PM_STR("Kuramoto Transport"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Invisible oscillator field → event-driven light transport"), PM_STR("80-oscillator Kuramoto with nonlocal coupling, RK2 integration, phase-slip/coherence-edge injection into Bloom-style transport buffer. Audio steers regime, not pixels."), PM_STR("Dynamical System/Emergence/Transport")},
@@ -216,7 +219,26 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
     {PM_STR("LGP Rule 30 Cathedral"), PatternFamily::NOVEL_PHYSICS, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP, PM_STR("Elementary CA textile (triangles + chaos + ribs)"), PM_STR("Rule 30 cellular automaton, binary-to-textile blur, neighbourhood tinting"), PM_STR("LGP Mycelial Network")},
     {PM_STR("LGP Langton Highway"), PatternFamily::NOVEL_PHYSICS, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP, PM_STR("Emergent order reveal (ant to chaos to highway) projected to 1D"), PM_STR("Langton ant 64x64 grid, diagonal slice projection, ant spark"), PM_STR("LGP Rule 30 Cathedral")},
     {PM_STR("LGP Cymatic Ladder"), PatternFamily::INTERFERENCE, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::STANDING | PatternTags::PHYSICS, PM_STR("Standing-wave nodes/antinodes sculpted into LGP glass"), PM_STR("Standing wave harmonics 2-8, node/antinode sculpture"), PM_STR("LGP Chladni Harmonics")},
-    {PM_STR("LGP Mach Diamonds"), PatternFamily::INTERFERENCE, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::STANDING | PatternTags::PHYSICS, PM_STR("Shock-diamond jewellery (standing shock-cell pulses)"), PM_STR("Triangle-wave shock cells, diamond breathing, jewel tones"), PM_STR("LGP Cymatic Ladder")}
+    {PM_STR("LGP Mach Diamonds"), PatternFamily::INTERFERENCE, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::STANDING | PatternTags::PHYSICS, PM_STR("Shock-diamond jewellery (standing shock-cell pulses)"), PM_STR("Triangle-wave shock cells, diamond breathing, jewel tones"), PM_STR("LGP Cymatic Ladder")},
+
+    // --- LGP Holy Shit Bangers Pack (147-151) ---
+    {PM_STR("Chimera Crown"), PatternFamily::MATHEMATICAL, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::PHYSICS, PM_STR("Coherent and incoherent domains (sync fracture line)"), PM_STR("Kuramoto-Sakaguchi nonlocal coupling, local order parameter"), PM_STR("")},
+    {PM_STR("Catastrophe Caustics"), PatternFamily::QUANTUM, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::PHYSICS, PM_STR("Ray-envelope filaments (focus pull + cusp spark)"), PM_STR("1D ray histogram, lens thickness field, caustic concentration"), PM_STR("LGP Caustic Fan, LGP Water Caustics")},
+    {PM_STR("Hyperbolic Portal"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP, PM_STR("Edge densification via atanh(r) (Poincaré vibe)"), PM_STR("Hyperbolic stretch, multi-band ribs, centre calm"), PM_STR("")},
+    {PM_STR("Lorenz Ribbon"), PatternFamily::MATHEMATICAL, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::PHYSICS, PM_STR("Chaotic attractor ribbon (never repeats the same way twice)"), PM_STR("Lorenz ODE trail, radial projection, age fade"), PM_STR("")},
+    {PM_STR("IFS Botanical Relic"), PatternFamily::ORGANIC, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP, PM_STR("Mirrored IFS growth (fractal botany in glass)"), PM_STR("Barnsley fern IFS, radial histogram, vein specular"), PM_STR("LGP Crystalline Growth")},
+
+    // --- Experimental Audio Pack (152-161) ---
+    {PM_STR("LGP Flux Rift"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING | PatternTags::SPECTRAL, PM_STR("Transient flux opens a travelling centre-out rift"), PM_STR("Fast flux envelope, beat pulse coupling, radial ring pressure"), PM_STR("Beat Pulse (Shockwave), Audio Bloom")},
+    {PM_STR("LGP Beat Prism"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING | PatternTags::SPECTRAL, PM_STR("Beat-front prism rays with edgeward pressure travel"), PM_STR("Beat-strength front, treble prism modulation, radial ray field"), PM_STR("Beat Pulse (Stack), LGP Star Burst")},
+    {PM_STR("LGP Harmonic Tide"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Chord-anchored tidal bands with centre-held continuity"), PM_STR("Chord/root anchoring, harmonic saliency weighting, dual-wave tide"), PM_STR("Chord Glow, Breathing")},
+    {PM_STR("LGP Bass Quake"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Sub-bass compression waves with outward shock release"), PM_STR("Heavy-bass envelope, beat-coupled shock ring, centre pressure core"), PM_STR("Bass Breath, Beat Pulse (Shockwave Cascade)")},
+    {PM_STR("LGP Treble Net"), PatternFamily::INTERFERENCE, PatternTags::CENTER_ORIGIN | PatternTags::STANDING | PatternTags::SPECTRAL, PM_STR("Timbral shimmer lattice with edge-biased spectral filaments"), PM_STR("Treble/timbral envelope, interference net, shimmer burst accents"), PM_STR("LGP Interference Scanner, LGP Chladni Harmonics")},
+    {PM_STR("LGP Rhythmic Gate"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Beat-gated lattice shutters with travelling pulse seams"), PM_STR("Rhythmic saliency gate, moving bar field, beat seam projection"), PM_STR("BPM Enhanced, Chevron Waves Enhanced")},
+    {PM_STR("LGP Spectral Knot"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING | PatternTags::SPECTRAL, PM_STR("Frequency-balance knot fields crossing in mirrored rings"), PM_STR("Low/mid/high balance knotting, crossing radial rings, weave envelope"), PM_STR("Spectrum Bars, Beat Pulse (Spectral)")},
+    {PM_STR("LGP Saliency Bloom"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Overall novelty drives expanding bloom radius and density"), PM_STR("Overall saliency envelope, beat-assisted bloom radius, centre glow bed"), PM_STR("Audio Bloom, Wave Reactive")},
+    {PM_STR("LGP Transient Lattice"), PatternFamily::INTERFERENCE, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Snare and flux impacts drive a decaying interference scaffold"), PM_STR("Transient memory field, impact ring launch, dual-frequency lattice"), PM_STR("Ripple Enhanced, LGP Wave Collision")},
+    {PM_STR("LGP Wavelet Mirror"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Waveform crest mirroring with beat-travel ridge reinforcement"), PM_STR("Waveform crest sampling, mirrored radial mapping, beat-ridge overlay"), PM_STR("Audio Waveform, Snapwave")}
 };
 
 const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(PatternMetadata);
@@ -467,7 +489,7 @@ static const uint8_t REACTIVE_EFFECT_IDS[] PROGMEM = {
     71,  // Bass Breath - bass-driven breathing
     72,  // Audio Waveform - time-domain visualization
     73,  // Audio Bloom - transient-triggered blooms
-    74,  // Star Burst Narrative - full musical intelligence
+    74,  // Star Burst Narrative - legacy core + phrase-gated harmonic commits
     75,  // Chord Glow - chord detection showcase
     76,  // Wave Reactive - energy accumulation
     77,  // Perlin Veil - audio-driven advection
@@ -504,7 +526,20 @@ static const uint8_t REACTIVE_EFFECT_IDS[] PROGMEM = {
     117, // Beat Pulse (Spectral) - three frequency-driven rings
     118, // Beat Pulse (Spectral Pulse) - stationary frequency zones
     119, // Beat Pulse (Breathe) - whole-strip amplitude pump
-    120  // Beat Pulse (LGP Interference) - dual-strip standing wave interference
+    120, // Beat Pulse (LGP Interference) - dual-strip standing wave interference
+    121, // Beat Pulse (Bloom) - beat-gated transport bloom
+    122, // Bloom (Parity) - SB parity transport bloom
+    123, // Kuramoto Transport - event-driven coherence transport
+    152, // LGP Flux Rift - flux-driven travelling rift
+    153, // LGP Beat Prism - beat-front prism rays
+    154, // LGP Harmonic Tide - chord-anchored tidal bands
+    155, // LGP Bass Quake - bass compression with shock release
+    156, // LGP Treble Net - timbral shimmer lattice
+    157, // LGP Rhythmic Gate - saliency-gated shutter field
+    158, // LGP Spectral Knot - low/mid/high knot crossings
+    159, // LGP Saliency Bloom - novelty-weighted bloom radius
+    160, // LGP Transient Lattice - snare/flux impact scaffold
+    161  // LGP Wavelet Mirror - waveform crest mirror field
 };
 static constexpr uint8_t REACTIVE_EFFECT_COUNT = sizeof(REACTIVE_EFFECT_IDS);
 

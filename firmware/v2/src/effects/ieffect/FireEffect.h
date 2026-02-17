@@ -16,6 +16,10 @@
 #include "../../plugins/api/EffectContext.h"
 #include <FastLED.h>
 
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#endif
+
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
@@ -32,9 +36,15 @@ public:
     const plugins::EffectMetadata& getMetadata() const override;
 
 private:
-    // Instance state (was: static byte fireHeat[STRIP_LENGTH])
-    static constexpr uint16_t STRIP_LENGTH = 160;  // From CoreEffects.h
-    byte m_fireHeat[STRIP_LENGTH];
+    static constexpr uint16_t STRIP_LENGTH = 160;
+#ifndef NATIVE_BUILD
+    struct FirePsram {
+        byte fireHeat[STRIP_LENGTH];
+    };
+    FirePsram* m_ps = nullptr;
+#else
+    void* m_ps = nullptr;
+#endif
 };
 
 } // namespace ieffect

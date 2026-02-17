@@ -34,7 +34,7 @@ namespace plugins {
  * @brief Plugin configuration constants
  */
 struct PluginConfig {
-    static constexpr uint8_t MAX_EFFECTS = 155;
+    static constexpr uint8_t MAX_EFFECTS = 170;
     static_assert(MAX_EFFECTS >= limits::MAX_EFFECTS,
                   "PluginConfig::MAX_EFFECTS must be >= limits::MAX_EFFECTS");
     static constexpr uint8_t MAX_MANIFESTS = 16;

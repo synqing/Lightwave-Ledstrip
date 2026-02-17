@@ -13,6 +13,7 @@
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
+#include <esp_heap_caps.h>
 #endif
 
 #include <cmath>
@@ -24,17 +25,23 @@ namespace ieffect {
 
 bool LGPSpectrumDetailEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
-    // Initialize smoothing followers
-    for (uint8_t i = 0; i < 64; i++) {
-        m_binFollowers[i].reset(0.0f);
-        m_targetBins[i] = 0.0f;
-        m_binSmoothing[i] = 0.0f;
+#ifndef NATIVE_BUILD
+    if (!m_ps) {
+        m_ps = static_cast<SpectrumDetailPsram*>(
+            heap_caps_malloc(sizeof(SpectrumDetailPsram), MALLOC_CAP_SPIRAM));
+        if (!m_ps) return false;
     }
+    memset(m_ps, 0, sizeof(SpectrumDetailPsram));
+    for (uint8_t i = 0; i < 64; i++) {
+        m_ps->binFollowers[i].reset(0.0f);
+    }
+#endif
     m_lastHopSeq = 0;
     return true;
 }
 
 void LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {
+    if (!m_ps) return;
     // #region agent log
     #ifndef NATIVE_BUILD
     static uint32_t lastRenderLogMs = 0;
@@ -77,6 +84,7 @@ void LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {
     }
     constexpr uint8_t NUM_BINS = 64;
     
+    float rawDt = ctx.getSafeRawDeltaSeconds();
     float dt = ctx.getSafeDeltaSeconds();
     float moodNorm = ctx.getMoodNormalized();
     
@@ -86,7 +94,7 @@ void LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {
         m_lastHopSeq = ctx.audio.controlBus.hop_seq;
         float maxBin = 0.0f;
         for (uint8_t bin = 0; bin < NUM_BINS; ++bin) {
-            m_targetBins[bin] = bins64[bin];
+            m_ps->targetBins[bin] = bins64[bin];
             if (bins64[bin] > maxBin) maxBin = bins64[bin];
         }
         // #region agent log
@@ -104,9 +112,9 @@ void LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {
     float maxSmooth = 0.0f;
     uint8_t binsAboveThreshold = 0;
     for (uint8_t bin = 0; bin < NUM_BINS; ++bin) {
-        m_binSmoothing[bin] = m_binFollowers[bin].updateWithMood(m_targetBins[bin], dt, moodNorm);
-        if (m_binSmoothing[bin] > maxSmooth) maxSmooth = m_binSmoothing[bin];
-        if (m_binSmoothing[bin] >= 0.01f) binsAboveThreshold++;
+        m_ps->binSmoothing[bin] = m_ps->binFollowers[bin].updateWithMood(m_ps->targetBins[bin], rawDt, moodNorm);
+        if (m_ps->binSmoothing[bin] > maxSmooth) maxSmooth = m_ps->binSmoothing[bin];
+        if (m_ps->binSmoothing[bin] >= 0.01f) binsAboveThreshold++;
     }
     
     // =========================================================================
@@ -120,7 +128,7 @@ void LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {
     uint16_t ledsWritten = 0;
     uint8_t maxBright = 0;
     for (uint8_t bin = 0; bin < NUM_BINS; ++bin) {
-        float magnitude = m_binSmoothing[bin];
+        float magnitude = m_ps->binSmoothing[bin];
 
         // VISIBILITY FIX: Apply 2x gain boost to bass bins (0-15) for better visibility
         if (bin < 16) {
@@ -252,7 +260,12 @@ CRGB LGPSpectrumDetailEffect::frequencyToColor(uint8_t bin, const plugins::Effec
 }
 
 void LGPSpectrumDetailEffect::cleanup() {
-    // No resources to free
+#ifndef NATIVE_BUILD
+    if (m_ps) {
+        heap_caps_free(m_ps);
+        m_ps = nullptr;
+    }
+#endif
 }
 
 const plugins::EffectMetadata& LGPSpectrumDetailEffect::getMetadata() const {

@@ -21,6 +21,7 @@
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
 #include <Arduino.h>
+#include <esp_heap_caps.h>
 #endif
 
 #include <cmath>
@@ -56,43 +57,43 @@ bool LGPSpectrumDetailEnhancedEffect::init(plugins::EffectContext& ctx) {
     m_decayAlpha = expf(-FRAME_DT / DECAY_TAU);                 // ~0.9958 @ 120 FPS (retention)
     m_shimmerAlpha = 1.0f - expf(-FRAME_DT / SHIMMER_SMOOTH_TAU); // ~0.080 @ 120 FPS
 
+#ifndef NATIVE_BUILD
+    if (!m_ps) {
+        m_ps = static_cast<SpectrumDetailEnhancedPsram*>(
+            heap_caps_malloc(sizeof(SpectrumDetailEnhancedPsram), MALLOC_CAP_SPIRAM));
+        if (!m_ps) return false;
+    }
+    memset(m_ps, 0, sizeof(SpectrumDetailEnhancedPsram));
+
     // Initialize history buffer and smoothing arrays
     for (uint8_t i = 0; i < HISTORY_SIZE; i++) {
         for (uint8_t bin = 0; bin < 64; bin++) {
-            m_binHistory[i][bin] = 0.0f;
+            m_ps->binHistory[i][bin] = 0.0f;
         }
     }
     for (uint8_t bin = 0; bin < 64; bin++) {
-        m_binSmoothing[bin] = 0.0f;
-        m_shimmerAmp[bin] = 0.0f;  // Initialize smoothed shimmer amplitudes
+        m_ps->binSmoothing[bin] = 0.0f;
+        m_ps->shimmerAmp[bin] = 0.0f;
+        m_ps->binDistance[bin] = (float)binToLedDistance(bin);
+        m_ps->binMomentum[bin] = 0.0f;
     }
+#endif
     m_historyIdx = 0;
     m_lastHopSeq = 0;
-
-    // Initialize reverse trail radial buffer and beat tracking
-    memset(m_radialTrail, 0, sizeof(m_radialTrail));
     m_lastBeatInBar = 255;
     m_lastBarPhase = 0.0f;
-
-    // Initialize motion physics v2 state (Direct Energy Coupling)
-    for (uint8_t bin = 0; bin < 64; bin++) {
-        m_binDistance[bin] = (float)binToLedDistance(bin);  // Start at static position
-        m_binMomentum[bin] = 0.0f;                          // No initial momentum
-    }
-
-    // Strip 2 gap detection uses local arrays in render() - no initialization needed
 
     return true;
 }
 
 void LGPSpectrumDetailEnhancedEffect::render(plugins::EffectContext& ctx) {
+    if (!m_ps) return;
     // Faster LED-level cleanup to prevent saturation buildup between frames
     // fadeAmount=12 (4.7% per frame) - takes 14 frames to halve instead of 77
     fadeToBlackBy(ctx.leds, ctx.ledCount, 12);
 
     // Fade reverse trail buffer - fixed faster rate for consistent decay
-    // (ctx.fadeAmount varies, use fixed value for predictable trail behavior)
-    fadeToBlackBy(m_radialTrail, HALF_LENGTH, 15);
+    fadeToBlackBy(m_ps->radialTrail, HALF_LENGTH, 15);
 
 #if !FEATURE_AUDIO_SYNC
     (void)ctx;
@@ -120,7 +121,7 @@ void LGPSpectrumDetailEnhancedEffect::render(plugins::EffectContext& ctx) {
         // Update history buffer ONLY on new hops (when data actually changes)
         // Sensory Bridge Pattern: History Buffer BEFORE Smoothing (filters spikes)
         for (uint8_t bin = 0; bin < NUM_BINS; ++bin) {
-            m_binHistory[m_historyIdx][bin] = bins64[bin];
+            m_ps->binHistory[m_historyIdx][bin] = bins64[bin];
         }
         m_historyIdx = (m_historyIdx + 1) % HISTORY_SIZE;
     }
@@ -133,7 +134,7 @@ void LGPSpectrumDetailEnhancedEffect::render(plugins::EffectContext& ctx) {
     for (uint8_t bin = 0; bin < NUM_BINS; ++bin) {
         float sum = 0.0f;
         for (uint8_t i = 0; i < HISTORY_SIZE; ++i) {
-            sum += m_binHistory[i][bin];
+            sum += m_ps->binHistory[i][bin];
         }
         avgBins[bin] = sum / (float)HISTORY_SIZE;
     }
@@ -145,10 +146,10 @@ void LGPSpectrumDetailEnhancedEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
     for (uint8_t bin = 0; bin < NUM_BINS; ++bin) {
         float target = avgBins[bin];
-        float current = m_binSmoothing[bin];
+        float current = m_ps->binSmoothing[bin];
 
         // Frame-rate independent exponential smoothing
-        m_binSmoothing[bin] = current + (target - current) * m_smoothingAlpha;
+        m_ps->binSmoothing[bin] = current + (target - current) * m_smoothingAlpha;
     }
 
     // =========================================================================
@@ -159,7 +160,7 @@ void LGPSpectrumDetailEnhancedEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
     for (uint8_t bin = 0; bin < NUM_BINS; ++bin) {
         // Frame-rate independent uniform decay
-        m_binSmoothing[bin] *= m_decayAlpha;
+        m_ps->binSmoothing[bin] *= m_decayAlpha;
     }
 
     // =========================================================================
@@ -182,26 +183,26 @@ void LGPSpectrumDetailEnhancedEffect::render(plugins::EffectContext& ctx) {
     float springReturnAlpha = 1.0f - expf(-FRAME_DT / SPRING_RETURN_TAU);
 
     for (uint8_t bin = 0; bin < NUM_BINS; ++bin) {
-        float currentEnergy = m_binSmoothing[bin];
+        float currentEnergy = m_ps->binSmoothing[bin];
         float staticBase = (float)binToLedDistance(bin);
 
         // ASYMMETRIC MOMENTUM: Frame-rate independent attack/release
-        float alpha = (currentEnergy > m_binMomentum[bin]) ? m_attackAlpha : m_releaseAlpha;
-        m_binMomentum[bin] += (currentEnergy - m_binMomentum[bin]) * alpha;
+        float alpha = (currentEnergy > m_ps->binMomentum[bin]) ? m_attackAlpha : m_releaseAlpha;
+        m_ps->binMomentum[bin] += (currentEnergy - m_ps->binMomentum[bin]) * alpha;
 
         // DIRECT COUPLING: Position = Base + Instant + MomentumTail
         float directContribution = currentEnergy * EXPANSION_FACTOR;       // INSTANT
-        float momentumContribution = m_binMomentum[bin] * MOMENTUM_FACTOR; // SMOOTH
+        float momentumContribution = m_ps->binMomentum[bin] * MOMENTUM_FACTOR; // SMOOTH
 
         float rawPosition = staticBase + directContribution + momentumContribution;
 
         // SPRING RETURN: Frame-rate independent (only during silence)
-        if (currentEnergy < SILENCE_THRESHOLD && m_binMomentum[bin] < MOMENTUM_THRESHOLD) {
+        if (currentEnergy < SILENCE_THRESHOLD && m_ps->binMomentum[bin] < MOMENTUM_THRESHOLD) {
             rawPosition = rawPosition + (staticBase - rawPosition) * springReturnAlpha;
         }
 
         // Clamp to valid LED range
-        m_binDistance[bin] = fmaxf(0.0f, fminf((float)(HALF_LENGTH - 1), rawPosition));
+        m_ps->binDistance[bin] = fmaxf(0.0f, fminf((float)(HALF_LENGTH - 1), rawPosition));
     }
 
     // =========================================================================
@@ -212,19 +213,19 @@ void LGPSpectrumDetailEnhancedEffect::render(plugins::EffectContext& ctx) {
     float time = (float)millis() * 0.001f;  // Time in seconds
     for (uint8_t bin = 48; bin < 64; ++bin) {  // Treble bins only (highest 16 bins)
         // Target amplitude based on current energy
-        float targetAmp = (m_binSmoothing[bin] > MIN_THRESHOLD) ? 0.3f * m_binSmoothing[bin] : 0.0f;
+        float targetAmp = (m_ps->binSmoothing[bin] > MIN_THRESHOLD) ? 0.3f * m_ps->binSmoothing[bin] : 0.0f;
 
         // Smooth the amplitude using frame-rate independent decay
-        m_shimmerAmp[bin] += (targetAmp - m_shimmerAmp[bin]) * m_shimmerAlpha;
+        m_ps->shimmerAmp[bin] += (targetAmp - m_ps->shimmerAmp[bin]) * m_shimmerAlpha;
 
         // Apply oscillation with smoothed amplitude
-        if (m_shimmerAmp[bin] > 0.001f) {
+        if (m_ps->shimmerAmp[bin] > 0.001f) {
             float freqNorm = (float)(bin - 48) / 16.0f;  // 0.0-1.0 for treble range
             float oscillationFreq = 4.0f + freqNorm * 8.0f;  // 4-12 Hz
-            m_binDistance[bin] += m_shimmerAmp[bin] * sinf(time * oscillationFreq * 6.28f);
+            m_ps->binDistance[bin] += m_ps->shimmerAmp[bin] * sinf(time * oscillationFreq * 6.28f);
 
             // Re-clamp after oscillation
-            m_binDistance[bin] = fmaxf(0.0f, fminf((float)(HALF_LENGTH - 1), m_binDistance[bin]));
+            m_ps->binDistance[bin] = fmaxf(0.0f, fminf((float)(HALF_LENGTH - 1), m_ps->binDistance[bin]));
         }
     }
 
@@ -274,16 +275,16 @@ void LGPSpectrumDetailEnhancedEffect::render(plugins::EffectContext& ctx) {
         // MOTION ENHANCEMENT v2: Momentum boost on beats 2 & 4
         // Creates coordinated outward expansion pulse (F1-style throttle burst)
         for (uint8_t bin = 0; bin < NUM_BINS; ++bin) {
-            if (m_binSmoothing[bin] > MIN_THRESHOLD) {
+            if (m_ps->binSmoothing[bin] > MIN_THRESHOLD) {
                 // Boost momentum by 20-50% based on energy (scales with activity)
-                float boostFactor = 0.2f + m_binSmoothing[bin] * 0.3f;
-                m_binMomentum[bin] = fminf(1.0f, m_binMomentum[bin] + boostFactor);
+                float boostFactor = 0.2f + m_ps->binSmoothing[bin] * 0.3f;
+                m_ps->binMomentum[bin] = fminf(1.0f, m_ps->binMomentum[bin] + boostFactor);
             }
         }
 
         // Render reverse trail: for each active bin, draw trailing wake
         for (uint8_t bin = 0; bin < NUM_BINS; ++bin) {
-            float magnitude = m_binSmoothing[bin] * AMPLITUDE_GAIN;
+            float magnitude = m_ps->binSmoothing[bin] * AMPLITUDE_GAIN;
             if (magnitude < MIN_THRESHOLD) continue;
             
             // Map bin to LED distance from center
@@ -313,9 +314,9 @@ void LGPSpectrumDetailEnhancedEffect::render(plugins::EffectContext& ctx) {
                     color.b = scale8(color.b, TRAIL_PRE_SCALE);
 
                     // Additive blending into radial buffer with qadd8() overflow protection
-                    m_radialTrail[trailDist].r = qadd8(m_radialTrail[trailDist].r, color.r);
-                    m_radialTrail[trailDist].g = qadd8(m_radialTrail[trailDist].g, color.g);
-                    m_radialTrail[trailDist].b = qadd8(m_radialTrail[trailDist].b, color.b);
+                    m_ps->radialTrail[trailDist].r = qadd8(m_ps->radialTrail[trailDist].r, color.r);
+                    m_ps->radialTrail[trailDist].g = qadd8(m_ps->radialTrail[trailDist].g, color.g);
+                    m_ps->radialTrail[trailDist].b = qadd8(m_ps->radialTrail[trailDist].b, color.b);
                 }
             }
         }
@@ -331,7 +332,7 @@ void LGPSpectrumDetailEnhancedEffect::render(plugins::EffectContext& ctx) {
 
     for (uint8_t bin = 0; bin < NUM_BINS; ++bin) {
         // Apply amplitude gain to smoothed magnitude
-        float magnitude = m_binSmoothing[bin] * AMPLITUDE_GAIN;
+        float magnitude = m_ps->binSmoothing[bin] * AMPLITUDE_GAIN;
 
         // VISIBILITY FIX: Apply 2x gain boost to bass bins (0-15) for better visibility
         if (bin < 16) {
@@ -344,7 +345,7 @@ void LGPSpectrumDetailEnhancedEffect::render(plugins::EffectContext& ctx) {
         }
 
         // SUBPIXEL: Keep fractional position for anti-aliasing
-        float ledDistFloat = m_binDistance[bin];
+        float ledDistFloat = m_ps->binDistance[bin];
         uint16_t ledDistLow = (uint16_t)ledDistFloat;
         uint16_t ledDistHigh = ledDistLow + 1;
         float frac = ledDistFloat - (float)ledDistLow;  // 0.0-1.0 fractional part
@@ -412,20 +413,20 @@ void LGPSpectrumDetailEnhancedEffect::render(plugins::EffectContext& ctx) {
     // STRIP 1 ONLY (like original) - qadd8() prevents overflow
     // =========================================================================
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
-        if (m_radialTrail[dist].r > 0 || m_radialTrail[dist].g > 0 || m_radialTrail[dist].b > 0) {
+        if (m_ps->radialTrail[dist].r > 0 || m_ps->radialTrail[dist].g > 0 || m_ps->radialTrail[dist].b > 0) {
             uint16_t centerLED = ctx.centerPoint;
             uint16_t leftIdx = centerLED - 1 - dist;
             uint16_t rightIdx = centerLED + dist;
             
             if (leftIdx < ctx.ledCount) {
-                ctx.leds[leftIdx].r = qadd8(ctx.leds[leftIdx].r, m_radialTrail[dist].r);
-                ctx.leds[leftIdx].g = qadd8(ctx.leds[leftIdx].g, m_radialTrail[dist].g);
-                ctx.leds[leftIdx].b = qadd8(ctx.leds[leftIdx].b, m_radialTrail[dist].b);
+                ctx.leds[leftIdx].r = qadd8(ctx.leds[leftIdx].r, m_ps->radialTrail[dist].r);
+                ctx.leds[leftIdx].g = qadd8(ctx.leds[leftIdx].g, m_ps->radialTrail[dist].g);
+                ctx.leds[leftIdx].b = qadd8(ctx.leds[leftIdx].b, m_ps->radialTrail[dist].b);
             }
             if (rightIdx < ctx.ledCount) {
-                ctx.leds[rightIdx].r = qadd8(ctx.leds[rightIdx].r, m_radialTrail[dist].r);
-                ctx.leds[rightIdx].g = qadd8(ctx.leds[rightIdx].g, m_radialTrail[dist].g);
-                ctx.leds[rightIdx].b = qadd8(ctx.leds[rightIdx].b, m_radialTrail[dist].b);
+                ctx.leds[rightIdx].r = qadd8(ctx.leds[rightIdx].r, m_ps->radialTrail[dist].r);
+                ctx.leds[rightIdx].g = qadd8(ctx.leds[rightIdx].g, m_ps->radialTrail[dist].g);
+                ctx.leds[rightIdx].b = qadd8(ctx.leds[rightIdx].b, m_ps->radialTrail[dist].b);
             }
         }
     }
@@ -444,10 +445,10 @@ void LGPSpectrumDetailEnhancedEffect::render(plugins::EffectContext& ctx) {
     float binMagnitudeAt[HALF_LENGTH] = {0.0f};  // Track magnitude at each position
 
     for (uint8_t bin = 0; bin < NUM_BINS; ++bin) {
-        float magnitude = m_binSmoothing[bin];
+        float magnitude = m_ps->binSmoothing[bin];
         if (magnitude < SIGNIFICANT_MAGNITUDE) continue;  // Only significant bins
 
-        uint16_t pos = (uint16_t)m_binDistance[bin];
+        uint16_t pos = (uint16_t)m_ps->binDistance[bin];
         if (pos >= HALF_LENGTH) continue;
 
         // Mark this position and immediate neighbors as "has bin"
@@ -467,7 +468,7 @@ void LGPSpectrumDetailEnhancedEffect::render(plugins::EffectContext& ctx) {
     // Step 2: Compute total audio energy for gap brightness scaling
     float totalEnergy = 0.0f;
     for (uint8_t bin = 0; bin < NUM_BINS; ++bin) {
-        totalEnergy += m_binSmoothing[bin];
+        totalEnergy += m_ps->binSmoothing[bin];
     }
     totalEnergy = fminf(1.0f, totalEnergy / 8.0f);  // Normalize
 
@@ -564,7 +565,12 @@ CRGB LGPSpectrumDetailEnhancedEffect::frequencyToColor(uint8_t bin, const plugin
 }
 
 void LGPSpectrumDetailEnhancedEffect::cleanup() {
-    // No resources to free
+#ifndef NATIVE_BUILD
+    if (m_ps) {
+        heap_caps_free(m_ps);
+        m_ps = nullptr;
+    }
+#endif
 }
 
 const plugins::EffectMetadata& LGPSpectrumDetailEnhancedEffect::getMetadata() const {

@@ -19,6 +19,7 @@
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
+#include <esp_heap_caps.h>
 #endif
 
 namespace lightwaveos {
@@ -36,13 +37,19 @@ public:
     const plugins::EffectMetadata& getMetadata() const override;
 
 private:
-    // Per-bin smoothing (AsymmetricFollower for natural attack/release)
-    enhancement::AsymmetricFollower m_binFollowers[64];
-    float m_binSmoothing[64] = {0};
-    
+#ifndef NATIVE_BUILD
+    struct SpectrumDetailPsram {
+        enhancement::AsymmetricFollower binFollowers[64];
+        float binSmoothing[64];
+        float targetBins[64];
+    };
+    SpectrumDetailPsram* m_ps = nullptr;
+#else
+    void* m_ps = nullptr;
+#endif
+
     // Hop sequence tracking
     uint32_t m_lastHopSeq = 0;
-    float m_targetBins[64] = {0.0f};
     
     // Frequency-to-color mapping helper (uses palette system)
     CRGB frequencyToColor(uint8_t bin, const plugins::EffectContext& ctx) const;

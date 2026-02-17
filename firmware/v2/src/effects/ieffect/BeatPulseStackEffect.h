@@ -26,6 +26,7 @@
 #include "../CoreEffects.h"
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "BeatPulseCore.h"
 
 namespace lightwaveos::effects::ieffect {
 
@@ -45,9 +46,7 @@ public:
     float getParameter(const char* name) const override;
 
 private:
-    float m_beatIntensity = 0.0f;      // Amplitude-driven ring position (HTML parity)
-    uint32_t m_lastBeatTimeMs = 0;     // Fallback metronome tracking
-    float m_fallbackBpm = 128.0f;      // Fallback metronome BPM
+    BeatPulseCore::State m_state{};
 };
 
 } // namespace lightwaveos::effects::ieffect

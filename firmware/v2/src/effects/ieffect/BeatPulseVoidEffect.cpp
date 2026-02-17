@@ -12,6 +12,7 @@
 
 #include "BeatPulseVoidEffect.h"
 #include "../CoreEffects.h"
+#include "AudioReactivePolicy.h"
 #include "BeatPulseRenderUtils.h"
 
 #include <cmath>
@@ -29,9 +30,7 @@ constexpr float CORE_WHITE_FACTOR = 0.6f;  // Aggressive white in ring core
 
 bool BeatPulseVoidEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
-    m_beatIntensity = 0.0f;
-    m_lastBeatTimeMs = 0;
-    m_fallbackBpm = 128.0f;
+    BeatPulseCore::reset(m_state, 128.0f);
     return true;
 }
 
@@ -43,34 +42,23 @@ void BeatPulseVoidEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
 
     // --- Beat source ---
-    bool beatTick = false;
-
-    if (ctx.audio.available) {
-        beatTick = ctx.audio.isOnBeat();
-    } else {
-        const uint32_t nowMs = ctx.totalTimeMs;
-        const float beatIntervalMs = 60000.0f / fmaxf(30.0f, m_fallbackBpm);
-        if (m_lastBeatTimeMs == 0 || (nowMs - m_lastBeatTimeMs) >= static_cast<uint32_t>(beatIntervalMs)) {
-            beatTick = true;
-            m_lastBeatTimeMs = nowMs;
-        }
-    }
+    const bool beatTick = AudioReactivePolicy::audioBeatTick(ctx, m_state.fallbackBpm, m_state.lastBeatMs);
 
     // --- Slam to 1.0 on beat ---
     if (beatTick) {
-        m_beatIntensity = 1.0f;
+        m_state.beatIntensity = 1.0f;
     }
 
     // --- DT-correct exponential decay ---
-    const float dt = ctx.getSafeDeltaSeconds();
+    const float dt = ctx.getSafeRawDeltaSeconds();
     const float decayRate = 1000.0f / DECAY_MS;  // Decay constant
-    m_beatIntensity *= expf(-decayRate * dt);
-    if (m_beatIntensity < 0.001f) {
-        m_beatIntensity = 0.0f;
+    m_state.beatIntensity *= expf(-decayRate * dt);
+    if (m_state.beatIntensity < 0.001f) {
+        m_state.beatIntensity = 0.0f;
     }
 
     // --- Ring position (contracting inward) ---
-    const float ringCentre = RING_CENTRE_FACTOR * m_beatIntensity;
+    const float ringCentre = RING_CENTRE_FACTOR * m_state.beatIntensity;
 
     // --- Palette index based on ring position (colour travels with ring) ---
     const uint8_t paletteIdx = floatToByte(ringCentre);
@@ -82,7 +70,7 @@ void BeatPulseVoidEffect::render(plugins::EffectContext& ctx) {
         // Hard-edged ring profile
         const float diff = fabsf(dist01 - ringCentre);
         float hit = RingProfile::hardEdge(diff, RING_WIDTH, 0.012f);
-        hit *= m_beatIntensity;
+        hit *= m_state.beatIntensity;
 
         // TRUE BLACK outside ring - maximum contrast
         if (hit < 0.01f) {

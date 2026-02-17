@@ -23,6 +23,7 @@
 #include "../CoreEffects.h"
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "BeatPulseCore.h"
 
 namespace lightwaveos::effects::ieffect {
 
@@ -42,9 +43,7 @@ public:
     float getParameter(const char* name) const override;
 
 private:
-    float m_beatIntensity = 0.0f;
-    uint32_t m_lastBeatTimeMs = 0;
-    float m_fallbackBpm = 128.0f;
+    BeatPulseCore::State m_state{};
 };
 
 } // namespace lightwaveos::effects::ieffect

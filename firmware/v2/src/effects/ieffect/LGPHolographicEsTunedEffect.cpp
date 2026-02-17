@@ -31,14 +31,8 @@ static inline float clamp(float v, float lo, float hi) {
 }
 
 static inline const float* selectChroma12(const audio::ControlBusFrame& cb) {
-    // Prefer ES raw chroma when present (ES backend parity/stability).
-    float esSum = 0.0f;
-    float lwSum = 0.0f;
-    for (uint8_t i = 0; i < audio::CONTROLBUS_NUM_CHROMA; ++i) {
-        esSum += cb.es_chroma_raw[i];
-        lwSum += cb.chroma[i];
-    }
-    return (esSum > (lwSum + 0.001f)) ? cb.es_chroma_raw : cb.chroma;
+    // Both backends now produce normalised chroma via Stage A/B pipeline.
+    return cb.chroma;
 }
 
 static inline uint8_t dominantChromaBin12(const float chroma[audio::CONTROLBUS_NUM_CHROMA]) {
@@ -88,6 +82,7 @@ bool LGPHolographicEsTunedEffect::init(plugins::EffectContext& ctx) {
 }
 
 void LGPHolographicEsTunedEffect::render(plugins::EffectContext& ctx) {
+    const float rawDt = ctx.getSafeRawDeltaSeconds();
     const float dt = ctx.getSafeDeltaSeconds();
     const float speedNorm = ctx.speed / 50.0f;
     const float intensityNorm = ctx.brightness / 255.0f;
@@ -102,7 +97,7 @@ void LGPHolographicEsTunedEffect::render(plugins::EffectContext& ctx) {
     float beatPhase = 0.0f;
     float beatStrength = 0.0f;
     float tempoConfidence = 0.0f;
-    float silentScale = 1.0f;
+    // silentScale handled globally by RendererActor
     bool beatTick = false;
     bool downbeatTick = false;
     bool beatLock = false;
@@ -118,7 +113,6 @@ void LGPHolographicEsTunedEffect::render(plugins::EffectContext& ctx) {
         beatPhase = ctx.audio.beatPhase();
         beatStrength = ctx.audio.beatStrength();
         tempoConfidence = ctx.audio.tempoConfidence();
-        silentScale = ctx.audio.controlBus.silentScale;
         beatTick = ctx.audio.isOnBeat();
         downbeatTick = ctx.audio.isOnDownbeat();
         beatLock = (tempoConfidence > 0.45f);
@@ -130,7 +124,7 @@ void LGPHolographicEsTunedEffect::render(plugins::EffectContext& ctx) {
             m_dominantChromaBin = dominantChromaBin12(chroma);
         }
 
-        float alphaHue = 1.0f - expf(-dt / 0.30f);
+        float alphaHue = 1.0f - expf(-rawDt / 0.30f);
         m_dominantChromaBinSmooth += ((float)m_dominantChromaBin - m_dominantChromaBinSmooth) * alphaHue;
 
         // Flux spike → refraction accent (fast attack, short decay).
@@ -139,20 +133,20 @@ void LGPHolographicEsTunedEffect::render(plugins::EffectContext& ctx) {
         if (fluxDelta > 0.22f && flux > 0.25f) {
             m_refraction = 1.0f;
         } else {
-            m_refraction *= expf(-dt / 0.18f);
+            m_refraction *= expf(-rawDt / 0.18f);
         }
 
-        // Downbeat focus: briefly “snap into focus”, then drift.
+        // Downbeat focus: briefly "snap into focus", then drift.
         if (downbeatTick) {
             m_focus = 1.0f;
         } else {
-            m_focus *= expf(-dt / 0.35f);
+            m_focus *= expf(-rawDt / 0.35f);
         }
     } else {
         // No audio: decay accents slowly.
-        m_refraction *= expf(-dt / 0.25f);
-        m_focus *= expf(-dt / 0.40f);
-        m_dominantChromaBinSmooth *= powf(0.995f, dt * 60.0f);  // dt-corrected
+        m_refraction *= expf(-rawDt / 0.25f);
+        m_focus *= expf(-rawDt / 0.40f);
+        m_dominantChromaBinSmooth *= powf(0.995f, rawDt * 60.0f);  // dt-corrected
     }
 
     // ---------------------------------------------------------------------
@@ -174,7 +168,7 @@ void LGPHolographicEsTunedEffect::render(plugins::EffectContext& ctx) {
     if (ctx.audio.available && beatLock) {
         // Target musical ratios (1×, 2×, 4×). Focus reduces detune for a crisp “lock”.
         float focus = clamp01(m_focus);
-        float pull = 1.0f - expf(-dt / 0.18f);
+        float pull = 1.0f - expf(-rawDt / 0.18f);
         pull *= (0.25f + 0.55f * tempoConfidence);
 
         float detune = (1.0f - focus) * (0.35f + 0.25f * speedNorm);
@@ -205,12 +199,6 @@ void LGPHolographicEsTunedEffect::render(plugins::EffectContext& ctx) {
     float g2 = 0.40f + 0.95f * lowMid;
     float g3 = 0.30f + 0.85f * treble;
     float g4 = 0.20f + 1.10f * clamp01(flux * 0.8f + m_refraction);
-
-    // Silence gating: the hologram should breathe down cleanly.
-    g1 *= silentScale;
-    g2 *= silentScale;
-    g3 *= silentScale;
-    g4 *= silentScale;
 
     // Prevent hard zeros (keeps a base hologram even in quieter passages).
     g1 = clamp(g1, 0.10f, 1.60f);

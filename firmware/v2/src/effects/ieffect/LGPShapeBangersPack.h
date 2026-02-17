@@ -18,6 +18,10 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#endif
+
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
@@ -117,8 +121,15 @@ public:
     void cleanup() override;
     const plugins::EffectMetadata& getMetadata() const override;
 private:
-    uint8_t m_cells[BANGERS_STRIP_LENGTH];
-    uint8_t m_next[BANGERS_STRIP_LENGTH];
+#ifndef NATIVE_BUILD
+    struct Rule30Psram {
+        uint8_t cells[BANGERS_STRIP_LENGTH];
+        uint8_t next[BANGERS_STRIP_LENGTH];
+    };
+    Rule30Psram* m_ps = nullptr;
+#else
+    void* m_ps = nullptr;
+#endif
     uint32_t m_step;
 };
 

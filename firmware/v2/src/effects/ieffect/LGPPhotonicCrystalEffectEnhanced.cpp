@@ -89,6 +89,7 @@ void LGPPhotonicCrystalEnhancedEffect::render(plugins::EffectContext& ctx) {
     // ========================================================================
     // SAFE DELTA TIME (clamped for physics stability)
     // ========================================================================
+    float rawDt = ctx.getSafeRawDeltaSeconds();
     float dt = ctx.getSafeDeltaSeconds();
     float moodNorm = ctx.getMoodNormalized();
 
@@ -161,15 +162,15 @@ void LGPPhotonicCrystalEnhancedEffect::render(plugins::EffectContext& ctx) {
         // Smooth chromagram with AsymmetricFollower (every frame)
         for (uint8_t i = 0; i < 12; i++) {
             m_chromaSmoothed[i] = m_chromaFollowers[i].updateWithMood(
-                m_chromaTargets[i], dt, moodNorm);
+                m_chromaTargets[i], rawDt, moodNorm);
         }
         
         // Enhanced: Smooth sub-bass energy
-        m_subBassEnergy = m_subBassFollower.updateWithMood(m_targetSubBass, dt, moodNorm);
+        m_subBassEnergy = m_subBassFollower.updateWithMood(m_targetSubBass, rawDt, moodNorm);
 
         // Asymmetric followers for BRIGHTNESS (not speed!)
-        float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, dt, moodNorm);
-        float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, dt, moodNorm);
+        float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, rawDt, moodNorm);
+        float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, rawDt, moodNorm);
 
         // Brightness modulation
         brightnessGain = 0.4f + 0.5f * energyAvgSmooth + 0.4f * energyDeltaSmooth;

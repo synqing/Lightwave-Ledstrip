@@ -80,6 +80,7 @@ bool LGPChordGlowEffect::init(plugins::EffectContext& ctx) {
 
 void LGPChordGlowEffect::render(plugins::EffectContext& ctx) {
     // Clear output buffer with fade for trails
+    const float rawDt = ctx.getSafeRawDeltaSeconds();
     const float dt = ctx.getSafeDeltaSeconds();
     const int fadeAmt = (int)roundf(25.0f * (dt * 60.0f));
     fadeToBlackBy(ctx.leds, ctx.ledCount, clampU8(fadeAmt));
@@ -141,7 +142,7 @@ void LGPChordGlowEffect::render(plugins::EffectContext& ctx) {
     float diff = targetRoot - m_rootNoteSmooth;
     if (diff > 6.0f) targetRoot -= 12.0f;
     else if (diff < -6.0f) targetRoot += 12.0f;
-    m_rootNoteSmooth += (targetRoot - m_rootNoteSmooth) * (1.0f - expf(-dt / 0.2f));  // True exponential, tau=200ms
+    m_rootNoteSmooth += (targetRoot - m_rootNoteSmooth) * (1.0f - expf(-rawDt / 0.2f));  // True exponential, tau=200ms
     // Wrap back to 0-11 range
     while (m_rootNoteSmooth < 0.0f) m_rootNoteSmooth += 12.0f;
     while (m_rootNoteSmooth >= 12.0f) m_rootNoteSmooth -= 12.0f;
@@ -152,7 +153,7 @@ void LGPChordGlowEffect::render(plugins::EffectContext& ctx) {
     if (m_glowPhase > 6.28318f) m_glowPhase -= 6.28318f;
 
     // Decay chord change pulse
-    m_chordChangePulse *= expf(-dt / 0.15f);  // ~150ms decay
+    m_chordChangePulse *= expf(-rawDt / 0.15f);  // ~150ms decay
 
     // Get mood parameters for current and previous chord
     ChordMood currentMood = getChordMood(m_currentChordType);

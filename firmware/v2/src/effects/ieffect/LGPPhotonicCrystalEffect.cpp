@@ -77,6 +77,7 @@ void LGPPhotonicCrystalEffect::render(plugins::EffectContext& ctx) {
     // ========================================================================
     // SAFE DELTA TIME (clamped for physics stability)
     // ========================================================================
+    float rawDt = ctx.getSafeRawDeltaSeconds();
     float dt = ctx.getSafeDeltaSeconds();
     float moodNorm = ctx.getMoodNormalized();
 
@@ -102,7 +103,7 @@ void LGPPhotonicCrystalEffect::render(plugins::EffectContext& ctx) {
         float heavyEnergy = (ctx.audio.controlBus.heavy_bands[1] +
                              ctx.audio.controlBus.heavy_bands[2]) / 2.0f;
         float targetSpeed = 0.6f + 0.8f * heavyEnergy;  // 0.6-1.4x range
-        speedMult = m_speedSpring.update(targetSpeed, dt);
+        speedMult = m_speedSpring.update(targetSpeed, rawDt);
         if (speedMult > 1.6f) speedMult = 1.6f;
         if (speedMult < 0.3f) speedMult = 0.3f;
 
@@ -128,15 +129,8 @@ void LGPPhotonicCrystalEffect::render(plugins::EffectContext& ctx) {
             if (m_energyDelta < 0.0f) m_energyDelta = 0.0f;
 
             // Dominant chroma bin detection (for color offset)
+            // Both backends now produce normalised chroma via Stage A/B pipeline.
             const float* chroma = ctx.audio.controlBus.chroma;
-            // Prefer ES raw chroma when present (ES backend parity/stability).
-            float esSum = 0.0f;
-            float lwSum = 0.0f;
-            for (uint8_t i = 0; i < 12; ++i) {
-                esSum += ctx.audio.controlBus.es_chroma_raw[i];
-                lwSum += ctx.audio.controlBus.chroma[i];
-            }
-            if (esSum > (lwSum + 0.001f)) chroma = ctx.audio.controlBus.es_chroma_raw;
 
             float maxChroma = 0.0f;
             for (uint8_t bin = 0; bin < 12; ++bin) {
@@ -148,8 +142,8 @@ void LGPPhotonicCrystalEffect::render(plugins::EffectContext& ctx) {
         }
 
         // Asymmetric followers for BRIGHTNESS (not speed!)
-        float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, dt, moodNorm);
-        float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, dt, moodNorm);
+        float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, rawDt, moodNorm);
+        float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, rawDt, moodNorm);
 
         // Brightness modulation
         brightnessGain = 0.4f + 0.5f * energyAvgSmooth + 0.4f * energyDeltaSmooth;
@@ -177,7 +171,7 @@ void LGPPhotonicCrystalEffect::render(plugins::EffectContext& ctx) {
         m_collisionBoost *= 0.88f;
 
         // Chroma color offset (250ms smooth)
-        float alphaBin = 1.0f - expf(-dt / 0.25f);
+        float alphaBin = 1.0f - expf(-rawDt / 0.25f);
         m_dominantBinSmooth += ((float)m_dominantBin - m_dominantBinSmooth) * alphaBin;
         chromaOffset = (uint8_t)(m_dominantBinSmooth * (255.0f / 12.0f));
     }

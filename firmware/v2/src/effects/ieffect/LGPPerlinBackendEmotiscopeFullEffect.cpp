@@ -8,6 +8,11 @@
 #include "../../config/features.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#endif
 
 namespace lightwaveos {
 namespace effects {
@@ -115,64 +120,52 @@ float LGPPerlinBackendEmotiscopeFullEffect::perlinNoiseOctaves(Vec2 position, in
 LGPPerlinBackendEmotiscopeFullEffect::LGPPerlinBackendEmotiscopeFullEffect()
     : m_seed(0)
     , m_positionX(0.0f)
+    , m_ps(nullptr)
     , m_positionY(0.0f)
     , m_momentum(0.0f)
     , m_lastUpdateMs(0)
 {
-    // Zero-initialize aligned array
-    for (int i = 0; i < 80; i++) {
-        m_noiseArray[i] = 0.0f;
-    }
 }
 
 bool LGPPerlinBackendEmotiscopeFullEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
-    // Seed for "non-reproducible" feel
     m_seed = (unsigned int)((uint32_t)random16() << 16 | random16());
-    
-    // Initialize advection position
     m_positionX = (float)(random16() % 1000);
     m_positionY = (float)(random16() % 1000);
     m_momentum = 0.0f;
-    
-    // Initialize timing (use ctx.totalTimeMs for consistency)
     m_lastUpdateMs = ctx.totalTimeMs;
-    
-    // Pre-compute initial noise array
+#ifndef NATIVE_BUILD
+    if (!m_ps) {
+        m_ps = static_cast<PerlinBackendPsram*>(
+            heap_caps_malloc(sizeof(PerlinBackendPsram), MALLOC_CAP_SPIRAM));
+        if (!m_ps) return false;
+    }
+    memset(m_ps, 0, sizeof(PerlinBackendPsram));
+#endif
     generateNoiseArray();
     normalizeNoiseArray();
-    
     return true;
 }
 
 void LGPPerlinBackendEmotiscopeFullEffect::generateNoiseArray() {
-    // Pre-compute 80 samples (one per centre distance 0-79)
-    // Matches Emotiscope 2.0's generate_perlin_noise() architecture
+    if (!m_ps) return;
     for (int i = 0; i < 80; i++) {
-        // Map centre distance to spatial position
-        // Note: SPATIAL_SCALE=0.025f gives larger span than Emotiscope2's num_leds_float_lookup (~0..1)
         Vec2 pos(m_positionX + (float)i * SPATIAL_SCALE, m_positionY);
-        
-        // Sample Perlin noise with octaves
         float noiseValue = perlinNoiseOctaves(pos, (int)FREQUENCY, OCTAVE_COUNT, PERSISTENCE, LACUNARITY, m_seed);
-        m_noiseArray[i] = noiseValue;
+        m_ps->noiseArray[i] = noiseValue;
     }
 }
 
 void LGPPerlinBackendEmotiscopeFullEffect::normalizeNoiseArray() {
-    // Normalize array: convert [-1,1] to [0,1]
-    // Matches Emotiscope 2.0's SIMD normalization:
-    // dsps_addc_f32(array, array, len, 1.0, 1, 1)  // [-1,1] -> [0,2]
-    // dsps_mulc_f32(array, array, len, 0.5, 1, 1)  // [0,2] -> [0,1]
-    // C++ fallback (can be upgraded to SIMD later)
+    if (!m_ps) return;
     for (int i = 0; i < 80; i++) {
-        m_noiseArray[i] = (m_noiseArray[i] + 1.0f) * 0.5f; // [-1,1] -> [0,1]
-        m_noiseArray[i] = fmaxf(0.0f, fminf(1.0f, m_noiseArray[i])); // Clamp
+        m_ps->noiseArray[i] = (m_ps->noiseArray[i] + 1.0f) * 0.5f;
+        m_ps->noiseArray[i] = fmaxf(0.0f, fminf(1.0f, m_ps->noiseArray[i]));
     }
 }
 
 void LGPPerlinBackendEmotiscopeFullEffect::render(plugins::EffectContext& ctx) {
-    // CENTRE ORIGIN - Emotiscope 2.0 Perlin full-res test (FIXED ARCHITECTURE)
+    if (!m_ps) return;
     const bool hasAudio = ctx.audio.available;
     float dt = ctx.getSafeDeltaSeconds();
     float speedNorm = ctx.speed / 50.0f;
@@ -221,7 +214,7 @@ void LGPPerlinBackendEmotiscopeFullEffect::render(plugins::EffectContext& ctx) {
         if (dist >= 80) dist = 79;
         
         // Array lookup (not recomputation!)
-        float noiseNorm = m_noiseArray[dist];
+        float noiseNorm = m_ps->noiseArray[dist];
         
         // Same shaping as FastLED test (for fair comparison)
         noiseNorm = noiseNorm * noiseNorm; // Bias toward darker, stronger highlights
@@ -241,7 +234,12 @@ void LGPPerlinBackendEmotiscopeFullEffect::render(plugins::EffectContext& ctx) {
 }
 
 void LGPPerlinBackendEmotiscopeFullEffect::cleanup() {
-    // No resources to free
+#ifndef NATIVE_BUILD
+    if (m_ps) {
+        heap_caps_free(m_ps);
+        m_ps = nullptr;
+    }
+#endif
 }
 
 const plugins::EffectMetadata& LGPPerlinBackendEmotiscopeFullEffect::getMetadata() const {

@@ -8,6 +8,8 @@
  * - Mood-dependent per-sample smoothing
  * - Note-chromagram → colour summation (chromatic mode) or single hue (non-chromatic)
  * - Peak follower scaling (`waveform_peak_scaled_last * 4.0`)
+ * - Per-zone state (ZoneComposer reuses one instance across zones)
+ * - dt-corrected colour smoothing for frame-rate independence
  *
  * Effect ID: 109
  */
@@ -17,7 +19,10 @@
 #include "../../CoreEffects.h"
 #include "../../../plugins/api/IEffect.h"
 #include "../../../plugins/api/EffectContext.h"
-#include "../../CoreEffects.h"
+
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#endif
 
 namespace lightwaveos::effects::ieffect::sensorybridge_reference {
 
@@ -32,18 +37,29 @@ public:
     const plugins::EffectMetadata& getMetadata() const override;
 
 private:
-    static constexpr uint8_t WAVEFORM_POINTS = lightwaveos::audio::CONTROLBUS_WAVEFORM_N;
-    static constexpr uint8_t HISTORY_FRAMES = 4;
+    static constexpr int      kMaxZones      = 4;
+    static constexpr uint8_t  WAVEFORM_POINTS = lightwaveos::audio::CONTROLBUS_WAVEFORM_N;
+    static constexpr uint8_t  HISTORY_FRAMES  = 4;
+    static constexpr uint16_t kHalfLength     = lightwaveos::effects::HALF_LENGTH;
 
-    uint32_t m_lastHopSeq = 0;
-    uint8_t m_historyIndex = 0;
-    bool m_historyPrimed = false;
+    // Per-zone scalar state (small — lives in DRAM with the class instance)
+    uint32_t m_lastHopSeq[kMaxZones]           = {};
+    uint8_t  m_historyIndex[kMaxZones]         = {};
+    bool     m_historyPrimed[kMaxZones]        = {};
+    float    m_waveformPeakScaledLast[kMaxZones] = {};
+    float    m_waveformMaxFollower[kMaxZones]  = {};
 
-    int16_t m_waveformHistory[HISTORY_FRAMES][WAVEFORM_POINTS] = {{0}};
-    float m_waveformLast[lightwaveos::effects::HALF_LENGTH] = {0};
-
-    float m_waveformPeakScaledLast = 0.0f;
-    float m_sumColorLast[3] = {0.0f, 0.0f, 0.0f};
+    // PSRAM-allocated — large buffers MUST NOT live in DRAM (see MEMORY_ALLOCATION.md)
+#ifndef NATIVE_BUILD
+    struct SbWaveform310Psram {
+        int16_t waveformHistory[kMaxZones][HISTORY_FRAMES][WAVEFORM_POINTS];
+        float   waveformLast[kMaxZones][kHalfLength];
+        float   sumColourLast[kMaxZones][3];
+    };
+    SbWaveform310Psram* m_ps = nullptr;
+#else
+    void* m_ps = nullptr;
+#endif
 };
 
 } // namespace lightwaveos::effects::ieffect::sensorybridge_reference

@@ -63,7 +63,7 @@ bool LGPPerlinVeilEffect::init(plugins::EffectContext& ctx) {
 void LGPPerlinVeilEffect::render(plugins::EffectContext& ctx) {
     // CENTRE ORIGIN - Perlin noise veils drifting from centre
     const bool hasAudio = ctx.audio.available;
-    float dt = ctx.getSafeDeltaSeconds();
+    float dt = ctx.getSafeRawDeltaSeconds();
     float speedNorm = ctx.speed / 50.0f;
     float intensityNorm = ctx.brightness / 255.0f;
 

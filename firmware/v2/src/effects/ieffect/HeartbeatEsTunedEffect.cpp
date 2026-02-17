@@ -23,14 +23,8 @@ static inline float clamp01(float v) {
 }
 
 static inline const float* selectChroma12(const audio::ControlBusFrame& cb) {
-    // Prefer ES raw chroma when present (ES backend parity/stability).
-    float esSum = 0.0f;
-    float lwSum = 0.0f;
-    for (uint8_t i = 0; i < audio::CONTROLBUS_NUM_CHROMA; ++i) {
-        esSum += cb.es_chroma_raw[i];
-        lwSum += cb.chroma[i];
-    }
-    return (esSum > (lwSum + 0.001f)) ? cb.es_chroma_raw : cb.chroma;
+    // Both backends now produce normalised chroma via Stage A/B pipeline.
+    return cb.chroma;
 }
 
 static inline uint8_t dominantChromaBin12(const float chroma[audio::CONTROLBUS_NUM_CHROMA]) {
@@ -84,6 +78,7 @@ void HeartbeatEsTunedEffect::render(plugins::EffectContext& ctx) {
     // Trails: keep the original aesthetic, but all motion/trigger logic becomes audio-aware.
     fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 
+    const float rawDt = ctx.getSafeRawDeltaSeconds();
     const float dt = ctx.getSafeDeltaSeconds();
     const float speedNorm = ctx.speed / 50.0f;
 
@@ -97,11 +92,11 @@ void HeartbeatEsTunedEffect::render(plugins::EffectContext& ctx) {
             m_dominantChromaBin = dominantChromaBin12(chroma);
         }
 
-        float alpha = 1.0f - expf(-dt / 0.25f);
+        float alpha = 1.0f - expf(-rawDt / 0.25f);
         m_dominantChromaBinSmooth += ((float)m_dominantChromaBin - m_dominantChromaBinSmooth) * alpha;
     } else {
         // Drift very slowly back to 0 when audio is absent (keeps a stable default) - dt-corrected
-        m_dominantChromaBinSmooth *= powf(0.995f, dt * 60.0f);
+        m_dominantChromaBinSmooth *= powf(0.995f, rawDt * 60.0f);
     }
 
     const uint8_t baseHue = chromaBinToHue((uint8_t)(m_dominantChromaBinSmooth + 0.5f));
@@ -114,12 +109,11 @@ void HeartbeatEsTunedEffect::render(plugins::EffectContext& ctx) {
     bool useAudioBeat = false;
     float beatStrength = 0.0f;
     float beatPhase = 0.0f;
-    float silentScale = 1.0f;
+    // silentScale handled globally by RendererActor
 
     if (ctx.audio.available) {
         beatStrength = ctx.audio.beatStrength();
         beatPhase = ctx.audio.beatPhase();
-        silentScale = ctx.audio.controlBus.silentScale;
 
         // Require some confidence before we trust beat ticks for the heartbeat cadence.
         useAudioBeat = (ctx.audio.tempoConfidence() > 0.40f);
@@ -127,7 +121,7 @@ void HeartbeatEsTunedEffect::render(plugins::EffectContext& ctx) {
         if (useAudioBeat && ctx.audio.isOnBeat()) {
             // "Lub"
             m_lubRadius = 0.0f;
-            m_lubIntensity = (0.30f + 0.70f * clamp01(beatStrength)) * silentScale;
+            m_lubIntensity = 0.30f + 0.70f * clamp01(beatStrength);
             m_dubPending = true;
         }
 
@@ -150,7 +144,7 @@ void HeartbeatEsTunedEffect::render(plugins::EffectContext& ctx) {
             if (dubTrigger) {
                 m_dubRadius = 0.0f;
                 float accent = clamp01(beatStrength * 0.75f + ctx.audio.fastFlux() * 0.35f);
-                m_dubIntensity = (0.20f + 0.65f * accent) * silentScale;
+                m_dubIntensity = 0.20f + 0.65f * accent;
                 m_dubPending = false;
             }
         }
@@ -186,14 +180,14 @@ void HeartbeatEsTunedEffect::render(plugins::EffectContext& ctx) {
 
     if (m_lubIntensity > 0.001f && m_lubRadius < (float)HALF_LENGTH + 10.0f) {
         m_lubRadius += adv;
-        m_lubIntensity *= expf(-dt / 0.28f);
+        m_lubIntensity *= expf(-rawDt / 0.28f);
     } else {
         m_lubIntensity = 0.0f;
     }
 
     if (m_dubIntensity > 0.001f && m_dubRadius < (float)HALF_LENGTH + 10.0f) {
         m_dubRadius += adv * 1.10f;
-        m_dubIntensity *= expf(-dt / 0.22f);
+        m_dubIntensity *= expf(-rawDt / 0.22f);
     } else {
         m_dubIntensity = 0.0f;
     }
@@ -240,7 +234,7 @@ void HeartbeatEsTunedEffect::render(plugins::EffectContext& ctx) {
 
     // Subtle centre fill on strong beats (adds “cardiac core” presence).
     if (ctx.audio.available && useAudioBeat) {
-        float core = clamp01(beatStrength * 0.35f + ctx.audio.fastRms() * 0.20f) * silentScale;
+        float core = clamp01(beatStrength * 0.35f + ctx.audio.fastRms() * 0.20f);
         if (core > 0.02f) {
             uint8_t b = (uint8_t)(core * 255.0f);
             b = scale8(b, ctx.brightness);

@@ -103,6 +103,7 @@ void LGPStarBurstEnhancedEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
     // Per-frame Updates (smooth animation)
     // =========================================================================
+    float rawDt = ctx.getSafeRawDeltaSeconds();
     float dt = ctx.getSafeDeltaSeconds();
     float moodNorm = ctx.getMoodNormalized();
     
@@ -110,10 +111,10 @@ void LGPStarBurstEnhancedEffect::render(plugins::EffectContext& ctx) {
     if (hasAudio) {
         for (uint8_t i = 0; i < 12; i++) {
             m_chromaSmoothed[i] = m_chromaFollowers[i].updateWithMood(
-                m_chromaTargets[i], dt, moodNorm);
+                m_chromaTargets[i], rawDt, moodNorm);
         }
         // Enhanced: Smooth sub-bass energy
-        m_subBassEnergy = m_subBassFollower.updateWithMood(m_targetSubBass, dt, moodNorm);
+        m_subBassEnergy = m_subBassFollower.updateWithMood(m_targetSubBass, rawDt, moodNorm);
         
         // Enhanced: Hi-hat hit triggers sparkle burst
         if (ctx.audio.isHihatHit()) {
@@ -124,7 +125,7 @@ void LGPStarBurstEnhancedEffect::render(plugins::EffectContext& ctx) {
     }
 
     // Smooth dominant bin (for color stability) - true exponential, tau=250ms
-    float alphaBin = 1.0f - expf(-dt / 0.25f);
+    float alphaBin = 1.0f - expf(-rawDt / 0.25f);
     m_dominantBinSmooth += (m_dominantBin - m_dominantBinSmooth) * alphaBin;
     if (m_dominantBinSmooth < 0.0f) m_dominantBinSmooth = 0.0f;
     if (m_dominantBinSmooth > 11.0f) m_dominantBinSmooth = 11.0f;
@@ -143,7 +144,7 @@ void LGPStarBurstEnhancedEffect::render(plugins::EffectContext& ctx) {
 
     // Spring physics for speed modulation (natural momentum, no jitter)
     float targetSpeed = 0.7f + 0.6f * heavyEnergy;
-    float smoothedSpeed = m_phaseSpeedSpring.update(targetSpeed, dt);
+    float smoothedSpeed = m_phaseSpeedSpring.update(targetSpeed, rawDt);
     if (smoothedSpeed > 2.0f) smoothedSpeed = 2.0f;
     if (smoothedSpeed < 0.3f) smoothedSpeed = 0.3f;  // Prevent stalling
 
@@ -179,7 +180,7 @@ void LGPStarBurstEnhancedEffect::render(plugins::EffectContext& ctx) {
         // Proportional correction (tau ~100ms gives smooth lock)
         // Compute ONCE per frame, not per pixel
         const float tau = 0.1f;
-        const float correctionAlpha = 1.0f - expf(-dt / tau);
+        const float correctionAlpha = 1.0f - expf(-rawDt / tau);
         m_phase += phaseError * correctionAlpha;
     }
     

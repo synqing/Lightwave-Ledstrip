@@ -28,7 +28,7 @@ namespace plugins {
 class BuiltinEffectRegistry {
 public:
     // Larger than limits::MAX_EFFECTS to allow headroom for future effects
-    static constexpr uint8_t MAX_EFFECTS = 155;
+    static constexpr uint8_t MAX_EFFECTS = 170;
     static_assert(MAX_EFFECTS >= limits::MAX_EFFECTS,
                   "BuiltinEffectRegistry::MAX_EFFECTS must be >= limits::MAX_EFFECTS");
 

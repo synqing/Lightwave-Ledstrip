@@ -8,17 +8,22 @@
  * 1. Smooth peak (2% new, 98% old)
  * 2. Compute time-based oscillation from chromagram + sin(millis())
  * 3. Apply tanh() for "snap" characteristic
- * 4. Calculate dot distance from center
+ * 4. Calculate dot distance from centre
  * 5. Push current position to HISTORY BUFFER
  * 6. Render ALL history entries as fading trail
- * 7. Mirror for CENTER ORIGIN (strip 1 only)
+ * 7. Mirror for CENTRE ORIGIN (strip 1 only)
+ *
+ * Per-zone: all temporal state is dimensioned [kMaxZones] and accessed via
+ * const int z = ctx.zoneId. ZoneComposer reuses one instance across zones.
  */
 
 #include "SnapwaveLinearEffect.h"
+#include "AudioReactivePolicy.h"
 #include "../../config/features.h"
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
+#include <esp_heap_caps.h>
 #endif
 
 #include <cmath>
@@ -30,49 +35,49 @@ namespace ieffect {
 
 bool SnapwaveLinearEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
-    m_peakSmoothed = 0.0f;
-    m_historyIndex = 0;
 
-    // Clear history buffers
-    memset(m_distanceHistory, 0, sizeof(m_distanceHistory));
-    memset(m_colorHistory, 0, sizeof(m_colorHistory));
+    for (uint8_t z = 0; z < kMaxZones; ++z) {
+        m_peakSmoothed[z] = 0.0f;
+        m_historyIndex[z] = 0;
+    }
 
+#ifndef NATIVE_BUILD
+    if (!m_ps) {
+        m_ps = static_cast<SnapwavePsram*>(
+            heap_caps_malloc(sizeof(SnapwavePsram), MALLOC_CAP_SPIRAM));
+        if (!m_ps) return false;
+    }
+    memset(m_ps, 0, sizeof(SnapwavePsram));
+#endif
     return true;
 }
 
-void SnapwaveLinearEffect::pushHistory(uint8_t distance, CRGB color) {
-    // Push new entry to ring buffer
-    m_distanceHistory[m_historyIndex] = distance;
-    m_colorHistory[m_historyIndex] = color;
-
-    // Advance ring buffer index
-    m_historyIndex = (m_historyIndex + 1) % HISTORY_SIZE;
+void SnapwaveLinearEffect::pushHistory(int z, uint8_t distance, CRGB color) {
+    if (!m_ps) return;
+    m_ps->distanceHistory[z][m_historyIndex[z]] = distance;
+    m_ps->colorHistory[z][m_historyIndex[z]] = color;
+    m_historyIndex[z] = (m_historyIndex[z] + 1) % HISTORY_SIZE;
 }
 
-void SnapwaveLinearEffect::renderHistoryToLeds(plugins::EffectContext& ctx) {
+void SnapwaveLinearEffect::renderHistoryToLeds(int z, plugins::EffectContext& ctx) {
+    if (!m_ps) return;
     uint16_t stripLen = (ctx.ledCount > 160) ? 160 : ctx.ledCount;
-    uint16_t halfStrip = stripLen / 2;  // 80
+    uint16_t halfStrip = stripLen / 2;
 
-    // Clear strip 1 first
     memset(ctx.leds, 0, stripLen * sizeof(CRGB));
 
-    // Render history from oldest to newest (so newest overwrites oldest)
-    // Oldest entry is at m_historyIndex, newest is at m_historyIndex - 1
-    float brightness = 1.0f;
-
     for (uint16_t i = 0; i < HISTORY_SIZE; ++i) {
-        // Calculate actual index in ring buffer (oldest first)
-        uint16_t idx = (m_historyIndex + i) % HISTORY_SIZE;
+        uint16_t idx = (m_historyIndex[z] + i) % HISTORY_SIZE;
 
-        uint8_t distance = m_distanceHistory[idx];
-        CRGB color = m_colorHistory[idx];
+        uint8_t distance = m_ps->distanceHistory[z][idx];
+        CRGB color = m_ps->colorHistory[z][idx];
 
         // Calculate faded brightness (oldest = dimmest, newest = brightest)
         // i=0 is oldest, i=HISTORY_SIZE-1 is newest
         float ageFactor = (float)(i + 1) / (float)HISTORY_SIZE;  // 0.025 to 1.0
         float fadedBrightness = ageFactor * ageFactor;  // Quadratic falloff for more contrast
 
-        // Scale color by faded brightness
+        // Scale colour by faded brightness
         uint8_t scale = (uint8_t)(fadedBrightness * 255.0f);
         CRGB fadedColor = color;
         fadedColor.nscale8(scale);
@@ -80,8 +85,8 @@ void SnapwaveLinearEffect::renderHistoryToLeds(plugins::EffectContext& ctx) {
         // Skip if too dim
         if (scale < 5) continue;
 
-        // Map distance to LED positions (CENTER ORIGIN)
-        // distance 0 = center (79/80), distance 79 = edge (0/159)
+        // Map distance to LED positions (CENTRE ORIGIN)
+        // distance 0 = centre (79/80), distance 79 = edge (0/159)
         if (distance < halfStrip) {
             uint16_t leftPos = (halfStrip - 1) - distance;   // 79 - dist
             uint16_t rightPos = halfStrip + distance;         // 80 + dist
@@ -108,7 +113,7 @@ float SnapwaveLinearEffect::computeOscillation(const plugins::EffectContext& ctx
         // Time-based oscillation from chromagram
         // Each active note contributes with different phase offset
         // Formula: sum(chromagram[i] * sin(millis() * 0.001 * (1.0 + i * 0.5)))
-        float timeMs = (float)ctx.totalTimeMs;
+        float timeMs = static_cast<float>(ctx.rawTotalTimeMs);
 
         for (uint8_t i = 0; i < 12; ++i) {
             float chromaVal = ctx.audio.controlBus.chroma[i];
@@ -120,7 +125,7 @@ float SnapwaveLinearEffect::computeOscillation(const plugins::EffectContext& ctx
     }
 #else
     // Without audio, use time-based oscillation for demo
-    float timeMs = (float)ctx.totalTimeMs;
+    float timeMs = static_cast<float>(ctx.rawTotalTimeMs);
     oscillation = sinf(timeMs * 0.002f);  // Slow oscillation for visual demo
 #endif
 
@@ -189,6 +194,10 @@ CRGB SnapwaveLinearEffect::computeChromaColor(const plugins::EffectContext& ctx)
 }
 
 void SnapwaveLinearEffect::render(plugins::EffectContext& ctx) {
+    if (!m_ps) return;
+
+    const int z = (ctx.zoneId < kMaxZones) ? ctx.zoneId : 0;
+
     uint16_t stripLen = (ctx.ledCount > 160) ? 160 : ctx.ledCount;
     uint16_t halfStrip = stripLen / 2;  // 80
 
@@ -202,13 +211,15 @@ void SnapwaveLinearEffect::render(plugins::EffectContext& ctx) {
     } else {
         // No audio available: slow breathing demo (obviously NOT musical)
         // 2-second cycle so it's clearly not responding to audio
-        float breathPhase = sinf(ctx.totalTimeMs * 0.0005f);
+        float breathPhase = sinf(static_cast<float>(ctx.rawTotalTimeMs) * 0.0005f);
         currentPeak = 0.3f + 0.2f * breathPhase;  // 0.1 to 0.5 range
     }
 #else
     currentPeak = 0.4f;  // Compile-time no audio: constant demo
 #endif
-    m_peakSmoothed = currentPeak * PEAK_ATTACK + m_peakSmoothed * PEAK_DECAY;
+    const float dt = AudioReactivePolicy::signalDt(ctx);
+    const float peakAlpha = 1.0f - powf(PEAK_DECAY, dt * 60.0f);  // 0.02-at-60fps equivalent
+    m_peakSmoothed[z] += (currentPeak - m_peakSmoothed[z]) * peakAlpha;
 
     // =========================================
     // STEP 2: Compute oscillation
@@ -218,34 +229,34 @@ void SnapwaveLinearEffect::render(plugins::EffectContext& ctx) {
     // =========================================
     // STEP 3: Mix oscillation with amplitude
     // =========================================
-    // CRITICAL: No forced minimum - silence = stillness (dot at center)
-    float amp = oscillation * m_peakSmoothed * AMPLITUDE_MIX;
+    // CRITICAL: No forced minimum - silence = stillness (dot at centre)
+    float amp = oscillation * m_peakSmoothed[z] * AMPLITUDE_MIX;
     if (amp > 1.0f) amp = 1.0f;
     if (amp < -1.0f) amp = -1.0f;
 
     // =========================================
-    // STEP 4: Calculate dot distance from center
+    // STEP 4: Calculate dot distance from centre
     // =========================================
     // amp ranges from -1 to +1
-    // Map to distance from center: 0 to halfStrip-1
+    // Map to distance from centre: 0 to halfStrip-1
     float distance = fabsf(amp) * (halfStrip - 1);
     uint8_t distInt = (uint8_t)(distance + 0.5f);
     if (distInt >= halfStrip) distInt = halfStrip - 1;
 
     // =========================================
-    // STEP 5: Compute color
+    // STEP 5: Compute colour
     // =========================================
     CRGB dotColor = computeChromaColor(ctx);
 
     // =========================================
     // STEP 6: Push to HISTORY BUFFER
     // =========================================
-    pushHistory(distInt, dotColor);
+    pushHistory(z, distInt, dotColor);
 
     // =========================================
     // STEP 7: Render history as trail
     // =========================================
-    renderHistoryToLeds(ctx);
+    renderHistoryToLeds(z, ctx);
 
     // =========================================
     // STEP 8: Render to strip 2 (centre-origin at LED 239/240)
@@ -258,11 +269,10 @@ void SnapwaveLinearEffect::render(plugins::EffectContext& ctx) {
         // Clear strip 2 first
         memset(&ctx.leds[strip2Start], 0, strip2HalfLen * 2 * sizeof(CRGB));
 
-        // Render history to strip 2 with phase offset for visual interest
         for (uint16_t i = 0; i < HISTORY_SIZE; ++i) {
-            uint16_t idx = (m_historyIndex + i) % HISTORY_SIZE;
-            uint8_t distance = m_distanceHistory[idx];
-            CRGB color = m_colorHistory[idx];
+            uint16_t idx = (m_historyIndex[z] + i) % HISTORY_SIZE;
+            uint8_t distance = m_ps->distanceHistory[z][idx];
+            CRGB color = m_ps->colorHistory[z][idx];
 
             // Faded brightness (oldest = dimmest)
             float ageFactor = (float)(i + 1) / (float)HISTORY_SIZE;
@@ -290,7 +300,12 @@ void SnapwaveLinearEffect::render(plugins::EffectContext& ctx) {
 }
 
 void SnapwaveLinearEffect::cleanup() {
-    // No resources to free
+#ifndef NATIVE_BUILD
+    if (m_ps) {
+        heap_caps_free(m_ps);
+        m_ps = nullptr;
+    }
+#endif
 }
 
 const plugins::EffectMetadata& SnapwaveLinearEffect::getMetadata() const {

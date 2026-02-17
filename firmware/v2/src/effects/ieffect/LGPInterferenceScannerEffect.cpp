@@ -117,20 +117,21 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
 #endif
     {
         // dt-corrected decay when audio unavailable (matches Enhanced version)
-        float dtFallback = enhancement::getSafeDeltaSeconds(ctx.deltaTimeSeconds);
+        float dtFallback = enhancement::getSafeDeltaSeconds(ctx.rawDeltaTimeSeconds);
         m_energyAvg *= powf(0.98f, dtFallback * 60.0f);
         m_energyDelta = 0.0f;
     }
 
+    float rawDt = enhancement::getSafeDeltaSeconds(ctx.rawDeltaTimeSeconds);
     float dt = enhancement::getSafeDeltaSeconds(ctx.deltaTimeSeconds);
 
     // True exponential smoothing with AsymmetricFollower (frame-rate independent)
     float moodNorm = ctx.mood / 255.0f;  // 0=reactive, 1=smooth
-    float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, dt, moodNorm);
-    float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, dt, moodNorm);
+    float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, rawDt, moodNorm);
+    float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, rawDt, moodNorm);
 
     // Dominant bin smoothing
-    float alphaBin = 1.0f - expf(-dt / 0.25f);  // True exponential, 250ms time constant
+    float alphaBin = 1.0f - expf(-rawDt / 0.25f);  // True exponential, 250ms time constant
     m_dominantBinSmooth += (m_dominantBin - m_dominantBinSmooth) * alphaBin;
     if (m_dominantBinSmooth < 0.0f) m_dominantBinSmooth = 0.0f;
     if (m_dominantBinSmooth > 11.0f) m_dominantBinSmooth = 11.0f;
@@ -142,7 +143,7 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
     if (speedTarget > 1.4f) speedTarget = 1.4f;
 
     // Spring physics for speed modulation (replaces linear slew limiting)
-    float smoothedSpeed = m_speedSpring.update(speedTarget, dt);
+    float smoothedSpeed = m_speedSpring.update(speedTarget, rawDt);
     if (smoothedSpeed > 1.4f) smoothedSpeed = 1.4f;  // Hard clamp
     if (smoothedSpeed < 0.3f) smoothedSpeed = 0.3f;  // Prevent stalling
 

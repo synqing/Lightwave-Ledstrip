@@ -92,20 +92,21 @@ void ChevronWavesEffect::render(plugins::EffectContext& ctx) {
 #endif
     {
         // dt-corrected decay when audio unavailable
-        float dtFallback = enhancement::getSafeDeltaSeconds(ctx.deltaTimeSeconds);
+        float dtFallback = enhancement::getSafeDeltaSeconds(ctx.rawDeltaTimeSeconds);
         m_energyAvg *= powf(0.98f, dtFallback * 60.0f);
         m_energyDelta = 0.0f;
     }
 
+    float rawDt = enhancement::getSafeDeltaSeconds(ctx.rawDeltaTimeSeconds);
     float dt = enhancement::getSafeDeltaSeconds(ctx.deltaTimeSeconds);
 
     // True exponential smoothing with AsymmetricFollower (frame-rate independent)
     float moodNorm = ctx.mood / 255.0f;  // 0=reactive, 1=smooth
-    float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, dt, moodNorm);
-    float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, dt, moodNorm);
+    float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, rawDt, moodNorm);
+    float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, rawDt, moodNorm);
 
     // Dominant bin smoothing
-    float alphaBin = 1.0f - expf(-dt / 0.25f);  // True exponential, 250ms time constant
+    float alphaBin = 1.0f - expf(-rawDt / 0.25f);  // True exponential, 250ms time constant
     m_dominantBinSmooth += (m_dominantBin - m_dominantBinSmooth) * alphaBin;
     if (m_dominantBinSmooth < 0.0f) m_dominantBinSmooth = 0.0f;
     if (m_dominantBinSmooth > 11.0f) m_dominantBinSmooth = 11.0f;
@@ -121,7 +122,7 @@ void ChevronWavesEffect::render(plugins::EffectContext& ctx) {
     float targetSpeed = 0.6f + 1.2f * heavyEnergy;  // Reduced range for stability
 
     // Spring physics for speed modulation (natural momentum, no jitter)
-    float smoothedSpeed = m_phaseSpeedSpring.update(targetSpeed, dt);
+    float smoothedSpeed = m_phaseSpeedSpring.update(targetSpeed, rawDt);
     if (smoothedSpeed > 2.0f) smoothedSpeed = 2.0f;  // Hard clamp
     if (smoothedSpeed < 0.3f) smoothedSpeed = 0.3f;  // Prevent stalling
     m_chevronPos += speedNorm * 240.0f * smoothedSpeed * dt;  // dt-corrected: 240/sec at speedNorm=1

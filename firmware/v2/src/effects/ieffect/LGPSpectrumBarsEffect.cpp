@@ -20,13 +20,8 @@ namespace ieffect {
 namespace {
 
 static inline const float* selectChroma12(const audio::ControlBusFrame& cb) {
-    float esSum = 0.0f;
-    float lwSum = 0.0f;
-    for (uint8_t i = 0; i < audio::CONTROLBUS_NUM_CHROMA; ++i) {
-        esSum += cb.es_chroma_raw[i];
-        lwSum += cb.chroma[i];
-    }
-    return (esSum > (lwSum + 0.001f)) ? cb.es_chroma_raw : cb.chroma;
+    // Both backends now produce normalised chroma via Stage A/B pipeline.
+    return cb.chroma;
 }
 
 static inline uint8_t dominantChromaBin12(const float chroma[audio::CONTROLBUS_NUM_CHROMA]) {
@@ -67,7 +62,8 @@ void LGPSpectrumBarsEffect::render(plugins::EffectContext& ctx) {
     for (int i = 0; i < 8; ++i) {
         float target;
         if (ctx.audio.available) {
-            target = ctx.audio.getBand(i) * ctx.audio.controlBus.silentScale;
+            // silentScale handled globally by RendererActor
+            target = ctx.audio.getBand(i);
         } else {
             // Fallback: gentle sine wave animation when no audio
             float phase = ctx.totalTimeMs * 0.001f + i * 0.4f;

@@ -61,20 +61,9 @@ void BeatPulseRippleEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
 
     // --- Beat source ---
-    bool beatTick = false;
+    const bool beatTick = BeatPulseTiming::computeBeatTick(ctx, m_fallbackBpm, m_lastFallbackBeatMs);
 
-    if (ctx.audio.available) {
-        beatTick = ctx.audio.isOnBeat();
-    } else {
-        const uint32_t nowMs = ctx.totalTimeMs;
-        const float beatIntervalMs = 60000.0f / fmaxf(30.0f, m_fallbackBpm);
-        if (m_lastFallbackBeatMs == 0 || (nowMs - m_lastFallbackBeatMs) >= static_cast<uint32_t>(beatIntervalMs)) {
-            beatTick = true;
-            m_lastFallbackBeatMs = nowMs;
-        }
-    }
-
-    const uint32_t nowMs = ctx.totalTimeMs;
+    const uint32_t nowMs = ctx.rawTotalTimeMs;
 
     // --- Spawn new ring on beat ---
     if (beatTick) {

@@ -1,11 +1,19 @@
 /**
  * @file EsWaveformRefEffect.h
  * @brief ES v1.1 "Waveform" reference show (time-domain strip).
+ *
+ * Per-zone state: ZoneComposer reuses one effect instance across up to 4 zones,
+ * setting ctx.zoneId before each render(). All temporal buffers are dimensioned
+ * [kMaxZones] to prevent cross-zone contamination.
  */
 
 #pragma once
 
 #include "../../../plugins/api/IEffect.h"
+
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#endif
 
 namespace lightwaveos::effects::ieffect::esv11_reference {
 
@@ -20,13 +28,29 @@ public:
     const plugins::EffectMetadata& getMetadata() const override;
 
 private:
+    static constexpr uint8_t  kMaxZones      = 4;
     static constexpr uint16_t SAMPLE_RATE_HZ = 12800;
     static constexpr float CUTOFF_HZ = 2110.0f;  // ES: 110 + 2000*(1.0 - bass); bass disabled in ref.
     static constexpr uint8_t FILTER_PASSES = 3;
+    static constexpr uint8_t HISTORY_FRAMES = 4;
+
+    // Large buffers in PSRAM — dimensioned per-zone to avoid cross-zone contamination.
+#ifndef NATIVE_BUILD
+    struct EsWaveformPsram {
+        float samples[kMaxZones][128];
+        float history[kMaxZones][HISTORY_FRAMES][128];
+    };
+    EsWaveformPsram* m_ps = nullptr;
+#else
+    void* m_ps = nullptr;
+#endif
 
     float m_alpha = 0.0f;
-    float m_samples[128] = {0.0f};
+
+    // Per-zone temporal state
+    uint32_t m_lastHopSeq[kMaxZones]   = {};
+    uint8_t  m_historyIndex[kMaxZones] = {};
+    bool     m_historyPrimed[kMaxZones] = {};
 };
 
 } // namespace lightwaveos::effects::ieffect::esv11_reference
-

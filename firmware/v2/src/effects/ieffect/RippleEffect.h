@@ -17,6 +17,10 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#endif
+
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
@@ -51,9 +55,15 @@ private:
     float m_chromaEnergySum = 0.0f;
     uint8_t m_chromaHistIdx = 0;
 
-    // Radial LED history buffer (centre-out)
-    CRGB m_radial[HALF_LENGTH];
-    CRGB m_radialAux[HALF_LENGTH];
+#ifndef NATIVE_BUILD
+    struct RipplePsram {
+        CRGB radial[HALF_LENGTH];
+        CRGB radialAux[HALF_LENGTH];
+    };
+    RipplePsram* m_ps = nullptr;
+#else
+    void* m_ps = nullptr;
+#endif
 
     // 64-bin spectrum tracking for enhanced audio response
     float m_kickPulse = 0.0f;       ///< Sub-bass energy (bins 0-5) for kick-triggered ripples

@@ -5,6 +5,7 @@
 
 #include "BeatPulseBloomEffect.h"
 
+#include "AudioReactivePolicy.h"
 #include "BeatPulseRenderUtils.h"
 #include "BeatPulseTransportCore.h"
 
@@ -78,33 +79,18 @@ void BeatPulseBloomEffect::render(plugins::EffectContext& ctx) {
 
     // zoneId: 0xFF means global (non-zone mode) → treat as zone 0
     const uint8_t zoneId = (ctx.zoneId == 0xFF) ? 0 : (ctx.zoneId & 0x03);
-    const float dt = ctx.getSafeDeltaSeconds();
-    const uint32_t nowMs = ctx.totalTimeMs;
+    const float dt = AudioReactivePolicy::signalDt(ctx);
+    const uint32_t nowMs = ctx.rawTotalTimeMs;
 
     g_transport.setNowMs(nowMs);
 
     // ---------------------------------------------------------------------
-    // Beat source (audio preferred; fallback metronome if no audio)
+    // Beat source (audio preferred with tempo confidence gate; raw-time fallback metronome)
     // ---------------------------------------------------------------------
     // NOTE: silentScale is NOT applied here - RendererActor handles it globally
     // to avoid double-gating which kills punch.
-    bool beatTick = false;
-    float beatStrength = 1.0f;
-
-    if (ctx.audio.available) {
-        beatTick = ctx.audio.isOnBeat();
-        beatStrength = clamp01(ctx.audio.beatStrength());
-    } else {
-        // Fallback metronome: tie BPM to speed so it stays alive.
-        const float speed01 = clamp01(ctx.speed / 100.0f);
-        const float bpm = lerp(96.0f, 140.0f, speed01);
-        const float beatIntervalMs = 60000.0f / fmaxf(30.0f, bpm);
-
-        if (m_lastBeatMs[zoneId] == 0 || (nowMs - m_lastBeatMs[zoneId]) >= static_cast<uint32_t>(beatIntervalMs)) {
-            beatTick = true;
-            m_lastBeatMs[zoneId] = nowMs;
-        }
-    }
+    const bool beatTick = AudioReactivePolicy::audioBeatTick(ctx, 128.0f, m_lastBeatMs[zoneId]);
+    const float beatStrength = ctx.audio.available ? clamp01(ctx.audio.beatStrength()) : 1.0f;
 
     // Beat envelope: slam to 1.0 on beat, dt-correct exponential decay.
     BeatPulseHTML::updateBeatIntensity(m_beatEnv[zoneId], beatTick, dt);

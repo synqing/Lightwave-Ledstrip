@@ -538,8 +538,11 @@ struct EffectContext {
 
     uint32_t deltaTimeMs;       ///< Time since last frame (ms)
     float deltaTimeSeconds;     ///< Time since last frame (seconds, high precision)
+    uint32_t rawDeltaTimeMs;    ///< Unscaled time since last frame (ms)
+    float rawDeltaTimeSeconds;  ///< Unscaled time since last frame (seconds)
     uint32_t frameNumber;       ///< Frame counter (wraps at 2^32)
     uint32_t totalTimeMs;       ///< Total effect runtime (ms)
+    uint32_t rawTotalTimeMs;    ///< Unscaled total effect runtime (ms)
 
     //--------------------------------------------------------------------------
     // Zone Information (when rendering a zone)
@@ -707,6 +710,19 @@ struct EffectContext {
         return dt;
     }
 
+    /**
+     * @brief Get safe unscaled delta time in seconds (clamped for stability)
+     * @return Delta time in seconds, clamped to [0.0001, 0.05]
+     *
+     * Uses rawDeltaTimeSeconds so beat timing stays independent of SPEED.
+     */
+    float getSafeRawDeltaSeconds() const {
+        float dt = rawDeltaTimeSeconds;
+        if (dt < 0.0001f) dt = 0.0001f;
+        if (dt > 0.05f) dt = 0.05f;
+        return dt;
+    }
+
     //--------------------------------------------------------------------------
     // Constructor
     //--------------------------------------------------------------------------
@@ -727,8 +743,11 @@ struct EffectContext {
         , fadeAmount(20)
         , deltaTimeMs(8)
         , deltaTimeSeconds(0.008f)
+        , rawDeltaTimeMs(8)
+        , rawDeltaTimeSeconds(0.008f)
         , frameNumber(0)
         , totalTimeMs(0)
+        , rawTotalTimeMs(0)
         , zoneId(0xFF)
         , zoneStart(0)
         , zoneLength(0)

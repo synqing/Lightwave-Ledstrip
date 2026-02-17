@@ -21,6 +21,10 @@
 #include "../enhancement/SmoothingEngine.h"
 #include <FastLED.h>
 
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#endif
+
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
@@ -58,18 +62,21 @@ private:
     bool m_lastBeatState = false;
     bool m_lastDownbeatState = false;
 
-    // Radial LED history buffer (centre-out)
-    CRGB m_radial[HALF_LENGTH];
-    CRGB m_radialAux[HALF_LENGTH];
+#ifndef NATIVE_BUILD
+    struct RippleEnhancedPsram {
+        CRGB radial[HALF_LENGTH];
+        CRGB radialAux[HALF_LENGTH];
+        enhancement::AsymmetricFollower chromaFollowers[12];
+        float chromaSmoothed[12];
+        float chromaTargets[12];
+    };
+    RippleEnhancedPsram* m_ps = nullptr;
+#else
+    void* m_ps = nullptr;
+#endif
 
-    // Audio smoothing (AsymmetricFollower for natural attack/release)
-    enhancement::AsymmetricFollower m_chromaFollowers[12];
     enhancement::AsymmetricFollower m_kickFollower{0.0f, 0.05f, 0.30f};
     enhancement::AsymmetricFollower m_trebleFollower{0.0f, 0.05f, 0.30f};
-
-    // Chromagram smoothing state
-    float m_chromaSmoothed[12] = {0.0f};
-    float m_chromaTargets[12] = {0.0f};
 
     // 64-bin spectrum tracking for enhanced audio response
     float m_kickPulse = 0.0f;

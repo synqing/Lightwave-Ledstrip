@@ -43,7 +43,7 @@ bool LGPPerlinInterferenceWeaveEffect::init(plugins::EffectContext& ctx) {
 void LGPPerlinInterferenceWeaveEffect::render(plugins::EffectContext& ctx) {
     // CENTRE ORIGIN - Dual-strip interference weave
     const bool hasAudio = ctx.audio.available;
-    float dt = ctx.getSafeDeltaSeconds();
+    float dt = ctx.getSafeRawDeltaSeconds();
     float speedNorm = ctx.speed / 50.0f;
     float intensityNorm = ctx.brightness / 255.0f;
 

@@ -177,7 +177,7 @@ void BreathingEnhancedEffect::render(plugins::EffectContext& ctx) {
 
 #if FEATURE_AUDIO_SYNC
     if (ctx.audio.available) {
-        float dt = ctx.getSafeDeltaSeconds();
+        float rawDt = ctx.getSafeRawDeltaSeconds();
         float moodNorm = ctx.getMoodNormalized();
         
         bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
@@ -203,12 +203,12 @@ void BreathingEnhancedEffect::render(plugins::EffectContext& ctx) {
         // Smooth chromagram with AsymmetricFollower
         for (int i = 0; i < 12; i++) {
             m_chromaSmoothed[i] = m_chromaFollowers[i].updateWithMood(
-                m_chromaTargets[i], dt, moodNorm);
+                m_chromaTargets[i], rawDt, moodNorm);
         }
         
         // Smooth energy envelope
-        m_energySmoothed = m_rmsFollower.updateWithMood(m_targetRms, dt, moodNorm);
-        subBassEnergy = m_subBassFollower.updateWithMood(m_targetSubBass, dt, moodNorm);
+        m_energySmoothed = m_rmsFollower.updateWithMood(m_targetRms, rawDt, moodNorm);
+        subBassEnergy = m_subBassFollower.updateWithMood(m_targetSubBass, rawDt, moodNorm);
         
         // Compute Chromatic Color
         chromaticColor = computeChromaticColor(m_chromaSmoothed, ctx);
@@ -228,7 +228,7 @@ void BreathingEnhancedEffect::render(plugins::EffectContext& ctx) {
         }
         
         // Decay pulse intensity (dt-corrected)
-        m_pulseIntensity *= powf(0.92f, dt * 60.0f);
+        m_pulseIntensity *= powf(0.92f, rawDt * 60.0f);
         if (m_pulseIntensity < 0.01f) m_pulseIntensity = 0.0f;
         
         // Boost brightness with pulse

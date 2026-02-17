@@ -110,11 +110,12 @@ void ChevronWavesEnhancedEffect::render(plugins::EffectContext& ctx) {
 #endif
     {
         // dt-corrected decay when audio unavailable
-        float dtFallback = enhancement::getSafeDeltaSeconds(ctx.deltaTimeSeconds);
+        float dtFallback = enhancement::getSafeDeltaSeconds(ctx.rawDeltaTimeSeconds);
         m_energyAvg *= powf(0.98f, dtFallback * 60.0f);
         m_energyDelta = 0.0f;
     }
 
+    float rawDt = enhancement::getSafeDeltaSeconds(ctx.rawDeltaTimeSeconds);
     float dt = enhancement::getSafeDeltaSeconds(ctx.deltaTimeSeconds);
     float moodNorm = ctx.getMoodNormalized();
 
@@ -122,22 +123,22 @@ void ChevronWavesEnhancedEffect::render(plugins::EffectContext& ctx) {
     if (hasAudio) {
         for (uint8_t i = 0; i < 12; i++) {
             m_chromaSmoothed[i] = m_chromaFollowers[i].updateWithMood(
-                m_chromaTargets[i], dt, moodNorm);
+                m_chromaTargets[i], rawDt, moodNorm);
         }
         // Enhanced: Smooth sub-bass energy
-        m_subBassEnergy = m_subBassFollower.updateWithMood(m_targetSubBass, dt, moodNorm);
+        m_subBassEnergy = m_subBassFollower.updateWithMood(m_targetSubBass, rawDt, moodNorm);
         
         // Enhanced: Snare hit triggers sharpness boost
         if (ctx.audio.isSnareHit()) {
             m_snareSharpness = 1.0f;
         }
-        m_snareSharpness *= powf(0.90f, dt * 60.0f);  // dt-corrected decay
+        m_snareSharpness *= powf(0.90f, rawDt * 60.0f);  // dt-corrected decay (rawDt: audio-coupled)
         if (m_snareSharpness < 0.01f) m_snareSharpness = 0.0f;
     }
 
     // True exponential smoothing with AsymmetricFollower (frame-rate independent)
-    float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, dt, moodNorm);
-    float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, dt, moodNorm);
+    float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, rawDt, moodNorm);
+    float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, rawDt, moodNorm);
 
     // Dominant bin smoothing
     float alphaBin = 1.0f - expf(-dt / 0.25f);  // True exponential, 250ms time constant

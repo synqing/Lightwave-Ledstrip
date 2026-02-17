@@ -1,6 +1,10 @@
 /**
  * @file EsAnalogRefEffect.h
  * @brief ES v1.1 "Analog" reference show (VU dot).
+ *
+ * Per-zone state: ZoneComposer reuses one instance across up to 4
+ * zones, so vuSmooth is indexed by ctx.zoneId.
+ * Only 16 bytes total -- small enough for DRAM (no PSRAM needed).
  */
 
 #pragma once
@@ -20,7 +24,8 @@ public:
     const plugins::EffectMetadata& getMetadata() const override;
 
 private:
-    float m_vuSmooth = 0.000001f;
+    static constexpr uint8_t kMaxZones = 4;
+    float m_vuSmooth[kMaxZones] = {};
 };
 
 } // namespace lightwaveos::effects::ieffect::esv11_reference

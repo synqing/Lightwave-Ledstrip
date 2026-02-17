@@ -17,6 +17,10 @@
 #include "../../plugins/api/EffectContext.h"
 #include "../CoreEffects.h"
 
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#endif
+
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
@@ -33,9 +37,16 @@ public:
     const plugins::EffectMetadata& getMetadata() const override;
 
 private:
+#ifndef NATIVE_BUILD
+    struct FluidPsram {
+        float velocity[STRIP_LENGTH];
+        float pressure[STRIP_LENGTH];
+    };
+    FluidPsram* m_ps = nullptr;
+#else
+    void* m_ps = nullptr;
+#endif
     uint16_t m_time;
-    float m_velocity[STRIP_LENGTH];
-    float m_pressure[STRIP_LENGTH];
 };
 
 } // namespace ieffect

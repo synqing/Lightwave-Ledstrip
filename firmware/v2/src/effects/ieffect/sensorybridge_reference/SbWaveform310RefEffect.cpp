@@ -5,11 +5,13 @@
 
 #include "SbWaveform310RefEffect.h"
 
+#include "../AudioReactivePolicy.h"
 #include "../../CoreEffects.h"
 #include "../../../config/features.h"
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
+#include <esp_heap_caps.h>
 #endif
 
 #include <cmath>
@@ -52,19 +54,26 @@ static inline const float* selectNoteChroma12(const audio::ControlBusFrame& cb, 
 
 bool SbWaveform310RefEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
-    m_lastHopSeq = 0;
-    m_historyIndex = 0;
-    m_historyPrimed = false;
-    std::memset(m_waveformHistory, 0, sizeof(m_waveformHistory));
-    std::memset(m_waveformLast, 0, sizeof(m_waveformLast));
-    m_waveformPeakScaledLast = 0.0f;
-    m_sumColorLast[0] = 0.0f;
-    m_sumColorLast[1] = 0.0f;
-    m_sumColorLast[2] = 0.0f;
+#ifndef NATIVE_BUILD
+    if (!m_ps) {
+        m_ps = static_cast<SbWaveform310Psram*>(
+            heap_caps_malloc(sizeof(SbWaveform310Psram), MALLOC_CAP_SPIRAM));
+        if (!m_ps) return false;
+    }
+    std::memset(m_ps, 0, sizeof(SbWaveform310Psram));
+#endif
+    for (int z = 0; z < kMaxZones; ++z) {
+        m_lastHopSeq[z]           = 0;
+        m_historyIndex[z]         = 0;
+        m_historyPrimed[z]        = false;
+        m_waveformPeakScaledLast[z] = 0.0f;
+        m_waveformMaxFollower[z]  = 750.0f;
+    }
     return true;
 }
 
 void SbWaveform310RefEffect::render(plugins::EffectContext& ctx) {
+    if (!m_ps) return;
 #if !FEATURE_AUDIO_SYNC
     (void)ctx;
     return;
@@ -75,12 +84,15 @@ void SbWaveform310RefEffect::render(plugins::EffectContext& ctx) {
         return;
     }
 
+    const int z = (ctx.zoneId < kMaxZones) ? ctx.zoneId : 0;
+    const float dt = AudioReactivePolicy::signalDt(ctx);
+
     // ---------------------------------------------------------------------
     // Waveform history (updated on hop)
     // ---------------------------------------------------------------------
-    const bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+    const bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq[z]);
     if (newHop) {
-        m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+        m_lastHopSeq[z] = ctx.audio.controlBus.hop_seq;
 
         // Prefer SB waveform if present; otherwise use contract waveform.
         const int16_t* wf = ctx.audio.controlBus.sb_waveform;
@@ -89,16 +101,31 @@ void SbWaveform310RefEffect::render(plugins::EffectContext& ctx) {
             wf = ctx.audio.controlBus.waveform;
         }
 
-        if (!m_historyPrimed) {
+        if (!m_historyPrimed[z]) {
             // First hop: seed all history frames to avoid startup zeros.
             for (uint8_t f = 0; f < HISTORY_FRAMES; ++f) {
-                std::memcpy(m_waveformHistory[f], wf, WAVEFORM_POINTS * sizeof(int16_t));
+                std::memcpy(m_ps->waveformHistory[z][f], wf, WAVEFORM_POINTS * sizeof(int16_t));
             }
-            m_historyPrimed = true;
-            m_historyIndex = 0;
+            m_historyPrimed[z] = true;
+            m_historyIndex[z] = 0;
         } else {
-            std::memcpy(m_waveformHistory[m_historyIndex], wf, WAVEFORM_POINTS * sizeof(int16_t));
-            m_historyIndex = (uint8_t)((m_historyIndex + 1) % HISTORY_FRAMES);
+            std::memcpy(m_ps->waveformHistory[z][m_historyIndex[z]], wf, WAVEFORM_POINTS * sizeof(int16_t));
+            m_historyIndex[z] = (uint8_t)((m_historyIndex[z] + 1) % HISTORY_FRAMES);
+        }
+
+        // Adaptive max follower for int16_t domain normalisation.
+        float frameMaxAbs = 0.0f;
+        for (uint8_t i = 0; i < WAVEFORM_POINTS; ++i) {
+            const float a = fabsf(static_cast<float>(wf[i]));
+            if (a > frameMaxAbs) frameMaxAbs = a;
+        }
+        if (frameMaxAbs > m_waveformMaxFollower[z]) {
+            m_waveformMaxFollower[z] += (frameMaxAbs - m_waveformMaxFollower[z]) * 0.25f;
+        } else {
+            m_waveformMaxFollower[z] -= (m_waveformMaxFollower[z] - frameMaxAbs) * 0.005f;
+        }
+        if (m_waveformMaxFollower[z] < 100.0f) {
+            m_waveformMaxFollower[z] = 100.0f;
         }
     }
 
@@ -107,10 +134,11 @@ void SbWaveform310RefEffect::render(plugins::EffectContext& ctx) {
     // ---------------------------------------------------------------------
     float peakScaled = ctx.audio.controlBus.sb_waveform_peak_scaled;
     if (peakScaled < 0.0001f) {
-        // Fallback when SB sidecar isn’t populated: derive from RMS.
+        // Fallback when SB sidecar isn't populated: derive from RMS.
         peakScaled = clamp01(ctx.audio.rms() * 1.25f);
     }
-    m_waveformPeakScaledLast = peakScaled * 0.05f + m_waveformPeakScaledLast * 0.95f;
+    const float peakAlpha = 1.0f - powf(0.95f, dt * 60.0f);
+    m_waveformPeakScaledLast[z] += (peakScaled - m_waveformPeakScaledLast[z]) * peakAlpha;
 
     // ---------------------------------------------------------------------
     // Colour synthesis (SB 3.1.0: note chromagram → sum_color, smoothed 5/95)
@@ -154,13 +182,15 @@ void SbWaveform310RefEffect::render(plugins::EffectContext& ctx) {
         hsv2rgb_spectrum(CHSV(ctx.gHue, 255, (uint8_t)brightness_sum), sum_color);
     }
 
+    // dt-corrected colour smoothing (one-pole filter, tau ~0.325s from SB 0.05/0.95 @ 60fps)
+    static constexpr float kColourTau = 0.325f;
+    const float colourAlpha = 1.0f - expf(-dt / kColourTau);
+
     float sum_color_float[3] = { (float)sum_color.r, (float)sum_color.g, (float)sum_color.b };
-    sum_color_float[0] = sum_color_float[0] * 0.05f + m_sumColorLast[0] * 0.95f;
-    sum_color_float[1] = sum_color_float[1] * 0.05f + m_sumColorLast[1] * 0.95f;
-    sum_color_float[2] = sum_color_float[2] * 0.05f + m_sumColorLast[2] * 0.95f;
-    m_sumColorLast[0] = sum_color_float[0];
-    m_sumColorLast[1] = sum_color_float[1];
-    m_sumColorLast[2] = sum_color_float[2];
+    for (int c = 0; c < 3; ++c) {
+        sum_color_float[c] = m_ps->sumColourLast[z][c] + colourAlpha * (sum_color_float[c] - m_ps->sumColourLast[z][c]);
+        m_ps->sumColourLast[z][c] = sum_color_float[c];
+    }
 
     // ---------------------------------------------------------------------
     // Waveform render (centre-origin resample of SB NATIVE_RESOLUTION=128)
@@ -168,13 +198,15 @@ void SbWaveform310RefEffect::render(plugins::EffectContext& ctx) {
     float moodNorm = ctx.getMoodNormalized();
     float smoothing = (0.1f + moodNorm * 0.9f) * 0.05f;
     smoothing = clamp(smoothing, 0.0005f, 0.25f);
+    // Convert frame-based smoothing to dt-corrected alpha (~48 FPS reference).
+    const float smoothingAlpha = 1.0f - powf(1.0f - smoothing, dt * 48.0f);
 
-    float peak = m_waveformPeakScaledLast * 4.0f;
+    float peak = m_waveformPeakScaledLast[z] * 4.0f;
     if (peak > 1.0f) peak = 1.0f;
     if (peak < 0.0f) peak = 0.0f;
 
     const float brightnessScale = (float)ctx.brightness / 255.0f;
-    const float silentScale = ctx.audio.controlBus.silentScale;
+    const float invFollower = 1.0f / m_waveformMaxFollower[z];
 
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         // Map dist 0..79 → waveform index 0..127 (SB NATIVE_RESOLUTION=128).
@@ -183,25 +215,24 @@ void SbWaveform310RefEffect::render(plugins::EffectContext& ctx) {
 
         float waveform_sample = 0.0f;
         for (uint8_t s = 0; s < HISTORY_FRAMES; ++s) {
-            waveform_sample += (float)m_waveformHistory[s][wfIndex];
+            waveform_sample += (float)m_ps->waveformHistory[z][s][wfIndex];
         }
         waveform_sample *= (1.0f / (float)HISTORY_FRAMES);
 
-        float input_wave_sample = waveform_sample / 128.0f;
-        m_waveformLast[dist] = input_wave_sample * smoothing + m_waveformLast[dist] * (1.0f - smoothing);
+        // waveform_sample is int16_t-domain; normalise using adaptive follower.
+        const float input_wave_sample = waveform_sample * invFollower;
+        m_ps->waveformLast[z][dist] += (input_wave_sample - m_ps->waveformLast[z][dist]) * smoothingAlpha;
 
-        float output_brightness = m_waveformLast[dist];
+        float output_brightness = m_ps->waveformLast[z][dist];
         if (output_brightness > 1.0f) output_brightness = 1.0f;
 
         output_brightness = 0.5f + output_brightness * 0.5f;
         output_brightness = clamp(output_brightness, 0.0f, 1.0f);
         output_brightness *= peak;
-        output_brightness *= silentScale;
-
         // Convert colour to final RGB with brightness and master brightness scaling.
-        float r = m_sumColorLast[0] * output_brightness * brightnessScale;
-        float g = m_sumColorLast[1] * output_brightness * brightnessScale;
-        float b = m_sumColorLast[2] * output_brightness * brightnessScale;
+        float r = m_ps->sumColourLast[z][0] * output_brightness * brightnessScale;
+        float g = m_ps->sumColourLast[z][1] * output_brightness * brightnessScale;
+        float b = m_ps->sumColourLast[z][2] * output_brightness * brightnessScale;
 
         CRGB c((uint8_t)fminf(r, 255.0f), (uint8_t)fminf(g, 255.0f), (uint8_t)fminf(b, 255.0f));
         SET_CENTER_PAIR(ctx, dist, c);
@@ -209,7 +240,14 @@ void SbWaveform310RefEffect::render(plugins::EffectContext& ctx) {
 #endif
 }
 
-void SbWaveform310RefEffect::cleanup() {}
+void SbWaveform310RefEffect::cleanup() {
+#ifndef NATIVE_BUILD
+    if (m_ps) {
+        heap_caps_free(m_ps);
+        m_ps = nullptr;
+    }
+#endif
+}
 
 const plugins::EffectMetadata& SbWaveform310RefEffect::getMetadata() const {
     static plugins::EffectMetadata meta{
@@ -223,4 +261,3 @@ const plugins::EffectMetadata& SbWaveform310RefEffect::getMetadata() const {
 }
 
 } // namespace lightwaveos::effects::ieffect::sensorybridge_reference
-

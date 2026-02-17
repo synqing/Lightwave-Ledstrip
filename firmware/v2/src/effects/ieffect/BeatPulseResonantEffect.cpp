@@ -61,19 +61,9 @@ void BeatPulseResonantEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
 
     // --- Beat source ---
-    bool beatTick = false;
+    const bool beatTick = BeatPulseTiming::computeBeatTick(ctx, m_fallbackBpm, m_lastBeatTimeMs);
 
-    if (ctx.audio.available) {
-        beatTick = ctx.audio.isOnBeat();
-    } else {
-        const uint32_t nowMs = ctx.totalTimeMs;
-        const float beatIntervalMs = 60000.0f / fmaxf(30.0f, m_fallbackBpm);
-        if (m_lastBeatTimeMs == 0 || (nowMs - m_lastBeatTimeMs) >= static_cast<uint32_t>(beatIntervalMs)) {
-            beatTick = true;
-        }
-    }
-
-    const uint32_t nowMs = ctx.totalTimeMs;
+    const uint32_t nowMs = ctx.rawTotalTimeMs;
 
     // --- Slam to 1.0 on beat ---
     if (beatTick) {

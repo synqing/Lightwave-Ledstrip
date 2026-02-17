@@ -3,15 +3,15 @@
  * @brief Beat Pulse (Shockwave Cascade) - Triple pressure wave with HTML shading
  *
  * Visual identity: Primary shockwave + 2 trailing echo fronts expanding outward.
- * Like multiple pressure waves from a single detonation. Uses HTML PARITY shading
- * spine (brightness = 0.5 + intensity * 0.5, whiteMix = intensity * 0.3).
+ * Like multiple pressure waves from a single detonation.
  *
  * Key characteristics:
  *  - 3 rings total: primary + 2 echoes, all expanding OUTWARD
  *  - Echoes spawn with time delay (staggered birth)
  *  - Echoes are progressively THINNER and DIMMER
  *  - Colour by distance through palette
- *  - HTML PARITY shading for all rings
+ *  - Brightness spine: 0.05 + intensity * 0.95
+ *  - White mix: primary only (0.35)
  *
  * Effect ID: 116
  */
@@ -39,74 +39,56 @@ void BeatPulseShockwaveCascadeEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
 
     // --- Beat source ---
-    bool beatTick = false;
+    const bool beatTick = BeatPulseTiming::computeBeatTick(ctx, m_fallbackBpm, m_lastBeatTimeMs);
 
-    if (ctx.audio.available) {
-        beatTick = ctx.audio.isOnBeat();
-    } else {
-        const uint32_t nowMs = ctx.totalTimeMs;
-        const float beatIntervalMs = 60000.0f / fmaxf(30.0f, m_fallbackBpm);
-        if (m_lastBeatTimeMs == 0 || (nowMs - m_lastBeatTimeMs) >= static_cast<uint32_t>(beatIntervalMs)) {
-            beatTick = true;
-            m_lastBeatTimeMs = nowMs;
-        }
+    const uint32_t nowMs = ctx.rawTotalTimeMs;
+    if (beatTick) {
+        m_beatIntensity = 1.0f;
+        m_lastBeatTimeMs = nowMs;
     }
 
-    // --- Update beatIntensity using HTML parity maths ---
-    const float dt = ctx.getSafeDeltaSeconds();
-    BeatPulseHTML::updateBeatIntensity(m_beatIntensity, beatTick, dt);
-
-    // --- Ring configuration ---
-    // Primary ring travels centre→edge; echoes trail behind with offsets
-    const float htmlCentre = BeatPulseHTML::ringCentre01(m_beatIntensity);
-    const float primaryPos = 1.0f - htmlCentre;  // Outward: 0→1 as beatIntensity decays
-
-    // Echo positions trail behind the primary
+    // --- Time-driven ring positions ---
+    constexpr float TRAVEL_MS = 400.0f;
+    constexpr float DECAY_MS = 320.0f;
+    constexpr float RING_WIDTH = 0.10f;
     constexpr float ECHO1_OFFSET = 0.12f;
     constexpr float ECHO2_OFFSET = 0.24f;
+
+    float ageMs = 999999.0f;
+    if (m_lastBeatTimeMs != 0) {
+        ageMs = static_cast<float>(nowMs - m_lastBeatTimeMs);
+    }
+
+    const float envelope = expf(-ageMs / DECAY_MS);
+    const float primaryPos = clamp01(ageMs / TRAVEL_MS);  // centre -> edge
     const float echo1Pos = clamp01(primaryPos - ECHO1_OFFSET);
     const float echo2Pos = clamp01(primaryPos - ECHO2_OFFSET);
-
-    // Ring gains (primary = full, echoes progressively dimmer)
-    constexpr float RING_GAINS[] = {1.0f, 0.45f, 0.22f};
-    const float ringPositions[] = {primaryPos, echo1Pos, echo2Pos};
 
     // --- Render ---
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         const float dist01 = (static_cast<float>(dist) + 0.5f) / static_cast<float>(HALF_LENGTH);
 
-        float maxIntensity = 0.0f;
-        float primaryHit = 0.0f;
+        const float diffPrimary = fabsf(dist01 - primaryPos);
+        const float primaryHit = RingProfile::tent(diffPrimary, RING_WIDTH);
 
-        // Process all 3 rings: primary + 2 echoes
-        for (uint8_t e = 0; e < 3; ++e) {
-            // Only show echo if primary has advanced far enough
-            if (e > 0) {
-                const float minAdvance = (e == 1) ? ECHO1_OFFSET : ECHO2_OFFSET;
-                if (primaryPos < minAdvance * 1.5f) continue;
-            }
+        const float diffEcho1 = fabsf(dist01 - echo1Pos);
+        const float echo1Hit = RingProfile::tent(diffEcho1, RING_WIDTH) * 0.45f;
 
-            // HTML parity triangle profile (slope = 3)
-            const float diff = fabsf(dist01 - ringPositions[e]);
-            const float waveHit = 1.0f - fminf(1.0f, diff * 3.0f);
-            const float hit = fmaxf(0.0f, waveHit) * RING_GAINS[e] * m_beatIntensity;
+        const float diffEcho2 = fabsf(dist01 - echo2Pos);
+        const float echo2Hit = RingProfile::tent(diffEcho2, RING_WIDTH) * 0.25f;
 
-            if (hit > maxIntensity) {
-                maxIntensity = hit;
-            }
+        const float maxHit = fmaxf(primaryHit, fmaxf(echo1Hit, echo2Hit));
+        const float intensity = clamp01(maxHit * envelope);
 
-            if (e == 0) primaryHit = hit;
-        }
-
-        // HTML parity: brightness = 0.5 + intensity * 0.5
-        const float brightFactor = BeatPulseHTML::brightnessFactor(maxIntensity);
+        // Brightness: 0.05 + intensity * 0.95
+        const float brightFactor = clamp01(0.05f + intensity * 0.95f);
 
         // Palette colour by distance
         const uint8_t paletteIdx = floatToByte(dist01);
         CRGB c = ctx.palette.getColor(paletteIdx, scaleBrightness(ctx.brightness, brightFactor));
 
-        // HTML parity: white mix = intensity * 0.3 (primary only)
-        const float whiteMixVal = BeatPulseHTML::whiteMix(primaryHit);
+        // White mix: primary hit only
+        const float whiteMixVal = clamp01(primaryHit * envelope) * 0.35f;
         ColourUtil::addWhiteSaturating(c, floatToByte(whiteMixVal));
 
         SET_CENTER_PAIR(ctx, dist, c);

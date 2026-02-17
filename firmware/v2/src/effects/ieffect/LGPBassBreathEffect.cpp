@@ -20,13 +20,8 @@ namespace ieffect {
 namespace {
 
 static inline const float* selectChroma12(const audio::ControlBusFrame& cb) {
-    float esSum = 0.0f;
-    float lwSum = 0.0f;
-    for (uint8_t i = 0; i < audio::CONTROLBUS_NUM_CHROMA; ++i) {
-        esSum += cb.es_chroma_raw[i];
-        lwSum += cb.chroma[i];
-    }
-    return (esSum > (lwSum + 0.001f)) ? cb.es_chroma_raw : cb.chroma;
+    // Both backends now produce normalised chroma via Stage A/B pipeline.
+    return cb.chroma;
 }
 
 static inline uint8_t dominantChromaBin12(const float chroma[audio::CONTROLBUS_NUM_CHROMA], float* outMax = nullptr) {
@@ -68,12 +63,12 @@ bool LGPBassBreathEffect::init(plugins::EffectContext& ctx) {
 
 void LGPBassBreathEffect::render(plugins::EffectContext& ctx) {
     // Get dt early for all decay operations
-    float dt = ctx.getSafeDeltaSeconds();
+    float dt = ctx.getSafeRawDeltaSeconds();
 
     float bass, mid, treble;
     float beatStrength = 0.0f;
     float beatPhase = 0.0f;
-    float silentScale = 1.0f;
+    // silentScale handled globally by RendererActor
 
     if (ctx.audio.available) {
         bass = ctx.audio.bass();
@@ -81,7 +76,6 @@ void LGPBassBreathEffect::render(plugins::EffectContext& ctx) {
         treble = ctx.audio.treble();
         beatStrength = ctx.audio.beatStrength();
         beatPhase = ctx.audio.beatPhase();
-        silentScale = ctx.audio.controlBus.silentScale;
     } else {
         // Fallback: slow sine wave breathing
         float phase = (float)(ctx.totalTimeMs % 3000) / 3000.0f;
@@ -123,7 +117,7 @@ void LGPBassBreathEffect::render(plugins::EffectContext& ctx) {
 
     // Breath dynamics: fast attack, slow decay (bass-led, with optional beat inhale).
     float targetBreath = bass * 0.75f + mid * 0.15f + beatInhale * 0.35f + m_fluxKick * 0.20f;
-    targetBreath = clamp01(targetBreath) * silentScale;
+    targetBreath = clamp01(targetBreath);
     if (targetBreath > m_breathLevel) {
         m_breathLevel = targetBreath;  // Instant attack
     } else {

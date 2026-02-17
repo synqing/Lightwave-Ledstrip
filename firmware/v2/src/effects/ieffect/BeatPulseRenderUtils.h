@@ -17,6 +17,8 @@
 #include <cstdint>
 #include <cmath>
 
+#include "../../plugins/api/EffectContext.h"
+
 namespace lightwaveos::effects::ieffect {
 
 // ============================================================================
@@ -335,5 +337,44 @@ static inline float whiteMix(float intensity) {
 }
 
 } // namespace BeatPulseHTML
+
+// ============================================================================
+// Beat Pulse Timing Helpers (tempo-confidence gate + fallback)
+// ============================================================================
+
+namespace BeatPulseTiming {
+
+static constexpr float kTempoConfMin = 0.25f;
+
+/**
+ * @brief Compute beat tick with tempo-confidence gate and fallback metronome.
+ *
+ * If audio is available and tempo confidence is high, use audio beat ticks.
+ * Otherwise, use a fallback metronome driven by raw (unscaled) time.
+ */
+static inline bool computeBeatTick(
+    const plugins::EffectContext& ctx,
+    float fallbackBpm,
+    uint32_t& lastBeatMs
+) {
+    const bool beatLocked = ctx.audio.available && (ctx.audio.tempoConfidence() >= kTempoConfMin);
+    if (beatLocked) {
+        const bool tick = ctx.audio.isOnBeat();
+        if (tick) {
+            lastBeatMs = ctx.rawTotalTimeMs;
+        }
+        return tick;
+    }
+
+    const uint32_t nowMs = ctx.rawTotalTimeMs;
+    const float beatIntervalMs = 60000.0f / fmaxf(30.0f, fallbackBpm);
+    if (lastBeatMs == 0 || (nowMs - lastBeatMs) >= static_cast<uint32_t>(beatIntervalMs)) {
+        lastBeatMs = nowMs;
+        return true;
+    }
+    return false;
+}
+
+} // namespace BeatPulseTiming
 
 } // namespace lightwaveos::effects::ieffect

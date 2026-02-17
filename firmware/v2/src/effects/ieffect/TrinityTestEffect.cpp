@@ -62,7 +62,7 @@ void TrinityTestEffect::renderNoDataWarning(plugins::EffectContext& ctx) {
 }
 
 void TrinityTestEffect::render(plugins::EffectContext& ctx) {
-    float dt = ctx.getSafeDeltaSeconds();
+    float dt = ctx.getSafeRawDeltaSeconds();
     m_frameCount++;
 
     // Clear all LEDs first

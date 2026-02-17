@@ -171,6 +171,7 @@ ZoneComposer::ZoneComposer()
 
     for (uint8_t i = 0; i < MAX_ZONES; i++) {
         m_zoneTimeSeconds[i] = 0.0f;
+        m_zoneTimeSecondsRaw[i] = 0.0f;
         m_zoneFrameAccumulator[i] = 0.0f;
         m_zoneFrameCount[i] = 0;
     }
@@ -246,11 +247,15 @@ void ZoneComposer::render(CRGB* leds, uint16_t numLeds, CRGBPalette16* palette,
     m_zoneContext.variation = 0;
     m_zoneContext.frameNumber = frameCount;
     // Base delta in seconds for per-zone scaling.
-    float deltaSeconds = static_cast<float>(deltaTimeMs) * 0.001f;
+    const float rawDeltaSeconds = static_cast<float>(deltaTimeMs) * 0.001f;
+    float deltaSeconds = rawDeltaSeconds;
     if (deltaSeconds > 0.05f) deltaSeconds = 0.05f;  // Maximum 50ms (20 FPS floor)
     m_zoneContext.deltaTimeSeconds = deltaSeconds;
     m_zoneContext.deltaTimeMs = static_cast<uint32_t>(deltaSeconds * 1000.0f + 0.5f);
     m_zoneContext.totalTimeMs = 0;
+    m_zoneContext.rawDeltaTimeSeconds = rawDeltaSeconds;
+    m_zoneContext.rawDeltaTimeMs = deltaTimeMs;
+    m_zoneContext.rawTotalTimeMs = 0;
 
     // Copy audio context once per frame if available (reused for all zones)
     if (audioCtx != nullptr) {
@@ -320,6 +325,9 @@ void ZoneComposer::renderZone(uint8_t zoneId, CRGB* leds, uint16_t numLeds,
     // Set mood and fadeAmount so transport-based effects have fuel
     m_zoneContext.mood = 128;       // Default mid-range mood (0-255)
     m_zoneContext.fadeAmount = 128; // Default mid-range fade (0-255)
+    // Update unscaled time accumulators per zone (independent of SPEED).
+    m_zoneTimeSecondsRaw[safeZone] += m_zoneContext.rawDeltaTimeSeconds;
+    m_zoneContext.rawTotalTimeMs = static_cast<uint32_t>(m_zoneTimeSecondsRaw[safeZone] * 1000.0f + 0.5f);
     // Apply speed-scaled time for this zone.
     float speedFactor = computeSpeedTimeFactor(zone.speed);
     float scaledDeltaSeconds = deltaSeconds * speedFactor;

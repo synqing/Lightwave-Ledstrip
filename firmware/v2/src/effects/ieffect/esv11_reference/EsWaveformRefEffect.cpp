@@ -7,6 +7,11 @@
 #include "EsV11RefUtil.h"
 
 #include <math.h>
+#include <cstring>
+
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#endif
 
 namespace lightwaveos::effects::ieffect::esv11_reference {
 
@@ -36,48 +41,94 @@ static inline float computeAlpha(float cutoffHz, float sampleRateHz) {
 bool EsWaveformRefEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
     m_alpha = computeAlpha(CUTOFF_HZ, static_cast<float>(SAMPLE_RATE_HZ));
+#ifndef NATIVE_BUILD
+    if (!m_ps) {
+        m_ps = static_cast<EsWaveformPsram*>(
+            heap_caps_malloc(sizeof(EsWaveformPsram), MALLOC_CAP_SPIRAM));
+        if (!m_ps) return false;
+    }
+    memset(m_ps, 0, sizeof(EsWaveformPsram));
+#endif
+    for (uint8_t z = 0; z < kMaxZones; ++z) {
+        m_lastHopSeq[z]   = 0;
+        m_historyIndex[z]  = 0;
+        m_historyPrimed[z] = false;
+    }
     return true;
 }
 
 void EsWaveformRefEffect::render(plugins::EffectContext& ctx) {
+    if (!m_ps) return;
     clearAll(ctx);
 
     if (!ctx.audio.available) {
         return;
     }
 
-    // ES reference behaviour: copy last NUM_LEDS samples, low-pass filter, auto-scale by max, then HSV gradient.
-    // LWLS provides a fixed-size waveform snapshot; interpolate it across HALF_LENGTH and mirror from centre.
-    for (uint8_t i = 0; i < 128; i++) {
-        m_samples[i] = clamp01(ctx.audio.getWaveformAmplitude(i));
-    }
+    const int z = (ctx.zoneId < kMaxZones) ? ctx.zoneId : 0;
 
-    // Low-pass filter (3 passes) to emulate ES smoothing.
-    for (uint8_t pass = 0; pass < FILTER_PASSES; pass++) {
-        float y = 0.0f;
-        for (uint8_t i = 0; i < 128; i++) {
-            float x = m_samples[i];
-            y = y + m_alpha * (x - y);
-            m_samples[i] = y;
+    const bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq[z]);
+    if (newHop || !m_historyPrimed[z]) {
+        m_lastHopSeq[z] = ctx.audio.controlBus.hop_seq;
+        if (!m_historyPrimed[z]) {
+            for (uint8_t f = 0; f < HISTORY_FRAMES; ++f) {
+                for (uint8_t i = 0; i < 128; ++i) {
+                    m_ps->history[z][f][i] = ctx.audio.getWaveformNormalized(i);
+                }
+            }
+            m_historyPrimed[z] = true;
+            m_historyIndex[z] = 0;
+        } else {
+            for (uint8_t i = 0; i < 128; ++i) {
+                m_ps->history[z][m_historyIndex[z]][i] = ctx.audio.getWaveformNormalized(i);
+            }
+            m_historyIndex[z] = static_cast<uint8_t>((m_historyIndex[z] + 1u) % HISTORY_FRAMES);
         }
     }
 
-    float maxVal = 0.000001f;
-    for (uint8_t i = 0; i < 128; i++) {
-        if (m_samples[i] > maxVal) maxVal = m_samples[i];
+    // Average history to preserve waveform morphology with stable motion.
+    for (uint8_t i = 0; i < 128; ++i) {
+        float sum = 0.0f;
+        for (uint8_t f = 0; f < HISTORY_FRAMES; ++f) {
+            sum += m_ps->history[z][f][i];
+        }
+        m_ps->samples[z][i] = sum / static_cast<float>(HISTORY_FRAMES);
     }
-    const float autoScale = 1.0f / maxVal;
+
+    for (uint8_t pass = 0; pass < FILTER_PASSES; pass++) {
+        float y = 0.0f;
+        for (uint8_t i = 0; i < 128; i++) {
+            float x = m_ps->samples[z][i];
+            y = y + m_alpha * (x - y);
+            m_ps->samples[z][i] = y;
+        }
+    }
+
+    float maxAbs = 0.000001f;
+    for (uint8_t i = 0; i < 128; i++) {
+        const float a = fabsf(m_ps->samples[z][i]);
+        if (a > maxAbs) maxAbs = a;
+    }
+    const float autoScale = 1.0f / maxAbs;
 
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         float progress = (HALF_LENGTH <= 1) ? 0.0f : (static_cast<float>(dist) / static_cast<float>(HALF_LENGTH - 1));
-        float sample = clamp01(interp128(m_samples, progress) * autoScale);
+        float signedSample = interp128(m_ps->samples[z], progress) * autoScale;
+        if (signedSample < -1.0f) signedSample = -1.0f;
+        if (signedSample > 1.0f) signedSample = 1.0f;
+        const float sample = clamp01(0.5f + signedSample * 0.5f);
         const CRGB c = hsvProgress(ctx, progress, sample);
         SET_CENTER_PAIR(ctx, dist, c);
     }
 }
 
 void EsWaveformRefEffect::cleanup() {
-    // No resources to free.
+#ifndef NATIVE_BUILD
+    if (m_ps) {
+        heap_caps_free(m_ps);
+        m_ps = nullptr;
+    }
+#endif
 }
 
 const plugins::EffectMetadata& EsWaveformRefEffect::getMetadata() const {
@@ -91,4 +142,3 @@ const plugins::EffectMetadata& EsWaveformRefEffect::getMetadata() const {
 }
 
 } // namespace lightwaveos::effects::ieffect::esv11_reference
-

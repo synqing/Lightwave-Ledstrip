@@ -19,15 +19,8 @@ namespace ieffect {
 namespace {
 
 static inline const float* selectChroma12(const audio::ControlBusFrame& cb) {
-    // Prefer ES raw chroma when present (parity + stability for ES backend).
-    // Fallback to LWLS contract chroma otherwise.
-    float esSum = 0.0f;
-    float lwSum = 0.0f;
-    for (uint8_t i = 0; i < audio::CONTROLBUS_NUM_CHROMA; ++i) {
-        esSum += cb.es_chroma_raw[i];
-        lwSum += cb.chroma[i];
-    }
-    return (esSum > (lwSum + 0.001f)) ? cb.es_chroma_raw : cb.chroma;
+    // Both backends now produce normalised chroma via Stage A/B pipeline.
+    return cb.chroma;
 }
 
 static inline uint8_t dominantChromaBin12(const float chroma[audio::CONTROLBUS_NUM_CHROMA], float* outMax = nullptr) {
@@ -118,8 +111,8 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
         }
 
         // Smooth chroma bin (prevents rapid hue jitter on sparse chroma).
-        float dt = ctx.getSafeDeltaSeconds();
-        float alpha = 1.0f - expf(-dt / 0.20f);
+        float rawDt = ctx.getSafeRawDeltaSeconds();
+        float alpha = 1.0f - expf(-rawDt / 0.20f);
         m_dominantChromaBinSmooth += ((float)m_dominantChromaBin - m_dominantChromaBinSmooth) * alpha;
 
         // Snare detection: spike in mid-frequency energy (only when bands look live)
@@ -187,9 +180,9 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
     // === PRIMARY PULSE (Kick/Beat) ===
     if (onBeat) {
         m_pulsePosition = 0.0f;
-        float silentScale = ctx.audio.available ? ctx.audio.controlBus.silentScale : 1.0f;
+        // silentScale handled globally by RendererActor
         float base = 0.25f + 0.75f * fminf(1.0f, bassEnergy * 1.15f + m_smoothStrength * 0.65f);
-        m_pulseIntensity = base * silentScale;
+        m_pulseIntensity = base;
     }
 
     // Expand pulse outward (~400ms to reach edge)
@@ -197,8 +190,8 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
     if (m_pulsePosition > 1.0f) m_pulsePosition = 1.0f;
 
     // Decay intensity (dt-corrected for frame-rate independence)
-    float dt = ctx.getSafeDeltaSeconds();
-    m_pulseIntensity *= powf(0.95f, dt * 60.0f);
+    float rawDt2 = ctx.getSafeRawDeltaSeconds();
+    m_pulseIntensity *= powf(0.95f, rawDt2 * 60.0f);
     if (m_pulseIntensity < 0.01f) m_pulseIntensity = 0.0f;
 
     // === SECONDARY PULSE (Snare) ===
@@ -212,7 +205,7 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
     if (m_snarePulsePos > 1.0f) m_snarePulsePos = 1.0f;
 
     // Faster decay for snare (dt-corrected)
-    m_snarePulseInt *= powf(0.92f, dt * 60.0f);
+    m_snarePulseInt *= powf(0.92f, rawDt2 * 60.0f);
     if (m_snarePulseInt < 0.01f) m_snarePulseInt = 0.0f;
 
     // === SHIMMER OVERLAY (Hi-hat) ===
@@ -221,7 +214,7 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
     }
 
     // Very fast decay for hi-hat sparkle (dt-corrected)
-    m_hihatShimmer *= powf(0.88f, dt * 60.0f);
+    m_hihatShimmer *= powf(0.88f, rawDt2 * 60.0f);
     if (m_hihatShimmer < 0.01f) m_hihatShimmer = 0.0f;
 
     // Clear buffer

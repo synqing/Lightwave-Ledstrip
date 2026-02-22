@@ -17,6 +17,8 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../enhancement/SmoothingEngine.h"
+#include "ChromaUtils.h"
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -24,6 +26,8 @@ namespace ieffect {
 
 class LGPStarBurstNarrativeEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_STAR_BURST_NARRATIVE;
+
     LGPStarBurstNarrativeEffect();
     ~LGPStarBurstNarrativeEffect() override = default;
 
@@ -52,8 +56,7 @@ private:
     uint8_t m_keyRootBin = 0;
     bool m_keyMinor = false;
     uint8_t m_dominantBin = 0;
-    float m_keyRootBinSmooth = 0.0f;
-    float m_dominantBinSmooth = 0.0f;
+    float m_keyRootAngle = 0.0f;     // Circular EMA angle for key root (radians)
 
     // Audio smoothing for stable speed coupling
     enhancement::Spring m_phaseSpeedSpring;

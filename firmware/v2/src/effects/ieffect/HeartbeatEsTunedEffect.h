@@ -17,11 +17,13 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos::effects::ieffect {
 
 class HeartbeatEsTunedEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_HEARTBEAT_ES_TUNED;
     HeartbeatEsTunedEffect() = default;
     ~HeartbeatEsTunedEffect() override = default;
 
@@ -31,10 +33,9 @@ public:
     const plugins::EffectMetadata& getMetadata() const override;
 
 private:
-    // Chroma anchor (stable across hops)
+    // Chroma anchor (circular EMA state, radians)
     uint32_t m_lastHopSeq = 0;
-    uint8_t m_dominantChromaBin = 0;
-    float m_dominantChromaBinSmooth = 0.0f;
+    float m_chromaAngle = 0.0f;
 
     // Beat + onset state
     float m_lastBeatPhase = 0.0f;

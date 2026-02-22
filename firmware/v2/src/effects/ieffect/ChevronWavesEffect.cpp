@@ -4,6 +4,7 @@
  */
 
 #include "ChevronWavesEffect.h"
+#include "ChromaUtils.h"
 #include "../CoreEffects.h"
 #include "../utils/FastLEDOptim.h"
 #include "../../config/features.h"
@@ -34,7 +35,8 @@ bool ChevronWavesEffect::init(plugins::EffectContext& ctx) {
     m_energyAvg = 0.0f;
     m_energyDelta = 0.0f;
     m_dominantBin = 0;
-    m_dominantBinSmooth = 0.0f;
+    m_chromaAngle = 0.0f;
+    m_chromaHue = 0.0f;
 
     // Initialize enhancement utilities
     m_phaseSpeedSpring.init(50.0f, 1.0f);  // stiffness=50, mass=1 (critically damped)
@@ -105,11 +107,13 @@ void ChevronWavesEffect::render(plugins::EffectContext& ctx) {
     float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, rawDt, moodNorm);
     float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, rawDt, moodNorm);
 
-    // Dominant bin smoothing
-    float alphaBin = 1.0f - expf(-rawDt / 0.25f);  // True exponential, 250ms time constant
-    m_dominantBinSmooth += (m_dominantBin - m_dominantBinSmooth) * alphaBin;
-    if (m_dominantBinSmooth < 0.0f) m_dominantBinSmooth = 0.0f;
-    if (m_dominantBinSmooth > 11.0f) m_dominantBinSmooth = 11.0f;
+    // Circular chroma hue smoothing (replaces linear EMA on bin index)
+#if FEATURE_AUDIO_SYNC
+    if (hasAudio) {
+        m_chromaHue = static_cast<float>(effects::chroma::circularChromaHueSmoothed(
+            ctx.audio.controlBus.chroma, m_chromaAngle, rawDt, 0.20f));
+    }
+#endif
 
     // Use heavy_bands instead of raw chroma/energyAvg to eliminate jitter
     float heavyEnergy = 0.0f;
@@ -149,10 +153,10 @@ void ChevronWavesEffect::render(plugins::EffectContext& ctx) {
 
         float audioGain = 0.2f + 0.8f * energyAvgSmooth;
         uint8_t brightness = (uint8_t)(chevron * 255.0f * intensityNorm * audioGain);
-        // Calculate hue with proper modular arithmetic (avoids UB from large float→uint8_t cast)
-        // m_chevronPos grows unbounded; fmodf ensures values stay in [0, 256) before casting
+        // Calculate hue with proper modular arithmetic (avoids UB from large float->uint8_t cast)
+        // m_chromaHue is already 0-255 from circular chroma smoothing
         float rawHue = (float)ctx.gHue
-                     + m_dominantBinSmooth * (255.0f / 12.0f)
+                     + m_chromaHue
                      + distFromCenter * 2.0f
                      + fmodf(m_chevronPos * 0.5f, 256.0f);
         uint8_t hue = (uint8_t)fmodf(rawHue, 256.0f);

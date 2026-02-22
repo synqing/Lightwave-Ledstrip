@@ -20,6 +20,8 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../enhancement/SmoothingEngine.h"
+#include "ChromaUtils.h"
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -27,6 +29,8 @@ namespace ieffect {
 
 class LGPPhotonicCrystalEnhancedEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_PHOTONIC_CRYSTAL_ENHANCED;
+
     LGPPhotonicCrystalEnhancedEffect();
     ~LGPPhotonicCrystalEnhancedEffect() override = default;
 
@@ -83,8 +87,7 @@ private:
     float m_chromaSmoothed[12] = {0.0f};
     float m_chromaTargets[12] = {0.0f};
     
-    uint8_t m_dominantBin = 0;
-    float m_dominantBinSmooth = 0.0f;
+    float m_chromaAngle = 0.0f;       // Circular EMA angle for chroma hue (radians)
     
     // Enhanced: 64-bin sub-bass tracking
     enhancement::AsymmetricFollower m_subBassFollower{0.0f, 0.05f, 0.30f};

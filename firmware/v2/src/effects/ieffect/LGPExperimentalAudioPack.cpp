@@ -4,6 +4,7 @@
  */
 
 #include "LGPExperimentalAudioPack.h"
+#include "ChromaUtils.h"
 #include "AudioReactivePolicy.h"
 #include "../CoreEffects.h"
 #include "../../config/features.h"
@@ -68,24 +69,39 @@ static inline float binsRangeEnergy(const plugins::EffectContext& ctx, uint8_t s
 static inline uint8_t dominantNoteFromBins(const plugins::EffectContext& ctx) {
     if (!ctx.audio.available) return 0;
 
-    float best = -1.0f;
-    uint8_t bestNote = 0;
+    // Accumulate per-note scores across octaves, then use circular weighted
+    // mean to avoid discontinuous jumps when two adjacent notes compete.
+    float scores[12] = {};
     for (uint8_t note = 0; note < 12; ++note) {
-        float score = 0.0f;
         for (uint8_t b = note; b < 48; b = static_cast<uint8_t>(b + 12)) {
-            score += clamp01f(ctx.audio.binAdaptive(b));
-        }
-        if (score > best) {
-            best = score;
-            bestNote = note;
+            scores[note] += clamp01f(ctx.audio.binAdaptive(b));
         }
     }
-    return bestNote;
+
+    // Circular weighted mean over 12 note positions (30-degree steps)
+    float cx = 0.0f, sy = 0.0f;
+    for (uint8_t i = 0; i < 12; ++i) {
+        cx += scores[i] * effects::chroma::kCos[i];
+        sy += scores[i] * effects::chroma::kSin[i];
+    }
+    float angle = atan2f(sy, cx);
+    if (angle < 0.0f) angle += EX_TAU;
+
+    // Map angle back to nearest note index (0-11)
+    uint8_t note = static_cast<uint8_t>(roundf(angle * (12.0f / EX_TAU))) % 12;
+    return note;
 }
 
-static inline uint8_t selectMusicalHue(const plugins::EffectContext& ctx) {
+static inline uint8_t selectMusicalHue(const plugins::EffectContext& ctx, bool& chordGateOpen) {
     if (!ctx.audio.available) return 24;
-    const uint8_t note = (ctx.audio.chordConfidence() > 0.35f)
+
+    // Schmitt trigger hysteresis on chord confidence (enter 0.40, exit 0.25)
+    // prevents rapid switching between chord root and bin-derived note.
+    const float conf = ctx.audio.chordConfidence();
+    if (conf >= 0.40f) chordGateOpen = true;
+    else if (conf <= 0.25f) chordGateOpen = false;
+
+    const uint8_t note = chordGateOpen
         ? static_cast<uint8_t>(ctx.audio.rootNote() % 12)
         : dominantNoteFromBins(ctx);
     return NOTE_HUES[note];
@@ -98,6 +114,18 @@ static inline float smoothHue(float current, float target, float dt, float tauS)
     const float next = current + delta * expAlpha(dt, tauS);
     float wrapped = fmodf(next, 256.0f);
     if (wrapped < 0.0f) wrapped += 256.0f;
+    return wrapped;
+}
+
+// Circular smoothing for note index domain [0, 12).
+// Same shortest-arc approach as smoothHue but with period 12.
+static inline float smoothNoteCircular(float current, float target, float dt, float tauS) {
+    float delta = target - current;
+    while (delta > 6.0f) delta -= 12.0f;
+    while (delta < -6.0f) delta += 12.0f;
+    const float next = current + delta * expAlpha(dt, tauS);
+    float wrapped = fmodf(next, 12.0f);
+    if (wrapped < 0.0f) wrapped += 12.0f;
     return wrapped;
 }
 
@@ -156,6 +184,7 @@ bool LGPFluxRiftEffect::init(plugins::EffectContext& ctx) {
     m_lastBeatMs = 0;
     m_hue = 24.0f;
     m_audioPresence = 0.0f;
+    m_chordGateOpen = false;
     return true;
 }
 
@@ -185,7 +214,7 @@ void LGPFluxRiftEffect::render(plugins::EffectContext& ctx) {
     if (m_phase > 100000.0f) m_phase = fmodf(m_phase, EX_TAU);
 
     const float seamPos = clamp01f(1.0f - m_beatPulse);
-    const float hueTarget = static_cast<float>(selectMusicalHue(ctx));
+    const float hueTarget = static_cast<float>(selectMusicalHue(ctx, m_chordGateOpen));
     m_hue = smoothHue(m_hue, hueTarget, dtSignal, 0.45f);
     const uint8_t baseHue = static_cast<uint8_t>(m_hue);
 
@@ -232,6 +261,7 @@ bool LGPBeatPrismEffect::init(plugins::EffectContext& ctx) {
     m_lastBeatMs = 0;
     m_hue = 24.0f;
     m_audioPresence = 0.0f;
+    m_chordGateOpen = false;
     return true;
 }
 
@@ -262,7 +292,7 @@ void LGPBeatPrismEffect::render(plugins::EffectContext& ctx) {
     if (m_phase > 100000.0f) m_phase = fmodf(m_phase, EX_TAU);
 
     const float frontPos = clamp01f(1.0f - m_beatPulse);
-    const float hueTarget = static_cast<float>(static_cast<uint8_t>(selectMusicalHue(ctx) + 8));
+    const float hueTarget = static_cast<float>(static_cast<uint8_t>(selectMusicalHue(ctx, m_chordGateOpen) + 8));
     m_hue = smoothHue(m_hue, hueTarget, dtSignal, 0.45f);
     const uint8_t baseHue = static_cast<uint8_t>(m_hue);
 
@@ -308,6 +338,7 @@ bool LGPHarmonicTideEffect::init(plugins::EffectContext& ctx) {
     m_rootSmooth = 0.0f;
     m_hue = 24.0f;
     m_audioPresence = 0.0f;
+    m_chordGateOpen = false;
     return true;
 }
 
@@ -326,13 +357,19 @@ void LGPHarmonicTideEffect::render(plugins::EffectContext& ctx) {
         : fallbackSine(ctx.rawTotalTimeMs, 0.0008f, 1.6f);
     m_harmonic = smoothTo(m_harmonic, harmonicTarget, dtSignal, 0.20f);
 
+    // Hysteresis gate for chord confidence (enter 0.40, exit 0.25)
+    if (ctx.audio.available) {
+        const float conf = ctx.audio.chordConfidence();
+        if (conf >= 0.40f) m_chordGateOpen = true;
+        else if (conf <= 0.25f) m_chordGateOpen = false;
+    }
+
+    // Root note with hysteresis gate and circular smoothing (note domain wraps at 12)
     const float rootTarget = ctx.audio.available
-        ? static_cast<float>((ctx.audio.chordConfidence() > 0.35f) ? (ctx.audio.rootNote() % 12)
-                                                                    : dominantNoteFromBins(ctx))
+        ? static_cast<float>(m_chordGateOpen ? (ctx.audio.rootNote() % 12)
+                                             : dominantNoteFromBins(ctx))
         : 2.0f;
-    m_rootSmooth = smoothTo(m_rootSmooth, rootTarget, dtSignal, 0.30f);
-    if (m_rootSmooth < 0.0f) m_rootSmooth = 0.0f;
-    if (m_rootSmooth > 11.0f) m_rootSmooth = 11.0f;
+    m_rootSmooth = smoothNoteCircular(m_rootSmooth, rootTarget, dtSignal, 0.30f);
 
     const float mid = ctx.audio.available ? clamp01f(ctx.audio.heavyMid()) : 0.25f;
     m_phase += 0.75f * (0.65f + 1.15f * mid) * dtVisual;
@@ -416,6 +453,7 @@ bool LGPBassQuakeEffect::init(plugins::EffectContext& ctx) {
     m_lastBeatMs = 0;
     m_hue = 24.0f;
     m_audioPresence = 0.0f;
+    m_chordGateOpen = false;
     return true;
 }
 
@@ -446,7 +484,7 @@ void LGPBassQuakeEffect::render(plugins::EffectContext& ctx) {
     if (m_phase > 100000.0f) m_phase = fmodf(m_phase, EX_TAU);
 
     const float shockPos = clamp01f(1.0f - m_impact);
-    const float hueTarget = static_cast<float>(static_cast<uint8_t>(selectMusicalHue(ctx) + 10));
+    const float hueTarget = static_cast<float>(static_cast<uint8_t>(selectMusicalHue(ctx, m_chordGateOpen) + 10));
     m_hue = smoothHue(m_hue, hueTarget, dtSignal, 0.45f);
     const uint8_t baseHue = static_cast<uint8_t>(m_hue);
 
@@ -491,6 +529,7 @@ bool LGPTrebleNetEffect::init(plugins::EffectContext& ctx) {
     m_shimmer = 0.0f;
     m_hue = 24.0f;
     m_audioPresence = 0.0f;
+    m_chordGateOpen = false;
     return true;
 }
 
@@ -519,7 +558,7 @@ void LGPTrebleNetEffect::render(plugins::EffectContext& ctx) {
     m_phase += 0.95f * (0.45f + 1.55f * m_trebleEnv) * dtVisual;
     if (m_phase > 100000.0f) m_phase = fmodf(m_phase, EX_TAU);
 
-    const float hueTarget = static_cast<float>(static_cast<uint8_t>(selectMusicalHue(ctx) + 116));
+    const float hueTarget = static_cast<float>(static_cast<uint8_t>(selectMusicalHue(ctx, m_chordGateOpen) + 116));
     m_hue = smoothHue(m_hue, hueTarget, dtSignal, 0.45f);
     const uint8_t baseHue = static_cast<uint8_t>(m_hue);
 
@@ -569,6 +608,7 @@ bool LGPRhythmicGateEffect::init(plugins::EffectContext& ctx) {
     m_lastBeatMs = 0;
     m_hue = 24.0f;
     m_audioPresence = 0.0f;
+    m_chordGateOpen = false;
     return true;
 }
 
@@ -602,7 +642,7 @@ void LGPRhythmicGateEffect::render(plugins::EffectContext& ctx) {
     const float duty = 0.24f + 0.48f * m_gate;
     const float frontPos = clamp01f(1.0f - m_pulse);
 
-    const float hueTarget = static_cast<float>(static_cast<uint8_t>(selectMusicalHue(ctx) + 30));
+    const float hueTarget = static_cast<float>(static_cast<uint8_t>(selectMusicalHue(ctx, m_chordGateOpen) + 30));
     m_hue = smoothHue(m_hue, hueTarget, dtSignal, 0.45f);
     const uint8_t baseHue = static_cast<uint8_t>(m_hue);
 
@@ -651,6 +691,7 @@ bool LGPSpectralKnotEffect::init(plugins::EffectContext& ctx) {
     m_rotation = 0.0f;
     m_hue = 24.0f;
     m_audioPresence = 0.0f;
+    m_chordGateOpen = false;
     return true;
 }
 
@@ -681,7 +722,7 @@ void LGPSpectralKnotEffect::render(plugins::EffectContext& ctx) {
 
     const float knotPos = clamp01f(0.5f + 0.28f * sinf(m_rotation));
     const float antiPos = 1.0f - knotPos;
-    const float hueTarget = static_cast<float>(static_cast<uint8_t>(selectMusicalHue(ctx) + 44));
+    const float hueTarget = static_cast<float>(static_cast<uint8_t>(selectMusicalHue(ctx, m_chordGateOpen) + 44));
     m_hue = smoothHue(m_hue, hueTarget, dtSignal, 0.45f);
     const uint8_t baseHue = static_cast<uint8_t>(m_hue);
 
@@ -730,6 +771,7 @@ bool LGPSaliencyBloomEffect::init(plugins::EffectContext& ctx) {
     m_lastBeatMs = 0;
     m_hue = 24.0f;
     m_audioPresence = 0.0f;
+    m_chordGateOpen = false;
     return true;
 }
 
@@ -760,7 +802,7 @@ void LGPSaliencyBloomEffect::render(plugins::EffectContext& ctx) {
     if (m_phase > 100000.0f) m_phase = fmodf(m_phase, EX_TAU);
 
     const float ringPos = clamp01f(1.0f - m_bloom);
-    const float hueTarget = static_cast<float>(static_cast<uint8_t>(selectMusicalHue(ctx) + 14));
+    const float hueTarget = static_cast<float>(static_cast<uint8_t>(selectMusicalHue(ctx, m_chordGateOpen) + 14));
     m_hue = smoothHue(m_hue, hueTarget, dtSignal, 0.45f);
     const uint8_t baseHue = static_cast<uint8_t>(m_hue);
 
@@ -806,6 +848,7 @@ bool LGPTransientLatticeEffect::init(plugins::EffectContext& ctx) {
     m_lastBeatMs = 0;
     m_hue = 24.0f;
     m_audioPresence = 0.0f;
+    m_chordGateOpen = false;
     return true;
 }
 
@@ -836,7 +879,7 @@ void LGPTransientLatticeEffect::render(plugins::EffectContext& ctx) {
     if (m_phase > 100000.0f) m_phase = fmodf(m_phase, EX_TAU);
 
     const float ringPos = clamp01f(1.0f - m_transient);
-    const float hueTarget = static_cast<float>(static_cast<uint8_t>(selectMusicalHue(ctx) + 62));
+    const float hueTarget = static_cast<float>(static_cast<uint8_t>(selectMusicalHue(ctx, m_chordGateOpen) + 62));
     m_hue = smoothHue(m_hue, hueTarget, dtSignal, 0.45f);
     const uint8_t baseHue = static_cast<uint8_t>(m_hue);
 
@@ -884,6 +927,7 @@ bool LGPWaveletMirrorEffect::init(plugins::EffectContext& ctx) {
     m_lastBeatMs = 0;
     m_hue = 24.0f;
     m_audioPresence = 0.0f;
+    m_chordGateOpen = false;
     return true;
 }
 
@@ -922,7 +966,7 @@ void LGPWaveletMirrorEffect::render(plugins::EffectContext& ctx) {
     if (m_phase > 100000.0f) m_phase = fmodf(m_phase, EX_TAU);
 
     const float ridgePos = clamp01f(1.0f - m_beatTrail);
-    const float hueTarget = static_cast<float>(static_cast<uint8_t>(selectMusicalHue(ctx) + 30));
+    const float hueTarget = static_cast<float>(static_cast<uint8_t>(selectMusicalHue(ctx, m_chordGateOpen) + 30));
     m_hue = smoothHue(m_hue, hueTarget, dtSignal, 0.45f);
     const uint8_t baseHue = static_cast<uint8_t>(m_hue);
 

@@ -22,6 +22,7 @@
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
+#include "../../config/effect_ids.h"
 #endif
 
 namespace lightwaveos {
@@ -41,6 +42,8 @@ struct ChordMood {
 
 class LGPChordGlowEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_CHORD_GLOW;
+
     LGPChordGlowEffect() = default;
     ~LGPChordGlowEffect() override = default;
 

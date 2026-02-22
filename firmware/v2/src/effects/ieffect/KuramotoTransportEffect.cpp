@@ -4,6 +4,9 @@
  *
  * The key insight: Kuramoto field is INVISIBLE.
  * What you SEE is transported light substance injected at events.
+ *
+ * Recovered from Codex snapshot 1140f3c6 (Feb 10, 2026),
+ * adapted for PSRAM allocation + dt-correctness (AudioReactivePolicy).
  */
 
 #include "KuramotoTransportEffect.h"
@@ -20,7 +23,7 @@ namespace lightwaveos::effects::ieffect {
 
 const lightwaveos::plugins::EffectMetadata KuramotoTransportEffect::s_meta{
     "Kuramoto Transport",
-    "Invisible oscillators -> event injections -> transported light substance",
+    "Invisible oscillators \xe2\x86\x92 event injections \xe2\x86\x92 transported light substance",
     lightwaveos::plugins::EffectCategory::QUANTUM,
     1,
     "LightwaveOS"
@@ -114,8 +117,9 @@ void KuramotoTransportEffect::render(lightwaveos::plugins::EffectContext& ctx) {
     uint8_t zid = (ctx.zoneId == 0xFF) ? 0 : ctx.zoneId;
     if (zid >= KuramotoOscillatorField::MAX_ZONES) zid = 0;
 
-    // dt
-    const float dt = AudioReactivePolicy::signalDt(ctx);
+    // dt: raw for oscillator physics, speed-scaled for visual transport.
+    const float rawDt = AudioReactivePolicy::signalDt(ctx);
+    const float dt = ctx.getSafeDeltaSeconds();
 
     // --- Audio steering (NO direct audio -> per-LED brightness mapping)
     // We ONLY steer regime parameters.
@@ -132,18 +136,18 @@ void KuramotoTransportEffect::render(lightwaveos::plugins::EffectContext& ctx) {
 
     // Nonlocal radius: knob + energy. (Energy increases interaction range.)
     const uint16_t radius = (uint16_t)fminf((float)KuramotoOscillatorField::MAX_R,
-                                           (float)radiusFrom01(0.80f * m_radius01 + 0.20f * overall));
+                                           (float)radiusFrom01(0.65f * m_radius01 + 0.35f * overall));
 
-    // Noise and kicks: audio steers emergent structure without direct VU brightness mapping.
-    const float noiseSigma   = 0.12f + 0.25f * timbre;              // rad/sqrt(s)
+    // Noise and kicks: audio creates *structure* without becoming "VU-meter on LEDs".
+    const float noiseSigma   = 0.15f + 0.35f * timbre;              // rad/sqrt(s)
     const float flux01       = ctx.audio.available ? clamp01(ctx.audio.flux()) : 0.0f;
-    const float kickRateHz   = 1.5f + 6.0f * flux01;                // events/sec (baseline 1.5 Hz for guaranteed liveliness)
-    const float kickStrength = 1.2f + 1.8f * overall;              // radians [1.2,3.0] exceeds phase slip threshold
+    const float kickRateHz   = 1.5f + 6.0f * flux01;                // events/sec
+    const float kickStrength = 1.2f + 1.8f * overall;               // radians [1.2, 3.0]
 
-    // Step the invisible field.
-    m_field.step(zid, dt, K, spread, radius, noiseSigma, kickRateHz, kickStrength);
+    // Step the invisible field (raw dt for physics).
+    m_field.step(zid, rawDt, K, spread, radius, noiseSigma, kickRateHz, kickStrength);
 
-    // --- Derived features used by transport (including velocity-driven advection)
+    // --- Derived features (coherence for injection colour, events for triggers)
     KuramotoFeatureExtractor::extract(
         m_field.theta(zid),
         m_field.prevTheta(zid),
@@ -166,24 +170,24 @@ void KuramotoTransportEffect::render(lightwaveos::plugins::EffectContext& ctx) {
     // Audio saliency adds extra push for energetic response.
     const float baseOffset60 = 0.25f + 1.75f * mood01 + 0.50f * overall;
 
-    // Persistence per-frame @60fps. Higher MOOD = more persistence (dreamy trails).
-    // Sensory Bridge uses alpha=0.99 baseline.
-    const float persistence60 = 0.96f + 0.03f * mood01;  // [0.96..0.99]
+    // Persistence per-frame @60fps. MOOD modulation.
+    const float persistence60 = clamp01(0.96f + 0.03f * mood01);
 
     // Diffusion: cheap bloom/viscosity. Higher when incoherent (creates creamy fog).
     const float diffusion = clamp01(0.05f + 0.25f * (1.0f - sync01) + 0.10f * mood01);
 
     // The visible buffer length is centre->edge samples.
-    // In LightwaveOS centre-origin convention for 160-LED strip: centrePoint=79 => radialLen=80.
     const uint16_t radialLen = (ctx.centerPoint + 1u);
 
-    // Use extracted velocity for coherence-edge transport structure.
-    m_transport.advectWithVelocity(zid, radialLen, baseOffset60, persistence60, diffusion, dt, m_scratch->velocity);
+    // ========================================================================
+    // Uniform OUTWARD advection (nullptr = +1.0 direction, outward from centre)
+    // ========================================================================
+    m_transport.advectWithVelocity(zid, radialLen, baseOffset60, persistence60, diffusion, dt, nullptr);
 
     // --- Inject events with CENTER BIAS
     // ========================================================================
-    // SENSORY BRIDGE REFERENCE: Inject ONLY at center, let it flow outward
-    // We compromise: inject anywhere events occur, but weight heavily toward center
+    // SENSORY BRIDGE REFERENCE: Inject at centre, let it flow outward.
+    // We compromise: inject anywhere events occur, but weight heavily toward centre.
     // ========================================================================
     const float injectGain = clamp01(static_cast<float>(ctx.intensity) / 255.0f);
 
@@ -193,29 +197,27 @@ void KuramotoTransportEffect::render(lightwaveos::plugins::EffectContext& ctx) {
     // Base hue comes from global hue + slow drift.
     const uint8_t baseHue = (uint8_t)(ctx.gHue + (uint8_t)(m_palettePhase * 29.0f));
 
-    // Accumulate center injection: sum all event energy, inject at center
+    // Accumulate centre injection: sum all event energy, inject at centre.
     float centerEnergy = 0.0f;
-    float totalEventEnergy = 0.0f;
     float centerPhaseSum = 0.0f;
     float centerCohSum = 0.0f;
     float totalWeight = 0.0f;
 
-    // Iterate oscillators, accumulate energy with center bias
+    // Iterate oscillators, accumulate energy with centre bias.
     for (uint16_t i = 0; i < radialLen && i < KuramotoOscillatorField::N; ++i) {
         const float e = m_scratch->event[i];
         if (e <= 0.001f) continue;
 
-        // Center bias: exponential falloff from center (i=0)
-        // Events near center contribute fully, events at edge contribute less
-        const float distNorm = (float)i / (float)radialLen;  // 0=center, 1=edge
-        const float centerWeight = expf(-3.0f * distNorm);   // edge events contribute less to center
+        // Centre bias: exponential falloff from centre (i=0).
+        // Events near centre contribute fully, events at edge contribute less.
+        const float distNorm = (float)i / (float)radialLen;  // 0=centre, 1=edge
+        const float centerWeight = expf(-3.0f * distNorm);   // ~0.05 at edge, 1.0 at centre
 
-        // Weighted contribution to center injection
+        // Weighted contribution to centre injection.
         const float weightedE = e * centerWeight;
         centerEnergy += weightedE;
-        totalEventEnergy += e;
 
-        // Accumulate phase and coherence for color averaging
+        // Accumulate phase and coherence for colour averaging.
         const float th = m_field.theta(zid)[i];
         const float phase01 = (KuramotoOscillatorField::wrapPi(th) + KuramotoOscillatorField::PI_F) * (1.0f / (2.0f * KuramotoOscillatorField::PI_F));
         const float coh = m_scratch->coherence[i];
@@ -225,46 +227,42 @@ void KuramotoTransportEffect::render(lightwaveos::plugins::EffectContext& ctx) {
         totalWeight += weightedE;
     }
 
-    // Inject accumulated energy at CENTER (position 0)
+    // Inject accumulated energy at CENTRE (position 0).
     if (centerEnergy > 0.01f && totalWeight > 0.001f) {
-        // Cap centre injection so coherence-edge injections remain visible.
-        const float centerCap = totalEventEnergy * 0.40f;
-        const float centerEnergyLimited = fminf(centerEnergy, centerCap);
-        if (centerEnergyLimited > 0.0f) {
-            // Average phase and coherence
-            const float avgPhase = centerPhaseSum / totalWeight;
-            const float avgCoh = centerCohSum / totalWeight;
+        // Average phase and coherence.
+        const float avgPhase = centerPhaseSum / totalWeight;
+        const float avgCoh = centerCohSum / totalWeight;
 
-            // Color from averaged phase
-            const uint8_t palIdx = (uint8_t)(baseHue + (uint8_t)(avgPhase * 255.0f) + (uint8_t)(avgCoh * 48.0f));
-            const uint8_t bri = (uint8_t)(255.0f * clamp01(0.25f + 0.75f * clamp01(centerEnergyLimited)));
-            CRGB c = ctx.palette.getColor(palIdx, bri);
+        // Colour from averaged phase.
+        const uint8_t palIdx = (uint8_t)(baseHue + (uint8_t)(avgPhase * 255.0f) + (uint8_t)(avgCoh * 48.0f));
+        const uint8_t bri = (uint8_t)(255.0f * clamp01(0.25f + 0.75f * clamp01(centerEnergy)));
+        CRGB c = ctx.palette.getColor(palIdx, bri);
 
-            // Spread based on average coherence
-            const float spreadVal = 0.5f + 1.0f * (1.0f - avgCoh);
+        // Spread based on average coherence.
+        const float spreadVal = 0.5f + 1.0f * (1.0f - avgCoh);
 
-            // Amount: accumulated energy * injection gain, clamped
-            const float amount = clamp01(centerEnergyLimited * (0.5f + 0.5f * injectGain));
+        // Amount: accumulated energy * injection gain.
+        const float amount = clamp01(centerEnergy * (0.5f + 0.5f * injectGain));
 
-            // Inject at CENTER (position 0 = center of radial buffer)
-            m_transport.injectAtPos(zid, radialLen, 0.0f, c, amount, spreadVal);
-        }
+        // Inject at CENTRE (position 0 = centre of radial buffer).
+        m_transport.injectAtPos(zid, radialLen, 0.0f, c, amount, spreadVal);
     }
 
-    // Inject at event locations to preserve coherence-edge structure.
+    // Also inject smaller amounts at event locations for texture (but much weaker).
     for (uint16_t i = 1; i < radialLen && i < KuramotoOscillatorField::N; ++i) {
         const float e = m_scratch->event[i];
-        if (e <= 0.05f) continue;
+        if (e <= 0.05f) continue;  // Higher threshold for non-centre injection
 
-        // Weak edge texture: flat 0.15x falloff preserves coherence-edge visibility.
-        const float falloff = 0.15f;
+        // Much weaker injection away from centre.
+        const float distNorm = (float)i / (float)radialLen;
+        const float falloff = 0.15f * expf(-2.0f * distNorm);  // Very weak away from centre
 
         const float th = m_field.theta(zid)[i];
         const float phase01 = (KuramotoOscillatorField::wrapPi(th) + KuramotoOscillatorField::PI_F) * (1.0f / (2.0f * KuramotoOscillatorField::PI_F));
         const float coh = m_scratch->coherence[i];
 
         const uint8_t palIdx = (uint8_t)(baseHue + (uint8_t)(phase01 * 255.0f) + (uint8_t)(coh * 48.0f));
-        const uint8_t bri = (uint8_t)(255.0f * clamp01(0.18f + 0.45f * e));
+        const uint8_t bri = (uint8_t)(255.0f * clamp01(0.15f + 0.35f * e));
         CRGB c = ctx.palette.getColor(palIdx, bri);
 
         const float spreadVal = 0.3f + 0.7f * (1.0f - coh);
@@ -273,13 +271,14 @@ void KuramotoTransportEffect::render(lightwaveos::plugins::EffectContext& ctx) {
         m_transport.injectAtPos(zid, radialLen, (float)i, c, amount, spreadVal);
     }
 
-    // --- Readout to LEDs with tone mapping + centre-origin symmetry
+    // --- Readout to LEDs with tone mapping + centre-origin symmetry.
     // Brightness is applied inside TransportBuffer::readoutToLeds() via ctx.brightness.
     // We control only "scene exposure" here (ties to intensity, not audio).
-    const float exposure = 1.2f + 1.8f * injectGain;                   // brighter output
-    const float satBoost = 0.10f + 0.35f * (1.0f - sync01) + 0.10f*mood01; // more haze in incoherent regimes
+    const float exposure = 1.2f + 1.8f * injectGain;                      // brighter output
+    const float satBoost = 0.10f + 0.35f * (1.0f - sync01) + 0.10f * mood01; // more haze in incoherent regimes
 
     m_transport.readoutToLeds(zid, ctx, radialLen, exposure, satBoost);
+
 }
 
 } // namespace lightwaveos::effects::ieffect

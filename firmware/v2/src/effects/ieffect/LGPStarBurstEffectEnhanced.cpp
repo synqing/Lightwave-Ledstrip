@@ -33,8 +33,7 @@ bool LGPStarBurstEnhancedEffect::init(plugins::EffectContext& ctx) {
     m_phase = 0.0f;
     m_burst = 0.0f;
     m_lastHopSeq = 0;
-    m_dominantBin = 0;
-    m_dominantBinSmooth = 0.0f;
+    m_chromaAngle = 0.0f;
     m_subBassEnergy = 0.0f;
     m_targetSubBass = 0.0f;
     m_hihatSparkle = 0.0f;
@@ -73,16 +72,6 @@ void LGPStarBurstEnhancedEffect::render(plugins::EffectContext& ctx) {
             // Update chromagram targets
             for (uint8_t i = 0; i < 12; i++) {
                 m_chromaTargets[i] = ctx.audio.controlBus.heavy_chroma[i];
-            }
-
-            // Simple chroma analysis for color (dominant bin only) - use smoothed values
-            float maxBinVal = 0.0f;
-            for (uint8_t i = 0; i < 12; ++i) {
-                float bin = m_chromaSmoothed[i];
-                if (bin > maxBinVal) {
-                    maxBinVal = bin;
-                    m_dominantBin = i;
-                }
             }
 
             // Enhanced: Snare = burst with sub-bass boost
@@ -124,11 +113,9 @@ void LGPStarBurstEnhancedEffect::render(plugins::EffectContext& ctx) {
         if (m_hihatSparkle < 0.01f) m_hihatSparkle = 0.0f;
     }
 
-    // Smooth dominant bin (for color stability) - true exponential, tau=250ms
-    float alphaBin = 1.0f - expf(-rawDt / 0.25f);
-    m_dominantBinSmooth += (m_dominantBin - m_dominantBinSmooth) * alphaBin;
-    if (m_dominantBinSmooth < 0.0f) m_dominantBinSmooth = 0.0f;
-    if (m_dominantBinSmooth > 11.0f) m_dominantBinSmooth = 11.0f;
+    // Circular chroma hue (replaces argmax + linear EMA to eliminate bin-flip rainbow sweeps)
+    uint8_t chromaHue = effects::chroma::circularChromaHueSmoothed(
+        ctx.audio.controlBus.heavy_chroma, m_chromaAngle, rawDt, 0.20f);
 
     // Enhanced: Use 64-bin sub-bass for speed (more responsive)
     float heavyEnergy = 0.0f;
@@ -202,7 +189,7 @@ void LGPStarBurstEnhancedEffect::render(plugins::EffectContext& ctx) {
     // Anti-aliased burst core at true center (79.5) using SubpixelRenderer
     // Lower threshold from 0.05 to 0.02 for more visibility
     if (m_burst > 0.02f) {
-        uint8_t baseHue = (uint8_t)(ctx.gHue + m_dominantBinSmooth * (255.0f / 12.0f));
+        uint8_t baseHue = (uint8_t)(ctx.gHue + chromaHue);
         CRGB burstColor = ctx.palette.getColor(baseHue, 255);
         // Enhanced: Boost brightness with sub-bass and hi-hat sparkle
         // Use sqrt for gentler curve on burst intensity
@@ -246,7 +233,7 @@ void LGPStarBurstEnhancedEffect::render(plugins::EffectContext& ctx) {
         pattern = fmaxf(0.2f, pattern);
         uint8_t brightness = (uint8_t)(pattern * 255.0f * intensityNorm);
         uint8_t paletteIndex = (uint8_t)(distFromCenter * 2.0f + pattern * 50.0f);
-        uint8_t baseHue = (uint8_t)(ctx.gHue + m_dominantBinSmooth * (255.0f / 12.0f));
+        uint8_t baseHue = (uint8_t)(ctx.gHue + chromaHue);
 
         ctx.leds[i] = ctx.palette.getColor((uint8_t)(baseHue + paletteIndex), brightness);
         if (i + STRIP_LENGTH < ctx.ledCount) {

@@ -21,4 +21,10 @@
 | #35098 | 2:49 AM | 🔵 | SbWaveform310RefEffect header shows PSRAM struct lacking per-zone dimensions and multiple plain state variables | ~618 |
 | #35058 | 2:33 AM | 🔴 | SbWaveform310RefEffect fixed with adaptive int16 normalization, dt-correct smoothing, and no local silence attenuation | ~823 |
 | #35041 | 2:27 AM | 🔴 | Audio-reactive effects timing and normalization fixes across multiple effect families | ~664 |
+
+### Feb 21, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #36991 | 12:45 AM | 🔵 | Audio-reactive LED effects audit completed - 19 files analyzed for frame-rate independence | ~1206 |
 </claude-mem-context>

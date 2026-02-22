@@ -4,6 +4,7 @@
  */
 
 #include "LGPSpectrumBarsEffect.h"
+#include "ChromaUtils.h"
 #include "../CoreEffects.h"
 
 #ifndef NATIVE_BUILD
@@ -24,23 +25,6 @@ static inline const float* selectChroma12(const audio::ControlBusFrame& cb) {
     return cb.chroma;
 }
 
-static inline uint8_t dominantChromaBin12(const float chroma[audio::CONTROLBUS_NUM_CHROMA]) {
-    uint8_t best = 0;
-    float bestV = chroma[0];
-    for (uint8_t i = 1; i < audio::CONTROLBUS_NUM_CHROMA; ++i) {
-        float v = chroma[i];
-        if (v > bestV) {
-            bestV = v;
-            best = i;
-        }
-    }
-    return best;
-}
-
-static inline uint8_t chromaBinToHue(uint8_t bin) {
-    return (uint8_t)(bin * 21);
-}
-
 static inline float clamp01(float v) {
     if (v < 0.0f) return 0.0f;
     if (v > 1.0f) return 1.0f;
@@ -52,6 +36,7 @@ static inline float clamp01(float v) {
 bool LGPSpectrumBarsEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
     memset(m_smoothedBands, 0, sizeof(m_smoothedBands));
+    m_chromaAngle = 0.0f;
     return true;
 }
 
@@ -79,12 +64,13 @@ void LGPSpectrumBarsEffect::render(plugins::EffectContext& ctx) {
     // Clear buffer
     memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
 
-    // Musically anchored hue (non-rainbow): dominant chroma bin, stable per hop.
+    // Musically anchored hue (non-rainbow): circular chroma mean, smoothed.
     uint8_t baseHue = ctx.gHue;
 #if FEATURE_AUDIO_SYNC
     if (ctx.audio.available) {
         const float* chroma = selectChroma12(ctx.audio.controlBus);
-        baseHue = chromaBinToHue(dominantChromaBin12(chroma));
+        baseHue = effects::chroma::circularChromaHueSmoothed(
+            chroma, m_chromaAngle, dt, 0.20f);
     }
 #endif
 

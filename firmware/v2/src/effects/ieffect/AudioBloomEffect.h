@@ -18,6 +18,7 @@
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
 #include <esp_heap_caps.h>
+#include "../../config/effect_ids.h"
 #endif
 
 namespace lightwaveos {
@@ -29,6 +30,8 @@ constexpr uint16_t HALF_LENGTH = 80;
 
 class AudioBloomEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_AUDIO_BLOOM;
+
     AudioBloomEffect() = default;
     ~AudioBloomEffect() override = default;
 

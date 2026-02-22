@@ -26,6 +26,11 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../../plugins/runtime/LegacyEffectAdapter.h"
+#include "../../config/chip_config.h"
+#include "../../config/audio_config.h"
+#if CHIP_ESP32_S3 && !defined(NATIVE_BUILD)
+#include "../../hal/esp32s3/StatusStripTouch.h"
+#endif
 #include <math.h>
 #if FEATURE_VALIDATION_PROFILING
 #include "../../core/system/ValidationProfiler.h"
@@ -109,7 +114,7 @@ static audio::MusicalGridTuning toMusicalGridTuning(const audio::AudioContractTu
 
 RendererActor::RendererActor()
     : Actor(ActorConfigs::Renderer())
-    , m_currentEffect(0)
+    , m_currentEffect(INVALID_EFFECT_ID)
     , m_brightness(LedConfig::DEFAULT_BRIGHTNESS)
     , m_speed(LedConfig::DEFAULT_SPEED)
     , m_paletteIndex(0)
@@ -120,7 +125,7 @@ RendererActor::RendererActor()
     , m_variation(0)
     , m_mood(128)  // Default: balanced reactive/smooth
     , m_fadeAmount(20)
-    , m_effectCount(0)
+    , m_registryCount(0)
     , m_lastFrameTime(0)
     , m_frameCount(0)
     , m_effectTimeSeconds(0.0f)
@@ -130,7 +135,7 @@ RendererActor::RendererActor()
     , m_zoneComposer(nullptr)
 #if FEATURE_TRANSITIONS
     , m_transitionEngine(nullptr)
-    , m_pendingEffect(0)
+    , m_pendingEffect(INVALID_EFFECT_ID)
     , m_transitionPending(false)
 #endif
     , m_captureEnabled(false)
@@ -165,11 +170,12 @@ RendererActor::RendererActor()
 #endif
 
     // Initialize effect registry
-    for (uint8_t i = 0; i < MAX_EFFECTS; i++) {
-        m_effects[i].name = nullptr;
-        m_effects[i].effect = nullptr;
-        m_effects[i].active = false;
-        m_legacyAdapters[i] = nullptr;
+    for (uint16_t i = 0; i < MAX_EFFECTS; i++) {
+        m_registry[i].id = INVALID_EFFECT_ID;
+        m_registry[i].name = nullptr;
+        m_registry[i].effect = nullptr;
+        m_registry[i].legacyAdapter = nullptr;
+        m_registry[i].active = false;
     }
 
     // Default palette - load from master palette system (index 0: Sunset Real)
@@ -220,64 +226,104 @@ void RendererActor::getBufferCopy(CRGB* outBuffer) const
 // Effect Registration
 // ============================================================================
 
-bool RendererActor::registerEffect(uint8_t id, const char* name, EffectRenderFn fn)
+RendererActor::EffectRegistration* RendererActor::findById(EffectId id)
 {
-    if (id >= MAX_EFFECTS || name == nullptr || fn == nullptr) {
+    for (uint16_t i = 0; i < m_registryCount; ++i) {
+        if (m_registry[i].id == id && m_registry[i].active) {
+            return &m_registry[i];
+        }
+    }
+    return nullptr;
+}
+
+const RendererActor::EffectRegistration* RendererActor::findById(EffectId id) const
+{
+    for (uint16_t i = 0; i < m_registryCount; ++i) {
+        if (m_registry[i].id == id && m_registry[i].active) {
+            return &m_registry[i];
+        }
+    }
+    return nullptr;
+}
+
+bool RendererActor::registerEffect(EffectId id, const char* name, EffectRenderFn fn)
+{
+    if (id == INVALID_EFFECT_ID || name == nullptr || fn == nullptr) {
         return false;
     }
 
-    // Create LegacyEffectAdapter to wrap function pointer
-    // Allocate adapter (owned by RendererActor)
-    if (m_legacyAdapters[id] != nullptr) {
-        // Already registered - clean up old adapter
-        delete m_legacyAdapters[id];
+    // Check for existing registration (update in place)
+    auto* existing = findById(id);
+    if (existing) {
+        if (existing->legacyAdapter) {
+            delete existing->legacyAdapter;
+        }
+        existing->legacyAdapter = new plugins::runtime::LegacyEffectAdapter(name, fn);
+        existing->effect = existing->legacyAdapter;
+        existing->name = name;
+        LW_LOGD("Re-registered effect 0x%04X: %s (legacy)", id, name);
+        return true;
     }
-    
-    m_legacyAdapters[id] = new plugins::runtime::LegacyEffectAdapter(name, fn);
-    if (m_legacyAdapters[id] == nullptr) {
+
+    // Append new registration
+    if (m_registryCount >= MAX_EFFECTS) {
+        return false;
+    }
+
+    auto* adapter = new plugins::runtime::LegacyEffectAdapter(name, fn);
+    if (adapter == nullptr) {
         return false;  // Allocation failed
     }
 
-    m_effects[id].name = name;
-    m_effects[id].effect = m_legacyAdapters[id];
-    m_effects[id].active = true;
+    EffectRegistration& reg = m_registry[m_registryCount];
+    reg.id = id;
+    reg.name = name;
+    reg.effect = adapter;
+    reg.legacyAdapter = adapter;
+    reg.active = true;
+    m_registryCount++;
 
-    // Update count
-    if (id >= m_effectCount) {
-        m_effectCount = id + 1;
-    }
-
-    LW_LOGD("Registered effect %d: %s (legacy -> IEffect adapter)", id, name);
-
+    LW_LOGD("Registered effect 0x%04X: %s (legacy -> IEffect adapter)", id, name);
     return true;
 }
 
-bool RendererActor::registerEffect(uint8_t id, plugins::IEffect* effect)
+bool RendererActor::registerEffect(EffectId id, plugins::IEffect* effect)
 {
-    if (id >= MAX_EFFECTS || effect == nullptr) {
+    if (id == INVALID_EFFECT_ID || effect == nullptr) {
         return false;
     }
 
-    // Clean up any existing legacy adapter for this ID
-    if (m_legacyAdapters[id] != nullptr) {
-        delete m_legacyAdapters[id];
-        m_legacyAdapters[id] = nullptr;
+    // Check for existing registration (update in place)
+    auto* existing = findById(id);
+    if (existing) {
+        // Clean up any legacy adapter
+        if (existing->legacyAdapter) {
+            delete existing->legacyAdapter;
+            existing->legacyAdapter = nullptr;
+        }
+        const plugins::EffectMetadata& meta = effect->getMetadata();
+        existing->name = meta.name;
+        existing->effect = effect;
+        LW_LOGD("Re-registered effect 0x%04X: %s (IEffect native)", id, meta.name);
+        return true;
     }
 
-    // Get name from effect metadata
+    // Append new registration
+    if (m_registryCount >= MAX_EFFECTS) {
+        return false;
+    }
+
     const plugins::EffectMetadata& meta = effect->getMetadata();
-    
-    m_effects[id].name = meta.name;
-    m_effects[id].effect = effect;
-    m_effects[id].active = true;
 
-    // Update count
-    if (id >= m_effectCount) {
-        m_effectCount = id + 1;
-    }
+    EffectRegistration& reg = m_registry[m_registryCount];
+    reg.id = id;
+    reg.name = meta.name;
+    reg.effect = effect;
+    reg.legacyAdapter = nullptr;
+    reg.active = true;
+    m_registryCount++;
 
-    LW_LOGD("Registered effect %d: %s (IEffect native)", id, meta.name);
-
+    LW_LOGD("Registered effect 0x%04X: %s (IEffect native)", id, meta.name);
     return true;
 }
 
@@ -285,65 +331,48 @@ bool RendererActor::registerEffect(uint8_t id, plugins::IEffect* effect)
 // IEffectRegistry Implementation
 // ============================================================================
 
-bool RendererActor::unregisterEffect(uint8_t id)
+bool RendererActor::unregisterEffect(EffectId id)
 {
-    if (id >= MAX_EFFECTS) {
+    auto* reg = findById(id);
+    if (!reg) {
         return false;
     }
 
-    if (m_effects[id].active) {
-        m_effects[id].active = false;
-        m_effects[id].effect = nullptr;
-        m_effects[id].name = nullptr;
+    reg->active = false;
+    reg->effect = nullptr;
+    reg->name = nullptr;
 
-        // Clean up legacy adapter if present
-        if (m_legacyAdapters[id] != nullptr) {
-            delete m_legacyAdapters[id];
-            m_legacyAdapters[id] = nullptr;
-        }
-
-        // Update count (recalculate from active effects)
-        // This is safe but may not be exact if effects are unregistered out of order
-        // The count represents the highest registered ID, not the actual active count
-        uint8_t highestActive = 0;
-        for (uint8_t i = 0; i < MAX_EFFECTS; i++) {
-            if (m_effects[i].active && i >= highestActive) {
-                highestActive = i + 1;
-            }
-        }
-        m_effectCount = highestActive;
-
-        LW_LOGD("Unregistered effect %d", id);
-        return true;
+    // Clean up legacy adapter if present
+    if (reg->legacyAdapter != nullptr) {
+        delete reg->legacyAdapter;
+        reg->legacyAdapter = nullptr;
     }
 
-    return false;
+    LW_LOGD("Unregistered effect 0x%04X", id);
+    return true;
 }
 
-bool RendererActor::isEffectRegistered(uint8_t id) const
+bool RendererActor::isEffectRegistered(EffectId id) const
 {
-    if (id >= MAX_EFFECTS) {
-        return false;
-    }
-    return m_effects[id].active;
+    return findById(id) != nullptr;
 }
 
-uint8_t RendererActor::getRegisteredCount() const
+uint16_t RendererActor::getRegisteredCount() const
 {
-    // Count actual active effects (not just highest ID)
-    uint8_t count = 0;
-    for (uint8_t i = 0; i < MAX_EFFECTS; i++) {
-        if (m_effects[i].active) {
+    uint16_t count = 0;
+    for (uint16_t i = 0; i < m_registryCount; i++) {
+        if (m_registry[i].active) {
             count++;
         }
     }
     return count;
 }
 
-const char* RendererActor::getEffectName(uint8_t id) const
+const char* RendererActor::getEffectName(EffectId id) const
 {
-    if (id < MAX_EFFECTS && m_effects[id].active) {
-        return m_effects[id].name;
+    const auto* reg = findById(id);
+    if (reg) {
+        return reg->name;
     }
     return "Unknown";
 }
@@ -358,59 +387,67 @@ const char* RendererActor::getPaletteName(uint8_t id) const
     return lightwaveos::palettes::getPaletteName(id);
 }
 
-plugins::IEffect* RendererActor::getEffectInstance(uint8_t id) const
+plugins::IEffect* RendererActor::getEffectInstance(EffectId id) const
 {
-    if (id < MAX_EFFECTS && m_effects[id].active) {
-        return m_effects[id].effect;
+    const auto* reg = findById(id);
+    if (reg) {
+        return reg->effect;
     }
     return nullptr;
 }
 
 /**
- * @brief Validate and clamp effectId to safe range [0, MAX_EFFECTS-1]
- * 
- * DEFENSIVE CHECK: Prevents LoadProhibited crashes from corrupted effect ID.
- * 
- * RendererActor uses m_effects[MAX_EFFECTS] array where MAX_EFFECTS = 100. If
- * effectId is corrupted (e.g., by memory corruption, invalid input, or race
- * condition), accessing m_effects[effectId] would cause out-of-bounds access
- * and crash.
- * 
- * This validation ensures we always access valid array indices, returning safe
- * default (effect 0) if corruption is detected.
- * 
+ * @brief Validate effect ID exists in the registry
+ *
+ * DEFENSIVE CHECK: Ensures the effect ID is registered and active before use.
+ * Returns the input ID if valid, or falls back to the first registered effect.
+ *
  * @param effectId Effect ID to validate
- * @return Valid effect ID in [0, MAX_EFFECTS-1], defaults to 0 if out of bounds
+ * @return Valid EffectId (the input if registered, or first registered effect)
  */
-uint8_t RendererActor::validateEffectId(uint8_t effectId) const {
+EffectId RendererActor::validateEffectId(EffectId effectId) const {
 #if FEATURE_VALIDATION_PROFILING
 #ifndef NATIVE_BUILD
     int64_t start = esp_timer_get_time();
-#else
-    int64_t start = 0;
 #endif
 #endif
-    // Validate effectId is within bounds [0, MAX_EFFECTS-1]
-    if (effectId >= MAX_EFFECTS) {
+    // Check if the ID exists in the registry
+    if (findById(effectId) != nullptr) {
 #if FEATURE_VALIDATION_PROFILING
 #ifndef NATIVE_BUILD
-        lightwaveos::core::system::ValidationProfiler::recordCall("validateEffectId", 
+        lightwaveos::core::system::ValidationProfiler::recordCall("validateEffectId",
                                                                     esp_timer_get_time() - start);
 #else
         lightwaveos::core::system::ValidationProfiler::recordCall("validateEffectId", 0);
 #endif
 #endif
-        return 0;  // Return safe default (effect 0)
+        return effectId;
     }
+
+    // Fall back to first registered effect
+    for (uint16_t i = 0; i < m_registryCount; ++i) {
+        if (m_registry[i].active) {
 #if FEATURE_VALIDATION_PROFILING
 #ifndef NATIVE_BUILD
-    lightwaveos::core::system::ValidationProfiler::recordCall("validateEffectId", 
+            lightwaveos::core::system::ValidationProfiler::recordCall("validateEffectId",
+                                                                        esp_timer_get_time() - start);
+#else
+            lightwaveos::core::system::ValidationProfiler::recordCall("validateEffectId", 0);
+#endif
+#endif
+            return m_registry[i].id;
+        }
+    }
+
+#if FEATURE_VALIDATION_PROFILING
+#ifndef NATIVE_BUILD
+    lightwaveos::core::system::ValidationProfiler::recordCall("validateEffectId",
                                                                 esp_timer_get_time() - start);
 #else
     lightwaveos::core::system::ValidationProfiler::recordCall("validateEffectId", 0);
 #endif
 #endif
-    return effectId;
+    return INVALID_EFFECT_ID;
 }
 
 // ============================================================================
@@ -437,14 +474,15 @@ void RendererActor::onStart()
     m_lastFrameTime = micros();
 
     LW_LOGI("Ready - %d effects, brightness=%d, target=%d FPS",
-             m_effectCount, m_brightness, LedConfig::TARGET_FPS);
+             m_registryCount, m_brightness, LedConfig::TARGET_FPS);
 }
 
 void RendererActor::onMessage(const Message& msg)
 {
     switch (msg.type) {
         case MessageType::SET_EFFECT:
-            handleSetEffect(msg.param1);
+            // ActorSystem packs EffectId as 2 bytes: param1=low, param2=high
+            handleSetEffect(static_cast<EffectId>(msg.param1) | (static_cast<EffectId>(msg.param2) << 8));
             break;
 
         case MessageType::SET_BRIGHTNESS:
@@ -503,7 +541,8 @@ void RendererActor::onMessage(const Message& msg)
             break;
 
         case MessageType::START_TRANSITION:
-            handleStartTransition(msg.param1, msg.param2);
+            // ActorSystem packs EffectId as 2 bytes: param1=low, param2=high, param3=transitionType
+            handleStartTransition(static_cast<EffectId>(msg.param1) | (static_cast<EffectId>(msg.param2) << 8), msg.param3);
             break;
 
         case MessageType::HEALTH_CHECK:
@@ -565,7 +604,7 @@ void RendererActor::onMessage(const Message& msg)
 #if FEATURE_AUDIO_BACKEND_ESV11
                 // Inject into renderer-domain beat clock (no MusicalGrid in ESV11 builds).
                 uint64_t now_us = micros();
-                uint32_t sr = m_lastAudioTime.sample_rate_hz ? m_lastAudioTime.sample_rate_hz : 12800;
+                uint32_t sr = m_lastAudioTime.sample_rate_hz ? m_lastAudioTime.sample_rate_hz : audio::SAMPLE_RATE;
                 m_esBeatClock.injectExternalBeat(
                     bpm,
                     phase01,
@@ -616,7 +655,7 @@ void RendererActor::onMessage(const Message& msg)
                         if (bpm > 0.0f) {
 #if FEATURE_AUDIO_BACKEND_ESV11
                             uint64_t now_us = micros();
-                            uint32_t sr = m_lastAudioTime.sample_rate_hz ? m_lastAudioTime.sample_rate_hz : 12800;
+                            uint32_t sr = m_lastAudioTime.sample_rate_hz ? m_lastAudioTime.sample_rate_hz : audio::SAMPLE_RATE;
                             m_esBeatClock.injectExternalBeat(bpm, 0.0f, false, false, 0, now_us, sr);
 #else
                             m_musicalGrid.injectExternalBeat(bpm, 0.0f, false, false, 0);
@@ -649,7 +688,7 @@ void RendererActor::onMessage(const Message& msg)
                         if (bpm > 0.0f) {
 #if FEATURE_AUDIO_BACKEND_ESV11
                             uint64_t now_us = micros();
-                            uint32_t sr = m_lastAudioTime.sample_rate_hz ? m_lastAudioTime.sample_rate_hz : 12800;
+                            uint32_t sr = m_lastAudioTime.sample_rate_hz ? m_lastAudioTime.sample_rate_hz : audio::SAMPLE_RATE;
                             m_esBeatClock.injectExternalBeat(bpm, 0.0f, false, false, 0, now_us, sr);
 #else
                             m_musicalGrid.injectExternalBeat(bpm, 0.0f, false, false, 0);
@@ -713,8 +752,8 @@ void RendererActor::onTick()
     // Post-render color correction pipeline (skip for sensitive effects)
     // Includes: LGP-sensitive, stateful, PHYSICS_BASED, MATHEMATICAL families
     // See PatternRegistry::shouldSkipColorCorrection() for full list
-    uint8_t safeEffect = validateEffectId(m_currentEffect);
-    if (!::PatternRegistry::shouldSkipColorCorrection(safeEffect)) {
+    EffectId safeEffectTick = validateEffectId(m_currentEffect);
+    if (!::PatternRegistry::shouldSkipColorCorrection(safeEffectTick)) {
         enhancement::ColorCorrectionEngine::getInstance().processBuffer(m_leds, LedConfig::TOTAL_LEDS);
         m_correctionApplyCount++;
     } else {
@@ -727,7 +766,9 @@ void RendererActor::onTick()
     }
 
     // Push to strips
-    // NOTE: showLeds() blocks for ~9.6ms (WS2812 wire time for 320 LEDs)
+    // NOTE: showLeds() blocks for ~4.8ms (WS2812 wire time for 160 LEDs).
+    // All 3 RMT channels (strip1, strip2, status) transmit in parallel,
+    // so blocking time = max strip length (160 LEDs), not total (350 LEDs).
     // During this blocking I/O, FreeRTOS can schedule other tasks on Core 1,
     // including IDLE1 which feeds the watchdog. No explicit yield needed before.
     showLeds();
@@ -768,10 +809,12 @@ void RendererActor::onTick()
     updateStats(frameTimeUs, rawFrameTimeUs);
 
     // Publish FRAME_RENDERED event (every 10 frames to reduce overhead)
+    // EffectId packed as 2 bytes: param1=low, param2=high
     if ((m_frameCount % 10) == 0) {
         Message evt(MessageType::FRAME_RENDERED);
-        evt.param1 = m_currentEffect;
-        evt.param2 = m_stats.currentFPS;
+        evt.param1 = static_cast<uint8_t>(m_currentEffect & 0xFF);
+        evt.param2 = static_cast<uint8_t>((m_currentEffect >> 8) & 0xFF);
+        evt.param3 = m_stats.currentFPS;
         evt.param4 = m_frameCount;
         bus::MessageBus::instance().publish(evt);
     }
@@ -781,7 +824,7 @@ void RendererActor::onTick()
 
 #ifndef NATIVE_BUILD
     // Cooperative yield at end of frame - use vTaskDelay(0) to yield without
-    // adding ~10ms latency. The ~9.6ms showLeds() blocking already provides
+    // adding ~10ms latency. The ~4.8ms showLeds() blocking already provides
     // ample time for IDLE1 to run and feed the watchdog.
     vTaskDelay(0);
 #endif
@@ -941,7 +984,7 @@ void RendererActor::getBandsDebugSnapshot(BandsDebugSnapshot& out) const {
 
 #endif
 
-bool RendererActor::enqueueEffectParameterUpdate(uint8_t effectId, const char* name, float value) {
+bool RendererActor::enqueueEffectParameterUpdate(EffectId effectId, const char* name, float value) {
     if (!name || name[0] == '\0') {
         return false;
     }
@@ -968,13 +1011,9 @@ void RendererActor::applyPendingEffectParameterUpdates() {
     uint8_t head = m_paramQueueHead.load(std::memory_order_acquire);
     while (tail != head) {
         const EffectParamUpdate& update = m_paramQueue[tail];
-        if (update.effectId < m_effectCount) {
-            // Validate effectId before access
-            uint8_t safeEffectId = validateEffectId(update.effectId);
-            plugins::IEffect* effect = m_effects[safeEffectId].effect;
-            if (effect) {
-                effect->setParameter(update.name, update.value);
-            }
+        const auto* reg = findById(update.effectId);
+        if (reg && reg->effect) {
+            reg->effect->setParameter(update.name, update.value);
         }
         tail = static_cast<uint8_t>((tail + 1) % PARAM_QUEUE_SIZE);
         m_paramQueueTail.store(tail, std::memory_order_release);
@@ -1099,7 +1138,13 @@ void RendererActor::initLeds()
 
 void RendererActor::renderFrame()
 {
-#if FEATURE_AUDIO_SYNC && !FEATURE_AUDIO_BACKEND_ESV11
+#if FEATURE_AUDIO_SYNC
+#if FEATURE_AUDIO_BACKEND_ESV11
+    // ESV11: beat data flows through ControlBusFrame es_* fields (handled below)
+#elif FEATURE_AUDIO_BACKEND_PIPELINECORE
+    // PipelineCore: No TempoTracker to advance — beat data arrives via ControlBusFrame
+    applyPendingAudioContractTuning();
+#else
     applyPendingAudioContractTuning();
 
     // Advance TempoTracker phase at 120 FPS
@@ -1136,6 +1181,7 @@ void RendererActor::renderFrame()
             }
         }
     }
+#endif
 #endif
     applyPendingEffectParameterUpdates();
 
@@ -1234,6 +1280,29 @@ void RendererActor::renderFrame()
 #if FEATURE_AUDIO_BACKEND_ESV11
         m_esBeatClock.tick(m_lastControlBus, sequence_changed, render_now);
         m_lastMusicalGrid = m_esBeatClock.snapshot();
+#elif FEATURE_AUDIO_BACKEND_PIPELINECORE
+        // Feed MusicalGrid using timestamped audio-domain observations.
+        // This avoids K1 shim timing (synthetic "now" beats) and keeps phase
+        // correction anchored to the AudioActor hop timestamp.
+        if (sequence_changed) {
+            const float confidence = m_lastControlBus.tempoLocked
+                ? m_lastControlBus.tempoConfidence
+                : 0.0f;
+            m_musicalGrid.OnTempoEstimate(
+                m_lastControlBus.t,
+                m_lastControlBus.tempoBpm,
+                confidence
+            );
+            if (m_lastControlBus.tempoLocked && m_lastControlBus.tempoBeatTick) {
+                m_musicalGrid.OnBeatObservation(
+                    m_lastControlBus.t,
+                    m_lastControlBus.tempoBeatStrength,
+                    false
+                );
+            }
+        }
+        m_musicalGrid.Tick(render_now);
+        m_musicalGrid.ReadLatest(m_lastMusicalGrid);
 #else
         m_musicalGrid.Tick(render_now);
         m_musicalGrid.ReadLatest(m_lastMusicalGrid);
@@ -1358,21 +1427,19 @@ void RendererActor::renderFrame()
     }
 
     // Single-effect mode
-    // Validate current effect ID before access
-    uint8_t safeEffect = validateEffectId(m_currentEffect);
-    if (safeEffect >= MAX_EFFECTS || !m_effects[safeEffect].active) {
+    // Validate current effect ID and find registry entry
+    EffectId safeEffect = validateEffectId(m_currentEffect);
+    const auto* safeReg = findById(safeEffect);
+    if (!safeReg || !safeReg->active) {
         // No effect - clear buffer
         memset(m_leds, 0, sizeof(m_leds));
         return;
     }
 
+    // safeEffect is the validated EffectId used throughout the render path
+
     // IEffect-only path (all effects are IEffect instances)
-    //
-    // IMPORTANT: Always use the validated/clamped `safeEffect` for both:
-    // - indexing m_effects[]
-    // - passing effectId into any downstream subsystems (e.g. audio mapping)
-    // Using m_currentEffect directly here is unsafe if it ever gets corrupted.
-    if (m_effects[safeEffect].effect != nullptr) {
+    if (safeReg->effect != nullptr) {
         plugins::EffectContext& ctx = m_effectContext;
         ctx.leds = m_leds;
         ctx.ledCount = LedConfig::TOTAL_LEDS;
@@ -1424,11 +1491,13 @@ void RendererActor::renderFrame()
             uint8_t mappedVariation = ctx.variation;
             uint8_t mappedHue = ctx.gHue;
 
+            float dtSeconds = static_cast<float>(deltaTimeMs) * 0.001f;
             audio::AudioMappingRegistry::instance().applyMappings(
                 safeEffect,
                 m_lastControlBus,
                 m_lastMusicalGrid,
                 ctx.audio.available,
+                dtSeconds,
                 mappedBrightness,
                 mappedSpeed,
                 mappedIntensity,
@@ -1498,7 +1567,7 @@ void RendererActor::renderFrame()
         ctx.frameNumber = m_effectFrameCount;
         ctx.totalTimeMs = static_cast<uint32_t>(m_effectTimeSeconds * 1000.0f + 0.5f);
 
-        m_effects[safeEffect].effect->render(ctx);
+        safeReg->effect->render(ctx);
     }
 
     // Increment hue for effects that use it
@@ -1552,12 +1621,12 @@ void RendererActor::showLeds()
     }
 
     // =========================================================================
-    // Hard silence gate for high-ID reactive effects (140+)
+    // Hard silence gate for late-pack reactive effects
     // Ensures no-audio state fades these effects to black.
     // =========================================================================
     {
-        const uint8_t safeEffect = validateEffectId(m_currentEffect);
-        const bool hardGateEffect = (safeEffect >= 140u) && ::PatternRegistry::isAudioReactive(safeEffect);
+        const EffectId safeId = validateEffectId(m_currentEffect);
+        const bool hardGateEffect = needsSilenceGate(safeId) && ::PatternRegistry::isAudioReactive(safeId);
         if (hardGateEffect) {
             float dt = m_effectContext.rawDeltaTimeSeconds;
             if (dt < 0.0001f) dt = 0.0001f;
@@ -1672,28 +1741,29 @@ void RendererActor::updateStats(uint32_t frameTimeUs, uint32_t rawFrameTimeUs)
     }
 }
 
-void RendererActor::handleSetEffect(uint8_t effectId)
+void RendererActor::handleSetEffect(EffectId effectId)
 {
-    if (effectId >= MAX_EFFECTS || !m_effects[effectId].active) {
-        LW_LOGW("Invalid effect ID: %d", effectId);
+    const EffectRegistration* newReg = findById(effectId);
+    if (!newReg) {
+        LW_LOGW("Invalid effect ID: 0x%04X", effectId);
         return;
     }
 
     if (m_currentEffect != effectId) {
-        // Validate oldEffect before accessing array
-        uint8_t oldEffect = validateEffectId(m_currentEffect);
+        EffectId oldEffectId = m_currentEffect;
 
         // Cleanup old effect (only if valid and active)
-        if (oldEffect < MAX_EFFECTS && m_effects[oldEffect].active && m_effects[oldEffect].effect != nullptr) {
-            LW_LOGI("IEffect cleanup: %s (ID %d)", m_effects[oldEffect].name, oldEffect);
-            m_effects[oldEffect].effect->cleanup();
+        const EffectRegistration* oldReg = findById(oldEffectId);
+        if (oldReg && oldReg->effect != nullptr) {
+            LW_LOGI("IEffect cleanup: %s (ID 0x%04X)", oldReg->name, oldEffectId);
+            oldReg->effect->cleanup();
         }
 
         m_currentEffect = effectId;
 
         // Initialize new effect
-        if (m_effects[effectId].effect != nullptr) {
-            LW_LOGI("IEffect init: %s (ID %d)", m_effects[effectId].name, effectId);
+        if (newReg->effect != nullptr) {
+            LW_LOGI("IEffect init: %s (ID 0x%04X)", newReg->name, effectId);
             plugins::EffectContext initCtx;
             initCtx.leds = m_leds;
             initCtx.ledCount = LedConfig::TOTAL_LEDS;
@@ -1715,18 +1785,18 @@ void RendererActor::handleSetEffect(uint8_t effectId)
             initCtx.zoneId = 0xFF;
             initCtx.zoneStart = 0;
             initCtx.zoneLength = 0;
-            
-            if (!m_effects[effectId].effect->init(initCtx)) {
+
+            if (!newReg->effect->init(initCtx)) {
                 // Initialization failed - revert to previous effect
-                m_currentEffect = oldEffect;
-                LW_LOGW("IEffect %d init failed, reverting to %d", effectId, oldEffect);
+                m_currentEffect = oldEffectId;
+                LW_LOGW("IEffect 0x%04X init failed, reverting to 0x%04X", effectId, oldEffectId);
                 return;
             }
             LW_LOGI("IEffect init: SUCCESS");
         }
 
-        LW_LOGI("Effect changed: %d (%s) -> %d (" LW_CLR_GREEN "%s" LW_ANSI_RESET ")",
-                 oldEffect, getEffectName(oldEffect),
+        LW_LOGI("Effect changed: 0x%04X (%s) -> 0x%04X (" LW_CLR_GREEN "%s" LW_ANSI_RESET ")",
+                 oldEffectId, getEffectName(oldEffectId),
                  effectId, getEffectName(effectId));
 
 #if FEATURE_AUDIO_SYNC
@@ -1734,10 +1804,9 @@ void RendererActor::handleSetEffect(uint8_t effectId)
         m_effectHasAudioMappings = audio::AudioMappingRegistry::instance().hasActiveMappings(effectId);
 #endif
 
-        // Reset high-ID reactive gate on effect change to prevent stale state carrying across patterns.
+        // Reset silence gate on effect change to prevent stale state carrying across patterns.
         {
-            const uint8_t safeNew = validateEffectId(effectId);
-            const bool hardGateNew = (safeNew >= 140u) && ::PatternRegistry::isAudioReactive(safeNew);
+            const bool hardGateNew = needsSilenceGate(effectId) && ::PatternRegistry::isAudioReactive(effectId);
             if (hardGateNew) {
                 bool activityNow = false;
                 if (m_sharedAudioCtx.available && !m_lastControlBus.isSilent) {
@@ -1754,10 +1823,12 @@ void RendererActor::handleSetEffect(uint8_t effectId)
             }
         }
 
-        // Publish EFFECT_CHANGED event
+        // Publish EFFECT_CHANGED event: new EffectId in param1+param2, old in param3+param4
         Message evt(MessageType::EFFECT_CHANGED);
-        evt.param1 = effectId;
-        evt.param2 = oldEffect;
+        evt.param1 = static_cast<uint8_t>(effectId & 0xFF);
+        evt.param2 = static_cast<uint8_t>((effectId >> 8) & 0xFF);
+        evt.param3 = static_cast<uint8_t>(oldEffectId & 0xFF);
+        evt.param4 = static_cast<uint8_t>((oldEffectId >> 8) & 0xFF);
         bus::MessageBus::instance().publish(evt);
     }
 }
@@ -1820,6 +1891,10 @@ void RendererActor::handleSetPalette(uint8_t paletteIndex)
         enhancement::ColorCorrectionEngine::getInstance().correctPalette(m_currentPalette, flags);
 
         LW_LOGD("Palette: %d (%s)", m_paletteIndex, getPaletteName(m_paletteIndex));
+
+#if CHIP_ESP32_S3 && !defined(NATIVE_BUILD)
+        statusStripShowPalette(m_paletteIndex);
+#endif
 
         // Publish PALETTE_CHANGED event (for other actors)
         Message evt(MessageType::PALETTE_CHANGED);
@@ -1888,11 +1963,11 @@ void RendererActor::handleSetFadeAmount(uint8_t fadeAmount)
 // Transition Methods
 // ============================================================================
 
-void RendererActor::handleStartTransition(uint8_t newEffectId, uint8_t transitionType)
+void RendererActor::handleStartTransition(EffectId newEffectId, uint8_t transitionType)
 {
-    // Validate effectId before access
-    uint8_t safeEffectId = validateEffectId(newEffectId);
-    if (safeEffectId >= MAX_EFFECTS || !m_effects[safeEffectId].active) return;
+    // Validate new effect exists in registry
+    EffectId safeEffectId = validateEffectId(newEffectId);
+    if (!findById(safeEffectId)) return;
 
 #if FEATURE_TRANSITIONS
     // Thread-safe handler called from message queue (Core 1)
@@ -1901,7 +1976,7 @@ void RendererActor::handleStartTransition(uint8_t newEffectId, uint8_t transitio
         transitionType = 0;  // Default to FADE
     }
 
-    uint8_t oldEffect = validateEffectId(m_currentEffect);
+    EffectId oldEffectId = m_currentEffect;
 
     // Copy current LED state as source
     memcpy(m_transitionSourceBuffer, m_leds, sizeof(m_transitionSourceBuffer));
@@ -1922,7 +1997,7 @@ void RendererActor::handleStartTransition(uint8_t newEffectId, uint8_t transitio
     );
 
     LW_LOGI("Transition started: %s -> %s (%s)",
-             getEffectName(oldEffect),
+             getEffectName(oldEffectId),
              getEffectName(safeEffectId),
              getTransitionName(type));
 #else
@@ -1931,14 +2006,14 @@ void RendererActor::handleStartTransition(uint8_t newEffectId, uint8_t transitio
 #endif
 }
 
-void RendererActor::startTransition(uint8_t newEffectId, uint8_t transitionType)
+void RendererActor::startTransition(EffectId newEffectId, uint8_t transitionType)
 {
     // DEPRECATED for external callers: unsafe from Core 0. Use ActorSystem::startTransition() instead.
     // Kept for internal Core 1 usage (ShowDirectorActor) only; request handlers must not call this directly.
     handleStartTransition(newEffectId, transitionType);
 }
 
-void RendererActor::startRandomTransition(uint8_t newEffectId)
+void RendererActor::startRandomTransition(EffectId newEffectId)
 {
 #if FEATURE_TRANSITIONS
     TransitionType type = TransitionEngine::getRandomTransition();

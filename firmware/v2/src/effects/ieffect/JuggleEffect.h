@@ -12,6 +12,7 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include <FastLED.h>
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -19,6 +20,8 @@ namespace ieffect {
 
 class JuggleEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_JUGGLE;
+
     JuggleEffect();
     ~JuggleEffect() override = default;
 
@@ -29,7 +32,7 @@ public:
     const plugins::EffectMetadata& getMetadata() const override;
 
 private:
-    // No instance state needed - uses beatsin16 which is deterministic
+    float m_chromaAngle = 0.0f;  // Circular chroma hue smoothing state
 };
 
 } // namespace ieffect

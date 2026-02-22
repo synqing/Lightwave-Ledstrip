@@ -26,6 +26,7 @@
 
 #include "../config/features.h"
 #include "../config/limits.h"
+#include "../config/effect_ids.h"
 
 #if FEATURE_WEB_SERVER
 
@@ -262,8 +263,8 @@ public:
      * All request handlers should use this cached state instead of direct renderer-> calls.
      */
     struct CachedRendererState {
-        uint8_t effectCount;
-        uint8_t currentEffect;
+        uint16_t effectCount;
+        EffectId currentEffect;
         uint8_t brightness;
         uint8_t speed;
         uint8_t paletteIndex;
@@ -285,8 +286,17 @@ public:
         } stats;
         // Effect names - pointers to stable strings in RendererActor (valid until next cache update)
         // Uses limits::MAX_EFFECTS (single source of truth)
-        static constexpr uint8_t MAX_CACHED_EFFECTS = limits::MAX_EFFECTS;
+        static constexpr uint16_t MAX_CACHED_EFFECTS = limits::MAX_EFFECTS;
         const char* effectNames[MAX_CACHED_EFFECTS];
+        EffectId effectIds[MAX_CACHED_EFFECTS];  // Registry index → EffectId mapping
+
+        // Look up effect name by EffectId (linear scan of cached IDs)
+        const char* findEffectName(EffectId id) const {
+            for (uint16_t i = 0; i < effectCount && i < MAX_CACHED_EFFECTS; i++) {
+                if (effectIds[i] == id) return effectNames[i];
+            }
+            return nullptr;
+        }
         // Audio tuning (if available) - simplified to avoid include dependency
 #if FEATURE_AUDIO_SYNC
         struct {
@@ -458,7 +468,7 @@ public:
     /**
      * @brief Notify clients of effect change
      */
-    void notifyEffectChange(uint8_t effectId, const char* name);
+    void notifyEffectChange(EffectId effectId, const char* name);
 
     /**
      * @brief Notify clients of parameter change

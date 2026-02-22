@@ -4,6 +4,8 @@
 #include <Arduino.h>
 #include <pgmspace.h>
 #include "ShowTypes.h"
+#include "../../config/effect_ids.h"
+
 
 // ============================================================================
 // BUILTIN SHOWS - 10 Choreographed Light Show Presets
@@ -26,13 +28,17 @@
 
 // Helper macros for cue data initialization
 // Data layout: {byte0, byte1, byte2, byte3}
-// CUE_EFFECT:          {effectId, transitionType, 0, 0}
+// CUE_EFFECT:          {effectId_lo, effectId_hi, transitionType, 0}
 // CUE_PARAMETER_SWEEP: {paramId, targetValue, durLow, durHigh} (dur in 256ms units, max 65535ms)
 // CUE_NARRATIVE:       {phase, tempoLow, tempoHigh, 0}
 
 // Duration encoding: split 16-bit into low/high bytes
 #define DUR_LO(ms) ((uint8_t)((ms) & 0xFF))
 #define DUR_HI(ms) ((uint8_t)(((ms) >> 8) & 0xFF))
+
+// EffectId encoding: split 16-bit into low/high bytes for ShowCue data[]
+#define EID_LO(eid) ((uint8_t)((::lightwaveos::eid) & 0xFF))
+#define EID_HI(eid) ((uint8_t)(((::lightwaveos::eid) >> 8) & 0xFF))
 
 // ============================================================================
 // SHOW 0: DAWN (3 minutes = 180,000 ms)
@@ -48,7 +54,7 @@ static const char PROGMEM DAWN_CH3_NAME[] = "Daylight";
 
 static const ShowCue PROGMEM DAWN_CUES[] = {
     // Chapter 0: Night Sky (0-45s) - Effect 6 (Aurora-like), low brightness
-    {0,      CUE_EFFECT,          ZONE_GLOBAL, {6, 0, 0, 0}},                    // Aurora effect
+    {0,      CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_BPM), EID_HI(EID_BPM), 0, 0}},  // Aurora effect
     {0,      CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_BRIGHTNESS, 40, 0, 0}},    // Instant low brightness
     {0,      CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_REST, DUR_LO(8000), DUR_HI(8000), 0}},
 
@@ -57,7 +63,7 @@ static const ShowCue PROGMEM DAWN_CUES[] = {
     {45000,  CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_BRIGHTNESS, 80, DUR_LO(45000), DUR_HI(45000)}},
 
     // Chapter 2: Sunrise (90s-150s) - Fire effect, peak intensity
-    {90000,  CUE_EFFECT,          ZONE_GLOBAL, {0, 2, 0, 0}},                    // Fire with transition
+    {90000,  CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_FIRE), EID_HI(EID_FIRE), 2, 0}},  // Fire with transition
     {90000,  CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_HOLD, DUR_LO(4000), DUR_HI(4000), 0}},
     {90000,  CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_BRIGHTNESS, 150, DUR_LO(30000), DUR_HI(30000)}},
 
@@ -88,28 +94,28 @@ static const char PROGMEM STORM_CH4_NAME[] = "Peace";
 
 static const ShowCue PROGMEM STORM_CUES[] = {
     // Calm (0-40s)
-    {0,      CUE_EFFECT,          ZONE_GLOBAL, {2, 0, 0, 0}},                    // Ocean
+    {0,      CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_PLASMA), EID_HI(EID_PLASMA), 0, 0}},  // Ocean
     {0,      CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_SPEED, 20, 0, 0}},
     {0,      CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_REST, DUR_LO(8000), DUR_HI(8000), 0}},
 
     // Building (40s-90s)
     {40000,  CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_BUILD, DUR_LO(5000), DUR_HI(5000), 0}},
     {40000,  CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_SPEED, 80, DUR_LO(50000), DUR_HI(50000)}},
-    {50000,  CUE_EFFECT,          ZONE_GLOBAL, {3, 1, 0, 0}},                    // Ripple
+    {50000,  CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_CONFETTI), EID_HI(EID_CONFETTI), 1, 0}},  // Ripple
 
     // Tempest (90s-150s)
-    {90000,  CUE_EFFECT,          ZONE_GLOBAL, {8, 3, 0, 0}},                    // Shockwave
+    {90000,  CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_RIPPLE), EID_HI(EID_RIPPLE), 3, 0}},  // Shockwave
     {90000,  CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_HOLD, DUR_LO(2500), DUR_HI(2500), 0}},
     {90000,  CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_BRIGHTNESS, 200, DUR_LO(20000), DUR_HI(20000)}},
     {120000, CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_INTENSITY, 255, DUR_LO(15000), DUR_HI(15000)}},
 
     // Lightning (150s-200s)
-    {150000, CUE_EFFECT,          ZONE_GLOBAL, {9, 4, 0, 0}},                    // Collision
+    {150000, CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_HEARTBEAT), EID_HI(EID_HEARTBEAT), 4, 0}},  // Collision
     {150000, CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_HOLD, DUR_LO(2000), DUR_HI(2000), 0}},
     {170000, CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_BRIGHTNESS, 180, DUR_LO(15000), DUR_HI(15000)}},
 
     // Peace (200s-240s)
-    {200000, CUE_EFFECT,          ZONE_GLOBAL, {2, 2, 0, 0}},                    // Back to Ocean
+    {200000, CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_PLASMA), EID_HI(EID_PLASMA), 2, 0}},  // Back to Ocean
     {200000, CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_RELEASE, DUR_LO(6000), DUR_HI(6000), 0}},
     {200000, CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_SPEED, 25, DUR_LO(30000), DUR_HI(30000)}},
     {200000, CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_BRIGHTNESS, 100, DUR_LO(30000), DUR_HI(30000)}},
@@ -136,7 +142,7 @@ static const char PROGMEM MEDITATION_CH2_NAME[] = "Breathe Out";
 
 static const ShowCue PROGMEM MEDITATION_CUES[] = {
     // Initial setup
-    {0,      CUE_EFFECT,          ZONE_GLOBAL, {20, 0, 0, 0}},                   // Benard Convection
+    {0,      CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_LGP_SPIRAL_VORTEX), EID_HI(EID_LGP_SPIRAL_VORTEX), 0, 0}},  // Benard Convection
     {0,      CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_SPEED, 15, 0, 0}},
     {0,      CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_BRIGHTNESS, 80, 0, 0}},
 
@@ -172,23 +178,23 @@ static const char PROGMEM CELEBRATION_CH3_NAME[] = "Outro";
 
 static const ShowCue PROGMEM CELEBRATION_CUES[] = {
     // Intro (0-30s)
-    {0,      CUE_EFFECT,          ZONE_GLOBAL, {4, 0, 0, 0}},                    // Confetti
+    {0,      CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_SINELON), EID_HI(EID_SINELON), 0, 0}},  // Confetti
     {0,      CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_BUILD, DUR_LO(4000), DUR_HI(4000), 0}},
     {0,      CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_SPEED, 60, 0, 0}},
 
     // Build (30s-90s)
     {30000,  CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_BUILD, DUR_LO(3000), DUR_HI(3000), 0}},
     {30000,  CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_SPEED, 120, DUR_LO(60000), DUR_HI(60000)}},
-    {50000,  CUE_EFFECT,          ZONE_GLOBAL, {7, 2, 0, 0}},                    // BPM
+    {50000,  CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_WAVE_AMBIENT), EID_HI(EID_WAVE_AMBIENT), 2, 0}},  // BPM
 
     // Peak (90s-150s)
-    {90000,  CUE_EFFECT,          ZONE_GLOBAL, {9, 3, 0, 0}},                    // Collision
+    {90000,  CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_HEARTBEAT), EID_HI(EID_HEARTBEAT), 3, 0}},  // Collision
     {90000,  CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_HOLD, DUR_LO(2000), DUR_HI(2000), 0}},
     {90000,  CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_BRIGHTNESS, 200, 0, 0}},
     {120000, CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_INTENSITY, 255, DUR_LO(15000), DUR_HI(15000)}},
 
     // Outro (150s-180s)
-    {150000, CUE_EFFECT,          ZONE_GLOBAL, {5, 1, 0, 0}},                    // Juggle
+    {150000, CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_JUGGLE), EID_HI(EID_JUGGLE), 1, 0}},  // Juggle
     {150000, CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_RELEASE, DUR_LO(4000), DUR_HI(4000), 0}},
     {150000, CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_SPEED, 50, DUR_LO(30000), DUR_HI(30000)}},
 };
@@ -215,27 +221,27 @@ static const char PROGMEM COSMOS_CH4_NAME[] = "Aftermath";
 
 static const ShowCue PROGMEM COSMOS_CUES[] = {
     // Stars (0-60s)
-    {0,      CUE_EFFECT,          ZONE_GLOBAL, {25, 0, 0, 0}},                   // Mandelbrot Zoom
+    {0,      CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_LGP_MESH_NETWORK), EID_HI(EID_LGP_MESH_NETWORK), 0, 0}},  // Mandelbrot Zoom
     {0,      CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_REST, DUR_LO(10000), DUR_HI(10000), 0}},
     {0,      CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_BRIGHTNESS, 60, 0, 0}},
 
     // Drift (60s-110s)
-    {60000,  CUE_EFFECT,          ZONE_GLOBAL, {24, 1, 0, 0}},                   // Strange Attractor
+    {60000,  CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_LGP_STAR_BURST), EID_HI(EID_LGP_STAR_BURST), 1, 0}},  // Strange Attractor
     {60000,  CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_BUILD, DUR_LO(8000), DUR_HI(8000), 0}},
     {60000,  CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_BRIGHTNESS, 100, DUR_LO(50000), DUR_HI(50000)}},
 
     // Nebula (110s-180s)
-    {110000, CUE_EFFECT,          ZONE_GLOBAL, {22, 2, 0, 0}},                   // Plasma Pinch
+    {110000, CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_CHEVRON_WAVES), EID_HI(EID_CHEVRON_WAVES), 2, 0}},  // Plasma Pinch
     {110000, CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_BUILD, DUR_LO(5000), DUR_HI(5000), 0}},
     {140000, CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_INTENSITY, 200, DUR_LO(40000), DUR_HI(40000)}},
 
     // Collision (180s-240s)
-    {180000, CUE_EFFECT,          ZONE_GLOBAL, {9, 4, 0, 0}},                    // Collision effect
+    {180000, CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_HEARTBEAT), EID_HI(EID_HEARTBEAT), 4, 0}},  // Collision effect
     {180000, CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_HOLD, DUR_LO(2500), DUR_HI(2500), 0}},
     {180000, CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_BRIGHTNESS, 220, DUR_LO(10000), DUR_HI(10000)}},
 
     // Aftermath (240s-300s)
-    {240000, CUE_EFFECT,          ZONE_GLOBAL, {26, 2, 0, 0}},                   // Kuramoto Oscillators
+    {240000, CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_LGP_MOIRE_CURTAINS), EID_HI(EID_LGP_MOIRE_CURTAINS), 2, 0}},  // Kuramoto Oscillators
     {240000, CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_RELEASE, DUR_LO(7000), DUR_HI(7000), 0}},
     {240000, CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_BRIGHTNESS, 80, DUR_LO(60000), DUR_HI(60000)}},
 };
@@ -261,18 +267,18 @@ static const char PROGMEM FOREST_CH2_NAME[] = "Dusk";
 
 static const ShowCue PROGMEM FOREST_CUES[] = {
     // Morning (0-80s)
-    {0,      CUE_EFFECT,          ZONE_GLOBAL, {20, 0, 0, 0}},                   // Benard Convection
+    {0,      CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_LGP_SPIRAL_VORTEX), EID_HI(EID_LGP_SPIRAL_VORTEX), 0, 0}},  // Benard Convection
     {0,      CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_BUILD, DUR_LO(8000), DUR_HI(8000), 0}},
     {0,      CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_BRIGHTNESS, 100, 0, 0}},
 
     // Wind (80s-160s)
-    {80000,  CUE_EFFECT,          ZONE_GLOBAL, {23, 2, 0, 0}},                   // KH Enhanced
+    {80000,  CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_LGP_CONCENTRIC_RINGS), EID_HI(EID_LGP_CONCENTRIC_RINGS), 2, 0}},  // KH Enhanced
     {80000,  CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_HOLD, DUR_LO(5000), DUR_HI(5000), 0}},
     {80000,  CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_SPEED, 80, DUR_LO(40000), DUR_HI(40000)}},
     {120000, CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_SPEED, 50, DUR_LO(40000), DUR_HI(40000)}},
 
     // Dusk (160s-240s)
-    {160000, CUE_EFFECT,          ZONE_GLOBAL, {0, 1, 0, 0}},                    // Fire (low)
+    {160000, CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_FIRE), EID_HI(EID_FIRE), 1, 0}},  // Fire (low)
     {160000, CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_RELEASE, DUR_LO(10000), DUR_HI(10000), 0}},
     {160000, CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_BRIGHTNESS, 60, DUR_LO(60000), DUR_HI(60000)}},
 };
@@ -296,7 +302,7 @@ static const char PROGMEM HEARTBEAT_CH2_NAME[] = "Recovery";
 
 static const ShowCue PROGMEM HEARTBEAT_CUES[] = {
     // Rest (0-30s)
-    {0,      CUE_EFFECT,          ZONE_GLOBAL, {1, 0, 0, 0}},                    // Pulse
+    {0,      CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_OCEAN), EID_HI(EID_OCEAN), 0, 0}},  // Pulse
     {0,      CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_REST, DUR_LO(6000), DUR_HI(6000), 0}},
     {0,      CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_SPEED, 30, 0, 0}},
 
@@ -304,7 +310,7 @@ static const ShowCue PROGMEM HEARTBEAT_CUES[] = {
     {30000,  CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_HOLD, DUR_LO(1500), DUR_HI(1500), 0}},
     {30000,  CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_SPEED, 180, DUR_LO(30000), DUR_HI(30000)}},
     {30000,  CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_BRIGHTNESS, 180, DUR_LO(20000), DUR_HI(20000)}},
-    {60000,  CUE_EFFECT,          ZONE_GLOBAL, {7, 0, 0, 0}},                    // BPM
+    {60000,  CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_WAVE_AMBIENT), EID_HI(EID_WAVE_AMBIENT), 0, 0}},  // BPM
 
     // Recovery (90s-120s)
     {90000,  CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_RELEASE, DUR_LO(4000), DUR_HI(4000), 0}},
@@ -332,23 +338,23 @@ static const char PROGMEM OCEAN_CH3_NAME[] = "Retreat";
 
 static const ShowCue PROGMEM OCEAN_CUES[] = {
     // Gentle (0-50s)
-    {0,      CUE_EFFECT,          ZONE_GLOBAL, {2, 0, 0, 0}},                    // Ocean
+    {0,      CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_PLASMA), EID_HI(EID_PLASMA), 0, 0}},  // Ocean
     {0,      CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_REST, DUR_LO(8000), DUR_HI(8000), 0}},
     {0,      CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_SPEED, 30, 0, 0}},
 
     // Swell (50s-110s)
     {50000,  CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_BUILD, DUR_LO(5000), DUR_HI(5000), 0}},
     {50000,  CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_SPEED, 80, DUR_LO(60000), DUR_HI(60000)}},
-    {80000,  CUE_EFFECT,          ZONE_GLOBAL, {3, 1, 0, 0}},                    // Ripple
+    {80000,  CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_CONFETTI), EID_HI(EID_CONFETTI), 1, 0}},  // Ripple
 
     // Crash (110s-180s)
-    {110000, CUE_EFFECT,          ZONE_GLOBAL, {21, 3, 0, 0}},                   // Rayleigh-Taylor
+    {110000, CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_LGP_SIERPINSKI), EID_HI(EID_LGP_SIERPINSKI), 3, 0}},  // Rayleigh-Taylor
     {110000, CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_HOLD, DUR_LO(2500), DUR_HI(2500), 0}},
     {110000, CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_BRIGHTNESS, 200, DUR_LO(20000), DUR_HI(20000)}},
     {150000, CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_INTENSITY, 220, DUR_LO(30000), DUR_HI(30000)}},
 
     // Retreat (180s-240s)
-    {180000, CUE_EFFECT,          ZONE_GLOBAL, {2, 2, 0, 0}},                    // Back to Ocean
+    {180000, CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_PLASMA), EID_HI(EID_PLASMA), 2, 0}},  // Back to Ocean
     {180000, CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_RELEASE, DUR_LO(7000), DUR_HI(7000), 0}},
     {180000, CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_SPEED, 25, DUR_LO(60000), DUR_HI(60000)}},
     {180000, CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_BRIGHTNESS, 100, DUR_LO(60000), DUR_HI(60000)}},
@@ -374,18 +380,18 @@ static const char PROGMEM ENERGY_CH2_NAME[] = "Fade";
 
 static const ShowCue PROGMEM ENERGY_CUES[] = {
     // Build (0-40s)
-    {0,      CUE_EFFECT,          ZONE_GLOBAL, {19, 0, 0, 0}},                   // Gray-Scott
+    {0,      CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_LGP_HEXAGONAL_GRID), EID_HI(EID_LGP_HEXAGONAL_GRID), 0, 0}},  // Gray-Scott
     {0,      CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_BUILD, DUR_LO(3000), DUR_HI(3000), 0}},
     {0,      CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_BRIGHTNESS, 80, 0, 0}},
     {10000,  CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_SPEED, 150, DUR_LO(30000), DUR_HI(30000)}},
 
     // Explode (40s-80s)
-    {40000,  CUE_EFFECT,          ZONE_GLOBAL, {21, 4, 0, 0}},                   // Magnetic Reconnection
+    {40000,  CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_LGP_SIERPINSKI), EID_HI(EID_LGP_SIERPINSKI), 4, 0}},  // Magnetic Reconnection
     {40000,  CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_HOLD, DUR_LO(1800), DUR_HI(1800), 0}},
     {40000,  CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_BRIGHTNESS, 255, DUR_LO(5000), DUR_HI(5000)}},
 
     // Fade (80s-120s)
-    {80000,  CUE_EFFECT,          ZONE_GLOBAL, {26, 2, 0, 0}},                   // Kuramoto
+    {80000,  CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_LGP_MOIRE_CURTAINS), EID_HI(EID_LGP_MOIRE_CURTAINS), 2, 0}},  // Kuramoto
     {80000,  CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_RELEASE, DUR_LO(5000), DUR_HI(5000), 0}},
     {80000,  CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_BRIGHTNESS, 50, DUR_LO(40000), DUR_HI(40000)}},
     {80000,  CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_SPEED, 30, DUR_LO(40000), DUR_HI(40000)}},
@@ -411,23 +417,23 @@ static const char PROGMEM AMBIENT_CH3_NAME[] = "Phase D";
 
 static const ShowCue PROGMEM AMBIENT_CUES[] = {
     // Phase A (0-150s)
-    {0,      CUE_EFFECT,          ZONE_GLOBAL, {20, 0, 0, 0}},                   // Benard
+    {0,      CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_LGP_SPIRAL_VORTEX), EID_HI(EID_LGP_SPIRAL_VORTEX), 0, 0}},  // Benard
     {0,      CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_REST, DUR_LO(15000), DUR_HI(15000), 0}},
     {0,      CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_BRIGHTNESS, 70, 0, 0}},
     {0,      CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_SPEED, 20, 0, 0}},
 
     // Phase B (150s-300s)
-    {150000, CUE_EFFECT,          ZONE_GLOBAL, {24, 1, 0, 0}},                   // Strange Attractor
+    {150000, CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_LGP_STAR_BURST), EID_HI(EID_LGP_STAR_BURST), 1, 0}},  // Strange Attractor
     {150000, CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_BUILD, DUR_LO(12000), DUR_HI(12000), 0}},
     {150000, CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_BRIGHTNESS, 90, DUR_LO(60000), DUR_HI(60000)}},
 
     // Phase C (300s-450s)
-    {300000, CUE_EFFECT,          ZONE_GLOBAL, {26, 1, 0, 0}},                   // Kuramoto
+    {300000, CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_LGP_MOIRE_CURTAINS), EID_HI(EID_LGP_MOIRE_CURTAINS), 1, 0}},  // Kuramoto
     {300000, CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_HOLD, DUR_LO(12000), DUR_HI(12000), 0}},
     {300000, CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_BRIGHTNESS, 80, DUR_LO(60000), DUR_HI(60000)}},
 
     // Phase D (450s-600s)
-    {450000, CUE_EFFECT,          ZONE_GLOBAL, {2, 1, 0, 0}},                    // Ocean
+    {450000, CUE_EFFECT,          ZONE_GLOBAL, {EID_LO(EID_PLASMA), EID_HI(EID_PLASMA), 1, 0}},  // Ocean
     {450000, CUE_NARRATIVE,       ZONE_GLOBAL, {SHOW_PHASE_RELEASE, DUR_LO(15000), DUR_HI(15000), 0}},
     {450000, CUE_PARAMETER_SWEEP, ZONE_GLOBAL, {PARAM_BRIGHTNESS, 60, DUR_LO(60000), DUR_HI(60000)}},
 };

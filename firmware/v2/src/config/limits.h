@@ -32,17 +32,17 @@ namespace limits {
  * @brief Maximum number of registered effects - SINGLE SOURCE OF TRUTH
  *
  * This value must be >= the number of effects registered in registerAllEffects().
- * Current count: 162 (as of Feb 2026)
+ * Current count: 162 (as of Feb 2026), with headroom for growth.
  *
  * Referenced by:
- * - RendererActor.h: m_effects[MAX_EFFECTS] array
+ * - RendererActor.h: m_registry[MAX_EFFECTS] array
  * - WebServer.h: CachedRendererState::effectNames[MAX_EFFECTS]
  * - AudioEffectMapping.h: AudioMappingRegistry::MAX_EFFECTS
  * - PatternRegistry.cpp: EXPECTED_EFFECT_COUNT validation
  * - BuiltinEffectRegistry.h: Static assertion for headroom
  *
  * When adding new effects:
- * 1. Update this constant
+ * 1. Add effect ID constant to effect_ids.h (via gen_effect_ids.py)
  * 2. Add effect to registerAllEffects() in CoreEffects.cpp
  * 3. Add metadata entry to PATTERN_METADATA[] in PatternRegistry.cpp
  * 4. Build will fail with static_assert if counts don't match
@@ -53,7 +53,7 @@ namespace limits {
  * Large buffers (>64 bytes) MUST be PSRAM-allocated in init().
  * See docs/MEMORY_ALLOCATION.md section 3.5 for the mandatory pattern.
  */
-constexpr uint8_t MAX_EFFECTS = 162;
+constexpr uint16_t MAX_EFFECTS = 256;
 
 // ============================================================================
 // Palette System Limits

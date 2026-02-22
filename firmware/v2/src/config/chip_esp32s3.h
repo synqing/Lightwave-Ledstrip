@@ -86,8 +86,10 @@ namespace i2s {
     /// I2S port number
     constexpr uint8_t PORT = 0;
 
-    /// Sample rate in Hz
+    /// Sample rate in Hz (guarded: vendor shim may #define SAMPLE_RATE)
+#ifndef SAMPLE_RATE
     constexpr uint32_t SAMPLE_RATE = 12800;
+#endif
 
     /// DMA buffer count
     constexpr uint8_t DMA_BUFFER_COUNT = 4;

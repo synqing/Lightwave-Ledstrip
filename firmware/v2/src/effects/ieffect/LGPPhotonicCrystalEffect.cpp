@@ -67,8 +67,7 @@ bool LGPPhotonicCrystalEffect::init(plugins::EffectContext& ctx) {
     m_lastFastFlux = 0.0f;
 
     // Chroma tracking
-    m_dominantBin = 0;
-    m_dominantBinSmooth = 0.0f;
+    m_chromaAngle = 0.0f;
 
     return true;
 }
@@ -128,17 +127,6 @@ void LGPPhotonicCrystalEffect::render(plugins::EffectContext& ctx) {
             m_energyDelta = currentEnergy - m_energyAvg;
             if (m_energyDelta < 0.0f) m_energyDelta = 0.0f;
 
-            // Dominant chroma bin detection (for color offset)
-            // Both backends now produce normalised chroma via Stage A/B pipeline.
-            const float* chroma = ctx.audio.controlBus.chroma;
-
-            float maxChroma = 0.0f;
-            for (uint8_t bin = 0; bin < 12; ++bin) {
-                if (chroma[bin] > maxChroma) {
-                    maxChroma = chroma[bin];
-                    m_dominantBin = bin;
-                }
-            }
         }
 
         // Asymmetric followers for BRIGHTNESS (not speed!)
@@ -170,10 +158,9 @@ void LGPPhotonicCrystalEffect::render(plugins::EffectContext& ctx) {
         }
         m_collisionBoost *= 0.88f;
 
-        // Chroma color offset (250ms smooth)
-        float alphaBin = 1.0f - expf(-rawDt / 0.25f);
-        m_dominantBinSmooth += ((float)m_dominantBin - m_dominantBinSmooth) * alphaBin;
-        chromaOffset = (uint8_t)(m_dominantBinSmooth * (255.0f / 12.0f));
+        // Circular chroma hue (replaces argmax + linear EMA to eliminate bin-flip rainbow sweeps)
+        chromaOffset = effects::chroma::circularChromaHueSmoothed(
+            ctx.audio.controlBus.chroma, m_chromaAngle, rawDt, 0.20f);
     }
 #endif
 

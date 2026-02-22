@@ -25,11 +25,13 @@
 #include "../CoreEffects.h"
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos::effects::ieffect {
 
 class BeatPulseShockwaveCascadeEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_BEAT_PULSE_SHOCKWAVE_CASCADE;
     BeatPulseShockwaveCascadeEffect() = default;
     ~BeatPulseShockwaveCascadeEffect() override = default;
 

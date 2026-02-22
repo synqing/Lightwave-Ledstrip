@@ -20,6 +20,7 @@
 #include "../../../core/shows/ShowTypes.h"
 #include "../../../core/shows/BuiltinShows.h"
 #include "../../../utils/Log.h"
+#include "../../../config/effect_ids.h"
 
 #include <ArduinoJson.h>
 #include <ESPAsyncWebServer.h>
@@ -409,7 +410,7 @@ static void handleShowCueInject(AsyncWebSocketClient* client, JsonDocument& doc,
 
     // Parse the cue type and extract key fields
     if (strcmp(typeStr, "effect") == 0) {
-        uint8_t effectId = cueObj["data"]["effectId"] | 0u;
+        EffectId effectId = cueObj["data"]["effectId"] | 0u;
         uint8_t transType = cueObj["data"]["transitionType"] | 0u;
 
         JsonDocument resp;

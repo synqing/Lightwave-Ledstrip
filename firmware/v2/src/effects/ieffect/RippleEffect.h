@@ -19,6 +19,7 @@
 
 #ifndef NATIVE_BUILD
 #include <esp_heap_caps.h>
+#include "../../config/effect_ids.h"
 #endif
 
 namespace lightwaveos {
@@ -27,6 +28,8 @@ namespace ieffect {
 
 class RippleEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_RIPPLE;
+
     RippleEffect();
     ~RippleEffect() override = default;
 
@@ -64,6 +67,9 @@ private:
 #else
     void* m_ps = nullptr;
 #endif
+
+    // Circular chroma EMA state (radians)
+    float m_chromaAngle = 0.0f;
 
     // 64-bin spectrum tracking for enhanced audio response
     float m_kickPulse = 0.0f;       ///< Sub-bass energy (bins 0-5) for kick-triggered ripples

@@ -24,11 +24,13 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "BeatPulseCore.h"
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos::effects::ieffect {
 
 class BeatPulseVoidEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_BEAT_PULSE_VOID;
     BeatPulseVoidEffect() = default;
     ~BeatPulseVoidEffect() override = default;
 

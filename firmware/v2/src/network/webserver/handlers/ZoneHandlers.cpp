@@ -1,5 +1,6 @@
 #include "ZoneHandlers.h"
 #include "../../RequestValidator.h"
+#include "../../../config/effect_ids.h"
 #include "../../../core/actors/ActorSystem.h"
 #include "../../../palettes/Palettes_Master.h"
 #include "../../../effects/zones/BlendMode.h"
@@ -49,9 +50,10 @@ void ZoneHandlers::handleList(AsyncWebServerRequest* request, lightwaveos::actor
             zone["enabled"] = composer->isZoneEnabled(i);
             zone["effectId"] = composer->getZoneEffect(i);
             // SAFE: Uses cached state (no cross-core access)
-            uint8_t effectId = composer->getZoneEffect(i);
-            if (effectId < cachedState.effectCount && cachedState.effectNames[effectId]) {
-                zone["effectName"] = cachedState.effectNames[effectId];
+            EffectId effectId = composer->getZoneEffect(i);
+            const char* effName = cachedState.findEffectName(effectId);
+            if (effName) {
+                zone["effectName"] = effName;
             }
             zone["brightness"] = composer->getZoneBrightness(i);
             zone["speed"] = composer->getZoneSpeed(i);
@@ -182,7 +184,7 @@ void ZoneHandlers::handleGet(AsyncWebServerRequest* request, lightwaveos::actors
     sendSuccessResponse(request, [composer, zoneId, &cachedState](JsonObject& data) {
         data["id"] = zoneId;
         data["enabled"] = composer->isZoneEnabled(zoneId);
-        uint8_t effectId = composer->getZoneEffect(zoneId);
+        EffectId effectId = composer->getZoneEffect(zoneId);
         data["effectId"] = effectId;
         // SAFE: Uses cached state (no cross-core access)
         if (effectId < cachedState.effectCount && cachedState.effectNames[effectId]) {
@@ -219,7 +221,7 @@ void ZoneHandlers::handleSetEffect(AsyncWebServerRequest* request, uint8_t* data
     JsonDocument doc;
     VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::ZoneEffect, request);
 
-    uint8_t effectId = doc["effectId"];
+    EffectId effectId = doc["effectId"];
     // SAFE: Uses cached state (no cross-core access)
     if (effectId >= cachedState.effectCount) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,

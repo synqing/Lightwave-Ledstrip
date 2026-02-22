@@ -232,8 +232,8 @@ public:
         uint8_t zoneId,
         lightwaveos::plugins::EffectContext& ctx,
         uint16_t radialLen,
-        float exposure,        // 0..?
-        float saturationBoost  // 0..1
+        float exposure,              // 0..?
+        float saturationBoost        // 0..1
     ) {
         if (!m_ps) return;
         if (zoneId >= MAX_ZONES) return;

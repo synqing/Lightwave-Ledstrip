@@ -29,6 +29,7 @@
 #include "effects/CoreEffects.h"
 #include "effects/zones/ZoneComposer.h"
 #include "effects/PatternRegistry.h"
+#include "config/display_order.h"
 #include "effects/ieffect/BeatPulseBloomEffect.h"  // For debug toggle
 #include "effects/ieffect/BloomParityEffect.h"     // For runtime PostFX tuning
 #if FEATURE_TRANSITIONS
@@ -187,7 +188,7 @@ void setup() {
 
     // Register ALL effects (core + LGP) BEFORE starting actors
     LW_LOGI("Registering effects...");
-    uint8_t effectCount = registerAllEffects(renderer);
+    uint16_t effectCount = registerAllEffects(renderer);
     LW_LOGI("Effects registered: %d", effectCount);
 
 #if FEATURE_AUDIO_SYNC
@@ -272,17 +273,17 @@ void setup() {
 
     // Load or set initial state
     LW_LOGI("Loading system state...");
-    uint8_t savedEffect, savedBrightness, savedSpeed, savedPalette;
+    EffectId savedEffect; uint8_t savedBrightness, savedSpeed, savedPalette;
     if (zoneConfigMgr && zoneConfigMgr->loadSystemState(savedEffect, savedBrightness, savedSpeed, savedPalette)) {
         actors.setEffect(savedEffect);
         actors.setBrightness(savedBrightness);
         actors.setSpeed(savedSpeed);
         actors.setPalette(savedPalette);
-        LW_LOGI("Restored: Effect=%d, Brightness=%d, Speed=%d, Palette=%d",
+        LW_LOGI("Restored: Effect=0x%04X, Brightness=%d, Speed=%d, Palette=%d",
                 savedEffect, savedBrightness, savedSpeed, savedPalette);
     } else {
         // First boot defaults
-        actors.setEffect(100);     // LGP Holographic Auto-Cycle
+        actors.setEffect(lightwaveos::EID_LGP_HOLOGRAPHIC_AUTO_CYCLE);  // LGP Holographic Auto-Cycle
         actors.setBrightness(128); // 50% brightness
         actors.setSpeed(15);       // Medium speed
         actors.setPalette(0);      // Party colors
@@ -526,7 +527,7 @@ static void processSerialJsonCommand(const String& json) {
     // ------------------------------------------------------------------
     else if (strcmp(type, "effects.getCurrent") == 0) {
         if (!renderer) { serialJsonError(reqId, "renderer unavailable"); return; }
-        uint8_t id = renderer->getCurrentEffect();
+        EffectId id = renderer->getCurrentEffect();
         const char* name = renderer->getEffectName(id);
         char buf[128];
         snprintf(buf, sizeof(buf), "{\"effectId\":%u,\"name\":\"%s\"}", (unsigned)id, name ? name : "");
@@ -538,9 +539,9 @@ static void processSerialJsonCommand(const String& json) {
     else if (strcmp(type, "effects.list") == 0) {
         if (!renderer) { serialJsonError(reqId, "renderer unavailable"); return; }
 
-        uint8_t total = renderer->getEffectCount();
-        uint8_t offset = doc["offset"] | 0;
-        uint8_t limit  = doc["limit"]  | total;
+        uint16_t total = renderer->getEffectCount();
+        uint16_t offset = doc["offset"] | 0;
+        uint16_t limit  = doc["limit"]  | total;
         if (offset >= total) { offset = 0; limit = 0; }
         if (offset + limit > total) limit = total - offset;
 
@@ -550,10 +551,11 @@ static void processSerialJsonCommand(const String& json) {
         respDoc["offset"] = offset;
         respDoc["limit"] = limit;
         JsonArray arr = respDoc["effects"].to<JsonArray>();
-        for (uint8_t i = offset; i < offset + limit; i++) {
+        for (uint16_t i = offset; i < offset + limit; i++) {
+            EffectId eid = renderer->getEffectIdAt(i);
             JsonObject obj = arr.add<JsonObject>();
-            obj["id"] = i;
-            const char* name = renderer->getEffectName(i);
+            obj["id"] = eid;
+            const char* name = renderer->getEffectName(eid);
             obj["name"] = name ? name : "";
         }
 
@@ -568,7 +570,7 @@ static void processSerialJsonCommand(const String& json) {
     else if (strcmp(type, "effects.getCategories") == 0) {
         // Return reactive vs ambient categorisation counts
         uint8_t reactiveCount = PatternRegistry::getReactiveEffectCount();
-        uint8_t totalCount = renderer ? renderer->getEffectCount() : 0;
+        uint16_t totalCount = renderer ? renderer->getEffectCount() : 0;
         char buf[192];
         snprintf(buf, sizeof(buf),
             "{\"categories\":[{\"name\":\"reactive\",\"count\":%u},{\"name\":\"ambient\",\"count\":%u},{\"name\":\"all\",\"count\":%u}]}",
@@ -607,9 +609,8 @@ static void processSerialJsonCommand(const String& json) {
     else if (strcmp(type, "setEffect") == 0) {
         if (!renderer) { serialJsonError(reqId, "renderer unavailable"); return; }
         if (!doc["effectId"].is<int>()) { serialJsonError(reqId, "missing effectId"); return; }
-        uint8_t effectId = doc["effectId"];
-        uint8_t effectCount = renderer->getEffectCount();
-        if (effectId >= effectCount) { serialJsonError(reqId, "effectId out of range"); return; }
+        EffectId effectId = doc["effectId"];
+        if (!renderer->isEffectRegistered(effectId)) { serialJsonError(reqId, "effectId not registered"); return; }
         actors.setEffect(effectId);
         char buf[128];
         snprintf(buf, sizeof(buf), "{\"effectId\":%u,\"name\":\"%s\"}",
@@ -703,9 +704,8 @@ static void processSerialJsonCommand(const String& json) {
 #if FEATURE_TRANSITIONS
         if (!renderer) { serialJsonError(reqId, "renderer unavailable"); return; }
         if (!doc["toEffect"].is<int>()) { serialJsonError(reqId, "missing toEffect"); return; }
-        uint8_t toEffect = doc["toEffect"];
-        uint8_t effectCount = renderer->getEffectCount();
-        if (toEffect >= effectCount) { serialJsonError(reqId, "toEffect out of range"); return; }
+        EffectId toEffect = doc["toEffect"];
+        if (!renderer->isEffectRegistered(toEffect)) { serialJsonError(reqId, "toEffect not registered"); return; }
 
         if (doc["transitionType"].is<int>()) {
             uint8_t tt = doc["transitionType"];
@@ -856,10 +856,10 @@ static void processSerialJsonCommand(const String& json) {
         if (!doc["zoneId"].is<int>()) { serialJsonError(reqId, "missing zoneId"); return; }
         if (!doc["effectId"].is<int>()) { serialJsonError(reqId, "missing effectId"); return; }
         uint8_t zoneId = doc["zoneId"];
-        uint8_t effectId = doc["effectId"];
+        EffectId effectId = doc["effectId"];
 
         if (zoneId >= zoneComposer.getZoneCount()) { serialJsonError(reqId, "zoneId out of range"); return; }
-        if (renderer && effectId >= renderer->getEffectCount()) { serialJsonError(reqId, "effectId out of range"); return; }
+        if (renderer && !renderer->isEffectRegistered(effectId)) { serialJsonError(reqId, "effectId not registered"); return; }
 
         zoneComposer.setZoneEffect(zoneId, effectId);
         char buf[96];
@@ -941,7 +941,7 @@ static void processSerialJsonCommand(const String& json) {
         if (zoneId >= zoneComposer.getZoneCount()) { serialJsonError(reqId, "zoneId out of range"); return; }
 
         if (doc.containsKey("effectId") && renderer) {
-            uint8_t eid = doc["effectId"];
+            EffectId eid = doc["effectId"];
             if (eid < renderer->getEffectCount()) zoneComposer.setZoneEffect(zoneId, eid);
         }
         if (doc.containsKey("brightness")) {
@@ -1285,22 +1285,27 @@ static void processSerialJsonCommand(const String& json) {
 
 void loop() {
     static uint32_t lastStatus = 0;
-    static uint8_t currentEffect = 0;
+    static EffectId currentEffect = lightwaveos::EID_FIRE;
     static uint8_t lastAudioEffectIndex = 0;  // Track which audio effect (0=Waveform, 1=Bloom)
 
     // Effect register state (for filtered effect cycling)
     static EffectRegister currentRegister = EffectRegister::ALL;
     static uint8_t reactiveRegisterIndex = 0;   // Index within reactive effects
-    static uint8_t ambientRegisterIndex = 0;    // Index within ambient effects
-    static uint8_t ambientEffectIds[80];        // Cached ambient effect IDs
-    static uint8_t ambientEffectCount = 0;      // Number of ambient effects
+    static uint16_t ambientRegisterIndex = 0;   // Index within ambient effects
+    static EffectId ambientEffectIds[170];      // Cached ambient effect IDs
+    static uint16_t ambientEffectCount = 0;     // Number of ambient effects
     static bool registersInitialized = false;
 
     // One-time initialization of effect registers
     if (!registersInitialized && renderer) {
-        uint8_t effectCount = renderer->getEffectCount();
+        uint16_t effectCount = renderer->getEffectCount();
+        // Build array of all registered EffectIds for ambient filtering
+        EffectId allIds[170];
+        for (uint16_t i = 0; i < effectCount && i < 170; i++) {
+            allIds[i] = renderer->getEffectIdAt(i);
+        }
         ambientEffectCount = PatternRegistry::buildAmbientEffectArray(
-            ambientEffectIds, sizeof(ambientEffectIds), effectCount);
+            ambientEffectIds, 170, allIds, effectCount);
         registersInitialized = true;
         LW_LOGI("Effect registers: %d reactive, %d ambient, %d total",
                 PatternRegistry::getReactiveEffectCount(), ambientEffectCount, effectCount);
@@ -1354,13 +1359,22 @@ void loop() {
                 case 'b': case 'B':  // RD Triangle K +/-
                 case 't': case 'T':  // RD Triangle F +/-
                 case 'x': case 'X':  // Bands observability (one-shot dump)
+                case '`':            // Status strip idle mode cycle
                     isImmediate = true;
                     break;
             }
             if (isImmediate) {
-                // Process immediately without buffering
-                serialCmdBuffer = String(c);
-                break; // Exit while loop to process
+                // Check if more chars are pending — if so, this might be
+                // the start of a multi-char command (e.g. 'a' in "adbg 5")
+                if (Serial.available() > 0) {
+                    // Buffer it instead of processing immediately
+                    serialCmdBuffer += c;
+                } else {
+                    // Process immediately without buffering
+                    serialCmdBuffer = String(c);
+                    break; // Exit while loop to process
+                }
+                continue;
             }
         }
 
@@ -1584,14 +1598,23 @@ void loop() {
             if (inputLower.startsWith("effect ")) {
                 handledMulti = true;
 
-                int effectId = input.substring(7).toInt();
-                uint8_t effectCount = renderer->getEffectCount();
-                if (effectId < 0 || effectId >= effectCount) {
-                    Serial.printf("ERROR: Invalid effect ID. Valid range: 0-%d\n", effectCount - 1);
+                // Parse as EffectId - accepts both namespaced IDs (0x0100) and display indices (0-161)
+                int rawId = input.substring(7).toInt();
+                EffectId effectId;
+                uint16_t effectCount = renderer->getEffectCount();
+                if (rawId >= 0 && rawId < effectCount) {
+                    // Treat small numbers as display-order index
+                    effectId = renderer->getEffectIdAt(rawId);
                 } else {
-                    currentEffect = (uint8_t)effectId;
-                    actors.setEffect((uint8_t)effectId);
-                    Serial.printf("Effect %d: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n", effectId, renderer->getEffectName(effectId));
+                    // Treat as direct EffectId
+                    effectId = static_cast<EffectId>(rawId);
+                }
+                if (!renderer->isEffectRegistered(effectId)) {
+                    Serial.printf("ERROR: Effect 0x%04X not registered\n", effectId);
+                } else {
+                    currentEffect = effectId;
+                    actors.setEffect(effectId);
+                    Serial.printf("Effect 0x%04X: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n", effectId, renderer->getEffectName(effectId));
                 }
             }
         }
@@ -1943,15 +1966,21 @@ void loop() {
             if (inputLower.startsWith("validate ")) {
                 handledMulti = true;
 
-                // Parse effect ID
-                int effectId = input.substring(9).toInt();
-                uint8_t effectCount = renderer->getEffectCount();
+                // Parse effect ID - accepts display index or direct EffectId
+                int rawId = input.substring(9).toInt();
+                uint16_t effectCount = renderer->getEffectCount();
+                EffectId effectId;
+                if (rawId >= 0 && rawId < effectCount) {
+                    effectId = renderer->getEffectIdAt(rawId);
+                } else {
+                    effectId = static_cast<EffectId>(rawId);
+                }
 
-                if (effectId < 0 || effectId >= effectCount) {
-                    Serial.printf("ERROR: Invalid effect ID. Valid range: 0-%d\n", effectCount - 1);
+                if (!renderer->isEffectRegistered(effectId)) {
+                    Serial.printf("ERROR: Effect 0x%04X not registered\n", effectId);
                 } else {
                     // Save current effect
-                    uint8_t savedEffect = renderer->getCurrentEffect();
+                    EffectId savedEffect = renderer->getCurrentEffect();
                     const char* effectName = renderer->getEffectName(effectId);
 
                     // Memory baseline
@@ -2220,7 +2249,7 @@ void loop() {
         // -----------------------------------------------------------------
         // Tempo Debug Commands: tempo
         // -----------------------------------------------------------------
-#if FEATURE_AUDIO_SYNC && !FEATURE_AUDIO_BACKEND_ESV11
+#if FEATURE_AUDIO_SYNC && !FEATURE_AUDIO_BACKEND_ESV11 && !FEATURE_AUDIO_BACKEND_PIPELINECORE
         else if (inputLower.startsWith("tempo")) {
             handledMulti = true;
 
@@ -2432,10 +2461,7 @@ void loop() {
             }
         }
 
-        if (handledMulti) {
-            // Do not process single-character commands after consuming a multi-char command
-        } else if (input.length() == 1) {
-            // Single character commands (input is already in 'input' from line buffering)
+        if (!handledMulti && input.length() == 1) {
             char cmd = input[0];
 
             // Check if in zone mode for special handling
@@ -2453,27 +2479,27 @@ void loop() {
                 
                 // Special case: '6' cycles through audio effects (72=Waveform, 73=Bloom)
                 if (e == 6) {
-                    const uint8_t audioEffects[] = {72, 73};  // Audio Waveform, Audio Bloom
+                    const EffectId audioEffects[] = {lightwaveos::EID_AUDIO_WAVEFORM, lightwaveos::EID_AUDIO_BLOOM};
                     const uint8_t audioEffectCount = sizeof(audioEffects) / sizeof(audioEffects[0]);
-                    
+
                     // Cycle to next audio effect
                     lastAudioEffectIndex = (lastAudioEffectIndex + 1) % audioEffectCount;
-                    uint8_t audioEffectId = audioEffects[lastAudioEffectIndex];
-                    
-                    if (audioEffectId < renderer->getEffectCount()) {
+                    EffectId audioEffectId = audioEffects[lastAudioEffectIndex];
+
+                    if (renderer->isEffectRegistered(audioEffectId)) {
                         currentEffect = audioEffectId;
                         actors.setEffect(audioEffectId);
-                        Serial.printf("Audio Effect %d: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n", audioEffectId, renderer->getEffectName(audioEffectId));
+                        Serial.printf("Audio Effect 0x%04X: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n", audioEffectId, renderer->getEffectName(audioEffectId));
                     } else {
-                        Serial.printf("ERROR: Audio effect %d not available (effect count: %d)\n", 
-                                     audioEffectId, renderer->getEffectCount());
+                        Serial.printf("ERROR: Audio effect 0x%04X not registered\n", audioEffectId);
                     }
                 } else {
-                    // Normal numeric effect selection (0-5, 7-9)
-                if (e < renderer->getEffectCount()) {
-                    currentEffect = e;
-                    actors.setEffect(e);
-                    Serial.printf("Effect %d: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n", e, renderer->getEffectName(e));
+                    // Normal numeric effect selection (0-5, 7-9) - map to display order
+                    EffectId eid = (e < lightwaveos::DISPLAY_COUNT) ? lightwaveos::DISPLAY_ORDER[e] : lightwaveos::INVALID_EFFECT_ID;
+                if (renderer->isEffectRegistered(eid)) {
+                    currentEffect = eid;
+                    actors.setEffect(eid);
+                    Serial.printf("Effect [%d] 0x%04X: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n", e, eid, renderer->getEffectName(eid));
                     }
                 }
             } else {
@@ -2484,11 +2510,12 @@ void loop() {
                     cmd != 'a' && cmd != 'b' && cmd != 'c' && cmd != 'd' && cmd != 'e' && cmd != 'f' && cmd != 'g' &&
                     cmd != 'h' && cmd != 'i' && cmd != 'j' && cmd != 'k' &&
                     cmd != 'n' && cmd != 'l' && cmd != 'p' && cmd != 's' && cmd != 't' && cmd != 'z') {
-                    uint8_t e = 10 + (cmd - 'a');
-                    if (e < renderer->getEffectCount()) {
-                        currentEffect = e;
-                        actors.setEffect(e);
-                        Serial.printf("Effect %d: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n", e, renderer->getEffectName(e));
+                    uint16_t displayIdx = 10 + (cmd - 'a');
+                    EffectId eid = (displayIdx < lightwaveos::DISPLAY_COUNT) ? lightwaveos::DISPLAY_ORDER[displayIdx] : lightwaveos::INVALID_EFFECT_ID;
+                    if (renderer->isEffectRegistered(eid)) {
+                        currentEffect = eid;
+                        actors.setEffect(eid);
+                        Serial.printf("Effect [%d] 0x%04X: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n", displayIdx, eid, renderer->getEffectName(eid));
                         isEffectKey = true;
                     }
                 }
@@ -2559,16 +2586,20 @@ void loop() {
                     }
                     break;
 
+                case '`':
+#ifndef NATIVE_BUILD
+                    statusStripNextIdleMode();
+#endif
+                    break;
+
                 case ' ':  // Spacebar - quick next effect (no Enter needed)
                 case 'n':
                     if (!inZoneMode) {
-                        uint8_t effectCount = renderer->getEffectCount();
-                        uint8_t newEffectId = currentEffect;
+                        EffectId newEffectId = currentEffect;
 
                         switch (currentRegister) {
                             case EffectRegister::ALL:
-                                currentEffect = (currentEffect + 1) % effectCount;
-                                newEffectId = currentEffect;
+                                newEffectId = lightwaveos::getNextDisplay(currentEffect);
                                 break;
 
                             case EffectRegister::REACTIVE:
@@ -2587,12 +2618,12 @@ void loop() {
                                 break;
                         }
 
-                        if (newEffectId != 0xFF && newEffectId < effectCount) {
+                        if (newEffectId != lightwaveos::INVALID_EFFECT_ID) {
                             currentEffect = newEffectId;
                             actors.setEffect(currentEffect);
                             const char* suffix = (currentRegister == EffectRegister::REACTIVE) ? "[R]" :
                                                  (currentRegister == EffectRegister::AMBIENT) ? "[M]" : "";
-                            Serial.printf("Effect %d%s: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n",
+                            Serial.printf("Effect 0x%04X%s: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n",
                                           currentEffect, suffix, renderer->getEffectName(currentEffect));
                         }
                     }
@@ -2600,13 +2631,11 @@ void loop() {
 
                 case 'N':
                     if (!inZoneMode) {
-                        uint8_t effectCount = renderer->getEffectCount();
-                        uint8_t newEffectId = currentEffect;
+                        EffectId newEffectId = currentEffect;
 
                         switch (currentRegister) {
                             case EffectRegister::ALL:
-                                currentEffect = (currentEffect + effectCount - 1) % effectCount;
-                                newEffectId = currentEffect;
+                                newEffectId = lightwaveos::getPrevDisplay(currentEffect);
                                 break;
 
                             case EffectRegister::REACTIVE: {
@@ -2627,12 +2656,12 @@ void loop() {
                                 break;
                         }
 
-                        if (newEffectId != 0xFF && newEffectId < effectCount) {
+                        if (newEffectId != lightwaveos::INVALID_EFFECT_ID) {
                             currentEffect = newEffectId;
                             actors.setEffect(currentEffect);
                             const char* suffix = (currentRegister == EffectRegister::REACTIVE) ? "[R]" :
                                                  (currentRegister == EffectRegister::AMBIENT) ? "[M]" : "";
-                            Serial.printf("Effect %d%s: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n",
+                            Serial.printf("Effect 0x%04X%s: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n",
                                           currentEffect, suffix, renderer->getEffectName(currentEffect));
                         }
                     }
@@ -2645,11 +2674,11 @@ void loop() {
                                   PatternRegistry::getReactiveEffectCount());
                     // Switch to current reactive effect
                     if (PatternRegistry::getReactiveEffectCount() > 0) {
-                        uint8_t reactiveId = PatternRegistry::getReactiveEffectId(reactiveRegisterIndex);
-                        if (reactiveId != 0xFF && reactiveId < renderer->getEffectCount()) {
+                        EffectId reactiveId = PatternRegistry::getReactiveEffectId(reactiveRegisterIndex);
+                        if (reactiveId != lightwaveos::INVALID_EFFECT_ID) {
                             currentEffect = reactiveId;
                             actors.setEffect(reactiveId);
-                            Serial.printf("  Current: %s (ID %d)\n",
+                            Serial.printf("  Current: %s (ID 0x%04X)\n",
                                           renderer->getEffectName(reactiveId), reactiveId);
                         }
                     }
@@ -2661,11 +2690,11 @@ void loop() {
                     Serial.printf("  %d ambient effects available\n", ambientEffectCount);
                     // Switch to current ambient effect
                     if (ambientEffectCount > 0 && ambientRegisterIndex < ambientEffectCount) {
-                        uint8_t ambientId = ambientEffectIds[ambientRegisterIndex];
-                        if (ambientId < renderer->getEffectCount()) {
+                        EffectId ambientId = ambientEffectIds[ambientRegisterIndex];
+                        if (ambientId != lightwaveos::INVALID_EFFECT_ID) {
                             currentEffect = ambientId;
                             actors.setEffect(ambientId);
-                            Serial.printf("  Current: %s (ID %d)\n",
+                            Serial.printf("  Current: %s (ID 0x%04X)\n",
                                           renderer->getEffectName(ambientId), ambientId);
                         }
                     }
@@ -2675,17 +2704,22 @@ void loop() {
                     currentRegister = EffectRegister::ALL;
                     Serial.println("Switched to " LW_CLR_GREEN "All Effects" LW_ANSI_RESET " register");
                     Serial.printf("  %d effects available\n", renderer->getEffectCount());
-                    Serial.printf("  Current: %s (ID %d)\n",
+                    Serial.printf("  Current: %s (ID 0x%04X)\n",
                                   renderer->getEffectName(currentEffect), currentEffect);
                     break;
 
                 case 'L': {  // Jump to last effect in current register
-                    uint8_t newEffectId = 0xFF;
+                    EffectId newEffectId = lightwaveos::INVALID_EFFECT_ID;
 
                     switch (currentRegister) {
-                        case EffectRegister::ALL:
-                            newEffectId = renderer->getEffectCount() - 1;
+                        case EffectRegister::ALL: {
+                            // Last effect in display order
+                            uint16_t dc = lightwaveos::DISPLAY_COUNT;
+                            if (dc > 0) {
+                                newEffectId = lightwaveos::DISPLAY_ORDER[dc - 1];
+                            }
                             break;
+                        }
 
                         case EffectRegister::REACTIVE: {
                             uint8_t count = PatternRegistry::getReactiveEffectCount();
@@ -2704,12 +2738,12 @@ void loop() {
                             break;
                     }
 
-                    if (newEffectId != 0xFF && newEffectId < renderer->getEffectCount()) {
+                    if (newEffectId != lightwaveos::INVALID_EFFECT_ID) {
                         currentEffect = newEffectId;
                         actors.setEffect(currentEffect);
                         const char* suffix = (currentRegister == EffectRegister::REACTIVE) ? "[R]" :
                                              (currentRegister == EffectRegister::AMBIENT) ? "[M]" : "";
-                        Serial.printf("Last effect %d%s: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n",
+                        Serial.printf("Last effect 0x%04X%s: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n",
                                       currentEffect, suffix, renderer->getEffectName(currentEffect));
                     }
                     break;
@@ -2781,13 +2815,14 @@ void loop() {
 
                 case 'l':
                     {
-                        uint8_t effectCount = renderer->getEffectCount();
+                        uint16_t effectCount = renderer->getEffectCount();
                         Serial.printf("\n=== Effects (%d total) ===\n", effectCount);
-                        for (uint8_t i = 0; i < effectCount; i++) {
+                        for (uint16_t i = 0; i < effectCount; i++) {
+                            EffectId eid = renderer->getEffectIdAt(i);
                             char key = (i < 10) ? ('0' + i) : ('a' + i - 10);
-                            const char* type = (renderer->getEffectInstance(i) != nullptr) ? " [IEffect]" : " [Legacy]";
-                            Serial.printf("  %2d [%c]: %s%s%s\n", i, key, renderer->getEffectName(i), type,
-                                          (!inZoneMode && i == currentEffect) ? " <--" : "");
+                            const char* type = (renderer->getEffectInstance(eid) != nullptr) ? " [IEffect]" : " [Legacy]";
+                            Serial.printf("  %3d [%c] 0x%04X: %s%s%s\n", i, key, eid, renderer->getEffectName(eid), type,
+                                          (!inZoneMode && eid == currentEffect) ? " <--" : "");
                         }
                         Serial.println();
                     }
@@ -2858,7 +2893,7 @@ void loop() {
                     }
                     // Show IEffect status for current effect
                     {
-                        uint8_t current = renderer->getCurrentEffect();
+                        EffectId current = renderer->getCurrentEffect();
                         IEffect* effect = renderer->getEffectInstance(current);
                         if (effect != nullptr) {
                             Serial.printf("  Current effect type: IEffect (native)\n");
@@ -2882,16 +2917,17 @@ void loop() {
                 case 'T':
                     // RD Triangle: F - / +
                     {
-                        uint8_t rdTriangleId = 0xFF;
-                        uint8_t effectCount = renderer->getEffectCount();
-                        for (uint8_t i = 0; i < effectCount; i++) {
-                            const char* name = renderer->getEffectName(i);
+                        EffectId rdTriangleId = lightwaveos::INVALID_EFFECT_ID;
+                        uint16_t effectCount = renderer->getEffectCount();
+                        for (uint16_t i = 0; i < effectCount; i++) {
+                            EffectId eid = renderer->getEffectIdAt(i);
+                            const char* name = renderer->getEffectName(eid);
                             if (name && strcmp(name, "LGP RD Triangle") == 0) {
-                                rdTriangleId = i;
+                                rdTriangleId = eid;
                                 break;
                             }
                         }
-                        if (rdTriangleId == 0xFF) {
+                        if (rdTriangleId == lightwaveos::INVALID_EFFECT_ID) {
                             Serial.println("RD Triangle not found");
                             break;
                         }
@@ -3173,16 +3209,17 @@ void loop() {
                 case 'B':
                     // RD Triangle: K - / +
                     {
-                        uint8_t rdTriangleId = 0xFF;
-                        uint8_t effectCount = renderer->getEffectCount();
-                        for (uint8_t i = 0; i < effectCount; i++) {
-                            const char* name = renderer->getEffectName(i);
+                        EffectId rdTriangleId = lightwaveos::INVALID_EFFECT_ID;
+                        uint16_t effectCount = renderer->getEffectCount();
+                        for (uint16_t i = 0; i < effectCount; i++) {
+                            EffectId eid = renderer->getEffectIdAt(i);
+                            const char* name = renderer->getEffectName(eid);
                             if (name && strcmp(name, "LGP RD Triangle") == 0) {
-                                rdTriangleId = i;
+                                rdTriangleId = eid;
                                 break;
                             }
                         }
-                        if (rdTriangleId == 0xFF) {
+                        if (rdTriangleId == lightwaveos::INVALID_EFFECT_ID) {
                             Serial.println("RD Triangle not found");
                             break;
                         }

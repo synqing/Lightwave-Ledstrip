@@ -20,6 +20,7 @@
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
+#include "../../config/effect_ids.h"
 #endif
 
 namespace lightwaveos {
@@ -28,6 +29,8 @@ namespace ieffect {
 
 class AudioWaveformEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_AUDIO_WAVEFORM;
+
     AudioWaveformEffect() = default;
     ~AudioWaveformEffect() override = default;
 
@@ -75,6 +78,9 @@ private:
 
     // Sum colour state (RGB smoothing)
     float m_sumColorLast[3] = {0.0f, 0.0f, 0.0f};
+
+    // Circular chroma EMA state (radians)
+    float m_chromaAngle = 0.0f;
 
     // Flag for first frame (need to clear buffer once)
     bool m_initialized = false;

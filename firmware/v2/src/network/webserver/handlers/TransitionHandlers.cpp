@@ -42,11 +42,11 @@ void TransitionHandlers::handleTrigger(AsyncWebServerRequest* request,
     JsonDocument doc;
     VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::TriggerTransition, request);
 
-    uint8_t toEffect = doc["toEffect"];
+    EffectId toEffect = doc["toEffect"];
     // SAFE: Uses cached state (no cross-core access)
-    if (toEffect >= cachedState.effectCount) {
+    if (!cachedState.findEffectName(toEffect)) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "toEffect");
+                          ErrorCodes::OUT_OF_RANGE, "Effect ID not registered", "toEffect");
         return;
     }
 
@@ -67,8 +67,9 @@ void TransitionHandlers::handleTrigger(AsyncWebServerRequest* request,
     sendSuccessResponse(request, [&cachedState, toEffect, transitionType](JsonObject& respData) {
         respData["effectId"] = toEffect;
         // SAFE: Uses cached state (no cross-core access)
-        if (toEffect < cachedState.effectCount && cachedState.effectNames[toEffect]) {
-            respData["name"] = cachedState.effectNames[toEffect];
+        const char* transName = cachedState.findEffectName(toEffect);
+        if (transName) {
+            respData["name"] = transName;
         }
         respData["transitionType"] = transitionType;
     });

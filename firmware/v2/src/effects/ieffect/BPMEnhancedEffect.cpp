@@ -4,6 +4,7 @@
  */
 
 #include "BPMEnhancedEffect.h"
+#include "ChromaUtils.h"
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
@@ -48,6 +49,7 @@ bool BPMEnhancedEffect::init(plugins::EffectContext& ctx) {
         m_chromaSmoothed[i] = 0.0f;
         m_chromaTargets[i] = 0.0f;
     }
+    m_chromaAngle = 0.0f;
 
     // Clear ring buffer
     for (int r = 0; r < MAX_RINGS; r++) {
@@ -74,7 +76,7 @@ void BPMEnhancedEffect::render(plugins::EffectContext& ctx) {
     float speedMult = 1.0f;
     float expansionRate = 80.0f;
     float subBassEnergy = 0.0f;
-    uint8_t dominantChromaBin = 0;
+    uint8_t chromaHueOffset = 0;
 
 #if FEATURE_AUDIO_SYNC
     if (ctx.audio.available) {
@@ -116,14 +118,10 @@ void BPMEnhancedEffect::render(plugins::EffectContext& ctx) {
                 m_chromaTargets[i], rawDt, moodNorm);
         }
         
-        // Find dominant chroma bin for color
-        float maxChroma = 0.0f;
-        for (uint8_t i = 0; i < 12; i++) {
-            if (m_chromaSmoothed[i] > maxChroma) {
-                maxChroma = m_chromaSmoothed[i];
-                dominantChromaBin = i;
-            }
-        }
+        // Circular weighted mean + circular EMA for smooth, continuous hue.
+        // Eliminates argmax discontinuities AND temporal chroma shifts.
+        chromaHueOffset = effects::chroma::circularChromaHueSmoothed(
+            m_chromaSmoothed, m_chromaAngle, rawDt, 0.20f);
         
         // =====================================================================
         // v8 SPEED MODULATION: heavy_bands → Spring (NO stacked smoothing!)
@@ -151,10 +149,8 @@ void BPMEnhancedEffect::render(plugins::EffectContext& ctx) {
         bool shouldSpawnRing = false;
         float ringIntensity = 0.0f;
 
-        // Primary: Beat detection with beatPhase synchronization
+        // Primary: Beat detection
         if (ctx.audio.isOnBeat()) {
-            // Use beatPhase for better synchronization
-            float beatPhase = ctx.audio.beatPhase();
             // Scale by confidence - use sqrt for gentler curve at low confidence
             float confWeight = sqrtf(tempoConf) * 1.5f;
             confWeight = fmaxf(0.3f, confWeight);  // Minimum floor for visibility
@@ -294,7 +290,7 @@ void BPMEnhancedEffect::render(plugins::EffectContext& ctx) {
 #if FEATURE_AUDIO_SYNC
         if (ctx.audio.available) {
             // Use dominant chroma bin for hue offset
-            uint8_t hue = ctx.gHue + (uint8_t)(dominantChromaBin * (255.0f / 12.0f)) + (uint8_t)(dist / 3);
+            uint8_t hue = ctx.gHue + chromaHueOffset + (uint8_t)(dist / 3);
             CRGB color = ctx.palette.getColor(hue, intensity);
             ctx.leds[i] = color;
             

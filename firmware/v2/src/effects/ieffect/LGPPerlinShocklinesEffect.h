@@ -23,6 +23,7 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include <FastLED.h>
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -30,6 +31,8 @@ namespace ieffect {
 
 class LGPPerlinShocklinesEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_PERLIN_SHOCKLINES;
+
     LGPPerlinShocklinesEffect();
     ~LGPPerlinShocklinesEffect() override = default;
 

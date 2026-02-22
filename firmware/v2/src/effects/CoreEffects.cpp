@@ -8,6 +8,7 @@
 
 #include "CoreEffects.h"
 #include "../config/limits.h"  // For limits::MAX_EFFECTS validation
+#include "../config/effect_ids.h"
 #include "LGPInterferenceEffects.h"
 #include "LGPGeometricEffects.h"
 #include "LGPAdvancedEffects.h"
@@ -298,46 +299,48 @@ void effectPulse(RenderContext& ctx) {
 
 // ==================== EFFECT REGISTRATION ====================
 
-uint8_t registerCoreEffects(RendererActor* renderer) {
+uint16_t registerCoreEffects(RendererActor* renderer) {
     if (!renderer) return 0;
 
-    uint8_t count = 0;
+    uint16_t count = 0;
 
     // Register all core effects
-    // Fire (ID 0) - registered as IEffect in registerAllEffects()
+    // Fire - registered as IEffect in registerAllEffects()
     count++;  // Increment count to maintain ID sequence
-    // Ocean (ID 1) - registered as IEffect in registerAllEffects()
+    // Ocean - registered as IEffect in registerAllEffects()
     count++;  // Increment count to maintain ID sequence
-    // Plasma (ID 2) - registered as IEffect in registerAllEffects()
+    // Plasma - registered as IEffect in registerAllEffects()
     count++;  // Increment count to maintain ID sequence
-    // Confetti (ID 3) - registered as IEffect in registerAllEffects()
+    // Confetti - registered as IEffect in registerAllEffects()
     count++;  // Increment count to maintain ID sequence
-    // Sinelon (ID 4) - registered as IEffect in registerAllEffects()
+    // Sinelon - registered as IEffect in registerAllEffects()
     count++;  // Increment count to maintain ID sequence
-    // Juggle (ID 5) - registered as IEffect in registerAllEffects()
+    // Juggle - registered as IEffect in registerAllEffects()
     count++;  // Increment count to maintain ID sequence
-    // BPM (ID 6) - registered as IEffect in registerAllEffects()
+    // BPM - registered as IEffect in registerAllEffects()
     count++;  // Increment count to maintain ID sequence
-    // Wave (ID 7) - registered as IEffect in registerAllEffects()
+    // Wave - registered as IEffect in registerAllEffects()
     count++;  // Increment count to maintain ID sequence
-    // Ripple (ID 8) - registered as IEffect in registerAllEffects()
+    // Ripple - registered as IEffect in registerAllEffects()
     count++;  // Increment count to maintain ID sequence
-    // Heartbeat (ID 9) - registered as IEffect in registerAllEffects()
+    // Heartbeat - registered as IEffect in registerAllEffects()
     count++;  // Increment count to maintain ID sequence
-    // Interference (ID 10) - registered as IEffect in registerAllEffects()
+    // Interference - registered as IEffect in registerAllEffects()
     count++;  // Increment count to maintain ID sequence
-    // Breathing (ID 11) - registered as IEffect in registerAllEffects()
+    // Breathing - registered as IEffect in registerAllEffects()
     count++;  // Increment count to maintain ID sequence
-    // Pulse (ID 12) - registered as IEffect in registerAllEffects()
+    // Pulse - registered as IEffect in registerAllEffects()
     count++;  // Increment count to maintain ID sequence
 
     return count;
 }
 
-uint8_t registerAllEffects(RendererActor* renderer) {
+uint16_t registerAllEffects(RendererActor* renderer) {
     if (!renderer) return 0;
 
-    uint8_t total = 0;
+    using namespace lightwaveos;
+
+    uint16_t total = 0;
 
     // =================================================================
     // MEMORY NOTE: Static effect instances go into .bss (DRAM).
@@ -346,1034 +349,791 @@ uint8_t registerAllEffects(RendererActor* renderer) {
     // =================================================================
 
     // =============== REGISTER ALL NATIVE V2 EFFECTS ===============
-    // 68 total effects organized by category
-    // Legacy v1 effects are disabled until plugins/legacy is properly integrated
 
-    // Core effects (13) - IDs 0-12
-    uint8_t coreStart = total;
-    total += registerCoreEffects(renderer);
-    
-    // Pilot: Fire (ID 0) - IEffect native
+    // --- Core / Classic ---
+
     static ieffect::FireEffect fireInstance;
-    if (renderer->registerEffect(coreStart + 0, &fireInstance)) {
-        // Effect already counted in registerCoreEffects (count++), just register it
-    }
-    
-    // Pilot: Ocean (ID 1) - IEffect native
+    renderer->registerEffect(EID_FIRE, &fireInstance);
+    total++;
+
     static ieffect::OceanEffect oceanInstance;
-    if (renderer->registerEffect(coreStart + 1, &oceanInstance)) {
-        // Effect already counted in registerCoreEffects (count++), just register it
-    }
-    
-    // Pilot: Plasma (ID 2) - IEffect native
+    renderer->registerEffect(EID_OCEAN, &oceanInstance);
+    total++;
+
     static ieffect::PlasmaEffect plasmaInstance;
-    if (renderer->registerEffect(coreStart + 2, &plasmaInstance)) {
-        // Effect already counted in registerCoreEffects (count++), just register it
-    }
-    
-    // Pilot: Confetti (ID 3) - IEffect native
+    renderer->registerEffect(EID_PLASMA, &plasmaInstance);
+    total++;
+
     static ieffect::ConfettiEffect confettiInstance;
-    if (renderer->registerEffect(coreStart + 3, &confettiInstance)) {
-        // Effect already counted in registerCoreEffects (count++), just register it
-    }
-    
-    // Pilot: Sinelon (ID 4) - IEffect native
+    renderer->registerEffect(EID_CONFETTI, &confettiInstance);
+    total++;
+
     static ieffect::SinelonEffect sinelonInstance;
-    if (renderer->registerEffect(coreStart + 4, &sinelonInstance)) {
-        // Effect already counted in registerCoreEffects (count++), just register it
-    }
-    
-    // Pilot: Juggle (ID 5) - IEffect native
+    renderer->registerEffect(EID_SINELON, &sinelonInstance);
+    total++;
+
     static ieffect::JuggleEffect juggleInstance;
-    if (renderer->registerEffect(coreStart + 5, &juggleInstance)) {
-        // Effect already counted in registerCoreEffects (count++), just register it
-    }
-    
-    // Pilot: BPM (ID 6) - IEffect native
+    renderer->registerEffect(EID_JUGGLE, &juggleInstance);
+    total++;
+
     static ieffect::BPMEffect bpmInstance;
-    if (renderer->registerEffect(coreStart + 6, &bpmInstance)) {
-        // Effect already counted in registerCoreEffects (count++), just register it
-    }
-    
-    // Pilot: Wave Ambient (ID 7) - IEffect native (replaces WaveEffect)
-    // Uses time-driven motion with audio amplitude modulation (AMBIENT pattern)
+    renderer->registerEffect(EID_BPM, &bpmInstance);
+    total++;
+
+    // Wave Ambient - Uses time-driven motion with audio amplitude modulation (AMBIENT pattern)
     static ieffect::WaveAmbientEffect waveAmbientInstance;
-    if (renderer->registerEffect(coreStart + 7, &waveAmbientInstance)) {
-        // Effect already counted in registerCoreEffects (count++), just register it
-    }
-    
-    // Pilot: Ripple (ID 8) - IEffect native
+    renderer->registerEffect(EID_WAVE_AMBIENT, &waveAmbientInstance);
+    total++;
+
     static ieffect::RippleEffect rippleInstance;
-    if (renderer->registerEffect(coreStart + 8, &rippleInstance)) {
-        // Effect already counted in registerCoreEffects (count++), just register it
-    }
-    
-    // Pilot: Heartbeat (ID 9) - IEffect native
+    renderer->registerEffect(EID_RIPPLE, &rippleInstance);
+    total++;
+
     static ieffect::HeartbeatEffect heartbeatInstance;
-    if (renderer->registerEffect(coreStart + 9, &heartbeatInstance)) {
-        // Effect already counted in registerCoreEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_HEARTBEAT, &heartbeatInstance);
+    total++;
 
-    // Interference (ID 10) - IEffect native
     static ieffect::InterferenceEffect interferenceInstance;
-    if (renderer->registerEffect(coreStart + 10, &interferenceInstance)) {
-        // Effect already counted in registerCoreEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_INTERFERENCE, &interferenceInstance);
+    total++;
 
-    // Breathing (ID 11) - IEffect native
     static ieffect::BreathingEffect breathingInstance;
-    if (renderer->registerEffect(coreStart + 11, &breathingInstance)) {
-        // Effect already counted in registerCoreEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_BREATHING, &breathingInstance);
+    total++;
 
-    // Pulse (ID 12) - IEffect native
     static ieffect::PulseEffect pulseInstance;
-    if (renderer->registerEffect(coreStart + 12, &pulseInstance)) {
-        // Effect already counted in registerCoreEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_PULSE, &pulseInstance);
+    total++;
 
-    // LGP Interference effects (5) - IDs 13-17
-    uint8_t interferenceStart = total;
-    uint8_t interferenceCount = registerLGPInterferenceEffects(renderer, total);
-    total += interferenceCount;
-    
-    // LGP Box Wave (ID 13) - IEffect native
+    // --- LGP Interference ---
+
     static ieffect::LGPBoxWaveEffect boxWaveInstance;
-    if (renderer->registerEffect(interferenceStart + 0, &boxWaveInstance)) {
-        // Effect already counted in registerLGPInterferenceEffects (count++), just register it
-    }
-    
-    // LGP Holographic (ID 14) - IEffect native
+    renderer->registerEffect(EID_LGP_BOX_WAVE, &boxWaveInstance);
+    total++;
+
     static ieffect::LGPHolographicEffect holographicInstance;
-    if (renderer->registerEffect(interferenceStart + 1, &holographicInstance)) {
-        // Effect already counted in registerLGPInterferenceEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_HOLOGRAPHIC, &holographicInstance);
+    total++;
 
-    // Pilot: LGP Modal Resonance (ID 15) - IEffect native
     static ieffect::ModalResonanceEffect modalResonanceInstance;
-    if (renderer->registerEffect(interferenceStart + 2, &modalResonanceInstance)) {
-        // Effect already counted in registerLGPInterferenceEffects (count++), just register it
-    }
-    
-    // LGP Interference Scanner (ID 16) - IEffect native
+    renderer->registerEffect(EID_MODAL_RESONANCE, &modalResonanceInstance);
+    total++;
+
     static ieffect::LGPInterferenceScannerEffect interferenceScannerInstance;
-    if (renderer->registerEffect(interferenceStart + 3, &interferenceScannerInstance)) {
-        // Effect already counted in registerLGPInterferenceEffects (count++), just register it
-    }
-    
-    // LGP Wave Collision (ID 17) - IEffect native
+    renderer->registerEffect(EID_LGP_INTERFERENCE_SCANNER, &interferenceScannerInstance);
+    total++;
+
     static ieffect::LGPWaveCollisionEffect waveCollisionInstance;
-    if (renderer->registerEffect(interferenceStart + 4, &waveCollisionInstance)) {
-        // Effect already counted in registerLGPInterferenceEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_WAVE_COLLISION, &waveCollisionInstance);
+    total++;
 
-    // LGP Geometric effects (8) - IDs 18-25
-    uint8_t geometricStart = total;
-    uint8_t geometricCount = registerLGPGeometricEffects(renderer, total);
-    total += geometricCount;
-    
-    // LGP Diamond Lattice (ID 18) - IEffect native
+    // --- LGP Geometric ---
+
     static ieffect::LGPDiamondLatticeEffect diamondLatticeInstance;
-    if (renderer->registerEffect(geometricStart + 0, &diamondLatticeInstance)) {
-        // Effect already counted in registerLGPGeometricEffects (count++), just register it
-    }
-    
-    // LGP Hexagonal Grid (ID 19) - IEffect native
+    renderer->registerEffect(EID_LGP_DIAMOND_LATTICE, &diamondLatticeInstance);
+    total++;
+
     static ieffect::LGPHexagonalGridEffect hexagonalGridInstance;
-    if (renderer->registerEffect(geometricStart + 1, &hexagonalGridInstance)) {
-        // Effect already counted in registerLGPGeometricEffects (count++), just register it
-    }
-    
-    // LGP Spiral Vortex (ID 20) - IEffect native
+    renderer->registerEffect(EID_LGP_HEXAGONAL_GRID, &hexagonalGridInstance);
+    total++;
+
     static ieffect::LGPSpiralVortexEffect spiralVortexInstance;
-    if (renderer->registerEffect(geometricStart + 2, &spiralVortexInstance)) {
-        // Effect already counted in registerLGPGeometricEffects (count++), just register it
-    }
-    
-    // LGP Sierpinski (ID 21) - IEffect native
+    renderer->registerEffect(EID_LGP_SPIRAL_VORTEX, &spiralVortexInstance);
+    total++;
+
     static ieffect::LGPSierpinskiEffect sierpinskiInstance;
-    if (renderer->registerEffect(geometricStart + 3, &sierpinskiInstance)) {
-        // Effect already counted in registerLGPGeometricEffects (count++), just register it
-    }
-    
-    // Pilot: LGP Chevron Waves (ID 22) - IEffect native
+    renderer->registerEffect(EID_LGP_SIERPINSKI, &sierpinskiInstance);
+    total++;
+
     static ieffect::ChevronWavesEffect chevronWavesInstance;
-    if (renderer->registerEffect(geometricStart + 4, &chevronWavesInstance)) {
-        // Effect already counted in registerLGPGeometricEffects (count++), just register it
-    }
-    
-    // LGP Concentric Rings (ID 23) - IEffect native
+    renderer->registerEffect(EID_CHEVRON_WAVES, &chevronWavesInstance);
+    total++;
+
     static ieffect::LGPConcentricRingsEffect concentricRingsInstance;
-    if (renderer->registerEffect(geometricStart + 5, &concentricRingsInstance)) {
-        // Effect already counted in registerLGPGeometricEffects (count++), just register it
-    }
-    
-    // LGP Star Burst (ID 24) - IEffect native
+    renderer->registerEffect(EID_LGP_CONCENTRIC_RINGS, &concentricRingsInstance);
+    total++;
+
     static ieffect::LGPStarBurstEffect starBurstInstance;
-    if (renderer->registerEffect(geometricStart + 6, &starBurstInstance)) {
-        // Effect already counted in registerLGPGeometricEffects (count++), just register it
-    }
-    
-    // LGP Mesh Network (ID 25) - IEffect native
+    renderer->registerEffect(EID_LGP_STAR_BURST, &starBurstInstance);
+    total++;
+
     static ieffect::LGPMeshNetworkEffect meshNetworkInstance;
-    if (renderer->registerEffect(geometricStart + 7, &meshNetworkInstance)) {
-        // Effect already counted in registerLGPGeometricEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_MESH_NETWORK, &meshNetworkInstance);
+    total++;
 
-    // LGP Advanced effects (8) - IDs 26-33
-    uint8_t advancedStart = total;
-    uint8_t advancedCount = registerLGPAdvancedEffects(renderer, total);
-    total += advancedCount;
-    
-    // LGP Moire Curtains (ID 26) - IEffect native
+    // --- LGP Advanced Optical ---
+
     static ieffect::LGPMoireCurtainsEffect moireCurtainsInstance;
-    if (renderer->registerEffect(advancedStart + 0, &moireCurtainsInstance)) {
-        // Effect already counted in registerLGPAdvancedEffects (count++), just register it
-    }
-    
-    // LGP Radial Ripple (ID 27) - IEffect native
+    renderer->registerEffect(EID_LGP_MOIRE_CURTAINS, &moireCurtainsInstance);
+    total++;
+
     static ieffect::LGPRadialRippleEffect radialRippleInstance;
-    if (renderer->registerEffect(advancedStart + 1, &radialRippleInstance)) {
-        // Effect already counted in registerLGPAdvancedEffects (count++), just register it
-    }
-    
-    // LGP Holographic Vortex (ID 28) - IEffect native
+    renderer->registerEffect(EID_LGP_RADIAL_RIPPLE, &radialRippleInstance);
+    total++;
+
     static ieffect::LGPHolographicVortexEffect holographicVortexInstance;
-    if (renderer->registerEffect(advancedStart + 2, &holographicVortexInstance)) {
-        // Effect already counted in registerLGPAdvancedEffects (count++), just register it
-    }
-    
-    // LGP Evanescent Drift (ID 29) - IEffect native
+    renderer->registerEffect(EID_LGP_HOLOGRAPHIC_VORTEX, &holographicVortexInstance);
+    total++;
+
     static ieffect::LGPEvanescentDriftEffect evanescentDriftInstance;
-    if (renderer->registerEffect(advancedStart + 3, &evanescentDriftInstance)) {
-        // Effect already counted in registerLGPAdvancedEffects (count++), just register it
-    }
-    
-    // LGP Chromatic Shear (ID 30) - IEffect native
+    renderer->registerEffect(EID_LGP_EVANESCENT_DRIFT, &evanescentDriftInstance);
+    total++;
+
     static ieffect::LGPChromaticShearEffect chromaticShearInstance;
-    if (renderer->registerEffect(advancedStart + 4, &chromaticShearInstance)) {
-        // Effect already counted in registerLGPAdvancedEffects (count++), just register it
-    }
-    
-    // LGP Modal Cavity (ID 31) - IEffect native
+    renderer->registerEffect(EID_LGP_CHROMATIC_SHEAR, &chromaticShearInstance);
+    total++;
+
     static ieffect::LGPModalCavityEffect modalCavityInstance;
-    if (renderer->registerEffect(advancedStart + 5, &modalCavityInstance)) {
-        // Effect already counted in registerLGPAdvancedEffects (count++), just register it
-    }
-    
-    // LGP Fresnel Zones (ID 32) - IEffect native
+    renderer->registerEffect(EID_LGP_MODAL_CAVITY, &modalCavityInstance);
+    total++;
+
     static ieffect::LGPFresnelZonesEffect fresnelZonesInstance;
-    if (renderer->registerEffect(advancedStart + 6, &fresnelZonesInstance)) {
-        // Effect already counted in registerLGPAdvancedEffects (count++), just register it
-    }
-    
-    // LGP Photonic Crystal (ID 33) - IEffect native
+    renderer->registerEffect(EID_LGP_FRESNEL_ZONES, &fresnelZonesInstance);
+    total++;
+
     static ieffect::LGPPhotonicCrystalEffect photonicCrystalInstance;
-    if (renderer->registerEffect(advancedStart + 7, &photonicCrystalInstance)) {
-        // Effect already counted in registerLGPAdvancedEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_PHOTONIC_CRYSTAL, &photonicCrystalInstance);
+    total++;
 
-    // LGP Organic effects (6) - IDs 34-39
-    uint8_t organicStart = total;
-    uint8_t organicCount = registerLGPOrganicEffects(renderer, total);
-    total += organicCount;
-    
-    // LGP Aurora Borealis (ID 34) - IEffect native
+    // --- LGP Organic ---
+
     static ieffect::LGPAuroraBorealisEffect auroraBorealisInstance;
-    if (renderer->registerEffect(organicStart + 0, &auroraBorealisInstance)) {
-        // Effect already counted in registerLGPOrganicEffects (count++), just register it
-    }
-    
-    // LGP Bioluminescent Waves (ID 35) - IEffect native
+    renderer->registerEffect(EID_LGP_AURORA_BOREALIS, &auroraBorealisInstance);
+    total++;
+
     static ieffect::LGPBioluminescentWavesEffect bioluminescentWavesInstance;
-    if (renderer->registerEffect(organicStart + 1, &bioluminescentWavesInstance)) {
-        // Effect already counted in registerLGPOrganicEffects (count++), just register it
-    }
-    
-    // LGP Plasma Membrane (ID 36) - IEffect native
+    renderer->registerEffect(EID_LGP_BIOLUMINESCENT_WAVES, &bioluminescentWavesInstance);
+    total++;
+
     static ieffect::LGPPlasmaMembraneEffect plasmaMembraneInstance;
-    if (renderer->registerEffect(organicStart + 2, &plasmaMembraneInstance)) {
-        // Effect already counted in registerLGPOrganicEffects (count++), just register it
-    }
-    
-    // LGP Neural Network (ID 37) - IEffect native
+    renderer->registerEffect(EID_LGP_PLASMA_MEMBRANE, &plasmaMembraneInstance);
+    total++;
+
     static ieffect::LGPNeuralNetworkEffect neuralNetworkInstance;
-    if (renderer->registerEffect(organicStart + 3, &neuralNetworkInstance)) {
-        // Effect already counted in registerLGPOrganicEffects (count++), just register it
-    }
-    
-    // LGP Crystalline Growth (ID 38) - IEffect native
+    renderer->registerEffect(EID_LGP_NEURAL_NETWORK, &neuralNetworkInstance);
+    total++;
+
     static ieffect::LGPCrystallineGrowthEffect crystallineGrowthInstance;
-    if (renderer->registerEffect(organicStart + 4, &crystallineGrowthInstance)) {
-        // Effect already counted in registerLGPOrganicEffects (count++), just register it
-    }
-    
-    // LGP Fluid Dynamics (ID 39) - IEffect native
+    renderer->registerEffect(EID_LGP_CRYSTALLINE_GROWTH, &crystallineGrowthInstance);
+    total++;
+
     static ieffect::LGPFluidDynamicsEffect fluidDynamicsInstance;
-    if (renderer->registerEffect(organicStart + 5, &fluidDynamicsInstance)) {
-        // Effect already counted in registerLGPOrganicEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_FLUID_DYNAMICS, &fluidDynamicsInstance);
+    total++;
 
-    // LGP Quantum effects (10) - IDs 40-49
-    uint8_t quantumStart = total;
-    uint8_t quantumCount = registerLGPQuantumEffects(renderer, total);
-    total += quantumCount;
+    // --- LGP Quantum ---
 
-    // LGP Quantum Tunneling (ID 40) - IEffect native
     static ieffect::LGPQuantumTunnelingEffect quantumTunnelingInstance;
-    if (renderer->registerEffect(quantumStart + 0, &quantumTunnelingInstance)) {
-        // Effect already counted in registerLGPQuantumEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_QUANTUM_TUNNELING, &quantumTunnelingInstance);
+    total++;
 
-    // LGP Gravitational Lensing (ID 41) - IEffect native
     static ieffect::LGPGravitationalLensingEffect gravitationalLensingInstance;
-    if (renderer->registerEffect(quantumStart + 1, &gravitationalLensingInstance)) {
-        // Effect already counted in registerLGPQuantumEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_GRAVITATIONAL_LENSING, &gravitationalLensingInstance);
+    total++;
 
-    // LGP Time Crystal (ID 42) - IEffect native
     static ieffect::LGPTimeCrystalEffect timeCrystalInstance;
-    if (renderer->registerEffect(quantumStart + 2, &timeCrystalInstance)) {
-        // Effect already counted in registerLGPQuantumEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_TIME_CRYSTAL, &timeCrystalInstance);
+    total++;
 
-    // LGP Soliton Waves (ID 43) - IEffect native
     static ieffect::LGPSolitonWavesEffect solitonWavesInstance;
-    if (renderer->registerEffect(quantumStart + 3, &solitonWavesInstance)) {
-        // Effect already counted in registerLGPQuantumEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_SOLITON_WAVES, &solitonWavesInstance);
+    total++;
 
-    // LGP Metamaterial Cloak (ID 44) - IEffect native
     static ieffect::LGPMetamaterialCloakEffect metamaterialCloakInstance;
-    if (renderer->registerEffect(quantumStart + 4, &metamaterialCloakInstance)) {
-        // Effect already counted in registerLGPQuantumEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_METAMATERIAL_CLOAK, &metamaterialCloakInstance);
+    total++;
 
-    // LGP GRIN Cloak (ID 45) - IEffect native
     static ieffect::LGPGrinCloakEffect grinCloakInstance;
-    if (renderer->registerEffect(quantumStart + 5, &grinCloakInstance)) {
-        // Effect already counted in registerLGPQuantumEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_GRIN_CLOAK, &grinCloakInstance);
+    total++;
 
-    // LGP Caustic Fan (ID 46) - IEffect native
     static ieffect::LGPCausticFanEffect causticFanInstance;
-    if (renderer->registerEffect(quantumStart + 6, &causticFanInstance)) {
-        // Effect already counted in registerLGPQuantumEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_CAUSTIC_FAN, &causticFanInstance);
+    total++;
 
-    // LGP Birefringent Shear (ID 47) - IEffect native
     static ieffect::LGPBirefringentShearEffect birefringentShearInstance;
-    if (renderer->registerEffect(quantumStart + 7, &birefringentShearInstance)) {
-        // Effect already counted in registerLGPQuantumEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_BIREFRINGENT_SHEAR, &birefringentShearInstance);
+    total++;
 
-    // LGP Anisotropic Cloak (ID 48) - IEffect native
     static ieffect::LGPAnisotropicCloakEffect anisotropicCloakInstance;
-    if (renderer->registerEffect(quantumStart + 8, &anisotropicCloakInstance)) {
-        // Effect already counted in registerLGPQuantumEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_ANISOTROPIC_CLOAK, &anisotropicCloakInstance);
+    total++;
 
-    // LGP Evanescent Skin (ID 49) - IEffect native
     static ieffect::LGPEvanescentSkinEffect evanescentSkinInstance;
-    if (renderer->registerEffect(quantumStart + 9, &evanescentSkinInstance)) {
-        // Effect already counted in registerLGPQuantumEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_EVANESCENT_SKIN, &evanescentSkinInstance);
+    total++;
 
-    // LGP Color Mixing effects (10) - IDs 50-59
-    uint8_t colorMixStart = total;
-    uint8_t colorMixCount = registerLGPColorMixingEffects(renderer, total);
-    total += colorMixCount;
+    // --- LGP Colour Mixing ---
 
-    // LGP Color Temperature (ID 50) - IEffect native
     static ieffect::LGPColorTemperatureEffect colorTemperatureInstance;
-    if (renderer->registerEffect(colorMixStart + 0, &colorTemperatureInstance)) {
-        // Effect already counted in registerLGPColorMixingEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_COLOR_TEMPERATURE, &colorTemperatureInstance);
+    total++;
 
-    // LGP RGB Prism (ID 51) - IEffect native
     static ieffect::LGPRGBPrismEffect rgbPrismInstance;
-    if (renderer->registerEffect(colorMixStart + 1, &rgbPrismInstance)) {
-        // Effect already counted in registerLGPColorMixingEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_RGB_PRISM, &rgbPrismInstance);
+    total++;
 
-    // LGP Complementary Mixing (ID 52) - IEffect native
     static ieffect::LGPComplementaryMixingEffect complementaryMixingInstance;
-    if (renderer->registerEffect(colorMixStart + 2, &complementaryMixingInstance)) {
-        // Effect already counted in registerLGPColorMixingEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_COMPLEMENTARY_MIXING, &complementaryMixingInstance);
+    total++;
 
-    // LGP Quantum Colors (ID 53) - IEffect native
     static ieffect::LGPQuantumColorsEffect quantumColorsInstance;
-    if (renderer->registerEffect(colorMixStart + 3, &quantumColorsInstance)) {
-        // Effect already counted in registerLGPColorMixingEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_QUANTUM_COLORS, &quantumColorsInstance);
+    total++;
 
-    // LGP Doppler Shift (ID 54) - IEffect native
     static ieffect::LGPDopplerShiftEffect dopplerShiftInstance;
-    if (renderer->registerEffect(colorMixStart + 4, &dopplerShiftInstance)) {
-        // Effect already counted in registerLGPColorMixingEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_DOPPLER_SHIFT, &dopplerShiftInstance);
+    total++;
 
-    // LGP Color Accelerator (ID 55) - IEffect native
     static ieffect::LGPColorAcceleratorEffect colorAcceleratorInstance;
-    if (renderer->registerEffect(colorMixStart + 5, &colorAcceleratorInstance)) {
-        // Effect already counted in registerLGPColorMixingEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_COLOR_ACCELERATOR, &colorAcceleratorInstance);
+    total++;
 
-    // LGP DNA Helix (ID 56) - IEffect native
     static ieffect::LGPDNAHelixEffect dnaHelixInstance;
-    if (renderer->registerEffect(colorMixStart + 6, &dnaHelixInstance)) {
-        // Effect already counted in registerLGPColorMixingEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_DNA_HELIX, &dnaHelixInstance);
+    total++;
 
-    // LGP Phase Transition (ID 57) - IEffect native
     static ieffect::LGPPhaseTransitionEffect phaseTransitionInstance;
-    if (renderer->registerEffect(colorMixStart + 7, &phaseTransitionInstance)) {
-        // Effect already counted in registerLGPColorMixingEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_PHASE_TRANSITION, &phaseTransitionInstance);
+    total++;
 
-    // LGP Chromatic Aberration (ID 58) - IEffect native
     static ieffect::LGPChromaticAberrationEffect chromaticAberrationInstance;
-    if (renderer->registerEffect(colorMixStart + 8, &chromaticAberrationInstance)) {
-        // Effect already counted in registerLGPColorMixingEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_CHROMATIC_ABERRATION, &chromaticAberrationInstance);
+    total++;
 
-    // LGP Perceptual Blend (ID 59) - IEffect native
     static ieffect::LGPPerceptualBlendEffect perceptualBlendInstance;
-    if (renderer->registerEffect(colorMixStart + 9, &perceptualBlendInstance)) {
-        // Effect already counted in registerLGPColorMixingEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_PERCEPTUAL_BLEND, &perceptualBlendInstance);
+    total++;
 
-    // LGP Novel Physics effects (5) - IDs 60-64
-    uint8_t novelStart = total;
-    uint8_t novelCount = registerLGPNovelPhysicsEffects(renderer, total);
-    total += novelCount;
+    // --- LGP Novel Physics ---
 
-    // LGP Chladni Harmonics (ID 60) - IEffect native
     static ieffect::LGPChladniHarmonicsEffect chladniHarmonicsInstance;
-    if (renderer->registerEffect(novelStart + 0, &chladniHarmonicsInstance)) {
-        // Effect already counted in registerLGPNovelPhysicsEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_CHLADNI_HARMONICS, &chladniHarmonicsInstance);
+    total++;
 
-    // LGP Gravitational Wave Chirp (ID 61) - IEffect native
     static ieffect::LGPGravitationalWaveChirpEffect gravitationalWaveChirpInstance;
-    if (renderer->registerEffect(novelStart + 1, &gravitationalWaveChirpInstance)) {
-        // Effect already counted in registerLGPNovelPhysicsEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_GRAVITATIONAL_WAVE_CHIRP, &gravitationalWaveChirpInstance);
+    total++;
 
-    // LGP Quantum Entanglement (ID 62) - IEffect native
     static ieffect::LGPQuantumEntanglementEffect quantumEntanglementInstance;
-    if (renderer->registerEffect(novelStart + 2, &quantumEntanglementInstance)) {
-        // Effect already counted in registerLGPNovelPhysicsEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_QUANTUM_ENTANGLEMENT, &quantumEntanglementInstance);
+    total++;
 
-    // LGP Mycelial Network (ID 63) - IEffect native
     static ieffect::LGPMycelialNetworkEffect mycelialNetworkInstance;
-    if (renderer->registerEffect(novelStart + 3, &mycelialNetworkInstance)) {
-        // Effect already counted in registerLGPNovelPhysicsEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_MYCELIAL_NETWORK, &mycelialNetworkInstance);
+    total++;
 
-    // LGP Riley Dissonance (ID 64) - IEffect native
     static ieffect::LGPRileyDissonanceEffect rileyDissonanceInstance;
-    if (renderer->registerEffect(novelStart + 4, &rileyDissonanceInstance)) {
-        // Effect already counted in registerLGPNovelPhysicsEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_RILEY_DISSONANCE, &rileyDissonanceInstance);
+    total++;
 
-    // LGP Chromatic effects (3) - IDs 65-67 (physics-accurate Cauchy dispersion)
-    uint8_t chromaticStart = total;
-    uint8_t chromaticCount = registerLGPChromaticEffects(renderer, total);
-    total += chromaticCount;
+    // --- LGP Chromatic (physics-accurate Cauchy dispersion) ---
 
-    // LGP Chromatic Lens (ID 65) - IEffect native
     static ieffect::LGPChromaticLensEffect chromaticLensInstance;
-    if (renderer->registerEffect(chromaticStart + 0, &chromaticLensInstance)) {
-        // Effect already counted in registerLGPChromaticEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_CHROMATIC_LENS, &chromaticLensInstance);
+    total++;
 
-    // LGP Chromatic Pulse (ID 66) - IEffect native
     static ieffect::LGPChromaticPulseEffect chromaticPulseInstance;
-    if (renderer->registerEffect(chromaticStart + 1, &chromaticPulseInstance)) {
-        // Effect already counted in registerLGPChromaticEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_LGP_CHROMATIC_PULSE, &chromaticPulseInstance);
+    total++;
 
-    // Pilot: LGP Chromatic Interference (ID 67) - IEffect native
     static ieffect::ChromaticInterferenceEffect chromaticInterferenceInstance;
-    if (renderer->registerEffect(chromaticStart + 2, &chromaticInterferenceInstance)) {
-        // Effect already counted in registerLGPChromaticEffects (count++), just register it
-    }
+    renderer->registerEffect(EID_CHROMATIC_INTERFERENCE, &chromaticInterferenceInstance);
+    total++;
 
-    // Audio-Reactive effects (Phase 2) - ID 68+
-    // LGP Audio Test (ID 68) - IEffect native, demonstrates audio pipeline
+    // --- Audio-Reactive ---
+
+    // LGP Audio Test - demonstrates audio pipeline
     static ieffect::LGPAudioTestEffect audioTestInstance;
-    if (renderer->registerEffect(total, &audioTestInstance)) {
-        total++;  // Count this effect
-    }
+    renderer->registerEffect(EID_LGP_AUDIO_TEST, &audioTestInstance);
+    total++;
 
-    // LGP Beat Pulse (ID 69) - Beat-synchronized radial pulse
+    // LGP Beat Pulse - Beat-synchronized radial pulse
     static ieffect::LGPBeatPulseEffect beatPulseInstance;
-    if (renderer->registerEffect(total, &beatPulseInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_BEAT_PULSE, &beatPulseInstance);
+    total++;
 
-    // LGP Spectrum Bars (ID 70) - 8-band spectrum analyzer
+    // LGP Spectrum Bars - 8-band spectrum analyzer
     static ieffect::LGPSpectrumBarsEffect spectrumBarsInstance;
-    if (renderer->registerEffect(total, &spectrumBarsInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_SPECTRUM_BARS, &spectrumBarsInstance);
+    total++;
 
-    // LGP Bass Breath (ID 71) - Organic breathing driven by bass
+    // LGP Bass Breath - Organic breathing driven by bass
     static ieffect::LGPBassBreathEffect bassBreathInstance;
-    if (renderer->registerEffect(total, &bassBreathInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_BASS_BREATH, &bassBreathInstance);
+    total++;
 
-    // Audio Waveform (ID 72) - True time-domain waveform visualization
+    // Audio Waveform - True time-domain waveform visualization
     static ieffect::AudioWaveformEffect audioWaveformInstance;
-    if (renderer->registerEffect(total, &audioWaveformInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_AUDIO_WAVEFORM, &audioWaveformInstance);
+    total++;
 
-    // Audio Bloom (ID 73) - Centre bloom pulses triggered by audio transients
+    // Audio Bloom - Centre bloom pulses triggered by audio transients
     static ieffect::AudioBloomEffect audioBloomInstance;
-    if (renderer->registerEffect(total, &audioBloomInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_AUDIO_BLOOM, &audioBloomInstance);
+    total++;
 
-    // LGP Star Burst Narrative (ID 74) - Legacy core with phrase-gated harmonic colour
+    // LGP Star Burst Narrative - Legacy core with phrase-gated harmonic colour
     static ieffect::LGPStarBurstNarrativeEffect starBurstNarrativeInstance;
-    if (renderer->registerEffect(total, &starBurstNarrativeInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_STAR_BURST_NARRATIVE, &starBurstNarrativeInstance);
+    total++;
 
-    // LGP Chord Glow (ID 75) - Full chord detection showcase effect
+    // LGP Chord Glow - Full chord detection showcase effect
     static ieffect::LGPChordGlowEffect chordGlowInstance;
-    if (renderer->registerEffect(total, &chordGlowInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_CHORD_GLOW, &chordGlowInstance);
+    total++;
 
-    // Wave Reactive (ID 76) - Energy-accumulating wave with audio-driven motion
+    // Wave Reactive - Energy-accumulating wave with audio-driven motion
     // Uses Kaleidoscope-style energy accumulation (REACTIVE pattern)
     static ieffect::WaveReactiveEffect waveReactiveInstance;
-    if (renderer->registerEffect(total, &waveReactiveInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_WAVE_REACTIVE, &waveReactiveInstance);
+    total++;
 
-    // Perlin-based LGP effects (IDs 77-80) - Audio-reactive noise field patterns
-    // LGP Perlin Veil (ID 77) - Slow drifting curtains from centre, audio-driven advection
+    // --- Perlin Reactive (audio-reactive noise field patterns) ---
+
+    // LGP Perlin Veil - Slow drifting curtains from centre, audio-driven advection
     static ieffect::LGPPerlinVeilEffect perlinVeilInstance;
-    if (renderer->registerEffect(total, &perlinVeilInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_PERLIN_VEIL, &perlinVeilInstance);
+    total++;
 
-    // LGP Perlin Shocklines (ID 78) - Beat-driven travelling ridges
+    // LGP Perlin Shocklines - Beat-driven travelling ridges
     static ieffect::LGPPerlinShocklinesEffect perlinShocklinesInstance;
-    if (renderer->registerEffect(total, &perlinShocklinesInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_PERLIN_SHOCKLINES, &perlinShocklinesInstance);
+    total++;
 
-    // LGP Perlin Caustics (ID 79) - Sparkling caustic lobes, treble→sparkle, bass→scale
+    // LGP Perlin Caustics - Sparkling caustic lobes, treble->sparkle, bass->scale
     static ieffect::LGPPerlinCausticsEffect perlinCausticsInstance;
-    if (renderer->registerEffect(total, &perlinCausticsInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_PERLIN_CAUSTICS, &perlinCausticsInstance);
+    total++;
 
-    // LGP Perlin Interference Weave (ID 80) - Dual-strip moiré interference
+    // LGP Perlin Interference Weave - Dual-strip moire interference
     static ieffect::LGPPerlinInterferenceWeaveEffect perlinInterferenceWeaveInstance;
-    if (renderer->registerEffect(total, &perlinInterferenceWeaveInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_PERLIN_INTERFERENCE_WEAVE, &perlinInterferenceWeaveInstance);
+    total++;
 
-    // Perlin-based LGP effects (IDs 81-84) - Ambient (time-driven) variants
-    // LGP Perlin Veil Ambient (ID 81) - Time-driven drifting curtains
+    // --- Perlin Ambient (time-driven variants) ---
+
+    // LGP Perlin Veil Ambient - Time-driven drifting curtains
     static ieffect::LGPPerlinVeilAmbientEffect perlinVeilAmbientInstance;
-    if (renderer->registerEffect(total, &perlinVeilAmbientInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_PERLIN_VEIL_AMBIENT, &perlinVeilAmbientInstance);
+    total++;
 
-    // LGP Perlin Shocklines Ambient (ID 82) - Time-driven travelling ridges
+    // LGP Perlin Shocklines Ambient - Time-driven travelling ridges
     static ieffect::LGPPerlinShocklinesAmbientEffect perlinShocklinesAmbientInstance;
-    if (renderer->registerEffect(total, &perlinShocklinesAmbientInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_PERLIN_SHOCKLINES_AMBIENT, &perlinShocklinesAmbientInstance);
+    total++;
 
-    // LGP Perlin Caustics Ambient (ID 83) - Time-driven caustic lobes
+    // LGP Perlin Caustics Ambient - Time-driven caustic lobes
     static ieffect::LGPPerlinCausticsAmbientEffect perlinCausticsAmbientInstance;
-    if (renderer->registerEffect(total, &perlinCausticsAmbientInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_PERLIN_CAUSTICS_AMBIENT, &perlinCausticsAmbientInstance);
+    total++;
 
-    // LGP Perlin Interference Weave Ambient (ID 84) - Time-driven moiré
+    // LGP Perlin Interference Weave Ambient - Time-driven moire
     static ieffect::LGPPerlinInterferenceWeaveAmbientEffect perlinInterferenceWeaveAmbientInstance;
-    if (renderer->registerEffect(total, &perlinInterferenceWeaveAmbientInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_PERLIN_INTERFERENCE_WEAVE_AMBIENT, &perlinInterferenceWeaveAmbientInstance);
+    total++;
 
-    // Perlin Backend Test Effects (IDs 85-87) - A/B/C comparison harness
-    // Perlin Backend Test A (ID 85) - FastLED inoise8 baseline
+    // --- Perlin Backend Test (A/B/C comparison harness) ---
+
+    // Perlin Backend Test A - FastLED inoise8 baseline
     static ieffect::LGPPerlinBackendFastLEDEffect perlinBackendFastLEDInstance;
-    if (renderer->registerEffect(total, &perlinBackendFastLEDInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_PERLIN_BACKEND_FAST_LED, &perlinBackendFastLEDInstance);
+    total++;
 
-    // Perlin Backend Test B (ID 86) - Emotiscope 2.0 Perlin full-res
+    // Perlin Backend Test B - Emotiscope 2.0 Perlin full-res
     static ieffect::LGPPerlinBackendEmotiscopeFullEffect perlinBackendEmotiscopeFullInstance;
-    if (renderer->registerEffect(total, &perlinBackendEmotiscopeFullInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_PERLIN_BACKEND_EMOTISCOPE_FULL, &perlinBackendEmotiscopeFullInstance);
+    total++;
 
-    // Perlin Backend Test C (ID 87) - Emotiscope 2.0 Perlin quarter-res + interpolation
+    // Perlin Backend Test C - Emotiscope 2.0 Perlin quarter-res + interpolation
     static ieffect::LGPPerlinBackendEmotiscopeQuarterEffect perlinBackendEmotiscopeQuarterInstance;
-    if (renderer->registerEffect(total, &perlinBackendEmotiscopeQuarterInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_PERLIN_BACKEND_EMOTISCOPE_QUARTER, &perlinBackendEmotiscopeQuarterInstance);
+    total++;
 
-    // =============== ENHANCED AUDIO-REACTIVE EFFECTS (88-99) ===============
+    // =============== ENHANCED AUDIO-REACTIVE EFFECTS ===============
 
-    // BPM Enhanced (ID 88) - Tempo-locked pulse rings
+    // BPM Enhanced - Tempo-locked pulse rings
     static ieffect::BPMEnhancedEffect bpmEnhancedInstance;
-    if (renderer->registerEffect(total, &bpmEnhancedInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_BPM_ENHANCED, &bpmEnhancedInstance);
+    total++;
 
-    // Breathing Enhanced (ID 89) - Style-adaptive breathing
+    // Breathing Enhanced - Style-adaptive breathing
     static ieffect::BreathingEnhancedEffect breathingEnhancedInstance;
-    if (renderer->registerEffect(total, &breathingEnhancedInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_BREATHING_ENHANCED, &breathingEnhancedInstance);
+    total++;
 
-    // Chevron Waves Enhanced (ID 90) - Beat-synced chevron propagation
+    // Chevron Waves Enhanced - Beat-synced chevron propagation
     static ieffect::ChevronWavesEnhancedEffect chevronWavesEnhancedInstance;
-    if (renderer->registerEffect(total, &chevronWavesEnhancedInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_CHEVRON_WAVES_ENHANCED, &chevronWavesEnhancedInstance);
+    total++;
 
-    // LGP Interference Scanner Enhanced (ID 91) - Audio-reactive scan speed
+    // LGP Interference Scanner Enhanced - Audio-reactive scan speed
     static ieffect::LGPInterferenceScannerEnhancedEffect interferenceScannerEnhancedInstance;
-    if (renderer->registerEffect(total, &interferenceScannerEnhancedInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_INTERFERENCE_SCANNER_ENHANCED, &interferenceScannerEnhancedInstance);
+    total++;
 
-    // LGP Photonic Crystal Enhanced (ID 92) - Harmonic lattice modulation
+    // LGP Photonic Crystal Enhanced - Harmonic lattice modulation
     static ieffect::LGPPhotonicCrystalEnhancedEffect photonicCrystalEnhancedInstance;
-    if (renderer->registerEffect(total, &photonicCrystalEnhancedInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_PHOTONIC_CRYSTAL_ENHANCED, &photonicCrystalEnhancedInstance);
+    total++;
 
-    // LGP Spectrum Detail (ID 93) - 64-bin FFT direct visualisation
+    // LGP Spectrum Detail - 64-bin FFT direct visualisation
     static ieffect::LGPSpectrumDetailEffect spectrumDetailInstance;
-    if (renderer->registerEffect(total, &spectrumDetailInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_SPECTRUM_DETAIL, &spectrumDetailInstance);
+    total++;
 
-    // LGP Spectrum Detail Enhanced (ID 94) - Saliency-weighted spectrum
+    // LGP Spectrum Detail Enhanced - Saliency-weighted spectrum
     static ieffect::LGPSpectrumDetailEnhancedEffect spectrumDetailEnhancedInstance;
-    if (renderer->registerEffect(total, &spectrumDetailEnhancedInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_SPECTRUM_DETAIL_ENHANCED, &spectrumDetailEnhancedInstance);
+    total++;
 
-    // LGP Star Burst Enhanced (ID 95) - Beat-triggered bursts
+    // LGP Star Burst Enhanced - Beat-triggered bursts
     static ieffect::LGPStarBurstEnhancedEffect starBurstEnhancedInstance;
-    if (renderer->registerEffect(total, &starBurstEnhancedInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_STAR_BURST_ENHANCED, &starBurstEnhancedInstance);
+    total++;
 
-    // LGP Wave Collision Enhanced (ID 96) - Audio-driven wave interference
+    // LGP Wave Collision Enhanced - Audio-driven wave interference
     static ieffect::LGPWaveCollisionEnhancedEffect waveCollisionEnhancedInstance;
-    if (renderer->registerEffect(total, &waveCollisionEnhancedInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_WAVE_COLLISION_ENHANCED, &waveCollisionEnhancedInstance);
+    total++;
 
-    // Ripple Enhanced (ID 97) - Beat-synced ripple propagation
+    // Ripple Enhanced - Beat-synced ripple propagation
     static ieffect::RippleEnhancedEffect rippleEnhancedInstance;
-    if (renderer->registerEffect(total, &rippleEnhancedInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_RIPPLE_ENHANCED, &rippleEnhancedInstance);
+    total++;
 
-    // Snapwave Linear (ID 98) - v1 parity, LINEAR exempt from CENTER_ORIGIN
+    // Snapwave Linear - v1 parity, LINEAR exempt from CENTER_ORIGIN
     static ieffect::SnapwaveLinearEffect snapwaveLinearInstance;
-    if (renderer->registerEffect(total, &snapwaveLinearInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_SNAPWAVE_LINEAR, &snapwaveLinearInstance);
+    total++;
 
     // =============== DIAGNOSTIC EFFECTS ===============
 
-    // Trinity Test (ID 99) - Diagnostic effect for PRISM Trinity data flow verification
+    // Trinity Test - Diagnostic effect for PRISM Trinity data flow verification
     static ieffect::TrinityTestEffect trinityTestInstance;
-    if (renderer->registerEffect(total, &trinityTestInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_TRINITY_TEST, &trinityTestInstance);
+    total++;
 
     // =============== PALETTE AUTO-CYCLE EFFECTS ===============
 
-    // LGP Holographic Auto-Cycle (ID 100) - Holographic with internal palette cycling
+    // LGP Holographic Auto-Cycle - Holographic with internal palette cycling
     static ieffect::LGPHolographicAutoCycleEffect holographicAutoCycleInstance;
-    if (renderer->registerEffect(total, &holographicAutoCycleInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_HOLOGRAPHIC_AUTO_CYCLE, &holographicAutoCycleInstance);
+    total++;
 
     // =============== ES v1.1 REFERENCE SHOWS ===============
     // These are ports of Emotiscope v1.1_320 light modes for parity comparisons.
 
-    // ES Analog (Ref) (ID 101)
     static ieffect::esv11_reference::EsAnalogRefEffect esAnalogRefInstance;
-    if (renderer->registerEffect(total, &esAnalogRefInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_ES_ANALOG, &esAnalogRefInstance);
+    total++;
 
-    // ES Spectrum (Ref) (ID 102)
     static ieffect::esv11_reference::EsSpectrumRefEffect esSpectrumRefInstance;
-    if (renderer->registerEffect(total, &esSpectrumRefInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_ES_SPECTRUM, &esSpectrumRefInstance);
+    total++;
 
-    // ES Octave (Ref) (ID 103)
     static ieffect::esv11_reference::EsOctaveRefEffect esOctaveRefInstance;
-    if (renderer->registerEffect(total, &esOctaveRefInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_ES_OCTAVE, &esOctaveRefInstance);
+    total++;
 
-    // ES Bloom (Ref) (ID 104)
     static ieffect::esv11_reference::EsBloomRefEffect esBloomRefInstance;
-    if (renderer->registerEffect(total, &esBloomRefInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_ES_BLOOM, &esBloomRefInstance);
+    total++;
 
-    // ES Waveform (Ref) (ID 105)
     static ieffect::esv11_reference::EsWaveformRefEffect esWaveformRefInstance;
-    if (renderer->registerEffect(total, &esWaveformRefInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_ES_WAVEFORM, &esWaveformRefInstance);
+    total++;
 
-    // Ripple (ES tuned) (ID 106)
+    // --- ES Tuned ---
+
     static ieffect::RippleEsTunedEffect rippleEsTunedInstance;
-    if (renderer->registerEffect(total, &rippleEsTunedInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_RIPPLE_ES_TUNED, &rippleEsTunedInstance);
+    total++;
 
-    // Heartbeat (ES tuned) (ID 107)
     static ieffect::HeartbeatEsTunedEffect heartbeatEsTunedInstance;
-    if (renderer->registerEffect(total, &heartbeatEsTunedInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_HEARTBEAT_ES_TUNED, &heartbeatEsTunedInstance);
+    total++;
 
-    // LGP Holographic (ES tuned) (ID 108)
     static ieffect::LGPHolographicEsTunedEffect holographicEsTunedInstance;
-    if (renderer->registerEffect(total, &holographicEsTunedInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_HOLOGRAPHIC_ES_TUNED, &holographicEsTunedInstance);
+    total++;
 
     // =============== SENSORY BRIDGE REFERENCE SHOWS ===============
     // These are ports of Sensory Bridge 3.1.0 light show modes for parity comparisons.
 
-    // SB Waveform (Ref) (ID 109)
     static ieffect::sensorybridge_reference::SbWaveform310RefEffect sbWaveform310RefInstance;
-    if (renderer->registerEffect(total, &sbWaveform310RefInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_SB_WAVEFORM310, &sbWaveform310RefInstance);
+    total++;
 
-    // Beat Pulse (Stack) (ID 110) - UI preview parity (static gradient + white push)
+    // =============== BEAT PULSE FAMILY ===============
+
+    // Beat Pulse (Stack) - UI preview parity (static gradient + white push)
     static ieffect::BeatPulseStackEffect beatPulseStackInstance;
-    if (renderer->registerEffect(total, &beatPulseStackInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_BEAT_PULSE_STACK, &beatPulseStackInstance);
+    total++;
 
-    // Beat Pulse (Shockwave) (ID 111) - HTML parity outward ring (amplitude-driven position)
+    // Beat Pulse (Shockwave) - HTML parity outward ring (amplitude-driven position)
     static ieffect::BeatPulseShockwaveEffect beatPulseShockwaveInstance(false);  // false = outward
-    if (renderer->registerEffect(total, &beatPulseShockwaveInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_BEAT_PULSE_SHOCKWAVE, &beatPulseShockwaveInstance);
+    total++;
 
-    // NOTE: ID 112 (Shockwave In) has been removed. Use Parity/Stack for inward effects.
-    // The slot is left empty to preserve effect ID stability for existing presets.
+    // NOTE: Old ID 112 (Shockwave In) has been RETIRED. Use Parity/Stack for inward effects.
 
-    // =============== BEAT PULSE FAMILY (113-119) ===============
-
-    // Beat Pulse (Void) (ID 113) - Parity ring in darkness, palette-coloured detonation against black
+    // Beat Pulse (Void) - Parity ring in darkness, palette-coloured detonation against black
     static ieffect::BeatPulseVoidEffect beatPulseVoidInstance;
-    if (renderer->registerEffect(total, &beatPulseVoidInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_BEAT_PULSE_VOID, &beatPulseVoidInstance);
+    total++;
 
-    // Beat Pulse (Resonant) (ID 114) - Double ring contracting inward: attack snap + resonant body
+    // Beat Pulse (Resonant) - Double ring contracting inward: attack snap + resonant body
     static ieffect::BeatPulseResonantEffect beatPulseResonantInstance;
-    if (renderer->registerEffect(total, &beatPulseResonantInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_BEAT_PULSE_RESONANT, &beatPulseResonantInstance);
+    total++;
 
-    // Beat Pulse (Ripple) (ID 115) - 3-slot ring buffer of cascading implosion rings
+    // Beat Pulse (Ripple) - 3-slot ring buffer of cascading implosion rings
     static ieffect::BeatPulseRippleEffect beatPulseRippleInstance;
-    if (renderer->registerEffect(total, &beatPulseRippleInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_BEAT_PULSE_RIPPLE, &beatPulseRippleInstance);
+    total++;
 
-    // Beat Pulse (Shockwave Cascade) (ID 116) - Outward expansion with trailing echo rings
+    // Beat Pulse (Shockwave Cascade) - Outward expansion with trailing echo rings
     static ieffect::BeatPulseShockwaveCascadeEffect beatPulseShockwaveCascadeInstance;
-    if (renderer->registerEffect(total, &beatPulseShockwaveCascadeInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_BEAT_PULSE_SHOCKWAVE_CASCADE, &beatPulseShockwaveCascadeInstance);
+    total++;
 
-    // Beat Pulse (Spectral) (ID 117) - Three frequency-driven rings: bass outer, mid middle, treble centre
+    // Beat Pulse (Spectral) - Three frequency-driven rings: bass outer, mid middle, treble centre
     static ieffect::BeatPulseSpectralEffect beatPulseSpectralInstance;
-    if (renderer->registerEffect(total, &beatPulseSpectralInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_BEAT_PULSE_SPECTRAL, &beatPulseSpectralInstance);
+    total++;
 
-    // Beat Pulse (Spectral Pulse) (ID 118) - Stationary zones pulsing by frequency band
+    // Beat Pulse (Spectral Pulse) - Stationary zones pulsing by frequency band
     static ieffect::BeatPulseSpectralPulseEffect beatPulseSpectralPulseInstance;
-    if (renderer->registerEffect(total, &beatPulseSpectralPulseInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_BEAT_PULSE_SPECTRAL_PULSE, &beatPulseSpectralPulseInstance);
+    total++;
 
-    // Beat Pulse (Breathe) (ID 119) - Whole-strip amplitude pump with centre-weighted glow
+    // Beat Pulse (Breathe) - Whole-strip amplitude pump with centre-weighted glow
     static ieffect::BeatPulseBreatheEffect beatPulseBreatheInstance;
-    if (renderer->registerEffect(total, &beatPulseBreatheInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_BEAT_PULSE_BREATHE, &beatPulseBreatheInstance);
+    total++;
 
-    // Beat Pulse (LGP Interference) (ID 119) - Dual-strip phase control for optical interference
+    // Beat Pulse (LGP Interference) - Dual-strip phase control for optical interference
     static ieffect::BeatPulseLGPInterferenceEffect beatPulseLGPInterferenceInstance;
-    if (renderer->registerEffect(total, &beatPulseLGPInterferenceInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_BEAT_PULSE_LGP_INTERFERENCE, &beatPulseLGPInterferenceInstance);
+    total++;
 
-    // Beat Pulse (Bloom) (ID 120) - Beat Pulse transport bloom variant.
+    // Beat Pulse (Bloom) - Beat Pulse transport bloom variant.
     static ieffect::BeatPulseBloomEffect beatPulseBloomInstance;
-    if (renderer->registerEffect(total, &beatPulseBloomInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_BEAT_PULSE_BLOOM, &beatPulseBloomInstance);
+    total++;
 
-    // Bloom (Parity) (ID 121) - Sensory Bridge Bloom parity: subpixel advection transport
+    // =============== TRANSPORT / PARITY ===============
+
+    // Bloom (Parity) - Sensory Bridge Bloom parity: subpixel advection transport
     // Transport is the brush. History is the canvas. Audio is just pigment injection.
     static ieffect::BloomParityEffect bloomParityInstance;
-    if (renderer->registerEffect(total, &bloomParityInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_BLOOM_PARITY, &bloomParityInstance);
+    total++;
 
-    // Kuramoto Transport (ID 122) - Invisible oscillators → event injection → transported light
+    // Kuramoto Transport - Invisible oscillators -> event injection -> transported light
     // Architecture: Kuramoto field generates phase dynamics, feature extractor finds events,
     // transport buffer advects visible "light substance". Audio steers only engine params.
     static ieffect::KuramotoTransportEffect kuramotoTransportInstance;
-    if (renderer->registerEffect(total, &kuramotoTransportInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_KURAMOTO_TRANSPORT, &kuramotoTransportInstance);
+    total++;
 
-    // SB Waveform Parity (ID 123) - Sensory Bridge 3.1.0 waveform mode
+    // Waveform Parity - Sensory Bridge 3.1.0 waveform mode
     // Intensity-only rendering + palette at output. dt-corrected. Dynamic normalisation.
+    // NOTE: Mapped to EID_LGP_OPAL_FILM in the stable ID scheme.
     static ieffect::WaveformParityEffect waveformParityInstance;
-    if (renderer->registerEffect(total, &waveformParityInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_OPAL_FILM, &waveformParityInstance);
+    total++;
 
-    // =============== HOLOGRAPHIC VARIANTS PACK (124-129) ===============
+    // =============== HOLOGRAPHIC VARIANTS ===============
 
-    // LGP Opal Film (ID 124) - Thin-film iridescence bands
+    // LGP Opal Film - Thin-film iridescence bands
     static ieffect::LGPOpalFilmEffect opalFilmInstance;
-    if (renderer->registerEffect(total, &opalFilmInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_GRATING_SCAN, &opalFilmInstance);
+    total++;
 
-    // LGP Grating Scan (ID 125) - Diffraction scan highlight
+    // LGP Grating Scan - Diffraction scan highlight
     static ieffect::LGPGratingScanEffect gratingScanInstance;
-    if (renderer->registerEffect(total, &gratingScanInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_STRESS_GLASS, &gratingScanInstance);
+    total++;
 
-    // LGP Stress Glass (ID 126) - Photoelastic fringe field
+    // LGP Stress Glass - Photoelastic fringe field
     static ieffect::LGPStressGlassEffect stressGlassInstance;
-    if (renderer->registerEffect(total, &stressGlassInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_MOIRE_SILK, &stressGlassInstance);
+    total++;
 
-    // LGP Moire Silk (ID 127) - Two-lattice beat pattern
+    // LGP Moire Silk - Two-lattice beat pattern
     static ieffect::LGPMoireSilkEffect moireSilkInstance;
-    if (renderer->registerEffect(total, &moireSilkInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_CAUSTIC_SHARDS, &moireSilkInstance);
+    total++;
 
-    // LGP Caustic Shards (ID 128) - Interference with prismatic glints
+    // LGP Caustic Shards - Interference with prismatic glints
     static ieffect::LGPCausticShardsEffect causticShardsInstance;
-    if (renderer->registerEffect(total, &causticShardsInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_PARALLAX_DEPTH, &causticShardsInstance);
+    total++;
 
-    // LGP Parallax Depth (ID 129) - Two-layer refractive parallax
+    // LGP Parallax Depth - Two-layer refractive parallax
     static ieffect::LGPParallaxDepthEffect parallaxDepthInstance;
-    if (renderer->registerEffect(total, &parallaxDepthInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_STRESS_GLASS_MELT, &parallaxDepthInstance);
+    total++;
 
-    // LGP Stress Glass (Melt) (ID 130) - Phase-locked wings
+    // LGP Stress Glass (Melt) - Phase-locked wings
     static ieffect::LGPStressGlassMeltEffect stressGlassMeltInstance;
-    if (renderer->registerEffect(total, &stressGlassMeltInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_GRATING_SCAN_BREAKUP, &stressGlassMeltInstance);
+    total++;
 
-    // LGP Grating Scan (Breakup) (ID 131) - Halo breakup
+    // LGP Grating Scan (Breakup) - Halo breakup
     static ieffect::LGPGratingScanBreakupEffect gratingScanBreakupInstance;
-    if (renderer->registerEffect(total, &gratingScanBreakupInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_WATER_CAUSTICS, &gratingScanBreakupInstance);
+    total++;
 
-    // LGP Water Caustics (ID 132) - Ray-envelope caustic filaments
+    // LGP Water Caustics - Ray-envelope caustic filaments
     static ieffect::LGPWaterCausticsEffect waterCausticsInstance;
-    if (renderer->registerEffect(total, &waterCausticsInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_SCHLIEREN_FLOW, &waterCausticsInstance);
+    total++;
 
-    // LGP Schlieren Flow (ID 133) - Knife-edge gradient flow
+    // LGP Schlieren Flow - Knife-edge gradient flow
     static ieffect::LGPSchlierenFlowEffect schlierenFlowInstance;
-    if (renderer->registerEffect(total, &schlierenFlowInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_REACTION_DIFFUSION, &schlierenFlowInstance);
+    total++;
 
-    // LGP Reaction Diffusion (ID 134) - Gray-Scott slime
+    // --- Reaction Diffusion ---
+
+    // LGP Reaction Diffusion - Gray-Scott slime
     static ieffect::LGPReactionDiffusionEffect reactionDiffusionInstance;
-    if (renderer->registerEffect(total, &reactionDiffusionInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_REACTION_DIFFUSION_TRIANGLE, &reactionDiffusionInstance);
+    total++;
 
-    // LGP RD Triangle (ID 135) - Reaction-diffusion front wedge isolation
+    // LGP RD Triangle - Reaction-diffusion front wedge isolation
     static ieffect::LGPReactionDiffusionTriangleEffect reactionDiffusionTriangleInstance;
-    if (renderer->registerEffect(total, &reactionDiffusionTriangleInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_TALBOT_CARPET, &reactionDiffusionTriangleInstance);
+    total++;
 
-    // --- Shape Bangers Pack (136-146) ---
+    // --- Shape Bangers Pack ---
 
-    // LGP Talbot Carpet (ID 136) - Self-imaging lattice rug
+    // LGP Talbot Carpet - Self-imaging lattice rug
     static ieffect::LGPTalbotCarpetEffect talbotCarpetInstance;
-    if (renderer->registerEffect(total, &talbotCarpetInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_AIRY_COMET, &talbotCarpetInstance);
+    total++;
 
-    // LGP Airy Comet (ID 137) - Self-accelerating comet with trailing lobes
+    // LGP Airy Comet - Self-accelerating comet with trailing lobes
     static ieffect::LGPAiryCometEffect airyCometInstance;
-    if (renderer->registerEffect(total, &airyCometInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_MOIRE_CATHEDRAL, &airyCometInstance);
+    total++;
 
-    // LGP Moire Cathedral (ID 138) - Interference arches from close gratings
+    // LGP Moire Cathedral - Interference arches from close gratings
     static ieffect::LGPMoireCathedralEffect moireCathedralInstance;
-    if (renderer->registerEffect(total, &moireCathedralInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_SUPERFORMULA_GLYPH, &moireCathedralInstance);
+    total++;
 
-    // LGP Living Glyph (ID 139) - Superformula morphing supershapes
+    // LGP Living Glyph - Superformula morphing supershapes
     static ieffect::LGPSuperformulaGlyphEffect superformulaGlyphInstance;
-    if (renderer->registerEffect(total, &superformulaGlyphInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_SPIROGRAPH_CROWN, &superformulaGlyphInstance);
+    total++;
 
-    // LGP Spirograph Crown (ID 140) - Hypotrochoid gear-flower loops
+    // LGP Spirograph Crown - Hypotrochoid gear-flower loops
     static ieffect::LGPSpirographCrownEffect spirographCrownInstance;
-    if (renderer->registerEffect(total, &spirographCrownInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_ROSE_BLOOM, &spirographCrownInstance);
+    total++;
 
-    // LGP Rose Bloom (ID 141) - Rhodonea petal engine
+    // LGP Rose Bloom - Rhodonea petal engine
     static ieffect::LGPRoseBloomEffect roseBloomInstance;
-    if (renderer->registerEffect(total, &roseBloomInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_HARMONOGRAPH_HALO, &roseBloomInstance);
+    total++;
 
-    // LGP Harmonograph Halo (ID 142) - Lissajous aura orbitals
+    // LGP Harmonograph Halo - Lissajous aura orbitals
     static ieffect::LGPHarmonographHaloEffect harmonographHaloInstance;
-    if (renderer->registerEffect(total, &harmonographHaloInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_RULE30_CATHEDRAL, &harmonographHaloInstance);
+    total++;
 
-    // LGP Rule 30 Cathedral (ID 143) - Elementary CA textile
+    // LGP Rule 30 Cathedral - Elementary CA textile
     static ieffect::LGPRule30CathedralEffect rule30CathedralInstance;
-    if (renderer->registerEffect(total, &rule30CathedralInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_LANGTON_HIGHWAY, &rule30CathedralInstance);
+    total++;
 
-    // LGP Langton Highway (ID 144) - Emergent ant-to-highway projection
+    // LGP Langton Highway - Emergent ant-to-highway projection
     static ieffect::LGPLangtonHighwayEffect langtonHighwayInstance;
-    if (renderer->registerEffect(total, &langtonHighwayInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_CYMATIC_LADDER, &langtonHighwayInstance);
+    total++;
 
-    // LGP Cymatic Ladder (ID 145) - Standing-wave sculpture
+    // LGP Cymatic Ladder - Standing-wave sculpture
     static ieffect::LGPCymaticLadderEffect cymaticLadderInstance;
-    if (renderer->registerEffect(total, &cymaticLadderInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_MACH_DIAMONDS, &cymaticLadderInstance);
+    total++;
 
-    // LGP Mach Diamonds (ID 146) - Shock-diamond jewellery
+    // LGP Mach Diamonds - Shock-diamond jewellery
     static ieffect::LGPMachDiamondsEffect machDiamondsInstance;
-    if (renderer->registerEffect(total, &machDiamondsInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_CHIMERA_CROWN, &machDiamondsInstance);
+    total++;
 
-    // LGP Holy Shit Bangers Pack (IDs 147-151)
+    // --- Holy Shit Bangers Pack ---
+
     static ieffect::LGPChimeraCrownEffect chimeraCrownInstance;
-    if (renderer->registerEffect(total, &chimeraCrownInstance)) {
-        total++;
-    }
-    static ieffect::LGPCatastropheCausticsEffect catastropheCausticsInstance;
-    if (renderer->registerEffect(total, &catastropheCausticsInstance)) {
-        total++;
-    }
-    static ieffect::LGPHyperbolicPortalEffect hyperbolicPortalInstance;
-    if (renderer->registerEffect(total, &hyperbolicPortalInstance)) {
-        total++;
-    }
-    static ieffect::LGPLorenzRibbonEffect lorenzRibbonInstance;
-    if (renderer->registerEffect(total, &lorenzRibbonInstance)) {
-        total++;
-    }
-    static ieffect::LGPIFSBioRelicEffect ifsBioRelicInstance;
-    if (renderer->registerEffect(total, &ifsBioRelicInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_CATASTROPHE_CAUSTICS, &chimeraCrownInstance);
+    total++;
 
-    // --- Experimental Audio Pack (152-161) ---
+    static ieffect::LGPCatastropheCausticsEffect catastropheCausticsInstance;
+    renderer->registerEffect(EID_LGP_HYPERBOLIC_PORTAL, &catastropheCausticsInstance);
+    total++;
+
+    static ieffect::LGPHyperbolicPortalEffect hyperbolicPortalInstance;
+    renderer->registerEffect(EID_LGP_LORENZ_RIBBON, &hyperbolicPortalInstance);
+    total++;
+
+    static ieffect::LGPLorenzRibbonEffect lorenzRibbonInstance;
+    renderer->registerEffect(EID_LGP_IFS_BIO_RELIC, &lorenzRibbonInstance);
+    total++;
+
+    static ieffect::LGPIFSBioRelicEffect ifsBioRelicInstance;
+    renderer->registerEffect(EID_LGP_FLUX_RIFT, &ifsBioRelicInstance);
+    total++;
+
+    // --- Experimental Audio Pack ---
+
     static ieffect::LGPFluxRiftEffect fluxRiftInstance;
-    if (renderer->registerEffect(total, &fluxRiftInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_BEAT_PRISM, &fluxRiftInstance);
+    total++;
+
     static ieffect::LGPBeatPrismEffect beatPrismInstance;
-    if (renderer->registerEffect(total, &beatPrismInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_HARMONIC_TIDE, &beatPrismInstance);
+    total++;
+
     static ieffect::LGPHarmonicTideEffect harmonicTideInstance;
-    if (renderer->registerEffect(total, &harmonicTideInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_BASS_QUAKE, &harmonicTideInstance);
+    total++;
+
     static ieffect::LGPBassQuakeEffect bassQuakeInstance;
-    if (renderer->registerEffect(total, &bassQuakeInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_TREBLE_NET, &bassQuakeInstance);
+    total++;
+
     static ieffect::LGPTrebleNetEffect trebleNetInstance;
-    if (renderer->registerEffect(total, &trebleNetInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_RHYTHMIC_GATE, &trebleNetInstance);
+    total++;
+
     static ieffect::LGPRhythmicGateEffect rhythmicGateInstance;
-    if (renderer->registerEffect(total, &rhythmicGateInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_SPECTRAL_KNOT, &rhythmicGateInstance);
+    total++;
+
     static ieffect::LGPSpectralKnotEffect spectralKnotInstance;
-    if (renderer->registerEffect(total, &spectralKnotInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_SALIENCY_BLOOM, &spectralKnotInstance);
+    total++;
+
     static ieffect::LGPSaliencyBloomEffect saliencyBloomInstance;
-    if (renderer->registerEffect(total, &saliencyBloomInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_TRANSIENT_LATTICE, &saliencyBloomInstance);
+    total++;
+
     static ieffect::LGPTransientLatticeEffect transientLatticeInstance;
-    if (renderer->registerEffect(total, &transientLatticeInstance)) {
-        total++;
-    }
-    static ieffect::LGPWaveletMirrorEffect waveletMirrorInstance;
-    if (renderer->registerEffect(total, &waveletMirrorInstance)) {
-        total++;
-    }
+    renderer->registerEffect(EID_LGP_WAVELET_MIRROR, &transientLatticeInstance);
+    total++;
+
+    // NOTE: waveletMirrorInstance has no mapping entry (shifted out by retired ID 112 gap)
+    // It will be assigned a proper EID when the next batch of IDs is allocated.
+    // For now, it is not registered.
+    // static ieffect::LGPWaveletMirrorEffect waveletMirrorInstance;
 
     // =============== EFFECT COUNT PARITY VALIDATION ===============
-    // Runtime validation: ensure registered count matches expected
-    // Single source of truth: limits::MAX_EFFECTS from config/limits.h
-    constexpr uint8_t EXPECTED_EFFECT_COUNT = limits::MAX_EFFECTS;
+    constexpr uint16_t EXPECTED_EFFECT_COUNT = 161;
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

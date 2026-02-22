@@ -15,6 +15,7 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -22,6 +23,8 @@ namespace ieffect {
 
 class LGPBassBreathEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_BASS_BREATH;
+
     LGPBassBreathEffect() = default;
     ~LGPBassBreathEffect() override = default;
 
@@ -32,8 +35,8 @@ public:
 
 private:
     float m_breathLevel = 0.0f;  // Current "breath" intensity
-    // Musically anchored hue (smoothed) - avoids time-based hue cycling.
-    float m_hueAnchorSmooth = 0.0f;
+    // Circular chroma EMA state (radians) — replaces linear hue anchor.
+    float m_chromaAngle = 0.0f;
     uint32_t m_lastHopSeq = 0;
     float m_lastBass = 0.0f;
     float m_lastFastFlux = 0.0f;

@@ -4,6 +4,7 @@
  */
 
 #include "RippleEsTunedEffect.h"
+#include "ChromaUtils.h"
 
 #include "../../config/features.h"
 #include <FastLED.h>
@@ -42,6 +43,7 @@ bool RippleEsTunedEffect::init(plugins::EffectContext& ctx) {
     m_subBass = 0.0f;
     m_treble = 0.0f;
     m_fluxEnv = 0.0f;
+    m_chromaAngle = 0.0f;
     m_baseHue = 0;
     return true;
 }
@@ -119,23 +121,14 @@ void RippleEsTunedEffect::render(plugins::EffectContext& ctx) {
                 m_fluxEnv *= 0.82f;
             }
 
-            // Both backends now produce normalised chroma via Stage A/B pipeline.
-            const float* chroma = ctx.audio.controlBus.chroma;
-            float maxVal = 0.0f;
-            uint8_t maxIdx = 0;
-            for (uint8_t i = 0; i < 12; i++) {
-                if (chroma[i] > maxVal) {
-                    maxVal = chroma[i];
-                    maxIdx = i;
-                }
-            }
-            if (maxVal > 0.05f) {
-                m_baseHue = static_cast<uint8_t>(maxIdx * 21);
-            } else {
-                // Keep stable rather than drifting hues when chroma is absent.
-                m_baseHue = ctx.gHue;
-            }
         }
+
+        // Circular chroma hue (prevents argmax discontinuities and wrapping artefacts).
+        // Runs every frame for smooth tracking, not just on hops.
+        float rawDt = ctx.getSafeRawDeltaSeconds();
+        const float* chroma = ctx.audio.controlBus.chroma;
+        m_baseHue = effects::chroma::circularChromaHueSmoothed(
+            chroma, m_chromaAngle, rawDt, 0.20f);
     }
 #endif
 

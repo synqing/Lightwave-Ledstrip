@@ -64,7 +64,7 @@ size_t CommandSerializer::writeEnvelopeEnd(char* buffer, size_t remaining) {
 }
 
 size_t CommandSerializer::serializeSetEffect(
-    uint8_t effectId,
+    EffectId effectId,
     uint32_t version,
     const char* senderUuid,
     char* outBuffer,
@@ -141,7 +141,7 @@ size_t CommandSerializer::serializeSetPalette(
 
 size_t CommandSerializer::serializeZoneSetEffect(
     uint8_t zoneId,
-    uint8_t effectId,
+    EffectId effectId,
     uint32_t version,
     const char* senderUuid,
     char* outBuffer,
@@ -306,7 +306,7 @@ ParsedCommand CommandSerializer::parse(const char* json, size_t length) {
     switch (result.type) {
         case CommandType::SET_EFFECT:
             if (findInt(json, "\"e\"", &val1)) {
-                result.params.effect.effectId = static_cast<uint8_t>(val1);
+                result.params.effect.effectId = static_cast<EffectId>(val1);
                 result.valid = true;
             }
             break;
@@ -343,7 +343,7 @@ ParsedCommand CommandSerializer::parse(const char* json, size_t length) {
         case CommandType::ZONE_SET_EFFECT:
             if (findInt(json, "\"z\"", &val1) && findInt(json, "\"e\"", &val2)) {
                 result.params.zoneEffect.zoneId = static_cast<uint8_t>(val1);
-                result.params.zoneEffect.effectId = static_cast<uint8_t>(val2);
+                result.params.zoneEffect.effectId = static_cast<EffectId>(val2);
                 result.valid = true;
             }
             break;

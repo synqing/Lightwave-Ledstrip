@@ -7,6 +7,7 @@
  */
 
 #include "ActorSystem.h"
+#include "../../config/effect_ids.h"
 #include <math.h>
 #include <cstdio>
 
@@ -190,16 +191,23 @@ bool ActorSystem::start()
         // Wire up audio buffer to renderer for cross-core access
         if (m_renderer) {
             m_renderer->setAudioBuffer(&m_audio->getControlBusBuffer());
-#if !FEATURE_AUDIO_BACKEND_ESV11
-            // Wire up TempoTracker for phase advancement at 120 FPS
+#if FEATURE_AUDIO_BACKEND_ESV11
+            // ESV11: beat data flows through ControlBusFrame es_* fields
+#elif FEATURE_AUDIO_BACKEND_PIPELINECORE
+            // PipelineCore: beat data flows through ControlBusFrame tempo* fields
+            // No setTempo() — RendererActor reads from ControlBusFrame
+#else
+            // Goertzel: TempoTracker pointer for 120 FPS phase advancement
             m_renderer->setTempo(&m_audio->getTempoMut());
 #endif
 #ifndef NATIVE_BUILD
             ESP_LOGI(TAG, "Audio integration enabled - ControlBus%s",
-#if !FEATURE_AUDIO_BACKEND_ESV11
-                     " + TempoTracker"
-#else
+#if FEATURE_AUDIO_BACKEND_ESV11
                      " (ES v1.1 backend)"
+#elif FEATURE_AUDIO_BACKEND_PIPELINECORE
+                     " (PipelineCore backend)"
+#else
+                     " + TempoTracker"
 #endif
             );
 #endif
@@ -272,7 +280,7 @@ void ActorSystem::shutdown()
 // Convenience Commands
 // ============================================================================
 
-bool ActorSystem::setEffect(uint8_t effectId)
+bool ActorSystem::setEffect(EffectId effectId)
 {
     if (!m_renderer || !m_renderer->isRunning()) {
         return false;
@@ -282,17 +290,20 @@ bool ActorSystem::setEffect(uint8_t effectId)
     uint8_t utilization = m_renderer->getQueueUtilization();
     if (utilization >= 90) {
 #ifndef NATIVE_BUILD
-        ESP_LOGW(TAG, "setEffect(%d) rejected - queue saturated (utilization: %d%%)",
+        ESP_LOGW(TAG, "setEffect(0x%04X) rejected - queue saturated (utilization: %d%%)",
                  effectId, utilization);
 #endif
         return false;
     }
 
-    Message msg(MessageType::SET_EFFECT, effectId);
+    // Pack EffectId as 2 bytes: low byte in param1, high byte in param2
+    Message msg(MessageType::SET_EFFECT,
+                static_cast<uint8_t>(effectId & 0xFF),
+                static_cast<uint8_t>((effectId >> 8) & 0xFF));
     bool success = m_renderer->send(msg, pdMS_TO_TICKS(10));
     if (!success) {
 #ifndef NATIVE_BUILD
-        ESP_LOGW(TAG, "setEffect(%d) failed - queue may be full (utilization: %d%%)",
+        ESP_LOGW(TAG, "setEffect(0x%04X) failed - queue may be full (utilization: %d%%)",
                  effectId, m_renderer->getQueueUtilization());
 #endif
     }
@@ -585,7 +596,7 @@ bool ActorSystem::trinitySegment(uint8_t index, uint16_t labelHash16, float star
 }
 #endif
 
-bool ActorSystem::startTransition(uint8_t effectId, uint8_t transitionType)
+bool ActorSystem::startTransition(EffectId effectId, uint8_t transitionType)
 {
     if (!m_renderer || !m_renderer->isRunning()) {
         return false;
@@ -595,19 +606,22 @@ bool ActorSystem::startTransition(uint8_t effectId, uint8_t transitionType)
     uint8_t utilization = m_renderer->getQueueUtilization();
     if (utilization >= 90) {
 #ifndef NATIVE_BUILD
-        ESP_LOGW(TAG, "startTransition(%d, %d) rejected - queue saturated (utilization: %d%%)",
+        ESP_LOGW(TAG, "startTransition(0x%04X, %d) rejected - queue saturated (utilization: %d%%)",
                  effectId, transitionType, utilization);
 #endif
         return false;
     }
 
+    // Pack EffectId as 2 bytes: low byte in param1, high byte in param2
+    // transitionType moves to param3
     Message msg(MessageType::START_TRANSITION);
-    msg.param1 = effectId;
-    msg.param2 = transitionType;
+    msg.param1 = static_cast<uint8_t>(effectId & 0xFF);
+    msg.param2 = static_cast<uint8_t>((effectId >> 8) & 0xFF);
+    msg.param3 = transitionType;
     bool success = m_renderer->send(msg, pdMS_TO_TICKS(10));
     if (!success) {
 #ifndef NATIVE_BUILD
-        ESP_LOGW(TAG, "startTransition(%d, %d) failed - queue may be full (utilization: %d%%)",
+        ESP_LOGW(TAG, "startTransition(0x%04X, %d) failed - queue may be full (utilization: %d%%)",
                  effectId, transitionType, m_renderer->getQueueUtilization());
 #endif
     }

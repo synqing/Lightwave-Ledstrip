@@ -10,6 +10,7 @@
 #include "RendererActor.h"
 #include "../shows/BuiltinShows.h"
 #include "../narrative/NarrativeEngine.h"
+#include "../../config/effect_ids.h"
 #include <cstring>
 
 #ifndef NATIVE_BUILD
@@ -633,7 +634,7 @@ void ShowDirectorActor::updateShow() {
 void ShowDirectorActor::executeCue(const ShowCue& cue) {
     switch (cue.type) {
         case CUE_EFFECT: {
-            uint8_t effectId = cue.effectId();
+            EffectId effectId = cue.effectId();
             uint8_t transitionType = cue.effectTransition();
             
             if (transitionType != 0 && m_rendererActor) {
@@ -641,8 +642,10 @@ void ShowDirectorActor::executeCue(const ShowCue& cue) {
                 RendererActor* renderer = static_cast<RendererActor*>(m_rendererActor);
                 renderer->startTransition(effectId, transitionType);
             } else {
-                // Instant change
-                Message msg(MessageType::SET_EFFECT, effectId);
+                // Instant change - pack EffectId as 2 bytes (little-endian)
+                Message msg(MessageType::SET_EFFECT,
+                            static_cast<uint8_t>(effectId & 0xFF),
+                            static_cast<uint8_t>((effectId >> 8) & 0xFF));
                 sendToRenderer(msg);
             }
             break;

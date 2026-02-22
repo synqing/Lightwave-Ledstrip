@@ -552,7 +552,7 @@ bool ZoneComposer::validateLayout(const ZoneSegment* segments, uint8_t count) co
 
 // ==================== Per-Zone Settings ====================
 
-void ZoneComposer::setZoneEffect(uint8_t zone, uint8_t effectId) {
+void ZoneComposer::setZoneEffect(uint8_t zone, EffectId effectId) {
     // DEFENSIVE CHECK: Validate zone ID before array access
     uint8_t safeZone = validateZoneId(zone);
     if (safeZone >= MAX_ZONES || safeZone >= m_zoneCount) {
@@ -628,8 +628,8 @@ void ZoneComposer::setZoneEnabled(uint8_t zone, bool enabled) {
 
 // ==================== Getters ====================
 
-uint8_t ZoneComposer::getZoneEffect(uint8_t zone) const {
-    return (zone < MAX_ZONES) ? m_zones[zone].effectId : 0;
+EffectId ZoneComposer::getZoneEffect(uint8_t zone) const {
+    return (zone < MAX_ZONES) ? m_zones[zone].effectId : INVALID_EFFECT_ID;
 }
 
 uint8_t ZoneComposer::getZoneBrightness(uint8_t zone) const {

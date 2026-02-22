@@ -18,6 +18,8 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 
+#include "../../config/effect_ids.h"
+
 #ifndef NATIVE_BUILD
 #include <esp_heap_caps.h>
 #endif
@@ -31,6 +33,7 @@ static constexpr uint16_t BANGERS_STRIP_LENGTH = 160;
 // 1) Talbot Carpet (optical self-imaging vibes)
 class LGPTalbotCarpetEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_TALBOT_CARPET;
     LGPTalbotCarpetEffect();
     bool init(plugins::EffectContext& ctx) override;
     void render(plugins::EffectContext& ctx) override;
@@ -43,6 +46,7 @@ private:
 // 2) Airy Comet (self-accelerating lobe + trailing lobes)
 class LGPAiryCometEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_AIRY_COMET;
     LGPAiryCometEffect();
     bool init(plugins::EffectContext& ctx) override;
     void render(plugins::EffectContext& ctx) override;
@@ -55,6 +59,7 @@ private:
 // 3) Moire Cathedral (beat interference into arches)
 class LGPMoireCathedralEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_MOIRE_CATHEDRAL;
     LGPMoireCathedralEffect();
     bool init(plugins::EffectContext& ctx) override;
     void render(plugins::EffectContext& ctx) override;
@@ -67,6 +72,7 @@ private:
 // 4) Superformula Living Glyph (morphing sigils)
 class LGPSuperformulaGlyphEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_SUPERFORMULA_GLYPH;
     LGPSuperformulaGlyphEffect();
     bool init(plugins::EffectContext& ctx) override;
     void render(plugins::EffectContext& ctx) override;
@@ -79,6 +85,7 @@ private:
 // 5) Spirograph Crown (hypotrochoid crown loops)
 class LGPSpirographCrownEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_SPIROGRAPH_CROWN;
     LGPSpirographCrownEffect();
     bool init(plugins::EffectContext& ctx) override;
     void render(plugins::EffectContext& ctx) override;
@@ -91,6 +98,7 @@ private:
 // 6) Rose Bloom (petal engine)
 class LGPRoseBloomEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_ROSE_BLOOM;
     LGPRoseBloomEffect();
     bool init(plugins::EffectContext& ctx) override;
     void render(plugins::EffectContext& ctx) override;
@@ -103,6 +111,7 @@ private:
 // 7) Harmonograph Halo (Lissajous aura orbitals)
 class LGPHarmonographHaloEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_HARMONOGRAPH_HALO;
     LGPHarmonographHaloEffect();
     bool init(plugins::EffectContext& ctx) override;
     void render(plugins::EffectContext& ctx) override;
@@ -115,6 +124,7 @@ private:
 // 8) Rule 30 Cathedral (triangles + chaos textile)
 class LGPRule30CathedralEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_RULE30_CATHEDRAL;
     LGPRule30CathedralEffect();
     bool init(plugins::EffectContext& ctx) override;
     void render(plugins::EffectContext& ctx) override;
@@ -136,6 +146,7 @@ private:
 // 9) Langton Highway (emergent order reveal)
 class LGPLangtonHighwayEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_LANGTON_HIGHWAY;
     LGPLangtonHighwayEffect();
     bool init(plugins::EffectContext& ctx) override;
     void render(plugins::EffectContext& ctx) override;
@@ -158,6 +169,7 @@ private:
 // 10) Cymatic Ladder (standing wave sculpture)
 class LGPCymaticLadderEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_CYMATIC_LADDER;
     LGPCymaticLadderEffect();
     bool init(plugins::EffectContext& ctx) override;
     void render(plugins::EffectContext& ctx) override;
@@ -170,6 +182,7 @@ private:
 // 11) Mach Diamonds (shock diamond jewellery)
 class LGPMachDiamondsEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_MACH_DIAMONDS;
     LGPMachDiamondsEffect();
     bool init(plugins::EffectContext& ctx) override;
     void render(plugins::EffectContext& ctx) override;

@@ -219,7 +219,7 @@ bool StateSerializer::parse(const char* json, size_t length, state::SystemState&
 
     // Parse global parameters
     if (findLong(json, "\"v\":", &val)) outState.version = static_cast<uint32_t>(val);
-    if (findLong(stateStart, "\"e\":", &val)) outState.currentEffectId = static_cast<uint8_t>(val);
+    if (findLong(stateStart, "\"e\":", &val)) outState.currentEffectId = static_cast<EffectId>(val);
     if (findLong(stateStart, "\"p\":", &val)) outState.currentPaletteId = static_cast<uint8_t>(val);
     if (findLong(stateStart, "\"b\":", &val)) outState.brightness = static_cast<uint8_t>(val);
     if (findLong(stateStart, "\"sp\":", &val)) outState.speed = static_cast<uint8_t>(val);

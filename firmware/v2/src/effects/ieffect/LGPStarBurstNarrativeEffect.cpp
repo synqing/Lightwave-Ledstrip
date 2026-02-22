@@ -67,8 +67,7 @@ bool LGPStarBurstNarrativeEffect::init(plugins::EffectContext& ctx) {
     m_keyRootBin = 0;
     m_keyMinor = false;
     m_dominantBin = 0;
-    m_keyRootBinSmooth = 0.0f;
-    m_dominantBinSmooth = 0.0f;
+    m_keyRootAngle = 0.0f;
 
     m_phaseSpeedSpring.init(50.0f, 1.0f);
     m_phaseSpeedSpring.reset(1.0f);
@@ -227,15 +226,14 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
     }
     env = clamp01(env);
 
-    const float keyAlpha = expAlpha(dtAudio, 0.35f);
-    m_keyRootBinSmooth += (static_cast<float>(m_keyRootBin) - m_keyRootBinSmooth) * keyAlpha;
-    if (m_keyRootBinSmooth < 0.0f) m_keyRootBinSmooth = 0.0f;
-    if (m_keyRootBinSmooth > 11.0f) m_keyRootBinSmooth = 11.0f;
-
-    const float domAlpha = expAlpha(dtAudio, 0.25f);
-    m_dominantBinSmooth += (static_cast<float>(m_dominantBin) - m_dominantBinSmooth) * domAlpha;
-    if (m_dominantBinSmooth < 0.0f) m_dominantBinSmooth = 0.0f;
-    if (m_dominantBinSmooth > 11.0f) m_dominantBinSmooth = 11.0f;
+    // Circular EMA for key root bin (eliminates rainbow sweep at bin 11->0 boundary)
+    {
+        const float keyAlpha = expAlpha(dtAudio, 0.35f);
+        const float targetAngle = static_cast<float>(m_keyRootBin) *
+            (effects::chroma::TWO_PI_F / 12.0f);
+        m_keyRootAngle = effects::chroma::circularEma(
+            targetAngle, m_keyRootAngle, keyAlpha);
+    }
 
     const float targetSpeed = 0.70f + 0.60f * m_heavyBassSmooth;
     float smoothedSpeed = m_phaseSpeedSpring.update(targetSpeed, dtAudio);
@@ -259,7 +257,9 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
     fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 
     const uint8_t binStep = static_cast<uint8_t>(255.0f / 12.0f);
-    const uint8_t rootBin = static_cast<uint8_t>(roundf(m_keyRootBinSmooth)) % 12;
+    // Derive integer root bin from circular angle (avoids wrap-around artefacts)
+    const uint8_t rootBin = static_cast<uint8_t>(
+        roundf(m_keyRootAngle * (12.0f / effects::chroma::TWO_PI_F))) % 12;
     const uint8_t thirdBin = static_cast<uint8_t>((rootBin + (m_keyMinor ? 3 : 4)) % 12);
     const uint8_t fifthBin = static_cast<uint8_t>((rootBin + 7) % 12);
 

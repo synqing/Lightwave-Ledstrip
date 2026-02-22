@@ -4,6 +4,7 @@
  */
 
 #include "LGPHolographicEsTunedEffect.h"
+#include "ChromaUtils.h"
 #include "../CoreEffects.h"
 
 #ifndef NATIVE_BUILD
@@ -35,24 +36,6 @@ static inline const float* selectChroma12(const audio::ControlBusFrame& cb) {
     return cb.chroma;
 }
 
-static inline uint8_t dominantChromaBin12(const float chroma[audio::CONTROLBUS_NUM_CHROMA]) {
-    uint8_t best = 0;
-    float bestV = chroma[0];
-    for (uint8_t i = 1; i < audio::CONTROLBUS_NUM_CHROMA; ++i) {
-        float v = chroma[i];
-        if (v > bestV) {
-            bestV = v;
-            best = i;
-        }
-    }
-    return best;
-}
-
-static inline uint8_t chromaBinToHue(uint8_t bin) {
-    // 12 bins → 0..252 hue range (21 hue units per semitone).
-    return (uint8_t)(bin * 21);
-}
-
 static inline float meanAdaptiveBins(const plugins::AudioContext& a, uint8_t start, uint8_t count) {
     float sum = 0.0f;
     for (uint8_t i = 0; i < count; ++i) {
@@ -70,8 +53,7 @@ bool LGPHolographicEsTunedEffect::init(plugins::EffectContext& ctx) {
     m_phase3 = 0.0f;
 
     m_lastHopSeq = 0;
-    m_dominantChromaBin = 0;
-    m_dominantChromaBinSmooth = 0.0f;
+    m_chromaAngle = 0.0f;
 
     m_lastFastFlux = 0.0f;
     m_refraction = 0.0f;
@@ -117,15 +99,11 @@ void LGPHolographicEsTunedEffect::render(plugins::EffectContext& ctx) {
         downbeatTick = ctx.audio.isOnDownbeat();
         beatLock = (tempoConfidence > 0.45f);
 
-        // Chroma anchor update on hop boundaries.
-        if (ctx.audio.controlBus.hop_seq != m_lastHopSeq) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
-            const float* chroma = selectChroma12(ctx.audio.controlBus);
-            m_dominantChromaBin = dominantChromaBin12(chroma);
-        }
-
-        float alphaHue = 1.0f - expf(-rawDt / 0.30f);
-        m_dominantChromaBinSmooth += ((float)m_dominantChromaBin - m_dominantChromaBinSmooth) * alphaHue;
+        // Circular chroma hue (prevents argmax discontinuities and wrapping artefacts).
+        // The return value is not used directly; baseHue is derived from m_chromaAngle below.
+        const float* chroma = selectChroma12(ctx.audio.controlBus);
+        (void)effects::chroma::circularChromaHueSmoothed(
+            chroma, m_chromaAngle, rawDt, 0.30f);
 
         // Flux spike → refraction accent (fast attack, short decay).
         float fluxDelta = flux - m_lastFastFlux;
@@ -146,7 +124,7 @@ void LGPHolographicEsTunedEffect::render(plugins::EffectContext& ctx) {
         // No audio: decay accents slowly.
         m_refraction *= expf(-rawDt / 0.25f);
         m_focus *= expf(-rawDt / 0.40f);
-        m_dominantChromaBinSmooth *= powf(0.995f, rawDt * 60.0f);  // dt-corrected
+        m_chromaAngle *= powf(0.995f, rawDt * 60.0f);  // dt-corrected
     }
 
     // ---------------------------------------------------------------------
@@ -211,9 +189,10 @@ void LGPHolographicEsTunedEffect::render(plugins::EffectContext& ctx) {
     float drive = 1.0f + 1.55f * energy + 0.55f * clamp01(m_focus);
 
     // ---------------------------------------------------------------------
-    // Colour anchoring (non-rainbow): chroma bin sets the base, palette does the rest.
+    // Colour anchoring (non-rainbow): circular chroma mean sets the base.
+    // Derive hue from persisted angle (updated by circularChromaHueSmoothed or decayed).
     // ---------------------------------------------------------------------
-    uint8_t baseHue = chromaBinToHue((uint8_t)(m_dominantChromaBinSmooth + 0.5f));
+    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle * (255.0f / 6.2831853f));
     uint8_t dispersion = (uint8_t)(96 + (uint8_t)(m_refraction * 28.0f));
 
     // ---------------------------------------------------------------------

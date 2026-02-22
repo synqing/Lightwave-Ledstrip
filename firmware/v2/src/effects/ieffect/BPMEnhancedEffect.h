@@ -21,6 +21,7 @@
 #include "../../plugins/api/EffectContext.h"
 #include "../../effects/enhancement/SmoothingEngine.h"
 #include <FastLED.h>
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -28,6 +29,8 @@ namespace ieffect {
 
 class BPMEnhancedEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_BPM_ENHANCED;
+
     BPMEnhancedEffect();
     ~BPMEnhancedEffect() override = default;
 
@@ -54,6 +57,7 @@ private:
     enhancement::AsymmetricFollower m_chromaFollowers[12];
     float m_chromaSmoothed[12] = {0.0f};
     float m_chromaTargets[12] = {0.0f};
+    float m_chromaAngle = 0.0f;  // Circular EMA state for ChromaUtils
     
     // Hop sequence tracking
     uint32_t m_lastHopSeq = 0;

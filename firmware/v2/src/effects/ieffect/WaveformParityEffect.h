@@ -36,12 +36,14 @@
 
 #ifndef NATIVE_BUILD
 #include <esp_heap_caps.h>
+#include "../../config/effect_ids.h"
 #endif
 
 namespace lightwaveos::effects::ieffect {
 
 class WaveformParityEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_OPAL_FILM;
     WaveformParityEffect() = default;
     ~WaveformParityEffect() override = default;
 

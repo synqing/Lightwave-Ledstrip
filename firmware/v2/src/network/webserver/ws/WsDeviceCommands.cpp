@@ -59,9 +59,9 @@ static void handleLegacyGetStatus(AsyncWebSocketClient* client, JsonDocument& do
         JsonDocument response;
         response["type"] = "status";
         response["effectId"] = cached.currentEffect;
-        if (cached.currentEffect < cached.effectCount &&
-            cached.effectNames[cached.currentEffect]) {
-            response["effectName"] = cached.effectNames[cached.currentEffect];
+        const char* curEffName = cached.findEffectName(cached.currentEffect);
+        if (curEffName) {
+            response["effectName"] = curEffName;
         }
         response["brightness"] = cached.brightness;
         response["speed"] = cached.speed;

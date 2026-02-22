@@ -1,17 +1,17 @@
 /**
  * Pattern Registry
- * 
+ *
  * Provides programmatic access to pattern taxonomy metadata, enabling:
  * - Runtime pattern discovery and filtering by family
  * - Composition rules enforcement
  * - Show choreography automation
  * - API-driven pattern selection by family/tags
- * 
+ *
  * Based on taxonomy from docs/analysis/b2. LGP_PATTERN_TAXONOMY.md
- * Organizes 118+ patterns into 10 families with relationships.
- * 
- * IMPORTANT: Pattern metadata indices MUST match effect IDs exactly.
- * Effect IDs are stable and match v1's effects[] array order.
+ * Organizes 162 patterns into 10 families with relationships.
+ *
+ * Pattern metadata is keyed by stable EffectId (uint16_t), not sequential index.
+ * Lookup is by linear scan of the metadata array.
  */
 
 #ifndef PATTERN_REGISTRY_H
@@ -20,13 +20,16 @@
 #include <stdint.h>
 #include <Arduino.h>
 #include "../plugins/api/IEffect.h"
+#include "../config/effect_ids.h"
+
+using lightwaveos::EffectId;
 
 // ============================================================================
 // Pattern Family Enumeration (10 families from taxonomy)
 // ============================================================================
 
 enum class PatternFamily : uint8_t {
-    INTERFERENCE = 0,      // Standing Wave, Moiré Envelope, Phase Collision (13 patterns)
+    INTERFERENCE = 0,      // Standing Wave, Moire Envelope, Phase Collision (13 patterns)
     GEOMETRIC = 1,         // Tiled Boxes, Radial Rings, Fractal Zoom (8 patterns)
     ADVANCED_OPTICAL = 2,  // Chromatic Lens, Diffraction Grating, Caustics (6 patterns)
     ORGANIC = 3,           // Bioluminescence, Mycelium, Plankton Waves (12 patterns)
@@ -72,7 +75,7 @@ const char* const PATTERN_FAMILY_NAMES[] PROGMEM = {
 namespace PatternTags {
     constexpr uint8_t STANDING = 0x01;      // Standing wave pattern
     constexpr uint8_t TRAVELING = 0x02;     // Traveling wave pattern
-    constexpr uint8_t MOIRE = 0x04;          // Moiré interference pattern
+    constexpr uint8_t MOIRE = 0x04;          // Moire interference pattern
     constexpr uint8_t DEPTH = 0x08;          // Depth illusion effect
     constexpr uint8_t SPECTRAL = 0x10;       // Spectral/chromatic effect
     constexpr uint8_t CENTER_ORIGIN = 0x20;  // Originates from LEDs 79/80
@@ -85,13 +88,14 @@ namespace PatternTags {
 // ============================================================================
 
 struct PatternMetadata {
+    EffectId id;                   // Stable effect ID (from effect_ids.h)
     const char* name;              // Pattern name (e.g., "LGP Standing Wave")
     PatternFamily family;          // Pattern family classification
     uint8_t tags;                  // Bitfield: STANDING|TRAVELING|MOIRE|DEPTH|SPECTRAL|...
     const char* story;             // One-sentence narrative description
     const char* opticalIntent;     // Which optical levers are used
     const char* relatedPatterns;   // Comma-separated list of related pattern names (optional)
-    
+
     // Helper functions
     bool hasTag(uint8_t tag) const { return (tags & tag) != 0; }
     bool isStanding() const { return hasTag(PatternTags::STANDING); }
@@ -118,20 +122,20 @@ namespace PatternRegistry {
 const PatternMetadata* getPatternMetadata(const char* name);
 
 /**
- * Get pattern metadata by index (effect ID)
- * @param index Effect ID (matches v1/v2 effect registration order)
- * @return PatternMetadata pointer, or nullptr if index invalid
+ * Get pattern metadata by EffectId
+ * @param id Stable effect ID (from effect_ids.h)
+ * @return PatternMetadata pointer, or nullptr if not found
  */
-const PatternMetadata* getPatternMetadata(uint8_t index);
+const PatternMetadata* getPatternMetadata(EffectId id);
 
 /**
  * Get all patterns in a family
  * @param family Pattern family to filter by
- * @param output Array to store pattern indices (must be large enough)
+ * @param output Array to store EffectIds (must be large enough)
  * @param maxOutput Maximum number of patterns to return
  * @return Number of patterns found
  */
-uint8_t getPatternsByFamily(PatternFamily family, uint8_t* output, uint8_t maxOutput);
+uint16_t getPatternsByFamily(PatternFamily family, EffectId* output, uint16_t maxOutput);
 
 /**
  * Get related patterns for a given pattern
@@ -162,77 +166,56 @@ bool patternInFamily(const char* name, PatternFamily family);
  * Get total number of registered patterns
  * @return Number of patterns with metadata
  */
-uint8_t getPatternCount();
+uint16_t getPatternCount();
 
 /**
  * Get number of patterns in a family
  * @param family Pattern family
  * @return Number of patterns in family
  */
-uint8_t getFamilyCount(PatternFamily family);
+uint16_t getFamilyCount(PatternFamily family);
 
 /**
  * Check if an effect is LGP-sensitive (should skip ColorCorrectionEngine)
- * @param effectId Effect ID to check
+ * @param effectId Stable effect ID to check
  * @return true if effect is LGP-sensitive and should skip color correction
- * 
- * LGP-sensitive effects are those that rely on precise amplitude relationships
- * for interference patterns. Color correction breaks these relationships.
- * 
- * Includes:
- * - INTERFERENCE family effects (10, 13-17)
- * - ADVANCED_OPTICAL family effects with CENTER_ORIGIN tag (26-33, 65-67)
- * - Specific IDs: 10, 13, 16, 26, 32, 65, 66, 67
  */
-bool isLGPSensitive(uint8_t effectId);
+bool isLGPSensitive(EffectId effectId);
 
 /**
  * Check if an effect is stateful (reads previous frame buffer)
- * @param effectId Effect ID to check
+ * @param effectId Stable effect ID to check
  * @return true if effect is stateful and should skip color correction
- * 
- * Stateful effects read from ctx.leds in the previous frame for propagation.
- * ColorCorrectionEngine mutates m_leds in-place, corrupting the feedback loop.
- * 
- * Currently includes: 3 (Confetti), 8 (Ripple)
  */
-bool isStatefulEffect(uint8_t effectId);
+bool isStatefulEffect(EffectId effectId);
 
 /**
- * Validate and clamp effect ID to safe range
+ * Validate effect ID exists in metadata registry
  * @param effectId Effect ID to validate
- * @return Valid effect ID, defaults to 0 if out of bounds
+ * @return Same effectId if valid, INVALID_EFFECT_ID otherwise
  */
-uint8_t validateEffectId(uint8_t effectId);
+EffectId validateEffectId(EffectId effectId);
 
 /**
  * Get IEffect metadata for an effect (if available)
- * @param effectId Effect ID to query
+ * @param effectId Stable effect ID to query
  * @return Pointer to EffectMetadata, or nullptr if not available or not an IEffect
  */
-const lightwaveos::plugins::EffectMetadata* getIEffectMetadata(uint8_t effectId);
+const lightwaveos::plugins::EffectMetadata* getIEffectMetadata(EffectId effectId);
 
 /**
  * Check if an effect has IEffect metadata available
- * @param effectId Effect ID to check
+ * @param effectId Stable effect ID to check
  * @return true if effect is an IEffect instance with metadata
  */
-bool hasIEffectMetadata(uint8_t effectId);
+bool hasIEffectMetadata(EffectId effectId);
 
 /**
  * Check if an effect should skip ColorCorrectionEngine processing
- * @param effectId Effect ID to check
+ * @param effectId Stable effect ID to check
  * @return true if effect should skip color correction
- *
- * Consolidates all color correction skip logic:
- * - LGP-sensitive effects (INTERFERENCE, ADVANCED_OPTICAL families)
- * - Stateful effects (Confetti, Ripple - read previous frame buffer)
- * - PHYSICS_BASED family (precise amplitude for physics simulations)
- * - MATHEMATICAL family (exact RGB values for mathematical mappings)
- *
- * Performance: Skipping saves ~1,500µs per frame for eligible effects
  */
-bool shouldSkipColorCorrection(uint8_t effectId);
+bool shouldSkipColorCorrection(EffectId effectId);
 
 // ============================================================================
 // Effect Register Functions (for filtered effect cycling)
@@ -240,16 +223,10 @@ bool shouldSkipColorCorrection(uint8_t effectId);
 
 /**
  * @brief Check if an effect is audio-reactive
- * @param effectId Effect ID to check (effect ID space; see RendererActor::MAX_EFFECTS)
+ * @param effectId Stable effect ID to check
  * @return true if effect actively uses ctx.audio features
- *
- * Audio-reactive effects respond to real-time audio input via:
- * - Beat tracking (beatPhase, isOnBeat, bpm)
- * - Energy metrics (rms, flux, bass, mid, treble)
- * - Spectrum analysis (getBand, bins64)
- * - Chord detection (chordType, rootNote)
  */
-bool isAudioReactive(uint8_t effectId);
+bool isAudioReactive(EffectId effectId);
 
 /**
  * @brief Get the number of audio-reactive effects
@@ -260,21 +237,19 @@ uint8_t getReactiveEffectCount();
 /**
  * @brief Get reactive effect ID by index
  * @param index Index within reactive effects array (0 to getReactiveEffectCount()-1)
- * @return Effect ID, or 0xFF if index out of bounds
+ * @return EffectId, or INVALID_EFFECT_ID if index out of bounds
  */
-uint8_t getReactiveEffectId(uint8_t index);
+EffectId getReactiveEffectId(uint8_t index);
 
 /**
  * @brief Build ambient effect ID array (call once at startup)
- * @param outputArray Array to populate with ambient effect IDs
+ * @param outputArray Array to populate with ambient EffectIds
  * @param maxOutput Maximum size of output array
+ * @param allIds Array of all registered EffectIds
  * @param effectCount Total number of registered effects
  * @return Number of ambient effects found
- *
- * Ambient effects are all effects NOT in the audio-reactive list.
- * They use time-based animation or user parameters only.
  */
-uint8_t buildAmbientEffectArray(uint8_t* outputArray, uint8_t maxOutput, uint8_t effectCount);
+uint16_t buildAmbientEffectArray(EffectId* outputArray, uint16_t maxOutput, const EffectId* allIds, uint16_t effectCount);
 
 } // namespace PatternRegistry
 
@@ -306,6 +281,6 @@ enum class EffectRegister : uint8_t {
 // ============================================================================
 
 extern const PatternMetadata PATTERN_METADATA[];
-extern const uint8_t PATTERN_METADATA_COUNT;
+extern const uint16_t PATTERN_METADATA_COUNT;
 
 #endif // PATTERN_REGISTRY_H

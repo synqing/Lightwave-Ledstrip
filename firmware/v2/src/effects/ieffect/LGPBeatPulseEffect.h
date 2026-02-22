@@ -15,6 +15,7 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -22,6 +23,8 @@ namespace ieffect {
 
 class LGPBeatPulseEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_BEAT_PULSE;
+
     LGPBeatPulseEffect() = default;
     ~LGPBeatPulseEffect() override = default;
 
@@ -49,8 +52,7 @@ private:
     // ES/LWLS-agnostic onset proxy (flux) and chroma hue anchoring
     float m_lastFastFlux = 0.0f;
     uint32_t m_lastHopSeq = 0;
-    uint8_t m_dominantChromaBin = 0;
-    float m_dominantChromaBinSmooth = 0.0f;
+    float m_chromaAngle = 0.0f;  ///< Circular chroma EMA state (radians)
 
     // Bands-dead guard: when bands stay near zero for N frames, don't trust band-based snare/hihat
     uint16_t m_bandsLowFrames = 0;

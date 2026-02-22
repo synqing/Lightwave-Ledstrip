@@ -128,7 +128,7 @@ static void handleTransitionsTrigger(AsyncWebSocketClient* client, JsonDocument&
         return;
     }
     
-    uint8_t fromEffect = ctx.renderer->getCurrentEffect();
+    EffectId fromEffect = ctx.renderer->getCurrentEffect();
     ctx.renderer->startTransition(toEffect, transType);
     if (ctx.broadcastStatus) ctx.broadcastStatus();
     

@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <cstddef>
 #include "NVSManager.h"
+#include "../../config/effect_ids.h"
 
 // Forward declarations
 namespace lightwaveos { namespace actors { class RendererActor; } }
@@ -47,7 +48,7 @@ struct EffectPreset {
     uint8_t version = CURRENT_VERSION;  // Format version for future compatibility
 
     // Core effect settings
-    uint8_t effectId = 0;               // Effect ID (0-255)
+    EffectId effectId = INVALID_EFFECT_ID;  // Effect ID (stable namespaced)
     uint8_t paletteId = 0;              // Palette ID (0-74)
     uint8_t brightness = 96;            // Brightness (0-255)
     uint8_t speed = 10;                 // Animation speed (1-100)
@@ -98,7 +99,7 @@ struct EffectPreset {
 struct EffectPresetMetadata {
     uint8_t slot = 0;                   // Slot index (0-15)
     char name[EffectPreset::NAME_MAX_LEN] = {0};
-    uint8_t effectId = 0;
+    EffectId effectId = INVALID_EFFECT_ID;
     uint8_t paletteId = 0;
     uint32_t timestamp = 0;
     bool occupied = false;              // True if slot contains valid preset

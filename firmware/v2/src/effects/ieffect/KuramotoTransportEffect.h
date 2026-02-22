@@ -28,6 +28,7 @@
 #include "KuramotoOscillatorField.h"
 #include "KuramotoFeatureExtractor.h"
 #include "KuramotoTransportBuffer.h"
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos::effects::ieffect {
 
@@ -43,6 +44,7 @@ namespace lightwaveos::effects::ieffect {
  */
 class KuramotoTransportEffect final : public lightwaveos::plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_KURAMOTO_TRANSPORT;
     KuramotoTransportEffect();
 
     bool init(lightwaveos::plugins::EffectContext& ctx) override;

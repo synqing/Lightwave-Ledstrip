@@ -4,6 +4,7 @@
  */
 
 #include "JuggleEffect.h"
+#include "ChromaUtils.h"
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <math.h>
@@ -17,6 +18,8 @@ JuggleEffect::JuggleEffect()
 }
 
 bool JuggleEffect::init(plugins::EffectContext& ctx) {
+    (void)ctx;
+    m_chromaAngle = 0.0f;
     return true;
 }
 
@@ -52,20 +55,12 @@ void JuggleEffect::render(plugins::EffectContext& ctx) {
         if (dotCount > 8) dotCount = 8;
     }
 
-    // Chroma‑anchored hue (non‑rainbow): pick dominant chroma bin as base, then offset per dot.
+    // Chroma-anchored hue (non-rainbow): circular weighted mean for smooth, continuous colour.
+    const float rawDt = ctx.getSafeRawDeltaSeconds();
     uint8_t baseHue = ctx.gHue;
     if (chroma) {
-        float maxChroma = 0.0f;
-        uint8_t maxIdx = 0;
-        for (uint8_t i = 0; i < 12; i++) {
-            if (chroma[i] > maxChroma) {
-                maxChroma = chroma[i];
-                maxIdx = i;
-            }
-        }
-        if (maxChroma > 0.05f) {
-            baseHue = static_cast<uint8_t>(maxIdx * 21);  // 256/12 ≈ 21
-        }
+        baseHue = effects::chroma::circularChromaHueSmoothed(
+            chroma, m_chromaAngle, rawDt, 0.20f);
     }
 
     for (uint8_t i = 0; i < dotCount; i++) {

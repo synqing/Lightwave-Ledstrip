@@ -836,13 +836,14 @@ void AudioHandlers::handleMappingsList(AsyncWebServerRequest* request,
 
         JsonArray effects = data["effects"].to<JsonArray>();
 
-        uint8_t effectCount = renderer->getEffectCount();
-        for (uint8_t i = 0; i < effectCount && i < AudioMappingRegistry::MAX_EFFECTS; i++) {
-            const EffectAudioMapping* mapping = registry.getMapping(i);
+        uint16_t effectCount = renderer->getEffectCount();
+        for (uint16_t i = 0; i < effectCount; i++) {
+            EffectId eid = renderer->getEffectIdAt(i);
+            const EffectAudioMapping* mapping = registry.getMapping(eid);
             if (mapping && mapping->globalEnabled && mapping->mappingCount > 0) {
                 JsonObject e = effects.add<JsonObject>();
-                e["id"] = i;
-                e["name"] = renderer->getEffectName(i);
+                e["id"] = eid;
+                e["name"] = renderer->getEffectName(eid);
                 e["mappingCount"] = mapping->mappingCount;
                 e["enabled"] = mapping->globalEnabled;
             }
@@ -850,13 +851,13 @@ void AudioHandlers::handleMappingsList(AsyncWebServerRequest* request,
     }, 2048);
 }
 
-void AudioHandlers::handleMappingsGet(AsyncWebServerRequest* request, uint8_t effectId,
+void AudioHandlers::handleMappingsGet(AsyncWebServerRequest* request, EffectId effectId,
                                        RendererActor* renderer) {
     using namespace audio;
     auto& registry = AudioMappingRegistry::instance();
 
     if (effectId >= AudioMappingRegistry::MAX_EFFECTS ||
-        effectId >= renderer->getEffectCount()) {
+        !renderer->isEffectRegistered(effectId)) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
                           ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "id");
         return;
@@ -889,6 +890,7 @@ void AudioHandlers::handleMappingsGet(AsyncWebServerRequest* request, uint8_t ef
             mapping["outputMin"] = m.outputMin;
             mapping["outputMax"] = m.outputMax;
             mapping["smoothingAlpha"] = m.smoothingAlpha;
+            mapping["tauSeconds"] = m.tauSeconds;
             mapping["gain"] = m.gain;
             mapping["enabled"] = m.enabled;
             mapping["additive"] = m.additive;
@@ -896,14 +898,14 @@ void AudioHandlers::handleMappingsGet(AsyncWebServerRequest* request, uint8_t ef
     }, 2048);
 }
 
-void AudioHandlers::handleMappingsSet(AsyncWebServerRequest* request, uint8_t effectId,
+void AudioHandlers::handleMappingsSet(AsyncWebServerRequest* request, EffectId effectId,
                                        uint8_t* data, size_t len,
                                        RendererActor* renderer) {
     using namespace audio;
     auto& registry = AudioMappingRegistry::instance();
 
     if (effectId >= AudioMappingRegistry::MAX_EFFECTS ||
-        effectId >= renderer->getEffectCount()) {
+        !renderer->isEffectRegistered(effectId)) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
                           ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "id");
         return;
@@ -939,6 +941,7 @@ void AudioHandlers::handleMappingsSet(AsyncWebServerRequest* request, uint8_t ef
             mapping.outputMin = m["outputMin"] | 0.0f;
             mapping.outputMax = m["outputMax"] | 255.0f;
             mapping.smoothingAlpha = m["smoothingAlpha"] | 0.3f;
+            mapping.tauSeconds = m["tauSeconds"] | 0.15f;
             mapping.gain = m["gain"] | 1.0f;
             mapping.enabled = m["enabled"] | true;
             mapping.additive = m["additive"] | false;
@@ -966,7 +969,7 @@ void AudioHandlers::handleMappingsSet(AsyncWebServerRequest* request, uint8_t ef
     });
 }
 
-void AudioHandlers::handleMappingsDelete(AsyncWebServerRequest* request, uint8_t effectId) {
+void AudioHandlers::handleMappingsDelete(AsyncWebServerRequest* request, EffectId effectId) {
     using namespace audio;
     auto& registry = AudioMappingRegistry::instance();
 
@@ -988,7 +991,7 @@ void AudioHandlers::handleMappingsDelete(AsyncWebServerRequest* request, uint8_t
     });
 }
 
-void AudioHandlers::handleMappingsEnable(AsyncWebServerRequest* request, uint8_t effectId, bool enable) {
+void AudioHandlers::handleMappingsEnable(AsyncWebServerRequest* request, EffectId effectId, bool enable) {
     using namespace audio;
     auto& registry = AudioMappingRegistry::instance();
 
@@ -1730,23 +1733,23 @@ void AudioHandlers::handleMappingsList(AsyncWebServerRequest* request, RendererA
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
 
-void AudioHandlers::handleMappingsGet(AsyncWebServerRequest* request, uint8_t, RendererActor*) {
+void AudioHandlers::handleMappingsGet(AsyncWebServerRequest* request, EffectId, RendererActor*) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
 
-void AudioHandlers::handleMappingsSet(AsyncWebServerRequest* request, uint8_t,
+void AudioHandlers::handleMappingsSet(AsyncWebServerRequest* request, EffectId,
                                         uint8_t*, size_t, RendererActor*) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
 
-void AudioHandlers::handleMappingsDelete(AsyncWebServerRequest* request, uint8_t) {
+void AudioHandlers::handleMappingsDelete(AsyncWebServerRequest* request, EffectId) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
 
-void AudioHandlers::handleMappingsEnable(AsyncWebServerRequest* request, uint8_t, bool) {
+void AudioHandlers::handleMappingsEnable(AsyncWebServerRequest* request, EffectId, bool) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }

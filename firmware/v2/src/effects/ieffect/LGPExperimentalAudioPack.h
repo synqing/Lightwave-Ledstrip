@@ -15,6 +15,7 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -22,6 +23,7 @@ namespace ieffect {
 
 class LGPFluxRiftEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_FLUX_RIFT;
     LGPFluxRiftEffect();
     bool init(plugins::EffectContext& ctx) override;
     void render(plugins::EffectContext& ctx) override;
@@ -34,10 +36,12 @@ private:
     uint32_t m_lastBeatMs = 0;
     float m_hue = 24.0f;
     float m_audioPresence = 0.0f;
+    bool m_chordGateOpen = false;
 };
 
 class LGPBeatPrismEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_BEAT_PRISM;
     LGPBeatPrismEffect();
     bool init(plugins::EffectContext& ctx) override;
     void render(plugins::EffectContext& ctx) override;
@@ -50,10 +54,12 @@ private:
     uint32_t m_lastBeatMs = 0;
     float m_hue = 24.0f;
     float m_audioPresence = 0.0f;
+    bool m_chordGateOpen = false;
 };
 
 class LGPHarmonicTideEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_HARMONIC_TIDE;
     LGPHarmonicTideEffect();
     bool init(plugins::EffectContext& ctx) override;
     void render(plugins::EffectContext& ctx) override;
@@ -65,10 +71,12 @@ private:
     float m_rootSmooth = 0.0f;
     float m_hue = 24.0f;
     float m_audioPresence = 0.0f;
+    bool m_chordGateOpen = false;
 };
 
 class LGPBassQuakeEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_BASS_QUAKE;
     LGPBassQuakeEffect();
     bool init(plugins::EffectContext& ctx) override;
     void render(plugins::EffectContext& ctx) override;
@@ -81,10 +89,12 @@ private:
     uint32_t m_lastBeatMs = 0;
     float m_hue = 24.0f;
     float m_audioPresence = 0.0f;
+    bool m_chordGateOpen = false;
 };
 
 class LGPTrebleNetEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_TREBLE_NET;
     LGPTrebleNetEffect();
     bool init(plugins::EffectContext& ctx) override;
     void render(plugins::EffectContext& ctx) override;
@@ -96,10 +106,12 @@ private:
     float m_shimmer = 0.0f;
     float m_hue = 24.0f;
     float m_audioPresence = 0.0f;
+    bool m_chordGateOpen = false;
 };
 
 class LGPRhythmicGateEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_RHYTHMIC_GATE;
     LGPRhythmicGateEffect();
     bool init(plugins::EffectContext& ctx) override;
     void render(plugins::EffectContext& ctx) override;
@@ -112,10 +124,12 @@ private:
     uint32_t m_lastBeatMs = 0;
     float m_hue = 24.0f;
     float m_audioPresence = 0.0f;
+    bool m_chordGateOpen = false;
 };
 
 class LGPSpectralKnotEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_SPECTRAL_KNOT;
     LGPSpectralKnotEffect();
     bool init(plugins::EffectContext& ctx) override;
     void render(plugins::EffectContext& ctx) override;
@@ -127,10 +141,12 @@ private:
     float m_rotation = 0.0f;
     float m_hue = 24.0f;
     float m_audioPresence = 0.0f;
+    bool m_chordGateOpen = false;
 };
 
 class LGPSaliencyBloomEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_SALIENCY_BLOOM;
     LGPSaliencyBloomEffect();
     bool init(plugins::EffectContext& ctx) override;
     void render(plugins::EffectContext& ctx) override;
@@ -143,10 +159,12 @@ private:
     uint32_t m_lastBeatMs = 0;
     float m_hue = 24.0f;
     float m_audioPresence = 0.0f;
+    bool m_chordGateOpen = false;
 };
 
 class LGPTransientLatticeEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_TRANSIENT_LATTICE;
     LGPTransientLatticeEffect();
     bool init(plugins::EffectContext& ctx) override;
     void render(plugins::EffectContext& ctx) override;
@@ -159,10 +177,12 @@ private:
     uint32_t m_lastBeatMs = 0;
     float m_hue = 24.0f;
     float m_audioPresence = 0.0f;
+    bool m_chordGateOpen = false;
 };
 
 class LGPWaveletMirrorEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_WAVELET_MIRROR;
     LGPWaveletMirrorEffect();
     bool init(plugins::EffectContext& ctx) override;
     void render(plugins::EffectContext& ctx) override;
@@ -175,6 +195,7 @@ private:
     uint32_t m_lastBeatMs = 0;
     float m_hue = 24.0f;
     float m_audioPresence = 0.0f;
+    bool m_chordGateOpen = false;
 };
 
 } // namespace ieffect

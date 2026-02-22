@@ -11,6 +11,7 @@
 #include "../../../codec/WsZonesCodec.h"
 #include "../../../effects/zones/ZoneComposer.h"
 #include "../../../effects/zones/BlendMode.h"
+#include "../../../config/effect_ids.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 
@@ -23,7 +24,9 @@ using namespace lightwaveos::zones;
 
 static void handleZoneEnable(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     if (!ctx.zoneComposer) {
-        return; // Silently ignore if zones not available
+        const char* requestId = doc["requestId"] | "";
+        client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone composer not available", requestId));
+        return;
     }
     
     JsonObjectConst root = doc.as<JsonObjectConst>();
@@ -58,6 +61,8 @@ static void handleZoneEnable(AsyncWebSocketClient* client, JsonDocument& doc, co
  */
 static void handleZoneEnableZone(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     if (!ctx.zoneComposer) {
+        const char* requestId = doc["requestId"] | "";
+        client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone composer not available", requestId));
         return;
     }
 
@@ -123,26 +128,26 @@ static void handleZoneSetEffect(AsyncWebSocketClient* client, JsonDocument& doc,
     
     const codec::ZoneSetEffectRequest& req = decodeResult.request;
     uint8_t zoneId = req.zoneId;
-    uint8_t effectId = req.effectId;
+    EffectId effectId = req.effectId;
     const char* requestId = req.requestId ? req.requestId : "";
-    
+
     // DEFENSIVE CHECK: Validate zoneId and effectId before array access
     zoneId = lightwaveos::network::validateZoneIdInRequest(zoneId);
     effectId = lightwaveos::network::validateEffectIdInRequest(effectId);
-    
+
     if (zoneId >= ctx.zoneComposer->getZoneCount()) {
         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid zoneId", requestId));
         return;
     }
-    
-    if (effectId >= ctx.renderer->getEffectCount()) {
+
+    if (!ctx.renderer->isEffectRegistered(effectId)) {
         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid effectId", requestId));
         return;
     }
-    
+
     ctx.zoneComposer->setZoneEffect(zoneId, effectId);
     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
-    
+
     String response = buildWsResponse("zones.effectChanged", requestId, [&ctx, zoneId, effectId](JsonObject& data) {
         codec::WsZonesCodec::encodeZonesEffectChanged(zoneId, effectId, *ctx.zoneComposer, ctx.renderer, data);
     });
@@ -406,10 +411,10 @@ static void handleZonesUpdate(AsyncWebSocketClient* client, JsonDocument& doc, c
     bool updatedBlend = false;
     
     if (req.hasEffectId) {
-        uint8_t effectId = req.effectId;
+        EffectId effectId = req.effectId;
         // DEFENSIVE CHECK: Validate effectId before array access
         effectId = lightwaveos::network::validateEffectIdInRequest(effectId);
-        if (effectId < ctx.renderer->getEffectCount()) {
+        if (ctx.renderer->isEffectRegistered(effectId)) {
             ctx.zoneComposer->setZoneEffect(zoneId, effectId);
             updatedEffect = true;
         }
@@ -479,26 +484,26 @@ static void handleZonesSetEffect(AsyncWebSocketClient* client, JsonDocument& doc
     
     const codec::ZoneSetEffectRequest& req = decodeResult.request;
     uint8_t zoneId = req.zoneId;
-    uint8_t effectId = req.effectId;
+    EffectId effectId = req.effectId;
     const char* requestId = req.requestId ? req.requestId : "";
-    
+
     // DEFENSIVE CHECK: Validate zoneId and effectId before array access
     zoneId = lightwaveos::network::validateZoneIdInRequest(zoneId);
     effectId = lightwaveos::network::validateEffectIdInRequest(effectId);
-    
+
     if (zoneId >= ctx.zoneComposer->getZoneCount()) {
         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid zoneId", requestId));
         return;
     }
-    
-    if (effectId >= ctx.renderer->getEffectCount()) {
+
+    if (!ctx.renderer->isEffectRegistered(effectId)) {
         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid effectId", requestId));
         return;
     }
-    
+
     ctx.zoneComposer->setZoneEffect(zoneId, effectId);
     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
-    
+
     String response = buildWsResponse("zones.effectChanged", requestId, [&ctx, zoneId, effectId](JsonObject& data) {
         codec::WsZonesCodec::encodeZonesEffectChanged(zoneId, effectId, *ctx.zoneComposer, ctx.renderer, data);
     });

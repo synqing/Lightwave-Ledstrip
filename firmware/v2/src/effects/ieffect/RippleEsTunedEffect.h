@@ -16,12 +16,15 @@
 
 #ifndef NATIVE_BUILD
 #include <esp_heap_caps.h>
+#include "../../config/effect_ids.h"
 #endif
 
 namespace lightwaveos::effects::ieffect {
 
 class RippleEsTunedEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_RIPPLE_ES_TUNED;
+
     RippleEsTunedEffect();
     ~RippleEsTunedEffect() override = default;
 
@@ -59,6 +62,7 @@ private:
     float m_subBass = 0.0f;        // 0..1 (bins 0-5)
     float m_treble = 0.0f;         // 0..1 (bins 48-63)
     float m_fluxEnv = 0.0f;        // 0..1 transient envelope
+    float m_chromaAngle = 0.0f;    ///< Circular chroma EMA state (radians)
     uint8_t m_baseHue = 0;
 
     void spawnRipple(uint8_t hue, uint8_t intensity, float speed);

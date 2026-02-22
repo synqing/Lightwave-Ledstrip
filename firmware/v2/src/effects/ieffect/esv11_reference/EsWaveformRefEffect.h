@@ -10,15 +10,19 @@
 #pragma once
 
 #include "../../../plugins/api/IEffect.h"
+#include "config/audio_config.h"
 
 #ifndef NATIVE_BUILD
 #include <esp_heap_caps.h>
+#include "../../../config/effect_ids.h"
 #endif
 
 namespace lightwaveos::effects::ieffect::esv11_reference {
 
 class EsWaveformRefEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_ES_WAVEFORM;
+
     EsWaveformRefEffect() = default;
     ~EsWaveformRefEffect() override = default;
 
@@ -29,7 +33,7 @@ public:
 
 private:
     static constexpr uint8_t  kMaxZones      = 4;
-    static constexpr uint16_t SAMPLE_RATE_HZ = 12800;
+    static constexpr uint16_t SAMPLE_RATE_HZ = lightwaveos::audio::SAMPLE_RATE;
     static constexpr float CUTOFF_HZ = 2110.0f;  // ES: 110 + 2000*(1.0 - bass); bass disabled in ref.
     static constexpr uint8_t FILTER_PASSES = 3;
     static constexpr uint8_t HISTORY_FRAMES = 4;

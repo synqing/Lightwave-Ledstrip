@@ -15,12 +15,15 @@
 
 #ifndef NATIVE_BUILD
 #include <esp_heap_caps.h>
+#include "../../../config/effect_ids.h"
 #endif
 
 namespace lightwaveos::effects::ieffect::esv11_reference {
 
 class EsSpectrumRefEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_ES_SPECTRUM;
+
     EsSpectrumRefEffect() = default;
     ~EsSpectrumRefEffect() override = default;
 

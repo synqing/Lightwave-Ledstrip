@@ -30,11 +30,13 @@
 #include "../CoreEffects.h"
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos::effects::ieffect {
 
 class BeatPulseSpectralPulseEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_BEAT_PULSE_SPECTRAL_PULSE;
     BeatPulseSpectralPulseEffect() = default;
     ~BeatPulseSpectralPulseEffect() override = default;
 

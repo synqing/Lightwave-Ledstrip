@@ -78,8 +78,7 @@ bool LGPPhotonicCrystalEnhancedEffect::init(plugins::EffectContext& ctx) {
     }
     
     // Chroma tracking
-    m_dominantBin = 0;
-    m_dominantBinSmooth = 0.0f;
+    m_chromaAngle = 0.0f;
     m_tempoLocked = false;
 
     return true;
@@ -149,14 +148,6 @@ void LGPPhotonicCrystalEnhancedEffect::render(plugins::EffectContext& ctx) {
             }
             m_targetSubBass = subBassSum / 6.0f;
             
-            // Dominant chroma bin detection (for color offset) - use smoothed values
-            float maxChroma = 0.0f;
-            for (uint8_t bin = 0; bin < 12; ++bin) {
-                if (m_chromaSmoothed[bin] > maxChroma) {
-                    maxChroma = m_chromaSmoothed[bin];
-                    m_dominantBin = bin;
-                }
-            }
         }
         
         // Smooth chromagram with AsymmetricFollower (every frame)
@@ -184,10 +175,9 @@ void LGPPhotonicCrystalEnhancedEffect::render(plugins::EffectContext& ctx) {
         if (m_collisionBoost > 1.3f) m_collisionBoost = 1.3f;  // Clamp
         m_collisionBoost *= 0.88f;
 
-        // Chroma color offset (250ms smooth)
-        float alphaBin = 1.0f - expf(-dt / 0.25f);
-        m_dominantBinSmooth += ((float)m_dominantBin - m_dominantBinSmooth) * alphaBin;
-        chromaOffset = (uint8_t)(m_dominantBinSmooth * (255.0f / 12.0f));
+        // Circular chroma hue (replaces argmax + linear EMA to eliminate bin-flip rainbow sweeps)
+        chromaOffset = effects::chroma::circularChromaHueSmoothed(
+            ctx.audio.controlBus.heavy_chroma, m_chromaAngle, rawDt, 0.20f);
     }
 #endif
 

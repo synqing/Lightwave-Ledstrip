@@ -27,6 +27,7 @@
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
 #include <esp_heap_caps.h>
+#include "../../config/effect_ids.h"
 #endif
 
 namespace lightwaveos {
@@ -35,6 +36,8 @@ namespace ieffect {
 
 class LGPSpectrumDetailEnhancedEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_SPECTRUM_DETAIL_ENHANCED;
+
     LGPSpectrumDetailEnhancedEffect() = default;
     ~LGPSpectrumDetailEnhancedEffect() override = default;
 

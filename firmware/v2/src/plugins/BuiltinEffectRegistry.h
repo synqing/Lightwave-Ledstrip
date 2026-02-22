@@ -4,7 +4,10 @@
  *
  * Stores compiled-in effect instances for lookup during
  * plugin manifest loading. Effects are registered during
- * registerAllEffects() and looked up by ID.
+ * registerAllEffects() and looked up by stable EffectId.
+ *
+ * Uses append-only linear registry (not array-indexed) to
+ * support sparse namespaced EffectId values.
  *
  * @author LightwaveOS Team
  * @version 2.0.0
@@ -13,6 +16,7 @@
 #pragma once
 
 #include "api/IEffect.h"
+#include "../config/effect_ids.h"
 #include "../config/limits.h"
 #include <stdint.h>
 
@@ -22,43 +26,42 @@ namespace plugins {
 /**
  * @brief Static registry for built-in effects
  *
- * Maps effect IDs to compiled IEffect pointers.
+ * Maps stable EffectId values to compiled IEffect pointers.
  * Used by PluginManagerActor to resolve manifest effect references.
  */
 class BuiltinEffectRegistry {
 public:
-    // Larger than limits::MAX_EFFECTS to allow headroom for future effects
-    static constexpr uint8_t MAX_EFFECTS = 170;
+    static constexpr uint16_t MAX_EFFECTS = 256;
     static_assert(MAX_EFFECTS >= limits::MAX_EFFECTS,
                   "BuiltinEffectRegistry::MAX_EFFECTS must be >= limits::MAX_EFFECTS");
 
     /**
      * @brief Register a built-in effect
-     * @param id Effect ID (0-139)
+     * @param id Stable namespaced EffectId
      * @param effect Pointer to IEffect instance
      * @return true if registered successfully
      */
-    static bool registerBuiltin(uint8_t id, IEffect* effect);
+    static bool registerBuiltin(EffectId id, IEffect* effect);
 
     /**
      * @brief Get a built-in effect by ID
-     * @param id Effect ID
+     * @param id Stable EffectId
      * @return Pointer to IEffect or nullptr if not registered
      */
-    static IEffect* getBuiltin(uint8_t id);
+    static IEffect* getBuiltin(EffectId id);
 
     /**
      * @brief Check if an effect ID is registered
-     * @param id Effect ID
+     * @param id Stable EffectId
      * @return true if registered
      */
-    static bool hasBuiltin(uint8_t id);
+    static bool hasBuiltin(EffectId id);
 
     /**
      * @brief Get count of registered built-in effects
      * @return Number of registered effects
      */
-    static uint8_t getBuiltinCount();
+    static uint16_t getBuiltinCount();
 
     /**
      * @brief Clear all registrations (for testing)
@@ -66,8 +69,12 @@ public:
     static void clear();
 
 private:
-    static IEffect* s_effects[MAX_EFFECTS];
-    static uint8_t s_count;
+    struct Entry {
+        EffectId id;
+        IEffect* effect;
+    };
+    static Entry s_entries[MAX_EFFECTS];
+    static uint16_t s_count;
 };
 
 } // namespace plugins

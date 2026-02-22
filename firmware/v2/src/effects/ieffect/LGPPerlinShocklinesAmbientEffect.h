@@ -23,6 +23,7 @@
 
 #ifndef NATIVE_BUILD
 #include <esp_heap_caps.h>
+#include "../../config/effect_ids.h"
 #endif
 
 namespace lightwaveos {
@@ -31,6 +32,8 @@ namespace ieffect {
 
 class LGPPerlinShocklinesAmbientEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_PERLIN_SHOCKLINES_AMBIENT;
+
     LGPPerlinShocklinesAmbientEffect();
     ~LGPPerlinShocklinesAmbientEffect() override = default;
 

@@ -18,11 +18,13 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos::effects::ieffect {
 
 class LGPHolographicEsTunedEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_HOLOGRAPHIC_ES_TUNED;
     LGPHolographicEsTunedEffect() = default;
     ~LGPHolographicEsTunedEffect() override = default;
 
@@ -37,10 +39,9 @@ private:
     float m_phase2 = 0.0f;
     float m_phase3 = 0.0f;
 
-    // Chroma anchor (stable across hops)
+    // Chroma anchor (circular EMA state, radians)
     uint32_t m_lastHopSeq = 0;
-    uint8_t m_dominantChromaBin = 0;
-    float m_dominantChromaBinSmooth = 0.0f;
+    float m_chromaAngle = 0.0f;
 
     // Flux/refraction accent
     float m_lastFastFlux = 0.0f;

@@ -4,6 +4,7 @@
  */
 
 #include "HeartbeatEsTunedEffect.h"
+#include "ChromaUtils.h"
 #include "../CoreEffects.h"
 
 #ifndef NATIVE_BUILD
@@ -27,24 +28,6 @@ static inline const float* selectChroma12(const audio::ControlBusFrame& cb) {
     return cb.chroma;
 }
 
-static inline uint8_t dominantChromaBin12(const float chroma[audio::CONTROLBUS_NUM_CHROMA]) {
-    uint8_t best = 0;
-    float bestV = chroma[0];
-    for (uint8_t i = 1; i < audio::CONTROLBUS_NUM_CHROMA; ++i) {
-        float v = chroma[i];
-        if (v > bestV) {
-            bestV = v;
-            best = i;
-        }
-    }
-    return best;
-}
-
-static inline uint8_t chromaBinToHue(uint8_t bin) {
-    // 12 bins → 0..252 hue range (21 hue units per semitone).
-    return (uint8_t)(bin * 21);
-}
-
 static inline CRGB addSat(CRGB a, CRGB b) {
     a.r = qadd8(a.r, b.r);
     a.g = qadd8(a.g, b.g);
@@ -57,8 +40,7 @@ static inline CRGB addSat(CRGB a, CRGB b) {
 bool HeartbeatEsTunedEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
     m_lastHopSeq = 0;
-    m_dominantChromaBin = 0;
-    m_dominantChromaBinSmooth = 0.0f;
+    m_chromaAngle = 0.0f;
 
     m_lastBeatPhase = 0.0f;
     m_lastFastFlux = 0.0f;
@@ -83,23 +65,18 @@ void HeartbeatEsTunedEffect::render(plugins::EffectContext& ctx) {
     const float speedNorm = ctx.speed / 50.0f;
 
     // ---------------------------------------------------------------------
-    // Chroma anchor (non-rainbow): stable hue derived from dominant chroma bin.
+    // Chroma anchor (non-rainbow): circular weighted mean, smoothed.
     // ---------------------------------------------------------------------
+    uint8_t baseHue = 0;
     if (ctx.audio.available) {
-        if (ctx.audio.controlBus.hop_seq != m_lastHopSeq) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
-            const float* chroma = selectChroma12(ctx.audio.controlBus);
-            m_dominantChromaBin = dominantChromaBin12(chroma);
-        }
-
-        float alpha = 1.0f - expf(-rawDt / 0.25f);
-        m_dominantChromaBinSmooth += ((float)m_dominantChromaBin - m_dominantChromaBinSmooth) * alpha;
+        const float* chroma = selectChroma12(ctx.audio.controlBus);
+        baseHue = effects::chroma::circularChromaHueSmoothed(
+            chroma, m_chromaAngle, rawDt, 0.25f);
     } else {
         // Drift very slowly back to 0 when audio is absent (keeps a stable default) - dt-corrected
-        m_dominantChromaBinSmooth *= powf(0.995f, rawDt * 60.0f);
+        m_chromaAngle *= powf(0.995f, rawDt * 60.0f);
+        baseHue = static_cast<uint8_t>(m_chromaAngle * (255.0f / 6.2831853f));
     }
-
-    const uint8_t baseHue = chromaBinToHue((uint8_t)(m_dominantChromaBinSmooth + 0.5f));
     const uint8_t lubHue = baseHue;
     const uint8_t dubHue = (uint8_t)(baseHue + 36);
 

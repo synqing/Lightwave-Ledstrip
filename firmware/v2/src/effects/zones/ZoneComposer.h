@@ -20,6 +20,7 @@
 #include <functional>
 #include "ZoneDefinition.h"
 #include "BlendMode.h"
+#include "../../config/effect_ids.h"
 #include "../../core/actors/RendererActor.h"
 #include "../../plugins/api/EffectContext.h"
 
@@ -55,7 +56,7 @@ struct ZoneAudioConfig {
  * @brief Per-zone configuration
  */
 struct ZoneState {
-    uint8_t effectId;           // Effect to render (0-12 for core effects)
+    EffectId effectId;           // Effect to render (stable namespaced ID)
     uint8_t brightness;         // Zone brightness (0-255)
     uint8_t speed;              // Zone speed (1-100)
     uint8_t paletteId;          // Palette ID (0 = use global)
@@ -130,7 +131,7 @@ public:
 
     // ==================== Per-Zone Settings ====================
 
-    void setZoneEffect(uint8_t zone, uint8_t effectId);
+    void setZoneEffect(uint8_t zone, EffectId effectId);
     void setZoneBrightness(uint8_t zone, uint8_t brightness);
     void setZoneSpeed(uint8_t zone, uint8_t speed);
     void setZonePalette(uint8_t zone, uint8_t paletteId);
@@ -138,7 +139,7 @@ public:
     void setZoneEnabled(uint8_t zone, bool enabled);
 
     // Getters
-    uint8_t getZoneEffect(uint8_t zone) const;
+    EffectId getZoneEffect(uint8_t zone) const;
     uint8_t getZoneBrightness(uint8_t zone) const;
     uint8_t getZoneSpeed(uint8_t zone) const;
     uint8_t getZonePalette(uint8_t zone) const;

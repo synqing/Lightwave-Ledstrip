@@ -4,6 +4,7 @@
  */
 
 #include "RippleEnhancedEffect.h"
+#include "ChromaUtils.h"
 #include "../CoreEffects.h"
 #include "../enhancement/SmoothingEngine.h"
 #include "../../config/features.h"
@@ -59,6 +60,7 @@ bool RippleEnhancedEffect::init(plugins::EffectContext& ctx) {
         m_ps->chromaFollowers[i].reset(0.0f);
     }
 #endif
+    m_chromaAngle = 0.0f;
     m_kickFollower.reset(0.0f);
     m_trebleFollower.reset(0.0f);
     m_kickPulse = 0.0f;
@@ -138,22 +140,27 @@ void RippleEnhancedEffect::render(plugins::EffectContext& ctx) {
     uint8_t spawnChance = 0;
     float energyNorm = 0.0f;
     float energyDelta = 0.0f;
-    uint8_t dominantBin = 0;
     float energyAvg = 0.0f;
+
+    // Circular chroma hue (prevents argmax discontinuities and wrapping artefacts).
+    uint8_t chromaHueOffset = 0;
+#if FEATURE_AUDIO_SYNC
+    if (hasAudio) {
+        const float* chroma = ctx.audio.controlBus.chroma;
+        chromaHueOffset = effects::chroma::circularChromaHueSmoothed(
+            chroma, m_chromaAngle, rawDt, 0.20f);
+    }
+#endif
+
 #if FEATURE_AUDIO_SYNC
     if (hasAudio && newHop) {
         const float led_share = 255.0f / 12.0f;
         float chromaEnergy = 0.0f;
-        float maxBinVal = 0.0f;
         for (uint8_t i = 0; i < 12; ++i) {
             float bin = m_ps->chromaSmoothed[i];  // Use smoothed chromagram
             // FIX: Use sqrt scaling instead of squaring to preserve low-level signals
             float bright = sqrtf(bin) * 1.5f;
             if (bright > 1.0f) bright = 1.0f;
-            if (bright > maxBinVal) {
-                maxBinVal = bright;
-                dominantBin = i;
-            }
             chromaEnergy += bright * led_share;
         }
         energyNorm = chromaEnergy / 255.0f;
@@ -249,8 +256,8 @@ void RippleEnhancedEffect::render(plugins::EffectContext& ctx) {
                 m_ripples[r].radius = 0.0f;      // Reset at center
                 m_ripples[r].intensity = 255;    // Max intensity for snare burst
                 m_ripples[r].speed = speedScale; // Uses unified speed from slider
-                // Enhanced: Use dominant chroma bin for hue (no chord reactivity)
-                m_ripples[r].hue = ctx.gHue + (uint8_t)(dominantBin * (255.0f / 12.0f));
+                // Enhanced: Use circular chroma hue (no chord reactivity)
+                m_ripples[r].hue = ctx.gHue + chromaHueOffset;
                 m_ripples[r].active = true;
                 m_spawnCooldown = 1;             // Brief cooldown
                 break;
@@ -278,8 +285,8 @@ void RippleEnhancedEffect::render(plugins::EffectContext& ctx) {
                 m_ripples[i].speed = speedScale * speedVariation;
                 if (m_ripples[i].speed > speedScale * 1.5f) m_ripples[i].speed = speedScale * 1.5f;
                 if (hasAudio) {
-                    // Enhanced: Use chroma-based hue (no chord reactivity)
-                    float hueBase = (dominantBin * (255.0f / 12.0f)) + ctx.gHue;
+                    // Enhanced: Use circular chroma hue (no chord reactivity)
+                    float hueBase = (float)chromaHueOffset + ctx.gHue;
                     m_ripples[i].hue = (uint8_t)hueBase;
                 } else {
                     m_ripples[i].hue = random8();

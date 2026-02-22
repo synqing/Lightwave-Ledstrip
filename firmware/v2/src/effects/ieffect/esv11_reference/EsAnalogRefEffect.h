@@ -10,11 +10,14 @@
 #pragma once
 
 #include "../../../plugins/api/IEffect.h"
+#include "../../../config/effect_ids.h"
 
 namespace lightwaveos::effects::ieffect::esv11_reference {
 
 class EsAnalogRefEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_ES_ANALOG;
+
     EsAnalogRefEffect() = default;
     ~EsAnalogRefEffect() override = default;
 

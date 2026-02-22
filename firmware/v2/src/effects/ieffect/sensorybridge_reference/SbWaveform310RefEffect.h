@@ -22,12 +22,14 @@
 
 #ifndef NATIVE_BUILD
 #include <esp_heap_caps.h>
+#include "../../../config/effect_ids.h"
 #endif
 
 namespace lightwaveos::effects::ieffect::sensorybridge_reference {
 
 class SbWaveform310RefEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_SB_WAVEFORM310;
     SbWaveform310RefEffect() = default;
     ~SbWaveform310RefEffect() override = default;
 

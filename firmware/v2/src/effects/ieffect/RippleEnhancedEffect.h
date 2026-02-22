@@ -23,6 +23,7 @@
 
 #ifndef NATIVE_BUILD
 #include <esp_heap_caps.h>
+#include "../../config/effect_ids.h"
 #endif
 
 namespace lightwaveos {
@@ -31,6 +32,8 @@ namespace ieffect {
 
 class RippleEnhancedEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_RIPPLE_ENHANCED;
+
     RippleEnhancedEffect();
     ~RippleEnhancedEffect() override = default;
 
@@ -74,6 +77,9 @@ private:
 #else
     void* m_ps = nullptr;
 #endif
+
+    // Circular chroma EMA state (radians)
+    float m_chromaAngle = 0.0f;
 
     enhancement::AsymmetricFollower m_kickFollower{0.0f, 0.05f, 0.30f};
     enhancement::AsymmetricFollower m_trebleFollower{0.0f, 0.05f, 0.30f};

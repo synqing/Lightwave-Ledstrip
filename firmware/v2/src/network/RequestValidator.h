@@ -42,6 +42,7 @@
 #include <ArduinoJson.h>
 #include "ApiResponse.h"
 #include "../config/limits.h"  // Single source of truth for system limits
+#include "../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace network {
@@ -581,9 +582,9 @@ public:
  * @param effectId Effect ID from request
  * @return Valid effect ID, defaults to 0 if out of bounds
  */
-inline uint8_t validateEffectIdInRequest(uint8_t effectId) {
-    if (effectId >= limits::MAX_EFFECTS) {
-        return 0;  // Return safe default (effect 0)
+inline EffectId validateEffectIdInRequest(EffectId effectId) {
+    if (effectId == INVALID_EFFECT_ID) {
+        return lightwaveos::EID_FIRE;  // Return safe default
     }
     return effectId;
 }

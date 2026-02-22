@@ -50,6 +50,7 @@
 // =====================================================================
 
 #include <cstdint>
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace plugins {
@@ -84,6 +85,7 @@ struct EffectMetadata {
     EffectCategory category;    // Category for filtering
     uint8_t version;            // Effect version (for updates)
     const char* author;         // Creator name (optional)
+    EffectId id = INVALID_EFFECT_ID;  // Stable namespaced ID (set during registration)
 
     // Default constructor
     EffectMetadata(const char* n = "Unnamed",

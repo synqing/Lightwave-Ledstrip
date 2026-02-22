@@ -25,6 +25,7 @@
 #include <cstdint>
 #include "NVSManager.h"
 #include "../../config/limits.h"  // Single source of truth for system limits
+#include "../../config/effect_ids.h"
 
 // Forward declaration to avoid circular includes
 namespace lightwaveos {
@@ -51,7 +52,7 @@ constexpr uint8_t ZONE_PRESET_NAME_LENGTH = 32;
  * brightness, speed, blend mode, and LED segment ranges.
  */
 struct ZonePresetEntry {
-    uint8_t effectId;           // Effect ID (0-255)
+    EffectId effectId;          // Effect ID (stable namespaced)
     uint8_t paletteId;          // Palette ID (0-74)
     uint8_t brightness;         // Zone brightness (0-255)
     uint8_t speed;              // Zone speed (1-100)
@@ -302,7 +303,7 @@ private:
     bool m_slotOccupied[ZONE_PRESET_MAX_SLOTS];
 
     // Validation limits - reference centralised limits
-    static constexpr uint8_t MAX_EFFECT_ID = limits::MAX_EFFECTS - 1;
+    static constexpr EffectId MAX_EFFECT_ID = 0x1FFF;  // Covers all family blocks (0x0100-0x1Axx)
     static constexpr uint8_t MIN_SPEED = 1;
     static constexpr uint8_t MAX_SPEED = 100;
     static constexpr uint8_t MAX_PALETTE_ID = limits::MAX_PALETTES - 1;

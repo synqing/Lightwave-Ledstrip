@@ -4,6 +4,7 @@
  */
 
 #include "LGPBassBreathEffect.h"
+#include "ChromaUtils.h"
 #include "../CoreEffects.h"
 
 #ifndef NATIVE_BUILD
@@ -24,24 +25,6 @@ static inline const float* selectChroma12(const audio::ControlBusFrame& cb) {
     return cb.chroma;
 }
 
-static inline uint8_t dominantChromaBin12(const float chroma[audio::CONTROLBUS_NUM_CHROMA], float* outMax = nullptr) {
-    uint8_t best = 0;
-    float bestV = chroma[0];
-    for (uint8_t i = 1; i < audio::CONTROLBUS_NUM_CHROMA; ++i) {
-        float v = chroma[i];
-        if (v > bestV) {
-            bestV = v;
-            best = i;
-        }
-    }
-    if (outMax) *outMax = bestV;
-    return best;
-}
-
-static inline uint8_t chromaBinToHue(uint8_t bin) {
-    return (uint8_t)(bin * 21);
-}
-
 static inline float clamp01(float v) {
     if (v < 0.0f) return 0.0f;
     if (v > 1.0f) return 1.0f;
@@ -53,7 +36,7 @@ static inline float clamp01(float v) {
 bool LGPBassBreathEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
     m_breathLevel = 0.0f;
-    m_hueAnchorSmooth = 0.0f;
+    m_chromaAngle = 0.0f;
     m_lastHopSeq = 0;
     m_lastBass = 0.0f;
     m_lastFastFlux = 0.0f;
@@ -124,23 +107,15 @@ void LGPBassBreathEffect::render(plugins::EffectContext& ctx) {
         m_breathLevel *= powf(0.97f, dt * 60.0f);  // Slow exhale (dt-corrected)
     }
 
-    // Musically anchored hue (non-rainbow): dominant chroma bin, smoothed across hops.
-    uint8_t dominantBin = 0;
+    // Musically anchored hue (non-rainbow): circular chroma mean, smoothed.
+    uint8_t chromaHueOffset = 0;
 #if FEATURE_AUDIO_SYNC
     if (ctx.audio.available) {
-        if (ctx.audio.controlBus.hop_seq != m_lastHopSeq) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
-            const float* chroma = selectChroma12(ctx.audio.controlBus);
-            dominantBin = dominantChromaBin12(chroma);
-        } else {
-            dominantBin = (uint8_t)(m_hueAnchorSmooth / 21.0f + 0.5f);
-        }
+        const float* chroma = selectChroma12(ctx.audio.controlBus);
+        chromaHueOffset = effects::chroma::circularChromaHueSmoothed(
+            chroma, m_chromaAngle, dt, 0.35f);
     }
 #endif
-
-    float alphaHue = 1.0f - expf(-dt / 0.35f);
-    float targetHue = (float)chromaBinToHue(dominantBin);
-    m_hueAnchorSmooth += (targetHue - m_hueAnchorSmooth) * alphaHue;
 
     // Clear buffer
     memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
@@ -165,7 +140,7 @@ void LGPBassBreathEffect::render(plugins::EffectContext& ctx) {
         uint8_t bright = (uint8_t)(brightness * m_breathLevel * ctx.brightness);
 
         // Colour: anchored to chroma (stable), with subtle treble lift (no cycling).
-        uint8_t hue = (uint8_t)((uint8_t)m_hueAnchorSmooth + (uint8_t)(treble * 18.0f) + (uint8_t)(normalizedDist * 20.0f));
+        uint8_t hue = (uint8_t)(chromaHueOffset + (uint8_t)(treble * 18.0f) + (uint8_t)(normalizedDist * 20.0f));
         CRGB color = ctx.palette.getColor(hue, bright);
 
         SET_CENTER_PAIR(ctx, dist, color);

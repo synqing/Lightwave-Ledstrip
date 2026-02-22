@@ -18,6 +18,8 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 
+#include "../../config/effect_ids.h"
+
 #ifndef NATIVE_BUILD
 #include <esp_heap_caps.h>
 #endif
@@ -31,6 +33,7 @@ static constexpr uint16_t STRIP_LENGTH = 160;
 // 1) Chimera Crown — synced + unsynced domains coexist (Kuramoto-ish, nonlocal)
 class LGPChimeraCrownEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_CHIMERA_CROWN;
     LGPChimeraCrownEffect();
     bool init(plugins::EffectContext& ctx) override;
     void render(plugins::EffectContext& ctx) override;
@@ -49,6 +52,7 @@ private:
 // 2) Catastrophe Caustics — 1D ray envelope histogram (focus pull, cusp filaments)
 class LGPCatastropheCausticsEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_CATASTROPHE_CAUSTICS;
     LGPCatastropheCausticsEffect();
     bool init(plugins::EffectContext& ctx) override;
     void render(plugins::EffectContext& ctx) override;
@@ -65,6 +69,7 @@ private:
 // 3) Hyperbolic Portal — Poincaré-style edge densification (atanh blow-up)
 class LGPHyperbolicPortalEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_HYPERBOLIC_PORTAL;
     LGPHyperbolicPortalEffect();
     bool init(plugins::EffectContext& ctx) override;
     void render(plugins::EffectContext& ctx) override;
@@ -77,6 +82,7 @@ private:
 // 4) Lorenz Ribbon — strange attractor trail → 1D distance field glow
 class LGPLorenzRibbonEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_LORENZ_RIBBON;
     LGPLorenzRibbonEffect();
     bool init(plugins::EffectContext& ctx) override;
     void render(plugins::EffectContext& ctx) override;
@@ -96,6 +102,7 @@ private:
 // 5) IFS Botanical Relic — Barnsley-style IFS, mirrored for relic symmetry
 class LGPIFSBioRelicEffect final : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_IFS_BIO_RELIC;
     LGPIFSBioRelicEffect();
     bool init(plugins::EffectContext& ctx) override;
     void render(plugins::EffectContext& ctx) override;

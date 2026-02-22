@@ -18,6 +18,7 @@
 
 #ifndef NATIVE_BUILD
 #include <esp_heap_caps.h>
+#include "../../config/effect_ids.h"
 #endif
 
 namespace lightwaveos {
@@ -26,6 +27,8 @@ namespace ieffect {
 
 class FireEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_FIRE;
+
     FireEffect();
     ~FireEffect() override = default;
 

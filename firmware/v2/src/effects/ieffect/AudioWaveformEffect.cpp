@@ -15,6 +15,7 @@
  */
 
 #include "AudioWaveformEffect.h"
+#include "ChromaUtils.h"
 #include "../CoreEffects.h"
 #include "../../config/features.h"
 
@@ -36,10 +37,6 @@ static inline const float* selectChroma12(const audio::ControlBusFrame& cb) {
     return cb.chroma;
 }
 
-static inline uint8_t chromaBinToHue(uint8_t bin) {
-    return (uint8_t)(bin * 21);
-}
-
 static inline float clamp01(float v) {
     if (v < 0.0f) return 0.0f;
     if (v > 1.0f) return 1.0f;
@@ -54,6 +51,7 @@ bool AudioWaveformEffect::init(plugins::EffectContext& ctx) {
     m_sumColorLast[0] = 0.0f;
     m_sumColorLast[1] = 0.0f;
     m_sumColorLast[2] = 0.0f;
+    m_chromaAngle = 0.0f;
     m_initialized = false;
     return true;
 }
@@ -214,17 +212,10 @@ CRGB AudioWaveformEffect::computeChromaColor(const plugins::EffectContext& ctx) 
         0, 12, 28, 40, 58, 72, 92, 108, 132, 152, 176, 204
     };
 
-    // Pick a stable base hue from the dominant chroma bin.
-    uint8_t dominantBin = 0;
-    float dominantV = 0.0f;
-    for (uint8_t i = 0; i < 12; ++i) {
-        float v = chroma[i];
-        if (v > dominantV) {
-            dominantV = v;
-            dominantBin = i;
-        }
-    }
-    uint8_t baseHue = chromaBinToHue(dominantBin);
+    // Circular chroma hue (prevents argmax discontinuities and wrapping artefacts).
+    float dt = ctx.getSafeRawDeltaSeconds();
+    uint8_t baseHue = effects::chroma::circularChromaHueSmoothed(
+        chroma, m_chromaAngle, dt, 0.20f);
 
     // Accumulate color from all chromagram bins
     for (uint8_t c = 0; c < 12; ++c) {

@@ -2,6 +2,9 @@
  * @file BuiltinEffectRegistry.cpp
  * @brief Static registry implementation for built-in effects
  *
+ * Append-only linear registry with linear scan lookup.
+ * For 162 effects on ESP32 at 240 MHz, scan time is <1us.
+ *
  * @author LightwaveOS Team
  * @version 2.0.0
  */
@@ -13,41 +16,56 @@ namespace lightwaveos {
 namespace plugins {
 
 // Static storage
-IEffect* BuiltinEffectRegistry::s_effects[MAX_EFFECTS] = {nullptr};
-uint8_t BuiltinEffectRegistry::s_count = 0;
+BuiltinEffectRegistry::Entry BuiltinEffectRegistry::s_entries[MAX_EFFECTS] = {};
+uint16_t BuiltinEffectRegistry::s_count = 0;
 
-bool BuiltinEffectRegistry::registerBuiltin(uint8_t id, IEffect* effect) {
-    if (id >= MAX_EFFECTS || effect == nullptr) {
+bool BuiltinEffectRegistry::registerBuiltin(EffectId id, IEffect* effect) {
+    if (id == INVALID_EFFECT_ID || effect == nullptr) {
         return false;
     }
 
-    if (s_effects[id] == nullptr) {
-        s_count++;
+    // Check for existing registration (update in place)
+    for (uint16_t i = 0; i < s_count; ++i) {
+        if (s_entries[i].id == id) {
+            s_entries[i].effect = effect;
+            return true;
+        }
     }
-    s_effects[id] = effect;
+
+    // Append new entry
+    if (s_count >= MAX_EFFECTS) {
+        return false;
+    }
+    s_entries[s_count].id = id;
+    s_entries[s_count].effect = effect;
+    s_count++;
     return true;
 }
 
-IEffect* BuiltinEffectRegistry::getBuiltin(uint8_t id) {
-    if (id >= MAX_EFFECTS) {
-        return nullptr;
+IEffect* BuiltinEffectRegistry::getBuiltin(EffectId id) {
+    for (uint16_t i = 0; i < s_count; ++i) {
+        if (s_entries[i].id == id) {
+            return s_entries[i].effect;
+        }
     }
-    return s_effects[id];
+    return nullptr;
 }
 
-bool BuiltinEffectRegistry::hasBuiltin(uint8_t id) {
-    if (id >= MAX_EFFECTS) {
-        return false;
+bool BuiltinEffectRegistry::hasBuiltin(EffectId id) {
+    for (uint16_t i = 0; i < s_count; ++i) {
+        if (s_entries[i].id == id) {
+            return true;
+        }
     }
-    return s_effects[id] != nullptr;
+    return false;
 }
 
-uint8_t BuiltinEffectRegistry::getBuiltinCount() {
+uint16_t BuiltinEffectRegistry::getBuiltinCount() {
     return s_count;
 }
 
 void BuiltinEffectRegistry::clear() {
-    memset(s_effects, 0, sizeof(s_effects));
+    memset(s_entries, 0, sizeof(s_entries));
     s_count = 0;
 }
 

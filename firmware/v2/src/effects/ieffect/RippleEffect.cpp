@@ -4,6 +4,7 @@
  */
 
 #include "RippleEffect.h"
+#include "ChromaUtils.h"
 #include "../CoreEffects.h"
 #include "../../config/features.h"
 #include <FastLED.h>
@@ -53,6 +54,7 @@ bool RippleEffect::init(plugins::EffectContext& ctx) {
     }
     memset(m_ps, 0, sizeof(RipplePsram));
 #endif
+    m_chromaAngle = 0.0f;
     m_kickPulse = 0.0f;
     m_trebleShimmer = 0.0f;
     return true;
@@ -102,23 +104,29 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
     uint8_t spawnChance = 0;
     float energyNorm = 0.0f;
     float energyDelta = 0.0f;
-    uint8_t dominantBin = 0;
     float energyAvg = 0.0f;
+
+    // Circular chroma hue (prevents argmax discontinuities and wrapping artefacts).
+    float rawDt = ctx.getSafeRawDeltaSeconds();
+    uint8_t chromaHueOffset = 0;
+#if FEATURE_AUDIO_SYNC
+    if (hasAudio) {
+        const float* chroma = ctx.audio.controlBus.chroma;
+        chromaHueOffset = effects::chroma::circularChromaHueSmoothed(
+            chroma, m_chromaAngle, rawDt, 0.20f);
+    }
+#endif
+
 #if FEATURE_AUDIO_SYNC
     if (hasAudio && newHop) {
         const float led_share = 255.0f / 12.0f;
         float chromaEnergy = 0.0f;
-        float maxBinVal = 0.0f;
         for (uint8_t i = 0; i < 12; ++i) {
             float bin = ctx.audio.controlBus.chroma[i];
             float bright = bin;
             bright = bright * bright;
             bright *= 1.5f;
             if (bright > 1.0f) bright = 1.0f;
-            if (bright > maxBinVal) {
-                maxBinVal = bright;
-                dominantBin = i;
-            }
             chromaEnergy += bright * led_share;
         }
         energyNorm = chromaEnergy / 255.0f;
@@ -233,7 +241,7 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
                 if (m_ripples[i].speed > speedScale * 1.5f) m_ripples[i].speed = speedScale * 1.5f;
                 if (hasAudio) {
                     // Apply chord warmth shift to chroma-based hue
-                    float hueBase = (dominantBin * (255.0f / 12.0f)) + ctx.gHue;
+                    float hueBase = (float)chromaHueOffset + ctx.gHue;
                     m_ripples[i].hue = (uint8_t)(hueBase + chordHueShift);
                 } else {
                     m_ripples[i].hue = random8();

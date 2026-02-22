@@ -26,8 +26,7 @@ bool LGPWaveCollisionEnhancedEffect::init(plugins::EffectContext& ctx) {
     }
     m_energyAvg = 0.0f;
     m_energyDelta = 0.0f;
-    m_dominantBin = 0;
-    m_dominantBinSmooth = 0.0f;
+    m_chromaAngle = 0.0f;
     m_collisionBoost = 0.0f;
     m_speedTarget = 1.0f;
 
@@ -67,18 +66,12 @@ void LGPWaveCollisionEnhancedEffect::render(plugins::EffectContext& ctx) {
 
             const float led_share = 255.0f / 12.0f;
             float chromaEnergy = 0.0f;
-            float maxBinVal = 0.0f;
-            uint8_t dominantBin = 0;
             for (uint8_t i = 0; i < 12; ++i) {
                 // Use smoothed chromagram for energy calculation
                 float bin = m_chromaSmoothed[i];
                 // FIX: Use sqrt scaling instead of squaring to preserve low-level signals
                 float bright = sqrtf(bin) * 1.5f;
                 if (bright > 1.0f) bright = 1.0f;
-                if (bright > maxBinVal) {
-                    maxBinVal = bright;
-                    dominantBin = i;
-                }
                 chromaEnergy += bright * led_share;
             }
             float energyNorm = chromaEnergy / 255.0f;
@@ -93,8 +86,6 @@ void LGPWaveCollisionEnhancedEffect::render(plugins::EffectContext& ctx) {
             m_energyAvg = m_chromaEnergySum / CHROMA_HISTORY;
             m_energyDelta = energyNorm - m_energyAvg;
             if (m_energyDelta < 0.0f) m_energyDelta = 0.0f;
-            m_dominantBin = dominantBin;
-            
             // Enhanced: 64-bin Sub-Bass Detection (bins 0-5 = ~110-155 Hz)
             float subBassSum = 0.0f;
             for (uint8_t i = 0; i < 6; ++i) {
@@ -129,11 +120,9 @@ void LGPWaveCollisionEnhancedEffect::render(plugins::EffectContext& ctx) {
     float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, rawDt, moodNorm);
     float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, rawDt, moodNorm);
 
-    // Dominant bin smoothing
-    float alphaBin = 1.0f - expf(-dt / 0.25f);  // True exponential, 250ms time constant
-    m_dominantBinSmooth += (m_dominantBin - m_dominantBinSmooth) * alphaBin;
-    if (m_dominantBinSmooth < 0.0f) m_dominantBinSmooth = 0.0f;
-    if (m_dominantBinSmooth > 11.0f) m_dominantBinSmooth = 11.0f;
+    // Circular chroma hue (replaces argmax + linear EMA to eliminate bin-flip rainbow sweeps)
+    uint8_t chromaHue = effects::chroma::circularChromaHueSmoothed(
+        ctx.audio.controlBus.heavy_chroma, m_chromaAngle, rawDt, 0.20f);
 
     // Enhanced: Percussion-driven collision boost (snare = collision event!)
 #if FEATURE_AUDIO_SYNC
@@ -223,7 +212,7 @@ void LGPWaveCollisionEnhancedEffect::render(plugins::EffectContext& ctx) {
     VALIDATION_INIT(17);  // Effect ID 17
     VALIDATION_PHASE(m_phase, phaseDelta);
     VALIDATION_SPEED(rawSpeedScale, smoothedSpeed);
-    VALIDATION_AUDIO(m_dominantBinSmooth, energyAvgSmooth, energyDeltaSmooth);
+    VALIDATION_AUDIO(m_chromaAngle, energyAvgSmooth, energyDeltaSmooth);
     VALIDATION_REVERSAL_CHECK(m_prevPhaseDelta, phaseDelta);
     VALIDATION_SUBMIT(::lightwaveos::validation::g_validationRing);
     m_prevPhaseDelta = phaseDelta;
@@ -233,7 +222,7 @@ void LGPWaveCollisionEnhancedEffect::render(plugins::EffectContext& ctx) {
     // Anti-aliased collision core at true center (79.5) using SubpixelRenderer
     if (m_collisionBoost > 0.05f) {
         float intensityNorm = ctx.brightness / 255.0f;
-        uint8_t baseHue = (uint8_t)(ctx.gHue + m_dominantBinSmooth * (255.0f / 12.0f));
+        uint8_t baseHue = (uint8_t)(ctx.gHue + chromaHue);
         CRGB collisionColor = ctx.palette.getColor(baseHue, 255);
         uint8_t collisionBright = (uint8_t)(m_collisionBoost * 200.0f * intensityNorm);
 
@@ -277,7 +266,7 @@ void LGPWaveCollisionEnhancedEffect::render(plugins::EffectContext& ctx) {
 
         // CENTRE ORIGIN colour mapping
         uint8_t paletteIndex = (uint8_t)(distFromCenter * 2.0f + interference * 50.0f);
-        uint8_t baseHue = (uint8_t)(ctx.gHue + (uint8_t)(m_dominantBinSmooth * (255.0f / 12.0f)));
+        uint8_t baseHue = (uint8_t)(ctx.gHue + chromaHue);
 
         // Blend with existing pixel (preserves trails from fadeToBlackBy)
         // nblend uses 8-bit amount: 0=keep existing, 255=full replace

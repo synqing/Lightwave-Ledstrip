@@ -16,6 +16,7 @@
 #include "../../plugins/api/EffectContext.h"
 #include "../enhancement/SmoothingEngine.h"
 #include <FastLED.h>
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -23,6 +24,8 @@ namespace ieffect {
 
 class ChevronWavesEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_CHEVRON_WAVES;
+
     ChevronWavesEffect();
     ~ChevronWavesEffect() override = default;
 
@@ -46,8 +49,9 @@ private:
     // Raw energy values (updated per hop)
     float m_energyAvg = 0.0f;
     float m_energyDelta = 0.0f;
-    uint8_t m_dominantBin = 0;
-    float m_dominantBinSmooth = 0.0f;
+    uint8_t m_dominantBin = 0;       // kept for energy calculation
+    float m_chromaAngle = 0.0f;      // Circular chroma hue smoothing state (radians)
+    float m_chromaHue = 0.0f;        // Smoothed chroma hue (0-255)
 
     // Enhancement utilities (Spring + AsymmetricFollower)
     enhancement::Spring m_phaseSpeedSpring;                              // Natural momentum for speed

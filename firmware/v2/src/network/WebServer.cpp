@@ -758,15 +758,18 @@ void WebServer::updateCachedRendererState() {
     m_cachedRendererState.stats.framesRendered = srcStats.framesRendered;
     
     // Cache effect names (pointers to stable strings in RendererActor)
-    uint8_t count = m_cachedRendererState.effectCount;
+    uint16_t count = m_cachedRendererState.effectCount;
     if (count > CachedRendererState::MAX_CACHED_EFFECTS) {
         count = CachedRendererState::MAX_CACHED_EFFECTS;
     }
-    for (uint8_t i = 0; i < count; ++i) {
-        m_cachedRendererState.effectNames[i] = m_renderer->getEffectName(i);
+    for (uint16_t i = 0; i < count; ++i) {
+        EffectId eid = m_renderer->getEffectIdAt(i);
+        m_cachedRendererState.effectIds[i] = eid;
+        m_cachedRendererState.effectNames[i] = m_renderer->getEffectName(eid);
     }
     // Clear remaining slots
-    for (uint8_t i = count; i < CachedRendererState::MAX_CACHED_EFFECTS; ++i) {
+    for (uint16_t i = count; i < CachedRendererState::MAX_CACHED_EFFECTS; ++i) {
+        m_cachedRendererState.effectIds[i] = INVALID_EFFECT_ID;
         m_cachedRendererState.effectNames[i] = nullptr;
     }
     
@@ -1063,7 +1066,7 @@ bool WebServer::executeBatchAction(const String& action, JsonVariant params) {
     }
     else if (action == "setEffect") {
         if (!params.containsKey("effectId")) return false;
-        uint8_t id = params["effectId"];
+        EffectId id = params["effectId"];
         if (id >= m_renderer->getEffectCount()) return false;
         m_orchestrator.setEffect(id);
         return true;
@@ -1083,7 +1086,7 @@ bool WebServer::executeBatchAction(const String& action, JsonVariant params) {
     else if (action == "setZoneEffect" && m_zoneComposer) {
         if (!params.containsKey("zoneId") || !params.containsKey("effectId")) return false;
         uint8_t zoneId = params["zoneId"];
-        uint8_t effectId = params["effectId"];
+        EffectId effectId = params["effectId"];
         m_zoneComposer->setZoneEffect(zoneId, effectId);
         return true;
     }
@@ -1321,8 +1324,9 @@ void WebServer::doBroadcastStatus() {
     // SAFE: Use cached state instead of unsafe cross-core access
     const CachedRendererState& cached = m_cachedRendererState;
     doc["effectId"] = cached.currentEffect;
-    if (cached.currentEffect < cached.effectCount && cached.effectNames[cached.currentEffect]) {
-        doc["effectName"] = cached.effectNames[cached.currentEffect];
+    const char* curName = cached.findEffectName(cached.currentEffect);
+    if (curName) {
+        doc["effectName"] = curName;
     }
     doc["brightness"] = cached.brightness;
     doc["speed"] = cached.speed;
@@ -1365,18 +1369,38 @@ void WebServer::doBroadcastStatus() {
         } else {
             doc["key"] = "";
         }
+#elif FEATURE_AUDIO_BACKEND_PIPELINECORE
+        // PipelineCore: BPM from ControlBusFrame (flows through PipelineAdapter)
+        {
+            audio::ControlBusFrame frame{};
+            audio->getControlBusBuffer().ReadLatest(frame);
+            doc["bpm"] = frame.tempoBpm;
+
+            audio::AudioDspState dsp = audio->getDspState();
+            float micLevelDb = (dsp.rmsPreGain > 0.0001f)
+                ? (20.0f * log10f(dsp.rmsPreGain))
+                : -80.0f;
+            doc["mic"] = micLevelDb;
+
+            const audio::ChordState& chord = frame.chordState;
+            if (chord.confidence > 0.1f && chord.type != audio::ChordType::NONE) {
+                doc["key"] = formatKeyName(chord.rootNote, chord.type);
+            } else {
+                doc["key"] = "";
+            }
+        }
 #else
-        // BPM from TempoTrackerOutput
+        // Goertzel: BPM from TempoTrackerOutput
         audio::TempoTrackerOutput tempo = audio->getTempo().getOutput();
         doc["bpm"] = tempo.bpm;
-        
+
         // Mic level in dB (calculated from rmsPreGain)
         audio::AudioDspState dsp = audio->getDspState();
-        float micLevelDb = (dsp.rmsPreGain > 0.0001f) 
-            ? (20.0f * log10f(dsp.rmsPreGain)) 
+        float micLevelDb = (dsp.rmsPreGain > 0.0001f)
+            ? (20.0f * log10f(dsp.rmsPreGain))
             : -80.0f;
         doc["mic"] = micLevelDb;
-        
+
         // Musical key/chord (formatted string)
         const audio::ControlBus& controlBus = audio->getControlBusRef();
         const audio::ControlBusFrame& frame = controlBus.GetFrame();
@@ -1447,12 +1471,13 @@ void WebServer::broadcastZoneState() {
         JsonObject zone = zones.add<JsonObject>();
         zone["id"] = i;
         zone["enabled"] = m_zoneComposer->isZoneEnabled(i);
-        uint8_t effectId = m_zoneComposer->getZoneEffect(i);
+        EffectId effectId = m_zoneComposer->getZoneEffect(i);
         zone["effectId"] = effectId;
         // SAFE: Use cached state instead of unsafe cross-core access
         const CachedRendererState& cached = m_cachedRendererState;
-        if (effectId < cached.effectCount && cached.effectNames[effectId]) {
-            zone["effectName"] = cached.effectNames[effectId];
+        const char* eName = cached.findEffectName(effectId);
+        if (eName) {
+            zone["effectName"] = eName;
         }
         zone["brightness"] = m_zoneComposer->getZoneBrightness(i);
         zone["speed"] = m_zoneComposer->getZoneSpeed(i);
@@ -1528,13 +1553,14 @@ void WebServer::broadcastSingleZoneState(uint8_t zoneId) {
     JsonObject current = doc["current"].to<JsonObject>();
     current["enabled"] = m_zoneComposer->isZoneEnabled(zoneId);
 
-    uint8_t effectId = m_zoneComposer->getZoneEffect(zoneId);
+    EffectId effectId = m_zoneComposer->getZoneEffect(zoneId);
     current["effectId"] = effectId;
 
     // SAFE: Use cached state for effect name (thread-safe)
     const CachedRendererState& cached = m_cachedRendererState;
-    if (effectId < cached.effectCount && cached.effectNames[effectId]) {
-        current["effectName"] = cached.effectNames[effectId];
+    const char* effName = cached.findEffectName(effectId);
+    if (effName) {
+        current["effectName"] = effName;
     } else {
         current["effectName"] = "Unknown";
     }
@@ -1558,7 +1584,7 @@ void WebServer::broadcastSingleZoneState(uint8_t zoneId) {
     LW_LOGD("Broadcast zones.stateChanged for zone %d", zoneId);
 }
 
-void WebServer::notifyEffectChange(uint8_t effectId, const char* name) {
+void WebServer::notifyEffectChange(EffectId effectId, const char* name) {
     if (m_lowHeapShed) {
         return;
     }

@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <array>
 #include "../../config/limits.h"  // Single source of truth for system limits
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace state {
@@ -10,14 +11,14 @@ namespace state {
 // Maximum configuration constants - reference centralised limits
 using limits::MAX_ZONES;
 constexpr uint8_t MAX_PALETTE_COUNT = limits::MAX_PALETTES;
-constexpr uint8_t MAX_EFFECT_COUNT = limits::MAX_EFFECTS;
+constexpr uint16_t MAX_EFFECT_COUNT = limits::MAX_EFFECTS;
 
 /**
  * Zone configuration state
  * Represents the state of a single zone in multi-zone mode
  */
 struct ZoneState {
-    uint8_t effectId;       // Current effect ID for this zone
+    EffectId effectId;      // Current effect ID for this zone
     uint8_t paletteId;      // Current palette ID for this zone
     uint8_t brightness;     // Zone-specific brightness (0-255)
     uint8_t speed;          // Zone-specific animation speed (1-100)
@@ -25,7 +26,7 @@ struct ZoneState {
 
     // Default constructor with safe initial values
     ZoneState()
-        : effectId(0)
+        : effectId(EID_FIRE)
         , paletteId(0)
         , brightness(255)
         , speed(15)
@@ -55,7 +56,7 @@ struct SystemState {
 
     // ==================== Global Settings ====================
 
-    uint8_t currentEffectId;     // Active effect (0-(MAX_EFFECT_COUNT-1))
+    EffectId currentEffectId;    // Active effect (stable namespaced ID)
     uint8_t currentPaletteId;    // Active palette (0-63)
     uint8_t brightness;          // Global brightness (0-255)
     uint8_t speed;               // Global animation speed (1-100)
@@ -103,10 +104,10 @@ struct SystemState {
 
     /**
      * Create modified copy with new effect ID
-     * @param effectId New effect ID (0-(MAX_EFFECT_COUNT-1))
+     * @param effectId New effect ID (stable namespaced EffectId)
      * @return New state with updated effect
      */
-    SystemState withEffect(uint8_t effectId) const;
+    SystemState withEffect(EffectId effectId) const;
 
     /**
      * Create modified copy with new brightness
@@ -143,7 +144,7 @@ struct SystemState {
      * @param effectId New effect ID for zone
      * @return New state with updated zone effect
      */
-    SystemState withZoneEffect(uint8_t zoneId, uint8_t effectId) const;
+    SystemState withZoneEffect(uint8_t zoneId, EffectId effectId) const;
 
     /**
      * Create modified copy with zone palette changed

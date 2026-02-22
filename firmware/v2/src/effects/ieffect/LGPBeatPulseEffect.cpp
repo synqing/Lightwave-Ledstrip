@@ -4,6 +4,7 @@
  */
 
 #include "LGPBeatPulseEffect.h"
+#include "ChromaUtils.h"
 #include "../CoreEffects.h"
 
 #ifndef NATIVE_BUILD
@@ -21,25 +22,6 @@ namespace {
 static inline const float* selectChroma12(const audio::ControlBusFrame& cb) {
     // Both backends now produce normalised chroma via Stage A/B pipeline.
     return cb.chroma;
-}
-
-static inline uint8_t dominantChromaBin12(const float chroma[audio::CONTROLBUS_NUM_CHROMA], float* outMax = nullptr) {
-    uint8_t best = 0;
-    float bestV = chroma[0];
-    for (uint8_t i = 1; i < audio::CONTROLBUS_NUM_CHROMA; ++i) {
-        float v = chroma[i];
-        if (v > bestV) {
-            bestV = v;
-            best = i;
-        }
-    }
-    if (outMax) *outMax = bestV;
-    return best;
-}
-
-static inline uint8_t chromaBinToHue(uint8_t bin) {
-    // 12 bins → 0..252 hue range (21 hue units per semitone).
-    return (uint8_t)(bin * 21);
 }
 
 } // namespace
@@ -63,8 +45,7 @@ bool LGPBeatPulseEffect::init(plugins::EffectContext& ctx) {
 
     m_lastFastFlux = 0.0f;
     m_lastHopSeq = 0;
-    m_dominantChromaBin = 0;
-    m_dominantChromaBinSmooth = 0.0f;
+    m_chromaAngle = 0.0f;
     m_bandsLowFrames = 0;
     m_smoothBrightness = ctx.brightness / 255.0f;
     m_smoothStrength = 0.3f;
@@ -87,6 +68,9 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
     constexpr float HIHAT_SPIKE_THRESH = 0.14f;   // Treble energy spike threshold
     constexpr float FLUX_SPIKE_THRESH = 0.18f;    // Flux spike threshold (backend-agnostic onset proxy)
 
+    // Circular chroma hue — declared here so it is visible in the render section below.
+    uint8_t chromaHueOffset = 0;
+
     if (ctx.audio.available) {
         beatPhase = ctx.audio.beatPhase();
         bassEnergy = ctx.audio.bass();
@@ -103,17 +87,11 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
         }
         bool bandsTrusted = (m_bandsLowFrames < BANDS_LOW_FRAMES_MAX);
 
-        // Update chroma anchor on hop boundaries (keeps colour stable between hops).
-        if (ctx.audio.controlBus.hop_seq != m_lastHopSeq) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
-            const float* chroma = selectChroma12(ctx.audio.controlBus);
-            m_dominantChromaBin = dominantChromaBin12(chroma);
-        }
-
-        // Smooth chroma bin (prevents rapid hue jitter on sparse chroma).
+        // Circular chroma hue (prevents argmax discontinuities and wrapping artefacts).
         float rawDt = ctx.getSafeRawDeltaSeconds();
-        float alpha = 1.0f - expf(-rawDt / 0.20f);
-        m_dominantChromaBinSmooth += ((float)m_dominantChromaBin - m_dominantChromaBinSmooth) * alpha;
+        const float* chroma = selectChroma12(ctx.audio.controlBus);
+        chromaHueOffset = effects::chroma::circularChromaHueSmoothed(
+            chroma, m_chromaAngle, rawDt, 0.20f);
 
         // Snare detection: spike in mid-frequency energy (only when bands look live)
         if (bandsTrusted) {
@@ -221,7 +199,7 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
     memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
 
     // === RENDER CENTER PAIR OUTWARD ===
-    uint8_t baseHue = chromaBinToHue((uint8_t)(m_dominantChromaBinSmooth + 0.5f));
+    uint8_t baseHue = chromaHueOffset;
     // Fixed offsets (no time-based hue cycling): keeps colour musically anchored (non-rainbow).
     uint8_t primaryHue = baseHue;
     uint8_t snareHue = (uint8_t)(baseHue + 42);  // ~perfect fifth-ish shift

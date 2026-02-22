@@ -31,6 +31,7 @@
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
 #include <esp_heap_caps.h>
+#include "../../config/effect_ids.h"
 #endif
 
 namespace lightwaveos {
@@ -39,6 +40,8 @@ namespace ieffect {
 
 class SnapwaveLinearEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_SNAPWAVE_LINEAR;
+
     SnapwaveLinearEffect() = default;
     ~SnapwaveLinearEffect() override = default;
 

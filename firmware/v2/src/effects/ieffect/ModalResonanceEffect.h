@@ -16,6 +16,7 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include <FastLED.h>
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -23,6 +24,8 @@ namespace ieffect {
 
 class ModalResonanceEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_MODAL_RESONANCE;
+
     ModalResonanceEffect();
     ~ModalResonanceEffect() override = default;
 

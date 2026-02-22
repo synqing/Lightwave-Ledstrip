@@ -10,6 +10,7 @@
  */
 
 #include "LGPPerlinInterferenceWeaveEffect.h"
+#include "ChromaUtils.h"
 #include "../CoreEffects.h"
 #include "../../config/features.h"
 #include <FastLED.h>
@@ -25,7 +26,7 @@ LGPPerlinInterferenceWeaveEffect::LGPPerlinInterferenceWeaveEffect()
     , m_phaseOffset(0.0f)
     , m_time(0)
     , m_lastHopSeq(0)
-    , m_dominantChromaBin(0)
+    , m_chromaAngle(0.0f)
 {
 }
 
@@ -36,7 +37,7 @@ bool LGPPerlinInterferenceWeaveEffect::init(plugins::EffectContext& ctx) {
     m_phaseOffset = 0.0f;
     m_time = 0;
     m_lastHopSeq = 0;
-    m_dominantChromaBin = 0;
+    m_chromaAngle = 0.0f;
     return true;
 }
 
@@ -58,16 +59,6 @@ void LGPPerlinInterferenceWeaveEffect::render(plugins::EffectContext& ctx) {
         bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
         if (newHop) {
             m_lastHopSeq = ctx.audio.controlBus.hop_seq;
-            
-            // Chroma analysis for colour offset
-            float maxBinVal = 0.0f;
-            for (uint8_t i = 0; i < 12; ++i) {
-                float bin = ctx.audio.controlBus.chroma[i];
-                if (bin > maxBinVal) {
-                    maxBinVal = bin;
-                    m_dominantChromaBin = i;
-                }
-            }
         }
         
         // Beat → phase separation modulation
@@ -107,8 +98,11 @@ void LGPPerlinInterferenceWeaveEffect::render(plugins::EffectContext& ctx) {
     // Weave intensity (flux-modulated)
     float weaveIntensity = 0.5f + fluxNorm * 0.5f; // 0.5-1.0
 
-    // Chroma-based colour offset
-    uint8_t chromaOffset = (uint8_t)(m_dominantChromaBin * (255 / 12));
+    // Chroma-based colour offset (circular weighted mean for smooth, continuous hue)
+    uint8_t chromaOffset = hasAudio
+        ? effects::chroma::circularChromaHueSmoothed(
+              ctx.audio.controlBus.chroma, m_chromaAngle, dt, 0.20f)
+        : 0;
 
     for (uint16_t i = 0; i < STRIP_LENGTH; i++) {
         // Calculate distance from centre pair

@@ -31,8 +31,7 @@ bool LGPInterferenceScannerEnhancedEffect::init(plugins::EffectContext& ctx) {
     }
     m_energyAvg = 0.0f;
     m_energyDelta = 0.0f;
-    m_dominantBin = 0;
-    m_dominantBinSmooth = 0.0f;
+    m_chromaAngle = 0.0f;
     m_bassWavelength = 0.0f;
     m_trebleOverlay = 0.0f;
 
@@ -84,17 +83,6 @@ void LGPInterferenceScannerEnhancedEffect::render(plugins::EffectContext& ctx) {
                 m_chromaTargets[i] = ctx.audio.controlBus.heavy_chroma[i];
             }
             
-            // Still track dominant chroma bin for color mapping (use smoothed values)
-            float maxBinVal = 0.0f;
-            uint8_t dominantBin = 0;
-            for (uint8_t i = 0; i < 12; ++i) {
-                float bin = m_chromaSmoothed[i];
-                if (bin > maxBinVal) {
-                    maxBinVal = bin;
-                    dominantBin = i;
-                }
-            }
-
             // =================================================================
             // 64-bin Sub-Bass Wavelength Modulation (bins 0-5 = 110-155 Hz)
             // Deep bass widens the interference pattern - kick drums create
@@ -125,7 +113,6 @@ void LGPInterferenceScannerEnhancedEffect::render(plugins::EffectContext& ctx) {
             m_energyAvg = m_chromaEnergySum / CHROMA_HISTORY;
             m_energyDelta = energyNorm - m_energyAvg;
             if (m_energyDelta < 0.0f) m_energyDelta = 0.0f;
-            m_dominantBin = dominantBin;
         }
     } else
 #endif
@@ -156,11 +143,9 @@ void LGPInterferenceScannerEnhancedEffect::render(plugins::EffectContext& ctx) {
     float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, rawDt, moodNorm);
     float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, rawDt, moodNorm);
 
-    // Dominant bin smoothing
-    float alphaBin = 1.0f - expf(-dt / 0.25f);  // True exponential, 250ms time constant
-    m_dominantBinSmooth += (m_dominantBin - m_dominantBinSmooth) * alphaBin;
-    if (m_dominantBinSmooth < 0.0f) m_dominantBinSmooth = 0.0f;
-    if (m_dominantBinSmooth > 11.0f) m_dominantBinSmooth = 11.0f;
+    // Circular chroma hue (replaces argmax + linear EMA to eliminate bin-flip rainbow sweeps)
+    uint8_t chromaHue = effects::chroma::circularChromaHueSmoothed(
+        ctx.audio.controlBus.heavy_chroma, m_chromaAngle, rawDt, 0.20f);
 
     // Speed modulation with Spring physics (natural momentum, no jitter)
     // Target range: 0.6 to 1.4 (2.3x variation max, not 10x)
@@ -185,7 +170,7 @@ void LGPInterferenceScannerEnhancedEffect::render(plugins::EffectContext& ctx) {
     VALIDATION_INIT(16);  // Effect ID 16
     VALIDATION_PHASE(m_scanPhase, phaseDelta);
     VALIDATION_SPEED(rawSpeedScale, smoothedSpeed);
-    VALIDATION_AUDIO(m_dominantBinSmooth, energyAvgSmooth, energyDeltaSmooth);
+    VALIDATION_AUDIO(m_chromaAngle, energyAvgSmooth, energyDeltaSmooth);
     VALIDATION_REVERSAL_CHECK(m_prevPhaseDelta, phaseDelta);
     VALIDATION_SUBMIT(::lightwaveos::validation::g_validationRing);
     m_prevPhaseDelta = phaseDelta;
@@ -249,7 +234,7 @@ void LGPInterferenceScannerEnhancedEffect::render(plugins::EffectContext& ctx) {
 
         uint8_t brightness = (uint8_t)(pattern * 255.0f * intensityNorm);
         uint8_t paletteIndex = (uint8_t)(dist * 2.0f + pattern * 50.0f);
-        uint8_t baseHue = (uint8_t)(ctx.gHue + (uint8_t)(m_dominantBinSmooth * (255.0f / 12.0f)));
+        uint8_t baseHue = (uint8_t)(ctx.gHue + chromaHue);
 
         ctx.leds[i] = ctx.palette.getColor((uint8_t)(baseHue + paletteIndex), brightness);
         if (i + STRIP_LENGTH < ctx.ledCount) {

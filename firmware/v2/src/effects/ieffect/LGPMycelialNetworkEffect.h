@@ -19,6 +19,7 @@
 
 #ifndef NATIVE_BUILD
 #include <esp_heap_caps.h>
+#include "../../config/effect_ids.h"
 #endif
 
 namespace lightwaveos {
@@ -27,6 +28,8 @@ namespace ieffect {
 
 class LGPMycelialNetworkEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_MYCELIAL_NETWORK;
+
     LGPMycelialNetworkEffect();
     ~LGPMycelialNetworkEffect() override = default;
 

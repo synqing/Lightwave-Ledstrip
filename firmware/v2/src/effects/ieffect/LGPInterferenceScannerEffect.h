@@ -15,6 +15,8 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../enhancement/SmoothingEngine.h"
+#include "ChromaUtils.h"
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -22,6 +24,8 @@ namespace ieffect {
 
 class LGPInterferenceScannerEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_INTERFERENCE_SCANNER;
+
     LGPInterferenceScannerEffect();
     ~LGPInterferenceScannerEffect() override = default;
 
@@ -40,8 +44,7 @@ private:
     uint8_t m_chromaHistIdx = 0;
     float m_energyAvg = 0.0f;
     float m_energyDelta = 0.0f;
-    uint8_t m_dominantBin = 0;
-    float m_dominantBinSmooth = 0.0f;
+    float m_chromaAngle = 0.0f;       // Circular EMA angle for chroma hue (radians)
 
     // Enhancement utilities (Spring + AsymmetricFollower)
     enhancement::Spring m_speedSpring;                                        // Natural momentum for speed

@@ -4,6 +4,8 @@
 #include "config/chip_config.h"
 
 #ifndef NATIVE_BUILD
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 class CLEDController;
 #endif
 
@@ -55,7 +57,11 @@ private:
 #ifndef NATIVE_BUILD
     CLEDController* m_ctrl1 = nullptr;
     CLEDController* m_ctrl2 = nullptr;
+    SemaphoreHandle_t m_showMutex = nullptr;
 #endif
+
+    static constexpr uint32_t kMinShowGapUs = 1000;  ///< 1ms minimum gap between show() calls
+    uint32_t m_lastShowEndUs = 0;
 
     LedDriverStats m_stats{};
 

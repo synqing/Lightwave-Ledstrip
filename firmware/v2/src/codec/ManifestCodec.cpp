@@ -217,7 +217,7 @@ ManifestDecodeResult ManifestCodec::decode(JsonObjectConst root) {
             return result;
         }
 
-        result.config.effectIds[result.config.effectCount++] = static_cast<uint8_t>(id);
+        result.config.effectIds[result.config.effectCount++] = static_cast<EffectId>(id);
     }
 
     // Success

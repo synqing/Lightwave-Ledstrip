@@ -71,7 +71,7 @@ struct HttpZoneSegmentData {
 struct HttpZoneListItemData {
     uint8_t id;
     bool enabled;
-    uint8_t effectId;
+    EffectId effectId;
     const char* effectName;
     uint8_t brightness;
     uint8_t speed;
@@ -118,7 +118,7 @@ struct HttpZoneListFullData {
 struct HttpZoneGetFullData {
     uint8_t id;
     bool enabled;
-    uint8_t effectId;
+    EffectId effectId;
     const char* effectName;
     uint8_t brightness;
     uint8_t speed;
@@ -137,7 +137,7 @@ struct HttpZoneGetFullData {
 struct HttpZoneSetResultData {
     uint8_t zoneId;
     bool hasEffectId;
-    uint8_t effectId;
+    EffectId effectId;
     const char* effectName;
     bool hasBrightness;
     uint8_t brightness;
@@ -176,9 +176,9 @@ struct HttpZoneLayoutDecodeResult {
 
 struct HttpZoneSetEffectDecodeResult {
     bool success;
-    uint8_t effectId;
+    EffectId effectId;
     char errorMsg[MAX_ERROR_MSG];
-    
+
     HttpZoneSetEffectDecodeResult() : success(false), effectId(0) {
         memset(errorMsg, 0, sizeof(errorMsg));
     }

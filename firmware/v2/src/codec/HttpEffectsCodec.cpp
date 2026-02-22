@@ -34,7 +34,7 @@ HttpEffectsSetDecodeResult HttpEffectsCodec::decodeSet(JsonObjectConst root) {
         snprintf(result.errorMsg, MAX_ERROR_MSG, "effectId out of range (0-%d): %d", limits::MAX_EFFECTS - 1, effectId);
         return result;
     }
-    result.request.effectId = static_cast<uint8_t>(effectId);
+    result.request.effectId = static_cast<EffectId>(effectId);
 
     // Extract transition flag (optional, default: false)
     result.request.useTransition = root["transition"] | false;
@@ -69,7 +69,7 @@ HttpEffectsParametersSetDecodeResult HttpEffectsCodec::decodeParametersSet(JsonO
         snprintf(result.errorMsg, MAX_ERROR_MSG, "effectId out of range (0-%d): %d", limits::MAX_EFFECTS - 1, effectId);
         return result;
     }
-    result.request.effectId = static_cast<uint8_t>(effectId);
+    result.request.effectId = static_cast<EffectId>(effectId);
 
     // Extract parameters object (required)
     if (!root.containsKey("parameters") || !root["parameters"].is<JsonObjectConst>()) {

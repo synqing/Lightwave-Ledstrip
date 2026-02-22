@@ -314,7 +314,7 @@ void HttpAudioCodec::encodeMappingsList(uint8_t activeEffects, uint8_t totalMapp
     }
 }
 
-void HttpAudioCodec::encodeMappingsGet(uint8_t effectId, const char* effectName, bool globalEnabled, uint8_t mappingCount,
+void HttpAudioCodec::encodeMappingsGet(EffectId effectId, const char* effectName, bool globalEnabled, uint8_t mappingCount,
                                       const AudioMappingDetailItem* mappings, size_t count,
                                       JsonObject& data) {
     data["effectId"] = effectId;
@@ -339,19 +339,19 @@ void HttpAudioCodec::encodeMappingsGet(uint8_t effectId, const char* effectName,
     }
 }
 
-void HttpAudioCodec::encodeMappingsSet(uint8_t effectId, uint8_t mappingCount, bool enabled, JsonObject& data) {
+void HttpAudioCodec::encodeMappingsSet(EffectId effectId, uint8_t mappingCount, bool enabled, JsonObject& data) {
     data["effectId"] = effectId;
     data["mappingCount"] = mappingCount;
     data["enabled"] = enabled;
     data["message"] = "Mapping updated";
 }
 
-void HttpAudioCodec::encodeMappingsDelete(uint8_t effectId, JsonObject& data) {
+void HttpAudioCodec::encodeMappingsDelete(EffectId effectId, JsonObject& data) {
     data["effectId"] = effectId;
     data["message"] = "Mapping cleared";
 }
 
-void HttpAudioCodec::encodeMappingsEnable(uint8_t effectId, bool enabled, JsonObject& data) {
+void HttpAudioCodec::encodeMappingsEnable(EffectId effectId, bool enabled, JsonObject& data) {
     data["effectId"] = effectId;
     data["enabled"] = enabled;
 }

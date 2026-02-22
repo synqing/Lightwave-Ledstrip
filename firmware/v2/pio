@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Run PlatformIO with Homebrew Python 3.12 (PlatformIO requires 3.10–3.13; system may have 3.14).
+set -e
+PY312=""
+if [[ -x "/opt/homebrew/opt/python@3.12/bin/python3" ]]; then
+  PY312="/opt/homebrew/opt/python@3.12/bin/python3"
+elif [[ -x "/opt/homebrew/opt/python@3.12/bin/python3.12" ]]; then
+  PY312="/opt/homebrew/opt/python@3.12/bin/python3.12"
+elif [[ -x "/usr/local/opt/python@3.12/bin/python3" ]]; then
+  PY312="/usr/local/opt/python@3.12/bin/python3"
+elif [[ -x "/usr/local/opt/python@3.12/bin/python3.12" ]]; then
+  PY312="/usr/local/opt/python@3.12/bin/python3.12"
+else
+  BREW_PY312_PREFIX="$(brew --prefix python@3.12 2>/dev/null)"
+  if [[ -x "${BREW_PY312_PREFIX}/bin/python3" ]]; then
+    PY312="${BREW_PY312_PREFIX}/bin/python3"
+  elif [[ -x "${BREW_PY312_PREFIX}/bin/python3.12" ]]; then
+    PY312="${BREW_PY312_PREFIX}/bin/python3.12"
+  fi
+fi
+if [[ -z "$PY312" || ! -x "$PY312" ]]; then
+  echo "Homebrew python@3.12 not found. Install with: HOMEBREW_NO_AUTO_UPDATE=1 brew install python@3.12" >&2
+  exit 1
+fi
+exec "$PY312" -m platformio "$@"

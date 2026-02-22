@@ -118,8 +118,8 @@ ZoneSetEffectDecodeResult WsZonesCodec::decodeZoneSetEffect(JsonObjectConst root
         snprintf(result.errorMsg, MAX_ERROR_MSG, "effectId out of range (0-%d): %d", limits::MAX_EFFECTS - 1, effectId);
         return result;
     }
-    result.request.effectId = static_cast<uint8_t>(effectId);
-    
+    result.request.effectId = static_cast<EffectId>(effectId);
+
     // Extract requestId (optional string)
     if (root["requestId"].is<const char*>()) {
         result.request.requestId = root["requestId"].as<const char*>();
@@ -414,7 +414,7 @@ ZonesUpdateDecodeResult WsZonesCodec::decodeZonesUpdate(JsonObjectConst root) {
     if (root.containsKey("effectId") && root["effectId"].is<int>()) {
         int effectId = root["effectId"].as<int>();
         if (effectId >= 0 && effectId < limits::MAX_EFFECTS) {
-            result.request.effectId = static_cast<uint8_t>(effectId);
+            result.request.effectId = static_cast<EffectId>(effectId);
             result.request.hasEffectId = true;
         }
     }
@@ -625,7 +625,7 @@ void WsZonesCodec::encodeZonesChanged(uint8_t zoneId, const char* const updatedF
     current["blendModeName"] = ::lightwaveos::zones::getBlendModeName(composer.getZoneBlendMode(zoneId));
 }
 
-void WsZonesCodec::encodeZonesEffectChanged(uint8_t zoneId, uint8_t effectId, const ::lightwaveos::zones::ZoneComposer& composer, const ::lightwaveos::actors::RendererActor* renderer, JsonObject& data) {
+void WsZonesCodec::encodeZonesEffectChanged(uint8_t zoneId, EffectId effectId, const ::lightwaveos::zones::ZoneComposer& composer, const ::lightwaveos::actors::RendererActor* renderer, JsonObject& data) {
     data["zoneId"] = zoneId;
     JsonObject current = data["current"].to<JsonObject>();
     current["effectId"] = effectId;

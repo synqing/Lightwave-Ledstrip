@@ -19,6 +19,7 @@
 #include <cstddef>
 #include <cstring>
 #include "WsAudioCodec.h"  // Reuse POD structs (AudioPipelineTuningData, etc.)
+#include "../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace codec {
@@ -365,12 +366,12 @@ public:
     static void encodeMappingsList(uint8_t activeEffects, uint8_t totalMappings,
                                   const AudioMappingEffectItem* effects, size_t effectCount,
                                   JsonObject& data);
-    static void encodeMappingsGet(uint8_t effectId, const char* effectName, bool globalEnabled, uint8_t mappingCount,
+    static void encodeMappingsGet(EffectId effectId, const char* effectName, bool globalEnabled, uint8_t mappingCount,
                                  const AudioMappingDetailItem* mappings, size_t count,
                                  JsonObject& data);
-    static void encodeMappingsSet(uint8_t effectId, uint8_t mappingCount, bool enabled, JsonObject& data);
-    static void encodeMappingsDelete(uint8_t effectId, JsonObject& data);
-    static void encodeMappingsEnable(uint8_t effectId, bool enabled, JsonObject& data);
+    static void encodeMappingsSet(EffectId effectId, uint8_t mappingCount, bool enabled, JsonObject& data);
+    static void encodeMappingsDelete(EffectId effectId, JsonObject& data);
+    static void encodeMappingsEnable(EffectId effectId, bool enabled, JsonObject& data);
     static void encodeMappingsStats(const AudioMappingStatsData& stats, JsonObject& data);
 
     // Zone AGC

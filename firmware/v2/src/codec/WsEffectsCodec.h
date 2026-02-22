@@ -17,6 +17,7 @@
 #include <ArduinoJson.h>
 #include <stdint.h>
 #include <cstddef>
+#include "../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace codec {
@@ -30,14 +31,14 @@ static constexpr size_t MAX_ERROR_MSG = 128;
  * @brief Decoded effects.setCurrent request
  */
 struct EffectsSetCurrentRequest {
-    uint8_t effectId;                // Required (0-127)
+    EffectId effectId;               // Effect ID (stable namespaced)
     const char* requestId;           // Optional (for correlation)
     bool hasTransition;              // True if transition object present
     uint8_t transitionType;          // Transition type (if hasTransition)
     uint16_t transitionDuration;     // Duration in ms (if hasTransition)
 
-    EffectsSetCurrentRequest() 
-        : effectId(255), requestId(""), hasTransition(false), 
+    EffectsSetCurrentRequest()
+        : effectId(INVALID_EFFECT_ID), requestId(""), hasTransition(false),
           transitionType(0), transitionDuration(1000) {}
 };
 
@@ -62,9 +63,9 @@ struct EffectsSetCurrentDecodeResult {
  * @brief Decoded setEffect request (legacy command)
  */
 struct EffectsSetEffectRequest {
-    uint8_t effectId;        // Required (0-127)
-    
-    EffectsSetEffectRequest() : effectId(255) {}
+    EffectId effectId;       // Effect ID (stable namespaced)
+
+    EffectsSetEffectRequest() : effectId(INVALID_EFFECT_ID) {}
 };
 
 struct EffectsSetEffectDecodeResult {
@@ -142,10 +143,10 @@ struct EffectsSetPaletteDecodeResult {
  * @brief Decoded effects.getMetadata request
  */
 struct EffectsGetMetadataRequest {
-    uint8_t effectId;        // Optional (255 means invalid/missing)
+    EffectId effectId;       // Optional (INVALID_EFFECT_ID means invalid/missing)
     const char* requestId;   // Optional
-    
-    EffectsGetMetadataRequest() : effectId(255), requestId("") {}
+
+    EffectsGetMetadataRequest() : effectId(INVALID_EFFECT_ID), requestId("") {}
 };
 
 struct EffectsGetMetadataDecodeResult {
@@ -184,10 +185,10 @@ struct EffectsListDecodeResult {
  * @brief Decoded effects.parameters.get request
  */
 struct EffectsParametersGetRequest {
-    uint8_t effectId;        // Optional (255 means use current)
+    EffectId effectId;       // Optional (INVALID_EFFECT_ID means use current)
     const char* requestId;   // Optional
-    
-    EffectsParametersGetRequest() : effectId(255), requestId("") {}
+
+    EffectsParametersGetRequest() : effectId(INVALID_EFFECT_ID), requestId("") {}
 };
 
 struct EffectsParametersGetDecodeResult {
@@ -204,12 +205,12 @@ struct EffectsParametersGetDecodeResult {
  * @brief Decoded effects.parameters.set request
  */
 struct EffectsParametersSetRequest {
-    uint8_t effectId;                // Optional (255 means use current)
+    EffectId effectId;               // Optional (INVALID_EFFECT_ID means use current)
     const char* requestId;           // Optional
     bool hasParameters;              // True if parameters object present
     JsonObjectConst parameters;      // Dynamic parameters object (if hasParameters)
-    
-    EffectsParametersSetRequest() : effectId(255), requestId(""), hasParameters(false), parameters() {}
+
+    EffectsParametersSetRequest() : effectId(INVALID_EFFECT_ID), requestId(""), hasParameters(false), parameters() {}
 };
 
 struct EffectsParametersSetDecodeResult {
@@ -334,16 +335,16 @@ public:
     // Populate JsonObject data from domain objects
     
     // Effects encoders
-    static void encodeGetCurrent(uint8_t effectId, const char* name, uint8_t brightness, uint8_t speed, uint8_t paletteId, uint8_t hue, uint8_t intensity, uint8_t saturation, uint8_t complexity, uint8_t variation, JsonObject& data);
-    static void encodeChanged(uint8_t effectId, const char* name, bool transitionActive, JsonObject& data);
-    static void encodeMetadata(uint8_t effectId, const char* name, const char* familyName, uint8_t familyId, const char* story, const char* opticalIntent, uint8_t tags, JsonObject& data);
-    static void encodeList(uint8_t effectCount, uint8_t startIdx, uint8_t endIdx, uint8_t page, uint8_t limit, bool details, const char* const effectNames[], const char* const categories[], JsonObject& data);
-    static void encodeByFamily(uint8_t familyId, const char* familyName, const uint8_t patternIndices[], uint8_t count, JsonObject& data);
+    static void encodeGetCurrent(EffectId effectId, const char* name, uint8_t brightness, uint8_t speed, uint8_t paletteId, uint8_t hue, uint8_t intensity, uint8_t saturation, uint8_t complexity, uint8_t variation, JsonObject& data);
+    static void encodeChanged(EffectId effectId, const char* name, bool transitionActive, JsonObject& data);
+    static void encodeMetadata(EffectId effectId, const char* name, const char* familyName, uint8_t familyId, const char* story, const char* opticalIntent, uint8_t tags, JsonObject& data);
+    static void encodeList(uint16_t effectCount, uint16_t startIdx, uint16_t endIdx, uint8_t page, uint8_t limit, bool details, const char* const effectNames[], const EffectId effectIds[], const char* const categories[], JsonObject& data);
+    static void encodeByFamily(uint8_t familyId, const char* familyName, const EffectId patternIndices[], uint16_t count, JsonObject& data);
     static void encodeCategories(const char* const familyNames[], const uint8_t familyCounts[], uint8_t total, JsonObject& data);
     
     // Parameters encoders
-    static void encodeParametersGet(uint8_t effectId, const char* name, bool hasParameters, const char* const paramNames[], const char* const paramDisplayNames[], const float paramMins[], const float paramMaxs[], const float paramDefaults[], const float paramValues[], uint8_t paramCount, JsonObject& data);
-    static void encodeParametersSetChanged(uint8_t effectId, const char* name, const char* const queuedKeys[], uint8_t queuedCount, const char* const failedKeys[], uint8_t failedCount, JsonObject& data);
+    static void encodeParametersGet(EffectId effectId, const char* name, bool hasParameters, const char* const paramNames[], const char* const paramDisplayNames[], const float paramMins[], const float paramMaxs[], const float paramDefaults[], const float paramValues[], uint8_t paramCount, JsonObject& data);
+    static void encodeParametersSetChanged(EffectId effectId, const char* name, const char* const queuedKeys[], uint8_t queuedCount, const char* const failedKeys[], uint8_t failedCount, JsonObject& data);
     static void encodeGlobalParametersGet(uint8_t brightness, uint8_t speed, uint8_t paletteId, uint8_t hue, uint8_t intensity, uint8_t saturation, uint8_t complexity, uint8_t variation, JsonObject& data);
     static void encodeParametersChanged(const char* const updatedKeys[], uint8_t updatedCount, uint8_t brightness, uint8_t speed, uint8_t paletteId, uint8_t hue, uint8_t intensity, uint8_t saturation, uint8_t complexity, uint8_t variation, JsonObject& data);
 };

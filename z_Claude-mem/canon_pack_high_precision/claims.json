@@ -1,0 +1,667 @@
+{
+  "claims": [
+    {
+      "template_id": "risk_watchdog_budget",
+      "claim": "Watchdog stability and timing budget violations are recurring system risks in render/audio integration.",
+      "topic": "risk_register",
+      "type": "risk",
+      "status": "current",
+      "confidence": "high",
+      "support_count": 1684,
+      "session_count": 236,
+      "citations": [
+        {
+          "evidence_id": "O4269",
+          "timestamp": "2025-12-27T09:02:53.931Z",
+          "source": "observation",
+          "row_id": 4269,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4285",
+          "timestamp": "2025-12-27T09:05:10.243Z",
+          "source": "observation",
+          "row_id": 4285,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4291",
+          "timestamp": "2025-12-27T09:06:09.945Z",
+          "source": "observation",
+          "row_id": 4291,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4309",
+          "timestamp": "2025-12-27T09:09:20.395Z",
+          "source": "observation",
+          "row_id": 4309,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4320",
+          "timestamp": "2025-12-27T09:12:43.917Z",
+          "source": "observation",
+          "row_id": 4320,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4322",
+          "timestamp": "2025-12-27T09:13:01.988Z",
+          "source": "observation",
+          "row_id": 4322,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4334",
+          "timestamp": "2025-12-27T09:15:47.469Z",
+          "source": "observation",
+          "row_id": 4334,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4358",
+          "timestamp": "2025-12-27T09:24:11.892Z",
+          "source": "observation",
+          "row_id": 4358,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4359",
+          "timestamp": "2025-12-27T09:24:22.564Z",
+          "source": "observation",
+          "row_id": 4359,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4372",
+          "timestamp": "2025-12-27T09:28:12.730Z",
+          "source": "observation",
+          "row_id": 4372,
+          "project": "K1.Sliders"
+        }
+      ]
+    },
+    {
+      "template_id": "api_control_plane",
+      "claim": "Control plane uses HTTP/REST plus WebSocket messaging contracts for device state and streams.",
+      "topic": "protocols_contracts",
+      "type": "fact",
+      "status": "current",
+      "confidence": "high",
+      "support_count": 7699,
+      "session_count": 401,
+      "citations": [
+        {
+          "evidence_id": "O4234",
+          "timestamp": "2025-12-27T08:56:42.461Z",
+          "source": "observation",
+          "row_id": 4234,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4238",
+          "timestamp": "2025-12-27T08:57:14.136Z",
+          "source": "observation",
+          "row_id": 4238,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4245",
+          "timestamp": "2025-12-27T08:57:56.905Z",
+          "source": "observation",
+          "row_id": 4245,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4254",
+          "timestamp": "2025-12-27T09:00:38.119Z",
+          "source": "observation",
+          "row_id": 4254,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4255",
+          "timestamp": "2025-12-27T09:00:51.843Z",
+          "source": "observation",
+          "row_id": 4255,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4260",
+          "timestamp": "2025-12-27T09:01:33.771Z",
+          "source": "observation",
+          "row_id": 4260,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4272",
+          "timestamp": "2025-12-27T09:03:21.635Z",
+          "source": "observation",
+          "row_id": 4272,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4275",
+          "timestamp": "2025-12-27T09:03:44.162Z",
+          "source": "observation",
+          "row_id": 4275,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4279",
+          "timestamp": "2025-12-27T09:04:20.208Z",
+          "source": "observation",
+          "row_id": 4279,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4288",
+          "timestamp": "2025-12-27T09:05:36.130Z",
+          "source": "observation",
+          "row_id": 4288,
+          "project": "K1.Sliders"
+        }
+      ]
+    },
+    {
+      "template_id": "decision_register_exists",
+      "claim": "The project history includes superseded and revised architecture decisions requiring explicit status tracking.",
+      "topic": "decision_register",
+      "type": "decision",
+      "status": "current",
+      "confidence": "high",
+      "support_count": 1239,
+      "session_count": 155,
+      "citations": [
+        {
+          "evidence_id": "O4238",
+          "timestamp": "2025-12-27T08:57:14.136Z",
+          "source": "observation",
+          "row_id": 4238,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4261",
+          "timestamp": "2025-12-27T09:01:43.962Z",
+          "source": "observation",
+          "row_id": 4261,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4423",
+          "timestamp": "2025-12-27T09:37:27.154Z",
+          "source": "observation",
+          "row_id": 4423,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4425",
+          "timestamp": "2025-12-27T09:37:47.217Z",
+          "source": "observation",
+          "row_id": 4425,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4499",
+          "timestamp": "2025-12-27T10:09:45.445Z",
+          "source": "observation",
+          "row_id": 4499,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4526",
+          "timestamp": "2025-12-27T10:18:12.880Z",
+          "source": "observation",
+          "row_id": 4526,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4530",
+          "timestamp": "2025-12-27T10:19:42.658Z",
+          "source": "observation",
+          "row_id": 4530,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4584",
+          "timestamp": "2025-12-27T10:36:31.062Z",
+          "source": "observation",
+          "row_id": 4584,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O9994",
+          "timestamp": "2026-01-01T10:14:05.910Z",
+          "source": "observation",
+          "row_id": 9994,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O10018",
+          "timestamp": "2026-01-01T11:15:14.341Z",
+          "source": "observation",
+          "row_id": 10018,
+          "project": "K1.Sliders"
+        }
+      ]
+    },
+    {
+      "template_id": "centre_origin_invariant",
+      "claim": "Effects use centre-origin propagation from LEDs 79/80 and reject linear sweep behaviour.",
+      "topic": "constitution",
+      "type": "constraint",
+      "status": "current",
+      "confidence": "high",
+      "support_count": 903,
+      "session_count": 69,
+      "citations": [
+        {
+          "evidence_id": "O17074",
+          "timestamp": "2025-10-11T12:26:47.067000Z",
+          "source": "observation",
+          "row_id": 17074,
+          "project": "K1.juce"
+        },
+        {
+          "evidence_id": "O17075",
+          "timestamp": "2025-10-12T11:41:55.942000Z",
+          "source": "observation",
+          "row_id": 17075,
+          "project": "K1.juce"
+        },
+        {
+          "evidence_id": "O17281",
+          "timestamp": "2025-10-12T15:58:15.425000Z",
+          "source": "observation",
+          "row_id": 17281,
+          "project": "K1.juce"
+        },
+        {
+          "evidence_id": "O13",
+          "timestamp": "2025-12-20T09:17:45.737Z",
+          "source": "observation",
+          "row_id": 13,
+          "project": "Lightwave-Ledstrip"
+        },
+        {
+          "evidence_id": "O18",
+          "timestamp": "2025-12-20T09:19:20.546Z",
+          "source": "observation",
+          "row_id": 18,
+          "project": "Lightwave-Ledstrip"
+        },
+        {
+          "evidence_id": "O52",
+          "timestamp": "2025-12-20T11:30:36.828Z",
+          "source": "observation",
+          "row_id": 52,
+          "project": "Lightwave-Ledstrip"
+        },
+        {
+          "evidence_id": "O90",
+          "timestamp": "2025-12-20T11:36:36.606Z",
+          "source": "observation",
+          "row_id": 90,
+          "project": "Lightwave-Ledstrip"
+        },
+        {
+          "evidence_id": "O94",
+          "timestamp": "2025-12-20T11:38:14.431Z",
+          "source": "observation",
+          "row_id": 94,
+          "project": "Lightwave-Ledstrip"
+        },
+        {
+          "evidence_id": "O102",
+          "timestamp": "2025-12-20T11:41:40.360Z",
+          "source": "observation",
+          "row_id": 102,
+          "project": "Lightwave-Ledstrip"
+        },
+        {
+          "evidence_id": "O103",
+          "timestamp": "2025-12-20T11:42:01.414Z",
+          "source": "observation",
+          "row_id": 103,
+          "project": "Lightwave-Ledstrip"
+        }
+      ]
+    },
+    {
+      "template_id": "no_rainbow_invariant",
+      "claim": "Rainbow cycling and full hue-wheel sweeps are explicitly disallowed.",
+      "topic": "constitution",
+      "type": "constraint",
+      "status": "current",
+      "confidence": "high",
+      "support_count": 165,
+      "session_count": 26,
+      "citations": [
+        {
+          "evidence_id": "O18964",
+          "timestamp": "2025-10-30T19:21:28.199000Z",
+          "source": "observation",
+          "row_id": 18964,
+          "project": "K1.reinvented"
+        },
+        {
+          "evidence_id": "O415",
+          "timestamp": "2025-12-20T13:56:19.003Z",
+          "source": "observation",
+          "row_id": 415,
+          "project": "Lightwave-Ledstrip"
+        },
+        {
+          "evidence_id": "O416",
+          "timestamp": "2025-12-20T13:56:37.759Z",
+          "source": "observation",
+          "row_id": 416,
+          "project": "Lightwave-Ledstrip"
+        },
+        {
+          "evidence_id": "O417",
+          "timestamp": "2025-12-20T13:56:52.978Z",
+          "source": "observation",
+          "row_id": 417,
+          "project": "Lightwave-Ledstrip"
+        },
+        {
+          "evidence_id": "O421",
+          "timestamp": "2025-12-20T13:58:15.200Z",
+          "source": "observation",
+          "row_id": 421,
+          "project": "Lightwave-Ledstrip"
+        },
+        {
+          "evidence_id": "O423",
+          "timestamp": "2025-12-20T13:58:38.632Z",
+          "source": "observation",
+          "row_id": 423,
+          "project": "Lightwave-Ledstrip"
+        },
+        {
+          "evidence_id": "O425",
+          "timestamp": "2025-12-20T13:59:08.978Z",
+          "source": "observation",
+          "row_id": 425,
+          "project": "Lightwave-Ledstrip"
+        },
+        {
+          "evidence_id": "O426",
+          "timestamp": "2025-12-20T13:59:21.540Z",
+          "source": "observation",
+          "row_id": 426,
+          "project": "Lightwave-Ledstrip"
+        },
+        {
+          "evidence_id": "O428",
+          "timestamp": "2025-12-20T13:59:35.469Z",
+          "source": "observation",
+          "row_id": 428,
+          "project": "Lightwave-Ledstrip"
+        },
+        {
+          "evidence_id": "O430",
+          "timestamp": "2025-12-20T14:00:02.581Z",
+          "source": "observation",
+          "row_id": 430,
+          "project": "Lightwave-Ledstrip"
+        }
+      ]
+    },
+    {
+      "template_id": "no_heap_in_render",
+      "claim": "Render paths avoid heap allocation (`new`/`malloc`/`String`) and use static buffers.",
+      "topic": "constitution",
+      "type": "constraint",
+      "status": "current",
+      "confidence": "high",
+      "support_count": 84,
+      "session_count": 47,
+      "citations": [
+        {
+          "evidence_id": "O16223",
+          "timestamp": "2025-10-05T21:55:54.785000Z",
+          "source": "observation",
+          "row_id": 16223,
+          "project": "K1.juce"
+        },
+        {
+          "evidence_id": "O16308",
+          "timestamp": "2025-10-06T10:11:22.216000Z",
+          "source": "observation",
+          "row_id": 16308,
+          "project": "K1.juce"
+        },
+        {
+          "evidence_id": "O16863",
+          "timestamp": "2025-10-09T08:54:55.477000Z",
+          "source": "observation",
+          "row_id": 16863,
+          "project": "K1.juce"
+        },
+        {
+          "evidence_id": "O17420",
+          "timestamp": "2025-10-12T18:29:20.393000Z",
+          "source": "observation",
+          "row_id": 17420,
+          "project": "K1.juce"
+        },
+        {
+          "evidence_id": "O18893",
+          "timestamp": "2025-10-28T03:58:26.881000Z",
+          "source": "observation",
+          "row_id": 18893,
+          "project": "K1.reinvented"
+        },
+        {
+          "evidence_id": "O19151",
+          "timestamp": "2025-10-30T22:35:51.919000Z",
+          "source": "observation",
+          "row_id": 19151,
+          "project": "K1.reinvented"
+        },
+        {
+          "evidence_id": "O19544",
+          "timestamp": "2025-11-06T21:53:18.348000Z",
+          "source": "observation",
+          "row_id": 19544,
+          "project": "K1.reinvented"
+        },
+        {
+          "evidence_id": "O19566",
+          "timestamp": "2025-11-07T01:51:50.597000Z",
+          "source": "observation",
+          "row_id": 19566,
+          "project": "K1.reinvented"
+        },
+        {
+          "evidence_id": "O19568",
+          "timestamp": "2025-11-07T01:59:53.911000Z",
+          "source": "observation",
+          "row_id": 19568,
+          "project": "K1.reinvented"
+        },
+        {
+          "evidence_id": "O154",
+          "timestamp": "2025-12-20T11:51:37.129Z",
+          "source": "observation",
+          "row_id": 154,
+          "project": "Lightwave-Ledstrip"
+        }
+      ]
+    },
+    {
+      "template_id": "render_budget_120fps",
+      "claim": "Renderer targets 120 FPS with an 8.33ms frame budget and low single-digit millisecond effect execution.",
+      "topic": "architecture_atlas",
+      "type": "fact",
+      "status": "current",
+      "confidence": "high",
+      "support_count": 762,
+      "session_count": 112,
+      "citations": [
+        {
+          "evidence_id": "O16223",
+          "timestamp": "2025-10-05T21:55:54.785000Z",
+          "source": "observation",
+          "row_id": 16223,
+          "project": "K1.juce"
+        },
+        {
+          "evidence_id": "O16271",
+          "timestamp": "2025-10-06T07:46:53.375000Z",
+          "source": "observation",
+          "row_id": 16271,
+          "project": "K1.juce"
+        },
+        {
+          "evidence_id": "O16275",
+          "timestamp": "2025-10-06T09:11:10.004000Z",
+          "source": "observation",
+          "row_id": 16275,
+          "project": "K1.juce"
+        },
+        {
+          "evidence_id": "O16328",
+          "timestamp": "2025-10-06T19:13:29.895000Z",
+          "source": "observation",
+          "row_id": 16328,
+          "project": "K1.juce"
+        },
+        {
+          "evidence_id": "O17155",
+          "timestamp": "2025-10-10T11:02:33.764000Z",
+          "source": "observation",
+          "row_id": 17155,
+          "project": "K1.juce"
+        },
+        {
+          "evidence_id": "O18741",
+          "timestamp": "2025-10-24T19:30:47.102000Z",
+          "source": "observation",
+          "row_id": 18741,
+          "project": "K1.reinvented"
+        },
+        {
+          "evidence_id": "O18751",
+          "timestamp": "2025-10-24T20:27:44.437000Z",
+          "source": "observation",
+          "row_id": 18751,
+          "project": "K1.reinvented"
+        },
+        {
+          "evidence_id": "O18758",
+          "timestamp": "2025-10-25T05:27:38.505000Z",
+          "source": "observation",
+          "row_id": 18758,
+          "project": "K1.reinvented"
+        },
+        {
+          "evidence_id": "O18852",
+          "timestamp": "2025-10-27T21:31:54.968000Z",
+          "source": "observation",
+          "row_id": 18852,
+          "project": "K1.reinvented"
+        },
+        {
+          "evidence_id": "O18916",
+          "timestamp": "2025-10-28T04:12:44.107000Z",
+          "source": "observation",
+          "row_id": 18916,
+          "project": "K1.reinvented"
+        }
+      ]
+    },
+    {
+      "template_id": "psram_mandatory",
+      "claim": "PSRAM is mandatory for stable runtime memory budgets; builds without PSRAM risk memory failure.",
+      "topic": "architecture_atlas",
+      "type": "constraint",
+      "status": "current",
+      "confidence": "high",
+      "support_count": 97,
+      "session_count": 24,
+      "citations": [
+        {
+          "evidence_id": "O4320",
+          "timestamp": "2025-12-27T09:12:43.917Z",
+          "source": "observation",
+          "row_id": 4320,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4340",
+          "timestamp": "2025-12-27T09:16:41.132Z",
+          "source": "observation",
+          "row_id": 4340,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4494",
+          "timestamp": "2025-12-27T10:08:04.326Z",
+          "source": "observation",
+          "row_id": 4494,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4522",
+          "timestamp": "2025-12-27T10:16:11.792Z",
+          "source": "observation",
+          "row_id": 4522,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4566",
+          "timestamp": "2025-12-27T10:29:37.015Z",
+          "source": "observation",
+          "row_id": 4566,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O4594",
+          "timestamp": "2025-12-27T10:42:50.642Z",
+          "source": "observation",
+          "row_id": 4594,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O9961",
+          "timestamp": "2026-01-01T09:18:31.200Z",
+          "source": "observation",
+          "row_id": 9961,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O9985",
+          "timestamp": "2026-01-01T10:03:39.621Z",
+          "source": "observation",
+          "row_id": 9985,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O10014",
+          "timestamp": "2026-01-01T11:06:54.799Z",
+          "source": "observation",
+          "row_id": 10014,
+          "project": "K1.Sliders"
+        },
+        {
+          "evidence_id": "O10063",
+          "timestamp": "2026-01-01T12:02:01.742Z",
+          "source": "observation",
+          "row_id": 10063,
+          "project": "K1.Sliders"
+        }
+      ]
+    }
+  ],
+  "template_claims": 8,
+  "clustered_claims": 0,
+  "excluded_topics_with_no_claims": [
+    "alias_glossary",
+    "prd_library",
+    "roadmap_timeline"
+  ]
+}

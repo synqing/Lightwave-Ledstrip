@@ -1,0 +1,36 @@
+{
+  "source_file": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/z_Claude-mem/NEW_MACHINE_MERGE_HANDOFF/artifacts/vscode_extension_import_payload.json",
+  "chunk_size": 20,
+  "chunks": [
+    {
+      "ok": false,
+      "status": 413,
+      "error": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>PayloadTooLargeError: request entity too large<br> &nbsp; &nbsp;at RN (/Users/spectrasynq/.claude/plugins/cache/thedotmack/claude-mem/9.0.9/scripts/worker-service.cjs:42:423385)<br> &nbsp; &nbsp;at CK (/Users/spectrasynq/.claude/plugins/cache/thedotmack/claude-mem/9.0.9/scripts/worker-service.cjs:42:427479)<br> &nbsp; &nbsp;at &lt;anonymous&gt; (/Users/spectrasynq/.claude/plugins/cache/thedotm",
+      "sessions": 20,
+      "observations": 2050,
+      "prompts": 2067
+    },
+    {
+      "ok": false,
+      "status": 413,
+      "error": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Error<br> &nbsp; &nbsp;at RN (/Users/spectrasynq/.claude/plugins/cache/thedotmack/claude-mem/9.0.9/scripts/worker-service.cjs:42:423385)<br> &nbsp; &nbsp;at CK (/Users/spectrasynq/.claude/plugins/cache/thedotmack/claude-mem/9.0.9/scripts/worker-service.cjs:42:427479)<br> &nbsp; &nbsp;at &lt;anonymous&gt; (/Users/spectrasynq/.claude/plugins/cache/thedotmack/claude-mem/9.0.9/scripts/worker-servi",
+      "sessions": 20,
+      "observations": 2050,
+      "prompts": 2067
+    },
+    {
+      "ok": false,
+      "status": 413,
+      "error": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>PayloadTooLargeError: request entity too large<br> &nbsp; &nbsp;at RN (/Users/spectrasynq/.claude/plugins/cache/thedotmack/claude-mem/9.0.9/scripts/worker-service.cjs:42:423385)<br> &nbsp; &nbsp;at CK (/Users/spectrasynq/.claude/plugins/cache/thedotmack/claude-mem/9.0.9/scripts/worker-service.cjs:42:427479)<br> &nbsp; &nbsp;at &lt;anonymous&gt; (/Users/spectrasynq/.claude/plugins/cache/thedotm",
+      "sessions": 4,
+      "observations": 2050,
+      "prompts": 2067
+    }
+  ],
+  "after": {
+    "sdk_sessions": 1030,
+    "observations": 30749,
+    "user_prompts": 12760,
+    "fts_lightwaveos_hits": 2967
+  }
+}

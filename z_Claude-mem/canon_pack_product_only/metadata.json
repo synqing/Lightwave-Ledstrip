@@ -1,0 +1,28 @@
+{
+  "db": "/Users/spectrasynq/.claude-mem/claude-mem.db",
+  "projects_filter": [
+    "Lightwave-Ledstrip",
+    "Tab5.DSP",
+    "v2",
+    "PRISM.k1",
+    "K1.reinvented",
+    "lightwave-controller",
+    "K1.juce",
+    "K1.Sliders"
+  ],
+  "rows_loaded": 17610,
+  "observations_loaded": 17610,
+  "prompts_loaded": 0,
+  "include_prompts": false,
+  "generated_at": "2026-02-09T22:45:02.708457Z",
+  "quality_gate": {
+    "min_chars": 180,
+    "max_evidence_per_topic": 40,
+    "min_evidence_per_claim": 4,
+    "min_sessions_per_claim": 3
+  },
+  "contract": {
+    "rule": "No supporting excerpts found when evidence is insufficient",
+    "claims_require_distinct_sessions": true
+  }
+}

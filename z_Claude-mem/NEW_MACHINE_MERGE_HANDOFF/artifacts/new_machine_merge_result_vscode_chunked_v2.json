@@ -1,0 +1,267 @@
+{
+  "source": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/z_Claude-mem/NEW_MACHINE_MERGE_HANDOFF/artifacts/vscode_extension_import_payload.json",
+  "chunk_size": 3,
+  "chunks": [
+    {
+      "ok": true,
+      "status": 200,
+      "sessions": 3,
+      "observations": 81,
+      "prompts": 82,
+      "stats": {
+        "sessionsImported": 3,
+        "sessionsSkipped": 0,
+        "summariesImported": 0,
+        "summariesSkipped": 0,
+        "observationsImported": 81,
+        "observationsSkipped": 0,
+        "promptsImported": 82,
+        "promptsSkipped": 0
+      }
+    },
+    {
+      "ok": true,
+      "status": 200,
+      "sessions": 3,
+      "observations": 71,
+      "prompts": 73,
+      "stats": {
+        "sessionsImported": 3,
+        "sessionsSkipped": 0,
+        "summariesImported": 0,
+        "summariesSkipped": 0,
+        "observationsImported": 71,
+        "observationsSkipped": 0,
+        "promptsImported": 73,
+        "promptsSkipped": 0
+      }
+    },
+    {
+      "ok": true,
+      "status": 200,
+      "sessions": 3,
+      "observations": 185,
+      "prompts": 186,
+      "stats": {
+        "sessionsImported": 3,
+        "sessionsSkipped": 0,
+        "summariesImported": 0,
+        "summariesSkipped": 0,
+        "observationsImported": 185,
+        "observationsSkipped": 0,
+        "promptsImported": 186,
+        "promptsSkipped": 0
+      }
+    },
+    {
+      "ok": true,
+      "status": 200,
+      "sessions": 3,
+      "observations": 68,
+      "prompts": 69,
+      "stats": {
+        "sessionsImported": 3,
+        "sessionsSkipped": 0,
+        "summariesImported": 0,
+        "summariesSkipped": 0,
+        "observationsImported": 68,
+        "observationsSkipped": 0,
+        "promptsImported": 69,
+        "promptsSkipped": 0
+      }
+    },
+    {
+      "ok": true,
+      "status": 200,
+      "sessions": 3,
+      "observations": 123,
+      "prompts": 124,
+      "stats": {
+        "sessionsImported": 3,
+        "sessionsSkipped": 0,
+        "summariesImported": 0,
+        "summariesSkipped": 0,
+        "observationsImported": 123,
+        "observationsSkipped": 0,
+        "promptsImported": 124,
+        "promptsSkipped": 0
+      }
+    },
+    {
+      "ok": true,
+      "status": 200,
+      "sessions": 3,
+      "observations": 29,
+      "prompts": 29,
+      "stats": {
+        "sessionsImported": 3,
+        "sessionsSkipped": 0,
+        "summariesImported": 0,
+        "summariesSkipped": 0,
+        "observationsImported": 29,
+        "observationsSkipped": 0,
+        "promptsImported": 29,
+        "promptsSkipped": 0
+      }
+    },
+    {
+      "ok": true,
+      "status": 200,
+      "sessions": 3,
+      "observations": 130,
+      "prompts": 132,
+      "stats": {
+        "sessionsImported": 3,
+        "sessionsSkipped": 0,
+        "summariesImported": 0,
+        "summariesSkipped": 0,
+        "observationsImported": 130,
+        "observationsSkipped": 0,
+        "promptsImported": 132,
+        "promptsSkipped": 0
+      }
+    },
+    {
+      "ok": true,
+      "status": 200,
+      "sessions": 3,
+      "observations": 192,
+      "prompts": 193,
+      "stats": {
+        "sessionsImported": 3,
+        "sessionsSkipped": 0,
+        "summariesImported": 0,
+        "summariesSkipped": 0,
+        "observationsImported": 192,
+        "observationsSkipped": 0,
+        "promptsImported": 193,
+        "promptsSkipped": 0
+      }
+    },
+    {
+      "ok": true,
+      "status": 200,
+      "sessions": 3,
+      "observations": 78,
+      "prompts": 81,
+      "stats": {
+        "sessionsImported": 3,
+        "sessionsSkipped": 0,
+        "summariesImported": 0,
+        "summariesSkipped": 0,
+        "observationsImported": 78,
+        "observationsSkipped": 0,
+        "promptsImported": 81,
+        "promptsSkipped": 0
+      }
+    },
+    {
+      "ok": true,
+      "status": 200,
+      "sessions": 3,
+      "observations": 125,
+      "prompts": 125,
+      "stats": {
+        "sessionsImported": 3,
+        "sessionsSkipped": 0,
+        "summariesImported": 0,
+        "summariesSkipped": 0,
+        "observationsImported": 125,
+        "observationsSkipped": 0,
+        "promptsImported": 125,
+        "promptsSkipped": 0
+      }
+    },
+    {
+      "ok": true,
+      "status": 200,
+      "sessions": 3,
+      "observations": 306,
+      "prompts": 306,
+      "stats": {
+        "sessionsImported": 3,
+        "sessionsSkipped": 0,
+        "summariesImported": 0,
+        "summariesSkipped": 0,
+        "observationsImported": 306,
+        "observationsSkipped": 0,
+        "promptsImported": 306,
+        "promptsSkipped": 0
+      }
+    },
+    {
+      "ok": true,
+      "status": 200,
+      "sessions": 3,
+      "observations": 118,
+      "prompts": 119,
+      "stats": {
+        "sessionsImported": 3,
+        "sessionsSkipped": 0,
+        "summariesImported": 0,
+        "summariesSkipped": 0,
+        "observationsImported": 118,
+        "observationsSkipped": 0,
+        "promptsImported": 119,
+        "promptsSkipped": 0
+      }
+    },
+    {
+      "ok": true,
+      "status": 200,
+      "sessions": 3,
+      "observations": 104,
+      "prompts": 105,
+      "stats": {
+        "sessionsImported": 3,
+        "sessionsSkipped": 0,
+        "summariesImported": 0,
+        "summariesSkipped": 0,
+        "observationsImported": 104,
+        "observationsSkipped": 0,
+        "promptsImported": 105,
+        "promptsSkipped": 0
+      }
+    },
+    {
+      "ok": true,
+      "status": 200,
+      "sessions": 3,
+      "observations": 361,
+      "prompts": 363,
+      "stats": {
+        "sessionsImported": 3,
+        "sessionsSkipped": 0,
+        "summariesImported": 0,
+        "summariesSkipped": 0,
+        "observationsImported": 361,
+        "observationsSkipped": 0,
+        "promptsImported": 363,
+        "promptsSkipped": 0
+      }
+    },
+    {
+      "ok": true,
+      "status": 200,
+      "sessions": 2,
+      "observations": 79,
+      "prompts": 80,
+      "stats": {
+        "sessionsImported": 2,
+        "sessionsSkipped": 0,
+        "summariesImported": 0,
+        "summariesSkipped": 0,
+        "observationsImported": 79,
+        "observationsSkipped": 0,
+        "promptsImported": 80,
+        "promptsSkipped": 0
+      }
+    }
+  ],
+  "after": {
+    "sdk_sessions": 1074,
+    "observations": 32799,
+    "user_prompts": 14827,
+    "fts_lightwaveos_hits": 3275
+  }
+}

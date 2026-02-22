@@ -1,0 +1,56 @@
+# AS-IS Architecture Atlas
+
+## Evidence Table
+- `arch_renderer_actor` | dimension=components | status=superseded | confidence=high
+  - statement: RendererActor is the core visual engine with exclusive frame ownership and high-frequency scheduling.
+  - [O28396] 2026-02-09T15:28:51.860Z | Lightwave-Ledstrip | Render Pipeline Uses Static Post-FX Parameters for Runtime Tuning applyPrismEffect and renderBulbCover reference s_prismOpacity and s_bulbOpacity enabling live parameter adjustment The final render pipeline implementation at lines 497 and 500 demonstrates how runtime parameter tuning integrates into the Bloom effect.
+  - [O28381] 2026-02-09T15:09:36.033Z | Lightwave-Ledstrip | Audio debug logging now toggleable via m_audioDebugEnabled flag Firmware RendererActor audio diagnostics can be controlled at runtime instead of spamming every 4 seconds Implemented runtime control for audio debug logging in RendererActor to reduce serial spam.
+  - [O28380] 2026-02-09T15:09:13.887Z | Lightwave-Ledstrip | Added Audio Debug Logging Toggle to RendererActor New m_audioDebugEnabled boolean flag enables runtime control of audio logging via serial 'a' command.
+  - [O28379] 2026-02-09T15:08:45.147Z | Lightwave-Ledstrip | RendererActor implements capture mode for LED frame recording RendererActor.h defines m_captureEnabled flag and three capture tap points for multi-buffer frame recording system.
+- `arch_audio_pipeline` | dimension=components | status=superseded | confidence=high
+  - statement: Audio pipeline computes analysis features (tempo/chroma/flux) and feeds render-time controls.
+  - [O28426] 2026-02-09T16:01:54.129Z | Lightwave-Ledstrip | SB Waveform (Parity) Recategorized from REACTIVE to FLUID_PLASMA Family Pattern family changed to match rendering architecture and visual characteristics over audio dependency.
+  - [O28421] 2026-02-09T15:59:10.592Z | Lightwave-Ledstrip | SB Waveform Parity Effect Registered as Effect ID 123 Added Sensory Bridge 3.1.0 waveform mode to pattern registry with intensity-only rendering and palette output A new Sensory Bridge waveform parity effect has been registered in the pattern registry as effect ID 123, positioned after Kuramoto Transport (ID 122).
+  - [O28418] 2026-02-09T15:56:26.177Z | Lightwave-Ledstrip | SB Waveform Uses HSV Direct RGB Conversion Without Palette System Effect generates colors via hsv2rgb_spectrum and direct channel scaling instead of palette.getColor() lookups.
+  - [O28417] 2026-02-09T15:56:19.430Z | Lightwave-Ledstrip | Examined SbWaveform310RefEffect reference implementation for palette-free color summation pattern SbWaveform310RefEffect uses note-chromagram color summation in chromatic mode, providing reference for multi-color injection without palette corruption.
+- `arch_state_ownership` | dimension=state_ownership | status=superseded | confidence=high
+  - statement: State ownership is actor-mediated with explicit boundaries between render, audio, and control layers.
+  - [O28417] 2026-02-09T15:56:19.430Z | Lightwave-Ledstrip | Examined SbWaveform310RefEffect reference implementation for palette-free color summation pattern SbWaveform310RefEffect uses note-chromagram color summation in chromatic mode, providing reference for multi-color injection without palette corruption.
+  - [O28409] 2026-02-09T15:52:48.212Z | Lightwave-Ledstrip | Serial Keyboard Controls for Bloom Prism Iterations Main.cpp implements runtime hotkeys j/J to adjust Bloom prism iteration count for ghost layer tuning The main.cpp serial keyboard interface includes runtime controls for Bloom mode prism iterations accessible via j/J keys.
+  - [O28399] 2026-02-09T15:33:08.292Z | Lightwave-Ledstrip | Refactored Bloom injection to grayscale-only transport, deferring palette mapping to output stage computeInjection() now returns grayscale intensity values, eliminating color corruption by moving palette lookups to final LED output.
+  - [O28398] 2026-02-09T15:31:51.123Z | Lightwave-Ledstrip | Bloom Mode Injection Algorithm Requires Complete Redesign Current weighted centroid approach still produces oversaturated visuals requiring fundamental rethink of color injection strategy After implementing a weighted centroid voting algorithm to replace the RGB accumulation loop in BloomParityEffect.cpp's computeInje…
+- `arch_timing_model` | dimension=timing_model | status=superseded | confidence=high
+  - statement: Timing model couples audio hop cadence with render cadence under deterministic frame budgets.
+  - [O28339] 2026-02-09T14:35:25.424Z | Lightwave-Ledstrip | Firmware implements clock spine render timing diagnostics with 2-second logging intervals RendererActor.cpp tracks audio frame age, render intervals, and beat clock integration with detailed performance metrics.
+  - [O28338] 2026-02-09T14:34:00.302Z | Lightwave-Ledstrip | RendererActor runs at 120 FPS on ESP32 Core 1 with tight frame budget RendererActor implementation shows 8.33ms frame budget with 2-4ms render time and 2ms LED driver overhead.
+  - [O28334] 2026-02-09T14:33:07.926Z | Lightwave-Ledstrip | Verbose debug logging requested for removal from audio and renderer User requested commenting out CLOCK_SPINE log statements from AudioActor and RendererActor to reduce console spam User identified two verbose debug log statements that are flooding the console output.
+  - [O28239] 2026-02-08T21:43:06.938Z | Lightwave-Ledstrip | BeatPulseBloomEffect Design Philosophy Existing Beat Pulse Bloom at ID 121 uses stateful subpixel advection with center injection, distinct from stateless BeatPulse variants BeatPulseBloomEffect at ID 121 already implements a form of bloom transport using subpixel advection - moving the previous frame forward by fract…
+- `arch_control_plane` | dimension=control_plane | status=superseded | confidence=high
+  - statement: Control plane combines REST endpoints and WebSocket streams with fallback handling.
+  - [O28423] 2026-02-09T15:59:51.150Z | Lightwave-Ledstrip | Firmware implements serial command interface for effect selection via keyboard main.cpp serial handler maps keys a-k to effects 10-20 while reserving command letters for system functions.
+  - [O28394] 2026-02-09T15:21:47.057Z | Lightwave-Ledstrip | Bloom Injection Switched from Multi-Lookup Summation to Single Centroid-Based Palette Lookup Fixed palette color corruption by computing weighted chroma centroid for single palette lookup instead of summing twelve lookups The Bloom injection color computation was fundamentally restructured to fix palette color corrupt…
+  - [O28380] 2026-02-09T15:09:13.887Z | Lightwave-Ledstrip | Added Audio Debug Logging Toggle to RendererActor New m_audioDebugEnabled boolean flag enables runtime control of audio logging via serial 'a' command.
+  - [O28376] 2026-02-09T15:08:19.742Z | Lightwave-Ledstrip | RendererActor logs audio pipeline health check every 2 seconds RendererActor.cpp logs audio frame sequence, RMS, flux, and ES backend metrics at 2-second intervals.
+- `arch_network_modes` | dimension=boundaries | status=superseded | confidence=high
+  - statement: Network behaviour includes AP/STA modes with discovery and IP fallback strategies.
+  - [O28425] 2026-02-09T16:01:39.531Z | Lightwave-Ledstrip | Examined PatternRegistry pattern families for color handling architecture PatternRegistry.cpp defines PatternFamily taxonomy with FLUID_PLASMA, GEOMETRIC, and other categories using CENTER_ORIGIN and palette-driven rendering.
+  - [O28424] 2026-02-09T16:01:31.824Z | Lightwave-Ledstrip | PatternFamily::REACTIVE compilation error in WaveformParity registration WaveformParityEffect registration failed due to incorrect PatternFamily enum value REACTIVE not existing in codebase The WaveformParityEffect registration in PatternRegistry.cpp failed to compile because it referenced PatternFamily::REACTIVE, whi…
+  - [O28421] 2026-02-09T15:59:10.592Z | Lightwave-Ledstrip | SB Waveform Parity Effect Registered as Effect ID 123 Added Sensory Bridge 3.1.0 waveform mode to pattern registry with intensity-only rendering and palette output A new Sensory Bridge waveform parity effect has been registered in the pattern registry as effect ID 123, positioned after Kuramoto Transport (ID 122).
+  - [O28419] 2026-02-09T15:56:29.928Z | Lightwave-Ledstrip | CoreEffects Center-Origin LED Geometry Constants CoreEffects.h defines CENTER_LEFT=79, CENTER_RIGHT=80 as injection points for dual-strip 160-LED center-origin layout The primary session is examining CoreEffects.h to understand the LED geometry constants that define the center-origin layout used throughout the codebas…
+- `arch_client_boundary` | dimension=boundaries | status=superseded | confidence=high
+  - statement: iOS/Tab5/dashboard clients are boundary consumers of firmware-owned state and contracts.
+  - [O28360] 2026-02-09T14:58:01.637Z | Lightwave-Ledstrip | Serial command interface effect iteration mapping Located 'i' command for effect iteration in firmware main.cpp serial command handler Investigation located the firmware's serial command handler for effect iteration, likely mapped to the 'i' key in the main.cpp command processing loop.
+  - [O28357] 2026-02-09T14:50:45.810Z | Lightwave-Ledstrip | Disabled CLOCK_SPINE:ES debug logging in AudioActor to reduce serial spam Commented out 2-second periodic clock spine logging for ES v1.1 backend audio pipeline.
+  - [O28336] 2026-02-09T14:33:33.081Z | Lightwave-Ledstrip | RendererActor logs clock spine render statistics every 2 seconds Firmware tracks frame age, delta time, and new frame counts with periodic diagnostic logging.
+  - [O28333] 2026-02-09T14:32:28.476Z | Lightwave-Ledstrip | LightwaveOS app with connection stability fixes deployed to iPhone Updated build includes 500ms WebSocket and 300ms REST delays to prevent ESP32 soft AP overload Deployed updated LightwaveOS iOS app to physical iPhone device with ESP32 soft AP connection stability improvements.
+
+## Implemented vs Aspirational
+- Implemented:
+  - RendererActor is the core visual engine with exclusive frame ownership and high-frequency scheduling.
+  - Audio pipeline computes analysis features (tempo/chroma/flux) and feeds render-time controls.
+  - State ownership is actor-mediated with explicit boundaries between render, audio, and control layers.
+  - Timing model couples audio hop cadence with render cadence under deterministic frame budgets.
+  - Control plane combines REST endpoints and WebSocket streams with fallback handling.
+  - Network behaviour includes AP/STA modes with discovery and IP fallback strategies.
+  - iOS/Tab5/dashboard clients are boundary consumers of firmware-owned state and contracts.
+- Aspirational: No supporting excerpts found.

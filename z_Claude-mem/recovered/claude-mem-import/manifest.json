@@ -1,0 +1,40 @@
+{
+  "files": [
+    {
+      "bytes": 11677,
+      "kind": "create",
+      "original_path": "/Users/spectrasynq/.claude/plugins/marketplaces/thedotmack/src/services/import/Importer.ts",
+      "output_path": "recovered/claude-mem-import/thedotmack/src/services/import/Importer.ts",
+      "sha256": "a003ee4d273f4e025aabff335dcf38d601e4b3f321ac74effb8c021a7e9a8087",
+      "sources": [
+        {
+          "jsonl_line": 2,
+          "jsonl_path": "/Users/spectrasynq/.claude/projects/-Users-spectrasynq-Workspace-Management-Software-Lightwave-Ledstrip/372f1927-4dba-4221-9dd0-bd18932ba28d.jsonl",
+          "outcome_index": 4
+        }
+      ]
+    },
+    {
+      "bytes": 10110,
+      "kind": "create",
+      "original_path": "/Users/spectrasynq/.claude/plugins/marketplaces/thedotmack/src/services/import/Normalizer.ts",
+      "output_path": "recovered/claude-mem-import/thedotmack/src/services/import/Normalizer.ts",
+      "sha256": "4eff96eb406a7ebd795a781a7926b4e95225417a7e797841c9c67199c5358676",
+      "sources": [
+        {
+          "jsonl_line": 2,
+          "jsonl_path": "/Users/spectrasynq/.claude/projects/-Users-spectrasynq-Workspace-Management-Software-Lightwave-Ledstrip/0f1b6768-ef61-4944-a12b-35efd0ed11cd.jsonl",
+          "outcome_index": 1
+        }
+      ]
+    }
+  ],
+  "include": [
+    "/thedotmack/src/services/import/",
+    "/thedotmack/src/commands/import-cli\\.ts$"
+  ],
+  "inputs": [
+    "/Users/spectrasynq/.claude/projects"
+  ],
+  "output": "recovered/claude-mem-import"
+}

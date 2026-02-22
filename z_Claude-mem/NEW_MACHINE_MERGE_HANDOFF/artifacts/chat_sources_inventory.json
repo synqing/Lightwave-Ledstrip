@@ -1,0 +1,112 @@
+{
+  "sources": [
+    {
+      "name": "claude_code",
+      "status": "found",
+      "paths": [
+        "/Users/macbookpro/.claude/projects/-Users-macbookpro-Downloads-z-Claude-mem/78567f98-6a42-4a63-b720-4c4002ef6efe.jsonl"
+      ],
+      "total_size_bytes": 1129,
+      "file_count": 1,
+      "date_range": {
+        "earliest": "2026-02-09",
+        "latest": "2026-02-09"
+      },
+      "accessible": true,
+      "error": null
+    },
+    {
+      "name": "cursor",
+      "status": "found",
+      "paths": [
+        "/Users/macbookpro/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
+      ],
+      "total_size_bytes": 390848512,
+      "file_count": 1,
+      "date_range": null,
+      "accessible": true,
+      "error": null
+    },
+    {
+      "name": "codex",
+      "status": "found",
+      "paths": [
+        "/Users/macbookpro/.codex/sessions/2025/11/18/rollout-2025-11-18T19-11-36-019a96a9-b86a-75e0-9b52-04582504a89f.jsonl",
+        "/Users/macbookpro/.codex/sessions/2025/11/19/rollout-2025-11-19T00-04-03-019a97b5-7763-73a3-9849-a444071e55e3.jsonl",
+        "/Users/macbookpro/.codex/sessions/2026/02/10/rollout-2026-02-10T04-49-26-019c442a-915e-77e2-81fa-7de41074b643.jsonl",
+        "/Users/macbookpro/.codex/history.jsonl"
+      ],
+      "total_size_bytes": 110992557,
+      "file_count": 4,
+      "date_range": {
+        "earliest": "2025-11-18",
+        "latest": "2026-02-09"
+      },
+      "accessible": true,
+      "error": null
+    },
+    {
+      "name": "vscode_copilot",
+      "status": "found",
+      "paths": [
+        "/Users/macbookpro/Library/Application Support/Code/User/globalStorage/github.copilot-chat"
+      ],
+      "total_size_bytes": 22255052,
+      "file_count": 4,
+      "date_range": null,
+      "accessible": true,
+      "error": null
+    },
+    {
+      "name": "continue_dev",
+      "status": "not_found",
+      "paths": [],
+      "total_size_bytes": 0,
+      "file_count": 0,
+      "date_range": null,
+      "accessible": true,
+      "error": null
+    },
+    {
+      "name": "jetbrains",
+      "status": "found",
+      "paths": [
+        "/Users/macbookpro/Library/Application Support/JetBrains/PyCharm2023.3/options",
+        "/Users/macbookpro/Library/Application Support/JetBrains/CLion2023.3/options"
+      ],
+      "total_size_bytes": 173729,
+      "file_count": 70,
+      "date_range": null,
+      "accessible": true,
+      "error": null
+    },
+    {
+      "name": "aider",
+      "status": "not_found",
+      "paths": [],
+      "total_size_bytes": 0,
+      "file_count": 0,
+      "date_range": null,
+      "accessible": true,
+      "error": null
+    },
+    {
+      "name": "cline",
+      "status": "not_found",
+      "paths": [],
+      "total_size_bytes": 0,
+      "file_count": 0,
+      "date_range": null,
+      "accessible": true,
+      "error": null
+    }
+  ],
+  "summary": {
+    "total_sources_found": 5,
+    "total_size_gb": 0.49,
+    "total_size_bytes": 524270979,
+    "total_file_count": 80,
+    "total_conversations_estimated": 18472,
+    "scan_timestamp": "2026-02-09T22:03:54.035634+00:00"
+  }
+}

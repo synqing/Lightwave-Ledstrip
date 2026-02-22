@@ -1,0 +1,35 @@
+{
+  "db": "/Users/spectrasynq/.claude-mem/claude-mem.db",
+  "generated_at": "2026-02-09T23:03:47.299387Z",
+  "primary_projects": [
+    "Lightwave-Ledstrip",
+    "Tab5.DSP",
+    "v2",
+    "PRISM.k1",
+    "K1.reinvented",
+    "lightwave-controller",
+    "K1.juce",
+    "K1.Sliders"
+  ],
+  "supplemental_projects": [
+    "cursor",
+    "codex"
+  ],
+  "rows_loaded": 19931,
+  "candidates_after_stitching_and_dedupe": 19632,
+  "gates": {
+    "min_primary_citations": 2,
+    "min_citation_chars": 180,
+    "short_threshold": 120,
+    "stitch_window": 2
+  },
+  "contract": {
+    "primary_required_for_claims": true,
+    "supplemental_context_allowed": true,
+    "no_support_string": "No supporting excerpts found."
+  },
+  "stitching_stats": {
+    "stitched_candidates": 67,
+    "unstitched_candidates": 19565
+  }
+}

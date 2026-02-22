@@ -1,0 +1,155 @@
+# Decision Register
+
+## Evidence Table
+- `decision_017` | status=contested | confidence=high | first_seen=2025-10-06T09:46:33.868000Z | last_seen=2026-02-09T15:08:19.742000Z
+  - decision: Control plane choices keep AP/STA, IP-first discovery, and portable-mode recoveries deterministic.
+  - rationale: No supporting excerpts found.
+  - alternatives: No supporting excerpts found.
+  - [O28376] 2026-02-09T15:08:19.742Z | Lightwave-Ledstrip | RendererActor logs audio pipeline health check every 2 seconds RendererActor.cpp logs audio frame sequence, RMS, flux, and ES backend metrics at 2-second intervals.
+  - [O28339] 2026-02-09T14:35:25.424Z | Lightwave-Ledstrip | Firmware implements clock spine render timing diagnostics with 2-second logging intervals RendererActor.cpp tracks audio frame age, render intervals, and beat clock integration with detailed performance metrics.
+  - [O28327] 2026-02-09T14:31:03.742Z | Lightwave-Ledstrip | Firmware stream subscription handling via WebSocket commands Firmware uses WS commands audio.subscribe and ledStream.subscribe with UDP port negotiation or WS fallback.
+  - [O28326] 2026-02-09T14:30:47.110Z | Lightwave-Ledstrip | ConnectionManager WebSocket event stream has single consumer architecture AppViewModel is sole consumer of WebSocket events; must call notifyWebSocketDisconnected() to trigger reconnection.
+- `decision_006` | status=current | confidence=high | first_seen=2025-10-05T21:55:54.785000Z | last_seen=2026-02-09T15:59:51.150000Z
+  - decision: Device control contracts use REST for commands and WebSocket for streaming/state.
+  - rationale: No supporting excerpts found.
+  - alternatives: No supporting excerpts found.
+  - [O28423] 2026-02-09T15:59:51.150Z | Lightwave-Ledstrip | Firmware implements serial command interface for effect selection via keyboard main.cpp serial handler maps keys a-k to effects 10-20 while reserving command letters for system functions.
+  - [O28394] 2026-02-09T15:21:47.057Z | Lightwave-Ledstrip | Bloom Injection Switched from Multi-Lookup Summation to Single Centroid-Based Palette Lookup Fixed palette color corruption by computing weighted chroma centroid for single palette lookup instead of summing twelve lookups The Bloom injection color computation was fundamentally restructured to fix palette color corrupt…
+  - [O28376] 2026-02-09T15:08:19.742Z | Lightwave-Ledstrip | RendererActor logs audio pipeline health check every 2 seconds RendererActor.cpp logs audio frame sequence, RMS, flux, and ES backend metrics at 2-second intervals.
+  - [O28338] 2026-02-09T14:34:00.302Z | Lightwave-Ledstrip | RendererActor runs at 120 FPS on ESP32 Core 1 with tight frame budget RendererActor implementation shows 8.33ms frame budget with 2-4ms render time and 2ms LED driver overhead.
+- `decision_014` | status=contested | confidence=high | first_seen=2025-10-06T04:05:43.072000Z | last_seen=2026-02-07T18:49:28.799000Z
+  - decision: Hardware topology and modularity boundaries separate device, hub, and tooling responsibilities.
+  - rationale: No supporting excerpts found.
+  - alternatives: decided to move all backup/archive directories to an external location rather than delete them, preserving historical references while cleaning the working directory
+  - [O27569] 2026-02-07T18:49:28.799Z | Lightwave-Ledstrip | Professional Audio-Visual Synchronization Systems - SMPTE Timecode and DMX Control VJ software uses SMPTE timecode and BPM information for perfect sync; wired audio taps preferred over microphones to minimize latency.
+  - [O27304] 2026-02-07T13:39:00.571Z | Lightwave-Ledstrip | Comprehensive Stash Analysis Shows No UI Mockup HTML Files in Any Stash All 10 stashes contain only tracked source code files with no docs/ui-mockups HTML files present Comprehensive analysis of all 10 git stashes definitively proves that no UI mockup HTML files from docs/ui-mockups/ were captured in any stash entry.
+  - [O27288] 2026-02-07T13:34:49.380Z | Lightwave-Ledstrip | Recent File Deletion History Reveals Major Cleanup Operations Four major deletion commits removed web UI assets, Tab5 components, lightwave-simple app, and dashboard docs Git deletion history reveals several major cleanup operations that removed deprecated web assets, UI components, and documentation.
+  - [O27133] 2026-02-06T17:34:26.610Z | Lightwave-Ledstrip | ConnectionManager Implements Actor-Based Connection State Machine with Swift 6 Strict Concurrency Actor-isolated connection management with 7 connection states, delegate pattern for ready state, and async event stream consumption.
+- `decision_007` | status=current | confidence=high | first_seen=2025-10-05T21:15:32.413000Z | last_seen=2026-02-09T14:35:25.424000Z
+  - decision: Connectivity strategy keeps AP/STA fallback behaviour for resilience.
+  - rationale: No supporting excerpts found.
+  - alternatives: No supporting excerpts found.
+  - [O28339] 2026-02-09T14:35:25.424Z | Lightwave-Ledstrip | Firmware implements clock spine render timing diagnostics with 2-second logging intervals RendererActor.cpp tracks audio frame age, render intervals, and beat clock integration with detailed performance metrics.
+  - [O28327] 2026-02-09T14:31:03.742Z | Lightwave-Ledstrip | Firmware stream subscription handling via WebSocket commands Firmware uses WS commands audio.subscribe and ledStream.subscribe with UDP port negotiation or WS fallback.
+  - [O28326] 2026-02-09T14:30:47.110Z | Lightwave-Ledstrip | ConnectionManager WebSocket event stream has single consumer architecture AppViewModel is sole consumer of WebSocket events; must call notifyWebSocketDisconnected() to trigger reconnection.
+  - [O28272] 2026-02-09T07:28:26.628Z | Lightwave-Ledstrip | WebSocket connection stability regression after zone preset refactor Connection drops immediately after REST calls despite delays, but REST operations still function.
+- `decision_011` | status=current | confidence=high | first_seen=2025-10-16T11:29:27.406000Z | last_seen=2026-02-09T14:34:00.302000Z
+  - decision: Zone/segment boundaries are fixed with explicit composer/state contracts.
+  - rationale: No supporting excerpts found.
+  - alternatives: No supporting excerpts found.
+  - [O28338] 2026-02-09T14:34:00.302Z | Lightwave-Ledstrip | RendererActor runs at 120 FPS on ESP32 Core 1 with tight frame budget RendererActor implementation shows 8.33ms frame budget with 2-4ms render time and 2ms LED driver overhead.
+  - [O28239] 2026-02-08T21:43:06.938Z | Lightwave-Ledstrip | BeatPulseBloomEffect Design Philosophy Existing Beat Pulse Bloom at ID 121 uses stateful subpixel advection with center injection, distinct from stateless BeatPulse variants BeatPulseBloomEffect at ID 121 already implements a form of bloom transport using subpixel advection - moving the previous frame forward by fract…
+  - [O28136] 2026-02-08T17:34:04.290Z | Lightwave-Ledstrip | ZonePresetManager Fully Implemented with NVS Storage Complete zone preset manager with save, load, list, remove and ZoneComposer integration ZonePresetManager header reveals a fully-designed zone preset system matching the capability of EffectPresetManager.
+  - [O28101] 2026-02-08T14:36:04.926Z | Lightwave-Ledstrip | Root Cause Analysis: Double Brightness Scaling and Missing Parameter Initialization Engineering analysis identifies three critical issues causing BeatPulseBloom to appear flat: brightness squaring, double silence gating, and missing mood/fadeAmount initialization.
+- `decision_018` | status=current | confidence=high | first_seen=2025-10-10T11:00:26.531000Z | last_seen=2026-02-09T15:21:59.709000Z
+  - decision: Storage/persistence decisions lock in LittleFS and recovery paths.
+  - rationale: No supporting excerpts found.
+  - alternatives: No supporting excerpts found.
+  - [O28395] 2026-02-09T15:21:59.709Z | Lightwave-Ledstrip | Firmware Build Completed with Runtime Parameter Control and Palette-Driven Bloom Successfully compiled esp32dev_audio_esv11 firmware with externalized tunables, palette injection system, and keyboard control infrastructure The firmware build successfully compiled with major architectural changes to the Bloom effect sy…
+  - [O28136] 2026-02-08T17:34:04.290Z | Lightwave-Ledstrip | ZonePresetManager Fully Implemented with NVS Storage Complete zone preset manager with save, load, list, remove and ZoneComposer integration ZonePresetManager header reveals a fully-designed zone preset system matching the capability of EffectPresetManager.
+  - [O27538] 2026-02-07T18:40:58.097Z | Lightwave-Ledstrip | ESP32-S3 Memory Architecture and Allocation Constraints for LED Effects 320 KB internal SRAM for DMA/WiFi with 8 MB PSRAM for large buffers; critical threshold at 8 KB triggers WiFi crashes.
+  - [O27199] 2026-02-07T10:39:42.696Z | Lightwave-Ledstrip | RendererActor Defines Authoritative MAX_EFFECTS = 113 Constant Core rendering actor sets MAX_EFFECTS at 113 matching current effect count, serving as source of truth for effect limits.
+- `decision_019` | status=contested | confidence=high | first_seen=2025-10-05T21:55:54.785000Z | last_seen=2026-02-09T15:33:08.292000Z
+  - decision: Palette/preset control decisions are enforced through API handlers with validation.
+  - rationale: No supporting excerpts found.
+  - alternatives: No supporting excerpts found.
+  - [O28399] 2026-02-09T15:33:08.292Z | Lightwave-Ledstrip | Refactored Bloom injection to grayscale-only transport, deferring palette mapping to output stage computeInjection() now returns grayscale intensity values, eliminating color corruption by moving palette lookups to final LED output.
+  - [O28398] 2026-02-09T15:31:51.123Z | Lightwave-Ledstrip | Bloom Mode Injection Algorithm Requires Complete Redesign Current weighted centroid approach still produces oversaturated visuals requiring fundamental rethink of color injection strategy After implementing a weighted centroid voting algorithm to replace the RGB accumulation loop in BloomParityEffect.cpp's computeInje…
+  - [O28395] 2026-02-09T15:21:59.709Z | Lightwave-Ledstrip | Firmware Build Completed with Runtime Parameter Control and Palette-Driven Bloom Successfully compiled esp32dev_audio_esv11 firmware with externalized tunables, palette injection system, and keyboard control infrastructure The firmware build successfully compiled with major architectural changes to the Bloom effect sy…
+  - [O28394] 2026-02-09T15:21:47.057Z | Lightwave-Ledstrip | Bloom Injection Switched from Multi-Lookup Summation to Single Centroid-Based Palette Lookup Fixed palette color corruption by computing weighted chroma centroid for single palette lookup instead of summing twelve lookups The Bloom injection color computation was fundamentally restructured to fix palette color corrupt…
+- `decision_001` | status=current | confidence=high | first_seen=2025-06-23T23:54:39Z | last_seen=2026-02-08T21:42:04.041000Z
+  - decision: Centre-origin propagation from LEDs 79/80 is locked as a rendering invariant.
+  - rationale: No supporting excerpts found.
+  - alternatives: No supporting excerpts found.
+  - [O28235] 2026-02-08T21:42:04.041Z | Lightwave-Ledstrip | Effect Registration Pattern Using Static Instances CoreEffects.cpp registers effects via static instances with renderer->registerEffect() pattern, ID 98 currently occupied by SnapwaveLinearEffect The effect registration system in CoreEffects.cpp uses a static instance pattern where each effect is declared as a static…
+  - [O28119] 2026-02-08T14:55:46.369Z | Lightwave-Ledstrip | Kuramoto Oscillator Field Rendering Architecture Design Phase-to-color rendering system using coherence metrics, center-origin mirroring, and audio-reactive coupling for visualizing synchronized oscillator dynamics.
+  - [O27713] 2026-02-07T21:19:55.535Z | Lightwave-Ledstrip | Center Point Architecture Uses LEDs 79/80 as Physical Origin Codebase consistently defines center origin at LED indices 79 (CENTER_LEFT) and 80 (CENTER_RIGHT) across all center-origin effects PRIMARY session searched for all references to center point 79 to understand the center-origin architecture before implementing…
+  - [O27650] 2026-02-07T19:21:41.689Z | Lightwave-Ledstrip | Centre-Origin Architecture Documentation and Phase Convention Found Documentation establishes outward motion convention sin(k*dist - phase) and inward sin(k*dist + phase) with Audio_Reactive_Motion_Phase_Analysis.md cataloging 45+ outward effects and 8 inward effects.
+- `decision_010` | status=current | confidence=high | first_seen=2025-10-16T11:24:43.113000Z | last_seen=2026-02-09T14:34:00.302000Z
+  - decision: RendererActor scheduling and buffer ownership decisions are locked for Core 1 execution.
+  - rationale: No supporting excerpts found.
+  - alternatives: No supporting excerpts found.
+  - [O28338] 2026-02-09T14:34:00.302Z | Lightwave-Ledstrip | RendererActor runs at 120 FPS on ESP32 Core 1 with tight frame budget RendererActor implementation shows 8.33ms frame budget with 2-4ms render time and 2ms LED driver overhead.
+  - [O28068] 2026-02-08T13:46:48.619Z | Lightwave-Ledstrip | Global Mode zoneId Handling Fixed in BeatPulseBloomEffect Added explicit 0xFF check treating global non-zone mode as zone 0 preventing out-of-bounds array access in transport state.
+  - [O28056] 2026-02-08T13:35:42.420Z | Lightwave-Ledstrip | Clock Spine Fix Validated on Hardware with Live Serial Output Analysis Debug logs confirm END-OF-HOP semantics working correctly with consistent timing across AudioActor, EsBeatClock, and RendererActor at runtime The primary session successfully validated the clock spine fix implementation on live hardware by analyzin…
+  - [O27641] 2026-02-07T19:20:47.595Z | Lightwave-Ledstrip | System Architecture Constraints Drive Beat Pulse Simplicity Requirements Watchdog timeout risk, 2ms render budget, memory limits, and multi-stage pipeline necessitate minimal effect complexity for stability ESP32 watchdog timer management emerges as critical system stability constraint requiring aggressive prevention…
+- `decision_008` | status=current | confidence=high | first_seen=2025-10-10T11:00:26.531000Z | last_seen=2026-02-07T18:50:51.764000Z
+  - decision: IP-first discovery with mDNS as hint/fallback is favoured for deterministic connection.
+  - rationale: No supporting excerpts found.
+  - alternatives: No supporting excerpts found.
+  - [O27573] 2026-02-07T18:50:51.764Z | Lightwave-Ledstrip | Critical Memory Architecture and PSRAM Allocation Strategy for Embedded System Stability The memory allocation architecture documentation was examined to understand the critical constraints that Beat Pulse effects operate within, particularly why dynamic allocation is forbidden in render paths and how PSRAM vs interna…
+  - [O27133] 2026-02-06T17:34:26.610Z | Lightwave-Ledstrip | ConnectionManager Implements Actor-Based Connection State Machine with Swift 6 Strict Concurrency Actor-isolated connection management with 7 connection states, delegate pattern for ready state, and async event stream consumption.
+  - [O26726] 2026-02-06T15:57:15.186Z | Lightwave-Ledstrip | WiFi Scan and mDNS Discovery - Multiple Dynamic Allocation Sources WiFiManager performs network scanning with results stored in std::vector, mDNS peer discovery tracks discovered devices, both creating dynamic allocations The grep search for WiFi scanning and mDNS discovery revealed two additional sources of dynamic m…
+  - [O26545] 2026-02-06T14:43:51.534Z | Lightwave-Ledstrip | network_config.h Defines WiFi and WebSocket Configuration Constants Network configuration header documents WS_MAX_CLIENTS = 4, 15-second ping interval, 20-second WiFi timeout, and multi-network fallback support PRIMARY session read complete network_config.h (163 lines) revealing WiFi and WebSocket configuration consta…
+- `decision_016` | status=current | confidence=high | first_seen=2025-10-06T20:37:48.926000Z | last_seen=2026-02-08T13:44:11.715000Z
+  - decision: Audio capture chain decisions nail mic/interface selection and hop/latency budgets.
+  - rationale: No supporting excerpts found.
+  - alternatives: No supporting excerpts found.
+  - [O28063] 2026-02-08T13:44:11.715Z | Lightwave-Ledstrip | Clock Spine Fix Validated: Metrics Confirm Correct Operation with FPS Optimization Recommendation External specialist confirms clock spine fix working correctly with 1-2ms latency; identifies vTaskDelay overhead and WS2812 physics as FPS limiters External specialist provided comprehensive validation of the clock spine…
+  - [O28056] 2026-02-08T13:35:42.420Z | Lightwave-Ledstrip | Clock Spine Fix Validated on Hardware with Live Serial Output Analysis Debug logs confirm END-OF-HOP semantics working correctly with consistent timing across AudioActor, EsBeatClock, and RendererActor at runtime The primary session successfully validated the clock spine fix implementation on live hardware by analyzin…
+  - [O28055] 2026-02-08T13:35:32.828Z | Lightwave-Ledstrip | LightwaveOS Clock Spine Architecture Validated on Hardware Three-domain timing system running live with EsBeatClock, renderer at 120 FPS, and ES audio backend User observed live hardware telemetry from LightwaveOS firmware showing the clock spine architecture functioning correctly across three timing domains.
+  - [O27938] 2026-02-08T11:57:42.110Z | Lightwave-Ledstrip | External Specialist Audit Identifies Clock Spine Architecture as Root Cause of Audio-Visual Lag Specialist analysis reveals renderer anchors to frame-arrival time instead of audio-event time, causing systematic visual delay and phase lag External specialist conducted comprehensive audit of AUDIO_VISUAL_TIMING_ARCHITEC…
+- `decision_012` | status=current | confidence=high | first_seen=2025-10-16T19:15:31.146000Z | last_seen=2026-02-07T19:20:47.595000Z
+  - decision: Watchdog-related timing guardrails are treated as mandatory stability constraints.
+  - rationale: No supporting excerpts found.
+  - alternatives: No supporting excerpts found.
+  - [O27641] 2026-02-07T19:20:47.595Z | Lightwave-Ledstrip | System Architecture Constraints Drive Beat Pulse Simplicity Requirements Watchdog timeout risk, 2ms render budget, memory limits, and multi-stage pipeline necessitate minimal effect complexity for stability ESP32 watchdog timer management emerges as critical system stability constraint requiring aggressive prevention…
+  - [O26219] 2026-02-06T05:40:46.986Z | Lightwave-Ledstrip | ESP32-S3 Task Watchdog Crash Fixed by Replacing taskYIELD with vTaskDelay Replaced taskYIELD with vTaskDelay(1) in AudioActor to allow IDLE0 task scheduling on Core 0.
+  - [O26214] 2026-02-06T05:35:37.199Z | Lightwave-Ledstrip | ESP32 Watchdog Timer Feed Fix in AudioActor Replaced taskYIELD() with vTaskDelay(1) to allow IDLE0 task to feed watchdog timer.
+  - [O26196] 2026-02-06T04:39:01.257Z | Lightwave-Ledstrip | Task Watchdog crash root cause identified: taskYIELD() insufficient for IDLE task scheduling Embedded engineer investigation reveals taskYIELD() cannot yield to lower-priority IDLE0 task, causing watchdog starvation on Core 0 A comprehensive embedded systems investigation diagnosed the critical Task Watchdog Timer (TW…
+- `decision_004` | status=current | confidence=high | first_seen=2025-10-16T11:24:43.113000Z | last_seen=2026-02-09T14:34:00.302000Z
+  - decision: Renderer cadence and effect code are budgeted around 120 FPS operation.
+  - rationale: No supporting excerpts found.
+  - alternatives: No supporting excerpts found.
+  - [O28338] 2026-02-09T14:34:00.302Z | Lightwave-Ledstrip | RendererActor runs at 120 FPS on ESP32 Core 1 with tight frame budget RendererActor implementation shows 8.33ms frame budget with 2-4ms render time and 2ms LED driver overhead.
+  - [O28118] 2026-02-08T14:54:32.369Z | Lightwave-Ledstrip | Designed dt-Correct Coupled Oscillator System for LED Effects Architected frame-rate independent Kuramoto oscillator implementation using semi-implicit Euler integration with O(N) local coupling and Gaussian perturbation support.
+  - [O28056] 2026-02-08T13:35:42.420Z | Lightwave-Ledstrip | Clock Spine Fix Validated on Hardware with Live Serial Output Analysis Debug logs confirm END-OF-HOP semantics working correctly with consistent timing across AudioActor, EsBeatClock, and RendererActor at runtime The primary session successfully validated the clock spine fix implementation on live hardware by analyzin…
+  - [O27900] 2026-02-08T10:19:49.323Z | v2 | Effects Documentation Reveals Rendering Techniques and Performance Requirements Documentation describes effect categories, temporal blending, supersampling, and 120 FPS performance budget with 8.3ms frame time limit.
+- `decision_002` | status=current | confidence=high | first_seen=2025-06-23T23:54:39Z | last_seen=2026-02-09T15:06:39.797000Z
+  - decision: Rainbow cycling and full hue-wheel sweeps are intentionally excluded.
+  - rationale: No supporting excerpts found.
+  - alternatives: No supporting excerpts found.
+  - [O28371] 2026-02-09T15:06:39.797Z | Lightwave-Ledstrip | Bloom Injection Refactored to Palette-Driven Color System Replaced HSV color summation with direct palette sampling, mapping 12 chroma bins to palette positions for dynamic color vocabulary The Bloom injection computation was completely refactored from HSV-based color summation to a palette-driven system.
+  - [O28358] 2026-02-09T14:56:27.180Z | Lightwave-Ledstrip | User Requests Prism Opacity Uncapping and Palette-Based Color System Two enhancement requests: remove 1.0 prism opacity cap for extreme ghosting effects, replace HSV with palette-driven color User provided feedback on Bloom parity implementation, confirming the prism effect's ghost layering behavior works as designed…
+  - [O27650] 2026-02-07T19:21:41.689Z | Lightwave-Ledstrip | Centre-Origin Architecture Documentation and Phase Convention Found Documentation establishes outward motion convention sin(k*dist - phase) and inward sin(k*dist + phase) with Audio_Reactive_Motion_Phase_Analysis.md cataloging 45+ outward effects and 8 inward effects.
+  - [O27577] 2026-02-07T18:51:28.049Z | Lightwave-Ledstrip | LightwaveOS Architecture Fundamentals and Critical Design Invariants Examined architecture quick reference documenting centre-origin rendering requirement, no-malloc constraint, defensive bounds checking pattern, and 120 FPS performance targets.
+- `decision_015` | status=current | confidence=high | first_seen=2025-10-05T21:55:54.785000Z | last_seen=2026-02-07T18:52:26.628000Z
+  - decision: LED silicon choice and dual-channel brightness caps are locked for current HW.
+  - rationale: No supporting excerpts found.
+  - alternatives: No supporting excerpts found.
+  - [O27579] 2026-02-07T18:52:26.628Z | Lightwave-Ledstrip | RGBIC LED Color Theory Specialist Research - Gamut, Gamma, and Power Considerations WS2812 LEDs produce bluish white at (255,255,255), require gamma 2.2-2.5 correction, consume 60mA per LED at full white creating 96W total load for 320 LEDs.
+  - [O27577] 2026-02-07T18:51:28.049Z | Lightwave-Ledstrip | LightwaveOS Architecture Fundamentals and Critical Design Invariants Examined architecture quick reference documenting centre-origin rendering requirement, no-malloc constraint, defensive bounds checking pattern, and 120 FPS performance targets.
+  - [O27565] 2026-02-07T18:47:54.030Z | Lightwave-Ledstrip | FastLED Power Management and Hardware Initialization Architecture Examined FastLED driver initialization revealing setMaxPowerInVoltsAndMilliamps power limiting and dual-strip addLeds configuration across ESP32-S3 and ESP32-P4 platforms.
+  - [O27564] 2026-02-07T18:47:51.083Z | Lightwave-Ledstrip | System Constraints Document - Performance, Memory, and Power Budgets ["Frame budget is 8.33ms for 120 FPS with effect calculation limited to 2ms max (typical 1.2ms) before FastLED.show() consumes 2.5ms","ESP32-S3 has 320KB SRAM with 280KB available after boot; LED buffer is 960 bytes (320 LEDs × 3 RGB), transition buf…
+- `decision_005` | status=current | confidence=high | first_seen=2025-10-05T21:55:54.785000Z | last_seen=2026-02-07T19:20:47.595000Z
+  - decision: Render-path heap allocation is prohibited in favour of static buffers.
+  - rationale: No supporting excerpts found.
+  - alternatives: No supporting excerpts found.
+  - [O27641] 2026-02-07T19:20:47.595Z | Lightwave-Ledstrip | System Architecture Constraints Drive Beat Pulse Simplicity Requirements Watchdog timeout risk, 2ms render budget, memory limits, and multi-stage pipeline necessitate minimal effect complexity for stability ESP32 watchdog timer management emerges as critical system stability constraint requiring aggressive prevention…
+  - [O27564] 2026-02-07T18:47:51.083Z | Lightwave-Ledstrip | System Constraints Document - Performance, Memory, and Power Budgets ["Frame budget is 8.33ms for 120 FPS with effect calculation limited to 2ms max (typical 1.2ms) before FastLED.show() consumes 2.5ms","ESP32-S3 has 320KB SRAM with 280KB available after boot; LED buffer is 960 bytes (320 LEDs × 3 RGB), transition buf…
+  - [O27544] 2026-02-07T18:42:26.268Z | Lightwave-Ledstrip | System Constraints and Performance Budget for Effect Development Examined hard limits including 2ms effect calculation budget, 120 FPS target, centre-origin rendering requirement, and power safety constraints.
+  - [O26771] 2026-02-06T16:12:08.751Z | Lightwave-Ledstrip | WsOtaCommands Base64 Decode Buffer Malloc Confirmed - Uncapped Dynamic Allocation handleOtaChunk line 613 allocates decode buffer using malloc from internal SRAM with size based on base64 input length without explicit cap Reading WsOtaCommands.cpp lines 590-670 confirmed the base64 decode buffer allocation pattern ide…
+- `decision_003` | status=current | confidence=high | first_seen=2025-10-16T15:19:24.418000Z | last_seen=2026-02-07T19:20:47.595000Z
+  - decision: PSRAM-enabled builds are required to avoid runtime memory failures.
+  - rationale: No supporting excerpts found.
+  - alternatives: No supporting excerpts found.
+  - [O27641] 2026-02-07T19:20:47.595Z | Lightwave-Ledstrip | System Architecture Constraints Drive Beat Pulse Simplicity Requirements Watchdog timeout risk, 2ms render budget, memory limits, and multi-stage pipeline necessitate minimal effect complexity for stability ESP32 watchdog timer management emerges as critical system stability constraint requiring aggressive prevention…
+  - [O26767] 2026-02-06T16:09:22.349Z | Lightwave-Ledstrip | Frame Capture Deferred Allocation Analysis Complete - Not a Significant Problem Subagent analysis concluded 2.9KB PSRAM allocation for debug capture is acceptable design with proper failure handling already in place The PRIMARY session dispatched a specialized subagent task to analyze the frame capture "deferred alloc…
+  - [O26531] 2026-02-06T14:38:25.184Z | Lightwave-Ledstrip | Complete platformio.ini Configuration Reveals Missing PSRAM Initialization in Default Environment Full 536-line build configuration confirms esp32dev_audio lacks board_build.psram_type = opi while other environments correctly configure PSRAM PRIMARY session read complete platformio.ini (536 lines) confirming the root…
+  - [O26517] 2026-02-06T14:34:00.004Z | Lightwave-Ledstrip | Historical Memory Investigation Documentation Retrieved from Claude-Mem Five key observations from January 30 session reveal previous PSRAM misconfiguration analysis and internal SRAM exhaustion diagnosis PRIMARY session retrieved five historical observations from Claude-Mem spanning January 30 to February 6, revealin…
+- `decision_013` | status=current | confidence=high | first_seen=2026-01-28T05:17:25.852000Z | last_seen=2026-02-08T21:43:02.979000Z
+  - decision: System limits are maintained via single-source constants with validation checks.
+  - rationale: No supporting excerpts found.
+  - alternatives: No supporting excerpts found.
+  - [O28238] 2026-02-08T21:43:02.979Z | Lightwave-Ledstrip | Effect Registration Ends at ID 122 with Validation Registration sequence concludes with Kuramoto Transport at ID 122 followed by count validation against limits::MAX_EFFECTS The effect registration concludes with Kuramoto Transport at ID 122, followed by validation logic that compares the actual registration count aga…
+  - [O28028] 2026-02-08T13:22:31.323Z | Lightwave-Ledstrip | BeatPulseBloomEffect registration verification Grep confirms BeatPulseBloomEffect properly integrated into CoreEffects registration system at effect ID 121 Grep verification confirms BeatPulseBloomEffect properly integrated into effect registration system.
+  - [O27933] 2026-02-08T11:56:02.004Z | Lightwave-Ledstrip | MAX_EFFECTS Single Source of Truth Architecture with Compile-Time Validation Effect count limit (121) defined once in config/limits.h and validated across 15+ subsystems via static assertions and bounds checking The grep search reveals LightwaveOS implements rigorous **single source of truth** architecture for the eff…
+  - [O27668] 2026-02-07T19:28:35.094Z | Lightwave-Ledstrip | System Limits Configuration Single Source of Truth limits.h defines MAX_EFFECTS=120, MAX_PALETTES=75, MAX_ZONES=8 as centralized constants with static assertion enforcement preventing component drift.
+- `decision_009` | status=current | confidence=high | first_seen=2025-10-10T11:00:26.531000Z | last_seen=2026-02-06T17:34:26.610000Z
+  - decision: Actor boundaries and explicit state ownership are the primary concurrency model.
+  - rationale: No supporting excerpts found.
+  - alternatives: No supporting excerpts found.
+  - [O27133] 2026-02-06T17:34:26.610Z | Lightwave-Ledstrip | ConnectionManager Implements Actor-Based Connection State Machine with Swift 6 Strict Concurrency Actor-isolated connection management with 7 connection states, delegate pattern for ready state, and async event stream consumption.
+  - [O26087] 2026-02-05T23:04:35.088Z | Lightwave-Ledstrip | ZoneViewModel State Management Implementation @Observable ViewModel with 150ms debouncing, optimistic updates, WebSocket-preferred networking, centre-origin symmetric boundary calculations, and pending state tracking for echo prevention The ZoneViewModel implementation reveals sophisticated state management patterns a…
+  - [O24122] 2026-01-31T14:46:15.037Z | Lightwave-Ledstrip | WebServer.cpp shows firmware v2 architecture with Actor System integration Firmware implements REST and WebSocket APIs with NodeOrchestrator for thread-safe state management.
+  - [O23265] 2026-01-30T00:37:56.269Z | Lightwave-Ledstrip | ActorSystem orchestrates lifecycle management for renderer, show director, and audio actors Singleton coordinator creates actors in dependency order with RendererActor first, then ShowDirectorActor and AudioActor.

@@ -1,0 +1,18 @@
+{
+  "totals": {
+    "sdk_sessions": 90,
+    "observations": 4368,
+    "user_prompts": 3154
+  },
+  "sources": {
+    "cursor": 42,
+    "codex": 3,
+    "vscode_extensions": 44,
+    "claude_code": 1
+  },
+  "search_checks": {
+    "LightwaveOS": 398,
+    "Blackbox": 6,
+    "esptool": 26
+  }
+}

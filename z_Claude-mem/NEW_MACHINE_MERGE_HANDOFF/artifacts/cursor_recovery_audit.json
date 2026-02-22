@@ -1,0 +1,13 @@
+{
+  "known_sessions_total": 917,
+  "recoverable_full_transcript": 42,
+  "metadata_only": 875,
+  "global_composer_ids": 228,
+  "global_bubble_ids": 42,
+  "global_missing_composer_without_bubbles": 186,
+  "global_missing_with_aux_data": 0,
+  "workspace_all_composers_ids": 779,
+  "first_pass_export_transcript_sessions": 41,
+  "second_pass_export_transcript_sessions": 42,
+  "new_transcript_sessions_recovered_in_second_pass": 1
+}

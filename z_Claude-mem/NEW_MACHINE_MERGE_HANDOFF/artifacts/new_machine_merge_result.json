@@ -1,0 +1,80 @@
+{
+  "timestamp": "20260210-061834",
+  "db_path": "/Users/spectrasynq/.claude-mem/claude-mem.db",
+  "backup_files": [
+    "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/z_Claude-mem/NEW_MACHINE_MERGE_HANDOFF/artifacts/new_machine_db_backup/claude-mem.db.20260210-061834.bak",
+    "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/z_Claude-mem/NEW_MACHINE_MERGE_HANDOFF/artifacts/new_machine_db_backup/claude-mem.db-wal.20260210-061834.bak",
+    "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/z_Claude-mem/NEW_MACHINE_MERGE_HANDOFF/artifacts/new_machine_db_backup/claude-mem.db-shm.20260210-061834.bak"
+  ],
+  "before": {
+    "sdk_sessions": 984,
+    "observations": 28426,
+    "user_prompts": 11671,
+    "fts_lightwaveos_hits": 2877
+  },
+  "replay": [
+    {
+      "file": "cursor_import_payload.json",
+      "http_status": 200,
+      "stats": {
+        "sessionsImported": 42,
+        "sessionsSkipped": 0,
+        "summariesImported": 0,
+        "summariesSkipped": 0,
+        "observationsImported": 2245,
+        "observationsSkipped": 0,
+        "promptsImported": 1045,
+        "promptsSkipped": 0
+      },
+      "ok": true
+    },
+    {
+      "file": "codex_import_payload.json",
+      "http_status": 200,
+      "stats": {
+        "sessionsImported": 3,
+        "sessionsSkipped": 0,
+        "summariesImported": 0,
+        "summariesSkipped": 0,
+        "observationsImported": 78,
+        "observationsSkipped": 0,
+        "promptsImported": 42,
+        "promptsSkipped": 0
+      },
+      "ok": true
+    },
+    {
+      "file": "vscode_extension_import_payload.json",
+      "ok": false,
+      "http_status": 413,
+      "error": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Error<br> &nbsp; &nbsp;at RN (/Users/spectrasynq/.claude/plugins/cache/thedotmack/claude-mem/9.0.9/scripts/worker-service.cjs:42:423385)<br> &nbsp; &nbsp;at CK (/Users/spectrasynq/.claude/plugins/cache/thedotmack/claude-mem/9.0.9/scripts/worker-service.cjs:42:427479)<br> &nbsp; &nbsp;at &lt;anonymous&gt; (/Users/spectrasynq/.claude/plugins/cache/thedotmack/claude-mem/9.0.9/scripts/worker-service.cjs:42:571137)<br> &nbsp; &nbsp;at &lt;anonymous&gt; (/Users/spectrasynq/.claude/plugins/cache/thedotmack/claude-mem/9.0.9/scripts/worker-service.cjs:55:4058)<br> &nbsp; &nbsp;at m (/Users/spectrasynq/.claude/plugins/cache/thedotmack/claude-mem/9.0.9/scripts/worker-service.cjs:55:9244)<br> &nbsp;"
+    },
+    {
+      "file": "claude_code_import_payload.json",
+      "http_status": 200,
+      "stats": {
+        "sessionsImported": 1,
+        "sessionsSkipped": 0,
+        "summariesImported": 0,
+        "summariesSkipped": 0,
+        "observationsImported": 0,
+        "observationsSkipped": 0,
+        "promptsImported": 2,
+        "promptsSkipped": 0
+      },
+      "ok": true
+    }
+  ],
+  "after": {
+    "sdk_sessions": 1030,
+    "observations": 30749,
+    "user_prompts": 12760,
+    "fts_lightwaveos_hits": 2967
+  },
+  "delta": {
+    "sdk_sessions": 46,
+    "observations": 2323,
+    "user_prompts": 1089,
+    "fts_lightwaveos_hits": 90
+  }
+}

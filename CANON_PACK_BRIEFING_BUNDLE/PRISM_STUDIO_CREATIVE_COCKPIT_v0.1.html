@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PRISM Studio — Creative Cockpit v0.1</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, system-ui, sans-serif;
+    background: #f5f5f8;
+    color: #1a1a2e;
+    padding: 24px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Title Block ── */
+  .title-block {
+    background: #1a1a2e;
+    border-radius: 12px;
+    padding: 20px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+  }
+  .title-block h1 { color: #fff; font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
+  .title-block .subtitle { color: #7c8cf0; font-size: 15px; margin-top: 2px; }
+  .title-block .meta { color: #666; font-size: 12px; margin-top: 4px; }
+  .title-block .version-tag {
+    color: #f57f17; font-size: 11px; font-weight: 700;
+    border: 1px solid #f57f1755; border-radius: 4px; padding: 4px 10px;
+    white-space: nowrap;
+  }
+
+  /* ── Grid Layout ── */
+  .grid-2x3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 20px;
+  }
+
+  /* ── Cluster Card ── */
+  .cluster {
+    border-radius: 14px;
+    border: 2px solid;
+    padding: 20px 24px 24px;
+    position: relative;
+  }
+  .cluster-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .cluster-num {
+    font-size: 13px;
+    font-weight: 700;
+    opacity: 0.5;
+  }
+  .cluster-title {
+    font-size: 18px;
+    font-weight: 700;
+  }
+  .cluster-subtitle {
+    font-size: 12px;
+    color: #666;
+    font-weight: 400;
+  }
+
+  /* ── Cluster Colours ── */
+  .c-screen   { background: #f0f4ff; border-color: #7c8cf0; }
+  .c-loop     { background: #fff8f0; border-color: #ff9800; }
+  .c-data     { background: #f5f0ff; border-color: #9b6fd4; }
+  .c-stems    { background: #f0fff0; border-color: #4caf50; }
+  .c-laws     { background: #fff0f0; border-color: #e53935; }
+  .c-bundle   { background: #f0f0ff; border-color: #5c6bc0; }
+
+  /* ── Inner Block ── */
+  .block {
+    border-radius: 8px;
+    border: 1.5px solid;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+  }
+  .block:last-child { margin-bottom: 0; }
+  .block-title {
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .block-badge {
+    font-size: 9px;
+    font-weight: 500;
+    padding: 1px 6px;
+    border-radius: 3px;
+    vertical-align: middle;
+    margin-left: 6px;
+  }
+  .block p, .block li {
+    font-size: 11px;
+    color: #555;
+    line-height: 1.55;
+  }
+  .block ul { padding-left: 16px; }
+  .block li { margin-bottom: 1px; }
+
+  /* ── Constitution Box ── */
+  .constitution {
+    background: #fff8e1;
+    border: 2px solid #f57f17;
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-top: 10px;
+  }
+  .constitution .con-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: #b71c1c;
+    font-style: italic;
+    margin-bottom: 3px;
+  }
+  .constitution p {
+    font-size: 10px;
+    color: #b71c1c;
+    line-height: 1.5;
+  }
+
+  /* ── Chrome Bar ── */
+  .chrome-bar {
+    background: #1a1a2e;
+    border-radius: 6px;
+    padding: 6px 14px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 12px;
+  }
+  .chrome-label {
+    font-size: 10px;
+    color: #888;
+    font-weight: 500;
+  }
+  .mode-btn {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+  }
+  .mode-active { background: #7c8cf0; color: #fff; border: 1px solid #5570e6; }
+  .mode-inactive { background: #2a2a4e; color: #aaa; border: 1px solid #444; }
+  .chrome-sep { width: 1px; height: 18px; background: #444; }
+  .zoom-btn {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: 600;
+  }
+  .zoom-active { background: #00897b; color: #fff; }
+  .zoom-inactive { border: 1px dashed #555; color: #555; }
+  .chrome-note {
+    font-size: 9px;
+    color: #666;
+    margin-left: auto;
+  }
+
+  /* ── Panel Blocks (Screen Layout) ── */
+  .screen-panels {
+    display: grid;
+    grid-template-columns: 110px 1fr 120px;
+    grid-template-rows: auto auto auto;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .panel-stage {
+    grid-column: 1 / -1;
+    background: #c8d6ff; border-color: #5570e6;
+    text-align: center;
+  }
+  .panel-mixer { background: #e8d8ff; border-color: #9b6fd4; grid-row: span 2; }
+  .panel-field { background: #dff5dd; border-color: #4caf50; }
+  .panel-wave  { background: #e0e0e0; border-color: #999; }
+  .panel-inspector { background: #fff3e0; border-color: #ff9800; grid-row: span 2; }
+  .panel-intent {
+    grid-column: 1 / -1;
+    background: #1a1a2e; border-color: #1a1a2e;
+  }
+  .panel-intent .block-title { color: #7c8cf0; }
+  .panel-intent p { color: #aaa; }
+
+  /* ── Fader Labels ── */
+  .fader-label {
+    font-size: 10px;
+    color: #555;
+    font-family: 'Inter', monospace;
+    line-height: 1.6;
+  }
+  .fader-label b { color: #9b6fd4; }
+
+  /* ── Moment Chips (in Field) ── */
+  .moment-row {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 6px;
+  }
+  .moment-chip {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 600;
+    text-align: center;
+    line-height: 1.3;
+  }
+  .moment-chip .material { font-weight: 400; font-size: 8px; opacity: 0.7; }
+  .mc-intro   { background: #b8e6b3; border: 1px solid #4caf50; flex: 1; }
+  .mc-build   { background: #b8e6b3; border: 1px solid #4caf50; flex: 1.5; }
+  .mc-snare   { background: #fff3cd; border: 1px solid #ffc107; flex: 0.5; }
+  .mc-drop    { background: #ffcccb; border: 1px solid #e74c3c; flex: 2; }
+  .mc-outro   { background: #b8e6b3; border: 1px solid #4caf50; flex: 1; }
+
+  /* ── Loop Flow ── */
+  .loop-flow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .loop-step {
+    border-radius: 8px;
+    border: 1.5px solid;
+    padding: 8px 14px;
+    min-width: 110px;
+  }
+  .loop-step .step-title { font-size: 12px; font-weight: 700; margin-bottom: 3px; }
+  .loop-step p { font-size: 10px; color: #555; line-height: 1.4; }
+  .loop-arrow { font-size: 18px; color: #999; }
+  .ls-import  { background: #ffe0b2; border-color: #ff9800; }
+  .ls-draft   { background: #c8e6c9; border-color: #4caf50; }
+  .ls-rehearse { background: #bbdefb; border-color: #2196f3; }
+  .ls-perform { background: #e1bee7; border-color: #9c27b0; }
+  .ls-publish { background: #ffcdd2; border-color: #e53935; }
+
+  /* ── Data Model Nesting ── */
+  .dm-show {
+    border: 1.5px dashed #9b6fd4;
+    border-radius: 8px;
+    background: #ede7f6;
+    padding: 12px;
+  }
+  .dm-moment {
+    border: 1.5px solid #7e57c2;
+    border-radius: 8px;
+    background: #d1c4e9;
+    padding: 10px;
+    margin-top: 8px;
+  }
+  .dm-cues {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .cue-scene    { background: #ffecb3; border-color: #ffa000; }
+  .cue-envelope { background: #b3e5fc; border-color: #0288d1; }
+  .cue-trigger  { background: #ffcdd2; border-color: #e53935; }
+
+  /* ── Bottom row blocks ── */
+  .dm-bottom {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .dm-prim8 { background: #e8eaf6; border-color: #3f51b5; }
+  .dm-zoom  { background: #e0f2f1; border-color: #00897b; }
+  .dm-pattern { background: #f8bbd0; border-color: #c2185b; }
+
+  /* ── Stem Rails ── */
+  .stem-rails { margin-bottom: 10px; }
+  .stem-rail {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 0;
+    border-bottom: 1px solid #e0e0e0;
+  }
+  .stem-rail:last-child { border-bottom: none; }
+  .stem-name {
+    font-size: 9px;
+    font-weight: 700;
+    width: 48px;
+    padding: 2px 6px;
+    background: #fff;
+    border: 1px solid #66bb6a;
+    border-radius: 3px;
+    text-align: center;
+  }
+  .stem-vis {
+    flex: 1;
+    height: 14px;
+    position: relative;
+    border-bottom: 1px solid #66bb6a;
+  }
+  .stem-tick {
+    position: absolute;
+    width: 2px; height: 10px;
+    background: #333;
+    top: 2px;
+  }
+
+  /* ── Patch Chips Detail ── */
+  .patch-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .patch-chip-ex {
+    background: #e8f5e9;
+    border: 1px solid #4caf50;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 9px;
+    line-height: 1.4;
+  }
+  .patch-chip-ex .name { font-weight: 700; }
+  .patch-chip-ex .route { font-weight: 400; }
+  .patch-chip-ex .mode { font-size: 8px; color: #888; }
+  .route-red { color: #e53935; }
+  .route-blue { color: #0288d1; }
+  .route-orange { color: #ff9800; }
+
+  /* ── Routing Modes ── */
+  .routing-modes {
+    display: flex;
+    gap: 6px;
+    margin: 8px 0;
+  }
+  .rm-tag {
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+  }
+  .rm-trigger  { background: #ffcdd2; color: #c62828; }
+  .rm-envelope { background: #b3e5fc; color: #01579b; }
+  .rm-density  { background: #e1bee7; color: #6a1b9a; }
+
+  /* ── Instrument Laws Layout ── */
+  .laws-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+  }
+
+  /* ── Zone Rings Diagram ── */
+  .zone-rings {
+    display: flex;
+    justify-content: center;
+    padding: 12px 0;
+  }
+  .ring-set {
+    position: relative;
+    width: 120px;
+    height: 120px;
+  }
+  .ring {
+    position: absolute;
+    border-radius: 50%;
+    border: 2px solid;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+  }
+  .ring-edge  { width: 120px; height: 120px; border-color: #e57373; }
+  .ring-outer { width: 90px;  height: 90px;  border-color: #ef9a9a; }
+  .ring-inner { width: 60px;  height: 60px;  border-color: #ef9a9a; }
+  .ring-core  { width: 34px;  height: 34px;  border-color: #e57373; background: #e5737333; }
+  .ring-label {
+    position: absolute;
+    font-size: 7px;
+    font-weight: 600;
+    color: #555;
+    left: 50%;
+    transform: translateX(-50%);
+    white-space: nowrap;
+  }
+
+  .zone-block { background: #fce4ec; border-color: #e57373; }
+  .material-block { background: #e8eaf6; border-color: #5c6bc0; }
+  .continuity-block { background: #e0f7fa; border-color: #00acc1; }
+
+  /* ── Continuity Law Items ── */
+  .law-item {
+    background: #b2ebf2;
+    border: 1px solid #00acc1;
+    border-radius: 4px;
+    padding: 5px 8px;
+    margin-bottom: 5px;
+  }
+  .law-item .law-num { font-size: 10px; font-weight: 600; }
+  .law-item .law-desc { font-size: 9px; color: #555; }
+
+  /* ── Material Swatches ── */
+  .swatch-row {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+  }
+  .swatch {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 8px;
+    color: #555;
+  }
+  .swatch-dot {
+    width: 12px; height: 12px;
+    border-radius: 3px;
+  }
+
+  /* ── ShowBundle Layers ── */
+  .bundle-layers { display: flex; flex-direction: column; gap: 6px; }
+  .bundle-layer {
+    border-radius: 6px;
+    border: 1.5px solid;
+    padding: 6px 10px;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .bundle-layer .bl-name { font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .bundle-layer .bl-desc { font-size: 9px; color: #555; }
+  .bl-manifest  { background: #fff; border-color: #5c6bc0; }
+  .bl-show      { background: #d1c4e9; border-color: #7e57c2; }
+  .bl-routing   { background: #c8e6c9; border-color: #4caf50; }
+  .bl-analysis  { background: #ffe0b2; border-color: #ff9800; }
+  .bl-edits     { background: #fff3e0; border-color: #ff9800; }
+  .bl-materials { background: #e8eaf6; border-color: #3f51b5; }
+
+  /* ── Pipeline Steps ── */
+  .pipeline-steps {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin: 8px 0;
+  }
+  .pipeline-step {
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    border: 1px solid;
+  }
+  .ps-locate    { background: #ffe0b2; border-color: #ff9800; }
+  .ps-evaluate  { background: #c8e6c9; border-color: #4caf50; }
+  .ps-blend     { background: #bbdefb; border-color: #2196f3; }
+  .ps-material  { background: #e1bee7; border-color: #9c27b0; }
+  .ps-composite { background: #ffcdd2; border-color: #e53935; }
+  .ps-output    { background: #1a1a2e; color: #fff; border-color: #1a1a2e; }
+  .ps-arrow { color: #999; font-size: 14px; }
+
+  /* ── Computed / Precompiled ── */
+  .runtime-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .rt-col {
+    background: #e0f2f1;
+    border: 1px solid #00897b;
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+  .rt-col .rt-heading { font-size: 10px; font-weight: 700; margin-bottom: 4px; }
+  .rt-col li { font-size: 10px; color: #555; margin-bottom: 1px; }
+
+  /* ── Selection Rule Table ── */
+  .sel-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10px;
+    margin-top: 6px;
+  }
+  .sel-table th {
+    text-align: left;
+    padding: 4px 8px;
+    background: #fff3e0;
+    border-bottom: 2px solid #ff9800;
+    font-weight: 600;
+    font-size: 9px;
+    color: #e65100;
+  }
+  .sel-table td {
+    padding: 3px 8px;
+    border-bottom: 1px solid #eee;
+    color: #555;
+  }
+  .sel-table tr:last-child td { border-bottom: none; }
+
+  /* ── Iterate Arrows ── */
+  .iterate-note {
+    font-size: 10px;
+    color: #888;
+    text-align: center;
+    margin-top: 6px;
+    font-style: italic;
+  }
+
+  /* ── Connectors ── */
+  .connector-strip {
+    display: flex;
+    justify-content: space-around;
+    padding: 6px 0;
+    font-size: 9px;
+    color: #888;
+  }
+  .connector-strip span {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .dot-purple { color: #9b6fd4; }
+  .dot-green  { color: #4caf50; }
+  .dot-blue   { color: #5c6bc0; }
+  .dot-red    { color: #e53935; }
+
+  /* ── Print ── */
+  @media print {
+    body { padding: 8px; background: #fff; }
+    .grid-2x3 { gap: 10px; }
+    .cluster { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- TITLE BLOCK                                                     -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+<div class="title-block">
+  <div>
+    <h1>PRISM STUDIO</h1>
+    <div class="subtitle">Creative Cockpit v0.1</div>
+    <div class="meta">SpectraSynq | DAW for Light</div>
+  </div>
+  <div class="version-tag">+ Inspector rules, Mode Switch, Zoom Ladder, Constitution fixes</div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- CROSS-CLUSTER CONNECTORS                                        -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+<div class="connector-strip">
+  <span class="dot-purple">Screen displays Moments from Data Model</span>
+  <span class="dot-green">Stem Rack routing generates Cues</span>
+  <span class="dot-blue">Data Model compiles to ShowBundle</span>
+  <span class="dot-red">Publish exports ShowBundle to device</span>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- 2x3 GRID                                                        -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+<div class="grid-2x3">
+
+<!-- ──────────────────────────────────────── -->
+<!-- 1. THE SCREEN                             -->
+<!-- ──────────────────────────────────────── -->
+<div class="cluster c-screen">
+  <div class="cluster-header">
+    <span class="cluster-num">1.</span>
+    <span class="cluster-title">THE SCREEN</span>
+    <span class="cluster-subtitle">Panel Layout + Controls</span>
+  </div>
+
+  <!-- Chrome Bar -->
+  <div class="chrome-bar">
+    <span class="chrome-label">MODE</span>
+    <span class="mode-btn mode-inactive">DRAFT</span>
+    <span class="mode-btn mode-active">REHEARSE</span>
+    <span class="mode-btn mode-inactive">PERFORM</span>
+    <span class="mode-btn mode-inactive">PUBLISH</span>
+    <div class="chrome-sep"></div>
+    <span class="chrome-label">ZOOM</span>
+    <span class="zoom-btn zoom-inactive">Section</span>
+    <span class="zoom-btn zoom-active">Bar</span>
+    <span class="zoom-btn zoom-inactive">Beat</span>
+    <span class="zoom-btn zoom-inactive">Sub</span>
+    <span class="chrome-note">D &rarr; R &rarr; P: linear. Any &rarr; Draft: always.</span>
+  </div>
+
+  <!-- Panel Grid -->
+  <div class="screen-panels">
+    <!-- Stage -->
+    <div class="block panel-stage">
+      <div class="block-title">THE STAGE</div>
+      <p>320 LED preview | always visible | 80px fixed</p>
+    </div>
+
+    <!-- Mixer -->
+    <div class="block panel-mixer">
+      <div class="block-title">MIXER</div>
+      <p style="font-size:10px;margin-bottom:4px;">8 faders</p>
+      <div class="fader-label">
+        <b>PRE</b> ━━<br>
+        <b>IMP</b> ━━<br>
+        <b>MAS</b> ━━<br>
+        <b>MOM</b> ━━<br>
+        <b>HEA</b> ━━<br>
+        <b>SPA</b> ━━<br>
+        <b>TEX</b> ━━<br>
+        <b>GRA</b> ━━
+      </div>
+      <div class="swatch-row" style="margin-top:6px;">
+        <span class="swatch"><span class="swatch-dot" style="background:#ff6b35"></span></span>
+        <span class="swatch"><span class="swatch-dot" style="background:#4ecdc4"></span></span>
+        <span class="swatch"><span class="swatch-dot" style="background:#e84393"></span></span>
+        <span class="swatch"><span class="swatch-dot" style="background:#a29bfe"></span></span>
+      </div>
+      <p style="font-size:9px;color:#9b6fd4;margin-top:4px;">Live in Perform<br>Read-only in Rehearse</p>
+    </div>
+
+    <!-- Field -->
+    <div class="block panel-field">
+      <div class="block-title">THE FIELD</div>
+      <p>x = time | y = energy | scrollable + zoomable</p>
+      <div class="moment-row" style="margin-top:6px;">
+        <div class="moment-chip mc-intro">Intro<br><span class="material">Ice</span></div>
+        <div class="moment-chip mc-build">Buildup<br><span class="material">Smoke</span></div>
+        <div class="moment-chip mc-snare">/\</div>
+        <div class="moment-chip mc-drop">DROP<br><span class="material">Magma</span></div>
+        <div class="moment-chip mc-outro">Outro<br><span class="material">Silk</span></div>
+      </div>
+      <p style="font-size:9px;color:#4caf50;text-align:center;margin-top:2px;">energy contour (click Moment block to select)</p>
+    </div>
+
+    <!-- Inspector -->
+    <div class="block panel-inspector">
+      <div class="block-title">INSPECTOR <span class="block-badge" style="background:#fff3e0;color:#ff9800;">context-sensitive</span></div>
+      <div style="text-align:center;margin:6px 0;">
+        <svg width="60" height="60" viewBox="0 0 60 60">
+          <circle cx="30" cy="30" r="26" fill="none" stroke="#ffcc80" stroke-width="1"/>
+          <polygon points="30,6 48,22 44,46 30,55 16,46 12,22" fill="#ff980033" stroke="#ff9800" stroke-width="1.5"/>
+        </svg>
+        <div style="font-size:8px;color:#888;">Prim8 radar</div>
+      </div>
+      <div style="text-align:center;">
+        <svg width="42" height="42" viewBox="0 0 42 42">
+          <circle cx="21" cy="21" r="18" fill="none" stroke="#ff9800" stroke-width="1.5"/>
+          <circle cx="21" cy="21" r="11" fill="none" stroke="#ff9800" stroke-width="1"/>
+          <circle cx="21" cy="21" r="5" fill="#ff980066" stroke="#ff9800" stroke-width="1"/>
+        </svg>
+        <div style="font-size:8px;color:#888;">zone map</div>
+      </div>
+      <p style="font-size:9px;color:#ff9800;text-align:center;margin-top:4px;">AI reading</p>
+      <p style="font-size:8px;color:#888;text-align:center;font-style:italic;">"Building tension..."</p>
+    </div>
+
+    <!-- Waveform -->
+    <div class="block panel-wave">
+      <p style="text-align:center;">WAVEFORM &mdash; beats | sections | energy overlay</p>
+    </div>
+
+    <!-- Intent Bar -->
+    <div class="block panel-intent">
+      <div class="block-title">INTENT BAR</div>
+      <p><span style="color:#7c8cf0;font-weight:500;">CMD</span> &nbsp;"make the drop feel like the world splitting open"</p>
+    </div>
+  </div>
+
+  <!-- Selection Rule -->
+  <div class="block" style="background:#fff8f0;border-color:#ff9800;">
+    <div class="block-title" style="color:#e65100;">SELECTION &rarr; INSPECTOR RULE</div>
+    <table class="sel-table">
+      <tr><th>Click...</th><th>Inspector shows</th></tr>
+      <tr><td>Moment block</td><td>material, baseline Prim8, zone layout, entry Scene</td></tr>
+      <tr><td>Envelope curve</td><td>target prim, control points, blend mode, gain</td></tr>
+      <tr><td>Trigger tick</td><td>impulse shape (atk/hold/decay), spike values, target zone</td></tr>
+      <tr><td>Stem rail</td><td>routing popover (Patch Chip), corrections</td></tr>
+      <tr><td style="color:#e65100;font-weight:600;">Nothing selected</td><td style="color:#888;">Prim8 radar + zone map + AI reading at playhead</td></tr>
+    </table>
+  </div>
+</div>
+
+
+<!-- ──────────────────────────────────────── -->
+<!-- 2. THE LOOP                               -->
+<!-- ──────────────────────────────────────── -->
+<div class="cluster c-loop">
+  <div class="cluster-header">
+    <span class="cluster-num">2.</span>
+    <span class="cluster-title">THE LOOP</span>
+    <span class="cluster-subtitle">Creation Flow (mirrors Mode Switch)</span>
+  </div>
+
+  <div class="loop-flow">
+    <div class="loop-step ls-import">
+      <div class="step-title">IMPORT</div>
+      <p>Drop track<br>Trinity analyses<br>15s to first draft</p>
+    </div>
+    <span class="loop-arrow">&rarr;</span>
+    <div class="loop-step ls-draft">
+      <div class="step-title">DRAFT</div>
+      <p>Draw energy<br>Place Moments<br>Speak intent</p>
+    </div>
+    <span class="loop-arrow">&rarr;</span>
+    <div class="loop-step ls-rehearse">
+      <div class="step-title">REHEARSE</div>
+      <p>Watch + mark<br>Fix marks<br>Watch again</p>
+    </div>
+    <span class="loop-arrow">&rarr;</span>
+    <div class="loop-step ls-perform">
+      <div class="step-title">PERFORM</div>
+      <p>Ride faders live<br>Record automation<br>Tab5 encoders</p>
+    </div>
+    <span class="loop-arrow">&rarr;</span>
+    <div class="loop-step ls-publish">
+      <div class="step-title">PUBLISH</div>
+      <p>To device<br>To video<br>To community</p>
+    </div>
+  </div>
+
+  <div class="iterate-note">Rehearse &harr; Draft: iterate &nbsp;&nbsp;|&nbsp;&nbsp; Perform &rarr; Draft: record &rarr; refine</div>
+</div>
+
+
+<!-- ──────────────────────────────────────── -->
+<!-- 3. DATA MODEL                             -->
+<!-- ──────────────────────────────────────── -->
+<div class="cluster c-data">
+  <div class="cluster-header">
+    <span class="cluster-num">3.</span>
+    <span class="cluster-title">DATA MODEL</span>
+    <span class="cluster-subtitle">Containment Hierarchy</span>
+  </div>
+
+  <div class="dm-show">
+    <div class="block-title" style="font-size:15px;">SHOW</div>
+    <p style="font-size:10px;color:#555;">{ name, artist, duration, bpm, key }</p>
+
+    <div class="dm-moment">
+      <div class="block-title" style="font-size:14px;">MOMENT</div>
+      <p style="font-size:10px;color:#555;">{ time, name, material, baseline: Prim8[8], zones }</p>
+      <p style="font-size:10px;color:#888;margin-top:2px;">The human unit of composition. Maps to sections/bars. Contains all cue types.</p>
+
+      <div class="dm-cues">
+        <!-- Scene -->
+        <div class="block cue-scene">
+          <div class="block-title">SCENE <span style="font-weight:400;font-size:10px;color:#888;">"switch"</span></div>
+          <ul>
+            <li>time: offset within Moment</li>
+            <li>transition: { mode, duration }</li>
+            <li>&nbsp;&nbsp;crossfade | morph | cut</li>
+            <li>changes:</li>
+            <li>&nbsp;&nbsp;material | zones | baseline</li>
+          </ul>
+        </div>
+        <!-- Envelope -->
+        <div class="block cue-envelope">
+          <div class="block-title">ENVELOPE <span style="font-weight:400;font-size:10px;color:#888;">"shape"</span></div>
+          <ul>
+            <li>target: one PrimitiveId</li>
+            <li>points: ControlPoint[] (bezier)</li>
+            <li>blend: add | mul | set</li>
+          </ul>
+          <svg width="100%" height="20" style="margin-top:4px;">
+            <polyline points="0,18 20,16 50,10 80,4 100,12 140,18" fill="none" stroke="#0288d1" stroke-width="2"/>
+          </svg>
+        </div>
+        <!-- Trigger -->
+        <div class="block cue-trigger">
+          <div class="block-title">TRIGGER <span style="font-weight:400;font-size:10px;color:#888;">"hit"</span></div>
+          <ul>
+            <li>time: beat-relative</li>
+            <li>impulse: { atk, hold, decay }</li>
+            <li>spike: Partial&lt;Prim8&gt;</li>
+            <li>target: zone | null (all)</li>
+          </ul>
+          <svg width="100%" height="20" style="margin-top:4px;">
+            <polyline points="0,18 10,18 15,2 20,2 25,6 50,16 80,18" fill="none" stroke="#e53935" stroke-width="2"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom row -->
+  <div class="dm-bottom">
+    <div class="block dm-prim8">
+      <div class="block-title">Prim8</div>
+      <p>8 floats [0,1] &mdash; universal vocabulary</p>
+      <p style="margin-top:3px;">pressure | impact | mass | momentum<br>heat | space | texture | gravity[-1,+1]</p>
+      <p style="margin-top:4px;font-weight:600;font-size:10px;">effective(t) = baseline + envelopes(t) + triggers(t)</p>
+    </div>
+    <div class="block dm-zoom">
+      <div class="block-title">ZOOM LEVELS</div>
+      <ul>
+        <li><b>Section</b> &mdash; Moments + materials + baselines</li>
+        <li><b>Bar</b> &mdash; draw Envelopes + place Triggers</li>
+        <li><b>Beat</b> &mdash; edit Trigger shapes + timing</li>
+        <li><b>Sub-beat</b> &mdash; atk/hold/decay + per-prim spike</li>
+      </ul>
+    </div>
+    <div class="block dm-pattern">
+      <div class="block-title">PATTERN</div>
+      <p style="font-size:10px;color:#888;margin-bottom:3px;">generates Triggers</p>
+      <ul>
+        <li>source: on-kick | on-snare | every-beat</li>
+        <li>template: Trigger shape</li>
+        <li>variation: 0-100% (humanise)</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+
+<!-- ──────────────────────────────────────── -->
+<!-- 4. STEM RACK                              -->
+<!-- ──────────────────────────────────────── -->
+<div class="cluster c-stems">
+  <div class="cluster-header">
+    <span class="cluster-num">4.</span>
+    <span class="cluster-title">STEM RACK</span>
+    <span class="cluster-subtitle">Sound-to-Light Wiring</span>
+  </div>
+
+  <div class="block" style="background:#e8f5e9;border-color:#66bb6a;">
+    <div class="block-title">STEM RAILS</div>
+    <p style="margin-bottom:6px;">7 rails, one per stem, beneath Moments in the Field</p>
+    <div class="stem-rails">
+      <div class="stem-rail"><span class="stem-name">KICK</span><div class="stem-vis"><span class="stem-tick" style="left:10%"></span><span class="stem-tick" style="left:22%"></span><span class="stem-tick" style="left:34%"></span><span class="stem-tick" style="left:46%"></span><span class="stem-tick" style="left:58%"></span><span class="stem-tick" style="left:70%"></span></div></div>
+      <div class="stem-rail"><span class="stem-name">CLAP</span><div class="stem-vis"><span class="stem-tick" style="left:22%"></span><span class="stem-tick" style="left:58%"></span></div></div>
+      <div class="stem-rail"><span class="stem-name">SNARE</span><div class="stem-vis"><span class="stem-tick" style="left:30%"></span><span class="stem-tick" style="left:36%"></span><span class="stem-tick" style="left:41%"></span><span class="stem-tick" style="left:45%"></span><span class="stem-tick" style="left:48%"></span><span class="stem-tick" style="left:50%"></span></div></div>
+      <div class="stem-rail"><span class="stem-name">BASS</span><div class="stem-vis" style="border-bottom-style:dotted;"></div></div>
+      <div class="stem-rail"><span class="stem-name">LEAD</span><div class="stem-vis" style="border-bottom-style:dotted;"></div></div>
+      <div class="stem-rail"><span class="stem-name">NOISE</span><div class="stem-vis"></div></div>
+      <div class="stem-rail"><span class="stem-name">ENERGY</span><div class="stem-vis" style="border-bottom: 2px solid #4caf50;"></div></div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+    <!-- Patch Chip -->
+    <div class="block" style="background:#fff;border-color:#66bb6a;">
+      <div class="block-title">PATCH CHIP</div>
+      <p>Each rail has a routing control:</p>
+      <div class="patch-row" style="margin-top:6px;">
+        <div class="patch-chip-ex">
+          <div class="name">KICK</div>
+          <div class="route route-red">&rarr; IMP 90%</div>
+          <div class="mode">trigger</div>
+        </div>
+        <div class="patch-chip-ex">
+          <div class="name">SNARE</div>
+          <div class="route route-blue">&rarr; PRE 95%</div>
+          <div class="mode">density</div>
+        </div>
+        <div class="patch-chip-ex">
+          <div class="name">LEAD</div>
+          <div class="route route-orange">&rarr; HEA 80%</div>
+          <div class="mode">envelope</div>
+        </div>
+      </div>
+      <p style="margin-top:6px;">Drag chip &rarr; Mixer fader<br>Click chip &rarr; routing popover</p>
+    </div>
+
+    <!-- Routing Modes + Corrections -->
+    <div>
+      <div class="block" style="background:#fff;border-color:#66bb6a;">
+        <div class="block-title">3 ROUTING MODES</div>
+        <div class="routing-modes">
+          <span class="rm-tag rm-trigger">trigger</span>
+          <span class="rm-tag rm-envelope">envelope</span>
+          <span class="rm-tag rm-density">density</span>
+        </div>
+        <p>trigger: transient &rarr; spike (kick, clap)<br>
+           envelope: amplitude &rarr; curve (bass, lead)<br>
+           density: events/s &rarr; ramp (snare roll)</p>
+      </div>
+
+      <div class="block" style="background:#fff3e0;border-color:#ff9800;">
+        <div class="block-title">CORRECTIONS</div>
+        <p>Click: delete | Dbl-click: add | Drag-Y: reclassify<br>
+           Drag-X: re-time | Marquee: bulk | P+drag: paint</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Route Combination Constitution -->
+  <div class="constitution">
+    <div class="con-label">CONSTITUTION: ROUTE COMBINATION RULE</div>
+    <p>Untargeted cues apply to all rings. Targeted cues add/override per ring. Order: global first, then targeted, with set > mul > add precedence.</p>
+  </div>
+</div>
+
+
+<!-- ──────────────────────────────────────── -->
+<!-- 5. INSTRUMENT LAWS                        -->
+<!-- ──────────────────────────────────────── -->
+<div class="cluster c-laws">
+  <div class="cluster-header">
+    <span class="cluster-num">5.</span>
+    <span class="cluster-title">INSTRUMENT LAWS</span>
+    <span class="cluster-subtitle">Zones, Materials, Continuity</span>
+  </div>
+
+  <div class="laws-grid">
+    <!-- Zones -->
+    <div class="block zone-block">
+      <div class="block-title">ZONE LAYOUT</div>
+      <div class="zone-rings">
+        <div class="ring-set">
+          <div class="ring ring-edge"></div>
+          <div class="ring ring-outer"></div>
+          <div class="ring ring-inner"></div>
+          <div class="ring ring-core"></div>
+          <span class="ring-label" style="top:3px;">edge</span>
+          <span class="ring-label" style="top:18px;">outer</span>
+          <span class="ring-label" style="top:33px;">inner</span>
+          <span class="ring-label" style="top:50%;transform:translate(-50%,-50%);">core</span>
+        </div>
+      </div>
+      <ul>
+        <li>Presets: Single | Dual | Quad</li>
+        <li>Groups: all | centre | rim | alternate</li>
+        <li>Cue target: null=all | "core" | ["core","inner"]</li>
+        <li>Solo/Mute per ring for preview</li>
+      </ul>
+
+      <!-- Fix A -->
+      <div class="constitution">
+        <div class="con-label">FIX A &mdash; ZONE PRIM8 COMPUTATION:</div>
+        <p>ring_prim8 = moment.baseline<br>
+           &nbsp;&nbsp;+ global_cues(t) + targeted_cues(t)<br>
+           &nbsp;&nbsp;+ zone_baseline_delta (if defined)</p>
+      </div>
+
+      <!-- Fix B -->
+      <div class="constitution">
+        <div class="con-label">FIX B &mdash; BLEND PRECEDENCE ORDER:</div>
+        <p>1. Moment baseline (constant)<br>
+           2. Global cues: set > mul > add<br>
+           3. Targeted cues: set > mul > add</p>
+      </div>
+    </div>
+
+    <!-- Material Adapter -->
+    <div class="block material-block">
+      <div class="block-title">MATERIAL ADAPTER</div>
+
+      <p style="font-weight:600;margin-top:4px;">RECEIVES:</p>
+      <ul>
+        <li>Prim8[8] per zone</li>
+        <li>zone_id + span</li>
+        <li>elapsed_ms</li>
+        <li>transition_alpha [0,1]</li>
+      </ul>
+
+      <p style="font-weight:600;margin-top:6px;">PRODUCES:</p>
+      <ul><li>CRGB[zone.led_count]</li></ul>
+
+      <p style="font-weight:600;margin-top:6px;">DEFINES:</p>
+      <ul>
+        <li>palettes: cold + warm + accent</li>
+        <li>motion: attack + sustain + decay</li>
+        <li>surface: noise + grain + reflectivity</li>
+        <li>interpretation[8]: per-prim behaviour</li>
+      </ul>
+
+      <p style="font-size:10px;font-weight:600;color:#5c6bc0;margin-top:8px;">Rule: all materials respond to all 8 prims.<br>Same input, different character.</p>
+
+      <div class="swatch-row">
+        <span class="swatch"><span class="swatch-dot" style="background:#ff6b35"></span>magma</span>
+        <span class="swatch"><span class="swatch-dot" style="background:#4ecdc4"></span>ice</span>
+        <span class="swatch"><span class="swatch-dot" style="background:#e84393"></span>neon</span>
+        <span class="swatch"><span class="swatch-dot" style="background:#a29bfe"></span>silk</span>
+      </div>
+      <p style="font-size:10px;margin-top:4px;">void | chrome | smoke | crystal</p>
+    </div>
+
+    <!-- Continuity Laws -->
+    <div class="block continuity-block">
+      <div class="block-title">CONTINUITY LAWS</div>
+
+      <div class="law-item"><span class="law-num">1. C0 Continuity</span><br><span class="law-desc">No jumps unless explicit cut</span></div>
+      <div class="law-item"><span class="law-num">2. Envelope Carry</span><br><span class="law-desc">End value interpolates to new baseline</span></div>
+      <div class="law-item"><span class="law-num">3. Triggers are Additive</span><br><span class="law-desc">Spike adds to effective, not to zero</span></div>
+      <div class="law-item"><span class="law-num">4. Scene Modes</span><br><span class="law-desc">crossfade: blend two material renders<br>morph: interpolate interpretation table</span></div>
+      <div class="law-item"><span class="law-num">5. Zone Independence</span><br><span class="law-desc">Each ring evaluates own Prim8 pipeline</span></div>
+
+      <p style="font-size:10px;font-weight:600;color:#00acc1;margin-top:8px;">Cut micro-ramp: 50ms softening<br>Clamp all values to [0, 1]</p>
+
+      <!-- Scene Interaction Rule -->
+      <div class="constitution">
+        <div class="con-label">SCENE INTERACTION RULE:</div>
+        <p>Scenes mutate baseline + material.<br>
+           Active envelopes re-anchor to new baseline over transition duration.<br>
+           Triggers keep firing through transition.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ──────────────────────────────────────── -->
+<!-- 6. SHOWBUNDLE                             -->
+<!-- ──────────────────────────────────────── -->
+<div class="cluster c-bundle">
+  <div class="cluster-header">
+    <span class="cluster-num">6.</span>
+    <span class="cluster-title">SHOWBUNDLE</span>
+    <span class="cluster-subtitle">The Shippable Unit (2-8 KB)</span>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+    <!-- Left: Bundle Contents -->
+    <div>
+      <div class="block" style="background:#e8eaf6;border-color:#5c6bc0;border-style:dashed;">
+        <div class="block-title" style="font-size:14px;">ShowBundle</div>
+        <div class="bundle-layers">
+          <div class="bundle-layer bl-manifest">
+            <span class="bl-name">manifest</span>
+            <span class="bl-desc">id | name | artist | track { title, bpm, key } | version | compat</span>
+          </div>
+          <div class="bundle-layer bl-show">
+            <span class="bl-name">show</span>
+            <span class="bl-desc">moments[] | global_baseline: Prim8 &mdash; the authored composition</span>
+          </div>
+          <div class="bundle-layer bl-routing">
+            <span class="bl-name">routing</span>
+            <span class="bl-desc">per_moment: { moment_id &rarr; StemRouting[] } &mdash; sound-to-light wiring</span>
+          </div>
+          <div class="bundle-layer bl-analysis">
+            <span class="bl-name">analysis_snapshot</span>
+            <span class="bl-desc">beats[] | downbeats[] | sections[] | stems{} | energy | hash</span>
+          </div>
+          <div class="bundle-layer bl-edits">
+            <span class="bl-name">edits</span>
+            <span class="bl-desc">base_hash | corrections[]: add | delete | move | reclassify | threshold</span>
+          </div>
+          <div class="bundle-layer bl-materials">
+            <span class="bl-name">material_refs</span>
+            <span class="bl-desc">used: MaterialId[] (built-in) | custom: MaterialDef[] (inline)</span>
+          </div>
+        </div>
+        <div style="background:#1a1a2e;border-radius:4px;padding:4px 8px;margin-top:6px;text-align:center;">
+          <span style="font-size:10px;color:#aaa;">analysis (Trinity) &rarr; edits (human) &rarr; effective (merged)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Runtime + Pipeline -->
+    <div>
+      <div class="runtime-split">
+        <div class="rt-col">
+          <div class="rt-heading">PRECOMPILED (read-only)</div>
+          <ul>
+            <li>Moment boundaries + baselines</li>
+            <li>Envelope control points (bezier)</li>
+            <li>Trigger event list + impulse shapes</li>
+            <li>Scene transitions + zone layouts</li>
+          </ul>
+        </div>
+        <div class="rt-col">
+          <div class="rt-heading">COMPUTED LIVE</div>
+          <ul>
+            <li>Envelope interpolation at current t</li>
+            <li>Trigger impulse evaluation</li>
+            <li>Prim8 stacking + zone targeting</li>
+            <li>Material rendering + transition blend</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="block" style="background:#fff;border-color:#00897b;">
+        <div class="block-title">RESOLUTION PIPELINE &mdash; Per Frame (120fps)</div>
+        <div class="pipeline-steps">
+          <span class="pipeline-step ps-locate">1. LOCATE</span>
+          <span class="ps-arrow">&rarr;</span>
+          <span class="pipeline-step ps-evaluate">2. EVALUATE</span>
+          <span class="ps-arrow">&rarr;</span>
+          <span class="pipeline-step ps-blend">3. BLEND</span>
+          <span class="ps-arrow">&rarr;</span>
+          <span class="pipeline-step ps-material">4. MATERIAL</span>
+          <span class="ps-arrow">&rarr;</span>
+          <span class="pipeline-step ps-composite">5. COMPOSITE</span>
+          <span class="ps-arrow">&rarr;</span>
+          <span class="pipeline-step ps-output">CRGB[]</span>
+        </div>
+        <ul style="font-size:9px;color:#555;line-height:1.6;">
+          <li><b>LOCATE:</b> time &rarr; which Moment? active Scene?</li>
+          <li><b>EVALUATE:</b> baseline + envelopes(t) + triggers(t) per zone</li>
+          <li><b>BLEND:</b> lerp(outgoing, incoming, alpha) with easing</li>
+          <li><b>MATERIAL:</b> adapter.render(prim8, zone, alpha) &rarr; pixels</li>
+          <li><b>COMPOSITE:</b> stitch zones &rarr; CRGB[320] &rarr; LED buffer</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- end grid-2x3 -->
+
+</body>
+</html>

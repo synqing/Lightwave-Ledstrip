@@ -1,0 +1,633 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2800 2100" font-family="Inter, -apple-system, system-ui, sans-serif">
+  <defs>
+    <style>
+      .cluster-bg { rx: 16; ry: 16; stroke-width: 2; }
+      .block { rx: 8; ry: 8; stroke-width: 1.5; }
+      .label { font-size: 13px; fill: #1a1a2e; font-weight: 500; }
+      .label-sm { font-size: 11px; fill: #555; font-weight: 400; }
+      .cluster-title { font-size: 18px; font-weight: 700; fill: #1a1a2e; }
+      .cluster-subtitle { font-size: 12px; font-weight: 400; fill: #666; }
+      .arrow { stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+      .arrow-thin { stroke-width: 1.5; fill: none; marker-end: url(#arrowhead-sm); }
+      .contain-arrow { stroke-width: 1.5; fill: none; stroke-dasharray: 4,3; }
+      .constitution { font-size: 10px; fill: #b71c1c; font-weight: 700; font-style: italic; }
+      .mode-active { fill: #7c8cf0; stroke: #5570e6; }
+      .mode-inactive { fill: #2a2a4e; stroke: #444; }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#444"/>
+    </marker>
+    <marker id="arrowhead-sm" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#777"/>
+    </marker>
+  </defs>
+
+  <!-- ============================================================ -->
+  <!-- CLUSTER 1: THE SCREEN (top-left)                             -->
+  <!-- ============================================================ -->
+  <rect x="30" y="30" width="880" height="570" fill="#f0f4ff" stroke="#7c8cf0" class="cluster-bg"/>
+  <text x="50" y="62" class="cluster-title">1. THE SCREEN</text>
+  <text x="220" y="62" class="cluster-subtitle">Panel Layout + Controls</text>
+
+  <!-- ====== TOP CHROME BAR (Mode Switch + Zoom Ladder) ====== -->
+  <rect x="50" y="78" width="840" height="36" fill="#1a1a2e" stroke="#333" class="block"/>
+
+  <!-- Mode Switch — state machine -->
+  <text x="62" y="100" class="label-sm" font-size="10px" fill="#888">MODE</text>
+  <rect x="105" y="83" width="65" height="26" class="mode-inactive" rx="4"/>
+  <text x="137" y="100" text-anchor="middle" class="label-sm" font-size="10px" fill="#aaa">DRAFT</text>
+  <rect x="175" y="83" width="80" height="26" class="mode-active" rx="4"/>
+  <text x="215" y="100" text-anchor="middle" class="label-sm" font-size="10px" fill="#fff" font-weight="700">REHEARSE</text>
+  <rect x="260" y="83" width="80" height="26" class="mode-inactive" rx="4"/>
+  <text x="300" y="100" text-anchor="middle" class="label-sm" font-size="10px" fill="#aaa">PERFORM</text>
+  <rect x="345" y="83" width="70" height="26" class="mode-inactive" rx="4"/>
+  <text x="380" y="100" text-anchor="middle" class="label-sm" font-size="10px" fill="#aaa">PUBLISH</text>
+
+  <!-- Mode state arrows -->
+  <text x="430" y="100" class="label-sm" font-size="9px" fill="#666">D → R → P: linear. Any → Draft: always available.</text>
+
+  <!-- Zoom Ladder — always visible -->
+  <text x="630" y="100" class="label-sm" font-size="10px" fill="#888">ZOOM</text>
+  <rect x="673" y="85" width="52" height="22" fill="#00897b" rx="3"/>
+  <text x="699" y="100" text-anchor="middle" class="label-sm" font-size="9px" fill="#fff" font-weight="600">Bar</text>
+  <!-- Zoom level indicators -->
+  <text x="730" y="100" class="label-sm" font-size="9px" fill="#555">Section</text>
+  <text x="730" y="100" class="label-sm" font-size="9px" fill="#555">Section</text>
+  <rect x="726" y="86" width="50" height="20" fill="none" stroke="#555" rx="3" stroke-dasharray="3,2"/>
+  <rect x="780" y="86" width="40" height="20" fill="none" stroke="#555" rx="3" stroke-dasharray="3,2"/>
+  <text x="800" y="100" text-anchor="middle" class="label-sm" font-size="9px" fill="#555">Beat</text>
+  <rect x="824" y="86" width="54" height="20" fill="none" stroke="#555" rx="3" stroke-dasharray="3,2"/>
+  <text x="851" y="100" text-anchor="middle" class="label-sm" font-size="9px" fill="#555">Sub</text>
+
+  <!-- Stage -->
+  <rect x="50" y="122" width="840" height="55" fill="#c8d6ff" stroke="#5570e6" class="block"/>
+  <text x="420" y="150" text-anchor="middle" class="label" font-size="14px" font-weight="700">THE STAGE</text>
+  <text x="420" y="168" text-anchor="middle" class="label-sm">320 LED preview | always visible | 80px fixed</text>
+
+  <!-- Mixer -->
+  <rect x="50" y="190" width="120" height="240" fill="#e8d8ff" stroke="#9b6fd4" class="block"/>
+  <text x="110" y="212" text-anchor="middle" class="label" font-weight="700">MIXER</text>
+  <text x="110" y="228" text-anchor="middle" class="label-sm">8 faders</text>
+  <!-- Fader labels -->
+  <text x="68" y="248" class="label-sm" font-size="10px">PRE ━━</text>
+  <text x="68" y="263" class="label-sm" font-size="10px">IMP ━━</text>
+  <text x="68" y="278" class="label-sm" font-size="10px">MAS ━━</text>
+  <text x="68" y="293" class="label-sm" font-size="10px">MOM ━━</text>
+  <text x="68" y="308" class="label-sm" font-size="10px">HEA ━━</text>
+  <text x="68" y="323" class="label-sm" font-size="10px">SPA ━━</text>
+  <text x="68" y="338" class="label-sm" font-size="10px">TEX ━━</text>
+  <text x="68" y="353" class="label-sm" font-size="10px">GRA ━━</text>
+  <text x="110" y="378" text-anchor="middle" class="label-sm" font-size="10px">Materials</text>
+  <rect x="62" y="386" width="16" height="16" fill="#ff6b35" rx="3"/>
+  <rect x="82" y="386" width="16" height="16" fill="#4ecdc4" rx="3"/>
+  <rect x="102" y="386" width="16" height="16" fill="#e84393" rx="3"/>
+  <rect x="122" y="386" width="16" height="16" fill="#a29bfe" rx="3"/>
+  <text x="110" y="416" text-anchor="middle" class="label-sm" font-size="9px" fill="#9b6fd4">Live in Perform</text>
+  <text x="110" y="426" text-anchor="middle" class="label-sm" font-size="9px" fill="#9b6fd4">Read-only in Rehearse</text>
+
+  <!-- Field -->
+  <rect x="185" y="190" width="560" height="175" fill="#dff5dd" stroke="#4caf50" class="block"/>
+  <text x="465" y="212" text-anchor="middle" class="label" font-size="14px" font-weight="700">THE FIELD</text>
+  <text x="465" y="228" text-anchor="middle" class="label-sm">x = time | y = energy | scrollable + zoomable</text>
+  <!-- Moment blocks inside field -->
+  <rect x="205" y="240" width="70" height="45" fill="#b8e6b3" stroke="#4caf50" rx="4"/>
+  <text x="240" y="260" text-anchor="middle" class="label-sm" font-size="10px">Intro</text>
+  <text x="240" y="274" text-anchor="middle" class="label-sm" font-size="9px">Ice</text>
+  <rect x="285" y="240" width="110" height="45" fill="#b8e6b3" stroke="#4caf50" rx="4"/>
+  <text x="340" y="260" text-anchor="middle" class="label-sm" font-size="10px">Buildup</text>
+  <text x="340" y="274" text-anchor="middle" class="label-sm" font-size="9px">Smoke</text>
+  <rect x="405" y="240" width="35" height="45" fill="#fff3cd" stroke="#ffc107" rx="4"/>
+  <text x="422" y="266" text-anchor="middle" class="label-sm" font-size="9px">/\</text>
+  <rect x="450" y="240" width="150" height="45" fill="#ffcccb" stroke="#e74c3c" rx="4"/>
+  <text x="525" y="260" text-anchor="middle" class="label-sm" font-size="10px">DROP</text>
+  <text x="525" y="274" text-anchor="middle" class="label-sm" font-size="9px">Magma</text>
+  <rect x="610" y="240" width="80" height="45" fill="#b8e6b3" stroke="#4caf50" rx="4"/>
+  <text x="650" y="260" text-anchor="middle" class="label-sm" font-size="10px">Outro</text>
+  <text x="650" y="274" text-anchor="middle" class="label-sm" font-size="9px">Silk</text>
+  <!-- Energy contour -->
+  <polyline points="205,320 240,316 310,310 360,298 400,286 420,320 440,265 510,252 560,256 610,270 650,286 700,305 730,318" fill="none" stroke="#4caf50" stroke-width="2" opacity="0.6"/>
+  <text x="465" y="348" text-anchor="middle" class="label-sm" font-size="10px" fill="#4caf50">energy contour (click Moment block to select)</text>
+
+  <!-- INSPECTOR (was Scope — now with selection rules) -->
+  <rect x="760" y="190" width="130" height="240" fill="#fff3e0" stroke="#ff9800" class="block"/>
+  <text x="825" y="212" text-anchor="middle" class="label" font-weight="700">INSPECTOR</text>
+  <text x="825" y="227" text-anchor="middle" class="label-sm" font-size="9px" fill="#ff9800">context-sensitive</text>
+  <!-- Spider chart -->
+  <circle cx="825" cy="272" r="32" fill="none" stroke="#ffcc80" stroke-width="1"/>
+  <polygon points="825,244 848,262 844,290 825,304 806,290 802,262" fill="#ff980033" stroke="#ff9800" stroke-width="1.5"/>
+  <text x="825" y="323" text-anchor="middle" class="label-sm" font-size="9px">Prim8 radar</text>
+  <!-- Zone map -->
+  <circle cx="825" cy="362" r="18" fill="none" stroke="#ff9800" stroke-width="1.5"/>
+  <circle cx="825" cy="362" r="11" fill="none" stroke="#ff9800" stroke-width="1"/>
+  <circle cx="825" cy="362" r="5" fill="#ff980066" stroke="#ff9800" stroke-width="1"/>
+  <text x="825" y="390" text-anchor="middle" class="label-sm" font-size="9px">zone map</text>
+  <text x="825" y="410" text-anchor="middle" class="label-sm" font-size="9px" fill="#ff9800">AI reading</text>
+  <text x="825" y="422" text-anchor="middle" class="label-sm" font-size="8px" fill="#888">"Building tension..."</text>
+
+  <!-- Waveform -->
+  <rect x="185" y="375" width="560" height="40" fill="#e0e0e0" stroke="#999" class="block"/>
+  <text x="465" y="396" text-anchor="middle" class="label-sm">WAVEFORM — beats | sections | energy overlay</text>
+  <polyline points="200,402 220,396 240,406 260,393 280,404 300,390 320,406 340,388 360,408 380,386 400,410 420,383 440,412 460,381 480,414 500,378 520,416 540,380 560,412 580,388 600,404 620,392 640,402 660,396 680,400 700,398 720,400" fill="none" stroke="#999" stroke-width="1" opacity="0.5"/>
+
+  <!-- Intent Bar -->
+  <rect x="50" y="445" width="840" height="45" fill="#1a1a2e" stroke="#1a1a2e" class="block"/>
+  <text x="58" y="470" class="label" fill="#7c8cf0" font-size="11px">CMD</text>
+  <text x="92" y="470" class="label" fill="#aaa" font-size="12px">"make the drop feel like the world splitting open"</text>
+  <text x="780" y="470" class="label" fill="#fff" font-size="12px">INTENT BAR</text>
+  <text x="840" y="482" text-anchor="middle" class="label-sm" fill="#888" font-size="10px">|> [] ()</text>
+
+  <!-- ====== SELECTION → INSPECTOR TABLE ====== -->
+  <rect x="50" y="500" width="840" height="90" fill="#fff8f0" stroke="#ff9800" class="block"/>
+  <text x="70" y="520" class="label" font-weight="700" font-size="12px" fill="#e65100">SELECTION → INSPECTOR RULE</text>
+  <text x="70" y="536" class="label-sm" font-size="10px">Click Moment block → Inspector shows: material, baseline Prim8, zone layout, entry Scene</text>
+  <text x="70" y="550" class="label-sm" font-size="10px">Click Envelope curve → Inspector shows: target prim, control points, blend mode, gain</text>
+  <text x="70" y="564" class="label-sm" font-size="10px">Click Trigger tick → Inspector shows: impulse shape (atk/hold/decay), spike values, target zone</text>
+  <text x="70" y="578" class="label-sm" font-size="10px">Click Stem rail → Inspector shows: routing popover (same as Patch Chip click), corrections</text>
+  <text x="680" y="520" class="label-sm" font-size="10px" fill="#e65100" font-weight="600">Nothing selected:</text>
+  <text x="680" y="536" class="label-sm" font-size="10px" fill="#888">Prim8 radar + zone map</text>
+  <text x="680" y="550" class="label-sm" font-size="10px" fill="#888">+ AI reading at playhead</text>
+
+
+  <!-- ============================================================ -->
+  <!-- CLUSTER 2: THE LOOP (top-right)                              -->
+  <!-- ============================================================ -->
+  <rect x="940" y="30" width="840" height="220" fill="#fff8f0" stroke="#ff9800" class="cluster-bg"/>
+  <text x="960" y="62" class="cluster-title">2. THE LOOP</text>
+  <text x="1100" y="62" class="cluster-subtitle">Creation Flow (mirrors Mode Switch)</text>
+
+  <!-- Import -->
+  <rect x="960" y="85" width="120" height="70" fill="#ffe0b2" stroke="#ff9800" class="block"/>
+  <text x="1020" y="112" text-anchor="middle" class="label" font-weight="700">IMPORT</text>
+  <text x="1020" y="128" text-anchor="middle" class="label-sm" font-size="10px">Drop track</text>
+  <text x="1020" y="140" text-anchor="middle" class="label-sm" font-size="10px">Trinity analyses</text>
+  <text x="1020" y="152" text-anchor="middle" class="label-sm" font-size="10px">15s to first draft</text>
+
+  <line x1="1085" y1="120" x2="1115" y2="120" class="arrow" stroke="#ff9800"/>
+
+  <!-- Draft -->
+  <rect x="1120" y="85" width="120" height="70" fill="#c8e6c9" stroke="#4caf50" class="block"/>
+  <text x="1180" y="112" text-anchor="middle" class="label" font-weight="700">DRAFT</text>
+  <text x="1180" y="128" text-anchor="middle" class="label-sm" font-size="10px">Draw energy</text>
+  <text x="1180" y="140" text-anchor="middle" class="label-sm" font-size="10px">Place Moments</text>
+  <text x="1180" y="152" text-anchor="middle" class="label-sm" font-size="10px">Speak intent</text>
+
+  <line x1="1245" y1="120" x2="1275" y2="120" class="arrow" stroke="#4caf50"/>
+
+  <!-- Rehearse -->
+  <rect x="1280" y="85" width="120" height="70" fill="#bbdefb" stroke="#2196f3" class="block"/>
+  <text x="1340" y="112" text-anchor="middle" class="label" font-weight="700">REHEARSE</text>
+  <text x="1340" y="128" text-anchor="middle" class="label-sm" font-size="10px">Watch + mark</text>
+  <text x="1340" y="140" text-anchor="middle" class="label-sm" font-size="10px">Fix marks</text>
+  <text x="1340" y="152" text-anchor="middle" class="label-sm" font-size="10px">Watch again</text>
+
+  <line x1="1405" y1="120" x2="1435" y2="120" class="arrow" stroke="#2196f3"/>
+
+  <!-- Perform -->
+  <rect x="1440" y="85" width="120" height="70" fill="#e1bee7" stroke="#9c27b0" class="block"/>
+  <text x="1500" y="112" text-anchor="middle" class="label" font-weight="700">PERFORM</text>
+  <text x="1500" y="128" text-anchor="middle" class="label-sm" font-size="10px">Ride faders live</text>
+  <text x="1500" y="140" text-anchor="middle" class="label-sm" font-size="10px">Record automation</text>
+  <text x="1500" y="152" text-anchor="middle" class="label-sm" font-size="10px">Tab5 encoders</text>
+
+  <line x1="1565" y1="120" x2="1595" y2="120" class="arrow" stroke="#9c27b0"/>
+
+  <!-- Publish -->
+  <rect x="1600" y="85" width="120" height="70" fill="#ffcdd2" stroke="#e53935" class="block"/>
+  <text x="1660" y="112" text-anchor="middle" class="label" font-weight="700">PUBLISH</text>
+  <text x="1660" y="128" text-anchor="middle" class="label-sm" font-size="10px">To device</text>
+  <text x="1660" y="140" text-anchor="middle" class="label-sm" font-size="10px">To video</text>
+  <text x="1660" y="152" text-anchor="middle" class="label-sm" font-size="10px">To community</text>
+
+  <!-- Feedback loop arrows -->
+  <path d="M 1340,160 L 1340,185 Q 1340,195 1330,195 L 1190,195 Q 1180,195 1180,185 L 1180,160" class="arrow-thin" stroke="#888" stroke-dasharray="5,3"/>
+  <text x="1260" y="210" text-anchor="middle" class="label-sm" font-size="10px" fill="#888">iterate</text>
+
+  <path d="M 1500,160 L 1500,215 Q 1500,225 1490,225 L 1190,225 Q 1180,225 1180,215 L 1180,160" class="arrow-thin" stroke="#888" stroke-dasharray="5,3"/>
+  <text x="1340" y="240" text-anchor="middle" class="label-sm" font-size="10px" fill="#888">record → refine</text>
+
+
+  <!-- ============================================================ -->
+  <!-- CLUSTER 3: DATA MODEL (middle-left)                          -->
+  <!-- ============================================================ -->
+  <rect x="30" y="630" width="880" height="500" fill="#f5f0ff" stroke="#9b6fd4" class="cluster-bg"/>
+  <text x="50" y="662" class="cluster-title">3. DATA MODEL</text>
+  <text x="225" y="662" class="cluster-subtitle">Containment Hierarchy</text>
+
+  <!-- Show -->
+  <rect x="50" y="680" width="840" height="435" fill="#ede7f6" stroke="#9b6fd4" class="block" stroke-dasharray="6,3"/>
+  <text x="70" y="705" class="label" font-weight="700" font-size="15px">SHOW</text>
+  <text x="145" y="705" class="label-sm">{ name, artist, duration, bpm, key }</text>
+
+  <!-- Moment -->
+  <rect x="70" y="720" width="800" height="330" fill="#d1c4e9" stroke="#7e57c2" class="block"/>
+  <text x="90" y="745" class="label" font-weight="700" font-size="14px">MOMENT</text>
+  <text x="200" y="745" class="label-sm">{ time, name, material, baseline: Prim8[8], zones }</text>
+  <text x="90" y="765" class="label-sm" font-size="10px">The human unit of composition. Maps to sections/bars. Contains all cue types.</text>
+
+  <!-- Scene -->
+  <rect x="90" y="780" width="240" height="120" fill="#ffecb3" stroke="#ffa000" class="block"/>
+  <text x="110" y="805" class="label" font-weight="700">SCENE</text>
+  <text x="175" y="805" class="label-sm" font-size="10px">"switch"</text>
+  <text x="110" y="825" class="label-sm" font-size="10px">time: offset within Moment</text>
+  <text x="110" y="840" class="label-sm" font-size="10px">transition: { mode, duration }</text>
+  <text x="110" y="855" class="label-sm" font-size="10px">  crossfade | morph | cut</text>
+  <text x="110" y="870" class="label-sm" font-size="10px">changes:</text>
+  <text x="110" y="885" class="label-sm" font-size="10px">  material | zones | baseline</text>
+
+  <!-- Envelope -->
+  <rect x="345" y="780" width="240" height="120" fill="#b3e5fc" stroke="#0288d1" class="block"/>
+  <text x="365" y="805" class="label" font-weight="700">ENVELOPE</text>
+  <text x="440" y="805" class="label-sm" font-size="10px">"shape"</text>
+  <text x="365" y="825" class="label-sm" font-size="10px">target: one PrimitiveId</text>
+  <text x="365" y="840" class="label-sm" font-size="10px">points: ControlPoint[] (bezier)</text>
+  <text x="365" y="855" class="label-sm" font-size="10px">blend: add | mul | set</text>
+  <polyline points="365,890 390,888 420,880 450,865 470,878 510,890 550,885" fill="none" stroke="#0288d1" stroke-width="2"/>
+
+  <!-- Trigger -->
+  <rect x="600" y="780" width="250" height="120" fill="#ffcdd2" stroke="#e53935" class="block"/>
+  <text x="620" y="805" class="label" font-weight="700">TRIGGER</text>
+  <text x="695" y="805" class="label-sm" font-size="10px">"hit"</text>
+  <text x="620" y="825" class="label-sm" font-size="10px">time: beat-relative</text>
+  <text x="620" y="840" class="label-sm" font-size="10px">impulse: { atk, hold, decay }</text>
+  <text x="620" y="855" class="label-sm" font-size="10px">spike: Partial&lt;Prim8&gt;</text>
+  <text x="620" y="870" class="label-sm" font-size="10px">target: zone | null (all)</text>
+  <polyline points="620,890 635,890 640,865 645,865 650,870 680,888 730,890" fill="none" stroke="#e53935" stroke-width="2"/>
+
+  <!-- Pattern -->
+  <rect x="600" y="915" width="250" height="95" fill="#f8bbd0" stroke="#c2185b" class="block"/>
+  <text x="620" y="940" class="label" font-weight="700">PATTERN</text>
+  <text x="700" y="940" class="label-sm" font-size="10px">generates Triggers</text>
+  <text x="620" y="960" class="label-sm" font-size="10px">source: on-kick | on-snare | every-beat</text>
+  <text x="620" y="975" class="label-sm" font-size="10px">template: Trigger shape</text>
+  <text x="620" y="990" class="label-sm" font-size="10px">variation: 0-100% (humanise)</text>
+
+  <!-- Pattern → Trigger arrow -->
+  <line x1="725" y1="915" x2="725" y2="905" class="arrow-thin" stroke="#c2185b"/>
+
+  <!-- Prim8 box -->
+  <rect x="90" y="915" width="240" height="95" fill="#e8eaf6" stroke="#3f51b5" class="block"/>
+  <text x="110" y="940" class="label" font-weight="700">Prim8</text>
+  <text x="170" y="940" class="label-sm" font-size="10px">8 floats [0,1] — the universal vocabulary</text>
+  <text x="110" y="962" class="label-sm" font-size="10px">pressure | impact | mass | momentum</text>
+  <text x="110" y="977" class="label-sm" font-size="10px">heat | space | texture | gravity[-1,+1]</text>
+  <text x="110" y="995" class="label-sm" font-size="10px" font-weight="600">effective(t) = baseline + envelopes(t) + triggers(t)</text>
+
+  <!-- Stacking arrows into Prim8 -->
+  <path d="M 210,900 L 210,912" class="arrow-thin" stroke="#ffa000"/>
+  <path d="M 465,900 L 350,912" class="arrow-thin" stroke="#0288d1"/>
+  <path d="M 600,890 L 340,920" class="arrow-thin" stroke="#e53935"/>
+
+  <!-- Zoom Levels -->
+  <rect x="345" y="915" width="240" height="95" fill="#e0f2f1" stroke="#00897b" class="block"/>
+  <text x="365" y="940" class="label" font-weight="700">ZOOM LEVELS</text>
+  <text x="365" y="960" class="label-sm" font-size="10px">Section — Moments + materials + baselines</text>
+  <text x="365" y="975" class="label-sm" font-size="10px">Bar — draw Envelopes + place Triggers</text>
+  <text x="365" y="990" class="label-sm" font-size="10px">Beat — edit Trigger shapes + timing</text>
+  <text x="365" y="1005" class="label-sm" font-size="10px">Sub-beat — atk/hold/decay + per-prim spike</text>
+
+
+  <!-- ============================================================ -->
+  <!-- CLUSTER 4: STEM RACK (middle-right)                          -->
+  <!-- ============================================================ -->
+  <rect x="940" y="280" width="840" height="430" fill="#f0fff0" stroke="#4caf50" class="cluster-bg"/>
+  <text x="960" y="312" class="cluster-title">4. STEM RACK</text>
+  <text x="1115" y="312" class="cluster-subtitle">Sound-to-Light Wiring</text>
+
+  <!-- Stem Rails -->
+  <rect x="960" y="330" width="500" height="280" fill="#e8f5e9" stroke="#66bb6a" class="block"/>
+  <text x="980" y="355" class="label" font-weight="700">STEM RAILS</text>
+  <text x="1090" y="355" class="label-sm" font-size="10px">7 rails, one per stem, beneath Moments</text>
+
+  <!-- Individual rails -->
+  <rect x="980" y="368" width="60" height="24" fill="#fff" stroke="#66bb6a" rx="4"/>
+  <text x="990" y="384" class="label-sm" font-size="9px" font-weight="600">KICK</text>
+  <line x1="1050" y1="380" x2="1440" y2="380" stroke="#66bb6a" stroke-width="1"/>
+  <line x1="1100" y1="372" x2="1100" y2="388" stroke="#333" stroke-width="1.5"/>
+  <line x1="1160" y1="372" x2="1160" y2="388" stroke="#333" stroke-width="1.5"/>
+  <line x1="1220" y1="372" x2="1220" y2="388" stroke="#333" stroke-width="1.5"/>
+  <line x1="1280" y1="372" x2="1280" y2="388" stroke="#333" stroke-width="1.5"/>
+  <line x1="1340" y1="372" x2="1340" y2="388" stroke="#333" stroke-width="1.5"/>
+  <line x1="1400" y1="372" x2="1400" y2="388" stroke="#333" stroke-width="1.5"/>
+
+  <rect x="980" y="396" width="60" height="24" fill="#fff" stroke="#66bb6a" rx="4"/>
+  <text x="990" y="412" class="label-sm" font-size="9px" font-weight="600">CLAP</text>
+  <line x1="1050" y1="408" x2="1440" y2="408" stroke="#66bb6a" stroke-width="1"/>
+  <line x1="1160" y1="400" x2="1160" y2="416" stroke="#333" stroke-width="1.5"/>
+  <line x1="1340" y1="400" x2="1340" y2="416" stroke="#333" stroke-width="1.5"/>
+
+  <rect x="980" y="424" width="60" height="24" fill="#fff" stroke="#66bb6a" rx="4"/>
+  <text x="990" y="440" class="label-sm" font-size="9px" font-weight="600">SNARE</text>
+  <line x1="1050" y1="436" x2="1440" y2="436" stroke="#66bb6a" stroke-width="1"/>
+  <line x1="1200" y1="428" x2="1200" y2="444" stroke="#333" stroke-width="1"/>
+  <line x1="1240" y1="428" x2="1240" y2="444" stroke="#333" stroke-width="1"/>
+  <line x1="1270" y1="428" x2="1270" y2="444" stroke="#333" stroke-width="1"/>
+  <line x1="1290" y1="428" x2="1290" y2="444" stroke="#333" stroke-width="1"/>
+  <line x1="1305" y1="428" x2="1305" y2="444" stroke="#333" stroke-width="1"/>
+  <line x1="1315" y1="428" x2="1315" y2="444" stroke="#333" stroke-width="1"/>
+  <rect x="1325" y="430" width="115" height="12" fill="#33333355" rx="2"/>
+
+  <rect x="980" y="452" width="60" height="24" fill="#fff" stroke="#66bb6a" rx="4"/>
+  <text x="990" y="468" class="label-sm" font-size="9px" font-weight="600">BASS</text>
+  <line x1="1050" y1="464" x2="1440" y2="464" stroke="#66bb6a" stroke-width="1"/>
+  <polyline points="1060,468 1100,458 1140,468 1180,458 1220,468 1260,458 1300,468 1340,454 1380,454 1420,454 1440,456" fill="none" stroke="#333" stroke-width="1.5"/>
+
+  <rect x="980" y="480" width="60" height="24" fill="#fff" stroke="#66bb6a" rx="4"/>
+  <text x="990" y="496" class="label-sm" font-size="9px" font-weight="600">LEAD</text>
+  <line x1="1050" y1="492" x2="1440" y2="492" stroke="#66bb6a" stroke-width="1"/>
+  <polyline points="1340,496 1350,486 1360,482 1380,480 1420,480 1440,482" fill="none" stroke="#333" stroke-width="1.5"/>
+
+  <rect x="980" y="508" width="60" height="24" fill="#fff" stroke="#66bb6a" rx="4"/>
+  <text x="990" y="524" class="label-sm" font-size="9px" font-weight="600">NOISE</text>
+  <line x1="1050" y1="520" x2="1440" y2="520" stroke="#66bb6a" stroke-width="1"/>
+
+  <rect x="980" y="536" width="60" height="24" fill="#fff" stroke="#66bb6a" rx="4"/>
+  <text x="990" y="552" class="label-sm" font-size="9px" font-weight="600">ENERGY</text>
+  <line x1="1050" y1="548" x2="1440" y2="548" stroke="#66bb6a" stroke-width="1"/>
+  <polyline points="1060,556 1140,550 1220,544 1300,535 1330,550 1350,530 1380,530 1420,534 1440,540" fill="none" stroke="#4caf50" stroke-width="2" opacity="0.5"/>
+
+  <!-- Patch Chip detail -->
+  <rect x="1480" y="330" width="280" height="155" fill="#fff" stroke="#66bb6a" class="block"/>
+  <text x="1500" y="355" class="label" font-weight="700">PATCH CHIP</text>
+  <text x="1500" y="375" class="label-sm" font-size="10px">Each rail has a routing control:</text>
+  <rect x="1500" y="385" width="80" height="50" fill="#e8f5e9" stroke="#4caf50" rx="4"/>
+  <text x="1510" y="400" class="label-sm" font-size="9px" font-weight="700">KICK</text>
+  <text x="1510" y="414" class="label-sm" font-size="9px" fill="#e53935">-> IMP 90%</text>
+  <text x="1510" y="428" class="label-sm" font-size="8px" fill="#888">trigger</text>
+
+  <rect x="1600" y="385" width="80" height="50" fill="#e8f5e9" stroke="#4caf50" rx="4"/>
+  <text x="1610" y="400" class="label-sm" font-size="9px" font-weight="700">SNARE</text>
+  <text x="1610" y="414" class="label-sm" font-size="9px" fill="#0288d1">-> PRE 95%</text>
+  <text x="1610" y="428" class="label-sm" font-size="8px" fill="#888">density</text>
+
+  <rect x="1700" y="385" width="56" height="50" fill="#e8f5e9" stroke="#4caf50" rx="4"/>
+  <text x="1710" y="400" class="label-sm" font-size="9px" font-weight="700">LEAD</text>
+  <text x="1710" y="414" class="label-sm" font-size="9px" fill="#ff9800">-> HEA 80%</text>
+  <text x="1710" y="428" class="label-sm" font-size="8px" fill="#888">envelope</text>
+
+  <text x="1500" y="458" class="label-sm" font-size="10px">Drag chip → Mixer fader</text>
+  <text x="1500" y="472" class="label-sm" font-size="10px">Click chip → routing popover</text>
+
+  <!-- 3 Routing Modes -->
+  <rect x="1480" y="500" width="280" height="100" fill="#fff" stroke="#66bb6a" class="block"/>
+  <text x="1500" y="525" class="label" font-weight="700">3 ROUTING MODES</text>
+
+  <rect x="1500" y="535" width="70" height="28" fill="#ffcdd2" stroke="#e53935" rx="4"/>
+  <text x="1535" y="554" text-anchor="middle" class="label-sm" font-size="10px" font-weight="600">trigger</text>
+
+  <rect x="1580" y="535" width="80" height="28" fill="#b3e5fc" stroke="#0288d1" rx="4"/>
+  <text x="1620" y="554" text-anchor="middle" class="label-sm" font-size="10px" font-weight="600">envelope</text>
+
+  <rect x="1670" y="535" width="70" height="28" fill="#e1bee7" stroke="#9c27b0" rx="4"/>
+  <text x="1705" y="554" text-anchor="middle" class="label-sm" font-size="10px" font-weight="600">density</text>
+
+  <text x="1500" y="582" class="label-sm" font-size="9px">trigger: transient → spike (kick, clap)</text>
+  <text x="1500" y="594" class="label-sm" font-size="9px">envelope: amplitude → curve (bass, lead)</text>
+
+  <!-- Corrections -->
+  <rect x="1480" y="615" width="280" height="55" fill="#fff3e0" stroke="#ff9800" class="block"/>
+  <text x="1500" y="638" class="label" font-weight="700" font-size="12px">CORRECTIONS</text>
+  <text x="1500" y="654" class="label-sm" font-size="10px">Click: delete | Dbl-click: add | Drag-Y: reclassify</text>
+  <text x="1500" y="666" class="label-sm" font-size="10px">Drag-X: re-time | Marquee: bulk | P+drag: paint</text>
+
+  <!-- ====== ROUTE COMBINATION RULE (constitution-grade) ====== -->
+  <rect x="960" y="680" width="800" height="24" fill="#fff8e1" stroke="#f57f17" rx="4" stroke-width="2"/>
+  <text x="970" y="696" class="constitution">CONSTITUTION: Untargeted cues apply to all rings. Targeted cues add/override per ring. Order: global first, then targeted, with set > mul > add precedence.</text>
+
+
+  <!-- ============================================================ -->
+  <!-- CLUSTER 5: INSTRUMENT LAWS (bottom-left)                     -->
+  <!-- ============================================================ -->
+  <rect x="30" y="1160" width="880" height="500" fill="#fff0f0" stroke="#e53935" class="cluster-bg"/>
+  <text x="50" y="1192" class="cluster-title">5. INSTRUMENT LAWS</text>
+  <text x="260" y="1192" class="cluster-subtitle">Zones, Materials, Continuity</text>
+
+  <!-- Zones -->
+  <rect x="50" y="1210" width="270" height="430" fill="#fce4ec" stroke="#e57373" class="block"/>
+  <text x="70" y="1235" class="label" font-weight="700">ZONE LAYOUT</text>
+
+  <!-- Concentric rings diagram -->
+  <circle cx="185" cy="1330" r="80" fill="none" stroke="#e57373" stroke-width="2"/>
+  <circle cx="185" cy="1330" r="60" fill="none" stroke="#ef9a9a" stroke-width="1.5"/>
+  <circle cx="185" cy="1330" r="40" fill="none" stroke="#ef9a9a" stroke-width="1.5"/>
+  <circle cx="185" cy="1330" r="20" fill="#e5737333" stroke="#e57373" stroke-width="2"/>
+
+  <text x="185" y="1334" text-anchor="middle" class="label-sm" font-size="8px" font-weight="600">core</text>
+  <text x="185" y="1302" text-anchor="middle" class="label-sm" font-size="8px">inner</text>
+  <text x="185" y="1282" text-anchor="middle" class="label-sm" font-size="8px">outer</text>
+  <text x="185" y="1260" text-anchor="middle" class="label-sm" font-size="8px">edge</text>
+
+  <text x="70" y="1435" class="label-sm" font-size="10px">Presets: Single | Dual | Quad</text>
+  <text x="70" y="1450" class="label-sm" font-size="10px">Groups: all | centre | rim | alternate</text>
+  <text x="70" y="1465" class="label-sm" font-size="10px">Cue target: null=all | "core" | ["core","inner"]</text>
+  <text x="70" y="1480" class="label-sm" font-size="10px">Solo/Mute per ring for preview</text>
+
+  <!-- ====== FIX A: Zone Independence Constitution ====== -->
+  <rect x="60" y="1495" width="250" height="60" fill="#fff8e1" stroke="#f57f17" rx="4" stroke-width="2"/>
+  <text x="70" y="1510" class="constitution">FIX A — ZONE PRIM8 COMPUTATION:</text>
+  <text x="70" y="1524" class="label-sm" font-size="9px" fill="#b71c1c">ring_prim8 = moment.baseline</text>
+  <text x="70" y="1537" class="label-sm" font-size="9px" fill="#b71c1c">  + global_cues(t) + targeted_cues(t)</text>
+  <text x="70" y="1550" class="label-sm" font-size="9px" fill="#b71c1c">  + zone_baseline_delta (if defined)</text>
+
+  <!-- ====== FIX B: Combination Order Constitution ====== -->
+  <rect x="60" y="1565" width="250" height="60" fill="#fff8e1" stroke="#f57f17" rx="4" stroke-width="2"/>
+  <text x="70" y="1580" class="constitution">FIX B — BLEND PRECEDENCE ORDER:</text>
+  <text x="70" y="1594" class="label-sm" font-size="9px" fill="#b71c1c">1. Moment baseline (constant)</text>
+  <text x="70" y="1607" class="label-sm" font-size="9px" fill="#b71c1c">2. Global cues: set > mul > add</text>
+  <text x="70" y="1620" class="label-sm" font-size="9px" fill="#b71c1c">3. Targeted cues: set > mul > add</text>
+
+  <!-- Materials -->
+  <rect x="335" y="1210" width="270" height="430" fill="#e8eaf6" stroke="#5c6bc0" class="block"/>
+  <text x="355" y="1235" class="label" font-weight="700">MATERIAL ADAPTER</text>
+
+  <text x="355" y="1260" class="label-sm" font-size="10px" font-weight="600">RECEIVES:</text>
+  <text x="355" y="1275" class="label-sm" font-size="10px">  Prim8[8] per zone</text>
+  <text x="355" y="1290" class="label-sm" font-size="10px">  zone_id + span</text>
+  <text x="355" y="1305" class="label-sm" font-size="10px">  elapsed_ms</text>
+  <text x="355" y="1320" class="label-sm" font-size="10px">  transition_alpha [0,1]</text>
+
+  <text x="355" y="1345" class="label-sm" font-size="10px" font-weight="600">PRODUCES:</text>
+  <text x="355" y="1360" class="label-sm" font-size="10px">  CRGB[zone.led_count]</text>
+
+  <text x="355" y="1385" class="label-sm" font-size="10px" font-weight="600">DEFINES:</text>
+  <text x="355" y="1400" class="label-sm" font-size="10px">  palettes: cold + warm + accent</text>
+  <text x="355" y="1415" class="label-sm" font-size="10px">  motion: attack + sustain + decay</text>
+  <text x="355" y="1430" class="label-sm" font-size="10px">  surface: noise + grain + reflectivity</text>
+  <text x="355" y="1445" class="label-sm" font-size="10px">  interpretation[8]: per-prim behaviour</text>
+
+  <text x="355" y="1475" class="label-sm" font-size="10px" font-weight="600" fill="#5c6bc0">Rule: all materials respond to all 8 prims.</text>
+  <text x="355" y="1490" class="label-sm" font-size="10px" font-weight="600" fill="#5c6bc0">Same input, different character.</text>
+
+  <!-- Materials color swatches -->
+  <rect x="355" y="1505" width="24" height="14" fill="#ff6b35" rx="3"/>
+  <text x="383" y="1516" class="label-sm" font-size="8px">magma</text>
+  <rect x="420" y="1505" width="24" height="14" fill="#4ecdc4" rx="3"/>
+  <text x="448" y="1516" class="label-sm" font-size="8px">ice</text>
+  <rect x="470" y="1505" width="24" height="14" fill="#e84393" rx="3"/>
+  <text x="498" y="1516" class="label-sm" font-size="8px">neon</text>
+  <rect x="528" y="1505" width="24" height="14" fill="#a29bfe" rx="3"/>
+  <text x="556" y="1516" class="label-sm" font-size="8px">silk</text>
+
+  <text x="355" y="1540" class="label-sm" font-size="10px">  void | chrome | smoke | crystal</text>
+
+  <!-- Continuity Laws -->
+  <rect x="620" y="1210" width="270" height="430" fill="#e0f7fa" stroke="#00acc1" class="block"/>
+  <text x="640" y="1235" class="label" font-weight="700">CONTINUITY LAWS</text>
+
+  <rect x="635" y="1250" width="240" height="40" fill="#b2ebf2" stroke="#00acc1" rx="4"/>
+  <text x="645" y="1267" class="label-sm" font-size="10px" font-weight="600">1. C0 Continuity</text>
+  <text x="645" y="1282" class="label-sm" font-size="9px">No jumps unless explicit cut</text>
+
+  <rect x="635" y="1298" width="240" height="40" fill="#b2ebf2" stroke="#00acc1" rx="4"/>
+  <text x="645" y="1315" class="label-sm" font-size="10px" font-weight="600">2. Envelope Carry</text>
+  <text x="645" y="1330" class="label-sm" font-size="9px">End value interpolates to new baseline</text>
+
+  <rect x="635" y="1346" width="240" height="40" fill="#b2ebf2" stroke="#00acc1" rx="4"/>
+  <text x="645" y="1363" class="label-sm" font-size="10px" font-weight="600">3. Triggers are Additive</text>
+  <text x="645" y="1378" class="label-sm" font-size="9px">Spike adds to effective, not to zero</text>
+
+  <rect x="635" y="1394" width="240" height="55" fill="#b2ebf2" stroke="#00acc1" rx="4"/>
+  <text x="645" y="1411" class="label-sm" font-size="10px" font-weight="600">4. Scene Modes</text>
+  <text x="645" y="1426" class="label-sm" font-size="9px">crossfade: blend two material renders</text>
+  <text x="645" y="1439" class="label-sm" font-size="9px">morph: interpolate interpretation table</text>
+
+  <rect x="635" y="1457" width="240" height="40" fill="#b2ebf2" stroke="#00acc1" rx="4"/>
+  <text x="645" y="1474" class="label-sm" font-size="10px" font-weight="600">5. Zone Independence</text>
+  <text x="645" y="1489" class="label-sm" font-size="9px">Each ring evaluates own Prim8 pipeline</text>
+
+  <text x="640" y="1520" class="label-sm" font-size="10px" fill="#00acc1" font-weight="600">Cut micro-ramp: 50ms softening</text>
+  <text x="640" y="1535" class="label-sm" font-size="10px" fill="#00acc1" font-weight="600">Clamp all values to [0, 1]</text>
+
+  <!-- ====== Continuity Constitution ====== -->
+  <rect x="635" y="1550" width="240" height="75" fill="#fff8e1" stroke="#f57f17" rx="4" stroke-width="2"/>
+  <text x="645" y="1565" class="constitution">SCENE INTERACTION RULE:</text>
+  <text x="645" y="1579" class="label-sm" font-size="9px" fill="#b71c1c">Scenes mutate baseline + material.</text>
+  <text x="645" y="1592" class="label-sm" font-size="9px" fill="#b71c1c">Active envelopes re-anchor to new</text>
+  <text x="645" y="1605" class="label-sm" font-size="9px" fill="#b71c1c">baseline over transition duration.</text>
+  <text x="645" y="1618" class="label-sm" font-size="9px" fill="#b71c1c">Triggers keep firing through transition.</text>
+
+
+  <!-- ============================================================ -->
+  <!-- CLUSTER 6: SHOWBUNDLE (bottom-right)                         -->
+  <!-- ============================================================ -->
+  <rect x="940" y="730" width="840" height="480" fill="#f0f0ff" stroke="#5c6bc0" class="cluster-bg"/>
+  <text x="960" y="762" class="cluster-title">6. SHOWBUNDLE</text>
+  <text x="1130" y="762" class="cluster-subtitle">The Shippable Unit (2-8 KB)</text>
+
+  <!-- Package diagram -->
+  <rect x="960" y="780" width="360" height="410" fill="#e8eaf6" stroke="#5c6bc0" class="block" stroke-dasharray="6,3"/>
+  <text x="980" y="805" class="label" font-weight="700" font-size="14px">ShowBundle</text>
+
+  <rect x="980" y="820" width="320" height="48" fill="#fff" stroke="#5c6bc0" class="block"/>
+  <text x="1000" y="840" class="label" font-weight="600" font-size="11px">manifest</text>
+  <text x="1000" y="855" class="label-sm" font-size="9px">id | name | artist | track { title, bpm, key } | version | compat</text>
+
+  <rect x="980" y="876" width="320" height="48" fill="#d1c4e9" stroke="#7e57c2" class="block"/>
+  <text x="1000" y="896" class="label" font-weight="600" font-size="11px">show</text>
+  <text x="1000" y="911" class="label-sm" font-size="9px">moments[] | global_baseline: Prim8 — the authored composition</text>
+
+  <rect x="980" y="932" width="320" height="48" fill="#c8e6c9" stroke="#4caf50" class="block"/>
+  <text x="1000" y="952" class="label" font-weight="600" font-size="11px">routing</text>
+  <text x="1000" y="967" class="label-sm" font-size="9px">per_moment: { moment_id -> StemRouting[] } — sound-to-light wiring</text>
+
+  <rect x="980" y="988" width="320" height="48" fill="#ffe0b2" stroke="#ff9800" class="block"/>
+  <text x="1000" y="1008" class="label" font-weight="600" font-size="11px">analysis_snapshot</text>
+  <text x="1000" y="1023" class="label-sm" font-size="9px">beats[] | downbeats[] | sections[] | stems{} | energy | hash</text>
+
+  <rect x="980" y="1044" width="320" height="48" fill="#fff3e0" stroke="#ff9800" class="block"/>
+  <text x="1000" y="1064" class="label" font-weight="600" font-size="11px">edits</text>
+  <text x="1000" y="1079" class="label-sm" font-size="9px">base_hash | corrections[]: add | delete | move | reclassify | threshold</text>
+
+  <rect x="980" y="1100" width="320" height="48" fill="#e8eaf6" stroke="#3f51b5" class="block"/>
+  <text x="1000" y="1120" class="label" font-weight="600" font-size="11px">material_refs</text>
+  <text x="1000" y="1135" class="label-sm" font-size="9px">used: MaterialId[] (built-in) | custom: MaterialDef[] (inline)</text>
+
+  <rect x="980" y="1156" width="320" height="24" fill="#1a1a2e" rx="4"/>
+  <text x="1140" y="1172" text-anchor="middle" class="label-sm" font-size="10px" fill="#aaa">analysis (Trinity) -> edits (human) -> effective (merged)</text>
+
+  <!-- Runtime panel -->
+  <rect x="1340" y="780" width="420" height="200" fill="#e0f2f1" stroke="#00897b" class="block"/>
+  <text x="1360" y="805" class="label" font-weight="700">RUNTIME — Per Frame (120fps)</text>
+
+  <text x="1360" y="830" class="label-sm" font-size="10px" font-weight="600">PRECOMPILED (read-only)</text>
+  <text x="1360" y="845" class="label-sm" font-size="10px">Moment boundaries + baselines</text>
+  <text x="1360" y="860" class="label-sm" font-size="10px">Envelope control points (bezier)</text>
+  <text x="1360" y="875" class="label-sm" font-size="10px">Trigger event list + impulse shapes</text>
+  <text x="1360" y="890" class="label-sm" font-size="10px">Scene transitions + zone layouts</text>
+
+  <text x="1360" y="915" class="label-sm" font-size="10px" font-weight="600">COMPUTED LIVE</text>
+  <text x="1360" y="930" class="label-sm" font-size="10px">Envelope interpolation at current t</text>
+  <text x="1360" y="945" class="label-sm" font-size="10px">Trigger impulse evaluation</text>
+  <text x="1360" y="960" class="label-sm" font-size="10px">Prim8 stacking + zone targeting</text>
+  <text x="1360" y="975" class="label-sm" font-size="10px">Material rendering + transition blend</text>
+
+  <!-- Pipeline -->
+  <rect x="1340" y="995" width="420" height="195" fill="#fff" stroke="#00897b" class="block"/>
+  <text x="1360" y="1020" class="label" font-weight="700">RESOLUTION PIPELINE</text>
+
+  <rect x="1360" y="1035" width="120" height="30" fill="#ffe0b2" stroke="#ff9800" rx="4"/>
+  <text x="1420" y="1055" text-anchor="middle" class="label-sm" font-size="10px" font-weight="600">1. LOCATE</text>
+
+  <line x1="1485" y1="1050" x2="1505" y2="1050" class="arrow-thin" stroke="#888"/>
+
+  <rect x="1510" y="1035" width="120" height="30" fill="#c8e6c9" stroke="#4caf50" rx="4"/>
+  <text x="1570" y="1055" text-anchor="middle" class="label-sm" font-size="10px" font-weight="600">2. EVALUATE</text>
+
+  <line x1="1635" y1="1050" x2="1655" y2="1050" class="arrow-thin" stroke="#888"/>
+
+  <rect x="1660" y="1035" width="80" height="30" fill="#bbdefb" stroke="#2196f3" rx="4"/>
+  <text x="1700" y="1055" text-anchor="middle" class="label-sm" font-size="10px" font-weight="600">3. BLEND</text>
+
+  <rect x="1360" y="1078" width="120" height="30" fill="#e1bee7" stroke="#9c27b0" rx="4"/>
+  <text x="1420" y="1098" text-anchor="middle" class="label-sm" font-size="10px" font-weight="600">4. MATERIAL</text>
+
+  <line x1="1485" y1="1093" x2="1505" y2="1093" class="arrow-thin" stroke="#888"/>
+
+  <rect x="1510" y="1078" width="120" height="30" fill="#ffcdd2" stroke="#e53935" rx="4"/>
+  <text x="1570" y="1098" text-anchor="middle" class="label-sm" font-size="10px" font-weight="600">5. COMPOSITE</text>
+
+  <line x1="1635" y1="1093" x2="1655" y2="1093" class="arrow-thin" stroke="#888"/>
+
+  <rect x="1660" y="1078" width="80" height="30" fill="#1a1a2e" rx="4"/>
+  <text x="1700" y="1098" text-anchor="middle" class="label-sm" font-size="10px" fill="#fff" font-weight="600">CRGB[]</text>
+
+  <text x="1360" y="1130" class="label-sm" font-size="9px">LOCATE: time -> which Moment? active Scene?</text>
+  <text x="1360" y="1144" class="label-sm" font-size="9px">EVALUATE: baseline + envelopes(t) + triggers(t) per zone</text>
+  <text x="1360" y="1158" class="label-sm" font-size="9px">BLEND: lerp(outgoing, incoming, alpha) with easing</text>
+  <text x="1360" y="1172" class="label-sm" font-size="9px">MATERIAL: adapter.render(prim8, zone, alpha) -> pixels</text>
+  <text x="1360" y="1186" class="label-sm" font-size="9px">COMPOSITE: stitch zones -> CRGB[320] -> LED buffer</text>
+
+
+  <!-- ============================================================ -->
+  <!-- Title block                                                  -->
+  <!-- ============================================================ -->
+  <rect x="1840" y="30" width="350" height="100" fill="#1a1a2e" rx="12"/>
+  <text x="2015" y="60" text-anchor="middle" font-size="22px" font-weight="800" fill="#fff" font-family="Inter, sans-serif">PRISM STUDIO</text>
+  <text x="2015" y="82" text-anchor="middle" font-size="14px" fill="#7c8cf0" font-family="Inter, sans-serif">Creative Cockpit v0.1</text>
+  <text x="2015" y="100" text-anchor="middle" font-size="11px" fill="#666" font-family="Inter, sans-serif">SpectraSynq | DAW for Light</text>
+  <text x="2015" y="118" text-anchor="middle" font-size="10px" fill="#f57f17" font-family="Inter, sans-serif" font-weight="700">+ Inspector rules, Mode Switch, Zoom Ladder, Constitution fixes</text>
+
+
+  <!-- ============================================================ -->
+  <!-- Cross-cluster connection arrows                              -->
+  <!-- ============================================================ -->
+  <!-- Screen → Data Model -->
+  <path d="M 470,600 L 470,627" class="arrow" stroke="#9b6fd4"/>
+  <text x="480" y="618" class="label-sm" font-size="9px" fill="#9b6fd4">Field displays Moments</text>
+
+  <!-- Stem Rack → Data Model -->
+  <path d="M 940,690 L 915,690" class="arrow" stroke="#4caf50"/>
+  <text x="915" y="705" text-anchor="end" class="label-sm" font-size="9px" fill="#4caf50">routing generates cues</text>
+
+  <!-- Data Model → ShowBundle -->
+  <path d="M 910,930 L 958,930" class="arrow" stroke="#5c6bc0"/>
+  <text x="935" y="920" class="label-sm" font-size="9px" fill="#5c6bc0">compiles to</text>
+
+  <!-- Loop → ShowBundle -->
+  <path d="M 1660,160 L 1660,728" class="arrow" stroke="#e53935"/>
+  <text x="1670" y="450" class="label-sm" font-size="9px" fill="#e53935" transform="rotate(90, 1670, 450)">Publish exports ShowBundle</text>
+
+  <!-- Mode Switch → Loop connection -->
+  <path d="M 415,78 L 960,60" class="arrow-thin" stroke="#7c8cf0" stroke-dasharray="4,3"/>
+  <text x="680" y="53" class="label-sm" font-size="9px" fill="#7c8cf0">Mode Switch mirrors Loop state</text>
+
+</svg>

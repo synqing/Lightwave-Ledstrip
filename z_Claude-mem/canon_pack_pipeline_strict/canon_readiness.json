@@ -1,0 +1,34 @@
+{
+  "pack_ready": true,
+  "high_conf_claim_total": 45,
+  "constitution_claims": 15,
+  "product_spec_claims": 4,
+  "architecture_claims": 7,
+  "decision_count": 16,
+  "invariant_count": 14,
+  "gates": {
+    "claims_total_gte_30": {
+      "pass": true,
+      "value": 45,
+      "threshold": 30
+    },
+    "invariants_gte_10": {
+      "pass": true,
+      "value": 14,
+      "threshold": 10
+    },
+    "decisions_gte_15": {
+      "pass": true,
+      "value": 16,
+      "threshold": 15
+    },
+    "architecture_dimensions_complete": {
+      "pass": true,
+      "missing_dimensions": []
+    },
+    "unknown_domains_explicit": {
+      "pass": true,
+      "unknown": []
+    }
+  }
+}

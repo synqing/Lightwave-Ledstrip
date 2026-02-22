@@ -1,0 +1,8 @@
+{
+  "alias_map": "alias_map.json",
+  "constitution": "constitution_claims.json",
+  "product_spec": "product_spec_claims.json",
+  "architecture_atlas": "architecture_claims.json",
+  "decision_register": "decision_register.json",
+  "readiness": "canon_readiness.json"
+}

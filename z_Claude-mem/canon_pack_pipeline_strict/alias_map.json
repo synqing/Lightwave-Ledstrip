@@ -1,0 +1,2824 @@
+{
+  "phase": "alias_map",
+  "entries": [
+    {
+      "concept": "SpectraSynq",
+      "aliases": [
+        "spectrasynq"
+      ],
+      "first_seen": "2025-10-06T11:12:43.912000Z",
+      "last_seen": "2026-02-09T14:32:28.476000Z",
+      "status": "current",
+      "citation_count": 483,
+      "citations": [
+        {
+          "evidence_id": "O28333",
+          "source_obs_ids": [
+            28333
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T14:32:28.476Z",
+          "session_id": "d4a7bce4-fb66-4f17-86c2-4148009186b8",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "LightwaveOS app with connection stability fixes deployed to iPhone Updated build includes 500ms WebSocket and 300ms REST delays to prevent ESP32 soft AP overload Deployed updated LightwaveOS iOS app to physical iPhone device with ESP32 soft AP connection stability improvements.",
+          "excerpt_chars": 278,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "CONTROL/NETWORK",
+            "UI/UX"
+          ]
+        },
+        {
+          "evidence_id": "O28279",
+          "source_obs_ids": [
+            28279
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T07:29:43.883Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Bloom Optics Post-FX Artifact Files Located Artifact contains header-only implementation and documentation for Sensory Bridge Bloom parity effects The Bloom Optics Post-FX artifact was delivered as a header-only C++ implementation to achieve visual parity with Sensory Bridge's Bloom mode.",
+          "excerpt_chars": 289,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "OPTICS/LGP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28255",
+          "source_obs_ids": [
+            28255
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T07:03:13.863Z",
+          "session_id": "d4a7bce4-fb66-4f17-86c2-4148009186b8",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "LightwaveOS iOS app deployed to physical iPhone device App successfully installed on device 'EiP' using xcrun devicectl with bundle ID com.spectrasynq.lightwaveos2 The LightwaveOS iOS application was successfully deployed to a physical iPhone device using xcrun devicectl.",
+          "excerpt_chars": 272,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "UI/UX"
+          ]
+        },
+        {
+          "evidence_id": "O28253",
+          "source_obs_ids": [
+            28253
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T07:00:21.527Z",
+          "session_id": "d4a7bce4-fb66-4f17-86c2-4148009186b8",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Xcode Project Regenerated with XcodeGen to Include ZonePresetsCard Successfully ran xcodegen to update LightwaveOS.xcodeproj with new ZonePresetsCard.swift file in build configuration.",
+          "excerpt_chars": 184,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "UI/UX"
+          ]
+        },
+        {
+          "evidence_id": "O28148",
+          "source_obs_ids": [
+            28148
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T20:16:48.144Z",
+          "session_id": "d4a7bce4-fb66-4f17-86c2-4148009186b8",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "LightwaveOS iOS App Deployed to Physical iPhone Device Successfully installed app with preset system fixes to iPhone via devicectl with bundle ID com.spectrasynq.lightwaveos2 Successfully deployed LightwaveOS iOS app to physical iPhone device using xcrun devicectl.",
+          "excerpt_chars": 265,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "UI/UX"
+          ]
+        },
+        {
+          "evidence_id": "O28147",
+          "source_obs_ids": [
+            28147
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T20:16:34.890Z",
+          "session_id": "d4a7bce4-fb66-4f17-86c2-4148009186b8",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "iOS App Built Successfully for Physical Device Deployment LightwaveOS built for iPhone 13 Pro device with code signing and provisioning profile, ready for on-device testing iOS app successfully built for physical device deployment after preset system fixes.",
+          "excerpt_chars": 257,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "CONTROL/NETWORK",
+            "UI/UX"
+          ]
+        },
+        {
+          "evidence_id": "O27910",
+          "source_obs_ids": [
+            27910
+          ],
+          "project": "v2",
+          "timestamp": "2026-02-08T10:23:27.249Z",
+          "session_id": "6b059617-7d88-41ea-8def-0c2326364071",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Bloom Mode Temporal Feedback Architecture Analysis for BeatPulse Enhancement External specialist recommends porting Bloom mode's subpixel transport and temporal feedback instead of stateless pulse rendering.",
+          "excerpt_chars": 207,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O27895",
+          "source_obs_ids": [
+            27895
+          ],
+          "project": "v2",
+          "timestamp": "2026-02-08T10:18:01.322Z",
+          "session_id": "6b059617-7d88-41ea-8def-0c2326364071",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "LED Rendering Physics Investigation Initiated Beginning deep dive into LED rendering physics for firmware/v2, starting with memory search for existing knowledge.",
+          "excerpt_chars": 161,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "LEDS/POWER",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O27863",
+          "source_obs_ids": [
+            27863
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T06:01:09.350Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Debug Logging for Palette Loop Investigation Found in RendererActor JSON debug logs written to file tracking palette change messages for hypothesis H2 validation [\"RendererActor.cpp contains debug logging at lines 456-469 and 513-526 tracking SET_PALETTE and PALETTE_CHANGED messages\",\"Debug logs written to /Users/spec\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O27628",
+          "source_obs_ids": [
+            27628
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-07T19:20:01.017Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Core Documentation Files - Effects Guide and Architecture Documents Found EFFECTS.md in docs/effects/ and two ARCHITECTURE.md files for test audio tool and dashboard components The primary session searched for core documentation files to understand effects architecture and constraints.",
+          "excerpt_chars": 286,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX",
+            "UI/UX"
+          ]
+        },
+        {
+          "evidence_id": "O27500",
+          "source_obs_ids": [
+            27500
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-07T18:22:20.403Z",
+          "session_id": "77891073-2c67-4168-8806-fbda0f9d9399",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Twitter MCP Server Configuration Completed in Claude Settings Agent-twitter-client-mcp server configured with cookie-based authentication in ~/.claude/settings.json mcpServers section Completed Twitter/X integration by adding agent-twitter-client-mcp server to Claude Code's MCP server configuration.",
+          "excerpt_chars": 300,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": []
+        },
+        {
+          "evidence_id": "O27489",
+          "source_obs_ids": [
+            27489
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-07T18:08:00.614Z",
+          "session_id": "77891073-2c67-4168-8806-fbda0f9d9399",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Twitter Authentication Cookies Configured in MCP Settings Populated agent-twitter-client-mcp with actual Twitter authentication cookies extracted from browser session The Twitter MCP server configuration in Claude settings was completed by replacing placeholder cookie values with actual authentication credentials extr\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": []
+        }
+      ],
+      "definition": "LightwaveOS app with connection stability fixes deployed to iPhone Updated build includes 500ms WebSocket and 300ms REST delays to prevent ESP32 soft AP overload Deployed updated\u2026"
+    },
+    {
+      "concept": "K1-Lightwave",
+      "aliases": [
+        "k1 lightwave",
+        "k1-lightwave",
+        "lightwave ledstrip",
+        "lightwave-ledstrip",
+        "lightwaveos"
+      ],
+      "first_seen": "2025-07-02T13:05:43Z",
+      "last_seen": "2026-02-09T16:01:39.531000Z",
+      "status": "current",
+      "citation_count": 3023,
+      "citations": [
+        {
+          "evidence_id": "O28425",
+          "source_obs_ids": [
+            28425
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T16:01:39.531Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Examined PatternRegistry pattern families for color handling architecture PatternRegistry.cpp defines PatternFamily taxonomy with FLUID_PLASMA, GEOMETRIC, and other categories using CENTER_ORIGIN and palette-driven rendering.",
+          "excerpt_chars": 225,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28417",
+          "source_obs_ids": [
+            28417
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:56:19.430Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Examined SbWaveform310RefEffect reference implementation for palette-free color summation pattern SbWaveform310RefEffect uses note-chromagram color summation in chromatic mode, providing reference for multi-color injection without palette corruption.",
+          "excerpt_chars": 250,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28416",
+          "source_obs_ids": [
+            28416
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:56:17.412Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Waveform Effect Implementations in LightwaveOS Effects directory contains multiple waveform visualizers including Sensory Bridge and ESv11 reference implementations The effects directory contains a comprehensive set of waveform visualization implementations spanning multiple audio visualization paradigms.",
+          "excerpt_chars": 306,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28398",
+          "source_obs_ids": [
+            28398
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:31:51.123Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Bloom Mode Injection Algorithm Requires Complete Redesign Current weighted centroid approach still produces oversaturated visuals requiring fundamental rethink of color injection strategy After implementing a weighted centroid voting algorithm to replace the RGB accumulation loop in BloomParityEffect.cpp's computeInje\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "LEDS/POWER",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28396",
+          "source_obs_ids": [
+            28396
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:28:51.860Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Render Pipeline Uses Static Post-FX Parameters for Runtime Tuning applyPrismEffect and renderBulbCover reference s_prismOpacity and s_bulbOpacity enabling live parameter adjustment The final render pipeline implementation at lines 497 and 500 demonstrates how runtime parameter tuning integrates into the Bloom effect.",
+          "excerpt_chars": 318,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28393",
+          "source_obs_ids": [
+            28393
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:21:35.350Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Palette Usage Pattern in LGPBoxWaveEffect Effect uses ctx.palette.getColor with hue-based index and calculated brightness for color wave rendering The LGPBoxWaveEffect demonstrates standard palette usage patterns in LightwaveOS effects.",
+          "excerpt_chars": 236,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "LEDS/POWER",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28391",
+          "source_obs_ids": [
+            28391
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:21:19.667Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Palette Color Corruption Pattern Identified Across Effects Certain effects display palette colors accurately while others show extreme RGB channel saturation and corruption.",
+          "excerpt_chars": 173,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28390",
+          "source_obs_ids": [
+            28390
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:12:42.961Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Serial Command Buffering System Includes Bloom Tuning Hotkeys Immediate command handling ensures p/P/o/O/i/I bypass line buffering for responsive real-time adjustment The serial command handling system in main.cpp implements a sophisticated buffering strategy that treats Bloom tuning hotkeys as immediate commands.",
+          "excerpt_chars": 315,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28378",
+          "source_obs_ids": [
+            28378
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:08:40.398Z",
+          "session_id": "d4a7bce4-fb66-4f17-86c2-4148009186b8",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "RendererActor provides dependency injection for zone composer, audio buffer, and tempo tracker RendererActor.h exposes setter methods for external dependencies including ZoneComposer, audio snapshot buffer, and TempoTracker.",
+          "excerpt_chars": 224,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28370",
+          "source_obs_ids": [
+            28370
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:06:34.707Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "ESV11 Audio Backend Build Environment Configuration PlatformIO defines esp32dev_audio_esv11 environment extending base audio config with FEATURE_AUDIO_BACKEND_ESV11 flag The platformio.ini configuration reveals an alternate build environment for ESV11 audio backend integration.",
+          "excerpt_chars": 278,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP"
+          ]
+        },
+        {
+          "evidence_id": "O28367",
+          "source_obs_ids": [
+            28367
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T14:59:45.777Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Bloom Parity Firmware Successfully Flashed to ESP32 Hardware Firmware with FastLED color model and optical post-FX deployed to device in 39.63 seconds The complete Bloom parity implementation was successfully uploaded to ESP32 hardware, marking deployment of the visual parity features.",
+          "excerpt_chars": 286,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28366",
+          "source_obs_ids": [
+            28366
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T14:59:03.542Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Final Bloom Parity Build Successful with Runtime Controls Complete implementation with FastLED color model, post-FX, and serial tuning compiled ready for deployment The final firmware build successfully compiled with all Bloom parity features integrated and ready for deployment.",
+          "excerpt_chars": 279,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        }
+      ],
+      "definition": "Examined PatternRegistry pattern families for color handling architecture PatternRegistry.cpp defines PatternFamily taxonomy with FLUID_PLASMA, GEOMETRIC, and other categories usi\u2026"
+    },
+    {
+      "concept": "Tab5 Hub",
+      "aliases": [
+        "encoder device",
+        "hub",
+        "tab5",
+        "tab5.encoder"
+      ],
+      "first_seen": "2025-10-06T01:50:34.641000Z",
+      "last_seen": "2026-02-08T13:54:09.858000Z",
+      "status": "current",
+      "citation_count": 1868,
+      "citations": [
+        {
+          "evidence_id": "O28076",
+          "source_obs_ids": [
+            28076
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T13:54:09.858Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Systematic USB Serial Connection Failure Pattern Blocking All Firmware Deployment Attempts 30+ consecutive upload attempts failed at identical 42% completion point with pySerial port configuration error indicating persistent hardware issue.",
+          "excerpt_chars": 240,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28075",
+          "source_obs_ids": [
+            28075
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T13:53:13.021Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "USB Serial Connection Instability Blocking Firmware Deployment ESP32 upload failed at 42% completion with pySerial port configuration error indicating hardware connection or driver issue.",
+          "excerpt_chars": 187,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": []
+        },
+        {
+          "evidence_id": "O27854",
+          "source_obs_ids": [
+            27854
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T05:47:15.805Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Auggie CLI Research for Agentic Terminal Integration Web search retrieved installation and authentication details for Augment Code's AI coding agent that runs in terminal environments The primary session researched Auggie CLI, Augment Code's terminal-based AI coding agent, potentially evaluating it as a complementary\u2026",
+          "excerpt_chars": 319,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": []
+        },
+        {
+          "evidence_id": "O27795",
+          "source_obs_ids": [
+            27795
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T05:00:36.489Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "iOS Project Configuration, Test Targets, and CI Workflow Added XcodeGen configuration, unit/UI test infrastructure, and GitHub Actions snapshot testing workflow for LightwaveOS iOS app The primary session added comprehensive iOS testing infrastructure to the LightwaveOS project, establishing automated quality gates fo\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "UI/UX"
+          ]
+        },
+        {
+          "evidence_id": "O27672",
+          "source_obs_ids": [
+            27672
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-07T19:29:05.843Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "CoreEffects.cpp - Added BeatPulseLGPInterferenceEffect Header Include Registered new LGP interference effect header in core effects compilation unit for firmware integration The primary session updated CoreEffects.cpp to include the new BeatPulseLGPInterferenceEffect.h header file, integrating it into the firmware's c\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "OPTICS/LGP",
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O27622",
+          "source_obs_ids": [
+            27622
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-07T19:19:26.298Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Agent Documentation Directory - FastLED Research and Protected Files Seven agent-facing documentation files including FastLED optimization research, practical patterns, performance benchmarks, and protected file registry The primary session discovered a dedicated docs/agent/ directory containing seven markdown files d\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O27496",
+          "source_obs_ids": [
+            27496
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-07T18:11:41.256Z",
+          "session_id": "77891073-2c67-4168-8806-fbda0f9d9399",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Nitter-Based Scrapers Enable Authentication-Free Twitter Access Multiple Nitter scraper implementations allow Twitter data extraction without API credentials or authentication Web search identified Nitter-based scraping solutions as alternatives to cookie-based or API-based Twitter access.",
+          "excerpt_chars": 290,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "CONTROL/NETWORK"
+          ]
+        },
+        {
+          "evidence_id": "O27483",
+          "source_obs_ids": [
+            27483
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-07T15:59:08.335Z",
+          "session_id": "77891073-2c67-4168-8806-fbda0f9d9399",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "MCP Servers Enable AI Agent Access to X.com API Multiple Model Context Protocol servers provide X/Twitter API integration for AI assistants and agents Web search revealed a robust ecosystem of Model Context Protocol (MCP) servers designed specifically for X.com (Twitter) integration with AI agents.",
+          "excerpt_chars": 299,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "CONTROL/NETWORK"
+          ]
+        },
+        {
+          "evidence_id": "O27399",
+          "source_obs_ids": [
+            27399
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-07T15:05:22.762Z",
+          "session_id": "3aa8af33-db01-45f6-b446-6235943e5033",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Repository Contains 19+ Untracked Files Including UI Mockups and Architecture Documentation Git status shows 1 staged file and 19+ untracked files across docs, firmware, and workflow directories Git status reveals significant untracked work in repository including 19+ files spanning documentation, firmware implementat\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "UI/UX"
+          ]
+        },
+        {
+          "evidence_id": "O27304",
+          "source_obs_ids": [
+            27304
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-07T13:39:00.571Z",
+          "session_id": "3aa8af33-db01-45f6-b446-6235943e5033",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Comprehensive Stash Analysis Shows No UI Mockup HTML Files in Any Stash All 10 stashes contain only tracked source code files with no docs/ui-mockups HTML files present Comprehensive analysis of all 10 git stashes definitively proves that no UI mockup HTML files from docs/ui-mockups/ were captured in any stash entry.",
+          "excerpt_chars": 318,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "UI/UX"
+          ]
+        },
+        {
+          "evidence_id": "O27288",
+          "source_obs_ids": [
+            27288
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-07T13:34:49.380Z",
+          "session_id": "3aa8af33-db01-45f6-b446-6235943e5033",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Recent File Deletion History Reveals Major Cleanup Operations Four major deletion commits removed web UI assets, Tab5 components, lightwave-simple app, and dashboard docs Git deletion history reveals several major cleanup operations that removed deprecated web assets, UI components, and documentation.",
+          "excerpt_chars": 302,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "UI/UX"
+          ]
+        },
+        {
+          "evidence_id": "O27285",
+          "source_obs_ids": [
+            27285
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-07T13:34:09.774Z",
+          "session_id": "3aa8af33-db01-45f6-b446-6235943e5033",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Memory Search for File Deletion and Cleanup Patterns Multiple cleanup events found but no agent explicitly documented deleting files during commits Second memory search targeting general file deletion and cleanup patterns found 24 observations spanning January-February 2026.",
+          "excerpt_chars": 275,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        }
+      ],
+      "definition": "Systematic USB Serial Connection Failure Pattern Blocking All Firmware Deployment Attempts 30+ consecutive upload attempts failed at identical 42% completion point with pySerial p\u2026"
+    },
+    {
+      "concept": "PRISM",
+      "aliases": [
+        "prism",
+        "prism.k1",
+        "prism.unified",
+        "s_bulbopacity and converted",
+        "s_prismopacity and converted"
+      ],
+      "first_seen": "2025-07-05T04:29:09Z",
+      "last_seen": "2026-02-09T15:54:01.001000Z",
+      "status": "current",
+      "citation_count": 412,
+      "citations": [
+        {
+          "evidence_id": "O28415",
+          "source_obs_ids": [
+            28415
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:54:01.001Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Firmware Successfully Flashed to Device with Palette-Driven Bloom and Runtime Control Infrastructure Deployed firmware to esp32dev_audio_esv11 hardware in 39.86 seconds with dual-layer motion system and externalized parameters The firmware was successfully deployed to the ESP32-S3 hardware running the esp32dev_audio_e\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28413",
+          "source_obs_ids": [
+            28413
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:52:58.703Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Additional Bloom Parameter Hotkeys Registered as Immediate Commands Added k/K, u/U, v/V as immediate single-char commands for upcoming Bloom palette and spatial controls The serial command parser's immediate hotkey registration was extended with three additional Bloom control keys: k/K for gHue speed (palette sweep),\u2026",
+          "excerpt_chars": 319,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28412",
+          "source_obs_ids": [
+            28412
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:52:55.818Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Added Help Text for Three Additional Bloom Parameters Documented k/K, u/U, v/V commands for gHue speed, spatial spread, and intensity coupling tuning The primary session added documentation for three additional Bloom runtime-adjustable parameters in the help system.",
+          "excerpt_chars": 266,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28411",
+          "source_obs_ids": [
+            28411
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:52:51.136Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Verified comprehensive Bloom tuning keyboard map in help text main.cpp help text confirms 7-parameter Bloom control interface covering transport mechanics, post-FX, and palette selection.",
+          "excerpt_chars": 187,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28409",
+          "source_obs_ids": [
+            28409
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:52:48.212Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Serial Keyboard Controls for Bloom Prism Iterations Main.cpp implements runtime hotkeys j/J to adjust Bloom prism iteration count for ghost layer tuning The main.cpp serial keyboard interface includes runtime controls for Bloom mode prism iterations accessible via j/J keys.",
+          "excerpt_chars": 274,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28408",
+          "source_obs_ids": [
+            28408
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:51:37.705Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Added Palette Color Mapping Control Parameters for Bloom Introduced three static tunables for palette sweep speed, spatial spread, and intensity coupling modes Three new static tunable parameters were added to BloomParityEffect to control palette-based color mapping behavior.",
+          "excerpt_chars": 276,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28407",
+          "source_obs_ids": [
+            28407
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:51:30.569Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Additional Runtime-Tunable Parameters Added to BloomParityEffect s_alpha, s_squareIter, and s_prismIterations exposed as static variables alongside opacity controls The BloomParityEffect header was expanded to expose three additional core algorithm parameters as runtime-tunable static variables.",
+          "excerpt_chars": 296,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28406",
+          "source_obs_ids": [
+            28406
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:51:06.946Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Complete Runtime-Tunable Parameter Interface Added to BloomParityEffect Five static getter/setter pairs expose all Bloom tuning parameters with range validation for live adjustment BloomParityEffect was completed with a comprehensive runtime-tunable parameter interface exposing five critical visual controls.",
+          "excerpt_chars": 309,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28402",
+          "source_obs_ids": [
+            28402
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:33:49.574Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Successful Build with Expanded Bloom Tunable Parameters Firmware compiled successfully with five runtime-adjustable Bloom parameters in 26 seconds The primary session successfully compiled the firmware with the expanded set of runtime-adjustable Bloom parameters.",
+          "excerpt_chars": 263,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28397",
+          "source_obs_ids": [
+            28397
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:28:57.843Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "History Buffer Proportional Scaling Prevents Feedback Loop Color Distortion Replaced memcpy with per-pixel proportional scaling to prevent hue shift toward white during HDR overdrive conditions The history buffer copy operation was modified to prevent color distortion in the feedback loop when prism opacity exceeds 1.\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": []
+        },
+        {
+          "evidence_id": "O28396",
+          "source_obs_ids": [
+            28396
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:28:51.860Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Render Pipeline Uses Static Post-FX Parameters for Runtime Tuning applyPrismEffect and renderBulbCover reference s_prismOpacity and s_bulbOpacity enabling live parameter adjustment The final render pipeline implementation at lines 497 and 500 demonstrates how runtime parameter tuning integrates into the Bloom effect.",
+          "excerpt_chars": 318,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28395",
+          "source_obs_ids": [
+            28395
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:21:59.709Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Firmware Build Completed with Runtime Parameter Control and Palette-Driven Bloom Successfully compiled esp32dev_audio_esv11 firmware with externalized tunables, palette injection system, and keyboard control infrastructure The firmware build successfully compiled with major architectural changes to the Bloom effect sy\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        }
+      ],
+      "definition": "Firmware Successfully Flashed to Device with Palette-Driven Bloom and Runtime Control Infrastructure Deployed firmware to esp32dev_audio_esv11 hardware in 39.86 seconds with dual-\u2026"
+    },
+    {
+      "concept": "Trinity",
+      "aliases": [
+        "spectrasynq.trinity",
+        "trinity"
+      ],
+      "first_seen": "2026-01-27T20:04:18.544000Z",
+      "last_seen": "2026-02-09T15:08:45.147000Z",
+      "status": "current",
+      "citation_count": 42,
+      "citations": [
+        {
+          "evidence_id": "O28379",
+          "source_obs_ids": [
+            28379
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:08:45.147Z",
+          "session_id": "d4a7bce4-fb66-4f17-86c2-4148009186b8",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "RendererActor implements capture mode for LED frame recording RendererActor.h defines m_captureEnabled flag and three capture tap points for multi-buffer frame recording system.",
+          "excerpt_chars": 177,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "LEDS/POWER",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O27979",
+          "source_obs_ids": [
+            27979
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T12:08:10.154Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Firmware successfully uploaded to device - esp32dev_audio_esv11 build with 81.64 second total time Full compilation and upload completed: 1.96MB firmware (29.9% flash), 106KB RAM (32.6%), deployed to ESP32-S3 at MAC b4:3a:45:a5:89:b4.",
+          "excerpt_chars": 234,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP"
+          ]
+        },
+        {
+          "evidence_id": "O27931",
+          "source_obs_ids": [
+            27931
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T11:55:48.785Z",
+          "session_id": "c3c8a9fc-f4fb-402d-a4ee-5e6742c7343a",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Git Repository State Check Reveals Recent Validation Work and Uncommitted Architecture Document Most recent commit validates dt-correctness sweep with 3-agent consensus; AUDIO_VISUAL_TIMING_ARCHITECTURE.md remains uncommitted Git repository inspection reveals the current state of the Lightwave-Ledstrip project followi\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "LEDS/POWER",
+            "AUDIO/DSP"
+          ]
+        },
+        {
+          "evidence_id": "O27883",
+          "source_obs_ids": [
+            27883
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T10:05:48.261Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "ES v1.1 Beat Clock Architecture for Renderer-Domain Tempo Tracking EsBeatClock provides 120 FPS smooth beatPhase without LWLS MusicalGrid for ES audio backend PRIMARY examined the EsBeatClock header which implements renderer-domain beat clock for the ES v1.1 audio backend.",
+          "excerpt_chars": 273,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O27879",
+          "source_obs_ids": [
+            27879
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T10:05:38.868Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Audio sample rate references span 49 files across architecture 12.8kHz sample rate found in audio backends, capture layers, tempo tracking, documentation, and test infrastructure Initial architecture mapping grep revealed 12.8kHz sample rate referenced across 49 files spanning entire audio pipeline.",
+          "excerpt_chars": 300,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP"
+          ]
+        },
+        {
+          "evidence_id": "O27873",
+          "source_obs_ids": [
+            27873
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T06:07:07.137Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Complete Audio-to-LED Data Flow Architecture Mapped for LightwaveOS Comprehensive 11-section architecture map documenting audio input sources, DSP pipeline, control bus, effect context, rendering pipeline, and LED output with timing-critical paths.",
+          "excerpt_chars": 248,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "LEDS/POWER",
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O27869",
+          "source_obs_ids": [
+            27869
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T06:01:37.362Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "EsBeatClock provides renderer-domain beat synchronization for ES v1.1 audio backend Beat clock produces smooth 120 FPS beatPhase from ES tempo fields with external sync support for Trinity bridge EsBeatClock provides renderer-domain beat synchronization specifically for the ES v1.1_320 audio backend, producing smooth\u2026",
+          "excerpt_chars": 319,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O27868",
+          "source_obs_ids": [
+            27868
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T06:01:33.933Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Musical Grid Architecture with K1 Integration and Trinity External Sync Render-domain PLL-style beat tracking system supporting K1 Lightwave beat tracker integration and Trinity offline analysis external sync with thread-safe snapshot publishing [\"MusicalGrid.h defines render-domain PLL (Phase-Locked Loop) musical gri\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O27862",
+          "source_obs_ids": [
+            27862
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T06:00:59.588Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Audio subsystem architecture comprises 55 files across contracts, backends, and analysis modules Comprehensive audio pipeline including tempo tracking, chroma analysis, style detection, and Emotiscope v1.1 backend integration Audio subsystem glob reveals comprehensive 55-file architecture implementing full audio analy\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP"
+          ]
+        },
+        {
+          "evidence_id": "O27806",
+          "source_obs_ids": [
+            27806
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T05:17:12.960Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Git history shows systematic bug fix progression across three major commits Recent commits reveal systematic remediation: motion direction fixes, dt-correctness across 38 effects, powf optimizations and dual-strip fixes - total 53+ effects corrected.",
+          "excerpt_chars": 250,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "LEDS/POWER",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O27799",
+          "source_obs_ids": [
+            27799
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T05:01:52.780Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Git staging completed - only .claude/ directory remains untracked All systematic bug fixes and associated changes staged for commit; single untracked directory (.claude/) persists as expected IDE/assistant metadata.",
+          "excerpt_chars": 215,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": []
+        },
+        {
+          "evidence_id": "O27796",
+          "source_obs_ids": [
+            27796
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T05:00:52.006Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Commit 11: Documentation - FastLED research and architecture guides Added 6,064 lines of documentation covering FastLED optimization, preset architecture, and Trinity protocol specification Commit 11 completed on fix/effects-systematic-bug-fixes branch, adding comprehensive documentation spanning FastLED library resea\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX",
+            "UI/UX"
+          ]
+        }
+      ],
+      "definition": "RendererActor implements capture mode for LED frame recording RendererActor.h defines m_captureEnabled flag and three capture tap points for multi-buffer frame recording system."
+    },
+    {
+      "concept": "v2 Firmware",
+      "aliases": [
+        "firmware v2",
+        "lightwaveos v2",
+        "v2"
+      ],
+      "first_seen": "2025-07-05T12:37:14Z",
+      "last_seen": "2026-02-09T15:56:26.177000Z",
+      "status": "current",
+      "citation_count": 2903,
+      "citations": [
+        {
+          "evidence_id": "O28418",
+          "source_obs_ids": [
+            28418
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:56:26.177Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "SB Waveform Uses HSV Direct RGB Conversion Without Palette System Effect generates colors via hsv2rgb_spectrum and direct channel scaling instead of palette.getColor() lookups.",
+          "excerpt_chars": 176,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28417",
+          "source_obs_ids": [
+            28417
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:56:19.430Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Examined SbWaveform310RefEffect reference implementation for palette-free color summation pattern SbWaveform310RefEffect uses note-chromagram color summation in chromatic mode, providing reference for multi-color injection without palette corruption.",
+          "excerpt_chars": 250,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28375",
+          "source_obs_ids": [
+            28375
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:08:08.248Z",
+          "session_id": "d4a7bce4-fb66-4f17-86c2-4148009186b8",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Audio sequence logging found in RendererActor RendererActor.cpp contains \"Audio OK\" message with sequence number tracking for audio frame processing.",
+          "excerpt_chars": 149,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28360",
+          "source_obs_ids": [
+            28360
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T14:58:01.637Z",
+          "session_id": "d4a7bce4-fb66-4f17-86c2-4148009186b8",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Serial command interface effect iteration mapping Located 'i' command for effect iteration in firmware main.cpp serial command handler Investigation located the firmware's serial command handler for effect iteration, likely mapped to the 'i' key in the main.cpp command processing loop.",
+          "excerpt_chars": 286,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28341",
+          "source_obs_ids": [
+            28341
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T14:40:46.862Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Final BloomParityEffect Implementation with Complete Color Parity Implementation now includes FastLED rainbow HSV model and 8-bit round-trip for both forceSaturation and forceHue The final BloomParityEffect implementation achieves comprehensive Sensory Bridge visual parity through correct color model implementation.",
+          "excerpt_chars": 317,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28284",
+          "source_obs_ids": [
+            28284
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T07:30:30.067Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Existing BloomParityEffect.h Header Structure Current implementation contains transport and injection logic but lacks Sensory Bridge optical post-FX layers The existing BloomParityEffect header defines the structure for Sensory Bridge Bloom mode parity in LightwaveOS v2.",
+          "excerpt_chars": 271,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "LEDS/POWER",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28253",
+          "source_obs_ids": [
+            28253
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T07:00:21.527Z",
+          "session_id": "d4a7bce4-fb66-4f17-86c2-4148009186b8",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Xcode Project Regenerated with XcodeGen to Include ZonePresetsCard Successfully ran xcodegen to update LightwaveOS.xcodeproj with new ZonePresetsCard.swift file in build configuration.",
+          "excerpt_chars": 184,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "UI/UX"
+          ]
+        },
+        {
+          "evidence_id": "O28250",
+          "source_obs_ids": [
+            28250
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T06:57:16.830Z",
+          "session_id": "d4a7bce4-fb66-4f17-86c2-4148009186b8",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Modified files identified across firmware and iOS app Git diff shows changes in audio timing, beat effects, zone composer, and iOS preset views Git diff revealed pending changes across multiple subsystems.",
+          "excerpt_chars": 205,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX",
+            "UI/UX"
+          ]
+        },
+        {
+          "evidence_id": "O28240",
+          "source_obs_ids": [
+            28240
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T21:43:20.368Z",
+          "session_id": "33d05f53-bb8a-4af0-a123-c3db740ce647",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "BloomParityEffect Header Created in ieffect Directory BloomParityEffect.h written to firmware/v2/src/effects/ieffect/ with 7-step transport pipeline and per-zone state The BloomParityEffect header file has been created in the ieffect directory, defining the complete interface for Sensory Bridge Bloom parity implementa\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28234",
+          "source_obs_ids": [
+            28234
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T21:41:54.049Z",
+          "session_id": "33d05f53-bb8a-4af0-a123-c3db740ce647",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "No AudioBloomParity Effect Files Exist Glob search confirms no AudioBloomParity implementation files in effects directory despite pattern 98 reservation The glob search confirms pattern ID 98 exists only as metadata - no implementation files were ever created.",
+          "excerpt_chars": 260,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28230",
+          "source_obs_ids": [
+            28230
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T21:40:56.075Z",
+          "session_id": "33d05f53-bb8a-4af0-a123-c3db740ce647",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "IEffect Directory Structure Effects directory contains 245 files including existing BeatPulse effects and transport utilities The ieffect directory already contains multiple bloom-related implementations including AudioBloomEffect and BeatPulseBloomEffect, along with a family of BeatPulse effects (Breathe, Ripple, Sho\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28226",
+          "source_obs_ids": [
+            28226
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T21:40:14.382Z",
+          "session_id": "33d05f53-bb8a-4af0-a123-c3db740ce647",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Bloom Parity Effect Architecture Header file defines exact port of Sensory Bridge Bloom mode to LightwaveOS v2 with transport pipeline The BloomParityEffect header defines the architecture for porting Sensory Bridge's Bloom visual mode to LightwaveOS v2.",
+          "excerpt_chars": 254,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        }
+      ],
+      "definition": "SB Waveform Uses HSV Direct RGB Conversion Without Palette System Effect generates colors via hsv2rgb_spectrum and direct channel scaling instead of palette.getColor() lookups."
+    }
+  ],
+  "included_entries": [
+    {
+      "concept": "SpectraSynq",
+      "aliases": [
+        "spectrasynq"
+      ],
+      "first_seen": "2025-10-06T11:12:43.912000Z",
+      "last_seen": "2026-02-09T14:32:28.476000Z",
+      "status": "current",
+      "citation_count": 483,
+      "citations": [
+        {
+          "evidence_id": "O28333",
+          "source_obs_ids": [
+            28333
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T14:32:28.476Z",
+          "session_id": "d4a7bce4-fb66-4f17-86c2-4148009186b8",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "LightwaveOS app with connection stability fixes deployed to iPhone Updated build includes 500ms WebSocket and 300ms REST delays to prevent ESP32 soft AP overload Deployed updated LightwaveOS iOS app to physical iPhone device with ESP32 soft AP connection stability improvements.",
+          "excerpt_chars": 278,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "CONTROL/NETWORK",
+            "UI/UX"
+          ]
+        },
+        {
+          "evidence_id": "O28279",
+          "source_obs_ids": [
+            28279
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T07:29:43.883Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Bloom Optics Post-FX Artifact Files Located Artifact contains header-only implementation and documentation for Sensory Bridge Bloom parity effects The Bloom Optics Post-FX artifact was delivered as a header-only C++ implementation to achieve visual parity with Sensory Bridge's Bloom mode.",
+          "excerpt_chars": 289,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "OPTICS/LGP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28255",
+          "source_obs_ids": [
+            28255
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T07:03:13.863Z",
+          "session_id": "d4a7bce4-fb66-4f17-86c2-4148009186b8",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "LightwaveOS iOS app deployed to physical iPhone device App successfully installed on device 'EiP' using xcrun devicectl with bundle ID com.spectrasynq.lightwaveos2 The LightwaveOS iOS application was successfully deployed to a physical iPhone device using xcrun devicectl.",
+          "excerpt_chars": 272,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "UI/UX"
+          ]
+        },
+        {
+          "evidence_id": "O28253",
+          "source_obs_ids": [
+            28253
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T07:00:21.527Z",
+          "session_id": "d4a7bce4-fb66-4f17-86c2-4148009186b8",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Xcode Project Regenerated with XcodeGen to Include ZonePresetsCard Successfully ran xcodegen to update LightwaveOS.xcodeproj with new ZonePresetsCard.swift file in build configuration.",
+          "excerpt_chars": 184,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "UI/UX"
+          ]
+        },
+        {
+          "evidence_id": "O28148",
+          "source_obs_ids": [
+            28148
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T20:16:48.144Z",
+          "session_id": "d4a7bce4-fb66-4f17-86c2-4148009186b8",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "LightwaveOS iOS App Deployed to Physical iPhone Device Successfully installed app with preset system fixes to iPhone via devicectl with bundle ID com.spectrasynq.lightwaveos2 Successfully deployed LightwaveOS iOS app to physical iPhone device using xcrun devicectl.",
+          "excerpt_chars": 265,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "UI/UX"
+          ]
+        },
+        {
+          "evidence_id": "O28147",
+          "source_obs_ids": [
+            28147
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T20:16:34.890Z",
+          "session_id": "d4a7bce4-fb66-4f17-86c2-4148009186b8",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "iOS App Built Successfully for Physical Device Deployment LightwaveOS built for iPhone 13 Pro device with code signing and provisioning profile, ready for on-device testing iOS app successfully built for physical device deployment after preset system fixes.",
+          "excerpt_chars": 257,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "CONTROL/NETWORK",
+            "UI/UX"
+          ]
+        },
+        {
+          "evidence_id": "O27910",
+          "source_obs_ids": [
+            27910
+          ],
+          "project": "v2",
+          "timestamp": "2026-02-08T10:23:27.249Z",
+          "session_id": "6b059617-7d88-41ea-8def-0c2326364071",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Bloom Mode Temporal Feedback Architecture Analysis for BeatPulse Enhancement External specialist recommends porting Bloom mode's subpixel transport and temporal feedback instead of stateless pulse rendering.",
+          "excerpt_chars": 207,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O27895",
+          "source_obs_ids": [
+            27895
+          ],
+          "project": "v2",
+          "timestamp": "2026-02-08T10:18:01.322Z",
+          "session_id": "6b059617-7d88-41ea-8def-0c2326364071",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "LED Rendering Physics Investigation Initiated Beginning deep dive into LED rendering physics for firmware/v2, starting with memory search for existing knowledge.",
+          "excerpt_chars": 161,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "LEDS/POWER",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O27863",
+          "source_obs_ids": [
+            27863
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T06:01:09.350Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Debug Logging for Palette Loop Investigation Found in RendererActor JSON debug logs written to file tracking palette change messages for hypothesis H2 validation [\"RendererActor.cpp contains debug logging at lines 456-469 and 513-526 tracking SET_PALETTE and PALETTE_CHANGED messages\",\"Debug logs written to /Users/spec\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O27628",
+          "source_obs_ids": [
+            27628
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-07T19:20:01.017Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Core Documentation Files - Effects Guide and Architecture Documents Found EFFECTS.md in docs/effects/ and two ARCHITECTURE.md files for test audio tool and dashboard components The primary session searched for core documentation files to understand effects architecture and constraints.",
+          "excerpt_chars": 286,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX",
+            "UI/UX"
+          ]
+        },
+        {
+          "evidence_id": "O27500",
+          "source_obs_ids": [
+            27500
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-07T18:22:20.403Z",
+          "session_id": "77891073-2c67-4168-8806-fbda0f9d9399",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Twitter MCP Server Configuration Completed in Claude Settings Agent-twitter-client-mcp server configured with cookie-based authentication in ~/.claude/settings.json mcpServers section Completed Twitter/X integration by adding agent-twitter-client-mcp server to Claude Code's MCP server configuration.",
+          "excerpt_chars": 300,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": []
+        },
+        {
+          "evidence_id": "O27489",
+          "source_obs_ids": [
+            27489
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-07T18:08:00.614Z",
+          "session_id": "77891073-2c67-4168-8806-fbda0f9d9399",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Twitter Authentication Cookies Configured in MCP Settings Populated agent-twitter-client-mcp with actual Twitter authentication cookies extracted from browser session The Twitter MCP server configuration in Claude settings was completed by replacing placeholder cookie values with actual authentication credentials extr\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": []
+        }
+      ],
+      "definition": "LightwaveOS app with connection stability fixes deployed to iPhone Updated build includes 500ms WebSocket and 300ms REST delays to prevent ESP32 soft AP overload Deployed updated\u2026"
+    },
+    {
+      "concept": "K1-Lightwave",
+      "aliases": [
+        "k1 lightwave",
+        "k1-lightwave",
+        "lightwave ledstrip",
+        "lightwave-ledstrip",
+        "lightwaveos"
+      ],
+      "first_seen": "2025-07-02T13:05:43Z",
+      "last_seen": "2026-02-09T16:01:39.531000Z",
+      "status": "current",
+      "citation_count": 3023,
+      "citations": [
+        {
+          "evidence_id": "O28425",
+          "source_obs_ids": [
+            28425
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T16:01:39.531Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Examined PatternRegistry pattern families for color handling architecture PatternRegistry.cpp defines PatternFamily taxonomy with FLUID_PLASMA, GEOMETRIC, and other categories using CENTER_ORIGIN and palette-driven rendering.",
+          "excerpt_chars": 225,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28417",
+          "source_obs_ids": [
+            28417
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:56:19.430Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Examined SbWaveform310RefEffect reference implementation for palette-free color summation pattern SbWaveform310RefEffect uses note-chromagram color summation in chromatic mode, providing reference for multi-color injection without palette corruption.",
+          "excerpt_chars": 250,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28416",
+          "source_obs_ids": [
+            28416
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:56:17.412Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Waveform Effect Implementations in LightwaveOS Effects directory contains multiple waveform visualizers including Sensory Bridge and ESv11 reference implementations The effects directory contains a comprehensive set of waveform visualization implementations spanning multiple audio visualization paradigms.",
+          "excerpt_chars": 306,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28398",
+          "source_obs_ids": [
+            28398
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:31:51.123Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Bloom Mode Injection Algorithm Requires Complete Redesign Current weighted centroid approach still produces oversaturated visuals requiring fundamental rethink of color injection strategy After implementing a weighted centroid voting algorithm to replace the RGB accumulation loop in BloomParityEffect.cpp's computeInje\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "LEDS/POWER",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28396",
+          "source_obs_ids": [
+            28396
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:28:51.860Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Render Pipeline Uses Static Post-FX Parameters for Runtime Tuning applyPrismEffect and renderBulbCover reference s_prismOpacity and s_bulbOpacity enabling live parameter adjustment The final render pipeline implementation at lines 497 and 500 demonstrates how runtime parameter tuning integrates into the Bloom effect.",
+          "excerpt_chars": 318,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28393",
+          "source_obs_ids": [
+            28393
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:21:35.350Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Palette Usage Pattern in LGPBoxWaveEffect Effect uses ctx.palette.getColor with hue-based index and calculated brightness for color wave rendering The LGPBoxWaveEffect demonstrates standard palette usage patterns in LightwaveOS effects.",
+          "excerpt_chars": 236,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "LEDS/POWER",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28391",
+          "source_obs_ids": [
+            28391
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:21:19.667Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Palette Color Corruption Pattern Identified Across Effects Certain effects display palette colors accurately while others show extreme RGB channel saturation and corruption.",
+          "excerpt_chars": 173,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28390",
+          "source_obs_ids": [
+            28390
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:12:42.961Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Serial Command Buffering System Includes Bloom Tuning Hotkeys Immediate command handling ensures p/P/o/O/i/I bypass line buffering for responsive real-time adjustment The serial command handling system in main.cpp implements a sophisticated buffering strategy that treats Bloom tuning hotkeys as immediate commands.",
+          "excerpt_chars": 315,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28378",
+          "source_obs_ids": [
+            28378
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:08:40.398Z",
+          "session_id": "d4a7bce4-fb66-4f17-86c2-4148009186b8",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "RendererActor provides dependency injection for zone composer, audio buffer, and tempo tracker RendererActor.h exposes setter methods for external dependencies including ZoneComposer, audio snapshot buffer, and TempoTracker.",
+          "excerpt_chars": 224,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28370",
+          "source_obs_ids": [
+            28370
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:06:34.707Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "ESV11 Audio Backend Build Environment Configuration PlatformIO defines esp32dev_audio_esv11 environment extending base audio config with FEATURE_AUDIO_BACKEND_ESV11 flag The platformio.ini configuration reveals an alternate build environment for ESV11 audio backend integration.",
+          "excerpt_chars": 278,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP"
+          ]
+        },
+        {
+          "evidence_id": "O28367",
+          "source_obs_ids": [
+            28367
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T14:59:45.777Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Bloom Parity Firmware Successfully Flashed to ESP32 Hardware Firmware with FastLED color model and optical post-FX deployed to device in 39.63 seconds The complete Bloom parity implementation was successfully uploaded to ESP32 hardware, marking deployment of the visual parity features.",
+          "excerpt_chars": 286,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28366",
+          "source_obs_ids": [
+            28366
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T14:59:03.542Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Final Bloom Parity Build Successful with Runtime Controls Complete implementation with FastLED color model, post-FX, and serial tuning compiled ready for deployment The final firmware build successfully compiled with all Bloom parity features integrated and ready for deployment.",
+          "excerpt_chars": 279,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        }
+      ],
+      "definition": "Examined PatternRegistry pattern families for color handling architecture PatternRegistry.cpp defines PatternFamily taxonomy with FLUID_PLASMA, GEOMETRIC, and other categories usi\u2026"
+    },
+    {
+      "concept": "Tab5 Hub",
+      "aliases": [
+        "encoder device",
+        "hub",
+        "tab5",
+        "tab5.encoder"
+      ],
+      "first_seen": "2025-10-06T01:50:34.641000Z",
+      "last_seen": "2026-02-08T13:54:09.858000Z",
+      "status": "current",
+      "citation_count": 1868,
+      "citations": [
+        {
+          "evidence_id": "O28076",
+          "source_obs_ids": [
+            28076
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T13:54:09.858Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Systematic USB Serial Connection Failure Pattern Blocking All Firmware Deployment Attempts 30+ consecutive upload attempts failed at identical 42% completion point with pySerial port configuration error indicating persistent hardware issue.",
+          "excerpt_chars": 240,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28075",
+          "source_obs_ids": [
+            28075
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T13:53:13.021Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "USB Serial Connection Instability Blocking Firmware Deployment ESP32 upload failed at 42% completion with pySerial port configuration error indicating hardware connection or driver issue.",
+          "excerpt_chars": 187,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": []
+        },
+        {
+          "evidence_id": "O27854",
+          "source_obs_ids": [
+            27854
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T05:47:15.805Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Auggie CLI Research for Agentic Terminal Integration Web search retrieved installation and authentication details for Augment Code's AI coding agent that runs in terminal environments The primary session researched Auggie CLI, Augment Code's terminal-based AI coding agent, potentially evaluating it as a complementary\u2026",
+          "excerpt_chars": 319,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": []
+        },
+        {
+          "evidence_id": "O27795",
+          "source_obs_ids": [
+            27795
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T05:00:36.489Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "iOS Project Configuration, Test Targets, and CI Workflow Added XcodeGen configuration, unit/UI test infrastructure, and GitHub Actions snapshot testing workflow for LightwaveOS iOS app The primary session added comprehensive iOS testing infrastructure to the LightwaveOS project, establishing automated quality gates fo\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "UI/UX"
+          ]
+        },
+        {
+          "evidence_id": "O27672",
+          "source_obs_ids": [
+            27672
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-07T19:29:05.843Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "CoreEffects.cpp - Added BeatPulseLGPInterferenceEffect Header Include Registered new LGP interference effect header in core effects compilation unit for firmware integration The primary session updated CoreEffects.cpp to include the new BeatPulseLGPInterferenceEffect.h header file, integrating it into the firmware's c\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "OPTICS/LGP",
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O27622",
+          "source_obs_ids": [
+            27622
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-07T19:19:26.298Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Agent Documentation Directory - FastLED Research and Protected Files Seven agent-facing documentation files including FastLED optimization research, practical patterns, performance benchmarks, and protected file registry The primary session discovered a dedicated docs/agent/ directory containing seven markdown files d\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O27496",
+          "source_obs_ids": [
+            27496
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-07T18:11:41.256Z",
+          "session_id": "77891073-2c67-4168-8806-fbda0f9d9399",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Nitter-Based Scrapers Enable Authentication-Free Twitter Access Multiple Nitter scraper implementations allow Twitter data extraction without API credentials or authentication Web search identified Nitter-based scraping solutions as alternatives to cookie-based or API-based Twitter access.",
+          "excerpt_chars": 290,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "CONTROL/NETWORK"
+          ]
+        },
+        {
+          "evidence_id": "O27483",
+          "source_obs_ids": [
+            27483
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-07T15:59:08.335Z",
+          "session_id": "77891073-2c67-4168-8806-fbda0f9d9399",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "MCP Servers Enable AI Agent Access to X.com API Multiple Model Context Protocol servers provide X/Twitter API integration for AI assistants and agents Web search revealed a robust ecosystem of Model Context Protocol (MCP) servers designed specifically for X.com (Twitter) integration with AI agents.",
+          "excerpt_chars": 299,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "CONTROL/NETWORK"
+          ]
+        },
+        {
+          "evidence_id": "O27399",
+          "source_obs_ids": [
+            27399
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-07T15:05:22.762Z",
+          "session_id": "3aa8af33-db01-45f6-b446-6235943e5033",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Repository Contains 19+ Untracked Files Including UI Mockups and Architecture Documentation Git status shows 1 staged file and 19+ untracked files across docs, firmware, and workflow directories Git status reveals significant untracked work in repository including 19+ files spanning documentation, firmware implementat\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "UI/UX"
+          ]
+        },
+        {
+          "evidence_id": "O27304",
+          "source_obs_ids": [
+            27304
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-07T13:39:00.571Z",
+          "session_id": "3aa8af33-db01-45f6-b446-6235943e5033",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Comprehensive Stash Analysis Shows No UI Mockup HTML Files in Any Stash All 10 stashes contain only tracked source code files with no docs/ui-mockups HTML files present Comprehensive analysis of all 10 git stashes definitively proves that no UI mockup HTML files from docs/ui-mockups/ were captured in any stash entry.",
+          "excerpt_chars": 318,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "UI/UX"
+          ]
+        },
+        {
+          "evidence_id": "O27288",
+          "source_obs_ids": [
+            27288
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-07T13:34:49.380Z",
+          "session_id": "3aa8af33-db01-45f6-b446-6235943e5033",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Recent File Deletion History Reveals Major Cleanup Operations Four major deletion commits removed web UI assets, Tab5 components, lightwave-simple app, and dashboard docs Git deletion history reveals several major cleanup operations that removed deprecated web assets, UI components, and documentation.",
+          "excerpt_chars": 302,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "UI/UX"
+          ]
+        },
+        {
+          "evidence_id": "O27285",
+          "source_obs_ids": [
+            27285
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-07T13:34:09.774Z",
+          "session_id": "3aa8af33-db01-45f6-b446-6235943e5033",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Memory Search for File Deletion and Cleanup Patterns Multiple cleanup events found but no agent explicitly documented deleting files during commits Second memory search targeting general file deletion and cleanup patterns found 24 observations spanning January-February 2026.",
+          "excerpt_chars": 275,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        }
+      ],
+      "definition": "Systematic USB Serial Connection Failure Pattern Blocking All Firmware Deployment Attempts 30+ consecutive upload attempts failed at identical 42% completion point with pySerial p\u2026"
+    },
+    {
+      "concept": "PRISM",
+      "aliases": [
+        "prism",
+        "prism.k1",
+        "prism.unified",
+        "s_bulbopacity and converted",
+        "s_prismopacity and converted"
+      ],
+      "first_seen": "2025-07-05T04:29:09Z",
+      "last_seen": "2026-02-09T15:54:01.001000Z",
+      "status": "current",
+      "citation_count": 412,
+      "citations": [
+        {
+          "evidence_id": "O28415",
+          "source_obs_ids": [
+            28415
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:54:01.001Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Firmware Successfully Flashed to Device with Palette-Driven Bloom and Runtime Control Infrastructure Deployed firmware to esp32dev_audio_esv11 hardware in 39.86 seconds with dual-layer motion system and externalized parameters The firmware was successfully deployed to the ESP32-S3 hardware running the esp32dev_audio_e\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28413",
+          "source_obs_ids": [
+            28413
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:52:58.703Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Additional Bloom Parameter Hotkeys Registered as Immediate Commands Added k/K, u/U, v/V as immediate single-char commands for upcoming Bloom palette and spatial controls The serial command parser's immediate hotkey registration was extended with three additional Bloom control keys: k/K for gHue speed (palette sweep),\u2026",
+          "excerpt_chars": 319,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28412",
+          "source_obs_ids": [
+            28412
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:52:55.818Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Added Help Text for Three Additional Bloom Parameters Documented k/K, u/U, v/V commands for gHue speed, spatial spread, and intensity coupling tuning The primary session added documentation for three additional Bloom runtime-adjustable parameters in the help system.",
+          "excerpt_chars": 266,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28411",
+          "source_obs_ids": [
+            28411
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:52:51.136Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Verified comprehensive Bloom tuning keyboard map in help text main.cpp help text confirms 7-parameter Bloom control interface covering transport mechanics, post-FX, and palette selection.",
+          "excerpt_chars": 187,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28409",
+          "source_obs_ids": [
+            28409
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:52:48.212Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Serial Keyboard Controls for Bloom Prism Iterations Main.cpp implements runtime hotkeys j/J to adjust Bloom prism iteration count for ghost layer tuning The main.cpp serial keyboard interface includes runtime controls for Bloom mode prism iterations accessible via j/J keys.",
+          "excerpt_chars": 274,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28408",
+          "source_obs_ids": [
+            28408
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:51:37.705Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Added Palette Color Mapping Control Parameters for Bloom Introduced three static tunables for palette sweep speed, spatial spread, and intensity coupling modes Three new static tunable parameters were added to BloomParityEffect to control palette-based color mapping behavior.",
+          "excerpt_chars": 276,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28407",
+          "source_obs_ids": [
+            28407
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:51:30.569Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Additional Runtime-Tunable Parameters Added to BloomParityEffect s_alpha, s_squareIter, and s_prismIterations exposed as static variables alongside opacity controls The BloomParityEffect header was expanded to expose three additional core algorithm parameters as runtime-tunable static variables.",
+          "excerpt_chars": 296,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28406",
+          "source_obs_ids": [
+            28406
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:51:06.946Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Complete Runtime-Tunable Parameter Interface Added to BloomParityEffect Five static getter/setter pairs expose all Bloom tuning parameters with range validation for live adjustment BloomParityEffect was completed with a comprehensive runtime-tunable parameter interface exposing five critical visual controls.",
+          "excerpt_chars": 309,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28402",
+          "source_obs_ids": [
+            28402
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:33:49.574Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Successful Build with Expanded Bloom Tunable Parameters Firmware compiled successfully with five runtime-adjustable Bloom parameters in 26 seconds The primary session successfully compiled the firmware with the expanded set of runtime-adjustable Bloom parameters.",
+          "excerpt_chars": 263,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28397",
+          "source_obs_ids": [
+            28397
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:28:57.843Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "History Buffer Proportional Scaling Prevents Feedback Loop Color Distortion Replaced memcpy with per-pixel proportional scaling to prevent hue shift toward white during HDR overdrive conditions The history buffer copy operation was modified to prevent color distortion in the feedback loop when prism opacity exceeds 1.\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": []
+        },
+        {
+          "evidence_id": "O28396",
+          "source_obs_ids": [
+            28396
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:28:51.860Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Render Pipeline Uses Static Post-FX Parameters for Runtime Tuning applyPrismEffect and renderBulbCover reference s_prismOpacity and s_bulbOpacity enabling live parameter adjustment The final render pipeline implementation at lines 497 and 500 demonstrates how runtime parameter tuning integrates into the Bloom effect.",
+          "excerpt_chars": 318,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28395",
+          "source_obs_ids": [
+            28395
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:21:59.709Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Firmware Build Completed with Runtime Parameter Control and Palette-Driven Bloom Successfully compiled esp32dev_audio_esv11 firmware with externalized tunables, palette injection system, and keyboard control infrastructure The firmware build successfully compiled with major architectural changes to the Bloom effect sy\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        }
+      ],
+      "definition": "Firmware Successfully Flashed to Device with Palette-Driven Bloom and Runtime Control Infrastructure Deployed firmware to esp32dev_audio_esv11 hardware in 39.86 seconds with dual-\u2026"
+    },
+    {
+      "concept": "Trinity",
+      "aliases": [
+        "spectrasynq.trinity",
+        "trinity"
+      ],
+      "first_seen": "2026-01-27T20:04:18.544000Z",
+      "last_seen": "2026-02-09T15:08:45.147000Z",
+      "status": "current",
+      "citation_count": 42,
+      "citations": [
+        {
+          "evidence_id": "O28379",
+          "source_obs_ids": [
+            28379
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:08:45.147Z",
+          "session_id": "d4a7bce4-fb66-4f17-86c2-4148009186b8",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "RendererActor implements capture mode for LED frame recording RendererActor.h defines m_captureEnabled flag and three capture tap points for multi-buffer frame recording system.",
+          "excerpt_chars": 177,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "LEDS/POWER",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O27979",
+          "source_obs_ids": [
+            27979
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T12:08:10.154Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Firmware successfully uploaded to device - esp32dev_audio_esv11 build with 81.64 second total time Full compilation and upload completed: 1.96MB firmware (29.9% flash), 106KB RAM (32.6%), deployed to ESP32-S3 at MAC b4:3a:45:a5:89:b4.",
+          "excerpt_chars": 234,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP"
+          ]
+        },
+        {
+          "evidence_id": "O27931",
+          "source_obs_ids": [
+            27931
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T11:55:48.785Z",
+          "session_id": "c3c8a9fc-f4fb-402d-a4ee-5e6742c7343a",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Git Repository State Check Reveals Recent Validation Work and Uncommitted Architecture Document Most recent commit validates dt-correctness sweep with 3-agent consensus; AUDIO_VISUAL_TIMING_ARCHITECTURE.md remains uncommitted Git repository inspection reveals the current state of the Lightwave-Ledstrip project followi\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "LEDS/POWER",
+            "AUDIO/DSP"
+          ]
+        },
+        {
+          "evidence_id": "O27883",
+          "source_obs_ids": [
+            27883
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T10:05:48.261Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "ES v1.1 Beat Clock Architecture for Renderer-Domain Tempo Tracking EsBeatClock provides 120 FPS smooth beatPhase without LWLS MusicalGrid for ES audio backend PRIMARY examined the EsBeatClock header which implements renderer-domain beat clock for the ES v1.1 audio backend.",
+          "excerpt_chars": 273,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O27879",
+          "source_obs_ids": [
+            27879
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T10:05:38.868Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Audio sample rate references span 49 files across architecture 12.8kHz sample rate found in audio backends, capture layers, tempo tracking, documentation, and test infrastructure Initial architecture mapping grep revealed 12.8kHz sample rate referenced across 49 files spanning entire audio pipeline.",
+          "excerpt_chars": 300,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP"
+          ]
+        },
+        {
+          "evidence_id": "O27873",
+          "source_obs_ids": [
+            27873
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T06:07:07.137Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Complete Audio-to-LED Data Flow Architecture Mapped for LightwaveOS Comprehensive 11-section architecture map documenting audio input sources, DSP pipeline, control bus, effect context, rendering pipeline, and LED output with timing-critical paths.",
+          "excerpt_chars": 248,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "LEDS/POWER",
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O27869",
+          "source_obs_ids": [
+            27869
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T06:01:37.362Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "EsBeatClock provides renderer-domain beat synchronization for ES v1.1 audio backend Beat clock produces smooth 120 FPS beatPhase from ES tempo fields with external sync support for Trinity bridge EsBeatClock provides renderer-domain beat synchronization specifically for the ES v1.1_320 audio backend, producing smooth\u2026",
+          "excerpt_chars": 319,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O27868",
+          "source_obs_ids": [
+            27868
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T06:01:33.933Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Musical Grid Architecture with K1 Integration and Trinity External Sync Render-domain PLL-style beat tracking system supporting K1 Lightwave beat tracker integration and Trinity offline analysis external sync with thread-safe snapshot publishing [\"MusicalGrid.h defines render-domain PLL (Phase-Locked Loop) musical gri\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O27862",
+          "source_obs_ids": [
+            27862
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T06:00:59.588Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Audio subsystem architecture comprises 55 files across contracts, backends, and analysis modules Comprehensive audio pipeline including tempo tracking, chroma analysis, style detection, and Emotiscope v1.1 backend integration Audio subsystem glob reveals comprehensive 55-file architecture implementing full audio analy\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP"
+          ]
+        },
+        {
+          "evidence_id": "O27806",
+          "source_obs_ids": [
+            27806
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T05:17:12.960Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Git history shows systematic bug fix progression across three major commits Recent commits reveal systematic remediation: motion direction fixes, dt-correctness across 38 effects, powf optimizations and dual-strip fixes - total 53+ effects corrected.",
+          "excerpt_chars": 250,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "LEDS/POWER",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O27799",
+          "source_obs_ids": [
+            27799
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T05:01:52.780Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Git staging completed - only .claude/ directory remains untracked All systematic bug fixes and associated changes staged for commit; single untracked directory (.claude/) persists as expected IDE/assistant metadata.",
+          "excerpt_chars": 215,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": []
+        },
+        {
+          "evidence_id": "O27796",
+          "source_obs_ids": [
+            27796
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T05:00:52.006Z",
+          "session_id": "f201dce0-ef12-4a08-8f99-62e548d331f9",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Commit 11: Documentation - FastLED research and architecture guides Added 6,064 lines of documentation covering FastLED optimization, preset architecture, and Trinity protocol specification Commit 11 completed on fix/effects-systematic-bug-fixes branch, adding comprehensive documentation spanning FastLED library resea\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX",
+            "UI/UX"
+          ]
+        }
+      ],
+      "definition": "RendererActor implements capture mode for LED frame recording RendererActor.h defines m_captureEnabled flag and three capture tap points for multi-buffer frame recording system."
+    },
+    {
+      "concept": "v2 Firmware",
+      "aliases": [
+        "firmware v2",
+        "lightwaveos v2",
+        "v2"
+      ],
+      "first_seen": "2025-07-05T12:37:14Z",
+      "last_seen": "2026-02-09T15:56:26.177000Z",
+      "status": "current",
+      "citation_count": 2903,
+      "citations": [
+        {
+          "evidence_id": "O28418",
+          "source_obs_ids": [
+            28418
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:56:26.177Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "SB Waveform Uses HSV Direct RGB Conversion Without Palette System Effect generates colors via hsv2rgb_spectrum and direct channel scaling instead of palette.getColor() lookups.",
+          "excerpt_chars": 176,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28417",
+          "source_obs_ids": [
+            28417
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:56:19.430Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Examined SbWaveform310RefEffect reference implementation for palette-free color summation pattern SbWaveform310RefEffect uses note-chromagram color summation in chromatic mode, providing reference for multi-color injection without palette corruption.",
+          "excerpt_chars": 250,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28375",
+          "source_obs_ids": [
+            28375
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T15:08:08.248Z",
+          "session_id": "d4a7bce4-fb66-4f17-86c2-4148009186b8",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Audio sequence logging found in RendererActor RendererActor.cpp contains \"Audio OK\" message with sequence number tracking for audio frame processing.",
+          "excerpt_chars": 149,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28360",
+          "source_obs_ids": [
+            28360
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T14:58:01.637Z",
+          "session_id": "d4a7bce4-fb66-4f17-86c2-4148009186b8",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Serial command interface effect iteration mapping Located 'i' command for effect iteration in firmware main.cpp serial command handler Investigation located the firmware's serial command handler for effect iteration, likely mapped to the 'i' key in the main.cpp command processing loop.",
+          "excerpt_chars": 286,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28341",
+          "source_obs_ids": [
+            28341
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T14:40:46.862Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Final BloomParityEffect Implementation with Complete Color Parity Implementation now includes FastLED rainbow HSV model and 8-bit round-trip for both forceSaturation and forceHue The final BloomParityEffect implementation achieves comprehensive Sensory Bridge visual parity through correct color model implementation.",
+          "excerpt_chars": 317,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28284",
+          "source_obs_ids": [
+            28284
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T07:30:30.067Z",
+          "session_id": "669ecadb-8086-47e4-ad1f-2aff39253d69",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Existing BloomParityEffect.h Header Structure Current implementation contains transport and injection logic but lacks Sensory Bridge optical post-FX layers The existing BloomParityEffect header defines the structure for Sensory Bridge Bloom mode parity in LightwaveOS v2.",
+          "excerpt_chars": 271,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "LEDS/POWER",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28253",
+          "source_obs_ids": [
+            28253
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T07:00:21.527Z",
+          "session_id": "d4a7bce4-fb66-4f17-86c2-4148009186b8",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Xcode Project Regenerated with XcodeGen to Include ZonePresetsCard Successfully ran xcodegen to update LightwaveOS.xcodeproj with new ZonePresetsCard.swift file in build configuration.",
+          "excerpt_chars": 184,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "UI/UX"
+          ]
+        },
+        {
+          "evidence_id": "O28250",
+          "source_obs_ids": [
+            28250
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-09T06:57:16.830Z",
+          "session_id": "d4a7bce4-fb66-4f17-86c2-4148009186b8",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Modified files identified across firmware and iOS app Git diff shows changes in audio timing, beat effects, zone composer, and iOS preset views Git diff revealed pending changes across multiple subsystems.",
+          "excerpt_chars": 205,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX",
+            "UI/UX"
+          ]
+        },
+        {
+          "evidence_id": "O28240",
+          "source_obs_ids": [
+            28240
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T21:43:20.368Z",
+          "session_id": "33d05f53-bb8a-4af0-a123-c3db740ce647",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "BloomParityEffect Header Created in ieffect Directory BloomParityEffect.h written to firmware/v2/src/effects/ieffect/ with 7-step transport pipeline and per-zone state The BloomParityEffect header file has been created in the ieffect directory, defining the complete interface for Sensory Bridge Bloom parity implementa\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": true,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28234",
+          "source_obs_ids": [
+            28234
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T21:41:54.049Z",
+          "session_id": "33d05f53-bb8a-4af0-a123-c3db740ce647",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "No AudioBloomParity Effect Files Exist Glob search confirms no AudioBloomParity implementation files in effects directory despite pattern 98 reservation The glob search confirms pattern ID 98 exists only as metadata - no implementation files were ever created.",
+          "excerpt_chars": 260,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28230",
+          "source_obs_ids": [
+            28230
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T21:40:56.075Z",
+          "session_id": "33d05f53-bb8a-4af0-a123-c3db740ce647",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "IEffect Directory Structure Effects directory contains 245 files including existing BeatPulse effects and transport utilities The ieffect directory already contains multiple bloom-related implementations including AudioBloomEffect and BeatPulseBloomEffect, along with a family of BeatPulse effects (Breathe, Ripple, Sho\u2026",
+          "excerpt_chars": 320,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "AUDIO/DSP",
+            "RENDER/FX"
+          ]
+        },
+        {
+          "evidence_id": "O28226",
+          "source_obs_ids": [
+            28226
+          ],
+          "project": "Lightwave-Ledstrip",
+          "timestamp": "2026-02-08T21:40:14.382Z",
+          "session_id": "33d05f53-bb8a-4af0-a123-c3db740ce647",
+          "source_tier": "primary",
+          "stitched": false,
+          "excerpt": "Bloom Parity Effect Architecture Header file defines exact port of Sensory Bridge Bloom mode to LightwaveOS v2 with transport pipeline The BloomParityEffect header defines the architecture for porting Sensory Bridge's Bloom visual mode to LightwaveOS v2.",
+          "excerpt_chars": 254,
+          "explicit_identifier": false,
+          "citation_quality_pass": true,
+          "domain_tags": [
+            "RENDER/FX"
+          ]
+        }
+      ],
+      "definition": "SB Waveform Uses HSV Direct RGB Conversion Without Palette System Effect generates colors via hsv2rgb_spectrum and direct channel scaling instead of palette.getColor() lookups."
+    }
+  ],
+  "excluded_entries": []
+}

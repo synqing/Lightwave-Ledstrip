@@ -1,0 +1,18 @@
+{
+  "db": "/Users/spectrasynq/.claude-mem/claude-mem.db",
+  "projects_filter": "ALL",
+  "rows_loaded": 36483,
+  "observations_loaded": 31083,
+  "prompts_loaded": 5400,
+  "generated_at": "2026-02-09T22:35:57.504700Z",
+  "quality_gate": {
+    "min_chars": 100,
+    "max_evidence_per_topic": 60,
+    "min_evidence_per_claim": 2,
+    "min_sessions_per_claim": 2
+  },
+  "contract": {
+    "rule": "No supporting excerpts found when evidence is insufficient",
+    "claims_require_distinct_sessions": true
+  }
+}

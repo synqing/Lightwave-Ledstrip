@@ -36,12 +36,26 @@ On 2026-02-06, an agent decided that `docs/ui-mockups/LIGHTWAVE_DESIGN_SYSTEM_MO
 
 ## Build (PlatformIO)
 
+PlatformIO requires Python 3.10–3.13. If your default `python3` is 3.14+, use the wrapper (uses Homebrew `python@3.12`):
+
 ```bash
 cd firmware/v2
-pio run -e esp32dev_audio_esv11              # build
-pio run -e esp32dev_audio_esv11 -t upload    # build + flash
-pio device monitor -b 115200           # serial monitor
+./pio run -e esp32dev_audio_esv11_32khz              # build (default)
+./pio run -e esp32dev_audio_esv11_32khz -t upload    # build + flash
+./pio device monitor -b 115200                       # serial monitor
 ```
+
+Without the wrapper (when `python3` is 3.10–3.13):
+
+```bash
+cd firmware/v2
+pio run -e esp32dev_audio_esv11_32khz
+pio run -e esp32dev_audio_esv11_32khz -t upload
+pio device monitor -b 115200
+```
+
+**Default build environment: `esp32dev_audio_esv11_32khz`** (32kHz/125Hz DSP pipeline).
+The legacy `esp32dev_audio_esv11` (12.8kHz/50Hz) is retained for regression testing only.
 
 ## Hard Constraints
 

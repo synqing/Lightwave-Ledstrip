@@ -151,16 +151,30 @@ void ZoneComposerUI::loop() {
 
 void ZoneComposerUI::updateZone(uint8_t zoneId, const ZoneState& state) {
     if (zoneId >= 4) return;
-    
+
     _zones[zoneId] = state;
-    
+
+    // Sync encoder working arrays from server state (respecting holdoff)
+    if (!isZoneInHoldoff(zoneId, 0)) {
+        _zoneEffects[zoneId] = state.effectId;
+    }
+    if (!isZoneInHoldoff(zoneId, 1)) {
+        _zonePalettes[zoneId] = state.paletteId;
+    }
+    if (!isZoneInHoldoff(zoneId, 2)) {
+        _zoneSpeeds[zoneId] = state.speed;
+    }
+    if (!isZoneInHoldoff(zoneId, 3)) {
+        _zoneBrightness[zoneId] = state.brightness;
+    }
+
     // Update LED range from segments if available
     if (zoneId < _zoneCount) {
         const zones::ZoneSegment& seg = _segments[zoneId];
         _zones[zoneId].ledStart = seg.s1LeftStart;
         _zones[zoneId].ledEnd = seg.s1RightEnd;
     }
-    
+
     markDirty();
 }
 
@@ -833,37 +847,34 @@ lv_obj_t* ZoneComposerUI::getParameterWidget(uint8_t zoneIndex, ZoneParameterMod
 }
 
 void ZoneComposerUI::handleEncoderChange(uint8_t encoderIndex, int32_t delta) {
-    // Route based on current selection
-    switch (_currentSelection.type) {
-        case SelectionType::ZONE_PARAMETER:
-            // Encoder N adjusts Zone N parameter
-            if (encoderIndex == _currentSelection.zoneIndex) {
-                adjustZoneParameter(encoderIndex, delta);
-            } else if (encoderIndex < 4) {
-                // Fallback: encoder N always controls zone N
-                adjustZoneParameter(encoderIndex, delta);
-            }
-            break;
+    // Fixed-function mapping for ENC-B (local indices 0-7):
+    //   3 encoders per zone: effect, speed, palette
+    //   enc0 = Zone 1 effect,  enc1 = Zone 1 speed,  enc2 = Zone 1 palette
+    //   enc3 = Zone 2 effect,  enc4 = Zone 2 speed,  enc5 = Zone 2 palette
+    //   enc6 = Zone 3 effect,  enc7 = Zone 3 speed
 
-        case SelectionType::ZONE_COUNT:
-            if (encoderIndex == 0) {
-                adjustZoneCount(delta);
-            }
-            break;
+    if (encoderIndex >= 8) return;
 
-        case SelectionType::PRESET:
-            if (encoderIndex == 0) {
-                adjustPreset(delta);
-            }
-            break;
+    // Lookup table: [encoderIndex] → {zoneIndex, parameterMode}
+    struct EncoderMapping { uint8_t zone; ZoneParameterMode mode; };
+    static constexpr EncoderMapping mapping[8] = {
+        {0, ZoneParameterMode::EFFECT},   // enc0 → Zone 1 effect
+        {0, ZoneParameterMode::SPEED},    // enc1 → Zone 1 speed
+        {0, ZoneParameterMode::PALETTE},  // enc2 → Zone 1 palette
+        {1, ZoneParameterMode::EFFECT},   // enc3 → Zone 2 effect
+        {1, ZoneParameterMode::SPEED},    // enc4 → Zone 2 speed
+        {1, ZoneParameterMode::PALETTE},  // enc5 → Zone 2 palette
+        {2, ZoneParameterMode::EFFECT},   // enc6 → Zone 3 effect
+        {2, ZoneParameterMode::SPEED},    // enc7 → Zone 3 speed
+    };
 
-        case SelectionType::NONE:
-            // Fallback: Encoder N adjusts Zone N with current mode
-            if (encoderIndex < 4) {
-                adjustZoneParameter(encoderIndex, delta);
-            }
-            break;
-    }
+    const auto& m = mapping[encoderIndex];
+    if (m.zone >= 4) return;
+
+    ZoneParameterMode savedMode = _activeMode;
+    _activeMode = m.mode;
+    adjustZoneParameter(m.zone, delta);
+    _activeMode = savedMode;
 }
 
 void ZoneComposerUI::adjustZoneParameter(uint8_t zoneIndex, int32_t delta) {
@@ -1025,45 +1036,58 @@ void ZoneComposerUI::adjustPreset(int32_t delta) {
 void ZoneComposerUI::updateEffectLabel(uint8_t zoneIndex) {
     if (zoneIndex >= 4 || !_zoneEffectLabels[zoneIndex]) return;
 
+    // _zoneEffectLabels stores the container; the value label is the second child
+    lv_obj_t* valueLabel = lv_obj_get_child(_zoneEffectLabels[zoneIndex], 1);
+    if (!valueLabel) return;
+
     const char* effectName = lookupEffectName(_zoneEffects[zoneIndex]);
     if (effectName) {
-        lv_label_set_text(_zoneEffectLabels[zoneIndex], effectName);
+        lv_label_set_text(valueLabel, effectName);
     } else {
         // Fallback to ID if name not cached
         char buf[24];
         snprintf(buf, sizeof(buf), "Effect #%u", _zoneEffects[zoneIndex]);
-        lv_label_set_text(_zoneEffectLabels[zoneIndex], buf);
+        lv_label_set_text(valueLabel, buf);
     }
 }
 
 void ZoneComposerUI::updatePaletteLabel(uint8_t zoneIndex) {
     if (zoneIndex >= 4 || !_zonePaletteLabels[zoneIndex]) return;
 
+    lv_obj_t* valueLabel = lv_obj_get_child(_zonePaletteLabels[zoneIndex], 1);
+    if (!valueLabel) return;
+
     const char* paletteName = lookupPaletteName(_zonePalettes[zoneIndex]);
     if (paletteName) {
-        lv_label_set_text(_zonePaletteLabels[zoneIndex], paletteName);
+        lv_label_set_text(valueLabel, paletteName);
     } else {
         // Fallback to ID if name not cached
         char buf[24];
         snprintf(buf, sizeof(buf), "Palette #%u", _zonePalettes[zoneIndex]);
-        lv_label_set_text(_zonePaletteLabels[zoneIndex], buf);
+        lv_label_set_text(valueLabel, buf);
     }
 }
 
 void ZoneComposerUI::updateSpeedLabel(uint8_t zoneIndex) {
     if (zoneIndex >= 4 || !_zoneSpeedLabels[zoneIndex]) return;
 
+    lv_obj_t* valueLabel = lv_obj_get_child(_zoneSpeedLabels[zoneIndex], 1);
+    if (!valueLabel) return;
+
     char buf[16];
-    snprintf(buf, sizeof(buf), "SPD: %u", _zoneSpeeds[zoneIndex]);
-    lv_label_set_text(_zoneSpeedLabels[zoneIndex], buf);
+    snprintf(buf, sizeof(buf), "%u", _zoneSpeeds[zoneIndex]);
+    lv_label_set_text(valueLabel, buf);
 }
 
 void ZoneComposerUI::updateBrightnessLabel(uint8_t zoneIndex) {
     if (zoneIndex >= 4 || !_zoneBrightnessLabels[zoneIndex]) return;
 
+    lv_obj_t* valueLabel = lv_obj_get_child(_zoneBrightnessLabels[zoneIndex], 1);
+    if (!valueLabel) return;
+
     char buf[16];
-    snprintf(buf, sizeof(buf), "BRI: %u", _zoneBrightness[zoneIndex]);
-    lv_label_set_text(_zoneBrightnessLabels[zoneIndex], buf);
+    snprintf(buf, sizeof(buf), "%u", _zoneBrightness[zoneIndex]);
+    lv_label_set_text(valueLabel, buf);
 }
 
 void ZoneComposerUI::updateZoneCountLabel() {

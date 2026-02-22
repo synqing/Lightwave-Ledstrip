@@ -652,9 +652,9 @@ static bool s_encodersInitialized[16] = {false};
  * @param wasReset true if this was a button-press reset to default
  */
 void onEncoderChange(uint8_t index, uint16_t value, bool wasReset) {
-    // CRITICAL FIX: Screen-aware encoder routing
-    // If Zone Composer is active, route encoders to Zone Composer UI
-    if (g_ui && s_uiInitialized && g_ui->getCurrentScreen() == UIScreen::ZONE_COMPOSER) {
+    // Zone Composer routing: only ENC-B (indices 8-15) when Zone Composer is active.
+    // ENC-A (0-7) always works as global parameters regardless of active screen.
+    if (index >= 8 && g_ui && s_uiInitialized && g_ui->getCurrentScreen() == UIScreen::ZONE_COMPOSER) {
         ZoneComposerUI* zoneUI = g_ui->getZoneComposerUI();
         if (zoneUI) {
             // Calculate delta for Zone Composer
@@ -675,8 +675,8 @@ void onEncoderChange(uint8_t index, uint16_t value, bool wasReset) {
                 delta += 256;  // Wrapped backward, treat as forward
             }
 
-            // Send delta to Zone Composer
-            zoneUI->handleEncoderChange(index, delta);
+            // Route ENC-B to Zone Composer with local index (0-7)
+            zoneUI->handleEncoderChange(index - 8, delta);
 
             // Update previous value
             s_prevEncoderValues[index] = value;
@@ -770,10 +770,23 @@ void onEncoderChange(uint8_t index, uint16_t value, bool wasReset) {
     bool shouldLog = wasReset || (now - s_lastEncoderLogTime >= ENCODER_LOG_INTERVAL_MS);
     
     if (shouldLog) {
+        // Resolve human-readable name for Effect (index 0) and Palette (index 1)
+        const char* resolvedName = nullptr;
+        if (index == 0) resolvedName = lookupEffectName(static_cast<uint8_t>(value));
+        else if (index == 1) resolvedName = lookupPaletteName(static_cast<uint8_t>(value));
+
         if (wasReset) {
-            Serial.printf("[%s:%d] %s reset to %d\n", unit, localIdx, name, value);
+            if (resolvedName) {
+                Serial.printf("[%s:%d] %s reset to %d (%s)\n", unit, localIdx, name, value, resolvedName);
+            } else {
+                Serial.printf("[%s:%d] %s reset to %d\n", unit, localIdx, name, value);
+            }
         } else {
-            Serial.printf("[%s:%d] %s: → %d\n", unit, localIdx, name, value);
+            if (resolvedName) {
+                Serial.printf("[%s:%d] %s: → %d (%s)\n", unit, localIdx, name, value, resolvedName);
+            } else {
+                Serial.printf("[%s:%d] %s: → %d\n", unit, localIdx, name, value);
+            }
         }
         s_lastEncoderLogTime = now;
     }
@@ -2014,6 +2027,26 @@ void loop() {
             
             s_uiInitialized = true;
             Serial.println("[UI] Full UI initialized after WiFi connection");
+
+            // Wire ZoneComposerUI to WebSocket client NOW (deferred from setup()
+            // because ZoneComposerUI doesn't exist until after WiFi connects)
+            ZoneComposerUI* zoneUI = g_ui->getZoneComposerUI();
+            if (zoneUI) {
+                zoneUI->setWebSocketClient(&g_wsClient);
+                Serial.println("[UI] ZoneComposerUI wired to WebSocket client");
+
+                // Re-init WsMessageRouter with actual ZoneComposerUI pointer
+                // (setup() passed nullptr because UI didn't exist yet)
+                WsMessageRouter::init(g_paramHandler, &g_wsClient, zoneUI, g_ui);
+                Serial.println("[UI] WsMessageRouter re-initialised with ZoneComposerUI");
+
+                // Wire PresetManager to ZoneComposerUI
+                if (g_presetManager) {
+                    g_presetManager->setZoneComposerUI(zoneUI);
+                }
+            } else {
+                Serial.println("[UI] WARNING: ZoneComposerUI not available after UI init");
+            }
             
             // DISABLED - PaletteLedDisplay
             // Enable palette LED display now that dashboard is loaded

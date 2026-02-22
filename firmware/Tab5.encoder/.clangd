@@ -1,0 +1,9 @@
+# Tab5 (ESP32-P4) clangd config: use compile_commands.json here and strip
+# GCC/ESP-only flags that clang doesn't support so the IDE doesn't show false errors.
+CompileFlags:
+  Add:
+    - -Wno-unknown-warning-option
+  Remove:
+    - -mlongcalls
+    - -fstrict-volatile-bitfields
+    - -fno-tree-switch-conversion

@@ -103,6 +103,28 @@ public:
     bool isZoneModeEnabled() const { return _zonesEnabled; }
 
     /**
+     * Set zone mode enabled state from server sync
+     * Updates internal state and UI visuals without sending a WS command.
+     * @param enabled true to show zones ON, false for OFF
+     */
+    void setZonesEnabled(bool enabled) {
+        if (_zonesEnabled == enabled) return;  // no change
+        _zonesEnabled = enabled;
+        if (_zoneEnableButton) {
+            lv_obj_set_style_border_color(_zoneEnableButton,
+                                          lv_color_hex(enabled ? 0x00FF00 : 0xFF0000),
+                                          LV_PART_MAIN);
+        }
+        if (_zoneEnableLabel) {
+            lv_label_set_text(_zoneEnableLabel, enabled ? "ZONES: ON" : "ZONES: OFF");
+            lv_obj_set_style_text_color(_zoneEnableLabel,
+                                        lv_color_hex(enabled ? 0x00FF00 : 0xFFFFFF),
+                                        LV_PART_MAIN);
+            lv_obj_invalidate(_zoneEnableLabel);
+        }
+    }
+
+    /**
      * Get number of active zones
      * @return Zone count (1-4)
      */

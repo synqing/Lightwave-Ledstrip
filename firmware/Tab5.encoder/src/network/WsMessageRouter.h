@@ -413,6 +413,9 @@ private:
             zoneCount = zones::MAX_ZONES;
         }
 
+        // Sync global zone enable state to UI toggle
+        s_zoneComposerUI->setZonesEnabled(enabled);
+
         // Parse segments array if present
         if (doc["segments"].is<JsonArray>()) {
             JsonArray segmentsArray = doc["segments"].as<JsonArray>();
@@ -612,9 +615,10 @@ private:
         JsonObject data = doc["data"].is<JsonObject>() ? doc["data"].as<JsonObject>() : doc.as<JsonObject>();
         bool enabled = data["enabled"] | false;
         TAB5_WS_PRINTF("[WsRouter] Zone enabled changed: %s\n", enabled ? "ON" : "OFF");
-        // The zones.list broadcast will follow with full state, so no action needed
-        // beyond logging. The UI will update from zones.list.
-        (void)enabled;
+        // Sync UI toggle state immediately so Tab5 stays in phase with v2
+        if (s_zoneComposerUI) {
+            s_zoneComposerUI->setZonesEnabled(enabled);
+        }
     }
 
     /**

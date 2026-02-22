@@ -29,7 +29,7 @@ static void test_registry_before_begin_is_safe() {
     uint8_t variation = 10;
     uint8_t hue = 10;
 
-    registry.applyMappings(0, bus, grid, true, brightness, speed, intensity, saturation, complexity, variation, hue);
+    registry.applyMappings(0, bus, grid, true, 0.008f, brightness, speed, intensity, saturation, complexity, variation, hue);
 
     TEST_ASSERT_EQUAL_UINT8(10, brightness);
     TEST_ASSERT_EQUAL_UINT8(10, speed);
@@ -90,7 +90,7 @@ static void test_registry_set_mapping_and_apply() {
     uint8_t variation = 10;
     uint8_t hue = 10;
 
-    registry.applyMappings(0, bus, grid, true, brightness, speed, intensity, saturation, complexity, variation, hue);
+    registry.applyMappings(0, bus, grid, true, 0.008f, brightness, speed, intensity, saturation, complexity, variation, hue);
     TEST_ASSERT_GREATER_THAN_UINT8(0, brightness);
 }
 

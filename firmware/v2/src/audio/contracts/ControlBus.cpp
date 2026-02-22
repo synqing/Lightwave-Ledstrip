@@ -1,5 +1,7 @@
 #include "ControlBus.h"
 #include "../../config/features.h"  // FEATURE_MUSICAL_SALIENCY
+#include "../../config/audio_config.h"  // audio::HOP_RATE_HZ
+#include "../AudioMath.h"  // retunedAlpha()
 #include <cstring>  // for memcpy
 
 namespace lightwaveos::audio {
@@ -94,24 +96,36 @@ void ControlBus::setMoodSmoothing(uint8_t mood) {
     // Maps mood (0-255) to smoothing parameters:
     //   Low mood (0):    Reactive - fast attack, slow decay, low alpha
     //   High mood (255): Smooth - slow attack, fast decay, high alpha
+    //
+    // Reference alphas are tuned for 50 Hz (12.8kHz / 256-hop).
+    // retunedAlpha() preserves time constants at any frame rate.
     // ========================================================================
+
+    constexpr float REF_HZ = 50.0f;
+    const float targetHz = audio::HOP_RATE_HZ;
 
     // RMS/Flux alpha smoothing
     // Low mood: fast=0.25, slow=0.08 (more reactive)
     // High mood: fast=0.45, slow=0.18 (more smoothed)
-    m_alpha_fast = 0.25f + 0.20f * moodNorm;  // 0.25-0.45
-    m_alpha_slow = 0.08f + 0.10f * moodNorm;  // 0.08-0.18
+    float fast_ref = 0.25f + 0.20f * moodNorm;  // 0.25-0.45 @ 50Hz
+    float slow_ref = 0.08f + 0.10f * moodNorm;  // 0.08-0.18 @ 50Hz
+    m_alpha_fast = retunedAlpha(fast_ref, REF_HZ, targetHz);
+    m_alpha_slow = retunedAlpha(slow_ref, REF_HZ, targetHz);
 
     // Band attack/release (asymmetric follower)
     // Low mood: fast attack (0.25), very slow release (0.02) - punchy transients
     // High mood: slow attack (0.08), faster release (0.06) - sustained, dreamy
-    m_band_attack = 0.25f - 0.17f * moodNorm;        // 0.25-0.08 (inverted)
-    m_band_release = 0.02f + 0.04f * moodNorm;       // 0.02-0.06
+    float attack_ref = 0.25f - 0.17f * moodNorm;   // 0.25-0.08 @ 50Hz
+    float release_ref = 0.02f + 0.04f * moodNorm;  // 0.02-0.06 @ 50Hz
+    m_band_attack = retunedAlpha(attack_ref, REF_HZ, targetHz);
+    m_band_release = retunedAlpha(release_ref, REF_HZ, targetHz);
 
     // Heavy band attack/release (extra-smoothed for ambient effects)
     // Same pattern but with more extreme smoothing
-    m_heavy_band_attack = 0.12f - 0.08f * moodNorm;  // 0.12-0.04 (inverted)
-    m_heavy_band_release = 0.01f + 0.02f * moodNorm; // 0.01-0.03
+    float heavy_attack_ref = 0.12f - 0.08f * moodNorm;   // 0.12-0.04 @ 50Hz
+    float heavy_release_ref = 0.01f + 0.02f * moodNorm;  // 0.01-0.03 @ 50Hz
+    m_heavy_band_attack = retunedAlpha(heavy_attack_ref, REF_HZ, targetHz);
+    m_heavy_band_release = retunedAlpha(heavy_release_ref, REF_HZ, targetHz);
 }
 
 /**
@@ -250,8 +264,8 @@ void ControlBus::detectAndRemoveSpikes(LookaheadBuffer& buffer,
     m_spikeStats.spikesCorrected += frameSpikesCorrected;
     m_spikeStats.totalEnergyRemoved += frameEnergyRemoved;
 
-    // Rolling averages (EMA alpha=0.02)
-    const float alpha = 0.02f;
+    // Rolling averages (EMA, ~1s tau for spike statistics)
+    const float alpha = retunedAlpha(0.02f, 50.0f, audio::HOP_RATE_HZ);
     m_spikeStats.avgSpikesPerFrame = lerp(m_spikeStats.avgSpikesPerFrame,
                                            (float)frameSpikesDetected, alpha);
     if (frameSpikesCorrected > 0) {
@@ -459,6 +473,8 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
     m_frame.tempoLocked = raw.tempoLocked;
     m_frame.tempoConfidence = raw.tempoConfidence;
     m_frame.tempoBeatTick = raw.tempoBeatTick;
+    m_frame.tempoBpm = raw.tempoBpm;
+    m_frame.tempoBeatStrength = raw.tempoBeatStrength;
 
     // Copy waveform data (no processing)
     for (uint8_t i = 0; i < CONTROLBUS_WAVEFORM_N; ++i) {
@@ -478,6 +494,10 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
     for (uint8_t i = 0; i < ControlBusRawInput::BINS_64_COUNT; ++i) {
         m_frame.bins64Adaptive[i] = clamp01(raw.bins64Adaptive[i]);
     }
+
+    // Copy bins256 (PipelineCore full-resolution spectrum, zero for Goertzel backend)
+    memcpy(m_frame.bins256, raw.bins256, sizeof(float) * ControlBusRawInput::BINS_256_COUNT);
+    m_frame.binHz = raw.binHz;
 
     // Update spike detection telemetry frame counter
     m_spikeStats.totalFrames++;
@@ -556,9 +576,11 @@ void ControlBus::applyDerivedFeatures(ControlBusFrame& frame, float dt, float rm
             m_silence_triggered = false;
         }
 
-        // Smooth transition (90% hysteresis = ~400ms fade at 60fps)
+        // Smooth transition (~400ms fade, frame-rate independent)
         float target = m_silence_triggered ? 0.0f : 1.0f;
-        m_silent_scale_smoothed = target * 0.1f + m_silent_scale_smoothed * 0.9f;
+        constexpr float SILENCE_FADE_TAU = 0.19f;  // ~400ms @ 60fps with original 0.1 alpha
+        const float silenceAlpha = computeEmaAlpha(SILENCE_FADE_TAU, audio::HOP_RATE_HZ);
+        m_silent_scale_smoothed = target * silenceAlpha + m_silent_scale_smoothed * (1.0f - silenceAlpha);
 
         frame.silentScale = m_silent_scale_smoothed;
         frame.isSilent = m_silence_triggered;

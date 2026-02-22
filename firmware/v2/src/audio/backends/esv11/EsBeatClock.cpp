@@ -8,6 +8,8 @@
 
 #include <cmath>
 
+#include "config/audio_config.h"
+
 // Unified logging for debug output
 #define LW_LOG_TAG "EsBeatClock"
 #include "utils/Log.h"
@@ -69,8 +71,8 @@ void EsBeatClock::injectExternalBeat(float bpm,
 
     const uint64_t samples = (sample_rate_hz > 0)
         ? (now_us * static_cast<uint64_t>(sample_rate_hz) / 1000000ULL)
-        : now_us * 12800ULL / 1000000ULL;
-    m_externalT = AudioTime(samples, sample_rate_hz ? sample_rate_hz : 12800, now_us);
+        : now_us * static_cast<uint64_t>(audio::SAMPLE_RATE) / 1000000ULL;
+    m_externalT = AudioTime(samples, sample_rate_hz ? sample_rate_hz : audio::SAMPLE_RATE, now_us);
     m_externalPending = true;
 }
 
@@ -135,7 +137,7 @@ void EsBeatClock::tick(const ControlBusFrame& latest, bool newAudioFrame, const 
     // Integrate phase at render cadence using sample-index timebase.
     int64_t ds = static_cast<int64_t>(render_now.sample_index) - static_cast<int64_t>(m_lastTickT.sample_index);
     if (ds < 0) ds = 0;
-    const float dt_s = static_cast<float>(ds) / static_cast<float>(render_now.sample_rate_hz ? render_now.sample_rate_hz : 12800);
+    const float dt_s = static_cast<float>(ds) / static_cast<float>(render_now.sample_rate_hz ? render_now.sample_rate_hz : audio::SAMPLE_RATE);
 
     m_lastTickT = render_now;
 

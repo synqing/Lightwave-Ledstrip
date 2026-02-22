@@ -51,7 +51,7 @@ public:
                             bool downbeat,
                             uint8_t beatInBar,
                             uint64_t now_us,
-                            uint32_t sample_rate_hz = 12800);
+                            uint32_t sample_rate_hz = 0);
 
     /**
      * @brief Tick the beat clock at render cadence (~120 FPS).

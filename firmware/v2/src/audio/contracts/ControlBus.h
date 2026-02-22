@@ -68,10 +68,17 @@ struct ControlBusRawInput {
     float bins64[BINS_64_COUNT] = {0};  // 0..1 normalized magnitudes
     float bins64Adaptive[BINS_64_COUNT] = {0};  // 0..1 adaptive normalised (Sensory Bridge max follower)
 
+    // PipelineCore: Full 256-bin FFT magnitude spectrum
+    static constexpr uint16_t BINS_256_COUNT = 256;
+    float bins256[BINS_256_COUNT] = {0};  ///< 0..1 normalised magnitudes (62.5 Hz spacing @ 32kHz/512-pt)
+    float binHz = 0.0f;                   ///< Frequency resolution (sampleRate / fftSize)
+
     // Tempo tracker output (saliency computation ONLY - effects read MusicalGrid)
     bool tempoLocked = false;       ///< TempoTracker lock state (saliency; effects read MusicalGrid)
     float tempoConfidence = 0.0f;   ///< TempoTracker confidence (saliency; effects read MusicalGrid.confidence)
     bool tempoBeatTick = false;     ///< TempoTracker beat tick gated by lock (saliency support)
+    float tempoBpm = 120.0f;        ///< Tempo BPM estimate (PipelineCore/TempoTracker)
+    float tempoBeatStrength = 0.0f; ///< Beat event strength [0,1] (0 = no beat this hop)
 };
 
 /**
@@ -130,10 +137,17 @@ struct ControlBusFrame {
     float bins64[BINS_64_COUNT] = {0};  // 0..1 normalized magnitudes
     float bins64Adaptive[BINS_64_COUNT] = {0};  // 0..1 adaptive normalised (Sensory Bridge max follower)
 
+    // PipelineCore: Full 256-bin FFT magnitude spectrum
+    static constexpr uint16_t BINS_256_COUNT = ControlBusRawInput::BINS_256_COUNT;
+    float bins256[BINS_256_COUNT] = {0};  ///< 0..1 normalised magnitudes
+    float binHz = 0.0f;                   ///< Frequency resolution (Hz per bin)
+
     // Tempo tracker output (saliency computation ONLY - effects read MusicalGrid)
     bool tempoLocked = false;       ///< TempoTracker lock state (saliency; effects read MusicalGrid)
     float tempoConfidence = 0.0f;   ///< TempoTracker confidence (saliency; effects read MusicalGrid.confidence)
     bool tempoBeatTick = false;     ///< TempoTracker beat tick gated by lock (saliency support)
+    float tempoBpm = 120.0f;        ///< Tempo BPM estimate
+    float tempoBeatStrength = 0.0f; ///< Beat event strength [0,1]
 
     // -----------------------------------------------------------------------
     // ES v1.1_320 tempo extras (FEATURE_AUDIO_BACKEND_ESV11)
@@ -386,11 +400,13 @@ private:
     float m_bands_despiked[CONTROLBUS_NUM_BANDS] = {0};
     float m_chroma_despiked[CONTROLBUS_NUM_CHROMA] = {0};
 
-    // Tunables (Phase-2 defaults; keep them stable until you port Tab5 constants)
-    float m_alpha_fast = 0.35f;  // fast response
-    float m_alpha_slow = 0.12f;  // slower response
+    // Tunables (Phase-2 defaults, tuned for 50 Hz reference)
+    // The ESV11 path calls setMoodSmoothing() which retunes these dynamically.
+    // The default path uses setSmoothing() from AudioPipelineTuning.
+    float m_alpha_fast = 0.35f;  // fast response (50 Hz reference)
+    float m_alpha_slow = 0.12f;  // slower response (50 Hz reference)
 
-    // LGP_SMOOTH: Asymmetric attack/release for bands
+    // LGP_SMOOTH: Asymmetric attack/release for bands (50 Hz reference)
     float m_band_attack = 0.15f;       // Fast rise for transients
     float m_band_release = 0.03f;      // Slow fall for LGP viewing
     float m_heavy_band_attack = 0.08f; // Extra slow rise

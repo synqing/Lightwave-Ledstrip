@@ -4,7 +4,7 @@
  *
  * Supports mic-type selection via MicType enum in audio_config.h:
  * - SPH0645 (default): 18-bit, RIGHT channel, >>10 shift (K1 hardware)
- * - INMP441: 24-bit, LEFT channel, >>8 shift, MSB_SHIFT set
+ * - IM69D130: 24-bit via ADAU7002, LEFT channel, >>8 shift, MSB_SHIFT set
  *
  * @version 5.0.0 - Compile-time mic-type branching
  */
@@ -269,10 +269,10 @@ CaptureResult AudioCapture::captureHop(int16_t* buffer)
     // 3. Clamp and normalize to int16
     //
     // SPH0645: RIGHT channel (odd DMA indices), >>10 shift (18-bit data)
-    // INMP441: LEFT channel (even DMA indices), >>8 shift (24-bit data)
+    // IM69D130: LEFT channel (even DMA indices), >>8 shift (24-bit data)
     // =========================================================================
-    constexpr size_t CHANNEL_OFFSET = (MICROPHONE_TYPE == MicType::INMP441) ? 0 : 1;
-    constexpr int    BIT_SHIFT      = (MICROPHONE_TYPE == MicType::INMP441) ? 8 : 10;
+    constexpr size_t CHANNEL_OFFSET = (MICROPHONE_TYPE == MicType::IM69D130) ? 0 : 1;
+    constexpr int    BIT_SHIFT      = (MICROPHONE_TYPE == MicType::IM69D130) ? 8 : 10;
 
     int16_t peak = 0;
     for (size_t i = 0; i < HOP_SIZE; i++) {
@@ -366,8 +366,8 @@ CaptureResult AudioCapture::captureHopNonBlocking(int16_t* buffer)
     }
 
     // Process samples (same channel extraction and DC blocking as blocking version)
-    constexpr size_t CHANNEL_OFFSET = (MICROPHONE_TYPE == MicType::INMP441) ? 0 : 1;
-    constexpr int BIT_SHIFT = (MICROPHONE_TYPE == MicType::INMP441) ? 8 : 10;
+    constexpr size_t CHANNEL_OFFSET = (MICROPHONE_TYPE == MicType::IM69D130) ? 0 : 1;
+    constexpr int BIT_SHIFT = (MICROPHONE_TYPE == MicType::IM69D130) ? 8 : 10;
 
     int16_t peak = 0;
     for (size_t i = 0; i < HOP_SIZE; i++) {
@@ -458,8 +458,8 @@ CaptureResult AudioCapture::captureHopWithTimeout(int16_t* buffer, uint32_t time
     }
 
     // Process samples (same channel extraction and DC blocking as blocking version)
-    constexpr size_t CHANNEL_OFFSET = (MICROPHONE_TYPE == MicType::INMP441) ? 0 : 1;
-    constexpr int BIT_SHIFT = (MICROPHONE_TYPE == MicType::INMP441) ? 8 : 10;
+    constexpr size_t CHANNEL_OFFSET = (MICROPHONE_TYPE == MicType::IM69D130) ? 0 : 1;
+    constexpr int BIT_SHIFT = (MICROPHONE_TYPE == MicType::IM69D130) ? 8 : 10;
 
     int16_t peak = 0;
     for (size_t i = 0; i < HOP_SIZE; i++) {
@@ -731,13 +731,13 @@ bool AudioCapture::configureI2S()
     }
 
     // Register settings AFTER i2s_set_pin() — mic-type dependent
-    if constexpr (MICROPHONE_TYPE == MicType::INMP441) {
-        // INMP441: SET MSB_SHIFT to compensate 1-bit I2S delay
+    if constexpr (MICROPHONE_TYPE == MicType::IM69D130) {
+        // IM69D130: SET MSB_SHIFT to compensate 1-bit I2S delay
         REG_SET_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_MSB_SHIFT);
         REG_CLR_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_WS_IDLE_POL);
         REG_SET_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_LEFT_ALIGN);
         REG_SET_BIT(I2S_RX_TIMING_REG(I2S_PORT), BIT(9));
-        LW_LOGI("I2S configured: INMP441, LEFT ch, MSB_SHIFT set, >>8 shift");
+        LW_LOGI("I2S configured: IM69D130, LEFT ch, MSB_SHIFT set, >>8 shift");
     } else {
         // SPH0645: CLEAR MSB_SHIFT, data in RIGHT channel
         REG_CLR_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_MSB_SHIFT);

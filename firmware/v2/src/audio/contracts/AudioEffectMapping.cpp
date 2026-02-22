@@ -115,14 +115,15 @@ float AudioParameterMapping::apply(float rawInput) const {
     return outputMin + curved * (outputMax - outputMin);
 }
 
-void AudioParameterMapping::updateSmoothed(float rawInput) {
+void AudioParameterMapping::updateSmoothed(float rawInput, float dtSeconds) {
     if (!enabled) return;
 
     float targetValue = apply(rawInput);
 
-    // IIR smoothing: smoothed = alpha * new + (1-alpha) * old
-    // Higher alpha = faster response, lower alpha = more smoothing
-    float alpha = smoothingAlpha;
+    // dt-corrected IIR: alpha = 1 - exp(-dt/tau) for frame-rate-independent smoothing
+    if (dtSeconds <= 0.0f) dtSeconds = 1.0f / 120.0f;
+    float tau = (tauSeconds > 0.0001f) ? tauSeconds : 0.15f;
+    float alpha = 1.0f - expf(-dtSeconds / tau);
     if (alpha < 0.05f) alpha = 0.05f;
     if (alpha > 0.95f) alpha = 0.95f;
 
@@ -180,16 +181,32 @@ AudioParameterMapping* EffectAudioMapping::findMapping(VisualTarget target) {
     return nullptr;
 }
 
+const AudioParameterMapping* EffectAudioMapping::findMappingBySourceTarget(AudioSource source, VisualTarget target) const {
+    for (uint8_t i = 0; i < mappingCount && i < MAX_MAPPINGS_PER_EFFECT; i++) {
+        if (mappings[i].source == source && mappings[i].target == target) {
+            return &mappings[i];
+        }
+    }
+    return nullptr;
+}
+
+AudioParameterMapping* EffectAudioMapping::findMappingBySourceTarget(AudioSource source, VisualTarget target) {
+    for (uint8_t i = 0; i < mappingCount && i < MAX_MAPPINGS_PER_EFFECT; i++) {
+        if (mappings[i].source == source && mappings[i].target == target) {
+            return &mappings[i];
+        }
+    }
+    return nullptr;
+}
+
 bool EffectAudioMapping::addMapping(const AudioParameterMapping& mapping) {
-    // Check if mapping for this target already exists
-    AudioParameterMapping* existing = findMapping(mapping.target);
+    AudioParameterMapping* existing = findMappingBySourceTarget(mapping.source, mapping.target);
     if (existing) {
         *existing = mapping;
         calculateChecksum();
         return true;
     }
 
-    // Add new mapping if space available
     if (mappingCount >= MAX_MAPPINGS_PER_EFFECT) {
         return false;
     }
@@ -257,10 +274,11 @@ bool AudioMappingRegistry::begin() {
 
     m_mappings = table;
 
-    // Initialise defaults using in-struct initialisers (not preserved by calloc()).
-    for (uint8_t i = 0; i < MAX_EFFECTS; i++) {
+    // Initialise all slots as empty (INVALID_EFFECT_ID).
+    // Slots are claimed on-demand by findOrClaimSlot().
+    for (uint16_t i = 0; i < MAX_EFFECTS; i++) {
         m_mappings[i] = EffectAudioMapping();
-        m_mappings[i].effectId = i;
+        // effectId defaults to INVALID_EFFECT_ID via struct initialiser
         m_mappings[i].calculateChecksum();
     }
 
@@ -274,47 +292,97 @@ void AudioMappingRegistry::setTestAllocator(void* (*allocFn)(size_t count, size_
 }
 #endif
 
-const EffectAudioMapping* AudioMappingRegistry::getMapping(uint8_t effectId) const {
-    if (!m_ready || m_mappings == nullptr) return nullptr;
-    if (effectId >= MAX_EFFECTS) return nullptr;
-    return &m_mappings[effectId];
+// ---------------------------------------------------------------------------
+// Slot lookup (linear scan by effectId field)
+// ---------------------------------------------------------------------------
+
+int16_t AudioMappingRegistry::findSlot(EffectId effectId) const {
+    if (!m_mappings || effectId == INVALID_EFFECT_ID) return -1;
+    for (uint16_t i = 0; i < MAX_EFFECTS; i++) {
+        if (m_mappings[i].effectId == effectId) return static_cast<int16_t>(i);
+    }
+    return -1;
 }
 
-EffectAudioMapping* AudioMappingRegistry::getMapping(uint8_t effectId) {
-    if (!m_ready || m_mappings == nullptr) return nullptr;
-    if (effectId >= MAX_EFFECTS) return nullptr;
-    return &m_mappings[effectId];
+int16_t AudioMappingRegistry::findOrClaimSlot(EffectId effectId) {
+    if (!m_mappings || effectId == INVALID_EFFECT_ID) return -1;
+    int16_t firstFree = -1;
+    for (uint16_t i = 0; i < MAX_EFFECTS; i++) {
+        if (m_mappings[i].effectId == effectId) return static_cast<int16_t>(i);
+        if (firstFree < 0 && m_mappings[i].effectId == INVALID_EFFECT_ID) {
+            firstFree = static_cast<int16_t>(i);
+        }
+    }
+    // Claim the first free slot
+    if (firstFree >= 0) {
+        m_mappings[firstFree].effectId = effectId;
+        m_mappings[firstFree].calculateChecksum();
+    }
+    return firstFree;
 }
 
-bool AudioMappingRegistry::setMapping(uint8_t effectId, const EffectAudioMapping& config) {
+// ---------------------------------------------------------------------------
+// Public API — all use linear-scan findSlot / findOrClaimSlot
+// ---------------------------------------------------------------------------
+
+const EffectAudioMapping* AudioMappingRegistry::getMapping(EffectId effectId) const {
+    if (!m_ready || m_mappings == nullptr) return nullptr;
+    int16_t slot = findSlot(effectId);
+    if (slot < 0) return nullptr;
+    return &m_mappings[slot];
+}
+
+EffectAudioMapping* AudioMappingRegistry::getMapping(EffectId effectId) {
+    if (!m_ready || m_mappings == nullptr) return nullptr;
+    int16_t slot = findSlot(effectId);
+    if (slot < 0) return nullptr;
+    return &m_mappings[slot];
+}
+
+bool AudioMappingRegistry::setMapping(EffectId effectId, const EffectAudioMapping& config) {
     if (!m_ready || m_mappings == nullptr) return false;
-    if (effectId >= MAX_EFFECTS) return false;
+    int16_t slot = findOrClaimSlot(effectId);
+    if (slot < 0) return false;
 
-    m_mappings[effectId] = config;
-    m_mappings[effectId].effectId = effectId;
-    m_mappings[effectId].calculateChecksum();
+    float savedSmoothed[EffectAudioMapping::MAX_MAPPINGS_PER_EFFECT];
+    for (uint8_t i = 0; i < EffectAudioMapping::MAX_MAPPINGS_PER_EFFECT; i++) {
+        savedSmoothed[i] = m_mappings[slot].mappings[i].smoothedValue;
+    }
+
+    m_mappings[slot] = config;
+    m_mappings[slot].effectId = effectId;
+
+    for (uint8_t i = 0; i < EffectAudioMapping::MAX_MAPPINGS_PER_EFFECT; i++) {
+        m_mappings[slot].mappings[i].smoothedValue = savedSmoothed[i];
+    }
+    m_mappings[slot].calculateChecksum();
     return true;
 }
 
-void AudioMappingRegistry::setEffectMappingEnabled(uint8_t effectId, bool enabled) {
+void AudioMappingRegistry::setEffectMappingEnabled(EffectId effectId, bool enabled) {
     if (!m_ready || m_mappings == nullptr) return;
-    if (effectId >= MAX_EFFECTS) return;
-    m_mappings[effectId].globalEnabled = enabled;
-    m_mappings[effectId].calculateChecksum();
+    int16_t slot = findOrClaimSlot(effectId);
+    if (slot < 0) return;
+    m_mappings[slot].globalEnabled = enabled;
+    m_mappings[slot].calculateChecksum();
 }
 
-bool AudioMappingRegistry::hasActiveMappings(uint8_t effectId) const {
+bool AudioMappingRegistry::hasActiveMappings(EffectId effectId) const {
     if (!m_ready || m_mappings == nullptr) return false;
-    if (effectId >= MAX_EFFECTS) return false;
-    const EffectAudioMapping& mapping = m_mappings[effectId];
+    int16_t slot = findSlot(effectId);
+    if (slot < 0) return false;
+    const EffectAudioMapping& mapping = m_mappings[slot];
     return mapping.globalEnabled && mapping.mappingCount > 0;
 }
 
-uint8_t AudioMappingRegistry::getActiveEffectCount() const {
+uint16_t AudioMappingRegistry::getActiveEffectCount() const {
     if (!m_ready || m_mappings == nullptr) return 0;
-    uint8_t count = 0;
-    for (uint8_t i = 0; i < MAX_EFFECTS; i++) {
-        if (hasActiveMappings(i)) count++;
+    uint16_t count = 0;
+    for (uint16_t i = 0; i < MAX_EFFECTS; i++) {
+        if (m_mappings[i].effectId != INVALID_EFFECT_ID &&
+            m_mappings[i].globalEnabled && m_mappings[i].mappingCount > 0) {
+            count++;
+        }
     }
     return count;
 }
@@ -322,8 +390,8 @@ uint8_t AudioMappingRegistry::getActiveEffectCount() const {
 uint16_t AudioMappingRegistry::getTotalMappingCount() const {
     if (!m_ready || m_mappings == nullptr) return 0;
     uint16_t count = 0;
-    for (uint8_t i = 0; i < MAX_EFFECTS; i++) {
-        if (m_mappings[i].globalEnabled) {
+    for (uint16_t i = 0; i < MAX_EFFECTS; i++) {
+        if (m_mappings[i].effectId != INVALID_EFFECT_ID && m_mappings[i].globalEnabled) {
             count += m_mappings[i].mappingCount;
         }
     }
@@ -401,12 +469,13 @@ float AudioMappingRegistry::getAudioValue(
 void AudioMappingRegistry::applySingleMapping(
     AudioParameterMapping& mapping,
     float audioValue,
+    float dtSeconds,
     uint8_t& targetValue,
     uint8_t minVal,
     uint8_t maxVal
 ) {
-    // Update smoothed value
-    mapping.updateSmoothed(audioValue);
+    // Update smoothed value (dt-corrected)
+    mapping.updateSmoothed(audioValue, dtSeconds);
 
     // Get output value
     float output = mapping.getSmoothedOutput();
@@ -428,10 +497,11 @@ void AudioMappingRegistry::applySingleMapping(
 }
 
 void AudioMappingRegistry::applyMappings(
-    uint8_t effectId,
+    EffectId effectId,
     const ControlBusFrame& bus,
     const MusicalGridSnapshot& grid,
     bool audioAvailable,
+    float dtSeconds,
     uint8_t& brightness,
     uint8_t& speed,
     uint8_t& intensity,
@@ -441,56 +511,95 @@ void AudioMappingRegistry::applyMappings(
     uint8_t& hue
 ) {
     if (!m_ready || m_mappings == nullptr) return;
-    if (effectId >= MAX_EFFECTS) return;
 
-    EffectAudioMapping& config = m_mappings[effectId];
+    int16_t slot = findSlot(effectId);
+    if (slot < 0) return;
+
+    EffectAudioMapping& config = m_mappings[slot];
     if (!config.globalEnabled || config.mappingCount == 0) return;
 
     // Performance instrumentation
     uint32_t startMicros = lw_micros();
 
-    // If no fresh audio, skip (keep previous smoothed values)
-    if (!audioAvailable) {
-        m_lastApplyMicros = lw_micros() - startMicros;
-        m_applyCount++;
-        return;
-    }
+    if (dtSeconds <= 0.0f) dtSeconds = 1.0f / 120.0f;
 
-    // Process each mapping
-    for (uint8_t i = 0; i < config.mappingCount && i < EffectAudioMapping::MAX_MAPPINGS_PER_EFFECT; i++) {
-        AudioParameterMapping& mapping = config.mappings[i];
+    if (audioAvailable) {
+        // Process each mapping with live audio
+        for (uint8_t i = 0; i < config.mappingCount && i < EffectAudioMapping::MAX_MAPPINGS_PER_EFFECT; i++) {
+            AudioParameterMapping& mapping = config.mappings[i];
 
-        if (!mapping.enabled || mapping.source == AudioSource::NONE) continue;
+            if (!mapping.enabled || mapping.source == AudioSource::NONE) continue;
 
-        // Get audio value for this source
-        float audioValue = getAudioValue(mapping.source, bus, grid);
+            float audioValue = getAudioValue(mapping.source, bus, grid);
 
-        // Apply to target
-        switch (mapping.target) {
-            case VisualTarget::BRIGHTNESS:
-                applySingleMapping(mapping, audioValue, brightness, 0, 160);
-                break;
-            case VisualTarget::SPEED:
-                applySingleMapping(mapping, audioValue, speed, 1, 50);
-                break;
-            case VisualTarget::INTENSITY:
-                applySingleMapping(mapping, audioValue, intensity, 0, 255);
-                break;
-            case VisualTarget::SATURATION:
-                applySingleMapping(mapping, audioValue, saturation, 0, 255);
-                break;
-            case VisualTarget::COMPLEXITY:
-                applySingleMapping(mapping, audioValue, complexity, 0, 255);
-                break;
-            case VisualTarget::VARIATION:
-                applySingleMapping(mapping, audioValue, variation, 0, 255);
-                break;
-            case VisualTarget::HUE:
-                applySingleMapping(mapping, audioValue, hue, 0, 255);
-                break;
-            case VisualTarget::NONE:
-            default:
-                break;
+            switch (mapping.target) {
+                case VisualTarget::BRIGHTNESS:
+                    applySingleMapping(mapping, audioValue, dtSeconds, brightness, 0, 160);
+                    break;
+                case VisualTarget::SPEED:
+                    applySingleMapping(mapping, audioValue, dtSeconds, speed, 1, 50);
+                    break;
+                case VisualTarget::INTENSITY:
+                    applySingleMapping(mapping, audioValue, dtSeconds, intensity, 0, 255);
+                    break;
+                case VisualTarget::SATURATION:
+                    applySingleMapping(mapping, audioValue, dtSeconds, saturation, 0, 255);
+                    break;
+                case VisualTarget::COMPLEXITY:
+                    applySingleMapping(mapping, audioValue, dtSeconds, complexity, 0, 255);
+                    break;
+                case VisualTarget::VARIATION:
+                    applySingleMapping(mapping, audioValue, dtSeconds, variation, 0, 255);
+                    break;
+                case VisualTarget::HUE:
+                    applySingleMapping(mapping, audioValue, dtSeconds, hue, 0, 255);
+                    break;
+                case VisualTarget::NONE:
+                default:
+                    break;
+            }
+        }
+    } else {
+        // Audio absent: decay smoothed values toward outputMin then apply to targets
+        constexpr float kDecayTauSeconds = 0.3f;
+        float decayAlpha = 1.0f - expf(-dtSeconds / kDecayTauSeconds);
+        if (decayAlpha < 0.01f) decayAlpha = 0.01f;
+        if (decayAlpha > 0.5f) decayAlpha = 0.5f;
+
+        for (uint8_t i = 0; i < config.mappingCount && i < EffectAudioMapping::MAX_MAPPINGS_PER_EFFECT; i++) {
+            AudioParameterMapping& mapping = config.mappings[i];
+            if (!mapping.enabled || mapping.target == VisualTarget::NONE) continue;
+
+            float rest = mapping.outputMin;
+            mapping.smoothedValue += (rest - mapping.smoothedValue) * decayAlpha;
+            if (mapping.smoothedValue < mapping.outputMin) mapping.smoothedValue = mapping.outputMin;
+            if (mapping.smoothedValue > mapping.outputMax) mapping.smoothedValue = mapping.outputMax;
+
+            float output = mapping.getSmoothedOutput();
+            uint8_t minVal = 0, maxVal = 255;
+            uint8_t* pTarget = nullptr;
+            switch (mapping.target) {
+                case VisualTarget::BRIGHTNESS: minVal = 0; maxVal = 160; pTarget = &brightness; break;
+                case VisualTarget::SPEED:      minVal = 1; maxVal = 50;  pTarget = &speed; break;
+                case VisualTarget::INTENSITY:  minVal = 0; maxVal = 255; pTarget = &intensity; break;
+                case VisualTarget::SATURATION: minVal = 0; maxVal = 255; pTarget = &saturation; break;
+                case VisualTarget::COMPLEXITY: minVal = 0; maxVal = 255; pTarget = &complexity; break;
+                case VisualTarget::VARIATION:  minVal = 0; maxVal = 255; pTarget = &variation; break;
+                case VisualTarget::HUE:       minVal = 0; maxVal = 255; pTarget = &hue; break;
+                default: break;
+            }
+            if (pTarget) {
+                if (output < minVal) output = static_cast<float>(minVal);
+                if (output > maxVal) output = static_cast<float>(maxVal);
+                if (mapping.additive) {
+                    int newVal = (int)*pTarget + (int)(output + 0.5f);
+                    if (newVal > maxVal) newVal = maxVal;
+                    if (newVal < minVal) newVal = minVal;
+                    *pTarget = (uint8_t)newVal;
+                } else {
+                    *pTarget = (uint8_t)(output + 0.5f);
+                }
+            }
         }
     }
 

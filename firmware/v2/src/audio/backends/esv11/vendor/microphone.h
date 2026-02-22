@@ -36,9 +36,14 @@ const float recip_scale = 1.0f / 131072.0f; // max 18 bit signed value
 
 // DC Blocker filter state and coefficients
 // y[n] = g * (x[n] - x[n-1] + R * y[n-1])
+// Guards allow override via shim for different sample rates.
 #define DC_BLOCKER_FC 5.0f
+#ifndef DC_BLOCKER_R
 #define DC_BLOCKER_R  0.997545f
+#endif
+#ifndef DC_BLOCKER_G
 #define DC_BLOCKER_G  0.998772f
+#endif
 
 static float dc_blocker_x_prev = 0.0f;
 static float dc_blocker_y_prev = 0.0f;

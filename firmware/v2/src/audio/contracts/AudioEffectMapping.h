@@ -27,6 +27,7 @@
 
 #include <cstdint>
 #include <cmath>
+#include "../../config/effect_ids.h"
 #include "../../config/limits.h"  // For limits::MAX_EFFECTS
 #include "ControlBus.h"
 #include "MusicalGrid.h"
@@ -131,7 +132,8 @@ struct AudioParameterMapping {
     float inputMax = 1.0f;          ///< Source clip maximum
     float outputMin = 0.0f;         ///< Target output minimum
     float outputMax = 255.0f;       ///< Target output maximum
-    float smoothingAlpha = 0.3f;    ///< IIR coefficient [0.05, 0.95]
+    float smoothingAlpha = 0.3f;    ///< Legacy; not used in smoothing (see tauSeconds)
+    float tauSeconds = 0.15f;       ///< Time constant in seconds for dt-corrected IIR smoothing
     float gain = 1.0f;              ///< Pre-curve multiplier
 
     bool enabled = false;           ///< Is this mapping active?
@@ -157,8 +159,9 @@ struct AudioParameterMapping {
     /**
      * @brief Update smoothed value with new input (call each frame)
      * @param rawInput New raw audio value
+     * @param dtSeconds Delta time in seconds for frame-rate-independent smoothing
      */
-    void updateSmoothed(float rawInput);
+    void updateSmoothed(float rawInput, float dtSeconds);
 
     /**
      * @brief Get the current smoothed and mapped output
@@ -179,7 +182,7 @@ struct EffectAudioMapping {
     static constexpr uint8_t VERSION = 1;
 
     uint8_t version = VERSION;
-    uint8_t effectId = 0xFF;
+    EffectId effectId = INVALID_EFFECT_ID;
     bool globalEnabled = false;     ///< Master enable for this effect
     uint8_t mappingCount = 0;
     AudioParameterMapping mappings[MAX_MAPPINGS_PER_EFFECT];
@@ -204,8 +207,11 @@ struct EffectAudioMapping {
     const AudioParameterMapping* findMapping(VisualTarget target) const;
     AudioParameterMapping* findMapping(VisualTarget target);
 
+    const AudioParameterMapping* findMappingBySourceTarget(AudioSource source, VisualTarget target) const;
+    AudioParameterMapping* findMappingBySourceTarget(AudioSource source, VisualTarget target);
+
     /**
-     * @brief Add or update a mapping
+     * @brief Add or update the mapping for the (source, target) pair
      * @param mapping Mapping to add
      * @return true if successful (or updated existing)
      */
@@ -238,7 +244,7 @@ struct EffectAudioMapping {
 class AudioMappingRegistry {
 public:
     // Single source of truth: references limits::MAX_EFFECTS
-    static constexpr uint8_t MAX_EFFECTS = limits::MAX_EFFECTS;
+    static constexpr uint16_t MAX_EFFECTS = limits::MAX_EFFECTS;
 
     /**
      * @brief Get singleton instance
@@ -274,14 +280,14 @@ public:
      * @param effectId Effect index (0-79)
      * @return Pointer to mapping config, or nullptr if invalid ID
      */
-    const EffectAudioMapping* getMapping(uint8_t effectId) const;
+    const EffectAudioMapping* getMapping(EffectId effectId) const;
 
     /**
      * @brief Get mapping configuration for an effect (mutable)
      * @param effectId Effect index (0-79)
      * @return Pointer to mapping config, or nullptr if invalid ID
      */
-    EffectAudioMapping* getMapping(uint8_t effectId);
+    EffectAudioMapping* getMapping(EffectId effectId);
 
     /**
      * @brief Set complete mapping configuration for an effect
@@ -289,26 +295,26 @@ public:
      * @param config Mapping configuration to copy
      * @return true on success
      */
-    bool setMapping(uint8_t effectId, const EffectAudioMapping& config);
+    bool setMapping(EffectId effectId, const EffectAudioMapping& config);
 
     /**
      * @brief Enable/disable all mappings for an effect
      * @param effectId Effect index
      * @param enabled Enable state
      */
-    void setEffectMappingEnabled(uint8_t effectId, bool enabled);
+    void setEffectMappingEnabled(EffectId effectId, bool enabled);
 
     /**
      * @brief Check if effect has any active mappings
      * @param effectId Effect index
      * @return true if effect has globalEnabled && mappingCount > 0
      */
-    bool hasActiveMappings(uint8_t effectId) const;
+    bool hasActiveMappings(EffectId effectId) const;
 
     /**
      * @brief Get count of effects with active mappings
      */
-    uint8_t getActiveEffectCount() const;
+    uint16_t getActiveEffectCount() const;
 
     /**
      * @brief Get total mapping count across all effects
@@ -330,6 +336,7 @@ public:
      * @param bus Current ControlBusFrame (read-only)
      * @param grid Current MusicalGridSnapshot (read-only)
      * @param audioAvailable Whether audio data is fresh
+     * @param dtSeconds Delta time in seconds (for dt-corrected smoothing and audio-absent decay)
      * @param[in,out] brightness Modified if mapping exists
      * @param[in,out] speed Modified if mapping exists
      * @param[in,out] intensity Modified if mapping exists
@@ -339,10 +346,11 @@ public:
      * @param[in,out] hue Modified if mapping exists
      */
     void applyMappings(
-        uint8_t effectId,
+        EffectId effectId,
         const ControlBusFrame& bus,
         const MusicalGridSnapshot& grid,
         bool audioAvailable,
+        float dtSeconds,
         uint8_t& brightness,
         uint8_t& speed,
         uint8_t& intensity,
@@ -443,11 +451,27 @@ private:
     uint64_t m_totalApplyMicros = 0;
 
     /**
+     * @brief Find the registry slot for a given EffectId (linear scan)
+     * @return Index into m_mappings, or -1 if not found
+     */
+    int16_t findSlot(EffectId effectId) const;
+
+    /**
+     * @brief Find or claim a registry slot for a given EffectId
+     *
+     * Returns existing slot if one matches, otherwise claims the first
+     * INVALID_EFFECT_ID slot.
+     * @return Index into m_mappings, or -1 if full
+     */
+    int16_t findOrClaimSlot(EffectId effectId);
+
+    /**
      * @brief Apply a single mapping to its target
      */
     void applySingleMapping(
         AudioParameterMapping& mapping,
         float audioValue,
+        float dtSeconds,
         uint8_t& targetValue,
         uint8_t minVal,
         uint8_t maxVal

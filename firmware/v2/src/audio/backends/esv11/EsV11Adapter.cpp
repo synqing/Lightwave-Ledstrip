@@ -10,6 +10,9 @@
 #include <cmath>
 #include <cstring>
 
+#include "config/audio_config.h"
+#include "audio/AudioMath.h"
+
 namespace lightwaveos::audio::esv11 {
 
 static inline float clamp01(float x) {
@@ -43,7 +46,7 @@ void EsV11Adapter::buildFrame(lightwaveos::audio::ControlBusFrame& out,
     out = lightwaveos::audio::ControlBusFrame{};
 
     // AudioTime uses sample_index as the monotonic clock.
-    out.t = lightwaveos::audio::AudioTime(es.sample_index, 12800, es.now_us);
+    out.t = lightwaveos::audio::AudioTime(es.sample_index, audio::SAMPLE_RATE, es.now_us);
     out.hop_seq = hopSeq;
 
     // Core energy / novelty proxy
@@ -79,9 +82,9 @@ void EsV11Adapter::buildFrame(lightwaveos::audio::ControlBusFrame& out,
     for (uint8_t i = 0; i < lightwaveos::audio::ControlBusFrame::BINS_64_COUNT; ++i) {
         currentMax = std::max(currentMax, rawBins[i]);
     }
-    // Decay + rise behaviour
-    const float decay = 0.995f;
-    const float rise = 0.25f;
+    // Decay + rise behaviour (retuned for current hop rate)
+    static const float decay = 1.0f - audio::retunedAlpha(1.0f - 0.995f, 50.0f, audio::HOP_RATE_HZ);
+    static const float rise = audio::retunedAlpha(0.25f, 50.0f, audio::HOP_RATE_HZ);
     const float floor = 0.05f;
 
     float decayed = m_binsMaxFollower * decay;
@@ -124,8 +127,8 @@ void EsV11Adapter::buildFrame(lightwaveos::audio::ControlBusFrame& out,
     }
 
     // Similar autorange follower for chroma magnitudes, gated by activity.
-    const float chromaDecay = 0.995f;
-    const float chromaRise = 0.35f;
+    static const float chromaDecay = 1.0f - audio::retunedAlpha(1.0f - 0.995f, 50.0f, audio::HOP_RATE_HZ);
+    static const float chromaRise = audio::retunedAlpha(0.35f, 50.0f, audio::HOP_RATE_HZ);
     const float chromaFloor = 0.08f;
     float chromaDecayed = m_chromaMaxFollower * chromaDecay;
     if (chromaMax > chromaDecayed) {
@@ -143,7 +146,7 @@ void EsV11Adapter::buildFrame(lightwaveos::audio::ControlBusFrame& out,
     }
 
     // Heavy smoothing (slow envelope) purely within adapter
-    const float heavy_alpha = 0.05f;
+    static const float heavy_alpha = audio::retunedAlpha(0.05f, 50.0f, audio::HOP_RATE_HZ);
     for (uint8_t i = 0; i < lightwaveos::audio::CONTROLBUS_NUM_BANDS; ++i) {
         m_heavyBands[i] = (m_heavyBands[i] * (1.0f - heavy_alpha)) + (out.bands[i] * heavy_alpha);
         out.heavy_bands[i] = clamp01(m_heavyBands[i]);
@@ -183,12 +186,15 @@ void EsV11Adapter::buildFrame(lightwaveos::audio::ControlBusFrame& out,
     float maxWaveformVal = maxWaveformValRaw - 750.0f;  // Sweet spot min level
     if (maxWaveformVal < 0.0f) maxWaveformVal = 0.0f;
 
+    // SB peak follower alphas (retuned for current hop rate)
+    static const float kSbPeakAttack = audio::retunedAlpha(0.25f, 50.0f, audio::HOP_RATE_HZ);
+    static const float kSbPeakRelease = audio::retunedAlpha(0.005f, 50.0f, audio::HOP_RATE_HZ);
     if (maxWaveformVal > m_sbMaxWaveformValFollower) {
         float delta = maxWaveformVal - m_sbMaxWaveformValFollower;
-        m_sbMaxWaveformValFollower += delta * 0.25f;
+        m_sbMaxWaveformValFollower += delta * kSbPeakAttack;
     } else if (maxWaveformVal < m_sbMaxWaveformValFollower) {
         float delta = m_sbMaxWaveformValFollower - maxWaveformVal;
-        m_sbMaxWaveformValFollower -= delta * 0.005f;
+        m_sbMaxWaveformValFollower -= delta * kSbPeakRelease;
         if (m_sbMaxWaveformValFollower < 750.0f) {
             m_sbMaxWaveformValFollower = 750.0f;
         }
@@ -198,17 +204,20 @@ void EsV11Adapter::buildFrame(lightwaveos::audio::ControlBusFrame& out,
     if (m_sbMaxWaveformValFollower > 0.0f) {
         waveformPeakScaledRaw = maxWaveformVal / m_sbMaxWaveformValFollower;
     }
+    static const float kSbScaledAttack = audio::retunedAlpha(0.25f, 50.0f, audio::HOP_RATE_HZ);
+    static const float kSbScaledRelease = audio::retunedAlpha(0.25f, 50.0f, audio::HOP_RATE_HZ);
     if (waveformPeakScaledRaw > m_sbWaveformPeakScaled) {
         float delta = waveformPeakScaledRaw - m_sbWaveformPeakScaled;
-        m_sbWaveformPeakScaled += delta * 0.25f;
+        m_sbWaveformPeakScaled += delta * kSbScaledAttack;
     } else if (waveformPeakScaledRaw < m_sbWaveformPeakScaled) {
         float delta = m_sbWaveformPeakScaled - waveformPeakScaledRaw;
-        m_sbWaveformPeakScaled -= delta * 0.25f;
+        m_sbWaveformPeakScaled -= delta * kSbScaledRelease;
     }
 
     // 3.1.0 waveform peak follower used by waveform/VU modes.
+    static const float kSbLastAlpha = audio::retunedAlpha(0.05f, 50.0f, audio::HOP_RATE_HZ);
     m_sbWaveformPeakScaledLast =
-        (m_sbWaveformPeakScaled * 0.05f) + (m_sbWaveformPeakScaledLast * 0.95f);
+        (m_sbWaveformPeakScaled * kSbLastAlpha) + (m_sbWaveformPeakScaledLast * (1.0f - kSbLastAlpha));
     out.sb_waveform_peak_scaled = m_sbWaveformPeakScaled;
     out.sb_waveform_peak_scaled_last = m_sbWaveformPeakScaledLast;
 

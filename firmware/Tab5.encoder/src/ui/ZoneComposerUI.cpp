@@ -7,6 +7,7 @@
 #include "../input/ButtonHandler.h"
 #include "../network/WebSocketClient.h"
 #include "../utils/NameLookup.h"
+#include "../parameters/ParameterMap.h"  // getParameterMax()
 #include "Theme.h"
 #include <Arduino.h>
 #include <cstdio>
@@ -155,8 +156,12 @@ void ZoneComposerUI::updateZone(uint8_t zoneId, const ZoneState& state) {
     _zones[zoneId] = state;
 
     // Sync encoder working arrays from server state (respecting holdoff)
+    // state.effectId is a hex effectId (uint16_t), translate to position index for encoder
     if (!isZoneInHoldoff(zoneId, 0)) {
-        _zoneEffects[zoneId] = state.effectId;
+        uint8_t idx = indexFromEffectId(state.effectId);
+        if (idx != 0xFF) {
+            _zoneEffects[zoneId] = idx;
+        }
     }
     if (!isZoneInHoldoff(zoneId, 1)) {
         _zonePalettes[zoneId] = state.paletteId;
@@ -372,11 +377,13 @@ void ZoneComposerUI::drawZoneRow(uint8_t zoneId, int x, int y, int w, int h) {
     _display.setTextColor(Theme::TEXT_DIM);
     _display.setTextDatum(textdatum_t::middle_left);
     
-    // Effect name
-    const char* effectText = (zone.effectName[0] != '\0') ? zone.effectName : lookupEffectName(zone.effectId);
+    // Effect name — zone.effectId is hex, translate to position index for lookup
+    uint8_t effectIdx = indexFromEffectId(zone.effectId);
+    const char* effectText = (zone.effectName[0] != '\0') ? zone.effectName :
+                             (effectIdx != 0xFF ? lookupEffectName(effectIdx) : nullptr);
     char effectBuf[48];
     if (!effectText) {
-        snprintf(effectBuf, sizeof(effectBuf), "Effect #%u", zone.effectId);
+        snprintf(effectBuf, sizeof(effectBuf), "Effect 0x%04X", zone.effectId);
         effectText = effectBuf;
     }
     _display.drawString(effectText, infoX, y + h / 2);
@@ -882,11 +889,11 @@ void ZoneComposerUI::adjustZoneParameter(uint8_t zoneIndex, int32_t delta) {
 
     switch (_activeMode) {
         case ZoneParameterMode::EFFECT: {
-            // Max effect ID from LightwaveOS v2 firmware (147 effects, IDs 0-146)
-            constexpr int MAX_EFFECT_ID = 146;
+            // Dynamic max from effects.list (position index, updated at runtime)
+            int MAX_EFFECT_INDEX = static_cast<int>(getParameterMax(0));
             int newVal = _zoneEffects[zoneIndex] + delta;
-            if (newVal < 0) newVal = MAX_EFFECT_ID;
-            if (newVal > MAX_EFFECT_ID) newVal = 0;
+            if (newVal < 0) newVal = MAX_EFFECT_INDEX;
+            if (newVal > MAX_EFFECT_INDEX) newVal = 0;
             _zoneEffects[zoneIndex] = newVal;
 
             updateEffectLabel(zoneIndex);

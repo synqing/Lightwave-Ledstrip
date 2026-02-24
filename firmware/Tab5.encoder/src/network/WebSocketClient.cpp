@@ -17,6 +17,7 @@
 #include <esp_task_wdt.h>  // For watchdog reset
 #include <cstring>
 #include "../zones/ZoneDefinition.h"
+#include "../utils/NameLookup.h"  // effectIdFromIndex()
 
 namespace {
 static_assert(NetworkConfig::WS_HEARTBEAT_PING_INTERVAL_MS > NetworkConfig::WS_HEARTBEAT_PONG_TIMEOUT_MS,
@@ -926,7 +927,7 @@ void WebSocketClient::processSendQueue() {
                 doc["zoneId"] = _sendQueue[i].zoneId;
                 // Extract field name from type (e.g., "zone.setEffect" -> "effectId")
                 if (strstr(_sendQueue[i].type, "setEffect") != nullptr) {
-                    doc["effectId"] = _sendQueue[i].value;
+                    doc["effectId"] = effectIdFromIndex(_sendQueue[i].value);
                 } else if (strstr(_sendQueue[i].type, "setSpeed") != nullptr) {
                     doc["speed"] = _sendQueue[i].value;
                 } else if (strstr(_sendQueue[i].type, "setPalette") != nullptr) {
@@ -942,7 +943,7 @@ void WebSocketClient::processSendQueue() {
                 // Global parameter - map paramIndex to field name
                 switch (_sendQueue[i].paramIndex) {
                     case ParamIndex::EFFECT:
-                        doc["effectId"] = _sendQueue[i].value;
+                        doc["effectId"] = effectIdFromIndex(_sendQueue[i].value);
                         sendType = "effects.setCurrent";
                         break;
                     case ParamIndex::BRIGHTNESS:

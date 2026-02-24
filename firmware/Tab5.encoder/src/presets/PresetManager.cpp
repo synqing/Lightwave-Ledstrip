@@ -7,6 +7,7 @@
 #include "../parameters/ParameterMap.h"
 #include "../network/WebSocketClient.h"
 #include "../ui/ZoneComposerUI.h"
+#include "../utils/NameLookup.h"  // effectIdFromIndex(), indexFromEffectId()
 
 // ============================================================================
 // Constructor
@@ -169,7 +170,8 @@ void PresetManager::captureCurrentState(PresetData& preset) {
         _paramHandler->getAllValues(values);
 
         // Unit A parameters (0-7)
-        preset.effectId = values[static_cast<uint8_t>(ParameterId::EffectId)];
+        // Translate position index → hex effectId for stable preset storage
+        preset.effectId = effectIdFromIndex(values[static_cast<uint8_t>(ParameterId::EffectId)]);
         preset.brightness = values[static_cast<uint8_t>(ParameterId::Brightness)];
         preset.paletteId = values[static_cast<uint8_t>(ParameterId::PaletteId)];
         preset.speed = values[static_cast<uint8_t>(ParameterId::Speed)];
@@ -183,7 +185,7 @@ void PresetManager::captureCurrentState(PresetData& preset) {
             uint8_t effectIdx = 8 + (z * 2);   // Zone effect indices: 8, 10, 12, 14
             uint8_t speedIdx = 9 + (z * 2);    // Zone speed indices: 9, 11, 13, 15
 
-            preset.zones[z].effectId = values[effectIdx];
+            preset.zones[z].effectId = effectIdFromIndex(values[effectIdx]);
             preset.zones[z].speed = values[speedIdx];
             preset.zones[z].brightness = 255;  // Default
             preset.zones[z].enabled = true;
@@ -264,8 +266,10 @@ bool PresetManager::applyPresetState(const PresetData& preset) {
         return false;
     }
 
-    // Apply global parameters
-    _wsClient->sendEffectChange(preset.effectId);
+    // Apply global parameters — translate hex effectId → position index
+    uint8_t effectIndex = indexFromEffectId(preset.effectId);
+    if (effectIndex == 0xFF) effectIndex = 0;  // Fallback if effect no longer exists
+    _wsClient->sendEffectChange(effectIndex);
     _wsClient->sendBrightnessChange(preset.brightness);
     _wsClient->sendPaletteChange(preset.paletteId);
     _wsClient->sendSpeedChange(preset.speed);
@@ -280,7 +284,9 @@ bool PresetManager::applyPresetState(const PresetData& preset) {
 
         for (uint8_t z = 0; z < preset.zoneCount && z < 4; z++) {
             if (preset.zones[z].enabled) {
-                _wsClient->sendZoneEffect(z, preset.zones[z].effectId);
+                uint8_t zoneEffIdx = indexFromEffectId(preset.zones[z].effectId);
+                if (zoneEffIdx == 0xFF) zoneEffIdx = 0;
+                _wsClient->sendZoneEffect(z, zoneEffIdx);
                 _wsClient->sendZoneSpeed(z, preset.zones[z].speed);
                 _wsClient->sendZoneBrightness(z, preset.zones[z].brightness);
                 _wsClient->sendZonePalette(z, preset.zones[z].paletteId);
@@ -311,9 +317,9 @@ bool PresetManager::applyPresetState(const PresetData& preset) {
                   preset.autoExposure ? "ON" : "OFF",
                   preset.brownGuardrail ? "ON" : "OFF");
 
-    // Update local ParameterHandler state to match
+    // Update local ParameterHandler state to match (position indices, not hex IDs)
     if (_paramHandler) {
-        _paramHandler->setValue(ParameterId::EffectId, preset.effectId);
+        _paramHandler->setValue(ParameterId::EffectId, effectIndex);
         _paramHandler->setValue(ParameterId::Brightness, preset.brightness);
         _paramHandler->setValue(ParameterId::PaletteId, preset.paletteId);
         _paramHandler->setValue(ParameterId::Speed, preset.speed);

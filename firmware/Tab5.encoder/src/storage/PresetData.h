@@ -31,9 +31,9 @@
 // Ensure struct is packed for consistent binary storage
 #pragma pack(push, 1)
 
-// Per-zone configuration (4 bytes per zone)
+// Per-zone configuration (5 bytes per zone)
 struct ZonePresetConfig {
-    uint8_t effectId;      // Zone effect index
+    uint16_t effectId;     // Zone effect hex ID (e.g. 0x0100)
     uint8_t speed;         // Zone speed (1-100)
     uint8_t brightness;    // Zone brightness (0-255)
     uint8_t enabled : 1;   // Zone enabled flag
@@ -48,12 +48,12 @@ struct PresetData {
 
     // Version for forward compatibility (1 byte)
     uint8_t version;
-    static constexpr uint8_t CURRENT_VERSION = 1;
+    static constexpr uint8_t CURRENT_VERSION = 2;  // V2: effectId widened to uint16_t
 
     // ========================================================================
-    // Global Parameters (8 bytes) - matches Unit-A encoder mapping
+    // Global Parameters (9 bytes) - matches Unit-A encoder mapping
     // ========================================================================
-    uint8_t effectId;      // Current effect index (0-87, 88 effects total)
+    uint16_t effectId;     // Current effect hex ID (e.g. 0x0100)
     uint8_t brightness;    // Global brightness (0-255)
     uint8_t paletteId;     // Current palette index (0-63)
     uint8_t speed;         // Animation speed (1-100)
@@ -94,9 +94,10 @@ struct PresetData {
     // ========================================================================
     uint16_t checksum;
 
-    // Reserved space for future expansion (22 bytes)
-    // Total: 2+1+8+18+3+8+2+22 = 64 bytes
-    uint8_t reservedFuture[22];
+    // Reserved space for future expansion (17 bytes)
+    // Total: 2+1+9+22+3+8+2+17 = 64 bytes
+    // (V2: effectId widened to uint16_t in global +1B and 4 zones +4B = -5B reserved)
+    uint8_t reservedFuture[17];
 
     // ========================================================================
     // Methods
@@ -169,7 +170,7 @@ struct PresetData {
 
 // Verify struct size at compile time
 static_assert(sizeof(PresetData) == 64, "PresetData must be exactly 64 bytes");
-static_assert(sizeof(ZonePresetConfig) == 4, "ZonePresetConfig must be exactly 4 bytes");
+static_assert(sizeof(ZonePresetConfig) == 5, "ZonePresetConfig must be exactly 5 bytes");
 
 // Number of preset slots (one per Unit-B encoder)
 constexpr uint8_t PRESET_SLOT_COUNT = 8;

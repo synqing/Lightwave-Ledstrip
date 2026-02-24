@@ -9,7 +9,7 @@ import Foundation
 
 /// Metadata for a single visual effect
 struct EffectMetadata: Codable, Sendable, Identifiable, Hashable {
-    /// Effect ID (0-100)
+    /// Effect ID (hex-based, e.g. 0x0100 = 256)
     let id: Int
 
     /// Effect display name

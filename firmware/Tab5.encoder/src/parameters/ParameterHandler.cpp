@@ -10,6 +10,7 @@
 #include "../input/DualEncoderService.h"
 #include "../input/ButtonHandler.h"
 #include "../network/WebSocketClient.h"
+#include "../utils/NameLookup.h"  // indexFromEffectId()
 #include <Arduino.h>
 #include <esp_task_wdt.h>
 #include <cstring>
@@ -91,8 +92,13 @@ bool ParameterHandler::applyStatus(JsonDocument& doc) {
         if (doc[param->statusField].is<int>() || doc[param->statusField].is<uint8_t>()) {
             uint8_t newValue = 0;
 
-            // Handle different JSON types (uint8_t, int, etc.)
-            if (doc[param->statusField].is<uint8_t>()) {
+            // EffectId requires special handling: translate hex effectId → position index
+            if (param->id == ParameterId::EffectId) {
+                int val = doc[param->statusField].as<int>();
+                uint8_t idx = indexFromEffectId(static_cast<uint16_t>(val));
+                if (idx == 0xFF) continue;  // Unknown effectId, skip
+                newValue = idx;
+            } else if (doc[param->statusField].is<uint8_t>()) {
                 newValue = doc[param->statusField].as<uint8_t>();
             } else if (doc[param->statusField].is<int>()) {
                 int val = doc[param->statusField].as<int>();

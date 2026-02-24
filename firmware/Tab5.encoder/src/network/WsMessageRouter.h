@@ -26,8 +26,10 @@
 #include "../ui/DisplayUI.h"
 #include "WebSocketClient.h"
 
-// External function to cache palette names (defined in main.cpp)
+// External functions (defined in main.cpp)
 extern void cachePaletteName(uint8_t id, const char* name);
+
+#include "../utils/NameLookup.h"  // indexFromEffectId()
 
 // ============================================================================
 // Router logging (compile-time, default off)
@@ -326,10 +328,13 @@ private:
                     continue;  // Should not reach here
             }
 
-            // Zone effectId
-            if (zone["effectId"].is<uint8_t>()) {
-                uint8_t effectId = zone["effectId"].as<uint8_t>();
-                s_paramHandler->setValue(effectParam, effectId);
+            // Zone effectId — translate hex effectId → position index
+            if (zone["effectId"].is<int>()) {
+                uint16_t hexEffectId = static_cast<uint16_t>(zone["effectId"].as<int>());
+                uint8_t index = indexFromEffectId(hexEffectId);
+                if (index != 0xFF) {
+                    s_paramHandler->setValue(effectParam, index);
+                }
             }
 
             // Zone speed
@@ -454,7 +459,9 @@ private:
                 // Anti-snapback: only update fields not under local holdoff
                 // Effect (ZoneParameterMode::EFFECT = 0)
                 if (!s_zoneComposerUI->isZoneInHoldoff(zoneId, 0)) {
-                    state.effectId = zone["effectId"].as<uint8_t>();
+                    if (zone["effectId"].is<int>()) {
+                        state.effectId = static_cast<uint16_t>(zone["effectId"].as<int>());
+                    }
                     if (zone["effectName"].is<const char*>()) {
                         const char* name = zone["effectName"].as<const char*>();
                         strncpy(state.effectName, name, sizeof(state.effectName) - 1);
@@ -523,8 +530,8 @@ private:
 
         // Effect (ZoneParameterMode::EFFECT = 0)
         if (!s_zoneComposerUI->isZoneInHoldoff(zoneId, 0)) {
-            if (current["effectId"].is<uint8_t>()) {
-                state.effectId = current["effectId"].as<uint8_t>();
+            if (current["effectId"].is<int>()) {
+                state.effectId = static_cast<uint16_t>(current["effectId"].as<int>());
             }
             if (current["effectName"].is<const char*>()) {
                 const char* name = current["effectName"].as<const char*>();

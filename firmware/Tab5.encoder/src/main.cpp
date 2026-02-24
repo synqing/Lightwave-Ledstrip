@@ -151,6 +151,8 @@ static constexpr uint8_t MAX_PALETTES = 80;  // v2 has 75 palettes, allow headro
 
 static char s_effectNames[MAX_EFFECTS][EFFECT_NAME_MAX] = {{0}};
 static bool s_effectKnown[MAX_EFFECTS] = {false};
+static uint16_t s_effectIds[MAX_EFFECTS] = {0};   // position index → hex effectId
+static uint16_t s_effectCount = 0;                  // total effects received across all pages
 static uint8_t s_effectPages = 0;
 static uint8_t s_effectNextPage = 1;
 
@@ -360,11 +362,24 @@ static void handleActionButton(uint8_t buttonIndex) {
     }
 }
 
-const char* lookupEffectName(uint8_t id) {
-    // Note: id is uint8_t (0-255), MAX_EFFECTS is 256, so id < MAX_EFFECTS is always true
-    // But we also check id <= 99 to enforce actual effect range
-    if (id < MAX_EFFECTS && s_effectKnown[id] && s_effectNames[id][0]) return s_effectNames[id];
+const char* lookupEffectName(uint8_t index) {
+    // index is a position index (0-160), not a hex effectId
+    if (index < MAX_EFFECTS && s_effectKnown[index] && s_effectNames[index][0]) return s_effectNames[index];
     return nullptr;
+}
+
+// Translate position index → hex effectId (returns 0xFFFF if invalid)
+uint16_t effectIdFromIndex(uint8_t index) {
+    if (index >= s_effectCount) return 0xFFFF;
+    return s_effectIds[index];
+}
+
+// Translate hex effectId → position index (returns 0xFF if not found)
+uint8_t indexFromEffectId(uint16_t effectId) {
+    for (uint16_t i = 0; i < s_effectCount; i++) {
+        if (s_effectIds[i] == effectId) return static_cast<uint8_t>(i);
+    }
+    return 0xFF;
 }
 
 const char* lookupPaletteName(uint8_t id) {
@@ -383,20 +398,20 @@ void cachePaletteName(uint8_t id, const char* name) {
 
 static void updateUiEffectPaletteLabels() {
     if (!g_ui || !g_encoders || !s_uiInitialized) return;  // Only update if UI is initialized
-    uint8_t effectId = static_cast<uint8_t>(g_encoders->getValue(0));
+    uint8_t effectIndex = static_cast<uint8_t>(g_encoders->getValue(0));  // position index
     uint8_t paletteId = static_cast<uint8_t>(g_encoders->getValue(1));  // FIXED: Palette is encoder 1, not 2
 
     char effectBuf[EFFECT_NAME_MAX];
     char paletteBuf[PALETTE_NAME_MAX];
 
-    const char* en = lookupEffectName(effectId);
+    const char* en = lookupEffectName(effectIndex);
     const char* pn = lookupPaletteName(paletteId);
 
     if (en) {
         strncpy(effectBuf, en, sizeof(effectBuf) - 1);
         effectBuf[sizeof(effectBuf) - 1] = '\0';
     } else {
-        snprintf(effectBuf, sizeof(effectBuf), "#%u", (unsigned)effectId);
+        snprintf(effectBuf, sizeof(effectBuf), "#%u", (unsigned)effectIndex);
     }
 
     if (pn) {
@@ -406,7 +421,7 @@ static void updateUiEffectPaletteLabels() {
         snprintf(paletteBuf, sizeof(paletteBuf), "#%u", (unsigned)paletteId);
     }
 
-    g_ui->setCurrentEffect(effectId, effectBuf);
+    g_ui->setCurrentEffect(effectIndex, effectBuf);
     g_ui->setCurrentPalette(paletteId, paletteBuf);
 }
 
@@ -1385,65 +1400,67 @@ void setup() {
             if (type && strcmp(type, "effects.list") == 0 && doc["success"].is<bool>() && doc["success"].as<bool>()) {
                 JsonObject data = doc["data"].as<JsonObject>();
                 JsonArray effects = data["effects"].as<JsonArray>();
-                uint8_t effectsOnPage = 0;
-                uint8_t highestEffectId = 0;
+
+                // Parse pagination first to detect page reset
+                JsonObject pagination = data["pagination"].as<JsonObject>();
+                int currentPage = 0;
+                if (pagination["page"].is<int>()) {
+                    currentPage = pagination["page"].as<int>();
+                }
+
+                // Reset position counter on first page (new list fetch)
+                if (currentPage <= 1) {
+                    s_effectCount = 0;
+                    memset(s_effectIds, 0, sizeof(s_effectIds));
+                    memset(s_effectKnown, 0, sizeof(s_effectKnown));
+                }
+
+                // Position-indexed storage: effects stored at s_effectCount++
+                // effectId is uint16_t (hex-based, e.g. 0x0100 = 256)
+                uint16_t effectsOnPage = 0;
                 for (JsonObject e : effects) {
-                    // ArduinoJson stores small integers as int - use is<int>()
                     if (!e["id"].is<int>() || !e["name"].is<const char*>()) continue;
                     int idInt = e["id"].as<int>();
-                    if (idInt < 0 || idInt > 255) continue;  // Invalid ID range
-                    uint8_t id = static_cast<uint8_t>(idInt);
-                    const char* name = e["name"].as<const char*>();
-                    // Store effect if within range (0-87 for 88 effects)
-                    if (id < MAX_EFFECTS && name) {
-                        strncpy(s_effectNames[id], name, EFFECT_NAME_MAX - 1);
-                        s_effectNames[id][EFFECT_NAME_MAX - 1] = '\0';
-                        s_effectKnown[id] = true;
-                        effectsOnPage++;
-                        if (id > highestEffectId) highestEffectId = id;
-                    } else if (id >= MAX_EFFECTS) {
-                        Serial.printf("[WARN] Invalid effect ID %u (max=%u), ignoring\n", id, MAX_EFFECTS - 1);
-                    }
-                }
-                Serial.printf("[Effects] Page received: %u effects stored, highest ID=%u\n", effectsOnPage, highestEffectId);
+                    if (idInt < 0 || idInt > 0xFFFF) continue;  // Valid effectId range
+                    if (s_effectCount >= MAX_EFFECTS) break;     // Capacity limit
 
-                JsonObject pagination = data["pagination"].as<JsonObject>();
-                // ArduinoJson stores small integers as int, not uint8_t - use is<int>()
+                    uint16_t effectId = static_cast<uint16_t>(idInt);
+                    const char* name = e["name"].as<const char*>();
+                    if (!name) continue;
+
+                    // Store at next position index
+                    uint16_t pos = s_effectCount;
+                    s_effectIds[pos] = effectId;
+                    strncpy(s_effectNames[pos], name, EFFECT_NAME_MAX - 1);
+                    s_effectNames[pos][EFFECT_NAME_MAX - 1] = '\0';
+                    s_effectKnown[pos] = true;
+                    s_effectCount++;
+                    effectsOnPage++;
+                }
+                Serial.printf("[Effects] Page %d: %u effects stored, total=%u\n",
+                              currentPage, effectsOnPage, s_effectCount);
+
+                // Update pagination tracking
                 if (pagination["pages"].is<int>()) {
                     int pages = pagination["pages"].as<int>();
                     if (pages > 0 && pages <= 255) s_effectPages = static_cast<uint8_t>(pages);
                 }
-                if (pagination["page"].is<int>()) {
-                    int page = pagination["page"].as<int>();
-                    if (page > 0 && page <= 255 && static_cast<uint8_t>(page) >= s_effectNextPage) {
-                        s_effectNextPage = static_cast<uint8_t>(page) + 1;
-                    }
+                if (currentPage > 0 && currentPage <= 255 &&
+                    static_cast<uint8_t>(currentPage) >= s_effectNextPage) {
+                    s_effectNextPage = static_cast<uint8_t>(currentPage) + 1;
                 }
 
-                // Extract total effect count and update ParameterMap metadata
-                // Effect max = total - 1 (0-indexed)
-                // ArduinoJson stores integers as int, not uint16_t - use is<int>()
-                if (pagination["total"].is<int>()) {
-                    int totalInt = pagination["total"].as<int>();
-                    if (totalInt > 0 && totalInt <= 256) {
-                        uint8_t effectMax = (totalInt > 1) ? static_cast<uint8_t>(totalInt - 1) : 0;
-                        updateParameterMetadata(0, 0, effectMax);  // EffectId is index 0
-                        Serial.printf("[ParamMap] Updated Effect max from effects.list: %u (total=%d)\n", effectMax, totalInt);
-                    }
-                } else if (data["total"].is<int>()) {
-                    // Some API versions put total at data level
-                    int totalInt = data["total"].as<int>();
-                    if (totalInt > 0 && totalInt <= 256) {
-                        uint8_t effectMax = (totalInt > 1) ? static_cast<uint8_t>(totalInt - 1) : 0;
-                        updateParameterMetadata(0, 0, effectMax);
-                        Serial.printf("[ParamMap] Updated Effect max from effects.list: %u (total=%d)\n", effectMax, totalInt);
-                    }
+                // Update ParameterMap: effect encoder max = last position index
+                if (s_effectCount > 0) {
+                    uint8_t effectMax = static_cast<uint8_t>(s_effectCount - 1);
+                    updateParameterMetadata(0, 0, effectMax);  // EffectId is index 0
+                    Serial.printf("[ParamMap] Updated Effect max from effects.list: %u (total=%u)\n",
+                                  effectMax, s_effectCount);
                 }
 
                 // Also update zone effect max values (indices 8, 10, 12, 14)
-                // Only update when Zone Composer is active - prevents spurious updates on other screens
                 if (g_ui && s_uiInitialized && g_ui->getCurrentScreen() == UIScreen::ZONE_COMPOSER) {
-                    uint8_t zoneEffectMax = getParameterMax(0);  // Use same max as global effect
+                    uint8_t zoneEffectMax = getParameterMax(0);
                     for (uint8_t i = 8; i <= 14; i += 2) {
                         updateParameterMetadata(i, 0, zoneEffectMax);
                     }

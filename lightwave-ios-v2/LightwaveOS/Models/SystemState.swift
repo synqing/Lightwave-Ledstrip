@@ -11,7 +11,7 @@ import Foundation
 struct SystemState: Sendable, Equatable {
     // MARK: - Effect State
 
-    /// Current effect ID (0-100)
+    /// Current effect ID (hex-based, e.g. 0x0100 = 256)
     var effectId: Int = 0
 
     /// Current effect name

@@ -21,7 +21,7 @@
  * Zone state for display
  */
 struct ZoneState {
-    uint8_t effectId = 0;
+    uint16_t effectId = 0;  // Actual hex effectId (e.g. 0x0100), NOT position index
     char effectName[48] = {0};
     uint8_t speed = 25;
     uint8_t paletteId = 0;

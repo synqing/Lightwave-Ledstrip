@@ -638,9 +638,12 @@ void ShowDirectorActor::executeCue(const ShowCue& cue) {
             uint8_t transitionType = cue.effectTransition();
             
             if (transitionType != 0 && m_rendererActor) {
-                // Use transition - call RendererActor's startTransition method directly
-                RendererActor* renderer = static_cast<RendererActor*>(m_rendererActor);
-                renderer->startTransition(effectId, transitionType);
+                // Route through message queue for thread safety (ShowDirector runs on Core 0)
+                Message msg(MessageType::START_TRANSITION);
+                msg.param1 = static_cast<uint8_t>(effectId & 0xFF);
+                msg.param2 = static_cast<uint8_t>((effectId >> 8) & 0xFF);
+                msg.param3 = transitionType;
+                sendToRenderer(msg);
             } else {
                 // Instant change - pack EffectId as 2 bytes (little-endian)
                 Message msg(MessageType::SET_EFFECT,

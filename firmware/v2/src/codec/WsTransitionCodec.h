@@ -17,6 +17,8 @@
 #include <ArduinoJson.h>
 #include <stdint.h>
 #include <cstddef>
+#include <cstring>
+#include "../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace codec {
@@ -30,11 +32,11 @@ static constexpr size_t MAX_ERROR_MSG = 128;
  * @brief Decoded transition.trigger request
  */
 struct TransitionTriggerRequest {
-    uint8_t toEffect;         // Required (0-127)
+    EffectId toEffect;        // Required (stable namespaced EffectId)
     uint8_t transitionType;   // Optional (default: 0)
     bool random;              // Optional (default: false)
-    
-    TransitionTriggerRequest() : toEffect(255), transitionType(0), random(false) {}
+
+    TransitionTriggerRequest() : toEffect(INVALID_EFFECT_ID), transitionType(0), random(false) {}
 };
 
 struct TransitionTriggerDecodeResult {
@@ -54,7 +56,7 @@ struct TransitionConfigSetRequest {
     const char* requestId;    // Optional
     uint16_t defaultDuration; // Optional (default: 1000)
     uint8_t defaultType;      // Optional (default: 0)
-    
+
     TransitionConfigSetRequest() : requestId(""), defaultDuration(1000), defaultType(0) {}
 };
 
@@ -73,11 +75,11 @@ struct TransitionConfigSetDecodeResult {
  */
 struct TransitionsTriggerRequest {
     const char* requestId;    // Optional
-    uint8_t toEffect;         // Required (0-127)
+    EffectId toEffect;        // Required (stable namespaced EffectId)
     uint8_t type;             // Optional (default: 0)
     uint16_t duration;        // Optional (default: 1000)
-    
-    TransitionsTriggerRequest() : requestId(""), toEffect(255), type(0), duration(1000) {}
+
+    TransitionsTriggerRequest() : requestId(""), toEffect(INVALID_EFFECT_ID), type(0), duration(1000) {}
 };
 
 struct TransitionsTriggerDecodeResult {
@@ -95,7 +97,7 @@ struct TransitionsTriggerDecodeResult {
  */
 struct TransitionSimpleRequest {
     const char* requestId;   // Optional
-    
+
     TransitionSimpleRequest() : requestId("") {}
 };
 
@@ -115,7 +117,7 @@ struct TransitionSimpleDecodeResult {
  * Single canonical parser for transition WebSocket commands. Enforces:
  * - Required field validation
  * - Type checking using is<T>()
- * - Range validation
+ * - Basic numeric range validation (uint16 for EffectId)
  * - Optional field defaults
  */
 class WsTransitionCodec {
@@ -125,14 +127,15 @@ public:
     static TransitionConfigSetDecodeResult decodeConfigSet(JsonObjectConst root);
     static TransitionsTriggerDecodeResult decodeTransitionsTrigger(JsonObjectConst root);
     static TransitionSimpleDecodeResult decodeSimple(JsonObjectConst root);  // For getTypes, configGet, list
-    
+
     // Encoder functions (response encoding)
-    // Populate JsonObject data from domain objects
     static void encodeGetTypes(JsonObject& data);
     static void encodeConfigGet(JsonObject& data);
     static void encodeConfigSet(uint16_t defaultDuration, uint8_t defaultType, JsonObject& data);
     static void encodeList(JsonObject& data);
-    static void encodeTriggerStarted(uint8_t fromEffect, uint8_t toEffect, const char* toEffectName, uint8_t transitionType, const char* transitionName, uint16_t duration, JsonObject& data);
+    static void encodeTriggerStarted(EffectId fromEffect, EffectId toEffect, const char* toEffectName,
+                                    uint8_t transitionType, const char* transitionName,
+                                    uint16_t duration, JsonObject& data);
 };
 
 } // namespace codec

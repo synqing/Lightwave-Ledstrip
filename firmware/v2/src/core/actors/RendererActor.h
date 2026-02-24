@@ -333,19 +333,6 @@ public:
     // ========================================================================
 
     /**
-     * @brief Start a transition to a new effect
-     * @param newEffectId Target effect ID
-     * @param transitionType Transition type (0-11)
-     */
-    void startTransition(EffectId newEffectId, uint8_t transitionType);
-
-    /**
-     * @brief Start transition with random type
-     * @param newEffectId Target effect ID
-     */
-    void startRandomTransition(EffectId newEffectId);
-
-    /**
      * @brief Check if a transition is currently active
      */
     bool isTransitionActive() const;
@@ -553,6 +540,16 @@ protected:
     void onStop() override;
 
 private:
+    // ========================================================================
+    // Cross-Core Unsafe — use ActorSystem::startTransition() from Core 0
+    // ========================================================================
+
+    /** @brief Start transition (Core 1 internal only — unsafe from Core 0) */
+    void startTransition(EffectId newEffectId, uint8_t transitionType);
+
+    /** @brief Start random transition (Core 1 internal only — unsafe from Core 0) */
+    void startRandomTransition(EffectId newEffectId);
+
     // ========================================================================
     // Internal Methods
     // ========================================================================

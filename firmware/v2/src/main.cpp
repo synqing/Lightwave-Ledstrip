@@ -709,9 +709,11 @@ static void processSerialJsonCommand(const String& json) {
 
         if (doc["transitionType"].is<int>()) {
             uint8_t tt = doc["transitionType"];
-            renderer->startTransition(toEffect, tt);
+            // Route through ActorSystem message queue for thread safety (Core 0 -> Core 1)
+            actors.startTransition(toEffect, tt);
         } else {
-            renderer->startRandomTransition(toEffect);
+            uint8_t randomType = static_cast<uint8_t>(lightwaveos::transitions::TransitionEngine::getRandomTransition());
+            actors.startTransition(toEffect, randomType);
         }
         char buf[128];
         snprintf(buf, sizeof(buf), "{\"toEffect\":%u,\"name\":\"%s\"}",
@@ -942,7 +944,9 @@ static void processSerialJsonCommand(const String& json) {
 
         if (doc.containsKey("effectId") && renderer) {
             EffectId eid = doc["effectId"];
-            if (eid < renderer->getEffectCount()) zoneComposer.setZoneEffect(zoneId, eid);
+            if (renderer->isEffectRegistered(eid)) {
+                zoneComposer.setZoneEffect(zoneId, eid);
+            }
         }
         if (doc.containsKey("brightness")) {
             zoneComposer.setZoneBrightness(zoneId, doc["brightness"].as<uint8_t>());

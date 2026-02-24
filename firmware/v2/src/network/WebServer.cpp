@@ -1067,7 +1067,7 @@ bool WebServer::executeBatchAction(const String& action, JsonVariant params) {
     else if (action == "setEffect") {
         if (!params.containsKey("effectId")) return false;
         EffectId id = params["effectId"];
-        if (id >= m_renderer->getEffectCount()) return false;
+        if (!m_renderer || !m_renderer->isEffectRegistered(id)) return false;
         m_orchestrator.setEffect(id);
         return true;
     }
@@ -1078,9 +1078,11 @@ bool WebServer::executeBatchAction(const String& action, JsonVariant params) {
     }
     else if (action == "transition") {
         if (!params.containsKey("toEffect")) return false;
-        uint8_t toEffect = params["toEffect"];
+        EffectId toEffect = params["toEffect"];
         uint8_t type = params["type"] | 0;
-        m_renderer->startTransition(toEffect, type);
+        if (!m_renderer || !m_renderer->isEffectRegistered(toEffect)) return false;
+        // Route through ActorSystem message queue for thread safety (Core 0 -> Core 1)
+        m_orchestrator.startTransition(toEffect, type);
         return true;
     }
     else if (action == "setZoneEffect" && m_zoneComposer) {

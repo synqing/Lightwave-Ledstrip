@@ -93,7 +93,7 @@ public:
         // Prevents peak-normalization from amplifying mic noise to full scale.
         // The Goertzel backend has its own noise floor subtraction; this is
         // PipelineCore's equivalent.
-        float silenceRmsGate      = 0.001f;  // ~-60 dBFS (lowered for PipelineCore diagnosis)
+        float silenceRmsGate      = 0.0005f;  // ~-66 dBFS (lets very quiet-but-real mic signal through)
     };
 
     PipelineAdapter() = default;

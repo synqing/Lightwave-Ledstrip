@@ -257,7 +257,8 @@ static void handleEffectsSetCurrent(AsyncWebSocketClient* client, JsonDocument& 
 
     // Apply effect change (with or without transition)
     if (req.hasTransition && req.transitionType < static_cast<uint8_t>(lightwaveos::transitions::TransitionType::TYPE_COUNT)) {
-        ctx.renderer->startTransition(effectId, req.transitionType);
+        // Route through ActorSystem message queue for thread safety (Core 0 -> Core 1)
+        ctx.actorSystem.startTransition(effectId, req.transitionType);
     } else {
         ctx.actorSystem.setEffect(effectId);
     }

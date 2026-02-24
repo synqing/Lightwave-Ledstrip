@@ -29,6 +29,14 @@
 
 #include "PipelineAdapter.h"
 
+// For HOP_SIZE (backend-dependent; 256 in PipelineCore S3 env)
+#include "../../config/audio_config.h"
+
+#include <cmath>
+
+// For HOP_SIZE (used for time-domain RMS calculation)
+#include "../../config/audio_config.h"
+
 // FrequencyMap types are in ::audio namespace; bring NamedBand into scope
 // to keep the derivePercussion() call site readable.
 using ::audio::NamedBand;
@@ -48,11 +56,27 @@ void PipelineAdapter::adapt(
     // ------------------------------------------------------------------
     // 1. Direct scalar mappings
     // ------------------------------------------------------------------
-    out.rms         = frame.rms;
-    out.rmsUngated  = frame.rms;   // PipelineCore doesn't have ungated RMS.
-                                    // Use gated RMS for now. If silence
-                                    // detection misbehaves, add ungated
-                                    // output to PipelineCore.
+    // Prefer time-domain RMS computed from the hop buffer when available.
+    // This is robust against any upstream gating/zeroing inside PipelineCore,
+    // and gives ControlBus a true "pre-gate" RMS for silence detection.
+    float rmsTime = frame.rms;
+    if (hopBuffer) {
+        uint64_t sumSq = 0;
+        for (uint16_t i = 0; i < HOP_SIZE; ++i) {
+            const int32_t s = hopBuffer[i];
+            sumSq += static_cast<uint64_t>(s * s);
+        }
+        const float meanSq = static_cast<float>(sumSq) / static_cast<float>(HOP_SIZE);
+        rmsTime = std::sqrt(meanSq) / 32768.0f;
+    }
+
+    out.rms        = frame.rms;
+    out.rmsUngated = rmsTime;
+
+    // If PipelineCore reports 0 RMS but time-domain RMS is non-zero, fall back.
+    if (out.rms <= 0.0f && rmsTime > 0.0f) {
+        out.rms = rmsTime;
+    }
 
     // Flux mapping: PipelineCore log-flux -> bounded [0,1] novelty.
     // Use soft-knee compression to preserve dynamics and avoid hard ceiling lock.
@@ -63,7 +87,7 @@ void PipelineAdapter::adapt(
     // ------------------------------------------------------------------
     // 2. Band energies -- direct mapping (both are 8-band, [0,1])
     // ------------------------------------------------------------------
-    if (frame.rms >= m_config.silenceRmsGate) {
+    if (out.rmsUngated >= m_config.silenceRmsGate) {
         for (uint8_t i = 0; i < 8; ++i) {
             out.bands[i] = frame.bands[i];
         }
@@ -76,7 +100,7 @@ void PipelineAdapter::adapt(
     // ------------------------------------------------------------------
     // 3. Chroma -- direct mapping (both are 12-bin, [0,1])
     // ------------------------------------------------------------------
-    if (frame.rms >= m_config.silenceRmsGate) {
+    if (out.rmsUngated >= m_config.silenceRmsGate) {
         for (uint8_t i = 0; i < 12; ++i) {
             out.chroma[i] = frame.chroma[i];
         }
@@ -101,7 +125,7 @@ void PipelineAdapter::adapt(
     // Gate: If RMS is below silence threshold, zero the spectrum.
     // Without this gate, peak-normalization amplifies mic noise to 1.0,
     // saturating bins64/spectrogram and driving LEDs to max brightness.
-    const bool spectrumGateOpen = (frame.rms >= m_config.silenceRmsGate);
+    const bool spectrumGateOpen = (out.rmsUngated >= m_config.silenceRmsGate);
 
     if (magSpectrum && spectrumGateOpen) {
         normaliseMagnitudes(magSpectrum, m_bins256, BINS256_COUNT);

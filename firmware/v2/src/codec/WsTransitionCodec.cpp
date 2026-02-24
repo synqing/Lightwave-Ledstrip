@@ -24,17 +24,17 @@ TransitionTriggerDecodeResult WsTransitionCodec::decodeTrigger(JsonObjectConst r
     TransitionTriggerDecodeResult result;
     result.request = TransitionTriggerRequest();
 
-    // Extract toEffect (required, 0-127)
+    // Extract toEffect (required, stable namespaced EffectId)
     if (!root["toEffect"].is<int>()) {
         snprintf(result.errorMsg, MAX_ERROR_MSG, "Missing required field 'toEffect'");
         return result;
     }
-    int toEffect = root["toEffect"].as<int>();
-    if (toEffect < 0 || toEffect > 127) {
-        snprintf(result.errorMsg, MAX_ERROR_MSG, "toEffect out of range (0-127): %d", toEffect);
+    int32_t toEffect = root["toEffect"].as<int32_t>();
+    if (toEffect < 0 || toEffect > 0xFFFF) {
+        snprintf(result.errorMsg, MAX_ERROR_MSG, "toEffect out of uint16 range (0-65535): %ld", (long)toEffect);
         return result;
     }
-    result.request.toEffect = static_cast<uint8_t>(toEffect);
+    result.request.toEffect = static_cast<EffectId>(toEffect);
 
     // Extract transitionType (optional, default: 0)
     if (root["transitionType"].is<int>()) {
@@ -97,17 +97,17 @@ TransitionsTriggerDecodeResult WsTransitionCodec::decodeTransitionsTrigger(JsonO
         result.request.requestId = root["requestId"].as<const char*>();
     }
 
-    // Extract toEffect (required, 0-127)
+    // Extract toEffect (required, stable namespaced EffectId)
     if (!root["toEffect"].is<int>()) {
         snprintf(result.errorMsg, MAX_ERROR_MSG, "Missing required field 'toEffect'");
         return result;
     }
-    int toEffect = root["toEffect"].as<int>();
-    if (toEffect < 0 || toEffect > 127) {
-        snprintf(result.errorMsg, MAX_ERROR_MSG, "toEffect out of range (0-127): %d", toEffect);
+    int32_t toEffect = root["toEffect"].as<int32_t>();
+    if (toEffect < 0 || toEffect > 0xFFFF) {
+        snprintf(result.errorMsg, MAX_ERROR_MSG, "toEffect out of uint16 range (0-65535): %ld", (long)toEffect);
         return result;
     }
-    result.request.toEffect = static_cast<uint8_t>(toEffect);
+    result.request.toEffect = static_cast<EffectId>(toEffect);
 
     // Extract type (optional, default: 0)
     if (root["type"].is<int>()) {
@@ -212,7 +212,7 @@ void WsTransitionCodec::encodeList(JsonObject& data) {
     data["total"] = static_cast<uint8_t>(::lightwaveos::transitions::TransitionType::TYPE_COUNT);
 }
 
-void WsTransitionCodec::encodeTriggerStarted(uint8_t fromEffect, uint8_t toEffect, const char* toEffectName, uint8_t transitionType, const char* transitionName, uint16_t duration, JsonObject& data) {
+void WsTransitionCodec::encodeTriggerStarted(EffectId fromEffect, EffectId toEffect, const char* toEffectName, uint8_t transitionType, const char* transitionName, uint16_t duration, JsonObject& data) {
     data["fromEffect"] = fromEffect;
     data["toEffect"] = toEffect;
     data["toEffectName"] = toEffectName ? toEffectName : "";

@@ -187,8 +187,8 @@ void ZoneHandlers::handleGet(AsyncWebServerRequest* request, lightwaveos::actors
         EffectId effectId = composer->getZoneEffect(zoneId);
         data["effectId"] = effectId;
         // SAFE: Uses cached state (no cross-core access)
-        if (effectId < cachedState.effectCount && cachedState.effectNames[effectId]) {
-            data["effectName"] = cachedState.effectNames[effectId];
+        if (const char* name = cachedState.findEffectName(effectId)) {
+            data["effectName"] = name;
         }
         data["brightness"] = composer->getZoneBrightness(zoneId);
         data["speed"] = composer->getZoneSpeed(zoneId);
@@ -222,10 +222,18 @@ void ZoneHandlers::handleSetEffect(AsyncWebServerRequest* request, uint8_t* data
     VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::ZoneEffect, request);
 
     EffectId effectId = doc["effectId"];
+
     // SAFE: Uses cached state (no cross-core access)
-    if (effectId >= cachedState.effectCount) {
+    // Accept stable namespaced EffectIds. Also tolerate legacy numeric indices (0..effectCount-1)
+    // by translating them to the cached registry EffectId.
+    const char* effectName = cachedState.findEffectName(effectId);
+    if (!effectName && effectId < cachedState.effectCount && effectId < cachedState.MAX_CACHED_EFFECTS) {
+        effectId = cachedState.effectIds[static_cast<uint16_t>(effectId)];
+        effectName = cachedState.findEffectName(effectId);
+    }
+    if (!effectName) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "effectId");
+                          ErrorCodes::OUT_OF_RANGE, "Effect ID not registered", "effectId");
         return;
     }
 
@@ -235,8 +243,8 @@ void ZoneHandlers::handleSetEffect(AsyncWebServerRequest* request, uint8_t* data
         respData["zoneId"] = zoneId;
         respData["effectId"] = effectId;
         // SAFE: Uses cached state (no cross-core access)
-        if (effectId < cachedState.effectCount && cachedState.effectNames[effectId]) {
-            respData["effectName"] = cachedState.effectNames[effectId];
+        if (const char* name = cachedState.findEffectName(effectId)) {
+            respData["effectName"] = name;
         }
     });
 

@@ -24,14 +24,14 @@ HttpEffectsSetDecodeResult HttpEffectsCodec::decodeSet(JsonObjectConst root) {
     HttpEffectsSetDecodeResult result;
     result.request = HttpEffectsSetRequest();
     
-    // Extract effectId (required, 0 to MAX_EFFECTS-1)
+    // Extract effectId (required, stable namespaced EffectId)
     if (!root["effectId"].is<int>()) {
         snprintf(result.errorMsg, MAX_ERROR_MSG, "Missing required field 'effectId'");
         return result;
     }
-    int effectId = root["effectId"].as<int>();
-    if (effectId < 0 || effectId >= limits::MAX_EFFECTS) {
-        snprintf(result.errorMsg, MAX_ERROR_MSG, "effectId out of range (0-%d): %d", limits::MAX_EFFECTS - 1, effectId);
+    int32_t effectId = root["effectId"].as<int32_t>();
+    if (effectId < 0 || effectId > 0xFFFF) {
+        snprintf(result.errorMsg, MAX_ERROR_MSG, "effectId out of uint16 range (0-65535): %ld", (long)effectId);
         return result;
     }
     result.request.effectId = static_cast<EffectId>(effectId);
@@ -59,14 +59,14 @@ HttpEffectsParametersSetDecodeResult HttpEffectsCodec::decodeParametersSet(JsonO
     HttpEffectsParametersSetDecodeResult result;
     result.request = HttpEffectsParametersSetRequest();
     
-    // Extract effectId (required, 0 to MAX_EFFECTS-1)
+    // Extract effectId (required, stable namespaced EffectId)
     if (!root["effectId"].is<int>()) {
         snprintf(result.errorMsg, MAX_ERROR_MSG, "Missing required field 'effectId'");
         return result;
     }
-    int effectId = root["effectId"].as<int>();
-    if (effectId < 0 || effectId >= limits::MAX_EFFECTS) {
-        snprintf(result.errorMsg, MAX_ERROR_MSG, "effectId out of range (0-%d): %d", limits::MAX_EFFECTS - 1, effectId);
+    int32_t effectId = root["effectId"].as<int32_t>();
+    if (effectId < 0 || effectId > 0xFFFF) {
+        snprintf(result.errorMsg, MAX_ERROR_MSG, "effectId out of uint16 range (0-65535): %ld", (long)effectId);
         return result;
     }
     result.request.effectId = static_cast<EffectId>(effectId);

@@ -856,10 +856,10 @@ void AudioHandlers::handleMappingsGet(AsyncWebServerRequest* request, EffectId e
     using namespace audio;
     auto& registry = AudioMappingRegistry::instance();
 
-    if (effectId >= AudioMappingRegistry::MAX_EFFECTS ||
-        !renderer->isEffectRegistered(effectId)) {
+    // EffectId is a stable namespaced uint16 (0xFFSS). Do NOT treat it as an array index.
+    if (effectId == INVALID_EFFECT_ID || !renderer->isEffectRegistered(effectId)) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "id");
+                          ErrorCodes::OUT_OF_RANGE, "Effect ID not registered", "id");
         return;
     }
 
@@ -904,10 +904,10 @@ void AudioHandlers::handleMappingsSet(AsyncWebServerRequest* request, EffectId e
     using namespace audio;
     auto& registry = AudioMappingRegistry::instance();
 
-    if (effectId >= AudioMappingRegistry::MAX_EFFECTS ||
-        !renderer->isEffectRegistered(effectId)) {
+    // EffectId is a stable namespaced uint16 (0xFFSS). Do NOT treat it as an array index.
+    if (effectId == INVALID_EFFECT_ID || !renderer->isEffectRegistered(effectId)) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "id");
+                          ErrorCodes::OUT_OF_RANGE, "Effect ID not registered", "id");
         return;
     }
 
@@ -973,9 +973,10 @@ void AudioHandlers::handleMappingsDelete(AsyncWebServerRequest* request, EffectI
     using namespace audio;
     auto& registry = AudioMappingRegistry::instance();
 
-    if (effectId >= AudioMappingRegistry::MAX_EFFECTS) {
+    // EffectId is a stable namespaced uint16 (0xFFSS). Do NOT treat it as an array index.
+    if (effectId == INVALID_EFFECT_ID) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "id");
+                          ErrorCodes::OUT_OF_RANGE, "Invalid effectId", "id");
         return;
     }
 
@@ -995,9 +996,10 @@ void AudioHandlers::handleMappingsEnable(AsyncWebServerRequest* request, EffectI
     using namespace audio;
     auto& registry = AudioMappingRegistry::instance();
 
-    if (effectId >= AudioMappingRegistry::MAX_EFFECTS) {
+    // EffectId is a stable namespaced uint16 (0xFFSS). Do NOT treat it as an array index.
+    if (effectId == INVALID_EFFECT_ID) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "id");
+                          ErrorCodes::OUT_OF_RANGE, "Invalid effectId", "id");
         return;
     }
 

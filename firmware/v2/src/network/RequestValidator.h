@@ -636,7 +636,7 @@ namespace RequestSchemas {
      * Optional: transition (bool), transitionType (0-15)
      */
     constexpr FieldSchema SetEffect[] = {
-        {"effectId", FieldType::UINT8, true, 0, 255}
+        {"effectId", FieldType::UINT16, true, 0, 65535}
         // transition and transitionType are optional, validated inline
     };
     constexpr size_t SetEffectSize = sizeof(SetEffect) / sizeof(FieldSchema);
@@ -672,7 +672,7 @@ namespace RequestSchemas {
      * Optional: type, duration, easing, random
      */
     constexpr FieldSchema TriggerTransition[] = {
-        {"toEffect", FieldType::UINT8,  true,  0, 255},
+        {"toEffect", FieldType::UINT16, true, 0, 65535},
         {"type",     FieldType::UINT8,  false, 0, 15},
         {"duration", FieldType::UINT16, false, 100, 10000},
         {"easing",   FieldType::UINT8,  false, 0, 15}
@@ -708,7 +708,7 @@ namespace RequestSchemas {
      * Required: effectId
      */
     constexpr FieldSchema ZoneEffect[] = {
-        {"effectId", FieldType::UINT8, true, 0, 255}
+        {"effectId", FieldType::UINT16, true, 0, 65535}
     };
     constexpr size_t ZoneEffectSize = sizeof(ZoneEffect) / sizeof(FieldSchema);
 

@@ -194,7 +194,7 @@ bool StateSerializer::extractSenderUuid(const char* json, size_t length, char* o
 bool StateSerializer::parseZone(const char* json, state::ZoneState& zone) {
     long val;
 
-    if (findLong(json, "\"e\"", &val)) zone.effectId = static_cast<uint8_t>(val);
+    if (findLong(json, "\"e\"", &val)) zone.effectId = static_cast<EffectId>(val);
     if (findLong(json, "\"p\"", &val)) zone.paletteId = static_cast<uint8_t>(val);
     if (findLong(json, "\"b\"", &val)) zone.brightness = static_cast<uint8_t>(val);
     if (findLong(json, "\"s\"", &val)) zone.speed = static_cast<uint8_t>(val);

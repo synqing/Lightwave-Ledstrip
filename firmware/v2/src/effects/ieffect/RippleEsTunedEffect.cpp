@@ -63,6 +63,7 @@ void RippleEsTunedEffect::spawnRipple(uint8_t hue, uint8_t intensity, float spee
 
 void RippleEsTunedEffect::render(plugins::EffectContext& ctx) {
     if (!m_ps) return;
+    const float rawDtEarly = ctx.getSafeRawDeltaSeconds();
     const bool hasAudio = ctx.audio.available;
     const bool tempoOk = hasAudio && (ctx.audio.tempoConfidence() >= 0.30f);
 
@@ -118,7 +119,7 @@ void RippleEsTunedEffect::render(plugins::EffectContext& ctx) {
             if (flux > m_fluxEnv) {
                 m_fluxEnv = flux;
             } else {
-                m_fluxEnv *= 0.82f;
+                m_fluxEnv = effects::chroma::dtDecay(m_fluxEnv, 0.82f, rawDtEarly);
             }
 
         }

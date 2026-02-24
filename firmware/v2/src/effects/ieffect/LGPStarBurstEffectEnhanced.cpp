@@ -109,7 +109,7 @@ void LGPStarBurstEnhancedEffect::render(plugins::EffectContext& ctx) {
         if (ctx.audio.isHihatHit()) {
             m_hihatSparkle = 1.0f;
         }
-        m_hihatSparkle *= 0.85f;  // Faster decay for sparkle
+        m_hihatSparkle = effects::chroma::dtDecay(m_hihatSparkle, 0.85f, rawDt);  // dt-corrected decay for sparkle
         if (m_hihatSparkle < 0.01f) m_hihatSparkle = 0.0f;
     }
 
@@ -176,7 +176,7 @@ void LGPStarBurstEnhancedEffect::render(plugins::EffectContext& ctx) {
     while (m_phase < 0.0f) m_phase += PHASE_DOMAIN;
 
     // Enhanced: Burst decay with sub-bass boost
-    m_burst *= 0.88f;
+    m_burst = effects::chroma::dtDecay(m_burst, 0.88f, rawDt);
     if (hasAudio && m_subBassEnergy > 0.3f) {
         m_burst = fmaxf(m_burst, m_subBassEnergy * 0.5f);  // Boost burst with sub-bass
     }

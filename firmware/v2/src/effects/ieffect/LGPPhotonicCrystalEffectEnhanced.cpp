@@ -173,7 +173,7 @@ void LGPPhotonicCrystalEnhancedEffect::render(plugins::EffectContext& ctx) {
             m_collisionBoost = 1.0f + m_subBassEnergy * 0.3f;  // Boost with sub-bass
         }
         if (m_collisionBoost > 1.3f) m_collisionBoost = 1.3f;  // Clamp
-        m_collisionBoost *= 0.88f;
+        m_collisionBoost = effects::chroma::dtDecay(m_collisionBoost, 0.88f, rawDt);
 
         // Circular chroma hue (replaces argmax + linear EMA to eliminate bin-flip rainbow sweeps)
         chromaOffset = effects::chroma::circularChromaHueSmoothed(

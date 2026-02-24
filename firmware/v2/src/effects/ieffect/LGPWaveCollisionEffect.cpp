@@ -122,7 +122,7 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
         m_collisionBoost += energyDeltaSmooth * 0.4f;
     }
     if (m_collisionBoost > 1.0f) m_collisionBoost = 1.0f;
-    m_collisionBoost *= 0.88f;  // Slightly faster decay for snappier response
+    m_collisionBoost = effects::chroma::dtDecay(m_collisionBoost, 0.88f, rawDt);  // dt-corrected decay for snappier response
 
     // Hi-hat driven speed burst
     if (hasAudio && ctx.audio.isHihatHit()) {
@@ -136,7 +136,7 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
 #else
     m_collisionBoost += energyDeltaSmooth * 0.4f;
     if (m_collisionBoost > 1.0f) m_collisionBoost = 1.0f;
-    m_collisionBoost *= 0.88f;
+    m_collisionBoost = effects::chroma::dtDecay(m_collisionBoost, 0.88f, rawDt);
     m_speedTarget = m_speedTarget * 0.95f + 1.0f * 0.05f;
     float bassEnergy = energyAvgSmooth;
 #endif

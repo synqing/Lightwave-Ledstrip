@@ -49,6 +49,7 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
     float intensityNorm = ctx.brightness / 255.0f;
     const bool hasAudio = ctx.audio.available;
     bool newHop = false;
+    const float rawDtEarly = enhancement::getSafeDeltaSeconds(ctx.rawDeltaTimeSeconds);
 
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
@@ -77,7 +78,7 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
             if (bassNorm > m_bassWavelength) {
                 m_bassWavelength = bassNorm;  // Instant attack
             } else {
-                m_bassWavelength *= 0.85f;    // ~100ms decay
+                m_bassWavelength = effects::chroma::dtDecay(m_bassWavelength, 0.85f, rawDtEarly);    // dt-corrected ~100ms decay
             }
 
             // =================================================================

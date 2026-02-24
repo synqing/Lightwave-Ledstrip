@@ -32,7 +32,7 @@ bool EsAnalogRefEffect::init(plugins::EffectContext& ctx) {
 void EsAnalogRefEffect::render(plugins::EffectContext& ctx) {
     clearAll(ctx);
 
-    const int z = ctx.zoneId;
+    const int z = (ctx.zoneId < kMaxZones) ? ctx.zoneId : 0;
 
     float vu = 0.0f;
     if (ctx.audio.available) {

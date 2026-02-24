@@ -4,6 +4,7 @@
  */
 
 #include "AudioBloomEffect.h"
+#include "ChromaUtils.h"
 #include "../CoreEffects.h"
 #include "../../config/features.h"
 #include "../../audio/contracts/ControlBus.h"
@@ -132,6 +133,7 @@ bool AudioBloomEffect::init(plugins::EffectContext& ctx) {
 
 void AudioBloomEffect::render(plugins::EffectContext& ctx) {
     if (!m_ps) return;
+    const float rawDt = ctx.getSafeRawDeltaSeconds();
     // Clear output buffer
     memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
 
@@ -164,7 +166,7 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
         if (subBassAvg > m_subBassPulse) {
             m_subBassPulse = subBassAvg;  // Instant attack
         } else {
-            m_subBassPulse *= 0.85f;  // ~100ms decay at 60fps
+            m_subBassPulse = effects::chroma::dtDecay(m_subBassPulse, 0.85f, rawDt);  // dt-corrected ~100ms decay
         }
     }
 

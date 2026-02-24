@@ -139,6 +139,10 @@ void LedDriver_S3::show() {
         return;
     }
 
+    // Assert: FastLED.show() must only ever run on Core 1 (renderer).
+    // Cross-core calls cause RMT spinlock corruption (see fix/stable-effect-ids).
+    configASSERT(xPortGetCoreID() == 1);
+
     FastLED.show();
 
     uint32_t end = static_cast<uint32_t>(esp_timer_get_time());

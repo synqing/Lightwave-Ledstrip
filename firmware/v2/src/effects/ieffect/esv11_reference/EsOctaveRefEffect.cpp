@@ -42,7 +42,7 @@ void EsOctaveRefEffect::render(plugins::EffectContext& ctx) {
         return;
     }
 
-    const int z = ctx.zoneId;
+    const int z = (ctx.zoneId < kMaxZones) ? ctx.zoneId : 0;
 
     // Prefer raw ES chroma, fallback to contract chroma.
     const float* chroma = ctx.audio.controlBus.es_chroma_raw;

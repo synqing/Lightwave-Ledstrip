@@ -66,6 +66,7 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
 
     const bool hasAudio = ctx.audio.available;
     bool newHop = false;
+    const float rawDtEarly = ctx.getSafeRawDeltaSeconds();
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
         newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
@@ -85,7 +86,7 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
             if (kickAvg > m_kickPulse) {
                 m_kickPulse = kickAvg;  // Instant attack
             } else {
-                m_kickPulse *= 0.80f;   // ~80ms decay at 60fps for punchy response
+                m_kickPulse = effects::chroma::dtDecay(m_kickPulse, 0.80f, rawDtEarly);   // dt-corrected ~80ms decay
             }
 
             // =====================================================================

@@ -113,7 +113,7 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
     if (m_phase > 628.3f) m_phase -= 628.3f;  // Wrap at 100*2π
 
     // Simple burst decay (like Wave Collision)
-    m_burst *= 0.88f;
+    m_burst = effects::chroma::dtDecay(m_burst, 0.88f, rawDt);
 
     // =========================================================================
     // Rendering

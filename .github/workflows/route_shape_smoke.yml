@@ -1,0 +1,51 @@
+name: Route Shape Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      host:
+        description: "Device host or IP (for example: lightwaveos.local or 192.168.1.101)"
+        required: false
+        default: ""
+  schedule:
+    - cron: "15 3 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  route-shape-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Resolve target host
+        id: host
+        env:
+          INPUT_HOST: ${{ github.event.inputs.host }}
+          SECRET_HOST: ${{ secrets.LIGHTWAVE_SMOKE_HOST }}
+        run: |
+          set -euo pipefail
+          HOST="${INPUT_HOST:-}"
+          if [ -z "$HOST" ]; then
+            HOST="${SECRET_HOST:-}"
+          fi
+          if [ -z "$HOST" ]; then
+            echo "host=" >> "$GITHUB_OUTPUT"
+            echo "No host configured; skipping route-shape smoke."
+            exit 0
+          fi
+          echo "host=$HOST" >> "$GITHUB_OUTPUT"
+          echo "Using target host: $HOST"
+
+      - name: Run route-shape smoke checks
+        if: steps.host.outputs.host != ''
+        run: |
+          set -euo pipefail
+          python3 tools/web/web_smoke_test.py --host "${{ steps.host.outputs.host }}"

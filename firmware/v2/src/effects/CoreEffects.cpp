@@ -159,6 +159,15 @@
 #include "ieffect/esv11_reference/EsBloomRefEffect.h"
 #include "ieffect/esv11_reference/EsWaveformRefEffect.h"
 #include "ieffect/sensorybridge_reference/SbWaveform310RefEffect.h"
+#include "ieffect/LGPTimeReversalMirrorEffect.h"
+#include "ieffect/LGPKdVSolitonPairEffect.h"
+#include "ieffect/LGPGoldCodeSpeckleEffect.h"
+#include "ieffect/LGPQuasicrystalLatticeEffect.h"
+#include "ieffect/LGPFresnelCausticSweepEffect.h"
+#include "ieffect/LGPTimeReversalMirrorEffect_AR.h"
+#include "ieffect/LGPTimeReversalMirrorEffect_Mod1.h"
+#include "ieffect/LGPTimeReversalMirrorEffect_Mod2.h"
+#include "ieffect/LGPTimeReversalMirrorEffect_Mod3.h"
 #include "utils/FastLEDOptim.h"
 #include "../core/narrative/NarrativeEngine.h"
 #include <FastLED.h>
@@ -1132,8 +1141,45 @@ uint16_t registerAllEffects(RendererActor* renderer) {
     // For now, it is not registered.
     // static ieffect::LGPWaveletMirrorEffect waveletMirrorInstance;
 
+    // --- Showpiece Pack 3 ---
+    static ieffect::LGPTimeReversalMirrorEffect timeReversalMirrorInstance;
+    renderer->registerEffect(EID_LGP_TIME_REVERSAL_MIRROR, &timeReversalMirrorInstance);
+    total++;
+
+    static ieffect::LGPKdVSolitonPairEffect kdvSolitonPairInstance;
+    renderer->registerEffect(EID_LGP_KDV_SOLITON_PAIR, &kdvSolitonPairInstance);
+    total++;
+
+    static ieffect::LGPGoldCodeSpeckleEffect goldCodeSpeckleInstance;
+    renderer->registerEffect(EID_LGP_GOLD_CODE_SPECKLE, &goldCodeSpeckleInstance);
+    total++;
+
+    static ieffect::LGPQuasicrystalLatticeEffect quasicrystalLatticeInstance;
+    renderer->registerEffect(EID_LGP_QUASICRYSTAL_LATTICE, &quasicrystalLatticeInstance);
+    total++;
+
+    static ieffect::LGPFresnelCausticSweepEffect fresnelCausticSweepInstance;
+    renderer->registerEffect(EID_LGP_FRESNEL_CAUSTIC_SWEEP, &fresnelCausticSweepInstance);
+    total++;
+
+    static ieffect::LGPTimeReversalMirrorEffect_AR timeReversalMirrorARInstance;
+    renderer->registerEffect(EID_LGP_TIME_REVERSAL_MIRROR_AR, &timeReversalMirrorARInstance);
+    total++;
+
+    static ieffect::LGPTimeReversalMirrorEffect_Mod1 timeReversalMirrorMod1Instance;
+    renderer->registerEffect(EID_LGP_TIME_REVERSAL_MIRROR_MOD1, &timeReversalMirrorMod1Instance);
+    total++;
+
+    static ieffect::LGPTimeReversalMirrorEffect_Mod2 timeReversalMirrorMod2Instance;
+    renderer->registerEffect(EID_LGP_TIME_REVERSAL_MIRROR_MOD2, &timeReversalMirrorMod2Instance);
+    total++;
+
+    static ieffect::LGPTimeReversalMirrorEffect_Mod3 timeReversalMirrorMod3Instance;
+    renderer->registerEffect(EID_LGP_TIME_REVERSAL_MIRROR_MOD3, &timeReversalMirrorMod3Instance);
+    total++;
+
     // =============== EFFECT COUNT PARITY VALIDATION ===============
-    constexpr uint16_t EXPECTED_EFFECT_COUNT = 161;
+    constexpr uint16_t EXPECTED_EFFECT_COUNT = 170;
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

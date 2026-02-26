@@ -242,6 +242,17 @@ constexpr EffectId DISPLAY_ORDER[] = {
     EID_LGP_SALIENCY_BLOOM,                  // 159
     EID_LGP_TRANSIENT_LATTICE,               // 160
     EID_LGP_WAVELET_MIRROR,                  // 161
+
+    // Showpiece Pack 3
+    EID_LGP_TIME_REVERSAL_MIRROR,            // 162
+    EID_LGP_KDV_SOLITON_PAIR,               // 163
+    EID_LGP_GOLD_CODE_SPECKLE,              // 164
+    EID_LGP_QUASICRYSTAL_LATTICE,           // 165
+    EID_LGP_FRESNEL_CAUSTIC_SWEEP,          // 166
+    EID_LGP_TIME_REVERSAL_MIRROR_AR,        // 167
+    EID_LGP_TIME_REVERSAL_MIRROR_MOD1,      // 168
+    EID_LGP_TIME_REVERSAL_MIRROR_MOD2,      // 169
+    EID_LGP_TIME_REVERSAL_MIRROR_MOD3,      // 170
 };
 
 /// Number of effects in the display order (excludes retired slots)

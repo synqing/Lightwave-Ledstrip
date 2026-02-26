@@ -34,6 +34,10 @@ public:
     void render(plugins::EffectContext& ctx) override;
     void cleanup() override;
     const plugins::EffectMetadata& getMetadata() const override;
+    uint8_t getParameterCount() const override;
+    const plugins::EffectParameter* getParameter(uint8_t index) const override;
+    bool setParameter(const char* name, float value) override;
+    float getParameter(const char* name) const override;
 
 private:
     // Instance state
@@ -58,8 +62,10 @@ private:
     enhancement::AsymmetricFollower m_energyAvgFollower{0.0f, 0.20f, 0.50f};   // 200ms rise, 500ms fall
     enhancement::AsymmetricFollower m_energyDeltaFollower{0.0f, 0.25f, 0.40f}; // 250ms rise, 400ms fall
 
-    // Constants
-    static constexpr uint8_t FADE_AMOUNT = 40;
+    // Tunables
+    float m_phaseRate = 240.0f;
+    float m_waveFreq = 0.25f;
+    int m_fadeAmount = 40;
 };
 
 } // namespace ieffect

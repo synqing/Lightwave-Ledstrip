@@ -9,6 +9,7 @@
 #include "WsSysCommands.h"
 #include "../WsCommandRouter.h"
 #include "../WebServerContext.h"
+#include "WsStreamCommands.h"
 #include "../../../config/features.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
@@ -71,6 +72,13 @@ static void handleSysCapabilities(AsyncWebSocketClient* client,
 #else
     response["pattern_registry"] = false;
 #endif
+
+    const RenderStreamStatusSnapshot stream = getRenderStreamStatusSnapshot();
+    response["renderStreamBinaryV1"] = true;
+    response["externalRenderMode"] = true;
+    response["mailboxDepth"] = stream.mailboxDepth;
+    response["maxPayloadBytes"] = stream.maxPayloadBytes;
+    response["frameContractVersion"] = stream.frameContractVersion;
 
     // Serialise and send
     char buf[256];

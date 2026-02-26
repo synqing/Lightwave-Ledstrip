@@ -11,6 +11,7 @@
 #include "../ApiResponse.h"
 #include "../RequestValidator.h"
 #include "handlers/DeviceHandlers.h"
+#include "handlers/ControlHandlers.h"
 #include "handlers/FilesystemHandlers.h"
 #include "handlers/EffectHandlers.h"
 #include "handlers/ZoneHandlers.h"
@@ -101,6 +102,13 @@ void V1ApiRoutes::registerRoutes(
         handlers::DeviceHandlers::handleInfo(request, ctx.orchestrator, ctx.renderer);
     });
 
+    // Control Lease Status - GET /api/v1/control/status
+    registry.onGet("/api/v1/control/status", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::ControlHandlers::handleStatus(request);
+    });
+
     // Filesystem Status - GET /api/v1/filesystem/status
     registry.onGet("/api/v1/filesystem/status", [server, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
@@ -186,18 +194,20 @@ void V1ApiRoutes::registerRoutes(
         handlers::EffectHandlers::handleFamilies(request);
     });
 
+    // Current Effect - GET /api/v1/effects/current
+    // Keep this route above /api/v1/effects: AsyncWebServer path matching can
+    // otherwise dispatch /effects/current to the broader /effects handler.
+    registry.onGet("/api/v1/effects/current", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::EffectHandlers::handleCurrent(request, ctx.renderer);
+    });
+
     // Effects List - GET /api/v1/effects
     registry.onGet("/api/v1/effects", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
         handlers::EffectHandlers::handleList(request, ctx.renderer);
-    });
-
-    // Current Effect - GET /api/v1/effects/current
-    registry.onGet("/api/v1/effects/current", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        handlers::EffectHandlers::handleCurrent(request, ctx.renderer);
     });
 
     // Set Effect - POST /api/v1/effects/set

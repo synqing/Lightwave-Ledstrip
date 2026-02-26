@@ -6,10 +6,15 @@
 #include "WsDeviceCommands.h"
 #include "../WsCommandRouter.h"
 #include "../WebServerContext.h"
+#include "WsStreamCommands.h"
 #include "../../ApiResponse.h"
 #include "../../WebServer.h"
 #include "../../../codec/WsDeviceCodec.h"
 #include "../../../core/actors/RendererActor.h"
+#include "../../../config/features.h"
+#if FEATURE_CONTROL_LEASE
+#include "../../../core/system/ControlLeaseManager.h"
+#endif
 #include <ESPAsyncWebServer.h>
 #include <WiFi.h>
 #include <ArduinoJson.h>
@@ -75,6 +80,55 @@ static void handleLegacyGetStatus(AsyncWebSocketClient* client, JsonDocument& do
         response["cpuPercent"] = cached.stats.cpuPercent;
         response["freeHeap"] = ESP.getFreeHeap();
         response["uptime"] = millis() / 1000;
+
+#if FEATURE_CONTROL_LEASE
+        using lightwaveos::core::system::ControlLeaseManager;
+        const ControlLeaseManager::LeaseState leaseState = ControlLeaseManager::getState();
+        const ControlLeaseManager::StatusCounters counters = ControlLeaseManager::getCounters();
+        JsonObject lease = response["controlLease"].to<JsonObject>();
+        lease["active"] = leaseState.active;
+        lease["leaseId"] = leaseState.leaseId;
+        lease["scope"] = leaseState.scope;
+        lease["ownerClientName"] = leaseState.ownerClientName;
+        lease["ownerInstanceId"] = leaseState.ownerInstanceId;
+        lease["ownerWsClientId"] = leaseState.ownerWsClientId;
+        lease["remainingMs"] = ControlLeaseManager::getRemainingMs();
+        lease["ttlMs"] = leaseState.ttlMs;
+        lease["heartbeatIntervalMs"] = leaseState.heartbeatIntervalMs;
+        lease["takeoverAllowed"] = leaseState.takeoverAllowed;
+
+        JsonObject controlCounters = response["controlCounters"].to<JsonObject>();
+        controlCounters["blockedWsCommands"] = counters.blockedWsCommands;
+        controlCounters["blockedRestRequests"] = counters.blockedRestRequests;
+        controlCounters["blockedLocalEncoderInputs"] = counters.blockedLocalEncoderInputs;
+        controlCounters["blockedLocalSerialInputs"] = counters.blockedLocalSerialInputs;
+        controlCounters["lastLeaseEventMs"] = counters.lastLeaseEventMs;
+#endif
+
+        const RenderStreamStatusSnapshot stream = getRenderStreamStatusSnapshot();
+        JsonObject renderStream = response["renderStream"].to<JsonObject>();
+        renderStream["active"] = stream.active;
+        renderStream["sessionId"] = stream.sessionId;
+        renderStream["ownerWsClientId"] = stream.ownerWsClientId;
+        renderStream["lastFrameSeq"] = stream.lastFrameSeq;
+        renderStream["lastFrameRxMs"] = stream.lastFrameRxMs;
+        renderStream["staleTimeoutMs"] = stream.staleTimeoutMs;
+        renderStream["targetFps"] = stream.targetFps;
+        renderStream["frameContractVersion"] = stream.frameContractVersion;
+        renderStream["pixelFormat"] = "rgb888";
+        renderStream["ledCount"] = stream.ledCount;
+        renderStream["headerBytes"] = stream.headerBytes;
+        renderStream["payloadBytes"] = stream.payloadBytes;
+        renderStream["maxPayloadBytes"] = stream.maxPayloadBytes;
+        renderStream["mailboxDepth"] = stream.mailboxDepth;
+
+        JsonObject renderCounters = response["renderCounters"].to<JsonObject>();
+        renderCounters["framesRx"] = stream.framesRx;
+        renderCounters["framesRendered"] = stream.framesRendered;
+        renderCounters["framesDroppedMailbox"] = stream.framesDroppedMailbox;
+        renderCounters["framesInvalid"] = stream.framesInvalid;
+        renderCounters["framesBlockedLease"] = stream.framesBlockedLease;
+        renderCounters["staleTimeouts"] = stream.staleTimeouts;
         String output;
         serializeJson(response, output);
         client->text(output);
@@ -127,6 +181,55 @@ static void handleDeviceGetStatus(AsyncWebSocketClient* client, JsonDocument& do
             network["rssi"] = WiFi.RSSI();
         }
         // Note: wsClients count not available in context - can be added via callback if needed
+
+#if FEATURE_CONTROL_LEASE
+        using lightwaveos::core::system::ControlLeaseManager;
+        const ControlLeaseManager::LeaseState leaseState = ControlLeaseManager::getState();
+        const ControlLeaseManager::StatusCounters counters = ControlLeaseManager::getCounters();
+        JsonObject lease = data["controlLease"].to<JsonObject>();
+        lease["active"] = leaseState.active;
+        lease["leaseId"] = leaseState.leaseId;
+        lease["scope"] = leaseState.scope;
+        lease["ownerClientName"] = leaseState.ownerClientName;
+        lease["ownerInstanceId"] = leaseState.ownerInstanceId;
+        lease["ownerWsClientId"] = leaseState.ownerWsClientId;
+        lease["remainingMs"] = ControlLeaseManager::getRemainingMs();
+        lease["ttlMs"] = leaseState.ttlMs;
+        lease["heartbeatIntervalMs"] = leaseState.heartbeatIntervalMs;
+        lease["takeoverAllowed"] = leaseState.takeoverAllowed;
+
+        JsonObject controlCounters = data["controlCounters"].to<JsonObject>();
+        controlCounters["blockedWsCommands"] = counters.blockedWsCommands;
+        controlCounters["blockedRestRequests"] = counters.blockedRestRequests;
+        controlCounters["blockedLocalEncoderInputs"] = counters.blockedLocalEncoderInputs;
+        controlCounters["blockedLocalSerialInputs"] = counters.blockedLocalSerialInputs;
+        controlCounters["lastLeaseEventMs"] = counters.lastLeaseEventMs;
+#endif
+
+        const RenderStreamStatusSnapshot stream = getRenderStreamStatusSnapshot();
+        JsonObject renderStream = data["renderStream"].to<JsonObject>();
+        renderStream["active"] = stream.active;
+        renderStream["sessionId"] = stream.sessionId;
+        renderStream["ownerWsClientId"] = stream.ownerWsClientId;
+        renderStream["lastFrameSeq"] = stream.lastFrameSeq;
+        renderStream["lastFrameRxMs"] = stream.lastFrameRxMs;
+        renderStream["staleTimeoutMs"] = stream.staleTimeoutMs;
+        renderStream["targetFps"] = stream.targetFps;
+        renderStream["frameContractVersion"] = stream.frameContractVersion;
+        renderStream["pixelFormat"] = "rgb888";
+        renderStream["ledCount"] = stream.ledCount;
+        renderStream["headerBytes"] = stream.headerBytes;
+        renderStream["payloadBytes"] = stream.payloadBytes;
+        renderStream["maxPayloadBytes"] = stream.maxPayloadBytes;
+        renderStream["mailboxDepth"] = stream.mailboxDepth;
+
+        JsonObject renderCounters = data["renderCounters"].to<JsonObject>();
+        renderCounters["framesRx"] = stream.framesRx;
+        renderCounters["framesRendered"] = stream.framesRendered;
+        renderCounters["framesDroppedMailbox"] = stream.framesDroppedMailbox;
+        renderCounters["framesInvalid"] = stream.framesInvalid;
+        renderCounters["framesBlockedLease"] = stream.framesBlockedLease;
+        renderCounters["staleTimeouts"] = stream.staleTimeouts;
     });
     client->text(response);
 }

@@ -14,6 +14,7 @@
 #include "../../../codec/WsEffectsCodec.h"
 #include "../../../core/actors/ActorSystem.h"
 #include "../../../core/actors/RendererActor.h"
+#include "../../../core/persistence/EffectTunableStore.h"
 #include "../../../effects/PatternRegistry.h"
 #include "../../../config/display_order.h"
 #include "../../../plugins/api/IEffect.h"
@@ -80,12 +81,23 @@ static void handleEffectsGetCurrent(AsyncWebSocketClient* client, JsonDocument& 
     // Decode using codec (single canonical JSON parser)
     JsonObjectConst root = doc.as<JsonObjectConst>();
     codec::EffectsSimpleDecodeResult decodeResult = codec::WsEffectsCodec::decodeSimple(root);
-    
+
     const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
     EffectId effectId = ctx.renderer->getCurrentEffect();
     const char* name = ctx.renderer->getEffectName(effectId);
 
-    String response = buildWsResponse("effects.current", requestId, [effectId, name, &ctx](JsonObject& data) {
+    // Look up IEffect metadata for parity with REST API
+    plugins::IEffect* ieffect = ctx.renderer->getEffectInstance(effectId);
+    bool isIEffect = (ieffect != nullptr);
+    const char* description = nullptr;
+    uint8_t version = 0;
+    if (ieffect) {
+        const plugins::EffectMetadata& meta = ieffect->getMetadata();
+        description = meta.description;
+        version = meta.version;
+    }
+
+    String response = buildWsResponse("effects.current", requestId, [effectId, name, &ctx, isIEffect, description, version](JsonObject& data) {
         codec::WsEffectsCodec::encodeGetCurrent(
             effectId,
             name,
@@ -97,6 +109,9 @@ static void handleEffectsGetCurrent(AsyncWebSocketClient* client, JsonDocument& 
             ctx.renderer->getSaturation(),
             ctx.renderer->getComplexity(),
             ctx.renderer->getVariation(),
+            isIEffect,
+            description,
+            version,
             data
         );
     });
@@ -295,34 +310,46 @@ static void handleEffectsParametersGet(AsyncWebSocketClient* client, JsonDocumen
     plugins::IEffect* effect = ctx.renderer->getEffectInstance(effectId);
     const char* name = ctx.renderer->getEffectName(effectId);
     bool hasParameters = (effect != nullptr && effect->getParameterCount() > 0);
+    const persistence::EffectTunableStore::Status status =
+        persistence::EffectTunableStore::instance().getStatus(effectId);
     
-    // Collect parameter data into arrays
-    // Note: Effects rarely have >16 parameters, caps stack usage
-    static constexpr uint8_t MAX_EFFECT_PARAMS = 16;
-    const char* paramNames[MAX_EFFECT_PARAMS];
-    const char* paramDisplayNames[MAX_EFFECT_PARAMS];
-    float paramMins[MAX_EFFECT_PARAMS];
-    float paramMaxs[MAX_EFFECT_PARAMS];
-    float paramDefaults[MAX_EFFECT_PARAMS];
-    float paramValues[MAX_EFFECT_PARAMS];
-    uint8_t paramCount = 0;
+    String response = buildWsResponse("effects.parameters", requestId, [effectId, name, hasParameters, effect, status](JsonObject& data) {
+        data["effectId"] = effectId;
+        data["name"] = name ? name : "";
+        data["hasParameters"] = hasParameters;
 
-    if (effect) {
-        paramCount = effect->getParameterCount();
-        for (uint8_t i = 0; i < paramCount && i < MAX_EFFECT_PARAMS; ++i) {
-            const plugins::EffectParameter* param = effect->getParameter(i);
-            if (!param) continue;
-            paramNames[i] = param->name;
-            paramDisplayNames[i] = param->displayName;
-            paramMins[i] = param->minValue;
-            paramMaxs[i] = param->maxValue;
-            paramDefaults[i] = param->defaultValue;
-            paramValues[i] = effect->getParameter(param->name);
+        JsonObject persistenceObj = data["persistence"].to<JsonObject>();
+        persistenceObj["mode"] = status.mode ? status.mode : "volatile";
+        persistenceObj["dirty"] = status.dirty;
+        if (status.lastError && status.lastError[0] != '\0') {
+            persistenceObj["lastError"] = status.lastError;
         }
-    }
-    
-    String response = buildWsResponse("effects.parameters", requestId, [effectId, name, hasParameters, paramNames, paramDisplayNames, paramMins, paramMaxs, paramDefaults, paramValues, paramCount](JsonObject& data) {
-        codec::WsEffectsCodec::encodeParametersGet(effectId, name, hasParameters, paramNames, paramDisplayNames, paramMins, paramMaxs, paramDefaults, paramValues, paramCount, data);
+
+        JsonArray params = data["parameters"].to<JsonArray>();
+        if (!effect) {
+            return;
+        }
+
+        const uint8_t paramCount = effect->getParameterCount();
+        for (uint8_t i = 0; i < paramCount; ++i) {
+            const plugins::EffectParameter* param = effect->getParameter(i);
+            if (!param || !param->name || param->name[0] == '\0') {
+                continue;
+            }
+
+            JsonObject p = params.add<JsonObject>();
+            p["name"] = param->name;
+            p["displayName"] = param->displayName ? param->displayName : param->name;
+            p["min"] = param->minValue;
+            p["max"] = param->maxValue;
+            p["default"] = param->defaultValue;
+            p["value"] = effect->getParameter(param->name);
+            p["type"] = plugins::effectParameterTypeToString(param->type);
+            p["step"] = param->step;
+            p["group"] = param->group ? param->group : "";
+            p["unit"] = param->unit ? param->unit : "";
+            p["advanced"] = param->advanced;
+        }
     });
     client->text(response);
 }
@@ -358,46 +385,39 @@ static void handleEffectsParametersSet(AsyncWebSocketClient* client, JsonDocumen
         return;
     }
 
-    // Iterate over JsonObjectConst (ArduinoJson v7 supports range-for on JsonObjectConst)
-    // Note: Effects rarely have >16 parameters, caps stack usage
-    static constexpr uint8_t MAX_PARAM_KEYS = 16;
-    const char* queuedKeys[MAX_PARAM_KEYS];
-    const char* failedKeys[MAX_PARAM_KEYS];
-    uint8_t queuedCount = 0;
-    uint8_t failedCount = 0;
-
-    for (JsonPairConst kv : req.parameters) {
-        const char* key = kv.key().c_str();
-        float value = kv.value().as<float>();
-        bool known = false;
-        uint8_t count = effect->getParameterCount();
-        for (uint8_t i = 0; i < count; ++i) {
-            const plugins::EffectParameter* param = effect->getParameter(i);
-            if (param && strcmp(param->name, key) == 0) {
-                known = true;
-                break;
-            }
-        }
-        if (!known) {
-            if (failedCount < MAX_PARAM_KEYS) {
-                failedKeys[failedCount++] = key;
-            }
-            continue;
-        }
-        if (ctx.renderer->enqueueEffectParameterUpdate(effectId, key, value)) {
-            if (queuedCount < MAX_PARAM_KEYS) {
-                queuedKeys[queuedCount++] = key;
-            }
-        } else {
-            if (failedCount < MAX_PARAM_KEYS) {
-                failedKeys[failedCount++] = key;
-            }
-        }
-    }
-    
     const char* name = ctx.renderer->getEffectName(effectId);
-    String response = buildWsResponse("effects.parameters.changed", requestId, [effectId, name, queuedKeys, queuedCount, failedKeys, failedCount](JsonObject& data) {
-        codec::WsEffectsCodec::encodeParametersSetChanged(effectId, name, queuedKeys, queuedCount, failedKeys, failedCount, data);
+    JsonObjectConst reqParams = req.parameters;
+    String response = buildWsResponse("effects.parameters.changed", requestId, [effectId, name, reqParams, effect, &ctx](JsonObject& data) {
+        data["effectId"] = effectId;
+        data["name"] = name ? name : "";
+
+        JsonArray queuedArr = data["queued"].to<JsonArray>();
+        JsonArray failedArr = data["failed"].to<JsonArray>();
+
+        const uint8_t count = effect ? effect->getParameterCount() : 0;
+        for (JsonPairConst kv : reqParams) {
+            const char* key = kv.key().c_str();
+            const float value = kv.value().as<float>();
+            bool known = false;
+            for (uint8_t i = 0; i < count; ++i) {
+                const plugins::EffectParameter* param = effect->getParameter(i);
+                if (param && param->name && strcmp(param->name, key) == 0) {
+                    known = true;
+                    break;
+                }
+            }
+
+            if (!known) {
+                failedArr.add(key);
+                continue;
+            }
+
+            if (ctx.renderer->enqueueEffectParameterUpdate(effectId, key, value)) {
+                queuedArr.add(key);
+            } else {
+                failedArr.add(key);
+            }
+        }
     });
     client->text(response);
 }
@@ -599,4 +619,3 @@ void registerWsEffectsCommands(const WebServerContext& ctx) {
 } // namespace webserver
 } // namespace network
 } // namespace lightwaveos
-

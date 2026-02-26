@@ -29,6 +29,32 @@ def http_get(url: str) -> dict:
         return json.loads(data)
 
 
+def validate_effects_shape(mode: str, obj: dict, endpoint: str) -> None:
+    data = obj.get("data")
+    if not isinstance(data, dict):
+        raise ValueError(f"{endpoint}: missing object 'data'")
+
+    if mode == "list":
+        if not isinstance(data.get("effects"), list):
+            raise ValueError(f"{endpoint}: expected data.effects[] list")
+        has_pagination = isinstance(data.get("pagination"), dict)
+        has_flat_paging = all(key in data for key in ("total", "offset", "limit"))
+        if not (has_pagination or has_flat_paging):
+            raise ValueError(f"{endpoint}: missing pagination metadata")
+        if "effectId" in data and "effects" not in data:
+            raise ValueError(f"{endpoint}: returned current-effect shape")
+        return
+
+    if mode == "current":
+        if "effectId" not in data:
+            raise ValueError(f"{endpoint}: missing data.effectId")
+        if "effects" in data:
+            raise ValueError(f"{endpoint}: returned list shape (data.effects present)")
+        return
+
+    raise ValueError(f"{endpoint}: unknown shape mode '{mode}'")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", required=True, help="Device host or IP (e.g. lightwaveos.local)")
@@ -38,14 +64,16 @@ def main() -> int:
     base = f"http://{args.host}:{args.port}"
 
     endpoints = [
-        "/api/v1/",
-        "/api/v1/spec",
-        "/api/v1/device/status",
-        "/api/v1/effects",
-        "/api/v1/effects/current",
+        ("/api/v1/", None),
+        ("/api/v1/spec", None),
+        ("/api/v1/device/status", None),
+        ("/api/v1/effects", "list"),
+        ("/api/v1/effects/current", "current"),
+        ("/api/v1/effects/current?details=true", "current"),
+        ("/api/v1/effects?limit=20", "list"),
     ]
 
-    for ep in endpoints:
+    for ep, shape_mode in endpoints:
         url = base + ep
         try:
             obj = http_get(url)
@@ -59,6 +87,14 @@ def main() -> int:
         if "success" not in obj:
             print(f"FAIL {ep}: missing 'success' in response")
             return 2
+
+        if shape_mode:
+            try:
+                validate_effects_shape(shape_mode, obj, ep)
+            except ValueError as e:
+                print(f"FAIL {e}")
+                return 2
+
         print(f"OK   {ep}: success={obj.get('success')}")
 
     print("All basic REST smoke tests passed.")
@@ -68,5 +104,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
 

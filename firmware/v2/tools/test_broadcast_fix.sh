@@ -54,6 +54,58 @@ test_endpoint() {
     fi
 }
 
+test_endpoint_shape() {
+    local endpoint=$1
+    local description=$2
+    local mode=$3
+
+    echo -n "Testing: ${description}... "
+
+    response=$(curl -s -w "\n%{http_code}" -X GET "${BASE_URL}${endpoint}")
+    http_code=$(echo "$response" | tail -n1)
+    body=$(echo "$response" | head -n-1)
+
+    if [ "$http_code" != "200" ]; then
+        echo -e "${RED}✗ FAIL${NC} (HTTP ${http_code})"
+        echo "  Response: ${body}"
+        ((FAILED++))
+        return 1
+    fi
+
+    if printf '%s' "$body" | python3 - "$mode" <<'PY'
+import json
+import sys
+
+mode = sys.argv[1]
+obj = json.load(sys.stdin)
+data = obj.get("data")
+if not isinstance(data, dict):
+    sys.exit(1)
+
+if mode == "current":
+    ok = ("effectId" in data) and ("effects" not in data)
+elif mode == "list":
+    effects = data.get("effects")
+    has_pagination = isinstance(data.get("pagination"), dict)
+    has_flat_paging = all(key in data for key in ("total", "offset", "limit"))
+    ok = isinstance(effects, list) and (has_pagination or has_flat_paging)
+else:
+    ok = False
+
+sys.exit(0 if ok else 1)
+PY
+    then
+        echo -e "${GREEN}✓ PASS${NC} (shape=${mode})"
+        ((PASSED++))
+        return 0
+    fi
+
+    echo -e "${RED}✗ FAIL${NC} (invalid ${mode} shape)"
+    echo "  Response: ${body}"
+    ((FAILED++))
+    return 1
+}
+
 # Test WebSocket connection (basic check)
 test_websocket_connection() {
     echo -n "Testing: WebSocket connection... "
@@ -99,6 +151,21 @@ sleep 0.1
 test_endpoint "GET" "/effects/current" "" "Get current effect"
 sleep 0.1
 
+test_endpoint "GET" "/effects" "" "Get effects list"
+sleep 0.1
+
+test_endpoint_shape "/effects/current" "Validate /effects/current response shape" "current"
+sleep 0.1
+
+test_endpoint_shape "/effects" "Validate /effects response shape" "list"
+sleep 0.1
+
+test_endpoint_shape "/effects/current?details=true" "Validate /effects/current query shape" "current"
+sleep 0.1
+
+test_endpoint_shape "/effects?limit=20" "Validate /effects query shape" "list"
+sleep 0.1
+
 echo ""
 echo "=== Test 5: Rapid Requests (Stress Test) ==="
 # Send multiple rapid requests to test coalescing
@@ -125,4 +192,3 @@ else
     echo -e "${RED}Some tests failed!${NC}"
     exit 1
 fi
-

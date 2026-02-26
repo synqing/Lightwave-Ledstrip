@@ -1,6 +1,7 @@
 #include "EffectHandlers.h"
 #include "../../../core/actors/ActorSystem.h"
 #include "../../../core/actors/RendererActor.h"
+#include "../../../core/persistence/EffectTunableStore.h"
 #include "../../../effects/PatternRegistry.h"
 #include "../../../plugins/api/IEffect.h"
 #include "../../RequestValidator.h"
@@ -26,6 +27,13 @@ void EffectHandlers::handleList(AsyncWebServerRequest* request, RendererActor* r
     if (!renderer) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::SYSTEM_NOT_READY, "Renderer not available");
+        return;
+    }
+
+    // Defensive path check: only serve the exact list endpoint from this handler.
+    if (request->url() != "/api/v1/effects") {
+        sendErrorResponse(request, HttpStatus::NOT_FOUND,
+                          ErrorCodes::NOT_FOUND, "Endpoint not found");
         return;
     }
 
@@ -220,6 +228,15 @@ void EffectHandlers::handleCurrent(AsyncWebServerRequest* request, RendererActor
         return;
     }
 
+    // Defensive path check: ESPAsyncWebServer BackwardCompatible matching
+    // can prefix-match /effects/current to the /effects list handler.
+    // Belt-and-suspenders guard ensures this handler only serves its exact path.
+    if (request->url() != "/api/v1/effects/current") {
+        sendErrorResponse(request, HttpStatus::NOT_FOUND,
+                          ErrorCodes::NOT_FOUND, "Endpoint not found");
+        return;
+    }
+
     sendSuccessResponse(request, [renderer](JsonObject& data) {
         EffectId effectId = renderer->getCurrentEffect();
         data["effectId"] = effectId;
@@ -268,10 +285,19 @@ void EffectHandlers::handleParametersGet(AsyncWebServerRequest* request, Rendere
 
     plugins::IEffect* effect = renderer->getEffectInstance(effectId);
 
-    sendSuccessResponse(request, [renderer, effectId, effect](JsonObject& data) {
+    const persistence::EffectTunableStore::Status status =
+        persistence::EffectTunableStore::instance().getStatus(effectId);
+
+    sendSuccessResponse(request, [renderer, effectId, effect, status](JsonObject& data) {
         data["effectId"] = effectId;
         data["name"] = renderer->getEffectName(effectId);
         data["hasParameters"] = (effect != nullptr && effect->getParameterCount() > 0);
+        JsonObject persistenceObj = data["persistence"].to<JsonObject>();
+        persistenceObj["mode"] = status.mode ? status.mode : "volatile";
+        persistenceObj["dirty"] = status.dirty;
+        if (status.lastError && status.lastError[0] != '\0') {
+            persistenceObj["lastError"] = status.lastError;
+        }
 
         JsonArray params = data["parameters"].to<JsonArray>();
         if (!effect) {
@@ -289,6 +315,11 @@ void EffectHandlers::handleParametersGet(AsyncWebServerRequest* request, Rendere
             p["max"] = param->maxValue;
             p["default"] = param->defaultValue;
             p["value"] = effect->getParameter(param->name);
+            p["type"] = plugins::effectParameterTypeToString(param->type);
+            p["step"] = param->step;
+            p["group"] = param->group ? param->group : "";
+            p["unit"] = param->unit ? param->unit : "";
+            p["advanced"] = param->advanced;
         }
     });
 }

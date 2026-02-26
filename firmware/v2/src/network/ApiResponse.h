@@ -45,6 +45,13 @@ namespace ErrorCodes {
     constexpr const char* STORAGE_FULL = "STORAGE_FULL";
     constexpr const char* INVALID_PARAMETER = "INVALID_PARAMETER";
     constexpr const char* OPERATION_FAILED = "OPERATION_FAILED";
+    constexpr const char* CONTROL_LOCKED = "CONTROL_LOCKED";
+    constexpr const char* LEASE_REQUIRED = "LEASE_REQUIRED";
+    constexpr const char* LEASE_INVALID = "LEASE_INVALID";
+    constexpr const char* LEASE_EXPIRED = "LEASE_EXPIRED";
+    constexpr const char* STREAM_NOT_ACTIVE = "STREAM_NOT_ACTIVE";
+    constexpr const char* STREAM_CONTRACT_MISMATCH = "STREAM_CONTRACT_MISMATCH";
+    constexpr const char* STREAM_FRAME_INVALID = "STREAM_FRAME_INVALID";
 }
 
 // HTTP Status Codes
@@ -58,6 +65,7 @@ namespace HttpStatus {
     constexpr uint16_t FORBIDDEN = 403;
     constexpr uint16_t NOT_FOUND = 404;
     constexpr uint16_t CONFLICT = 409;
+    constexpr uint16_t PRECONDITION_REQUIRED = 428;
     constexpr uint16_t TOO_MANY_REQUESTS = 429;
     constexpr uint16_t INTERNAL_ERROR = 500;
     constexpr uint16_t INTERNAL_SERVER_ERROR = 500;  // Alias for INTERNAL_ERROR

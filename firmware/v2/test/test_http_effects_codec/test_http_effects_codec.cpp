@@ -102,7 +102,7 @@ void test_http_effects_set_decode_missing_effectId() {
 }
 
 void test_http_effects_set_decode_invalid_effectId_range() {
-    const char* json = R"({"effectId": 200})";
+    const char* json = R"({"effectId": 70000})";
     JsonDocument doc;
     TEST_ASSERT_TRUE_MESSAGE(loadJsonString(json, doc), "JSON should parse");
 
@@ -251,6 +251,64 @@ void test_http_effects_encode_families_allow_list() {
                              "families should only have families and total keys");
 }
 
+void test_http_effects_encode_parameters_get_typed_and_persistence() {
+    HttpEffectParameterItemData params[2];
+    params[0].name = "forward_sec";
+    params[0].displayName = "Forward";
+    params[0].minValue = 0.2f;
+    params[0].maxValue = 4.0f;
+    params[0].defaultValue = 1.1f;
+    params[0].value = 1.4f;
+    params[0].type = "float";
+    params[0].step = 0.05f;
+    params[0].group = "timing";
+    params[0].unit = "s";
+    params[0].advanced = false;
+
+    params[1].name = "ridge_count";
+    params[1].displayName = "Ridge Count";
+    params[1].minValue = 2.0f;
+    params[1].maxValue = 24.0f;
+    params[1].defaultValue = 8.0f;
+    params[1].value = 12.0f;
+    params[1].type = "int";
+    params[1].step = 1.0f;
+    params[1].group = "ridge";
+    params[1].unit = "";
+    params[1].advanced = true;
+
+    HttpEffectsParametersGetData parametersData;
+    parametersData.effectId = 77;
+    parametersData.name = "Time Reversal Mirror";
+    parametersData.hasParameters = true;
+    parametersData.parameters = params;
+    parametersData.parameterCount = 2;
+    parametersData.persistenceMode = "nvs";
+    parametersData.persistenceDirty = true;
+    parametersData.persistenceLastError = "Write Error";
+
+    JsonDocument doc;
+    JsonObject data = doc.to<JsonObject>();
+    HttpEffectsCodec::encodeParametersGet(parametersData, data);
+
+    const char* keys[] = {"effectId", "name", "hasParameters", "persistence", "parameters"};
+    TEST_ASSERT_TRUE_MESSAGE(validateKeysAgainstAllowList(data, keys, sizeof(keys) / sizeof(keys[0])),
+                             "parameters payload should include persistence and parameters");
+
+    JsonObject persistence = data["persistence"].as<JsonObject>();
+    TEST_ASSERT_EQUAL_STRING("nvs", persistence["mode"].as<const char*>());
+    TEST_ASSERT_TRUE_MESSAGE(persistence["dirty"].as<bool>(), "dirty should be true");
+    TEST_ASSERT_EQUAL_STRING("Write Error", persistence["lastError"].as<const char*>());
+
+    JsonArray arr = data["parameters"].as<JsonArray>();
+    TEST_ASSERT_EQUAL_INT_MESSAGE(2, arr.size(), "parameter count should match");
+    JsonObject first = arr[0].as<JsonObject>();
+    TEST_ASSERT_EQUAL_STRING("float", first["type"].as<const char*>());
+    TEST_ASSERT_EQUAL_STRING("timing", first["group"].as<const char*>());
+    TEST_ASSERT_EQUAL_STRING("s", first["unit"].as<const char*>());
+    TEST_ASSERT_FALSE_MESSAGE(first["advanced"].as<bool>(), "advanced should be false");
+}
+
 // ============================================================================
 // Unity setUp/tearDown (required by Unity framework)
 // ============================================================================
@@ -280,6 +338,7 @@ int main() {
     RUN_TEST(test_http_effects_encode_list_pagination_zero_values);
     RUN_TEST(test_http_effects_encode_current_allow_list);
     RUN_TEST(test_http_effects_encode_families_allow_list);
+    RUN_TEST(test_http_effects_encode_parameters_get_typed_and_persistence);
     
     UNITY_END();
     return 0;

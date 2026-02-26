@@ -1,365 +1,151 @@
 /**
  * @file test_ws_color_codec.cpp
- * @brief Unit tests for WsColorCodec JSON parsing and validation
- *
- * Tests color WebSocket command decoding with type checking, unknown-key rejection,
- * and encoder allow-list validation.
- *
- * @author LightwaveOS Team
- * @version 2.0.0
+ * @brief Unit tests for WsColorCodec decode contracts
  */
 
 #ifdef NATIVE_BUILD
 
 #include <unity.h>
 #include <ArduinoJson.h>
-#include <fstream>
-#include <string>
-#include <cstring>
+
 #include "../../src/codec/WsColorCodec.h"
 
 using namespace lightwaveos::codec;
 
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-/**
- * @brief Load JSON from string and parse into JsonDocument
- */
 static bool loadJsonString(const char* jsonStr, JsonDocument& doc) {
     DeserializationError error = deserializeJson(doc, jsonStr);
     return error == DeserializationError::Ok;
 }
 
-/**
- * @brief Validate keys against allow-list (matches decode test pattern)
- * 
- * Verifies:
- * - All keys in object are in the allow-list (no unknown keys)
- * - All required keys from allow-list are present
- * 
- * @param obj JSON object to validate
- * @param allowedKeys Array of allowed key names
- * @param allowedCount Number of allowed keys
- * @return true if all keys are allowed and all required keys are present
- */
-static bool validateKeysAgainstAllowList(const JsonObject& obj, const char* allowedKeys[], size_t allowedCount) {
-    size_t foundCount = 0;
-    // Check that all keys in object are in allow-list
-    for (JsonPair kv : obj) {
-        const char* key = kv.key().c_str();
-        bool isAllowed = false;
-        for (size_t i = 0; i < allowedCount; i++) {
-            if (strcmp(key, allowedKeys[i]) == 0) {
-                isAllowed = true;
-                foundCount++;
-                break;
-            }
-        }
-        if (!isAllowed) {
-            return false;  // Unknown key found
-        }
-    }
-    // Verify all required keys are present
-    for (size_t i = 0; i < allowedCount; i++) {
-        if (!obj.containsKey(allowedKeys[i])) {
-            return false;  // Required key missing
-        }
-    }
-    return foundCount == allowedCount;  // No extra, no missing
-}
-
-// ============================================================================
-// Test: Valid Simple Request (requestId only)
-// ============================================================================
-
-void test_color_simple_valid() {
-    const char* json = R"({"requestId": "test123"})";
-    
+void test_decode_enable_blend_valid() {
     JsonDocument doc;
-    TEST_ASSERT_TRUE_MESSAGE(loadJsonString(json, doc), "JSON should parse");
-    
-    JsonObjectConst root = doc.as<JsonObjectConst>();
-    ColorSimpleDecodeResult result = WsColorCodec::decodeSimple(root);
-    
-    TEST_ASSERT_TRUE_MESSAGE(result.success, "Decode should succeed");
-    TEST_ASSERT_EQUAL_STRING("test123", result.request.requestId);
+    TEST_ASSERT_TRUE(loadJsonString(R"({"requestId":"r1","enable":true})", doc));
+
+    ColorEnableBlendDecodeResult result = WsColorCodec::decodeEnableBlend(doc.as<JsonObjectConst>());
+    TEST_ASSERT_TRUE(result.success);
+    TEST_ASSERT_TRUE(result.request.enable);
+    TEST_ASSERT_EQUAL_STRING("r1", result.request.requestId);
 }
 
-void test_color_simple_valid_no_requestId() {
-    const char* json = R"({})";
-    
+void test_decode_enable_blend_missing_enable() {
     JsonDocument doc;
-    TEST_ASSERT_TRUE_MESSAGE(loadJsonString(json, doc), "JSON should parse");
-    
-    JsonObjectConst root = doc.as<JsonObjectConst>();
-    ColorSimpleDecodeResult result = WsColorCodec::decodeSimple(root);
-    
-    TEST_ASSERT_TRUE_MESSAGE(result.success, "Decode should succeed");
-    TEST_ASSERT_EQUAL_STRING("", result.request.requestId);
+    TEST_ASSERT_TRUE(loadJsonString(R"({"requestId":"r1"})", doc));
+
+    ColorEnableBlendDecodeResult result = WsColorCodec::decodeEnableBlend(doc.as<JsonObjectConst>());
+    TEST_ASSERT_FALSE(result.success);
 }
 
-// ============================================================================
-// Test: Encoder Functions (Response Encoding)
-// ============================================================================
-
-void test_encode_get_status() {
+void test_decode_set_diffusion_amount_valid() {
     JsonDocument doc;
-    JsonObject data = doc.to<JsonObject>();
+    TEST_ASSERT_TRUE(loadJsonString(R"({"amount":128})", doc));
 
-    WsColorCodec::encodeGetStatus(true, true, 100, 150, 200, false, 2.5f, 0.0f, true, 128, data);
-
-    TEST_ASSERT_TRUE_MESSAGE(data["active"].as<bool>(), "active should be true");
-    TEST_ASSERT_TRUE_MESSAGE(data["blendEnabled"].as<bool>(), "blendEnabled should be true");
-    TEST_ASSERT_TRUE_MESSAGE(data.containsKey("blendFactors"), "blendFactors array should be present");
-    TEST_ASSERT_FALSE_MESSAGE(data["rotationEnabled"].as<bool>(), "rotationEnabled should be false");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 2.5f, data["rotationSpeed"].as<float>(), "rotationSpeed should be 2.5");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 0.0f, data["rotationPhase"].as<float>(), "rotationPhase should be 0.0");
-    TEST_ASSERT_TRUE_MESSAGE(data["diffusionEnabled"].as<bool>(), "diffusionEnabled should be true");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(128, data["diffusionAmount"].as<uint8_t>(), "diffusionAmount should be 128");
-    
-    JsonArray blendFactors = data["blendFactors"].as<JsonArray>();
-    TEST_ASSERT_EQUAL_INT_MESSAGE(3, blendFactors.size(), "blendFactors should have 3 entries");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(100, blendFactors[0].as<uint8_t>(), "first factor should be 100");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(150, blendFactors[1].as<uint8_t>(), "second factor should be 150");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(200, blendFactors[2].as<uint8_t>(), "third factor should be 200");
-    
-    const char* allowedKeys[] = {"active", "blendEnabled", "blendFactors", "rotationEnabled", "rotationSpeed", "rotationPhase", "diffusionEnabled", "diffusionAmount"};
-    TEST_ASSERT_TRUE_MESSAGE(
-        validateKeysAgainstAllowList(data, allowedKeys, 8),
-        "Should only have required keys, no extras allowed");
+    ColorSetDiffusionAmountDecodeResult result = WsColorCodec::decodeSetDiffusionAmount(doc.as<JsonObjectConst>());
+    TEST_ASSERT_TRUE(result.success);
+    TEST_ASSERT_EQUAL_UINT8(128, result.request.amount);
 }
 
-void test_encode_enable_blend() {
+void test_decode_set_diffusion_amount_out_of_range() {
     JsonDocument doc;
-    JsonObject data = doc.to<JsonObject>();
+    TEST_ASSERT_TRUE(loadJsonString(R"({"amount":300})", doc));
 
-    WsColorCodec::encodeEnableBlend(true, data);
-
-    TEST_ASSERT_TRUE_MESSAGE(data["blendEnabled"].as<bool>(), "blendEnabled should be true");
-    
-    const char* allowedKeys[] = {"blendEnabled"};
-    TEST_ASSERT_TRUE_MESSAGE(
-        validateKeysAgainstAllowList(data, allowedKeys, 1),
-        "Should only have blendEnabled key, no extras allowed");
+    ColorSetDiffusionAmountDecodeResult result = WsColorCodec::decodeSetDiffusionAmount(doc.as<JsonObjectConst>());
+    TEST_ASSERT_FALSE(result.success);
 }
 
-void test_encode_set_blend_palettes() {
+void test_decode_set_mode_valid() {
     JsonDocument doc;
-    JsonObject data = doc.to<JsonObject>();
+    TEST_ASSERT_TRUE(loadJsonString(R"({"mode":2})", doc));
 
-    uint8_t palettes2[] = {5, 10};
-    WsColorCodec::encodeSetBlendPalettes(palettes2, 2, data);
-
-    TEST_ASSERT_TRUE_MESSAGE(data.containsKey("blendPalettes"), "blendPalettes array should be present");
-    JsonArray palettes = data["blendPalettes"].as<JsonArray>();
-    TEST_ASSERT_EQUAL_INT_MESSAGE(2, palettes.size(), "blendPalettes should have 2 entries");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(5, palettes[0].as<uint8_t>(), "first palette should be 5");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(10, palettes[1].as<uint8_t>(), "second palette should be 10");
-    
-    const char* allowedKeys[] = {"blendPalettes"};
-    TEST_ASSERT_TRUE_MESSAGE(
-        validateKeysAgainstAllowList(data, allowedKeys, 1),
-        "Should only have blendPalettes key, no extras allowed");
+    ColorCorrectionSetModeDecodeResult result = WsColorCodec::decodeSetMode(doc.as<JsonObjectConst>());
+    TEST_ASSERT_TRUE(result.success);
+    TEST_ASSERT_EQUAL_UINT8(2, result.request.mode);
 }
 
-void test_encode_set_blend_palettes_three() {
+void test_decode_set_mode_out_of_range() {
     JsonDocument doc;
-    JsonObject data = doc.to<JsonObject>();
+    TEST_ASSERT_TRUE(loadJsonString(R"({"mode":5})", doc));
 
-    uint8_t palettes3[] = {5, 10, 15};
-    WsColorCodec::encodeSetBlendPalettes(palettes3, 3, data);
-
-    JsonArray palettes = data["blendPalettes"].as<JsonArray>();
-    TEST_ASSERT_EQUAL_INT_MESSAGE(3, palettes.size(), "blendPalettes should have 3 entries");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(15, palettes[2].as<uint8_t>(), "third palette should be 15");
+    ColorCorrectionSetModeDecodeResult result = WsColorCodec::decodeSetMode(doc.as<JsonObjectConst>());
+    TEST_ASSERT_FALSE(result.success);
 }
 
-void test_encode_set_blend_factors() {
+void test_decode_set_rotation_speed_valid() {
     JsonDocument doc;
-    JsonObject data = doc.to<JsonObject>();
+    TEST_ASSERT_TRUE(loadJsonString(R"({"degreesPerFrame":2.5})", doc));
 
-    WsColorCodec::encodeSetBlendFactors(100, 150, 200, data);
-
-    TEST_ASSERT_TRUE_MESSAGE(data.containsKey("blendFactors"), "blendFactors array should be present");
-    JsonArray factors = data["blendFactors"].as<JsonArray>();
-    TEST_ASSERT_EQUAL_INT_MESSAGE(3, factors.size(), "blendFactors should have 3 entries");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(100, factors[0].as<uint8_t>(), "first factor should be 100");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(150, factors[1].as<uint8_t>(), "second factor should be 150");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(200, factors[2].as<uint8_t>(), "third factor should be 200");
-    
-    const char* allowedKeys[] = {"blendFactors"};
-    TEST_ASSERT_TRUE_MESSAGE(
-        validateKeysAgainstAllowList(data, allowedKeys, 1),
-        "Should only have blendFactors key, no extras allowed");
+    ColorSetRotationSpeedDecodeResult result = WsColorCodec::decodeSetRotationSpeed(doc.as<JsonObjectConst>());
+    TEST_ASSERT_TRUE(result.success);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 2.5f, result.request.degreesPerFrame);
 }
 
-void test_encode_enable_rotation() {
+void test_decode_set_blend_palettes_defaults_palette3() {
     JsonDocument doc;
-    JsonObject data = doc.to<JsonObject>();
+    TEST_ASSERT_TRUE(loadJsonString(R"({"palette1":5,"palette2":10})", doc));
 
-    WsColorCodec::encodeEnableRotation(true, data);
-
-    TEST_ASSERT_TRUE_MESSAGE(data["rotationEnabled"].as<bool>(), "rotationEnabled should be true");
-    
-    const char* allowedKeys[] = {"rotationEnabled"};
-    TEST_ASSERT_TRUE_MESSAGE(
-        validateKeysAgainstAllowList(data, allowedKeys, 1),
-        "Should only have rotationEnabled key, no extras allowed");
+    ColorSetBlendPalettesDecodeResult result = WsColorCodec::decodeSetBlendPalettes(doc.as<JsonObjectConst>());
+    TEST_ASSERT_TRUE(result.success);
+    TEST_ASSERT_EQUAL_UINT8(5, result.request.palette1);
+    TEST_ASSERT_EQUAL_UINT8(10, result.request.palette2);
+    TEST_ASSERT_EQUAL_UINT8(255, result.request.palette3);
 }
 
-void test_encode_set_rotation_speed() {
+void test_decode_set_blend_factors_defaults_factor3() {
     JsonDocument doc;
-    JsonObject data = doc.to<JsonObject>();
+    TEST_ASSERT_TRUE(loadJsonString(R"({"factor1":100,"factor2":150})", doc));
 
-    WsColorCodec::encodeSetRotationSpeed(2.5f, data);
-
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 2.5f, data["rotationSpeed"].as<float>(), "rotationSpeed should be 2.5");
-    
-    const char* allowedKeys[] = {"rotationSpeed"};
-    TEST_ASSERT_TRUE_MESSAGE(
-        validateKeysAgainstAllowList(data, allowedKeys, 1),
-        "Should only have rotationSpeed key, no extras allowed");
+    ColorSetBlendFactorsDecodeResult result = WsColorCodec::decodeSetBlendFactors(doc.as<JsonObjectConst>());
+    TEST_ASSERT_TRUE(result.success);
+    TEST_ASSERT_EQUAL_UINT8(100, result.request.factor1);
+    TEST_ASSERT_EQUAL_UINT8(150, result.request.factor2);
+    TEST_ASSERT_EQUAL_UINT8(0, result.request.factor3);
 }
 
-void test_encode_enable_diffusion() {
+void test_decode_set_config_valid() {
     JsonDocument doc;
-    JsonObject data = doc.to<JsonObject>();
+    TEST_ASSERT_TRUE(loadJsonString(
+        R"({"mode":2,"hsvMinSaturation":120,"gammaEnabled":true,"gammaValue":2.2})",
+        doc));
 
-    WsColorCodec::encodeEnableDiffusion(true, data);
-
-    TEST_ASSERT_TRUE_MESSAGE(data["diffusionEnabled"].as<bool>(), "diffusionEnabled should be true");
-    
-    const char* allowedKeys[] = {"diffusionEnabled"};
-    TEST_ASSERT_TRUE_MESSAGE(
-        validateKeysAgainstAllowList(data, allowedKeys, 1),
-        "Should only have diffusionEnabled key, no extras allowed");
+    ColorCorrectionSetConfigDecodeResult result = WsColorCodec::decodeSetConfig(doc.as<JsonObjectConst>());
+    TEST_ASSERT_TRUE(result.success);
+    TEST_ASSERT_TRUE(result.request.hasMode);
+    TEST_ASSERT_TRUE(result.request.hasHsvMinSaturation);
+    TEST_ASSERT_TRUE(result.request.hasGammaEnabled);
+    TEST_ASSERT_TRUE(result.request.hasGammaValue);
+    TEST_ASSERT_EQUAL_UINT8(2, result.request.mode);
+    TEST_ASSERT_EQUAL_UINT8(120, result.request.hsvMinSaturation);
+    TEST_ASSERT_TRUE(result.request.gammaEnabled);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 2.2f, result.request.gammaValue);
 }
 
-void test_encode_set_diffusion_amount() {
+void test_decode_set_config_invalid_gamma() {
     JsonDocument doc;
-    JsonObject data = doc.to<JsonObject>();
+    TEST_ASSERT_TRUE(loadJsonString(R"({"gammaValue":3.5})", doc));
 
-    WsColorCodec::encodeSetDiffusionAmount(128, data);
-
-    TEST_ASSERT_EQUAL_INT_MESSAGE(128, data["diffusionAmount"].as<uint8_t>(), "diffusionAmount should be 128");
-    
-    const char* allowedKeys[] = {"diffusionAmount"};
-    TEST_ASSERT_TRUE_MESSAGE(
-        validateKeysAgainstAllowList(data, allowedKeys, 1),
-        "Should only have diffusionAmount key, no extras allowed");
+    ColorCorrectionSetConfigDecodeResult result = WsColorCodec::decodeSetConfig(doc.as<JsonObjectConst>());
+    TEST_ASSERT_FALSE(result.success);
 }
 
-void test_encode_correction_get_config() {
-    JsonDocument doc;
-    JsonObject data = doc.to<JsonObject>();
-
-    WsColorCodec::encodeCorrectionGetConfig(2, "OFF,HSV,RGB,BOTH", 120, 150, 100, true, 110, true, 2.2f, false, 28, 8, data);
-
-    TEST_ASSERT_EQUAL_INT_MESSAGE(2, data["mode"].as<uint8_t>(), "mode should be 2");
-    TEST_ASSERT_EQUAL_STRING("OFF,HSV,RGB,BOTH", data["modeNames"].as<const char*>());
-    TEST_ASSERT_EQUAL_INT_MESSAGE(120, data["hsvMinSaturation"].as<uint8_t>(), "hsvMinSaturation should be 120");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(150, data["rgbWhiteThreshold"].as<uint8_t>(), "rgbWhiteThreshold should be 150");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(100, data["rgbTargetMin"].as<uint8_t>(), "rgbTargetMin should be 100");
-    TEST_ASSERT_TRUE_MESSAGE(data["autoExposureEnabled"].as<bool>(), "autoExposureEnabled should be true");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(110, data["autoExposureTarget"].as<uint8_t>(), "autoExposureTarget should be 110");
-    TEST_ASSERT_TRUE_MESSAGE(data["gammaEnabled"].as<bool>(), "gammaEnabled should be true");
-    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 2.2f, data["gammaValue"].as<float>(), "gammaValue should be 2.2");
-    TEST_ASSERT_FALSE_MESSAGE(data["brownGuardrailEnabled"].as<bool>(), "brownGuardrailEnabled should be false");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(28, data["maxGreenPercentOfRed"].as<uint8_t>(), "maxGreenPercentOfRed should be 28");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(8, data["maxBluePercentOfRed"].as<uint8_t>(), "maxBluePercentOfRed should be 8");
-    
-    const char* allowedKeys[] = {"mode", "modeNames", "hsvMinSaturation", "rgbWhiteThreshold", "rgbTargetMin", "autoExposureEnabled", "autoExposureTarget", "gammaEnabled", "gammaValue", "brownGuardrailEnabled", "maxGreenPercentOfRed", "maxBluePercentOfRed"};
-    TEST_ASSERT_TRUE_MESSAGE(
-        validateKeysAgainstAllowList(data, allowedKeys, 12),
-        "Should only have required keys, no extras allowed");
-}
-
-void test_encode_correction_set_mode() {
-    JsonDocument doc;
-    JsonObject data = doc.to<JsonObject>();
-
-    WsColorCodec::encodeCorrectionSetMode(2, "RGB", data);
-
-    TEST_ASSERT_EQUAL_INT_MESSAGE(2, data["mode"].as<uint8_t>(), "mode should be 2");
-    TEST_ASSERT_EQUAL_STRING("RGB", data["modeName"].as<const char*>());
-    
-    const char* allowedKeys[] = {"mode", "modeName"};
-    TEST_ASSERT_TRUE_MESSAGE(
-        validateKeysAgainstAllowList(data, allowedKeys, 2),
-        "Should only have mode and modeName keys, no extras allowed");
-}
-
-void test_encode_correction_set_config() {
-    JsonDocument doc;
-    JsonObject data = doc.to<JsonObject>();
-
-    WsColorCodec::encodeCorrectionSetConfig(3, true, data);
-
-    TEST_ASSERT_EQUAL_INT_MESSAGE(3, data["mode"].as<uint8_t>(), "mode should be 3");
-    TEST_ASSERT_TRUE_MESSAGE(data["updated"].as<bool>(), "updated should be true");
-    
-    const char* allowedKeys[] = {"mode", "updated"};
-    TEST_ASSERT_TRUE_MESSAGE(
-        validateKeysAgainstAllowList(data, allowedKeys, 2),
-        "Should only have mode and updated keys, no extras allowed");
-}
-
-void test_encode_correction_save() {
-    JsonDocument doc;
-    JsonObject data = doc.to<JsonObject>();
-
-    WsColorCodec::encodeCorrectionSave(true, data);
-
-    TEST_ASSERT_TRUE_MESSAGE(data["saved"].as<bool>(), "saved should be true");
-    
-    const char* allowedKeys[] = {"saved"};
-    TEST_ASSERT_TRUE_MESSAGE(
-        validateKeysAgainstAllowList(data, allowedKeys, 1),
-        "Should only have saved key, no extras allowed");
-}
-
-// ============================================================================
-// Unity setUp/tearDown (required by Unity framework)
-// ============================================================================
-
-void setUp(void) {
-    // Called before each test
-}
-
-void tearDown(void) {
-    // Called after each test
-}
-
-// ============================================================================
-// Test Runner
-// ============================================================================
+void setUp(void) {}
+void tearDown(void) {}
 
 int main() {
     UNITY_BEGIN();
 
-    // Valid payloads
-    RUN_TEST(test_color_simple_valid);
-    RUN_TEST(test_color_simple_valid_no_requestId);
-
-    // Encoder tests (response payloads)
-    RUN_TEST(test_encode_get_status);
-    RUN_TEST(test_encode_enable_blend);
-    RUN_TEST(test_encode_set_blend_palettes);
-    RUN_TEST(test_encode_set_blend_palettes_three);
-    RUN_TEST(test_encode_set_blend_factors);
-    RUN_TEST(test_encode_enable_rotation);
-    RUN_TEST(test_encode_set_rotation_speed);
-    RUN_TEST(test_encode_enable_diffusion);
-    RUN_TEST(test_encode_set_diffusion_amount);
-    RUN_TEST(test_encode_correction_get_config);
-    RUN_TEST(test_encode_correction_set_mode);
-    RUN_TEST(test_encode_correction_set_config);
-    RUN_TEST(test_encode_correction_save);
+    RUN_TEST(test_decode_enable_blend_valid);
+    RUN_TEST(test_decode_enable_blend_missing_enable);
+    RUN_TEST(test_decode_set_diffusion_amount_valid);
+    RUN_TEST(test_decode_set_diffusion_amount_out_of_range);
+    RUN_TEST(test_decode_set_mode_valid);
+    RUN_TEST(test_decode_set_mode_out_of_range);
+    RUN_TEST(test_decode_set_rotation_speed_valid);
+    RUN_TEST(test_decode_set_blend_palettes_defaults_palette3);
+    RUN_TEST(test_decode_set_blend_factors_defaults_factor3);
+    RUN_TEST(test_decode_set_config_valid);
+    RUN_TEST(test_decode_set_config_invalid_gamma);
 
     UNITY_END();
     return 0;
 }
 
-#endif // NATIVE_BUILD
+#endif

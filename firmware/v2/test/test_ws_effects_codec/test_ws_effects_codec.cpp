@@ -108,7 +108,7 @@ void test_encode_get_current() {
     JsonDocument doc;
     JsonObject data = doc.to<JsonObject>();
 
-    WsEffectsCodec::encodeGetCurrent(5, "TestEffect", 200, 25, 3, 180, 150, 200, 100, 50, data);
+    WsEffectsCodec::encodeGetCurrent(5, "TestEffect", 200, 25, 3, 180, 150, 200, 100, 50, true, "Test effect description", 1, data);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(5, data["effectId"].as<uint8_t>(), "effectId should be 5");
     TEST_ASSERT_EQUAL_STRING("TestEffect", data["name"].as<const char*>());
@@ -120,11 +120,28 @@ void test_encode_get_current() {
     TEST_ASSERT_EQUAL_INT_MESSAGE(200, data["saturation"].as<uint8_t>(), "saturation should be 200");
     TEST_ASSERT_EQUAL_INT_MESSAGE(100, data["complexity"].as<uint8_t>(), "complexity should be 100");
     TEST_ASSERT_EQUAL_INT_MESSAGE(50, data["variation"].as<uint8_t>(), "variation should be 50");
-    
-    const char* allowedKeys[] = {"effectId", "name", "brightness", "speed", "paletteId", "hue", "intensity", "saturation", "complexity", "variation"};
+    TEST_ASSERT_TRUE(data["isIEffect"].as<bool>());
+    TEST_ASSERT_EQUAL_STRING("Test effect description", data["description"].as<const char*>());
+    TEST_ASSERT_EQUAL(1, data["version"].as<uint8_t>());
+
+    const char* allowedKeys[] = {"effectId", "name", "brightness", "speed", "paletteId", "hue", "intensity", "saturation", "complexity", "variation", "isIEffect", "description", "version"};
     TEST_ASSERT_TRUE_MESSAGE(
-        validateKeysAgainstAllowList(data, allowedKeys, 10),
+        validateKeysAgainstAllowList(data, allowedKeys, 13),
         "Should only have required keys, no extras allowed");
+}
+
+void test_encode_get_current_null_description() {
+    JsonDocument doc;
+    JsonObject data = doc.to<JsonObject>();
+
+    // When description is nullptr, the field should be absent from the output
+    WsEffectsCodec::encodeGetCurrent(5, "TestEffect", 200, 25, 3, 180, 150, 200, 100, 50, false, nullptr, 0, data);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(5, data["effectId"].as<uint8_t>(), "effectId should be 5");
+    TEST_ASSERT_EQUAL_STRING("TestEffect", data["name"].as<const char*>());
+    TEST_ASSERT_FALSE(data["isIEffect"].as<bool>());
+    TEST_ASSERT_TRUE(data["description"].isNull());
+    TEST_ASSERT_EQUAL(0, data["version"].as<uint8_t>());
 }
 
 void test_encode_changed() {
@@ -183,9 +200,10 @@ void test_encode_list() {
     JsonObject data = doc.to<JsonObject>();
 
     const char* effectNames[] = {"Effect0", "Effect1", "Effect2", nullptr, nullptr};
+    lightwaveos::EffectId effectIds[] = {0, 1, 2, 0, 0};
     const char* categories[] = {"Classic", "Wave", "Physics", nullptr, nullptr};
     
-    WsEffectsCodec::encodeList(50, 0, 3, 1, 20, true, effectNames, categories, data);
+    WsEffectsCodec::encodeList(50, 0, 3, 1, 20, true, effectNames, effectIds, categories, data);
 
     TEST_ASSERT_TRUE_MESSAGE(data.containsKey("effects"), "effects array should be present");
     TEST_ASSERT_TRUE_MESSAGE(data.containsKey("pagination"), "pagination object should be present");
@@ -214,7 +232,7 @@ void test_encode_by_family() {
     JsonDocument doc;
     JsonObject data = doc.to<JsonObject>();
 
-    uint8_t patternIndices[] = {5, 10, 15, 20};
+    lightwaveos::EffectId patternIndices[] = {5, 10, 15, 20};
     WsEffectsCodec::encodeByFamily(2, "Advanced Optical", patternIndices, 4, data);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(2, data["familyId"].as<uint8_t>(), "familyId should be 2");
@@ -268,8 +286,17 @@ void test_encode_parameters_get() {
     float paramMaxs[] = {1.0f, 1.0f, 0.0f, 0.0f};
     float paramDefaults[] = {0.5f, 0.7f, 0.0f, 0.0f};
     float paramValues[] = {0.6f, 0.8f, 0.0f, 0.0f};
-    
-    WsEffectsCodec::encodeParametersGet(5, "TestEffect", true, paramNames, paramDisplayNames, paramMins, paramMaxs, paramDefaults, paramValues, 2, data);
+    const char* paramTypes[] = {"float", "int", nullptr, nullptr};
+    float paramSteps[] = {0.05f, 1.0f, 0.0f, 0.0f};
+    const char* paramGroups[] = {"timing", "ridge", nullptr, nullptr};
+    const char* paramUnits[] = {"s", "%", nullptr, nullptr};
+    bool paramAdvanced[] = {false, true, false, false};
+
+    WsEffectsCodec::encodeParametersGet(5, "TestEffect", true,
+                                        paramNames, paramDisplayNames, paramMins, paramMaxs,
+                                        paramDefaults, paramValues, paramTypes, paramSteps,
+                                        paramGroups, paramUnits, paramAdvanced, 2,
+                                        "nvs", true, "Write Error", data);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(5, data["effectId"].as<uint8_t>(), "effectId should be 5");
     TEST_ASSERT_EQUAL_STRING("TestEffect", data["name"].as<const char*>());
@@ -286,11 +313,64 @@ void test_encode_parameters_get() {
     TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 1.0f, firstParam["max"].as<float>(), "max should be 1.0");
     TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 0.5f, firstParam["default"].as<float>(), "default should be 0.5");
     TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, 0.6f, firstParam["value"].as<float>(), "value should be 0.6");
-    
-    const char* allowedKeys[] = {"effectId", "name", "hasParameters", "parameters"};
+
+    TEST_ASSERT_EQUAL_STRING("float", firstParam["type"].as<const char*>());
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.001f, 0.05f, firstParam["step"].as<float>(), "step should be 0.05");
+    TEST_ASSERT_EQUAL_STRING("timing", firstParam["group"].as<const char*>());
+    TEST_ASSERT_EQUAL_STRING("s", firstParam["unit"].as<const char*>());
+    TEST_ASSERT_FALSE_MESSAGE(firstParam["advanced"].as<bool>(), "advanced should be false");
+
+    JsonObject persistence = data["persistence"].as<JsonObject>();
+    TEST_ASSERT_EQUAL_STRING("nvs", persistence["mode"].as<const char*>());
+    TEST_ASSERT_TRUE_MESSAGE(persistence["dirty"].as<bool>(), "dirty should be true");
+    TEST_ASSERT_EQUAL_STRING("Write Error", persistence["lastError"].as<const char*>());
+
+    const char* allowedKeys[] = {"effectId", "name", "hasParameters", "persistence", "parameters"};
     TEST_ASSERT_TRUE_MESSAGE(
-        validateKeysAgainstAllowList(data, allowedKeys, 4),
+        validateKeysAgainstAllowList(data, allowedKeys, 5),
         "Should only have required keys, no extras allowed");
+}
+
+void test_encode_parameters_get_large_count() {
+    JsonDocument doc;
+    JsonObject data = doc.to<JsonObject>();
+
+    static constexpr uint8_t kCount = 20;
+    const char* paramNames[kCount];
+    const char* paramDisplayNames[kCount];
+    float paramMins[kCount];
+    float paramMaxs[kCount];
+    float paramDefaults[kCount];
+    float paramValues[kCount];
+    const char* paramTypes[kCount];
+    float paramSteps[kCount];
+    const char* paramGroups[kCount];
+    const char* paramUnits[kCount];
+    bool paramAdvanced[kCount];
+
+    for (uint8_t i = 0; i < kCount; ++i) {
+        paramNames[i] = "p";
+        paramDisplayNames[i] = "Param";
+        paramMins[i] = 0.0f;
+        paramMaxs[i] = 1.0f;
+        paramDefaults[i] = 0.0f;
+        paramValues[i] = static_cast<float>(i) / static_cast<float>(kCount);
+        paramTypes[i] = "float";
+        paramSteps[i] = 0.01f;
+        paramGroups[i] = "timing";
+        paramUnits[i] = "";
+        paramAdvanced[i] = false;
+    }
+
+    WsEffectsCodec::encodeParametersGet(9, "LargeEffect", true,
+                                        paramNames, paramDisplayNames, paramMins, paramMaxs,
+                                        paramDefaults, paramValues, paramTypes, paramSteps,
+                                        paramGroups, paramUnits, paramAdvanced, kCount,
+                                        "volatile", false, nullptr, data);
+
+    TEST_ASSERT_TRUE_MESSAGE(data.containsKey("parameters"), "parameters array should be present");
+    JsonArray params = data["parameters"].as<JsonArray>();
+    TEST_ASSERT_EQUAL_INT_MESSAGE(kCount, params.size(), "parameters should support count > 16");
 }
 
 void test_encode_parameters_set_changed() {
@@ -397,12 +477,14 @@ int main() {
 
     // Encoder tests (response payloads)
     RUN_TEST(test_encode_get_current);
+    RUN_TEST(test_encode_get_current_null_description);
     RUN_TEST(test_encode_changed);
     RUN_TEST(test_encode_metadata);
     RUN_TEST(test_encode_list);
     RUN_TEST(test_encode_by_family);
     RUN_TEST(test_encode_categories);
     RUN_TEST(test_encode_parameters_get);
+    RUN_TEST(test_encode_parameters_get_large_count);
     RUN_TEST(test_encode_parameters_set_changed);
     RUN_TEST(test_encode_global_parameters_get);
     RUN_TEST(test_encode_parameters_changed);

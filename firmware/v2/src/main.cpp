@@ -59,6 +59,9 @@
 #endif
 #include "core/system/OtaBootVerifier.h"
 #include "core/system/OtaTokenManager.h"
+#if FEATURE_CONTROL_LEASE
+#include "core/system/ControlLeaseManager.h"
+#endif
 
 #ifndef NATIVE_BUILD
 #include "hal/esp32s3/StatusStripTouch.h"
@@ -482,6 +485,84 @@ static void serialJsonError(const char* reqId, const char* error) {
                   reqId, error);
 }
 
+#if FEATURE_CONTROL_LEASE
+static bool isSerialJsonReadOnlyCommand(const char* type) {
+    if (!type || type[0] == '\0') {
+        return true;
+    }
+
+    if (strcmp(type, "control.acquire") == 0 ||
+        strcmp(type, "control.heartbeat") == 0 ||
+        strcmp(type, "control.release") == 0 ||
+        strcmp(type, "control.status") == 0 ||
+        strncmp(type, "auth.", 5) == 0 ||
+        strncmp(type, "ota.", 4) == 0) {
+        return true;
+    }
+
+    if (strcmp(type, "getStatus") == 0 || strcmp(type, "getZoneState") == 0) {
+        return true;
+    }
+
+    if (strstr(type, ".get") != nullptr ||
+        strstr(type, ".list") != nullptr ||
+        strstr(type, "status") != nullptr ||
+        strstr(type, "info") != nullptr ||
+        strstr(type, "metadata") != nullptr ||
+        strstr(type, "check") != nullptr ||
+        strstr(type, "subscribe") != nullptr ||
+        strstr(type, "unsubscribe") != nullptr ||
+        strstr(type, ".read") != nullptr) {
+        return true;
+    }
+
+    return false;
+}
+
+static bool isSerialTextReadOnlyCommand(const String& input, const String& inputLower) {
+    if (input.length() == 0) {
+        return true;
+    }
+
+    if (input.charAt(0) == '{') {
+        return true;
+    }
+
+    if (inputLower == "s" ||
+        inputLower == "l" ||
+        input == "Z" ||
+        input == "W" ||
+        input == "#" ||
+        input == "C" ||
+        inputLower == "x" ||
+        inputLower == "bands" ||
+        inputLower == "tempo" ||
+        inputLower == "?" ||
+        inputLower == "help" ||
+        inputLower == "wifi" ||
+        inputLower == "wifi status" ||
+        inputLower == "wifi scan" ||
+        inputLower == "adbg" ||
+        inputLower == "adbg status" ||
+        inputLower == "adbg spectrum" ||
+        inputLower == "adbg beat" ||
+        inputLower == "dbg" ||
+        inputLower == "dbg status" ||
+        inputLower == "dbg spectrum" ||
+        inputLower == "dbg beat" ||
+        inputLower == "dbg memory" ||
+        inputLower.startsWith("validation_stats") ||
+        inputLower == "val_stats" ||
+        inputLower.startsWith("stack_usage") ||
+        inputLower == "stack_profile" ||
+        inputLower == "capture status") {
+        return true;
+    }
+
+    return false;
+}
+#endif
+
 /**
  * @brief Process a JSON command received over Serial.
  *
@@ -500,6 +581,20 @@ static void processSerialJsonCommand(const String& json) {
 
     const char* type = doc["type"] | "";
     const char* reqId = doc["requestId"] | "";
+
+#if FEATURE_CONTROL_LEASE
+    if (!isSerialJsonReadOnlyCommand(type)) {
+        const lightwaveos::core::system::ControlLeaseManager::MutationCheckResult leaseCheck =
+            lightwaveos::core::system::ControlLeaseManager::checkMutationPermission(
+                lightwaveos::core::system::ControlLeaseManager::MutationSource::LocalSerial
+            );
+        if (!leaseCheck.allowed) {
+            lightwaveos::core::system::ControlLeaseManager::noteBlockedLocalSerial(type);
+            serialJsonError(reqId, "command blocked by active control lease");
+            return;
+        }
+    }
+#endif
 
     // ------------------------------------------------------------------
     // device.getStatus
@@ -1326,6 +1421,16 @@ void loop() {
     using namespace lightwaveos::hardware;
     EncoderEvent event;
     while (xQueueReceive(encoderManager.getEventQueue(), &event, 0) == pdTRUE) {
+#if FEATURE_CONTROL_LEASE
+        const lightwaveos::core::system::ControlLeaseManager::MutationCheckResult leaseCheck =
+            lightwaveos::core::system::ControlLeaseManager::checkMutationPermission(
+                lightwaveos::core::system::ControlLeaseManager::MutationSource::LocalEncoder
+            );
+        if (!leaseCheck.allowed) {
+            lightwaveos::core::system::ControlLeaseManager::noteBlockedLocalEncoder("encoder.event");
+            continue;
+        }
+#endif
         handleEncoderEvent(event, actors, renderer);
     }
 #endif
@@ -1420,6 +1525,23 @@ void loop() {
         inputLower.toLowerCase();
         bool handledMulti = false;
         int peekChar = input[0];
+
+#if FEATURE_CONTROL_LEASE
+        if (!isSerialTextReadOnlyCommand(input, inputLower)) {
+            const lightwaveos::core::system::ControlLeaseManager::MutationCheckResult leaseCheck =
+                lightwaveos::core::system::ControlLeaseManager::checkMutationPermission(
+                    lightwaveos::core::system::ControlLeaseManager::MutationSource::LocalSerial
+                );
+            if (!leaseCheck.allowed) {
+                lightwaveos::core::system::ControlLeaseManager::noteBlockedLocalSerial(input.c_str());
+                Serial.println("Command blocked by active control lease");
+                handledMulti = true;
+                input = "";
+                inputLower = "";
+                peekChar = 0;
+            }
+        }
+#endif
 
         // Serial JSON command gateway (for PRISM Studio Web Serial).
         // Any line beginning with '{' is routed to the JSON handler and

@@ -12,6 +12,10 @@
 #include "../../utils/Log.h"
 #include "../../config/network_config.h"
 #include "ws/WsOtaCommands.h"
+#include "ws/WsStreamCommands.h"
+#if FEATURE_CONTROL_LEASE
+#include "../../core/system/ControlLeaseManager.h"
+#endif
 #include <cstring>
 #include <Arduino.h>
 #include <WiFi.h>
@@ -93,6 +97,54 @@ static void escapeJsonString(const char* input, char* output, size_t outputSize)
     output[outIdx] = '\0';
 }
 
+#if FEATURE_CONTROL_LEASE
+static bool hasSuffix(const char* value, const char* suffix) {
+    if (!value || !suffix) {
+        return false;
+    }
+    const size_t valueLen = strlen(value);
+    const size_t suffixLen = strlen(suffix);
+    if (suffixLen > valueLen) {
+        return false;
+    }
+    return strcmp(value + (valueLen - suffixLen), suffix) == 0;
+}
+
+static bool isLeaseExemptWsCommand(const char* type) {
+    if (!type || type[0] == '\0') {
+        return true;
+    }
+
+    if (strcmp(type, "control.acquire") == 0 ||
+        strcmp(type, "control.heartbeat") == 0 ||
+        strcmp(type, "control.release") == 0 ||
+        strcmp(type, "control.status") == 0 ||
+        strncmp(type, "auth.", 5) == 0 ||
+        strncmp(type, "ota.", 4) == 0) {
+        return true;
+    }
+
+    if (strcmp(type, "getStatus") == 0 || strcmp(type, "getZoneState") == 0) {
+        return true;
+    }
+
+    if (strstr(type, ".get") != nullptr ||
+        strstr(type, ".list") != nullptr ||
+        strstr(type, "status") != nullptr ||
+        strstr(type, "info") != nullptr ||
+        strstr(type, "metadata") != nullptr ||
+        strstr(type, "capabilities") != nullptr ||
+        strstr(type, "check") != nullptr ||
+        strstr(type, "subscribe") != nullptr ||
+        strstr(type, "unsubscribe") != nullptr ||
+        hasSuffix(type, ".read")) {
+        return true;
+    }
+
+    return false;
+}
+#endif
+
 // Static instance for event handler
 WsGateway* WsGateway::s_instance = nullptr;
 
@@ -133,7 +185,7 @@ void WsGateway::onEvent(AsyncWebSocket* server, AsyncWebSocketClient* client,
             break;
 
         case WS_EVT_DATA:
-            s_instance->handleMessage(client, data, len);
+            s_instance->handleMessage(client, arg, data, len);
             break;
 
         case WS_EVT_ERROR:
@@ -216,28 +268,8 @@ void WsGateway::handleConnect(AsyncWebSocketClient* client) {
                 return;
             }
 
-            // Reject overlapping WS sessions from the same IP.
-            // This protects the device from clients that repeatedly call connect() without
-            // closing the previous connection or without servicing the socket.
-            if (m_connectGuard[slot].active >= 1) {
-                // #region agent log (DISABLED)
-                // {
-                //     char buf[320];
-                //     const int n = snprintf(
-                //         buf, sizeof(buf),
-                //         "{\"sessionId\":\"debug-session\",\"runId\":\"ws-guard-pre\",\"hypothesisId\":\"Hws2\",\"location\":\"v2/src/network/webserver/WsGateway.cpp:handleConnect\",\"message\":\"ws.connect.reject.overlap\",\"data\":{\"clientId\":%lu,\"ip\":\"%s\",\"active\":%u},\"timestamp\":%lu}",
-                //         static_cast<unsigned long>(client->id()),
-                //         ip.toString().c_str(),
-                //         static_cast<unsigned>(m_connectGuard[slot].active),
-                //         static_cast<unsigned long>(nowMs)
-                //     );
-                //     if (n > 0) Serial.println(buf);
-                // }
-                // #endregion
-                m_stats.connectRejectedOverlap++;
-                client->close(1008, "Only one session per device");
-                return;
-            }
+            // Multiple observe-mode connections from the same IP are allowed.
+            // Control lease semantics enforce single-writer behaviour.
         }
     }
 
@@ -430,6 +462,15 @@ void WsGateway::handleDisconnect(AsyncWebSocketClient* client) {
         }
     }
 
+    for (uint8_t i = 0; i < CLIENT_IP_MAP_SLOTS; ++i) {
+        if (m_binaryAssembly[i].active && m_binaryAssembly[i].clientId == clientId) {
+            m_binaryAssembly[i].active = false;
+            m_binaryAssembly[i].expectedLen = 0;
+            m_binaryAssembly[i].receivedLen = 0;
+            break;
+        }
+    }
+
     // #region agent log (DISABLED)
     // {
     //     // Hws3: Confirm whether disconnects correlate with zero messages received.
@@ -450,6 +491,12 @@ void WsGateway::handleDisconnect(AsyncWebSocketClient* client) {
 #if FEATURE_OTA_UPDATE
     webserver::ws::handleOtaClientDisconnect(clientId);
 #endif
+
+#if FEATURE_CONTROL_LEASE
+    lightwaveos::core::system::ControlLeaseManager::releaseByDisconnect(clientId, "ws_disconnect");
+#endif
+
+    webserver::ws::handleRenderStreamClientDisconnect(clientId);
 
     // Call disconnection callback (for cleanup)
     if (m_onDisconnect) {
@@ -548,7 +595,29 @@ bool WsGateway::validateOrigin(AsyncWebServerRequest* request) {
     return false;
 }
 
-void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_t len) {
+void WsGateway::handleMessage(AsyncWebSocketClient* client, void* arg, uint8_t* data, size_t len) {
+    AwsFrameInfo* info = reinterpret_cast<AwsFrameInfo*>(arg);
+
+    if (info && info->opcode == WS_BINARY) {
+        if (handleBinaryFrameData(client, info, data, len)) {
+            ++m_stats.binaryFramesAccepted;
+        } else {
+            ++m_stats.binaryFramesRejected;
+        }
+        return;
+    }
+
+    if (info && info->opcode != WS_TEXT) {
+        return;
+    }
+
+    // JSON control-plane commands are expected as complete WS text messages.
+    if (info && !(info->final && info->index == 0 && info->len == len)) {
+        m_stats.parseErrors++;
+        client->text(buildWsError(ErrorCodes::INVALID_JSON, "Fragmented text messages are not supported"));
+        return;
+    }
+
     // Rate limit check
     if (!m_checkRateLimit(client)) {
         // Structured telemetry: msg.recv with result="rejected", reason="rate_limit"
@@ -596,8 +665,10 @@ void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_
         }
     }
 
+    const size_t messageLen = (info && info->len > 0) ? info->len : len;
+
     // Parse message
-    if (len > MAX_WS_MESSAGE_SIZE) {
+    if (messageLen > MAX_WS_MESSAGE_SIZE) {
         m_stats.oversizedFrames++;
         // Log rejected frame (oversize)
         uint32_t clientId = client->id();
@@ -777,6 +848,44 @@ void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_
         return;
     }
 
+#if FEATURE_CONTROL_LEASE
+    if (!isLeaseExemptWsCommand(msgType)) {
+        const lightwaveos::core::system::ControlLeaseManager::MutationCheckResult leaseCheck =
+            lightwaveos::core::system::ControlLeaseManager::checkMutationPermission(
+                lightwaveos::core::system::ControlLeaseManager::MutationSource::Ws,
+                client->id()
+            );
+
+        if (!leaseCheck.allowed) {
+            const char* requestId = root["requestId"] | "";
+
+            JsonDocument response;
+            response["type"] = "error";
+            if (requestId && requestId[0] != '\0') {
+                response["requestId"] = requestId;
+            }
+            response["success"] = false;
+            JsonObject err = response["error"].to<JsonObject>();
+            if (leaseCheck.error == lightwaveos::core::system::ControlLeaseManager::MutationError::LeaseExpired) {
+                err["code"] = ErrorCodes::LEASE_EXPIRED;
+                err["message"] = "Control lease has expired";
+            } else {
+                err["code"] = ErrorCodes::CONTROL_LOCKED;
+                err["message"] = "Command blocked by active control lease";
+            }
+            err["ownerClientName"] = leaseCheck.state.ownerClientName;
+            err["remainingMs"] = leaseCheck.remainingMs;
+            err["scope"] = leaseCheck.state.scope;
+
+            String output;
+            serializeJson(response, output);
+            client->text(output);
+            lightwaveos::core::system::ControlLeaseManager::noteBlockedWsCommand(msgType);
+            return;
+        }
+    }
+#endif
+
     // Route command via WsCommandRouter
     const char* typeStr = msgType;
     bool handled = WsCommandRouter::route(client, doc, m_ctx);
@@ -803,6 +912,92 @@ void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_
         RequestIdDecodeResult requestIdResult = WsCommonCodec::decodeRequestId(root);
         client->text(buildWsError(ErrorCodes::INVALID_VALUE, "Unknown command type", requestIdResult.requestId));
     }
+}
+
+bool WsGateway::handleBinaryFrameData(AsyncWebSocketClient* client,
+                                      AwsFrameInfo* info,
+                                      const uint8_t* data,
+                                      size_t len) {
+    if (!client || !info || !data) {
+        return false;
+    }
+
+    if (info->len == 0 || info->len > MAX_BINARY_FRAME_BUFFER || info->len > MAX_WS_MESSAGE_SIZE) {
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE, "Binary frame exceeds size limits"));
+        return false;
+    }
+
+    // Update activity timestamp for idle timeout tracking.
+    {
+        const uint32_t nowMs = millis();
+        const IPAddress ip = client->remoteIP();
+        const uint32_t ipKey =
+            (static_cast<uint32_t>(ip[0]) << 24) |
+            (static_cast<uint32_t>(ip[1]) << 16) |
+            (static_cast<uint32_t>(ip[2]) << 8)  |
+            (static_cast<uint32_t>(ip[3]) << 0);
+        if (ipKey != 0) {
+            for (uint8_t i = 0; i < CONNECT_GUARD_SLOTS; i++) {
+                if (m_connectGuard[i].ipKey == ipKey) {
+                    m_connectGuard[i].lastActivityMs = nowMs;
+                    break;
+                }
+            }
+        }
+    }
+
+    BinaryAssemblyEntry* slot = nullptr;
+    BinaryAssemblyEntry* empty = nullptr;
+    const uint32_t clientId = client->id();
+    for (uint8_t i = 0; i < CLIENT_IP_MAP_SLOTS; ++i) {
+        if (m_binaryAssembly[i].active && m_binaryAssembly[i].clientId == clientId) {
+            slot = &m_binaryAssembly[i];
+            break;
+        }
+        if (!m_binaryAssembly[i].active && empty == nullptr) {
+            empty = &m_binaryAssembly[i];
+        }
+    }
+
+    if (info->index == 0) {
+        if (!slot) {
+            slot = empty;
+        }
+        if (!slot) {
+            client->text(buildWsError(ErrorCodes::BUSY, "No binary assembly slots available"));
+            return false;
+        }
+        slot->active = true;
+        slot->clientId = clientId;
+        slot->expectedLen = static_cast<uint32_t>(info->len);
+        slot->receivedLen = 0;
+    }
+
+    if (!slot || !slot->active || slot->expectedLen != info->len) {
+        return false;
+    }
+
+    const size_t chunkEnd = info->index + len;
+    if (chunkEnd > slot->expectedLen || chunkEnd > MAX_BINARY_FRAME_BUFFER) {
+        slot->active = false;
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE, "Invalid binary frame chunk"));
+        return false;
+    }
+
+    memcpy(slot->buffer + info->index, data, len);
+    if (chunkEnd > slot->receivedLen) {
+        slot->receivedLen = static_cast<uint32_t>(chunkEnd);
+    }
+
+    if (!(info->final && chunkEnd == info->len)) {
+        return true;
+    }
+
+    const bool accepted = webserver::ws::handleRenderStreamBinaryFrame(client, slot->buffer, slot->expectedLen);
+    slot->active = false;
+    slot->expectedLen = 0;
+    slot->receivedLen = 0;
+    return accepted;
 }
 
 void WsGateway::cleanupStaleConnections() {

@@ -34,6 +34,8 @@ public:
         uint32_t parseErrors = 0;
         uint32_t oversizedFrames = 0;
         uint32_t unknownCommands = 0;
+        uint32_t binaryFramesAccepted = 0;
+        uint32_t binaryFramesRejected = 0;
     };
 
     /**
@@ -86,7 +88,14 @@ public:
      * @param data Message data
      * @param len Message length
      */
-    void handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_t len);
+    void handleMessage(AsyncWebSocketClient* client, void* arg, uint8_t* data, size_t len);
+
+    /**
+     * @brief Backward-compatible wrapper for legacy call sites.
+     */
+    void handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_t len) {
+        handleMessage(client, nullptr, data, len);
+    }
 
     /**
      * @brief Cleanup stale guard entries that have been idle too long
@@ -171,6 +180,16 @@ private:
     // WebSocket message size limit (OWASP recommendation: 64KB)
     // ------------------------------------------------------------------------
     static constexpr size_t MAX_WS_MESSAGE_SIZE = 64 * 1024;  // 64KB
+    static constexpr size_t MAX_BINARY_FRAME_BUFFER = 2048;   // render.stream binary frame cap
+
+    struct BinaryAssemblyEntry {
+        uint32_t clientId = 0;
+        uint32_t expectedLen = 0;
+        uint32_t receivedLen = 0;
+        bool active = false;
+        uint8_t buffer[MAX_BINARY_FRAME_BUFFER];
+    };
+    BinaryAssemblyEntry m_binaryAssembly[CLIENT_IP_MAP_SLOTS] = {};
 
     // ------------------------------------------------------------------------
     // Monotonic event sequence counter (for telemetry)
@@ -183,6 +202,11 @@ private:
 
     // Validate WebSocket handshake Origin header (browser CSWSH protection)
     bool validateOrigin(AsyncWebServerRequest* request);
+
+    bool handleBinaryFrameData(AsyncWebSocketClient* client,
+                               AwsFrameInfo* info,
+                               const uint8_t* data,
+                               size_t len);
 
     // Static instance pointer for event handler
     static WsGateway* s_instance;

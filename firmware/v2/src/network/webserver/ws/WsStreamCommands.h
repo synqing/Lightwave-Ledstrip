@@ -6,9 +6,13 @@
 #pragma once
 
 #include "../../../config/features.h"
+#include <stdint.h>
+#include <stddef.h>
+#include <Arduino.h>
 
 // Forward declarations for FFT stream stubs
 class AsyncWebSocket;
+class AsyncWebSocketClient;
 
 #if FEATURE_AUDIO_SYNC
 namespace lightwaveos { namespace audio { struct ControlBusFrame; } }
@@ -28,6 +32,51 @@ namespace ws {
  * @param ctx WebServer context
  */
 void registerWsStreamCommands(const webserver::WebServerContext& ctx);
+
+struct RenderStreamStatusSnapshot {
+    bool active = false;
+    String sessionId;
+    uint32_t ownerWsClientId = 0;
+    uint32_t targetFps = 120;
+    uint32_t staleTimeoutMs = 750;
+    uint8_t frameContractVersion = 1;
+    uint8_t pixelFormat = 1;
+    uint16_t ledCount = 320;
+    uint16_t headerBytes = 16;
+    uint16_t payloadBytes = 960;
+    uint16_t maxPayloadBytes = 960;
+    uint8_t mailboxDepth = 2;
+    uint32_t lastFrameSeq = 0;
+    uint32_t lastFrameRxMs = 0;
+    uint32_t framesRx = 0;
+    uint32_t framesRendered = 0;
+    uint32_t framesDroppedMailbox = 0;
+    uint32_t framesInvalid = 0;
+    uint32_t framesBlockedLease = 0;
+    uint32_t staleTimeouts = 0;
+};
+
+/**
+ * @brief Handle a binary render frame payload.
+ *
+ * Called by WsGateway after frame fragmentation reassembly.
+ */
+bool handleRenderStreamBinaryFrame(AsyncWebSocketClient* client, const uint8_t* payload, size_t len);
+
+/**
+ * @brief Notify stream session logic of WS disconnection.
+ */
+void handleRenderStreamClientDisconnect(uint32_t clientId);
+
+/**
+ * @brief Periodic service hook to sync lease/session/render state.
+ */
+void serviceRenderStreamState();
+
+/**
+ * @brief Snapshot render stream state/counters for REST/WS status payloads.
+ */
+RenderStreamStatusSnapshot getRenderStreamStatusSnapshot();
 
 // ============================================================================
 // FFT Stream Stubs

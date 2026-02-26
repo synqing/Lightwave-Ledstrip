@@ -97,6 +97,37 @@ struct EffectMetadata {
 };
 
 /**
+ * @brief Effect parameter value type for dynamic UI generation
+ */
+enum class EffectParameterType : uint8_t {
+    FLOAT = 0,
+    INT = 1,
+    BOOL = 2,
+    ENUM = 3
+};
+
+inline const char* effectParameterTypeToString(EffectParameterType type) {
+    switch (type) {
+        case EffectParameterType::INT:
+            return "int";
+        case EffectParameterType::BOOL:
+            return "bool";
+        case EffectParameterType::ENUM:
+            return "enum";
+        case EffectParameterType::FLOAT:
+        default:
+            return "float";
+    }
+}
+
+/**
+ * @brief Max effect parameter name length used for transport buffers
+ *
+ * Keep this value in sync with RendererActor::EffectParamUpdate::name.
+ */
+static constexpr uint8_t kEffectParameterNameMaxLen = 40;
+
+/**
  * @brief Effect parameter descriptor for dynamic UI generation
  */
 struct EffectParameter {
@@ -105,10 +136,29 @@ struct EffectParameter {
     float minValue;             // Minimum allowed value
     float maxValue;             // Maximum allowed value
     float defaultValue;         // Initial value
+    EffectParameterType type;   // Value type for UI/validation
+    float step;                 // Suggested step size
+    const char* group;          // Optional control group (timing/wave/...)
+    const char* unit;           // Optional display unit (s, Hz, %, ...)
+    bool advanced;              // True for dense/internal controls
 
     EffectParameter(const char* n = "", const char* d = "",
-                    float min = 0.0f, float max = 1.0f, float def = 0.5f)
-        : name(n), displayName(d), minValue(min), maxValue(max), defaultValue(def) {}
+                    float min = 0.0f, float max = 1.0f, float def = 0.5f,
+                    EffectParameterType t = EffectParameterType::FLOAT,
+                    float s = 0.01f,
+                    const char* g = "",
+                    const char* u = "",
+                    bool adv = false)
+        : name(n)
+        , displayName(d)
+        , minValue(min)
+        , maxValue(max)
+        , defaultValue(def)
+        , type(t)
+        , step(s)
+        , group(g)
+        , unit(u)
+        , advanced(adv) {}
 };
 
 /**

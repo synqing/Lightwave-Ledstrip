@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LightwaveOS Architecture Canvas</title>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'base', securityLevel: 'loose' });
+  </script>
+  <style>
+    :root { --bg: #0f172a; --card: #1e293b; --text: #e2e8f0; --accent: #38bdf8; --muted: #94a3b8; }
+    body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 1rem 2rem; }
+    h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+    .subtitle { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
+    section { background: var(--card); border-radius: 8px; padding: 1.25rem; margin-bottom: 1.5rem; }
+    section h2 { font-size: 1.1rem; margin-top: 0; margin-bottom: 1rem; color: var(--accent); }
+    .mermaid { background: #0f172a; border-radius: 6px; padding: 1rem; overflow: auto; }
+    .mermaid svg { max-width: 100%; }
+    footer { color: var(--muted); font-size: 0.8rem; margin-top: 2rem; }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <h1>LightwaveOS Architecture Canvas</h1>
+  <p class="subtitle">Single-page visual map for tooling (e.g. Nogic) and onboarding. ESP32-S3 @ 240 MHz · 320 LEDs · Centre 79/80.</p>
+
+  <section>
+    <h2>1. Data flow (high level)</h2>
+    <div class="mermaid">
+flowchart TB
+    subgraph Input["Input layer"]
+        Web["Web UI (data/*.html/js)"]
+        Serial["Serial menu (115200)"]
+    end
+    subgraph Control["Control layer"]
+        WS["WebServer"]
+        REST["REST API"]
+        WSock["WebSocket"]
+    end
+    subgraph Effect["Effect layer"]
+        ZC["Zone Composer"]
+        FX["Effect classes"]
+        TE["Transition engine"]
+    end
+    subgraph Output["Output layer"]
+        FastLED["FastLED + RMT"]
+        Strips["leds[320] → strip1 + strip2"]
+    end
+    Web --> WS
+    Serial --> WS
+    WS --> REST
+    WS --> WSock
+    REST --> ZC
+    WSock --> ZC
+    ZC --> FX
+    FX --> TE
+    TE --> FastLED
+    FastLED --> Strips
+    </div>
+  </section>
+
+  <section>
+    <h2>2. Component interaction</h2>
+    <div class="mermaid">
+flowchart LR
+    subgraph Input["Input Layer"]
+        E[Encoders]
+        W[WebSocket]
+        S[Serial]
+    end
+    subgraph Processing["Processing Layer"]
+        EM[EncoderManager]
+        WS[WebServer]
+        VP[VisualParams]
+        PM[PaletteManager]
+        ER[EffectRegistry]
+    end
+    subgraph Rendering["Rendering Layer"]
+        EE[EffectEngine]
+        TE[TransitionEngine]
+        FB[FrameBuffers]
+    end
+    subgraph Output["Output Layer"]
+        FL[FastLED]
+    end
+    E --> EM
+    W --> WS
+    S --> WS
+    EM --> VP
+    WS --> VP
+    VP --> EE
+    PM --> EE
+    ER --> EE
+    EE --> FB
+    FB --> TE
+    TE --> FL
+    </div>
+  </section>
+
+  <section>
+    <h2>3. Sequence: user → LED</h2>
+    <div class="mermaid">
+sequenceDiagram
+    participant U as User
+    participant Q as Event Queue
+    participant M as Main Loop
+    participant V as VisualParams
+    participant EF as Effect
+    participant T as Transition
+    participant F as FastLED
+    U->>Q: Encoder / WebSocket
+    Q->>M: pollEvents()
+    M->>V: Update params
+    M->>EF: render()
+    EF->>T: buffer
+    T->>F: show()
+    F->>U: LEDs
+    </div>
+  </section>
+
+  <footer>
+    Source: <a href="ARCHITECTURE_MAP.md">ARCHITECTURE_MAP.md</a>, <a href="00_LIGHTWAVEOS_INFRASTRUCTURE_COMPREHENSIVE.md">00_LIGHTWAVEOS_INFRASTRUCTURE_COMPREHENSIVE.md</a>. Run <code>!nogicreview</code> and <code>agent_canvas</code> in your MCP client when Nogic is connected.
+  </footer>
+</body>
+</html>

@@ -1,0 +1,26 @@
+{
+  "version": "1.0",
+  "title": "LightwaveOS Architecture",
+  "layout": { "type": "dagre", "direction": "TB" },
+  "elements": {
+    "input": { "id": "input", "type": "box", "label": "Input layer", "icon": "📥", "sublabel": "Web UI, Serial" },
+    "control": { "id": "control", "type": "box", "label": "Control layer", "icon": "⚙️", "sublabel": "WebServer, REST, WebSocket" },
+    "effect": { "id": "effect", "type": "box", "label": "Effect layer", "icon": "🎨", "sublabel": "Zone Composer, IEffect, Transitions" },
+    "output": { "id": "output", "type": "box", "label": "Output layer", "icon": "💡", "sublabel": "FastLED + RMT, leds[320]" },
+    "centre": { "id": "centre", "type": "diamond", "label": "Centre origin", "icon": "◆", "sublabel": "LEDs 79/80" }
+  },
+  "connections": [
+    { "source": "input", "target": "control", "label": "events" },
+    { "source": "control", "target": "effect", "label": "params" },
+    { "source": "effect", "target": "centre", "label": "respects" },
+    { "source": "effect", "target": "output", "label": "render" },
+    { "source": "output", "target": "centre", "label": "strip1+2" }
+  ],
+  "narrative": [
+    { "step": 1, "title": "Input", "description": "Web UI and serial send commands.", "elementIds": ["input"] },
+    { "step": 2, "title": "Control", "description": "WebServer and WebSocket dispatch.", "elementIds": ["control"] },
+    { "step": 3, "title": "Effect", "description": "Zone Composer runs IEffect render.", "elementIds": ["effect"] },
+    { "step": 4, "title": "Centre origin", "description": "All effects use LEDs 79/80.", "elementIds": ["centre"] },
+    { "step": 5, "title": "Output", "description": "FastLED drives 320 LEDs.", "elementIds": ["output"] }
+  ]
+}

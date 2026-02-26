@@ -10,6 +10,9 @@
 #include "core/actors/ActorSystem.h"
 #include "core/actors/RendererActor.h"
 #include <WiFi.h>
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#endif
 #if FEATURE_CONTROL_LEASE
 #include "../../../core/system/ControlLeaseManager.h"
 #endif
@@ -43,6 +46,9 @@ void DeviceHandlers::handleStatus(AsyncWebServerRequest* request,
     sendSuccessResponse(request, [startTime, apMode, wsClientCount, renderer](JsonObject& data) {
         data["uptime"] = (millis() - startTime) / 1000;
         data["freeHeap"] = ESP.getFreeHeap();
+#ifndef NATIVE_BUILD
+        data["freeInternalHeap"] = static_cast<uint32_t>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+#endif
         data["heapSize"] = ESP.getHeapSize();
         data["cpuFreq"] = ESP.getCpuFreqMHz();
 

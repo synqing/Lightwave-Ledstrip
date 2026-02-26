@@ -91,6 +91,24 @@ def pctl(values: list[float], pct: int) -> float | None:
     return arr[idx]
 
 
+def parse_internal_heap(line: str) -> int | None:
+    """Extract internal heap bytes from common log token patterns."""
+    for token in ("internal=", "internal_heap="):
+        idx = line.find(token)
+        if idx < 0:
+            continue
+        start = idx + len(token)
+        end = start
+        while end < len(line) and line[end].isdigit():
+            end += 1
+        if end > start:
+            try:
+                return int(line[start:end])
+            except ValueError:
+                return None
+    return None
+
+
 def http_get_json(url: str, timeout_s: float = 3.0) -> tuple[dict[str, Any] | None, float, bool]:
     t0 = time.time()
     try:
@@ -260,13 +278,11 @@ def run_scenario(host: str, ws_url: str, serial_port: str | None, scenario: Scen
         elif k == "serial_line":
             serial_lines += 1
             line: str = v
+            heap = parse_internal_heap(line)
+            if heap is not None:
+                heaps.append(heap)
             if "Low-heap shedding active" in line:
                 shedding_lines += 1
-                if "internal=" in line:
-                    try:
-                        heaps.append(int(line.split("internal=")[1].split(")")[0]))
-                    except Exception:
-                        pass
             if "WS diag:" in line:
                 ws_diag_lines += 1
             if (

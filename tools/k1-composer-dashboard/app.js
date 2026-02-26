@@ -44,14 +44,19 @@ const ui = {
 
 const LEDS_PER_STRIP = 160;
 const STRIPS = 2;
-const TOTAL_LEDS = LEDS_PER_STRIP * STRIPS;
 const BYTES_PER_LED = 3;
+const TOTAL_LEDS = LEDS_PER_STRIP * STRIPS;
 const FRAME_PAYLOAD_BYTES = TOTAL_LEDS * BYTES_PER_LED;
 const FRAME_HEADER_BYTES = 16;
 const FRAME_TOTAL_BYTES = FRAME_HEADER_BYTES + FRAME_PAYLOAD_BYTES;
 const CATALOG_GENERATED_INDEX_URL = "./src/code-catalog/generated/index.json";
 const CATALOG_SEED_URL = "./src/code-catalog/effects.json";
 const PHASE_ORDER = ["input", "mapping", "modulation", "render", "post", "output"];
+
+const DISCOVERY_TIMEOUT_MS = 3000;
+const RECONNECT_BACKOFF_MS = [1000, 2000, 4000, 8000, 16000, 30000];
+const STORAGE_KEY_HOST = "k1_composer_host";
+const DISCOVERY_CANDIDATES = ["lightwaveos.local", "192.168.4.1"];
 
 const SENSITIVE_TELEMETRY_KEYS = new Set([
   "leasetoken",
@@ -71,9 +76,13 @@ const paramConfig = [
 ];
 
 const state = {
-  host: ui.hostInput.value.trim(),
+  host: ui.hostInput ? ui.hostInput.value.trim() : "",
   ws: null,
   connected: false,
+  connectionState: "disconnected",
+  userRequestedDisconnect: false,
+  reconnectAttempts: 0,
+  reconnectTimer: null,
   clientName: "K1 Composer Dashboard",
   clientInstanceId: crypto.randomUUID(),
   lease: {
@@ -507,9 +516,93 @@ function populateEffectSelect() {
   });
 }
 
-function setConnectionBadge(connected) {
-  ui.connectBadge.textContent = connected ? "Connected" : "Disconnected";
-  ui.connectBadge.className = `badge ${connected ? "online" : "offline"}`;
+function setConnectionBadge(status) {
+  const isBoolean = typeof status === "boolean";
+  const connected = isBoolean ? status : status === "connected";
+  const label =
+    status === "connecting"
+      ? "Connecting…"
+      : status === "reconnecting"
+        ? "Reconnecting…"
+        : status === "no_device"
+          ? "No device found"
+          : connected
+            ? "Connected"
+            : "Disconnected";
+  ui.connectBadge.textContent = label;
+  ui.connectBadge.className = `badge ${connected ? "online" : status === "no_device" ? "muted" : "offline"}`;
+  state.connectionState =
+    isBoolean ? (status ? "connected" : "disconnected") : status;
+}
+
+function probeHost(host) {
+  const url = `http://${host}/api/v1/device/status`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), DISCOVERY_TIMEOUT_MS);
+  return fetch(url, { signal: controller.signal, mode: "cors" })
+    .then((r) => r.ok)
+    .catch(() => false)
+    .finally(() => clearTimeout(timeout));
+}
+
+async function resolveDeviceHost() {
+  const cached = localStorage.getItem(STORAGE_KEY_HOST);
+  const candidates = cached ? [cached, ...DISCOVERY_CANDIDATES.filter((h) => h !== cached)] : DISCOVERY_CANDIDATES;
+  for (const host of candidates) {
+    if (await probeHost(host)) return host;
+  }
+  return null;
+}
+
+async function autoConnect() {
+  if (state.connected) return;
+  state.userRequestedDisconnect = false;
+  setConnectionBadge("connecting");
+  const host = await resolveDeviceHost();
+  if (host) {
+    if (ui.hostInput) ui.hostInput.value = host;
+    state.host = host;
+    connect(host);
+  } else {
+    setConnectionBadge("no_device");
+    toast("No device found. Connect to K1's WiFi or ensure device is on this network.");
+    logEvent("discovery.failed", { candidates: DISCOVERY_CANDIDATES });
+  }
+}
+
+function stopReconnect() {
+  if (state.reconnectTimer) {
+    clearTimeout(state.reconnectTimer);
+    state.reconnectTimer = null;
+  }
+  state.reconnectAttempts = 0;
+}
+
+function scheduleReconnect() {
+  stopReconnect();
+  const delay = RECONNECT_BACKOFF_MS[Math.min(state.reconnectAttempts, RECONNECT_BACKOFF_MS.length - 1)];
+  state.reconnectAttempts += 1;
+  setConnectionBadge("reconnecting");
+  state.reconnectTimer = setTimeout(tryReconnect, delay);
+  logEvent("reconnect.scheduled", { attempt: state.reconnectAttempts, delayMs: delay });
+}
+
+function tryReconnect() {
+  state.reconnectTimer = null;
+  if (state.userRequestedDisconnect || state.connected) return;
+  const host = state.host || ui.hostInput?.value?.trim() || "lightwaveos.local";
+  state.host = host;
+  if (ui.hostInput) ui.hostInput.value = host;
+  connect(host);
+}
+
+function disconnect() {
+  state.userRequestedDisconnect = true;
+  stopReconnect();
+  cleanupWs();
+  localStorage.removeItem(STORAGE_KEY_HOST);
+  setConnectionBadge("disconnected");
+  updateControls();
 }
 
 function setLeaseModeBadge(mode) {
@@ -544,6 +637,15 @@ function canMutate() {
 
 function updateControls() {
   const exclusive = canMutate();
+  if (ui.connectBtn) {
+    ui.connectBtn.textContent =
+      state.connectionState === "reconnecting"
+        ? "Reconnecting…"
+        : state.connected
+          ? "Disconnect"
+          : "Connect";
+    ui.connectBtn.disabled = state.connectionState === "reconnecting";
+  }
   ui.acquireBtn.disabled = !state.connected || exclusive;
   ui.releaseBtn.disabled = !exclusive;
   ui.reacquireBtn.disabled = !state.connected;
@@ -975,7 +1077,9 @@ function cleanupWs() {
   stopHeartbeat();
   stopStatusPolling();
   stopLeaseCountdown();
-  setConnectionBadge(false);
+  if (state.connectionState !== "reconnecting" && state.connectionState !== "no_device") {
+    setConnectionBadge(false);
+  }
   updateControls();
 }
 
@@ -989,16 +1093,22 @@ function apiUrl(path) {
   return `http://${host}${path}`;
 }
 
-function connect() {
+function connect(optionalHost) {
   cleanupWs();
-  state.host = ui.hostInput.value.trim();
+  state.host = (optionalHost != null ? optionalHost : (ui.hostInput && ui.hostInput.value.trim())) || "lightwaveos.local";
+  if (ui.hostInput) ui.hostInput.value = state.host;
   const ws = new WebSocket(wsUrl());
   ws.binaryType = "arraybuffer";
   state.ws = ws;
 
   ws.onopen = async () => {
     state.connected = true;
-    setConnectionBadge(true);
+    state.reconnectAttempts = 0;
+    state.userRequestedDisconnect = false;
+    try {
+      localStorage.setItem(STORAGE_KEY_HOST, state.host);
+    } catch (_) {}
+    setConnectionBadge("connected");
     startLeaseCountdown();
     renderLeaseState();
     renderStreamState();
@@ -1008,6 +1118,7 @@ function connect() {
     await refreshStreamStatus();
     await refreshDeviceStatus();
     startStatusPolling();
+    updateControls();
   };
 
   ws.onclose = () => {
@@ -1028,6 +1139,12 @@ function connect() {
       logEvent("control.lease.lost", { reason: "ws_disconnected" });
       logEvent("render.stream.stopped", { reason: "ws_disconnected" });
     }
+    if (!state.userRequestedDisconnect) {
+      scheduleReconnect();
+    } else {
+      setConnectionBadge("disconnected");
+    }
+    updateControls();
   };
 
   ws.onerror = () => {
@@ -1709,7 +1826,10 @@ function resetTimeline() {
 }
 
 function bindEvents() {
-  ui.connectBtn.addEventListener("click", connect);
+  ui.connectBtn.addEventListener("click", () => {
+    if (state.connected) disconnect();
+    else connect();
+  });
 
   ui.statusBtn.addEventListener("click", async () => {
     await refreshLeaseStatus();
@@ -1837,6 +1957,8 @@ async function init() {
   startDiagnosticsLoop();
   runSimulationAndRender();
   initWasmRuntime();
+  updateControls();
+  autoConnect();
   logEvent("dashboard.init", { clientInstanceId: state.clientInstanceId });
 }
 

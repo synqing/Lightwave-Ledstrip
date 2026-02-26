@@ -15,6 +15,7 @@
 #include <Arduino.h>
 #ifndef NATIVE_BUILD
 #include <esp_task_wdt.h>
+#include <esp_heap_caps.h>
 #endif
 
 #define LW_LOG_TAG "Main"
@@ -2000,13 +2001,26 @@ void loop() {
 #endif
                 }
                 else if (subcmd == "memory") {
-                    // One-shot memory print
+                    // One-shot memory print (internal SRAM is what WiFi/lwIP need; combined heap masks exhaustion)
                     Serial.println("\n=== Memory Status ===");
-                    Serial.printf("  Free heap: %lu bytes\n", ESP.getFreeHeap());
-                    Serial.printf("  Min free heap: %lu bytes\n", ESP.getMinFreeHeap());
-                    Serial.printf("  Max alloc heap: %lu bytes\n", ESP.getMaxAllocHeap());
+#ifndef NATIVE_BUILD
+                    {
+                        const size_t internalFree = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+                        const size_t internalLargest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
+                        Serial.printf("  Internal SRAM free: %u bytes (largest block: %u)\n",
+                                      (unsigned)internalFree, (unsigned)internalLargest);
+                        if (internalFree < 15000) {
+                            Serial.println("  WARNING: Internal SRAM < 15 KB - timer/WiFi at risk");
+                        } else if (internalFree < 30000) {
+                            Serial.println("  CAUTION: Internal SRAM < 30 KB");
+                        }
+                    }
+#endif
+                    Serial.printf("  Free heap (combined): %lu bytes\n", (unsigned long)ESP.getFreeHeap());
+                    Serial.printf("  Min free heap: %lu bytes\n", (unsigned long)ESP.getMinFreeHeap());
+                    Serial.printf("  Max alloc heap: %lu bytes\n", (unsigned long)ESP.getMaxAllocHeap());
 #ifdef CONFIG_SPIRAM_SUPPORT
-                    Serial.printf("  Free PSRAM: %lu bytes\n", ESP.getFreePsram());
+                    Serial.printf("  Free PSRAM: %lu bytes\n", (unsigned long)ESP.getFreePsram());
 #endif
                     Serial.println();
                 }

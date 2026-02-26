@@ -155,13 +155,16 @@ curl http://lightwaveos.local/api/v1/
 
 Get device runtime status.
 
-**Response:**
+**Response:**  
+`freeHeap` is combined (internal + PSRAM); `freeInternalHeap` is internal SRAM only — the metric that matters for WiFi/lwIP. When internal SRAM is low (&lt;~30 KB), timer and WiFi can become unstable even if combined heap looks healthy.
+
 ```json
 {
   "success": true,
   "data": {
     "uptime": 3600,
     "freeHeap": 245000,
+    "freeInternalHeap": 42000,
     "heapSize": 327680,
     "cpuFreq": 240,
     "network": {

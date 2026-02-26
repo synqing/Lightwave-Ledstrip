@@ -4,7 +4,7 @@
 Runtime Performance Hardening: Internal SRAM Shedding Baseline
 
 ## Trigger
-Milestone snapshot complete for all-effects tunables exposure rollout.
+Wave C closure complete (`WAVE_C_CLOSURE_2026-02-26.md`) with manifest/build/tests green.
 
 ## Entry Criteria
 - Manifest gate green across all active families
@@ -25,3 +25,4 @@ Reduce low-heap shedding pressure and establish a stable performance envelope wh
 - Shedding behaviour remains non-blocking under sustained load
 - Measurable heap/shedding improvement documented
 - No regressions in build/test/runtime gates
+- Perf issue #4 remains tracked as non-blocking follow-up work

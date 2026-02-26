@@ -31,6 +31,10 @@ public:
     void render(plugins::EffectContext& ctx) override;
     void cleanup() override;
     const plugins::EffectMetadata& getMetadata() const override;
+    uint8_t getParameterCount() const override;
+    const plugins::EffectParameter* getParameter(uint8_t index) const override;
+    bool setParameter(const char* name, float value) override;
+    float getParameter(const char* name) const override;
 
 private:
     // CRITICAL FIX: Single phase accumulator for traveling waves (not radii for standing waves)
@@ -59,6 +63,9 @@ private:
     // EMA smoothing for energyDelta (prevents pops)
     float m_energyDeltaEMASmooth = 0.0f;
     bool m_energyDeltaEMAInitialized = false;
+    float m_phaseRate = 240.0f;
+    float m_freqBase = 0.15f;
+    float m_collisionDecay = 0.88f;
 };
 
 } // namespace ieffect

@@ -19,6 +19,15 @@ namespace lightwaveos::effects::ieffect::esv11_reference {
 using namespace lightwaveos::effects;
 using namespace lightwaveos::effects::ieffect::esv11ref;
 
+namespace {
+const plugins::EffectParameter kParameters[] = {
+    {"follower_attack_tau", "Follower Attack Tau", 0.010f, 0.500f, 0.047f,
+     plugins::EffectParameterType::FLOAT, 0.001f, "audio", "s", false},
+    {"follower_decay_tau", "Follower Decay Tau", 0.050f, 2.000f, 0.825f,
+     plugins::EffectParameterType::FLOAT, 0.005f, "audio", "s", false},
+};
+}
+
 bool EsSpectrumRefEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
 
@@ -71,8 +80,8 @@ void EsSpectrumRefEffect::render(plugins::EffectContext& ctx) {
     }
 
     // Adaptive follower — dt-corrected one-pole (attack/decay asymmetric).
-    const float attackAlpha = 1.0f - expf(-dt / kFollowerAttackTau);
-    const float decayAlpha  = 1.0f - expf(-dt / kFollowerDecayTau);
+    const float attackAlpha = 1.0f - expf(-dt / m_followerAttackTau);
+    const float decayAlpha  = 1.0f - expf(-dt / m_followerDecayTau);
 
     if (frameMax > m_ps->maxFollower[z]) {
         m_ps->maxFollower[z] += (frameMax - m_ps->maxFollower[z]) * attackAlpha;
@@ -106,6 +115,35 @@ const plugins::EffectMetadata& EsSpectrumRefEffect::getMetadata() const {
         1
     };
     return meta;
+}
+
+uint8_t EsSpectrumRefEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kParameters) / sizeof(kParameters[0]));
+}
+
+const plugins::EffectParameter* EsSpectrumRefEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kParameters[index];
+}
+
+bool EsSpectrumRefEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (std::strcmp(name, "follower_attack_tau") == 0) {
+        m_followerAttackTau = clamp01((value - 0.010f) / (0.500f - 0.010f)) * (0.500f - 0.010f) + 0.010f;
+        return true;
+    }
+    if (std::strcmp(name, "follower_decay_tau") == 0) {
+        m_followerDecayTau = clamp01((value - 0.050f) / (2.000f - 0.050f)) * (2.000f - 0.050f) + 0.050f;
+        return true;
+    }
+    return false;
+}
+
+float EsSpectrumRefEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (std::strcmp(name, "follower_attack_tau") == 0) return m_followerAttackTau;
+    if (std::strcmp(name, "follower_decay_tau") == 0) return m_followerDecayTau;
+    return 0.0f;
 }
 
 } // namespace lightwaveos::effects::ieffect::esv11_reference

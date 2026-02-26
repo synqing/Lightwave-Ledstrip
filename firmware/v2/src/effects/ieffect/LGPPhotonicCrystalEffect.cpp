@@ -26,10 +26,31 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
 
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
+
+namespace {
+constexpr float kPhaseRate = 240.0f;
+constexpr float kSpeedFloor = 0.6f;
+constexpr float kSpeedRange = 0.8f;
+constexpr float kBrightnessBase = 0.4f;
+constexpr float kBrightnessAvgGain = 0.5f;
+constexpr float kBrightnessDeltaGain = 0.4f;
+constexpr float kCollisionDecay = 0.88f;
+
+const plugins::EffectParameter kParameters[] = {
+    {"phase_rate", "Phase Rate", 120.0f, 320.0f, kPhaseRate, plugins::EffectParameterType::FLOAT, 1.0f, "timing", "", true},
+    {"speed_floor", "Speed Floor", 0.2f, 1.2f, kSpeedFloor, plugins::EffectParameterType::FLOAT, 0.02f, "timing", "x", true},
+    {"speed_range", "Speed Range", 0.2f, 1.4f, kSpeedRange, plugins::EffectParameterType::FLOAT, 0.02f, "timing", "x", true},
+    {"brightness_base", "Brightness Base", 0.1f, 1.0f, kBrightnessBase, plugins::EffectParameterType::FLOAT, 0.02f, "blend", "x", true},
+    {"brightness_avg_gain", "Brightness Avg Gain", 0.0f, 1.0f, kBrightnessAvgGain, plugins::EffectParameterType::FLOAT, 0.02f, "blend", "x", true},
+    {"brightness_delta_gain", "Brightness Delta Gain", 0.0f, 1.2f, kBrightnessDeltaGain, plugins::EffectParameterType::FLOAT, 0.02f, "blend", "x", true},
+    {"collision_decay", "Collision Decay", 0.70f, 0.99f, kCollisionDecay, plugins::EffectParameterType::FLOAT, 0.005f, "blend", "", true},
+};
+}
 
 LGPPhotonicCrystalEffect::LGPPhotonicCrystalEffect()
     : m_phase(0.0f)
@@ -68,6 +89,13 @@ bool LGPPhotonicCrystalEffect::init(plugins::EffectContext& ctx) {
 
     // Chroma tracking
     m_chromaAngle = 0.0f;
+    m_phaseRate = kPhaseRate;
+    m_speedFloor = kSpeedFloor;
+    m_speedRange = kSpeedRange;
+    m_brightnessBase = kBrightnessBase;
+    m_brightnessAvgGain = kBrightnessAvgGain;
+    m_brightnessDeltaGain = kBrightnessDeltaGain;
+    m_collisionDecay = kCollisionDecay;
 
     return true;
 }
@@ -101,7 +129,7 @@ void LGPPhotonicCrystalEffect::render(plugins::EffectContext& ctx) {
         // ================================================================
         float heavyEnergy = (ctx.audio.controlBus.heavy_bands[1] +
                              ctx.audio.controlBus.heavy_bands[2]) / 2.0f;
-        float targetSpeed = 0.6f + 0.8f * heavyEnergy;  // 0.6-1.4x range
+        float targetSpeed = m_speedFloor + m_speedRange * heavyEnergy;
         speedMult = m_speedSpring.update(targetSpeed, rawDt);
         if (speedMult > 1.6f) speedMult = 1.6f;
         if (speedMult < 0.3f) speedMult = 0.3f;
@@ -134,7 +162,9 @@ void LGPPhotonicCrystalEffect::render(plugins::EffectContext& ctx) {
         float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, rawDt, moodNorm);
 
         // Brightness modulation
-        brightnessGain = 0.4f + 0.5f * energyAvgSmooth + 0.4f * energyDeltaSmooth;
+        brightnessGain = m_brightnessBase +
+                         m_brightnessAvgGain * energyAvgSmooth +
+                         m_brightnessDeltaGain * energyDeltaSmooth;
         if (brightnessGain > 1.5f) brightnessGain = 1.5f;
         if (brightnessGain < 0.3f) brightnessGain = 0.3f;
 
@@ -156,7 +186,7 @@ void LGPPhotonicCrystalEffect::render(plugins::EffectContext& ctx) {
         if (collisionHit) {
             m_collisionBoost = 1.0f;
         }
-        m_collisionBoost = effects::chroma::dtDecay(m_collisionBoost, 0.88f, rawDt);
+        m_collisionBoost = effects::chroma::dtDecay(m_collisionBoost, m_collisionDecay, rawDt);
 
         // Circular chroma hue (replaces argmax + linear EMA to eliminate bin-flip rainbow sweeps)
         chromaOffset = effects::chroma::circularChromaHueSmoothed(
@@ -169,7 +199,7 @@ void LGPPhotonicCrystalEffect::render(plugins::EffectContext& ctx) {
     // m_phase += speedNorm * 240.0f * speedMult * dt
     // ========================================================================
     float speedNorm = ctx.speed / 50.0f;
-    m_phase += speedNorm * 240.0f * speedMult * dt;
+    m_phase += speedNorm * m_phaseRate * speedMult * dt;
     if (m_phase > 628.3f) m_phase -= 628.3f;  // Wrap at ~2*PI*100
 
     // Convert to integer phase for sin8 compatibility
@@ -256,6 +286,60 @@ const plugins::EffectMetadata& LGPPhotonicCrystalEffect::getMetadata() const {
         1
     };
     return meta;
+}
+
+uint8_t LGPPhotonicCrystalEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kParameters) / sizeof(kParameters[0]));
+}
+
+const plugins::EffectParameter* LGPPhotonicCrystalEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kParameters[index];
+}
+
+bool LGPPhotonicCrystalEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "phase_rate") == 0) {
+        m_phaseRate = constrain(value, 120.0f, 320.0f);
+        return true;
+    }
+    if (strcmp(name, "speed_floor") == 0) {
+        m_speedFloor = constrain(value, 0.2f, 1.2f);
+        return true;
+    }
+    if (strcmp(name, "speed_range") == 0) {
+        m_speedRange = constrain(value, 0.2f, 1.4f);
+        return true;
+    }
+    if (strcmp(name, "brightness_base") == 0) {
+        m_brightnessBase = constrain(value, 0.1f, 1.0f);
+        return true;
+    }
+    if (strcmp(name, "brightness_avg_gain") == 0) {
+        m_brightnessAvgGain = constrain(value, 0.0f, 1.0f);
+        return true;
+    }
+    if (strcmp(name, "brightness_delta_gain") == 0) {
+        m_brightnessDeltaGain = constrain(value, 0.0f, 1.2f);
+        return true;
+    }
+    if (strcmp(name, "collision_decay") == 0) {
+        m_collisionDecay = constrain(value, 0.70f, 0.99f);
+        return true;
+    }
+    return false;
+}
+
+float LGPPhotonicCrystalEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "phase_rate") == 0) return m_phaseRate;
+    if (strcmp(name, "speed_floor") == 0) return m_speedFloor;
+    if (strcmp(name, "speed_range") == 0) return m_speedRange;
+    if (strcmp(name, "brightness_base") == 0) return m_brightnessBase;
+    if (strcmp(name, "brightness_avg_gain") == 0) return m_brightnessAvgGain;
+    if (strcmp(name, "brightness_delta_gain") == 0) return m_brightnessDeltaGain;
+    if (strcmp(name, "collision_decay") == 0) return m_collisionDecay;
+    return 0.0f;
 }
 
 } // namespace ieffect

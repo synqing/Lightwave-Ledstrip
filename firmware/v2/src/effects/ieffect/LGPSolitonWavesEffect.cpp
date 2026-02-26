@@ -13,11 +13,26 @@ namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
+namespace {
+constexpr int kSolitonCount = 4;
+constexpr float kDamping = 0.996f;
+constexpr float kVelocityScale = 1.0f;
+
+const plugins::EffectParameter kParameters[] = {
+    {"soliton_count", "Soliton Count", 2.0f, 4.0f, (float)kSolitonCount, plugins::EffectParameterType::INT, 1.0f, "wave", "", false},
+    {"damping", "Damping", 0.95f, 0.999f, kDamping, plugins::EffectParameterType::FLOAT, 0.001f, "blend", "", false},
+    {"velocity_scale", "Velocity Scale", 0.4f, 2.0f, kVelocityScale, plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+};
+}
+
 LGPSolitonWavesEffect::LGPSolitonWavesEffect()
     : m_pos{20.0f, 60.0f, 100.0f, 140.0f}
     , m_vel{1.0f, -0.8f, 1.2f, -1.1f}
     , m_amp{255, 200, 230, 180}
     , m_hue{0, 60, 120, 180}
+    , m_solitonCount(kSolitonCount)
+    , m_damping(kDamping)
+    , m_velocityScale(kVelocityScale)
 {
 }
 
@@ -39,19 +54,21 @@ bool LGPSolitonWavesEffect::init(plugins::EffectContext& ctx) {
     m_hue[1] = 60;
     m_hue[2] = 120;
     m_hue[3] = 180;
+    m_solitonCount = kSolitonCount;
+    m_damping = kDamping;
+    m_velocityScale = kVelocityScale;
     return true;
 }
 
 void LGPSolitonWavesEffect::render(plugins::EffectContext& ctx) {
     // Self-reinforcing wave packets that maintain shape
     float speedNorm = ctx.speed / 50.0f;
-    const uint8_t solitonCount = 4;
-    const float damping = 0.996f;
+    const uint8_t solitonCount = (uint8_t)m_solitonCount;
 
     fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 
     for (uint8_t s = 0; s < solitonCount; s++) {
-        m_pos[s] += m_vel[s] * speedNorm;
+        m_pos[s] += m_vel[s] * speedNorm * m_velocityScale;
 
         if (m_pos[s] < 0.0f || m_pos[s] >= STRIP_LENGTH) {
             m_vel[s] = -m_vel[s];
@@ -102,7 +119,7 @@ void LGPSolitonWavesEffect::render(plugins::EffectContext& ctx) {
             }
         }
 
-        m_amp[s] = (uint8_t)(m_amp[s] * damping);
+        m_amp[s] = (uint8_t)(m_amp[s] * m_damping);
 
         // Regenerate dead solitons
         if (m_amp[s] < 50) {
@@ -126,6 +143,40 @@ const plugins::EffectMetadata& LGPSolitonWavesEffect::getMetadata() const {
         1
     };
     return meta;
+}
+
+uint8_t LGPSolitonWavesEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kParameters) / sizeof(kParameters[0]));
+}
+
+const plugins::EffectParameter* LGPSolitonWavesEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kParameters[index];
+}
+
+bool LGPSolitonWavesEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "soliton_count") == 0) {
+        m_solitonCount = (int)constrain(value, 2.0f, 4.0f);
+        return true;
+    }
+    if (strcmp(name, "damping") == 0) {
+        m_damping = constrain(value, 0.95f, 0.999f);
+        return true;
+    }
+    if (strcmp(name, "velocity_scale") == 0) {
+        m_velocityScale = constrain(value, 0.4f, 2.0f);
+        return true;
+    }
+    return false;
+}
+
+float LGPSolitonWavesEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "soliton_count") == 0) return (float)m_solitonCount;
+    if (strcmp(name, "damping") == 0) return m_damping;
+    if (strcmp(name, "velocity_scale") == 0) return m_velocityScale;
+    return 0.0f;
 }
 
 } // namespace ieffect

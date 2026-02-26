@@ -7,15 +7,34 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
 
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
+namespace {
+constexpr float kCloakRadius = 20.0f;
+constexpr float kBaseIndex = 1.0f;
+constexpr float kAnisotropy = 0.5f;
+constexpr float kPhaseStep = 0.25f;
+
+const plugins::EffectParameter kParameters[] = {
+    {"cloak_radius", "Cloak Radius", 10.0f, 32.0f, kCloakRadius, plugins::EffectParameterType::FLOAT, 0.5f, "wave", "", false},
+    {"base_index", "Base Index", 0.2f, 2.0f, kBaseIndex, plugins::EffectParameterType::FLOAT, 0.05f, "wave", "", false},
+    {"anisotropy", "Anisotropy", 0.0f, 0.95f, kAnisotropy, plugins::EffectParameterType::FLOAT, 0.02f, "wave", "", false},
+    {"phase_step", "Phase Step", 0.1f, 1.2f, kPhaseStep, plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", true},
+};
+}
+
 LGPAnisotropicCloakEffect::LGPAnisotropicCloakEffect()
     : m_time(0)
     , m_pos(80.0f)
     , m_vel(0.45f)
+    , m_cloakRadius(kCloakRadius)
+    , m_baseIndex(kBaseIndex)
+    , m_anisotropy(kAnisotropy)
+    , m_phaseStep(kPhaseStep)
 {
 }
 
@@ -24,17 +43,21 @@ bool LGPAnisotropicCloakEffect::init(plugins::EffectContext& ctx) {
     m_time = 0;
     m_pos = 80.0f;
     m_vel = 0.45f;
+    m_cloakRadius = kCloakRadius;
+    m_baseIndex = kBaseIndex;
+    m_anisotropy = kAnisotropy;
+    m_phaseStep = kPhaseStep;
     return true;
 }
 
 void LGPAnisotropicCloakEffect::render(plugins::EffectContext& ctx) {
     // Directionally biased refractive shell
-    m_time = (uint16_t)(m_time + (ctx.speed >> 2));
+    m_time = (uint16_t)(m_time + (uint16_t)(ctx.speed * m_phaseStep));
 
     float speedNorm = ctx.speed / 50.0f;
-    const float cloakRadius = 20.0f;
-    const float baseIndex = 1.0f;
-    const float anisotropy = 0.5f;
+    const float cloakRadius = m_cloakRadius;
+    const float baseIndex = m_baseIndex;
+    const float anisotropy = m_anisotropy;
 
     m_pos += m_vel * speedNorm;
     if (m_pos < cloakRadius || m_pos > (float)STRIP_LENGTH - cloakRadius) {
@@ -86,6 +109,45 @@ const plugins::EffectMetadata& LGPAnisotropicCloakEffect::getMetadata() const {
         1
     };
     return meta;
+}
+
+uint8_t LGPAnisotropicCloakEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kParameters) / sizeof(kParameters[0]));
+}
+
+const plugins::EffectParameter* LGPAnisotropicCloakEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kParameters[index];
+}
+
+bool LGPAnisotropicCloakEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "cloak_radius") == 0) {
+        m_cloakRadius = constrain(value, 10.0f, 32.0f);
+        return true;
+    }
+    if (strcmp(name, "base_index") == 0) {
+        m_baseIndex = constrain(value, 0.2f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "anisotropy") == 0) {
+        m_anisotropy = constrain(value, 0.0f, 0.95f);
+        return true;
+    }
+    if (strcmp(name, "phase_step") == 0) {
+        m_phaseStep = constrain(value, 0.1f, 1.2f);
+        return true;
+    }
+    return false;
+}
+
+float LGPAnisotropicCloakEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "cloak_radius") == 0) return m_cloakRadius;
+    if (strcmp(name, "base_index") == 0) return m_baseIndex;
+    if (strcmp(name, "anisotropy") == 0) return m_anisotropy;
+    if (strcmp(name, "phase_step") == 0) return m_phaseStep;
+    return 0.0f;
 }
 
 } // namespace ieffect

@@ -33,6 +33,10 @@ public:
     void render(plugins::EffectContext& ctx) override;
     void cleanup() override;
     const plugins::EffectMetadata& getMetadata() const override;
+    uint8_t getParameterCount() const override;
+    const plugins::EffectParameter* getParameter(uint8_t index) const override;
+    bool setParameter(const char* name, float value) override;
+    float getParameter(const char* name) const override;
 
 private:
     // ------------------------------------------------------------------------
@@ -49,6 +53,9 @@ private:
         float maxFollower[kMaxZones];
     };
     PsramData* m_ps = nullptr;
+
+    float m_attackTau = 0.058f;
+    float m_decayTau = 0.825f;
 };
 
 } // namespace lightwaveos::effects::ieffect::esv11_reference

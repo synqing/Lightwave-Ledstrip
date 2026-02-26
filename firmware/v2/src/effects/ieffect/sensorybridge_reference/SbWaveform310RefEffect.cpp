@@ -21,6 +21,11 @@ namespace lightwaveos::effects::ieffect::sensorybridge_reference {
 
 namespace {
 
+const plugins::EffectParameter kParameters[] = {
+    {"colour_tau", "Colour Tau", 0.050f, 1.200f, 0.325f,
+     plugins::EffectParameterType::FLOAT, 0.005f, "colour", "s", false},
+};
+
 static inline float clamp01(float v) {
     if (v < 0.0f) return 0.0f;
     if (v > 1.0f) return 1.0f;
@@ -183,8 +188,7 @@ void SbWaveform310RefEffect::render(plugins::EffectContext& ctx) {
     }
 
     // dt-corrected colour smoothing (one-pole filter, tau ~0.325s from SB 0.05/0.95 @ 60fps)
-    static constexpr float kColourTau = 0.325f;
-    const float colourAlpha = 1.0f - expf(-dt / kColourTau);
+    const float colourAlpha = 1.0f - expf(-dt / m_colourTau);
 
     float sum_color_float[3] = { (float)sum_color.r, (float)sum_color.g, (float)sum_color.b };
     for (int c = 0; c < 3; ++c) {
@@ -258,6 +262,41 @@ const plugins::EffectMetadata& SbWaveform310RefEffect::getMetadata() const {
         "LightwaveOS"
     };
     return meta;
+}
+
+uint8_t SbWaveform310RefEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kParameters) / sizeof(kParameters[0]));
+}
+
+const plugins::EffectParameter* SbWaveform310RefEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) {
+        return nullptr;
+    }
+    return &kParameters[index];
+}
+
+bool SbWaveform310RefEffect::setParameter(const char* name, float value) {
+    if (!name) {
+        return false;
+    }
+
+    if (std::strcmp(name, "colour_tau") == 0) {
+        if (value < 0.050f) value = 0.050f;
+        if (value > 1.200f) value = 1.200f;
+        m_colourTau = value;
+        return true;
+    }
+    return false;
+}
+
+float SbWaveform310RefEffect::getParameter(const char* name) const {
+    if (!name) {
+        return 0.0f;
+    }
+    if (std::strcmp(name, "colour_tau") == 0) {
+        return m_colourTau;
+    }
+    return 0.0f;
 }
 
 } // namespace lightwaveos::effects::ieffect::sensorybridge_reference

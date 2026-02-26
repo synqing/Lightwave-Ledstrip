@@ -10,10 +10,23 @@
 #include "../../validation/EffectValidationMacros.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
 
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
+
+namespace {
+constexpr float kPhaseRate = 240.0f;
+constexpr float kWaveFreq1 = 0.20f;
+constexpr float kWaveFreq2 = 0.35f;
+
+const plugins::EffectParameter kParameters[] = {
+    {"phase_rate", "Phase Rate", 120.0f, 320.0f, kPhaseRate, plugins::EffectParameterType::FLOAT, 1.0f, "timing", "", true},
+    {"wave_freq1", "Wave 1 Freq", 0.10f, 0.40f, kWaveFreq1, plugins::EffectParameterType::FLOAT, 0.005f, "wave", "", false},
+    {"wave_freq2", "Wave 2 Freq", 0.15f, 0.60f, kWaveFreq2, plugins::EffectParameterType::FLOAT, 0.005f, "wave", "", false},
+};
+}
 
 LGPInterferenceScannerEffect::LGPInterferenceScannerEffect()
     : m_scanPhase(0.0f)
@@ -34,6 +47,9 @@ bool LGPInterferenceScannerEffect::init(plugins::EffectContext& ctx) {
     m_chromaAngle = 0.0f;
     m_bassWavelength = 0.0f;
     m_trebleOverlay = 0.0f;
+    m_phaseRate = kPhaseRate;
+    m_waveFreq1 = kWaveFreq1;
+    m_waveFreq2 = kWaveFreq2;
 
     // Initialize enhancement utilities
     m_speedSpring.init(50.0f, 1.0f);  // stiffness=50, mass=1 (critically damped)
@@ -137,7 +153,7 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
     float prevPhase = m_scanPhase;
     // FIX: Use 240.0f multiplier like ChevronWaves (was 3.6f via advancePhase - 67x slower!)
     // Fast phase accumulation makes forward motion perceptually dominant
-    m_scanPhase += speedNorm * 240.0f * smoothedSpeed * dt;
+    m_scanPhase += speedNorm * m_phaseRate * smoothedSpeed * dt;
     if (m_scanPhase > 628.3f) m_scanPhase -= 628.3f;  // Wrap at 100*2π to prevent float overflow
     float phaseDelta = m_scanPhase - prevPhase;
 
@@ -161,8 +177,8 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
         // On kick drum hits, the interference fringes expand majestically.
         // Bass energy reduces frequency → larger wavelength → wider pattern.
         // =====================================================================
-        float freq1 = 0.20f - 0.05f * m_bassWavelength;  // 0.20→0.15 (wider on bass)
-        float freq2 = 0.35f - 0.08f * m_bassWavelength;  // 0.35→0.27 (wider on bass)
+        float freq1 = m_waveFreq1 - 0.05f * m_bassWavelength;  // wider on bass
+        float freq2 = m_waveFreq2 - 0.08f * m_bassWavelength;  // wider on bass
         float wave1 = sinf(dist * freq1 - m_scanPhase);
         float wave2 = sinf(dist * freq2 - m_scanPhase * 1.2f);  // Slight phase offset
         float interference = wave1 + wave2 * 0.6f;  // Combine with weight for moiré
@@ -225,6 +241,40 @@ const plugins::EffectMetadata& LGPInterferenceScannerEffect::getMetadata() const
         1
     };
     return meta;
+}
+
+uint8_t LGPInterferenceScannerEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kParameters) / sizeof(kParameters[0]));
+}
+
+const plugins::EffectParameter* LGPInterferenceScannerEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kParameters[index];
+}
+
+bool LGPInterferenceScannerEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "phase_rate") == 0) {
+        m_phaseRate = constrain(value, 120.0f, 320.0f);
+        return true;
+    }
+    if (strcmp(name, "wave_freq1") == 0) {
+        m_waveFreq1 = constrain(value, 0.10f, 0.40f);
+        return true;
+    }
+    if (strcmp(name, "wave_freq2") == 0) {
+        m_waveFreq2 = constrain(value, 0.15f, 0.60f);
+        return true;
+    }
+    return false;
+}
+
+float LGPInterferenceScannerEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "phase_rate") == 0) return m_phaseRate;
+    if (strcmp(name, "wave_freq1") == 0) return m_waveFreq1;
+    if (strcmp(name, "wave_freq2") == 0) return m_waveFreq2;
+    return 0.0f;
 }
 
 } // namespace ieffect

@@ -7,10 +7,22 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
 
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
+
+namespace {
+const plugins::EffectParameter kParameters[] = {
+    {"r", "R Dispersion", 0.50f, 2.50f, 1.00f,
+     plugins::EffectParameterType::FLOAT, 0.01f, "colour", "", false},
+    {"g", "G Dispersion", 0.50f, 2.50f, 1.23f,
+     plugins::EffectParameterType::FLOAT, 0.01f, "colour", "", false},
+    {"b", "B Dispersion", 0.50f, 2.50f, 1.55f,
+     plugins::EffectParameterType::FLOAT, 0.01f, "colour", "", false},
+};
+}
 
 static inline float clamp01(float x) {
     return (x < 0.0f) ? 0.0f : (x > 1.0f) ? 1.0f : x;
@@ -37,9 +49,6 @@ void LGPOpalFilmEffect::render(plugins::EffectContext& ctx) {
     m_time += 0.010f + speedNorm * 0.040f;
     m_flow += 0.006f + speedNorm * 0.020f;
 
-    const float kR = 1.00f;
-    const float kG = 1.23f;
-    const float kB = 1.55f;
     const float hueBias = (ctx.gHue / 255.0f) * 0.15f;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
@@ -55,9 +64,9 @@ void LGPOpalFilmEffect::render(plugins::EffectContext& ctx) {
 
         const float phase = 6.2831853f * (thickness + hueBias * 0.15f);
 
-        float r = 0.5f + 0.5f * cosf(phase * kR + 0.3f);
-        float g = 0.5f + 0.5f * cosf(phase * kG + 1.1f);
-        float b = 0.5f + 0.5f * cosf(phase * kB + 2.0f);
+        float r = 0.5f + 0.5f * cosf(phase * m_r + 0.3f);
+        float g = 0.5f + 0.5f * cosf(phase * m_g + 1.1f);
+        float b = 0.5f + 0.5f * cosf(phase * m_b + 2.0f);
 
         float luma = 0.20f + 0.80f * (0.333f * (r + g + b));
         r = clamp01(0.65f * r + 0.35f * luma);
@@ -95,6 +104,40 @@ const plugins::EffectMetadata& LGPOpalFilmEffect::getMetadata() const {
         1
     };
     return meta;
+}
+
+uint8_t LGPOpalFilmEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kParameters) / sizeof(kParameters[0]));
+}
+
+const plugins::EffectParameter* LGPOpalFilmEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kParameters[index];
+}
+
+bool LGPOpalFilmEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (std::strcmp(name, "r") == 0) {
+        m_r = (value < 0.50f) ? 0.50f : (value > 2.50f) ? 2.50f : value;
+        return true;
+    }
+    if (std::strcmp(name, "g") == 0) {
+        m_g = (value < 0.50f) ? 0.50f : (value > 2.50f) ? 2.50f : value;
+        return true;
+    }
+    if (std::strcmp(name, "b") == 0) {
+        m_b = (value < 0.50f) ? 0.50f : (value > 2.50f) ? 2.50f : value;
+        return true;
+    }
+    return false;
+}
+
+float LGPOpalFilmEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (std::strcmp(name, "r") == 0) return m_r;
+    if (std::strcmp(name, "g") == 0) return m_g;
+    if (std::strcmp(name, "b") == 0) return m_b;
+    return 0.0f;
 }
 
 } // namespace ieffect

@@ -22,11 +22,18 @@ namespace lightwaveos::effects::ieffect::esv11_reference {
 using namespace lightwaveos::effects;
 using namespace lightwaveos::effects::ieffect::esv11ref;
 
-// ============================================================================
-// Follower time constants (derived from per-frame alpha at 60 fps)
-// ============================================================================
-static constexpr float kAttackTau = 0.058f;   // tau for attack alpha 0.25 @ 60 fps
-static constexpr float kDecayTau  = 0.825f;   // tau for decay  alpha 0.02 @ 60 fps
+namespace {
+const plugins::EffectParameter kParameters[] = {
+    {"attack_tau", "Attack Tau", 0.010f, 0.500f, 0.058f,
+     plugins::EffectParameterType::FLOAT, 0.001f, "audio", "s", false},
+    {"decay_tau", "Decay Tau", 0.050f, 2.000f, 0.825f,
+     plugins::EffectParameterType::FLOAT, 0.005f, "audio", "s", false},
+};
+
+static inline float clampf(float x, float lo, float hi) {
+    return (x < lo) ? lo : (x > hi) ? hi : x;
+}
+}
 
 // ============================================================================
 // IEffect interface
@@ -85,8 +92,8 @@ void EsBloomRefEffect::render(plugins::EffectContext& ctx) {
     }
 
     // Adaptive max follower — dt-corrected attack/decay
-    const float attackAlpha = 1.0f - expf(-dt / kAttackTau);
-    const float decayAlpha  = 1.0f - expf(-dt / kDecayTau);
+    const float attackAlpha = 1.0f - expf(-dt / m_attackTau);
+    const float decayAlpha  = 1.0f - expf(-dt / m_decayTau);
 
     if (frameMax > m_ps->maxFollower[z]) {
         m_ps->maxFollower[z] += (frameMax - m_ps->maxFollower[z]) * attackAlpha;
@@ -147,6 +154,35 @@ const plugins::EffectMetadata& EsBloomRefEffect::getMetadata() const {
         1
     };
     return meta;
+}
+
+uint8_t EsBloomRefEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kParameters) / sizeof(kParameters[0]));
+}
+
+const plugins::EffectParameter* EsBloomRefEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kParameters[index];
+}
+
+bool EsBloomRefEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (std::strcmp(name, "attack_tau") == 0) {
+        m_attackTau = clampf(value, 0.010f, 0.500f);
+        return true;
+    }
+    if (std::strcmp(name, "decay_tau") == 0) {
+        m_decayTau = clampf(value, 0.050f, 2.000f);
+        return true;
+    }
+    return false;
+}
+
+float EsBloomRefEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (std::strcmp(name, "attack_tau") == 0) return m_attackTau;
+    if (std::strcmp(name, "decay_tau") == 0) return m_decayTau;
+    return 0.0f;
 }
 
 } // namespace lightwaveos::effects::ieffect::esv11_reference

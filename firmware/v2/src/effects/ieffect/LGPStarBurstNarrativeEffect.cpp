@@ -74,12 +74,14 @@ bool LGPStarBurstNarrativeEffect::init(plugins::EffectContext& ctx) {
 
     m_heavyBassSmooth = 0.0f;
     m_heavyBassSmoothInitialised = false;
+    m_kickEnv = 0.0f;
 
     return true;
 }
 
 void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
-    const float speedNorm = ctx.speed / 50.0f;
+    const float userSpeed = clamp01((ctx.speed - 1) / 99.0f);
+    const float userMood  = ctx.getMoodNormalized();
     const float intensityNorm = ctx.brightness / 255.0f;
     const float dtAudio = ctx.getSafeRawDeltaSeconds();
     float dtVisual = ctx.getSafeDeltaSeconds();
@@ -128,19 +130,30 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
         }
 
         if (ctx.audio.isSnareHit()) {
-            m_burst = 1.0f;
+            const float burstCeiling = 0.35f + 0.40f * userMood;
+            m_burst = fmaxf(m_burst, burstCeiling);
             if (m_storyPhase == StoryPhase::REST) {
                 m_storyPhase = StoryPhase::BUILD;
                 m_storyTimeS = 0.0f;
             }
         }
 
+        // Kick envelope from beat events
+        if (ctx.audio.isOnBeat()) {
+            const float kickCeiling = 0.50f + 0.35f * userMood;
+            m_kickEnv = fmaxf(m_kickEnv, kickCeiling);
+            m_phaseSpeedSpring.velocity += 0.8f + 1.2f * userSpeed;
+        }
+        const float kickReleaseTau = 0.20f - 0.08f * userMood;
+        m_kickEnv *= expf(-dtAudio / kickReleaseTau);
+
         const float heavyRaw = clamp01(ctx.audio.heavyBass());
+        const float tauHeavy = 0.12f - 0.07f * userMood;
         if (!m_heavyBassSmoothInitialised) {
             m_heavyBassSmooth = heavyRaw;
             m_heavyBassSmoothInitialised = true;
         } else {
-            const float heavyAlpha = expAlpha(dtAudio, 0.06f);
+            const float heavyAlpha = expAlpha(dtAudio, tauHeavy);
             m_heavyBassSmooth += (heavyRaw - m_heavyBassSmooth) * heavyAlpha;
         }
     } else
@@ -159,8 +172,9 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
     }
 #endif
 
-    const bool quietNow = (!hasAudio) ||
-                          ((rmsNow < 0.06f) && (m_heavyBassSmooth < 0.08f) && (m_burst < 0.06f));
+    const bool energyQuiet = (rmsNow < 0.06f) && (m_heavyBassSmooth < 0.08f) && (m_burst < 0.06f);
+    const bool noRecentKick = (m_kickEnv < 0.05f);
+    const bool quietNow = (!hasAudio) || (energyQuiet && noRecentKick);
     if (quietNow) {
         m_quietTimeS += dtAudio;
     } else {
@@ -181,7 +195,7 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
             break;
 
         case StoryPhase::BUILD:
-            if (m_quietTimeS > 0.75f) {
+            if (m_quietTimeS > (0.80f + 0.40f * userMood)) {
                 m_storyPhase = StoryPhase::REST;
                 m_storyTimeS = 0.0f;
             } else if (m_storyTimeS > 0.90f && m_heavyBassSmooth > 0.14f) {
@@ -191,15 +205,16 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
             break;
 
         case StoryPhase::HOLD:
-            if (m_quietTimeS > 0.85f ||
+            if (m_quietTimeS > (0.90f + 0.50f * userMood) ||
                 (m_storyTimeS > 2.40f && m_heavyBassSmooth < 0.10f)) {
                 m_storyPhase = StoryPhase::RELEASE;
                 m_storyTimeS = 0.0f;
             }
             break;
 
-        case StoryPhase::RELEASE:
-            if (m_quietTimeS > 1.10f || m_storyTimeS > 1.30f) {
+        case StoryPhase::RELEASE: {
+            const float releaseDurS = 1.40f - 0.85f * userMood;
+            if (m_quietTimeS > (1.10f + 0.40f * userMood) || m_storyTimeS > releaseDurS) {
                 m_storyPhase = StoryPhase::REST;
                 m_storyTimeS = 0.0f;
             } else if (!quietNow && m_storyTimeS > 0.70f) {
@@ -207,7 +222,11 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
                 m_storyTimeS = 0.0f;
             }
             break;
+        }
     }
+
+    const float buildDurS   = 1.20f - 0.75f * userMood;
+    const float releaseDurEnvS = 1.40f - 0.85f * userMood;
 
     float env = 0.0f;
     switch (m_storyPhase) {
@@ -215,13 +234,13 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
             env = 0.0f;
             break;
         case StoryPhase::BUILD:
-            env = smoothstepDur(m_storyTimeS, 0.90f);
+            env = smoothstepDur(m_storyTimeS, buildDurS);
             break;
         case StoryPhase::HOLD:
             env = 1.0f;
             break;
         case StoryPhase::RELEASE:
-            env = 1.0f - smoothstepDur(m_storyTimeS, 0.95f);
+            env = 1.0f - smoothstepDur(m_storyTimeS, releaseDurEnvS);
             break;
     }
     env = clamp01(env);
@@ -235,24 +254,26 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
             targetAngle, m_keyRootAngle, keyAlpha);
     }
 
-    const float targetSpeed = 0.70f + 0.60f * m_heavyBassSmooth;
-    float smoothedSpeed = m_phaseSpeedSpring.update(targetSpeed, dtAudio);
-    if (smoothedSpeed > 2.0f) smoothedSpeed = 2.0f;
-    if (smoothedSpeed < 0.3f) smoothedSpeed = 0.3f;
+    // Mood-controlled spring dynamics
+    m_phaseSpeedSpring.stiffness = 35.0f + 65.0f * userMood;
+    m_phaseSpeedSpring.damping = 2.0f * sqrtf(m_phaseSpeedSpring.stiffness * m_phaseSpeedSpring.mass);
 
-    // Legacy narrative cadence: slow phase transport keeps triadic fields readable.
-    m_phase += (0.55f + 1.65f * speedNorm) * smoothedSpeed * dtVisual;
+    const float minSpeed = 0.25f + 0.55f * userSpeed;
+    const float maxSpeed = 1.25f + 1.95f * userSpeed;
+    const float targetSpeed = (0.55f + 0.95f * userSpeed)
+                            + (0.30f + 1.50f * userSpeed) * m_heavyBassSmooth;
+    float smoothedSpeed = m_phaseSpeedSpring.update(targetSpeed, dtAudio);
+    if (smoothedSpeed > maxSpeed) smoothedSpeed = maxSpeed;
+    if (smoothedSpeed < minSpeed) smoothedSpeed = minSpeed;
+
+    m_phase += (0.40f + 1.80f * userSpeed) * smoothedSpeed * dtVisual;
     if (m_phase > 100000.0f) {
         m_phase = fmodf(m_phase, 6.2831853f);
     }
 
-    if (m_storyPhase == StoryPhase::BUILD) {
-        m_burst = clamp01(m_burst + env * 0.18f * dtAudio);
-    }
-    m_burst *= expf(-dtAudio / 0.18f);
-    if (m_storyPhase == StoryPhase::REST) {
-        m_burst *= expf(-dtAudio / 0.10f);
-    }
+    // Mood-controlled burst decay (no BUILD accumulation, no separate REST decay)
+    const float burstDecayTau = 0.26f - 0.10f * userMood;
+    m_burst *= expf(-dtAudio / burstDecayTau);
 
     fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 
@@ -268,8 +289,8 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
     const uint8_t hueFifth = static_cast<uint8_t>(ctx.gHue + fifthBin * binStep);
 
     const float freqBase = 0.18f + 0.30f * env;
-    const float falloff = 3.2f - 1.6f * env;
-    const float pulseRate = 0.8f + 2.4f * env;
+    const float falloff = (3.6f - 1.2f * userMood) - (1.6f - 0.4f * userMood) * env;
+    const float pulseRate = (0.6f + 0.6f * userSpeed) + (1.8f + 0.8f * userSpeed) * env;
     const uint8_t motionIdx =
         static_cast<uint8_t>((static_cast<uint32_t>(m_phase * 40.58f)) & 0xFFu);
 
@@ -290,7 +311,13 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
             field += m_burst * env * expf(-normalisedDist * (falloff + 0.6f));
         }
         field = clamp01(field);
-        field *= field;
+
+        // Controllable contrast curve (replaces harsh squaring)
+        const float gamma = 2.2f - 0.8f * userMood;
+        field = powf(field, gamma);
+
+        // Kick-locked amplitude modulation
+        field *= (0.70f + 0.30f * m_kickEnv);
 
         float brightF = field;
         if (m_storyPhase == StoryPhase::REST) {
@@ -298,6 +325,10 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
         } else if (m_storyPhase == StoryPhase::BUILD) {
             brightF *= (0.35f + 0.65f * env);
         }
+
+        // Soft limiter (prevents flash/white-out)
+        brightF = brightF / (brightF + 0.15f) * 1.15f;
+        brightF = clamp01(brightF);
 
         const uint8_t brightness =
             clampU8(static_cast<int>(roundf(brightF * intensityNorm * 255.0f)));

@@ -13,10 +13,28 @@ namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
+namespace {
+constexpr int kMassCount = 2;
+constexpr float kMassStrengthScale = 1.0f;
+constexpr float kDeflectionGain = 20.0f;
+constexpr float kPhaseStep = 0.25f;
+
+const plugins::EffectParameter kParameters[] = {
+    {"mass_count", "Mass Count", 1.0f, 3.0f, (float)kMassCount, plugins::EffectParameterType::INT, 1.0f, "wave", "", false},
+    {"mass_strength_scale", "Mass Strength", 0.2f, 2.0f, kMassStrengthScale, plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"deflection_gain", "Deflection Gain", 8.0f, 36.0f, kDeflectionGain, plugins::EffectParameterType::FLOAT, 0.5f, "wave", "", false},
+    {"phase_step", "Phase Step", 0.1f, 1.5f, kPhaseStep, plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", true},
+};
+}
+
 LGPGravitationalLensingEffect::LGPGravitationalLensingEffect()
     : m_time(0)
     , m_massPos{40.0f, 80.0f, 120.0f}
     , m_massVel{0.5f, -0.3f, 0.4f}
+    , m_massCount(kMassCount)
+    , m_massStrengthScale(kMassStrengthScale)
+    , m_deflectionGain(kDeflectionGain)
+    , m_phaseStep(kPhaseStep)
 {
 }
 
@@ -29,16 +47,20 @@ bool LGPGravitationalLensingEffect::init(plugins::EffectContext& ctx) {
     m_massVel[0] = 0.5f;
     m_massVel[1] = -0.3f;
     m_massVel[2] = 0.4f;
+    m_massCount = kMassCount;
+    m_massStrengthScale = kMassStrengthScale;
+    m_deflectionGain = kDeflectionGain;
+    m_phaseStep = kPhaseStep;
     return true;
 }
 
 void LGPGravitationalLensingEffect::render(plugins::EffectContext& ctx) {
     // Light bends around invisible massive objects creating Einstein rings
-    m_time = (uint16_t)(m_time + (ctx.speed >> 2));
+    m_time = (uint16_t)(m_time + (uint16_t)(ctx.speed * m_phaseStep));
 
     float speedNorm = ctx.speed / 50.0f;
-    const uint8_t massCount = 2;
-    float massStrength = ctx.brightness / 255.0f;
+    const uint8_t massCount = (uint8_t)m_massCount;
+    float massStrength = (ctx.brightness / 255.0f) * m_massStrengthScale;
 
     // Update mass positions
     for (uint8_t m = 0; m < massCount; m++) {
@@ -63,7 +85,7 @@ void LGPGravitationalLensingEffect::render(plugins::EffectContext& ctx) {
                 for (uint8_t m = 0; m < massCount; m++) {
                     float dist = fabsf(rayPos - m_massPos[m]);
                     if (dist < 40.0f && dist > 1.0f) {
-                        float deflection = massStrength * 20.0f / (dist * dist);
+                        float deflection = massStrength * m_deflectionGain / (dist * dist);
                         if (rayPos > m_massPos[m]) {
                             deflection = -deflection;
                         }
@@ -113,6 +135,45 @@ const plugins::EffectMetadata& LGPGravitationalLensingEffect::getMetadata() cons
         1
     };
     return meta;
+}
+
+uint8_t LGPGravitationalLensingEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kParameters) / sizeof(kParameters[0]));
+}
+
+const plugins::EffectParameter* LGPGravitationalLensingEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kParameters[index];
+}
+
+bool LGPGravitationalLensingEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "mass_count") == 0) {
+        m_massCount = (int)constrain(value, 1.0f, 3.0f);
+        return true;
+    }
+    if (strcmp(name, "mass_strength_scale") == 0) {
+        m_massStrengthScale = constrain(value, 0.2f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "deflection_gain") == 0) {
+        m_deflectionGain = constrain(value, 8.0f, 36.0f);
+        return true;
+    }
+    if (strcmp(name, "phase_step") == 0) {
+        m_phaseStep = constrain(value, 0.1f, 1.5f);
+        return true;
+    }
+    return false;
+}
+
+float LGPGravitationalLensingEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "mass_count") == 0) return (float)m_massCount;
+    if (strcmp(name, "mass_strength_scale") == 0) return m_massStrengthScale;
+    if (strcmp(name, "deflection_gain") == 0) return m_deflectionGain;
+    if (strcmp(name, "phase_step") == 0) return m_phaseStep;
+    return 0.0f;
 }
 
 } // namespace ieffect

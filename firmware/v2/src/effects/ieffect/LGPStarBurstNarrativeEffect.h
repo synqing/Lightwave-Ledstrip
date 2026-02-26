@@ -62,6 +62,9 @@ private:
     enhancement::Spring m_phaseSpeedSpring;
     float m_heavyBassSmooth = 0.0f;
     bool m_heavyBassSmoothInitialised = false;
+
+    // Kick envelope for beat-locked motion
+    float m_kickEnv = 0.0f;
 };
 
 } // namespace ieffect

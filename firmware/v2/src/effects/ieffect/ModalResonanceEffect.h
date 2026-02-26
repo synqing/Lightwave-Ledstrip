@@ -34,18 +34,19 @@ public:
     void render(plugins::EffectContext& ctx) override;
     void cleanup() override;
     const plugins::EffectMetadata& getMetadata() const override;
+    uint8_t getParameterCount() const override;
+    const plugins::EffectParameter* getParameter(uint8_t index) const override;
+    bool setParameter(const char* name, float value) override;
+    float getParameter(const char* name) const override;
 
 private:
     // Instance state (was: static float modalModePhase)
     float m_modalModePhase;
-    
-    // Mode parameters
-    static constexpr float BASE_MODE_MIN = 5.0f;
-    static constexpr float BASE_MODE_RANGE = 4.0f;
-    static constexpr float HARMONIC_WEIGHT = 0.5f;
+    float m_baseModeMin;
+    float m_baseModeRange;
+    float m_harmonicWeight;
 };
 
 } // namespace ieffect
 } // namespace effects
 } // namespace lightwaveos
-

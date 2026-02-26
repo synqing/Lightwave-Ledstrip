@@ -7,15 +7,31 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
 
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
+namespace {
+constexpr float kCloakRadius = 15.0f;
+constexpr float kRefractiveIndex = -1.5f;
+constexpr float kPhaseStep = 0.25f;
+
+const plugins::EffectParameter kParameters[] = {
+    {"cloak_radius", "Cloak Radius", 8.0f, 30.0f, kCloakRadius, plugins::EffectParameterType::FLOAT, 0.5f, "wave", "", false},
+    {"refractive_index", "Refractive Index", -2.5f, -0.3f, kRefractiveIndex, plugins::EffectParameterType::FLOAT, 0.05f, "wave", "", false},
+    {"phase_step", "Phase Step", 0.1f, 1.5f, kPhaseStep, plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+};
+}
+
 LGPMetamaterialCloakEffect::LGPMetamaterialCloakEffect()
     : m_time(0)
     , m_pos(80.0f)
     , m_vel(0.5f)
+    , m_cloakRadius(kCloakRadius)
+    , m_refractiveIndex(kRefractiveIndex)
+    , m_phaseStep(kPhaseStep)
 {
 }
 
@@ -24,16 +40,19 @@ bool LGPMetamaterialCloakEffect::init(plugins::EffectContext& ctx) {
     m_time = 0;
     m_pos = 80.0f;
     m_vel = 0.5f;
+    m_cloakRadius = kCloakRadius;
+    m_refractiveIndex = kRefractiveIndex;
+    m_phaseStep = kPhaseStep;
     return true;
 }
 
 void LGPMetamaterialCloakEffect::render(plugins::EffectContext& ctx) {
     // Negative refractive index creates invisibility effects
-    m_time = (uint16_t)(m_time + (ctx.speed >> 2));
+    m_time = (uint16_t)(m_time + (uint16_t)(ctx.speed * m_phaseStep));
 
     float speedNorm = ctx.speed / 50.0f;
-    const float cloakRadius = 15.0f;
-    const float refractiveIndex = -1.5f;
+    const float cloakRadius = m_cloakRadius;
+    const float refractiveIndex = m_refractiveIndex;
 
     m_pos += m_vel * speedNorm;
     if (m_pos < cloakRadius || m_pos > (float)STRIP_LENGTH - cloakRadius) {
@@ -80,6 +99,40 @@ const plugins::EffectMetadata& LGPMetamaterialCloakEffect::getMetadata() const {
         1
     };
     return meta;
+}
+
+uint8_t LGPMetamaterialCloakEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kParameters) / sizeof(kParameters[0]));
+}
+
+const plugins::EffectParameter* LGPMetamaterialCloakEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kParameters[index];
+}
+
+bool LGPMetamaterialCloakEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "cloak_radius") == 0) {
+        m_cloakRadius = constrain(value, 8.0f, 30.0f);
+        return true;
+    }
+    if (strcmp(name, "refractive_index") == 0) {
+        m_refractiveIndex = constrain(value, -2.5f, -0.3f);
+        return true;
+    }
+    if (strcmp(name, "phase_step") == 0) {
+        m_phaseStep = constrain(value, 0.1f, 1.5f);
+        return true;
+    }
+    return false;
+}
+
+float LGPMetamaterialCloakEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "cloak_radius") == 0) return m_cloakRadius;
+    if (strcmp(name, "refractive_index") == 0) return m_refractiveIndex;
+    if (strcmp(name, "phase_step") == 0) return m_phaseStep;
+    return 0.0f;
 }
 
 } // namespace ieffect

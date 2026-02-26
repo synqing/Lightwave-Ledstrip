@@ -34,6 +34,10 @@ public:
     void render(plugins::EffectContext& ctx) override;
     void cleanup() override;
     const plugins::EffectMetadata& getMetadata() const override;
+    uint8_t getParameterCount() const override;
+    const plugins::EffectParameter* getParameter(uint8_t index) const override;
+    bool setParameter(const char* name, float value) override;
+    float getParameter(const char* name) const override;
 
 private:
     float m_scanPhase;
@@ -57,6 +61,9 @@ private:
     // 64-bin spectrum tracking for enhanced audio response
     float m_bassWavelength = 0.0f;    ///< Sub-bass energy (bins 0-5) modulates pattern width
     float m_trebleOverlay = 0.0f;     ///< Treble energy (bins 48-63) adds sparkle overlay
+    float m_phaseRate = 240.0f;
+    float m_waveFreq1 = 0.20f;
+    float m_waveFreq2 = 0.35f;
 };
 
 } // namespace ieffect

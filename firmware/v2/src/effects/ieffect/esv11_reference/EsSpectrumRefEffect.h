@@ -31,6 +31,10 @@ public:
     void render(plugins::EffectContext& ctx) override;
     void cleanup() override;
     const plugins::EffectMetadata& getMetadata() const override;
+    uint8_t getParameterCount() const override;
+    const plugins::EffectParameter* getParameter(uint8_t index) const override;
+    bool setParameter(const char* name, float value) override;
+    float getParameter(const char* name) const override;
 
 private:
     static constexpr uint8_t kMaxZones = 4;
@@ -41,6 +45,9 @@ private:
     //   decay  alpha 0.02 → tau = -1 / (60 * ln(1 - 0.02)) ≈ 0.825 s
     static constexpr float kFollowerAttackTau = 0.047f;
     static constexpr float kFollowerDecayTau  = 0.825f;
+
+    float m_followerAttackTau = kFollowerAttackTau;
+    float m_followerDecayTau = kFollowerDecayTau;
 
     // PSRAM-allocated — large buffers MUST NOT live in DRAM (see MEMORY_ALLOCATION.md)
     struct PsramData {

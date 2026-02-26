@@ -7,15 +7,31 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
 
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
+namespace {
+constexpr float kLayer2Weight = 0.7f;
+constexpr float kLayer3Weight = 0.5f;
+constexpr float kShimmerWeight = 0.3f;
+
+const plugins::EffectParameter kParameters[] = {
+    {"layer2_weight", "Layer 2", 0.1f, 1.5f, kLayer2Weight, plugins::EffectParameterType::FLOAT, 0.01f, "wave", "", false},
+    {"layer3_weight", "Layer 3", 0.1f, 1.5f, kLayer3Weight, plugins::EffectParameterType::FLOAT, 0.01f, "wave", "", false},
+    {"shimmer_weight", "Shimmer", 0.0f, 1.0f, kShimmerWeight, plugins::EffectParameterType::FLOAT, 0.01f, "wave", "", false},
+};
+}
+
 LGPHolographicEffect::LGPHolographicEffect()
     : m_phase1(0.0f)
     , m_phase2(0.0f)
     , m_phase3(0.0f)
+    , m_layer2Weight(kLayer2Weight)
+    , m_layer3Weight(kLayer3Weight)
+    , m_shimmerWeight(kShimmerWeight)
 {
 }
 
@@ -24,6 +40,9 @@ bool LGPHolographicEffect::init(plugins::EffectContext& ctx) {
     m_phase1 = 0.0f;
     m_phase2 = 0.0f;
     m_phase3 = 0.0f;
+    m_layer2Weight = kLayer2Weight;
+    m_layer3Weight = kLayer3Weight;
+    m_shimmerWeight = kShimmerWeight;
     return true;
 }
 
@@ -47,13 +66,13 @@ void LGPHolographicEffect::render(plugins::EffectContext& ctx) {
         layerSum += sinf(dist * 0.05f + m_phase1);
 
         // Layer 2 - Medium pattern
-        layerSum += sinf(dist * 0.15f + m_phase2) * 0.7f;
+        layerSum += sinf(dist * 0.15f + m_phase2) * m_layer2Weight;
 
         // Layer 3 - Fast, tight pattern
-        layerSum += sinf(dist * 0.3f + m_phase3) * 0.5f;
+        layerSum += sinf(dist * 0.3f + m_phase3) * m_layer3Weight;
 
         // Layer 4 - Shimmer (3.0x creates sharp interference bands)
-        layerSum += sinf(dist * 0.6f - m_phase1 * 3.0f) * 0.3f;
+        layerSum += sinf(dist * 0.6f - m_phase1 * 3.0f) * m_shimmerWeight;
 
         // Normalize
         layerSum = layerSum / (float)numLayers;
@@ -84,6 +103,40 @@ const plugins::EffectMetadata& LGPHolographicEffect::getMetadata() const {
         1
     };
     return meta;
+}
+
+uint8_t LGPHolographicEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kParameters) / sizeof(kParameters[0]));
+}
+
+const plugins::EffectParameter* LGPHolographicEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kParameters[index];
+}
+
+bool LGPHolographicEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "layer2_weight") == 0) {
+        m_layer2Weight = constrain(value, 0.1f, 1.5f);
+        return true;
+    }
+    if (strcmp(name, "layer3_weight") == 0) {
+        m_layer3Weight = constrain(value, 0.1f, 1.5f);
+        return true;
+    }
+    if (strcmp(name, "shimmer_weight") == 0) {
+        m_shimmerWeight = constrain(value, 0.0f, 1.0f);
+        return true;
+    }
+    return false;
+}
+
+float LGPHolographicEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "layer2_weight") == 0) return m_layer2Weight;
+    if (strcmp(name, "layer3_weight") == 0) return m_layer3Weight;
+    if (strcmp(name, "shimmer_weight") == 0) return m_shimmerWeight;
+    return 0.0f;
 }
 
 } // namespace ieffect

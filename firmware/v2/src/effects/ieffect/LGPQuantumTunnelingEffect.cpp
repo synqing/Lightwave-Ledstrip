@@ -13,11 +13,29 @@ namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
+namespace {
+constexpr int kBarrierCount = 3;
+constexpr int kBarrierWidth = 20;
+constexpr float kTunnelProbability = 64.0f / 255.0f;
+constexpr float kPhaseStep = 0.5f;
+
+const plugins::EffectParameter kParameters[] = {
+    {"barrier_count", "Barrier Count", 1.0f, 6.0f, (float)kBarrierCount, plugins::EffectParameterType::INT, 1.0f, "wave", "", false},
+    {"barrier_width", "Barrier Width", 8.0f, 36.0f, (float)kBarrierWidth, plugins::EffectParameterType::INT, 1.0f, "wave", "", false},
+    {"tunnel_probability", "Tunnel Probability", 0.05f, 0.95f, kTunnelProbability, plugins::EffectParameterType::FLOAT, 0.01f, "audio", "x", false},
+    {"phase_step", "Phase Step", 0.1f, 2.0f, kPhaseStep, plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", true},
+};
+}
+
 LGPQuantumTunnelingEffect::LGPQuantumTunnelingEffect()
     : m_time(0)
     , m_particlePos{}
     , m_particleEnergy{}
     , m_particleActive{}
+    , m_barrierCount(kBarrierCount)
+    , m_barrierWidth(kBarrierWidth)
+    , m_tunnelProbability(kTunnelProbability)
+    , m_phaseStep(kPhaseStep)
 {
 }
 
@@ -27,16 +45,19 @@ bool LGPQuantumTunnelingEffect::init(plugins::EffectContext& ctx) {
     memset(m_particlePos, 0, sizeof(m_particlePos));
     memset(m_particleEnergy, 0, sizeof(m_particleEnergy));
     memset(m_particleActive, 0, sizeof(m_particleActive));
+    m_barrierCount = kBarrierCount;
+    m_barrierWidth = kBarrierWidth;
+    m_tunnelProbability = kTunnelProbability;
+    m_phaseStep = kPhaseStep;
     return true;
 }
 
 void LGPQuantumTunnelingEffect::render(plugins::EffectContext& ctx) {
     // Particles tunnel through energy barriers with probability waves
-    m_time = (uint16_t)(m_time + (ctx.speed >> 1));
-
-    const uint8_t barrierCount = 3;
-    const uint8_t barrierWidth = 20;
-    const uint8_t tunnelProbability = 64;
+    m_time = (uint16_t)(m_time + (uint16_t)(ctx.speed * m_phaseStep));
+    const uint8_t barrierCount = (uint8_t)m_barrierCount;
+    const uint8_t barrierWidth = (uint8_t)m_barrierWidth;
+    const uint8_t tunnelProbability = (uint8_t)(m_tunnelProbability * 255.0f);
 
     fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 
@@ -154,6 +175,45 @@ const plugins::EffectMetadata& LGPQuantumTunnelingEffect::getMetadata() const {
         1
     };
     return meta;
+}
+
+uint8_t LGPQuantumTunnelingEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kParameters) / sizeof(kParameters[0]));
+}
+
+const plugins::EffectParameter* LGPQuantumTunnelingEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kParameters[index];
+}
+
+bool LGPQuantumTunnelingEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "barrier_count") == 0) {
+        m_barrierCount = (int)constrain(value, 1.0f, 6.0f);
+        return true;
+    }
+    if (strcmp(name, "barrier_width") == 0) {
+        m_barrierWidth = (int)constrain(value, 8.0f, 36.0f);
+        return true;
+    }
+    if (strcmp(name, "tunnel_probability") == 0) {
+        m_tunnelProbability = constrain(value, 0.05f, 0.95f);
+        return true;
+    }
+    if (strcmp(name, "phase_step") == 0) {
+        m_phaseStep = constrain(value, 0.1f, 2.0f);
+        return true;
+    }
+    return false;
+}
+
+float LGPQuantumTunnelingEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "barrier_count") == 0) return (float)m_barrierCount;
+    if (strcmp(name, "barrier_width") == 0) return (float)m_barrierWidth;
+    if (strcmp(name, "tunnel_probability") == 0) return m_tunnelProbability;
+    if (strcmp(name, "phase_step") == 0) return m_phaseStep;
+    return 0.0f;
 }
 
 } // namespace ieffect

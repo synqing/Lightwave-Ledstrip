@@ -9,10 +9,23 @@
 #include "../../validation/EffectValidationMacros.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
 
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
+
+namespace {
+constexpr float kPhaseRate = 240.0f;
+constexpr float kFreqBase = 0.15f;
+constexpr float kCollisionDecay = 0.88f;
+
+const plugins::EffectParameter kParameters[] = {
+    {"phase_rate", "Phase Rate", 120.0f, 320.0f, kPhaseRate, plugins::EffectParameterType::FLOAT, 1.0f, "timing", "", true},
+    {"freq_base", "Frequency", 0.05f, 0.30f, kFreqBase, plugins::EffectParameterType::FLOAT, 0.005f, "wave", "", false},
+    {"collision_decay", "Collision Decay", 0.70f, 0.99f, kCollisionDecay, plugins::EffectParameterType::FLOAT, 0.005f, "blend", "", false},
+};
+}
 
 bool LGPWaveCollisionEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
@@ -39,6 +52,9 @@ bool LGPWaveCollisionEffect::init(plugins::EffectContext& ctx) {
     // Initialize EMA smoothing
     m_energyDeltaEMASmooth = 0.0f;
     m_energyDeltaEMAInitialized = false;
+    m_phaseRate = kPhaseRate;
+    m_freqBase = kFreqBase;
+    m_collisionDecay = kCollisionDecay;
     return true;
 }
 
@@ -122,7 +138,7 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
         m_collisionBoost += energyDeltaSmooth * 0.4f;
     }
     if (m_collisionBoost > 1.0f) m_collisionBoost = 1.0f;
-    m_collisionBoost = effects::chroma::dtDecay(m_collisionBoost, 0.88f, rawDt);  // dt-corrected decay for snappier response
+    m_collisionBoost = effects::chroma::dtDecay(m_collisionBoost, m_collisionDecay, rawDt);  // dt-corrected decay for snappier response
 
     // Hi-hat driven speed burst
     if (hasAudio && ctx.audio.isHihatHit()) {
@@ -136,7 +152,7 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
 #else
     m_collisionBoost += energyDeltaSmooth * 0.4f;
     if (m_collisionBoost > 1.0f) m_collisionBoost = 1.0f;
-    m_collisionBoost = effects::chroma::dtDecay(m_collisionBoost, 0.88f, rawDt);
+    m_collisionBoost = effects::chroma::dtDecay(m_collisionBoost, m_collisionDecay, rawDt);
     m_speedTarget = m_speedTarget * 0.95f + 1.0f * 0.05f;
     float bassEnergy = energyAvgSmooth;
 #endif
@@ -156,7 +172,7 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
     float prevPhase = m_phase;
     // FIX: Use 240.0f multiplier like ChevronWaves (was 4.0f - 60x slower!)
     // Fast phase accumulation makes forward motion perceptually dominant
-    m_phase += speedNorm * 240.0f * smoothedSpeed * dt;
+    m_phase += speedNorm * m_phaseRate * smoothedSpeed * dt;
     if (m_phase > 628.3f) m_phase -= 628.3f;  // Wrap at 100*2π to prevent float overflow
     float phaseDelta = m_phase - prevPhase;
 
@@ -199,9 +215,8 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
         // WAVE COLLISION: Two counter-propagating wave packets that collide at centre
         // sin(k*dist - phase) = OUTWARD motion, sin(k*dist + phase) = INWARD motion
         // Their sum creates standing wave nodes with travelling collision events
-        const float freqBase = 0.15f;  // ~42 LED wavelength (vs Scanner's ~25-31)
-        float waveOutward = sinf(distFromCenter * freqBase - m_phase);
-        float waveInward = sinf(distFromCenter * freqBase + m_phase);
+        float waveOutward = sinf(distFromCenter * m_freqBase - m_phase);
+        float waveInward = sinf(distFromCenter * m_freqBase + m_phase);
 
         // Sum creates interference: constructive at nodes, destructive at antinodes
         // The beating pattern appears to "collide" at the centre
@@ -249,6 +264,40 @@ const plugins::EffectMetadata& LGPWaveCollisionEffect::getMetadata() const {
         1
     };
     return meta;
+}
+
+uint8_t LGPWaveCollisionEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kParameters) / sizeof(kParameters[0]));
+}
+
+const plugins::EffectParameter* LGPWaveCollisionEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kParameters[index];
+}
+
+bool LGPWaveCollisionEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "phase_rate") == 0) {
+        m_phaseRate = constrain(value, 120.0f, 320.0f);
+        return true;
+    }
+    if (strcmp(name, "freq_base") == 0) {
+        m_freqBase = constrain(value, 0.05f, 0.30f);
+        return true;
+    }
+    if (strcmp(name, "collision_decay") == 0) {
+        m_collisionDecay = constrain(value, 0.70f, 0.99f);
+        return true;
+    }
+    return false;
+}
+
+float LGPWaveCollisionEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "phase_rate") == 0) return m_phaseRate;
+    if (strcmp(name, "freq_base") == 0) return m_freqBase;
+    if (strcmp(name, "collision_decay") == 0) return m_collisionDecay;
+    return 0.0f;
 }
 
 } // namespace ieffect

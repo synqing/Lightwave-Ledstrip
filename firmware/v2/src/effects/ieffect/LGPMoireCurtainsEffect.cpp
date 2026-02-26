@@ -6,31 +6,46 @@
 #include "LGPMoireCurtainsEffect.h"
 #include "../CoreEffects.h"
 #include <FastLED.h>
+#include <cstring>
 
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
+namespace {
+constexpr float kBaseFreq = 8.0f;
+constexpr float kDeltaFreq = 0.2f;
+constexpr float kPhaseStep = 1.0f;
+
+const plugins::EffectParameter kParameters[] = {
+    {"base_freq", "Base Frequency", 4.0f, 16.0f, kBaseFreq, plugins::EffectParameterType::FLOAT, 0.1f, "wave", "", false},
+    {"delta_freq", "Delta Frequency", 0.05f, 1.0f, kDeltaFreq, plugins::EffectParameterType::FLOAT, 0.01f, "wave", "", false},
+    {"phase_step", "Phase Step", 0.25f, 4.0f, kPhaseStep, plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+};
+}
+
 LGPMoireCurtainsEffect::LGPMoireCurtainsEffect()
     : m_phase(0)
+    , m_baseFreq(kBaseFreq)
+    , m_deltaFreq(kDeltaFreq)
+    , m_phaseStep(kPhaseStep)
 {
 }
 
 bool LGPMoireCurtainsEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
     m_phase = 0;
+    m_baseFreq = kBaseFreq;
+    m_deltaFreq = kDeltaFreq;
+    m_phaseStep = kPhaseStep;
     return true;
 }
 
 void LGPMoireCurtainsEffect::render(plugins::EffectContext& ctx) {
     // CENTER ORIGIN - Two slightly mismatched frequencies create beat patterns
-    const float baseFreq = 8.0f;
-    const float delta = 0.2f;
-
-    const float leftFreq = baseFreq + delta / 2.0f;
-    const float rightFreq = baseFreq - delta / 2.0f;
-
-    m_phase = (uint16_t)(m_phase + ctx.speed);
+    const float leftFreq = m_baseFreq + m_deltaFreq / 2.0f;
+    const float rightFreq = m_baseFreq - m_deltaFreq / 2.0f;
+    m_phase = (uint16_t)(m_phase + (uint16_t)(ctx.speed * m_phaseStep));
 
     for (uint16_t i = 0; i < STRIP_LENGTH; i++) {
         float distFromCenter = (float)centerPairDistance(i);
@@ -63,6 +78,40 @@ const plugins::EffectMetadata& LGPMoireCurtainsEffect::getMetadata() const {
         1
     };
     return meta;
+}
+
+uint8_t LGPMoireCurtainsEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kParameters) / sizeof(kParameters[0]));
+}
+
+const plugins::EffectParameter* LGPMoireCurtainsEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kParameters[index];
+}
+
+bool LGPMoireCurtainsEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "base_freq") == 0) {
+        m_baseFreq = constrain(value, 4.0f, 16.0f);
+        return true;
+    }
+    if (strcmp(name, "delta_freq") == 0) {
+        m_deltaFreq = constrain(value, 0.05f, 1.0f);
+        return true;
+    }
+    if (strcmp(name, "phase_step") == 0) {
+        m_phaseStep = constrain(value, 0.25f, 4.0f);
+        return true;
+    }
+    return false;
+}
+
+float LGPMoireCurtainsEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "base_freq") == 0) return m_baseFreq;
+    if (strcmp(name, "delta_freq") == 0) return m_deltaFreq;
+    if (strcmp(name, "phase_step") == 0) return m_phaseStep;
+    return 0.0f;
 }
 
 } // namespace ieffect

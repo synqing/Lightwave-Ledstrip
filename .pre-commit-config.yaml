@@ -60,3 +60,14 @@ repos:
         pass_filenames: false
         files: ^firmware/v2/.*\.(cpp|h|hpp)$
         stages: [commit]
+
+  # Effect tunable manifest + phased coverage gate
+  - repo: local
+    hooks:
+      - id: effect-tunable-manifest-check
+        name: Effect Tunable Manifest Check
+        entry: python firmware/v2/tools/effect_tunables/generate_manifest.py --validate --enforce-all-families
+        language: python
+        pass_filenames: false
+        files: ^firmware/v2/(src/effects/|src/config/effect_ids\.h|docs/effects/tunable_manifest\.json|tools/effect_tunables/)
+        stages: [commit]

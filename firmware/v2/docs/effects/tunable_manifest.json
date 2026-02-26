@@ -1,0 +1,4742 @@
+{
+  "manifest_version": 1,
+  "coverage_mode": "phased",
+  "enforced_families": [
+    "INTERFERENCE",
+    "QUANTUM",
+    "ADVANCED_OPTICAL"
+  ],
+  "active_effect_source": "firmware/v2/src/effects/CoreEffects.cpp:registerAllEffects/registerEffect",
+  "effects": [
+    {
+      "effect_id": "EID_FIRE",
+      "effect_id_hex": "0x0100",
+      "family": "CORE",
+      "class_name": "FireEffect",
+      "registered_instance": "fireInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/FireEffect.h",
+        "firmware/v2/src/effects/ieffect/FireEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_OCEAN",
+      "effect_id_hex": "0x0101",
+      "family": "CORE",
+      "class_name": "OceanEffect",
+      "registered_instance": "oceanInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/OceanEffect.h",
+        "firmware/v2/src/effects/ieffect/OceanEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_PLASMA",
+      "effect_id_hex": "0x0102",
+      "family": "CORE",
+      "class_name": "PlasmaEffect",
+      "registered_instance": "plasmaInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/PlasmaEffect.h",
+        "firmware/v2/src/effects/ieffect/PlasmaEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_CONFETTI",
+      "effect_id_hex": "0x0103",
+      "family": "CORE",
+      "class_name": "ConfettiEffect",
+      "registered_instance": "confettiInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/ConfettiEffect.h",
+        "firmware/v2/src/effects/ieffect/ConfettiEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_SINELON",
+      "effect_id_hex": "0x0104",
+      "family": "CORE",
+      "class_name": "SinelonEffect",
+      "registered_instance": "sinelonInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/SinelonEffect.h",
+        "firmware/v2/src/effects/ieffect/SinelonEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_JUGGLE",
+      "effect_id_hex": "0x0105",
+      "family": "CORE",
+      "class_name": "JuggleEffect",
+      "registered_instance": "juggleInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/JuggleEffect.h",
+        "firmware/v2/src/effects/ieffect/JuggleEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_BPM",
+      "effect_id_hex": "0x0106",
+      "family": "CORE",
+      "class_name": "BPMEffect",
+      "registered_instance": "bpmInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/BPMEffect.h",
+        "firmware/v2/src/effects/ieffect/BPMEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_WAVE_AMBIENT",
+      "effect_id_hex": "0x0107",
+      "family": "CORE",
+      "class_name": "WaveAmbientEffect",
+      "registered_instance": "waveAmbientInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/WaveAmbientEffect.h",
+        "firmware/v2/src/effects/ieffect/WaveAmbientEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_RIPPLE",
+      "effect_id_hex": "0x0108",
+      "family": "CORE",
+      "class_name": "RippleEffect",
+      "registered_instance": "rippleInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/RippleEffect.h",
+        "firmware/v2/src/effects/ieffect/RippleEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_HEARTBEAT",
+      "effect_id_hex": "0x0109",
+      "family": "CORE",
+      "class_name": "HeartbeatEffect",
+      "registered_instance": "heartbeatInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/HeartbeatEffect.h",
+        "firmware/v2/src/effects/ieffect/HeartbeatEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_INTERFERENCE",
+      "effect_id_hex": "0x010A",
+      "family": "CORE",
+      "class_name": "InterferenceEffect",
+      "registered_instance": "interferenceInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/InterferenceEffect.h",
+        "firmware/v2/src/effects/ieffect/InterferenceEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_BREATHING",
+      "effect_id_hex": "0x010B",
+      "family": "CORE",
+      "class_name": "BreathingEffect",
+      "registered_instance": "breathingInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/BreathingEffect.h",
+        "firmware/v2/src/effects/ieffect/BreathingEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_PULSE",
+      "effect_id_hex": "0x010C",
+      "family": "CORE",
+      "class_name": "PulseEffect",
+      "registered_instance": "pulseInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/PulseEffect.h",
+        "firmware/v2/src/effects/ieffect/PulseEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_BOX_WAVE",
+      "effect_id_hex": "0x0200",
+      "family": "INTERFERENCE",
+      "class_name": "LGPBoxWaveEffect",
+      "registered_instance": "boxWaveInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPBoxWaveEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPBoxWaveEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "boxes_per_side",
+        "pattern_sharpness",
+        "phase_rate"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "kBoxesPerSide",
+          "canonical": "boxesperside",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPBoxWaveEffect.cpp",
+          "line": 17,
+          "exposed": true,
+          "matched_parameters": [
+            "boxes_per_side"
+          ]
+        },
+        {
+          "name": "kPatternSharpness",
+          "canonical": "patternsharpness",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPBoxWaveEffect.cpp",
+          "line": 19,
+          "exposed": true,
+          "matched_parameters": [
+            "pattern_sharpness"
+          ]
+        },
+        {
+          "name": "kPhaseRate",
+          "canonical": "phaserate",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPBoxWaveEffect.cpp",
+          "line": 18,
+          "exposed": true,
+          "matched_parameters": [
+            "phase_rate"
+          ]
+        }
+      ],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_HOLOGRAPHIC",
+      "effect_id_hex": "0x0201",
+      "family": "INTERFERENCE",
+      "class_name": "LGPHolographicEffect",
+      "registered_instance": "holographicInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPHolographicEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPHolographicEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "layer2_weight",
+        "layer3_weight",
+        "shimmer_weight"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "kLayer2Weight",
+          "canonical": "layer2weight",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPHolographicEffect.cpp",
+          "line": 17,
+          "exposed": true,
+          "matched_parameters": [
+            "layer2_weight"
+          ]
+        },
+        {
+          "name": "kLayer3Weight",
+          "canonical": "layer3weight",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPHolographicEffect.cpp",
+          "line": 18,
+          "exposed": true,
+          "matched_parameters": [
+            "layer3_weight"
+          ]
+        },
+        {
+          "name": "kShimmerWeight",
+          "canonical": "shimmerweight",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPHolographicEffect.cpp",
+          "line": 19,
+          "exposed": true,
+          "matched_parameters": [
+            "shimmer_weight"
+          ]
+        }
+      ],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_MODAL_RESONANCE",
+      "effect_id_hex": "0x0202",
+      "family": "INTERFERENCE",
+      "class_name": "ModalResonanceEffect",
+      "registered_instance": "modalResonanceInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/ModalResonanceEffect.h",
+        "firmware/v2/src/effects/ieffect/ModalResonanceEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "base_mode_min",
+        "base_mode_range",
+        "harmonic_weight"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "kBaseModeMin",
+          "canonical": "basemodemin",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/ModalResonanceEffect.cpp",
+          "line": 23,
+          "exposed": true,
+          "matched_parameters": [
+            "base_mode_min"
+          ]
+        },
+        {
+          "name": "kBaseModeRange",
+          "canonical": "basemoderange",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/ModalResonanceEffect.cpp",
+          "line": 24,
+          "exposed": true,
+          "matched_parameters": [
+            "base_mode_range"
+          ]
+        },
+        {
+          "name": "kHarmonicWeight",
+          "canonical": "harmonicweight",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/ModalResonanceEffect.cpp",
+          "line": 25,
+          "exposed": true,
+          "matched_parameters": [
+            "harmonic_weight"
+          ]
+        }
+      ],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_INTERFERENCE_SCANNER",
+      "effect_id_hex": "0x0203",
+      "family": "INTERFERENCE",
+      "class_name": "LGPInterferenceScannerEffect",
+      "registered_instance": "interferenceScannerInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPInterferenceScannerEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPInterferenceScannerEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "phase_rate",
+        "wave_freq1",
+        "wave_freq2"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "kPhaseRate",
+          "canonical": "phaserate",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPInterferenceScannerEffect.cpp",
+          "line": 20,
+          "exposed": true,
+          "matched_parameters": [
+            "phase_rate"
+          ]
+        },
+        {
+          "name": "kWaveFreq1",
+          "canonical": "wavefreq1",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPInterferenceScannerEffect.cpp",
+          "line": 21,
+          "exposed": true,
+          "matched_parameters": [
+            "wave_freq1"
+          ]
+        },
+        {
+          "name": "kWaveFreq2",
+          "canonical": "wavefreq2",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPInterferenceScannerEffect.cpp",
+          "line": 22,
+          "exposed": true,
+          "matched_parameters": [
+            "wave_freq2"
+          ]
+        }
+      ],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_WAVE_COLLISION",
+      "effect_id_hex": "0x0204",
+      "family": "INTERFERENCE",
+      "class_name": "LGPWaveCollisionEffect",
+      "registered_instance": "waveCollisionInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPWaveCollisionEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPWaveCollisionEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "collision_decay",
+        "freq_base",
+        "phase_rate"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "kCollisionDecay",
+          "canonical": "collisiondecay",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPWaveCollisionEffect.cpp",
+          "line": 21,
+          "exposed": true,
+          "matched_parameters": [
+            "collision_decay"
+          ]
+        },
+        {
+          "name": "kFreqBase",
+          "canonical": "freqbase",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPWaveCollisionEffect.cpp",
+          "line": 20,
+          "exposed": true,
+          "matched_parameters": [
+            "freq_base"
+          ]
+        },
+        {
+          "name": "kPhaseRate",
+          "canonical": "phaserate",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPWaveCollisionEffect.cpp",
+          "line": 19,
+          "exposed": true,
+          "matched_parameters": [
+            "phase_rate"
+          ]
+        }
+      ],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_DIAMOND_LATTICE",
+      "effect_id_hex": "0x0300",
+      "family": "GEOMETRIC",
+      "class_name": "LGPDiamondLatticeEffect",
+      "registered_instance": "diamondLatticeInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPDiamondLatticeEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPDiamondLatticeEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_HEXAGONAL_GRID",
+      "effect_id_hex": "0x0301",
+      "family": "GEOMETRIC",
+      "class_name": "LGPHexagonalGridEffect",
+      "registered_instance": "hexagonalGridInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPHexagonalGridEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPHexagonalGridEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_SPIRAL_VORTEX",
+      "effect_id_hex": "0x0302",
+      "family": "GEOMETRIC",
+      "class_name": "LGPSpiralVortexEffect",
+      "registered_instance": "spiralVortexInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPSpiralVortexEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPSpiralVortexEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_SIERPINSKI",
+      "effect_id_hex": "0x0303",
+      "family": "GEOMETRIC",
+      "class_name": "LGPSierpinskiEffect",
+      "registered_instance": "sierpinskiInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPSierpinskiEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPSierpinskiEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_CHEVRON_WAVES",
+      "effect_id_hex": "0x0304",
+      "family": "GEOMETRIC",
+      "class_name": "ChevronWavesEffect",
+      "registered_instance": "chevronWavesInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/ChevronWavesEffect.h",
+        "firmware/v2/src/effects/ieffect/ChevronWavesEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_CONCENTRIC_RINGS",
+      "effect_id_hex": "0x0305",
+      "family": "GEOMETRIC",
+      "class_name": "LGPConcentricRingsEffect",
+      "registered_instance": "concentricRingsInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPConcentricRingsEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPConcentricRingsEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_STAR_BURST",
+      "effect_id_hex": "0x0306",
+      "family": "GEOMETRIC",
+      "class_name": "LGPStarBurstEffect",
+      "registered_instance": "starBurstInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPStarBurstEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPStarBurstEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_MESH_NETWORK",
+      "effect_id_hex": "0x0307",
+      "family": "GEOMETRIC",
+      "class_name": "LGPMeshNetworkEffect",
+      "registered_instance": "meshNetworkInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPMeshNetworkEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPMeshNetworkEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_MOIRE_CURTAINS",
+      "effect_id_hex": "0x0400",
+      "family": "ADVANCED_OPTICAL",
+      "class_name": "LGPMoireCurtainsEffect",
+      "registered_instance": "moireCurtainsInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPMoireCurtainsEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPMoireCurtainsEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "base_freq",
+        "delta_freq",
+        "phase_step"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "kBaseFreq",
+          "canonical": "basefreq",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPMoireCurtainsEffect.cpp",
+          "line": 16,
+          "exposed": true,
+          "matched_parameters": [
+            "base_freq"
+          ]
+        },
+        {
+          "name": "kDeltaFreq",
+          "canonical": "deltafreq",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPMoireCurtainsEffect.cpp",
+          "line": 17,
+          "exposed": true,
+          "matched_parameters": [
+            "delta_freq"
+          ]
+        },
+        {
+          "name": "kPhaseStep",
+          "canonical": "phasestep",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPMoireCurtainsEffect.cpp",
+          "line": 18,
+          "exposed": true,
+          "matched_parameters": [
+            "phase_step"
+          ]
+        }
+      ],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_RADIAL_RIPPLE",
+      "effect_id_hex": "0x0401",
+      "family": "ADVANCED_OPTICAL",
+      "class_name": "LGPRadialRippleEffect",
+      "registered_instance": "radialRippleInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPRadialRippleEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPRadialRippleEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "dist_scale",
+        "ring_count",
+        "ring_speed_scale"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "kDistScale",
+          "canonical": "distscale",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPRadialRippleEffect.cpp",
+          "line": 18,
+          "exposed": true,
+          "matched_parameters": [
+            "dist_scale"
+          ]
+        },
+        {
+          "name": "kRingCount",
+          "canonical": "ringcount",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPRadialRippleEffect.cpp",
+          "line": 16,
+          "exposed": true,
+          "matched_parameters": [
+            "ring_count"
+          ]
+        },
+        {
+          "name": "kRingSpeedScale",
+          "canonical": "ringspeedscale",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPRadialRippleEffect.cpp",
+          "line": 17,
+          "exposed": true,
+          "matched_parameters": [
+            "ring_speed_scale"
+          ]
+        }
+      ],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_HOLOGRAPHIC_VORTEX",
+      "effect_id_hex": "0x0402",
+      "family": "ADVANCED_OPTICAL",
+      "class_name": "LGPHolographicVortexEffect",
+      "registered_instance": "holographicVortexInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPHolographicVortexEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPHolographicVortexEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "phase_step",
+        "spiral_count",
+        "tightness_scale"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "kPhaseStep",
+          "canonical": "phasestep",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPHolographicVortexEffect.cpp",
+          "line": 18,
+          "exposed": true,
+          "matched_parameters": [
+            "phase_step"
+          ]
+        },
+        {
+          "name": "kSpiralCount",
+          "canonical": "spiralcount",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPHolographicVortexEffect.cpp",
+          "line": 16,
+          "exposed": true,
+          "matched_parameters": [
+            "spiral_count"
+          ]
+        },
+        {
+          "name": "kTightnessScale",
+          "canonical": "tightnessscale",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPHolographicVortexEffect.cpp",
+          "line": 17,
+          "exposed": true,
+          "matched_parameters": [
+            "tightness_scale"
+          ]
+        }
+      ],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_EVANESCENT_DRIFT",
+      "effect_id_hex": "0x0403",
+      "family": "ADVANCED_OPTICAL",
+      "class_name": "LGPEvanescentDriftEffect",
+      "registered_instance": "evanescentDriftInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPEvanescentDriftEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPEvanescentDriftEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "decay_depth",
+        "phase_step",
+        "wave_scale"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "kDecayDepth",
+          "canonical": "decaydepth",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPEvanescentDriftEffect.cpp",
+          "line": 17,
+          "exposed": true,
+          "matched_parameters": [
+            "decay_depth"
+          ]
+        },
+        {
+          "name": "kPhaseStep",
+          "canonical": "phasestep",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPEvanescentDriftEffect.cpp",
+          "line": 16,
+          "exposed": true,
+          "matched_parameters": [
+            "phase_step"
+          ]
+        },
+        {
+          "name": "kWaveScale",
+          "canonical": "wavescale",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPEvanescentDriftEffect.cpp",
+          "line": 18,
+          "exposed": true,
+          "matched_parameters": [
+            "wave_scale"
+          ]
+        }
+      ],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_CHROMATIC_SHEAR",
+      "effect_id_hex": "0x0404",
+      "family": "ADVANCED_OPTICAL",
+      "class_name": "LGPChromaticShearEffect",
+      "registered_instance": "chromaticShearInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPChromaticShearEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPChromaticShearEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "palette_step",
+        "phase_step",
+        "shear_amount"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "kPaletteStep",
+          "canonical": "palettestep",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPChromaticShearEffect.cpp",
+          "line": 17,
+          "exposed": true,
+          "matched_parameters": [
+            "palette_step"
+          ]
+        },
+        {
+          "name": "kPhaseStep",
+          "canonical": "phasestep",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPChromaticShearEffect.cpp",
+          "line": 16,
+          "exposed": true,
+          "matched_parameters": [
+            "phase_step"
+          ]
+        },
+        {
+          "name": "kShearAmount",
+          "canonical": "shearamount",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPChromaticShearEffect.cpp",
+          "line": 18,
+          "exposed": true,
+          "matched_parameters": [
+            "shear_amount"
+          ]
+        }
+      ],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_MODAL_CAVITY",
+      "effect_id_hex": "0x0405",
+      "family": "ADVANCED_OPTICAL",
+      "class_name": "LGPModalCavityEffect",
+      "registered_instance": "modalCavityInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPModalCavityEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPModalCavityEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "beat_offset",
+        "mode_number",
+        "phase_step"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "kBeatOffset",
+          "canonical": "beatoffset",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPModalCavityEffect.cpp",
+          "line": 17,
+          "exposed": true,
+          "matched_parameters": [
+            "beat_offset"
+          ]
+        },
+        {
+          "name": "kModeNumber",
+          "canonical": "modenumber",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPModalCavityEffect.cpp",
+          "line": 16,
+          "exposed": true,
+          "matched_parameters": [
+            "mode_number"
+          ]
+        },
+        {
+          "name": "kPhaseStep",
+          "canonical": "phasestep",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPModalCavityEffect.cpp",
+          "line": 18,
+          "exposed": true,
+          "matched_parameters": [
+            "phase_step"
+          ]
+        }
+      ],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_FRESNEL_ZONES",
+      "effect_id_hex": "0x0406",
+      "family": "ADVANCED_OPTICAL",
+      "class_name": "LGPFresnelZonesEffect",
+      "registered_instance": "fresnelZonesInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPFresnelZonesEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPFresnelZonesEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "edge_threshold",
+        "strip2_scale",
+        "zone_count"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "kEdgeThreshold",
+          "canonical": "edgethreshold",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPFresnelZonesEffect.cpp",
+          "line": 17,
+          "exposed": true,
+          "matched_parameters": [
+            "edge_threshold"
+          ]
+        },
+        {
+          "name": "kStrip2Scale",
+          "canonical": "strip2scale",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPFresnelZonesEffect.cpp",
+          "line": 18,
+          "exposed": true,
+          "matched_parameters": [
+            "strip2_scale"
+          ]
+        },
+        {
+          "name": "kZoneCount",
+          "canonical": "zonecount",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPFresnelZonesEffect.cpp",
+          "line": 16,
+          "exposed": true,
+          "matched_parameters": [
+            "zone_count"
+          ]
+        }
+      ],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_PHOTONIC_CRYSTAL",
+      "effect_id_hex": "0x0407",
+      "family": "ADVANCED_OPTICAL",
+      "class_name": "LGPPhotonicCrystalEffect",
+      "registered_instance": "photonicCrystalInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPPhotonicCrystalEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPPhotonicCrystalEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "brightness_avg_gain",
+        "brightness_base",
+        "brightness_delta_gain",
+        "collision_decay",
+        "phase_rate",
+        "speed_floor",
+        "speed_range"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "kBrightnessAvgGain",
+          "canonical": "brightnessavggain",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPPhotonicCrystalEffect.cpp",
+          "line": 40,
+          "exposed": true,
+          "matched_parameters": [
+            "brightness_avg_gain"
+          ]
+        },
+        {
+          "name": "kBrightnessBase",
+          "canonical": "brightnessbase",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPPhotonicCrystalEffect.cpp",
+          "line": 39,
+          "exposed": true,
+          "matched_parameters": [
+            "brightness_base"
+          ]
+        },
+        {
+          "name": "kBrightnessDeltaGain",
+          "canonical": "brightnessdeltagain",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPPhotonicCrystalEffect.cpp",
+          "line": 41,
+          "exposed": true,
+          "matched_parameters": [
+            "brightness_delta_gain"
+          ]
+        },
+        {
+          "name": "kCollisionDecay",
+          "canonical": "collisiondecay",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPPhotonicCrystalEffect.cpp",
+          "line": 42,
+          "exposed": true,
+          "matched_parameters": [
+            "collision_decay"
+          ]
+        },
+        {
+          "name": "kPhaseRate",
+          "canonical": "phaserate",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPPhotonicCrystalEffect.cpp",
+          "line": 36,
+          "exposed": true,
+          "matched_parameters": [
+            "phase_rate"
+          ]
+        },
+        {
+          "name": "kSpeedFloor",
+          "canonical": "speedfloor",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPPhotonicCrystalEffect.cpp",
+          "line": 37,
+          "exposed": true,
+          "matched_parameters": [
+            "speed_floor"
+          ]
+        },
+        {
+          "name": "kSpeedRange",
+          "canonical": "speedrange",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPPhotonicCrystalEffect.cpp",
+          "line": 38,
+          "exposed": true,
+          "matched_parameters": [
+            "speed_range"
+          ]
+        }
+      ],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_AURORA_BOREALIS",
+      "effect_id_hex": "0x0500",
+      "family": "ORGANIC",
+      "class_name": "LGPAuroraBorealisEffect",
+      "registered_instance": "auroraBorealisInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPAuroraBorealisEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPAuroraBorealisEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_BIOLUMINESCENT_WAVES",
+      "effect_id_hex": "0x0501",
+      "family": "ORGANIC",
+      "class_name": "LGPBioluminescentWavesEffect",
+      "registered_instance": "bioluminescentWavesInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPBioluminescentWavesEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPBioluminescentWavesEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_PLASMA_MEMBRANE",
+      "effect_id_hex": "0x0502",
+      "family": "ORGANIC",
+      "class_name": "LGPPlasmaMembraneEffect",
+      "registered_instance": "plasmaMembraneInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPPlasmaMembraneEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPPlasmaMembraneEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_NEURAL_NETWORK",
+      "effect_id_hex": "0x0503",
+      "family": "ORGANIC",
+      "class_name": "LGPNeuralNetworkEffect",
+      "registered_instance": "neuralNetworkInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPNeuralNetworkEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPNeuralNetworkEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_CRYSTALLINE_GROWTH",
+      "effect_id_hex": "0x0504",
+      "family": "ORGANIC",
+      "class_name": "LGPCrystallineGrowthEffect",
+      "registered_instance": "crystallineGrowthInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPCrystallineGrowthEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPCrystallineGrowthEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_FLUID_DYNAMICS",
+      "effect_id_hex": "0x0505",
+      "family": "ORGANIC",
+      "class_name": "LGPFluidDynamicsEffect",
+      "registered_instance": "fluidDynamicsInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPFluidDynamicsEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPFluidDynamicsEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_QUANTUM_TUNNELING",
+      "effect_id_hex": "0x0600",
+      "family": "QUANTUM",
+      "class_name": "LGPQuantumTunnelingEffect",
+      "registered_instance": "quantumTunnelingInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPQuantumTunnelingEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPQuantumTunnelingEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "barrier_count",
+        "barrier_width",
+        "phase_step",
+        "tunnel_probability"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "kBarrierCount",
+          "canonical": "barriercount",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPQuantumTunnelingEffect.cpp",
+          "line": 17,
+          "exposed": true,
+          "matched_parameters": [
+            "barrier_count"
+          ]
+        },
+        {
+          "name": "kBarrierWidth",
+          "canonical": "barrierwidth",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPQuantumTunnelingEffect.cpp",
+          "line": 18,
+          "exposed": true,
+          "matched_parameters": [
+            "barrier_width"
+          ]
+        },
+        {
+          "name": "kPhaseStep",
+          "canonical": "phasestep",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPQuantumTunnelingEffect.cpp",
+          "line": 20,
+          "exposed": true,
+          "matched_parameters": [
+            "phase_step"
+          ]
+        },
+        {
+          "name": "kTunnelProbability",
+          "canonical": "tunnelprobability",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPQuantumTunnelingEffect.cpp",
+          "line": 19,
+          "exposed": true,
+          "matched_parameters": [
+            "tunnel_probability"
+          ]
+        }
+      ],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_GRAVITATIONAL_LENSING",
+      "effect_id_hex": "0x0601",
+      "family": "QUANTUM",
+      "class_name": "LGPGravitationalLensingEffect",
+      "registered_instance": "gravitationalLensingInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPGravitationalLensingEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPGravitationalLensingEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "deflection_gain",
+        "mass_count",
+        "mass_strength_scale",
+        "phase_step"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "kDeflectionGain",
+          "canonical": "deflectiongain",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPGravitationalLensingEffect.cpp",
+          "line": 19,
+          "exposed": true,
+          "matched_parameters": [
+            "deflection_gain"
+          ]
+        },
+        {
+          "name": "kMassCount",
+          "canonical": "masscount",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPGravitationalLensingEffect.cpp",
+          "line": 17,
+          "exposed": true,
+          "matched_parameters": [
+            "mass_count"
+          ]
+        },
+        {
+          "name": "kMassStrengthScale",
+          "canonical": "massstrengthscale",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPGravitationalLensingEffect.cpp",
+          "line": 18,
+          "exposed": true,
+          "matched_parameters": [
+            "mass_strength_scale"
+          ]
+        },
+        {
+          "name": "kPhaseStep",
+          "canonical": "phasestep",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPGravitationalLensingEffect.cpp",
+          "line": 20,
+          "exposed": true,
+          "matched_parameters": [
+            "phase_step"
+          ]
+        }
+      ],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_TIME_CRYSTAL",
+      "effect_id_hex": "0x0602",
+      "family": "QUANTUM",
+      "class_name": "LGPTimeCrystalEffect",
+      "registered_instance": "timeCrystalInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPTimeCrystalEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPTimeCrystalEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "palette_spread",
+        "phase1_rate",
+        "phase2_rate",
+        "phase3_rate"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "kPaletteSpread",
+          "canonical": "palettespread",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeCrystalEffect.cpp",
+          "line": 20,
+          "exposed": true,
+          "matched_parameters": [
+            "palette_spread"
+          ]
+        },
+        {
+          "name": "kPhase1Rate",
+          "canonical": "phase1rate",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeCrystalEffect.cpp",
+          "line": 17,
+          "exposed": true,
+          "matched_parameters": [
+            "phase1_rate"
+          ]
+        },
+        {
+          "name": "kPhase2Rate",
+          "canonical": "phase2rate",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeCrystalEffect.cpp",
+          "line": 18,
+          "exposed": true,
+          "matched_parameters": [
+            "phase2_rate"
+          ]
+        },
+        {
+          "name": "kPhase3Rate",
+          "canonical": "phase3rate",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeCrystalEffect.cpp",
+          "line": 19,
+          "exposed": true,
+          "matched_parameters": [
+            "phase3_rate"
+          ]
+        }
+      ],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_SOLITON_WAVES",
+      "effect_id_hex": "0x0603",
+      "family": "QUANTUM",
+      "class_name": "LGPSolitonWavesEffect",
+      "registered_instance": "solitonWavesInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPSolitonWavesEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPSolitonWavesEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "damping",
+        "soliton_count",
+        "velocity_scale"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "kDamping",
+          "canonical": "damping",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPSolitonWavesEffect.cpp",
+          "line": 18,
+          "exposed": true,
+          "matched_parameters": [
+            "damping"
+          ]
+        },
+        {
+          "name": "kSolitonCount",
+          "canonical": "solitoncount",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPSolitonWavesEffect.cpp",
+          "line": 17,
+          "exposed": true,
+          "matched_parameters": [
+            "soliton_count"
+          ]
+        },
+        {
+          "name": "kVelocityScale",
+          "canonical": "velocityscale",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPSolitonWavesEffect.cpp",
+          "line": 19,
+          "exposed": true,
+          "matched_parameters": [
+            "velocity_scale"
+          ]
+        }
+      ],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_METAMATERIAL_CLOAK",
+      "effect_id_hex": "0x0604",
+      "family": "QUANTUM",
+      "class_name": "LGPMetamaterialCloakEffect",
+      "registered_instance": "metamaterialCloakInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPMetamaterialCloakEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPMetamaterialCloakEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "cloak_radius",
+        "phase_step",
+        "refractive_index"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "kCloakRadius",
+          "canonical": "cloakradius",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPMetamaterialCloakEffect.cpp",
+          "line": 17,
+          "exposed": true,
+          "matched_parameters": [
+            "cloak_radius"
+          ]
+        },
+        {
+          "name": "kPhaseStep",
+          "canonical": "phasestep",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPMetamaterialCloakEffect.cpp",
+          "line": 19,
+          "exposed": true,
+          "matched_parameters": [
+            "phase_step"
+          ]
+        },
+        {
+          "name": "kRefractiveIndex",
+          "canonical": "refractiveindex",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPMetamaterialCloakEffect.cpp",
+          "line": 18,
+          "exposed": true,
+          "matched_parameters": [
+            "refractive_index"
+          ]
+        }
+      ],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_GRIN_CLOAK",
+      "effect_id_hex": "0x0605",
+      "family": "QUANTUM",
+      "class_name": "LGPGrinCloakEffect",
+      "registered_instance": "grinCloakInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPGrinCloakEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPGrinCloakEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "cloak_radius",
+        "gradient",
+        "phase_step"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "kCloakRadius",
+          "canonical": "cloakradius",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPGrinCloakEffect.cpp",
+          "line": 17,
+          "exposed": true,
+          "matched_parameters": [
+            "cloak_radius"
+          ]
+        },
+        {
+          "name": "kGradient",
+          "canonical": "gradient",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPGrinCloakEffect.cpp",
+          "line": 18,
+          "exposed": true,
+          "matched_parameters": [
+            "gradient"
+          ]
+        },
+        {
+          "name": "kPhaseStep",
+          "canonical": "phasestep",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPGrinCloakEffect.cpp",
+          "line": 19,
+          "exposed": true,
+          "matched_parameters": [
+            "phase_step"
+          ]
+        }
+      ],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_CAUSTIC_FAN",
+      "effect_id_hex": "0x0606",
+      "family": "QUANTUM",
+      "class_name": "LGPCausticFanEffect",
+      "registered_instance": "causticFanInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPCausticFanEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPCausticFanEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "curvature",
+        "gain",
+        "phase_step",
+        "separation"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "kCurvature",
+          "canonical": "curvature",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPCausticFanEffect.cpp",
+          "line": 17,
+          "exposed": true,
+          "matched_parameters": [
+            "curvature"
+          ]
+        },
+        {
+          "name": "kGain",
+          "canonical": "gain",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPCausticFanEffect.cpp",
+          "line": 19,
+          "exposed": true,
+          "matched_parameters": [
+            "gain"
+          ]
+        },
+        {
+          "name": "kPhaseStep",
+          "canonical": "phasestep",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPCausticFanEffect.cpp",
+          "line": 20,
+          "exposed": true,
+          "matched_parameters": [
+            "phase_step"
+          ]
+        },
+        {
+          "name": "kSeparation",
+          "canonical": "separation",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPCausticFanEffect.cpp",
+          "line": 18,
+          "exposed": true,
+          "matched_parameters": [
+            "separation"
+          ]
+        }
+      ],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_BIREFRINGENT_SHEAR",
+      "effect_id_hex": "0x0607",
+      "family": "QUANTUM",
+      "class_name": "LGPBirefringentShearEffect",
+      "registered_instance": "birefringentShearInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPBirefringentShearEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPBirefringentShearEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "base_frequency",
+        "delta_k",
+        "drift",
+        "phase_step"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "kBaseFrequency",
+          "canonical": "basefrequency",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPBirefringentShearEffect.cpp",
+          "line": 16,
+          "exposed": true,
+          "matched_parameters": [
+            "base_frequency"
+          ]
+        },
+        {
+          "name": "kDeltaK",
+          "canonical": "deltak",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPBirefringentShearEffect.cpp",
+          "line": 17,
+          "exposed": true,
+          "matched_parameters": [
+            "delta_k"
+          ]
+        },
+        {
+          "name": "kDrift",
+          "canonical": "drift",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPBirefringentShearEffect.cpp",
+          "line": 18,
+          "exposed": true,
+          "matched_parameters": [
+            "drift"
+          ]
+        },
+        {
+          "name": "kPhaseStep",
+          "canonical": "phasestep",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPBirefringentShearEffect.cpp",
+          "line": 19,
+          "exposed": true,
+          "matched_parameters": [
+            "phase_step"
+          ]
+        }
+      ],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_ANISOTROPIC_CLOAK",
+      "effect_id_hex": "0x0608",
+      "family": "QUANTUM",
+      "class_name": "LGPAnisotropicCloakEffect",
+      "registered_instance": "anisotropicCloakInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPAnisotropicCloakEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPAnisotropicCloakEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "anisotropy",
+        "base_index",
+        "cloak_radius",
+        "phase_step"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "kAnisotropy",
+          "canonical": "anisotropy",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPAnisotropicCloakEffect.cpp",
+          "line": 19,
+          "exposed": true,
+          "matched_parameters": [
+            "anisotropy"
+          ]
+        },
+        {
+          "name": "kBaseIndex",
+          "canonical": "baseindex",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPAnisotropicCloakEffect.cpp",
+          "line": 18,
+          "exposed": true,
+          "matched_parameters": [
+            "base_index"
+          ]
+        },
+        {
+          "name": "kCloakRadius",
+          "canonical": "cloakradius",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPAnisotropicCloakEffect.cpp",
+          "line": 17,
+          "exposed": true,
+          "matched_parameters": [
+            "cloak_radius"
+          ]
+        },
+        {
+          "name": "kPhaseStep",
+          "canonical": "phasestep",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPAnisotropicCloakEffect.cpp",
+          "line": 20,
+          "exposed": true,
+          "matched_parameters": [
+            "phase_step"
+          ]
+        }
+      ],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_EVANESCENT_SKIN",
+      "effect_id_hex": "0x0609",
+      "family": "QUANTUM",
+      "class_name": "LGPEvanescentSkinEffect",
+      "registered_instance": "evanescentSkinInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPEvanescentSkinEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPEvanescentSkinEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "lambda",
+        "phase_step",
+        "ring_radius_scale",
+        "skin_freq"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "kLambda",
+          "canonical": "lambda",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPEvanescentSkinEffect.cpp",
+          "line": 18,
+          "exposed": true,
+          "matched_parameters": [
+            "lambda"
+          ]
+        },
+        {
+          "name": "kPhaseStep",
+          "canonical": "phasestep",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPEvanescentSkinEffect.cpp",
+          "line": 21,
+          "exposed": true,
+          "matched_parameters": [
+            "phase_step"
+          ]
+        },
+        {
+          "name": "kRingRadiusScale",
+          "canonical": "ringradiusscale",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPEvanescentSkinEffect.cpp",
+          "line": 20,
+          "exposed": true,
+          "matched_parameters": [
+            "ring_radius_scale"
+          ]
+        },
+        {
+          "name": "kSkinFreq",
+          "canonical": "skinfreq",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPEvanescentSkinEffect.cpp",
+          "line": 19,
+          "exposed": true,
+          "matched_parameters": [
+            "skin_freq"
+          ]
+        }
+      ],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_COLOR_TEMPERATURE",
+      "effect_id_hex": "0x0700",
+      "family": "COLOUR_MIXING",
+      "class_name": "LGPColorTemperatureEffect",
+      "registered_instance": "colorTemperatureInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPColorTemperatureEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPColorTemperatureEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_RGB_PRISM",
+      "effect_id_hex": "0x0701",
+      "family": "COLOUR_MIXING",
+      "class_name": "LGPRGBPrismEffect",
+      "registered_instance": "rgbPrismInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPRGBPrismEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPRGBPrismEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_COMPLEMENTARY_MIXING",
+      "effect_id_hex": "0x0702",
+      "family": "COLOUR_MIXING",
+      "class_name": "LGPComplementaryMixingEffect",
+      "registered_instance": "complementaryMixingInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPComplementaryMixingEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPComplementaryMixingEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_QUANTUM_COLORS",
+      "effect_id_hex": "0x0703",
+      "family": "COLOUR_MIXING",
+      "class_name": "LGPQuantumColorsEffect",
+      "registered_instance": "quantumColorsInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPQuantumColorsEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPQuantumColorsEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_DOPPLER_SHIFT",
+      "effect_id_hex": "0x0704",
+      "family": "COLOUR_MIXING",
+      "class_name": "LGPDopplerShiftEffect",
+      "registered_instance": "dopplerShiftInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPDopplerShiftEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPDopplerShiftEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_COLOR_ACCELERATOR",
+      "effect_id_hex": "0x0705",
+      "family": "COLOUR_MIXING",
+      "class_name": "LGPColorAcceleratorEffect",
+      "registered_instance": "colorAcceleratorInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPColorAcceleratorEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPColorAcceleratorEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_DNA_HELIX",
+      "effect_id_hex": "0x0706",
+      "family": "COLOUR_MIXING",
+      "class_name": "LGPDNAHelixEffect",
+      "registered_instance": "dnaHelixInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPDNAHelixEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPDNAHelixEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_PHASE_TRANSITION",
+      "effect_id_hex": "0x0707",
+      "family": "COLOUR_MIXING",
+      "class_name": "LGPPhaseTransitionEffect",
+      "registered_instance": "phaseTransitionInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPPhaseTransitionEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPPhaseTransitionEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_CHROMATIC_ABERRATION",
+      "effect_id_hex": "0x0708",
+      "family": "COLOUR_MIXING",
+      "class_name": "LGPChromaticAberrationEffect",
+      "registered_instance": "chromaticAberrationInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPChromaticAberrationEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPChromaticAberrationEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_PERCEPTUAL_BLEND",
+      "effect_id_hex": "0x0709",
+      "family": "COLOUR_MIXING",
+      "class_name": "LGPPerceptualBlendEffect",
+      "registered_instance": "perceptualBlendInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPPerceptualBlendEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPPerceptualBlendEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_CHLADNI_HARMONICS",
+      "effect_id_hex": "0x0800",
+      "family": "NOVEL_PHYSICS",
+      "class_name": "LGPChladniHarmonicsEffect",
+      "registered_instance": "chladniHarmonicsInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPChladniHarmonicsEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPChladniHarmonicsEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_GRAVITATIONAL_WAVE_CHIRP",
+      "effect_id_hex": "0x0801",
+      "family": "NOVEL_PHYSICS",
+      "class_name": "LGPGravitationalWaveChirpEffect",
+      "registered_instance": "gravitationalWaveChirpInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPGravitationalWaveChirpEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPGravitationalWaveChirpEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_QUANTUM_ENTANGLEMENT",
+      "effect_id_hex": "0x0802",
+      "family": "NOVEL_PHYSICS",
+      "class_name": "LGPQuantumEntanglementEffect",
+      "registered_instance": "quantumEntanglementInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPQuantumEntanglementEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPQuantumEntanglementEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_MYCELIAL_NETWORK",
+      "effect_id_hex": "0x0803",
+      "family": "NOVEL_PHYSICS",
+      "class_name": "LGPMycelialNetworkEffect",
+      "registered_instance": "mycelialNetworkInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPMycelialNetworkEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPMycelialNetworkEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_RILEY_DISSONANCE",
+      "effect_id_hex": "0x0804",
+      "family": "NOVEL_PHYSICS",
+      "class_name": "LGPRileyDissonanceEffect",
+      "registered_instance": "rileyDissonanceInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPRileyDissonanceEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPRileyDissonanceEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_CHROMATIC_LENS",
+      "effect_id_hex": "0x0900",
+      "family": "CHROMATIC",
+      "class_name": "LGPChromaticLensEffect",
+      "registered_instance": "chromaticLensInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPChromaticLensEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPChromaticLensEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_CHROMATIC_PULSE",
+      "effect_id_hex": "0x0901",
+      "family": "CHROMATIC",
+      "class_name": "LGPChromaticPulseEffect",
+      "registered_instance": "chromaticPulseInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPChromaticPulseEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPChromaticPulseEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_CHROMATIC_INTERFERENCE",
+      "effect_id_hex": "0x0902",
+      "family": "CHROMATIC",
+      "class_name": "ChromaticInterferenceEffect",
+      "registered_instance": "chromaticInterferenceInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/ChromaticInterferenceEffect.h",
+        "firmware/v2/src/effects/ieffect/ChromaticInterferenceEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_AUDIO_TEST",
+      "effect_id_hex": "0x0A00",
+      "family": "AUDIO_REACTIVE",
+      "class_name": "LGPAudioTestEffect",
+      "registered_instance": "audioTestInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPAudioTestEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPAudioTestEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_BEAT_PULSE",
+      "effect_id_hex": "0x0A01",
+      "family": "AUDIO_REACTIVE",
+      "class_name": "LGPBeatPulseEffect",
+      "registered_instance": "beatPulseInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPBeatPulseEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPBeatPulseEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_SPECTRUM_BARS",
+      "effect_id_hex": "0x0A02",
+      "family": "AUDIO_REACTIVE",
+      "class_name": "LGPSpectrumBarsEffect",
+      "registered_instance": "spectrumBarsInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPSpectrumBarsEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPSpectrumBarsEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_BASS_BREATH",
+      "effect_id_hex": "0x0A03",
+      "family": "AUDIO_REACTIVE",
+      "class_name": "LGPBassBreathEffect",
+      "registered_instance": "bassBreathInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPBassBreathEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPBassBreathEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_AUDIO_WAVEFORM",
+      "effect_id_hex": "0x0A04",
+      "family": "AUDIO_REACTIVE",
+      "class_name": "AudioWaveformEffect",
+      "registered_instance": "audioWaveformInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/AudioWaveformEffect.h",
+        "firmware/v2/src/effects/ieffect/AudioWaveformEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_AUDIO_BLOOM",
+      "effect_id_hex": "0x0A05",
+      "family": "AUDIO_REACTIVE",
+      "class_name": "AudioBloomEffect",
+      "registered_instance": "audioBloomInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/AudioBloomEffect.h",
+        "firmware/v2/src/effects/ieffect/AudioBloomEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_STAR_BURST_NARRATIVE",
+      "effect_id_hex": "0x0A06",
+      "family": "AUDIO_REACTIVE",
+      "class_name": "LGPStarBurstNarrativeEffect",
+      "registered_instance": "starBurstNarrativeInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPStarBurstNarrativeEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPStarBurstNarrativeEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_CHORD_GLOW",
+      "effect_id_hex": "0x0A07",
+      "family": "AUDIO_REACTIVE",
+      "class_name": "LGPChordGlowEffect",
+      "registered_instance": "chordGlowInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPChordGlowEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPChordGlowEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_WAVE_REACTIVE",
+      "effect_id_hex": "0x0A08",
+      "family": "AUDIO_REACTIVE",
+      "class_name": "WaveReactiveEffect",
+      "registered_instance": "waveReactiveInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/WaveReactiveEffect.h",
+        "firmware/v2/src/effects/ieffect/WaveReactiveEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_PERLIN_VEIL",
+      "effect_id_hex": "0x0B00",
+      "family": "PERLIN_REACTIVE",
+      "class_name": "LGPPerlinVeilEffect",
+      "registered_instance": "perlinVeilInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPPerlinVeilEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPPerlinVeilEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_PERLIN_SHOCKLINES",
+      "effect_id_hex": "0x0B01",
+      "family": "PERLIN_REACTIVE",
+      "class_name": "LGPPerlinShocklinesEffect",
+      "registered_instance": "perlinShocklinesInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPPerlinShocklinesEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPPerlinShocklinesEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_PERLIN_CAUSTICS",
+      "effect_id_hex": "0x0B02",
+      "family": "PERLIN_REACTIVE",
+      "class_name": "LGPPerlinCausticsEffect",
+      "registered_instance": "perlinCausticsInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPPerlinCausticsEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPPerlinCausticsEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_PERLIN_INTERFERENCE_WEAVE",
+      "effect_id_hex": "0x0B03",
+      "family": "PERLIN_REACTIVE",
+      "class_name": "LGPPerlinInterferenceWeaveEffect",
+      "registered_instance": "perlinInterferenceWeaveInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPPerlinInterferenceWeaveEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPPerlinInterferenceWeaveEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_PERLIN_VEIL_AMBIENT",
+      "effect_id_hex": "0x0C00",
+      "family": "PERLIN_AMBIENT",
+      "class_name": "LGPPerlinVeilAmbientEffect",
+      "registered_instance": "perlinVeilAmbientInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPPerlinVeilAmbientEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPPerlinVeilAmbientEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_PERLIN_SHOCKLINES_AMBIENT",
+      "effect_id_hex": "0x0C01",
+      "family": "PERLIN_AMBIENT",
+      "class_name": "LGPPerlinShocklinesAmbientEffect",
+      "registered_instance": "perlinShocklinesAmbientInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPPerlinShocklinesAmbientEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPPerlinShocklinesAmbientEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_PERLIN_CAUSTICS_AMBIENT",
+      "effect_id_hex": "0x0C02",
+      "family": "PERLIN_AMBIENT",
+      "class_name": "LGPPerlinCausticsAmbientEffect",
+      "registered_instance": "perlinCausticsAmbientInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPPerlinCausticsAmbientEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPPerlinCausticsAmbientEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_PERLIN_INTERFERENCE_WEAVE_AMBIENT",
+      "effect_id_hex": "0x0C03",
+      "family": "PERLIN_AMBIENT",
+      "class_name": "LGPPerlinInterferenceWeaveAmbientEffect",
+      "registered_instance": "perlinInterferenceWeaveAmbientInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPPerlinInterferenceWeaveAmbientEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPPerlinInterferenceWeaveAmbientEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_PERLIN_BACKEND_FAST_LED",
+      "effect_id_hex": "0x0D00",
+      "family": "PERLIN_TEST",
+      "class_name": "LGPPerlinBackendFastLEDEffect",
+      "registered_instance": "perlinBackendFastLEDInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPPerlinBackendFastLEDEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPPerlinBackendFastLEDEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_PERLIN_BACKEND_EMOTISCOPE_FULL",
+      "effect_id_hex": "0x0D01",
+      "family": "PERLIN_TEST",
+      "class_name": "LGPPerlinBackendEmotiscopeFullEffect",
+      "registered_instance": "perlinBackendEmotiscopeFullInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPPerlinBackendEmotiscopeFullEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPPerlinBackendEmotiscopeFullEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_PERLIN_BACKEND_EMOTISCOPE_QUARTER",
+      "effect_id_hex": "0x0D02",
+      "family": "PERLIN_TEST",
+      "class_name": "LGPPerlinBackendEmotiscopeQuarterEffect",
+      "registered_instance": "perlinBackendEmotiscopeQuarterInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPPerlinBackendEmotiscopeQuarterEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPPerlinBackendEmotiscopeQuarterEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_BPM_ENHANCED",
+      "effect_id_hex": "0x0E00",
+      "family": "ENHANCED_AUDIO",
+      "class_name": "BPMEnhancedEffect",
+      "registered_instance": "bpmEnhancedInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/BPMEnhancedEffect.h",
+        "firmware/v2/src/effects/ieffect/BPMEnhancedEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_BREATHING_ENHANCED",
+      "effect_id_hex": "0x0E01",
+      "family": "ENHANCED_AUDIO",
+      "class_name": "BreathingEnhancedEffect",
+      "registered_instance": "breathingEnhancedInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/BreathingEnhancedEffect.h",
+        "firmware/v2/src/effects/ieffect/BreathingEnhancedEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_CHEVRON_WAVES_ENHANCED",
+      "effect_id_hex": "0x0E02",
+      "family": "ENHANCED_AUDIO",
+      "class_name": "ChevronWavesEnhancedEffect",
+      "registered_instance": "chevronWavesEnhancedInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/ChevronWavesEffectEnhanced.h",
+        "firmware/v2/src/effects/ieffect/ChevronWavesEffectEnhanced.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_INTERFERENCE_SCANNER_ENHANCED",
+      "effect_id_hex": "0x0E03",
+      "family": "ENHANCED_AUDIO",
+      "class_name": "LGPInterferenceScannerEnhancedEffect",
+      "registered_instance": "interferenceScannerEnhancedInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPInterferenceScannerEffectEnhanced.h",
+        "firmware/v2/src/effects/ieffect/LGPInterferenceScannerEffectEnhanced.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_PHOTONIC_CRYSTAL_ENHANCED",
+      "effect_id_hex": "0x0E04",
+      "family": "ENHANCED_AUDIO",
+      "class_name": "LGPPhotonicCrystalEnhancedEffect",
+      "registered_instance": "photonicCrystalEnhancedInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPPhotonicCrystalEffectEnhanced.h",
+        "firmware/v2/src/effects/ieffect/LGPPhotonicCrystalEffectEnhanced.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_SPECTRUM_DETAIL",
+      "effect_id_hex": "0x0E05",
+      "family": "ENHANCED_AUDIO",
+      "class_name": "LGPSpectrumDetailEffect",
+      "registered_instance": "spectrumDetailInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPSpectrumDetailEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPSpectrumDetailEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_SPECTRUM_DETAIL_ENHANCED",
+      "effect_id_hex": "0x0E06",
+      "family": "ENHANCED_AUDIO",
+      "class_name": "LGPSpectrumDetailEnhancedEffect",
+      "registered_instance": "spectrumDetailEnhancedInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPSpectrumDetailEnhancedEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPSpectrumDetailEnhancedEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_STAR_BURST_ENHANCED",
+      "effect_id_hex": "0x0E07",
+      "family": "ENHANCED_AUDIO",
+      "class_name": "LGPStarBurstEnhancedEffect",
+      "registered_instance": "starBurstEnhancedInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPStarBurstEffectEnhanced.h",
+        "firmware/v2/src/effects/ieffect/LGPStarBurstEffectEnhanced.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_WAVE_COLLISION_ENHANCED",
+      "effect_id_hex": "0x0E08",
+      "family": "ENHANCED_AUDIO",
+      "class_name": "LGPWaveCollisionEnhancedEffect",
+      "registered_instance": "waveCollisionEnhancedInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPWaveCollisionEffectEnhanced.h",
+        "firmware/v2/src/effects/ieffect/LGPWaveCollisionEffectEnhanced.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_RIPPLE_ENHANCED",
+      "effect_id_hex": "0x0E09",
+      "family": "ENHANCED_AUDIO",
+      "class_name": "RippleEnhancedEffect",
+      "registered_instance": "rippleEnhancedInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/RippleEnhancedEffect.h",
+        "firmware/v2/src/effects/ieffect/RippleEnhancedEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_SNAPWAVE_LINEAR",
+      "effect_id_hex": "0x0E0A",
+      "family": "ENHANCED_AUDIO",
+      "class_name": "SnapwaveLinearEffect",
+      "registered_instance": "snapwaveLinearInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/SnapwaveLinearEffect.h",
+        "firmware/v2/src/effects/ieffect/SnapwaveLinearEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [
+        {
+          "name": "kMaxZones",
+          "canonical": "maxzones",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/SnapwaveLinearEffect.h",
+          "line": 57
+        }
+      ],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_TRINITY_TEST",
+      "effect_id_hex": "0x0F00",
+      "family": "DIAGNOSTIC",
+      "class_name": "TrinityTestEffect",
+      "registered_instance": "trinityTestInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/TrinityTestEffect.h",
+        "firmware/v2/src/effects/ieffect/TrinityTestEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_HOLOGRAPHIC_AUTO_CYCLE",
+      "effect_id_hex": "0x1000",
+      "family": "AUTO_CYCLE",
+      "class_name": "LGPHolographicAutoCycleEffect",
+      "registered_instance": "holographicAutoCycleInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPHolographicAutoCycleEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPHolographicAutoCycleEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_ES_ANALOG",
+      "effect_id_hex": "0x1100",
+      "family": "ES_REFERENCE",
+      "class_name": "EsAnalogRefEffect",
+      "registered_instance": "esAnalogRefInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/esv11_reference/EsAnalogRefEffect.h",
+        "firmware/v2/src/effects/ieffect/esv11_reference/EsAnalogRefEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [
+        {
+          "name": "kMaxZones",
+          "canonical": "maxzones",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/esv11_reference/EsAnalogRefEffect.h",
+          "line": 30
+        }
+      ],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_ES_SPECTRUM",
+      "effect_id_hex": "0x1101",
+      "family": "ES_REFERENCE",
+      "class_name": "EsSpectrumRefEffect",
+      "registered_instance": "esSpectrumRefInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/esv11_reference/EsSpectrumRefEffect.h",
+        "firmware/v2/src/effects/ieffect/esv11_reference/EsSpectrumRefEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "follower_attack_tau",
+        "follower_decay_tau"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "kFollowerAttackTau",
+          "canonical": "followerattacktau",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/esv11_reference/EsSpectrumRefEffect.h",
+          "line": 46,
+          "exposed": true,
+          "matched_parameters": [
+            "follower_attack_tau"
+          ]
+        },
+        {
+          "name": "kFollowerDecayTau",
+          "canonical": "followerdecaytau",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/esv11_reference/EsSpectrumRefEffect.h",
+          "line": 47,
+          "exposed": true,
+          "matched_parameters": [
+            "follower_decay_tau"
+          ]
+        }
+      ],
+      "excluded_named_constants": [
+        {
+          "name": "kBinCount",
+          "canonical": "bincount",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/esv11_reference/EsSpectrumRefEffect.h",
+          "line": 41
+        },
+        {
+          "name": "kMaxZones",
+          "canonical": "maxzones",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/esv11_reference/EsSpectrumRefEffect.h",
+          "line": 40
+        }
+      ],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_ES_OCTAVE",
+      "effect_id_hex": "0x1102",
+      "family": "ES_REFERENCE",
+      "class_name": "EsOctaveRefEffect",
+      "registered_instance": "esOctaveRefInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/esv11_reference/EsOctaveRefEffect.h",
+        "firmware/v2/src/effects/ieffect/esv11_reference/EsOctaveRefEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [
+        {
+          "name": "kMaxFollowerAttackTau",
+          "canonical": "maxfollowerattacktau",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/esv11_reference/EsOctaveRefEffect.h",
+          "line": 39
+        },
+        {
+          "name": "kMaxFollowerDecayTau",
+          "canonical": "maxfollowerdecaytau",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/esv11_reference/EsOctaveRefEffect.h",
+          "line": 40
+        },
+        {
+          "name": "kMaxZones",
+          "canonical": "maxzones",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/esv11_reference/EsOctaveRefEffect.h",
+          "line": 34
+        }
+      ],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_ES_BLOOM",
+      "effect_id_hex": "0x1103",
+      "family": "ES_REFERENCE",
+      "class_name": "EsBloomRefEffect",
+      "registered_instance": "esBloomRefInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/esv11_reference/EsBloomRefEffect.h",
+        "firmware/v2/src/effects/ieffect/esv11_reference/EsBloomRefEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "attack_tau",
+        "decay_tau"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "attack_tau",
+          "canonical": "attacktau",
+          "source": "api",
+          "file": null,
+          "line": null,
+          "exposed": true,
+          "matched_parameters": [
+            "attack_tau"
+          ]
+        },
+        {
+          "name": "decay_tau",
+          "canonical": "decaytau",
+          "source": "api",
+          "file": null,
+          "line": null,
+          "exposed": true,
+          "matched_parameters": [
+            "decay_tau"
+          ]
+        }
+      ],
+      "excluded_named_constants": [
+        {
+          "name": "kChromaBins",
+          "canonical": "chromabins",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/esv11_reference/EsBloomRefEffect.h",
+          "line": 46
+        },
+        {
+          "name": "kHalfLength",
+          "canonical": "halflength",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/esv11_reference/EsBloomRefEffect.h",
+          "line": 47
+        },
+        {
+          "name": "kMaxZones",
+          "canonical": "maxzones",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/esv11_reference/EsBloomRefEffect.h",
+          "line": 45
+        }
+      ],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_ES_WAVEFORM",
+      "effect_id_hex": "0x1104",
+      "family": "ES_REFERENCE",
+      "class_name": "EsWaveformRefEffect",
+      "registered_instance": "esWaveformRefInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/esv11_reference/EsWaveformRefEffect.h",
+        "firmware/v2/src/effects/ieffect/esv11_reference/EsWaveformRefEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [
+        {
+          "name": "kMaxZones",
+          "canonical": "maxzones",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/esv11_reference/EsWaveformRefEffect.h",
+          "line": 35
+        }
+      ],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_RIPPLE_ES_TUNED",
+      "effect_id_hex": "0x1200",
+      "family": "ES_TUNED",
+      "class_name": "RippleEsTunedEffect",
+      "registered_instance": "rippleEsTunedInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/RippleEsTunedEffect.h",
+        "firmware/v2/src/effects/ieffect/RippleEsTunedEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_HEARTBEAT_ES_TUNED",
+      "effect_id_hex": "0x1201",
+      "family": "ES_TUNED",
+      "class_name": "HeartbeatEsTunedEffect",
+      "registered_instance": "heartbeatEsTunedInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/HeartbeatEsTunedEffect.h",
+        "firmware/v2/src/effects/ieffect/HeartbeatEsTunedEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_HOLOGRAPHIC_ES_TUNED",
+      "effect_id_hex": "0x1202",
+      "family": "ES_TUNED",
+      "class_name": "LGPHolographicEsTunedEffect",
+      "registered_instance": "holographicEsTunedInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPHolographicEsTunedEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPHolographicEsTunedEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [
+        {
+          "name": "kTwoPi",
+          "canonical": "twopi",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/LGPHolographicEsTunedEffect.cpp",
+          "line": 20
+        }
+      ],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_SB_WAVEFORM310",
+      "effect_id_hex": "0x1300",
+      "family": "SB_REFERENCE",
+      "class_name": "SbWaveform310RefEffect",
+      "registered_instance": "sbWaveform310RefInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/sensorybridge_reference/SbWaveform310RefEffect.h",
+        "firmware/v2/src/effects/ieffect/sensorybridge_reference/SbWaveform310RefEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "colour_tau"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "colour_tau",
+          "canonical": "colourtau",
+          "source": "api",
+          "file": null,
+          "line": null,
+          "exposed": true,
+          "matched_parameters": [
+            "colour_tau"
+          ]
+        }
+      ],
+      "excluded_named_constants": [
+        {
+          "name": "kHalfLength",
+          "canonical": "halflength",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/sensorybridge_reference/SbWaveform310RefEffect.h",
+          "line": 49
+        },
+        {
+          "name": "kMaxZones",
+          "canonical": "maxzones",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/sensorybridge_reference/SbWaveform310RefEffect.h",
+          "line": 46
+        }
+      ],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_BEAT_PULSE_STACK",
+      "effect_id_hex": "0x1400",
+      "family": "BEAT_PULSE",
+      "class_name": "BeatPulseStackEffect",
+      "registered_instance": "beatPulseStackInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/BeatPulseStackEffect.h",
+        "firmware/v2/src/effects/ieffect/BeatPulseStackEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_BEAT_PULSE_SHOCKWAVE",
+      "effect_id_hex": "0x1401",
+      "family": "BEAT_PULSE",
+      "class_name": "BeatPulseShockwaveEffect",
+      "registered_instance": "beatPulseShockwaveInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/BeatPulseShockwaveEffect.h",
+        "firmware/v2/src/effects/ieffect/BeatPulseShockwaveEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_BEAT_PULSE_VOID",
+      "effect_id_hex": "0x1403",
+      "family": "BEAT_PULSE",
+      "class_name": "BeatPulseVoidEffect",
+      "registered_instance": "beatPulseVoidInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/BeatPulseVoidEffect.h",
+        "firmware/v2/src/effects/ieffect/BeatPulseVoidEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_BEAT_PULSE_RESONANT",
+      "effect_id_hex": "0x1404",
+      "family": "BEAT_PULSE",
+      "class_name": "BeatPulseResonantEffect",
+      "registered_instance": "beatPulseResonantInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/BeatPulseResonantEffect.h",
+        "firmware/v2/src/effects/ieffect/BeatPulseResonantEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_BEAT_PULSE_RIPPLE",
+      "effect_id_hex": "0x1405",
+      "family": "BEAT_PULSE",
+      "class_name": "BeatPulseRippleEffect",
+      "registered_instance": "beatPulseRippleInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/BeatPulseRippleEffect.h",
+        "firmware/v2/src/effects/ieffect/BeatPulseRippleEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_BEAT_PULSE_SHOCKWAVE_CASCADE",
+      "effect_id_hex": "0x1406",
+      "family": "BEAT_PULSE",
+      "class_name": "BeatPulseShockwaveCascadeEffect",
+      "registered_instance": "beatPulseShockwaveCascadeInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/BeatPulseShockwaveCascadeEffect.h",
+        "firmware/v2/src/effects/ieffect/BeatPulseShockwaveCascadeEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_BEAT_PULSE_SPECTRAL",
+      "effect_id_hex": "0x1407",
+      "family": "BEAT_PULSE",
+      "class_name": "BeatPulseSpectralEffect",
+      "registered_instance": "beatPulseSpectralInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/BeatPulseSpectralEffect.h",
+        "firmware/v2/src/effects/ieffect/BeatPulseSpectralEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_BEAT_PULSE_SPECTRAL_PULSE",
+      "effect_id_hex": "0x1408",
+      "family": "BEAT_PULSE",
+      "class_name": "BeatPulseSpectralPulseEffect",
+      "registered_instance": "beatPulseSpectralPulseInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/BeatPulseSpectralPulseEffect.h",
+        "firmware/v2/src/effects/ieffect/BeatPulseSpectralPulseEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_BEAT_PULSE_BREATHE",
+      "effect_id_hex": "0x1409",
+      "family": "BEAT_PULSE",
+      "class_name": "BeatPulseBreatheEffect",
+      "registered_instance": "beatPulseBreatheInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/BeatPulseBreatheEffect.h",
+        "firmware/v2/src/effects/ieffect/BeatPulseBreatheEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_BEAT_PULSE_LGP_INTERFERENCE",
+      "effect_id_hex": "0x140A",
+      "family": "BEAT_PULSE",
+      "class_name": "BeatPulseLGPInterferenceEffect",
+      "registered_instance": "beatPulseLGPInterferenceInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/BeatPulseLGPInterferenceEffect.h",
+        "firmware/v2/src/effects/ieffect/BeatPulseLGPInterferenceEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_BEAT_PULSE_BLOOM",
+      "effect_id_hex": "0x140B",
+      "family": "BEAT_PULSE",
+      "class_name": "BeatPulseBloomEffect",
+      "registered_instance": "beatPulseBloomInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/BeatPulseBloomEffect.h",
+        "firmware/v2/src/effects/ieffect/BeatPulseBloomEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_BLOOM_PARITY",
+      "effect_id_hex": "0x1500",
+      "family": "TRANSPORT",
+      "class_name": "BloomParityEffect",
+      "registered_instance": "bloomParityInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/BloomParityEffect.h",
+        "firmware/v2/src/effects/ieffect/BloomParityEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [
+        {
+          "name": "kBandMap",
+          "canonical": "bandmap",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/BloomParityEffect.cpp",
+          "line": 265
+        },
+        {
+          "name": "kChromaBins",
+          "canonical": "chromabins",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/BloomParityEffect.h",
+          "line": 75
+        },
+        {
+          "name": "kEdgeMinBrightness",
+          "canonical": "edgeminbrightness",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/BloomParityEffect.cpp",
+          "line": 518
+        },
+        {
+          "name": "kMaxLeds",
+          "canonical": "maxleds",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/BloomParityEffect.h",
+          "line": 74
+        },
+        {
+          "name": "kMaxZones",
+          "canonical": "maxzones",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/BloomParityEffect.h",
+          "line": 73
+        }
+      ],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_KURAMOTO_TRANSPORT",
+      "effect_id_hex": "0x1501",
+      "family": "TRANSPORT",
+      "class_name": "KuramotoTransportEffect",
+      "registered_instance": "kuramotoTransportInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/KuramotoTransportEffect.h",
+        "firmware/v2/src/effects/ieffect/KuramotoTransportEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "radius",
+        "sync_ratio"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "radius",
+          "canonical": "radius",
+          "source": "api",
+          "file": null,
+          "line": null,
+          "exposed": true,
+          "matched_parameters": [
+            "radius"
+          ]
+        },
+        {
+          "name": "sync_ratio",
+          "canonical": "syncratio",
+          "source": "api",
+          "file": null,
+          "line": null,
+          "exposed": true,
+          "matched_parameters": [
+            "sync_ratio"
+          ]
+        }
+      ],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_OPAL_FILM",
+      "effect_id_hex": "0x1600",
+      "family": "HOLOGRAPHIC_VAR",
+      "class_name": "WaveformParityEffect",
+      "registered_instance": "waveformParityInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/WaveformParityEffect.h",
+        "firmware/v2/src/effects/ieffect/WaveformParityEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [
+        {
+          "name": "kHalfLength",
+          "canonical": "halflength",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/WaveformParityEffect.h",
+          "line": 63
+        },
+        {
+          "name": "kHistoryFrames",
+          "canonical": "historyframes",
+          "reason": "state-only",
+          "file": "firmware/v2/src/effects/ieffect/WaveformParityEffect.h",
+          "line": 62
+        },
+        {
+          "name": "kMaxZones",
+          "canonical": "maxzones",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/WaveformParityEffect.h",
+          "line": 60
+        },
+        {
+          "name": "kWaveformPoints",
+          "canonical": "waveformpoints",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/WaveformParityEffect.h",
+          "line": 61
+        }
+      ],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_GRATING_SCAN",
+      "effect_id_hex": "0x1601",
+      "family": "HOLOGRAPHIC_VAR",
+      "class_name": "LGPOpalFilmEffect",
+      "registered_instance": "opalFilmInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPOpalFilmEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPOpalFilmEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "b",
+        "g",
+        "r"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "b",
+          "canonical": "b",
+          "source": "api",
+          "file": null,
+          "line": null,
+          "exposed": true,
+          "matched_parameters": [
+            "b"
+          ]
+        },
+        {
+          "name": "g",
+          "canonical": "g",
+          "source": "api",
+          "file": null,
+          "line": null,
+          "exposed": true,
+          "matched_parameters": [
+            "g"
+          ]
+        },
+        {
+          "name": "r",
+          "canonical": "r",
+          "source": "api",
+          "file": null,
+          "line": null,
+          "exposed": true,
+          "matched_parameters": [
+            "r"
+          ]
+        }
+      ],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_STRESS_GLASS",
+      "effect_id_hex": "0x1602",
+      "family": "HOLOGRAPHIC_VAR",
+      "class_name": "LGPGratingScanEffect",
+      "registered_instance": "gratingScanInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPGratingScanEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPGratingScanEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_MOIRE_SILK",
+      "effect_id_hex": "0x1603",
+      "family": "HOLOGRAPHIC_VAR",
+      "class_name": "LGPStressGlassEffect",
+      "registered_instance": "stressGlassInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPStressGlassEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPStressGlassEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_CAUSTIC_SHARDS",
+      "effect_id_hex": "0x1604",
+      "family": "HOLOGRAPHIC_VAR",
+      "class_name": "LGPMoireSilkEffect",
+      "registered_instance": "moireSilkInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPMoireSilkEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPMoireSilkEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_PARALLAX_DEPTH",
+      "effect_id_hex": "0x1605",
+      "family": "HOLOGRAPHIC_VAR",
+      "class_name": "LGPCausticShardsEffect",
+      "registered_instance": "causticShardsInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPCausticShardsEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPCausticShardsEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_STRESS_GLASS_MELT",
+      "effect_id_hex": "0x1606",
+      "family": "HOLOGRAPHIC_VAR",
+      "class_name": "LGPParallaxDepthEffect",
+      "registered_instance": "parallaxDepthInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPParallaxDepthEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPParallaxDepthEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_GRATING_SCAN_BREAKUP",
+      "effect_id_hex": "0x1607",
+      "family": "HOLOGRAPHIC_VAR",
+      "class_name": "LGPStressGlassMeltEffect",
+      "registered_instance": "stressGlassMeltInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPStressGlassMeltEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPStressGlassMeltEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_WATER_CAUSTICS",
+      "effect_id_hex": "0x1608",
+      "family": "HOLOGRAPHIC_VAR",
+      "class_name": "LGPGratingScanBreakupEffect",
+      "registered_instance": "gratingScanBreakupInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPGratingScanBreakupEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPGratingScanBreakupEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_SCHLIEREN_FLOW",
+      "effect_id_hex": "0x1609",
+      "family": "HOLOGRAPHIC_VAR",
+      "class_name": "LGPWaterCausticsEffect",
+      "registered_instance": "waterCausticsInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPWaterCausticsEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPWaterCausticsEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_REACTION_DIFFUSION",
+      "effect_id_hex": "0x1700",
+      "family": "REACTION_DIFFUSION",
+      "class_name": "LGPSchlierenFlowEffect",
+      "registered_instance": "schlierenFlowInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPSchlierenFlowEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPSchlierenFlowEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_REACTION_DIFFUSION_TRIANGLE",
+      "effect_id_hex": "0x1701",
+      "family": "REACTION_DIFFUSION",
+      "class_name": "LGPReactionDiffusionEffect",
+      "registered_instance": "reactionDiffusionInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPReactionDiffusionEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPReactionDiffusionEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_TALBOT_CARPET",
+      "effect_id_hex": "0x1800",
+      "family": "SHAPE_BANGERS",
+      "class_name": "LGPReactionDiffusionTriangleEffect",
+      "registered_instance": "reactionDiffusionTriangleInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPReactionDiffusionTriangleEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPReactionDiffusionTriangleEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "melt"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "melt",
+          "canonical": "melt",
+          "source": "api",
+          "file": null,
+          "line": null,
+          "exposed": true,
+          "matched_parameters": [
+            "melt"
+          ]
+        }
+      ],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_AIRY_COMET",
+      "effect_id_hex": "0x1801",
+      "family": "SHAPE_BANGERS",
+      "class_name": "LGPTalbotCarpetEffect",
+      "registered_instance": "talbotCarpetInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.h",
+        "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_MOIRE_CATHEDRAL",
+      "effect_id_hex": "0x1802",
+      "family": "SHAPE_BANGERS",
+      "class_name": "LGPAiryCometEffect",
+      "registered_instance": "airyCometInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.h",
+        "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_SUPERFORMULA_GLYPH",
+      "effect_id_hex": "0x1803",
+      "family": "SHAPE_BANGERS",
+      "class_name": "LGPMoireCathedralEffect",
+      "registered_instance": "moireCathedralInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.h",
+        "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_SPIROGRAPH_CROWN",
+      "effect_id_hex": "0x1804",
+      "family": "SHAPE_BANGERS",
+      "class_name": "LGPSuperformulaGlyphEffect",
+      "registered_instance": "superformulaGlyphInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.h",
+        "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_ROSE_BLOOM",
+      "effect_id_hex": "0x1805",
+      "family": "SHAPE_BANGERS",
+      "class_name": "LGPSpirographCrownEffect",
+      "registered_instance": "spirographCrownInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.h",
+        "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_HARMONOGRAPH_HALO",
+      "effect_id_hex": "0x1806",
+      "family": "SHAPE_BANGERS",
+      "class_name": "LGPRoseBloomEffect",
+      "registered_instance": "roseBloomInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.h",
+        "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_RULE30_CATHEDRAL",
+      "effect_id_hex": "0x1807",
+      "family": "SHAPE_BANGERS",
+      "class_name": "LGPHarmonographHaloEffect",
+      "registered_instance": "harmonographHaloInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.h",
+        "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_LANGTON_HIGHWAY",
+      "effect_id_hex": "0x1808",
+      "family": "SHAPE_BANGERS",
+      "class_name": "LGPRule30CathedralEffect",
+      "registered_instance": "rule30CathedralInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.h",
+        "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_CYMATIC_LADDER",
+      "effect_id_hex": "0x1809",
+      "family": "SHAPE_BANGERS",
+      "class_name": "LGPLangtonHighwayEffect",
+      "registered_instance": "langtonHighwayInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.h",
+        "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_MACH_DIAMONDS",
+      "effect_id_hex": "0x180A",
+      "family": "SHAPE_BANGERS",
+      "class_name": "LGPCymaticLadderEffect",
+      "registered_instance": "cymaticLadderInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.h",
+        "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_CHIMERA_CROWN",
+      "effect_id_hex": "0x1900",
+      "family": "HOLY_SHIT_BANGERS",
+      "class_name": "LGPMachDiamondsEffect",
+      "registered_instance": "machDiamondsInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.h",
+        "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_CATASTROPHE_CAUSTICS",
+      "effect_id_hex": "0x1901",
+      "family": "HOLY_SHIT_BANGERS",
+      "class_name": "LGPChimeraCrownEffect",
+      "registered_instance": "chimeraCrownInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPHolyShitBangersPack.h",
+        "firmware/v2/src/effects/ieffect/LGPHolyShitBangersPack.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_HYPERBOLIC_PORTAL",
+      "effect_id_hex": "0x1902",
+      "family": "HOLY_SHIT_BANGERS",
+      "class_name": "LGPCatastropheCausticsEffect",
+      "registered_instance": "catastropheCausticsInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPHolyShitBangersPack.h",
+        "firmware/v2/src/effects/ieffect/LGPHolyShitBangersPack.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_LORENZ_RIBBON",
+      "effect_id_hex": "0x1903",
+      "family": "HOLY_SHIT_BANGERS",
+      "class_name": "LGPHyperbolicPortalEffect",
+      "registered_instance": "hyperbolicPortalInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPHolyShitBangersPack.h",
+        "firmware/v2/src/effects/ieffect/LGPHolyShitBangersPack.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_IFS_BIO_RELIC",
+      "effect_id_hex": "0x1904",
+      "family": "HOLY_SHIT_BANGERS",
+      "class_name": "LGPLorenzRibbonEffect",
+      "registered_instance": "lorenzRibbonInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPHolyShitBangersPack.h",
+        "firmware/v2/src/effects/ieffect/LGPHolyShitBangersPack.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_FLUX_RIFT",
+      "effect_id_hex": "0x1A00",
+      "family": "EXPERIMENTAL_AUDIO",
+      "class_name": "LGPIFSBioRelicEffect",
+      "registered_instance": "ifsBioRelicInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPHolyShitBangersPack.h",
+        "firmware/v2/src/effects/ieffect/LGPHolyShitBangersPack.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_BEAT_PRISM",
+      "effect_id_hex": "0x1A01",
+      "family": "EXPERIMENTAL_AUDIO",
+      "class_name": "LGPFluxRiftEffect",
+      "registered_instance": "fluxRiftInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.h",
+        "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_HARMONIC_TIDE",
+      "effect_id_hex": "0x1A02",
+      "family": "EXPERIMENTAL_AUDIO",
+      "class_name": "LGPBeatPrismEffect",
+      "registered_instance": "beatPrismInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.h",
+        "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_BASS_QUAKE",
+      "effect_id_hex": "0x1A03",
+      "family": "EXPERIMENTAL_AUDIO",
+      "class_name": "LGPHarmonicTideEffect",
+      "registered_instance": "harmonicTideInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.h",
+        "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_TREBLE_NET",
+      "effect_id_hex": "0x1A04",
+      "family": "EXPERIMENTAL_AUDIO",
+      "class_name": "LGPBassQuakeEffect",
+      "registered_instance": "bassQuakeInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.h",
+        "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_RHYTHMIC_GATE",
+      "effect_id_hex": "0x1A05",
+      "family": "EXPERIMENTAL_AUDIO",
+      "class_name": "LGPTrebleNetEffect",
+      "registered_instance": "trebleNetInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.h",
+        "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_SPECTRAL_KNOT",
+      "effect_id_hex": "0x1A06",
+      "family": "EXPERIMENTAL_AUDIO",
+      "class_name": "LGPRhythmicGateEffect",
+      "registered_instance": "rhythmicGateInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.h",
+        "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_SALIENCY_BLOOM",
+      "effect_id_hex": "0x1A07",
+      "family": "EXPERIMENTAL_AUDIO",
+      "class_name": "LGPSpectralKnotEffect",
+      "registered_instance": "spectralKnotInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.h",
+        "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_TRANSIENT_LATTICE",
+      "effect_id_hex": "0x1A08",
+      "family": "EXPERIMENTAL_AUDIO",
+      "class_name": "LGPSaliencyBloomEffect",
+      "registered_instance": "saliencyBloomInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.h",
+        "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_WAVELET_MIRROR",
+      "effect_id_hex": "0x1A09",
+      "family": "EXPERIMENTAL_AUDIO",
+      "class_name": "LGPTransientLatticeEffect",
+      "registered_instance": "transientLatticeInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.h",
+        "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_TIME_REVERSAL_MIRROR",
+      "effect_id_hex": "0x1B00",
+      "family": "SHOWPIECE_PACK3",
+      "class_name": "LGPTimeReversalMirrorEffect",
+      "registered_instance": "timeReversalMirrorInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "csq",
+        "damping",
+        "forward_sec",
+        "impulse_every",
+        "reverse_sec"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "kCsq",
+          "canonical": "csq",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect.h",
+          "line": 69,
+          "exposed": true,
+          "matched_parameters": [
+            "csq"
+          ]
+        },
+        {
+          "name": "kDamping",
+          "canonical": "damping",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect.h",
+          "line": 70,
+          "exposed": true,
+          "matched_parameters": [
+            "damping"
+          ]
+        },
+        {
+          "name": "kForwardSec",
+          "canonical": "forwardsec",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect.h",
+          "line": 72,
+          "exposed": true,
+          "matched_parameters": [
+            "forward_sec"
+          ]
+        },
+        {
+          "name": "kImpulseEvery",
+          "canonical": "impulseevery",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect.h",
+          "line": 71,
+          "exposed": true,
+          "matched_parameters": [
+            "impulse_every"
+          ]
+        },
+        {
+          "name": "kReverseSec",
+          "canonical": "reversesec",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect.h",
+          "line": 73,
+          "exposed": true,
+          "matched_parameters": [
+            "reverse_sec"
+          ]
+        }
+      ],
+      "excluded_named_constants": [
+        {
+          "name": "kFieldSize",
+          "canonical": "fieldsize",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect.h",
+          "line": 67
+        },
+        {
+          "name": "kHistoryDepth",
+          "canonical": "historydepth",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect.h",
+          "line": 68
+        }
+      ],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_KDV_SOLITON_PAIR",
+      "effect_id_hex": "0x1B01",
+      "family": "SHOWPIECE_PACK3",
+      "class_name": "LGPKdVSolitonPairEffect",
+      "registered_instance": "kdvSolitonPairInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPKdVSolitonPairEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPKdVSolitonPairEffect.cpp"
+      ],
+      "exposed_parameters": [
+        "a1",
+        "a2",
+        "base_vel1",
+        "base_vel2",
+        "spark_gain",
+        "spark_hue_shift",
+        "stage0_dur",
+        "stage1_dur",
+        "stage2_dur",
+        "strip2_bright",
+        "strip2_hue_shift",
+        "width1",
+        "width2"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "a1",
+          "canonical": "a1",
+          "source": "api",
+          "file": null,
+          "line": null,
+          "exposed": true,
+          "matched_parameters": [
+            "a1"
+          ]
+        },
+        {
+          "name": "a2",
+          "canonical": "a2",
+          "source": "api",
+          "file": null,
+          "line": null,
+          "exposed": true,
+          "matched_parameters": [
+            "a2"
+          ]
+        },
+        {
+          "name": "base_vel1",
+          "canonical": "basevel1",
+          "source": "api",
+          "file": null,
+          "line": null,
+          "exposed": true,
+          "matched_parameters": [
+            "base_vel1"
+          ]
+        },
+        {
+          "name": "base_vel2",
+          "canonical": "basevel2",
+          "source": "api",
+          "file": null,
+          "line": null,
+          "exposed": true,
+          "matched_parameters": [
+            "base_vel2"
+          ]
+        },
+        {
+          "name": "spark_gain",
+          "canonical": "sparkgain",
+          "source": "api",
+          "file": null,
+          "line": null,
+          "exposed": true,
+          "matched_parameters": [
+            "spark_gain"
+          ]
+        },
+        {
+          "name": "spark_hue_shift",
+          "canonical": "sparkhueshift",
+          "source": "api",
+          "file": null,
+          "line": null,
+          "exposed": true,
+          "matched_parameters": [
+            "spark_hue_shift"
+          ]
+        },
+        {
+          "name": "stage0_dur",
+          "canonical": "stage0dur",
+          "source": "api",
+          "file": null,
+          "line": null,
+          "exposed": true,
+          "matched_parameters": [
+            "stage0_dur"
+          ]
+        },
+        {
+          "name": "stage1_dur",
+          "canonical": "stage1dur",
+          "source": "api",
+          "file": null,
+          "line": null,
+          "exposed": true,
+          "matched_parameters": [
+            "stage1_dur"
+          ]
+        },
+        {
+          "name": "stage2_dur",
+          "canonical": "stage2dur",
+          "source": "api",
+          "file": null,
+          "line": null,
+          "exposed": true,
+          "matched_parameters": [
+            "stage2_dur"
+          ]
+        },
+        {
+          "name": "strip2_bright",
+          "canonical": "strip2bright",
+          "source": "api",
+          "file": null,
+          "line": null,
+          "exposed": true,
+          "matched_parameters": [
+            "strip2_bright"
+          ]
+        },
+        {
+          "name": "strip2_hue_shift",
+          "canonical": "strip2hueshift",
+          "source": "api",
+          "file": null,
+          "line": null,
+          "exposed": true,
+          "matched_parameters": [
+            "strip2_hue_shift"
+          ]
+        },
+        {
+          "name": "width1",
+          "canonical": "width1",
+          "source": "api",
+          "file": null,
+          "line": null,
+          "exposed": true,
+          "matched_parameters": [
+            "width1"
+          ]
+        },
+        {
+          "name": "width2",
+          "canonical": "width2",
+          "source": "api",
+          "file": null,
+          "line": null,
+          "exposed": true,
+          "matched_parameters": [
+            "width2"
+          ]
+        }
+      ],
+      "excluded_named_constants": [
+        {
+          "name": "kMaxDist",
+          "canonical": "maxdist",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/LGPKdVSolitonPairEffect.cpp",
+          "line": 64
+        }
+      ],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_GOLD_CODE_SPECKLE",
+      "effect_id_hex": "0x1B02",
+      "family": "SHOWPIECE_PACK3",
+      "class_name": "LGPGoldCodeSpeckleEffect",
+      "registered_instance": "goldCodeSpeckleInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPGoldCodeSpeckleEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPGoldCodeSpeckleEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_QUASICRYSTAL_LATTICE",
+      "effect_id_hex": "0x1B03",
+      "family": "SHOWPIECE_PACK3",
+      "class_name": "LGPQuasicrystalLatticeEffect",
+      "registered_instance": "quasicrystalLatticeInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPQuasicrystalLatticeEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPQuasicrystalLatticeEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_FRESNEL_CAUSTIC_SWEEP",
+      "effect_id_hex": "0x1B04",
+      "family": "SHOWPIECE_PACK3",
+      "class_name": "LGPFresnelCausticSweepEffect",
+      "registered_instance": "fresnelCausticSweepInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPFresnelCausticSweepEffect.h",
+        "firmware/v2/src/effects/ieffect/LGPFresnelCausticSweepEffect.cpp"
+      ],
+      "exposed_parameters": [],
+      "discovered_named_tunables": [],
+      "excluded_named_constants": [
+        {
+          "name": "kTwoPi",
+          "canonical": "twopi",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/LGPFresnelCausticSweepEffect.cpp",
+          "line": 26
+        }
+      ],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_TIME_REVERSAL_MIRROR_AR",
+      "effect_id_hex": "0x1B05",
+      "family": "SHOWPIECE_PACK3",
+      "class_name": "LGPTimeReversalMirrorEffect_AR",
+      "registered_instance": "timeReversalMirrorARInstance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_AR.h",
+        "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_AR.cpp"
+      ],
+      "exposed_parameters": [
+        "base_damping",
+        "base_impulse_every",
+        "csq",
+        "forward_sec",
+        "reverse_sec"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "kBaseDamping",
+          "canonical": "basedamping",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_AR.h",
+          "line": 66,
+          "exposed": true,
+          "matched_parameters": [
+            "base_damping"
+          ]
+        },
+        {
+          "name": "kBaseImpulseEvery",
+          "canonical": "baseimpulseevery",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_AR.h",
+          "line": 67,
+          "exposed": true,
+          "matched_parameters": [
+            "base_impulse_every"
+          ]
+        },
+        {
+          "name": "kCsq",
+          "canonical": "csq",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_AR.h",
+          "line": 65,
+          "exposed": true,
+          "matched_parameters": [
+            "csq"
+          ]
+        },
+        {
+          "name": "kForwardSec",
+          "canonical": "forwardsec",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_AR.h",
+          "line": 68,
+          "exposed": true,
+          "matched_parameters": [
+            "forward_sec"
+          ]
+        },
+        {
+          "name": "kReverseSec",
+          "canonical": "reversesec",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_AR.h",
+          "line": 69,
+          "exposed": true,
+          "matched_parameters": [
+            "reverse_sec"
+          ]
+        }
+      ],
+      "excluded_named_constants": [
+        {
+          "name": "kFieldSize",
+          "canonical": "fieldsize",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_AR.h",
+          "line": 63
+        },
+        {
+          "name": "kHistoryDepth",
+          "canonical": "historydepth",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_AR.h",
+          "line": 64
+        },
+        {
+          "name": "kMinReverseCooldownSec",
+          "canonical": "minreversecooldownsec",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_AR.h",
+          "line": 78
+        }
+      ],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_TIME_REVERSAL_MIRROR_MOD1",
+      "effect_id_hex": "0x1B06",
+      "family": "SHOWPIECE_PACK3",
+      "class_name": "LGPTimeReversalMirrorEffect_Mod1",
+      "registered_instance": "timeReversalMirrorMod1Instance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod1.h",
+        "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod1.cpp"
+      ],
+      "exposed_parameters": [
+        "csq",
+        "damping",
+        "edge_absorb",
+        "forward_sec",
+        "impulse_every",
+        "intro_drive",
+        "intro_sec",
+        "normalise_follow_hz",
+        "peak_gamma",
+        "reverse_sec"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "kCsq",
+          "canonical": "csq",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod1.h",
+          "line": 57,
+          "exposed": true,
+          "matched_parameters": [
+            "csq"
+          ]
+        },
+        {
+          "name": "kDamping",
+          "canonical": "damping",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod1.h",
+          "line": 58,
+          "exposed": true,
+          "matched_parameters": [
+            "damping"
+          ]
+        },
+        {
+          "name": "kEdgeAbsorb",
+          "canonical": "edgeabsorb",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod1.h",
+          "line": 59,
+          "exposed": true,
+          "matched_parameters": [
+            "edge_absorb"
+          ]
+        },
+        {
+          "name": "kForwardSec",
+          "canonical": "forwardsec",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod1.h",
+          "line": 61,
+          "exposed": true,
+          "matched_parameters": [
+            "forward_sec"
+          ]
+        },
+        {
+          "name": "kImpulseEvery",
+          "canonical": "impulseevery",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod1.h",
+          "line": 60,
+          "exposed": true,
+          "matched_parameters": [
+            "impulse_every"
+          ]
+        },
+        {
+          "name": "kIntroDrive",
+          "canonical": "introdrive",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod1.h",
+          "line": 65,
+          "exposed": true,
+          "matched_parameters": [
+            "intro_drive"
+          ]
+        },
+        {
+          "name": "kIntroSec",
+          "canonical": "introsec",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod1.h",
+          "line": 64,
+          "exposed": true,
+          "matched_parameters": [
+            "intro_sec"
+          ]
+        },
+        {
+          "name": "kNormaliseFollowHz",
+          "canonical": "normalisefollowhz",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod1.h",
+          "line": 67,
+          "exposed": true,
+          "matched_parameters": [
+            "normalise_follow_hz"
+          ]
+        },
+        {
+          "name": "kPeakGamma",
+          "canonical": "peakgamma",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod1.h",
+          "line": 68,
+          "exposed": true,
+          "matched_parameters": [
+            "peak_gamma"
+          ]
+        },
+        {
+          "name": "kReverseSec",
+          "canonical": "reversesec",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod1.h",
+          "line": 62,
+          "exposed": true,
+          "matched_parameters": [
+            "reverse_sec"
+          ]
+        }
+      ],
+      "excluded_named_constants": [
+        {
+          "name": "kBeatImpulseCooldownFrames",
+          "canonical": "beatimpulsecooldownframes",
+          "reason": "state-only",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod1.h",
+          "line": 66
+        },
+        {
+          "name": "kFieldSize",
+          "canonical": "fieldsize",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod1.h",
+          "line": 55
+        },
+        {
+          "name": "kHistoryDepth",
+          "canonical": "historydepth",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod1.h",
+          "line": 56
+        }
+      ],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_TIME_REVERSAL_MIRROR_MOD2",
+      "effect_id_hex": "0x1B07",
+      "family": "SHOWPIECE_PACK3",
+      "class_name": "LGPTimeReversalMirrorEffect_Mod2",
+      "registered_instance": "timeReversalMirrorMod2Instance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod2.h",
+        "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod2.cpp"
+      ],
+      "exposed_parameters": [
+        "beat_release_sec",
+        "csq",
+        "damping",
+        "edge_absorb",
+        "forward_sec",
+        "impulse_every",
+        "intro_drive",
+        "intro_sec",
+        "normalise_follow_hz",
+        "peak_gamma",
+        "reverse_sec"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "kBeatReleaseSec",
+          "canonical": "beatreleasesec",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod2.h",
+          "line": 67,
+          "exposed": true,
+          "matched_parameters": [
+            "beat_release_sec"
+          ]
+        },
+        {
+          "name": "kCsq",
+          "canonical": "csq",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod2.h",
+          "line": 57,
+          "exposed": true,
+          "matched_parameters": [
+            "csq"
+          ]
+        },
+        {
+          "name": "kDamping",
+          "canonical": "damping",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod2.h",
+          "line": 58,
+          "exposed": true,
+          "matched_parameters": [
+            "damping"
+          ]
+        },
+        {
+          "name": "kEdgeAbsorb",
+          "canonical": "edgeabsorb",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod2.h",
+          "line": 59,
+          "exposed": true,
+          "matched_parameters": [
+            "edge_absorb"
+          ]
+        },
+        {
+          "name": "kForwardSec",
+          "canonical": "forwardsec",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod2.h",
+          "line": 61,
+          "exposed": true,
+          "matched_parameters": [
+            "forward_sec"
+          ]
+        },
+        {
+          "name": "kImpulseEvery",
+          "canonical": "impulseevery",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod2.h",
+          "line": 60,
+          "exposed": true,
+          "matched_parameters": [
+            "impulse_every"
+          ]
+        },
+        {
+          "name": "kIntroDrive",
+          "canonical": "introdrive",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod2.h",
+          "line": 65,
+          "exposed": true,
+          "matched_parameters": [
+            "intro_drive"
+          ]
+        },
+        {
+          "name": "kIntroSec",
+          "canonical": "introsec",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod2.h",
+          "line": 64,
+          "exposed": true,
+          "matched_parameters": [
+            "intro_sec"
+          ]
+        },
+        {
+          "name": "kNormaliseFollowHz",
+          "canonical": "normalisefollowhz",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod2.h",
+          "line": 68,
+          "exposed": true,
+          "matched_parameters": [
+            "normalise_follow_hz"
+          ]
+        },
+        {
+          "name": "kPeakGamma",
+          "canonical": "peakgamma",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod2.h",
+          "line": 69,
+          "exposed": true,
+          "matched_parameters": [
+            "peak_gamma"
+          ]
+        },
+        {
+          "name": "kReverseSec",
+          "canonical": "reversesec",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod2.h",
+          "line": 62,
+          "exposed": true,
+          "matched_parameters": [
+            "reverse_sec"
+          ]
+        }
+      ],
+      "excluded_named_constants": [
+        {
+          "name": "kBeatImpulseCooldownFrames",
+          "canonical": "beatimpulsecooldownframes",
+          "reason": "state-only",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod2.h",
+          "line": 66
+        },
+        {
+          "name": "kFieldSize",
+          "canonical": "fieldsize",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod2.h",
+          "line": 55
+        },
+        {
+          "name": "kHistoryDepth",
+          "canonical": "historydepth",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod2.h",
+          "line": 56
+        }
+      ],
+      "missing_tunable_count": 0
+    },
+    {
+      "effect_id": "EID_LGP_TIME_REVERSAL_MIRROR_MOD3",
+      "effect_id_hex": "0x1B08",
+      "family": "SHOWPIECE_PACK3",
+      "class_name": "LGPTimeReversalMirrorEffect_Mod3",
+      "registered_instance": "timeReversalMirrorMod3Instance",
+      "source_files": [
+        "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod3.h",
+        "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod3.cpp"
+      ],
+      "exposed_parameters": [
+        "beat_release_sec",
+        "csq",
+        "damping",
+        "edge_absorb",
+        "forward_sec",
+        "impulse_every",
+        "intro_drive",
+        "intro_sec",
+        "normalise_follow_hz",
+        "peak_gamma",
+        "reverse_sec",
+        "ridge_attack_hz",
+        "ridge_blend",
+        "ridge_floor",
+        "ridge_release_hz",
+        "ridge_sensitivity"
+      ],
+      "discovered_named_tunables": [
+        {
+          "name": "kBeatReleaseSec",
+          "canonical": "beatreleasesec",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod3.h",
+          "line": 67,
+          "exposed": true,
+          "matched_parameters": [
+            "beat_release_sec"
+          ]
+        },
+        {
+          "name": "kCsq",
+          "canonical": "csq",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod3.h",
+          "line": 57,
+          "exposed": true,
+          "matched_parameters": [
+            "csq"
+          ]
+        },
+        {
+          "name": "kDamping",
+          "canonical": "damping",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod3.h",
+          "line": 58,
+          "exposed": true,
+          "matched_parameters": [
+            "damping"
+          ]
+        },
+        {
+          "name": "kEdgeAbsorb",
+          "canonical": "edgeabsorb",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod3.h",
+          "line": 59,
+          "exposed": true,
+          "matched_parameters": [
+            "edge_absorb"
+          ]
+        },
+        {
+          "name": "kForwardSec",
+          "canonical": "forwardsec",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod3.h",
+          "line": 61,
+          "exposed": true,
+          "matched_parameters": [
+            "forward_sec"
+          ]
+        },
+        {
+          "name": "kImpulseEvery",
+          "canonical": "impulseevery",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod3.h",
+          "line": 60,
+          "exposed": true,
+          "matched_parameters": [
+            "impulse_every"
+          ]
+        },
+        {
+          "name": "kIntroDrive",
+          "canonical": "introdrive",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod3.h",
+          "line": 65,
+          "exposed": true,
+          "matched_parameters": [
+            "intro_drive"
+          ]
+        },
+        {
+          "name": "kIntroSec",
+          "canonical": "introsec",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod3.h",
+          "line": 64,
+          "exposed": true,
+          "matched_parameters": [
+            "intro_sec"
+          ]
+        },
+        {
+          "name": "kNormaliseFollowHz",
+          "canonical": "normalisefollowhz",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod3.h",
+          "line": 68,
+          "exposed": true,
+          "matched_parameters": [
+            "normalise_follow_hz"
+          ]
+        },
+        {
+          "name": "kPeakGamma",
+          "canonical": "peakgamma",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod3.h",
+          "line": 69,
+          "exposed": true,
+          "matched_parameters": [
+            "peak_gamma"
+          ]
+        },
+        {
+          "name": "kReverseSec",
+          "canonical": "reversesec",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod3.h",
+          "line": 62,
+          "exposed": true,
+          "matched_parameters": [
+            "reverse_sec"
+          ]
+        },
+        {
+          "name": "kRidgeAttackHz",
+          "canonical": "ridgeattackhz",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod3.h",
+          "line": 70,
+          "exposed": true,
+          "matched_parameters": [
+            "ridge_attack_hz"
+          ]
+        },
+        {
+          "name": "kRidgeBlend",
+          "canonical": "ridgeblend",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod3.h",
+          "line": 73,
+          "exposed": true,
+          "matched_parameters": [
+            "ridge_blend"
+          ]
+        },
+        {
+          "name": "kRidgeFloor",
+          "canonical": "ridgefloor",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod3.h",
+          "line": 74,
+          "exposed": true,
+          "matched_parameters": [
+            "ridge_floor"
+          ]
+        },
+        {
+          "name": "kRidgeReleaseHz",
+          "canonical": "ridgereleasehz",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod3.h",
+          "line": 71,
+          "exposed": true,
+          "matched_parameters": [
+            "ridge_release_hz"
+          ]
+        },
+        {
+          "name": "kRidgeSensitivity",
+          "canonical": "ridgesensitivity",
+          "source": "constant",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod3.h",
+          "line": 72,
+          "exposed": true,
+          "matched_parameters": [
+            "ridge_sensitivity"
+          ]
+        }
+      ],
+      "excluded_named_constants": [
+        {
+          "name": "kBeatImpulseCooldownFrames",
+          "canonical": "beatimpulsecooldownframes",
+          "reason": "state-only",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod3.h",
+          "line": 66
+        },
+        {
+          "name": "kFieldSize",
+          "canonical": "fieldsize",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod3.h",
+          "line": 55
+        },
+        {
+          "name": "kHistoryDepth",
+          "canonical": "historydepth",
+          "reason": "structural",
+          "file": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_Mod3.h",
+          "line": 56
+        }
+      ],
+      "missing_tunable_count": 0
+    }
+  ],
+  "summary": {
+    "active_effect_count": 170,
+    "effects_with_api_parameters": 35,
+    "total_exposed_parameters": 151,
+    "total_discovered_named_tunables": 151,
+    "total_missing_named_tunables": 0,
+    "missing_named_tunables_by_family": {}
+  }
+}

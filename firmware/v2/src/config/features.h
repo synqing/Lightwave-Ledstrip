@@ -169,6 +169,22 @@
 #define FEATURE_API_AUTH 0
 #endif
 
+// Control lease lock - explicit acquire/heartbeat/release via WebSocket.
+// Enforces hard-exclusive mutation lock across WS/REST/local control paths.
+#ifndef FEATURE_CONTROL_LEASE
+#define FEATURE_CONTROL_LEASE 1
+#endif
+
+// External render stream - binary WS framebuffer ingest (`render.stream.*`, K1F1 contract).
+#ifndef FEATURE_EXTERNAL_RENDER_STREAM
+#define FEATURE_EXTERNAL_RENDER_STREAM 1
+#endif
+
+// Dashboard WASM composer integration toggle (dashboard-side rollout coordination flag).
+#ifndef FEATURE_WASM_COMPOSER
+#define FEATURE_WASM_COMPOSER 1
+#endif
+
 // ESP-NOW Wireless Encoders
 #ifndef FEATURE_WIRELESS_ENCODERS
 #define FEATURE_WIRELESS_ENCODERS 0

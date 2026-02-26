@@ -20,6 +20,7 @@
 #include "webserver/RateLimiter.h"
 #include "webserver/LedStreamBroadcaster.h"
 #include "webserver/handlers/DeviceHandlers.h"
+#include "webserver/handlers/ControlHandlers.h"
 #include "webserver/handlers/EffectHandlers.h"
 #include "webserver/handlers/ZoneHandlers.h"
 #include "webserver/handlers/SystemHandlers.h"
@@ -37,6 +38,7 @@
 #include "webserver/UdpStreamer.h"
 #include "webserver/WsCommandRouter.h"
 #include "webserver/ws/WsDeviceCommands.h"
+#include "webserver/ws/WsControlCommands.h"
 #include "webserver/ws/WsFilesystemCommands.h"
 #include "webserver/ws/WsEffectsCommands.h"
 #include "webserver/ws/WsZonesCommands.h"
@@ -74,6 +76,7 @@
 #include "../palettes/Palettes_Master.h"
 #include "../effects/PatternRegistry.h"
 #include "../core/narrative/NarrativeEngine.h"
+#include "../core/system/ControlLeaseManager.h"
 #include "../effects/enhancement/MotionEngine.h"
 #include "../effects/enhancement/ColorEngine.h"
 #include "../plugins/api/IEffect.h"
@@ -141,6 +144,51 @@ size_t getFreeInternalHeap() {
     return heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
 }
 
+#if FEATURE_CONTROL_LEASE
+bool isMutatingHttpMethod(AsyncWebServerRequest* request) {
+    if (!request) {
+        return false;
+    }
+    const uint8_t method = static_cast<uint8_t>(request->method());
+    return method == HTTP_POST || method == HTTP_PUT || method == HTTP_PATCH || method == HTTP_DELETE;
+}
+
+bool isLeaseExemptRestPath(const String& path) {
+    if (path == "/update") {
+        return true;
+    }
+    if (path == "/api/v1/control/status" || path == "/api/v1/control/status/") {
+        return true;
+    }
+    if (path.startsWith("/api/v1/auth/")) {
+        return true;
+    }
+    if (path.startsWith("/api/v1/firmware/")) {
+        return true;
+    }
+    if (path.startsWith("/api/v1/device/ota-token")) {
+        return true;
+    }
+    return false;
+}
+
+const char* controlLeaseEventName(core::system::ControlLeaseManager::LeaseEvent event) {
+    using LeaseEvent = core::system::ControlLeaseManager::LeaseEvent;
+    switch (event) {
+        case LeaseEvent::Acquired: return "acquired";
+        case LeaseEvent::Heartbeat: return "heartbeat";
+        case LeaseEvent::Released: return "released";
+        case LeaseEvent::Expired: return "expired";
+        case LeaseEvent::RejectedLocked: return "rejected_locked";
+        case LeaseEvent::BlockedWs: return "blocked_ws";
+        case LeaseEvent::BlockedRest: return "blocked_rest";
+        case LeaseEvent::BlockedLocalEncoder: return "blocked_local_encoder";
+        case LeaseEvent::BlockedLocalSerial: return "blocked_local_serial";
+        default: return "none";
+    }
+}
+#endif
+
 } // namespace
 
 #if FEATURE_EFFECT_VALIDATION
@@ -194,6 +242,10 @@ WebServer::WebServer(NodeOrchestrator& orchestrator, RendererNode* renderer)
 
 WebServer::~WebServer() {
     stop();
+
+#if FEATURE_CONTROL_LEASE
+    core::system::ControlLeaseManager::setStateChangeCallback(nullptr);
+#endif
 
     // TODO: Implement logging callback system for WebSocket log streaming
     // clearLogCallback() would unregister the WebSocket log forwarder here
@@ -478,6 +530,10 @@ void WebServer::update() {
         }
     }
     const uint32_t nowMs = millis();
+#if FEATURE_CONTROL_LEASE
+    core::system::ControlLeaseManager::maybeExpireLease();
+#endif
+    webserver::ws::serviceRenderStreamState();
     updateLowHeapShedState(nowMs);
 
     // Periodic WS transport diagnostics (helps classify reconnect storms quickly).
@@ -803,7 +859,7 @@ void WebServer::setupCORS() {
     DefaultHeaders::Instance().addHeader("Access-Control-Allow-Methods",
                                          "GET, POST, PUT, DELETE, OPTIONS");
     DefaultHeaders::Instance().addHeader("Access-Control-Allow-Headers",
-                                         "Content-Type, X-Requested-With");
+                                         "Content-Type, X-Requested-With, X-API-Key, X-Control-Lease, X-Control-Lease-Id, X-OTA-Token");
 }
 
 void WebServer::startMDNS() {
@@ -1021,11 +1077,55 @@ void WebServer::setupWebSocket() {
 #if FEATURE_API_AUTH
     webserver::ws::registerWsAuthCommands(ctx);
 #endif
+#if FEATURE_CONTROL_LEASE
+    webserver::ws::registerWsControlCommands(ctx);
+#endif
     webserver::ws::registerWsSysCommands(ctx);
     webserver::ws::registerWsTrinityCommands(ctx);
     webserver::ws::registerWsShowCommands(ctx);
     webserver::ws::registerWsOtaCommands(ctx);
     webserver::ws::registerWsPluginCommands(ctx);
+
+#if FEATURE_CONTROL_LEASE
+    core::system::ControlLeaseManager::setStateChangeCallback([this](core::system::ControlLeaseManager::LeaseEvent event,
+                                                                      const core::system::ControlLeaseManager::LeaseState& state) {
+        if (!m_ws || m_ws->count() == 0) {
+            return;
+        }
+
+        JsonDocument doc;
+        doc["type"] = "control.stateChanged";
+        doc["event"] = controlLeaseEventName(event);
+        doc["success"] = true;
+
+        JsonObject data = doc["data"].to<JsonObject>();
+        data["active"] = state.active;
+        data["leaseId"] = state.leaseId;
+        data["scope"] = state.scope;
+        data["ownerClientName"] = state.ownerClientName;
+        data["ownerInstanceId"] = state.ownerInstanceId;
+        data["ownerWsClientId"] = state.ownerWsClientId;
+        data["ttlMs"] = state.ttlMs;
+        data["heartbeatIntervalMs"] = state.heartbeatIntervalMs;
+        data["remainingMs"] = state.active ? core::system::ControlLeaseManager::getRemainingMs() : 0;
+        data["takeoverAllowed"] = state.takeoverAllowed;
+
+        const core::system::ControlLeaseManager::StatusCounters counters =
+            core::system::ControlLeaseManager::getCounters();
+        JsonObject countersObj = data["counters"].to<JsonObject>();
+        countersObj["blockedWsCommands"] = counters.blockedWsCommands;
+        countersObj["blockedRestRequests"] = counters.blockedRestRequests;
+        countersObj["blockedLocalEncoderInputs"] = counters.blockedLocalEncoderInputs;
+        countersObj["blockedLocalSerialInputs"] = counters.blockedLocalSerialInputs;
+        countersObj["lastLeaseEventMs"] = counters.lastLeaseEventMs;
+
+        String output;
+        serializeJson(doc, output);
+        m_ws->textAll(output);
+
+        webserver::ws::serviceRenderStreamState();
+    });
+#endif
 
     // Log handler registration summary
     size_t handlerCount = webserver::WsCommandRouter::getHandlerCount();
@@ -1345,6 +1445,33 @@ void WebServer::doBroadcastStatus() {
     doc["freeHeapInternal"] = static_cast<uint32_t>(getFreeInternalHeap());
     doc["freePsram"] = ESP.getFreePsram();
     doc["uptime"] = millis() / 1000;
+
+#if FEATURE_CONTROL_LEASE
+    {
+        const core::system::ControlLeaseManager::LeaseState leaseState =
+            core::system::ControlLeaseManager::getState();
+        const core::system::ControlLeaseManager::StatusCounters counters =
+            core::system::ControlLeaseManager::getCounters();
+        JsonObject lease = doc["controlLease"].to<JsonObject>();
+        lease["active"] = leaseState.active;
+        lease["leaseId"] = leaseState.leaseId;
+        lease["scope"] = leaseState.scope;
+        lease["ownerClientName"] = leaseState.ownerClientName;
+        lease["ownerInstanceId"] = leaseState.ownerInstanceId;
+        lease["ownerWsClientId"] = leaseState.ownerWsClientId;
+        lease["remainingMs"] = core::system::ControlLeaseManager::getRemainingMs();
+        lease["ttlMs"] = leaseState.ttlMs;
+        lease["heartbeatIntervalMs"] = leaseState.heartbeatIntervalMs;
+        lease["takeoverAllowed"] = leaseState.takeoverAllowed;
+
+        JsonObject controlCounters = doc["controlCounters"].to<JsonObject>();
+        controlCounters["blockedWsCommands"] = counters.blockedWsCommands;
+        controlCounters["blockedRestRequests"] = counters.blockedRestRequests;
+        controlCounters["blockedLocalEncoderInputs"] = counters.blockedLocalEncoderInputs;
+        controlCounters["blockedLocalSerialInputs"] = counters.blockedLocalSerialInputs;
+        controlCounters["lastLeaseEventMs"] = counters.lastLeaseEventMs;
+    }
+#endif
 
 #if FEATURE_AUDIO_SYNC
     // Add audio metrics (BPM, KEY, MIC)
@@ -1905,6 +2032,76 @@ bool WebServer::checkAPIKey(AsyncWebServerRequest* request) {
     // Successful auth - reset failure counter
     m_authRateLimiter.recordSuccess(clientIP);
 #endif
+
+#if FEATURE_CONTROL_LEASE
+    if (!isMutatingHttpMethod(request)) {
+        return true;
+    }
+
+    const String path = request->url();
+    if (isLeaseExemptRestPath(path)) {
+        return true;
+    }
+
+    const String leaseToken = request->hasHeader("X-Control-Lease")
+        ? request->header("X-Control-Lease")
+        : String("");
+    const String leaseId = request->hasHeader("X-Control-Lease-Id")
+        ? request->header("X-Control-Lease-Id")
+        : String("");
+
+    const core::system::ControlLeaseManager::MutationCheckResult leaseCheck =
+        core::system::ControlLeaseManager::checkMutationPermission(
+            core::system::ControlLeaseManager::MutationSource::Rest,
+            0,
+            leaseToken.c_str(),
+            leaseId.c_str()
+        );
+    if (!leaseCheck.allowed) {
+        auto sendLeaseError = [request, &leaseCheck](uint16_t httpCode,
+                                                     const char* code,
+                                                     const char* message) {
+            JsonDocument response;
+            response["success"] = false;
+            JsonObject error = response["error"].to<JsonObject>();
+            error["code"] = code;
+            error["message"] = message;
+            error["ownerClientName"] = leaseCheck.state.ownerClientName;
+            error["remainingMs"] = leaseCheck.remainingMs;
+            error["scope"] = leaseCheck.state.scope;
+            error["requiredHeader"] = "X-Control-Lease";
+            response["timestamp"] = millis();
+            response["version"] = API_VERSION;
+
+            String output;
+            serializeJson(response, output);
+            request->send(httpCode, "application/json", output);
+        };
+
+        core::system::ControlLeaseManager::noteBlockedRestCommand(path.c_str());
+        switch (leaseCheck.error) {
+            case core::system::ControlLeaseManager::MutationError::LeaseRequired:
+                sendLeaseError(HttpStatus::PRECONDITION_REQUIRED, ErrorCodes::LEASE_REQUIRED,
+                               "Missing required X-Control-Lease header while control lease is active");
+                break;
+            case core::system::ControlLeaseManager::MutationError::LeaseInvalid:
+                sendLeaseError(HttpStatus::FORBIDDEN, ErrorCodes::LEASE_INVALID,
+                               "Invalid control lease token");
+                break;
+            case core::system::ControlLeaseManager::MutationError::LeaseExpired:
+                sendLeaseError(HttpStatus::CONFLICT, ErrorCodes::LEASE_EXPIRED,
+                               "Control lease has expired");
+                break;
+            case core::system::ControlLeaseManager::MutationError::ControlLocked:
+            default:
+                sendLeaseError(HttpStatus::CONFLICT, ErrorCodes::CONTROL_LOCKED,
+                               "Control lease is held by another client");
+                break;
+        }
+        return false;
+    }
+#endif
+
     return true;
 }
 

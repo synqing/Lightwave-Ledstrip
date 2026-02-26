@@ -34,12 +34,17 @@
 #include "../../config/features.h"
 #include "../../config/limits.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/IEffectRegistry.h"
 
 #include <atomic>
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
+#endif
+
+#if defined(ESP32) && !defined(NATIVE_BUILD)
+#include <freertos/portmacro.h>
 #endif
 
 #include "hal/HalFactory.h"
@@ -127,6 +132,18 @@ struct RenderStats {
     }
 };
 
+struct ExternalRenderStats {
+    bool active = false;
+    uint32_t staleTimeoutMs = 0;
+    uint32_t lastFrameSeq = 0;
+    uint32_t lastFrameRxMs = 0;
+    uint32_t framesRx = 0;
+    uint32_t framesRendered = 0;
+    uint32_t framesDroppedMailbox = 0;
+    uint32_t framesInvalid = 0;
+    uint32_t staleTimeouts = 0;
+};
+
 /**
  * @brief Effect render function signature
  *
@@ -197,6 +214,36 @@ public:
     uint8_t getMood() const { return m_mood; }
     uint8_t getFadeAmount() const { return m_fadeAmount; }
     const RenderStats& getStats() const { return m_stats; }
+
+    static constexpr uint16_t EXTERNAL_STREAM_LED_COUNT = LedConfig::TOTAL_LEDS;
+    static constexpr uint16_t EXTERNAL_STREAM_FRAME_BYTES = LedConfig::TOTAL_LEDS * 3;
+    static constexpr uint8_t EXTERNAL_STREAM_MAILBOX_DEPTH = 2;
+
+    /**
+     * @brief Enable external framebuffer render mode.
+     */
+    void startExternalRender(uint32_t staleTimeoutMs);
+
+    /**
+     * @brief Disable external framebuffer render mode and revert to internal effects.
+     */
+    void stopExternalRender();
+
+    /**
+     * @brief Push an RGB888 frame into the external render mailbox.
+     *
+     * @param seq Monotonic sequence number supplied by the sender.
+     * @param rgb Packed RGB888 payload (320 * 3 bytes).
+     * @param length Payload length in bytes (must equal EXTERNAL_STREAM_FRAME_BYTES).
+     * @param rxMs Monotonic millis() timestamp when frame was received.
+     * @return true when the frame is accepted, false when invalid/rejected.
+     */
+    bool ingestExternalFrame(uint32_t seq, const uint8_t* rgb, size_t length, uint32_t rxMs);
+
+    /**
+     * @brief Return a thread-safe snapshot of external render counters/state.
+     */
+    ExternalRenderStats getExternalRenderStats() const;
 
     /**
      * @brief Get a copy of the current LED buffer
@@ -655,7 +702,7 @@ private:
 
     struct EffectParamUpdate {
         EffectId effectId;
-        char name[24];
+        char name[plugins::kEffectParameterNameMaxLen + 1];
         float value;
     };
     static constexpr uint8_t PARAM_QUEUE_SIZE = 16;
@@ -819,6 +866,49 @@ private:
      * @param sourceBuffer Source buffer to copy from
      */
     void captureFrame(CaptureTap tap, const CRGB* sourceBuffer);
+
+    enum class RenderSourceMode : uint8_t {
+        Internal = 0,
+        ExternalStream = 1
+    };
+
+    struct ExternalFrameSlot {
+        uint8_t rgb[EXTERNAL_STREAM_FRAME_BYTES];
+        uint32_t seq = 0;
+        uint32_t rxMs = 0;
+        bool valid = false;
+    };
+
+#if defined(ESP32) && !defined(NATIVE_BUILD)
+    using ExternalLock = portMUX_TYPE;
+#else
+    struct ExternalLock {
+        volatile uint8_t guard = 0;
+    };
+#endif
+    static void lockExternal(ExternalLock& lock);
+    static void unlockExternal(ExternalLock& lock);
+
+    mutable ExternalLock m_externalLock =
+#if defined(ESP32) && !defined(NATIVE_BUILD)
+        portMUX_INITIALIZER_UNLOCKED;
+#else
+        {};
+#endif
+    RenderSourceMode m_renderSourceMode = RenderSourceMode::Internal;
+    ExternalFrameSlot m_externalMailbox[EXTERNAL_STREAM_MAILBOX_DEPTH];
+    int8_t m_externalLatestSlot = -1;
+    uint8_t m_externalWriteSlot = 0;
+    bool m_externalHasFrame = false;
+    uint32_t m_externalStaleTimeoutMs = 0;
+    uint32_t m_externalLastFrameSeq = 0;
+    uint32_t m_externalLastFrameRxMs = 0;
+    uint32_t m_externalFramesRx = 0;
+    uint32_t m_externalFramesRendered = 0;
+    uint32_t m_externalFramesDroppedMailbox = 0;
+    uint32_t m_externalFramesInvalid = 0;
+    uint32_t m_externalStaleTimeouts = 0;
+    uint8_t m_externalScratch[EXTERNAL_STREAM_FRAME_BYTES];
 };
 
 } // namespace actors

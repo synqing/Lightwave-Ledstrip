@@ -28,6 +28,7 @@
 #include "../../plugins/runtime/LegacyEffectAdapter.h"
 #include "../../config/chip_config.h"
 #include "../../config/audio_config.h"
+#include "../persistence/EffectTunableStore.h"
 #if CHIP_ESP32_S3 && !defined(NATIVE_BUILD)
 #include "../../hal/esp32s3/StatusStripTouch.h"
 #endif
@@ -94,6 +95,23 @@ namespace lightwaveos { namespace actors {
 
 namespace lightwaveos {
 namespace actors {
+
+void RendererActor::lockExternal(ExternalLock& lock) {
+#if defined(ESP32) && !defined(NATIVE_BUILD)
+    taskENTER_CRITICAL(&lock);
+#else
+    while (__sync_lock_test_and_set(&lock.guard, 1) != 0) {
+    }
+#endif
+}
+
+void RendererActor::unlockExternal(ExternalLock& lock) {
+#if defined(ESP32) && !defined(NATIVE_BUILD)
+    taskEXIT_CRITICAL(&lock);
+#else
+    __sync_lock_release(&lock.guard);
+#endif
+}
 
 #if FEATURE_AUDIO_SYNC
 static audio::MusicalGridTuning toMusicalGridTuning(const audio::AudioContractTuning& tuning) {
@@ -220,6 +238,96 @@ void RendererActor::getBufferCopy(CRGB* outBuffer) const
         // For strict consistency, use a mutex or double-buffer
         memcpy(outBuffer, m_leds, sizeof(m_leds));
     }
+}
+
+void RendererActor::startExternalRender(uint32_t staleTimeoutMs)
+{
+    if (staleTimeoutMs < 250) staleTimeoutMs = 250;
+    if (staleTimeoutMs > 5000) staleTimeoutMs = 5000;
+
+    lockExternal(m_externalLock);
+    m_renderSourceMode = RenderSourceMode::ExternalStream;
+    m_externalStaleTimeoutMs = staleTimeoutMs;
+    m_externalLatestSlot = -1;
+    m_externalWriteSlot = 0;
+    m_externalHasFrame = false;
+    m_externalLastFrameSeq = 0;
+    m_externalLastFrameRxMs = millis();
+    m_externalFramesRx = 0;
+    m_externalFramesRendered = 0;
+    m_externalFramesDroppedMailbox = 0;
+    m_externalFramesInvalid = 0;
+    m_externalStaleTimeouts = 0;
+    for (uint8_t i = 0; i < EXTERNAL_STREAM_MAILBOX_DEPTH; ++i) {
+        m_externalMailbox[i].seq = 0;
+        m_externalMailbox[i].rxMs = 0;
+        m_externalMailbox[i].valid = false;
+        memset(m_externalMailbox[i].rgb, 0, sizeof(m_externalMailbox[i].rgb));
+    }
+    unlockExternal(m_externalLock);
+}
+
+void RendererActor::stopExternalRender()
+{
+    lockExternal(m_externalLock);
+    m_renderSourceMode = RenderSourceMode::Internal;
+    m_externalLatestSlot = -1;
+    m_externalWriteSlot = 0;
+    m_externalHasFrame = false;
+    unlockExternal(m_externalLock);
+}
+
+bool RendererActor::ingestExternalFrame(uint32_t seq, const uint8_t* rgb, size_t length, uint32_t rxMs)
+{
+    if (rgb == nullptr || length != EXTERNAL_STREAM_FRAME_BYTES) {
+        lockExternal(m_externalLock);
+        ++m_externalFramesInvalid;
+        unlockExternal(m_externalLock);
+        return false;
+    }
+
+    lockExternal(m_externalLock);
+    if (m_renderSourceMode != RenderSourceMode::ExternalStream) {
+        ++m_externalFramesInvalid;
+        unlockExternal(m_externalLock);
+        return false;
+    }
+
+    uint8_t slot = m_externalWriteSlot;
+    if (m_externalHasFrame && m_externalMailbox[slot].valid) {
+        ++m_externalFramesDroppedMailbox;
+    }
+
+    memcpy(m_externalMailbox[slot].rgb, rgb, EXTERNAL_STREAM_FRAME_BYTES);
+    m_externalMailbox[slot].seq = seq;
+    m_externalMailbox[slot].rxMs = rxMs;
+    m_externalMailbox[slot].valid = true;
+
+    m_externalLatestSlot = static_cast<int8_t>(slot);
+    m_externalWriteSlot = static_cast<uint8_t>((slot + 1) % EXTERNAL_STREAM_MAILBOX_DEPTH);
+    m_externalHasFrame = true;
+    m_externalLastFrameSeq = seq;
+    m_externalLastFrameRxMs = rxMs;
+    ++m_externalFramesRx;
+    unlockExternal(m_externalLock);
+    return true;
+}
+
+ExternalRenderStats RendererActor::getExternalRenderStats() const
+{
+    ExternalRenderStats stats;
+    lockExternal(m_externalLock);
+    stats.active = (m_renderSourceMode == RenderSourceMode::ExternalStream);
+    stats.staleTimeoutMs = m_externalStaleTimeoutMs;
+    stats.lastFrameSeq = m_externalLastFrameSeq;
+    stats.lastFrameRxMs = m_externalLastFrameRxMs;
+    stats.framesRx = m_externalFramesRx;
+    stats.framesRendered = m_externalFramesRendered;
+    stats.framesDroppedMailbox = m_externalFramesDroppedMailbox;
+    stats.framesInvalid = m_externalFramesInvalid;
+    stats.staleTimeouts = m_externalStaleTimeouts;
+    unlockExternal(m_externalLock);
+    return stats;
 }
 
 // ============================================================================
@@ -466,6 +574,7 @@ void RendererActor::onStart()
 #endif
 
     initLeds();
+    persistence::EffectTunableStore::instance().init();
 
     // Subscribe to relevant events
     bus::MessageBus::instance().subscribe(MessageType::PALETTE_CHANGED, this);
@@ -740,9 +849,51 @@ void RendererActor::onTick()
 {
     uint32_t frameStartUs = micros();
     static uint16_t s_wdtResetFrames = 0;
+    const uint32_t nowMs = millis();
+    persistence::EffectTunableStore::instance().tick(nowMs);
+    bool usingExternalFrame = false;
+    bool staleExternalStream = false;
+    bool externalMode = false;
 
-    // Render the current effect
-    renderFrame();
+    lockExternal(m_externalLock);
+    externalMode = (m_renderSourceMode == RenderSourceMode::ExternalStream);
+    const uint32_t staleTimeoutMs = m_externalStaleTimeoutMs;
+    const uint32_t lastRxMs = m_externalLastFrameRxMs;
+    const bool hasFrame = m_externalHasFrame && m_externalLatestSlot >= 0 &&
+                          m_externalMailbox[m_externalLatestSlot].valid;
+    int8_t latestSlot = m_externalLatestSlot;
+    if (externalMode && staleTimeoutMs > 0 && (nowMs - lastRxMs) > staleTimeoutMs) {
+        staleExternalStream = true;
+        m_renderSourceMode = RenderSourceMode::Internal;
+        ++m_externalStaleTimeouts;
+        externalMode = false;
+        latestSlot = -1;
+        m_externalLatestSlot = -1;
+        m_externalHasFrame = false;
+    }
+    if (externalMode && hasFrame && latestSlot >= 0) {
+        memcpy(m_externalScratch, m_externalMailbox[latestSlot].rgb, EXTERNAL_STREAM_FRAME_BYTES);
+        usingExternalFrame = true;
+    }
+    unlockExternal(m_externalLock);
+
+    if (staleExternalStream) {
+        LW_LOGW("External render stream timed out; reverting to internal renderer");
+    }
+
+    if (usingExternalFrame) {
+        for (uint16_t i = 0, px = 0; i < LedConfig::TOTAL_LEDS; ++i, px += 3) {
+            m_leds[i].r = m_externalScratch[px + 0];
+            m_leds[i].g = m_externalScratch[px + 1];
+            m_leds[i].b = m_externalScratch[px + 2];
+        }
+        lockExternal(m_externalLock);
+        ++m_externalFramesRendered;
+        unlockExternal(m_externalLock);
+    } else if (!externalMode) {
+        // Internal effect pipeline.
+        renderFrame();
+    }
 
     // TAP A: Capture pre-correction (after renderFrame, before processBuffer)
     if (m_captureEnabled && (m_captureTapMask & 0x01)) {
@@ -1013,7 +1164,9 @@ void RendererActor::applyPendingEffectParameterUpdates() {
         const EffectParamUpdate& update = m_paramQueue[tail];
         const auto* reg = findById(update.effectId);
         if (reg && reg->effect) {
-            reg->effect->setParameter(update.name, update.value);
+            if (reg->effect->setParameter(update.name, update.value)) {
+                persistence::EffectTunableStore::instance().onParameterApplied(update.effectId, reg->effect);
+            }
         }
         tail = static_cast<uint8_t>((tail + 1) % PARAM_QUEUE_SIZE);
         m_paramQueueTail.store(tail, std::memory_order_release);
@@ -1792,6 +1945,7 @@ void RendererActor::handleSetEffect(EffectId effectId)
                 LW_LOGW("IEffect 0x%04X init failed, reverting to 0x%04X", effectId, oldEffectId);
                 return;
             }
+            persistence::EffectTunableStore::instance().onEffectActivated(effectId, newReg->effect);
             LW_LOGI("IEffect init: SUCCESS");
         }
 

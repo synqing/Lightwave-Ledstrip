@@ -1,0 +1,132 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_BLOOM_PARITY",
+  "effectIdHex": "0x1500",
+  "className": "BloomParityEffect",
+  "displayName": "Bloom (Parity)",
+  "headerPath": "firmware/v2/src/effects/ieffect/BloomParityEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/BloomParityEffect.cpp",
+  "renderRange": [
+    470,
+    590
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        555,
+        555
+      ]
+    ],
+    "mapping": [
+      [
+        551,
+        551
+      ],
+      [
+        557,
+        557
+      ],
+      [
+        575,
+        575
+      ]
+    ],
+    "modulation": [
+      [
+        491,
+        492
+      ],
+      [
+        495,
+        496
+      ]
+    ],
+    "render": [
+      [
+        478,
+        478
+      ],
+      [
+        521,
+        521
+      ],
+      [
+        533,
+        533
+      ],
+      [
+        545,
+        545
+      ],
+      [
+        551,
+        553
+      ],
+      [
+        555,
+        556
+      ],
+      [
+        564,
+        564
+      ],
+      [
+        570,
+        570
+      ],
+      [
+        575,
+        575
+      ],
+      [
+        583,
+        583
+      ],
+      [
+        587,
+        588
+      ]
+    ],
+    "post": [
+      [
+        470,
+        470
+      ],
+      [
+        537,
+        537
+      ],
+      [
+        540,
+        540
+      ]
+    ],
+    "output": [
+      [
+        487,
+        487
+      ],
+      [
+        516,
+        517
+      ],
+      [
+        556,
+        556
+      ],
+      [
+        583,
+        583
+      ],
+      [
+        588,
+        588
+      ]
+    ]
+  },
+  "mappingConfidence": "high",
+  "mappingWarnings": [],
+  "sourceText": "/**\n * @file BloomParityEffect.cpp\n * @brief Sensory Bridge \"Bloom\" parity port for LightwaveOS v2\n *\n * Transport is the brush. History is the canvas. Audio is just pigment injection.\n *\n * Parity spine (exact order matters):\n *  1) clear\n *  2) advect history by subpixel offset (draw_sprite: position = 0.250 + 1.750 * MOOD, alpha = 0.99)\n *  3) compute chroma-summed injection colour\n *  4) overwrite centre pixels with injection\n *  5) copy current -> history BEFORE any presentation shaping\n *  6) tail quadratic taper (presentation only, last 25%, edges dim to 60%)\n *  7) mirror (presentation only)\n */\n\n#include \"BloomParityEffect.h\"\n#include \"../../utils/Log.h\"\n\n#ifndef NATIVE_BUILD\n#include <Arduino.h>\n#include <FastLED.h>\n#endif\n\n#include <cmath>\n#include <cstdint>\n#include <cstring>\n\nnamespace lightwaveos::effects::ieffect {\n\n// Static tunables (defaults match user-tuned values; Sensory defaults: prism=0.25, bulb=0.00)\nfloat   BloomParityEffect::s_prismOpacity    = 0.20f;\nfloat   BloomParityEffect::s_bulbOpacity     = 0.40f;\nfloat   BloomParityEffect::s_alpha           = 0.99f;   // Transport persistence (Sensory default: 0.99)\nuint8_t BloomParityEffect::s_squareIter      = 1;       // Contrast shaping (Sensory default: 1)\nuint8_t BloomParityEffect::s_prismIterations = 1;       // Prism passes (Sensory default: 0)\nfloat   BloomParityEffect::s_gHueSpeed       = 1.0f;    // Palette sweep multiplier (0=frozen, -1=reverse)\nfloat   BloomParityEffect::s_spatialSpread   = 128.0f;  // Palette spread centre→edge (0=mono, 255=full)\nfloat   BloomParityEffect::s_intensityCoupling = 0.0f;  // 0=spatial colour, 1=intensity colour (heat map)\n\n// -----------------------------------------------------------------------------\n// Metadata\n// -----------------------------------------------------------------------------\nconst plugins::EffectMetadata& BloomParityEffect::getMetadata() const {\n    static plugins::EffectMetadata meta(\n        \"Bloom (Parity)\",\n        \"Sensory Bridge Bloom transport: subpixel advection + centre injection + mirror bloom\",\n        plugins::EffectCategory::AMBIENT,\n        1,\n        \"LightwaveOS\"\n    );\n    return meta;\n}\n\n// -----------------------------------------------------------------------------\n// Lifecycle\n// -----------------------------------------------------------------------------\nbool BloomParityEffect::init(plugins::EffectContext& /*ctx*/) {\n    // Allocate large transport buffers in PSRAM (19.3 KB — must not live in DRAM)\n    if (!m_ps) {\n        m_ps = static_cast<PsramData*>(heap_caps_malloc(sizeof(PsramData), MALLOC_CAP_SPIRAM));\n        if (!m_ps) {\n            LW_LOGE(\"BloomParityEffect: PSRAM alloc failed (%u bytes)\", (unsigned)sizeof(PsramData));\n            return false;\n        }\n    }\n    memset(m_ps, 0, sizeof(PsramData));\n\n    // Hard reset all per-zone state.\n    for (uint8_t z = 0; z < kMaxZones; z++) {\n        clearBuffer(&m_ps->prev[z][0], kMaxLeds);\n        clearBuffer(&m_ps->curr[z][0], kMaxLeds);\n\n        m_chromaMaxPeak[z] = 0.01f;\n\n        m_huePosition[z] = 0.0f;\n        m_hueShiftSpeed[z] = 0.0f;\n        m_huePushDirection[z] = -1.0f;\n        m_hueDestination[z] = 0.0f;\n        m_hueShiftingMix[z] = -0.35f;\n        m_hueShiftingMixTarget[z] = 1.0f;\n\n        m_chromaticMode[z] = true;   // Sensory default\n        m_chromaVal[z] = 1.0f;       // Sensory default\n    }\n    return true;\n}\n\nvoid BloomParityEffect::cleanup() {\n    if (m_ps) {\n        heap_caps_free(m_ps);\n        m_ps = nullptr;\n    }\n}\n\n// -----------------------------------------------------------------------------\n// Core helpers (HSV + colour forcing)\n// -----------------------------------------------------------------------------\nBloomParityEffect::RGBf BloomParityEffect::hsv(float h, float s, float v) {\n    h = wrap01(h);\n    s = clamp01(s);\n    v = clamp01(v);\n\n#ifndef NATIVE_BUILD\n    // Sensory Bridge parity: uses FastLED's CHSV→CRGB (rainbow colour model)\n    // with value applied as post-multiply. The rainbow hue wheel is perceptually\n    // tuned and differs significantly from standard mathematical HSV.\n    CRGB base = CHSV(static_cast<uint8_t>(h * 255.0f),\n                      static_cast<uint8_t>(s * 255.0f),\n                      255);\n    return RGBf{(base.r / 255.0f) * v, (base.g / 255.0f) * v, (base.b / 255.0f) * v};\n#else\n    // Fallback: standard mathematical HSV for native builds without FastLED.\n    const float hh = h * 6.0f;\n    const int   i  = static_cast<int>(hh);\n    const float f  = hh - static_cast<float>(i);\n\n    const float p = v * (1.0f - s);\n    const float q = v * (1.0f - s * f);\n    const float t = v * (1.0f - s * (1.0f - f));\n\n    RGBf out;\n    switch (i % 6) {\n        case 0: out = {v, t, p}; break;\n        case 1: out = {q, v, p}; break;\n        case 2: out = {p, v, t}; break;\n        case 3: out = {p, q, v}; break;\n        case 4: out = {t, p, v}; break;\n        default: out = {v, p, q}; break;\n    }\n    return out;\n#endif\n}\n\nvoid BloomParityEffect::rgbToHsv(const RGBf& in, float& h, float& s, float& v) {\n    const float r = clamp01(in.r);\n    const float g = clamp01(in.g);\n    const float b = clamp01(in.b);\n\n    const float maxv = std::fmax(r, std::fmax(g, b));\n    const float minv = std::fmin(r, std::fmin(g, b));\n    const float d = maxv - minv;\n\n    v = maxv;\n    s = (maxv <= 1e-6f) ? 0.0f : (d / maxv);\n\n    if (d <= 1e-6f) {\n        h = 0.0f;\n        return;\n    }\n\n    float hh;\n    if (maxv == r) {\n        hh = (g - b) / d + (g < b ? 6.0f : 0.0f);\n    } else if (maxv == g) {\n        hh = (b - r) / d + 2.0f;\n    } else {\n        hh = (r - g) / d + 4.0f;\n    }\n\n    h = wrap01(hh / 6.0f);\n}\n\nBloomParityEffect::RGBf BloomParityEffect::forceSaturation(const RGBf& in, float sat) {\n#ifndef NATIVE_BUILD\n    // Sensory Bridge parity: deliberately round-trips through 8-bit CRGB and\n    // FastLED's rgb2hsv_approximate(). The quantisation artefacts are intentional.\n    CRGB rgb8(static_cast<uint8_t>(clamp01(in.r) * 255.0f),\n              static_cast<uint8_t>(clamp01(in.g) * 255.0f),\n              static_cast<uint8_t>(clamp01(in.b) * 255.0f));\n    CHSV hsv8 = rgb2hsv_approximate(rgb8);\n    CRGB out = CRGB(CHSV(hsv8.h, static_cast<uint8_t>(clamp01(sat) * 255.0f), hsv8.v));\n    return RGBf{out.r / 255.0f, out.g / 255.0f, out.b / 255.0f};\n#else\n    float h, s, v;\n    rgbToHsv(in, h, s, v);\n    (void)s;\n    return hsv(h, clamp01(sat), v);\n#endif\n}\n\nBloomParityEffect::RGBf BloomParityEffect::forceHue(const RGBf& in, float hue) {\n#ifndef NATIVE_BUILD\n    // Sensory Bridge parity: same 8-bit round-trip as forceSaturation.\n    CRGB rgb8(static_cast<uint8_t>(clamp01(in.r) * 255.0f),\n              static_cast<uint8_t>(clamp01(in.g) * 255.0f),\n              static_cast<uint8_t>(clamp01(in.b) * 255.0f));\n    CHSV hsv8 = rgb2hsv_approximate(rgb8);\n    CRGB out = CRGB(CHSV(static_cast<uint8_t>(wrap01(hue) * 255.0f), hsv8.s, hsv8.v));\n    return RGBf{out.r / 255.0f, out.g / 255.0f, out.b / 255.0f};\n#else\n    float h, s, v;\n    rgbToHsv(in, h, s, v);\n    (void)h;\n    return hsv(wrap01(hue), s, v);\n#endif\n}\n\n// -----------------------------------------------------------------------------\n// draw_sprite parity (subpixel advection) - THE CORE TRANSPORT SPINE\n// -----------------------------------------------------------------------------\nvoid BloomParityEffect::drawSprite(RGBf* dest, const RGBf* sprite,\n                                  uint16_t destLen, uint16_t spriteLen,\n                                  float position, float alpha)\n{\n    // This is the 2-tap linear interpolation that creates the \"liquid\" motion.\n    // Each pixel is split between its neighbours with weights (1-frac) and frac.\n    const int32_t positionWhole = static_cast<int32_t>(position);\n    const float   positionFract = position - static_cast<float>(positionWhole);\n    const float   mixRight = positionFract;\n    const float   mixLeft  = 1.0f - mixRight;\n\n    for (uint16_t i = 0; i < spriteLen; i++) {\n        int32_t posLeft  = static_cast<int32_t>(i) + positionWhole;\n        int32_t posRight = static_cast<int32_t>(i) + positionWhole + 1;\n\n        bool skipLeft = false;\n        bool skipRight = false;\n\n        if (posLeft < 0) { posLeft = 0; skipLeft = true; }\n        if (posLeft > static_cast<int32_t>(destLen) - 1) { posLeft = static_cast<int32_t>(destLen) - 1; skipLeft = true; }\n\n        if (posRight < 0) { posRight = 0; skipRight = true; }\n        if (posRight > static_cast<int32_t>(destLen) - 1) { posRight = static_cast<int32_t>(destLen) - 1; skipRight = true; }\n\n        const RGBf px = sprite[i];\n\n        if (!skipLeft) {\n            dest[posLeft].r += px.r * mixLeft  * alpha;\n            dest[posLeft].g += px.g * mixLeft  * alpha;\n            dest[posLeft].b += px.b * mixLeft  * alpha;\n        }\n\n        if (!skipRight) {\n            dest[posRight].r += px.r * mixRight * alpha;\n            dest[posRight].g += px.g * mixRight * alpha;\n            dest[posRight].b += px.b * mixRight * alpha;\n        }\n    }\n}\n\n// -----------------------------------------------------------------------------\n// Chroma acquisition (best-effort)\n// -----------------------------------------------------------------------------\nvoid BloomParityEffect::getChroma12(const plugins::EffectContext& ctx, float outChroma12[kChromaBins]) const {\n    // Zero\n    for (uint16_t i = 0; i < kChromaBins; i++) outChroma12[i] = 0.0f;\n\n    if (!ctx.audio.available) {\n        return;\n    }\n\n    // Prefer 12-bin chroma when populated.\n    float chromaSum = 0.0f;\n    for (uint16_t i = 0; i < kChromaBins; i++) {\n        const float v = clamp01(ctx.audio.controlBus.chroma[i]);\n        outChroma12[i] = v;\n        chromaSum += v;\n    }\n    if (chromaSum > 0.001f) {\n        return;\n    }\n\n    // Fallback: derive 12-note energy from 8-band spectrum when chroma is missing.\n    static constexpr uint8_t kBandMap[kChromaBins] = {0, 0, 1, 1, 2, 2, 3, 4, 5, 6, 6, 7};\n    float maxVal = 0.0f;\n    for (uint16_t i = 0; i < kChromaBins; i++) {\n        const float v = clamp01(ctx.audio.getBand(kBandMap[i]));\n        outChroma12[i] = v;\n        if (v > maxVal) maxVal = v;\n    }\n\n    if (maxVal > 0.001f) {\n        const float inv = 1.0f / maxVal;\n        for (uint16_t i = 0; i < kChromaBins; i++) {\n            outChroma12[i] = clamp01(outChroma12[i] * inv);\n        }\n    }\n}\n\n// -----------------------------------------------------------------------------\n// Hue shift (parity-ish with Sensory process_color_shift())\n// -----------------------------------------------------------------------------\nvoid BloomParityEffect::processHueShift(uint8_t zone, const plugins::EffectContext& ctx, float dtVis) {\n    // Sensory uses novelty_curve and a bunch of shaping. Our closest analogue is spectral flux.\n    float novelty = ctx.audio.available ? clamp01(ctx.audio.flux()) : 0.0f;\n\n    // Remove bottom 10%, stretch remaining to fill [0,1].\n    novelty -= 0.10f;\n    if (novelty < 0.0f) novelty = 0.0f;\n    novelty *= 1.111111f;\n\n    // Cube shaping\n    novelty = novelty * novelty * novelty;\n\n    // Cap (matches Sensory: if (novelty_now > 0.05) novelty_now = 0.05)\n    if (novelty > 0.05f) novelty = 0.05f;\n\n    // Attack/decay follower for hue shift speed\n    // dt-correct: decay *= powf(0.99, dt*60) instead of per-frame *= 0.99\n    if (novelty > m_hueShiftSpeed[zone]) {\n        m_hueShiftSpeed[zone] = novelty * 0.75f;\n    } else {\n        m_hueShiftSpeed[zone] *= powf(0.99f, dtVis * 60.0f);\n    }\n\n    // Integrate hue position and wrap\n    // dt-correct: scale increment by dt*60 (was once-per-frame at 60 FPS)\n    m_huePosition[zone] = wrap01(m_huePosition[zone] + (m_hueShiftSpeed[zone] * m_huePushDirection[zone] * dtVis * 60.0f));\n\n    // Destination bouncing (parity structure, deterministic but still lively)\n    const float dist = std::fabs(m_huePosition[zone] - m_hueDestination[zone]);\n    if (dist <= 0.01f) {\n        m_huePushDirection[zone] *= -1.0f;\n        m_hueShiftingMixTarget[zone] *= -1.0f;\n\n        // Deterministic pseudo-random destination: uses frameNumber hashed into [0,1)\n        const uint32_t x = ctx.frameNumber * 1664525u + 1013904223u;\n        m_hueDestination[zone] = (x & 0xFFFFu) / 65535.0f;\n    }\n\n    // Mix follower (one-pole exponential approach)\n    // dt-correct: alpha = 1 - (1 - 0.01)^(dt*60) instead of per-frame 0.01\n    const float mixAlpha = 1.0f - powf(1.0f - 0.01f, dtVis * 60.0f);\n    const float mixDist = std::fabs(m_hueShiftingMix[zone] - m_hueShiftingMixTarget[zone]);\n    if (m_hueShiftingMix[zone] < m_hueShiftingMixTarget[zone]) {\n        m_hueShiftingMix[zone] += mixDist * mixAlpha;\n    } else if (m_hueShiftingMix[zone] > m_hueShiftingMixTarget[zone]) {\n        m_hueShiftingMix[zone] -= mixDist * mixAlpha;\n    }\n}\n\n// -----------------------------------------------------------------------------\n// Bloom injection computation (intensity-only)\n//\n// Returns GRAYSCALE energy (all channels equal) so the transport buffer never\n// carries colour information. Palette mapping happens at the output stage,\n// guaranteeing every LED pixel displays a clean, uncorrupted palette colour.\n// -----------------------------------------------------------------------------\nBloomParityEffect::RGBf BloomParityEffect::computeInjection(uint8_t zone, const plugins::EffectContext& ctx, float dtRaw) {\n    // 1) Pull 12-bin chroma (best effort)\n    float chroma[12];\n    getChroma12(ctx, chroma);\n\n    // 2) Parity-ish max_peak follower (from make_smooth_chromagram())\n    // dt-correct: decay *= powf(0.999, dt*60) instead of per-frame *= 0.999\n    float max_peak = m_chromaMaxPeak[zone];\n    max_peak *= powf(0.999f, dtRaw * 60.0f);\n    if (max_peak < 0.01f) max_peak = 0.01f;\n\n    // dt-correct: attack alpha = 1 - (1 - 0.05)^(dt*60) instead of per-frame 0.05\n    const float attackAlpha = 1.0f - powf(1.0f - 0.05f, dtRaw * 60.0f);\n    for (uint16_t i = 0; i < 12; i++) {\n        if (chroma[i] > max_peak) {\n            const float distance = chroma[i] - max_peak;\n            max_peak += distance * attackAlpha;\n        }\n    }\n    m_chromaMaxPeak[zone] = max_peak;\n\n    const float multiplier = 1.0f / max_peak;\n    for (uint16_t i = 0; i < 12; i++) {\n        chroma[i] = clamp01(chroma[i] * multiplier);\n    }\n\n    // 3) Total chroma energy → grayscale intensity\n    float totalEnergy = 0.0f;\n    for (uint16_t i = 0; i < 12; i++) {\n        totalEnergy += chroma[i] * chroma[i];   // Squared for contrast\n    }\n    float bright = clamp01(totalEnergy * (1.0f / 6.0f));\n\n    // Square iter for contrast shaping\n    for (uint8_t sq = 0; sq < s_squareIter; sq++) {\n        bright *= bright;\n    }\n\n    // Return grayscale (all channels equal — no colour in transport)\n    return RGBf{bright, bright, bright};\n}\n\n// -----------------------------------------------------------------------------\n// PostFX: Sensory Bridge optical cheats (prism + bulb cover)\n// Ported from render_bulb_cover() and apply_prism_effect() for RGBf floats.\n// Call order (parity): transport pipeline → prism → bulb → output\n// -----------------------------------------------------------------------------\n\nvoid BloomParityEffect::scaleImageToHalf(RGBf* buf, uint16_t len, RGBf* temp) {\n    if (!buf || !temp || len < 2) return;\n    const uint16_t half = len >> 1;\n\n    for (uint16_t i = 0; i < half; i++) {\n        const RGBf& a = buf[i << 1];\n        const RGBf& b = buf[(i << 1) + 1];\n        temp[i].r = (a.r + b.r) * 0.5f;\n        temp[i].g = (a.g + b.g) * 0.5f;\n        temp[i].b = (a.b + b.b) * 0.5f;\n        temp[half + i] = {0, 0, 0};\n    }\n    std::memcpy(buf, temp, sizeof(RGBf) * len);\n}\n\nvoid BloomParityEffect::shiftLedsUp(RGBf* buf, uint16_t len, uint16_t offset, RGBf* temp) {\n    if (!buf || !temp || len == 0) return;\n    if (offset >= len) {\n        std::memset(buf, 0, sizeof(RGBf) * len);\n        return;\n    }\n    std::memcpy(temp, buf, sizeof(RGBf) * len);\n    std::memcpy(buf + offset, temp, sizeof(RGBf) * (len - offset));\n    std::memset(buf, 0, sizeof(RGBf) * offset);\n}\n\nvoid BloomParityEffect::mirrorImageDownwards(RGBf* buf, uint16_t len, RGBf* temp) {\n    if (!buf || !temp || len < 2) return;\n    const uint16_t half = len >> 1;\n\n    for (uint16_t i = 0; i < half; i++) {\n        const RGBf& src = buf[half + i];\n        temp[half + i]     = src;\n        temp[half - 1 - i] = src;\n    }\n    std::memcpy(buf, temp, sizeof(RGBf) * len);\n}\n\nvoid BloomParityEffect::applyPrismEffect(RGBf* buf, uint16_t len, uint8_t iterations,\n                                          float opacity, RGBf* fx, RGBf* temp) {\n    if (!buf || !fx || !temp || len < 4) return;\n    if ((len & 1u) != 0u) return;   // must be even\n    if (iterations == 0 || opacity <= 0.0f) return;\n\n    const uint16_t half = len >> 1;\n\n    for (uint8_t it = 0; it < iterations; it++) {\n        std::memcpy(fx, buf, sizeof(RGBf) * len);\n\n        scaleImageToHalf(fx, len, temp);\n        shiftLedsUp(fx, len, half, temp);\n        mirrorImageDownwards(fx, len, temp);\n\n        // Additive blend into buf\n        for (uint16_t i = 0; i < len; i++) {\n            buf[i].r = clamp01(buf[i].r + fx[i].r * opacity);\n            buf[i].g = clamp01(buf[i].g + fx[i].g * opacity);\n            buf[i].b = clamp01(buf[i].b + fx[i].b * opacity);\n        }\n    }\n}\n\nvoid BloomParityEffect::renderBulbCover(RGBf* buf, uint16_t len, float bulbOpacity) {\n    if (!buf || len == 0) return;\n    if (bulbOpacity <= 0.0f) return;\n    if (bulbOpacity > 1.0f) bulbOpacity = 1.0f;\n\n    // Sensory Bridge 4-phase occlusion mask\n    const float cover[4] = {0.25f, 1.0f, 0.25f, 0.0f};\n\n    for (uint16_t i = 0; i < len; i++) {\n        // lerp(p, p*cover, opacity) = p * (1 - opacity*(1-cover))\n        const float k = 1.0f - bulbOpacity * (1.0f - cover[i & 3u]);\n        buf[i].r *= k;\n        buf[i].g *= k;\n        buf[i].b *= k;\n    }\n}\n\n// -----------------------------------------------------------------------------\n// Render (THE PARITY PIPELINE - order matters!)\n// -----------------------------------------------------------------------------\nvoid BloomParityEffect::render(plugins::EffectContext& ctx) {\n    if (!m_ps) return;   // PSRAM not allocated (init failed or not called)\n\n    // Zone handling (ZoneComposer uses zoneId 0-3)\n    uint8_t zone = (ctx.zoneId == 0xFF) ? 0 : ctx.zoneId;\n    if (zone >= kMaxZones) zone = 0;\n\n    const uint16_t len = (ctx.ledCount > kMaxLeds) ? kMaxLeds : ctx.ledCount;\n    if (len < 4 || ctx.leds == nullptr) return;\n\n    // dt values: visual for animation, raw for audio signal processing\n    const float dtVis = ctx.getSafeDeltaSeconds();\n    const float dtRaw = ctx.getSafeRawDeltaSeconds();\n\n    RGBf* curr = &m_ps->curr[zone][0];\n    RGBf* prev = &m_ps->prev[zone][0];\n\n    // ----- (1) Clear output\n    clearBuffer(curr, len);\n\n    // ----- (2) Advect previous frame (subpixel)\n    // THE SPINE: position = 0.250 + 1.750 * MOOD, alpha = 0.99 (at 60 FPS)\n    // dt-correct: persistence alpha = powf(0.99, dt*60) instead of fixed 0.99 per frame\n    const float mood = clamp01(static_cast<float>(ctx.mood) / 255.0f);\n    const float position = 0.250f + 1.750f * mood;\n    const float dtAlpha = powf(s_alpha, dtVis * 60.0f);\n    drawSprite(curr, prev, len, len, position, dtAlpha);\n\n    // ----- (Parity) Update hue shift state (kept invisible unless chromatic mode off)\n    processHueShift(zone, ctx, dtVis);\n\n    // ----- (3) Compute injection colour\n    const RGBf inject = computeInjection(zone, ctx, dtRaw);\n\n    // ----- (4) Overwrite centre pixels (parity: leds_16[63] and [64])\n    const uint16_t centerL = (len / 2) - 1;\n    const uint16_t centerR = (len / 2);\n\n    curr[centerL] = inject;\n    curr[centerR] = inject;\n\n    // ----- (5) Copy current to history BEFORE any presentation shaping\n    // This is critical: history stores pre-taper/pre-mirror state.\n    // Transport is grayscale (all channels equal), so no colour distortion to worry about.\n    std::memcpy(prev, curr, sizeof(RGBf) * len);\n\n    // ----- (6) Tail quadratic taper (presentation only, last 25% of strip)\n    // Edges dim to 60% min (was 0%) to avoid ~10–15 unused LEDs at strip ends.\n    constexpr float kEdgeMinBrightness = 0.60f;\n    const uint16_t tailLen = len / 4;\n    if (tailLen >= 2) {\n        for (uint16_t i = 0; i < tailLen; i++) {\n            const float prog = static_cast<float>(i) / static_cast<float>(tailLen - 1);\n            const float k = kEdgeMinBrightness + (1.0f - kEdgeMinBrightness) * (prog * prog);\n\n            const uint16_t idx = (len - 1) - i;\n            curr[idx].r *= k;\n            curr[idx].g *= k;\n            curr[idx].b *= k;\n        }\n    }\n\n    // ----- (7) Mirror for symmetry (left half = mirror of right half)\n    for (uint16_t i = 0; i < (len / 2); i++) {\n        curr[i] = curr[(len - 1) - i];\n    }\n\n    // ----- PostFX A: Prism (glassy layered glow — Sensory: apply_prism_effect)\n    applyPrismEffect(curr, len, s_prismIterations, s_prismOpacity, m_ps->fx, m_ps->tmp);\n\n    // ----- PostFX B: Bulb cover (micro-occlusion mask — Sensory: render_bulb_cover)\n    renderBulbCover(curr, len, s_bulbOpacity);\n\n    // ----- Clamp accumulation to [0,1] per channel before lum extraction\n    // Preserves r:g:b ratio and restores dynamic range in hot spots (splat sum > 1).\n    for (uint16_t i = 0; i < len; i++) {\n        curr[i].r = clamp01(curr[i].r);\n        curr[i].g = clamp01(curr[i].g);\n        curr[i].b = clamp01(curr[i].b);\n    }\n\n    // ----- Write to LED buffer (palette-mapped from grayscale intensity)\n    // Transport carries intensity only (all channels equal). Palette colour is\n    // assigned here so every pixel is ONE clean palette.getColor() call.\n    //\n    // Two palette-position sources blended by s_intensityCoupling:\n    //   Spatial:   distance from centre × spread   → palette gradient across strip\n    //   Intensity: pixel brightness × 255          → heat-map / fire mode\n    // Both are offset by audio novelty drift + gHue time rotation.\n    const float hueOffset = m_huePosition[zone];\n    const uint16_t half = len / 2;\n    const float hueRotation = static_cast<float>(ctx.gHue) * s_gHueSpeed;\n    const float coupling = s_intensityCoupling;\n\n    for (uint16_t i = 0; i < len; i++) {\n        // Extract intensity (average of channels — should be equal, but safe)\n        float lum = (curr[i].r + curr[i].g + curr[i].b) * (1.0f / 3.0f);\n        if (lum > 1.0f) lum = 1.0f;\n        if (lum < 0.0f) lum = 0.0f;\n\n        // Spatial palette position: distance from centre × spread\n        const float dist = static_cast<float>(std::abs(static_cast<int>(i) - static_cast<int>(half)))\n                         / static_cast<float>(half);\n        const float spatialPal = dist * s_spatialSpread;\n\n        // Intensity palette position: brightness → palette (heat map)\n        const float intensityPal = lum * 255.0f;\n\n        // Blend spatial ↔ intensity, add audio drift + time rotation\n        const float palFloat = spatialPal * (1.0f - coupling) + intensityPal * coupling\n                             + hueOffset * 255.0f + hueRotation;\n        const uint8_t palIdx = static_cast<uint8_t>(static_cast<uint16_t>(palFloat) & 0xFFu);\n\n        ctx.leds[i] = ctx.palette.getColor(palIdx, static_cast<uint8_t>(lum * 255.0f));\n    }\n\n    // If ctx.ledCount > len, clear remainder to avoid stale pixels in odd configs.\n    for (uint16_t i = len; i < ctx.ledCount; i++) {\n        ctx.leds[i] = CRGB::Black;\n    }\n}\n\n} // namespace lightwaveos::effects::ieffect\n"
+}

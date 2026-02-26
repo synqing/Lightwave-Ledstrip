@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_PULSE",
+  "effectIdHex": "0x010C",
+  "className": "PulseEffect",
+  "displayName": "Pulse",
+  "headerPath": "firmware/v2/src/effects/ieffect/PulseEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/PulseEffect.cpp",
+  "renderRange": [
+    20,
+    52
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        20,
+        22
+      ]
+    ],
+    "mapping": [
+      [
+        23,
+        28
+      ]
+    ],
+    "modulation": [
+      [
+        22,
+        23
+      ]
+    ],
+    "render": [
+      [
+        25,
+        25
+      ],
+      [
+        27,
+        27
+      ],
+      [
+        35,
+        35
+      ],
+      [
+        41,
+        42
+      ],
+      [
+        48,
+        49
+      ]
+    ],
+    "post": [
+      [
+        49,
+        50
+      ]
+    ],
+    "output": [
+      [
+        37,
+        37
+      ],
+      [
+        41,
+        42
+      ],
+      [
+        44,
+        46
+      ],
+      [
+        48,
+        49
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'mapping' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file PulseEffect.cpp\n * @brief Pulse effect implementation\n */\n\n#include \"PulseEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nbool PulseEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    return true;\n}\n\nvoid PulseEffect::render(plugins::EffectContext& ctx) {\n    // CENTER PAIR Pulse - Canonical pattern\n    float phase = (ctx.frameNumber * ctx.speed / 60.0f);\n    float pulsePos = fmodf(phase, (float)HALF_LENGTH);\n\n    memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));\n\n    for (int dist = 0; dist < HALF_LENGTH; dist++) {\n        float delta = fabsf((float)dist - pulsePos);\n        float intensity = (delta < 10.0f) ? (1.0f - delta / 10.0f) : 0.0f;\n\n        if (intensity > 0.0f) {\n            uint8_t brightness = (uint8_t)(intensity * 255.0f);\n            uint8_t colorIndex = (uint8_t)(dist * 3);\n\n            CRGB color = ctx.palette.getColor((uint8_t)(ctx.gHue + colorIndex), brightness);\n\n            // Strip 1: center pair\n            uint16_t left1 = CENTER_LEFT - dist;\n            uint16_t right1 = CENTER_RIGHT + dist;\n\n            if (left1 < STRIP_LENGTH) ctx.leds[left1] = color;\n            if (right1 < STRIP_LENGTH) ctx.leds[right1] = color;\n\n            // Strip 2: center pair\n            uint16_t left2 = STRIP_LENGTH + CENTER_LEFT - dist;\n            uint16_t right2 = STRIP_LENGTH + CENTER_RIGHT + dist;\n\n            if (left2 < ctx.ledCount) ctx.leds[left2] = color;\n            if (right2 < ctx.ledCount) ctx.leds[right2] = color;\n        }\n    }\n}\n\nvoid PulseEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& PulseEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Pulse\",\n        \"Sharp energy pulses\",\n        plugins::EffectCategory::SHOCKWAVE,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

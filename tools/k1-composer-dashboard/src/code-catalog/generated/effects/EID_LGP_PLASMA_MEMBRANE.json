@@ -1,0 +1,105 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_PLASMA_MEMBRANE",
+  "effectIdHex": "0x0502",
+  "className": "LGPPlasmaMembraneEffect",
+  "displayName": "LGP Plasma Membrane",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPPlasmaMembraneEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPPlasmaMembraneEffect.cpp",
+  "renderRange": [
+    25,
+    64
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        25,
+        28
+      ]
+    ],
+    "mapping": [
+      [
+        29,
+        35
+      ]
+    ],
+    "modulation": [
+      [
+        53,
+        53
+      ]
+    ],
+    "render": [
+      [
+        29,
+        29
+      ],
+      [
+        41,
+        41
+      ],
+      [
+        44,
+        44
+      ],
+      [
+        46,
+        46
+      ],
+      [
+        48,
+        48
+      ],
+      [
+        54,
+        54
+      ],
+      [
+        58,
+        58
+      ],
+      [
+        60,
+        60
+      ]
+    ],
+    "post": [
+      [
+        60,
+        62
+      ]
+    ],
+    "output": [
+      [
+        29,
+        29
+      ],
+      [
+        46,
+        48
+      ],
+      [
+        53,
+        53
+      ],
+      [
+        56,
+        56
+      ],
+      [
+        58,
+        60
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'mapping' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPPlasmaMembraneEffect.cpp\n * @brief LGP Plasma Membrane effect implementation\n */\n\n#include \"LGPPlasmaMembraneEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPPlasmaMembraneEffect::LGPPlasmaMembraneEffect()\n    : m_time(0)\n{\n}\n\nbool LGPPlasmaMembraneEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_time = 0;\n    return true;\n}\n\nvoid LGPPlasmaMembraneEffect::render(plugins::EffectContext& ctx) {\n    // Organic cellular membrane with lipid bilayer dynamics\n    m_time = (uint16_t)(m_time + (ctx.speed >> 1));\n\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        // Membrane shape using multiple octaves\n        uint16_t membrane = 0;\n        membrane += (uint16_t)(inoise8(i * 3, m_time >> 2) << 1);\n        membrane += (uint16_t)(inoise8(i * 7, m_time >> 1) >> 1);\n        membrane += inoise8(i * 13, m_time);\n        membrane >>= 2;\n\n        uint8_t hue = (uint8_t)(20 + (membrane >> 3));\n        uint8_t sat = (uint8_t)(200 + (membrane >> 2));\n        uint8_t brightness = scale8((uint8_t)membrane, ctx.brightness);\n\n        CRGB inner = ctx.palette.getColor(hue, brightness);\n        uint8_t outerBright = scale8(brightness, 200);\n        outerBright = (uint8_t)((outerBright * ctx.brightness) / 255);\n        CRGB outer = ctx.palette.getColor((uint8_t)(hue + 10), outerBright);\n\n        ctx.leds[i] = inner;\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = outer;\n        }\n    }\n\n    // Add membrane potential waves\n    uint16_t potentialWave = beatsin16(5, 0, STRIP_LENGTH - 1);\n    for (int8_t w = -10; w <= 10; w++) {\n        int16_t pos = (int16_t)potentialWave + w;\n        if (pos >= 0 && pos < STRIP_LENGTH) {\n            uint8_t waveIntensity = (uint8_t)(255 - abs(w) * 20);\n            ctx.leds[pos] = blend(ctx.leds[pos], CRGB::Yellow, waveIntensity);\n            if (pos + STRIP_LENGTH < ctx.ledCount) {\n                ctx.leds[pos + STRIP_LENGTH] = blend(ctx.leds[pos + STRIP_LENGTH], CRGB::Gold, waveIntensity);\n            }\n        }\n    }\n}\n\nvoid LGPPlasmaMembraneEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPPlasmaMembraneEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Plasma Membrane\",\n        \"Cellular membrane fluctuations\",\n        plugins::EffectCategory::NATURE,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

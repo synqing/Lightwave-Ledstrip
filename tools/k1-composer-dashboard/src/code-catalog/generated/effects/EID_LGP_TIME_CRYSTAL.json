@@ -1,0 +1,99 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_TIME_CRYSTAL",
+  "effectIdHex": "0x0602",
+  "className": "LGPTimeCrystalEffect",
+  "displayName": "LGP Time Crystal",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPTimeCrystalEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPTimeCrystalEffect.cpp",
+  "renderRange": [
+    30,
+    71
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        30,
+        34
+      ]
+    ],
+    "mapping": [
+      [
+        32,
+        32
+      ],
+      [
+        34,
+        36
+      ]
+    ],
+    "modulation": [
+      [
+        34,
+        36
+      ],
+      [
+        47,
+        47
+      ],
+      [
+        50,
+        50
+      ],
+      [
+        53,
+        53
+      ]
+    ],
+    "render": [
+      [
+        41,
+        41
+      ],
+      [
+        58,
+        58
+      ],
+      [
+        60,
+        60
+      ],
+      [
+        63,
+        63
+      ],
+      [
+        66,
+        66
+      ],
+      [
+        68,
+        68
+      ]
+    ],
+    "post": [
+      [
+        66,
+        68
+      ]
+    ],
+    "output": [
+      [
+        41,
+        41
+      ],
+      [
+        66,
+        68
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPTimeCrystalEffect.cpp\n * @brief LGP Time Crystal effect implementation\n */\n\n#include \"LGPTimeCrystalEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPTimeCrystalEffect::LGPTimeCrystalEffect()\n    : m_phase1(0)\n    , m_phase2(0)\n    , m_phase3(0)\n{\n}\n\nbool LGPTimeCrystalEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_phase1 = 0;\n    m_phase2 = 0;\n    m_phase3 = 0;\n    return true;\n}\n\nvoid LGPTimeCrystalEffect::render(plugins::EffectContext& ctx) {\n    // Perpetual motion patterns with non-repeating periods\n    float speedNorm = ctx.speed / 50.0f;\n\n    m_phase1 = (uint16_t)(m_phase1 + (uint16_t)(speedNorm * 100.0f));\n    m_phase2 = (uint16_t)(m_phase2 + (uint16_t)(speedNorm * 161.8f));  // Golden ratio\n    m_phase3 = (uint16_t)(m_phase3 + (uint16_t)(speedNorm * 271.8f));  // e\n\n    uint8_t crystallinity = ctx.brightness;\n    const uint8_t dimensions = 3;\n\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        float distFromCenter = (float)centerPairDistance((uint16_t)i) / (float)HALF_LENGTH;\n\n        float crystal = 0.0f;\n\n        // Dimension 1\n        crystal += sin16((uint16_t)(m_phase1 + i * 400)) / 32768.0f;\n\n        // Dimension 2\n        crystal += sin16((uint16_t)(m_phase2 + i * 650)) / 65536.0f;\n\n        // Dimension 3\n        crystal += sin16((uint16_t)(m_phase3 + i * 1050)) / 131072.0f;\n\n        crystal = crystal / dimensions;\n        uint8_t brightness = (uint8_t)(128 + (int8_t)(crystal * crystallinity));\n\n        uint8_t paletteIndex = (uint8_t)(crystal * 20.0f) + (uint8_t)(distFromCenter * 20.0f);\n\n        // Use bright color from palette instead of white (paletteIndex=0)\n        if (fabsf(crystal) > 0.9f) {\n            brightness = 240;  // Slightly below 255 to avoid white guardrail\n            paletteIndex = (uint8_t)(fabsf(crystal) * 50.0f);  // Use crystal value for color\n        }\n\n        ctx.leds[i] = ctx.palette.getColor((uint8_t)(ctx.gHue + paletteIndex), brightness);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(ctx.gHue + paletteIndex + 85), brightness);\n        }\n    }\n}\n\nvoid LGPTimeCrystalEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPTimeCrystalEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Time Crystal\",\n        \"Periodic structure in time\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

@@ -1,0 +1,121 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_CATASTROPHE_CAUSTICS",
+  "effectIdHex": "0x1901",
+  "className": "LGPCatastropheCausticsEffect",
+  "displayName": "Catastrophe Caustics",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPHolyShitBangersPack.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPHolyShitBangersPack.cpp",
+  "renderRange": [
+    222,
+    289
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        222,
+        229
+      ]
+    ],
+    "mapping": [
+      [
+        226,
+        226
+      ],
+      [
+        228,
+        228
+      ],
+      [
+        230,
+        230
+      ],
+      [
+        235,
+        235
+      ],
+      [
+        288,
+        288
+      ]
+    ],
+    "modulation": [
+      [
+        241,
+        252
+      ]
+    ],
+    "render": [
+      [
+        231,
+        231
+      ],
+      [
+        249,
+        249
+      ],
+      [
+        267,
+        267
+      ],
+      [
+        270,
+        270
+      ],
+      [
+        286,
+        286
+      ]
+    ],
+    "post": [
+      [
+        281,
+        285
+      ]
+    ],
+    "output": [
+      [
+        231,
+        231
+      ],
+      [
+        239,
+        239
+      ],
+      [
+        249,
+        249
+      ],
+      [
+        253,
+        253
+      ],
+      [
+        260,
+        260
+      ],
+      [
+        267,
+        267
+      ],
+      [
+        270,
+        270
+      ],
+      [
+        275,
+        275
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'modulation' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "#include \"LGPHolyShitBangersPack.h\"\n#include \"LGPFilmPost.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n#include <cstdint>\n#include <cstring>\n#include <algorithm>\n#ifndef NATIVE_BUILD\n#include <esp_heap_caps.h>\n#endif\n#include \"../../utils/Log.h\"\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nstatic constexpr float HS_PI  = 3.14159265358979323846f;\nstatic constexpr float HS_TAU = 6.28318530717958647692f;\n\nstatic inline float clamp01(float x) { return (x < 0.0f) ? 0.0f : (x > 1.0f) ? 1.0f : x; }\nstatic inline float lerp(float a, float b, float t) { return a + (b - a) * t; }\nstatic inline float smoothstep(float a, float b, float x) {\n    float t = clamp01((x - a) / (b - a));\n    return t * t * (3.0f - 2.0f * t);\n}\nstatic inline float fract(float x) { return x - floorf(x); }\nstatic inline float gaussian(float x, float sigma) {\n    float s2 = sigma * sigma;\n    return expf(-(x * x) / (2.0f * s2));\n}\nstatic inline float artanh_safe(float r) {\n    // 0.5*ln((1+r)/(1-r)) with clamp near 1\n    r = std::clamp(r, 0.0f, 0.9995f);\n    return 0.5f * logf((1.0f + r) / (1.0f - r));\n}\nstatic inline uint32_t hash32(uint32_t x) {\n    x ^= x >> 16; x *= 0x7feb352dU; x ^= x >> 15; x *= 0x846ca68bU; x ^= x >> 16;\n    return x;\n}\nstatic inline uint32_t lcg_next(uint32_t& s) {\n    s = s * 1664525u + 1013904223u;\n    return s;\n}\n\n// Premium \"centre glue\": keeps the middle welded into the wings.\nstatic inline float centreGlue(int i) {\n    const float mid = (STRIP_LENGTH - 1) * 0.5f;\n    float d = (float)i - mid;\n    return 0.30f + 0.70f * expf(-(d * d) * 0.0016f);\n}\n\n// Dual-strip LOCK. No wing rivalry, ever.\nstatic inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRGB& c) {\n    ctx.leds[i] = c;\n    int j = i + STRIP_LENGTH;\n    if (j < (int)ctx.ledCount) ctx.leds[j] = c;\n}\n\n// Luminance shaping: \"velvet blacks + glass highlights\" without harsh clipping.\nstatic inline uint8_t waveToBr(float w01, float master) {\n    const float base = 0.055f;\n    float out = clamp01(base + (1.0f - base) * clamp01(w01));\n    // mild filmic shoulder\n    out = out / (1.0f + 0.60f * out);\n    out *= master;\n    return (uint8_t)std::clamp((int)lroundf(out * 255.0f), 0, 255);\n}\n\nstatic inline float distN_from_index(int i) {\n    const float mid = (STRIP_LENGTH - 1) * 0.5f;\n    const float invMid = 1.0f / mid;\n    return fabsf((float)i - mid) * invMid; // 0..1\n}\n\n// -----------------------------------------------------------------------------\n// 1) Chimera Crown\n// -----------------------------------------------------------------------------\nLGPChimeraCrownEffect::LGPChimeraCrownEffect() : m_t(0.0f) {}\n\nbool LGPChimeraCrownEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_t = 0.0f;\n    lightwaveos::effects::cinema::reset();\n\n#ifndef NATIVE_BUILD\n    if (!m_ps) {\n        m_ps = static_cast<ChimeraPsram*>(heap_caps_malloc(sizeof(ChimeraPsram), MALLOC_CAP_SPIRAM));\n        if (!m_ps) {\n            LW_LOGE(\"LGPChimeraCrownEffect: PSRAM alloc failed\");\n            return false;\n        }\n    }\n    memset(m_ps, 0, sizeof(ChimeraPsram));\n#else\n    (void)m_ps;\n    return true;\n#endif\n\n    // Deterministic \"random\" initial phases/frequencies (no rand()).\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        uint32_t h = hash32(0xC0FFEEu ^ (uint32_t)i * 2654435761u);\n        float u = (float)(h & 0xFFFFu) / 65535.0f;\n        m_ps->theta[i] = u * HS_TAU;\n\n        uint32_t h2 = hash32(h ^ 0xA5A5A5A5u);\n        float v = ((float)((int)(h2 & 0xFFFFu) - 32768) / 32768.0f);\n        m_ps->omega[i] = 0.20f * v;\n        m_ps->Rlocal[i] = 0.0f;\n    }\n    return true;\n}\n\nvoid LGPChimeraCrownEffect::render(plugins::EffectContext& ctx) {\n#ifndef NATIVE_BUILD\n    if (!m_ps) return;\n#endif\n    const float speedNorm = ctx.speed / 50.0f;\n    const float master = ctx.brightness / 255.0f;\n\n    const int   W = 10 + (int)(10.0f * speedNorm);\n    const float K = 1.4f + 1.2f * speedNorm;\n    const float alpha = 0.55f;\n    const float dt = 0.035f + 0.030f * speedNorm;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float csum = 0.0f, ssum = 0.0f, wsum = 0.0f;\n        for (int dj = -W; dj <= W; dj++) {\n            int j = i + dj;\n            if (j < 0) j += STRIP_LENGTH;\n            if (j >= STRIP_LENGTH) j -= STRIP_LENGTH;\n            float t = fabsf((float)dj) / (float)W;\n            float w = 0.5f + 0.5f * cosf(HS_PI * t);\n            csum += w * cosf(m_ps->theta[j]);\n            ssum += w * sinf(m_ps->theta[j]);\n            wsum += w;\n        }\n        float inv = 1.0f / (wsum + 1e-6f);\n        float c = csum * inv;\n        float s = ssum * inv;\n        m_ps->Rlocal[i] = clamp01(sqrtf(c * c + s * s));\n    }\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float sum = 0.0f, wsum = 0.0f;\n        for (int dj = -W; dj <= W; dj++) {\n            int j = i + dj;\n            if (j < 0) j += STRIP_LENGTH;\n            if (j >= STRIP_LENGTH) j -= STRIP_LENGTH;\n            float t = fabsf((float)dj) / (float)W;\n            float w = 0.5f + 0.5f * cosf(HS_PI * t);\n            sum += w * sinf(m_ps->theta[j] - m_ps->theta[i] - alpha);\n            wsum += w;\n        }\n        float coupling = (K / (wsum + 1e-6f)) * sum;\n        m_ps->theta[i] += (m_ps->omega[i] + coupling) * dt;\n        if (m_ps->theta[i] > HS_TAU) m_ps->theta[i] -= HS_TAU;\n        if (m_ps->theta[i] < 0.0f) m_ps->theta[i] += HS_TAU;\n    }\n\n    m_t += dt;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float R = m_ps->Rlocal[i];\n        float glue = centreGlue(i);\n        float crown = smoothstep(0.55f, 0.92f, R);\n        crown = powf(crown, 1.35f);\n        float bed = 0.30f + 0.70f * (0.5f + 0.5f * sinf(m_ps->theta[i]));\n        bed = powf(bed, 1.15f) * 0.55f;\n        uint32_t h = hash32((uint32_t)i * 2654435761u ^ (uint32_t)(m_t * 1000.0f));\n        float n = (float)(h & 0xFFu) / 255.0f;\n        float grain = (1.0f - smoothstep(0.35f, 0.75f, R)) * (n - 0.5f) * 0.10f;\n        float wave = clamp01((bed + crown) * glue + grain);\n        uint8_t br = waveToBr(wave, master);\n        float hueShift = lerp(18.0f, 55.0f, crown) - lerp(0.0f, 14.0f, 1.0f - R);\n        uint8_t hue = (uint8_t)(ctx.gHue + (int)hueShift);\n        writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));\n    }\n    lightwaveos::effects::cinema::apply(ctx, speedNorm);\n}\n\nvoid LGPChimeraCrownEffect::cleanup() {\n#ifndef NATIVE_BUILD\n    if (m_ps) { heap_caps_free(m_ps); m_ps = nullptr; }\n#endif\n}\n\nconst plugins::EffectMetadata& LGPChimeraCrownEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Chimera Crown\",\n        \"Coherent + incoherent domains (sync fracture line)\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n// -----------------------------------------------------------------------------\n// 2) Catastrophe Caustics\n// -----------------------------------------------------------------------------\nLGPCatastropheCausticsEffect::LGPCatastropheCausticsEffect() : m_t(0.0f) {}\n\nbool LGPCatastropheCausticsEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_t = 0.0f;\n    lightwaveos::effects::cinema::reset();\n#ifndef NATIVE_BUILD\n    if (!m_ps) {\n        m_ps = static_cast<CausticsPsram*>(heap_caps_malloc(sizeof(CausticsPsram), MALLOC_CAP_SPIRAM));\n        if (!m_ps) {\n            LW_LOGE(\"LGPCatastropheCausticsEffect: PSRAM alloc failed\");\n            return false;\n        }\n    }\n    memset(m_ps, 0, sizeof(CausticsPsram));\n#else\n    return true;\n#endif\n    return true;\n}\n\nvoid LGPCatastropheCausticsEffect::render(plugins::EffectContext& ctx) {\n#ifndef NATIVE_BUILD\n    if (!m_ps) return;\n#endif\n    const float speedNorm = ctx.speed / 50.0f;\n    const float master = ctx.brightness / 255.0f;\n    m_t += (0.012f + 0.040f * speedNorm);\n\n    const float decay = 0.88f + 0.08f * (1.0f - speedNorm);\n    for (int i = 0; i < STRIP_LENGTH; i++) m_ps->I[i] *= decay;\n\n    // Focus pull controls caustic tightness\n    float z = 6.0f + 22.0f * (0.5f + 0.5f * sinf(m_t * 0.35f));\n    float strength = 1.6f + 1.4f * speedNorm;\n\n    // Lens \"thickness field\" h(x,t): slow warp + centre bias\n    auto hfield = [&](float x) -> float {\n        float xn = x / (float)(STRIP_LENGTH - 1);   // 0..1\n        float c = xn - 0.5f;\n        float centre = expf(-(c * c) * 9.0f);\n        float h = 0.55f * sinf(HS_TAU * (xn * 1.1f) + m_t * 0.7f)\n                + 0.35f * sinf(HS_TAU * (xn * 2.3f) - m_t * 0.4f)\n                + 0.20f * sinf(HS_TAU * (xn * 3.7f) + m_t * 0.25f);\n        return h * (0.35f + 0.65f * centre);\n    };\n\n    // Ray histogram: rays start at x, deflect by dh/dx, land at X = x + z * a(x)\n    for (int s = 0; s < STRIP_LENGTH; s++) {\n        float x = (float)s;\n\n        float hm1 = hfield((s == 0) ? 0.0f : (float)(s - 1));\n        float hp1 = hfield((s == STRIP_LENGTH - 1) ? (float)(STRIP_LENGTH - 1) : (float)(s + 1));\n        float dhdx = 0.5f * (hp1 - hm1);\n\n        float a = strength * dhdx;               // deflection angle proxy\n        float X = x + z * a;\n\n        int bin = (int)lroundf(X);\n        if (bin >= 0 && bin < STRIP_LENGTH) {\n            float glue = centreGlue(bin);\n            m_ps->I[bin] += 0.90f + 0.45f * glue;\n        }\n    }\n\n    float maxI = 1e-6f;\n    for (int i = 0; i < STRIP_LENGTH; i++) maxI = std::max(maxI, m_ps->I[i]);\n    float invMax = 1.0f / maxI;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float glue = centreGlue(i);\n        float v = m_ps->I[i] * invMax;\n        float fil = powf(v, 1.85f);\n        int im1 = (i == 0) ? 0 : (i - 1);\n        int ip1 = (i == STRIP_LENGTH - 1) ? (STRIP_LENGTH - 1) : (i + 1);\n        float lap = m_ps->I[im1] - 2.0f * m_ps->I[i] + m_ps->I[ip1];\n        float cusp = clamp01(fabsf(lap) * invMax * 2.4f);\n\n        float wave = clamp01((0.18f + 0.82f * fil + 0.25f * cusp) * glue);\n        uint8_t br = waveToBr(wave, master);\n\n        // Colourist rule: caustics are luminance; hue drift is tiny and \"refractive\"\n        float hueDrift = 14.0f * (v - 0.5f) + 10.0f * cusp;\n        uint8_t hue = (uint8_t)(ctx.gHue + (int)hueDrift);\n\n        writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));\n    }\n    lightwaveos::effects::cinema::apply(ctx, speedNorm);\n}\n\nvoid LGPCatastropheCausticsEffect::cleanup() {\n#ifndef NATIVE_BUILD\n    if (m_ps) { heap_caps_free(m_ps); m_ps = nullptr; }\n#endif\n}\n\nconst plugins::EffectMetadata& LGPCatastropheCausticsEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Catastrophe Caustics\",\n        \"Ray-envelope filaments (focus pull + cusp spark)\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n// -----------------------------------------------------------------------------\n// 3) Hyperbolic Portal\n// -----------------------------------------------------------------------------\nLGPHyperbolicPortalEffect::LGPHyperbolicPortalEffect() : m_t(0.0f) {}\nbool LGPHyperbolicPortalEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }\n\nvoid LGPHyperbolicPortalEffect::render(plugins::EffectContext& ctx) {\n    const float speedNorm = ctx.speed / 50.0f;\n    const float master = ctx.brightness / 255.0f;\n    m_t += (0.010f + 0.030f * speedNorm);\n\n    // Phase rotation = \"portal turning in depth\"\n    float phi = m_t * (0.55f + 0.55f * speedNorm);\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float dn = distN_from_index(i);             // 0..1 Euclidean radius\n        float glue = centreGlue(i);\n\n        // Hyperbolic coordinate blows up near edge: u = artanh(r)\n        float r = dn * 0.985f;\n        float u = artanh_safe(r);\n\n        // Multi-band hyperbolic ribs (density rises toward edges automatically)\n        float w1 = 3.8f;\n        float w2 = 7.6f;\n        float p  = sinf(w1 * u + phi) + 0.62f * sinf(w2 * u - 0.7f * phi);\n\n        // \"Tiling ribs\": turn sine into sharp-ish bands\n        float ribs = powf(smoothstep(0.15f, 1.0f, fabsf(p)), 1.35f);\n\n        // Centre calm; edge intricate (but still glued)\n        float edgeBoost = smoothstep(0.15f, 1.0f, dn);\n        float wave = clamp01((0.22f + 0.78f * ribs) * (0.70f + 0.30f * edgeBoost) * glue);\n\n        uint8_t br = waveToBr(wave, master);\n\n        // Colour: largely fixed; minor shift with hyperbolic depth so it feels \"volumetric\"\n        uint8_t hue = (uint8_t)(ctx.gHue + (int)(12.0f * edgeBoost) + (int)(18.0f * ribs));\n\n        writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));\n    }\n    lightwaveos::effects::cinema::apply(ctx, speedNorm);\n}\n\nvoid LGPHyperbolicPortalEffect::cleanup() {}\n\nconst plugins::EffectMetadata& LGPHyperbolicPortalEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Hyperbolic Portal\",\n        \"Edge densification via atanh(r) (Poincaré vibe)\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n// -----------------------------------------------------------------------------\n// 4) Lorenz Ribbon\n// -----------------------------------------------------------------------------\nLGPLorenzRibbonEffect::LGPLorenzRibbonEffect()\n    : m_x(0.1f), m_y(0.0f), m_z(0.0f), m_head(0), m_t(0.0f)\n{\n}\n\nbool LGPLorenzRibbonEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_x = 0.1f; m_y = 0.0f; m_z = 0.0f;\n    m_head = 0;\n    m_t = 0.0f;\n    lightwaveos::effects::cinema::reset();\n#ifndef NATIVE_BUILD\n    if (!m_ps) {\n        m_ps = static_cast<LorenzPsram*>(heap_caps_malloc(sizeof(LorenzPsram), MALLOC_CAP_SPIRAM));\n        if (!m_ps) {\n            LW_LOGE(\"LGPLorenzRibbonEffect: PSRAM alloc failed\");\n            return false;\n        }\n    }\n    memset(m_ps, 0, sizeof(LorenzPsram));\n#else\n    return true;\n#endif\n    return true;\n}\n\nvoid LGPLorenzRibbonEffect::render(plugins::EffectContext& ctx) {\n#ifndef NATIVE_BUILD\n    if (!m_ps) return;\n#endif\n    const float speedNorm = ctx.speed / 50.0f;\n    const float master = ctx.brightness / 255.0f;\n\n    const float sigma = 10.0f;\n    const float rho   = 28.0f;\n    const float beta  = 8.0f / 3.0f;\n    float dt = 0.0065f + 0.010f * speedNorm;\n    int sub = 2 + (int)(4.0f * speedNorm);\n    for (int s = 0; s < sub; s++) {\n        float dx = sigma * (m_y - m_x);\n        float dy = m_x * (rho - m_z) - m_y;\n        float dz = m_x * m_y - beta * m_z;\n\n        m_x += dx * dt;\n        m_y += dy * dt;\n        m_z += dz * dt;\n        m_t += dt;\n\n        float r = (0.55f * fabsf(m_x) / 22.0f) + (0.45f * m_z / 55.0f);\n        r = clamp01(r);\n\n        m_ps->trail[m_head] = r;\n        m_head = (uint8_t)((m_head + 1) % TRAIL_N);\n    }\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float dn = distN_from_index(i);\n        float glue = centreGlue(i);\n        float best = 0.0f;\n\n        for (int k = 0; k < TRAIL_N; k++) {\n            int idx = (int)m_head - 1 - k;\n            while (idx < 0) idx += TRAIL_N;\n            float r = m_ps->trail[idx];\n\n            float age = (float)k / (float)(TRAIL_N - 1);     // 0 newest .. 1 oldest\n            float fade = powf(1.0f - age, 1.65f);\n\n            float w = 0.040f + 0.030f * (1.0f - speedNorm);  // thickness\n            float g = expf(-fabsf(dn - r) / w) * fade;\n\n            best = std::max(best, g);\n        }\n\n        // Add a thin specular edge that makes it feel like a \"ribbon\"\n        float spec = powf(best, 2.2f) * 0.55f;\n\n        float wave = clamp01((0.22f + 0.78f * best + spec) * glue);\n        uint8_t br = waveToBr(wave, master);\n\n        // Colour tied to local \"chaotic energy\" (speed proxy)\n        float energy = clamp01((fabsf(m_x) / 22.0f) * 0.6f + (fabsf(m_y) / 28.0f) * 0.4f);\n        uint8_t hue = (uint8_t)(ctx.gHue + (int)(25.0f * energy) + (int)(45.0f * spec));\n\n        writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));\n    }\n    lightwaveos::effects::cinema::apply(ctx, speedNorm);\n}\n\nvoid LGPLorenzRibbonEffect::cleanup() {\n#ifndef NATIVE_BUILD\n    if (m_ps) { heap_caps_free(m_ps); m_ps = nullptr; }\n#endif\n}\n\nconst plugins::EffectMetadata& LGPLorenzRibbonEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Lorenz Ribbon\",\n        \"Chaotic attractor ribbon (never repeats the same way twice)\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n// -----------------------------------------------------------------------------\n// 5) IFS Botanical Relic (Barnsley-inspired, mirrored)\n// -----------------------------------------------------------------------------\nLGPIFSBioRelicEffect::LGPIFSBioRelicEffect()\n    : m_px(0.0f), m_py(0.0f), m_rng(0x12345678u), m_t(0.0f)\n{\n}\n\nbool LGPIFSBioRelicEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_px = 0.0f; m_py = 0.0f;\n    m_rng = 0xBADC0DEu;\n    m_t = 0.0f;\n    lightwaveos::effects::cinema::reset();\n#ifndef NATIVE_BUILD\n    if (!m_ps) {\n        m_ps = static_cast<IFSPsram*>(heap_caps_malloc(sizeof(IFSPsram), MALLOC_CAP_SPIRAM));\n        if (!m_ps) {\n            LW_LOGE(\"LGPIFSBioRelicEffect: PSRAM alloc failed\");\n            return false;\n        }\n    }\n    memset(m_ps, 0, sizeof(IFSPsram));\n#else\n    return true;\n#endif\n    return true;\n}\n\nvoid LGPIFSBioRelicEffect::render(plugins::EffectContext& ctx) {\n#ifndef NATIVE_BUILD\n    if (!m_ps) return;\n#endif\n    const float speedNorm = ctx.speed / 50.0f;\n    const float master = ctx.brightness / 255.0f;\n    m_t += (0.010f + 0.020f * speedNorm);\n\n    float decay = 0.92f + 0.06f * (1.0f - speedNorm);\n    for (int i = 0; i < STRIP_LENGTH; i++) m_ps->hist[i] *= decay;\n\n    // Points per frame (budget-friendly)\n    int P = 220 + (int)(520.0f * speedNorm);\n\n    // Barnsley-style IFS coefficients (classic fern family), then MIRROR x for symmetry\n    for (int k = 0; k < P; k++) {\n        uint32_t r = lcg_next(m_rng);\n        float u = (float)(r & 0xFFFFu) / 65535.0f;\n\n        float x = m_px, y = m_py;\n        float nx, ny;\n\n        // Probabilities (approx classic): 0.01, 0.85, 0.07, 0.07\n        if (u < 0.01f) {\n            nx = 0.0f;\n            ny = 0.16f * y;\n        } else if (u < 0.86f) {\n            nx = 0.85f * x + 0.04f * y;\n            ny = -0.04f * x + 0.85f * y + 1.6f;\n        } else if (u < 0.93f) {\n            nx = 0.20f * x - 0.26f * y;\n            ny = 0.23f * x + 0.22f * y + 1.6f;\n        } else {\n            nx = -0.15f * x + 0.28f * y;\n            ny = 0.26f * x + 0.24f * y + 0.44f;\n        }\n\n        m_px = nx;\n        m_py = ny;\n\n        // Normalise/mirror into a \"relic\" radial coordinate:\n        // - Mirror x to enforce centre-origin symmetry\n        // - Use a mix of height and lateral detail to make veins\n        float ax = fabsf(nx);\n        float yy = ny;\n\n        // Fern typically spans y ~ [0..~10]; clamp gracefully.\n        float yN = clamp01(yy / 10.0f);\n        float xN = clamp01(ax / 3.0f);\n\n        // Radial distance preference: more structure near centre, veins outward\n        float radial = clamp01(0.10f + 0.78f * (0.70f * yN + 0.30f * xN));\n\n        int bin = (int)lroundf(radial * (STRIP_LENGTH - 1));\n        if (bin >= 0 && bin < STRIP_LENGTH) {\n            float pulse = 0.85f + 0.15f * sinf(m_t * 0.7f + radial * 6.0f);\n            m_ps->hist[bin] += 0.80f * pulse;\n        }\n    }\n\n    float maxH = 1e-6f;\n    for (int i = 0; i < STRIP_LENGTH; i++) maxH = std::max(maxH, m_ps->hist[i]);\n    float inv = 1.0f / maxH;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float dn = distN_from_index(i);\n        float glue = centreGlue(i);\n\n        int bin = (int)lroundf(dn * (STRIP_LENGTH - 1));\n        bin = std::clamp(bin, 0, (int)STRIP_LENGTH - 1);\n\n        float v = clamp01(m_ps->hist[bin] * inv);\n        float veins = powf(v, 1.65f);\n        float spec  = powf(veins, 2.2f) * 0.45f;\n\n        float wave = clamp01((0.18f + 0.82f * veins + spec) * glue);\n        uint8_t br = waveToBr(wave, master);\n\n        // Colour: museum relic vibe — stable hue, slight lift on spec\n        uint8_t hue = (uint8_t)(ctx.gHue + (int)(10.0f * dn) + (int)(35.0f * spec));\n\n        writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));\n    }\n    lightwaveos::effects::cinema::apply(ctx, speedNorm);\n}\n\nvoid LGPIFSBioRelicEffect::cleanup() {\n#ifndef NATIVE_BUILD\n    if (m_ps) { heap_caps_free(m_ps); m_ps = nullptr; }\n#endif\n}\n\nconst plugins::EffectMetadata& LGPIFSBioRelicEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"IFS Botanical Relic\",\n        \"Mirrored IFS growth (fractal botany in glass)\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

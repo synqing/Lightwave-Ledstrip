@@ -1,0 +1,93 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_RGB_PRISM",
+  "effectIdHex": "0x0701",
+  "className": "LGPRGBPrismEffect",
+  "displayName": "LGP RGB Prism",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPRGBPrismEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPRGBPrismEffect.cpp",
+  "renderRange": [
+    26,
+    62
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        26,
+        29
+      ]
+    ],
+    "mapping": [
+      [
+        36,
+        36
+      ],
+      [
+        38,
+        40
+      ]
+    ],
+    "modulation": [
+      [
+        36,
+        42
+      ]
+    ],
+    "render": [
+      [
+        34,
+        34
+      ],
+      [
+        43,
+        45
+      ],
+      [
+        49,
+        51
+      ],
+      [
+        56,
+        56
+      ],
+      [
+        58,
+        58
+      ]
+    ],
+    "post": [
+      [
+        58,
+        60
+      ]
+    ],
+    "output": [
+      [
+        34,
+        34
+      ],
+      [
+        42,
+        45
+      ],
+      [
+        47,
+        51
+      ],
+      [
+        56,
+        58
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'modulation' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPRGBPrismEffect.cpp\n * @brief LGP RGB Prism effect implementation\n */\n\n#include \"LGPRGBPrismEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPRGBPrismEffect::LGPRGBPrismEffect()\n    : m_prismAngle(0.0f)\n{\n}\n\nbool LGPRGBPrismEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_prismAngle = 0.0f;\n    return true;\n}\n\nvoid LGPRGBPrismEffect::render(plugins::EffectContext& ctx) {\n    // Simulates light passing through a prism\n    float speed = ctx.speed / 255.0f;\n    float intensity = ctx.brightness / 255.0f;\n    const float dispersion = 1.5f;\n\n    m_prismAngle += speed * 0.02f;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float distFromCenter = (float)centerPairDistance((uint16_t)i);\n        float normalizedDist = distFromCenter / (float)HALF_LENGTH;\n\n        float redAngle = sinf(normalizedDist * dispersion + m_prismAngle);\n        float greenAngle = sinf(normalizedDist * dispersion * 1.1f + m_prismAngle);\n        float blueAngle = sinf(normalizedDist * dispersion * 1.2f + m_prismAngle);\n\n        // Strip 1: Red channel dominant\n        ctx.leds[i].r = (uint8_t)((128.0f + 127.0f * redAngle) * intensity);\n        ctx.leds[i].g = (uint8_t)(64.0f * fabsf(greenAngle) * intensity);\n        ctx.leds[i].b = 0;\n\n        // Strip 2: Blue channel dominant\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH].r = 0;\n            ctx.leds[i + STRIP_LENGTH].g = (uint8_t)(64.0f * fabsf(greenAngle) * intensity);\n            ctx.leds[i + STRIP_LENGTH].b = (uint8_t)((128.0f + 127.0f * blueAngle) * intensity);\n        }\n\n        // Green emerges at center\n        if (distFromCenter < 10.0f) {\n            ctx.leds[i].g += (uint8_t)(128.0f * intensity);\n            if (i + STRIP_LENGTH < ctx.ledCount) {\n                ctx.leds[i + STRIP_LENGTH].g += (uint8_t)(128.0f * intensity);\n            }\n        }\n    }\n}\n\nvoid LGPRGBPrismEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPRGBPrismEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP RGB Prism\",\n        \"RGB component splitting\",\n        plugins::EffectCategory::UNCATEGORIZED,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

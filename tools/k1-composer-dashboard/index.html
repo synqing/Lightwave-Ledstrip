@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>K1 Composer Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="bg-grid" aria-hidden="true"></div>
+    <header class="app-header">
+      <div class="title-wrap">
+        <h1>K1 Lightwave Composer</h1>
+        <p>Dashboard-as-brains companion: execute effects locally, stream frames to K1 renderer.</p>
+      </div>
+      <div class="status-wrap">
+        <label class="host-input">
+          <span>Device Host</span>
+          <input id="hostInput" type="text" value="192.168.1.100" placeholder="lightwaveos.local" />
+        </label>
+        <div class="status-line">
+          <span id="connectBadge" class="badge offline">Disconnected</span>
+          <span id="leaseBadge" class="badge muted">Observe</span>
+          <span id="streamBadge" class="badge muted">Stream Idle</span>
+          <span id="ownerBadge" class="owner">owner: n/a</span>
+        </div>
+      </div>
+    </header>
+
+    <section class="toolbar">
+      <button id="connectBtn">Connect</button>
+      <button id="acquireBtn" class="accent">Take Control</button>
+      <button id="releaseBtn">Release</button>
+      <button id="reacquireBtn">Reacquire</button>
+      <button id="statusBtn">Refresh Status</button>
+      <button id="emergencyBtn" class="danger">Emergency Stop</button>
+      <a href="./k1-diagnostic.html" target="_blank" style="display:inline-flex;align-items:center;gap:4px;padding:6px 12px;border-radius:4px;background:rgba(74,175,255,0.1);border:1px solid rgba(74,175,255,0.25);color:#4af;font-size:11px;text-decoration:none;font-family:monospace;letter-spacing:0.05em;">Diagnostic Panel</a>
+      <div class="lease-meta">
+        <span id="leaseId">leaseId: -</span>
+        <span id="leaseTtl">remaining: -</span>
+        <span id="hbState">heartbeat: idle</span>
+        <span id="streamMeta">stream: idle</span>
+        <span id="streamQueue">queue: 0B</span>
+      </div>
+    </section>
+
+    <main class="layout">
+      <section class="card transport-card">
+        <h2>Timeline + Transport</h2>
+        <div class="transport-controls">
+          <button id="playBtn">Play</button>
+          <button id="pauseBtn">Pause</button>
+          <button id="resetBtn">Reset</button>
+          <div class="speed-group" role="group" aria-label="playback speed">
+            <button data-speed="0.25">0.25x</button>
+            <button data-speed="0.5">0.5x</button>
+            <button data-speed="1" class="is-active">1x</button>
+            <button data-speed="2">2x</button>
+          </div>
+        </div>
+        <div class="timeline-wrap">
+          <input id="timeline" type="range" min="0" max="1000" value="0" />
+          <div class="timeline-labels">
+            <span>Input</span>
+            <span>Mapping</span>
+            <span>Render</span>
+            <span>Output</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card lease-card">
+        <h2>Control Lease</h2>
+        <div id="leaseStateBlock" class="kv-grid"></div>
+        <h2 class="sub-title">Render Stream</h2>
+        <div id="streamStateBlock" class="kv-grid"></div>
+      </section>
+
+      <section class="card preview-card">
+        <h2>LED Preview</h2>
+        <div class="strip" id="stripA" aria-label="Strip A preview"></div>
+        <div class="strip" id="stripB" aria-label="Strip B preview"></div>
+      </section>
+
+      <section class="card algo-card">
+        <h2>Algorithm Flow</h2>
+        <div class="algo-flow" id="algoFlow">
+          <div data-node="input">Input</div>
+          <div data-node="mapping">Semantic Mapping</div>
+          <div data-node="modulation">Modulation</div>
+          <div data-node="render">Render</div>
+          <div data-node="post">PostFX</div>
+          <div data-node="output">LED Output</div>
+        </div>
+      </section>
+
+      <section class="card tuner-card">
+        <h2>Parameter Tuner</h2>
+        <div class="slider-grid" id="tunerGrid"></div>
+      </section>
+
+      <section class="card code-card">
+        <h2>Live Code Visualiser</h2>
+        <div class="code-toolbar code-toolbar-top">
+          <label class="effect-picker">
+            <span>Effect</span>
+            <select id="effectSelect" aria-label="Effect source selector"></select>
+          </label>
+          <span id="mappingBadge" class="badge muted">mapping: n/a</span>
+        </div>
+        <div class="code-toolbar">
+          <span id="effectNameLabel">effect: -</span>
+          <span id="sourcePathLabel">source: -</span>
+          <span id="phaseLabel">phase: input</span>
+        </div>
+        <pre id="codeVisualiser" class="code-view" aria-label="Live effect source view"></pre>
+        <div id="codeVars" class="code-vars"></div>
+        <pre id="codeTrace" class="code-trace" aria-label="Execution trace"></pre>
+      </section>
+
+      <section class="card diagnostics-card">
+        <h2>Stream Diagnostics</h2>
+        <div id="diagMetrics" class="diag-grid"></div>
+        <div class="diag-charts">
+          <div class="diag-chart">
+            <span>Queue (bytes)</span>
+            <canvas id="queueSpark" width="420" height="86" aria-label="Queue sparkline"></canvas>
+          </div>
+          <div class="diag-chart">
+            <span>Send cadence (Hz)</span>
+            <canvas id="cadenceSpark" width="420" height="86" aria-label="Cadence sparkline"></canvas>
+          </div>
+          <div class="diag-chart">
+            <span>Drop ratio (10s)</span>
+            <canvas id="dropSpark" width="420" height="86" aria-label="Drop ratio sparkline"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <section class="card telemetry-card">
+        <h2>Event Trace / Telemetry</h2>
+        <pre id="telemetryLog" class="telemetry-log"></pre>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

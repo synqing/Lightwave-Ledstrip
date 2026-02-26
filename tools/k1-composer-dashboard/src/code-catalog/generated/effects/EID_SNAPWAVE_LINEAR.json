@@ -1,0 +1,128 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_SNAPWAVE_LINEAR",
+  "effectIdHex": "0x0E0A",
+  "className": "SnapwaveLinearEffect",
+  "displayName": "Snapwave",
+  "headerPath": "firmware/v2/src/effects/ieffect/SnapwaveLinearEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/SnapwaveLinearEffect.cpp",
+  "renderRange": [
+    196,
+    300
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        209,
+        210
+      ]
+    ],
+    "mapping": [
+      [
+        241,
+        241
+      ],
+      [
+        286,
+        286
+      ]
+    ],
+    "modulation": [
+      [
+        205,
+        205
+      ],
+      [
+        214,
+        215
+      ],
+      [
+        221,
+        222
+      ],
+      [
+        233,
+        233
+      ]
+    ],
+    "render": [
+      [
+        270,
+        270
+      ],
+      [
+        272,
+        272
+      ],
+      [
+        292,
+        292
+      ],
+      [
+        295,
+        295
+      ]
+    ],
+    "post": [
+      [
+        277,
+        277
+      ],
+      [
+        279,
+        282
+      ],
+      [
+        292,
+        292
+      ],
+      [
+        295,
+        295
+      ]
+    ],
+    "output": [
+      [
+        201,
+        202
+      ],
+      [
+        241,
+        242
+      ],
+      [
+        244,
+        244
+      ],
+      [
+        262,
+        262
+      ],
+      [
+        265,
+        267
+      ],
+      [
+        269,
+        270
+      ],
+      [
+        286,
+        289
+      ],
+      [
+        291,
+        292
+      ],
+      [
+        295,
+        295
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [],
+  "sourceText": "/**\n * @file SnapwaveLinearEffect.cpp\n * @brief Scrolling waveform with time-based oscillation and HISTORY BUFFER trails\n *\n * ORIGINAL SNAPWAVE ALGORITHM - Restored from SensoryBridge light_mode_snapwave()\n *\n * Algorithm per frame:\n * 1. Smooth peak (2% new, 98% old)\n * 2. Compute time-based oscillation from chromagram + sin(millis())\n * 3. Apply tanh() for \"snap\" characteristic\n * 4. Calculate dot distance from centre\n * 5. Push current position to HISTORY BUFFER\n * 6. Render ALL history entries as fading trail\n * 7. Mirror for CENTRE ORIGIN (strip 1 only)\n *\n * Per-zone: all temporal state is dimensioned [kMaxZones] and accessed via\n * const int z = ctx.zoneId. ZoneComposer reuses one instance across zones.\n */\n\n#include \"SnapwaveLinearEffect.h\"\n#include \"AudioReactivePolicy.h\"\n#include \"../../config/features.h\"\n\n#ifndef NATIVE_BUILD\n#include <FastLED.h>\n#include <esp_heap_caps.h>\n#endif\n\n#include <cmath>\n#include <cstring>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nbool SnapwaveLinearEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n\n    for (uint8_t z = 0; z < kMaxZones; ++z) {\n        m_peakSmoothed[z] = 0.0f;\n        m_historyIndex[z] = 0;\n    }\n\n#ifndef NATIVE_BUILD\n    if (!m_ps) {\n        m_ps = static_cast<SnapwavePsram*>(\n            heap_caps_malloc(sizeof(SnapwavePsram), MALLOC_CAP_SPIRAM));\n        if (!m_ps) return false;\n    }\n    memset(m_ps, 0, sizeof(SnapwavePsram));\n#endif\n    return true;\n}\n\nvoid SnapwaveLinearEffect::pushHistory(int z, uint8_t distance, CRGB color) {\n    if (!m_ps) return;\n    m_ps->distanceHistory[z][m_historyIndex[z]] = distance;\n    m_ps->colorHistory[z][m_historyIndex[z]] = color;\n    m_historyIndex[z] = (m_historyIndex[z] + 1) % HISTORY_SIZE;\n}\n\nvoid SnapwaveLinearEffect::renderHistoryToLeds(int z, plugins::EffectContext& ctx) {\n    if (!m_ps) return;\n    uint16_t stripLen = (ctx.ledCount > 160) ? 160 : ctx.ledCount;\n    uint16_t halfStrip = stripLen / 2;\n\n    memset(ctx.leds, 0, stripLen * sizeof(CRGB));\n\n    for (uint16_t i = 0; i < HISTORY_SIZE; ++i) {\n        uint16_t idx = (m_historyIndex[z] + i) % HISTORY_SIZE;\n\n        uint8_t distance = m_ps->distanceHistory[z][idx];\n        CRGB color = m_ps->colorHistory[z][idx];\n\n        // Calculate faded brightness (oldest = dimmest, newest = brightest)\n        // i=0 is oldest, i=HISTORY_SIZE-1 is newest\n        float ageFactor = (float)(i + 1) / (float)HISTORY_SIZE;  // 0.025 to 1.0\n        float fadedBrightness = ageFactor * ageFactor;  // Quadratic falloff for more contrast\n\n        // Scale colour by faded brightness\n        uint8_t scale = (uint8_t)(fadedBrightness * 255.0f);\n        CRGB fadedColor = color;\n        fadedColor.nscale8(scale);\n\n        // Skip if too dim\n        if (scale < 5) continue;\n\n        // Map distance to LED positions (CENTRE ORIGIN)\n        // distance 0 = centre (79/80), distance 79 = edge (0/159)\n        if (distance < halfStrip) {\n            uint16_t leftPos = (halfStrip - 1) - distance;   // 79 - dist\n            uint16_t rightPos = halfStrip + distance;         // 80 + dist\n\n            // Additive blend for overlapping trails\n            ctx.leds[leftPos] += fadedColor;\n            ctx.leds[rightPos] += fadedColor;\n        }\n    }\n}\n\nfloat SnapwaveLinearEffect::computeOscillation(const plugins::EffectContext& ctx) {\n    float oscillation = 0.0f;\n\n#if FEATURE_AUDIO_SYNC\n    if (ctx.audio.available) {\n        // CRITICAL FIX: Gate by overall audio energy\n        // If RMS is below threshold, return 0 immediately (dot stays at center)\n        float rms = ctx.audio.rms();\n        if (rms < ENERGY_GATE_THRESHOLD) {\n            return 0.0f;  // Silence = stillness\n        }\n\n        // Time-based oscillation from chromagram\n        // Each active note contributes with different phase offset\n        // Formula: sum(chromagram[i] * sin(millis() * 0.001 * (1.0 + i * 0.5)))\n        float timeMs = static_cast<float>(ctx.rawTotalTimeMs);\n\n        for (uint8_t i = 0; i < 12; ++i) {\n            float chromaVal = ctx.audio.controlBus.chroma[i];\n            if (chromaVal > NOTE_THRESHOLD) {\n                float freqMult = 1.0f + PHASE_SPREAD * i;\n                oscillation += chromaVal * sinf(timeMs * BASE_FREQUENCY * freqMult);\n            }\n        }\n    }\n#else\n    // Without audio, use time-based oscillation for demo\n    float timeMs = static_cast<float>(ctx.rawTotalTimeMs);\n    oscillation = sinf(timeMs * 0.002f);  // Slow oscillation for visual demo\n#endif\n\n    // Normalize with tanh() for \"snap\" characteristic\n    // tanh(x * 2.0) provides natural limiting at ±1\n    oscillation = tanhf(oscillation * TANH_SCALE);\n\n    return oscillation;\n}\n\nCRGB SnapwaveLinearEffect::computeChromaColor(const plugins::EffectContext& ctx) {\n    float sumR = 0.0f, sumG = 0.0f, sumB = 0.0f;\n    float totalMagnitude = 0.0f;\n\n#if FEATURE_AUDIO_SYNC\n    if (ctx.audio.available) {\n        for (uint8_t c = 0; c < 12; ++c) {\n            float prog = c / 12.0f;\n            float bin = ctx.audio.controlBus.chroma[c];\n\n            // Square for contrast (SQUARE_ITER = 1)\n            float bright = bin * bin;\n\n            if (bright > COLOR_THRESHOLD) {\n                uint8_t hue = (uint8_t)(prog * 255.0f + ctx.gHue);\n                CRGB noteCol = ctx.palette.getColor(hue, 255);\n\n                sumR += noteCol.r * bright;\n                sumG += noteCol.g * bright;\n                sumB += noteCol.b * bright;\n                totalMagnitude += bright;\n            }\n        }\n\n        // Normalize and scale\n        if (totalMagnitude > 0.01f) {\n            sumR /= totalMagnitude;\n            sumG /= totalMagnitude;\n            sumB /= totalMagnitude;\n            sumR *= fminf(totalMagnitude, 1.0f);\n            sumG *= fminf(totalMagnitude, 1.0f);\n            sumB *= fminf(totalMagnitude, 1.0f);\n        }\n    }\n#endif\n\n    // Fallback color when no audio\n    if (totalMagnitude < 0.01f) {\n        CRGB fallback = ctx.palette.getColor(ctx.gHue, 255);\n        sumR = fallback.r;\n        sumG = fallback.g;\n        sumB = fallback.b;\n    }\n\n    // Brightness scaling\n    float brightnessScale = ctx.brightness / 255.0f;\n    sumR *= brightnessScale;\n    sumG *= brightnessScale;\n    sumB *= brightnessScale;\n\n    return CRGB(\n        (uint8_t)fminf(sumR, 255.0f),\n        (uint8_t)fminf(sumG, 255.0f),\n        (uint8_t)fminf(sumB, 255.0f)\n    );\n}\n\nvoid SnapwaveLinearEffect::render(plugins::EffectContext& ctx) {\n    if (!m_ps) return;\n\n    const int z = (ctx.zoneId < kMaxZones) ? ctx.zoneId : 0;\n\n    uint16_t stripLen = (ctx.ledCount > 160) ? 160 : ctx.ledCount;\n    uint16_t halfStrip = stripLen / 2;  // 80\n\n    // =========================================\n    // STEP 1: Smooth the peak (2% new, 98% old)\n    // =========================================\n    float currentPeak = 0.0f;\n#if FEATURE_AUDIO_SYNC\n    if (ctx.audio.available) {\n        currentPeak = ctx.audio.rms();\n    } else {\n        // No audio available: slow breathing demo (obviously NOT musical)\n        // 2-second cycle so it's clearly not responding to audio\n        float breathPhase = sinf(static_cast<float>(ctx.rawTotalTimeMs) * 0.0005f);\n        currentPeak = 0.3f + 0.2f * breathPhase;  // 0.1 to 0.5 range\n    }\n#else\n    currentPeak = 0.4f;  // Compile-time no audio: constant demo\n#endif\n    const float dt = AudioReactivePolicy::signalDt(ctx);\n    const float peakAlpha = 1.0f - powf(PEAK_DECAY, dt * 60.0f);  // 0.02-at-60fps equivalent\n    m_peakSmoothed[z] += (currentPeak - m_peakSmoothed[z]) * peakAlpha;\n\n    // =========================================\n    // STEP 2: Compute oscillation\n    // =========================================\n    float oscillation = computeOscillation(ctx);\n\n    // =========================================\n    // STEP 3: Mix oscillation with amplitude\n    // =========================================\n    // CRITICAL: No forced minimum - silence = stillness (dot at centre)\n    float amp = oscillation * m_peakSmoothed[z] * AMPLITUDE_MIX;\n    if (amp > 1.0f) amp = 1.0f;\n    if (amp < -1.0f) amp = -1.0f;\n\n    // =========================================\n    // STEP 4: Calculate dot distance from centre\n    // =========================================\n    // amp ranges from -1 to +1\n    // Map to distance from centre: 0 to halfStrip-1\n    float distance = fabsf(amp) * (halfStrip - 1);\n    uint8_t distInt = (uint8_t)(distance + 0.5f);\n    if (distInt >= halfStrip) distInt = halfStrip - 1;\n\n    // =========================================\n    // STEP 5: Compute colour\n    // =========================================\n    CRGB dotColor = computeChromaColor(ctx);\n\n    // =========================================\n    // STEP 6: Push to HISTORY BUFFER\n    // =========================================\n    pushHistory(z, distInt, dotColor);\n\n    // =========================================\n    // STEP 7: Render history as trail\n    // =========================================\n    renderHistoryToLeds(z, ctx);\n\n    // =========================================\n    // STEP 8: Render to strip 2 (centre-origin at LED 239/240)\n    // =========================================\n    if (ctx.ledCount > 160) {\n        uint16_t strip2Start = 160;\n        uint16_t strip2Center = 240;  // Centre of strip 2\n        uint16_t strip2HalfLen = 80;\n\n        // Clear strip 2 first\n        memset(&ctx.leds[strip2Start], 0, strip2HalfLen * 2 * sizeof(CRGB));\n\n        for (uint16_t i = 0; i < HISTORY_SIZE; ++i) {\n            uint16_t idx = (m_historyIndex[z] + i) % HISTORY_SIZE;\n            uint8_t distance = m_ps->distanceHistory[z][idx];\n            CRGB color = m_ps->colorHistory[z][idx];\n\n            // Faded brightness (oldest = dimmest)\n            float ageFactor = (float)(i + 1) / (float)HISTORY_SIZE;\n            float fadedBrightness = ageFactor * ageFactor;\n            uint8_t scale = (uint8_t)(fadedBrightness * 255.0f);\n            CRGB fadedColor = color;\n            fadedColor.nscale8(scale);\n\n            if (scale < 5) continue;\n\n            // Map to strip 2 centre-origin\n            if (distance < strip2HalfLen) {\n                uint16_t leftPos = strip2Center - 1 - distance;\n                uint16_t rightPos = strip2Center + distance;\n\n                if (leftPos >= strip2Start && leftPos < ctx.ledCount) {\n                    ctx.leds[leftPos] += fadedColor;\n                }\n                if (rightPos < ctx.ledCount) {\n                    ctx.leds[rightPos] += fadedColor;\n                }\n            }\n        }\n    }\n}\n\nvoid SnapwaveLinearEffect::cleanup() {\n#ifndef NATIVE_BUILD\n    if (m_ps) {\n        heap_caps_free(m_ps);\n        m_ps = nullptr;\n    }\n#endif\n}\n\nconst plugins::EffectMetadata& SnapwaveLinearEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Snapwave\",\n        \"Bouncing dot with history trail - time-based oscillation with snap\",\n        plugins::EffectCategory::PARTY,\n        1,\n        \"LightwaveOS\"\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

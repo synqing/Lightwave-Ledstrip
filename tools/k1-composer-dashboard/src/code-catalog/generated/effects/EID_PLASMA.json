@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_PLASMA",
+  "effectIdHex": "0x0102",
+  "className": "PlasmaEffect",
+  "displayName": "Plasma",
+  "headerPath": "firmware/v2/src/effects/ieffect/PlasmaEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/PlasmaEffect.cpp",
+  "renderRange": [
+    26,
+    57
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        26,
+        28
+      ]
+    ],
+    "mapping": [
+      [
+        29,
+        33
+      ]
+    ],
+    "modulation": [
+      [
+        34,
+        39
+      ]
+    ],
+    "render": [
+      [
+        41,
+        41
+      ],
+      [
+        47,
+        47
+      ],
+      [
+        50,
+        50
+      ],
+      [
+        52,
+        52
+      ],
+      [
+        54,
+        54
+      ]
+    ],
+    "post": [
+      [
+        54,
+        55
+      ]
+    ],
+    "output": [
+      [
+        41,
+        41
+      ],
+      [
+        52,
+        54
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'mapping' inferred from fallback segmentation.",
+    "Phase 'modulation' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file PlasmaEffect.cpp\n * @brief Plasma effect implementation\n */\n\n#include \"PlasmaEffect.h\"\n#include \"../CoreEffects.h\"\n#include \"../utils/FastLEDOptim.h\"\n#include \"../../core/narrative/NarrativeEngine.h\"\n#include <FastLED.h>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nPlasmaEffect::PlasmaEffect()\n    : m_plasmaTime(0)\n{\n}\n\nbool PlasmaEffect::init(plugins::EffectContext& ctx) {\n    m_plasmaTime = 0;\n    return true;\n}\n\nvoid PlasmaEffect::render(plugins::EffectContext& ctx) {\n    // CENTER ORIGIN PLASMA - Plasma field from center\n    // Narrative integration: speed modulated by tempo multiplier\n    using namespace utils;\n    using namespace lightwaveos::narrative;\n    \n    // Apply narrative tempo multiplier to speed (opt-in, backward compatible)\n    float narrativeSpeed = ctx.speed;\n    if (NARRATIVE.isEnabled()) {\n        narrativeSpeed *= NARRATIVE.getTempoMultiplier();\n    }\n    \n    m_plasmaTime += (uint16_t)narrativeSpeed;\n    if (m_plasmaTime > 65535) m_plasmaTime = m_plasmaTime % 65536;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        // Use utility function for center-based sin16 calculations\n        float v1 = fastled_center_sin16(i, CENTER_LEFT, HALF_LENGTH, 8.0f, m_plasmaTime);\n        float v2 = fastled_center_sin16(i, CENTER_LEFT, HALF_LENGTH, 5.0f, (uint16_t)(-m_plasmaTime * 0.75f));\n        float v3 = fastled_center_sin16(i, CENTER_LEFT, HALF_LENGTH, 3.0f, (uint16_t)(m_plasmaTime * 0.5f));\n\n        uint8_t paletteIndex = (uint8_t)((v1 + v2 + v3) * 10.0f + 15.0f) + ctx.gHue;\n        uint8_t brightness = (uint8_t)((v1 + v2 + 2.0f) * 63.75f);\n\n        CRGB color = ctx.palette.getColor(paletteIndex, brightness);\n\n        ctx.leds[i] = color;\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = color;\n        }\n    }\n}\n\nvoid PlasmaEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& PlasmaEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Plasma\",\n        \"Smoothly shifting color plasma\",\n        plugins::EffectCategory::AMBIENT,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n\n"
+}

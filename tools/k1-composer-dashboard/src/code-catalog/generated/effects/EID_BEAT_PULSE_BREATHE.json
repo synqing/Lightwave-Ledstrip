@@ -1,0 +1,114 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_BEAT_PULSE_BREATHE",
+  "effectIdHex": "0x1409",
+  "className": "BeatPulseBreatheEffect",
+  "displayName": "Beat Pulse (Breathe)",
+  "headerPath": "firmware/v2/src/effects/ieffect/BeatPulseBreatheEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/BeatPulseBreatheEffect.cpp",
+  "renderRange": [
+    43,
+    101
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        50,
+        50
+      ]
+    ],
+    "mapping": [
+      [
+        58,
+        58
+      ],
+      [
+        61,
+        61
+      ],
+      [
+        66,
+        66
+      ],
+      [
+        72,
+        73
+      ]
+    ],
+    "modulation": [
+      [
+        43,
+        43
+      ],
+      [
+        45,
+        45
+      ],
+      [
+        50,
+        51
+      ],
+      [
+        57,
+        57
+      ],
+      [
+        60,
+        61
+      ],
+      [
+        65,
+        65
+      ],
+      [
+        69,
+        70
+      ],
+      [
+        82,
+        82
+      ]
+    ],
+    "render": [
+      [
+        77,
+        77
+      ],
+      [
+        85,
+        85
+      ],
+      [
+        87,
+        87
+      ],
+      [
+        91,
+        91
+      ]
+    ],
+    "post": [
+      [
+        94,
+        98
+      ]
+    ],
+    "output": [
+      [
+        46,
+        46
+      ],
+      [
+        76,
+        76
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file BeatPulseBreatheEffect.cpp\n * @brief Beat Pulse (Breathe) - Organic whole-strip breathing pulse\n *\n * The simplest, most primal beat-reactive effect - like a heartbeat or\n * subwoofer cone. NO ring. The entire strip pulses with strong centre-weighting.\n * Warm, organic, living.\n *\n * See BeatPulseBreatheEffect.h for design rationale.\n */\n\n#include \"BeatPulseBreatheEffect.h\"\n#include \"../CoreEffects.h\"\n#include \"BeatPulseRenderUtils.h\"\n\n#include <cmath>\n\nnamespace lightwaveos::effects::ieffect {\n\n// ============================================================================\n// Constants - Organic Breathing Feel\n// ============================================================================\n\nconstexpr float DECAY_FACTOR = 0.88f;         // Slower than 0.94 (organic exhale)\nconstexpr float ATTACK_SMOOTHING = 0.25f;     // Soft attack (inhale)\nconstexpr float CENTRE_FALLOFF = 0.6f;        // Edge is 40% of centre brightness\nconstexpr float BASE_BRIGHTNESS = 0.20f;      // Higher resting state (warm glow)\nconstexpr float WARMTH_SHIFT = 0.25f;         // Palette shift toward warm on beat\n\n// ============================================================================\n// Lifecycle\n// ============================================================================\n\nbool BeatPulseBreatheEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_beatIntensity = 0.0f;\n    m_targetIntensity = 0.0f;\n    m_lastBeatTimeMs = 0;\n    m_fallbackBpm = 128.0f;\n    return true;\n}\n\nvoid BeatPulseBreatheEffect::render(plugins::EffectContext& ctx) {\n    // =========================================================================\n    // BREATHE: The simplest, most primal - like a heartbeat or subwoofer cone.\n    // NO ring. The entire strip pulses with strong centre-weighting.\n    // Organic, warm, living.\n    // =========================================================================\n\n    // --- Beat source ---\n    const bool beatTick = BeatPulseTiming::computeBeatTick(ctx, m_fallbackBpm, m_lastBeatTimeMs);\n\n    // --- Delta time for frame-rate independent motion ---\n    const float dt = ctx.getSafeRawDeltaSeconds();\n\n    // --- Soft attack (the \"inhale\") - dt-corrected ---\n    if (beatTick) {\n        m_targetIntensity = 1.0f;\n    }\n    const float attackSmooth = 1.0f - powf(1.0f - ATTACK_SMOOTHING, dt * 60.0f);\n    m_beatIntensity += (m_targetIntensity - m_beatIntensity) * attackSmooth;\n\n    // --- Slower decay (the \"exhale\") ---\n    const float decay = powf(DECAY_FACTOR, dt * 60.0f);\n    m_beatIntensity *= decay;\n    m_targetIntensity *= decay;\n\n    // Clamp to zero when below threshold\n    if (m_beatIntensity < 0.001f) {\n        m_beatIntensity = 0.0f;\n    }\n    if (m_targetIntensity < 0.001f) {\n        m_targetIntensity = 0.0f;\n    }\n\n    // --- Render: whole-strip breathing with strong centre weighting ---\n    for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {\n        const float dist01 = (static_cast<float>(dist) + 0.5f) / static_cast<float>(HALF_LENGTH);\n\n        // Strong centre weighting: centre = 1.0, edge = 0.4\n        const float centreWeight = 1.0f - dist01 * CENTRE_FALLOFF;\n        const float localIntensity = m_beatIntensity * centreWeight;\n\n        // Colour: warm on hit, cool at rest\n        // Shift palette index based on intensity (lower index = warmer colours typically)\n        const float warmth = localIntensity * WARMTH_SHIFT;\n        const uint8_t paletteIdx = floatToByte(dist01 * 0.8f + (1.0f - warmth) * 0.2f);\n\n        // Higher resting brightness (warm ambient glow)\n        const float brightnessFactor = BASE_BRIGHTNESS + localIntensity * (1.0f - BASE_BRIGHTNESS);\n        CRGB c = ctx.palette.getColor(paletteIdx, scaleBrightness(ctx.brightness, brightnessFactor));\n\n        // Very subtle white only at centre on strong hits\n        if (dist01 < 0.12f && localIntensity > 0.7f) {\n            const uint8_t white = floatToByte((localIntensity - 0.7f) * 3.3f * 0.12f);\n            ColourUtil::addWhiteSaturating(c, white);\n        }\n\n        SET_CENTER_PAIR(ctx, dist, c);\n    }\n}\n\nvoid BeatPulseBreatheEffect::cleanup() {}\n\n// ============================================================================\n// Metadata\n// ============================================================================\n\nconst plugins::EffectMetadata& BeatPulseBreatheEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Beat Pulse (Breathe)\",\n        \"Organic whole-strip breathing pulse with warm centre-weighted glow\",\n        plugins::EffectCategory::PARTY,\n        1,\n        \"LightwaveOS\"\n    };\n    return meta;\n}\n\n// ============================================================================\n// Parameters (none for this effect)\n// ============================================================================\n\nuint8_t BeatPulseBreatheEffect::getParameterCount() const { return 0; }\n\nconst plugins::EffectParameter* BeatPulseBreatheEffect::getParameter(uint8_t index) const {\n    (void)index;\n    return nullptr;\n}\n\nbool BeatPulseBreatheEffect::setParameter(const char* name, float value) {\n    (void)name; (void)value;\n    return false;\n}\n\nfloat BeatPulseBreatheEffect::getParameter(const char* name) const {\n    (void)name;\n    return 0.0f;\n}\n\n} // namespace lightwaveos::effects::ieffect\n"
+}

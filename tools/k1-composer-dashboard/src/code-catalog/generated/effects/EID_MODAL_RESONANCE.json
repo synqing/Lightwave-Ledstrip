@@ -1,0 +1,111 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_MODAL_RESONANCE",
+  "effectIdHex": "0x0202",
+  "className": "ModalResonanceEffect",
+  "displayName": "LGP Modal Resonance",
+  "headerPath": "firmware/v2/src/effects/ieffect/ModalResonanceEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/ModalResonanceEffect.cpp",
+  "renderRange": [
+    31,
+    68
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        31,
+        34
+      ]
+    ],
+    "mapping": [
+      [
+        34,
+        35
+      ],
+      [
+        37,
+        37
+      ],
+      [
+        44,
+        44
+      ],
+      [
+        47,
+        47
+      ],
+      [
+        50,
+        50
+      ],
+      [
+        54,
+        54
+      ],
+      [
+        57,
+        57
+      ],
+      [
+        59,
+        59
+      ]
+    ],
+    "modulation": [
+      [
+        37,
+        37
+      ],
+      [
+        40,
+        40
+      ]
+    ],
+    "render": [
+      [
+        42,
+        42
+      ],
+      [
+        59,
+        59
+      ],
+      [
+        61,
+        62
+      ],
+      [
+        65,
+        65
+      ]
+    ],
+    "post": [
+      [
+        64,
+        66
+      ]
+    ],
+    "output": [
+      [
+        42,
+        42
+      ],
+      [
+        62,
+        62
+      ],
+      [
+        64,
+        65
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file ModalResonanceEffect.cpp\n * @brief LGP Modal Resonance implementation\n */\n\n#include \"ModalResonanceEffect.h\"\n#include \"../CoreEffects.h\"\n#include <math.h>\n\n#ifndef PI\n#define PI 3.14159265358979323846f\n#endif\n#ifndef TWO_PI\n#define TWO_PI (2.0f * PI)\n#endif\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nModalResonanceEffect::ModalResonanceEffect()\n    : m_modalModePhase(0.0f)\n{\n}\n\nbool ModalResonanceEffect::init(plugins::EffectContext& ctx) {\n    m_modalModePhase = 0.0f;\n    return true;\n}\n\nvoid ModalResonanceEffect::render(plugins::EffectContext& ctx) {\n    // CENTER ORIGIN MODAL RESONANCE - Explores different optical cavity modes\n\n    float speedNorm = ctx.speed / 50.0f;\n    float intensityNorm = ctx.brightness / 255.0f;\n\n    m_modalModePhase += speedNorm * 0.01f;\n\n    // Mode number varies with time\n    float baseMode = BASE_MODE_MIN + sinf(m_modalModePhase) * BASE_MODE_RANGE;\n\n    for (uint16_t i = 0; i < ctx.ledCount && i < STRIP_LENGTH; i++) {\n        float distFromCenter = ctx.getDistanceFromCenter(i) * (float)HALF_LENGTH;\n        float normalizedDist = distFromCenter / (float)HALF_LENGTH;\n\n        // Mode pattern\n        float modalPattern = sinf(normalizedDist * baseMode * TWO_PI);\n\n        // Add harmonic\n        modalPattern += sinf(normalizedDist * baseMode * 2.0f * TWO_PI) * HARMONIC_WEIGHT;\n        modalPattern /= 1.5f;\n\n        // Apply window function\n        float window = sinf(normalizedDist * PI);\n        modalPattern *= window;\n\n        uint8_t brightness = (uint8_t)(128 + 127 * modalPattern * intensityNorm);\n\n        uint8_t paletteIndex = (uint8_t)(baseMode * 10.0f) + (uint8_t)(normalizedDist * 50.0f);\n\n        CRGB color = ctx.palette.getColor(ctx.gHue + paletteIndex, brightness);\n        ctx.leds[i] = color;\n        \n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor(ctx.gHue + paletteIndex + 128, brightness);\n        }\n    }\n}\n\nvoid ModalResonanceEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& ModalResonanceEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Modal Resonance\",\n        \"Explores different optical cavity resonance modes\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n\n"
+}

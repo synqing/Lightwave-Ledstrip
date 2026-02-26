@@ -1,0 +1,234 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_INTERFERENCE_SCANNER",
+  "effectIdHex": "0x0203",
+  "className": "LGPInterferenceScannerEffect",
+  "displayName": "LGP Interference Scanner",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPInterferenceScannerEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPInterferenceScannerEffect.cpp",
+  "renderRange": [
+    46,
+    214
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        50,
+        50
+      ],
+      [
+        56,
+        56
+      ],
+      [
+        58,
+        58
+      ],
+      [
+        62,
+        62
+      ],
+      [
+        74,
+        74
+      ],
+      [
+        91,
+        91
+      ],
+      [
+        123,
+        123
+      ],
+      [
+        172,
+        172
+      ],
+      [
+        191,
+        191
+      ]
+    ],
+    "mapping": [
+      [
+        48,
+        49
+      ],
+      [
+        63,
+        65
+      ],
+      [
+        76,
+        76
+      ],
+      [
+        78,
+        79
+      ],
+      [
+        96,
+        97
+      ],
+      [
+        101,
+        101
+      ],
+      [
+        117,
+        119
+      ],
+      [
+        126,
+        126
+      ],
+      [
+        128,
+        129
+      ],
+      [
+        132,
+        132
+      ],
+      [
+        140,
+        140
+      ],
+      [
+        202,
+        202
+      ]
+    ],
+    "modulation": [
+      [
+        60,
+        60
+      ],
+      [
+        68,
+        68
+      ],
+      [
+        77,
+        77
+      ],
+      [
+        116,
+        119
+      ],
+      [
+        122,
+        122
+      ],
+      [
+        125,
+        125
+      ],
+      [
+        127,
+        127
+      ],
+      [
+        131,
+        134
+      ],
+      [
+        136,
+        142
+      ],
+      [
+        146,
+        149
+      ],
+      [
+        151,
+        151
+      ],
+      [
+        156,
+        157
+      ],
+      [
+        160,
+        160
+      ],
+      [
+        166,
+        167
+      ],
+      [
+        172,
+        172
+      ],
+      [
+        174,
+        174
+      ],
+      [
+        176,
+        176
+      ],
+      [
+        181,
+        181
+      ],
+      [
+        185,
+        185
+      ]
+    ],
+    "render": [
+      [
+        73,
+        73
+      ],
+      [
+        90,
+        90
+      ],
+      [
+        153,
+        153
+      ],
+      [
+        203,
+        203
+      ],
+      [
+        206,
+        206
+      ],
+      [
+        210,
+        210
+      ]
+    ],
+    "post": [
+      [
+        194,
+        205
+      ]
+    ],
+    "output": [
+      [
+        153,
+        153
+      ],
+      [
+        206,
+        208
+      ],
+      [
+        210,
+        210
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPInterferenceScannerEffect.cpp\n * @brief LGP Interference Scanner effect implementation\n */\n\n#include \"LGPInterferenceScannerEffect.h\"\n#include \"../CoreEffects.h\"\n#include \"../enhancement/MotionEngine.h\"\n#include \"../../config/features.h\"\n#include \"../../validation/EffectValidationMacros.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPInterferenceScannerEffect::LGPInterferenceScannerEffect()\n    : m_scanPhase(0.0f)\n{\n}\n\nbool LGPInterferenceScannerEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_scanPhase = 0.0f;\n    m_lastHopSeq = 0;\n    m_chromaEnergySum = 0.0f;\n    m_chromaHistIdx = 0;\n    for (uint8_t i = 0; i < CHROMA_HISTORY; ++i) {\n        m_chromaEnergyHist[i] = 0.0f;\n    }\n    m_energyAvg = 0.0f;\n    m_energyDelta = 0.0f;\n    m_chromaAngle = 0.0f;\n    m_bassWavelength = 0.0f;\n    m_trebleOverlay = 0.0f;\n\n    // Initialize enhancement utilities\n    m_speedSpring.init(50.0f, 1.0f);  // stiffness=50, mass=1 (critically damped)\n    m_speedSpring.reset(1.0f);         // Start at base speed\n    m_energyAvgFollower.reset(0.0f);\n    m_energyDeltaFollower.reset(0.0f);\n    return true;\n}\n\nvoid LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {\n    // CENTER ORIGIN INTERFERENCE SCANNER - Creates scanning interference patterns\n    float speedNorm = ctx.speed / 50.0f;\n    float intensityNorm = ctx.brightness / 255.0f;\n    const bool hasAudio = ctx.audio.available;\n    bool newHop = false;\n    const float rawDtEarly = enhancement::getSafeDeltaSeconds(ctx.rawDeltaTimeSeconds);\n\n#if FEATURE_AUDIO_SYNC\n    if (hasAudio) {\n        newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);\n        if (newHop) {\n            m_lastHopSeq = ctx.audio.controlBus.hop_seq;\n\n            // LGP-SMOOTH: Use heavy_bands mid-frequency for smoother energy signal\n            // This replaces raw chroma processing which is prone to spikes\n            float heavyMid = ctx.audio.heavyMid();  // Accessor: (heavy_bands[2-4]) / 3.0f\n            float energyNorm = heavyMid;\n            if (energyNorm < 0.0f) energyNorm = 0.0f;\n            if (energyNorm > 1.0f) energyNorm = 1.0f;\n\n            // =================================================================\n            // 64-bin Sub-Bass Wavelength Modulation (bins 0-5 = 110-155 Hz)\n            // Deep bass widens the interference pattern - kick drums create\n            // slow, majestic wave expansion instead of tight fringes.\n            // =================================================================\n            float bassSum = 0.0f;\n            for (uint8_t i = 0; i < 6; ++i) {\n                bassSum += ctx.audio.binAdaptive(i);\n            }\n            float bassNorm = bassSum / 6.0f;\n            // Smooth with fast attack, slower decay for punchy response\n            if (bassNorm > m_bassWavelength) {\n                m_bassWavelength = bassNorm;  // Instant attack\n            } else {\n                m_bassWavelength = effects::chroma::dtDecay(m_bassWavelength, 0.85f, rawDtEarly);    // dt-corrected ~100ms decay\n            }\n\n            // =================================================================\n            // 64-bin Treble Overlay (bins 48-63 = 1.3-4.2 kHz)\n            // Hi-hat and cymbal energy adds high-frequency sparkle on top\n            // of the interference pattern.\n            // =================================================================\n            float trebleSum = 0.0f;\n            for (uint8_t i = 48; i < 64; ++i) {\n                trebleSum += ctx.audio.binAdaptive(i);\n            }\n            m_trebleOverlay = trebleSum / 16.0f;\n\n            m_chromaEnergySum -= m_chromaEnergyHist[m_chromaHistIdx];\n            m_chromaEnergyHist[m_chromaHistIdx] = energyNorm;\n            m_chromaEnergySum += energyNorm;\n            m_chromaHistIdx = (m_chromaHistIdx + 1) % CHROMA_HISTORY;\n\n            m_energyAvg = m_chromaEnergySum / CHROMA_HISTORY;\n            m_energyDelta = energyNorm - m_energyAvg;\n            if (m_energyDelta < 0.0f) m_energyDelta = 0.0f;\n        }\n    } else\n#endif\n    {\n        // dt-corrected decay when audio unavailable (matches Enhanced version)\n        float dtFallback = enhancement::getSafeDeltaSeconds(ctx.rawDeltaTimeSeconds);\n        m_energyAvg *= powf(0.98f, dtFallback * 60.0f);\n        m_energyDelta = 0.0f;\n    }\n\n    float rawDt = enhancement::getSafeDeltaSeconds(ctx.rawDeltaTimeSeconds);\n    float dt = enhancement::getSafeDeltaSeconds(ctx.deltaTimeSeconds);\n\n    // True exponential smoothing with AsymmetricFollower (frame-rate independent)\n    float moodNorm = ctx.mood / 255.0f;  // 0=reactive, 1=smooth\n    float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, rawDt, moodNorm);\n    float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, rawDt, moodNorm);\n\n    // Circular chroma hue (replaces argmax + linear EMA to eliminate bin-flip rainbow sweeps)\n    uint8_t chromaHue = effects::chroma::circularChromaHueSmoothed(\n        ctx.audio.controlBus.heavy_chroma, m_chromaAngle, rawDt, 0.20f);\n\n    // Speed modulation with Spring physics (natural momentum, no jitter)\n    // Target range: 0.6 to 1.4 (2.3x variation max, not 10x)\n    float rawSpeedScale = 0.6f + 0.8f * energyAvgSmooth;  // Capture raw speed for validation\n    float speedTarget = rawSpeedScale;\n    if (speedTarget > 1.4f) speedTarget = 1.4f;\n\n    // Spring physics for speed modulation (replaces linear slew limiting)\n    float smoothedSpeed = m_speedSpring.update(speedTarget, rawDt);\n    if (smoothedSpeed > 1.4f) smoothedSpeed = 1.4f;  // Hard clamp\n    if (smoothedSpeed < 0.3f) smoothedSpeed = 0.3f;  // Prevent stalling\n\n    // Capture phase before update for delta calculation\n    float prevPhase = m_scanPhase;\n    // FIX: Use 240.0f multiplier like ChevronWaves (was 3.6f via advancePhase - 67x slower!)\n    // Fast phase accumulation makes forward motion perceptually dominant\n    m_scanPhase += speedNorm * 240.0f * smoothedSpeed * dt;\n    if (m_scanPhase > 628.3f) m_scanPhase -= 628.3f;  // Wrap at 100*2π to prevent float overflow\n    float phaseDelta = m_scanPhase - prevPhase;\n\n    // Validation instrumentation\n    VALIDATION_INIT(16);  // Effect ID 16\n    VALIDATION_PHASE(m_scanPhase, phaseDelta);\n    VALIDATION_SPEED(rawSpeedScale, smoothedSpeed);\n    VALIDATION_AUDIO(m_chromaAngle, energyAvgSmooth, energyDeltaSmooth);\n    VALIDATION_REVERSAL_CHECK(m_prevPhaseDelta, phaseDelta);\n    VALIDATION_SUBMIT(::lightwaveos::validation::g_validationRing);\n    m_prevPhaseDelta = phaseDelta;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float dist = (float)centerPairDistance((uint16_t)i);\n\n        // INTERFERENCE PATTERN: Two wavelengths create moiré beating patterns\n        // sin(k*dist - phase) produces OUTWARD motion when phase increases\n        //\n        // =====================================================================\n        // 64-bin BASS WAVELENGTH MODULATION: Sub-bass (bins 0-5) widens pattern\n        // On kick drum hits, the interference fringes expand majestically.\n        // Bass energy reduces frequency → larger wavelength → wider pattern.\n        // =====================================================================\n        float freq1 = 0.20f - 0.05f * m_bassWavelength;  // 0.20→0.15 (wider on bass)\n        float freq2 = 0.35f - 0.08f * m_bassWavelength;  // 0.35→0.27 (wider on bass)\n        float wave1 = sinf(dist * freq1 - m_scanPhase);\n        float wave2 = sinf(dist * freq2 - m_scanPhase * 1.2f);  // Slight phase offset\n        float interference = wave1 + wave2 * 0.6f;  // Combine with weight for moiré\n\n        // JOG-DIAL FIX: Audio modulates BRIGHTNESS, not speed - energyDelta drives intensity bursts\n#if FEATURE_AUDIO_SYNC\n        float fastFlux = hasAudio ? ctx.audio.fastFlux() : 0.0f;\n#else\n        float fastFlux = 0.0f;\n#endif\n        float audioGain = 0.4f + 0.5f * energyAvgSmooth + 0.5f * energyDeltaSmooth + 0.3f * fastFlux;\n\n        // =====================================================================\n        // 64-bin TREBLE SHIMMER: High frequencies (bins 48-63) add sparkle\n        // Hi-hat and cymbal energy creates high-frequency brightness overlay.\n        // FIXED: Reduced phase multiplier from 4.0x to 1.6x to match wave velocities\n        // (was 10x faster than main waves, now only 1.3x faster for visual coherence)\n        // =====================================================================\n        if (m_trebleOverlay > 0.1f) {\n            float shimmer = m_trebleOverlay * sinf(dist * 1.5f + m_scanPhase * 1.6f);\n            audioGain += shimmer * 0.35f;\n        }\n\n        // PERCUSSION BOOST: Add amplitude spike on snare hit for visual punch\n#if FEATURE_AUDIO_SYNC\n        if (hasAudio && ctx.audio.isSnareHit()) {\n            audioGain += 0.8f;  // Burst on snare\n        }\n#endif\n        audioGain = fminf(audioGain, 2.0f);  // Clamp max to prevent oversaturation\n\n        float pattern = interference * audioGain;\n\n        // CRITICAL: Use tanhf for uniform brightness (like ChevronWaves)\n        pattern = tanhf(pattern * 2.0f) * 0.5f + 0.5f;\n\n        uint8_t brightness = (uint8_t)(pattern * 255.0f * intensityNorm);\n        uint8_t paletteIndex = (uint8_t)(dist * 2.0f + pattern * 50.0f);\n        uint8_t baseHue = (uint8_t)(ctx.gHue + chromaHue);\n\n        ctx.leds[i] = ctx.palette.getColor((uint8_t)(baseHue + paletteIndex), brightness);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            // FIX: Use SAME brightness for both strips (was inverted, causing visual backward motion)\n            // Hue offset +90 matches ChevronWaves pattern (was +128)\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(baseHue + paletteIndex + 90),\n                                                             brightness);\n        }\n    }\n}\n\nvoid LGPInterferenceScannerEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPInterferenceScannerEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Interference Scanner\",\n        \"Scanning beam with interference fringes\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

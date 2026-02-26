@@ -1,0 +1,148 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_JUGGLE",
+  "effectIdHex": "0x0105",
+  "className": "JuggleEffect",
+  "displayName": "Juggle",
+  "headerPath": "firmware/v2/src/effects/ieffect/JuggleEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/JuggleEffect.cpp",
+  "renderRange": [
+    26,
+    148
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        33,
+        34
+      ],
+      [
+        37,
+        42
+      ],
+      [
+        44,
+        45
+      ],
+      [
+        50,
+        50
+      ],
+      [
+        78,
+        78
+      ]
+    ],
+    "mapping": [
+      [
+        69,
+        69
+      ],
+      [
+        84,
+        84
+      ]
+    ],
+    "modulation": [
+      [
+        39,
+        42
+      ],
+      [
+        58,
+        58
+      ],
+      [
+        62,
+        62
+      ],
+      [
+        85,
+        85
+      ],
+      [
+        88,
+        88
+      ],
+      [
+        91,
+        92
+      ],
+      [
+        101,
+        101
+      ],
+      [
+        103,
+        103
+      ],
+      [
+        112,
+        112
+      ],
+      [
+        122,
+        122
+      ]
+    ],
+    "render": [
+      [
+        31,
+        31
+      ],
+      [
+        66,
+        66
+      ],
+      [
+        72,
+        72
+      ],
+      [
+        118,
+        118
+      ],
+      [
+        131,
+        131
+      ],
+      [
+        134,
+        134
+      ],
+      [
+        137,
+        137
+      ],
+      [
+        141,
+        141
+      ],
+      [
+        144,
+        144
+      ]
+    ],
+    "post": [
+      [
+        31,
+        31
+      ]
+    ],
+    "output": [
+      [
+        133,
+        137
+      ],
+      [
+        141,
+        144
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [],
+  "sourceText": "/**\n * @file JuggleEffect.cpp\n * @brief Juggle effect implementation\n */\n\n#include \"JuggleEffect.h\"\n#include \"ChromaUtils.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <math.h>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nJuggleEffect::JuggleEffect()\n{\n}\n\nbool JuggleEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_chromaAngle = 0.0f;\n    return true;\n}\n\nvoid JuggleEffect::render(plugins::EffectContext& ctx) {\n    // CENTER ORIGIN JUGGLE - Multiple dots oscillate from center\n    //\n    // NOTE: dothue += 32 per dot (8 dots × 32 = 256 wrap) creates different colors per dot,\n    // not rainbow cycling. Each dot uses a fixed hue per frame, not cycling through the wheel.\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    const bool audioOk = ctx.audio.available;\n    const bool tempoOk = audioOk && (ctx.audio.tempoConfidence() >= 0.25f);\n    const bool useBins =\n        audioOk &&\n        !ctx.audio.trinityActive &&\n        (ctx.audio.bins64Adaptive() != nullptr);\n    const float beatPhase01 = tempoOk ? ctx.audio.beatPhase() : 0.0f;\n    const bool beatTick = tempoOk && ctx.audio.isOnBeat();\n    const float beatStrength = tempoOk ? ctx.audio.beatStrength() : 0.0f;\n    const float flux = audioOk ? ctx.audio.fastFlux() : 0.0f;\n\n    const float* bins = useBins ? ctx.audio.bins64Adaptive() : nullptr;\n    const float* chroma = audioOk ? ctx.audio.controlBus.chroma : nullptr;\n\n    // Dynamic dot count: more energy → more juggling balls.\n    uint8_t dotCount = 8;\n    if (audioOk) {\n        float rms = ctx.audio.rms();\n        if (rms < 0.0f) rms = 0.0f;\n        if (rms > 1.0f) rms = 1.0f;\n        dotCount = static_cast<uint8_t>(3 + static_cast<uint8_t>(rms * 5.0f));\n        if (dotCount < 3) dotCount = 3;\n        if (dotCount > 8) dotCount = 8;\n    }\n\n    // Chroma-anchored hue (non-rainbow): circular weighted mean for smooth, continuous colour.\n    const float rawDt = ctx.getSafeRawDeltaSeconds();\n    uint8_t baseHue = ctx.gHue;\n    if (chroma) {\n        baseHue = effects::chroma::circularChromaHueSmoothed(\n            chroma, m_chromaAngle, rawDt, 0.20f);\n    }\n\n    for (uint8_t i = 0; i < dotCount; i++) {\n        float mag01 = 0.0f;\n        if (bins) {\n            // Map 8 dots → 8 equal bin groups (8 bins each) from the 64-bin spectrum.\n            const uint8_t start = static_cast<uint8_t>(i * 8);\n            float sum = 0.0f;\n            for (uint8_t j = 0; j < 8; j++) {\n                sum += bins[start + j];\n            }\n            mag01 = sum * (1.0f / 8.0f);\n        } else if (audioOk) {\n            // Trinity / non-FFT fallback: use the coarse band energies.\n            mag01 = ctx.audio.getBand(static_cast<uint8_t>(i));\n        }\n\n        if (mag01 < 0.0f) mag01 = 0.0f;\n        if (mag01 > 1.0f) mag01 = 1.0f;\n\n        // Audio semantic link (ES Spectrum reference):\n        // magnitude drives \"reach\" from the centre, while beat phase drives motion cadence.\n        float elastic = 1.0f;\n        if (tempoOk) {\n            elastic = 0.70f + (0.60f * beatStrength);  // stronger beat → longer throws\n        }\n        float accent = 1.0f;\n        if (flux > 0.20f) {\n            accent = 1.0f + ((flux - 0.20f) * 0.6f);   // transient accents\n            if (accent > 1.30f) accent = 1.30f;\n        }\n        float maxDistF = static_cast<float>(HALF_LENGTH) * (0.10f + 0.90f * mag01) * elastic * accent;\n        if (maxDistF > static_cast<float>(HALF_LENGTH)) maxDistF = static_cast<float>(HALF_LENGTH);\n        const uint16_t maxDist = static_cast<uint16_t>(maxDistF);\n\n        uint16_t distFromCenter = 0;\n        if (tempoOk) {\n            // Rate multiplier spreads dots across different \"juggle\" speeds while remaining beat-locked.\n            const float rate = 1.0f + (0.125f * static_cast<float>(i));\n            float p = (beatPhase01 * rate) + (static_cast<float>(i) * 0.07f);\n            p -= floorf(p);  // Keep in [0,1)\n\n            const uint16_t angle = static_cast<uint16_t>(p * 65535.0f);\n            const int16_t s = sin16(angle);\n            const uint16_t s01 = static_cast<uint16_t>(s + 32768);  // 0..65535\n            distFromCenter = static_cast<uint16_t>((static_cast<uint32_t>(s01) * maxDist) / 65535U);\n        } else {\n            // Fallback: original deterministic juggle motion.\n            distFromCenter = beatsin16(i + 7, 0, maxDist);\n        }\n\n        int pos1 = CENTER_RIGHT + distFromCenter;\n        int pos2 = CENTER_LEFT - distFromCenter;\n\n        // Respect active palette and brightness scaling\n        uint8_t brightU8 = ctx.brightness;\n        if (audioOk) {\n            float brightScale = 0.30f + (0.70f * mag01);\n            if (beatTick) {\n                brightScale *= 1.15f;\n            }\n            float b = static_cast<float>(ctx.brightness) * brightScale;\n            if (b > 255.0f) b = 255.0f;\n            if (b < 0.0f) b = 0.0f;\n            brightU8 = static_cast<uint8_t>(b);\n        }\n        const uint8_t dotHue = static_cast<uint8_t>(baseHue + (i * 12));\n        CRGB color = ctx.palette.getColor(dotHue, brightU8);\n\n        if (pos1 < STRIP_LENGTH) {\n            ctx.leds[pos1] = color;\n            if (pos1 + STRIP_LENGTH < ctx.ledCount) {\n                int mirrorPos1 = pos1 + STRIP_LENGTH;\n                ctx.leds[mirrorPos1] = color;\n            }\n        }\n        if (pos2 >= 0) {\n            ctx.leds[pos2] = color;\n            if (pos2 + STRIP_LENGTH < ctx.ledCount) {\n                int mirrorPos2 = pos2 + STRIP_LENGTH;\n                ctx.leds[mirrorPos2] = color;\n            }\n        }\n    }\n}\n\nvoid JuggleEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& JuggleEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Juggle\",\n        \"Multiple colored balls juggling\",\n        plugins::EffectCategory::PARTY,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

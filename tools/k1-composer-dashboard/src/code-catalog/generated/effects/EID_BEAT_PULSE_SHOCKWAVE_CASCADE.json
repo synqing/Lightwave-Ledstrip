@@ -1,0 +1,77 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_BEAT_PULSE_SHOCKWAVE_CASCADE",
+  "effectIdHex": "0x1406",
+  "className": "BeatPulseShockwaveCascadeEffect",
+  "displayName": "Beat Pulse (Shockwave Cascade)",
+  "headerPath": "firmware/v2/src/effects/ieffect/BeatPulseShockwaveCascadeEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/BeatPulseShockwaveCascadeEffect.cpp",
+  "renderRange": [
+    35,
+    96
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        41,
+        41
+      ]
+    ],
+    "mapping": [
+      [
+        42,
+        51
+      ]
+    ],
+    "modulation": [
+      [
+        35,
+        35
+      ],
+      [
+        41,
+        42
+      ],
+      [
+        45,
+        47
+      ],
+      [
+        58,
+        59
+      ]
+    ],
+    "render": [
+      [
+        68,
+        68
+      ],
+      [
+        86,
+        88
+      ]
+    ],
+    "post": [
+      [
+        89,
+        92
+      ]
+    ],
+    "output": [
+      [
+        93,
+        96
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'mapping' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation.",
+    "Phase 'output' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file BeatPulseShockwaveCascadeEffect.cpp\n * @brief Beat Pulse (Shockwave Cascade) - Triple pressure wave with HTML shading\n *\n * Visual identity: Primary shockwave + 2 trailing echo fronts expanding outward.\n * Like multiple pressure waves from a single detonation.\n *\n * Key characteristics:\n *  - 3 rings total: primary + 2 echoes, all expanding OUTWARD\n *  - Echoes spawn with time delay (staggered birth)\n *  - Echoes are progressively THINNER and DIMMER\n *  - Colour by distance through palette\n *  - Brightness spine: 0.05 + intensity * 0.95\n *  - White mix: primary only (0.35)\n *\n * Effect ID: 116\n */\n\n#include \"BeatPulseShockwaveCascadeEffect.h\"\n#include \"../CoreEffects.h\"\n#include \"BeatPulseRenderUtils.h\"\n\n#include <cmath>\n\nnamespace lightwaveos::effects::ieffect {\n\nbool BeatPulseShockwaveCascadeEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_beatIntensity = 0.0f;\n    m_lastBeatTimeMs = 0;\n    m_fallbackBpm = 128.0f;\n    return true;\n}\n\nvoid BeatPulseShockwaveCascadeEffect::render(plugins::EffectContext& ctx) {\n    // =========================================================================\n    // SHOCKWAVE CASCADE: Primary ring + 2 trailing echoes expanding outward.\n    // Uses HTML parity shading spine.\n    // =========================================================================\n\n    // --- Beat source ---\n    const bool beatTick = BeatPulseTiming::computeBeatTick(ctx, m_fallbackBpm, m_lastBeatTimeMs);\n\n    const uint32_t nowMs = ctx.rawTotalTimeMs;\n    if (beatTick) {\n        m_beatIntensity = 1.0f;\n        m_lastBeatTimeMs = nowMs;\n    }\n\n    // --- Time-driven ring positions ---\n    constexpr float TRAVEL_MS = 400.0f;\n    constexpr float DECAY_MS = 320.0f;\n    constexpr float RING_WIDTH = 0.10f;\n    constexpr float ECHO1_OFFSET = 0.12f;\n    constexpr float ECHO2_OFFSET = 0.24f;\n\n    float ageMs = 999999.0f;\n    if (m_lastBeatTimeMs != 0) {\n        ageMs = static_cast<float>(nowMs - m_lastBeatTimeMs);\n    }\n\n    const float envelope = expf(-ageMs / DECAY_MS);\n    const float primaryPos = clamp01(ageMs / TRAVEL_MS);  // centre -> edge\n    const float echo1Pos = clamp01(primaryPos - ECHO1_OFFSET);\n    const float echo2Pos = clamp01(primaryPos - ECHO2_OFFSET);\n\n    // --- Render ---\n    for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {\n        const float dist01 = (static_cast<float>(dist) + 0.5f) / static_cast<float>(HALF_LENGTH);\n\n        const float diffPrimary = fabsf(dist01 - primaryPos);\n        const float primaryHit = RingProfile::tent(diffPrimary, RING_WIDTH);\n\n        const float diffEcho1 = fabsf(dist01 - echo1Pos);\n        const float echo1Hit = RingProfile::tent(diffEcho1, RING_WIDTH) * 0.45f;\n\n        const float diffEcho2 = fabsf(dist01 - echo2Pos);\n        const float echo2Hit = RingProfile::tent(diffEcho2, RING_WIDTH) * 0.25f;\n\n        const float maxHit = fmaxf(primaryHit, fmaxf(echo1Hit, echo2Hit));\n        const float intensity = clamp01(maxHit * envelope);\n\n        // Brightness: 0.05 + intensity * 0.95\n        const float brightFactor = clamp01(0.05f + intensity * 0.95f);\n\n        // Palette colour by distance\n        const uint8_t paletteIdx = floatToByte(dist01);\n        CRGB c = ctx.palette.getColor(paletteIdx, scaleBrightness(ctx.brightness, brightFactor));\n\n        // White mix: primary hit only\n        const float whiteMixVal = clamp01(primaryHit * envelope) * 0.35f;\n        ColourUtil::addWhiteSaturating(c, floatToByte(whiteMixVal));\n\n        SET_CENTER_PAIR(ctx, dist, c);\n    }\n}\n\nvoid BeatPulseShockwaveCascadeEffect::cleanup() {}\n\nconst plugins::EffectMetadata& BeatPulseShockwaveCascadeEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Beat Pulse (Shockwave Cascade)\",\n        \"HTML parity: triple wave cascade centre→edge\",\n        plugins::EffectCategory::PARTY,\n        1,\n        \"LightwaveOS\"\n    };\n    return meta;\n}\n\nuint8_t BeatPulseShockwaveCascadeEffect::getParameterCount() const { return 0; }\n\nconst plugins::EffectParameter* BeatPulseShockwaveCascadeEffect::getParameter(uint8_t index) const {\n    (void)index;\n    return nullptr;\n}\n\nbool BeatPulseShockwaveCascadeEffect::setParameter(const char* name, float value) {\n    (void)name; (void)value;\n    return false;\n}\n\nfloat BeatPulseShockwaveCascadeEffect::getParameter(const char* name) const {\n    (void)name;\n    return 0.0f;\n}\n\n} // namespace lightwaveos::effects::ieffect\n"
+}

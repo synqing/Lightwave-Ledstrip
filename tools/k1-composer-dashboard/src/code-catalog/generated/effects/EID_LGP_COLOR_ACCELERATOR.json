@@ -1,0 +1,117 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_COLOR_ACCELERATOR",
+  "effectIdHex": "0x0705",
+  "className": "LGPColorAcceleratorEffect",
+  "displayName": "LGP Color Accelerator",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPColorAcceleratorEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPColorAcceleratorEffect.cpp",
+  "renderRange": [
+    32,
+    92
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        32,
+        38
+      ]
+    ],
+    "mapping": [
+      [
+        39,
+        48
+      ]
+    ],
+    "modulation": [
+      [
+        49,
+        59
+      ]
+    ],
+    "render": [
+      [
+        37,
+        37
+      ],
+      [
+        44,
+        44
+      ],
+      [
+        50,
+        50
+      ],
+      [
+        56,
+        56
+      ],
+      [
+        69,
+        69
+      ],
+      [
+        77,
+        77
+      ],
+      [
+        79,
+        79
+      ],
+      [
+        81,
+        81
+      ]
+    ],
+    "post": [
+      [
+        37,
+        37
+      ]
+    ],
+    "output": [
+      [
+        40,
+        41
+      ],
+      [
+        48,
+        48
+      ],
+      [
+        50,
+        50
+      ],
+      [
+        53,
+        53
+      ],
+      [
+        55,
+        56
+      ],
+      [
+        69,
+        69
+      ],
+      [
+        79,
+        81
+      ],
+      [
+        89,
+        89
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'mapping' inferred from fallback segmentation.",
+    "Phase 'modulation' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPColorAcceleratorEffect.cpp\n * @brief LGP Color Accelerator effect implementation\n */\n\n#include \"LGPColorAcceleratorEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPColorAcceleratorEffect::LGPColorAcceleratorEffect()\n    : m_redParticle(0.0f)\n    , m_blueParticle(STRIP_LENGTH - 1.0f)\n    , m_collision(false)\n    , m_debrisRadius(0.0f)\n{\n}\n\nbool LGPColorAcceleratorEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_redParticle = 0.0f;\n    m_blueParticle = STRIP_LENGTH - 1.0f;\n    m_collision = false;\n    m_debrisRadius = 0.0f;\n    return true;\n}\n\nvoid LGPColorAcceleratorEffect::render(plugins::EffectContext& ctx) {\n    // RGB particles accelerate from edges and collide at center\n    float speed = ctx.speed / 255.0f;\n    float intensity = ctx.brightness / 255.0f;\n\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    if (!m_collision) {\n        m_redParticle += speed * 10.0f * (1.0f + (m_redParticle / STRIP_LENGTH));\n        m_blueParticle -= speed * 10.0f * (1.0f + ((STRIP_LENGTH - m_blueParticle) / STRIP_LENGTH));\n\n        // Draw particle trails\n        for (int t = 0; t < 20; t++) {\n            int redPos = (int)m_redParticle - t;\n            int bluePos = (int)m_blueParticle + t;\n\n            if (redPos >= 0 && redPos < STRIP_LENGTH) {\n                uint8_t trailBright = (uint8_t)((255 - t * 12) * intensity);\n                ctx.leds[redPos] = CRGB(trailBright, 0, 0);\n            }\n\n            if (bluePos >= 0 && bluePos < STRIP_LENGTH) {\n                uint8_t trailBright = (uint8_t)((255 - t * 12) * intensity);\n                if (bluePos + STRIP_LENGTH < ctx.ledCount) {\n                    ctx.leds[bluePos + STRIP_LENGTH] = CRGB(0, 0, trailBright);\n                }\n            }\n        }\n\n        // Check for collision\n        if (m_redParticle >= CENTER_LEFT - 5 && m_blueParticle <= CENTER_LEFT + 5) {\n            m_collision = true;\n            m_debrisRadius = 0.0f;\n        }\n    } else {\n        m_debrisRadius += speed * 8.0f;\n\n        for (int i = 0; i < STRIP_LENGTH; i++) {\n            float distFromCenter = (float)centerPairDistance((uint16_t)i);\n\n            if (distFromCenter <= m_debrisRadius) {\n                uint8_t debrisHue = random8();\n                uint8_t debrisBright = (uint8_t)(255.0f * (1.0f - distFromCenter / m_debrisRadius) * intensity);\n\n                uint8_t brightU8 = (uint8_t)((debrisBright * ctx.brightness) / 255);\n                CRGB debrisColor = ctx.palette.getColor(debrisHue, brightU8);\n                if (random8(2) == 0) {\n                    ctx.leds[i] = debrisColor;\n                } else if (i + STRIP_LENGTH < ctx.ledCount) {\n                    ctx.leds[i + STRIP_LENGTH] = debrisColor;\n                }\n            }\n        }\n\n        if (m_debrisRadius > HALF_LENGTH) {\n            m_collision = false;\n            m_redParticle = 0.0f;\n            m_blueParticle = STRIP_LENGTH - 1.0f;\n        }\n    }\n}\n\nvoid LGPColorAcceleratorEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPColorAcceleratorEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Color Accelerator\",\n        \"Color cycling with momentum\",\n        plugins::EffectCategory::UNCATEGORIZED,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

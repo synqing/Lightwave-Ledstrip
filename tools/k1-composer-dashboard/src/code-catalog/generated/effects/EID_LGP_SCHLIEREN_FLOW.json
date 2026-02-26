@@ -1,0 +1,85 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_SCHLIEREN_FLOW",
+  "effectIdHex": "0x1609",
+  "className": "LGPSchlierenFlowEffect",
+  "displayName": "LGP Schlieren Flow",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPSchlierenFlowEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPSchlierenFlowEffect.cpp",
+  "renderRange": [
+    30,
+    78
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        30,
+        34
+      ]
+    ],
+    "mapping": [
+      [
+        32,
+        32
+      ],
+      [
+        35,
+        35
+      ]
+    ],
+    "modulation": [
+      [
+        43,
+        51
+      ]
+    ],
+    "render": [
+      [
+        41,
+        41
+      ],
+      [
+        72,
+        72
+      ],
+      [
+        75,
+        75
+      ]
+    ],
+    "post": [
+      [
+        73,
+        75
+      ]
+    ],
+    "output": [
+      [
+        41,
+        41
+      ],
+      [
+        57,
+        57
+      ],
+      [
+        72,
+        73
+      ],
+      [
+        75,
+        75
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'modulation' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPSchlierenFlowEffect.cpp\n * @brief LGP Schlieren Flow effect implementation\n */\n\n#include \"LGPSchlierenFlowEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nstatic inline float clamp01(float x) {\n    return (x < 0.0f) ? 0.0f : (x > 1.0f) ? 1.0f : x;\n}\n\nLGPSchlierenFlowEffect::LGPSchlierenFlowEffect()\n    : m_t(0.0f)\n{\n}\n\nbool LGPSchlierenFlowEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_t = 0.0f;\n    return true;\n}\n\nvoid LGPSchlierenFlowEffect::render(plugins::EffectContext& ctx) {\n    // CENTRE ORIGIN SCHLIEREN - Knife-edge gradient flow\n    const float speedNorm = ctx.speed / 50.0f;\n    const float master = ctx.brightness / 255.0f;\n\n    m_t += 0.012f + 0.070f * speedNorm;\n\n    const float f1 = 0.060f;\n    const float f2 = 0.145f;\n    const float f3 = 0.310f;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        const float x = (float)i;\n        const float dist = (float)centerPairDistance((uint16_t)i);\n\n        float rho =\n            sinf(x * f1 + m_t)\n            + 0.7f * sinf(x * f2 - m_t * 1.2f)\n            + 0.3f * sinf(x * f3 + m_t * 2.1f);\n\n        float grad =\n            f1 * cosf(x * f1 + m_t)\n            + 0.7f * f2 * cosf(x * f2 - m_t * 1.2f)\n            + 0.3f * f3 * cosf(x * f3 + m_t * 2.1f);\n\n        float edge = 0.5f + 0.5f * tanhf(grad * 6.0f);\n\n        const float mid = (STRIP_LENGTH - 1) * 0.5f;\n        const float dmid = (x - mid);\n        const float melt = expf(-(dmid * dmid) * 0.0028f);\n\n        float wave = clamp01(0.65f * (edge * melt + 0.25f * melt) + 0.35f * (0.5f + 0.5f * sinf(rho)));\n\n        const float base = 0.08f;\n        const float out = clamp01(base + (1.0f - base) * wave) * master;\n        const uint8_t brA = (uint8_t)(255.0f * out);\n\n        const uint8_t hueA = (uint8_t)(ctx.gHue + (int)(dist * 0.7f) + (int)(edge * 40.0f));\n\n        const uint8_t hueB = (uint8_t)(hueA + 5u);\n        const uint8_t brB = scale8_video(brA, 245);\n\n        ctx.leds[i] = ctx.palette.getColor(hueA, brA);\n        const int j = i + STRIP_LENGTH;\n        if (j < ctx.ledCount) {\n            ctx.leds[j] = ctx.palette.getColor(hueB, brB);\n        }\n    }\n}\n\nvoid LGPSchlierenFlowEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPSchlierenFlowEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Schlieren Flow\",\n        \"Knife-edge gradient flow\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

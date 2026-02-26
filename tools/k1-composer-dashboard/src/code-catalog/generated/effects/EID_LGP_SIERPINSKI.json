@@ -1,0 +1,83 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_SIERPINSKI",
+  "effectIdHex": "0x0303",
+  "className": "LGPSierpinskiEffect",
+  "displayName": "LGP Sierpinski",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPSierpinskiEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPSierpinskiEffect.cpp",
+  "renderRange": [
+    26,
+    57
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        26,
+        28
+      ]
+    ],
+    "mapping": [
+      [
+        28,
+        28
+      ],
+      [
+        49,
+        49
+      ]
+    ],
+    "modulation": [
+      [
+        47,
+        47
+      ],
+      [
+        49,
+        49
+      ]
+    ],
+    "render": [
+      [
+        34,
+        34
+      ],
+      [
+        43,
+        43
+      ],
+      [
+        52,
+        52
+      ],
+      [
+        54,
+        54
+      ]
+    ],
+    "post": [
+      [
+        54,
+        55
+      ]
+    ],
+    "output": [
+      [
+        34,
+        34
+      ],
+      [
+        52,
+        54
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPSierpinskiEffect.cpp\n * @brief LGP Sierpinski effect implementation\n */\n\n#include \"LGPSierpinskiEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPSierpinskiEffect::LGPSierpinskiEffect()\n    : m_iteration(0)\n{\n}\n\nbool LGPSierpinskiEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_iteration = 0;\n    return true;\n}\n\nvoid LGPSierpinskiEffect::render(plugins::EffectContext& ctx) {\n    // CENTER ORIGIN - Fractal triangle patterns through recursive interference\n    float intensityNorm = ctx.brightness / 255.0f;\n\n    m_iteration = (uint16_t)(m_iteration + (ctx.speed >> 2));\n\n    const int maxDepth = 5;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        uint16_t x = centerPairDistance((uint16_t)i);\n        uint16_t y = m_iteration >> 4;\n\n        // XOR creates Sierpinski triangle\n        uint16_t pattern = x ^ y;\n\n        // Count bits for fractal depth\n        uint8_t bitCount = 0;\n        for (int d = 0; d < maxDepth; d++) {\n            if (pattern & (1 << d)) bitCount++;\n        }\n\n        float smooth = sinf(bitCount * PI / (float)maxDepth);\n\n        uint8_t brightness = (uint8_t)(smooth * 255.0f * intensityNorm);\n        uint8_t hue = (uint8_t)(ctx.gHue + (bitCount * 30));\n\n        ctx.leds[i] = ctx.palette.getColor(hue, brightness);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(hue + 128), brightness);\n        }\n    }\n}\n\nvoid LGPSierpinskiEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPSierpinskiEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Sierpinski\",\n        \"Fractal triangle generation\",\n        plugins::EffectCategory::GEOMETRIC,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

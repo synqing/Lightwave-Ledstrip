@@ -1,0 +1,220 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_PERLIN_INTERFERENCE_WEAVE",
+  "effectIdHex": "0x0B03",
+  "className": "LGPPerlinInterferenceWeaveEffect",
+  "displayName": "LGP Perlin Interference Weave",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPPerlinInterferenceWeaveEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPPerlinInterferenceWeaveEffect.cpp",
+  "renderRange": [
+    44,
+    155
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        46,
+        46
+      ],
+      [
+        52,
+        52
+      ],
+      [
+        59,
+        59
+      ],
+      [
+        61,
+        61
+      ],
+      [
+        65,
+        65
+      ],
+      [
+        68,
+        68
+      ],
+      [
+        104,
+        104
+      ]
+    ],
+    "mapping": [
+      [
+        48,
+        49
+      ],
+      [
+        55,
+        55
+      ],
+      [
+        68,
+        68
+      ],
+      [
+        80,
+        80
+      ],
+      [
+        84,
+        84
+      ],
+      [
+        89,
+        91
+      ],
+      [
+        99,
+        99
+      ],
+      [
+        122,
+        124
+      ],
+      [
+        127,
+        127
+      ],
+      [
+        131,
+        132
+      ],
+      [
+        137,
+        137
+      ],
+      [
+        141,
+        142
+      ]
+    ],
+    "modulation": [
+      [
+        54,
+        55
+      ],
+      [
+        64,
+        65
+      ],
+      [
+        67,
+        68
+      ],
+      [
+        73,
+        73
+      ],
+      [
+        75,
+        76
+      ],
+      [
+        78,
+        80
+      ],
+      [
+        82,
+        84
+      ],
+      [
+        98,
+        99
+      ],
+      [
+        101,
+        101
+      ],
+      [
+        103,
+        103
+      ],
+      [
+        111,
+        111
+      ],
+      [
+        117,
+        119
+      ],
+      [
+        150,
+        150
+      ]
+    ],
+    "render": [
+      [
+        94,
+        94
+      ],
+      [
+        96,
+        96
+      ],
+      [
+        107,
+        107
+      ],
+      [
+        137,
+        139
+      ],
+      [
+        144,
+        145
+      ],
+      [
+        148,
+        148
+      ],
+      [
+        152,
+        152
+      ]
+    ],
+    "post": [
+      [
+        96,
+        96
+      ]
+    ],
+    "output": [
+      [
+        45,
+        45
+      ],
+      [
+        94,
+        94
+      ],
+      [
+        107,
+        107
+      ],
+      [
+        111,
+        111
+      ],
+      [
+        117,
+        117
+      ],
+      [
+        147,
+        148
+      ],
+      [
+        150,
+        152
+      ]
+    ]
+  },
+  "mappingConfidence": "high",
+  "mappingWarnings": [],
+  "sourceText": "/**\n * @file LGPPerlinInterferenceWeaveEffect.cpp\n * @brief LGP Perlin Interference Weave - Dual-strip phase-offset noise creates moiré\n * \n * Audio-reactive Perlin interference effect:\n * - Two strips sample same noise field with phase offset\n * - Phase offset creates moiré interference pattern on LGP\n * - Beat modulates phase separation\n * - Chroma provides colour offset between strips\n */\n\n#include \"LGPPerlinInterferenceWeaveEffect.h\"\n#include \"ChromaUtils.h\"\n#include \"../CoreEffects.h\"\n#include \"../../config/features.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPPerlinInterferenceWeaveEffect::LGPPerlinInterferenceWeaveEffect()\n    : m_noiseX(0)\n    , m_noiseY(0)\n    , m_phaseOffset(0.0f)\n    , m_time(0)\n    , m_lastHopSeq(0)\n    , m_chromaAngle(0.0f)\n{\n}\n\nbool LGPPerlinInterferenceWeaveEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_noiseX = random16();\n    m_noiseY = random16();\n    m_phaseOffset = 0.0f;\n    m_time = 0;\n    m_lastHopSeq = 0;\n    m_chromaAngle = 0.0f;\n    return true;\n}\n\nvoid LGPPerlinInterferenceWeaveEffect::render(plugins::EffectContext& ctx) {\n    // CENTRE ORIGIN - Dual-strip interference weave\n    const bool hasAudio = ctx.audio.available;\n    float dt = ctx.getSafeRawDeltaSeconds();\n    float speedNorm = ctx.speed / 50.0f;\n    float intensityNorm = ctx.brightness / 255.0f;\n\n    // =========================================================================\n    // Audio Analysis\n    // =========================================================================\n    float beatMod = 0.0f;\n    float fluxNorm = 0.0f;\n    \n#if FEATURE_AUDIO_SYNC\n    if (hasAudio) {\n        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);\n        if (newHop) {\n            m_lastHopSeq = ctx.audio.controlBus.hop_seq;\n        }\n        \n        // Beat → phase separation modulation\n        beatMod = ctx.audio.beatStrength();\n        \n        // Flux → weave intensity\n        fluxNorm = ctx.audio.flux();\n    }\n#endif\n\n    // =========================================================================\n    // Phase Offset Update (audio-modulated)\n    // =========================================================================\n    // Base phase offset (slow drift)\n    float basePhaseOffset = 32.0f; // Base offset in noise space\n    \n    // Beat modulates phase separation (creates dynamic moiré)\n    float beatPhaseMod = beatMod * 16.0f; // 0-16 additional offset\n    float targetPhaseOffset = basePhaseOffset + beatPhaseMod;\n    \n    // Smooth phase offset changes (true exponential, tau=150ms)\n    float alpha = 1.0f - expf(-dt / 0.15f);\n    m_phaseOffset += (targetPhaseOffset - m_phaseOffset) * alpha;\n\n    // =========================================================================\n    // Noise Field Updates (increased advection for visible motion)\n    // =========================================================================\n    m_noiseX += (uint16_t)(6 + speedNorm * 12.0f);\n    m_noiseY += (uint16_t)(4 + speedNorm * 8.0f);\n    m_time += (uint16_t)(8 + speedNorm * 16.0f);\n\n    // =========================================================================\n    // Rendering (centre-origin pattern with dual-strip interference)\n    // =========================================================================\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    // Weave intensity (flux-modulated)\n    float weaveIntensity = 0.5f + fluxNorm * 0.5f; // 0.5-1.0\n\n    // Chroma-based colour offset (circular weighted mean for smooth, continuous hue)\n    uint8_t chromaOffset = hasAudio\n        ? effects::chroma::circularChromaHueSmoothed(\n              ctx.audio.controlBus.chroma, m_chromaAngle, dt, 0.20f)\n        : 0;\n\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        // Calculate distance from centre pair\n        uint16_t dist = centerPairDistance(i);\n        \n        // Sample noise field for strip 1 (base phase)\n        // Removed >>8 collapse - use proper coordinate scaling like working effects\n        uint16_t noiseX1 = m_noiseX + (dist * 8);\n        uint16_t noiseY1 = m_noiseY + m_time;\n        uint8_t noise1 = inoise8(noiseX1, noiseY1);\n        \n        // Sample noise field for strip 2 (phase offset for interference)\n        uint16_t noiseX2 = m_noiseX + (dist * 8) + (uint16_t)m_phaseOffset;\n        uint16_t noiseY2 = m_noiseY + m_time + (uint16_t)(m_phaseOffset * 0.5f);\n        uint8_t noise2 = inoise8(noiseX2, noiseY2);\n        \n        // Convert to normalized values\n        float norm1 = noise1 / 255.0f;\n        float norm2 = noise2 / 255.0f;\n        \n        // Interference calculation: difference creates moiré pattern\n        float interference = fabsf(norm1 - norm2);\n        interference = interference * interference; // Square for emphasis\n        \n        // Combine base noise with interference\n        float combined1 = norm1 * (1.0f - weaveIntensity * 0.3f) + interference * weaveIntensity;\n        float combined2 = norm2 * (1.0f - weaveIntensity * 0.3f) + interference * weaveIntensity;\n        \n        combined1 = fmaxf(0.0f, fminf(1.0f, combined1));\n        combined2 = fmaxf(0.0f, fminf(1.0f, combined2));\n        \n        // Map to palette and brightness\n        uint8_t paletteIndex1 = (uint8_t)(combined1 * 255.0f) + ctx.gHue;\n        uint8_t paletteIndex2 = (uint8_t)(combined2 * 255.0f) + chromaOffset + ctx.gHue;\n        \n        uint8_t brightness1 = (uint8_t)((0.2f + combined1 * 0.8f) * 255.0f * intensityNorm);\n        uint8_t brightness2 = (uint8_t)((0.2f + combined2 * 0.8f) * 255.0f * intensityNorm);\n        \n        CRGB color1 = ctx.palette.getColor(paletteIndex1, brightness1);\n        CRGB color2 = ctx.palette.getColor(paletteIndex2, brightness2);\n        \n        // Apply to strip 1\n        ctx.leds[i] = color1;\n        \n        // Apply to strip 2 (with phase offset for interference)\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = color2;\n        }\n    }\n}\n\nvoid LGPPerlinInterferenceWeaveEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPPerlinInterferenceWeaveEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Perlin Interference Weave\",\n        \"Dual-strip moiré interference, beat→phase, chroma→colour\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n\n"
+}

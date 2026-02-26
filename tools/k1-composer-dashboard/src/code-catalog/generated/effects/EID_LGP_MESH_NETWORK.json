@@ -1,0 +1,110 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_MESH_NETWORK",
+  "effectIdHex": "0x0307",
+  "className": "LGPMeshNetworkEffect",
+  "displayName": "LGP Mesh Network",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPMeshNetworkEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPMeshNetworkEffect.cpp",
+  "renderRange": [
+    26,
+    67
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        26,
+        30
+      ]
+    ],
+    "mapping": [
+      [
+        29,
+        30
+      ],
+      [
+        32,
+        32
+      ],
+      [
+        46,
+        46
+      ],
+      [
+        57,
+        57
+      ]
+    ],
+    "modulation": [
+      [
+        32,
+        32
+      ],
+      [
+        53,
+        54
+      ]
+    ],
+    "render": [
+      [
+        36,
+        36
+      ],
+      [
+        38,
+        38
+      ],
+      [
+        41,
+        41
+      ],
+      [
+        47,
+        47
+      ],
+      [
+        49,
+        49
+      ],
+      [
+        58,
+        59
+      ],
+      [
+        61,
+        62
+      ]
+    ],
+    "post": [
+      [
+        36,
+        36
+      ]
+    ],
+    "output": [
+      [
+        41,
+        41
+      ],
+      [
+        47,
+        49
+      ],
+      [
+        59,
+        60
+      ],
+      [
+        62,
+        62
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPMeshNetworkEffect.cpp\n * @brief LGP Mesh Network effect implementation\n */\n\n#include \"LGPMeshNetworkEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPMeshNetworkEffect::LGPMeshNetworkEffect()\n    : m_phase(0.0f)\n{\n}\n\nbool LGPMeshNetworkEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_phase = 0.0f;\n    return true;\n}\n\nvoid LGPMeshNetworkEffect::render(plugins::EffectContext& ctx) {\n    // CENTER ORIGIN - Interconnected node patterns like neural networks\n    float dt = ctx.getSafeDeltaSeconds();\n    float speedNorm = ctx.speed / 50.0f;\n    float intensityNorm = ctx.brightness / 255.0f;\n\n    m_phase += speedNorm * 0.02f * 60.0f * dt;  // dt-corrected\n\n    const int nodeCount = 12;\n\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    for (int n = 0; n < nodeCount; n++) {\n        float nodePos = (float)n / (float)nodeCount * (float)HALF_LENGTH;\n\n        for (int i = 0; i < STRIP_LENGTH; i++) {\n            float distToNode = fabsf((float)centerPairDistance((uint16_t)i) - nodePos);\n\n            if (distToNode < 3.0f) {\n                // Node core\n                uint8_t nodeBright = (uint8_t)(255.0f * intensityNorm);\n                ctx.leds[i] = ctx.palette.getColor((uint8_t)(ctx.gHue + (n * 20)), nodeBright);\n                if (i + STRIP_LENGTH < ctx.ledCount) {\n                    ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(ctx.gHue + (n * 20) + 128),\n                                                                      nodeBright);\n                }\n            } else if (distToNode < 20.0f) {\n                // Connections to nearby nodes (sin(k*dist + phase) = INWARD propagation - intentional design)\n                float connection = sinf(distToNode * 0.5f + m_phase + n);\n                connection *= expf(-distToNode * 0.1f);\n\n                uint8_t connBright = (uint8_t)(fabsf(connection) * 128.0f * intensityNorm);\n                CRGB connColor = ctx.palette.getColor((uint8_t)(ctx.gHue + (n * 20)), connBright);\n                ctx.leds[i] = connColor;\n                if (i + STRIP_LENGTH < ctx.ledCount) {\n                    CRGB connColor2 = ctx.palette.getColor((uint8_t)(ctx.gHue + (n * 20) + 128), connBright);\n                    ctx.leds[i + STRIP_LENGTH] = connColor2;\n                }\n            }\n        }\n    }\n}\n\nvoid LGPMeshNetworkEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPMeshNetworkEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Mesh Network\",\n        \"Interconnected node graph\",\n        plugins::EffectCategory::GEOMETRIC,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

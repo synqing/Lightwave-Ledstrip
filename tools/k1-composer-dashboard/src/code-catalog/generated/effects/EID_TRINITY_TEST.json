@@ -1,0 +1,179 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_TRINITY_TEST",
+  "effectIdHex": "0x0F00",
+  "className": "TrinityTestEffect",
+  "displayName": "Trinity Test",
+  "headerPath": "firmware/v2/src/effects/ieffect/TrinityTestEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/TrinityTestEffect.cpp",
+  "renderRange": [
+    64,
+    228
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        76,
+        76
+      ],
+      [
+        88,
+        93
+      ]
+    ],
+    "mapping": [
+      [
+        83,
+        109
+      ]
+    ],
+    "modulation": [
+      [
+        88,
+        89
+      ],
+      [
+        93,
+        93
+      ],
+      [
+        95,
+        99
+      ],
+      [
+        102,
+        102
+      ],
+      [
+        105,
+        106
+      ],
+      [
+        108,
+        108
+      ],
+      [
+        110,
+        112
+      ],
+      [
+        120,
+        120
+      ],
+      [
+        123,
+        124
+      ],
+      [
+        126,
+        126
+      ],
+      [
+        129,
+        132
+      ],
+      [
+        143,
+        143
+      ],
+      [
+        145,
+        146
+      ],
+      [
+        151,
+        151
+      ],
+      [
+        163,
+        163
+      ],
+      [
+        180,
+        180
+      ],
+      [
+        194,
+        194
+      ],
+      [
+        198,
+        199
+      ],
+      [
+        202,
+        202
+      ],
+      [
+        210,
+        210
+      ],
+      [
+        213,
+        214
+      ]
+    ],
+    "render": [
+      [
+        69,
+        70
+      ],
+      [
+        114,
+        115
+      ],
+      [
+        126,
+        126
+      ],
+      [
+        145,
+        145
+      ],
+      [
+        165,
+        165
+      ],
+      [
+        182,
+        182
+      ],
+      [
+        197,
+        197
+      ],
+      [
+        220,
+        221
+      ]
+    ],
+    "post": [
+      [
+        209,
+        219
+      ]
+    ],
+    "output": [
+      [
+        70,
+        70
+      ],
+      [
+        115,
+        115
+      ],
+      [
+        221,
+        221
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'mapping' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "#include \"TrinityTestEffect.h\"\n#include \"../CoreEffects.h\"\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nbool TrinityTestEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_beatFlashDecay = 0.0f;\n    m_lastBeatPhase = 0.0f;\n    m_lastDataTime = 0;\n    m_frameCount = 0;\n    m_smoothEnergy = 0.0f;\n    m_smoothBass = 0.0f;\n    m_smoothTreble = 0.0f;\n    m_smoothPerc = 0.0f;\n    m_smoothVocal = 0.0f;\n    return true;\n}\n\nfloat TrinityTestEffect::smooth(float current, float target, float dt, float speed) {\n    float alpha = 1.0f - expf(-speed * dt);\n    return current + (target - current) * alpha;\n}\n\nvoid TrinityTestEffect::setSymmetricLEDs(plugins::EffectContext& ctx, uint8_t distFromCenter, CRGB color) {\n    // CENTER ORIGIN pattern: set all 4 LEDs at this distance from center\n    // Strip 1 left: 79 - dist, Strip 1 right: 80 + dist\n    // Strip 2 left: 239 - dist, Strip 2 right: 240 + dist\n\n    if (distFromCenter >= 80) return;  // Out of bounds\n\n    uint16_t s1Left = 79 - distFromCenter;\n    uint16_t s1Right = 80 + distFromCenter;\n    uint16_t s2Left = 239 - distFromCenter;\n    uint16_t s2Right = 240 + distFromCenter;\n\n    if (s1Left < ctx.ledCount) ctx.leds[s1Left] = color;\n    if (s1Right < ctx.ledCount) ctx.leds[s1Right] = color;\n    if (s2Left < ctx.ledCount) ctx.leds[s2Left] = color;\n    if (s2Right < ctx.ledCount) ctx.leds[s2Right] = color;\n}\n\nvoid TrinityTestEffect::renderNoDataWarning(plugins::EffectContext& ctx) {\n    // Pulsing dim red to indicate NO AUDIO DATA\n    m_frameCount++;\n    float pulse = sinf(m_frameCount * 0.05f) * 0.3f + 0.4f;  // 0.1 to 0.7 brightness\n    uint8_t brightness = (uint8_t)(pulse * ctx.brightness * 0.5f);\n\n    CRGB warningColor = CRGB(brightness, 0, 0);  // Red\n\n    for (uint16_t i = 0; i < ctx.ledCount; i++) {\n        ctx.leds[i] = warningColor;\n    }\n\n    // Center pair shows brighter to indicate \"waiting for data\"\n    CRGB centerColor = CRGB(ctx.brightness, ctx.brightness / 4, 0);  // Orange\n    setSymmetricLEDs(ctx, 0, centerColor);\n    setSymmetricLEDs(ctx, 1, centerColor);\n}\n\nvoid TrinityTestEffect::render(plugins::EffectContext& ctx) {\n    float dt = ctx.getSafeRawDeltaSeconds();\n    m_frameCount++;\n\n    // Clear all LEDs first\n    for (uint16_t i = 0; i < ctx.ledCount; i++) {\n        ctx.leds[i] = CRGB::Black;\n    }\n\n#if FEATURE_AUDIO_SYNC\n    // TRINITY-ONLY: Only visualize PRISM data, ignore microphone fallback\n    // This makes the effect a true diagnostic for Trinity data flow\n    if (!ctx.audio.available || !ctx.audio.trinityActive) {\n        renderNoDataWarning(ctx);\n        return;\n    }\n\n    // Record that we received data\n    m_lastDataTime = ctx.totalTimeMs;\n\n    // =========================================================================\n    // EXTRACT TRINITY DATA\n    // =========================================================================\n\n    float beatPhase = ctx.audio.beatPhase();      // 0.0 - 1.0, sweeps each beat\n    bool onBeat = ctx.audio.isOnBeat();           // True momentarily on beat\n    float rms = ctx.audio.rms();                  // Energy (0-1)\n    float bass = ctx.audio.bass();                // Bass weight (0-1)\n    float treble = ctx.audio.treble();            // Brightness/treble (0-1)\n    float flux = ctx.audio.flux();                // Percussiveness (0-1)\n\n    // Smooth the values for stable visualization\n    m_smoothEnergy = smooth(m_smoothEnergy, rms, dt, 12.0f);\n    m_smoothBass = smooth(m_smoothBass, bass, dt, 10.0f);\n    m_smoothTreble = smooth(m_smoothTreble, treble, dt, 10.0f);\n    m_smoothPerc = smooth(m_smoothPerc, flux, dt, 15.0f);\n\n    // =========================================================================\n    // BEAT FLASH (all LEDs flash white on beat)\n    // =========================================================================\n\n    if (onBeat) {\n        m_beatFlashDecay = 1.0f;  // Full flash\n    }\n    m_beatFlashDecay = smooth(m_beatFlashDecay, 0.0f, dt, 8.0f);  // Decay quickly\n\n    // Apply beat flash as additive white overlay\n    if (m_beatFlashDecay > 0.01f) {\n        uint8_t flashBrightness = (uint8_t)(m_beatFlashDecay * ctx.brightness * 0.5f);\n        CRGB flashColor = CRGB(flashBrightness, flashBrightness, flashBrightness);\n        for (uint16_t i = 0; i < ctx.ledCount; i++) {\n            ctx.leds[i] += flashColor;\n        }\n    }\n\n    // =========================================================================\n    // ZONE 1: BEAT PHASE RING (0-19 from center) - White sweeping indicator\n    // =========================================================================\n\n    // The beat phase sweep indicator - shows current position in beat\n    uint8_t phasePos = (uint8_t)(beatPhase * ZONE_PHASE_END);\n\n    for (uint8_t d = 0; d <= ZONE_PHASE_END; d++) {\n        uint8_t brightness = 20;  // Dim background\n\n        // Highlight the current phase position\n        if (d == phasePos) {\n            brightness = ctx.brightness;  // Full brightness at phase position\n        } else if (d == (phasePos > 0 ? phasePos - 1 : ZONE_PHASE_END)) {\n            brightness = ctx.brightness / 2;  // Trail\n        }\n\n        setSymmetricLEDs(ctx, d, CRGB(brightness, brightness, brightness));  // White\n    }\n\n    // =========================================================================\n    // ZONE 2: ENERGY LEVEL (20-39 from center) - Yellow/Orange bar\n    // =========================================================================\n\n    uint8_t energyLevel = (uint8_t)(m_smoothEnergy * (ZONE_ENERGY_END - ZONE_PHASE_END));\n\n    for (uint8_t d = ZONE_PHASE_END + 1; d <= ZONE_ENERGY_END; d++) {\n        uint8_t zoneDist = d - ZONE_PHASE_END - 1;\n\n        if (zoneDist <= energyLevel) {\n            // Gradient from yellow to red based on level\n            uint8_t red = ctx.brightness;\n            uint8_t green = (uint8_t)(ctx.brightness * (1.0f - (float)zoneDist / (ZONE_ENERGY_END - ZONE_PHASE_END)));\n            setSymmetricLEDs(ctx, d, CRGB(red, green, 0));\n        } else {\n            // Dim background\n            setSymmetricLEDs(ctx, d, CRGB(15, 10, 0));\n        }\n    }\n\n    // =========================================================================\n    // ZONE 3: BASS LEVEL (40-54 from center) - Red bar\n    // =========================================================================\n\n    uint8_t bassLevel = (uint8_t)(m_smoothBass * (ZONE_BASS_END - ZONE_ENERGY_END));\n\n    for (uint8_t d = ZONE_ENERGY_END + 1; d <= ZONE_BASS_END; d++) {\n        uint8_t zoneDist = d - ZONE_ENERGY_END - 1;\n\n        if (zoneDist <= bassLevel) {\n            uint8_t intensity = ctx.brightness;\n            setSymmetricLEDs(ctx, d, CRGB(intensity, 0, intensity / 4));  // Red-magenta\n        } else {\n            setSymmetricLEDs(ctx, d, CRGB(15, 0, 5));  // Dim background\n        }\n    }\n\n    // =========================================================================\n    // ZONE 4: TREBLE/BRIGHTNESS LEVEL (55-69 from center) - Blue/Cyan bar\n    // =========================================================================\n\n    uint8_t trebleLevel = (uint8_t)(m_smoothTreble * (ZONE_TREBLE_END - ZONE_BASS_END));\n\n    for (uint8_t d = ZONE_BASS_END + 1; d <= ZONE_TREBLE_END; d++) {\n        uint8_t zoneDist = d - ZONE_BASS_END - 1;\n\n        if (zoneDist <= trebleLevel) {\n            uint8_t intensity = ctx.brightness;\n            setSymmetricLEDs(ctx, d, CRGB(0, intensity / 2, intensity));  // Cyan-blue\n        } else {\n            setSymmetricLEDs(ctx, d, CRGB(0, 5, 15));  // Dim background\n        }\n    }\n\n    // =========================================================================\n    // ZONE 5: OUTER BEAT FLASH RING (70-79 from center) - Purple on beat\n    // =========================================================================\n\n    for (uint8_t d = ZONE_TREBLE_END + 1; d < 80; d++) {\n        if (m_beatFlashDecay > 0.1f) {\n            uint8_t intensity = (uint8_t)(m_beatFlashDecay * ctx.brightness);\n            setSymmetricLEDs(ctx, d, CRGB(intensity, 0, intensity));  // Magenta\n        } else {\n            // Gentle breathing when no beat\n            float breath = sinf(m_frameCount * 0.02f) * 0.3f + 0.2f;\n            uint8_t dim = (uint8_t)(breath * 30);\n            setSymmetricLEDs(ctx, d, CRGB(dim, 0, dim));\n        }\n    }\n\n    // =========================================================================\n    // CENTER PAIR: BPM INDICATOR (alternates based on beat phase)\n    // =========================================================================\n\n    // Center pair pulses with beat phase\n    uint8_t centerBrightness = (uint8_t)((1.0f - beatPhase) * ctx.brightness);\n    setSymmetricLEDs(ctx, 0, CRGB(centerBrightness, centerBrightness, centerBrightness));\n\n#else\n    // FEATURE_AUDIO_SYNC is disabled at compile time\n    // Show static magenta pattern to indicate this\n    for (uint16_t i = 0; i < ctx.ledCount; i++) {\n        ctx.leds[i] = CRGB(40, 0, 40);  // Dim magenta\n    }\n\n    // Center shows brighter magenta\n    setSymmetricLEDs(ctx, 0, CRGB(100, 0, 100));\n    setSymmetricLEDs(ctx, 1, CRGB(80, 0, 80));\n#endif\n}\n\nvoid TrinityTestEffect::cleanup() {\n    // No dynamic resources to free\n}\n\nconst plugins::EffectMetadata& TrinityTestEffect::getMetadata() const {\n    static plugins::EffectMetadata meta(\n        \"Trinity Test\",                                    // Display name\n        \"Diagnostic effect for PRISM Trinity data flow\",  // Description\n        plugins::EffectCategory::PARTY,                   // Category (music-reactive)\n        1,                                                // Version\n        \"SpectraSynq\"                                     // Author\n    );\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

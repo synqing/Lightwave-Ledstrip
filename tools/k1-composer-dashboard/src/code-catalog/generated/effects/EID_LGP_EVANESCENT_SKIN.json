@@ -1,0 +1,81 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_EVANESCENT_SKIN",
+  "effectIdHex": "0x0609",
+  "className": "LGPEvanescentSkinEffect",
+  "displayName": "LGP Evanescent Skin",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPEvanescentSkinEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPEvanescentSkinEffect.cpp",
+  "renderRange": [
+    27,
+    67
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        27,
+        30
+      ]
+    ],
+    "mapping": [
+      [
+        31,
+        32
+      ]
+    ],
+    "modulation": [
+      [
+        38,
+        44
+      ]
+    ],
+    "render": [
+      [
+        40,
+        40
+      ],
+      [
+        62,
+        62
+      ],
+      [
+        64,
+        64
+      ]
+    ],
+    "post": [
+      [
+        63,
+        64
+      ]
+    ],
+    "output": [
+      [
+        40,
+        40
+      ],
+      [
+        51,
+        51
+      ],
+      [
+        54,
+        54
+      ],
+      [
+        62,
+        64
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'modulation' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPEvanescentSkinEffect.cpp\n * @brief LGP Evanescent Skin effect implementation\n */\n\n#include \"LGPEvanescentSkinEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <algorithm>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPEvanescentSkinEffect::LGPEvanescentSkinEffect()\n    : m_time(0)\n{\n}\n\nbool LGPEvanescentSkinEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_time = 0;\n    return true;\n}\n\nvoid LGPEvanescentSkinEffect::render(plugins::EffectContext& ctx) {\n    // Thin shimmering layers hugging rims or edges\n    m_time = (uint16_t)(m_time + (ctx.speed >> 2));\n\n    float intensityNorm = ctx.brightness / 255.0f;\n    (void)intensityNorm;\n    const bool rimMode = true;\n    const float lambda = 4.0f;\n    const float skinFreq = 7.0f;\n    float anim = m_time / 256.0f;\n\n    float ringRadius = HALF_LENGTH * 0.6f;\n\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        float brightnessF;\n        float hue = (float)ctx.gHue + (i >> 1);\n\n        if (rimMode) {\n            float distFromCenter = (float)centerPairDistance(i);\n            float skinDistance = fabsf(distFromCenter - ringRadius);\n            float envelope = 1.0f / (1.0f + lambda * skinDistance);\n            float carrier = sinf(distFromCenter * skinFreq * 0.05f + anim * TWO_PI);\n            brightnessF = envelope * (carrier * 0.5f + 0.5f) * 255.0f;\n        } else {\n            uint16_t edgeDistance = std::min((uint16_t)i, (uint16_t)(STRIP_LENGTH - 1 - i));\n            float distToEdge = (float)edgeDistance;\n            float envelope = 1.0f / (1.0f + lambda * distToEdge * 0.4f);\n            float carrier = sinf(((float)STRIP_LENGTH - distToEdge) * skinFreq * 0.04f - anim * TWO_PI);\n            brightnessF = envelope * (carrier * 0.5f + 0.5f) * 255.0f;\n        }\n\n        brightnessF = constrain(brightnessF, 0.0f, 255.0f);\n        uint8_t brightness = (uint8_t)brightnessF;\n\n        uint8_t brightU8 = (uint8_t)((brightness * ctx.brightness) / 255);\n        ctx.leds[i] = ctx.palette.getColor((uint8_t)hue, brightU8);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)hue + 128, brightU8);\n        }\n    }\n}\n\nvoid LGPEvanescentSkinEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPEvanescentSkinEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Evanescent Skin\",\n        \"Surface wave propagation\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

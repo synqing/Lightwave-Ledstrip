@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_FRESNEL_ZONES",
+  "effectIdHex": "0x0406",
+  "className": "LGPFresnelZonesEffect",
+  "displayName": "LGP Fresnel Zones",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPFresnelZonesEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPFresnelZonesEffect.cpp",
+  "renderRange": [
+    19,
+    49
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        19,
+        21
+      ]
+    ],
+    "mapping": [
+      [
+        22,
+        26
+      ]
+    ],
+    "modulation": [
+      [
+        34,
+        34
+      ]
+    ],
+    "render": [
+      [
+        23,
+        23
+      ],
+      [
+        44,
+        44
+      ],
+      [
+        46,
+        46
+      ]
+    ],
+    "post": [
+      [
+        46,
+        47
+      ]
+    ],
+    "output": [
+      [
+        23,
+        23
+      ],
+      [
+        44,
+        46
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'mapping' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPFresnelZonesEffect.cpp\n * @brief LGP Fresnel Zones effect implementation\n */\n\n#include \"LGPFresnelZonesEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nbool LGPFresnelZonesEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    return true;\n}\n\nvoid LGPFresnelZonesEffect::render(plugins::EffectContext& ctx) {\n    // CENTER ORIGIN - Optical zone plates creating focusing effects\n    const uint8_t zoneCount = 6;\n\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        // Distance from center\n        uint16_t dist = centerPairDistance(i);\n\n        // Fresnel zone calculation\n        uint16_t zoneRadius = (uint16_t)(sqrt16(dist << 8) * zoneCount);\n\n        // Binary zone plate\n        bool inZone = (zoneRadius & 0x100) != 0;\n        uint8_t brightness = inZone ? 255 : 0;\n\n        // Smooth edges based on intensity\n        if (ctx.brightness < 200) {\n            uint8_t edge = (uint8_t)(zoneRadius & 0xFF);\n            brightness = inZone ? edge : (uint8_t)(255 - edge);\n        }\n\n        brightness = scale8(brightness, ctx.brightness);\n\n        uint8_t hue = (uint8_t)(ctx.gHue + (dist >> 2));\n\n        ctx.leds[i] = ctx.palette.getColor(hue, brightness);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(hue + 30), scale8(brightness, 200));\n        }\n    }\n}\n\nvoid LGPFresnelZonesEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPFresnelZonesEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Fresnel Zones\",\n        \"Fresnel lens zone plate pattern\",\n        plugins::EffectCategory::UNCATEGORIZED,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

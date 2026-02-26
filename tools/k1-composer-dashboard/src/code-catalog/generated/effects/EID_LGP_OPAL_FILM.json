@@ -1,0 +1,83 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_OPAL_FILM",
+  "effectIdHex": "0x1600",
+  "className": "LGPOpalFilmEffect",
+  "displayName": "LGP Opal Film",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPOpalFilmEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPOpalFilmEffect.cpp",
+  "renderRange": [
+    32,
+    84
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        32,
+        37
+      ]
+    ],
+    "mapping": [
+      [
+        34,
+        34
+      ],
+      [
+        37,
+        38
+      ]
+    ],
+    "modulation": [
+      [
+        56,
+        56
+      ],
+      [
+        58,
+        60
+      ]
+    ],
+    "render": [
+      [
+        45,
+        45
+      ],
+      [
+        78,
+        78
+      ],
+      [
+        81,
+        81
+      ]
+    ],
+    "post": [
+      [
+        78,
+        81
+      ]
+    ],
+    "output": [
+      [
+        45,
+        45
+      ],
+      [
+        78,
+        79
+      ],
+      [
+        81,
+        81
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPOpalFilmEffect.cpp\n * @brief LGP Opal Film effect implementation\n */\n\n#include \"LGPOpalFilmEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nstatic inline float clamp01(float x) {\n    return (x < 0.0f) ? 0.0f : (x > 1.0f) ? 1.0f : x;\n}\n\nLGPOpalFilmEffect::LGPOpalFilmEffect()\n    : m_time(0.0f)\n    , m_flow(0.0f)\n{\n}\n\nbool LGPOpalFilmEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_time = 0.0f;\n    m_flow = 0.0f;\n    return true;\n}\n\nvoid LGPOpalFilmEffect::render(plugins::EffectContext& ctx) {\n    // CENTRE ORIGIN OPAL FILM - Thin-film inspired iridescence\n    const float speedNorm = ctx.speed / 50.0f;\n    const float master = ctx.brightness / 255.0f;\n\n    m_time += 0.010f + speedNorm * 0.040f;\n    m_flow += 0.006f + speedNorm * 0.020f;\n\n    const float kR = 1.00f;\n    const float kG = 1.23f;\n    const float kB = 1.55f;\n    const float hueBias = (ctx.gHue / 255.0f) * 0.15f;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        const float dist = (float)centerPairDistance((uint16_t)i);\n\n        float thickness =\n            0.55f\n            + 0.20f * sinf(dist * 0.045f + m_time)\n            + 0.12f * sinf(dist * 0.110f - m_flow * 1.3f)\n            + 0.06f * sinf(dist * 0.240f + m_time * 1.7f);\n\n        thickness = clamp01(0.5f + 0.5f * tanhf((thickness - 0.5f) * 2.0f));\n\n        const float phase = 6.2831853f * (thickness + hueBias * 0.15f);\n\n        float r = 0.5f + 0.5f * cosf(phase * kR + 0.3f);\n        float g = 0.5f + 0.5f * cosf(phase * kG + 1.1f);\n        float b = 0.5f + 0.5f * cosf(phase * kB + 2.0f);\n\n        float luma = 0.20f + 0.80f * (0.333f * (r + g + b));\n        r = clamp01(0.65f * r + 0.35f * luma);\n        g = clamp01(0.65f * g + 0.35f * luma);\n        b = clamp01(0.65f * b + 0.35f * luma);\n\n        const float base = 0.12f;\n        const float wave = clamp01(luma);\n        const float out = clamp01(base + (1.0f - base) * wave) * master;\n        const uint8_t br = (uint8_t)(255.0f * out);\n\n        CRGB cA((uint8_t)(255.0f * r), (uint8_t)(255.0f * g), (uint8_t)(255.0f * b));\n        CRGB cB((uint8_t)(255.0f * b), (uint8_t)(255.0f * r), (uint8_t)(255.0f * g));\n\n        cA.nscale8_video(br);\n        cB.nscale8_video(br);\n\n        ctx.leds[i] = cA;\n        const int j = i + STRIP_LENGTH;\n        if (j < ctx.ledCount) {\n            ctx.leds[j] = cB;\n        }\n    }\n}\n\nvoid LGPOpalFilmEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPOpalFilmEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Opal Film\",\n        \"Thin-film iridescence bands\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

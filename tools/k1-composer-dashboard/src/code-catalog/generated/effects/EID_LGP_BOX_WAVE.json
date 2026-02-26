@@ -1,0 +1,86 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_BOX_WAVE",
+  "effectIdHex": "0x0200",
+  "className": "LGPBoxWaveEffect",
+  "displayName": "LGP Box Wave",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPBoxWaveEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPBoxWaveEffect.cpp",
+  "renderRange": [
+    26,
+    61
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        26,
+        29
+      ]
+    ],
+    "mapping": [
+      [
+        28,
+        29
+      ],
+      [
+        35,
+        35
+      ],
+      [
+        50,
+        50
+      ]
+    ],
+    "modulation": [
+      [
+        35,
+        35
+      ],
+      [
+        43,
+        44
+      ]
+    ],
+    "render": [
+      [
+        37,
+        37
+      ],
+      [
+        39,
+        39
+      ],
+      [
+        56,
+        56
+      ],
+      [
+        58,
+        58
+      ]
+    ],
+    "post": [
+      [
+        37,
+        37
+      ]
+    ],
+    "output": [
+      [
+        39,
+        39
+      ],
+      [
+        55,
+        58
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPBoxWaveEffect.cpp\n * @brief LGP Box Wave effect implementation\n */\n\n#include \"LGPBoxWaveEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPBoxWaveEffect::LGPBoxWaveEffect()\n    : m_boxMotionPhase(0.0f)\n{\n}\n\nbool LGPBoxWaveEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_boxMotionPhase = 0.0f;\n    return true;\n}\n\nvoid LGPBoxWaveEffect::render(plugins::EffectContext& ctx) {\n    // CENTER ORIGIN BOX WAVE - Creates controllable standing wave boxes from center\n    float speedNorm = ctx.speed / 50.0f;\n    float intensityNorm = ctx.brightness / 255.0f;\n\n    // Box count: 3-12 boxes\n    const float boxesPerSide = 6.0f;\n    const float spatialFreq = boxesPerSide * PI / (float)HALF_LENGTH;\n\n    m_boxMotionPhase += speedNorm * 0.05f;\n\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float distFromCenter = (float)centerPairDistance((uint16_t)i);\n\n        // Base box pattern from center\n        float boxPhase = distFromCenter * spatialFreq;\n        float boxPattern = sinf(boxPhase + m_boxMotionPhase);\n\n        // Sharpness control\n        boxPattern = tanhf(boxPattern * 2.0f);\n\n        // Convert to brightness\n        uint8_t brightness = (uint8_t)(128.0f + 127.0f * boxPattern * intensityNorm);\n\n        // Color wave overlay\n        uint8_t colorIndex = (uint8_t)(ctx.gHue + (uint8_t)(distFromCenter * 2.0f));\n\n        // Apply to both strips\n        ctx.leds[i] = ctx.palette.getColor(colorIndex, brightness);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(colorIndex + 128), brightness);\n        }\n    }\n}\n\nvoid LGPBoxWaveEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPBoxWaveEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Box Wave\",\n        \"Square wave standing patterns\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

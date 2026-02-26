@@ -1,0 +1,126 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_CHROMATIC_INTERFERENCE",
+  "effectIdHex": "0x0902",
+  "className": "ChromaticInterferenceEffect",
+  "displayName": "LGP Chromatic Interference",
+  "headerPath": "firmware/v2/src/effects/ieffect/ChromaticInterferenceEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/ChromaticInterferenceEffect.cpp",
+  "renderRange": [
+    108,
+    175
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        122,
+        122
+      ]
+    ],
+    "mapping": [
+      [
+        112,
+        112
+      ],
+      [
+        123,
+        124
+      ],
+      [
+        132,
+        132
+      ]
+    ],
+    "modulation": [
+      [
+        115,
+        117
+      ],
+      [
+        126,
+        128
+      ],
+      [
+        131,
+        131
+      ],
+      [
+        134,
+        136
+      ],
+      [
+        157,
+        158
+      ],
+      [
+        160,
+        160
+      ],
+      [
+        163,
+        164
+      ]
+    ],
+    "render": [
+      [
+        119,
+        119
+      ],
+      [
+        136,
+        136
+      ],
+      [
+        144,
+        144
+      ],
+      [
+        149,
+        149
+      ],
+      [
+        164,
+        164
+      ],
+      [
+        171,
+        171
+      ]
+    ],
+    "post": [
+      [
+        167,
+        171
+      ]
+    ],
+    "output": [
+      [
+        119,
+        119
+      ],
+      [
+        144,
+        144
+      ],
+      [
+        147,
+        151
+      ],
+      [
+        155,
+        155
+      ],
+      [
+        171,
+        171
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file ChromaticInterferenceEffect.cpp\n * @brief LGP Chromatic Interference implementation\n */\n\n#include \"ChromaticInterferenceEffect.h\"\n#include \"../CoreEffects.h\"\n#include <math.h>\n\n#ifndef PI\n#define PI 3.14159265358979323846f\n#endif\n#ifndef TWO_PI\n#define TWO_PI (2.0f * PI)\n#endif\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nChromaticInterferenceEffect::ChromaticInterferenceEffect()\n    : m_interferencePhase(0.0f)\n{\n}\n\nbool ChromaticInterferenceEffect::init(plugins::EffectContext& ctx) {\n    m_interferencePhase = 0.0f;\n    return true;\n}\n\nCRGB ChromaticInterferenceEffect::chromaticDispersionPalette(float position,\n                                                             float aberration,\n                                                             float phase,\n                                                             float intensity,\n                                                             const plugins::PaletteRef& palette,\n                                                             uint8_t baseHue) const {\n    if (!palette.isValid()) {\n        // Fallback to simple RGB dispersion if no palette\n        float distFromCenter = (float)centerPairDistance((uint16_t)position);\n        float normalizedDist = distFromCenter / (float)HALF_LENGTH;\n        if (normalizedDist < 0.0f) normalizedDist = 0.0f;\n        if (normalizedDist > 1.0f) normalizedDist = 1.0f;\n        \n        // Simplified RGB dispersion\n        float redFocus = 0.5f + 0.5f * sinf((normalizedDist - 0.04f * aberration) * PI + phase);\n        float greenFocus = 0.5f + 0.5f * sinf(normalizedDist * PI + phase);\n        float blueFocus = 0.5f + 0.5f * sinf((normalizedDist + 0.05f * aberration) * PI + phase);\n        \n        uint8_t r = (uint8_t)(128 + 127 * redFocus);\n        uint8_t g = (uint8_t)(128 + 127 * greenFocus);\n        uint8_t b = (uint8_t)(128 + 127 * blueFocus);\n        \n        CRGB out(r, g, b);\n        out.nscale8_video((uint8_t)(constrain(intensity * 255.0f, 0.0f, 255.0f)));\n        return out;\n    }\n\n    // Normalised distance from centre (0..1)\n    float distFromCenter = (float)centerPairDistance((uint16_t)position);\n    float normalizedDist = distFromCenter / (float)HALF_LENGTH;\n    if (normalizedDist < 0.0f) normalizedDist = 0.0f;\n    if (normalizedDist > 1.0f) normalizedDist = 1.0f;\n\n    // Use palette as a \"spectrum\" source: distance selects along palette,\n    // phase scrolls it slowly to keep the effect alive.\n    uint8_t phaseScroll = (uint8_t)((phase * 255.0f) / TWO_PI);\n    uint8_t idx = baseHue + (uint8_t)(normalizedDist * 255.0f) + phaseScroll;\n\n    // Chromatic separation in palette space: stronger separation as aberration increases.\n    // Keep this deliberately larger than the physically tiny Δn mapping so it remains visible.\n    int16_t sep = (int16_t)(8 + (aberration * 24.0f));   // ~8..80\n\n    CRGB cR = palette.getColor((uint8_t)(idx - sep), 255);\n    CRGB cG = palette.getColor(idx, 255);\n    CRGB cB = palette.getColor((uint8_t)(idx + sep), 255);\n\n    // Dispersion modulation weights (0..1) derived from the original channel foci.\n    // We recompute a simplified version here to avoid depending on internal offsets.\n    float aberr = aberration;\n    if (aberr < 0.0f) aberr = 0.0f;\n    if (aberr > 3.0f) aberr = 3.0f;\n\n    // Use slightly exaggerated offsets so the per-channel weights differ enough to matter.\n    float redOffset  = -0.04f * aberr;\n    float blueOffset = +0.05f * aberr;\n\n    float redFocus   = 0.5f + 0.5f * sinf((normalizedDist + redOffset) * PI + phase);\n    float greenFocus = 0.5f + 0.5f * sinf((normalizedDist) * PI + phase);\n    float blueFocus  = 0.5f + 0.5f * sinf((normalizedDist + blueOffset) * PI + phase);\n\n    float wSum = redFocus + greenFocus + blueFocus;\n    if (wSum < 0.001f) wSum = 1.0f;\n\n    // Weighted blend of the three palette samples\n    float rF = (cR.r * redFocus + cG.r * greenFocus + cB.r * blueFocus) / wSum;\n    float gF = (cR.g * redFocus + cG.g * greenFocus + cB.g * blueFocus) / wSum;\n    float bF = (cR.b * redFocus + cG.b * greenFocus + cB.b * blueFocus) / wSum;\n\n    CRGB out((uint8_t)constrain((int)rF, 0, 255),\n             (uint8_t)constrain((int)gF, 0, 255),\n             (uint8_t)constrain((int)bF, 0, 255));\n\n    // Apply intensity scaling (0..1)\n    out.nscale8_video((uint8_t)(constrain(intensity * 255.0f, 0.0f, 255.0f)));\n    return out;\n}\n\nvoid ChromaticInterferenceEffect::render(plugins::EffectContext& ctx) {\n    // Dual-edge injection with dispersion, interference patterns\n    float dt = ctx.getSafeDeltaSeconds();\n    float intensity = ctx.brightness / 255.0f;\n    // Aberration strength from complexity parameter (b1: complexity_norm * 3)\n    float aberration = (ctx.complexity / 255.0f) * 3.0f;\n\n    // Interference phase animation (dt-corrected)\n    m_interferencePhase += ctx.speed * PHASE_SPEED * 60.0f * dt;\n    if (m_interferencePhase > TWO_PI) m_interferencePhase -= TWO_PI;\n    \n    for (uint16_t i = 0; i < ctx.ledCount && i < STRIP_LENGTH; i++) {\n        float position = (float)i;\n        \n        // Dual wave sources from edges (constructive/destructive interference)\n        float distFromLeft = position / 79.5f;  // Normalized distance from left edge\n        float distFromRight = (159.0f - position) / 79.5f; // Normalized distance from right edge\n        \n        // Wave phases from each edge\n        float leftPhase = m_interferencePhase - distFromLeft * TWO_PI;\n        float rightPhase = m_interferencePhase - distFromRight * TWO_PI;\n        \n        // Interference pattern (sum of waves)\n        float interference = sinf(leftPhase) + sinf(rightPhase);\n        interference = interference / 2.0f; // Normalize to -1..1\n        \n        // Apply chromatic dispersion with interference modulation\n        float phase = m_interferencePhase + interference * INTERFERENCE_MODULATION;\n        CRGB color = chromaticDispersionPalette(position, aberration, phase, intensity, ctx.palette, ctx.gHue);\n        \n        // Modulate intensity based on interference (constructive = brighter, destructive = dimmer)\n        float interferenceIntensity = 0.5f + 0.5f * interference;\n        color.r = (uint8_t)(color.r * interferenceIntensity);\n        color.g = (uint8_t)(color.g * interferenceIntensity);\n        color.b = (uint8_t)(color.b * interferenceIntensity);\n        \n        ctx.leds[i] = color;\n    }\n    \n    // Strip 2: Centre-origin at LED 240 (not edge mirror)\n    if (ctx.ledCount >= STRIP_LENGTH * 2) {\n        for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n            uint16_t strip2Idx = STRIP_LENGTH + i;\n            if (strip2Idx < ctx.ledCount) {\n                float position = (float)i;\n\n                float distFromLeft = position / (float)HALF_LENGTH;\n                float distFromRight = ((float)(STRIP_LENGTH - 1) - position) / (float)HALF_LENGTH;\n\n                float leftPhase = m_interferencePhase - distFromLeft * TWO_PI;\n                float rightPhase = m_interferencePhase - distFromRight * TWO_PI;\n\n                float interference = sinf(leftPhase) + sinf(rightPhase);\n                interference = interference / 2.0f;\n\n                float phase = m_interferencePhase + interference * INTERFERENCE_MODULATION + PI;\n                CRGB color = chromaticDispersionPalette(position, aberration, phase, intensity, ctx.palette, ctx.gHue);\n\n                float interferenceIntensity = 0.5f + 0.5f * interference;\n                color.r = (uint8_t)(color.r * interferenceIntensity);\n                color.g = (uint8_t)(color.g * interferenceIntensity);\n                color.b = (uint8_t)(color.b * interferenceIntensity);\n\n                ctx.leds[strip2Idx] = color;\n            }\n        }\n    }\n}\n\nvoid ChromaticInterferenceEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& ChromaticInterferenceEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Chromatic Interference\",\n        \"Interfering dispersion patterns\",\n        plugins::EffectCategory::UNCATEGORIZED,  // ADVANCED_OPTICAL not in enum, using UNCATEGORIZED\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n\n"
+}

@@ -1,0 +1,102 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_WAVE_REACTIVE",
+  "effectIdHex": "0x0A08",
+  "className": "WaveReactiveEffect",
+  "displayName": "Wave Reactive",
+  "headerPath": "firmware/v2/src/effects/ieffect/WaveReactiveEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/WaveReactiveEffect.cpp",
+  "renderRange": [
+    54,
+    120
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        65,
+        65
+      ],
+      [
+        70,
+        70
+      ],
+      [
+        77,
+        77
+      ]
+    ],
+    "mapping": [
+      [
+        62,
+        71
+      ]
+    ],
+    "modulation": [
+      [
+        76,
+        80
+      ],
+      [
+        82,
+        82
+      ],
+      [
+        92,
+        94
+      ],
+      [
+        96,
+        96
+      ],
+      [
+        106,
+        107
+      ]
+    ],
+    "render": [
+      [
+        97,
+        97
+      ],
+      [
+        99,
+        99
+      ],
+      [
+        112,
+        112
+      ],
+      [
+        114,
+        115
+      ],
+      [
+        117,
+        117
+      ]
+    ],
+    "post": [
+      [
+        96,
+        97
+      ]
+    ],
+    "output": [
+      [
+        99,
+        99
+      ],
+      [
+        114,
+        117
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'mapping' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file WaveReactiveEffect.cpp\n * @brief Wave Reactive - Energy-accumulating wave with smooth audio-driven motion\n *\n * Pattern: REACTIVE (Sensory Bridge Kaleidoscope-style)\n * - Motion: ENERGY ACCUMULATION (pos += accumulated energy, not speed = metric)\n * - Audio: RMS -> accumulated energy -> wave speed boost\n * - Flux -> brightness boost on transients\n *\n * This is the \"responsive\" wave effect. Audio energy accumulates over time\n * and adds to base motion speed, creating smooth audio-driven movement\n * without the jitter of direct audio->speed coupling.\n *\n * For calm time-based wave motion, see WaveAmbientEffect.\n */\n\n#include \"WaveReactiveEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\n// Energy accumulation constants (Kaleidoscope pattern)\nstatic constexpr float ENERGY_ACCUMULATION_RATE = 0.5f;  // How fast energy accumulates from RMS\nstatic constexpr float ENERGY_DECAY_RATE = 0.98f;        // 2% decay per frame - smooths motion\nstatic constexpr float ENERGY_TO_SPEED_FACTOR = 10.0f;   // How much accumulated energy affects speed\n\n// Flux boost constants\nstatic constexpr float FLUX_BOOST_DECAY = 0.9f;          // Transient brightness decay\nstatic constexpr float FLUX_THRESHOLD = 0.1f;            // Delta threshold for transient detection\nstatic constexpr float FLUX_MIN_LEVEL = 0.2f;            // Minimum flux to trigger boost\nstatic constexpr float FLUX_BOOST_BRIGHTNESS = 50.0f;    // Max brightness boost from flux\n\nWaveReactiveEffect::WaveReactiveEffect()\n    : m_waveOffset(0)\n    , m_energyAccum(0.0f)\n    , m_lastFlux(0.0f)\n    , m_fluxBoost(0.0f)\n{\n}\n\nbool WaveReactiveEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_waveOffset = 0;\n    m_energyAccum = 0.0f;\n    m_lastFlux = 0.0f;\n    m_fluxBoost = 0.0f;\n    return true;\n}\n\nvoid WaveReactiveEffect::render(plugins::EffectContext& ctx) {\n    // CENTER ORIGIN WAVE - Waves propagate from center\n    // REACTIVE pattern: energy accumulation drives motion\n\n    float dt = ctx.getSafeDeltaSeconds();\n\n    // Base speed from user parameter\n    float baseSpeed = (float)ctx.speed;\n    float waveFreq = 15.0f;  // Fixed wave frequency\n\n#if FEATURE_AUDIO_SYNC\n    if (ctx.audio.available) {\n        // REACTIVE pattern: Audio drives motion through ACCUMULATION\n        // This is the key insight from Sensory Bridge Kaleidoscope\n\n        // Step 1: Accumulate energy from RMS (dt-corrected)\n        float rms = ctx.audio.rms();\n        m_energyAccum += rms * ENERGY_ACCUMULATION_RATE * dt * 60.0f;\n\n        // Step 2: Decay accumulated energy (dt-corrected)\n        m_energyAccum *= powf(ENERGY_DECAY_RATE, dt * 60.0f);\n\n        // Step 3: Flux transient detection (brightness boost)\n        float flux = ctx.audio.flux();\n        float fluxDelta = flux - m_lastFlux;\n        if (fluxDelta > FLUX_THRESHOLD && flux > FLUX_MIN_LEVEL) {\n            m_fluxBoost = fmaxf(m_fluxBoost, flux);\n        }\n        m_lastFlux = flux;\n    }\n#endif\n\n    // Update wave offset with energy-augmented speed (dt-corrected)\n    // REACTIVE pattern: accumulated energy adds to base speed, not replaces it\n    float effectiveSpeed = baseSpeed + m_energyAccum * ENERGY_TO_SPEED_FACTOR;\n    m_waveOffset += (uint32_t)(effectiveSpeed * dt * 60.0f);\n    if (m_waveOffset > 65535) m_waveOffset = m_waveOffset % 65536;\n\n    // Decay flux boost for transient brightness (dt-corrected)\n    m_fluxBoost *= powf(FLUX_BOOST_DECAY, dt * 60.0f);\n    if (m_fluxBoost < 0.01f) m_fluxBoost = 0.0f;\n\n    // Gentle fade for smooth trails\n    fadeToBlackBy(ctx.leds, ctx.ledCount, 12);\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float distFromCenter = (float)centerPairDistance((uint16_t)i);\n\n        // Wave propagates outward from center\n        // Wave position driven by time + accumulated energy\n        uint8_t rawBrightness = sin8((uint16_t)(distFromCenter * waveFreq) + (m_waveOffset >> 4));\n\n        // Add flux boost for transient brightness\n        uint8_t brightness = qadd8(rawBrightness, (uint8_t)(m_fluxBoost * FLUX_BOOST_BRIGHTNESS));\n\n        // Color follows wave with subtle motion\n        uint8_t colorIndex = (uint8_t)(distFromCenter * 8) + (m_waveOffset >> 6);\n\n        CRGB color = ctx.palette.getColor(colorIndex, brightness);\n\n        // Apply to both strips (CENTER ORIGIN symmetric rendering)\n        ctx.leds[i] = color;\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = color;\n        }\n    }\n}\n\nvoid WaveReactiveEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& WaveReactiveEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Wave Reactive\",\n        \"Energy-accumulating wave with smooth audio-driven motion\",\n        plugins::EffectCategory::WATER,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

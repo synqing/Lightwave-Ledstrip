@@ -1,0 +1,83 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_HEXAGONAL_GRID",
+  "effectIdHex": "0x0301",
+  "className": "LGPHexagonalGridEffect",
+  "displayName": "LGP Hexagonal Grid",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPHexagonalGridEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPHexagonalGridEffect.cpp",
+  "renderRange": [
+    26,
+    56
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        26,
+        28
+      ]
+    ],
+    "mapping": [
+      [
+        29,
+        30
+      ],
+      [
+        32,
+        32
+      ],
+      [
+        48,
+        48
+      ]
+    ],
+    "modulation": [
+      [
+        32,
+        32
+      ],
+      [
+        40,
+        42
+      ]
+    ],
+    "render": [
+      [
+        36,
+        36
+      ],
+      [
+        51,
+        51
+      ],
+      [
+        53,
+        53
+      ]
+    ],
+    "post": [
+      [
+        53,
+        54
+      ]
+    ],
+    "output": [
+      [
+        36,
+        36
+      ],
+      [
+        51,
+        53
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPHexagonalGridEffect.cpp\n * @brief LGP Hexagonal Grid effect implementation\n */\n\n#include \"LGPHexagonalGridEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPHexagonalGridEffect::LGPHexagonalGridEffect()\n    : m_phase(0.0f)\n{\n}\n\nbool LGPHexagonalGridEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_phase = 0.0f;\n    return true;\n}\n\nvoid LGPHexagonalGridEffect::render(plugins::EffectContext& ctx) {\n    // Three waves at 120 degrees create hexagonal patterns\n    float dt = ctx.getSafeDeltaSeconds();\n    float speedNorm = ctx.speed / 50.0f;\n    float intensityNorm = ctx.brightness / 255.0f;\n\n    m_phase += speedNorm * 0.01f * 60.0f * dt;  // dt-corrected\n\n    const float hexSize = 10.0f;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float pos = centerPairSignedPosition((uint16_t)i) / (float)HALF_LENGTH;\n\n        // Three waves at 120 degree angles\n        float wave1 = sinf(pos * hexSize * TWO_PI + m_phase);\n        float wave2 = sinf(pos * hexSize * TWO_PI + m_phase + TWO_PI / 3.0f);\n        float wave3 = sinf(pos * hexSize * TWO_PI + m_phase + 2.0f * TWO_PI / 3.0f);\n\n        // Multiplicative creates cells\n        float pattern = fabsf(wave1 * wave2 * wave3);\n        pattern = powf(pattern, 0.3f);\n\n        uint8_t brightness = (uint8_t)(pattern * 255.0f * intensityNorm);\n        uint8_t hue = (uint8_t)(ctx.gHue + (uint8_t)(pattern * 60.0f) + (i >> 1));\n\n        ctx.leds[i] = ctx.palette.getColor(hue, brightness);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(hue + 60), brightness);\n        }\n    }\n}\n\nvoid LGPHexagonalGridEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPHexagonalGridEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Hexagonal Grid\",\n        \"Hexagonal cell structure\",\n        plugins::EffectCategory::GEOMETRIC,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

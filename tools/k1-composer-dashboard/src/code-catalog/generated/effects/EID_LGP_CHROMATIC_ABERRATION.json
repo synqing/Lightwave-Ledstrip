@@ -1,0 +1,85 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_CHROMATIC_ABERRATION",
+  "effectIdHex": "0x0708",
+  "className": "LGPChromaticAberrationEffect",
+  "displayName": "LGP Chromatic Aberration",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPChromaticAberrationEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPChromaticAberrationEffect.cpp",
+  "renderRange": [
+    26,
+    57
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        26,
+        28
+      ]
+    ],
+    "mapping": [
+      [
+        36,
+        36
+      ],
+      [
+        38,
+        40
+      ]
+    ],
+    "modulation": [
+      [
+        34,
+        39
+      ]
+    ],
+    "render": [
+      [
+        34,
+        34
+      ],
+      [
+        47,
+        47
+      ],
+      [
+        54,
+        54
+      ]
+    ],
+    "post": [
+      [
+        54,
+        55
+      ]
+    ],
+    "output": [
+      [
+        34,
+        34
+      ],
+      [
+        47,
+        47
+      ],
+      [
+        49,
+        49
+      ],
+      [
+        54,
+        54
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'modulation' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPChromaticAberrationEffect.cpp\n * @brief LGP Chromatic Aberration effect implementation\n */\n\n#include \"LGPChromaticAberrationEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPChromaticAberrationEffect::LGPChromaticAberrationEffect()\n    : m_lensPosition(0.0f)\n{\n}\n\nbool LGPChromaticAberrationEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_lensPosition = 0.0f;\n    return true;\n}\n\nvoid LGPChromaticAberrationEffect::render(plugins::EffectContext& ctx) {\n    // Different wavelengths refract at different angles\n    float dt = ctx.getSafeDeltaSeconds();\n    float intensity = ctx.brightness / 255.0f;\n    const float aberration = 1.5f;\n\n    m_lensPosition += ctx.speed * 0.01f * 60.0f * dt;  // dt-corrected\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float distFromCenter = (float)centerPairDistance((uint16_t)i);\n        float normalizedDist = distFromCenter / (float)HALF_LENGTH;\n\n        float redFocus = sinf((normalizedDist - 0.1f * aberration) * PI + m_lensPosition);\n        float greenFocus = sinf(normalizedDist * PI + m_lensPosition);\n        float blueFocus = sinf((normalizedDist + 0.1f * aberration) * PI + m_lensPosition);\n\n        CRGB aberratedColor;\n        aberratedColor.r = (uint8_t)(constrain(128.0f + 127.0f * redFocus, 0.0f, 255.0f) * intensity);\n        aberratedColor.g = (uint8_t)(constrain(128.0f + 127.0f * greenFocus, 0.0f, 255.0f) * intensity);\n        aberratedColor.b = (uint8_t)(constrain(128.0f + 127.0f * blueFocus, 0.0f, 255.0f) * intensity);\n\n        ctx.leds[i] = aberratedColor;\n\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            CRGB aberratedColor2;\n            aberratedColor2.r = (uint8_t)(constrain(128.0f + 127.0f * blueFocus, 0.0f, 255.0f) * intensity);\n            aberratedColor2.g = (uint8_t)(constrain(128.0f + 127.0f * greenFocus, 0.0f, 255.0f) * intensity);\n            aberratedColor2.b = (uint8_t)(constrain(128.0f + 127.0f * redFocus, 0.0f, 255.0f) * intensity);\n            ctx.leds[i + STRIP_LENGTH] = aberratedColor2;\n        }\n    }\n}\n\nvoid LGPChromaticAberrationEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPChromaticAberrationEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Chromatic Aberration\",\n        \"Lens dispersion edge effects\",\n        plugins::EffectCategory::UNCATEGORIZED,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

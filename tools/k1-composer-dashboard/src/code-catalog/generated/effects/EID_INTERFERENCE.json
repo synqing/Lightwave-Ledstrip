@@ -1,0 +1,95 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_INTERFERENCE",
+  "effectIdHex": "0x010A",
+  "className": "InterferenceEffect",
+  "displayName": "Interference",
+  "headerPath": "firmware/v2/src/effects/ieffect/InterferenceEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/InterferenceEffect.cpp",
+  "renderRange": [
+    28,
+    61
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        28,
+        31
+      ]
+    ],
+    "mapping": [
+      [
+        43,
+        43
+      ],
+      [
+        46,
+        47
+      ]
+    ],
+    "modulation": [
+      [
+        31,
+        32
+      ],
+      [
+        34,
+        34
+      ],
+      [
+        36,
+        39
+      ],
+      [
+        46,
+        47
+      ],
+      [
+        52,
+        52
+      ]
+    ],
+    "render": [
+      [
+        41,
+        41
+      ],
+      [
+        54,
+        54
+      ],
+      [
+        56,
+        56
+      ],
+      [
+        58,
+        58
+      ]
+    ],
+    "post": [
+      [
+        57,
+        59
+      ]
+    ],
+    "output": [
+      [
+        41,
+        41
+      ],
+      [
+        56,
+        58
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file InterferenceEffect.cpp\n * @brief Interference effect implementation\n */\n\n#include \"InterferenceEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nInterferenceEffect::InterferenceEffect()\n    : m_wave1Phase(0.0f)\n    , m_wave2Phase(0.0f)\n{\n}\n\nbool InterferenceEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_wave1Phase = 0.0f;\n    m_wave2Phase = 0.0f;\n    return true;\n}\n\nvoid InterferenceEffect::render(plugins::EffectContext& ctx) {\n    // CENTER ORIGIN INTERFERENCE - Two waves from center create patterns\n    float dt = ctx.getSafeDeltaSeconds();\n    m_wave1Phase += ctx.speed / 20.0f * 60.0f * dt;  // dt-corrected\n    m_wave2Phase -= ctx.speed / 30.0f * 60.0f * dt;  // dt-corrected\n\n    // Wrap phases to prevent unbounded growth (prevents hue cycling - no-rainbows rule)\n    const float twoPi = 2.0f * PI;\n    if (m_wave1Phase > twoPi) m_wave1Phase -= twoPi;\n    if (m_wave1Phase < 0.0f) m_wave1Phase += twoPi;\n    if (m_wave2Phase > twoPi) m_wave2Phase -= twoPi;\n    if (m_wave2Phase < 0.0f) m_wave2Phase += twoPi;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float distFromCenter = (float)centerPairDistance((uint16_t)i);\n        float normalizedDist = distFromCenter / (float)HALF_LENGTH;\n\n        // Two waves emanating from center\n        float wave1 = sinf(normalizedDist * PI * 4.0f + m_wave1Phase) * 127.0f + 128.0f;\n        float wave2 = sinf(normalizedDist * PI * 6.0f + m_wave2Phase) * 127.0f + 128.0f;\n\n        // Interference pattern\n        uint8_t brightness = (uint8_t)((wave1 + wave2) / 2.0f);\n        // Wrap hue calculation to prevent rainbow cycling (no-rainbows rule: < 60° range)\n        uint8_t hue = (uint8_t)((m_wave1Phase * 20.0f) + (distFromCenter * 8.0f));\n\n        CRGB color = ctx.palette.getColor((uint8_t)(ctx.gHue + hue), brightness);\n\n        ctx.leds[i] = color;\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = color;\n        }\n    }\n}\n\nvoid InterferenceEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& InterferenceEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Interference\",\n        \"Basic wave interference\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

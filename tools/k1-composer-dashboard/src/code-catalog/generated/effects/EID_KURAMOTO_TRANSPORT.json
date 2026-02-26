@@ -1,0 +1,148 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_KURAMOTO_TRANSPORT",
+  "effectIdHex": "0x1501",
+  "className": "KuramotoTransportEffect",
+  "displayName": "KuramotoTransportEffect",
+  "headerPath": "firmware/v2/src/effects/ieffect/KuramotoTransportEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/KuramotoTransportEffect.cpp",
+  "renderRange": [
+    113,
+    282
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        126,
+        128
+      ],
+      [
+        143,
+        143
+      ]
+    ],
+    "mapping": [
+      [
+        116,
+        116
+      ],
+      [
+        124,
+        124
+      ],
+      [
+        162,
+        162
+      ],
+      [
+        213,
+        214
+      ],
+      [
+        257,
+        258
+      ],
+      [
+        274,
+        274
+      ]
+    ],
+    "modulation": [
+      [
+        143,
+        144
+      ],
+      [
+        173,
+        173
+      ],
+      [
+        195,
+        195
+      ],
+      [
+        198,
+        198
+      ],
+      [
+        202,
+        202
+      ],
+      [
+        220,
+        220
+      ],
+      [
+        222,
+        222
+      ],
+      [
+        225,
+        225
+      ],
+      [
+        232,
+        233
+      ],
+      [
+        236,
+        237
+      ],
+      [
+        261,
+        261
+      ],
+      [
+        264,
+        264
+      ]
+    ],
+    "render": [
+      [
+        194,
+        195
+      ],
+      [
+        198,
+        198
+      ],
+      [
+        207,
+        207
+      ],
+      [
+        239,
+        239
+      ],
+      [
+        252,
+        252
+      ],
+      [
+        266,
+        266
+      ]
+    ],
+    "post": [
+      [
+        167,
+        167
+      ],
+      [
+        176,
+        176
+      ]
+    ],
+    "output": [
+      [
+        277,
+        277
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [],
+  "sourceText": "/**\n * @file KuramotoTransportEffect.cpp\n * @brief Implementation of event-driven transport effect\n *\n * The key insight: Kuramoto field is INVISIBLE.\n * What you SEE is transported light substance injected at events.\n *\n * Recovered from Codex snapshot 1140f3c6 (Feb 10, 2026),\n * adapted for PSRAM allocation + dt-correctness (AudioReactivePolicy).\n */\n\n#include \"KuramotoTransportEffect.h\"\n#include \"AudioReactivePolicy.h\"\n\n#include <string.h>\n#include <math.h>\n\n#include \"../../utils/Log.h\"\n\nnamespace lightwaveos::effects::ieffect {\n\n// -------------------- Static metadata --------------------\n\nconst lightwaveos::plugins::EffectMetadata KuramotoTransportEffect::s_meta{\n    \"Kuramoto Transport\",\n    \"Invisible oscillators \\xe2\\x86\\x92 event injections \\xe2\\x86\\x92 transported light substance\",\n    lightwaveos::plugins::EffectCategory::QUANTUM,\n    1,\n    \"LightwaveOS\"\n};\n\nconst lightwaveos::plugins::EffectParameter KuramotoTransportEffect::s_params[2] = {\n    // name, displayName, min, max, default\n    {\"sync_ratio\", \"Sync Ratio\", 0.0f, 1.0f, 0.55f},\n    {\"radius\",     \"Coupling Radius\", 0.0f, 1.0f, 0.50f},\n};\n\n// -------------------- Lifecycle --------------------\n\nKuramotoTransportEffect::KuramotoTransportEffect() {\n    // Scratch buffers are allocated in init(), not here.\n}\n\nbool KuramotoTransportEffect::init(lightwaveos::plugins::EffectContext& ctx) {\n    // Allocate PSRAM for sub-components\n    if (!m_field.allocatePsram()) {\n        LW_LOGE(\"KuramotoTransport: field PSRAM alloc failed\");\n        return false;\n    }\n    if (!m_transport.allocatePsram()) {\n        LW_LOGE(\"KuramotoTransport: transport PSRAM alloc failed\");\n        return false;\n    }\n    if (!m_scratch) {\n        m_scratch = static_cast<PsramScratch*>(heap_caps_malloc(sizeof(PsramScratch), MALLOC_CAP_SPIRAM));\n        if (!m_scratch) {\n            LW_LOGE(\"KuramotoTransport: scratch PSRAM alloc failed\");\n            return false;\n        }\n    }\n    memset(m_scratch, 0, sizeof(PsramScratch));\n\n    // Seed from time to avoid identical behaviour across boots.\n    // Seed from raw runtime + frame context to avoid SPEED-dependent seeding.\n    const uint32_t seed =\n        static_cast<uint32_t>(ctx.rawTotalTimeMs) ^\n        static_cast<uint32_t>(ctx.frameNumber * 2654435761u) ^\n        0xC0FFEEu;\n    m_field.resetAll(seed);\n    m_transport.resetAll();\n    m_palettePhase = 0.0f;\n    (void)ctx;\n    return true;\n}\n\nvoid KuramotoTransportEffect::cleanup() {\n    m_field.freePsram();\n    m_transport.freePsram();\n    if (m_scratch) { heap_caps_free(m_scratch); m_scratch = nullptr; }\n}\n\nconst lightwaveos::plugins::EffectMetadata& KuramotoTransportEffect::getMetadata() const {\n    return s_meta;\n}\n\nconst lightwaveos::plugins::EffectParameter* KuramotoTransportEffect::getParameter(uint8_t index) const {\n    if (index >= 2) return nullptr;\n    return &s_params[index];\n}\n\nbool KuramotoTransportEffect::setParameter(const char* name, float value) {\n    if (!name) return false;\n    if (strcmp(name, \"sync_ratio\") == 0) {\n        m_syncRatio01 = clamp01(value);\n        return true;\n    }\n    if (strcmp(name, \"radius\") == 0) {\n        m_radius01 = clamp01(value);\n        return true;\n    }\n    return false;\n}\n\nfloat KuramotoTransportEffect::getParameter(const char* name) const {\n    if (!name) return 0.0f;\n    if (strcmp(name, \"sync_ratio\") == 0) return m_syncRatio01;\n    if (strcmp(name, \"radius\") == 0) return m_radius01;\n    return 0.0f;\n}\n\n// -------------------- Render --------------------\n\nvoid KuramotoTransportEffect::render(lightwaveos::plugins::EffectContext& ctx) {\n    if (!m_scratch) return;\n\n    // Map zone id (0xFF means \"not a zone render\").\n    uint8_t zid = (ctx.zoneId == 0xFF) ? 0 : ctx.zoneId;\n    if (zid >= KuramotoOscillatorField::MAX_ZONES) zid = 0;\n\n    // dt: raw for oscillator physics, speed-scaled for visual transport.\n    const float rawDt = AudioReactivePolicy::signalDt(ctx);\n    const float dt = ctx.getSafeDeltaSeconds();\n\n    // --- Audio steering (NO direct audio -> per-LED brightness mapping)\n    // We ONLY steer regime parameters.\n    float overall = ctx.audio.available ? clamp01(ctx.audio.overallSaliency()) : 0.25f;\n    float rhythm  = ctx.audio.available ? clamp01(ctx.audio.rhythmicSaliency()) : 0.20f;\n    float timbre  = ctx.audio.available ? clamp01(ctx.audio.timbralSaliency()) : 0.20f;\n\n    // Custom knob sets the baseline regime; audio nudges it.\n    const float sync01 = clamp01(0.70f * m_syncRatio01 + 0.30f * rhythm);\n\n    float K = 0.0f;\n    float spread = 0.0f;\n    computeRegime(sync01, K, spread);\n\n    // Nonlocal radius: knob + energy. (Energy increases interaction range.)\n    const uint16_t radius = (uint16_t)fminf((float)KuramotoOscillatorField::MAX_R,\n                                           (float)radiusFrom01(0.65f * m_radius01 + 0.35f * overall));\n\n    // Noise and kicks: audio creates *structure* without becoming \"VU-meter on LEDs\".\n    const float noiseSigma   = 0.15f + 0.35f * timbre;              // rad/sqrt(s)\n    const float flux01       = ctx.audio.available ? clamp01(ctx.audio.flux()) : 0.0f;\n    const float kickRateHz   = 1.5f + 6.0f * flux01;                // events/sec\n    const float kickStrength = 1.2f + 1.8f * overall;               // radians [1.2, 3.0]\n\n    // Step the invisible field (raw dt for physics).\n    m_field.step(zid, rawDt, K, spread, radius, noiseSigma, kickRateHz, kickStrength);\n\n    // --- Derived features (coherence for injection colour, events for triggers)\n    KuramotoFeatureExtractor::extract(\n        m_field.theta(zid),\n        m_field.prevTheta(zid),\n        m_field.radius(),\n        m_field.kernel(),\n        m_scratch->velocity,\n        m_scratch->coherence,\n        m_scratch->event\n    );\n\n    // --- Transport parameters (dt-correct inside transport)\n    const float mood01 = ctx.getMoodNormalized();\n\n    // ========================================================================\n    // SENSORY BRIDGE REFERENCE PATTERN: Unidirectional OUTWARD motion\n    // ========================================================================\n    // Bloom mode uses: offset = 0.25 + 1.75 * MOOD\n    // - MOOD=0 (reactive): offset=0.25 (fast outward motion)\n    // - MOOD=1 (dreamy): offset=2.0 (slower, more viscous)\n    // Audio saliency adds extra push for energetic response.\n    const float baseOffset60 = 0.25f + 1.75f * mood01 + 0.50f * overall;\n\n    // Persistence per-frame @60fps. MOOD modulation.\n    const float persistence60 = clamp01(0.96f + 0.03f * mood01);\n\n    // Diffusion: cheap bloom/viscosity. Higher when incoherent (creates creamy fog).\n    const float diffusion = clamp01(0.05f + 0.25f * (1.0f - sync01) + 0.10f * mood01);\n\n    // The visible buffer length is centre->edge samples.\n    const uint16_t radialLen = (ctx.centerPoint + 1u);\n\n    // ========================================================================\n    // Uniform OUTWARD advection (nullptr = +1.0 direction, outward from centre)\n    // ========================================================================\n    m_transport.advectWithVelocity(zid, radialLen, baseOffset60, persistence60, diffusion, dt, nullptr);\n\n    // --- Inject events with CENTER BIAS\n    // ========================================================================\n    // SENSORY BRIDGE REFERENCE: Inject at centre, let it flow outward.\n    // We compromise: inject anywhere events occur, but weight heavily toward centre.\n    // ========================================================================\n    const float injectGain = clamp01(static_cast<float>(ctx.intensity) / 255.0f);\n\n    // Slow palette drift: event colours shift over time.\n    m_palettePhase += dt * (0.08f + 0.20f * overall);\n\n    // Base hue comes from global hue + slow drift.\n    const uint8_t baseHue = (uint8_t)(ctx.gHue + (uint8_t)(m_palettePhase * 29.0f));\n\n    // Accumulate centre injection: sum all event energy, inject at centre.\n    float centerEnergy = 0.0f;\n    float centerPhaseSum = 0.0f;\n    float centerCohSum = 0.0f;\n    float totalWeight = 0.0f;\n\n    // Iterate oscillators, accumulate energy with centre bias.\n    for (uint16_t i = 0; i < radialLen && i < KuramotoOscillatorField::N; ++i) {\n        const float e = m_scratch->event[i];\n        if (e <= 0.001f) continue;\n\n        // Centre bias: exponential falloff from centre (i=0).\n        // Events near centre contribute fully, events at edge contribute less.\n        const float distNorm = (float)i / (float)radialLen;  // 0=centre, 1=edge\n        const float centerWeight = expf(-3.0f * distNorm);   // ~0.05 at edge, 1.0 at centre\n\n        // Weighted contribution to centre injection.\n        const float weightedE = e * centerWeight;\n        centerEnergy += weightedE;\n\n        // Accumulate phase and coherence for colour averaging.\n        const float th = m_field.theta(zid)[i];\n        const float phase01 = (KuramotoOscillatorField::wrapPi(th) + KuramotoOscillatorField::PI_F) * (1.0f / (2.0f * KuramotoOscillatorField::PI_F));\n        const float coh = m_scratch->coherence[i];\n\n        centerPhaseSum += phase01 * weightedE;\n        centerCohSum += coh * weightedE;\n        totalWeight += weightedE;\n    }\n\n    // Inject accumulated energy at CENTRE (position 0).\n    if (centerEnergy > 0.01f && totalWeight > 0.001f) {\n        // Average phase and coherence.\n        const float avgPhase = centerPhaseSum / totalWeight;\n        const float avgCoh = centerCohSum / totalWeight;\n\n        // Colour from averaged phase.\n        const uint8_t palIdx = (uint8_t)(baseHue + (uint8_t)(avgPhase * 255.0f) + (uint8_t)(avgCoh * 48.0f));\n        const uint8_t bri = (uint8_t)(255.0f * clamp01(0.25f + 0.75f * clamp01(centerEnergy)));\n        CRGB c = ctx.palette.getColor(palIdx, bri);\n\n        // Spread based on average coherence.\n        const float spreadVal = 0.5f + 1.0f * (1.0f - avgCoh);\n\n        // Amount: accumulated energy * injection gain.\n        const float amount = clamp01(centerEnergy * (0.5f + 0.5f * injectGain));\n\n        // Inject at CENTRE (position 0 = centre of radial buffer).\n        m_transport.injectAtPos(zid, radialLen, 0.0f, c, amount, spreadVal);\n    }\n\n    // Also inject smaller amounts at event locations for texture (but much weaker).\n    for (uint16_t i = 1; i < radialLen && i < KuramotoOscillatorField::N; ++i) {\n        const float e = m_scratch->event[i];\n        if (e <= 0.05f) continue;  // Higher threshold for non-centre injection\n\n        // Much weaker injection away from centre.\n        const float distNorm = (float)i / (float)radialLen;\n        const float falloff = 0.15f * expf(-2.0f * distNorm);  // Very weak away from centre\n\n        const float th = m_field.theta(zid)[i];\n        const float phase01 = (KuramotoOscillatorField::wrapPi(th) + KuramotoOscillatorField::PI_F) * (1.0f / (2.0f * KuramotoOscillatorField::PI_F));\n        const float coh = m_scratch->coherence[i];\n\n        const uint8_t palIdx = (uint8_t)(baseHue + (uint8_t)(phase01 * 255.0f) + (uint8_t)(coh * 48.0f));\n        const uint8_t bri = (uint8_t)(255.0f * clamp01(0.15f + 0.35f * e));\n        CRGB c = ctx.palette.getColor(palIdx, bri);\n\n        const float spreadVal = 0.3f + 0.7f * (1.0f - coh);\n        const float amount = clamp01(e * falloff * injectGain);\n\n        m_transport.injectAtPos(zid, radialLen, (float)i, c, amount, spreadVal);\n    }\n\n    // --- Readout to LEDs with tone mapping + centre-origin symmetry.\n    // Brightness is applied inside TransportBuffer::readoutToLeds() via ctx.brightness.\n    // We control only \"scene exposure\" here (ties to intensity, not audio).\n    const float exposure = 1.2f + 1.8f * injectGain;                      // brighter output\n    const float satBoost = 0.10f + 0.35f * (1.0f - sync01) + 0.10f * mood01; // more haze in incoherent regimes\n\n    m_transport.readoutToLeds(zid, ctx, radialLen, exposure, satBoost);\n\n}\n\n} // namespace lightwaveos::effects::ieffect\n"
+}

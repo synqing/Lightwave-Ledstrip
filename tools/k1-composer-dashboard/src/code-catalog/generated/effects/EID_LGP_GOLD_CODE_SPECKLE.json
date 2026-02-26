@@ -1,0 +1,236 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_GOLD_CODE_SPECKLE",
+  "effectIdHex": "0x1B02",
+  "className": "LGPGoldCodeSpeckleEffect",
+  "displayName": "LGP Gold-Code Speckle",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPGoldCodeSpeckleEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPGoldCodeSpeckleEffect.cpp",
+  "renderRange": [
+    90,
+    266
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        132,
+        132
+      ],
+      [
+        134,
+        134
+      ],
+      [
+        136,
+        136
+      ],
+      [
+        139,
+        139
+      ],
+      [
+        149,
+        149
+      ],
+      [
+        206,
+        206
+      ]
+    ],
+    "mapping": [
+      [
+        96,
+        96
+      ],
+      [
+        112,
+        112
+      ],
+      [
+        123,
+        123
+      ],
+      [
+        133,
+        133
+      ],
+      [
+        139,
+        140
+      ],
+      [
+        155,
+        155
+      ],
+      [
+        162,
+        162
+      ]
+    ],
+    "modulation": [
+      [
+        110,
+        110
+      ],
+      [
+        113,
+        114
+      ],
+      [
+        117,
+        117
+      ],
+      [
+        127,
+        127
+      ],
+      [
+        138,
+        138
+      ],
+      [
+        140,
+        140
+      ],
+      [
+        144,
+        146
+      ],
+      [
+        148,
+        149
+      ],
+      [
+        155,
+        157
+      ],
+      [
+        162,
+        164
+      ],
+      [
+        196,
+        198
+      ],
+      [
+        201,
+        202
+      ],
+      [
+        205,
+        205
+      ],
+      [
+        210,
+        210
+      ]
+    ],
+    "render": [
+      [
+        103,
+        103
+      ],
+      [
+        137,
+        137
+      ],
+      [
+        171,
+        171
+      ],
+      [
+        181,
+        181
+      ],
+      [
+        183,
+        183
+      ],
+      [
+        240,
+        241
+      ],
+      [
+        244,
+        244
+      ],
+      [
+        247,
+        247
+      ],
+      [
+        257,
+        257
+      ],
+      [
+        260,
+        260
+      ],
+      [
+        262,
+        262
+      ]
+    ],
+    "post": [
+      [
+        110,
+        110
+      ],
+      [
+        169,
+        169
+      ],
+      [
+        171,
+        171
+      ],
+      [
+        200,
+        200
+      ],
+      [
+        246,
+        246
+      ]
+    ],
+    "output": [
+      [
+        181,
+        181
+      ],
+      [
+        183,
+        183
+      ],
+      [
+        231,
+        231
+      ],
+      [
+        236,
+        236
+      ],
+      [
+        247,
+        247
+      ],
+      [
+        250,
+        250
+      ],
+      [
+        252,
+        252
+      ],
+      [
+        262,
+        262
+      ]
+    ]
+  },
+  "mappingConfidence": "high",
+  "mappingWarnings": [],
+  "sourceText": "/**\n * @file LGPGoldCodeSpeckleEffect.cpp\n * @brief LGP Gold-Code Speckle Morph - Phase-plate holographic grain illusion\n *\n * Two 16-bit LFSRs with different seeds produce deterministic pseudo-random\n * bit patterns that index into centre-origin distance to create symmetric\n * holographic speckle. A slow sinusoidal crossfade morphs between the two\n * codes, giving the impression of a rotating phase plate behind the LGP.\n *\n * LFSR polynomial: x^16 + x^14 + x^13 + x^11 + 1\n *   feedback = bit0 ^ bit2 ^ bit3 ^ bit5\n */\n\n#include \"LGPGoldCodeSpeckleEffect.h\"\n#include \"ChromaUtils.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\n// ---------------------------------------------------------------------------\n// LFSR helper\n// ---------------------------------------------------------------------------\n\n/**\n * @brief Advance a 16-bit LFSR by one step.\n *\n * Polynomial: x^16 + x^14 + x^13 + x^11 + 1\n * Taps at bit positions 0, 2, 3, 5 (counting from LSB).\n */\nstatic inline uint16_t lfsrStep(uint16_t state) {\n    uint16_t feedback = ((state >> 0) ^ (state >> 2) ^ (state >> 3) ^ (state >> 5)) & 1u;\n    return (state >> 1) | (feedback << 15);\n}\n\n/**\n * @brief Advance LFSR by N steps (used for beat-triggered jump).\n */\nstatic inline uint16_t lfsrAdvance(uint16_t state, uint8_t steps) {\n    for (uint8_t s = 0; s < steps; ++s) {\n        state = lfsrStep(state);\n    }\n    return state;\n}\n\n// ---------------------------------------------------------------------------\n// Construction / lifecycle\n// ---------------------------------------------------------------------------\n\nLGPGoldCodeSpeckleEffect::LGPGoldCodeSpeckleEffect()\n    : m_lfsrA(0xACE1u)\n    , m_lfsrB(0xBEEFu)\n    , m_lfsrTimer(0.0f)\n    , m_mixPhase(0.0f)\n    , m_chromaAngle(0.0f)\n    , m_timeOffset(0.0f)\n    , m_fallbackPhase(0.0f)\n#if FEATURE_AUDIO_SYNC\n    , m_lastHopSeq(0)\n    , m_chromaSmoothed{0}\n#endif\n{\n}\n\nbool LGPGoldCodeSpeckleEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_lfsrA        = 0xACE1u;\n    m_lfsrB        = 0xBEEFu;\n    m_lfsrTimer    = 0.0f;\n    m_mixPhase     = 0.0f;\n    m_chromaAngle  = 0.0f;\n    m_timeOffset   = 0.0f;\n    m_fallbackPhase = 0.0f;\n#if FEATURE_AUDIO_SYNC\n    m_lastHopSeq = 0;\n    for (uint8_t i = 0; i < 12; ++i) {\n        m_chromaSmoothed[i] = 0.0f;\n    }\n#endif\n    return true;\n}\n\n// ---------------------------------------------------------------------------\n// Render\n// ---------------------------------------------------------------------------\n\nvoid LGPGoldCodeSpeckleEffect::render(plugins::EffectContext& ctx) {\n    // =====================================================================\n    // Safe delta time\n    // =====================================================================\n    const float rawDt    = ctx.getSafeRawDeltaSeconds();\n    const float dt       = ctx.getSafeDeltaSeconds();\n    const float speedNorm = ctx.speed / 50.0f;\n\n    // =====================================================================\n    // LFSR stepping (~45 Hz, every ~22 ms of accumulated time)\n    // =====================================================================\n    const float lfsrInterval = 0.022f;  // ~45 Hz\n    m_lfsrTimer += rawDt;\n    while (m_lfsrTimer >= lfsrInterval) {\n        m_lfsrTimer -= lfsrInterval;\n        m_lfsrA = lfsrStep(m_lfsrA);\n        m_lfsrB = lfsrStep(m_lfsrB);\n    }\n\n    // =====================================================================\n    // Crossfade phase: full cycle ~10 s, speed-scaled\n    // =====================================================================\n    const float mixRate = 0.6283f * speedNorm;  // 2*PI / 10s * speedNorm\n    m_mixPhase += mixRate * dt;\n    if (m_mixPhase > 6.2831853f) m_mixPhase -= 6.2831853f;\n\n    // mix: 0..255\n    const float mixF = sinf(m_mixPhase) * 0.5f + 0.5f;\n    const uint8_t mix = (uint8_t)(mixF * 255.0f);\n\n    // =====================================================================\n    // Carrier wave time offset (centre-origin travelling wave)\n    // =====================================================================\n    m_timeOffset += (1.0f + speedNorm) * dt * 40.0f;\n    if (m_timeOffset > 65535.0f) m_timeOffset -= 65535.0f;\n\n    // =====================================================================\n    // Audio: chroma hue + beat LFSR jump\n    // =====================================================================\n    uint8_t chromaHueOffset = 0;\n\n#if FEATURE_AUDIO_SYNC\n    if (ctx.audio.available) {\n        // Update chroma targets on new hops\n        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);\n        if (newHop) {\n            m_lastHopSeq = ctx.audio.controlBus.hop_seq;\n            for (uint8_t i = 0; i < 12; ++i) {\n                // Smooth toward heavy_chroma using simple exponential approach\n                float target = ctx.audio.controlBus.heavy_chroma[i];\n                m_chromaSmoothed[i] += (target - m_chromaSmoothed[i]) * 0.3f;\n            }\n        }\n\n        // Circular weighted mean + circular EMA for smooth, continuous hue\n        chromaHueOffset = effects::chroma::circularChromaHueSmoothed(\n            m_chromaSmoothed, m_chromaAngle, rawDt, 0.20f);\n\n        // Beat-triggered LFSR jump: advance by 8 steps for sudden speckle shift\n        if (ctx.audio.isOnBeat()) {\n            m_lfsrA = lfsrAdvance(m_lfsrA, 8);\n            m_lfsrB = lfsrAdvance(m_lfsrB, 8);\n        }\n    } else {\n        // No audio: slow fallback animation\n        m_fallbackPhase += speedNorm * 0.3f * dt;\n        if (m_fallbackPhase > 6.2831853f * 10.0f) {\n            m_fallbackPhase -= 6.2831853f * 10.0f;\n        }\n    }\n#else\n    // No audio feature: slow fallback animation\n    m_fallbackPhase += speedNorm * 0.3f * dt;\n    if (m_fallbackPhase > 6.2831853f * 10.0f) {\n        m_fallbackPhase -= 6.2831853f * 10.0f;\n    }\n#endif\n\n    // =====================================================================\n    // Fade for persistence / trails\n    // =====================================================================\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    // =====================================================================\n    // Snapshot LFSR state (read-only in pixel loop)\n    // =====================================================================\n    const uint16_t lfsrA = m_lfsrA;\n    const uint16_t lfsrB = m_lfsrB;\n    const uint8_t timeOff8 = (uint8_t)((int)m_timeOffset & 0xFF);\n\n    // =====================================================================\n    // RENDER LOOP -- per-strip, centre-origin\n    // =====================================================================\n    for (uint16_t i = 0; i < STRIP_LENGTH; ++i) {\n        const uint16_t d = centerPairDistance(i);\n\n        // ---------------------------------------------------------------\n        // Extract bits from each LFSR indexed by distance (symmetric key)\n        // Using different offsets for code B to decorrelate the two codes\n        // ---------------------------------------------------------------\n        const uint8_t bitIdxA = (d) & 15u;\n        const uint8_t bitIdxB = (d + 7u) & 15u;\n\n        const uint8_t bitA = (lfsrA >> bitIdxA) & 1u;\n        const uint8_t bitB = (lfsrB >> bitIdxB) & 1u;\n\n        // Convert to signed phase: 0 -> -60, 1 -> +60\n        const int8_t phaseA = bitA ? 60 : -60;\n        const int8_t phaseB = bitB ? 60 : -60;\n\n        // Crossfade between code A and code B\n        // p = (phaseA * (255 - mix) + phaseB * mix) / 255\n        const int16_t p = ((int16_t)phaseA * (255 - mix) + (int16_t)phaseB * mix) / 255;\n\n        // ---------------------------------------------------------------\n        // Carrier wave + phase modulation\n        // sin8 input: d * 17 gives ~15-LED wavelength, plus time offset\n        // ---------------------------------------------------------------\n        const uint8_t carrier = sin8((uint8_t)(d * 17 + timeOff8));\n\n        // Add phase modulation to carrier\n        int16_t v16 = (int16_t)carrier + p;\n        if (v16 < 0) v16 = 0;\n        if (v16 > 255) v16 = 255;\n        uint8_t v = (uint8_t)v16;\n\n        // ---------------------------------------------------------------\n        // Contrast curve: square response for speckle grain\n        // scale8(v, v) ~= v*v/256\n        // ---------------------------------------------------------------\n        v = scale8(v, v);\n\n        // ---------------------------------------------------------------\n        // Specular sparkle where v > 245\n        // ---------------------------------------------------------------\n        const bool sparkle = (v > 245);\n        if (sparkle) {\n            v = 255;\n        }\n\n        // ---------------------------------------------------------------\n        // Colour: strip 1 teal-ish, strip 2 offset +25 hue\n        // Max hue shift ~40 units (no rainbow sweeps)\n        // ---------------------------------------------------------------\n        const uint8_t baseHue = ctx.gHue + chromaHueOffset;\n\n        // Strip 1\n        {\n            CRGB colour;\n            if (sparkle) {\n                // Specular highlight: near-white with slight palette tint\n                colour = ctx.palette.getColor(baseHue, 255);\n                colour += CRGB(60, 60, 60);  // Lift toward white\n            } else {\n                colour = ctx.palette.getColor(baseHue, v);\n            }\n            // Blend onto existing (fadeToBlackBy provides persistence)\n            ctx.leds[i] |= colour;\n        }\n\n        // Strip 2 (hue offset +25)\n        {\n            const uint16_t j = i + STRIP_LENGTH;\n            if (j < ctx.ledCount) {\n                const uint8_t hue2 = baseHue + 25;\n                CRGB colour2;\n                if (sparkle) {\n                    colour2 = ctx.palette.getColor(hue2, 255);\n                    colour2 += CRGB(60, 60, 60);\n                } else {\n                    colour2 = ctx.palette.getColor(hue2, v);\n                }\n                ctx.leds[j] |= colour2;\n            }\n        }\n    }\n}\n\nvoid LGPGoldCodeSpeckleEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPGoldCodeSpeckleEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Gold-Code Speckle\",\n        \"Holographic grain drift from LFSR phase-plate crossfade\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

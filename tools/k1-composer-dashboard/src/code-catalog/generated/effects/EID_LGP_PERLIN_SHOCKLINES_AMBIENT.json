@@ -1,0 +1,147 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_PERLIN_SHOCKLINES_AMBIENT",
+  "effectIdHex": "0x0C01",
+  "className": "LGPPerlinShocklinesAmbientEffect",
+  "displayName": "LGP Perlin Shocklines Ambient",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPPerlinShocklinesAmbientEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPPerlinShocklinesAmbientEffect.cpp",
+  "renderRange": [
+    51,
+    145
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        51,
+        61
+      ]
+    ],
+    "mapping": [
+      [
+        54,
+        55
+      ],
+      [
+        60,
+        60
+      ],
+      [
+        71,
+        72
+      ],
+      [
+        98,
+        100
+      ],
+      [
+        121,
+        122
+      ],
+      [
+        124,
+        124
+      ],
+      [
+        127,
+        127
+      ],
+      [
+        129,
+        129
+      ]
+    ],
+    "modulation": [
+      [
+        77,
+        93
+      ]
+    ],
+    "render": [
+      [
+        74,
+        74
+      ],
+      [
+        81,
+        81
+      ],
+      [
+        88,
+        88
+      ],
+      [
+        103,
+        103
+      ],
+      [
+        105,
+        105
+      ],
+      [
+        109,
+        109
+      ],
+      [
+        127,
+        128
+      ],
+      [
+        135,
+        135
+      ],
+      [
+        137,
+        137
+      ],
+      [
+        140,
+        142
+      ]
+    ],
+    "post": [
+      [
+        105,
+        105
+      ]
+    ],
+    "output": [
+      [
+        75,
+        75
+      ],
+      [
+        81,
+        81
+      ],
+      [
+        88,
+        88
+      ],
+      [
+        109,
+        109
+      ],
+      [
+        137,
+        137
+      ],
+      [
+        139,
+        139
+      ],
+      [
+        142,
+        142
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'modulation' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPPerlinShocklinesAmbientEffect.cpp\n * @brief LGP Perlin Shocklines Ambient - Time-driven travelling ridges\n * \n * Ambient Perlin effect:\n * - Base noise field provides organic texture\n * - Periodic shockwave injection at centre (time-based)\n * - Shockwaves propagate outward and dissolve\n */\n\n#include \"LGPPerlinShocklinesAmbientEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n#include <cstring>\n\n#ifndef NATIVE_BUILD\n#include <esp_heap_caps.h>\n#endif\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPPerlinShocklinesAmbientEffect::LGPPerlinShocklinesAmbientEffect()\n    : m_ps(nullptr)\n    , m_noiseX(0)\n    , m_noiseY(0)\n    , m_time(0)\n    , m_lastShockTime(0)\n{\n}\n\nbool LGPPerlinShocklinesAmbientEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_noiseX = random16();\n    m_noiseY = random16();\n    m_time = 0;\n    m_lastShockTime = 0;\n#ifndef NATIVE_BUILD\n    if (!m_ps) {\n        m_ps = static_cast<ShocklinesPsram*>(\n            heap_caps_malloc(sizeof(ShocklinesPsram), MALLOC_CAP_SPIRAM));\n        if (!m_ps) return false;\n    }\n    memset(m_ps, 0, sizeof(ShocklinesPsram));\n#endif\n    return true;\n}\n\nvoid LGPPerlinShocklinesAmbientEffect::render(plugins::EffectContext& ctx) {\n    if (!m_ps) return;\n    // CENTRE ORIGIN - Shockwaves propagate outward from centre (ambient)\n    float speedNorm = ctx.speed / 50.0f;\n    float intensityNorm = ctx.brightness / 255.0f;\n\n    // =========================================================================\n    // Periodic Shockwave Injection (time-based, no audio)\n    // =========================================================================\n    uint32_t shockInterval = 2000 + (uint32_t)((1.0f - speedNorm) * 2000);\n    if (ctx.totalTimeMs - m_lastShockTime > shockInterval) {\n        m_lastShockTime = ctx.totalTimeMs;\n        float shockEnergy = 0.5f + random8(50) / 255.0f;\n        m_ps->shockBuffer[CENTER_LEFT] += shockEnergy;\n        m_ps->shockBuffer[CENTER_RIGHT] += shockEnergy;\n    }\n\n    // =========================================================================\n    // Shockwave Propagation (centre-origin)\n    // =========================================================================\n    float propagationSpeed = speedNorm * 0.5f;\n    float decayRate = 0.92f + speedNorm * 0.06f;\n\n    for (int16_t i = CENTER_LEFT - 1; i >= 0; i--) {\n        if (i + 1 < STRIP_LENGTH) {\n            float energy = m_ps->shockBuffer[i + 1] * propagationSpeed;\n            m_ps->shockBuffer[i] += energy;\n        }\n    }\n\n    for (uint16_t i = CENTER_RIGHT + 1; i < STRIP_LENGTH; i++) {\n        if (i > 0) {\n            float energy = m_ps->shockBuffer[i - 1] * propagationSpeed;\n            m_ps->shockBuffer[i] += energy;\n        }\n    }\n\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        m_ps->shockBuffer[i] *= decayRate;\n        if (m_ps->shockBuffer[i] < 0.01f) {\n            m_ps->shockBuffer[i] = 0.0f;\n        }\n    }\n\n    // =========================================================================\n    // Noise Field Updates\n    // =========================================================================\n    m_noiseX += (uint16_t)(speedNorm * 3.0f);\n    m_noiseY += (uint16_t)(speedNorm * 1.5f);\n    m_time += (uint16_t)(speedNorm * 2.0f);\n\n    // =========================================================================\n    // Rendering (centre-origin pattern)\n    // =========================================================================\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    float sharpness = 0.5f; // Fixed sharpness for ambient\n\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        uint16_t dist = centerPairDistance(i);\n        \n        // Sample base noise field\n        uint16_t noiseXCoord = m_noiseX + (dist * 4);\n        uint16_t noiseYCoord = m_noiseY + m_time;\n        uint8_t baseNoise = inoise8(noiseXCoord >> 8, noiseYCoord >> 8);\n        \n        // Get shockwave energy\n        float shockEnergy = m_ps->shockBuffer[i];\n        \n        // Combine noise with shockwave\n        float noiseNorm = baseNoise / 255.0f;\n        float shockNorm = shockEnergy;\n        \n        float combined = noiseNorm + shockNorm * sharpness * 2.0f;\n        combined = fmaxf(0.0f, fminf(1.0f, combined));\n        \n        // Map to palette and brightness\n        uint8_t paletteIndex = (uint8_t)(combined * 255.0f);\n        uint8_t brightness = (uint8_t)((0.2f + combined * 0.8f) * 255.0f * intensityNorm);\n        \n        if (shockEnergy > 0.1f) {\n            brightness = qadd8(brightness, (uint8_t)(shockEnergy * 100.0f));\n        }\n        \n        CRGB color = ctx.palette.getColor(paletteIndex, brightness);\n        \n        ctx.leds[i] = color;\n        \n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            uint8_t paletteIndex2 = (uint8_t)(paletteIndex + 64);\n            CRGB color2 = ctx.palette.getColor(paletteIndex2, brightness);\n            ctx.leds[i + STRIP_LENGTH] = color2;\n        }\n    }\n}\n\nvoid LGPPerlinShocklinesAmbientEffect::cleanup() {\n#ifndef NATIVE_BUILD\n    if (m_ps) {\n        heap_caps_free(m_ps);\n        m_ps = nullptr;\n    }\n#endif\n}\n\nconst plugins::EffectMetadata& LGPPerlinShocklinesAmbientEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Perlin Shocklines Ambient\",\n        \"Time-driven travelling ridges propagating from centre\",\n        plugins::EffectCategory::AMBIENT,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n\n"
+}

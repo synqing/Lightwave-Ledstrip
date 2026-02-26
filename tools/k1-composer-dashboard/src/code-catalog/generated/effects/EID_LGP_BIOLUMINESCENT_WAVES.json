@@ -1,0 +1,115 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_BIOLUMINESCENT_WAVES",
+  "effectIdHex": "0x0501",
+  "className": "LGPBioluminescentWavesEffect",
+  "displayName": "LGP Bioluminescent Waves",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPBioluminescentWavesEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPBioluminescentWavesEffect.cpp",
+  "renderRange": [
+    30,
+    88
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        30,
+        36
+      ]
+    ],
+    "mapping": [
+      [
+        37,
+        45
+      ]
+    ],
+    "modulation": [
+      [
+        35,
+        35
+      ],
+      [
+        43,
+        43
+      ]
+    ],
+    "render": [
+      [
+        32,
+        32
+      ],
+      [
+        40,
+        40
+      ],
+      [
+        42,
+        42
+      ],
+      [
+        50,
+        50
+      ],
+      [
+        52,
+        52
+      ],
+      [
+        58,
+        58
+      ],
+      [
+        68,
+        68
+      ],
+      [
+        75,
+        75
+      ],
+      [
+        79,
+        79
+      ],
+      [
+        82,
+        82
+      ]
+    ],
+    "post": [
+      [
+        31,
+        32
+      ]
+    ],
+    "output": [
+      [
+        40,
+        40
+      ],
+      [
+        50,
+        52
+      ],
+      [
+        60,
+        60
+      ],
+      [
+        77,
+        77
+      ],
+      [
+        79,
+        82
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'mapping' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPBioluminescentWavesEffect.cpp\n * @brief LGP Bioluminescent Waves effect implementation\n */\n\n#include \"LGPBioluminescentWavesEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cstring>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPBioluminescentWavesEffect::LGPBioluminescentWavesEffect()\n    : m_wavePhase(0)\n    , m_glowPoints{}\n    , m_glowLife{}\n{\n}\n\nbool LGPBioluminescentWavesEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_wavePhase = 0;\n    memset(m_glowPoints, 0, sizeof(m_glowPoints));\n    memset(m_glowLife, 0, sizeof(m_glowLife));\n    return true;\n}\n\nvoid LGPBioluminescentWavesEffect::render(plugins::EffectContext& ctx) {\n    // Fade to prevent color accumulation from additive blending\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    // Ocean waves with glowing plankton effect\n    m_wavePhase = (uint16_t)(m_wavePhase + ctx.speed);\n\n    const uint8_t waveCount = 4;\n\n    // Base ocean color\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        uint16_t wave = 0;\n        for (uint8_t w = 0; w < waveCount; w++) {\n            wave += sin8(((i << 2) + (m_wavePhase >> (4 - w))) >> w);\n        }\n        wave /= waveCount;\n\n        uint8_t blue = scale8((uint8_t)wave, 60);\n        uint8_t green = scale8((uint8_t)wave, 20);\n\n        ctx.leds[i] = CRGB(0, green, blue);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = CRGB(0, green >> 1, blue);\n        }\n    }\n\n    // Spawn new glow points occasionally\n    if ((ctx.frameNumber % 12) == 0) {\n        for (uint8_t g = 0; g < 20; g++) {\n            if (m_glowLife[g] == 0) {\n                m_glowPoints[g] = random8(STRIP_LENGTH);\n                m_glowLife[g] = 255;\n                break;\n            }\n        }\n    }\n\n    // Update and render glow points\n    for (uint8_t g = 0; g < 20; g++) {\n        if (m_glowLife[g] > 0) {\n            m_glowLife[g] = scale8(m_glowLife[g], 240);\n\n            uint8_t pos = m_glowPoints[g];\n            uint8_t intensity = scale8(m_glowLife[g], ctx.brightness);\n\n            for (int8_t spread = -3; spread <= 3; spread++) {\n                int16_t p = (int16_t)pos + spread;\n                if (p >= 0 && p < STRIP_LENGTH) {\n                    uint8_t spreadIntensity = scale8(intensity, (uint8_t)(255 - abs(spread) * 60));\n                    ctx.leds[p] = CRGB(0, spreadIntensity >> 1, spreadIntensity);\n                    if (p + STRIP_LENGTH < ctx.ledCount) {\n                        uint16_t idx = p + STRIP_LENGTH;\n                        ctx.leds[idx] = CRGB(0, spreadIntensity >> 2, spreadIntensity);\n                    }\n                }\n            }\n        }\n    }\n}\n\nvoid LGPBioluminescentWavesEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPBioluminescentWavesEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Bioluminescent Waves\",\n        \"Glowing plankton in waves\",\n        plugins::EffectCategory::NATURE,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

@@ -1,0 +1,131 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_HEARTBEAT",
+  "effectIdHex": "0x0109",
+  "className": "HeartbeatEffect",
+  "displayName": "Heartbeat",
+  "headerPath": "firmware/v2/src/effects/ieffect/HeartbeatEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/HeartbeatEffect.cpp",
+  "renderRange": [
+    29,
+    100
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        29,
+        36
+      ]
+    ],
+    "mapping": [
+      [
+        37,
+        48
+      ]
+    ],
+    "modulation": [
+      [
+        29,
+        31
+      ],
+      [
+        36,
+        39
+      ],
+      [
+        42,
+        42
+      ],
+      [
+        44,
+        44
+      ],
+      [
+        46,
+        47
+      ],
+      [
+        49,
+        50
+      ],
+      [
+        58,
+        58
+      ]
+    ],
+    "render": [
+      [
+        55,
+        55
+      ],
+      [
+        60,
+        60
+      ],
+      [
+        69,
+        69
+      ],
+      [
+        78,
+        78
+      ],
+      [
+        81,
+        81
+      ],
+      [
+        89,
+        89
+      ],
+      [
+        92,
+        92
+      ]
+    ],
+    "post": [
+      [
+        54,
+        55
+      ],
+      [
+        65,
+        65
+      ]
+    ],
+    "output": [
+      [
+        73,
+        73
+      ],
+      [
+        77,
+        78
+      ],
+      [
+        80,
+        81
+      ],
+      [
+        84,
+        86
+      ],
+      [
+        89,
+        89
+      ],
+      [
+        92,
+        92
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'mapping' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file HeartbeatEffect.cpp\n * @brief Heartbeat effect implementation\n */\n\n#include \"HeartbeatEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <Arduino.h>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nHeartbeatEffect::HeartbeatEffect()\n    : m_lastBeatTime(0)\n    , m_beatState(0)\n    , m_pulseRadius(0.0f)\n{\n}\n\nbool HeartbeatEffect::init(plugins::EffectContext& ctx) {\n    m_lastBeatTime = millis();\n    m_beatState = 0;\n    m_pulseRadius = 0.0f;\n    return true;\n}\n\nvoid HeartbeatEffect::render(plugins::EffectContext& ctx) {\n    // CENTER ORIGIN HEARTBEAT - Pulses like a heart from center\n    // Uses a \"lub-dub\" pattern: two quick beats then pause\n    float dt = ctx.getSafeDeltaSeconds();\n\n    uint32_t now = millis();\n\n    // Heartbeat timing (lub-dub pattern)\n    // First beat, short pause, second beat, long pause\n    const uint32_t BEAT1_DELAY = 0;\n    const uint32_t BEAT2_DELAY = 200;   // 200ms after first beat\n    const uint32_t CYCLE_TIME = 800;    // Full cycle ~75 BPM\n\n    uint32_t cyclePos = (now - m_lastBeatTime);\n\n    // Trigger beats\n    if (cyclePos >= CYCLE_TIME) {\n        m_lastBeatTime = now;\n        m_beatState = 1;\n        m_pulseRadius = 0;\n    } else if (cyclePos >= BEAT2_DELAY && m_beatState == 1) {\n        m_beatState = 2;\n        m_pulseRadius = 0;\n    }\n\n    // Fade existing\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    // Expand pulse from center\n    if (m_beatState > 0 && m_pulseRadius < HALF_LENGTH) {\n        // Draw expanding ring\n        for (int dist = 0; dist < HALF_LENGTH; dist++) {\n            float delta = fabs(dist - m_pulseRadius);\n\n            if (delta < 8) {\n                float intensity = 1.0f - (delta / 8.0f);\n                // Fade as it expands\n                intensity *= 1.0f - (m_pulseRadius / HALF_LENGTH) * 0.7f;\n\n                uint8_t brightness = (uint8_t)(255 * intensity);\n                CRGB color = ctx.palette.getColor(\n                    ctx.gHue + (uint8_t)(dist * 2),\n                    brightness);\n\n                // Strip 1: center pair\n                uint16_t left1 = CENTER_LEFT - dist;\n                uint16_t right1 = CENTER_RIGHT + dist;\n\n                if (left1 < STRIP_LENGTH) {\n                    ctx.leds[left1] = color;\n                }\n                if (right1 < STRIP_LENGTH) {\n                    ctx.leds[right1] = color;\n                }\n\n                // Strip 2: center pair\n                uint16_t left2 = STRIP_LENGTH + CENTER_LEFT - dist;\n                uint16_t right2 = STRIP_LENGTH + CENTER_RIGHT + dist;\n\n                if (left2 < ctx.ledCount) {\n                    ctx.leds[left2] = color;\n                }\n                if (right2 < ctx.ledCount) {\n                    ctx.leds[right2] = color;\n                }\n            }\n        }\n\n        // Expand pulse outward (dt-corrected)\n        m_pulseRadius += ctx.speed / 8.0f * 60.0f * dt;\n    }\n}\n\nvoid HeartbeatEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& HeartbeatEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Heartbeat\",\n        \"Rhythmic cardiac pulsing\",\n        plugins::EffectCategory::AMBIENT,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n\n"
+}

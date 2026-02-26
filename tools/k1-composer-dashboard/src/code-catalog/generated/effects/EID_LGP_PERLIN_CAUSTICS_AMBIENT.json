@@ -1,0 +1,118 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_PERLIN_CAUSTICS_AMBIENT",
+  "effectIdHex": "0x0C02",
+  "className": "LGPPerlinCausticsAmbientEffect",
+  "displayName": "LGP Perlin Caustics Ambient",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPPerlinCausticsAmbientEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPPerlinCausticsAmbientEffect.cpp",
+  "renderRange": [
+    36,
+    104
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        36,
+        43
+      ]
+    ],
+    "mapping": [
+      [
+        38,
+        39
+      ],
+      [
+        52,
+        55
+      ],
+      [
+        64,
+        64
+      ],
+      [
+        80,
+        82
+      ],
+      [
+        84,
+        84
+      ],
+      [
+        88,
+        88
+      ],
+      [
+        92,
+        92
+      ]
+    ],
+    "modulation": [
+      [
+        42,
+        42
+      ]
+    ],
+    "render": [
+      [
+        58,
+        58
+      ],
+      [
+        60,
+        60
+      ],
+      [
+        62,
+        62
+      ],
+      [
+        91,
+        91
+      ],
+      [
+        94,
+        94
+      ],
+      [
+        96,
+        96
+      ],
+      [
+        99,
+        101
+      ]
+    ],
+    "post": [
+      [
+        60,
+        60
+      ]
+    ],
+    "output": [
+      [
+        62,
+        62
+      ],
+      [
+        96,
+        96
+      ],
+      [
+        98,
+        98
+      ],
+      [
+        101,
+        101
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPPerlinCausticsAmbientEffect.cpp\n * @brief LGP Perlin Caustics Ambient - Sparkling caustic lobes (time-driven)\n * \n * Ambient Perlin caustics effect:\n * - Multiple octaves of noise create caustic-like patterns\n * - Time-driven slow parameter modulation\n */\n\n#include \"LGPPerlinCausticsAmbientEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPPerlinCausticsAmbientEffect::LGPPerlinCausticsAmbientEffect()\n    : m_noiseX(0)\n    , m_noiseY(0)\n    , m_noiseZ(0)\n    , m_time(0)\n{\n}\n\nbool LGPPerlinCausticsAmbientEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_noiseX = random16();\n    m_noiseY = random16();\n    m_noiseZ = random16();\n    m_time = 0;\n    return true;\n}\n\nvoid LGPPerlinCausticsAmbientEffect::render(plugins::EffectContext& ctx) {\n    // CENTRE ORIGIN - Caustic lobes radiating from centre (ambient)\n    float speedNorm = ctx.speed / 50.0f;\n    float intensityNorm = ctx.brightness / 255.0f;\n\n    // =========================================================================\n    // Time-driven Parameter Modulation\n    // =========================================================================\n    float angle = ctx.totalTimeMs * 0.001f;\n    float sparkleDensity = 0.8f + 0.4f * sinf(angle * 0.2f); // 0.8-1.2\n    float lobeScale = 0.7f + 0.3f * sinf(angle * 0.15f);     // 0.7-1.0\n    float brightnessMod = 0.8f + 0.2f * sinf(angle * 0.25f); // 0.8-1.0\n\n    // =========================================================================\n    // Noise Field Updates\n    // =========================================================================\n    m_noiseX += (uint16_t)(speedNorm * 2.0f);\n    m_noiseY += (uint16_t)(speedNorm * 1.0f);\n    m_noiseZ += (uint16_t)(speedNorm * 0.5f);\n    m_time += (uint16_t)(speedNorm * 3.0f);\n\n    // =========================================================================\n    // Rendering (centre-origin pattern with caustic lobes)\n    // =========================================================================\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        uint16_t dist = centerPairDistance(i);\n        float distNorm = dist / 79.0f;\n        \n        // Sample multiple octaves of noise\n        uint16_t baseX = m_noiseX + (uint16_t)(dist * lobeScale * 8);\n        uint16_t baseY = m_noiseY + m_time;\n        uint8_t baseNoise = inoise8(baseX >> 8, baseY >> 8);\n        \n        uint16_t detailX = m_noiseX + (uint16_t)(dist * sparkleDensity * 16) + 10000;\n        uint16_t detailY = m_noiseY + (m_time >> 1) + 5000;\n        uint8_t detailNoise = inoise8(detailX >> 8, detailY >> 8);\n        \n        uint16_t depthX = m_noiseX + (uint16_t)(dist * 6) + 20000;\n        uint16_t depthY = m_noiseZ + (m_time >> 2);\n        uint8_t depthNoise = inoise8(depthX >> 8, depthY >> 8);\n        \n        // Combine noise octaves\n        float baseNorm = baseNoise / 255.0f;\n        float detailNorm = detailNoise / 255.0f;\n        float depthNorm = depthNoise / 255.0f;\n        \n        float caustic = baseNorm * (0.5f + detailNorm * 0.5f) + depthNorm * 0.3f;\n        caustic = fmaxf(0.0f, fminf(1.0f, caustic));\n        caustic = caustic * caustic;\n        \n        float centreFalloff = 1.0f - distNorm * 0.3f;\n        caustic *= centreFalloff;\n        \n        uint8_t paletteIndex = (uint8_t)(caustic * 255.0f);\n        uint8_t brightness = (uint8_t)((0.3f + caustic * 0.7f) * brightnessMod * 255.0f * intensityNorm);\n        \n        CRGB color = ctx.palette.getColor(paletteIndex, brightness);\n        \n        ctx.leds[i] = color;\n        \n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            uint8_t paletteIndex2 = (uint8_t)(paletteIndex + 48);\n            CRGB color2 = ctx.palette.getColor(paletteIndex2, brightness);\n            ctx.leds[i + STRIP_LENGTH] = color2;\n        }\n    }\n}\n\nvoid LGPPerlinCausticsAmbientEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPPerlinCausticsAmbientEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Perlin Caustics Ambient\",\n        \"Sparkling caustic lobes, time-driven modulation\",\n        plugins::EffectCategory::AMBIENT,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n\n"
+}

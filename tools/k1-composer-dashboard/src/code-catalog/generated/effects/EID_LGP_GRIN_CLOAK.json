@@ -1,0 +1,103 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_GRIN_CLOAK",
+  "effectIdHex": "0x0605",
+  "className": "LGPGrinCloakEffect",
+  "displayName": "LGP GRIN Cloak",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPGrinCloakEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPGrinCloakEffect.cpp",
+  "renderRange": [
+    30,
+    76
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        30,
+        34
+      ]
+    ],
+    "mapping": [
+      [
+        34,
+        34
+      ],
+      [
+        39,
+        39
+      ],
+      [
+        46,
+        47
+      ],
+      [
+        49,
+        49
+      ],
+      [
+        56,
+        56
+      ],
+      [
+        59,
+        60
+      ],
+      [
+        63,
+        63
+      ]
+    ],
+    "modulation": [
+      [
+        31,
+        31
+      ]
+    ],
+    "render": [
+      [
+        44,
+        44
+      ],
+      [
+        71,
+        71
+      ],
+      [
+        73,
+        73
+      ]
+    ],
+    "post": [
+      [
+        71,
+        73
+      ]
+    ],
+    "output": [
+      [
+        40,
+        40
+      ],
+      [
+        44,
+        44
+      ],
+      [
+        52,
+        52
+      ],
+      [
+        71,
+        73
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPGrinCloakEffect.cpp\n * @brief LGP GRIN Cloak effect implementation\n */\n\n#include \"LGPGrinCloakEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPGrinCloakEffect::LGPGrinCloakEffect()\n    : m_time(0)\n    , m_pos(80.0f)\n    , m_vel(0.35f)\n{\n}\n\nbool LGPGrinCloakEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_time = 0;\n    m_pos = 80.0f;\n    m_vel = 0.35f;\n    return true;\n}\n\nvoid LGPGrinCloakEffect::render(plugins::EffectContext& ctx) {\n    // Smooth gradient refractive profile emulating GRIN optics\n    m_time = (uint16_t)(m_time + (ctx.speed >> 1));\n\n    float speedNorm = ctx.speed / 50.0f;\n\n    const float cloakRadius = 20.0f;\n    const float gradient = 1.5f;\n\n    m_pos += m_vel * speedNorm;\n    if (m_pos < cloakRadius || m_pos > (float)STRIP_LENGTH - cloakRadius) {\n        m_vel = -m_vel;\n    }\n\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        float dist = fabsf((float)i - m_pos);\n        float norm = (cloakRadius > 0.001f) ? (dist / cloakRadius) : 0.0f;\n        norm = constrain(norm, 0.0f, 1.0f);\n\n        float lensStrength = gradient * (norm * norm);  // Optimized: exponent=2.0 → x*x\n        float direction = (i < m_pos) ? -1.0f : 1.0f;\n        float sample = (float)i + direction * lensStrength * cloakRadius * 0.6f;\n        sample = constrain(sample, 0.0f, (float)(STRIP_LENGTH - 1));\n\n        uint8_t wave = sin8((int16_t)(sample * 4.0f) + (m_time >> 2));\n\n        float focusGain = 1.0f + (1.0f - norm) * gradient * 0.3f;\n        float brightnessF = wave * focusGain;\n\n        if (norm < 0.3f) {\n            brightnessF *= norm / 0.3f;\n        }\n\n        if (fabsf(norm - 1.0f) < 0.08f) {\n            brightnessF = 255.0f;\n        }\n\n        uint8_t brightness = (uint8_t)constrain(brightnessF, 0.0f, 255.0f);\n        uint8_t hue = (uint8_t)(ctx.gHue + (uint8_t)(sample * 1.5f));\n\n        uint8_t brightU8 = (uint8_t)((brightness * ctx.brightness) / 255);\n        ctx.leds[i] = ctx.palette.getColor(hue, brightU8);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(hue + 128), brightU8);\n        }\n    }\n}\n\nvoid LGPGrinCloakEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPGrinCloakEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP GRIN Cloak\",\n        \"Gradient index optics\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

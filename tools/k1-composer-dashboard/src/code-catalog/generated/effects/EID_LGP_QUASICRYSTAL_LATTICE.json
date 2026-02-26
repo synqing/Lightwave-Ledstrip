@@ -1,0 +1,188 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_QUASICRYSTAL_LATTICE",
+  "effectIdHex": "0x1B03",
+  "className": "LGPQuasicrystalLatticeEffect",
+  "displayName": "LGP Quasicrystal Lattice",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPQuasicrystalLatticeEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPQuasicrystalLatticeEffect.cpp",
+  "renderRange": [
+    42,
+    212
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        61,
+        61
+      ],
+      [
+        64,
+        64
+      ],
+      [
+        67,
+        67
+      ],
+      [
+        75,
+        76
+      ]
+    ],
+    "mapping": [
+      [
+        48,
+        48
+      ],
+      [
+        51,
+        52
+      ],
+      [
+        67,
+        67
+      ],
+      [
+        69,
+        69
+      ],
+      [
+        105,
+        105
+      ]
+    ],
+    "modulation": [
+      [
+        63,
+        63
+      ],
+      [
+        66,
+        66
+      ],
+      [
+        68,
+        69
+      ],
+      [
+        71,
+        72
+      ],
+      [
+        74,
+        78
+      ],
+      [
+        84,
+        85
+      ],
+      [
+        88,
+        88
+      ],
+      [
+        98,
+        98
+      ],
+      [
+        124,
+        124
+      ],
+      [
+        140,
+        140
+      ],
+      [
+        155,
+        157
+      ],
+      [
+        178,
+        178
+      ],
+      [
+        197,
+        197
+      ]
+    ],
+    "render": [
+      [
+        111,
+        111
+      ],
+      [
+        114,
+        114
+      ],
+      [
+        116,
+        116
+      ],
+      [
+        160,
+        160
+      ],
+      [
+        163,
+        163
+      ],
+      [
+        167,
+        167
+      ],
+      [
+        176,
+        176
+      ],
+      [
+        200,
+        200
+      ],
+      [
+        202,
+        202
+      ],
+      [
+        209,
+        209
+      ]
+    ],
+    "post": [
+      [
+        109,
+        109
+      ],
+      [
+        111,
+        111
+      ]
+    ],
+    "output": [
+      [
+        114,
+        114
+      ],
+      [
+        116,
+        116
+      ],
+      [
+        175,
+        176
+      ],
+      [
+        178,
+        179
+      ],
+      [
+        209,
+        209
+      ]
+    ]
+  },
+  "mappingConfidence": "high",
+  "mappingWarnings": [],
+  "sourceText": "/**\n * @file LGPQuasicrystalLatticeEffect.cpp\n * @brief LGP Quasicrystal Lattice - Penrose-like incommensurate interference lattice\n *\n * Five spatial sine components at Fibonacci-ratio frequencies (13, 21, 34, 55, 89)\n * summed and passed through nonlinear threshold extraction to produce crisp\n * quasi-periodic lattice nodes radiating from centre.\n *\n * Audio: circularChromaHueSmoothed for hue, RMS modulates time phase speed,\n * beat briefly brightens lattice nodes.\n */\n\n#include \"LGPQuasicrystalLatticeEffect.h\"\n#include \"ChromaUtils.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPQuasicrystalLatticeEffect::LGPQuasicrystalLatticeEffect()\n    : m_timeA(0.0f)\n    , m_timeB(0.0f)\n    , m_chromaAngle(0.0f)\n    , m_rmsSmooth(0.0f)\n    , m_beatFlash(0.0f)\n{\n}\n\nbool LGPQuasicrystalLatticeEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_timeA = 0.0f;\n    m_timeB = 0.0f;\n    m_chromaAngle = 0.0f;\n    m_rmsSmooth = 0.0f;\n    m_beatFlash = 0.0f;\n    return true;\n}\n\nvoid LGPQuasicrystalLatticeEffect::render(plugins::EffectContext& ctx) {\n    // =========================================================================\n    // TIMING\n    // =========================================================================\n    const float rawDt = ctx.getSafeRawDeltaSeconds();\n    const float dt    = ctx.getSafeDeltaSeconds();\n    const float speedNorm = ctx.speed / 50.0f;\n\n    // Base time advance rates (slow drift for quasi-static lattice)\n    float timeRateA = 18.0f * speedNorm;\n    float timeRateB = 12.0f * speedNorm;\n\n    // Default audio-derived values\n    uint8_t chromaHueOffset = 0;\n\n    // =========================================================================\n    // AUDIO REACTIVITY\n    // =========================================================================\n#if FEATURE_AUDIO_SYNC\n    if (ctx.audio.available) {\n        // --- Chroma hue via circular weighted mean + circular EMA ---\n        chromaHueOffset = effects::chroma::circularChromaHueSmoothed(\n            ctx.audio.controlBus.heavy_chroma, m_chromaAngle, rawDt, 0.22f);\n\n        // --- RMS modulates time-phase speed (smooth follower) ---\n        const float rmsTarget = ctx.audio.rms();\n        const float rmsAlpha = 1.0f - expf(-4.0f * rawDt);\n        m_rmsSmooth += (rmsTarget - m_rmsSmooth) * rmsAlpha;\n        // Boost time rate by up to 60% at full RMS\n        timeRateA *= (1.0f + 0.6f * m_rmsSmooth);\n        timeRateB *= (1.0f + 0.6f * m_rmsSmooth);\n\n        // --- Beat flash: brief brightness boost on beat ---\n        if (ctx.audio.isOnBeat()) {\n            const float strength = ctx.audio.beatStrength();\n            if (strength > m_beatFlash) {\n                m_beatFlash = fminf(strength, 1.0f);\n            }\n        }\n    }\n#endif\n\n    // Decay beat flash (dt-corrected: ~0.88 per frame at 60fps)\n    m_beatFlash = effects::chroma::dtDecay(m_beatFlash, 0.88f, rawDt);\n\n    // =========================================================================\n    // PHASE ACCUMULATION\n    // =========================================================================\n    m_timeA += timeRateA * dt;\n    m_timeB += timeRateB * dt;\n\n    // Wrap to prevent float precision loss after long runtime\n    // Using 1024.0 (power of 2) for clean wrap boundary\n    if (m_timeA > 1024.0f) m_timeA -= 1024.0f;\n    if (m_timeB > 1024.0f) m_timeB -= 1024.0f;\n\n    // Integer time phases for sin8 (0-255 domain)\n    const uint8_t tA  = (uint8_t)(int)(m_timeA) & 0xFF;\n    const uint8_t tB  = (uint8_t)(int)(m_timeB) & 0xFF;\n    const uint8_t tA2 = (uint8_t)(int)(m_timeA * 0.5f) & 0xFF;\n    const uint8_t tB2 = (uint8_t)(int)(m_timeB * 0.5f) & 0xFF;\n    const uint8_t tA4 = (uint8_t)(int)(m_timeA * 0.25f) & 0xFF;\n\n    // Maximum distance from centre (for envelope normalisation)\n    const uint16_t maxD = HALF_LENGTH;  // 80\n\n    // =========================================================================\n    // FADE FOR TRAILS\n    // =========================================================================\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    // =========================================================================\n    // RENDER LOOP (per strip-local LED, mirrored to strip 2)\n    // =========================================================================\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        const uint16_t d = centerPairDistance(i);\n\n        // Cast to uint8_t for sin8 -- wraps naturally in 8-bit domain\n        const uint8_t d8 = (uint8_t)(d & 0xFF);\n\n        // =================================================================\n        // 5 INCOMMENSURATE SPATIAL COMPONENTS (Fibonacci multipliers)\n        // Each uses a different time phase offset for independent drift\n        // =================================================================\n        const uint8_t a = sin8((uint8_t)(d8 * 13 + tA));\n        const uint8_t b = sin8((uint8_t)(d8 * 21 + tB));\n        const uint8_t c = sin8((uint8_t)(d8 * 34 + tA2));\n        const uint8_t e = sin8((uint8_t)(d8 * 55 + tB2));\n        const uint8_t f = sin8((uint8_t)(d8 * 89 + tA4 + 40));\n\n        // Average of 5 components (0..255)\n        const uint16_t sum = (uint16_t)a + (uint16_t)b + (uint16_t)c\n                           + (uint16_t)e + (uint16_t)f;\n        const uint8_t avg = (uint8_t)(sum / 5);\n\n        // =================================================================\n        // NONLINEAR LATTICE EXTRACTION\n        // Subtract threshold, square for sharpening, boost contrast\n        // This turns a smooth wave sum into crisp node/antinode structure\n        // =================================================================\n        uint8_t hi = qsub8(avg, 150);          // Threshold: only peaks survive\n        hi = scale8(hi, hi);                     // Square for sharpening\n        hi = qadd8(hi, hi >> 1);                 // +50% contrast boost\n\n        // =================================================================\n        // CENTRE ENVELOPE (brighter at centre, darker at edges)\n        // =================================================================\n        const uint8_t env = (uint8_t)(255 - (d * 255 / maxD));\n        const uint8_t v = scale8(hi, qadd8(70, env >> 1));\n\n        // Apply master brightness\n        const uint8_t brightness = scale8(v, ctx.brightness);\n\n        // Beat flash: additive boost to lattice nodes\n        const uint8_t beatBoost = (uint8_t)(m_beatFlash * 40.0f);\n        const uint8_t finalBri = qadd8(brightness, scale8(beatBoost, hi));\n\n        // =================================================================\n        // COLOUR: Palette + chroma offset, secondary sheen layer\n        // =================================================================\n        const uint8_t baseHue = ctx.gHue + chromaHueOffset + (uint8_t)(d >> 2);\n        const CRGB primary = ctx.palette.getColor(baseHue, finalBri);\n\n        // Secondary \"sheen\" layer: hue+30, lower intensity for depth\n        const uint8_t sheenBri = scale8(finalBri, 80);\n        const CRGB sheen = ctx.palette.getColor((uint8_t)(baseHue + 30), sheenBri);\n\n        // Blend primary + sheen\n        CRGB pixel = primary;\n        pixel.r = qadd8(pixel.r, sheen.r);\n        pixel.g = qadd8(pixel.g, sheen.g);\n        pixel.b = qadd8(pixel.b, sheen.b);\n\n        // --- Strip 1 ---\n        ctx.leds[i] = pixel;\n\n        // --- Strip 2: different lattice orientation (+128 phase) and hue (+25) ---\n        const uint16_t j = i + STRIP_LENGTH;\n        if (j < ctx.ledCount) {\n            const uint8_t a2 = sin8((uint8_t)(d8 * 13 + tA + 128));\n            const uint8_t b2 = sin8((uint8_t)(d8 * 21 + tB + 128));\n            const uint8_t c2 = sin8((uint8_t)(d8 * 34 + tA2 + 128));\n            const uint8_t e2 = sin8((uint8_t)(d8 * 55 + tB2 + 128));\n            const uint8_t f2 = sin8((uint8_t)(d8 * 89 + tA4 + 40 + 128));\n\n            const uint16_t sum2 = (uint16_t)a2 + (uint16_t)b2 + (uint16_t)c2\n                                + (uint16_t)e2 + (uint16_t)f2;\n            const uint8_t avg2 = (uint8_t)(sum2 / 5);\n\n            uint8_t hi2 = qsub8(avg2, 150);\n            hi2 = scale8(hi2, hi2);\n            hi2 = qadd8(hi2, hi2 >> 1);\n\n            const uint8_t v2 = scale8(hi2, qadd8(70, env >> 1));\n            const uint8_t bri2 = scale8(v2, ctx.brightness);\n            const uint8_t finalBri2 = qadd8(bri2, scale8(beatBoost, hi2));\n\n            const uint8_t hue2 = ctx.gHue + chromaHueOffset + 25 + (uint8_t)(d >> 2);\n            const CRGB primary2 = ctx.palette.getColor(hue2, finalBri2);\n            const uint8_t sheenBri2 = scale8(finalBri2, 80);\n            const CRGB sheen2 = ctx.palette.getColor((uint8_t)(hue2 + 30), sheenBri2);\n\n            CRGB pixel2 = primary2;\n            pixel2.r = qadd8(pixel2.r, sheen2.r);\n            pixel2.g = qadd8(pixel2.g, sheen2.g);\n            pixel2.b = qadd8(pixel2.b, sheen2.b);\n\n            ctx.leds[j] = pixel2;\n        }\n    }\n}\n\nvoid LGPQuasicrystalLatticeEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPQuasicrystalLatticeEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Quasicrystal Lattice\",\n        \"Penrose-like incommensurate interference lattice with 5 Fibonacci spatial modes\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

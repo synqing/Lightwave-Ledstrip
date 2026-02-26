@@ -1,0 +1,78 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_RADIAL_RIPPLE",
+  "effectIdHex": "0x0401",
+  "className": "LGPRadialRippleEffect",
+  "displayName": "LGP Radial Ripple",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPRadialRippleEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPRadialRippleEffect.cpp",
+  "renderRange": [
+    25,
+    52
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        25,
+        27
+      ]
+    ],
+    "mapping": [
+      [
+        28,
+        31
+      ]
+    ],
+    "modulation": [
+      [
+        32,
+        36
+      ]
+    ],
+    "render": [
+      [
+        32,
+        32
+      ],
+      [
+        46,
+        46
+      ],
+      [
+        49,
+        49
+      ]
+    ],
+    "post": [
+      [
+        49,
+        50
+      ]
+    ],
+    "output": [
+      [
+        32,
+        32
+      ],
+      [
+        46,
+        46
+      ],
+      [
+        48,
+        49
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'mapping' inferred from fallback segmentation.",
+    "Phase 'modulation' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPRadialRippleEffect.cpp\n * @brief LGP Radial Ripple effect implementation\n */\n\n#include \"LGPRadialRippleEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPRadialRippleEffect::LGPRadialRippleEffect()\n    : m_time(0)\n{\n}\n\nbool LGPRadialRippleEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_time = 0;\n    return true;\n}\n\nvoid LGPRadialRippleEffect::render(plugins::EffectContext& ctx) {\n    // CENTER ORIGIN - Concentric rings that expand from center\n    const uint8_t ringCount = 6;\n    uint16_t ringSpeed = (uint16_t)(ctx.speed << 2);\n\n    m_time = (uint16_t)(m_time + ringSpeed);\n\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        float distFromCenter = (float)centerPairDistance(i) / (float)HALF_LENGTH;\n\n        // Square the distance for circular appearance\n        uint16_t distSquared = (uint16_t)(distFromCenter * distFromCenter * 65535.0f);\n\n        // Create expanding rings\n        int16_t wave = sin16((distSquared >> 1) * ringCount - m_time);\n\n        // Convert to brightness\n        uint8_t brightness = (uint8_t)((wave + 32768) >> 8);\n        brightness = scale8(brightness, ctx.brightness);\n\n        uint8_t hue = (uint8_t)(ctx.gHue + (distSquared >> 10));\n        ctx.leds[i] = ctx.palette.getColor(hue, brightness);\n\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(hue + 64), brightness);\n        }\n    }\n}\n\nvoid LGPRadialRippleEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPRadialRippleEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Radial Ripple\",\n        \"Complex radial wave interference\",\n        plugins::EffectCategory::UNCATEGORIZED,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

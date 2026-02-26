@@ -1,0 +1,107 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_BEAT_PULSE_SPECTRAL_PULSE",
+  "effectIdHex": "0x1408",
+  "className": "BeatPulseSpectralPulseEffect",
+  "displayName": "Beat Pulse (Spectral Pulse)",
+  "headerPath": "firmware/v2/src/effects/ieffect/BeatPulseSpectralPulseEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/BeatPulseSpectralPulseEffect.cpp",
+  "renderRange": [
+    56,
+    160
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        70,
+        73
+      ]
+    ],
+    "mapping": [
+      [
+        68,
+        84
+      ]
+    ],
+    "modulation": [
+      [
+        56,
+        56
+      ],
+      [
+        76,
+        80
+      ],
+      [
+        83,
+        86
+      ],
+      [
+        88,
+        90
+      ],
+      [
+        92,
+        95
+      ],
+      [
+        97,
+        98
+      ],
+      [
+        116,
+        118
+      ],
+      [
+        123,
+        123
+      ]
+    ],
+    "render": [
+      [
+        108,
+        108
+      ],
+      [
+        128,
+        128
+      ],
+      [
+        136,
+        136
+      ],
+      [
+        141,
+        141
+      ]
+    ],
+    "post": [
+      [
+        60,
+        60
+      ],
+      [
+        100,
+        104
+      ],
+      [
+        111,
+        114
+      ]
+    ],
+    "output": [
+      [
+        155,
+        160
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'mapping' inferred from fallback segmentation.",
+    "Phase 'output' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file BeatPulseSpectralPulseEffect.cpp\n * @brief Beat Pulse (Spectral Pulse) - Three-zone frequency pulse\n *\n * Visual identity: Three FIXED ZONES pulsing with frequency bands.\n * Simpler than Spectral - no sparkle, no ring movement.\n * Clean spatial separation. Readable at high BPM.\n *\n * Zone layout (soft crossfades, width 0.08):\n *   - Inner (0.00 - 0.33): Treble - high-frequency subtle flicker\n *   - Middle (0.33 - 0.66): Mid - neutral pulse\n *   - Outer (0.66 - 1.00): Bass - warm saturated (stays colourful)\n *\n * See BeatPulseSpectralPulseEffect.h for design rationale.\n */\n\n#include \"BeatPulseSpectralPulseEffect.h\"\n#include \"../CoreEffects.h\"\n#include \"BeatPulseRenderUtils.h\"\n\n#include <cmath>\n\nnamespace lightwaveos::effects::ieffect {\n\nnamespace {\n\n// ==================== Zone Boundaries (Soft Crossfades) ====================\nconstexpr float TREBLE_END = 0.33f;     // 0.00 - 0.33\nconstexpr float MID_END = 0.66f;        // 0.33 - 0.66\n// Bass: 0.66 - 1.00\nconstexpr float CROSSFADE_WIDTH = 0.08f;\n\n// ==================== Band Smoothing ====================\nconstexpr float BASS_SMOOTH = 0.85f;\nconstexpr float MID_SMOOTH = 0.88f;\nconstexpr float TREBLE_SMOOTH = 0.92f;\n\n// ==================== Treble Flicker ====================\n// Creates shimmer at ~4Hz (0.028 radians per ms at 120fps)\nconstexpr float FLICKER_SPEED = 0.028f;\n\n} // namespace\n\nbool BeatPulseSpectralPulseEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_smoothBass = 0.0f;\n    m_smoothMid = 0.0f;\n    m_smoothTreble = 0.0f;\n    m_beatBoost = 0.0f;\n    m_fallbackBpm = 128.0f;\n    m_lastFallbackBeatMs = 0;\n    m_fallbackPhase = 0.0f;\n    return true;\n}\n\nvoid BeatPulseSpectralPulseEffect::render(plugins::EffectContext& ctx) {\n    // =========================================================================\n    // THREE-ZONE SPECTRAL PULSE\n    // Inner = treble (flicker), Middle = mid (white punch), Outer = bass (saturated)\n    // Soft crossfades preserve clean zones without hard seams.\n    // =========================================================================\n\n    const float dt = ctx.getSafeRawDeltaSeconds();\n\n    // --- Read frequency bands ---\n    float rawBass = 0.0f;\n    float rawMid = 0.0f;\n    float rawTreble = 0.0f;\n\n    if (ctx.audio.available) {\n        rawBass = clamp01(ctx.audio.bass());\n        rawMid = clamp01(ctx.audio.mid());\n        rawTreble = clamp01(ctx.audio.treble());\n    } else {\n        // Fallback: gentle simulated spectrum\n        m_fallbackPhase += dt * 2.0f;\n        if (m_fallbackPhase > 6.28318f) m_fallbackPhase -= 6.28318f;\n        rawBass = 0.4f + 0.3f * sinf(m_fallbackPhase);\n        rawMid = 0.3f + 0.2f * sinf(m_fallbackPhase * 1.5f);\n        rawTreble = 0.2f + 0.15f * sinf(m_fallbackPhase * 2.5f);\n    }\n\n    // --- Smooth bands (dt-correct exponential) ---\n    const float bassSmooth = 1.0f - powf(BASS_SMOOTH, dt * 60.0f);\n    const float midSmooth = 1.0f - powf(MID_SMOOTH, dt * 60.0f);\n    const float trebleSmooth = 1.0f - powf(TREBLE_SMOOTH, dt * 60.0f);\n\n    m_smoothBass += (rawBass - m_smoothBass) * bassSmooth;\n    m_smoothMid += (rawMid - m_smoothMid) * midSmooth;\n    m_smoothTreble += (rawTreble - m_smoothTreble) * trebleSmooth;\n\n    // --- Beat boost (brief global pump) ---\n    const bool beatTick = BeatPulseTiming::computeBeatTick(ctx, m_fallbackBpm, m_lastFallbackBeatMs);\n    if (beatTick) {\n        m_beatBoost = 0.25f;\n    }\n    m_beatBoost *= powf(0.90f, dt * 60.0f);\n    if (m_beatBoost < 0.001f) m_beatBoost = 0.0f;\n\n    // --- Render: Three soft-crossfaded zones ---\n    auto zoneWeight = [](float x, float start, float end, float fade) -> float {\n        if (x < start - fade || x > end + fade) return 0.0f;\n        if (x < start) return clamp01((x - (start - fade)) / fade);\n        if (x > end) return clamp01(((end + fade) - x) / fade);\n        return 1.0f;\n    };\n\n    for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {\n        const float dist01 = (static_cast<float>(dist) + 0.5f) / static_cast<float>(HALF_LENGTH);\n\n        // Zone weights (soft crossfade)\n        const float wTreble = zoneWeight(dist01, 0.0f, TREBLE_END, CROSSFADE_WIDTH);\n        const float wMid = zoneWeight(dist01, TREBLE_END, MID_END, CROSSFADE_WIDTH);\n        const float wBass = zoneWeight(dist01, MID_END, 1.0f, CROSSFADE_WIDTH);\n\n        // Intensity from weighted bands + beat boost\n        float intensity = wTreble * m_smoothTreble + wMid * m_smoothMid + wBass * m_smoothBass;\n        intensity = clamp01(intensity + m_beatBoost);\n\n        const float brightnessFactor = clamp01(0.10f + intensity * 0.90f);\n\n        // === TREBLE ZONE: Cool, high-frequency flicker ===\n        float trebleIntensity = m_smoothTreble;\n        trebleIntensity *= 0.75f + 0.25f * sinf(static_cast<float>(ctx.rawTotalTimeMs) * FLICKER_SPEED + static_cast<float>(dist) * 0.4f);\n        const float treblePos = clamp01(dist01 / TREBLE_END);\n        const uint8_t trebleIdx = 190 + floatToByte(treblePos * 0.25f);\n        const float trebleMod = clamp01(0.7f + 0.3f * trebleIntensity);\n        CRGB trebleColor = ctx.palette.getColor(\n            trebleIdx,\n            scaleBrightness(ctx.brightness, clamp01(brightnessFactor * trebleMod))\n        );\n\n        // === MID ZONE: Neutral ===\n        const float midPos = clamp01((dist01 - TREBLE_END) / (MID_END - TREBLE_END));\n        const uint8_t midIdx = 100 + floatToByte(midPos * 0.2f);\n        CRGB midColor = ctx.palette.getColor(midIdx, scaleBrightness(ctx.brightness, brightnessFactor));\n\n        // === BASS ZONE: Warm saturated ===\n        const float bassPos = clamp01((dist01 - MID_END) / (1.0f - MID_END));\n        const uint8_t bassIdx = 50 - floatToByte(bassPos * 0.2f);\n        CRGB bassColor = ctx.palette.getColor(bassIdx, scaleBrightness(ctx.brightness, brightnessFactor));\n\n        // Blend colours by zone weights\n        const float wSum = wTreble + wMid + wBass;\n        if (wSum <= 0.0001f) {\n            SET_CENTER_PAIR(ctx, dist, CRGB(0, 0, 0));\n            continue;\n        }\n        const float inv = 1.0f / wSum;\n        uint8_t r = static_cast<uint8_t>((trebleColor.r * wTreble + midColor.r * wMid + bassColor.r * wBass) * inv);\n        uint8_t g = static_cast<uint8_t>((trebleColor.g * wTreble + midColor.g * wMid + bassColor.g * wBass) * inv);\n        uint8_t b = static_cast<uint8_t>((trebleColor.b * wTreble + midColor.b * wMid + bassColor.b * wBass) * inv);\n        CRGB c(r, g, b);\n\n        // White mix per spec\n        ColourUtil::addWhiteSaturating(c, floatToByte(intensity * 0.20f));\n\n        SET_CENTER_PAIR(ctx, dist, c);\n    }\n}\n\nvoid BeatPulseSpectralPulseEffect::cleanup() {}\n\nconst plugins::EffectMetadata& BeatPulseSpectralPulseEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Beat Pulse (Spectral Pulse)\",\n        \"Three-zone frequency pulse: flickering treble, punchy mid, warm bass\",\n        plugins::EffectCategory::PARTY,\n        1,\n        \"LightwaveOS\"\n    };\n    return meta;\n}\n\nuint8_t BeatPulseSpectralPulseEffect::getParameterCount() const { return 0; }\n\nconst plugins::EffectParameter* BeatPulseSpectralPulseEffect::getParameter(uint8_t index) const {\n    (void)index;\n    return nullptr;\n}\n\nbool BeatPulseSpectralPulseEffect::setParameter(const char* name, float value) {\n    (void)name; (void)value;\n    return false;\n}\n\nfloat BeatPulseSpectralPulseEffect::getParameter(const char* name) const {\n    (void)name;\n    return 0.0f;\n}\n\n} // namespace lightwaveos::effects::ieffect\n"
+}

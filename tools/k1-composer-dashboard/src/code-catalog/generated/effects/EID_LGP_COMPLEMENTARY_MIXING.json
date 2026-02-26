@@ -1,0 +1,99 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_COMPLEMENTARY_MIXING",
+  "effectIdHex": "0x0702",
+  "className": "LGPComplementaryMixingEffect",
+  "displayName": "LGP Complementary Mixing",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPComplementaryMixingEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPComplementaryMixingEffect.cpp",
+  "renderRange": [
+    25,
+    61
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        25,
+        28
+      ]
+    ],
+    "mapping": [
+      [
+        36,
+        36
+      ],
+      [
+        43,
+        43
+      ],
+      [
+        45,
+        45
+      ]
+    ],
+    "modulation": [
+      [
+        32,
+        32
+      ],
+      [
+        38,
+        38
+      ]
+    ],
+    "render": [
+      [
+        34,
+        34
+      ],
+      [
+        48,
+        48
+      ],
+      [
+        50,
+        50
+      ],
+      [
+        55,
+        55
+      ],
+      [
+        57,
+        57
+      ]
+    ],
+    "post": [
+      [
+        57,
+        59
+      ]
+    ],
+    "output": [
+      [
+        34,
+        34
+      ],
+      [
+        39,
+        39
+      ],
+      [
+        48,
+        50
+      ],
+      [
+        55,
+        57
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPComplementaryMixingEffect.cpp\n * @brief LGP Complementary Mixing effect implementation\n */\n\n#include \"LGPComplementaryMixingEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPComplementaryMixingEffect::LGPComplementaryMixingEffect()\n    : m_phase(0.0f)\n{\n}\n\nbool LGPComplementaryMixingEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_phase = 0.0f;\n    return true;\n}\n\nvoid LGPComplementaryMixingEffect::render(plugins::EffectContext& ctx) {\n    // Dynamic complementary pairs create neutral zones\n    float dt = ctx.getSafeDeltaSeconds();\n    float speed = ctx.speed / 255.0f;\n    float intensity = ctx.brightness / 255.0f;\n    const float variation = 0.5f;\n\n    m_phase += speed * 0.01f * 60.0f * dt;  // dt-corrected\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float distFromCenter = (float)centerPairDistance((uint16_t)i);\n        float normalizedDist = distFromCenter / (float)HALF_LENGTH;\n\n        uint8_t baseHue = (uint8_t)(ctx.gHue + (uint8_t)(m_phase * 255.0f));\n        // Complementary color pairing: Strip 2 uses hue + 128 (180deg offset) for\n        // intentional complementary color contrast, not rainbow cycling.\n        uint8_t complementHue = (uint8_t)(baseHue + 128);\n\n        uint8_t edgeIntensity = (uint8_t)(255.0f * (1.0f - normalizedDist * variation));\n\n        if (normalizedDist > 0.5f) {\n            uint8_t brightU8 = (uint8_t)(edgeIntensity * intensity);\n            brightU8 = (uint8_t)((brightU8 * ctx.brightness) / 255);\n            ctx.leds[i] = ctx.palette.getColor(baseHue, brightU8);\n            if (i + STRIP_LENGTH < ctx.ledCount) {\n                ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor(complementHue, brightU8);\n            }\n        } else {\n            uint8_t brightU8 = (uint8_t)(128.0f * intensity);\n            brightU8 = (uint8_t)((brightU8 * ctx.brightness) / 255);\n            ctx.leds[i] = ctx.palette.getColor(baseHue, brightU8);\n            if (i + STRIP_LENGTH < ctx.ledCount) {\n                ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor(complementHue, brightU8);\n            }\n        }\n    }\n}\n\nvoid LGPComplementaryMixingEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPComplementaryMixingEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Complementary Mixing\",\n        \"Complementary color gradients\",\n        plugins::EffectCategory::UNCATEGORIZED,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

@@ -1,0 +1,109 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_REACTION_DIFFUSION_TRIANGLE",
+  "effectIdHex": "0x1701",
+  "className": "LGPReactionDiffusionTriangleEffect",
+  "displayName": "LGP RD Triangle",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPReactionDiffusionTriangleEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPReactionDiffusionTriangleEffect.cpp",
+  "renderRange": [
+    63,
+    135
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        63,
+        70
+      ]
+    ],
+    "mapping": [
+      [
+        67,
+        67
+      ],
+      [
+        76,
+        77
+      ],
+      [
+        104,
+        104
+      ]
+    ],
+    "modulation": [
+      [
+        83,
+        95
+      ]
+    ],
+    "render": [
+      [
+        79,
+        80
+      ],
+      [
+        98,
+        98
+      ],
+      [
+        108,
+        108
+      ],
+      [
+        127,
+        127
+      ],
+      [
+        130,
+        130
+      ]
+    ],
+    "post": [
+      [
+        127,
+        131
+      ]
+    ],
+    "output": [
+      [
+        80,
+        80
+      ],
+      [
+        82,
+        82
+      ],
+      [
+        98,
+        98
+      ],
+      [
+        105,
+        105
+      ],
+      [
+        108,
+        108
+      ],
+      [
+        127,
+        128
+      ],
+      [
+        130,
+        130
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'modulation' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPReactionDiffusionTriangleEffect.cpp\n * @brief LGP Reaction Diffusion (tunable) effect implementation\n */\n\n#include \"LGPReactionDiffusionTriangleEffect.h\"\n#include \"../CoreEffects.h\"\n#include \"../../utils/Log.h\"\n#include <FastLED.h>\n#include <cmath>\n#include <cstring>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nstatic inline float clamp01(float x) {\n    return (x < 0.0f) ? 0.0f : (x > 1.0f) ? 1.0f : x;\n}\n\nLGPReactionDiffusionTriangleEffect::LGPReactionDiffusionTriangleEffect()\n    : m_t(0.0f)\n    , m_paramF(0.0380f)\n    , m_paramK(0.0630f)\n    , m_paramMeltK(0.0018f)\n{\n}\n\nbool LGPReactionDiffusionTriangleEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_t = 0.0f;\n\n    // Allocate large buffers in PSRAM (DRAM is too precious)\n    if (!m_ps) {\n        m_ps = static_cast<PsramData*>(heap_caps_malloc(sizeof(PsramData), MALLOC_CAP_SPIRAM));\n        if (!m_ps) {\n            LW_LOGE(\"LGPReactionDiffusionTriangleEffect: PSRAM alloc failed (%u bytes)\", (unsigned)sizeof(PsramData));\n            return false;\n        }\n    }\n\n    // Reset tunables to defaults for a baseline-identical start.\n    m_paramF = 0.0380f;\n    m_paramK = 0.0630f;\n    m_paramMeltK = 0.0018f;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        m_ps->u[i] = 1.0f;\n        m_ps->v[i] = 0.0f;\n    }\n\n    const int mid = STRIP_LENGTH / 2;\n    for (int i = mid - 6; i <= mid + 6; i++) {\n        if (i >= 0 && i < STRIP_LENGTH) {\n            m_ps->v[i] = 1.0f;\n            m_ps->u[i] = 0.0f;\n        }\n    }\n\n    return true;\n}\n\nvoid LGPReactionDiffusionTriangleEffect::render(plugins::EffectContext& ctx) {\n    if (!m_ps) return;\n\n    // Identical to LGPReactionDiffusionEffect, with effect-local tunable levers (default = baseline).\n    const float speedNorm = ctx.speed / 50.0f;\n    const float master = ctx.brightness / 255.0f;\n\n    // Gray-Scott parameters (baseline pocket, with small tunable offsets)\n    const float Du = 1.0f;\n    const float Dv = 0.5f;\n    const float F = m_paramF;\n    const float K = m_paramK;\n\n    const float dt = 0.9f + 0.6f * speedNorm;\n    const int iters = (speedNorm > 0.55f) ? 2 : 1;\n\n    for (int iter = 0; iter < iters; iter++) {\n        for (int i = 0; i < STRIP_LENGTH; i++) {\n            const int im1 = (i == 0) ? 0 : (i - 1);\n            const int ip1 = (i == STRIP_LENGTH - 1) ? (STRIP_LENGTH - 1) : (i + 1);\n\n            const float lapU = m_ps->u[im1] - 2.0f * m_ps->u[i] + m_ps->u[ip1];\n            const float lapV = m_ps->v[im1] - 2.0f * m_ps->v[i] + m_ps->v[ip1];\n\n            const float u = m_ps->u[i];\n            const float v = m_ps->v[i];\n            const float uvv = u * v * v;\n\n            m_ps->u2[i] = u + (Du * lapU - uvv + F * (1.0f - u)) * dt;\n            m_ps->v2[i] = v + (Dv * lapV + uvv - (K + F) * v) * dt;\n\n            m_ps->u2[i] = clamp01(m_ps->u2[i]);\n            m_ps->v2[i] = clamp01(m_ps->v2[i]);\n        }\n\n        for (int i = 0; i < STRIP_LENGTH; i++) {\n            m_ps->u[i] = m_ps->u2[i];\n            m_ps->v[i] = m_ps->v2[i];\n        }\n    }\n\n    // Render: map V concentration to brightness and hue; add centre “melt glue”.\n    const float mid = (STRIP_LENGTH - 1) * 0.5f;\n    const float meltK = m_paramMeltK;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        const float x = (float)i;\n        const float dist = (float)centerPairDistance((uint16_t)i);\n\n        const float dmid = x - mid;\n        const float melt = expf(-(dmid * dmid) * meltK);\n\n        const float v = m_ps->v[i];\n        float wave = clamp01(0.15f * melt + 0.85f * (v * melt + 0.25f * v));\n\n        const float base = 0.07f;\n        const float out = clamp01(base + (1.0f - base) * wave) * master;\n        const uint8_t brA = (uint8_t)(255.0f * out);\n\n        const uint8_t hueA = (uint8_t)(ctx.gHue + (int)(dist * 0.6f) + (int)(v * 180.0f));\n\n        const uint8_t hueB = (uint8_t)(hueA + 4u);\n        const uint8_t brB = scale8_video(brA, 245);\n\n        ctx.leds[i] = ctx.palette.getColor(hueA, brA);\n        const int j = i + STRIP_LENGTH;\n        if (j < ctx.ledCount) {\n            ctx.leds[j] = ctx.palette.getColor(hueB, brB);\n        }\n    }\n\n    m_t += 1.0f;\n}\n\nvoid LGPReactionDiffusionTriangleEffect::cleanup() {\n    if (m_ps) { heap_caps_free(m_ps); m_ps = nullptr; }\n}\n\nconst plugins::EffectMetadata& LGPReactionDiffusionTriangleEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP RD Triangle\",\n        \"Reaction-diffusion (tunable levers)\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\nuint8_t LGPReactionDiffusionTriangleEffect::getParameterCount() const {\n    return 3;\n}\n\nconst plugins::EffectParameter* LGPReactionDiffusionTriangleEffect::getParameter(uint8_t index) const {\n    static plugins::EffectParameter params[] = {\n        plugins::EffectParameter(\"F\", \"Feed (F)\", 0.0300f, 0.0500f, 0.0380f),\n        plugins::EffectParameter(\"K\", \"Kill (K)\", 0.0550f, 0.0750f, 0.0630f),\n        plugins::EffectParameter(\"melt\", \"Melt Glue\", 0.0010f, 0.0035f, 0.0018f)\n    };\n    if (index >= (sizeof(params) / sizeof(params[0]))) {\n        return nullptr;\n    }\n    return &params[index];\n}\n\nbool LGPReactionDiffusionTriangleEffect::setParameter(const char* name, float value) {\n    if (!name) return false;\n\n    if (strcmp(name, \"F\") == 0) {\n        if (value < 0.0300f) value = 0.0300f;\n        if (value > 0.0500f) value = 0.0500f;\n        m_paramF = value;\n        return true;\n    }\n    if (strcmp(name, \"K\") == 0) {\n        if (value < 0.0550f) value = 0.0550f;\n        if (value > 0.0750f) value = 0.0750f;\n        m_paramK = value;\n        return true;\n    }\n    if (strcmp(name, \"melt\") == 0) {\n        if (value < 0.0010f) value = 0.0010f;\n        if (value > 0.0035f) value = 0.0035f;\n        m_paramMeltK = value;\n        return true;\n    }\n    return false;\n}\n\nfloat LGPReactionDiffusionTriangleEffect::getParameter(const char* name) const {\n    if (!name) return 0.0f;\n\n    if (strcmp(name, \"F\") == 0) return m_paramF;\n    if (strcmp(name, \"K\") == 0) return m_paramK;\n    if (strcmp(name, \"melt\") == 0) return m_paramMeltK;\n    return 0.0f;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

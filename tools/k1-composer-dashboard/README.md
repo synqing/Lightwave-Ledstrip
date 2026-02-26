@@ -100,3 +100,20 @@ Run generation whenever firmware effect sources change.
   - `persistence.mode` (`nvs|volatile`)
   - `persistence.dirty` (debounced write pending)
   - `persistence.lastError` (optional)
+
+## Tunables rollout status (API-facing)
+
+As of February 26, 2026:
+
+- Active effects: `170`
+- Effects with API tunables: `170`
+- Total exposed per-effect parameters: `1162`
+- Missing named tunables: `0`
+- Coverage gate: `python firmware/v2/tools/effect_tunables/generate_manifest.py --validate --enforce-all-families` passes
+
+Wave A and Wave B are complete, and all remaining active families are now tunables-exposed.
+
+Dashboard source of truth for per-effect keys:
+
+- Runtime discovery: `GET /api/v1/effects/parameters?id=<effectId>`
+- Static manifest: `firmware/v2/docs/effects/tunable_manifest.json`

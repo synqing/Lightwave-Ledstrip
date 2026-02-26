@@ -578,6 +578,20 @@ v2 clients can call these routes directly without changing command names.
 | `persistence.dirty` | bool | Pending debounced write |
 | `persistence.lastError` | string | Optional last persistence error |
 
+**Coverage snapshot (as of February 26, 2026):**
+
+- Active effects: `170`
+- Effects with API tunables: `170`
+- Total exposed per-effect parameters: `1162`
+- Missing named tunables: `0`
+- Coverage gate: `python firmware/v2/tools/effect_tunables/generate_manifest.py --validate --enforce-all-families` passes
+
+All active families now expose tunables (Wave A, Wave B, and remaining active families).
+
+For per-effect key lists used by dashboard tuners, refer to:
+- v1 list in `docs/api/api-v1.md` under `POST/PATCH /api/v1/effects/parameters`
+- generated manifest `firmware/v2/docs/effects/tunable_manifest.json`
+
 ---
 
 #### `GET /api/v2/effects/categories`

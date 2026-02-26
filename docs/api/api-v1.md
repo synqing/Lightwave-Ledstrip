@@ -421,6 +421,21 @@ Queue one or more per-effect tunable updates.
 }
 ```
 
+**Tunables coverage snapshot (as of February 26, 2026):**
+
+- Active effects: `170`
+- Effects with API tunables: `170`
+- Total exposed per-effect parameters: `1162`
+- Missing named tunables: `0`
+- Coverage gate: `python firmware/v2/tools/effect_tunables/generate_manifest.py --validate --enforce-all-families` passes
+
+All active families now expose per-effect tunables, including Wave A (`QUANTUM`, `INTERFERENCE`, `ADVANCED_OPTICAL`), Wave B (`GEOMETRIC`, `NOVEL_PHYSICS`), and remaining families (`CORE`, `BEAT_PULSE`, `ENHANCED_AUDIO`, `EXPERIMENTAL_AUDIO`, `AUDIO_REACTIVE`, `HOLOGRAPHIC_VAR`, `SHAPE_BANGERS`, `SHOWPIECE_PACK3`, `TRANSPORT`, `DIAGNOSTIC`, `REACTION_DIFFUSION`, `PERLIN_*`, `ES_*`, and others).
+
+For exact per-effect parameter keys, use:
+
+- Runtime discovery: `GET /api/v1/effects/parameters?id=<effectId>`
+- Static manifest: `firmware/v2/docs/effects/tunable_manifest.json`
+
 ---
 
 #### `GET /api/v1/effects/metadata`

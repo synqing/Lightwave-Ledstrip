@@ -7,14 +7,30 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
 
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
+namespace {
+constexpr int kModeNumber = 4;
+constexpr float kVibrationRate = 0.08f;
+constexpr float kMixRate = 0.05f;
+
+const plugins::EffectParameter kParameters[] = {
+    {"mode_number", "Mode Number", 2.0f, 8.0f, (float)kModeNumber, plugins::EffectParameterType::INT, 1.0f, "wave", "", false},
+    {"vibration_rate", "Vibration Rate", 0.02f, 0.2f, kVibrationRate, plugins::EffectParameterType::FLOAT, 0.005f, "timing", "x", false},
+    {"mix_rate", "Mix Rate", 0.01f, 0.2f, kMixRate, plugins::EffectParameterType::FLOAT, 0.005f, "timing", "x", false},
+};
+}
+
 LGPChladniHarmonicsEffect::LGPChladniHarmonicsEffect()
     : m_vibrationPhase(0.0f)
     , m_mixPhase(0.0f)
+    , m_modeNumber(kModeNumber)
+    , m_vibrationRate(kVibrationRate)
+    , m_mixRate(kMixRate)
 {
 }
 
@@ -22,6 +38,9 @@ bool LGPChladniHarmonicsEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
     m_vibrationPhase = 0.0f;
     m_mixPhase = 0.0f;
+    m_modeNumber = kModeNumber;
+    m_vibrationRate = kVibrationRate;
+    m_mixRate = kMixRate;
     return true;
 }
 
@@ -30,10 +49,9 @@ void LGPChladniHarmonicsEffect::render(plugins::EffectContext& ctx) {
     float speed = ctx.speed / 50.0f;
     float intensity = ctx.brightness / 255.0f;
 
-    const int modeNumber = 4;
-
-    m_vibrationPhase += speed * 0.08f;
-    m_mixPhase += speed * 0.05f;
+    const int modeNumber = m_modeNumber;
+    m_vibrationPhase += speed * m_vibrationRate;
+    m_mixPhase += speed * m_mixRate;
 
     fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 
@@ -93,6 +111,40 @@ const plugins::EffectMetadata& LGPChladniHarmonicsEffect::getMetadata() const {
         1
     };
     return meta;
+}
+
+uint8_t LGPChladniHarmonicsEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kParameters) / sizeof(kParameters[0]));
+}
+
+const plugins::EffectParameter* LGPChladniHarmonicsEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kParameters[index];
+}
+
+bool LGPChladniHarmonicsEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "mode_number") == 0) {
+        m_modeNumber = (int)constrain(value, 2.0f, 8.0f);
+        return true;
+    }
+    if (strcmp(name, "vibration_rate") == 0) {
+        m_vibrationRate = constrain(value, 0.02f, 0.2f);
+        return true;
+    }
+    if (strcmp(name, "mix_rate") == 0) {
+        m_mixRate = constrain(value, 0.01f, 0.2f);
+        return true;
+    }
+    return false;
+}
+
+float LGPChladniHarmonicsEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "mode_number") == 0) return (float)m_modeNumber;
+    if (strcmp(name, "vibration_rate") == 0) return m_vibrationRate;
+    if (strcmp(name, "mix_rate") == 0) return m_mixRate;
+    return 0.0f;
 }
 
 } // namespace ieffect

@@ -8,6 +8,26 @@
 #include "../../utils/Log.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPReactionDiffusionEffect
+namespace {
+constexpr float kLGPReactionDiffusionEffectSpeedScale = 1.0f;
+constexpr float kLGPReactionDiffusionEffectOutputGain = 1.0f;
+constexpr float kLGPReactionDiffusionEffectCentreBias = 1.0f;
+
+float gLGPReactionDiffusionEffectSpeedScale = kLGPReactionDiffusionEffectSpeedScale;
+float gLGPReactionDiffusionEffectOutputGain = kLGPReactionDiffusionEffectOutputGain;
+float gLGPReactionDiffusionEffectCentreBias = kLGPReactionDiffusionEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPReactionDiffusionEffectParameters[] = {
+    {"lgpreaction_diffusion_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPReactionDiffusionEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpreaction_diffusion_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPReactionDiffusionEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpreaction_diffusion_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPReactionDiffusionEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPReactionDiffusionEffect
 
 namespace lightwaveos {
 namespace effects {
@@ -24,6 +44,12 @@ LGPReactionDiffusionEffect::LGPReactionDiffusionEffect()
 
 bool LGPReactionDiffusionEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPReactionDiffusionEffect
+    gLGPReactionDiffusionEffectSpeedScale = kLGPReactionDiffusionEffectSpeedScale;
+    gLGPReactionDiffusionEffectOutputGain = kLGPReactionDiffusionEffectOutputGain;
+    gLGPReactionDiffusionEffectCentreBias = kLGPReactionDiffusionEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPReactionDiffusionEffect
+
     m_t = 0.0f;
 
     // Allocate large buffers in PSRAM (DRAM is too precious)
@@ -124,6 +150,43 @@ void LGPReactionDiffusionEffect::render(plugins::EffectContext& ctx) {
 
     m_t += 1.0f;
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPReactionDiffusionEffect
+uint8_t LGPReactionDiffusionEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPReactionDiffusionEffectParameters) / sizeof(kLGPReactionDiffusionEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPReactionDiffusionEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPReactionDiffusionEffectParameters[index];
+}
+
+bool LGPReactionDiffusionEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpreaction_diffusion_effect_speed_scale") == 0) {
+        gLGPReactionDiffusionEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpreaction_diffusion_effect_output_gain") == 0) {
+        gLGPReactionDiffusionEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpreaction_diffusion_effect_centre_bias") == 0) {
+        gLGPReactionDiffusionEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPReactionDiffusionEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpreaction_diffusion_effect_speed_scale") == 0) return gLGPReactionDiffusionEffectSpeedScale;
+    if (strcmp(name, "lgpreaction_diffusion_effect_output_gain") == 0) return gLGPReactionDiffusionEffectOutputGain;
+    if (strcmp(name, "lgpreaction_diffusion_effect_centre_bias") == 0) return gLGPReactionDiffusionEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPReactionDiffusionEffect
 
 void LGPReactionDiffusionEffect::cleanup() {
     if (m_ps) { heap_caps_free(m_ps); m_ps = nullptr; }

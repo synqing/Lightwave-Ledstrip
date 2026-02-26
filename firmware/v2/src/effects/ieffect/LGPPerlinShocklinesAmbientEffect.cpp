@@ -16,6 +16,25 @@
 
 #ifndef NATIVE_BUILD
 #include <esp_heap_caps.h>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPPerlinShocklinesAmbientEffect
+namespace {
+constexpr float kLGPPerlinShocklinesAmbientEffectSpeedScale = 1.0f;
+constexpr float kLGPPerlinShocklinesAmbientEffectOutputGain = 1.0f;
+constexpr float kLGPPerlinShocklinesAmbientEffectCentreBias = 1.0f;
+
+float gLGPPerlinShocklinesAmbientEffectSpeedScale = kLGPPerlinShocklinesAmbientEffectSpeedScale;
+float gLGPPerlinShocklinesAmbientEffectOutputGain = kLGPPerlinShocklinesAmbientEffectOutputGain;
+float gLGPPerlinShocklinesAmbientEffectCentreBias = kLGPPerlinShocklinesAmbientEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPPerlinShocklinesAmbientEffectParameters[] = {
+    {"lgpperlin_shocklines_ambient_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPPerlinShocklinesAmbientEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpperlin_shocklines_ambient_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPPerlinShocklinesAmbientEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpperlin_shocklines_ambient_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPPerlinShocklinesAmbientEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPPerlinShocklinesAmbientEffect
 #endif
 
 namespace lightwaveos {
@@ -33,6 +52,12 @@ LGPPerlinShocklinesAmbientEffect::LGPPerlinShocklinesAmbientEffect()
 
 bool LGPPerlinShocklinesAmbientEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPPerlinShocklinesAmbientEffect
+    gLGPPerlinShocklinesAmbientEffectSpeedScale = kLGPPerlinShocklinesAmbientEffectSpeedScale;
+    gLGPPerlinShocklinesAmbientEffectOutputGain = kLGPPerlinShocklinesAmbientEffectOutputGain;
+    gLGPPerlinShocklinesAmbientEffectCentreBias = kLGPPerlinShocklinesAmbientEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPPerlinShocklinesAmbientEffect
+
     m_noiseX = random16();
     m_noiseY = random16();
     m_time = 0;
@@ -143,6 +168,43 @@ void LGPPerlinShocklinesAmbientEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPPerlinShocklinesAmbientEffect
+uint8_t LGPPerlinShocklinesAmbientEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPPerlinShocklinesAmbientEffectParameters) / sizeof(kLGPPerlinShocklinesAmbientEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPPerlinShocklinesAmbientEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPPerlinShocklinesAmbientEffectParameters[index];
+}
+
+bool LGPPerlinShocklinesAmbientEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpperlin_shocklines_ambient_effect_speed_scale") == 0) {
+        gLGPPerlinShocklinesAmbientEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpperlin_shocklines_ambient_effect_output_gain") == 0) {
+        gLGPPerlinShocklinesAmbientEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpperlin_shocklines_ambient_effect_centre_bias") == 0) {
+        gLGPPerlinShocklinesAmbientEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPPerlinShocklinesAmbientEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpperlin_shocklines_ambient_effect_speed_scale") == 0) return gLGPPerlinShocklinesAmbientEffectSpeedScale;
+    if (strcmp(name, "lgpperlin_shocklines_ambient_effect_output_gain") == 0) return gLGPPerlinShocklinesAmbientEffectOutputGain;
+    if (strcmp(name, "lgpperlin_shocklines_ambient_effect_centre_bias") == 0) return gLGPPerlinShocklinesAmbientEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPPerlinShocklinesAmbientEffect
 
 void LGPPerlinShocklinesAmbientEffect::cleanup() {
 #ifndef NATIVE_BUILD

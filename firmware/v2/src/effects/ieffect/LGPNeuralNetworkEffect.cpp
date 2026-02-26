@@ -6,11 +6,24 @@
 #include "LGPNeuralNetworkEffect.h"
 #include "../CoreEffects.h"
 #include <FastLED.h>
+#include <cmath>
 #include <cstring>
 
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
+
+namespace {
+constexpr float kPhaseRate = 0.25f;
+constexpr float kFireProbability = 0.063f;
+constexpr float kSignalDecay = 0.941f;
+
+const plugins::EffectParameter kParameters[] = {
+    {"phase_rate", "Phase Rate", 0.10f, 1.0f, kPhaseRate, plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"fire_probability", "Fire Probability", 0.01f, 0.20f, kFireProbability, plugins::EffectParameterType::FLOAT, 0.01f, "wave", "", false},
+    {"signal_decay", "Signal Decay", 0.85f, 0.99f, kSignalDecay, plugins::EffectParameterType::FLOAT, 0.005f, "damping", "", false},
+};
+}
 
 LGPNeuralNetworkEffect::LGPNeuralNetworkEffect()
     : m_time(0)
@@ -19,6 +32,9 @@ LGPNeuralNetworkEffect::LGPNeuralNetworkEffect()
     , m_signalPos{}
     , m_signalStrength{}
     , m_initialized(false)
+    , m_phaseRate(kPhaseRate)
+    , m_fireProbability(kFireProbability)
+    , m_signalDecay(kSignalDecay)
 {
 }
 
@@ -30,6 +46,9 @@ bool LGPNeuralNetworkEffect::init(plugins::EffectContext& ctx) {
     memset(m_signalPos, 0, sizeof(m_signalPos));
     memset(m_signalStrength, 0, sizeof(m_signalStrength));
     m_initialized = false;
+    m_phaseRate = kPhaseRate;
+    m_fireProbability = kFireProbability;
+    m_signalDecay = kSignalDecay;
     return true;
 }
 
@@ -38,7 +57,8 @@ void LGPNeuralNetworkEffect::render(plugins::EffectContext& ctx) {
     fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 
     // Synaptic firing patterns with signal propagation
-    m_time = (uint16_t)(m_time + (ctx.speed >> 2));
+    const uint16_t phaseStep = (uint16_t)fmaxf(1.0f, ctx.speed * m_phaseRate);
+    m_time = (uint16_t)(m_time + phaseStep);
 
     // Initialize neurons on first run
     if (!m_initialized) {
@@ -66,7 +86,7 @@ void LGPNeuralNetworkEffect::render(plugins::EffectContext& ctx) {
         if (m_neuronState[n] > 0) {
             m_neuronState[n] = scale8(m_neuronState[n], 230);
         } else {
-            if (random8() < 16) {
+            if (random8() < (uint8_t)(m_fireProbability * 255.0f)) {
                 m_neuronState[n] = 255;
 
                 // Spawn signal
@@ -112,7 +132,7 @@ void LGPNeuralNetworkEffect::render(plugins::EffectContext& ctx) {
     for (uint8_t s = 0; s < 10; s++) {
         if (m_signalStrength[s] > 0) {
             m_signalPos[s] += (random8(2) == 0) ? 1 : -1;
-            m_signalStrength[s] = scale8(m_signalStrength[s], 240);
+            m_signalStrength[s] = scale8(m_signalStrength[s], (uint8_t)(m_signalDecay * 255.0f));
 
             if (m_signalPos[s] >= 0 && m_signalPos[s] < STRIP_LENGTH) {
                 uint8_t sigIntensity = scale8(m_signalStrength[s], ctx.brightness);
@@ -143,6 +163,40 @@ const plugins::EffectMetadata& LGPNeuralNetworkEffect::getMetadata() const {
         1
     };
     return meta;
+}
+
+uint8_t LGPNeuralNetworkEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kParameters) / sizeof(kParameters[0]));
+}
+
+const plugins::EffectParameter* LGPNeuralNetworkEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kParameters[index];
+}
+
+bool LGPNeuralNetworkEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "phase_rate") == 0) {
+        m_phaseRate = constrain(value, 0.10f, 1.0f);
+        return true;
+    }
+    if (strcmp(name, "fire_probability") == 0) {
+        m_fireProbability = constrain(value, 0.01f, 0.20f);
+        return true;
+    }
+    if (strcmp(name, "signal_decay") == 0) {
+        m_signalDecay = constrain(value, 0.85f, 0.99f);
+        return true;
+    }
+    return false;
+}
+
+float LGPNeuralNetworkEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "phase_rate") == 0) return m_phaseRate;
+    if (strcmp(name, "fire_probability") == 0) return m_fireProbability;
+    if (strcmp(name, "signal_decay") == 0) return m_signalDecay;
+    return 0.0f;
 }
 
 } // namespace ieffect

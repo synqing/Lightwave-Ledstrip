@@ -17,15 +17,33 @@ namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
+namespace {
+constexpr float kTurbulenceScale = 1.0f;
+constexpr float kVelocityDecay = 0.95f;
+constexpr float kPressureDecay = 0.98f;
+
+const plugins::EffectParameter kParameters[] = {
+    {"turbulence_scale", "Turbulence Scale", 0.2f, 2.0f, kTurbulenceScale, plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+    {"velocity_decay", "Velocity Decay", 0.85f, 0.995f, kVelocityDecay, plugins::EffectParameterType::FLOAT, 0.005f, "damping", "", false},
+    {"pressure_decay", "Pressure Decay", 0.90f, 0.999f, kPressureDecay, plugins::EffectParameterType::FLOAT, 0.005f, "damping", "", false},
+};
+}
+
 LGPFluidDynamicsEffect::LGPFluidDynamicsEffect()
     : m_ps(nullptr)
     , m_time(0)
+    , m_turbulenceScale(kTurbulenceScale)
+    , m_velocityDecay(kVelocityDecay)
+    , m_pressureDecay(kPressureDecay)
 {
 }
 
 bool LGPFluidDynamicsEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
     m_time = 0;
+    m_turbulenceScale = kTurbulenceScale;
+    m_velocityDecay = kVelocityDecay;
+    m_pressureDecay = kPressureDecay;
 #ifndef NATIVE_BUILD
     if (!m_ps) {
         m_ps = static_cast<FluidPsram*>(
@@ -44,7 +62,7 @@ void LGPFluidDynamicsEffect::render(plugins::EffectContext& ctx) {
     m_time = (uint16_t)(m_time + (ctx.speed >> 2));
 
     float speedNorm = ctx.speed / 50.0f;
-    float reynolds = speedNorm;
+    float reynolds = speedNorm * m_turbulenceScale;
 
     // Update fluid simulation
     for (uint16_t i = 0; i < STRIP_LENGTH; i++) {
@@ -59,11 +77,11 @@ void LGPFluidDynamicsEffect::render(plugins::EffectContext& ctx) {
 
         // Update velocity
         m_ps->velocity[i] += gradientForce + turbulence * 0.1f;
-        m_ps->velocity[i] *= powf(0.95f, dt * 60.0f);  // dt-corrected decay
+        m_ps->velocity[i] *= powf(m_velocityDecay, dt * 60.0f);  // dt-corrected decay
 
         // Update pressure
         m_ps->pressure[i] += m_ps->velocity[i] * 0.1f;
-        m_ps->pressure[i] *= powf(0.98f, dt * 60.0f);  // dt-corrected decay
+        m_ps->pressure[i] *= powf(m_pressureDecay, dt * 60.0f);  // dt-corrected decay
 
         // Add source/sink at centre
         if (centerPairDistance(i) < 5) {
@@ -111,6 +129,40 @@ const plugins::EffectMetadata& LGPFluidDynamicsEffect::getMetadata() const {
         1
     };
     return meta;
+}
+
+uint8_t LGPFluidDynamicsEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kParameters) / sizeof(kParameters[0]));
+}
+
+const plugins::EffectParameter* LGPFluidDynamicsEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kParameters[index];
+}
+
+bool LGPFluidDynamicsEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "turbulence_scale") == 0) {
+        m_turbulenceScale = constrain(value, 0.2f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "velocity_decay") == 0) {
+        m_velocityDecay = constrain(value, 0.85f, 0.995f);
+        return true;
+    }
+    if (strcmp(name, "pressure_decay") == 0) {
+        m_pressureDecay = constrain(value, 0.90f, 0.999f);
+        return true;
+    }
+    return false;
+}
+
+float LGPFluidDynamicsEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "turbulence_scale") == 0) return m_turbulenceScale;
+    if (strcmp(name, "velocity_decay") == 0) return m_velocityDecay;
+    if (strcmp(name, "pressure_decay") == 0) return m_pressureDecay;
+    return 0.0f;
 }
 
 } // namespace ieffect

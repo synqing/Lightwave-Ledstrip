@@ -7,6 +7,26 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPMoireSilkEffect
+namespace {
+constexpr float kLGPMoireSilkEffectSpeedScale = 1.0f;
+constexpr float kLGPMoireSilkEffectOutputGain = 1.0f;
+constexpr float kLGPMoireSilkEffectCentreBias = 1.0f;
+
+float gLGPMoireSilkEffectSpeedScale = kLGPMoireSilkEffectSpeedScale;
+float gLGPMoireSilkEffectOutputGain = kLGPMoireSilkEffectOutputGain;
+float gLGPMoireSilkEffectCentreBias = kLGPMoireSilkEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPMoireSilkEffectParameters[] = {
+    {"lgpmoire_silk_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPMoireSilkEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpmoire_silk_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPMoireSilkEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpmoire_silk_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPMoireSilkEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPMoireSilkEffect
 
 namespace lightwaveos {
 namespace effects {
@@ -24,6 +44,12 @@ LGPMoireSilkEffect::LGPMoireSilkEffect()
 
 bool LGPMoireSilkEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPMoireSilkEffect
+    gLGPMoireSilkEffectSpeedScale = kLGPMoireSilkEffectSpeedScale;
+    gLGPMoireSilkEffectOutputGain = kLGPMoireSilkEffectOutputGain;
+    gLGPMoireSilkEffectCentreBias = kLGPMoireSilkEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPMoireSilkEffect
+
     m_phaseA = 0.0f;
     m_phaseB = 0.0f;
     return true;
@@ -66,6 +92,43 @@ void LGPMoireSilkEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPMoireSilkEffect
+uint8_t LGPMoireSilkEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPMoireSilkEffectParameters) / sizeof(kLGPMoireSilkEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPMoireSilkEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPMoireSilkEffectParameters[index];
+}
+
+bool LGPMoireSilkEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpmoire_silk_effect_speed_scale") == 0) {
+        gLGPMoireSilkEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpmoire_silk_effect_output_gain") == 0) {
+        gLGPMoireSilkEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpmoire_silk_effect_centre_bias") == 0) {
+        gLGPMoireSilkEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPMoireSilkEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpmoire_silk_effect_speed_scale") == 0) return gLGPMoireSilkEffectSpeedScale;
+    if (strcmp(name, "lgpmoire_silk_effect_output_gain") == 0) return gLGPMoireSilkEffectOutputGain;
+    if (strcmp(name, "lgpmoire_silk_effect_centre_bias") == 0) return gLGPMoireSilkEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPMoireSilkEffect
 
 void LGPMoireSilkEffect::cleanup() {
     // No resources to free

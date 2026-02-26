@@ -7,6 +7,26 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPGratingScanEffect
+namespace {
+constexpr float kLGPGratingScanEffectSpeedScale = 1.0f;
+constexpr float kLGPGratingScanEffectOutputGain = 1.0f;
+constexpr float kLGPGratingScanEffectCentreBias = 1.0f;
+
+float gLGPGratingScanEffectSpeedScale = kLGPGratingScanEffectSpeedScale;
+float gLGPGratingScanEffectOutputGain = kLGPGratingScanEffectOutputGain;
+float gLGPGratingScanEffectCentreBias = kLGPGratingScanEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPGratingScanEffectParameters[] = {
+    {"lgpgrating_scan_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPGratingScanEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpgrating_scan_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPGratingScanEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpgrating_scan_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPGratingScanEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPGratingScanEffect
 
 namespace lightwaveos {
 namespace effects {
@@ -23,6 +43,12 @@ LGPGratingScanEffect::LGPGratingScanEffect()
 
 bool LGPGratingScanEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPGratingScanEffect
+    gLGPGratingScanEffectSpeedScale = kLGPGratingScanEffectSpeedScale;
+    gLGPGratingScanEffectOutputGain = kLGPGratingScanEffectOutputGain;
+    gLGPGratingScanEffectCentreBias = kLGPGratingScanEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPGratingScanEffect
+
     m_pos = 0.0f;
     return true;
 }
@@ -62,6 +88,43 @@ void LGPGratingScanEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPGratingScanEffect
+uint8_t LGPGratingScanEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPGratingScanEffectParameters) / sizeof(kLGPGratingScanEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPGratingScanEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPGratingScanEffectParameters[index];
+}
+
+bool LGPGratingScanEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpgrating_scan_effect_speed_scale") == 0) {
+        gLGPGratingScanEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpgrating_scan_effect_output_gain") == 0) {
+        gLGPGratingScanEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpgrating_scan_effect_centre_bias") == 0) {
+        gLGPGratingScanEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPGratingScanEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpgrating_scan_effect_speed_scale") == 0) return gLGPGratingScanEffectSpeedScale;
+    if (strcmp(name, "lgpgrating_scan_effect_output_gain") == 0) return gLGPGratingScanEffectOutputGain;
+    if (strcmp(name, "lgpgrating_scan_effect_centre_bias") == 0) return gLGPGratingScanEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPGratingScanEffect
 
 void LGPGratingScanEffect::cleanup() {
     // No resources to free

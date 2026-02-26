@@ -7,6 +7,7 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
 
 #ifndef PI
 #define PI 3.14159265358979323846f
@@ -18,6 +19,18 @@
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
+
+namespace {
+constexpr float kPhaseRate = 0.01f;
+constexpr float kAberrationScale = 1.0f;
+constexpr float kIntensityScale = 1.0f;
+
+const plugins::EffectParameter kParameters[] = {
+    {"phase_rate", "Phase Rate", 0.003f, 0.05f, kPhaseRate, plugins::EffectParameterType::FLOAT, 0.002f, "timing", "x", false},
+    {"aberration_scale", "Aberration Scale", 0.5f, 2.0f, kAberrationScale, plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+    {"intensity_scale", "Intensity Scale", 0.5f, 1.5f, kIntensityScale, plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+};
+}
 
 namespace {
 
@@ -119,22 +132,28 @@ CRGB chromaticDispersionPalette(float position,
 
 LGPChromaticLensEffect::LGPChromaticLensEffect()
     : m_phase(0.0f)
+    , m_phaseRate(kPhaseRate)
+    , m_aberrationScale(kAberrationScale)
+    , m_intensityScale(kIntensityScale)
 {
 }
 
 bool LGPChromaticLensEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
     m_phase = 0.0f;
+    m_phaseRate = kPhaseRate;
+    m_aberrationScale = kAberrationScale;
+    m_intensityScale = kIntensityScale;
     return true;
 }
 
 void LGPChromaticLensEffect::render(plugins::EffectContext& ctx) {
     // Static aberration, lens position controlled by speed
     float dt = ctx.getSafeDeltaSeconds();
-    float intensity = ctx.brightness / 255.0f;
-    float aberration = (ctx.complexity / 255.0f) * 3.0f;
+    float intensity = (ctx.brightness / 255.0f) * m_intensityScale;
+    float aberration = (ctx.complexity / 255.0f) * 3.0f * m_aberrationScale;
 
-    m_phase += ctx.speed * 0.01f * 60.0f * dt;  // dt-corrected
+    m_phase += ctx.speed * m_phaseRate * 60.0f * dt;  // dt-corrected
     if (m_phase > TWO_PI) m_phase -= TWO_PI;
 
     for (int i = 0; i < STRIP_LENGTH && i < (int)ctx.ledCount; i++) {
@@ -167,6 +186,40 @@ const plugins::EffectMetadata& LGPChromaticLensEffect::getMetadata() const {
         1
     };
     return meta;
+}
+
+uint8_t LGPChromaticLensEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kParameters) / sizeof(kParameters[0]));
+}
+
+const plugins::EffectParameter* LGPChromaticLensEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kParameters[index];
+}
+
+bool LGPChromaticLensEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "phase_rate") == 0) {
+        m_phaseRate = constrain(value, 0.003f, 0.05f);
+        return true;
+    }
+    if (strcmp(name, "aberration_scale") == 0) {
+        m_aberrationScale = constrain(value, 0.5f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "intensity_scale") == 0) {
+        m_intensityScale = constrain(value, 0.5f, 1.5f);
+        return true;
+    }
+    return false;
+}
+
+float LGPChromaticLensEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "phase_rate") == 0) return m_phaseRate;
+    if (strcmp(name, "aberration_scale") == 0) return m_aberrationScale;
+    if (strcmp(name, "intensity_scale") == 0) return m_intensityScale;
+    return 0.0f;
 }
 
 } // namespace ieffect

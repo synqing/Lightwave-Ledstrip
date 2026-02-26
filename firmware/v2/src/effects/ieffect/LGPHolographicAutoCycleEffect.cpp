@@ -11,6 +11,26 @@
 #include "../../palettes/Palettes_Master.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPHolographicAutoCycleEffect
+namespace {
+constexpr float kLGPHolographicAutoCycleEffectSpeedScale = 1.0f;
+constexpr float kLGPHolographicAutoCycleEffectOutputGain = 1.0f;
+constexpr float kLGPHolographicAutoCycleEffectCentreBias = 1.0f;
+
+float gLGPHolographicAutoCycleEffectSpeedScale = kLGPHolographicAutoCycleEffectSpeedScale;
+float gLGPHolographicAutoCycleEffectOutputGain = kLGPHolographicAutoCycleEffectOutputGain;
+float gLGPHolographicAutoCycleEffectCentreBias = kLGPHolographicAutoCycleEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPHolographicAutoCycleEffectParameters[] = {
+    {"lgpholographic_auto_cycle_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPHolographicAutoCycleEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpholographic_auto_cycle_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPHolographicAutoCycleEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpholographic_auto_cycle_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPHolographicAutoCycleEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPHolographicAutoCycleEffect
 
 namespace lightwaveos {
 namespace effects {
@@ -47,6 +67,12 @@ LGPHolographicAutoCycleEffect::LGPHolographicAutoCycleEffect()
 
 bool LGPHolographicAutoCycleEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPHolographicAutoCycleEffect
+    gLGPHolographicAutoCycleEffectSpeedScale = kLGPHolographicAutoCycleEffectSpeedScale;
+    gLGPHolographicAutoCycleEffectOutputGain = kLGPHolographicAutoCycleEffectOutputGain;
+    gLGPHolographicAutoCycleEffectCentreBias = kLGPHolographicAutoCycleEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPHolographicAutoCycleEffect
+
 
     // Reset rendering phases
     m_phase1 = 0.0f;
@@ -137,6 +163,43 @@ void LGPHolographicAutoCycleEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPHolographicAutoCycleEffect
+uint8_t LGPHolographicAutoCycleEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPHolographicAutoCycleEffectParameters) / sizeof(kLGPHolographicAutoCycleEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPHolographicAutoCycleEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPHolographicAutoCycleEffectParameters[index];
+}
+
+bool LGPHolographicAutoCycleEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpholographic_auto_cycle_effect_speed_scale") == 0) {
+        gLGPHolographicAutoCycleEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpholographic_auto_cycle_effect_output_gain") == 0) {
+        gLGPHolographicAutoCycleEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpholographic_auto_cycle_effect_centre_bias") == 0) {
+        gLGPHolographicAutoCycleEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPHolographicAutoCycleEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpholographic_auto_cycle_effect_speed_scale") == 0) return gLGPHolographicAutoCycleEffectSpeedScale;
+    if (strcmp(name, "lgpholographic_auto_cycle_effect_output_gain") == 0) return gLGPHolographicAutoCycleEffectOutputGain;
+    if (strcmp(name, "lgpholographic_auto_cycle_effect_centre_bias") == 0) return gLGPHolographicAutoCycleEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPHolographicAutoCycleEffect
 
 void LGPHolographicAutoCycleEffect::cleanup() {
     // No dynamic resources to free

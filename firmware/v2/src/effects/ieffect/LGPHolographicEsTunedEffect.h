@@ -33,6 +33,11 @@ public:
     void cleanup() override;
     const plugins::EffectMetadata& getMetadata() const override;
 
+
+    uint8_t getParameterCount() const override;
+    const plugins::EffectParameter* getParameter(uint8_t index) const override;
+    bool setParameter(const char* name, float value) override;
+    float getParameter(const char* name) const override;
 private:
     // Phase state (dt-based; always advances so it still looks alive without beat lock)
     float m_phase1 = 0.0f;

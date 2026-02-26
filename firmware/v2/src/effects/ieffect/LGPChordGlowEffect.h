@@ -52,6 +52,11 @@ public:
     void cleanup() override;
     const plugins::EffectMetadata& getMetadata() const override;
 
+
+    uint8_t getParameterCount() const override;
+    const plugins::EffectParameter* getParameter(uint8_t index) const override;
+    bool setParameter(const char* name, float value) override;
+    float getParameter(const char* name) const override;
 private:
     // Current chord state (smoothed)
     uint8_t m_currentRootNote = 0;      // 0-11 (C=0, B=11)

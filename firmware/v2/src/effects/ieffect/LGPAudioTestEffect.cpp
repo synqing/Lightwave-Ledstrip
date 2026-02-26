@@ -16,6 +16,26 @@
 #endif
 
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPAudioTestEffect
+namespace {
+constexpr float kLGPAudioTestEffectSpeedScale = 1.0f;
+constexpr float kLGPAudioTestEffectOutputGain = 1.0f;
+constexpr float kLGPAudioTestEffectCentreBias = 1.0f;
+
+float gLGPAudioTestEffectSpeedScale = kLGPAudioTestEffectSpeedScale;
+float gLGPAudioTestEffectOutputGain = kLGPAudioTestEffectOutputGain;
+float gLGPAudioTestEffectCentreBias = kLGPAudioTestEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPAudioTestEffectParameters[] = {
+    {"lgpaudio_test_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPAudioTestEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpaudio_test_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPAudioTestEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpaudio_test_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPAudioTestEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPAudioTestEffect
 
 namespace lightwaveos {
 namespace effects {
@@ -23,6 +43,12 @@ namespace ieffect {
 
 bool LGPAudioTestEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPAudioTestEffect
+    gLGPAudioTestEffectSpeedScale = kLGPAudioTestEffectSpeedScale;
+    gLGPAudioTestEffectOutputGain = kLGPAudioTestEffectOutputGain;
+    gLGPAudioTestEffectCentreBias = kLGPAudioTestEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPAudioTestEffect
+
     m_beatDecay = 0.0f;
     m_lastBeatPhase = 0.0f;
     m_fallbackPhase = 0.0f;
@@ -154,6 +180,43 @@ void LGPAudioTestEffect::render(plugins::EffectContext& ctx) {
         ctx.leds[STRIP_LENGTH + CENTER_RIGHT] = beatColor;
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPAudioTestEffect
+uint8_t LGPAudioTestEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPAudioTestEffectParameters) / sizeof(kLGPAudioTestEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPAudioTestEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPAudioTestEffectParameters[index];
+}
+
+bool LGPAudioTestEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpaudio_test_effect_speed_scale") == 0) {
+        gLGPAudioTestEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpaudio_test_effect_output_gain") == 0) {
+        gLGPAudioTestEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpaudio_test_effect_centre_bias") == 0) {
+        gLGPAudioTestEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPAudioTestEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpaudio_test_effect_speed_scale") == 0) return gLGPAudioTestEffectSpeedScale;
+    if (strcmp(name, "lgpaudio_test_effect_output_gain") == 0) return gLGPAudioTestEffectOutputGain;
+    if (strcmp(name, "lgpaudio_test_effect_centre_bias") == 0) return gLGPAudioTestEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPAudioTestEffect
 
 void LGPAudioTestEffect::cleanup() {
     // No resources to free

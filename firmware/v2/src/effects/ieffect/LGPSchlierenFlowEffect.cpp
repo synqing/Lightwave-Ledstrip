@@ -7,6 +7,26 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPSchlierenFlowEffect
+namespace {
+constexpr float kLGPSchlierenFlowEffectSpeedScale = 1.0f;
+constexpr float kLGPSchlierenFlowEffectOutputGain = 1.0f;
+constexpr float kLGPSchlierenFlowEffectCentreBias = 1.0f;
+
+float gLGPSchlierenFlowEffectSpeedScale = kLGPSchlierenFlowEffectSpeedScale;
+float gLGPSchlierenFlowEffectOutputGain = kLGPSchlierenFlowEffectOutputGain;
+float gLGPSchlierenFlowEffectCentreBias = kLGPSchlierenFlowEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPSchlierenFlowEffectParameters[] = {
+    {"lgpschlieren_flow_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPSchlierenFlowEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpschlieren_flow_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPSchlierenFlowEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpschlieren_flow_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPSchlierenFlowEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPSchlierenFlowEffect
 
 namespace lightwaveos {
 namespace effects {
@@ -23,6 +43,12 @@ LGPSchlierenFlowEffect::LGPSchlierenFlowEffect()
 
 bool LGPSchlierenFlowEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPSchlierenFlowEffect
+    gLGPSchlierenFlowEffectSpeedScale = kLGPSchlierenFlowEffectSpeedScale;
+    gLGPSchlierenFlowEffectOutputGain = kLGPSchlierenFlowEffectOutputGain;
+    gLGPSchlierenFlowEffectCentreBias = kLGPSchlierenFlowEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPSchlierenFlowEffect
+
     m_t = 0.0f;
     return true;
 }
@@ -76,6 +102,43 @@ void LGPSchlierenFlowEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPSchlierenFlowEffect
+uint8_t LGPSchlierenFlowEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPSchlierenFlowEffectParameters) / sizeof(kLGPSchlierenFlowEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPSchlierenFlowEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPSchlierenFlowEffectParameters[index];
+}
+
+bool LGPSchlierenFlowEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpschlieren_flow_effect_speed_scale") == 0) {
+        gLGPSchlierenFlowEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpschlieren_flow_effect_output_gain") == 0) {
+        gLGPSchlierenFlowEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpschlieren_flow_effect_centre_bias") == 0) {
+        gLGPSchlierenFlowEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPSchlierenFlowEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpschlieren_flow_effect_speed_scale") == 0) return gLGPSchlierenFlowEffectSpeedScale;
+    if (strcmp(name, "lgpschlieren_flow_effect_output_gain") == 0) return gLGPSchlierenFlowEffectOutputGain;
+    if (strcmp(name, "lgpschlieren_flow_effect_centre_bias") == 0) return gLGPSchlierenFlowEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPSchlierenFlowEffect
 
 void LGPSchlierenFlowEffect::cleanup() {
     // No resources to free

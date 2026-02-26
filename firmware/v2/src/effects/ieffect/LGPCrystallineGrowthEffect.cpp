@@ -6,11 +6,24 @@
 #include "LGPCrystallineGrowthEffect.h"
 #include "../CoreEffects.h"
 #include <FastLED.h>
+#include <cmath>
 #include <cstring>
 
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
+
+namespace {
+constexpr float kPhaseRate = 0.125f;
+constexpr float kGrowthProbability = 0.125f;
+constexpr float kResetProbability = 0.02f;
+
+const plugins::EffectParameter kParameters[] = {
+    {"phase_rate", "Phase Rate", 0.05f, 0.50f, kPhaseRate, plugins::EffectParameterType::FLOAT, 0.01f, "timing", "x", false},
+    {"growth_probability", "Growth Probability", 0.02f, 0.30f, kGrowthProbability, plugins::EffectParameterType::FLOAT, 0.01f, "wave", "", false},
+    {"reset_probability", "Reset Probability", 0.005f, 0.08f, kResetProbability, plugins::EffectParameterType::FLOAT, 0.005f, "wave", "", false},
+};
+}
 
 LGPCrystallineGrowthEffect::LGPCrystallineGrowthEffect()
     : m_time(0)
@@ -18,6 +31,9 @@ LGPCrystallineGrowthEffect::LGPCrystallineGrowthEffect()
     , m_size{}
     , m_hue{}
     , m_initialized(false)
+    , m_phaseRate(kPhaseRate)
+    , m_growthProbability(kGrowthProbability)
+    , m_resetProbability(kResetProbability)
 {
 }
 
@@ -28,12 +44,16 @@ bool LGPCrystallineGrowthEffect::init(plugins::EffectContext& ctx) {
     memset(m_size, 0, sizeof(m_size));
     memset(m_hue, 0, sizeof(m_hue));
     m_initialized = false;
+    m_phaseRate = kPhaseRate;
+    m_growthProbability = kGrowthProbability;
+    m_resetProbability = kResetProbability;
     return true;
 }
 
 void LGPCrystallineGrowthEffect::render(plugins::EffectContext& ctx) {
     // Crystal formation with light refraction
-    m_time = (uint16_t)(m_time + (ctx.speed >> 3));
+    const uint16_t phaseStep = (uint16_t)fmaxf(1.0f, ctx.speed * m_phaseRate);
+    m_time = (uint16_t)(m_time + phaseStep);
 
     // Initialize crystal seeds
     if (!m_initialized) {
@@ -57,12 +77,12 @@ void LGPCrystallineGrowthEffect::render(plugins::EffectContext& ctx) {
     // Update crystals
     for (uint8_t c = 0; c < 10; c++) {
         // Grow crystals
-        if (m_size[c] < 20 && random8() < 32) {
+        if (m_size[c] < 20 && random8() < (uint8_t)(m_growthProbability * 255.0f)) {
             m_size[c]++;
         }
 
         // Reset fully grown crystals occasionally
-        if (m_size[c] >= 20 && random8() < 5) {
+        if (m_size[c] >= 20 && random8() < (uint8_t)(m_resetProbability * 255.0f)) {
             m_size[c] = 0;
             m_seeds[c] = random8(STRIP_LENGTH);
             m_hue[c] = random8(30);
@@ -103,6 +123,40 @@ const plugins::EffectMetadata& LGPCrystallineGrowthEffect::getMetadata() const {
         1
     };
     return meta;
+}
+
+uint8_t LGPCrystallineGrowthEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kParameters) / sizeof(kParameters[0]));
+}
+
+const plugins::EffectParameter* LGPCrystallineGrowthEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kParameters[index];
+}
+
+bool LGPCrystallineGrowthEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "phase_rate") == 0) {
+        m_phaseRate = constrain(value, 0.05f, 0.50f);
+        return true;
+    }
+    if (strcmp(name, "growth_probability") == 0) {
+        m_growthProbability = constrain(value, 0.02f, 0.30f);
+        return true;
+    }
+    if (strcmp(name, "reset_probability") == 0) {
+        m_resetProbability = constrain(value, 0.005f, 0.08f);
+        return true;
+    }
+    return false;
+}
+
+float LGPCrystallineGrowthEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "phase_rate") == 0) return m_phaseRate;
+    if (strcmp(name, "growth_probability") == 0) return m_growthProbability;
+    if (strcmp(name, "reset_probability") == 0) return m_resetProbability;
+    return 0.0f;
 }
 
 } // namespace ieffect

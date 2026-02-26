@@ -16,6 +16,26 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPGoldCodeSpeckleEffect
+namespace {
+constexpr float kLGPGoldCodeSpeckleEffectSpeedScale = 1.0f;
+constexpr float kLGPGoldCodeSpeckleEffectOutputGain = 1.0f;
+constexpr float kLGPGoldCodeSpeckleEffectCentreBias = 1.0f;
+
+float gLGPGoldCodeSpeckleEffectSpeedScale = kLGPGoldCodeSpeckleEffectSpeedScale;
+float gLGPGoldCodeSpeckleEffectOutputGain = kLGPGoldCodeSpeckleEffectOutputGain;
+float gLGPGoldCodeSpeckleEffectCentreBias = kLGPGoldCodeSpeckleEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPGoldCodeSpeckleEffectParameters[] = {
+    {"lgpgold_code_speckle_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPGoldCodeSpeckleEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpgold_code_speckle_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPGoldCodeSpeckleEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpgold_code_speckle_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPGoldCodeSpeckleEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPGoldCodeSpeckleEffect
 
 namespace lightwaveos {
 namespace effects {
@@ -67,6 +87,12 @@ LGPGoldCodeSpeckleEffect::LGPGoldCodeSpeckleEffect()
 
 bool LGPGoldCodeSpeckleEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPGoldCodeSpeckleEffect
+    gLGPGoldCodeSpeckleEffectSpeedScale = kLGPGoldCodeSpeckleEffectSpeedScale;
+    gLGPGoldCodeSpeckleEffectOutputGain = kLGPGoldCodeSpeckleEffectOutputGain;
+    gLGPGoldCodeSpeckleEffectCentreBias = kLGPGoldCodeSpeckleEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPGoldCodeSpeckleEffect
+
     m_lfsrA        = 0xACE1u;
     m_lfsrB        = 0xBEEFu;
     m_lfsrTimer    = 0.0f;
@@ -264,6 +290,43 @@ void LGPGoldCodeSpeckleEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPGoldCodeSpeckleEffect
+uint8_t LGPGoldCodeSpeckleEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPGoldCodeSpeckleEffectParameters) / sizeof(kLGPGoldCodeSpeckleEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPGoldCodeSpeckleEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPGoldCodeSpeckleEffectParameters[index];
+}
+
+bool LGPGoldCodeSpeckleEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpgold_code_speckle_effect_speed_scale") == 0) {
+        gLGPGoldCodeSpeckleEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpgold_code_speckle_effect_output_gain") == 0) {
+        gLGPGoldCodeSpeckleEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpgold_code_speckle_effect_centre_bias") == 0) {
+        gLGPGoldCodeSpeckleEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPGoldCodeSpeckleEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpgold_code_speckle_effect_speed_scale") == 0) return gLGPGoldCodeSpeckleEffectSpeedScale;
+    if (strcmp(name, "lgpgold_code_speckle_effect_output_gain") == 0) return gLGPGoldCodeSpeckleEffectOutputGain;
+    if (strcmp(name, "lgpgold_code_speckle_effect_centre_bias") == 0) return gLGPGoldCodeSpeckleEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPGoldCodeSpeckleEffect
 
 void LGPGoldCodeSpeckleEffect::cleanup() {
     // No resources to free

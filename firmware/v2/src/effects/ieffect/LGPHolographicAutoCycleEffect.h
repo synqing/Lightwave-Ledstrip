@@ -44,6 +44,11 @@ public:
     // Public constant so static PALETTE_IDS array in .cpp can reference it
     static constexpr uint8_t PLAYLIST_SIZE = 20;
 
+
+    uint8_t getParameterCount() const override;
+    const plugins::EffectParameter* getParameter(uint8_t index) const override;
+    bool setParameter(const char* name, float value) override;
+    float getParameter(const char* name) const override;
 private:
     // ===== Rendering state (identical to LGPHolographicEffect) =====
     float m_phase1;

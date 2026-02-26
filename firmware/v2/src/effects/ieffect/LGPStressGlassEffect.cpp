@@ -7,6 +7,26 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPStressGlassEffect
+namespace {
+constexpr float kLGPStressGlassEffectSpeedScale = 1.0f;
+constexpr float kLGPStressGlassEffectOutputGain = 1.0f;
+constexpr float kLGPStressGlassEffectCentreBias = 1.0f;
+
+float gLGPStressGlassEffectSpeedScale = kLGPStressGlassEffectSpeedScale;
+float gLGPStressGlassEffectOutputGain = kLGPStressGlassEffectOutputGain;
+float gLGPStressGlassEffectCentreBias = kLGPStressGlassEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPStressGlassEffectParameters[] = {
+    {"lgpstress_glass_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPStressGlassEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpstress_glass_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPStressGlassEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpstress_glass_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPStressGlassEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPStressGlassEffect
 
 namespace lightwaveos {
 namespace effects {
@@ -23,6 +43,12 @@ LGPStressGlassEffect::LGPStressGlassEffect()
 
 bool LGPStressGlassEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPStressGlassEffect
+    gLGPStressGlassEffectSpeedScale = kLGPStressGlassEffectSpeedScale;
+    gLGPStressGlassEffectOutputGain = kLGPStressGlassEffectOutputGain;
+    gLGPStressGlassEffectCentreBias = kLGPStressGlassEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPStressGlassEffect
+
     m_analyser = 0.0f;
     return true;
 }
@@ -63,6 +89,43 @@ void LGPStressGlassEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPStressGlassEffect
+uint8_t LGPStressGlassEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPStressGlassEffectParameters) / sizeof(kLGPStressGlassEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPStressGlassEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPStressGlassEffectParameters[index];
+}
+
+bool LGPStressGlassEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpstress_glass_effect_speed_scale") == 0) {
+        gLGPStressGlassEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpstress_glass_effect_output_gain") == 0) {
+        gLGPStressGlassEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpstress_glass_effect_centre_bias") == 0) {
+        gLGPStressGlassEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPStressGlassEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpstress_glass_effect_speed_scale") == 0) return gLGPStressGlassEffectSpeedScale;
+    if (strcmp(name, "lgpstress_glass_effect_output_gain") == 0) return gLGPStressGlassEffectOutputGain;
+    if (strcmp(name, "lgpstress_glass_effect_centre_bias") == 0) return gLGPStressGlassEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPStressGlassEffect
 
 void LGPStressGlassEffect::cleanup() {
     // No resources to free

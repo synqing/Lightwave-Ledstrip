@@ -7,6 +7,7 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
 
 #ifndef PI
 #define PI 3.14159265358979323846f
@@ -18,6 +19,18 @@
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
+
+namespace {
+constexpr float kPhaseRate = 0.015f;
+constexpr float kPulseRate = 1.5f;
+constexpr float kAberrationScale = 1.0f;
+
+const plugins::EffectParameter kParameters[] = {
+    {"phase_rate", "Phase Rate", 0.005f, 0.06f, kPhaseRate, plugins::EffectParameterType::FLOAT, 0.002f, "timing", "x", false},
+    {"pulse_rate", "Pulse Rate", 0.5f, 3.0f, kPulseRate, plugins::EffectParameterType::FLOAT, 0.1f, "wave", "x", false},
+    {"aberration_scale", "Aberration Scale", 0.5f, 2.0f, kAberrationScale, plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+};
+}
 
 namespace {
 
@@ -117,12 +130,18 @@ CRGB chromaticDispersionPalette(float position,
 
 LGPChromaticPulseEffect::LGPChromaticPulseEffect()
     : m_phase(0.0f)
+    , m_phaseRate(kPhaseRate)
+    , m_pulseRate(kPulseRate)
+    , m_aberrationScale(kAberrationScale)
 {
 }
 
 bool LGPChromaticPulseEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
     m_phase = 0.0f;
+    m_phaseRate = kPhaseRate;
+    m_pulseRate = kPulseRate;
+    m_aberrationScale = kAberrationScale;
     return true;
 }
 
@@ -130,13 +149,13 @@ void LGPChromaticPulseEffect::render(plugins::EffectContext& ctx) {
     // Aberration sweeps from centre outward with intensity pulse
     float dt = ctx.getSafeDeltaSeconds();
     float baseIntensity = ctx.brightness / 255.0f;
-    float baseAberration = (ctx.complexity / 255.0f) * 3.0f;
+    float baseAberration = (ctx.complexity / 255.0f) * 3.0f * m_aberrationScale;
 
-    m_phase += ctx.speed * 0.015f * 60.0f * dt;  // dt-corrected
+    m_phase += ctx.speed * m_phaseRate * 60.0f * dt;  // dt-corrected
     if (m_phase > TWO_PI) m_phase -= TWO_PI;
 
     float aberration = baseAberration * (0.5f + 0.5f * sinf(m_phase));
-    float intensity = baseIntensity * (0.7f + 0.3f * sinf(m_phase * 1.5f));
+    float intensity = baseIntensity * (0.7f + 0.3f * sinf(m_phase * m_pulseRate));
     float phase = m_phase * 0.5f;
 
     for (int i = 0; i < STRIP_LENGTH && i < (int)ctx.ledCount; i++) {
@@ -168,6 +187,40 @@ const plugins::EffectMetadata& LGPChromaticPulseEffect::getMetadata() const {
         1
     };
     return meta;
+}
+
+uint8_t LGPChromaticPulseEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kParameters) / sizeof(kParameters[0]));
+}
+
+const plugins::EffectParameter* LGPChromaticPulseEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kParameters[index];
+}
+
+bool LGPChromaticPulseEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "phase_rate") == 0) {
+        m_phaseRate = constrain(value, 0.005f, 0.06f);
+        return true;
+    }
+    if (strcmp(name, "pulse_rate") == 0) {
+        m_pulseRate = constrain(value, 0.5f, 3.0f);
+        return true;
+    }
+    if (strcmp(name, "aberration_scale") == 0) {
+        m_aberrationScale = constrain(value, 0.5f, 2.0f);
+        return true;
+    }
+    return false;
+}
+
+float LGPChromaticPulseEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "phase_rate") == 0) return m_phaseRate;
+    if (strcmp(name, "pulse_rate") == 0) return m_pulseRate;
+    if (strcmp(name, "aberration_scale") == 0) return m_aberrationScale;
+    return 0.0f;
 }
 
 } // namespace ieffect

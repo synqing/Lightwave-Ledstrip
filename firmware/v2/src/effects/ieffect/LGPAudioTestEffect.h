@@ -37,6 +37,11 @@ public:
     void cleanup() override;
     const plugins::EffectMetadata& getMetadata() const override;
 
+
+    uint8_t getParameterCount() const override;
+    const plugins::EffectParameter* getParameter(uint8_t index) const override;
+    bool setParameter(const char* name, float value) override;
+    float getParameter(const char* name) const override;
 private:
     // Beat pulse animation state
     float m_beatDecay = 0.0f;      // Current beat pulse intensity (decays over time)

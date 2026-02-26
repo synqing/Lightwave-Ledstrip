@@ -8,6 +8,26 @@
 #include <FastLED.h>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPCausticShardsEffect
+namespace {
+constexpr float kLGPCausticShardsEffectSpeedScale = 1.0f;
+constexpr float kLGPCausticShardsEffectOutputGain = 1.0f;
+constexpr float kLGPCausticShardsEffectCentreBias = 1.0f;
+
+float gLGPCausticShardsEffectSpeedScale = kLGPCausticShardsEffectSpeedScale;
+float gLGPCausticShardsEffectOutputGain = kLGPCausticShardsEffectOutputGain;
+float gLGPCausticShardsEffectCentreBias = kLGPCausticShardsEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPCausticShardsEffectParameters[] = {
+    {"lgpcaustic_shards_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPCausticShardsEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpcaustic_shards_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPCausticShardsEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpcaustic_shards_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPCausticShardsEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPCausticShardsEffect
 
 namespace lightwaveos {
 namespace effects {
@@ -35,6 +55,12 @@ LGPCausticShardsEffect::LGPCausticShardsEffect()
 
 bool LGPCausticShardsEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPCausticShardsEffect
+    gLGPCausticShardsEffectSpeedScale = kLGPCausticShardsEffectSpeedScale;
+    gLGPCausticShardsEffectOutputGain = kLGPCausticShardsEffectOutputGain;
+    gLGPCausticShardsEffectCentreBias = kLGPCausticShardsEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPCausticShardsEffect
+
     m_phase1 = 0.0f;
     m_phase2 = 0.0f;
     m_phase3 = 0.0f;
@@ -89,6 +115,43 @@ void LGPCausticShardsEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPCausticShardsEffect
+uint8_t LGPCausticShardsEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPCausticShardsEffectParameters) / sizeof(kLGPCausticShardsEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPCausticShardsEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPCausticShardsEffectParameters[index];
+}
+
+bool LGPCausticShardsEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpcaustic_shards_effect_speed_scale") == 0) {
+        gLGPCausticShardsEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpcaustic_shards_effect_output_gain") == 0) {
+        gLGPCausticShardsEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpcaustic_shards_effect_centre_bias") == 0) {
+        gLGPCausticShardsEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPCausticShardsEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpcaustic_shards_effect_speed_scale") == 0) return gLGPCausticShardsEffectSpeedScale;
+    if (strcmp(name, "lgpcaustic_shards_effect_output_gain") == 0) return gLGPCausticShardsEffectOutputGain;
+    if (strcmp(name, "lgpcaustic_shards_effect_centre_bias") == 0) return gLGPCausticShardsEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPCausticShardsEffect
 
 void LGPCausticShardsEffect::cleanup() {
     // No resources to free

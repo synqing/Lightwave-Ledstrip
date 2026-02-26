@@ -8,6 +8,26 @@
 #include "../../config/features.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPPerlinBackendFastLEDEffect
+namespace {
+constexpr float kLGPPerlinBackendFastLEDEffectSpeedScale = 1.0f;
+constexpr float kLGPPerlinBackendFastLEDEffectOutputGain = 1.0f;
+constexpr float kLGPPerlinBackendFastLEDEffectCentreBias = 1.0f;
+
+float gLGPPerlinBackendFastLEDEffectSpeedScale = kLGPPerlinBackendFastLEDEffectSpeedScale;
+float gLGPPerlinBackendFastLEDEffectOutputGain = kLGPPerlinBackendFastLEDEffectOutputGain;
+float gLGPPerlinBackendFastLEDEffectCentreBias = kLGPPerlinBackendFastLEDEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPPerlinBackendFastLEDEffectParameters[] = {
+    {"lgpperlin_backend_fast_ledeffect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPPerlinBackendFastLEDEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpperlin_backend_fast_ledeffect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPPerlinBackendFastLEDEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpperlin_backend_fast_ledeffect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPPerlinBackendFastLEDEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPPerlinBackendFastLEDEffect
 
 namespace lightwaveos {
 namespace effects {
@@ -25,6 +45,12 @@ LGPPerlinBackendFastLEDEffect::LGPPerlinBackendFastLEDEffect()
 
 bool LGPPerlinBackendFastLEDEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPPerlinBackendFastLEDEffect
+    gLGPPerlinBackendFastLEDEffectSpeedScale = kLGPPerlinBackendFastLEDEffectSpeedScale;
+    gLGPPerlinBackendFastLEDEffectOutputGain = kLGPPerlinBackendFastLEDEffectOutputGain;
+    gLGPPerlinBackendFastLEDEffectCentreBias = kLGPPerlinBackendFastLEDEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPPerlinBackendFastLEDEffect
+
     // Seed for "non-reproducible" feel (different each boot/init)
     m_seed = (uint32_t)random16() << 16 | random16();
     
@@ -106,6 +132,43 @@ void LGPPerlinBackendFastLEDEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPPerlinBackendFastLEDEffect
+uint8_t LGPPerlinBackendFastLEDEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPPerlinBackendFastLEDEffectParameters) / sizeof(kLGPPerlinBackendFastLEDEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPPerlinBackendFastLEDEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPPerlinBackendFastLEDEffectParameters[index];
+}
+
+bool LGPPerlinBackendFastLEDEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpperlin_backend_fast_ledeffect_speed_scale") == 0) {
+        gLGPPerlinBackendFastLEDEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpperlin_backend_fast_ledeffect_output_gain") == 0) {
+        gLGPPerlinBackendFastLEDEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpperlin_backend_fast_ledeffect_centre_bias") == 0) {
+        gLGPPerlinBackendFastLEDEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPPerlinBackendFastLEDEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpperlin_backend_fast_ledeffect_speed_scale") == 0) return gLGPPerlinBackendFastLEDEffectSpeedScale;
+    if (strcmp(name, "lgpperlin_backend_fast_ledeffect_output_gain") == 0) return gLGPPerlinBackendFastLEDEffectOutputGain;
+    if (strcmp(name, "lgpperlin_backend_fast_ledeffect_centre_bias") == 0) return gLGPPerlinBackendFastLEDEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPPerlinBackendFastLEDEffect
 
 void LGPPerlinBackendFastLEDEffect::cleanup() {
     // No resources to free

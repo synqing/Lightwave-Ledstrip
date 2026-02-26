@@ -34,6 +34,10 @@ public:
     void render(plugins::EffectContext& ctx) override;
     void cleanup() override;
     const plugins::EffectMetadata& getMetadata() const override;
+    uint8_t getParameterCount() const override;
+    const plugins::EffectParameter* getParameter(uint8_t index) const override;
+    bool setParameter(const char* name, float value) override;
+    float getParameter(const char* name) const override;
 
 private:
     // Core state (simplified - matches Wave Collision pattern)
@@ -50,6 +54,11 @@ private:
     // EMA smoothing for heavyBass (prevents pops)
     float m_heavyBassSmooth = 0.0f;
     bool m_heavyBassSmoothInitialized = false;
+
+    // Tunables
+    float m_phaseRate = 240.0f;
+    float m_freqBase = 0.12f;
+    float m_burstDecay = 0.88f;
 };
 
 } // namespace ieffect

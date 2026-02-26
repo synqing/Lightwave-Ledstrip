@@ -12,6 +12,26 @@
 #endif
 
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPBeatPulseEffect
+namespace {
+constexpr float kLGPBeatPulseEffectSpeedScale = 1.0f;
+constexpr float kLGPBeatPulseEffectOutputGain = 1.0f;
+constexpr float kLGPBeatPulseEffectCentreBias = 1.0f;
+
+float gLGPBeatPulseEffectSpeedScale = kLGPBeatPulseEffectSpeedScale;
+float gLGPBeatPulseEffectOutputGain = kLGPBeatPulseEffectOutputGain;
+float gLGPBeatPulseEffectCentreBias = kLGPBeatPulseEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPBeatPulseEffectParameters[] = {
+    {"lgpbeat_pulse_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPBeatPulseEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpbeat_pulse_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPBeatPulseEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpbeat_pulse_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPBeatPulseEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPBeatPulseEffect
 
 namespace lightwaveos {
 namespace effects {
@@ -28,6 +48,12 @@ static inline const float* selectChroma12(const audio::ControlBusFrame& cb) {
 
 bool LGPBeatPulseEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPBeatPulseEffect
+    gLGPBeatPulseEffectSpeedScale = kLGPBeatPulseEffectSpeedScale;
+    gLGPBeatPulseEffectOutputGain = kLGPBeatPulseEffectOutputGain;
+    gLGPBeatPulseEffectCentreBias = kLGPBeatPulseEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPBeatPulseEffect
+
     // Primary kick/beat pulse
     m_pulsePosition = 0.0f;
     m_pulseIntensity = 0.0f;
@@ -289,6 +315,43 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
         SET_CENTER_PAIR(ctx, dist, finalColor);
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPBeatPulseEffect
+uint8_t LGPBeatPulseEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPBeatPulseEffectParameters) / sizeof(kLGPBeatPulseEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPBeatPulseEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPBeatPulseEffectParameters[index];
+}
+
+bool LGPBeatPulseEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpbeat_pulse_effect_speed_scale") == 0) {
+        gLGPBeatPulseEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpbeat_pulse_effect_output_gain") == 0) {
+        gLGPBeatPulseEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpbeat_pulse_effect_centre_bias") == 0) {
+        gLGPBeatPulseEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPBeatPulseEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpbeat_pulse_effect_speed_scale") == 0) return gLGPBeatPulseEffectSpeedScale;
+    if (strcmp(name, "lgpbeat_pulse_effect_output_gain") == 0) return gLGPBeatPulseEffectOutputGain;
+    if (strcmp(name, "lgpbeat_pulse_effect_centre_bias") == 0) return gLGPBeatPulseEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPBeatPulseEffect
 
 void LGPBeatPulseEffect::cleanup() {}
 

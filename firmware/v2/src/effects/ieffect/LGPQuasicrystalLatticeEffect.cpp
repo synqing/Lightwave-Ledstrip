@@ -15,6 +15,26 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPQuasicrystalLatticeEffect
+namespace {
+constexpr float kLGPQuasicrystalLatticeEffectSpeedScale = 1.0f;
+constexpr float kLGPQuasicrystalLatticeEffectOutputGain = 1.0f;
+constexpr float kLGPQuasicrystalLatticeEffectCentreBias = 1.0f;
+
+float gLGPQuasicrystalLatticeEffectSpeedScale = kLGPQuasicrystalLatticeEffectSpeedScale;
+float gLGPQuasicrystalLatticeEffectOutputGain = kLGPQuasicrystalLatticeEffectOutputGain;
+float gLGPQuasicrystalLatticeEffectCentreBias = kLGPQuasicrystalLatticeEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPQuasicrystalLatticeEffectParameters[] = {
+    {"lgpquasicrystal_lattice_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPQuasicrystalLatticeEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpquasicrystal_lattice_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPQuasicrystalLatticeEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpquasicrystal_lattice_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPQuasicrystalLatticeEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPQuasicrystalLatticeEffect
 
 namespace lightwaveos {
 namespace effects {
@@ -31,6 +51,12 @@ LGPQuasicrystalLatticeEffect::LGPQuasicrystalLatticeEffect()
 
 bool LGPQuasicrystalLatticeEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPQuasicrystalLatticeEffect
+    gLGPQuasicrystalLatticeEffectSpeedScale = kLGPQuasicrystalLatticeEffectSpeedScale;
+    gLGPQuasicrystalLatticeEffectOutputGain = kLGPQuasicrystalLatticeEffectOutputGain;
+    gLGPQuasicrystalLatticeEffectCentreBias = kLGPQuasicrystalLatticeEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPQuasicrystalLatticeEffect
+
     m_timeA = 0.0f;
     m_timeB = 0.0f;
     m_chromaAngle = 0.0f;
@@ -210,6 +236,43 @@ void LGPQuasicrystalLatticeEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPQuasicrystalLatticeEffect
+uint8_t LGPQuasicrystalLatticeEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPQuasicrystalLatticeEffectParameters) / sizeof(kLGPQuasicrystalLatticeEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPQuasicrystalLatticeEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPQuasicrystalLatticeEffectParameters[index];
+}
+
+bool LGPQuasicrystalLatticeEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpquasicrystal_lattice_effect_speed_scale") == 0) {
+        gLGPQuasicrystalLatticeEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpquasicrystal_lattice_effect_output_gain") == 0) {
+        gLGPQuasicrystalLatticeEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpquasicrystal_lattice_effect_centre_bias") == 0) {
+        gLGPQuasicrystalLatticeEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPQuasicrystalLatticeEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpquasicrystal_lattice_effect_speed_scale") == 0) return gLGPQuasicrystalLatticeEffectSpeedScale;
+    if (strcmp(name, "lgpquasicrystal_lattice_effect_output_gain") == 0) return gLGPQuasicrystalLatticeEffectOutputGain;
+    if (strcmp(name, "lgpquasicrystal_lattice_effect_centre_bias") == 0) return gLGPQuasicrystalLatticeEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPQuasicrystalLatticeEffect
 
 void LGPQuasicrystalLatticeEffect::cleanup() {
     // No resources to free

@@ -14,6 +14,26 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPFresnelCausticSweepEffect
+namespace {
+constexpr float kLGPFresnelCausticSweepEffectSpeedScale = 1.0f;
+constexpr float kLGPFresnelCausticSweepEffectOutputGain = 1.0f;
+constexpr float kLGPFresnelCausticSweepEffectCentreBias = 1.0f;
+
+float gLGPFresnelCausticSweepEffectSpeedScale = kLGPFresnelCausticSweepEffectSpeedScale;
+float gLGPFresnelCausticSweepEffectOutputGain = kLGPFresnelCausticSweepEffectOutputGain;
+float gLGPFresnelCausticSweepEffectCentreBias = kLGPFresnelCausticSweepEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPFresnelCausticSweepEffectParameters[] = {
+    {"lgpfresnel_caustic_sweep_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPFresnelCausticSweepEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpfresnel_caustic_sweep_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPFresnelCausticSweepEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpfresnel_caustic_sweep_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPFresnelCausticSweepEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPFresnelCausticSweepEffect
 
 namespace lightwaveos {
 namespace effects {
@@ -72,6 +92,12 @@ LGPFresnelCausticSweepEffect::LGPFresnelCausticSweepEffect()
 
 bool LGPFresnelCausticSweepEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPFresnelCausticSweepEffect
+    gLGPFresnelCausticSweepEffectSpeedScale = kLGPFresnelCausticSweepEffectSpeedScale;
+    gLGPFresnelCausticSweepEffectOutputGain = kLGPFresnelCausticSweepEffectOutputGain;
+    gLGPFresnelCausticSweepEffectCentreBias = kLGPFresnelCausticSweepEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPFresnelCausticSweepEffect
+
     m_focusPhase = 0.0f;
     m_ringPhase = 0.0f;
     m_chromaAngle = 0.0f;
@@ -248,6 +274,43 @@ void LGPFresnelCausticSweepEffect::render(plugins::EffectContext& ctx) {
 // ---------------------------------------------------------------------------
 // cleanup
 // ---------------------------------------------------------------------------
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPFresnelCausticSweepEffect
+uint8_t LGPFresnelCausticSweepEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPFresnelCausticSweepEffectParameters) / sizeof(kLGPFresnelCausticSweepEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPFresnelCausticSweepEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPFresnelCausticSweepEffectParameters[index];
+}
+
+bool LGPFresnelCausticSweepEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpfresnel_caustic_sweep_effect_speed_scale") == 0) {
+        gLGPFresnelCausticSweepEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpfresnel_caustic_sweep_effect_output_gain") == 0) {
+        gLGPFresnelCausticSweepEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpfresnel_caustic_sweep_effect_centre_bias") == 0) {
+        gLGPFresnelCausticSweepEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPFresnelCausticSweepEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpfresnel_caustic_sweep_effect_speed_scale") == 0) return gLGPFresnelCausticSweepEffectSpeedScale;
+    if (strcmp(name, "lgpfresnel_caustic_sweep_effect_output_gain") == 0) return gLGPFresnelCausticSweepEffectOutputGain;
+    if (strcmp(name, "lgpfresnel_caustic_sweep_effect_centre_bias") == 0) return gLGPFresnelCausticSweepEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPFresnelCausticSweepEffect
 
 void LGPFresnelCausticSweepEffect::cleanup() {
     // No resources to free

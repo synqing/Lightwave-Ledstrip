@@ -14,6 +14,26 @@
 #include "../../config/features.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPPerlinCausticsEffect
+namespace {
+constexpr float kLGPPerlinCausticsEffectSpeedScale = 1.0f;
+constexpr float kLGPPerlinCausticsEffectOutputGain = 1.0f;
+constexpr float kLGPPerlinCausticsEffectCentreBias = 1.0f;
+
+float gLGPPerlinCausticsEffectSpeedScale = kLGPPerlinCausticsEffectSpeedScale;
+float gLGPPerlinCausticsEffectOutputGain = kLGPPerlinCausticsEffectOutputGain;
+float gLGPPerlinCausticsEffectCentreBias = kLGPPerlinCausticsEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPPerlinCausticsEffectParameters[] = {
+    {"lgpperlin_caustics_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPPerlinCausticsEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpperlin_caustics_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPPerlinCausticsEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpperlin_caustics_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPPerlinCausticsEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPPerlinCausticsEffect
 
 namespace lightwaveos {
 namespace effects {
@@ -38,6 +58,12 @@ LGPPerlinCausticsEffect::LGPPerlinCausticsEffect()
 
 bool LGPPerlinCausticsEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPPerlinCausticsEffect
+    gLGPPerlinCausticsEffectSpeedScale = kLGPPerlinCausticsEffectSpeedScale;
+    gLGPPerlinCausticsEffectOutputGain = kLGPPerlinCausticsEffectOutputGain;
+    gLGPPerlinCausticsEffectCentreBias = kLGPPerlinCausticsEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPPerlinCausticsEffect
+
     m_noiseX = random16();
     m_noiseY = random16();
     m_noiseZ = random16();
@@ -173,6 +199,43 @@ void LGPPerlinCausticsEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPPerlinCausticsEffect
+uint8_t LGPPerlinCausticsEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPPerlinCausticsEffectParameters) / sizeof(kLGPPerlinCausticsEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPPerlinCausticsEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPPerlinCausticsEffectParameters[index];
+}
+
+bool LGPPerlinCausticsEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpperlin_caustics_effect_speed_scale") == 0) {
+        gLGPPerlinCausticsEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpperlin_caustics_effect_output_gain") == 0) {
+        gLGPPerlinCausticsEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpperlin_caustics_effect_centre_bias") == 0) {
+        gLGPPerlinCausticsEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPPerlinCausticsEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpperlin_caustics_effect_speed_scale") == 0) return gLGPPerlinCausticsEffectSpeedScale;
+    if (strcmp(name, "lgpperlin_caustics_effect_output_gain") == 0) return gLGPPerlinCausticsEffectOutputGain;
+    if (strcmp(name, "lgpperlin_caustics_effect_centre_bias") == 0) return gLGPPerlinCausticsEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPPerlinCausticsEffect
 
 void LGPPerlinCausticsEffect::cleanup() {
     // No resources to free

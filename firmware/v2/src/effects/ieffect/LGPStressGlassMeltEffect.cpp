@@ -7,6 +7,26 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPStressGlassMeltEffect
+namespace {
+constexpr float kLGPStressGlassMeltEffectSpeedScale = 1.0f;
+constexpr float kLGPStressGlassMeltEffectOutputGain = 1.0f;
+constexpr float kLGPStressGlassMeltEffectCentreBias = 1.0f;
+
+float gLGPStressGlassMeltEffectSpeedScale = kLGPStressGlassMeltEffectSpeedScale;
+float gLGPStressGlassMeltEffectOutputGain = kLGPStressGlassMeltEffectOutputGain;
+float gLGPStressGlassMeltEffectCentreBias = kLGPStressGlassMeltEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPStressGlassMeltEffectParameters[] = {
+    {"lgpstress_glass_melt_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPStressGlassMeltEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpstress_glass_melt_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPStressGlassMeltEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpstress_glass_melt_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPStressGlassMeltEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPStressGlassMeltEffect
 
 namespace lightwaveos {
 namespace effects {
@@ -23,6 +43,12 @@ LGPStressGlassMeltEffect::LGPStressGlassMeltEffect()
 
 bool LGPStressGlassMeltEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPStressGlassMeltEffect
+    gLGPStressGlassMeltEffectSpeedScale = kLGPStressGlassMeltEffectSpeedScale;
+    gLGPStressGlassMeltEffectOutputGain = kLGPStressGlassMeltEffectOutputGain;
+    gLGPStressGlassMeltEffectCentreBias = kLGPStressGlassMeltEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPStressGlassMeltEffect
+
     m_analyser = 0.0f;
     return true;
 }
@@ -69,6 +95,43 @@ void LGPStressGlassMeltEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPStressGlassMeltEffect
+uint8_t LGPStressGlassMeltEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPStressGlassMeltEffectParameters) / sizeof(kLGPStressGlassMeltEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPStressGlassMeltEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPStressGlassMeltEffectParameters[index];
+}
+
+bool LGPStressGlassMeltEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpstress_glass_melt_effect_speed_scale") == 0) {
+        gLGPStressGlassMeltEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpstress_glass_melt_effect_output_gain") == 0) {
+        gLGPStressGlassMeltEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpstress_glass_melt_effect_centre_bias") == 0) {
+        gLGPStressGlassMeltEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPStressGlassMeltEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpstress_glass_melt_effect_speed_scale") == 0) return gLGPStressGlassMeltEffectSpeedScale;
+    if (strcmp(name, "lgpstress_glass_melt_effect_output_gain") == 0) return gLGPStressGlassMeltEffectOutputGain;
+    if (strcmp(name, "lgpstress_glass_melt_effect_centre_bias") == 0) return gLGPStressGlassMeltEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPStressGlassMeltEffect
 
 void LGPStressGlassMeltEffect::cleanup() {
     // No resources to free

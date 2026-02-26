@@ -28,6 +28,25 @@
 #include <cstring>
 #include <cstdio>
 
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPSpectrumDetailEnhancedEffect
+namespace {
+constexpr float kLGPSpectrumDetailEnhancedEffectSpeedScale = 1.0f;
+constexpr float kLGPSpectrumDetailEnhancedEffectOutputGain = 1.0f;
+constexpr float kLGPSpectrumDetailEnhancedEffectCentreBias = 1.0f;
+
+float gLGPSpectrumDetailEnhancedEffectSpeedScale = kLGPSpectrumDetailEnhancedEffectSpeedScale;
+float gLGPSpectrumDetailEnhancedEffectOutputGain = kLGPSpectrumDetailEnhancedEffectOutputGain;
+float gLGPSpectrumDetailEnhancedEffectCentreBias = kLGPSpectrumDetailEnhancedEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPSpectrumDetailEnhancedEffectParameters[] = {
+    {"lgpspectrum_detail_enhanced_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPSpectrumDetailEnhancedEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpspectrum_detail_enhanced_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPSpectrumDetailEnhancedEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpspectrum_detail_enhanced_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPSpectrumDetailEnhancedEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPSpectrumDetailEnhancedEffect
+
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
@@ -42,9 +61,14 @@ constexpr float MIN_THRESHOLD = 0.002f;  // Very low threshold for sensitivity
 constexpr uint8_t SPECTRUM_PRE_SCALE = 40;   // ~4 bins × 40 + trail ~= 220, stays in range
 constexpr uint8_t TRAIL_PRE_SCALE = 25;      // Trail overlap; spectrum + trail must not wash to white
 constexpr uint8_t STRIP2_PRE_SCALE = 60;     // Strip 2 at 66% of Strip 1 (supporting role)
-
-bool LGPSpectrumDetailEnhancedEffect::init(plugins::EffectContext& ctx) {
+bool  LGPSpectrumDetailEnhancedEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPSpectrumDetailEnhancedEffect
+    gLGPSpectrumDetailEnhancedEffectSpeedScale = kLGPSpectrumDetailEnhancedEffectSpeedScale;
+    gLGPSpectrumDetailEnhancedEffectOutputGain = kLGPSpectrumDetailEnhancedEffectOutputGain;
+    gLGPSpectrumDetailEnhancedEffectCentreBias = kLGPSpectrumDetailEnhancedEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPSpectrumDetailEnhancedEffect
+
 
     // =========================================================================
     // PRE-COMPUTE FRAME-RATE INDEPENDENT ALPHA VALUES
@@ -563,6 +587,43 @@ CRGB LGPSpectrumDetailEnhancedEffect::frequencyToColor(uint8_t bin, const plugin
     uint8_t paletteIdx = (uint8_t)(prog * 255.0f) + ctx.gHue;
     return ctx.palette.getColor(paletteIdx, 255);  // Full brightness - scaled later in render
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPSpectrumDetailEnhancedEffect
+uint8_t LGPSpectrumDetailEnhancedEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPSpectrumDetailEnhancedEffectParameters) / sizeof(kLGPSpectrumDetailEnhancedEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPSpectrumDetailEnhancedEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPSpectrumDetailEnhancedEffectParameters[index];
+}
+
+bool LGPSpectrumDetailEnhancedEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpspectrum_detail_enhanced_effect_speed_scale") == 0) {
+        gLGPSpectrumDetailEnhancedEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpspectrum_detail_enhanced_effect_output_gain") == 0) {
+        gLGPSpectrumDetailEnhancedEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpspectrum_detail_enhanced_effect_centre_bias") == 0) {
+        gLGPSpectrumDetailEnhancedEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPSpectrumDetailEnhancedEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpspectrum_detail_enhanced_effect_speed_scale") == 0) return gLGPSpectrumDetailEnhancedEffectSpeedScale;
+    if (strcmp(name, "lgpspectrum_detail_enhanced_effect_output_gain") == 0) return gLGPSpectrumDetailEnhancedEffectOutputGain;
+    if (strcmp(name, "lgpspectrum_detail_enhanced_effect_centre_bias") == 0) return gLGPSpectrumDetailEnhancedEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPSpectrumDetailEnhancedEffect
 
 void LGPSpectrumDetailEnhancedEffect::cleanup() {
 #ifndef NATIVE_BUILD

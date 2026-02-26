@@ -17,10 +17,25 @@ namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
+namespace {
+constexpr float kNutrientPhaseRate = 0.05f;
+constexpr float kBranchProbability = 0.005f;
+constexpr float kNutrientFreq = 10.0f;
+
+const plugins::EffectParameter kParameters[] = {
+    {"nutrient_phase_rate", "Nutrient Phase Rate", 0.01f, 0.20f, kNutrientPhaseRate, plugins::EffectParameterType::FLOAT, 0.005f, "timing", "x", false},
+    {"branch_probability", "Branch Probability", 0.001f, 0.03f, kBranchProbability, plugins::EffectParameterType::FLOAT, 0.001f, "wave", "", false},
+    {"nutrient_freq", "Nutrient Frequency", 2.0f, 20.0f, kNutrientFreq, plugins::EffectParameterType::FLOAT, 0.2f, "wave", "", false},
+};
+}
+
 LGPMycelialNetworkEffect::LGPMycelialNetworkEffect()
     : m_ps(nullptr)
     , m_nutrientPhase(0.0f)
     , m_initialized(false)
+    , m_nutrientPhaseRate(kNutrientPhaseRate)
+    , m_branchProbability(kBranchProbability)
+    , m_nutrientFreq(kNutrientFreq)
 {
 }
 
@@ -28,6 +43,9 @@ bool LGPMycelialNetworkEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
     m_nutrientPhase = 0.0f;
     m_initialized = false;
+    m_nutrientPhaseRate = kNutrientPhaseRate;
+    m_branchProbability = kBranchProbability;
+    m_nutrientFreq = kNutrientFreq;
 #ifndef NATIVE_BUILD
     if (!m_ps) {
         m_ps = static_cast<MycelialPsram*>(
@@ -45,7 +63,7 @@ void LGPMycelialNetworkEffect::render(plugins::EffectContext& ctx) {
     float speed = ctx.speed / 50.0f;
     float intensity = ctx.brightness / 255.0f;
 
-    m_nutrientPhase += speed * 0.05f;
+    m_nutrientPhase += speed * m_nutrientPhaseRate;
 
     if (!m_initialized) {
         for (int t = 0; t < 16; t++) {
@@ -69,7 +87,7 @@ void LGPMycelialNetworkEffect::render(plugins::EffectContext& ctx) {
     // Get dt for frame-rate independent decay
     float dt = ctx.getSafeDeltaSeconds();
 
-    const float branchProbability = 0.005f;
+    const float branchProbability = m_branchProbability;
     const uint8_t numTips = 8;
 
     // Update tips
@@ -121,7 +139,7 @@ void LGPMycelialNetworkEffect::render(plugins::EffectContext& ctx) {
         }
 
         const float flowDirection = 0.5f;
-        float nutrientWave = sinf(normalizedDist * 10.0f - m_nutrientPhase * flowDirection * 3.0f);
+        float nutrientWave = sinf(normalizedDist * m_nutrientFreq - m_nutrientPhase * flowDirection * 3.0f);
         float nutrientBrightness = m_ps->networkDensity[i] * (0.5f + nutrientWave * 0.5f);
 
         uint8_t hue1 = (uint8_t)(140 + (uint8_t)(ctx.gHue * 0.3f));
@@ -165,6 +183,40 @@ const plugins::EffectMetadata& LGPMycelialNetworkEffect::getMetadata() const {
         1
     };
     return meta;
+}
+
+uint8_t LGPMycelialNetworkEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kParameters) / sizeof(kParameters[0]));
+}
+
+const plugins::EffectParameter* LGPMycelialNetworkEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kParameters[index];
+}
+
+bool LGPMycelialNetworkEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "nutrient_phase_rate") == 0) {
+        m_nutrientPhaseRate = constrain(value, 0.01f, 0.20f);
+        return true;
+    }
+    if (strcmp(name, "branch_probability") == 0) {
+        m_branchProbability = constrain(value, 0.001f, 0.03f);
+        return true;
+    }
+    if (strcmp(name, "nutrient_freq") == 0) {
+        m_nutrientFreq = constrain(value, 2.0f, 20.0f);
+        return true;
+    }
+    return false;
+}
+
+float LGPMycelialNetworkEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "nutrient_phase_rate") == 0) return m_nutrientPhaseRate;
+    if (strcmp(name, "branch_probability") == 0) return m_branchProbability;
+    if (strcmp(name, "nutrient_freq") == 0) return m_nutrientFreq;
+    return 0.0f;
 }
 
 } // namespace ieffect

@@ -9,13 +9,38 @@
 #include "../../validation/EffectValidationMacros.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPWaveCollisionEnhancedEffect
+namespace {
+constexpr float kLGPWaveCollisionEnhancedEffectSpeedScale = 1.0f;
+constexpr float kLGPWaveCollisionEnhancedEffectOutputGain = 1.0f;
+constexpr float kLGPWaveCollisionEnhancedEffectCentreBias = 1.0f;
+
+float gLGPWaveCollisionEnhancedEffectSpeedScale = kLGPWaveCollisionEnhancedEffectSpeedScale;
+float gLGPWaveCollisionEnhancedEffectOutputGain = kLGPWaveCollisionEnhancedEffectOutputGain;
+float gLGPWaveCollisionEnhancedEffectCentreBias = kLGPWaveCollisionEnhancedEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPWaveCollisionEnhancedEffectParameters[] = {
+    {"lgpwave_collision_enhanced_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPWaveCollisionEnhancedEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpwave_collision_enhanced_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPWaveCollisionEnhancedEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpwave_collision_enhanced_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPWaveCollisionEnhancedEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPWaveCollisionEnhancedEffect
 
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
-
-bool LGPWaveCollisionEnhancedEffect::init(plugins::EffectContext& ctx) {
+bool  LGPWaveCollisionEnhancedEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPWaveCollisionEnhancedEffect
+    gLGPWaveCollisionEnhancedEffectSpeedScale = kLGPWaveCollisionEnhancedEffectSpeedScale;
+    gLGPWaveCollisionEnhancedEffectOutputGain = kLGPWaveCollisionEnhancedEffectOutputGain;
+    gLGPWaveCollisionEnhancedEffectCentreBias = kLGPWaveCollisionEnhancedEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPWaveCollisionEnhancedEffect
+
     // CRITICAL FIX: Single phase for traveling waves
     m_phase = 0.0f;
     m_lastHopSeq = 0;
@@ -280,6 +305,43 @@ void LGPWaveCollisionEnhancedEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPWaveCollisionEnhancedEffect
+uint8_t LGPWaveCollisionEnhancedEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPWaveCollisionEnhancedEffectParameters) / sizeof(kLGPWaveCollisionEnhancedEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPWaveCollisionEnhancedEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPWaveCollisionEnhancedEffectParameters[index];
+}
+
+bool LGPWaveCollisionEnhancedEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpwave_collision_enhanced_effect_speed_scale") == 0) {
+        gLGPWaveCollisionEnhancedEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpwave_collision_enhanced_effect_output_gain") == 0) {
+        gLGPWaveCollisionEnhancedEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpwave_collision_enhanced_effect_centre_bias") == 0) {
+        gLGPWaveCollisionEnhancedEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPWaveCollisionEnhancedEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpwave_collision_enhanced_effect_speed_scale") == 0) return gLGPWaveCollisionEnhancedEffectSpeedScale;
+    if (strcmp(name, "lgpwave_collision_enhanced_effect_output_gain") == 0) return gLGPWaveCollisionEnhancedEffectOutputGain;
+    if (strcmp(name, "lgpwave_collision_enhanced_effect_centre_bias") == 0) return gLGPWaveCollisionEnhancedEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPWaveCollisionEnhancedEffect
 
 void LGPWaveCollisionEnhancedEffect::cleanup() {
     // No resources to free

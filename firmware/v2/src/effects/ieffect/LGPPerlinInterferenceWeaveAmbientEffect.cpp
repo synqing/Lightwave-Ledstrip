@@ -12,6 +12,26 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPPerlinInterferenceWeaveAmbientEffect
+namespace {
+constexpr float kLGPPerlinInterferenceWeaveAmbientEffectSpeedScale = 1.0f;
+constexpr float kLGPPerlinInterferenceWeaveAmbientEffectOutputGain = 1.0f;
+constexpr float kLGPPerlinInterferenceWeaveAmbientEffectCentreBias = 1.0f;
+
+float gLGPPerlinInterferenceWeaveAmbientEffectSpeedScale = kLGPPerlinInterferenceWeaveAmbientEffectSpeedScale;
+float gLGPPerlinInterferenceWeaveAmbientEffectOutputGain = kLGPPerlinInterferenceWeaveAmbientEffectOutputGain;
+float gLGPPerlinInterferenceWeaveAmbientEffectCentreBias = kLGPPerlinInterferenceWeaveAmbientEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPPerlinInterferenceWeaveAmbientEffectParameters[] = {
+    {"lgpperlin_interference_weave_ambient_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPPerlinInterferenceWeaveAmbientEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpperlin_interference_weave_ambient_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPPerlinInterferenceWeaveAmbientEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpperlin_interference_weave_ambient_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPPerlinInterferenceWeaveAmbientEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPPerlinInterferenceWeaveAmbientEffect
 
 namespace lightwaveos {
 namespace effects {
@@ -27,6 +47,12 @@ LGPPerlinInterferenceWeaveAmbientEffect::LGPPerlinInterferenceWeaveAmbientEffect
 
 bool LGPPerlinInterferenceWeaveAmbientEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPPerlinInterferenceWeaveAmbientEffect
+    gLGPPerlinInterferenceWeaveAmbientEffectSpeedScale = kLGPPerlinInterferenceWeaveAmbientEffectSpeedScale;
+    gLGPPerlinInterferenceWeaveAmbientEffectOutputGain = kLGPPerlinInterferenceWeaveAmbientEffectOutputGain;
+    gLGPPerlinInterferenceWeaveAmbientEffectCentreBias = kLGPPerlinInterferenceWeaveAmbientEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPPerlinInterferenceWeaveAmbientEffect
+
     m_noiseX = random16();
     m_noiseY = random16();
     m_phaseOffset = 32.0f;
@@ -107,6 +133,43 @@ void LGPPerlinInterferenceWeaveAmbientEffect::render(plugins::EffectContext& ctx
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPPerlinInterferenceWeaveAmbientEffect
+uint8_t LGPPerlinInterferenceWeaveAmbientEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPPerlinInterferenceWeaveAmbientEffectParameters) / sizeof(kLGPPerlinInterferenceWeaveAmbientEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPPerlinInterferenceWeaveAmbientEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPPerlinInterferenceWeaveAmbientEffectParameters[index];
+}
+
+bool LGPPerlinInterferenceWeaveAmbientEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpperlin_interference_weave_ambient_effect_speed_scale") == 0) {
+        gLGPPerlinInterferenceWeaveAmbientEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpperlin_interference_weave_ambient_effect_output_gain") == 0) {
+        gLGPPerlinInterferenceWeaveAmbientEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpperlin_interference_weave_ambient_effect_centre_bias") == 0) {
+        gLGPPerlinInterferenceWeaveAmbientEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPPerlinInterferenceWeaveAmbientEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpperlin_interference_weave_ambient_effect_speed_scale") == 0) return gLGPPerlinInterferenceWeaveAmbientEffectSpeedScale;
+    if (strcmp(name, "lgpperlin_interference_weave_ambient_effect_output_gain") == 0) return gLGPPerlinInterferenceWeaveAmbientEffectOutputGain;
+    if (strcmp(name, "lgpperlin_interference_weave_ambient_effect_centre_bias") == 0) return gLGPPerlinInterferenceWeaveAmbientEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPPerlinInterferenceWeaveAmbientEffect
 
 void LGPPerlinInterferenceWeaveAmbientEffect::cleanup() {
     // No resources to free

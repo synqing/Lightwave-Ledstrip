@@ -11,6 +11,26 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPPerlinCausticsAmbientEffect
+namespace {
+constexpr float kLGPPerlinCausticsAmbientEffectSpeedScale = 1.0f;
+constexpr float kLGPPerlinCausticsAmbientEffectOutputGain = 1.0f;
+constexpr float kLGPPerlinCausticsAmbientEffectCentreBias = 1.0f;
+
+float gLGPPerlinCausticsAmbientEffectSpeedScale = kLGPPerlinCausticsAmbientEffectSpeedScale;
+float gLGPPerlinCausticsAmbientEffectOutputGain = kLGPPerlinCausticsAmbientEffectOutputGain;
+float gLGPPerlinCausticsAmbientEffectCentreBias = kLGPPerlinCausticsAmbientEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPPerlinCausticsAmbientEffectParameters[] = {
+    {"lgpperlin_caustics_ambient_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPPerlinCausticsAmbientEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpperlin_caustics_ambient_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPPerlinCausticsAmbientEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpperlin_caustics_ambient_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPPerlinCausticsAmbientEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPPerlinCausticsAmbientEffect
 
 namespace lightwaveos {
 namespace effects {
@@ -26,6 +46,12 @@ LGPPerlinCausticsAmbientEffect::LGPPerlinCausticsAmbientEffect()
 
 bool LGPPerlinCausticsAmbientEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPPerlinCausticsAmbientEffect
+    gLGPPerlinCausticsAmbientEffectSpeedScale = kLGPPerlinCausticsAmbientEffectSpeedScale;
+    gLGPPerlinCausticsAmbientEffectOutputGain = kLGPPerlinCausticsAmbientEffectOutputGain;
+    gLGPPerlinCausticsAmbientEffectCentreBias = kLGPPerlinCausticsAmbientEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPPerlinCausticsAmbientEffect
+
     m_noiseX = random16();
     m_noiseY = random16();
     m_noiseZ = random16();
@@ -102,6 +128,43 @@ void LGPPerlinCausticsAmbientEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPPerlinCausticsAmbientEffect
+uint8_t LGPPerlinCausticsAmbientEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPPerlinCausticsAmbientEffectParameters) / sizeof(kLGPPerlinCausticsAmbientEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPPerlinCausticsAmbientEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPPerlinCausticsAmbientEffectParameters[index];
+}
+
+bool LGPPerlinCausticsAmbientEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpperlin_caustics_ambient_effect_speed_scale") == 0) {
+        gLGPPerlinCausticsAmbientEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpperlin_caustics_ambient_effect_output_gain") == 0) {
+        gLGPPerlinCausticsAmbientEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpperlin_caustics_ambient_effect_centre_bias") == 0) {
+        gLGPPerlinCausticsAmbientEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPPerlinCausticsAmbientEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpperlin_caustics_ambient_effect_speed_scale") == 0) return gLGPPerlinCausticsAmbientEffectSpeedScale;
+    if (strcmp(name, "lgpperlin_caustics_ambient_effect_output_gain") == 0) return gLGPPerlinCausticsAmbientEffectOutputGain;
+    if (strcmp(name, "lgpperlin_caustics_ambient_effect_centre_bias") == 0) return gLGPPerlinCausticsAmbientEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPPerlinCausticsAmbientEffect
 
 void LGPPerlinCausticsAmbientEffect::cleanup() {
     // No resources to free

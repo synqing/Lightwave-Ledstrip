@@ -26,11 +26,30 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPPhotonicCrystalEnhancedEffect
+namespace {
+constexpr float kLGPPhotonicCrystalEnhancedEffectSpeedScale = 1.0f;
+constexpr float kLGPPhotonicCrystalEnhancedEffectOutputGain = 1.0f;
+constexpr float kLGPPhotonicCrystalEnhancedEffectCentreBias = 1.0f;
+
+float gLGPPhotonicCrystalEnhancedEffectSpeedScale = kLGPPhotonicCrystalEnhancedEffectSpeedScale;
+float gLGPPhotonicCrystalEnhancedEffectOutputGain = kLGPPhotonicCrystalEnhancedEffectOutputGain;
+float gLGPPhotonicCrystalEnhancedEffectCentreBias = kLGPPhotonicCrystalEnhancedEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPPhotonicCrystalEnhancedEffectParameters[] = {
+    {"lgpphotonic_crystal_enhanced_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPPhotonicCrystalEnhancedEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpphotonic_crystal_enhanced_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPPhotonicCrystalEnhancedEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpphotonic_crystal_enhanced_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPPhotonicCrystalEnhancedEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPPhotonicCrystalEnhancedEffect
 
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
-
 LGPPhotonicCrystalEnhancedEffect::LGPPhotonicCrystalEnhancedEffect()
     : m_phase(0.0f)
 {
@@ -38,6 +57,12 @@ LGPPhotonicCrystalEnhancedEffect::LGPPhotonicCrystalEnhancedEffect()
 
 bool LGPPhotonicCrystalEnhancedEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPPhotonicCrystalEnhancedEffect
+    gLGPPhotonicCrystalEnhancedEffectSpeedScale = kLGPPhotonicCrystalEnhancedEffectSpeedScale;
+    gLGPPhotonicCrystalEnhancedEffectOutputGain = kLGPPhotonicCrystalEnhancedEffectOutputGain;
+    gLGPPhotonicCrystalEnhancedEffectCentreBias = kLGPPhotonicCrystalEnhancedEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPPhotonicCrystalEnhancedEffect
+
 
     // Initialize phase
     m_phase = 0.0f;
@@ -299,6 +324,43 @@ void LGPPhotonicCrystalEnhancedEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPPhotonicCrystalEnhancedEffect
+uint8_t LGPPhotonicCrystalEnhancedEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPPhotonicCrystalEnhancedEffectParameters) / sizeof(kLGPPhotonicCrystalEnhancedEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPPhotonicCrystalEnhancedEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPPhotonicCrystalEnhancedEffectParameters[index];
+}
+
+bool LGPPhotonicCrystalEnhancedEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpphotonic_crystal_enhanced_effect_speed_scale") == 0) {
+        gLGPPhotonicCrystalEnhancedEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpphotonic_crystal_enhanced_effect_output_gain") == 0) {
+        gLGPPhotonicCrystalEnhancedEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpphotonic_crystal_enhanced_effect_centre_bias") == 0) {
+        gLGPPhotonicCrystalEnhancedEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPPhotonicCrystalEnhancedEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpphotonic_crystal_enhanced_effect_speed_scale") == 0) return gLGPPhotonicCrystalEnhancedEffectSpeedScale;
+    if (strcmp(name, "lgpphotonic_crystal_enhanced_effect_output_gain") == 0) return gLGPPhotonicCrystalEnhancedEffectOutputGain;
+    if (strcmp(name, "lgpphotonic_crystal_enhanced_effect_centre_bias") == 0) return gLGPPhotonicCrystalEnhancedEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPPhotonicCrystalEnhancedEffect
 
 void LGPPhotonicCrystalEnhancedEffect::cleanup() {
     // No resources to free

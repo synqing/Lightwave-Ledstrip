@@ -23,6 +23,25 @@
 #include <cmath>
 #include <cstring>
 
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPChordGlowEffect
+namespace {
+constexpr float kLGPChordGlowEffectSpeedScale = 1.0f;
+constexpr float kLGPChordGlowEffectOutputGain = 1.0f;
+constexpr float kLGPChordGlowEffectCentreBias = 1.0f;
+
+float gLGPChordGlowEffectSpeedScale = kLGPChordGlowEffectSpeedScale;
+float gLGPChordGlowEffectOutputGain = kLGPChordGlowEffectOutputGain;
+float gLGPChordGlowEffectCentreBias = kLGPChordGlowEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPChordGlowEffectParameters[] = {
+    {"lgpchord_glow_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPChordGlowEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpchord_glow_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPChordGlowEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpchord_glow_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPChordGlowEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPChordGlowEffect
+
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
@@ -55,6 +74,12 @@ static constexpr ChordMood CHORD_MOODS[] = {
 
 bool LGPChordGlowEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPChordGlowEffect
+    gLGPChordGlowEffectSpeedScale = kLGPChordGlowEffectSpeedScale;
+    gLGPChordGlowEffectOutputGain = kLGPChordGlowEffectOutputGain;
+    gLGPChordGlowEffectCentreBias = kLGPChordGlowEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPChordGlowEffect
+
 
     // Reset chord state
     m_currentRootNote = 0;
@@ -317,6 +342,43 @@ CRGB LGPChordGlowEffect::blendColors(CRGB c1, CRGB c2, float blend) const {
         clampU8((int)(c1.b * inv + c2.b * blend))
     );
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPChordGlowEffect
+uint8_t LGPChordGlowEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPChordGlowEffectParameters) / sizeof(kLGPChordGlowEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPChordGlowEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPChordGlowEffectParameters[index];
+}
+
+bool LGPChordGlowEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpchord_glow_effect_speed_scale") == 0) {
+        gLGPChordGlowEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpchord_glow_effect_output_gain") == 0) {
+        gLGPChordGlowEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpchord_glow_effect_centre_bias") == 0) {
+        gLGPChordGlowEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPChordGlowEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpchord_glow_effect_speed_scale") == 0) return gLGPChordGlowEffectSpeedScale;
+    if (strcmp(name, "lgpchord_glow_effect_output_gain") == 0) return gLGPChordGlowEffectOutputGain;
+    if (strcmp(name, "lgpchord_glow_effect_centre_bias") == 0) return gLGPChordGlowEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPChordGlowEffect
 
 void LGPChordGlowEffect::cleanup() {
     // No resources to free

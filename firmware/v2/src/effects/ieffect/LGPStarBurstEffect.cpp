@@ -18,10 +18,23 @@
 #include "../../config/features.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
 
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
+
+namespace {
+constexpr float kPhaseRate = 240.0f;
+constexpr float kFreqBase = 0.12f;
+constexpr float kBurstDecay = 0.88f;
+
+const plugins::EffectParameter kParameters[] = {
+    {"phase_rate", "Phase Rate", 120.0f, 320.0f, kPhaseRate, plugins::EffectParameterType::FLOAT, 1.0f, "timing", "", false},
+    {"freq_base", "Frequency", 0.05f, 0.30f, kFreqBase, plugins::EffectParameterType::FLOAT, 0.005f, "wave", "", false},
+    {"burst_decay", "Burst Decay", 0.70f, 0.99f, kBurstDecay, plugins::EffectParameterType::FLOAT, 0.005f, "blend", "", false},
+};
+}
 
 LGPStarBurstEffect::LGPStarBurstEffect()
     : m_phase(0.0f)
@@ -42,6 +55,9 @@ bool LGPStarBurstEffect::init(plugins::EffectContext& ctx) {
     // Initialize smoothing
     m_heavyBassSmooth = 0.0f;
     m_heavyBassSmoothInitialized = false;
+    m_phaseRate = kPhaseRate;
+    m_freqBase = kFreqBase;
+    m_burstDecay = kBurstDecay;
 
     return true;
 }
@@ -109,11 +125,11 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
     if (smoothedSpeed < 0.3f) smoothedSpeed = 0.3f;  // Prevent stalling
 
     // Phase advancement (PROVEN PATTERN - 240.0f multiplier)
-    m_phase += speedNorm * 240.0f * smoothedSpeed * dt;
+    m_phase += speedNorm * m_phaseRate * smoothedSpeed * dt;
     if (m_phase > 628.3f) m_phase -= 628.3f;  // Wrap at 100*2π
 
     // Simple burst decay (like Wave Collision)
-    m_burst = effects::chroma::dtDecay(m_burst, 0.88f, rawDt);
+    m_burst = effects::chroma::dtDecay(m_burst, m_burstDecay, rawDt);
 
     // =========================================================================
     // Rendering
@@ -146,8 +162,7 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
         // ANTI-ALIASED frequency: Reduced from 0.25f to 0.12f to prevent wagon-wheel
         // At 0.25f with 240.0 phase multiplier: ~3.84 rad/frame @ 60fps = jumps >1 wavelength
         // At 0.12f: ~1.84 rad/frame = stays under half-wavelength (Nyquist-safe)
-        const float freqBase = 0.12f;  // ~52 LED wavelength, smoother motion
-        float star = sinf(distFromCenter * freqBase - m_phase);
+        float star = sinf(distFromCenter * m_freqBase - m_phase);
 
         // Center-focused burst flash (like Wave Collision's collision flash)
         float burstFlash = m_burst * expf(-distFromCenter * 0.12f);
@@ -182,6 +197,40 @@ const plugins::EffectMetadata& LGPStarBurstEffect::getMetadata() const {
         1
     };
     return meta;
+}
+
+uint8_t LGPStarBurstEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kParameters) / sizeof(kParameters[0]));
+}
+
+const plugins::EffectParameter* LGPStarBurstEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kParameters[index];
+}
+
+bool LGPStarBurstEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "phase_rate") == 0) {
+        m_phaseRate = constrain(value, 120.0f, 320.0f);
+        return true;
+    }
+    if (strcmp(name, "freq_base") == 0) {
+        m_freqBase = constrain(value, 0.05f, 0.30f);
+        return true;
+    }
+    if (strcmp(name, "burst_decay") == 0) {
+        m_burstDecay = constrain(value, 0.70f, 0.99f);
+        return true;
+    }
+    return false;
+}
+
+float LGPStarBurstEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "phase_rate") == 0) return m_phaseRate;
+    if (strcmp(name, "freq_base") == 0) return m_freqBase;
+    if (strcmp(name, "burst_decay") == 0) return m_burstDecay;
+    return 0.0f;
 }
 
 } // namespace ieffect

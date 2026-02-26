@@ -12,6 +12,25 @@
 
 #ifndef NATIVE_BUILD
 #include <esp_heap_caps.h>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPPerlinBackendEmotiscopeFullEffect
+namespace {
+constexpr float kLGPPerlinBackendEmotiscopeFullEffectSpeedScale = 1.0f;
+constexpr float kLGPPerlinBackendEmotiscopeFullEffectOutputGain = 1.0f;
+constexpr float kLGPPerlinBackendEmotiscopeFullEffectCentreBias = 1.0f;
+
+float gLGPPerlinBackendEmotiscopeFullEffectSpeedScale = kLGPPerlinBackendEmotiscopeFullEffectSpeedScale;
+float gLGPPerlinBackendEmotiscopeFullEffectOutputGain = kLGPPerlinBackendEmotiscopeFullEffectOutputGain;
+float gLGPPerlinBackendEmotiscopeFullEffectCentreBias = kLGPPerlinBackendEmotiscopeFullEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPPerlinBackendEmotiscopeFullEffectParameters[] = {
+    {"lgpperlin_backend_emotiscope_full_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPPerlinBackendEmotiscopeFullEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpperlin_backend_emotiscope_full_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPPerlinBackendEmotiscopeFullEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpperlin_backend_emotiscope_full_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPPerlinBackendEmotiscopeFullEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPPerlinBackendEmotiscopeFullEffect
 #endif
 
 namespace lightwaveos {
@@ -129,6 +148,12 @@ LGPPerlinBackendEmotiscopeFullEffect::LGPPerlinBackendEmotiscopeFullEffect()
 
 bool LGPPerlinBackendEmotiscopeFullEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPPerlinBackendEmotiscopeFullEffect
+    gLGPPerlinBackendEmotiscopeFullEffectSpeedScale = kLGPPerlinBackendEmotiscopeFullEffectSpeedScale;
+    gLGPPerlinBackendEmotiscopeFullEffectOutputGain = kLGPPerlinBackendEmotiscopeFullEffectOutputGain;
+    gLGPPerlinBackendEmotiscopeFullEffectCentreBias = kLGPPerlinBackendEmotiscopeFullEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPPerlinBackendEmotiscopeFullEffect
+
     m_seed = (unsigned int)((uint32_t)random16() << 16 | random16());
     m_positionX = (float)(random16() % 1000);
     m_positionY = (float)(random16() % 1000);
@@ -232,6 +257,43 @@ void LGPPerlinBackendEmotiscopeFullEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPPerlinBackendEmotiscopeFullEffect
+uint8_t LGPPerlinBackendEmotiscopeFullEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPPerlinBackendEmotiscopeFullEffectParameters) / sizeof(kLGPPerlinBackendEmotiscopeFullEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPPerlinBackendEmotiscopeFullEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPPerlinBackendEmotiscopeFullEffectParameters[index];
+}
+
+bool LGPPerlinBackendEmotiscopeFullEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpperlin_backend_emotiscope_full_effect_speed_scale") == 0) {
+        gLGPPerlinBackendEmotiscopeFullEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpperlin_backend_emotiscope_full_effect_output_gain") == 0) {
+        gLGPPerlinBackendEmotiscopeFullEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpperlin_backend_emotiscope_full_effect_centre_bias") == 0) {
+        gLGPPerlinBackendEmotiscopeFullEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPPerlinBackendEmotiscopeFullEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpperlin_backend_emotiscope_full_effect_speed_scale") == 0) return gLGPPerlinBackendEmotiscopeFullEffectSpeedScale;
+    if (strcmp(name, "lgpperlin_backend_emotiscope_full_effect_output_gain") == 0) return gLGPPerlinBackendEmotiscopeFullEffectOutputGain;
+    if (strcmp(name, "lgpperlin_backend_emotiscope_full_effect_centre_bias") == 0) return gLGPPerlinBackendEmotiscopeFullEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPPerlinBackendEmotiscopeFullEffect
 
 void LGPPerlinBackendEmotiscopeFullEffect::cleanup() {
 #ifndef NATIVE_BUILD

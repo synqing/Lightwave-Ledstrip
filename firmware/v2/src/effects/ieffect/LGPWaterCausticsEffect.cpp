@@ -7,6 +7,26 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPWaterCausticsEffect
+namespace {
+constexpr float kLGPWaterCausticsEffectSpeedScale = 1.0f;
+constexpr float kLGPWaterCausticsEffectOutputGain = 1.0f;
+constexpr float kLGPWaterCausticsEffectCentreBias = 1.0f;
+
+float gLGPWaterCausticsEffectSpeedScale = kLGPWaterCausticsEffectSpeedScale;
+float gLGPWaterCausticsEffectOutputGain = kLGPWaterCausticsEffectOutputGain;
+float gLGPWaterCausticsEffectCentreBias = kLGPWaterCausticsEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPWaterCausticsEffectParameters[] = {
+    {"lgpwater_caustics_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPWaterCausticsEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpwater_caustics_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPWaterCausticsEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpwater_caustics_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPWaterCausticsEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPWaterCausticsEffect
 
 namespace lightwaveos {
 namespace effects {
@@ -24,6 +44,12 @@ LGPWaterCausticsEffect::LGPWaterCausticsEffect()
 
 bool LGPWaterCausticsEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPWaterCausticsEffect
+    gLGPWaterCausticsEffectSpeedScale = kLGPWaterCausticsEffectSpeedScale;
+    gLGPWaterCausticsEffectOutputGain = kLGPWaterCausticsEffectOutputGain;
+    gLGPWaterCausticsEffectCentreBias = kLGPWaterCausticsEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPWaterCausticsEffect
+
     m_t1 = 0.0f;
     m_t2 = 0.0f;
     return true;
@@ -77,6 +103,43 @@ void LGPWaterCausticsEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPWaterCausticsEffect
+uint8_t LGPWaterCausticsEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPWaterCausticsEffectParameters) / sizeof(kLGPWaterCausticsEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPWaterCausticsEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPWaterCausticsEffectParameters[index];
+}
+
+bool LGPWaterCausticsEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpwater_caustics_effect_speed_scale") == 0) {
+        gLGPWaterCausticsEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpwater_caustics_effect_output_gain") == 0) {
+        gLGPWaterCausticsEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpwater_caustics_effect_centre_bias") == 0) {
+        gLGPWaterCausticsEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPWaterCausticsEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpwater_caustics_effect_speed_scale") == 0) return gLGPWaterCausticsEffectSpeedScale;
+    if (strcmp(name, "lgpwater_caustics_effect_output_gain") == 0) return gLGPWaterCausticsEffectOutputGain;
+    if (strcmp(name, "lgpwater_caustics_effect_centre_bias") == 0) return gLGPWaterCausticsEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPWaterCausticsEffect
 
 void LGPWaterCausticsEffect::cleanup() {
     // No resources to free

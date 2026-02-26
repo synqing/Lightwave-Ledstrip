@@ -7,6 +7,26 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPParallaxDepthEffect
+namespace {
+constexpr float kLGPParallaxDepthEffectSpeedScale = 1.0f;
+constexpr float kLGPParallaxDepthEffectOutputGain = 1.0f;
+constexpr float kLGPParallaxDepthEffectCentreBias = 1.0f;
+
+float gLGPParallaxDepthEffectSpeedScale = kLGPParallaxDepthEffectSpeedScale;
+float gLGPParallaxDepthEffectOutputGain = kLGPParallaxDepthEffectOutputGain;
+float gLGPParallaxDepthEffectCentreBias = kLGPParallaxDepthEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPParallaxDepthEffectParameters[] = {
+    {"lgpparallax_depth_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPParallaxDepthEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpparallax_depth_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPParallaxDepthEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpparallax_depth_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPParallaxDepthEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPParallaxDepthEffect
 
 namespace lightwaveos {
 namespace effects {
@@ -23,6 +43,12 @@ LGPParallaxDepthEffect::LGPParallaxDepthEffect()
 
 bool LGPParallaxDepthEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPParallaxDepthEffect
+    gLGPParallaxDepthEffectSpeedScale = kLGPParallaxDepthEffectSpeedScale;
+    gLGPParallaxDepthEffectOutputGain = kLGPParallaxDepthEffectOutputGain;
+    gLGPParallaxDepthEffectCentreBias = kLGPParallaxDepthEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPParallaxDepthEffect
+
     m_time = 0.0f;
     return true;
 }
@@ -65,6 +91,43 @@ void LGPParallaxDepthEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPParallaxDepthEffect
+uint8_t LGPParallaxDepthEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPParallaxDepthEffectParameters) / sizeof(kLGPParallaxDepthEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPParallaxDepthEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPParallaxDepthEffectParameters[index];
+}
+
+bool LGPParallaxDepthEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpparallax_depth_effect_speed_scale") == 0) {
+        gLGPParallaxDepthEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpparallax_depth_effect_output_gain") == 0) {
+        gLGPParallaxDepthEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpparallax_depth_effect_centre_bias") == 0) {
+        gLGPParallaxDepthEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPParallaxDepthEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpparallax_depth_effect_speed_scale") == 0) return gLGPParallaxDepthEffectSpeedScale;
+    if (strcmp(name, "lgpparallax_depth_effect_output_gain") == 0) return gLGPParallaxDepthEffectOutputGain;
+    if (strcmp(name, "lgpparallax_depth_effect_centre_bias") == 0) return gLGPParallaxDepthEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPParallaxDepthEffect
 
 void LGPParallaxDepthEffect::cleanup() {
     // No resources to free

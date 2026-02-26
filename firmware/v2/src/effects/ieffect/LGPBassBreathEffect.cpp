@@ -14,6 +14,25 @@
 #include <cmath>
 #include <cstring>
 
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPBassBreathEffect
+namespace {
+constexpr float kLGPBassBreathEffectSpeedScale = 1.0f;
+constexpr float kLGPBassBreathEffectOutputGain = 1.0f;
+constexpr float kLGPBassBreathEffectCentreBias = 1.0f;
+
+float gLGPBassBreathEffectSpeedScale = kLGPBassBreathEffectSpeedScale;
+float gLGPBassBreathEffectOutputGain = kLGPBassBreathEffectOutputGain;
+float gLGPBassBreathEffectCentreBias = kLGPBassBreathEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPBassBreathEffectParameters[] = {
+    {"lgpbass_breath_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPBassBreathEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpbass_breath_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPBassBreathEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpbass_breath_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPBassBreathEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPBassBreathEffect
+
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
@@ -35,6 +54,12 @@ static inline float clamp01(float v) {
 
 bool LGPBassBreathEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPBassBreathEffect
+    gLGPBassBreathEffectSpeedScale = kLGPBassBreathEffectSpeedScale;
+    gLGPBassBreathEffectOutputGain = kLGPBassBreathEffectOutputGain;
+    gLGPBassBreathEffectCentreBias = kLGPBassBreathEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPBassBreathEffect
+
     m_breathLevel = 0.0f;
     m_chromaAngle = 0.0f;
     m_lastHopSeq = 0;
@@ -146,6 +171,43 @@ void LGPBassBreathEffect::render(plugins::EffectContext& ctx) {
         SET_CENTER_PAIR(ctx, dist, color);
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPBassBreathEffect
+uint8_t LGPBassBreathEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPBassBreathEffectParameters) / sizeof(kLGPBassBreathEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPBassBreathEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPBassBreathEffectParameters[index];
+}
+
+bool LGPBassBreathEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpbass_breath_effect_speed_scale") == 0) {
+        gLGPBassBreathEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpbass_breath_effect_output_gain") == 0) {
+        gLGPBassBreathEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpbass_breath_effect_centre_bias") == 0) {
+        gLGPBassBreathEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPBassBreathEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpbass_breath_effect_speed_scale") == 0) return gLGPBassBreathEffectSpeedScale;
+    if (strcmp(name, "lgpbass_breath_effect_output_gain") == 0) return gLGPBassBreathEffectOutputGain;
+    if (strcmp(name, "lgpbass_breath_effect_centre_bias") == 0) return gLGPBassBreathEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPBassBreathEffect
 
 void LGPBassBreathEffect::cleanup() {}
 

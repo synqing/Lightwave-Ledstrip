@@ -33,6 +33,11 @@ public:
     void cleanup() override;
     const plugins::EffectMetadata& getMetadata() const override;
 
+
+    uint8_t getParameterCount() const override;
+    const plugins::EffectParameter* getParameter(uint8_t index) const override;
+    bool setParameter(const char* name, float value) override;
+    float getParameter(const char* name) const override;
 private:
     float m_phase1;
     float m_phase2;

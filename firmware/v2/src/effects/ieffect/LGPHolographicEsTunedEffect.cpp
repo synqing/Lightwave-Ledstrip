@@ -12,6 +12,26 @@
 #endif
 
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPHolographicEsTunedEffect
+namespace {
+constexpr float kLGPHolographicEsTunedEffectSpeedScale = 1.0f;
+constexpr float kLGPHolographicEsTunedEffectOutputGain = 1.0f;
+constexpr float kLGPHolographicEsTunedEffectCentreBias = 1.0f;
+
+float gLGPHolographicEsTunedEffectSpeedScale = kLGPHolographicEsTunedEffectSpeedScale;
+float gLGPHolographicEsTunedEffectOutputGain = kLGPHolographicEsTunedEffectOutputGain;
+float gLGPHolographicEsTunedEffectCentreBias = kLGPHolographicEsTunedEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPHolographicEsTunedEffectParameters[] = {
+    {"lgpholographic_es_tuned_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPHolographicEsTunedEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpholographic_es_tuned_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPHolographicEsTunedEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpholographic_es_tuned_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPHolographicEsTunedEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPHolographicEsTunedEffect
 
 namespace lightwaveos::effects::ieffect {
 
@@ -48,6 +68,12 @@ static inline float meanAdaptiveBins(const plugins::AudioContext& a, uint8_t sta
 
 bool LGPHolographicEsTunedEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPHolographicEsTunedEffect
+    gLGPHolographicEsTunedEffectSpeedScale = kLGPHolographicEsTunedEffectSpeedScale;
+    gLGPHolographicEsTunedEffectOutputGain = kLGPHolographicEsTunedEffectOutputGain;
+    gLGPHolographicEsTunedEffectCentreBias = kLGPHolographicEsTunedEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPHolographicEsTunedEffect
+
     m_phase1 = 0.0f;
     m_phase2 = 0.0f;
     m_phase3 = 0.0f;
@@ -228,6 +254,43 @@ void LGPHolographicEsTunedEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPHolographicEsTunedEffect
+uint8_t LGPHolographicEsTunedEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPHolographicEsTunedEffectParameters) / sizeof(kLGPHolographicEsTunedEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPHolographicEsTunedEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPHolographicEsTunedEffectParameters[index];
+}
+
+bool LGPHolographicEsTunedEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpholographic_es_tuned_effect_speed_scale") == 0) {
+        gLGPHolographicEsTunedEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpholographic_es_tuned_effect_output_gain") == 0) {
+        gLGPHolographicEsTunedEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpholographic_es_tuned_effect_centre_bias") == 0) {
+        gLGPHolographicEsTunedEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPHolographicEsTunedEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpholographic_es_tuned_effect_speed_scale") == 0) return gLGPHolographicEsTunedEffectSpeedScale;
+    if (strcmp(name, "lgpholographic_es_tuned_effect_output_gain") == 0) return gLGPHolographicEsTunedEffectOutputGain;
+    if (strcmp(name, "lgpholographic_es_tuned_effect_centre_bias") == 0) return gLGPHolographicEsTunedEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPHolographicEsTunedEffect
 
 void LGPHolographicEsTunedEffect::cleanup() {}
 

@@ -7,10 +7,23 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
 
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
+
+namespace {
+constexpr float kChirpBase = 0.002f;
+constexpr float kChirpScale = 0.008f;
+constexpr float kMergeDecay = 0.92f;
+
+const plugins::EffectParameter kParameters[] = {
+    {"chirp_base", "Chirp Base", 0.0005f, 0.01f, kChirpBase, plugins::EffectParameterType::FLOAT, 0.0005f, "timing", "x", false},
+    {"chirp_scale", "Chirp Scale", 0.001f, 0.02f, kChirpScale, plugins::EffectParameterType::FLOAT, 0.0005f, "timing", "x", false},
+    {"merge_decay", "Merge Decay", 0.80f, 0.98f, kMergeDecay, plugins::EffectParameterType::FLOAT, 0.005f, "blend", "", false},
+};
+}
 
 LGPGravitationalWaveChirpEffect::LGPGravitationalWaveChirpEffect()
     : m_inspiralProgress(0.0f)
@@ -20,6 +33,9 @@ LGPGravitationalWaveChirpEffect::LGPGravitationalWaveChirpEffect()
     , m_mergeFlash(0.0f)
     , m_phase1(0.0f)
     , m_phase2(0.0f)
+    , m_chirpBase(kChirpBase)
+    , m_chirpScale(kChirpScale)
+    , m_mergeDecay(kMergeDecay)
 {
 }
 
@@ -32,6 +48,9 @@ bool LGPGravitationalWaveChirpEffect::init(plugins::EffectContext& ctx) {
     m_mergeFlash = 0.0f;
     m_phase1 = 0.0f;
     m_phase2 = 0.0f;
+    m_chirpBase = kChirpBase;
+    m_chirpScale = kChirpScale;
+    m_mergeDecay = kMergeDecay;
     return true;
 }
 
@@ -41,7 +60,7 @@ void LGPGravitationalWaveChirpEffect::render(plugins::EffectContext& ctx) {
     float speed = ctx.speed / 50.0f;
     float intensity = ctx.brightness / 255.0f;
 
-    float chirpRate = 0.002f + speed * 0.008f;
+    float chirpRate = m_chirpBase + speed * m_chirpScale;
     const float massRatio = 1.0f;
 
     if (!m_merging && !m_ringdown) {
@@ -52,7 +71,7 @@ void LGPGravitationalWaveChirpEffect::render(plugins::EffectContext& ctx) {
             m_mergeFlash = 1.0f;
         }
     } else if (m_merging) {
-        m_mergeFlash *= powf(0.92f, dt * 60.0f);  // dt-corrected decay
+        m_mergeFlash *= powf(m_mergeDecay, dt * 60.0f);
         if (m_mergeFlash < 0.05f) {
             m_merging = false;
             m_ringdown = true;
@@ -142,6 +161,40 @@ const plugins::EffectMetadata& LGPGravitationalWaveChirpEffect::getMetadata() co
         1
     };
     return meta;
+}
+
+uint8_t LGPGravitationalWaveChirpEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kParameters) / sizeof(kParameters[0]));
+}
+
+const plugins::EffectParameter* LGPGravitationalWaveChirpEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kParameters[index];
+}
+
+bool LGPGravitationalWaveChirpEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "chirp_base") == 0) {
+        m_chirpBase = constrain(value, 0.0005f, 0.01f);
+        return true;
+    }
+    if (strcmp(name, "chirp_scale") == 0) {
+        m_chirpScale = constrain(value, 0.001f, 0.02f);
+        return true;
+    }
+    if (strcmp(name, "merge_decay") == 0) {
+        m_mergeDecay = constrain(value, 0.80f, 0.98f);
+        return true;
+    }
+    return false;
+}
+
+float LGPGravitationalWaveChirpEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "chirp_base") == 0) return m_chirpBase;
+    if (strcmp(name, "chirp_scale") == 0) return m_chirpScale;
+    if (strcmp(name, "merge_decay") == 0) return m_mergeDecay;
+    return 0.0f;
 }
 
 } // namespace ieffect

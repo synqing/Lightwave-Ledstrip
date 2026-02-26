@@ -19,12 +19,36 @@
 #include <cmath>
 #include <cstring>
 
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPSpectrumDetailEffect
+namespace {
+constexpr float kLGPSpectrumDetailEffectSpeedScale = 1.0f;
+constexpr float kLGPSpectrumDetailEffectOutputGain = 1.0f;
+constexpr float kLGPSpectrumDetailEffectCentreBias = 1.0f;
+
+float gLGPSpectrumDetailEffectSpeedScale = kLGPSpectrumDetailEffectSpeedScale;
+float gLGPSpectrumDetailEffectOutputGain = kLGPSpectrumDetailEffectOutputGain;
+float gLGPSpectrumDetailEffectCentreBias = kLGPSpectrumDetailEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPSpectrumDetailEffectParameters[] = {
+    {"lgpspectrum_detail_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPSpectrumDetailEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpspectrum_detail_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPSpectrumDetailEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpspectrum_detail_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPSpectrumDetailEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPSpectrumDetailEffect
+
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
-
-bool LGPSpectrumDetailEffect::init(plugins::EffectContext& ctx) {
+bool  LGPSpectrumDetailEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPSpectrumDetailEffect
+    gLGPSpectrumDetailEffectSpeedScale = kLGPSpectrumDetailEffectSpeedScale;
+    gLGPSpectrumDetailEffectOutputGain = kLGPSpectrumDetailEffectOutputGain;
+    gLGPSpectrumDetailEffectCentreBias = kLGPSpectrumDetailEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPSpectrumDetailEffect
+
 #ifndef NATIVE_BUILD
     if (!m_ps) {
         m_ps = static_cast<SpectrumDetailPsram*>(
@@ -258,6 +282,43 @@ CRGB LGPSpectrumDetailEffect::frequencyToColor(uint8_t bin, const plugins::Effec
         return ctx.palette.getColor(ctx.gHue, 255);
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPSpectrumDetailEffect
+uint8_t LGPSpectrumDetailEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPSpectrumDetailEffectParameters) / sizeof(kLGPSpectrumDetailEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPSpectrumDetailEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPSpectrumDetailEffectParameters[index];
+}
+
+bool LGPSpectrumDetailEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpspectrum_detail_effect_speed_scale") == 0) {
+        gLGPSpectrumDetailEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpspectrum_detail_effect_output_gain") == 0) {
+        gLGPSpectrumDetailEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpspectrum_detail_effect_centre_bias") == 0) {
+        gLGPSpectrumDetailEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPSpectrumDetailEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpspectrum_detail_effect_speed_scale") == 0) return gLGPSpectrumDetailEffectSpeedScale;
+    if (strcmp(name, "lgpspectrum_detail_effect_output_gain") == 0) return gLGPSpectrumDetailEffectOutputGain;
+    if (strcmp(name, "lgpspectrum_detail_effect_centre_bias") == 0) return gLGPSpectrumDetailEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPSpectrumDetailEffect
 
 void LGPSpectrumDetailEffect::cleanup() {
 #ifndef NATIVE_BUILD

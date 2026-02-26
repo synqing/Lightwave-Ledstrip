@@ -10,11 +10,30 @@
 #include "../../validation/EffectValidationMacros.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPInterferenceScannerEnhancedEffect
+namespace {
+constexpr float kLGPInterferenceScannerEnhancedEffectSpeedScale = 1.0f;
+constexpr float kLGPInterferenceScannerEnhancedEffectOutputGain = 1.0f;
+constexpr float kLGPInterferenceScannerEnhancedEffectCentreBias = 1.0f;
+
+float gLGPInterferenceScannerEnhancedEffectSpeedScale = kLGPInterferenceScannerEnhancedEffectSpeedScale;
+float gLGPInterferenceScannerEnhancedEffectOutputGain = kLGPInterferenceScannerEnhancedEffectOutputGain;
+float gLGPInterferenceScannerEnhancedEffectCentreBias = kLGPInterferenceScannerEnhancedEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPInterferenceScannerEnhancedEffectParameters[] = {
+    {"lgpinterference_scanner_enhanced_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPInterferenceScannerEnhancedEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpinterference_scanner_enhanced_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPInterferenceScannerEnhancedEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpinterference_scanner_enhanced_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPInterferenceScannerEnhancedEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPInterferenceScannerEnhancedEffect
 
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
-
 LGPInterferenceScannerEnhancedEffect::LGPInterferenceScannerEnhancedEffect()
     : m_scanPhase(0.0f)
 {
@@ -22,6 +41,13 @@ LGPInterferenceScannerEnhancedEffect::LGPInterferenceScannerEnhancedEffect()
 
 bool LGPInterferenceScannerEnhancedEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPInterferenceScannerEnhancedEffect
+    gLGPInterferenceScannerEnhancedEffectSpeedScale = kLGPInterferenceScannerEnhancedEffectSpeedScale;
+    gLGPInterferenceScannerEnhancedEffectOutputGain = kLGPInterferenceScannerEnhancedEffectOutputGain;
+    gLGPInterferenceScannerEnhancedEffectCentreBias = kLGPInterferenceScannerEnhancedEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPInterferenceScannerEnhancedEffect
+
+
     m_scanPhase = 0.0f;
     m_lastHopSeq = 0;
     m_chromaEnergySum = 0.0f;
@@ -245,6 +271,43 @@ void LGPInterferenceScannerEnhancedEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPInterferenceScannerEnhancedEffect
+uint8_t LGPInterferenceScannerEnhancedEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPInterferenceScannerEnhancedEffectParameters) / sizeof(kLGPInterferenceScannerEnhancedEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPInterferenceScannerEnhancedEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPInterferenceScannerEnhancedEffectParameters[index];
+}
+
+bool LGPInterferenceScannerEnhancedEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpinterference_scanner_enhanced_effect_speed_scale") == 0) {
+        gLGPInterferenceScannerEnhancedEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpinterference_scanner_enhanced_effect_output_gain") == 0) {
+        gLGPInterferenceScannerEnhancedEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpinterference_scanner_enhanced_effect_centre_bias") == 0) {
+        gLGPInterferenceScannerEnhancedEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPInterferenceScannerEnhancedEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpinterference_scanner_enhanced_effect_speed_scale") == 0) return gLGPInterferenceScannerEnhancedEffectSpeedScale;
+    if (strcmp(name, "lgpinterference_scanner_enhanced_effect_output_gain") == 0) return gLGPInterferenceScannerEnhancedEffectOutputGain;
+    if (strcmp(name, "lgpinterference_scanner_enhanced_effect_centre_bias") == 0) return gLGPInterferenceScannerEnhancedEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPInterferenceScannerEnhancedEffect
 
 void LGPInterferenceScannerEnhancedEffect::cleanup() {
     // No resources to free

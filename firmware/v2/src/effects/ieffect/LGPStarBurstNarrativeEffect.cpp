@@ -10,6 +10,26 @@
 
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPStarBurstNarrativeEffect
+namespace {
+constexpr float kLGPStarBurstNarrativeEffectSpeedScale = 1.0f;
+constexpr float kLGPStarBurstNarrativeEffectOutputGain = 1.0f;
+constexpr float kLGPStarBurstNarrativeEffectCentreBias = 1.0f;
+
+float gLGPStarBurstNarrativeEffectSpeedScale = kLGPStarBurstNarrativeEffectSpeedScale;
+float gLGPStarBurstNarrativeEffectOutputGain = kLGPStarBurstNarrativeEffectOutputGain;
+float gLGPStarBurstNarrativeEffectCentreBias = kLGPStarBurstNarrativeEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPStarBurstNarrativeEffectParameters[] = {
+    {"lgpstar_burst_narrative_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPStarBurstNarrativeEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpstar_burst_narrative_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPStarBurstNarrativeEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpstar_burst_narrative_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPStarBurstNarrativeEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPStarBurstNarrativeEffect
 
 namespace lightwaveos {
 namespace effects {
@@ -52,6 +72,12 @@ LGPStarBurstNarrativeEffect::LGPStarBurstNarrativeEffect()
 
 bool LGPStarBurstNarrativeEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPStarBurstNarrativeEffect
+    gLGPStarBurstNarrativeEffectSpeedScale = kLGPStarBurstNarrativeEffectSpeedScale;
+    gLGPStarBurstNarrativeEffectOutputGain = kLGPStarBurstNarrativeEffectOutputGain;
+    gLGPStarBurstNarrativeEffectCentreBias = kLGPStarBurstNarrativeEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPStarBurstNarrativeEffect
+
 
     m_storyPhase = StoryPhase::REST;
     m_storyTimeS = 0.0f;
@@ -374,6 +400,43 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPStarBurstNarrativeEffect
+uint8_t LGPStarBurstNarrativeEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPStarBurstNarrativeEffectParameters) / sizeof(kLGPStarBurstNarrativeEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPStarBurstNarrativeEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPStarBurstNarrativeEffectParameters[index];
+}
+
+bool LGPStarBurstNarrativeEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpstar_burst_narrative_effect_speed_scale") == 0) {
+        gLGPStarBurstNarrativeEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpstar_burst_narrative_effect_output_gain") == 0) {
+        gLGPStarBurstNarrativeEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpstar_burst_narrative_effect_centre_bias") == 0) {
+        gLGPStarBurstNarrativeEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPStarBurstNarrativeEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpstar_burst_narrative_effect_speed_scale") == 0) return gLGPStarBurstNarrativeEffectSpeedScale;
+    if (strcmp(name, "lgpstar_burst_narrative_effect_output_gain") == 0) return gLGPStarBurstNarrativeEffectOutputGain;
+    if (strcmp(name, "lgpstar_burst_narrative_effect_centre_bias") == 0) return gLGPStarBurstNarrativeEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPStarBurstNarrativeEffect
 
 void LGPStarBurstNarrativeEffect::cleanup() {
     // No resources to free.

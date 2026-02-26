@@ -12,6 +12,26 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPPerlinVeilAmbientEffect
+namespace {
+constexpr float kLGPPerlinVeilAmbientEffectSpeedScale = 1.0f;
+constexpr float kLGPPerlinVeilAmbientEffectOutputGain = 1.0f;
+constexpr float kLGPPerlinVeilAmbientEffectCentreBias = 1.0f;
+
+float gLGPPerlinVeilAmbientEffectSpeedScale = kLGPPerlinVeilAmbientEffectSpeedScale;
+float gLGPPerlinVeilAmbientEffectOutputGain = kLGPPerlinVeilAmbientEffectOutputGain;
+float gLGPPerlinVeilAmbientEffectCentreBias = kLGPPerlinVeilAmbientEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPPerlinVeilAmbientEffectParameters[] = {
+    {"lgpperlin_veil_ambient_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPPerlinVeilAmbientEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpperlin_veil_ambient_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPPerlinVeilAmbientEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpperlin_veil_ambient_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPPerlinVeilAmbientEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPPerlinVeilAmbientEffect
 
 namespace lightwaveos {
 namespace effects {
@@ -27,6 +47,12 @@ LGPPerlinVeilAmbientEffect::LGPPerlinVeilAmbientEffect()
 
 bool LGPPerlinVeilAmbientEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPPerlinVeilAmbientEffect
+    gLGPPerlinVeilAmbientEffectSpeedScale = kLGPPerlinVeilAmbientEffectSpeedScale;
+    gLGPPerlinVeilAmbientEffectOutputGain = kLGPPerlinVeilAmbientEffectOutputGain;
+    gLGPPerlinVeilAmbientEffectCentreBias = kLGPPerlinVeilAmbientEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPPerlinVeilAmbientEffect
+
     m_noiseX = random16();
     m_noiseY = random16();
     m_noiseZ = random16();
@@ -111,6 +137,43 @@ void LGPPerlinVeilAmbientEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPPerlinVeilAmbientEffect
+uint8_t LGPPerlinVeilAmbientEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPPerlinVeilAmbientEffectParameters) / sizeof(kLGPPerlinVeilAmbientEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPPerlinVeilAmbientEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPPerlinVeilAmbientEffectParameters[index];
+}
+
+bool LGPPerlinVeilAmbientEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpperlin_veil_ambient_effect_speed_scale") == 0) {
+        gLGPPerlinVeilAmbientEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpperlin_veil_ambient_effect_output_gain") == 0) {
+        gLGPPerlinVeilAmbientEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpperlin_veil_ambient_effect_centre_bias") == 0) {
+        gLGPPerlinVeilAmbientEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPPerlinVeilAmbientEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpperlin_veil_ambient_effect_speed_scale") == 0) return gLGPPerlinVeilAmbientEffectSpeedScale;
+    if (strcmp(name, "lgpperlin_veil_ambient_effect_output_gain") == 0) return gLGPPerlinVeilAmbientEffectOutputGain;
+    if (strcmp(name, "lgpperlin_veil_ambient_effect_centre_bias") == 0) return gLGPPerlinVeilAmbientEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPPerlinVeilAmbientEffect
 
 void LGPPerlinVeilAmbientEffect::cleanup() {
     // No resources to free

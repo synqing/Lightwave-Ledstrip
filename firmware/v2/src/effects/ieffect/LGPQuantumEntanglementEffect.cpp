@@ -7,6 +7,7 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
 
 #ifndef PI
 #define PI 3.14159265358979323846f
@@ -16,6 +17,18 @@ namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
+namespace {
+constexpr float kMeasurementRate = 0.01f;
+constexpr float kCollapseRate = 0.02f;
+constexpr float kHoldDuration = 1.5f;
+
+const plugins::EffectParameter kParameters[] = {
+    {"measurement_rate", "Measurement Rate", 0.002f, 0.04f, kMeasurementRate, plugins::EffectParameterType::FLOAT, 0.001f, "timing", "x", false},
+    {"collapse_rate", "Collapse Rate", 0.005f, 0.08f, kCollapseRate, plugins::EffectParameterType::FLOAT, 0.001f, "timing", "x", false},
+    {"hold_duration", "Hold Duration", 0.3f, 4.0f, kHoldDuration, plugins::EffectParameterType::FLOAT, 0.05f, "timing", "s", false},
+};
+}
+
 LGPQuantumEntanglementEffect::LGPQuantumEntanglementEffect()
     : m_collapseRadius(0.0f)
     , m_collapsing(false)
@@ -24,6 +37,9 @@ LGPQuantumEntanglementEffect::LGPQuantumEntanglementEffect()
     , m_collapsedHue(0)
     , m_quantumPhase(0.0f)
     , m_measurementTimer(0.0f)
+    , m_measurementRate(kMeasurementRate)
+    , m_collapseRate(kCollapseRate)
+    , m_holdDuration(kHoldDuration)
 {
 }
 
@@ -36,6 +52,9 @@ bool LGPQuantumEntanglementEffect::init(plugins::EffectContext& ctx) {
     m_collapsedHue = 0;
     m_quantumPhase = 0.0f;
     m_measurementTimer = 0.0f;
+    m_measurementRate = kMeasurementRate;
+    m_collapseRate = kCollapseRate;
+    m_holdDuration = kHoldDuration;
     return true;
 }
 
@@ -49,7 +68,7 @@ void LGPQuantumEntanglementEffect::render(plugins::EffectContext& ctx) {
     m_quantumPhase += speed * 0.1f;
 
     if (!m_collapsing && !m_collapsed) {
-        m_measurementTimer += speed * 0.01f;
+        m_measurementTimer += speed * m_measurementRate;
 
         if (m_measurementTimer > 1.0f + random8() / 255.0f) {
             m_collapsing = true;
@@ -58,7 +77,7 @@ void LGPQuantumEntanglementEffect::render(plugins::EffectContext& ctx) {
             m_measurementTimer = 0.0f;
         }
     } else if (m_collapsing) {
-        m_collapseRadius += speed * 0.02f;
+        m_collapseRadius += speed * m_collapseRate;
 
         if (m_collapseRadius >= 1.0f) {
             m_collapsing = false;
@@ -68,7 +87,7 @@ void LGPQuantumEntanglementEffect::render(plugins::EffectContext& ctx) {
     } else if (m_collapsed) {
         m_holdTime += speed * 0.02f;
 
-        if (m_holdTime > 1.5f) {
+        if (m_holdTime > m_holdDuration) {
             m_collapsed = false;
             m_collapseRadius = 0.0f;
         }
@@ -145,6 +164,40 @@ const plugins::EffectMetadata& LGPQuantumEntanglementEffect::getMetadata() const
         1
     };
     return meta;
+}
+
+uint8_t LGPQuantumEntanglementEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kParameters) / sizeof(kParameters[0]));
+}
+
+const plugins::EffectParameter* LGPQuantumEntanglementEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kParameters[index];
+}
+
+bool LGPQuantumEntanglementEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "measurement_rate") == 0) {
+        m_measurementRate = constrain(value, 0.002f, 0.04f);
+        return true;
+    }
+    if (strcmp(name, "collapse_rate") == 0) {
+        m_collapseRate = constrain(value, 0.005f, 0.08f);
+        return true;
+    }
+    if (strcmp(name, "hold_duration") == 0) {
+        m_holdDuration = constrain(value, 0.3f, 4.0f);
+        return true;
+    }
+    return false;
+}
+
+float LGPQuantumEntanglementEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "measurement_rate") == 0) return m_measurementRate;
+    if (strcmp(name, "collapse_rate") == 0) return m_collapseRate;
+    if (strcmp(name, "hold_duration") == 0) return m_holdDuration;
+    return 0.0f;
 }
 
 } // namespace ieffect

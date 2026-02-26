@@ -7,6 +7,26 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPPerlinBackendEmotiscopeQuarterEffect
+namespace {
+constexpr float kLGPPerlinBackendEmotiscopeQuarterEffectSpeedScale = 1.0f;
+constexpr float kLGPPerlinBackendEmotiscopeQuarterEffectOutputGain = 1.0f;
+constexpr float kLGPPerlinBackendEmotiscopeQuarterEffectCentreBias = 1.0f;
+
+float gLGPPerlinBackendEmotiscopeQuarterEffectSpeedScale = kLGPPerlinBackendEmotiscopeQuarterEffectSpeedScale;
+float gLGPPerlinBackendEmotiscopeQuarterEffectOutputGain = kLGPPerlinBackendEmotiscopeQuarterEffectOutputGain;
+float gLGPPerlinBackendEmotiscopeQuarterEffectCentreBias = kLGPPerlinBackendEmotiscopeQuarterEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPPerlinBackendEmotiscopeQuarterEffectParameters[] = {
+    {"lgpperlin_backend_emotiscope_quarter_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPPerlinBackendEmotiscopeQuarterEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpperlin_backend_emotiscope_quarter_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPPerlinBackendEmotiscopeQuarterEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpperlin_backend_emotiscope_quarter_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPPerlinBackendEmotiscopeQuarterEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPPerlinBackendEmotiscopeQuarterEffect
 
 namespace lightwaveos {
 namespace effects {
@@ -125,6 +145,12 @@ LGPPerlinBackendEmotiscopeQuarterEffect::LGPPerlinBackendEmotiscopeQuarterEffect
 
 bool LGPPerlinBackendEmotiscopeQuarterEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPPerlinBackendEmotiscopeQuarterEffect
+    gLGPPerlinBackendEmotiscopeQuarterEffectSpeedScale = kLGPPerlinBackendEmotiscopeQuarterEffectSpeedScale;
+    gLGPPerlinBackendEmotiscopeQuarterEffectOutputGain = kLGPPerlinBackendEmotiscopeQuarterEffectOutputGain;
+    gLGPPerlinBackendEmotiscopeQuarterEffectCentreBias = kLGPPerlinBackendEmotiscopeQuarterEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPPerlinBackendEmotiscopeQuarterEffect
+
     m_seed = (unsigned int)((uint32_t)random16() << 16 | random16());
     m_positionX = (float)(random16() % 1000);
     m_positionY = (float)(random16() % 1000);
@@ -200,6 +226,43 @@ void LGPPerlinBackendEmotiscopeQuarterEffect::render(plugins::EffectContext& ctx
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPPerlinBackendEmotiscopeQuarterEffect
+uint8_t LGPPerlinBackendEmotiscopeQuarterEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPPerlinBackendEmotiscopeQuarterEffectParameters) / sizeof(kLGPPerlinBackendEmotiscopeQuarterEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPPerlinBackendEmotiscopeQuarterEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPPerlinBackendEmotiscopeQuarterEffectParameters[index];
+}
+
+bool LGPPerlinBackendEmotiscopeQuarterEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpperlin_backend_emotiscope_quarter_effect_speed_scale") == 0) {
+        gLGPPerlinBackendEmotiscopeQuarterEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpperlin_backend_emotiscope_quarter_effect_output_gain") == 0) {
+        gLGPPerlinBackendEmotiscopeQuarterEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpperlin_backend_emotiscope_quarter_effect_centre_bias") == 0) {
+        gLGPPerlinBackendEmotiscopeQuarterEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPPerlinBackendEmotiscopeQuarterEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpperlin_backend_emotiscope_quarter_effect_speed_scale") == 0) return gLGPPerlinBackendEmotiscopeQuarterEffectSpeedScale;
+    if (strcmp(name, "lgpperlin_backend_emotiscope_quarter_effect_output_gain") == 0) return gLGPPerlinBackendEmotiscopeQuarterEffectOutputGain;
+    if (strcmp(name, "lgpperlin_backend_emotiscope_quarter_effect_centre_bias") == 0) return gLGPPerlinBackendEmotiscopeQuarterEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPPerlinBackendEmotiscopeQuarterEffect
 
 void LGPPerlinBackendEmotiscopeQuarterEffect::cleanup() {
     // No resources to free

@@ -14,6 +14,26 @@
 #include "../../config/features.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPPerlinShocklinesEffect
+namespace {
+constexpr float kLGPPerlinShocklinesEffectSpeedScale = 1.0f;
+constexpr float kLGPPerlinShocklinesEffectOutputGain = 1.0f;
+constexpr float kLGPPerlinShocklinesEffectCentreBias = 1.0f;
+
+float gLGPPerlinShocklinesEffectSpeedScale = kLGPPerlinShocklinesEffectSpeedScale;
+float gLGPPerlinShocklinesEffectOutputGain = kLGPPerlinShocklinesEffectOutputGain;
+float gLGPPerlinShocklinesEffectCentreBias = kLGPPerlinShocklinesEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPPerlinShocklinesEffectParameters[] = {
+    {"lgpperlin_shocklines_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPPerlinShocklinesEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpperlin_shocklines_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPPerlinShocklinesEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpperlin_shocklines_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPPerlinShocklinesEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPPerlinShocklinesEffect
 
 namespace lightwaveos {
 namespace effects {
@@ -32,6 +52,12 @@ LGPPerlinShocklinesEffect::LGPPerlinShocklinesEffect()
 
 bool LGPPerlinShocklinesEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPPerlinShocklinesEffect
+    gLGPPerlinShocklinesEffectSpeedScale = kLGPPerlinShocklinesEffectSpeedScale;
+    gLGPPerlinShocklinesEffectOutputGain = kLGPPerlinShocklinesEffectOutputGain;
+    gLGPPerlinShocklinesEffectCentreBias = kLGPPerlinShocklinesEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPPerlinShocklinesEffect
+
     m_noiseX = random16();
     m_noiseY = random16();
     m_waveFront = 0;
@@ -165,6 +191,43 @@ void LGPPerlinShocklinesEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPPerlinShocklinesEffect
+uint8_t LGPPerlinShocklinesEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPPerlinShocklinesEffectParameters) / sizeof(kLGPPerlinShocklinesEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPPerlinShocklinesEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPPerlinShocklinesEffectParameters[index];
+}
+
+bool LGPPerlinShocklinesEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpperlin_shocklines_effect_speed_scale") == 0) {
+        gLGPPerlinShocklinesEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpperlin_shocklines_effect_output_gain") == 0) {
+        gLGPPerlinShocklinesEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpperlin_shocklines_effect_centre_bias") == 0) {
+        gLGPPerlinShocklinesEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPPerlinShocklinesEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpperlin_shocklines_effect_speed_scale") == 0) return gLGPPerlinShocklinesEffectSpeedScale;
+    if (strcmp(name, "lgpperlin_shocklines_effect_output_gain") == 0) return gLGPPerlinShocklinesEffectOutputGain;
+    if (strcmp(name, "lgpperlin_shocklines_effect_centre_bias") == 0) return gLGPPerlinShocklinesEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPPerlinShocklinesEffect
 
 void LGPPerlinShocklinesEffect::cleanup() {
     // No resources to free

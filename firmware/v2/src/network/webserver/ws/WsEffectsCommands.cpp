@@ -164,7 +164,7 @@ static void handleEffectsList(AsyncWebSocketClient* client, JsonDocument& doc, c
             categories[i] = nullptr;
         }
     }
-    
+
     String response = buildWsResponse("effects.list", requestId, [effectCount, startIdx, endIdx, page, limit, details, effectNames, effectIdArr, categories](JsonObject& data) {
         codec::WsEffectsCodec::encodeList(effectCount, startIdx, endIdx, page, limit, details, effectNames, effectIdArr, categories, data);
     });

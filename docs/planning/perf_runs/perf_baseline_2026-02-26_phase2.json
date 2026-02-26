@@ -1,0 +1,59 @@
+{
+  "timestamp": "2026-02-26 14:22:55",
+  "host": "http://192.168.1.101",
+  "ws": "ws://192.168.1.101/ws",
+  "port": "/dev/cu.usbmodem212401",
+  "results": [
+    {
+      "scenario": "rest_only_5m",
+      "duration_s": 300,
+      "serial_lines": 100,
+      "shedding_lines": 60,
+      "ws_diag_lines": 30,
+      "heap_samples": 60,
+      "heap_min": 19484,
+      "heap_max": 24568,
+      "heap_avg": 23979.5,
+      "rest_calls": 1901,
+      "rest_errors": 0,
+      "ws_connects": 0,
+      "ws_messages": 0,
+      "ws_recv": 0,
+      "ws_errors": 0
+    },
+    {
+      "scenario": "ws_only_5m",
+      "duration_s": 300,
+      "serial_lines": 105,
+      "shedding_lines": 60,
+      "ws_diag_lines": 30,
+      "heap_samples": 59,
+      "heap_min": 20480,
+      "heap_max": 25800,
+      "heap_avg": 24329.7,
+      "rest_calls": 0,
+      "rest_errors": 0,
+      "ws_connects": 1,
+      "ws_messages": 2587,
+      "ws_recv": 2587,
+      "ws_errors": 0
+    },
+    {
+      "scenario": "mixed_rest_ws_15m",
+      "duration_s": 900,
+      "serial_lines": 311,
+      "shedding_lines": 180,
+      "ws_diag_lines": 90,
+      "heap_samples": 180,
+      "heap_min": 11252,
+      "heap_max": 24460,
+      "heap_avg": 22348.0,
+      "rest_calls": 4836,
+      "rest_errors": 4131,
+      "ws_connects": 1,
+      "ws_messages": 975,
+      "ws_recv": 936,
+      "ws_errors": 2228
+    }
+  ]
+}

@@ -16,6 +16,7 @@
 #if FEATURE_CONTROL_LEASE
 #include "../../core/system/ControlLeaseManager.h"
 #endif
+#include <esp_heap_caps.h>
 #include <cstring>
 #include <Arduino.h>
 #include <WiFi.h>
@@ -168,7 +169,26 @@ WsGateway::WsGateway(
     , m_onDisconnect(onDisconnect)
     , m_fallbackHandler(fallbackHandler)
 {
+    for (uint8_t i = 0; i < CLIENT_IP_MAP_SLOTS; i++) {
+        m_binaryAssembly[i].buffer = static_cast<uint8_t*>(
+            heap_caps_calloc(1, MAX_BINARY_FRAME_BUFFER, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+        if (!m_binaryAssembly[i].buffer) {
+            LW_LOGW("WS: Binary assembly slot %u PSRAM alloc failed", i);
+        }
+    }
     s_instance = this;
+}
+
+WsGateway::~WsGateway() {
+    if (s_instance == this) {
+        s_instance = nullptr;
+    }
+    for (uint8_t i = 0; i < CLIENT_IP_MAP_SLOTS; i++) {
+        if (m_binaryAssembly[i].buffer != nullptr) {
+            heap_caps_free(m_binaryAssembly[i].buffer);
+            m_binaryAssembly[i].buffer = nullptr;
+        }
+    }
 }
 
 void WsGateway::onEvent(AsyncWebSocket* server, AsyncWebSocketClient* client,
@@ -954,7 +974,7 @@ bool WsGateway::handleBinaryFrameData(AsyncWebSocketClient* client,
             slot = &m_binaryAssembly[i];
             break;
         }
-        if (!m_binaryAssembly[i].active && empty == nullptr) {
+        if (!m_binaryAssembly[i].active && m_binaryAssembly[i].buffer != nullptr && empty == nullptr) {
             empty = &m_binaryAssembly[i];
         }
     }
@@ -984,6 +1004,10 @@ bool WsGateway::handleBinaryFrameData(AsyncWebSocketClient* client,
         return false;
     }
 
+    if (!slot->buffer) {
+        slot->active = false;
+        return false;
+    }
     memcpy(slot->buffer + info->index, data, len);
     if (chunkEnd > slot->receivedLen) {
         slot->receivedLen = static_cast<uint32_t>(chunkEnd);

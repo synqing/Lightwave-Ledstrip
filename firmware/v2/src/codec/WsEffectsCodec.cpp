@@ -475,7 +475,7 @@ void WsEffectsCodec::encodeList(uint16_t effectCount, uint16_t startIdx, uint16_
             effect["category"] = categories[i];
         }
     }
-    
+
     JsonObject pagination = data["pagination"].to<JsonObject>();
     pagination["page"] = page;
     pagination["limit"] = limit;

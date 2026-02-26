@@ -57,6 +57,7 @@ public:
         std::function<void(AsyncWebSocketClient*)> onDisconnect,
         std::function<void(AsyncWebSocketClient*, JsonDocument&)> fallbackHandler = nullptr
     );
+    ~WsGateway();
 
     /**
      * @brief Handle WebSocket event
@@ -187,7 +188,7 @@ private:
         uint32_t expectedLen = 0;
         uint32_t receivedLen = 0;
         bool active = false;
-        uint8_t buffer[MAX_BINARY_FRAME_BUFFER];
+        uint8_t* buffer = nullptr;  // PSRAM-allocated in ctor; freed in dtor
     };
     BinaryAssemblyEntry m_binaryAssembly[CLIENT_IP_MAP_SLOTS] = {};
 

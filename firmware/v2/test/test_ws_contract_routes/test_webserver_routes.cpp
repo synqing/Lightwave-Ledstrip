@@ -33,7 +33,8 @@ public:
     }
     
     void onNotFound(void* handler) {
-        notFoundHandler = handler;
+        // Sentinel so tests can assert "not-found handler was registered" without a real callback
+        notFoundHandler = (handler != nullptr) ? handler : reinterpret_cast<void*>(1);
     }
     
     void* notFoundHandler = nullptr;
@@ -141,4 +142,3 @@ int main(void) {
 }
 
 #endif // NATIVE_BUILD
-

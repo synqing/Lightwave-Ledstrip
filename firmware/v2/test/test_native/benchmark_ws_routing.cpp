@@ -31,7 +31,7 @@ int main() {
     printf("WebSocket Routing Benchmark\n");
     printf("===========================\n\n");
     
-    // TODO: Implement actual benchmark
+    // Full benchmark requires WsCommandRouter in native env (AsyncWebSocket, WebServerContext, etc.).
     // 1. Register test commands
     // 2. Warmup
     // 3. Measure routing time for N iterations

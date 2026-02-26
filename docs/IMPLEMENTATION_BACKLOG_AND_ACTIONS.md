@@ -10,7 +10,7 @@
 | Task | Location | Action |
 |------|----------|--------|
 | **ApiResponse.h deprecation** | `firmware/v2/src/network/ApiResponse.h` ~line 254 | Replace `root.createNestedObject("error")` with ArduinoJson v7 pattern (e.g. `root["error"].to<JsonObject>()`) in `buildWsRateLimitError()`. One-line fix. |
-| **API auth device verification** | N/A | After upload: run Python test to confirm 401 (no key), 403 (wrong key), 200 (correct `X-API-Key`). Documented in `docs/API_AUTH_DEPRECATION_DEBRIEF.md` § Blocker 3. |
+| **API auth device verification** | N/A | After deploy: run `python3 firmware/v2/tools/test_api_auth.py [host]` (default `lightwaveos.local`) to confirm 401 (no key), 403 (wrong key), 200 (correct `X-API-Key`). Documented in `docs/API_AUTH_DEPRECATION_DEBRIEF.md` § Blocker 3. |
 
 ---
 
@@ -18,8 +18,8 @@
 
 | Blocker | Source | Resolution |
 |---------|--------|------------|
-| **RendererActor Trinity sync** | `docs/API_AUTH_DEPRECATION_DEBRIEF.md` § Blocker 2 | `RendererActor.cpp` Trinity sync functions (`startTrinitySync`, etc.) are orphaned (not called by WsTrinityCommands). Decide: remove dead code or rewire; verify member vars `m_trinitySyncActive` etc. |
-| **API auth not verified on device** | Same debrief § Blocker 3 | Run verification script after upload; add to CI or release checklist if desired. |
+| **RendererActor Trinity sync** | `docs/API_AUTH_DEPRECATION_DEBRIEF.md` § Blocker 2 | **Resolved.** Message-based TRINITY_SYNC; no code change required. WsTrinityCommands → ActorSystem.trinitySync() → RendererActor message loop. |
+| **API auth not verified on device** | Same debrief § Blocker 3 | Run `firmware/v2/tools/test_api_auth.py` after upload; add to CI or release checklist if desired. |
 
 ---
 
@@ -63,7 +63,7 @@
 
 1. **Immediate:** Fix `ApiResponse.h` line 254 (deprecation) and push.
 2. **Immediate:** Run API auth verification on device; document result or add to checklist.
-3. **Short-term:** Decide fate of RendererActor Trinity sync (remove or rewire); implement decision.
+3. **Short-term:** ~~Decide fate of RendererActor Trinity sync~~ Resolved (message-based TRINITY_SYNC; no code change).
 4. **Short-term:** Add or expand tests for WS router, gateway, and webserver routes where TODOs exist.
 5. **Backlog:** Tackle firmware TODOs (WebServer logging callback, FFT streaming, MessageBus HEALTH_STATUS/PONG, NarrativeHandlers NVS, LedDriver power limiting) when the relevant features are in scope.
 6. **Backlog:** iOS ConnectionManager UUID + verification when firmware exposes UUID.

@@ -270,29 +270,13 @@ JsonObject error = root.createNestedObject("error");
 
 ---
 
-### Blocker 2: RendererActor Trinity Sync Functions (Pre-existing Structural Issue)
+### Blocker 2: RendererActor Trinity Sync Functions — **RESOLVED**
 
-**Location**: `firmware/v2/src/core/actors/RendererActor.cpp`, lines 1305-1361
+**Status**: Resolved (no code change required).
 
-**Issue**:
-- Functions `startTrinitySync()`, `stopTrinitySync()`, `seekTrinitySync()`, `pauseTrinitySync()`, `resumeTrinitySync()` are defined in `.cpp` file
-- They are declared in `.h` file inside `#if FEATURE_AUDIO_SYNC` block (lines 421-425)
-- Functions reference member variables `m_trinitySyncActive`, `m_trinitySyncPaused`, `m_trinitySyncPosition` that may not be declared in the class
-- These functions are **no longer called** by `WsTrinityCommands.cpp` (calls were removed/commented out)
+**Current architecture**: Trinity sync is wired via message-based flow. The previously documented public methods (`startTrinitySync()`, `stopTrinitySync()`, `seekTrinitySync()`, `pauseTrinitySync()`, `resumeTrinitySync()`) **no longer exist** in `RendererActor.cpp` or `RendererActor.h`; they were removed in favour of message handling.
 
-**Why Not Fixed**:
-1. **Pre-existing bug**: This structural issue existed before this cleanup task
-2. **Not blocking**: The functions compile (member variables may be declared elsewhere or compiler is lenient)
-3. **Orphaned code**: Since `WsTrinityCommands.cpp` no longer calls these functions, they are effectively dead code
-4. **Scope**: This is a larger refactoring task that would require:
-   - Verifying all member variable declarations
-   - Understanding the intended Trinity sync architecture
-   - Deciding whether to remove or properly wire these functions
-   - Testing the full audio sync pipeline
-
-**Impact**: Low - code compiles, functions are not called, no runtime impact
-
-**Resolution**: Requires architectural decision on Trinity sync integration
+**Wired path**: `WsTrinityCommands.cpp` calls `ctx.actorSystem.trinitySync(action, positionSec, bpm)`; `ActorSystem.cpp` sends `MessageType::TRINITY_SYNC` to RendererActor; RendererActor handles it in the message loop (lines 745–808), setting `m_trinitySyncActive`, `m_trinitySyncPaused`, `m_trinitySyncPosition`. No orphaned public methods; flow is WS → ActorSystem → RendererActor message handler.
 
 ---
 
@@ -310,7 +294,7 @@ JsonObject error = root.createNestedObject("error");
 
 **Impact**: Medium - feature may not be working as expected
 
-**Resolution**: Run test script after firmware upload
+**Resolution**: Run test script after firmware upload: `python3 firmware/v2/tools/test_api_auth.py [host]` (default host: `lightwaveos.local`). Prerequisite: device running firmware with `FEATURE_API_AUTH=1`; API key in script is `spectrasynq` (must match device config).
 
 ---
 
@@ -321,12 +305,10 @@ JsonObject error = root.createNestedObject("error");
 - Firmware builds successfully (`pio run -e esp32dev_audio_esv11`)
 - Firmware uploads successfully
 - JSON boundary checker shows no new violations (only pre-existing Tab5 encoder violations)
-- All deprecation warnings resolved except 1 in `ApiResponse.h`
+- All deprecation warnings resolved (including `ApiResponse.h`; build verified clean)
 
 ### ⚠️ Pending
-- API auth verification on device (401/403/200 responses)
-- Fix remaining `createNestedObject` in `ApiResponse.h` line 254
-- Architectural decision on RendererActor Trinity sync functions
+- API auth verification on device (401/403/200 responses): run `firmware/v2/tools/test_api_auth.py` after upload.
 
 ---
 

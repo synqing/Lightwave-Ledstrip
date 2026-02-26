@@ -17,6 +17,177 @@
 #include <cstdint>
 #include <cstring>
 
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPTransientLatticeEffect
+namespace {
+constexpr float kLGPTransientLatticeEffectSpeedScale = 1.0f;
+constexpr float kLGPTransientLatticeEffectOutputGain = 1.0f;
+constexpr float kLGPTransientLatticeEffectCentreBias = 1.0f;
+
+float gLGPTransientLatticeEffectSpeedScale = kLGPTransientLatticeEffectSpeedScale;
+float gLGPTransientLatticeEffectOutputGain = kLGPTransientLatticeEffectOutputGain;
+float gLGPTransientLatticeEffectCentreBias = kLGPTransientLatticeEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPTransientLatticeEffectParameters[] = {
+    {"lgptransient_lattice_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPTransientLatticeEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgptransient_lattice_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPTransientLatticeEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgptransient_lattice_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPTransientLatticeEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPTransientLatticeEffect
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPBassQuakeEffect
+namespace {
+constexpr float kLGPBassQuakeEffectSpeedScale = 1.0f;
+constexpr float kLGPBassQuakeEffectOutputGain = 1.0f;
+constexpr float kLGPBassQuakeEffectCentreBias = 1.0f;
+
+float gLGPBassQuakeEffectSpeedScale = kLGPBassQuakeEffectSpeedScale;
+float gLGPBassQuakeEffectOutputGain = kLGPBassQuakeEffectOutputGain;
+float gLGPBassQuakeEffectCentreBias = kLGPBassQuakeEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPBassQuakeEffectParameters[] = {
+    {"lgpbass_quake_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPBassQuakeEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpbass_quake_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPBassQuakeEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpbass_quake_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPBassQuakeEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPBassQuakeEffect
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPSaliencyBloomEffect
+namespace {
+constexpr float kLGPSaliencyBloomEffectSpeedScale = 1.0f;
+constexpr float kLGPSaliencyBloomEffectOutputGain = 1.0f;
+constexpr float kLGPSaliencyBloomEffectCentreBias = 1.0f;
+
+float gLGPSaliencyBloomEffectSpeedScale = kLGPSaliencyBloomEffectSpeedScale;
+float gLGPSaliencyBloomEffectOutputGain = kLGPSaliencyBloomEffectOutputGain;
+float gLGPSaliencyBloomEffectCentreBias = kLGPSaliencyBloomEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPSaliencyBloomEffectParameters[] = {
+    {"lgpsaliency_bloom_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPSaliencyBloomEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpsaliency_bloom_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPSaliencyBloomEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpsaliency_bloom_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPSaliencyBloomEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPSaliencyBloomEffect
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPRhythmicGateEffect
+namespace {
+constexpr float kLGPRhythmicGateEffectSpeedScale = 1.0f;
+constexpr float kLGPRhythmicGateEffectOutputGain = 1.0f;
+constexpr float kLGPRhythmicGateEffectCentreBias = 1.0f;
+
+float gLGPRhythmicGateEffectSpeedScale = kLGPRhythmicGateEffectSpeedScale;
+float gLGPRhythmicGateEffectOutputGain = kLGPRhythmicGateEffectOutputGain;
+float gLGPRhythmicGateEffectCentreBias = kLGPRhythmicGateEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPRhythmicGateEffectParameters[] = {
+    {"lgprhythmic_gate_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPRhythmicGateEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgprhythmic_gate_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPRhythmicGateEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgprhythmic_gate_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPRhythmicGateEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPRhythmicGateEffect
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPSpectralKnotEffect
+namespace {
+constexpr float kLGPSpectralKnotEffectSpeedScale = 1.0f;
+constexpr float kLGPSpectralKnotEffectOutputGain = 1.0f;
+constexpr float kLGPSpectralKnotEffectCentreBias = 1.0f;
+
+float gLGPSpectralKnotEffectSpeedScale = kLGPSpectralKnotEffectSpeedScale;
+float gLGPSpectralKnotEffectOutputGain = kLGPSpectralKnotEffectOutputGain;
+float gLGPSpectralKnotEffectCentreBias = kLGPSpectralKnotEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPSpectralKnotEffectParameters[] = {
+    {"lgpspectral_knot_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPSpectralKnotEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpspectral_knot_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPSpectralKnotEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpspectral_knot_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPSpectralKnotEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPSpectralKnotEffect
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPTrebleNetEffect
+namespace {
+constexpr float kLGPTrebleNetEffectSpeedScale = 1.0f;
+constexpr float kLGPTrebleNetEffectOutputGain = 1.0f;
+constexpr float kLGPTrebleNetEffectCentreBias = 1.0f;
+
+float gLGPTrebleNetEffectSpeedScale = kLGPTrebleNetEffectSpeedScale;
+float gLGPTrebleNetEffectOutputGain = kLGPTrebleNetEffectOutputGain;
+float gLGPTrebleNetEffectCentreBias = kLGPTrebleNetEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPTrebleNetEffectParameters[] = {
+    {"lgptreble_net_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPTrebleNetEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgptreble_net_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPTrebleNetEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgptreble_net_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPTrebleNetEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPTrebleNetEffect
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPBeatPrismEffect
+namespace {
+constexpr float kLGPBeatPrismEffectSpeedScale = 1.0f;
+constexpr float kLGPBeatPrismEffectOutputGain = 1.0f;
+constexpr float kLGPBeatPrismEffectCentreBias = 1.0f;
+
+float gLGPBeatPrismEffectSpeedScale = kLGPBeatPrismEffectSpeedScale;
+float gLGPBeatPrismEffectOutputGain = kLGPBeatPrismEffectOutputGain;
+float gLGPBeatPrismEffectCentreBias = kLGPBeatPrismEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPBeatPrismEffectParameters[] = {
+    {"lgpbeat_prism_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPBeatPrismEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpbeat_prism_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPBeatPrismEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpbeat_prism_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPBeatPrismEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPBeatPrismEffect
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPFluxRiftEffect
+namespace {
+constexpr float kLGPFluxRiftEffectSpeedScale = 1.0f;
+constexpr float kLGPFluxRiftEffectOutputGain = 1.0f;
+constexpr float kLGPFluxRiftEffectCentreBias = 1.0f;
+
+float gLGPFluxRiftEffectSpeedScale = kLGPFluxRiftEffectSpeedScale;
+float gLGPFluxRiftEffectOutputGain = kLGPFluxRiftEffectOutputGain;
+float gLGPFluxRiftEffectCentreBias = kLGPFluxRiftEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPFluxRiftEffectParameters[] = {
+    {"lgpflux_rift_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPFluxRiftEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpflux_rift_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPFluxRiftEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpflux_rift_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPFluxRiftEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPFluxRiftEffect
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPHarmonicTideEffect
+namespace {
+constexpr float kLGPHarmonicTideEffectSpeedScale = 1.0f;
+constexpr float kLGPHarmonicTideEffectOutputGain = 1.0f;
+constexpr float kLGPHarmonicTideEffectCentreBias = 1.0f;
+
+float gLGPHarmonicTideEffectSpeedScale = kLGPHarmonicTideEffectSpeedScale;
+float gLGPHarmonicTideEffectOutputGain = kLGPHarmonicTideEffectOutputGain;
+float gLGPHarmonicTideEffectCentreBias = kLGPHarmonicTideEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPHarmonicTideEffectParameters[] = {
+    {"lgpharmonic_tide_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPHarmonicTideEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpharmonic_tide_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPHarmonicTideEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpharmonic_tide_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPHarmonicTideEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPHarmonicTideEffect
+
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
@@ -178,6 +349,12 @@ LGPFluxRiftEffect::LGPFluxRiftEffect() = default;
 
 bool LGPFluxRiftEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPFluxRiftEffect
+    gLGPFluxRiftEffectSpeedScale = kLGPFluxRiftEffectSpeedScale;
+    gLGPFluxRiftEffectOutputGain = kLGPFluxRiftEffectOutputGain;
+    gLGPFluxRiftEffectCentreBias = kLGPFluxRiftEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPFluxRiftEffect
+
     m_phase = 0.0f;
     m_fluxEnv = 0.0f;
     m_beatPulse = 0.0f;
@@ -234,6 +411,43 @@ void LGPFluxRiftEffect::render(plugins::EffectContext& ctx) {
     }
 }
 
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPFluxRiftEffect
+uint8_t LGPFluxRiftEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPFluxRiftEffectParameters) / sizeof(kLGPFluxRiftEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPFluxRiftEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPFluxRiftEffectParameters[index];
+}
+
+bool LGPFluxRiftEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpflux_rift_effect_speed_scale") == 0) {
+        gLGPFluxRiftEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpflux_rift_effect_output_gain") == 0) {
+        gLGPFluxRiftEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpflux_rift_effect_centre_bias") == 0) {
+        gLGPFluxRiftEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPFluxRiftEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpflux_rift_effect_speed_scale") == 0) return gLGPFluxRiftEffectSpeedScale;
+    if (strcmp(name, "lgpflux_rift_effect_output_gain") == 0) return gLGPFluxRiftEffectOutputGain;
+    if (strcmp(name, "lgpflux_rift_effect_centre_bias") == 0) return gLGPFluxRiftEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPFluxRiftEffect
+
 void LGPFluxRiftEffect::cleanup() {}
 
 const plugins::EffectMetadata& LGPFluxRiftEffect::getMetadata() const {
@@ -255,6 +469,12 @@ LGPBeatPrismEffect::LGPBeatPrismEffect() = default;
 
 bool LGPBeatPrismEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPBeatPrismEffect
+    gLGPBeatPrismEffectSpeedScale = kLGPBeatPrismEffectSpeedScale;
+    gLGPBeatPrismEffectOutputGain = kLGPBeatPrismEffectOutputGain;
+    gLGPBeatPrismEffectCentreBias = kLGPBeatPrismEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPBeatPrismEffect
+
     m_phase = 0.0f;
     m_prism = 0.0f;
     m_beatPulse = 0.0f;
@@ -312,6 +532,43 @@ void LGPBeatPrismEffect::render(plugins::EffectContext& ctx) {
     }
 }
 
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPBeatPrismEffect
+uint8_t LGPBeatPrismEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPBeatPrismEffectParameters) / sizeof(kLGPBeatPrismEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPBeatPrismEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPBeatPrismEffectParameters[index];
+}
+
+bool LGPBeatPrismEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpbeat_prism_effect_speed_scale") == 0) {
+        gLGPBeatPrismEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpbeat_prism_effect_output_gain") == 0) {
+        gLGPBeatPrismEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpbeat_prism_effect_centre_bias") == 0) {
+        gLGPBeatPrismEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPBeatPrismEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpbeat_prism_effect_speed_scale") == 0) return gLGPBeatPrismEffectSpeedScale;
+    if (strcmp(name, "lgpbeat_prism_effect_output_gain") == 0) return gLGPBeatPrismEffectOutputGain;
+    if (strcmp(name, "lgpbeat_prism_effect_centre_bias") == 0) return gLGPBeatPrismEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPBeatPrismEffect
+
 void LGPBeatPrismEffect::cleanup() {}
 
 const plugins::EffectMetadata& LGPBeatPrismEffect::getMetadata() const {
@@ -333,6 +590,12 @@ LGPHarmonicTideEffect::LGPHarmonicTideEffect() = default;
 
 bool LGPHarmonicTideEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPHarmonicTideEffect
+    gLGPHarmonicTideEffectSpeedScale = kLGPHarmonicTideEffectSpeedScale;
+    gLGPHarmonicTideEffectOutputGain = kLGPHarmonicTideEffectOutputGain;
+    gLGPHarmonicTideEffectCentreBias = kLGPHarmonicTideEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPHarmonicTideEffect
+
     m_phase = 0.0f;
     m_harmonic = 0.0f;
     m_rootSmooth = 0.0f;
@@ -426,6 +689,43 @@ void LGPHarmonicTideEffect::render(plugins::EffectContext& ctx) {
     }
 }
 
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPHarmonicTideEffect
+uint8_t LGPHarmonicTideEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPHarmonicTideEffectParameters) / sizeof(kLGPHarmonicTideEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPHarmonicTideEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPHarmonicTideEffectParameters[index];
+}
+
+bool LGPHarmonicTideEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpharmonic_tide_effect_speed_scale") == 0) {
+        gLGPHarmonicTideEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpharmonic_tide_effect_output_gain") == 0) {
+        gLGPHarmonicTideEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpharmonic_tide_effect_centre_bias") == 0) {
+        gLGPHarmonicTideEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPHarmonicTideEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpharmonic_tide_effect_speed_scale") == 0) return gLGPHarmonicTideEffectSpeedScale;
+    if (strcmp(name, "lgpharmonic_tide_effect_output_gain") == 0) return gLGPHarmonicTideEffectOutputGain;
+    if (strcmp(name, "lgpharmonic_tide_effect_centre_bias") == 0) return gLGPHarmonicTideEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPHarmonicTideEffect
+
 void LGPHarmonicTideEffect::cleanup() {}
 
 const plugins::EffectMetadata& LGPHarmonicTideEffect::getMetadata() const {
@@ -447,6 +747,12 @@ LGPBassQuakeEffect::LGPBassQuakeEffect() = default;
 
 bool LGPBassQuakeEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPBassQuakeEffect
+    gLGPBassQuakeEffectSpeedScale = kLGPBassQuakeEffectSpeedScale;
+    gLGPBassQuakeEffectOutputGain = kLGPBassQuakeEffectOutputGain;
+    gLGPBassQuakeEffectCentreBias = kLGPBassQuakeEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPBassQuakeEffect
+
     m_phase = 0.0f;
     m_bassEnv = 0.0f;
     m_impact = 0.0f;
@@ -503,6 +809,43 @@ void LGPBassQuakeEffect::render(plugins::EffectContext& ctx) {
     }
 }
 
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPBassQuakeEffect
+uint8_t LGPBassQuakeEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPBassQuakeEffectParameters) / sizeof(kLGPBassQuakeEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPBassQuakeEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPBassQuakeEffectParameters[index];
+}
+
+bool LGPBassQuakeEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpbass_quake_effect_speed_scale") == 0) {
+        gLGPBassQuakeEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpbass_quake_effect_output_gain") == 0) {
+        gLGPBassQuakeEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpbass_quake_effect_centre_bias") == 0) {
+        gLGPBassQuakeEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPBassQuakeEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpbass_quake_effect_speed_scale") == 0) return gLGPBassQuakeEffectSpeedScale;
+    if (strcmp(name, "lgpbass_quake_effect_output_gain") == 0) return gLGPBassQuakeEffectOutputGain;
+    if (strcmp(name, "lgpbass_quake_effect_centre_bias") == 0) return gLGPBassQuakeEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPBassQuakeEffect
+
 void LGPBassQuakeEffect::cleanup() {}
 
 const plugins::EffectMetadata& LGPBassQuakeEffect::getMetadata() const {
@@ -524,6 +867,12 @@ LGPTrebleNetEffect::LGPTrebleNetEffect() = default;
 
 bool LGPTrebleNetEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPTrebleNetEffect
+    gLGPTrebleNetEffectSpeedScale = kLGPTrebleNetEffectSpeedScale;
+    gLGPTrebleNetEffectOutputGain = kLGPTrebleNetEffectOutputGain;
+    gLGPTrebleNetEffectCentreBias = kLGPTrebleNetEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPTrebleNetEffect
+
     m_phase = 0.0f;
     m_trebleEnv = 0.0f;
     m_shimmer = 0.0f;
@@ -581,6 +930,43 @@ void LGPTrebleNetEffect::render(plugins::EffectContext& ctx) {
     }
 }
 
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPTrebleNetEffect
+uint8_t LGPTrebleNetEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPTrebleNetEffectParameters) / sizeof(kLGPTrebleNetEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPTrebleNetEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPTrebleNetEffectParameters[index];
+}
+
+bool LGPTrebleNetEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgptreble_net_effect_speed_scale") == 0) {
+        gLGPTrebleNetEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgptreble_net_effect_output_gain") == 0) {
+        gLGPTrebleNetEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgptreble_net_effect_centre_bias") == 0) {
+        gLGPTrebleNetEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPTrebleNetEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgptreble_net_effect_speed_scale") == 0) return gLGPTrebleNetEffectSpeedScale;
+    if (strcmp(name, "lgptreble_net_effect_output_gain") == 0) return gLGPTrebleNetEffectOutputGain;
+    if (strcmp(name, "lgptreble_net_effect_centre_bias") == 0) return gLGPTrebleNetEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPTrebleNetEffect
+
 void LGPTrebleNetEffect::cleanup() {}
 
 const plugins::EffectMetadata& LGPTrebleNetEffect::getMetadata() const {
@@ -602,6 +988,12 @@ LGPRhythmicGateEffect::LGPRhythmicGateEffect() = default;
 
 bool LGPRhythmicGateEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPRhythmicGateEffect
+    gLGPRhythmicGateEffectSpeedScale = kLGPRhythmicGateEffectSpeedScale;
+    gLGPRhythmicGateEffectOutputGain = kLGPRhythmicGateEffectOutputGain;
+    gLGPRhythmicGateEffectCentreBias = kLGPRhythmicGateEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPRhythmicGateEffect
+
     m_phase = 0.0f;
     m_gate = 0.0f;
     m_pulse = 0.0f;
@@ -665,6 +1057,43 @@ void LGPRhythmicGateEffect::render(plugins::EffectContext& ctx) {
     }
 }
 
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPRhythmicGateEffect
+uint8_t LGPRhythmicGateEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPRhythmicGateEffectParameters) / sizeof(kLGPRhythmicGateEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPRhythmicGateEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPRhythmicGateEffectParameters[index];
+}
+
+bool LGPRhythmicGateEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgprhythmic_gate_effect_speed_scale") == 0) {
+        gLGPRhythmicGateEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgprhythmic_gate_effect_output_gain") == 0) {
+        gLGPRhythmicGateEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgprhythmic_gate_effect_centre_bias") == 0) {
+        gLGPRhythmicGateEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPRhythmicGateEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgprhythmic_gate_effect_speed_scale") == 0) return gLGPRhythmicGateEffectSpeedScale;
+    if (strcmp(name, "lgprhythmic_gate_effect_output_gain") == 0) return gLGPRhythmicGateEffectOutputGain;
+    if (strcmp(name, "lgprhythmic_gate_effect_centre_bias") == 0) return gLGPRhythmicGateEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPRhythmicGateEffect
+
 void LGPRhythmicGateEffect::cleanup() {}
 
 const plugins::EffectMetadata& LGPRhythmicGateEffect::getMetadata() const {
@@ -686,6 +1115,12 @@ LGPSpectralKnotEffect::LGPSpectralKnotEffect() = default;
 
 bool LGPSpectralKnotEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPSpectralKnotEffect
+    gLGPSpectralKnotEffectSpeedScale = kLGPSpectralKnotEffectSpeedScale;
+    gLGPSpectralKnotEffectOutputGain = kLGPSpectralKnotEffectOutputGain;
+    gLGPSpectralKnotEffectCentreBias = kLGPSpectralKnotEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPSpectralKnotEffect
+
     m_phase = 0.0f;
     m_knot = 0.0f;
     m_rotation = 0.0f;
@@ -744,6 +1179,43 @@ void LGPSpectralKnotEffect::render(plugins::EffectContext& ctx) {
     }
 }
 
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPSpectralKnotEffect
+uint8_t LGPSpectralKnotEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPSpectralKnotEffectParameters) / sizeof(kLGPSpectralKnotEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPSpectralKnotEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPSpectralKnotEffectParameters[index];
+}
+
+bool LGPSpectralKnotEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpspectral_knot_effect_speed_scale") == 0) {
+        gLGPSpectralKnotEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpspectral_knot_effect_output_gain") == 0) {
+        gLGPSpectralKnotEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpspectral_knot_effect_centre_bias") == 0) {
+        gLGPSpectralKnotEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPSpectralKnotEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpspectral_knot_effect_speed_scale") == 0) return gLGPSpectralKnotEffectSpeedScale;
+    if (strcmp(name, "lgpspectral_knot_effect_output_gain") == 0) return gLGPSpectralKnotEffectOutputGain;
+    if (strcmp(name, "lgpspectral_knot_effect_centre_bias") == 0) return gLGPSpectralKnotEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPSpectralKnotEffect
+
 void LGPSpectralKnotEffect::cleanup() {}
 
 const plugins::EffectMetadata& LGPSpectralKnotEffect::getMetadata() const {
@@ -765,6 +1237,12 @@ LGPSaliencyBloomEffect::LGPSaliencyBloomEffect() = default;
 
 bool LGPSaliencyBloomEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPSaliencyBloomEffect
+    gLGPSaliencyBloomEffectSpeedScale = kLGPSaliencyBloomEffectSpeedScale;
+    gLGPSaliencyBloomEffectOutputGain = kLGPSaliencyBloomEffectOutputGain;
+    gLGPSaliencyBloomEffectCentreBias = kLGPSaliencyBloomEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPSaliencyBloomEffect
+
     m_phase = 0.0f;
     m_saliency = 0.0f;
     m_bloom = 0.0f;
@@ -821,6 +1299,43 @@ void LGPSaliencyBloomEffect::render(plugins::EffectContext& ctx) {
     }
 }
 
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPSaliencyBloomEffect
+uint8_t LGPSaliencyBloomEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPSaliencyBloomEffectParameters) / sizeof(kLGPSaliencyBloomEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPSaliencyBloomEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPSaliencyBloomEffectParameters[index];
+}
+
+bool LGPSaliencyBloomEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpsaliency_bloom_effect_speed_scale") == 0) {
+        gLGPSaliencyBloomEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpsaliency_bloom_effect_output_gain") == 0) {
+        gLGPSaliencyBloomEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpsaliency_bloom_effect_centre_bias") == 0) {
+        gLGPSaliencyBloomEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPSaliencyBloomEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpsaliency_bloom_effect_speed_scale") == 0) return gLGPSaliencyBloomEffectSpeedScale;
+    if (strcmp(name, "lgpsaliency_bloom_effect_output_gain") == 0) return gLGPSaliencyBloomEffectOutputGain;
+    if (strcmp(name, "lgpsaliency_bloom_effect_centre_bias") == 0) return gLGPSaliencyBloomEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPSaliencyBloomEffect
+
 void LGPSaliencyBloomEffect::cleanup() {}
 
 const plugins::EffectMetadata& LGPSaliencyBloomEffect::getMetadata() const {
@@ -842,6 +1357,12 @@ LGPTransientLatticeEffect::LGPTransientLatticeEffect() = default;
 
 bool LGPTransientLatticeEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPTransientLatticeEffect
+    gLGPTransientLatticeEffectSpeedScale = kLGPTransientLatticeEffectSpeedScale;
+    gLGPTransientLatticeEffectOutputGain = kLGPTransientLatticeEffectOutputGain;
+    gLGPTransientLatticeEffectCentreBias = kLGPTransientLatticeEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPTransientLatticeEffect
+
     m_phase = 0.0f;
     m_transient = 0.0f;
     m_memory = 0.0f;
@@ -899,6 +1420,43 @@ void LGPTransientLatticeEffect::render(plugins::EffectContext& ctx) {
         setCentrePairMono(ctx, dist, ctx.palette.getColor(idxA, br));
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPTransientLatticeEffect
+uint8_t LGPTransientLatticeEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPTransientLatticeEffectParameters) / sizeof(kLGPTransientLatticeEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPTransientLatticeEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPTransientLatticeEffectParameters[index];
+}
+
+bool LGPTransientLatticeEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgptransient_lattice_effect_speed_scale") == 0) {
+        gLGPTransientLatticeEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgptransient_lattice_effect_output_gain") == 0) {
+        gLGPTransientLatticeEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgptransient_lattice_effect_centre_bias") == 0) {
+        gLGPTransientLatticeEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPTransientLatticeEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgptransient_lattice_effect_speed_scale") == 0) return gLGPTransientLatticeEffectSpeedScale;
+    if (strcmp(name, "lgptransient_lattice_effect_output_gain") == 0) return gLGPTransientLatticeEffectOutputGain;
+    if (strcmp(name, "lgptransient_lattice_effect_centre_bias") == 0) return gLGPTransientLatticeEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPTransientLatticeEffect
 
 void LGPTransientLatticeEffect::cleanup() {}
 

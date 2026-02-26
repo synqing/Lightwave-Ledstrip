@@ -11,6 +11,25 @@
 
 #ifndef NATIVE_BUILD
 #include <esp_heap_caps.h>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:EsWaveformRefEffect
+namespace {
+constexpr float kEsWaveformRefEffectSpeedScale = 1.0f;
+constexpr float kEsWaveformRefEffectOutputGain = 1.0f;
+constexpr float kEsWaveformRefEffectCentreBias = 1.0f;
+
+float gEsWaveformRefEffectSpeedScale = kEsWaveformRefEffectSpeedScale;
+float gEsWaveformRefEffectOutputGain = kEsWaveformRefEffectOutputGain;
+float gEsWaveformRefEffectCentreBias = kEsWaveformRefEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kEsWaveformRefEffectParameters[] = {
+    {"es_waveform_ref_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kEsWaveformRefEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"es_waveform_ref_effect_output_gain", "Output Gain", 0.25f, 2.0f, kEsWaveformRefEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"es_waveform_ref_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kEsWaveformRefEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:EsWaveformRefEffect
 #endif
 
 namespace lightwaveos::effects::ieffect::esv11_reference {
@@ -40,6 +59,12 @@ static inline float computeAlpha(float cutoffHz, float sampleRateHz) {
 
 bool EsWaveformRefEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:EsWaveformRefEffect
+    gEsWaveformRefEffectSpeedScale = kEsWaveformRefEffectSpeedScale;
+    gEsWaveformRefEffectOutputGain = kEsWaveformRefEffectOutputGain;
+    gEsWaveformRefEffectCentreBias = kEsWaveformRefEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:EsWaveformRefEffect
+
     m_alpha = computeAlpha(CUTOFF_HZ, static_cast<float>(SAMPLE_RATE_HZ));
 #ifndef NATIVE_BUILD
     if (!m_ps) {
@@ -121,6 +146,43 @@ void EsWaveformRefEffect::render(plugins::EffectContext& ctx) {
         SET_CENTER_PAIR(ctx, dist, c);
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:EsWaveformRefEffect
+uint8_t EsWaveformRefEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kEsWaveformRefEffectParameters) / sizeof(kEsWaveformRefEffectParameters[0]));
+}
+
+const plugins::EffectParameter* EsWaveformRefEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kEsWaveformRefEffectParameters[index];
+}
+
+bool EsWaveformRefEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "es_waveform_ref_effect_speed_scale") == 0) {
+        gEsWaveformRefEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "es_waveform_ref_effect_output_gain") == 0) {
+        gEsWaveformRefEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "es_waveform_ref_effect_centre_bias") == 0) {
+        gEsWaveformRefEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float EsWaveformRefEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "es_waveform_ref_effect_speed_scale") == 0) return gEsWaveformRefEffectSpeedScale;
+    if (strcmp(name, "es_waveform_ref_effect_output_gain") == 0) return gEsWaveformRefEffectOutputGain;
+    if (strcmp(name, "es_waveform_ref_effect_centre_bias") == 0) return gEsWaveformRefEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:EsWaveformRefEffect
 
 void EsWaveformRefEffect::cleanup() {
 #ifndef NATIVE_BUILD

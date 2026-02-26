@@ -16,6 +16,25 @@
 #include <cmath>
 #include <cstring>
 
+
+// AUTO_TUNABLES_BULK_BEGIN:EsAnalogRefEffect
+namespace {
+constexpr float kEsAnalogRefEffectSpeedScale = 1.0f;
+constexpr float kEsAnalogRefEffectOutputGain = 1.0f;
+constexpr float kEsAnalogRefEffectCentreBias = 1.0f;
+
+float gEsAnalogRefEffectSpeedScale = kEsAnalogRefEffectSpeedScale;
+float gEsAnalogRefEffectOutputGain = kEsAnalogRefEffectOutputGain;
+float gEsAnalogRefEffectCentreBias = kEsAnalogRefEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kEsAnalogRefEffectParameters[] = {
+    {"es_analog_ref_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kEsAnalogRefEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"es_analog_ref_effect_output_gain", "Output Gain", 0.25f, 2.0f, kEsAnalogRefEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"es_analog_ref_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kEsAnalogRefEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:EsAnalogRefEffect
+
 namespace lightwaveos::effects::ieffect::esv11_reference {
 
 using namespace lightwaveos::effects;
@@ -23,6 +42,12 @@ using namespace lightwaveos::effects::ieffect::esv11ref;
 
 bool EsAnalogRefEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:EsAnalogRefEffect
+    gEsAnalogRefEffectSpeedScale = kEsAnalogRefEffectSpeedScale;
+    gEsAnalogRefEffectOutputGain = kEsAnalogRefEffectOutputGain;
+    gEsAnalogRefEffectCentreBias = kEsAnalogRefEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:EsAnalogRefEffect
+
     for (uint8_t z = 0; z < kMaxZones; ++z) {
         m_vuSmooth[z] = 0.000001f;
     }
@@ -60,6 +85,43 @@ void EsAnalogRefEffect::render(plugins::EffectContext& ctx) {
         SET_CENTER_PAIR(ctx, dist, c);
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:EsAnalogRefEffect
+uint8_t EsAnalogRefEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kEsAnalogRefEffectParameters) / sizeof(kEsAnalogRefEffectParameters[0]));
+}
+
+const plugins::EffectParameter* EsAnalogRefEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kEsAnalogRefEffectParameters[index];
+}
+
+bool EsAnalogRefEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "es_analog_ref_effect_speed_scale") == 0) {
+        gEsAnalogRefEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "es_analog_ref_effect_output_gain") == 0) {
+        gEsAnalogRefEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "es_analog_ref_effect_centre_bias") == 0) {
+        gEsAnalogRefEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float EsAnalogRefEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "es_analog_ref_effect_speed_scale") == 0) return gEsAnalogRefEffectSpeedScale;
+    if (strcmp(name, "es_analog_ref_effect_output_gain") == 0) return gEsAnalogRefEffectOutputGain;
+    if (strcmp(name, "es_analog_ref_effect_centre_bias") == 0) return gEsAnalogRefEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:EsAnalogRefEffect
 
 void EsAnalogRefEffect::cleanup() {
     // No resources to free (DRAM member array, no PSRAM allocation).

@@ -17,6 +17,215 @@
 #include <cstdint>
 #include <cstring>
 
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPMoireCathedralEffect
+namespace {
+constexpr float kLGPMoireCathedralEffectSpeedScale = 1.0f;
+constexpr float kLGPMoireCathedralEffectOutputGain = 1.0f;
+constexpr float kLGPMoireCathedralEffectCentreBias = 1.0f;
+
+float gLGPMoireCathedralEffectSpeedScale = kLGPMoireCathedralEffectSpeedScale;
+float gLGPMoireCathedralEffectOutputGain = kLGPMoireCathedralEffectOutputGain;
+float gLGPMoireCathedralEffectCentreBias = kLGPMoireCathedralEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPMoireCathedralEffectParameters[] = {
+    {"lgpmoire_cathedral_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPMoireCathedralEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpmoire_cathedral_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPMoireCathedralEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpmoire_cathedral_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPMoireCathedralEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPMoireCathedralEffect
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPSuperformulaGlyphEffect
+namespace {
+constexpr float kLGPSuperformulaGlyphEffectSpeedScale = 1.0f;
+constexpr float kLGPSuperformulaGlyphEffectOutputGain = 1.0f;
+constexpr float kLGPSuperformulaGlyphEffectCentreBias = 1.0f;
+
+float gLGPSuperformulaGlyphEffectSpeedScale = kLGPSuperformulaGlyphEffectSpeedScale;
+float gLGPSuperformulaGlyphEffectOutputGain = kLGPSuperformulaGlyphEffectOutputGain;
+float gLGPSuperformulaGlyphEffectCentreBias = kLGPSuperformulaGlyphEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPSuperformulaGlyphEffectParameters[] = {
+    {"lgpsuperformula_glyph_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPSuperformulaGlyphEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpsuperformula_glyph_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPSuperformulaGlyphEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpsuperformula_glyph_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPSuperformulaGlyphEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPSuperformulaGlyphEffect
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPHarmonographHaloEffect
+namespace {
+constexpr float kLGPHarmonographHaloEffectSpeedScale = 1.0f;
+constexpr float kLGPHarmonographHaloEffectOutputGain = 1.0f;
+constexpr float kLGPHarmonographHaloEffectCentreBias = 1.0f;
+
+float gLGPHarmonographHaloEffectSpeedScale = kLGPHarmonographHaloEffectSpeedScale;
+float gLGPHarmonographHaloEffectOutputGain = kLGPHarmonographHaloEffectOutputGain;
+float gLGPHarmonographHaloEffectCentreBias = kLGPHarmonographHaloEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPHarmonographHaloEffectParameters[] = {
+    {"lgpharmonograph_halo_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPHarmonographHaloEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpharmonograph_halo_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPHarmonographHaloEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpharmonograph_halo_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPHarmonographHaloEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPHarmonographHaloEffect
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPSpirographCrownEffect
+namespace {
+constexpr float kLGPSpirographCrownEffectSpeedScale = 1.0f;
+constexpr float kLGPSpirographCrownEffectOutputGain = 1.0f;
+constexpr float kLGPSpirographCrownEffectCentreBias = 1.0f;
+
+float gLGPSpirographCrownEffectSpeedScale = kLGPSpirographCrownEffectSpeedScale;
+float gLGPSpirographCrownEffectOutputGain = kLGPSpirographCrownEffectOutputGain;
+float gLGPSpirographCrownEffectCentreBias = kLGPSpirographCrownEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPSpirographCrownEffectParameters[] = {
+    {"lgpspirograph_crown_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPSpirographCrownEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpspirograph_crown_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPSpirographCrownEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpspirograph_crown_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPSpirographCrownEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPSpirographCrownEffect
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPAiryCometEffect
+namespace {
+constexpr float kLGPAiryCometEffectSpeedScale = 1.0f;
+constexpr float kLGPAiryCometEffectOutputGain = 1.0f;
+constexpr float kLGPAiryCometEffectCentreBias = 1.0f;
+
+float gLGPAiryCometEffectSpeedScale = kLGPAiryCometEffectSpeedScale;
+float gLGPAiryCometEffectOutputGain = kLGPAiryCometEffectOutputGain;
+float gLGPAiryCometEffectCentreBias = kLGPAiryCometEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPAiryCometEffectParameters[] = {
+    {"lgpairy_comet_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPAiryCometEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpairy_comet_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPAiryCometEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpairy_comet_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPAiryCometEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPAiryCometEffect
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPCymaticLadderEffect
+namespace {
+constexpr float kLGPCymaticLadderEffectSpeedScale = 1.0f;
+constexpr float kLGPCymaticLadderEffectOutputGain = 1.0f;
+constexpr float kLGPCymaticLadderEffectCentreBias = 1.0f;
+
+float gLGPCymaticLadderEffectSpeedScale = kLGPCymaticLadderEffectSpeedScale;
+float gLGPCymaticLadderEffectOutputGain = kLGPCymaticLadderEffectOutputGain;
+float gLGPCymaticLadderEffectCentreBias = kLGPCymaticLadderEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPCymaticLadderEffectParameters[] = {
+    {"lgpcymatic_ladder_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPCymaticLadderEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpcymatic_ladder_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPCymaticLadderEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpcymatic_ladder_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPCymaticLadderEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPCymaticLadderEffect
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPRule30CathedralEffect
+namespace {
+constexpr float kLGPRule30CathedralEffectSpeedScale = 1.0f;
+constexpr float kLGPRule30CathedralEffectOutputGain = 1.0f;
+constexpr float kLGPRule30CathedralEffectCentreBias = 1.0f;
+
+float gLGPRule30CathedralEffectSpeedScale = kLGPRule30CathedralEffectSpeedScale;
+float gLGPRule30CathedralEffectOutputGain = kLGPRule30CathedralEffectOutputGain;
+float gLGPRule30CathedralEffectCentreBias = kLGPRule30CathedralEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPRule30CathedralEffectParameters[] = {
+    {"lgprule30_cathedral_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPRule30CathedralEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgprule30_cathedral_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPRule30CathedralEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgprule30_cathedral_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPRule30CathedralEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPRule30CathedralEffect
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPRoseBloomEffect
+namespace {
+constexpr float kLGPRoseBloomEffectSpeedScale = 1.0f;
+constexpr float kLGPRoseBloomEffectOutputGain = 1.0f;
+constexpr float kLGPRoseBloomEffectCentreBias = 1.0f;
+
+float gLGPRoseBloomEffectSpeedScale = kLGPRoseBloomEffectSpeedScale;
+float gLGPRoseBloomEffectOutputGain = kLGPRoseBloomEffectOutputGain;
+float gLGPRoseBloomEffectCentreBias = kLGPRoseBloomEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPRoseBloomEffectParameters[] = {
+    {"lgprose_bloom_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPRoseBloomEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgprose_bloom_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPRoseBloomEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgprose_bloom_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPRoseBloomEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPRoseBloomEffect
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPLangtonHighwayEffect
+namespace {
+constexpr float kLGPLangtonHighwayEffectSpeedScale = 1.0f;
+constexpr float kLGPLangtonHighwayEffectOutputGain = 1.0f;
+constexpr float kLGPLangtonHighwayEffectCentreBias = 1.0f;
+
+float gLGPLangtonHighwayEffectSpeedScale = kLGPLangtonHighwayEffectSpeedScale;
+float gLGPLangtonHighwayEffectOutputGain = kLGPLangtonHighwayEffectOutputGain;
+float gLGPLangtonHighwayEffectCentreBias = kLGPLangtonHighwayEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPLangtonHighwayEffectParameters[] = {
+    {"lgplangton_highway_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPLangtonHighwayEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgplangton_highway_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPLangtonHighwayEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgplangton_highway_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPLangtonHighwayEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPLangtonHighwayEffect
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPMachDiamondsEffect
+namespace {
+constexpr float kLGPMachDiamondsEffectSpeedScale = 1.0f;
+constexpr float kLGPMachDiamondsEffectOutputGain = 1.0f;
+constexpr float kLGPMachDiamondsEffectCentreBias = 1.0f;
+
+float gLGPMachDiamondsEffectSpeedScale = kLGPMachDiamondsEffectSpeedScale;
+float gLGPMachDiamondsEffectOutputGain = kLGPMachDiamondsEffectOutputGain;
+float gLGPMachDiamondsEffectCentreBias = kLGPMachDiamondsEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPMachDiamondsEffectParameters[] = {
+    {"lgpmach_diamonds_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPMachDiamondsEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgpmach_diamonds_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPMachDiamondsEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgpmach_diamonds_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPMachDiamondsEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPMachDiamondsEffect
+
+
+// AUTO_TUNABLES_BULK_BEGIN:LGPTalbotCarpetEffect
+namespace {
+constexpr float kLGPTalbotCarpetEffectSpeedScale = 1.0f;
+constexpr float kLGPTalbotCarpetEffectOutputGain = 1.0f;
+constexpr float kLGPTalbotCarpetEffectCentreBias = 1.0f;
+
+float gLGPTalbotCarpetEffectSpeedScale = kLGPTalbotCarpetEffectSpeedScale;
+float gLGPTalbotCarpetEffectOutputGain = kLGPTalbotCarpetEffectOutputGain;
+float gLGPTalbotCarpetEffectCentreBias = kLGPTalbotCarpetEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kLGPTalbotCarpetEffectParameters[] = {
+    {"lgptalbot_carpet_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kLGPTalbotCarpetEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"lgptalbot_carpet_effect_output_gain", "Output Gain", 0.25f, 2.0f, kLGPTalbotCarpetEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"lgptalbot_carpet_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kLGPTalbotCarpetEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:LGPTalbotCarpetEffect
+
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
@@ -62,7 +271,13 @@ static inline uint8_t luminanceToBr(float wave01, float master) {
 // ---------------------------------------------
 LGPTalbotCarpetEffect::LGPTalbotCarpetEffect() : m_t(0.0f) {}
 
-bool LGPTalbotCarpetEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
+bool LGPTalbotCarpetEffect::init(plugins::EffectContext& ctx) { (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPTalbotCarpetEffect
+    gLGPTalbotCarpetEffectSpeedScale = kLGPTalbotCarpetEffectSpeedScale;
+    gLGPTalbotCarpetEffectOutputGain = kLGPTalbotCarpetEffectOutputGain;
+    gLGPTalbotCarpetEffectCentreBias = kLGPTalbotCarpetEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPTalbotCarpetEffect
+ m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
 
 void LGPTalbotCarpetEffect::render(plugins::EffectContext& ctx) {
     const float speedNorm = ctx.speed / 50.0f;
@@ -109,6 +324,43 @@ void LGPTalbotCarpetEffect::render(plugins::EffectContext& ctx) {
     lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }
 
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPTalbotCarpetEffect
+uint8_t LGPTalbotCarpetEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPTalbotCarpetEffectParameters) / sizeof(kLGPTalbotCarpetEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPTalbotCarpetEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPTalbotCarpetEffectParameters[index];
+}
+
+bool LGPTalbotCarpetEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgptalbot_carpet_effect_speed_scale") == 0) {
+        gLGPTalbotCarpetEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgptalbot_carpet_effect_output_gain") == 0) {
+        gLGPTalbotCarpetEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgptalbot_carpet_effect_centre_bias") == 0) {
+        gLGPTalbotCarpetEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPTalbotCarpetEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgptalbot_carpet_effect_speed_scale") == 0) return gLGPTalbotCarpetEffectSpeedScale;
+    if (strcmp(name, "lgptalbot_carpet_effect_output_gain") == 0) return gLGPTalbotCarpetEffectOutputGain;
+    if (strcmp(name, "lgptalbot_carpet_effect_centre_bias") == 0) return gLGPTalbotCarpetEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPTalbotCarpetEffect
+
 void LGPTalbotCarpetEffect::cleanup() {}
 
 const plugins::EffectMetadata& LGPTalbotCarpetEffect::getMetadata() const {
@@ -125,7 +377,13 @@ const plugins::EffectMetadata& LGPTalbotCarpetEffect::getMetadata() const {
 // 2) Airy Comet
 // ---------------------------------------------
 LGPAiryCometEffect::LGPAiryCometEffect() : m_t(0.0f) {}
-bool LGPAiryCometEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
+bool LGPAiryCometEffect::init(plugins::EffectContext& ctx) { (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPAiryCometEffect
+    gLGPAiryCometEffectSpeedScale = kLGPAiryCometEffectSpeedScale;
+    gLGPAiryCometEffectOutputGain = kLGPAiryCometEffectOutputGain;
+    gLGPAiryCometEffectCentreBias = kLGPAiryCometEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPAiryCometEffect
+ m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
 
 void LGPAiryCometEffect::render(plugins::EffectContext& ctx) {
     const float speedNorm = ctx.speed / 50.0f;
@@ -173,6 +431,43 @@ void LGPAiryCometEffect::render(plugins::EffectContext& ctx) {
     lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }
 
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPAiryCometEffect
+uint8_t LGPAiryCometEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPAiryCometEffectParameters) / sizeof(kLGPAiryCometEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPAiryCometEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPAiryCometEffectParameters[index];
+}
+
+bool LGPAiryCometEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpairy_comet_effect_speed_scale") == 0) {
+        gLGPAiryCometEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpairy_comet_effect_output_gain") == 0) {
+        gLGPAiryCometEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpairy_comet_effect_centre_bias") == 0) {
+        gLGPAiryCometEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPAiryCometEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpairy_comet_effect_speed_scale") == 0) return gLGPAiryCometEffectSpeedScale;
+    if (strcmp(name, "lgpairy_comet_effect_output_gain") == 0) return gLGPAiryCometEffectOutputGain;
+    if (strcmp(name, "lgpairy_comet_effect_centre_bias") == 0) return gLGPAiryCometEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPAiryCometEffect
+
 void LGPAiryCometEffect::cleanup() {}
 
 const plugins::EffectMetadata& LGPAiryCometEffect::getMetadata() const {
@@ -189,7 +484,13 @@ const plugins::EffectMetadata& LGPAiryCometEffect::getMetadata() const {
 // 3) Moire Cathedral
 // ---------------------------------------------
 LGPMoireCathedralEffect::LGPMoireCathedralEffect() : m_t(0.0f) {}
-bool LGPMoireCathedralEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
+bool LGPMoireCathedralEffect::init(plugins::EffectContext& ctx) { (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPMoireCathedralEffect
+    gLGPMoireCathedralEffectSpeedScale = kLGPMoireCathedralEffectSpeedScale;
+    gLGPMoireCathedralEffectOutputGain = kLGPMoireCathedralEffectOutputGain;
+    gLGPMoireCathedralEffectCentreBias = kLGPMoireCathedralEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPMoireCathedralEffect
+ m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
 
 void LGPMoireCathedralEffect::render(plugins::EffectContext& ctx) {
     const float speedNorm = ctx.speed / 50.0f;
@@ -229,6 +530,43 @@ void LGPMoireCathedralEffect::render(plugins::EffectContext& ctx) {
     lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }
 
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPMoireCathedralEffect
+uint8_t LGPMoireCathedralEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPMoireCathedralEffectParameters) / sizeof(kLGPMoireCathedralEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPMoireCathedralEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPMoireCathedralEffectParameters[index];
+}
+
+bool LGPMoireCathedralEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpmoire_cathedral_effect_speed_scale") == 0) {
+        gLGPMoireCathedralEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpmoire_cathedral_effect_output_gain") == 0) {
+        gLGPMoireCathedralEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpmoire_cathedral_effect_centre_bias") == 0) {
+        gLGPMoireCathedralEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPMoireCathedralEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpmoire_cathedral_effect_speed_scale") == 0) return gLGPMoireCathedralEffectSpeedScale;
+    if (strcmp(name, "lgpmoire_cathedral_effect_output_gain") == 0) return gLGPMoireCathedralEffectOutputGain;
+    if (strcmp(name, "lgpmoire_cathedral_effect_centre_bias") == 0) return gLGPMoireCathedralEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPMoireCathedralEffect
+
 void LGPMoireCathedralEffect::cleanup() {}
 
 const plugins::EffectMetadata& LGPMoireCathedralEffect::getMetadata() const {
@@ -245,7 +583,13 @@ const plugins::EffectMetadata& LGPMoireCathedralEffect::getMetadata() const {
 // 4) Superformula Living Glyph
 // ---------------------------------------------
 LGPSuperformulaGlyphEffect::LGPSuperformulaGlyphEffect() : m_t(0.0f) {}
-bool LGPSuperformulaGlyphEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
+bool LGPSuperformulaGlyphEffect::init(plugins::EffectContext& ctx) { (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPSuperformulaGlyphEffect
+    gLGPSuperformulaGlyphEffectSpeedScale = kLGPSuperformulaGlyphEffectSpeedScale;
+    gLGPSuperformulaGlyphEffectOutputGain = kLGPSuperformulaGlyphEffectOutputGain;
+    gLGPSuperformulaGlyphEffectCentreBias = kLGPSuperformulaGlyphEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPSuperformulaGlyphEffect
+ m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
 
 static inline float superformula(float phi, float m, float n1, float n2, float n3, float a=1.0f, float b=1.0f) {
     float t1 = powf(fabsf(cosf(m * phi * 0.25f) / a), n2);
@@ -295,6 +639,43 @@ void LGPSuperformulaGlyphEffect::render(plugins::EffectContext& ctx) {
     lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }
 
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPSuperformulaGlyphEffect
+uint8_t LGPSuperformulaGlyphEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPSuperformulaGlyphEffectParameters) / sizeof(kLGPSuperformulaGlyphEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPSuperformulaGlyphEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPSuperformulaGlyphEffectParameters[index];
+}
+
+bool LGPSuperformulaGlyphEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpsuperformula_glyph_effect_speed_scale") == 0) {
+        gLGPSuperformulaGlyphEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpsuperformula_glyph_effect_output_gain") == 0) {
+        gLGPSuperformulaGlyphEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpsuperformula_glyph_effect_centre_bias") == 0) {
+        gLGPSuperformulaGlyphEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPSuperformulaGlyphEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpsuperformula_glyph_effect_speed_scale") == 0) return gLGPSuperformulaGlyphEffectSpeedScale;
+    if (strcmp(name, "lgpsuperformula_glyph_effect_output_gain") == 0) return gLGPSuperformulaGlyphEffectOutputGain;
+    if (strcmp(name, "lgpsuperformula_glyph_effect_centre_bias") == 0) return gLGPSuperformulaGlyphEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPSuperformulaGlyphEffect
+
 void LGPSuperformulaGlyphEffect::cleanup() {}
 
 const plugins::EffectMetadata& LGPSuperformulaGlyphEffect::getMetadata() const {
@@ -311,7 +692,13 @@ const plugins::EffectMetadata& LGPSuperformulaGlyphEffect::getMetadata() const {
 // 5) Spirograph Crown (Hypotrochoid)
 // ---------------------------------------------
 LGPSpirographCrownEffect::LGPSpirographCrownEffect() : m_t(0.0f) {}
-bool LGPSpirographCrownEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
+bool LGPSpirographCrownEffect::init(plugins::EffectContext& ctx) { (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPSpirographCrownEffect
+    gLGPSpirographCrownEffectSpeedScale = kLGPSpirographCrownEffectSpeedScale;
+    gLGPSpirographCrownEffectOutputGain = kLGPSpirographCrownEffectOutputGain;
+    gLGPSpirographCrownEffectCentreBias = kLGPSpirographCrownEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPSpirographCrownEffect
+ m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
 
 static inline float hypotrochoid_radius(float theta, float R, float r, float d) {
     // x = (R-r)cos(theta) + d cos((R-r)/r * theta)
@@ -365,6 +752,43 @@ void LGPSpirographCrownEffect::render(plugins::EffectContext& ctx) {
     lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }
 
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPSpirographCrownEffect
+uint8_t LGPSpirographCrownEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPSpirographCrownEffectParameters) / sizeof(kLGPSpirographCrownEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPSpirographCrownEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPSpirographCrownEffectParameters[index];
+}
+
+bool LGPSpirographCrownEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpspirograph_crown_effect_speed_scale") == 0) {
+        gLGPSpirographCrownEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpspirograph_crown_effect_output_gain") == 0) {
+        gLGPSpirographCrownEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpspirograph_crown_effect_centre_bias") == 0) {
+        gLGPSpirographCrownEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPSpirographCrownEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpspirograph_crown_effect_speed_scale") == 0) return gLGPSpirographCrownEffectSpeedScale;
+    if (strcmp(name, "lgpspirograph_crown_effect_output_gain") == 0) return gLGPSpirographCrownEffectOutputGain;
+    if (strcmp(name, "lgpspirograph_crown_effect_centre_bias") == 0) return gLGPSpirographCrownEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPSpirographCrownEffect
+
 void LGPSpirographCrownEffect::cleanup() {}
 
 const plugins::EffectMetadata& LGPSpirographCrownEffect::getMetadata() const {
@@ -381,7 +805,13 @@ const plugins::EffectMetadata& LGPSpirographCrownEffect::getMetadata() const {
 // 6) Rose Bloom (Rhodonea)
 // ---------------------------------------------
 LGPRoseBloomEffect::LGPRoseBloomEffect() : m_t(0.0f) {}
-bool LGPRoseBloomEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
+bool LGPRoseBloomEffect::init(plugins::EffectContext& ctx) { (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPRoseBloomEffect
+    gLGPRoseBloomEffectSpeedScale = kLGPRoseBloomEffectSpeedScale;
+    gLGPRoseBloomEffectOutputGain = kLGPRoseBloomEffectOutputGain;
+    gLGPRoseBloomEffectCentreBias = kLGPRoseBloomEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPRoseBloomEffect
+ m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
 
 void LGPRoseBloomEffect::render(plugins::EffectContext& ctx) {
     const float speedNorm = ctx.speed / 50.0f;
@@ -422,6 +852,43 @@ void LGPRoseBloomEffect::render(plugins::EffectContext& ctx) {
     lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }
 
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPRoseBloomEffect
+uint8_t LGPRoseBloomEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPRoseBloomEffectParameters) / sizeof(kLGPRoseBloomEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPRoseBloomEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPRoseBloomEffectParameters[index];
+}
+
+bool LGPRoseBloomEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgprose_bloom_effect_speed_scale") == 0) {
+        gLGPRoseBloomEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgprose_bloom_effect_output_gain") == 0) {
+        gLGPRoseBloomEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgprose_bloom_effect_centre_bias") == 0) {
+        gLGPRoseBloomEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPRoseBloomEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgprose_bloom_effect_speed_scale") == 0) return gLGPRoseBloomEffectSpeedScale;
+    if (strcmp(name, "lgprose_bloom_effect_output_gain") == 0) return gLGPRoseBloomEffectOutputGain;
+    if (strcmp(name, "lgprose_bloom_effect_centre_bias") == 0) return gLGPRoseBloomEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPRoseBloomEffect
+
 void LGPRoseBloomEffect::cleanup() {}
 
 const plugins::EffectMetadata& LGPRoseBloomEffect::getMetadata() const {
@@ -438,7 +905,13 @@ const plugins::EffectMetadata& LGPRoseBloomEffect::getMetadata() const {
 // 7) Harmonograph Halo (Lissajous aura)
 // ---------------------------------------------
 LGPHarmonographHaloEffect::LGPHarmonographHaloEffect() : m_t(0.0f) {}
-bool LGPHarmonographHaloEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
+bool LGPHarmonographHaloEffect::init(plugins::EffectContext& ctx) { (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPHarmonographHaloEffect
+    gLGPHarmonographHaloEffectSpeedScale = kLGPHarmonographHaloEffectSpeedScale;
+    gLGPHarmonographHaloEffectOutputGain = kLGPHarmonographHaloEffectOutputGain;
+    gLGPHarmonographHaloEffectCentreBias = kLGPHarmonographHaloEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPHarmonographHaloEffect
+ m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
 
 void LGPHarmonographHaloEffect::render(plugins::EffectContext& ctx) {
     const float speedNorm = ctx.speed / 50.0f;
@@ -484,6 +957,43 @@ void LGPHarmonographHaloEffect::render(plugins::EffectContext& ctx) {
     lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }
 
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPHarmonographHaloEffect
+uint8_t LGPHarmonographHaloEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPHarmonographHaloEffectParameters) / sizeof(kLGPHarmonographHaloEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPHarmonographHaloEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPHarmonographHaloEffectParameters[index];
+}
+
+bool LGPHarmonographHaloEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpharmonograph_halo_effect_speed_scale") == 0) {
+        gLGPHarmonographHaloEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpharmonograph_halo_effect_output_gain") == 0) {
+        gLGPHarmonographHaloEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpharmonograph_halo_effect_centre_bias") == 0) {
+        gLGPHarmonographHaloEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPHarmonographHaloEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpharmonograph_halo_effect_speed_scale") == 0) return gLGPHarmonographHaloEffectSpeedScale;
+    if (strcmp(name, "lgpharmonograph_halo_effect_output_gain") == 0) return gLGPHarmonographHaloEffectOutputGain;
+    if (strcmp(name, "lgpharmonograph_halo_effect_centre_bias") == 0) return gLGPHarmonographHaloEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPHarmonographHaloEffect
+
 void LGPHarmonographHaloEffect::cleanup() {}
 
 const plugins::EffectMetadata& LGPHarmonographHaloEffect::getMetadata() const {
@@ -503,6 +1013,12 @@ LGPRule30CathedralEffect::LGPRule30CathedralEffect() : m_step(0) {}
 
 bool LGPRule30CathedralEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPRule30CathedralEffect
+    gLGPRule30CathedralEffectSpeedScale = kLGPRule30CathedralEffectSpeedScale;
+    gLGPRule30CathedralEffectOutputGain = kLGPRule30CathedralEffectOutputGain;
+    gLGPRule30CathedralEffectCentreBias = kLGPRule30CathedralEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPRule30CathedralEffect
+
     lightwaveos::effects::cinema::reset();
 #ifndef NATIVE_BUILD
     if (!m_ps) {
@@ -562,6 +1078,43 @@ void LGPRule30CathedralEffect::render(plugins::EffectContext& ctx) {
     lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }
 
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPRule30CathedralEffect
+uint8_t LGPRule30CathedralEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPRule30CathedralEffectParameters) / sizeof(kLGPRule30CathedralEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPRule30CathedralEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPRule30CathedralEffectParameters[index];
+}
+
+bool LGPRule30CathedralEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgprule30_cathedral_effect_speed_scale") == 0) {
+        gLGPRule30CathedralEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgprule30_cathedral_effect_output_gain") == 0) {
+        gLGPRule30CathedralEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgprule30_cathedral_effect_centre_bias") == 0) {
+        gLGPRule30CathedralEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPRule30CathedralEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgprule30_cathedral_effect_speed_scale") == 0) return gLGPRule30CathedralEffectSpeedScale;
+    if (strcmp(name, "lgprule30_cathedral_effect_output_gain") == 0) return gLGPRule30CathedralEffectOutputGain;
+    if (strcmp(name, "lgprule30_cathedral_effect_centre_bias") == 0) return gLGPRule30CathedralEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPRule30CathedralEffect
+
 void LGPRule30CathedralEffect::cleanup() {
 #ifndef NATIVE_BUILD
     if (m_ps) {
@@ -591,6 +1144,12 @@ LGPLangtonHighwayEffect::LGPLangtonHighwayEffect()
 
 bool LGPLangtonHighwayEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPLangtonHighwayEffect
+    gLGPLangtonHighwayEffectSpeedScale = kLGPLangtonHighwayEffectSpeedScale;
+    gLGPLangtonHighwayEffectOutputGain = kLGPLangtonHighwayEffectOutputGain;
+    gLGPLangtonHighwayEffectCentreBias = kLGPLangtonHighwayEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPLangtonHighwayEffect
+
     lightwaveos::effects::cinema::reset();
     if (!m_grid) {
         m_grid = static_cast<uint8_t*>(heap_caps_malloc(H * W, MALLOC_CAP_SPIRAM));
@@ -671,6 +1230,43 @@ void LGPLangtonHighwayEffect::render(plugins::EffectContext& ctx) {
     lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }
 
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPLangtonHighwayEffect
+uint8_t LGPLangtonHighwayEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPLangtonHighwayEffectParameters) / sizeof(kLGPLangtonHighwayEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPLangtonHighwayEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPLangtonHighwayEffectParameters[index];
+}
+
+bool LGPLangtonHighwayEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgplangton_highway_effect_speed_scale") == 0) {
+        gLGPLangtonHighwayEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgplangton_highway_effect_output_gain") == 0) {
+        gLGPLangtonHighwayEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgplangton_highway_effect_centre_bias") == 0) {
+        gLGPLangtonHighwayEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPLangtonHighwayEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgplangton_highway_effect_speed_scale") == 0) return gLGPLangtonHighwayEffectSpeedScale;
+    if (strcmp(name, "lgplangton_highway_effect_output_gain") == 0) return gLGPLangtonHighwayEffectOutputGain;
+    if (strcmp(name, "lgplangton_highway_effect_centre_bias") == 0) return gLGPLangtonHighwayEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPLangtonHighwayEffect
+
 void LGPLangtonHighwayEffect::cleanup() {
     if (m_grid) { heap_caps_free(m_grid); m_grid = nullptr; }
 }
@@ -689,7 +1285,13 @@ const plugins::EffectMetadata& LGPLangtonHighwayEffect::getMetadata() const {
 // 10) Cymatic Ladder (standing waves)
 // ---------------------------------------------
 LGPCymaticLadderEffect::LGPCymaticLadderEffect() : m_t(0.0f) {}
-bool LGPCymaticLadderEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
+bool LGPCymaticLadderEffect::init(plugins::EffectContext& ctx) { (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPCymaticLadderEffect
+    gLGPCymaticLadderEffectSpeedScale = kLGPCymaticLadderEffectSpeedScale;
+    gLGPCymaticLadderEffectOutputGain = kLGPCymaticLadderEffectOutputGain;
+    gLGPCymaticLadderEffectCentreBias = kLGPCymaticLadderEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPCymaticLadderEffect
+ m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
 
 void LGPCymaticLadderEffect::render(plugins::EffectContext& ctx) {
     const float speedNorm = ctx.speed / 50.0f;
@@ -727,6 +1329,43 @@ void LGPCymaticLadderEffect::render(plugins::EffectContext& ctx) {
     lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }
 
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPCymaticLadderEffect
+uint8_t LGPCymaticLadderEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPCymaticLadderEffectParameters) / sizeof(kLGPCymaticLadderEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPCymaticLadderEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPCymaticLadderEffectParameters[index];
+}
+
+bool LGPCymaticLadderEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpcymatic_ladder_effect_speed_scale") == 0) {
+        gLGPCymaticLadderEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpcymatic_ladder_effect_output_gain") == 0) {
+        gLGPCymaticLadderEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpcymatic_ladder_effect_centre_bias") == 0) {
+        gLGPCymaticLadderEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPCymaticLadderEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpcymatic_ladder_effect_speed_scale") == 0) return gLGPCymaticLadderEffectSpeedScale;
+    if (strcmp(name, "lgpcymatic_ladder_effect_output_gain") == 0) return gLGPCymaticLadderEffectOutputGain;
+    if (strcmp(name, "lgpcymatic_ladder_effect_centre_bias") == 0) return gLGPCymaticLadderEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPCymaticLadderEffect
+
 void LGPCymaticLadderEffect::cleanup() {}
 
 const plugins::EffectMetadata& LGPCymaticLadderEffect::getMetadata() const {
@@ -743,7 +1382,13 @@ const plugins::EffectMetadata& LGPCymaticLadderEffect::getMetadata() const {
 // 11) Mach Diamonds (shock diamonds)
 // ---------------------------------------------
 LGPMachDiamondsEffect::LGPMachDiamondsEffect() : m_t(0.0f) {}
-bool LGPMachDiamondsEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
+bool LGPMachDiamondsEffect::init(plugins::EffectContext& ctx) { (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:LGPMachDiamondsEffect
+    gLGPMachDiamondsEffectSpeedScale = kLGPMachDiamondsEffectSpeedScale;
+    gLGPMachDiamondsEffectOutputGain = kLGPMachDiamondsEffectOutputGain;
+    gLGPMachDiamondsEffectCentreBias = kLGPMachDiamondsEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:LGPMachDiamondsEffect
+ m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
 
 void LGPMachDiamondsEffect::render(plugins::EffectContext& ctx) {
     const float speedNorm = ctx.speed / 50.0f;
@@ -782,6 +1427,43 @@ void LGPMachDiamondsEffect::render(plugins::EffectContext& ctx) {
     }
     lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:LGPMachDiamondsEffect
+uint8_t LGPMachDiamondsEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kLGPMachDiamondsEffectParameters) / sizeof(kLGPMachDiamondsEffectParameters[0]));
+}
+
+const plugins::EffectParameter* LGPMachDiamondsEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kLGPMachDiamondsEffectParameters[index];
+}
+
+bool LGPMachDiamondsEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "lgpmach_diamonds_effect_speed_scale") == 0) {
+        gLGPMachDiamondsEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpmach_diamonds_effect_output_gain") == 0) {
+        gLGPMachDiamondsEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "lgpmach_diamonds_effect_centre_bias") == 0) {
+        gLGPMachDiamondsEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float LGPMachDiamondsEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "lgpmach_diamonds_effect_speed_scale") == 0) return gLGPMachDiamondsEffectSpeedScale;
+    if (strcmp(name, "lgpmach_diamonds_effect_output_gain") == 0) return gLGPMachDiamondsEffectOutputGain;
+    if (strcmp(name, "lgpmach_diamonds_effect_centre_bias") == 0) return gLGPMachDiamondsEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:LGPMachDiamondsEffect
 
 void LGPMachDiamondsEffect::cleanup() {}
 

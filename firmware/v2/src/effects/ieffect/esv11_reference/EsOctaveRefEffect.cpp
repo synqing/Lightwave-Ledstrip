@@ -12,6 +12,25 @@
 #include <cmath>
 #include <cstring>
 
+
+// AUTO_TUNABLES_BULK_BEGIN:EsOctaveRefEffect
+namespace {
+constexpr float kEsOctaveRefEffectSpeedScale = 1.0f;
+constexpr float kEsOctaveRefEffectOutputGain = 1.0f;
+constexpr float kEsOctaveRefEffectCentreBias = 1.0f;
+
+float gEsOctaveRefEffectSpeedScale = kEsOctaveRefEffectSpeedScale;
+float gEsOctaveRefEffectOutputGain = kEsOctaveRefEffectOutputGain;
+float gEsOctaveRefEffectCentreBias = kEsOctaveRefEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kEsOctaveRefEffectParameters[] = {
+    {"es_octave_ref_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kEsOctaveRefEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"es_octave_ref_effect_output_gain", "Output Gain", 0.25f, 2.0f, kEsOctaveRefEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"es_octave_ref_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kEsOctaveRefEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:EsOctaveRefEffect
+
 namespace lightwaveos::effects::ieffect::esv11_reference {
 
 using namespace lightwaveos::effects;
@@ -19,6 +38,12 @@ using namespace lightwaveos::effects::ieffect::esv11ref;
 
 bool EsOctaveRefEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:EsOctaveRefEffect
+    gEsOctaveRefEffectSpeedScale = kEsOctaveRefEffectSpeedScale;
+    gEsOctaveRefEffectOutputGain = kEsOctaveRefEffectOutputGain;
+    gEsOctaveRefEffectCentreBias = kEsOctaveRefEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:EsOctaveRefEffect
+
 
     if (!m_ps) {
         m_ps = static_cast<PsramData*>(
@@ -80,6 +105,43 @@ void EsOctaveRefEffect::render(plugins::EffectContext& ctx) {
         SET_CENTER_PAIR(ctx, dist, c);
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:EsOctaveRefEffect
+uint8_t EsOctaveRefEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kEsOctaveRefEffectParameters) / sizeof(kEsOctaveRefEffectParameters[0]));
+}
+
+const plugins::EffectParameter* EsOctaveRefEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kEsOctaveRefEffectParameters[index];
+}
+
+bool EsOctaveRefEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "es_octave_ref_effect_speed_scale") == 0) {
+        gEsOctaveRefEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "es_octave_ref_effect_output_gain") == 0) {
+        gEsOctaveRefEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "es_octave_ref_effect_centre_bias") == 0) {
+        gEsOctaveRefEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float EsOctaveRefEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "es_octave_ref_effect_speed_scale") == 0) return gEsOctaveRefEffectSpeedScale;
+    if (strcmp(name, "es_octave_ref_effect_output_gain") == 0) return gEsOctaveRefEffectOutputGain;
+    if (strcmp(name, "es_octave_ref_effect_centre_bias") == 0) return gEsOctaveRefEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:EsOctaveRefEffect
 
 void EsOctaveRefEffect::cleanup() {
     if (m_ps) { heap_caps_free(m_ps); m_ps = nullptr; }

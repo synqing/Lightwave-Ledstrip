@@ -553,6 +553,33 @@ curl http://lightwaveos.local/api/v2/effects/9
 
 ---
 
+#### `GET /api/v1/effects/parameters` (compat)
+#### `POST /api/v1/effects/parameters` (compat)
+#### `PATCH /api/v1/effects/parameters` (compat)
+
+Per-effect tunable discovery and updates currently ship on the v1 compatibility route.  
+v2 clients can call these routes directly without changing command names.
+
+**Typed tunable metadata fields:**
+
+| Field | Type | Description |
+|------|------|-------------|
+| `type` | `float\\|int\\|bool\\|enum` | Runtime value type |
+| `step` | float | Suggested UI increment |
+| `group` | string | Stable grouping key (`timing`, `wave`, `intro`, etc.) |
+| `unit` | string | Display unit (`s`, `Hz`, `%`, etc.) |
+| `advanced` | bool | True for dense/internal controls |
+
+**Persistence status fields:**
+
+| Field | Type | Description |
+|------|------|-------------|
+| `persistence.mode` | `nvs\\|volatile` | Active persistence mode |
+| `persistence.dirty` | bool | Pending debounced write |
+| `persistence.lastError` | string | Optional last persistence error |
+
+---
+
 #### `GET /api/v2/effects/categories`
 
 Get list of all effect categories with counts.
@@ -2122,6 +2149,78 @@ Get effect metadata over WebSocket.
   },
   "timestamp": 123456789,
   "version": "2.0.0"
+}
+```
+
+---
+
+### Command: `effects.parameters.get` (compat)
+
+Get per-effect tunables over WebSocket.
+
+**Send:**
+```json
+{
+  "type": "effects.parameters.get",
+  "effectId": 1201
+}
+```
+
+**Receive:**
+```json
+{
+  "type": "effects.parameters",
+  "success": true,
+  "data": {
+    "effectId": 1201,
+    "name": "Time Reversal Mirror Mod3",
+    "hasParameters": true,
+    "persistence": {
+      "mode": "nvs",
+      "dirty": false
+    },
+    "parameters": [
+      {
+        "name": "forward_sec",
+        "type": "float",
+        "step": 0.05,
+        "group": "timing",
+        "unit": "s",
+        "advanced": false
+      }
+    ]
+  }
+}
+```
+
+---
+
+### Command: `effects.parameters.set` (compat)
+
+Set per-effect tunables over WebSocket.
+
+**Send:**
+```json
+{
+  "type": "effects.parameters.set",
+  "effectId": 1201,
+  "parameters": {
+    "forward_sec": 1.4,
+    "ridge_count": 12
+  }
+}
+```
+
+**Receive:**
+```json
+{
+  "type": "effects.parameters.changed",
+  "success": true,
+  "data": {
+    "effectId": 1201,
+    "queued": ["forward_sec", "ridge_count"],
+    "failed": []
+  }
 }
 ```
 

@@ -16,6 +16,7 @@
 8. [Effect Metadata](#effect-metadata)
 9. [Examples](#examples)
 10. [Related Documentation](#related-documentation)
+11. [Control Lease v1](#control-lease-v1)
 
 ---
 
@@ -75,6 +76,10 @@ All v1 API responses follow a standardized JSON structure.
 | `MISSING_FIELD` | 400 | Required field is missing from request |
 | `OUT_OF_RANGE` | 400 | Parameter value exceeds valid range |
 | `SCHEMA_MISMATCH` | 400 | Request doesn't match expected schema |
+| `LEASE_REQUIRED` | 428 | Mutating request missing `X-Control-Lease` while lease is active |
+| `LEASE_INVALID` | 403 | Lease token or lease id is invalid |
+| `LEASE_EXPIRED` | 409 | Lease timed out before command completed |
+| `CONTROL_LOCKED` | 409 | Lease is held by another client |
 | `RATE_LIMITED` | 429 | Too many requests, client is rate limited |
 | `INTERNAL_ERROR` | 500 | Server-side error occurred |
 
@@ -165,7 +170,26 @@ Get device runtime status.
       "ip": "192.168.1.100",
       "rssi": -45
     },
-    "wsClients": 2
+    "wsClients": 2,
+    "controlLease": {
+      "active": true,
+      "leaseId": "cl_9f4a2137c1d6",
+      "scope": "global",
+      "ownerClientName": "K1 Composer",
+      "ownerInstanceId": "6f0d84a3-8f49-4da8-8c70-0b8f6db5a870",
+      "ownerWsClientId": 12,
+      "remainingMs": 2140,
+      "ttlMs": 5000,
+      "heartbeatIntervalMs": 1000,
+      "takeoverAllowed": false
+    },
+    "controlCounters": {
+      "blockedWsCommands": 4,
+      "blockedRestRequests": 2,
+      "blockedLocalEncoderInputs": 6,
+      "blockedLocalSerialInputs": 1,
+      "lastLeaseEventMs": 1208600
+    }
   }
 }
 ```
@@ -200,6 +224,41 @@ Get device hardware and firmware information.
 ```bash
 curl http://lightwaveos.local/api/v1/device/info
 ```
+
+---
+
+### Control Lease Endpoint
+
+#### `GET /api/v1/control/status`
+
+Get current control lease state.
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "active": true,
+    "leaseId": "cl_9f4a2137c1d6",
+    "scope": "global",
+    "ownerClientName": "K1 Composer",
+    "ownerInstanceId": "6f0d84a3-8f49-4da8-8c70-0b8f6db5a870",
+    "ownerWsClientId": 12,
+    "remainingMs": 2140,
+    "ttlMs": 5000,
+    "heartbeatIntervalMs": 1000,
+    "takeoverAllowed": false
+  }
+}
+```
+
+When a lease is active, mutating REST requests require:
+
+Mutating endpoints are requests that change effect selection, parameters, transport state, presets, or persisted configuration.
+
+- `X-Control-Lease: <leaseToken>`
+- `X-Control-Lease-Id: <leaseId>` (optional diagnostic)
 
 ---
 
@@ -281,6 +340,85 @@ Get currently active effect with parameters.
 **cURL Example:**
 ```bash
 curl http://lightwaveos.local/api/v1/effects/current
+```
+
+---
+
+#### `GET /api/v1/effects/parameters`
+
+Get per-effect tunables for the active effect, or for a specific effect via `id`.
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | int | No | Effect ID (defaults to current effect) |
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "effectId": 1201,
+    "name": "Time Reversal Mirror Mod3",
+    "hasParameters": true,
+    "persistence": {
+      "mode": "nvs",
+      "dirty": false
+    },
+    "parameters": [
+      {
+        "name": "forward_sec",
+        "displayName": "Forward",
+        "min": 0.2,
+        "max": 4.0,
+        "default": 1.1,
+        "value": 1.4,
+        "type": "float",
+        "step": 0.05,
+        "group": "timing",
+        "unit": "s",
+        "advanced": false
+      }
+    ]
+  }
+}
+```
+
+**cURL Example:**
+```bash
+curl "http://lightwaveos.local/api/v1/effects/parameters?id=1201"
+```
+
+---
+
+#### `POST /api/v1/effects/parameters`
+#### `PATCH /api/v1/effects/parameters`
+
+Queue one or more per-effect tunable updates.
+
+**Request Body:**
+```json
+{
+  "effectId": 1201,
+  "parameters": {
+    "forward_sec": 1.4,
+    "ridge_count": 12
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "effectId": 1201,
+    "name": "Time Reversal Mirror Mod3",
+    "queued": ["forward_sec", "ridge_count"],
+    "failed": []
+  }
+}
 ```
 
 ---
@@ -1128,6 +1266,7 @@ All WebSocket messages use JSON format with a `type` field.
 | Transitions | `transition.getTypes`, `transition.trigger`, `transition.config` |
 | Zones | `zones.list`, `zones.update`, `zones.setLayout`, `zone.setEffect`, `zone.setPalette`, `zone.setBlend` |
 | Device | `device.getStatus` |
+| Control Lease | `control.acquire`, `control.heartbeat`, `control.release`, `control.status` |
 | Batch | `batch` |
 | Streaming | `ledStream.subscribe`, `ledStream.unsubscribe`, `audio.subscribe`, `audio.unsubscribe` |
 | Debug | `debug.audio.get`, `debug.audio.set`, `debug.udp.get` |
@@ -1146,6 +1285,60 @@ ws.onmessage = (event) => {
   console.log('Received:', data);
 };
 ```
+
+---
+
+### Control Lease Commands
+
+Use control lease for hard-exclusive command ownership.
+
+Acquire:
+
+```json
+{
+  "type": "control.acquire",
+  "requestId": "req-101",
+  "clientName": "K1 Composer",
+  "clientInstanceId": "6f0d84a3-8f49-4da8-8c70-0b8f6db5a870",
+  "scope": "global"
+}
+```
+
+Heartbeat:
+
+```json
+{
+  "type": "control.heartbeat",
+  "requestId": "req-102",
+  "leaseId": "cl_9f4a2137c1d6",
+  "leaseToken": "2Ab8P9Qk0kY2eP7nX7c2Yw"
+}
+```
+
+Release:
+
+```json
+{
+  "type": "control.release",
+  "requestId": "req-103",
+  "leaseId": "cl_9f4a2137c1d6",
+  "leaseToken": "2Ab8P9Qk0kY2eP7nX7c2Yw",
+  "reason": "user_exit"
+}
+```
+
+Status:
+
+```json
+{
+  "type": "control.status",
+  "requestId": "req-104"
+}
+```
+
+For full contract and lock-error schema, see [`control-lease-v1.md`](./control-lease-v1.md).
+
+Server broadcasts `control.stateChanged` to all WS clients whenever lease state changes.
 
 ---
 
@@ -1418,6 +1611,84 @@ Get effect category list.
 ws.send(JSON.stringify({
   type: "effects.getCategories"
 }));
+```
+
+---
+
+### Command: `effects.parameters.get`
+
+Get per-effect tunables over WebSocket.
+
+**Send:**
+```json
+{
+  "type": "effects.parameters.get",
+  "effectId": 1201
+}
+```
+
+**Receive:**
+```json
+{
+  "type": "effects.parameters",
+  "success": true,
+  "data": {
+    "effectId": 1201,
+    "name": "Time Reversal Mirror Mod3",
+    "hasParameters": true,
+    "persistence": {
+      "mode": "nvs",
+      "dirty": false
+    },
+    "parameters": [
+      {
+        "name": "forward_sec",
+        "displayName": "Forward",
+        "min": 0.2,
+        "max": 4.0,
+        "default": 1.1,
+        "value": 1.4,
+        "type": "float",
+        "step": 0.05,
+        "group": "timing",
+        "unit": "s",
+        "advanced": false
+      }
+    ]
+  }
+}
+```
+
+---
+
+### Command: `effects.parameters.set`
+
+Queue per-effect tunable updates over WebSocket.
+
+**Send:**
+```json
+{
+  "type": "effects.parameters.set",
+  "effectId": 1201,
+  "parameters": {
+    "forward_sec": 1.4,
+    "ridge_count": 12
+  }
+}
+```
+
+**Receive:**
+```json
+{
+  "type": "effects.parameters.changed",
+  "success": true,
+  "data": {
+    "effectId": 1201,
+    "name": "Time Reversal Mirror Mod3",
+    "queued": ["forward_sec", "ridge_count"],
+    "failed": []
+  }
+}
 ```
 
 ---
@@ -2073,7 +2344,41 @@ ws.onmessage = (event) => {
 
 ---
 
+## Control Lease v1
+
+Control lease introduces hard-exclusive mutating control ownership for dashboard tooling.
+
+See full contract: [`control-lease-v1.md`](./control-lease-v1.md)
+
+Highlights:
+
+- WS lease lifecycle: `control.acquire`, `control.heartbeat`, `control.release`, `control.status`
+- WS lease broadcast: `control.stateChanged`
+- REST mutation token headers while active lease exists
+- canonical lock errors: `CONTROL_LOCKED`, `LEASE_REQUIRED`, `LEASE_INVALID`, `LEASE_EXPIRED`
+- local encoder and serial mutating inputs are blocked while active lease exists
+
+---
+
+## Render Stream v1
+
+Render Stream v1 enables dashboard-as-brains mode where the dashboard executes effect logic locally and streams binary framebuffers to K1.
+
+See full contract: [`render-stream-v1.md`](./render-stream-v1.md)
+
+Highlights:
+
+- WS JSON lifecycle: `render.stream.start`, `render.stream.stop`, `render.stream.status`
+- WS state broadcast: `render.stream.stateChanged`
+- binary frame header contract: `K1F1` + versioned payload (`320` LEDs, RGB888)
+- latest-frame-wins mailbox semantics on device (bounded latency)
+- stale timeout automatic fallback to internal renderer mode
+- stream ownership is lease-coupled (owner WS client only)
+
+---
+
 ## Notes
+
 
 ### CENTER ORIGIN Constraint
 
@@ -2116,9 +2421,11 @@ For audio-specific APIs (requires `esp32dev_audio_esv11` build):
 
 - [Audio Stream API](../../v2/docs/AUDIO_STREAM_API.md) - Binary audio metrics streaming (30 FPS)
 - [Audio Control API](../../v2/docs/AUDIO_CONTROL_API.md) - Capture control, beat events, tuning presets
+- [Control Lease v1](./control-lease-v1.md) - Hard-exclusive control acquisition/release contract
+- [Render Stream v1](./render-stream-v1.md) - Dashboard-to-K1 binary framebuffer transport contract
 
 ---
 
-**Documentation Version:** 1.0.0
-**Last Updated:** 2026-02-04
+**Documentation Version:** 1.1.0
+**Last Updated:** 2026-02-25
 **API Base:** LightwaveOS v1.0.0

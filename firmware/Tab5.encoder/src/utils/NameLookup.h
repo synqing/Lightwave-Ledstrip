@@ -17,3 +17,6 @@ extern const char* lookupPaletteName(uint8_t id);
 // EffectId translation (hex effectId ↔ position index)
 extern uint16_t effectIdFromIndex(uint8_t index);     // returns 0xFFFF if invalid
 extern uint8_t indexFromEffectId(uint16_t effectId);   // returns 0xFF if not found
+
+// Deferred sync: raw hex effectId from status before effects.list loads
+extern uint16_t s_pendingEffectHexId;

@@ -155,6 +155,7 @@ static uint16_t s_effectIds[MAX_EFFECTS] = {0};   // position index → hex effe
 static uint16_t s_effectCount = 0;                  // total effects received across all pages
 static uint8_t s_effectPages = 0;
 static uint8_t s_effectNextPage = 1;
+uint16_t s_pendingEffectHexId = 0;                    // raw hex effectId from status before effects.list loads
 
 static char s_paletteNames[MAX_PALETTES][PALETTE_NAME_MAX] = {{0}};
 static bool s_paletteKnown[MAX_PALETTES] = {false};
@@ -1456,14 +1457,33 @@ void setup() {
                     updateParameterMetadata(0, 0, effectMax);  // EffectId is index 0
                     Serial.printf("[ParamMap] Updated Effect max from effects.list: %u (total=%u)\n",
                                   effectMax, s_effectCount);
+
+                    // Also update zone effect max values (indices 8, 10, 12, 14)
+                    for (uint8_t i = 8; i <= 14; i += 2) {
+                        updateParameterMetadata(i, 0, effectMax);
+                    }
                 }
 
-                // Also update zone effect max values (indices 8, 10, 12, 14)
-                if (g_ui && s_uiInitialized && g_ui->getCurrentScreen() == UIScreen::ZONE_COMPOSER) {
-                    uint8_t zoneEffectMax = getParameterMax(0);
-                    for (uint8_t i = 8; i <= 14; i += 2) {
-                        updateParameterMetadata(i, 0, zoneEffectMax);
+                // Resolve deferred effectId from status (arrived before effects.list)
+                if (s_pendingEffectHexId != 0) {
+                    uint8_t idx = indexFromEffectId(s_pendingEffectHexId);
+                    if (idx != 0xFF) {
+                        if (g_paramHandler) {
+                            g_paramHandler->setValue(ParameterId::EffectId, idx);
+                        }
+                        if (g_encoders) {
+                            g_encoders->setValue(0, idx, false);
+                        }
+                        Serial.printf("[Effects] Deferred effectId resolved: 0x%04X → index %u\n",
+                                      s_pendingEffectHexId, idx);
+                        s_pendingEffectHexId = 0;
                     }
+                }
+
+                // Log when all pages are loaded
+                if (s_effectPages > 0 && s_effectNextPage > s_effectPages) {
+                    Serial.printf("[Effects] All %u pages loaded, %u effects total\n",
+                                  s_effectPages, s_effectCount);
                 }
 
                 updateUiEffectPaletteLabels();

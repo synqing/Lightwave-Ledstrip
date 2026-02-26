@@ -891,7 +891,8 @@ void ZoneComposerUI::adjustZoneParameter(uint8_t zoneIndex, int32_t delta) {
         case ZoneParameterMode::EFFECT: {
             // Dynamic max from effects.list (position index, updated at runtime)
             int MAX_EFFECT_INDEX = static_cast<int>(getParameterMax(0));
-            int newVal = _zoneEffects[zoneIndex] + delta;
+            int oldVal = _zoneEffects[zoneIndex];
+            int newVal = oldVal + delta;
             if (newVal < 0) newVal = MAX_EFFECT_INDEX;
             if (newVal > MAX_EFFECT_INDEX) newVal = 0;
             _zoneEffects[zoneIndex] = newVal;
@@ -906,7 +907,8 @@ void ZoneComposerUI::adjustZoneParameter(uint8_t zoneIndex, int32_t delta) {
                 _wsClient->sendZoneEffect(zoneIndex, _zoneEffects[zoneIndex]);
             }
 
-            Serial.printf("[ZoneComposer] Zone %u Effect → %u\n", zoneIndex, _zoneEffects[zoneIndex]);
+            Serial.printf("[ZoneComposer] Zone %u Effect %d→%d (max=%d, delta=%d)\n",
+                          zoneIndex, oldVal, newVal, MAX_EFFECT_INDEX, (int)delta);
             break;
         }
 

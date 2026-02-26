@@ -96,7 +96,12 @@ bool ParameterHandler::applyStatus(JsonDocument& doc) {
             if (param->id == ParameterId::EffectId) {
                 int val = doc[param->statusField].as<int>();
                 uint8_t idx = indexFromEffectId(static_cast<uint16_t>(val));
-                if (idx == 0xFF) continue;  // Unknown effectId, skip
+                if (idx == 0xFF) {
+                    // effects.list not loaded yet — stash raw hex ID for deferred sync
+                    s_pendingEffectHexId = static_cast<uint16_t>(val);
+                    Serial.printf("[Param] EffectId %d (0x%04X) deferred — effects.list not loaded\n", val, val);
+                    continue;
+                }
                 newValue = idx;
             } else if (doc[param->statusField].is<uint8_t>()) {
                 newValue = doc[param->statusField].as<uint8_t>();

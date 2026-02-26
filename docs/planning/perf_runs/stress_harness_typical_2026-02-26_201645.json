@@ -1,0 +1,38 @@
+{
+  "timestamp": "2026-02-26 20:16:45",
+  "host": "http://192.168.1.101",
+  "ws_url": "ws://192.168.1.101/ws",
+  "serial_port": "/dev/cu.usbmodem212401",
+  "profile": "typical",
+  "overall": "PASS",
+  "results": [
+    {
+      "name": "serial_only_120s",
+      "duration_s": 120,
+      "rest_calls": 0,
+      "rest_errors": 0,
+      "ws_messages": 0,
+      "ws_errors": 0,
+      "ws_connects": 0,
+      "ws_receives": 0,
+      "rest_p50_ms": null,
+      "rest_p95_ms": null,
+      "ws_p50_ms": null,
+      "ws_p95_ms": null,
+      "serial_lines": 28,
+      "shedding_lines": 0,
+      "ws_diag_lines": 12,
+      "heap_samples": 12,
+      "heap_min": 27664,
+      "heap_max": 27664,
+      "heap_avg": 27664,
+      "largest_samples": 12,
+      "largest_min": 17396,
+      "largest_max": 17396,
+      "largest_avg": 17396,
+      "uptime_resets": 0,
+      "fatal_lines": 0
+    }
+  ],
+  "notes": []
+}

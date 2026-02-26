@@ -144,6 +144,10 @@ size_t getFreeInternalHeap() {
     return heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
 }
 
+size_t getLargestInternalHeapBlock() {
+    return heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
+}
+
 #if FEATURE_CONTROL_LEASE
 bool isMutatingHttpMethod(AsyncWebServerRequest* request) {
     if (!request) {
@@ -541,6 +545,8 @@ void WebServer::update() {
         static uint32_t s_lastWsDiagLogMs = 0;
         if ((nowMs - s_lastWsDiagLogMs) >= 10000) {
             s_lastWsDiagLogMs = nowMs;
+            const uint32_t freeInternal = static_cast<uint32_t>(getFreeInternalHeap());
+            const uint32_t largestInternal = static_cast<uint32_t>(getLargestInternalHeapBlock());
             const webserver::WsGateway::Stats wsStats = m_wsGateway->getStats();
             LW_LOGI(
                 "WS diag: active=%u ok=%lu rejCooldown=%lu rejOverlap=%lu rejLimit=%lu disc=%lu parseErr=%lu oversize=%lu unknown=%lu",
@@ -553,6 +559,11 @@ void WebServer::update() {
                 static_cast<unsigned long>(wsStats.parseErrors),
                 static_cast<unsigned long>(wsStats.oversizedFrames),
                 static_cast<unsigned long>(wsStats.unknownCommands));
+            LW_LOGI(
+                "Heap diag: internal=%lu largest=%lu shed=%u",
+                static_cast<unsigned long>(freeInternal),
+                static_cast<unsigned long>(largestInternal),
+                static_cast<unsigned>(m_lowHeapShed ? 1 : 0));
         }
     }
 

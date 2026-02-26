@@ -56,6 +56,8 @@ const PHASE_ORDER = ["input", "mapping", "modulation", "render", "post", "output
 const DISCOVERY_TIMEOUT_MS = 3000;
 const RECONNECT_BACKOFF_MS = [1000, 2000, 4000, 8000, 16000, 30000];
 const STORAGE_KEY_HOST = "k1_composer_host";
+/** Wired-first: K1 plugged into computer via USB; local proxy exposes device at this host. */
+const WIRED_PROXY_HOST = "localhost:8765";
 const DISCOVERY_CANDIDATES = ["lightwaveos.local", "192.168.4.1"];
 
 const SENSITIVE_TELEMETRY_KEYS = new Set([
@@ -547,7 +549,12 @@ function probeHost(host) {
 
 async function resolveDeviceHost() {
   const cached = localStorage.getItem(STORAGE_KEY_HOST);
-  const candidates = cached ? [cached, ...DISCOVERY_CANDIDATES.filter((h) => h !== cached)] : DISCOVERY_CANDIDATES;
+  // Wired-first: try local proxy (USB serial bridge) first, then cached, then wireless candidates.
+  const candidates = [
+    WIRED_PROXY_HOST,
+    ...(cached && cached !== WIRED_PROXY_HOST ? [cached] : []),
+    ...DISCOVERY_CANDIDATES.filter((h) => h !== cached),
+  ];
   for (const host of candidates) {
     if (await probeHost(host)) return host;
   }
@@ -566,7 +573,7 @@ async function autoConnect() {
   } else {
     setConnectionBadge("no_device");
     toast("No device found. Connect to K1's WiFi or ensure device is on this network.");
-    logEvent("discovery.failed", { candidates: DISCOVERY_CANDIDATES });
+    logEvent("discovery.failed", { wiredFirst: WIRED_PROXY_HOST, wireless: DISCOVERY_CANDIDATES });
   }
 }
 

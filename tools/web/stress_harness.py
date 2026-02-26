@@ -79,6 +79,10 @@ class ScenarioResult:
     heap_min: int | None
     heap_max: int | None
     heap_avg: float | None
+    largest_samples: int
+    largest_min: int | None
+    largest_max: int | None
+    largest_avg: float | None
     uptime_resets: int
     fatal_lines: int
 
@@ -107,6 +111,23 @@ def parse_internal_heap(line: str) -> int | None:
             except ValueError:
                 return None
     return None
+
+
+def parse_largest_heap_block(line: str) -> int | None:
+    token = "largest="
+    idx = line.find(token)
+    if idx < 0:
+        return None
+    start = idx + len(token)
+    end = start
+    while end < len(line) and line[end].isdigit():
+        end += 1
+    if end <= start:
+        return None
+    try:
+        return int(line[start:end])
+    except ValueError:
+        return None
 
 
 def http_get_json(url: str, timeout_s: float = 3.0) -> tuple[dict[str, Any] | None, float, bool]:
@@ -247,6 +268,7 @@ def run_scenario(host: str, ws_url: str, serial_port: str | None, scenario: Scen
     shedding_lines = 0
     ws_diag_lines = 0
     heaps: list[int] = []
+    largest_blocks: list[int] = []
     uptime_resets = 0
     last_uptime: int | None = None
     fatal_lines = 0
@@ -281,6 +303,9 @@ def run_scenario(host: str, ws_url: str, serial_port: str | None, scenario: Scen
             heap = parse_internal_heap(line)
             if heap is not None:
                 heaps.append(heap)
+            largest = parse_largest_heap_block(line)
+            if largest is not None:
+                largest_blocks.append(largest)
             if "Low-heap shedding active" in line:
                 shedding_lines += 1
             if "WS diag:" in line:
@@ -323,6 +348,10 @@ def run_scenario(host: str, ws_url: str, serial_port: str | None, scenario: Scen
         heap_min=min(heaps) if heaps else None,
         heap_max=max(heaps) if heaps else None,
         heap_avg=round(statistics.mean(heaps), 1) if heaps else None,
+        largest_samples=len(largest_blocks),
+        largest_min=min(largest_blocks) if largest_blocks else None,
+        largest_max=max(largest_blocks) if largest_blocks else None,
+        largest_avg=round(statistics.mean(largest_blocks), 1) if largest_blocks else None,
         uptime_resets=uptime_resets,
         fatal_lines=fatal_lines,
     )
@@ -379,13 +408,14 @@ def write_reports(out_base: Path, host: str, ws_url: str, serial_port: str | Non
         f"- Profile: `{profile}`",
         f"- Overall: `{overall}`",
         "",
-        "| Scenario | Dur(s) | REST Calls | REST Err | WS Msg | WS Err | Heap Min | Heap Avg | Shedding | Uptime Resets | Fatal Lines |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| Scenario | Dur(s) | REST Calls | REST Err | WS Msg | WS Err | Heap Min | Heap Avg | Largest Min | Largest Avg | Shedding | Uptime Resets | Fatal Lines |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for r in results:
         lines.append(
             f"| {r.name} | {r.duration_s} | {r.rest_calls} | {r.rest_errors} | "
             f"{r.ws_messages} | {r.ws_errors} | {r.heap_min} | {r.heap_avg} | "
+            f"{r.largest_min} | {r.largest_avg} | "
             f"{r.shedding_lines} | {r.uptime_resets} | {r.fatal_lines} |"
         )
     lines.append("")

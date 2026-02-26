@@ -413,7 +413,7 @@ EffectsSimpleDecodeResult WsEffectsCodec::decodeSimple(JsonObjectConst root) {
 // Encoder Functions (Response Encoding)
 // ============================================================================
 
-void WsEffectsCodec::encodeGetCurrent(EffectId effectId, const char* name, uint8_t brightness, uint8_t speed, uint8_t paletteId, uint8_t hue, uint8_t intensity, uint8_t saturation, uint8_t complexity, uint8_t variation, JsonObject& data) {
+void WsEffectsCodec::encodeGetCurrent(EffectId effectId, const char* name, uint8_t brightness, uint8_t speed, uint8_t paletteId, uint8_t hue, uint8_t intensity, uint8_t saturation, uint8_t complexity, uint8_t variation, bool isIEffect, const char* description, uint8_t version, JsonObject& data) {
     data["effectId"] = effectId;
     data["name"] = name ? name : "";
     data["brightness"] = brightness;
@@ -424,6 +424,9 @@ void WsEffectsCodec::encodeGetCurrent(EffectId effectId, const char* name, uint8
     data["saturation"] = saturation;
     data["complexity"] = complexity;
     data["variation"] = variation;
+    data["isIEffect"] = isIEffect;
+    if (description) data["description"] = description;
+    data["version"] = version;
 }
 
 void WsEffectsCodec::encodeChanged(EffectId effectId, const char* name, bool transitionActive, JsonObject& data) {
@@ -503,10 +506,34 @@ void WsEffectsCodec::encodeCategories(const char* const familyNames[], const uin
     data["total"] = total;
 }
 
-void WsEffectsCodec::encodeParametersGet(EffectId effectId, const char* name, bool hasParameters, const char* const paramNames[], const char* const paramDisplayNames[], const float paramMins[], const float paramMaxs[], const float paramDefaults[], const float paramValues[], uint8_t paramCount, JsonObject& data) {
+void WsEffectsCodec::encodeParametersGet(EffectId effectId,
+                                         const char* name,
+                                         bool hasParameters,
+                                         const char* const paramNames[],
+                                         const char* const paramDisplayNames[],
+                                         const float paramMins[],
+                                         const float paramMaxs[],
+                                         const float paramDefaults[],
+                                         const float paramValues[],
+                                         const char* const paramTypes[],
+                                         const float paramSteps[],
+                                         const char* const paramGroups[],
+                                         const char* const paramUnits[],
+                                         const bool paramAdvanced[],
+                                         uint8_t paramCount,
+                                         const char* persistenceMode,
+                                         bool persistenceDirty,
+                                         const char* persistenceLastError,
+                                         JsonObject& data) {
     data["effectId"] = effectId;
     data["name"] = name ? name : "";
     data["hasParameters"] = hasParameters;
+    JsonObject persistence = data["persistence"].to<JsonObject>();
+    persistence["mode"] = persistenceMode ? persistenceMode : "volatile";
+    persistence["dirty"] = persistenceDirty;
+    if (persistenceLastError && persistenceLastError[0] != '\0') {
+        persistence["lastError"] = persistenceLastError;
+    }
     
     JsonArray params = data["parameters"].to<JsonArray>();
     for (uint8_t i = 0; i < paramCount; i++) {
@@ -517,6 +544,11 @@ void WsEffectsCodec::encodeParametersGet(EffectId effectId, const char* name, bo
         p["max"] = paramMaxs[i];
         p["default"] = paramDefaults[i];
         p["value"] = paramValues[i];
+        p["type"] = (paramTypes && paramTypes[i]) ? paramTypes[i] : "float";
+        p["step"] = paramSteps ? paramSteps[i] : 0.01f;
+        p["group"] = (paramGroups && paramGroups[i]) ? paramGroups[i] : "";
+        p["unit"] = (paramUnits && paramUnits[i]) ? paramUnits[i] : "";
+        p["advanced"] = paramAdvanced ? paramAdvanced[i] : false;
     }
 }
 

@@ -198,10 +198,16 @@ struct HttpEffectParameterItemData {
     float maxValue;
     float defaultValue;
     float value;
+    const char* type;
+    float step;
+    const char* group;
+    const char* unit;
+    bool advanced;
     
     HttpEffectParameterItemData()
         : name(""), displayName(""), minValue(0.0f), maxValue(0.0f),
-          defaultValue(0.0f), value(0.0f) {}
+          defaultValue(0.0f), value(0.0f), type("float"), step(0.01f),
+          group(""), unit(""), advanced(false) {}
 };
 
 /**
@@ -213,9 +219,13 @@ struct HttpEffectsParametersGetData {
     bool hasParameters;
     const HttpEffectParameterItemData* parameters;
     size_t parameterCount;
+    const char* persistenceMode;
+    bool persistenceDirty;
+    const char* persistenceLastError;
     
     HttpEffectsParametersGetData()
-        : effectId(0), name(""), hasParameters(false), parameters(nullptr), parameterCount(0) {}
+        : effectId(0), name(""), hasParameters(false), parameters(nullptr), parameterCount(0),
+          persistenceMode("volatile"), persistenceDirty(false), persistenceLastError(nullptr) {}
 };
 
 /**

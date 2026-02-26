@@ -170,6 +170,12 @@ void HttpEffectsCodec::encodeParametersGet(const HttpEffectsParametersGetData& d
     obj["effectId"] = data.effectId;
     obj["name"] = data.name;
     obj["hasParameters"] = data.hasParameters;
+    JsonObject persistence = obj["persistence"].to<JsonObject>();
+    persistence["mode"] = data.persistenceMode ? data.persistenceMode : "volatile";
+    persistence["dirty"] = data.persistenceDirty;
+    if (data.persistenceLastError && data.persistenceLastError[0] != '\0') {
+        persistence["lastError"] = data.persistenceLastError;
+    }
 
     JsonArray params = obj["parameters"].to<JsonArray>();
     if (!data.hasParameters || !data.parameters) {
@@ -185,6 +191,11 @@ void HttpEffectsCodec::encodeParametersGet(const HttpEffectsParametersGetData& d
         p["max"] = param.maxValue;
         p["default"] = param.defaultValue;
         p["value"] = param.value;
+        p["type"] = param.type ? param.type : "float";
+        p["step"] = param.step;
+        p["group"] = param.group ? param.group : "";
+        p["unit"] = param.unit ? param.unit : "";
+        p["advanced"] = param.advanced;
     }
 }
 

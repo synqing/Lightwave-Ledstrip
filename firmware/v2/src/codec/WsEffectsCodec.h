@@ -335,7 +335,7 @@ public:
     // Populate JsonObject data from domain objects
     
     // Effects encoders
-    static void encodeGetCurrent(EffectId effectId, const char* name, uint8_t brightness, uint8_t speed, uint8_t paletteId, uint8_t hue, uint8_t intensity, uint8_t saturation, uint8_t complexity, uint8_t variation, JsonObject& data);
+    static void encodeGetCurrent(EffectId effectId, const char* name, uint8_t brightness, uint8_t speed, uint8_t paletteId, uint8_t hue, uint8_t intensity, uint8_t saturation, uint8_t complexity, uint8_t variation, bool isIEffect, const char* description, uint8_t version, JsonObject& data);
     static void encodeChanged(EffectId effectId, const char* name, bool transitionActive, JsonObject& data);
     static void encodeMetadata(EffectId effectId, const char* name, const char* familyName, uint8_t familyId, const char* story, const char* opticalIntent, uint8_t tags, JsonObject& data);
     static void encodeList(uint16_t effectCount, uint16_t startIdx, uint16_t endIdx, uint8_t page, uint8_t limit, bool details, const char* const effectNames[], const EffectId effectIds[], const char* const categories[], JsonObject& data);
@@ -343,7 +343,25 @@ public:
     static void encodeCategories(const char* const familyNames[], const uint8_t familyCounts[], uint8_t total, JsonObject& data);
     
     // Parameters encoders
-    static void encodeParametersGet(EffectId effectId, const char* name, bool hasParameters, const char* const paramNames[], const char* const paramDisplayNames[], const float paramMins[], const float paramMaxs[], const float paramDefaults[], const float paramValues[], uint8_t paramCount, JsonObject& data);
+    static void encodeParametersGet(EffectId effectId,
+                                    const char* name,
+                                    bool hasParameters,
+                                    const char* const paramNames[],
+                                    const char* const paramDisplayNames[],
+                                    const float paramMins[],
+                                    const float paramMaxs[],
+                                    const float paramDefaults[],
+                                    const float paramValues[],
+                                    const char* const paramTypes[],
+                                    const float paramSteps[],
+                                    const char* const paramGroups[],
+                                    const char* const paramUnits[],
+                                    const bool paramAdvanced[],
+                                    uint8_t paramCount,
+                                    const char* persistenceMode,
+                                    bool persistenceDirty,
+                                    const char* persistenceLastError,
+                                    JsonObject& data);
     static void encodeParametersSetChanged(EffectId effectId, const char* name, const char* const queuedKeys[], uint8_t queuedCount, const char* const failedKeys[], uint8_t failedCount, JsonObject& data);
     static void encodeGlobalParametersGet(uint8_t brightness, uint8_t speed, uint8_t paletteId, uint8_t hue, uint8_t intensity, uint8_t saturation, uint8_t complexity, uint8_t variation, JsonObject& data);
     static void encodeParametersChanged(const char* const updatedKeys[], uint8_t updatedCount, uint8_t brightness, uint8_t speed, uint8_t paletteId, uint8_t hue, uint8_t intensity, uint8_t saturation, uint8_t complexity, uint8_t variation, JsonObject& data);

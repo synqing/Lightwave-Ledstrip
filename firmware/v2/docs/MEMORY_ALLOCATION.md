@@ -241,6 +241,18 @@ All task stacks MUST remain in internal SRAM (FreeRTOS requirement).
 | mDNS | ~2 KB | Internal | Service advertisement |
 | **Worst case (8 WS clients)** | ~100 KB | Internal | Leaves ~80 KB headroom |
 
+#### 4.2.1 WsGateway binary assembly buffers (PSRAM)
+
+WebSocket render-stream binary frames are reassembled in 16 slots of 2048 B each. These buffers are allocated from PSRAM in `WsGateway` constructor (~32 KB total) to preserve internal SRAM.
+
+| Component | Size | Location | Notes |
+|-----------|------|----------|-------|
+| Binary assembly (16 × 2048 B) | 32 KB | PSRAM | `WsGateway::m_binaryAssembly[].buffer`; allocated in ctor, freed in dtor |
+
+**PSRAM allocation failure behaviour:** If `heap_caps_calloc(..., MALLOC_CAP_SPIRAM)` fails for a slot, that entry keeps `buffer == nullptr` and is never chosen as an empty slot. If all 16 slots fail, clients receive `"No binary assembly slots available"` when starting a chunked binary frame. No fallback to internal SRAM (avoids hiding OOM). Slots are reused on disconnect; buffers are only freed in `~WsGateway()`.
+
+**Smoke test (after deploy):** Connect via WebSocket, start render stream, send a binary frame (chunked if applicable). Confirm the frame is accepted and the render stream behaves as before. Optional: check serial for `WS: Binary assembly buffers in PSRAM; internal SRAM free N bytes` after boot to confirm internal SRAM headroom.
+
 ### 4.3 Audio DSP (ESV11 Backend)
 
 All ESV11 buffers allocated in PSRAM via `heap_caps_calloc(..., MALLOC_CAP_SPIRAM)`:
@@ -640,6 +652,7 @@ The firmware initialises components in a specific order to ensure PSRAM is avail
 | `src/effects/transitions/TransitionEngine.cpp:49-68` | Transition buffer allocation |
 | `src/core/system/HeapMonitor.cpp` | Heap monitoring (uses combined metrics!) |
 | `src/network/webserver/UdpStreamer.cpp:226` | Correct internal SRAM check |
+| `src/network/webserver/WsGateway.cpp` | Binary assembly buffers (16×2048 B) in PSRAM |
 | `src/network/WebServer.cpp:139` | Internal SRAM getter |
 | `src/core/actors/Actor.h:208-573` | Task stack size definitions |
 

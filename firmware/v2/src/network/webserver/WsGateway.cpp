@@ -176,6 +176,8 @@ WsGateway::WsGateway(
             LW_LOGW("WS: Binary assembly slot %u PSRAM alloc failed", i);
         }
     }
+    const size_t internalFree = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    LW_LOGI("WS: Binary assembly buffers in PSRAM; internal SRAM free %u bytes", internalFree);
     s_instance = this;
 }
 

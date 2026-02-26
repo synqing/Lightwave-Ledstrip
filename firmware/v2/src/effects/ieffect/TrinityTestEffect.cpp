@@ -1,6 +1,26 @@
 #include "TrinityTestEffect.h"
 #include "../CoreEffects.h"
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:TrinityTestEffect
+namespace {
+constexpr float kTrinityTestEffectSpeedScale = 1.0f;
+constexpr float kTrinityTestEffectOutputGain = 1.0f;
+constexpr float kTrinityTestEffectCentreBias = 1.0f;
+
+float gTrinityTestEffectSpeedScale = kTrinityTestEffectSpeedScale;
+float gTrinityTestEffectOutputGain = kTrinityTestEffectOutputGain;
+float gTrinityTestEffectCentreBias = kTrinityTestEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kTrinityTestEffectParameters[] = {
+    {"trinity_test_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kTrinityTestEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"trinity_test_effect_output_gain", "Output Gain", 0.25f, 2.0f, kTrinityTestEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"trinity_test_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kTrinityTestEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:TrinityTestEffect
 
 namespace lightwaveos {
 namespace effects {
@@ -8,6 +28,12 @@ namespace ieffect {
 
 bool TrinityTestEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:TrinityTestEffect
+    gTrinityTestEffectSpeedScale = kTrinityTestEffectSpeedScale;
+    gTrinityTestEffectOutputGain = kTrinityTestEffectOutputGain;
+    gTrinityTestEffectCentreBias = kTrinityTestEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:TrinityTestEffect
+
     m_beatFlashDecay = 0.0f;
     m_lastBeatPhase = 0.0f;
     m_lastDataTime = 0;
@@ -226,6 +252,43 @@ void TrinityTestEffect::render(plugins::EffectContext& ctx) {
     setSymmetricLEDs(ctx, 1, CRGB(80, 0, 80));
 #endif
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:TrinityTestEffect
+uint8_t TrinityTestEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kTrinityTestEffectParameters) / sizeof(kTrinityTestEffectParameters[0]));
+}
+
+const plugins::EffectParameter* TrinityTestEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kTrinityTestEffectParameters[index];
+}
+
+bool TrinityTestEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "trinity_test_effect_speed_scale") == 0) {
+        gTrinityTestEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "trinity_test_effect_output_gain") == 0) {
+        gTrinityTestEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "trinity_test_effect_centre_bias") == 0) {
+        gTrinityTestEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float TrinityTestEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "trinity_test_effect_speed_scale") == 0) return gTrinityTestEffectSpeedScale;
+    if (strcmp(name, "trinity_test_effect_output_gain") == 0) return gTrinityTestEffectOutputGain;
+    if (strcmp(name, "trinity_test_effect_centre_bias") == 0) return gTrinityTestEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:TrinityTestEffect
 
 void TrinityTestEffect::cleanup() {
     // No dynamic resources to free

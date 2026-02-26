@@ -21,6 +21,25 @@
 #include <cmath>
 #include <cstring>
 
+
+// AUTO_TUNABLES_BULK_BEGIN:AudioBloomEffect
+namespace {
+constexpr float kAudioBloomEffectSpeedScale = 1.0f;
+constexpr float kAudioBloomEffectOutputGain = 1.0f;
+constexpr float kAudioBloomEffectCentreBias = 1.0f;
+
+float gAudioBloomEffectSpeedScale = kAudioBloomEffectSpeedScale;
+float gAudioBloomEffectOutputGain = kAudioBloomEffectOutputGain;
+float gAudioBloomEffectCentreBias = kAudioBloomEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kAudioBloomEffectParameters[] = {
+    {"audio_bloom_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kAudioBloomEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"audio_bloom_effect_output_gain", "Output Gain", 0.25f, 2.0f, kAudioBloomEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"audio_bloom_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kAudioBloomEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:AudioBloomEffect
+
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
@@ -116,6 +135,12 @@ uint8_t computeRootNoteHueShift(uint8_t rootNote, float confidence) {
 
 bool AudioBloomEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:AudioBloomEffect
+    gAudioBloomEffectSpeedScale = kAudioBloomEffectSpeedScale;
+    gAudioBloomEffectOutputGain = kAudioBloomEffectOutputGain;
+    gAudioBloomEffectCentreBias = kAudioBloomEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:AudioBloomEffect
+
 #ifndef NATIVE_BUILD
     if (!m_ps) {
         m_ps = static_cast<AudioBloomPsram*>(
@@ -383,6 +408,43 @@ void AudioBloomEffect::increaseSaturation(CRGB* buffer, uint16_t len, uint8_t am
         hsv2rgb_spectrum(hsv, buffer[i]);
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:AudioBloomEffect
+uint8_t AudioBloomEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kAudioBloomEffectParameters) / sizeof(kAudioBloomEffectParameters[0]));
+}
+
+const plugins::EffectParameter* AudioBloomEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kAudioBloomEffectParameters[index];
+}
+
+bool AudioBloomEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "audio_bloom_effect_speed_scale") == 0) {
+        gAudioBloomEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "audio_bloom_effect_output_gain") == 0) {
+        gAudioBloomEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "audio_bloom_effect_centre_bias") == 0) {
+        gAudioBloomEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float AudioBloomEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "audio_bloom_effect_speed_scale") == 0) return gAudioBloomEffectSpeedScale;
+    if (strcmp(name, "audio_bloom_effect_output_gain") == 0) return gAudioBloomEffectOutputGain;
+    if (strcmp(name, "audio_bloom_effect_centre_bias") == 0) return gAudioBloomEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:AudioBloomEffect
 
 void AudioBloomEffect::cleanup() {
 #ifndef NATIVE_BUILD

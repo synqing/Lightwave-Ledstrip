@@ -6,6 +6,7 @@
 #include "ChromaticInterferenceEffect.h"
 #include "../CoreEffects.h"
 #include <math.h>
+#include <cstring>
 
 #ifndef PI
 #define PI 3.14159265358979323846f
@@ -18,13 +19,28 @@ namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
+namespace {
+const plugins::EffectParameter kParameters[] = {
+    {"phase_rate", "Phase Rate", 0.004f, 0.05f, 0.012f, plugins::EffectParameterType::FLOAT, 0.002f, "timing", "x", false},
+    {"interference_modulation", "Interference Modulation", 0.1f, 1.0f, 0.5f, plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+    {"aberration_scale", "Aberration Scale", 0.5f, 2.0f, 1.0f, plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+};
+}
+
 ChromaticInterferenceEffect::ChromaticInterferenceEffect()
     : m_interferencePhase(0.0f)
+    , m_phaseRate(PHASE_SPEED)
+    , m_interferenceModulation(INTERFERENCE_MODULATION)
+    , m_aberrationScale(1.0f)
 {
 }
 
 bool ChromaticInterferenceEffect::init(plugins::EffectContext& ctx) {
+    (void)ctx;
     m_interferencePhase = 0.0f;
+    m_phaseRate = PHASE_SPEED;
+    m_interferenceModulation = INTERFERENCE_MODULATION;
+    m_aberrationScale = 1.0f;
     return true;
 }
 
@@ -110,10 +126,10 @@ void ChromaticInterferenceEffect::render(plugins::EffectContext& ctx) {
     float dt = ctx.getSafeDeltaSeconds();
     float intensity = ctx.brightness / 255.0f;
     // Aberration strength from complexity parameter (b1: complexity_norm * 3)
-    float aberration = (ctx.complexity / 255.0f) * 3.0f;
+    float aberration = (ctx.complexity / 255.0f) * 3.0f * m_aberrationScale;
 
     // Interference phase animation (dt-corrected)
-    m_interferencePhase += ctx.speed * PHASE_SPEED * 60.0f * dt;
+    m_interferencePhase += ctx.speed * m_phaseRate * 60.0f * dt;
     if (m_interferencePhase > TWO_PI) m_interferencePhase -= TWO_PI;
     
     for (uint16_t i = 0; i < ctx.ledCount && i < STRIP_LENGTH; i++) {
@@ -132,7 +148,7 @@ void ChromaticInterferenceEffect::render(plugins::EffectContext& ctx) {
         interference = interference / 2.0f; // Normalize to -1..1
         
         // Apply chromatic dispersion with interference modulation
-        float phase = m_interferencePhase + interference * INTERFERENCE_MODULATION;
+        float phase = m_interferencePhase + interference * m_interferenceModulation;
         CRGB color = chromaticDispersionPalette(position, aberration, phase, intensity, ctx.palette, ctx.gHue);
         
         // Modulate intensity based on interference (constructive = brighter, destructive = dimmer)
@@ -160,7 +176,7 @@ void ChromaticInterferenceEffect::render(plugins::EffectContext& ctx) {
                 float interference = sinf(leftPhase) + sinf(rightPhase);
                 interference = interference / 2.0f;
 
-                float phase = m_interferencePhase + interference * INTERFERENCE_MODULATION + PI;
+                float phase = m_interferencePhase + interference * m_interferenceModulation + PI;
                 CRGB color = chromaticDispersionPalette(position, aberration, phase, intensity, ctx.palette, ctx.gHue);
 
                 float interferenceIntensity = 0.5f + 0.5f * interference;
@@ -188,7 +204,40 @@ const plugins::EffectMetadata& ChromaticInterferenceEffect::getMetadata() const 
     return meta;
 }
 
+uint8_t ChromaticInterferenceEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kParameters) / sizeof(kParameters[0]));
+}
+
+const plugins::EffectParameter* ChromaticInterferenceEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kParameters[index];
+}
+
+bool ChromaticInterferenceEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "phase_rate") == 0) {
+        m_phaseRate = constrain(value, 0.004f, 0.05f);
+        return true;
+    }
+    if (strcmp(name, "interference_modulation") == 0) {
+        m_interferenceModulation = constrain(value, 0.1f, 1.0f);
+        return true;
+    }
+    if (strcmp(name, "aberration_scale") == 0) {
+        m_aberrationScale = constrain(value, 0.5f, 2.0f);
+        return true;
+    }
+    return false;
+}
+
+float ChromaticInterferenceEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "phase_rate") == 0) return m_phaseRate;
+    if (strcmp(name, "interference_modulation") == 0) return m_interferenceModulation;
+    if (strcmp(name, "aberration_scale") == 0) return m_aberrationScale;
+    return 0.0f;
+}
+
 } // namespace ieffect
 } // namespace effects
 } // namespace lightwaveos
-

@@ -16,6 +16,26 @@
 #include "BeatPulseRenderUtils.h"
 
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:BeatPulseVoidEffect
+namespace {
+constexpr float kBeatPulseVoidEffectSpeedScale = 1.0f;
+constexpr float kBeatPulseVoidEffectOutputGain = 1.0f;
+constexpr float kBeatPulseVoidEffectCentreBias = 1.0f;
+
+float gBeatPulseVoidEffectSpeedScale = kBeatPulseVoidEffectSpeedScale;
+float gBeatPulseVoidEffectOutputGain = kBeatPulseVoidEffectOutputGain;
+float gBeatPulseVoidEffectCentreBias = kBeatPulseVoidEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kBeatPulseVoidEffectParameters[] = {
+    {"beat_pulse_void_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kBeatPulseVoidEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"beat_pulse_void_effect_output_gain", "Output Gain", 0.25f, 2.0f, kBeatPulseVoidEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"beat_pulse_void_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kBeatPulseVoidEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:BeatPulseVoidEffect
 
 namespace lightwaveos::effects::ieffect {
 
@@ -27,9 +47,14 @@ constexpr float RING_WIDTH = 0.10f;        // Ring half-width in dist01 space
 constexpr float RING_CENTRE_FACTOR = 0.6f; // Ring contracts from 0.6 -> 0
 constexpr float DECAY_MS = 280.0f;         // Slightly faster decay for punch
 constexpr float CORE_WHITE_FACTOR = 0.6f;  // Aggressive white in ring core
-
-bool BeatPulseVoidEffect::init(plugins::EffectContext& ctx) {
+bool  BeatPulseVoidEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:BeatPulseVoidEffect
+    gBeatPulseVoidEffectSpeedScale = kBeatPulseVoidEffectSpeedScale;
+    gBeatPulseVoidEffectOutputGain = kBeatPulseVoidEffectOutputGain;
+    gBeatPulseVoidEffectCentreBias = kBeatPulseVoidEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:BeatPulseVoidEffect
+
     BeatPulseCore::reset(m_state, 128.0f);
     return true;
 }
@@ -92,6 +117,43 @@ void BeatPulseVoidEffect::render(plugins::EffectContext& ctx) {
     }
 }
 
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:BeatPulseVoidEffect
+uint8_t BeatPulseVoidEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kBeatPulseVoidEffectParameters) / sizeof(kBeatPulseVoidEffectParameters[0]));
+}
+
+const plugins::EffectParameter* BeatPulseVoidEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kBeatPulseVoidEffectParameters[index];
+}
+
+bool BeatPulseVoidEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "beat_pulse_void_effect_speed_scale") == 0) {
+        gBeatPulseVoidEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "beat_pulse_void_effect_output_gain") == 0) {
+        gBeatPulseVoidEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "beat_pulse_void_effect_centre_bias") == 0) {
+        gBeatPulseVoidEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float BeatPulseVoidEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "beat_pulse_void_effect_speed_scale") == 0) return gBeatPulseVoidEffectSpeedScale;
+    if (strcmp(name, "beat_pulse_void_effect_output_gain") == 0) return gBeatPulseVoidEffectOutputGain;
+    if (strcmp(name, "beat_pulse_void_effect_centre_bias") == 0) return gBeatPulseVoidEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:BeatPulseVoidEffect
+
 void BeatPulseVoidEffect::cleanup() {}
 
 const plugins::EffectMetadata& BeatPulseVoidEffect::getMetadata() const {
@@ -105,21 +167,5 @@ const plugins::EffectMetadata& BeatPulseVoidEffect::getMetadata() const {
     return meta;
 }
 
-uint8_t BeatPulseVoidEffect::getParameterCount() const { return 0; }
-
-const plugins::EffectParameter* BeatPulseVoidEffect::getParameter(uint8_t index) const {
-    (void)index;
-    return nullptr;
-}
-
-bool BeatPulseVoidEffect::setParameter(const char* name, float value) {
-    (void)name; (void)value;
-    return false;
-}
-
-float BeatPulseVoidEffect::getParameter(const char* name) const {
-    (void)name;
-    return 0.0f;
-}
 
 } // namespace lightwaveos::effects::ieffect

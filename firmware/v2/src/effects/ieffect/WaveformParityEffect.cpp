@@ -24,6 +24,25 @@
 #include <cmath>
 #include <cstring>
 
+
+// AUTO_TUNABLES_BULK_BEGIN:WaveformParityEffect
+namespace {
+constexpr float kWaveformParityEffectSpeedScale = 1.0f;
+constexpr float kWaveformParityEffectOutputGain = 1.0f;
+constexpr float kWaveformParityEffectCentreBias = 1.0f;
+
+float gWaveformParityEffectSpeedScale = kWaveformParityEffectSpeedScale;
+float gWaveformParityEffectOutputGain = kWaveformParityEffectOutputGain;
+float gWaveformParityEffectCentreBias = kWaveformParityEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kWaveformParityEffectParameters[] = {
+    {"waveform_parity_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kWaveformParityEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"waveform_parity_effect_output_gain", "Output Gain", 0.25f, 2.0f, kWaveformParityEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"waveform_parity_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kWaveformParityEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:WaveformParityEffect
+
 namespace lightwaveos::effects::ieffect {
 
 // ============================================================================
@@ -32,6 +51,12 @@ namespace lightwaveos::effects::ieffect {
 
 bool WaveformParityEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:WaveformParityEffect
+    gWaveformParityEffectSpeedScale = kWaveformParityEffectSpeedScale;
+    gWaveformParityEffectOutputGain = kWaveformParityEffectOutputGain;
+    gWaveformParityEffectCentreBias = kWaveformParityEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:WaveformParityEffect
+
 
     // Allocate large buffers in PSRAM (DRAM is too precious)
     if (!m_ps) {
@@ -190,6 +215,43 @@ void WaveformParityEffect::render(plugins::EffectContext& ctx) {
     }
 #endif
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:WaveformParityEffect
+uint8_t WaveformParityEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kWaveformParityEffectParameters) / sizeof(kWaveformParityEffectParameters[0]));
+}
+
+const plugins::EffectParameter* WaveformParityEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kWaveformParityEffectParameters[index];
+}
+
+bool WaveformParityEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "waveform_parity_effect_speed_scale") == 0) {
+        gWaveformParityEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "waveform_parity_effect_output_gain") == 0) {
+        gWaveformParityEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "waveform_parity_effect_centre_bias") == 0) {
+        gWaveformParityEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float WaveformParityEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "waveform_parity_effect_speed_scale") == 0) return gWaveformParityEffectSpeedScale;
+    if (strcmp(name, "waveform_parity_effect_output_gain") == 0) return gWaveformParityEffectOutputGain;
+    if (strcmp(name, "waveform_parity_effect_centre_bias") == 0) return gWaveformParityEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:WaveformParityEffect
 
 void WaveformParityEffect::cleanup() {
     if (m_ps) { heap_caps_free(m_ps); m_ps = nullptr; }

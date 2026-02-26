@@ -7,6 +7,26 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:BreathingEnhancedEffect
+namespace {
+constexpr float kBreathingEnhancedEffectSpeedScale = 1.0f;
+constexpr float kBreathingEnhancedEffectOutputGain = 1.0f;
+constexpr float kBreathingEnhancedEffectCentreBias = 1.0f;
+
+float gBreathingEnhancedEffectSpeedScale = kBreathingEnhancedEffectSpeedScale;
+float gBreathingEnhancedEffectOutputGain = kBreathingEnhancedEffectOutputGain;
+float gBreathingEnhancedEffectCentreBias = kBreathingEnhancedEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kBreathingEnhancedEffectParameters[] = {
+    {"breathing_enhanced_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kBreathingEnhancedEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"breathing_enhanced_effect_output_gain", "Output Gain", 0.25f, 2.0f, kBreathingEnhancedEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"breathing_enhanced_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kBreathingEnhancedEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:BreathingEnhancedEffect
 
 namespace lightwaveos {
 namespace effects {
@@ -46,7 +66,6 @@ static CRGB computeChromaticColor(const float chroma[12], const plugins::EffectC
     
     return sum;
 }
-
 BreathingEnhancedEffect::BreathingEnhancedEffect()
     : m_currentRadius(0.0f)
     , m_prevRadius(0.0f)
@@ -67,6 +86,12 @@ BreathingEnhancedEffect::BreathingEnhancedEffect()
 
 bool BreathingEnhancedEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:BreathingEnhancedEffect
+    gBreathingEnhancedEffectSpeedScale = kBreathingEnhancedEffectSpeedScale;
+    gBreathingEnhancedEffectOutputGain = kBreathingEnhancedEffectOutputGain;
+    gBreathingEnhancedEffectCentreBias = kBreathingEnhancedEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:BreathingEnhancedEffect
+
 
     m_currentRadius = 0.0f;
     m_prevRadius = 0.0f;
@@ -319,6 +344,43 @@ void BreathingEnhancedEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:BreathingEnhancedEffect
+uint8_t BreathingEnhancedEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kBreathingEnhancedEffectParameters) / sizeof(kBreathingEnhancedEffectParameters[0]));
+}
+
+const plugins::EffectParameter* BreathingEnhancedEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kBreathingEnhancedEffectParameters[index];
+}
+
+bool BreathingEnhancedEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "breathing_enhanced_effect_speed_scale") == 0) {
+        gBreathingEnhancedEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "breathing_enhanced_effect_output_gain") == 0) {
+        gBreathingEnhancedEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "breathing_enhanced_effect_centre_bias") == 0) {
+        gBreathingEnhancedEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float BreathingEnhancedEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "breathing_enhanced_effect_speed_scale") == 0) return gBreathingEnhancedEffectSpeedScale;
+    if (strcmp(name, "breathing_enhanced_effect_output_gain") == 0) return gBreathingEnhancedEffectOutputGain;
+    if (strcmp(name, "breathing_enhanced_effect_centre_bias") == 0) return gBreathingEnhancedEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:BreathingEnhancedEffect
 
 void BreathingEnhancedEffect::cleanup() {
     // No resources to free

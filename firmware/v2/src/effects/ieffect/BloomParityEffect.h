@@ -66,6 +66,11 @@ public:
     static void setSpatialSpread(float v)      { s_spatialSpread = (v < 0.0f) ? 0.0f : (v > 255.0f ? 255.0f : v); }
     static void setIntensityCoupling(float v)  { s_intensityCoupling = (v < 0.0f) ? 0.0f : (v > 1.0f ? 1.0f : v); }
 
+
+    uint8_t getParameterCount() const override;
+    const plugins::EffectParameter* getParameter(uint8_t index) const override;
+    bool setParameter(const char* name, float value) override;
+    float getParameter(const char* name) const override;
 private:
     // ------------------------------------------------------------------------
     // Fixed limits (match LightwaveOS zone model)

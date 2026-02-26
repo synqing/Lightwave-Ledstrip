@@ -13,12 +13,30 @@
 
 #ifndef NATIVE_BUILD
 #include <esp_heap_caps.h>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:RippleEffect
+namespace {
+constexpr float kRippleEffectSpeedScale = 1.0f;
+constexpr float kRippleEffectOutputGain = 1.0f;
+constexpr float kRippleEffectCentreBias = 1.0f;
+
+float gRippleEffectSpeedScale = kRippleEffectSpeedScale;
+float gRippleEffectOutputGain = kRippleEffectOutputGain;
+float gRippleEffectCentreBias = kRippleEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kRippleEffectParameters[] = {
+    {"ripple_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kRippleEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"ripple_effect_output_gain", "Output Gain", 0.25f, 2.0f, kRippleEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"ripple_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kRippleEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:RippleEffect
 #endif
 
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
-
 RippleEffect::RippleEffect()
     : m_ps(nullptr)
 {
@@ -33,6 +51,13 @@ RippleEffect::RippleEffect()
 
 bool RippleEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:RippleEffect
+    gRippleEffectSpeedScale = kRippleEffectSpeedScale;
+    gRippleEffectOutputGain = kRippleEffectOutputGain;
+    gRippleEffectCentreBias = kRippleEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:RippleEffect
+
+
     for (uint8_t i = 0; i < MAX_RIPPLES; i++) {
         m_ripples[i].active = false;
         m_ripples[i].radius = 0;
@@ -304,6 +329,43 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
         SET_CENTER_PAIR(ctx, dist, m_ps->radialAux[dist]);
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:RippleEffect
+uint8_t RippleEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kRippleEffectParameters) / sizeof(kRippleEffectParameters[0]));
+}
+
+const plugins::EffectParameter* RippleEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kRippleEffectParameters[index];
+}
+
+bool RippleEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "ripple_effect_speed_scale") == 0) {
+        gRippleEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "ripple_effect_output_gain") == 0) {
+        gRippleEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "ripple_effect_centre_bias") == 0) {
+        gRippleEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float RippleEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "ripple_effect_speed_scale") == 0) return gRippleEffectSpeedScale;
+    if (strcmp(name, "ripple_effect_output_gain") == 0) return gRippleEffectOutputGain;
+    if (strcmp(name, "ripple_effect_centre_bias") == 0) return gRippleEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:RippleEffect
 
 void RippleEffect::cleanup() {
 #ifndef NATIVE_BUILD

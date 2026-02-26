@@ -7,11 +7,30 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:InterferenceEffect
+namespace {
+constexpr float kInterferenceEffectSpeedScale = 1.0f;
+constexpr float kInterferenceEffectOutputGain = 1.0f;
+constexpr float kInterferenceEffectCentreBias = 1.0f;
+
+float gInterferenceEffectSpeedScale = kInterferenceEffectSpeedScale;
+float gInterferenceEffectOutputGain = kInterferenceEffectOutputGain;
+float gInterferenceEffectCentreBias = kInterferenceEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kInterferenceEffectParameters[] = {
+    {"interference_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kInterferenceEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"interference_effect_output_gain", "Output Gain", 0.25f, 2.0f, kInterferenceEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"interference_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kInterferenceEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:InterferenceEffect
 
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
-
 InterferenceEffect::InterferenceEffect()
     : m_wave1Phase(0.0f)
     , m_wave2Phase(0.0f)
@@ -20,6 +39,13 @@ InterferenceEffect::InterferenceEffect()
 
 bool InterferenceEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:InterferenceEffect
+    gInterferenceEffectSpeedScale = kInterferenceEffectSpeedScale;
+    gInterferenceEffectOutputGain = kInterferenceEffectOutputGain;
+    gInterferenceEffectCentreBias = kInterferenceEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:InterferenceEffect
+
+
     m_wave1Phase = 0.0f;
     m_wave2Phase = 0.0f;
     return true;
@@ -59,6 +85,43 @@ void InterferenceEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:InterferenceEffect
+uint8_t InterferenceEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kInterferenceEffectParameters) / sizeof(kInterferenceEffectParameters[0]));
+}
+
+const plugins::EffectParameter* InterferenceEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kInterferenceEffectParameters[index];
+}
+
+bool InterferenceEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "interference_effect_speed_scale") == 0) {
+        gInterferenceEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "interference_effect_output_gain") == 0) {
+        gInterferenceEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "interference_effect_centre_bias") == 0) {
+        gInterferenceEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float InterferenceEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "interference_effect_speed_scale") == 0) return gInterferenceEffectSpeedScale;
+    if (strcmp(name, "interference_effect_output_gain") == 0) return gInterferenceEffectOutputGain;
+    if (strcmp(name, "interference_effect_centre_bias") == 0) return gInterferenceEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:InterferenceEffect
 
 void InterferenceEffect::cleanup() {
     // No resources to free

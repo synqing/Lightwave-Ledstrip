@@ -20,6 +20,26 @@
 #include "BeatPulseRenderUtils.h"
 
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:BeatPulseResonantEffect
+namespace {
+constexpr float kBeatPulseResonantEffectSpeedScale = 1.0f;
+constexpr float kBeatPulseResonantEffectOutputGain = 1.0f;
+constexpr float kBeatPulseResonantEffectCentreBias = 1.0f;
+
+float gBeatPulseResonantEffectSpeedScale = kBeatPulseResonantEffectSpeedScale;
+float gBeatPulseResonantEffectOutputGain = kBeatPulseResonantEffectOutputGain;
+float gBeatPulseResonantEffectCentreBias = kBeatPulseResonantEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kBeatPulseResonantEffectParameters[] = {
+    {"beat_pulse_resonant_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kBeatPulseResonantEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"beat_pulse_resonant_effect_output_gain", "Output Gain", 0.25f, 2.0f, kBeatPulseResonantEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"beat_pulse_resonant_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kBeatPulseResonantEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:BeatPulseResonantEffect
 
 namespace lightwaveos::effects::ieffect {
 
@@ -44,9 +64,14 @@ constexpr float ATTACK_WHITE = 0.85f;        // Attack is nearly white (desatura
 // ============================================================================
 // Effect Implementation
 // ============================================================================
-
-bool BeatPulseResonantEffect::init(plugins::EffectContext& ctx) {
+bool  BeatPulseResonantEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:BeatPulseResonantEffect
+    gBeatPulseResonantEffectSpeedScale = kBeatPulseResonantEffectSpeedScale;
+    gBeatPulseResonantEffectOutputGain = kBeatPulseResonantEffectOutputGain;
+    gBeatPulseResonantEffectCentreBias = kBeatPulseResonantEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:BeatPulseResonantEffect
+
     m_beatIntensity = 0.0f;
     m_lastBeatTimeMs = 0;
     m_fallbackBpm = 128.0f;
@@ -114,6 +139,43 @@ void BeatPulseResonantEffect::render(plugins::EffectContext& ctx) {
     }
 }
 
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:BeatPulseResonantEffect
+uint8_t BeatPulseResonantEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kBeatPulseResonantEffectParameters) / sizeof(kBeatPulseResonantEffectParameters[0]));
+}
+
+const plugins::EffectParameter* BeatPulseResonantEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kBeatPulseResonantEffectParameters[index];
+}
+
+bool BeatPulseResonantEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "beat_pulse_resonant_effect_speed_scale") == 0) {
+        gBeatPulseResonantEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "beat_pulse_resonant_effect_output_gain") == 0) {
+        gBeatPulseResonantEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "beat_pulse_resonant_effect_centre_bias") == 0) {
+        gBeatPulseResonantEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float BeatPulseResonantEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "beat_pulse_resonant_effect_speed_scale") == 0) return gBeatPulseResonantEffectSpeedScale;
+    if (strcmp(name, "beat_pulse_resonant_effect_output_gain") == 0) return gBeatPulseResonantEffectOutputGain;
+    if (strcmp(name, "beat_pulse_resonant_effect_centre_bias") == 0) return gBeatPulseResonantEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:BeatPulseResonantEffect
+
 void BeatPulseResonantEffect::cleanup() {}
 
 const plugins::EffectMetadata& BeatPulseResonantEffect::getMetadata() const {
@@ -127,21 +189,5 @@ const plugins::EffectMetadata& BeatPulseResonantEffect::getMetadata() const {
     return meta;
 }
 
-uint8_t BeatPulseResonantEffect::getParameterCount() const { return 0; }
-
-const plugins::EffectParameter* BeatPulseResonantEffect::getParameter(uint8_t index) const {
-    (void)index;
-    return nullptr;
-}
-
-bool BeatPulseResonantEffect::setParameter(const char* name, float value) {
-    (void)name; (void)value;
-    return false;
-}
-
-float BeatPulseResonantEffect::getParameter(const char* name) const {
-    (void)name;
-    return 0.0f;
-}
 
 } // namespace lightwaveos::effects::ieffect

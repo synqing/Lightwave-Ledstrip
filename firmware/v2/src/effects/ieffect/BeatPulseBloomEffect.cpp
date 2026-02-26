@@ -17,6 +17,25 @@
 #include <cmath>
 #include <cstring>
 
+
+// AUTO_TUNABLES_BULK_BEGIN:BeatPulseBloomEffect
+namespace {
+constexpr float kBeatPulseBloomEffectSpeedScale = 1.0f;
+constexpr float kBeatPulseBloomEffectOutputGain = 1.0f;
+constexpr float kBeatPulseBloomEffectCentreBias = 1.0f;
+
+float gBeatPulseBloomEffectSpeedScale = kBeatPulseBloomEffectSpeedScale;
+float gBeatPulseBloomEffectOutputGain = kBeatPulseBloomEffectOutputGain;
+float gBeatPulseBloomEffectCentreBias = kBeatPulseBloomEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kBeatPulseBloomEffectParameters[] = {
+    {"beat_pulse_bloom_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kBeatPulseBloomEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"beat_pulse_bloom_effect_output_gain", "Output Gain", 0.25f, 2.0f, kBeatPulseBloomEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"beat_pulse_bloom_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kBeatPulseBloomEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:BeatPulseBloomEffect
+
 namespace lightwaveos::effects::ieffect {
 
 // Shared transport state for this effect instance.
@@ -28,7 +47,6 @@ bool g_bloomDebugEnabled = false;
 
 static uint32_t g_lastDebugMs = 0;
 static constexpr uint32_t DEBUG_INTERVAL_MS = 500;  // Log every 500ms
-
 BeatPulseBloomEffect::BeatPulseBloomEffect()
     : m_meta(
           "Beat Pulse (Bloom)",
@@ -39,6 +57,13 @@ BeatPulseBloomEffect::BeatPulseBloomEffect()
 
 bool BeatPulseBloomEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:BeatPulseBloomEffect
+    gBeatPulseBloomEffectSpeedScale = kBeatPulseBloomEffectSpeedScale;
+    gBeatPulseBloomEffectOutputGain = kBeatPulseBloomEffectOutputGain;
+    gBeatPulseBloomEffectCentreBias = kBeatPulseBloomEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:BeatPulseBloomEffect
+
+
     for (int i = 0; i < 4; i++) {
         m_beatEnv[i] = 0.0f;
         m_lastBeatMs[i] = 0;
@@ -221,13 +246,46 @@ void BeatPulseBloomEffect::render(plugins::EffectContext& ctx) {
     g_transport.readoutToLedsWithPalette(zoneId, ctx, radialLen, outGain, baseIdx, paletteMix);
 }
 
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:BeatPulseBloomEffect
+uint8_t BeatPulseBloomEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kBeatPulseBloomEffectParameters) / sizeof(kBeatPulseBloomEffectParameters[0]));
+}
+
+const plugins::EffectParameter* BeatPulseBloomEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kBeatPulseBloomEffectParameters[index];
+}
+
+bool BeatPulseBloomEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "beat_pulse_bloom_effect_speed_scale") == 0) {
+        gBeatPulseBloomEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "beat_pulse_bloom_effect_output_gain") == 0) {
+        gBeatPulseBloomEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "beat_pulse_bloom_effect_centre_bias") == 0) {
+        gBeatPulseBloomEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float BeatPulseBloomEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "beat_pulse_bloom_effect_speed_scale") == 0) return gBeatPulseBloomEffectSpeedScale;
+    if (strcmp(name, "beat_pulse_bloom_effect_output_gain") == 0) return gBeatPulseBloomEffectOutputGain;
+    if (strcmp(name, "beat_pulse_bloom_effect_centre_bias") == 0) return gBeatPulseBloomEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:BeatPulseBloomEffect
+
 void BeatPulseBloomEffect::cleanup() {}
 
 const plugins::EffectMetadata& BeatPulseBloomEffect::getMetadata() const { return m_meta; }
 
-uint8_t BeatPulseBloomEffect::getParameterCount() const { return 0; }
-const plugins::EffectParameter* BeatPulseBloomEffect::getParameter(uint8_t index) const { (void)index; return nullptr; }
-bool BeatPulseBloomEffect::setParameter(const char* name, float value) { (void)name; (void)value; return false; }
-float BeatPulseBloomEffect::getParameter(const char* name) const { (void)name; return 0.0f; }
 
 } // namespace lightwaveos::effects::ieffect

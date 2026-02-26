@@ -8,11 +8,30 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:BPMEnhancedEffect
+namespace {
+constexpr float kBPMEnhancedEffectSpeedScale = 1.0f;
+constexpr float kBPMEnhancedEffectOutputGain = 1.0f;
+constexpr float kBPMEnhancedEffectCentreBias = 1.0f;
+
+float gBPMEnhancedEffectSpeedScale = kBPMEnhancedEffectSpeedScale;
+float gBPMEnhancedEffectOutputGain = kBPMEnhancedEffectOutputGain;
+float gBPMEnhancedEffectCentreBias = kBPMEnhancedEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kBPMEnhancedEffectParameters[] = {
+    {"bpmenhanced_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kBPMEnhancedEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"bpmenhanced_effect_output_gain", "Output Gain", 0.25f, 2.0f, kBPMEnhancedEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"bpmenhanced_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kBPMEnhancedEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:BPMEnhancedEffect
 
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
-
 BPMEnhancedEffect::BPMEnhancedEffect()
     : m_phase(0.0f)
     , m_nextRing(0)
@@ -23,6 +42,12 @@ BPMEnhancedEffect::BPMEnhancedEffect()
 
 bool BPMEnhancedEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:BPMEnhancedEffect
+    gBPMEnhancedEffectSpeedScale = kBPMEnhancedEffectSpeedScale;
+    gBPMEnhancedEffectOutputGain = kBPMEnhancedEffectOutputGain;
+    gBPMEnhancedEffectCentreBias = kBPMEnhancedEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:BPMEnhancedEffect
+
 
     // Initialize phase
     m_phase = 0.0f;
@@ -321,6 +346,43 @@ void BPMEnhancedEffect::render(plugins::EffectContext& ctx) {
 #endif
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:BPMEnhancedEffect
+uint8_t BPMEnhancedEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kBPMEnhancedEffectParameters) / sizeof(kBPMEnhancedEffectParameters[0]));
+}
+
+const plugins::EffectParameter* BPMEnhancedEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kBPMEnhancedEffectParameters[index];
+}
+
+bool BPMEnhancedEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "bpmenhanced_effect_speed_scale") == 0) {
+        gBPMEnhancedEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "bpmenhanced_effect_output_gain") == 0) {
+        gBPMEnhancedEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "bpmenhanced_effect_centre_bias") == 0) {
+        gBPMEnhancedEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float BPMEnhancedEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "bpmenhanced_effect_speed_scale") == 0) return gBPMEnhancedEffectSpeedScale;
+    if (strcmp(name, "bpmenhanced_effect_output_gain") == 0) return gBPMEnhancedEffectOutputGain;
+    if (strcmp(name, "bpmenhanced_effect_centre_bias") == 0) return gBPMEnhancedEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:BPMEnhancedEffect
 
 void BPMEnhancedEffect::cleanup() {
     // No resources to free

@@ -27,6 +27,26 @@
 // Unified logging system
 #define LW_LOG_TAG "Breathing"
 #include "../../utils/Log.h"
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:BreathingEffect
+namespace {
+constexpr float kBreathingEffectSpeedScale = 1.0f;
+constexpr float kBreathingEffectOutputGain = 1.0f;
+constexpr float kBreathingEffectCentreBias = 1.0f;
+
+float gBreathingEffectSpeedScale = kBreathingEffectSpeedScale;
+float gBreathingEffectOutputGain = kBreathingEffectOutputGain;
+float gBreathingEffectCentreBias = kBreathingEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kBreathingEffectParameters[] = {
+    {"breathing_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kBreathingEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"breathing_effect_output_gain", "Output Gain", 0.25f, 2.0f, kBreathingEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"breathing_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kBreathingEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:BreathingEffect
 
 namespace lightwaveos {
 namespace effects {
@@ -85,7 +105,6 @@ static CRGB computeChromaticColor(const float chroma[12], const plugins::EffectC
     
     return sum;
 }
-
 BreathingEffect::BreathingEffect()
     : m_currentRadius(0.0f)
     , m_prevRadius(0.0f)
@@ -112,6 +131,12 @@ BreathingEffect::BreathingEffect()
 
 bool BreathingEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:BreathingEffect
+    gBreathingEffectSpeedScale = kBreathingEffectSpeedScale;
+    gBreathingEffectOutputGain = kBreathingEffectOutputGain;
+    gBreathingEffectCentreBias = kBreathingEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:BreathingEffect
+
 
     // Initialize state
     m_currentRadius = 0.0f;
@@ -514,6 +539,43 @@ void BreathingEffect::renderTexture(plugins::EffectContext& ctx) {
     // Keep fallback phase synced for smooth transitions
     m_fallbackPhase = combinedWave * 2.0f * 3.14159f;
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:BreathingEffect
+uint8_t BreathingEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kBreathingEffectParameters) / sizeof(kBreathingEffectParameters[0]));
+}
+
+const plugins::EffectParameter* BreathingEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kBreathingEffectParameters[index];
+}
+
+bool BreathingEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "breathing_effect_speed_scale") == 0) {
+        gBreathingEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "breathing_effect_output_gain") == 0) {
+        gBreathingEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "breathing_effect_centre_bias") == 0) {
+        gBreathingEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float BreathingEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "breathing_effect_speed_scale") == 0) return gBreathingEffectSpeedScale;
+    if (strcmp(name, "breathing_effect_output_gain") == 0) return gBreathingEffectOutputGain;
+    if (strcmp(name, "breathing_effect_centre_bias") == 0) return gBreathingEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:BreathingEffect
 
 void BreathingEffect::cleanup() {
     // No resources to free

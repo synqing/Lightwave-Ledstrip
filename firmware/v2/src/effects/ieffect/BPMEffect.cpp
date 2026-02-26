@@ -20,11 +20,30 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:BPMEffect
+namespace {
+constexpr float kBPMEffectSpeedScale = 1.0f;
+constexpr float kBPMEffectOutputGain = 1.0f;
+constexpr float kBPMEffectCentreBias = 1.0f;
+
+float gBPMEffectSpeedScale = kBPMEffectSpeedScale;
+float gBPMEffectOutputGain = kBPMEffectOutputGain;
+float gBPMEffectCentreBias = kBPMEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kBPMEffectParameters[] = {
+    {"bpmeffect_speed_scale", "Speed Scale", 0.25f, 2.0f, kBPMEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"bpmeffect_output_gain", "Output Gain", 0.25f, 2.0f, kBPMEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"bpmeffect_centre_bias", "Centre Bias", 0.50f, 1.50f, kBPMEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:BPMEffect
 
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
-
 BPMEffect::BPMEffect()
     : m_phase(0.0f)
     , m_nextRing(0)
@@ -34,6 +53,12 @@ BPMEffect::BPMEffect()
 
 bool BPMEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:BPMEffect
+    gBPMEffectSpeedScale = kBPMEffectSpeedScale;
+    gBPMEffectOutputGain = kBPMEffectOutputGain;
+    gBPMEffectCentreBias = kBPMEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:BPMEffect
+
 
     // Initialize phase
     m_phase = 0.0f;
@@ -192,6 +217,43 @@ void BPMEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:BPMEffect
+uint8_t BPMEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kBPMEffectParameters) / sizeof(kBPMEffectParameters[0]));
+}
+
+const plugins::EffectParameter* BPMEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kBPMEffectParameters[index];
+}
+
+bool BPMEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "bpmeffect_speed_scale") == 0) {
+        gBPMEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "bpmeffect_output_gain") == 0) {
+        gBPMEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "bpmeffect_centre_bias") == 0) {
+        gBPMEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float BPMEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "bpmeffect_speed_scale") == 0) return gBPMEffectSpeedScale;
+    if (strcmp(name, "bpmeffect_output_gain") == 0) return gBPMEffectOutputGain;
+    if (strcmp(name, "bpmeffect_centre_bias") == 0) return gBPMEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:BPMEffect
 
 void BPMEffect::cleanup() {
     // No resources to free

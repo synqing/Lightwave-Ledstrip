@@ -12,6 +12,26 @@
 #endif
 
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:HeartbeatEsTunedEffect
+namespace {
+constexpr float kHeartbeatEsTunedEffectSpeedScale = 1.0f;
+constexpr float kHeartbeatEsTunedEffectOutputGain = 1.0f;
+constexpr float kHeartbeatEsTunedEffectCentreBias = 1.0f;
+
+float gHeartbeatEsTunedEffectSpeedScale = kHeartbeatEsTunedEffectSpeedScale;
+float gHeartbeatEsTunedEffectOutputGain = kHeartbeatEsTunedEffectOutputGain;
+float gHeartbeatEsTunedEffectCentreBias = kHeartbeatEsTunedEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kHeartbeatEsTunedEffectParameters[] = {
+    {"heartbeat_es_tuned_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kHeartbeatEsTunedEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"heartbeat_es_tuned_effect_output_gain", "Output Gain", 0.25f, 2.0f, kHeartbeatEsTunedEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"heartbeat_es_tuned_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kHeartbeatEsTunedEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:HeartbeatEsTunedEffect
 
 namespace lightwaveos::effects::ieffect {
 
@@ -39,6 +59,12 @@ static inline CRGB addSat(CRGB a, CRGB b) {
 
 bool HeartbeatEsTunedEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:HeartbeatEsTunedEffect
+    gHeartbeatEsTunedEffectSpeedScale = kHeartbeatEsTunedEffectSpeedScale;
+    gHeartbeatEsTunedEffectOutputGain = kHeartbeatEsTunedEffectOutputGain;
+    gHeartbeatEsTunedEffectCentreBias = kHeartbeatEsTunedEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:HeartbeatEsTunedEffect
+
     m_lastHopSeq = 0;
     m_chromaAngle = 0.0f;
 
@@ -221,6 +247,43 @@ void HeartbeatEsTunedEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:HeartbeatEsTunedEffect
+uint8_t HeartbeatEsTunedEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kHeartbeatEsTunedEffectParameters) / sizeof(kHeartbeatEsTunedEffectParameters[0]));
+}
+
+const plugins::EffectParameter* HeartbeatEsTunedEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kHeartbeatEsTunedEffectParameters[index];
+}
+
+bool HeartbeatEsTunedEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "heartbeat_es_tuned_effect_speed_scale") == 0) {
+        gHeartbeatEsTunedEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "heartbeat_es_tuned_effect_output_gain") == 0) {
+        gHeartbeatEsTunedEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "heartbeat_es_tuned_effect_centre_bias") == 0) {
+        gHeartbeatEsTunedEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float HeartbeatEsTunedEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "heartbeat_es_tuned_effect_speed_scale") == 0) return gHeartbeatEsTunedEffectSpeedScale;
+    if (strcmp(name, "heartbeat_es_tuned_effect_output_gain") == 0) return gHeartbeatEsTunedEffectOutputGain;
+    if (strcmp(name, "heartbeat_es_tuned_effect_centre_bias") == 0) return gHeartbeatEsTunedEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:HeartbeatEsTunedEffect
 
 void HeartbeatEsTunedEffect::cleanup() {}
 

@@ -8,17 +8,43 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <math.h>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:JuggleEffect
+namespace {
+constexpr float kJuggleEffectSpeedScale = 1.0f;
+constexpr float kJuggleEffectOutputGain = 1.0f;
+constexpr float kJuggleEffectCentreBias = 1.0f;
+
+float gJuggleEffectSpeedScale = kJuggleEffectSpeedScale;
+float gJuggleEffectOutputGain = kJuggleEffectOutputGain;
+float gJuggleEffectCentreBias = kJuggleEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kJuggleEffectParameters[] = {
+    {"juggle_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kJuggleEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"juggle_effect_output_gain", "Output Gain", 0.25f, 2.0f, kJuggleEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"juggle_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kJuggleEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:JuggleEffect
 
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
-
 JuggleEffect::JuggleEffect()
 {
 }
 
 bool JuggleEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:JuggleEffect
+    gJuggleEffectSpeedScale = kJuggleEffectSpeedScale;
+    gJuggleEffectOutputGain = kJuggleEffectOutputGain;
+    gJuggleEffectCentreBias = kJuggleEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:JuggleEffect
+
+
     m_chromaAngle = 0.0f;
     return true;
 }
@@ -146,6 +172,43 @@ void JuggleEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:JuggleEffect
+uint8_t JuggleEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kJuggleEffectParameters) / sizeof(kJuggleEffectParameters[0]));
+}
+
+const plugins::EffectParameter* JuggleEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kJuggleEffectParameters[index];
+}
+
+bool JuggleEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "juggle_effect_speed_scale") == 0) {
+        gJuggleEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "juggle_effect_output_gain") == 0) {
+        gJuggleEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "juggle_effect_centre_bias") == 0) {
+        gJuggleEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float JuggleEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "juggle_effect_speed_scale") == 0) return gJuggleEffectSpeedScale;
+    if (strcmp(name, "juggle_effect_output_gain") == 0) return gJuggleEffectOutputGain;
+    if (strcmp(name, "juggle_effect_centre_bias") == 0) return gJuggleEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:JuggleEffect
 
 void JuggleEffect::cleanup() {
     // No resources to free

@@ -11,16 +11,41 @@
 
 #ifndef NATIVE_BUILD
 #include <esp_heap_caps.h>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:FireEffect
+namespace {
+constexpr float kFireEffectSpeedScale = 1.0f;
+constexpr float kFireEffectOutputGain = 1.0f;
+constexpr float kFireEffectCentreBias = 1.0f;
+
+float gFireEffectSpeedScale = kFireEffectSpeedScale;
+float gFireEffectOutputGain = kFireEffectOutputGain;
+float gFireEffectCentreBias = kFireEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kFireEffectParameters[] = {
+    {"fire_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kFireEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"fire_effect_output_gain", "Output Gain", 0.25f, 2.0f, kFireEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"fire_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kFireEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:FireEffect
 #endif
 
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
-
 FireEffect::FireEffect() {}
 
 bool FireEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:FireEffect
+    gFireEffectSpeedScale = kFireEffectSpeedScale;
+    gFireEffectOutputGain = kFireEffectOutputGain;
+    gFireEffectCentreBias = kFireEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:FireEffect
+
+
 #ifndef NATIVE_BUILD
     if (!m_ps) {
         m_ps = static_cast<FirePsram*>(
@@ -62,6 +87,43 @@ void FireEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:FireEffect
+uint8_t FireEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kFireEffectParameters) / sizeof(kFireEffectParameters[0]));
+}
+
+const plugins::EffectParameter* FireEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kFireEffectParameters[index];
+}
+
+bool FireEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "fire_effect_speed_scale") == 0) {
+        gFireEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "fire_effect_output_gain") == 0) {
+        gFireEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "fire_effect_centre_bias") == 0) {
+        gFireEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float FireEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "fire_effect_speed_scale") == 0) return gFireEffectSpeedScale;
+    if (strcmp(name, "fire_effect_output_gain") == 0) return gFireEffectOutputGain;
+    if (strcmp(name, "fire_effect_centre_bias") == 0) return gFireEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:FireEffect
 
 void FireEffect::cleanup() {
 #ifndef NATIVE_BUILD

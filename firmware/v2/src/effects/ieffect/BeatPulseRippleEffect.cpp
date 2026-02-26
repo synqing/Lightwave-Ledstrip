@@ -22,6 +22,26 @@
 #include "BeatPulseRenderUtils.h"
 
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:BeatPulseRippleEffect
+namespace {
+constexpr float kBeatPulseRippleEffectSpeedScale = 1.0f;
+constexpr float kBeatPulseRippleEffectOutputGain = 1.0f;
+constexpr float kBeatPulseRippleEffectCentreBias = 1.0f;
+
+float gBeatPulseRippleEffectSpeedScale = kBeatPulseRippleEffectSpeedScale;
+float gBeatPulseRippleEffectOutputGain = kBeatPulseRippleEffectOutputGain;
+float gBeatPulseRippleEffectCentreBias = kBeatPulseRippleEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kBeatPulseRippleEffectParameters[] = {
+    {"beat_pulse_ripple_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kBeatPulseRippleEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"beat_pulse_ripple_effect_output_gain", "Output Gain", 0.25f, 2.0f, kBeatPulseRippleEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"beat_pulse_ripple_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kBeatPulseRippleEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:BeatPulseRippleEffect
 
 namespace lightwaveos::effects::ieffect {
 
@@ -41,9 +61,14 @@ constexpr float BASE_BRIGHTNESS = 0.06f;      // Dim background
 // ============================================================================
 // Implementation
 // ============================================================================
-
-bool BeatPulseRippleEffect::init(plugins::EffectContext& ctx) {
+bool  BeatPulseRippleEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:BeatPulseRippleEffect
+    gBeatPulseRippleEffectSpeedScale = kBeatPulseRippleEffectSpeedScale;
+    gBeatPulseRippleEffectOutputGain = kBeatPulseRippleEffectOutputGain;
+    gBeatPulseRippleEffectCentreBias = kBeatPulseRippleEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:BeatPulseRippleEffect
+
     for (uint8_t i = 0; i < MAX_RINGS; ++i) {
         m_rings[i].birthMs = 0;
         m_rings[i].active = false;
@@ -182,6 +207,43 @@ void BeatPulseRippleEffect::render(plugins::EffectContext& ctx) {
     }
 }
 
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:BeatPulseRippleEffect
+uint8_t BeatPulseRippleEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kBeatPulseRippleEffectParameters) / sizeof(kBeatPulseRippleEffectParameters[0]));
+}
+
+const plugins::EffectParameter* BeatPulseRippleEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kBeatPulseRippleEffectParameters[index];
+}
+
+bool BeatPulseRippleEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "beat_pulse_ripple_effect_speed_scale") == 0) {
+        gBeatPulseRippleEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "beat_pulse_ripple_effect_output_gain") == 0) {
+        gBeatPulseRippleEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "beat_pulse_ripple_effect_centre_bias") == 0) {
+        gBeatPulseRippleEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float BeatPulseRippleEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "beat_pulse_ripple_effect_speed_scale") == 0) return gBeatPulseRippleEffectSpeedScale;
+    if (strcmp(name, "beat_pulse_ripple_effect_output_gain") == 0) return gBeatPulseRippleEffectOutputGain;
+    if (strcmp(name, "beat_pulse_ripple_effect_centre_bias") == 0) return gBeatPulseRippleEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:BeatPulseRippleEffect
+
 void BeatPulseRippleEffect::cleanup() {}
 
 const plugins::EffectMetadata& BeatPulseRippleEffect::getMetadata() const {
@@ -195,21 +257,5 @@ const plugins::EffectMetadata& BeatPulseRippleEffect::getMetadata() const {
     return meta;
 }
 
-uint8_t BeatPulseRippleEffect::getParameterCount() const { return 0; }
-
-const plugins::EffectParameter* BeatPulseRippleEffect::getParameter(uint8_t index) const {
-    (void)index;
-    return nullptr;
-}
-
-bool BeatPulseRippleEffect::setParameter(const char* name, float value) {
-    (void)name; (void)value;
-    return false;
-}
-
-float BeatPulseRippleEffect::getParameter(const char* name) const {
-    (void)name;
-    return 0.0f;
-}
 
 } // namespace lightwaveos::effects::ieffect

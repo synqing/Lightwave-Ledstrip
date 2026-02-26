@@ -7,11 +7,30 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <Arduino.h>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:HeartbeatEffect
+namespace {
+constexpr float kHeartbeatEffectSpeedScale = 1.0f;
+constexpr float kHeartbeatEffectOutputGain = 1.0f;
+constexpr float kHeartbeatEffectCentreBias = 1.0f;
+
+float gHeartbeatEffectSpeedScale = kHeartbeatEffectSpeedScale;
+float gHeartbeatEffectOutputGain = kHeartbeatEffectOutputGain;
+float gHeartbeatEffectCentreBias = kHeartbeatEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kHeartbeatEffectParameters[] = {
+    {"heartbeat_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kHeartbeatEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"heartbeat_effect_output_gain", "Output Gain", 0.25f, 2.0f, kHeartbeatEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"heartbeat_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kHeartbeatEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:HeartbeatEffect
 
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
-
 HeartbeatEffect::HeartbeatEffect()
     : m_lastBeatTime(0)
     , m_beatState(0)
@@ -20,6 +39,13 @@ HeartbeatEffect::HeartbeatEffect()
 }
 
 bool HeartbeatEffect::init(plugins::EffectContext& ctx) {
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:HeartbeatEffect
+    gHeartbeatEffectSpeedScale = kHeartbeatEffectSpeedScale;
+    gHeartbeatEffectOutputGain = kHeartbeatEffectOutputGain;
+    gHeartbeatEffectCentreBias = kHeartbeatEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:HeartbeatEffect
+
+
     m_lastBeatTime = millis();
     m_beatState = 0;
     m_pulseRadius = 0.0f;
@@ -98,6 +124,43 @@ void HeartbeatEffect::render(plugins::EffectContext& ctx) {
         m_pulseRadius += ctx.speed / 8.0f * 60.0f * dt;
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:HeartbeatEffect
+uint8_t HeartbeatEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kHeartbeatEffectParameters) / sizeof(kHeartbeatEffectParameters[0]));
+}
+
+const plugins::EffectParameter* HeartbeatEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kHeartbeatEffectParameters[index];
+}
+
+bool HeartbeatEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "heartbeat_effect_speed_scale") == 0) {
+        gHeartbeatEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "heartbeat_effect_output_gain") == 0) {
+        gHeartbeatEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "heartbeat_effect_centre_bias") == 0) {
+        gHeartbeatEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float HeartbeatEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "heartbeat_effect_speed_scale") == 0) return gHeartbeatEffectSpeedScale;
+    if (strcmp(name, "heartbeat_effect_output_gain") == 0) return gHeartbeatEffectOutputGain;
+    if (strcmp(name, "heartbeat_effect_centre_bias") == 0) return gHeartbeatEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:HeartbeatEffect
 
 void HeartbeatEffect::cleanup() {
     // No resources to free

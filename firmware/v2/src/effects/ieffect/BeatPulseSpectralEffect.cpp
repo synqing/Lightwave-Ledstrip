@@ -18,6 +18,26 @@
 #include "BeatPulseRenderUtils.h"
 
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:BeatPulseSpectralEffect
+namespace {
+constexpr float kBeatPulseSpectralEffectSpeedScale = 1.0f;
+constexpr float kBeatPulseSpectralEffectOutputGain = 1.0f;
+constexpr float kBeatPulseSpectralEffectCentreBias = 1.0f;
+
+float gBeatPulseSpectralEffectSpeedScale = kBeatPulseSpectralEffectSpeedScale;
+float gBeatPulseSpectralEffectOutputGain = kBeatPulseSpectralEffectOutputGain;
+float gBeatPulseSpectralEffectCentreBias = kBeatPulseSpectralEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kBeatPulseSpectralEffectParameters[] = {
+    {"beat_pulse_spectral_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kBeatPulseSpectralEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"beat_pulse_spectral_effect_output_gain", "Output Gain", 0.25f, 2.0f, kBeatPulseSpectralEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"beat_pulse_spectral_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kBeatPulseSpectralEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:BeatPulseSpectralEffect
 
 namespace lightwaveos::effects::ieffect {
 
@@ -51,9 +71,14 @@ constexpr uint8_t TREBLE_PALETTE = 200; // Cool
 constexpr float MID_EDGE_SOFTNESS = 0.015f;
 
 } // namespace
-
-bool BeatPulseSpectralEffect::init(plugins::EffectContext& ctx) {
+bool  BeatPulseSpectralEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:BeatPulseSpectralEffect
+    gBeatPulseSpectralEffectSpeedScale = kBeatPulseSpectralEffectSpeedScale;
+    gBeatPulseSpectralEffectOutputGain = kBeatPulseSpectralEffectOutputGain;
+    gBeatPulseSpectralEffectCentreBias = kBeatPulseSpectralEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:BeatPulseSpectralEffect
+
     m_smoothBass = 0.0f;
     m_smoothMid = 0.0f;
     m_smoothTreble = 0.0f;
@@ -168,6 +193,43 @@ void BeatPulseSpectralEffect::render(plugins::EffectContext& ctx) {
     }
 }
 
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:BeatPulseSpectralEffect
+uint8_t BeatPulseSpectralEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kBeatPulseSpectralEffectParameters) / sizeof(kBeatPulseSpectralEffectParameters[0]));
+}
+
+const plugins::EffectParameter* BeatPulseSpectralEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kBeatPulseSpectralEffectParameters[index];
+}
+
+bool BeatPulseSpectralEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "beat_pulse_spectral_effect_speed_scale") == 0) {
+        gBeatPulseSpectralEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "beat_pulse_spectral_effect_output_gain") == 0) {
+        gBeatPulseSpectralEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "beat_pulse_spectral_effect_centre_bias") == 0) {
+        gBeatPulseSpectralEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float BeatPulseSpectralEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "beat_pulse_spectral_effect_speed_scale") == 0) return gBeatPulseSpectralEffectSpeedScale;
+    if (strcmp(name, "beat_pulse_spectral_effect_output_gain") == 0) return gBeatPulseSpectralEffectOutputGain;
+    if (strcmp(name, "beat_pulse_spectral_effect_centre_bias") == 0) return gBeatPulseSpectralEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:BeatPulseSpectralEffect
+
 void BeatPulseSpectralEffect::cleanup() {}
 
 const plugins::EffectMetadata& BeatPulseSpectralEffect::getMetadata() const {
@@ -181,21 +243,5 @@ const plugins::EffectMetadata& BeatPulseSpectralEffect::getMetadata() const {
     return meta;
 }
 
-uint8_t BeatPulseSpectralEffect::getParameterCount() const { return 0; }
-
-const plugins::EffectParameter* BeatPulseSpectralEffect::getParameter(uint8_t index) const {
-    (void)index;
-    return nullptr;
-}
-
-bool BeatPulseSpectralEffect::setParameter(const char* name, float value) {
-    (void)name; (void)value;
-    return false;
-}
-
-float BeatPulseSpectralEffect::getParameter(const char* name) const {
-    (void)name;
-    return 0.0f;
-}
 
 } // namespace lightwaveos::effects::ieffect

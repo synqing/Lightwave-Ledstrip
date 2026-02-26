@@ -26,6 +26,25 @@
 #include <cmath>
 #include <cstring>
 
+
+// AUTO_TUNABLES_BULK_BEGIN:AudioWaveformEffect
+namespace {
+constexpr float kAudioWaveformEffectSpeedScale = 1.0f;
+constexpr float kAudioWaveformEffectOutputGain = 1.0f;
+constexpr float kAudioWaveformEffectCentreBias = 1.0f;
+
+float gAudioWaveformEffectSpeedScale = kAudioWaveformEffectSpeedScale;
+float gAudioWaveformEffectOutputGain = kAudioWaveformEffectOutputGain;
+float gAudioWaveformEffectCentreBias = kAudioWaveformEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kAudioWaveformEffectParameters[] = {
+    {"audio_waveform_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kAudioWaveformEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"audio_waveform_effect_output_gain", "Output Gain", 0.25f, 2.0f, kAudioWaveformEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"audio_waveform_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kAudioWaveformEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:AudioWaveformEffect
+
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
@@ -47,6 +66,12 @@ static inline float clamp01(float v) {
 
 bool AudioWaveformEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:AudioWaveformEffect
+    gAudioWaveformEffectSpeedScale = kAudioWaveformEffectSpeedScale;
+    gAudioWaveformEffectOutputGain = kAudioWaveformEffectOutputGain;
+    gAudioWaveformEffectCentreBias = kAudioWaveformEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:AudioWaveformEffect
+
     m_peakSmoothed = 0.0f;
     m_sumColorLast[0] = 0.0f;
     m_sumColorLast[1] = 0.0f;
@@ -252,6 +277,43 @@ CRGB AudioWaveformEffect::computeChromaColor(const plugins::EffectContext& ctx) 
         (uint8_t)fminf(m_sumColorLast[2], 255.0f)
     );
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:AudioWaveformEffect
+uint8_t AudioWaveformEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kAudioWaveformEffectParameters) / sizeof(kAudioWaveformEffectParameters[0]));
+}
+
+const plugins::EffectParameter* AudioWaveformEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kAudioWaveformEffectParameters[index];
+}
+
+bool AudioWaveformEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "audio_waveform_effect_speed_scale") == 0) {
+        gAudioWaveformEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "audio_waveform_effect_output_gain") == 0) {
+        gAudioWaveformEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "audio_waveform_effect_centre_bias") == 0) {
+        gAudioWaveformEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float AudioWaveformEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "audio_waveform_effect_speed_scale") == 0) return gAudioWaveformEffectSpeedScale;
+    if (strcmp(name, "audio_waveform_effect_output_gain") == 0) return gAudioWaveformEffectOutputGain;
+    if (strcmp(name, "audio_waveform_effect_centre_bias") == 0) return gAudioWaveformEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:AudioWaveformEffect
 
 void AudioWaveformEffect::cleanup() {
     // No resources to free

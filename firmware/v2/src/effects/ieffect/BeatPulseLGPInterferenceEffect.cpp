@@ -16,6 +16,25 @@
 #include <cmath>
 #include <cstring>
 
+
+// AUTO_TUNABLES_BULK_BEGIN:BeatPulseLGPInterferenceEffect
+namespace {
+constexpr float kBeatPulseLGPInterferenceEffectSpeedScale = 1.0f;
+constexpr float kBeatPulseLGPInterferenceEffectOutputGain = 1.0f;
+constexpr float kBeatPulseLGPInterferenceEffectCentreBias = 1.0f;
+
+float gBeatPulseLGPInterferenceEffectSpeedScale = kBeatPulseLGPInterferenceEffectSpeedScale;
+float gBeatPulseLGPInterferenceEffectOutputGain = kBeatPulseLGPInterferenceEffectOutputGain;
+float gBeatPulseLGPInterferenceEffectCentreBias = kBeatPulseLGPInterferenceEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kBeatPulseLGPInterferenceEffectParameters[] = {
+    {"beat_pulse_lgpinterference_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kBeatPulseLGPInterferenceEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"beat_pulse_lgpinterference_effect_output_gain", "Output Gain", 0.25f, 2.0f, kBeatPulseLGPInterferenceEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"beat_pulse_lgpinterference_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kBeatPulseLGPInterferenceEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:BeatPulseLGPInterferenceEffect
+
 namespace lightwaveos::effects::ieffect {
 
 // ============================================================================
@@ -27,9 +46,14 @@ constexpr float LGP_TWO_PI = 6.28318530717959f;
 
 // Motion phase drift speed (radians per second) - creates slow standing wave animation
 constexpr float PHASE_DRIFT_SPEED = 0.8f;
-
-bool BeatPulseLGPInterferenceEffect::init(plugins::EffectContext& ctx) {
+bool  BeatPulseLGPInterferenceEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:BeatPulseLGPInterferenceEffect
+    gBeatPulseLGPInterferenceEffectSpeedScale = kBeatPulseLGPInterferenceEffectSpeedScale;
+    gBeatPulseLGPInterferenceEffectOutputGain = kBeatPulseLGPInterferenceEffectOutputGain;
+    gBeatPulseLGPInterferenceEffectCentreBias = kBeatPulseLGPInterferenceEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:BeatPulseLGPInterferenceEffect
+
     m_beatIntensity = 0.0f;
     m_lastBeatTimeMs = 0;
     m_fallbackBpm = 128.0f;
@@ -139,6 +163,43 @@ void BeatPulseLGPInterferenceEffect::render(plugins::EffectContext& ctx) {
     }
 }
 
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:BeatPulseLGPInterferenceEffect
+uint8_t BeatPulseLGPInterferenceEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kBeatPulseLGPInterferenceEffectParameters) / sizeof(kBeatPulseLGPInterferenceEffectParameters[0]));
+}
+
+const plugins::EffectParameter* BeatPulseLGPInterferenceEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kBeatPulseLGPInterferenceEffectParameters[index];
+}
+
+bool BeatPulseLGPInterferenceEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "beat_pulse_lgpinterference_effect_speed_scale") == 0) {
+        gBeatPulseLGPInterferenceEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "beat_pulse_lgpinterference_effect_output_gain") == 0) {
+        gBeatPulseLGPInterferenceEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "beat_pulse_lgpinterference_effect_centre_bias") == 0) {
+        gBeatPulseLGPInterferenceEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float BeatPulseLGPInterferenceEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "beat_pulse_lgpinterference_effect_speed_scale") == 0) return gBeatPulseLGPInterferenceEffectSpeedScale;
+    if (strcmp(name, "beat_pulse_lgpinterference_effect_output_gain") == 0) return gBeatPulseLGPInterferenceEffectOutputGain;
+    if (strcmp(name, "beat_pulse_lgpinterference_effect_centre_bias") == 0) return gBeatPulseLGPInterferenceEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:BeatPulseLGPInterferenceEffect
+
 void BeatPulseLGPInterferenceEffect::cleanup() {}
 
 const plugins::EffectMetadata& BeatPulseLGPInterferenceEffect::getMetadata() const {
@@ -152,50 +213,5 @@ const plugins::EffectMetadata& BeatPulseLGPInterferenceEffect::getMetadata() con
     return meta;
 }
 
-uint8_t BeatPulseLGPInterferenceEffect::getParameterCount() const {
-    return 2;
-}
-
-const plugins::EffectParameter* BeatPulseLGPInterferenceEffect::getParameter(uint8_t index) const {
-    static plugins::EffectParameter params[] = {
-        plugins::EffectParameter("phaseMode", "Phase Mode", 0.0f, 2.0f, 2.0f),      // 0=in-phase, 1=quadrature, 2=anti-phase
-        plugins::EffectParameter("spatialFreq", "Box Count", 2.0f, 12.0f, 4.0f),    // Standing wave nodes
-    };
-    if (index >= (sizeof(params) / sizeof(params[0]))) {
-        return nullptr;
-    }
-    return &params[index];
-}
-
-bool BeatPulseLGPInterferenceEffect::setParameter(const char* name, float value) {
-    if (!name) return false;
-
-    if (strcmp(name, "phaseMode") == 0) {
-        int mode = static_cast<int>(value + 0.5f);
-        if (mode < 0) mode = 0;
-        if (mode > 2) mode = 2;
-        m_phaseMode = static_cast<LGPPhaseMode>(mode);
-        return true;
-    }
-    if (strcmp(name, "spatialFreq") == 0) {
-        m_spatialFreq = value;
-        if (m_spatialFreq < 2.0f) m_spatialFreq = 2.0f;
-        if (m_spatialFreq > 12.0f) m_spatialFreq = 12.0f;
-        return true;
-    }
-    return false;
-}
-
-float BeatPulseLGPInterferenceEffect::getParameter(const char* name) const {
-    if (!name) return 0.0f;
-
-    if (strcmp(name, "phaseMode") == 0) {
-        return static_cast<float>(m_phaseMode);
-    }
-    if (strcmp(name, "spatialFreq") == 0) {
-        return m_spatialFreq;
-    }
-    return 0.0f;
-}
 
 } // namespace lightwaveos::effects::ieffect

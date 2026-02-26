@@ -18,6 +18,26 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:WaveReactiveEffect
+namespace {
+constexpr float kWaveReactiveEffectSpeedScale = 1.0f;
+constexpr float kWaveReactiveEffectOutputGain = 1.0f;
+constexpr float kWaveReactiveEffectCentreBias = 1.0f;
+
+float gWaveReactiveEffectSpeedScale = kWaveReactiveEffectSpeedScale;
+float gWaveReactiveEffectOutputGain = kWaveReactiveEffectOutputGain;
+float gWaveReactiveEffectCentreBias = kWaveReactiveEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kWaveReactiveEffectParameters[] = {
+    {"wave_reactive_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kWaveReactiveEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"wave_reactive_effect_output_gain", "Output Gain", 0.25f, 2.0f, kWaveReactiveEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"wave_reactive_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kWaveReactiveEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:WaveReactiveEffect
 
 namespace lightwaveos {
 namespace effects {
@@ -44,6 +64,12 @@ WaveReactiveEffect::WaveReactiveEffect()
 
 bool WaveReactiveEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:WaveReactiveEffect
+    gWaveReactiveEffectSpeedScale = kWaveReactiveEffectSpeedScale;
+    gWaveReactiveEffectOutputGain = kWaveReactiveEffectOutputGain;
+    gWaveReactiveEffectCentreBias = kWaveReactiveEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:WaveReactiveEffect
+
     m_waveOffset = 0;
     m_energyAccum = 0.0f;
     m_lastFlux = 0.0f;
@@ -118,6 +144,43 @@ void WaveReactiveEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:WaveReactiveEffect
+uint8_t WaveReactiveEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kWaveReactiveEffectParameters) / sizeof(kWaveReactiveEffectParameters[0]));
+}
+
+const plugins::EffectParameter* WaveReactiveEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kWaveReactiveEffectParameters[index];
+}
+
+bool WaveReactiveEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "wave_reactive_effect_speed_scale") == 0) {
+        gWaveReactiveEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "wave_reactive_effect_output_gain") == 0) {
+        gWaveReactiveEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "wave_reactive_effect_centre_bias") == 0) {
+        gWaveReactiveEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float WaveReactiveEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "wave_reactive_effect_speed_scale") == 0) return gWaveReactiveEffectSpeedScale;
+    if (strcmp(name, "wave_reactive_effect_output_gain") == 0) return gWaveReactiveEffectOutputGain;
+    if (strcmp(name, "wave_reactive_effect_centre_bias") == 0) return gWaveReactiveEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:WaveReactiveEffect
 
 void WaveReactiveEffect::cleanup() {
     // No resources to free

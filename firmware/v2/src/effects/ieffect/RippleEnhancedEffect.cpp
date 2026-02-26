@@ -14,12 +14,30 @@
 
 #ifndef NATIVE_BUILD
 #include <esp_heap_caps.h>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:RippleEnhancedEffect
+namespace {
+constexpr float kRippleEnhancedEffectSpeedScale = 1.0f;
+constexpr float kRippleEnhancedEffectOutputGain = 1.0f;
+constexpr float kRippleEnhancedEffectCentreBias = 1.0f;
+
+float gRippleEnhancedEffectSpeedScale = kRippleEnhancedEffectSpeedScale;
+float gRippleEnhancedEffectOutputGain = kRippleEnhancedEffectOutputGain;
+float gRippleEnhancedEffectCentreBias = kRippleEnhancedEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kRippleEnhancedEffectParameters[] = {
+    {"ripple_enhanced_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kRippleEnhancedEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"ripple_enhanced_effect_output_gain", "Output Gain", 0.25f, 2.0f, kRippleEnhancedEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"ripple_enhanced_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kRippleEnhancedEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:RippleEnhancedEffect
 #endif
 
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
-
 RippleEnhancedEffect::RippleEnhancedEffect()
     : m_ps(nullptr)
 {
@@ -34,6 +52,13 @@ RippleEnhancedEffect::RippleEnhancedEffect()
 
 bool RippleEnhancedEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:RippleEnhancedEffect
+    gRippleEnhancedEffectSpeedScale = kRippleEnhancedEffectSpeedScale;
+    gRippleEnhancedEffectOutputGain = kRippleEnhancedEffectOutputGain;
+    gRippleEnhancedEffectCentreBias = kRippleEnhancedEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:RippleEnhancedEffect
+
+
     for (uint8_t i = 0; i < MAX_RIPPLES; i++) {
         m_ripples[i].active = false;
         m_ripples[i].radius = 0;
@@ -348,6 +373,43 @@ void RippleEnhancedEffect::render(plugins::EffectContext& ctx) {
         SET_CENTER_PAIR(ctx, dist, m_ps->radialAux[dist]);
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:RippleEnhancedEffect
+uint8_t RippleEnhancedEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kRippleEnhancedEffectParameters) / sizeof(kRippleEnhancedEffectParameters[0]));
+}
+
+const plugins::EffectParameter* RippleEnhancedEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kRippleEnhancedEffectParameters[index];
+}
+
+bool RippleEnhancedEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "ripple_enhanced_effect_speed_scale") == 0) {
+        gRippleEnhancedEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "ripple_enhanced_effect_output_gain") == 0) {
+        gRippleEnhancedEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "ripple_enhanced_effect_centre_bias") == 0) {
+        gRippleEnhancedEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float RippleEnhancedEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "ripple_enhanced_effect_speed_scale") == 0) return gRippleEnhancedEffectSpeedScale;
+    if (strcmp(name, "ripple_enhanced_effect_output_gain") == 0) return gRippleEnhancedEffectOutputGain;
+    if (strcmp(name, "ripple_enhanced_effect_centre_bias") == 0) return gRippleEnhancedEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:RippleEnhancedEffect
 
 void RippleEnhancedEffect::cleanup() {
 #ifndef NATIVE_BUILD

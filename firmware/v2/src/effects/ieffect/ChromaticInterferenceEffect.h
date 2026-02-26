@@ -34,10 +34,17 @@ public:
     void render(plugins::EffectContext& ctx) override;
     void cleanup() override;
     const plugins::EffectMetadata& getMetadata() const override;
+    uint8_t getParameterCount() const override;
+    const plugins::EffectParameter* getParameter(uint8_t index) const override;
+    bool setParameter(const char* name, float value) override;
+    float getParameter(const char* name) const override;
 
 private:
     // Instance state (was: static float interferencePhase)
     float m_interferencePhase;
+    float m_phaseRate;
+    float m_interferenceModulation;
+    float m_aberrationScale;
     
     // Helper: chromaticDispersionPalette (moved from static in LGPChromaticEffects.cpp)
     CRGB chromaticDispersionPalette(float position,
@@ -55,4 +62,3 @@ private:
 } // namespace ieffect
 } // namespace effects
 } // namespace lightwaveos
-

@@ -19,6 +19,26 @@
 #include "BeatPulseRenderUtils.h"
 
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:BeatPulseSpectralPulseEffect
+namespace {
+constexpr float kBeatPulseSpectralPulseEffectSpeedScale = 1.0f;
+constexpr float kBeatPulseSpectralPulseEffectOutputGain = 1.0f;
+constexpr float kBeatPulseSpectralPulseEffectCentreBias = 1.0f;
+
+float gBeatPulseSpectralPulseEffectSpeedScale = kBeatPulseSpectralPulseEffectSpeedScale;
+float gBeatPulseSpectralPulseEffectOutputGain = kBeatPulseSpectralPulseEffectOutputGain;
+float gBeatPulseSpectralPulseEffectCentreBias = kBeatPulseSpectralPulseEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kBeatPulseSpectralPulseEffectParameters[] = {
+    {"beat_pulse_spectral_pulse_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kBeatPulseSpectralPulseEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"beat_pulse_spectral_pulse_effect_output_gain", "Output Gain", 0.25f, 2.0f, kBeatPulseSpectralPulseEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"beat_pulse_spectral_pulse_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kBeatPulseSpectralPulseEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:BeatPulseSpectralPulseEffect
 
 namespace lightwaveos::effects::ieffect {
 
@@ -40,9 +60,14 @@ constexpr float TREBLE_SMOOTH = 0.92f;
 constexpr float FLICKER_SPEED = 0.028f;
 
 } // namespace
-
-bool BeatPulseSpectralPulseEffect::init(plugins::EffectContext& ctx) {
+bool  BeatPulseSpectralPulseEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:BeatPulseSpectralPulseEffect
+    gBeatPulseSpectralPulseEffectSpeedScale = kBeatPulseSpectralPulseEffectSpeedScale;
+    gBeatPulseSpectralPulseEffectOutputGain = kBeatPulseSpectralPulseEffectOutputGain;
+    gBeatPulseSpectralPulseEffectCentreBias = kBeatPulseSpectralPulseEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:BeatPulseSpectralPulseEffect
+
     m_smoothBass = 0.0f;
     m_smoothMid = 0.0f;
     m_smoothTreble = 0.0f;
@@ -159,6 +184,43 @@ void BeatPulseSpectralPulseEffect::render(plugins::EffectContext& ctx) {
     }
 }
 
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:BeatPulseSpectralPulseEffect
+uint8_t BeatPulseSpectralPulseEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kBeatPulseSpectralPulseEffectParameters) / sizeof(kBeatPulseSpectralPulseEffectParameters[0]));
+}
+
+const plugins::EffectParameter* BeatPulseSpectralPulseEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kBeatPulseSpectralPulseEffectParameters[index];
+}
+
+bool BeatPulseSpectralPulseEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "beat_pulse_spectral_pulse_effect_speed_scale") == 0) {
+        gBeatPulseSpectralPulseEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "beat_pulse_spectral_pulse_effect_output_gain") == 0) {
+        gBeatPulseSpectralPulseEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "beat_pulse_spectral_pulse_effect_centre_bias") == 0) {
+        gBeatPulseSpectralPulseEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float BeatPulseSpectralPulseEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "beat_pulse_spectral_pulse_effect_speed_scale") == 0) return gBeatPulseSpectralPulseEffectSpeedScale;
+    if (strcmp(name, "beat_pulse_spectral_pulse_effect_output_gain") == 0) return gBeatPulseSpectralPulseEffectOutputGain;
+    if (strcmp(name, "beat_pulse_spectral_pulse_effect_centre_bias") == 0) return gBeatPulseSpectralPulseEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:BeatPulseSpectralPulseEffect
+
 void BeatPulseSpectralPulseEffect::cleanup() {}
 
 const plugins::EffectMetadata& BeatPulseSpectralPulseEffect::getMetadata() const {
@@ -172,21 +234,5 @@ const plugins::EffectMetadata& BeatPulseSpectralPulseEffect::getMetadata() const
     return meta;
 }
 
-uint8_t BeatPulseSpectralPulseEffect::getParameterCount() const { return 0; }
-
-const plugins::EffectParameter* BeatPulseSpectralPulseEffect::getParameter(uint8_t index) const {
-    (void)index;
-    return nullptr;
-}
-
-bool BeatPulseSpectralPulseEffect::setParameter(const char* name, float value) {
-    (void)name; (void)value;
-    return false;
-}
-
-float BeatPulseSpectralPulseEffect::getParameter(const char* name) const {
-    (void)name;
-    return 0.0f;
-}
 
 } // namespace lightwaveos::effects::ieffect

@@ -29,12 +29,36 @@
 #include <cmath>
 #include <cstring>
 
+
+// AUTO_TUNABLES_BULK_BEGIN:SnapwaveLinearEffect
+namespace {
+constexpr float kSnapwaveLinearEffectSpeedScale = 1.0f;
+constexpr float kSnapwaveLinearEffectOutputGain = 1.0f;
+constexpr float kSnapwaveLinearEffectCentreBias = 1.0f;
+
+float gSnapwaveLinearEffectSpeedScale = kSnapwaveLinearEffectSpeedScale;
+float gSnapwaveLinearEffectOutputGain = kSnapwaveLinearEffectOutputGain;
+float gSnapwaveLinearEffectCentreBias = kSnapwaveLinearEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kSnapwaveLinearEffectParameters[] = {
+    {"snapwave_linear_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kSnapwaveLinearEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"snapwave_linear_effect_output_gain", "Output Gain", 0.25f, 2.0f, kSnapwaveLinearEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"snapwave_linear_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kSnapwaveLinearEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:SnapwaveLinearEffect
+
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
-
-bool SnapwaveLinearEffect::init(plugins::EffectContext& ctx) {
+bool  SnapwaveLinearEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:SnapwaveLinearEffect
+    gSnapwaveLinearEffectSpeedScale = kSnapwaveLinearEffectSpeedScale;
+    gSnapwaveLinearEffectOutputGain = kSnapwaveLinearEffectOutputGain;
+    gSnapwaveLinearEffectCentreBias = kSnapwaveLinearEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:SnapwaveLinearEffect
+
 
     for (uint8_t z = 0; z < kMaxZones; ++z) {
         m_peakSmoothed[z] = 0.0f;
@@ -298,6 +322,43 @@ void SnapwaveLinearEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:SnapwaveLinearEffect
+uint8_t SnapwaveLinearEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kSnapwaveLinearEffectParameters) / sizeof(kSnapwaveLinearEffectParameters[0]));
+}
+
+const plugins::EffectParameter* SnapwaveLinearEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kSnapwaveLinearEffectParameters[index];
+}
+
+bool SnapwaveLinearEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "snapwave_linear_effect_speed_scale") == 0) {
+        gSnapwaveLinearEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "snapwave_linear_effect_output_gain") == 0) {
+        gSnapwaveLinearEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "snapwave_linear_effect_centre_bias") == 0) {
+        gSnapwaveLinearEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float SnapwaveLinearEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "snapwave_linear_effect_speed_scale") == 0) return gSnapwaveLinearEffectSpeedScale;
+    if (strcmp(name, "snapwave_linear_effect_output_gain") == 0) return gSnapwaveLinearEffectOutputGain;
+    if (strcmp(name, "snapwave_linear_effect_centre_bias") == 0) return gSnapwaveLinearEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:SnapwaveLinearEffect
 
 void SnapwaveLinearEffect::cleanup() {
 #ifndef NATIVE_BUILD

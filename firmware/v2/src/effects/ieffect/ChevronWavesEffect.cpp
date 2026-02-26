@@ -9,6 +9,7 @@
 #include "../utils/FastLEDOptim.h"
 #include "../../config/features.h"
 #include <math.h>
+#include <cstring>
 
 #ifndef PI
 #define PI 3.14159265358979323846f
@@ -17,6 +18,18 @@
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
+
+namespace {
+constexpr float kPhaseRate = 240.0f;
+constexpr float kWaveFreq = 0.25f;
+constexpr int kFadeAmount = 40;
+
+const plugins::EffectParameter kParameters[] = {
+    {"phase_rate", "Phase Rate", 120.0f, 320.0f, kPhaseRate, plugins::EffectParameterType::FLOAT, 1.0f, "timing", "", false},
+    {"wave_freq", "Wave Frequency", 0.08f, 0.45f, kWaveFreq, plugins::EffectParameterType::FLOAT, 0.005f, "wave", "", false},
+    {"fade_amount", "Fade Amount", 10.0f, 120.0f, (float)kFadeAmount, plugins::EffectParameterType::INT, 1.0f, "blend", "", true},
+};
+}
 
 ChevronWavesEffect::ChevronWavesEffect()
     : m_chevronPos(0.0f)
@@ -43,6 +56,9 @@ bool ChevronWavesEffect::init(plugins::EffectContext& ctx) {
     m_phaseSpeedSpring.reset(1.0f);        // Start at base speed
     m_energyAvgFollower.reset(0.0f);
     m_energyDeltaFollower.reset(0.0f);
+    m_phaseRate = kPhaseRate;
+    m_waveFreq = kWaveFreq;
+    m_fadeAmount = kFadeAmount;
 
     return true;
 }
@@ -129,9 +145,9 @@ void ChevronWavesEffect::render(plugins::EffectContext& ctx) {
     float smoothedSpeed = m_phaseSpeedSpring.update(targetSpeed, rawDt);
     if (smoothedSpeed > 2.0f) smoothedSpeed = 2.0f;  // Hard clamp
     if (smoothedSpeed < 0.3f) smoothedSpeed = 0.3f;  // Prevent stalling
-    m_chevronPos += speedNorm * 240.0f * smoothedSpeed * dt;  // dt-corrected: 240/sec at speedNorm=1
+    m_chevronPos += speedNorm * m_phaseRate * smoothedSpeed * dt;
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, FADE_AMOUNT);
+    fadeToBlackBy(ctx.leds, ctx.ledCount, (uint8_t)m_fadeAmount);
 
     for (uint16_t i = 0; i < ctx.ledCount && i < STRIP_LENGTH; i++) {
         // CRITICAL FIX: Use centerPairDistance() like working effects
@@ -139,8 +155,7 @@ void ChevronWavesEffect::render(plugins::EffectContext& ctx) {
 
         // CRITICAL FIX: Match reference pattern with moderate spatial frequency
         // sin(k*dist - phase) produces OUTWARD motion when phase increases
-        const float freqBase = 0.25f;  // Wavelength ~25 LEDs (was ~7 with CHEVRON_COUNT)
-        float chevron = sinf(distFromCenter * freqBase - m_chevronPos);
+        float chevron = sinf(distFromCenter * m_waveFreq - m_chevronPos);
 
         // Sharp edges with snare-triggered crispness
         float tanhScale = 2.0f;  // Base sharpness
@@ -182,6 +197,40 @@ const plugins::EffectMetadata& ChevronWavesEffect::getMetadata() const {
         1
     };
     return meta;
+}
+
+uint8_t ChevronWavesEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kParameters) / sizeof(kParameters[0]));
+}
+
+const plugins::EffectParameter* ChevronWavesEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kParameters[index];
+}
+
+bool ChevronWavesEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "phase_rate") == 0) {
+        m_phaseRate = constrain(value, 120.0f, 320.0f);
+        return true;
+    }
+    if (strcmp(name, "wave_freq") == 0) {
+        m_waveFreq = constrain(value, 0.08f, 0.45f);
+        return true;
+    }
+    if (strcmp(name, "fade_amount") == 0) {
+        m_fadeAmount = (int)constrain(value, 10.0f, 120.0f);
+        return true;
+    }
+    return false;
+}
+
+float ChevronWavesEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "phase_rate") == 0) return m_phaseRate;
+    if (strcmp(name, "wave_freq") == 0) return m_waveFreq;
+    if (strcmp(name, "fade_amount") == 0) return (float)m_fadeAmount;
+    return 0.0f;
 }
 
 } // namespace ieffect

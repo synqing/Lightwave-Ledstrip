@@ -9,6 +9,26 @@
 #include "../utils/FastLEDOptim.h"
 #include "../../config/features.h"
 #include <math.h>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:ChevronWavesEnhancedEffect
+namespace {
+constexpr float kChevronWavesEnhancedEffectSpeedScale = 1.0f;
+constexpr float kChevronWavesEnhancedEffectOutputGain = 1.0f;
+constexpr float kChevronWavesEnhancedEffectCentreBias = 1.0f;
+
+float gChevronWavesEnhancedEffectSpeedScale = kChevronWavesEnhancedEffectSpeedScale;
+float gChevronWavesEnhancedEffectOutputGain = kChevronWavesEnhancedEffectOutputGain;
+float gChevronWavesEnhancedEffectCentreBias = kChevronWavesEnhancedEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kChevronWavesEnhancedEffectParameters[] = {
+    {"chevron_waves_enhanced_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kChevronWavesEnhancedEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"chevron_waves_enhanced_effect_output_gain", "Output Gain", 0.25f, 2.0f, kChevronWavesEnhancedEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"chevron_waves_enhanced_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kChevronWavesEnhancedEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:ChevronWavesEnhancedEffect
 
 #ifndef PI
 #define PI 3.14159265358979323846f
@@ -17,7 +37,6 @@
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
-
 ChevronWavesEnhancedEffect::ChevronWavesEnhancedEffect()
     : m_chevronPos(0.0f)
 {
@@ -25,6 +44,13 @@ ChevronWavesEnhancedEffect::ChevronWavesEnhancedEffect()
 
 bool ChevronWavesEnhancedEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:ChevronWavesEnhancedEffect
+    gChevronWavesEnhancedEffectSpeedScale = kChevronWavesEnhancedEffectSpeedScale;
+    gChevronWavesEnhancedEffectOutputGain = kChevronWavesEnhancedEffectOutputGain;
+    gChevronWavesEnhancedEffectCentreBias = kChevronWavesEnhancedEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:ChevronWavesEnhancedEffect
+
+
     m_chevronPos = 0.0f;
     m_lastHopSeq = 0;
     m_chromaEnergySum = 0.0f;
@@ -238,6 +264,43 @@ void ChevronWavesEnhancedEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:ChevronWavesEnhancedEffect
+uint8_t ChevronWavesEnhancedEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kChevronWavesEnhancedEffectParameters) / sizeof(kChevronWavesEnhancedEffectParameters[0]));
+}
+
+const plugins::EffectParameter* ChevronWavesEnhancedEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kChevronWavesEnhancedEffectParameters[index];
+}
+
+bool ChevronWavesEnhancedEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "chevron_waves_enhanced_effect_speed_scale") == 0) {
+        gChevronWavesEnhancedEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "chevron_waves_enhanced_effect_output_gain") == 0) {
+        gChevronWavesEnhancedEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "chevron_waves_enhanced_effect_centre_bias") == 0) {
+        gChevronWavesEnhancedEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float ChevronWavesEnhancedEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "chevron_waves_enhanced_effect_speed_scale") == 0) return gChevronWavesEnhancedEffectSpeedScale;
+    if (strcmp(name, "chevron_waves_enhanced_effect_output_gain") == 0) return gChevronWavesEnhancedEffectOutputGain;
+    if (strcmp(name, "chevron_waves_enhanced_effect_centre_bias") == 0) return gChevronWavesEnhancedEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:ChevronWavesEnhancedEffect
 
 void ChevronWavesEnhancedEffect::cleanup() {
     // No resources to free

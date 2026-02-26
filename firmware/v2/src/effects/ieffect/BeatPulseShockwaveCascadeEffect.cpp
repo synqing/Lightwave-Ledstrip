@@ -21,11 +21,36 @@
 #include "BeatPulseRenderUtils.h"
 
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:BeatPulseShockwaveCascadeEffect
+namespace {
+constexpr float kBeatPulseShockwaveCascadeEffectSpeedScale = 1.0f;
+constexpr float kBeatPulseShockwaveCascadeEffectOutputGain = 1.0f;
+constexpr float kBeatPulseShockwaveCascadeEffectCentreBias = 1.0f;
+
+float gBeatPulseShockwaveCascadeEffectSpeedScale = kBeatPulseShockwaveCascadeEffectSpeedScale;
+float gBeatPulseShockwaveCascadeEffectOutputGain = kBeatPulseShockwaveCascadeEffectOutputGain;
+float gBeatPulseShockwaveCascadeEffectCentreBias = kBeatPulseShockwaveCascadeEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kBeatPulseShockwaveCascadeEffectParameters[] = {
+    {"beat_pulse_shockwave_cascade_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kBeatPulseShockwaveCascadeEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"beat_pulse_shockwave_cascade_effect_output_gain", "Output Gain", 0.25f, 2.0f, kBeatPulseShockwaveCascadeEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"beat_pulse_shockwave_cascade_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kBeatPulseShockwaveCascadeEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:BeatPulseShockwaveCascadeEffect
 
 namespace lightwaveos::effects::ieffect {
-
-bool BeatPulseShockwaveCascadeEffect::init(plugins::EffectContext& ctx) {
+bool  BeatPulseShockwaveCascadeEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:BeatPulseShockwaveCascadeEffect
+    gBeatPulseShockwaveCascadeEffectSpeedScale = kBeatPulseShockwaveCascadeEffectSpeedScale;
+    gBeatPulseShockwaveCascadeEffectOutputGain = kBeatPulseShockwaveCascadeEffectOutputGain;
+    gBeatPulseShockwaveCascadeEffectCentreBias = kBeatPulseShockwaveCascadeEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:BeatPulseShockwaveCascadeEffect
+
     m_beatIntensity = 0.0f;
     m_lastBeatTimeMs = 0;
     m_fallbackBpm = 128.0f;
@@ -95,6 +120,43 @@ void BeatPulseShockwaveCascadeEffect::render(plugins::EffectContext& ctx) {
     }
 }
 
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:BeatPulseShockwaveCascadeEffect
+uint8_t BeatPulseShockwaveCascadeEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kBeatPulseShockwaveCascadeEffectParameters) / sizeof(kBeatPulseShockwaveCascadeEffectParameters[0]));
+}
+
+const plugins::EffectParameter* BeatPulseShockwaveCascadeEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kBeatPulseShockwaveCascadeEffectParameters[index];
+}
+
+bool BeatPulseShockwaveCascadeEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "beat_pulse_shockwave_cascade_effect_speed_scale") == 0) {
+        gBeatPulseShockwaveCascadeEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "beat_pulse_shockwave_cascade_effect_output_gain") == 0) {
+        gBeatPulseShockwaveCascadeEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "beat_pulse_shockwave_cascade_effect_centre_bias") == 0) {
+        gBeatPulseShockwaveCascadeEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float BeatPulseShockwaveCascadeEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "beat_pulse_shockwave_cascade_effect_speed_scale") == 0) return gBeatPulseShockwaveCascadeEffectSpeedScale;
+    if (strcmp(name, "beat_pulse_shockwave_cascade_effect_output_gain") == 0) return gBeatPulseShockwaveCascadeEffectOutputGain;
+    if (strcmp(name, "beat_pulse_shockwave_cascade_effect_centre_bias") == 0) return gBeatPulseShockwaveCascadeEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:BeatPulseShockwaveCascadeEffect
+
 void BeatPulseShockwaveCascadeEffect::cleanup() {}
 
 const plugins::EffectMetadata& BeatPulseShockwaveCascadeEffect::getMetadata() const {
@@ -108,21 +170,5 @@ const plugins::EffectMetadata& BeatPulseShockwaveCascadeEffect::getMetadata() co
     return meta;
 }
 
-uint8_t BeatPulseShockwaveCascadeEffect::getParameterCount() const { return 0; }
-
-const plugins::EffectParameter* BeatPulseShockwaveCascadeEffect::getParameter(uint8_t index) const {
-    (void)index;
-    return nullptr;
-}
-
-bool BeatPulseShockwaveCascadeEffect::setParameter(const char* name, float value) {
-    (void)name; (void)value;
-    return false;
-}
-
-float BeatPulseShockwaveCascadeEffect::getParameter(const char* name) const {
-    (void)name;
-    return 0.0f;
-}
 
 } // namespace lightwaveos::effects::ieffect

@@ -14,6 +14,26 @@
 #include "BeatPulseRenderUtils.h"
 
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:BeatPulseBreatheEffect
+namespace {
+constexpr float kBeatPulseBreatheEffectSpeedScale = 1.0f;
+constexpr float kBeatPulseBreatheEffectOutputGain = 1.0f;
+constexpr float kBeatPulseBreatheEffectCentreBias = 1.0f;
+
+float gBeatPulseBreatheEffectSpeedScale = kBeatPulseBreatheEffectSpeedScale;
+float gBeatPulseBreatheEffectOutputGain = kBeatPulseBreatheEffectOutputGain;
+float gBeatPulseBreatheEffectCentreBias = kBeatPulseBreatheEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kBeatPulseBreatheEffectParameters[] = {
+    {"beat_pulse_breathe_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kBeatPulseBreatheEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"beat_pulse_breathe_effect_output_gain", "Output Gain", 0.25f, 2.0f, kBeatPulseBreatheEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"beat_pulse_breathe_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kBeatPulseBreatheEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:BeatPulseBreatheEffect
 
 namespace lightwaveos::effects::ieffect {
 
@@ -30,9 +50,14 @@ constexpr float WARMTH_SHIFT = 0.25f;         // Palette shift toward warm on be
 // ============================================================================
 // Lifecycle
 // ============================================================================
-
-bool BeatPulseBreatheEffect::init(plugins::EffectContext& ctx) {
+bool  BeatPulseBreatheEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:BeatPulseBreatheEffect
+    gBeatPulseBreatheEffectSpeedScale = kBeatPulseBreatheEffectSpeedScale;
+    gBeatPulseBreatheEffectOutputGain = kBeatPulseBreatheEffectOutputGain;
+    gBeatPulseBreatheEffectCentreBias = kBeatPulseBreatheEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:BeatPulseBreatheEffect
+
     m_beatIntensity = 0.0f;
     m_targetIntensity = 0.0f;
     m_lastBeatTimeMs = 0;
@@ -100,6 +125,43 @@ void BeatPulseBreatheEffect::render(plugins::EffectContext& ctx) {
     }
 }
 
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:BeatPulseBreatheEffect
+uint8_t BeatPulseBreatheEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kBeatPulseBreatheEffectParameters) / sizeof(kBeatPulseBreatheEffectParameters[0]));
+}
+
+const plugins::EffectParameter* BeatPulseBreatheEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kBeatPulseBreatheEffectParameters[index];
+}
+
+bool BeatPulseBreatheEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "beat_pulse_breathe_effect_speed_scale") == 0) {
+        gBeatPulseBreatheEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "beat_pulse_breathe_effect_output_gain") == 0) {
+        gBeatPulseBreatheEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "beat_pulse_breathe_effect_centre_bias") == 0) {
+        gBeatPulseBreatheEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float BeatPulseBreatheEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "beat_pulse_breathe_effect_speed_scale") == 0) return gBeatPulseBreatheEffectSpeedScale;
+    if (strcmp(name, "beat_pulse_breathe_effect_output_gain") == 0) return gBeatPulseBreatheEffectOutputGain;
+    if (strcmp(name, "beat_pulse_breathe_effect_centre_bias") == 0) return gBeatPulseBreatheEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:BeatPulseBreatheEffect
+
 void BeatPulseBreatheEffect::cleanup() {}
 
 // ============================================================================
@@ -121,21 +183,5 @@ const plugins::EffectMetadata& BeatPulseBreatheEffect::getMetadata() const {
 // Parameters (none for this effect)
 // ============================================================================
 
-uint8_t BeatPulseBreatheEffect::getParameterCount() const { return 0; }
-
-const plugins::EffectParameter* BeatPulseBreatheEffect::getParameter(uint8_t index) const {
-    (void)index;
-    return nullptr;
-}
-
-bool BeatPulseBreatheEffect::setParameter(const char* name, float value) {
-    (void)name; (void)value;
-    return false;
-}
-
-float BeatPulseBreatheEffect::getParameter(const char* name) const {
-    (void)name;
-    return 0.0f;
-}
 
 } // namespace lightwaveos::effects::ieffect

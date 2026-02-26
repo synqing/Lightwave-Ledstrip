@@ -16,6 +16,26 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+
+// AUTO_TUNABLES_BULK_BEGIN:WaveAmbientEffect
+namespace {
+constexpr float kWaveAmbientEffectSpeedScale = 1.0f;
+constexpr float kWaveAmbientEffectOutputGain = 1.0f;
+constexpr float kWaveAmbientEffectCentreBias = 1.0f;
+
+float gWaveAmbientEffectSpeedScale = kWaveAmbientEffectSpeedScale;
+float gWaveAmbientEffectOutputGain = kWaveAmbientEffectOutputGain;
+float gWaveAmbientEffectCentreBias = kWaveAmbientEffectCentreBias;
+
+const lightwaveos::plugins::EffectParameter kWaveAmbientEffectParameters[] = {
+    {"wave_ambient_effect_speed_scale", "Speed Scale", 0.25f, 2.0f, kWaveAmbientEffectSpeedScale, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "timing", "x", false},
+    {"wave_ambient_effect_output_gain", "Output Gain", 0.25f, 2.0f, kWaveAmbientEffectOutputGain, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "blend", "x", false},
+    {"wave_ambient_effect_centre_bias", "Centre Bias", 0.50f, 1.50f, kWaveAmbientEffectCentreBias, lightwaveos::plugins::EffectParameterType::FLOAT, 0.05f, "wave", "x", false},
+};
+} // namespace
+// AUTO_TUNABLES_BULK_END:WaveAmbientEffect
 
 namespace lightwaveos {
 namespace effects {
@@ -23,7 +43,6 @@ namespace ieffect {
 
 // Flux boost decay rate
 static constexpr float FLUX_BOOST_DECAY = 0.9f;
-
 WaveAmbientEffect::WaveAmbientEffect()
     : m_waveOffset(0)
     , m_lastFlux(0.0f)
@@ -33,6 +52,13 @@ WaveAmbientEffect::WaveAmbientEffect()
 
 bool WaveAmbientEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // AUTO_TUNABLES_BULK_RESET_BEGIN:WaveAmbientEffect
+    gWaveAmbientEffectSpeedScale = kWaveAmbientEffectSpeedScale;
+    gWaveAmbientEffectOutputGain = kWaveAmbientEffectOutputGain;
+    gWaveAmbientEffectCentreBias = kWaveAmbientEffectCentreBias;
+    // AUTO_TUNABLES_BULK_RESET_END:WaveAmbientEffect
+
+
     m_waveOffset = 0;
     m_lastFlux = 0.0f;
     m_fluxBoost = 0.0f;
@@ -104,6 +130,43 @@ void WaveAmbientEffect::render(plugins::EffectContext& ctx) {
         }
     }
 }
+
+
+// AUTO_TUNABLES_BULK_METHODS_BEGIN:WaveAmbientEffect
+uint8_t WaveAmbientEffect::getParameterCount() const {
+    return static_cast<uint8_t>(sizeof(kWaveAmbientEffectParameters) / sizeof(kWaveAmbientEffectParameters[0]));
+}
+
+const plugins::EffectParameter* WaveAmbientEffect::getParameter(uint8_t index) const {
+    if (index >= getParameterCount()) return nullptr;
+    return &kWaveAmbientEffectParameters[index];
+}
+
+bool WaveAmbientEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "wave_ambient_effect_speed_scale") == 0) {
+        gWaveAmbientEffectSpeedScale = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "wave_ambient_effect_output_gain") == 0) {
+        gWaveAmbientEffectOutputGain = constrain(value, 0.25f, 2.0f);
+        return true;
+    }
+    if (strcmp(name, "wave_ambient_effect_centre_bias") == 0) {
+        gWaveAmbientEffectCentreBias = constrain(value, 0.50f, 1.50f);
+        return true;
+    }
+    return false;
+}
+
+float WaveAmbientEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "wave_ambient_effect_speed_scale") == 0) return gWaveAmbientEffectSpeedScale;
+    if (strcmp(name, "wave_ambient_effect_output_gain") == 0) return gWaveAmbientEffectOutputGain;
+    if (strcmp(name, "wave_ambient_effect_centre_bias") == 0) return gWaveAmbientEffectCentreBias;
+    return 0.0f;
+}
+// AUTO_TUNABLES_BULK_METHODS_END:WaveAmbientEffect
 
 void WaveAmbientEffect::cleanup() {
     // No resources to free

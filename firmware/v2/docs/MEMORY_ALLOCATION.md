@@ -699,7 +699,7 @@ MALLOC_CAP_DEFAULT
 
 | Metric | Warning | Critical |
 |--------|---------|----------|
-| Internal SRAM Free | < 30 KB | < 8 KB |
+| Internal SRAM Free | < 24 KB (shedding threshold) | < 8 KB |
 | Internal Fragmentation | > 50% | > 75% |
 | Task Stack Remaining | < 1 KB | < 400 B |
 
@@ -722,5 +722,5 @@ build_flags =
 ---
 
 *Document version: 1.1*
-*Last updated: 2026-02-10*
+*Last updated: 2026-02-26*
 *Author: LightwaveOS Team*

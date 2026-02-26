@@ -564,8 +564,11 @@ private:
     // Use hysteresis to prevent rapid toggling.
     bool m_lowHeapShed;
     uint32_t m_lastHeapShedLogMs;
-    static constexpr uint32_t INTERNAL_HEAP_SHED_BELOW_BYTES = 30U * 1024U;
-    static constexpr uint32_t INTERNAL_HEAP_RESUME_ABOVE_BYTES = 45U * 1024U;
+    // Tuned from field baseline (2026-02-26): stable idle/typical runtime sits around
+    // ~27-28KB internal heap. Keep shedding below that floor so we only shed under
+    // genuine pressure, not during normal operation.
+    static constexpr uint32_t INTERNAL_HEAP_SHED_BELOW_BYTES = 24U * 1024U;
+    static constexpr uint32_t INTERNAL_HEAP_RESUME_ABOVE_BYTES = 32U * 1024U;
 
     // LED frame streaming (extracted to LedStreamBroadcaster)
     webserver::LedStreamBroadcaster* m_ledBroadcaster;

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPSpectrumDetailEffect.cpp
  * @brief Detailed 64-bin FFT spectrum visualization with logarithmic mapping

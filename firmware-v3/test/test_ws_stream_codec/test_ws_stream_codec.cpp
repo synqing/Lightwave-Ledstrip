@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file test_ws_stream_codec.cpp
  * @brief Unit tests for WsStreamCodec JSON parsing and validation

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 #pragma once
 // ============================================================================
 // I2CRecovery - ESP32-P4 I2C Bus Recovery with Hardware Reset for Tab5

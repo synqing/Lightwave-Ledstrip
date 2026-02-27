@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPInterferenceScannerEffect.h
  * @brief LGP Interference Scanner - Scanning beam with interference fringes

@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Run PlatformIO from the local .venv-pio virtualenv.
+# The venv uses Python 3.12 (PlatformIO requires 3.10-3.13; system may have 3.14).
+#
+# Recreate the venv if missing:
+#   python3.12 -m venv .venv-pio && .venv-pio/bin/pip install platformio
+set -e
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VENV_PIO="${SCRIPT_DIR}/.venv-pio/bin/pio"
+
+if [[ ! -x "$VENV_PIO" ]]; then
+  echo "error: .venv-pio not found. Create it with:" >&2
+  echo "  cd ${SCRIPT_DIR}" >&2
+  echo "  python3.12 -m venv .venv-pio && .venv-pio/bin/pip install platformio" >&2
+  exit 1
+fi
+
+exec "$VENV_PIO" "$@"

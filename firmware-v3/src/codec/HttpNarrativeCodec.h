@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file HttpNarrativeCodec.h
  * @brief JSON codec for HTTP narrative endpoints parsing and validation

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file RequestValidator.h
  * @brief Lightweight schema-based request validation for LightwaveOS v2 API

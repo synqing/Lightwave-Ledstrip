@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file WsCommandRouter.h
  * @brief WebSocket command router with table-driven dispatch

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file StaticAssetRoutes.cpp
  * @brief User-facing launcher page and fallback route registration

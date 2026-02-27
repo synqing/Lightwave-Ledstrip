@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPStarBurstEnhancedEffect.h
  * @brief LGP Star Burst Enhanced - Enhanced version with 64-bin sub-bass, enhanced snare/hi-hat triggers

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPAudioTestEffect.h
  * @brief Audio-reactive test effect demonstrating Phase 2 audio integration

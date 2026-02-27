@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 // Bebas Neue 48px - converted from LVGL to simple bitmap format for M5GFX
 // This is a TEMPORARY solution - just uses Font8 at larger sizes
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 #pragma once
 // ============================================================================
 // Theme - Color palette and layout constants for Tab5.encoder UI

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file BenchmarkStreamBroadcaster.h
  * @brief Benchmark metrics broadcaster for WebSocket clients

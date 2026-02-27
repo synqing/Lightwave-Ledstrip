@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file BPMEffect.cpp
  * @brief BPM effect v2 - Dual-layer beat-synced traveling waves + expanding rings

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file Actor.h
  * @brief Base Actor class for LightwaveOS v2 cross-core communication

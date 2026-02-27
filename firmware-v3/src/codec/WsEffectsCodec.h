@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file WsEffectsCodec.h
  * @brief JSON codec for WebSocket effects commands parsing and validation

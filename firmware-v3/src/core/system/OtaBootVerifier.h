@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file OtaBootVerifier.h
  * @brief OTA boot verification and automatic rollback for K1 prototype

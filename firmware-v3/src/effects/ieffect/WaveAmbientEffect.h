@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file WaveAmbientEffect.h
  * @brief Wave Ambient - Time-driven sine wave with audio amplitude modulation

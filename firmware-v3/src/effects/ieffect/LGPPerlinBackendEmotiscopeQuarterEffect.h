@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPPerlinBackendEmotiscopeQuarterEffect.h
  * @brief Perlin Backend Test C: Emotiscope 2.0 seedable Perlin (quarter-res + interpolation)

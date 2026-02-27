@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPPhotonicCrystalEnhancedEffect.h
  * @brief LGP Photonic Crystal Enhanced - Enhanced version with heavy_chroma, 64-bin sub-bass, enhanced snare flash

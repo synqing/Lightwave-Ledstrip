@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file MusicalSaliency.h
  * @brief Musical saliency metrics for adaptive audio-visual intelligence

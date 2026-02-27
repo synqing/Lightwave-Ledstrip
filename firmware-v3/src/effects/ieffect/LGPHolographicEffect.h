@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPHolographicEffect.h
  * @brief LGP Holographic - Multi-layer interference with depth illusion

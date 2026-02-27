@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file ApiResponse.h
  * @brief Standardized API response helpers for LightwaveOS v2 API

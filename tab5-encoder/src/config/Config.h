@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 #ifndef TAB5_CONFIG_H
 #define TAB5_CONFIG_H
 

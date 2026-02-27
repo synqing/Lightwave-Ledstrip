@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPPhotonicCrystalEffect.h
  * @brief LGP Photonic Crystal - Bandgap structure simulation with audio layering

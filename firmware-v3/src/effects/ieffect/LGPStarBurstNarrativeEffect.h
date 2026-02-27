@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPStarBurstNarrativeEffect.h
  * @brief LGP Star Burst (Narrative) - Story conductor + chord-based coloring

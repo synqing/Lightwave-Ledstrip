@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file BPMEnhancedEffect.h
  * @brief BPM Enhanced - Enhanced version with 64-bin spectrum, heavy_chroma, beatPhase sync, snare triggers

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file AudioCapture.h
  * @brief I2S audio capture driver for SPH0645 MEMS microphone

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file FireEffect.h
  * @brief Fire - Realistic fire simulation radiating from center

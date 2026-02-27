@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPPhotonicCrystalEffect.cpp
  * @brief LGP Photonic Crystal effect - v8 CORRECT audio-reactive motion

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LedDriver_P4_RMT.cpp
  * @brief Custom parallel RMT driver implementation for ESP32-P4

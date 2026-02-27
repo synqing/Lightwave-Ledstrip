@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPInterferenceScannerEnhancedEffect.cpp
  * @brief LGP Interference Scanner Enhanced - Enhanced version with optimized thresholds and snare boost

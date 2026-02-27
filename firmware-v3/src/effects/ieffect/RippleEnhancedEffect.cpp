@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file RippleEnhancedEffect.cpp
  * @brief Ripple Enhanced effect - Enhanced version with improved thresholds and snare triggers

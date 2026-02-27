@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 #ifndef LV_CONF_H
 #define LV_CONF_H
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file WsAudioCodec.h
  * @brief JSON codec for WebSocket audio commands parsing and validation

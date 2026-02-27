@@ -211,7 +211,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for repository structure rules, changelog
 
 ## License
 
-Licensed under the [Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for additional information.
+Licensed under the [Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for additional information and [TRADEMARK.md](TRADEMARK.md) for branding guidelines.
 
 ## Acknowledgements
 

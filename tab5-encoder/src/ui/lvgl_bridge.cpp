@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 #include "lvgl_bridge.h"
 
 #include <esp_heap_caps.h>

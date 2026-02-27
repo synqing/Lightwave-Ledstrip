@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file ApiKeyManager.cpp
  * @brief NVS-based storage implementation for API authentication key

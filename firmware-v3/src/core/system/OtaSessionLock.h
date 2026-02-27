@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file OtaSessionLock.h
  * @brief Thread-safe OTA session state guard for cross-transport exclusion

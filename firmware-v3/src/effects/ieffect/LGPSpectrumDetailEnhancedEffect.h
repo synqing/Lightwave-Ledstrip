@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPSpectrumDetailEnhancedEffect.h
  * @brief Enhanced 64-bin FFT spectrum visualization matching Sensory Bridge pattern

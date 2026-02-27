@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file WiFiManager.h
  * @brief Non-blocking WiFi management with FreeRTOS task for LightwaveOS v2

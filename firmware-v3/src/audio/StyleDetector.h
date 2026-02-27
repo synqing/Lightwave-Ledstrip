@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file StyleDetector.h
  * @brief Music style classification for adaptive audio-visual response

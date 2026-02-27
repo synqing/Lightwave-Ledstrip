@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file EffectTypes.h
  * @brief Common types for effects, easing, and narrative timing

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPWaveCollisionEnhancedEffect.h
  * @brief LGP Wave Collision Enhanced - Enhanced version with 64-bin sub-bass, enhanced snare/hi-hat triggers

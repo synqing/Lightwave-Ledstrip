@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPHolographicAutoCycleEffect.h
  * @brief LGP Holographic Auto-Cycle - Multi-layer interference with auto-cycling palettes

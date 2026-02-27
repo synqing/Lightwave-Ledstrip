@@ -11,6 +11,7 @@ CONTRIBUTING.md
 CHANGELOG.md
 LICENSE
 NOTICE
+TRADEMARK.md
 instructions
 firmware-v3
 tab5-encoder

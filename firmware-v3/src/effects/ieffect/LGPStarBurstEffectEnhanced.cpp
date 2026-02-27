@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPStarBurstEffect.cpp
  * @brief LGP Star Burst effect - explosive radial lines from center

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 #include "ControlBus.h"
 #include "../../config/features.h"  // FEATURE_MUSICAL_SALIENCY
 #include <cstring>  // for memcpy

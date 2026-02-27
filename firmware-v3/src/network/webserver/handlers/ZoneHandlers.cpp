@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 #include "ZoneHandlers.h"
 #include "../../RequestValidator.h"
 #include "../../../core/actors/ActorSystem.h"

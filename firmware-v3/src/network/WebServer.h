@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file WebServer.h
  * @brief Web Server for LightwaveOS v2 with Actor System integration

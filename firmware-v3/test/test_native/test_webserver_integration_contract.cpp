@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file test_webserver_integration_contract.cpp
  * @brief Integration tests for WebServer HTTP/WS contract compliance

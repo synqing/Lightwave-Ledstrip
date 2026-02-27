@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 #pragma once
 // ============================================================================
 // Rotate8Transport - Clean M5ROTATE8 I2C Transport Layer

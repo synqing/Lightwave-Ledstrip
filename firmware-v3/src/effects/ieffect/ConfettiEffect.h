@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file ConfettiEffect.h
  * @brief Confetti - Random colored speckles fading

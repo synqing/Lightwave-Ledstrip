@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file AudioCapture.cpp
  * @brief I2S audio capture with LEGACY driver and compile-time mic selection

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPPerlinBackendEmotiscopeFullEffect.h
  * @brief Perlin Backend Test B: Emotiscope 2.0 seedable Perlin (full-res per-frame)

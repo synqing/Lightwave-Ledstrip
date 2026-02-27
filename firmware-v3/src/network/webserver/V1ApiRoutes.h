@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file V1ApiRoutes.h
  * @brief V1 API route registration (/api/v1/*)

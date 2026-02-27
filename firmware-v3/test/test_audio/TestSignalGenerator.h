@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file TestSignalGenerator.h
  * @brief Synthetic test signal generation for audio pipeline benchmarking

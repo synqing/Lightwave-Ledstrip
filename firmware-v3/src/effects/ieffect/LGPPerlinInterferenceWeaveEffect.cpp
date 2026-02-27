@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPPerlinInterferenceWeaveEffect.cpp
  * @brief LGP Perlin Interference Weave - Dual-strip phase-offset noise creates moiré

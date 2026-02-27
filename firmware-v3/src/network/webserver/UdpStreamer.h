@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file UdpStreamer.h
  * @brief UDP frame streamer for LED and audio data

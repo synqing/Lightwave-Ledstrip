@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 // ============================================================================
 // ParameterMap - Parameter Definition Table for Tab5.encoder
 // ============================================================================

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file AuthHandlers.h
  * @brief API Key authentication management handlers for LightwaveOS v2

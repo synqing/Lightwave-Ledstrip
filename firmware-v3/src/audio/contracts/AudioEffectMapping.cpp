@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file AudioEffectMapping.cpp
  * @brief Audio-to-Visual Parameter Mapping System Implementation

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file AudioBenchmarkMetrics.h
  * @brief Per-hop timing metrics for audio pipeline performance analysis

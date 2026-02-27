@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file test_http_audio_codec.cpp
  * @brief Unit tests for HttpAudioCodec JSON parsing and encoder allow-list validation

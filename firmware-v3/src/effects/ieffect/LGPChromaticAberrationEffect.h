@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPChromaticAberrationEffect.h
  * @brief LGP Chromatic Aberration - Lens dispersion edge effects

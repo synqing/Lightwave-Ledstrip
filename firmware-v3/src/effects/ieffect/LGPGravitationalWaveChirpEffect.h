@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPGravitationalWaveChirpEffect.h
  * @brief LGP Gravitational Wave Chirp - Inspiral merger signal

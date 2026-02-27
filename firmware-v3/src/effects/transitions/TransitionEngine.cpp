@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file TransitionEngine.cpp
  * @brief CENTER ORIGIN-compliant transitions with per-strip processing

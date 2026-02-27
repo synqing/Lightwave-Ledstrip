@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPQuantumTunnelingEffect.h
  * @brief LGP Quantum Tunneling - Particles passing through barriers

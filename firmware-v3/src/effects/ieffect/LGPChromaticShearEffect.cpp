@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPChromaticShearEffect.cpp
  * @brief LGP Chromatic Shear effect implementation

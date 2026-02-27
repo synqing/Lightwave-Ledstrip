@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file StateSerializer.h
  * @brief Serialize SystemState to/from JSON for sync transmission

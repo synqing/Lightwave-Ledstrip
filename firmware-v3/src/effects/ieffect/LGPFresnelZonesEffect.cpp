@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPFresnelZonesEffect.cpp
  * @brief LGP Fresnel Zones effect implementation

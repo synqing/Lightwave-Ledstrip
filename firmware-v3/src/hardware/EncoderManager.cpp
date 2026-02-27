@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file EncoderManager.cpp
  * @brief M5Stack ROTATE8 Encoder Manager implementation for LightwaveOS v2

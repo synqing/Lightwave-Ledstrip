@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file ChevronWavesEnhancedEffect.h
  * @brief LGP Chevron Waves Enhanced - Enhanced version with heavy_chroma, 64-bin sub-bass, snare sharpness boost

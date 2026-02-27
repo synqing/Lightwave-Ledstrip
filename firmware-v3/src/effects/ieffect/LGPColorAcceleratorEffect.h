@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPColorAcceleratorEffect.h
  * @brief LGP Color Accelerator - Color cycling with momentum

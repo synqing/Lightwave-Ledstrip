@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPGravitationalLensingEffect.h
  * @brief LGP Gravitational Lensing - Light bending around mass

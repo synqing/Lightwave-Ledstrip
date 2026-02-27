@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file SnapwaveLinearEffect.cpp
  * @brief Scrolling waveform with time-based oscillation and HISTORY BUFFER trails

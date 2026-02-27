@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPPerlinShocklinesEffect.cpp
  * @brief LGP Perlin Shocklines - Beat/flux injects sharp travelling ridges

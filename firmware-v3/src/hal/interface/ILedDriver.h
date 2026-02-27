@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file ILedDriver.h
  * @brief Hardware abstraction interface for LED strip control

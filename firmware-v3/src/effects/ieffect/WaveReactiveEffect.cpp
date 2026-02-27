@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file WaveReactiveEffect.cpp
  * @brief Wave Reactive - Energy-accumulating wave with smooth audio-driven motion

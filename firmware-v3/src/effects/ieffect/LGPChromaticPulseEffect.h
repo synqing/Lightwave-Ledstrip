@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPChromaticPulseEffect.h
  * @brief LGP Chromatic Pulse - Pulsing dispersion wave

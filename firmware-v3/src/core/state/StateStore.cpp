@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 #include "StateStore.h"
 #include <esp_timer.h>
 #include <string.h>

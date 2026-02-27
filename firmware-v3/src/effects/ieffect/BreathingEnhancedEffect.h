@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file BreathingEnhancedEffect.h
  * @brief Breathing Enhanced - Enhanced version with 64-bin sub-bass, beatPhase sync, snare triggers

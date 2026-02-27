@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 // ============================================================================
 // LedFeedback - Connection Status LED Feedback for Tab5.encoder
 // ============================================================================

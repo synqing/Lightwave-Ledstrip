@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LedDriver_P4_RMT.h
  * @brief Custom parallel RMT driver for ESP32-P4 WS2812 LED strips

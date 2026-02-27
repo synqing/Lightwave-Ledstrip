@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPMycelialNetworkEffect.h
  * @brief LGP Mycelial Network - Fungal network expansion

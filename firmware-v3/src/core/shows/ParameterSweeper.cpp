@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file ParameterSweeper.cpp
  * @brief Implementation of parameter sweeper for show transitions

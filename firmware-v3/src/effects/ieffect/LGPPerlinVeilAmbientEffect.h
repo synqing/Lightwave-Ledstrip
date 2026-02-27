@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPPerlinVeilAmbientEffect.h
  * @brief LGP Perlin Veil Ambient - Slow drifting curtains/fog from centre (time-driven)

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file NetworkHandlers.h
  * @brief Network management HTTP handlers for LightwaveOS v2

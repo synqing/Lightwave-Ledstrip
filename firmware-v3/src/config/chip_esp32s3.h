@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025-2026 SpectraSynq
 /**
  * @file chip_esp32s3.h
  * @brief ESP32-S3 specific configuration and constants

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file EncoderManager.cpp
  * @brief M5Stack ROTATE8 Encoder Manager implementation for LightwaveOS v2
@@ -20,6 +18,7 @@
 #include "utils/Log.h"
 
 #include "../core/actors/ActorSystem.h"
+#include "../config/display_order.h"
 
 namespace lightwaveos {
 namespace hardware {
@@ -596,15 +595,17 @@ void handleEncoderEvent(const EncoderEvent& event,
 
     switch (event.encoder_id) {
         case 0: {
-            // Effect selection
-            // Use actual effect count from renderer
-            uint8_t effectCount = renderer->getEffectCount();
-            if (effectCount == 0) effectCount = 45;  // Fallback
-            uint8_t current = renderer->getCurrentEffect();
-            int16_t newEffect = (int16_t)current + event.delta;
-            if (newEffect < 0) newEffect = effectCount - 1;
-            if (newEffect >= effectCount) newEffect = 0;
-            actors.setEffect((uint8_t)newEffect);
+            // Effect selection using display order
+            EffectId current = renderer->getCurrentEffect();
+            EffectId newEffect = current;
+            if (event.delta > 0) {
+                for (int d = 0; d < event.delta; d++)
+                    newEffect = lightwaveos::getNextDisplay(newEffect);
+            } else {
+                for (int d = 0; d < -event.delta; d++)
+                    newEffect = lightwaveos::getPrevDisplay(newEffect);
+            }
+            actors.setEffect(newEffect);
             break;
         }
 

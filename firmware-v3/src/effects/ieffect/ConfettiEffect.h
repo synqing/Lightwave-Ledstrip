@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file ConfettiEffect.h
  * @brief Confetti - Random colored speckles fading
@@ -16,6 +14,7 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include <FastLED.h>
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -23,6 +22,8 @@ namespace ieffect {
 
 class ConfettiEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_CONFETTI;
+
     ConfettiEffect();
     ~ConfettiEffect() override = default;
 

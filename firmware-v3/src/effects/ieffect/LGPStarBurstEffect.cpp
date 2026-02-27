@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPStarBurstEffect.cpp
  * @brief LGP Star Burst effect - explosive radial lines from center
@@ -35,8 +33,7 @@ bool LGPStarBurstEffect::init(plugins::EffectContext& ctx) {
     m_phase = 0.0f;
     m_burst = 0.0f;
     m_lastHopSeq = 0;
-    m_dominantBin = 0;
-    m_dominantBinSmooth = 0.0f;
+    m_chromaAngle = 0.0f;
 
     // Initialize spring physics for natural speed momentum
     m_phaseSpeedSpring.init(50.0f, 1.0f);  // stiffness=50, mass=1 (critically damped)
@@ -64,16 +61,6 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
         if (newHop) {
             m_lastHopSeq = ctx.audio.controlBus.hop_seq;
 
-            // Simple chroma analysis for color (dominant bin only)
-            float maxBinVal = 0.0f;
-            for (uint8_t i = 0; i < 12; ++i) {
-                float bin = ctx.audio.controlBus.chroma[i];
-                if (bin > maxBinVal) {
-                    maxBinVal = bin;
-                    m_dominantBin = i;
-                }
-            }
-
             // Snare = burst (SIMPLE - like Wave Collision)
             if (ctx.audio.isSnareHit()) {
                 m_burst = 1.0f;
@@ -85,14 +72,13 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
     // Per-frame Updates (smooth animation)
     // =========================================================================
+    float rawDt = ctx.getSafeRawDeltaSeconds();
     float dt = ctx.getSafeDeltaSeconds();
     if (dt > 0.1f) dt = 0.1f;  // Clamp for safety
 
-    // Smooth dominant bin (for color stability)
-    float alphaBin = dt / (0.25f + dt);
-    m_dominantBinSmooth += (m_dominantBin - m_dominantBinSmooth) * alphaBin;
-    if (m_dominantBinSmooth < 0.0f) m_dominantBinSmooth = 0.0f;
-    if (m_dominantBinSmooth > 11.0f) m_dominantBinSmooth = 11.0f;
+    // Circular chroma hue (replaces argmax + linear EMA to eliminate bin-flip rainbow sweeps)
+    uint8_t chromaHue = effects::chroma::circularChromaHueSmoothed(
+        ctx.audio.controlBus.chroma, m_chromaAngle, rawDt, 0.20f);
 
     // Use heavy_bands for speed (like Wave Collision) with EMA smoothing
     float heavyEnergy = 0.0f;
@@ -102,7 +88,7 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
         
         // EMA smoothing with frame-rate-independent alpha (tau = 50ms)
         const float tau = 0.05f;
-        float alpha = 1.0f - expf(-dt / tau);
+        float alpha = 1.0f - expf(-rawDt / tau);
         
         // CRITICAL: Initialize to raw value on first frame (no ramp-from-zero)
         if (!m_heavyBassSmoothInitialized) {
@@ -118,7 +104,7 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
 
     // Spring physics for speed modulation (natural momentum, no jitter)
     float targetSpeed = 0.7f + 0.6f * heavyEnergy;
-    float smoothedSpeed = m_phaseSpeedSpring.update(targetSpeed, dt);
+    float smoothedSpeed = m_phaseSpeedSpring.update(targetSpeed, rawDt);
     if (smoothedSpeed > 2.0f) smoothedSpeed = 2.0f;
     if (smoothedSpeed < 0.3f) smoothedSpeed = 0.3f;  // Prevent stalling
 
@@ -127,7 +113,7 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
     if (m_phase > 628.3f) m_phase -= 628.3f;  // Wrap at 100*2π
 
     // Simple burst decay (like Wave Collision)
-    m_burst *= 0.88f;
+    m_burst = effects::chroma::dtDecay(m_burst, 0.88f, rawDt);
 
     // =========================================================================
     // Rendering
@@ -136,7 +122,7 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
 
     // Anti-aliased burst core at true center (79.5) using SubpixelRenderer
     if (m_burst > 0.05f) {
-        uint8_t baseHue = (uint8_t)(ctx.gHue + m_dominantBinSmooth * (255.0f / 12.0f));
+        uint8_t baseHue = (uint8_t)(ctx.gHue + chromaHue);
         CRGB burstColor = ctx.palette.getColor(baseHue, 255);
         uint8_t burstBright = (uint8_t)(m_burst * 200.0f * intensityNorm);
 
@@ -157,8 +143,10 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
     for (int i = 0; i < STRIP_LENGTH; i++) {
         float distFromCenter = (float)centerPairDistance((uint16_t)i);
 
-        // FIXED frequency - no kick modulation (like Wave Collision)
-        const float freqBase = 0.25f;
+        // ANTI-ALIASED frequency: Reduced from 0.25f to 0.12f to prevent wagon-wheel
+        // At 0.25f with 240.0 phase multiplier: ~3.84 rad/frame @ 60fps = jumps >1 wavelength
+        // At 0.12f: ~1.84 rad/frame = stays under half-wavelength (Nyquist-safe)
+        const float freqBase = 0.12f;  // ~52 LED wavelength, smoother motion
         float star = sinf(distFromCenter * freqBase - m_phase);
 
         // Center-focused burst flash (like Wave Collision's collision flash)
@@ -173,7 +161,7 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
 
         uint8_t brightness = (uint8_t)(pattern * 255.0f * intensityNorm);
         uint8_t paletteIndex = (uint8_t)(distFromCenter * 2.0f + pattern * 50.0f);
-        uint8_t baseHue = (uint8_t)(ctx.gHue + m_dominantBinSmooth * (255.0f / 12.0f));
+        uint8_t baseHue = (uint8_t)(ctx.gHue + chromaHue);
 
         ctx.leds[i] = ctx.palette.getColor((uint8_t)(baseHue + paletteIndex), brightness);
         if (i + STRIP_LENGTH < ctx.ledCount) {

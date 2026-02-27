@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file AudioStreamBroadcaster.cpp
  * @brief Audio stream broadcaster implementation
@@ -107,7 +105,15 @@ size_t AudioStreamBroadcaster::broadcast(const audio::ControlBusFrame& frame, co
             }
             continue;
         }
-        if (!c->canSend()) continue;  // Back-pressure: skip frame if queue full
+        // Back-pressure:
+        // - canSend() alone is not sufficient because AsyncWebSocket may still accept messages into its queue,
+        //   and queued WS messages consume internal heap (SRAM).
+        // - Check queueLen() before calling binary() to avoid allocating a new WS message buffer unnecessarily.
+        static constexpr size_t MAX_QUEUE_LEN_BEFORE_DROP = 1;
+        if (c->queueIsFull() || c->queueLen() > MAX_QUEUE_LEN_BEFORE_DROP) {
+            continue;
+        }
+        if (!c->canSend()) continue;
         c->binary(m_frameBuffer, AudioStreamConfig::FRAME_SIZE);
         sentCount++;
     }

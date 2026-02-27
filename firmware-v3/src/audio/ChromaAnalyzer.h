@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file ChromaAnalyzer.h
  * @brief 12-bin chromagram analyzer using Goertzel algorithm

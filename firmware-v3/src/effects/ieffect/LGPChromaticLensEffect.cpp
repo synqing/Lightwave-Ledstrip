@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPChromaticLensEffect.cpp
  * @brief LGP Chromatic Lens effect implementation
@@ -132,10 +130,11 @@ bool LGPChromaticLensEffect::init(plugins::EffectContext& ctx) {
 
 void LGPChromaticLensEffect::render(plugins::EffectContext& ctx) {
     // Static aberration, lens position controlled by speed
+    float dt = ctx.getSafeDeltaSeconds();
     float intensity = ctx.brightness / 255.0f;
     float aberration = (ctx.complexity / 255.0f) * 3.0f;
 
-    m_phase += ctx.speed * 0.01f;
+    m_phase += ctx.speed * 0.01f * 60.0f * dt;  // dt-corrected
     if (m_phase > TWO_PI) m_phase -= TWO_PI;
 
     for (int i = 0; i < STRIP_LENGTH && i < (int)ctx.ledCount; i++) {
@@ -143,12 +142,14 @@ void LGPChromaticLensEffect::render(plugins::EffectContext& ctx) {
         ctx.leds[i] = color;
     }
 
+    // Strip 2: Centre-origin at LED 240 (not edge mirror)
     if (ctx.ledCount >= STRIP_LENGTH * 2) {
         for (int i = 0; i < STRIP_LENGTH; i++) {
-            int mirrorIdx = STRIP_LENGTH * 2 - 1 - i;
-            if (mirrorIdx < (int)ctx.ledCount) {
+            // Calculate position on strip 2 using same centre-origin pattern
+            int strip2Idx = STRIP_LENGTH + i;
+            if (strip2Idx < (int)ctx.ledCount) {
                 CRGB color = chromaticDispersionPalette((float)i, aberration, m_phase + PI, intensity, ctx.palette, ctx.gHue);
-                ctx.leds[mirrorIdx] = CRGB(color.b, color.g, color.r);
+                ctx.leds[strip2Idx] = CRGB(color.b, color.g, color.r);  // RGB swap for visual interest
             }
         }
     }

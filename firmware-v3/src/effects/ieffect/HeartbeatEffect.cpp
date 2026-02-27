@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file HeartbeatEffect.cpp
  * @brief Heartbeat effect implementation
@@ -31,6 +29,7 @@ bool HeartbeatEffect::init(plugins::EffectContext& ctx) {
 void HeartbeatEffect::render(plugins::EffectContext& ctx) {
     // CENTER ORIGIN HEARTBEAT - Pulses like a heart from center
     // Uses a "lub-dub" pattern: two quick beats then pause
+    float dt = ctx.getSafeDeltaSeconds();
 
     uint32_t now = millis();
 
@@ -95,8 +94,8 @@ void HeartbeatEffect::render(plugins::EffectContext& ctx) {
             }
         }
 
-        // Expand pulse outward
-        m_pulseRadius += ctx.speed / 8.0f;
+        // Expand pulse outward (dt-corrected)
+        m_pulseRadius += ctx.speed / 8.0f * 60.0f * dt;
     }
 }
 

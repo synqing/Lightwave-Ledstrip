@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file HttpPaletteCodec.h
  * @brief JSON codec for HTTP palette endpoints parsing and validation

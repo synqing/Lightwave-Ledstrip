@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 #include "EffectHandlers.h"
 #include "../../../core/actors/ActorSystem.h"
 #include "../../../core/actors/RendererActor.h"
@@ -31,7 +29,7 @@ void EffectHandlers::handleList(AsyncWebServerRequest* request, RendererActor* r
         return;
     }
 
-    uint8_t effectCount = renderer->getEffectCount();
+    uint16_t effectCount = renderer->getEffectCount();
 
     // Parse pagination query parameters
     int page = 1;
@@ -104,12 +102,18 @@ void EffectHandlers::handleList(AsyncWebServerRequest* request, RendererActor* r
         pagination["total"] = capturedTotal;
         pagination["pages"] = capturedPages;
 
-        // Helper lambda to get category info
-        auto getCategoryId = [](uint8_t effectId) -> int {
-            if (effectId <= 4) return 0;       // Classic
-            else if (effectId <= 7) return 1;  // Wave
-            else if (effectId <= 12) return 2; // Physics
-            else return 3;                     // Custom
+        // Helper lambda to get category from PatternMetadata family
+        auto getCategoryId = [](EffectId eid) -> int {
+            const PatternMetadata* meta = PatternRegistry::getPatternMetadata(eid);
+            if (!meta) return 3;  // Custom
+            switch (meta->family) {
+                case PatternFamily::FLUID_PLASMA: return 0;   // Classic
+                case PatternFamily::INTERFERENCE: return 1;   // Wave
+                case PatternFamily::GEOMETRIC:
+                case PatternFamily::PHYSICS_BASED:
+                case PatternFamily::MATHEMATICAL: return 2;   // Physics
+                default: return 3;                            // Custom
+            }
         };
 
         auto getCategoryName = [](int categoryId) -> const char* {
@@ -128,13 +132,14 @@ void EffectHandlers::handleList(AsyncWebServerRequest* request, RendererActor* r
             int matchCount = 0;
             int addedCount = 0;
 
-            for (uint8_t i = 0; i < renderer->getEffectCount(); i++) {
-                int effectCategory = getCategoryId(i);
+            for (uint16_t i = 0; i < renderer->getEffectCount(); i++) {
+                EffectId eid = renderer->getEffectIdAt(i);
+                int effectCategory = getCategoryId(eid);
                 if (effectCategory == capturedCategoryFilter) {
                     if (matchCount >= capturedStartIdx && addedCount < capturedLimit) {
                         JsonObject effect = effects.add<JsonObject>();
-                        effect["id"] = i;
-                        effect["name"] = renderer->getEffectName(i);
+                        effect["id"] = eid;
+                        effect["name"] = renderer->getEffectName(eid);
                         effect["category"] = getCategoryName(effectCategory);
                         effect["categoryId"] = effectCategory;
 
@@ -152,16 +157,17 @@ void EffectHandlers::handleList(AsyncWebServerRequest* request, RendererActor* r
             }
         } else {
             for (int i = capturedStartIdx; i < capturedEndIdx; i++) {
+                EffectId eid = renderer->getEffectIdAt(i);
                 JsonObject effect = effects.add<JsonObject>();
-                effect["id"] = i;
-                effect["name"] = renderer->getEffectName(i);
-                int categoryId = getCategoryId(i);
+                effect["id"] = eid;
+                effect["name"] = renderer->getEffectName(eid);
+                int categoryId = getCategoryId(eid);
                 effect["category"] = getCategoryName(categoryId);
                 effect["categoryId"] = categoryId;
-                effect["isAudioReactive"] = PatternRegistry::isAudioReactive(i);
+                effect["isAudioReactive"] = PatternRegistry::isAudioReactive(eid);
 
                 // Query IEffect metadata if available
-                plugins::IEffect* ieffect = renderer->getEffectInstance(i);
+                plugins::IEffect* ieffect = renderer->getEffectInstance(eid);
                 if (ieffect) {
                     effect["isIEffect"] = true;
                     const plugins::EffectMetadata& meta = ieffect->getMetadata();
@@ -215,7 +221,7 @@ void EffectHandlers::handleCurrent(AsyncWebServerRequest* request, RendererActor
     }
 
     sendSuccessResponse(request, [renderer](JsonObject& data) {
-        uint8_t effectId = renderer->getCurrentEffect();
+        EffectId effectId = renderer->getCurrentEffect();
         data["effectId"] = effectId;
         data["name"] = renderer->getEffectName(effectId);
         data["brightness"] = renderer->getBrightness();
@@ -226,7 +232,7 @@ void EffectHandlers::handleCurrent(AsyncWebServerRequest* request, RendererActor
         data["saturation"] = renderer->getSaturation();
         data["complexity"] = renderer->getComplexity();
         data["variation"] = renderer->getVariation();
-        
+
         // Include IEffect metadata if available
         plugins::IEffect* ieffect = renderer->getEffectInstance(effectId);
         if (ieffect) {
@@ -249,12 +255,12 @@ void EffectHandlers::handleParametersGet(AsyncWebServerRequest* request, Rendere
         return;
     }
 
-    uint8_t effectId = renderer->getCurrentEffect();
+    EffectId effectId = renderer->getCurrentEffect();
     if (request->hasParam("id")) {
-        effectId = static_cast<uint8_t>(request->getParam("id")->value().toInt());
+        effectId = static_cast<EffectId>(request->getParam("id")->value().toInt());
     }
 
-    if (effectId >= renderer->getEffectCount()) {
+    if (effectId == INVALID_EFFECT_ID) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
                           ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "id");
         return;
@@ -308,19 +314,13 @@ void EffectHandlers::handleParametersSet(AsyncWebServerRequest* request, uint8_t
         return;
     }
 
-    uint8_t effectId = doc["effectId"];
-    // DEFENSIVE CHECK: Validate effectId before array access
+    EffectId effectId = doc["effectId"];
     effectId = lightwaveos::network::validateEffectIdInRequest(effectId);
-    if (effectId >= renderer->getEffectCount()) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "effectId");
-        return;
-    }
 
     plugins::IEffect* effect = renderer->getEffectInstance(effectId);
     if (!effect) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::INVALID_VALUE, "Effect has no parameters");
+                          ErrorCodes::INVALID_VALUE, "Effect not found or has no parameters");
         return;
     }
 
@@ -368,16 +368,8 @@ void EffectHandlers::handleSet(AsyncWebServerRequest* request, uint8_t* data, si
     JsonDocument doc;
     VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::SetEffect, request);
 
-    uint8_t effectId = doc["effectId"];
-    // DEFENSIVE CHECK: Validate effectId before array access
+    EffectId effectId = doc["effectId"];
     effectId = lightwaveos::network::validateEffectIdInRequest(effectId);
-    
-    // SAFE: Uses cached state (no cross-core access)
-    if (effectId >= cachedState.effectCount) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "effectId");
-        return;
-    }
 
     bool useTransition = doc["transition"] | false;
     uint8_t transitionType = doc["transitionType"] | 0;
@@ -389,11 +381,11 @@ void EffectHandlers::handleSet(AsyncWebServerRequest* request, uint8_t* data, si
         actors.setEffect(effectId);
     }
 
-    sendSuccessResponse(request, [effectId, &cachedState](JsonObject& respData) {
+    sendSuccessResponse(request, [effectId](JsonObject& respData) {
         respData["effectId"] = effectId;
-        // SAFE: Uses cached state (no cross-core access)
-        if (effectId < cachedState.effectCount && cachedState.effectNames[effectId]) {
-            respData["name"] = cachedState.effectNames[effectId];
+        const PatternMetadata* meta = PatternRegistry::getPatternMetadata(effectId);
+        if (meta) {
+            respData["name"] = meta->name;
         }
     });
 
@@ -415,12 +407,10 @@ void EffectHandlers::handleMetadata(AsyncWebServerRequest* request, RendererActo
         return;
     }
 
-    uint8_t effectId = request->getParam("id")->value().toInt();
-    // DEFENSIVE CHECK: Validate effectId before use
+    EffectId effectId = static_cast<EffectId>(request->getParam("id")->value().toInt());
     effectId = lightwaveos::network::validateEffectIdInRequest(effectId);
-    uint8_t effectCount = renderer->getEffectCount();
 
-    if (effectId >= effectCount) {
+    if (effectId == INVALID_EFFECT_ID) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
                           ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "id");
         return;

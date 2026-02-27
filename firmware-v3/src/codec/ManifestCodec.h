@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file ManifestCodec.h
  * @brief JSON codec for plugin manifest parsing and validation
@@ -19,6 +17,7 @@
 #include <ArduinoJson.h>
 #include <stdint.h>
 #include <cstddef>
+#include "../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace codec {
@@ -45,7 +44,7 @@ struct ManifestConfig {
     uint8_t schemaVersion;              // Schema version (1 or 2)
     char pluginName[MAX_PLUGIN_NAME];   // Plugin name (required)
     bool overrideMode;                  // Override mode (default: false)
-    uint8_t effectIds[MAX_MANIFEST_EFFECTS]; // Effect IDs
+    EffectId effectIds[MAX_MANIFEST_EFFECTS]; // Effect IDs
     uint8_t effectCount;                // Number of effects
 
     ManifestConfig() : schemaVersion(1), overrideMode(false), effectCount(0) {

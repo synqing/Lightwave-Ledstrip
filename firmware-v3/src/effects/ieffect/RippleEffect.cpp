@@ -1,23 +1,27 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file RippleEffect.cpp
  * @brief Ripple effect implementation
  */
 
 #include "RippleEffect.h"
+#include "ChromaUtils.h"
 #include "../CoreEffects.h"
 #include "../../config/features.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
+
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#endif
 
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
 RippleEffect::RippleEffect()
+    : m_ps(nullptr)
 {
-    // Initialize all ripples as inactive
     for (uint8_t i = 0; i < MAX_RIPPLES; i++) {
         m_ripples[i].active = false;
         m_ripples[i].radius = 0;
@@ -25,12 +29,10 @@ RippleEffect::RippleEffect()
         m_ripples[i].hue = 0;
         m_ripples[i].intensity = 255;
     }
-    memset(m_radial, 0, sizeof(m_radial));
-    memset(m_radialAux, 0, sizeof(m_radialAux));
 }
 
 bool RippleEffect::init(plugins::EffectContext& ctx) {
-    // Reset all ripples
+    (void)ctx;
     for (uint8_t i = 0; i < MAX_RIPPLES; i++) {
         m_ripples[i].active = false;
         m_ripples[i].radius = 0;
@@ -44,26 +46,27 @@ bool RippleEffect::init(plugins::EffectContext& ctx) {
     for (uint8_t i = 0; i < CHROMA_HISTORY; ++i) {
         m_chromaEnergyHist[i] = 0.0f;
     }
-    memset(m_radial, 0, sizeof(m_radial));
-    memset(m_radialAux, 0, sizeof(m_radialAux));
+#ifndef NATIVE_BUILD
+    if (!m_ps) {
+        m_ps = static_cast<RipplePsram*>(
+            heap_caps_malloc(sizeof(RipplePsram), MALLOC_CAP_SPIRAM));
+        if (!m_ps) return false;
+    }
+    memset(m_ps, 0, sizeof(RipplePsram));
+#endif
+    m_chromaAngle = 0.0f;
     m_kickPulse = 0.0f;
     m_trebleShimmer = 0.0f;
     return true;
 }
 
 void RippleEffect::render(plugins::EffectContext& ctx) {
-    // CENTER ORIGIN RIPPLE - Ripples expand from center
-    //
-    // STATEFUL EFFECT: This effect maintains ripple state (position, speed, hue) across frames
-    // in the m_ripples[] array. Ripples spawn at center and expand outward. Identified
-    // in PatternRegistry::isStatefulEffect().
-
-    // INCREASED DECAY: Faster fade (20→45) prevents white accumulation from
-    // overlapping ripples with WHITE_HEAVY palettes. ~2.25x faster decay.
-    fadeToBlackBy(m_radial, HALF_LENGTH, 45);
+    if (!m_ps) return;
+    fadeToBlackBy(m_ps->radial, HALF_LENGTH, 45);
 
     const bool hasAudio = ctx.audio.available;
     bool newHop = false;
+    const float rawDtEarly = ctx.getSafeRawDeltaSeconds();
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
         newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
@@ -83,7 +86,7 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
             if (kickAvg > m_kickPulse) {
                 m_kickPulse = kickAvg;  // Instant attack
             } else {
-                m_kickPulse *= 0.80f;   // ~80ms decay at 60fps for punchy response
+                m_kickPulse = effects::chroma::dtDecay(m_kickPulse, 0.80f, rawDtEarly);   // dt-corrected ~80ms decay
             }
 
             // =====================================================================
@@ -102,23 +105,29 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
     uint8_t spawnChance = 0;
     float energyNorm = 0.0f;
     float energyDelta = 0.0f;
-    uint8_t dominantBin = 0;
     float energyAvg = 0.0f;
+
+    // Circular chroma hue (prevents argmax discontinuities and wrapping artefacts).
+    float rawDt = ctx.getSafeRawDeltaSeconds();
+    uint8_t chromaHueOffset = 0;
+#if FEATURE_AUDIO_SYNC
+    if (hasAudio) {
+        const float* chroma = ctx.audio.controlBus.chroma;
+        chromaHueOffset = effects::chroma::circularChromaHueSmoothed(
+            chroma, m_chromaAngle, rawDt, 0.20f);
+    }
+#endif
+
 #if FEATURE_AUDIO_SYNC
     if (hasAudio && newHop) {
         const float led_share = 255.0f / 12.0f;
         float chromaEnergy = 0.0f;
-        float maxBinVal = 0.0f;
         for (uint8_t i = 0; i < 12; ++i) {
             float bin = ctx.audio.controlBus.chroma[i];
             float bright = bin;
             bright = bright * bright;
             bright *= 1.5f;
             if (bright > 1.0f) bright = 1.0f;
-            if (bright > maxBinVal) {
-                maxBinVal = bright;
-                dominantBin = i;
-            }
             chromaEnergy += bright * led_share;
         }
         energyNorm = chromaEnergy / 255.0f;
@@ -233,7 +242,7 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
                 if (m_ripples[i].speed > speedScale * 1.5f) m_ripples[i].speed = speedScale * 1.5f;
                 if (hasAudio) {
                     // Apply chord warmth shift to chroma-based hue
-                    float hueBase = (dominantBin * (255.0f / 12.0f)) + ctx.gHue;
+                    float hueBase = (float)chromaHueOffset + ctx.gHue;
                     m_ripples[i].hue = (uint8_t)(hueBase + chordHueShift);
                 } else {
                     m_ripples[i].hue = random8();
@@ -281,23 +290,28 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
                 CRGB color = ctx.palette.getColor(
                     m_ripples[r].hue + (uint8_t)dist,
                     brightness);
-                m_radial[dist].r = qadd8(m_radial[dist].r, color.r);
-                m_radial[dist].g = qadd8(m_radial[dist].g, color.g);
-                m_radial[dist].b = qadd8(m_radial[dist].b, color.b);
+                m_ps->radial[dist].r = qadd8(m_ps->radial[dist].r, color.r);
+                m_ps->radial[dist].g = qadd8(m_ps->radial[dist].g, color.g);
+                m_ps->radial[dist].b = qadd8(m_ps->radial[dist].b, color.b);
             }
         }
     }
 
-    memcpy(m_radialAux, m_radial, sizeof(m_radial));
+    memcpy(m_ps->radialAux, m_ps->radial, sizeof(m_ps->radial));
 
     // Render radial history buffer to LEDs (centre-origin)
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
-        SET_CENTER_PAIR(ctx, dist, m_radialAux[dist]);
+        SET_CENTER_PAIR(ctx, dist, m_ps->radialAux[dist]);
     }
 }
 
 void RippleEffect::cleanup() {
-    // No resources to free
+#ifndef NATIVE_BUILD
+    if (m_ps) {
+        heap_caps_free(m_ps);
+        m_ps = nullptr;
+    }
+#endif
 }
 
 const plugins::EffectMetadata& RippleEffect::getMetadata() const {

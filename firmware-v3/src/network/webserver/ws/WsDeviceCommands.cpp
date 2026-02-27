@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file WsDeviceCommands.cpp
  * @brief WebSocket device command handlers implementation
@@ -9,6 +7,7 @@
 #include "../WsCommandRouter.h"
 #include "../WebServerContext.h"
 #include "../../ApiResponse.h"
+#include "../../WebServer.h"
 #include "../../../codec/WsDeviceCodec.h"
 #include "../../../core/actors/RendererActor.h"
 #include <ESPAsyncWebServer.h>
@@ -46,12 +45,40 @@ static void handleLegacyGetStatus(AsyncWebSocketClient* client, JsonDocument& do
         }
     }
 
-    if (!ctx.broadcastStatus) {
-        client->text(buildWsError(ErrorCodes::SYSTEM_NOT_READY, "Status broadcaster not available", requestId));
+    // UNICAST: Build status JSON and send directly to the requesting client.
+    // The previous implementation called ctx.broadcastStatus() which used
+    // textAll(), overwhelming SoftAP TCP send buffers on connect and causing
+    // immediate disconnection within 100-250ms. Unicast sends only to the
+    // client that asked, avoiding broadcast amplification.
+    if (!ctx.webServer) {
+        client->text(buildWsError(ErrorCodes::SYSTEM_NOT_READY, "Status not available", requestId));
         return;
     }
-
-    ctx.broadcastStatus();
+    {
+        const auto& cached = ctx.webServer->getCachedRendererState();
+        JsonDocument response;
+        response["type"] = "status";
+        response["effectId"] = cached.currentEffect;
+        const char* curEffName = cached.findEffectName(cached.currentEffect);
+        if (curEffName) {
+            response["effectName"] = curEffName;
+        }
+        response["brightness"] = cached.brightness;
+        response["speed"] = cached.speed;
+        response["paletteId"] = cached.paletteIndex;
+        response["hue"] = cached.hue;
+        response["intensity"] = cached.intensity;
+        response["saturation"] = cached.saturation;
+        response["complexity"] = cached.complexity;
+        response["variation"] = cached.variation;
+        response["fps"] = cached.stats.currentFPS;
+        response["cpuPercent"] = cached.stats.cpuPercent;
+        response["freeHeap"] = ESP.getFreeHeap();
+        response["uptime"] = millis() / 1000;
+        String output;
+        serializeJson(response, output);
+        client->text(output);
+    }
 
     // Send a dedicated pong response back to the requesting client so PRISM can
     // measure RTT and clock drift. For now we operate in "echo" mode: if the

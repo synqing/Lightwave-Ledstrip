@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file FireEffect.cpp
  * @brief Fire effect implementation
@@ -9,58 +7,56 @@
 #include "../CoreEffects.h"
 #include "../../core/narrative/NarrativeEngine.h"
 #include <FastLED.h>
+#include <cstring>
+
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#endif
 
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
-FireEffect::FireEffect()
-{
-    // Initialize heat array to zero
-    memset(m_fireHeat, 0, sizeof(m_fireHeat));
-}
+FireEffect::FireEffect() {}
 
 bool FireEffect::init(plugins::EffectContext& ctx) {
-    // Reset heat array
-    memset(m_fireHeat, 0, sizeof(m_fireHeat));
+    (void)ctx;
+#ifndef NATIVE_BUILD
+    if (!m_ps) {
+        m_ps = static_cast<FirePsram*>(
+            heap_caps_malloc(sizeof(FirePsram), MALLOC_CAP_SPIRAM));
+        if (!m_ps) return false;
+    }
+    memset(m_ps, 0, sizeof(FirePsram));
+#endif
     return true;
 }
 
 void FireEffect::render(plugins::EffectContext& ctx) {
-    // CENTER ORIGIN FIRE - Sparks ignite at center 79/80 and spread outward
-    // Narrative integration: spark frequency modulated by tension
+    if (!m_ps) return;
     using namespace lightwaveos::narrative;
 
-    // Cool down every cell
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        m_fireHeat[i] = qsub8(m_fireHeat[i], random8(0, ((55 * 10) / STRIP_LENGTH) + 2));
+        m_ps->fireHeat[i] = qsub8(m_ps->fireHeat[i], random8(0, ((55 * 10) / STRIP_LENGTH) + 2));
     }
 
-    // Heat diffuses
     for (int k = 1; k < STRIP_LENGTH - 1; k++) {
-        m_fireHeat[k] = (m_fireHeat[k - 1] + m_fireHeat[k] + m_fireHeat[k + 1]) / 3;
+        m_ps->fireHeat[k] = (m_ps->fireHeat[k - 1] + m_ps->fireHeat[k] + m_ps->fireHeat[k + 1]) / 3;
     }
 
-    // Ignite new sparks at CENTER PAIR (79/80)
-    // Apply narrative tension to spark frequency (opt-in, backward compatible)
     float narrativeTension = 1.0f;
     if (NARRATIVE.isEnabled()) {
-        narrativeTension = NARRATIVE.getTension();  // 0.0-1.0
+        narrativeTension = NARRATIVE.getTension();
     }
     uint8_t sparkChance = (uint8_t)((80 + ctx.speed) * (0.5f + narrativeTension * 0.5f));
     if (random8() < sparkChance) {
-        int center = CENTER_LEFT + random8(2);  // 79 or 80
-        m_fireHeat[center] = qadd8(m_fireHeat[center], random8(160, 255));
+        int center = CENTER_LEFT + random8(2);
+        m_ps->fireHeat[center] = qadd8(m_ps->fireHeat[center], random8(160, 255));
     }
 
-    // Map heat to LEDs with CENTER PAIR pattern
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        CRGB color = HeatColor(m_fireHeat[i]);
-
-        // Strip 1
+        CRGB color = HeatColor(m_ps->fireHeat[i]);
         ctx.leds[i] = color;
-
-        // Strip 2 (mirrored)
         if (i + STRIP_LENGTH < ctx.ledCount) {
             ctx.leds[i + STRIP_LENGTH] = color;
         }
@@ -68,7 +64,12 @@ void FireEffect::render(plugins::EffectContext& ctx) {
 }
 
 void FireEffect::cleanup() {
-    // No resources to free
+#ifndef NATIVE_BUILD
+    if (m_ps) {
+        heap_caps_free(m_ps);
+        m_ps = nullptr;
+    }
+#endif
 }
 
 const plugins::EffectMetadata& FireEffect::getMetadata() const {

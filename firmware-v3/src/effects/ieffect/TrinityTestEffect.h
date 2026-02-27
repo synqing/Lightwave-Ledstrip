@@ -1,9 +1,8 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 #pragma once
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -38,6 +37,8 @@ namespace ieffect {
  */
 class TrinityTestEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_TRINITY_TEST;
+
     TrinityTestEffect() = default;
     ~TrinityTestEffect() override = default;
 

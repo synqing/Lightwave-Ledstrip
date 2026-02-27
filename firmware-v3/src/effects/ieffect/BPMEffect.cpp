@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file BPMEffect.cpp
  * @brief BPM effect v2 - Dual-layer beat-synced traveling waves + expanding rings
@@ -64,6 +62,7 @@ void BPMEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
     // SAFE DELTA TIME (clamped for physics stability)
     // =========================================================================
+    float rawDt = ctx.getSafeRawDeltaSeconds();
     float dt = ctx.getSafeDeltaSeconds();
     float speedNorm = ctx.speed / 50.0f;
 
@@ -81,7 +80,7 @@ void BPMEffect::render(plugins::EffectContext& ctx) {
         
         // EMA smoothing with frame-rate-independent alpha (tau = 50ms)
         const float tau = 0.05f;
-        float alpha = 1.0f - expf(-dt / tau);
+        float alpha = 1.0f - expf(-rawDt / tau);
         
         // CRITICAL: Initialize to raw value on first frame (no ramp-from-zero)
         if (!m_heavyEnergySmoothInitialized) {
@@ -93,7 +92,7 @@ void BPMEffect::render(plugins::EffectContext& ctx) {
         
         float heavyEnergy = m_heavyEnergySmooth;
         float targetSpeed = 0.6f + 0.8f * heavyEnergy;  // 0.6-1.4x range
-        speedMult = m_speedSpring.update(targetSpeed, dt);
+        speedMult = m_speedSpring.update(targetSpeed, rawDt);
         if (speedMult > 1.6f) speedMult = 1.6f;
         if (speedMult < 0.3f) speedMult = 0.3f;
 
@@ -135,7 +134,7 @@ void BPMEffect::render(plugins::EffectContext& ctx) {
     for (int r = 0; r < MAX_RINGS; r++) {
         if (m_ringIntensity[r] > 0.01f) {
             m_ringRadius[r] += expansionRate * dt;
-            m_ringIntensity[r] *= 0.97f;  // Gradual fade
+            m_ringIntensity[r] *= powf(0.97f, rawDt * 60.0f);  // Gradual fade (dt-corrected)
 
             // Kill ring when it reaches edge
             if (m_ringRadius[r] > HALF_LENGTH) {

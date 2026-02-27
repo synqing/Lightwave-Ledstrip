@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file AudioBenchmarkRing.h
  * @brief Lock-free ring buffer for cross-core benchmark sample transfer

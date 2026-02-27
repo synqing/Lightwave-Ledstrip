@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file FilesystemHandlers.h
  * @brief Filesystem management REST API handlers (stub)

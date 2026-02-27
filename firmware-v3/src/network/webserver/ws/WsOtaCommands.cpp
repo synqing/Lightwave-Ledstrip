@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file WsOtaCommands.cpp
  * @brief WebSocket OTA command handlers implementation
@@ -23,6 +21,7 @@
 #include <Arduino.h>
 // Base64 decoding - using mbedTLS (available in ESP32 Arduino core 6.x+)
 #include <mbedtls/base64.h>
+#include <esp_heap_caps.h>
 
 // Convenience aliases
 using OtaLed = lightwaveos::core::system::OtaLedFeedback;
@@ -610,9 +609,30 @@ static void handleOtaChunk(AsyncWebSocketClient* client, JsonDocument& doc, cons
     // Decode base64 data using mbedTLS
     size_t inputLen = strlen(req.data);
     size_t decodedLen = 0;
-    // Calculate output buffer size (base64 is ~4/3 of input, but we need exact)
+    // Calculate output buffer size (base64 decodes to ~3/4 of input)
     size_t outputLen = (inputLen * 3) / 4 + 1;
-    unsigned char* decodedBuf = (unsigned char*)malloc(outputLen);
+
+    // Security: Cap decoded chunk size to prevent memory exhaustion
+    // A 64KB WebSocket message could decode to ~48KB - reject early
+    if (outputLen > lightwaveos::config::NetworkConfig::MAX_OTA_CHUNK_DECODED_SIZE) {
+        char errorMsg[96];
+        snprintf(errorMsg, sizeof(errorMsg),
+                 "Chunk too large: %zu bytes exceeds max %zu",
+                 outputLen,
+                 lightwaveos::config::NetworkConfig::MAX_OTA_CHUNK_DECODED_SIZE);
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE, errorMsg, requestId));
+        return;
+    }
+
+    // Allocate decode buffer (try PSRAM first if available, fall back to internal)
+    unsigned char* decodedBuf = nullptr;
+#if CONFIG_SPIRAM_USE_MALLOC || CONFIG_SPIRAM
+    decodedBuf = (unsigned char*)heap_caps_malloc(outputLen, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+#endif
+    if (!decodedBuf) {
+        // Fall back to internal RAM
+        decodedBuf = (unsigned char*)malloc(outputLen);
+    }
     if (!decodedBuf) {
         client->text(buildWsError(ErrorCodes::INTERNAL_ERROR, "Memory allocation failed", requestId));
         return;

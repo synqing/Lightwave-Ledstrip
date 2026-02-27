@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPAuroraBorealisEffect.h
  * @brief LGP Aurora Borealis - Shimmering curtain lights
@@ -17,6 +15,7 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -24,6 +23,8 @@ namespace ieffect {
 
 class LGPAuroraBorealisEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_AURORA_BOREALIS;
+
     LGPAuroraBorealisEffect();
     ~LGPAuroraBorealisEffect() override = default;
 

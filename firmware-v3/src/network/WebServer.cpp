@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file WebServer.cpp
  * @brief Web Server implementation for LightwaveOS v2
@@ -49,6 +47,7 @@
 #include "webserver/ws/WsPaletteCommands.h"
 #include "webserver/ws/WsPresetCommands.h"
 #include "webserver/ws/WsZonePresetCommands.h"
+#include "webserver/ws/WsEffectPresetCommands.h"
 #include "webserver/ws/WsBatchCommands.h"
 #if FEATURE_AUDIO_SYNC
 #include "webserver/ws/WsAudioCommands.h"
@@ -61,6 +60,7 @@
 #endif
 #include "webserver/ws/WsSysCommands.h"
 #include "webserver/ws/WsTrinityCommands.h"
+#include "webserver/ws/WsShowCommands.h"
 #include "webserver/ws/WsOtaCommands.h"
 #include "webserver/ws/WsPluginCommands.h"
 #include "../config/network_config.h"
@@ -98,6 +98,8 @@
 #include <ESPmDNS.h>
 #include <LittleFS.h>
 #include <Arduino.h>
+#include <esp_wifi.h>
+#include <esp_heap_caps.h>
 
 #if FEATURE_MULTI_DEVICE
 #include "../sync/DeviceUUID.h"
@@ -116,6 +118,30 @@ namespace network {
 
 // Global instance pointer (initialized in setup)
 WebServer* webServerInstance = nullptr;
+
+namespace {
+
+uint32_t packIpKey(const IPAddress& ip) {
+    return (static_cast<uint32_t>(ip[0]) << 24) |
+           (static_cast<uint32_t>(ip[1]) << 16) |
+           (static_cast<uint32_t>(ip[2]) << 8)  |
+           (static_cast<uint32_t>(ip[3]) << 0);
+}
+
+IPAddress unpackIpKey(uint32_t key) {
+    return IPAddress(
+        static_cast<uint8_t>((key >> 24) & 0xFF),
+        static_cast<uint8_t>((key >> 16) & 0xFF),
+        static_cast<uint8_t>((key >> 8) & 0xFF),
+        static_cast<uint8_t>((key >> 0) & 0xFF)
+    );
+}
+
+size_t getFreeInternalHeap() {
+    return heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+}
+
+} // namespace
 
 #if FEATURE_EFFECT_VALIDATION
 // Validation encoder (uses g_validationRing from EffectValidationMacros.cpp)
@@ -150,6 +176,11 @@ WebServer::WebServer(NodeOrchestrator& orchestrator, RendererNode* renderer)
     , m_startTime(0)
     , m_lastImmediateBroadcast(0)
     , m_broadcastPending(false)
+    , m_lastClientConnectMs(0)
+    , m_apClientDisconnected(false)
+    , m_lastApReinitMs(0)
+    , m_lowHeapShed(false)
+    , m_lastHeapShedLogMs(0)
     , m_zoneComposer(nullptr)
     , m_lastStateCacheUpdate(0)
     , m_ledBroadcaster(nullptr)
@@ -316,6 +347,17 @@ bool WebServer::begin() {
     m_server->begin();
     m_running = true;
 
+    // Register WiFi event handler for immediate AP client cleanup.
+    // When a station disconnects from the AP, TCP doesn't notice for 10-30s.
+    // This flag triggers immediate WebSocket cleanup in update().
+    m_apClientDisconnected = false;
+    m_lastApReinitMs = 0;
+    WiFi.onEvent([this](WiFiEvent_t event, WiFiEventInfo_t info) {
+        (void)event;
+        (void)info;
+        m_apClientDisconnected = true;
+    }, WiFiEvent_t::ARDUINO_EVENT_WIFI_AP_STADISCONNECTED);
+
     // Get zone composer reference if available
     if (m_renderer) {
         m_zoneComposer = m_renderer->getZoneComposer();
@@ -393,16 +435,136 @@ bool WebServer::isClientAuthenticated(uint32_t clientId) const {
 }
 #endif
 
+void WebServer::updateLowHeapShedState(uint32_t nowMs) {
+    const uint32_t freeInternal = static_cast<uint32_t>(getFreeInternalHeap());
+
+    if (!m_lowHeapShed) {
+        if (freeInternal < INTERNAL_HEAP_SHED_BELOW_BYTES) {
+            m_lowHeapShed = true;
+            m_lastHeapShedLogMs = nowMs;
+            LW_LOGW("Low-heap shedding ENABLED (internal=%lu)", (unsigned long)freeInternal);
+            // Cancel any pending broadcasts; when shedding we avoid creating/queuing WS payloads.
+            m_broadcastPending = false;
+            // Free queued WS frames immediately — internal heap starvation crashes WiFi/esp_timer.
+            if (m_ws && m_ws->count() > 0) {
+                m_ws->closeAll(1013 /* Try Again Later */);
+            }
+        }
+    } else {
+        if (freeInternal > INTERNAL_HEAP_RESUME_ABOVE_BYTES) {
+            m_lowHeapShed = false;
+            m_lastHeapShedLogMs = nowMs;
+            LW_LOGI("Low-heap shedding DISABLED (internal=%lu)", (unsigned long)freeInternal);
+            // Force a one-shot status broadcast after recovery to resynchronise dashboards.
+            m_broadcastPending = true;
+        } else if ((nowMs - m_lastHeapShedLogMs) > 5000) {
+            m_lastHeapShedLogMs = nowMs;
+            LW_LOGW("Low-heap shedding active (internal=%lu)", (unsigned long)freeInternal);
+        }
+    }
+}
+
 void WebServer::update() {
     if (!m_running) return;
 
     // Cleanup disconnected WebSocket clients
     m_ws->cleanupClients();
+    if (m_wsGateway) {
+        static uint32_t s_lastGuardCleanupMs = 0;
+        const uint32_t nowMs = millis();
+        if ((nowMs - s_lastGuardCleanupMs) >= 1000) {
+            m_wsGateway->cleanupStaleConnections();
+            s_lastGuardCleanupMs = nowMs;
+        }
+    }
+    const uint32_t nowMs = millis();
+    updateLowHeapShedState(nowMs);
+
+    // Periodic WS transport diagnostics (helps classify reconnect storms quickly).
+    if (m_wsGateway) {
+        static uint32_t s_lastWsDiagLogMs = 0;
+        if ((nowMs - s_lastWsDiagLogMs) >= 10000) {
+            s_lastWsDiagLogMs = nowMs;
+            const webserver::WsGateway::Stats wsStats = m_wsGateway->getStats();
+            LW_LOGI(
+                "WS diag: active=%u ok=%lu rejCooldown=%lu rejOverlap=%lu rejLimit=%lu disc=%lu parseErr=%lu oversize=%lu unknown=%lu",
+                static_cast<unsigned>(m_ws ? m_ws->count() : 0),
+                static_cast<unsigned long>(wsStats.connectAccepted),
+                static_cast<unsigned long>(wsStats.connectRejectedCooldown),
+                static_cast<unsigned long>(wsStats.connectRejectedOverlap),
+                static_cast<unsigned long>(wsStats.connectRejectedLimit),
+                static_cast<unsigned long>(wsStats.disconnects),
+                static_cast<unsigned long>(wsStats.parseErrors),
+                static_cast<unsigned long>(wsStats.oversizedFrames),
+                static_cast<unsigned long>(wsStats.unknownCommands));
+        }
+    }
+
+    // Immediate cleanup when an AP station disconnects from WiFi.
+    // TCP won't notice the dead connection for 10-30s, but we know immediately
+    // from the WiFi event. Close all WS clients on the AP subnet (192.168.4.x).
+    if (m_apClientDisconnected) {
+        m_apClientDisconnected = false;
+
+        // GUARD: Only close subnet clients if NO WiFi stations remain connected
+        // to the AP. When a station briefly drops and reconnects (e.g., Tab5
+        // auto-reconnect), the old TCP connection is dead but the new WiFi
+        // association may already be up. Nuking all 192.168.4.x WebSocket
+        // connections in that window kills the freshly-reconnected client,
+        // causing a reconnect storm. Let TCP keepalive and WebSocket ping/pong
+        // handle stale connections naturally when other stations are still present.
+        const uint8_t stationCount = WiFi.softAPgetStationNum();
+        if (stationCount == 0) {
+            if (m_wsGateway) {
+                m_wsGateway->closeClientsInSubnet(192, 168, 4, 1001 /* Going Away */, "AP station left");
+            } else if (m_ws) {
+                // Fallback: close everything (safe but heavy-handed).
+                m_ws->closeAll(1001 /* Going Away */, "AP station left");
+            }
+        } else {
+            LW_LOGI("AP station left but %u stations still connected, skipping WS cleanup",
+                     static_cast<unsigned>(stationCount));
+        }
+
+        // Optional recovery: restart AP to flush WPA2 PMK cache (helps some rebooted clients).
+        // This is deliberately conservative because AP restarts are expensive and can leak
+        // resources in the WiFi stack under memory pressure.
+        const size_t apPwLen = strlen(config::NetworkConfig::AP_PASSWORD);
+        const bool apUsesWpa = apPwLen >= 8;
+
+        if (apUsesWpa) {
+            static constexpr uint32_t AP_REINIT_THROTTLE_MS = 60000;
+            static constexpr size_t MIN_INTERNAL_HEAP_FOR_AP_REINIT = 45000;
+
+            // Never restart AP if other stations are still connected.
+            if (WiFi.softAPgetStationNum() != 0) {
+                // Keep serving; do not disrupt remaining AP clients.
+            } else if (m_lastApReinitMs != 0 && (nowMs - m_lastApReinitMs) < AP_REINIT_THROTTLE_MS) {
+                LW_LOGW("AP re-init suppressed (throttle)");
+            } else if (getFreeInternalHeap() < MIN_INTERNAL_HEAP_FOR_AP_REINIT) {
+                LW_LOGW("AP re-init skipped (low internal heap=%lu)", (unsigned long)getFreeInternalHeap());
+            } else {
+                uint8_t apChannel = 1;
+                if (WIFI_MANAGER.isConnected()) {
+                    uint8_t ch = WiFi.channel();
+                    apChannel = (ch != 0) ? ch : 1;
+                }
+                // Tear down AP first to avoid accumulating stale state.
+                WiFi.softAPdisconnect(false);
+                const char* apPw = config::NetworkConfig::AP_PASSWORD;
+                if (!WiFi.softAP(config::NetworkConfig::AP_SSID, apPw, apChannel, false, 4, WIFI_AUTH_WPA_WPA2_PSK)) {
+                    LW_LOGE("AP re-init failed");
+                } else {
+                    m_lastApReinitMs = nowMs;
+                    LW_LOGI("AP re-initialised (channel=%u)", static_cast<unsigned>(apChannel));
+                }
+            }
+        }
+    }
 
     // WebSocket keepalive ping - prevents mobile network timeouts
     static uint32_t lastPingMs = 0;
-    uint32_t nowMs = millis();
-    if (nowMs - lastPingMs >= 30000) {  // Every 30 seconds
+    if (nowMs - lastPingMs >= config::NetworkConfig::WS_PING_INTERVAL_MS) {
         if (m_ws && m_ws->count() > 0) {
             m_ws->pingAll();
         }
@@ -434,8 +596,8 @@ void WebServer::update() {
         }
 
         // If WiFi is up but UDP is in a persistent failure state, force a WiFi reconnect.
-        // This is a stronger recovery lever than resetting the UDP socket alone.
-        if (networkUp && !WIFI_MANAGER.isAPMode()) {
+        // Skip in AP+STA mode — reconnecting STA would disrupt AP clients (Tab5, etc).
+        if (networkUp && !WIFI_MANAGER.isAPMode() && WiFi.getMode() != WIFI_MODE_APSTA) {
             webserver::UdpStreamer::UdpStats st;
             m_udpStreamer->getStats(st);
             uint32_t now = millis();
@@ -479,18 +641,22 @@ void WebServer::update() {
 
 #if FEATURE_AUDIO_SYNC
     // Audio frame streaming to subscribed clients (30 FPS)
-    broadcastAudioFrame();
+    if (!m_lowHeapShed) {
+        broadcastAudioFrame();
 
-    // FFT frame streaming to subscribed clients (31 Hz)
-    broadcastFftFrame();
+        // FFT frame streaming to subscribed clients (31 Hz)
+        broadcastFftFrame();
 
-    // Beat event streaming (fires on beat_tick/downbeat_tick)
-    broadcastBeatEvent();
+        // Beat event streaming (fires on beat_tick/downbeat_tick)
+        broadcastBeatEvent();
+    }
 #endif
 
 #if FEATURE_AUDIO_BENCHMARK
     // Benchmark metrics streaming to subscribed clients (10 FPS)
-    broadcastBenchmarkStats();
+    if (!m_lowHeapShed) {
+        broadcastBenchmarkStats();
+    }
 #endif
 
 #if FEATURE_EFFECT_VALIDATION
@@ -508,8 +674,8 @@ void WebServer::update() {
 #endif
 
     // Periodic status broadcast
-    uint32_t now = millis();
-    if (now - m_lastBroadcast >= WebServerConfig::STATUS_BROADCAST_INTERVAL_MS) {
+    uint32_t now = nowMs;
+    if (!m_lowHeapShed && (now - m_lastBroadcast >= WebServerConfig::STATUS_BROADCAST_INTERVAL_MS)) {
         m_lastBroadcast = now;
         m_broadcastPending = true;  // Defer to safe context
     }
@@ -523,7 +689,9 @@ void WebServer::update() {
             // (AsyncWebSocket doesn't expose queue size, so we use time-based throttling)
             m_lastImmediateBroadcast = now;
             m_broadcastPending = false;
-            doBroadcastStatus();  // Actually send the broadcast in safe context
+            if (!m_lowHeapShed) {
+                doBroadcastStatus();  // Actually send the broadcast in safe context
+            }
         }
     }
     
@@ -590,13 +758,18 @@ void WebServer::updateCachedRendererState() {
     m_cachedRendererState.stats.framesRendered = srcStats.framesRendered;
     
     // Cache effect names (pointers to stable strings in RendererActor)
-    uint8_t count = m_cachedRendererState.effectCount;
-    if (count > 102) count = 102;  // Safety: MAX_EFFECTS
-    for (uint8_t i = 0; i < count; ++i) {
-        m_cachedRendererState.effectNames[i] = m_renderer->getEffectName(i);
+    uint16_t count = m_cachedRendererState.effectCount;
+    if (count > CachedRendererState::MAX_CACHED_EFFECTS) {
+        count = CachedRendererState::MAX_CACHED_EFFECTS;
+    }
+    for (uint16_t i = 0; i < count; ++i) {
+        EffectId eid = m_renderer->getEffectIdAt(i);
+        m_cachedRendererState.effectIds[i] = eid;
+        m_cachedRendererState.effectNames[i] = m_renderer->getEffectName(eid);
     }
     // Clear remaining slots
-    for (uint8_t i = count; i < 96; ++i) {
+    for (uint16_t i = count; i < CachedRendererState::MAX_CACHED_EFFECTS; ++i) {
+        m_cachedRendererState.effectIds[i] = INVALID_EFFECT_ID;
         m_cachedRendererState.effectNames[i] = nullptr;
     }
     
@@ -837,6 +1010,7 @@ void WebServer::setupWebSocket() {
     webserver::ws::registerWsPaletteCommands(ctx);
     webserver::ws::registerWsPresetCommands(ctx);
     webserver::ws::registerWsZonePresetCommands(ctx);
+    webserver::ws::registerWsEffectPresetCommands(ctx);
     webserver::ws::registerWsBatchCommands(ctx);
 #if FEATURE_AUDIO_SYNC
     webserver::ws::registerWsAudioCommands(ctx);
@@ -849,6 +1023,7 @@ void WebServer::setupWebSocket() {
 #endif
     webserver::ws::registerWsSysCommands(ctx);
     webserver::ws::registerWsTrinityCommands(ctx);
+    webserver::ws::registerWsShowCommands(ctx);
     webserver::ws::registerWsOtaCommands(ctx);
     webserver::ws::registerWsPluginCommands(ctx);
 
@@ -891,8 +1066,8 @@ bool WebServer::executeBatchAction(const String& action, JsonVariant params) {
     }
     else if (action == "setEffect") {
         if (!params.containsKey("effectId")) return false;
-        uint8_t id = params["effectId"];
-        if (id >= m_renderer->getEffectCount()) return false;
+        EffectId id = params["effectId"];
+        if (!m_renderer || !m_renderer->isEffectRegistered(id)) return false;
         m_orchestrator.setEffect(id);
         return true;
     }
@@ -903,15 +1078,17 @@ bool WebServer::executeBatchAction(const String& action, JsonVariant params) {
     }
     else if (action == "transition") {
         if (!params.containsKey("toEffect")) return false;
-        uint8_t toEffect = params["toEffect"];
+        EffectId toEffect = params["toEffect"];
         uint8_t type = params["type"] | 0;
-        m_renderer->startTransition(toEffect, type);
+        if (!m_renderer || !m_renderer->isEffectRegistered(toEffect)) return false;
+        // Route through ActorSystem message queue for thread safety (Core 0 -> Core 1)
+        m_orchestrator.startTransition(toEffect, type);
         return true;
     }
     else if (action == "setZoneEffect" && m_zoneComposer) {
         if (!params.containsKey("zoneId") || !params.containsKey("effectId")) return false;
         uint8_t zoneId = params["zoneId"];
-        uint8_t effectId = params["effectId"];
+        EffectId effectId = params["effectId"];
         m_zoneComposer->setZoneEffect(zoneId, effectId);
         return true;
     }
@@ -965,13 +1142,39 @@ void WebServer::handleWsConnect(AsyncWebSocketClient* client) {
     }
 
     LW_LOGI("WS: Client %u connected from %s", client->id(), client->remoteIP().toString().c_str());
+    m_lastClientConnectMs = millis();
 
-    // QUEUE PROTECTION: Defer initial broadcasts to prevent queue saturation on connect
-    // Instead of broadcasting immediately (which can queue messages for all clients),
-    // we defer to the update() loop which has proper throttling
-    // This prevents "Too many messages queued" errors when multiple clients connect rapidly
-    m_broadcastPending = true;  // Defer status broadcast
-    // Zone state will be sent on next update() tick if needed
+    // NOTE: Do NOT set m_broadcastPending here. The previous behaviour sent a
+    // full status broadcast (textAll) immediately on connect, which overwhelms
+    // the SoftAP TCP send buffers and causes the new client to disconnect
+    // within 100-250ms. Instead, let the client explicitly request status via
+    // the "getStatus" command, which now responds with a unicast message to
+    // the requesting client only (not textAll). The periodic 5-second
+    // broadcast will also sync any clients that miss the initial state.
+
+    // Track clientId → IP for disconnect cleanup (remoteIP() may become 0.0.0.0 after disconnect).
+    const uint32_t clientId = client->id();
+    const uint32_t ipKey = packIpKey(client->remoteIP());
+    if (ipKey != 0) {
+        uint8_t slot = 0xFF;
+        for (uint8_t i = 0; i < WS_CLIENT_IP_MAP_SLOTS; i++) {
+            if (m_wsClientIpMap[i].clientId == clientId) {
+                slot = i;
+                break;
+            }
+            if (slot == 0xFF && m_wsClientIpMap[i].clientId == 0) {
+                slot = i;  // First empty slot
+            }
+        }
+        if (slot != 0xFF) {
+            m_wsClientIpMap[slot].clientId = clientId;
+            m_wsClientIpMap[slot].ipKey = ipKey;
+        } else {
+            // Table full: evict slot 0 (LRU approximation) so we always keep a mapping.
+            m_wsClientIpMap[0].clientId = clientId;
+            m_wsClientIpMap[0].ipKey = ipKey;
+        }
+    }
 }
 
 void WebServer::handleWsDisconnect(AsyncWebSocketClient* client) {
@@ -981,9 +1184,31 @@ void WebServer::handleWsDisconnect(AsyncWebSocketClient* client) {
     // Cleanup LED stream subscription
     setLEDStreamSubscription(client, false);
 
+    // Cleanup beat event subscription
+    webserver::ws::removeBeatSubscriber(clientId);
+
     // Cleanup UDP stream subscriptions
     if (m_udpStreamer) {
-        m_udpStreamer->removeSubscriber(client->remoteIP());
+        uint32_t ipKey = packIpKey(client->remoteIP());
+        uint32_t mappedIpKey = 0;
+        for (uint8_t i = 0; i < WS_CLIENT_IP_MAP_SLOTS; i++) {
+            if (m_wsClientIpMap[i].clientId == clientId) {
+                mappedIpKey = m_wsClientIpMap[i].ipKey;
+                m_wsClientIpMap[i].clientId = 0;
+                m_wsClientIpMap[i].ipKey = 0;
+                break;
+            }
+        }
+
+        if (ipKey == 0 && mappedIpKey != 0) {
+            ipKey = mappedIpKey;
+        }
+
+        if (ipKey != 0) {
+            m_udpStreamer->removeSubscriber(unpackIpKey(ipKey));
+        } else {
+            LW_LOGW("UDP: No IP for disconnected client %u (remoteIP=0, no mapping)", clientId);
+        }
     }
 
 #if FEATURE_API_AUTH
@@ -1065,6 +1290,9 @@ void WebServer::broadcastStatus() {
 }
 
 void WebServer::doBroadcastStatus() {
+    if (m_lowHeapShed) {
+        return;
+    }
     // SAFETY CHECKS: Validate pointers and state before accessing
     if (!m_ws) {
         LW_LOGW("doBroadcastStatus: m_ws is null");
@@ -1072,6 +1300,12 @@ void WebServer::doBroadcastStatus() {
     }
     
     if (m_ws->count() == 0) return;
+
+    // Stabilise newly connected clients before high-frequency textAll traffic.
+    const uint32_t now = millis();
+    if (m_lastClientConnectMs != 0 && (now - m_lastClientConnectMs) < CONNECT_STABILISE_MS) {
+        return;
+    }
 
     // Cleanup disconnected clients before broadcasting
     m_ws->cleanupClients();
@@ -1081,8 +1315,7 @@ void WebServer::doBroadcastStatus() {
     // AsyncWebSocket has internal queue limits, but we can't check them directly
     // Instead, we use time-based throttling to prevent queue saturation
     static uint32_t lastBroadcastAttempt = 0;
-    uint32_t now = millis();
-    if (now - lastBroadcastAttempt < 10) {  // Minimum 10ms between broadcast attempts
+    if (now - lastBroadcastAttempt < 50) {  // Minimum 50ms between broadcast attempts
         return;  // Skip this broadcast to prevent queue buildup
     }
     lastBroadcastAttempt = now;
@@ -1093,8 +1326,9 @@ void WebServer::doBroadcastStatus() {
     // SAFE: Use cached state instead of unsafe cross-core access
     const CachedRendererState& cached = m_cachedRendererState;
     doc["effectId"] = cached.currentEffect;
-    if (cached.currentEffect < cached.effectCount && cached.effectNames[cached.currentEffect]) {
-        doc["effectName"] = cached.effectNames[cached.currentEffect];
+    const char* curName = cached.findEffectName(cached.currentEffect);
+    if (curName) {
+        doc["effectName"] = curName;
     }
     doc["brightness"] = cached.brightness;
     doc["speed"] = cached.speed;
@@ -1108,23 +1342,67 @@ void WebServer::doBroadcastStatus() {
     doc["cpuPercent"] = cached.stats.cpuPercent;
 
     doc["freeHeap"] = ESP.getFreeHeap();
+    doc["freeHeapInternal"] = static_cast<uint32_t>(getFreeInternalHeap());
+    doc["freePsram"] = ESP.getFreePsram();
     doc["uptime"] = millis() / 1000;
 
 #if FEATURE_AUDIO_SYNC
     // Add audio metrics (BPM, KEY, MIC)
     auto* audio = m_orchestrator.getAudio();
     if (audio) {
-        // BPM from TempoTrackerOutput
-        audio::TempoTrackerOutput tempo = audio->getTempo().getOutput();
-        doc["bpm"] = tempo.bpm;
-        
-        // Mic level in dB (calculated from rmsPreGain)
-        audio::AudioDspState dsp = audio->getDspState();
-        float micLevelDb = (dsp.rmsPreGain > 0.0001f) 
-            ? (20.0f * log10f(dsp.rmsPreGain)) 
+        if (m_orchestrator.getRenderer() != nullptr) {
+            doc["audioSyncMode"] = m_orchestrator.getRenderer()->getAudioSyncMode();
+        }
+#if FEATURE_AUDIO_BACKEND_ESV11
+        audio::ControlBusFrame frame{};
+        audio->getControlBusBuffer().ReadLatest(frame);
+
+        doc["bpm"] = frame.es_bpm;
+
+        // Mic level in dB (approx; ES backend publishes mapped RMS 0..1)
+        float micLevelDb = (frame.rms > 0.0001f)
+            ? (20.0f * log10f(frame.rms))
             : -80.0f;
         doc["mic"] = micLevelDb;
-        
+
+        const audio::ChordState& chord = frame.chordState;
+        if (chord.confidence > 0.1f && chord.type != audio::ChordType::NONE) {
+            doc["key"] = formatKeyName(chord.rootNote, chord.type);
+        } else {
+            doc["key"] = "";
+        }
+#elif FEATURE_AUDIO_BACKEND_PIPELINECORE
+        // PipelineCore: BPM from ControlBusFrame (flows through PipelineAdapter)
+        {
+            audio::ControlBusFrame frame{};
+            audio->getControlBusBuffer().ReadLatest(frame);
+            doc["bpm"] = frame.tempoBpm;
+
+            audio::AudioDspState dsp = audio->getDspState();
+            float micLevelDb = (dsp.rmsPreGain > 0.0001f)
+                ? (20.0f * log10f(dsp.rmsPreGain))
+                : -80.0f;
+            doc["mic"] = micLevelDb;
+
+            const audio::ChordState& chord = frame.chordState;
+            if (chord.confidence > 0.1f && chord.type != audio::ChordType::NONE) {
+                doc["key"] = formatKeyName(chord.rootNote, chord.type);
+            } else {
+                doc["key"] = "";
+            }
+        }
+#else
+        // Goertzel: BPM from TempoTrackerOutput
+        audio::TempoTrackerOutput tempo = audio->getTempo().getOutput();
+        doc["bpm"] = tempo.bpm;
+
+        // Mic level in dB (calculated from rmsPreGain)
+        audio::AudioDspState dsp = audio->getDspState();
+        float micLevelDb = (dsp.rmsPreGain > 0.0001f)
+            ? (20.0f * log10f(dsp.rmsPreGain))
+            : -80.0f;
+        doc["mic"] = micLevelDb;
+
         // Musical key/chord (formatted string)
         const audio::ControlBus& controlBus = audio->getControlBusRef();
         const audio::ControlBusFrame& frame = controlBus.GetFrame();
@@ -1134,27 +1412,43 @@ void WebServer::doBroadcastStatus() {
         } else {
             doc["key"] = "";  // Empty string when no valid key detected
         }
+#endif
     }
 #endif
 
     String output;
     serializeJson(doc, output);
     
-    // SAFETY: Validate m_ws is still valid before calling textAll()
-    // Note: AsyncWebSocket will handle queue overflow internally, but we throttle to prevent it
     if (m_ws && m_ws->count() > 0) {
+        if (!m_ws->availableForWriteAll()) return;
         m_ws->textAll(output);
     }
 }
 
 void WebServer::broadcastZoneState() {
+    if (m_lowHeapShed) {
+        return;
+    }
     // SAFETY: Validate pointers before accessing
     if (!m_ws) {
         LW_LOGW("broadcastZoneState: m_ws is null");
         return;
     }
-    
+
     if (m_ws->count() == 0 || !m_zoneComposer) return;
+
+    const uint32_t now = millis();
+    if (m_lastClientConnectMs != 0 && (now - m_lastClientConnectMs) < CONNECT_STABILISE_MS) {
+        return;
+    }
+
+    // QUEUE PROTECTION: Throttle zone broadcasts before doing any JSON work.
+    // zones.list is comparatively large and is called from multiple codepaths.
+    static uint32_t lastZoneBroadcastAttempt = 0;
+    if (now - lastZoneBroadcastAttempt < 250) {  // 4 Hz max
+        return;
+    }
+    lastZoneBroadcastAttempt = now;
 
     JsonDocument doc;  // Increased for audio config fields
     doc["type"] = "zones.list";  // Changed from "zone.state"
@@ -1179,12 +1473,13 @@ void WebServer::broadcastZoneState() {
         JsonObject zone = zones.add<JsonObject>();
         zone["id"] = i;
         zone["enabled"] = m_zoneComposer->isZoneEnabled(i);
-        uint8_t effectId = m_zoneComposer->getZoneEffect(i);
+        EffectId effectId = m_zoneComposer->getZoneEffect(i);
         zone["effectId"] = effectId;
         // SAFE: Use cached state instead of unsafe cross-core access
         const CachedRendererState& cached = m_cachedRendererState;
-        if (effectId < cached.effectCount && cached.effectNames[effectId]) {
-            zone["effectName"] = cached.effectNames[effectId];
+        const char* eName = cached.findEffectName(effectId);
+        if (eName) {
+            zone["effectName"] = eName;
         }
         zone["brightness"] = m_zoneComposer->getZoneBrightness(i);
         zone["speed"] = m_zoneComposer->getZoneSpeed(i);
@@ -1214,21 +1509,16 @@ void WebServer::broadcastZoneState() {
     String output;
     serializeJson(doc, output);
     
-    // QUEUE PROTECTION: Throttle zone broadcasts to prevent queue saturation
-    static uint32_t lastZoneBroadcastAttempt = 0;
-    uint32_t now = millis();
-    if (now - lastZoneBroadcastAttempt < 10) {  // Minimum 10ms between zone broadcasts
-        return;  // Skip this broadcast to prevent queue buildup
-    }
-    lastZoneBroadcastAttempt = now;
-
-    // SAFETY: Validate m_ws is still valid before calling textAll()
     if (m_ws && m_ws->count() > 0) {
+        if (!m_ws->availableForWriteAll()) return;
         m_ws->textAll(output);
     }
 }
 
 void WebServer::broadcastSingleZoneState(uint8_t zoneId) {
+    if (m_lowHeapShed) {
+        return;
+    }
     // SAFETY: Validate pointers before accessing
     if (!m_ws) {
         LW_LOGW("broadcastSingleZoneState: m_ws is null");
@@ -1236,6 +1526,18 @@ void WebServer::broadcastSingleZoneState(uint8_t zoneId) {
     }
 
     if (m_ws->count() == 0 || !m_zoneComposer) return;
+
+    const uint32_t now = millis();
+    if (m_lastClientConnectMs != 0 && (now - m_lastClientConnectMs) < CONNECT_STABILISE_MS) {
+        return;
+    }
+
+    // QUEUE PROTECTION: Throttle rapid per-zone updates (e.g. speed slider/encoder).
+    static uint32_t lastSingleZoneBroadcastAttempt = 0;
+    if (now - lastSingleZoneBroadcastAttempt < 50) {  // 20 Hz max
+        return;
+    }
+    lastSingleZoneBroadcastAttempt = now;
 
     // Validate zone ID
     if (zoneId >= m_zoneComposer->getZoneCount()) {
@@ -1247,19 +1549,20 @@ void WebServer::broadcastSingleZoneState(uint8_t zoneId) {
     JsonDocument doc;
     doc["type"] = "zones.stateChanged";
     doc["zoneId"] = zoneId;
-    doc["timestamp"] = millis();
+    doc["timestamp"] = now;
 
     // Add current zone state
     JsonObject current = doc["current"].to<JsonObject>();
     current["enabled"] = m_zoneComposer->isZoneEnabled(zoneId);
 
-    uint8_t effectId = m_zoneComposer->getZoneEffect(zoneId);
+    EffectId effectId = m_zoneComposer->getZoneEffect(zoneId);
     current["effectId"] = effectId;
 
     // SAFE: Use cached state for effect name (thread-safe)
     const CachedRendererState& cached = m_cachedRendererState;
-    if (effectId < cached.effectCount && cached.effectNames[effectId]) {
-        current["effectName"] = cached.effectNames[effectId];
+    const char* effName = cached.findEffectName(effectId);
+    if (effName) {
+        current["effectName"] = effName;
     } else {
         current["effectName"] = "Unknown";
     }
@@ -1275,15 +1578,18 @@ void WebServer::broadcastSingleZoneState(uint8_t zoneId) {
     String output;
     serializeJson(doc, output);
 
-    // SAFETY: Validate m_ws is still valid before calling textAll()
     if (m_ws && m_ws->count() > 0) {
+        if (!m_ws->availableForWriteAll()) return;
         m_ws->textAll(output);
     }
 
     LW_LOGD("Broadcast zones.stateChanged for zone %d", zoneId);
 }
 
-void WebServer::notifyEffectChange(uint8_t effectId, const char* name) {
+void WebServer::notifyEffectChange(EffectId effectId, const char* name) {
+    if (m_lowHeapShed) {
+        return;
+    }
     // SAFETY: Validate pointers before accessing
     if (!m_ws) {
         LW_LOGW("notifyEffectChange: m_ws is null");
@@ -1295,7 +1601,7 @@ void WebServer::notifyEffectChange(uint8_t effectId, const char* name) {
     // QUEUE PROTECTION: Throttle notifications to prevent queue saturation
     static uint32_t lastEffectNotifyAttempt = 0;
     uint32_t now = millis();
-    if (now - lastEffectNotifyAttempt < 10) {  // Minimum 10ms between notifications
+    if (now - lastEffectNotifyAttempt < 50) {  // Minimum 50ms between notifications
         return;  // Skip this notification to prevent queue buildup
     }
     lastEffectNotifyAttempt = now;
@@ -1308,8 +1614,8 @@ void WebServer::notifyEffectChange(uint8_t effectId, const char* name) {
     String output;
     serializeJson(doc, output);
     
-    // SAFETY: Validate m_ws is still valid before calling textAll()
     if (m_ws && m_ws->count() > 0) {
+        if (!m_ws->availableForWriteAll()) return;
         m_ws->textAll(output);
     }
 }
@@ -1324,6 +1630,12 @@ void WebServer::notifyParameterChange() {
 
 void WebServer::broadcastLEDFrame() {
     if (!m_ledBroadcaster || !m_renderer) return;
+
+    // Streaming over WebSocket can consume significant internal heap when clients are slow.
+    // When shedding, prioritise control plane (commands) and UDP streaming.
+    if (m_lowHeapShed) {
+        return;
+    }
     
     // Get LED buffer from renderer (cross-core safe copy)
     CRGB leds[webserver::LedStreamConfig::TOTAL_LEDS];
@@ -1335,6 +1647,13 @@ void WebServer::broadcastLEDFrame() {
 
 bool WebServer::setLEDStreamSubscription(AsyncWebSocketClient* client, bool subscribe) {
     if (!client || !m_ledBroadcaster) return false;
+    if (subscribe) {
+        const uint32_t freeInternal = static_cast<uint32_t>(getFreeInternalHeap());
+        if (m_lowHeapShed || freeInternal < INTERNAL_HEAP_SHED_BELOW_BYTES) {
+            LW_LOGW("LED stream subscribe rejected (low internal heap=%lu)", (unsigned long)freeInternal);
+            return false;
+        }
+    }
     uint32_t clientId = client->id();
     bool success = m_ledBroadcaster->setSubscription(clientId, subscribe);
 
@@ -1377,6 +1696,9 @@ bool WebServer::hasLogStreamSubscribers() const {
 
 void WebServer::broadcastAudioFrame() {
     if (!m_audioBroadcaster || !m_renderer) return;
+    if (m_lowHeapShed) {
+        return;
+    }
 
     // Get audio frame from renderer (cross-core safe - returns by-value copy)
     const audio::ControlBusFrame& frame = m_renderer->getCachedAudioFrame();
@@ -1387,19 +1709,21 @@ void WebServer::broadcastAudioFrame() {
 }
 
 void WebServer::broadcastBeatEvent() {
-    // SAFETY: Validate pointers before accessing
+    if (m_lowHeapShed) {
+        return;
+    }
+    // Skip entirely if nobody has sent beat.subscribe — prevents queue overflow
+    // on slow SoftAP clients (Tab5/iOS) that don't consume beat events.
+    if (!webserver::ws::hasBeatEventSubscribers()) return;
+
     if (!m_ws || m_ws->count() == 0) return;
 
-    // QUEUE PROTECTION: Throttle beat events to prevent queue saturation
+    // Throttle beat events (20 Hz max)
     static uint32_t lastBeatBroadcastAttempt = 0;
     uint32_t now = millis();
-    if (now - lastBeatBroadcastAttempt < 50) {  // Minimum 50ms between beat broadcasts (20 Hz max)
-        return;  // Skip this broadcast to prevent queue buildup
-    }
+    if (now - lastBeatBroadcastAttempt < 50) return;
     lastBeatBroadcastAttempt = now;
 
-    // Note: We need to get musical grid from cached state or another safe source
-    // For now, we'll skip if renderer is not available (this should use cached audio state)
     if (!m_renderer) return;
 
     const auto& grid = m_renderer->getLastMusicalGrid();
@@ -1421,8 +1745,8 @@ void WebServer::broadcastBeatEvent() {
     String json;
     serializeJson(doc, json);
 
-    // SAFETY: Validate m_ws is still valid before calling textAll()
     if (m_ws) {
+        if (!m_ws->availableForWriteAll()) return;
         m_ws->textAll(json);
     }
 }
@@ -1450,6 +1774,13 @@ void WebServer::broadcastFftFrame() {
 
 bool WebServer::setAudioStreamSubscription(AsyncWebSocketClient* client, bool subscribe) {
     if (!client || !m_audioBroadcaster) return false;
+    if (subscribe) {
+        const uint32_t freeInternal = static_cast<uint32_t>(getFreeInternalHeap());
+        if (m_lowHeapShed || freeInternal < INTERNAL_HEAP_SHED_BELOW_BYTES) {
+            LW_LOGW("Audio stream subscribe rejected (low internal heap=%lu)", (unsigned long)freeInternal);
+            return false;
+        }
+    }
     uint32_t clientId = client->id();
     bool success = m_audioBroadcaster->setSubscription(clientId, subscribe);
 

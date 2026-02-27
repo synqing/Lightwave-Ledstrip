@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file ModifierHandlers.cpp
  * @brief Effect modifier REST API handlers (stub)

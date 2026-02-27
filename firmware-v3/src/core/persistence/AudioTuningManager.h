@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file AudioTuningManager.h
  * @brief Audio tuning preset persistence manager for NVS storage

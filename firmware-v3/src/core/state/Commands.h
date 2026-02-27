@@ -1,8 +1,7 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 #pragma once
 
 #include "ICommand.h"
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace state {
@@ -14,7 +13,7 @@ namespace state {
  */
 class SetEffectCommand : public ICommand {
 public:
-    explicit SetEffectCommand(uint8_t effectId)
+    explicit SetEffectCommand(EffectId effectId)
         : m_effectId(effectId) {}
 
     SystemState apply(const SystemState& current) const override {
@@ -27,11 +26,11 @@ public:
 
     bool validate(const SystemState& current) const override {
         (void)current;
-        return m_effectId < MAX_EFFECT_COUNT;
+        return m_effectId != INVALID_EFFECT_ID;
     }
 
 private:
-    uint8_t m_effectId;
+    EffectId m_effectId;
 };
 
 // ==================== Brightness Commands ====================
@@ -143,7 +142,7 @@ private:
  */
 class ZoneSetEffectCommand : public ICommand {
 public:
-    ZoneSetEffectCommand(uint8_t zoneId, uint8_t effectId)
+    ZoneSetEffectCommand(uint8_t zoneId, EffectId effectId)
         : m_zoneId(zoneId), m_effectId(effectId) {}
 
     SystemState apply(const SystemState& current) const override {
@@ -156,12 +155,12 @@ public:
 
     bool validate(const SystemState& current) const override {
         (void)current;
-        return m_zoneId < MAX_ZONES && m_effectId < MAX_EFFECT_COUNT;
+        return m_zoneId < MAX_ZONES && m_effectId != INVALID_EFFECT_ID;
     }
 
 private:
     uint8_t m_zoneId;
-    uint8_t m_effectId;
+    EffectId m_effectId;
 };
 
 /**

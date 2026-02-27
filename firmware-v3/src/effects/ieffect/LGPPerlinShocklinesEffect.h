@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPPerlinShocklinesEffect.h
  * @brief LGP Perlin Shocklines - Beat/flux injects sharp travelling ridges
@@ -25,6 +23,7 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include <FastLED.h>
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -32,6 +31,8 @@ namespace ieffect {
 
 class LGPPerlinShocklinesEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_PERLIN_SHOCKLINES;
+
     LGPPerlinShocklinesEffect();
     ~LGPPerlinShocklinesEffect() override = default;
 

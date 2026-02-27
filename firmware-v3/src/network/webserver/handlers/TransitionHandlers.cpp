@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file TransitionHandlers.cpp
  * @brief Transition handlers implementation
@@ -44,11 +42,18 @@ void TransitionHandlers::handleTrigger(AsyncWebServerRequest* request,
     JsonDocument doc;
     VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::TriggerTransition, request);
 
-    uint8_t toEffect = doc["toEffect"];
+    EffectId toEffect = doc["toEffect"];
+
     // SAFE: Uses cached state (no cross-core access)
-    if (toEffect >= cachedState.effectCount) {
+    // Accept stable namespaced EffectIds. Also tolerate legacy numeric indices.
+    if (!cachedState.findEffectName(toEffect)) {
+        if (toEffect < cachedState.effectCount && toEffect < cachedState.MAX_CACHED_EFFECTS) {
+            toEffect = cachedState.effectIds[static_cast<uint16_t>(toEffect)];
+        }
+    }
+    if (!cachedState.findEffectName(toEffect)) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "toEffect");
+                          ErrorCodes::OUT_OF_RANGE, "Effect ID not registered", "toEffect");
         return;
     }
 
@@ -69,8 +74,9 @@ void TransitionHandlers::handleTrigger(AsyncWebServerRequest* request,
     sendSuccessResponse(request, [&cachedState, toEffect, transitionType](JsonObject& respData) {
         respData["effectId"] = toEffect;
         // SAFE: Uses cached state (no cross-core access)
-        if (toEffect < cachedState.effectCount && cachedState.effectNames[toEffect]) {
-            respData["name"] = cachedState.effectNames[toEffect];
+        const char* transName = cachedState.findEffectName(toEffect);
+        if (transName) {
+            respData["name"] = transName;
         }
         respData["transitionType"] = transitionType;
     });

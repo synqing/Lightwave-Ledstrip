@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file NarrativeEngine.h
  * @brief Global temporal conductor for visual drama

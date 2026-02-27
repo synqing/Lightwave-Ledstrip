@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file HttpResponseCodec.h
  * @brief Codec for standard HTTP response envelope

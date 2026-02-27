@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file test_ws_palette_codec.cpp
  * @brief Unit tests for WsPaletteCodec JSON parsing and encoder allow-list validation

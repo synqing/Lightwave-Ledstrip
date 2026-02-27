@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file ZoneConfigManager.cpp
  * @brief Zone-specific persistence manager implementation
@@ -11,6 +9,7 @@
 #include <Arduino.h>
 #include <cstring>
 #include "../../effects/zones/ZoneDefinition.h"
+#include "../../config/effect_ids.h"
 
 using namespace lightwaveos::zones;
 
@@ -24,6 +23,23 @@ struct ZoneConfigDataV1 {
     ZoneLayout layout;
     bool systemEnabled;
     uint8_t zoneEffects[MAX_ZONES];
+    bool zoneEnabled[MAX_ZONES];
+    uint8_t zoneBrightness[MAX_ZONES];
+    uint8_t zoneSpeed[MAX_ZONES];
+    uint8_t zonePalette[MAX_ZONES];
+    uint8_t zoneBlendMode[MAX_ZONES];
+    uint32_t checksum;
+};
+
+// ==================== Version 2 Migration Structure ====================
+// V2 used segments[] but still had uint8_t zoneEffects
+
+struct ZoneConfigDataV2 {
+    uint8_t version;
+    ZoneSegment segments[MAX_ZONES];
+    uint8_t zoneCount;
+    bool systemEnabled;
+    uint8_t zoneEffects[MAX_ZONES];     // Old: uint8_t sequential IDs
     bool zoneEnabled[MAX_ZONES];
     uint8_t zoneBrightness[MAX_ZONES];
     uint8_t zoneSpeed[MAX_ZONES];
@@ -67,11 +83,11 @@ const ZonePreset ZONE_PRESETS[ZONE_PRESET_COUNT] = {
     {
         "Unified",
         {
-            .version = 2,
+            .version = 3,
             .segments = {},  // Will be set in loadPreset
             .zoneCount = 1,
             .systemEnabled = false,  // User must enable manually
-            .zoneEffects = {0, 0, 0, 0},
+            .zoneEffects = {EID_FIRE, EID_FIRE, EID_FIRE, EID_FIRE},
             .zoneEnabled = {true, false, false, false},
             .zoneBrightness = {255, 255, 255, 255},
             .zoneSpeed = {25, 25, 25, 25},
@@ -85,11 +101,11 @@ const ZonePreset ZONE_PRESETS[ZONE_PRESET_COUNT] = {
     {
         "Dual Split",
         {
-            .version = 2,
+            .version = 3,
             .segments = {},
             .zoneCount = 2,
             .systemEnabled = false,
-            .zoneEffects = {0, 5, 0, 0},  // Inner: Fire, Outer: Juggle (example)
+            .zoneEffects = {EID_FIRE, EID_JUGGLE, EID_FIRE, EID_FIRE},  // Inner: Fire, Outer: Juggle
             .zoneEnabled = {true, true, false, false},
             .zoneBrightness = {255, 200, 255, 255},
             .zoneSpeed = {25, 30, 25, 25},
@@ -104,11 +120,11 @@ const ZonePreset ZONE_PRESETS[ZONE_PRESET_COUNT] = {
     {
         "Dual Glow",
         {
-            .version = 2,
+            .version = 3,
             .segments = {},
             .zoneCount = 2,
             .systemEnabled = false,
-            .zoneEffects = {0, 0, 0, 0},
+            .zoneEffects = {EID_FIRE, EID_FIRE, EID_FIRE, EID_FIRE},
             .zoneEnabled = {true, true, false, false},
             .zoneBrightness = {255, 140, 255, 255},
             .zoneSpeed = {20, 12, 25, 25},
@@ -122,11 +138,11 @@ const ZonePreset ZONE_PRESETS[ZONE_PRESET_COUNT] = {
     {
         "Dual Pulse",
         {
-            .version = 2,
+            .version = 3,
             .segments = {},
             .zoneCount = 2,
             .systemEnabled = false,
-            .zoneEffects = {12, 4, 0, 0},
+            .zoneEffects = {EID_PULSE, EID_SINELON, EID_FIRE, EID_FIRE},
             .zoneEnabled = {true, true, false, false},
             .zoneBrightness = {255, 180, 255, 255},
             .zoneSpeed = {18, 28, 25, 25},
@@ -140,11 +156,11 @@ const ZonePreset ZONE_PRESETS[ZONE_PRESET_COUNT] = {
     {
         "LGP Duo",
         {
-            .version = 2,
+            .version = 3,
             .segments = {},
             .zoneCount = 2,
             .systemEnabled = false,
-            .zoneEffects = {10, 2, 0, 0},
+            .zoneEffects = {EID_INTERFERENCE, EID_PLASMA, EID_FIRE, EID_FIRE},
             .zoneEnabled = {true, true, false, false},
             .zoneBrightness = {255, 220, 255, 255},
             .zoneSpeed = {20, 24, 25, 25},
@@ -245,40 +261,74 @@ bool ZoneConfigManager::loadFromNVS() {
 
     // Check version compatibility and migrate if needed
     if (config.version == 1) {
-        Serial.println("[ZoneConfig] Migrating from version 1 to version 2");
+        Serial.println("[ZoneConfig] Migrating from version 1 to version 3");
         // Load as V1 struct
         ZoneConfigDataV1 v1Config;
         memcpy(&v1Config, &config, sizeof(ZoneConfigDataV1));
-        
-        // Convert to V2 format
-        ZoneConfigData v2Config;
-        v2Config.version = CONFIG_VERSION;
-        v2Config.systemEnabled = v1Config.systemEnabled;
-        // Convert old layout enum to zoneCount+segments (v2)
+
+        // Convert to V3 format
+        ZoneConfigData v3Config;
+        memset(&v3Config, 0, sizeof(v3Config));
+        v3Config.version = CONFIG_VERSION;
+        v3Config.systemEnabled = v1Config.systemEnabled;
+        // Convert old layout enum to zoneCount+segments
         if (v1Config.layout == ZoneLayout::SINGLE) {
-            v2Config.zoneCount = 1;
-            memcpy(v2Config.segments, ZONE_1_CONFIG, sizeof(ZONE_1_CONFIG));
+            v3Config.zoneCount = 1;
+            memcpy(v3Config.segments, ZONE_1_CONFIG, sizeof(ZONE_1_CONFIG));
         } else if (v1Config.layout == ZoneLayout::QUAD) {
-            v2Config.zoneCount = 4;
-            memcpy(v2Config.segments, ZONE_4_CONFIG, sizeof(ZONE_4_CONFIG));
+            v3Config.zoneCount = 4;
+            memcpy(v3Config.segments, ZONE_4_CONFIG, sizeof(ZONE_4_CONFIG));
         } else if (v1Config.layout == ZoneLayout::DUAL) {
-            v2Config.zoneCount = 2;
-            memcpy(v2Config.segments, ZONE_2_CONFIG, sizeof(ZONE_2_CONFIG));
+            v3Config.zoneCount = 2;
+            memcpy(v3Config.segments, ZONE_2_CONFIG, sizeof(ZONE_2_CONFIG));
         } else {
-            v2Config.zoneCount = 3;
-            memcpy(v2Config.segments, ZONE_3_CONFIG, sizeof(ZONE_3_CONFIG));
+            v3Config.zoneCount = 3;
+            memcpy(v3Config.segments, ZONE_3_CONFIG, sizeof(ZONE_3_CONFIG));
         }
-        
-        // Copy zone settings
-        memcpy(v2Config.zoneEffects, v1Config.zoneEffects, sizeof(v1Config.zoneEffects));
-        memcpy(v2Config.zoneEnabled, v1Config.zoneEnabled, sizeof(v1Config.zoneEnabled));
-        memcpy(v2Config.zoneBrightness, v1Config.zoneBrightness, sizeof(v1Config.zoneBrightness));
-        memcpy(v2Config.zoneSpeed, v1Config.zoneSpeed, sizeof(v1Config.zoneSpeed));
-        memcpy(v2Config.zonePalette, v1Config.zonePalette, sizeof(v1Config.zonePalette));
-        memcpy(v2Config.zoneBlendMode, v1Config.zoneBlendMode, sizeof(v1Config.zoneBlendMode));
-        
+
+        // Migrate zone effects: uint8_t sequential → EffectId namespaced
+        for (uint8_t i = 0; i < MAX_ZONES; i++) {
+            v3Config.zoneEffects[i] = oldIdToNew(v1Config.zoneEffects[i]);
+            if (v3Config.zoneEffects[i] == INVALID_EFFECT_ID) {
+                v3Config.zoneEffects[i] = EID_FIRE;
+            }
+        }
+        memcpy(v3Config.zoneEnabled, v1Config.zoneEnabled, sizeof(v1Config.zoneEnabled));
+        memcpy(v3Config.zoneBrightness, v1Config.zoneBrightness, sizeof(v1Config.zoneBrightness));
+        memcpy(v3Config.zoneSpeed, v1Config.zoneSpeed, sizeof(v1Config.zoneSpeed));
+        memcpy(v3Config.zonePalette, v1Config.zonePalette, sizeof(v1Config.zonePalette));
+        memcpy(v3Config.zoneBlendMode, v1Config.zoneBlendMode, sizeof(v1Config.zoneBlendMode));
+
         // Apply migrated configuration
-        importConfig(v2Config);
+        importConfig(v3Config);
+    } else if (config.version == 2) {
+        Serial.println("[ZoneConfig] Migrating from version 2 to version 3");
+        // Load as V2 struct (segments[] but uint8_t zoneEffects)
+        ZoneConfigDataV2 v2Config;
+        memcpy(&v2Config, &config, sizeof(ZoneConfigDataV2));
+
+        // Convert to V3 format
+        ZoneConfigData v3Config;
+        memset(&v3Config, 0, sizeof(v3Config));
+        v3Config.version = CONFIG_VERSION;
+        v3Config.zoneCount = v2Config.zoneCount;
+        v3Config.systemEnabled = v2Config.systemEnabled;
+        memcpy(v3Config.segments, v2Config.segments, sizeof(v2Config.segments));
+
+        // Migrate zone effects: uint8_t sequential → EffectId namespaced
+        for (uint8_t i = 0; i < MAX_ZONES; i++) {
+            v3Config.zoneEffects[i] = oldIdToNew(v2Config.zoneEffects[i]);
+            if (v3Config.zoneEffects[i] == INVALID_EFFECT_ID) {
+                v3Config.zoneEffects[i] = EID_FIRE;
+            }
+        }
+        memcpy(v3Config.zoneEnabled, v2Config.zoneEnabled, sizeof(v2Config.zoneEnabled));
+        memcpy(v3Config.zoneBrightness, v2Config.zoneBrightness, sizeof(v2Config.zoneBrightness));
+        memcpy(v3Config.zoneSpeed, v2Config.zoneSpeed, sizeof(v2Config.zoneSpeed));
+        memcpy(v3Config.zonePalette, v2Config.zonePalette, sizeof(v2Config.zonePalette));
+        memcpy(v3Config.zoneBlendMode, v2Config.zoneBlendMode, sizeof(v2Config.zoneBlendMode));
+
+        importConfig(v3Config);
     } else if (config.version == CONFIG_VERSION) {
         // Apply configuration
         importConfig(config);
@@ -294,7 +344,7 @@ bool ZoneConfigManager::loadFromNVS() {
 
 // ==================== System State Operations ====================
 
-bool ZoneConfigManager::saveSystemState(uint8_t effectId, uint8_t brightness,
+bool ZoneConfigManager::saveSystemState(EffectId effectId, uint8_t brightness,
                                         uint8_t speed, uint8_t paletteId) {
     // Ensure NVS is initialized
     if (!NVS_MANAGER.isInitialized()) {
@@ -305,7 +355,7 @@ bool ZoneConfigManager::saveSystemState(uint8_t effectId, uint8_t brightness,
     }
 
     SystemConfigData config;
-    config.version = CONFIG_VERSION;
+    config.version = SYSTEM_CONFIG_VERSION;
     config.effectId = effectId;
     config.brightness = brightness;
     config.speed = speed;
@@ -324,7 +374,7 @@ bool ZoneConfigManager::saveSystemState(uint8_t effectId, uint8_t brightness,
     }
 }
 
-bool ZoneConfigManager::loadSystemState(uint8_t& effectId, uint8_t& brightness,
+bool ZoneConfigManager::loadSystemState(EffectId& effectId, uint8_t& brightness,
                                         uint8_t& speed, uint8_t& paletteId) {
     // Ensure NVS is initialized
     if (!NVS_MANAGER.isInitialized()) {
@@ -334,6 +384,7 @@ bool ZoneConfigManager::loadSystemState(uint8_t& effectId, uint8_t& brightness,
         }
     }
 
+    // Try loading current format first
     SystemConfigData config;
     m_lastError = NVS_MANAGER.loadBlob(NVS_NS_SYSTEM, NVS_KEY_STATE, &config, sizeof(config));
 
@@ -343,9 +394,34 @@ bool ZoneConfigManager::loadSystemState(uint8_t& effectId, uint8_t& brightness,
     }
 
     if (m_lastError != NVSResult::OK) {
-        Serial.printf("[ZoneConfig] ERROR: Load system state failed: %s\n",
-                      NVSManager::resultToString(m_lastError));
-        return false;
+        // May be old (smaller) format -- try loading legacy struct
+        struct SystemConfigDataV1 {
+            uint8_t version;
+            uint8_t effectId;
+            uint8_t brightness;
+            uint8_t speed;
+            uint8_t paletteId;
+            uint32_t checksum;
+        };
+        SystemConfigDataV1 v1;
+        m_lastError = NVS_MANAGER.loadBlob(NVS_NS_SYSTEM, NVS_KEY_STATE, &v1, sizeof(v1));
+        if (m_lastError != NVSResult::OK) {
+            Serial.printf("[ZoneConfig] ERROR: Load system state failed: %s\n",
+                          NVSManager::resultToString(m_lastError));
+            return false;
+        }
+
+        // Migrate old uint8_t effectId to new EffectId via oldIdToNew()
+        effectId = oldIdToNew(v1.effectId);
+        if (effectId == INVALID_EFFECT_ID) {
+            effectId = EID_FIRE;  // Safe fallback
+        }
+        brightness = v1.brightness;
+        speed = (v1.speed >= MIN_SPEED && v1.speed <= MAX_SPEED) ? v1.speed : 25;
+        paletteId = (v1.paletteId <= MAX_PALETTE_ID) ? v1.paletteId : 0;
+
+        Serial.println("[ZoneConfig] System state migrated from v1 (uint8_t effectId)");
+        return true;
     }
 
     // Validate checksum
@@ -355,9 +431,36 @@ bool ZoneConfigManager::loadSystemState(uint8_t& effectId, uint8_t& brightness,
         return false;
     }
 
-    // Validate and clamp values
-    effectId = (config.effectId < MAX_EFFECT_ID) ? config.effectId : 0;
-    brightness = config.brightness;  // Full range 0-255 is valid
+    // Check version for migration
+    if (config.version < SYSTEM_CONFIG_VERSION) {
+        // Pre-v3 format: effectId was stored as uint8_t at the same field offset
+        // Re-read as legacy and migrate
+        struct SystemConfigDataV1 {
+            uint8_t version;
+            uint8_t effectId;
+            uint8_t brightness;
+            uint8_t speed;
+            uint8_t paletteId;
+            uint32_t checksum;
+        };
+        SystemConfigDataV1 v1;
+        memcpy(&v1, &config, sizeof(v1));
+
+        effectId = oldIdToNew(v1.effectId);
+        if (effectId == INVALID_EFFECT_ID) {
+            effectId = EID_FIRE;
+        }
+        brightness = v1.brightness;
+        speed = (v1.speed >= MIN_SPEED && v1.speed <= MAX_SPEED) ? v1.speed : 25;
+        paletteId = (v1.paletteId <= MAX_PALETTE_ID) ? v1.paletteId : 0;
+
+        Serial.println("[ZoneConfig] System state migrated from legacy version");
+        return true;
+    }
+
+    // Current version: read EffectId (uint16_t) directly
+    effectId = (config.effectId != INVALID_EFFECT_ID) ? config.effectId : EID_FIRE;
+    brightness = config.brightness;
     speed = (config.speed >= MIN_SPEED && config.speed <= MAX_SPEED) ? config.speed : 25;
     paletteId = (config.paletteId <= MAX_PALETTE_ID) ? config.paletteId : 0;
 

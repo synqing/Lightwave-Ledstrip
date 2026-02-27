@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file ColorCorrectionEngine.h
  * @brief Comprehensive color correction system for LED rendering
@@ -78,7 +76,7 @@ struct ColorCorrectionConfig {
 
     // === V-Clamping (White Accumulation Prevention) ===
     bool vClampEnabled = true;          ///< Enable brightness V-clamping
-    uint8_t maxBrightness = 200;        ///< Max brightness (0-255, conservative 200)
+    uint8_t maxBrightness = 255;        ///< Max brightness (0-255); no power clamping
     uint8_t saturationBoostAmount = 25; ///< Saturation boost after V-clamp (0-255)
 };
 

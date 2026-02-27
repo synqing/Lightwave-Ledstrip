@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPWaveCollisionEnhancedEffect.h
  * @brief LGP Wave Collision Enhanced - Enhanced version with 64-bin sub-bass, enhanced snare/hi-hat triggers
@@ -21,6 +19,8 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../enhancement/SmoothingEngine.h"
+#include "ChromaUtils.h"
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -28,6 +28,8 @@ namespace ieffect {
 
 class LGPWaveCollisionEnhancedEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_WAVE_COLLISION_ENHANCED;
+
     LGPWaveCollisionEnhancedEffect() = default;
     ~LGPWaveCollisionEnhancedEffect() override = default;
 
@@ -47,8 +49,7 @@ private:
     uint8_t m_chromaHistIdx = 0;
     float m_energyAvg = 0.0f;
     float m_energyDelta = 0.0f;
-    uint8_t m_dominantBin = 0;
-    float m_dominantBinSmooth = 0.0f;
+    float m_chromaAngle = 0.0f;       // Circular EMA angle for chroma hue (radians)
     float m_collisionBoost = 0.0f;
 
     // Chromagram smoothing (AsymmetricFollower for natural attack/release)

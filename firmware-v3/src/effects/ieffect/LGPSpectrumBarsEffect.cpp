@@ -1,11 +1,10 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPSpectrumBarsEffect.cpp
  * @brief 8-band spectrum analyzer implementation
  */
 
 #include "LGPSpectrumBarsEffect.h"
+#include "ChromaUtils.h"
 #include "../CoreEffects.h"
 
 #ifndef NATIVE_BUILD
@@ -19,25 +18,68 @@ namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
+namespace {
+
+static inline const float* selectChroma12(const audio::ControlBusFrame& cb) {
+    // Both backends now produce normalised chroma via Stage A/B pipeline.
+    return cb.chroma;
+}
+
+static inline float clamp01(float v) {
+    if (v < 0.0f) return 0.0f;
+    if (v > 1.0f) return 1.0f;
+    return v;
+}
+
+} // namespace
+
 bool LGPSpectrumBarsEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
     memset(m_smoothedBands, 0, sizeof(m_smoothedBands));
+    m_chromaAngle = 0.0f;
     return true;
 }
 
 void LGPSpectrumBarsEffect::render(plugins::EffectContext& ctx) {
+    float dt = ctx.getSafeDeltaSeconds();
+
     // Update smoothed bands (fast attack, slow decay)
     for (int i = 0; i < 8; ++i) {
-        float target = ctx.audio.available ? ctx.audio.getBand(i) : 0.3f;
+        float target;
+        if (ctx.audio.available) {
+            // silentScale handled globally by RendererActor
+            target = ctx.audio.getBand(i);
+        } else {
+            // Fallback: gentle sine wave animation when no audio
+            float phase = ctx.totalTimeMs * 0.001f + i * 0.4f;
+            target = 0.3f + 0.2f * sinf(phase);
+        }
         if (target > m_smoothedBands[i]) {
             m_smoothedBands[i] = target;  // Instant attack
         } else {
-            m_smoothedBands[i] *= 0.92f;  // Slow decay (~200ms)
+            m_smoothedBands[i] *= powf(0.92f, dt * 60.0f);  // Slow decay (~200ms, dt-corrected)
         }
     }
 
     // Clear buffer
     memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+
+    // Musically anchored hue (non-rainbow): circular chroma mean, smoothed.
+    uint8_t baseHue = ctx.gHue;
+#if FEATURE_AUDIO_SYNC
+    if (ctx.audio.available) {
+        const float* chroma = selectChroma12(ctx.audio.controlBus);
+        baseHue = effects::chroma::circularChromaHueSmoothed(
+            chroma, m_chromaAngle, dt, 0.20f);
+    }
+#endif
+
+    float beatAccent = 0.0f;
+#if FEATURE_AUDIO_SYNC
+    if (ctx.audio.available) {
+        beatAccent = 0.10f * ctx.audio.beatStrength();
+    }
+#endif
 
     // Render CENTER PAIR: bands map from center (bass) to edges (treble)
     // Each band gets 10 LEDs (80 / 8 = 10)
@@ -48,7 +90,8 @@ void LGPSpectrumBarsEffect::render(plugins::EffectContext& ctx) {
         uint8_t bandIdx = (uint8_t)(dist / LEDS_PER_BAND);
         if (bandIdx > 7) bandIdx = 7;
 
-        float bandEnergy = m_smoothedBands[bandIdx];
+        // Mild perceptual lift makes quieter content visible without blowing peaks.
+        float bandEnergy = powf(clamp01(m_smoothedBands[bandIdx]), 0.65f);
 
         // Position within band (0-1)
         int posInBand = dist % LEDS_PER_BAND;
@@ -57,15 +100,16 @@ void LGPSpectrumBarsEffect::render(plugins::EffectContext& ctx) {
         // Bar visualization: bright if energy > position in band
         float brightness;
         if (normalizedPos < bandEnergy) {
-            brightness = 0.6f + bandEnergy * 0.4f;
+            brightness = 0.55f + bandEnergy * 0.45f + beatAccent;
         } else {
-            brightness = 0.03f;  // Dim background
+            brightness = 0.02f + 0.05f * beatAccent;  // Dim background with subtle beat lift
         }
 
         uint8_t bright = (uint8_t)(brightness * ctx.brightness);
 
         // Color: each band gets different hue (spread across palette)
-        uint8_t hue = ctx.gHue + bandIdx * 28;  // ~224 degrees spread
+        // Fixed offsets per band (no time-based hue sweep).
+        uint8_t hue = (uint8_t)(baseHue + bandIdx * 10);
         CRGB color = ctx.palette.getColor(hue, bright);
 
         SET_CENTER_PAIR(ctx, dist, color);

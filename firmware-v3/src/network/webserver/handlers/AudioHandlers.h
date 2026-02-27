@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file AudioHandlers.h
  * @brief Audio-related HTTP handlers
@@ -11,6 +9,7 @@
 
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
+#include "../../../config/effect_ids.h"
 
 // Forward declarations
 namespace lightwaveos {
@@ -82,16 +81,16 @@ public:
     static void handleMappingsList(AsyncWebServerRequest* request,
                                     lightwaveos::actors::RendererActor* renderer);
     
-    static void handleMappingsGet(AsyncWebServerRequest* request, uint8_t effectId,
+    static void handleMappingsGet(AsyncWebServerRequest* request, EffectId effectId,
                                    lightwaveos::actors::RendererActor* renderer);
-    
-    static void handleMappingsSet(AsyncWebServerRequest* request, uint8_t effectId,
+
+    static void handleMappingsSet(AsyncWebServerRequest* request, EffectId effectId,
                                   uint8_t* data, size_t len,
                                   lightwaveos::actors::RendererActor* renderer);
-    
-    static void handleMappingsDelete(AsyncWebServerRequest* request, uint8_t effectId);
-    
-    static void handleMappingsEnable(AsyncWebServerRequest* request, uint8_t effectId, bool enable);
+
+    static void handleMappingsDelete(AsyncWebServerRequest* request, EffectId effectId);
+
+    static void handleMappingsEnable(AsyncWebServerRequest* request, EffectId effectId, bool enable);
     
     static void handleMappingsStats(AsyncWebServerRequest* request);
 

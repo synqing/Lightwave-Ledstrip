@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file PerlinNoiseTypes.h
  * @brief Shared types for Emotiscope 2.0 Perlin noise port

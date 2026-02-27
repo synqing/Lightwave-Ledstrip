@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPInterferenceScannerEffect.cpp
  * @brief LGP Interference Scanner effect implementation
@@ -33,8 +31,7 @@ bool LGPInterferenceScannerEffect::init(plugins::EffectContext& ctx) {
     }
     m_energyAvg = 0.0f;
     m_energyDelta = 0.0f;
-    m_dominantBin = 0;
-    m_dominantBinSmooth = 0.0f;
+    m_chromaAngle = 0.0f;
     m_bassWavelength = 0.0f;
     m_trebleOverlay = 0.0f;
 
@@ -52,6 +49,7 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
     float intensityNorm = ctx.brightness / 255.0f;
     const bool hasAudio = ctx.audio.available;
     bool newHop = false;
+    const float rawDtEarly = enhancement::getSafeDeltaSeconds(ctx.rawDeltaTimeSeconds);
 
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
@@ -65,17 +63,6 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
             float energyNorm = heavyMid;
             if (energyNorm < 0.0f) energyNorm = 0.0f;
             if (energyNorm > 1.0f) energyNorm = 1.0f;
-
-            // Still track dominant chroma bin for color mapping
-            float maxBinVal = 0.0f;
-            uint8_t dominantBin = 0;
-            for (uint8_t i = 0; i < 12; ++i) {
-                float bin = ctx.audio.controlBus.heavy_chroma[i];  // Use heavy_chroma for stability
-                if (bin > maxBinVal) {
-                    maxBinVal = bin;
-                    dominantBin = i;
-                }
-            }
 
             // =================================================================
             // 64-bin Sub-Bass Wavelength Modulation (bins 0-5 = 110-155 Hz)
@@ -91,7 +78,7 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
             if (bassNorm > m_bassWavelength) {
                 m_bassWavelength = bassNorm;  // Instant attack
             } else {
-                m_bassWavelength *= 0.85f;    // ~100ms decay
+                m_bassWavelength = effects::chroma::dtDecay(m_bassWavelength, 0.85f, rawDtEarly);    // dt-corrected ~100ms decay
             }
 
             // =================================================================
@@ -113,27 +100,27 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
             m_energyAvg = m_chromaEnergySum / CHROMA_HISTORY;
             m_energyDelta = energyNorm - m_energyAvg;
             if (m_energyDelta < 0.0f) m_energyDelta = 0.0f;
-            m_dominantBin = dominantBin;
         }
     } else
 #endif
     {
-        m_energyAvg *= 0.98f;
+        // dt-corrected decay when audio unavailable (matches Enhanced version)
+        float dtFallback = enhancement::getSafeDeltaSeconds(ctx.rawDeltaTimeSeconds);
+        m_energyAvg *= powf(0.98f, dtFallback * 60.0f);
         m_energyDelta = 0.0f;
     }
 
+    float rawDt = enhancement::getSafeDeltaSeconds(ctx.rawDeltaTimeSeconds);
     float dt = enhancement::getSafeDeltaSeconds(ctx.deltaTimeSeconds);
 
     // True exponential smoothing with AsymmetricFollower (frame-rate independent)
     float moodNorm = ctx.mood / 255.0f;  // 0=reactive, 1=smooth
-    float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, dt, moodNorm);
-    float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, dt, moodNorm);
+    float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, rawDt, moodNorm);
+    float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, rawDt, moodNorm);
 
-    // Dominant bin smoothing
-    float alphaBin = 1.0f - expf(-dt / 0.25f);  // True exponential, 250ms time constant
-    m_dominantBinSmooth += (m_dominantBin - m_dominantBinSmooth) * alphaBin;
-    if (m_dominantBinSmooth < 0.0f) m_dominantBinSmooth = 0.0f;
-    if (m_dominantBinSmooth > 11.0f) m_dominantBinSmooth = 11.0f;
+    // Circular chroma hue (replaces argmax + linear EMA to eliminate bin-flip rainbow sweeps)
+    uint8_t chromaHue = effects::chroma::circularChromaHueSmoothed(
+        ctx.audio.controlBus.heavy_chroma, m_chromaAngle, rawDt, 0.20f);
 
     // Speed modulation with Spring physics (natural momentum, no jitter)
     // Target range: 0.6 to 1.4 (2.3x variation max, not 10x)
@@ -142,7 +129,7 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
     if (speedTarget > 1.4f) speedTarget = 1.4f;
 
     // Spring physics for speed modulation (replaces linear slew limiting)
-    float smoothedSpeed = m_speedSpring.update(speedTarget, dt);
+    float smoothedSpeed = m_speedSpring.update(speedTarget, rawDt);
     if (smoothedSpeed > 1.4f) smoothedSpeed = 1.4f;  // Hard clamp
     if (smoothedSpeed < 0.3f) smoothedSpeed = 0.3f;  // Prevent stalling
 
@@ -158,7 +145,7 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
     VALIDATION_INIT(16);  // Effect ID 16
     VALIDATION_PHASE(m_scanPhase, phaseDelta);
     VALIDATION_SPEED(rawSpeedScale, smoothedSpeed);
-    VALIDATION_AUDIO(m_dominantBinSmooth, energyAvgSmooth, energyDeltaSmooth);
+    VALIDATION_AUDIO(m_chromaAngle, energyAvgSmooth, energyDeltaSmooth);
     VALIDATION_REVERSAL_CHECK(m_prevPhaseDelta, phaseDelta);
     VALIDATION_SUBMIT(::lightwaveos::validation::g_validationRing);
     m_prevPhaseDelta = phaseDelta;
@@ -191,9 +178,11 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
         // =====================================================================
         // 64-bin TREBLE SHIMMER: High frequencies (bins 48-63) add sparkle
         // Hi-hat and cymbal energy creates high-frequency brightness overlay.
+        // FIXED: Reduced phase multiplier from 4.0x to 1.6x to match wave velocities
+        // (was 10x faster than main waves, now only 1.3x faster for visual coherence)
         // =====================================================================
         if (m_trebleOverlay > 0.1f) {
-            float shimmer = m_trebleOverlay * sinf(dist * 1.5f + m_scanPhase * 4.0f);
+            float shimmer = m_trebleOverlay * sinf(dist * 1.5f + m_scanPhase * 1.6f);
             audioGain += shimmer * 0.35f;
         }
 
@@ -212,7 +201,7 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
 
         uint8_t brightness = (uint8_t)(pattern * 255.0f * intensityNorm);
         uint8_t paletteIndex = (uint8_t)(dist * 2.0f + pattern * 50.0f);
-        uint8_t baseHue = (uint8_t)(ctx.gHue + (uint8_t)(m_dominantBinSmooth * (255.0f / 12.0f)));
+        uint8_t baseHue = (uint8_t)(ctx.gHue + chromaHue);
 
         ctx.leds[i] = ctx.palette.getColor((uint8_t)(baseHue + paletteIndex), brightness);
         if (i + STRIP_LENGTH < ctx.ledCount) {

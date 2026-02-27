@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file StaticAssetRoutes.cpp
  * @brief User-facing launcher page and fallback route registration
@@ -86,7 +84,9 @@ void StaticAssetRoutes::registerRoutes(HttpRouteRegistry& registry) {
             ssid = "WiFi";
         }
 
-        char buf[3072];
+        // Static buffer - safe for low-concurrency root page
+        // Note: Not thread-safe if concurrent requests hit this route
+        static char buf[3072];
         snprintf(buf, sizeof(buf), LAUNCHER_HTML,
                  ssid.c_str(),                     // WiFi network name (%s)
                  FIRMWARE_VERSION_STRING,           // version in footer (%s)

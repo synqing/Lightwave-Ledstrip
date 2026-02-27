@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPMeshNetworkEffect.cpp
  * @brief LGP Mesh Network effect implementation
@@ -27,10 +25,11 @@ bool LGPMeshNetworkEffect::init(plugins::EffectContext& ctx) {
 
 void LGPMeshNetworkEffect::render(plugins::EffectContext& ctx) {
     // CENTER ORIGIN - Interconnected node patterns like neural networks
+    float dt = ctx.getSafeDeltaSeconds();
     float speedNorm = ctx.speed / 50.0f;
     float intensityNorm = ctx.brightness / 255.0f;
 
-    m_phase += speedNorm * 0.02f;
+    m_phase += speedNorm * 0.02f * 60.0f * dt;  // dt-corrected
 
     const int nodeCount = 12;
 
@@ -51,7 +50,7 @@ void LGPMeshNetworkEffect::render(plugins::EffectContext& ctx) {
                                                                       nodeBright);
                 }
             } else if (distToNode < 20.0f) {
-                // Connections to nearby nodes
+                // Connections to nearby nodes (sin(k*dist + phase) = INWARD propagation - intentional design)
                 float connection = sinf(distToNode * 0.5f + m_phase + n);
                 connection *= expf(-distToNode * 0.1f);
 

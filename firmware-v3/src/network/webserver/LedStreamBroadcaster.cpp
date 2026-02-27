@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LedStreamBroadcaster.cpp
  * @brief LED stream broadcaster implementation
@@ -101,7 +99,14 @@ size_t LedStreamBroadcaster::broadcast(const CRGB* leds) {
             }
             continue;
         }
-        if (!c->canSend()) continue;  // Back-pressure: skip frame if queue full
+        // Back-pressure:
+        // AsyncWebSocket queues outgoing WS frames in internal heap. Avoid queue growth by
+        // skipping frames when there is already pending data for this client.
+        static constexpr size_t MAX_QUEUE_LEN_BEFORE_DROP = 1;
+        if (c->queueIsFull() || c->queueLen() > MAX_QUEUE_LEN_BEFORE_DROP) {
+            continue;
+        }
+        if (!c->canSend()) continue;
         c->binary(m_frameBuffer, LedStreamConfig::FRAME_SIZE);
         sentCount++;
     }
@@ -183,4 +188,3 @@ uint32_t LedStreamBroadcaster::getTime() const {
 } // namespace webserver
 } // namespace network
 } // namespace lightwaveos
-

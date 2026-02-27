@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPAudioTestEffect.h
  * @brief Audio-reactive test effect demonstrating Phase 2 audio integration
@@ -20,6 +18,7 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -27,6 +26,8 @@ namespace ieffect {
 
 class LGPAudioTestEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_AUDIO_TEST;
+
     LGPAudioTestEffect() = default;
     ~LGPAudioTestEffect() override = default;
 

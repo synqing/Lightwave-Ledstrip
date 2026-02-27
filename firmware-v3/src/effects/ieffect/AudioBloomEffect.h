@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file AudioBloomEffect.h
  * @brief Sensory Bridge-style scrolling bloom effect
@@ -19,6 +17,8 @@
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
+#include <esp_heap_caps.h>
+#include "../../config/effect_ids.h"
 #endif
 
 namespace lightwaveos {
@@ -30,6 +30,8 @@ constexpr uint16_t HALF_LENGTH = 80;
 
 class AudioBloomEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_AUDIO_BLOOM;
+
     AudioBloomEffect() = default;
     ~AudioBloomEffect() override = default;
 
@@ -39,11 +41,17 @@ public:
     const plugins::EffectMetadata& getMetadata() const override;
 
 private:
-    // Radial buffer (index 0 = centre, grows outward to HALF_LENGTH-1)
-    CRGB m_radial[HALF_LENGTH];
-    CRGB m_radialAux[HALF_LENGTH];  // Aux buffer for alternate frames
-    CRGB m_radialTemp[HALF_LENGTH];  // Temp buffer for post-processing
-    
+#ifndef NATIVE_BUILD
+    struct AudioBloomPsram {
+        CRGB radial[HALF_LENGTH];
+        CRGB radialAux[HALF_LENGTH];
+        CRGB radialTemp[HALF_LENGTH];
+    };
+    AudioBloomPsram* m_ps = nullptr;
+#else
+    void* m_ps = nullptr;
+#endif
+
     uint32_t m_iter = 0;  // Frame counter for alternate frame logic
     uint32_t m_lastHopSeq = 0;  // Track hop sequence for updates
     float m_scrollPhase = 0.0f;  // Fractional scroll accumulator

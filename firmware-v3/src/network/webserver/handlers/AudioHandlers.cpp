@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file AudioHandlers.cpp
  * @brief Audio handlers implementation
@@ -10,6 +8,7 @@
 #include "../../RequestValidator.h"
 #include "../../../core/actors/ActorSystem.h"
 #include "../../../core/actors/RendererActor.h"
+#include "../../../config/features.h"
 #include <cstring>
 
 #if FEATURE_AUDIO_SYNC
@@ -18,6 +17,7 @@
 #include "../../../core/persistence/AudioTuningManager.h"
 #include "../../../audio/AudioMappingRegistry.h"
 #include "../../../audio/contracts/ControlBus.h"
+#include "../../../audio/contracts/SnapshotBuffer.h"
 #endif
 
 #if FEATURE_AUDIO_BENCHMARK
@@ -47,6 +47,47 @@ void AudioHandlers::handleParametersGet(AsyncWebServerRequest* request,
         return;
     }
 
+#if FEATURE_AUDIO_BACKEND_ESV11
+    audio::ControlBusFrame frame{};
+    uint32_t seq = audio->getControlBusBuffer().ReadLatest(frame);
+    audio::AudioContractTuning contract = renderer ? renderer->getAudioContractTuning()
+                                                    : audio::clampAudioContractTuning(audio::AudioContractTuning{});
+
+    sendSuccessResponse(request, [&](JsonObject& data) {
+        data["backend"] = "esv11";
+        data["seq"] = seq;
+
+        JsonObject contractObj = data["contract"].to<JsonObject>();
+        contractObj["audioStalenessMs"] = contract.audioStalenessMs;
+        contractObj["bpmMin"] = contract.bpmMin;
+        contractObj["bpmMax"] = contract.bpmMax;
+        contractObj["bpmTau"] = contract.bpmTau;
+        contractObj["confidenceTau"] = contract.confidenceTau;
+        contractObj["phaseCorrectionGain"] = contract.phaseCorrectionGain;
+        contractObj["barCorrectionGain"] = contract.barCorrectionGain;
+        contractObj["beatsPerBar"] = contract.beatsPerBar;
+        contractObj["beatUnit"] = contract.beatUnit;
+
+        JsonObject latest = data["latest"].to<JsonObject>();
+        latest["rms"] = frame.rms;
+        latest["flux"] = frame.flux;
+        latest["bpm"] = frame.es_bpm;
+        latest["tempoConfidence"] = frame.es_tempo_confidence;
+        latest["phase01AtAudioT"] = frame.es_phase01_at_audio_t;
+        latest["beatTick"] = frame.es_beat_tick;
+        latest["downbeatTick"] = frame.es_downbeat_tick;
+        latest["beatInBar"] = frame.es_beat_in_bar;
+        latest["beatStrength"] = frame.es_beat_strength;
+
+        JsonObject caps = data["capabilities"].to<JsonObject>();
+        caps["sampleRate"] = frame.t.sample_rate_hz;
+        caps["hopSize"] = 64 * 4; // ES publish cadence: 4 chunks per hop
+        caps["bins64"] = audio::ControlBusFrame::BINS_64_COUNT;
+        caps["bandCount"] = audio::CONTROLBUS_NUM_BANDS;
+        caps["chromaCount"] = audio::CONTROLBUS_NUM_CHROMA;
+        caps["waveformPoints"] = audio::CONTROLBUS_WAVEFORM_N;
+    });
+#else
     audio::AudioPipelineTuning pipeline = audio->getPipelineTuning();
     audio::AudioDspState state = audio->getDspState();
     audio::AudioContractTuning contract = renderer ? renderer->getAudioContractTuning()
@@ -142,6 +183,7 @@ void AudioHandlers::handleParametersGet(AsyncWebServerRequest* request,
         caps["chromaCount"] = audio::CONTROLBUS_NUM_CHROMA;
         caps["waveformPoints"] = audio::CONTROLBUS_WAVEFORM_N;
     });
+#endif
 }
 
 void AudioHandlers::handleParametersSet(AsyncWebServerRequest* request,
@@ -155,6 +197,43 @@ void AudioHandlers::handleParametersSet(AsyncWebServerRequest* request,
         return;
     }
 
+#if FEATURE_AUDIO_BACKEND_ESV11
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, data, len);
+    if (error) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::INVALID_JSON, "Invalid JSON payload");
+        return;
+    }
+
+    if (renderer == nullptr) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::SYSTEM_NOT_READY, "Renderer not available");
+        return;
+    }
+
+    if (!doc.containsKey("contract")) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::MISSING_FIELD, "Missing 'contract' object");
+        return;
+    }
+
+    audio::AudioContractTuning contract = renderer->getAudioContractTuning();
+    JsonObject c = doc["contract"].as<JsonObject>();
+    if (c.containsKey("audioStalenessMs")) contract.audioStalenessMs = c["audioStalenessMs"].as<uint16_t>();
+    if (c.containsKey("bpmMin")) contract.bpmMin = c["bpmMin"].as<float>();
+    if (c.containsKey("bpmMax")) contract.bpmMax = c["bpmMax"].as<float>();
+    if (c.containsKey("bpmTau")) contract.bpmTau = c["bpmTau"].as<float>();
+    if (c.containsKey("confidenceTau")) contract.confidenceTau = c["confidenceTau"].as<float>();
+    if (c.containsKey("phaseCorrectionGain")) contract.phaseCorrectionGain = c["phaseCorrectionGain"].as<float>();
+    if (c.containsKey("barCorrectionGain")) contract.barCorrectionGain = c["barCorrectionGain"].as<float>();
+    if (c.containsKey("beatsPerBar")) contract.beatsPerBar = c["beatsPerBar"].as<uint8_t>();
+    if (c.containsKey("beatUnit")) contract.beatUnit = c["beatUnit"].as<uint8_t>();
+
+    renderer->setAudioContractTuning(contract);
+    sendSuccessResponse(request);
+    return;
+#else
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, data, len);
     if (error) {
@@ -305,6 +384,7 @@ void AudioHandlers::handleParametersSet(AsyncWebServerRequest* request,
         if (updatedContract) updated.add("contract");
         if (resetState) updated.add("state");
     });
+#endif
 }
 
 void AudioHandlers::handleControl(AsyncWebServerRequest* request,
@@ -528,6 +608,16 @@ void AudioHandlers::handlePresetSave(AsyncWebServerRequest* request,
                                       RendererActor* renderer) {
     using namespace persistence;
 
+#if FEATURE_AUDIO_BACKEND_ESV11
+    (void)data;
+    (void)len;
+    (void)actorSystem;
+    (void)renderer;
+    sendErrorResponse(request, HttpStatus::NOT_IMPLEMENTED,
+                      ErrorCodes::FEATURE_DISABLED,
+                      "Audio preset save (pipeline tuning) is not available in ESV11 backend builds");
+    return;
+#else
     JsonDocument doc;
     if (deserializeJson(doc, data, len)) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
@@ -563,6 +653,7 @@ void AudioHandlers::handlePresetSave(AsyncWebServerRequest* request,
         d["name"] = name;
         d["message"] = "Preset saved";
     });
+#endif
 }
 
 void AudioHandlers::handlePresetApply(AsyncWebServerRequest* request, uint8_t presetId,
@@ -571,6 +662,15 @@ void AudioHandlers::handlePresetApply(AsyncWebServerRequest* request, uint8_t pr
     using namespace persistence;
     auto& mgr = AudioTuningManager::instance();
 
+#if FEATURE_AUDIO_BACKEND_ESV11
+    (void)presetId;
+    (void)actorSystem;
+    (void)renderer;
+    sendErrorResponse(request, HttpStatus::NOT_IMPLEMENTED,
+                      ErrorCodes::FEATURE_DISABLED,
+                      "Audio preset apply (pipeline tuning) is not available in ESV11 backend builds");
+    return;
+#else
     if (presetId >= AudioTuningManager::MAX_PRESETS) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
                           ErrorCodes::OUT_OF_RANGE, "Preset ID must be 0-9", "presetId");
@@ -605,6 +705,7 @@ void AudioHandlers::handlePresetApply(AsyncWebServerRequest* request, uint8_t pr
         d["name"] = name;
         d["message"] = "Preset applied";
     });
+#endif
 }
 
 void AudioHandlers::handlePresetDelete(AsyncWebServerRequest* request, uint8_t presetId) {
@@ -735,13 +836,14 @@ void AudioHandlers::handleMappingsList(AsyncWebServerRequest* request,
 
         JsonArray effects = data["effects"].to<JsonArray>();
 
-        uint8_t effectCount = renderer->getEffectCount();
-        for (uint8_t i = 0; i < effectCount && i < AudioMappingRegistry::MAX_EFFECTS; i++) {
-            const EffectAudioMapping* mapping = registry.getMapping(i);
+        uint16_t effectCount = renderer->getEffectCount();
+        for (uint16_t i = 0; i < effectCount; i++) {
+            EffectId eid = renderer->getEffectIdAt(i);
+            const EffectAudioMapping* mapping = registry.getMapping(eid);
             if (mapping && mapping->globalEnabled && mapping->mappingCount > 0) {
                 JsonObject e = effects.add<JsonObject>();
-                e["id"] = i;
-                e["name"] = renderer->getEffectName(i);
+                e["id"] = eid;
+                e["name"] = renderer->getEffectName(eid);
                 e["mappingCount"] = mapping->mappingCount;
                 e["enabled"] = mapping->globalEnabled;
             }
@@ -749,15 +851,15 @@ void AudioHandlers::handleMappingsList(AsyncWebServerRequest* request,
     }, 2048);
 }
 
-void AudioHandlers::handleMappingsGet(AsyncWebServerRequest* request, uint8_t effectId,
+void AudioHandlers::handleMappingsGet(AsyncWebServerRequest* request, EffectId effectId,
                                        RendererActor* renderer) {
     using namespace audio;
     auto& registry = AudioMappingRegistry::instance();
 
-    if (effectId >= AudioMappingRegistry::MAX_EFFECTS ||
-        effectId >= renderer->getEffectCount()) {
+    // EffectId is a stable namespaced uint16 (0xFFSS). Do NOT treat it as an array index.
+    if (effectId == INVALID_EFFECT_ID || !renderer->isEffectRegistered(effectId)) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "id");
+                          ErrorCodes::OUT_OF_RANGE, "Effect ID not registered", "id");
         return;
     }
 
@@ -788,6 +890,7 @@ void AudioHandlers::handleMappingsGet(AsyncWebServerRequest* request, uint8_t ef
             mapping["outputMin"] = m.outputMin;
             mapping["outputMax"] = m.outputMax;
             mapping["smoothingAlpha"] = m.smoothingAlpha;
+            mapping["tauSeconds"] = m.tauSeconds;
             mapping["gain"] = m.gain;
             mapping["enabled"] = m.enabled;
             mapping["additive"] = m.additive;
@@ -795,16 +898,16 @@ void AudioHandlers::handleMappingsGet(AsyncWebServerRequest* request, uint8_t ef
     }, 2048);
 }
 
-void AudioHandlers::handleMappingsSet(AsyncWebServerRequest* request, uint8_t effectId,
+void AudioHandlers::handleMappingsSet(AsyncWebServerRequest* request, EffectId effectId,
                                        uint8_t* data, size_t len,
                                        RendererActor* renderer) {
     using namespace audio;
     auto& registry = AudioMappingRegistry::instance();
 
-    if (effectId >= AudioMappingRegistry::MAX_EFFECTS ||
-        effectId >= renderer->getEffectCount()) {
+    // EffectId is a stable namespaced uint16 (0xFFSS). Do NOT treat it as an array index.
+    if (effectId == INVALID_EFFECT_ID || !renderer->isEffectRegistered(effectId)) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "id");
+                          ErrorCodes::OUT_OF_RANGE, "Effect ID not registered", "id");
         return;
     }
 
@@ -838,6 +941,7 @@ void AudioHandlers::handleMappingsSet(AsyncWebServerRequest* request, uint8_t ef
             mapping.outputMin = m["outputMin"] | 0.0f;
             mapping.outputMax = m["outputMax"] | 255.0f;
             mapping.smoothingAlpha = m["smoothingAlpha"] | 0.3f;
+            mapping.tauSeconds = m["tauSeconds"] | 0.15f;
             mapping.gain = m["gain"] | 1.0f;
             mapping.enabled = m["enabled"] | true;
             mapping.additive = m["additive"] | false;
@@ -865,13 +969,14 @@ void AudioHandlers::handleMappingsSet(AsyncWebServerRequest* request, uint8_t ef
     });
 }
 
-void AudioHandlers::handleMappingsDelete(AsyncWebServerRequest* request, uint8_t effectId) {
+void AudioHandlers::handleMappingsDelete(AsyncWebServerRequest* request, EffectId effectId) {
     using namespace audio;
     auto& registry = AudioMappingRegistry::instance();
 
-    if (effectId >= AudioMappingRegistry::MAX_EFFECTS) {
+    // EffectId is a stable namespaced uint16 (0xFFSS). Do NOT treat it as an array index.
+    if (effectId == INVALID_EFFECT_ID) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "id");
+                          ErrorCodes::OUT_OF_RANGE, "Invalid effectId", "id");
         return;
     }
 
@@ -887,13 +992,14 @@ void AudioHandlers::handleMappingsDelete(AsyncWebServerRequest* request, uint8_t
     });
 }
 
-void AudioHandlers::handleMappingsEnable(AsyncWebServerRequest* request, uint8_t effectId, bool enable) {
+void AudioHandlers::handleMappingsEnable(AsyncWebServerRequest* request, EffectId effectId, bool enable) {
     using namespace audio;
     auto& registry = AudioMappingRegistry::instance();
 
-    if (effectId >= AudioMappingRegistry::MAX_EFFECTS) {
+    // EffectId is a stable namespaced uint16 (0xFFSS). Do NOT treat it as an array index.
+    if (effectId == INVALID_EFFECT_ID) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "id");
+                          ErrorCodes::OUT_OF_RANGE, "Invalid effectId", "id");
         return;
     }
 
@@ -927,6 +1033,13 @@ void AudioHandlers::handleZoneAGCGet(AsyncWebServerRequest* request,
         return;
     }
 
+#if FEATURE_AUDIO_BACKEND_ESV11
+    (void)audio;
+    sendErrorResponse(request, HttpStatus::NOT_IMPLEMENTED,
+                      ErrorCodes::FEATURE_DISABLED,
+                      "Zone AGC is not available in ESV11 backend builds");
+    return;
+#else
     const audio::ControlBus& controlBus = audio->getControlBusRef();
 
     sendSuccessResponse(request, [&controlBus](JsonObject& data) {
@@ -941,6 +1054,7 @@ void AudioHandlers::handleZoneAGCGet(AsyncWebServerRequest* request,
             zone["maxMag"] = controlBus.getZoneMaxMag(z);
         }
     });
+#endif
 }
 
 void AudioHandlers::handleZoneAGCSet(AsyncWebServerRequest* request,
@@ -953,6 +1067,15 @@ void AudioHandlers::handleZoneAGCSet(AsyncWebServerRequest* request,
         return;
     }
 
+#if FEATURE_AUDIO_BACKEND_ESV11
+    (void)data;
+    (void)len;
+    (void)audio;
+    sendErrorResponse(request, HttpStatus::NOT_IMPLEMENTED,
+                      ErrorCodes::FEATURE_DISABLED,
+                      "Zone AGC is not available in ESV11 backend builds");
+    return;
+#else
     JsonDocument doc;
     if (deserializeJson(doc, data, len)) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
@@ -988,6 +1111,7 @@ void AudioHandlers::handleZoneAGCSet(AsyncWebServerRequest* request,
     sendSuccessResponse(request, [updated](JsonObject& resp) {
         resp["updated"] = updated;
     });
+#endif
 }
 
 void AudioHandlers::handleSpikeDetectionGet(AsyncWebServerRequest* request,
@@ -999,6 +1123,13 @@ void AudioHandlers::handleSpikeDetectionGet(AsyncWebServerRequest* request,
         return;
     }
 
+#if FEATURE_AUDIO_BACKEND_ESV11
+    (void)audio;
+    sendErrorResponse(request, HttpStatus::NOT_IMPLEMENTED,
+                      ErrorCodes::FEATURE_DISABLED,
+                      "Spike detection is not available in ESV11 backend builds");
+    return;
+#else
     const audio::ControlBus& controlBus = audio->getControlBusRef();
     const audio::SpikeDetectionStats& stats = controlBus.getSpikeStats();
 
@@ -1014,6 +1145,7 @@ void AudioHandlers::handleSpikeDetectionGet(AsyncWebServerRequest* request,
         statsObj["avgSpikesPerFrame"] = stats.avgSpikesPerFrame;
         statsObj["avgCorrectionMagnitude"] = stats.avgCorrectionMagnitude;
     });
+#endif
 }
 
 void AudioHandlers::handleSpikeDetectionReset(AsyncWebServerRequest* request,
@@ -1025,8 +1157,16 @@ void AudioHandlers::handleSpikeDetectionReset(AsyncWebServerRequest* request,
         return;
     }
 
+#if FEATURE_AUDIO_BACKEND_ESV11
+    (void)audio;
+    sendErrorResponse(request, HttpStatus::NOT_IMPLEMENTED,
+                      ErrorCodes::FEATURE_DISABLED,
+                      "Spike detection is not available in ESV11 backend builds");
+    return;
+#else
     audio->getControlBusMut().resetSpikeStats();
     sendSuccessResponse(request);
+#endif
 }
 
 void AudioHandlers::handleMicGainGet(AsyncWebServerRequest* request,
@@ -1125,6 +1265,13 @@ void AudioHandlers::handleCalibrateStatus(AsyncWebServerRequest* request,
         return;
     }
 
+#if FEATURE_AUDIO_BACKEND_ESV11
+    (void)audio;
+    sendErrorResponse(request, HttpStatus::NOT_IMPLEMENTED,
+                      ErrorCodes::FEATURE_DISABLED,
+                      "Noise calibration is not available in ESV11 backend builds");
+    return;
+#else
     const auto& calState = audio->getNoiseCalibrationState();
     const auto& result = audio->getCalibrationResult();
 
@@ -1178,6 +1325,7 @@ void AudioHandlers::handleCalibrateStatus(AsyncWebServerRequest* request,
             }
         }
     });
+#endif
 }
 
 void AudioHandlers::handleCalibrateStart(AsyncWebServerRequest* request,
@@ -1190,6 +1338,15 @@ void AudioHandlers::handleCalibrateStart(AsyncWebServerRequest* request,
         return;
     }
 
+#if FEATURE_AUDIO_BACKEND_ESV11
+    (void)data;
+    (void)len;
+    (void)audio;
+    sendErrorResponse(request, HttpStatus::NOT_IMPLEMENTED,
+                      ErrorCodes::FEATURE_DISABLED,
+                      "Noise calibration is not available in ESV11 backend builds");
+    return;
+#else
     // Parse optional parameters
     uint32_t durationMs = 3000;
     float safetyMultiplier = 1.2f;
@@ -1224,6 +1381,7 @@ void AudioHandlers::handleCalibrateStart(AsyncWebServerRequest* request,
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
                           ErrorCodes::BUSY, "Calibration already in progress");
     }
+#endif
 }
 
 void AudioHandlers::handleCalibrateCancel(AsyncWebServerRequest* request,
@@ -1235,8 +1393,16 @@ void AudioHandlers::handleCalibrateCancel(AsyncWebServerRequest* request,
         return;
     }
 
+#if FEATURE_AUDIO_BACKEND_ESV11
+    (void)audio;
+    sendErrorResponse(request, HttpStatus::NOT_IMPLEMENTED,
+                      ErrorCodes::FEATURE_DISABLED,
+                      "Noise calibration is not available in ESV11 backend builds");
+    return;
+#else
     audio->cancelNoiseCalibration();
     sendSuccessResponse(request);
+#endif
 }
 
 void AudioHandlers::handleCalibrateApply(AsyncWebServerRequest* request,
@@ -1248,6 +1414,13 @@ void AudioHandlers::handleCalibrateApply(AsyncWebServerRequest* request,
         return;
     }
 
+#if FEATURE_AUDIO_BACKEND_ESV11
+    (void)audio;
+    sendErrorResponse(request, HttpStatus::NOT_IMPLEMENTED,
+                      ErrorCodes::FEATURE_DISABLED,
+                      "Noise calibration is not available in ESV11 backend builds");
+    return;
+#else
     bool applied = audio->applyCalibrationResults();
     if (applied) {
         const auto& result = audio->getCalibrationResult();
@@ -1267,6 +1440,7 @@ void AudioHandlers::handleCalibrateApply(AsyncWebServerRequest* request,
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
                           ErrorCodes::INVALID_VALUE, "No valid calibration results to apply");
     }
+#endif
 }
 
 #if FEATURE_AUDIO_BENCHMARK
@@ -1408,6 +1582,15 @@ void AudioHandlers::handleAGCToggle(AsyncWebServerRequest* request,
         return;
     }
 
+#if FEATURE_AUDIO_BACKEND_ESV11
+    (void)data;
+    (void)len;
+    (void)audio;
+    sendErrorResponse(request, HttpStatus::NOT_IMPLEMENTED,
+                      ErrorCodes::FEATURE_DISABLED,
+                      "AGC control is not available in ESV11 backend builds");
+    return;
+#else
     JsonDocument doc;
     if (deserializeJson(doc, data, len)) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
@@ -1430,6 +1613,7 @@ void AudioHandlers::handleAGCToggle(AsyncWebServerRequest* request,
     sendSuccessResponse(request, [enabled](JsonObject& resp) {
         resp["agcEnabled"] = enabled;
     });
+#endif
 }
 
 void AudioHandlers::handleFftGet(AsyncWebServerRequest* request,
@@ -1441,26 +1625,33 @@ void AudioHandlers::handleFftGet(AsyncWebServerRequest* request,
         return;
     }
 
-    // Get DSP state and control bus for band/chroma data
-    const audio::AudioDspState state = audio->getDspState();
-    const audio::ControlBusFrame frame = audio->getControlBusRef().GetFrame();
+    audio::ControlBusFrame frame{};
+    uint32_t seq = audio->getControlBusBuffer().ReadLatest(frame);
 
-    sendSuccessResponse(request, [&state, &frame](JsonObject& data) {
-        data["rmsRaw"] = state.rmsRaw;
-        data["rmsMapped"] = state.rmsMapped;
-        data["rmsPreGain"] = state.rmsPreGain;
-        data["agcGain"] = state.agcGain;
+    sendSuccessResponse(request, [&frame, seq](JsonObject& data) {
+        data["backend"] = FEATURE_AUDIO_BACKEND_ESV11 ? "esv11" : "lwls";
+        data["seq"] = seq;
+        data["rms"] = frame.rms;
+        data["flux"] = frame.flux;
 
-        // Get smoothed band energies from control bus frame
         JsonArray bands = data["bands"].to<JsonArray>();
         for (int i = 0; i < audio::CONTROLBUS_NUM_BANDS; ++i) {
             bands.add(frame.bands[i]);
         }
 
-        // Get chroma energies from control bus frame
         JsonArray chroma = data["chroma"].to<JsonArray>();
         for (int i = 0; i < audio::CONTROLBUS_NUM_CHROMA; ++i) {
             chroma.add(frame.chroma[i]);
+        }
+
+        JsonArray bins64 = data["bins64"].to<JsonArray>();
+        for (int i = 0; i < audio::ControlBusFrame::BINS_64_COUNT; ++i) {
+            bins64.add(frame.bins64[i]);
+        }
+
+        JsonArray bins64Adaptive = data["bins64Adaptive"].to<JsonArray>();
+        for (int i = 0; i < audio::ControlBusFrame::BINS_64_COUNT; ++i) {
+            bins64Adaptive.add(frame.bins64Adaptive[i]);
         }
     });
 }
@@ -1544,23 +1735,23 @@ void AudioHandlers::handleMappingsList(AsyncWebServerRequest* request, RendererA
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
 
-void AudioHandlers::handleMappingsGet(AsyncWebServerRequest* request, uint8_t, RendererActor*) {
+void AudioHandlers::handleMappingsGet(AsyncWebServerRequest* request, EffectId, RendererActor*) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
 
-void AudioHandlers::handleMappingsSet(AsyncWebServerRequest* request, uint8_t,
+void AudioHandlers::handleMappingsSet(AsyncWebServerRequest* request, EffectId,
                                         uint8_t*, size_t, RendererActor*) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
 
-void AudioHandlers::handleMappingsDelete(AsyncWebServerRequest* request, uint8_t) {
+void AudioHandlers::handleMappingsDelete(AsyncWebServerRequest* request, EffectId) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
 
-void AudioHandlers::handleMappingsEnable(AsyncWebServerRequest* request, uint8_t, bool) {
+void AudioHandlers::handleMappingsEnable(AsyncWebServerRequest* request, EffectId, bool) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }

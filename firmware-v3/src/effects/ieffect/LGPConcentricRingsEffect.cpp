@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPConcentricRingsEffect.cpp
  * @brief LGP Concentric Rings effect implementation
@@ -27,10 +25,11 @@ bool LGPConcentricRingsEffect::init(plugins::EffectContext& ctx) {
 
 void LGPConcentricRingsEffect::render(plugins::EffectContext& ctx) {
     // CENTER ORIGIN - Radial standing waves create ring patterns
+    float dt = ctx.getSafeDeltaSeconds();
     float speedNorm = ctx.speed / 50.0f;
     float intensityNorm = ctx.brightness / 255.0f;
 
-    m_phase += speedNorm * 0.1f;
+    m_phase += speedNorm * 0.1f * 60.0f * dt;  // dt-corrected
 
     const float ringCount = 10.0f;
 
@@ -38,7 +37,7 @@ void LGPConcentricRingsEffect::render(plugins::EffectContext& ctx) {
         float distFromCenter = (float)centerPairDistance((uint16_t)i);
         float normalizedDist = distFromCenter / (float)HALF_LENGTH;
 
-        // Bessel function-like
+        // Bessel function-like (sin(k*dist + phase) = INWARD motion - intentional design)
         float bessel = sinf(distFromCenter * ringCount * 0.2f + m_phase);
         bessel *= 1.0f / sqrtf(normalizedDist + 0.1f);
 

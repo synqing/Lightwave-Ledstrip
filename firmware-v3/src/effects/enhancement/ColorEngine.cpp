@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file ColorEngine.cpp
  * @brief Implementation of advanced color manipulation engine

@@ -1,11 +1,10 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file RippleEnhancedEffect.cpp
  * @brief Ripple Enhanced effect - Enhanced version with improved thresholds and snare triggers
  */
 
 #include "RippleEnhancedEffect.h"
+#include "ChromaUtils.h"
 #include "../CoreEffects.h"
 #include "../enhancement/SmoothingEngine.h"
 #include "../../config/features.h"
@@ -13,13 +12,17 @@
 #include <cmath>
 #include <cstring>
 
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#endif
+
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
 RippleEnhancedEffect::RippleEnhancedEffect()
+    : m_ps(nullptr)
 {
-    // Initialize all ripples as inactive
     for (uint8_t i = 0; i < MAX_RIPPLES; i++) {
         m_ripples[i].active = false;
         m_ripples[i].radius = 0;
@@ -27,12 +30,10 @@ RippleEnhancedEffect::RippleEnhancedEffect()
         m_ripples[i].hue = 0;
         m_ripples[i].intensity = 255;
     }
-    memset(m_radial, 0, sizeof(m_radial));
-    memset(m_radialAux, 0, sizeof(m_radialAux));
 }
 
 bool RippleEnhancedEffect::init(plugins::EffectContext& ctx) {
-    // Reset all ripples
+    (void)ctx;
     for (uint8_t i = 0; i < MAX_RIPPLES; i++) {
         m_ripples[i].active = false;
         m_ripples[i].radius = 0;
@@ -48,16 +49,20 @@ bool RippleEnhancedEffect::init(plugins::EffectContext& ctx) {
     }
     m_lastBeatState = false;
     m_lastDownbeatState = false;
-    memset(m_radial, 0, sizeof(m_radial));
-    memset(m_radialAux, 0, sizeof(m_radialAux));
-    // Initialize smoothing followers
+#ifndef NATIVE_BUILD
+    if (!m_ps) {
+        m_ps = static_cast<RippleEnhancedPsram*>(
+            heap_caps_malloc(sizeof(RippleEnhancedPsram), MALLOC_CAP_SPIRAM));
+        if (!m_ps) return false;
+    }
+    memset(m_ps, 0, sizeof(RippleEnhancedPsram));
+    for (uint8_t i = 0; i < 12; i++) {
+        m_ps->chromaFollowers[i].reset(0.0f);
+    }
+#endif
+    m_chromaAngle = 0.0f;
     m_kickFollower.reset(0.0f);
     m_trebleFollower.reset(0.0f);
-    for (uint8_t i = 0; i < 12; i++) {
-        m_chromaFollowers[i].reset(0.0f);
-        m_chromaSmoothed[i] = 0.0f;
-        m_chromaTargets[i] = 0.0f;
-    }
     m_kickPulse = 0.0f;
     m_trebleShimmer = 0.0f;
     m_targetKick = 0.0f;
@@ -66,19 +71,14 @@ bool RippleEnhancedEffect::init(plugins::EffectContext& ctx) {
 }
 
 void RippleEnhancedEffect::render(plugins::EffectContext& ctx) {
-    // CENTER ORIGIN RIPPLE - Ripples expand from center
-    //
-    // STATEFUL EFFECT: This effect maintains ripple state (position, speed, hue) across frames
-    // in the m_ripples[] array. Ripples spawn at center and expand outward. Identified
-    // in PatternRegistry::isStatefulEffect().
-
-    // Fade radial buffer using fadeAmount parameter
-    fadeToBlackBy(m_radial, HALF_LENGTH, ctx.fadeAmount);
+    if (!m_ps) return;
+    fadeToBlackBy(m_ps->radial, HALF_LENGTH, ctx.fadeAmount);
 
     const bool hasAudio = ctx.audio.available;
     bool newHop = false;
     bool beatOnset = false;
     bool downbeatOnset = false;
+    float rawDt = ctx.getSafeRawDeltaSeconds();
     float dt = ctx.getSafeDeltaSeconds();
     float moodNorm = ctx.getMoodNormalized();
 
@@ -118,18 +118,18 @@ void RippleEnhancedEffect::render(plugins::EffectContext& ctx) {
 
             // Update chromagram targets
             for (uint8_t i = 0; i < 12; i++) {
-                m_chromaTargets[i] = ctx.audio.controlBus.heavy_chroma[i];
+                m_ps->chromaTargets[i] = ctx.audio.controlBus.heavy_chroma[i];
             }
         }
 
         // Smooth toward targets every frame with MOOD-adjusted smoothing
-        m_kickPulse = m_kickFollower.updateWithMood(m_targetKick, dt, moodNorm);
-        m_trebleShimmer = m_trebleFollower.updateWithMood(m_targetTreble, dt, moodNorm);
+        m_kickPulse = m_kickFollower.updateWithMood(m_targetKick, rawDt, moodNorm);
+        m_trebleShimmer = m_trebleFollower.updateWithMood(m_targetTreble, rawDt, moodNorm);
 
         // Smooth chromagram with AsymmetricFollower
         for (uint8_t i = 0; i < 12; i++) {
-            m_chromaSmoothed[i] = m_chromaFollowers[i].updateWithMood(
-                m_chromaTargets[i], dt, moodNorm);
+            m_ps->chromaSmoothed[i] = m_ps->chromaFollowers[i].updateWithMood(
+                m_ps->chromaTargets[i], rawDt, moodNorm);
         }
     } else {
         m_lastBeatState = false;
@@ -140,22 +140,27 @@ void RippleEnhancedEffect::render(plugins::EffectContext& ctx) {
     uint8_t spawnChance = 0;
     float energyNorm = 0.0f;
     float energyDelta = 0.0f;
-    uint8_t dominantBin = 0;
     float energyAvg = 0.0f;
+
+    // Circular chroma hue (prevents argmax discontinuities and wrapping artefacts).
+    uint8_t chromaHueOffset = 0;
+#if FEATURE_AUDIO_SYNC
+    if (hasAudio) {
+        const float* chroma = ctx.audio.controlBus.chroma;
+        chromaHueOffset = effects::chroma::circularChromaHueSmoothed(
+            chroma, m_chromaAngle, rawDt, 0.20f);
+    }
+#endif
+
 #if FEATURE_AUDIO_SYNC
     if (hasAudio && newHop) {
         const float led_share = 255.0f / 12.0f;
         float chromaEnergy = 0.0f;
-        float maxBinVal = 0.0f;
         for (uint8_t i = 0; i < 12; ++i) {
-            float bin = m_chromaSmoothed[i];  // Use smoothed chromagram
+            float bin = m_ps->chromaSmoothed[i];  // Use smoothed chromagram
             // FIX: Use sqrt scaling instead of squaring to preserve low-level signals
             float bright = sqrtf(bin) * 1.5f;
             if (bright > 1.0f) bright = 1.0f;
-            if (bright > maxBinVal) {
-                maxBinVal = bright;
-                dominantBin = i;
-            }
             chromaEnergy += bright * led_share;
         }
         energyNorm = chromaEnergy / 255.0f;
@@ -251,8 +256,8 @@ void RippleEnhancedEffect::render(plugins::EffectContext& ctx) {
                 m_ripples[r].radius = 0.0f;      // Reset at center
                 m_ripples[r].intensity = 255;    // Max intensity for snare burst
                 m_ripples[r].speed = speedScale; // Uses unified speed from slider
-                // Enhanced: Use dominant chroma bin for hue (no chord reactivity)
-                m_ripples[r].hue = ctx.gHue + (uint8_t)(dominantBin * (255.0f / 12.0f));
+                // Enhanced: Use circular chroma hue (no chord reactivity)
+                m_ripples[r].hue = ctx.gHue + chromaHueOffset;
                 m_ripples[r].active = true;
                 m_spawnCooldown = 1;             // Brief cooldown
                 break;
@@ -280,8 +285,8 @@ void RippleEnhancedEffect::render(plugins::EffectContext& ctx) {
                 m_ripples[i].speed = speedScale * speedVariation;
                 if (m_ripples[i].speed > speedScale * 1.5f) m_ripples[i].speed = speedScale * 1.5f;
                 if (hasAudio) {
-                    // Enhanced: Use chroma-based hue (no chord reactivity)
-                    float hueBase = (dominantBin * (255.0f / 12.0f)) + ctx.gHue;
+                    // Enhanced: Use circular chroma hue (no chord reactivity)
+                    float hueBase = (float)chromaHueOffset + ctx.gHue;
                     m_ripples[i].hue = (uint8_t)hueBase;
                 } else {
                     m_ripples[i].hue = random8();
@@ -317,12 +322,11 @@ void RippleEnhancedEffect::render(plugins::EffectContext& ctx) {
 
                 // =========================================================
                 // 64-bin TREBLE SHIMMER on wavefront (bins 48-63)
-                // Hi-hat/cymbal energy adds sparkle to the leading edge.
-                // Stronger at wavefront (waveAbs~0), fades toward trailing edge.
+                // Hi-hat/cymbal energy adds sparkle; capped to avoid brightness stacking wash (colour fix).
                 // =========================================================
-                if (m_trebleShimmer > 0.08f) {  // Enhanced: Lower threshold (0.08f instead of 0.1f)
+                if (m_trebleShimmer > 0.08f) {
                     float shimmerFade = 1.0f - (waveAbs / 3.0f);  // 1.0 at front, 0.0 at back
-                    uint8_t shimmerBoost = (uint8_t)(m_trebleShimmer * shimmerFade * 60.0f);
+                    uint8_t shimmerBoost = (uint8_t)(m_trebleShimmer * shimmerFade * 30.0f);  // was 60; halved to preserve palette
                     brightness = qadd8(brightness, shimmerBoost);
                 }
 
@@ -330,23 +334,28 @@ void RippleEnhancedEffect::render(plugins::EffectContext& ctx) {
                     m_ripples[r].hue + (uint8_t)dist,
                     brightness);
                 // Keep colours within palette: select brightest contributor.
-                if (brightness > m_radial[dist].getAverageLight()) {
-                    m_radial[dist] = color;
+                if (brightness > m_ps->radial[dist].getAverageLight()) {
+                    m_ps->radial[dist] = color;
                 }
             }
         }
     }
 
-    memcpy(m_radialAux, m_radial, sizeof(m_radial));
+    memcpy(m_ps->radialAux, m_ps->radial, sizeof(m_ps->radial));
 
     // Render radial history buffer to LEDs (centre-origin)
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
-        SET_CENTER_PAIR(ctx, dist, m_radialAux[dist]);
+        SET_CENTER_PAIR(ctx, dist, m_ps->radialAux[dist]);
     }
 }
 
 void RippleEnhancedEffect::cleanup() {
-    // No resources to free
+#ifndef NATIVE_BUILD
+    if (m_ps) {
+        heap_caps_free(m_ps);
+        m_ps = nullptr;
+    }
+#endif
 }
 
 const plugins::EffectMetadata& RippleEnhancedEffect::getMetadata() const {

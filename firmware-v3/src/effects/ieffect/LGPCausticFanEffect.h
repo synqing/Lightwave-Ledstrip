@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPCausticFanEffect.h
  * @brief LGP Caustic Fan - Focused light caustics
@@ -16,6 +14,7 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -23,6 +22,8 @@ namespace ieffect {
 
 class LGPCausticFanEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_CAUSTIC_FAN;
+
     LGPCausticFanEffect();
     ~LGPCausticFanEffect() override = default;
 

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPPerlinVeilEffect.cpp
  * @brief LGP Perlin Veil - Slow drifting curtains/fog from centre
@@ -65,7 +63,7 @@ bool LGPPerlinVeilEffect::init(plugins::EffectContext& ctx) {
 void LGPPerlinVeilEffect::render(plugins::EffectContext& ctx) {
     // CENTRE ORIGIN - Perlin noise veils drifting from centre
     const bool hasAudio = ctx.audio.available;
-    float dt = ctx.getSafeDeltaSeconds();
+    float dt = ctx.getSafeRawDeltaSeconds();
     float speedNorm = ctx.speed / 50.0f;
     float intensityNorm = ctx.brightness / 255.0f;
 
@@ -86,7 +84,7 @@ void LGPPerlinVeilEffect::render(plugins::EffectContext& ctx) {
         }
         
         // Smooth toward targets every frame (keeps motion alive between hops)
-        float alpha = dt / (0.15f + dt); // ~150ms smoothing
+        float alpha = 1.0f - expf(-dt / 0.15f);  // True exponential, tau=150ms
         m_smoothRms += (m_targetRms - m_smoothRms) * alpha;
         m_smoothFlux += (m_targetFlux - m_smoothFlux) * alpha;
         m_smoothBeatStrength += (m_targetBeatStrength - m_smoothBeatStrength) * alpha;
@@ -97,25 +95,25 @@ void LGPPerlinVeilEffect::render(plugins::EffectContext& ctx) {
         audioPush = audioPush * audioPush * audioPush * audioPush; // ^4 for emphasis
         audioPush *= speedNorm * 0.1f;
         
-        // Momentum decay and boost (like Emotiscope)
-        m_momentum *= 0.99f;
+        // Momentum decay and boost (like Emotiscope) - dt-corrected
+        m_momentum *= powf(0.99f, dt * 60.0f);
         if (audioPush > m_momentum) {
             m_momentum = audioPush;
         }
         
-        // RMS → contrast modulation (using smoothed value)
+        // RMS → contrast modulation (using smoothed value) - true exponential, tau=200ms
         float targetContrast = 0.3f + m_smoothRms * 0.7f;
-        m_contrast += (targetContrast - m_contrast) * (dt / (0.2f + dt)); // ~200ms smoothing
+        m_contrast += (targetContrast - m_contrast) * (1.0f - expf(-dt / 0.2f));
         
         // Bass → depth variation (using smoothed value)
         m_depthVariation = m_smoothBass * 0.5f;
     } else {
-        // Ambient mode: slow decay
-        m_momentum *= 0.98f;
+        // Ambient mode: slow decay (dt-corrected)
+        m_momentum *= powf(0.98f, dt * 60.0f);
         m_contrast = 0.4f + 0.2f * sinf(ctx.totalTimeMs * 0.001f); // Slow breathing
         m_depthVariation = 0.0f;
-        // Smooth audio parameters to zero when no audio
-        float alpha = dt / (0.2f + dt);
+        // Smooth audio parameters to zero when no audio (true exponential, tau=200ms)
+        float alpha = 1.0f - expf(-dt / 0.2f);
         m_targetRms = 0.0f;
         m_targetFlux = 0.0f;
         m_targetBeatStrength = 0.0f;
@@ -126,8 +124,8 @@ void LGPPerlinVeilEffect::render(plugins::EffectContext& ctx) {
         m_smoothBass += (m_targetBass - m_smoothBass) * alpha;
     }
 #else
-    // No audio: ambient mode
-    m_momentum *= 0.98f;
+    // No audio: ambient mode (dt-corrected)
+    m_momentum *= powf(0.98f, dt * 60.0f);
     m_contrast = 0.4f + 0.2f * sinf(ctx.totalTimeMs * 0.001f);
     m_depthVariation = 0.0f;
 #endif

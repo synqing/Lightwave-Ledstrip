@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file IEffect.h
  * @brief Core plugin interface for LightwaveOS v2 effects
@@ -38,7 +36,21 @@
 
 #pragma once
 
+// =====================================================================
+// PSRAM ALLOCATION POLICY (MANDATORY)
+// =====================================================================
+// All IEffect implementations with buffers >64 bytes MUST allocate them
+// from PSRAM using heap_caps_malloc(size, MALLOC_CAP_SPIRAM).
+//
+// DO NOT declare large arrays as class members -- they end up in internal
+// DRAM (.bss section) and starve WiFi/lwIP/FreeRTOS of heap space.
+//
+// Pattern: Use a PsramData* pointer, allocate in init(), free in cleanup().
+// See: docs/MEMORY_ALLOCATION.md section 3.5 "Effect Buffer PSRAM Policy"
+// =====================================================================
+
 #include <cstdint>
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace plugins {
@@ -73,6 +85,7 @@ struct EffectMetadata {
     EffectCategory category;    // Category for filtering
     uint8_t version;            // Effect version (for updates)
     const char* author;         // Creator name (optional)
+    EffectId id = INVALID_EFFECT_ID;  // Stable namespaced ID (set during registration)
 
     // Default constructor
     EffectMetadata(const char* n = "Unnamed",

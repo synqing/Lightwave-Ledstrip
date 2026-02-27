@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 #include "../../src/core/state/StateStore.h"
 
 #ifdef NATIVE_BUILD

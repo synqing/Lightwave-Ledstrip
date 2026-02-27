@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file BreathingEnhancedEffect.h
  * @brief Breathing Enhanced - Enhanced version with 64-bin sub-bass, beatPhase sync, snare triggers
@@ -23,6 +21,7 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../enhancement/SmoothingEngine.h"
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -30,6 +29,8 @@ namespace ieffect {
 
 class BreathingEnhancedEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_BREATHING_ENHANCED;
+
     BreathingEnhancedEffect();
     ~BreathingEnhancedEffect() override = default;
 

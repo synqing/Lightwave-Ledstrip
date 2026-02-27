@@ -1,24 +1,26 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file SnapwaveLinearEffect.h
  * @brief Scrolling waveform with time-based oscillation
  *
  * ORIGINAL SNAPWAVE ALGORITHM - Restored from SensoryBridge light_mode_snapwave()
  *
- * Visual behavior:
+ * Visual behaviour:
  * 1. Dot bounces based on time-based oscillation + chromagram
  * 2. HISTORY BUFFER tracks previous dot positions
  * 3. Trail renders at previous positions with fading brightness
- * 4. Mirrored for CENTER ORIGIN compliance
+ * 4. Mirrored for CENTRE ORIGIN compliance
  *
- * The characteristic "snap" comes from tanh() normalization.
+ * The characteristic "snap" comes from tanh() normalisation.
+ *
+ * Per-zone state: ZoneComposer reuses one instance across up to 4 zones.
+ * ALL temporal state is dimensioned [kMaxZones] and indexed by ctx.zoneId
+ * to prevent cross-zone contamination.
  *
  * Effect ID: 98
  * Family: PARTY (audio-reactive)
  *
  * @author LightwaveOS Team
- * @version 4.1.0 - Added explicit history buffer for trails
+ * @version 5.0.0 - Per-zone PSRAM state for ZoneComposer compliance
  */
 
 #pragma once
@@ -28,6 +30,8 @@
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
+#include <esp_heap_caps.h>
+#include "../../config/effect_ids.h"
 #endif
 
 namespace lightwaveos {
@@ -36,6 +40,8 @@ namespace ieffect {
 
 class SnapwaveLinearEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_SNAPWAVE_LINEAR;
+
     SnapwaveLinearEffect() = default;
     ~SnapwaveLinearEffect() override = default;
 
@@ -46,8 +52,9 @@ public:
 
 private:
     // ============================================================================
-    // Algorithm Constants
+    // Zone & Algorithm Constants
     // ============================================================================
+    static constexpr uint8_t kMaxZones = 4;
 
     // Peak smoothing: 2% new, 98% old (very aggressive)
     static constexpr float PEAK_ATTACK = 0.02f;
@@ -65,23 +72,34 @@ private:
     static constexpr float PHASE_SPREAD = 0.5f;         // Phase offset per chromagram note
     static constexpr float TANH_SCALE = 2.0f;           // tanh() input multiplier
     static constexpr float NOTE_THRESHOLD = 0.1f;       // Min chromagram value to contribute
-    static constexpr float AMPLITUDE_MIX = 0.7f;        // Oscillation × peak mix factor
+    static constexpr float AMPLITUDE_MIX = 0.7f;        // Oscillation x peak mix factor
     static constexpr float ENERGY_GATE_THRESHOLD = 0.05f; // RMS below this = silence (no movement)
 
-    // Color thresholds
-    static constexpr float COLOR_THRESHOLD = 0.05f;     // Min brightness for color contribution
+    // Colour thresholds
+    static constexpr float COLOR_THRESHOLD = 0.05f;     // Min brightness for colour contribution
 
     // ============================================================================
-    // State Variables
+    // Per-zone State (indexed by ctx.zoneId)
     // ============================================================================
 
-    float m_peakSmoothed = 0.0f;
+    // Smoothed peak follower -- per-zone to prevent cross-zone bleed
+    float m_peakSmoothed[kMaxZones] = {};
 
-    // HISTORY BUFFER - stores previous dot distances from center
-    // distance 0 = center, distance 79 = edge
-    uint8_t m_distanceHistory[HISTORY_SIZE];
-    CRGB m_colorHistory[HISTORY_SIZE];
-    uint8_t m_historyIndex = 0;
+    // Ring buffer write position -- per-zone
+    uint8_t m_historyIndex[kMaxZones] = {};
+
+    // ============================================================================
+    // PSRAM-Allocated Buffers (per-zone dimensioned)
+    // ============================================================================
+#ifndef NATIVE_BUILD
+    struct SnapwavePsram {
+        uint8_t distanceHistory[kMaxZones][HISTORY_SIZE];
+        CRGB    colorHistory[kMaxZones][HISTORY_SIZE];
+    };
+    SnapwavePsram* m_ps = nullptr;
+#else
+    void* m_ps = nullptr;
+#endif
 
     // ============================================================================
     // Helper Methods
@@ -89,8 +107,8 @@ private:
 
     float computeOscillation(const plugins::EffectContext& ctx);
     CRGB computeChromaColor(const plugins::EffectContext& ctx);
-    void pushHistory(uint8_t distance, CRGB color);
-    void renderHistoryToLeds(plugins::EffectContext& ctx);
+    void pushHistory(int z, uint8_t distance, CRGB color);
+    void renderHistoryToLeds(int z, plugins::EffectContext& ctx);
 };
 
 } // namespace ieffect

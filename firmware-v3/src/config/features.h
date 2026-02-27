@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file features.h
  * @brief Compile-time feature flags for LightwaveOS v2
@@ -90,6 +88,31 @@
 // Audio Reactive Effects + Trinity Protocol (PRISM Dashboard integration)
 #ifndef FEATURE_AUDIO_SYNC
 #define FEATURE_AUDIO_SYNC 1
+#endif
+
+// Alternate audio backend: Emotiscope v1.1_320 end-to-end pipeline.
+// When enabled, LWLS audio analysis/tempo codepaths must not run.
+#ifndef FEATURE_AUDIO_BACKEND_ESV11
+#define FEATURE_AUDIO_BACKEND_ESV11 0
+#endif
+
+// ESV11 at 32kHz sample rate (SPH0645 overclocked, 125 Hz hop rate).
+// Implies FEATURE_AUDIO_BACKEND_ESV11. All vendor constants overridden via shim.
+#ifndef FEATURE_AUDIO_BACKEND_ESV11_32KHZ
+#define FEATURE_AUDIO_BACKEND_ESV11_32KHZ 0
+#endif
+
+// Auto-enable ESV11 when 32kHz variant is selected
+#if FEATURE_AUDIO_BACKEND_ESV11_32KHZ && !FEATURE_AUDIO_BACKEND_ESV11
+    #undef FEATURE_AUDIO_BACKEND_ESV11
+    #define FEATURE_AUDIO_BACKEND_ESV11 1
+#endif
+
+// Alternate audio backend: PipelineCore DSP engine (256-bin FFT + BeatTracker).
+// When enabled, replaces GoertzelAnalyzer + ChromaAnalyzer + TempoTracker
+// with PipelineCore + BeatTracker + PipelineAdapter.
+#ifndef FEATURE_AUDIO_BACKEND_PIPELINECORE
+#define FEATURE_AUDIO_BACKEND_PIPELINECORE 0
 #endif
 
 // Auto-speed trim (audio-driven base speed) - disabled by default

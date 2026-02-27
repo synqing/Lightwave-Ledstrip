@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file RequestValidator.h
  * @brief Lightweight schema-based request validation for LightwaveOS v2 API
@@ -43,6 +41,8 @@
 
 #include <ArduinoJson.h>
 #include "ApiResponse.h"
+#include "../config/limits.h"  // Single source of truth for system limits
+#include "../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace network {
@@ -528,11 +528,12 @@ private:
         return value;
     }
 
+public:
     /**
      * @brief Validate JSON document depth
-     * 
+     *
      * Prevents deeply nested JSON structures that could cause stack overflow.
-     * 
+     *
      * @param doc JSON document to validate
      * @param maxDepth Maximum allowed nesting depth (default 10)
      * @return true if depth is valid, false if too deep
@@ -581,10 +582,9 @@ private:
  * @param effectId Effect ID from request
  * @return Valid effect ID, defaults to 0 if out of bounds
  */
-inline uint8_t validateEffectIdInRequest(uint8_t effectId) {
-    constexpr uint8_t MAX_EFFECTS = 104;  // Keep in sync with RendererActor::MAX_EFFECTS
-    if (effectId >= MAX_EFFECTS) {
-        return 0;  // Return safe default (effect 0)
+inline EffectId validateEffectIdInRequest(EffectId effectId) {
+    if (effectId == INVALID_EFFECT_ID) {
+        return lightwaveos::EID_FIRE;  // Return safe default
     }
     return effectId;
 }
@@ -598,8 +598,7 @@ inline uint8_t validateEffectIdInRequest(uint8_t effectId) {
  * @return Valid palette ID, defaults to 0 if out of bounds
  */
 inline uint8_t validatePaletteIdInRequest(uint8_t paletteId) {
-    constexpr uint8_t MASTER_PALETTE_COUNT = 75;  // From Palettes_Master.h
-    if (paletteId >= MASTER_PALETTE_COUNT) {
+    if (paletteId >= limits::MAX_PALETTES) {
         return 0;  // Return safe default (palette 0)
     }
     return paletteId;
@@ -637,7 +636,7 @@ namespace RequestSchemas {
      * Optional: transition (bool), transitionType (0-15)
      */
     constexpr FieldSchema SetEffect[] = {
-        {"effectId", FieldType::UINT8, true, 0, 255}
+        {"effectId", FieldType::UINT16, true, 0, 65535}
         // transition and transitionType are optional, validated inline
     };
     constexpr size_t SetEffectSize = sizeof(SetEffect) / sizeof(FieldSchema);
@@ -673,7 +672,7 @@ namespace RequestSchemas {
      * Optional: type, duration, easing, random
      */
     constexpr FieldSchema TriggerTransition[] = {
-        {"toEffect", FieldType::UINT8,  true,  0, 255},
+        {"toEffect", FieldType::UINT16, true, 0, 65535},
         {"type",     FieldType::UINT8,  false, 0, 15},
         {"duration", FieldType::UINT16, false, 100, 10000},
         {"easing",   FieldType::UINT8,  false, 0, 15}
@@ -709,7 +708,7 @@ namespace RequestSchemas {
      * Required: effectId
      */
     constexpr FieldSchema ZoneEffect[] = {
-        {"effectId", FieldType::UINT8, true, 0, 255}
+        {"effectId", FieldType::UINT16, true, 0, 65535}
     };
     constexpr size_t ZoneEffectSize = sizeof(ZoneEffect) / sizeof(FieldSchema);
 

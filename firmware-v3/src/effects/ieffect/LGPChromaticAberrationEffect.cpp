@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPChromaticAberrationEffect.cpp
  * @brief LGP Chromatic Aberration effect implementation
@@ -27,10 +25,11 @@ bool LGPChromaticAberrationEffect::init(plugins::EffectContext& ctx) {
 
 void LGPChromaticAberrationEffect::render(plugins::EffectContext& ctx) {
     // Different wavelengths refract at different angles
+    float dt = ctx.getSafeDeltaSeconds();
     float intensity = ctx.brightness / 255.0f;
     const float aberration = 1.5f;
 
-    m_lensPosition += ctx.speed * 0.01f;
+    m_lensPosition += ctx.speed * 0.01f * 60.0f * dt;  // dt-corrected
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         float distFromCenter = (float)centerPairDistance((uint16_t)i);

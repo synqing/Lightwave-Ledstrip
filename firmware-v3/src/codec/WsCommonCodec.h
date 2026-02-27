@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file WsCommonCodec.h
  * @brief Common JSON codec utilities shared across WebSocket command codecs

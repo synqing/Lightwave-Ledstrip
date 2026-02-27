@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file ShowTypes.h
  * @brief Data structures for choreographed light shows
@@ -19,6 +17,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include "../../config/effect_ids.h"
 
 // Zone target constant
 static constexpr uint8_t ZONE_GLOBAL = 0xFF;
@@ -79,7 +78,7 @@ struct ShowCue {
     uint8_t data[4];          // Cue-specific data (interpreted based on type)
 
     // Data layout by type:
-    // CUE_EFFECT:          data[0]=effectId, data[1]=transitionType
+    // CUE_EFFECT:          data[0-1]=effectId (little-endian uint16_t), data[2]=transitionType
     // CUE_PARAMETER_SWEEP: data[0]=paramId, data[1]=targetValue, data[2-3]=durationMs (little-endian)
     // CUE_ZONE_CONFIG:     data[0]=zoneCount, data[1]=enabledMask
     // CUE_PALETTE:         data[0]=paletteId
@@ -87,8 +86,8 @@ struct ShowCue {
     // CUE_TRANSITION:      data[0]=transitionType, data[1-2]=durationMs (little-endian)
 
     // Accessors for CUE_EFFECT
-    inline uint8_t effectId() const { return data[0]; }
-    inline uint8_t effectTransition() const { return data[1]; }
+    inline lightwaveos::EffectId effectId() const { return static_cast<lightwaveos::EffectId>(data[0]) | (static_cast<lightwaveos::EffectId>(data[1]) << 8); }
+    inline uint8_t effectTransition() const { return data[2]; }
 
     // Accessors for CUE_PARAMETER_SWEEP
     inline uint8_t sweepParamId() const { return data[0]; }

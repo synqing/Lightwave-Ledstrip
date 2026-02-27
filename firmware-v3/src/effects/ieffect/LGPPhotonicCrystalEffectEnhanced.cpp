@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPPhotonicCrystalEffect.cpp
  * @brief LGP Photonic Crystal effect - v8 CORRECT audio-reactive motion
@@ -80,8 +78,7 @@ bool LGPPhotonicCrystalEnhancedEffect::init(plugins::EffectContext& ctx) {
     }
     
     // Chroma tracking
-    m_dominantBin = 0;
-    m_dominantBinSmooth = 0.0f;
+    m_chromaAngle = 0.0f;
     m_tempoLocked = false;
 
     return true;
@@ -91,6 +88,7 @@ void LGPPhotonicCrystalEnhancedEffect::render(plugins::EffectContext& ctx) {
     // ========================================================================
     // SAFE DELTA TIME (clamped for physics stability)
     // ========================================================================
+    float rawDt = ctx.getSafeRawDeltaSeconds();
     float dt = ctx.getSafeDeltaSeconds();
     float moodNorm = ctx.getMoodNormalized();
 
@@ -150,28 +148,20 @@ void LGPPhotonicCrystalEnhancedEffect::render(plugins::EffectContext& ctx) {
             }
             m_targetSubBass = subBassSum / 6.0f;
             
-            // Dominant chroma bin detection (for color offset) - use smoothed values
-            float maxChroma = 0.0f;
-            for (uint8_t bin = 0; bin < 12; ++bin) {
-                if (m_chromaSmoothed[bin] > maxChroma) {
-                    maxChroma = m_chromaSmoothed[bin];
-                    m_dominantBin = bin;
-                }
-            }
         }
         
         // Smooth chromagram with AsymmetricFollower (every frame)
         for (uint8_t i = 0; i < 12; i++) {
             m_chromaSmoothed[i] = m_chromaFollowers[i].updateWithMood(
-                m_chromaTargets[i], dt, moodNorm);
+                m_chromaTargets[i], rawDt, moodNorm);
         }
         
         // Enhanced: Smooth sub-bass energy
-        m_subBassEnergy = m_subBassFollower.updateWithMood(m_targetSubBass, dt, moodNorm);
+        m_subBassEnergy = m_subBassFollower.updateWithMood(m_targetSubBass, rawDt, moodNorm);
 
         // Asymmetric followers for BRIGHTNESS (not speed!)
-        float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, dt, moodNorm);
-        float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, dt, moodNorm);
+        float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, rawDt, moodNorm);
+        float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, rawDt, moodNorm);
 
         // Brightness modulation
         brightnessGain = 0.4f + 0.5f * energyAvgSmooth + 0.4f * energyDeltaSmooth;
@@ -183,12 +173,11 @@ void LGPPhotonicCrystalEnhancedEffect::render(plugins::EffectContext& ctx) {
             m_collisionBoost = 1.0f + m_subBassEnergy * 0.3f;  // Boost with sub-bass
         }
         if (m_collisionBoost > 1.3f) m_collisionBoost = 1.3f;  // Clamp
-        m_collisionBoost *= 0.88f;
+        m_collisionBoost = effects::chroma::dtDecay(m_collisionBoost, 0.88f, rawDt);
 
-        // Chroma color offset (250ms smooth)
-        float alphaBin = 1.0f - expf(-dt / 0.25f);
-        m_dominantBinSmooth += ((float)m_dominantBin - m_dominantBinSmooth) * alphaBin;
-        chromaOffset = (uint8_t)(m_dominantBinSmooth * (255.0f / 12.0f));
+        // Circular chroma hue (replaces argmax + linear EMA to eliminate bin-flip rainbow sweeps)
+        chromaOffset = effects::chroma::circularChromaHueSmoothed(
+            ctx.audio.controlBus.heavy_chroma, m_chromaAngle, rawDt, 0.20f);
     }
 #endif
 

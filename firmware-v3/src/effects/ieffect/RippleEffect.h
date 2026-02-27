@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file RippleEffect.h
  * @brief Ripple - Expanding water ripples
@@ -19,12 +17,19 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#include "../../config/effect_ids.h"
+#endif
+
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
 class RippleEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_RIPPLE;
+
     RippleEffect();
     ~RippleEffect() override = default;
 
@@ -53,9 +58,18 @@ private:
     float m_chromaEnergySum = 0.0f;
     uint8_t m_chromaHistIdx = 0;
 
-    // Radial LED history buffer (centre-out)
-    CRGB m_radial[HALF_LENGTH];
-    CRGB m_radialAux[HALF_LENGTH];
+#ifndef NATIVE_BUILD
+    struct RipplePsram {
+        CRGB radial[HALF_LENGTH];
+        CRGB radialAux[HALF_LENGTH];
+    };
+    RipplePsram* m_ps = nullptr;
+#else
+    void* m_ps = nullptr;
+#endif
+
+    // Circular chroma EMA state (radians)
+    float m_chromaAngle = 0.0f;
 
     // 64-bin spectrum tracking for enhanced audio response
     float m_kickPulse = 0.0f;       ///< Sub-bass energy (bins 0-5) for kick-triggered ripples

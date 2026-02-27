@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPPerlinShocklinesEffect.cpp
  * @brief LGP Perlin Shocklines - Beat/flux injects sharp travelling ridges
@@ -85,8 +83,8 @@ void LGPPerlinShocklinesEffect::render(plugins::EffectContext& ctx) {
     if (m_waveEnergy > 0.01f) {
         uint16_t next = (uint16_t)m_waveFront + advance;
         m_waveFront = (next > 79) ? 79 : (uint8_t)next;
-        // Energy decay (avoid strobe)
-        m_waveEnergy *= 0.90f;
+        // Energy decay (avoid strobe) - dt-corrected
+        m_waveEnergy *= powf(0.90f, dt * 60.0f);
     } else {
         m_waveEnergy = 0.0f;
     }
@@ -101,7 +99,7 @@ void LGPPerlinShocklinesEffect::render(plugins::EffectContext& ctx) {
         push = energy * energy * energy * energy * speedNorm * 0.1f; // Heavy emphasis on loud
     }
 #endif
-    m_momentum *= 0.99f; // Smooth decay
+    m_momentum *= powf(0.99f, dt * 60.0f); // Smooth decay (dt-corrected)
     if (push > m_momentum) {
         m_momentum = push; // Only boost, no jarring drops
     }

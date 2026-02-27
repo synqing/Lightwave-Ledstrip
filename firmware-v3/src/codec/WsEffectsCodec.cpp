@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file WsEffectsCodec.cpp
  * @brief WebSocket effects codec implementation
@@ -12,6 +10,7 @@
  */
 
 #include "WsEffectsCodec.h"
+#include "../config/limits.h"
 #include <cstring>
 
 namespace lightwaveos {
@@ -25,17 +24,17 @@ EffectsSetCurrentDecodeResult WsEffectsCodec::decodeSetCurrent(JsonObjectConst r
     EffectsSetCurrentDecodeResult result;
     result.request = EffectsSetCurrentRequest();
 
-    // Step 1: Extract effectId (required, 0-127)
+    // Step 1: Extract effectId (required, stable namespaced EffectId)
     if (!root["effectId"].is<int>()) {
         snprintf(result.errorMsg, MAX_ERROR_MSG, "Missing required field 'effectId'");
         return result;
     }
-    int effectId = root["effectId"].as<int>();
-    if (effectId < 0 || effectId > 127) {
-        snprintf(result.errorMsg, MAX_ERROR_MSG, "effectId out of range (0-127): %d", effectId);
+    int32_t effectId = root["effectId"].as<int32_t>();
+    if (effectId < 0 || effectId > 0xFFFF) {
+        snprintf(result.errorMsg, MAX_ERROR_MSG, "effectId out of uint16 range (0-65535): %ld", (long)effectId);
         return result;
     }
-    result.request.effectId = static_cast<uint8_t>(effectId);
+    result.request.effectId = static_cast<EffectId>(effectId);
 
     // Step 2: Extract requestId (optional string)
     if (root["requestId"].is<const char*>()) {
@@ -90,17 +89,17 @@ EffectsSetEffectDecodeResult WsEffectsCodec::decodeSetEffect(JsonObjectConst roo
     EffectsSetEffectDecodeResult result;
     result.request = EffectsSetEffectRequest();
 
-    // Extract effectId (required, 0-127)
+    // Extract effectId (required, stable namespaced EffectId)
     if (!root["effectId"].is<int>()) {
         snprintf(result.errorMsg, MAX_ERROR_MSG, "Missing required field 'effectId'");
         return result;
     }
-    int effectId = root["effectId"].as<int>();
-    if (effectId < 0 || effectId > 127) {
-        snprintf(result.errorMsg, MAX_ERROR_MSG, "effectId out of range (0-127): %d", effectId);
+    int32_t effectId = root["effectId"].as<int32_t>();
+    if (effectId < 0 || effectId > 0xFFFF) {
+        snprintf(result.errorMsg, MAX_ERROR_MSG, "effectId out of uint16 range (0-65535): %ld", (long)effectId);
         return result;
     }
-    result.request.effectId = static_cast<uint8_t>(effectId);
+    result.request.effectId = static_cast<EffectId>(effectId);
     result.success = true;
     return result;
 }
@@ -175,13 +174,13 @@ EffectsGetMetadataDecodeResult WsEffectsCodec::decodeGetMetadata(JsonObjectConst
         result.request.requestId = root["requestId"].as<const char*>();
     }
 
-    // Extract effectId (optional, 255 means missing/invalid)
+    // Extract effectId (optional, INVALID_EFFECT_ID means missing/invalid)
     if (root["effectId"].is<int>()) {
-        int effectId = root["effectId"].as<int>();
-        if (effectId >= 0 && effectId <= 127) {
-            result.request.effectId = static_cast<uint8_t>(effectId);
+        int32_t effectId = root["effectId"].as<int32_t>();
+        if (effectId >= 0 && effectId <= 0xFFFF) {
+            result.request.effectId = static_cast<EffectId>(effectId);
         }
-        // If out of range, leave as 255 (invalid)
+        // If out of range, leave as INVALID_EFFECT_ID
     }
 
     result.success = true;
@@ -235,11 +234,11 @@ EffectsParametersGetDecodeResult WsEffectsCodec::decodeParametersGet(JsonObjectC
         result.request.requestId = root["requestId"].as<const char*>();
     }
 
-    // Extract effectId (optional, 255 means use current)
+    // Extract effectId (optional, INVALID_EFFECT_ID means use current)
     if (root["effectId"].is<int>()) {
-        int effectId = root["effectId"].as<int>();
-        if (effectId >= 0 && effectId <= 127) {
-            result.request.effectId = static_cast<uint8_t>(effectId);
+        int32_t effectId = root["effectId"].as<int32_t>();
+        if (effectId >= 0 && effectId <= 0xFFFF) {
+            result.request.effectId = static_cast<EffectId>(effectId);
         }
     }
 
@@ -256,11 +255,11 @@ EffectsParametersSetDecodeResult WsEffectsCodec::decodeEffectsParametersSet(Json
         result.request.requestId = root["requestId"].as<const char*>();
     }
 
-    // Extract effectId (optional, 255 means use current)
+    // Extract effectId (optional, INVALID_EFFECT_ID means use current)
     if (root["effectId"].is<int>()) {
-        int effectId = root["effectId"].as<int>();
-        if (effectId >= 0 && effectId <= 127) {
-            result.request.effectId = static_cast<uint8_t>(effectId);
+        int32_t effectId = root["effectId"].as<int32_t>();
+        if (effectId >= 0 && effectId <= 0xFFFF) {
+            result.request.effectId = static_cast<EffectId>(effectId);
         }
     }
 
@@ -414,7 +413,7 @@ EffectsSimpleDecodeResult WsEffectsCodec::decodeSimple(JsonObjectConst root) {
 // Encoder Functions (Response Encoding)
 // ============================================================================
 
-void WsEffectsCodec::encodeGetCurrent(uint8_t effectId, const char* name, uint8_t brightness, uint8_t speed, uint8_t paletteId, uint8_t hue, uint8_t intensity, uint8_t saturation, uint8_t complexity, uint8_t variation, JsonObject& data) {
+void WsEffectsCodec::encodeGetCurrent(EffectId effectId, const char* name, uint8_t brightness, uint8_t speed, uint8_t paletteId, uint8_t hue, uint8_t intensity, uint8_t saturation, uint8_t complexity, uint8_t variation, JsonObject& data) {
     data["effectId"] = effectId;
     data["name"] = name ? name : "";
     data["brightness"] = brightness;
@@ -427,13 +426,13 @@ void WsEffectsCodec::encodeGetCurrent(uint8_t effectId, const char* name, uint8_
     data["variation"] = variation;
 }
 
-void WsEffectsCodec::encodeChanged(uint8_t effectId, const char* name, bool transitionActive, JsonObject& data) {
+void WsEffectsCodec::encodeChanged(EffectId effectId, const char* name, bool transitionActive, JsonObject& data) {
     data["effectId"] = effectId;
     data["name"] = name ? name : "";
     data["transitionActive"] = transitionActive;
 }
 
-void WsEffectsCodec::encodeMetadata(uint8_t effectId, const char* name, const char* familyName, uint8_t familyId, const char* story, const char* opticalIntent, uint8_t tags, JsonObject& data) {
+void WsEffectsCodec::encodeMetadata(EffectId effectId, const char* name, const char* familyName, uint8_t familyId, const char* story, const char* opticalIntent, uint8_t tags, JsonObject& data) {
     data["id"] = effectId;
     data["name"] = name ? name : "";
     data["family"] = familyName ? familyName : "Unknown";
@@ -463,11 +462,11 @@ void WsEffectsCodec::encodeMetadata(uint8_t effectId, const char* name, const ch
     properties["speedResponsive"] = true;
 }
 
-void WsEffectsCodec::encodeList(uint8_t effectCount, uint8_t startIdx, uint8_t endIdx, uint8_t page, uint8_t limit, bool details, const char* const effectNames[], const char* const categories[], JsonObject& data) {
+void WsEffectsCodec::encodeList(uint16_t effectCount, uint16_t startIdx, uint16_t endIdx, uint8_t page, uint8_t limit, bool details, const char* const effectNames[], const EffectId effectIds[], const char* const categories[], JsonObject& data) {
     JsonArray effects = data["effects"].to<JsonArray>();
-    for (uint8_t i = startIdx; i < endIdx; i++) {
+    for (uint16_t i = startIdx; i < endIdx; i++) {
         JsonObject effect = effects.add<JsonObject>();
-        effect["id"] = i;
+        effect["id"] = effectIds ? effectIds[i] : static_cast<EffectId>(i);
         effect["name"] = effectNames[i] ? effectNames[i] : "";
         if (details && categories && categories[i]) {
             effect["category"] = categories[i];
@@ -481,15 +480,15 @@ void WsEffectsCodec::encodeList(uint8_t effectCount, uint8_t startIdx, uint8_t e
     pagination["pages"] = (effectCount + limit - 1) / limit;
 }
 
-void WsEffectsCodec::encodeByFamily(uint8_t familyId, const char* familyName, const uint8_t patternIndices[], uint8_t count, JsonObject& data) {
+void WsEffectsCodec::encodeByFamily(uint8_t familyId, const char* familyName, const EffectId patternIndices[], uint16_t count, JsonObject& data) {
     data["familyId"] = familyId;
     data["familyName"] = familyName ? familyName : "";
-    
+
     JsonArray effects = data["effects"].to<JsonArray>();
-    for (uint8_t i = 0; i < count; i++) {
+    for (uint16_t i = 0; i < count; i++) {
         effects.add(patternIndices[i]);
     }
-    
+
     data["count"] = count;
 }
 
@@ -504,7 +503,7 @@ void WsEffectsCodec::encodeCategories(const char* const familyNames[], const uin
     data["total"] = total;
 }
 
-void WsEffectsCodec::encodeParametersGet(uint8_t effectId, const char* name, bool hasParameters, const char* const paramNames[], const char* const paramDisplayNames[], const float paramMins[], const float paramMaxs[], const float paramDefaults[], const float paramValues[], uint8_t paramCount, JsonObject& data) {
+void WsEffectsCodec::encodeParametersGet(EffectId effectId, const char* name, bool hasParameters, const char* const paramNames[], const char* const paramDisplayNames[], const float paramMins[], const float paramMaxs[], const float paramDefaults[], const float paramValues[], uint8_t paramCount, JsonObject& data) {
     data["effectId"] = effectId;
     data["name"] = name ? name : "";
     data["hasParameters"] = hasParameters;
@@ -521,7 +520,7 @@ void WsEffectsCodec::encodeParametersGet(uint8_t effectId, const char* name, boo
     }
 }
 
-void WsEffectsCodec::encodeParametersSetChanged(uint8_t effectId, const char* name, const char* const queuedKeys[], uint8_t queuedCount, const char* const failedKeys[], uint8_t failedCount, JsonObject& data) {
+void WsEffectsCodec::encodeParametersSetChanged(EffectId effectId, const char* name, const char* const queuedKeys[], uint8_t queuedCount, const char* const failedKeys[], uint8_t failedCount, JsonObject& data) {
     data["effectId"] = effectId;
     data["name"] = name ? name : "";
     

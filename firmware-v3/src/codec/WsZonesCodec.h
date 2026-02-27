@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file WsZonesCodec.h
  * @brief JSON codec for WebSocket zones commands parsing and validation
@@ -20,6 +18,7 @@
 #include <stdint.h>
 #include <cstddef>
 #include <cstring>
+#include "../config/effect_ids.h"
 
 // Forward declarations for encoder dependencies
 namespace lightwaveos {
@@ -69,10 +68,10 @@ struct ZoneEnableDecodeResult {
 
 struct ZoneSetEffectRequest {
     uint8_t zoneId;      // Required (0-3)
-    uint8_t effectId;    // Required (0-127)
+    EffectId effectId;   // Effect ID (stable namespaced)
     const char* requestId;
-    
-    ZoneSetEffectRequest() : zoneId(255), effectId(255), requestId("") {}
+
+    ZoneSetEffectRequest() : zoneId(255), effectId(INVALID_EFFECT_ID), requestId("") {}
 };
 
 struct ZoneSetEffectDecodeResult {
@@ -224,13 +223,13 @@ struct ZonesUpdateRequest {
     bool hasSpeed;
     bool hasPaletteId;
     bool hasBlendMode;
-    uint8_t effectId;
+    EffectId effectId;
     uint8_t brightness;
     uint8_t speed;
     uint8_t paletteId;
     uint8_t blendMode;
     const char* requestId;
-    
+
     ZonesUpdateRequest() : zoneId(255), hasEffectId(false), hasBrightness(false),
                           hasSpeed(false), hasPaletteId(false), hasBlendMode(false),
                           effectId(0), brightness(128), speed(15), paletteId(0),
@@ -314,7 +313,7 @@ public:
     static void encodeZonesList(const ::lightwaveos::zones::ZoneComposer& composer, const ::lightwaveos::actors::RendererActor* renderer, JsonObject& data);
     static void encodeZoneEnabledChanged(bool enabled, JsonObject& data);
     static void encodeZonesChanged(uint8_t zoneId, const char* const updatedFields[], uint8_t updatedCount, const ::lightwaveos::zones::ZoneComposer& composer, const ::lightwaveos::actors::RendererActor* renderer, JsonObject& data);
-    static void encodeZonesEffectChanged(uint8_t zoneId, uint8_t effectId, const ::lightwaveos::zones::ZoneComposer& composer, const ::lightwaveos::actors::RendererActor* renderer, JsonObject& data);
+    static void encodeZonesEffectChanged(uint8_t zoneId, EffectId effectId, const ::lightwaveos::zones::ZoneComposer& composer, const ::lightwaveos::actors::RendererActor* renderer, JsonObject& data);
     static void encodeZonePaletteChanged(uint8_t zoneId, uint8_t paletteId, const ::lightwaveos::zones::ZoneComposer& composer, const ::lightwaveos::actors::RendererActor* renderer, JsonObject& data);
     static void encodeZoneBlendChanged(uint8_t zoneId, uint8_t blendMode, const ::lightwaveos::zones::ZoneComposer& composer, const ::lightwaveos::actors::RendererActor* renderer, JsonObject& data);
     static void encodeZonesLayoutChanged(uint8_t zoneCount, JsonObject& data);

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file WiFiCredentialsStorage.cpp
  * @brief NVS-based storage implementation for WiFi network credentials
@@ -215,7 +213,9 @@ uint8_t WiFiCredentialsStorage::loadNetworks(NetworkCredential* networks, uint8_
         }
     }
 
-    LW_LOGI("Loaded %d networks from NVS", loaded);
+    if (loaded > 0) {
+        LW_LOGD("Loaded %d networks from NVS", loaded);
+    }
     return loaded;
 }
 

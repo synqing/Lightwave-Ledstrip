@@ -1,11 +1,10 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file ChevronWavesEffect.cpp
  * @brief LGP Chevron Waves implementation
  */
 
 #include "ChevronWavesEffectEnhanced.h"
+#include "ChromaUtils.h"
 #include "../CoreEffects.h"
 #include "../utils/FastLEDOptim.h"
 #include "../../config/features.h"
@@ -36,7 +35,8 @@ bool ChevronWavesEnhancedEffect::init(plugins::EffectContext& ctx) {
     m_energyAvg = 0.0f;
     m_energyDelta = 0.0f;
     m_dominantBin = 0;
-    m_dominantBinSmooth = 0.0f;
+    m_chromaAngle = 0.0f;
+    m_chromaHue = 0.0f;
 
     // Initialize chromagram smoothing
     for (uint8_t i = 0; i < 12; i++) {
@@ -111,10 +111,13 @@ void ChevronWavesEnhancedEffect::render(plugins::EffectContext& ctx) {
     } else
 #endif
     {
-        m_energyAvg *= 0.98f;
+        // dt-corrected decay when audio unavailable
+        float dtFallback = enhancement::getSafeDeltaSeconds(ctx.rawDeltaTimeSeconds);
+        m_energyAvg *= powf(0.98f, dtFallback * 60.0f);
         m_energyDelta = 0.0f;
     }
 
+    float rawDt = enhancement::getSafeDeltaSeconds(ctx.rawDeltaTimeSeconds);
     float dt = enhancement::getSafeDeltaSeconds(ctx.deltaTimeSeconds);
     float moodNorm = ctx.getMoodNormalized();
 
@@ -122,28 +125,30 @@ void ChevronWavesEnhancedEffect::render(plugins::EffectContext& ctx) {
     if (hasAudio) {
         for (uint8_t i = 0; i < 12; i++) {
             m_chromaSmoothed[i] = m_chromaFollowers[i].updateWithMood(
-                m_chromaTargets[i], dt, moodNorm);
+                m_chromaTargets[i], rawDt, moodNorm);
         }
         // Enhanced: Smooth sub-bass energy
-        m_subBassEnergy = m_subBassFollower.updateWithMood(m_targetSubBass, dt, moodNorm);
+        m_subBassEnergy = m_subBassFollower.updateWithMood(m_targetSubBass, rawDt, moodNorm);
         
         // Enhanced: Snare hit triggers sharpness boost
         if (ctx.audio.isSnareHit()) {
             m_snareSharpness = 1.0f;
         }
-        m_snareSharpness *= 0.90f;  // Decay
+        m_snareSharpness *= powf(0.90f, rawDt * 60.0f);  // dt-corrected decay (rawDt: audio-coupled)
         if (m_snareSharpness < 0.01f) m_snareSharpness = 0.0f;
     }
 
     // True exponential smoothing with AsymmetricFollower (frame-rate independent)
-    float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, dt, moodNorm);
-    float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, dt, moodNorm);
+    float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, rawDt, moodNorm);
+    float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, rawDt, moodNorm);
 
-    // Dominant bin smoothing
-    float alphaBin = 1.0f - expf(-dt / 0.25f);  // True exponential, 250ms time constant
-    m_dominantBinSmooth += (m_dominantBin - m_dominantBinSmooth) * alphaBin;
-    if (m_dominantBinSmooth < 0.0f) m_dominantBinSmooth = 0.0f;
-    if (m_dominantBinSmooth > 11.0f) m_dominantBinSmooth = 11.0f;
+    // Circular chroma hue smoothing (replaces linear EMA on bin index)
+#if FEATURE_AUDIO_SYNC
+    if (hasAudio) {
+        m_chromaHue = static_cast<float>(effects::chroma::circularChromaHueSmoothed(
+            ctx.audio.controlBus.heavy_chroma, m_chromaAngle, rawDt, 0.20f));
+    }
+#endif
 
     // Use heavy_bands instead of raw chroma/energyAvg to eliminate jitter
     float heavyEnergy = 0.0f;
@@ -217,10 +222,10 @@ void ChevronWavesEnhancedEffect::render(plugins::EffectContext& ctx) {
 
         float audioGain = 0.2f + 0.8f * energyAvgSmooth;
         uint8_t brightness = (uint8_t)(chevron * 255.0f * intensityNorm * audioGain);
-        // Calculate hue with proper modular arithmetic (avoids UB from large float→uint8_t cast)
-        // m_chevronPos grows unbounded; fmodf ensures values stay in [0, 256) before casting
+        // Calculate hue with proper modular arithmetic (avoids UB from large float->uint8_t cast)
+        // m_chromaHue is already 0-255 from circular chroma smoothing
         float rawHue = (float)ctx.gHue
-                     + m_dominantBinSmooth * (255.0f / 12.0f)
+                     + m_chromaHue
                      + distFromCenter * 2.0f
                      + fmodf(m_chevronPos * 0.5f, 256.0f);
         uint8_t hue = (uint8_t)fmodf(rawHue, 256.0f);

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPStarBurstEffect.cpp
  * @brief LGP Star Burst effect - explosive radial lines from center
@@ -35,8 +33,7 @@ bool LGPStarBurstEnhancedEffect::init(plugins::EffectContext& ctx) {
     m_phase = 0.0f;
     m_burst = 0.0f;
     m_lastHopSeq = 0;
-    m_dominantBin = 0;
-    m_dominantBinSmooth = 0.0f;
+    m_chromaAngle = 0.0f;
     m_subBassEnergy = 0.0f;
     m_targetSubBass = 0.0f;
     m_hihatSparkle = 0.0f;
@@ -77,16 +74,6 @@ void LGPStarBurstEnhancedEffect::render(plugins::EffectContext& ctx) {
                 m_chromaTargets[i] = ctx.audio.controlBus.heavy_chroma[i];
             }
 
-            // Simple chroma analysis for color (dominant bin only) - use smoothed values
-            float maxBinVal = 0.0f;
-            for (uint8_t i = 0; i < 12; ++i) {
-                float bin = m_chromaSmoothed[i];
-                if (bin > maxBinVal) {
-                    maxBinVal = bin;
-                    m_dominantBin = i;
-                }
-            }
-
             // Enhanced: Snare = burst with sub-bass boost
             if (ctx.audio.isSnareHit()) {
                 m_burst = 1.0f;
@@ -105,6 +92,7 @@ void LGPStarBurstEnhancedEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
     // Per-frame Updates (smooth animation)
     // =========================================================================
+    float rawDt = ctx.getSafeRawDeltaSeconds();
     float dt = ctx.getSafeDeltaSeconds();
     float moodNorm = ctx.getMoodNormalized();
     
@@ -112,24 +100,22 @@ void LGPStarBurstEnhancedEffect::render(plugins::EffectContext& ctx) {
     if (hasAudio) {
         for (uint8_t i = 0; i < 12; i++) {
             m_chromaSmoothed[i] = m_chromaFollowers[i].updateWithMood(
-                m_chromaTargets[i], dt, moodNorm);
+                m_chromaTargets[i], rawDt, moodNorm);
         }
         // Enhanced: Smooth sub-bass energy
-        m_subBassEnergy = m_subBassFollower.updateWithMood(m_targetSubBass, dt, moodNorm);
+        m_subBassEnergy = m_subBassFollower.updateWithMood(m_targetSubBass, rawDt, moodNorm);
         
         // Enhanced: Hi-hat hit triggers sparkle burst
         if (ctx.audio.isHihatHit()) {
             m_hihatSparkle = 1.0f;
         }
-        m_hihatSparkle *= 0.85f;  // Faster decay for sparkle
+        m_hihatSparkle = effects::chroma::dtDecay(m_hihatSparkle, 0.85f, rawDt);  // dt-corrected decay for sparkle
         if (m_hihatSparkle < 0.01f) m_hihatSparkle = 0.0f;
     }
 
-    // Smooth dominant bin (for color stability)
-    float alphaBin = dt / (0.25f + dt);
-    m_dominantBinSmooth += (m_dominantBin - m_dominantBinSmooth) * alphaBin;
-    if (m_dominantBinSmooth < 0.0f) m_dominantBinSmooth = 0.0f;
-    if (m_dominantBinSmooth > 11.0f) m_dominantBinSmooth = 11.0f;
+    // Circular chroma hue (replaces argmax + linear EMA to eliminate bin-flip rainbow sweeps)
+    uint8_t chromaHue = effects::chroma::circularChromaHueSmoothed(
+        ctx.audio.controlBus.heavy_chroma, m_chromaAngle, rawDt, 0.20f);
 
     // Enhanced: Use 64-bin sub-bass for speed (more responsive)
     float heavyEnergy = 0.0f;
@@ -145,7 +131,7 @@ void LGPStarBurstEnhancedEffect::render(plugins::EffectContext& ctx) {
 
     // Spring physics for speed modulation (natural momentum, no jitter)
     float targetSpeed = 0.7f + 0.6f * heavyEnergy;
-    float smoothedSpeed = m_phaseSpeedSpring.update(targetSpeed, dt);
+    float smoothedSpeed = m_phaseSpeedSpring.update(targetSpeed, rawDt);
     if (smoothedSpeed > 2.0f) smoothedSpeed = 2.0f;
     if (smoothedSpeed < 0.3f) smoothedSpeed = 0.3f;  // Prevent stalling
 
@@ -181,7 +167,7 @@ void LGPStarBurstEnhancedEffect::render(plugins::EffectContext& ctx) {
         // Proportional correction (tau ~100ms gives smooth lock)
         // Compute ONCE per frame, not per pixel
         const float tau = 0.1f;
-        const float correctionAlpha = 1.0f - expf(-dt / tau);
+        const float correctionAlpha = 1.0f - expf(-rawDt / tau);
         m_phase += phaseError * correctionAlpha;
     }
     
@@ -190,7 +176,7 @@ void LGPStarBurstEnhancedEffect::render(plugins::EffectContext& ctx) {
     while (m_phase < 0.0f) m_phase += PHASE_DOMAIN;
 
     // Enhanced: Burst decay with sub-bass boost
-    m_burst *= 0.88f;
+    m_burst = effects::chroma::dtDecay(m_burst, 0.88f, rawDt);
     if (hasAudio && m_subBassEnergy > 0.3f) {
         m_burst = fmaxf(m_burst, m_subBassEnergy * 0.5f);  // Boost burst with sub-bass
     }
@@ -203,7 +189,7 @@ void LGPStarBurstEnhancedEffect::render(plugins::EffectContext& ctx) {
     // Anti-aliased burst core at true center (79.5) using SubpixelRenderer
     // Lower threshold from 0.05 to 0.02 for more visibility
     if (m_burst > 0.02f) {
-        uint8_t baseHue = (uint8_t)(ctx.gHue + m_dominantBinSmooth * (255.0f / 12.0f));
+        uint8_t baseHue = (uint8_t)(ctx.gHue + chromaHue);
         CRGB burstColor = ctx.palette.getColor(baseHue, 255);
         // Enhanced: Boost brightness with sub-bass and hi-hat sparkle
         // Use sqrt for gentler curve on burst intensity
@@ -229,7 +215,7 @@ void LGPStarBurstEnhancedEffect::render(plugins::EffectContext& ctx) {
     for (int i = 0; i < STRIP_LENGTH; i++) {
         float distFromCenter = (float)centerPairDistance((uint16_t)i);
 
-        // FIXED frequency - no kick modulation (like Wave Collision)
+        // Spatial frequency for sharp radial lines
         const float freqBase = 0.25f;
         float star = sinf(distFromCenter * freqBase - m_phase);
 
@@ -247,7 +233,7 @@ void LGPStarBurstEnhancedEffect::render(plugins::EffectContext& ctx) {
         pattern = fmaxf(0.2f, pattern);
         uint8_t brightness = (uint8_t)(pattern * 255.0f * intensityNorm);
         uint8_t paletteIndex = (uint8_t)(distFromCenter * 2.0f + pattern * 50.0f);
-        uint8_t baseHue = (uint8_t)(ctx.gHue + m_dominantBinSmooth * (255.0f / 12.0f));
+        uint8_t baseHue = (uint8_t)(ctx.gHue + chromaHue);
 
         ctx.leds[i] = ctx.palette.getColor((uint8_t)(baseHue + paletteIndex), brightness);
         if (i + STRIP_LENGTH < ctx.ledCount) {

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPSpiralVortexEffect.cpp
  * @brief LGP Spiral Vortex effect implementation
@@ -27,10 +25,11 @@ bool LGPSpiralVortexEffect::init(plugins::EffectContext& ctx) {
 
 void LGPSpiralVortexEffect::render(plugins::EffectContext& ctx) {
     // CENTER ORIGIN - Creates rotating spiral patterns from center
+    float dt = ctx.getSafeDeltaSeconds();
     float speedNorm = ctx.speed / 50.0f;
     float intensityNorm = ctx.brightness / 255.0f;
 
-    m_phase += speedNorm * 0.05f;
+    m_phase += speedNorm * 0.05f * 60.0f * dt;  // dt-corrected
 
     const int spiralArms = 4;
 

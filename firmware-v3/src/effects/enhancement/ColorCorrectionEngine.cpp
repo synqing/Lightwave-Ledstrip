@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file ColorCorrectionEngine.cpp
  * @brief Implementation of comprehensive color correction system
@@ -431,7 +429,7 @@ void ColorCorrectionEngine::loadFromNVS() {
         m_config.maxBluePercentOfRed = prefs.getUChar("brownB", 8);
         // V-Clamping settings (white accumulation prevention)
         m_config.vClampEnabled = prefs.getBool("vClampEn", true);
-        m_config.maxBrightness = prefs.getUChar("maxBright", 200);
+        m_config.maxBrightness = prefs.getUChar("maxBright", 255);
         m_config.saturationBoostAmount = prefs.getUChar("satBoost", 25);
         prefs.end();
         ESP_LOGI(TAG, "Settings loaded from NVS (mode=%d, vClamp=%d)",

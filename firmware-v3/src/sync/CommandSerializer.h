@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file CommandSerializer.h
  * @brief Serialize CQRS commands to/from JSON for sync transmission
@@ -39,6 +37,7 @@
 #pragma once
 
 #include "CommandType.h"
+#include "../config/effect_ids.h"
 #include "../core/state/Commands.h"
 #include <cstddef>
 #include <cstdint>
@@ -57,12 +56,12 @@ struct ParsedCommand {
 
     // Union of all possible parameters
     union {
-        struct { uint8_t effectId; } effect;
+        struct { EffectId effectId; } effect;
         struct { uint8_t brightness; } brightness;
         struct { uint8_t paletteId; } palette;
         struct { uint8_t speed; } speed;
         struct { uint8_t zoneId; bool enabled; } zoneEnable;
-        struct { uint8_t zoneId; uint8_t effectId; } zoneEffect;
+        struct { uint8_t zoneId; EffectId effectId; } zoneEffect;
         struct { uint8_t zoneId; uint8_t paletteId; } zonePalette;
         struct { uint8_t zoneId; uint8_t brightness; } zoneBrightness;
         struct { uint8_t zoneId; uint8_t speed; } zoneSpeed;
@@ -121,7 +120,7 @@ public:
      * @brief Serialize SetEffect command
      */
     static size_t serializeSetEffect(
-        uint8_t effectId,
+        EffectId effectId,
         uint32_t version,
         const char* senderUuid,
         char* outBuffer,
@@ -166,7 +165,7 @@ public:
      */
     static size_t serializeZoneSetEffect(
         uint8_t zoneId,
-        uint8_t effectId,
+        EffectId effectId,
         uint32_t version,
         const char* senderUuid,
         char* outBuffer,

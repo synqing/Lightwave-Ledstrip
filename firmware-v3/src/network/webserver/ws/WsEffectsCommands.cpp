@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file WsEffectsCommands.cpp
  * @brief WebSocket effects command handlers implementation
@@ -17,6 +15,7 @@
 #include "../../../core/actors/ActorSystem.h"
 #include "../../../core/actors/RendererActor.h"
 #include "../../../effects/PatternRegistry.h"
+#include "../../../config/display_order.h"
 #include "../../../plugins/api/IEffect.h"
 #include "../../../effects/transitions/TransitionTypes.h"
 #include <ESPAsyncWebServer.h>
@@ -41,14 +40,14 @@ static void handleEffectsGetMetadata(AsyncWebSocketClient* client, JsonDocument&
 
     const codec::EffectsGetMetadataRequest& req = decodeResult.request;
     const char* requestId = req.requestId ? req.requestId : "";
-    uint8_t effectId = req.effectId;
-    
-    // DEFENSIVE CHECK: Validate effectId before array access
-    if (effectId != 255) {
+    EffectId effectId = req.effectId;
+
+    // DEFENSIVE CHECK: Validate effectId before registry lookup
+    if (effectId != INVALID_EFFECT_ID) {
         effectId = lightwaveos::network::validateEffectIdInRequest(effectId);
     }
 
-    if (effectId == 255 || effectId >= ctx.renderer->getEffectCount()) {
+    if (effectId == INVALID_EFFECT_ID || !ctx.renderer->isEffectRegistered(effectId)) {
         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid effectId", requestId));
         return;
     }
@@ -83,9 +82,9 @@ static void handleEffectsGetCurrent(AsyncWebSocketClient* client, JsonDocument& 
     codec::EffectsSimpleDecodeResult decodeResult = codec::WsEffectsCodec::decodeSimple(root);
     
     const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
-    uint8_t effectId = ctx.renderer->getCurrentEffect();
+    EffectId effectId = ctx.renderer->getCurrentEffect();
     const char* name = ctx.renderer->getEffectName(effectId);
-    
+
     String response = buildWsResponse("effects.current", requestId, [effectId, name, &ctx](JsonObject& data) {
         codec::WsEffectsCodec::encodeGetCurrent(
             effectId,
@@ -123,20 +122,24 @@ static void handleEffectsList(AsyncWebSocketClient* client, JsonDocument& doc, c
 
     // Values already validated by codec (page >= 1, limit 1-50)
 
-    uint8_t effectCount = ctx.renderer->getEffectCount();
-    uint8_t startIdx = (page - 1) * limit;
-    uint8_t endIdx = (startIdx + limit < effectCount) ? (startIdx + limit) : effectCount;
+    uint16_t effectCount = ctx.renderer->getEffectCount();
+    uint16_t startIdx = (page - 1) * limit;
+    uint16_t endIdx = (startIdx + limit < effectCount) ? (startIdx + limit) : effectCount;
 
-    // Collect effect names and categories into arrays
-    const char* effectNames[128];
-    const char* categories[128];
+    // Collect effect names, IDs, and categories into arrays
+    // Sized to MAX_CACHED_EFFECTS to handle full effect list
+    const char* effectNames[limits::MAX_EFFECTS];
+    EffectId effectIdArr[limits::MAX_EFFECTS];
+    const char* categories[limits::MAX_EFFECTS];
     static const char* categoryClassic = "Classic";
     static const char* categoryWave = "Wave";
     static const char* categoryPhysics = "Physics";
     static const char* categoryCustom = "Custom";
-    
-    for (uint8_t i = startIdx; i < endIdx; i++) {
-        effectNames[i] = ctx.renderer->getEffectName(i);
+
+    for (uint16_t i = startIdx; i < endIdx; i++) {
+        EffectId eid = ctx.renderer->getEffectIdAt(i);
+        effectIdArr[i] = eid;
+        effectNames[i] = ctx.renderer->getEffectName(eid);
         if (details) {
             if (i <= 4) categories[i] = categoryClassic;
             else if (i <= 7) categories[i] = categoryWave;
@@ -147,8 +150,8 @@ static void handleEffectsList(AsyncWebSocketClient* client, JsonDocument& doc, c
         }
     }
     
-    String response = buildWsResponse("effects.list", requestId, [effectCount, startIdx, endIdx, page, limit, details, effectNames, categories](JsonObject& data) {
-        codec::WsEffectsCodec::encodeList(effectCount, startIdx, endIdx, page, limit, details, effectNames, categories, data);
+    String response = buildWsResponse("effects.list", requestId, [effectCount, startIdx, endIdx, page, limit, details, effectNames, effectIdArr, categories](JsonObject& data) {
+        codec::WsEffectsCodec::encodeList(effectCount, startIdx, endIdx, page, limit, details, effectNames, effectIdArr, categories, data);
     });
     client->text(response);
 }
@@ -163,24 +166,24 @@ static void handleSetEffect(AsyncWebSocketClient* client, JsonDocument& doc, con
         return;
     }
 
-    // DEFENSIVE CHECK: Validate effectId against current effect count
-    uint8_t effectId = lightwaveos::network::validateEffectIdInRequest(decodeResult.request.effectId);
-    if (effectId < ctx.renderer->getEffectCount()) {
+    // DEFENSIVE CHECK: Validate effectId against registry
+    EffectId effectId = lightwaveos::network::validateEffectIdInRequest(decodeResult.request.effectId);
+    if (ctx.renderer->isEffectRegistered(effectId)) {
         ctx.actorSystem.setEffect(effectId);
         if (ctx.broadcastStatus) ctx.broadcastStatus();
     }
 }
 
 static void handleNextEffect(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    uint8_t current = ctx.renderer->getCurrentEffect();
-    uint8_t next = (current + 1) % ctx.renderer->getEffectCount();
+    EffectId current = ctx.renderer->getCurrentEffect();
+    EffectId next = lightwaveos::getNextDisplay(current);
     ctx.actorSystem.setEffect(next);
     if (ctx.broadcastStatus) ctx.broadcastStatus();
 }
 
 static void handlePrevEffect(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    uint8_t current = ctx.renderer->getCurrentEffect();
-    uint8_t prev = (current + ctx.renderer->getEffectCount() - 1) % ctx.renderer->getEffectCount();
+    EffectId current = ctx.renderer->getCurrentEffect();
+    EffectId prev = lightwaveos::getPrevDisplay(current);
     ctx.actorSystem.setEffect(prev);
     if (ctx.broadcastStatus) ctx.broadcastStatus();
 }
@@ -244,17 +247,18 @@ static void handleEffectsSetCurrent(AsyncWebSocketClient* client, JsonDocument& 
     const codec::EffectsSetCurrentRequest& req = decodeResult.request;
     const char* requestId = req.requestId ? req.requestId : "";
 
-    // DEFENSIVE CHECK: Validate effectId against current effect count
-    uint8_t effectId = lightwaveos::network::validateEffectIdInRequest(req.effectId);
+    // DEFENSIVE CHECK: Validate effectId against registry
+    EffectId effectId = lightwaveos::network::validateEffectIdInRequest(req.effectId);
 
-    if (effectId >= ctx.renderer->getEffectCount()) {
+    if (!ctx.renderer->isEffectRegistered(effectId)) {
         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid effectId", requestId));
         return;
     }
 
     // Apply effect change (with or without transition)
     if (req.hasTransition && req.transitionType < static_cast<uint8_t>(lightwaveos::transitions::TransitionType::TYPE_COUNT)) {
-        ctx.renderer->startTransition(effectId, req.transitionType);
+        // Route through ActorSystem message queue for thread safety (Core 0 -> Core 1)
+        ctx.actorSystem.startTransition(effectId, req.transitionType);
     } else {
         ctx.actorSystem.setEffect(effectId);
     }
@@ -281,9 +285,9 @@ static void handleEffectsParametersGet(AsyncWebSocketClient* client, JsonDocumen
 
     const codec::EffectsParametersGetRequest& req = decodeResult.request;
     const char* requestId = req.requestId ? req.requestId : "";
-    uint8_t effectId = (req.effectId == 255) ? ctx.renderer->getCurrentEffect() : req.effectId;
+    EffectId effectId = (req.effectId == INVALID_EFFECT_ID) ? ctx.renderer->getCurrentEffect() : req.effectId;
 
-    if (effectId >= ctx.renderer->getEffectCount()) {
+    if (effectId == INVALID_EFFECT_ID) {
         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid effectId", requestId));
         return;
     }
@@ -293,17 +297,19 @@ static void handleEffectsParametersGet(AsyncWebSocketClient* client, JsonDocumen
     bool hasParameters = (effect != nullptr && effect->getParameterCount() > 0);
     
     // Collect parameter data into arrays
-    const char* paramNames[64];
-    const char* paramDisplayNames[64];
-    float paramMins[64];
-    float paramMaxs[64];
-    float paramDefaults[64];
-    float paramValues[64];
+    // Note: Effects rarely have >16 parameters, caps stack usage
+    static constexpr uint8_t MAX_EFFECT_PARAMS = 16;
+    const char* paramNames[MAX_EFFECT_PARAMS];
+    const char* paramDisplayNames[MAX_EFFECT_PARAMS];
+    float paramMins[MAX_EFFECT_PARAMS];
+    float paramMaxs[MAX_EFFECT_PARAMS];
+    float paramDefaults[MAX_EFFECT_PARAMS];
+    float paramValues[MAX_EFFECT_PARAMS];
     uint8_t paramCount = 0;
-    
+
     if (effect) {
         paramCount = effect->getParameterCount();
-        for (uint8_t i = 0; i < paramCount && i < 64; ++i) {
+        for (uint8_t i = 0; i < paramCount && i < MAX_EFFECT_PARAMS; ++i) {
             const plugins::EffectParameter* param = effect->getParameter(i);
             if (!param) continue;
             paramNames[i] = param->name;
@@ -334,9 +340,9 @@ static void handleEffectsParametersSet(AsyncWebSocketClient* client, JsonDocumen
 
     const codec::EffectsParametersSetRequest& req = decodeResult.request;
     const char* requestId = req.requestId ? req.requestId : "";
-    uint8_t effectId = (req.effectId == 255) ? ctx.renderer->getCurrentEffect() : req.effectId;
+    EffectId effectId = (req.effectId == INVALID_EFFECT_ID) ? ctx.renderer->getCurrentEffect() : req.effectId;
 
-    if (effectId >= ctx.renderer->getEffectCount()) {
+    if (effectId == INVALID_EFFECT_ID) {
         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid effectId", requestId));
         return;
     }
@@ -353,11 +359,13 @@ static void handleEffectsParametersSet(AsyncWebSocketClient* client, JsonDocumen
     }
 
     // Iterate over JsonObjectConst (ArduinoJson v7 supports range-for on JsonObjectConst)
-    const char* queuedKeys[64];
-    const char* failedKeys[64];
+    // Note: Effects rarely have >16 parameters, caps stack usage
+    static constexpr uint8_t MAX_PARAM_KEYS = 16;
+    const char* queuedKeys[MAX_PARAM_KEYS];
+    const char* failedKeys[MAX_PARAM_KEYS];
     uint8_t queuedCount = 0;
     uint8_t failedCount = 0;
-    
+
     for (JsonPairConst kv : req.parameters) {
         const char* key = kv.key().c_str();
         float value = kv.value().as<float>();
@@ -371,17 +379,17 @@ static void handleEffectsParametersSet(AsyncWebSocketClient* client, JsonDocumen
             }
         }
         if (!known) {
-            if (failedCount < 64) {
+            if (failedCount < MAX_PARAM_KEYS) {
                 failedKeys[failedCount++] = key;
             }
             continue;
         }
         if (ctx.renderer->enqueueEffectParameterUpdate(effectId, key, value)) {
-            if (queuedCount < 64) {
+            if (queuedCount < MAX_PARAM_KEYS) {
                 queuedKeys[queuedCount++] = key;
             }
         } else {
-            if (failedCount < 64) {
+            if (failedCount < MAX_PARAM_KEYS) {
                 failedKeys[failedCount++] = key;
             }
         }
@@ -437,8 +445,8 @@ static void handleEffectsGetByFamily(AsyncWebSocketClient* client, JsonDocument&
     // Range already validated by codec (0-9)
     
     PatternFamily family = static_cast<PatternFamily>(familyId);
-    uint8_t patternIndices[128];
-    uint8_t count = PatternRegistry::getPatternsByFamily(family, patternIndices, 128);
+    EffectId patternIndices[128];
+    uint16_t count = PatternRegistry::getPatternsByFamily(family, patternIndices, 128);
     
     char familyNameBuf[32];
     PatternRegistry::getFamilyName(static_cast<PatternFamily>(familyId), familyNameBuf, sizeof(familyNameBuf));

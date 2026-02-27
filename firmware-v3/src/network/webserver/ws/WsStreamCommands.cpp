@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file WsStreamCommands.cpp
  * @brief WebSocket stream subscription command handlers implementation
@@ -331,10 +329,75 @@ static void handleBenchmarkGet(AsyncWebSocketClient* client, JsonDocument& doc, 
 }
 #endif
 
+// ============================================================================
+// Beat Event Subscribers
+// ============================================================================
+
+static constexpr size_t MAX_BEAT_SUBSCRIBERS = 4;
+static uint32_t s_beatSubscribers[MAX_BEAT_SUBSCRIBERS] = {0};
+
+bool hasBeatEventSubscribers() {
+    for (size_t i = 0; i < MAX_BEAT_SUBSCRIBERS; ++i) {
+        if (s_beatSubscribers[i] != 0) return true;
+    }
+    return false;
+}
+
+void removeBeatSubscriber(uint32_t clientId) {
+    for (size_t i = 0; i < MAX_BEAT_SUBSCRIBERS; ++i) {
+        if (s_beatSubscribers[i] == clientId) {
+            s_beatSubscribers[i] = 0;
+        }
+    }
+}
+
+static void handleBeatSubscribe(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    uint32_t clientId = client->id();
+    const char* requestId = doc["requestId"] | "";
+
+    bool subscribed = false;
+    for (size_t i = 0; i < MAX_BEAT_SUBSCRIBERS; ++i) {
+        if (s_beatSubscribers[i] == clientId) {
+            subscribed = true;
+            break;
+        }
+        if (!subscribed && s_beatSubscribers[i] == 0) {
+            s_beatSubscribers[i] = clientId;
+            subscribed = true;
+            break;
+        }
+    }
+
+    if (subscribed) {
+        String response = buildWsResponse("beat.subscribed", requestId, [clientId](JsonObject& data) {
+            data["clientId"] = clientId;
+        });
+        client->text(response);
+    } else {
+        client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Beat subscriber table full", requestId));
+    }
+}
+
+static void handleBeatUnsubscribe(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    uint32_t clientId = client->id();
+    const char* requestId = doc["requestId"] | "";
+
+    removeBeatSubscriber(clientId);
+
+    String response = buildWsResponse("beat.unsubscribed", requestId, [clientId](JsonObject& data) {
+        data["clientId"] = clientId;
+    });
+    client->text(response);
+}
+
+// ============================================================================
+// Registration
+// ============================================================================
+
 void registerWsStreamCommands(const WebServerContext& ctx) {
     WsCommandRouter::registerCommand("ledStream.subscribe", handleLedStreamSubscribe);
     WsCommandRouter::registerCommand("ledStream.unsubscribe", handleLedStreamUnsubscribe);
-    
+
 #if FEATURE_EFFECT_VALIDATION
     WsCommandRouter::registerCommand("validation.subscribe", handleValidationSubscribe);
     WsCommandRouter::registerCommand("validation.unsubscribe", handleValidationUnsubscribe);
@@ -347,6 +410,10 @@ void registerWsStreamCommands(const WebServerContext& ctx) {
     WsCommandRouter::registerCommand("benchmark.stop", handleBenchmarkStop);
     WsCommandRouter::registerCommand("benchmark.get", handleBenchmarkGet);
 #endif
+
+    // Beat event subscription (gated: no textAll() spam to non-subscribing clients)
+    WsCommandRouter::registerCommand("beat.subscribe", handleBeatSubscribe);
+    WsCommandRouter::registerCommand("beat.unsubscribe", handleBeatUnsubscribe);
 }
 
 } // namespace ws

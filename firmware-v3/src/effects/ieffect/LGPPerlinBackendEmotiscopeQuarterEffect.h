@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPPerlinBackendEmotiscopeQuarterEffect.h
  * @brief Perlin Backend Test C: Emotiscope 2.0 seedable Perlin (quarter-res + interpolation)
@@ -21,6 +19,7 @@
 #include "PerlinNoiseTypes.h"
 #include <FastLED.h>
 #include <cmath>
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -28,6 +27,8 @@ namespace ieffect {
 
 class LGPPerlinBackendEmotiscopeQuarterEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_PERLIN_BACKEND_EMOTISCOPE_QUARTER;
+
     LGPPerlinBackendEmotiscopeQuarterEffect();
     ~LGPPerlinBackendEmotiscopeQuarterEffect() override = default;
 

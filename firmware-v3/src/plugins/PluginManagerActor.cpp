@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file PluginManagerActor.cpp
  * @brief Plugin manager implementation
@@ -31,13 +29,15 @@ namespace plugins {
 
 PluginManagerActor::PluginManagerActor()
     : m_targetRegistry(nullptr)
+    , m_effectSlotCount(0)
     , m_overrideMode(false)
     , m_manifestCount(0)
+    , m_allowedIdCount(0)
 {
-    memset(m_effects, 0, sizeof(m_effects));
+    memset(m_effectSlots, 0, sizeof(m_effectSlots));
     memset(&m_stats, 0, sizeof(m_stats));
     memset(m_manifests, 0, sizeof(m_manifests));
-    memset(m_allowedEffects, 0, sizeof(m_allowedEffects));
+    memset(m_allowedIds, 0, sizeof(m_allowedIds));
 
     LW_LOGD("PluginManagerActor constructed");
 }
@@ -52,22 +52,56 @@ void PluginManagerActor::onStart() {
 }
 
 // ============================================================================
+// Internal Helpers
+// ============================================================================
+
+int16_t PluginManagerActor::findEffectSlot(EffectId id) const {
+    for (uint16_t i = 0; i < m_effectSlotCount; ++i) {
+        if (m_effectSlots[i].id == id) {
+            return static_cast<int16_t>(i);
+        }
+    }
+    return -1;
+}
+
+bool PluginManagerActor::isEffectAllowed(EffectId id) const {
+    for (uint16_t i = 0; i < m_allowedIdCount; ++i) {
+        if (m_allowedIds[i] == id) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// ============================================================================
 // IEffectRegistry Implementation
 // ============================================================================
 
-bool PluginManagerActor::registerEffect(uint8_t id, IEffect* effect) {
-    if (id >= PluginConfig::MAX_EFFECTS || effect == nullptr) {
+bool PluginManagerActor::registerEffect(EffectId id, IEffect* effect) {
+    if (id == INVALID_EFFECT_ID || effect == nullptr) {
         m_stats.registrationsFailed++;
         return false;
     }
 
     // In override mode, only allow effects in the allowed list
-    if (m_overrideMode && !m_allowedEffects[id]) {
+    if (m_overrideMode && !isEffectAllowed(id)) {
         m_stats.disabledByOverride++;
         return false;
     }
 
-    m_effects[id] = effect;
+    // Check for existing slot
+    int16_t slot = findEffectSlot(id);
+    if (slot >= 0) {
+        m_effectSlots[slot].effect = effect;
+    } else {
+        if (m_effectSlotCount >= PluginConfig::MAX_EFFECTS) {
+            m_stats.registrationsFailed++;
+            return false;
+        }
+        m_effectSlots[m_effectSlotCount].id = id;
+        m_effectSlots[m_effectSlotCount].effect = effect;
+        m_effectSlotCount++;
+    }
     m_stats.registeredCount++;
 
     // Forward to target registry if set
@@ -78,33 +112,31 @@ bool PluginManagerActor::registerEffect(uint8_t id, IEffect* effect) {
     return true;
 }
 
-bool PluginManagerActor::unregisterEffect(uint8_t id) {
-    if (id >= PluginConfig::MAX_EFFECTS) {
+bool PluginManagerActor::unregisterEffect(EffectId id) {
+    int16_t slot = findEffectSlot(id);
+    if (slot < 0) {
         return false;
     }
 
-    if (m_effects[id] != nullptr) {
-        m_effects[id] = nullptr;
-        m_stats.registeredCount--;
-        m_stats.unregistrations++;
+    // Remove by swapping with last entry (order doesn't matter)
+    m_effectSlots[slot] = m_effectSlots[m_effectSlotCount - 1];
+    m_effectSlots[m_effectSlotCount - 1] = {INVALID_EFFECT_ID, nullptr};
+    m_effectSlotCount--;
 
-        if (m_targetRegistry) {
-            return m_targetRegistry->unregisterEffect(id);
-        }
-        return true;
+    m_stats.registeredCount--;
+    m_stats.unregistrations++;
+
+    if (m_targetRegistry) {
+        return m_targetRegistry->unregisterEffect(id);
     }
-
-    return false;
+    return true;
 }
 
-bool PluginManagerActor::isEffectRegistered(uint8_t id) const {
-    if (id >= PluginConfig::MAX_EFFECTS) {
-        return false;
-    }
-    return m_effects[id] != nullptr;
+bool PluginManagerActor::isEffectRegistered(EffectId id) const {
+    return findEffectSlot(id) >= 0;
 }
 
-uint8_t PluginManagerActor::getRegisteredCount() const {
+uint16_t PluginManagerActor::getRegisteredCount() const {
     return m_stats.registeredCount;
 }
 
@@ -210,7 +242,7 @@ bool PluginManagerActor::reloadFromLittleFS() {
 
     // Reset override mode and allowed effects
     m_overrideMode = false;
-    memset(m_allowedEffects, 0, sizeof(m_allowedEffects));
+    m_allowedIdCount = 0;
 
     // Apply manifests
     if (applyManifests()) {
@@ -339,7 +371,7 @@ bool PluginManagerActor::parseManifest(const char* path, ParsedManifest& manifes
     manifest.pluginName[sizeof(manifest.pluginName) - 1] = '\0';
     manifest.overrideMode = decodeResult.config.overrideMode;
     manifest.effectCount = decodeResult.config.effectCount;
-    memcpy(manifest.effectIds, decodeResult.config.effectIds, 
+    memcpy(manifest.effectIds, decodeResult.config.effectIds,
            decodeResult.config.effectCount * sizeof(uint8_t));
 
     manifest.valid = true;
@@ -358,11 +390,12 @@ bool PluginManagerActor::validateManifest(ParsedManifest& manifest) {
     }
 
     // Validate all effect IDs exist in built-in registry
-    for (uint8_t i = 0; i < manifest.effectCount; i++) {
-        uint8_t id = manifest.effectIds[i];
+    for (uint16_t i = 0; i < manifest.effectCount; i++) {
+        EffectId id = manifest.effectIds[i];
         if (!BuiltinEffectRegistry::hasBuiltin(id)) {
             snprintf(manifest.errorMsg, sizeof(manifest.errorMsg),
-                     "Effect ID %u not found in built-in registry", id);
+                     "Effect ID 0x%04X not found in built-in registry",
+                     static_cast<unsigned>(id));
             manifest.valid = false;
             return false;
         }
@@ -383,36 +416,35 @@ bool PluginManagerActor::applyManifests() {
 
     // If override mode, build allowed effects list
     if (m_overrideMode) {
-        memset(m_allowedEffects, 0, sizeof(m_allowedEffects));
+        m_allowedIdCount = 0;
 
         for (uint8_t i = 0; i < m_manifestCount; i++) {
             if (!m_manifests[i].valid) continue;
 
-            for (uint8_t j = 0; j < m_manifests[i].effectCount; j++) {
-                uint8_t id = m_manifests[i].effectIds[j];
-                m_allowedEffects[id] = true;
+            for (uint16_t j = 0; j < m_manifests[i].effectCount; j++) {
+                EffectId id = m_manifests[i].effectIds[j];
+                // Avoid duplicates
+                if (!isEffectAllowed(id) && m_allowedIdCount < PluginConfig::MAX_EFFECTS) {
+                    m_allowedIds[m_allowedIdCount++] = id;
+                }
             }
         }
 
         // Count disabled effects
-        uint8_t builtinCount = BuiltinEffectRegistry::getBuiltinCount();
-        uint8_t allowedCount = 0;
-        for (uint8_t i = 0; i < PluginConfig::MAX_EFFECTS; i++) {
-            if (m_allowedEffects[i]) allowedCount++;
-        }
-        m_stats.disabledByOverride = builtinCount > allowedCount ?
-                                      builtinCount - allowedCount : 0;
+        uint16_t builtinCount = BuiltinEffectRegistry::getBuiltinCount();
+        m_stats.disabledByOverride = builtinCount > m_allowedIdCount ?
+                                      builtinCount - m_allowedIdCount : 0;
         m_stats.overrideModeEnabled = true;
 
         LW_LOGI("Override mode: %u effects allowed, %u disabled",
-                allowedCount, m_stats.disabledByOverride);
+                m_allowedIdCount, m_stats.disabledByOverride);
     } else {
         m_stats.overrideModeEnabled = false;
         m_stats.disabledByOverride = 0;
     }
 
     // Second pass: count loaded effects
-    uint8_t loadedCount = 0;
+    uint16_t loadedCount = 0;
     for (uint8_t i = 0; i < m_manifestCount; i++) {
         if (!m_manifests[i].valid) continue;
         loadedCount += m_manifests[i].effectCount;
@@ -423,10 +455,10 @@ bool PluginManagerActor::applyManifests() {
 }
 
 void PluginManagerActor::clearRegistrations() {
-    for (uint8_t i = 0; i < PluginConfig::MAX_EFFECTS; i++) {
-        if (m_effects[i] != nullptr) {
-            unregisterEffect(i);
-        }
+    // Unregister all slots
+    while (m_effectSlotCount > 0) {
+        EffectId id = m_effectSlots[0].id;
+        unregisterEffect(id);
     }
 }
 

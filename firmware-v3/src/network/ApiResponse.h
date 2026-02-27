@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file ApiResponse.h
  * @brief Standardized API response helpers for LightwaveOS v2 API
@@ -63,6 +61,7 @@ namespace HttpStatus {
     constexpr uint16_t TOO_MANY_REQUESTS = 429;
     constexpr uint16_t INTERNAL_ERROR = 500;
     constexpr uint16_t INTERNAL_SERVER_ERROR = 500;  // Alias for INTERNAL_ERROR
+    constexpr uint16_t NOT_IMPLEMENTED = 501;
     constexpr uint16_t SERVICE_UNAVAILABLE = 503;
     constexpr uint16_t INSUFFICIENT_STORAGE = 507;
     constexpr uint16_t REQUEST_TIMEOUT = 408;

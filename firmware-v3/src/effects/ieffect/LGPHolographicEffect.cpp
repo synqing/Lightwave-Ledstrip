@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPHolographicEffect.cpp
  * @brief LGP Holographic effect implementation
@@ -54,7 +52,7 @@ void LGPHolographicEffect::render(plugins::EffectContext& ctx) {
         // Layer 3 - Fast, tight pattern
         layerSum += sinf(dist * 0.3f + m_phase3) * 0.5f;
 
-        // Layer 4 - Very fast shimmer
+        // Layer 4 - Shimmer (3.0x creates sharp interference bands)
         layerSum += sinf(dist * 0.6f - m_phase1 * 3.0f) * 0.3f;
 
         // Normalize

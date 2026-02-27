@@ -1,7 +1,7 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 #include "ControlBus.h"
 #include "../../config/features.h"  // FEATURE_MUSICAL_SALIENCY
+#include "../../config/audio_config.h"  // audio::HOP_RATE_HZ
+#include "../AudioMath.h"  // retunedAlpha()
 #include <cstring>  // for memcpy
 
 namespace lightwaveos::audio {
@@ -96,24 +96,36 @@ void ControlBus::setMoodSmoothing(uint8_t mood) {
     // Maps mood (0-255) to smoothing parameters:
     //   Low mood (0):    Reactive - fast attack, slow decay, low alpha
     //   High mood (255): Smooth - slow attack, fast decay, high alpha
+    //
+    // Reference alphas are tuned for 50 Hz (12.8kHz / 256-hop).
+    // retunedAlpha() preserves time constants at any frame rate.
     // ========================================================================
+
+    constexpr float REF_HZ = 50.0f;
+    const float targetHz = audio::HOP_RATE_HZ;
 
     // RMS/Flux alpha smoothing
     // Low mood: fast=0.25, slow=0.08 (more reactive)
     // High mood: fast=0.45, slow=0.18 (more smoothed)
-    m_alpha_fast = 0.25f + 0.20f * moodNorm;  // 0.25-0.45
-    m_alpha_slow = 0.08f + 0.10f * moodNorm;  // 0.08-0.18
+    float fast_ref = 0.25f + 0.20f * moodNorm;  // 0.25-0.45 @ 50Hz
+    float slow_ref = 0.08f + 0.10f * moodNorm;  // 0.08-0.18 @ 50Hz
+    m_alpha_fast = retunedAlpha(fast_ref, REF_HZ, targetHz);
+    m_alpha_slow = retunedAlpha(slow_ref, REF_HZ, targetHz);
 
     // Band attack/release (asymmetric follower)
     // Low mood: fast attack (0.25), very slow release (0.02) - punchy transients
     // High mood: slow attack (0.08), faster release (0.06) - sustained, dreamy
-    m_band_attack = 0.25f - 0.17f * moodNorm;        // 0.25-0.08 (inverted)
-    m_band_release = 0.02f + 0.04f * moodNorm;       // 0.02-0.06
+    float attack_ref = 0.25f - 0.17f * moodNorm;   // 0.25-0.08 @ 50Hz
+    float release_ref = 0.02f + 0.04f * moodNorm;  // 0.02-0.06 @ 50Hz
+    m_band_attack = retunedAlpha(attack_ref, REF_HZ, targetHz);
+    m_band_release = retunedAlpha(release_ref, REF_HZ, targetHz);
 
     // Heavy band attack/release (extra-smoothed for ambient effects)
     // Same pattern but with more extreme smoothing
-    m_heavy_band_attack = 0.12f - 0.08f * moodNorm;  // 0.12-0.04 (inverted)
-    m_heavy_band_release = 0.01f + 0.02f * moodNorm; // 0.01-0.03
+    float heavy_attack_ref = 0.12f - 0.08f * moodNorm;   // 0.12-0.04 @ 50Hz
+    float heavy_release_ref = 0.01f + 0.02f * moodNorm;  // 0.01-0.03 @ 50Hz
+    m_heavy_band_attack = retunedAlpha(heavy_attack_ref, REF_HZ, targetHz);
+    m_heavy_band_release = retunedAlpha(heavy_release_ref, REF_HZ, targetHz);
 }
 
 /**
@@ -252,8 +264,8 @@ void ControlBus::detectAndRemoveSpikes(LookaheadBuffer& buffer,
     m_spikeStats.spikesCorrected += frameSpikesCorrected;
     m_spikeStats.totalEnergyRemoved += frameEnergyRemoved;
 
-    // Rolling averages (EMA alpha=0.02)
-    const float alpha = 0.02f;
+    // Rolling averages (EMA, ~1s tau for spike statistics)
+    const float alpha = retunedAlpha(0.02f, 50.0f, audio::HOP_RATE_HZ);
     m_spikeStats.avgSpikesPerFrame = lerp(m_spikeStats.avgSpikesPerFrame,
                                            (float)frameSpikesDetected, alpha);
     if (frameSpikesCorrected > 0) {
@@ -452,69 +464,30 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
     }
 
     // ========================================================================
-    // Stage 4b: Chord detection from chromagram (Priority 6)
-    // Detects Major/Minor/Diminished/Augmented triads from pitch-class energy
+    // Stage 4b-7: Derived features (Stage B — backend-agnostic)
+    // Chord detection, liveliness, saliency, silence detection.
+    // Called via applyDerivedFeatures() so ES path can also invoke it.
     // ========================================================================
-    if (m_chord_detection_enabled) {
-        detectChord(m_frame.chroma);
-    }
 
-    // ========================================================================
-    // Stage 4c: Store tempo tracker state for saliency computation
-    // Effects use MusicalGrid via ctx.audio.*, not these fields directly
-    // ========================================================================
+    // Copy tempo tracker state into frame (LWLS path populates from TempoTracker)
     m_frame.tempoLocked = raw.tempoLocked;
     m_frame.tempoConfidence = raw.tempoConfidence;
     m_frame.tempoBeatTick = raw.tempoBeatTick;
+    m_frame.tempoBpm = raw.tempoBpm;
+    m_frame.tempoBeatStrength = raw.tempoBeatStrength;
 
-    // ========================================================================
-    // Stage 4c.1: Liveliness (tempo + spectral flux) for global speed trim
-    // ========================================================================
-    const float tempoConf = clamp01(m_frame.tempoConfidence);
-    const float fluxNow = clamp01(m_frame.fast_flux);
-    float rawLiveliness = clamp01(tempoConf * 0.6f + fluxNow * 0.4f);
-
-    // Exponential smoothing with time-constant mapping
-    const float tau = 0.30f;
-    const float alpha = 1.0f - expf(-dt / tau);
-    if (!had_time) {
-        m_liveliness_s = rawLiveliness;
-    } else {
-        m_liveliness_s = lerp(m_liveliness_s, rawLiveliness, alpha);
-    }
-    m_frame.liveliness = clamp01(m_liveliness_s);
-
-    // ========================================================================
-    // Stage 4d: Musical saliency computation (Musical Intelligence System Phase 1)
-    // Computes what's "perceptually important" across harmonic/rhythmic/timbral/dynamic
-    // ========================================================================
-#if FEATURE_MUSICAL_SALIENCY
-    computeSaliency();
-#else
-    // Zero out saliency when disabled - effects will see all zeros
-    m_frame.saliency = MusicalSaliencyFrame{};
-#endif
-
-    // ========================================================================
-    // Stage 5: Copy waveform data (no processing)
-    // ========================================================================
+    // Copy waveform data (no processing)
     for (uint8_t i = 0; i < CONTROLBUS_WAVEFORM_N; ++i) {
         m_frame.waveform[i] = raw.waveform[i];
     }
 
-    // ========================================================================
-    // Stage 5b: Copy onset detection fields (Phase 1.2 - passthrough)
-    // Snare/hi-hat detection performed upstream in GoertzelAnalyzer
-    // ========================================================================
+    // Copy onset detection fields (Phase 1.2 - passthrough from GoertzelAnalyzer)
     m_frame.snareEnergy = clamp01(raw.snareEnergy);
     m_frame.hihatEnergy = clamp01(raw.hihatEnergy);
     m_frame.snareTrigger = raw.snareTrigger;
     m_frame.hihatTrigger = raw.hihatTrigger;
 
-    // ========================================================================
-    // Stage 5c: Copy 64-bin Goertzel spectrum (Phase 2 - passthrough)
-    // Full spectrum available for visualizer effects
-    // ========================================================================
+    // Copy 64-bin Goertzel spectrum (Phase 2 - passthrough)
     for (uint8_t i = 0; i < ControlBusRawInput::BINS_64_COUNT; ++i) {
         m_frame.bins64[i] = clamp01(raw.bins64[i]);
     }
@@ -522,10 +495,57 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
         m_frame.bins64Adaptive[i] = clamp01(raw.bins64Adaptive[i]);
     }
 
-    // ========================================================================
-    // Stage 6: Update spike detection telemetry frame counter
-    // ========================================================================
+    // Copy bins256 (PipelineCore full-resolution spectrum, zero for Goertzel backend)
+    memcpy(m_frame.bins256, raw.bins256, sizeof(float) * ControlBusRawInput::BINS_256_COUNT);
+    m_frame.binHz = raw.binHz;
+
+    // Update spike detection telemetry frame counter
     m_spikeStats.totalFrames++;
+
+    // Apply derived features (Stage B)
+    applyDerivedFeatures(m_frame, dt, raw.rmsUngated);
+}
+
+// ==========================================================================
+// Stage B: Backend-agnostic derived features
+// ==========================================================================
+void ControlBus::applyDerivedFeatures(ControlBusFrame& frame, float dt, float rmsUngated) {
+    // ========================================================================
+    // Stage 4b: Chord detection from chromagram (Priority 6)
+    // Detects Major/Minor/Diminished/Augmented triads from pitch-class energy
+    // ========================================================================
+    if (m_chord_detection_enabled) {
+        detectChord(frame.chroma, frame.chordState);
+    }
+
+    // ========================================================================
+    // Stage 4c: Liveliness (tempo + spectral flux) for global speed trim
+    // ========================================================================
+    const float tempoConf = clamp01(frame.tempoConfidence);
+    const float fluxNow = clamp01(frame.fast_flux);
+    float rawLiveliness = clamp01(tempoConf * 0.6f + fluxNow * 0.4f);
+
+    // Exponential smoothing with time-constant mapping
+    const float tau = 0.30f;
+    const float alpha = 1.0f - expf(-dt / tau);
+    if (dt >= 0.5f) {
+        // First call or large gap — snap to value
+        m_liveliness_s = rawLiveliness;
+    } else {
+        m_liveliness_s = lerp(m_liveliness_s, rawLiveliness, alpha);
+    }
+    frame.liveliness = clamp01(m_liveliness_s);
+
+    // ========================================================================
+    // Stage 4d: Musical saliency computation (Musical Intelligence System Phase 1)
+    // Computes what's "perceptually important" across harmonic/rhythmic/timbral/dynamic
+    // ========================================================================
+#if FEATURE_MUSICAL_SALIENCY
+    computeSaliency(frame);
+#else
+    // Zero out saliency when disabled - effects will see all zeros
+    frame.saliency = MusicalSaliencyFrame{};
+#endif
 
     // ========================================================================
     // Stage 7: Silence detection (Sensory Bridge silent_scale pattern)
@@ -533,13 +553,13 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
     // ========================================================================
     if (m_silence_hysteresis_ms <= 0.0f) {
         // Disabled - always active
-        m_frame.silentScale = 1.0f;
-        m_frame.isSilent = false;
+        frame.silentScale = 1.0f;
+        frame.isSilent = false;
     } else {
-        uint32_t now_ms = now.monotonic_us / 1000;  // Convert AudioTime to milliseconds
+        uint32_t now_ms = frame.t.monotonic_us / 1000;  // Convert AudioTime to milliseconds
         // Use the pre-gate RMS so the activity gate does not accidentally
         // force the entire system into "silence" on quiet but real audio.
-        bool currently_silent = (clamp01(raw.rmsUngated) < m_silence_threshold);
+        bool currently_silent = (clamp01(rmsUngated) < m_silence_threshold);
 
         if (currently_silent && !m_silence_triggered) {
             // Start silence timer if not already started
@@ -556,12 +576,14 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
             m_silence_triggered = false;
         }
 
-        // Smooth transition (90% hysteresis = ~400ms fade at 60fps)
+        // Smooth transition (~400ms fade, frame-rate independent)
         float target = m_silence_triggered ? 0.0f : 1.0f;
-        m_silent_scale_smoothed = target * 0.1f + m_silent_scale_smoothed * 0.9f;
+        constexpr float SILENCE_FADE_TAU = 0.19f;  // ~400ms @ 60fps with original 0.1 alpha
+        const float silenceAlpha = computeEmaAlpha(SILENCE_FADE_TAU, audio::HOP_RATE_HZ);
+        m_silent_scale_smoothed = target * silenceAlpha + m_silent_scale_smoothed * (1.0f - silenceAlpha);
 
-        m_frame.silentScale = m_silent_scale_smoothed;
-        m_frame.isSilent = m_silence_triggered;
+        frame.silentScale = m_silent_scale_smoothed;
+        frame.isSilent = m_silence_triggered;
     }
 }
 
@@ -576,8 +598,7 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
  *
  * @param chroma Pointer to 12-element chromagram array (C, C#, D, ..., B)
  */
-void ControlBus::detectChord(const float* chroma) {
-    ChordState& cs = m_frame.chordState;
+void ControlBus::detectChord(const float* chroma, ChordState& cs) {
 
     // 1. Find dominant pitch class (root candidate)
     uint8_t rootIdx = 0;
@@ -652,9 +673,9 @@ void ControlBus::detectChord(const float* chroma) {
  * Effects should respond primarily to the DOMINANT saliency type,
  * not blindly to all audio signals equally.
  */
-void ControlBus::computeSaliency() {
-    MusicalSaliencyFrame& sal = m_frame.saliency;
-    const ChordState& chord = m_frame.chordState;
+void ControlBus::computeSaliency(ControlBusFrame& frame) {
+    MusicalSaliencyFrame& sal = frame.saliency;
+    const ChordState& chord = frame.chordState;
 
     // ========================================================================
     // Harmonic Novelty: Chord root or type changes
@@ -682,36 +703,36 @@ void ControlBus::computeSaliency() {
     // Timbral Novelty: Spectral flux derivative
     // High when spectral character changes (instrument changes, frequency shifts)
     // ========================================================================
-    float fluxDelta = m_frame.flux - sal.prevFlux;
+    float fluxDelta = frame.flux - sal.prevFlux;
     if (fluxDelta < 0.0f) fluxDelta = -fluxDelta;  // abs
     sal.timbralNovelty = clamp01(fluxDelta / m_saliencyTuning.fluxDerivativeThreshold);
-    sal.prevFlux = m_frame.flux;
+    sal.prevFlux = frame.flux;
 
     // ========================================================================
     // Dynamic Novelty: RMS envelope derivative
     // High when loudness changes (crescendo, decrescendo, transients)
     // ========================================================================
-    float rmsDelta = m_frame.rms - sal.prevRms;
+    float rmsDelta = frame.rms - sal.prevRms;
     if (rmsDelta < 0.0f) rmsDelta = -rmsDelta;  // abs
     sal.dynamicNovelty = clamp01(rmsDelta / m_saliencyTuning.rmsDerivativeThreshold);
-    sal.prevRms = m_frame.rms;
+    sal.prevRms = frame.rms;
 
     // ========================================================================
     // Rhythmic Novelty: Tempo Tracker Integration
     // Use tempo confidence when locked, fall back to flux when unlocked
     // ========================================================================
-    if (m_frame.tempoLocked) {
+    if (frame.tempoLocked) {
         // Tempo tracker is phase-locked: use confidence directly (stronger beat = higher novelty)
         // Add spike on beat_tick for transient response
-        float baseRhythmic = m_frame.tempoConfidence * 0.8f;  // 80% from confidence
-        if (m_frame.tempoBeatTick) {
+        float baseRhythmic = frame.tempoConfidence * 0.8f;  // 80% from confidence
+        if (frame.tempoBeatTick) {
             sal.rhythmicNovelty = clamp01(baseRhythmic + 0.5f);  // Spike on beat
         } else {
             sal.rhythmicNovelty = baseRhythmic;
         }
     } else {
         // Tempo not locked: fall back to flux proxy (reduced weight)
-        sal.rhythmicNovelty = clamp01(m_frame.fast_flux * 0.5f);
+        sal.rhythmicNovelty = clamp01(frame.fast_flux * 0.5f);
     }
 
     // ========================================================================

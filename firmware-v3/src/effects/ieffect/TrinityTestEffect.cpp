@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 #include "TrinityTestEffect.h"
 #include "../CoreEffects.h"
 #include <cmath>
@@ -64,7 +62,7 @@ void TrinityTestEffect::renderNoDataWarning(plugins::EffectContext& ctx) {
 }
 
 void TrinityTestEffect::render(plugins::EffectContext& ctx) {
-    float dt = ctx.getSafeDeltaSeconds();
+    float dt = ctx.getSafeRawDeltaSeconds();
     m_frameCount++;
 
     // Clear all LEDs first

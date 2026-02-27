@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 #pragma once
 #include <stdint.h>
 #include <math.h>
@@ -70,10 +68,17 @@ struct ControlBusRawInput {
     float bins64[BINS_64_COUNT] = {0};  // 0..1 normalized magnitudes
     float bins64Adaptive[BINS_64_COUNT] = {0};  // 0..1 adaptive normalised (Sensory Bridge max follower)
 
+    // PipelineCore: Full 256-bin FFT magnitude spectrum
+    static constexpr uint16_t BINS_256_COUNT = 256;
+    float bins256[BINS_256_COUNT] = {0};  ///< 0..1 normalised magnitudes (62.5 Hz spacing @ 32kHz/512-pt)
+    float binHz = 0.0f;                   ///< Frequency resolution (sampleRate / fftSize)
+
     // Tempo tracker output (saliency computation ONLY - effects read MusicalGrid)
     bool tempoLocked = false;       ///< TempoTracker lock state (saliency; effects read MusicalGrid)
     float tempoConfidence = 0.0f;   ///< TempoTracker confidence (saliency; effects read MusicalGrid.confidence)
     bool tempoBeatTick = false;     ///< TempoTracker beat tick gated by lock (saliency support)
+    float tempoBpm = 120.0f;        ///< Tempo BPM estimate (PipelineCore/TempoTracker)
+    float tempoBeatStrength = 0.0f; ///< Beat event strength [0,1] (0 = no beat this hop)
 };
 
 /**
@@ -132,10 +137,39 @@ struct ControlBusFrame {
     float bins64[BINS_64_COUNT] = {0};  // 0..1 normalized magnitudes
     float bins64Adaptive[BINS_64_COUNT] = {0};  // 0..1 adaptive normalised (Sensory Bridge max follower)
 
+    // PipelineCore: Full 256-bin FFT magnitude spectrum
+    static constexpr uint16_t BINS_256_COUNT = ControlBusRawInput::BINS_256_COUNT;
+    float bins256[BINS_256_COUNT] = {0};  ///< 0..1 normalised magnitudes
+    float binHz = 0.0f;                   ///< Frequency resolution (Hz per bin)
+
     // Tempo tracker output (saliency computation ONLY - effects read MusicalGrid)
     bool tempoLocked = false;       ///< TempoTracker lock state (saliency; effects read MusicalGrid)
     float tempoConfidence = 0.0f;   ///< TempoTracker confidence (saliency; effects read MusicalGrid.confidence)
     bool tempoBeatTick = false;     ///< TempoTracker beat tick gated by lock (saliency support)
+    float tempoBpm = 120.0f;        ///< Tempo BPM estimate
+    float tempoBeatStrength = 0.0f; ///< Beat event strength [0,1]
+
+    // -----------------------------------------------------------------------
+    // ES v1.1_320 tempo extras (FEATURE_AUDIO_BACKEND_ESV11)
+    // -----------------------------------------------------------------------
+    float es_bpm = 120.0f;
+    float es_tempo_confidence = 0.0f;
+    bool  es_beat_tick = false;
+    float es_beat_strength = 0.0f;
+    float es_phase01_at_audio_t = 0.0f;  // Phase at frame timestamp t, [0,1)
+    uint8_t es_beat_in_bar = 0;
+    bool es_downbeat_tick = false;
+
+    // -----------------------------------------------------------------------
+    // ES v1.1_320 raw signals (for ES reference show parity)
+    //
+    // These are the direct ES pipeline outputs before any LWLS contract
+    // normalisation/adaptation is applied. They allow us to port and compare
+    // Emotiscope light shows 1:1 against canonical hardware.
+    // -----------------------------------------------------------------------
+    float es_vu_level_raw = 0.0f;                 // 0..1
+    float es_bins64_raw[BINS_64_COUNT] = {0};     // 0..1 (ES spectrogram_smooth)
+    float es_chroma_raw[CONTROLBUS_NUM_CHROMA] = {0}; // 0..1 (ES chromagram)
 
     // Silence detection (Sensory Bridge pattern)
     // silentScale fades from 1.0 to 0.0 after silenceHysteresisMs of silence
@@ -324,6 +358,23 @@ public:
     float getSilenceHysteresisMs() const { return m_silence_hysteresis_ms; }
     bool isSilenceEnabled() const { return m_silence_hysteresis_ms > 0.0f; }
 
+    /**
+     * @brief Apply backend-agnostic derived features (Stage B) to a frame.
+     *
+     * Called after Stage A (backend-specific input conditioning) completes.
+     * Both LWLS path (via UpdateFromHop) and ES path (via AudioActor) call this.
+     *
+     * Requires frame to have normalised: rms, flux, fast_rms, fast_flux,
+     * chroma[0..11], tempoLocked, tempoConfidence, tempoBeatTick.
+     *
+     * Computes: chord detection, liveliness, saliency, silence detection.
+     *
+     * @param frame       Frame with Stage A fields already populated
+     * @param dt          Delta time in seconds (hop cadence)
+     * @param rmsUngated  Pre-gate RMS for silence detection (0..1)
+     */
+    void applyDerivedFeatures(ControlBusFrame& frame, float dt, float rmsUngated);
+
 private:
     ControlBusFrame m_frame{};
 
@@ -349,11 +400,13 @@ private:
     float m_bands_despiked[CONTROLBUS_NUM_BANDS] = {0};
     float m_chroma_despiked[CONTROLBUS_NUM_CHROMA] = {0};
 
-    // Tunables (Phase-2 defaults; keep them stable until you port Tab5 constants)
-    float m_alpha_fast = 0.35f;  // fast response
-    float m_alpha_slow = 0.12f;  // slower response
+    // Tunables (Phase-2 defaults, tuned for 50 Hz reference)
+    // The ESV11 path calls setMoodSmoothing() which retunes these dynamically.
+    // The default path uses setSmoothing() from AudioPipelineTuning.
+    float m_alpha_fast = 0.35f;  // fast response (50 Hz reference)
+    float m_alpha_slow = 0.12f;  // slower response (50 Hz reference)
 
-    // LGP_SMOOTH: Asymmetric attack/release for bands
+    // LGP_SMOOTH: Asymmetric attack/release for bands (50 Hz reference)
     float m_band_attack = 0.15f;       // Fast rise for transients
     float m_band_release = 0.03f;      // Slow fall for LGP viewing
     float m_heavy_band_attack = 0.08f; // Extra slow rise
@@ -407,11 +460,11 @@ private:
                                size_t num_bands,
                                bool isBands);
 
-    // Private method for chord detection
-    void detectChord(const float* chroma);
+    // Private method for chord detection (Stage B)
+    void detectChord(const float* chroma, ChordState& outChord);
 
-    // Private method for saliency computation (Musical Intelligence System Phase 1)
-    void computeSaliency();
+    // Private method for saliency computation (Stage B, Musical Intelligence System Phase 1)
+    void computeSaliency(ControlBusFrame& frame);
 };
 
 } // namespace lightwaveos::audio

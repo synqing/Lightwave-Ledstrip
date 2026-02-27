@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file EffectValidationMetrics.h
  * @brief Core data structures for audio-reactive effect validation framework
@@ -19,6 +17,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include "../config/effect_ids.h"
 
 // ESP32 atomic operations
 #ifdef ESP_PLATFORM
@@ -57,15 +56,15 @@ namespace validation {
  *   32-35: energy_avg
  *   36-39: energy_delta
  *   40-43: scroll_phase
- *   44-127: reserved (padding to 128 bytes)
+ *   48-127: reserved (padding to 128 bytes)
  */
 struct EffectValidationSample {
     // Timing and sequencing (8 bytes)
     uint32_t timestamp_us;      ///< Microseconds since boot (esp_timer_get_time)
     uint32_t hop_seq;           ///< Audio hop sequence number for correlation
 
-    // Effect identification (4 bytes)
-    uint8_t effect_id;          ///< Current effect index
+    // Effect identification (8 bytes with padding)
+    EffectId effect_id;         ///< Current effect ID (stable namespaced)
     uint8_t reversal_count;     ///< Jog-dial detection: direction reversals this frame
     uint16_t frame_seq;         ///< Per-effect frame sequence counter
 
@@ -81,8 +80,8 @@ struct EffectValidationSample {
     float energy_delta;         ///< Change in energy from previous frame
     float scroll_phase;         ///< AudioBloom scroll phase (0.0 - 1.0)
 
-    // Reserved for future expansion (84 bytes padding to reach 128)
-    uint8_t reserved[84];
+    // Reserved for future expansion (80 bytes padding to reach 128)
+    uint8_t reserved[80];
 
     /**
      * @brief Default constructor - zero-initialize all fields
@@ -90,7 +89,7 @@ struct EffectValidationSample {
     EffectValidationSample() :
         timestamp_us(0),
         hop_seq(0),
-        effect_id(0),
+        effect_id(INVALID_EFFECT_ID),
         reversal_count(0),
         frame_seq(0),
         phase(0.0f),

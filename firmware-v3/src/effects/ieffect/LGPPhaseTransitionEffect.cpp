@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPPhaseTransitionEffect.cpp
  * @brief LGP Phase Transition effect implementation
@@ -50,7 +48,7 @@ void LGPPhaseTransitionEffect::render(plugins::EffectContext& ctx) {
             brightness = (uint8_t)(255.0f * intensity);
             color = ctx.palette.getColor((uint8_t)(ctx.gHue + paletteOffset), brightness);
         } else if (localTemp < 0.5f) {
-            // Liquid phase
+            // Liquid phase (sin(k*dist + phase) = INWARD flow - intentional design)
             float flow = sinf(distFromCenter * 0.1f + m_phaseAnimation);
             paletteOffset = (uint8_t)(10 + flow * 5.0f);
             brightness = (uint8_t)(200.0f * intensity);
@@ -66,7 +64,7 @@ void LGPPhaseTransitionEffect::render(plugins::EffectContext& ctx) {
                 color = CRGB::Black;
             }
         } else {
-            // Plasma phase
+            // Plasma phase (sin(k*dist + phase) = INWARD, 10x for sharp plasma bands - intentional design)
             float plasma = sinf(distFromCenter * 0.5f + m_phaseAnimation * 10.0f);
             paletteOffset = (uint8_t)(30 + plasma * 10.0f);
             brightness = (uint8_t)(255.0f * intensity);

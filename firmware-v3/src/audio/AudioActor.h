@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file AudioActor.h
  * @brief Actor for audio capture and processing pipeline
@@ -39,6 +37,23 @@
 
 #include "../core/actors/Actor.h"
 #include "../config/audio_config.h"
+#include "contracts/AudioTime.h"
+#include "contracts/ControlBus.h"
+#include "contracts/SnapshotBuffer.h"
+
+#if FEATURE_AUDIO_BACKEND_ESV11
+#include "backends/esv11/EsV11Backend.h"
+#include "backends/esv11/EsV11Adapter.h"
+#elif FEATURE_AUDIO_BACKEND_PIPELINECORE
+#include "AudioCapture.h"
+#include "AudioTuning.h"
+#include "pipeline/PipelineCore.h"
+#include "pipeline/BeatTracker.h"
+#include "pipeline/PipelineAdapter.h"
+#if FEATURE_STYLE_DETECTION
+#include "StyleDetector.h"
+#endif
+#else
 #include "AudioCapture.h"
 #include "AudioTuning.h"
 #include "GoertzelAnalyzer.h"
@@ -46,12 +61,9 @@
 #if FEATURE_STYLE_DETECTION
 #include "StyleDetector.h"
 #endif
-#include "contracts/AudioTime.h"
-#include "contracts/ControlBus.h"
-#include "contracts/SnapshotBuffer.h"
-
 // Tempo tracker
 #include "tempo/TempoTracker.h"
+#endif
 
 #if FEATURE_AUDIO_BENCHMARK
 #include "AudioBenchmarkMetrics.h"
@@ -220,8 +232,11 @@ public:
     /**
      * @brief Get audio capture statistics
      */
+#if !FEATURE_AUDIO_BACKEND_ESV11
     const CaptureStats& getCaptureStats() const { return m_capture.getStats(); }
+#endif
 
+#if !FEATURE_AUDIO_BACKEND_ESV11
 #if defined(CHIP_ESP32_P4) && CHIP_ESP32_P4
     /**
      * @brief Get current microphone gain in dB
@@ -236,6 +251,7 @@ public:
      */
     bool setMicGainDb(int8_t gainDb) { return m_capture.setMicGainDb(gainDb); }
 #endif
+#endif // !FEATURE_AUDIO_BACKEND_ESV11
 
     /**
      * @brief Get pipeline diagnostics (Phase 1 debugging)
@@ -356,6 +372,7 @@ public:
      */
     uint32_t getHopCount() const { return m_hopCount; }
 
+#if !FEATURE_AUDIO_BACKEND_ESV11
     /**
      * @brief Get current audio pipeline tuning (by value)
      */
@@ -448,9 +465,13 @@ public:
     bool applyCalibrationResults();
 
     // ========================================================================
-    // TempoTracker Integration (replaces K1 Pipeline)
+    // TempoTracker / PipelineCore Beat Integration
     // ========================================================================
 
+#if FEATURE_AUDIO_BACKEND_PIPELINECORE
+    // Beat data flows through ControlBusFrame — no TempoTracker exposure
+    bool isTempoEnabled() const { return true; }
+#else
     /**
      * @brief Get const reference to TempoTracker for diagnostics
      */
@@ -468,6 +489,7 @@ public:
      * @brief Check if tempo tracking is initialized
      */
     bool isTempoEnabled() const { return true; }  // Always enabled when audio is running
+#endif
 
     // ========================================================================
     // Phase 2B: Benchmark Access
@@ -502,6 +524,7 @@ public:
      */
     void resetBenchmarkStats() { m_benchmarkStats.reset(); }
 #endif
+#endif // !FEATURE_AUDIO_BACKEND_ESV11
 
 protected:
     // ========================================================================
@@ -543,6 +566,148 @@ private:
     // Internal State
     // ========================================================================
 
+#if FEATURE_AUDIO_BACKEND_ESV11
+    AudioActorState m_state;
+    AudioActorStats m_stats;
+    AudioPipelineDiagnostics m_diag;
+
+    // Lock-free buffer for cross-core sharing with RendererActor
+    SnapshotBuffer<ControlBusFrame> m_controlBusBuffer;
+
+    // Monotonic sample counter (64-bit for no overflow)
+    uint64_t m_sampleIndex = 0;
+
+    // Hop counter since start
+    uint32_t m_hopCount = 0;
+
+
+    // ES backend + adapter
+    esv11::EsV11Backend m_esBackend;
+    esv11::EsV11Adapter m_esAdapter;
+    uint32_t m_esHopSeq = 0;
+    uint8_t m_esChunkCounter = 0;  // Publish every 4 chunks (256 samples @ 12.8kHz = 50 Hz)
+
+    // ControlBus for Stage B derived features (chord, saliency, silence, liveliness)
+    // ES path bypasses Stage A (input conditioning) but needs Stage B.
+    ControlBus m_controlBus;
+#elif FEATURE_AUDIO_BACKEND_PIPELINECORE
+    // ========================================================================
+    // PipelineCore Backend State
+    // ========================================================================
+
+    // Audio capture driver (same I2S as Goertzel)
+    AudioCapture m_capture;
+
+    // Current state
+    AudioActorState m_state;
+
+    // Statistics
+    AudioActorStats m_stats;
+
+    // Pipeline diagnostics
+    AudioPipelineDiagnostics m_diag;
+
+    // Sample buffer for last captured hop
+    int16_t m_hopBuffer[HOP_SIZE];
+
+    // Flag for new hop availability
+    std::atomic<bool> m_newHopAvailable{false};
+
+    // PipelineCore DSP engine + adapter
+    PipelineCore m_pipeline;
+    PipelineAdapter m_adapter;
+    FeatureFrame m_lastFrame{};
+
+    // Style detector
+#if FEATURE_STYLE_DETECTION
+    StyleDetector m_styleDetector;
+#endif
+
+    // Previous chord root for chord change detection
+    uint8_t m_prevChordRoot = 0;
+
+    // ControlBus state machine (smoothing, attack/release)
+    ControlBus m_controlBus;
+
+    // Lock-free buffer for cross-core sharing with RendererActor
+    SnapshotBuffer<ControlBusFrame> m_controlBusBuffer;
+
+    // Monotonic sample counter (64-bit for no overflow)
+    uint64_t m_sampleIndex = 0;
+
+    // Hop counter since start
+    uint32_t m_hopCount = 0;
+
+    // Capture stall recovery state
+    uint32_t m_consecutiveZeroHops = 0;
+    uint32_t m_lastRecoveryAttemptHop = 0;
+
+    // Pipeline tuning
+    AudioPipelineTuning m_pipelineTuning;
+    std::atomic<uint32_t> m_pipelineTuningSeq{0};
+
+    AudioDspState m_dspState;
+    std::atomic<uint32_t> m_dspStateSeq{0};
+    std::atomic<bool> m_dspResetPending{false};
+
+    // Noise Calibration State
+    NoiseCalibrationState m_noiseCalibration;
+
+    // Benchmark Instrumentation
+#if FEATURE_AUDIO_BENCHMARK
+    AudioBenchmarkRing m_benchmarkRing;
+    AudioBenchmarkStats m_benchmarkStats;
+    uint32_t m_benchmarkAggregateCounter = 0;
+    static constexpr uint32_t BENCHMARK_AGGREGATE_INTERVAL = 62;
+    void aggregateBenchmarkStats();
+#endif
+
+    // Internal Methods
+    void captureHop();
+    bool recoverCapturePath();
+    void processHop();
+    float computeRMS(const int16_t* samples, size_t count);
+    void handleCaptureError(CaptureResult result);
+    void processNoiseCalibration(float rms, const float* bands, const float* chroma, uint32_t nowMs);
+
+    // Sensory Bridge parity side-car pipeline
+    void processSbWaveformSidecar(const ControlBusRawInput& raw);
+    void processSbBloomSidecar(const ControlBusRawInput& raw);
+    void updateSbNoveltyAndHueShift();
+
+    // SB parity buffers (3.1.0 waveform)
+    static constexpr uint8_t SB_WAVEFORM_POINTS = CONTROLBUS_WAVEFORM_N;
+    static constexpr uint8_t SB_WAVEFORM_HISTORY = 4;
+    int16_t m_sbWaveformHistory[SB_WAVEFORM_HISTORY][SB_WAVEFORM_POINTS] = {{0}};
+    uint8_t m_sbWaveformHistoryIndex = 0;
+    float m_sbMaxWaveformValFollower = 750.0f;
+    float m_sbWaveformPeakScaled = 0.0f;
+    float m_sbWaveformPeakScaledLast = 0.0f;
+    float m_sbNoteChroma[CONTROLBUS_NUM_CHROMA] = {0};
+    float m_sbChromaMaxVal = 0.0f;
+
+    // SB parity buffers (4.1.1 bloom)
+    static constexpr uint8_t SB_NUM_FREQS = 64;
+    static constexpr uint8_t SB_SPECTRAL_HISTORY = 5;
+    float m_sbSpectrogram[SB_NUM_FREQS] = {0};
+    float m_sbSpectrogramSmooth[SB_NUM_FREQS] = {0};
+    float m_sbChromagramSmooth[CONTROLBUS_NUM_CHROMA] = {0};
+    float m_sbChromagramMaxPeak = 0.001f;
+    int16_t m_sbWaveform[SB_WAVEFORM_POINTS] = {0};
+    float m_sbSpectralHistory[SB_SPECTRAL_HISTORY][SB_NUM_FREQS] = {{0}};
+    float m_sbNoveltyCurve[SB_SPECTRAL_HISTORY] = {0};
+    uint8_t m_sbSpectralHistoryIndex = 0;
+
+    // Auto colour shift (4.1.1)
+    float m_sbHuePosition = 0.0f;
+    float m_sbHueShiftSpeed = 0.0f;
+    float m_sbHuePushDirection = -1.0f;
+    float m_sbHueDestination = 0.0f;
+    float m_sbHueShiftingMix = -0.35f;
+    float m_sbHueShiftingMixTarget = 1.0f;
+    uint32_t m_sbRand = 0x12345678u;
+
+#else
     // Audio capture driver
     AudioCapture m_capture;
 
@@ -775,6 +940,7 @@ private:
     float m_sbHueShiftingMix = -0.35f;
     float m_sbHueShiftingMixTarget = 1.0f;
     uint32_t m_sbRand = 0x12345678u;
+#endif // FEATURE_AUDIO_BACKEND_ESV11
 };
 
 // ============================================================================
@@ -821,7 +987,14 @@ inline actors::ActorConfig Audio() {
         AUDIO_ACTOR_PRIORITY,                       // priority (4)
         AUDIO_ACTOR_CORE,                           // coreId (0)
         16,                                         // queueSize
+        // tickInterval semantics:
+        // - FEATURE_AUDIO_BACKEND_ESV11: self-clocked mode (tickInterval=0), onTick blocks on I2S chunk reads
+        // - default LWLS pipeline: periodic tick aligned to hop cadence
+#if FEATURE_AUDIO_BACKEND_ESV11
+        0
+#else
         LW_MS_TO_TICKS_CEIL_MIN1(AUDIO_ACTOR_TICK_MS) // tickInterval: 10ms = 1 tick @ 100Hz RTOS
+#endif
     );
 }
 

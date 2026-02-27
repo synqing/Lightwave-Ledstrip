@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file ZoneComposer.cpp
  * @brief Multi-zone effect orchestration implementation
@@ -10,6 +8,9 @@
 #include "ZoneComposer.h"
 #include <Arduino.h>
 #include <math.h>
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#endif
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../../palettes/Palettes_Master.h"
@@ -168,11 +169,9 @@ ZoneComposer::ZoneComposer()
     // Initialize default layout (DUAL) by copying from compile-time config
     memcpy(m_zoneConfig, ZONE_2_CONFIG, sizeof(ZONE_2_CONFIG));
 
-    // Clear buffers
-    memset(m_zoneBuffers, 0, sizeof(m_zoneBuffers));
-    memset(m_outputBuffer, 0, sizeof(m_outputBuffer));
     for (uint8_t i = 0; i < MAX_ZONES; i++) {
         m_zoneTimeSeconds[i] = 0.0f;
+        m_zoneTimeSecondsRaw[i] = 0.0f;
         m_zoneFrameAccumulator[i] = 0.0f;
         m_zoneFrameCount[i] = 0;
     }
@@ -187,8 +186,39 @@ bool ZoneComposer::init(RendererActor* renderer) {
     }
 
     m_renderer = renderer;
-    m_initialized = true;
 
+    // Allocate persistent buffers once during init(). Prefer PSRAM to keep internal SRAM
+    // available for WiFi/AsyncTCP/esp_timer.
+    const size_t zoneBytes = static_cast<size_t>(MAX_ZONES) * static_cast<size_t>(TOTAL_LEDS) * sizeof(CRGB);
+    const size_t outBytes = static_cast<size_t>(TOTAL_LEDS) * sizeof(CRGB);
+
+#ifndef NATIVE_BUILD
+    m_zoneBuffers = static_cast<CRGB*>(
+        heap_caps_calloc(1, zoneBytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    m_outputBuffer = static_cast<CRGB*>(
+        heap_caps_calloc(1, outBytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+#else
+    m_zoneBuffers = static_cast<CRGB*>(calloc(1, zoneBytes));
+    m_outputBuffer = static_cast<CRGB*>(calloc(1, outBytes));
+#endif
+
+    if (!m_zoneBuffers || !m_outputBuffer) {
+        Serial.printf("[ZoneComposer] ERROR: Buffer allocation failed (zones=%u bytes, out=%u bytes)\n",
+                      static_cast<unsigned>(zoneBytes), static_cast<unsigned>(outBytes));
+        if (m_zoneBuffers) {
+            free(m_zoneBuffers);
+            m_zoneBuffers = nullptr;
+        }
+        if (m_outputBuffer) {
+            free(m_outputBuffer);
+            m_outputBuffer = nullptr;
+        }
+        m_enabled = false;
+        m_initialized = false;
+        return false;
+    }
+
+    m_initialized = true;
     Serial.println("[ZoneComposer] Initialized");
     return true;
 }
@@ -198,7 +228,7 @@ bool ZoneComposer::init(RendererActor* renderer) {
 void ZoneComposer::render(CRGB* leds, uint16_t numLeds, CRGBPalette16* palette,
                           uint8_t hue, uint32_t frameCount, uint32_t deltaTimeMs,
                           const plugins::AudioContext* audioCtx) {
-    if (!m_initialized || !m_enabled) {
+    if (!m_initialized || !m_enabled || m_zoneBuffers == nullptr || m_outputBuffer == nullptr) {
         return;
     }
 
@@ -217,11 +247,15 @@ void ZoneComposer::render(CRGB* leds, uint16_t numLeds, CRGBPalette16* palette,
     m_zoneContext.variation = 0;
     m_zoneContext.frameNumber = frameCount;
     // Base delta in seconds for per-zone scaling.
-    float deltaSeconds = static_cast<float>(deltaTimeMs) * 0.001f;
+    const float rawDeltaSeconds = static_cast<float>(deltaTimeMs) * 0.001f;
+    float deltaSeconds = rawDeltaSeconds;
     if (deltaSeconds > 0.05f) deltaSeconds = 0.05f;  // Maximum 50ms (20 FPS floor)
     m_zoneContext.deltaTimeSeconds = deltaSeconds;
     m_zoneContext.deltaTimeMs = static_cast<uint32_t>(deltaSeconds * 1000.0f + 0.5f);
     m_zoneContext.totalTimeMs = 0;
+    m_zoneContext.rawDeltaTimeSeconds = rawDeltaSeconds;
+    m_zoneContext.rawDeltaTimeMs = deltaTimeMs;
+    m_zoneContext.rawTotalTimeMs = 0;
 
     // Copy audio context once per frame if available (reused for all zones)
     if (audioCtx != nullptr) {
@@ -233,7 +267,7 @@ void ZoneComposer::render(CRGB* leds, uint16_t numLeds, CRGBPalette16* palette,
 
     // Always clear output buffer to prevent stale pixels from previous frames
     // (OVERWRITE blend mode only overwrites zone segments, not the full 320 LEDs)
-    memset(m_outputBuffer, 0, sizeof(m_outputBuffer));
+    memset(m_outputBuffer, 0, static_cast<size_t>(TOTAL_LEDS) * sizeof(CRGB));
 
     // Render each enabled zone
     for (uint8_t z = 0; z < m_zoneCount; z++) {
@@ -243,7 +277,7 @@ void ZoneComposer::render(CRGB* leds, uint16_t numLeds, CRGBPalette16* palette,
     }
 
     // Copy composited output to main buffer
-    memcpy(leds, m_outputBuffer, numLeds * sizeof(CRGB));
+    memcpy(leds, m_outputBuffer, static_cast<size_t>(numLeds) * sizeof(CRGB));
 }
 
 void ZoneComposer::renderZone(uint8_t zoneId, CRGB* leds, uint16_t numLeds,
@@ -278,14 +312,22 @@ void ZoneComposer::renderZone(uint8_t zoneId, CRGB* leds, uint16_t numLeds,
 
     // Per-zone persistent render buffer (preserves trails/smoothing and prevents
     // cross-zone contamination).
-    CRGB* zoneBuffer = m_zoneBuffers[safeZone];
+    CRGB* zoneBuffer = m_zoneBuffers + (static_cast<size_t>(safeZone) * static_cast<size_t>(TOTAL_LEDS));
 
     // Update zone-specific fields in the reusable context
     // (Base fields were already set in render() once per frame)
     m_zoneContext.leds = zoneBuffer;
-    m_zoneContext.brightness = zone.brightness;
+    // IMPORTANT: Effects render at full brightness (255). The compositor applies
+    // zone.brightness during composition to avoid squaring brightness.
+    m_zoneContext.brightness = 255;
     m_zoneContext.speed = zone.speed;
     m_zoneContext.zoneId = zoneId;  // Zone ID for zone-aware effects
+    // Set mood and fadeAmount so transport-based effects have fuel
+    m_zoneContext.mood = 128;       // Default mid-range mood (0-255)
+    m_zoneContext.fadeAmount = 128; // Default mid-range fade (0-255)
+    // Update unscaled time accumulators per zone (independent of SPEED).
+    m_zoneTimeSecondsRaw[safeZone] += m_zoneContext.rawDeltaTimeSeconds;
+    m_zoneContext.rawTotalTimeMs = static_cast<uint32_t>(m_zoneTimeSecondsRaw[safeZone] * 1000.0f + 0.5f);
     // Apply speed-scaled time for this zone.
     float speedFactor = computeSpeedTimeFactor(zone.speed);
     float scaledDeltaSeconds = deltaSeconds * speedFactor;
@@ -392,7 +434,10 @@ bool ZoneComposer::setLayout(const ZoneSegment* segments, uint8_t count) {
     m_zoneCount = count;
     
     // Clear zone buffers when layout changes to prevent residue
-    memset(m_zoneBuffers, 0, sizeof(m_zoneBuffers));
+    if (m_zoneBuffers) {
+        memset(m_zoneBuffers, 0,
+               static_cast<size_t>(MAX_ZONES) * static_cast<size_t>(TOTAL_LEDS) * sizeof(CRGB));
+    }
     
     Serial.printf("[ZoneComposer] Layout set to %d zones\n", m_zoneCount);
     return true;
@@ -507,7 +552,7 @@ bool ZoneComposer::validateLayout(const ZoneSegment* segments, uint8_t count) co
 
 // ==================== Per-Zone Settings ====================
 
-void ZoneComposer::setZoneEffect(uint8_t zone, uint8_t effectId) {
+void ZoneComposer::setZoneEffect(uint8_t zone, EffectId effectId) {
     // DEFENSIVE CHECK: Validate zone ID before array access
     uint8_t safeZone = validateZoneId(zone);
     if (safeZone >= MAX_ZONES || safeZone >= m_zoneCount) {
@@ -516,7 +561,10 @@ void ZoneComposer::setZoneEffect(uint8_t zone, uint8_t effectId) {
     m_zones[safeZone].effectId = effectId;
     // Clear this zone's buffer when switching effects to avoid ghosting from
     // previous effect state.
-    memset(m_zoneBuffers[safeZone], 0, sizeof(m_zoneBuffers[safeZone]));
+    if (m_zoneBuffers) {
+        memset(m_zoneBuffers + (static_cast<size_t>(safeZone) * static_cast<size_t>(TOTAL_LEDS)),
+               0, static_cast<size_t>(TOTAL_LEDS) * sizeof(CRGB));
+    }
 }
 
 void ZoneComposer::setZoneBrightness(uint8_t zone, uint8_t brightness) {
@@ -571,14 +619,17 @@ void ZoneComposer::setZoneEnabled(uint8_t zone, bool enabled) {
     m_zones[safeZone].enabled = enabled;
     if (enabled) {
         // Clear on enable so newly-enabled zones don't flash stale pixels.
-        memset(m_zoneBuffers[safeZone], 0, sizeof(m_zoneBuffers[safeZone]));
+        if (m_zoneBuffers) {
+            memset(m_zoneBuffers + (static_cast<size_t>(safeZone) * static_cast<size_t>(TOTAL_LEDS)),
+                   0, static_cast<size_t>(TOTAL_LEDS) * sizeof(CRGB));
+        }
     }
 }
 
 // ==================== Getters ====================
 
-uint8_t ZoneComposer::getZoneEffect(uint8_t zone) const {
-    return (zone < MAX_ZONES) ? m_zones[zone].effectId : 0;
+EffectId ZoneComposer::getZoneEffect(uint8_t zone) const {
+    return (zone < MAX_ZONES) ? m_zones[zone].effectId : INVALID_EFFECT_ID;
 }
 
 uint8_t ZoneComposer::getZoneBrightness(uint8_t zone) const {

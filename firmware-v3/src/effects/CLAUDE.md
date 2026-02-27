@@ -8,4 +8,16 @@
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
 | #23184 | 7:26 AM | 🔵 | Beat Tracking Debug Commands in Serial Interface | ~389 |
+
+### Feb 7, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #27435 | 11:38 PM | 🔴 | Fixed CRGB Type Definition in EffectPostProcessor Header | ~634 |
+
+### Feb 21, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #37158 | 7:35 AM | 🔵 | Identified 14 core effects registered in CoreEffects.cpp for circular chroma migration verification | ~546 |
 </claude-mem-context>

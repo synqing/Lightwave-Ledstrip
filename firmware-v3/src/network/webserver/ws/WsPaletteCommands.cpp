@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file WsPaletteCommands.cpp
  * @brief WebSocket palette command handlers implementation

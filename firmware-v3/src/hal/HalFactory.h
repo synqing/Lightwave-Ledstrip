@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file HalFactory.h
  * @brief Hardware Abstraction Layer factory for compile-time chip selection

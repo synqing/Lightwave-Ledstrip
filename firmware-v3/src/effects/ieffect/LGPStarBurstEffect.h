@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPStarBurstEffect.h
  * @brief LGP Star Burst - Explosive radial lines from center
@@ -17,6 +15,8 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../enhancement/SmoothingEngine.h"
+#include "ChromaUtils.h"
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -24,6 +24,8 @@ namespace ieffect {
 
 class LGPStarBurstEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_STAR_BURST;
+
     LGPStarBurstEffect();
     ~LGPStarBurstEffect() override = default;
 
@@ -39,9 +41,8 @@ private:
     float m_burst = 0.0f;       // Snare-driven burst intensity
     uint32_t m_lastHopSeq = 0;  // Audio hop sequence tracking
 
-    // Color state
-    uint8_t m_dominantBin = 0;       // Dominant chroma bin
-    float m_dominantBinSmooth = 0.0f; // Smoothed for stability
+    // Circular chroma hue state (replaces argmax + linear EMA)
+    float m_chromaAngle = 0.0f;      // Persistent angle for circular EMA (radians)
 
     // Speed state (Spring physics for natural momentum)
     enhancement::Spring m_phaseSpeedSpring;  // Critically damped - no overshoot

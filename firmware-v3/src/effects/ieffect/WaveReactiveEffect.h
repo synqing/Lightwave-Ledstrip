@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file WaveReactiveEffect.h
  * @brief Wave Reactive - Energy-accumulating wave with smooth audio-driven motion
@@ -27,6 +25,7 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include <FastLED.h>
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -34,6 +33,8 @@ namespace ieffect {
 
 class WaveReactiveEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_WAVE_REACTIVE;
+
     WaveReactiveEffect();
     ~WaveReactiveEffect() override = default;
 

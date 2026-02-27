@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPAudioTestEffect.cpp
  * @brief Audio-reactive test effect implementation
@@ -76,6 +74,9 @@ void LGPAudioTestEffect::render(plugins::EffectContext& ctx) {
 
     m_lastBeatPhase = beatPhase;
 
+    // Get dt for frame-rate independent decay
+    float dt = ctx.getSafeRawDeltaSeconds();
+
     // ========================================================================
     // Beat pulse animation (decays over time)
     // ========================================================================
@@ -83,8 +84,8 @@ void LGPAudioTestEffect::render(plugins::EffectContext& ctx) {
     if (onBeat) {
         m_beatDecay = 1.0f;  // Reset to full intensity on beat
     } else {
-        // Exponential decay (~200ms)
-        m_beatDecay *= 0.92f;
+        // Exponential decay (~200ms, dt-corrected)
+        m_beatDecay *= powf(0.92f, dt * 60.0f);
         if (m_beatDecay < 0.01f) m_beatDecay = 0.0f;
     }
 

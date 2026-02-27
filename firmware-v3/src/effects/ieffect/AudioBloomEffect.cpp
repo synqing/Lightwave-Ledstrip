@@ -1,11 +1,10 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file AudioBloomEffect.cpp
  * @brief Sensory Bridge-style scrolling bloom implementation
  */
 
 #include "AudioBloomEffect.h"
+#include "ChromaUtils.h"
 #include "../CoreEffects.h"
 #include "../../config/features.h"
 #include "../../audio/contracts/ControlBus.h"
@@ -16,6 +15,7 @@
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
+#include <esp_heap_caps.h>
 #endif
 
 #include <cmath>
@@ -26,6 +26,23 @@ namespace effects {
 namespace ieffect {
 
 namespace {
+
+static inline const float* selectChroma12(const audio::ControlBusFrame& cb, bool preferHeavy) {
+    // Both backends now produce normalised chroma via Stage A/B pipeline.
+    if (preferHeavy) {
+        float heavySum = 0.0f;
+        for (uint8_t i = 0; i < audio::CONTROLBUS_NUM_CHROMA; ++i) {
+            heavySum += cb.heavy_chroma[i];
+        }
+        if (heavySum > 0.001f) return cb.heavy_chroma;
+    }
+    return cb.chroma;
+}
+
+// Musically anchored palette offsets (no full hue-wheel sweep).
+static constexpr uint8_t NOTE_OFFSETS[12] = {
+    0, 10, 26, 38, 56, 70, 90, 106, 130, 150, 174, 202
+};
 
 /**
  * @brief Compute palette warmth offset from chord type.
@@ -99,10 +116,14 @@ uint8_t computeRootNoteHueShift(uint8_t rootNote, float confidence) {
 
 bool AudioBloomEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
-    // Initialize radial buffers to black
-    memset(m_radial, 0, sizeof(m_radial));
-    memset(m_radialAux, 0, sizeof(m_radialAux));
-    memset(m_radialTemp, 0, sizeof(m_radialTemp));
+#ifndef NATIVE_BUILD
+    if (!m_ps) {
+        m_ps = static_cast<AudioBloomPsram*>(
+            heap_caps_malloc(sizeof(AudioBloomPsram), MALLOC_CAP_SPIRAM));
+        if (!m_ps) return false;
+    }
+    memset(m_ps, 0, sizeof(AudioBloomPsram));
+#endif
     m_iter = 0;
     m_lastHopSeq = 0;
     m_scrollPhase = 0.0f;
@@ -111,6 +132,8 @@ bool AudioBloomEffect::init(plugins::EffectContext& ctx) {
 }
 
 void AudioBloomEffect::render(plugins::EffectContext& ctx) {
+    if (!m_ps) return;
+    const float rawDt = ctx.getSafeRawDeltaSeconds();
     // Clear output buffer
     memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
 
@@ -135,7 +158,7 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
         // =====================================================================
         float subBassSum = 0.0f;
         for (uint8_t i = 0; i < 6; ++i) {
-            subBassSum += ctx.audio.bin(i);  // bins64[0..5]
+            subBassSum += ctx.audio.binAdaptive(i);  // bins64Adaptive[0..5] is more robust across backends
         }
         float subBassAvg = subBassSum / 6.0f;
 
@@ -143,7 +166,7 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
         if (subBassAvg > m_subBassPulse) {
             m_subBassPulse = subBassAvg;  // Instant attack
         } else {
-            m_subBassPulse *= 0.85f;  // ~100ms decay at 60fps
+            m_subBassPulse = effects::chroma::dtDecay(m_subBassPulse, 0.85f, rawDt);  // dt-corrected ~100ms decay
         }
     }
 
@@ -154,6 +177,7 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
         CRGB sum_color = CRGB(0, 0, 0);
         float brightness_sum = 0.0f;
         const bool chromaticMode = (ctx.saturation >= 128);
+        // silentScale handled globally by RendererActor
 
         // Chord-driven palette warmth adjustment
         // Maps chord type to hue offset for emotional color response
@@ -168,9 +192,10 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
         if (adjustedHue > 255) adjustedHue -= 256;
         uint8_t chordAdjustedHue = (uint8_t)adjustedHue;
 
+        const float* chroma = selectChroma12(ctx.audio.controlBus, /*preferHeavy*/ true);
+
         for (uint8_t i = 0; i < 12; ++i) {
-            float prog = i / 12.0f;
-            float bin = ctx.audio.controlBus.heavy_chroma[i];
+            float bin = chroma[i];
 
             // Apply squaring (SQUARE_ITER, typically 1)
             float bright = bin;
@@ -183,7 +208,7 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
             if (chromaticMode) {
                 // Use palette for colour with chord-adjusted hue base
                 // Palette index includes chord warmth for emotional color response
-                uint8_t paletteIdx = (uint8_t)(prog * 255.0f + chordAdjustedHue);
+                uint8_t paletteIdx = (uint8_t)(chordAdjustedHue + NOTE_OFFSETS[i]);
                 uint8_t brightU8 = (uint8_t)bright;
                 brightU8 = (uint8_t)((brightU8 * ctx.brightness) / 255);
                 CRGB out_col = ctx.palette.getColor(paletteIdx, brightU8);
@@ -211,35 +236,35 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
 
         if (step > 0) {
             for (uint8_t i = 0; i < HALF_LENGTH - step; ++i) {
-                m_radialTemp[(HALF_LENGTH - 1) - i] = m_radial[(HALF_LENGTH - 1) - i - step];
+                m_ps->radialTemp[(HALF_LENGTH - 1) - i] = m_ps->radial[(HALF_LENGTH - 1) - i - step];
             }
             for (uint8_t i = 0; i < step; ++i) {
-                m_radialTemp[i] = sum_color;
+                m_ps->radialTemp[i] = sum_color;
             }
         } else {
-            memcpy(m_radialTemp, m_radial, sizeof(m_radialTemp));
-            m_radialTemp[0] = sum_color;
+            memcpy(m_ps->radialTemp, m_ps->radial, sizeof(m_ps->radialTemp));
+            m_ps->radialTemp[0] = sum_color;
         }
 
         // Copy temp to main radial buffer
-        memcpy(m_radial, m_radialTemp, sizeof(m_radial));
+        memcpy(m_ps->radial, m_ps->radialTemp, sizeof(m_ps->radial));
 
         // Apply post-processing (matching Sensory Bridge)
         // 1. Logarithmic distortion
-        distortLogarithmic(m_radial, m_radialTemp, HALF_LENGTH);
-        memcpy(m_radial, m_radialTemp, sizeof(m_radial));
+        distortLogarithmic(m_ps->radial, m_ps->radialTemp, HALF_LENGTH);
+        memcpy(m_ps->radial, m_ps->radialTemp, sizeof(m_ps->radial));
 
         // 2. Fade top half (toward edge)
-        fadeTopHalf(m_radial, HALF_LENGTH);
+        fadeTopHalf(m_ps->radial, HALF_LENGTH);
 
         // 3. Increase saturation
-        increaseSaturation(m_radial, HALF_LENGTH, 24);
+        increaseSaturation(m_ps->radial, HALF_LENGTH, 24);
 
         // Save to aux buffer
-        memcpy(m_radialAux, m_radial, sizeof(m_radial));
+        memcpy(m_ps->radialAux, m_ps->radial, sizeof(m_ps->radial));
     } else {
         // Alternate frames: load from aux buffer
-        memcpy(m_radial, m_radialAux, sizeof(m_radial));
+        memcpy(m_ps->radial, m_ps->radialAux, sizeof(m_ps->radial));
     }
 
     // Compute scroll rate for validation (same as in update block)
@@ -264,7 +289,7 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
 
     // Render radial buffer to LEDs (centre-origin)
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
-        SET_CENTER_PAIR(ctx, dist, m_radial[dist]);
+        SET_CENTER_PAIR(ctx, dist, m_ps->radial[dist]);
     }
 
     // =========================================================================
@@ -297,6 +322,16 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
             if (rightIdx < ctx.ledCount) {
                 ctx.leds[rightIdx] += warmBoost;
             }
+        }
+    }
+
+    // Beat confidence accent: a small centre lift that tracks tempo confidence without needing explicit beat triggers.
+    if (ctx.audio.tempoConfidence() > 0.35f) {
+        float beat = ctx.audio.beatStrength();
+        if (beat > 0.05f) {
+            uint8_t boost = (uint8_t)(beat * 22.0f);
+            ctx.leds[ctx.centerPoint - 1] += CRGB(boost, boost >> 2, 0);
+            ctx.leds[ctx.centerPoint] += CRGB(boost, boost >> 2, 0);
         }
     }
 #endif  // FEATURE_AUDIO_SYNC
@@ -350,7 +385,12 @@ void AudioBloomEffect::increaseSaturation(CRGB* buffer, uint16_t len, uint8_t am
 }
 
 void AudioBloomEffect::cleanup() {
-    // No resources to free
+#ifndef NATIVE_BUILD
+    if (m_ps) {
+        heap_caps_free(m_ps);
+        m_ps = nullptr;
+    }
+#endif
 }
 
 const plugins::EffectMetadata& AudioBloomEffect::getMetadata() const {

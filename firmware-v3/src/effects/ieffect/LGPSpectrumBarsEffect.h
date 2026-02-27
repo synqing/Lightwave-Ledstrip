@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPSpectrumBarsEffect.h
  * @brief 8-band spectrum analyzer from center outward
@@ -16,6 +14,7 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -23,6 +22,8 @@ namespace ieffect {
 
 class LGPSpectrumBarsEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_SPECTRUM_BARS;
+
     LGPSpectrumBarsEffect() = default;
     ~LGPSpectrumBarsEffect() override = default;
 
@@ -33,6 +34,7 @@ public:
 
 private:
     float m_smoothedBands[8] = {0};  // Smoothed band values for animation
+    float m_chromaAngle = 0.0f;      ///< Circular chroma EMA state (radians)
 };
 
 } // namespace ieffect

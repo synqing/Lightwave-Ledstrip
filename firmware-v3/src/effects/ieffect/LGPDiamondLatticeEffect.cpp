@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPDiamondLatticeEffect.cpp
  * @brief LGP Diamond Lattice effect implementation
@@ -27,10 +25,11 @@ bool LGPDiamondLatticeEffect::init(plugins::EffectContext& ctx) {
 
 void LGPDiamondLatticeEffect::render(plugins::EffectContext& ctx) {
     // CENTER ORIGIN - Angled wave fronts create diamond patterns from center
+    float dt = ctx.getSafeDeltaSeconds();
     float speedNorm = ctx.speed / 50.0f;
     float intensityNorm = ctx.brightness / 255.0f;
 
-    m_phase += speedNorm * 0.02f;
+    m_phase += speedNorm * 0.02f * 60.0f * dt;  // dt-corrected
 
     const float diamondFreq = 6.0f;
 
@@ -44,7 +43,7 @@ void LGPDiamondLatticeEffect::render(plugins::EffectContext& ctx) {
 
         // Interference creates diamond nodes
         float diamond = fabsf(wave1 * wave2);
-        diamond = powf(diamond, 0.5f);
+        diamond = sqrtf(diamond);  // Optimized: sqrtf faster than powf(x, 0.5f)
 
         uint8_t brightness = (uint8_t)(diamond * 255.0f * intensityNorm);
         uint8_t paletteIndex = (uint8_t)(distFromCenter * 2.0f);

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPPerlinVeilAmbientEffect.h
  * @brief LGP Perlin Veil Ambient - Slow drifting curtains/fog from centre (time-driven)
@@ -22,6 +20,7 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include <FastLED.h>
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -29,6 +28,8 @@ namespace ieffect {
 
 class LGPPerlinVeilAmbientEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_PERLIN_VEIL_AMBIENT;
+
     LGPPerlinVeilAmbientEffect();
     ~LGPPerlinVeilAmbientEffect() override = default;
 

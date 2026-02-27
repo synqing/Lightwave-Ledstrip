@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPGravitationalWaveChirpEffect.cpp
  * @brief LGP Gravitational Wave Chirp effect implementation
@@ -39,6 +37,7 @@ bool LGPGravitationalWaveChirpEffect::init(plugins::EffectContext& ctx) {
 
 void LGPGravitationalWaveChirpEffect::render(plugins::EffectContext& ctx) {
     // Binary black hole inspiral with LIGO-accurate frequency evolution
+    float dt = ctx.getSafeDeltaSeconds();
     float speed = ctx.speed / 50.0f;
     float intensity = ctx.brightness / 255.0f;
 
@@ -53,7 +52,7 @@ void LGPGravitationalWaveChirpEffect::render(plugins::EffectContext& ctx) {
             m_mergeFlash = 1.0f;
         }
     } else if (m_merging) {
-        m_mergeFlash *= 0.92f;
+        m_mergeFlash *= powf(0.92f, dt * 60.0f);  // dt-corrected decay
         if (m_mergeFlash < 0.05f) {
             m_merging = false;
             m_ringdown = true;

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file RendererActor.cpp
  * @brief Implementation of the RendererActor
@@ -28,6 +26,11 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../../plugins/runtime/LegacyEffectAdapter.h"
+#include "../../config/chip_config.h"
+#include "../../config/audio_config.h"
+#if CHIP_ESP32_S3 && !defined(NATIVE_BUILD)
+#include "../../hal/esp32s3/StatusStripTouch.h"
+#endif
 #include <math.h>
 #if FEATURE_VALIDATION_PROFILING
 #include "../../core/system/ValidationProfiler.h"
@@ -35,13 +38,17 @@
 #ifndef NATIVE_BUILD
 #include "esp_rom_sys.h"
 #include <esp_task_wdt.h>
+#include <esp_heap_caps.h>
+#include <esp_timer.h>  // CLOCK SPINE FIX: Use same clock as AudioActor
 #endif
 
 // Audio integration (Phase 2)
 #if FEATURE_AUDIO_SYNC
 #include "../../audio/AudioActor.h"
+#if !FEATURE_AUDIO_BACKEND_ESV11
 // TempoTracker integration (replaces K1)
 #include "../../audio/tempo/TempoTracker.h"
+#endif
 #endif
 
 #if FEATURE_TRANSITIONS
@@ -81,12 +88,10 @@ namespace lightwaveos { namespace actors {
 #include <Arduino.h>
 #endif
 
-// MabuTrace instrumentation (zero-cost when FEATURE_MABUTRACE=0)
-#include "../../audio/AudioBenchmarkTrace.h"
-
 // Unified logging system (preserves colored output conventions)
 #define LW_LOG_TAG "Renderer"
 #include "utils/Log.h"
+#include "../../audio/AudioBenchmarkTrace.h"
 
 namespace lightwaveos {
 namespace actors {
@@ -110,7 +115,7 @@ static audio::MusicalGridTuning toMusicalGridTuning(const audio::AudioContractTu
 
 RendererActor::RendererActor()
     : Actor(ActorConfigs::Renderer())
-    , m_currentEffect(0)
+    , m_currentEffect(INVALID_EFFECT_ID)
     , m_brightness(LedConfig::DEFAULT_BRIGHTNESS)
     , m_speed(LedConfig::DEFAULT_SPEED)
     , m_paletteIndex(0)
@@ -121,27 +126,36 @@ RendererActor::RendererActor()
     , m_variation(0)
     , m_mood(128)  // Default: balanced reactive/smooth
     , m_fadeAmount(20)
-    , m_effectCount(0)
+    , m_registryCount(0)
     , m_lastFrameTime(0)
     , m_frameCount(0)
     , m_effectTimeSeconds(0.0f)
+    , m_effectTimeSecondsRaw(0.0f)
     , m_effectFrameAccumulator(0.0f)
     , m_effectFrameCount(0)
     , m_zoneComposer(nullptr)
 #if FEATURE_TRANSITIONS
     , m_transitionEngine(nullptr)
-    , m_pendingEffect(0)
+    , m_pendingEffect(INVALID_EFFECT_ID)
     , m_transitionPending(false)
 #endif
     , m_captureEnabled(false)
     , m_captureTapMask(0)
     , m_correctionSkipCount(0)
     , m_correctionApplyCount(0)
+    , m_captureBlock(nullptr)
+    , m_captureTapA(nullptr)
+    , m_captureTapB(nullptr)
+    , m_captureTapC(nullptr)
     , m_captureTapAValid(false)
     , m_captureTapBValid(false)
     , m_captureTapCValid(false)
 #if FEATURE_AUDIO_SYNC
+#if FEATURE_AUDIO_BACKEND_ESV11
+    , m_esBeatClock()                // Explicit default init for audio state
+#else
     , m_musicalGrid()                // Explicit default init for audio state
+#endif
     , m_lastControlBus()
     , m_lastMusicalGrid()
     , m_lastAudioTime()
@@ -155,16 +169,14 @@ RendererActor::RendererActor()
     memset(m_transitionSourceBuffer, 0, sizeof(m_transitionSourceBuffer));
     m_transitionEngine = new TransitionEngine();
 #endif
-    memset(m_captureTapA, 0, sizeof(m_captureTapA));
-    memset(m_captureTapB, 0, sizeof(m_captureTapB));
-    memset(m_captureTapC, 0, sizeof(m_captureTapC));
 
     // Initialize effect registry
-    for (uint8_t i = 0; i < MAX_EFFECTS; i++) {
-        m_effects[i].name = nullptr;
-        m_effects[i].effect = nullptr;
-        m_effects[i].active = false;
-        m_legacyAdapters[i] = nullptr;
+    for (uint16_t i = 0; i < MAX_EFFECTS; i++) {
+        m_registry[i].id = INVALID_EFFECT_ID;
+        m_registry[i].name = nullptr;
+        m_registry[i].effect = nullptr;
+        m_registry[i].legacyAdapter = nullptr;
+        m_registry[i].active = false;
     }
 
     // Default palette - load from master palette system (index 0: Sunset Real)
@@ -173,8 +185,10 @@ RendererActor::RendererActor()
 #if FEATURE_AUDIO_SYNC
     m_audioContractTuning = audio::clampAudioContractTuning(audio::AudioContractTuning{});
     m_audioContractPending = m_audioContractTuning;
+#if !FEATURE_AUDIO_BACKEND_ESV11
     m_musicalGrid.setTuning(toMusicalGridTuning(m_audioContractTuning));
     m_musicalGrid.SetTimeSignature(m_audioContractTuning.beatsPerBar, m_audioContractTuning.beatUnit);
+#endif
 #endif
 }
 
@@ -186,6 +200,13 @@ RendererActor::~RendererActor()
         m_transitionEngine = nullptr;
     }
 #endif
+    if (m_captureBlock) {
+        free(m_captureBlock);
+        m_captureBlock = nullptr;
+        m_captureTapA = nullptr;
+        m_captureTapB = nullptr;
+        m_captureTapC = nullptr;
+    }
     // Actor base class handles task cleanup
 }
 
@@ -206,64 +227,104 @@ void RendererActor::getBufferCopy(CRGB* outBuffer) const
 // Effect Registration
 // ============================================================================
 
-bool RendererActor::registerEffect(uint8_t id, const char* name, EffectRenderFn fn)
+RendererActor::EffectRegistration* RendererActor::findById(EffectId id)
 {
-    if (id >= MAX_EFFECTS || name == nullptr || fn == nullptr) {
+    for (uint16_t i = 0; i < m_registryCount; ++i) {
+        if (m_registry[i].id == id && m_registry[i].active) {
+            return &m_registry[i];
+        }
+    }
+    return nullptr;
+}
+
+const RendererActor::EffectRegistration* RendererActor::findById(EffectId id) const
+{
+    for (uint16_t i = 0; i < m_registryCount; ++i) {
+        if (m_registry[i].id == id && m_registry[i].active) {
+            return &m_registry[i];
+        }
+    }
+    return nullptr;
+}
+
+bool RendererActor::registerEffect(EffectId id, const char* name, EffectRenderFn fn)
+{
+    if (id == INVALID_EFFECT_ID || name == nullptr || fn == nullptr) {
         return false;
     }
 
-    // Create LegacyEffectAdapter to wrap function pointer
-    // Allocate adapter (owned by RendererActor)
-    if (m_legacyAdapters[id] != nullptr) {
-        // Already registered - clean up old adapter
-        delete m_legacyAdapters[id];
+    // Check for existing registration (update in place)
+    auto* existing = findById(id);
+    if (existing) {
+        if (existing->legacyAdapter) {
+            delete existing->legacyAdapter;
+        }
+        existing->legacyAdapter = new plugins::runtime::LegacyEffectAdapter(name, fn);
+        existing->effect = existing->legacyAdapter;
+        existing->name = name;
+        LW_LOGD("Re-registered effect 0x%04X: %s (legacy)", id, name);
+        return true;
     }
-    
-    m_legacyAdapters[id] = new plugins::runtime::LegacyEffectAdapter(name, fn);
-    if (m_legacyAdapters[id] == nullptr) {
+
+    // Append new registration
+    if (m_registryCount >= MAX_EFFECTS) {
+        return false;
+    }
+
+    auto* adapter = new plugins::runtime::LegacyEffectAdapter(name, fn);
+    if (adapter == nullptr) {
         return false;  // Allocation failed
     }
 
-    m_effects[id].name = name;
-    m_effects[id].effect = m_legacyAdapters[id];
-    m_effects[id].active = true;
+    EffectRegistration& reg = m_registry[m_registryCount];
+    reg.id = id;
+    reg.name = name;
+    reg.effect = adapter;
+    reg.legacyAdapter = adapter;
+    reg.active = true;
+    m_registryCount++;
 
-    // Update count
-    if (id >= m_effectCount) {
-        m_effectCount = id + 1;
-    }
-
-    LW_LOGD("Registered effect %d: %s (legacy -> IEffect adapter)", id, name);
-
+    LW_LOGD("Registered effect 0x%04X: %s (legacy -> IEffect adapter)", id, name);
     return true;
 }
 
-bool RendererActor::registerEffect(uint8_t id, plugins::IEffect* effect)
+bool RendererActor::registerEffect(EffectId id, plugins::IEffect* effect)
 {
-    if (id >= MAX_EFFECTS || effect == nullptr) {
+    if (id == INVALID_EFFECT_ID || effect == nullptr) {
         return false;
     }
 
-    // Clean up any existing legacy adapter for this ID
-    if (m_legacyAdapters[id] != nullptr) {
-        delete m_legacyAdapters[id];
-        m_legacyAdapters[id] = nullptr;
+    // Check for existing registration (update in place)
+    auto* existing = findById(id);
+    if (existing) {
+        // Clean up any legacy adapter
+        if (existing->legacyAdapter) {
+            delete existing->legacyAdapter;
+            existing->legacyAdapter = nullptr;
+        }
+        const plugins::EffectMetadata& meta = effect->getMetadata();
+        existing->name = meta.name;
+        existing->effect = effect;
+        LW_LOGD("Re-registered effect 0x%04X: %s (IEffect native)", id, meta.name);
+        return true;
     }
 
-    // Get name from effect metadata
+    // Append new registration
+    if (m_registryCount >= MAX_EFFECTS) {
+        return false;
+    }
+
     const plugins::EffectMetadata& meta = effect->getMetadata();
-    
-    m_effects[id].name = meta.name;
-    m_effects[id].effect = effect;
-    m_effects[id].active = true;
 
-    // Update count
-    if (id >= m_effectCount) {
-        m_effectCount = id + 1;
-    }
+    EffectRegistration& reg = m_registry[m_registryCount];
+    reg.id = id;
+    reg.name = meta.name;
+    reg.effect = effect;
+    reg.legacyAdapter = nullptr;
+    reg.active = true;
+    m_registryCount++;
 
-    LW_LOGD("Registered effect %d: %s (IEffect native)", id, meta.name);
-
+    LW_LOGD("Registered effect 0x%04X: %s (IEffect native)", id, meta.name);
     return true;
 }
 
@@ -271,65 +332,48 @@ bool RendererActor::registerEffect(uint8_t id, plugins::IEffect* effect)
 // IEffectRegistry Implementation
 // ============================================================================
 
-bool RendererActor::unregisterEffect(uint8_t id)
+bool RendererActor::unregisterEffect(EffectId id)
 {
-    if (id >= MAX_EFFECTS) {
+    auto* reg = findById(id);
+    if (!reg) {
         return false;
     }
 
-    if (m_effects[id].active) {
-        m_effects[id].active = false;
-        m_effects[id].effect = nullptr;
-        m_effects[id].name = nullptr;
+    reg->active = false;
+    reg->effect = nullptr;
+    reg->name = nullptr;
 
-        // Clean up legacy adapter if present
-        if (m_legacyAdapters[id] != nullptr) {
-            delete m_legacyAdapters[id];
-            m_legacyAdapters[id] = nullptr;
-        }
-
-        // Update count (recalculate from active effects)
-        // This is safe but may not be exact if effects are unregistered out of order
-        // The count represents the highest registered ID, not the actual active count
-        uint8_t highestActive = 0;
-        for (uint8_t i = 0; i < MAX_EFFECTS; i++) {
-            if (m_effects[i].active && i >= highestActive) {
-                highestActive = i + 1;
-            }
-        }
-        m_effectCount = highestActive;
-
-        LW_LOGD("Unregistered effect %d", id);
-        return true;
+    // Clean up legacy adapter if present
+    if (reg->legacyAdapter != nullptr) {
+        delete reg->legacyAdapter;
+        reg->legacyAdapter = nullptr;
     }
 
-    return false;
+    LW_LOGD("Unregistered effect 0x%04X", id);
+    return true;
 }
 
-bool RendererActor::isEffectRegistered(uint8_t id) const
+bool RendererActor::isEffectRegistered(EffectId id) const
 {
-    if (id >= MAX_EFFECTS) {
-        return false;
-    }
-    return m_effects[id].active;
+    return findById(id) != nullptr;
 }
 
-uint8_t RendererActor::getRegisteredCount() const
+uint16_t RendererActor::getRegisteredCount() const
 {
-    // Count actual active effects (not just highest ID)
-    uint8_t count = 0;
-    for (uint8_t i = 0; i < MAX_EFFECTS; i++) {
-        if (m_effects[i].active) {
+    uint16_t count = 0;
+    for (uint16_t i = 0; i < m_registryCount; i++) {
+        if (m_registry[i].active) {
             count++;
         }
     }
     return count;
 }
 
-const char* RendererActor::getEffectName(uint8_t id) const
+const char* RendererActor::getEffectName(EffectId id) const
 {
-    if (id < MAX_EFFECTS && m_effects[id].active) {
-        return m_effects[id].name;
+    const auto* reg = findById(id);
+    if (reg) {
+        return reg->name;
     }
     return "Unknown";
 }
@@ -344,59 +388,67 @@ const char* RendererActor::getPaletteName(uint8_t id) const
     return lightwaveos::palettes::getPaletteName(id);
 }
 
-plugins::IEffect* RendererActor::getEffectInstance(uint8_t id) const
+plugins::IEffect* RendererActor::getEffectInstance(EffectId id) const
 {
-    if (id < MAX_EFFECTS && m_effects[id].active) {
-        return m_effects[id].effect;
+    const auto* reg = findById(id);
+    if (reg) {
+        return reg->effect;
     }
     return nullptr;
 }
 
 /**
- * @brief Validate and clamp effectId to safe range [0, MAX_EFFECTS-1]
- * 
- * DEFENSIVE CHECK: Prevents LoadProhibited crashes from corrupted effect ID.
- * 
- * RendererActor uses m_effects[MAX_EFFECTS] array where MAX_EFFECTS = 100. If
- * effectId is corrupted (e.g., by memory corruption, invalid input, or race
- * condition), accessing m_effects[effectId] would cause out-of-bounds access
- * and crash.
- * 
- * This validation ensures we always access valid array indices, returning safe
- * default (effect 0) if corruption is detected.
- * 
+ * @brief Validate effect ID exists in the registry
+ *
+ * DEFENSIVE CHECK: Ensures the effect ID is registered and active before use.
+ * Returns the input ID if valid, or falls back to the first registered effect.
+ *
  * @param effectId Effect ID to validate
- * @return Valid effect ID in [0, MAX_EFFECTS-1], defaults to 0 if out of bounds
+ * @return Valid EffectId (the input if registered, or first registered effect)
  */
-uint8_t RendererActor::validateEffectId(uint8_t effectId) const {
+EffectId RendererActor::validateEffectId(EffectId effectId) const {
 #if FEATURE_VALIDATION_PROFILING
 #ifndef NATIVE_BUILD
     int64_t start = esp_timer_get_time();
-#else
-    int64_t start = 0;
 #endif
 #endif
-    // Validate effectId is within bounds [0, MAX_EFFECTS-1]
-    if (effectId >= MAX_EFFECTS) {
+    // Check if the ID exists in the registry
+    if (findById(effectId) != nullptr) {
 #if FEATURE_VALIDATION_PROFILING
 #ifndef NATIVE_BUILD
-        lightwaveos::core::system::ValidationProfiler::recordCall("validateEffectId", 
+        lightwaveos::core::system::ValidationProfiler::recordCall("validateEffectId",
                                                                     esp_timer_get_time() - start);
 #else
         lightwaveos::core::system::ValidationProfiler::recordCall("validateEffectId", 0);
 #endif
 #endif
-        return 0;  // Return safe default (effect 0)
+        return effectId;
     }
+
+    // Fall back to first registered effect
+    for (uint16_t i = 0; i < m_registryCount; ++i) {
+        if (m_registry[i].active) {
 #if FEATURE_VALIDATION_PROFILING
 #ifndef NATIVE_BUILD
-    lightwaveos::core::system::ValidationProfiler::recordCall("validateEffectId", 
+            lightwaveos::core::system::ValidationProfiler::recordCall("validateEffectId",
+                                                                        esp_timer_get_time() - start);
+#else
+            lightwaveos::core::system::ValidationProfiler::recordCall("validateEffectId", 0);
+#endif
+#endif
+            return m_registry[i].id;
+        }
+    }
+
+#if FEATURE_VALIDATION_PROFILING
+#ifndef NATIVE_BUILD
+    lightwaveos::core::system::ValidationProfiler::recordCall("validateEffectId",
                                                                 esp_timer_get_time() - start);
 #else
     lightwaveos::core::system::ValidationProfiler::recordCall("validateEffectId", 0);
 #endif
 #endif
-    return effectId;
+    return INVALID_EFFECT_ID;
 }
 
 // ============================================================================
@@ -423,14 +475,15 @@ void RendererActor::onStart()
     m_lastFrameTime = micros();
 
     LW_LOGI("Ready - %d effects, brightness=%d, target=%d FPS",
-             m_effectCount, m_brightness, LedConfig::TARGET_FPS);
+             m_registryCount, m_brightness, LedConfig::TARGET_FPS);
 }
 
 void RendererActor::onMessage(const Message& msg)
 {
     switch (msg.type) {
         case MessageType::SET_EFFECT:
-            handleSetEffect(msg.param1);
+            // ActorSystem packs EffectId as 2 bytes: param1=low, param2=high
+            handleSetEffect(static_cast<EffectId>(msg.param1) | (static_cast<EffectId>(msg.param2) << 8));
             break;
 
         case MessageType::SET_BRIGHTNESS:
@@ -489,7 +542,8 @@ void RendererActor::onMessage(const Message& msg)
             break;
 
         case MessageType::START_TRANSITION:
-            handleStartTransition(msg.param1, msg.param2);
+            // ActorSystem packs EffectId as 2 bytes: param1=low, param2=high, param3=transitionType
+            handleStartTransition(static_cast<EffectId>(msg.param1) | (static_cast<EffectId>(msg.param2) << 8), msg.param3);
             break;
 
         case MessageType::HEALTH_CHECK:
@@ -547,8 +601,23 @@ void RendererActor::onMessage(const Message& msg)
                 bool tick = (msg.param4 & 0x01) != 0;
                 bool downbeat = (msg.param4 & 0x02) != 0;
                 int beatInBar = (int)((msg.param4 >> 2) & 0x03);
-                
+
+#if FEATURE_AUDIO_BACKEND_ESV11
+                // Inject into renderer-domain beat clock (no MusicalGrid in ESV11 builds).
+                uint64_t now_us = micros();
+                uint32_t sr = m_lastAudioTime.sample_rate_hz ? m_lastAudioTime.sample_rate_hz : audio::SAMPLE_RATE;
+                m_esBeatClock.injectExternalBeat(
+                    bpm,
+                    phase01,
+                    tick,
+                    downbeat,
+                    static_cast<uint8_t>(beatInBar),
+                    now_us,
+                    sr
+                );
+#else
                 m_musicalGrid.injectExternalBeat(bpm, phase01, tick, downbeat, beatInBar);
+#endif
             }
             break;
 
@@ -577,11 +646,21 @@ void RendererActor::onMessage(const Message& msg)
                         m_trinitySyncActive = true;
                         m_trinitySyncPaused = false;
                         m_trinitySyncPosition = positionSec;
+#if FEATURE_AUDIO_BACKEND_ESV11
+                        m_esBeatClock.setExternalSyncMode(true);
+#else
                         m_musicalGrid.setExternalSyncMode(true);
+#endif
                         // Prime the proxy so isActive() returns true before first macro arrives
                         m_trinityProxy.markActive();
                         if (bpm > 0.0f) {
+#if FEATURE_AUDIO_BACKEND_ESV11
+                            uint64_t now_us = micros();
+                            uint32_t sr = m_lastAudioTime.sample_rate_hz ? m_lastAudioTime.sample_rate_hz : audio::SAMPLE_RATE;
+                            m_esBeatClock.injectExternalBeat(bpm, 0.0f, false, false, 0, now_us, sr);
+#else
                             m_musicalGrid.injectExternalBeat(bpm, 0.0f, false, false, 0);
+#endif
                         }
                         LW_LOGI("TRINITY_SYNC: START active=1 paused=0 pos=%.2fs bpm=%.1f", positionSec, bpm);
                         break;
@@ -589,7 +668,11 @@ void RendererActor::onMessage(const Message& msg)
                         m_trinitySyncActive = false;
                         m_trinitySyncPaused = false;
                         m_trinitySyncPosition = 0.0f;
+#if FEATURE_AUDIO_BACKEND_ESV11
+                        m_esBeatClock.setExternalSyncMode(false);
+#else
                         m_musicalGrid.setExternalSyncMode(false);
+#endif
                         m_trinityProxy.reset();
                         LW_LOGI("TRINITY_SYNC: STOP active=0 paused=0");
                         break;
@@ -604,10 +687,45 @@ void RendererActor::onMessage(const Message& msg)
                     case 4: // seek
                         m_trinitySyncPosition = positionSec;
                         if (bpm > 0.0f) {
+#if FEATURE_AUDIO_BACKEND_ESV11
+                            uint64_t now_us = micros();
+                            uint32_t sr = m_lastAudioTime.sample_rate_hz ? m_lastAudioTime.sample_rate_hz : audio::SAMPLE_RATE;
+                            m_esBeatClock.injectExternalBeat(bpm, 0.0f, false, false, 0, now_us, sr);
+#else
                             m_musicalGrid.injectExternalBeat(bpm, 0.0f, false, false, 0);
+#endif
                         }
                         LW_LOGD("TRINITY_SYNC: SEEK pos=%.2fs bpm=%.1f", positionSec, bpm);
                         break;
+                }
+            }
+            break;
+
+        case MessageType::TRINITY_SEGMENT:
+            {
+                uint8_t index = msg.param1;
+                uint16_t labelHash16 = ((uint16_t)msg.param2 << 8) | (uint16_t)msg.param3;
+                uint32_t startMs = msg.param4;
+                uint32_t endMs = msg._reserved;
+
+                bool changed = (index != m_trinitySegmentIndex) ||
+                               (labelHash16 != m_trinitySegmentLabelHash) ||
+                               (startMs != m_trinitySegmentStartMs) ||
+                               (endMs != m_trinitySegmentEndMs);
+
+                m_trinitySegmentIndex = index;
+                m_trinitySegmentLabelHash = labelHash16;
+                m_trinitySegmentStartMs = startMs;
+                m_trinitySegmentEndMs = endMs;
+
+                if (changed) {
+                    // Broadcast to any interested actors (semantic adapters, diagnostics, etc.)
+                    bus::MessageBus::instance().publish(msg);
+                    LW_LOGI("TRINITY_SEGMENT: idx=%u labelHash=0x%04X start=%lums end=%lums",
+                            static_cast<unsigned>(index),
+                            static_cast<unsigned>(labelHash16),
+                            static_cast<unsigned long>(startMs),
+                            static_cast<unsigned long>(endMs));
                 }
             }
             break;
@@ -621,7 +739,6 @@ void RendererActor::onMessage(const Message& msg)
 
 void RendererActor::onTick()
 {
-    TRACE_SCOPE("render_frame");
     uint32_t frameStartUs = micros();
     static uint16_t s_wdtResetFrames = 0;
 
@@ -636,15 +753,15 @@ void RendererActor::onTick()
     // Post-render color correction pipeline (skip for sensitive effects)
     // Includes: LGP-sensitive, stateful, PHYSICS_BASED, MATHEMATICAL families
     // See PatternRegistry::shouldSkipColorCorrection() for full list
-    uint8_t safeEffect = validateEffectId(m_currentEffect);
-    if (!::PatternRegistry::shouldSkipColorCorrection(safeEffect)) {
-        {
-            TRACE_SCOPE("color_correction");
+    {
+        TRACE_SCOPE("color_correction");
+        EffectId safeEffectTick = validateEffectId(m_currentEffect);
+        if (!::PatternRegistry::shouldSkipColorCorrection(safeEffectTick)) {
             enhancement::ColorCorrectionEngine::getInstance().processBuffer(m_leds, LedConfig::TOTAL_LEDS);
             m_correctionApplyCount++;
+        } else {
+            m_correctionSkipCount++;
         }
-    } else {
-        m_correctionSkipCount++;
     }
 
     // TAP B: Capture post-correction (after processBuffer, before showLeds)
@@ -652,22 +769,13 @@ void RendererActor::onTick()
         captureFrame(CaptureTap::TAP_B_POST_CORRECTION, m_leds);
     }
 
-#ifndef NATIVE_BUILD
-    // CRITICAL: Yield BEFORE showLeds() to let IDLE1 reset its watchdog
-    // FastLED.show() blocks for ~9.6ms, preventing IDLE1 from running
-    // We must yield here so IDLE1 gets CPU time before the blocking call
-    // Use vTaskDelay(1) not vTaskDelay(0) - vTaskDelay(0) may not yield if nothing else is ready
-    {
-        TRACE_SCOPE("pre_show_yield");
-        vTaskDelay(1);
-    }
-#endif
-
     // Push to strips
-    {
-        TRACE_SCOPE("show_leds");
-        showLeds();
-    }
+    // NOTE: showLeds() blocks for ~4.8ms (WS2812 wire time for 160 LEDs).
+    // All 3 RMT channels (strip1, strip2, status) transmit in parallel,
+    // so blocking time = max strip length (160 LEDs), not total (350 LEDs).
+    // During this blocking I/O, FreeRTOS can schedule other tasks on Core 1,
+    // including IDLE1 which feeds the watchdog. No explicit yield needed before.
+    { TRACE_SCOPE("show_leds"); showLeds(); }
 
     // Calculate frame time (pre-throttle)
     uint32_t frameEndUs = micros();
@@ -702,16 +810,16 @@ void RendererActor::onTick()
     }
 
     // Update statistics (use raw time for drops, throttled time for FPS)
+    TRACE_COUNTER("frame_us", frameTimeUs);
     updateStats(frameTimeUs, rawFrameTimeUs);
 
-    TRACE_COUNTER("fps", static_cast<int32_t>(m_stats.currentFPS));
-    TRACE_COUNTER("frame_us", static_cast<int32_t>(rawFrameTimeUs));
-
     // Publish FRAME_RENDERED event (every 10 frames to reduce overhead)
+    // EffectId packed as 2 bytes: param1=low, param2=high
     if ((m_frameCount % 10) == 0) {
         Message evt(MessageType::FRAME_RENDERED);
-        evt.param1 = m_currentEffect;
-        evt.param2 = m_stats.currentFPS;
+        evt.param1 = static_cast<uint8_t>(m_currentEffect & 0xFF);
+        evt.param2 = static_cast<uint8_t>((m_currentEffect >> 8) & 0xFF);
+        evt.param3 = m_stats.currentFPS;
         evt.param4 = m_frameCount;
         bus::MessageBus::instance().publish(evt);
     }
@@ -720,11 +828,10 @@ void RendererActor::onTick()
     m_frameCount++;
 
 #ifndef NATIVE_BUILD
-    // CRITICAL: Yield at END of frame to let IDLE1 reset its watchdog
-    // The Actor system calls onTick() synchronously when queue times out,
-    // so we must explicitly yield here to give IDLE1 CPU time
-    // Use vTaskDelay(1) to ensure at least one tick of yield (vTaskDelay(0) may not yield)
-    vTaskDelay(1);
+    // Cooperative yield at end of frame - use vTaskDelay(0) to yield without
+    // adding ~10ms latency. The ~4.8ms showLeds() blocking already provides
+    // ample time for IDLE1 to run and feed the watchdog.
+    { TRACE_SCOPE("pre_show_yield"); vTaskDelay(0); }
 #endif
 }
 
@@ -745,9 +852,52 @@ void RendererActor::onStop()
 // Frame Capture System (for testbed)
 // ============================================================================
 
+static bool ensureCaptureBuffers(CRGB*& block, CRGB*& tapA, CRGB*& tapB, CRGB*& tapC) {
+    if (block != nullptr && tapA != nullptr && tapB != nullptr && tapC != nullptr) {
+        return true;
+    }
+
+    const size_t bytes = static_cast<size_t>(lightwaveos::actors::LedConfig::TOTAL_LEDS) *
+                         sizeof(CRGB) * 3U;
+
+#ifndef NATIVE_BUILD
+    block = static_cast<CRGB*>(
+        heap_caps_calloc(1, bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (!block) {
+        block = static_cast<CRGB*>(
+            heap_caps_calloc(1, bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    }
+#else
+    block = static_cast<CRGB*>(calloc(1, bytes));
+#endif
+
+    if (!block) {
+        tapA = nullptr;
+        tapB = nullptr;
+        tapC = nullptr;
+        return false;
+    }
+
+    tapA = block;
+    tapB = block + lightwaveos::actors::LedConfig::TOTAL_LEDS;
+    tapC = block + (2U * lightwaveos::actors::LedConfig::TOTAL_LEDS);
+    return true;
+}
+
 void RendererActor::setCaptureMode(bool enabled, uint8_t tapMask) {
+    const uint8_t masked = tapMask & 0x07;  // Only bits 0-2 are valid
+
+    if (enabled) {
+        if (!ensureCaptureBuffers(m_captureBlock, m_captureTapA, m_captureTapB, m_captureTapC)) {
+            LW_LOGW("Capture enable refused: buffer allocation failed");
+            m_captureEnabled = false;
+            m_captureTapMask = 0;
+            return;
+        }
+    }
+
     m_captureEnabled = enabled;
-    m_captureTapMask = tapMask & 0x07;  // Only bits 0-2 are valid
+    m_captureTapMask = masked;
     
     if (!enabled) {
         m_captureTapAValid = false;
@@ -825,13 +975,21 @@ void RendererActor::applyPendingAudioContractTuning() {
     }
     audio::AudioContractTuning pending = getAudioContractTuning();
     m_audioContractTuning = pending;
+#if !FEATURE_AUDIO_BACKEND_ESV11
     m_musicalGrid.setTuning(toMusicalGridTuning(m_audioContractTuning));
     m_musicalGrid.SetTimeSignature(m_audioContractTuning.beatsPerBar, m_audioContractTuning.beatUnit);
+#endif
+}
+
+void RendererActor::getBandsDebugSnapshot(BandsDebugSnapshot& out) const {
+    uint8_t idx = m_bandsDebugWriteIndex.load(std::memory_order_acquire);
+    const BandsDebugSnapshot& snap = m_bandsDebugSnapshot[1u - idx];
+    out = snap;
 }
 
 #endif
 
-bool RendererActor::enqueueEffectParameterUpdate(uint8_t effectId, const char* name, float value) {
+bool RendererActor::enqueueEffectParameterUpdate(EffectId effectId, const char* name, float value) {
     if (!name || name[0] == '\0') {
         return false;
     }
@@ -858,13 +1016,9 @@ void RendererActor::applyPendingEffectParameterUpdates() {
     uint8_t head = m_paramQueueHead.load(std::memory_order_acquire);
     while (tail != head) {
         const EffectParamUpdate& update = m_paramQueue[tail];
-        if (update.effectId < m_effectCount) {
-            // Validate effectId before access
-            uint8_t safeEffectId = validateEffectId(update.effectId);
-            plugins::IEffect* effect = m_effects[safeEffectId].effect;
-            if (effect) {
-                effect->setParameter(update.name, update.value);
-            }
+        const auto* reg = findById(update.effectId);
+        if (reg && reg->effect) {
+            reg->effect->setParameter(update.name, update.value);
         }
         tail = static_cast<uint8_t>((tail + 1) % PARAM_QUEUE_SIZE);
         m_paramQueueTail.store(tail, std::memory_order_release);
@@ -873,6 +1027,13 @@ void RendererActor::applyPendingEffectParameterUpdates() {
 }
 
 void RendererActor::forceOneShotCapture(CaptureTap tap) {
+    // forceOneShotCapture may be called even when capture mode is disabled (e.g. serial dump),
+    // so ensure buffers exist for the requested tap.
+    if (!ensureCaptureBuffers(m_captureBlock, m_captureTapA, m_captureTapB, m_captureTapC)) {
+        LW_LOGW("One-shot capture skipped: buffer allocation failed");
+        return;
+    }
+
     // Preserve the live LED state buffer so buffer-feedback effects are not disturbed.
     CRGB savedLeds[LedConfig::TOTAL_LEDS];
     memcpy(savedLeds, m_leds, sizeof(savedLeds));
@@ -908,6 +1069,10 @@ void RendererActor::forceOneShotCapture(CaptureTap tap) {
 
 void RendererActor::captureFrame(CaptureTap tap, const CRGB* sourceBuffer) {
     if (sourceBuffer == nullptr) {
+        return;
+    }
+
+    if (m_captureTapA == nullptr || m_captureTapB == nullptr || m_captureTapC == nullptr) {
         return;
     }
     
@@ -978,7 +1143,14 @@ void RendererActor::initLeds()
 
 void RendererActor::renderFrame()
 {
+    TRACE_SCOPE("render_frame");
 #if FEATURE_AUDIO_SYNC
+#if FEATURE_AUDIO_BACKEND_ESV11
+    // ESV11: beat data flows through ControlBusFrame es_* fields (handled below)
+#elif FEATURE_AUDIO_BACKEND_PIPELINECORE
+    // PipelineCore: No TempoTracker to advance — beat data arrives via ControlBusFrame
+    applyPendingAudioContractTuning();
+#else
     applyPendingAudioContractTuning();
 
     // Advance TempoTracker phase at 120 FPS
@@ -1016,6 +1188,7 @@ void RendererActor::renderFrame()
         }
     }
 #endif
+#endif
     applyPendingEffectParameterUpdates();
 
 #if FEATURE_TRANSITIONS
@@ -1037,18 +1210,21 @@ void RendererActor::renderFrame()
     // FreeRTOS stack overflow in the Renderer task.
     bool audioAvailable = false;
     if (m_controlBusBuffer != nullptr) {
+        TRACE_SCOPE("audio_snapshot_read");
         // 1. Read latest ControlBusFrame BY VALUE (thread-safe)
-        uint32_t seq;
-        {
-            TRACE_SCOPE("audio_snapshot_read");
-            seq = m_controlBusBuffer->ReadLatest(m_lastControlBus);
-        }
+        uint32_t seq = m_controlBusBuffer->ReadLatest(m_lastControlBus);
 
         // Store previous sequence BEFORE updating (for availability gate)
         uint32_t prevSeq = m_lastControlBusSeq;
 
         // 2. Extrapolate AudioTime from audio snapshot
+        // CLOCK SPINE FIX: Use esp_timer_get_time() (same clock as AudioActor)
+        // This ensures renderer and audio actor share a consistent timeline.
+#ifndef NATIVE_BUILD
+        uint64_t now_us = static_cast<uint64_t>(esp_timer_get_time());
+#else
         uint64_t now_us = micros();
+#endif
         if (seq != m_lastControlBusSeq) {
             // New audio frame arrived - resync extrapolation base
             m_lastAudioTime = m_lastControlBus.t;
@@ -1057,7 +1233,8 @@ void RendererActor::renderFrame()
         }
 
         // 3. Build extrapolated render-time AudioTime
-        uint64_t dt_us = now_us - m_lastAudioMicros;
+        // CLOCK SPINE FIX: Wrap-safe subtraction (defensive, 64-bit shouldn't wrap)
+        uint64_t dt_us = (now_us >= m_lastAudioMicros) ? (now_us - m_lastAudioMicros) : 0;
         uint64_t extrapolated_samples = m_lastAudioTime.sample_index +
             (dt_us * m_lastAudioTime.sample_rate_hz / 1000000);
         audio::AudioTime render_now(
@@ -1066,28 +1243,110 @@ void RendererActor::renderFrame()
             now_us
         );
 
-        // 4. Tick MusicalGrid at 120 FPS
-        m_musicalGrid.Tick(render_now);
-        m_musicalGrid.ReadLatest(m_lastMusicalGrid);
-
-        // 5. Compute freshness
+        // 4. Compute freshness + "new frame" detection
         float age_s = audio::AudioTime_SecondsBetween(m_lastControlBus.t, render_now);
         float staleness_s = m_audioContractTuning.audioStalenessMs / 1000.0f;
         bool sequence_changed = (seq != prevSeq);
         bool age_within_tolerance = (age_s >= -0.01f && age_s < staleness_s);
         audioAvailable = sequence_changed || age_within_tolerance;
+
+        // DEBUG: Log clock spine renderer values every 2 seconds
+        // Track stats over the interval to see actual behavior
+        static uint32_t lastClockSpineRenderLog = 0;
+        static float maxAge_ms = 0.0f;
+        static float sumAge_ms = 0.0f;
+        static uint32_t ageCount = 0;
+        static uint32_t newFrameCount = 0;
+        static uint64_t maxDt_us = 0;
+
+        float age_ms = age_s * 1000.0f;
+        if (age_ms > maxAge_ms) maxAge_ms = age_ms;
+        sumAge_ms += age_ms;
+        ageCount++;
+        if (sequence_changed) newFrameCount++;
+        if (dt_us > maxDt_us) maxDt_us = dt_us;
+
+        // DEBUG: CLOCK_SPINE:RENDER logging disabled to reduce serial spam
+        // uint32_t nowLogMs = millis();
+        // if (nowLogMs - lastClockSpineRenderLog >= 2000) {  // 2 seconds
+        //     lastClockSpineRenderLog = nowLogMs;
+        //     float avgAge_ms = (ageCount > 0) ? (sumAge_ms / ageCount) : 0.0f;
+        //     LW_LOGI("[CLOCK_SPINE:RENDER] avgAge=%.2fms maxAge=%.2fms maxDt=%lluus newFrames=%u totalFrames=%u",
+        //             avgAge_ms, maxAge_ms,
+        //             (unsigned long long)maxDt_us,
+        //             newFrameCount, ageCount);
+        //     // Reset stats
+        //     maxAge_ms = 0.0f;
+        //     sumAge_ms = 0.0f;
+        //     ageCount = 0;
+        //     newFrameCount = 0;
+        //     maxDt_us = 0;
+        // }
+
+        // 5. Beat phase at 120 FPS (renderer-domain integration)
+#if FEATURE_AUDIO_BACKEND_ESV11
+        m_esBeatClock.tick(m_lastControlBus, sequence_changed, render_now);
+        m_lastMusicalGrid = m_esBeatClock.snapshot();
+#elif FEATURE_AUDIO_BACKEND_PIPELINECORE
+        // Feed MusicalGrid using timestamped audio-domain observations.
+        // This avoids K1 shim timing (synthetic "now" beats) and keeps phase
+        // correction anchored to the AudioActor hop timestamp.
+        if (sequence_changed) {
+            const float confidence = m_lastControlBus.tempoLocked
+                ? m_lastControlBus.tempoConfidence
+                : 0.0f;
+            m_musicalGrid.OnTempoEstimate(
+                m_lastControlBus.t,
+                m_lastControlBus.tempoBpm,
+                confidence
+            );
+            if (m_lastControlBus.tempoLocked && m_lastControlBus.tempoBeatTick) {
+                m_musicalGrid.OnBeatObservation(
+                    m_lastControlBus.t,
+                    m_lastControlBus.tempoBeatStrength,
+                    false
+                );
+            }
+        }
+        m_musicalGrid.Tick(render_now);
+        m_musicalGrid.ReadLatest(m_lastMusicalGrid);
+#else
+        m_musicalGrid.Tick(render_now);
+        m_musicalGrid.ReadLatest(m_lastMusicalGrid);
+#endif
         
         // Debug: Log audio availability issues every 4 seconds (reduced frequency)
-        static uint32_t lastAudioDbg = 0;
-        uint32_t nowDbg = millis();
-        if (nowDbg - lastAudioDbg >= 4000) {
-            lastAudioDbg = nowDbg;
-            if (!audioAvailable) {
-                LW_LOGW("Audio unavailable: seq=%u prevSeq=%u age_s=%.3f staleness_s=%.3f hop_seq=%u",
-                        seq, prevSeq, age_s, staleness_s, m_lastControlBus.hop_seq);
-            } else {
-                LW_LOGI("Audio OK: seq=%u hop_seq=%u rms=%.3f flux=%.3f",
-                        seq, m_lastControlBus.hop_seq, m_lastControlBus.rms, m_lastControlBus.flux);
+        // Toggle with serial 'a' command via setAudioDebugEnabled()
+        if (m_audioDebugEnabled) {
+            static uint32_t lastAudioDbg = 0;
+            uint32_t nowDbg = millis();
+            if (nowDbg - lastAudioDbg >= 4000) {
+                lastAudioDbg = nowDbg;
+                if (!audioAvailable) {
+                    LW_LOGW("Audio unavailable: seq=%u prevSeq=%u age_s=%.3f staleness_s=%.3f hop_seq=%u",
+                            seq, prevSeq, age_s, staleness_s, m_lastControlBus.hop_seq);
+                } else {
+                    // Include ES raw signal peaks to aid parity debugging against Emotiscope.
+#if FEATURE_AUDIO_BACKEND_ESV11
+                    float maxBinRaw = 0.0f;
+                    float maxChromaRaw = 0.0f;
+                    for (uint8_t i = 0; i < audio::ControlBusFrame::BINS_64_COUNT; ++i) {
+                        if (m_lastControlBus.es_bins64_raw[i] > maxBinRaw) maxBinRaw = m_lastControlBus.es_bins64_raw[i];
+                    }
+                    for (uint8_t i = 0; i < audio::CONTROLBUS_NUM_CHROMA; ++i) {
+                        if (m_lastControlBus.es_chroma_raw[i] > maxChromaRaw) maxChromaRaw = m_lastControlBus.es_chroma_raw[i];
+                    }
+                    LW_LOGI("Audio OK: seq=%u hop=%u rms=%.3f flux=%.3f es_vu=%.3f binMax=%.3f chrMax=%.3f bpm=%.1f conf=%.2f sil=%.2f silent=%d gate=%.2f actGate=%.2f",
+                            seq, m_lastControlBus.hop_seq, m_lastControlBus.rms, m_lastControlBus.flux,
+                            m_lastControlBus.es_vu_level_raw, maxBinRaw, maxChromaRaw,
+                            m_lastControlBus.es_bpm, m_lastControlBus.es_tempo_confidence,
+                            m_lastControlBus.silentScale, m_lastControlBus.isSilent ? 1 : 0,
+                            m_highIdReactiveSilenceGate, m_highIdReactiveActivityGate);
+#else
+                    LW_LOGI("Audio OK: seq=%u hop_seq=%u rms=%.3f flux=%.3f",
+                            seq, m_lastControlBus.hop_seq, m_lastControlBus.rms, m_lastControlBus.flux);
+#endif
+                }
             }
         }
 
@@ -1116,6 +1375,25 @@ void RendererActor::renderFrame()
             m_sharedAudioCtx.musicalGrid = m_lastMusicalGrid;
             m_sharedAudioCtx.available = audioAvailable;
             m_sharedAudioCtx.trinityActive = false;
+
+            // Bands debug snapshot (lock-free double buffer for serial "bands" command)
+            uint8_t idx = m_bandsDebugWriteIndex.load(std::memory_order_relaxed);
+            BandsDebugSnapshot& snap = m_bandsDebugSnapshot[idx];
+            for (uint8_t i = 0; i < 8; ++i) snap.bands[i] = m_lastControlBus.bands[i];
+            snap.bass = (m_lastControlBus.bands[0] + m_lastControlBus.bands[1]) * 0.5f;
+            snap.mid = (m_lastControlBus.bands[2] + m_lastControlBus.bands[3] + m_lastControlBus.bands[4]) / 3.0f;
+            snap.treble = (m_lastControlBus.bands[5] + m_lastControlBus.bands[6] + m_lastControlBus.bands[7]) / 3.0f;
+            snap.rms = m_lastControlBus.rms;
+            // Avoid rms=0 when bands have content (display fallback for "x" output)
+            if (snap.rms <= 0.0f && (snap.bass + snap.mid + snap.treble) > 0.01f) {
+                float bandRms = 0.0f;
+                for (uint8_t i = 0; i < 8; ++i) bandRms += snap.bands[i] * snap.bands[i];
+                snap.rms = (bandRms > 0.0f) ? sqrtf(bandRms / 8.0f) : (snap.bass + snap.mid + snap.treble) / 3.0f;
+            }
+            snap.flux = m_lastControlBus.flux;
+            snap.hop_seq = m_lastControlBus.hop_seq;
+            snap.valid = true;
+            m_bandsDebugWriteIndex.store(1u - idx, std::memory_order_release);
         }
     } else {
         // No audio buffer - check Trinity proxy as fallback
@@ -1143,37 +1421,33 @@ void RendererActor::renderFrame()
 
     // Check if zone composer is enabled
     if (m_zoneComposer != nullptr && m_zoneComposer->isEnabled()) {
+        TRACE_SCOPE("zone_compose");
         // Use ZoneComposer for multi-zone rendering
-        {
-            TRACE_SCOPE("zone_compose");
 #if FEATURE_AUDIO_SYNC
-            m_zoneComposer->render(m_leds, LedConfig::TOTAL_LEDS,
-                                   &m_currentPalette, m_hue, m_frameCount, deltaTimeMs, &m_sharedAudioCtx);
+        m_zoneComposer->render(m_leds, LedConfig::TOTAL_LEDS,
+                               &m_currentPalette, m_hue, m_frameCount, deltaTimeMs, &m_sharedAudioCtx);
 #else
-            m_zoneComposer->render(m_leds, LedConfig::TOTAL_LEDS,
-                                   &m_currentPalette, m_hue, m_frameCount, deltaTimeMs, nullptr);
+        m_zoneComposer->render(m_leds, LedConfig::TOTAL_LEDS,
+                               &m_currentPalette, m_hue, m_frameCount, deltaTimeMs, nullptr);
 #endif
-        }
         m_hue += 1;
         return;
     }
 
     // Single-effect mode
-    // Validate current effect ID before access
-    uint8_t safeEffect = validateEffectId(m_currentEffect);
-    if (safeEffect >= MAX_EFFECTS || !m_effects[safeEffect].active) {
+    // Validate current effect ID and find registry entry
+    EffectId safeEffect = validateEffectId(m_currentEffect);
+    const auto* safeReg = findById(safeEffect);
+    if (!safeReg || !safeReg->active) {
         // No effect - clear buffer
         memset(m_leds, 0, sizeof(m_leds));
         return;
     }
 
+    // safeEffect is the validated EffectId used throughout the render path
+
     // IEffect-only path (all effects are IEffect instances)
-    //
-    // IMPORTANT: Always use the validated/clamped `safeEffect` for both:
-    // - indexing m_effects[]
-    // - passing effectId into any downstream subsystems (e.g. audio mapping)
-    // Using m_currentEffect directly here is unsafe if it ever gets corrupted.
-    if (m_effects[safeEffect].effect != nullptr) {
+    if (safeReg->effect != nullptr) {
         plugins::EffectContext& ctx = m_effectContext;
         ctx.leds = m_leds;
         ctx.ledCount = LedConfig::TOTAL_LEDS;
@@ -1192,6 +1466,9 @@ void RendererActor::renderFrame()
         ctx.totalTimeMs = 0;
         ctx.deltaTimeMs = 0;
         ctx.deltaTimeSeconds = 0.0f;
+        ctx.rawTotalTimeMs = 0;
+        ctx.rawDeltaTimeMs = 0;
+        ctx.rawDeltaTimeSeconds = 0.0f;
         ctx.zoneId = 0xFF;  // Global render
         ctx.zoneStart = 0;
         ctx.zoneLength = 0;
@@ -1222,11 +1499,13 @@ void RendererActor::renderFrame()
             uint8_t mappedVariation = ctx.variation;
             uint8_t mappedHue = ctx.gHue;
 
+            float dtSeconds = static_cast<float>(deltaTimeMs) * 0.001f;
             audio::AudioMappingRegistry::instance().applyMappings(
                 safeEffect,
                 m_lastControlBus,
                 m_lastMusicalGrid,
                 ctx.audio.available,
+                dtSeconds,
                 mappedBrightness,
                 mappedSpeed,
                 mappedIntensity,
@@ -1274,8 +1553,14 @@ void RendererActor::renderFrame()
         // Speed-scaled timing (slow motion at low speed settings)
         // =====================================================================
         float speedFactor = computeSpeedTimeFactor(ctx.speed);
-        float deltaSeconds = static_cast<float>(deltaTimeMs) * 0.001f;
-        float scaledDeltaSeconds = deltaSeconds * speedFactor;
+        float rawDeltaSeconds = static_cast<float>(deltaTimeMs) * 0.001f;
+        float scaledDeltaSeconds = rawDeltaSeconds * speedFactor;
+
+        // Unscaled timing for beat-accurate envelopes.
+        m_effectTimeSecondsRaw += rawDeltaSeconds;
+        ctx.rawDeltaTimeSeconds = rawDeltaSeconds;
+        ctx.rawDeltaTimeMs = deltaTimeMs;
+        ctx.rawTotalTimeMs = static_cast<uint32_t>(m_effectTimeSecondsRaw * 1000.0f + 0.5f);
 
         m_effectTimeSeconds += scaledDeltaSeconds;
         m_effectFrameAccumulator += speedFactor;
@@ -1290,10 +1575,7 @@ void RendererActor::renderFrame()
         ctx.frameNumber = m_effectFrameCount;
         ctx.totalTimeMs = static_cast<uint32_t>(m_effectTimeSeconds * 1000.0f + 0.5f);
 
-        {
-            TRACE_SCOPE("effect_render");
-            m_effects[safeEffect].effect->render(ctx);
-        }
+        { TRACE_SCOPE("effect_render"); safeReg->effect->render(ctx); }
     }
 
     // Increment hue for effects that use it
@@ -1304,6 +1586,28 @@ void RendererActor::showLeds()
 {
     if (m_strip1 == nullptr || m_strip2 == nullptr) {
         return;
+    }
+
+    // Soft-knee tone map: prevent additive washout from flattening to white
+    // lum = (r+g+b)/3, lumT = lum/(lum+knee); scale RGB by lumT/lum (hue preserved)
+    constexpr float kToneMapKnee = 1.0f;
+    for (uint16_t i = 0; i < LedConfig::TOTAL_LEDS; ++i) {
+        float r = static_cast<float>(m_leds[i].r) * (1.0f / 255.0f);
+        float g = static_cast<float>(m_leds[i].g) * (1.0f / 255.0f);
+        float b = static_cast<float>(m_leds[i].b) * (1.0f / 255.0f);
+        float lum = (r + g + b) * (1.0f / 3.0f);
+        if (lum <= 0.0f) continue;
+        float lumT = lum / (lum + kToneMapKnee);
+        float scale = lumT / lum;
+        r *= scale;
+        g *= scale;
+        b *= scale;
+        if (r > 1.0f) r = 1.0f;
+        if (g > 1.0f) g = 1.0f;
+        if (b > 1.0f) b = 1.0f;
+        m_leds[i].r = static_cast<uint8_t>(r * 255.0f + 0.5f);
+        m_leds[i].g = static_cast<uint8_t>(g * 255.0f + 0.5f);
+        m_leds[i].b = static_cast<uint8_t>(b * 255.0f + 0.5f);
     }
 
     // Copy from unified buffer to strip buffers
@@ -1323,10 +1627,71 @@ void RendererActor::showLeds()
             m_strip2[i].nscale8(scale);
         }
     }
+
+    // =========================================================================
+    // Hard silence gate for late-pack reactive effects
+    // Ensures no-audio state fades these effects to black.
+    // =========================================================================
+    {
+        const EffectId safeId = validateEffectId(m_currentEffect);
+        const bool hardGateEffect = needsSilenceGate(safeId) && ::PatternRegistry::isAudioReactive(safeId);
+        if (hardGateEffect) {
+            float dt = m_effectContext.rawDeltaTimeSeconds;
+            if (dt < 0.0001f) dt = 0.0001f;
+            if (dt > 0.05f) dt = 0.05f;
+
+            // Bezier-like ramp: debounce "audio present" into a smooth 0..1 gate.
+            // CRITICAL: Use post-gate RMS, NOT es_vu_level_raw.
+            // es_vu_level_raw is AGC-amplified (up to 40x) and stays elevated
+            // in silence because AGC pumps gain on noise floor. Post-gate RMS
+            // has noise floor subtracted and goes near-zero in true silence.
+            bool activityNow = false;
+            if (m_effectContext.audio.available) {
+                if (m_lastControlBus.isSilent) {
+                    activityNow = false;  // ControlBus says silent → force close
+                } else {
+                    const float rms = m_lastControlBus.rms;
+                    const float flux = m_lastControlBus.flux;
+                    activityNow = (rms >= 0.03f) || ((flux >= 0.10f) && (rms >= 0.01f));
+                }
+            }
+
+            constexpr float kOpenTimeS = 0.22f;   // Require sustained activity to open (spike rejection)
+            constexpr float kCloseTimeS = 0.95f;  // Smooth fade-out in silence
+            if (activityNow) {
+                m_highIdReactiveActivityGate += dt / kOpenTimeS;
+            } else {
+                m_highIdReactiveActivityGate -= dt / kCloseTimeS;
+            }
+            if (m_highIdReactiveActivityGate < 0.0f) m_highIdReactiveActivityGate = 0.0f;
+            if (m_highIdReactiveActivityGate > 1.0f) m_highIdReactiveActivityGate = 1.0f;
+
+            const float g = m_highIdReactiveActivityGate;
+            m_highIdReactiveSilenceGate = g * g * (3.0f - 2.0f * g);  // smoothstep (bezier-like S-curve)
+
+            uint8_t gateScale = static_cast<uint8_t>(m_highIdReactiveSilenceGate * 255.0f + 0.5f);
+            // Snap-to-black at the bottom to prevent low-level flicker in "silence".
+            if (gateScale <= 2u) gateScale = 0u;
+            if (gateScale < 255u) {
+                for (uint16_t i = 0; i < LedConfig::LEDS_PER_STRIP; ++i) {
+                    if (gateScale == 0u) {
+                        m_strip1[i] = CRGB::Black;
+                        m_strip2[i] = CRGB::Black;
+                    } else {
+                        m_strip1[i].nscale8(gateScale);
+                        m_strip2[i].nscale8(gateScale);
+                    }
+                }
+            }
+        } else {
+            m_highIdReactiveSilenceGate = 1.0f;
+            m_highIdReactiveActivityGate = 1.0f;
+        }
+    }
 #endif
 
     // TAP C: Capture pre-WS2812 (after strip split, before show)
-    if (m_captureEnabled && (m_captureTapMask & 0x04)) {
+    if (m_captureEnabled && (m_captureTapMask & 0x04) && m_captureTapC != nullptr) {
         // Interleave strip1 and strip2 into unified format for capture
         for (uint16_t i = 0; i < LedConfig::LEDS_PER_STRIP; i++) {
             m_captureTapC[i] = m_strip1[i];
@@ -1375,6 +1740,7 @@ void RendererActor::updateStats(uint32_t frameTimeUs, uint32_t rawFrameTimeUs)
         // FPS = 1000000 / avgFrameTimeUs
         if (m_stats.avgFrameTimeUs > 0) {
             m_stats.currentFPS = 1000000 / m_stats.avgFrameTimeUs;
+            TRACE_COUNTER("fps", m_stats.currentFPS);
         }
 
         // CPU percent = (frameTime / frameBudget) * 100
@@ -1385,28 +1751,29 @@ void RendererActor::updateStats(uint32_t frameTimeUs, uint32_t rawFrameTimeUs)
     }
 }
 
-void RendererActor::handleSetEffect(uint8_t effectId)
+void RendererActor::handleSetEffect(EffectId effectId)
 {
-    if (effectId >= MAX_EFFECTS || !m_effects[effectId].active) {
-        LW_LOGW("Invalid effect ID: %d", effectId);
+    const EffectRegistration* newReg = findById(effectId);
+    if (!newReg) {
+        LW_LOGW("Invalid effect ID: 0x%04X", effectId);
         return;
     }
 
     if (m_currentEffect != effectId) {
-        // Validate oldEffect before accessing array
-        uint8_t oldEffect = validateEffectId(m_currentEffect);
+        EffectId oldEffectId = m_currentEffect;
 
         // Cleanup old effect (only if valid and active)
-        if (oldEffect < MAX_EFFECTS && m_effects[oldEffect].active && m_effects[oldEffect].effect != nullptr) {
-            LW_LOGI("IEffect cleanup: %s (ID %d)", m_effects[oldEffect].name, oldEffect);
-            m_effects[oldEffect].effect->cleanup();
+        const EffectRegistration* oldReg = findById(oldEffectId);
+        if (oldReg && oldReg->effect != nullptr) {
+            LW_LOGI("IEffect cleanup: %s (ID 0x%04X)", oldReg->name, oldEffectId);
+            oldReg->effect->cleanup();
         }
 
         m_currentEffect = effectId;
 
         // Initialize new effect
-        if (m_effects[effectId].effect != nullptr) {
-            LW_LOGI("IEffect init: %s (ID %d)", m_effects[effectId].name, effectId);
+        if (newReg->effect != nullptr) {
+            LW_LOGI("IEffect init: %s (ID 0x%04X)", newReg->name, effectId);
             plugins::EffectContext initCtx;
             initCtx.leds = m_leds;
             initCtx.ledCount = LedConfig::TOTAL_LEDS;
@@ -1422,23 +1789,25 @@ void RendererActor::handleSetEffect(uint8_t effectId)
             initCtx.frameNumber = m_frameCount;
             initCtx.totalTimeMs = m_frameCount * 8;  // Approximate
             initCtx.deltaTimeMs = 8;  // Default
+            initCtx.rawTotalTimeMs = initCtx.totalTimeMs;
+            initCtx.rawDeltaTimeMs = initCtx.deltaTimeMs;
+            initCtx.rawDeltaTimeSeconds = initCtx.deltaTimeMs * 0.001f;
             initCtx.zoneId = 0xFF;
             initCtx.zoneStart = 0;
             initCtx.zoneLength = 0;
-            
-            if (!m_effects[effectId].effect->init(initCtx)) {
+
+            if (!newReg->effect->init(initCtx)) {
                 // Initialization failed - revert to previous effect
-                m_currentEffect = oldEffect;
-                LW_LOGW("IEffect %d init failed, reverting to %d", effectId, oldEffect);
+                m_currentEffect = oldEffectId;
+                LW_LOGW("IEffect 0x%04X init failed, reverting to 0x%04X", effectId, oldEffectId);
                 return;
             }
             LW_LOGI("IEffect init: SUCCESS");
         }
 
         TRACE_INSTANT("effect_change");
-
-        LW_LOGI("Effect changed: %d (%s) -> %d (" LW_CLR_GREEN "%s" LW_ANSI_RESET ")",
-                 oldEffect, getEffectName(oldEffect),
+        LW_LOGI("Effect changed: 0x%04X (%s) -> 0x%04X (" LW_CLR_GREEN "%s" LW_ANSI_RESET ")",
+                 oldEffectId, getEffectName(oldEffectId),
                  effectId, getEffectName(effectId));
 
 #if FEATURE_AUDIO_SYNC
@@ -1446,21 +1815,38 @@ void RendererActor::handleSetEffect(uint8_t effectId)
         m_effectHasAudioMappings = audio::AudioMappingRegistry::instance().hasActiveMappings(effectId);
 #endif
 
-        // Publish EFFECT_CHANGED event
+        // Reset silence gate on effect change to prevent stale state carrying across patterns.
+        {
+            const bool hardGateNew = needsSilenceGate(effectId) && ::PatternRegistry::isAudioReactive(effectId);
+            if (hardGateNew) {
+                bool activityNow = false;
+                if (m_sharedAudioCtx.available && !m_lastControlBus.isSilent) {
+                    const float rms = m_lastControlBus.rms;
+                    const float flux = m_lastControlBus.flux;
+                    activityNow = (rms >= 0.03f) || ((flux >= 0.10f) && (rms >= 0.01f));
+                }
+                m_highIdReactiveActivityGate = activityNow ? 1.0f : 0.0f;
+                const float g = m_highIdReactiveActivityGate;
+                m_highIdReactiveSilenceGate = g * g * (3.0f - 2.0f * g);
+            } else {
+                m_highIdReactiveActivityGate = 1.0f;
+                m_highIdReactiveSilenceGate = 1.0f;
+            }
+        }
+
+        // Publish EFFECT_CHANGED event: new EffectId in param1+param2, old in param3+param4
         Message evt(MessageType::EFFECT_CHANGED);
-        evt.param1 = effectId;
-        evt.param2 = oldEffect;
+        evt.param1 = static_cast<uint8_t>(effectId & 0xFF);
+        evt.param2 = static_cast<uint8_t>((effectId >> 8) & 0xFF);
+        evt.param3 = static_cast<uint8_t>(oldEffectId & 0xFF);
+        evt.param4 = static_cast<uint8_t>((oldEffectId >> 8) & 0xFF);
         bus::MessageBus::instance().publish(evt);
     }
 }
 
 void RendererActor::handleSetBrightness(uint8_t brightness)
 {
-    // Clamp to max brightness
-    if (brightness > LedConfig::MAX_BRIGHTNESS) {
-        brightness = LedConfig::MAX_BRIGHTNESS;
-    }
-
+    // No power clamping: full 0–255 range passed through to LED driver
     if (m_brightness != brightness) {
         m_brightness = brightness;
 
@@ -1516,6 +1902,10 @@ void RendererActor::handleSetPalette(uint8_t paletteIndex)
         enhancement::ColorCorrectionEngine::getInstance().correctPalette(m_currentPalette, flags);
 
         LW_LOGD("Palette: %d (%s)", m_paletteIndex, getPaletteName(m_paletteIndex));
+
+#if CHIP_ESP32_S3 && !defined(NATIVE_BUILD)
+        statusStripShowPalette(m_paletteIndex);
+#endif
 
         // Publish PALETTE_CHANGED event (for other actors)
         Message evt(MessageType::PALETTE_CHANGED);
@@ -1584,11 +1974,11 @@ void RendererActor::handleSetFadeAmount(uint8_t fadeAmount)
 // Transition Methods
 // ============================================================================
 
-void RendererActor::handleStartTransition(uint8_t newEffectId, uint8_t transitionType)
+void RendererActor::handleStartTransition(EffectId newEffectId, uint8_t transitionType)
 {
-    // Validate effectId before access
-    uint8_t safeEffectId = validateEffectId(newEffectId);
-    if (safeEffectId >= MAX_EFFECTS || !m_effects[safeEffectId].active) return;
+    // Validate new effect exists in registry
+    EffectId safeEffectId = validateEffectId(newEffectId);
+    if (!findById(safeEffectId)) return;
 
 #if FEATURE_TRANSITIONS
     // Thread-safe handler called from message queue (Core 1)
@@ -1597,7 +1987,7 @@ void RendererActor::handleStartTransition(uint8_t newEffectId, uint8_t transitio
         transitionType = 0;  // Default to FADE
     }
 
-    uint8_t oldEffect = validateEffectId(m_currentEffect);
+    EffectId oldEffectId = m_currentEffect;
 
     // Copy current LED state as source
     memcpy(m_transitionSourceBuffer, m_leds, sizeof(m_transitionSourceBuffer));
@@ -1618,7 +2008,7 @@ void RendererActor::handleStartTransition(uint8_t newEffectId, uint8_t transitio
     );
 
     LW_LOGI("Transition started: %s -> %s (%s)",
-             getEffectName(oldEffect),
+             getEffectName(oldEffectId),
              getEffectName(safeEffectId),
              getTransitionName(type));
 #else
@@ -1627,14 +2017,14 @@ void RendererActor::handleStartTransition(uint8_t newEffectId, uint8_t transitio
 #endif
 }
 
-void RendererActor::startTransition(uint8_t newEffectId, uint8_t transitionType)
+void RendererActor::startTransition(EffectId newEffectId, uint8_t transitionType)
 {
     // DEPRECATED for external callers: unsafe from Core 0. Use ActorSystem::startTransition() instead.
     // Kept for internal Core 1 usage (ShowDirectorActor) only; request handlers must not call this directly.
     handleStartTransition(newEffectId, transitionType);
 }
 
-void RendererActor::startRandomTransition(uint8_t newEffectId)
+void RendererActor::startRandomTransition(EffectId newEffectId)
 {
 #if FEATURE_TRANSITIONS
     TransitionType type = TransitionEngine::getRandomTransition();

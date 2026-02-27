@@ -1,11 +1,10 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file ChevronWavesEffect.cpp
  * @brief LGP Chevron Waves implementation
  */
 
 #include "ChevronWavesEffect.h"
+#include "ChromaUtils.h"
 #include "../CoreEffects.h"
 #include "../utils/FastLEDOptim.h"
 #include "../../config/features.h"
@@ -36,7 +35,8 @@ bool ChevronWavesEffect::init(plugins::EffectContext& ctx) {
     m_energyAvg = 0.0f;
     m_energyDelta = 0.0f;
     m_dominantBin = 0;
-    m_dominantBinSmooth = 0.0f;
+    m_chromaAngle = 0.0f;
+    m_chromaHue = 0.0f;
 
     // Initialize enhancement utilities
     m_phaseSpeedSpring.init(50.0f, 1.0f);  // stiffness=50, mass=1 (critically damped)
@@ -93,22 +93,27 @@ void ChevronWavesEffect::render(plugins::EffectContext& ctx) {
     } else
 #endif
     {
-        m_energyAvg *= 0.98f;
+        // dt-corrected decay when audio unavailable
+        float dtFallback = enhancement::getSafeDeltaSeconds(ctx.rawDeltaTimeSeconds);
+        m_energyAvg *= powf(0.98f, dtFallback * 60.0f);
         m_energyDelta = 0.0f;
     }
 
+    float rawDt = enhancement::getSafeDeltaSeconds(ctx.rawDeltaTimeSeconds);
     float dt = enhancement::getSafeDeltaSeconds(ctx.deltaTimeSeconds);
 
     // True exponential smoothing with AsymmetricFollower (frame-rate independent)
     float moodNorm = ctx.mood / 255.0f;  // 0=reactive, 1=smooth
-    float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, dt, moodNorm);
-    float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, dt, moodNorm);
+    float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, rawDt, moodNorm);
+    float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, rawDt, moodNorm);
 
-    // Dominant bin smoothing
-    float alphaBin = 1.0f - expf(-dt / 0.25f);  // True exponential, 250ms time constant
-    m_dominantBinSmooth += (m_dominantBin - m_dominantBinSmooth) * alphaBin;
-    if (m_dominantBinSmooth < 0.0f) m_dominantBinSmooth = 0.0f;
-    if (m_dominantBinSmooth > 11.0f) m_dominantBinSmooth = 11.0f;
+    // Circular chroma hue smoothing (replaces linear EMA on bin index)
+#if FEATURE_AUDIO_SYNC
+    if (hasAudio) {
+        m_chromaHue = static_cast<float>(effects::chroma::circularChromaHueSmoothed(
+            ctx.audio.controlBus.chroma, m_chromaAngle, rawDt, 0.20f));
+    }
+#endif
 
     // Use heavy_bands instead of raw chroma/energyAvg to eliminate jitter
     float heavyEnergy = 0.0f;
@@ -121,7 +126,7 @@ void ChevronWavesEffect::render(plugins::EffectContext& ctx) {
     float targetSpeed = 0.6f + 1.2f * heavyEnergy;  // Reduced range for stability
 
     // Spring physics for speed modulation (natural momentum, no jitter)
-    float smoothedSpeed = m_phaseSpeedSpring.update(targetSpeed, dt);
+    float smoothedSpeed = m_phaseSpeedSpring.update(targetSpeed, rawDt);
     if (smoothedSpeed > 2.0f) smoothedSpeed = 2.0f;  // Hard clamp
     if (smoothedSpeed < 0.3f) smoothedSpeed = 0.3f;  // Prevent stalling
     m_chevronPos += speedNorm * 240.0f * smoothedSpeed * dt;  // dt-corrected: 240/sec at speedNorm=1
@@ -148,10 +153,10 @@ void ChevronWavesEffect::render(plugins::EffectContext& ctx) {
 
         float audioGain = 0.2f + 0.8f * energyAvgSmooth;
         uint8_t brightness = (uint8_t)(chevron * 255.0f * intensityNorm * audioGain);
-        // Calculate hue with proper modular arithmetic (avoids UB from large float→uint8_t cast)
-        // m_chevronPos grows unbounded; fmodf ensures values stay in [0, 256) before casting
+        // Calculate hue with proper modular arithmetic (avoids UB from large float->uint8_t cast)
+        // m_chromaHue is already 0-255 from circular chroma smoothing
         float rawHue = (float)ctx.gHue
-                     + m_dominantBinSmooth * (255.0f / 12.0f)
+                     + m_chromaHue
                      + distFromCenter * 2.0f
                      + fmodf(m_chevronPos * 0.5f, 256.0f);
         uint8_t hue = (uint8_t)fmodf(rawHue, 256.0f);

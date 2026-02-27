@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file PluginManagerActor.h
  * @brief Plugin manager for dynamic effect registration from LittleFS manifests
@@ -17,6 +15,7 @@
 #pragma once
 
 #include "../config/features.h"
+#include "../config/limits.h"
 #include "api/IEffectRegistry.h"
 #include "api/IEffect.h"
 #include <stdint.h>
@@ -35,7 +34,9 @@ namespace plugins {
  * @brief Plugin configuration constants
  */
 struct PluginConfig {
-    static constexpr uint8_t MAX_EFFECTS = 128;
+    static constexpr uint16_t MAX_EFFECTS = 256;
+    static_assert(MAX_EFFECTS >= limits::MAX_EFFECTS,
+                  "PluginConfig::MAX_EFFECTS must be >= limits::MAX_EFFECTS");
     static constexpr uint8_t MAX_MANIFESTS = 16;
     static constexpr size_t LITTLEFS_PLUGIN_PATH_MAX = 64;
     static constexpr size_t MANIFEST_CAPACITY = 2048;
@@ -52,20 +53,20 @@ struct ParsedManifest {
     bool valid;
     char errorMsg[PluginConfig::ERROR_MSG_MAX];
     bool overrideMode;
-    uint8_t effectIds[PluginConfig::MAX_EFFECTS];
-    uint8_t effectCount;
+    EffectId effectIds[PluginConfig::MAX_EFFECTS];
+    uint16_t effectCount;
 };
 
 /**
  * @brief Plugin system statistics
  */
 struct PluginStats {
-    uint8_t registeredCount;      // Currently registered effects
-    uint8_t loadedFromLittleFS;   // Effects loaded from manifests
-    uint8_t registrationsFailed;  // Failed registration attempts
-    uint8_t unregistrations;      // Total unregistration count
+    uint16_t registeredCount;     // Currently registered effects
+    uint16_t loadedFromLittleFS;  // Effects loaded from manifests
+    uint16_t registrationsFailed; // Failed registration attempts
+    uint16_t unregistrations;     // Total unregistration count
     bool overrideModeEnabled;     // Whether override mode is active
-    uint8_t disabledByOverride;   // Effects disabled by override mode
+    uint16_t disabledByOverride;  // Effects disabled by override mode
 
     // Reload status (Phase 2)
     uint32_t lastReloadMillis;    // Timestamp of last reload attempt
@@ -79,7 +80,7 @@ struct PluginStats {
  * @brief Plugin Manager Actor
  *
  * Central registry manager that:
- * - Maintains up to 128 registered IEffect instances
+ * - Maintains up to 140 registered IEffect instances
  * - Loads plugins from LittleFS on startup
  * - Supports atomic reload at runtime
  * - Coordinates effect registration with RendererActor
@@ -104,10 +105,10 @@ public:
     // IEffectRegistry Implementation
     // ========================================================================
 
-    bool registerEffect(uint8_t id, IEffect* effect) override;
-    bool unregisterEffect(uint8_t id) override;
-    bool isEffectRegistered(uint8_t id) const override;
-    uint8_t getRegisteredCount() const override;
+    bool registerEffect(EffectId id, IEffect* effect) override;
+    bool unregisterEffect(EffectId id) override;
+    bool isEffectRegistered(EffectId id) const override;
+    uint16_t getRegisteredCount() const override;
 
     // ========================================================================
     // Plugin Loading
@@ -200,11 +201,29 @@ private:
     void clearRegistrations();
 
     // ========================================================================
+    // Internal Helpers
+    // ========================================================================
+
+    /** Linear scan for registered effect slot by ID */
+    int16_t findEffectSlot(EffectId id) const;
+
+    /** Linear scan for allowed effect ID */
+    bool isEffectAllowed(EffectId id) const;
+
+    // ========================================================================
     // State
     // ========================================================================
 
     IEffectRegistry* m_targetRegistry;
-    IEffect* m_effects[PluginConfig::MAX_EFFECTS];
+
+    /// Append-only effect registry (sparse EffectId, linear scan)
+    struct EffectSlot {
+        EffectId id;
+        IEffect* effect;
+    };
+    EffectSlot m_effectSlots[PluginConfig::MAX_EFFECTS];
+    uint16_t m_effectSlotCount;
+
     PluginStats m_stats;
     bool m_overrideMode;
 
@@ -212,8 +231,9 @@ private:
     ParsedManifest m_manifests[PluginConfig::MAX_MANIFESTS];
     uint8_t m_manifestCount;
 
-    // Allowed effect IDs (for override mode)
-    bool m_allowedEffects[PluginConfig::MAX_EFFECTS];
+    // Allowed effect IDs for override mode (append-only set)
+    EffectId m_allowedIds[PluginConfig::MAX_EFFECTS];
+    uint16_t m_allowedIdCount;
 };
 
 } // namespace plugins

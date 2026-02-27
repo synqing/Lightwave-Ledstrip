@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file EffectContext.h
  * @brief Dependency injection container for effect rendering
@@ -39,6 +37,9 @@
 #include "../../audio/contracts/ControlBus.h"
 #include "../../audio/contracts/MusicalGrid.h"
 #include "../../audio/contracts/StyleDetector.h"
+#if FEATURE_AUDIO_BACKEND_PIPELINECORE
+#include "../../audio/pipeline/FrequencyMap.h"
+#endif
 #endif
 
 // Behavior selection (Phase 3)
@@ -234,6 +235,66 @@ struct AudioContext {
 
     /// Get pointer to adaptive 64-bin array (Sensory Bridge normalisation)
     const float* bins64Adaptive() const { return controlBus.bins64Adaptive; }
+
+    // ========================================================================
+    // 256-bin FFT / Frequency-Semantic Accessors (PipelineCore backend)
+    // ========================================================================
+
+#if FEATURE_AUDIO_BACKEND_PIPELINECORE
+    /// Number of full-resolution FFT bins
+    static constexpr uint16_t bins256Count() { return audio::ControlBusFrame::BINS_256_COUNT; }
+
+    /// Full 256-bin spectrum (0..1 normalised magnitudes)
+    const float* bins256() const { return controlBus.bins256; }
+
+    /// Frequency resolution in Hz per bin (sampleRate / fftSize)
+    float binHz() const { return controlBus.binHz; }
+
+    /// Mean energy in a named frequency band (FrequencyMap single source of truth)
+    float namedBandEnergy(::audio::NamedBand band) const {
+        const auto& def = ::audio::kNamedBandDefs[static_cast<size_t>(band)];
+        return energyInRange(def.freqLo, def.freqHi);
+    }
+
+    /// Sub-bass energy (20-120 Hz)
+    float subBass() const { return namedBandEnergy(::audio::NamedBand::SUB_BASS); }
+
+    /// Kick energy (60-150 Hz)
+    float kick() const { return namedBandEnergy(::audio::NamedBand::KICK); }
+
+    /// Low-mid energy (250-500 Hz)
+    float lowMid() const { return namedBandEnergy(::audio::NamedBand::LOW_MID); }
+
+    /// Mid-presence energy (500-2000 Hz)
+    float midPresence() const { return namedBandEnergy(::audio::NamedBand::MID); }
+
+    /// Shimmer energy (1300-4200 Hz)
+    float shimmer() const { return namedBandEnergy(::audio::NamedBand::SHIMMER); }
+
+    /// Air energy (8000-16000 Hz)
+    float air() const { return namedBandEnergy(::audio::NamedBand::AIR); }
+
+    /// Generic frequency range query (returns mean energy in [freqLo, freqHi] Hz)
+    float energyInRange(float freqLo, float freqHi) const {
+        if (controlBus.binHz <= 0.0f) return 0.0f;
+        uint16_t lo = static_cast<uint16_t>(freqLo / controlBus.binHz + 0.5f);
+        uint16_t hi = static_cast<uint16_t>(freqHi / controlBus.binHz + 0.5f);
+        if (lo >= 256) return 0.0f;
+        if (hi > 256) hi = 256;
+        if (lo >= hi) return 0.0f;
+        float s = 0;
+        for (uint16_t i = lo; i < hi; ++i) s += controlBus.bins256[i];
+        return s / static_cast<float>(hi - lo);
+    }
+#else
+    /// Fallback: delegate to legacy band accessors when PipelineCore not active
+    float subBass() const { return bass(); }
+    float kick() const { return bass(); }
+    float lowMid() const { return mid(); }
+    float midPresence() const { return mid(); }
+    float shimmer() const { return treble(); }
+    float air() const { return treble(); }
+#endif
 
     // ========================================================================
     // Musical Saliency Accessors (MIS Phase 1: Adaptive audio-visual intelligence)
@@ -540,8 +601,11 @@ struct EffectContext {
 
     uint32_t deltaTimeMs;       ///< Time since last frame (ms)
     float deltaTimeSeconds;     ///< Time since last frame (seconds, high precision)
+    uint32_t rawDeltaTimeMs;    ///< Unscaled time since last frame (ms)
+    float rawDeltaTimeSeconds;  ///< Unscaled time since last frame (seconds)
     uint32_t frameNumber;       ///< Frame counter (wraps at 2^32)
     uint32_t totalTimeMs;       ///< Total effect runtime (ms)
+    uint32_t rawTotalTimeMs;    ///< Unscaled total effect runtime (ms)
 
     //--------------------------------------------------------------------------
     // Zone Information (when rendering a zone)
@@ -709,6 +773,19 @@ struct EffectContext {
         return dt;
     }
 
+    /**
+     * @brief Get safe unscaled delta time in seconds (clamped for stability)
+     * @return Delta time in seconds, clamped to [0.0001, 0.05]
+     *
+     * Uses rawDeltaTimeSeconds so beat timing stays independent of SPEED.
+     */
+    float getSafeRawDeltaSeconds() const {
+        float dt = rawDeltaTimeSeconds;
+        if (dt < 0.0001f) dt = 0.0001f;
+        if (dt > 0.05f) dt = 0.05f;
+        return dt;
+    }
+
     //--------------------------------------------------------------------------
     // Constructor
     //--------------------------------------------------------------------------
@@ -729,8 +806,11 @@ struct EffectContext {
         , fadeAmount(20)
         , deltaTimeMs(8)
         , deltaTimeSeconds(0.008f)
+        , rawDeltaTimeMs(8)
+        , rawDeltaTimeSeconds(0.008f)
         , frameNumber(0)
         , totalTimeMs(0)
+        , rawTotalTimeMs(0)
         , zoneId(0xFF)
         , zoneStart(0)
         , zoneLength(0)

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file WiFiManager.h
  * @brief Non-blocking WiFi management with FreeRTOS task for LightwaveOS v2
@@ -21,7 +19,7 @@
  * @code
  * // In setup()
  * WIFI_MANAGER.setCredentials(ssid, password);
- * WIFI_MANAGER.enableSoftAP("LightwaveOS-AP", "SpectraSynq");
+ * WIFI_MANAGER.enableSoftAP("LightwaveOS-AP", "");
  * if (!WIFI_MANAGER.begin()) {
  *     Serial.println("WiFiManager failed!");
  * }
@@ -351,20 +349,17 @@ public:
     /**
      * @brief Request STA mode enable (stub)
      */
-    bool requestSTAEnable(uint32_t timeoutMs = 0, bool autoRevert = false) { 
-        (void)timeoutMs; (void)autoRevert; 
-        return false; 
-    }
+    bool requestSTAEnable(uint32_t timeoutMs = 0, bool autoRevert = false);
 
     /**
-     * @brief Request AP-only mode (stub)
+     * @brief Request AP-only mode (disconnects STA, stays in AP)
      */
-    bool requestAPOnly() { return false; }
+    bool requestAPOnly();
 
     /**
-     * @brief Check if force AP-only mode is active (stub)
+     * @brief Check if force AP-only mode is active (runtime, not compile-time)
      */
-    bool isForceApOnlyRuntime() const { return false; }
+    bool isForceApOnlyRuntime() const { return m_forceApOnly; }
 
     /**
      * @brief Get saved networks from NVS storage
@@ -399,18 +394,12 @@ public:
     /**
      * @brief Connect to network (stub)
      */
-    bool connectToNetwork(const String& ssid, const String& password) {
-        (void)ssid; (void)password;
-        return false;
-    }
+    bool connectToNetwork(const String& ssid, const String& password);
 
     /**
-     * @brief Connect to saved network (stub)
+     * @brief Connect to a saved network by SSID
      */
-    bool connectToSavedNetwork(const String& ssid) {
-        (void)ssid;
-        return false;
-    }
+    bool connectToSavedNetwork(const String& ssid);
 
 private:
     // ========================================================================
@@ -457,6 +446,9 @@ private:
     // ========================================================================
     // Helper Functions
     // ========================================================================
+
+    static bool isValidStaSsid(const String& ssid);
+    bool hasAnyStaCandidates() const;
 
     void performAsyncScan();
     bool connectToAP();
@@ -556,7 +548,8 @@ private:
     // ========================================================================
 
     bool m_apEnabled = false;
-    String m_apSSID = "LightwaveOS-AP";
+    volatile bool m_forceApOnly = true;    ///< Boot AP-only; STA activated ONLY via serial `wifi connect`
+    String m_apSSID = config::NetworkConfig::AP_SSID;
     String m_apPassword = config::NetworkConfig::AP_PASSWORD;
     uint8_t m_apChannel = 1;
 

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file HttpDebugCodec.h
  * @brief JSON codec for HTTP debug endpoints parsing and validation

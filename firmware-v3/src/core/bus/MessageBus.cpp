@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file MessageBus.cpp
  * @brief Implementation of the pub/sub MessageBus

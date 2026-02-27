@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file WsStreamCommands.h
  * @brief WebSocket stream subscription command handlers
@@ -64,6 +62,24 @@ inline void broadcastFftFrame(const audio::ControlBusFrame& /* frame */,
     // 4. Broadcast to subscribed clients
 }
 #endif
+
+// ============================================================================
+// Beat Event Subscribers
+// ============================================================================
+
+/**
+ * @brief Check if any client has subscribed to beat events
+ *
+ * beat.event broadcasts use textAll() which floods slow SoftAP clients.
+ * Gating behind a subscriber check means Tab5/iOS (which never subscribe)
+ * don't receive unwanted beat traffic.
+ */
+bool hasBeatEventSubscribers();
+
+/**
+ * @brief Remove a disconnected client from beat subscriber list
+ */
+void removeBeatSubscriber(uint32_t clientId);
 
 } // namespace ws
 } // namespace webserver

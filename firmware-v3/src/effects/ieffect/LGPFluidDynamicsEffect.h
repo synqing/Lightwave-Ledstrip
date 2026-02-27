@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPFluidDynamicsEffect.h
  * @brief LGP Fluid Dynamics - Fluid flow simulation
@@ -19,12 +17,19 @@
 #include "../../plugins/api/EffectContext.h"
 #include "../CoreEffects.h"
 
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#include "../../config/effect_ids.h"
+#endif
+
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
 class LGPFluidDynamicsEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_FLUID_DYNAMICS;
+
     LGPFluidDynamicsEffect();
     ~LGPFluidDynamicsEffect() override = default;
 
@@ -35,9 +40,16 @@ public:
     const plugins::EffectMetadata& getMetadata() const override;
 
 private:
+#ifndef NATIVE_BUILD
+    struct FluidPsram {
+        float velocity[STRIP_LENGTH];
+        float pressure[STRIP_LENGTH];
+    };
+    FluidPsram* m_ps = nullptr;
+#else
+    void* m_ps = nullptr;
+#endif
     uint16_t m_time;
-    float m_velocity[STRIP_LENGTH];
-    float m_pressure[STRIP_LENGTH];
 };
 
 } // namespace ieffect

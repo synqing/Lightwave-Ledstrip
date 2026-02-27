@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPAdvancedEffects.cpp
  * @brief LGP Advanced optical effects implementation

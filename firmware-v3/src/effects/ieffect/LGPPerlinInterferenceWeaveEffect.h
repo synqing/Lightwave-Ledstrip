@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPPerlinInterferenceWeaveEffect.h
  * @brief LGP Perlin Interference Weave - Dual-strip phase-offset noise creates moiré
@@ -24,6 +22,7 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include <FastLED.h>
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -31,6 +30,8 @@ namespace ieffect {
 
 class LGPPerlinInterferenceWeaveEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_PERLIN_INTERFERENCE_WEAVE;
+
     LGPPerlinInterferenceWeaveEffect();
     ~LGPPerlinInterferenceWeaveEffect() override = default;
 
@@ -53,7 +54,7 @@ private:
     
     // Audio state tracking
     uint32_t m_lastHopSeq;
-    uint8_t m_dominantChromaBin;
+    float m_chromaAngle;  // Circular chroma hue smoothing state
 };
 
 } // namespace ieffect

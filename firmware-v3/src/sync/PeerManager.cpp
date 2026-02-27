@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file PeerManager.cpp
  * @brief WebSocket client connection management implementation using esp_websocket_client

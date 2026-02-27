@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file BreathingEffect.cpp
  * @brief Bloom-inspired breathing effect using Sensory Bridge architecture
@@ -422,8 +420,9 @@ void BreathingEffect::renderPulsing(plugins::EffectContext& ctx) {
         }
     }
 
-    // Keep fallback phase moving for smooth transition back
-    m_fallbackPhase += ctx.speed / 300.0f;
+    // Keep fallback phase moving for smooth transition back (dt-corrected)
+    float dtFallback = ctx.getSafeDeltaSeconds();
+    m_fallbackPhase += ctx.speed / 300.0f * 60.0f * dtFallback;
     if (m_fallbackPhase > 2.0f * 3.14159f * 10.0f) {
         m_fallbackPhase -= 2.0f * 3.14159f * 10.0f;
     }

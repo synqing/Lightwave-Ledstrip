@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file ILedDriver.h
  * @brief Hardware abstraction interface for LED strip control
@@ -32,6 +30,7 @@ struct LedStripConfig {
  */
 struct LedDriverStats {
     uint32_t frameCount = 0;        ///< Total frames rendered
+    uint32_t showSkips = 0;         ///< Frames skipped by RMT safety guard
     uint32_t lastShowUs = 0;        ///< Last show() duration in microseconds
     uint32_t avgShowUs = 0;         ///< Average show() duration
     uint32_t maxShowUs = 0;         ///< Maximum show() duration

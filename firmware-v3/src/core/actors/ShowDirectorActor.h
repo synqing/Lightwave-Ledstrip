@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file ShowDirectorActor.h
  * @brief Actor responsible for orchestrating choreographed light shows
@@ -31,6 +29,7 @@
 #include "../shows/CueScheduler.h"
 #include "../shows/ParameterSweeper.h"
 #include "../narrative/NarrativeEngine.h"
+#include "../../config/features.h"
 
 // Forward declarations
 struct ShowDefinition;
@@ -110,6 +109,30 @@ private:
     void modulateNarrative(uint8_t phase, uint8_t tension);
     void setNarrativePhase(lightwaveos::effects::NarrativePhase phase, uint32_t durationMs);
 
+#if FEATURE_AUDIO_SYNC
+    // ========================================================================
+    // Trinity Semantic Bridge (PRISM/Trinity → ShowDirector)
+    // ========================================================================
+
+    /**
+     * @brief Apply semantic segment changes (trinity.segment) when no show is playing.
+     *
+     * Segment events are published by RendererActor on MessageBus when the host
+     * updates the current PRISM/Trinity structural segment.
+     *
+     * The bridge maps segment labels (hashed) into:
+     * - NarrativeEngine phase + tempo
+     * - Smooth parameter sweeps (brightness/speed) via ParameterSweeper
+     *
+     * This provides a lightweight semantic → parameter pipeline without any
+     * heap allocation in render paths.
+     */
+    void handleTrinitySegment(const Message& msg);
+
+    uint8_t m_lastTrinitySegmentIndex = 0xFF;
+    uint16_t m_lastTrinitySegmentLabelHash = 0;
+#endif
+
     // ========================================================================
     // Parameter Sweeper Callbacks
     // ========================================================================
@@ -143,4 +166,3 @@ private:
 
 } // namespace actors
 } // namespace lightwaveos
-

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file CoreEffects.h
  * @brief Core v2 effects with CENTER PAIR compliance
@@ -114,14 +112,14 @@ void effectPulse(RenderContext& ctx);
  * @param renderer Pointer to RendererActor
  * @return Number of effects registered
  */
-uint8_t registerCoreEffects(RendererActor* renderer);
+uint16_t registerCoreEffects(RendererActor* renderer);
 
 /**
  * @brief Register ALL effects (core + LGP) with RendererActor
  * @param renderer Pointer to RendererActor
  * @return Total number of effects registered
  */
-uint8_t registerAllEffects(RendererActor* renderer);
+uint16_t registerAllEffects(RendererActor* renderer);
 
 } // namespace effects
 } // namespace lightwaveos

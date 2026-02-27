@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPStarBurstEnhancedEffect.h
  * @brief LGP Star Burst Enhanced - Enhanced version with 64-bin sub-bass, enhanced snare/hi-hat triggers
@@ -22,6 +20,8 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../enhancement/SmoothingEngine.h"
+#include "ChromaUtils.h"
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -29,6 +29,8 @@ namespace ieffect {
 
 class LGPStarBurstEnhancedEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_STAR_BURST_ENHANCED;
+
     LGPStarBurstEnhancedEffect();
     ~LGPStarBurstEnhancedEffect() override = default;
 
@@ -49,9 +51,8 @@ private:
     float m_chromaSmoothed[12] = {0.0f};
     float m_chromaTargets[12] = {0.0f};
     
-    // Color state
-    uint8_t m_dominantBin = 0;       // Dominant chroma bin
-    float m_dominantBinSmooth = 0.0f; // Smoothed for stability
+    // Circular chroma hue state (replaces argmax + linear EMA)
+    float m_chromaAngle = 0.0f;      // Persistent angle for circular EMA (radians)
 
     // Speed state (Spring physics for natural momentum)
     enhancement::Spring m_phaseSpeedSpring;  // Critically damped - no overshoot

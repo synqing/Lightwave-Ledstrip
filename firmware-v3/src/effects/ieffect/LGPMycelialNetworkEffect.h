@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPMycelialNetworkEffect.h
  * @brief LGP Mycelial Network - Fungal network expansion
@@ -19,12 +17,19 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#include "../../config/effect_ids.h"
+#endif
+
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
 class LGPMycelialNetworkEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_MYCELIAL_NETWORK;
+
     LGPMycelialNetworkEffect();
     ~LGPMycelialNetworkEffect() override = default;
 
@@ -37,11 +42,18 @@ public:
 private:
     static constexpr uint16_t STRIP_LENGTH = 160;  // From CoreEffects.h
 
-    float m_tipPositions[16];
-    float m_tipVelocities[16];
-    bool m_tipActive[16];
-    float m_tipAge[16];
-    float m_networkDensity[STRIP_LENGTH];
+#ifndef NATIVE_BUILD
+    struct MycelialPsram {
+        float tipPositions[16];
+        float tipVelocities[16];
+        bool tipActive[16];
+        float tipAge[16];
+        float networkDensity[STRIP_LENGTH];
+    };
+    MycelialPsram* m_ps = nullptr;
+#else
+    void* m_ps = nullptr;
+#endif
     float m_nutrientPhase;
     bool m_initialized;
 };

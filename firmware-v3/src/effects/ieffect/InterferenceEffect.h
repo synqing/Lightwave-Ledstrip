@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file InterferenceEffect.h
  * @brief Interference - Basic wave interference
@@ -17,6 +15,7 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -24,6 +23,8 @@ namespace ieffect {
 
 class InterferenceEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_INTERFERENCE;
+
     InterferenceEffect();
     ~InterferenceEffect() override = default;
 

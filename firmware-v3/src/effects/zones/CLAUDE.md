@@ -8,4 +8,11 @@
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
 | #11371 | 8:46 AM | 🔵 | Zone system architecture uses center-origin concentric ring design | ~423 |
+
+### Feb 1, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #24281 | 2:54 AM | 🔵 | Default Zone Count Configuration Across Firmware Components | ~458 |
+| #24275 | " | 🔵 | ZoneComposer Multi-Zone Effect Architecture | ~505 |
 </claude-mem-context>

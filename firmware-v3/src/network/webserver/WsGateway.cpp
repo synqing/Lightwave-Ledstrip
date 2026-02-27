@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file WsGateway.cpp
  * @brief WebSocket gateway implementation
@@ -9,6 +7,7 @@
 #include "WsCommandRouter.h"
 #include "../WebServer.h"
 #include "../ApiResponse.h"
+#include "../RequestValidator.h"
 #include "../../codec/WsCommonCodec.h"
 #include "../../utils/Log.h"
 #include "../../config/network_config.h"
@@ -20,6 +19,12 @@
 
 #undef LW_LOG_TAG
 #define LW_LOG_TAG "WsGateway"
+
+namespace {
+    // Shared telemetry buffer for WS event handlers
+    // Safe: WS events processed sequentially on AsyncTCP task (Core 0)
+    static char s_telemetryBuf[320];
+}
 
 namespace lightwaveos {
 namespace network {
@@ -206,6 +211,7 @@ void WsGateway::handleConnect(AsyncWebSocketClient* client) {
                 //     if (n > 0) Serial.println(buf);
                 // }
                 // #endregion
+                m_stats.connectRejectedCooldown++;
                 client->close(1013, "Reconnect too fast");
                 return;
             }
@@ -228,6 +234,7 @@ void WsGateway::handleConnect(AsyncWebSocketClient* client) {
                 //     if (n > 0) Serial.println(buf);
                 // }
                 // #endregion
+                m_stats.connectRejectedOverlap++;
                 client->close(1008, "Only one session per device");
                 return;
             }
@@ -237,14 +244,18 @@ void WsGateway::handleConnect(AsyncWebSocketClient* client) {
     // Hard cap on connected WS clients (>=, not >)
     if (m_ws->count() >= lightwaveos::network::WebServerConfig::MAX_WS_CLIENTS) {
         LW_LOGW("WS: Max clients reached, rejecting %u", client->id());
+        m_stats.connectRejectedLimit++;
         client->close(1008, "Connection limit");
         return;
     }
 
     LW_LOGI("WS: Client %u connected from %s", client->id(), client->remoteIP().toString().c_str());
+    m_stats.connectAccepted++;
 
-    // For streaming clients (LED/audio), drop excess frames instead of killing the connection.
-    // canSend() checks in broadcasters provide first-line back-pressure; this is defence-in-depth.
+    // When a slow client's outgoing queue fills, silently drop new frames instead of
+    // closing the connection.  A missed status update is harmless (next one arrives 50 ms
+    // later); a nuked connection triggers a full reconnect storm on the client side.
+    // Queue depth is controlled by WS_MAX_QUEUED_MESSAGES (platformio.ini, default 32).
     client->setCloseClientOnQueueFull(false);
 
     // Mark active for this IP (best-effort) and set initial activity timestamp
@@ -345,6 +356,7 @@ uint32_t WsGateway::getOrIncrementEpoch(uint32_t clientId) {
 }
 
 void WsGateway::handleDisconnect(AsyncWebSocketClient* client) {
+    m_stats.disconnects++;
     uint32_t clientId = client->id();
     LW_LOGI("WS: Client %u disconnected", clientId);
 
@@ -586,6 +598,7 @@ void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_
 
     // Parse message
     if (len > MAX_WS_MESSAGE_SIZE) {
+        m_stats.oversizedFrames++;
         // Log rejected frame (oversize)
         uint32_t clientId = client->id();
         uint32_t connEpoch = 0;
@@ -649,6 +662,7 @@ void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_
     uint32_t tsMonoms = millis();
     
     if (error) {
+        m_stats.parseErrors++;
         // Log rejected frame (parse error)
         // Create bounded payload summary from raw data (~100 chars max, escaped for JSON)
         char payloadSummaryRaw[128] = {0};
@@ -694,7 +708,27 @@ void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_
         client->text(buildWsError(ErrorCodes::INVALID_JSON, "Parse error"));
         return;
     }
-    
+
+    // Validate JSON nesting depth to prevent stack overflow from malicious payloads
+    // Max depth 10 allows normal operations (2-5 levels) with headroom
+    constexpr uint8_t MAX_JSON_DEPTH = 10;
+    if (!RequestValidator::validateJsonDepth(doc, MAX_JSON_DEPTH)) {
+        // Log rejected frame (nesting depth exceeded)
+        const int n = snprintf(s_telemetryBuf, sizeof(s_telemetryBuf),
+            "{\"event\":\"msg.recv\",\"ts_mono_ms\":%lu,\"connEpoch\":%lu,\"eventSeq\":%lu,\"clientId\":%lu,\"msgType\":\"\",\"result\":\"rejected\",\"reason\":\"depth_limit\",\"payloadSummary\":\"\",\"schemaVersion\":\"1.0.0\"}",
+            static_cast<unsigned long>(tsMonoms),
+            static_cast<unsigned long>(connEpoch),
+            static_cast<unsigned long>(eventSeq),
+            static_cast<unsigned long>(clientId)
+        );
+        if (n > 0 && n < static_cast<int>(sizeof(s_telemetryBuf))) {
+            Serial.println(s_telemetryBuf);
+        }
+
+        client->text(buildWsError(ErrorCodes::INVALID_JSON, "JSON nesting depth exceeds limit"));
+        return;
+    }
+
     using namespace lightwaveos::codec;
     JsonObjectConst root = doc.as<JsonObjectConst>();
     TypeDecodeResult typeResult = WsCommonCodec::decodeType(root);
@@ -765,6 +799,7 @@ void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_
     
     // If not handled by router, send error (all commands should be registered)
     if (!handled) {
+        m_stats.unknownCommands++;
         RequestIdDecodeResult requestIdResult = WsCommonCodec::decodeRequestId(root);
         client->text(buildWsError(ErrorCodes::INVALID_VALUE, "Unknown command type", requestIdResult.requestId));
     }
@@ -785,6 +820,25 @@ void WsGateway::cleanupStaleConnections() {
                     static_cast<unsigned long>(nowMs), static_cast<unsigned>(i), static_cast<unsigned long>(idleMs));
                 Serial.println(buf);
             }
+        }
+    }
+}
+
+void WsGateway::closeClientsInSubnet(uint8_t a, uint8_t b, uint8_t c, uint16_t code, const char* reason) {
+    if (!m_ws) return;
+
+    for (uint8_t i = 0; i < CLIENT_IP_MAP_SLOTS; i++) {
+        const uint32_t clientId = m_clientIpMap[i].clientId;
+        if (clientId == 0) continue;
+
+        const uint32_t key = m_clientIpMap[i].ipKey;
+        const uint8_t o1 = static_cast<uint8_t>((key >> 24) & 0xFF);
+        const uint8_t o2 = static_cast<uint8_t>((key >> 16) & 0xFF);
+        const uint8_t o3 = static_cast<uint8_t>((key >> 8) & 0xFF);
+        if (o1 != a || o2 != b || o3 != c) continue;
+
+        if (m_ws->hasClient(clientId)) {
+            m_ws->close(clientId, code, reason);
         }
     }
 }

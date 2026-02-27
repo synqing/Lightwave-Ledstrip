@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file test_center_distance.cpp
  * @brief Unit tests for center distance calculation functions

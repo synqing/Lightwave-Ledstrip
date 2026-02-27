@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file FastLedDriver.cpp
  * @brief FastLED-based implementation of ILedDriver
@@ -272,10 +270,7 @@ void FastLedDriver::show() {
 }
 
 void FastLedDriver::setBrightness(uint8_t brightness) {
-    // Clamp to max brightness
-    if (brightness > m_config.maxBrightness) {
-        brightness = m_config.maxBrightness;
-    }
+    // No power clamping: pass through full 0–255 range
     m_brightness = brightness;
 
 #ifndef NATIVE_BUILD

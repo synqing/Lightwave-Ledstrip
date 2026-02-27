@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file ActorSystem.h
  * @brief Orchestrates all Actors in the LightwaveOS v2 system
@@ -31,6 +29,7 @@
 #include "ShowDirectorActor.h"
 #include "../bus/MessageBus.h"
 #include "../../config/features.h"
+#include "../../config/effect_ids.h"
 #include <memory>
 
 // Audio integration (Phase 2)
@@ -179,21 +178,21 @@ public:
      *
      * Sends a SET_EFFECT message to the RendererActor.
      *
-     * @param effectId Effect ID to set
+     * @param effectId Effect ID to set (stable namespaced EffectId)
      * @return true if message was sent
      */
-    bool setEffect(uint8_t effectId);
+    bool setEffect(EffectId effectId);
 
     /**
      * @brief Start a transition to a new effect (thread-safe)
      *
      * Sends a START_TRANSITION message to the RendererActor.
      *
-     * @param effectId Target effect ID
+     * @param effectId Target effect ID (stable namespaced EffectId)
      * @param transitionType Transition type (0-11)
      * @return true if message was sent
      */
-    bool startTransition(uint8_t effectId, uint8_t transitionType);
+    bool startTransition(EffectId effectId, uint8_t transitionType);
 
     /**
      * @brief Set brightness
@@ -290,6 +289,16 @@ public:
      * @return true if message was sent
      */
     bool trinitySync(uint8_t action, float positionSec, float bpm = 120.0f);
+
+    /**
+     * @brief Inject Trinity structure segment change
+     * @param index Segment index (0-255)
+     * @param labelHash16 16-bit hash of segment label (stable identifier, avoids string storage)
+     * @param startSec Segment start time (seconds)
+     * @param endSec Segment end time (seconds)
+     * @return true if message was sent
+     */
+    bool trinitySegment(uint8_t index, uint16_t labelHash16, float startSec, float endSec);
 #endif
 
     // ========================================================================

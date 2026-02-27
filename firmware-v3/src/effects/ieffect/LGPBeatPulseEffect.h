@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPBeatPulseEffect.h
  * @brief Beat-synchronized radial pulse from CENTER ORIGIN
@@ -17,6 +15,7 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -24,6 +23,8 @@ namespace ieffect {
 
 class LGPBeatPulseEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_BEAT_PULSE;
+
     LGPBeatPulseEffect() = default;
     ~LGPBeatPulseEffect() override = default;
 
@@ -47,6 +48,21 @@ private:
     // Hi-hat detection and shimmer overlay
     float m_lastTrebleEnergy = 0.0f; // Previous frame treble energy
     float m_hihatShimmer = 0.0f;     // Hi-hat shimmer intensity (decays fast)
+
+    // ES/LWLS-agnostic onset proxy (flux) and chroma hue anchoring
+    float m_lastFastFlux = 0.0f;
+    uint32_t m_lastHopSeq = 0;
+    float m_chromaAngle = 0.0f;  ///< Circular chroma EMA state (radians)
+
+    // Bands-dead guard: when bands stay near zero for N frames, don't trust band-based snare/hihat
+    uint16_t m_bandsLowFrames = 0;
+    static constexpr float BANDS_LOW_THRESHOLD = 0.02f;
+    static constexpr uint16_t BANDS_LOW_FRAMES_MAX = 60;  // ~0.5 s at 120 FPS
+
+    // Smoothed context so audio mapping doesn't cause flashing or cut-off display
+    float m_smoothBrightness = 0.8f;   // 0-1, from ctx.brightness/255
+    float m_smoothStrength = 0.3f;     // beatStrength
+    float m_smoothBeatPhase = 0.0f;     // beatPhase for stable background
 };
 
 } // namespace ieffect

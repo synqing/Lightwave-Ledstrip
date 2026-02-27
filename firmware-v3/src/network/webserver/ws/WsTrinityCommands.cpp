@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file WsTrinityCommands.cpp
  * @brief WebSocket Trinity command handlers implementation
@@ -26,6 +24,17 @@ namespace webserver {
 namespace ws {
 
 #if FEATURE_AUDIO_SYNC
+
+static uint16_t hashLabel16(const char* label) {
+    // 32-bit FNV-1a, folded to 16-bit for compact transport/storage.
+    uint32_t hash = 2166136261u;
+    const uint8_t* p = reinterpret_cast<const uint8_t*>(label);
+    while (*p) {
+        hash ^= *p++;
+        hash *= 16777619u;
+    }
+    return static_cast<uint16_t>((hash & 0xFFFFu) ^ (hash >> 16));
+}
 
 static void handleTrinityBeat(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     JsonObjectConst root = doc.as<JsonObjectConst>();
@@ -101,6 +110,62 @@ static void handleTrinityMacro(AsyncWebSocketClient* client, JsonDocument& doc, 
                 energy, vocal, bass, perc, bright);
         lastMacroLog = now;
     }
+}
+
+static void handleTrinitySegment(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+
+    if (!root.containsKey("index") || !root.containsKey("label")) {
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "Missing required fields: index, label", ""));
+        return;
+    }
+
+    int indexInt = root["index"].as<int>();
+    if (indexInt < 0 || indexInt > 255) {
+        client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "index out of range (0-255)", ""));
+        return;
+    }
+    uint8_t index = static_cast<uint8_t>(indexInt);
+
+    // Accept either {start,end} (contract) or {start_sec,end_sec} (alt)
+    float startSec = root["start"] | (root["start_sec"] | 0.0f);
+    float endSec = root["end"] | (root["end_sec"] | startSec);
+
+    if (startSec < 0.0f) {
+        client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "start must be >= 0", ""));
+        return;
+    }
+    if (endSec < startSec) {
+        client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "end must be >= start", ""));
+        return;
+    }
+
+    const char* label = root["label"].as<const char*>();
+    if (label == nullptr) {
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE, "label must be a string", ""));
+        return;
+    }
+
+    size_t labelLen = strlen(label);
+    if (labelLen == 0 || labelLen > 64) {
+        client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "label length must be 1-64 chars", ""));
+        return;
+    }
+
+    uint16_t labelHash16 = hashLabel16(label);
+
+    bool sent = ctx.actorSystem.trinitySegment(index, labelHash16, startSec, endSec);
+    if (!sent) {
+        LW_LOGW("trinity.segment rejected - queue saturated");
+        client->text(buildWsError(ErrorCodes::RATE_LIMITED, "Queue saturated", ""));
+        return;
+    }
+
+    LW_LOGI("trinity.segment: idx=%u labelHash=0x%04X start=%.2fs end=%.2fs",
+            static_cast<unsigned>(index),
+            static_cast<unsigned>(labelHash16),
+            startSec,
+            endSec);
 }
 
 static void handleTrinitySync(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
@@ -179,6 +244,7 @@ void registerWsTrinityCommands(const WebServerContext& ctx) {
 #if FEATURE_AUDIO_SYNC
     WsCommandRouter::registerCommand("trinity.beat", handleTrinityBeat);
     WsCommandRouter::registerCommand("trinity.macro", handleTrinityMacro);
+    WsCommandRouter::registerCommand("trinity.segment", handleTrinitySegment);
     WsCommandRouter::registerCommand("trinity.sync", handleTrinitySync);
 #endif
 }

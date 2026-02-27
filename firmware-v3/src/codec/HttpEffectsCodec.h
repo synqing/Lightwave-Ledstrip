@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file HttpEffectsCodec.h
  * @brief JSON codec for HTTP effects endpoints parsing and validation
@@ -35,12 +33,12 @@ namespace codec {
  * @brief Decoded effects.set request (HTTP version, simpler than WS)
  */
 struct HttpEffectsSetRequest {
-    uint8_t effectId;                // Required (0-127)
+    EffectId effectId;               // Effect ID (stable namespaced)
     bool useTransition;               // Optional (default: false)
     uint8_t transitionType;           // Optional (default: 0)
-    
-    HttpEffectsSetRequest() 
-        : effectId(255), useTransition(false), transitionType(0) {}
+
+    HttpEffectsSetRequest()
+        : effectId(INVALID_EFFECT_ID), useTransition(false), transitionType(0) {}
 };
 
 struct HttpEffectsSetDecodeResult {
@@ -57,12 +55,12 @@ struct HttpEffectsSetDecodeResult {
  * @brief Decoded effects.parameters.set request (HTTP version)
  */
 struct HttpEffectsParametersSetRequest {
-    uint8_t effectId;                 // Required (0-127)
+    EffectId effectId;                // Effect ID (stable namespaced)
     bool hasParameters;               // True if parameters object present
     JsonObjectConst parameters;       // Dynamic parameters object (if hasParameters)
-    
-    HttpEffectsParametersSetRequest() 
-        : effectId(255), hasParameters(false), parameters() {}
+
+    HttpEffectsParametersSetRequest()
+        : effectId(INVALID_EFFECT_ID), hasParameters(false), parameters() {}
 };
 
 struct HttpEffectsParametersSetDecodeResult {
@@ -169,7 +167,7 @@ struct HttpEffectsListData {
  * @brief Current effect response data
  */
 struct HttpEffectsCurrentData {
-    uint8_t effectId;
+    EffectId effectId;
     const char* name;
     uint8_t brightness;
     uint8_t speed;
@@ -210,7 +208,7 @@ struct HttpEffectParameterItemData {
  * @brief Effect parameters response data
  */
 struct HttpEffectsParametersGetData {
-    uint8_t effectId;
+    EffectId effectId;
     const char* name;
     bool hasParameters;
     const HttpEffectParameterItemData* parameters;
@@ -224,7 +222,7 @@ struct HttpEffectsParametersGetData {
  * @brief Effect parameters set result data
  */
 struct HttpEffectsParametersSetResultData {
-    uint8_t effectId;
+    EffectId effectId;
     const char* name;
     const char** queued;
     size_t queuedCount;

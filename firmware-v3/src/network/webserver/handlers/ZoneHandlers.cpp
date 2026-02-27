@@ -1,7 +1,6 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 #include "ZoneHandlers.h"
 #include "../../RequestValidator.h"
+#include "../../../config/effect_ids.h"
 #include "../../../core/actors/ActorSystem.h"
 #include "../../../palettes/Palettes_Master.h"
 #include "../../../effects/zones/BlendMode.h"
@@ -51,9 +50,10 @@ void ZoneHandlers::handleList(AsyncWebServerRequest* request, lightwaveos::actor
             zone["enabled"] = composer->isZoneEnabled(i);
             zone["effectId"] = composer->getZoneEffect(i);
             // SAFE: Uses cached state (no cross-core access)
-            uint8_t effectId = composer->getZoneEffect(i);
-            if (effectId < cachedState.effectCount && cachedState.effectNames[effectId]) {
-                zone["effectName"] = cachedState.effectNames[effectId];
+            EffectId effectId = composer->getZoneEffect(i);
+            const char* effName = cachedState.findEffectName(effectId);
+            if (effName) {
+                zone["effectName"] = effName;
             }
             zone["brightness"] = composer->getZoneBrightness(i);
             zone["speed"] = composer->getZoneSpeed(i);
@@ -184,11 +184,11 @@ void ZoneHandlers::handleGet(AsyncWebServerRequest* request, lightwaveos::actors
     sendSuccessResponse(request, [composer, zoneId, &cachedState](JsonObject& data) {
         data["id"] = zoneId;
         data["enabled"] = composer->isZoneEnabled(zoneId);
-        uint8_t effectId = composer->getZoneEffect(zoneId);
+        EffectId effectId = composer->getZoneEffect(zoneId);
         data["effectId"] = effectId;
         // SAFE: Uses cached state (no cross-core access)
-        if (effectId < cachedState.effectCount && cachedState.effectNames[effectId]) {
-            data["effectName"] = cachedState.effectNames[effectId];
+        if (const char* name = cachedState.findEffectName(effectId)) {
+            data["effectName"] = name;
         }
         data["brightness"] = composer->getZoneBrightness(zoneId);
         data["speed"] = composer->getZoneSpeed(zoneId);
@@ -221,11 +221,19 @@ void ZoneHandlers::handleSetEffect(AsyncWebServerRequest* request, uint8_t* data
     JsonDocument doc;
     VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::ZoneEffect, request);
 
-    uint8_t effectId = doc["effectId"];
+    EffectId effectId = doc["effectId"];
+
     // SAFE: Uses cached state (no cross-core access)
-    if (effectId >= cachedState.effectCount) {
+    // Accept stable namespaced EffectIds. Also tolerate legacy numeric indices (0..effectCount-1)
+    // by translating them to the cached registry EffectId.
+    const char* effectName = cachedState.findEffectName(effectId);
+    if (!effectName && effectId < cachedState.effectCount && effectId < cachedState.MAX_CACHED_EFFECTS) {
+        effectId = cachedState.effectIds[static_cast<uint16_t>(effectId)];
+        effectName = cachedState.findEffectName(effectId);
+    }
+    if (!effectName) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "effectId");
+                          ErrorCodes::OUT_OF_RANGE, "Effect ID not registered", "effectId");
         return;
     }
 
@@ -235,8 +243,8 @@ void ZoneHandlers::handleSetEffect(AsyncWebServerRequest* request, uint8_t* data
         respData["zoneId"] = zoneId;
         respData["effectId"] = effectId;
         // SAFE: Uses cached state (no cross-core access)
-        if (effectId < cachedState.effectCount && cachedState.effectNames[effectId]) {
-            respData["effectName"] = cachedState.effectNames[effectId];
+        if (const char* name = cachedState.findEffectName(effectId)) {
+            respData["effectName"] = name;
         }
     });
 

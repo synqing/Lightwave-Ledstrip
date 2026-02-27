@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file ZoneDefinition.h
  * @brief Zone layout definitions for CENTER ORIGIN multi-zone system
@@ -64,20 +62,22 @@ constexpr ZoneSegment ZONE_1_CONFIG[1] = {
 /**
  * 2-Zone Layout (Dual Split):
  * Zone 0 = inner half (near centre), Zone 1 = outer half.
- * Each zone is 40 LEDs per side (80 total).
+ * Default split at LED 60 per side:
+ * - Zone 0 (INNER): 20 LEDs per side (40 total)
+ * - Zone 1 (OUTER): 60 LEDs per side (120 total)
  */
 constexpr ZoneSegment ZONE_2_CONFIG[2] = {
-    // Zone 0: INNER (80 LEDs total)
+    // Zone 0: INNER (40 LEDs total)
     { .zoneId = 0,
-      .s1LeftStart = 40, .s1LeftEnd = 79,
-      .s1RightStart = 80, .s1RightEnd = 119,
-      .totalLeds = 80 },
+      .s1LeftStart = 60, .s1LeftEnd = 79,
+      .s1RightStart = 80, .s1RightEnd = 99,
+      .totalLeds = 40 },
 
-    // Zone 1: OUTER (80 LEDs total)
+    // Zone 1: OUTER (120 LEDs total)
     { .zoneId = 1,
-      .s1LeftStart = 0, .s1LeftEnd = 39,
-      .s1RightStart = 120, .s1RightEnd = 159,
-      .totalLeds = 80 }
+      .s1LeftStart = 0, .s1LeftEnd = 59,
+      .s1RightStart = 100, .s1RightEnd = 159,
+      .totalLeds = 120 }
 };
 
 // ==================== 3-Zone Configuration ====================

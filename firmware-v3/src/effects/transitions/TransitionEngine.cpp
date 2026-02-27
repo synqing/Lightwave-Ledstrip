@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file TransitionEngine.cpp
  * @brief CENTER ORIGIN-compliant transitions with per-strip processing
@@ -14,6 +12,9 @@
 
 #include "TransitionEngine.h"
 #include <Arduino.h>
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#endif
 
 namespace lightwaveos {
 namespace transitions {
@@ -28,7 +29,11 @@ TransitionEngine::TransitionEngine()
     , m_curve(EasingCurve::IN_OUT_QUAD)
     , m_startTime(0)
     , m_durationMs(1000)
+    , m_sourceBuffer(nullptr)
+    , m_targetBuffer(nullptr)
     , m_outputBuffer(nullptr)
+    , m_dissolveOrder(nullptr)
+    , m_buffersReady(false)
     , m_activePulses(0)
     , m_irisRadius(0)
     , m_shockwaveRadius(0)
@@ -38,12 +43,57 @@ TransitionEngine::TransitionEngine()
     , m_foldCount(6)
     , m_rotationAngle(0)
 {
-    memset(m_sourceBuffer, 0, sizeof(m_sourceBuffer));
-    memset(m_targetBuffer, 0, sizeof(m_targetBuffer));  // Now an array
-    memset(m_dissolveOrder, 0, sizeof(m_dissolveOrder));
+    // Allocate large transition buffers in PSRAM to preserve internal SRAM for WiFi/AsyncTCP/esp_timer.
+#ifndef NATIVE_BUILD
+    m_sourceBuffer = static_cast<CRGB*>(
+        heap_caps_calloc(TOTAL_LEDS, sizeof(CRGB), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    m_targetBuffer = static_cast<CRGB*>(
+        heap_caps_calloc(TOTAL_LEDS, sizeof(CRGB), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    m_dissolveOrder = static_cast<uint16_t*>(
+        heap_caps_calloc(MAX_DISSOLVE_PIXELS, sizeof(uint16_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+
+    // Fallback to internal heap if PSRAM allocation fails (degrades gracefully).
+    if (!m_sourceBuffer) {
+        m_sourceBuffer = static_cast<CRGB*>(
+            heap_caps_calloc(TOTAL_LEDS, sizeof(CRGB), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    }
+    if (!m_targetBuffer) {
+        m_targetBuffer = static_cast<CRGB*>(
+            heap_caps_calloc(TOTAL_LEDS, sizeof(CRGB), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    }
+    if (!m_dissolveOrder) {
+        m_dissolveOrder = static_cast<uint16_t*>(
+            heap_caps_calloc(MAX_DISSOLVE_PIXELS, sizeof(uint16_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    }
+#else
+    m_sourceBuffer = static_cast<CRGB*>(calloc(TOTAL_LEDS, sizeof(CRGB)));
+    m_targetBuffer = static_cast<CRGB*>(calloc(TOTAL_LEDS, sizeof(CRGB)));
+    m_dissolveOrder = static_cast<uint16_t*>(calloc(MAX_DISSOLVE_PIXELS, sizeof(uint16_t)));
+#endif
+
+    m_buffersReady = (m_sourceBuffer != nullptr) && (m_targetBuffer != nullptr) && (m_dissolveOrder != nullptr);
+    if (!m_buffersReady) {
+        Serial.println("[Transition] ERROR: Buffer allocation failed - transitions disabled");
+    }
+
     memset(m_particles, 0, sizeof(m_particles));
     memset(m_pulses, 0, sizeof(m_pulses));
     memset(m_ringPhases, 0, sizeof(m_ringPhases));
+}
+
+TransitionEngine::~TransitionEngine() {
+    if (m_sourceBuffer) {
+        free(m_sourceBuffer);
+        m_sourceBuffer = nullptr;
+    }
+    if (m_targetBuffer) {
+        free(m_targetBuffer);
+        m_targetBuffer = nullptr;
+    }
+    if (m_dissolveOrder) {
+        free(m_dissolveOrder);
+        m_dissolveOrder = nullptr;
+    }
 }
 
 // ==================== Transition Control ====================
@@ -54,10 +104,19 @@ void TransitionEngine::startTransition(const CRGB* sourceBuffer,
                                         TransitionType type,
                                         uint16_t durationMs,
                                         EasingCurve curve) {
+    if (!m_buffersReady || !m_sourceBuffer || !m_targetBuffer || !m_dissolveOrder) {
+        // Degrade gracefully: no transition, just show target immediately.
+        if (outputBuffer && targetBuffer) {
+            memcpy(outputBuffer, targetBuffer, TOTAL_LEDS * sizeof(CRGB));
+        }
+        m_active = false;
+        return;
+    }
+
     // Copy BOTH buffers to prevent aliasing issues
     // (source and target may point to same output buffer)
-    memcpy(m_sourceBuffer, sourceBuffer, sizeof(m_sourceBuffer));
-    memcpy(m_targetBuffer, targetBuffer, sizeof(m_targetBuffer));
+    memcpy(m_sourceBuffer, sourceBuffer, TOTAL_LEDS * sizeof(CRGB));
+    memcpy(m_targetBuffer, targetBuffer, TOTAL_LEDS * sizeof(CRGB));
     m_outputBuffer = outputBuffer;
     m_type = type;
     m_durationMs = durationMs;

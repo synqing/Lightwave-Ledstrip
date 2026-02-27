@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file ChevronWavesEnhancedEffect.h
  * @brief LGP Chevron Waves Enhanced - Enhanced version with heavy_chroma, 64-bin sub-bass, snare sharpness boost
@@ -22,6 +20,7 @@
 #include "../../plugins/api/EffectContext.h"
 #include "../enhancement/SmoothingEngine.h"
 #include <FastLED.h>
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -29,6 +28,8 @@ namespace ieffect {
 
 class ChevronWavesEnhancedEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_CHEVRON_WAVES_ENHANCED;
+
     ChevronWavesEnhancedEffect();
     ~ChevronWavesEnhancedEffect() override = default;
 
@@ -52,8 +53,9 @@ private:
     // Raw energy values (updated per hop)
     float m_energyAvg = 0.0f;
     float m_energyDelta = 0.0f;
-    uint8_t m_dominantBin = 0;
-    float m_dominantBinSmooth = 0.0f;
+    uint8_t m_dominantBin = 0;       // kept for energy calculation
+    float m_chromaAngle = 0.0f;      // Circular chroma hue smoothing state (radians)
+    float m_chromaHue = 0.0f;        // Smoothed chroma hue (0-255)
 
     // Chromagram smoothing (AsymmetricFollower for natural attack/release)
     enhancement::AsymmetricFollower m_chromaFollowers[12];

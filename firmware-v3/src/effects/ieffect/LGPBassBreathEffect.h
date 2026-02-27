@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPBassBreathEffect.h
  * @brief Organic breathing effect driven by bass energy
@@ -17,6 +15,7 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -24,6 +23,8 @@ namespace ieffect {
 
 class LGPBassBreathEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_BASS_BREATH;
+
     LGPBassBreathEffect() = default;
     ~LGPBassBreathEffect() override = default;
 
@@ -34,7 +35,12 @@ public:
 
 private:
     float m_breathLevel = 0.0f;  // Current "breath" intensity
-    float m_hueShift = 0.0f;     // Accumulated hue from treble
+    // Circular chroma EMA state (radians) — replaces linear hue anchor.
+    float m_chromaAngle = 0.0f;
+    uint32_t m_lastHopSeq = 0;
+    float m_lastBass = 0.0f;
+    float m_lastFastFlux = 0.0f;
+    float m_fluxKick = 0.0f;
 };
 
 } // namespace ieffect

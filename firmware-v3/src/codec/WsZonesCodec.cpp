@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file WsZonesCodec.cpp
  * @brief WebSocket zones codec implementation
@@ -12,6 +10,7 @@
  */
 
 #include "WsZonesCodec.h"
+#include "../config/limits.h"
 #ifdef NATIVE_BUILD
 #include "ZoneComposerStub.h"
 #include "RendererActorStub.h"
@@ -109,18 +108,18 @@ ZoneSetEffectDecodeResult WsZonesCodec::decodeZoneSetEffect(JsonObjectConst root
     }
     result.request.zoneId = static_cast<uint8_t>(zoneId);
     
-    // Extract effectId (required, 0-127)
+    // Extract effectId (required, stable namespaced EffectId)
     if (!root["effectId"].is<int>()) {
         snprintf(result.errorMsg, MAX_ERROR_MSG, "Missing required field 'effectId'");
         return result;
     }
-    int effectId = root["effectId"].as<int>();
-    if (effectId < 0 || effectId > 127) {
-        snprintf(result.errorMsg, MAX_ERROR_MSG, "effectId out of range (0-127): %d", effectId);
+    int32_t effectId = root["effectId"].as<int32_t>();
+    if (effectId < 0 || effectId > 0xFFFF) {
+        snprintf(result.errorMsg, MAX_ERROR_MSG, "effectId out of uint16 range (0-65535): %ld", (long)effectId);
         return result;
     }
-    result.request.effectId = static_cast<uint8_t>(effectId);
-    
+    result.request.effectId = static_cast<EffectId>(effectId);
+
     // Extract requestId (optional string)
     if (root["requestId"].is<const char*>()) {
         result.request.requestId = root["requestId"].as<const char*>();
@@ -413,9 +412,9 @@ ZonesUpdateDecodeResult WsZonesCodec::decodeZonesUpdate(JsonObjectConst root) {
     
     // Extract optional fields
     if (root.containsKey("effectId") && root["effectId"].is<int>()) {
-        int effectId = root["effectId"].as<int>();
-        if (effectId >= 0 && effectId <= 127) {
-            result.request.effectId = static_cast<uint8_t>(effectId);
+        int32_t effectId = root["effectId"].as<int32_t>();
+        if (effectId >= 0 && effectId <= 0xFFFF) {
+            result.request.effectId = static_cast<EffectId>(effectId);
             result.request.hasEffectId = true;
         }
     }
@@ -626,7 +625,7 @@ void WsZonesCodec::encodeZonesChanged(uint8_t zoneId, const char* const updatedF
     current["blendModeName"] = ::lightwaveos::zones::getBlendModeName(composer.getZoneBlendMode(zoneId));
 }
 
-void WsZonesCodec::encodeZonesEffectChanged(uint8_t zoneId, uint8_t effectId, const ::lightwaveos::zones::ZoneComposer& composer, const ::lightwaveos::actors::RendererActor* renderer, JsonObject& data) {
+void WsZonesCodec::encodeZonesEffectChanged(uint8_t zoneId, EffectId effectId, const ::lightwaveos::zones::ZoneComposer& composer, const ::lightwaveos::actors::RendererActor* renderer, JsonObject& data) {
     data["zoneId"] = zoneId;
     JsonObject current = data["current"].to<JsonObject>();
     current["effectId"] = effectId;

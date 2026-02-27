@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file ChromaticInterferenceEffect.cpp
  * @brief LGP Chromatic Interference implementation
@@ -109,12 +107,13 @@ CRGB ChromaticInterferenceEffect::chromaticDispersionPalette(float position,
 
 void ChromaticInterferenceEffect::render(plugins::EffectContext& ctx) {
     // Dual-edge injection with dispersion, interference patterns
+    float dt = ctx.getSafeDeltaSeconds();
     float intensity = ctx.brightness / 255.0f;
     // Aberration strength from complexity parameter (b1: complexity_norm * 3)
     float aberration = (ctx.complexity / 255.0f) * 3.0f;
-    
-    // Interference phase animation
-    m_interferencePhase += ctx.speed * PHASE_SPEED;
+
+    // Interference phase animation (dt-corrected)
+    m_interferencePhase += ctx.speed * PHASE_SPEED * 60.0f * dt;
     if (m_interferencePhase > TWO_PI) m_interferencePhase -= TWO_PI;
     
     for (uint16_t i = 0; i < ctx.ledCount && i < STRIP_LENGTH; i++) {
@@ -145,31 +144,31 @@ void ChromaticInterferenceEffect::render(plugins::EffectContext& ctx) {
         ctx.leds[i] = color;
     }
     
-    // Mirror to second strip if present
+    // Strip 2: Centre-origin at LED 240 (not edge mirror)
     if (ctx.ledCount >= STRIP_LENGTH * 2) {
         for (uint16_t i = 0; i < STRIP_LENGTH; i++) {
-            uint16_t mirrorIdx = STRIP_LENGTH * 2 - 1 - i;
-            if (mirrorIdx < ctx.ledCount) {
+            uint16_t strip2Idx = STRIP_LENGTH + i;
+            if (strip2Idx < ctx.ledCount) {
                 float position = (float)i;
-                
+
                 float distFromLeft = position / (float)HALF_LENGTH;
                 float distFromRight = ((float)(STRIP_LENGTH - 1) - position) / (float)HALF_LENGTH;
-                
+
                 float leftPhase = m_interferencePhase - distFromLeft * TWO_PI;
                 float rightPhase = m_interferencePhase - distFromRight * TWO_PI;
-                
+
                 float interference = sinf(leftPhase) + sinf(rightPhase);
                 interference = interference / 2.0f;
-                
+
                 float phase = m_interferencePhase + interference * INTERFERENCE_MODULATION + PI;
                 CRGB color = chromaticDispersionPalette(position, aberration, phase, intensity, ctx.palette, ctx.gHue);
-                
+
                 float interferenceIntensity = 0.5f + 0.5f * interference;
                 color.r = (uint8_t)(color.r * interferenceIntensity);
                 color.g = (uint8_t)(color.g * interferenceIntensity);
                 color.b = (uint8_t)(color.b * interferenceIntensity);
-                
-                ctx.leds[mirrorIdx] = color;
+
+                ctx.leds[strip2Idx] = color;
             }
         }
     }

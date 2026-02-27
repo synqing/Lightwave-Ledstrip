@@ -16,4 +16,10 @@
 | #23164 | " | 🔴 | I2S Audio Capture Legacy Driver Bit Shift Correction | ~788 |
 | #23150 | 7:15 AM | 🔵 | I2S Audio Capture Driver for SPH0645 MEMS Microphone | ~463 |
 | #23142 | 7:11 AM | 🔵 | AudioActor Lock-Free Threading Pattern for Pipeline State | ~507 |
+
+### Feb 22, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #37629 | 5:15 AM | 🔴 | TG1WDT_SYS_RST Boot Loop Diagnosed in AudioActor PipelineCore Backend | ~700 |
 </claude-mem-context>

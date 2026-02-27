@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file ZoneConfigManager.h
  * @brief Zone-specific persistence manager for NVS storage
@@ -25,6 +23,8 @@
 #include <cstdint>
 #include "NVSManager.h"
 #include "../../effects/zones/ZoneComposer.h"
+#include "../../config/limits.h"  // Single source of truth for system limits
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace persistence {
@@ -49,7 +49,7 @@ struct ZoneConfigData {
     bool systemEnabled;                  // Global zone system enable
 
     // Per-zone settings (4 zones max)
-    uint8_t zoneEffects[MAX_ZONES];     // Effect ID per zone
+    EffectId zoneEffects[MAX_ZONES];    // Effect ID per zone (stable namespaced)
     bool zoneEnabled[MAX_ZONES];        // Enable flag per zone
     uint8_t zoneBrightness[MAX_ZONES];  // Brightness per zone (0-255)
     uint8_t zoneSpeed[MAX_ZONES];       // Speed per zone (1-50)
@@ -74,9 +74,9 @@ struct ZoneConfigData {
  * Stores the non-zone-specific settings that persist across reboots.
  */
 struct SystemConfigData {
-    uint8_t version;                    // Config format version (currently 1)
+    uint8_t version;                    // Config format version (2 = EffectId uint16_t)
 
-    uint8_t effectId;                   // Current effect ID
+    EffectId effectId;                  // Current effect ID (stable namespaced)
     uint8_t brightness;                 // Global brightness (0-255)
     uint8_t speed;                      // Animation speed (1-50)
     uint8_t paletteId;                  // Current palette ID
@@ -148,23 +148,23 @@ public:
 
     /**
      * @brief Save system state (effect, brightness, speed, palette) to NVS
-     * @param effectId Current effect ID
+     * @param effectId Current effect ID (stable namespaced EffectId)
      * @param brightness Current brightness
      * @param speed Current speed
      * @param paletteId Current palette ID
      * @return true if saved successfully
      */
-    bool saveSystemState(uint8_t effectId, uint8_t brightness, uint8_t speed, uint8_t paletteId);
+    bool saveSystemState(EffectId effectId, uint8_t brightness, uint8_t speed, uint8_t paletteId);
 
     /**
      * @brief Load system state from NVS
-     * @param effectId Output: loaded effect ID
+     * @param effectId Output: loaded effect ID (stable namespaced EffectId)
      * @param brightness Output: loaded brightness
      * @param speed Output: loaded speed
      * @param paletteId Output: loaded palette ID
      * @return true if loaded successfully
      */
-    bool loadSystemState(uint8_t& effectId, uint8_t& brightness, uint8_t& speed, uint8_t& paletteId);
+    bool loadSystemState(EffectId& effectId, uint8_t& brightness, uint8_t& speed, uint8_t& paletteId);
 
     // ==================== Preset Management ====================
 
@@ -226,13 +226,14 @@ private:
     static constexpr const char* NVS_KEY_STATE = "state";
 
     // Config version for future compatibility
-    static constexpr uint8_t CONFIG_VERSION = 2;
+    static constexpr uint8_t CONFIG_VERSION = 3;       // Zone config format version (3 = EffectId uint16_t in zoneEffects)
+    static constexpr uint8_t SYSTEM_CONFIG_VERSION = 3; // System config version (3 = EffectId uint16_t)
 
-    // Effect limits (should match RendererActor upper bound)
-    static constexpr uint8_t MAX_EFFECT_ID = 104;
+    // Effect limits - reference centralised limits (upper bound for NVS validation)
+    static constexpr EffectId MAX_EFFECT_ID = 0x1FFF;  // Covers all family blocks (0x0100-0x1Axx)
     static constexpr uint8_t MIN_SPEED = 1;
     static constexpr uint8_t MAX_SPEED = 50;
-    static constexpr uint8_t MAX_PALETTE_ID = 36;
+    static constexpr uint8_t MAX_PALETTE_ID = limits::MAX_PALETTES - 1;
 };
 
 } // namespace persistence

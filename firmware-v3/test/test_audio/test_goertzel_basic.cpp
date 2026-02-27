@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 #define FEATURE_AUDIO_SYNC 1
 
 #include <unity.h>

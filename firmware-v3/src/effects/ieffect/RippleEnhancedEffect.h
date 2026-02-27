@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file RippleEnhancedEffect.h
  * @brief Ripple Enhanced - improved thresholds, snare triggers, treble shimmer
@@ -23,12 +21,19 @@
 #include "../enhancement/SmoothingEngine.h"
 #include <FastLED.h>
 
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#include "../../config/effect_ids.h"
+#endif
+
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
 class RippleEnhancedEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_RIPPLE_ENHANCED;
+
     RippleEnhancedEffect();
     ~RippleEnhancedEffect() override = default;
 
@@ -60,18 +65,24 @@ private:
     bool m_lastBeatState = false;
     bool m_lastDownbeatState = false;
 
-    // Radial LED history buffer (centre-out)
-    CRGB m_radial[HALF_LENGTH];
-    CRGB m_radialAux[HALF_LENGTH];
+#ifndef NATIVE_BUILD
+    struct RippleEnhancedPsram {
+        CRGB radial[HALF_LENGTH];
+        CRGB radialAux[HALF_LENGTH];
+        enhancement::AsymmetricFollower chromaFollowers[12];
+        float chromaSmoothed[12];
+        float chromaTargets[12];
+    };
+    RippleEnhancedPsram* m_ps = nullptr;
+#else
+    void* m_ps = nullptr;
+#endif
 
-    // Audio smoothing (AsymmetricFollower for natural attack/release)
-    enhancement::AsymmetricFollower m_chromaFollowers[12];
+    // Circular chroma EMA state (radians)
+    float m_chromaAngle = 0.0f;
+
     enhancement::AsymmetricFollower m_kickFollower{0.0f, 0.05f, 0.30f};
     enhancement::AsymmetricFollower m_trebleFollower{0.0f, 0.05f, 0.30f};
-
-    // Chromagram smoothing state
-    float m_chromaSmoothed[12] = {0.0f};
-    float m_chromaTargets[12] = {0.0f};
 
     // 64-bin spectrum tracking for enhanced audio response
     float m_kickPulse = 0.0f;

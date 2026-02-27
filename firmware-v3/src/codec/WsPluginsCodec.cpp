@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file WsPluginsCodec.cpp
  * @brief WebSocket plugins codec implementation
@@ -133,7 +131,7 @@ void WsPluginsCodec::encodePluginsList(const ::lightwaveos::plugins::PluginManag
     
     // List registered effect IDs
     JsonArray effects = data["effects"].to<JsonArray>();
-    for (uint8_t i = 0; i < plugins::PluginConfig::MAX_EFFECTS; i++) {
+    for (uint16_t i = 0; i < plugins::PluginConfig::MAX_EFFECTS; i++) {
         if (manager.isEffectRegistered(i)) {
             effects.add(i);
         }

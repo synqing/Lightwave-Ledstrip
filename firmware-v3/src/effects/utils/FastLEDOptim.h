@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file FastLEDOptim.h
  * @brief FastLED optimization utility functions for effect development

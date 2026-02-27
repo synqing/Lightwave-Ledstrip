@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPPerlinBackendFastLEDEffect.cpp
  * @brief Perlin Backend Test A: FastLED inoise8 baseline
@@ -43,6 +41,7 @@ bool LGPPerlinBackendFastLEDEffect::init(plugins::EffectContext& ctx) {
 void LGPPerlinBackendFastLEDEffect::render(plugins::EffectContext& ctx) {
     // CENTRE ORIGIN - FastLED inoise8 baseline test
     const bool hasAudio = ctx.audio.available;
+    float dt = ctx.getSafeDeltaSeconds();
     float speedNorm = ctx.speed / 50.0f;
     float intensityNorm = ctx.brightness / 255.0f;
     
@@ -56,7 +55,7 @@ void LGPPerlinBackendFastLEDEffect::render(plugins::EffectContext& ctx) {
         push = energy * energy * energy * energy * speedNorm * 0.1f; // Heavy emphasis on loud
     }
 #endif
-    m_momentum *= 0.99f; // Smooth decay
+    m_momentum *= powf(0.99f, dt * 60.0f); // Smooth decay (dt-corrected)
     if (push > m_momentum) {
         m_momentum = push; // Only boost, no jarring drops
     }

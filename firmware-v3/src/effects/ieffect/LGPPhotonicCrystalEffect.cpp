@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPPhotonicCrystalEffect.cpp
  * @brief LGP Photonic Crystal effect - v8 CORRECT audio-reactive motion
@@ -66,10 +64,10 @@ bool LGPPhotonicCrystalEffect::init(plugins::EffectContext& ctx) {
 
     // Collision flash
     m_collisionBoost = 0.0f;
+    m_lastFastFlux = 0.0f;
 
     // Chroma tracking
-    m_dominantBin = 0;
-    m_dominantBinSmooth = 0.0f;
+    m_chromaAngle = 0.0f;
 
     return true;
 }
@@ -78,6 +76,7 @@ void LGPPhotonicCrystalEffect::render(plugins::EffectContext& ctx) {
     // ========================================================================
     // SAFE DELTA TIME (clamped for physics stability)
     // ========================================================================
+    float rawDt = ctx.getSafeRawDeltaSeconds();
     float dt = ctx.getSafeDeltaSeconds();
     float moodNorm = ctx.getMoodNormalized();
 
@@ -103,7 +102,7 @@ void LGPPhotonicCrystalEffect::render(plugins::EffectContext& ctx) {
         float heavyEnergy = (ctx.audio.controlBus.heavy_bands[1] +
                              ctx.audio.controlBus.heavy_bands[2]) / 2.0f;
         float targetSpeed = 0.6f + 0.8f * heavyEnergy;  // 0.6-1.4x range
-        speedMult = m_speedSpring.update(targetSpeed, dt);
+        speedMult = m_speedSpring.update(targetSpeed, rawDt);
         if (speedMult > 1.6f) speedMult = 1.6f;
         if (speedMult < 0.3f) speedMult = 0.3f;
 
@@ -128,35 +127,40 @@ void LGPPhotonicCrystalEffect::render(plugins::EffectContext& ctx) {
             m_energyDelta = currentEnergy - m_energyAvg;
             if (m_energyDelta < 0.0f) m_energyDelta = 0.0f;
 
-            // Dominant chroma bin detection (for color offset)
-            float maxChroma = 0.0f;
-            for (uint8_t bin = 0; bin < 12; ++bin) {
-                if (ctx.audio.controlBus.chroma[bin] > maxChroma) {
-                    maxChroma = ctx.audio.controlBus.chroma[bin];
-                    m_dominantBin = bin;
-                }
-            }
         }
 
         // Asymmetric followers for BRIGHTNESS (not speed!)
-        float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, dt, moodNorm);
-        float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, dt, moodNorm);
+        float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, rawDt, moodNorm);
+        float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, rawDt, moodNorm);
 
         // Brightness modulation
         brightnessGain = 0.4f + 0.5f * energyAvgSmooth + 0.4f * energyDeltaSmooth;
         if (brightnessGain > 1.5f) brightnessGain = 1.5f;
         if (brightnessGain < 0.3f) brightnessGain = 0.3f;
 
-        // Collision flash (snare-triggered)
-        if (ctx.audio.isSnareHit()) {
+        // Collision flash:
+        // - Primary: explicit snare trigger (legacy LWLS pipeline)
+        // - Fallback: flux spikes with some treble/mid content (ES backend)
+        bool collisionHit = ctx.audio.isSnareHit();
+        float flux = ctx.audio.fastFlux();
+        float fluxDelta = flux - m_lastFastFlux;
+        m_lastFastFlux = flux;
+        if (!collisionHit) {
+            if (fluxDelta > 0.22f && flux > 0.25f) {
+                // Require some high-frequency energy so bass drops do not spam flashes.
+                if (ctx.audio.treble() > 0.20f || ctx.audio.mid() > 0.28f) {
+                    collisionHit = true;
+                }
+            }
+        }
+        if (collisionHit) {
             m_collisionBoost = 1.0f;
         }
-        m_collisionBoost *= 0.88f;
+        m_collisionBoost = effects::chroma::dtDecay(m_collisionBoost, 0.88f, rawDt);
 
-        // Chroma color offset (250ms smooth)
-        float alphaBin = 1.0f - expf(-dt / 0.25f);
-        m_dominantBinSmooth += ((float)m_dominantBin - m_dominantBinSmooth) * alphaBin;
-        chromaOffset = (uint8_t)(m_dominantBinSmooth * (255.0f / 12.0f));
+        // Circular chroma hue (replaces argmax + linear EMA to eliminate bin-flip rainbow sweeps)
+        chromaOffset = effects::chroma::circularChromaHueSmoothed(
+            ctx.audio.controlBus.chroma, m_chromaAngle, rawDt, 0.20f);
     }
 #endif
 

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPPhotonicCrystalEffect.h
  * @brief LGP Photonic Crystal - Bandgap structure simulation with audio layering
@@ -30,6 +28,8 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../enhancement/SmoothingEngine.h"
+#include "ChromaUtils.h"
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -37,6 +37,8 @@ namespace ieffect {
 
 class LGPPhotonicCrystalEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_PHOTONIC_CRYSTAL;
+
     LGPPhotonicCrystalEffect();
     ~LGPPhotonicCrystalEffect() override = default;
 
@@ -84,12 +86,12 @@ private:
     // COLLISION FLASH (snare-triggered, spatial decay from center)
     // =========================================================================
     float m_collisionBoost = 0.0f;
+    float m_lastFastFlux = 0.0f;  // Backend-agnostic transient proxy for collision flash
 
     // =========================================================================
-    // CHROMA DOMINANT BIN (smoothed over 250ms for color offset)
+    // CIRCULAR CHROMA HUE (replaces argmax + linear EMA for colour offset)
     // =========================================================================
-    uint8_t m_dominantBin = 0;
-    float m_dominantBinSmooth = 0.0f;
+    float m_chromaAngle = 0.0f;      // Persistent angle for circular EMA (radians)
 };
 
 } // namespace ieffect

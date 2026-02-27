@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file BreathingEffect.h
  * @brief Breathing - Bloom-inspired effect using Sensory Bridge architecture
@@ -27,6 +25,7 @@
 #include "../../plugins/api/EffectContext.h"
 #include "../../audio/AudioBehaviorSelector.h"
 #include "../enhancement/SmoothingEngine.h"
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -45,6 +44,8 @@ namespace ieffect {
  */
 class BreathingEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_BREATHING;
+
     BreathingEffect();
     ~BreathingEffect() override = default;
 

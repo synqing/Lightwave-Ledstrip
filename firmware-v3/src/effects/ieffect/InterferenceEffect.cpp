@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file InterferenceEffect.cpp
  * @brief Interference effect implementation
@@ -29,8 +27,9 @@ bool InterferenceEffect::init(plugins::EffectContext& ctx) {
 
 void InterferenceEffect::render(plugins::EffectContext& ctx) {
     // CENTER ORIGIN INTERFERENCE - Two waves from center create patterns
-    m_wave1Phase += ctx.speed / 20.0f;
-    m_wave2Phase -= ctx.speed / 30.0f;
+    float dt = ctx.getSafeDeltaSeconds();
+    m_wave1Phase += ctx.speed / 20.0f * 60.0f * dt;  // dt-corrected
+    m_wave2Phase -= ctx.speed / 30.0f * 60.0f * dt;  // dt-corrected
 
     // Wrap phases to prevent unbounded growth (prevents hue cycling - no-rainbows rule)
     const float twoPi = 2.0f * PI;

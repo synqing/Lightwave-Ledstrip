@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file RendererActor.h
  * @brief Actor responsible for LED rendering at 120 FPS
@@ -34,6 +32,7 @@
 #include "../bus/MessageBus.h"
 #include "../../effects/enhancement/ColorCorrectionEngine.h"
 #include "../../config/features.h"
+#include "../../config/limits.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../../plugins/api/IEffectRegistry.h"
 
@@ -54,8 +53,12 @@
 #include "../../audio/contracts/SnapshotBuffer.h"
 #include "../../audio/contracts/AudioEffectMapping.h"
 #include "../../audio/TrinityControlBusProxy.h"
+#if FEATURE_AUDIO_BACKEND_ESV11
+#include "../../audio/backends/esv11/EsBeatClock.h"
+#elif !FEATURE_AUDIO_BACKEND_PIPELINECORE
 // TempoTracker integration (replaces K1)
 #include "../../audio/tempo/TempoTracker.h"
+#endif
 #include "../../utils/LockFreeQueue.h"
 #endif
 
@@ -88,7 +91,7 @@ struct LedConfig {
     static constexpr uint32_t FRAME_TIME_US = 1000000 / TARGET_FPS;  // ~8333us
 
     static constexpr uint8_t DEFAULT_BRIGHTNESS = 96;
-    static constexpr uint8_t MAX_BRIGHTNESS = 160;
+    static constexpr uint8_t MAX_BRIGHTNESS = 255;  // No power clamping; full range available
     static constexpr uint8_t DEFAULT_SPEED = 10;
     static constexpr uint8_t MAX_SPEED = 100;  // Extended range (was 50)
 
@@ -182,7 +185,7 @@ public:
     // State Accessors (read-only, for diagnostics)
     // ========================================================================
 
-    uint8_t getCurrentEffect() const { return m_currentEffect; }
+    EffectId getCurrentEffect() const { return m_currentEffect; }
     uint8_t getBrightness() const { return m_brightness; }
     uint8_t getSpeed() const { return m_speed; }
     uint8_t getPaletteIndex() const { return m_paletteIndex; }
@@ -214,21 +217,21 @@ public:
      * Automatically wraps function pointer in LegacyEffectAdapter.
      * All effects go through IEffect path.
      *
-     * @param id Effect ID (0-255)
+     * @param id Stable namespaced EffectId
      * @param name Human-readable name
      * @param fn Render function
      * @return true if registered successfully
      */
-    bool registerEffect(uint8_t id, const char* name, EffectRenderFn fn);
+    bool registerEffect(EffectId id, const char* name, EffectRenderFn fn);
 
     /**
      * @brief Register an IEffect instance (native)
      *
-     * @param id Effect ID (0-255)
+     * @param id Stable namespaced EffectId
      * @param effect IEffect instance pointer
      * @return true if registered successfully
      */
-    bool registerEffect(uint8_t id, plugins::IEffect* effect) override;
+    bool registerEffect(EffectId id, plugins::IEffect* effect) override;
 
     // ========================================================================
     // IEffectRegistry Implementation
@@ -239,44 +242,54 @@ public:
      * @param id Effect ID to unregister
      * @return true if effect was registered and is now unregistered
      */
-    bool unregisterEffect(uint8_t id) override;
+    bool unregisterEffect(EffectId id) override;
 
     /**
      * @brief Check if an effect is registered
      * @param id Effect ID to check
      * @return true if effect is registered
      */
-    bool isEffectRegistered(uint8_t id) const override;
+    bool isEffectRegistered(EffectId id) const override;
 
     /**
      * @brief Get registered effect count
      * @return Number of registered effects
      */
-    uint8_t getRegisteredCount() const override;
+    uint16_t getRegisteredCount() const override;
 
     /**
      * @brief Get number of registered effects
      */
-    uint8_t getEffectCount() const { return m_effectCount; }
+    uint16_t getEffectCount() const { return m_registryCount; }
 
     /**
      * @brief Get effect name by ID
      */
-    const char* getEffectName(uint8_t id) const;
+    const char* getEffectName(EffectId id) const;
 
     /**
      * @brief Get IEffect instance by ID
      * @param id Effect ID
      * @return IEffect pointer, or nullptr if not found
      */
-    plugins::IEffect* getEffectInstance(uint8_t id) const;
+    plugins::IEffect* getEffectInstance(EffectId id) const;
 
     /**
-     * @brief Validate and clamp effect ID to safe range [0, MAX_EFFECTS-1]
+     * @brief Validate effect ID exists in registry
      * @param effectId Effect ID to validate
-     * @return Valid effect ID, defaults to 0 if out of bounds
+     * @return Valid effect ID, defaults to first registered or INVALID_EFFECT_ID
      */
-    uint8_t validateEffectId(uint8_t effectId) const;
+    EffectId validateEffectId(EffectId effectId) const;
+
+    /**
+     * @brief Get EffectId by registry position (for enumeration)
+     * @param index Registry index (0 to getEffectCount()-1)
+     * @return EffectId at that position, or INVALID_EFFECT_ID
+     */
+    EffectId getEffectIdAt(uint16_t index) const {
+        if (index < m_registryCount) return m_registry[index].id;
+        return INVALID_EFFECT_ID;
+    }
 
     /**
      * @brief Get pointer to current palette
@@ -318,19 +331,6 @@ public:
     // ========================================================================
     // Transition System Integration
     // ========================================================================
-
-    /**
-     * @brief Start a transition to a new effect
-     * @param newEffectId Target effect ID
-     * @param transitionType Transition type (0-11)
-     */
-    void startTransition(uint8_t newEffectId, uint8_t transitionType);
-
-    /**
-     * @brief Start transition with random type
-     * @param newEffectId Target effect ID
-     */
-    void startRandomTransition(uint8_t newEffectId);
 
     /**
      * @brief Check if a transition is currently active
@@ -387,6 +387,42 @@ public:
      */
     const audio::MusicalGridSnapshot& getLastMusicalGrid() const { return m_lastMusicalGrid; }
 
+    /**
+     * @brief Get current audio sync mode for status/telemetry.
+     *
+     * - "trinity" when Trinity sync is active and proxy is fresh.
+     * - "es" (or LWLS internal backend) otherwise.
+     */
+    const char* getAudioSyncMode() const {
+        // NOTE: This is intentionally coarse-grained and mirrors the render-time
+        // gating used when selecting TrinityControlBusProxy vs live audio.
+        return (m_trinitySyncActive && m_trinityProxy.isActive() && !m_trinitySyncPaused)
+            ? "trinity"
+            : "es";
+    }
+
+    /**
+     * @brief Snapshot of bands + rms/flux for serial debug (e.g. "bands" command).
+     * Lock-free: renderer writes to double buffer, getter reads the other slot.
+     */
+    struct BandsDebugSnapshot {
+        float bands[8] = {0};
+        float bass = 0.0f;   ///< (bands[0]+bands[1])/2
+        float mid = 0.0f;    ///< (bands[2]+bands[3]+bands[4])/3
+        float treble = 0.0f; ///< (bands[5]+bands[6]+bands[7])/3
+        float rms = 0.0f;
+        float flux = 0.0f;
+        uint32_t hop_seq = 0;
+        bool valid = false;
+    };
+
+    /**
+     * @brief Get latest bands snapshot for validation (serial "bands" command).
+     * Thread-safe: reads from the slot the renderer is not currently writing.
+     */
+    void getBandsDebugSnapshot(BandsDebugSnapshot& out) const;
+
+#if !FEATURE_AUDIO_BACKEND_ESV11 && !FEATURE_AUDIO_BACKEND_PIPELINECORE
     // ========================================================================
     // TempoTracker Integration (replaces K1)
     // ========================================================================
@@ -419,6 +455,9 @@ public:
         }
         return lightwaveos::audio::TempoTrackerOutput{};
     }
+#elif FEATURE_AUDIO_BACKEND_PIPELINECORE
+    bool isTempoEnabled() const { return true; }
+#endif // !FEATURE_AUDIO_BACKEND_ESV11 && !FEATURE_AUDIO_BACKEND_PIPELINECORE
 #endif
 
     // ========================================================================
@@ -447,6 +486,12 @@ public:
     bool isCaptureModeEnabled() const { return m_captureEnabled; }
 
     /**
+     * @brief Enable/disable audio debug logging (serial 'a' command)
+     */
+    void setAudioDebugEnabled(bool enabled) { m_audioDebugEnabled = enabled; }
+    bool isAudioDebugEnabled() const { return m_audioDebugEnabled; }
+
+    /**
      * @brief Get captured frame for a specific tap
      * @param tap Tap point to retrieve
      * @param outBuffer Buffer to copy into (must be TOTAL_LEDS size)
@@ -457,13 +502,13 @@ public:
     /**
      * @brief Queue a parameter update to be applied on the render thread
      */
-    bool enqueueEffectParameterUpdate(uint8_t effectId, const char* name, float value);
+    bool enqueueEffectParameterUpdate(EffectId effectId, const char* name, float value);
 
     /**
      * @brief Get capture metadata (effect ID, palette ID, frame index, timestamp)
      */
     struct CaptureMetadata {
-        uint8_t effectId;
+        EffectId effectId;
         uint8_t paletteId;
         uint8_t brightness;
         uint8_t speed;
@@ -496,6 +541,16 @@ protected:
 
 private:
     // ========================================================================
+    // Cross-Core Unsafe — use ActorSystem::startTransition() from Core 0
+    // ========================================================================
+
+    /** @brief Start transition (Core 1 internal only — unsafe from Core 0) */
+    void startTransition(EffectId newEffectId, uint8_t transitionType);
+
+    /** @brief Start random transition (Core 1 internal only — unsafe from Core 0) */
+    void startRandomTransition(EffectId newEffectId);
+
+    // ========================================================================
     // Internal Methods
     // ========================================================================
 
@@ -524,12 +579,12 @@ private:
     /**
      * @brief Handle SET_EFFECT message
      */
-    void handleSetEffect(uint8_t effectId);
+    void handleSetEffect(EffectId effectId);
 
     /**
      * @brief Handle START_TRANSITION message (thread-safe)
      */
-    void handleStartTransition(uint8_t effectId, uint8_t transitionType);
+    void handleStartTransition(EffectId effectId, uint8_t transitionType);
 
     /**
      * @brief Handle SET_BRIGHTNESS message
@@ -563,7 +618,7 @@ private:
     CRGB m_leds[LedConfig::TOTAL_LEDS];  // Unified buffer
 
     // Current state
-    uint8_t m_currentEffect;
+    EffectId m_currentEffect;
     bool m_effectInitialized;  // Track if current effect has been init()'d
     uint8_t m_brightness;
     uint8_t m_speed;
@@ -579,26 +634,27 @@ private:
     // Palette
     CRGBPalette16 m_currentPalette;
 
-    // Effect registry - IEffect-only
+    // Effect registry - append-only, keyed by stable EffectId
     //
-    // IMPORTANT: This value must be >= the number of registered effects.
-    // It is referenced (sometimes duplicated) across networking/state/persistence.
-    // If you add effects beyond this limit, registration and/or selection will fail.
-    static constexpr uint8_t MAX_EFFECTS = 104;
-    struct EffectEntry {
+    // Uses linear scan for lookups. For 162 effects on ESP32 at 240 MHz,
+    // scan time is <1us per lookup - negligible vs the 8.3ms frame budget.
+    static constexpr uint16_t MAX_EFFECTS = limits::MAX_EFFECTS;
+    struct EffectRegistration {
+        EffectId id;
         const char* name;
         plugins::IEffect* effect;   // All effects are IEffect instances (native or adapter)
+        plugins::runtime::LegacyEffectAdapter* legacyAdapter;  // Owned, nullptr if native
         bool active;
     };
-    EffectEntry m_effects[MAX_EFFECTS];
-    uint8_t m_effectCount;
-    
-    // Storage for LegacyEffectAdapter instances (one per legacy effect)
-    // These are allocated during registration and owned by RendererActor
-    plugins::runtime::LegacyEffectAdapter* m_legacyAdapters[MAX_EFFECTS];
+    EffectRegistration m_registry[MAX_EFFECTS];
+    uint16_t m_registryCount;
+
+    // Lookup helpers
+    EffectRegistration* findById(EffectId id);
+    const EffectRegistration* findById(EffectId id) const;
 
     struct EffectParamUpdate {
-        uint8_t effectId;
+        EffectId effectId;
         char name[24];
         float value;
     };
@@ -611,6 +667,7 @@ private:
     uint32_t m_lastFrameTime;
     uint32_t m_frameCount;
     float m_effectTimeSeconds;
+    float m_effectTimeSecondsRaw;
     float m_effectFrameAccumulator;
     uint32_t m_effectFrameCount;
 
@@ -638,7 +695,7 @@ private:
 #if FEATURE_TRANSITIONS
     transitions::TransitionEngine* m_transitionEngine;
     CRGB m_transitionSourceBuffer[LedConfig::TOTAL_LEDS];
-    uint8_t m_pendingEffect;
+    EffectId m_pendingEffect;
     bool m_transitionPending;
 #endif
 
@@ -649,9 +706,11 @@ private:
     // Performance metrics for color correction
     uint32_t m_correctionSkipCount;   // Number of frames where correction was skipped
     uint32_t m_correctionApplyCount;  // Number of frames where correction was applied
-    CRGB m_captureTapA[LedConfig::TOTAL_LEDS];  // Pre-correction
-    CRGB m_captureTapB[LedConfig::TOTAL_LEDS];  // Post-correction
-    CRGB m_captureTapC[LedConfig::TOTAL_LEDS];  // Pre-WS2812 (per-strip, interleaved)
+    // Capture buffers can be sizeable; allocate lazily (prefer PSRAM) when capture is enabled.
+    CRGB* m_captureBlock;
+    CRGB* m_captureTapA;  // Pre-correction
+    CRGB* m_captureTapB;  // Post-correction
+    CRGB* m_captureTapC;  // Pre-WS2812 (per-strip, interleaved)
     CaptureMetadata m_captureMetadata;
     bool m_captureTapAValid;
     bool m_captureTapBValid;
@@ -670,12 +729,16 @@ private:
      * in the audio domain at 62.5 Hz. This gives "PLL freewheel" behavior
      * where beat phase stays smooth even if audio stalls momentarily.
      */
+#if FEATURE_AUDIO_BACKEND_ESV11
+    audio::esv11::EsBeatClock m_esBeatClock;
+#else
     audio::MusicalGrid m_musicalGrid;
+#endif
 
     /// Last ControlBusFrame read from AudioActor (by-value copy)
     audio::ControlBusFrame m_lastControlBus;
 
-    /// Last MusicalGridSnapshot from our owned m_musicalGrid
+    /// Last MusicalGridSnapshot (populated by MusicalGrid or ES beat clock)
     audio::MusicalGridSnapshot m_lastMusicalGrid;
 
     /// Sequence number from last SnapshotBuffer read (for change detection)
@@ -689,6 +752,12 @@ private:
     bool m_trinitySyncActive = false;
     bool m_trinitySyncPaused = false;
     float m_trinitySyncPosition = 0.0f;
+
+    /// Trinity structure segment state (optional; driven by host)
+    uint8_t m_trinitySegmentIndex = 0xFF;     // 0xFF = unknown/unset
+    uint16_t m_trinitySegmentLabelHash = 0;   // 16-bit hash of label string (FNV-1a fold)
+    uint32_t m_trinitySegmentStartMs = 0;
+    uint32_t m_trinitySegmentEndMs = 0;
 #endif
 
     // Audio availability latch (hysteresis) removed: keep simple gate based on
@@ -717,6 +786,17 @@ private:
     /// Cached result of hasActiveMappings() - updated on effect change only
     bool m_effectHasAudioMappings = false;
 
+    /// Extra gate for reactive effects in high-ID range (140+).
+    float m_highIdReactiveSilenceGate = 1.0f;
+    float m_highIdReactiveActivityGate = 0.0f;
+
+    /// Audio debug logging toggle (serial 'a' command)
+    bool m_audioDebugEnabled = false;
+
+    /// Bands debug snapshot (double buffer for lock-free read from serial handler)
+    mutable BandsDebugSnapshot m_bandsDebugSnapshot[2];
+    mutable std::atomic<uint8_t> m_bandsDebugWriteIndex{0};
+
     // ========================================================================
     // TempoTracker Integration (replaces K1)
     // ========================================================================
@@ -728,7 +808,9 @@ private:
      * AudioActor calls updateNovelty() and updateTempo() per audio hop.
      * Set to nullptr if AudioActor isn't running.
      */
+#if !FEATURE_AUDIO_BACKEND_ESV11 && !FEATURE_AUDIO_BACKEND_PIPELINECORE
     lightwaveos::audio::TempoTracker* m_tempo = nullptr;
+#endif
 #endif
 
     /**

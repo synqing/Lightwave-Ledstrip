@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * LightwaveOS v2 - Unity Test Runner
  *
@@ -23,6 +21,7 @@ extern void run_transition_tests();
 extern void run_integration_tests();
 extern void run_sync_tests();
 extern void run_subscription_manager_tests();
+extern void run_audio_reactive_policy_tests();
 
 // Unity setUp/tearDown (required but can be empty)
 void setUp(void) {
@@ -69,6 +68,11 @@ int main(int argc, char** argv) {
     printf("  Effect Rendering Tests (CENTER ORIGIN)\n");
     printf("───────────────────────────────────────────────────────────────\n");
     run_effect_tests();
+
+    printf("\n───────────────────────────────────────────────────────────────\n");
+    printf("  Audio Reactive Policy Tests\n");
+    printf("───────────────────────────────────────────────────────────────\n");
+    run_audio_reactive_policy_tests();
 
     printf("\n───────────────────────────────────────────────────────────────\n");
     printf("  Zone Composer Tests (Buffer Isolation + Blend Modes)\n");

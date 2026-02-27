@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file UdpStreamer.h
  * @brief UDP frame streamer for LED and audio data
@@ -181,9 +179,9 @@ private:
     static constexpr uint32_t STATS_LOG_INTERVAL_MS = 5000;
     static constexpr uint8_t FAILURE_STREAK_SUPPRESS = 3;
     static constexpr uint8_t FAILURE_STREAK_LONG_SUPPRESS = 5;
-    static constexpr uint8_t FAILURE_STREAK_SOCKET_RESET = 3;
+    static constexpr uint8_t FAILURE_STREAK_SOCKET_RESET = 6;
     static constexpr uint8_t FAILURE_STREAK_DROP_ALL = 10;
-    static constexpr uint32_t SOCKET_RESET_MIN_INTERVAL_MS = 2000;
+    static constexpr uint32_t SOCKET_RESET_MIN_INTERVAL_MS = 15000;
 
     /// Find subscriber slot by IP, or first inactive slot if not found.
     /// Must be called under lock.

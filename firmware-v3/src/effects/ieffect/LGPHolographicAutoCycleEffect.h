@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPHolographicAutoCycleEffect.h
  * @brief LGP Holographic Auto-Cycle - Multi-layer interference with auto-cycling palettes
@@ -24,6 +22,7 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include <FastLED.h>
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -31,6 +30,8 @@ namespace ieffect {
 
 class LGPHolographicAutoCycleEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_HOLOGRAPHIC_AUTO_CYCLE;
+
     LGPHolographicAutoCycleEffect();
     ~LGPHolographicAutoCycleEffect() override = default;
 
@@ -55,7 +56,6 @@ private:
 
     // Cycle tracking
     int32_t m_lastCycleCount;            // floor(m_phase1 / TWO_PI) at last check
-    uint8_t m_cyclesSinceChange;         // Counts rotations on current palette (0 or 1)
 
     // Playlist state
     uint8_t m_playlist[PLAYLIST_SIZE];   // Shuffled copy of palette IDs

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file AudioPipelineBenchmark.h
  * @brief Metrics collection and analysis for audio pipeline benchmarking

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LegacyEffectAdapter.h
  * @brief Adapter to wrap legacy function-pointer effects as IEffect instances

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file OtaTokenManager.h
  * @brief Per-device OTA token management with NVS persistence

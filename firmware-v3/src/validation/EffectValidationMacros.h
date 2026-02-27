@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file EffectValidationMacros.h
  * @brief Zero-overhead instrumentation macros for audio-reactive effect validation
@@ -193,9 +191,10 @@ inline uint32_t _validation_get_time_us() {
 #define VALIDATION_SUBMIT(...)            do {} while(0)
 #define VALIDATION_SET_HOP_SEQ(...)       do {} while(0)
 
-// Include stdint.h for type definitions when disabled
+// Include type definitions when disabled
 #include <stdint.h>
 #include <stddef.h>
+#include "../config/effect_ids.h"
 
 // Forward declare an empty struct for VALIDATION_GET_SAMPLE when disabled
 namespace lightwaveos {
@@ -203,7 +202,7 @@ namespace validation {
     struct EffectValidationSample {
         uint32_t timestamp_us = 0;
         uint32_t hop_seq = 0;
-        uint8_t effect_id = 0;
+        EffectId effect_id = INVALID_EFFECT_ID;
         uint8_t reversal_count = 0;
         uint16_t frame_seq = 0;
         float phase = 0.0f;

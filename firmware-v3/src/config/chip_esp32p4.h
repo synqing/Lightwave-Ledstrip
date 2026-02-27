@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file chip_esp32p4.h
  * @brief ESP32-P4 specific configuration and constants

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LedDriverConfig.h
  * @brief Configuration structures for LED drivers
@@ -154,7 +152,7 @@ struct LedDriverConfig {
         , centerPoint(79)                           // LED 79/80 split (v1 compatible)
         , centerOriginEnabled(true)
         , defaultBrightness(96)                     // Safe default
-        , maxBrightness(160)                        // Current limit for 320 LEDs
+        , maxBrightness(255)                        // No power clamping; full range
         , powerVoltage(5)
         , powerMilliamps(1500)                      // 1.5A per strip
         , totalPowerBudget(3000)                    // 3A total

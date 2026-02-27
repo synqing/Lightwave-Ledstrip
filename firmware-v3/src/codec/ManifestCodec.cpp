@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file ManifestCodec.cpp
  * @brief Manifest codec implementation
@@ -219,7 +217,7 @@ ManifestDecodeResult ManifestCodec::decode(JsonObjectConst root) {
             return result;
         }
 
-        result.config.effectIds[result.config.effectCount++] = static_cast<uint8_t>(id);
+        result.config.effectIds[result.config.effectCount++] = static_cast<EffectId>(id);
     }
 
     // Success

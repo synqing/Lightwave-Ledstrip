@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPQuantumTunnelingEffect.h
  * @brief LGP Quantum Tunneling - Particles passing through barriers
@@ -17,6 +15,7 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -24,6 +23,8 @@ namespace ieffect {
 
 class LGPQuantumTunnelingEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_QUANTUM_TUNNELING;
+
     LGPQuantumTunnelingEffect();
     ~LGPQuantumTunnelingEffect() override = default;
 

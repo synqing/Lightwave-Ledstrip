@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file SmoothingEngine.h
  * @brief Centralized smoothing primitives for ultra-smooth audio-reactive rendering

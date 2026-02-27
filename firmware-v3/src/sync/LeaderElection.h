@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LeaderElection.h
  * @brief Deterministic leader election using Bully algorithm

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPPerlinCausticsEffect.cpp
  * @brief LGP Perlin Caustics - Sparkling caustic lobes
@@ -68,7 +66,7 @@ void LGPPerlinCausticsEffect::render(plugins::EffectContext& ctx) {
     float trebleNorm = 0.0f;
     float bassNorm = 0.0f;
     float midNorm = 0.0f;
-    float dt = ctx.getSafeDeltaSeconds();
+    float dt = ctx.getSafeRawDeltaSeconds();
     
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
@@ -84,7 +82,7 @@ void LGPPerlinCausticsEffect::render(plugins::EffectContext& ctx) {
         }
         
         // Smooth toward targets every frame (keeps motion alive between hops)
-        float alpha = dt / (0.15f + dt); // ~150ms smoothing
+        float alpha = 1.0f - expf(-dt / 0.15f);  // True exponential, tau=150ms
         m_smoothTreble += (m_targetTreble - m_smoothTreble) * alpha;
         m_smoothBass += (m_targetBass - m_smoothBass) * alpha;
         m_smoothMid += (m_targetMid - m_smoothMid) * alpha;
@@ -98,8 +96,8 @@ void LGPPerlinCausticsEffect::render(plugins::EffectContext& ctx) {
         // Hi-hat also contributes to sparkle (using smoothed value)
         trebleNorm = fmaxf(trebleNorm, m_smoothHihat * 0.7f);
     } else {
-        // Smooth audio parameters to zero when no audio
-        float alpha = dt / (0.2f + dt);
+        // Smooth audio parameters to zero when no audio (true exponential, tau=200ms)
+        float alpha = 1.0f - expf(-dt / 0.2f);
         m_targetTreble = 0.0f;
         m_targetBass = 0.0f;
         m_targetMid = 0.0f;

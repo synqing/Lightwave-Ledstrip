@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPChromaticPulseEffect.cpp
  * @brief LGP Chromatic Pulse effect implementation
@@ -130,10 +128,11 @@ bool LGPChromaticPulseEffect::init(plugins::EffectContext& ctx) {
 
 void LGPChromaticPulseEffect::render(plugins::EffectContext& ctx) {
     // Aberration sweeps from centre outward with intensity pulse
+    float dt = ctx.getSafeDeltaSeconds();
     float baseIntensity = ctx.brightness / 255.0f;
     float baseAberration = (ctx.complexity / 255.0f) * 3.0f;
 
-    m_phase += ctx.speed * 0.015f;
+    m_phase += ctx.speed * 0.015f * 60.0f * dt;  // dt-corrected
     if (m_phase > TWO_PI) m_phase -= TWO_PI;
 
     float aberration = baseAberration * (0.5f + 0.5f * sinf(m_phase));
@@ -145,12 +144,13 @@ void LGPChromaticPulseEffect::render(plugins::EffectContext& ctx) {
         ctx.leds[i] = color;
     }
 
+    // Strip 2: Centre-origin at LED 240 (not edge mirror)
     if (ctx.ledCount >= STRIP_LENGTH * 2) {
         for (int i = 0; i < STRIP_LENGTH; i++) {
-            int mirrorIdx = STRIP_LENGTH * 2 - 1 - i;
-            if (mirrorIdx < (int)ctx.ledCount) {
+            int strip2Idx = STRIP_LENGTH + i;
+            if (strip2Idx < (int)ctx.ledCount) {
                 CRGB color = chromaticDispersionPalette((float)i, aberration, phase + PI * 0.5f, intensity, ctx.palette, ctx.gHue);
-                ctx.leds[mirrorIdx] = color;
+                ctx.leds[strip2Idx] = color;
             }
         }
     }

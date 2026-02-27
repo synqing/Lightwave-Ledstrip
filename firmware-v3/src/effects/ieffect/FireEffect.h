@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file FireEffect.h
  * @brief Fire - Realistic fire simulation radiating from center
@@ -18,12 +16,19 @@
 #include "../../plugins/api/EffectContext.h"
 #include <FastLED.h>
 
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#include "../../config/effect_ids.h"
+#endif
+
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
 class FireEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_FIRE;
+
     FireEffect();
     ~FireEffect() override = default;
 
@@ -34,9 +39,15 @@ public:
     const plugins::EffectMetadata& getMetadata() const override;
 
 private:
-    // Instance state (was: static byte fireHeat[STRIP_LENGTH])
-    static constexpr uint16_t STRIP_LENGTH = 160;  // From CoreEffects.h
-    byte m_fireHeat[STRIP_LENGTH];
+    static constexpr uint16_t STRIP_LENGTH = 160;
+#ifndef NATIVE_BUILD
+    struct FirePsram {
+        byte fireHeat[STRIP_LENGTH];
+    };
+    FirePsram* m_ps = nullptr;
+#else
+    void* m_ps = nullptr;
+#endif
 };
 
 } // namespace ieffect

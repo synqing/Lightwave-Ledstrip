@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file WebServer.h
  * @brief Web Server for LightwaveOS v2 with Actor System integration
@@ -27,6 +25,8 @@
 #pragma once
 
 #include "../config/features.h"
+#include "../config/limits.h"
+#include "../config/effect_ids.h"
 
 #if FEATURE_WEB_SERVER
 
@@ -263,8 +263,8 @@ public:
      * All request handlers should use this cached state instead of direct renderer-> calls.
      */
     struct CachedRendererState {
-        uint8_t effectCount;
-        uint8_t currentEffect;
+        uint16_t effectCount;
+        EffectId currentEffect;
         uint8_t brightness;
         uint8_t speed;
         uint8_t paletteIndex;
@@ -285,7 +285,18 @@ public:
             uint32_t framesRendered;
         } stats;
         // Effect names - pointers to stable strings in RendererActor (valid until next cache update)
-        const char* effectNames[102];  // MAX_EFFECTS (keep in sync with RendererNode::MAX_EFFECTS)
+        // Uses limits::MAX_EFFECTS (single source of truth)
+        static constexpr uint16_t MAX_CACHED_EFFECTS = limits::MAX_EFFECTS;
+        const char* effectNames[MAX_CACHED_EFFECTS];
+        EffectId effectIds[MAX_CACHED_EFFECTS];  // Registry index → EffectId mapping
+
+        // Look up effect name by EffectId (linear scan of cached IDs)
+        const char* findEffectName(EffectId id) const {
+            for (uint16_t i = 0; i < effectCount && i < MAX_CACHED_EFFECTS; i++) {
+                if (effectIds[i] == id) return effectNames[i];
+            }
+            return nullptr;
+        }
         // Audio tuning (if available) - simplified to avoid include dependency
 #if FEATURE_AUDIO_SYNC
         struct {
@@ -457,7 +468,7 @@ public:
     /**
      * @brief Notify clients of effect change
      */
-    void notifyEffectChange(uint8_t effectId, const char* name);
+    void notifyEffectChange(EffectId effectId, const char* name);
 
     /**
      * @brief Notify clients of parameter change
@@ -519,8 +530,20 @@ private:
     webserver::RateLimiter m_rateLimiter;
     webserver::WsGateway* m_wsGateway;  // WebSocket gateway (Phase 2)
 
+    // Client ID → IP mapping for disconnect cleanup.
+    // AsyncWebSocketClient::remoteIP() may return 0.0.0.0 after disconnect, which breaks
+    // UDP subscriber cleanup if we key subscriptions by IP.
+    static constexpr uint8_t WS_CLIENT_IP_MAP_SLOTS = 16;
+    struct WsClientIpMapEntry {
+        uint32_t clientId = 0;  // AsyncWebSocketClient ID (0 = empty)
+        uint32_t ipKey = 0;     // Packed IPv4 from connect time
+    };
+    WsClientIpMapEntry m_wsClientIpMap[WS_CLIENT_IP_MAP_SLOTS] = {};
+
     bool m_running;
     bool m_apMode;
+    volatile bool m_apClientDisconnected;
+    uint32_t m_lastApReinitMs;
     bool m_mdnsStarted;
     bool m_littleFSMounted;
     uint32_t m_lastBroadcast;
@@ -531,6 +554,18 @@ private:
     uint32_t m_lastImmediateBroadcast;
     bool m_broadcastPending;
     static constexpr uint32_t BROADCAST_COALESCE_MS = 50;
+    uint32_t m_lastClientConnectMs;
+    // Hold heavy textAll broadcasts briefly after connect so command/hello traffic
+    // can settle on SoftAP links.
+    static constexpr uint32_t CONNECT_STABILISE_MS = 600;
+    static_assert(CONNECT_STABILISE_MS >= 400, "CONNECT_STABILISE_MS must remain >= 400ms for SoftAP safety");
+
+    // Low internal heap shedding (avoid esp_timer/WiFi/lwIP ENOMEM spirals).
+    // Use hysteresis to prevent rapid toggling.
+    bool m_lowHeapShed;
+    uint32_t m_lastHeapShedLogMs;
+    static constexpr uint32_t INTERNAL_HEAP_SHED_BELOW_BYTES = 30U * 1024U;
+    static constexpr uint32_t INTERNAL_HEAP_RESUME_ABOVE_BYTES = 45U * 1024U;
 
     // LED frame streaming (extracted to LedStreamBroadcaster)
     webserver::LedStreamBroadcaster* m_ledBroadcaster;
@@ -577,6 +612,8 @@ private:
      * @brief Update cached renderer state (called from update() in safe context)
      */
     void updateCachedRendererState();
+
+    void updateLowHeapShedState(uint32_t nowMs);
 };
 
 // ============================================================================

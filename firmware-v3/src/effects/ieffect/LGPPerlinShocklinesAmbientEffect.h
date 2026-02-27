@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPPerlinShocklinesAmbientEffect.h
  * @brief LGP Perlin Shocklines Ambient - Time-driven travelling ridges (ambient)
@@ -23,12 +21,19 @@
 #include "../../plugins/api/EffectContext.h"
 #include <FastLED.h>
 
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#include "../../config/effect_ids.h"
+#endif
+
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
 class LGPPerlinShocklinesAmbientEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_PERLIN_SHOCKLINES_AMBIENT;
+
     LGPPerlinShocklinesAmbientEffect();
     ~LGPPerlinShocklinesAmbientEffect() override = default;
 
@@ -40,10 +45,16 @@ public:
 
 private:
     static constexpr uint16_t STRIP_LENGTH = 160;
-    
-    // Shockwave energy buffer
-    float m_shockBuffer[STRIP_LENGTH];
-    
+
+#ifndef NATIVE_BUILD
+    struct ShocklinesPsram {
+        float shockBuffer[STRIP_LENGTH];
+    };
+    ShocklinesPsram* m_ps = nullptr;
+#else
+    void* m_ps = nullptr;
+#endif
+
     // Noise field coordinates
     uint16_t m_noiseX;
     uint16_t m_noiseY;

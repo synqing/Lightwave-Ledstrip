@@ -1,11 +1,10 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPBeatPulseEffect.cpp
  * @brief Beat-synchronized radial pulse implementation
  */
 
 #include "LGPBeatPulseEffect.h"
+#include "ChromaUtils.h"
 #include "../CoreEffects.h"
 
 #ifndef NATIVE_BUILD
@@ -17,6 +16,15 @@
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
+
+namespace {
+
+static inline const float* selectChroma12(const audio::ControlBusFrame& cb) {
+    // Both backends now produce normalised chroma via Stage A/B pipeline.
+    return cb.chroma;
+}
+
+} // namespace
 
 bool LGPBeatPulseEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
@@ -35,6 +43,14 @@ bool LGPBeatPulseEffect::init(plugins::EffectContext& ctx) {
     m_lastTrebleEnergy = 0.0f;
     m_hihatShimmer = 0.0f;
 
+    m_lastFastFlux = 0.0f;
+    m_lastHopSeq = 0;
+    m_chromaAngle = 0.0f;
+    m_bandsLowFrames = 0;
+    m_smoothBrightness = ctx.brightness / 255.0f;
+    m_smoothStrength = 0.3f;
+    m_smoothBeatPhase = 0.0f;
+
     return true;
 }
 
@@ -47,9 +63,13 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
     bool snareHit = false;
     bool hihatHit = false;
 
-    // Spike detection thresholds
-    constexpr float SNARE_SPIKE_THRESH = 0.25f;   // Mid energy spike threshold
-    constexpr float HIHAT_SPIKE_THRESH = 0.20f;   // Treble energy spike threshold
+    // Spike detection thresholds (tuned for typical band levels ~0.05–0.3)
+    constexpr float SNARE_SPIKE_THRESH = 0.18f;   // Mid energy spike threshold
+    constexpr float HIHAT_SPIKE_THRESH = 0.14f;   // Treble energy spike threshold
+    constexpr float FLUX_SPIKE_THRESH = 0.18f;    // Flux spike threshold (backend-agnostic onset proxy)
+
+    // Circular chroma hue — declared here so it is visible in the render section below.
+    uint8_t chromaHueOffset = 0;
 
     if (ctx.audio.available) {
         beatPhase = ctx.audio.beatPhase();
@@ -58,16 +78,46 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
         trebleEnergy = ctx.audio.treble();
         onBeat = ctx.audio.isOnBeat();
 
-        // Snare detection: spike in mid-frequency energy
-        float midDelta = midEnergy - m_lastMidEnergy;
-        if (midDelta > SNARE_SPIKE_THRESH && midEnergy > 0.4f) {
-            snareHit = true;
+        // Bands-dead guard: if bands stay near zero for N frames, don't trust band-based triggers
+        float bandSum = bassEnergy + midEnergy + trebleEnergy;
+        if (bandSum < BANDS_LOW_THRESHOLD) {
+            if (m_bandsLowFrames < BANDS_LOW_FRAMES_MAX) ++m_bandsLowFrames;
+        } else {
+            m_bandsLowFrames = 0;
+        }
+        bool bandsTrusted = (m_bandsLowFrames < BANDS_LOW_FRAMES_MAX);
+
+        // Circular chroma hue (prevents argmax discontinuities and wrapping artefacts).
+        float rawDt = ctx.getSafeRawDeltaSeconds();
+        const float* chroma = selectChroma12(ctx.audio.controlBus);
+        chromaHueOffset = effects::chroma::circularChromaHueSmoothed(
+            chroma, m_chromaAngle, rawDt, 0.20f);
+
+        // Snare detection: spike in mid-frequency energy (only when bands look live)
+        if (bandsTrusted) {
+            float midDelta = midEnergy - m_lastMidEnergy;
+            if (midDelta > SNARE_SPIKE_THRESH && midEnergy > 0.15f) {
+                snareHit = true;
+            }
+
+            // Hi-hat detection: spike in high-frequency energy
+            float trebleDelta = trebleEnergy - m_lastTrebleEnergy;
+            if (trebleDelta > HIHAT_SPIKE_THRESH && trebleEnergy > 0.12f) {
+                hihatHit = true;
+            }
         }
 
-        // Hi-hat detection: spike in high-frequency energy
-        float trebleDelta = trebleEnergy - m_lastTrebleEnergy;
-        if (trebleDelta > HIHAT_SPIKE_THRESH && trebleEnergy > 0.3f) {
-            hihatHit = true;
+        // Flux accent: a reliable onset proxy for backends without explicit snare triggers.
+        float flux = ctx.audio.fastFlux();
+        float fluxDelta = flux - m_lastFastFlux;
+        m_lastFastFlux = flux;
+        if (fluxDelta > FLUX_SPIKE_THRESH && flux > 0.18f) {
+            // Treat as snare-like transient when there is some mid/treble content.
+            if (midEnergy > 0.12f || trebleEnergy > 0.10f) {
+                snareHit = true;
+            } else {
+                hihatHit = true;
+            }
         }
 
         // Store for next frame
@@ -97,18 +147,29 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
     }
     m_lastBeatPhase = beatPhase;
 
+    // Smooth context so audio mapping / auto-speed don't cause flashing or cut-off
+    float brightnessNorm = ctx.brightness / 255.0f;
+    float strength = ctx.audio.available ? ctx.audio.beatStrength() : 0.0f;
+    const float blend = 0.08f;
+    m_smoothBrightness += (brightnessNorm - m_smoothBrightness) * blend;
+    m_smoothStrength += (strength - m_smoothStrength) * blend;
+    m_smoothBeatPhase += (beatPhase - m_smoothBeatPhase) * blend;
+
     // === PRIMARY PULSE (Kick/Beat) ===
     if (onBeat) {
         m_pulsePosition = 0.0f;
-        m_pulseIntensity = 0.3f + bassEnergy * 0.7f;
+        // silentScale handled globally by RendererActor
+        float base = 0.25f + 0.75f * fminf(1.0f, bassEnergy * 1.15f + m_smoothStrength * 0.65f);
+        m_pulseIntensity = base;
     }
 
     // Expand pulse outward (~400ms to reach edge)
     m_pulsePosition += (ctx.deltaTimeSeconds * 1000.0f) / 400.0f;
     if (m_pulsePosition > 1.0f) m_pulsePosition = 1.0f;
 
-    // Decay intensity
-    m_pulseIntensity *= 0.95f;
+    // Decay intensity (dt-corrected for frame-rate independence)
+    float rawDt2 = ctx.getSafeRawDeltaSeconds();
+    m_pulseIntensity *= powf(0.95f, rawDt2 * 60.0f);
     if (m_pulseIntensity < 0.01f) m_pulseIntensity = 0.0f;
 
     // === SECONDARY PULSE (Snare) ===
@@ -121,8 +182,8 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
     m_snarePulsePos += (ctx.deltaTimeSeconds * 1000.0f) / 300.0f;
     if (m_snarePulsePos > 1.0f) m_snarePulsePos = 1.0f;
 
-    // Faster decay for snare
-    m_snarePulseInt *= 0.92f;
+    // Faster decay for snare (dt-corrected)
+    m_snarePulseInt *= powf(0.92f, rawDt2 * 60.0f);
     if (m_snarePulseInt < 0.01f) m_snarePulseInt = 0.0f;
 
     // === SHIMMER OVERLAY (Hi-hat) ===
@@ -130,14 +191,20 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
         m_hihatShimmer = 0.8f + trebleEnergy * 0.2f;
     }
 
-    // Very fast decay for hi-hat sparkle (~150ms)
-    m_hihatShimmer *= 0.88f;
+    // Very fast decay for hi-hat sparkle (dt-corrected)
+    m_hihatShimmer *= powf(0.88f, rawDt2 * 60.0f);
     if (m_hihatShimmer < 0.01f) m_hihatShimmer = 0.0f;
 
     // Clear buffer
     memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
 
     // === RENDER CENTER PAIR OUTWARD ===
+    uint8_t baseHue = chromaHueOffset;
+    // Fixed offsets (no time-based hue cycling): keeps colour musically anchored (non-rainbow).
+    uint8_t primaryHue = baseHue;
+    uint8_t snareHue = (uint8_t)(baseHue + 42);  // ~perfect fifth-ish shift
+    uint8_t hihatHue = (uint8_t)(baseHue + 96);  // brighter offset
+
     for (int dist = 0; dist < HALF_LENGTH; ++dist) {
         float normalizedDist = (float)dist / HALF_LENGTH;
 
@@ -170,51 +237,53 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
             }
         }
 
-        // Background glow based on beat phase
-        float bgBright = 0.08f + beatPhase * 0.12f;
+        // Background glow: use smoothed phase/strength so it holds and doesn't flash
+        float bgBright = 0.08f + 0.08f * m_smoothBeatPhase + 0.08f * m_smoothStrength;
+        if (bgBright < 0.10f) bgBright = 0.10f;  // Floor so background always visible, no "random flashes"
 
         // --- Combine all layers ---
-        // Primary pulse uses base hue
-        uint8_t primaryHue = ctx.gHue + (uint8_t)(beatPhase * 64);
-
-        // Snare uses complementary hue (+128 = opposite on color wheel)
-        uint8_t snareHue = primaryHue + 128;
-
-        // Hi-hat uses offset hue (+64)
-        uint8_t hihatHue = primaryHue + 64;
-
-        // Calculate combined color
+        // Calculate combined color (normalised by layer count to prevent wash to white)
         CRGB finalColor = CRGB::Black;
+        uint8_t layerCount = 1;  // base always present
 
-        // Layer 1: Background glow
-        uint8_t bgBrightness = (uint8_t)(bgBright * ctx.brightness);
+        // Layer 1: Background glow (use smoothed brightness so display holds)
+        uint8_t bgBrightness = (uint8_t)(bgBright * m_smoothBrightness * 255.0f);
+        if (bgBrightness < 20u) bgBrightness = 20u;
         finalColor = ctx.palette.getColor(primaryHue, bgBrightness);
 
-        // Layer 2: Primary pulse (additive blend)
+        // Layer 2: Primary pulse (smoothed brightness)
         if (primaryBright > 0.01f) {
-            uint8_t pBright = (uint8_t)(primaryBright * ctx.brightness);
+            uint8_t pBright = (uint8_t)(primaryBright * m_smoothBrightness * 255.0f);
             CRGB primaryColor = ctx.palette.getColor(primaryHue, pBright);
-            finalColor.r = (finalColor.r + primaryColor.r > 255) ? 255 : finalColor.r + primaryColor.r;
-            finalColor.g = (finalColor.g + primaryColor.g > 255) ? 255 : finalColor.g + primaryColor.g;
-            finalColor.b = (finalColor.b + primaryColor.b > 255) ? 255 : finalColor.b + primaryColor.b;
+            finalColor.r = (finalColor.r + primaryColor.r > 255) ? 255 : (uint8_t)(finalColor.r + primaryColor.r);
+            finalColor.g = (finalColor.g + primaryColor.g > 255) ? 255 : (uint8_t)(finalColor.g + primaryColor.g);
+            finalColor.b = (finalColor.b + primaryColor.b > 255) ? 255 : (uint8_t)(finalColor.b + primaryColor.b);
+            layerCount++;
         }
 
-        // Layer 3: Snare pulse (additive blend with complementary color)
+        // Layer 3: Snare pulse (complementary color, smoothed brightness)
         if (snareBright > 0.01f) {
-            uint8_t sBright = (uint8_t)(snareBright * ctx.brightness * 0.7f);  // Slightly dimmer
+            uint8_t sBright = (uint8_t)(snareBright * m_smoothBrightness * 255.0f * 0.7f);  // Slightly dimmer
             CRGB snareColor = ctx.palette.getColor(snareHue, sBright);
-            finalColor.r = (finalColor.r + snareColor.r > 255) ? 255 : finalColor.r + snareColor.r;
-            finalColor.g = (finalColor.g + snareColor.g > 255) ? 255 : finalColor.g + snareColor.g;
-            finalColor.b = (finalColor.b + snareColor.b > 255) ? 255 : finalColor.b + snareColor.b;
+            finalColor.r = (finalColor.r + snareColor.r > 255) ? 255 : (uint8_t)(finalColor.r + snareColor.r);
+            finalColor.g = (finalColor.g + snareColor.g > 255) ? 255 : (uint8_t)(finalColor.g + snareColor.g);
+            finalColor.b = (finalColor.b + snareColor.b > 255) ? 255 : (uint8_t)(finalColor.b + snareColor.b);
+            layerCount++;
         }
 
-        // Layer 4: Hi-hat shimmer (additive sparkle)
+        // Layer 4: Hi-hat shimmer (smoothed brightness)
         if (shimmerBright > 0.01f) {
-            uint8_t hBright = (uint8_t)(shimmerBright * ctx.brightness * 0.5f);  // Subtle
+            uint8_t hBright = (uint8_t)(shimmerBright * m_smoothBrightness * 255.0f * 0.5f);  // Subtle
             CRGB hihatColor = ctx.palette.getColor(hihatHue, hBright);
-            finalColor.r = (finalColor.r + hihatColor.r > 255) ? 255 : finalColor.r + hihatColor.r;
-            finalColor.g = (finalColor.g + hihatColor.g > 255) ? 255 : finalColor.g + hihatColor.g;
-            finalColor.b = (finalColor.b + hihatColor.b > 255) ? 255 : finalColor.b + hihatColor.b;
+            finalColor.r = (finalColor.r + hihatColor.r > 255) ? 255 : (uint8_t)(finalColor.r + hihatColor.r);
+            finalColor.g = (finalColor.g + hihatColor.g > 255) ? 255 : (uint8_t)(finalColor.g + hihatColor.g);
+            finalColor.b = (finalColor.b + hihatColor.b > 255) ? 255 : (uint8_t)(finalColor.b + hihatColor.b);
+            layerCount++;
+        }
+
+        // Normalise by layer count so combined colour stays in range and preserves hue (colour corruption fix)
+        if (layerCount > 1) {
+            finalColor.nscale8(255u / (unsigned)layerCount);
         }
 
         SET_CENTER_PAIR(ctx, dist, finalColor);

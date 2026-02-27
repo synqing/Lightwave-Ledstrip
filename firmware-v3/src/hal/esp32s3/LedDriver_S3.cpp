@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 #include "LedDriver_S3.h"
 
 #include <cstring>
@@ -9,7 +7,6 @@
 #include <esp_timer.h>
 #endif
 
-// MabuTrace instrumentation (zero-cost when FEATURE_MABUTRACE=0)
 #include "../../audio/AudioBenchmarkTrace.h"
 
 #define LW_LOG_TAG "LedDriver_S3"
@@ -22,6 +19,9 @@ LedDriver_S3::LedDriver_S3() {
     resetStats();
     memset(m_strip1, 0, sizeof(m_strip1));
     memset(m_strip2, 0, sizeof(m_strip2));
+#ifndef NATIVE_BUILD
+    m_showMutex = xSemaphoreCreateMutex();
+#endif
 }
 
 bool LedDriver_S3::init(const LedStripConfig& config) {
@@ -53,6 +53,11 @@ bool LedDriver_S3::init(const LedStripConfig& config) {
 
     m_initialized = true;
     LW_LOGI("FastLED init: %u LEDs on GPIO %u", config.ledCount, chip::gpio::LED_STRIP1_DATA);
+#ifndef NATIVE_BUILD
+    LW_LOGI("RMT driver: %s (FASTLED_RMT_BUILTIN_DRIVER=%d)",
+            FASTLED_RMT_BUILTIN_DRIVER ? "BUILTIN (ESP-IDF spinlock)" : "CUSTOM (direct register)",
+            FASTLED_RMT_BUILTIN_DRIVER);
+#endif
     return true;
 }
 
@@ -121,13 +126,33 @@ uint16_t LedDriver_S3::getLedCount(uint8_t stripIndex) const {
 
 void LedDriver_S3::show() {
 #ifndef NATIVE_BUILD
-    uint32_t start = static_cast<uint32_t>(esp_timer_get_time());
-    {
-        TRACE_SCOPE("fastled_rmt_show");
-        FastLED.show();
+    // Layer 2: Mutex with timeout — skip frame on contention rather than crash
+    if (m_showMutex && xSemaphoreTake(m_showMutex, pdMS_TO_TICKS(2)) != pdTRUE) {
+        m_stats.showSkips++;
+        return;
     }
+
+    // Layer 1: Minimum interval guard — ensure RMT hardware has fully settled
+    // between transmissions. Prevents spinlock assertion on back-to-back show().
+    uint32_t now = static_cast<uint32_t>(esp_timer_get_time());
+    if (m_lastShowEndUs != 0 && (now - m_lastShowEndUs) < kMinShowGapUs) {
+        m_stats.showSkips++;
+        if (m_showMutex) xSemaphoreGive(m_showMutex);
+        return;
+    }
+
+    // Assert: FastLED.show() must only ever run on Core 1 (renderer).
+    // Cross-core calls cause RMT spinlock corruption (see fix/stable-effect-ids).
+    configASSERT(xPortGetCoreID() == 1);
+
+    TRACE_SCOPE("fastled_rmt_show");
+    FastLED.show();
+
     uint32_t end = static_cast<uint32_t>(esp_timer_get_time());
-    updateShowStats(end - start);
+    updateShowStats(end - now);
+    m_lastShowEndUs = end;
+
+    if (m_showMutex) xSemaphoreGive(m_showMutex);
 #else
     m_stats.frameCount++;
 #endif

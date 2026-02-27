@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file V1ApiRoutes.cpp
  * @brief V1 API route registration implementation
@@ -1222,6 +1220,158 @@ void V1ApiRoutes::registerRoutes(
             return;
         }
         uint8_t id = request->getParam("id")->value().toInt();
+        handlers::ZonePresetHandlers::handleDelete(request, id);
+    });
+
+    // ==================== Preset API Routes (RESTful path-based) ====================
+    // These routes use path parameters like /api/v1/presets/effects/{id}
+    // in addition to the query parameter routes above for backwards compatibility.
+
+    // --- Effect Presets (path-based) ---
+
+    // GET /api/v1/presets/effects - List all effect presets
+    registry.onGet("/api/v1/presets/effects", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::EffectPresetHandlers::handleList(request);
+    });
+
+    // GET /api/v1/presets/effects/{id} - Get effect preset by ID
+    registry.onGetRegex("^\\/api\\/v1\\/presets\\/effects\\/([0-9]+)$", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        // Extract ID from URL path
+        String path = request->url();
+        int lastSlash = path.lastIndexOf('/');
+        if (lastSlash < 0) {
+            sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                              ErrorCodes::MISSING_FIELD, "Invalid preset ID in URL path");
+            return;
+        }
+        uint8_t id = path.substring(lastSlash + 1).toInt();
+        handlers::EffectPresetHandlers::handleGet(request, id);
+    });
+
+    // POST /api/v1/presets/effects/save-current - Save current effect as preset
+    registry.onPost("/api/v1/presets/effects/save-current",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::EffectPresetHandlers::handleSave(request, data, len, ctx.renderer);
+        }
+    );
+
+    // POST /api/v1/presets/effects/{id}/load - Apply/load effect preset by ID
+    registry.onPostRegex("^\\/api\\/v1\\/presets\\/effects\\/([0-9]+)\\/load$",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t*, size_t, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            // Extract ID from URL path (before /load)
+            String path = request->url();
+            // URL format: /api/v1/presets/effects/{id}/load
+            int effectsIdx = path.indexOf("/effects/");
+            int loadIdx = path.indexOf("/load");
+            if (effectsIdx < 0 || loadIdx < 0 || loadIdx <= effectsIdx + 9) {
+                sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                                  ErrorCodes::MISSING_FIELD, "Invalid preset ID in URL path");
+                return;
+            }
+            uint8_t id = path.substring(effectsIdx + 9, loadIdx).toInt();
+            handlers::EffectPresetHandlers::handleApply(request, id, ctx.orchestrator, ctx.renderer);
+        }
+    );
+
+    // DELETE /api/v1/presets/effects/{id} - Delete effect preset by ID
+    registry.onDeleteRegex("^\\/api\\/v1\\/presets\\/effects\\/([0-9]+)$", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        // Extract ID from URL path
+        String path = request->url();
+        int lastSlash = path.lastIndexOf('/');
+        if (lastSlash < 0) {
+            sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                              ErrorCodes::MISSING_FIELD, "Invalid preset ID in URL path");
+            return;
+        }
+        uint8_t id = path.substring(lastSlash + 1).toInt();
+        handlers::EffectPresetHandlers::handleDelete(request, id);
+    });
+
+    // --- Zone Presets (path-based) ---
+
+    // GET /api/v1/presets/zones - List all zone presets
+    registry.onGet("/api/v1/presets/zones", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::ZonePresetHandlers::handleList(request);
+    });
+
+    // GET /api/v1/presets/zones/{id} - Get zone preset by ID
+    registry.onGetRegex("^\\/api\\/v1\\/presets\\/zones\\/([0-9]+)$", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        // Extract ID from URL path
+        String path = request->url();
+        int lastSlash = path.lastIndexOf('/');
+        if (lastSlash < 0) {
+            sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                              ErrorCodes::MISSING_FIELD, "Invalid preset ID in URL path");
+            return;
+        }
+        uint8_t id = path.substring(lastSlash + 1).toInt();
+        handlers::ZonePresetHandlers::handleGet(request, id);
+    });
+
+    // POST /api/v1/presets/zones/save-current - Save current zone config as preset
+    registry.onPost("/api/v1/presets/zones/save-current",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::ZonePresetHandlers::handleSave(request, data, len, ctx.zoneComposer);
+        }
+    );
+
+    // POST /api/v1/presets/zones/{id}/load - Apply/load zone preset by ID
+    registry.onPostRegex("^\\/api\\/v1\\/presets\\/zones\\/([0-9]+)\\/load$",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [ctx, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request, uint8_t*, size_t, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            // Extract ID from URL path (before /load)
+            String path = request->url();
+            // URL format: /api/v1/presets/zones/{id}/load
+            int zonesIdx = path.indexOf("/zones/");
+            int loadIdx = path.indexOf("/load");
+            if (zonesIdx < 0 || loadIdx < 0 || loadIdx <= zonesIdx + 7) {
+                sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                                  ErrorCodes::MISSING_FIELD, "Invalid preset ID in URL path");
+                return;
+            }
+            uint8_t id = path.substring(zonesIdx + 7, loadIdx).toInt();
+            handlers::ZonePresetHandlers::handleApply(request, id, ctx.orchestrator, ctx.zoneComposer, broadcastZoneState);
+        }
+    );
+
+    // DELETE /api/v1/presets/zones/{id} - Delete zone preset by ID
+    registry.onDeleteRegex("^\\/api\\/v1\\/presets\\/zones\\/([0-9]+)$", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        // Extract ID from URL path
+        String path = request->url();
+        int lastSlash = path.lastIndexOf('/');
+        if (lastSlash < 0) {
+            sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                              ErrorCodes::MISSING_FIELD, "Invalid preset ID in URL path");
+            return;
+        }
+        uint8_t id = path.substring(lastSlash + 1).toInt();
         handlers::ZonePresetHandlers::handleDelete(request, id);
     });
 

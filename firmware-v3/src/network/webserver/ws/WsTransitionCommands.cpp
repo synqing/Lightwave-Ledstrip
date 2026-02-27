@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file WsTransitionCommands.cpp
  * @brief WebSocket transition command handlers implementation
@@ -10,7 +8,9 @@
 #include "../WebServerContext.h"
 #include "../../ApiResponse.h"
 #include "../../../codec/WsTransitionCodec.h"
+#include "../../../core/actors/ActorSystem.h"
 #include "../../../core/actors/RendererActor.h"
+#include "../../../effects/transitions/TransitionEngine.h"
 #include "../../../effects/transitions/TransitionTypes.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
@@ -33,13 +33,25 @@ static void handleTransitionTrigger(AsyncWebSocketClient* client, JsonDocument& 
     }
 
     const codec::TransitionTriggerRequest& req = decodeResult.request;
-    uint8_t toEffect = req.toEffect;
-    
-    if (toEffect < ctx.renderer->getEffectCount()) {
+
+    // Support stable namespaced EffectIds, and also tolerate legacy numeric indices.
+    EffectId toEffect = req.toEffect;
+    if (ctx.renderer && !ctx.renderer->isEffectRegistered(toEffect)) {
+        // If the client sent a small integer, treat it as a registry index.
+        // This preserves compatibility with older UIs/protocols.
+        if (toEffect < ctx.renderer->getEffectCount()) {
+            toEffect = ctx.renderer->getEffectIdAt(static_cast<uint16_t>(toEffect));
+        }
+    }
+
+    if (ctx.renderer && ctx.renderer->isEffectRegistered(toEffect)) {
         if (req.random) {
-            ctx.renderer->startRandomTransition(toEffect);
+            // Route through ActorSystem message queue for thread safety (Core 0 -> Core 1)
+            uint8_t randomType = static_cast<uint8_t>(lightwaveos::transitions::TransitionEngine::getRandomTransition());
+            ctx.actorSystem.startTransition(toEffect, randomType);
         } else {
-            ctx.renderer->startTransition(toEffect, req.transitionType);
+            // Route through ActorSystem message queue for thread safety (Core 0 -> Core 1)
+            ctx.actorSystem.startTransition(toEffect, req.transitionType);
         }
         if (ctx.broadcastStatus) ctx.broadcastStatus();
     }
@@ -121,19 +133,27 @@ static void handleTransitionsTrigger(AsyncWebSocketClient* client, JsonDocument&
 
     const codec::TransitionsTriggerRequest& req = decodeResult.request;
     const char* requestId = req.requestId ? req.requestId : "";
-    uint8_t toEffect = req.toEffect;
+    EffectId toEffect = req.toEffect;
     uint8_t transType = req.type;
     uint16_t duration = req.duration;
-    
-    if (toEffect >= ctx.renderer->getEffectCount()) {
+
+    // Support stable namespaced EffectIds, and also tolerate legacy numeric indices.
+    if (ctx.renderer && !ctx.renderer->isEffectRegistered(toEffect)) {
+        if (toEffect < ctx.renderer->getEffectCount()) {
+            toEffect = ctx.renderer->getEffectIdAt(static_cast<uint16_t>(toEffect));
+        }
+    }
+
+    if (!ctx.renderer || !ctx.renderer->isEffectRegistered(toEffect)) {
         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid toEffect", requestId));
         return;
     }
-    
-    uint8_t fromEffect = ctx.renderer->getCurrentEffect();
-    ctx.renderer->startTransition(toEffect, transType);
+
+    EffectId fromEffect = ctx.renderer->getCurrentEffect();
+    // Route through ActorSystem message queue for thread safety (Core 0 -> Core 1)
+    ctx.actorSystem.startTransition(toEffect, transType);
     if (ctx.broadcastStatus) ctx.broadcastStatus();
-    
+
     // Use variables from decode result
     const char* toEffectName = ctx.renderer ? ctx.renderer->getEffectName(toEffect) : "";
     const char* transitionName = getTransitionName(static_cast<TransitionType>(transType));

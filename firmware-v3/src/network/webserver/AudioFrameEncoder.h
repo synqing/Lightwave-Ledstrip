@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file AudioFrameEncoder.h
  * @brief Audio frame encoder for WebSocket binary streaming

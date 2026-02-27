@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file FastLedDriver.h
  * @brief FastLED-based implementation of ILedDriver for WS2812 strips

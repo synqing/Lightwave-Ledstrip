@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file WiFiCredentialsStorage.h
  * @brief NVS-based storage for WiFi network credentials

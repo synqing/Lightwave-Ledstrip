@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file UdpStreamer.cpp
  * @brief UDP frame streamer implementation
@@ -17,6 +15,7 @@
 #include "../../utils/Log.h"
 
 #include <cstring>
+#include <esp_heap_caps.h>
 
 namespace lightwaveos {
 namespace network {
@@ -221,6 +220,23 @@ void UdpStreamer::sendLedFrame(const CRGB* leds) {
 
     uint32_t now = millis();
 
+    // Guard: avoid pushing UDP packets when heap is already tight.
+    // UDP send allocates lwIP pbufs; if we are low on heap this can spiral into ENOMEM storms.
+    static constexpr size_t MIN_HEAP_FOR_UDP_SEND = 25000;
+    const size_t freeInternalHeap = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    if (freeInternalHeap < MIN_HEAP_FOR_UDP_SEND) {
+        static uint32_t lastLowHeapLog = 0;
+        if (now - lastLowHeapLog > 5000) {
+            lastLowHeapLog = now;
+            LW_LOGW("UDP: skipping LED send (low internal heap=%lu)", (unsigned long)freeInternalHeap);
+        }
+        // Back off briefly to give WiFi/lwIP breathing room.
+        if (m_cooldownUntilMs < (now + COOLDOWN_LONG_MS)) {
+            m_cooldownUntilMs = now + COOLDOWN_LONG_MS;
+        }
+        return;
+    }
+
     maybeResetSocket(now);
 
     if (now < m_cooldownUntilMs) {
@@ -297,6 +313,20 @@ void UdpStreamer::sendAudioFrame(const audio::ControlBusFrame& frame,
     if (!m_started || !hasAudioSubscribers()) return;
 
     uint32_t now = millis();
+
+    static constexpr size_t MIN_HEAP_FOR_UDP_SEND = 25000;
+    const size_t freeInternalHeap = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    if (freeInternalHeap < MIN_HEAP_FOR_UDP_SEND) {
+        static uint32_t lastLowHeapLog = 0;
+        if (now - lastLowHeapLog > 5000) {
+            lastLowHeapLog = now;
+            LW_LOGW("UDP: skipping audio send (low internal heap=%lu)", (unsigned long)freeInternalHeap);
+        }
+        if (m_cooldownUntilMs < (now + COOLDOWN_LONG_MS)) {
+            m_cooldownUntilMs = now + COOLDOWN_LONG_MS;
+        }
+        return;
+    }
 
     maybeResetSocket(now);
 
@@ -567,6 +597,12 @@ void UdpStreamer::updateCooldown(uint32_t nowMs, bool anyFailure, bool anySucces
 void UdpStreamer::maybeResetSocket(uint32_t nowMs) {
     if (!m_started) return;
     if (!m_needsSocketReset) return;
+    // Avoid doing socket churn while heap is low; it tends to make the situation worse.
+    static constexpr size_t MIN_HEAP_FOR_SOCKET_RESET = 30000;
+    const size_t freeInternalHeap = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    if (freeInternalHeap < MIN_HEAP_FOR_SOCKET_RESET) {
+        return;
+    }
     if (m_lastSocketResetMs != 0 && (nowMs - m_lastSocketResetMs) < SOCKET_RESET_MIN_INTERVAL_MS) {
         return;
     }

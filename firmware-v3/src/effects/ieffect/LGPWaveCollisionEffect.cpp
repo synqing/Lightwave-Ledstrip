@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPWaveCollisionEffect.cpp
  * @brief LGP Wave Collision effect implementation
@@ -28,8 +26,7 @@ bool LGPWaveCollisionEffect::init(plugins::EffectContext& ctx) {
     }
     m_energyAvg = 0.0f;
     m_energyDelta = 0.0f;
-    m_dominantBin = 0;
-    m_dominantBinSmooth = 0.0f;
+    m_chromaAngle = 0.0f;
     m_collisionBoost = 0.0f;
     m_speedTarget = 1.0f;
 
@@ -60,17 +57,11 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
 
             const float led_share = 255.0f / 12.0f;
             float chromaEnergy = 0.0f;
-            float maxBinVal = 0.0f;
-            uint8_t dominantBin = 0;
             for (uint8_t i = 0; i < 12; ++i) {
                 float bin = ctx.audio.controlBus.chroma[i];
                 float bright = bin * bin;
                 bright *= 1.5f;
                 if (bright > 1.0f) bright = 1.0f;
-                if (bright > maxBinVal) {
-                    maxBinVal = bright;
-                    dominantBin = i;
-                }
                 chromaEnergy += bright * led_share;
             }
             float energyNorm = chromaEnergy / 255.0f;
@@ -85,20 +76,22 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
             m_energyAvg = m_chromaEnergySum / CHROMA_HISTORY;
             m_energyDelta = energyNorm - m_energyAvg;
             if (m_energyDelta < 0.0f) m_energyDelta = 0.0f;
-            m_dominantBin = dominantBin;
         }
     } else
 #endif
     {
-        m_energyAvg *= 0.98f;
+        // dt-corrected decay when audio unavailable (matches Enhanced version)
+        float dtFallback = enhancement::getSafeDeltaSeconds(ctx.rawDeltaTimeSeconds);
+        m_energyAvg *= powf(0.98f, dtFallback * 60.0f);
         m_energyDelta = 0.0f;
     }
 
+    float rawDt = enhancement::getSafeDeltaSeconds(ctx.rawDeltaTimeSeconds);
     float dt = enhancement::getSafeDeltaSeconds(ctx.deltaTimeSeconds);
 
     // EMA smoothing for energyDelta (prevents pops from spiky audio features)
     const float tau = 0.05f;  // 50ms time constant
-    float alpha = 1.0f - expf(-dt / tau);
+    float alpha = 1.0f - expf(-rawDt / tau);
     
     // CRITICAL: Initialize to raw value on first frame (no ramp-from-zero)
     if (!m_energyDeltaEMAInitialized && ctx.audio.available) {
@@ -113,14 +106,12 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
 
     // True exponential smoothing with AsymmetricFollower (frame-rate independent)
     float moodNorm = ctx.mood / 255.0f;  // 0=reactive, 1=smooth
-    float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, dt, moodNorm);
-    float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(energyDeltaForSmoothing, dt, moodNorm);
+    float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, rawDt, moodNorm);
+    float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(energyDeltaForSmoothing, rawDt, moodNorm);
 
-    // Dominant bin smoothing
-    float alphaBin = 1.0f - expf(-dt / 0.25f);  // True exponential, 250ms time constant
-    m_dominantBinSmooth += (m_dominantBin - m_dominantBinSmooth) * alphaBin;
-    if (m_dominantBinSmooth < 0.0f) m_dominantBinSmooth = 0.0f;
-    if (m_dominantBinSmooth > 11.0f) m_dominantBinSmooth = 11.0f;
+    // Circular chroma hue (replaces argmax + linear EMA to eliminate bin-flip rainbow sweeps)
+    uint8_t chromaHue = effects::chroma::circularChromaHueSmoothed(
+        ctx.audio.controlBus.chroma, m_chromaAngle, rawDt, 0.20f);
 
     // Percussion-driven collision boost (snare = collision event!)
 #if FEATURE_AUDIO_SYNC
@@ -131,7 +122,7 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
         m_collisionBoost += energyDeltaSmooth * 0.4f;
     }
     if (m_collisionBoost > 1.0f) m_collisionBoost = 1.0f;
-    m_collisionBoost *= 0.88f;  // Slightly faster decay for snappier response
+    m_collisionBoost = effects::chroma::dtDecay(m_collisionBoost, 0.88f, rawDt);  // dt-corrected decay for snappier response
 
     // Hi-hat driven speed burst
     if (hasAudio && ctx.audio.isHihatHit()) {
@@ -145,7 +136,7 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
 #else
     m_collisionBoost += energyDeltaSmooth * 0.4f;
     if (m_collisionBoost > 1.0f) m_collisionBoost = 1.0f;
-    m_collisionBoost *= 0.88f;
+    m_collisionBoost = effects::chroma::dtDecay(m_collisionBoost, 0.88f, rawDt);
     m_speedTarget = m_speedTarget * 0.95f + 1.0f * 0.05f;
     float bassEnergy = energyAvgSmooth;
 #endif
@@ -157,7 +148,7 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
     if (speedTargetClamped > 1.6f) speedTargetClamped = 1.6f;  // Allow higher speed with hi-hat boost
 
     // Spring physics for speed modulation (replaces linear slew limiting)
-    float smoothedSpeed = m_speedSpring.update(speedTargetClamped, dt);
+    float smoothedSpeed = m_speedSpring.update(speedTargetClamped, rawDt);
     if (smoothedSpeed > 1.6f) smoothedSpeed = 1.6f;  // Hard clamp
     if (smoothedSpeed < 0.3f) smoothedSpeed = 0.3f;  // Prevent stalling
 
@@ -173,7 +164,7 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
     VALIDATION_INIT(17);  // Effect ID 17
     VALIDATION_PHASE(m_phase, phaseDelta);
     VALIDATION_SPEED(rawSpeedScale, smoothedSpeed);
-    VALIDATION_AUDIO(m_dominantBinSmooth, energyAvgSmooth, energyDeltaSmooth);
+    VALIDATION_AUDIO(m_chromaAngle, energyAvgSmooth, energyDeltaSmooth);
     VALIDATION_REVERSAL_CHECK(m_prevPhaseDelta, phaseDelta);
     VALIDATION_SUBMIT(::lightwaveos::validation::g_validationRing);
     m_prevPhaseDelta = phaseDelta;
@@ -183,7 +174,7 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
     // Anti-aliased collision core at true center (79.5) using SubpixelRenderer
     if (m_collisionBoost > 0.05f) {
         float intensityNorm = ctx.brightness / 255.0f;
-        uint8_t baseHue = (uint8_t)(ctx.gHue + m_dominantBinSmooth * (255.0f / 12.0f));
+        uint8_t baseHue = (uint8_t)(ctx.gHue + chromaHue);
         CRGB collisionColor = ctx.palette.getColor(baseHue, 255);
         uint8_t collisionBright = (uint8_t)(m_collisionBoost * 200.0f * intensityNorm);
 
@@ -205,10 +196,16 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
         // CENTRE ORIGIN: Calculate distance from centre pair
         float distFromCenter = (float)centerPairDistance((uint16_t)i);
 
-        // DIFFERENTIATED WAVE COLLISION: Longer wavelength than Interference Scanner
-        // sin(k*dist - phase) produces OUTWARD motion when phase increases
+        // WAVE COLLISION: Two counter-propagating wave packets that collide at centre
+        // sin(k*dist - phase) = OUTWARD motion, sin(k*dist + phase) = INWARD motion
+        // Their sum creates standing wave nodes with travelling collision events
         const float freqBase = 0.15f;  // ~42 LED wavelength (vs Scanner's ~25-31)
-        float wave1 = sinf(distFromCenter * freqBase - m_phase);
+        float waveOutward = sinf(distFromCenter * freqBase - m_phase);
+        float waveInward = sinf(distFromCenter * freqBase + m_phase);
+
+        // Sum creates interference: constructive at nodes, destructive at antinodes
+        // The beating pattern appears to "collide" at the centre
+        float waveSum = (waveOutward + waveInward) * 0.5f;
 
         // COLLISION FLASH: Center-focused explosion on snare hits
         // collisionBoost decays from 1.0 (snare hit) with spatial falloff from center
@@ -216,7 +213,7 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
 
         // Base audio intensity (without uniform collision boost - moved to spatial flash)
         float audioIntensity = 0.4f + 0.5f * energyAvgSmooth + 0.4f * energyDeltaSmooth;
-        float interference = wave1 * audioIntensity + collisionFlash * 0.8f;  // Collision adds separate layer
+        float interference = waveSum * audioIntensity + collisionFlash * 0.8f;  // Collision adds separate layer
 
         // CRITICAL: Use tanhf for uniform brightness (like ChevronWaves)
         interference = tanhf(interference * 2.0f) * 0.5f + 0.5f;
@@ -225,7 +222,7 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
 
         // CENTRE ORIGIN colour mapping
         uint8_t paletteIndex = (uint8_t)(distFromCenter * 2.0f + interference * 50.0f);
-        uint8_t baseHue = (uint8_t)(ctx.gHue + (uint8_t)(m_dominantBinSmooth * (255.0f / 12.0f)));
+        uint8_t baseHue = (uint8_t)(ctx.gHue + chromaHue);
 
         // Blend with existing pixel (preserves trails from fadeToBlackBy)
         // nblend uses 8-bit amount: 0=keep existing, 255=full replace

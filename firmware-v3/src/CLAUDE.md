@@ -24,4 +24,30 @@
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
 | #24143 | 10:49 PM | ⚖️ | Wireless Architecture Hardening Plan Created for K1 Network Recovery | ~647 |
+
+### Feb 1, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #24281 | 2:54 AM | 🔵 | Default Zone Count Configuration Across Firmware Components | ~458 |
+
+### Feb 6, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #25598 | 12:54 AM | ✅ | v2 AP password removed for open network access in Portable Mode | ~420 |
+| #25582 | 12:45 AM | ✅ | v2 AP password removed for open network compatibility testing | ~484 |
+
+### Feb 11, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #33505 | 11:15 PM | ✅ | ArduinoJson Library Include Added to Firmware Main | ~497 |
+| #33454 | 10:26 PM | 🔵 | Serial Command Handler Multi-Character Processing Pattern | ~463 |
+
+### Feb 12, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #33760 | 3:42 AM | 🔵 | ESP32 Firmware Serial Communication Architecture | ~396 |
 </claude-mem-context>

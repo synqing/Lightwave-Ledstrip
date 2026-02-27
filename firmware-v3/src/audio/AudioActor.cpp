@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file AudioActor.cpp
  * @brief Actor implementation for audio capture and processing
@@ -43,7 +41,9 @@
 #include "AudioDebugConfig.h"
 
 // TempoTracker integration
+#if !FEATURE_AUDIO_BACKEND_ESV11 && !FEATURE_AUDIO_BACKEND_PIPELINECORE
 #include "tempo/TempoTracker.h"
+#endif
 
 // Perceptual band weights for spectral flux calculation (derived from K1 research)
 // Bass bands weighted higher for better kick detection
@@ -72,6 +72,1294 @@ inline uint32_t esp_log_timestamp() { return 0; }
 
 namespace lightwaveos {
 namespace audio {
+
+#if FEATURE_AUDIO_BACKEND_ESV11
+
+// ============================================================================
+// ES v1.1_320 Backend Implementation
+// ============================================================================
+
+AudioActor::AudioActor()
+    : Actor(ActorConfigs::Audio())
+    , m_state(AudioActorState::UNINITIALIZED)
+{
+    m_stats.reset();
+    m_diag.reset();
+    m_esAdapter.reset();
+}
+
+AudioActor::~AudioActor() = default;
+
+void AudioActor::pause()
+{
+    if (m_state == AudioActorState::RUNNING) {
+        LW_LOGI("Pausing ES v1.1 audio backend");
+        m_state = AudioActorState::PAUSED;
+    }
+}
+
+void AudioActor::resume()
+{
+    if (m_state == AudioActorState::PAUSED) {
+        LW_LOGI("Resuming ES v1.1 audio backend");
+        m_state = AudioActorState::RUNNING;
+    }
+}
+
+void AudioActor::resetStats()
+{
+    m_stats.reset();
+    m_diag.reset();
+    m_sampleIndex = 0;
+    m_hopCount = 0;
+    m_esHopSeq = 0;
+    m_esChunkCounter = 0;
+    m_esAdapter.reset();
+}
+
+void AudioActor::printDiagnostics()
+{
+    LW_LOGI("ES v1.1 audio backend: chunks=%lu publishes=%lu",
+            (unsigned long)m_stats.tickCount, (unsigned long)m_diag.publishCount);
+}
+
+void AudioActor::printStatus()
+{
+#ifndef NATIVE_BUILD
+    ControlBusFrame latest{};
+    m_controlBusBuffer.ReadLatest(latest);
+    Serial.println("=== Audio Status (ES v1.1 backend) ===");
+    Serial.printf("  RMS: %.3f  Flux: %.3f\n", latest.rms, latest.flux);
+    Serial.printf("  BPM: %.1f  Conf: %.3f  BeatTick: %d\n",
+                  latest.es_bpm, latest.es_tempo_confidence, latest.es_beat_tick ? 1 : 0);
+#endif
+}
+
+void AudioActor::printSpectrum()
+{
+#ifndef NATIVE_BUILD
+    ControlBusFrame latest{};
+    m_controlBusBuffer.ReadLatest(latest);
+    Serial.println("=== Spectrum (ES v1.1 backend) ===");
+    Serial.print("  Bands:");
+    for (int i = 0; i < CONTROLBUS_NUM_BANDS; ++i) {
+        Serial.printf(" %.3f", latest.bands[i]);
+    }
+    Serial.println();
+#endif
+}
+
+void AudioActor::printBeat()
+{
+#ifndef NATIVE_BUILD
+    ControlBusFrame latest{};
+    m_controlBusBuffer.ReadLatest(latest);
+    Serial.println("=== Beat (ES v1.1 backend) ===");
+    Serial.printf("  BPM: %.1f  Conf: %.3f  Phase01@t: %.3f  BeatInBar: %u\n",
+                  latest.es_bpm, latest.es_tempo_confidence, latest.es_phase01_at_audio_t,
+                  (unsigned)latest.es_beat_in_bar);
+#endif
+}
+
+const int16_t* AudioActor::getLastHop() const
+{
+    return nullptr;
+}
+
+bool AudioActor::hasNewHop()
+{
+    return false;
+}
+
+void AudioActor::onStart()
+{
+    m_state = AudioActorState::INITIALIZING;
+    m_diag.reset();
+    m_diag.diagStartTimeUs = esp_timer_get_time();
+
+    if (!m_esBackend.init()) {
+        m_state = AudioActorState::ERROR;
+        LW_LOGE("ES v1.1 backend init failed");
+        return;
+    }
+
+    // Configure Stage B derived features (silence detection)
+#ifdef AUDIO_SILENCE_GATE_DISABLED
+    m_controlBus.setSilenceParameters(0.01f, 0.0f);  // Disabled
+#else
+    m_controlBus.setSilenceParameters(0.01f, 5000.0f);  // 5s hysteresis (default)
+#endif
+
+    // Retune ControlBus smoothing for current frame rate (50 Hz or 125 Hz)
+    m_controlBus.setMoodSmoothing(128);  // Balanced default
+
+    m_state = AudioActorState::RUNNING;
+    LW_LOGI("ES v1.1 audio backend: INITIALISED (%.0f Hz hop rate)", audio::HOP_RATE_HZ);
+}
+
+void AudioActor::onMessage(const actors::Message& msg)
+{
+    // Keep minimal: shutdown is handled by Actor base; ignore other messages.
+    (void)msg;
+}
+
+void AudioActor::onTick()
+{
+    if (m_state != AudioActorState::RUNNING) {
+        // In self-clocked mode, avoid hot looping when paused/error.
+        sleep(5);
+        return;
+    }
+
+    const uint64_t now_us = esp_timer_get_time();
+    m_stats.tickCount++;
+
+    // Chunk processing blocks on I2S read (~5ms at 12.8kHz, 64 samples)
+    m_diag.captureAttempts++;
+    TRACE_BEGIN("i2s_dma_read");
+    if (!m_esBackend.readAndProcessChunk(now_us)) {
+        TRACE_END();
+        m_stats.captureFailCount++;
+        m_diag.captureReadErrors++;
+        vTaskDelay(1);  // Block to let IDLE0 feed watchdog (taskYIELD insufficient - only yields to equal/higher priority)
+        return;
+    }
+    TRACE_END();  // i2s_dma_read
+    m_stats.captureSuccessCount++;
+
+    // CRITICAL: vTaskDelay(1) blocks for one tick, letting IDLE0 feed the watchdog.
+    // taskYIELD() is WRONG here - it only yields to equal/higher priority tasks,
+    // but IDLE runs at priority 0 while Audio runs at priority 4.
+    vTaskDelay(1);
+
+    // Publish at hop rate: every N chunks where N = ceil(HOP_SIZE / CHUNK_SIZE)
+    // 12.8kHz: 256/64 = 4 chunks → 50 Hz publish
+    // 32kHz:   256/128 = 2 chunks → 125 Hz publish
+    constexpr uint8_t CHUNKS_PER_HOP = (audio::HOP_SIZE + audio::ESV11_CHUNK_SIZE - 1) / audio::ESV11_CHUNK_SIZE;
+    m_esChunkCounter++;
+    if (m_esChunkCounter < CHUNKS_PER_HOP) {
+        return;
+    }
+    m_esChunkCounter = 0;
+
+    TRACE_BEGIN("controlbus_build");
+    esv11::EsV11Outputs es{};
+    m_esBackend.getLatestOutputs(es);
+    m_sampleIndex = es.sample_index;
+
+    ControlBusFrame frame{};
+    m_esHopSeq++;
+    m_esAdapter.buildFrame(frame, es, m_esHopSeq);
+
+    // CLOCK SPINE FIX (ES backend): Ensure frame.t uses END-OF-HOP semantics
+    // es.sample_index from EsV11Backend represents the post-hop sample index
+    frame.t = AudioTime(es.sample_index, audio::SAMPLE_RATE, now_us);
+
+    // ========================================================================
+    // Stage B: Backend-agnostic derived features (chord, saliency, silence, liveliness)
+    //
+    // ES adapter produces Stage A output (normalised rms/flux/bands/chroma).
+    // Bridge tempo fields from ES-specific to standard, then run Stage B.
+    // ========================================================================
+
+    // Bridge ES tempo fields → standard fields consumed by Stage B
+    frame.tempoLocked = frame.es_tempo_confidence > 0.5f;
+    frame.tempoConfidence = frame.es_tempo_confidence;
+    frame.tempoBeatTick = frame.es_beat_tick && frame.tempoLocked;
+
+    // Derive rmsUngated from band energy average (autorange max gain ~20x,
+    // far less noise amplification than VU's 40,000x AGC).
+    float bandSum = 0.0f;
+    for (uint8_t i = 0; i < CONTROLBUS_NUM_BANDS; ++i) {
+        bandSum += frame.bands[i];
+    }
+    const float rmsUngated = bandSum / static_cast<float>(CONTROLBUS_NUM_BANDS);
+
+    // Estimate hop dt from configured frame rate
+    constexpr float ES_HOP_DT = audio::HOP_DURATION_MS / 1000.0f;
+
+    m_controlBus.applyDerivedFeatures(frame, ES_HOP_DT, rmsUngated);
+    TRACE_END();  // controlbus_build
+    TRACE_COUNTER("audio_rms", static_cast<int32_t>(frame.rms * 10000));
+
+    TRACE_BEGIN("snapshot_publish");
+    m_controlBusBuffer.Publish(frame);
+
+    m_hopCount++;
+    m_diag.publishCount++;
+    m_diag.lastPublishTimeUs = now_us;
+
+    // Track sequence gaps
+    uint32_t expectedSeq = m_diag.lastPublishSeq + 1;
+    if (m_diag.lastPublishSeq > 0 && frame.hop_seq != expectedSeq) {
+        m_diag.publishSeqGaps++;
+    }
+    m_diag.lastPublishSeq = frame.hop_seq;
+    TRACE_END();  // snapshot_publish
+}
+
+void AudioActor::onStop()
+{
+    m_state = AudioActorState::PAUSED;
+}
+
+#elif FEATURE_AUDIO_BACKEND_PIPELINECORE
+
+// ============================================================================
+// PipelineCore Backend Implementation
+// ============================================================================
+
+// ============================================================================
+// Constructor / Destructor
+// ============================================================================
+
+AudioActor::AudioActor()
+    : Actor(ActorConfigs::Audio())
+    , m_state(AudioActorState::UNINITIALIZED)
+{
+    m_stats.reset();
+    memset(m_hopBuffer, 0, sizeof(m_hopBuffer));
+    m_pipelineTuning = clampAudioPipelineTuning(AudioPipelineTuning{});
+}
+
+AudioActor::~AudioActor()
+{
+    // Base class handles task cleanup
+    // AudioCapture destructor handles I2S cleanup
+}
+
+// ============================================================================
+// Control Methods
+// ============================================================================
+
+void AudioActor::pause()
+{
+    if (m_state == AudioActorState::RUNNING) {
+        LW_LOGI("Pausing audio capture (PipelineCore)");
+        m_state = AudioActorState::PAUSED;
+    }
+}
+
+void AudioActor::resume()
+{
+    if (m_state == AudioActorState::PAUSED) {
+        LW_LOGI("Resuming audio capture (PipelineCore)");
+        m_state = AudioActorState::RUNNING;
+    }
+}
+
+void AudioActor::resetStats()
+{
+    m_stats.reset();
+    m_capture.resetStats();
+}
+
+// ============================================================================
+// One-Shot Debug Output Methods
+// ============================================================================
+
+void AudioActor::printStatus()
+{
+#ifndef NATIVE_BUILD
+    const ControlBusFrame& frame = m_controlBus.GetFrame();
+
+    Serial.println("=== Audio Status (PipelineCore) ===");
+    Serial.printf("  RMS: %.4f (frame)\n", frame.rms);
+    Serial.printf("  Flux: %.4f (mapped), raw=%.4f\n", frame.flux, m_lastFrame.flux);
+    Serial.printf("  Tempo: %.1f BPM (locked: %s)\n",
+                  m_lastFrame.tempo_bpm,
+                  frame.tempoLocked ? "YES" : "no");
+
+    const CaptureStats& cstats = m_capture.getStats();
+    Serial.printf("  Captures: %lu (failed: %lu)\n", cstats.hopsCapured, m_stats.captureFailCount);
+    Serial.printf("  Hops: %lu\n", (unsigned long)m_hopCount);
+
+    // Spike stats
+    auto spikeStats = m_controlBus.getSpikeStats();
+    Serial.printf("  Spikes: detected=%lu corrected=%lu avg/frame=%.3f\n",
+                  spikeStats.spikesDetectedBands + spikeStats.spikesDetectedChroma,
+                  spikeStats.spikesCorrected,
+                  spikeStats.avgSpikesPerFrame);
+
+#if FEATURE_MUSICAL_SALIENCY
+    Serial.printf("  Saliency: overall=%.3f dom=%u H=%.3f R=%.3f T=%.3f D=%.3f\n",
+                  frame.saliency.overallSaliency,
+                  frame.saliency.dominantType,
+                  frame.saliency.harmonicNoveltySmooth,
+                  frame.saliency.rhythmicNoveltySmooth,
+                  frame.saliency.timbralNoveltySmooth,
+                  frame.saliency.dynamicNoveltySmooth);
+#endif
+
+#if FEATURE_STYLE_DETECTION
+    const StyleClassification& styleClass = m_styleDetector.getClassification();
+    Serial.printf("  Style: %u conf=%.2f [R=%.2f H=%.2f M=%.2f T=%.2f D=%.2f]\n",
+                  static_cast<uint8_t>(m_styleDetector.getStyle()),
+                  m_styleDetector.getConfidence(),
+                  styleClass.styleWeights[0],
+                  styleClass.styleWeights[1],
+                  styleClass.styleWeights[2],
+                  styleClass.styleWeights[3],
+                  styleClass.styleWeights[4]);
+#endif
+#endif // NATIVE_BUILD
+}
+
+void AudioActor::printSpectrum()
+{
+#ifndef NATIVE_BUILD
+    Serial.println("=== Audio Spectrum (PipelineCore) ===");
+
+    // 8-band from FeatureFrame
+    Serial.print("  8-band: [");
+    for (int i = 0; i < 8; i++) {
+        Serial.printf("%.3f%s", m_lastFrame.bands[i], (i < 7) ? " " : "");
+    }
+    Serial.println("]");
+
+    // Flux
+    Serial.printf("  Spectral Flux: %.3f\n", m_lastFrame.flux);
+
+    // Chroma (12 pitch classes)
+    const ControlBusFrame& frame = m_controlBus.GetFrame();
+    Serial.print("  Chroma: [");
+    for (int i = 0; i < 12; i++) {
+        Serial.printf("%.2f%s", frame.chroma[i], (i < 11) ? " " : "");
+    }
+    Serial.println("]");
+
+    // bins256 peak
+    float maxBin = 0.0f;
+    uint16_t maxIdx = 0;
+    for (uint16_t i = 0; i < 256; i++) {
+        if (frame.bins256[i] > maxBin) { maxBin = frame.bins256[i]; maxIdx = i; }
+    }
+    Serial.printf("  bins256 peak: [%u]=%.4f (%.1f Hz)\n",
+                  maxIdx, maxBin, maxIdx * frame.binHz);
+#endif // NATIVE_BUILD
+}
+
+void AudioActor::printBeat()
+{
+#ifndef NATIVE_BUILD
+    Serial.println("=== Beat Tracking (PipelineCore) ===");
+    Serial.printf("  BPM: %.1f\n", m_lastFrame.tempo_bpm);
+    Serial.printf("  Phase: %.2f\n", m_lastFrame.beat_phase);
+    Serial.printf("  Beat Event: %.2f\n", m_lastFrame.beat_event);
+
+    const ControlBusFrame& frame = m_controlBus.GetFrame();
+    Serial.printf("  Locked: %s\n", frame.tempoLocked ? "YES" : "no");
+    Serial.printf("  Confidence: %.2f\n", frame.tempoConfidence);
+#endif // NATIVE_BUILD
+}
+
+void AudioActor::printDiagnostics()
+{
+    // Calculate rates
+    uint64_t now_us = esp_timer_get_time();
+    uint64_t elapsed_us = now_us - m_diag.diagStartTimeUs;
+    float elapsed_s = elapsed_us / 1000000.0f;
+
+    float captureRate = (elapsed_s > 0.1f) ? (m_diag.captureSuccesses / elapsed_s) : 0.0f;
+    float publishRate = (elapsed_s > 0.1f) ? (m_diag.publishCount / elapsed_s) : 0.0f;
+    float successPct = (m_diag.captureAttempts > 0)
+        ? (100.0f * m_diag.captureSuccesses / m_diag.captureAttempts) : 0.0f;
+
+    const float expectedRate = HOP_RATE_HZ;
+    bool rateOk = (captureRate >= expectedRate * 0.9f && captureRate <= expectedRate * 1.1f);
+
+    LW_LOGI("========== AUDIO PIPELINE DIAGNOSTICS (PipelineCore) ==========");
+
+    LW_LOGI("CAPTURE: rate=%.1f Hz (expect %.1f) %s | success=%.1f%% | attempts=%lu ok=%lu",
+            captureRate, expectedRate, rateOk ? "OK" : "PROBLEM",
+            successPct, (unsigned long)m_diag.captureAttempts, (unsigned long)m_diag.captureSuccesses);
+
+    if (m_diag.captureDmaTimeouts > 0 || m_diag.captureReadErrors > 0) {
+        LW_LOGW("  ERRORS: DMA_timeouts=%lu read_errors=%lu",
+                (unsigned long)m_diag.captureDmaTimeouts, (unsigned long)m_diag.captureReadErrors);
+    }
+
+    LW_LOGI("PUBLISH: rate=%.1f Hz | count=%lu | seq_gaps=%lu",
+            publishRate, (unsigned long)m_diag.publishCount, (unsigned long)m_diag.publishSeqGaps);
+
+    LW_LOGI("SAMPLES: raw=[%d..%d] rms=%.4f nonzero=%s zero_hops=%lu",
+            m_diag.lastRawMin, m_diag.lastRawMax, m_diag.lastRawRms,
+            m_diag.samplesNonZero ? "YES" : "NO",
+            (unsigned long)m_diag.zeroHopCount);
+
+    if (!m_diag.samplesNonZero || m_diag.zeroHopCount > 10) {
+        LW_LOGW("  WARNING: I2S may not be receiving audio data!");
+    }
+
+    LW_LOGI("TIMING: capture avg=%lu max=%lu us | process avg=%lu max=%lu us",
+            (unsigned long)m_diag.avgCaptureLatencyUs, (unsigned long)m_diag.maxCaptureLatencyUs,
+            (unsigned long)m_diag.avgProcessLatencyUs, (unsigned long)m_diag.maxProcessLatencyUs);
+
+    if (m_diag.lastPublishTimeUs > 0) {
+        uint32_t frameAge_ms = (now_us - m_diag.lastPublishTimeUs) / 1000;
+        LW_LOGI("FRESHNESS: last_publish=%lu ms ago | hop_seq=%lu",
+                (unsigned long)frameAge_ms, (unsigned long)m_diag.lastPublishSeq);
+    }
+
+    LW_LOGI("PIPELINE: tempo=%.1f BPM phase=%.2f onset_env=%.3f",
+            m_lastFrame.tempo_bpm, m_lastFrame.beat_phase, m_lastFrame.onset_env);
+
+    bool healthy = rateOk && m_diag.samplesNonZero &&
+                   m_diag.captureDmaTimeouts == 0 && m_diag.publishSeqGaps == 0;
+    LW_LOGI("HEALTH: %s", healthy ? "OK - Pipeline functioning normally" : "ISSUES DETECTED - See warnings above");
+    LW_LOGI("=================================================");
+}
+
+// ============================================================================
+// Pipeline Tuning
+// ============================================================================
+
+AudioPipelineTuning AudioActor::getPipelineTuning() const
+{
+    AudioPipelineTuning out;
+    uint32_t v0;
+    uint32_t v1 = 0;
+    do {
+        v0 = m_pipelineTuningSeq.load(std::memory_order_acquire);
+        if (v0 & 1U) continue;
+        out = m_pipelineTuning;
+        v1 = m_pipelineTuningSeq.load(std::memory_order_acquire);
+    } while (v0 != v1 || (v1 & 1U));
+    return out;
+}
+
+void AudioActor::setPipelineTuning(const AudioPipelineTuning& tuning)
+{
+    AudioPipelineTuning clamped = clampAudioPipelineTuning(tuning);
+    uint32_t v = m_pipelineTuningSeq.load(std::memory_order_relaxed);
+    m_pipelineTuningSeq.store(v + 1U, std::memory_order_release);
+    m_pipelineTuning = clamped;
+    m_pipelineTuningSeq.store(v + 2U, std::memory_order_release);
+}
+
+void AudioActor::resetDspState()
+{
+    m_dspResetPending.store(true, std::memory_order_release);
+}
+
+AudioDspState AudioActor::getDspState() const
+{
+    AudioDspState out;
+    uint32_t v0;
+    uint32_t v1 = 0;
+    do {
+        v0 = m_dspStateSeq.load(std::memory_order_acquire);
+        if (v0 & 1U) continue;
+        out = m_dspState;
+        v1 = m_dspStateSeq.load(std::memory_order_acquire);
+    } while (v0 != v1 || (v1 & 1U));
+    return out;
+}
+
+// ============================================================================
+// Buffer Access
+// ============================================================================
+
+const int16_t* AudioActor::getLastHop() const
+{
+    if (m_state == AudioActorState::RUNNING || m_state == AudioActorState::PAUSED) {
+        return m_hopBuffer;
+    }
+    return nullptr;
+}
+
+bool AudioActor::hasNewHop()
+{
+    if (m_newHopAvailable) {
+        m_newHopAvailable = false;
+        return true;
+    }
+    return false;
+}
+
+// ============================================================================
+// Actor Lifecycle
+// ============================================================================
+
+void AudioActor::onStart()
+{
+    LW_LOGI("AudioActor starting on Core %d (PipelineCore backend)", xPortGetCoreID());
+
+    m_state = AudioActorState::INITIALIZING;
+    m_stats.state = m_state;
+
+    // Initialize diagnostics
+    m_diag.reset();
+    m_diag.diagStartTimeUs = esp_timer_get_time();
+    m_consecutiveZeroHops = 0;
+    m_lastRecoveryAttemptHop = 0;
+
+    // Initialize I2S audio capture
+    if (!m_capture.init()) {
+        LW_LOGE("Failed to initialize audio capture");
+        m_state = AudioActorState::ERROR;
+        m_stats.state = m_state;
+        return;
+    }
+
+    // Initialize PipelineCore DSP engine
+    PipelineConfig cfg;
+    cfg.sampleRate = SAMPLE_RATE;
+    cfg.hopSize = HOP_SIZE;
+    cfg.windowSize = HOP_SIZE * 2;  // 512
+    m_pipeline.setConfig(cfg);
+    LW_LOGI("PipelineCore initialized (sr=%lu, hop=%u, win=%u)",
+             (unsigned long)cfg.sampleRate, cfg.hopSize, cfg.windowSize);
+
+    // Initialize PipelineAdapter bridge
+    PipelineAdapter::Config adapterCfg;
+    adapterCfg.sampleRate = static_cast<float>(SAMPLE_RATE);
+    adapterCfg.fftSize = HOP_SIZE * 2;
+    m_adapter.init(adapterCfg);
+    LW_LOGI("PipelineAdapter initialized (binHz=%.1f)",
+             adapterCfg.sampleRate / static_cast<float>(adapterCfg.fftSize));
+
+    m_state = AudioActorState::RUNNING;
+    m_stats.state = m_state;
+
+    LW_LOGI("AudioActor started (tick=%dms, hop=%d, rate=%.1fHz)",
+             AUDIO_ACTOR_TICK_MS, HOP_SIZE, HOP_RATE_HZ);
+    LW_LOGI("Pipeline diagnostics enabled - will log every 10 seconds");
+}
+
+void AudioActor::onMessage(const actors::Message& msg)
+{
+    switch (msg.type) {
+        case actors::MessageType::SHUTDOWN:
+            LW_LOGI("Received SHUTDOWN message");
+            break;
+
+        case actors::MessageType::HEALTH_CHECK:
+            LW_LOGD("Health check: state=%d, captures=%lu",
+                     static_cast<int>(m_state), m_stats.captureSuccessCount);
+            break;
+
+        case actors::MessageType::PING:
+            LW_LOGD("PING received");
+            break;
+
+        default:
+            LW_LOGD("Ignoring message type 0x%02X",
+                     static_cast<uint8_t>(msg.type));
+            break;
+    }
+}
+
+void AudioActor::onTick()
+{
+    // Skip if not in running state
+    if (m_state != AudioActorState::RUNNING) {
+        return;
+    }
+
+    m_stats.tickCount++;
+
+    // DEBUG: Log first few ticks and periodically to verify tick is running
+    static uint32_t s_tickDbgCount = 0;
+    s_tickDbgCount++;
+    if (s_tickDbgCount <= 5 || (s_tickDbgCount % 1250) == 0) {
+        LW_LOGI("AudioActor tick #%lu (PipelineCore, state=%d)", (unsigned long)s_tickDbgCount, static_cast<int>(m_state));
+    }
+
+    // Record tick start time
+    uint64_t tickStart = esp_timer_get_time();
+
+    // Capture one hop
+    captureHop();
+
+    // Feed the watchdog. vTaskDelay(1) blocks for one FreeRTOS tick (10ms at
+    // CONFIG_FREERTOS_HZ=100), which lets IDLE0 run. taskYIELD() was tried but
+    // caused all-zero DMA — likely because IDLE0 runs at priority 0 and
+    // taskYIELD only yields to equal-or-higher priority tasks, starving
+    // the I2S DMA housekeeping. This caps PipelineCore at ~96 Hz frame rate
+    // vs 125 Hz target. Event-driven I2S (DMA interrupt → queue) is the
+    // proper fix — Sprint 2.
+    vTaskDelay(1);
+
+    // Update tick timing
+    m_stats.lastTickTimeUs = (uint32_t)(esp_timer_get_time() - tickStart);
+    m_stats.state = m_state;
+}
+
+void AudioActor::onStop()
+{
+    LW_LOGI("AudioActor stopping (PipelineCore)");
+    m_capture.deinit();
+    m_state = AudioActorState::PAUSED;
+    m_stats.state = m_state;
+}
+
+// ============================================================================
+// Audio Capture
+// ============================================================================
+
+void AudioActor::captureHop()
+{
+    static constexpr uint32_t ZERO_HOPS_RECOVERY_THRESHOLD = 250;  // ~2s at 125 Hz
+    static constexpr uint32_t RECOVERY_RETRY_GAP_HOPS = 500;       // ~4s cooldown
+
+    m_diag.captureAttempts++;
+    m_diag.lastCaptureStartUs = esp_timer_get_time();
+
+    TRACE_BEGIN("i2s_dma_read");
+    CaptureResult result = m_capture.captureHop(m_hopBuffer);
+    TRACE_END();
+
+    m_diag.lastCaptureEndUs = esp_timer_get_time();
+    uint32_t captureLatency = static_cast<uint32_t>(m_diag.lastCaptureEndUs - m_diag.lastCaptureStartUs);
+    if (captureLatency > m_diag.maxCaptureLatencyUs) {
+        m_diag.maxCaptureLatencyUs = captureLatency;
+    }
+    m_diag.avgCaptureLatencyUs = (m_diag.avgCaptureLatencyUs * 7 + captureLatency) / 8;
+
+    if (result == CaptureResult::SUCCESS) {
+        m_stats.captureSuccessCount++;
+        m_diag.captureSuccesses++;
+        m_newHopAvailable = true;
+
+        // Analyze raw samples before processing
+        int16_t rawMin = 32767, rawMax = -32768;
+        int64_t rawSumSq = 0;
+        bool allSame = true;
+        int16_t firstSample = m_hopBuffer[0];
+        for (size_t i = 0; i < HOP_SIZE; ++i) {
+            int16_t s = m_hopBuffer[i];
+            if (s < rawMin) rawMin = s;
+            if (s > rawMax) rawMax = s;
+            rawSumSq += static_cast<int64_t>(s) * s;
+            if (s != firstSample) allSame = false;
+        }
+        m_diag.lastRawMin = rawMin;
+        m_diag.lastRawMax = rawMax;
+        m_diag.lastRawRms = std::sqrt(static_cast<float>(rawSumSq) / HOP_SIZE) / 32768.0f;
+        m_diag.samplesNonZero = !allSame && (rawMax != rawMin);
+        const bool flatline = allSame || (rawMin == rawMax);
+        if (flatline) {
+            m_diag.zeroHopCount++;
+            m_consecutiveZeroHops++;
+        } else {
+            m_consecutiveZeroHops = 0;
+        }
+
+        if (m_consecutiveZeroHops >= ZERO_HOPS_RECOVERY_THRESHOLD &&
+            (m_hopCount - m_lastRecoveryAttemptHop) >= RECOVERY_RETRY_GAP_HOPS) {
+            m_lastRecoveryAttemptHop = m_hopCount;
+            if (!recoverCapturePath()) {
+                m_stats.captureFailCount++;
+                return;
+            }
+            return;
+        }
+
+        // DC diagnostic: log raw sample mean every ~2 seconds
+        static uint32_t s_dcDiagCounter = 0;
+        if (++s_dcDiagCounter >= 250) {
+            s_dcDiagCounter = 0;
+            int64_t dcSum = 0;
+            for (size_t i = 0; i < HOP_SIZE; ++i) {
+                dcSum += m_hopBuffer[i];
+            }
+            int32_t dcMean = static_cast<int32_t>(dcSum / HOP_SIZE);
+            LW_LOGI("DC_DIAG: mean=%ld min=%d max=%d rms=%.4f zeros=%lu",
+                     (long)dcMean, rawMin, rawMax, m_diag.lastRawRms,
+                     (unsigned long)m_diag.zeroHopCount);
+        }
+
+        // Process the hop through PipelineCore DSP
+        uint64_t processStart = esp_timer_get_time();
+        processHop();
+        uint64_t processEnd = esp_timer_get_time();
+        m_diag.lastProcessEndUs = processEnd;
+
+        uint32_t processLatency = static_cast<uint32_t>(processEnd - processStart);
+        if (processLatency > m_diag.maxProcessLatencyUs) {
+            m_diag.maxProcessLatencyUs = processLatency;
+        }
+        m_diag.avgProcessLatencyUs = (m_diag.avgProcessLatencyUs * 7 + processLatency) / 8;
+
+    } else {
+        m_stats.captureFailCount++;
+        if (result == CaptureResult::DMA_TIMEOUT) {
+            m_diag.captureDmaTimeouts++;
+        } else {
+            m_diag.captureReadErrors++;
+        }
+        handleCaptureError(result);
+    }
+}
+
+bool AudioActor::recoverCapturePath()
+{
+    LW_LOGW("Capture flatline detected (%lu consecutive hops). Reinitialising I2S.",
+            (unsigned long)m_consecutiveZeroHops);
+
+    m_capture.deinit();
+    vTaskDelay(1);
+
+    if (!m_capture.init()) {
+        LW_LOGE("I2S recovery failed");
+        m_state = AudioActorState::ERROR;
+        m_stats.state = m_state;
+        return false;
+    }
+
+    m_consecutiveZeroHops = 0;
+    LW_LOGI("I2S recovery succeeded");
+    return true;
+}
+
+// ============================================================================
+// PipelineCore DSP Processing
+// ============================================================================
+
+void AudioActor::processHop()
+{
+    TRACE_SCOPE("audio_pipeline");
+    BENCH_DECL_TIMING();
+    BENCH_START_FRAME();
+
+    // Handle DSP reset requests
+    if (m_dspResetPending.exchange(false, std::memory_order_acq_rel)) {
+        m_pipeline.reset();
+        PipelineAdapter::Config adapterCfg;
+        adapterCfg.sampleRate = static_cast<float>(SAMPLE_RATE);
+        adapterCfg.fftSize = HOP_SIZE * 2;
+        m_adapter.init(adapterCfg);
+#if FEATURE_STYLE_DETECTION
+        m_styleDetector.reset();
+#endif
+        m_prevChordRoot = 0;
+        m_controlBus.Reset();
+    }
+
+    // Build AudioTime with END-OF-HOP semantics
+    uint64_t now_us = (m_diag.lastCaptureEndUs != 0)
+        ? m_diag.lastCaptureEndUs
+        : esp_timer_get_time();
+    uint64_t hop_end_sample_index = m_sampleIndex + HOP_SIZE;
+    AudioTime now(hop_end_sample_index, SAMPLE_RATE, now_us);
+    m_sampleIndex = hop_end_sample_index;
+    m_hopCount++;
+
+    // === Phase: PipelineCore Feed ===
+    BENCH_START_PHASE();
+    TRACE_BEGIN("dc_agc_loop");
+
+    // 1. Feed raw samples to PipelineCore (DC removal, FFT, features computed internally)
+    uint32_t ts = static_cast<uint32_t>(m_sampleIndex * 1000000ULL / SAMPLE_RATE);
+    m_pipeline.pushSamples(m_hopBuffer, HOP_SIZE, ts);
+
+    // 2. Pull feature frame (returns true when hop has been fully processed)
+    if (!m_pipeline.pullFrame(m_lastFrame)) {
+        // PipelineCore hasn't accumulated a full window yet -- nothing to publish
+        TRACE_END();  // dc_agc_loop
+        BENCH_END_PHASE(dcAgcLoopUs);
+        BENCH_END_FRAME(&m_benchmarkRing);
+        return;
+    }
+
+    TRACE_END();  // dc_agc_loop
+    BENCH_END_PHASE(dcAgcLoopUs);
+
+    // === Phase: Adapter Bridge ===
+    BENCH_START_PHASE();
+    TRACE_BEGIN("rms_flux");
+
+    // 3. Bridge: FeatureFrame → ControlBusRawInput
+    ControlBusRawInput raw{};
+    m_adapter.adapt(
+        m_lastFrame,
+        m_pipeline.getMagnitudeSpectrum(),
+        m_pipeline.getHopBuffer(),
+        raw
+    );
+
+    TRACE_END();  // rms_flux
+    TRACE_COUNTER("audio_rms", static_cast<int32_t>(raw.rms * 10000));
+    TRACE_COUNTER("audio_pre_gain_rms", static_cast<int32_t>(m_lastFrame.rms * 10000));
+    BENCH_END_PHASE(rmsComputeUs);
+
+    // Update DSP state snapshot for diagnostics
+    {
+        AudioDspState state;
+        state.rmsRaw = m_lastFrame.rms;
+        state.rmsMapped = raw.rms;
+        state.rmsPreGain = m_lastFrame.rms;
+        state.fluxMapped = raw.flux;
+        state.agcGain = 1.0f;   // PipelineCore doesn't expose AGC
+        state.dcEstimate = 0.0f;
+        state.noiseFloor = 0.0f;
+
+        uint32_t v = m_dspStateSeq.load(std::memory_order_relaxed);
+        m_dspStateSeq.store(v + 1U, std::memory_order_release);
+        m_dspState = state;
+        m_dspStateSeq.store(v + 2U, std::memory_order_release);
+    }
+
+    // === Phase: Sensory Bridge parity side-car ===
+    BENCH_START_PHASE();
+
+    // 4. SB parity sidecar (uses bins64 shim from adapter)
+    processSbWaveformSidecar(raw);
+    processSbBloomSidecar(raw);
+
+    BENCH_END_PHASE(goertzelUs);
+
+    // === Phase: Noise Calibration ===
+    {
+        uint32_t nowMs = static_cast<uint32_t>(now_us / 1000);
+        processNoiseCalibration(m_lastFrame.rms, raw.bands, raw.chroma, nowMs);
+    }
+
+    // === Phase: ControlBus Update ===
+    BENCH_START_PHASE();
+    TRACE_BEGIN("controlbus_build");
+
+    const AudioPipelineTuning tuning = getPipelineTuning();
+    m_controlBus.setSmoothing(tuning.controlBusAlphaFast, tuning.controlBusAlphaSlow);
+#ifdef AUDIO_SILENCE_GATE_DISABLED
+    m_controlBus.setSilenceParameters(tuning.silenceThreshold, 0.0f);
+#else
+    m_controlBus.setSilenceParameters(tuning.silenceThreshold, tuning.silenceHysteresisMs);
+#endif
+    m_controlBus.UpdateFromHop(now, raw);
+
+    TRACE_END();  // controlbus_build
+    BENCH_END_PHASE(controlBusUs);
+
+    // === Phase: Style Detection ===
+#if FEATURE_STYLE_DETECTION
+    {
+        bool chordChanged = (m_controlBus.GetFrame().chordState.rootNote != m_prevChordRoot);
+        m_prevChordRoot = m_controlBus.GetFrame().chordState.rootNote;
+        float beatConfidence = raw.tempoLocked ? raw.tempoConfidence : 0.0f;
+        m_styleDetector.update(
+            raw.rms,
+            raw.flux,
+            raw.bands,
+            beatConfidence,
+            chordChanged
+        );
+    }
+#endif
+
+    // === Phase: Publish ===
+    BENCH_START_PHASE();
+    TRACE_BEGIN("snapshot_publish");
+
+    // 5. Publish frame to renderer via lock-free SnapshotBuffer
+    {
+        ControlBusFrame frameToPublish = m_controlBus.GetFrame();
+#if FEATURE_STYLE_DETECTION
+        frameToPublish.currentStyle = m_styleDetector.getStyle();
+        frameToPublish.styleConfidence = m_styleDetector.getConfidence();
+#else
+        frameToPublish.currentStyle = MusicStyle::UNKNOWN;
+        frameToPublish.styleConfidence = 0.0f;
+#endif
+        // Sensory Bridge parity fields (side-car pipeline)
+        std::memcpy(frameToPublish.sb_waveform, m_sbWaveform, sizeof(m_sbWaveform));
+        frameToPublish.sb_waveform_peak_scaled = m_sbWaveformPeakScaled;
+        frameToPublish.sb_waveform_peak_scaled_last = m_sbWaveformPeakScaledLast;
+        std::memcpy(frameToPublish.sb_note_chromagram, m_sbNoteChroma, sizeof(m_sbNoteChroma));
+        frameToPublish.sb_chromagram_max_val = m_sbChromaMaxVal;
+        std::memcpy(frameToPublish.sb_spectrogram, m_sbSpectrogram, sizeof(m_sbSpectrogram));
+        std::memcpy(frameToPublish.sb_spectrogram_smooth, m_sbSpectrogramSmooth, sizeof(m_sbSpectrogramSmooth));
+        std::memcpy(frameToPublish.sb_chromagram_smooth, m_sbChromagramSmooth, sizeof(m_sbChromagramSmooth));
+        frameToPublish.sb_hue_position = m_sbHuePosition;
+        frameToPublish.sb_hue_shifting_mix = m_sbHueShiftingMix;
+        m_controlBusBuffer.Publish(frameToPublish);
+
+        // Track publish statistics
+        m_diag.publishCount++;
+        m_diag.lastPublishTimeUs = esp_timer_get_time();
+
+        uint32_t expectedSeq = m_diag.lastPublishSeq + 1;
+        if (m_diag.lastPublishSeq > 0 && frameToPublish.hop_seq != expectedSeq) {
+            m_diag.publishSeqGaps++;
+        }
+        m_diag.lastPublishSeq = frameToPublish.hop_seq;
+    }
+
+    TRACE_END();  // snapshot_publish
+    BENCH_END_PHASE(publishUs);
+
+    // Stack high-water mark (every ~2 seconds at 125 Hz)
+    static uint32_t s_stackLogCounter = 0;
+    if (++s_stackLogCounter >= 250) {
+        s_stackLogCounter = 0;
+        UBaseType_t hwm = uxTaskGetStackHighWaterMark(nullptr);
+        LW_LOGI("STACK: AudioActor high-water mark = %u words (%u bytes free)",
+                (unsigned)hwm, (unsigned)(hwm * sizeof(StackType_t)));
+    }
+
+    BENCH_END_FRAME(&m_benchmarkRing);
+
+#if FEATURE_AUDIO_BENCHMARK
+    if (++m_benchmarkAggregateCounter >= BENCHMARK_AGGREGATE_INTERVAL) {
+        aggregateBenchmarkStats();
+        m_benchmarkAggregateCounter = 0;
+    }
+#endif
+}
+
+// ============================================================================
+// Sensory Bridge Parity Side-Car Pipeline
+// ============================================================================
+
+void AudioActor::processSbWaveformSidecar(const ControlBusRawInput& raw)
+{
+    for (uint8_t i = 0; i < SB_WAVEFORM_POINTS; ++i) {
+        int16_t sample = raw.waveform[i];
+        m_sbWaveform[i] = sample;
+        m_sbWaveformHistory[m_sbWaveformHistoryIndex][i] = sample;
+    }
+    m_sbWaveformHistoryIndex++;
+    if (m_sbWaveformHistoryIndex >= SB_WAVEFORM_HISTORY) {
+        m_sbWaveformHistoryIndex = 0;
+    }
+
+    float maxWaveformValRaw = 0.0f;
+    for (uint8_t i = 0; i < SB_WAVEFORM_POINTS; ++i) {
+        int16_t sample = m_sbWaveform[i];
+        int16_t absSample = (sample < 0) ? -sample : sample;
+        if (absSample > maxWaveformValRaw) {
+            maxWaveformValRaw = static_cast<float>(absSample);
+        }
+    }
+
+    float maxWaveformVal = maxWaveformValRaw - 750.0f;
+    if (maxWaveformVal < 0.0f) maxWaveformVal = 0.0f;
+
+    if (maxWaveformVal > m_sbMaxWaveformValFollower) {
+        float delta = maxWaveformVal - m_sbMaxWaveformValFollower;
+        m_sbMaxWaveformValFollower += delta * 0.25f;
+    } else if (maxWaveformVal < m_sbMaxWaveformValFollower) {
+        float delta = m_sbMaxWaveformValFollower - maxWaveformVal;
+        m_sbMaxWaveformValFollower -= delta * 0.005f;
+        if (m_sbMaxWaveformValFollower < 750.0f) m_sbMaxWaveformValFollower = 750.0f;
+    }
+
+    float waveformPeakScaledRaw = 0.0f;
+    if (m_sbMaxWaveformValFollower > 0.0f) {
+        waveformPeakScaledRaw = maxWaveformVal / m_sbMaxWaveformValFollower;
+    }
+
+    if (waveformPeakScaledRaw > m_sbWaveformPeakScaled) {
+        float delta = waveformPeakScaledRaw - m_sbWaveformPeakScaled;
+        m_sbWaveformPeakScaled += delta * 0.25f;
+    } else if (waveformPeakScaledRaw < m_sbWaveformPeakScaled) {
+        float delta = m_sbWaveformPeakScaled - waveformPeakScaledRaw;
+        m_sbWaveformPeakScaled -= delta * 0.25f;
+    }
+
+    m_sbWaveformPeakScaledLast =
+        (m_sbWaveformPeakScaled * 0.05f) + (m_sbWaveformPeakScaledLast * 0.95f);
+
+    m_sbChromaMaxVal = 0.0f;
+    for (uint8_t i = 0; i < CONTROLBUS_NUM_CHROMA; ++i) {
+        m_sbNoteChroma[i] = 0.0f;
+    }
+    for (uint8_t octave = 0; octave < 6; ++octave) {
+        for (uint8_t note = 0; note < CONTROLBUS_NUM_CHROMA; ++note) {
+            uint16_t noteIndex = static_cast<uint16_t>(12 * octave + note);
+            if (noteIndex < SB_NUM_FREQS) {
+                float val = raw.bins64Adaptive[noteIndex];
+                m_sbNoteChroma[note] += val;
+                if (m_sbNoteChroma[note] > 1.0f) m_sbNoteChroma[note] = 1.0f;
+                if (m_sbNoteChroma[note] > m_sbChromaMaxVal) m_sbChromaMaxVal = m_sbNoteChroma[note];
+            }
+        }
+    }
+    if (m_sbChromaMaxVal < 0.0001f) m_sbChromaMaxVal = 0.0001f;
+}
+
+void AudioActor::processSbBloomSidecar(const ControlBusRawInput& raw)
+{
+    float moodNorm = static_cast<float>(m_controlBus.getMood()) / 255.0f;
+    float smoothingRate = 1.0f + (10.0f * moodNorm);
+    float alpha = 1.0f - std::exp(-smoothingRate * (HOP_DURATION_MS * 0.001f));
+
+    for (uint8_t i = 0; i < SB_NUM_FREQS; ++i) {
+        float target = raw.bins64Adaptive[i];
+        m_sbSpectrogram[i] = m_sbSpectrogram[i] + (target - m_sbSpectrogram[i]) * alpha;
+    }
+
+    for (uint8_t i = 0; i < SB_NUM_FREQS; ++i) {
+        float noteBrightness = m_sbSpectrogram[i];
+        if (m_sbSpectrogramSmooth[i] < noteBrightness) {
+            float distance = noteBrightness - m_sbSpectrogramSmooth[i];
+            m_sbSpectrogramSmooth[i] += distance * 0.75f;
+        } else if (m_sbSpectrogramSmooth[i] > noteBrightness) {
+            float distance = m_sbSpectrogramSmooth[i] - noteBrightness;
+            m_sbSpectrogramSmooth[i] -= distance * 0.75f;
+        }
+        if (m_sbSpectrogramSmooth[i] < 0.0f) m_sbSpectrogramSmooth[i] = 0.0f;
+        if (m_sbSpectrogramSmooth[i] > 1.0f) m_sbSpectrogramSmooth[i] = 1.0f;
+    }
+
+    for (uint8_t i = 0; i < CONTROLBUS_NUM_CHROMA; ++i) {
+        m_sbChromagramSmooth[i] = 0.0f;
+    }
+    const float chromaDiv = 64.0f / 12.0f;
+    for (uint8_t i = 0; i < SB_NUM_FREQS; ++i) {
+        float noteMagnitude = m_sbSpectrogramSmooth[i];
+        if (noteMagnitude < 0.0f) noteMagnitude = 0.0f;
+        if (noteMagnitude > 1.0f) noteMagnitude = 1.0f;
+        uint8_t chromaBin = static_cast<uint8_t>(i % 12);
+        m_sbChromagramSmooth[chromaBin] += noteMagnitude / chromaDiv;
+    }
+
+    m_sbChromagramMaxPeak *= 0.999f;
+    if (m_sbChromagramMaxPeak < 0.01f) m_sbChromagramMaxPeak = 0.01f;
+    for (uint8_t i = 0; i < CONTROLBUS_NUM_CHROMA; ++i) {
+        if (m_sbChromagramSmooth[i] > m_sbChromagramMaxPeak) {
+            float distance = m_sbChromagramSmooth[i] - m_sbChromagramMaxPeak;
+            m_sbChromagramMaxPeak += distance * 0.05f;
+        }
+    }
+    float multiplier = 1.0f / m_sbChromagramMaxPeak;
+    for (uint8_t i = 0; i < CONTROLBUS_NUM_CHROMA; ++i) {
+        m_sbChromagramSmooth[i] *= multiplier;
+        if (m_sbChromagramSmooth[i] > 1.0f) m_sbChromagramSmooth[i] = 1.0f;
+    }
+
+    updateSbNoveltyAndHueShift();
+}
+
+void AudioActor::updateSbNoveltyAndHueShift()
+{
+    int16_t roundedIndex = static_cast<int16_t>(m_sbSpectralHistoryIndex) - 1;
+    while (roundedIndex < 0) roundedIndex += SB_SPECTRAL_HISTORY;
+
+    float noveltyNow = 0.0f;
+    for (uint8_t i = 0; i < SB_NUM_FREQS; ++i) {
+        float noveltyBin = m_sbSpectrogram[i] - m_sbSpectralHistory[roundedIndex][i];
+        if (noveltyBin < 0.0f) noveltyBin = 0.0f;
+        noveltyNow += noveltyBin;
+    }
+    noveltyNow /= SB_NUM_FREQS;
+
+    for (uint8_t i = 0; i < SB_NUM_FREQS; ++i) {
+        m_sbSpectralHistory[m_sbSpectralHistoryIndex][i] = m_sbSpectrogram[i];
+    }
+    m_sbNoveltyCurve[m_sbSpectralHistoryIndex] = std::sqrt(noveltyNow);
+
+    m_sbSpectralHistoryIndex++;
+    if (m_sbSpectralHistoryIndex >= SB_SPECTRAL_HISTORY) m_sbSpectralHistoryIndex = 0;
+
+    int16_t noveltyIndex = static_cast<int16_t>(m_sbSpectralHistoryIndex) - 1;
+    while (noveltyIndex < 0) noveltyIndex += SB_SPECTRAL_HISTORY;
+    float noveltyVal = m_sbNoveltyCurve[noveltyIndex];
+
+    noveltyVal -= 0.10f;
+    if (noveltyVal < 0.0f) noveltyVal = 0.0f;
+    noveltyVal *= 1.111111f;
+    noveltyVal = noveltyVal * noveltyVal * noveltyVal;
+    if (noveltyVal > 0.05f) noveltyVal = 0.05f;
+
+    if (noveltyVal > m_sbHueShiftSpeed) {
+        m_sbHueShiftSpeed = noveltyVal * 0.75f;
+    } else {
+        m_sbHueShiftSpeed *= 0.99f;
+    }
+
+    m_sbHuePosition += (m_sbHueShiftSpeed * m_sbHuePushDirection);
+    while (m_sbHuePosition < 0.0f) m_sbHuePosition += 1.0f;
+    while (m_sbHuePosition >= 1.0f) m_sbHuePosition -= 1.0f;
+
+    if (std::fabs(m_sbHuePosition - m_sbHueDestination) <= 0.01f) {
+        m_sbHuePushDirection *= -1.0f;
+        m_sbHueShiftingMixTarget *= -1.0f;
+        m_sbRand = m_sbRand * 1664525u + 1013904223u;
+        m_sbHueDestination = static_cast<float>(m_sbRand) / 4294967295.0f;
+    }
+
+    float hueMixDistance = std::fabs(m_sbHueShiftingMix - m_sbHueShiftingMixTarget);
+    if (m_sbHueShiftingMix < m_sbHueShiftingMixTarget) {
+        m_sbHueShiftingMix += hueMixDistance * 0.01f;
+    } else if (m_sbHueShiftingMix > m_sbHueShiftingMixTarget) {
+        m_sbHueShiftingMix -= hueMixDistance * 0.01f;
+    }
+}
+
+// ============================================================================
+// Utility Methods
+// ============================================================================
+
+float AudioActor::computeRMS(const int16_t* samples, size_t count)
+{
+    if (count == 0) return 0.0f;
+    int64_t sumSq = 0;
+    for (size_t i = 0; i < count; ++i) {
+        int32_t s = samples[i];
+        sumSq += s * s;
+    }
+    float rms = std::sqrt(static_cast<float>(sumSq) / count);
+    return std::min(1.0f, rms / 32768.0f);
+}
+
+void AudioActor::handleCaptureError(CaptureResult result)
+{
+    switch (result) {
+        case CaptureResult::NOT_INITIALIZED:
+            LW_LOGE("Capture error: not initialized");
+            m_state = AudioActorState::ERROR;
+            m_stats.state = m_state;
+            break;
+        case CaptureResult::DMA_TIMEOUT:
+            LW_LOGW("Capture: DMA timeout");
+            break;
+        case CaptureResult::READ_ERROR:
+            LW_LOGW("Capture: read error");
+            break;
+        case CaptureResult::BUFFER_OVERFLOW:
+            LW_LOGW("Capture: buffer overflow");
+            break;
+        default:
+            LW_LOGW("Capture: unknown error %d", static_cast<int>(result));
+            break;
+    }
+}
+
+// ============================================================================
+// Benchmark Aggregation
+// ============================================================================
+
+#if FEATURE_AUDIO_BENCHMARK
+void AudioActor::aggregateBenchmarkStats()
+{
+    AudioBenchmarkSample sample;
+    while (m_benchmarkRing.pop(sample)) {
+        m_benchmarkStats.updateFromSample(sample);
+    }
+    TRACE_COUNTER("cpu_load", static_cast<int32_t>(m_benchmarkStats.cpuLoadPercent * 100));
+}
+#endif
+
+// ============================================================================
+// Noise Calibration (SensoryBridge pattern)
+// ============================================================================
+
+bool AudioActor::startNoiseCalibration(uint32_t durationMs, float safetyMultiplier)
+{
+    if (m_noiseCalibration.state == CalibrationState::MEASURING ||
+        m_noiseCalibration.state == CalibrationState::REQUESTED) {
+        LW_LOGW("Calibration already in progress");
+        return false;
+    }
+
+    m_noiseCalibration.reset();
+    m_noiseCalibration.durationMs = durationMs;
+    m_noiseCalibration.safetyMultiplier = safetyMultiplier;
+    m_noiseCalibration.state = CalibrationState::REQUESTED;
+
+    LW_LOGI("Noise calibration requested: %ums, multiplier=%.2f",
+             durationMs, safetyMultiplier);
+    return true;
+}
+
+void AudioActor::cancelNoiseCalibration()
+{
+    if (m_noiseCalibration.state != CalibrationState::IDLE) {
+        LW_LOGI("Calibration cancelled");
+        m_noiseCalibration.reset();
+    }
+}
+
+bool AudioActor::applyCalibrationResults()
+{
+    if (!m_noiseCalibration.result.valid) {
+        LW_LOGW("Cannot apply: no valid calibration results");
+        return false;
+    }
+
+    AudioPipelineTuning tuning = getPipelineTuning();
+    for (int i = 0; i < 8; ++i) {
+        tuning.perBandNoiseFloors[i] = m_noiseCalibration.result.bandFloors[i];
+    }
+    tuning.usePerBandNoiseFloor = true;
+    tuning.noiseFloorMin = m_noiseCalibration.result.overallRms * m_noiseCalibration.safetyMultiplier;
+    setPipelineTuning(tuning);
+
+    LW_LOGI("Applied calibration: noiseFloorMin=%.6f, perBand enabled",
+             tuning.noiseFloorMin);
+    return true;
+}
+
+void AudioActor::processNoiseCalibration(float rms, const float* bands, const float* chroma, uint32_t nowMs)
+{
+    switch (m_noiseCalibration.state) {
+        case CalibrationState::IDLE:
+        case CalibrationState::COMPLETE:
+        case CalibrationState::FAILED:
+            return;
+
+        case CalibrationState::REQUESTED:
+            m_noiseCalibration.startTimeMs = nowMs;
+            m_noiseCalibration.state = CalibrationState::MEASURING;
+            LW_LOGI("Calibration started: measuring for %ums", m_noiseCalibration.durationMs);
+            [[fallthrough]];
+
+        case CalibrationState::MEASURING: {
+            uint32_t elapsed = nowMs - m_noiseCalibration.startTimeMs;
+            if (elapsed >= m_noiseCalibration.durationMs) {
+                if (m_noiseCalibration.sampleCount > 0) {
+                    float invCount = 1.0f / static_cast<float>(m_noiseCalibration.sampleCount);
+                    m_noiseCalibration.result.overallRms = m_noiseCalibration.rmsSum * invCount;
+                    m_noiseCalibration.result.peakRms = m_noiseCalibration.peakRms;
+                    m_noiseCalibration.result.sampleCount = m_noiseCalibration.sampleCount;
+                    for (int i = 0; i < 8; ++i) {
+                        float avg = m_noiseCalibration.bandSum[i] * invCount;
+                        m_noiseCalibration.result.bandFloors[i] = avg * m_noiseCalibration.safetyMultiplier;
+                    }
+                    for (int i = 0; i < 12; ++i) {
+                        float avg = m_noiseCalibration.chromaSum[i] * invCount;
+                        m_noiseCalibration.result.chromaFloors[i] = avg * m_noiseCalibration.safetyMultiplier;
+                    }
+                    m_noiseCalibration.result.valid = true;
+                    m_noiseCalibration.state = CalibrationState::COMPLETE;
+                    LW_LOGI("Calibration complete: avgRMS=%.6f, peak=%.6f, samples=%u",
+                             m_noiseCalibration.result.overallRms,
+                             m_noiseCalibration.result.peakRms,
+                             m_noiseCalibration.result.sampleCount);
+                } else {
+                    LW_LOGE("Calibration failed: no samples collected");
+                    m_noiseCalibration.state = CalibrationState::FAILED;
+                }
+                return;
+            }
+
+            if (rms > m_noiseCalibration.maxAllowedRms) {
+                LW_LOGW("Calibration aborted: RMS %.4f exceeds max %.4f (not silent)",
+                         rms, m_noiseCalibration.maxAllowedRms);
+                m_noiseCalibration.state = CalibrationState::FAILED;
+                return;
+            }
+
+            m_noiseCalibration.rmsSum += rms;
+            if (rms > m_noiseCalibration.peakRms) m_noiseCalibration.peakRms = rms;
+            for (int i = 0; i < 8; ++i) m_noiseCalibration.bandSum[i] += bands[i];
+            for (int i = 0; i < 12; ++i) m_noiseCalibration.chromaSum[i] += chroma[i];
+            m_noiseCalibration.sampleCount++;
+
+            if ((m_noiseCalibration.sampleCount % 62) == 0) {
+                float progress = (float)elapsed / (float)m_noiseCalibration.durationMs * 100.0f;
+                LW_LOGD("Calibrating: %.0f%% (%u samples, avgRMS=%.5f)",
+                         progress, m_noiseCalibration.sampleCount,
+                         m_noiseCalibration.rmsSum / m_noiseCalibration.sampleCount);
+            }
+            break;
+        }
+    }
+}
+
+#else  // Goertzel backend (default)
 
 // ============================================================================
 // Constructor / Destructor
@@ -527,7 +1815,7 @@ void AudioActor::captureHop()
     uint64_t captureEnd = esp_timer_get_time();
     m_diag.lastCaptureEndUs = captureEnd;
     uint32_t captureLatency = static_cast<uint32_t>(captureEnd - captureStart);
-    
+
     // Update capture latency stats
     if (captureLatency > m_diag.maxCaptureLatencyUs) {
         m_diag.maxCaptureLatencyUs = captureLatency;
@@ -638,12 +1926,31 @@ void AudioActor::processHop()
     }
 
     // 1. Build AudioTime for this hop
-    uint64_t now_us = esp_timer_get_time();
-    AudioTime now(m_sampleIndex, SAMPLE_RATE, now_us);
+    // CLOCK SPINE FIX: Use END-OF-HOP semantics
+    // - t.sample_index = sample immediately AFTER this hop (monotonic)
+    // - t.timestamp_us = capture end time for this hop (not processing start)
+    // This ensures renderer extrapolation uses the correct audio timeline.
+    uint64_t now_us = (m_diag.lastCaptureEndUs != 0)
+        ? m_diag.lastCaptureEndUs
+        : esp_timer_get_time();
+    uint64_t hop_end_sample_index = m_sampleIndex + HOP_SIZE;
+    AudioTime now(hop_end_sample_index, SAMPLE_RATE, now_us);
 
-    // Update monotonic counters
-    m_sampleIndex += HOP_SIZE;
+    // Update monotonic counters (sample index now represents END of processed audio)
+    m_sampleIndex = hop_end_sample_index;
     m_hopCount++;
+
+    // DEBUG: Log clock spine values every 2 seconds (LWLS backend) - DISABLED
+    // static uint64_t lastClockSpineLogLwls = 0;
+    // uint64_t logNow = esp_timer_get_time();
+    // if (logNow - lastClockSpineLogLwls >= 2000000) {  // 2 seconds
+    //     lastClockSpineLogLwls = logNow;
+    //     LW_LOGI("[CLOCK_SPINE:LWLS] now.t: sample_idx=%llu mono_us=%llu captureEnd=%llu hop=%lu",
+    //             (unsigned long long)now.sample_index,
+    //             (unsigned long long)now.monotonic_us,
+    //             (unsigned long long)m_diag.lastCaptureEndUs,
+    //             (unsigned long)m_hopCount);
+    // }
 
     int32_t minRaw = 32767;
     int32_t maxRaw = -32768;
@@ -771,7 +2078,7 @@ void AudioActor::processHop()
     if (m_agcGain > agcMaxGain) m_agcGain = agcMaxGain;
     m_lastAgcGain = m_agcGain;
 
-    TRACE_END();
+    TRACE_END();  // dc_agc_loop
     BENCH_END_PHASE(dcAgcLoopUs);
 
     // === Phase: RMS Compute ===
@@ -794,7 +2101,9 @@ void AudioActor::processHop()
         m_lastFluxMapped = fluxMapped;
     }
 
-    TRACE_END();
+    TRACE_END();  // rms_flux
+    TRACE_COUNTER("audio_rms", static_cast<int32_t>(rmsRaw * 10000));
+    TRACE_COUNTER("audio_pre_gain_rms", static_cast<int32_t>(m_lastRmsPreGain * 10000));
     BENCH_END_PHASE(rmsComputeUs);
 
     {
@@ -972,11 +2281,11 @@ void AudioActor::processHop()
     // ========================================================================
     // TempoTracker Beat Tracker Processing
     // ========================================================================
+    TRACE_BEGIN("tempo_update");
     // EMOTISCOPE PARITY: Use full 64-bin spectrum for novelty detection
     // - Spectral flux from 64-bin Goertzel when ready (~10 Hz @ 12.8kHz)
     // - VU derivative from RMS every hop (50 Hz @ 12.8kHz)
     // 64-bin analysis fires when analyze64() completes (every 1500 samples)
-    TRACE_BEGIN("tempo_update");
     m_tempo.updateNovelty(
         m_analyze64Ready ? m_bins64Cached : nullptr,  // 64-bin magnitudes or nullptr
         audio::NUM_FREQS,                              // num_bins = 64 (Emotiscope parity)
@@ -993,7 +2302,7 @@ void AudioActor::processHop()
 
     // Store for change detection (used by getTempo() diagnostics)
     m_lastTempoOutput = m_tempo.getOutput();
-    TRACE_END();
+    TRACE_END();  // tempo_update
 
     // Note: advancePhase() is called by RendererActor at 120 FPS
     // This separation allows smooth beat tracking at render rate
@@ -1200,7 +2509,7 @@ void AudioActor::processHop()
 #endif
     m_controlBus.UpdateFromHop(now, raw);
 
-    TRACE_END();
+    TRACE_END();  // controlbus_build
     BENCH_END_PHASE(controlBusUs);
 
     // === Phase: Style Detection ===
@@ -1261,7 +2570,7 @@ void AudioActor::processHop()
         m_diag.lastPublishSeq = frameToPublish.hop_seq;
     }
 
-    TRACE_END();
+    TRACE_END();  // snapshot_publish
     BENCH_END_PHASE(publishUs);
 
     // === End Frame: Push sample to ring buffer ===
@@ -1550,9 +2859,6 @@ void AudioActor::aggregateBenchmarkStats()
 
     // MabuTrace: Record CPU load as a counter for Perfetto visualization
     TRACE_COUNTER("cpu_load", static_cast<int32_t>(m_benchmarkStats.cpuLoadPercent * 100));
-    // MabuTrace: Audio signal health counters for pipeline diagnostics
-    TRACE_COUNTER("audio_rms", static_cast<int32_t>(m_lastRmsMapped * 10000));
-    TRACE_COUNTER("audio_pre_gain_rms", static_cast<int32_t>(m_lastRmsPreGain * 10000));
 }
 #endif
 
@@ -1708,6 +3014,8 @@ void AudioActor::processNoiseCalibration(float rms, const float* bands, const fl
         }
     }
 }
+
+#endif // FEATURE_AUDIO_BACKEND_ESV11 / PIPELINECORE / Goertzel
 
 } // namespace audio
 } // namespace lightwaveos

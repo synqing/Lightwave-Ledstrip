@@ -79,7 +79,8 @@ namespace NetworkConfig {
     #ifdef AP_PASSWORD_CUSTOM
         constexpr const char* AP_PASSWORD = AP_PASSWORD_CUSTOM;
     #else
-        constexpr const char* AP_PASSWORD = "SpectraSynq";
+        // Empty string = open network (no password).
+        constexpr const char* AP_PASSWORD = "";
     #endif
 
     // ========================================================================

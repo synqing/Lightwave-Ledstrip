@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file LGPPerceptualBlendEffect.cpp
  * @brief LGP Perceptual Blend effect implementation
@@ -27,10 +25,11 @@ bool LGPPerceptualBlendEffect::init(plugins::EffectContext& ctx) {
 
 void LGPPerceptualBlendEffect::render(plugins::EffectContext& ctx) {
     // Uses perceptually uniform color space for natural mixing
+    float dt = ctx.getSafeDeltaSeconds();
     float speed = ctx.speed / 255.0f;
     float intensity = ctx.brightness / 255.0f;
 
-    m_phase += speed * 0.01f;
+    m_phase += speed * 0.01f * 60.0f * dt;  // dt-corrected
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         float distFromCenter = (float)centerPairDistance((uint16_t)i);

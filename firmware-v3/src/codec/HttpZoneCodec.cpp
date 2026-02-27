@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file HttpZoneCodec.cpp
  * @brief HTTP zone codec implementation
@@ -94,7 +92,7 @@ HttpZoneSetEffectDecodeResult HttpZoneCodec::decodeSetEffect(JsonObjectConst roo
         snprintf(result.errorMsg, MAX_ERROR_MSG, "effectId out of range (0-255)");
         return result;
     }
-    result.effectId = static_cast<uint8_t>(effectId);
+    result.effectId = static_cast<EffectId>(effectId);
     result.success = true;
     return result;
 }

@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file PulseEffect.h
  * @brief Pulse - Sharp energy pulses from centre
@@ -13,6 +11,7 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -20,6 +19,8 @@ namespace ieffect {
 
 class PulseEffect : public plugins::IEffect {
 public:
+    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_PULSE;
+
     PulseEffect() = default;
     ~PulseEffect() override = default;
 

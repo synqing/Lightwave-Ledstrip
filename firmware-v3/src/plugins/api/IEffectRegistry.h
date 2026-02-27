@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 SpectraSynq
 /**
  * @file IEffectRegistry.h
  * @brief Interface for effect registration
@@ -14,7 +12,7 @@
 #pragma once
 
 #include "IEffect.h"
-#include <stdint.h>
+#include "../../config/effect_ids.h"
 
 namespace lightwaveos {
 namespace plugins {
@@ -22,7 +20,7 @@ namespace plugins {
 /**
  * @brief Interface for effect registration
  *
- * Allows effects to be registered by ID without knowing
+ * Allows effects to be registered by EffectId without knowing
  * the concrete registry implementation.
  */
 class IEffectRegistry {
@@ -30,32 +28,32 @@ public:
     virtual ~IEffectRegistry() = default;
 
     /**
-     * @brief Register an effect by ID
-     * @param id Effect ID (0-127)
+     * @brief Register an effect by stable EffectId
+     * @param id Stable namespaced effect ID (from effect_ids.h)
      * @param effect Pointer to IEffect instance (must remain valid)
      * @return true if registration succeeded
      */
-    virtual bool registerEffect(uint8_t id, IEffect* effect) = 0;
+    virtual bool registerEffect(EffectId id, IEffect* effect) = 0;
 
     /**
      * @brief Unregister an effect by ID
      * @param id Effect ID to unregister
      * @return true if effect was registered and is now unregistered
      */
-    virtual bool unregisterEffect(uint8_t id) = 0;
+    virtual bool unregisterEffect(EffectId id) = 0;
 
     /**
      * @brief Check if an effect is registered
      * @param id Effect ID to check
      * @return true if effect is registered
      */
-    virtual bool isEffectRegistered(uint8_t id) const = 0;
+    virtual bool isEffectRegistered(EffectId id) const = 0;
 
     /**
      * @brief Get registered effect count
      * @return Number of registered effects
      */
-    virtual uint8_t getRegisteredCount() const = 0;
+    virtual uint16_t getRegisteredCount() const = 0;
 };
 
 } // namespace plugins

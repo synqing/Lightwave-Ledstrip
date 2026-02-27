@@ -4,6 +4,22 @@ Guidelines for contributing to the LightwaveOS repository. All contributors -- h
 
 ---
 
+## License
+
+This project is licensed under the [Apache License 2.0](LICENSE). By contributing, you agree that your contributions will be licensed under the same terms.
+
+## Developer Certificate of Origin (DCO)
+
+All commits must be signed off to certify that you have the right to submit them under the project's license. Add a `Signed-off-by` line to your commit messages:
+
+```
+Signed-off-by: Your Name <your.email@example.com>
+```
+
+You can do this automatically with `git commit -s`. The DCO is a lightweight alternative to a CLA -- it simply confirms you wrote the code (or have the right to submit it) and agree to the project's license terms.
+
+---
+
 ## Repository Root Placement Rules
 
 Only allowlisted entries may exist at the repository root. No exceptions without explicit approval.
@@ -22,6 +38,8 @@ CLAUDE.md
 README.md
 CONTRIBUTING.md
 CHANGELOG.md
+LICENSE
+NOTICE
 instructions/
 firmware-v3/
 tab5-encoder/

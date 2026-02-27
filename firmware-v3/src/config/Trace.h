@@ -38,81 +38,25 @@
 
 #if FEATURE_MABUTRACE
 
-// Include MabuTrace when enabled
+// MabuTrace library -- provides TRACE_SCOPE, TRACE_COUNTER, TRACE_INSTANT
+// directly as macros. We do NOT redefine those three.
 #include <mabutrace.h>
 
-/**
- * @brief Begin a scoped trace event
- *
- * Creates a trace span that automatically ends when the scope exits.
- * Use for measuring function or block execution time.
- *
- * @param name Static string name for the trace event (e.g., "audio_pipeline")
- */
-#define TRACE_SCOPE(name) MABU_TRACE_SCOPE(name)
+// --- Manual span pair (for non-RAII patterns with early returns) ----------
+// TRACE_BEGIN/TRACE_END use a file-local static handle. Safe because:
+//   - All BEGIN/END pairs in the codebase are sequential (never nested)
+//   - Each .cpp gets its own static copy via the header
+//   - AudioActor (Core 0) and RendererActor (Core 1) are in separate files
+static profiler_duration_handle_t _lw_trace_h;
 
-/**
- * @brief Record a counter value
- *
- * Logs a numeric counter value that appears as a graph in Perfetto.
- * Use for tracking metrics like CPU load, memory usage, or signal levels.
- *
- * @param name Static string name for the counter (e.g., "cpu_load")
- * @param value Integer or float value to record
- */
-#define TRACE_COUNTER(name, value) MABU_TRACE_COUNTER(name, value)
+#define TRACE_BEGIN(name) (_lw_trace_h = trace_begin(name, COLOR_UNDEFINED))
+#define TRACE_END()       trace_end(&_lw_trace_h)
 
-/**
- * @brief Record an instant event
- *
- * Logs a single point-in-time event marker in the timeline.
- * Use for marking discrete events like triggers or state changes.
- *
- * @param name Static string name for the instant event (e.g., "FALSE_TRIGGER")
- */
-#define TRACE_INSTANT(name) MABU_TRACE_INSTANT(name)
-
-/**
- * @brief Begin a named trace span (manual end required)
- *
- * For cases where TRACE_SCOPE cannot be used (non-RAII patterns).
- * Must be paired with TRACE_END.
- *
- * @param name Static string name for the span
- */
-#define TRACE_BEGIN(name) MABU_TRACE_BEGIN(name)
-
-/**
- * @brief End a previously started trace span
- *
- * Must match a prior TRACE_BEGIN call.
- */
-#define TRACE_END() MABU_TRACE_END()
-
-/**
- * @brief Initialise the MabuTrace system
- *
- * Call once during setup before any trace events.
- * Allocates the trace buffer and starts the background writer.
- *
- * @param buffer_kb Size of the trace ring buffer in KB (default: 64)
- */
-#define TRACE_INIT(buffer_kb) MABU_TRACE_INIT(buffer_kb)
-
-/**
- * @brief Flush trace buffer and prepare for capture
- *
- * Call before retrieving trace data to ensure all pending
- * events are written to the buffer.
- */
-#define TRACE_FLUSH() MABU_TRACE_FLUSH()
-
-/**
- * @brief Check if tracing is currently enabled
- *
- * @return true if tracing is active, false otherwise
- */
-#define TRACE_IS_ENABLED() MABU_TRACE_IS_ENABLED()
+// --- System lifecycle -----------------------------------------------------
+// mabutrace_init() uses a hardcoded 64 KB ring buffer; parameter is ignored.
+#define TRACE_INIT(buffer_kb) mabutrace_init()
+#define TRACE_FLUSH()         ((void)0)
+#define TRACE_IS_ENABLED()    (true)
 
 #else // !FEATURE_MABUTRACE
 

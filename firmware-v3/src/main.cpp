@@ -2267,9 +2267,9 @@ void loop() {
             handledMulti = true;
             Serial.println(F("[TRACE] Flushing trace buffer..."));
             TRACE_FLUSH();
-            mabutrace_get_json_trace_chunked([](const char* chunk) {
-                Serial.print(chunk);
-            }, 512);
+            get_json_trace_chunked(nullptr, [](void* /*ctx*/, const char* chunk, size_t len) {
+                Serial.write(chunk, len);
+            });
             Serial.println();
             Serial.println(F("[TRACE] Done."));
         }

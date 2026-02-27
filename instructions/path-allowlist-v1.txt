@@ -9,6 +9,8 @@ CLAUDE.md
 README.md
 CONTRIBUTING.md
 CHANGELOG.md
+LICENSE
+NOTICE
 instructions
 firmware-v3
 tab5-encoder

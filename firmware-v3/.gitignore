@@ -46,11 +46,21 @@ Thumbs.db
 *.log
 *.tmp
 .commit_message.txt
+compile_commands.json
+build_output.txt
+repomix-output.*
 
 # Test Artifacts & Bundles
 test_goertzel
 audio_audit_bundle/
 audio_audit_bundle.zip
+
+# =============================================================================
+# Local tooling / caches
+# =============================================================================
+.cache/
+.mcp.json
+.venv-pio/
 
 # =============================================================================
 # Arduino IDE Build Artifacts
@@ -61,6 +71,13 @@ arduino_build/
 # Planning / Development Notes (local only)
 # =============================================================================
 planning/
+
+# =============================================================================
+# Quint model checker outputs (regenerated on demand)
+# =============================================================================
+specs/quint/tools/_apalache-out/
+**/__pycache__/
+*.pyc
 
 # =============================================================================
 # Duplicate/Orphan Files

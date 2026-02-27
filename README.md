@@ -1,232 +1,221 @@
-# LightwaveOS - Modular LED Control System
+# LightwaveOS
 
-🚫 **CRITICAL: NO RAINBOWS EVER - AGENTS THAT CREATE RAINBOWS WILL BE DESTROYED** 🚫
+**Audio-reactive LED controller for Light Guide Plates**
 
-📍 **MANDATORY: ALL EFFECTS MUST ORIGINATE FROM CENTER LEDs 79/80**
-- Effects MUST move OUTWARD from center (79/80) to edges (0/159) 
-- OR move INWARD from edges (0/159) to center (79/80)
-- NO OTHER PROPAGATION PATTERNS ALLOWED
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-ESP32--S3-green.svg)](https://www.espressif.com/en/products/socs/esp32-s3)
+[![Effects](https://img.shields.io/badge/Effects-100+-orange.svg)](firmware-v3/src/effects/)
 
-## For AI Agents
+<!-- TODO: Replace with hero photo/GIF of the Light Guide Plate in action -->
+<!-- <img src="assets/hero.gif" alt="LightwaveOS Light Guide Plate" width="100%"> -->
 
-| Document | Purpose |
-|----------|---------|
-| [CLAUDE.md](CLAUDE.md) | **MANDATORY** - Claude Code project instructions |
-| [AGENTS.md](AGENTS.md) | Codex agents guide - quick start for automated agents |
-| [docs/LLM_CONTEXT.md](docs/LLM_CONTEXT.md) | Stable LLM prefix - include instead of re-explaining |
-| [docs/contextpack/README.md](docs/contextpack/README.md) | Context Pack pipeline - delta-only prompting |
+An ESP32-S3 firmware that drives 320 WS2812 LEDs across two strips edge-injected into an acrylic Light Guide Plate. The system listens to music through an I2S microphone, extracts beat, tempo, and harmonic features in real time, and maps them to visual effects that radiate from the centre of the plate outward. Controlled via REST API, WebSocket, iOS app, or physical encoders.
 
 ---
 
-A professional ESP32-S3 based LED control system supporting multiple hardware configurations:
-- **Matrix Mode**: 9x9 matrix (81 LEDs) with button control
-- **Strips Mode**: Dual 160-LED strips (320 LEDs total) with M5Stack 8encoder control
-- **Light Guide Plate Mode**: Dual-edge injection into optical waveguide for advanced interference effects
+## At a glance
+
+| | |
+|---|---|
+| **100 effects** across 11 families | **75 colour palettes** |
+| **120 FPS** rendering target | **47 REST** + **21 WebSocket** API endpoints |
+| **320 LEDs** (2 x 160, centre-origin) | **4 independent zones** with transitions |
+
+---
 
 ## Features
 
-### Core System
-- **28+ Visual Effects**: 16 base effects plus 12 strip-specific effects
-- **Smooth Transitions**: Professional fade, wipe, and blend transitions between effects
-- **Performance Monitoring**: Real-time FPS, CPU usage, and timing breakdown
-- **Modular Architecture**: Easy to extend with new effects and features
-- **Hardware Optimized**: ESP32-S3 specific optimizations for maximum performance
+### Audio-reactive pipeline
+Real-time I2S audio capture at 32 kHz, Goertzel frequency analysis, beat detection with tempo tracking, chroma/harmonic extraction, and musical style classification (electronic, organic, acoustic). Audio features map directly to visual parameters via a ControlBus architecture.
 
-### Light Guide Plate Capabilities
-- **Interference Pattern Effects**: Standing waves, moiré patterns, constructive/destructive zones
-- **Depth Illusion Effects**: Volumetric displays, parallax effects, Z-depth mapping
-- **Physics Simulations**: Plasma fields, magnetic field lines, particle collisions, wave propagation
-- **Interactive Features**: Proximity sensing, gesture recognition, touch-reactive surfaces
-- **Advanced Optical Effects**: Edge coupling resonance, holographic patterns, energy visualization
+### Centre-origin effects
+Every effect originates from LEDs 79/80 at the physical centre of the Light Guide Plate and propagates outward (or converges inward). This constraint produces unique interference and depth patterns impossible with conventional linear LED strips.
 
-## Project Structure
+### Multi-zone composer
+Up to 4 independent zones, each running its own effect and palette. 12 transition types with 15 easing curves for smooth cross-fades between effects.
 
-```
-LC_SelfContained/
-├── platformio.ini          # PlatformIO configuration
-├── src/                    # Source files
-│   ├── main.cpp           # Main application
-│   ├── config/            # Configuration files
-│   │   ├── hardware_config.h    # Pin definitions, LED count
-│   │   ├── network_config.h     # WiFi settings
-│   │   └── features.h           # Feature flags
-│   ├── core/              # Core functionality  
-│   │   ├── FxEngine.h     # Effect management system
-│   │   └── PaletteManager.h     # Color palette handling
-│   ├── effects/           # Visual effects
-│   │   ├── basic/         # Simple effects
-│   │   ├── advanced/      # Complex effects
-│   │   └── pipeline/      # Pipeline-based effects
-│   ├── hardware/          # Hardware interfaces
-│   │   ├── PerformanceMonitor.h # Performance tracking
-│   │   └── HardwareOptimizer.h  # ESP32 optimizations
-│   ├── network/           # Web interface (optional)
-│   └── utils/             # Utilities
-│       ├── SerialMenu.h   # Serial control interface
-│       └── StripMapper.h  # LED position mapping
-├── lib/                   # External libraries
-├── data/                  # Web interface files
-└── docs/                  # Documentation
-    ├── LIGHT_GUIDE_PLATE.md  # Light guide plate effects guide
-```
+### Multi-device ecosystem
+- **iOS app** -- SwiftUI dashboard with Canvas-based LED preview and beat-sync UI
+- **Tab5 encoder** -- M5Stack hardware controller with 16 rotary encoders and 5" LVGL display
+- **Web dashboard** -- Browser-based effect composer with live parameter tuning
+- **REST + WebSocket + UDP** -- Full programmatic control from any language
 
-## Building and Flashing
+---
 
-### Device Port Mapping
-
-**CRITICAL: Device Port Assignments**
-- **ESP32-S3 (v3 firmware)**: `/dev/cu.usbmodem1101`
-- **Tab5 (encoder firmware)**: `/dev/cu.usbmodem101`
-
-Always use these specific ports for uploads and monitoring. Verify with `pio device list` before uploading.
+## Quick start
 
 ### Prerequisites
-- [PlatformIO](https://platformio.org/) (VS Code extension or CLI)
-- ESP32 board package
-- USB cable for programming
 
-### Build Instructions
+- [PlatformIO CLI](https://platformio.org/install/cli) (or VS Code extension)
+- ESP32-S3 development board
+- USB-C cable
 
-**v3 Firmware (ESP32-S3)**:
+### Build and flash
+
 ```bash
-cd firmware-v3
-pio run -e esp32dev_audio -t upload --upload-port /dev/cu.usbmodem1101
+git clone https://github.com/synqing/Lightwave-Ledstrip.git
+cd Lightwave-Ledstrip/firmware-v3
+pio run -e esp32dev_audio              # build
+pio run -e esp32dev_audio -t upload    # flash
+pio device monitor -b 115200           # serial monitor
 ```
 
-**Tab5 Encoder Firmware**:
-```bash
-# From repository root:
-PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" pio run -e tab5 -t upload --upload-port /dev/cu.usbmodem101 -d tab5-encoder
+---
+
+## Project layout
+
+```
+LightwaveOS/
+  firmware-v3/       ESP32-S3 firmware (PlatformIO, C++17)
+  lightwave-ios-v2/  iOS companion app (SwiftUI, iOS 17+)
+  tab5-encoder/      M5Stack Tab5 hardware controller (LVGL 9.3)
+  k1-composer/       Web-based effect composer dashboard
+  instructions/      Governance policies and changelog fragments
 ```
 
-### Configuration
+---
 
-1. **Select Mode**: Edit `src/config/features.h`:
+<details>
+<summary><strong>Architecture</strong></summary>
+
+### Dual-core actor model
+
+- **Core 0** -- Network stack (WiFi, HTTP, WebSocket), audio capture and DSP
+- **Core 1** -- LED rendering at 120 FPS, effect computation, zone composition
+
+Cross-core communication uses lock-free snapshot buffers. The system follows a CQRS (Command Query Responsibility Segregation) pattern: commands flow in through the API, state changes propagate through an actor message bus, and the renderer queries the latest state each frame.
+
+### IEffect plugin system
+
+Effects implement a simple interface:
+
 ```cpp
-#define LED_STRIPS_MODE 1  // Set to 1 for strips, 0 for matrix
-#define LED_MATRIX_MODE 0  // Set to 1 for matrix, 0 for strips
-#define FEATURE_LIGHT_GUIDE_MODE 1  // Enable light guide effects
-```
-
-2. **Hardware Pins** (automatically configured based on mode):
-
-**Matrix Mode**:
-```cpp
-constexpr uint8_t LED_DATA_PIN = 6;     // LED data pin
-constexpr uint16_t NUM_LEDS = 81;       // Number of LEDs
-constexpr uint8_t BUTTON_PIN = 0;       // Button input
-```
-
-**Strips Mode**:
-```cpp
-constexpr uint8_t STRIP1_DATA_PIN = 11;  // First strip
-constexpr uint8_t STRIP2_DATA_PIN = 12;  // Second strip
-constexpr uint8_t I2C_SDA = 13;          // M5Stack 8encoder
-constexpr uint8_t I2C_SCL = 14;          // M5Stack 8encoder
-```
-
-**Light Guide Plate Mode** uses the same pins as Strips Mode but with specialized effects for optical waveguide applications.
-
-Enable/disable features in `src/config/features.h`:
-```cpp
-#define FEATURE_WEB_SERVER 0        // Web interface
-#define FEATURE_SERIAL_MENU 1       // Serial control
-#define FEATURE_PERFORMANCE_MONITOR 1 // Performance tracking
-#define FEATURE_LIGHT_GUIDE_MODE 1  // Light guide effects
-```
-
-## Usage
-
-### Physical Controls
-- **Matrix Mode**: Button to cycle through effects with different transitions
-- **Strips/Light Guide Mode**: M5Stack 8encoder for comprehensive control:
-  - Encoder 0: Effect selection
-  - Encoder 1: Palette selection  
-  - Encoder 2: Speed control
-  - Encoder 3: Fade amount
-  - Encoder 4: Brightness
-  - Encoder 5: Sync mode (strips/interference pattern)
-  - Encoder 6: Propagation mode
-  - Encoder 7: Light guide specific parameters
-
-### Serial Commands
-Connect at 115200 baud and type 'h' for help menu.
-
-Common commands:
-- `e` - Effects menu
-- `p` - Palette selection
-- `b <value>` - Set brightness (0-255)
-- `f <value>` - Set fade amount (0-255)
-- `s <value>` - Set speed (1-50)
-
-### Performance Monitoring
-The system provides real-time performance metrics:
-- FPS and frame timing
-- CPU usage percentage
-- Memory usage and fragmentation
-- Effect processing time breakdown
-
-## Light Guide Plate Mode
-
-### Overview
-The Light Guide Plate mode transforms the system into a sophisticated optical waveguide display. LEDs at opposing edges (329mm apart) fire light into an acrylic plate, creating unique interference patterns and depth effects impossible with traditional LED arrangements.
-
-### Key Features
-- **Edge-lit Waveguide**: 160 LEDs per edge firing into optical plate
-- **Interference Patterns**: Mathematical wave interference between opposing edges
-- **Depth Illusions**: 3D objects appearing to float within the plate
-- **Physics Simulations**: Realistic plasma, magnetic fields, and particle effects
-- **Interactive Capabilities**: Proximity sensing and gesture recognition
-
-### Effect Categories
-1. **Interference Effects**: Standing waves, moiré patterns, constructive/destructive zones
-2. **Depth Effects**: Volumetric displays, parallax illusions, Z-depth mapping
-3. **Physics Simulations**: Plasma fields, magnetic field visualization, particle collisions
-4. **Interactive Effects**: Touch-reactive surfaces, gesture-controlled visuals
-5. **Advanced Optical**: Holographic patterns, energy transfer visualization
-
-See [docs/LIGHT_GUIDE_PLATE.md](docs/LIGHT_GUIDE_PLATE.md) for complete technical documentation.
-
-## Adding New Effects
-
-1. Create a new effect class in `src/effects/`:
-```cpp
-class MyEffect : public EffectBase {
+class IEffect {
 public:
-    MyEffect() : EffectBase("My Effect", 128, 10, 20) {}
-    
-    void render() override {
-        // Your effect code here
-        for (uint16_t i = 0; i < HardwareConfig::NUM_LEDS; i++) {
-            leds[i] = CRGB::Red;
-        }
-    }
+    virtual void render(const RenderContext& ctx, CRGB* leds) = 0;
+    virtual const char* name() const = 0;
 };
 ```
 
-2. Register it in the appropriate effects collection file.
+Each effect receives a `RenderContext` with timing, audio features, palette, and zone information. Effects are registered in `PatternRegistry` and selectable at runtime via API or hardware controls.
 
-## Feature Flags
+### Zone composer
 
-The project uses compile-time feature flags to optimize binary size:
-- `FEATURE_BASIC_EFFECTS`: Simple visual effects
-- `FEATURE_ADVANCED_EFFECTS`: Complex computational effects
-- `FEATURE_PIPELINE_EFFECTS`: Modular pipeline system
-- `FEATURE_WEB_SERVER`: Web control interface
-- `FEATURE_PERFORMANCE_MONITOR`: Performance tracking
-- `FEATURE_LIGHT_GUIDE_MODE`: Light guide plate effects
-- `FEATURE_STRIP_EFFECTS`: Strip-specific effects
-- `FEATURE_INTERFERENCE_CALC`: Wave interference calculations
-- `FEATURE_INTERACTIVE_SENSING`: Proximity and gesture detection
+The zone composer divides the 320-LED strip into up to 4 independent zones, each with its own effect, palette, and parameters. A transition engine handles cross-fades between effects using 12 transition types (fade, wipe, dissolve, etc.) and 15 easing curves.
+
+</details>
+
+<details>
+<summary><strong>Audio pipeline</strong></summary>
+
+```
+SPH0645 mic (I2S, 32 kHz)
+  -> DMA capture (256-sample hops)
+  -> Goertzel frequency analysis (64 bins)
+  -> Beat detection + tempo tracking
+  -> Chroma/harmonic extraction
+  -> Style classification (electronic/organic/acoustic)
+  -> ControlBus frame
+  -> Effect render() receives audio features
+```
+
+The audio pipeline runs on Core 0 and produces a `ControlBusFrame` every hop (~8 ms). Effects read audio features through the `RenderContext`:
+
+- `rms` -- overall loudness
+- `flux` -- spectral change (onset detection)
+- `bands[]` -- frequency band energies
+- `chromaAngle` -- dominant pitch as hue angle
+- `bpm` -- current tempo estimate
+- `beatPhase` -- position within the current beat (0.0-1.0)
+
+</details>
+
+<details>
+<summary><strong>API</strong></summary>
+
+### REST API (47 endpoints)
+
+Base URL: `http://<device-ip>/api/v1/`
+
+| Category | Endpoints | Examples |
+|----------|-----------|---------|
+| Device | 2 | `/device/info`, `/device/restart` |
+| Effects | 5 | `/effects/current`, `/effects/list`, `/effects/{id}` |
+| Parameters | 2 | `/parameters`, `/parameters/{name}` |
+| Transitions | 4 | `/transitions/trigger`, `/transitions/config` |
+| Zones | 10 | `/zones`, `/zones/{id}`, `/zones/{id}/effect` |
+| Batch | 1 | `/batch` (multiple commands in one request) |
+| Debug | 1 | `/debug/metrics` |
+
+### WebSocket (21 commands)
+
+Connect to `ws://<device-ip>/ws` for real-time bidirectional control.
+
+### Binary streaming
+
+- **LED frames**: 966 bytes/frame over WebSocket or UDP (port 41234)
+- **Audio metrics**: 464 bytes/frame for visualisation clients
+
+See [firmware-v3/docs/api/api-v1.md](firmware-v3/docs/api/api-v1.md) for the complete API reference.
+
+</details>
+
+<details>
+<summary><strong>Ecosystem</strong></summary>
+
+### k1-composer (web dashboard)
+
+Browser-based effect composer with live code visualisation. Discovers 170 effects and 1,162 exposed parameters. Supports binary frame streaming (960 bytes/frame), lease-based control protocol, and runtime parameter patching.
+
+### tab5-encoder (hardware controller)
+
+M5Stack Tab5 (ESP32-P4) with a 5" 800x480 LVGL display and dual M5ROTATE8 encoder units (16 rotary encoders). Features an 8-bank preset system and WebSocket synchronisation with the main firmware.
+
+### lightwave-ios-v2 (iOS app)
+
+SwiftUI companion app for iOS 17+ with Canvas-based 320-LED rendering, beat-synchronised UI animations, and REST + WebSocket + UDP connectivity. Provides a music visualisation tool with a centre-origin LED preview.
+
+</details>
+
+<details>
+<summary><strong>Hardware</strong></summary>
+
+### Bill of materials
+
+| Component | Description |
+|-----------|-------------|
+| ESP32-S3-DevKitC-1 | Main controller (240 MHz, 8 MB flash, 2 MB PSRAM) |
+| WS2812 LED strip | 2 x 160 LEDs (320 total) |
+| SPH0645 | I2S MEMS microphone (32 kHz sampling) |
+| Acrylic plate | Light Guide Plate (~329 mm between LED edges) |
+| 5V PSU | Adequate for 320 LEDs at target brightness |
+
+### LED layout
+
+```
+Strip A (160 LEDs)     Light Guide Plate     Strip B (160 LEDs)
+[0 ---- 79|80 ---- 159]  <== acrylic ==>  [0 ---- 79|80 ---- 159]
+            ^                                         ^
+        centre origin                            centre origin
+```
+
+All effects radiate from LEDs 79/80 outward to the edges, creating symmetric interference patterns within the acrylic waveguide.
+
+</details>
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for repository structure rules, changelog fragment process, and DCO sign-off requirements.
 
 ## License
 
-This project is provided as-is for educational and personal use.
+Licensed under the [Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for additional information.
 
-## Acknowledgments
+## Acknowledgements
 
-Built with:
-- [FastLED](https://github.com/FastLED/FastLED) - LED control library
-- [ArduinoJson](https://arduinojson.org/) - JSON parsing
-- ESP32 Arduino Core
-    
+- [FastLED](https://github.com/FastLED/FastLED) -- LED control library
+- [ArduinoJson](https://arduinojson.org/) -- JSON serialisation
+- [ESPAsyncWebServer](https://github.com/ESP32Async/ESPAsyncWebServer) -- Async HTTP and WebSocket server
+- [ESP32 Arduino Core](https://github.com/espressif/arduino-esp32) -- ESP-IDF Arduino framework

@@ -12,6 +12,7 @@ CHANGELOG.md
 LICENSE
 NOTICE
 TRADEMARK.md
+BACKLOG.md
 instructions
 firmware-v3
 tab5-encoder

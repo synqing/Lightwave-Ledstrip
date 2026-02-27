@@ -97,6 +97,20 @@ Select everything between `=== MabuTrace Dump ===` and `=== End Trace ===`
 You should see a dual-track timeline with audio spans on one track and render
 spans on another.
 
+### Alternative: WiFi capture (optional)
+
+MabuTrace has a built-in HTTP server that can serve traces over the network.
+This is useful when serial output is impractical (e.g., the device is mounted
+in an enclosure without USB access).
+
+To use WiFi capture, call `mabutrace_start_server(81)` after WiFi is connected
+in `main.cpp`. Then navigate to `http://<device-ip>:81/trace` in a browser.
+
+> **Note:** The default development policy discourages WiFi-dependent workflows
+> to ensure the device operates standalone. WiFi capture is an exception for
+> developer tooling -- it does not affect production firmware behaviour. Use
+> serial capture as the default; WiFi capture only when physically required.
+
 ---
 
 ## 3. Instrumented Spans

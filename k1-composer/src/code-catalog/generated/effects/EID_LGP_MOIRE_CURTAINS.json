@@ -1,0 +1,97 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_MOIRE_CURTAINS",
+  "effectIdHex": "0x0400",
+  "className": "LGPMoireCurtainsEffect",
+  "displayName": "LGP Moire Curtains",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPMoireCurtainsEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPMoireCurtainsEffect.cpp",
+  "renderRange": [
+    25,
+    52
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        25,
+        27
+      ]
+    ],
+    "mapping": [
+      [
+        28,
+        31
+      ]
+    ],
+    "modulation": [
+      [
+        26,
+        26
+      ],
+      [
+        33,
+        33
+      ],
+      [
+        39,
+        40
+      ],
+      [
+        45,
+        46
+      ]
+    ],
+    "render": [
+      [
+        35,
+        35
+      ],
+      [
+        41,
+        41
+      ],
+      [
+        47,
+        47
+      ]
+    ],
+    "post": [
+      [
+        49,
+        50
+      ]
+    ],
+    "output": [
+      [
+        35,
+        35
+      ],
+      [
+        38,
+        38
+      ],
+      [
+        41,
+        41
+      ],
+      [
+        43,
+        44
+      ],
+      [
+        47,
+        47
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'mapping' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPMoireCurtainsEffect.cpp\n * @brief LGP Moire Curtains effect implementation\n */\n\n#include \"LGPMoireCurtainsEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPMoireCurtainsEffect::LGPMoireCurtainsEffect()\n    : m_phase(0)\n{\n}\n\nbool LGPMoireCurtainsEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_phase = 0;\n    return true;\n}\n\nvoid LGPMoireCurtainsEffect::render(plugins::EffectContext& ctx) {\n    // CENTER ORIGIN - Two slightly mismatched frequencies create beat patterns\n    const float baseFreq = 8.0f;\n    const float delta = 0.2f;\n\n    const float leftFreq = baseFreq + delta / 2.0f;\n    const float rightFreq = baseFreq - delta / 2.0f;\n\n    m_phase = (uint16_t)(m_phase + ctx.speed);\n\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        float distFromCenter = (float)centerPairDistance(i);\n\n        // Left strip\n        uint16_t leftPhaseVal = (uint16_t)(sin16(distFromCenter * leftFreq * 410.0f + m_phase) + 32768) >> 8;\n        uint8_t leftBright = scale8(leftPhaseVal, ctx.brightness);\n        ctx.leds[i] = ctx.palette.getColor((uint8_t)(ctx.gHue + (uint8_t)(distFromCenter / 2.0f)), leftBright);\n\n        // Right strip - slightly different frequency\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            uint16_t rightPhaseVal = (uint16_t)(sin16(distFromCenter * rightFreq * 410.0f + m_phase) + 32768) >> 8;\n            uint8_t rightBright = scale8(rightPhaseVal, ctx.brightness);\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor(\n                (uint8_t)(ctx.gHue + (uint8_t)(distFromCenter / 2.0f) + 128),\n                rightBright);\n        }\n    }\n}\n\nvoid LGPMoireCurtainsEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPMoireCurtainsEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Moire Curtains\",\n        \"Shifting moire interference layers\",\n        plugins::EffectCategory::UNCATEGORIZED,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

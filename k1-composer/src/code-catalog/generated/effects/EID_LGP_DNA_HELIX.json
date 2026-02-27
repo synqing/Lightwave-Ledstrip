@@ -1,0 +1,102 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_DNA_HELIX",
+  "effectIdHex": "0x0706",
+  "className": "LGPDNAHelixEffect",
+  "displayName": "LGP DNA Helix",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPDNAHelixEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPDNAHelixEffect.cpp",
+  "renderRange": [
+    25,
+    76
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        25,
+        30
+      ]
+    ],
+    "mapping": [
+      [
+        31,
+        38
+      ]
+    ],
+    "modulation": [
+      [
+        39,
+        47
+      ]
+    ],
+    "render": [
+      [
+        34,
+        34
+      ],
+      [
+        40,
+        41
+      ],
+      [
+        43,
+        44
+      ],
+      [
+        46,
+        47
+      ],
+      [
+        60,
+        60
+      ],
+      [
+        63,
+        63
+      ],
+      [
+        68,
+        70
+      ],
+      [
+        72,
+        72
+      ]
+    ],
+    "post": [
+      [
+        70,
+        73
+      ]
+    ],
+    "output": [
+      [
+        34,
+        34
+      ],
+      [
+        60,
+        60
+      ],
+      [
+        62,
+        63
+      ],
+      [
+        70,
+        72
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'mapping' inferred from fallback segmentation.",
+    "Phase 'modulation' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPDNAHelixEffect.cpp\n * @brief LGP DNA Helix effect implementation\n */\n\n#include \"LGPDNAHelixEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPDNAHelixEffect::LGPDNAHelixEffect()\n    : m_rotation(0.0f)\n{\n}\n\nbool LGPDNAHelixEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_rotation = 0.0f;\n    return true;\n}\n\nvoid LGPDNAHelixEffect::render(plugins::EffectContext& ctx) {\n    // Double helix with color base pairing\n    float speed = ctx.speed / 255.0f;\n    float intensity = ctx.brightness / 255.0f;\n\n    m_rotation += speed * 0.05f;\n\n    const float helixPitch = 20.0f;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float distFromCenter = (float)centerPairDistance((uint16_t)i);\n\n        float angle1 = (distFromCenter / helixPitch) * TWO_PI + m_rotation;\n        float angle2 = angle1 + PI;\n\n        uint8_t paletteOffset1;\n        uint8_t paletteOffset2;\n        if (sinf(angle1 * 2.0f) > 0.0f) {\n            paletteOffset1 = 0;\n            paletteOffset2 = 15;\n        } else {\n            paletteOffset1 = 10;\n            paletteOffset2 = 25;\n        }\n\n        float strand1Intensity = (sinf(angle1) + 1.0f) * 0.5f;\n        float strand2Intensity = (sinf(angle2) + 1.0f) * 0.5f;\n\n        float connectionIntensity = 0.0f;\n        if (fmodf(distFromCenter, helixPitch / 4.0f) < 2.0f) {\n            connectionIntensity = 1.0f;\n        }\n\n        uint8_t brightness = (uint8_t)(255.0f * intensity);\n\n        ctx.leds[i] = ctx.palette.getColor((uint8_t)(ctx.gHue + paletteOffset1),\n                                           (uint8_t)(brightness * strand1Intensity));\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(ctx.gHue + paletteOffset2),\n                                                             (uint8_t)(brightness * strand2Intensity));\n        }\n\n        if (connectionIntensity > 0.0f) {\n            CRGB conn2 = ctx.palette.getColor((uint8_t)(ctx.gHue + paletteOffset2), brightness);\n            CRGB conn1 = ctx.palette.getColor((uint8_t)(ctx.gHue + paletteOffset1), brightness);\n            ctx.leds[i] = blend(ctx.leds[i], conn2, 128);\n            if (i + STRIP_LENGTH < ctx.ledCount) {\n                ctx.leds[i + STRIP_LENGTH] = blend(ctx.leds[i + STRIP_LENGTH], conn1, 128);\n            }\n        }\n    }\n}\n\nvoid LGPDNAHelixEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPDNAHelixEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP DNA Helix\",\n        \"Double helix structure\",\n        plugins::EffectCategory::UNCATEGORIZED,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lightwave.local/schemas/k1-composer-telemetry-1.1.0.json",
+  "title": "K1 Composer Dashboard Telemetry",
+  "type": "object",
+  "additionalProperties": true,
+  "not": {
+    "anyOf": [
+      { "required": ["leaseToken"] },
+      { "required": ["X-Control-Lease"] },
+      { "required": ["X-Control-Lease-Id"] },
+      { "required": ["x-control-lease"] },
+      { "required": ["x-control-lease-id"] }
+    ]
+  },
+  "required": ["event"],
+  "properties": {
+    "event": { "type": "string" },
+    "ts_mono_ms": { "type": "integer", "minimum": 0 },
+    "schemaVersion": { "type": "string" },
+    "leaseId": { "type": "string" },
+    "sessionId": { "type": "string" },
+    "source": {
+      "type": "string",
+      "enum": ["ws", "rest", "encoder", "serial", "dashboard"]
+    },
+    "ownerWsClientId": { "type": "integer", "minimum": 0 },
+    "ownerClientName": { "type": "string" },
+    "ownerInstanceId": { "type": "string" },
+    "remainingMs": { "type": "integer", "minimum": 0 },
+    "command": { "type": "string" },
+    "reason": { "type": "string" },
+    "seq": { "type": "integer", "minimum": 0 },
+    "bufferedAmount": { "type": "integer", "minimum": 0 },
+    "queueDropThreshold": { "type": "integer", "minimum": 0 },
+    "bufferedAmountNow": { "type": "number", "minimum": 0 },
+    "bufferedAmountP95": { "type": "number", "minimum": 0 },
+    "bufferedAmountMax": { "type": "number", "minimum": 0 },
+    "sendCadenceHz": { "type": "number", "minimum": 0 },
+    "sendJitterMs": { "type": "number", "minimum": 0 },
+    "dropRatio": { "type": "number", "minimum": 0 },
+    "dropRatio10s": { "type": "number", "minimum": 0 },
+    "dropRatio60s": { "type": "number", "minimum": 0 },
+    "attempted": { "type": "integer", "minimum": 0 },
+    "sent": { "type": "integer", "minimum": 0 },
+    "dropped": { "type": "integer", "minimum": 0 },
+    "attempted10s": { "type": "integer", "minimum": 0 },
+    "attempted60s": { "type": "integer", "minimum": 0 },
+    "windowMs": { "type": "integer", "minimum": 0 }
+  }
+}

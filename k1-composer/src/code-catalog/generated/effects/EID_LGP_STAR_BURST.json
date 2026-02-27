@@ -1,0 +1,192 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_STAR_BURST",
+  "effectIdHex": "0x0306",
+  "className": "LGPStarBurstEffect",
+  "displayName": "LGP Star Burst",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPStarBurstEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPStarBurstEffect.cpp",
+  "renderRange": [
+    49,
+    171
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        53,
+        53
+      ],
+      [
+        56,
+        56
+      ],
+      [
+        60,
+        60
+      ],
+      [
+        62,
+        62
+      ],
+      [
+        65,
+        65
+      ],
+      [
+        81,
+        81
+      ],
+      [
+        87,
+        87
+      ]
+    ],
+    "mapping": [
+      [
+        51,
+        52
+      ],
+      [
+        106,
+        107
+      ],
+      [
+        112,
+        112
+      ],
+      [
+        127,
+        127
+      ],
+      [
+        162,
+        162
+      ]
+    ],
+    "modulation": [
+      [
+        73,
+        73
+      ],
+      [
+        80,
+        80
+      ],
+      [
+        83,
+        83
+      ],
+      [
+        89,
+        89
+      ],
+      [
+        91,
+        91
+      ],
+      [
+        94,
+        96
+      ],
+      [
+        98,
+        98
+      ],
+      [
+        101,
+        101
+      ],
+      [
+        105,
+        105
+      ],
+      [
+        107,
+        109
+      ],
+      [
+        111,
+        113
+      ],
+      [
+        147,
+        147
+      ],
+      [
+        149,
+        150
+      ]
+    ],
+    "render": [
+      [
+        119,
+        119
+      ],
+      [
+        121,
+        121
+      ],
+      [
+        126,
+        126
+      ],
+      [
+        131,
+        131
+      ],
+      [
+        137,
+        138
+      ],
+      [
+        143,
+        143
+      ],
+      [
+        163,
+        163
+      ],
+      [
+        166,
+        166
+      ],
+      [
+        168,
+        168
+      ]
+    ],
+    "post": [
+      [
+        121,
+        121
+      ]
+    ],
+    "output": [
+      [
+        131,
+        131
+      ],
+      [
+        134,
+        135
+      ],
+      [
+        137,
+        137
+      ],
+      [
+        143,
+        143
+      ],
+      [
+        166,
+        168
+      ]
+    ]
+  },
+  "mappingConfidence": "high",
+  "mappingWarnings": [],
+  "sourceText": "/**\n * @file LGPStarBurstEffect.cpp\n * @brief LGP Star Burst effect - explosive radial lines from center\n *\n * REPAIRED: Simplified to match Wave Collision's proven pattern.\n * Previous version was over-engineered with 9+ audio inputs causing chaos.\n *\n * Pattern: CENTER_ORIGIN radial waves with snare-driven bursts\n *\n * Audio Integration (Wave Collision pattern):\n * - Heavy Bass → Speed modulation (slew-limited)\n * - Snare Hit → Burst flash (center-focused)\n * - Chroma → Color (dominant bin for hue offset)\n */\n\n#include \"LGPStarBurstEffect.h\"\n#include \"../CoreEffects.h\"\n#include \"../../config/features.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPStarBurstEffect::LGPStarBurstEffect()\n    : m_phase(0.0f)\n{\n}\n\nbool LGPStarBurstEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_phase = 0.0f;\n    m_burst = 0.0f;\n    m_lastHopSeq = 0;\n    m_chromaAngle = 0.0f;\n\n    // Initialize spring physics for natural speed momentum\n    m_phaseSpeedSpring.init(50.0f, 1.0f);  // stiffness=50, mass=1 (critically damped)\n    m_phaseSpeedSpring.reset(1.0f);        // Start at base speed\n    \n    // Initialize smoothing\n    m_heavyBassSmooth = 0.0f;\n    m_heavyBassSmoothInitialized = false;\n\n    return true;\n}\n\nvoid LGPStarBurstEffect::render(plugins::EffectContext& ctx) {\n    // CENTRE ORIGIN - Star-like patterns radiating from centre\n    float speedNorm = ctx.speed / 50.0f;\n    float intensityNorm = ctx.brightness / 255.0f;\n    const bool hasAudio = ctx.audio.available;\n\n    // =========================================================================\n    // Audio Analysis (per-hop, like Wave Collision)\n    // =========================================================================\n#if FEATURE_AUDIO_SYNC\n    if (hasAudio) {\n        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);\n        if (newHop) {\n            m_lastHopSeq = ctx.audio.controlBus.hop_seq;\n\n            // Snare = burst (SIMPLE - like Wave Collision)\n            if (ctx.audio.isSnareHit()) {\n                m_burst = 1.0f;\n            }\n        }\n    }\n#endif\n\n    // =========================================================================\n    // Per-frame Updates (smooth animation)\n    // =========================================================================\n    float rawDt = ctx.getSafeRawDeltaSeconds();\n    float dt = ctx.getSafeDeltaSeconds();\n    if (dt > 0.1f) dt = 0.1f;  // Clamp for safety\n\n    // Circular chroma hue (replaces argmax + linear EMA to eliminate bin-flip rainbow sweeps)\n    uint8_t chromaHue = effects::chroma::circularChromaHueSmoothed(\n        ctx.audio.controlBus.chroma, m_chromaAngle, rawDt, 0.20f);\n\n    // Use heavy_bands for speed (like Wave Collision) with EMA smoothing\n    float heavyEnergy = 0.0f;\n#if FEATURE_AUDIO_SYNC\n    if (hasAudio) {\n        float rawHeavyBass = ctx.audio.heavyBass();\n        \n        // EMA smoothing with frame-rate-independent alpha (tau = 50ms)\n        const float tau = 0.05f;\n        float alpha = 1.0f - expf(-rawDt / tau);\n        \n        // CRITICAL: Initialize to raw value on first frame (no ramp-from-zero)\n        if (!m_heavyBassSmoothInitialized) {\n            m_heavyBassSmooth = rawHeavyBass;\n            m_heavyBassSmoothInitialized = true;\n        } else {\n            m_heavyBassSmooth += (rawHeavyBass - m_heavyBassSmooth) * alpha;\n        }\n        \n        heavyEnergy = m_heavyBassSmooth;\n    }\n#endif\n\n    // Spring physics for speed modulation (natural momentum, no jitter)\n    float targetSpeed = 0.7f + 0.6f * heavyEnergy;\n    float smoothedSpeed = m_phaseSpeedSpring.update(targetSpeed, rawDt);\n    if (smoothedSpeed > 2.0f) smoothedSpeed = 2.0f;\n    if (smoothedSpeed < 0.3f) smoothedSpeed = 0.3f;  // Prevent stalling\n\n    // Phase advancement (PROVEN PATTERN - 240.0f multiplier)\n    m_phase += speedNorm * 240.0f * smoothedSpeed * dt;\n    if (m_phase > 628.3f) m_phase -= 628.3f;  // Wrap at 100*2π\n\n    // Simple burst decay (like Wave Collision)\n    m_burst = effects::chroma::dtDecay(m_burst, 0.88f, rawDt);\n\n    // =========================================================================\n    // Rendering\n    // =========================================================================\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    // Anti-aliased burst core at true center (79.5) using SubpixelRenderer\n    if (m_burst > 0.05f) {\n        uint8_t baseHue = (uint8_t)(ctx.gHue + chromaHue);\n        CRGB burstColor = ctx.palette.getColor(baseHue, 255);\n        uint8_t burstBright = (uint8_t)(m_burst * 200.0f * intensityNorm);\n\n        // Render bright core at fractional center (between LED 79 and 80)\n        enhancement::SubpixelRenderer::renderPoint(\n            ctx.leds, STRIP_LENGTH, 79.5f, burstColor, burstBright\n        );\n\n        // Also render on strip 2\n        if (STRIP_LENGTH * 2 <= ctx.ledCount) {\n            enhancement::SubpixelRenderer::renderPoint(\n                ctx.leds + STRIP_LENGTH, STRIP_LENGTH, 79.5f,\n                ctx.palette.getColor(baseHue + 90, 255), burstBright\n            );\n        }\n    }\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float distFromCenter = (float)centerPairDistance((uint16_t)i);\n\n        // ANTI-ALIASED frequency: Reduced from 0.25f to 0.12f to prevent wagon-wheel\n        // At 0.25f with 240.0 phase multiplier: ~3.84 rad/frame @ 60fps = jumps >1 wavelength\n        // At 0.12f: ~1.84 rad/frame = stays under half-wavelength (Nyquist-safe)\n        const float freqBase = 0.12f;  // ~52 LED wavelength, smoother motion\n        float star = sinf(distFromCenter * freqBase - m_phase);\n\n        // Center-focused burst flash (like Wave Collision's collision flash)\n        float burstFlash = m_burst * expf(-distFromCenter * 0.12f);\n\n        // Simple audio gain (like Wave Collision)\n        float audioGain = 0.5f + 0.5f * heavyEnergy;\n        float pattern = star * audioGain + burstFlash * 0.8f;\n\n        // tanhf for uniform brightness (PROVEN PATTERN)\n        pattern = tanhf(pattern * 2.0f) * 0.5f + 0.5f;\n\n        uint8_t brightness = (uint8_t)(pattern * 255.0f * intensityNorm);\n        uint8_t paletteIndex = (uint8_t)(distFromCenter * 2.0f + pattern * 50.0f);\n        uint8_t baseHue = (uint8_t)(ctx.gHue + chromaHue);\n\n        ctx.leds[i] = ctx.palette.getColor((uint8_t)(baseHue + paletteIndex), brightness);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(baseHue + paletteIndex + 90), brightness);\n        }\n    }\n}\n\nvoid LGPStarBurstEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPStarBurstEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Star Burst\",\n        \"Explosive radial lines\",\n        plugins::EffectCategory::GEOMETRIC,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

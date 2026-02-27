@@ -1,0 +1,315 @@
+# Repository Hygiene Check
+# Enforces root allowlist, filename policy, and changelog fragment requirements.
+# Triggers on all pushes and PRs to main.
+
+name: Repository Hygiene
+
+on:
+  push:
+    branches: [main, 'migration/**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  hygiene:
+    name: Repository Hygiene Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ==================== Check 1: Root Allowlist ====================
+      - name: Check root directory allowlist
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ALLOWLIST=(
+            ".git"
+            ".github"
+            ".claude"
+            ".codex"
+            ".gitignore"
+            ".pre-commit-config.yaml"
+            "AGENTS.md"
+            "CLAUDE.md"
+            "README.md"
+            "CONTRIBUTING.md"
+            "CHANGELOG.md"
+            "instructions"
+            "firmware-v3"
+            "tab5-encoder"
+            "lightwave-ios-v2"
+            "k1-composer"
+          )
+
+          echo "Checking root directory entries against allowlist..."
+          VIOLATIONS=0
+
+          while IFS= read -r entry; do
+            [ -z "$entry" ] && continue
+            FOUND=0
+            for allowed in "${ALLOWLIST[@]}"; do
+              if [ "$entry" = "$allowed" ]; then
+                FOUND=1
+                break
+              fi
+            done
+
+            if [ "$FOUND" -eq 0 ]; then
+              echo "::error::Root entry '$entry' is not in allowlist"
+              VIOLATIONS=$((VIOLATIONS + 1))
+            fi
+          done < <(ls -1A)
+
+          if [ "$VIOLATIONS" -gt 0 ]; then
+            echo ""
+            echo "Root directory contains $VIOLATIONS disallowed entries."
+            echo "Allowed entries:"
+            printf '  %s\n' "${ALLOWLIST[@]}"
+            exit 1
+          fi
+
+          echo "PASS: Root directory contains only allowlisted entries"
+
+      # ==================== Check 2: Forbidden Root Directories ====================
+      - name: Check for forbidden directories at root
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          FORBIDDEN=(
+            "temp" "tmp" "prototype" "prototypes"
+            "output" "outputs" "build" "dist"
+            "cache" "backup" "backups" "old" "archive"
+          )
+
+          echo "Checking for forbidden directories at root..."
+          VIOLATIONS=0
+
+          for pattern in "${FORBIDDEN[@]}"; do
+            while IFS= read -r dir; do
+              [ -z "$dir" ] && continue
+              echo "::error::Forbidden directory '$dir' found at root"
+              VIOLATIONS=$((VIOLATIONS + 1))
+            done < <(find . -maxdepth 1 -type d -name "$pattern" | sed 's|^\./||' | grep -v '^\.$')
+          done
+
+          # Also check z_ prefixed directories
+          while IFS= read -r dir; do
+            [ -z "$dir" ] && continue
+            echo "::error::Forbidden z_ directory '$dir' found at root"
+            VIOLATIONS=$((VIOLATIONS + 1))
+          done < <(find . -maxdepth 1 -type d -name "z_*" | sed 's|^\./||')
+
+          if [ "$VIOLATIONS" -gt 0 ]; then
+            echo "Found $VIOLATIONS forbidden directories at root"
+            exit 1
+          fi
+
+          echo "PASS: No forbidden directories at root"
+
+      # ==================== Check 3: Filename Policy (Root Level) ====================
+      - name: Check root filename policy
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Governance files exempt from kebab-case
+          EXEMPT=(
+            "AGENTS.md" "CLAUDE.md" "README.md"
+            "CONTRIBUTING.md" "CHANGELOG.md"
+          )
+
+          echo "Checking root-level filename policy..."
+          VIOLATIONS=0
+
+          while IFS= read -r entry; do
+            [ -z "$entry" ] && continue
+            # Skip hidden entries (dotfiles/dirs)
+            [[ "$entry" == .* ]] && continue
+
+            # Skip exempt files
+            SKIP=0
+            for ex in "${EXEMPT[@]}"; do
+              [ "$entry" = "$ex" ] && SKIP=1 && break
+            done
+            [ "$SKIP" -eq 1 ] && continue
+
+            # Check for spaces
+            if [[ "$entry" =~ \  ]]; then
+              echo "::error::Root entry '$entry' contains spaces"
+              VIOLATIONS=$((VIOLATIONS + 1))
+              continue
+            fi
+
+            # Check for uppercase in directory/file names (excluding extension)
+            name_part="${entry%.*}"
+            if [[ "$name_part" =~ [A-Z] ]]; then
+              echo "::error::Root entry '$entry' contains uppercase (use kebab-case)"
+              VIOLATIONS=$((VIOLATIONS + 1))
+            fi
+          done < <(ls -1)
+
+          if [ "$VIOLATIONS" -gt 0 ]; then
+            echo "Found $VIOLATIONS filename policy violations at root"
+            echo "Rule: lowercase kebab-case, no spaces"
+            exit 1
+          fi
+
+          echo "PASS: Root filenames follow policy"
+
+      # ==================== Check 4: Changelog Fragment Required ====================
+      - name: Check for changelog fragment (PR only)
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+
+          BASE_REF="${BASE_REF:-main}"
+          git fetch --no-tags --prune origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}" 2>/dev/null || true
+
+          # Get non-doc changed files
+          CHANGED=$(git diff --name-only "origin/${BASE_REF}...HEAD" | \
+            grep -vE '^(instructions/.*\.md$|README\.md|CONTRIBUTING\.md|CHANGELOG\.md|\.github/workflows/)' || true)
+
+          if [ -z "$CHANGED" ]; then
+            echo "Only documentation/CI changed - changelog fragment not required"
+            exit 0
+          fi
+
+          echo "Non-documentation changes detected."
+
+          # Check for changelog fragment in instructions/changelog/
+          FRAGMENTS=$(git diff --name-only "origin/${BASE_REF}...HEAD" | \
+            grep '^instructions/changelog/.*\.md$' | \
+            grep -v '_fragment-template\.md' || true)
+
+          if [ -z "$FRAGMENTS" ]; then
+            echo "::error::Changelog fragment required for non-doc changes"
+            echo ""
+            echo "Add a fragment to instructions/changelog/"
+            echo "Format: instructions/changelog/<YYYY-MM-DD>--<scope>--<slug>.md"
+            echo "See instructions/changelog/_fragment-template.md for schema"
+            exit 1
+          fi
+
+          echo "PASS: Changelog fragment present"
+          echo "Fragments: $FRAGMENTS"
+
+      # ==================== Check 5: Fragment Validation ====================
+      - name: Validate changelog fragment schema
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+
+          BASE_REF="${BASE_REF:-main}"
+
+          FRAGMENTS=$(git diff --name-only --diff-filter=A "origin/${BASE_REF}...HEAD" | \
+            grep '^instructions/changelog/.*\.md$' | \
+            grep -v '_fragment-template\.md' | \
+            grep -v '/releases/' || true)
+
+          if [ -z "$FRAGMENTS" ]; then
+            echo "No new changelog fragments to validate"
+            exit 0
+          fi
+
+          echo "Validating changelog fragments..."
+          VIOLATIONS=0
+
+          while IFS= read -r fragment; do
+            [ -z "$fragment" ] && continue
+            echo "Checking $fragment..."
+
+            # Check filename format
+            basename=$(basename "$fragment")
+            if ! [[ "$basename" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}--[a-z0-9-]+--[a-z0-9-]+\.md$ ]]; then
+              echo "::error::$fragment: Invalid filename (expected: YYYY-MM-DD--scope--slug.md)"
+              VIOLATIONS=$((VIOLATIONS + 1))
+              continue
+            fi
+
+            # Check required frontmatter fields
+            for field in id date_utc agent scope type summary; do
+              if ! grep -q "^${field}:" "$fragment"; then
+                echo "::error::$fragment: Missing required field: $field"
+                VIOLATIONS=$((VIOLATIONS + 1))
+              fi
+            done
+
+            echo "  Valid"
+          done <<< "$FRAGMENTS"
+
+          if [ "$VIOLATIONS" -gt 0 ]; then
+            echo "Found $VIOLATIONS fragment validation errors"
+            exit 1
+          fi
+
+          echo "PASS: All fragments valid"
+
+      # ==================== Check 6: Broken Internal Links ====================
+      - name: Check for broken internal links
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Checking for broken internal links in key markdown files..."
+          VIOLATIONS=0
+
+          # Check root-level markdown files and instructions/
+          MARKDOWN_FILES=$(find . -maxdepth 1 -name "*.md" -type f 2>/dev/null || true)
+          MARKDOWN_FILES+=$'\n'$(find instructions -name "*.md" -type f 2>/dev/null || true)
+
+          while IFS= read -r mdfile; do
+            [ -z "$mdfile" ] || [ ! -f "$mdfile" ] && continue
+
+            while IFS= read -r link; do
+              [ -z "$link" ] && continue
+
+              filepath="${link%%#*}"
+
+              # Skip external links
+              [[ "$filepath" =~ ^https?:// ]] && continue
+              [[ "$filepath" =~ ^mailto: ]] && continue
+              [ -z "$filepath" ] && continue
+
+              # Resolve relative path
+              mddir=$(dirname "$mdfile")
+              if [[ "$filepath" = /* ]]; then
+                fullpath=".$filepath"
+              else
+                fullpath="$mddir/$filepath"
+              fi
+
+              fullpath=$(realpath -m "$fullpath" 2>/dev/null || echo "$fullpath")
+
+              if [ ! -e "$fullpath" ]; then
+                echo "::warning::Broken link in $mdfile: $link"
+                VIOLATIONS=$((VIOLATIONS + 1))
+              fi
+            done < <(grep -oP '\[.*?\]\(\K[^)]+' "$mdfile" 2>/dev/null || true)
+          done <<< "$MARKDOWN_FILES"
+
+          if [ "$VIOLATIONS" -gt 0 ]; then
+            echo "Found $VIOLATIONS broken internal links (warnings only)"
+            # Warn but don't fail - links may point to product-internal files
+          fi
+
+          echo "PASS: Link check complete"
+
+      # ==================== Summary ====================
+      - name: Summary
+        if: success()
+        run: |
+          echo "=========================================="
+          echo "Repository Hygiene Check: PASS"
+          echo "=========================================="

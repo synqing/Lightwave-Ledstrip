@@ -1,0 +1,176 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_PERLIN_CAUSTICS",
+  "effectIdHex": "0x0B02",
+  "className": "LGPPerlinCausticsEffect",
+  "displayName": "LGP Perlin Caustics",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPPerlinCausticsEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPPerlinCausticsEffect.cpp",
+  "renderRange": [
+    57,
+    175
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        59,
+        59
+      ],
+      [
+        64,
+        64
+      ],
+      [
+        74,
+        74
+      ],
+      [
+        76,
+        76
+      ],
+      [
+        78,
+        81
+      ]
+    ],
+    "mapping": [
+      [
+        60,
+        61
+      ],
+      [
+        66,
+        68
+      ],
+      [
+        77,
+        81
+      ],
+      [
+        84,
+        84
+      ],
+      [
+        86,
+        89
+      ],
+      [
+        92,
+        94
+      ],
+      [
+        97,
+        97
+      ],
+      [
+        101,
+        108
+      ],
+      [
+        116,
+        116
+      ],
+      [
+        128,
+        130
+      ],
+      [
+        136,
+        136
+      ],
+      [
+        156,
+        156
+      ],
+      [
+        159,
+        159
+      ],
+      [
+        161,
+        161
+      ]
+    ],
+    "modulation": [
+      [
+        84,
+        89
+      ],
+      [
+        91,
+        94
+      ],
+      [
+        96,
+        97
+      ],
+      [
+        99,
+        100
+      ],
+      [
+        105,
+        108
+      ]
+    ],
+    "render": [
+      [
+        123,
+        123
+      ],
+      [
+        125,
+        125
+      ],
+      [
+        132,
+        132
+      ],
+      [
+        159,
+        160
+      ],
+      [
+        163,
+        163
+      ],
+      [
+        166,
+        166
+      ],
+      [
+        170,
+        172
+      ]
+    ],
+    "post": [
+      [
+        125,
+        125
+      ]
+    ],
+    "output": [
+      [
+        132,
+        132
+      ],
+      [
+        165,
+        166
+      ],
+      [
+        168,
+        169
+      ],
+      [
+        172,
+        172
+      ]
+    ]
+  },
+  "mappingConfidence": "high",
+  "mappingWarnings": [],
+  "sourceText": "/**\n * @file LGPPerlinCausticsEffect.cpp\n * @brief LGP Perlin Caustics - Sparkling caustic lobes\n * \n * Audio-reactive Perlin caustics effect:\n * - Multiple octaves of noise create caustic-like patterns\n * - Treble/hi-hat → increases sparkle density (higher frequency detail)\n * - Bass → increases lobe scale (larger features)\n * - Mid → brightness modulation\n */\n\n#include \"LGPPerlinCausticsEffect.h\"\n#include \"../CoreEffects.h\"\n#include \"../../config/features.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPPerlinCausticsEffect::LGPPerlinCausticsEffect()\n    : m_noiseX(0)\n    , m_noiseY(0)\n    , m_noiseZ(0)\n    , m_lastHopSeq(0)\n    , m_targetTreble(0.0f)\n    , m_targetBass(0.0f)\n    , m_targetMid(0.0f)\n    , m_targetHihat(0.0f)\n    , m_smoothTreble(0.0f)\n    , m_smoothBass(0.0f)\n    , m_smoothMid(0.0f)\n    , m_smoothHihat(0.0f)\n    , m_time(0)\n{\n}\n\nbool LGPPerlinCausticsEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_noiseX = random16();\n    m_noiseY = random16();\n    m_noiseZ = random16();\n    m_lastHopSeq = 0;\n    m_targetTreble = 0.0f;\n    m_targetBass = 0.0f;\n    m_targetMid = 0.0f;\n    m_targetHihat = 0.0f;\n    m_smoothTreble = 0.0f;\n    m_smoothBass = 0.0f;\n    m_smoothMid = 0.0f;\n    m_smoothHihat = 0.0f;\n    m_time = 0;\n    return true;\n}\n\nvoid LGPPerlinCausticsEffect::render(plugins::EffectContext& ctx) {\n    // CENTRE ORIGIN - Caustic lobes radiating from centre\n    const bool hasAudio = ctx.audio.available;\n    float speedNorm = ctx.speed / 50.0f;\n    float intensityNorm = ctx.brightness / 255.0f;\n\n    // =========================================================================\n    // Audio Analysis (hop_seq checking for fresh data)\n    // =========================================================================\n    float trebleNorm = 0.0f;\n    float bassNorm = 0.0f;\n    float midNorm = 0.0f;\n    float dt = ctx.getSafeRawDeltaSeconds();\n    \n#if FEATURE_AUDIO_SYNC\n    if (hasAudio) {\n        // Check for new audio hop (fresh data)\n        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);\n        if (newHop) {\n            m_lastHopSeq = ctx.audio.controlBus.hop_seq;\n            // Update targets only on new hops (fresh audio data)\n            m_targetTreble = ctx.audio.treble();\n            m_targetBass = ctx.audio.bass();\n            m_targetMid = ctx.audio.mid();\n            m_targetHihat = ctx.audio.hihat();\n        }\n        \n        // Smooth toward targets every frame (keeps motion alive between hops)\n        float alpha = 1.0f - expf(-dt / 0.15f);  // True exponential, tau=150ms\n        m_smoothTreble += (m_targetTreble - m_smoothTreble) * alpha;\n        m_smoothBass += (m_targetBass - m_smoothBass) * alpha;\n        m_smoothMid += (m_targetMid - m_smoothMid) * alpha;\n        m_smoothHihat += (m_targetHihat - m_smoothHihat) * alpha;\n        \n        // Use smoothed values\n        trebleNorm = m_smoothTreble;\n        bassNorm = m_smoothBass;\n        midNorm = m_smoothMid;\n        \n        // Hi-hat also contributes to sparkle (using smoothed value)\n        trebleNorm = fmaxf(trebleNorm, m_smoothHihat * 0.7f);\n    } else {\n        // Smooth audio parameters to zero when no audio (true exponential, tau=200ms)\n        float alpha = 1.0f - expf(-dt / 0.2f);\n        m_targetTreble = 0.0f;\n        m_targetBass = 0.0f;\n        m_targetMid = 0.0f;\n        m_targetHihat = 0.0f;\n        m_smoothTreble += (m_targetTreble - m_smoothTreble) * alpha;\n        m_smoothBass += (m_targetBass - m_smoothBass) * alpha;\n        m_smoothMid += (m_targetMid - m_smoothMid) * alpha;\n        m_smoothHihat += (m_targetHihat - m_smoothHihat) * alpha;\n    }\n#endif\n\n    // =========================================================================\n    // Noise Field Updates\n    // =========================================================================\n    // Keep coordinate steps large enough to avoid flat sampling.\n    uint16_t tStep = (uint16_t)(8 + (uint16_t)(speedNorm * 28.0f));\n    m_time = (uint16_t)(m_time + tStep);\n    m_noiseX = (uint16_t)(m_noiseX + (uint16_t)(17 + (tStep >> 1)));\n    m_noiseY = (uint16_t)(m_noiseY + (uint16_t)(11 + (tStep >> 2)));\n    m_noiseZ = (uint16_t)(m_noiseZ + (uint16_t)(5 + (tStep >> 3)));\n\n    // =========================================================================\n    // Rendering (centre-origin pattern with caustic lobes)\n    // =========================================================================\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    // Audio-modulated parameters (kept conservative to avoid strobing)\n    float sparkleDensity = 0.8f + trebleNorm * 0.9f; // 0.8-1.7\n    float lobeScale = 0.8f + bassNorm * 0.9f;        // 0.8-1.7\n    float brightnessMod = 0.75f + midNorm * 0.25f;   // 0.75-1.0\n\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        // Calculate distance from centre pair\n        uint16_t dist = centerPairDistance(i);\n        uint8_t dist8 = (uint8_t)dist;\n        float distNorm = dist8 / 79.0f; // 0.0 at centre, 1.0 at edges\n        \n        // Sample multiple octaves of noise for caustic effect.\n        // Use coordinate style consistent with existing working effects:\n        // inoise8(dist*freq, timeShifted).\n        uint8_t n1 = inoise8((uint16_t)(dist * (uint16_t)(14 * lobeScale) + m_noiseX),\n                             (uint16_t)(m_time >> 1));\n        uint8_t n2 = inoise8((uint16_t)(dist * (uint16_t)(29 * sparkleDensity) + (m_noiseX + 10000u)),\n                             (uint16_t)(m_time >> 2));\n        uint8_t n3 = inoise8((uint16_t)(dist * 7 + (m_noiseY + 20000u)),\n                             (uint16_t)(m_time >> 3));\n\n        // Caustic focus: multiplicative highlight shaping (cheap, punchy)\n        uint16_t mul = (uint16_t)n1 * (uint16_t)n2;         // 0..65025\n        uint8_t caustic8 = (uint8_t)(mul >> 8);             // 0..255\n        caustic8 = qadd8((uint8_t)(caustic8 >> 1), (uint8_t)(n3 >> 2)); // add mild depth texture\n        caustic8 = scale8(caustic8, caustic8);              // square for highlights\n        float caustic = caustic8 / 255.0f;\n        \n        // Centre-focused falloff (caustics are brighter near centre)\n        float centreFalloff = 1.0f - distNorm * 0.3f; // 1.0 at centre, 0.7 at edges\n        caustic *= centreFalloff;\n        \n        // Map to palette and brightness\n        uint8_t paletteIndex = (uint8_t)(caustic * 255.0f) + ctx.gHue;\n        uint8_t brightness = (uint8_t)((0.3f + caustic * 0.7f) * brightnessMod * 255.0f * intensityNorm);\n        \n        CRGB color = ctx.palette.getColor(paletteIndex, brightness);\n        \n        // Apply to strip 1\n        ctx.leds[i] = color;\n        \n        // Apply to strip 2 (mirrored, spectral offset for interference)\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            uint8_t paletteIndex2 = (uint8_t)(paletteIndex + 48);\n            CRGB color2 = ctx.palette.getColor(paletteIndex2, brightness);\n            ctx.leds[i + STRIP_LENGTH] = color2;\n        }\n    }\n}\n\nvoid LGPPerlinCausticsEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPPerlinCausticsEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Perlin Caustics\",\n        \"Sparkling caustic lobes, treble→sparkle, bass→scale\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n\n"
+}

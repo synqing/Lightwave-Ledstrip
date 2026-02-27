@@ -1,0 +1,123 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_SOLITON_WAVES",
+  "effectIdHex": "0x0603",
+  "className": "LGPSolitonWavesEffect",
+  "displayName": "LGP Soliton Waves",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPSolitonWavesEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPSolitonWavesEffect.cpp",
+  "renderRange": [
+    45,
+    115
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        45,
+        52
+      ]
+    ],
+    "mapping": [
+      [
+        47,
+        47
+      ],
+      [
+        54,
+        54
+      ]
+    ],
+    "modulation": [
+      [
+        64,
+        76
+      ]
+    ],
+    "render": [
+      [
+        51,
+        51
+      ],
+      [
+        53,
+        53
+      ],
+      [
+        62,
+        62
+      ],
+      [
+        75,
+        75
+      ],
+      [
+        78,
+        78
+      ],
+      [
+        85,
+        85
+      ],
+      [
+        95,
+        96
+      ],
+      [
+        99,
+        100
+      ]
+    ],
+    "post": [
+      [
+        51,
+        51
+      ]
+    ],
+    "output": [
+      [
+        56,
+        56
+      ],
+      [
+        58,
+        58
+      ],
+      [
+        70,
+        70
+      ],
+      [
+        75,
+        76
+      ],
+      [
+        78,
+        78
+      ],
+      [
+        87,
+        87
+      ],
+      [
+        96,
+        97
+      ],
+      [
+        99,
+        100
+      ],
+      [
+        109,
+        109
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'modulation' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPSolitonWavesEffect.cpp\n * @brief LGP Soliton Waves effect implementation\n */\n\n#include \"LGPSolitonWavesEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n#include <cstring>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPSolitonWavesEffect::LGPSolitonWavesEffect()\n    : m_pos{20.0f, 60.0f, 100.0f, 140.0f}\n    , m_vel{1.0f, -0.8f, 1.2f, -1.1f}\n    , m_amp{255, 200, 230, 180}\n    , m_hue{0, 60, 120, 180}\n{\n}\n\nbool LGPSolitonWavesEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_pos[0] = 20.0f;\n    m_pos[1] = 60.0f;\n    m_pos[2] = 100.0f;\n    m_pos[3] = 140.0f;\n    m_vel[0] = 1.0f;\n    m_vel[1] = -0.8f;\n    m_vel[2] = 1.2f;\n    m_vel[3] = -1.1f;\n    m_amp[0] = 255;\n    m_amp[1] = 200;\n    m_amp[2] = 230;\n    m_amp[3] = 180;\n    m_hue[0] = 0;\n    m_hue[1] = 60;\n    m_hue[2] = 120;\n    m_hue[3] = 180;\n    return true;\n}\n\nvoid LGPSolitonWavesEffect::render(plugins::EffectContext& ctx) {\n    // Self-reinforcing wave packets that maintain shape\n    float speedNorm = ctx.speed / 50.0f;\n    const uint8_t solitonCount = 4;\n    const float damping = 0.996f;\n\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    for (uint8_t s = 0; s < solitonCount; s++) {\n        m_pos[s] += m_vel[s] * speedNorm;\n\n        if (m_pos[s] < 0.0f || m_pos[s] >= STRIP_LENGTH) {\n            m_vel[s] = -m_vel[s];\n            m_pos[s] = constrain(m_pos[s], 0.0f, (float)(STRIP_LENGTH - 1));\n        }\n\n        // Check for collisions\n        for (uint8_t other = s + 1; other < solitonCount; other++) {\n            float dist = fabsf(m_pos[s] - m_pos[other]);\n            if (dist < 10.0f) {\n                float tempVel = m_vel[s];\n                m_vel[s] = m_vel[other];\n                m_vel[other] = tempVel;\n\n                int16_t collisionPos = (int16_t)((m_pos[s] + m_pos[other]) / 2.0f);\n                if (collisionPos >= 0 && collisionPos < STRIP_LENGTH) {\n                    // Use blended color from colliding solitons instead of white\n                    uint8_t blendHue = (uint8_t)((m_hue[s] + m_hue[other]) / 2);\n                    uint8_t blendBright = (uint8_t)(qadd8(m_amp[s], m_amp[other]) / 2);\n                    uint8_t brightU8 = (uint8_t)((blendBright * ctx.brightness) / 255);\n                    ctx.leds[collisionPos] = ctx.palette.getColor((uint8_t)(blendHue + ctx.gHue), brightU8);\n                    if (collisionPos + STRIP_LENGTH < ctx.ledCount) {\n                        uint8_t brightU8_2 = (uint8_t)((scale8(blendBright, 200) * ctx.brightness) / 255);\n                        ctx.leds[collisionPos + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(blendHue + ctx.gHue + 30), brightU8_2);\n                    }\n                }\n            }\n        }\n\n        // Draw soliton - sech^2 profile\n        for (int16_t dx = -20; dx <= 20; dx++) {\n            int16_t pos = (int16_t)m_pos[s] + dx;\n            if (pos >= 0 && pos < STRIP_LENGTH) {\n                float sech = 1.0f / coshf(dx * 0.15f);\n                float profile = sech * sech;\n\n                uint8_t brightness = (uint8_t)(m_amp[s] * profile);\n                uint8_t hue = (uint8_t)(m_hue[s] + ctx.gHue);\n\n                uint8_t brightU8 = (uint8_t)((brightness * ctx.brightness) / 255);\n                CRGB solitonColor = ctx.palette.getColor(hue, brightU8);\n                ctx.leds[pos] = solitonColor;\n                if (pos + STRIP_LENGTH < ctx.ledCount) {\n                    uint8_t brightU8_2 = (uint8_t)((scale8(brightness, 200) * ctx.brightness) / 255);\n                    CRGB strip2Color = ctx.palette.getColor((uint8_t)(hue + 30), brightU8_2);\n                    ctx.leds[pos + STRIP_LENGTH] = strip2Color;\n                }\n            }\n        }\n\n        m_amp[s] = (uint8_t)(m_amp[s] * damping);\n\n        // Regenerate dead solitons\n        if (m_amp[s] < 50) {\n            m_pos[s] = (float)random16(STRIP_LENGTH);\n            m_vel[s] = (random8(2) ? 1 : -1) * (0.5f + random8(100) / 100.0f);\n            m_amp[s] = (uint8_t)(200 + random8(55));\n            m_hue[s] = random8();\n        }\n    }\n}\n\nvoid LGPSolitonWavesEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPSolitonWavesEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Soliton Waves\",\n        \"Self-reinforcing wave packets\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_EVANESCENT_DRIFT",
+  "effectIdHex": "0x0403",
+  "className": "LGPEvanescentDriftEffect",
+  "displayName": "LGP Evanescent Drift",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPEvanescentDriftEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPEvanescentDriftEffect.cpp",
+  "renderRange": [
+    27,
+    57
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        27,
+        29
+      ]
+    ],
+    "mapping": [
+      [
+        30,
+        34
+      ]
+    ],
+    "modulation": [
+      [
+        29,
+        30
+      ],
+      [
+        32,
+        32
+      ],
+      [
+        41,
+        41
+      ],
+      [
+        45,
+        46
+      ]
+    ],
+    "render": [
+      [
+        34,
+        34
+      ],
+      [
+        40,
+        40
+      ],
+      [
+        52,
+        52
+      ],
+      [
+        54,
+        54
+      ]
+    ],
+    "post": [
+      [
+        54,
+        55
+      ]
+    ],
+    "output": [
+      [
+        34,
+        34
+      ],
+      [
+        52,
+        54
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'mapping' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPEvanescentDriftEffect.cpp\n * @brief LGP Evanescent Drift effect implementation\n */\n\n#include \"LGPEvanescentDriftEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPEvanescentDriftEffect::LGPEvanescentDriftEffect()\n    : m_phase1(0)\n    , m_phase2(32768)\n{\n}\n\nbool LGPEvanescentDriftEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_phase1 = 0;\n    m_phase2 = 32768;\n    return true;\n}\n\nvoid LGPEvanescentDriftEffect::render(plugins::EffectContext& ctx) {\n    // Exponentially fading waves from edges - subtle ambient effect\n    m_phase1 = (uint16_t)(m_phase1 + ctx.speed);\n    m_phase2 = (uint16_t)(m_phase2 - ctx.speed);\n\n    uint8_t alpha = (uint8_t)(255 - ctx.brightness);\n\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        uint16_t distFromCenter = centerPairDistance(i);\n        uint8_t dist8 = (uint8_t)distFromCenter;\n\n        // Exponential decay approximation\n        uint8_t decay = 255;\n        for (uint16_t j = 0; j < distFromCenter && j < 8; j++) {\n            decay = scale8(decay, alpha);\n        }\n\n        // Wave patterns\n        uint8_t wave1 = sin8((dist8 << 2) + (m_phase1 >> 8));\n        uint8_t wave2 = sin8((dist8 << 2) + (m_phase2 >> 8));\n\n        // Apply decay\n        wave1 = scale8(wave1, decay);\n        wave2 = scale8(wave2, decay);\n\n        ctx.leds[i] = ctx.palette.getColor((uint8_t)(ctx.gHue + dist8), wave1);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(ctx.gHue + dist8 + 85), wave2);\n        }\n    }\n}\n\nvoid LGPEvanescentDriftEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPEvanescentDriftEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Evanescent Drift\",\n        \"Ghostly drifting particles\",\n        plugins::EffectCategory::AMBIENT,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

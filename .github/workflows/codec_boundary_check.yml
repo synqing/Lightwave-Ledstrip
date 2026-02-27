@@ -4,13 +4,13 @@ on:
   pull_request:
     branches: [ main, feat/Development-Progress-Continues ]
     paths:
-      - 'firmware/v2/**'
+      - 'firmware-v3/**'
       - 'tools/check_json_boundary.sh'
       - 'tools/json_boundary_baseline_firmware_v2.txt'
   push:
     branches: [ main, feat/Development-Progress-Continues ]
     paths:
-      - 'firmware/v2/**'
+      - 'firmware-v3/**'
 
 jobs:
   check-codec-boundary:
@@ -75,24 +75,24 @@ jobs:
       - name: Setup PlatformIO
         uses: platformio/platformio-action@v1
       
-      - name: Check JSON Boundary (firmware/v2)
+      - name: Check JSON Boundary (firmware-v3)
         run: |
           # If baseline exists, check against it. If not, hard-fail on any violations.
           if [ -f "tools/json_boundary_baseline_firmware_v2.txt" ]; then
-            TARGET_DIR=firmware/v2 ./tools/check_json_boundary.sh --check-baseline
+            TARGET_DIR=firmware-v3 ./tools/check_json_boundary.sh --check-baseline
           else
             echo "Baseline file deleted - running in strict mode (any violation fails)"
-            TARGET_DIR=firmware/v2 ./tools/check_json_boundary.sh || {
+            TARGET_DIR=firmware-v3 ./tools/check_json_boundary.sh || {
               echo "✗ JSON boundary violations found - all violations must be fixed"
-              echo "Move JSON parsing/encoding to codec modules (firmware/v2/src/codec/)"
+              echo "Move JSON parsing/encoding to codec modules (firmware-v3/src/codec/)"
               exit 1
             }
           fi
       
       - name: Run Codec Tests
-        working-directory: firmware/v2
+        working-directory: firmware-v3
         run: pio test -e native_codec_test_ws
       
       - name: Build Check
-        working-directory: firmware/v2
+        working-directory: firmware-v3
         run: pio run -e esp32dev_audio

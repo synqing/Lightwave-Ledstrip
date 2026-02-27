@@ -1,0 +1,104 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_PERLIN_BACKEND_EMOTISCOPE_FULL",
+  "effectIdHex": "0x0D01",
+  "className": "LGPPerlinBackendEmotiscopeFullEffect",
+  "displayName": "Perlin Test: Emotiscope2 Full",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPPerlinBackendEmotiscopeFullEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPPerlinBackendEmotiscopeFullEffect.cpp",
+  "renderRange": [
+    167,
+    234
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        169,
+        169
+      ],
+      [
+        180,
+        180
+      ]
+    ],
+    "mapping": [
+      [
+        171,
+        172
+      ],
+      [
+        181,
+        181
+      ],
+      [
+        196,
+        196
+      ],
+      [
+        202,
+        202
+      ],
+      [
+        217,
+        217
+      ],
+      [
+        220,
+        223
+      ]
+    ],
+    "modulation": [
+      [
+        184,
+        184
+      ]
+    ],
+    "render": [
+      [
+        209,
+        209
+      ],
+      [
+        223,
+        223
+      ],
+      [
+        225,
+        226
+      ],
+      [
+        229,
+        231
+      ]
+    ],
+    "post": [
+      [
+        206,
+        206
+      ]
+    ],
+    "output": [
+      [
+        209,
+        209
+      ],
+      [
+        226,
+        226
+      ],
+      [
+        228,
+        228
+      ],
+      [
+        231,
+        231
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [],
+  "sourceText": "/**\n * @file LGPPerlinBackendEmotiscopeFullEffect.cpp\n * @brief Perlin Backend Test B: Emotiscope 2.0 seedable Perlin (full-res)\n */\n\n#include \"LGPPerlinBackendEmotiscopeFullEffect.h\"\n#include \"../CoreEffects.h\"\n#include \"../../config/features.h\"\n#include <FastLED.h>\n#include <cmath>\n#include <cstring>\n\n#ifndef NATIVE_BUILD\n#include <esp_heap_caps.h>\n#endif\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\n// Emotiscope 2.0 hash function\nunsigned int LGPPerlinBackendEmotiscopeFullEffect::hash(unsigned int x, unsigned int seed) {\n    const unsigned int m = 0x5bd1e995U;\n    unsigned int h = seed;\n    unsigned int k = x;\n    k *= m;\n    k ^= k >> 24;\n    k *= m;\n    h *= m;\n    h ^= k;\n    h ^= h >> 13;\n    h *= m;\n    h ^= h >> 15;\n    return h;\n}\n\nunsigned int LGPPerlinBackendEmotiscopeFullEffect::hashVec2(UVec2 x, unsigned int seed) {\n    const unsigned int m = 0x5bd1e995U;\n    unsigned int h = seed;\n    unsigned int k;\n    \n    k = x.x;\n    k *= m;\n    k ^= k >> 24;\n    k *= m;\n    h *= m;\n    h ^= k;\n    \n    k = x.y;\n    k *= m;\n    k ^= k >> 24;\n    k *= m;\n    h *= m;\n    h ^= k;\n    \n    h ^= h >> 13;\n    h *= m;\n    h ^= h >> 15;\n    return h;\n}\n\nVec2 LGPPerlinBackendEmotiscopeFullEffect::gradientDirection(unsigned int hash) {\n    switch (hash & 7) {\n        case 0: return Vec2(1.0f, 1.0f);\n        case 1: return Vec2(-1.0f, 1.0f);\n        case 2: return Vec2(1.0f, -1.0f);\n        case 3: return Vec2(-1.0f, -1.0f);\n        case 4: return Vec2(1.0f, 0.0f);\n        case 5: return Vec2(-1.0f, 0.0f);\n        case 6: return Vec2(0.0f, 1.0f);\n        case 7: return Vec2(0.0f, -1.0f);\n    }\n    return Vec2(0.0f, 0.0f);\n}\n\nfloat LGPPerlinBackendEmotiscopeFullEffect::interpolatePerlin(float v1, float v2, float v3, float v4, Vec2 t) {\n    float mix1 = v1 + t.x * (v2 - v1);\n    float mix2 = v3 + t.x * (v4 - v3);\n    return mix1 + t.y * (mix2 - mix1);\n}\n\nVec2 LGPPerlinBackendEmotiscopeFullEffect::fade(Vec2 t) {\n    float tx = t.x * t.x * t.x * (t.x * (t.x * 6.0f - 15.0f) + 10.0f);\n    float ty = t.y * t.y * t.y * (t.y * (t.y * 6.0f - 15.0f) + 10.0f);\n    return Vec2(tx, ty);\n}\n\nfloat LGPPerlinBackendEmotiscopeFullEffect::dot(Vec2 a, Vec2 b) {\n    return a.x * b.x + a.y * b.y;\n}\n\nfloat LGPPerlinBackendEmotiscopeFullEffect::perlinNoise(Vec2 position, unsigned int seed) {\n    Vec2 floorPos(floorf(position.x), floorf(position.y));\n    Vec2 fractPos(position.x - floorPos.x, position.y - floorPos.y);\n    UVec2 cell((unsigned int)floorPos.x, (unsigned int)floorPos.y);\n    \n    float v1 = dot(gradientDirection(hashVec2(cell, seed)), fractPos);\n    float v2 = dot(gradientDirection(hashVec2(UVec2(cell.x + 1, cell.y), seed)), Vec2(fractPos.x - 1.0f, fractPos.y));\n    float v3 = dot(gradientDirection(hashVec2(UVec2(cell.x, cell.y + 1), seed)), Vec2(fractPos.x, fractPos.y - 1.0f));\n    float v4 = dot(gradientDirection(hashVec2(UVec2(cell.x + 1, cell.y + 1), seed)), Vec2(fractPos.x - 1.0f, fractPos.y - 1.0f));\n    \n    return interpolatePerlin(v1, v2, v3, v4, fade(fractPos));\n}\n\nfloat LGPPerlinBackendEmotiscopeFullEffect::perlinNoiseOctaves(Vec2 position, int frequency, int octaveCount, float persistence, float lacunarity, unsigned int seed) {\n    float value = 0.0f;\n    float amplitude = 1.0f;\n    float currentFreq = (float)frequency;\n    unsigned int currentSeed = seed;\n    \n    for (int i = 0; i < octaveCount; i++) {\n        currentSeed = hash(currentSeed, 0x0U); // New seed per octave\n        value += perlinNoise(Vec2(position.x * currentFreq, position.y * currentFreq), currentSeed) * amplitude;\n        amplitude *= persistence;\n        currentFreq *= lacunarity;\n    }\n    return value;\n}\n\nLGPPerlinBackendEmotiscopeFullEffect::LGPPerlinBackendEmotiscopeFullEffect()\n    : m_seed(0)\n    , m_positionX(0.0f)\n    , m_ps(nullptr)\n    , m_positionY(0.0f)\n    , m_momentum(0.0f)\n    , m_lastUpdateMs(0)\n{\n}\n\nbool LGPPerlinBackendEmotiscopeFullEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_seed = (unsigned int)((uint32_t)random16() << 16 | random16());\n    m_positionX = (float)(random16() % 1000);\n    m_positionY = (float)(random16() % 1000);\n    m_momentum = 0.0f;\n    m_lastUpdateMs = ctx.totalTimeMs;\n#ifndef NATIVE_BUILD\n    if (!m_ps) {\n        m_ps = static_cast<PerlinBackendPsram*>(\n            heap_caps_malloc(sizeof(PerlinBackendPsram), MALLOC_CAP_SPIRAM));\n        if (!m_ps) return false;\n    }\n    memset(m_ps, 0, sizeof(PerlinBackendPsram));\n#endif\n    generateNoiseArray();\n    normalizeNoiseArray();\n    return true;\n}\n\nvoid LGPPerlinBackendEmotiscopeFullEffect::generateNoiseArray() {\n    if (!m_ps) return;\n    for (int i = 0; i < 80; i++) {\n        Vec2 pos(m_positionX + (float)i * SPATIAL_SCALE, m_positionY);\n        float noiseValue = perlinNoiseOctaves(pos, (int)FREQUENCY, OCTAVE_COUNT, PERSISTENCE, LACUNARITY, m_seed);\n        m_ps->noiseArray[i] = noiseValue;\n    }\n}\n\nvoid LGPPerlinBackendEmotiscopeFullEffect::normalizeNoiseArray() {\n    if (!m_ps) return;\n    for (int i = 0; i < 80; i++) {\n        m_ps->noiseArray[i] = (m_ps->noiseArray[i] + 1.0f) * 0.5f;\n        m_ps->noiseArray[i] = fmaxf(0.0f, fminf(1.0f, m_ps->noiseArray[i]));\n    }\n}\n\nvoid LGPPerlinBackendEmotiscopeFullEffect::render(plugins::EffectContext& ctx) {\n    if (!m_ps) return;\n    const bool hasAudio = ctx.audio.available;\n    float dt = ctx.getSafeDeltaSeconds();\n    float speedNorm = ctx.speed / 50.0f;\n    float intensityNorm = ctx.brightness / 255.0f;\n    \n    // =========================================================================\n    // Audio-Driven Momentum (Emotiscope-style)\n    // =========================================================================\n    float push = 0.0f;\n#if FEATURE_AUDIO_SYNC\n    if (hasAudio) {\n        float energy = ctx.audio.rms();\n        push = energy * energy * energy * energy * speedNorm * 0.1f; // Heavy emphasis on loud\n    }\n#endif\n    m_momentum *= powf(0.99f, dt * 60.0f); // Smooth decay (dt-corrected)\n    if (push > m_momentum) {\n        m_momentum = push; // Only boost, no jarring drops\n    }\n    \n    // =========================================================================\n    // Advection (REVERSED for center→edges flow, use ms-based delta like Emotiscope 2.0)\n    // =========================================================================\n    // Clamp delta to prevent teleport jumps after stalls (max 50ms)\n    float deltaMs = ctx.deltaTimeSeconds * 1000.0f;\n    if (deltaMs > 50) deltaMs = 50;\n    // Reverse: subtract instead of add (makes pattern flow center→edges)\n    m_positionY -= 0.001f * (float)deltaMs * (1.0f + speedNorm + m_momentum);\n    \n    // Update pre-computed array periodically (every 10ms like Emotiscope 2.0)\n    // Use ctx.totalTimeMs for consistent timing (no millis() mixing)\n    if (ctx.totalTimeMs - m_lastUpdateMs >= UPDATE_INTERVAL_MS) {\n        generateNoiseArray();\n        normalizeNoiseArray();\n        m_lastUpdateMs = ctx.totalTimeMs;\n    }\n    \n    // No fadeToBlackBy - we overwrite every LED each frame\n    \n    // Render from pre-computed array (array lookups, not recomputation)\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        // Centre-origin: distance from centre pair\n        uint16_t dist = centerPairDistance(i);\n        \n        // Bounds check (dist should be 0-79)\n        if (dist >= 80) dist = 79;\n        \n        // Array lookup (not recomputation!)\n        float noiseNorm = m_ps->noiseArray[dist];\n        \n        // Same shaping as FastLED test (for fair comparison)\n        noiseNorm = noiseNorm * noiseNorm; // Bias toward darker, stronger highlights\n        float brightnessNorm = 0.2f + noiseNorm * 0.8f;\n        uint8_t brightness = (uint8_t)(brightnessNorm * 255.0f * intensityNorm);\n        uint8_t paletteIndex = (uint8_t)(noiseNorm * 255.0f) + ctx.gHue;\n        \n        CRGB color = ctx.palette.getColor(paletteIndex, brightness);\n        ctx.leds[i] = color;\n        \n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            uint8_t paletteIndex2 = (uint8_t)(paletteIndex + 32);\n            CRGB color2 = ctx.palette.getColor(paletteIndex2, brightness);\n            ctx.leds[i + STRIP_LENGTH] = color2;\n        }\n    }\n}\n\nvoid LGPPerlinBackendEmotiscopeFullEffect::cleanup() {\n#ifndef NATIVE_BUILD\n    if (m_ps) {\n        heap_caps_free(m_ps);\n        m_ps = nullptr;\n    }\n#endif\n}\n\nconst plugins::EffectMetadata& LGPPerlinBackendEmotiscopeFullEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Perlin Test: Emotiscope2 Full\",\n        \"Emotiscope 2.0 Perlin full-res (TEST)\",\n        plugins::EffectCategory::UNCATEGORIZED,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n\n"
+}

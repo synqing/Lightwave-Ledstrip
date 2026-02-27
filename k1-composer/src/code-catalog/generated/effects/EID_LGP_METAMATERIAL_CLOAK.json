@@ -1,0 +1,81 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_METAMATERIAL_CLOAK",
+  "effectIdHex": "0x0604",
+  "className": "LGPMetamaterialCloakEffect",
+  "displayName": "LGP Metamaterial Cloak",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPMetamaterialCloakEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPMetamaterialCloakEffect.cpp",
+  "renderRange": [
+    30,
+    69
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        30,
+        33
+      ]
+    ],
+    "mapping": [
+      [
+        34,
+        34
+      ],
+      [
+        38,
+        38
+      ]
+    ],
+    "modulation": [
+      [
+        41,
+        47
+      ]
+    ],
+    "render": [
+      [
+        43,
+        43
+      ],
+      [
+        64,
+        64
+      ],
+      [
+        66,
+        66
+      ]
+    ],
+    "post": [
+      [
+        65,
+        67
+      ]
+    ],
+    "output": [
+      [
+        39,
+        39
+      ],
+      [
+        43,
+        43
+      ],
+      [
+        64,
+        66
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'modulation' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPMetamaterialCloakEffect.cpp\n * @brief LGP Metamaterial Cloak effect implementation\n */\n\n#include \"LGPMetamaterialCloakEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPMetamaterialCloakEffect::LGPMetamaterialCloakEffect()\n    : m_time(0)\n    , m_pos(80.0f)\n    , m_vel(0.5f)\n{\n}\n\nbool LGPMetamaterialCloakEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_time = 0;\n    m_pos = 80.0f;\n    m_vel = 0.5f;\n    return true;\n}\n\nvoid LGPMetamaterialCloakEffect::render(plugins::EffectContext& ctx) {\n    // Negative refractive index creates invisibility effects\n    m_time = (uint16_t)(m_time + (ctx.speed >> 2));\n\n    float speedNorm = ctx.speed / 50.0f;\n    const float cloakRadius = 15.0f;\n    const float refractiveIndex = -1.5f;\n\n    m_pos += m_vel * speedNorm;\n    if (m_pos < cloakRadius || m_pos > (float)STRIP_LENGTH - cloakRadius) {\n        m_vel = -m_vel;\n    }\n\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        uint8_t wave = sin8((uint16_t)(i * 4 + (m_time >> 2)));\n        uint8_t hue = (uint8_t)(ctx.gHue + (i >> 2));\n\n        float distFromCloak = fabsf((float)i - m_pos);\n\n        if (distFromCloak < cloakRadius) {\n            float bendAngle = (distFromCloak / cloakRadius) * PI;\n            wave = sin8((int)(i * 4 * refractiveIndex) + (m_time >> 2) + (int)(bendAngle * 128.0f));\n\n            if (distFromCloak < cloakRadius * 0.5f) {\n                wave = scale8(wave, (uint8_t)(255.0f * (distFromCloak / (cloakRadius * 0.5f))));\n            }\n\n            if (fabsf(distFromCloak - cloakRadius) < 2.0f) {\n                wave = 255;\n                hue = 160;\n            }\n        }\n\n        uint8_t brightU8 = (uint8_t)((wave * ctx.brightness) / 255);\n        ctx.leds[i] = ctx.palette.getColor(hue, brightU8);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(hue + 128), brightU8);\n        }\n    }\n}\n\nvoid LGPMetamaterialCloakEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPMetamaterialCloakEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Metamaterial Cloak\",\n        \"Invisibility cloak simulation\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

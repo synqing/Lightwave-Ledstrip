@@ -1,0 +1,149 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_QUANTUM_TUNNELING",
+  "effectIdHex": "0x0600",
+  "className": "LGPQuantumTunnelingEffect",
+  "displayName": "LGP Quantum Tunneling",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPQuantumTunnelingEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPQuantumTunnelingEffect.cpp",
+  "renderRange": [
+    33,
+    143
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        33,
+        45
+      ]
+    ],
+    "mapping": [
+      [
+        46,
+        63
+      ]
+    ],
+    "modulation": [
+      [
+        64,
+        83
+      ]
+    ],
+    "render": [
+      [
+        41,
+        41
+      ],
+      [
+        44,
+        44
+      ],
+      [
+        47,
+        47
+      ],
+      [
+        52,
+        52
+      ],
+      [
+        54,
+        54
+      ],
+      [
+        62,
+        62
+      ],
+      [
+        73,
+        73
+      ],
+      [
+        79,
+        79
+      ],
+      [
+        90,
+        90
+      ],
+      [
+        95,
+        95
+      ],
+      [
+        97,
+        97
+      ],
+      [
+        120,
+        120
+      ],
+      [
+        127,
+        128
+      ],
+      [
+        130,
+        131
+      ]
+    ],
+    "post": [
+      [
+        41,
+        41
+      ]
+    ],
+    "output": [
+      [
+        45,
+        45
+      ],
+      [
+        49,
+        49
+      ],
+      [
+        52,
+        54
+      ],
+      [
+        80,
+        80
+      ],
+      [
+        92,
+        92
+      ],
+      [
+        95,
+        97
+      ],
+      [
+        114,
+        114
+      ],
+      [
+        122,
+        122
+      ],
+      [
+        128,
+        129
+      ],
+      [
+        131,
+        131
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'mapping' inferred from fallback segmentation.",
+    "Phase 'modulation' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPQuantumTunnelingEffect.cpp\n * @brief LGP Quantum Tunneling effect implementation\n */\n\n#include \"LGPQuantumTunnelingEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n#include <cstring>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPQuantumTunnelingEffect::LGPQuantumTunnelingEffect()\n    : m_time(0)\n    , m_particlePos{}\n    , m_particleEnergy{}\n    , m_particleActive{}\n{\n}\n\nbool LGPQuantumTunnelingEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_time = 0;\n    memset(m_particlePos, 0, sizeof(m_particlePos));\n    memset(m_particleEnergy, 0, sizeof(m_particleEnergy));\n    memset(m_particleActive, 0, sizeof(m_particleActive));\n    return true;\n}\n\nvoid LGPQuantumTunnelingEffect::render(plugins::EffectContext& ctx) {\n    // Particles tunnel through energy barriers with probability waves\n    m_time = (uint16_t)(m_time + (ctx.speed >> 1));\n\n    const uint8_t barrierCount = 3;\n    const uint8_t barrierWidth = 20;\n    const uint8_t tunnelProbability = 64;\n\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    // Draw energy barriers\n    for (uint8_t b = 0; b < barrierCount; b++) {\n        uint8_t barrierPos = (uint8_t)((b + 1) * STRIP_LENGTH / (barrierCount + 1));\n\n        for (int8_t w = -(int8_t)(barrierWidth / 2); w <= (int8_t)(barrierWidth / 2); w++) {\n            int16_t pos = (int16_t)barrierPos + w;\n            if (pos >= 0 && pos < STRIP_LENGTH) {\n                uint8_t barrierBright = (uint8_t)(60 - abs(w) * 3);\n                uint8_t brightU8 = (uint8_t)((barrierBright * ctx.brightness) / 255);\n                ctx.leds[pos] = ctx.palette.getColor(160, brightU8);\n                if (pos + STRIP_LENGTH < ctx.ledCount) {\n                    ctx.leds[pos + STRIP_LENGTH] = ctx.palette.getColor(160, brightU8);\n                }\n            }\n        }\n    }\n\n    // Spawn particles from center periodically\n    if ((ctx.frameNumber % 60) == 0) {\n        for (uint8_t p = 0; p < 10; p++) {\n            if (!m_particleActive[p]) {\n                m_particlePos[p] = CENTER_LEFT;\n                m_particleEnergy[p] = (uint8_t)(100 + random8(155));\n                m_particleActive[p] = true;\n                break;\n            }\n        }\n    }\n\n    // Update particles\n    for (uint8_t p = 0; p < 10; p++) {\n        if (m_particleActive[p]) {\n            int8_t direction = (p % 2) ? 1 : -1;\n\n            // Check for barrier collision\n            bool atBarrier = false;\n            for (uint8_t b = 0; b < barrierCount; b++) {\n                uint8_t barrierPos = (uint8_t)((b + 1) * STRIP_LENGTH / (barrierCount + 1));\n                if (abs((int)m_particlePos[p] - (int)barrierPos) < barrierWidth / 2) {\n                    atBarrier = true;\n\n                    if (random8() < tunnelProbability) {\n                        // TUNNEL THROUGH!\n                        m_particlePos[p] = (uint8_t)(m_particlePos[p] + direction * barrierWidth);\n\n                        // Flash effect - use particle color instead of white\n                        uint8_t flashHue = (uint8_t)(ctx.gHue + p * 25);\n                        for (int8_t f = -5; f <= 5; f++) {\n                            int16_t flashPos = (int16_t)m_particlePos[p] + f;\n                            if (flashPos >= 0 && flashPos < STRIP_LENGTH) {\n                                uint8_t flashBright = (uint8_t)(255 - abs(f) * 20);\n                                uint8_t flashBrightU8 = (uint8_t)((flashBright * ctx.brightness) / 255);\n                                ctx.leds[flashPos] = ctx.palette.getColor(flashHue, flashBrightU8);\n                                if (flashPos + STRIP_LENGTH < ctx.ledCount) {\n                                    ctx.leds[flashPos + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(flashHue + 128), flashBrightU8);\n                                }\n                            }\n                        }\n                    } else {\n                        // Reflect with energy loss\n                        m_particleEnergy[p] = scale8(m_particleEnergy[p], 200);\n                    }\n                    break;\n                }\n            }\n\n            if (!atBarrier) {\n                m_particlePos[p] = (uint8_t)(m_particlePos[p] + direction * 2);\n            }\n\n            // Deactivate at edges\n            if (m_particlePos[p] <= 0 || m_particlePos[p] >= STRIP_LENGTH - 1) {\n                m_particleActive[p] = false;\n                continue;\n            }\n\n            // Draw particle wave packet\n            for (int8_t w = -10; w <= 10; w++) {\n                int16_t wavePos = (int16_t)m_particlePos[p] + w;\n                if (wavePos >= 0 && wavePos < STRIP_LENGTH) {\n                    uint8_t waveBright = (uint8_t)(m_particleEnergy[p] * expf(-abs(w) * 0.2f));\n                    uint8_t hue = (uint8_t)(ctx.gHue + p * 25);\n\n                    uint8_t waveBrightU8 = (uint8_t)((waveBright * ctx.brightness) / 255);\n                    CRGB waveColor = ctx.palette.getColor(hue, waveBrightU8);\n                    ctx.leds[wavePos] = waveColor;\n                    if (wavePos + STRIP_LENGTH < ctx.ledCount) {\n                        CRGB waveColor2 = ctx.palette.getColor((uint8_t)(hue + 128), waveBrightU8);\n                        ctx.leds[wavePos + STRIP_LENGTH] = waveColor2;\n                    }\n                }\n            }\n\n            // Energy decay\n            m_particleEnergy[p] = scale8(m_particleEnergy[p], 250);\n            if (m_particleEnergy[p] < 10) {\n                m_particleActive[p] = false;\n            }\n        }\n    }\n}\n\nvoid LGPQuantumTunnelingEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPQuantumTunnelingEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Quantum Tunneling\",\n        \"Particles passing through barriers\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

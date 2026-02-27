@@ -1,0 +1,131 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_PHASE_TRANSITION",
+  "effectIdHex": "0x0707",
+  "className": "LGPPhaseTransitionEffect",
+  "displayName": "LGP Phase Transition",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPPhaseTransitionEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPPhaseTransitionEffect.cpp",
+  "renderRange": [
+    26,
+    79
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        26,
+        31
+      ]
+    ],
+    "mapping": [
+      [
+        36,
+        36
+      ],
+      [
+        38,
+        38
+      ]
+    ],
+    "modulation": [
+      [
+        26,
+        26
+      ],
+      [
+        32,
+        32
+      ],
+      [
+        45,
+        45
+      ],
+      [
+        51,
+        52
+      ],
+      [
+        57,
+        57
+      ],
+      [
+        67,
+        68
+      ]
+    ],
+    "render": [
+      [
+        34,
+        34
+      ],
+      [
+        41,
+        41
+      ],
+      [
+        47,
+        47
+      ],
+      [
+        49,
+        49
+      ],
+      [
+        53,
+        53
+      ],
+      [
+        55,
+        55
+      ],
+      [
+        60,
+        60
+      ],
+      [
+        62,
+        62
+      ],
+      [
+        69,
+        69
+      ],
+      [
+        71,
+        71
+      ],
+      [
+        74,
+        74
+      ],
+      [
+        76,
+        76
+      ]
+    ],
+    "post": [
+      [
+        73,
+        76
+      ]
+    ],
+    "output": [
+      [
+        34,
+        34
+      ],
+      [
+        74,
+        76
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPPhaseTransitionEffect.cpp\n * @brief LGP Phase Transition effect implementation\n */\n\n#include \"LGPPhaseTransitionEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPPhaseTransitionEffect::LGPPhaseTransitionEffect()\n    : m_phaseAnimation(0.0f)\n{\n}\n\nbool LGPPhaseTransitionEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_phaseAnimation = 0.0f;\n    return true;\n}\n\nvoid LGPPhaseTransitionEffect::render(plugins::EffectContext& ctx) {\n    // Colors undergo state changes like matter\n    float temperature = ctx.speed / 255.0f;\n    float intensity = ctx.brightness / 255.0f;\n    const float pressure = 0.5f;\n\n    m_phaseAnimation += temperature * 0.1f;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float distFromCenter = (float)centerPairDistance((uint16_t)i);\n        float normalizedDist = distFromCenter / (float)HALF_LENGTH;\n\n        float localTemp = temperature + (normalizedDist * pressure);\n\n        CRGB color;\n        uint8_t paletteOffset = 0;\n        uint8_t brightness = 0;\n\n        if (localTemp < 0.25f) {\n            // Solid phase\n            float crystal = sinf(distFromCenter * 0.3f) * 0.5f + 0.5f;\n            paletteOffset = (uint8_t)(crystal * 5.0f);\n            brightness = (uint8_t)(255.0f * intensity);\n            color = ctx.palette.getColor((uint8_t)(ctx.gHue + paletteOffset), brightness);\n        } else if (localTemp < 0.5f) {\n            // Liquid phase (sin(k*dist + phase) = INWARD flow - intentional design)\n            float flow = sinf(distFromCenter * 0.1f + m_phaseAnimation);\n            paletteOffset = (uint8_t)(10 + flow * 5.0f);\n            brightness = (uint8_t)(200.0f * intensity);\n            color = ctx.palette.getColor((uint8_t)(ctx.gHue + paletteOffset), brightness);\n        } else if (localTemp < 0.75f) {\n            // Gas phase\n            float dispersion = random8() / 255.0f;\n            if (dispersion < 0.3f) {\n                paletteOffset = 20;\n                brightness = (uint8_t)(150.0f * intensity);\n                color = ctx.palette.getColor((uint8_t)(ctx.gHue + paletteOffset), brightness);\n            } else {\n                color = CRGB::Black;\n            }\n        } else {\n            // Plasma phase (sin(k*dist + phase) = INWARD, 10x for sharp plasma bands - intentional design)\n            float plasma = sinf(distFromCenter * 0.5f + m_phaseAnimation * 10.0f);\n            paletteOffset = (uint8_t)(30 + plasma * 10.0f);\n            brightness = (uint8_t)(255.0f * intensity);\n            color = ctx.palette.getColor((uint8_t)(ctx.gHue + paletteOffset), brightness);\n        }\n\n        ctx.leds[i] = color;\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(ctx.gHue + paletteOffset + 60), brightness);\n        }\n    }\n}\n\nvoid LGPPhaseTransitionEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPPhaseTransitionEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Phase Transition\",\n        \"State change simulation\",\n        plugins::EffectCategory::UNCATEGORIZED,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

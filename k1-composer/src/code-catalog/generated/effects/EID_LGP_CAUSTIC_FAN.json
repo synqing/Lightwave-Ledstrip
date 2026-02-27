@@ -1,0 +1,79 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_CAUSTIC_FAN",
+  "effectIdHex": "0x0606",
+  "className": "LGPCausticFanEffect",
+  "displayName": "LGP Caustic Fan",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPCausticFanEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPCausticFanEffect.cpp",
+  "renderRange": [
+    26,
+    58
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        26,
+        28
+      ]
+    ],
+    "mapping": [
+      [
+        30,
+        30
+      ],
+      [
+        45,
+        45
+      ]
+    ],
+    "modulation": [
+      [
+        34,
+        34
+      ],
+      [
+        39,
+        40
+      ]
+    ],
+    "render": [
+      [
+        36,
+        36
+      ],
+      [
+        53,
+        53
+      ],
+      [
+        55,
+        55
+      ]
+    ],
+    "post": [
+      [
+        55,
+        56
+      ]
+    ],
+    "output": [
+      [
+        36,
+        36
+      ],
+      [
+        53,
+        55
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPCausticFanEffect.cpp\n * @brief LGP Caustic Fan effect implementation\n */\n\n#include \"LGPCausticFanEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPCausticFanEffect::LGPCausticFanEffect()\n    : m_time(0)\n{\n}\n\nbool LGPCausticFanEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_time = 0;\n    return true;\n}\n\nvoid LGPCausticFanEffect::render(plugins::EffectContext& ctx) {\n    // Two virtual focusing fans creating drifting caustic envelopes\n    m_time = (uint16_t)(m_time + (ctx.speed >> 2));\n\n    float intensityNorm = ctx.brightness / 255.0f;\n    const float curvature = 1.5f;\n    const float separation = 1.5f;\n    const float gain = 12.0f;\n    float animPhase = m_time / 256.0f;\n\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        float x = (float)i - (float)CENTER_LEFT;\n\n        float def1 = curvature * (x - separation) + sinf(animPhase);\n        float def2 = -curvature * (x + separation) + sinf(animPhase * 1.21f);\n        float diff = fabsf(def1 - def2);\n\n        float caustic = 1.0f / (1.0f + diff * diff * gain);\n        float envelope = 1.0f / (1.0f + fabsf(x) * 0.08f);\n        float brightnessF = caustic * envelope * 255.0f * intensityNorm;\n\n        brightnessF = constrain(brightnessF + (sin8((uint8_t)(i * 3 + (m_time >> 2))) >> 2), 0.0f, 255.0f);\n\n        uint8_t brightness = (uint8_t)brightnessF;\n        uint8_t hue = (uint8_t)(ctx.gHue + (uint8_t)(x * 1.5f) + (m_time >> 4));\n\n        uint8_t brightU8 = (uint8_t)((brightness * ctx.brightness) / 255);\n        ctx.leds[i] = ctx.palette.getColor(hue, brightU8);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(hue + 96), brightU8);\n        }\n    }\n}\n\nvoid LGPCausticFanEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPCausticFanEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Caustic Fan\",\n        \"Focused light caustics\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

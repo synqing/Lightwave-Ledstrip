@@ -44,8 +44,8 @@ open LightwaveOS.xcodeproj
 | Rive perf notes | [docs/RIVE_PERF_NOTES.md](docs/RIVE_PERF_NOTES.md) |
 | Rive UX checklist | [docs/RIVE_UX_CHECKLIST.md](docs/RIVE_UX_CHECKLIST.md) |
 | v1 source (reference) | [../lightwave-ios/](../lightwave-ios/) |
-| Firmware API docs | [../docs/api/api-v1.md](../docs/api/api-v1.md) |
-| Audio-reactive protocol | [../docs/audio-visual/audio-visual-semantic-mapping.md](../docs/audio-visual/audio-visual-semantic-mapping.md) |
+| Firmware API docs | [../firmware-v3/docs/api/api-v1.md](../firmware-v3/docs/api/api-v1.md) |
+| Audio-reactive protocol | [../firmware-v3/docs/audio-visual/audio-visual-semantic-mapping.md](../firmware-v3/docs/audio-visual/audio-visual-semantic-mapping.md) |
 
 ## Tab Structure
 

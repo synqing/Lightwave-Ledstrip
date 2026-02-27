@@ -1,0 +1,216 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_BEAT_PULSE_BLOOM",
+  "effectIdHex": "0x140B",
+  "className": "BeatPulseBloomEffect",
+  "displayName": "BeatPulseBloomEffect",
+  "headerPath": "firmware/v2/src/effects/ieffect/BeatPulseBloomEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/BeatPulseBloomEffect.cpp",
+  "renderRange": [
+    69,
+    222
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        88,
+        88
+      ],
+      [
+        93,
+        93
+      ],
+      [
+        148,
+        148
+      ],
+      [
+        158,
+        158
+      ],
+      [
+        160,
+        160
+      ],
+      [
+        170,
+        170
+      ],
+      [
+        173,
+        173
+      ]
+    ],
+    "mapping": [
+      [
+        108,
+        108
+      ],
+      [
+        119,
+        119
+      ],
+      [
+        171,
+        171
+      ],
+      [
+        204,
+        204
+      ]
+    ],
+    "modulation": [
+      [
+        69,
+        69
+      ],
+      [
+        73,
+        74
+      ],
+      [
+        88,
+        88
+      ],
+      [
+        92,
+        93
+      ],
+      [
+        95,
+        96
+      ],
+      [
+        103,
+        103
+      ],
+      [
+        144,
+        147
+      ],
+      [
+        168,
+        168
+      ],
+      [
+        173,
+        173
+      ],
+      [
+        180,
+        181
+      ],
+      [
+        183,
+        184
+      ]
+    ],
+    "render": [
+      [
+        72,
+        72
+      ],
+      [
+        156,
+        157
+      ],
+      [
+        160,
+        160
+      ],
+      [
+        162,
+        163
+      ],
+      [
+        204,
+        204
+      ],
+      [
+        209,
+        209
+      ],
+      [
+        211,
+        211
+      ],
+      [
+        217,
+        217
+      ],
+      [
+        221,
+        221
+      ]
+    ],
+    "post": [
+      [
+        69,
+        69
+      ],
+      [
+        99,
+        99
+      ],
+      [
+        101,
+        101
+      ],
+      [
+        117,
+        120
+      ],
+      [
+        134,
+        134
+      ],
+      [
+        138,
+        138
+      ],
+      [
+        140,
+        140
+      ],
+      [
+        146,
+        146
+      ],
+      [
+        195,
+        196
+      ],
+      [
+        215,
+        216
+      ]
+    ],
+    "output": [
+      [
+        126,
+        126
+      ],
+      [
+        133,
+        133
+      ],
+      [
+        135,
+        135
+      ],
+      [
+        204,
+        204
+      ],
+      [
+        214,
+        214
+      ]
+    ]
+  },
+  "mappingConfidence": "high",
+  "mappingWarnings": [],
+  "sourceText": "/**\n * @file BeatPulseBloomEffect.cpp\n * @brief Beat Pulse (Bloom) - subpixel advection transport + temporal feedback\n */\n\n#include \"BeatPulseBloomEffect.h\"\n\n#include \"AudioReactivePolicy.h\"\n#include \"BeatPulseRenderUtils.h\"\n#include \"BeatPulseTransportCore.h\"\n\n#ifndef NATIVE_BUILD\n#include <FastLED.h>\n#include <Arduino.h>\n#endif\n\n#include <cmath>\n#include <cstring>\n\nnamespace lightwaveos::effects::ieffect {\n\n// Shared transport state for this effect instance.\n// NOTE: ZoneComposer uses one shared effect instance, so TransportCore itself must be per-zone internally.\nstatic BeatPulseTransportCore g_transport;\n\n// Global debug flag - toggled by 'd' key in main.cpp\nbool g_bloomDebugEnabled = false;\n\nstatic uint32_t g_lastDebugMs = 0;\nstatic constexpr uint32_t DEBUG_INTERVAL_MS = 500;  // Log every 500ms\n\nBeatPulseBloomEffect::BeatPulseBloomEffect()\n    : m_meta(\n          \"Beat Pulse (Bloom)\",\n          \"Bloom-style transport: advected trails + centre injection (liquid motion)\",\n          plugins::EffectCategory::PARTY,\n          1,\n          \"LightwaveOS\") {}\n\nbool BeatPulseBloomEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    for (int i = 0; i < 4; i++) {\n        m_beatEnv[i] = 0.0f;\n        m_lastBeatMs[i] = 0;\n    }\n    g_transport.resetAll();\n    m_hasEverRendered = false;\n    return true;\n}\n\nstatic inline float norm01_u8(uint8_t v) { return static_cast<float>(v) / 255.0f; }\n\n/**\n * @brief Simple saturation control without HSV conversion.\n * sat=255 → unchanged; sat=0 → greyscale.\n */\nstatic inline CRGB applySaturation(CRGB c, uint8_t sat) {\n    if (sat >= 255) return c;\n    const uint16_t grey = (static_cast<uint16_t>(c.r) + c.g + c.b) / 3;\n    const uint16_t s = sat;\n    const uint16_t inv = 255 - sat;\n\n    c.r = static_cast<uint8_t>((grey * inv + static_cast<uint16_t>(c.r) * s) / 255);\n    c.g = static_cast<uint8_t>((grey * inv + static_cast<uint16_t>(c.g) * s) / 255);\n    c.b = static_cast<uint8_t>((grey * inv + static_cast<uint16_t>(c.b) * s) / 255);\n    return c;\n}\n\nvoid BeatPulseBloomEffect::render(plugins::EffectContext& ctx) {\n    // Lazy safety: if init() was never called (zone system), ensure sane defaults.\n    if (!m_hasEverRendered) {\n        for (int i = 0; i < 4; i++) {\n            m_beatEnv[i] = 0.0f;\n            m_lastBeatMs[i] = 0;\n        }\n        g_transport.resetAll();\n        m_hasEverRendered = true;\n    }\n\n    // zoneId: 0xFF means global (non-zone mode) → treat as zone 0\n    const uint8_t zoneId = (ctx.zoneId == 0xFF) ? 0 : (ctx.zoneId & 0x03);\n    const float dt = AudioReactivePolicy::signalDt(ctx);\n    const uint32_t nowMs = ctx.rawTotalTimeMs;\n\n    g_transport.setNowMs(nowMs);\n\n    // ---------------------------------------------------------------------\n    // Beat source (audio preferred with tempo confidence gate; raw-time fallback metronome)\n    // ---------------------------------------------------------------------\n    // NOTE: silentScale is NOT applied here - RendererActor handles it globally\n    // to avoid double-gating which kills punch.\n    const bool beatTick = AudioReactivePolicy::audioBeatTick(ctx, 128.0f, m_lastBeatMs[zoneId]);\n    const float beatStrength = ctx.audio.available ? clamp01(ctx.audio.beatStrength()) : 1.0f;\n\n    // Beat envelope: slam to 1.0 on beat, dt-correct exponential decay.\n    BeatPulseHTML::updateBeatIntensity(m_beatEnv[zoneId], beatTick, dt);\n\n    // ---------------------------------------------------------------------\n    // Transport tuning (Sensory Bridge Bloom parity)\n    // ---------------------------------------------------------------------\n    // Ported from Bloom's draw_sprite():\n    //   position = 0.250 + 1.750 * MOOD  (MOOD drives transport speed)\n    //   alpha = 0.99                      (persistence)\n    //\n    // MOOD affects how the light MOVES - low mood = slow/dreamy, high mood = fast/reactive.\n    // Speed is just a multiplier keeping the effect lively without stalling.\n    //\n    const float mood01 = ctx.getMoodNormalized();\n\n    // speed=0..100 -> multiplier 0.70..1.50 (keeps default lively, avoids extreme stalls)\n    const float speed01 = clamp01(ctx.speed / 100.0f);\n    const float speedMul = lerp(0.70f, 1.50f, speed01);\n\n    // MOOD drives transport: 0.25 pixels/frame at mood=0, up to 2.0 at mood=1\n    const float offsetPerFrame60 = (0.250f + 1.750f * mood01) * speedMul;\n\n    // fadeAmount=0..255 -> persistence 0.995..0.90 per 60Hz frame\n    // Low fade = long viscous trails, high fade = short snappy trails\n    const float fade01 = norm01_u8(ctx.fadeAmount);\n    const float persistencePerFrame60 = lerp(0.995f, 0.90f, fade01);\n\n    // complexity=0..100 -> diffusion 0.0..1.0\n    const float complexity01 = clamp01(ctx.complexity / 100.0f);\n    const float diffusion01 = complexity01;\n\n    // Radial length derived from centrePoint (79 -> 80 bins for a 160 strip).\n    const uint16_t radialLen = static_cast<uint16_t>(ctx.centerPoint + 1);\n\n    // Advect + decay (+ optional diffusion)\n    g_transport.advectOutward(zoneId, radialLen, offsetPerFrame60, persistencePerFrame60, diffusion01, dt);\n\n#ifndef NATIVE_BUILD\n    // Debug output (toggle with 'd' key)\n    if (g_bloomDebugEnabled) {\n        // Rate-limited transport tuning output (any zone, but show which)\n        if ((nowMs - g_lastDebugMs) >= DEBUG_INTERVAL_MS) {\n            g_lastDebugMs = nowMs;\n            Serial.printf(\"[BLOOM z%d] mood=%.2f spdMul=%.2f vel=%.2f | fade=%d persist=%.3f | cplx=%d diff=%.2f | dt=%.4f\\n\",\n                zoneId, mood01, speedMul, offsetPerFrame60,\n                ctx.fadeAmount, persistencePerFrame60,\n                ctx.complexity, diffusion01,\n                dt);\n        }\n        // Immediate beat event logging\n        if (beatTick) {\n            Serial.printf(\"[BLOOM z%d] >>> BEAT! strength=%.2f env=%.2f audio=%s\\n\",\n                zoneId, beatStrength, m_beatEnv[zoneId],\n                ctx.audio.available ? \"yes\" : \"no(metro)\");\n        }\n    }\n#endif\n\n    // ---------------------------------------------------------------------\n    // Centre injection (audio → colour + energy)\n    // ---------------------------------------------------------------------\n    // Colour: palette with chord-root shift when confidence is meaningful.\n    uint8_t paletteShift = 0;\n    if (ctx.audio.available && ctx.audio.chordConfidence() > 0.20f) {\n        // 12 notes → 0..252 shift (wrap naturally in uint8).\n        paletteShift = static_cast<uint8_t>(ctx.audio.rootNote() * 21);\n    }\n    const uint8_t baseIdx = static_cast<uint8_t>(paletteShift + ctx.gHue);\n    CRGB inject = ctx.palette.getColor(baseIdx);\n\n    // Apply global saturation knob.\n    inject = applySaturation(inject, ctx.saturation);\n\n    // Energy: blend beat slam with continuous drive (rms+flux) so it stays alive between beats.\n    float drive = 0.0f;\n    if (ctx.audio.available) {\n        // These are already normalised-ish in the control bus (0..1 in most cases).\n        // NOTE: No silentScale here - renderer handles global silence gating.\n        drive = clamp01(ctx.audio.rms() * 0.35f + ctx.audio.fastFlux() * 1.25f + ctx.audio.beatStrength() * 0.25f);\n    }\n\n    // intensity=0..100 -> injection gain 0.35..1.0 (keeps visible even at low intensity)\n    const float intensity01 = clamp01(ctx.intensity / 100.0f);\n    const float injGain = lerp(0.35f, 1.0f, intensity01);\n\n    // Beat env dominates attack; drive fills gaps.\n    const float injectAmount = clamp01((0.80f * m_beatEnv[zoneId] + 0.35f * drive) * injGain);\n\n    // White push: subtle specular punch on beats (reduced from 0.10-0.35 to preserve colour)\n    const float whitePush01 = clamp01(m_beatEnv[zoneId] * lerp(0.05f, 0.15f, intensity01));\n    ColourUtil::addWhiteSaturating(inject, floatToByte(whitePush01));\n\n    // variation=0..100 -> injection spread 0.05..0.85 (low variation = tight core)\n    const float variation01 = clamp01(ctx.variation / 100.0f);\n    const float spread01 = lerp(0.05f, 0.85f, variation01);\n\n    g_transport.injectAtCentre(zoneId, radialLen, inject, injectAmount, spread01);\n\n#ifndef NATIVE_BUILD\n    // Rate-limited injection logging (only if we just logged transport)\n    if (g_bloomDebugEnabled && (nowMs - g_lastDebugMs) < 50) {\n        Serial.printf(\"[BLOOM z%d] inj: drive=%.2f amt=%.2f spread=%.2f | rgb=(%d,%d,%d) palIdx=%d\\n\",\n            zoneId, drive, injectAmount, spread01,\n            inject.r, inject.g, inject.b,\n            baseIdx);\n    }\n#endif\n\n    // ---------------------------------------------------------------------\n    // Output mapping (centre-origin dual strip with palette enhancement)\n    // ---------------------------------------------------------------------\n    // NOTE: No silentScale here - renderer handles global silence gating.\n    const float outGain = clamp01(static_cast<float>(ctx.brightness) / 255.0f);\n\n    // Palette mix: variation=0..100 → 0.15..0.45 (subtle palette tinting as light travels)\n    // This creates richer colour variation without losing the transport character.\n    const float paletteMix = lerp(0.15f, 0.45f, variation01);\n\n#ifndef NATIVE_BUILD\n    // Rate-limited output logging (only if we just logged transport)\n    if (g_bloomDebugEnabled && (nowMs - g_lastDebugMs) < 50) {\n        Serial.printf(\"[BLOOM z%d] out: gain=%.2f palMix=%.2f var=%d | radLen=%d\\n\",\n            zoneId, outGain, paletteMix, ctx.variation, radialLen);\n    }\n#endif\n\n    g_transport.readoutToLedsWithPalette(zoneId, ctx, radialLen, outGain, baseIdx, paletteMix);\n}\n\nvoid BeatPulseBloomEffect::cleanup() {}\n\nconst plugins::EffectMetadata& BeatPulseBloomEffect::getMetadata() const { return m_meta; }\n\nuint8_t BeatPulseBloomEffect::getParameterCount() const { return 0; }\nconst plugins::EffectParameter* BeatPulseBloomEffect::getParameter(uint8_t index) const { (void)index; return nullptr; }\nbool BeatPulseBloomEffect::setParameter(const char* name, float value) { (void)name; (void)value; return false; }\nfloat BeatPulseBloomEffect::getParameter(const char* name) const { (void)name; return 0.0f; }\n\n} // namespace lightwaveos::effects::ieffect\n"
+}

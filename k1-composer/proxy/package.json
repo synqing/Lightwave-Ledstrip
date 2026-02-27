@@ -1,0 +1,18 @@
+{
+  "name": "k1-wired-proxy",
+  "version": "1.0.0",
+  "description": "Local proxy for K1 Lightwave over USB serial — wired-first discovery for K1 Composer",
+  "type": "module",
+  "main": "k1-wired-proxy.mjs",
+  "bin": { "k1-wired-proxy": "./k1-wired-proxy.mjs" },
+  "scripts": {
+    "start": "node k1-wired-proxy.mjs",
+    "probe": "node k1-wired-proxy.mjs --probe-only"
+  },
+  "dependencies": {
+    "@serialport/parser-readline": "^12.0.0",
+    "serialport": "^12.0.0",
+    "ws": "^8.18.0"
+  },
+  "engines": { "node": ">=18" }
+}

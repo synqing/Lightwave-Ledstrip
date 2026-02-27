@@ -1,0 +1,140 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_CHORD_GLOW",
+  "effectIdHex": "0x0A07",
+  "className": "LGPChordGlowEffect",
+  "displayName": "LGP Chord Glow",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPChordGlowEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPChordGlowEffect.cpp",
+  "renderRange": [
+    81,
+    261
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        93,
+        95
+      ],
+      [
+        99,
+        99
+      ]
+    ],
+    "mapping": [
+      [
+        140,
+        140
+      ],
+      [
+        142,
+        145
+      ],
+      [
+        151,
+        152
+      ],
+      [
+        187,
+        187
+      ],
+      [
+        190,
+        190
+      ],
+      [
+        193,
+        193
+      ]
+    ],
+    "modulation": [
+      [
+        126,
+        127
+      ],
+      [
+        139,
+        139
+      ],
+      [
+        142,
+        142
+      ],
+      [
+        145,
+        145
+      ],
+      [
+        147,
+        148
+      ],
+      [
+        150,
+        150
+      ],
+      [
+        152,
+        153
+      ],
+      [
+        193,
+        193
+      ]
+    ],
+    "render": [
+      [
+        86,
+        86
+      ],
+      [
+        147,
+        148
+      ],
+      [
+        186,
+        186
+      ],
+      [
+        222,
+        222
+      ],
+      [
+        229,
+        229
+      ],
+      [
+        239,
+        239
+      ],
+      [
+        247,
+        247
+      ]
+    ],
+    "post": [
+      [
+        82,
+        82
+      ],
+      [
+        85,
+        86
+      ],
+      [
+        189,
+        189
+      ]
+    ],
+    "output": [
+      [
+        82,
+        82
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [],
+  "sourceText": "/**\n * @file LGPChordGlowEffect.cpp\n * @brief LGP Chord Glow - Full chord detection integration showcase effect\n *\n * This effect demonstrates the complete chord detection pipeline:\n * 1. Root note determines base hue (chromatic circle: C=red -> B=violet)\n * 2. Chord type (major/minor/dim/aug) modulates saturation and mood\n * 3. Detection confidence controls overall brightness\n * 4. Chord changes trigger smooth 200ms cross-fade transitions\n * 5. 3rd and 5th intervals appear as accent colors at specific LED positions\n *\n * CENTER ORIGIN: All effects radiate from LED 79/80 (center point) outward.\n */\n\n#include \"LGPChordGlowEffect.h\"\n#include \"../CoreEffects.h\"\n#include \"../../config/features.h\"\n\n#ifndef NATIVE_BUILD\n#include <FastLED.h>\n#endif\n\n#include <cmath>\n#include <cstring>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\n// Root note to hue mapping (chromatic circle)\n// C=0 (red), C#=21, D=42, D#=63, E=84, F=105, F#=126, G=147, G#=168, A=189, A#=210, B=231\nstatic constexpr uint8_t ROOT_NOTE_HUES[12] = {\n    0,    // C  - Red\n    21,   // C# - Red-Orange\n    42,   // D  - Orange\n    63,   // D# - Yellow-Orange\n    84,   // E  - Yellow\n    105,  // F  - Yellow-Green\n    126,  // F# - Green\n    147,  // G  - Cyan-Green\n    168,  // G# - Cyan\n    189,  // A  - Blue\n    210,  // A# - Blue-Violet\n    231   // B  - Violet\n};\n\n// Chord mood configurations\nstatic constexpr ChordMood CHORD_MOODS[] = {\n    {180, 0, 0.3f},     // NONE - muted, low brightness\n    {255, 0, 1.0f},     // MAJOR - high saturation, bright (happy)\n    {200, -10, 0.85f},  // MINOR - medium saturation, cooler (melancholic)\n    {140, 15, 0.7f},    // DIMINISHED - low saturation, dark (tense)\n    {240, 30, 0.95f}    // AUGMENTED - high saturation, ethereal (dreamy)\n};\n\nbool LGPChordGlowEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n\n    // Reset chord state\n    m_currentRootNote = 0;\n    m_currentChordType = audio::ChordType::NONE;\n    m_currentConfidence = 0.0f;\n\n    m_prevRootNote = 0;\n    m_prevChordType = audio::ChordType::NONE;\n    m_prevConfidence = 0.0f;\n\n    // Reset transition state\n    m_transitionProgress = 1.0f;\n    m_isTransitioning = false;\n\n    // Reset smoothing\n    m_rootNoteSmooth = 0.0f;\n    m_glowPhase = 0.0f;\n    m_chordChangePulse = 0.0f;\n    m_lastHopSeq = 0;\n\n    return true;\n}\n\nvoid LGPChordGlowEffect::render(plugins::EffectContext& ctx) {\n    // Clear output buffer with fade for trails\n    const float rawDt = ctx.getSafeRawDeltaSeconds();\n    const float dt = ctx.getSafeDeltaSeconds();\n    const int fadeAmt = (int)roundf(25.0f * (dt * 60.0f));\n    fadeToBlackBy(ctx.leds, ctx.ledCount, clampU8(fadeAmt));\n\n#if !FEATURE_AUDIO_SYNC\n    (void)ctx;\n    return;\n#else\n    // Get chord detection state\n    const audio::ChordState& chord = ctx.audio.controlBus.chordState;\n    const bool hasAudio = ctx.audio.available;\n    const bool newHop = hasAudio && (ctx.audio.controlBus.hop_seq != m_lastHopSeq);\n\n    // Update chord state on new hop\n    if (hasAudio && newHop) {\n        m_lastHopSeq = ctx.audio.controlBus.hop_seq;\n\n        // Check for chord change (significant change in root or type)\n        bool chordChanged = false;\n        if (chord.type != audio::ChordType::NONE && chord.confidence > 0.3f) {\n            if (chord.rootNote != m_currentRootNote ||\n                chord.type != m_currentChordType) {\n                chordChanged = true;\n\n                // Store previous state for blending\n                m_prevRootNote = m_currentRootNote;\n                m_prevChordType = m_currentChordType;\n                m_prevConfidence = m_currentConfidence;\n\n                // Update current state\n                m_currentRootNote = chord.rootNote;\n                m_currentChordType = chord.type;\n\n                // Start transition\n                m_transitionProgress = 0.0f;\n                m_isTransitioning = true;\n\n                // Trigger chord change pulse\n                m_chordChangePulse = 1.0f;\n            }\n        }\n\n        // Always update confidence (smoothed)\n        m_currentConfidence = smoothValue(m_currentConfidence, chord.confidence, 0.15f);\n    }\n\n    // Update transition progress\n    if (m_isTransitioning) {\n        m_transitionProgress += (ctx.deltaTimeSeconds * 1000.0f / TRANSITION_DURATION_MS);\n        if (m_transitionProgress >= 1.0f) {\n            m_transitionProgress = 1.0f;\n            m_isTransitioning = false;\n        }\n    }\n\n    // Smooth root note for gradual hue drift\n    float targetRoot = (float)m_currentRootNote;\n    // Handle wraparound (e.g., transitioning from B to C)\n    float diff = targetRoot - m_rootNoteSmooth;\n    if (diff > 6.0f) targetRoot -= 12.0f;\n    else if (diff < -6.0f) targetRoot += 12.0f;\n    m_rootNoteSmooth += (targetRoot - m_rootNoteSmooth) * (1.0f - expf(-rawDt / 0.2f));  // True exponential, tau=200ms\n    // Wrap back to 0-11 range\n    while (m_rootNoteSmooth < 0.0f) m_rootNoteSmooth += 12.0f;\n    while (m_rootNoteSmooth >= 12.0f) m_rootNoteSmooth -= 12.0f;\n\n    // Update glow phase for ambient animation\n    float speedNorm = ctx.speed / 50.0f;\n    m_glowPhase += speedNorm * 2.0f * dt;\n    if (m_glowPhase > 6.28318f) m_glowPhase -= 6.28318f;\n\n    // Decay chord change pulse\n    m_chordChangePulse *= expf(-rawDt / 0.15f);  // ~150ms decay\n\n    // Get mood parameters for current and previous chord\n    ChordMood currentMood = getChordMood(m_currentChordType);\n    ChordMood prevMood = getChordMood(m_prevChordType);\n\n    // Calculate blended hue based on transition\n    uint8_t currentHue = rootNoteToHue(m_currentRootNote);\n    uint8_t prevHue = rootNoteToHue(m_prevRootNote);\n\n    // Get interval notes for accents\n    uint8_t thirdNote = getThirdInterval(m_currentRootNote, m_currentChordType);\n    uint8_t fifthNote = getFifthInterval(m_currentRootNote, m_currentChordType);\n    uint8_t thirdHue = rootNoteToHue(thirdNote);\n    uint8_t fifthHue = rootNoteToHue(fifthNote);\n\n    // Calculate positions for accent LEDs (3rd and 5th intervals)\n    // Position them at ~33% and ~66% from center\n    const uint16_t thirdDist = CHORD_GLOW_HALF_LENGTH / 3;    // ~26 LEDs from center\n    const uint16_t fifthDist = (CHORD_GLOW_HALF_LENGTH * 2) / 3;  // ~53 LEDs from center\n\n    // Brightness based on confidence\n    float baseBrightness = m_currentConfidence * currentMood.brightnessScale;\n    baseBrightness = baseBrightness * (0.6f + 0.4f * (ctx.brightness / 255.0f));\n\n    // Blend saturation during transition\n    float blendedSat = prevMood.saturation * (1.0f - m_transitionProgress) +\n                       currentMood.saturation * m_transitionProgress;\n\n    // Render CENTER ORIGIN glow pattern\n    for (uint16_t dist = 0; dist < CHORD_GLOW_HALF_LENGTH; ++dist) {\n        float normalizedDist = (float)dist / (float)CHORD_GLOW_HALF_LENGTH;\n\n        // Base glow intensity (stronger at center, fades toward edges)\n        float glow = expf(-normalizedDist * 2.5f);\n\n        // Add pulsing animation\n        float pulse = 0.7f + 0.3f * sinf(m_glowPhase - normalizedDist * 3.0f);\n        glow *= pulse;\n\n        // Add chord change burst (ripples outward from center)\n        if (m_chordChangePulse > 0.01f) {\n            float burstDist = m_chordChangePulse * CHORD_GLOW_HALF_LENGTH * 0.5f;\n            float burstWidth = 8.0f;\n            float burstIntensity = expf(-powf((float)dist - burstDist, 2.0f) / (2.0f * burstWidth * burstWidth));\n            glow += burstIntensity * m_chordChangePulse * 0.5f;\n        }\n\n        // Calculate hue with transition blending\n        uint8_t blendedHue;\n        if (m_isTransitioning) {\n            // Blend between previous and current hue\n            int hueDiff = (int)currentHue - (int)prevHue;\n            // Handle wraparound\n            if (hueDiff > 128) hueDiff -= 256;\n            else if (hueDiff < -128) hueDiff += 256;\n            blendedHue = (uint8_t)((int)prevHue + (int)(hueDiff * m_transitionProgress));\n        } else {\n            blendedHue = currentHue;\n        }\n\n        // Apply mood hue offset\n        int8_t hueOffset = (int8_t)(prevMood.hueOffset * (1.0f - m_transitionProgress) +\n                                     currentMood.hueOffset * m_transitionProgress);\n        blendedHue = (uint8_t)((int)blendedHue + hueOffset);\n\n        // Add gHue for palette cycling\n        blendedHue += ctx.gHue;\n\n        // Calculate final brightness\n        uint8_t brightness = clampU8((int)(glow * baseBrightness * 255.0f));\n\n        // Create base color\n        CRGB baseColor = ctx.palette.getColor(blendedHue, brightness);\n\n        // Check for accent positions (3rd and 5th intervals)\n        bool isThirdAccent = (dist >= thirdDist - 2 && dist <= thirdDist + 2);\n        bool isFifthAccent = (dist >= fifthDist - 2 && dist <= fifthDist + 2);\n\n        if (isThirdAccent && m_currentChordType != audio::ChordType::NONE) {\n            // Blend in third interval accent color\n            float accentStrength = 0.4f * m_currentConfidence * (1.0f - fabsf((float)dist - (float)thirdDist) / 3.0f);\n            uint8_t accentBrightness = clampU8((int)(accentStrength * baseBrightness * 255.0f));\n            CRGB accentColor = ctx.palette.getColor(thirdHue + ctx.gHue, accentBrightness);\n            baseColor = blendColors(baseColor, accentColor, accentStrength);\n        }\n\n        if (isFifthAccent && m_currentChordType != audio::ChordType::NONE) {\n            // Blend in fifth interval accent color\n            float accentStrength = 0.35f * m_currentConfidence * (1.0f - fabsf((float)dist - (float)fifthDist) / 3.0f);\n            uint8_t accentBrightness = clampU8((int)(accentStrength * baseBrightness * 255.0f));\n            CRGB accentColor = ctx.palette.getColor(fifthHue + ctx.gHue, accentBrightness);\n            baseColor = blendColors(baseColor, accentColor, accentStrength);\n        }\n\n        // Apply saturation adjustment\n        CHSV hsv = rgb2hsv_approximate(baseColor);\n        hsv.s = clampU8((int)(hsv.s * blendedSat / 255.0f));\n        hsv2rgb_spectrum(hsv, baseColor);\n\n        // Set symmetric LEDs from center (CENTER ORIGIN pattern)\n        SET_CENTER_PAIR(ctx, dist, baseColor);\n    }\n\n#endif  // FEATURE_AUDIO_SYNC\n}\n\nuint8_t LGPChordGlowEffect::rootNoteToHue(uint8_t rootNote) const {\n    if (rootNote >= 12) rootNote = rootNote % 12;\n    return ROOT_NOTE_HUES[rootNote];\n}\n\nChordMood LGPChordGlowEffect::getChordMood(audio::ChordType type) const {\n    uint8_t idx = static_cast<uint8_t>(type);\n    if (idx >= 5) idx = 0;  // Default to NONE\n    return CHORD_MOODS[idx];\n}\n\nuint8_t LGPChordGlowEffect::getThirdInterval(uint8_t rootNote, audio::ChordType type) const {\n    // Major 3rd = +4 semitones, Minor 3rd = +3 semitones\n    switch (type) {\n        case audio::ChordType::MAJOR:\n        case audio::ChordType::AUGMENTED:\n            return (rootNote + 4) % 12;\n        case audio::ChordType::MINOR:\n        case audio::ChordType::DIMINISHED:\n            return (rootNote + 3) % 12;\n        default:\n            return (rootNote + 4) % 12;  // Default to major 3rd\n    }\n}\n\nuint8_t LGPChordGlowEffect::getFifthInterval(uint8_t rootNote, audio::ChordType type) const {\n    // Perfect 5th = +7 semitones\n    // Diminished 5th = +6 semitones\n    // Augmented 5th = +8 semitones\n    switch (type) {\n        case audio::ChordType::DIMINISHED:\n            return (rootNote + 6) % 12;\n        case audio::ChordType::AUGMENTED:\n            return (rootNote + 8) % 12;\n        default:\n            return (rootNote + 7) % 12;  // Perfect 5th\n    }\n}\n\nfloat LGPChordGlowEffect::smoothValue(float current, float target, float alpha) const {\n    return current + (target - current) * alpha;\n}\n\nuint8_t LGPChordGlowEffect::clampU8(int value) const {\n    if (value < 0) return 0;\n    if (value > 255) return 255;\n    return (uint8_t)value;\n}\n\nCRGB LGPChordGlowEffect::blendColors(CRGB c1, CRGB c2, float blend) const {\n    float inv = 1.0f - blend;\n    return CRGB(\n        clampU8((int)(c1.r * inv + c2.r * blend)),\n        clampU8((int)(c1.g * inv + c2.g * blend)),\n        clampU8((int)(c1.b * inv + c2.b * blend))\n    );\n}\n\nvoid LGPChordGlowEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPChordGlowEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Chord Glow\",\n        \"Musical chord detection showcase: root=hue, type=mood, confidence=brightness, smooth transitions\",\n        plugins::EffectCategory::PARTY,\n        1,\n        \"LightwaveOS\"\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

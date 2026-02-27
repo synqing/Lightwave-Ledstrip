@@ -1,0 +1,67 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_BEAT_PULSE_STACK",
+  "effectIdHex": "0x1400",
+  "className": "BeatPulseStackEffect",
+  "displayName": "Beat Pulse (Stack)",
+  "headerPath": "firmware/v2/src/effects/ieffect/BeatPulseStackEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/BeatPulseStackEffect.cpp",
+  "renderRange": [
+    34,
+    43
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        34,
+        34
+      ]
+    ],
+    "mapping": [
+      [
+        35,
+        35
+      ]
+    ],
+    "modulation": [
+      [
+        34,
+        35
+      ],
+      [
+        42,
+        42
+      ]
+    ],
+    "render": [
+      [
+        38,
+        41
+      ]
+    ],
+    "post": [
+      [
+        42,
+        42
+      ]
+    ],
+    "output": [
+      [
+        43,
+        43
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'mapping' inferred from fallback segmentation.",
+    "Phase 'render' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation.",
+    "Phase 'output' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file BeatPulseStackEffect.cpp\n * @brief Beat Pulse (Stack) - HTML PARITY implementation\n *\n * VISUAL IDENTITY:\n * Single ring contracting inward (edge to centre) with AMPLITUDE-DRIVEN motion.\n * Clean. Definitive. The kick drum. HTML parity locked.\n *\n * HTML PARITY (LOCKED):\n * - beatIntensity slams to 1.0 on beat, decays *= 0.94^(dt*60)\n * - ringCentre = beatIntensity * 0.6 (amplitude-driven, not time-driven)\n * - Triangle profile: waveHit = 1 - min(1, abs(dist - ringCentre) * 3)\n * - intensity = max(0, waveHit) * beatIntensity\n * - brightness = 0.5 + intensity * 0.5\n * - whiteMix = intensity * 0.3\n *\n * Effect ID: 110\n */\n\n#include \"BeatPulseStackEffect.h\"\n#include \"../CoreEffects.h\"\n#include \"BeatPulseCore.h\"\n\n#include <cmath>\n\nnamespace lightwaveos::effects::ieffect {\n\nbool BeatPulseStackEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    BeatPulseCore::reset(m_state, 128.0f);\n    return true;\n}\n\nvoid BeatPulseStackEffect::render(plugins::EffectContext& ctx) {\n    const BeatPulseCore::Params p{\n        false, // inward\n        3.0f,  // profileSlope\n        0.5f,  // brightnessBase\n        0.5f,  // brightnessGain\n        0.3f   // whiteGain\n    };\n    BeatPulseCore::renderSingleRing(ctx, m_state, p);\n}\n\nvoid BeatPulseStackEffect::cleanup() {}\n\nconst plugins::EffectMetadata& BeatPulseStackEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Beat Pulse (Stack)\",\n        \"HTML parity: amplitude-driven ring contracting to centre\",\n        plugins::EffectCategory::PARTY,\n        1,\n        \"LightwaveOS\"\n    };\n    return meta;\n}\n\nuint8_t BeatPulseStackEffect::getParameterCount() const {\n    return 0;\n}\n\nconst plugins::EffectParameter* BeatPulseStackEffect::getParameter(uint8_t index) const {\n    (void)index;\n    return nullptr;\n}\n\nbool BeatPulseStackEffect::setParameter(const char* name, float value) {\n    (void)name;\n    (void)value;\n    return false;\n}\n\nfloat BeatPulseStackEffect::getParameter(const char* name) const {\n    (void)name;\n    return 0.0f;\n}\n\n} // namespace lightwaveos::effects::ieffect\n"
+}

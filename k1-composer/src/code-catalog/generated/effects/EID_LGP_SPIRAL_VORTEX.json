@@ -1,0 +1,98 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_SPIRAL_VORTEX",
+  "effectIdHex": "0x0302",
+  "className": "LGPSpiralVortexEffect",
+  "displayName": "LGP Spiral Vortex",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPSpiralVortexEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPSpiralVortexEffect.cpp",
+  "renderRange": [
+    26,
+    55
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        26,
+        28
+      ]
+    ],
+    "mapping": [
+      [
+        29,
+        30
+      ],
+      [
+        32,
+        32
+      ],
+      [
+        38,
+        38
+      ],
+      [
+        41,
+        41
+      ],
+      [
+        45,
+        45
+      ],
+      [
+        47,
+        47
+      ]
+    ],
+    "modulation": [
+      [
+        32,
+        32
+      ],
+      [
+        41,
+        41
+      ]
+    ],
+    "render": [
+      [
+        36,
+        36
+      ],
+      [
+        48,
+        48
+      ],
+      [
+        50,
+        50
+      ],
+      [
+        52,
+        52
+      ]
+    ],
+    "post": [
+      [
+        44,
+        44
+      ]
+    ],
+    "output": [
+      [
+        36,
+        36
+      ],
+      [
+        50,
+        52
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPSpiralVortexEffect.cpp\n * @brief LGP Spiral Vortex effect implementation\n */\n\n#include \"LGPSpiralVortexEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPSpiralVortexEffect::LGPSpiralVortexEffect()\n    : m_phase(0.0f)\n{\n}\n\nbool LGPSpiralVortexEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_phase = 0.0f;\n    return true;\n}\n\nvoid LGPSpiralVortexEffect::render(plugins::EffectContext& ctx) {\n    // CENTER ORIGIN - Creates rotating spiral patterns from center\n    float dt = ctx.getSafeDeltaSeconds();\n    float speedNorm = ctx.speed / 50.0f;\n    float intensityNorm = ctx.brightness / 255.0f;\n\n    m_phase += speedNorm * 0.05f * 60.0f * dt;  // dt-corrected\n\n    const int spiralArms = 4;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float distFromCenter = (float)centerPairDistance((uint16_t)i);\n        float normalizedDist = distFromCenter / (float)HALF_LENGTH;\n\n        // Spiral equation\n        float spiralAngle = normalizedDist * spiralArms * TWO_PI + m_phase;\n        float spiral = sinf(spiralAngle);\n\n        // Radial fade\n        spiral *= (1.0f - normalizedDist * 0.5f);\n\n        uint8_t brightness = (uint8_t)(128.0f + 127.0f * spiral * intensityNorm);\n        uint8_t paletteIndex = (uint8_t)(spiralAngle * 255.0f / TWO_PI);\n\n        ctx.leds[i] = ctx.palette.getColor((uint8_t)(ctx.gHue + paletteIndex), brightness);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(ctx.gHue + paletteIndex + 128), brightness);\n        }\n    }\n}\n\nvoid LGPSpiralVortexEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPSpiralVortexEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Spiral Vortex\",\n        \"Rotating spiral arms\",\n        plugins::EffectCategory::GEOMETRIC,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

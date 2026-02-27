@@ -1,0 +1,139 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_BEAT_PULSE_SPECTRAL",
+  "effectIdHex": "0x1407",
+  "className": "BeatPulseSpectralEffect",
+  "displayName": "Beat Pulse (Spectral)",
+  "headerPath": "firmware/v2/src/effects/ieffect/BeatPulseSpectralEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/BeatPulseSpectralEffect.cpp",
+  "renderRange": [
+    67,
+    169
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        82,
+        85
+      ]
+    ],
+    "mapping": [
+      [
+        79,
+        94
+      ]
+    ],
+    "modulation": [
+      [
+        67,
+        67
+      ],
+      [
+        80,
+        80
+      ],
+      [
+        88,
+        92
+      ],
+      [
+        94,
+        94
+      ],
+      [
+        96,
+        96
+      ],
+      [
+        98,
+        100
+      ],
+      [
+        102,
+        104
+      ],
+      [
+        106,
+        108
+      ],
+      [
+        110,
+        111
+      ],
+      [
+        117,
+        117
+      ],
+      [
+        124,
+        124
+      ],
+      [
+        128,
+        128
+      ],
+      [
+        132,
+        132
+      ],
+      [
+        134,
+        134
+      ],
+      [
+        142,
+        142
+      ],
+      [
+        145,
+        145
+      ]
+    ],
+    "render": [
+      [
+        114,
+        114
+      ],
+      [
+        149,
+        149
+      ],
+      [
+        151,
+        151
+      ],
+      [
+        154,
+        154
+      ],
+      [
+        157,
+        157
+      ]
+    ],
+    "post": [
+      [
+        122,
+        122
+      ],
+      [
+        124,
+        124
+      ]
+    ],
+    "output": [
+      [
+        164,
+        169
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'mapping' inferred from fallback segmentation.",
+    "Phase 'output' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file BeatPulseSpectralEffect.cpp\n * @brief Beat Pulse (Spectral) - Frequency decomposition: bass glow, mid crack, treble shimmer\n *\n * Visual identity: You SEE the drum kit spatially decomposed.\n *   - BASS: Wide warm GLOW filling outer region (thud)\n *   - MID: Sharp RING at middle position with position modulation (crack)\n *   - TREBLE: SPARKLE/shimmer near centre, noise-modulated (sizzle)\n *\n * Each band has DISTINCT visual character and uses different palette regions.\n * Additive combination shows all three bands simultaneously.\n *\n * See BeatPulseSpectralEffect.h for class definition.\n */\n\n#include \"BeatPulseSpectralEffect.h\"\n#include \"../CoreEffects.h\"\n#include \"BeatPulseRenderUtils.h\"\n\n#include <cmath>\n\nnamespace lightwaveos::effects::ieffect {\n\nnamespace {\n\n// ============================================================================\n// Band smoothing (different attack/release per band)\n// ============================================================================\nconstexpr float BASS_SMOOTH = 0.85f;    // Slower (weighty)\nconstexpr float MID_SMOOTH = 0.88f;\nconstexpr float TREBLE_SMOOTH = 0.92f;  // Faster (snappy)\n\n// ============================================================================\n// Spatial regions\n// ============================================================================\nconstexpr float BASS_START = 0.55f;     // Outer 45% of strip\nconstexpr float MID_POS = 0.40f;        // Middle ring centre\nconstexpr float MID_WIDTH = 0.07f;      // Sharp ring\nconstexpr float TREBLE_END = 0.18f;     // Inner 18% of strip\n\n// ============================================================================\n// Palette regions (warm/neutral/cool)\n// ============================================================================\nconstexpr uint8_t BASS_PALETTE = 40;    // Warm\nconstexpr uint8_t MID_PALETTE = 128;    // Neutral\nconstexpr uint8_t TREBLE_PALETTE = 200; // Cool\n\n// ============================================================================\n// Ring edge sharpness\n// ============================================================================\nconstexpr float MID_EDGE_SOFTNESS = 0.015f;\n\n} // namespace\n\nbool BeatPulseSpectralEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_smoothBass = 0.0f;\n    m_smoothMid = 0.0f;\n    m_smoothTreble = 0.0f;\n    m_beatBoost = 0.0f;\n    m_fallbackBpm = 128.0f;\n    m_lastFallbackBeatMs = 0;\n    m_fallbackPhase = 0.0f;\n    return true;\n}\n\nvoid BeatPulseSpectralEffect::render(plugins::EffectContext& ctx) {\n    // =========================================================================\n    // SPECTRAL: Frequency decomposition with distinct visual character per band.\n    // Bass = outer GLOW (warm), Mid = SHARP ring (neutral), Treble = SPARKLE (cool).\n    // Additive combination - you see all three bands simultaneously.\n    // =========================================================================\n\n    const float dt = ctx.getSafeRawDeltaSeconds();\n\n    // --- Read frequency bands ---\n    float rawBass = 0.0f;\n    float rawMid = 0.0f;\n    float rawTreble = 0.0f;\n    bool beatTick = false;\n\n    if (ctx.audio.available) {\n        rawBass = clamp01(ctx.audio.bass());\n        rawMid = clamp01(ctx.audio.mid());\n        rawTreble = clamp01(ctx.audio.treble());\n    } else {\n        // Fallback: simulate gentle pulsing\n        m_fallbackPhase += dt * 2.0f;\n        if (m_fallbackPhase > 6.28318f) m_fallbackPhase -= 6.28318f;\n        rawBass = 0.4f + 0.3f * sinf(m_fallbackPhase);\n        rawMid = 0.3f + 0.2f * sinf(m_fallbackPhase * 1.5f);\n        rawTreble = 0.2f + 0.15f * sinf(m_fallbackPhase * 2.5f);\n    }\n    beatTick = BeatPulseTiming::computeBeatTick(ctx, m_fallbackBpm, m_lastFallbackBeatMs);\n\n    // --- Smooth each band (dt-correct exponential smoothing) ---\n    // Different attack/release rates per band\n    const float bassSmooth = 1.0f - powf(BASS_SMOOTH, dt * 60.0f);   // slower (bass is weighty)\n    const float midSmooth = 1.0f - powf(MID_SMOOTH, dt * 60.0f);\n    const float trebleSmooth = 1.0f - powf(TREBLE_SMOOTH, dt * 60.0f); // faster (treble is snappy)\n\n    m_smoothBass += (rawBass - m_smoothBass) * bassSmooth;\n    m_smoothMid += (rawMid - m_smoothMid) * midSmooth;\n    m_smoothTreble += (rawTreble - m_smoothTreble) * trebleSmooth;\n\n    // --- Beat boost (brief global pump) ---\n    if (beatTick) {\n        m_beatBoost = 0.3f;\n    }\n    m_beatBoost *= powf(0.90f, dt * 60.0f);\n    if (m_beatBoost < 0.001f) m_beatBoost = 0.0f;\n\n    // --- Render ---\n    for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {\n        const float dist01 = (static_cast<float>(dist) + 0.5f) / static_cast<float>(HALF_LENGTH);\n\n        const float boost = 1.0f + m_beatBoost;\n\n        // === BASS: Wide warm GLOW in outer region ===\n        float bassHit = 0.0f;\n        if (dist01 > BASS_START) {\n            // Fills region, intensity fades toward edge\n            float zonePos = (dist01 - BASS_START) / (1.0f - BASS_START);\n            bassHit = (1.0f - zonePos * 0.3f) * m_smoothBass;  // Slight edge fade\n        }\n        bassHit = clamp01(bassHit * boost);\n\n        // === MID: Sharp ring with position modulation ===\n        float midHit = 0.0f;\n        {\n            // Ring position shifts slightly with intensity (crack moves)\n            const float modPos = MID_POS + m_smoothMid * 0.12f;\n            const float diff = fabsf(dist01 - modPos);\n            midHit = RingProfile::hardEdge(diff, MID_WIDTH, MID_EDGE_SOFTNESS) * m_smoothMid;\n        }\n        midHit = clamp01(midHit * boost);\n\n        // === TREBLE: Sparkle shimmer at centre ===\n        float trebleHit = 0.0f;\n        if (dist01 < TREBLE_END) {\n            float zonePos = dist01 / TREBLE_END;\n            // High-frequency noise modulation (sparkle)\n            float noise = 0.5f + 0.5f * sinf(static_cast<float>(dist) * 23.7f + static_cast<float>(ctx.rawTotalTimeMs) * 0.035f);\n            noise *= 0.5f + 0.5f * sinf(static_cast<float>(dist) * 11.3f - static_cast<float>(ctx.rawTotalTimeMs) * 0.021f);\n            trebleHit = (1.0f - zonePos) * m_smoothTreble * noise;\n        }\n        trebleHit = clamp01(trebleHit * boost);\n\n        // === Colour per band (different palette regions) ===\n        const uint8_t bassBright = scaleBrightness(ctx.brightness, bassHit * 0.9f);\n        CRGB bassColor = ctx.palette.getColor(BASS_PALETTE + floatToByte(bassHit * 0.15f), bassBright);\n\n        const uint8_t midBright = scaleBrightness(ctx.brightness, midHit);\n        CRGB midColor = ctx.palette.getColor(MID_PALETTE, midBright);\n\n        const uint8_t trebleBright = scaleBrightness(ctx.brightness, trebleHit * 1.1f);\n        CRGB trebleColor = ctx.palette.getColor(TREBLE_PALETTE + floatToByte(trebleHit * 0.2f), trebleBright);\n\n        // ADDITIVE combination\n        CRGB c = ColourUtil::additive(ColourUtil::additive(bassColor, midColor), trebleColor);\n\n        // White sparkle on TREBLE only\n        if (trebleHit > 0.25f) {\n            ColourUtil::addWhiteSaturating(c, floatToByte((trebleHit - 0.25f) * 0.5f));\n        }\n\n        SET_CENTER_PAIR(ctx, dist, c);\n    }\n}\n\nvoid BeatPulseSpectralEffect::cleanup() {}\n\nconst plugins::EffectMetadata& BeatPulseSpectralEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Beat Pulse (Spectral)\",\n        \"Frequency decomposition: bass glow, mid crack, treble shimmer\",\n        plugins::EffectCategory::PARTY,\n        1,\n        \"LightwaveOS\"\n    };\n    return meta;\n}\n\nuint8_t BeatPulseSpectralEffect::getParameterCount() const { return 0; }\n\nconst plugins::EffectParameter* BeatPulseSpectralEffect::getParameter(uint8_t index) const {\n    (void)index;\n    return nullptr;\n}\n\nbool BeatPulseSpectralEffect::setParameter(const char* name, float value) {\n    (void)name; (void)value;\n    return false;\n}\n\nfloat BeatPulseSpectralEffect::getParameter(const char* name) const {\n    (void)name;\n    return 0.0f;\n}\n\n} // namespace lightwaveos::effects::ieffect\n"
+}

@@ -1,0 +1,103 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_HOLOGRAPHIC",
+  "effectIdHex": "0x0201",
+  "className": "LGPHolographicEffect",
+  "displayName": "LGP Holographic",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPHolographicEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPHolographicEffect.cpp",
+  "renderRange": [
+    30,
+    73
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        30,
+        34
+      ]
+    ],
+    "mapping": [
+      [
+        32,
+        33
+      ],
+      [
+        35,
+        37
+      ],
+      [
+        58,
+        58
+      ],
+      [
+        62,
+        62
+      ]
+    ],
+    "modulation": [
+      [
+        35,
+        37
+      ],
+      [
+        47,
+        47
+      ],
+      [
+        50,
+        50
+      ],
+      [
+        53,
+        53
+      ],
+      [
+        56,
+        56
+      ]
+    ],
+    "render": [
+      [
+        41,
+        41
+      ],
+      [
+        65,
+        66
+      ],
+      [
+        68,
+        68
+      ],
+      [
+        70,
+        70
+      ]
+    ],
+    "post": [
+      [
+        68,
+        70
+      ]
+    ],
+    "output": [
+      [
+        41,
+        41
+      ],
+      [
+        68,
+        70
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPHolographicEffect.cpp\n * @brief LGP Holographic effect implementation\n */\n\n#include \"LGPHolographicEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPHolographicEffect::LGPHolographicEffect()\n    : m_phase1(0.0f)\n    , m_phase2(0.0f)\n    , m_phase3(0.0f)\n{\n}\n\nbool LGPHolographicEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_phase1 = 0.0f;\n    m_phase2 = 0.0f;\n    m_phase3 = 0.0f;\n    return true;\n}\n\nvoid LGPHolographicEffect::render(plugins::EffectContext& ctx) {\n    // CENTER ORIGIN HOLOGRAPHIC - Creates depth illusion through multi-layer interference\n    float speedNorm = ctx.speed / 50.0f;\n    float intensityNorm = ctx.brightness / 255.0f;\n\n    m_phase1 += speedNorm * 0.02f;\n    m_phase2 += speedNorm * 0.03f;\n    m_phase3 += speedNorm * 0.05f;\n\n    const int numLayers = 4;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float dist = (float)centerPairDistance((uint16_t)i);\n\n        float layerSum = 0.0f;\n\n        // Layer 1 - Slow, wide pattern\n        layerSum += sinf(dist * 0.05f + m_phase1);\n\n        // Layer 2 - Medium pattern\n        layerSum += sinf(dist * 0.15f + m_phase2) * 0.7f;\n\n        // Layer 3 - Fast, tight pattern\n        layerSum += sinf(dist * 0.3f + m_phase3) * 0.5f;\n\n        // Layer 4 - Shimmer (3.0x creates sharp interference bands)\n        layerSum += sinf(dist * 0.6f - m_phase1 * 3.0f) * 0.3f;\n\n        // Normalize\n        layerSum = layerSum / (float)numLayers;\n        layerSum = tanhf(layerSum);\n\n        uint8_t brightness = (uint8_t)(128.0f + 127.0f * layerSum * intensityNorm);\n\n        // Chromatic dispersion effect\n        uint8_t paletteIndex1 = (uint8_t)((dist * 0.5f) + (layerSum * 20.0f));\n        int paletteIndex2 = (int)(128.0f - (dist * 0.5f) - (layerSum * 20.0f));\n\n        ctx.leds[i] = ctx.palette.getColor((uint8_t)(ctx.gHue + paletteIndex1), brightness);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(ctx.gHue + (uint8_t)paletteIndex2), brightness);\n        }\n    }\n}\n\nvoid LGPHolographicEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPHolographicEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Holographic\",\n        \"Holographic interference depth layers\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

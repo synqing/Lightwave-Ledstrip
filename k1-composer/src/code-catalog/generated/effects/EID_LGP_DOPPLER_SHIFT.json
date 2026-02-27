@@ -1,0 +1,78 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_DOPPLER_SHIFT",
+  "effectIdHex": "0x0704",
+  "className": "LGPDopplerShiftEffect",
+  "displayName": "LGP Doppler Shift",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPDopplerShiftEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPDopplerShiftEffect.cpp",
+  "renderRange": [
+    26,
+    62
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        26,
+        29
+      ]
+    ],
+    "mapping": [
+      [
+        30,
+        35
+      ]
+    ],
+    "modulation": [
+      [
+        36,
+        42
+      ]
+    ],
+    "render": [
+      [
+        34,
+        34
+      ],
+      [
+        57,
+        57
+      ],
+      [
+        59,
+        59
+      ]
+    ],
+    "post": [
+      [
+        58,
+        60
+      ]
+    ],
+    "output": [
+      [
+        34,
+        34
+      ],
+      [
+        37,
+        37
+      ],
+      [
+        57,
+        59
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'mapping' inferred from fallback segmentation.",
+    "Phase 'modulation' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPDopplerShiftEffect.cpp\n * @brief LGP Doppler Shift effect implementation\n */\n\n#include \"LGPDopplerShiftEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPDopplerShiftEffect::LGPDopplerShiftEffect()\n    : m_sourcePosition(0.0f)\n{\n}\n\nbool LGPDopplerShiftEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_sourcePosition = 0.0f;\n    return true;\n}\n\nvoid LGPDopplerShiftEffect::render(plugins::EffectContext& ctx) {\n    // Moving colors shift frequency based on velocity\n    float dt = ctx.getSafeDeltaSeconds();\n    float speed = ctx.speed / 255.0f;\n    float intensity = ctx.brightness / 255.0f;\n\n    m_sourcePosition += speed * 5.0f * 60.0f * dt;  // dt-corrected\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float distFromCenter = (float)centerPairDistance((uint16_t)i);\n\n        float relativePos = i - fmodf(m_sourcePosition, (float)STRIP_LENGTH);\n        float velocity = speed * 10.0f;\n\n        float dopplerFactor;\n        if (relativePos > 0.0f) {\n            dopplerFactor = 1.0f - (velocity / 100.0f);\n        } else {\n            dopplerFactor = 1.0f + (velocity / 100.0f);\n        }\n\n        uint8_t shiftedHue = ctx.gHue;\n        if (dopplerFactor > 1.0f) {\n            shiftedHue = (uint8_t)(ctx.gHue - (uint8_t)(30.0f * (dopplerFactor - 1.0f)));\n        } else {\n            shiftedHue = (uint8_t)(ctx.gHue + (uint8_t)(30.0f * (1.0f - dopplerFactor)));\n        }\n\n        uint8_t brightness = (uint8_t)(255.0f * intensity * (1.0f - distFromCenter / HALF_LENGTH));\n\n        uint8_t brightU8 = (uint8_t)((brightness * ctx.brightness) / 255);\n        ctx.leds[i] = ctx.palette.getColor(shiftedHue, brightU8);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(shiftedHue + 90), brightU8);\n        }\n    }\n}\n\nvoid LGPDopplerShiftEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPDopplerShiftEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Doppler Shift\",\n        \"Red/Blue shift based on velocity\",\n        plugins::EffectCategory::UNCATEGORIZED,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

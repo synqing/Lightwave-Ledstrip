@@ -1,0 +1,95 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_BEAT_PULSE_VOID",
+  "effectIdHex": "0x1403",
+  "className": "BeatPulseVoidEffect",
+  "displayName": "Beat Pulse (Void)",
+  "headerPath": "firmware/v2/src/effects/ieffect/BeatPulseVoidEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/BeatPulseVoidEffect.cpp",
+  "renderRange": [
+    37,
+    93
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        44,
+        44
+      ]
+    ],
+    "mapping": [
+      [
+        43,
+        51
+      ]
+    ],
+    "modulation": [
+      [
+        37,
+        37
+      ],
+      [
+        40,
+        40
+      ],
+      [
+        44,
+        45
+      ],
+      [
+        47,
+        49
+      ],
+      [
+        55,
+        57
+      ],
+      [
+        61,
+        61
+      ],
+      [
+        73,
+        73
+      ]
+    ],
+    "render": [
+      [
+        41,
+        41
+      ],
+      [
+        63,
+        64
+      ],
+      [
+        67,
+        67
+      ],
+      [
+        81,
+        82
+      ]
+    ],
+    "post": [
+      [
+        87,
+        90
+      ]
+    ],
+    "output": [
+      [
+        40,
+        40
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'mapping' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file BeatPulseVoidEffect.cpp\n * @brief Beat Pulse (Void) - Hard detonation in absolute darkness\n *\n * Visual identity: Maximum contrast effect. TRUE BLACK between beats with\n * a crisp, hard-edged ring that has a white-hot core and saturated palette\n * colour at the edges. The colour travels WITH the ring (palette indexed\n * by ring position, not LED position).\n *\n * This is the most dramatic effect in the Beat Pulse family.\n */\n\n#include \"BeatPulseVoidEffect.h\"\n#include \"../CoreEffects.h\"\n#include \"AudioReactivePolicy.h\"\n#include \"BeatPulseRenderUtils.h\"\n\n#include <cmath>\n\nnamespace lightwaveos::effects::ieffect {\n\n// =============================================================================\n// Visual Identity Constants\n// =============================================================================\n\nconstexpr float RING_WIDTH = 0.10f;        // Ring half-width in dist01 space\nconstexpr float RING_CENTRE_FACTOR = 0.6f; // Ring contracts from 0.6 -> 0\nconstexpr float DECAY_MS = 280.0f;         // Slightly faster decay for punch\nconstexpr float CORE_WHITE_FACTOR = 0.6f;  // Aggressive white in ring core\n\nbool BeatPulseVoidEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    BeatPulseCore::reset(m_state, 128.0f);\n    return true;\n}\n\nvoid BeatPulseVoidEffect::render(plugins::EffectContext& ctx) {\n    // =========================================================================\n    // VOID DETONATION: Hard-edged ring in absolute darkness.\n    // Strip is TRUE BLACK between beats. Ring has white-hot core,\n    // saturated palette colour at edges. Colour travels with ring.\n    // =========================================================================\n\n    // --- Beat source ---\n    const bool beatTick = AudioReactivePolicy::audioBeatTick(ctx, m_state.fallbackBpm, m_state.lastBeatMs);\n\n    // --- Slam to 1.0 on beat ---\n    if (beatTick) {\n        m_state.beatIntensity = 1.0f;\n    }\n\n    // --- DT-correct exponential decay ---\n    const float dt = ctx.getSafeRawDeltaSeconds();\n    const float decayRate = 1000.0f / DECAY_MS;  // Decay constant\n    m_state.beatIntensity *= expf(-decayRate * dt);\n    if (m_state.beatIntensity < 0.001f) {\n        m_state.beatIntensity = 0.0f;\n    }\n\n    // --- Ring position (contracting inward) ---\n    const float ringCentre = RING_CENTRE_FACTOR * m_state.beatIntensity;\n\n    // --- Palette index based on ring position (colour travels with ring) ---\n    const uint8_t paletteIdx = floatToByte(ringCentre);\n\n    // --- Render: detonation in the void ---\n    for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {\n        const float dist01 = (static_cast<float>(dist) + 0.5f) / static_cast<float>(HALF_LENGTH);\n\n        // Hard-edged ring profile\n        const float diff = fabsf(dist01 - ringCentre);\n        float hit = RingProfile::hardEdge(diff, RING_WIDTH, 0.012f);\n        hit *= m_state.beatIntensity;\n\n        // TRUE BLACK outside ring - maximum contrast\n        if (hit < 0.01f) {\n            SET_CENTER_PAIR(ctx, dist, CRGB(0, 0, 0));\n            continue;\n        }\n\n        // Get colour from palette (indexed by ring position, not LED position)\n        CRGB c = ctx.palette.getColor(paletteIdx, scaleBrightness(ctx.brightness, hit));\n\n        // White-hot CORE (centre of ring is desaturated towards white)\n        const float ringLocalPos = 1.0f - diff / RING_WIDTH;  // 1.0 at ring centre, 0.0 at edge\n        if (ringLocalPos > 0.5f) {\n            const float coreWhite = (ringLocalPos - 0.5f) * 2.0f * CORE_WHITE_FACTOR * hit;\n            ColourUtil::addWhiteSaturating(c, floatToByte(coreWhite * static_cast<float>(ctx.brightness) / 255.0f));\n        }\n\n        SET_CENTER_PAIR(ctx, dist, c);\n    }\n}\n\nvoid BeatPulseVoidEffect::cleanup() {}\n\nconst plugins::EffectMetadata& BeatPulseVoidEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Beat Pulse (Void)\",\n        \"Hard detonation in absolute darkness: white-hot core, crisp edges, true black background\",\n        plugins::EffectCategory::PARTY,\n        1,\n        \"LightwaveOS\"\n    };\n    return meta;\n}\n\nuint8_t BeatPulseVoidEffect::getParameterCount() const { return 0; }\n\nconst plugins::EffectParameter* BeatPulseVoidEffect::getParameter(uint8_t index) const {\n    (void)index;\n    return nullptr;\n}\n\nbool BeatPulseVoidEffect::setParameter(const char* name, float value) {\n    (void)name; (void)value;\n    return false;\n}\n\nfloat BeatPulseVoidEffect::getParameter(const char* name) const {\n    (void)name;\n    return 0.0f;\n}\n\n} // namespace lightwaveos::effects::ieffect\n"
+}

@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_CONCENTRIC_RINGS",
+  "effectIdHex": "0x0305",
+  "className": "LGPConcentricRingsEffect",
+  "displayName": "LGP Concentric Rings",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPConcentricRingsEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPConcentricRingsEffect.cpp",
+  "renderRange": [
+    26,
+    54
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        26,
+        28
+      ]
+    ],
+    "mapping": [
+      [
+        29,
+        30
+      ],
+      [
+        32,
+        32
+      ],
+      [
+        38,
+        38
+      ],
+      [
+        42,
+        42
+      ],
+      [
+        47,
+        47
+      ]
+    ],
+    "modulation": [
+      [
+        32,
+        32
+      ],
+      [
+        40,
+        41
+      ]
+    ],
+    "render": [
+      [
+        36,
+        36
+      ],
+      [
+        49,
+        49
+      ],
+      [
+        51,
+        51
+      ]
+    ],
+    "post": [
+      [
+        51,
+        52
+      ]
+    ],
+    "output": [
+      [
+        36,
+        36
+      ],
+      [
+        49,
+        51
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPConcentricRingsEffect.cpp\n * @brief LGP Concentric Rings effect implementation\n */\n\n#include \"LGPConcentricRingsEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPConcentricRingsEffect::LGPConcentricRingsEffect()\n    : m_phase(0.0f)\n{\n}\n\nbool LGPConcentricRingsEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_phase = 0.0f;\n    return true;\n}\n\nvoid LGPConcentricRingsEffect::render(plugins::EffectContext& ctx) {\n    // CENTER ORIGIN - Radial standing waves create ring patterns\n    float dt = ctx.getSafeDeltaSeconds();\n    float speedNorm = ctx.speed / 50.0f;\n    float intensityNorm = ctx.brightness / 255.0f;\n\n    m_phase += speedNorm * 0.1f * 60.0f * dt;  // dt-corrected\n\n    const float ringCount = 10.0f;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float distFromCenter = (float)centerPairDistance((uint16_t)i);\n        float normalizedDist = distFromCenter / (float)HALF_LENGTH;\n\n        // Bessel function-like (sin(k*dist + phase) = INWARD motion - intentional design)\n        float bessel = sinf(distFromCenter * ringCount * 0.2f + m_phase);\n        bessel *= 1.0f / sqrtf(normalizedDist + 0.1f);\n\n        // Sharp ring edges\n        float rings = tanhf(bessel * 2.0f);\n\n        uint8_t brightness = (uint8_t)(128.0f + 127.0f * rings * intensityNorm);\n\n        ctx.leds[i] = ctx.palette.getColor(ctx.gHue, brightness);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(ctx.gHue + 128), brightness);\n        }\n    }\n}\n\nvoid LGPConcentricRingsEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPConcentricRingsEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Concentric Rings\",\n        \"Expanding circular rings\",\n        plugins::EffectCategory::GEOMETRIC,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

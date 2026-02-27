@@ -5,7 +5,7 @@ ESP32-S3 LED controller for a dual-strip Light Guide Plate. 320 WS2812 LEDs, 100
 ## Build (PlatformIO)
 
 ```bash
-cd firmware/v2
+cd firmware-v3
 pio run -e esp32dev_audio              # build
 pio run -e esp32dev_audio -t upload    # build + flash
 pio device monitor -b 115200           # serial monitor
@@ -25,14 +25,8 @@ Read these when the task requires it:
 
 | Topic | File |
 |-------|------|
-| Architecture & key files | [docs/agent/ARCHITECTURE.md](docs/agent/ARCHITECTURE.md) |
-| Effects & IEffect API | [docs/agent/EFFECTS.md](docs/agent/EFFECTS.md) |
-| Build variants & OTA | [docs/agent/BUILD.md](docs/agent/BUILD.md) |
-| Network, API & serial | [docs/agent/NETWORK.md](docs/agent/NETWORK.md) |
-| Protected files (landmines) | [docs/agent/PROTECTED_FILES.md](docs/agent/PROTECTED_FILES.md) |
-| Agents, skills & harness | [docs/agent/AGENTS_AND_TOOLS.md](docs/agent/AGENTS_AND_TOOLS.md) |
-| Timing & memory budgets | [CONSTRAINTS.md](CONSTRAINTS.md) |
-| System facts & data flow | [ARCHITECTURE.md](ARCHITECTURE.md) |
-| Audio-reactive protocol | [docs/audio-visual/audio-visual-semantic-mapping.md](docs/audio-visual/audio-visual-semantic-mapping.md) |
-| Full REST API reference | [docs/api/api-v1.md](docs/api/api-v1.md) |
+| Timing & memory budgets | [firmware-v3/CONSTRAINTS.md](firmware-v3/CONSTRAINTS.md) |
+| Audio-reactive protocol | [firmware-v3/docs/audio-visual/audio-visual-semantic-mapping.md](firmware-v3/docs/audio-visual/audio-visual-semantic-mapping.md) |
+| Full REST API reference | [firmware-v3/docs/api/api-v1.md](firmware-v3/docs/api/api-v1.md) |
+| CQRS state architecture | [firmware-v3/docs/CQRS_STATE_ARCHITECTURE.md](firmware-v3/docs/CQRS_STATE_ARCHITECTURE.md) |
 | Harness worker mode | [.claude/harness/HARNESS_RULES.md](.claude/harness/HARNESS_RULES.md) |

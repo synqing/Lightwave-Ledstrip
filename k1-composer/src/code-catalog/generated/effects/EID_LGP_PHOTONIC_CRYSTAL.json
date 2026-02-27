@@ -1,0 +1,178 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_PHOTONIC_CRYSTAL",
+  "effectIdHex": "0x0407",
+  "className": "LGPPhotonicCrystalEffect",
+  "displayName": "LGP Photonic Crystal",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPPhotonicCrystalEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPPhotonicCrystalEffect.cpp",
+  "renderRange": [
+    75,
+    245
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        96,
+        96
+      ],
+      [
+        102,
+        103
+      ],
+      [
+        113,
+        113
+      ],
+      [
+        115,
+        115
+      ],
+      [
+        117,
+        117
+      ],
+      [
+        144,
+        145
+      ],
+      [
+        151,
+        151
+      ],
+      [
+        163,
+        163
+      ],
+      [
+        221,
+        221
+      ]
+    ],
+    "mapping": [
+      [
+        81,
+        81
+      ],
+      [
+        104,
+        105
+      ],
+      [
+        133,
+        134
+      ],
+      [
+        169,
+        169
+      ],
+      [
+        171,
+        172
+      ]
+    ],
+    "modulation": [
+      [
+        90,
+        90
+      ],
+      [
+        98,
+        98
+      ],
+      [
+        100,
+        100
+      ],
+      [
+        133,
+        134
+      ],
+      [
+        136,
+        137
+      ],
+      [
+        143,
+        143
+      ],
+      [
+        145,
+        147
+      ],
+      [
+        149,
+        149
+      ],
+      [
+        162,
+        162
+      ],
+      [
+        168,
+        169
+      ],
+      [
+        172,
+        173
+      ],
+      [
+        175,
+        176
+      ],
+      [
+        204,
+        204
+      ],
+      [
+        208,
+        208
+      ]
+    ],
+    "render": [
+      [
+        179,
+        179
+      ],
+      [
+        181,
+        181
+      ],
+      [
+        234,
+        234
+      ],
+      [
+        237,
+        237
+      ],
+      [
+        239,
+        240
+      ]
+    ],
+    "post": [
+      [
+        225,
+        236
+      ]
+    ],
+    "output": [
+      [
+        181,
+        181
+      ],
+      [
+        236,
+        239
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPPhotonicCrystalEffect.cpp\n * @brief LGP Photonic Crystal effect - v8 CORRECT audio-reactive motion\n *\n * v8: FIXED SPEED SMOOTHING ARCHITECTURE\n *\n * ROOT CAUSE of v7 jitter: Too many smoothing layers for speed\n *   v7 WRONG: heavyBass() → rolling avg → AsymmetricFollower → Spring (~630ms)\n *   v8 CORRECT: heavy_bands (pre-smoothed) → Spring ONLY (~200ms)\n *\n * The base algorithm is UNCHANGED from the original v1 lgpPhotonicCrystal():\n * - latticeSize = 4 + (complexity >> 6)  → 4-10 LEDs per cell\n * - defectProbability = variation        → random impurities\n * - inBandgap = cellPosition < (latticeSize >> 1)\n * - Allowed modes: sin8((distFromCenter << 2) - (phase >> 7))\n * - Forbidden decay: scale8(sin8(...), 255 - cellPosition * 50)\n *\n * Audio reactivity architecture (matches ChevronWaves/WaveCollision):\n * - Speed: heavy_bands[1]+[2] → Spring ONLY (0.6-1.4x, ~200ms response)\n * - Brightness: rolling avg + AsymmetricFollower (fine for visual intensity)\n * - Collision flash: snare-triggered, spatial decay from center\n * - Color offset: chroma dominant bin (smoothed over 250ms)\n */\n\n#include \"LGPPhotonicCrystalEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPPhotonicCrystalEffect::LGPPhotonicCrystalEffect()\n    : m_phase(0.0f)\n{\n}\n\nbool LGPPhotonicCrystalEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n\n    // Initialize phase\n    m_phase = 0.0f;\n\n    // Audio hop tracking\n    m_lastHopSeq = 0;\n\n    // Energy history (4-hop rolling average)\n    for (uint8_t i = 0; i < ENERGY_HISTORY; ++i) {\n        m_energyHist[i] = 0.0f;\n    }\n    m_energySum = 0.0f;\n    m_energyHistIdx = 0;\n    m_energyAvg = 0.0f;\n    m_energyDelta = 0.0f;\n\n    // Reset asymmetric followers\n    m_energyAvgFollower.reset(0.5f);\n    m_energyDeltaFollower.reset(0.0f);\n\n    // Initialize spring with stiffness=50, critically damped\n    m_speedSpring.init(50.0f, 1.0f);\n    m_speedSpring.reset(1.0f);\n\n    // Collision flash\n    m_collisionBoost = 0.0f;\n    m_lastFastFlux = 0.0f;\n\n    // Chroma tracking\n    m_chromaAngle = 0.0f;\n\n    return true;\n}\n\nvoid LGPPhotonicCrystalEffect::render(plugins::EffectContext& ctx) {\n    // ========================================================================\n    // SAFE DELTA TIME (clamped for physics stability)\n    // ========================================================================\n    float rawDt = ctx.getSafeRawDeltaSeconds();\n    float dt = ctx.getSafeDeltaSeconds();\n    float moodNorm = ctx.getMoodNormalized();\n\n    // ========================================================================\n    // ORIGINAL V1 PARAMETERS (from ctx, NOT from audio)\n    // These MUST stay as the original algorithm intended\n    // ========================================================================\n    uint8_t latticeSize = 4 + (ctx.complexity >> 6);  // 4-10 LEDs per cell\n    uint8_t defectProbability = ctx.variation;         // Random impurities\n\n    // Audio modulation values (defaults for no-audio mode)\n    float speedMult = 1.0f;\n    float brightnessGain = 1.0f;\n    uint8_t chromaOffset = 0;\n\n#if FEATURE_AUDIO_SYNC\n    if (ctx.audio.available) {\n        // ================================================================\n        // v8 FIX: SPEED uses heavy_bands DIRECTLY → Spring (NO extra smoothing!)\n        // This matches ChevronWaves/WaveCollision/InterferenceScanner\n        // heavy_bands are PRE-SMOOTHED by ControlBus (80ms rise / 15ms fall)\n        // ================================================================\n        float heavyEnergy = (ctx.audio.controlBus.heavy_bands[1] +\n                             ctx.audio.controlBus.heavy_bands[2]) / 2.0f;\n        float targetSpeed = 0.6f + 0.8f * heavyEnergy;  // 0.6-1.4x range\n        speedMult = m_speedSpring.update(targetSpeed, rawDt);\n        if (speedMult > 1.6f) speedMult = 1.6f;\n        if (speedMult < 0.3f) speedMult = 0.3f;\n\n        // ================================================================\n        // BRIGHTNESS: Per-hop sampling for energy baseline (separate from speed)\n        // Rolling avg + AsymmetricFollower is fine for visual intensity\n        // ================================================================\n        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);\n        if (newHop) {\n            m_lastHopSeq = ctx.audio.controlBus.hop_seq;\n\n            float currentEnergy = ctx.audio.heavyBass();\n\n            // Rolling 4-hop average (for brightness baseline only)\n            m_energySum -= m_energyHist[m_energyHistIdx];\n            m_energyHist[m_energyHistIdx] = currentEnergy;\n            m_energySum += currentEnergy;\n            m_energyHistIdx = (m_energyHistIdx + 1) % ENERGY_HISTORY;\n            m_energyAvg = m_energySum / ENERGY_HISTORY;\n\n            // Delta = energy ABOVE average (positive only)\n            m_energyDelta = currentEnergy - m_energyAvg;\n            if (m_energyDelta < 0.0f) m_energyDelta = 0.0f;\n\n        }\n\n        // Asymmetric followers for BRIGHTNESS (not speed!)\n        float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, rawDt, moodNorm);\n        float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, rawDt, moodNorm);\n\n        // Brightness modulation\n        brightnessGain = 0.4f + 0.5f * energyAvgSmooth + 0.4f * energyDeltaSmooth;\n        if (brightnessGain > 1.5f) brightnessGain = 1.5f;\n        if (brightnessGain < 0.3f) brightnessGain = 0.3f;\n\n        // Collision flash:\n        // - Primary: explicit snare trigger (legacy LWLS pipeline)\n        // - Fallback: flux spikes with some treble/mid content (ES backend)\n        bool collisionHit = ctx.audio.isSnareHit();\n        float flux = ctx.audio.fastFlux();\n        float fluxDelta = flux - m_lastFastFlux;\n        m_lastFastFlux = flux;\n        if (!collisionHit) {\n            if (fluxDelta > 0.22f && flux > 0.25f) {\n                // Require some high-frequency energy so bass drops do not spam flashes.\n                if (ctx.audio.treble() > 0.20f || ctx.audio.mid() > 0.28f) {\n                    collisionHit = true;\n                }\n            }\n        }\n        if (collisionHit) {\n            m_collisionBoost = 1.0f;\n        }\n        m_collisionBoost = effects::chroma::dtDecay(m_collisionBoost, 0.88f, rawDt);\n\n        // Circular chroma hue (replaces argmax + linear EMA to eliminate bin-flip rainbow sweeps)\n        chromaOffset = effects::chroma::circularChromaHueSmoothed(\n            ctx.audio.controlBus.chroma, m_chromaAngle, rawDt, 0.20f);\n    }\n#endif\n\n    // ========================================================================\n    // PHASE ADVANCEMENT (proven formula from working effects)\n    // m_phase += speedNorm * 240.0f * speedMult * dt\n    // ========================================================================\n    float speedNorm = ctx.speed / 50.0f;\n    m_phase += speedNorm * 240.0f * speedMult * dt;\n    if (m_phase > 628.3f) m_phase -= 628.3f;  // Wrap at ~2*PI*100\n\n    // Convert to integer phase for sin8 compatibility\n    uint16_t phaseInt = (uint16_t)(m_phase * 0.408f);  // Scale to 0-256\n\n    // ========================================================================\n    // RENDER LOOP: ORIGINAL V1 ALGORITHM with audio layering\n    // ========================================================================\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        // CENTER ORIGIN: distance from center (79/80)\n        uint16_t distFromCenter = centerPairDistance(i);\n\n        // ================================================================\n        // ORIGINAL V1: Periodic structure - bandgap simulation\n        // ================================================================\n        uint8_t cellPosition = distFromCenter % latticeSize;\n        bool inBandgap = cellPosition < (latticeSize >> 1);\n\n        // ================================================================\n        // ORIGINAL V1: Random defects (photonic impurities)\n        // ================================================================\n        if (random8() < defectProbability) {\n            inBandgap = !inBandgap;\n        }\n\n        // ================================================================\n        // ORIGINAL V1: Photonic band structure\n        // ================================================================\n        uint8_t brightness = 0;\n        if (inBandgap) {\n            // Allowed modes - outward from center\n            brightness = sin8((distFromCenter << 2) - (phaseInt >> 7));\n        } else {\n            // Forbidden gap - evanescent decay\n            uint8_t decay = 255 - (cellPosition * 50);\n            brightness = scale8(sin8((distFromCenter << 1) - (phaseInt >> 8)), decay);\n        }\n\n        // ================================================================\n        // AUDIO LAYER: Apply brightness gain\n        // ================================================================\n        brightness = scale8(brightness, (uint8_t)(ctx.brightness * brightnessGain));\n\n        // ================================================================\n        // AUDIO LAYER: Collision flash (spatial decay from center)\n        // exp(-dist * 0.12f) creates natural falloff\n        // ================================================================\n#if FEATURE_AUDIO_SYNC\n        if (ctx.audio.available && m_collisionBoost > 0.01f) {\n            float flash = m_collisionBoost * expf(-(float)distFromCenter * 0.12f);\n            brightness = qadd8(brightness, (uint8_t)(flash * 60.0f));\n        }\n#endif\n\n        // ================================================================\n        // ORIGINAL V1: Color based on band structure\n        // Allowed zones get gHue, forbidden zones get gHue + 128\n        // AUDIO LAYER: Add chroma offset for pitch-based color variation\n        // ================================================================\n        uint8_t baseHue = inBandgap ? ctx.gHue : (uint8_t)(ctx.gHue + 128);\n        baseHue += chromaOffset;\n        uint8_t palettePos = baseHue + distFromCenter / 4;\n\n        // Render to both strips (Strip 2 offset by 64 for complementary color)\n        ctx.leds[i] = ctx.palette.getColor(palettePos, brightness);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor(\n                (uint8_t)(palettePos + 64),\n                brightness\n            );\n        }\n    }\n}\n\nvoid LGPPhotonicCrystalEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPPhotonicCrystalEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Photonic Crystal\",\n        \"v8: Fixed speed smoothing - heavy_bands direct to Spring (matches working effects)\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

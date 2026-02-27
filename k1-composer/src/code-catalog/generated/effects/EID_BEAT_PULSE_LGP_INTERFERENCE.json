@@ -1,0 +1,218 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_BEAT_PULSE_LGP_INTERFERENCE",
+  "effectIdHex": "0x140A",
+  "className": "BeatPulseLGPInterferenceEffect",
+  "displayName": "Beat Pulse (LGP Interference)",
+  "headerPath": "firmware/v2/src/effects/ieffect/BeatPulseLGPInterferenceEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/BeatPulseLGPInterferenceEffect.cpp",
+  "renderRange": [
+    42,
+    140
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        47,
+        47
+      ]
+    ],
+    "mapping": [
+      [
+        108,
+        108
+      ]
+    ],
+    "modulation": [
+      [
+        42,
+        42
+      ],
+      [
+        44,
+        44
+      ],
+      [
+        47,
+        48
+      ],
+      [
+        50,
+        50
+      ],
+      [
+        52,
+        52
+      ],
+      [
+        54,
+        57
+      ],
+      [
+        61,
+        61
+      ],
+      [
+        67,
+        71
+      ],
+      [
+        73,
+        74
+      ],
+      [
+        76,
+        77
+      ],
+      [
+        81,
+        81
+      ],
+      [
+        88,
+        88
+      ],
+      [
+        90,
+        90
+      ],
+      [
+        92,
+        92
+      ],
+      [
+        95,
+        95
+      ],
+      [
+        97,
+        98
+      ],
+      [
+        100,
+        101
+      ],
+      [
+        106,
+        107
+      ],
+      [
+        114,
+        115
+      ]
+    ],
+    "render": [
+      [
+        82,
+        82
+      ],
+      [
+        117,
+        118
+      ],
+      [
+        124,
+        124
+      ],
+      [
+        127,
+        128
+      ],
+      [
+        134,
+        134
+      ],
+      [
+        137,
+        138
+      ]
+    ],
+    "post": [
+      [
+        129,
+        135
+      ]
+    ],
+    "output": [
+      [
+        44,
+        44
+      ],
+      [
+        67,
+        68
+      ],
+      [
+        71,
+        71
+      ],
+      [
+        74,
+        74
+      ],
+      [
+        77,
+        77
+      ],
+      [
+        81,
+        81
+      ],
+      [
+        95,
+        98
+      ],
+      [
+        100,
+        101
+      ],
+      [
+        104,
+        104
+      ],
+      [
+        109,
+        109
+      ],
+      [
+        111,
+        111
+      ],
+      [
+        114,
+        115
+      ],
+      [
+        120,
+        120
+      ],
+      [
+        124,
+        125
+      ],
+      [
+        127,
+        128
+      ],
+      [
+        130,
+        130
+      ],
+      [
+        134,
+        135
+      ],
+      [
+        137,
+        138
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file BeatPulseLGPInterferenceEffect.cpp\n * @brief Beat Pulse with LGP optical interference exploitation\n *\n * Exploits the dual edge-lit LGP architecture by driving Strip 1 and Strip 2\n * with configurable phase relationships, creating standing wave interference\n * patterns that are impossible on single-strip displays.\n *\n * Effect ID: 120\n */\n\n#include \"BeatPulseLGPInterferenceEffect.h\"\n#include \"../CoreEffects.h\"\n#include \"BeatPulseRenderUtils.h\"\n\n#include <cmath>\n#include <cstring>\n\nnamespace lightwaveos::effects::ieffect {\n\n// ============================================================================\n// Constants\n// ============================================================================\n\nconstexpr float LGP_PI = 3.14159265358979f;\nconstexpr float LGP_TWO_PI = 6.28318530717959f;\n\n// Motion phase drift speed (radians per second) - creates slow standing wave animation\nconstexpr float PHASE_DRIFT_SPEED = 0.8f;\n\nbool BeatPulseLGPInterferenceEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_beatIntensity = 0.0f;\n    m_lastBeatTimeMs = 0;\n    m_fallbackBpm = 128.0f;\n    m_phaseMode = LGPPhaseMode::ANTI_PHASE;\n    m_spatialFreq = 4.0f;\n    m_motionPhase = 0.0f;\n    return true;\n}\n\nvoid BeatPulseLGPInterferenceEffect::render(plugins::EffectContext& ctx) {\n    // =========================================================================\n    // LGP INTERFERENCE: Dual-strip phase control for optical standing waves\n    // =========================================================================\n\n    // --- Beat source ---\n    const bool beatTick = BeatPulseTiming::computeBeatTick(ctx, m_fallbackBpm, m_lastBeatTimeMs);\n\n    // --- Update beatIntensity using HTML parity maths ---\n    const float dt = ctx.getSafeRawDeltaSeconds();\n    BeatPulseHTML::updateBeatIntensity(m_beatIntensity, beatTick, dt);\n\n    // --- Update motion phase for standing wave animation ---\n    m_motionPhase += PHASE_DRIFT_SPEED * dt;\n    if (m_motionPhase > LGP_TWO_PI) {\n        m_motionPhase -= LGP_TWO_PI;\n    }\n\n    // --- Ring position (OUTWARD expansion) ---\n    const float htmlCentre = BeatPulseHTML::ringCentre01(m_beatIntensity);\n    const float ringPos = htmlCentre;  // Centre -> edge\n\n    // --- Spatial frequency for interference pattern ---\n    const float spatialK = m_spatialFreq * LGP_PI / static_cast<float>(HALF_LENGTH);\n\n    // --- Phase offset for Strip 2 based on mode ---\n    float strip2PhaseOffset = 0.0f;\n    switch (m_phaseMode) {\n        case LGPPhaseMode::IN_PHASE:\n            strip2PhaseOffset = 0.0f;\n            break;\n        case LGPPhaseMode::QUADRATURE:\n            strip2PhaseOffset = PI * 0.5f;\n            break;\n        case LGPPhaseMode::ANTI_PHASE:\n            strip2PhaseOffset = PI;\n            break;\n    }\n\n    // --- Render both strips with phase relationship ---\n    for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {\n        const float dist01 = (static_cast<float>(dist) + 0.5f) / static_cast<float>(HALF_LENGTH);\n\n        // HTML parity triangle profile for the expanding ring\n        const float diff = fabsf(dist01 - ringPos);\n        const float waveHit = 1.0f - fminf(1.0f, diff * 3.0f);\n        const float ringIntensity = fmaxf(0.0f, waveHit) * m_beatIntensity;\n\n        // Spatial interference modulation (standing wave pattern)\n        // This creates \"boxes\" of constructive/destructive interference\n        const float spatialWave = sinf(static_cast<float>(dist) * spatialK + m_motionPhase);\n        const float spatialMod = 0.7f + 0.3f * spatialWave;  // 0.4 to 1.0 range\n\n        // --- Strip 1: Base intensity with spatial modulation ---\n        const float strip1Intensity = ringIntensity * spatialMod;\n        const float strip1Bright = BeatPulseHTML::brightnessFactor(strip1Intensity);\n        const float strip1White = BeatPulseHTML::whiteMix(strip1Intensity);\n\n        // --- Strip 2: Phase-shifted spatial modulation ---\n        const float spatialWave2 = sinf(static_cast<float>(dist) * spatialK + m_motionPhase + strip2PhaseOffset);\n        const float spatialMod2 = 0.7f + 0.3f * spatialWave2;\n\n        float strip2Intensity = ringIntensity * spatialMod2;\n\n        // For anti-phase, also invert the ring intensity for maximum interference\n        if (m_phaseMode == LGPPhaseMode::ANTI_PHASE) {\n            // Blend between normal and inverted based on spatial position\n            // This creates alternating bright/dark nodes between strips\n            const float invertBlend = 0.5f + 0.5f * spatialWave;\n            strip2Intensity = ringIntensity * (1.0f - invertBlend * 0.6f) * spatialMod2;\n        }\n\n        const float strip2Bright = BeatPulseHTML::brightnessFactor(strip2Intensity);\n        const float strip2White = BeatPulseHTML::whiteMix(strip2Intensity);\n\n        // Palette colour by distance\n        const uint8_t paletteIdx = floatToByte(dist01);\n\n        // --- Set Strip 1 LEDs (centre-origin symmetric) ---\n        uint16_t left1 = CENTER_LEFT - dist;\n        uint16_t right1 = CENTER_RIGHT + dist;\n\n        CRGB c1 = ctx.palette.getColor(paletteIdx, scaleBrightness(ctx.brightness, strip1Bright));\n        ColourUtil::addWhiteSaturating(c1, floatToByte(strip1White));\n\n        if (left1 < ctx.ledCount) ctx.leds[left1] = c1;\n        if (right1 < ctx.ledCount) ctx.leds[right1] = c1;\n\n        // --- Set Strip 2 LEDs (offset by STRIP_LENGTH = 160) ---\n        uint16_t left2 = 160 + CENTER_LEFT - dist;\n        uint16_t right2 = 160 + CENTER_RIGHT + dist;\n\n        CRGB c2 = ctx.palette.getColor(paletteIdx, scaleBrightness(ctx.brightness, strip2Bright));\n        ColourUtil::addWhiteSaturating(c2, floatToByte(strip2White));\n\n        if (left2 < ctx.ledCount) ctx.leds[left2] = c2;\n        if (right2 < ctx.ledCount) ctx.leds[right2] = c2;\n    }\n}\n\nvoid BeatPulseLGPInterferenceEffect::cleanup() {}\n\nconst plugins::EffectMetadata& BeatPulseLGPInterferenceEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Beat Pulse (LGP Interference)\",\n        \"Dual-strip interference: standing waves exploit LGP optics\",\n        plugins::EffectCategory::PARTY,\n        1,\n        \"LightwaveOS\"\n    };\n    return meta;\n}\n\nuint8_t BeatPulseLGPInterferenceEffect::getParameterCount() const {\n    return 2;\n}\n\nconst plugins::EffectParameter* BeatPulseLGPInterferenceEffect::getParameter(uint8_t index) const {\n    static plugins::EffectParameter params[] = {\n        plugins::EffectParameter(\"phaseMode\", \"Phase Mode\", 0.0f, 2.0f, 2.0f),      // 0=in-phase, 1=quadrature, 2=anti-phase\n        plugins::EffectParameter(\"spatialFreq\", \"Box Count\", 2.0f, 12.0f, 4.0f),    // Standing wave nodes\n    };\n    if (index >= (sizeof(params) / sizeof(params[0]))) {\n        return nullptr;\n    }\n    return &params[index];\n}\n\nbool BeatPulseLGPInterferenceEffect::setParameter(const char* name, float value) {\n    if (!name) return false;\n\n    if (strcmp(name, \"phaseMode\") == 0) {\n        int mode = static_cast<int>(value + 0.5f);\n        if (mode < 0) mode = 0;\n        if (mode > 2) mode = 2;\n        m_phaseMode = static_cast<LGPPhaseMode>(mode);\n        return true;\n    }\n    if (strcmp(name, \"spatialFreq\") == 0) {\n        m_spatialFreq = value;\n        if (m_spatialFreq < 2.0f) m_spatialFreq = 2.0f;\n        if (m_spatialFreq > 12.0f) m_spatialFreq = 12.0f;\n        return true;\n    }\n    return false;\n}\n\nfloat BeatPulseLGPInterferenceEffect::getParameter(const char* name) const {\n    if (!name) return 0.0f;\n\n    if (strcmp(name, \"phaseMode\") == 0) {\n        return static_cast<float>(m_phaseMode);\n    }\n    if (strcmp(name, \"spatialFreq\") == 0) {\n        return m_spatialFreq;\n    }\n    return 0.0f;\n}\n\n} // namespace lightwaveos::effects::ieffect\n"
+}

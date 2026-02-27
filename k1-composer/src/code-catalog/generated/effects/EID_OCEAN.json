@@ -1,0 +1,85 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_OCEAN",
+  "effectIdHex": "0x0101",
+  "className": "OceanEffect",
+  "displayName": "Ocean",
+  "headerPath": "firmware/v2/src/effects/ieffect/OceanEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/OceanEffect.cpp",
+  "renderRange": [
+    25,
+    66
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        25,
+        29
+      ]
+    ],
+    "mapping": [
+      [
+        30,
+        35
+      ]
+    ],
+    "modulation": [
+      [
+        35,
+        35
+      ],
+      [
+        50,
+        50
+      ]
+    ],
+    "render": [
+      [
+        41,
+        41
+      ],
+      [
+        53,
+        53
+      ],
+      [
+        57,
+        58
+      ],
+      [
+        61,
+        61
+      ],
+      [
+        63,
+        63
+      ]
+    ],
+    "post": [
+      [
+        61,
+        63
+      ]
+    ],
+    "output": [
+      [
+        41,
+        41
+      ],
+      [
+        60,
+        63
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'mapping' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file OceanEffect.cpp\n * @brief Ocean effect implementation\n */\n\n#include \"OceanEffect.h\"\n#include \"../CoreEffects.h\"\n#include \"../../core/narrative/NarrativeEngine.h\"\n#include <FastLED.h>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nOceanEffect::OceanEffect()\n    : m_waterOffset(0)\n{\n}\n\nbool OceanEffect::init(plugins::EffectContext& ctx) {\n    m_waterOffset = 0;\n    return true;\n}\n\nvoid OceanEffect::render(plugins::EffectContext& ctx) {\n    // CENTER ORIGIN OCEAN - Waves emanate from center 79/80\n    // Narrative integration: wave intensity modulated by narrative intensity\n    using namespace lightwaveos::narrative;\n    float dt = ctx.getSafeDeltaSeconds();\n\n    m_waterOffset += (uint32_t)(ctx.speed / 2 * 60.0f * dt);  // dt-corrected\n\n    if (m_waterOffset > 65535) m_waterOffset = m_waterOffset % 65536;\n    \n    // Get narrative intensity for wave modulation (opt-in, backward compatible)\n    float narrativeIntensity = 1.0f;\n    if (NARRATIVE.isEnabled()) {\n        narrativeIntensity = NARRATIVE.getIntensity();\n    }\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        // Calculate distance from CENTER PAIR\n        float distFromCenter = (float)centerPairDistance((uint16_t)i);\n\n        // Create wave motion from center outward\n        uint8_t wave1 = sin8((uint16_t)(distFromCenter * 10) + m_waterOffset);\n        uint8_t wave2 = sin8((uint16_t)(distFromCenter * 7) - m_waterOffset * 2);\n        uint8_t combinedWave = (wave1 + wave2) / 2;\n        \n        // Apply narrative intensity modulation to wave amplitude\n        combinedWave = (uint8_t)(combinedWave * narrativeIntensity);\n\n        // Ocean colors from deep blue to cyan - use palette system\n        uint8_t hue = 160 + (combinedWave >> 3);\n        uint8_t brightness = 100 + (uint8_t)((combinedWave >> 1) * narrativeIntensity);\n        uint8_t brightU8 = (uint8_t)((brightness * ctx.brightness) / 255);\n        uint8_t paletteIdx = (uint8_t)(hue + ctx.gHue);\n        CRGB color = ctx.palette.getColor(paletteIdx, brightU8);\n\n        // Both strips\n        ctx.leds[i] = color;\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = color;\n        }\n    }\n}\n\nvoid OceanEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& OceanEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Ocean\",\n        \"Deep ocean wave patterns from centre point\",\n        plugins::EffectCategory::WATER,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

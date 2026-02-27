@@ -1,0 +1,118 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_GRAVITATIONAL_WAVE_CHIRP",
+  "effectIdHex": "0x0801",
+  "className": "LGPGravitationalWaveChirpEffect",
+  "displayName": "LGP Gravitational Wave Chirp",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPGravitationalWaveChirpEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPGravitationalWaveChirpEffect.cpp",
+  "renderRange": [
+    38,
+    131
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        38,
+        48
+      ]
+    ],
+    "mapping": [
+      [
+        75,
+        75
+      ],
+      [
+        91,
+        91
+      ],
+      [
+        93,
+        94
+      ],
+      [
+        98,
+        99
+      ],
+      [
+        109,
+        109
+      ]
+    ],
+    "modulation": [
+      [
+        59,
+        59
+      ],
+      [
+        62,
+        63
+      ],
+      [
+        87,
+        88
+      ],
+      [
+        91,
+        91
+      ],
+      [
+        93,
+        94
+      ],
+      [
+        106,
+        107
+      ],
+      [
+        112,
+        113
+      ]
+    ],
+    "render": [
+      [
+        71,
+        71
+      ],
+      [
+        73,
+        73
+      ],
+      [
+        125,
+        125
+      ],
+      [
+        128,
+        128
+      ]
+    ],
+    "post": [
+      [
+        71,
+        71
+      ]
+    ],
+    "output": [
+      [
+        73,
+        73
+      ],
+      [
+        125,
+        126
+      ],
+      [
+        128,
+        128
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPGravitationalWaveChirpEffect.cpp\n * @brief LGP Gravitational Wave Chirp effect implementation\n */\n\n#include \"LGPGravitationalWaveChirpEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPGravitationalWaveChirpEffect::LGPGravitationalWaveChirpEffect()\n    : m_inspiralProgress(0.0f)\n    , m_ringdownPhase(0.0f)\n    , m_merging(false)\n    , m_ringdown(false)\n    , m_mergeFlash(0.0f)\n    , m_phase1(0.0f)\n    , m_phase2(0.0f)\n{\n}\n\nbool LGPGravitationalWaveChirpEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_inspiralProgress = 0.0f;\n    m_ringdownPhase = 0.0f;\n    m_merging = false;\n    m_ringdown = false;\n    m_mergeFlash = 0.0f;\n    m_phase1 = 0.0f;\n    m_phase2 = 0.0f;\n    return true;\n}\n\nvoid LGPGravitationalWaveChirpEffect::render(plugins::EffectContext& ctx) {\n    // Binary black hole inspiral with LIGO-accurate frequency evolution\n    float dt = ctx.getSafeDeltaSeconds();\n    float speed = ctx.speed / 50.0f;\n    float intensity = ctx.brightness / 255.0f;\n\n    float chirpRate = 0.002f + speed * 0.008f;\n    const float massRatio = 1.0f;\n\n    if (!m_merging && !m_ringdown) {\n        m_inspiralProgress += chirpRate;\n\n        if (m_inspiralProgress >= 1.0f) {\n            m_merging = true;\n            m_mergeFlash = 1.0f;\n        }\n    } else if (m_merging) {\n        m_mergeFlash *= powf(0.92f, dt * 60.0f);  // dt-corrected decay\n        if (m_mergeFlash < 0.05f) {\n            m_merging = false;\n            m_ringdown = true;\n            m_ringdownPhase = 0.0f;\n        }\n    } else if (m_ringdown) {\n        m_ringdownPhase += 0.15f + 0.1f;\n        float ringdownDecay = expf(-m_ringdownPhase * 0.05f);\n\n        if (ringdownDecay < 0.01f) {\n            m_ringdown = false;\n            m_inspiralProgress = 0.0f;\n        }\n    }\n\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float distFromCenter = (float)centerPairDistance((uint16_t)i);\n        float normalizedDist = distFromCenter / (float)HALF_LENGTH;\n\n        float wave1 = 0.0f;\n        float wave2 = 0.0f;\n\n        if (!m_merging && !m_ringdown) {\n            float t_remaining = fmaxf(0.01f, 1.0f - m_inspiralProgress);\n            float chirpFreq = powf(t_remaining, -3.0f / 8.0f * massRatio);\n            chirpFreq = constrain(chirpFreq, 1.0f, 20.0f);\n\n            float amplitude = intensity * (1.0f + m_inspiralProgress * 2.0f);\n\n            m_phase1 += chirpFreq * 0.1f;\n            m_phase2 = m_phase1 + PI / 2.0f;\n\n            float compressionFactor = 1.0f + m_inspiralProgress * 3.0f;\n            float spatialPhase = normalizedDist * chirpFreq * compressionFactor;\n\n            wave1 = sinf(spatialPhase - m_phase1) * amplitude * (1.0f - normalizedDist);\n            wave2 = sinf(spatialPhase - m_phase2) * amplitude * (1.0f - normalizedDist);\n\n        } else if (m_merging) {\n            float flashRadius = 0.3f + (1.0f - m_mergeFlash) * 0.5f;\n            if (normalizedDist < flashRadius) {\n                float flashIntensity = m_mergeFlash * (1.0f - normalizedDist / flashRadius);\n                wave1 = flashIntensity * intensity * 2.0f;\n                wave2 = flashIntensity * intensity * 2.0f;\n            }\n\n        } else if (m_ringdown) {\n            const float ringdownFreq = 10.0f;\n            float ringdownDecay = expf(-m_ringdownPhase * 0.05f);\n            float ringRadius = m_ringdownPhase * 0.1f;\n\n            float distToRing = fabsf(normalizedDist - fmodf(ringRadius, 1.0f));\n            if (distToRing < 0.2f) {\n                float ringShape = cosf(distToRing / 0.2f * PI / 2.0f);\n                wave1 = sinf(m_ringdownPhase * ringdownFreq) * ringShape * ringdownDecay * intensity;\n                wave2 = cosf(m_ringdownPhase * ringdownFreq) * ringShape * ringdownDecay * intensity;\n            }\n        }\n\n        uint8_t brightness1 = (uint8_t)(128 + constrain((int)(wave1 * 127.0f), -127, 127));\n        uint8_t brightness2 = (uint8_t)(128 + constrain((int)(wave2 * 127.0f), -127, 127));\n\n        uint8_t baseHue = 200;\n        if (m_merging) baseHue = 40;\n        else if (m_ringdown) baseHue = 160;\n\n        uint8_t brightU8_1 = (uint8_t)((brightness1 * ctx.brightness) / 255);\n        ctx.leds[i] = ctx.palette.getColor((uint8_t)(baseHue + ctx.gHue), brightU8_1);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            uint8_t brightU8_2 = (uint8_t)((brightness2 * ctx.brightness) / 255);\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(baseHue + ctx.gHue + 30), brightU8_2);\n        }\n    }\n}\n\nvoid LGPGravitationalWaveChirpEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPGravitationalWaveChirpEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Gravitational Wave Chirp\",\n        \"Inspiral merger signal\",\n        plugins::EffectCategory::UNCATEGORIZED,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

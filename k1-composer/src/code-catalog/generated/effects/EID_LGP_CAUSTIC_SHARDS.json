@@ -1,0 +1,95 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_CAUSTIC_SHARDS",
+  "effectIdHex": "0x1604",
+  "className": "LGPCausticShardsEffect",
+  "displayName": "LGP Caustic Shards",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPCausticShardsEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPCausticShardsEffect.cpp",
+  "renderRange": [
+    44,
+    91
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        44,
+        48
+      ]
+    ],
+    "mapping": [
+      [
+        46,
+        46
+      ],
+      [
+        49,
+        51
+      ]
+    ],
+    "modulation": [
+      [
+        49,
+        51
+      ],
+      [
+        57,
+        59
+      ],
+      [
+        63,
+        63
+      ],
+      [
+        69,
+        69
+      ]
+    ],
+    "render": [
+      [
+        53,
+        53
+      ],
+      [
+        83,
+        83
+      ],
+      [
+        88,
+        88
+      ]
+    ],
+    "post": [
+      [
+        86,
+        88
+      ]
+    ],
+    "output": [
+      [
+        53,
+        53
+      ],
+      [
+        83,
+        83
+      ],
+      [
+        85,
+        85
+      ],
+      [
+        88,
+        88
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPCausticShardsEffect.cpp\n * @brief LGP Caustic Shards effect implementation\n */\n\n#include \"LGPCausticShardsEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n#include <cstdint>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nstatic inline float clamp01(float x) {\n    return (x < 0.0f) ? 0.0f : (x > 1.0f) ? 1.0f : x;\n}\n\nstatic inline uint32_t hash32(uint32_t x) {\n    x ^= x >> 16;\n    x *= 0x7feb352d;\n    x ^= x >> 15;\n    x *= 0x846ca68b;\n    x ^= x >> 16;\n    return x;\n}\n\nLGPCausticShardsEffect::LGPCausticShardsEffect()\n    : m_phase1(0.0f)\n    , m_phase2(0.0f)\n    , m_phase3(0.0f)\n{\n}\n\nbool LGPCausticShardsEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_phase1 = 0.0f;\n    m_phase2 = 0.0f;\n    m_phase3 = 0.0f;\n    return true;\n}\n\nvoid LGPCausticShardsEffect::render(plugins::EffectContext& ctx) {\n    // CENTRE ORIGIN CAUSTIC SHARDS - Interference field with sharp glints\n    const float speedNorm = ctx.speed / 50.0f;\n    const float master = ctx.brightness / 255.0f;\n\n    m_phase1 += 0.010f + 0.020f * speedNorm;\n    m_phase2 += 0.012f + 0.030f * speedNorm;\n    m_phase3 += 0.018f + 0.055f * speedNorm;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        const float dist = (float)centerPairDistance((uint16_t)i);\n\n        float base =\n            sinf(dist * 0.050f + m_phase1)\n            + 0.7f * sinf(dist * 0.150f + m_phase2)\n            + 0.5f * sinf(dist * 0.300f + m_phase3);\n        base = tanhf(base / 2.2f);\n        const float field = 0.5f + 0.5f * base;\n\n        float shard = sinf(dist * 0.85f - m_phase1 * 3.0f);\n        shard = clamp01(shard);\n        shard = shard * shard * shard * shard;\n\n        shard *= clamp01((field - 0.55f) * 2.2f);\n\n        const uint32_t h = hash32((uint32_t)i ^ (uint32_t)(m_phase1 * 1000.0f));\n        const float mask = ((h & 1023u) < 40u) ? 1.0f : 0.0f;\n        shard *= mask;\n\n        const float wave = clamp01(0.78f * field + 0.22f * shard);\n        const float baseLit = 0.10f;\n        const float out = clamp01(baseLit + (1.0f - baseLit) * wave) * master;\n        const uint8_t br = (uint8_t)(255.0f * out);\n\n        uint8_t hueA = (uint8_t)(ctx.gHue + (int)(dist * 0.6f) + (int)(field * 36.0f));\n        if (shard > 0.2f) {\n            hueA = (uint8_t)(hueA + 20u);\n        }\n\n        ctx.leds[i] = ctx.palette.getColor(hueA, br);\n\n        const int j = i + STRIP_LENGTH;\n        if (j < ctx.ledCount) {\n            const uint8_t hueB = (uint8_t)(hueA + 64u);\n            ctx.leds[j] = ctx.palette.getColor(hueB, br);\n        }\n    }\n}\n\nvoid LGPCausticShardsEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPCausticShardsEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Caustic Shards\",\n        \"Interference with prismatic glints\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_BEAT_PULSE_RESONANT",
+  "effectIdHex": "0x1404",
+  "className": "BeatPulseResonantEffect",
+  "displayName": "Beat Pulse (Resonant)",
+  "headerPath": "firmware/v2/src/effects/ieffect/BeatPulseResonantEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/BeatPulseResonantEffect.cpp",
+  "renderRange": [
+    56,
+    115
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        63,
+        63
+      ]
+    ],
+    "mapping": [
+      [
+        63,
+        71
+      ]
+    ],
+    "modulation": [
+      [
+        56,
+        56
+      ],
+      [
+        63,
+        64
+      ],
+      [
+        68,
+        71
+      ],
+      [
+        74,
+        74
+      ],
+      [
+        76,
+        77
+      ],
+      [
+        85,
+        86
+      ]
+    ],
+    "render": [
+      [
+        88,
+        89
+      ],
+      [
+        92,
+        92
+      ],
+      [
+        103,
+        104
+      ]
+    ],
+    "post": [
+      [
+        108,
+        112
+      ]
+    ],
+    "output": [
+      [
+        113,
+        115
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'mapping' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation.",
+    "Phase 'output' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file BeatPulseResonantEffect.cpp\n * @brief Beat Pulse (Resonant) - Dual-ring anatomy: white attack snap over warm resonant body\n *\n * VISUAL IDENTITY:\n * You see the ANATOMY of the hit. Two distinct rings: thin bright ATTACK snap\n * (white flash) leads, wide warm BODY thud (saturated colour) follows.\n * Both contract inward from edge to centre.\n *\n * The attack ring is THIN, HARD-edged, nearly WHITE, with FAST travel and decay.\n * The body ring is WIDE, GAUSSIAN soft-edged, SATURATED palette colour, with\n * SLOWER travel and decay. Body colour travels WITH the ring (palette indexed\n * by body position, not LED position).\n *\n * Both rings are visible simultaneously via ADDITIVE blending.\n */\n\n#include \"BeatPulseResonantEffect.h\"\n#include \"../CoreEffects.h\"\n#include \"BeatPulseRenderUtils.h\"\n\n#include <cmath>\n\nnamespace lightwaveos::effects::ieffect {\n\n// ============================================================================\n// Constants: Dual-ring timing and shape\n// ============================================================================\n\n// Attack ring: percussive snap (thin, hard, white, fast)\nconstexpr float ATTACK_TRAVEL_MS = 280.0f;   // Fast travel edge->centre\nconstexpr float ATTACK_DECAY_MS = 150.0f;    // Quick decay\nconstexpr float ATTACK_WIDTH = 0.06f;        // Thin ring\nconstexpr float ATTACK_SOFTNESS = 0.012f;    // Hard edge with minimal AA\n\n// Body ring: resonant thud (wide, soft, saturated, slower)\nconstexpr float BODY_TRAVEL_MS = 480.0f;     // Slower travel\nconstexpr float BODY_DECAY_MS = 380.0f;      // Longer decay\nconstexpr float BODY_SIGMA = 0.14f;          // Gaussian sigma (wide, soft)\n\n// Colour treatment\nconstexpr float ATTACK_WHITE = 0.85f;        // Attack is nearly white (desaturated)\n\n// ============================================================================\n// Effect Implementation\n// ============================================================================\n\nbool BeatPulseResonantEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_beatIntensity = 0.0f;\n    m_lastBeatTimeMs = 0;\n    m_fallbackBpm = 128.0f;\n    return true;\n}\n\nvoid BeatPulseResonantEffect::render(plugins::EffectContext& ctx) {\n    // =========================================================================\n    // RESONANT: See the ANATOMY of the hit.\n    // Attack ring = white flash snap. Body ring = warm resonant thud.\n    // Both contract inward. Both visible via additive blend.\n    // =========================================================================\n\n    // --- Beat source ---\n    const bool beatTick = BeatPulseTiming::computeBeatTick(ctx, m_fallbackBpm, m_lastBeatTimeMs);\n\n    const uint32_t nowMs = ctx.rawTotalTimeMs;\n\n    // --- Slam to 1.0 on beat ---\n    if (beatTick) {\n        m_beatIntensity = 1.0f;\n        m_lastBeatTimeMs = nowMs;\n    }\n\n    // --- Age since last beat ---\n    float ageMs = 999999.0f;\n    if (m_lastBeatTimeMs != 0) {\n        ageMs = static_cast<float>(nowMs - m_lastBeatTimeMs);\n    }\n\n    // --- Two ring positions (both contracting inward: edge -> centre) ---\n    const float attackPos = 1.0f - clamp01(ageMs / ATTACK_TRAVEL_MS);\n    const float bodyPos = 1.0f - clamp01(ageMs / BODY_TRAVEL_MS);\n\n    // --- Separate envelopes ---\n    const float attackEnv = expf(-ageMs / ATTACK_DECAY_MS) * m_beatIntensity;\n    const float bodyEnv = expf(-ageMs / BODY_DECAY_MS) * m_beatIntensity;\n\n    // --- Body colour: palette indexed by BODY RING POSITION (travels with thud) ---\n    const uint8_t bodyPaletteIdx = floatToByte(bodyPos);\n\n    // --- Render ---\n    for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {\n        const float dist01 = (static_cast<float>(dist) + 0.5f) / static_cast<float>(HALF_LENGTH);\n\n        // Attack ring: HARD EDGE (thin, sharp snap)\n        const float attackDiff = fabsf(dist01 - attackPos);\n        const float attackHit = RingProfile::hardEdge(attackDiff, ATTACK_WIDTH, ATTACK_SOFTNESS) * attackEnv;\n\n        // Body ring: GAUSSIAN (wide, soft, warm)\n        const float bodyDiff = fabsf(dist01 - bodyPos);\n        const float bodyHit = RingProfile::gaussian(bodyDiff, BODY_SIGMA) * bodyEnv;\n\n        // Body colour: saturated palette colour at body ring position\n        CRGB bodyColor = ctx.palette.getColor(bodyPaletteIdx, scaleBrightness(ctx.brightness, bodyHit));\n\n        // Attack colour: nearly WHITE (desaturated flash)\n        const uint8_t attackBrightness = scaleBrightness(ctx.brightness, attackHit * ATTACK_WHITE);\n        CRGB attackColor = CRGB(attackBrightness, attackBrightness, attackBrightness);\n\n        // ADDITIVE blend: attack over body (both visible simultaneously)\n        CRGB c = ColourUtil::additive(bodyColor, attackColor);\n\n        SET_CENTER_PAIR(ctx, dist, c);\n    }\n}\n\nvoid BeatPulseResonantEffect::cleanup() {}\n\nconst plugins::EffectMetadata& BeatPulseResonantEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Beat Pulse (Resonant)\",\n        \"Dual-ring anatomy: white attack snap over warm resonant body\",\n        plugins::EffectCategory::PARTY,\n        1,\n        \"LightwaveOS\"\n    };\n    return meta;\n}\n\nuint8_t BeatPulseResonantEffect::getParameterCount() const { return 0; }\n\nconst plugins::EffectParameter* BeatPulseResonantEffect::getParameter(uint8_t index) const {\n    (void)index;\n    return nullptr;\n}\n\nbool BeatPulseResonantEffect::setParameter(const char* name, float value) {\n    (void)name; (void)value;\n    return false;\n}\n\nfloat BeatPulseResonantEffect::getParameter(const char* name) const {\n    (void)name;\n    return 0.0f;\n}\n\n} // namespace lightwaveos::effects::ieffect\n"
+}

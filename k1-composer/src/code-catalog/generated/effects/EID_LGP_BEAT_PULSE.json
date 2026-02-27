@@ -1,0 +1,215 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_BEAT_PULSE",
+  "effectIdHex": "0x0A01",
+  "className": "LGPBeatPulseEffect",
+  "displayName": "Beat Pulse",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPBeatPulseEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPBeatPulseEffect.cpp",
+  "renderRange": [
+    57,
+    291
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        74,
+        79
+      ],
+      [
+        92,
+        92
+      ],
+      [
+        111,
+        111
+      ],
+      [
+        152,
+        152
+      ]
+    ],
+    "mapping": [
+      [
+        150,
+        151
+      ],
+      [
+        154,
+        154
+      ],
+      [
+        209,
+        209
+      ],
+      [
+        212,
+        212
+      ],
+      [
+        221,
+        221
+      ],
+      [
+        245,
+        245
+      ],
+      [
+        284,
+        284
+      ]
+    ],
+    "modulation": [
+      [
+        57,
+        58
+      ],
+      [
+        62,
+        62
+      ],
+      [
+        69,
+        69
+      ],
+      [
+        75,
+        75
+      ],
+      [
+        79,
+        79
+      ],
+      [
+        93,
+        93
+      ],
+      [
+        110,
+        114
+      ],
+      [
+        127,
+        130
+      ],
+      [
+        133,
+        135
+      ],
+      [
+        137,
+        138
+      ],
+      [
+        142,
+        144
+      ],
+      [
+        148,
+        148
+      ],
+      [
+        150,
+        150
+      ],
+      [
+        152,
+        152
+      ],
+      [
+        154,
+        156
+      ],
+      [
+        158,
+        159
+      ],
+      [
+        162,
+        162
+      ],
+      [
+        234,
+        234
+      ],
+      [
+        240,
+        241
+      ],
+      [
+        249,
+        250
+      ],
+      [
+        254,
+        254
+      ],
+      [
+        256,
+        256
+      ],
+      [
+        264,
+        264
+      ],
+      [
+        266,
+        266
+      ],
+      [
+        274,
+        274
+      ],
+      [
+        276,
+        276
+      ]
+    ],
+    "render": [
+      [
+        199,
+        199
+      ],
+      [
+        208,
+        208
+      ],
+      [
+        252,
+        252
+      ],
+      [
+        257,
+        257
+      ],
+      [
+        267,
+        267
+      ],
+      [
+        277,
+        277
+      ]
+    ],
+    "post": [
+      [
+        263,
+        279
+      ]
+    ],
+    "output": [
+      [
+        280,
+        291
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'post' inferred from fallback segmentation.",
+    "Phase 'output' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPBeatPulseEffect.cpp\n * @brief Beat-synchronized radial pulse implementation\n */\n\n#include \"LGPBeatPulseEffect.h\"\n#include \"ChromaUtils.h\"\n#include \"../CoreEffects.h\"\n\n#ifndef NATIVE_BUILD\n#include <FastLED.h>\n#endif\n\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nnamespace {\n\nstatic inline const float* selectChroma12(const audio::ControlBusFrame& cb) {\n    // Both backends now produce normalised chroma via Stage A/B pipeline.\n    return cb.chroma;\n}\n\n} // namespace\n\nbool LGPBeatPulseEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    // Primary kick/beat pulse\n    m_pulsePosition = 0.0f;\n    m_pulseIntensity = 0.0f;\n    m_fallbackPhase = 0.0f;\n    m_lastBeatPhase = 0.0f;\n\n    // Snare detection and secondary pulse\n    m_lastMidEnergy = 0.0f;\n    m_snarePulsePos = 0.0f;\n    m_snarePulseInt = 0.0f;\n\n    // Hi-hat detection and shimmer\n    m_lastTrebleEnergy = 0.0f;\n    m_hihatShimmer = 0.0f;\n\n    m_lastFastFlux = 0.0f;\n    m_lastHopSeq = 0;\n    m_chromaAngle = 0.0f;\n    m_bandsLowFrames = 0;\n    m_smoothBrightness = ctx.brightness / 255.0f;\n    m_smoothStrength = 0.3f;\n    m_smoothBeatPhase = 0.0f;\n\n    return true;\n}\n\nvoid LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {\n    float beatPhase;\n    float bassEnergy;\n    float midEnergy = 0.0f;\n    float trebleEnergy = 0.0f;\n    bool onBeat = false;\n    bool snareHit = false;\n    bool hihatHit = false;\n\n    // Spike detection thresholds (tuned for typical band levels ~0.05–0.3)\n    constexpr float SNARE_SPIKE_THRESH = 0.18f;   // Mid energy spike threshold\n    constexpr float HIHAT_SPIKE_THRESH = 0.14f;   // Treble energy spike threshold\n    constexpr float FLUX_SPIKE_THRESH = 0.18f;    // Flux spike threshold (backend-agnostic onset proxy)\n\n    // Circular chroma hue — declared here so it is visible in the render section below.\n    uint8_t chromaHueOffset = 0;\n\n    if (ctx.audio.available) {\n        beatPhase = ctx.audio.beatPhase();\n        bassEnergy = ctx.audio.bass();\n        midEnergy = ctx.audio.mid();\n        trebleEnergy = ctx.audio.treble();\n        onBeat = ctx.audio.isOnBeat();\n\n        // Bands-dead guard: if bands stay near zero for N frames, don't trust band-based triggers\n        float bandSum = bassEnergy + midEnergy + trebleEnergy;\n        if (bandSum < BANDS_LOW_THRESHOLD) {\n            if (m_bandsLowFrames < BANDS_LOW_FRAMES_MAX) ++m_bandsLowFrames;\n        } else {\n            m_bandsLowFrames = 0;\n        }\n        bool bandsTrusted = (m_bandsLowFrames < BANDS_LOW_FRAMES_MAX);\n\n        // Circular chroma hue (prevents argmax discontinuities and wrapping artefacts).\n        float rawDt = ctx.getSafeRawDeltaSeconds();\n        const float* chroma = selectChroma12(ctx.audio.controlBus);\n        chromaHueOffset = effects::chroma::circularChromaHueSmoothed(\n            chroma, m_chromaAngle, rawDt, 0.20f);\n\n        // Snare detection: spike in mid-frequency energy (only when bands look live)\n        if (bandsTrusted) {\n            float midDelta = midEnergy - m_lastMidEnergy;\n            if (midDelta > SNARE_SPIKE_THRESH && midEnergy > 0.15f) {\n                snareHit = true;\n            }\n\n            // Hi-hat detection: spike in high-frequency energy\n            float trebleDelta = trebleEnergy - m_lastTrebleEnergy;\n            if (trebleDelta > HIHAT_SPIKE_THRESH && trebleEnergy > 0.12f) {\n                hihatHit = true;\n            }\n        }\n\n        // Flux accent: a reliable onset proxy for backends without explicit snare triggers.\n        float flux = ctx.audio.fastFlux();\n        float fluxDelta = flux - m_lastFastFlux;\n        m_lastFastFlux = flux;\n        if (fluxDelta > FLUX_SPIKE_THRESH && flux > 0.18f) {\n            // Treat as snare-like transient when there is some mid/treble content.\n            if (midEnergy > 0.12f || trebleEnergy > 0.10f) {\n                snareHit = true;\n            } else {\n                hihatHit = true;\n            }\n        }\n\n        // Store for next frame\n        m_lastMidEnergy = midEnergy;\n        m_lastTrebleEnergy = trebleEnergy;\n    } else {\n        // Fallback: 120 BPM with simulated snare on off-beats\n        m_fallbackPhase += ((ctx.deltaTimeSeconds * 1000.0f) / 500.0f);\n        if (m_fallbackPhase >= 1.0f) m_fallbackPhase -= 1.0f;\n        beatPhase = m_fallbackPhase;\n        bassEnergy = 0.5f;\n\n        // Detect beat crossing (kick)\n        if (beatPhase < 0.05f && m_lastBeatPhase > 0.95f) {\n            onBeat = true;\n        }\n        // Simulate snare on off-beat (around 0.5 phase)\n        if (beatPhase > 0.48f && beatPhase < 0.52f && m_lastBeatPhase < 0.48f) {\n            snareHit = true;\n        }\n        // Simulate hi-hat every eighth note\n        float hihatPhase = fmodf(beatPhase * 4.0f, 1.0f);\n        float lastHihatPhase = fmodf(m_lastBeatPhase * 4.0f, 1.0f);\n        if (hihatPhase < 0.1f && lastHihatPhase > 0.9f) {\n            hihatHit = true;\n        }\n    }\n    m_lastBeatPhase = beatPhase;\n\n    // Smooth context so audio mapping / auto-speed don't cause flashing or cut-off\n    float brightnessNorm = ctx.brightness / 255.0f;\n    float strength = ctx.audio.available ? ctx.audio.beatStrength() : 0.0f;\n    const float blend = 0.08f;\n    m_smoothBrightness += (brightnessNorm - m_smoothBrightness) * blend;\n    m_smoothStrength += (strength - m_smoothStrength) * blend;\n    m_smoothBeatPhase += (beatPhase - m_smoothBeatPhase) * blend;\n\n    // === PRIMARY PULSE (Kick/Beat) ===\n    if (onBeat) {\n        m_pulsePosition = 0.0f;\n        // silentScale handled globally by RendererActor\n        float base = 0.25f + 0.75f * fminf(1.0f, bassEnergy * 1.15f + m_smoothStrength * 0.65f);\n        m_pulseIntensity = base;\n    }\n\n    // Expand pulse outward (~400ms to reach edge)\n    m_pulsePosition += (ctx.deltaTimeSeconds * 1000.0f) / 400.0f;\n    if (m_pulsePosition > 1.0f) m_pulsePosition = 1.0f;\n\n    // Decay intensity (dt-corrected for frame-rate independence)\n    float rawDt2 = ctx.getSafeRawDeltaSeconds();\n    m_pulseIntensity *= powf(0.95f, rawDt2 * 60.0f);\n    if (m_pulseIntensity < 0.01f) m_pulseIntensity = 0.0f;\n\n    // === SECONDARY PULSE (Snare) ===\n    if (snareHit) {\n        m_snarePulsePos = 0.0f;\n        m_snarePulseInt = 0.6f + midEnergy * 0.4f;\n    }\n\n    // Snare pulse expands faster (~300ms)\n    m_snarePulsePos += (ctx.deltaTimeSeconds * 1000.0f) / 300.0f;\n    if (m_snarePulsePos > 1.0f) m_snarePulsePos = 1.0f;\n\n    // Faster decay for snare (dt-corrected)\n    m_snarePulseInt *= powf(0.92f, rawDt2 * 60.0f);\n    if (m_snarePulseInt < 0.01f) m_snarePulseInt = 0.0f;\n\n    // === SHIMMER OVERLAY (Hi-hat) ===\n    if (hihatHit) {\n        m_hihatShimmer = 0.8f + trebleEnergy * 0.2f;\n    }\n\n    // Very fast decay for hi-hat sparkle (dt-corrected)\n    m_hihatShimmer *= powf(0.88f, rawDt2 * 60.0f);\n    if (m_hihatShimmer < 0.01f) m_hihatShimmer = 0.0f;\n\n    // Clear buffer\n    memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));\n\n    // === RENDER CENTER PAIR OUTWARD ===\n    uint8_t baseHue = chromaHueOffset;\n    // Fixed offsets (no time-based hue cycling): keeps colour musically anchored (non-rainbow).\n    uint8_t primaryHue = baseHue;\n    uint8_t snareHue = (uint8_t)(baseHue + 42);  // ~perfect fifth-ish shift\n    uint8_t hihatHue = (uint8_t)(baseHue + 96);  // brighter offset\n\n    for (int dist = 0; dist < HALF_LENGTH; ++dist) {\n        float normalizedDist = (float)dist / HALF_LENGTH;\n\n        // --- Primary pulse ring (kick) ---\n        float ringDist = fabsf(normalizedDist - m_pulsePosition);\n        float ringWidth = 0.15f;\n        float primaryBright = 0.0f;\n\n        if (ringDist < ringWidth) {\n            primaryBright = (1.0f - ringDist / ringWidth) * m_pulseIntensity;\n        }\n\n        // --- Secondary pulse ring (snare) - thinner, faster ---\n        float snareRingDist = fabsf(normalizedDist - m_snarePulsePos);\n        float snareRingWidth = 0.08f;  // Thinner than primary\n        float snareBright = 0.0f;\n\n        if (snareRingDist < snareRingWidth) {\n            snareBright = (1.0f - snareRingDist / snareRingWidth) * m_snarePulseInt;\n        }\n\n        // --- Hi-hat shimmer overlay ---\n        // Sparkle pattern: pseudo-random based on position and time\n        float shimmerBright = 0.0f;\n        if (m_hihatShimmer > 0.05f) {\n            // Create sparkle pattern using position hash\n            uint8_t sparkleHash = (uint8_t)((dist * 73 + (int)(beatPhase * 256)) & 0xFF);\n            if ((sparkleHash & 0x0F) < 3) {  // ~20% of LEDs sparkle\n                shimmerBright = m_hihatShimmer * ((sparkleHash >> 4) / 16.0f);\n            }\n        }\n\n        // Background glow: use smoothed phase/strength so it holds and doesn't flash\n        float bgBright = 0.08f + 0.08f * m_smoothBeatPhase + 0.08f * m_smoothStrength;\n        if (bgBright < 0.10f) bgBright = 0.10f;  // Floor so background always visible, no \"random flashes\"\n\n        // --- Combine all layers ---\n        // Calculate combined color (normalised by layer count to prevent wash to white)\n        CRGB finalColor = CRGB::Black;\n        uint8_t layerCount = 1;  // base always present\n\n        // Layer 1: Background glow (use smoothed brightness so display holds)\n        uint8_t bgBrightness = (uint8_t)(bgBright * m_smoothBrightness * 255.0f);\n        if (bgBrightness < 20u) bgBrightness = 20u;\n        finalColor = ctx.palette.getColor(primaryHue, bgBrightness);\n\n        // Layer 2: Primary pulse (smoothed brightness)\n        if (primaryBright > 0.01f) {\n            uint8_t pBright = (uint8_t)(primaryBright * m_smoothBrightness * 255.0f);\n            CRGB primaryColor = ctx.palette.getColor(primaryHue, pBright);\n            finalColor.r = (finalColor.r + primaryColor.r > 255) ? 255 : (uint8_t)(finalColor.r + primaryColor.r);\n            finalColor.g = (finalColor.g + primaryColor.g > 255) ? 255 : (uint8_t)(finalColor.g + primaryColor.g);\n            finalColor.b = (finalColor.b + primaryColor.b > 255) ? 255 : (uint8_t)(finalColor.b + primaryColor.b);\n            layerCount++;\n        }\n\n        // Layer 3: Snare pulse (complementary color, smoothed brightness)\n        if (snareBright > 0.01f) {\n            uint8_t sBright = (uint8_t)(snareBright * m_smoothBrightness * 255.0f * 0.7f);  // Slightly dimmer\n            CRGB snareColor = ctx.palette.getColor(snareHue, sBright);\n            finalColor.r = (finalColor.r + snareColor.r > 255) ? 255 : (uint8_t)(finalColor.r + snareColor.r);\n            finalColor.g = (finalColor.g + snareColor.g > 255) ? 255 : (uint8_t)(finalColor.g + snareColor.g);\n            finalColor.b = (finalColor.b + snareColor.b > 255) ? 255 : (uint8_t)(finalColor.b + snareColor.b);\n            layerCount++;\n        }\n\n        // Layer 4: Hi-hat shimmer (smoothed brightness)\n        if (shimmerBright > 0.01f) {\n            uint8_t hBright = (uint8_t)(shimmerBright * m_smoothBrightness * 255.0f * 0.5f);  // Subtle\n            CRGB hihatColor = ctx.palette.getColor(hihatHue, hBright);\n            finalColor.r = (finalColor.r + hihatColor.r > 255) ? 255 : (uint8_t)(finalColor.r + hihatColor.r);\n            finalColor.g = (finalColor.g + hihatColor.g > 255) ? 255 : (uint8_t)(finalColor.g + hihatColor.g);\n            finalColor.b = (finalColor.b + hihatColor.b > 255) ? 255 : (uint8_t)(finalColor.b + hihatColor.b);\n            layerCount++;\n        }\n\n        // Normalise by layer count so combined colour stays in range and preserves hue (colour corruption fix)\n        if (layerCount > 1) {\n            finalColor.nscale8(255u / (unsigned)layerCount);\n        }\n\n        SET_CENTER_PAIR(ctx, dist, finalColor);\n    }\n}\n\nvoid LGPBeatPulseEffect::cleanup() {}\n\nconst plugins::EffectMetadata& LGPBeatPulseEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Beat Pulse\",\n        \"Radial pulse with snare/hihat response\",\n        plugins::EffectCategory::PARTY,\n        1,\n        \"LightwaveOS\"\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

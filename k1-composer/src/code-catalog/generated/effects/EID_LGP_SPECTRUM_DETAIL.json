@@ -1,0 +1,206 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_SPECTRUM_DETAIL",
+  "effectIdHex": "0x0E05",
+  "className": "LGPSpectrumDetailEffect",
+  "displayName": "LGP Spectrum Detail",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPSpectrumDetailEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPSpectrumDetailEffect.cpp",
+  "renderRange": [
+    43,
+    219
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        54,
+        54
+      ],
+      [
+        66,
+        66
+      ],
+      [
+        81,
+        81
+      ],
+      [
+        83,
+        83
+      ],
+      [
+        92,
+        92
+      ],
+      [
+        94,
+        94
+      ]
+    ],
+    "mapping": [
+      [
+        80,
+        80
+      ],
+      [
+        89,
+        89
+      ],
+      [
+        91,
+        91
+      ],
+      [
+        97,
+        97
+      ],
+      [
+        111,
+        111
+      ],
+      [
+        115,
+        115
+      ],
+      [
+        121,
+        121
+      ],
+      [
+        127,
+        127
+      ],
+      [
+        142,
+        142
+      ]
+    ],
+    "modulation": [
+      [
+        111,
+        112
+      ],
+      [
+        115,
+        117
+      ],
+      [
+        131,
+        131
+      ],
+      [
+        171,
+        171
+      ],
+      [
+        210,
+        211
+      ]
+    ],
+    "render": [
+      [
+        60,
+        60
+      ],
+      [
+        96,
+        96
+      ],
+      [
+        114,
+        114
+      ],
+      [
+        130,
+        130
+      ],
+      [
+        145,
+        145
+      ],
+      [
+        163,
+        163
+      ],
+      [
+        167,
+        167
+      ],
+      [
+        180,
+        180
+      ],
+      [
+        183,
+        183
+      ],
+      [
+        198,
+        198
+      ],
+      [
+        201,
+        201
+      ],
+      [
+        212,
+        214
+      ]
+    ],
+    "post": [
+      [
+        198,
+        210
+      ]
+    ],
+    "output": [
+      [
+        163,
+        163
+      ],
+      [
+        167,
+        167
+      ],
+      [
+        180,
+        180
+      ],
+      [
+        183,
+        183
+      ],
+      [
+        187,
+        187
+      ],
+      [
+        189,
+        191
+      ],
+      [
+        193,
+        193
+      ],
+      [
+        198,
+        198
+      ],
+      [
+        201,
+        201
+      ],
+      [
+        212,
+        214
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPSpectrumDetailEffect.cpp\n * @brief Detailed 64-bin FFT spectrum visualization with logarithmic mapping\n */\n\n#include \"LGPSpectrumDetailEffect.h\"\n#include \"../CoreEffects.h\"\n#include \"../../config/features.h\"\n\n#ifdef FEATURE_EFFECT_VALIDATION\n#include \"../../validation/EffectValidationMacros.h\"\n#endif\n\n#ifndef NATIVE_BUILD\n#include <FastLED.h>\n#include <esp_heap_caps.h>\n#endif\n\n#include <cmath>\n#include <cstring>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nbool LGPSpectrumDetailEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n#ifndef NATIVE_BUILD\n    if (!m_ps) {\n        m_ps = static_cast<SpectrumDetailPsram*>(\n            heap_caps_malloc(sizeof(SpectrumDetailPsram), MALLOC_CAP_SPIRAM));\n        if (!m_ps) return false;\n    }\n    memset(m_ps, 0, sizeof(SpectrumDetailPsram));\n    for (uint8_t i = 0; i < 64; i++) {\n        m_ps->binFollowers[i].reset(0.0f);\n    }\n#endif\n    m_lastHopSeq = 0;\n    return true;\n}\n\nvoid LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {\n    if (!m_ps) return;\n    // #region agent log\n    #ifndef NATIVE_BUILD\n    static uint32_t lastRenderLogMs = 0;\n    static uint32_t lastHopLogMs = 0;\n    static uint32_t lastStatsLogMs = 0;\n    uint32_t debugNowMs = millis();\n    if (debugNowMs - lastRenderLogMs >= 10000) {  // Every 10 seconds\n        lastRenderLogMs = debugNowMs;\n        Serial.printf(\"{\\\"id\\\":\\\"spectrum_render_entry\\\",\\\"location\\\":\\\"LGPSpectrumDetailEffect.cpp:37\\\",\\\"message\\\":\\\"Render called\\\",\\\"data\\\":{\\\"audioAvailable\\\":%d,\\\"brightness\\\":%u,\\\"ledCount\\\":%u,\\\"centerPoint\\\":%u},\\\"timestamp\\\":%lu}\\n\",\n            ctx.audio.available ? 1 : 0, ctx.brightness, ctx.ledCount, ctx.centerPoint, debugNowMs);\n    }\n    #endif\n    // #endregion\n    \n    // Clear buffer\n    memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));\n\n#if !FEATURE_AUDIO_SYNC\n    (void)ctx;\n    return;\n#else\n    if (!ctx.audio.available) {\n        // #region agent log\n        #ifndef NATIVE_BUILD\n        static uint32_t noAudioCount = 0;\n        noAudioCount++;\n        if (noAudioCount % 60 == 0) {\n            Serial.printf(\"{\\\"id\\\":\\\"spectrum_no_audio\\\",\\\"location\\\":\\\"LGPSpectrumDetailEffect.cpp:45\\\",\\\"message\\\":\\\"Audio not available\\\",\\\"data\\\":{\\\"count\\\":%u},\\\"timestamp\\\":%lu}\\n\",\n                noAudioCount, millis());\n        }\n        #endif\n        // #endregion\n        return;\n    }\n\n    // Prefer adaptive normalisation (Sensory Bridge max follower); fall back to raw bins if unavailable.\n    const float* bins64 = ctx.audio.bins64Adaptive();\n    if (!bins64) {\n        bins64 = ctx.audio.bins64();\n    }\n    constexpr uint8_t NUM_BINS = 64;\n    \n    float rawDt = ctx.getSafeRawDeltaSeconds();\n    float dt = ctx.getSafeDeltaSeconds();\n    float moodNorm = ctx.getMoodNormalized();\n    \n    // Hop-based updates: update targets only on new hops\n    bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);\n    if (newHop) {\n        m_lastHopSeq = ctx.audio.controlBus.hop_seq;\n        float maxBin = 0.0f;\n        for (uint8_t bin = 0; bin < NUM_BINS; ++bin) {\n            m_ps->targetBins[bin] = bins64[bin];\n            if (bins64[bin] > maxBin) maxBin = bins64[bin];\n        }\n        // #region agent log\n        #ifndef NATIVE_BUILD\n        if (debugNowMs - lastHopLogMs >= 10000) {  // Every 10 seconds\n            lastHopLogMs = debugNowMs;\n            Serial.printf(\"{\\\"id\\\":\\\"spectrum_new_hop\\\",\\\"location\\\":\\\"LGPSpectrumDetailEffect.cpp:58\\\",\\\"message\\\":\\\"New hop detected\\\",\\\"data\\\":{\\\"hopSeq\\\":%u,\\\"maxBin\\\":%.4f,\\\"bins64[0]\\\":%.4f,\\\"bins64[31]\\\":%.4f,\\\"bins64[63]\\\":%.4f},\\\"timestamp\\\":%lu}\\n\",\n                m_lastHopSeq, maxBin, bins64[0], bins64[31], bins64[63], debugNowMs);\n        }\n        #endif\n        // #endregion\n    }\n    \n    // Smooth toward targets every frame with MOOD-adjusted smoothing\n    float maxSmooth = 0.0f;\n    uint8_t binsAboveThreshold = 0;\n    for (uint8_t bin = 0; bin < NUM_BINS; ++bin) {\n        m_ps->binSmoothing[bin] = m_ps->binFollowers[bin].updateWithMood(m_ps->targetBins[bin], rawDt, moodNorm);\n        if (m_ps->binSmoothing[bin] > maxSmooth) maxSmooth = m_ps->binSmoothing[bin];\n        if (m_ps->binSmoothing[bin] >= 0.01f) binsAboveThreshold++;\n    }\n    \n    // =========================================================================\n    // Render: Logarithmic mapping of 64 bins to LED positions\n    // Low frequencies (bins 0-15) near center, high frequencies (bins 48-63) at edges\n    // =========================================================================\n    \n    // Clear buffer first (already done above)\n    \n    // Map each bin to LED positions using logarithmic spacing\n    uint16_t ledsWritten = 0;\n    uint8_t maxBright = 0;\n    for (uint8_t bin = 0; bin < NUM_BINS; ++bin) {\n        float magnitude = m_ps->binSmoothing[bin];\n\n        // VISIBILITY FIX: Apply 2x gain boost to bass bins (0-15) for better visibility\n        if (bin < 16) {\n            magnitude *= 2.0f;\n        }\n\n        if (magnitude < 0.01f) {\n            continue;  // Skip bins with no energy\n        }\n        \n        // Map bin to LED distance from center (logarithmic)\n        uint16_t ledDist = binToLedDistance(bin);\n        \n        // Get color for this frequency band (using palette system)\n        CRGB color = frequencyToColor(bin, ctx);\n        \n        // Scale brightness by magnitude and master brightness\n        uint8_t bright = (uint8_t)(magnitude * ctx.brightness);\n        if (bright > maxBright) maxBright = bright;\n        color = color.nscale8(bright);\n\n        // Pre-scale band contribution so multiple bins hitting same LED stay in range (colour corruption fix)\n        constexpr uint8_t SPECTRUM_PRE_SCALE = 85;  // ~3 overlapping bands sum to 255\n        color = color.nscale8(SPECTRUM_PRE_SCALE);\n        \n        // Apply to center pair (symmetric)\n        uint16_t centerLED = ctx.centerPoint;\n        uint16_t leftIdx = centerLED - 1 - ledDist;\n        uint16_t rightIdx = centerLED + ledDist;\n        \n        if (leftIdx < ctx.ledCount) {\n            ctx.leds[leftIdx] += color;\n            ledsWritten++;\n        }\n        if (rightIdx < ctx.ledCount) {\n            ctx.leds[rightIdx] += color;\n            ledsWritten++;\n        }\n        \n        // Also apply to adjacent LEDs for smoother visualization (optional)\n        // This creates a \"bar\" effect for each frequency band\n        if (ledDist > 0) {\n            uint16_t leftIdx2 = centerLED - 1 - (ledDist - 1);\n            uint16_t rightIdx2 = centerLED + (ledDist - 1);\n\n            CRGB color2 = color.nscale8(128);  // Dimmer for adjacent (already pre-scaled)\n\n            if (leftIdx2 < ctx.ledCount) {\n                ctx.leds[leftIdx2] += color2;\n            }\n            if (rightIdx2 < ctx.ledCount) {\n                ctx.leds[rightIdx2] += color2;\n            }\n        }\n\n        // Strip 2: Centre-origin at LED 240\n        if (ctx.ledCount >= 320) {\n            uint16_t strip2Center = 240;\n            uint16_t leftIdx3 = strip2Center - 1 - ledDist;\n            uint16_t rightIdx3 = strip2Center + ledDist;\n\n            // Use complementary hue offset for strip 2 (same pre-scale as strip 1)\n            CRGB color3 = frequencyToColor(bin, ctx);\n            color3 = color3.nscale8(bright).nscale8(SPECTRUM_PRE_SCALE);\n\n            if (leftIdx3 >= 160 && leftIdx3 < ctx.ledCount) {\n                ctx.leds[leftIdx3] += color3;\n            }\n            if (rightIdx3 < ctx.ledCount) {\n                ctx.leds[rightIdx3] += color3;\n            }\n        }\n    }\n    \n    // #region agent log\n    #ifndef NATIVE_BUILD\n    if (debugNowMs - lastStatsLogMs >= 10000) {  // Every 10 seconds\n        lastStatsLogMs = debugNowMs;\n        Serial.printf(\"{\\\"id\\\":\\\"spectrum_render_stats\\\",\\\"location\\\":\\\"LGPSpectrumDetailEffect.cpp:162\\\",\\\"message\\\":\\\"Render stats\\\",\\\"data\\\":{\\\"maxSmooth\\\":%.4f,\\\"binsAboveThreshold\\\":%u,\\\"ledsWritten\\\":%u,\\\"maxBright\\\":%u,\\\"brightness\\\":%u,\\\"colorR\\\":%u,\\\"colorG\\\":%u,\\\"colorB\\\":%u},\\\"timestamp\\\":%lu}\\n\",\n            maxSmooth, binsAboveThreshold, ledsWritten, maxBright, ctx.brightness, \n            ledsWritten > 0 ? ctx.leds[ctx.centerPoint].r : 0,\n            ledsWritten > 0 ? ctx.leds[ctx.centerPoint].g : 0,\n            ledsWritten > 0 ? ctx.leds[ctx.centerPoint].b : 0, debugNowMs);\n    }\n    #endif\n    // #endregion\n#endif  // FEATURE_AUDIO_SYNC\n}\n\nuint16_t LGPSpectrumDetailEffect::binToLedDistance(uint8_t bin) const {\n    // Logarithmic mapping: lower bins closer to center\n    // bin 0 (110 Hz) -> distance 0 (center)\n    // bin 63 (4186 Hz) -> distance ~79 (edge)\n    \n    if (bin == 0) {\n        return 0;\n    }\n    \n    // Logarithmic scale: log10((bin + 1) / 64) * maxDistance\n    // This compresses low frequencies near center, spreads high frequencies toward edges\n    float logPos = log10f((float)(bin + 1) / 64.0f);\n    \n    // Map to LED distance (0 to HALF_LENGTH-1)\n    // log10(1/64) ≈ -1.806, log10(64/64) = 0\n    // Normalize: (logPos - log10(1/64)) / (0 - log10(1/64))\n    float normalized = (logPos + 1.806f) / 1.806f;  // Maps -1.806..0 to 0..1\n    normalized = fmaxf(0.0f, fminf(1.0f, normalized));  // Clamp\n    \n    uint16_t distance = (uint16_t)(normalized * (float)(HALF_LENGTH - 1));\n    \n    return distance;\n}\n\nCRGB LGPSpectrumDetailEffect::frequencyToColor(uint8_t bin, const plugins::EffectContext& ctx) const {\n    // Use palette system instead of hardcoded HSV rainbow\n    // Matches SensoryBridge pattern: chromatic_mode determines color source\n    const bool chromaticMode = (ctx.saturation >= 128);\n    \n    if (chromaticMode) {\n        // Chromatic mode: Map bin to palette position (rainbow-like cycling)\n        // SensoryBridge uses 21.333 * i, we'll use bin/64 * 255 for palette index\n        float prog = (float)bin / 64.0f;\n        uint8_t paletteIdx = (uint8_t)(prog * 255.0f + ctx.gHue);\n        return ctx.palette.getColor(paletteIdx, 255);\n    } else {\n        // Non-chromatic mode: Single hue from palette\n        return ctx.palette.getColor(ctx.gHue, 255);\n    }\n}\n\nvoid LGPSpectrumDetailEffect::cleanup() {\n#ifndef NATIVE_BUILD\n    if (m_ps) {\n        heap_caps_free(m_ps);\n        m_ps = nullptr;\n    }\n#endif\n}\n\nconst plugins::EffectMetadata& LGPSpectrumDetailEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Spectrum Detail\",\n        \"Detailed 64-bin FFT spectrum visualization with logarithmic frequency mapping\",\n        plugins::EffectCategory::PARTY,\n        1,\n        \"LightwaveOS\"\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

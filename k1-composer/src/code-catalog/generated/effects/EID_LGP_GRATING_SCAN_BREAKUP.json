@@ -1,0 +1,85 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_GRATING_SCAN_BREAKUP",
+  "effectIdHex": "0x1607",
+  "className": "LGPGratingScanBreakupEffect",
+  "displayName": "LGP Grating Scan (Breakup)",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPGratingScanBreakupEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPGratingScanBreakupEffect.cpp",
+  "renderRange": [
+    31,
+    75
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        31,
+        35
+      ]
+    ],
+    "mapping": [
+      [
+        33,
+        33
+      ],
+      [
+        36,
+        36
+      ]
+    ],
+    "modulation": [
+      [
+        43,
+        50
+      ]
+    ],
+    "render": [
+      [
+        41,
+        41
+      ],
+      [
+        69,
+        69
+      ],
+      [
+        72,
+        72
+      ]
+    ],
+    "post": [
+      [
+        70,
+        72
+      ]
+    ],
+    "output": [
+      [
+        37,
+        38
+      ],
+      [
+        41,
+        41
+      ],
+      [
+        69,
+        70
+      ],
+      [
+        72,
+        72
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'modulation' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPGratingScanBreakupEffect.cpp\n * @brief LGP Grating Scan (Breakup) effect implementation\n */\n\n#include \"LGPGratingScanBreakupEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n#include <cstdint>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nstatic inline float clamp01(float x) {\n    return (x < 0.0f) ? 0.0f : (x > 1.0f) ? 1.0f : x;\n}\n\nLGPGratingScanBreakupEffect::LGPGratingScanBreakupEffect()\n    : m_pos(0.0f)\n{\n}\n\nbool LGPGratingScanBreakupEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_pos = 0.0f;\n    return true;\n}\n\nvoid LGPGratingScanBreakupEffect::render(plugins::EffectContext& ctx) {\n    // CENTRE ORIGIN GRATING SCAN (BREAKUP) - Halo spatter decay\n    const float speedNorm = ctx.speed / 50.0f;\n    const float master = ctx.brightness / 255.0f;\n\n    m_pos += (0.6f + 2.2f * speedNorm);\n    if (m_pos > (float)STRIP_LENGTH) {\n        m_pos -= (float)STRIP_LENGTH;\n    }\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        const float dist = (float)centerPairDistance((uint16_t)i);\n\n        const float dx = fabsf(dist - m_pos);\n        const float core = expf(-dx * dx * 0.020f);\n        const float halo = expf(-dx * dx * 0.006f);\n\n        // Breakup mask grows with distance from the scan core (halo spatter only).\n        const float breakupAmt = clamp01(dx * 0.08f);\n        uint32_t h = 2166136261u;\n        h ^= (uint32_t)i;\n        h *= 16777619u;\n        h ^= (uint32_t)(m_pos * 1000.0f);\n        h *= 16777619u;\n        const float noise = ((h & 1023u) / 1023.0f);\n        const float breakup = (noise > breakupAmt) ? 1.0f : 0.0f;\n\n        const float angle = (dist - m_pos) * 0.08f;\n        const float spec = 0.5f + 0.5f * tanhf(angle);\n\n        const uint8_t hueA = (uint8_t)(ctx.gHue + (int)(spec * 96.0f));\n        const uint8_t hueB = (uint8_t)(ctx.gHue + (int)((1.0f - spec) * 96.0f));\n\n        const float base = 0.06f;\n        const float wave = clamp01(0.15f * (halo * breakup) + 0.85f * core);\n        const float out = clamp01(base + (1.0f - base) * wave) * master;\n        const uint8_t br = (uint8_t)(255.0f * out);\n\n        ctx.leds[i] = ctx.palette.getColor(hueA, br);\n        const int j = i + STRIP_LENGTH;\n        if (j < ctx.ledCount) {\n            ctx.leds[j] = ctx.palette.getColor(hueB, br);\n        }\n    }\n}\n\nvoid LGPGratingScanBreakupEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPGratingScanBreakupEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Grating Scan (Breakup)\",\n        \"Diffraction scan with halo breakup\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

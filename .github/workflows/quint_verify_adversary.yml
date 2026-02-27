@@ -27,7 +27,7 @@ jobs:
         run: npm install -g @informalsystems/quint@0.29.1
       
       - name: Verify adversarial invariants
-        working-directory: firmware/v2/specs/quint/choreo
+        working-directory: firmware-v3/specs/quint/choreo
         run: |
           echo "Verifying adversarial invariants with message soup semantics..."
           
@@ -63,6 +63,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: quint-counterexample
-          path: firmware/v2/specs/quint/choreo/*.itf.json
+          path: firmware-v3/specs/quint/choreo/*.itf.json
           retention-days: 7
         continue-on-error: true

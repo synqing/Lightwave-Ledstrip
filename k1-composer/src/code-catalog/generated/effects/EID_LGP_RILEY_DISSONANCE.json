@@ -1,0 +1,83 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_RILEY_DISSONANCE",
+  "effectIdHex": "0x0804",
+  "className": "LGPRileyDissonanceEffect",
+  "displayName": "LGP Riley Dissonance",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPRileyDissonanceEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPRileyDissonanceEffect.cpp",
+  "renderRange": [
+    33,
+    82
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        33,
+        38
+      ]
+    ],
+    "mapping": [
+      [
+        47,
+        47
+      ],
+      [
+        49,
+        50
+      ]
+    ],
+    "modulation": [
+      [
+        38,
+        38
+      ],
+      [
+        49,
+        50
+      ]
+    ],
+    "render": [
+      [
+        45,
+        45
+      ],
+      [
+        76,
+        76
+      ],
+      [
+        79,
+        79
+      ]
+    ],
+    "post": [
+      [
+        77,
+        79
+      ]
+    ],
+    "output": [
+      [
+        45,
+        45
+      ],
+      [
+        76,
+        77
+      ],
+      [
+        79,
+        79
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPRileyDissonanceEffect.cpp\n * @brief LGP Riley Dissonance effect implementation\n */\n\n#include \"LGPRileyDissonanceEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\n#ifndef PI\n#define PI 3.14159265358979323846f\n#endif\n#ifndef TWO_PI\n#define TWO_PI (2.0f * PI)\n#endif\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPRileyDissonanceEffect::LGPRileyDissonanceEffect()\n    : m_patternPhase(0.0f)\n{\n}\n\nbool LGPRileyDissonanceEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_patternPhase = 0.0f;\n    return true;\n}\n\nvoid LGPRileyDissonanceEffect::render(plugins::EffectContext& ctx) {\n    // Op art perceptual instability inspired by Bridget Riley\n    float speed = ctx.speed / 50.0f;\n    float intensity = ctx.brightness / 255.0f;\n\n    m_patternPhase += speed * 0.02f;\n\n    const float baseFreq = 12.0f;\n    const float freqMismatch = 0.08f;\n    float freq1 = baseFreq * (1.0f + freqMismatch / 2.0f);\n    float freq2 = baseFreq * (1.0f - freqMismatch / 2.0f);\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float distFromCenter = (float)centerPairDistance((uint16_t)i);\n        float normalizedDist = distFromCenter / (float)HALF_LENGTH;\n\n        float pattern1 = sinf(normalizedDist * freq1 * TWO_PI + m_patternPhase);\n        float pattern2 = sinf(normalizedDist * freq2 * TWO_PI - m_patternPhase);\n\n        // Apply contrast enhancement\n        float contrast = 1.0f + intensity * 4.0f;\n        pattern1 = tanhf(pattern1 * contrast) / tanhf(contrast);\n        pattern2 = tanhf(pattern2 * contrast) / tanhf(contrast);\n\n        float rivalryZone = fabsf(pattern1 - pattern2);\n\n        float bright1 = 128.0f + (pattern1 * 127.0f * intensity);\n        float bright2 = 128.0f + (pattern2 * 127.0f * intensity);\n\n        uint8_t brightness1 = (uint8_t)constrain(bright1, 0.0f, 255.0f);\n        uint8_t brightness2 = (uint8_t)constrain(bright2, 0.0f, 255.0f);\n\n        // Complementary colours increase dissonance\n        uint8_t hue1 = ctx.gHue;\n        uint8_t hue2 = (uint8_t)(ctx.gHue + 128);\n        const uint8_t sat = 200;\n\n        if (rivalryZone > 0.5f) {\n            hue1 = (uint8_t)(hue1 + (uint8_t)(rivalryZone * 30.0f));\n            hue2 = (uint8_t)(hue2 - (uint8_t)(rivalryZone * 30.0f));\n        }\n\n        uint8_t brightU8_1 = (uint8_t)((brightness1 * ctx.brightness) / 255);\n        ctx.leds[i] = ctx.palette.getColor(hue1, brightU8_1);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            uint8_t brightU8_2 = (uint8_t)((brightness2 * ctx.brightness) / 255);\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor(hue2, brightU8_2);\n        }\n    }\n}\n\nvoid LGPRileyDissonanceEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPRileyDissonanceEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Riley Dissonance\",\n        \"Op-art visual vibration\",\n        plugins::EffectCategory::UNCATEGORIZED,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

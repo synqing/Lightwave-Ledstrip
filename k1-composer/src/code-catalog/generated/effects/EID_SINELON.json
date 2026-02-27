@@ -1,0 +1,83 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_SINELON",
+  "effectIdHex": "0x0104",
+  "className": "SinelonEffect",
+  "displayName": "Sinelon",
+  "headerPath": "firmware/v2/src/effects/ieffect/SinelonEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/SinelonEffect.cpp",
+  "renderRange": [
+    23,
+    52
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        23,
+        25
+      ]
+    ],
+    "mapping": [
+      [
+        26,
+        30
+      ]
+    ],
+    "modulation": [
+      [
+        29,
+        29
+      ]
+    ],
+    "render": [
+      [
+        26,
+        26
+      ],
+      [
+        35,
+        36
+      ],
+      [
+        39,
+        39
+      ],
+      [
+        42,
+        42
+      ],
+      [
+        46,
+        46
+      ],
+      [
+        49,
+        49
+      ]
+    ],
+    "post": [
+      [
+        26,
+        26
+      ]
+    ],
+    "output": [
+      [
+        38,
+        42
+      ],
+      [
+        46,
+        49
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'mapping' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file SinelonEffect.cpp\n * @brief Sinelon effect implementation\n */\n\n#include \"SinelonEffect.h\"\n#include \"../CoreEffects.h\"\n#include \"../utils/FastLEDOptim.h\"\n#include <FastLED.h>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nSinelonEffect::SinelonEffect()\n{\n}\n\nbool SinelonEffect::init(plugins::EffectContext& ctx) {\n    return true;\n}\n\nvoid SinelonEffect::render(plugins::EffectContext& ctx) {\n    // CENTER ORIGIN SINELON - Oscillates outward from center\n    using namespace utils;\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    // Oscillate from center outward using utility function\n    int distFromCenter = fastled_beatsin16(13, 0, HALF_LENGTH);\n\n    // Set both sides of center\n    int pos1 = CENTER_RIGHT + distFromCenter;  // Right side\n    int pos2 = CENTER_LEFT - distFromCenter;   // Left side\n\n    CRGB color1 = ctx.palette.getColor(ctx.gHue, 192);\n    CRGB color2 = ctx.palette.getColor(ctx.gHue + 128, 192);\n\n    if (pos1 < STRIP_LENGTH) {\n        ctx.leds[pos1] = color1;\n        if (pos1 + STRIP_LENGTH < ctx.ledCount) {\n            int mirrorPos1 = pos1 + STRIP_LENGTH;\n            ctx.leds[mirrorPos1] = color1;\n        }\n    }\n    if (pos2 >= 0) {\n        ctx.leds[pos2] = color2;\n        if (pos2 + STRIP_LENGTH < ctx.ledCount) {\n            int mirrorPos2 = pos2 + STRIP_LENGTH;\n            ctx.leds[mirrorPos2] = color2;\n        }\n    }\n}\n\nvoid SinelonEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& SinelonEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Sinelon\",\n        \"Bouncing particle with palette trails\",\n        plugins::EffectCategory::PARTY,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n\n"
+}

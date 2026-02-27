@@ -520,7 +520,9 @@ void AudioActor::captureHop()
     m_diag.captureAttempts++;
     m_diag.lastCaptureStartUs = captureStart;
 
+    TRACE_BEGIN("i2s_dma_read");
     CaptureResult result = m_capture.captureHop(m_hopBuffer);
+    TRACE_END();
 
     uint64_t captureEnd = esp_timer_get_time();
     m_diag.lastCaptureEndUs = captureEnd;
@@ -671,6 +673,7 @@ void AudioActor::processHop()
 
     // === Phase: DC/AGC Loop ===
     BENCH_START_PHASE();
+    TRACE_BEGIN("dc_agc_loop");
 
     int32_t minC = 32767;
     int32_t maxC = -32768;
@@ -768,10 +771,12 @@ void AudioActor::processHop()
     if (m_agcGain > agcMaxGain) m_agcGain = agcMaxGain;
     m_lastAgcGain = m_agcGain;
 
+    TRACE_END();
     BENCH_END_PHASE(dcAgcLoopUs);
 
     // === Phase: RMS Compute ===
     BENCH_START_PHASE();
+    TRACE_BEGIN("rms_flux");
 
     float rmsRaw = computeRMS(m_hopBufferCentered, HOP_SIZE);
     const float rmsMappedUngated = mapLevelDb(rmsRaw, tuning.rmsDbFloor, tuning.rmsDbCeil);
@@ -789,6 +794,7 @@ void AudioActor::processHop()
         m_lastFluxMapped = fluxMapped;
     }
 
+    TRACE_END();
     BENCH_END_PHASE(rmsComputeUs);
 
     {
@@ -970,6 +976,7 @@ void AudioActor::processHop()
     // - Spectral flux from 64-bin Goertzel when ready (~10 Hz @ 12.8kHz)
     // - VU derivative from RMS every hop (50 Hz @ 12.8kHz)
     // 64-bin analysis fires when analyze64() completes (every 1500 samples)
+    TRACE_BEGIN("tempo_update");
     m_tempo.updateNovelty(
         m_analyze64Ready ? m_bins64Cached : nullptr,  // 64-bin magnitudes or nullptr
         audio::NUM_FREQS,                              // num_bins = 64 (Emotiscope parity)
@@ -986,6 +993,7 @@ void AudioActor::processHop()
 
     // Store for change detection (used by getTempo() diagnostics)
     m_lastTempoOutput = m_tempo.getOutput();
+    TRACE_END();
 
     // Note: advancePhase() is called by RendererActor at 120 FPS
     // This separation allows smooth beat tracking at render rate
@@ -1175,6 +1183,7 @@ void AudioActor::processHop()
 
     // === Phase: ControlBus Update ===
     BENCH_START_PHASE();
+    TRACE_BEGIN("controlbus_build");
 
         // 7a. Populate tempo tracker state for rhythmic saliency
     // Effects use MusicalGrid via ctx.audio.*, not these fields directly
@@ -1191,6 +1200,7 @@ void AudioActor::processHop()
 #endif
     m_controlBus.UpdateFromHop(now, raw);
 
+    TRACE_END();
     BENCH_END_PHASE(controlBusUs);
 
     // === Phase: Style Detection ===
@@ -1213,6 +1223,7 @@ void AudioActor::processHop()
 
     // === Phase: Publish ===
     BENCH_START_PHASE();
+    TRACE_BEGIN("snapshot_publish");
 
     // 8. Publish frame to renderer via lock-free SnapshotBuffer
     // Copy style detection results to frame before publishing
@@ -1250,6 +1261,7 @@ void AudioActor::processHop()
         m_diag.lastPublishSeq = frameToPublish.hop_seq;
     }
 
+    TRACE_END();
     BENCH_END_PHASE(publishUs);
 
     // === End Frame: Push sample to ring buffer ===
@@ -1538,6 +1550,9 @@ void AudioActor::aggregateBenchmarkStats()
 
     // MabuTrace: Record CPU load as a counter for Perfetto visualization
     TRACE_COUNTER("cpu_load", static_cast<int32_t>(m_benchmarkStats.cpuLoadPercent * 100));
+    // MabuTrace: Audio signal health counters for pipeline diagnostics
+    TRACE_COUNTER("audio_rms", static_cast<int32_t>(m_lastRmsMapped * 10000));
+    TRACE_COUNTER("audio_pre_gain_rms", static_cast<int32_t>(m_lastRmsPreGain * 10000));
 }
 #endif
 

@@ -81,6 +81,9 @@ namespace lightwaveos { namespace actors {
 #include <Arduino.h>
 #endif
 
+// MabuTrace instrumentation (zero-cost when FEATURE_MABUTRACE=0)
+#include "../../audio/AudioBenchmarkTrace.h"
+
 // Unified logging system (preserves colored output conventions)
 #define LW_LOG_TAG "Renderer"
 #include "utils/Log.h"
@@ -618,6 +621,7 @@ void RendererActor::onMessage(const Message& msg)
 
 void RendererActor::onTick()
 {
+    TRACE_SCOPE("render_frame");
     uint32_t frameStartUs = micros();
     static uint16_t s_wdtResetFrames = 0;
 
@@ -634,8 +638,11 @@ void RendererActor::onTick()
     // See PatternRegistry::shouldSkipColorCorrection() for full list
     uint8_t safeEffect = validateEffectId(m_currentEffect);
     if (!::PatternRegistry::shouldSkipColorCorrection(safeEffect)) {
-        enhancement::ColorCorrectionEngine::getInstance().processBuffer(m_leds, LedConfig::TOTAL_LEDS);
-        m_correctionApplyCount++;
+        {
+            TRACE_SCOPE("color_correction");
+            enhancement::ColorCorrectionEngine::getInstance().processBuffer(m_leds, LedConfig::TOTAL_LEDS);
+            m_correctionApplyCount++;
+        }
     } else {
         m_correctionSkipCount++;
     }
@@ -650,11 +657,17 @@ void RendererActor::onTick()
     // FastLED.show() blocks for ~9.6ms, preventing IDLE1 from running
     // We must yield here so IDLE1 gets CPU time before the blocking call
     // Use vTaskDelay(1) not vTaskDelay(0) - vTaskDelay(0) may not yield if nothing else is ready
-    vTaskDelay(1);
+    {
+        TRACE_SCOPE("pre_show_yield");
+        vTaskDelay(1);
+    }
 #endif
 
     // Push to strips
-    showLeds();
+    {
+        TRACE_SCOPE("show_leds");
+        showLeds();
+    }
 
     // Calculate frame time (pre-throttle)
     uint32_t frameEndUs = micros();
@@ -690,6 +703,9 @@ void RendererActor::onTick()
 
     // Update statistics (use raw time for drops, throttled time for FPS)
     updateStats(frameTimeUs, rawFrameTimeUs);
+
+    TRACE_COUNTER("fps", static_cast<int32_t>(m_stats.currentFPS));
+    TRACE_COUNTER("frame_us", static_cast<int32_t>(rawFrameTimeUs));
 
     // Publish FRAME_RENDERED event (every 10 frames to reduce overhead)
     if ((m_frameCount % 10) == 0) {
@@ -1022,7 +1038,11 @@ void RendererActor::renderFrame()
     bool audioAvailable = false;
     if (m_controlBusBuffer != nullptr) {
         // 1. Read latest ControlBusFrame BY VALUE (thread-safe)
-        uint32_t seq = m_controlBusBuffer->ReadLatest(m_lastControlBus);
+        uint32_t seq;
+        {
+            TRACE_SCOPE("audio_snapshot_read");
+            seq = m_controlBusBuffer->ReadLatest(m_lastControlBus);
+        }
 
         // Store previous sequence BEFORE updating (for availability gate)
         uint32_t prevSeq = m_lastControlBusSeq;
@@ -1124,13 +1144,16 @@ void RendererActor::renderFrame()
     // Check if zone composer is enabled
     if (m_zoneComposer != nullptr && m_zoneComposer->isEnabled()) {
         // Use ZoneComposer for multi-zone rendering
+        {
+            TRACE_SCOPE("zone_compose");
 #if FEATURE_AUDIO_SYNC
-        m_zoneComposer->render(m_leds, LedConfig::TOTAL_LEDS,
-                               &m_currentPalette, m_hue, m_frameCount, deltaTimeMs, &m_sharedAudioCtx);
+            m_zoneComposer->render(m_leds, LedConfig::TOTAL_LEDS,
+                                   &m_currentPalette, m_hue, m_frameCount, deltaTimeMs, &m_sharedAudioCtx);
 #else
-        m_zoneComposer->render(m_leds, LedConfig::TOTAL_LEDS,
-                               &m_currentPalette, m_hue, m_frameCount, deltaTimeMs, nullptr);
+            m_zoneComposer->render(m_leds, LedConfig::TOTAL_LEDS,
+                                   &m_currentPalette, m_hue, m_frameCount, deltaTimeMs, nullptr);
 #endif
+        }
         m_hue += 1;
         return;
     }
@@ -1267,7 +1290,10 @@ void RendererActor::renderFrame()
         ctx.frameNumber = m_effectFrameCount;
         ctx.totalTimeMs = static_cast<uint32_t>(m_effectTimeSeconds * 1000.0f + 0.5f);
 
-        m_effects[safeEffect].effect->render(ctx);
+        {
+            TRACE_SCOPE("effect_render");
+            m_effects[safeEffect].effect->render(ctx);
+        }
     }
 
     // Increment hue for effects that use it
@@ -1325,6 +1351,7 @@ void RendererActor::updateStats(uint32_t frameTimeUs, uint32_t rawFrameTimeUs)
     // Check for frame drop (exceeded budget)
     if (rawFrameTimeUs > LedConfig::FRAME_TIME_US) {
         m_stats.frameDrops++;
+        TRACE_INSTANT("frame_drop");
     }
 
     // Update min/max
@@ -1407,6 +1434,8 @@ void RendererActor::handleSetEffect(uint8_t effectId)
             }
             LW_LOGI("IEffect init: SUCCESS");
         }
+
+        TRACE_INSTANT("effect_change");
 
         LW_LOGI("Effect changed: %d (%s) -> %d (" LW_CLR_GREEN "%s" LW_ANSI_RESET ")",
                  oldEffect, getEffectName(oldEffect),

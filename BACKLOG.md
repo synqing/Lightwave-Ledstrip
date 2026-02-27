@@ -22,22 +22,16 @@ Prioritised engineering backlog. Items are tagged by category and roughly ordere
 
 ## Observability
 
-### [P1] Activate MabuTrace -- currently dead code
-- **Problem:** `TRACE_INIT()` is never called anywhere in the firmware. The circular buffer is never allocated, making every `TRACE_*` macro a silent no-op. The `trace_dump` serial command referenced in `platformio.ini` comments does not exist. The integration was wired up but never activated.
-- **Phase 0 fix (1-2 hours):**
-  1. Add `TRACE_INIT(64)` to `main.cpp` after serial init (gated by `FEATURE_MABUTRACE`)
-  2. Add a `trace_dump` serial command that calls `TRACE_FLUSH()` then streams JSON via `get_json_trace_chunked()`
-  3. Alternatively, call `mabutrace_start_server(81)` after WiFi is up for web-based capture
-- **Phase 1: Audio pipeline** -- add 5 missing spans (DC/AGC, RMS/flux, ControlBus build, snapshot publish, tempo update)
-- **Phase 2: Renderer pipeline** -- add 6 spans (render_frame_total, effect_render, zone_compose, color_correction, pre_show_yield, fastled_show) + FPS/frame_drop counters
-- **Phase 3: Cross-core flow** -- add `TRACE_FLOW_OUT/IN` to draw Perfetto arrows from audio publish (Core 0) to renderer read (Core 1)
-- **Total overhead:** ~8-12 us per frame (0.1% of budget)
-- **Reference:** `firmware-v3/docs/research/EMBEDDED_TRACING_RESEARCH_2026.md`
+### [DONE] ~~Activate MabuTrace~~ -- completed 2026-02-27
+- Phase 0: `TRACE_INIT(64)` in `main.cpp`, `trace` serial command, `esp32dev_audio_trace` build env
+- Phase 1: 6 audio spans (i2s_dma_read, dc_agc_loop, rms_flux, tempo_update, controlbus_build, snapshot_publish)
+- Phase 2: 12 renderer spans (render_frame, effect_render, zone_compose, colour_correction, pre_show_yield, show_leds, fastled_rmt_show, audio_snapshot_read + fps/frame_us counters + frame_drop/effect_change instants)
+- System-wide `config/Trace.h` header, `AudioBenchmarkTrace.h` is now a redirect
+- **Remaining:** Phase 3 (cross-core `TRACE_FLOW_OUT/IN` arrows) deferred to Future section
 
-### [P2] Create MabuTrace capture guide
-- **Problem:** `docs/debugging/MABUTRACE_GUIDE.md` is referenced in code comments but never existed.
-- **Action:** Write the guide covering: build with trace env, serial capture workflow, Perfetto UI import, interpreting dual-core timelines.
-- **WiFi constraint:** The built-in MabuTrace web server requires WiFi. Dev constraint says "NEVER connect to ESP32 WiFi AP from dev machine." Serial dump is the primary capture path.
+### [DONE] ~~MabuTrace capture guide~~ -- completed 2026-02-27
+- 454-line guide at `firmware-v3/docs/debugging/MABUTRACE_GUIDE.md`
+- Covers: build, capture, Perfetto import, span reference, troubleshooting, licence isolation
 
 ---
 

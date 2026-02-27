@@ -9,6 +9,9 @@
 #include <esp_timer.h>
 #endif
 
+// MabuTrace instrumentation (zero-cost when FEATURE_MABUTRACE=0)
+#include "../../audio/AudioBenchmarkTrace.h"
+
 #define LW_LOG_TAG "LedDriver_S3"
 #include "utils/Log.h"
 
@@ -119,7 +122,10 @@ uint16_t LedDriver_S3::getLedCount(uint8_t stripIndex) const {
 void LedDriver_S3::show() {
 #ifndef NATIVE_BUILD
     uint32_t start = static_cast<uint32_t>(esp_timer_get_time());
-    FastLED.show();
+    {
+        TRACE_SCOPE("fastled_rmt_show");
+        FastLED.show();
+    }
     uint32_t end = static_cast<uint32_t>(esp_timer_get_time());
     updateShowStats(end - start);
 #else

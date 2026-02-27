@@ -23,6 +23,9 @@
 #include "utils/Log.h"
 
 #include "config/features.h"
+#if FEATURE_MABUTRACE
+#include "config/Trace.h"
+#endif
 #include "core/actors/ActorSystem.h"
 #include "hardware/EncoderManager.h"
 #include "core/actors/RendererActor.h"
@@ -120,6 +123,11 @@ void setup() {
 
     // Telemetry boot heartbeat (for trace capture verification)
     Serial.println("{\"event\":\"telemetry.boot\",\"ts_mono_ms\":0,\"version\":\"2.0\"}");
+
+#if FEATURE_MABUTRACE
+    TRACE_INIT(64);  // 64 KB circular buffer for Perfetto traces
+    LW_LOGI("MabuTrace: INITIALISED (64 KB buffer)");
+#endif
 
     // OTA boot verification -- check rollback status before anything else
 #ifndef NATIVE_BUILD
@@ -426,6 +434,8 @@ void setup() {
     Serial.println("  dbg memory    - Print heap/stack NOW");
     Serial.println("  dbg interval status <N>  - Auto status every N sec (0=off)");
     Serial.println("  dbg interval spectrum <N>- Auto spectrum every N sec (0=off)");
+    Serial.println("\nTracing (Perfetto):");
+    Serial.println("  trace   - Dump trace buffer as JSON (open at ui.perfetto.dev)");
 #if FEATURE_WEB_SERVER
     Serial.println("\nWeb API:");
     Serial.println("  GET  /api/v1/effects - List effects");
@@ -1348,6 +1358,26 @@ void loop() {
             }
         }
 #endif
+
+        // -----------------------------------------------------------------
+        // Trace Commands: trace (Perfetto timeline export)
+        // -----------------------------------------------------------------
+        else if (inputLower == "trace") {
+            handledMulti = true;
+#if FEATURE_MABUTRACE
+            TRACE_FLUSH();
+            Serial.println("=== MabuTrace Dump ===");
+            Serial.println("Flushing trace buffer...");
+            // Use MabuTrace's chunked JSON export via serial
+            mabutrace_get_json_trace_chunked([](const char* chunk, size_t len) {
+                Serial.write(chunk, len);
+            });
+            Serial.println("\n=== End Trace ===");
+            Serial.println("Copy the JSON between markers and open at https://ui.perfetto.dev");
+#else
+            Serial.println("MabuTrace not enabled. Build with: pio run -e esp32dev_audio_trace");
+#endif
+        }
 
         // -----------------------------------------------------------------
         // Zone Speed Commands: zs

@@ -21,6 +21,18 @@ compile_commands.json
 *.sublime-project
 *.sublime-workspace
 
+# AI/IDE agent configurations (per-project)
+**/.agent/
+**/.agents/
+**/.continue/
+**/.kiro/
+**/.qoder/
+**/.trae/
+**/.windsurf/
+
+# Xcode user data
+**/xcuserdata/
+
 # OS
 .DS_Store
 Thumbs.db
@@ -28,6 +40,7 @@ Thumbs.db
 # Python
 __pycache__/
 *.pyc
+.venv*/
 
 # Temporary files
 *.tmp
@@ -48,6 +61,10 @@ wifi_credentials.ini
 # Claude / local agent tooling (keep folder structure tracked via .claude/.gitkeep)
 .claude/**
 !.claude/.gitkeep
+# Nested .claude directories in subprojects
+lightwave-ios-v2/.claude/
+tab5-encoder/.claude/
+k1-composer/.claude/
 
 # Local semantic tooling / MCP manifests (environment-specific)
 .code-context/

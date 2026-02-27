@@ -1,0 +1,160 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_PERLIN_SHOCKLINES",
+  "effectIdHex": "0x0B01",
+  "className": "LGPPerlinShocklinesEffect",
+  "displayName": "LGP Perlin Shocklines",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPPerlinShocklinesEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPPerlinShocklinesEffect.cpp",
+  "renderRange": [
+    45,
+    167
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        47,
+        47
+      ],
+      [
+        53,
+        53
+      ],
+      [
+        57,
+        57
+      ],
+      [
+        59,
+        59
+      ],
+      [
+        62,
+        62
+      ],
+      [
+        98,
+        98
+      ],
+      [
+        130,
+        130
+      ]
+    ],
+    "mapping": [
+      [
+        49,
+        50
+      ],
+      [
+        80,
+        80
+      ],
+      [
+        99,
+        99
+      ],
+      [
+        112,
+        112
+      ],
+      [
+        127,
+        127
+      ],
+      [
+        130,
+        130
+      ],
+      [
+        133,
+        133
+      ],
+      [
+        151,
+        151
+      ],
+      [
+        153,
+        153
+      ]
+    ],
+    "modulation": [
+      [
+        61,
+        62
+      ],
+      [
+        79,
+        79
+      ],
+      [
+        102,
+        102
+      ],
+      [
+        160,
+        160
+      ]
+    ],
+    "render": [
+      [
+        122,
+        122
+      ],
+      [
+        124,
+        124
+      ],
+      [
+        135,
+        135
+      ],
+      [
+        151,
+        152
+      ],
+      [
+        155,
+        155
+      ],
+      [
+        158,
+        158
+      ],
+      [
+        162,
+        164
+      ]
+    ],
+    "post": [
+      [
+        124,
+        124
+      ]
+    ],
+    "output": [
+      [
+        135,
+        135
+      ],
+      [
+        157,
+        158
+      ],
+      [
+        160,
+        161
+      ],
+      [
+        164,
+        164
+      ]
+    ]
+  },
+  "mappingConfidence": "high",
+  "mappingWarnings": [],
+  "sourceText": "/**\n * @file LGPPerlinShocklinesEffect.cpp\n * @brief LGP Perlin Shocklines - Beat/flux injects sharp travelling ridges\n * \n * Audio-reactive Perlin effect:\n * - Base noise field provides organic texture\n * - Beat/flux events inject shockwaves at centre\n * - Shockwaves propagate outward and dissolve\n * - Treble modulates ridge sharpness\n */\n\n#include \"LGPPerlinShocklinesEffect.h\"\n#include \"../CoreEffects.h\"\n#include \"../../config/features.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPPerlinShocklinesEffect::LGPPerlinShocklinesEffect()\n    : m_noiseX(0)\n    , m_noiseY(0)\n    , m_waveFront(0)\n    , m_waveEnergy(0.0f)\n    , m_time(0)\n    , m_momentum(0.0f)\n    , m_lastHopSeq(0)\n{\n}\n\nbool LGPPerlinShocklinesEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_noiseX = random16();\n    m_noiseY = random16();\n    m_waveFront = 0;\n    m_waveEnergy = 0.0f;\n    m_time = 0;\n    m_momentum = 0.0f;\n    m_lastHopSeq = 0;\n    return true;\n}\n\nvoid LGPPerlinShocklinesEffect::render(plugins::EffectContext& ctx) {\n    // CENTRE ORIGIN - Shockwaves propagate outward from centre\n    const bool hasAudio = ctx.audio.available;\n    float dt = ctx.getSafeDeltaSeconds();\n    float speedNorm = ctx.speed / 50.0f;\n    float intensityNorm = ctx.brightness / 255.0f;\n\n    // =========================================================================\n    // Audio Analysis - Inject Shockwaves\n    // =========================================================================\n#if FEATURE_AUDIO_SYNC\n    if (hasAudio) {\n        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);\n        if (newHop) {\n            m_lastHopSeq = ctx.audio.controlBus.hop_seq;\n            \n            // Beat/flux → inject shockwave at centre\n            float trigger = ctx.audio.flux() * 0.5f + ctx.audio.beatStrength() * 0.5f;\n            if (trigger > 0.3f) {\n                // Start a new travelling ridge from the centre.\n                // Keep it stable and predictable (no accumulating buffer explosion).\n                m_waveFront = 0;\n                float shockEnergy = trigger * trigger; // emphasise strong events\n                if (shockEnergy > m_waveEnergy) {\n                    m_waveEnergy = shockEnergy;\n                }\n            }\n        }\n    }\n#endif\n\n    // =========================================================================\n    // Travelling Ridge Update (centre-origin)\n    // =========================================================================\n    // Advance wavefront outward (0..79), decay energy smoothly.\n    float waveSpeed = (0.45f + 0.85f * speedNorm); // per-second in \"distance units\"\n    uint8_t advance = (uint8_t)(waveSpeed * (dt * 60.0f)); // dt-scaled step\n    if (advance < 1) advance = 1;\n    if (m_waveEnergy > 0.01f) {\n        uint16_t next = (uint16_t)m_waveFront + advance;\n        m_waveFront = (next > 79) ? 79 : (uint8_t)next;\n        // Energy decay (avoid strobe) - dt-corrected\n        m_waveEnergy *= powf(0.90f, dt * 60.0f);\n    } else {\n        m_waveEnergy = 0.0f;\n    }\n\n    // =========================================================================\n    // Audio-Driven Momentum (Emotiscope-style)\n    // =========================================================================\n    float push = 0.0f;\n#if FEATURE_AUDIO_SYNC\n    if (hasAudio) {\n        float energy = ctx.audio.rms();\n        push = energy * energy * energy * energy * speedNorm * 0.1f; // Heavy emphasis on loud\n    }\n#endif\n    m_momentum *= powf(0.99f, dt * 60.0f); // Smooth decay (dt-corrected)\n    if (push > m_momentum) {\n        m_momentum = push; // Only boost, no jarring drops\n    }\n\n    // =========================================================================\n    // Noise Field Updates (REVERSED for center→edges flow)\n    // =========================================================================\n    // Keep coordinates large enough to actually vary noise across dist.\n    // SUBTRACT to reverse direction (center→edges instead of edges→center)\n    uint16_t baseStep = (uint16_t)(6 + (uint16_t)(speedNorm * 22.0f));\n    uint16_t momentumStep = (uint16_t)(m_momentum * 800.0f); // Scale momentum to step size\n    uint16_t tStep = baseStep + momentumStep;\n    \n    // Reverse: subtract instead of add (makes pattern flow center→edges)\n    m_time = (uint16_t)(m_time - tStep);\n    m_noiseX = (uint16_t)(m_noiseX - (uint16_t)(13 + (tStep >> 1)));\n    m_noiseY = (uint16_t)(m_noiseY - (uint16_t)(9 + (tStep >> 2)));\n\n    // =========================================================================\n    // Rendering (centre-origin pattern)\n    // =========================================================================\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    // Get treble for ridge sharpness\n    float trebleNorm = 0.0f;\n#if FEATURE_AUDIO_SYNC\n    if (hasAudio) {\n        trebleNorm = ctx.audio.treble();\n    }\n#endif\n    float sharpness = 0.3f + trebleNorm * 0.7f; // 0.3-1.0\n\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        // Calculate distance from centre pair\n        uint16_t dist = centerPairDistance(i);\n        uint8_t dist8 = (uint8_t)dist;\n        \n        // Sample base noise field\n        // Use centre distance as the spatial axis (no linear sweeps).\n        uint8_t baseNoise = inoise8((uint16_t)(m_noiseX + dist * 23), (uint16_t)(m_time));\n\n        // Travelling ridge at the wavefront (simple, fast profile)\n        uint8_t ridge = qsub8(255, (uint8_t)(abs((int16_t)dist8 - (int16_t)m_waveFront) * 9));\n        ridge = scale8(ridge, (uint8_t)(m_waveEnergy * 255.0f));\n\n        // Combine noise + ridge\n        uint8_t combined8 = qadd8((uint8_t)(baseNoise >> 1), scale8(ridge, (uint8_t)(180 + sharpness * 75.0f)));\n        \n        // Map to palette and brightness\n        uint8_t paletteIndex = combined8 + ctx.gHue;\n        uint8_t brightness = scale8(qadd8(48, combined8), (uint8_t)(255.0f * intensityNorm));\n        \n        CRGB color = ctx.palette.getColor(paletteIndex, brightness);\n        \n        // Apply to strip 1\n        ctx.leds[i] = color;\n        \n        // Apply to strip 2 (mirrored, phase offset)\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            uint8_t paletteIndex2 = (uint8_t)(paletteIndex + 48);\n            CRGB color2 = ctx.palette.getColor(paletteIndex2, brightness);\n            ctx.leds[i + STRIP_LENGTH] = color2;\n        }\n    }\n}\n\nvoid LGPPerlinShocklinesEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPPerlinShocklinesEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Perlin Shocklines\",\n        \"Beat-driven travelling ridges propagating from centre\",\n        plugins::EffectCategory::PARTY,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n\n"
+}

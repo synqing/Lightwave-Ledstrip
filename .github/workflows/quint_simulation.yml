@@ -4,12 +4,12 @@ on:
   pull_request:
     branches: [ main, feat/* ]
     paths:
-      - 'firmware/v2/specs/quint/choreo/*.qnt'
+      - 'firmware-v3/specs/quint/choreo/*.qnt'
       - '.github/workflows/quint_simulation.yml'
   push:
     branches: [ main, feat/* ]
     paths:
-      - 'firmware/v2/specs/quint/choreo/*.qnt'
+      - 'firmware-v3/specs/quint/choreo/*.qnt'
       - '.github/workflows/quint_simulation.yml'
   workflow_dispatch:  # Allow manual trigger
 
@@ -33,7 +33,7 @@ jobs:
           python-version: '3.10'
       
       - name: Run simulation
-        working-directory: firmware/v2/specs/quint/choreo
+        working-directory: firmware-v3/specs/quint/choreo
         run: |
           mkdir -p traces/sim
           quint run lightwave_step.qnt \
@@ -42,7 +42,7 @@ jobs:
             --out-itf=traces/sim/ci_out.itf.json
       
       - name: Validate ITF
-        working-directory: firmware/v2/specs/quint/choreo
+        working-directory: firmware-v3/specs/quint/choreo
         run: |
           # Validate all generated ITF files
           for itf_file in traces/sim/ci_out*.itf.json; do

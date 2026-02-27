@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_PERCEPTUAL_BLEND",
+  "effectIdHex": "0x0709",
+  "className": "LGPPerceptualBlendEffect",
+  "displayName": "LGP Perceptual Blend",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPPerceptualBlendEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPPerceptualBlendEffect.cpp",
+  "renderRange": [
+    26,
+    57
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        26,
+        28
+      ]
+    ],
+    "mapping": [
+      [
+        36,
+        36
+      ],
+      [
+        39,
+        40
+      ]
+    ],
+    "modulation": [
+      [
+        32,
+        32
+      ],
+      [
+        38,
+        40
+      ]
+    ],
+    "render": [
+      [
+        34,
+        34
+      ],
+      [
+        47,
+        47
+      ],
+      [
+        54,
+        54
+      ]
+    ],
+    "post": [
+      [
+        54,
+        55
+      ]
+    ],
+    "output": [
+      [
+        34,
+        34
+      ],
+      [
+        47,
+        47
+      ],
+      [
+        49,
+        49
+      ],
+      [
+        54,
+        54
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPPerceptualBlendEffect.cpp\n * @brief LGP Perceptual Blend effect implementation\n */\n\n#include \"LGPPerceptualBlendEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPPerceptualBlendEffect::LGPPerceptualBlendEffect()\n    : m_phase(0.0f)\n{\n}\n\nbool LGPPerceptualBlendEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_phase = 0.0f;\n    return true;\n}\n\nvoid LGPPerceptualBlendEffect::render(plugins::EffectContext& ctx) {\n    // Uses perceptually uniform color space for natural mixing\n    float dt = ctx.getSafeDeltaSeconds();\n    float speed = ctx.speed / 255.0f;\n    float intensity = ctx.brightness / 255.0f;\n\n    m_phase += speed * 0.01f * 60.0f * dt;  // dt-corrected\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float distFromCenter = (float)centerPairDistance((uint16_t)i);\n        float normalizedDist = distFromCenter / (float)HALF_LENGTH;\n\n        float L = 50.0f + 50.0f * sinf(m_phase);\n        float a = 50.0f * cosf(m_phase + normalizedDist * PI);\n        float b = 50.0f * sinf(m_phase - normalizedDist * PI);\n\n        CRGB color;\n        color.r = (uint8_t)(constrain(L + a * 2.0f, 0.0f, 255.0f) * intensity);\n        color.g = (uint8_t)(constrain(L - a - b, 0.0f, 255.0f) * intensity);\n        color.b = (uint8_t)(constrain(L + b * 2.0f, 0.0f, 255.0f) * intensity);\n\n        ctx.leds[i] = color;\n\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            CRGB color2;\n            color2.r = (uint8_t)(constrain(L - a * 2.0f, 0.0f, 255.0f) * intensity);\n            color2.g = (uint8_t)(constrain(L + a + b, 0.0f, 255.0f) * intensity);\n            color2.b = (uint8_t)(constrain(L - b * 2.0f, 0.0f, 255.0f) * intensity);\n            ctx.leds[i + STRIP_LENGTH] = color2;\n        }\n    }\n}\n\nvoid LGPPerceptualBlendEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPPerceptualBlendEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Perceptual Blend\",\n        \"Lab color space mixing\",\n        plugins::EffectCategory::UNCATEGORIZED,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

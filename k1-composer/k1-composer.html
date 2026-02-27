@@ -1,0 +1,2290 @@
+<!DOCTYPE html>
+<html lang="en-GB"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>K1 Composer Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;460;500;520;560;600;640;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
+<style>
+/* ══ DESIGN TOKENS ══ */
+:root {
+  /* Backgrounds */
+  --bg: #0c0d10;
+  --bg-deep: #090a0d;
+  --surface: #16181d;
+  --surface-raised: #1c1f26;
+  /* Borders */
+  --border: rgba(255,255,255,0.08);
+  --border-subtle: rgba(255,255,255,0.05);
+  /* Text hierarchy */
+  --text: #ececef;
+  --text-secondary: #8b8d98;
+  --text-tertiary: #5c5e6a;
+  --text-feed: #9ca3af;
+  --text-feed-hover: #b6c0cf;
+  --text-min: 0.5625rem;
+  /* Semantic colours */
+  --accent: #6e56cf;
+  --accent-hover: #7c66d4;
+  --accent-subtle: rgba(110,86,207,0.15);
+  --danger: #e5484d;
+  --danger-hover: #ec5d5e;
+  --danger-subtle: rgba(229,72,77,0.12);
+  --success: #30a46c;
+  --success-subtle: rgba(48,164,108,0.12);
+  --warning: #f5a623;
+  --warning-subtle: rgba(245,166,35,0.12);
+  --info: #3b82f6;
+  --info-subtle: rgba(59,130,246,0.12);
+  /* Pill text */
+  --pill-info-text: #93c5fd;
+  --pill-success-text: #86efac;
+  --pill-warning-text: #fcd34d;
+  --pill-error-text: #fca5a5;
+  /* LED preview */
+  --led-off: #1e2028;
+  /* Layout */
+  --radius: 10px;
+  --radius-lg: 14px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.25);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  /* Typography */
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono: 'IBM Plex Mono', 'Menlo', monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.07); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.13); }
+
+/* ══ EXTRACTED UTILITY CLASSES (FLAW-03) ══ */
+.topbar-chrome-row {
+  display: flex; align-items: center; padding: 5px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.04); gap: 6px; position: relative;
+}
+.panel-body-stack { display: flex; flex-direction: column; gap: 9px; }
+.btn-sm { padding: 5px 13px; font-size: 0.625rem; gap: 4px; }
+.divider-v { width: 1px; height: 18px; background: rgba(255,255,255,0.06); margin: 0 2px; flex-shrink: 0; }
+.divider-h { height: 1px; background: var(--border-subtle); width: 100%; }
+.meta-label { font-family: var(--mono); font-size: 0.5rem; color: var(--text-tertiary); }
+.strip-header { display: flex; justify-content: space-between; margin-bottom: 4px; }
+
+/* ══ BADGE COUNT CLASSES (FLAW-05) ══ */
+.badge-count-critical {
+  font-size: 0.4375rem; padding: 1px 5px;
+  background: var(--danger-subtle); color: var(--danger); border: 1px solid rgba(229,72,77,0.18);
+}
+.badge-count-warning {
+  font-size: 0.4375rem; padding: 1px 5px;
+  background: var(--warning-subtle); color: var(--warning); border: 1px solid rgba(245,166,35,0.18);
+}
+.badge-count-muted {
+  font-size: 0.4375rem; padding: 1px 5px;
+}
+.diag-critical {
+  background: var(--danger-subtle); color: var(--danger); border: 1px solid rgba(229,72,77,0.18);
+}
+.diag-degraded {
+  background: var(--warning-subtle); color: var(--warning); border: 1px solid rgba(245,166,35,0.18);
+}
+.diag-idle { /* uses badge-muted defaults */ }
+.diag-healthy { /* uses badge-success defaults */ }
+
+/* ══ RANGE SLIDERS ══ */
+input[type="range"] {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 3px;
+  background: rgba(255,255,255,0.07);
+  border-radius: 2px; outline: none; cursor: pointer;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 13px; height: 13px; border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  box-shadow: 0 0 0 2px rgba(110,86,207,0.3);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 4px rgba(110,86,207,0.22);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 13px; height: 13px; border-radius: 50%;
+  background: var(--accent); border: 2px solid var(--surface); cursor: pointer;
+}
+input[type="range"]:disabled { opacity: 0.3; cursor: not-allowed; }
+input[type="range"]:disabled::-webkit-slider-thumb { cursor: not-allowed; transform: none; }
+
+/* ══ CODE GLOW ══ */
+.code-glow { position: relative; }
+.code-glow::before {
+  content: '';
+  position: absolute; inset: -1px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, rgba(110,86,207,0.22), rgba(59,130,246,0.10), rgba(110,86,207,0.05));
+  z-index: -1; opacity: 0.7;
+  pointer-events: none;
+}
+
+/* ══ VIEWPORT (3D editor shell mock) ══ */
+.viewport-shell {
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(255,255,255,0.015), rgba(255,255,255,0.008));
+}
+.viewport-top {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: rgba(0,0,0,0.20);
+  backdrop-filter: blur(16px) saturate(1.35);
+  -webkit-backdrop-filter: blur(16px) saturate(1.35);
+}
+.viewport-title {
+  font-family: var(--mono); font-size: 0.5rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-tertiary);
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.viewport-title .dot {
+  width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,0.18);
+}
+.viewport-tools {
+  margin-left: auto; display: inline-flex; gap: 4px; align-items: center;
+}
+.viewport-canvas {
+  position: relative; height: 170px;
+  background:
+    radial-gradient(1200px 260px at 50% 0%, rgba(124,92,252,0.10), transparent 55%),
+    radial-gradient(900px 260px at 50% 100%, rgba(59,130,246,0.06), transparent 55%),
+    linear-gradient(180deg, rgba(10,11,14,0.85), rgba(10,11,14,0.95));
+}
+.viewport-grid {
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+  background-size: 22px 22px;
+  opacity: 0.10;
+  transform: perspective(800px) rotateX(58deg) translateY(38px);
+  transform-origin: 50% 0%;
+  filter: blur(0.2px);
+}
+.viewport-hud {
+  position: absolute; top: 8px; left: 8px;
+  display: flex; gap: 6px; align-items: center; pointer-events: none;
+}
+.viewport-hud .badge-status { font-size: 0.4375rem; padding: 1px 6px; }
+.viewport-axis {
+  position: absolute; top: 8px; right: 8px;
+  width: 34px; height: 34px; border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(0,0,0,0.25);
+  display: grid; place-items: center;
+  font-family: var(--mono); font-size: 0.5rem; color: var(--text-tertiary);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  pointer-events: none;
+}
+.viewport-axis span { display: inline-flex; align-items: center; gap: 3px; }
+.viewport-axis i {
+  width: 6px; height: 6px; border-radius: 2px; display: inline-block;
+  background: rgba(255,255,255,0.15);
+}
+.lgp-mock {
+  position: absolute; left: 50%; top: 54%;
+  transform: translate(-50%, -50%) perspective(900px) rotateX(62deg) rotateZ(-18deg);
+  width: 76%; max-width: 360px; height: 42px;
+}
+.lgp-plate {
+  position: absolute; inset: 0; border-radius: 12px;
+  background: linear-gradient(90deg,
+    rgba(124,92,252,0.14), rgba(255,255,255,0.06) 25%,
+    rgba(255,255,255,0.04) 50%, rgba(255,255,255,0.06) 75%,
+    rgba(59,130,246,0.10));
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow: 0 18px 55px rgba(0,0,0,0.55);
+  overflow: hidden;
+}
+.lgp-plate::before {
+  content: ""; position: absolute; inset: -60% -20%;
+  background: radial-gradient(circle at 30% 40%, rgba(124,92,252,0.18), transparent 60%),
+              radial-gradient(circle at 70% 60%, rgba(59,130,246,0.14), transparent 65%);
+  transform: rotate(12deg); opacity: 0.9;
+}
+.lgp-edge {
+  position: absolute; top: 8px; width: 10px; height: calc(100% - 16px);
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.20), rgba(255,255,255,0.05));
+  opacity: 0.55; filter: blur(0.1px);
+}
+.lgp-edge-left { left: 8px; box-shadow: 0 0 18px rgba(124,92,252,0.25); }
+.lgp-edge-right { right: 8px; box-shadow: 0 0 18px rgba(59,130,246,0.18); }
+.lgp-glow {
+  position: absolute; inset: -14px -20px;
+  background: radial-gradient(closest-side at 50% 50%, rgba(124,92,252,0.12), transparent 70%);
+  opacity: 0.8; filter: blur(8px); pointer-events: none;
+}
+.viewport-bottom {
+  padding: 6px 10px; border-top: 1px solid var(--border-subtle);
+  font-family: var(--mono); font-size: 0.5rem; color: var(--text-tertiary);
+  display: flex; justify-content: space-between; gap: 8px;
+}
+.viewport-hint { color: var(--text-tertiary); }
+
+/* ══ LED STRIPS ══ */
+.strip { display: flex; gap: 1px; }
+.strip span { flex: 1 1 0; border-radius: 1px; background: var(--led-off); transition: background 0.1s; }
+
+/* ══ PIPELINE NODES ══ */
+.algo-flow { display: grid; grid-template-columns: repeat(3,1fr); gap: 5px; }
+.algo-flow div {
+  border: 1px solid var(--border); border-radius: 5px; padding: 7px 4px;
+  text-align: center; font-weight: 500; font-size: 0.625rem; background: var(--bg);
+  color: var(--text-tertiary); transition: all 0.18s ease;
+  font-family: var(--mono); letter-spacing: 0.02em;
+}
+.algo-flow .is-active {
+  background: var(--accent-subtle); border-color: var(--accent);
+  color: var(--text); box-shadow: 0 0 10px rgba(110,86,207,0.18);
+}
+
+/* ══ SPEED GROUP ══ */
+.speed-group {
+  display: inline-flex; border: 1px solid var(--border); border-radius: 5px; overflow: hidden;
+}
+.speed-group button {
+  border: none; border-right: 1px solid var(--border); border-radius: 0;
+  padding: 4px 9px; font-size: 0.625rem; font-family: var(--mono);
+  min-height: 28px; background: var(--bg); color: var(--text-tertiary);
+  cursor: pointer; transition: all 0.13s ease;
+}
+.speed-group button:last-child { border-right: none; }
+.speed-group button.is-active { background: var(--accent); color: white; }
+.speed-group button:hover:not(.is-active) { background: var(--surface-raised); color: var(--text-secondary); }
+
+/* ══ TELEMETRY / EVENT LOG ══ */
+.telemetry-log {
+  margin: 0; max-height: 220px; overflow: auto;
+  background: var(--bg-deep); border-radius: 6px;
+  border: 1px solid var(--border-subtle); padding: 0;
+  font-family: var(--mono); font-size: 0.6875rem; line-height: 1.65;
+}
+.telemetry-log .feed-row {
+  display: grid; grid-template-columns: auto auto 1fr;
+  align-items: start; gap: 10px; padding: 6px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.035);
+  transition: background 0.1s ease;
+}
+.telemetry-log .feed-row:hover { background: rgba(255,255,255,0.02); }
+.telemetry-log .feed-row:last-child { border-bottom: none; }
+.telemetry-log .feed-ts {
+  color: var(--text-tertiary); white-space: nowrap;
+  font-size: var(--text-min); line-height: 1.9; opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+.telemetry-log .feed-pill {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 1px 6px; border-radius: 4px;
+  font-size: 0.5rem; font-weight: 560;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  white-space: nowrap; line-height: 1.7;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.telemetry-log .feed-pill.pill-info { background: var(--info-subtle); color: var(--pill-info-text); border-color: rgba(59,130,246,0.18); }
+.telemetry-log .feed-pill.pill-success { background: var(--success-subtle); color: var(--pill-success-text); border-color: rgba(48,164,108,0.18); }
+.telemetry-log .feed-pill.pill-warning { background: var(--warning-subtle); color: var(--pill-warning-text); border-color: rgba(245,166,35,0.18); }
+.telemetry-log .feed-pill.pill-error { background: var(--danger-subtle); color: var(--pill-error-text); border-color: rgba(229,72,77,0.18); }
+.telemetry-log .feed-pill.pill-default { background: rgba(255,255,255,0.04); color: var(--text-tertiary); border-color: rgba(255,255,255,0.06); }
+.telemetry-log .feed-msg { color: var(--text-feed); flex: 1; min-width: 0; word-break: break-all; }
+.telemetry-log .feed-row:hover .feed-msg { color: var(--text-feed-hover); }
+
+/* ══ KV GRID ══ */
+.kv-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 3px; font-family: var(--mono); font-size: var(--text-min); }
+.kv-grid div {
+  border: 1px solid var(--border-subtle); border-radius: 4px;
+  padding: 5px 7px; background: var(--bg);
+  color: var(--text-tertiary); line-height: 1.4;
+}
+
+/* ══ TOAST ══ */
+.toast {
+  position: fixed; bottom: 1.25rem; right: 1.25rem;
+  max-width: min(380px,calc(100vw - 2rem));
+  border-radius: 7px; border: 1px solid var(--border);
+  background: var(--surface-raised); box-shadow: var(--shadow);
+  padding: 9px 13px; font-size: 0.6875rem; color: var(--text);
+  opacity: 0; transform: translateY(8px); pointer-events: none;
+  transition: opacity 180ms ease, transform 180ms ease; z-index: 100;
+  font-family: var(--mono);
+}
+.toast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+
+/* ══ CODE LINES ══ */
+.code-line {
+  display: block; padding: 0 14px;
+  border-left: 2px solid transparent;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.code-line .keyword { color: #c084fc; }
+.code-line .fn      { color: #60a5fa; }
+.code-line .string  { color: #34d399; }
+.code-line .number  { color: #fbbf24; }
+.code-line .comment { color: #4b5563; font-style: italic; }
+.code-line .op      { color: #64748b; }
+.code-line .type    { color: #f472b6; }
+.code-line .param   { color: #a78bfa; }
+.code-line.active-line {
+  background: rgba(110,86,207,0.07) !important;
+  border-left-color: var(--accent) !important;
+}
+
+/* ══ BUTTONS ══ */
+.btn {
+  min-height: 28px; border: 1px solid var(--border); border-radius: 5px;
+  padding: 4px 10px; background: var(--surface-raised);
+  color: var(--text-secondary); font-family: var(--font);
+  font-weight: 520; font-size: 0.6875rem; cursor: pointer;
+  transition: all 0.13s ease;
+  display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+}
+.btn:hover:not(:disabled) { background: rgba(255,255,255,0.06); color: var(--text); border-color: rgba(255,255,255,0.12); }
+.btn:active:not(:disabled) { transform: scale(0.98); }
+.btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.btn-accent { background: var(--accent); border-color: transparent; color: white; font-weight: 560; }
+.btn-accent:hover:not(:disabled) { background: var(--accent-hover); color: white; border-color: transparent; }
+.btn-danger { background: var(--danger); border-color: transparent; color: white; font-weight: 560; }
+.btn-danger:hover:not(:disabled) { background: var(--danger-hover); color: white; border-color: transparent; }
+.btn-ghost { background: transparent; border-color: transparent; color: var(--text-tertiary); }
+.btn-ghost:hover:not(:disabled) { background: rgba(255,255,255,0.04); color: var(--text-secondary); border-color: transparent; }
+.btn-icon {
+  min-height: 26px; min-width: 26px; padding: 3px;
+  border-radius: 6px; display: inline-flex;
+  align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.06);
+  color: var(--text-tertiary); cursor: pointer;
+  transition: all 0.13s ease;
+}
+.btn-icon:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.10); color: var(--text-secondary); }
+.btn-icon:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* ══ PANELS ══ */
+.panel {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); overflow: hidden;
+}
+.panel-header {
+  padding: 8px 13px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 7px;
+  font-size: 0.6875rem; font-weight: 560;
+  background: rgba(255,255,255,0.015);
+}
+.panel-header .panel-icon { display: flex; align-items: center; color: var(--text-tertiary); }
+.panel-badge {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 3px;
+  border-radius: 999px; padding: 2px 7px;
+  font-size: 0.5rem; font-weight: 560;
+  text-transform: uppercase; letter-spacing: 0.05em; font-family: var(--mono);
+}
+.panel-body { padding: 11px 13px; }
+
+/* ══ STATUS BADGES ══ */
+.badge-status {
+  display: inline-flex; align-items: center; gap: 4px;
+  border-radius: 999px; padding: 2px 8px;
+  font-size: var(--text-min); font-weight: 560;
+  text-transform: uppercase; letter-spacing: 0.04em; font-family: var(--mono);
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.03);
+  backdrop-filter: blur(10px) saturate(1.25);
+  -webkit-backdrop-filter: blur(10px) saturate(1.25);
+}
+.badge-muted   { color: var(--text-tertiary); }
+.badge-success { color: var(--success); }
+.badge-info    { color: var(--info); }
+.badge-warning { color: var(--warning); }
+
+/* ══ EXEC DOT PULSE ══ */
+@keyframes execPulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(48,164,108,0.45); }
+  50%      { box-shadow: 0 0 0 4px rgba(48,164,108,0); }
+}
+.exec-dot-active { animation: execPulse 2s ease-in-out infinite; }
+
+/* ══ INSPECTOR ══ */
+.inspector-section {
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 9px; margin-bottom: 9px;
+}
+.inspector-section:last-child { border-bottom: none; padding-bottom: 0; margin-bottom: 0; }
+.inspector-section-header {
+  display: flex; align-items: center; gap: 6px;
+  cursor: pointer; padding: 6px 6px; user-select: none;
+  border-radius: 7px;
+  transition: background 0.13s ease, border-color 0.13s ease;
+  border: 1px solid transparent;
+}
+.inspector-section-header:hover { background: rgba(255,255,255,0.02); border-color: rgba(255,255,255,0.06); }
+.inspector-section-title {
+  font-size: 0.5rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--text-tertiary); font-family: var(--mono);
+  transition: color 0.13s;
+}
+.inspector-section-header:hover .inspector-section-title { color: var(--text-secondary); }
+.inspector-section-chevron { color: var(--text-tertiary); transition: transform 0.18s ease; flex-shrink: 0; }
+.inspector-section-chevron.collapsed { transform: rotate(-90deg); }
+.inspector-row {
+  display: grid; grid-template-columns: minmax(72px,auto) 1fr minmax(30px,auto);
+  align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px;
+}
+.inspector-row:hover { background: rgba(255,255,255,0.018); }
+.inspector-row-label { font-size: var(--text-min); font-weight: 520; color: var(--text-secondary); }
+.inspector-row-value { font-family: var(--mono); color: var(--accent); font-weight: 500; font-size: var(--text-min); text-align: right; }
+.inspector-row-slider { width: 100%; min-width: 0; }
+
+/* ══ TOPBAR GLASS ══ */
+.topbar-glass {
+  background: rgba(12,13,16,0.72);
+  backdrop-filter: blur(18px) saturate(1.35);
+  -webkit-backdrop-filter: blur(18px) saturate(1.35);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+/* ══ KPI TILES ══ */
+.kpi-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 5px; }
+.kpi-tile {
+  border: 1px solid var(--border-subtle); border-radius: 7px;
+  padding: 9px 9px 7px; background: var(--bg);
+  transition: border-color 0.13s, background 0.13s;
+  position: relative; overflow: hidden;
+}
+.kpi-tile:hover { border-color: var(--border); background: rgba(255,255,255,0.015); }
+.kpi-tile-label {
+  font-family: var(--mono); font-size: 0.5rem; font-weight: 520;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--text-tertiary); margin-bottom: 3px;
+  display: flex; align-items: center; gap: 3px;
+}
+.kpi-tile-value {
+  font-family: var(--mono); font-size: 1.0625rem; font-weight: 600;
+  letter-spacing: -0.025em; color: var(--text);
+  transition: color 0.2s; line-height: 1.2;
+}
+.kpi-tile-sub { font-family: var(--mono); font-size: 0.5rem; color: var(--text-tertiary); margin-top: 2px; }
+.kpi-tile-bar {
+  position: absolute; top: 0; left: 0; height: 2px;
+  border-radius: 0 1px 0 0;
+  transition: width 0.4s ease, background 0.3s ease;
+}
+
+/* ══ ALERTS ══ */
+.alert-list { display: flex; flex-direction: column; gap: 3px; max-height: 160px; overflow-y: auto; }
+.alert-row {
+  display: flex; align-items: flex-start; gap: 7px;
+  padding: 6px 9px; border-radius: 5px; border: 1px solid transparent;
+  transition: background 0.13s, border-color 0.13s;
+  font-size: 0.625rem; line-height: 1.4;
+}
+.alert-row:hover { background: rgba(255,255,255,0.018); }
+.alert-row.alert-critical { background: var(--danger-subtle); border-color: rgba(229,72,77,0.16); }
+.alert-row.alert-critical:hover { background: rgba(229,72,77,0.15); }
+.alert-row.alert-warning { background: var(--warning-subtle); border-color: rgba(245,166,35,0.16); }
+.alert-row.alert-warning:hover { background: rgba(245,166,35,0.14); }
+.alert-row.alert-info { background: var(--info-subtle); border-color: rgba(59,130,246,0.13); }
+.alert-row.alert-info:hover { background: rgba(59,130,246,0.1); }
+.alert-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+.alert-dot-critical { background: var(--danger); }
+.alert-dot-warning  { background: var(--warning); }
+.alert-dot-info     { background: var(--info); }
+.alert-ts { font-family: var(--mono); font-size: 0.5rem; color: var(--text-tertiary); white-space: nowrap; flex-shrink: 0; opacity: 0.65; margin-top: 1px; }
+.alert-msg { flex: 1; min-width: 0; color: var(--text-secondary); }
+.alert-empty { padding: 14px 10px; text-align: center; font-size: 0.625rem; color: var(--text-tertiary); font-family: var(--mono); }
+
+/* ══ TIMELINE TRACK ══ */
+.timeline-track { position: relative; height: 20px; display: flex; align-items: center; }
+.timeline-track-bg { position: absolute; inset: 0; display: flex; border-radius: 3px; overflow: hidden; }
+.timeline-segment { flex: 1; height: 100%; border-right: 1px solid var(--bg); opacity: 0.18; transition: opacity 0.2s; }
+.timeline-segment.seg-input { background: var(--info); }
+.timeline-segment.seg-mapping { background: var(--accent); }
+.timeline-segment.seg-modulation { background: #a78bfa; }
+.timeline-segment.seg-render { background: var(--warning); }
+.timeline-segment.seg-output { background: var(--success); }
+.timeline-segment.seg-active { opacity: 0.55; }
+
+/* ══ CONSOLE HEADER STRIP ══ */
+.console-header-strip {
+  display: flex; align-items: center; gap: 0;
+  border-bottom: 1px solid var(--border);
+  background: rgba(0,0,0,0.25);
+  font-family: var(--mono); font-size: var(--text-min); overflow-x: auto;
+}
+.console-tab {
+  padding: 7px 14px; color: var(--text-tertiary);
+  border-right: 1px solid var(--border);
+  white-space: nowrap; cursor: pointer;
+  transition: color 0.13s, background 0.13s;
+  display: flex; align-items: center; gap: 5px;
+}
+.console-tab:hover { color: var(--text-secondary); background: rgba(255,255,255,0.02); }
+.console-tab.active { color: var(--text); background: rgba(110,86,207,0.07); border-bottom: 1px solid var(--accent); margin-bottom: -1px; }
+
+/* ══ SECTION LABEL ══ */
+.section-label {
+  font-size: 0.5rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--text-tertiary); font-family: var(--mono);
+  margin-bottom: 5px;
+  display: flex; align-items: center; gap: 4px;
+}
+
+/* ══ AI ASSISTANT ══ */
+.ai-panel-body {
+  display: flex; flex-direction: column; gap: 8px;
+  min-height: 200px; max-height: 400px;
+}
+.ai-welcome {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 6px; text-align: center; padding: 20px 10px;
+}
+.ai-welcome p { font-size: 0.6875rem; font-weight: 560; color: var(--text-secondary); }
+.ai-welcome span { font-size: var(--text-min); color: var(--text-tertiary); font-family: var(--mono); }
+.ai-chat-log {
+  flex: 1; overflow-y: auto; display: none;
+  flex-direction: column; gap: 6px; padding: 4px 0;
+}
+.ai-input-row {
+  display: flex; gap: 6px; align-items: center;
+  padding-top: 6px; border-top: 1px solid var(--border-subtle);
+}
+.ai-text-input {
+  flex: 1; min-width: 0;
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 6px 10px; font-family: var(--font); font-size: 0.6875rem;
+  background: var(--bg); color: var(--text); outline: none;
+  transition: border-color 0.13s;
+}
+.ai-text-input:focus { border-color: var(--accent); }
+.ai-text-input:disabled { opacity: 0.4; cursor: not-allowed; }
+.ai-status-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--text-tertiary); transition: background 0.3s;
+}
+.ai-status-dot.active { background: var(--success); }
+
+/* ══ RESPONSIVE ══ */
+@media (max-width: 1079px) and (min-width: 768px) {
+  .main-grid { grid-template-columns: repeat(6,1fr) !important; padding: 0 14px 14px !important; gap: 10px !important; }
+  .code-panel   { grid-column: 1/-1 !important; min-height: 380px !important; }
+  .preview-panel  { grid-column: 1/4 !important; }
+  .diag-panel     { grid-column: 4/7 !important; }
+  .timeline-panel { grid-column: 1/5 !important; }
+  .tuner-panel    { grid-column: 5/7 !important; }
+  .tele-panel     { grid-column: 1/-1 !important; }
+  .ai-panel       { grid-column: 5/7 !important; }
+  .kpi-grid { grid-template-columns: repeat(2,1fr); }
+}
+@media (max-width: 767px) {
+  .main-grid { grid-template-columns: 1fr !important; padding: 0 10px 10px !important; gap: 8px !important; }
+  .topbar-inner { flex-direction: column; align-items: stretch !important; gap: 8px !important; }
+  .topbar-controls { flex-wrap: wrap; }
+  .code-panel,.preview-panel,.diag-panel,.timeline-panel,.tuner-panel,.tele-panel,.ai-panel { grid-column: 1/-1 !important; }
+  .code-panel { min-height: 300px !important; }
+  .kv-grid { grid-template-columns: 1fr; }
+  .kpi-grid { grid-template-columns: 1fr; }
+  .algo-flow { grid-template-columns: repeat(2,1fr); }
+  .lease-meta { flex-direction: column; gap: 2px; }
+  .topbar-right { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,*::before,*::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* ══ PAGE NAV TABS ══ */
+.page-nav {
+  display: flex; align-items: center; gap: 0;
+  max-width: 1440px; margin: 0 auto;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+.page-nav-tab {
+  padding: 9px 18px;
+  font-family: var(--mono); font-size: 0.625rem; font-weight: 500;
+  color: var(--text-tertiary);
+  cursor: pointer; border: none; background: none;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+  display: flex; align-items: center; gap: 6px;
+  white-space: nowrap;
+}
+.page-nav-tab:hover { color: var(--text-secondary); }
+.page-nav-tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+.diag-iframe-wrap {
+  display: none; width: 100%; max-width: 1440px;
+  margin: 0 auto; height: calc(100vh - 110px);
+  border: none; background: var(--bg-deep);
+}
+.diag-iframe-wrap iframe {
+  width: 100%; height: 100%; border: none;
+}
+</style></head>
+<body class="bg-[#0c0d10] text-[#ececef]">
+
+<!-- ══ TOP BAR ══ -->
+<div class="topbar-glass" style="position:sticky;top:0;z-index:50;">
+  <!-- window chrome row -->
+  <div class="topbar-chrome-row">
+    <span style="width:9px;height:9px;border-radius:50%;background:#e5484d;opacity:0.75;flex-shrink:0;" aria-hidden="true"></span>
+    <span style="width:9px;height:9px;border-radius:50%;background:#f5a623;opacity:0.75;flex-shrink:0;" aria-hidden="true"></span>
+    <span style="width:9px;height:9px;border-radius:50%;background:#30a46c;opacity:0.75;flex-shrink:0;" aria-hidden="true"></span>
+    <div style="margin-left:10px;display:flex;align-items:center;gap:6px;min-width:0;">
+      <span style="font-family:var(--mono);font-size:var(--text-min);color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">k1-lightwave.pipeline</span>
+      <span style="color:var(--text-tertiary);font-size:0.4rem;flex-shrink:0;">&#9679;</span>
+      <span style="font-size:var(--text-min);color:var(--text-tertiary);font-family:var(--mono);white-space:nowrap;flex-shrink:0;">firmware v2</span>
+    </div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
+      <span id="connectBadge" class="badge-status badge-muted" style="box-shadow:inset 0 1px 1px rgba(255,255,255,0.06);">
+        <span style="width:4px;height:4px;border-radius:50%;background:currentColor;"></span>Disconnected
+      </span>
+      <span id="leaseBadge" class="badge-status badge-muted" style="box-shadow:inset 0 1px 1px rgba(255,255,255,0.06);">Observe</span>
+    </div>
+  </div>
+
+  <!-- main topbar row -->
+  <div class="topbar-inner" style="max-width:1440px;margin:0 auto;padding:6px 12px;display:flex;align-items:center;gap:8px;position:relative;">
+    <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;min-width:0;">
+      <div style="width:24px;height:24px;background:var(--accent);border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.625rem;letter-spacing:-0.05em;color:white;font-family:var(--mono);box-shadow:0 1px 0 rgba(255,255,255,0.08) inset;">K1</div>
+      <div style="display:flex;align-items:baseline;gap:6px;min-width:0;">
+        <h1 style="font-size:0.75rem;font-weight:600;letter-spacing:-0.02em;line-height:1;white-space:nowrap;">Lightwave Composer</h1>
+        <span class="meta-label" style="white-space:nowrap;">Editor</span>
+      </div>
+    </div>
+
+    <div class="divider-v" style="height:16px;"></div>
+
+    <label style="display:flex;align-items:center;gap:6px;flex-shrink:1;min-width:0;">
+      <span class="meta-label" style="font-weight:520;white-space:nowrap;">host</span>
+      <div style="display:flex;align-items:center;gap:5px;min-width:0;">
+        <input id="hostInput" type="text" value="192.168.1.100" placeholder="lightwaveos.local" style="width:132px;border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-family:var(--mono);font-size:var(--text-min);background:rgba(0,0,0,0.35);color:var(--text);outline:none;transition:border-color 0.13s,background 0.13s;">
+        <button id="connectBtn" class="btn" style="padding:5px 10px;font-size:0.625rem;border-radius:7px;" title="Connect" aria-label="Connect">
+          <iconify-icon icon="solar:plug-circle-linear" width="12" style="stroke-width:1.5"></iconify-icon><span id="connectBtnLabel">Connect</span>
+        </button>
+      </div>
+    </label>
+
+    <div class="topbar-controls" style="display:flex;gap:4px;align-items:center;flex-shrink:0;">
+      <button id="acquireBtn" class="btn btn-accent btn-sm" style="border-radius:7px;">
+        <iconify-icon icon="solar:lock-keyhole-linear" width="12" style="stroke-width:1.5"></iconify-icon>Take Control
+      </button>
+      <button id="releaseBtn" class="btn btn-sm" style="border-radius:7px;">
+        <iconify-icon icon="solar:lock-unlocked-linear" width="12" style="stroke-width:1.5"></iconify-icon>Release
+      </button>
+      <button id="reacquireBtn" class="btn btn-sm" style="border-radius:7px;">
+        <iconify-icon icon="solar:refresh-linear" width="12" style="stroke-width:1.5"></iconify-icon>Reacquire
+      </button>
+      <div class="divider-v"></div>
+      <button id="statusBtn" class="btn-icon" title="Refresh status" aria-label="Refresh status">
+        <iconify-icon icon="solar:refresh-linear" width="14" style="stroke-width:1.5"></iconify-icon>
+      </button>
+      <button id="emergencyBtn" class="btn btn-danger btn-sm" style="border-radius:7px;">
+        <iconify-icon icon="solar:danger-triangle-linear" width="12" style="stroke-width:1.5"></iconify-icon>E-Stop
+      </button>
+    </div>
+
+    <div class="topbar-right" style="margin-left:auto;display:flex;gap:10px;align-items:center;flex-shrink:0;min-width:0;">
+      <span id="ownerBadge" class="meta-label" style="white-space:nowrap;">owner: n/a</span>
+      <div class="lease-meta" style="display:flex;gap:10px;font-family:var(--mono);font-size:0.5rem;color:var(--text-tertiary);white-space:nowrap;">
+        <span id="leaseId">leaseId: -</span>
+        <span id="leaseTtl">remaining: -</span>
+        <span id="hbState">heartbeat: idle</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ PAGE NAVIGATION ══ -->
+<nav class="page-nav" role="tablist">
+  <button class="page-nav-tab active" role="tab" aria-selected="true" data-page="composer">
+    <iconify-icon icon="solar:code-linear" width="13" style="stroke-width:1.5"></iconify-icon>
+    Composer
+  </button>
+  <button class="page-nav-tab" role="tab" aria-selected="false" data-page="diagnostics">
+    <iconify-icon icon="solar:chart-2-linear" width="13" style="stroke-width:1.5"></iconify-icon>
+    Diagnostics
+  </button>
+</nav>
+
+<section class="toolbar" style="display:none;"></section>
+
+<!-- ══ MAIN GRID ══ -->
+<main class="main-grid" style="display:grid;grid-template-columns:repeat(12,1fr);gap:16px;max-width:1440px;margin:0 auto;padding:16px 24px 24px;">
+
+  <!-- ── CODE VISUALISER ── -->
+  <section class="panel code-panel code-glow" style="grid-column:1/8;grid-row:1/3;display:flex;flex-direction:column;min-height:540px;border-radius:var(--radius-lg);">
+    <div class="console-header-strip">
+      <div class="console-tab active">
+        <iconify-icon icon="solar:code-linear" width="11" style="stroke-width:1.5;color:var(--accent);"></iconify-icon>
+        pipeline.ts
+      </div>
+      <div class="console-tab">
+        <iconify-icon icon="solar:settings-linear" width="11" style="stroke-width:1.5;"></iconify-icon>
+        config
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:10px;padding:0 12px;">
+        <span class="meta-label" id="lineCount">55 lines</span>
+        <span style="font-size:0.5rem;color:var(--success);display:flex;align-items:center;gap:3px;">
+          <iconify-icon icon="solar:check-circle-linear" width="10" style="stroke-width:1.5;"></iconify-icon>No errors
+        </span>
+      </div>
+    </div>
+    <div id="codeVisualiser" style="flex:1;overflow:auto;padding:10px 0;font-family:var(--mono);font-size:0.6875rem;line-height:1.75;background:var(--bg-deep);position:relative;">
+      <div style="display:flex;">
+        <div id="lineNumbers" style="width:40px;text-align:right;padding-right:10px;color:var(--text-tertiary);font-size:var(--text-min);user-select:none;flex-shrink:0;opacity:0.35;font-variant-numeric:tabular-nums;"></div>
+        <pre id="codeContent" style="flex:1;margin:0;padding-right:16px;color:var(--text-secondary);overflow-x:auto;white-space:pre;"></pre>
+      </div>
+    </div>
+    <div style="padding:6px 13px;border-top:1px solid var(--border);display:flex;align-items:center;gap:9px;background:rgba(0,0,0,0.3);">
+      <div id="execIndicator" style="width:6px;height:6px;border-radius:50%;background:var(--text-tertiary);transition:background 0.3s;flex-shrink:0;"></div>
+      <span id="execStatus" style="font-size:var(--text-min);font-weight:520;color:var(--text-secondary);font-family:var(--mono);">Idle &middot; No pipeline active</span>
+      <span style="margin-left:auto;font-family:var(--mono);font-size:0.5rem;color:var(--text-tertiary);" id="execPhase">phase: input</span>
+    </div>
+  </section>
+
+  <!-- ── LED PREVIEW ── -->
+  <section class="panel preview-panel" style="grid-column:8/13;grid-row:1/2;">
+    <div class="panel-header" style="gap:8px;">
+      <span class="panel-icon"><iconify-icon icon="solar:lightbulb-bolt-linear" width="13" style="color:var(--warning);stroke-width:1.5"></iconify-icon></span>
+      <span>LED Preview</span>
+      <span id="streamBadge" class="panel-badge badge-info" style="margin-left:auto;backdrop-filter:blur(10px) saturate(1.25);-webkit-backdrop-filter:blur(10px) saturate(1.25);background:rgba(59,130,246,0.10);border:1px solid rgba(59,130,246,0.14);">
+        <span style="width:3px;height:3px;border-radius:50%;background:currentColor;"></span>stream
+      </span>
+      <button class="btn-icon" type="button" aria-label="Preview options" title="Preview options" style="background:transparent;border-color:transparent;">
+        <iconify-icon icon="solar:menu-dots-linear" width="14" style="stroke-width:1.5"></iconify-icon>
+      </button>
+    </div>
+    <div class="panel-body panel-body-stack">
+      <!-- VIEWPORT -->
+      <div class="viewport-shell" aria-label="Editor viewport shell mock">
+        <div class="viewport-top">
+          <div class="viewport-title"><span class="dot"></span>Viewport</div>
+          <div class="viewport-tools" aria-hidden="true">
+            <button class="btn-icon" type="button" title="Coming soon" disabled><iconify-icon icon="solar:move-linear" width="13" style="stroke-width:1.5"></iconify-icon></button>
+            <button class="btn-icon" type="button" title="Coming soon" disabled><iconify-icon icon="solar:refresh-linear" width="13" style="stroke-width:1.5"></iconify-icon></button>
+            <button class="btn-icon" type="button" title="Coming soon" disabled><iconify-icon icon="solar:maximize-square-minimalistic-linear" width="13" style="stroke-width:1.5"></iconify-icon></button>
+            <div class="divider-v" style="height:16px;margin:0 2px;"></div>
+            <button class="btn-icon" type="button" title="Coming soon" disabled><iconify-icon icon="solar:pallete-2-linear" width="13" style="stroke-width:1.5"></iconify-icon></button>
+          </div>
+        </div>
+        <div class="viewport-canvas">
+          <div class="viewport-grid" aria-hidden="true"></div>
+          <div class="viewport-hud">
+            <span class="badge-status badge-muted">LGP</span>
+            <span class="badge-status badge-info">Preview</span>
+          </div>
+          <div class="viewport-axis" aria-hidden="true">
+            <span><i></i>XYZ</span>
+          </div>
+          <div class="lgp-mock" aria-hidden="true">
+            <div class="lgp-glow"></div>
+            <div class="lgp-plate"></div>
+            <div class="lgp-edge lgp-edge-left"></div>
+            <div class="lgp-edge lgp-edge-right"></div>
+          </div>
+        </div>
+        <div class="viewport-bottom" aria-hidden="true">
+          <span class="viewport-hint">3D viewport &mdash; coming soon</span>
+          <span>mode: shaded</span>
+        </div>
+      </div>
+
+      <!-- Strip A (raw) — 80 DOM elements at 2:1 ratio for 160 LEDs -->
+      <div>
+        <div class="strip-header">
+          <span style="font-size:var(--text-min);font-weight:520;color:var(--text-secondary);">Strip A (raw)</span>
+          <span class="meta-label" title="Rendering at 2:1 for performance">160 LEDs</span>
+        </div>
+        <div class="strip" id="stripA" aria-label="Strip A preview" style="height:18px;border-radius:2px;overflow:hidden;"></div>
+      </div>
+      <!-- Strip B (raw) -->
+      <div>
+        <div class="strip-header">
+          <span style="font-size:var(--text-min);font-weight:520;color:var(--text-secondary);">Strip B (raw)</span>
+          <span class="meta-label" title="Rendering at 2:1 for performance">160 LEDs</span>
+        </div>
+        <div class="strip" id="stripB" aria-label="Strip B preview" style="height:18px;border-radius:2px;overflow:hidden;"></div>
+      </div>
+      <!-- LGP Preview canvas stub (FLAW-10) -->
+      <div style="padding:7px 9px;border:1px solid var(--border-subtle);border-radius:6px;background:var(--bg-deep);">
+        <div class="section-label">LGP Preview (simulated)</div>
+        <canvas id="lgpPreviewCanvas" width="320" height="40" style="width:100%;height:40px;border-radius:4px;background:rgba(0,0,0,0.3);"></canvas>
+      </div>
+      <!-- Centre Origin -->
+      <div style="padding:7px 9px;border:1px solid var(--border-subtle);border-radius:6px;background:var(--bg-deep);">
+        <div class="section-label">Centre Origin</div>
+        <div id="centreOriginVis" style="display:flex;height:12px;gap:1px;"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── STREAM HEALTH + DIAGNOSTICS ── -->
+  <section class="panel diag-panel" style="grid-column:8/13;grid-row:2/3;display:flex;flex-direction:column;">
+    <div class="panel-header">
+      <span class="panel-icon"><iconify-icon icon="solar:graph-new-linear" width="13" style="color:var(--success);stroke-width:1.5"></iconify-icon></span>
+      <span>Stream Health</span>
+      <span id="diagBadge" class="panel-badge badge-success">
+        <span style="width:3px;height:3px;border-radius:50%;background:currentColor;"></span>healthy
+      </span>
+    </div>
+    <div class="panel-body panel-body-stack" style="gap:10px;flex:1;overflow:auto;">
+      <!-- KPIs (v1 metrics: FLAW-02) -->
+      <div>
+        <div class="section-label"><iconify-icon icon="solar:chart-2-linear" width="9" style="stroke-width:1.5;"></iconify-icon>KPIs</div>
+        <div class="kpi-grid" id="kpiGrid">
+          <div class="kpi-tile" data-kpi="queueP95">
+            <div class="kpi-tile-bar" style="width:0%;background:var(--success);"></div>
+            <div class="kpi-tile-label"><iconify-icon icon="solar:layers-linear" width="9" style="stroke-width:1.5"></iconify-icon>Queue p95</div>
+            <div class="kpi-tile-value" id="kpiQueueP95">0</div>
+            <div class="kpi-tile-sub">buffered msgs</div>
+          </div>
+          <div class="kpi-tile" data-kpi="cadence">
+            <div class="kpi-tile-bar" style="width:0%;background:var(--info);"></div>
+            <div class="kpi-tile-label"><iconify-icon icon="solar:pulse-2-linear" width="9" style="stroke-width:1.5"></iconify-icon>Cadence</div>
+            <div class="kpi-tile-value" id="kpiCadence">0<span style="font-size:var(--text-min);font-weight:500;color:var(--text-tertiary);margin-left:1px;">Hz</span></div>
+            <div class="kpi-tile-sub">msg/sec</div>
+          </div>
+          <div class="kpi-tile" data-kpi="jitter">
+            <div class="kpi-tile-bar" style="width:0%;background:var(--warning);"></div>
+            <div class="kpi-tile-label"><iconify-icon icon="solar:wave-square-linear" width="9" style="stroke-width:1.5"></iconify-icon>Jitter</div>
+            <div class="kpi-tile-value" id="kpiJitter">0<span style="font-size:var(--text-min);font-weight:500;color:var(--text-tertiary);margin-left:1px;">ms</span></div>
+            <div class="kpi-tile-sub">stddev</div>
+          </div>
+          <div class="kpi-tile" data-kpi="dropRatio">
+            <div class="kpi-tile-bar" style="width:0%;background:var(--danger);"></div>
+            <div class="kpi-tile-label"><iconify-icon icon="solar:trash-bin-minimalistic-linear" width="9" style="stroke-width:1.5"></iconify-icon>Drop Ratio</div>
+            <div class="kpi-tile-value" id="kpiDropRatio">0<span style="font-size:var(--text-min);font-weight:500;color:var(--text-tertiary);margin-left:1px;">%</span></div>
+            <div class="kpi-tile-sub"><span id="kpiDrop10s">10s: 0%</span> &middot; <span id="kpiDrop60s">60s: 0%</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pipeline -->
+      <div>
+        <div class="section-label"><iconify-icon icon="solar:cpu-linear" width="9" style="stroke-width:1.5;"></iconify-icon>Pipeline</div>
+        <div class="algo-flow" id="algoFlow">
+          <div data-node="input">Input</div>
+          <div data-node="mapping">Mapping</div>
+          <div data-node="modulation">Modulate</div>
+          <div data-node="render">Render</div>
+          <div data-node="post">PostFX</div>
+          <div data-node="output">Output</div>
+        </div>
+      </div>
+
+      <!-- Alerts -->
+      <div style="flex:1;display:flex;flex-direction:column;min-height:0;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
+          <div class="section-label" style="margin-bottom:0;">
+            <iconify-icon icon="solar:bell-linear" width="9" style="stroke-width:1.5;"></iconify-icon>Alerts
+          </div>
+          <span id="alertCount" class="badge-status badge-muted badge-count-muted">0</span>
+        </div>
+        <div class="alert-list" id="alertList">
+          <div class="alert-empty">
+            <iconify-icon icon="solar:check-circle-linear" width="14" style="stroke-width:1.5;color:var(--success);display:block;margin:0 auto 4px;"></iconify-icon>
+            No active alerts
+          </div>
+        </div>
+      </div>
+
+      <!-- Lease State (collapsed) -->
+      <div>
+        <div style="display:flex;align-items:center;gap:4px;cursor:pointer;margin-bottom:5px;" id="leaseToggle">
+          <iconify-icon id="leaseChevron" icon="solar:alt-arrow-right-linear" width="9" style="color:var(--text-tertiary);stroke-width:1.5;transition:transform 0.18s;"></iconify-icon>
+          <span class="section-label" style="margin-bottom:0;">Lease State</span>
+        </div>
+        <div id="leaseStateWrapper" style="display:none;">
+          <div id="leaseStateBlock" class="kv-grid"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── EXECUTION TIMELINE ── -->
+  <section class="panel timeline-panel" style="grid-column:1/9;">
+    <div class="panel-header">
+      <span class="panel-icon"><iconify-icon icon="solar:play-linear" width="13" style="color:var(--accent);stroke-width:1.5"></iconify-icon></span>
+      <span>Execution Timeline</span>
+      <span class="panel-badge badge-muted" style="font-size:0.4375rem;">pipeline runner</span>
+    </div>
+    <div class="panel-body">
+      <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+        <button id="playBtn" class="btn btn-accent btn-sm">
+          <iconify-icon icon="solar:play-linear" width="12" style="stroke-width:1.5"></iconify-icon>Run
+        </button>
+        <button id="pauseBtn" class="btn btn-sm">
+          <iconify-icon icon="solar:pause-linear" width="12" style="stroke-width:1.5"></iconify-icon>Pause
+        </button>
+        <button id="resetBtn" class="btn btn-sm">
+          <iconify-icon icon="solar:restart-linear" width="12" style="stroke-width:1.5"></iconify-icon>Reset
+        </button>
+        <div class="divider-v" style="height:18px;margin:0 3px;"></div>
+        <div class="speed-group" role="group" aria-label="playback speed">
+          <button data-speed="0.25">0.25&times;</button>
+          <button data-speed="0.5">0.5&times;</button>
+          <button data-speed="1" class="is-active">1&times;</button>
+          <button data-speed="2">2&times;</button>
+        </div>
+      </div>
+      <div style="margin-bottom:6px;position:relative;">
+        <div class="timeline-track">
+          <div class="timeline-track-bg" id="timelineTrackBg">
+            <div class="timeline-segment seg-input" style="flex:1;"></div>
+            <div class="timeline-segment seg-mapping" style="flex:1;"></div>
+            <div class="timeline-segment seg-modulation" style="flex:1;"></div>
+            <div class="timeline-segment seg-render" style="flex:1;"></div>
+            <div class="timeline-segment seg-output" style="flex:1;border-right:none;"></div>
+          </div>
+          <input id="timeline" type="range" min="0" max="1000" value="0" style="position:relative;z-index:1;background:transparent;">
+        </div>
+        <div style="display:flex;justify-content:space-between;color:var(--text-tertiary);font-size:0.5rem;margin-top:4px;font-family:var(--mono);">
+          <span>Input</span><span>Mapping</span><span>Modulate</span><span>Render</span><span>Output</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── INSPECTOR / PARAMETER TUNER ── -->
+  <section class="panel tuner-panel" style="grid-column:9/13;">
+    <div class="panel-header" style="gap:8px;">
+      <span class="panel-icon"><iconify-icon icon="solar:tuning-2-linear" width="13" style="color:var(--warning);stroke-width:1.5"></iconify-icon></span>
+      <span>Inspector</span>
+      <span class="panel-badge badge-muted">parameters</span>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
+        <button class="btn-icon" type="button" aria-label="Collapse all" title="Collapse all" style="background:transparent;border-color:transparent;">
+          <iconify-icon icon="solar:double-alt-arrow-up-linear" width="14" style="stroke-width:1.5"></iconify-icon>
+        </button>
+        <button class="btn-icon" type="button" aria-label="Inspector options" title="Inspector options" style="background:transparent;border-color:transparent;">
+          <iconify-icon icon="solar:menu-dots-linear" width="14" style="stroke-width:1.5"></iconify-icon>
+        </button>
+      </div>
+    </div>
+    <div class="panel-body" style="padding:9px 10px;">
+      <div id="tunerGrid" style="padding:2px;"></div>
+    </div>
+  </section>
+
+  <!-- ── AI ASSISTANT ── -->
+  <section class="panel ai-panel" style="grid-column:9/13;">
+    <div class="panel-header">
+      <span class="panel-icon">
+        <iconify-icon icon="solar:magic-stick-3-linear" width="13" style="color:var(--accent);stroke-width:1.5"></iconify-icon>
+      </span>
+      <span>AI Assistant</span>
+      <span class="panel-badge badge-muted">preview</span>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
+        <span class="ai-status-dot"></span>
+        <button class="btn-icon" type="button" aria-label="AI settings" title="AI settings">
+          <iconify-icon icon="solar:settings-linear" width="14" style="stroke-width:1.5"></iconify-icon>
+        </button>
+      </div>
+    </div>
+    <div class="panel-body ai-panel-body">
+      <div class="ai-welcome">
+        <iconify-icon icon="solar:magic-stick-3-linear" width="20" style="color:var(--accent);opacity:0.5;"></iconify-icon>
+        <p>AI-assisted effect design</p>
+        <span>Connect to your K1 to enable AI features</span>
+      </div>
+      <div class="ai-chat-log" id="aiChatLog"></div>
+      <div class="ai-input-row">
+        <input type="text" id="aiInput" placeholder="Describe an effect or ask for help..." class="ai-text-input" disabled>
+        <button id="aiSendBtn" class="btn btn-accent btn-sm" disabled>
+          <iconify-icon icon="solar:arrow-up-linear" width="14" style="stroke-width:1.5"></iconify-icon>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── TELEMETRY ── -->
+  <section class="panel tele-panel" style="grid-column:1/13;">
+    <div class="panel-header" style="cursor:pointer;" id="teleToggle">
+      <span class="panel-icon"><iconify-icon icon="solar:document-text-linear" width="13" style="color:var(--info);stroke-width:1.5"></iconify-icon></span>
+      <span>Telemetry</span>
+      <span class="panel-badge badge-muted">console</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:0.5rem;color:var(--text-tertiary);margin-left:8px;">
+        <span style="width:4px;height:4px;border-radius:50%;background:var(--info);opacity:0.7;"></span>live
+      </span>
+      <iconify-icon id="teleChevron" icon="solar:alt-arrow-down-linear" width="11" style="color:var(--text-tertiary);stroke-width:1.5;margin-left:auto;transition:transform 0.18s;"></iconify-icon>
+    </div>
+    <div id="teleContent" style="padding:8px 13px 12px;">
+      <div style="display:flex;align-items:center;gap:8px;padding:5px 0 6px;border-bottom:1px solid var(--border-subtle);margin-bottom:6px;">
+        <span class="meta-label">k1@lightwave</span>
+        <span style="font-family:var(--mono);font-size:0.5rem;color:var(--accent);">~/pipeline</span>
+        <span class="meta-label">$</span>
+        <span style="font-family:var(--mono);font-size:0.5rem;color:var(--text-secondary);">tail -f event.log</span>
+      </div>
+      <div id="telemetryLog" class="telemetry-log"></div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ══ DIAGNOSTICS IFRAME (hidden by default) ══ -->
+<div id="diagView" class="diag-iframe-wrap">
+  <iframe id="diagFrame" title="Diagnostics panel" loading="lazy"></iframe>
+</div>
+
+<section class="card lease-card" style="display:none;"><h2>Control Lease</h2></section>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script type="module" id="__inlined_app_js__">
+// ══════════════════════════════════════════════════════════════════════════════
+// K1 LIGHTWAVE COMPOSER — Merged Dashboard
+// v3 visual shell + v1 interaction layer + flaws fixed + hardening + AI hooks
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── 1. DOM CONTRACT (H-01) ──
+const DOM_IDS = {
+  // Topbar
+  hostInput: 'hostInput', connectBtn: 'connectBtn', connectBtnLabel: 'connectBtnLabel',
+  connectBadge: 'connectBadge',
+  acquireBtn: 'acquireBtn', releaseBtn: 'releaseBtn', reacquireBtn: 'reacquireBtn',
+  statusBtn: 'statusBtn', emergencyBtn: 'emergencyBtn',
+  leaseBadge: 'leaseBadge', ownerBadge: 'ownerBadge',
+  leaseId: 'leaseId', leaseTtl: 'leaseTtl', hbState: 'hbState',
+  // Code panel
+  codeContent: 'codeContent', lineNumbers: 'lineNumbers', lineCount: 'lineCount',
+  execIndicator: 'execIndicator', execStatus: 'execStatus', execPhase: 'execPhase',
+  // Preview
+  stripA: 'stripA', stripB: 'stripB', centreOriginVis: 'centreOriginVis',
+  streamBadge: 'streamBadge', lgpPreviewCanvas: 'lgpPreviewCanvas',
+  // Health
+  kpiQueueP95: 'kpiQueueP95', kpiCadence: 'kpiCadence',
+  kpiJitter: 'kpiJitter', kpiDropRatio: 'kpiDropRatio',
+  kpiDrop10s: 'kpiDrop10s', kpiDrop60s: 'kpiDrop60s',
+  kpiGrid: 'kpiGrid', diagBadge: 'diagBadge',
+  // Pipeline
+  algoFlow: 'algoFlow',
+  // Alerts
+  alertList: 'alertList', alertCount: 'alertCount',
+  // Lease state
+  leaseToggle: 'leaseToggle', leaseChevron: 'leaseChevron',
+  leaseStateWrapper: 'leaseStateWrapper', leaseStateBlock: 'leaseStateBlock',
+  // Timeline
+  timeline: 'timeline', timelineTrackBg: 'timelineTrackBg',
+  playBtn: 'playBtn', pauseBtn: 'pauseBtn', resetBtn: 'resetBtn',
+  // Inspector
+  tunerGrid: 'tunerGrid',
+  // Telemetry
+  telemetryLog: 'telemetryLog', teleChevron: 'teleChevron',
+  teleContent: 'teleContent', teleToggle: 'teleToggle',
+  // AI
+  aiChatLog: 'aiChatLog', aiInput: 'aiInput', aiSendBtn: 'aiSendBtn',
+  // Toast
+  toast: 'toast',
+};
+
+// ── 2. DEFENSIVE DOM HELPER (H-03) ──
+function getEl(id) {
+  const el = document.getElementById(id);
+  if (!el) console.warn(`[K1 Composer] Missing DOM element: #${id}`);
+  return el;
+}
+
+// ── 3. UI ELEMENT REFERENCES ──
+const ui = {
+  hostInput: getEl(DOM_IDS.hostInput),
+  connectBtn: getEl(DOM_IDS.connectBtn),
+  connectBtnLabel: getEl(DOM_IDS.connectBtnLabel),
+  connectBadge: getEl(DOM_IDS.connectBadge),
+  acquireBtn: getEl(DOM_IDS.acquireBtn),
+  releaseBtn: getEl(DOM_IDS.releaseBtn),
+  reacquireBtn: getEl(DOM_IDS.reacquireBtn),
+  statusBtn: getEl(DOM_IDS.statusBtn),
+  emergencyBtn: getEl(DOM_IDS.emergencyBtn),
+  leaseBadge: getEl(DOM_IDS.leaseBadge),
+  ownerBadge: getEl(DOM_IDS.ownerBadge),
+  leaseId: getEl(DOM_IDS.leaseId),
+  leaseTtl: getEl(DOM_IDS.leaseTtl),
+  hbState: getEl(DOM_IDS.hbState),
+  timeline: getEl(DOM_IDS.timeline),
+  timelineTrackBg: getEl(DOM_IDS.timelineTrackBg),
+  playBtn: getEl(DOM_IDS.playBtn),
+  pauseBtn: getEl(DOM_IDS.pauseBtn),
+  resetBtn: getEl(DOM_IDS.resetBtn),
+  speedButtons: Array.from(document.querySelectorAll('.speed-group button')),
+  leaseStateBlock: getEl(DOM_IDS.leaseStateBlock),
+  stripA: getEl(DOM_IDS.stripA),
+  stripB: getEl(DOM_IDS.stripB),
+  algoFlow: getEl(DOM_IDS.algoFlow),
+  tunerGrid: getEl(DOM_IDS.tunerGrid),
+  telemetryLog: getEl(DOM_IDS.telemetryLog),
+  toast: getEl(DOM_IDS.toast),
+  codeContent: getEl(DOM_IDS.codeContent),
+  lineNumbers: getEl(DOM_IDS.lineNumbers),
+  lineCount: getEl(DOM_IDS.lineCount),
+  execIndicator: getEl(DOM_IDS.execIndicator),
+  execStatus: getEl(DOM_IDS.execStatus),
+  execPhase: getEl(DOM_IDS.execPhase),
+  centreOriginVis: getEl(DOM_IDS.centreOriginVis),
+  lgpPreviewCanvas: getEl(DOM_IDS.lgpPreviewCanvas),
+  kpiQueueP95: getEl(DOM_IDS.kpiQueueP95),
+  kpiCadence: getEl(DOM_IDS.kpiCadence),
+  kpiJitter: getEl(DOM_IDS.kpiJitter),
+  kpiDropRatio: getEl(DOM_IDS.kpiDropRatio),
+  kpiDrop10s: getEl(DOM_IDS.kpiDrop10s),
+  kpiDrop60s: getEl(DOM_IDS.kpiDrop60s),
+  kpiGrid: getEl(DOM_IDS.kpiGrid),
+  alertList: getEl(DOM_IDS.alertList),
+  alertCount: getEl(DOM_IDS.alertCount),
+  diagBadge: getEl(DOM_IDS.diagBadge),
+  leaseToggle: getEl(DOM_IDS.leaseToggle),
+  leaseStateWrapper: getEl(DOM_IDS.leaseStateWrapper),
+  leaseChevron: getEl(DOM_IDS.leaseChevron),
+  teleToggle: getEl(DOM_IDS.teleToggle),
+  teleChevron: getEl(DOM_IDS.teleChevron),
+  teleContent: getEl(DOM_IDS.teleContent),
+  streamBadge: getEl(DOM_IDS.streamBadge),
+  aiChatLog: getEl(DOM_IDS.aiChatLog),
+  aiInput: getEl(DOM_IDS.aiInput),
+  aiSendBtn: getEl(DOM_IDS.aiSendBtn),
+};
+
+// ── 4. EVENT BUS (AI integration hook) ──
+const eventBus = {
+  _listeners: {},
+  on(event, fn) {
+    (this._listeners[event] ||= []).push(fn);
+    return () => { this._listeners[event] = this._listeners[event].filter(f => f !== fn); };
+  },
+  emit(event, data) {
+    (this._listeners[event] || []).forEach(fn => { try { fn(data); } catch (e) { console.error(`[eventBus] Error in ${event} listener:`, e); } });
+  },
+};
+
+// ── 5. STATE (H-04) ──
+const state = {
+  host: ui.hostInput ? ui.hostInput.value.trim() : '',
+  ws: null,
+  connected: false,
+  reconnect: { attempts: 0, timer: null, maxAttempts: 10, userDisconnected: false },
+  clientName: 'K1 Composer Dashboard',
+  clientInstanceId: crypto.randomUUID(),
+  lease: {
+    active: false, leaseId: '', leaseToken: '',
+    ownerClientName: '', ownerInstanceId: '', ownerWsClientId: null,
+    remainingMs: 0, ttlMs: 5000, heartbeatIntervalMs: 1000, scope: 'global',
+    countdownStartTime: 0,
+    countdownStartRemaining: 0,
+  },
+  heartbeatTimer: null,
+  statusPollTimer: null,
+  leaseCountdownTimer: null,
+  healthPollTimer: null,
+  pending: new Map(),
+  reqSeq: 0,
+  transport: { playing: false, speed: 1, timeline: 0, raf: null, lastTs: 0 },
+  eventBuffer: [],
+  codeActiveLine: 0,
+  health: {
+    msgTimestamps: [],
+    jitterSamples: [],
+    lastMsgTime: 0,
+    dropped10s: 0, total10s: 0,
+    dropped60s: 0, total60s: 0,
+    queueP95: 0,
+  },
+  alerts: [],
+  ai: {
+    enabled: false,
+    connected: false,
+    messages: [],
+    pendingRequest: false,
+    model: 'claude-sonnet-4-20250514',
+    systemContext: null,
+  },
+};
+
+// State transition helper (H-04)
+function setState(path, value) {
+  const keys = path.split('.');
+  let obj = state;
+  for (let i = 0; i < keys.length - 1; i++) obj = obj[keys[i]];
+  const oldVal = obj[keys[keys.length - 1]];
+  obj[keys[keys.length - 1]] = value;
+  // Development-mode logging (remove or gate behind flag in production)
+  if (oldVal !== value) {
+    console.debug(`[state] ${path}: ${JSON.stringify(oldVal)} → ${JSON.stringify(value)}`);
+  }
+}
+
+// ── 6. CONFIGURATION ──
+const paramConfig = [
+  { key: 'speed', label: 'Speed', min: 1, max: 50, value: 20, group: 'Motion' },
+  { key: 'intensity', label: 'Intensity', min: 0, max: 255, value: 128, group: 'Motion' },
+  { key: 'saturation', label: 'Saturation', min: 0, max: 255, value: 160, group: 'Color' },
+  { key: 'complexity', label: 'Complexity', min: 0, max: 255, value: 140, group: 'Color' },
+  { key: 'variation', label: 'Variation', min: 0, max: 255, value: 90, group: 'Output' },
+  { key: 'brightness', label: 'Brightness', min: 0, max: 255, value: 180, group: 'Output' },
+];
+
+const SENSITIVE_TELEMETRY_KEYS = new Set([
+  'leaseToken', 'x-control-lease', 'x-control-lease-id', 'authorization', 'apiKey',
+]);
+
+const sampleCode = [
+  { text: '// K1 Lightwave Pipeline \u2014 render loop', cls: 'comment' },
+  { text: '' },
+  { text: '<span class="keyword">import</span> { LedController, Pipeline } <span class="keyword">from</span> <span class="string">"@k1/core"</span>;' },
+  { text: '<span class="keyword">import</span> { SemanticMapper } <span class="keyword">from</span> <span class="string">"@k1/mapping"</span>;' },
+  { text: '' },
+  { text: '<span class="keyword">const</span> <span class="fn">config</span> <span class="op">=</span> {' },
+  { text: '  stripCount<span class="op">:</span> <span class="number">2</span>,' },
+  { text: '  ledsPerStrip<span class="op">:</span> <span class="number">160</span>,' },
+  { text: '  origin<span class="op">:</span> <span class="string">"centre"</span>,' },
+  { text: '  fps<span class="op">:</span> <span class="number">120</span>,' },
+  { text: '};' },
+  { text: '' },
+  { text: '<span class="keyword">const</span> pipeline <span class="op">=</span> <span class="keyword">new</span> <span class="fn">Pipeline</span>(config);' },
+  { text: '' },
+  { text: '<span class="comment">// Phase 1: Input acquisition</span>' },
+  { text: 'pipeline.<span class="fn">addStage</span>(<span class="string">"input"</span>, (ctx) <span class="op">=></span> {' },
+  { text: '  ctx.audio <span class="op">=</span> <span class="fn">captureAudio</span>(ctx.bufferSize);' },
+  { text: '  ctx.params <span class="op">=</span> <span class="fn">readParameters</span>();' },
+  { text: '  <span class="keyword">return</span> ctx;' },
+  { text: '});' },
+  { text: '' },
+  { text: '<span class="comment">// Phase 2: Semantic mapping</span>' },
+  { text: 'pipeline.<span class="fn">addStage</span>(<span class="string">"mapping"</span>, (ctx) <span class="op">=></span> {' },
+  { text: '  <span class="keyword">const</span> mapper <span class="op">=</span> <span class="keyword">new</span> <span class="fn">SemanticMapper</span>(ctx.params);' },
+  { text: '  ctx.mapped <span class="op">=</span> mapper.<span class="fn">transform</span>(ctx.audio);' },
+  { text: '  ctx.energy <span class="op">=</span> mapper.<span class="fn">computeEnergy</span>();' },
+  { text: '  <span class="keyword">return</span> ctx;' },
+  { text: '});' },
+  { text: '' },
+  { text: '<span class="comment">// Phase 3: Modulation + effects</span>' },
+  { text: 'pipeline.<span class="fn">addStage</span>(<span class="string">"modulation"</span>, (ctx) <span class="op">=></span> {' },
+  { text: '  <span class="keyword">const</span> t <span class="op">=</span> performance.<span class="fn">now</span>() <span class="op">*</span> <span class="number">0.001</span>;' },
+  { text: '  ctx.hue <span class="op">=</span> (ctx.mapped.hue <span class="op">+</span> Math.<span class="fn">sin</span>(t) <span class="op">*</span> <span class="number">30</span>) <span class="op">%</span> <span class="number">360</span>;' },
+  { text: '  ctx.intensity <span class="op">=</span> ctx.energy <span class="op">*</span> ctx.params.intensity;' },
+  { text: '  <span class="keyword">return</span> ctx;' },
+  { text: '});' },
+  { text: '' },
+  { text: '<span class="comment">// Phase 4: Render to LED buffer</span>' },
+  { text: 'pipeline.<span class="fn">addStage</span>(<span class="string">"render"</span>, (ctx) <span class="op">=></span> {' },
+  { text: '  <span class="keyword">for</span> (<span class="keyword">let</span> i <span class="op">=</span> <span class="number">0</span>; i <span class="op"><</span> config.ledsPerStrip; i<span class="op">++</span>) {' },
+  { text: '    <span class="keyword">const</span> d <span class="op">=</span> Math.<span class="fn">abs</span>(i <span class="op">-</span> <span class="number">80</span>) <span class="op">/</span> <span class="number">80</span>; <span class="comment">// centre origin</span>' },
+  { text: '    <span class="keyword">const</span> h <span class="op">=</span> (ctx.hue <span class="op">+</span> i <span class="op">*</span> <span class="number">0.9</span>) <span class="op">%</span> <span class="number">360</span>;' },
+  { text: '    <span class="keyword">const</span> l <span class="op">=</span> <span class="number">55</span> <span class="op">-</span> d <span class="op">*</span> <span class="number">35</span>;' },
+  { text: '    ctx.buffer[i] <span class="op">=</span> <span class="fn">hsl</span>(h, <span class="number">70</span>, l);' },
+  { text: '  }' },
+  { text: '  <span class="keyword">return</span> ctx;' },
+  { text: '});' },
+  { text: '' },
+  { text: '<span class="comment">// Phase 5: PostFX + output</span>' },
+  { text: 'pipeline.<span class="fn">addStage</span>(<span class="string">"output"</span>, (ctx) <span class="op">=></span> {' },
+  { text: '  <span class="fn">applyGamma</span>(ctx.buffer, <span class="number">2.2</span>);' },
+  { text: '  controller.<span class="fn">pushFrame</span>(ctx.buffer);' },
+  { text: '  <span class="keyword">return</span> ctx;' },
+  { text: '});' },
+  { text: '' },
+  { text: 'pipeline.<span class="fn">start</span>();' },
+];
+
+const phaseLines = {
+  input: [15, 16, 17, 18, 19],
+  mapping: [22, 23, 24, 25, 26, 27],
+  modulation: [30, 31, 32, 33, 34, 35],
+  render: [38, 39, 40, 41, 42, 43, 44, 45, 46],
+  post: [49, 50, 51, 52, 53],
+  output: [49, 50, 51, 52, 53],
+};
+
+// ── 7. UTILITY FUNCTIONS ──
+function makeReqId(prefix = 'req') { state.reqSeq += 1; return `${prefix}-${state.reqSeq}-${Date.now()}`; }
+
+// Toast with module-scoped timer (FLAW-09)
+let _toastTimer = null;
+function toast(message) {
+  if (!ui.toast) return;
+  ui.toast.textContent = message;
+  ui.toast.classList.add('show');
+  window.clearTimeout(_toastTimer);
+  _toastTimer = window.setTimeout(() => ui.toast.classList.remove('show'), 2200);
+}
+
+function sanitiseTelemetry(value) {
+  if (Array.isArray(value)) return value.map(item => sanitiseTelemetry(item));
+  if (value && typeof value === 'object') {
+    const out = {};
+    Object.entries(value).forEach(([key, nested]) => {
+      if (SENSITIVE_TELEMETRY_KEYS.has(key) || SENSITIVE_TELEMETRY_KEYS.has(key.toLowerCase())) out[key] = '[REDACTED]';
+      else out[key] = sanitiseTelemetry(nested);
+    });
+    return out;
+  }
+  return value;
+}
+
+function stddev(arr) {
+  if (arr.length < 2) return 0;
+  const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+  const sqDiffs = arr.map(v => (v - mean) ** 2);
+  return Math.sqrt(sqDiffs.reduce((a, b) => a + b, 0) / arr.length);
+}
+
+// Debounce helper (FLAW-07)
+function debounce(fn, ms) {
+  let timer;
+  return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
+}
+
+// ── 8. RENDERING FUNCTIONS ──
+function renderCode() {
+  let linesHtml = '';
+  let numsHtml = '';
+  sampleCode.forEach((line, i) => {
+    const num = i + 1;
+    numsHtml += `<div style="height:1.75em;line-height:1.75em;">${num}</div>`;
+    linesHtml += `<span class="code-line" data-line="${num}" style="display:block;height:1.75em;line-height:1.75em;">${line.text || ' '}</span>`;
+  });
+  if (ui.lineNumbers) ui.lineNumbers.innerHTML = numsHtml;
+  if (ui.codeContent) ui.codeContent.innerHTML = linesHtml;
+  if (ui.lineCount) ui.lineCount.textContent = `${sampleCode.length} lines`;
+}
+
+// FLAW-06: Use .active-line class toggle instead of inline styles
+function highlightCodePhase(phase) {
+  const lines = phaseLines[phase] || [];
+  if (!ui.codeContent) return;
+  const allLines = ui.codeContent.querySelectorAll('.code-line');
+  allLines.forEach(el => {
+    const ln = parseInt(el.dataset.line);
+    el.classList.toggle('active-line', lines.includes(ln));
+  });
+  const phaseNames = { input: 'Input Acquisition', mapping: 'Semantic Mapping', modulation: 'Modulation', render: 'LED Render', post: 'PostFX', output: 'LED Output' };
+  if (ui.execPhase) ui.execPhase.textContent = `phase: ${phase}`;
+  if (state.transport.playing) {
+    if (ui.execIndicator) { ui.execIndicator.style.background = 'var(--success)'; ui.execIndicator.classList.add('exec-dot-active'); }
+    if (ui.execStatus) ui.execStatus.textContent = `Running \u00b7 ${phaseNames[phase] || phase}`;
+  } else {
+    if (ui.execIndicator) { ui.execIndicator.style.background = 'var(--text-tertiary)'; ui.execIndicator.classList.remove('exec-dot-active'); }
+    if (ui.execStatus) ui.execStatus.textContent = `Idle \u00b7 ${phaseNames[phase] || phase}`;
+  }
+}
+
+// FLAW-01: 80 DOM elements per strip at 2:1 ratio for 160 LEDs
+function paintStrip(container, hue, reverse) {
+  if (!container) return;
+  if (container.childElementCount === 0) {
+    for (let i = 0; i < 80; i++) { const led = document.createElement('span'); container.appendChild(led); }
+  }
+  const leds = Array.from(container.children);
+  leds.forEach((led, idx) => {
+    const t = reverse ? leds.length - idx - 1 : idx;
+    const d = Math.abs(t - leds.length / 2) / (leds.length / 2);
+    const l = 55 - d * 35;
+    const s = 70 + (1 - d) * 25;
+    const h = (hue + t * 0.9) % 360;
+    led.style.background = `hsl(${h} ${s}% ${l}%)`;
+  });
+}
+
+// FLAW-01: 64 elements for centre origin vis (proportional to 160 LEDs)
+function renderCentreOriginVis(hue) {
+  const container = ui.centreOriginVis;
+  if (!container) return;
+  if (container.childElementCount === 0) {
+    for (let i = 0; i < 64; i++) {
+      const led = document.createElement('span');
+      led.style.cssText = `flex:1;border-radius:1px;background:var(--led-off);transition:background 0.1s;height:100%;`;
+      container.appendChild(led);
+    }
+  }
+  const leds = Array.from(container.children);
+  const half = leds.length / 2;
+  leds.forEach((led, i) => {
+    const d = Math.abs(i - half) / half;
+    const l = 60 - d * 40;
+    const s = 75 + (1 - d) * 20;
+    const h = (hue + Math.abs(i - half) * 2) % 360;
+    led.style.background = `hsl(${h} ${s}% ${l}%)`;
+  });
+}
+
+// FLAW-10: LGP preview stub
+// TODO: LGP optical simulation — apply Gaussian blur approximation
+function renderLGPPreview(stripAColors, stripBColors) {
+  const canvas = ui.lgpPreviewCanvas;
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  // Placeholder: draw a soft gradient based on strip hue
+  // Real implementation would convolve LED colours with Gaussian kernel
+  ctx.fillStyle = 'rgba(124,92,252,0.06)';
+  ctx.fillRect(0, 0, w, h);
+}
+
+// ── 9. TELEMETRY (FLAW-04: incremental DOM insertion) ──
+function eventSeverity(event) {
+  if (/error|fail|lost|stop/i.test(event)) return 'pill-error';
+  if (/warn|timeout/i.test(event)) return 'pill-warning';
+  if (/acquire|heartbeat|ok|connect|init|start/i.test(event)) return 'pill-success';
+  if (/release|change|update|speed/i.test(event)) return 'pill-info';
+  return 'pill-default';
+}
+
+function eventLabel(event) {
+  const parts = event.split('.');
+  return parts[parts.length - 1] || event;
+}
+
+function logEvent(event, payload = {}) {
+  const safePayload = sanitiseTelemetry(payload);
+  const now = new Date();
+  const ts = now.toISOString().slice(11, 23);
+  const msgStr = JSON.stringify(safePayload);
+  state.eventBuffer.unshift({ ts, event, msg: msgStr });
+  if (state.eventBuffer.length > 120) state.eventBuffer.length = 120;
+
+  const container = ui.telemetryLog;
+  if (!container) return;
+
+  // FLAW-04: Incremental DOM insertion instead of innerHTML rebuild
+  const row = document.createElement('div');
+  row.className = 'feed-row';
+  const tsEl = document.createElement('span');
+  tsEl.className = 'feed-ts';
+  tsEl.textContent = ts;
+  const pillEl = document.createElement('span');
+  pillEl.className = `feed-pill ${eventSeverity(event)}`;
+  pillEl.textContent = eventLabel(event);
+  const msgEl = document.createElement('span');
+  msgEl.className = 'feed-msg';
+  msgEl.textContent = msgStr === '{}' ? '' : msgStr;
+  row.appendChild(tsEl);
+  row.appendChild(pillEl);
+  row.appendChild(msgEl);
+
+  // Prepend new row at top
+  if (container.firstChild) {
+    container.insertBefore(row, container.firstChild);
+  } else {
+    container.appendChild(row);
+  }
+
+  // Trim excess rows from bottom
+  while (container.childElementCount > 120) {
+    container.removeChild(container.lastChild);
+  }
+
+  processAlertFromEvent(event, safePayload, ts);
+}
+
+// ── 10. ALERT SYSTEM ──
+function pushAlert(tier, msg) {
+  const ts = new Date().toISOString().slice(11, 19);
+  state.alerts.unshift({ tier, msg, ts, id: Date.now() });
+  state.alerts = state.alerts.slice(0, 30);
+  renderAlerts();
+  eventBus.emit('alert:new', { tier, msg });
+}
+
+function processAlertFromEvent(event, payload, ts) {
+  if (/disconnect|lost|stop/i.test(event)) {
+    pushAlert('critical', event.replace(/\./g, ' '));
+  } else if (/timeout|fail|heartbeat_failed/i.test(event)) {
+    pushAlert('warning', event.replace(/\./g, ' '));
+  } else if (/lease\.(acquired|released|changed)|ws\.connect/i.test(event)) {
+    pushAlert('info', event.replace(/\./g, ' '));
+  }
+}
+
+// FLAW-05: Use class toggling for alert badge instead of inline styles
+function renderAlerts() {
+  const list = ui.alertList;
+  if (!list) return;
+  const critCount = state.alerts.filter(a => a.tier === 'critical').length;
+  const warnCount = state.alerts.filter(a => a.tier === 'warning').length;
+  const total = state.alerts.length;
+
+  if (ui.alertCount) {
+    ui.alertCount.textContent = String(total);
+    ui.alertCount.className = 'badge-status';
+    if (critCount > 0) {
+      ui.alertCount.classList.add('badge-count-critical');
+    } else if (warnCount > 0) {
+      ui.alertCount.classList.add('badge-count-warning');
+    } else {
+      ui.alertCount.classList.add('badge-muted', 'badge-count-muted');
+    }
+  }
+
+  if (total === 0) {
+    list.innerHTML = '<div class="alert-empty"><iconify-icon icon="solar:check-circle-linear" width="14" style="stroke-width:1.5;color:var(--success);display:block;margin:0 auto 4px;"></iconify-icon>No active alerts</div>';
+    return;
+  }
+
+  list.innerHTML = '';
+  state.alerts.slice(0, 20).forEach(a => {
+    const row = document.createElement('div');
+    row.className = `alert-row alert-${a.tier}`;
+    const dot = document.createElement('span');
+    dot.className = `alert-dot alert-dot-${a.tier}`;
+    const tsEl = document.createElement('span');
+    tsEl.className = 'alert-ts';
+    tsEl.textContent = a.ts;
+    const msgEl = document.createElement('span');
+    msgEl.className = 'alert-msg';
+    msgEl.textContent = a.msg;
+    row.appendChild(dot);
+    row.appendChild(tsEl);
+    row.appendChild(msgEl);
+    list.appendChild(row);
+  });
+}
+
+// ── 11. HEALTH & DIAGNOSTICS ──
+function updateKPI(id, value, barPct, barColor) {
+  if (!ui.kpiGrid) return;
+  const tile = ui.kpiGrid.querySelector(`[data-kpi="${id}"]`);
+  if (!tile) return;
+  const bar = tile.querySelector('.kpi-tile-bar');
+  if (bar) {
+    bar.style.width = Math.min(100, Math.max(0, barPct)) + '%';
+    if (barColor) bar.style.background = barColor;
+  }
+}
+
+function computeAndRenderHealth() {
+  const h = state.health;
+
+  if (!state.connected) {
+    if (ui.kpiQueueP95) ui.kpiQueueP95.innerHTML = '0';
+    if (ui.kpiCadence) ui.kpiCadence.innerHTML = '0<span style="font-size:var(--text-min);font-weight:500;color:var(--text-tertiary);margin-left:1px;">Hz</span>';
+    if (ui.kpiJitter) ui.kpiJitter.innerHTML = '0<span style="font-size:var(--text-min);font-weight:500;color:var(--text-tertiary);margin-left:1px;">ms</span>';
+    if (ui.kpiDropRatio) ui.kpiDropRatio.innerHTML = '0<span style="font-size:var(--text-min);font-weight:500;color:var(--text-tertiary);margin-left:1px;">%</span>';
+    if (ui.kpiDrop10s) ui.kpiDrop10s.textContent = '10s: 0%';
+    if (ui.kpiDrop60s) ui.kpiDrop60s.textContent = '60s: 0%';
+    updateKPI('queueP95', 0, 0, 'var(--success)');
+    updateKPI('cadence', 0, 0, 'var(--info)');
+    updateKPI('jitter', 0, 0, 'var(--warning)');
+    updateKPI('dropRatio', 0, 0, 'var(--danger)');
+    updateDiagBadge('idle');
+    return;
+  }
+
+  const ws = state.ws;
+  const queueP95 = ws ? ws.bufferedAmount : 0;
+  const cadenceHz = h.msgTimestamps.length;
+  const jitterMs = h.jitterSamples.length > 1 ? stddev(h.jitterSamples) : 0;
+  const drop10 = h.total10s > 0 ? (h.dropped10s / h.total10s * 100) : 0;
+  const drop60 = h.total60s > 0 ? (h.dropped60s / h.total60s * 100) : 0;
+  const dropRatio = Math.max(drop10, drop60);
+
+  const qColor = queueP95 > 5000 ? 'var(--danger)' : queueP95 > 1000 ? 'var(--warning)' : 'var(--success)';
+  const jColor = jitterMs > 200 ? 'var(--danger)' : jitterMs > 80 ? 'var(--warning)' : 'var(--success)';
+  const dColor = dropRatio > 10 ? 'var(--danger)' : dropRatio > 2 ? 'var(--warning)' : 'var(--success)';
+
+  if (ui.kpiQueueP95) ui.kpiQueueP95.innerHTML = String(queueP95);
+  if (ui.kpiCadence) ui.kpiCadence.innerHTML = `${cadenceHz}<span style="font-size:var(--text-min);font-weight:500;color:var(--text-tertiary);margin-left:1px;">Hz</span>`;
+  if (ui.kpiJitter) ui.kpiJitter.innerHTML = `${jitterMs.toFixed(1)}<span style="font-size:var(--text-min);font-weight:500;color:var(--text-tertiary);margin-left:1px;">ms</span>`;
+  if (ui.kpiDropRatio) ui.kpiDropRatio.innerHTML = `${dropRatio.toFixed(1)}<span style="font-size:var(--text-min);font-weight:500;color:var(--text-tertiary);margin-left:1px;">%</span>`;
+  if (ui.kpiDrop10s) ui.kpiDrop10s.textContent = `10s: ${drop10.toFixed(1)}%`;
+  if (ui.kpiDrop60s) ui.kpiDrop60s.textContent = `60s: ${drop60.toFixed(1)}%`;
+
+  updateKPI('queueP95', queueP95, Math.min(100, queueP95 / 100), qColor);
+  updateKPI('cadence', cadenceHz, Math.min(100, cadenceHz / 60 * 100), 'var(--info)');
+  updateKPI('jitter', jitterMs, Math.min(100, jitterMs / 300 * 100), jColor);
+  updateKPI('dropRatio', dropRatio, Math.min(100, dropRatio / 20 * 100), dColor);
+
+  if (ui.kpiQueueP95) ui.kpiQueueP95.style.color = qColor === 'var(--success)' ? 'var(--text)' : qColor === 'var(--warning)' ? 'var(--warning)' : 'var(--danger)';
+  if (ui.kpiJitter) ui.kpiJitter.style.color = jColor === 'var(--success)' ? 'var(--text)' : jColor === 'var(--warning)' ? 'var(--warning)' : 'var(--danger)';
+  if (ui.kpiDropRatio) ui.kpiDropRatio.style.color = dColor === 'var(--success)' ? 'var(--text)' : dColor === 'var(--warning)' ? 'var(--warning)' : 'var(--danger)';
+
+  if (dropRatio > 10 || queueP95 > 5000 || jitterMs > 200) {
+    updateDiagBadge('critical');
+  } else if (dropRatio > 2 || queueP95 > 1000 || jitterMs > 80) {
+    updateDiagBadge('degraded');
+  } else {
+    updateDiagBadge('healthy');
+  }
+
+  // Health threshold alerts
+  if (dropRatio > 10 && !state._alertedDropCritical) {
+    pushAlert('critical', `Extreme drop ratio: ${dropRatio.toFixed(1)}%`);
+    state._alertedDropCritical = true;
+  } else if (dropRatio <= 10) { state._alertedDropCritical = false; }
+
+  if (jitterMs > 200 && !state._alertedJitterSpike) {
+    pushAlert('warning', `Jitter spike: ${jitterMs.toFixed(1)}ms stddev`);
+    state._alertedJitterSpike = true;
+  } else if (jitterMs <= 200) { state._alertedJitterSpike = false; }
+
+  if (queueP95 > 1000 && !state._alertedQueueRising) {
+    pushAlert('warning', `bufferedAmount p95 rising: ${queueP95}`);
+    state._alertedQueueRising = true;
+  } else if (queueP95 <= 1000) { state._alertedQueueRising = false; }
+
+  const healthMetrics = { queueP95, cadenceHz, jitterMs, dropRatio, drop10, drop60 };
+  eventBus.emit('health:update', healthMetrics);
+}
+
+// FLAW-05: Use class toggling for diag badge
+function updateDiagBadge(status) {
+  const badge = ui.diagBadge;
+  if (!badge) return;
+  const dotHtml = '<span style="width:3px;height:3px;border-radius:50%;background:currentColor;"></span>';
+  badge.style.cssText = '';
+  if (status === 'critical') {
+    badge.innerHTML = dotHtml + 'critical';
+    badge.className = 'panel-badge diag-critical';
+  } else if (status === 'degraded') {
+    badge.innerHTML = dotHtml + 'degraded';
+    badge.className = 'panel-badge diag-degraded';
+  } else if (status === 'idle') {
+    badge.innerHTML = dotHtml + 'idle';
+    badge.className = 'panel-badge badge-muted';
+  } else {
+    badge.innerHTML = dotHtml + 'healthy';
+    badge.className = 'panel-badge badge-success';
+  }
+}
+
+function recordMessageTiming() {
+  const now = performance.now();
+  const h = state.health;
+  if (h.lastMsgTime > 0) {
+    const delta = now - h.lastMsgTime;
+    h.jitterSamples.push(delta);
+    if (h.jitterSamples.length > 60) h.jitterSamples.shift();
+  }
+  h.lastMsgTime = now;
+  h.msgTimestamps.push(now);
+  const cutoff = now - 1000;
+  h.msgTimestamps = h.msgTimestamps.filter(t => t > cutoff);
+}
+
+// FLAW-12: Start/stop health poll on connect/disconnect
+function startHealthPoll() {
+  stopHealthPoll();
+  state.healthPollTimer = window.setInterval(computeAndRenderHealth, 500);
+}
+
+function stopHealthPoll() {
+  if (state.healthPollTimer) {
+    window.clearInterval(state.healthPollTimer);
+    state.healthPollTimer = null;
+  }
+}
+
+// ── 12. UI STATE UPDATES ──
+function setConnectionBadge(connected) {
+  if (ui.connectBadge) {
+    if (connected) {
+      ui.connectBadge.innerHTML = '<span style="width:4px;height:4px;border-radius:50%;background:currentColor;"></span>Connected';
+      ui.connectBadge.className = 'badge-status badge-success';
+    } else {
+      ui.connectBadge.innerHTML = '<span style="width:4px;height:4px;border-radius:50%;background:currentColor;"></span>Disconnected';
+      ui.connectBadge.className = 'badge-status badge-muted';
+    }
+  }
+  // Update connect button label
+  if (ui.connectBtnLabel) {
+    ui.connectBtnLabel.textContent = connected ? 'Disconnect' : 'Connect';
+  }
+  eventBus.emit('connection:change', { connected });
+}
+
+function setLeaseModeBadge(mode) {
+  if (!ui.leaseBadge) return;
+  if (mode === 'exclusive') {
+    ui.leaseBadge.textContent = 'Exclusive';
+    ui.leaseBadge.className = 'badge-status badge-success';
+  } else if (mode === 'locked') {
+    ui.leaseBadge.textContent = 'Locked';
+    ui.leaseBadge.className = 'badge-status badge-warning';
+  } else {
+    ui.leaseBadge.textContent = 'Observe';
+    ui.leaseBadge.className = 'badge-status badge-muted';
+  }
+}
+
+function canMutate() {
+  return state.connected && state.lease.active && state.lease.ownerInstanceId === state.clientInstanceId;
+}
+
+function updateControls() {
+  const exclusive = canMutate();
+  if (ui.acquireBtn) ui.acquireBtn.disabled = !state.connected || exclusive;
+  if (ui.releaseBtn) ui.releaseBtn.disabled = !exclusive;
+  if (ui.reacquireBtn) ui.reacquireBtn.disabled = !state.connected;
+  if (ui.emergencyBtn) ui.emergencyBtn.disabled = !exclusive;
+  if (ui.tunerGrid) {
+    const sliders = ui.tunerGrid.querySelectorAll('input[type=range]');
+    sliders.forEach(el => { el.disabled = !exclusive; });
+  }
+  if (!state.connected) { setLeaseModeBadge('muted'); return; }
+  if (!state.lease.active) setLeaseModeBadge('muted');
+  else if (exclusive) setLeaseModeBadge('exclusive');
+  else setLeaseModeBadge('locked');
+}
+
+function updateLeaseMeta() {
+  if (ui.leaseId) ui.leaseId.textContent = `leaseId: ${state.lease.leaseId || '-'}`;
+  if (ui.leaseTtl) ui.leaseTtl.textContent = `remaining: ${Math.max(0, Math.floor(state.lease.remainingMs || 0))}ms`;
+  if (ui.ownerBadge) ui.ownerBadge.textContent = `owner: ${state.lease.ownerClientName || 'n/a'}`;
+  const pairs = [
+    ['active', String(Boolean(state.lease.active))],
+    ['scope', state.lease.scope || 'global'],
+    ['ownerClientName', state.lease.ownerClientName || '-'],
+    ['ownerInstanceId', state.lease.ownerInstanceId || '-'],
+    ['ownerWsClientId', String(state.lease.ownerWsClientId ?? '-')],
+    ['ttlMs', String(state.lease.ttlMs || 0)],
+    ['heartbeatIntervalMs', String(state.lease.heartbeatIntervalMs || 0)],
+    ['remainingMs', String(Math.max(0, Math.floor(state.lease.remainingMs || 0)))],
+  ];
+  if (ui.leaseStateBlock) {
+    ui.leaseStateBlock.innerHTML = '';
+    pairs.forEach(([k, v]) => {
+      const cell = document.createElement('div');
+      cell.textContent = `${k}: ${v}`;
+      ui.leaseStateBlock.appendChild(cell);
+    });
+  }
+  updateControls();
+  eventBus.emit('lease:change', { ...state.lease });
+}
+
+// ── 13. LEASE MANAGEMENT ──
+function updateLeaseFromPayload(payload = {}, includeToken = false) {
+  if (typeof payload.active === 'boolean') state.lease.active = payload.active;
+  if (payload.leaseId !== undefined) state.lease.leaseId = payload.leaseId || '';
+  if (includeToken && payload.leaseToken) state.lease.leaseToken = payload.leaseToken;
+  if (payload.scope) state.lease.scope = payload.scope;
+  if (payload.ownerClientName !== undefined) state.lease.ownerClientName = payload.ownerClientName || '';
+  if (payload.ownerInstanceId !== undefined) state.lease.ownerInstanceId = payload.ownerInstanceId || '';
+  if (payload.ownerWsClientId !== undefined) state.lease.ownerWsClientId = payload.ownerWsClientId;
+  if (payload.remainingMs !== undefined) state.lease.remainingMs = payload.remainingMs;
+  if (payload.ttlMs !== undefined) state.lease.ttlMs = payload.ttlMs;
+  if (payload.heartbeatIntervalMs !== undefined) state.lease.heartbeatIntervalMs = payload.heartbeatIntervalMs;
+  updateLeaseMeta();
+}
+
+// FLAW-13: Drift-free lease countdown using performance.now() delta
+function startLeaseCountdown() {
+  window.clearInterval(state.leaseCountdownTimer);
+  state.lease.countdownStartTime = performance.now();
+  state.lease.countdownStartRemaining = state.lease.remainingMs;
+  state.leaseCountdownTimer = window.setInterval(() => {
+    const elapsed = performance.now() - state.lease.countdownStartTime;
+    state.lease.remainingMs = Math.max(0, state.lease.countdownStartRemaining - elapsed);
+    updateLeaseMeta();
+  }, 100);
+}
+
+function stopLeaseCountdown() { window.clearInterval(state.leaseCountdownTimer); }
+
+function stopHeartbeat() {
+  window.clearInterval(state.heartbeatTimer);
+  state.heartbeatTimer = null;
+  if (ui.hbState) ui.hbState.textContent = 'heartbeat: idle';
+}
+
+async function startHeartbeat() {
+  stopHeartbeat();
+  if (!canMutate()) return;
+  const tick = async () => {
+    if (!canMutate()) { stopHeartbeat(); return; }
+    try {
+      const result = await sendWsCommand('control.heartbeat', { leaseId: state.lease.leaseId, leaseToken: state.lease.leaseToken });
+      if (ui.hbState) ui.hbState.textContent = 'heartbeat: ok';
+      updateLeaseFromPayload(result, false);
+      logEvent('control.lease.heartbeat', result);
+    } catch (error) {
+      if (ui.hbState) ui.hbState.textContent = 'heartbeat: failed';
+      toast(`Lease heartbeat failed: ${error.message}`);
+      logEvent('control.lease.heartbeat_failed', { message: error.message });
+    }
+  };
+  await tick();
+  state.heartbeatTimer = window.setInterval(tick, Math.max(300, state.lease.heartbeatIntervalMs || 1000));
+}
+
+// ── 14. WEBSOCKET LAYER ──
+function cleanupWs() {
+  if (state.ws) { state.ws.onopen = null; state.ws.onclose = null; state.ws.onerror = null; state.ws.onmessage = null; state.ws.close(); }
+  state.ws = null; state.connected = false;
+  setConnectionBadge(false); stopHeartbeat(); stopLeaseCountdown(); stopHealthPoll();
+  state.pending.clear(); updateControls();
+}
+
+function wsUrl() { const host = state.host || 'lightwaveos.local'; return `ws://${host}/ws`; }
+function apiUrl(path) { const host = state.host || 'lightwaveos.local'; return `http://${host}${path}`; }
+
+// FLAW-08: Exponential backoff reconnection
+function scheduleReconnect() {
+  const r = state.reconnect;
+  if (r.userDisconnected || r.attempts >= r.maxAttempts) {
+    if (r.attempts >= r.maxAttempts) {
+      setConnectionBadge(false);
+      if (ui.connectBadge) ui.connectBadge.innerHTML = '<span style="width:4px;height:4px;border-radius:50%;background:currentColor;"></span>Failed \u2014 click retry';
+    }
+    return;
+  }
+  r.attempts += 1;
+  // Backoff: 1s, 2s, 4s, 8s, 16s, 30s cap
+  const delay = Math.min(30000, 1000 * Math.pow(2, r.attempts - 1));
+  if (ui.connectBadge) {
+    ui.connectBadge.innerHTML = `<span style="width:4px;height:4px;border-radius:50%;background:currentColor;"></span>Reconnecting (${r.attempts})...`;
+    ui.connectBadge.className = 'badge-status badge-warning';
+  }
+  r.timer = window.setTimeout(() => connect(true), delay);
+}
+
+function cancelReconnect() {
+  if (state.reconnect.timer) {
+    window.clearTimeout(state.reconnect.timer);
+    state.reconnect.timer = null;
+  }
+  state.reconnect.attempts = 0;
+}
+
+function connect(isReconnect = false) {
+  cleanupWs();
+  if (!isReconnect) {
+    cancelReconnect();
+    state.reconnect.userDisconnected = false;
+  }
+  state.host = ui.hostInput ? ui.hostInput.value.trim() : state.host;
+  const ws = new WebSocket(wsUrl());
+  state.ws = ws;
+  const hadLeaseBeforeDisconnect = state.lease.active;
+
+  ws.onopen = async () => {
+    state.connected = true;
+    cancelReconnect();
+    setConnectionBadge(true);
+    updateControls();
+    startHealthPoll();
+    toast('Connected to device');
+    logEvent('ws.connect', { host: state.host });
+    startLeaseCountdown();
+    await refreshLeaseStatus();
+    startStatusPolling();
+    // Re-acquire lease if reconnecting and had one before
+    if (isReconnect && hadLeaseBeforeDisconnect) {
+      try { await acquireLease(); } catch (e) { logEvent('control.lease.reacquire_failed', { message: e.message }); }
+    }
+  };
+
+  ws.onclose = () => {
+    const hadLease = state.lease.active;
+    cleanupWs();
+    state.lease.active = false; state.lease.leaseToken = ''; state.lease.leaseId = '';
+    updateLeaseMeta();
+    pushAlert('critical', 'WebSocket disconnected');
+    if (hadLease) { toast('Lease lost: websocket disconnected'); logEvent('control.lease.lost', { reason: 'ws_disconnected' }); }
+    // FLAW-08: Auto-reconnect if not user-initiated
+    if (!state.reconnect.userDisconnected) {
+      scheduleReconnect();
+    }
+  };
+
+  ws.onerror = () => { logEvent('ws.error', {}); };
+
+  ws.onmessage = (event) => {
+    recordMessageTiming();
+    let msg;
+    try { msg = JSON.parse(event.data); } catch (e) {
+      // FLAW-11: Log parse errors instead of silently swallowing
+      logEvent('ws.parse_error', { snippet: event.data.slice(0, 100) });
+      return;
+    }
+    if (msg.requestId && state.pending.has(msg.requestId)) {
+      const pending = state.pending.get(msg.requestId); state.pending.delete(msg.requestId);
+      if (msg.success === false) pending.reject(new Error(msg.error?.message || msg.error?.code || 'Request failed'));
+      else pending.resolve(msg.data ?? msg);
+      return;
+    }
+    handleUnsolicitedMessage(msg);
+  };
+}
+
+function disconnect() {
+  state.reconnect.userDisconnected = true;
+  cancelReconnect();
+  cleanupWs();
+  state.lease.active = false; state.lease.leaseToken = ''; state.lease.leaseId = '';
+  updateLeaseMeta();
+}
+
+function handleUnsolicitedMessage(msg) {
+  if (msg.type === 'control.stateChanged' && msg.data) {
+    updateLeaseFromPayload(msg.data, false);
+    logEvent(`control.lease.${msg.event || 'changed'}`, msg.data);
+    if (!canMutate()) stopHeartbeat();
+    return;
+  }
+  if (msg.type === 'status') { applyStatusFrame(msg); return; }
+  if (msg.type === 'error') {
+    logEvent('ws.error', msg.error || {});
+    if (msg.error?.code === 'CONTROL_LOCKED') toast(`Locked by ${msg.error.ownerClientName || 'another client'}`);
+  }
+}
+
+function sendWsCommand(type, payload = {}) {
+  if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return Promise.reject(new Error('WebSocket not connected'));
+  const requestId = makeReqId(type.replace(/\W/g, '_'));
+  const body = { type, requestId, ...payload };
+  return new Promise((resolve, reject) => {
+    state.pending.set(requestId, { resolve, reject });
+    state.ws.send(JSON.stringify(body));
+    window.setTimeout(() => { if (state.pending.has(requestId)) { state.pending.delete(requestId); reject(new Error(`Timeout waiting for ${type}`)); } }, 3000);
+  });
+}
+
+async function fetchJson(path, options = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  const response = await fetch(apiUrl(path), { ...options, headers });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.success === false) { const message = payload?.error?.message || `HTTP ${response.status}`; throw new Error(message); }
+  return payload;
+}
+
+async function fetchMutating(path, body) {
+  const headers = {};
+  if (state.lease.active) {
+    if (!state.lease.leaseToken) throw new Error('No lease token in memory');
+    headers['X-Control-Lease'] = state.lease.leaseToken;
+    if (state.lease.leaseId) headers['X-Control-Lease-Id'] = state.lease.leaseId;
+  }
+  return fetchJson(path, { method: 'POST', headers, body: JSON.stringify(body) });
+}
+
+async function refreshLeaseStatus() {
+  try { const byWs = state.connected ? await sendWsCommand('control.status') : null; if (byWs) { updateLeaseFromPayload(byWs, false); return; } } catch {}
+  try { const rest = await fetchJson('/api/v1/control/status'); updateLeaseFromPayload(rest.data || {}, false); } catch (error) { logEvent('control.status.fetch_failed', { message: error.message }); }
+}
+
+async function acquireLease() {
+  const result = await sendWsCommand('control.acquire', { clientName: state.clientName, clientInstanceId: state.clientInstanceId, scope: 'global' });
+  updateLeaseFromPayload(result, true); toast('Exclusive control acquired'); logEvent('control.lease.acquired', result);
+  await startHeartbeat();
+}
+
+async function releaseLease(reason = 'user_release') {
+  if (!state.lease.leaseId || !state.lease.leaseToken) return;
+  const result = await sendWsCommand('control.release', { leaseId: state.lease.leaseId, leaseToken: state.lease.leaseToken, reason });
+  state.lease.active = false; state.lease.leaseToken = ''; state.lease.leaseId = '';
+  updateLeaseMeta(); stopHeartbeat(); toast('Control lease released'); logEvent('control.lease.released', result);
+}
+
+async function emergencyStop() {
+  await fetchMutating('/api/v1/parameters', { brightness: 0 });
+  toast('Emergency stop: brightness set to 0'); logEvent('control.emergency_stop', {});
+}
+
+// ── 15. TRANSPORT CONTROLS ──
+function applyStatusFrame(status) {
+  if (status.controlLease) updateLeaseFromPayload(status.controlLease, false);
+  const phase = derivePhase(status); highlightAlgorithmPhase(phase); updateStripPreview(status);
+}
+
+// Updated to 5 segments matching timeline
+function derivePhase(status) {
+  const t = ui.timeline ? Number(ui.timeline.value) / 1000 : 0;
+  if (status?.type === 'status' && status.audioSyncMode === 'external') return 'mapping';
+  if (t < 0.2) return 'input';
+  if (t < 0.4) return 'mapping';
+  if (t < 0.6) return 'modulation';
+  if (t < 0.8) return 'render';
+  return 'output';
+}
+
+function highlightAlgorithmPhase(name) {
+  if (!ui.algoFlow) return;
+  const nodes = ui.algoFlow.querySelectorAll('[data-node]');
+  nodes.forEach(el => { el.classList.toggle('is-active', el.dataset.node === name); });
+  highlightCodePhase(name);
+
+  // Highlight active timeline segment
+  if (ui.timelineTrackBg) {
+    const segs = ui.timelineTrackBg.querySelectorAll('.timeline-segment');
+    const segMap = ['input', 'mapping', 'modulation', 'render', 'output'];
+    segs.forEach((seg, i) => { seg.classList.toggle('seg-active', segMap[i] === name); });
+  }
+
+  eventBus.emit('pipeline:phase', { phase: name });
+}
+
+function updateStripPreview(status = {}) {
+  const base = Number(status.hue || state.transport.timeline / 4) % 360;
+  paintStrip(ui.stripA, base, false);
+  paintStrip(ui.stripB, base + 40, true);
+  renderCentreOriginVis(base);
+  renderLGPPreview(null, null);
+}
+
+function transportTick(ts) {
+  if (!state.transport.playing) { state.transport.raf = null; state.transport.lastTs = 0; return; }
+  if (!state.transport.lastTs) state.transport.lastTs = ts;
+  const dt = ts - state.transport.lastTs;
+  state.transport.lastTs = ts;
+  state.transport.timeline = (state.transport.timeline + dt * 0.08 * state.transport.speed) % 1000;
+  if (ui.timeline) ui.timeline.value = String(Math.floor(state.transport.timeline));
+  highlightAlgorithmPhase(derivePhase({}));
+  updateStripPreview({});
+  state.transport.raf = requestAnimationFrame(transportTick);
+}
+
+function playTimeline() {
+  if (state.transport.playing) return;
+  state.transport.playing = true;
+  state.transport.raf = requestAnimationFrame(transportTick);
+  eventBus.emit('transport:state', { playing: true, speed: state.transport.speed, position: state.transport.timeline });
+}
+
+function pauseTimeline() {
+  state.transport.playing = false;
+  if (state.transport.raf) { cancelAnimationFrame(state.transport.raf); state.transport.raf = null; }
+  state.transport.lastTs = 0;
+  eventBus.emit('transport:state', { playing: false, speed: state.transport.speed, position: state.transport.timeline });
+}
+
+function resetTimeline() {
+  state.transport.timeline = 0;
+  if (ui.timeline) ui.timeline.value = '0';
+  highlightAlgorithmPhase('input'); updateStripPreview({ hue: 0 });
+  eventBus.emit('transport:state', { playing: state.transport.playing, speed: state.transport.speed, position: 0 });
+}
+
+function startStatusPolling() {
+  window.clearInterval(state.statusPollTimer);
+  state.statusPollTimer = window.setInterval(async () => { await refreshLeaseStatus(); }, 1500);
+}
+
+// ── 16. INSPECTOR / TUNER (FLAW-07: debounced change handler) ──
+function createTuner() {
+  if (!ui.tunerGrid) return;
+  const groups = {};
+  paramConfig.forEach(cfg => {
+    if (!groups[cfg.group]) groups[cfg.group] = [];
+    groups[cfg.group].push(cfg);
+  });
+  const groupIcons = {
+    'Motion': 'solar:play-circle-linear',
+    'Color': 'solar:pallete-2-linear',
+    'Output': 'solar:monitor-linear',
+  };
+  Object.entries(groups).forEach(([groupName, params]) => {
+    const section = document.createElement('div');
+    section.className = 'inspector-section';
+    const header = document.createElement('div');
+    header.className = 'inspector-section-header';
+    const chevron = document.createElement('iconify-icon');
+    chevron.setAttribute('icon', 'solar:alt-arrow-down-linear');
+    chevron.setAttribute('width', '10');
+    chevron.style.cssText = 'stroke-width:1.5;';
+    chevron.className = 'inspector-section-chevron';
+    const icon = document.createElement('iconify-icon');
+    icon.setAttribute('icon', groupIcons[groupName] || 'solar:settings-linear');
+    icon.setAttribute('width', '12');
+    icon.style.cssText = 'color:var(--text-tertiary);stroke-width:1.5;';
+    const title = document.createElement('span');
+    title.className = 'inspector-section-title';
+    title.textContent = groupName;
+    header.appendChild(chevron);
+    header.appendChild(icon);
+    header.appendChild(title);
+    section.appendChild(header);
+    const content = document.createElement('div');
+    content.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
+    params.forEach(cfg => {
+      const row = document.createElement('div');
+      row.className = 'inspector-row';
+      const label = document.createElement('span');
+      label.className = 'inspector-row-label';
+      label.textContent = cfg.label;
+      const slider = document.createElement('input');
+      slider.type = 'range';
+      slider.min = String(cfg.min);
+      slider.max = String(cfg.max);
+      slider.value = String(cfg.value);
+      slider.disabled = true;
+      slider.className = 'inspector-row-slider';
+      const value = document.createElement('span');
+      value.className = 'inspector-row-value';
+      value.textContent = String(cfg.value);
+      // `input` fires continuously during drag — instant visual feedback (intentional, not debounced)
+      slider.addEventListener('input', () => { value.textContent = slider.value; });
+      // `change` fires on release — 150ms debounce coalesces rapid discrete changes (FLAW-07)
+      const debouncedChange = debounce(async () => {
+        if (!canMutate()) return;
+        try {
+          const payload = { [cfg.key]: Number(slider.value) };
+          await fetchMutating('/api/v1/parameters', payload);
+          logEvent('parameter.update', payload);
+          eventBus.emit('parameter:change', { key: cfg.key, value: Number(slider.value) });
+        } catch (error) { toast(error.message); }
+      }, 150);
+      slider.addEventListener('change', debouncedChange);
+      row.appendChild(label);
+      row.appendChild(slider);
+      row.appendChild(value);
+      content.appendChild(row);
+    });
+    section.appendChild(content);
+    header.addEventListener('click', () => {
+      const isHidden = content.style.display === 'none';
+      content.style.display = isHidden ? 'flex' : 'none';
+      chevron.classList.toggle('collapsed', !isHidden);
+    });
+    ui.tunerGrid.appendChild(section);
+  });
+}
+
+// ── 17. EVENT BINDING (H-02: no inline onclick) ──
+function bindEvents() {
+  // Connect/disconnect toggle
+  if (ui.connectBtn) ui.connectBtn.addEventListener('click', () => {
+    if (state.connected) { disconnect(); } else { connect(); }
+  });
+  if (ui.statusBtn) ui.statusBtn.addEventListener('click', () => refreshLeaseStatus());
+  if (ui.acquireBtn) ui.acquireBtn.addEventListener('click', async () => {
+    try { await acquireLease(); } catch (error) { toast(error.message); logEvent('control.lease.acquire_failed', { message: error.message }); }
+  });
+  if (ui.releaseBtn) ui.releaseBtn.addEventListener('click', async () => {
+    try { await releaseLease('user_release'); } catch (error) { toast(error.message); logEvent('control.lease.release_failed', { message: error.message }); }
+  });
+  if (ui.reacquireBtn) ui.reacquireBtn.addEventListener('click', async () => {
+    try { await acquireLease(); } catch (error) { toast(error.message); logEvent('control.lease.reacquire_failed', { message: error.message }); }
+  });
+  if (ui.emergencyBtn) ui.emergencyBtn.addEventListener('click', async () => {
+    try { await emergencyStop(); } catch (error) { toast(error.message); logEvent('control.emergency_stop_failed', { message: error.message }); }
+  });
+  if (ui.playBtn) ui.playBtn.addEventListener('click', playTimeline);
+  if (ui.pauseBtn) ui.pauseBtn.addEventListener('click', pauseTimeline);
+  if (ui.resetBtn) ui.resetBtn.addEventListener('click', resetTimeline);
+  ui.speedButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const speed = Number(btn.dataset.speed || '1'); state.transport.speed = speed;
+      ui.speedButtons.forEach(b => b.classList.toggle('is-active', b === btn));
+      logEvent('timeline.speed', { speed });
+      eventBus.emit('transport:state', { playing: state.transport.playing, speed, position: state.transport.timeline });
+    });
+  });
+  if (ui.timeline) ui.timeline.addEventListener('input', () => {
+    state.transport.timeline = Number(ui.timeline.value);
+    highlightAlgorithmPhase(derivePhase({})); updateStripPreview({});
+  });
+
+  // Lease toggle (H-02: moved from inline)
+  if (ui.leaseToggle) ui.leaseToggle.addEventListener('click', () => {
+    const w = ui.leaseStateWrapper;
+    if (!w) return;
+    const open = w.style.display !== 'none';
+    w.style.display = open ? 'none' : 'block';
+    if (ui.leaseChevron) ui.leaseChevron.style.transform = open ? 'rotate(0deg)' : 'rotate(90deg)';
+  });
+
+  // Telemetry toggle (H-02: moved from inline onclick)
+  if (ui.teleToggle) ui.teleToggle.addEventListener('click', () => {
+    const c = ui.teleContent;
+    const i = ui.teleChevron;
+    if (!c) return;
+    if (c.style.display === 'none') {
+      c.style.display = 'block';
+      if (i) i.style.transform = 'rotate(0deg)';
+    } else {
+      c.style.display = 'none';
+      if (i) i.style.transform = 'rotate(-90deg)';
+    }
+  });
+
+  // Host input focus styling (H-02: replaced inline onfocus/onblur)
+  if (ui.hostInput) {
+    ui.hostInput.addEventListener('focus', function() { this.style.borderColor = 'var(--accent)'; this.style.background = 'rgba(0,0,0,0.45)'; });
+    ui.hostInput.addEventListener('blur', function() { this.style.borderColor = 'var(--border)'; this.style.background = 'rgba(0,0,0,0.35)'; });
+  }
+
+  window.addEventListener('beforeunload', async () => {
+    window.clearInterval(state.statusPollTimer);
+    cancelReconnect();
+    if (canMutate()) { try { await releaseLease('window_unload'); } catch {} }
+    cleanupWs();
+  });
+}
+
+// ── 18. PAGE-LEVEL TAB SWITCHING ──
+// Toggles between Composer grid and the Diagnostics iframe view.
+function initPageNav() {
+  const tabs = document.querySelectorAll('.page-nav-tab');
+  const mainGrid = document.querySelector('.main-grid');
+  const diagView = document.getElementById('diagView');
+  const diagFrame = document.getElementById('diagFrame');
+  if (!tabs.length || !mainGrid || !diagView) return;
+
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const page = tab.dataset.page;
+      // Update active tab state
+      tabs.forEach(t => {
+        t.classList.toggle('active', t === tab);
+        t.setAttribute('aria-selected', t === tab ? 'true' : 'false');
+      });
+
+      if (page === 'diagnostics') {
+        mainGrid.style.display = 'none';
+        diagView.style.display = 'block';
+        // Lazy-load the iframe src on first switch
+        if (!diagFrame.src || diagFrame.src === 'about:blank' || !diagFrame.getAttribute('src')) {
+          diagFrame.src = 'diagnostic/index.html';
+        }
+      } else {
+        mainGrid.style.display = '';
+        diagView.style.display = 'none';
+      }
+    });
+  });
+}
+
+// ── 19. INITIALISATION ──
+function init() {
+  createTuner();
+  updateLeaseMeta();
+  updateStripPreview({ hue: 220 });
+  highlightAlgorithmPhase('input');
+  renderCode();
+  highlightCodePhase('input');
+  bindEvents();
+  initPageNav();
+  computeAndRenderHealth();
+  renderAlerts();
+  logEvent('dashboard.init', { clientInstanceId: state.clientInstanceId });
+}
+
+init();
+</script>
+
+</body></html>

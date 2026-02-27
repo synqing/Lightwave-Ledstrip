@@ -1,0 +1,178 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_AUDIO_TEST",
+  "effectIdHex": "0x0A00",
+  "className": "LGPAudioTestEffect",
+  "displayName": "Audio Test",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPAudioTestEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPAudioTestEffect.cpp",
+  "renderRange": [
+    32,
+    156
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        34,
+        34
+      ],
+      [
+        42,
+        42
+      ],
+      [
+        44,
+        46
+      ],
+      [
+        50,
+        50
+      ]
+    ],
+    "mapping": [
+      [
+        107,
+        107
+      ],
+      [
+        111,
+        111
+      ]
+    ],
+    "modulation": [
+      [
+        38,
+        39
+      ],
+      [
+        45,
+        46
+      ],
+      [
+        53,
+        56
+      ],
+      [
+        58,
+        58
+      ],
+      [
+        61,
+        61
+      ],
+      [
+        63,
+        63
+      ],
+      [
+        65,
+        66
+      ],
+      [
+        69,
+        71
+      ],
+      [
+        75,
+        75
+      ],
+      [
+        81,
+        81
+      ],
+      [
+        84,
+        85
+      ],
+      [
+        88,
+        89
+      ],
+      [
+        93,
+        93
+      ],
+      [
+        96,
+        96
+      ],
+      [
+        127,
+        129
+      ],
+      [
+        140,
+        140
+      ],
+      [
+        145,
+        148
+      ],
+      [
+        151,
+        154
+      ]
+    ],
+    "render": [
+      [
+        49,
+        49
+      ],
+      [
+        64,
+        64
+      ],
+      [
+        104,
+        104
+      ],
+      [
+        107,
+        107
+      ],
+      [
+        110,
+        110
+      ],
+      [
+        133,
+        133
+      ],
+      [
+        141,
+        141
+      ],
+      [
+        148,
+        148
+      ],
+      [
+        151,
+        154
+      ]
+    ],
+    "post": [
+      [
+        142,
+        149
+      ]
+    ],
+    "output": [
+      [
+        135,
+        135
+      ],
+      [
+        151,
+        154
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPAudioTestEffect.cpp\n * @brief Audio-reactive test effect implementation\n *\n * Demonstrates Phase 2 audio pipeline integration:\n * - ControlBus: RMS, flux, 8-band spectrum\n * - MusicalGrid: beat phase, beat tick, BPM\n * - Graceful degradation when audio unavailable\n */\n\n#include \"LGPAudioTestEffect.h\"\n#include \"../CoreEffects.h\"\n\n#ifndef NATIVE_BUILD\n#include <FastLED.h>\n#endif\n\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nbool LGPAudioTestEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_beatDecay = 0.0f;\n    m_lastBeatPhase = 0.0f;\n    m_fallbackPhase = 0.0f;\n    return true;\n}\n\nvoid LGPAudioTestEffect::render(plugins::EffectContext& ctx) {\n    // ========================================================================\n    // Determine audio source (real vs fallback)\n    // ========================================================================\n\n    float rms = 0.5f;\n    float beatPhase = 0.0f;\n    bool onBeat = false;\n    float bands[8] = {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f};\n\n    if (ctx.audio.available) {\n        // Real audio data from AudioActor\n        rms = ctx.audio.rms();\n        beatPhase = ctx.audio.beatPhase();\n        onBeat = ctx.audio.isOnBeat();\n\n        // Get all 8 bands\n        for (int i = 0; i < 8; ++i) {\n            bands[i] = ctx.audio.getBand(i);\n        }\n    } else {\n        // Fallback: fake 120 BPM beat\n        m_fallbackPhase += ((ctx.deltaTimeSeconds * 1000.0f) / 500.0f);  // 500ms per beat = 120 BPM\n        if (m_fallbackPhase >= 1.0f) {\n            m_fallbackPhase -= 1.0f;\n        }\n        beatPhase = m_fallbackPhase;\n\n        // Fake RMS from sine wave\n        rms = 0.5f + 0.3f * sinf(beatPhase * 2.0f * 3.14159f);\n\n        // Fake bands with phase offset\n        for (int i = 0; i < 8; ++i) {\n            float phaseOffset = (float)i * 0.125f;\n            bands[i] = 0.5f + 0.4f * sinf((beatPhase + phaseOffset) * 2.0f * 3.14159f);\n        }\n\n        // Fake beat detection at phase crossing\n        if (beatPhase < 0.05f && m_lastBeatPhase > 0.95f) {\n            onBeat = true;\n        }\n    }\n\n    m_lastBeatPhase = beatPhase;\n\n    // Get dt for frame-rate independent decay\n    float dt = ctx.getSafeRawDeltaSeconds();\n\n    // ========================================================================\n    // Beat pulse animation (decays over time)\n    // ========================================================================\n\n    if (onBeat) {\n        m_beatDecay = 1.0f;  // Reset to full intensity on beat\n    } else {\n        // Exponential decay (~200ms, dt-corrected)\n        m_beatDecay *= powf(0.92f, dt * 60.0f);\n        if (m_beatDecay < 0.01f) m_beatDecay = 0.0f;\n    }\n\n    // ========================================================================\n    // Master brightness from RMS + beat pulse\n    // ========================================================================\n\n    float masterIntensity = 0.3f + (rms * 0.5f) + (m_beatDecay * 0.2f);\n    masterIntensity = fminf(1.0f, masterIntensity);\n    uint8_t masterBright = (uint8_t)(masterIntensity * 255.0f);\n\n    // ========================================================================\n    // Clear buffer\n    // ========================================================================\n\n    memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));\n\n    // ========================================================================\n    // CENTER PAIR rendering: bands map from center (bass) to edges (treble)\n    // ========================================================================\n\n    for (int dist = 0; dist < HALF_LENGTH; ++dist) {\n        // Map distance from center to band index\n        // dist 0-9: band 0 (bass)\n        // dist 10-19: band 1\n        // ...\n        // dist 70-79: band 7 (treble)\n        uint8_t bandIdx = (uint8_t)(dist / 10);\n        if (bandIdx > 7) bandIdx = 7;\n\n        float bandEnergy = bands[bandIdx];\n\n        // Color: hue shifts with distance + gHue for animation\n        uint8_t hue = ctx.gHue + (uint8_t)(dist * 2);\n\n        // Brightness: band energy × master intensity\n        uint8_t bright = (uint8_t)(bandEnergy * masterBright);\n\n        // Beat pulse adds extra brightness at center\n        if (dist < 20 && m_beatDecay > 0.1f) {\n            float centerBoost = (1.0f - (float)dist / 20.0f) * m_beatDecay;\n            bright = (uint8_t)fminf(255.0f, (float)bright + centerBoost * 100.0f);\n        }\n\n        CRGB color = ctx.palette.getColor(hue, bright);\n\n        // Set center pair (both strips)\n        SET_CENTER_PAIR(ctx, dist, color);\n    }\n\n    // ========================================================================\n    // Beat indicator: bright flash at center on beat\n    // Uses palette color with boosted brightness (scales toward BLACK)\n    // instead of additive white (which washes colors toward WHITE)\n    // ========================================================================\n\n    if (m_beatDecay > 0.5f) {\n        // Boost brightness based on beat decay (0.7 base + 0.3 from decay)\n        uint8_t beatBright = (uint8_t)((0.7f + m_beatDecay * 0.3f) * ctx.brightness);\n        CRGB beatColor = ctx.palette.getColor(ctx.gHue, beatBright);\n\n        // Center pair flash (just the center 4 LEDs) - assignment preserves saturation\n        ctx.leds[CENTER_LEFT] = beatColor;\n        ctx.leds[CENTER_RIGHT] = beatColor;\n        ctx.leds[STRIP_LENGTH + CENTER_LEFT] = beatColor;\n        ctx.leds[STRIP_LENGTH + CENTER_RIGHT] = beatColor;\n    }\n}\n\nvoid LGPAudioTestEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPAudioTestEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Audio Test\",\n        \"Audio-reactive spectrum + beat visualization\",\n        plugins::EffectCategory::PARTY,\n        1,\n        \"LightwaveOS\"\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

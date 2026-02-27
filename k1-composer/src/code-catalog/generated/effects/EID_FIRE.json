@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_FIRE",
+  "effectIdHex": "0x0100",
+  "className": "FireEffect",
+  "displayName": "Fire",
+  "headerPath": "firmware/v2/src/effects/ieffect/FireEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/FireEffect.cpp",
+  "renderRange": [
+    35,
+    64
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        35,
+        37
+      ]
+    ],
+    "mapping": [
+      [
+        38,
+        42
+      ]
+    ],
+    "modulation": [
+      [
+        43,
+        47
+      ]
+    ],
+    "render": [
+      [
+        39,
+        39
+      ],
+      [
+        43,
+        43
+      ],
+      [
+        57,
+        57
+      ],
+      [
+        59,
+        59
+      ],
+      [
+        61,
+        61
+      ]
+    ],
+    "post": [
+      [
+        61,
+        62
+      ]
+    ],
+    "output": [
+      [
+        39,
+        40
+      ],
+      [
+        43,
+        43
+      ],
+      [
+        57,
+        57
+      ],
+      [
+        59,
+        61
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'mapping' inferred from fallback segmentation.",
+    "Phase 'modulation' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file FireEffect.cpp\n * @brief Fire effect implementation\n */\n\n#include \"FireEffect.h\"\n#include \"../CoreEffects.h\"\n#include \"../../core/narrative/NarrativeEngine.h\"\n#include <FastLED.h>\n#include <cstring>\n\n#ifndef NATIVE_BUILD\n#include <esp_heap_caps.h>\n#endif\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nFireEffect::FireEffect() {}\n\nbool FireEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n#ifndef NATIVE_BUILD\n    if (!m_ps) {\n        m_ps = static_cast<FirePsram*>(\n            heap_caps_malloc(sizeof(FirePsram), MALLOC_CAP_SPIRAM));\n        if (!m_ps) return false;\n    }\n    memset(m_ps, 0, sizeof(FirePsram));\n#endif\n    return true;\n}\n\nvoid FireEffect::render(plugins::EffectContext& ctx) {\n    if (!m_ps) return;\n    using namespace lightwaveos::narrative;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        m_ps->fireHeat[i] = qsub8(m_ps->fireHeat[i], random8(0, ((55 * 10) / STRIP_LENGTH) + 2));\n    }\n\n    for (int k = 1; k < STRIP_LENGTH - 1; k++) {\n        m_ps->fireHeat[k] = (m_ps->fireHeat[k - 1] + m_ps->fireHeat[k] + m_ps->fireHeat[k + 1]) / 3;\n    }\n\n    float narrativeTension = 1.0f;\n    if (NARRATIVE.isEnabled()) {\n        narrativeTension = NARRATIVE.getTension();\n    }\n    uint8_t sparkChance = (uint8_t)((80 + ctx.speed) * (0.5f + narrativeTension * 0.5f));\n    if (random8() < sparkChance) {\n        int center = CENTER_LEFT + random8(2);\n        m_ps->fireHeat[center] = qadd8(m_ps->fireHeat[center], random8(160, 255));\n    }\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        CRGB color = HeatColor(m_ps->fireHeat[i]);\n        ctx.leds[i] = color;\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = color;\n        }\n    }\n}\n\nvoid FireEffect::cleanup() {\n#ifndef NATIVE_BUILD\n    if (m_ps) {\n        heap_caps_free(m_ps);\n        m_ps = nullptr;\n    }\n#endif\n}\n\nconst plugins::EffectMetadata& FireEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Fire\",\n        \"Realistic fire simulation radiating from centre\",\n        plugins::EffectCategory::FIRE,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n\n"
+}

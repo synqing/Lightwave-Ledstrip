@@ -1,0 +1,102 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_QUANTUM_ENTANGLEMENT",
+  "effectIdHex": "0x0802",
+  "className": "LGPQuantumEntanglementEffect",
+  "displayName": "LGP Quantum Entanglement",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPQuantumEntanglementEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPQuantumEntanglementEffect.cpp",
+  "renderRange": [
+    42,
+    134
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        42,
+        52
+      ]
+    ],
+    "mapping": [
+      [
+        81,
+        81
+      ],
+      [
+        89,
+        89
+      ],
+      [
+        102,
+        102
+      ],
+      [
+        106,
+        106
+      ]
+    ],
+    "modulation": [
+      [
+        49,
+        49
+      ],
+      [
+        92,
+        93
+      ],
+      [
+        95,
+        96
+      ],
+      [
+        113,
+        113
+      ],
+      [
+        124,
+        124
+      ]
+    ],
+    "render": [
+      [
+        77,
+        77
+      ],
+      [
+        79,
+        79
+      ],
+      [
+        129,
+        129
+      ],
+      [
+        131,
+        131
+      ]
+    ],
+    "post": [
+      [
+        77,
+        77
+      ]
+    ],
+    "output": [
+      [
+        79,
+        79
+      ],
+      [
+        129,
+        131
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPQuantumEntanglementEffect.cpp\n * @brief LGP Quantum Entanglement effect implementation\n */\n\n#include \"LGPQuantumEntanglementEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\n#ifndef PI\n#define PI 3.14159265358979323846f\n#endif\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPQuantumEntanglementEffect::LGPQuantumEntanglementEffect()\n    : m_collapseRadius(0.0f)\n    , m_collapsing(false)\n    , m_collapsed(false)\n    , m_holdTime(0.0f)\n    , m_collapsedHue(0)\n    , m_quantumPhase(0.0f)\n    , m_measurementTimer(0.0f)\n{\n}\n\nbool LGPQuantumEntanglementEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_collapseRadius = 0.0f;\n    m_collapsing = false;\n    m_collapsed = false;\n    m_holdTime = 0.0f;\n    m_collapsedHue = 0;\n    m_quantumPhase = 0.0f;\n    m_measurementTimer = 0.0f;\n    return true;\n}\n\nvoid LGPQuantumEntanglementEffect::render(plugins::EffectContext& ctx) {\n    // EPR paradox visualisation with superposition and measurement\n    float speed = ctx.speed / 50.0f;\n    float intensity = ctx.brightness / 255.0f;\n\n    const int quantumN = 4;\n\n    m_quantumPhase += speed * 0.1f;\n\n    if (!m_collapsing && !m_collapsed) {\n        m_measurementTimer += speed * 0.01f;\n\n        if (m_measurementTimer > 1.0f + random8() / 255.0f) {\n            m_collapsing = true;\n            m_collapseRadius = 0.0f;\n            m_collapsedHue = (uint8_t)(ctx.gHue + random8());\n            m_measurementTimer = 0.0f;\n        }\n    } else if (m_collapsing) {\n        m_collapseRadius += speed * 0.02f;\n\n        if (m_collapseRadius >= 1.0f) {\n            m_collapsing = false;\n            m_collapsed = true;\n            m_holdTime = 0.0f;\n        }\n    } else if (m_collapsed) {\n        m_holdTime += speed * 0.02f;\n\n        if (m_holdTime > 1.5f) {\n            m_collapsed = false;\n            m_collapseRadius = 0.0f;\n        }\n    }\n\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float distFromCenter = (float)centerPairDistance((uint16_t)i);\n        float normalizedDist = distFromCenter / (float)HALF_LENGTH;\n\n        uint8_t hue1 = 0;\n        uint8_t hue2 = 0;\n        uint8_t brightness1 = 0;\n        uint8_t brightness2 = 0;\n\n        if (!m_collapsing && !m_collapsed) {\n            float waveFunc = sinf(quantumN * PI * normalizedDist);\n            float probability = waveFunc * waveFunc;\n\n            float fluctuation = sinf(m_quantumPhase * 3.0f + i * 0.2f) *\n                                cosf(m_quantumPhase * 5.0f - i * 0.15f) * intensity;\n\n            hue1 = (uint8_t)(ctx.gHue + (uint8_t)(sinf(m_quantumPhase + i * 0.1f) * 15.0f));\n            hue2 = (uint8_t)(ctx.gHue + (uint8_t)(cosf(m_quantumPhase * 1.3f - i * 0.12f) * 15.0f));\n\n            brightness1 = (uint8_t)(80.0f + probability * 100.0f + fabsf(fluctuation) * 75.0f);\n            brightness2 = (uint8_t)(80.0f + probability * 100.0f + fabsf(fluctuation) * 75.0f);\n\n        } else if (m_collapsing) {\n            if (normalizedDist < m_collapseRadius) {\n                hue1 = m_collapsedHue;\n                hue2 = (uint8_t)(m_collapsedHue + 128);\n\n                float collapseEdge = m_collapseRadius - normalizedDist;\n                float edgeFactor = constrain(collapseEdge * 10.0f, 0.0f, 1.0f);\n\n                brightness1 = (uint8_t)(180.0f * edgeFactor + 50.0f);\n                brightness2 = (uint8_t)(180.0f * edgeFactor + 50.0f);\n\n            } else {\n                float chaos = sinf(m_quantumPhase * 5.0f + i * 0.3f) * intensity;\n                hue1 = (uint8_t)(ctx.gHue + (uint8_t)(chaos * 40.0f));\n                hue2 = (uint8_t)(ctx.gHue + (uint8_t)(chaos * 40.0f) + random8(30));\n                brightness1 = (uint8_t)(60.0f + fabsf(chaos) * 50.0f);\n                brightness2 = (uint8_t)(60.0f + fabsf(chaos) * 50.0f);\n            }\n\n        } else {\n            hue1 = m_collapsedHue;\n            hue2 = (uint8_t)(m_collapsedHue + 128);\n\n            float pulse = sinf(m_quantumPhase) * 0.1f + 0.9f;\n            brightness1 = (uint8_t)(200.0f * pulse);\n            brightness2 = (uint8_t)(200.0f * pulse);\n        }\n\n        ctx.leds[i] = ctx.palette.getColor(hue1, brightness1);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor(hue2, brightness2);\n        }\n    }\n}\n\nvoid LGPQuantumEntanglementEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPQuantumEntanglementEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Quantum Entanglement\",\n        \"Correlated state collapse\",\n        plugins::EffectCategory::UNCATEGORIZED,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

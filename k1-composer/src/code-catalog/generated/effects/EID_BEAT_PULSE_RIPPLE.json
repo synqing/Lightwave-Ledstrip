@@ -1,0 +1,109 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_BEAT_PULSE_RIPPLE",
+  "effectIdHex": "0x1405",
+  "className": "BeatPulseRippleEffect",
+  "displayName": "Beat Pulse (Ripple)",
+  "headerPath": "firmware/v2/src/effects/ieffect/BeatPulseRippleEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/BeatPulseRippleEffect.cpp",
+  "renderRange": [
+    57,
+    183
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        63,
+        63
+      ]
+    ],
+    "mapping": [
+      [
+        72,
+        91
+      ]
+    ],
+    "modulation": [
+      [
+        57,
+        57
+      ],
+      [
+        63,
+        64
+      ],
+      [
+        68,
+        69
+      ]
+    ],
+    "render": [
+      [
+        96,
+        96
+      ],
+      [
+        119,
+        119
+      ],
+      [
+        122,
+        122
+      ],
+      [
+        130,
+        130
+      ],
+      [
+        136,
+        136
+      ],
+      [
+        141,
+        142
+      ],
+      [
+        144,
+        144
+      ],
+      [
+        156,
+        158
+      ],
+      [
+        167,
+        169
+      ],
+      [
+        171,
+        171
+      ],
+      [
+        173,
+        173
+      ]
+    ],
+    "post": [
+      [
+        168,
+        176
+      ]
+    ],
+    "output": [
+      [
+        177,
+        183
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'mapping' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation.",
+    "Phase 'output' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file BeatPulseRippleEffect.cpp\n * @brief Beat Pulse (Ripple) - Cascading water ripples with interference patterns\n *\n * VISUAL IDENTITY: Stone dropped in water. Multiple rings propagate inward,\n * INTERFERE where they overlap, creating organic complexity. Rapid beats\n * produce cascading concentric ripples.\n *\n * Key features:\n * - Up to 3 simultaneous rings (ring buffer)\n * - ADDITIVE blending with soft accumulation - rings layer and interfere\n * - Each successive ring is dimmer (1.0, 0.55, 0.30)\n * - GLOW profile (core + halo) for water-like spread\n * - Colour is weighted average of ring positions (travels with ripples)\n * - White sparkle at interference peaks (where rings overlap)\n *\n * See BeatPulseRippleEffect.h for design rationale.\n */\n\n#include \"BeatPulseRippleEffect.h\"\n#include \"../CoreEffects.h\"\n#include \"BeatPulseRenderUtils.h\"\n\n#include <cmath>\n\nnamespace lightwaveos::effects::ieffect {\n\n// ============================================================================\n// Constants\n// ============================================================================\n\nconstexpr uint8_t MAX_RINGS = 3;\nconstexpr float TRAVEL_MS = 450.0f;           // Time for ring to travel edge to centre\nconstexpr float DECAY_MS = 380.0f;            // Exponential envelope decay\nconstexpr float CORE_WIDTH = 0.06f;           // Glow profile core width\nconstexpr float HALO_WIDTH = 0.08f;           // Glow profile halo width\nconstexpr float RING_GAINS[] = {1.0f, 0.55f, 0.30f};  // Successive dimming\nconstexpr float INTERFERENCE_THRESHOLD = 0.65f;\nconstexpr float BASE_BRIGHTNESS = 0.06f;      // Dim background\n\n// ============================================================================\n// Implementation\n// ============================================================================\n\nbool BeatPulseRippleEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    for (uint8_t i = 0; i < MAX_RINGS; ++i) {\n        m_rings[i].birthMs = 0;\n        m_rings[i].active = false;\n    }\n    m_nextSlot = 0;\n    m_fallbackBpm = 128.0f;\n    m_lastFallbackBeatMs = 0;\n    return true;\n}\n\nvoid BeatPulseRippleEffect::render(plugins::EffectContext& ctx) {\n    // =========================================================================\n    // RIPPLE: Up to 3 rings alive, each contracting edge->centre.\n    // Rings INTERFERE where they overlap creating organic complexity.\n    // =========================================================================\n\n    // --- Beat source ---\n    const bool beatTick = BeatPulseTiming::computeBeatTick(ctx, m_fallbackBpm, m_lastFallbackBeatMs);\n\n    const uint32_t nowMs = ctx.rawTotalTimeMs;\n\n    // --- Spawn new ring on beat ---\n    if (beatTick) {\n        m_rings[m_nextSlot].birthMs = nowMs;\n        m_rings[m_nextSlot].active = true;\n        m_nextSlot = (m_nextSlot + 1) % MAX_RINGS;\n    }\n\n    // --- Compute max life for ring expiry ---\n    const float maxLifeMs = TRAVEL_MS + 2.5f * DECAY_MS;\n\n    // --- Pre-compute ring states ---\n    struct RingState {\n        float pos;      // Position [0, 1] where 0 = centre, 1 = edge\n        float env;      // Envelope (decay)\n        float gain;     // Successive dimming gain\n        bool alive;\n    };\n    RingState ringStates[MAX_RINGS];\n\n    // Calculate age order to determine successive dimming\n    // Younger rings get lower gain indices (dimmer)\n    struct AgeSlot {\n        uint8_t slot;\n        float ageMs;\n    };\n    AgeSlot ageOrder[MAX_RINGS];\n    uint8_t activeCount = 0;\n\n    for (uint8_t r = 0; r < MAX_RINGS; ++r) {\n        ringStates[r].alive = false;\n\n        if (!m_rings[r].active) continue;\n\n        const float ageMs = static_cast<float>(nowMs - m_rings[r].birthMs);\n        if (ageMs > maxLifeMs) {\n            m_rings[r].active = false;\n            continue;\n        }\n\n        ringStates[r].alive = true;\n        ringStates[r].pos = 1.0f - clamp01(ageMs / TRAVEL_MS);  // Contracting inward\n        ringStates[r].env = clamp01(expf(-ageMs / DECAY_MS));\n\n        // Track for age-based gain assignment\n        ageOrder[activeCount].slot = r;\n        ageOrder[activeCount].ageMs = ageMs;\n        activeCount++;\n    }\n\n    // Sort by age (oldest first = gets highest gain)\n    // Simple insertion sort for 3 elements\n    for (uint8_t i = 1; i < activeCount; ++i) {\n        AgeSlot key = ageOrder[i];\n        int8_t j = static_cast<int8_t>(i) - 1;\n        while (j >= 0 && ageOrder[j].ageMs < key.ageMs) {\n            ageOrder[j + 1] = ageOrder[j];\n            j--;\n        }\n        ageOrder[j + 1] = key;\n    }\n\n    // Assign gains: oldest (index 0) gets RING_GAINS[0] = 1.0, etc.\n    for (uint8_t i = 0; i < activeCount; ++i) {\n        uint8_t slot = ageOrder[i].slot;\n        ringStates[slot].gain = RING_GAINS[i];\n    }\n\n    // --- Render ---\n    for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {\n        const float dist01 = (static_cast<float>(dist) + 0.5f) / static_cast<float>(HALF_LENGTH);\n\n        // Accumulate intensity from all rings (additive blending)\n        float accumulatedIntensity = 0.0f;\n        float paletteWeightSum = 0.0f;\n        float palettePositionSum = 0.0f;\n\n        for (uint8_t r = 0; r < MAX_RINGS; ++r) {\n            if (!ringStates[r].alive) continue;\n\n            const float diff = fabsf(dist01 - ringStates[r].pos);\n\n            // GLOW profile (core + soft halo) for water-like spread\n            float hit = RingProfile::glow(diff, CORE_WIDTH, HALO_WIDTH);\n            hit *= ringStates[r].env * ringStates[r].gain;\n\n            // ADDITIVE accumulation\n            accumulatedIntensity += hit;\n\n            // Weighted palette contribution (colour travels with ripples)\n            palettePositionSum += ringStates[r].pos * hit;\n            paletteWeightSum += hit;\n        }\n\n        // Soft accumulation (handles multiple layers gracefully)\n        const float intensity = BlendMode::softAccumulate(accumulatedIntensity, 1.8f);\n\n        // Final brightness: dim base + intensity-driven boost\n        const float brightnessFactor = clamp01(BASE_BRIGHTNESS + intensity * (1.0f - BASE_BRIGHTNESS));\n\n        // Weighted average palette position (colour travels with ripples)\n        const float palPos = (paletteWeightSum > 0.01f)\n            ? palettePositionSum / paletteWeightSum\n            : dist01;\n        const uint8_t paletteIdx = floatToByte(palPos);\n\n        CRGB c = ctx.palette.getColor(paletteIdx, scaleBrightness(ctx.brightness, brightnessFactor));\n\n        // White sparkle at INTERFERENCE peaks (where rings overlap)\n        if (intensity > INTERFERENCE_THRESHOLD) {\n            const float sparkle = (intensity - INTERFERENCE_THRESHOLD) / (1.0f - INTERFERENCE_THRESHOLD);\n            ColourUtil::addWhiteSaturating(c, floatToByte(sparkle * 0.35f));\n        }\n\n        SET_CENTER_PAIR(ctx, dist, c);\n    }\n}\n\nvoid BeatPulseRippleEffect::cleanup() {}\n\nconst plugins::EffectMetadata& BeatPulseRippleEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Beat Pulse (Ripple)\",\n        \"Cascading water ripples with interference patterns\",\n        plugins::EffectCategory::PARTY,\n        1,\n        \"LightwaveOS\"\n    };\n    return meta;\n}\n\nuint8_t BeatPulseRippleEffect::getParameterCount() const { return 0; }\n\nconst plugins::EffectParameter* BeatPulseRippleEffect::getParameter(uint8_t index) const {\n    (void)index;\n    return nullptr;\n}\n\nbool BeatPulseRippleEffect::setParameter(const char* name, float value) {\n    (void)name; (void)value;\n    return false;\n}\n\nfloat BeatPulseRippleEffect::getParameter(const char* name) const {\n    (void)name;\n    return 0.0f;\n}\n\n} // namespace lightwaveos::effects::ieffect\n"
+}

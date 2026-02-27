@@ -1,0 +1,114 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_MYCELIAL_NETWORK",
+  "effectIdHex": "0x0803",
+  "className": "LGPMycelialNetworkEffect",
+  "displayName": "LGP Mycelial Network",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPMycelialNetworkEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPMycelialNetworkEffect.cpp",
+  "renderRange": [
+    42,
+    149
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        42,
+        53
+      ]
+    ],
+    "mapping": [
+      [
+        108,
+        108
+      ],
+      [
+        124,
+        124
+      ]
+    ],
+    "modulation": [
+      [
+        48,
+        48
+      ],
+      [
+        124,
+        124
+      ]
+    ],
+    "render": [
+      [
+        51,
+        51
+      ],
+      [
+        62,
+        62
+      ],
+      [
+        76,
+        76
+      ],
+      [
+        86,
+        86
+      ],
+      [
+        104,
+        104
+      ],
+      [
+        106,
+        106
+      ],
+      [
+        113,
+        113
+      ],
+      [
+        142,
+        142
+      ],
+      [
+        146,
+        146
+      ]
+    ],
+    "post": [
+      [
+        104,
+        104
+      ]
+    ],
+    "output": [
+      [
+        62,
+        62
+      ],
+      [
+        81,
+        81
+      ],
+      [
+        106,
+        106
+      ],
+      [
+        142,
+        143
+      ],
+      [
+        146,
+        146
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPMycelialNetworkEffect.cpp\n * @brief LGP Mycelial Network effect implementation\n */\n\n#include \"LGPMycelialNetworkEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n#include <cstring>\n\n#ifndef NATIVE_BUILD\n#include <esp_heap_caps.h>\n#endif\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPMycelialNetworkEffect::LGPMycelialNetworkEffect()\n    : m_ps(nullptr)\n    , m_nutrientPhase(0.0f)\n    , m_initialized(false)\n{\n}\n\nbool LGPMycelialNetworkEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_nutrientPhase = 0.0f;\n    m_initialized = false;\n#ifndef NATIVE_BUILD\n    if (!m_ps) {\n        m_ps = static_cast<MycelialPsram*>(\n            heap_caps_malloc(sizeof(MycelialPsram), MALLOC_CAP_SPIRAM));\n        if (!m_ps) return false;\n    }\n    memset(m_ps, 0, sizeof(MycelialPsram));\n#endif\n    return true;\n}\n\nvoid LGPMycelialNetworkEffect::render(plugins::EffectContext& ctx) {\n    if (!m_ps) return;\n    // Fungal hyphal growth with fractal branching and nutrient flow\n    float speed = ctx.speed / 50.0f;\n    float intensity = ctx.brightness / 255.0f;\n\n    m_nutrientPhase += speed * 0.05f;\n\n    if (!m_initialized) {\n        for (int t = 0; t < 16; t++) {\n            m_ps->tipPositions[t] = (float)CENTER_LEFT;\n            m_ps->tipVelocities[t] = 0.0f;\n            m_ps->tipActive[t] = false;\n            m_ps->tipAge[t] = 0.0f;\n        }\n        m_ps->tipActive[0] = true;\n        m_ps->tipVelocities[0] = 0.5f;\n        m_ps->tipActive[1] = true;\n        m_ps->tipVelocities[1] = -0.5f;\n\n        for (int i = 0; i < STRIP_LENGTH; i++) {\n            m_ps->networkDensity[i] = 0.0f;\n        }\n\n        m_initialized = true;\n    }\n\n    // Get dt for frame-rate independent decay\n    float dt = ctx.getSafeDeltaSeconds();\n\n    const float branchProbability = 0.005f;\n    const uint8_t numTips = 8;\n\n    // Update tips\n    for (int t = 0; t < 16; t++) {\n        if (m_ps->tipActive[t]) {\n            m_ps->tipPositions[t] += m_ps->tipVelocities[t] * speed;\n            m_ps->tipAge[t] += speed * 0.01f;\n\n            if (m_ps->tipPositions[t] < 0.0f || m_ps->tipPositions[t] >= STRIP_LENGTH) {\n                m_ps->tipActive[t] = false;\n            }\n\n            if (random8() < (uint8_t)(branchProbability * 255.0f)) {\n                for (int newTip = 0; newTip < numTips; newTip++) {\n                    if (!m_ps->tipActive[newTip]) {\n                        m_ps->tipActive[newTip] = true;\n                        m_ps->tipPositions[newTip] = m_ps->tipPositions[t];\n                        m_ps->tipVelocities[newTip] = -m_ps->tipVelocities[t] * (0.5f + random8() / 255.0f * 0.5f);\n                        m_ps->tipAge[newTip] = 0.0f;\n                        break;\n                    }\n                }\n            }\n        } else if (random8() < 5) {\n            m_ps->tipActive[t] = true;\n            m_ps->tipPositions[t] = (float)CENTER_LEFT;\n            m_ps->tipVelocities[t] = (random8() > 127 ? 1.0f : -1.0f) * (0.3f + random8() / 255.0f * 0.4f);\n            m_ps->tipAge[t] = 0.0f;\n        }\n    }\n\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float distFromCenter = (float)centerPairDistance((uint16_t)i);\n        float normalizedDist = distFromCenter / (float)HALF_LENGTH;\n\n        m_ps->networkDensity[i] *= powf(0.998f, dt * 60.0f);  // dt-corrected decay\n\n        float tipGlow = 0.0f;\n        for (int t = 0; t < 16; t++) {\n            if (m_ps->tipActive[t]) {\n                float distToTip = fabsf((float)i - m_ps->tipPositions[t]);\n                if (distToTip < 5.0f) {\n                    tipGlow += (5.0f - distToTip) / 5.0f * intensity;\n                    m_ps->networkDensity[i] = fminf(1.0f, m_ps->networkDensity[i] + 0.02f);\n                }\n            }\n        }\n\n        const float flowDirection = 0.5f;\n        float nutrientWave = sinf(normalizedDist * 10.0f - m_nutrientPhase * flowDirection * 3.0f);\n        float nutrientBrightness = m_ps->networkDensity[i] * (0.5f + nutrientWave * 0.5f);\n\n        uint8_t hue1 = (uint8_t)(140 + (uint8_t)(ctx.gHue * 0.3f));\n        uint8_t hue2 = (uint8_t)(160 + (uint8_t)(ctx.gHue * 0.3f));\n\n        float brightness1 = tipGlow * 200.0f + m_ps->networkDensity[i] * 80.0f + nutrientBrightness * 60.0f;\n        float brightness2 = tipGlow * 150.0f + m_ps->networkDensity[i] * 90.0f + nutrientBrightness * 70.0f;\n\n        if (brightness1 > 100.0f && brightness2 > 100.0f) {\n            hue1 = (uint8_t)(40 + (uint8_t)(ctx.gHue * 0.2f));\n            hue2 = (uint8_t)(50 + (uint8_t)(ctx.gHue * 0.2f));\n            brightness1 = fminf(255.0f, brightness1 * 1.3f);\n            brightness2 = fminf(255.0f, brightness2 * 1.3f);\n        }\n\n        uint8_t brightU8_1 = (uint8_t)constrain(brightness1, 0.0f, 255.0f);\n        brightU8_1 = (uint8_t)((brightU8_1 * ctx.brightness) / 255);\n        ctx.leds[i] = ctx.palette.getColor(hue1, brightU8_1);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            uint8_t brightU8_2 = (uint8_t)constrain(brightness2, 0.0f, 255.0f);\n            brightU8_2 = (uint8_t)((brightU8_2 * ctx.brightness) / 255);\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor(hue2, brightU8_2);\n        }\n    }\n}\n\nvoid LGPMycelialNetworkEffect::cleanup() {\n#ifndef NATIVE_BUILD\n    if (m_ps) {\n        heap_caps_free(m_ps);\n        m_ps = nullptr;\n    }\n#endif\n}\n\nconst plugins::EffectMetadata& LGPMycelialNetworkEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Mycelial Network\",\n        \"Fungal network expansion\",\n        plugins::EffectCategory::UNCATEGORIZED,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

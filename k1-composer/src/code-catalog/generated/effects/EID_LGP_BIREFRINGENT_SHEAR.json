@@ -1,0 +1,83 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_BIREFRINGENT_SHEAR",
+  "effectIdHex": "0x0607",
+  "className": "LGPBirefringentShearEffect",
+  "displayName": "LGP Birefringent Shear",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPBirefringentShearEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPBirefringentShearEffect.cpp",
+  "renderRange": [
+    25,
+    60
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        25,
+        28
+      ]
+    ],
+    "mapping": [
+      [
+        29,
+        29
+      ],
+      [
+        34,
+        34
+      ]
+    ],
+    "modulation": [
+      [
+        40,
+        42
+      ],
+      [
+        44,
+        45
+      ],
+      [
+        48,
+        49
+      ]
+    ],
+    "render": [
+      [
+        37,
+        37
+      ],
+      [
+        55,
+        55
+      ],
+      [
+        57,
+        57
+      ]
+    ],
+    "post": [
+      [
+        56,
+        58
+      ]
+    ],
+    "output": [
+      [
+        37,
+        37
+      ],
+      [
+        55,
+        57
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPBirefringentShearEffect.cpp\n * @brief LGP Birefringent Shear effect implementation\n */\n\n#include \"LGPBirefringentShearEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPBirefringentShearEffect::LGPBirefringentShearEffect()\n    : m_time(0)\n{\n}\n\nbool LGPBirefringentShearEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_time = 0;\n    return true;\n}\n\nvoid LGPBirefringentShearEffect::render(plugins::EffectContext& ctx) {\n    // Dual spatial modes slipping past one another\n    m_time = (uint16_t)(m_time + (ctx.speed >> 1));\n\n    float intensityNorm = ctx.brightness / 255.0f;\n    const float baseFrequency = 3.5f;\n    const float deltaK = 1.5f;\n    const float drift = 0.3f;\n\n    uint8_t mixWave = (uint8_t)(intensityNorm * 255.0f);\n    uint8_t mixCarrier = (uint8_t)(255 - mixWave);\n\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        float idx = (float)i;\n\n        float phaseBase = m_time / 128.0f;\n        float phase1 = idx * (baseFrequency + deltaK) + phaseBase;\n        float phase2 = idx * (baseFrequency - deltaK) - phaseBase + drift * idx * 0.05f;\n\n        uint8_t wave1 = sin8((int16_t)(phase1 * 16.0f));\n        uint8_t wave2 = sin8((int16_t)(phase2 * 16.0f));\n\n        uint8_t combined = qadd8(scale8(wave1, mixCarrier), scale8(wave2, mixWave));\n        uint8_t beat = (uint8_t)abs((int)wave1 - (int)wave2);\n        uint8_t brightness = qadd8(combined, scale8(beat, 96));\n\n        uint8_t hue1 = (uint8_t)(ctx.gHue + (uint8_t)(idx) + (m_time >> 4));\n        uint8_t hue2 = (uint8_t)(hue1 + 128);\n\n        uint8_t brightU8 = (uint8_t)((brightness * ctx.brightness) / 255);\n        ctx.leds[i] = ctx.palette.getColor(hue1, brightU8);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor(hue2, brightU8);\n        }\n    }\n}\n\nvoid LGPBirefringentShearEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPBirefringentShearEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Birefringent Shear\",\n        \"Polarization splitting\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

@@ -1,0 +1,85 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_GRATING_SCAN",
+  "effectIdHex": "0x1601",
+  "className": "LGPGratingScanEffect",
+  "displayName": "LGP Grating Scan",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPGratingScanEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPGratingScanEffect.cpp",
+  "renderRange": [
+    30,
+    64
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        30,
+        33
+      ]
+    ],
+    "mapping": [
+      [
+        32,
+        32
+      ],
+      [
+        35,
+        35
+      ]
+    ],
+    "modulation": [
+      [
+        39,
+        45
+      ]
+    ],
+    "render": [
+      [
+        40,
+        40
+      ],
+      [
+        58,
+        58
+      ],
+      [
+        61,
+        61
+      ]
+    ],
+    "post": [
+      [
+        60,
+        62
+      ]
+    ],
+    "output": [
+      [
+        36,
+        37
+      ],
+      [
+        40,
+        40
+      ],
+      [
+        58,
+        59
+      ],
+      [
+        61,
+        61
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'modulation' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPGratingScanEffect.cpp\n * @brief LGP Grating Scan effect implementation\n */\n\n#include \"LGPGratingScanEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nstatic inline float clamp01(float x) {\n    return (x < 0.0f) ? 0.0f : (x > 1.0f) ? 1.0f : x;\n}\n\nLGPGratingScanEffect::LGPGratingScanEffect()\n    : m_pos(0.0f)\n{\n}\n\nbool LGPGratingScanEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_pos = 0.0f;\n    return true;\n}\n\nvoid LGPGratingScanEffect::render(plugins::EffectContext& ctx) {\n    // CENTRE ORIGIN GRATING SCAN - Spectral scan highlight\n    const float speedNorm = ctx.speed / 50.0f;\n    const float master = ctx.brightness / 255.0f;\n\n    m_pos += (0.6f + 2.2f * speedNorm);\n    if (m_pos > (float)STRIP_LENGTH) {\n        m_pos -= (float)STRIP_LENGTH;\n    }\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        const float dist = (float)centerPairDistance((uint16_t)i);\n\n        const float dx = fabsf(dist - m_pos);\n        const float core = expf(-dx * dx * 0.020f);\n        const float halo = expf(-dx * dx * 0.006f);\n\n        const float angle = (dist - m_pos) * 0.08f;\n        const float spec = 0.5f + 0.5f * tanhf(angle);\n\n        const uint8_t hueA = (uint8_t)(ctx.gHue + (int)(spec * 96.0f));\n        const uint8_t hueB = (uint8_t)(ctx.gHue + (int)((1.0f - spec) * 96.0f));\n\n        const float base = 0.06f;\n        const float wave = clamp01(0.2f * halo + 0.8f * core);\n        const float out = clamp01(base + (1.0f - base) * wave) * master;\n        const uint8_t br = (uint8_t)(255.0f * out);\n\n        ctx.leds[i] = ctx.palette.getColor(hueA, br);\n        const int j = i + STRIP_LENGTH;\n        if (j < ctx.ledCount) {\n            ctx.leds[j] = ctx.palette.getColor(hueB, br);\n        }\n    }\n}\n\nvoid LGPGratingScanEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPGratingScanEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Grating Scan\",\n        \"Diffraction scan highlight\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

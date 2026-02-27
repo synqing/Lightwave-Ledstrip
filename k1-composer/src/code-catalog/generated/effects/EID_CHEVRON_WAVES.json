@@ -1,0 +1,168 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_CHEVRON_WAVES",
+  "effectIdHex": "0x0304",
+  "className": "ChevronWavesEffect",
+  "displayName": "LGP Chevron Waves",
+  "headerPath": "firmware/v2/src/effects/ieffect/ChevronWavesEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/ChevronWavesEffect.cpp",
+  "renderRange": [
+    50,
+    171
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        55,
+        55
+      ],
+      [
+        60,
+        60
+      ],
+      [
+        62,
+        62
+      ],
+      [
+        69,
+        69
+      ],
+      [
+        114,
+        114
+      ],
+      [
+        122,
+        123
+      ],
+      [
+        148,
+        148
+      ]
+    ],
+    "mapping": [
+      [
+        53,
+        54
+      ],
+      [
+        79,
+        81
+      ],
+      [
+        84,
+        85
+      ],
+      [
+        89,
+        89
+      ],
+      [
+        106,
+        108
+      ],
+      [
+        126,
+        126
+      ],
+      [
+        129,
+        129
+      ],
+      [
+        132,
+        132
+      ],
+      [
+        155,
+        155
+      ]
+    ],
+    "modulation": [
+      [
+        105,
+        108
+      ],
+      [
+        110,
+        110
+      ],
+      [
+        113,
+        113
+      ],
+      [
+        128,
+        132
+      ],
+      [
+        141,
+        141
+      ],
+      [
+        152,
+        152
+      ],
+      [
+        154,
+        154
+      ],
+      [
+        157,
+        157
+      ]
+    ],
+    "render": [
+      [
+        68,
+        68
+      ],
+      [
+        134,
+        134
+      ],
+      [
+        136,
+        136
+      ],
+      [
+        165,
+        165
+      ],
+      [
+        168,
+        168
+      ]
+    ],
+    "post": [
+      [
+        134,
+        134
+      ],
+      [
+        164,
+        164
+      ]
+    ],
+    "output": [
+      [
+        136,
+        136
+      ],
+      [
+        165,
+        165
+      ],
+      [
+        167,
+        168
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [],
+  "sourceText": "/**\n * @file ChevronWavesEffect.cpp\n * @brief LGP Chevron Waves implementation\n */\n\n#include \"ChevronWavesEffect.h\"\n#include \"ChromaUtils.h\"\n#include \"../CoreEffects.h\"\n#include \"../utils/FastLEDOptim.h\"\n#include \"../../config/features.h\"\n#include <math.h>\n\n#ifndef PI\n#define PI 3.14159265358979323846f\n#endif\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nChevronWavesEffect::ChevronWavesEffect()\n    : m_chevronPos(0.0f)\n{\n}\n\nbool ChevronWavesEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_chevronPos = 0.0f;\n    m_lastHopSeq = 0;\n    m_chromaEnergySum = 0.0f;\n    m_chromaHistIdx = 0;\n    for (uint8_t i = 0; i < CHROMA_HISTORY; ++i) {\n        m_chromaEnergyHist[i] = 0.0f;\n    }\n    m_energyAvg = 0.0f;\n    m_energyDelta = 0.0f;\n    m_dominantBin = 0;\n    m_chromaAngle = 0.0f;\n    m_chromaHue = 0.0f;\n\n    // Initialize enhancement utilities\n    m_phaseSpeedSpring.init(50.0f, 1.0f);  // stiffness=50, mass=1 (critically damped)\n    m_phaseSpeedSpring.reset(1.0f);        // Start at base speed\n    m_energyAvgFollower.reset(0.0f);\n    m_energyDeltaFollower.reset(0.0f);\n\n    return true;\n}\n\nvoid ChevronWavesEffect::render(plugins::EffectContext& ctx) {\n    // CENTRE ORIGIN - V-shaped patterns from centre\n\n    float speedNorm = ctx.speed / 50.0f;\n    float intensityNorm = ctx.brightness / 255.0f;\n    const bool hasAudio = ctx.audio.available;\n    bool newHop = false;\n\n#if FEATURE_AUDIO_SYNC\n    if (hasAudio) {\n        newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);\n        if (newHop) {\n            m_lastHopSeq = ctx.audio.controlBus.hop_seq;\n\n            const float led_share = 255.0f / 12.0f;\n            float chromaEnergy = 0.0f;\n            float maxBinVal = 0.0f;\n            uint8_t dominantBin = 0;\n            for (uint8_t i = 0; i < 12; ++i) {\n                float bin = ctx.audio.controlBus.chroma[i];\n                float bright = bin * bin;\n                bright *= 1.5f;\n                if (bright > 1.0f) bright = 1.0f;\n                if (bright > maxBinVal) {\n                    maxBinVal = bright;\n                    dominantBin = i;\n                }\n                chromaEnergy += bright * led_share;\n            }\n            float energyNorm = chromaEnergy / 255.0f;\n            if (energyNorm < 0.0f) energyNorm = 0.0f;\n            if (energyNorm > 1.0f) energyNorm = 1.0f;\n\n            m_chromaEnergySum -= m_chromaEnergyHist[m_chromaHistIdx];\n            m_chromaEnergyHist[m_chromaHistIdx] = energyNorm;\n            m_chromaEnergySum += energyNorm;\n            m_chromaHistIdx = (m_chromaHistIdx + 1) % CHROMA_HISTORY;\n\n            m_energyAvg = m_chromaEnergySum / CHROMA_HISTORY;\n            m_energyDelta = energyNorm - m_energyAvg;\n            if (m_energyDelta < 0.0f) m_energyDelta = 0.0f;\n            m_dominantBin = dominantBin;\n        }\n    } else\n#endif\n    {\n        // dt-corrected decay when audio unavailable\n        float dtFallback = enhancement::getSafeDeltaSeconds(ctx.rawDeltaTimeSeconds);\n        m_energyAvg *= powf(0.98f, dtFallback * 60.0f);\n        m_energyDelta = 0.0f;\n    }\n\n    float rawDt = enhancement::getSafeDeltaSeconds(ctx.rawDeltaTimeSeconds);\n    float dt = enhancement::getSafeDeltaSeconds(ctx.deltaTimeSeconds);\n\n    // True exponential smoothing with AsymmetricFollower (frame-rate independent)\n    float moodNorm = ctx.mood / 255.0f;  // 0=reactive, 1=smooth\n    float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, rawDt, moodNorm);\n    float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, rawDt, moodNorm);\n\n    // Circular chroma hue smoothing (replaces linear EMA on bin index)\n#if FEATURE_AUDIO_SYNC\n    if (hasAudio) {\n        m_chromaHue = static_cast<float>(effects::chroma::circularChromaHueSmoothed(\n            ctx.audio.controlBus.chroma, m_chromaAngle, rawDt, 0.20f));\n    }\n#endif\n\n    // Use heavy_bands instead of raw chroma/energyAvg to eliminate jitter\n    float heavyEnergy = 0.0f;\n#if FEATURE_AUDIO_SYNC\n    if (hasAudio) {\n        heavyEnergy = (ctx.audio.controlBus.heavy_bands[1] +\n                       ctx.audio.controlBus.heavy_bands[2]) / 2.0f;\n    }\n#endif\n    float targetSpeed = 0.6f + 1.2f * heavyEnergy;  // Reduced range for stability\n\n    // Spring physics for speed modulation (natural momentum, no jitter)\n    float smoothedSpeed = m_phaseSpeedSpring.update(targetSpeed, rawDt);\n    if (smoothedSpeed > 2.0f) smoothedSpeed = 2.0f;  // Hard clamp\n    if (smoothedSpeed < 0.3f) smoothedSpeed = 0.3f;  // Prevent stalling\n    m_chevronPos += speedNorm * 240.0f * smoothedSpeed * dt;  // dt-corrected: 240/sec at speedNorm=1\n\n    fadeToBlackBy(ctx.leds, ctx.ledCount, FADE_AMOUNT);\n\n    for (uint16_t i = 0; i < ctx.ledCount && i < STRIP_LENGTH; i++) {\n        // CRITICAL FIX: Use centerPairDistance() like working effects\n        float distFromCenter = (float)centerPairDistance(i);\n\n        // CRITICAL FIX: Match reference pattern with moderate spatial frequency\n        // sin(k*dist - phase) produces OUTWARD motion when phase increases\n        const float freqBase = 0.25f;  // Wavelength ~25 LEDs (was ~7 with CHEVRON_COUNT)\n        float chevron = sinf(distFromCenter * freqBase - m_chevronPos);\n\n        // Sharp edges with snare-triggered crispness\n        float tanhScale = 2.0f;  // Base sharpness\n#if FEATURE_AUDIO_SYNC\n        if (hasAudio && ctx.audio.isSnareHit()) {\n            tanhScale = 5.0f;  // Sharp, crisp chevrons on snare\n        }\n#endif\n        chevron = tanhf(chevron * (tanhScale + 4.0f * energyAvgSmooth)) * 0.5f + 0.5f;\n\n        float audioGain = 0.2f + 0.8f * energyAvgSmooth;\n        uint8_t brightness = (uint8_t)(chevron * 255.0f * intensityNorm * audioGain);\n        // Calculate hue with proper modular arithmetic (avoids UB from large float->uint8_t cast)\n        // m_chromaHue is already 0-255 from circular chroma smoothing\n        float rawHue = (float)ctx.gHue\n                     + m_chromaHue\n                     + distFromCenter * 2.0f\n                     + fmodf(m_chevronPos * 0.5f, 256.0f);\n        uint8_t hue = (uint8_t)fmodf(rawHue, 256.0f);\n\n        // Direct assignment - fadeToBlackBy clears buffer each frame\n        ctx.leds[i] = ctx.palette.getColor(hue, brightness);\n\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor(hue + 90, brightness);\n        }\n    }\n}\n\nvoid ChevronWavesEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& ChevronWavesEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Chevron Waves\",\n        \"V-shaped wave propagation from centre\",\n        plugins::EffectCategory::GEOMETRIC,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

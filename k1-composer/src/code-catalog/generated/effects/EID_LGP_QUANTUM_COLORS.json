@@ -1,0 +1,101 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_QUANTUM_COLORS",
+  "effectIdHex": "0x0703",
+  "className": "LGPQuantumColorsEffect",
+  "displayName": "LGP Quantum Colors",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPQuantumColorsEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPQuantumColorsEffect.cpp",
+  "renderRange": [
+    25,
+    63
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        25,
+        28
+      ]
+    ],
+    "mapping": [
+      [
+        36,
+        36
+      ],
+      [
+        38,
+        38
+      ]
+    ],
+    "modulation": [
+      [
+        35,
+        41
+      ]
+    ],
+    "render": [
+      [
+        34,
+        34
+      ],
+      [
+        41,
+        41
+      ],
+      [
+        43,
+        43
+      ],
+      [
+        45,
+        45
+      ],
+      [
+        47,
+        47
+      ],
+      [
+        49,
+        49
+      ],
+      [
+        54,
+        54
+      ],
+      [
+        58,
+        59
+      ]
+    ],
+    "post": [
+      [
+        59,
+        61
+      ]
+    ],
+    "output": [
+      [
+        34,
+        34
+      ],
+      [
+        54,
+        56
+      ],
+      [
+        58,
+        58
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'modulation' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPQuantumColorsEffect.cpp\n * @brief LGP Quantum Colors effect implementation\n */\n\n#include \"LGPQuantumColorsEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPQuantumColorsEffect::LGPQuantumColorsEffect()\n    : m_waveFunction(0.0f)\n{\n}\n\nbool LGPQuantumColorsEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_waveFunction = 0.0f;\n    return true;\n}\n\nvoid LGPQuantumColorsEffect::render(plugins::EffectContext& ctx) {\n    // Colors exist in quantum states until \"observed\"\n    float dt = ctx.getSafeDeltaSeconds();\n    float intensity = ctx.brightness / 255.0f;\n\n    m_waveFunction += ctx.speed * 0.001f * 60.0f * dt;  // dt-corrected\n\n    const int numStates = 4;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float distFromCenter = (float)centerPairDistance((uint16_t)i);\n        float normalizedDist = distFromCenter / (float)HALF_LENGTH;\n\n        float probability = sinf(m_waveFunction + normalizedDist * TWO_PI * numStates);\n        probability = probability * probability;\n\n        uint8_t paletteOffset;\n        if (probability < 0.25f) {\n            paletteOffset = 0;\n        } else if (probability < 0.5f) {\n            paletteOffset = 10;\n        } else if (probability < 0.75f) {\n            paletteOffset = 20;\n        } else {\n            paletteOffset = 30;\n        }\n\n        uint8_t uncertainty = (uint8_t)(255.0f * (0.5f + 0.5f * sinf(distFromCenter * 0.2f)));\n\n        ctx.leds[i] = ctx.palette.getColor((uint8_t)(ctx.gHue + paletteOffset), (uint8_t)(uncertainty * intensity));\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            // Complementary color pairing: Strip 2 uses hue + 128 (180deg offset) for\n            // intentional complementary color contrast, not rainbow cycling.\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor(\n                (uint8_t)(ctx.gHue + paletteOffset + 128),\n                (uint8_t)((255 - uncertainty) * intensity));\n        }\n    }\n}\n\nvoid LGPQuantumColorsEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPQuantumColorsEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Quantum Colors\",\n        \"Quantized energy levels\",\n        plugins::EffectCategory::UNCATEGORIZED,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

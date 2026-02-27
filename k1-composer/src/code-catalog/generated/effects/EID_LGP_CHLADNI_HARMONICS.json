@@ -1,0 +1,98 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_CHLADNI_HARMONICS",
+  "effectIdHex": "0x0800",
+  "className": "LGPChladniHarmonicsEffect",
+  "displayName": "LGP Chladni Harmonics",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPChladniHarmonicsEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPChladniHarmonicsEffect.cpp",
+  "renderRange": [
+    28,
+    82
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        28,
+        33
+      ]
+    ],
+    "mapping": [
+      [
+        42,
+        42
+      ],
+      [
+        45,
+        45
+      ],
+      [
+        48,
+        49
+      ]
+    ],
+    "modulation": [
+      [
+        35,
+        36
+      ],
+      [
+        48,
+        49
+      ],
+      [
+        53,
+        53
+      ]
+    ],
+    "render": [
+      [
+        38,
+        38
+      ],
+      [
+        40,
+        40
+      ],
+      [
+        72,
+        72
+      ],
+      [
+        79,
+        79
+      ]
+    ],
+    "post": [
+      [
+        38,
+        38
+      ]
+    ],
+    "output": [
+      [
+        40,
+        40
+      ],
+      [
+        72,
+        72
+      ],
+      [
+        74,
+        74
+      ],
+      [
+        79,
+        79
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPChladniHarmonicsEffect.cpp\n * @brief LGP Chladni Harmonics effect implementation\n */\n\n#include \"LGPChladniHarmonicsEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPChladniHarmonicsEffect::LGPChladniHarmonicsEffect()\n    : m_vibrationPhase(0.0f)\n    , m_mixPhase(0.0f)\n{\n}\n\nbool LGPChladniHarmonicsEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_vibrationPhase = 0.0f;\n    m_mixPhase = 0.0f;\n    return true;\n}\n\nvoid LGPChladniHarmonicsEffect::render(plugins::EffectContext& ctx) {\n    // Visualizes acoustic resonance patterns on vibrating plates\n    float speed = ctx.speed / 50.0f;\n    float intensity = ctx.brightness / 255.0f;\n\n    const int modeNumber = 4;\n\n    m_vibrationPhase += speed * 0.08f;\n    m_mixPhase += speed * 0.05f;\n\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float distFromCenter = (float)centerPairDistance(i);\n        float normalizedPos = distFromCenter / (float)HALF_LENGTH;\n\n        // Mode shape: standing wave pattern\n        float modeShape = sinf(modeNumber * PI * normalizedPos);\n\n        // Add mixing with nearby modes\n        float mix1 = sinf((modeNumber + 1) * PI * normalizedPos) * sinf(m_mixPhase);\n        float mix2 = sinf((modeNumber - 1) * PI * normalizedPos) * cosf(m_mixPhase * 1.3f);\n        float mixedMode = modeShape * 0.75f + (mix1 + mix2) * 0.25f * 0.5f;\n\n        // Temporal oscillation\n        float temporalOscillation = cosf(m_vibrationPhase);\n        float plateDisplacement = mixedMode * temporalOscillation;\n\n        // Sand particle visualization\n        float nodeStrength = 1.0f / (fabsf(modeShape) + 0.1f);\n        nodeStrength = constrain(nodeStrength, 0.0f, 3.0f);\n\n        float antinodeStrength = fabsf(plateDisplacement) * intensity;\n\n        float particleBrightness = nodeStrength * (1.0f - intensity) * 0.3f;\n        float motionBrightness = antinodeStrength * intensity;\n        float totalBrightness = (particleBrightness + motionBrightness) * 255.0f;\n\n        uint8_t brightness = (uint8_t)constrain(totalBrightness, 20.0f, 255.0f);\n\n        uint8_t hue1 = (uint8_t)(ctx.gHue + (uint8_t)(plateDisplacement * 30.0f));\n        uint8_t hue2 = (uint8_t)(ctx.gHue + 128 + (uint8_t)(plateDisplacement * 30.0f));\n\n        uint8_t brightU8 = (uint8_t)((brightness * ctx.brightness) / 255);\n        ctx.leds[i] = ctx.palette.getColor(hue1, brightU8);\n\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            float bottomDisplacement = -plateDisplacement;\n            float bottomBrightness = (particleBrightness + fabsf(bottomDisplacement) * intensity) * 255.0f;\n            uint8_t bottomBrightU8 = (uint8_t)constrain(bottomBrightness, 20.0f, 255.0f);\n            bottomBrightU8 = (uint8_t)((bottomBrightU8 * ctx.brightness) / 255);\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor(hue2, bottomBrightU8);\n        }\n    }\n}\n\nvoid LGPChladniHarmonicsEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPChladniHarmonicsEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Chladni Harmonics\",\n        \"Resonant nodal patterns\",\n        plugins::EffectCategory::UNCATEGORIZED,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

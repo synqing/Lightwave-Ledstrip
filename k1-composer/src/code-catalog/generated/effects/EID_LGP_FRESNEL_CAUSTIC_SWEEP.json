@@ -1,0 +1,204 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_FRESNEL_CAUSTIC_SWEEP",
+  "effectIdHex": "0x1B04",
+  "className": "LGPFresnelCausticSweepEffect",
+  "displayName": "LGP Fresnel Caustic Sweep",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPFresnelCausticSweepEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPFresnelCausticSweepEffect.cpp",
+  "renderRange": [
+    93,
+    246
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        108,
+        108
+      ],
+      [
+        110,
+        110
+      ],
+      [
+        112,
+        112
+      ],
+      [
+        115,
+        115
+      ],
+      [
+        125,
+        125
+      ],
+      [
+        131,
+        132
+      ]
+    ],
+    "mapping": [
+      [
+        99,
+        99
+      ],
+      [
+        114,
+        116
+      ],
+      [
+        139,
+        139
+      ],
+      [
+        146,
+        146
+      ],
+      [
+        155,
+        155
+      ]
+    ],
+    "modulation": [
+      [
+        116,
+        116
+      ],
+      [
+        120,
+        122
+      ],
+      [
+        130,
+        134
+      ],
+      [
+        139,
+        141
+      ],
+      [
+        146,
+        148
+      ],
+      [
+        153,
+        153
+      ],
+      [
+        155,
+        157
+      ],
+      [
+        159,
+        160
+      ],
+      [
+        162,
+        164
+      ],
+      [
+        170,
+        170
+      ],
+      [
+        172,
+        173
+      ],
+      [
+        198,
+        198
+      ],
+      [
+        214,
+        215
+      ],
+      [
+        226,
+        227
+      ],
+      [
+        236,
+        236
+      ]
+    ],
+    "render": [
+      [
+        113,
+        113
+      ],
+      [
+        156,
+        157
+      ],
+      [
+        160,
+        160
+      ],
+      [
+        178,
+        178
+      ],
+      [
+        181,
+        181
+      ],
+      [
+        183,
+        183
+      ],
+      [
+        219,
+        219
+      ],
+      [
+        222,
+        222
+      ],
+      [
+        243,
+        243
+      ]
+    ],
+    "post": [
+      [
+        176,
+        176
+      ],
+      [
+        178,
+        178
+      ]
+    ],
+    "output": [
+      [
+        181,
+        181
+      ],
+      [
+        183,
+        183
+      ],
+      [
+        222,
+        222
+      ],
+      [
+        224,
+        225
+      ],
+      [
+        240,
+        240
+      ],
+      [
+        243,
+        243
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [],
+  "sourceText": "/**\n * @file LGPFresnelCausticSweepEffect.cpp\n * @brief LGP Fresnel Caustic Focus Sweep -- scanning lens caustic with Fresnel sidelobes\n *\n * A sinusoidally sweeping focus point in distance-from-centre space with:\n * - Narrow Gaussian-like core at the focus (~3 LEDs)\n * - Oscillatory Fresnel ring sidelobes that breathe slowly\n * - Centre-weighted envelope (brightest action near strip midpoint)\n * - Specular flash on beat at current focus position\n */\n\n#include \"LGPFresnelCausticSweepEffect.h\"\n#include \"ChromaUtils.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\n// ---------------------------------------------------------------------------\n// Constants\n// ---------------------------------------------------------------------------\n\nstatic constexpr float kTwoPi = 6.2831853f;\n\n// Full sweep period at speed=25 (normalised speed 0.5): ~8 seconds\n// focusPhase advances at speedNorm * BASE_SWEEP_RATE rad/s\n// At speedNorm=0.5 => 0.5 * 1.571 ~= 0.785 rad/s => ~8s full cycle\nstatic constexpr float BASE_SWEEP_RATE = 1.5707963f;   // PI/2 rad/s\n\n// Sidelobe breathing rate -- slow independent drift\nstatic constexpr float RING_BREATHE_RATE = 0.3f;       // rad/s\n\n// Maximum distance from centre (half strip length)\nstatic constexpr float MAX_D = 80.0f;\n\n// Core Gaussian width control: brightness = max(0, 255 - x * CORE_SLOPE)\n// At CORE_SLOPE=85 the core is ~3 LEDs wide before it drops to zero\nstatic constexpr float CORE_SLOPE = 85.0f;\n\n// Sidelobe spatial frequency (higher = tighter rings)\nstatic constexpr uint8_t RING_SPATIAL_FREQ = 18;\n\n// Sidelobe suppression threshold (removes dim oscillation tails)\nstatic constexpr uint8_t RING_SUPPRESS = 90;\n\n// Core vs sidelobe mixing: core scaled by 200/255, rings halved\nstatic constexpr uint8_t CORE_GAIN = 200;\n\n// ---------------------------------------------------------------------------\n// Constructor\n// ---------------------------------------------------------------------------\n\nLGPFresnelCausticSweepEffect::LGPFresnelCausticSweepEffect()\n    : m_focusPhase(0.0f)\n    , m_ringPhase(0.0f)\n    , m_chromaAngle(0.0f)\n    , m_beatFlash(0.0f)\n    , m_fallbackPhase(0.0f)\n#if FEATURE_AUDIO_SYNC\n    , m_lastHopSeq(0)\n    , m_chromaSmoothed{}\n#endif\n{\n}\n\n// ---------------------------------------------------------------------------\n// init\n// ---------------------------------------------------------------------------\n\nbool LGPFresnelCausticSweepEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_focusPhase = 0.0f;\n    m_ringPhase = 0.0f;\n    m_chromaAngle = 0.0f;\n    m_beatFlash = 0.0f;\n    m_fallbackPhase = 0.0f;\n#if FEATURE_AUDIO_SYNC\n    m_lastHopSeq = 0;\n    for (uint8_t i = 0; i < 12; i++) {\n        m_chromaSmoothed[i] = 0.0f;\n    }\n#endif\n    return true;\n}\n\n// ---------------------------------------------------------------------------\n// render\n// ---------------------------------------------------------------------------\n\nvoid LGPFresnelCausticSweepEffect::render(plugins::EffectContext& ctx) {\n    // =========================================================================\n    // SAFE DELTA TIME\n    // =========================================================================\n    float rawDt = ctx.getSafeRawDeltaSeconds();\n    float dt    = ctx.getSafeDeltaSeconds();\n    float speedNorm = ctx.speed / 50.0f;\n\n    // =========================================================================\n    // AUDIO PROCESSING\n    // =========================================================================\n    float sweepSpeedMult = 1.0f;\n    uint8_t chromaHueOffset = 0;\n\n#if FEATURE_AUDIO_SYNC\n    if (ctx.audio.available) {\n        // ----- Hop-gated chroma update -----\n        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);\n        if (newHop) {\n            m_lastHopSeq = ctx.audio.controlBus.hop_seq;\n            for (uint8_t i = 0; i < 12; i++) {\n                // Gentle exponential approach toward target (per-hop)\n                float target = ctx.audio.controlBus.heavy_chroma[i];\n                m_chromaSmoothed[i] += (target - m_chromaSmoothed[i]) * 0.25f;\n            }\n        }\n\n        // Circular weighted mean + circular EMA for smooth, continuous hue\n        chromaHueOffset = effects::chroma::circularChromaHueSmoothed(\n            m_chromaSmoothed, m_chromaAngle, rawDt, 0.20f);\n\n        // RMS modulates sweep speed: +-30% around nominal\n        float rms = ctx.audio.rms();\n        sweepSpeedMult = 1.0f + (rms - 0.3f) * 1.0f;  // 0.7 .. 1.7 range\n        if (sweepSpeedMult < 0.7f) sweepSpeedMult = 0.7f;\n        if (sweepSpeedMult > 1.7f) sweepSpeedMult = 1.7f;\n\n        // Beat triggers specular flash\n        if (ctx.audio.isOnBeat()) {\n            float str = ctx.audio.beatStrength();\n            if (str > m_beatFlash) {\n                m_beatFlash = str;\n            }\n        }\n    } else {\n        // No audio: slow fallback oscillation\n        m_fallbackPhase += speedNorm * 0.4f * dt;\n        if (m_fallbackPhase > kTwoPi * 10.0f) {\n            m_fallbackPhase -= kTwoPi * 10.0f;\n        }\n    }\n#else\n    // No audio feature: slow fallback oscillation\n    m_fallbackPhase += speedNorm * 0.4f * dt;\n    if (m_fallbackPhase > kTwoPi * 10.0f) {\n        m_fallbackPhase -= kTwoPi * 10.0f;\n    }\n#endif\n\n    // =========================================================================\n    // PHASE ACCUMULATION\n    // =========================================================================\n    m_focusPhase += speedNorm * BASE_SWEEP_RATE * sweepSpeedMult * dt;\n    while (m_focusPhase >= kTwoPi) m_focusPhase -= kTwoPi;\n    while (m_focusPhase < 0.0f)   m_focusPhase += kTwoPi;\n\n    m_ringPhase += RING_BREATHE_RATE * dt;\n    while (m_ringPhase >= kTwoPi) m_ringPhase -= kTwoPi;\n\n    // Decay beat flash (dt-corrected: ~0.88 per frame at 60fps => fast decay)\n    m_beatFlash = effects::chroma::dtDecay(m_beatFlash, 0.88f, rawDt);\n    if (m_beatFlash < 0.01f) m_beatFlash = 0.0f;\n\n    // =========================================================================\n    // COMPUTE FOCUS POSITION\n    // =========================================================================\n    // Sinusoidal sweep across distance-from-centre domain [0..MAX_D]\n    float focusPos = (sinf(m_focusPhase) * 0.5f + 0.5f) * MAX_D;\n\n    // Ring phase offset (8-bit domain) for sidelobe breathing\n    uint8_t ringPhaseU8 = (uint8_t)(m_ringPhase * (255.0f / kTwoPi));\n\n    // =========================================================================\n    // FADE (persistence trails)\n    // =========================================================================\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    // =========================================================================\n    // RENDER LOOP -- Strip 1 (i = 0..159)\n    // =========================================================================\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        float d = (float)centerPairDistance(i);\n\n        // Distance from the current focus point\n        float x = fabsf(d - focusPos);\n\n        // ----- Core: narrow bright peak -----\n        // Linear falloff clamped at zero: drops to 0 within ~3 LEDs\n        float coreF = 255.0f - x * CORE_SLOPE;\n        if (coreF < 0.0f) coreF = 0.0f;\n        uint8_t core = (uint8_t)coreF;\n\n        // ----- Sidelobes: Fresnel ring structure -----\n        // Oscillatory falloff using sin8 with distance from focus\n        uint8_t xU8 = (x > 255.0f) ? 255 : (uint8_t)x;\n        uint8_t ringArg = (uint8_t)(xU8 * RING_SPATIAL_FREQ) + ringPhaseU8;\n        uint8_t rings = sin8(ringArg);\n        rings = qsub8(rings, RING_SUPPRESS);    // suppress low values\n        rings = scale8(rings, rings);            // sharpen peaks (square)\n\n        // ----- Combine core + sidelobes -----\n        uint8_t v = qadd8(scale8(core, CORE_GAIN), rings >> 1);\n\n        // ----- Centre envelope -----\n        // So the effect reads as \"inside the acrylic\" not \"on the edge\"\n        uint8_t dU8 = (d > MAX_D) ? 255 : (uint8_t)(d * (255.0f / MAX_D));\n        uint8_t env = 255 - dU8;\n        v = scale8(v, qadd8(80, env >> 1));      // floor of ~80/255 + envelope\n\n        // ----- Specular highlight at exact focus -----\n        if (x <= 1.5f && v > 180) {\n            // Beat flash boosts toward white\n            uint8_t flashBoost = (uint8_t)(m_beatFlash * 75.0f);\n            v = qadd8(v, flashBoost);\n        }\n\n        // ----- Colour via palette -----\n        uint8_t hue = ctx.gHue + chromaHueOffset + (uint8_t)(d * 0.3f);\n        uint8_t bright = scale8(v, ctx.brightness);\n        ctx.leds[i] = ctx.palette.getColor(hue, bright);\n\n        // ----- Strip 2: parallax depth offset -----\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            // +90 on ring phase for different ring alignment (parallax)\n            uint8_t ringArg2 = (uint8_t)(xU8 * RING_SPATIAL_FREQ) + ringPhaseU8 + 90;\n            uint8_t rings2 = sin8(ringArg2);\n            rings2 = qsub8(rings2, RING_SUPPRESS);\n            rings2 = scale8(rings2, rings2);\n\n            uint8_t v2 = qadd8(scale8(core, CORE_GAIN), rings2 >> 1);\n            v2 = scale8(v2, qadd8(80, env >> 1));\n\n            if (x <= 1.5f && v2 > 180) {\n                uint8_t flashBoost2 = (uint8_t)(m_beatFlash * 75.0f);\n                v2 = qadd8(v2, flashBoost2);\n            }\n\n            // Hue +25 for strip 2, brightness 90%\n            uint8_t hue2 = (uint8_t)(hue + 25);\n            uint8_t bright2 = scale8(v2, scale8(ctx.brightness, 230));  // ~90%\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor(hue2, bright2);\n        }\n    }\n}\n\n// ---------------------------------------------------------------------------\n// cleanup\n// ---------------------------------------------------------------------------\n\nvoid LGPFresnelCausticSweepEffect::cleanup() {\n    // No resources to free\n}\n\n// ---------------------------------------------------------------------------\n// getMetadata\n// ---------------------------------------------------------------------------\n\nconst plugins::EffectMetadata& LGPFresnelCausticSweepEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Fresnel Caustic Sweep\",\n        \"Scanning lens caustic with Fresnel sidelobe ring structure\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

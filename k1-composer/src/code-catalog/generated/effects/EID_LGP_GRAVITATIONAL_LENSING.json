@@ -1,0 +1,109 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_GRAVITATIONAL_LENSING",
+  "effectIdHex": "0x0601",
+  "className": "LGPGravitationalLensingEffect",
+  "displayName": "LGP Gravitational Lensing",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPGravitationalLensingEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPGravitationalLensingEffect.cpp",
+  "renderRange": [
+    35,
+    102
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        35,
+        42
+      ]
+    ],
+    "mapping": [
+      [
+        39,
+        39
+      ],
+      [
+        45,
+        45
+      ]
+    ],
+    "modulation": [
+      [
+        54,
+        65
+      ]
+    ],
+    "render": [
+      [
+        44,
+        44
+      ],
+      [
+        52,
+        52
+      ],
+      [
+        55,
+        56
+      ],
+      [
+        60,
+        60
+      ],
+      [
+        63,
+        63
+      ],
+      [
+        79,
+        79
+      ],
+      [
+        85,
+        85
+      ],
+      [
+        88,
+        88
+      ],
+      [
+        90,
+        91
+      ]
+    ],
+    "post": [
+      [
+        94,
+        98
+      ]
+    ],
+    "output": [
+      [
+        47,
+        47
+      ],
+      [
+        78,
+        78
+      ],
+      [
+        88,
+        90
+      ],
+      [
+        96,
+        96
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'modulation' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPGravitationalLensingEffect.cpp\n * @brief LGP Gravitational Lensing effect implementation\n */\n\n#include \"LGPGravitationalLensingEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n#include <cstring>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPGravitationalLensingEffect::LGPGravitationalLensingEffect()\n    : m_time(0)\n    , m_massPos{40.0f, 80.0f, 120.0f}\n    , m_massVel{0.5f, -0.3f, 0.4f}\n{\n}\n\nbool LGPGravitationalLensingEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_time = 0;\n    m_massPos[0] = 40.0f;\n    m_massPos[1] = 80.0f;\n    m_massPos[2] = 120.0f;\n    m_massVel[0] = 0.5f;\n    m_massVel[1] = -0.3f;\n    m_massVel[2] = 0.4f;\n    return true;\n}\n\nvoid LGPGravitationalLensingEffect::render(plugins::EffectContext& ctx) {\n    // Light bends around invisible massive objects creating Einstein rings\n    m_time = (uint16_t)(m_time + (ctx.speed >> 2));\n\n    float speedNorm = ctx.speed / 50.0f;\n    const uint8_t massCount = 2;\n    float massStrength = ctx.brightness / 255.0f;\n\n    // Update mass positions\n    for (uint8_t m = 0; m < massCount; m++) {\n        m_massPos[m] += m_massVel[m] * speedNorm;\n\n        if (m_massPos[m] < 20.0f || m_massPos[m] > (float)STRIP_LENGTH - 20.0f) {\n            m_massVel[m] = -m_massVel[m];\n        }\n    }\n\n    fill_solid(ctx.leds, ctx.ledCount, CRGB::Black);\n\n    // Generate light rays from center\n    for (int16_t ray = -40; ray <= 40; ray += 2) {\n        for (int8_t direction = -1; direction <= 1; direction += 2) {\n            float rayPos = (float)CENTER_LEFT;\n            float rayAngle = ray * 0.02f * direction;\n\n            for (uint8_t step = 0; step < 80; step++) {\n                float totalDeflection = 0.0f;\n\n                for (uint8_t m = 0; m < massCount; m++) {\n                    float dist = fabsf(rayPos - m_massPos[m]);\n                    if (dist < 40.0f && dist > 1.0f) {\n                        float deflection = massStrength * 20.0f / (dist * dist);\n                        if (rayPos > m_massPos[m]) {\n                            deflection = -deflection;\n                        }\n                        totalDeflection += deflection;\n                    }\n                }\n\n                rayAngle += totalDeflection * 0.01f;\n                rayPos += cosf(rayAngle) * 2.0f * direction;\n\n                int16_t pixelPos = (int16_t)rayPos;\n                if (pixelPos >= 0 && pixelPos < STRIP_LENGTH) {\n                    uint8_t paletteIndex = (uint8_t)(fabsf(totalDeflection) * 20.0f);\n                    uint8_t brightness = (uint8_t)(255 - step * 3);\n\n                    // Clamp brightness to avoid white saturation\n                    if (fabsf(totalDeflection) > 0.5f) {\n                        brightness = 240;  // Slightly below 255 to avoid white guardrail\n                        paletteIndex = (uint8_t)(fabsf(totalDeflection) * 30.0f);  // Use deflection-based color\n                    }\n\n                    ctx.leds[pixelPos] += ctx.palette.getColor((uint8_t)(ctx.gHue + paletteIndex), brightness);\n                    if (pixelPos + STRIP_LENGTH < ctx.ledCount) {\n                        ctx.leds[pixelPos + STRIP_LENGTH] += ctx.palette.getColor(\n                            (uint8_t)(ctx.gHue + paletteIndex + 64),\n                            brightness);\n                    }\n                }\n\n                if (rayPos < 0.0f || rayPos >= STRIP_LENGTH) {\n                    break;\n                }\n            }\n        }\n    }\n}\n\nvoid LGPGravitationalLensingEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPGravitationalLensingEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Gravitational Lensing\",\n        \"Light bending around mass\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

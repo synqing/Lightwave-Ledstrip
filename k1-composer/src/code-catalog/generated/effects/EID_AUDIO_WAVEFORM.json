@@ -1,0 +1,110 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_AUDIO_WAVEFORM",
+  "effectIdHex": "0x0A04",
+  "className": "AudioWaveformEffect",
+  "displayName": "Audio Waveform",
+  "headerPath": "firmware/v2/src/effects/ieffect/AudioWaveformEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/AudioWaveformEffect.cpp",
+  "renderRange": [
+    127,
+    201
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        138,
+        138
+      ],
+      [
+        149,
+        150
+      ],
+      [
+        153,
+        153
+      ]
+    ],
+    "mapping": [
+      [
+        136,
+        147
+      ]
+    ],
+    "modulation": [
+      [
+        158,
+        158
+      ],
+      [
+        160,
+        160
+      ],
+      [
+        165,
+        165
+      ],
+      [
+        177,
+        178
+      ]
+    ],
+    "render": [
+      [
+        130,
+        130
+      ],
+      [
+        149,
+        149
+      ],
+      [
+        191,
+        192
+      ],
+      [
+        197,
+        198
+      ]
+    ],
+    "post": [
+      [
+        139,
+        140
+      ],
+      [
+        163,
+        163
+      ],
+      [
+        165,
+        165
+      ]
+    ],
+    "output": [
+      [
+        187,
+        188
+      ],
+      [
+        191,
+        192
+      ],
+      [
+        194,
+        194
+      ],
+      [
+        196,
+        198
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'mapping' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file AudioWaveformEffect.cpp\n * @brief Scrolling waveform visualization with trails and chromagram color\n *\n * CENTER ORIGIN compliant adaptation of SensoryBridge waveform mode.\n * Shows scrolling waveform emanating from center with dynamic trails.\n *\n * Algorithm (original SensoryBridge adapted for CENTER ORIGIN):\n * 1. Apply DYNAMIC FADE to all existing LEDs (creates trails)\n * 2. SHIFT LEDs outward from center (scrolling effect)\n * 3. Get waveform peak amplitude\n * 4. Smooth the peak (5% new, 95% old)\n * 5. Compute color from chromagram\n * 6. Draw new dot at CENTER based on amplitude brightness\n */\n\n#include \"AudioWaveformEffect.h\"\n#include \"ChromaUtils.h\"\n#include \"../CoreEffects.h\"\n#include \"../../config/features.h\"\n\n#ifndef NATIVE_BUILD\n#include <FastLED.h>\n#endif\n\n#include <cmath>\n#include <cstring>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nnamespace {\n\nstatic inline const float* selectChroma12(const audio::ControlBusFrame& cb) {\n    // Both backends now produce normalised chroma via Stage A/B pipeline.\n    return cb.chroma;\n}\n\nstatic inline float clamp01(float v) {\n    if (v < 0.0f) return 0.0f;\n    if (v > 1.0f) return 1.0f;\n    return v;\n}\n\n} // namespace\n\nbool AudioWaveformEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_peakSmoothed = 0.0f;\n    m_sumColorLast[0] = 0.0f;\n    m_sumColorLast[1] = 0.0f;\n    m_sumColorLast[2] = 0.0f;\n    m_chromaAngle = 0.0f;\n    m_initialized = false;\n    return true;\n}\n\nvoid AudioWaveformEffect::applyDynamicFade(plugins::EffectContext& ctx, float amplitude) {\n    // Original SensoryBridge formula:\n    // dynamic_fade_amount = 1.0 - (max_fade_reduction * abs_amp)\n    // When amplitude is HIGH: less fade (longer trails)\n    // When amplitude is LOW: more fade (shorter trails)\n\n    float absAmp = fabsf(amplitude);\n    if (absAmp > 1.0f) absAmp = 1.0f;\n\n    // Calculate dynamic fade: base fade reduced by amplitude\n    float fadeAmount = BASE_FADE - (MAX_FADE_REDUCTION * absAmp);\n    if (fadeAmount < 0.80f) fadeAmount = 0.80f;  // Don't fade too fast\n    if (fadeAmount > 0.98f) fadeAmount = 0.98f;  // Always fade a little\n\n    uint8_t fadeScale = (uint8_t)(fadeAmount * 255.0f);\n\n    // Apply fade to ALL LEDs (both strips)\n    for (uint16_t i = 0; i < ctx.ledCount; ++i) {\n        ctx.leds[i].nscale8(fadeScale);\n    }\n}\n\nvoid AudioWaveformEffect::shiftLedsOutward(plugins::EffectContext& ctx) {\n    // CENTER ORIGIN shift: LEDs move OUTWARD from center (79/80)\n    // This creates the scrolling waveform effect\n\n    uint16_t stripLen = (ctx.ledCount > 160) ? 160 : ctx.ledCount;\n    uint16_t center = stripLen / 2;  // 80 for 160 LEDs\n\n    // === STRIP 1: Shift outward from center ===\n\n    // Left half (79 down to 0): shift LEFT (toward 0)\n    // LED 0 falls off, LED 1→0, LED 2→1, ..., LED 79→78\n    for (uint16_t i = 0; i < center - 1; ++i) {\n        ctx.leds[i] = ctx.leds[i + 1];\n    }\n\n    // Right half (80 up to 159): shift RIGHT (toward 159)\n    // LED 159 falls off, LED 158→159, ..., LED 80→81\n    for (uint16_t i = stripLen - 1; i > center; --i) {\n        ctx.leds[i] = ctx.leds[i - 1];\n    }\n\n    // Clear center pixels (79 and 80) - new data will be drawn here\n    ctx.leds[center - 1] = CRGB::Black;  // LED 79\n    ctx.leds[center] = CRGB::Black;      // LED 80\n\n    // === STRIP 2: Same pattern if present ===\n    if (ctx.ledCount > 160) {\n        uint16_t strip2Start = 160;\n        uint16_t strip2Center = strip2Start + center;  // 240\n\n        // Left half of strip 2\n        for (uint16_t i = strip2Start; i < strip2Center - 1; ++i) {\n            ctx.leds[i] = ctx.leds[i + 1];\n        }\n\n        // Right half of strip 2\n        for (uint16_t i = ctx.ledCount - 1; i > strip2Center; --i) {\n            ctx.leds[i] = ctx.leds[i - 1];\n        }\n\n        // Clear center pixels for strip 2\n        ctx.leds[strip2Center - 1] = CRGB::Black;  // LED 239\n        ctx.leds[strip2Center] = CRGB::Black;      // LED 240\n    }\n}\n\nvoid AudioWaveformEffect::render(plugins::EffectContext& ctx) {\n    // First frame only: clear buffer\n    if (!m_initialized) {\n        memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));\n        m_initialized = true;\n    }\n\n#if !FEATURE_AUDIO_SYNC\n    (void)ctx;\n    return;\n#else\n    if (!ctx.audio.available) {\n        // No audio: just fade existing trails\n        applyDynamicFade(ctx, 0.0f);\n        return;\n    }\n\n    // =========================================\n    // STEP 1: Get current audio amplitude\n    // Prefer peak waveform amplitude for crisp transients; fall back to RMS.\n    // =========================================\n    float peak = 0.0f;\n    for (uint8_t i = 0; i < ctx.audio.waveformSize(); ++i) {\n        float a = ctx.audio.getWaveformAmplitude(i);\n        if (a > peak) peak = a;\n    }\n    float currentAmp = fmaxf(peak, ctx.audio.rms());\n    // silentScale handled globally by RendererActor\n    currentAmp = clamp01(currentAmp);\n\n    // =========================================\n    // STEP 2: Smooth the peak (5%/95% - original)\n    // =========================================\n    m_peakSmoothed = currentAmp * PEAK_SMOOTH_NEW + m_peakSmoothed * PEAK_SMOOTH_OLD;\n\n    // =========================================\n    // STEP 3: Apply DYNAMIC FADE (creates trails)\n    // =========================================\n    applyDynamicFade(ctx, m_peakSmoothed);\n\n    // =========================================\n    // STEP 4: SHIFT LEDs outward from center\n    // =========================================\n    shiftLedsOutward(ctx);\n\n    // =========================================\n    // STEP 5: Compute color from chromagram\n    // =========================================\n    CRGB dotColor = computeChromaColor(ctx);\n\n    // Scale by smoothed peak amplitude\n    uint8_t brightness = (uint8_t)(m_peakSmoothed * 255.0f);\n    dotColor.nscale8(brightness);\n\n    // Apply global brightness\n    dotColor.nscale8(ctx.brightness);\n\n    // =========================================\n    // STEP 6: Draw new dot at CENTER\n    // =========================================\n    uint16_t stripLen = (ctx.ledCount > 160) ? 160 : ctx.ledCount;\n    uint16_t center = stripLen / 2;  // 80\n\n    // Draw at center pair (79 and 80)\n    ctx.leds[center - 1] = dotColor;  // LED 79\n    ctx.leds[center] = dotColor;      // LED 80\n\n    // Strip 2 center if present\n    if (ctx.ledCount > 160) {\n        uint16_t strip2Center = 160 + center;  // 240\n        ctx.leds[strip2Center - 1] = dotColor;  // LED 239\n        ctx.leds[strip2Center] = dotColor;      // LED 240\n    }\n#endif\n}\n\nCRGB AudioWaveformEffect::computeChromaColor(const plugins::EffectContext& ctx) {\n    float sumR = 0.0f, sumG = 0.0f, sumB = 0.0f;\n\n#if FEATURE_AUDIO_SYNC\n    const float* chroma = selectChroma12(ctx.audio.controlBus);\n\n    // Musically anchored palette indices (no HSV hue-wheel sweep).\n    // Offsets are deliberately non-linear to avoid a \"rainbow ladder\" look.\n    static constexpr uint8_t NOTE_OFFSETS[12] = {\n        0, 12, 28, 40, 58, 72, 92, 108, 132, 152, 176, 204\n    };\n\n    // Circular chroma hue (prevents argmax discontinuities and wrapping artefacts).\n    float dt = ctx.getSafeRawDeltaSeconds();\n    uint8_t baseHue = effects::chroma::circularChromaHueSmoothed(\n        chroma, m_chromaAngle, dt, 0.20f);\n\n    // Accumulate color from all chromagram bins\n    for (uint8_t c = 0; c < 12; ++c) {\n        float bin = chroma[c];\n\n        // Square for contrast, then boost (original algorithm)\n        float bright = bin * bin * CHROMA_BOOST;\n        if (bright > 1.0f) bright = 1.0f;\n\n        // Only contribute if above threshold\n        if (bright > CHROMA_THRESHOLD) {\n            uint8_t paletteIdx = (uint8_t)(baseHue + NOTE_OFFSETS[c]);\n            uint8_t brightU8 = (uint8_t)(bright * 255.0f);\n            // Apply global brightness here to keep per-note contribution bounded.\n            brightU8 = (uint8_t)((brightU8 * ctx.brightness) / 255);\n            CRGB noteColor = ctx.palette.getColor(paletteIdx, brightU8);\n\n            sumR += noteColor.r;\n            sumG += noteColor.g;\n            sumB += noteColor.b;\n        }\n    }\n#endif\n\n    // Smooth color (5% new, 95% old - original ratio)\n    m_sumColorLast[0] = sumR * COLOR_SMOOTH_NEW + m_sumColorLast[0] * COLOR_SMOOTH_OLD;\n    m_sumColorLast[1] = sumG * COLOR_SMOOTH_NEW + m_sumColorLast[1] * COLOR_SMOOTH_OLD;\n    m_sumColorLast[2] = sumB * COLOR_SMOOTH_NEW + m_sumColorLast[2] * COLOR_SMOOTH_OLD;\n\n    // Clamp to valid RGB range\n    return CRGB(\n        (uint8_t)fminf(m_sumColorLast[0], 255.0f),\n        (uint8_t)fminf(m_sumColorLast[1], 255.0f),\n        (uint8_t)fminf(m_sumColorLast[2], 255.0f)\n    );\n}\n\nvoid AudioWaveformEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& AudioWaveformEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Audio Waveform\",\n        \"Scrolling waveform from center with dynamic trails - amplitude drives brightness\",\n        plugins::EffectCategory::PARTY,\n        1,\n        \"LightwaveOS\"\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

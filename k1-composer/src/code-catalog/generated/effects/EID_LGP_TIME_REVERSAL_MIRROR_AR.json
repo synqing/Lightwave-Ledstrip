@@ -1,0 +1,204 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_TIME_REVERSAL_MIRROR_AR",
+  "effectIdHex": "0x1B05",
+  "className": "LGPTimeReversalMirrorEffect_AR",
+  "displayName": "LGP Time Reversal Mirror (AR)",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_AR.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPTimeReversalMirrorEffect_AR.cpp",
+  "renderRange": [
+    136,
+    383
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        154,
+        154
+      ],
+      [
+        162,
+        164
+      ]
+    ],
+    "mapping": [
+      [
+        139,
+        139
+      ],
+      [
+        141,
+        141
+      ]
+    ],
+    "modulation": [
+      [
+        156,
+        156
+      ],
+      [
+        168,
+        168
+      ],
+      [
+        171,
+        171
+      ],
+      [
+        174,
+        174
+      ],
+      [
+        185,
+        185
+      ],
+      [
+        191,
+        191
+      ],
+      [
+        204,
+        204
+      ],
+      [
+        208,
+        208
+      ],
+      [
+        213,
+        213
+      ],
+      [
+        215,
+        216
+      ],
+      [
+        219,
+        219
+      ],
+      [
+        221,
+        222
+      ],
+      [
+        229,
+        230
+      ],
+      [
+        236,
+        239
+      ],
+      [
+        244,
+        244
+      ],
+      [
+        257,
+        257
+      ],
+      [
+        266,
+        266
+      ],
+      [
+        282,
+        282
+      ],
+      [
+        304,
+        304
+      ],
+      [
+        349,
+        349
+      ],
+      [
+        363,
+        363
+      ],
+      [
+        367,
+        367
+      ]
+    ],
+    "render": [
+      [
+        278,
+        278
+      ],
+      [
+        294,
+        294
+      ],
+      [
+        302,
+        302
+      ],
+      [
+        306,
+        306
+      ],
+      [
+        331,
+        331
+      ],
+      [
+        338,
+        339
+      ],
+      [
+        354,
+        354
+      ],
+      [
+        373,
+        373
+      ],
+      [
+        380,
+        380
+      ]
+    ],
+    "post": [
+      [
+        339,
+        339
+      ],
+      [
+        341,
+        341
+      ],
+      [
+        361,
+        361
+      ]
+    ],
+    "output": [
+      [
+        148,
+        150
+      ],
+      [
+        351,
+        352
+      ],
+      [
+        373,
+        373
+      ],
+      [
+        375,
+        376
+      ],
+      [
+        380,
+        380
+      ]
+    ]
+  },
+  "mappingConfidence": "high",
+  "mappingWarnings": [],
+  "sourceText": "/**\n * @file LGPTimeReversalMirrorEffect_AR.cpp\n * @brief LGP Time Reversal Mirror (AR) - musically gated signed-field wave recorder\n *        + EDM kick strikes + snare-triggered reverse bursts\n */\n\n#include \"LGPTimeReversalMirrorEffect_AR.h\"\n\n#include \"../CoreEffects.h\"\n#include \"../../config/features.h\"\n\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nnamespace {\n\nstatic inline float clamp01(float x) {\n    if (x < 0.0f) return 0.0f;\n    if (x > 1.0f) return 1.0f;\n    return x;\n}\n\nstatic inline uint8_t clampU8(int v) {\n    if (v < 0) return 0;\n    if (v > 255) return 255;\n    return static_cast<uint8_t>(v);\n}\n\nstatic inline float smoothstep01(float x) {\n    float t = clamp01(x);\n    return t * t * (3.0f - 2.0f * t);\n}\n\nstatic inline float smoothstepDur(float t, float durationS) {\n    if (durationS <= 0.0f) return 1.0f;\n    return smoothstep01(t / durationS);\n}\n\nstatic inline float expAlpha(float dt, float tauS) {\n    if (tauS <= 0.0f) return 1.0f;\n    return 1.0f - expf(-dt / tauS);\n}\n\nstatic inline int16_t i16Clamp(int32_t v, int16_t lo, int16_t hi) {\n    if (v < lo) return lo;\n    if (v > hi) return hi;\n    return static_cast<int16_t>(v);\n}\n\nstatic inline int16_t i16Abs(int16_t v) {\n    return (v < 0) ? static_cast<int16_t>(-v) : v;\n}\n\nstatic inline uint8_t softLimitToU8(float x01, float knee) {\n    float y = x01 / (x01 + knee);\n    if (y < 0.0f) y = 0.0f;\n    if (y > 1.0f) y = 1.0f;\n    return static_cast<uint8_t>(y * 255.0f + 0.5f);\n}\n\n} // namespace\n\nLGPTimeReversalMirrorEffect_AR::LGPTimeReversalMirrorEffect_AR() = default;\n\nbool LGPTimeReversalMirrorEffect_AR::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n\n    m_phase = Phase::REST;\n    m_phaseTimeS = 0.0f;\n    m_quietTimeS = 0.0f;\n    m_simAccS = 0.0f;\n\n    m_bassSmooth = 0.0f;\n    m_bassInit = false;\n\n    m_kickEnv = 0.0f;\n    m_snareEnv = 0.0f;\n\n    m_kickArmed = true;\n    m_lastKickMs = 0;\n    m_lastReverseMs = 0;\n\n    m_L = 0;\n    m_histWrite = 0;\n    m_histRead = 0.0f;\n    m_impulseSign = 1;\n\n    // Allocate PSRAM\n    if (m_ps) {\n#ifndef NATIVE_BUILD\n        heap_caps_free(m_ps);\n#else\n        free(m_ps);\n#endif\n        m_ps = nullptr;\n    }\n\n#ifndef NATIVE_BUILD\n    m_ps = static_cast<PsramData*>(heap_caps_malloc(sizeof(PsramData), MALLOC_CAP_SPIRAM));\n#else\n    m_ps = static_cast<PsramData*>(malloc(sizeof(PsramData)));\n#endif\n\n    if (!m_ps) return false;\n\n    memset(m_ps, 0, sizeof(PsramData));\n\n    return true;\n}\n\nvoid LGPTimeReversalMirrorEffect_AR::cleanup() {\n    if (m_ps) {\n#ifndef NATIVE_BUILD\n        heap_caps_free(m_ps);\n#else\n        free(m_ps);\n#endif\n        m_ps = nullptr;\n    }\n}\n\nconst plugins::EffectMetadata& LGPTimeReversalMirrorEffect_AR::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Time Reversal Mirror (AR)\",\n        \"Signed-field wave recorder + EDM kick strikes + snare-triggered reverse bursts\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\nvoid LGPTimeReversalMirrorEffect_AR::render(plugins::EffectContext& ctx) {\n    if (!m_ps) return;\n\n    // ---- Normalised controls ----\n    const float speed01     = clamp01((ctx.speed - 1) / 99.0f);  // 1-100 -> 0..1\n    const float mood01      = ctx.getMoodNormalized();            // 0-255 -> 0..1\n    const float intensity01 = clamp01(ctx.brightness / 255.0f);\n\n    const float dtAudio  = ctx.getSafeRawDeltaSeconds();\n    const float dtVisual = ctx.getSafeDeltaSeconds();\n\n    // ---- Layout / distance domain length ----\n    const uint16_t stripLen = (ctx.ledCount < STRIP_LENGTH)\n        ? static_cast<uint16_t>(ctx.ledCount) : static_cast<uint16_t>(STRIP_LENGTH);\n    const uint16_t maxD = (stripLen >= 2) ? (stripLen / 2 - 1) : 0;\n    m_L = (maxD + 1);\n    if (m_L > kMaxL) m_L = kMaxL;\n\n    const bool hasAudio = ctx.audio.available;\n\n    // ---- Audio smoothing + EDM kick detection ----\n    float bassRaw = 0.0f;\n    float rmsRaw  = 0.0f;\n    bool snareHit = false;\n\n    if (hasAudio) {\n        bassRaw = clamp01(ctx.audio.heavyBass());\n        rmsRaw  = clamp01(ctx.audio.rms());\n        snareHit = ctx.audio.isSnareHit();\n    }\n\n    const float tauBass = fmaxf(0.035f, 0.11f - 0.05f * mood01 - 0.02f * speed01);\n    const float aBass = expAlpha(dtAudio, tauBass);\n\n    if (!m_bassInit) {\n        m_bassSmooth = bassRaw;\n        m_bassInit = true;\n    } else {\n        m_bassSmooth += (bassRaw - m_bassSmooth) * aBass;\n    }\n\n    // Kick: hysteresis on heavy bass\n    const float kickHigh = 0.16f - 0.05f * mood01;\n    const float kickLow  = kickHigh * 0.55f;\n\n    const uint32_t nowMs = millis();\n    const uint32_t minKickGapMs = static_cast<uint32_t>(260.0f - 120.0f * speed01);\n    bool kickHit = false;\n\n    if (m_kickArmed && m_bassSmooth > kickHigh\n        && (nowMs - m_lastKickMs) > minKickGapMs && rmsRaw > 0.03f) {\n        kickHit = true;\n        m_lastKickMs = nowMs;\n        m_kickArmed = false;\n        m_impulseSign = static_cast<int16_t>(-m_impulseSign);\n    } else if (!m_kickArmed && m_bassSmooth < kickLow) {\n        m_kickArmed = true;\n    }\n\n    // ---- Event envelopes ----\n    if (kickHit) m_kickEnv = 1.0f;\n    const float tauKick = fmaxf(0.10f, 0.18f - 0.06f * mood01);\n    m_kickEnv *= expf(-dtVisual / tauKick);\n\n    if (snareHit) m_snareEnv = 1.0f;\n    const float tauSnare = fmaxf(0.14f, 0.24f - 0.08f * mood01);\n    m_snareEnv *= expf(-dtVisual / tauSnare);\n\n    // ---- Narrative phase logic ----\n    const float reverseDurS = 0.65f - 0.25f * mood01;\n    const float quietToRestS = 0.90f;\n\n    const bool energeticNow = (rmsRaw > 0.035f) || (m_bassSmooth > 0.08f) || (m_kickEnv > 0.08f);\n\n    const uint32_t minReverseGapMs = 900;\n    const bool canReverse = (nowMs - m_lastReverseMs) > minReverseGapMs;\n\n    if (m_phase == Phase::REST) {\n        if (energeticNow) {\n            m_phase = Phase::RECORD;\n            m_phaseTimeS = 0.0f;\n            m_quietTimeS = 0.0f;\n        }\n    } else if (m_phase == Phase::RECORD) {\n        if (snareHit && canReverse) {\n            m_phase = Phase::REVERSE;\n            m_phaseTimeS = 0.0f;\n            m_lastReverseMs = nowMs;\n            const uint16_t last = (m_histWrite == 0) ? (kHist - 1) : (m_histWrite - 1);\n            m_histRead = static_cast<float>(last);\n        } else if (!energeticNow) {\n            m_quietTimeS += dtVisual;\n            if (m_quietTimeS > quietToRestS) {\n                m_phase = Phase::REST;\n                m_phaseTimeS = 0.0f;\n                m_quietTimeS = 0.0f;\n            }\n        } else {\n            m_quietTimeS = 0.0f;\n        }\n    } else if (m_phase == Phase::REVERSE) {\n        if (m_phaseTimeS > reverseDurS) {\n            m_phase = Phase::RECORD;\n            m_phaseTimeS = 0.0f;\n            m_quietTimeS = 0.0f;\n        }\n    }\n\n    m_phaseTimeS += dtVisual;\n\n    // ---- Simulation step (fixed step for stability) ----\n    const float simHz = 90.0f + 90.0f * speed01;\n    const float simDt = 1.0f / simHz;\n\n    const int16_t cap = static_cast<int16_t>(8000 + 7000 * intensity01);\n    const int32_t lapGain = static_cast<int32_t>(42 + 58 * speed01);\n    const int32_t damp = static_cast<int32_t>(34 - 14 * mood01);\n\n    const float reverseRate = 1.10f + 2.40f * speed01;\n\n    // Inject impulse on kick (centre-origin, shaped and limited)\n    if (m_phase != Phase::REST && m_kickEnv > 0.04f) {\n        const float imp01 = (0.08f + 0.22f * m_kickEnv) * (0.35f + 0.65f * intensity01);\n        const int16_t imp = static_cast<int16_t>(cap * imp01) * m_impulseSign;\n        if (m_L >= 1) m_ps->uCurr[0] = i16Clamp((int32_t)m_ps->uCurr[0] + (int32_t)imp, -cap, cap);\n        if (m_L >= 2) m_ps->uCurr[1] = i16Clamp((int32_t)m_ps->uCurr[1] + (int32_t)(imp * 6 / 10), -cap, cap);\n        if (m_L >= 3) m_ps->uCurr[2] = i16Clamp((int32_t)m_ps->uCurr[2] + (int32_t)(imp * 3 / 10), -cap, cap);\n    }\n\n    // Small snare accent\n    if (m_phase != Phase::REST && m_snareEnv > 0.06f) {\n        const float imp01 = (0.05f + 0.12f * m_snareEnv) * (0.30f + 0.70f * intensity01);\n        const int16_t imp = static_cast<int16_t>(cap * imp01);\n        if (m_L >= 1) m_ps->uCurr[0] = i16Clamp((int32_t)m_ps->uCurr[0] + imp, -cap, cap);\n        if (m_L >= 2) m_ps->uCurr[1] = i16Clamp((int32_t)m_ps->uCurr[1] + (imp * 4 / 10), -cap, cap);\n    }\n\n    m_simAccS += dtVisual;\n\n    const int maxSteps = 6;\n    int steps = 0;\n\n    while (m_simAccS >= simDt && steps < maxSteps) {\n        m_simAccS -= simDt;\n        steps++;\n\n        if (m_phase == Phase::REVERSE) {\n            // Reverse playback with linear interpolation\n            float r = m_histRead;\n            int i0 = static_cast<int>(floorf(r));\n            int i1 = i0 - 1;\n            float frac = r - static_cast<float>(i0);\n\n            if (i0 < 0) i0 += kHist;\n            if (i1 < 0) i1 += kHist;\n            if (i0 >= (int)kHist) i0 %= kHist;\n            if (i1 >= (int)kHist) i1 %= kHist;\n\n            for (uint16_t i = 0; i < m_L; i++) {\n                const int16_t a = m_ps->hist[(uint16_t)i0][i];\n                const int16_t b = m_ps->hist[(uint16_t)i1][i];\n                const int32_t v = (int32_t)a + (int32_t)((float)(b - a) * frac);\n                m_ps->uCurr[i] = i16Clamp(v, -cap, cap);\n            }\n\n            m_histRead -= reverseRate;\n            while (m_histRead < 0.0f) m_histRead += (float)kHist;\n\n        } else if (m_phase == Phase::RECORD) {\n            // Signed damped wave step in distance domain\n            for (uint16_t i = 0; i < m_L; i++) {\n                const int32_t ui  = m_ps->uCurr[i];\n                const int32_t uim = (i == 0)       ? m_ps->uCurr[i] : m_ps->uCurr[i - 1];\n                const int32_t uip = (i + 1 >= m_L) ? m_ps->uCurr[i] : m_ps->uCurr[i + 1];\n\n                const int32_t lap = (uim - (ui << 1) + uip);\n\n                int32_t v = (ui << 1) - (int32_t)m_ps->uPrev[i];\n                v += (lap * lapGain) >> 6;\n                v -= (ui * damp) >> 6;\n\n                m_ps->uNext[i] = i16Clamp(v, -cap, cap);\n            }\n\n            // Rotate buffers\n            memcpy(m_ps->uPrev, m_ps->uCurr, sizeof(int16_t) * m_L);\n            memcpy(m_ps->uCurr, m_ps->uNext, sizeof(int16_t) * m_L);\n\n            // Record snapshot\n            memcpy(m_ps->hist[m_histWrite], m_ps->uCurr, sizeof(int16_t) * m_L);\n            m_histWrite++;\n            if (m_histWrite >= kHist) m_histWrite = 0;\n\n        } else {\n            // REST: decay toward zero\n            for (uint16_t i = 0; i < m_L; i++) {\n                m_ps->uCurr[i] = static_cast<int16_t>(m_ps->uCurr[i] * 0.92f);\n                m_ps->uPrev[i] = static_cast<int16_t>(m_ps->uPrev[i] * 0.92f);\n            }\n        }\n    }\n\n    // ---- Rendering ----\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    const float gamma = 1.85f - 0.55f * mood01;\n\n    const CRGB deepA = CRGB(6, 16, 70);\n    const CRGB glowA = CRGB(0, 235, 200);\n    const CRGB deepB = CRGB(18, 8, 70);\n    const CRGB glowB = CRGB(200, 60, 255);\n    const CRGB white = CRGB(255, 255, 255);\n\n    const float carrierPhase = (float)(millis() % 100000) * (0.0025f + 0.0045f * speed01);\n\n    const int maxLeds = (ctx.ledCount < STRIP_LENGTH)\n        ? static_cast<int>(ctx.ledCount) : static_cast<int>(STRIP_LENGTH);\n\n    for (int i = 0; i < maxLeds; i++) {\n        const uint16_t d = centerPairDistance(static_cast<uint16_t>(i));\n        const uint16_t di = (d < m_L) ? d : (m_L - 1);\n\n        const int16_t amp = i16Abs(m_ps->uCurr[di]);\n\n        float x = (float)amp / (float)cap;\n        x = powf(clamp01(x), gamma);\n\n        if (m_phase == Phase::REVERSE) x *= (1.10f + 0.25f * m_snareEnv);\n\n        const uint8_t v = static_cast<uint8_t>(softLimitToU8(x, 0.30f) * intensity01);\n\n        const float sheen = 0.85f + 0.15f * sinf((float)d * (0.22f + 0.18f * speed01) + carrierPhase);\n        const uint8_t vv = clampU8((int)(v * sheen));\n\n        CRGB col = blend(deepA, glowA, vv);\n        if (vv > 230) col = blend(col, white, (uint8_t)((vv - 230) * 5));\n        col.nscale8_video(vv);\n        ctx.leds[i] += col;\n\n        // Strip B\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            CRGB col2 = blend(deepB, glowB, vv);\n            if (vv > 230) col2 = blend(col2, white, (uint8_t)((vv - 230) * 5));\n            col2.nscale8_video(vv);\n            ctx.leds[i + STRIP_LENGTH] += col2;\n        }\n    }\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

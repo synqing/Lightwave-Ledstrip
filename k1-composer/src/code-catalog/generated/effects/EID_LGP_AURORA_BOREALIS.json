@@ -1,0 +1,111 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_AURORA_BOREALIS",
+  "effectIdHex": "0x0500",
+  "className": "LGPAuroraBorealisEffect",
+  "displayName": "LGP Aurora Borealis",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPAuroraBorealisEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPAuroraBorealisEffect.cpp",
+  "renderRange": [
+    29,
+    79
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        29,
+        34
+      ]
+    ],
+    "mapping": [
+      [
+        35,
+        42
+      ]
+    ],
+    "modulation": [
+      [
+        38,
+        40
+      ]
+    ],
+    "render": [
+      [
+        35,
+        35
+      ],
+      [
+        37,
+        37
+      ],
+      [
+        45,
+        45
+      ],
+      [
+        54,
+        55
+      ],
+      [
+        57,
+        57
+      ],
+      [
+        59,
+        59
+      ],
+      [
+        66,
+        66
+      ],
+      [
+        70,
+        71
+      ],
+      [
+        75,
+        76
+      ]
+    ],
+    "post": [
+      [
+        35,
+        35
+      ]
+    ],
+    "output": [
+      [
+        39,
+        39
+      ],
+      [
+        45,
+        45
+      ],
+      [
+        57,
+        59
+      ],
+      [
+        68,
+        68
+      ],
+      [
+        70,
+        73
+      ],
+      [
+        75,
+        76
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'mapping' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPAuroraBorealisEffect.cpp\n * @brief LGP Aurora Borealis effect implementation\n */\n\n#include \"LGPAuroraBorealisEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cstring>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPAuroraBorealisEffect::LGPAuroraBorealisEffect()\n    : m_time(0)\n    , m_curtainPhase{0, 51, 102, 153, 204}\n{\n}\n\nbool LGPAuroraBorealisEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_time = 0;\n    const uint8_t initPhases[5] = {0, 51, 102, 153, 204};\n    memcpy(m_curtainPhase, initPhases, sizeof(m_curtainPhase));\n    return true;\n}\n\nvoid LGPAuroraBorealisEffect::render(plugins::EffectContext& ctx) {\n    // Northern lights simulation with waveguide color mixing\n    m_time = (uint16_t)(m_time + (ctx.speed >> 4));\n\n    const uint8_t curtainCount = 4;\n\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    for (uint8_t c = 0; c < curtainCount; c++) {\n        m_curtainPhase[c] = (uint8_t)(m_curtainPhase[c] + (c + 1));\n        uint16_t curtainCenter = beatsin16(1, 20, STRIP_LENGTH - 20, 0, (uint16_t)(m_curtainPhase[c] << 8));\n        uint8_t curtainWidth = beatsin8(1, 20, 35, 0, m_curtainPhase[c]);\n\n        // Aurora colors - greens, blues, purples\n        uint8_t hue = (uint8_t)(96 + (c * 32));\n\n        for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n            int16_t dist = abs((int16_t)i - (int16_t)curtainCenter);\n            if (dist < curtainWidth) {\n                uint8_t brightness = qsub8(255, (uint8_t)((dist * 255) / curtainWidth));\n                brightness = scale8(brightness, ctx.brightness);\n\n                // Shimmer effect\n                brightness = scale8(brightness, (uint8_t)(220 + (inoise8(i * 5, m_time >> 3) >> 3)));\n\n                CRGB color1 = ctx.palette.getColor(hue, brightness);\n                CRGB color2 = ctx.palette.getColor((uint8_t)(hue + 20), brightness);\n\n                ctx.leds[i] = color1;\n                if (i + STRIP_LENGTH < ctx.ledCount) {\n                    ctx.leds[i + STRIP_LENGTH] = color2;\n                }\n            }\n        }\n    }\n\n    // Add corona at edges\n    for (uint8_t i = 0; i < 20; i++) {\n        uint8_t corona = scale8((uint8_t)(255 - i * 12), ctx.brightness >> 1);\n        // Corona color for strip 1: (0, corona >> 2, corona >> 1)\n        CRGB coronaColor1 = CRGB(0, corona >> 2, corona >> 1);\n        ctx.leds[i] = coronaColor1;\n        ctx.leds[STRIP_LENGTH - 1 - i] = coronaColor1;\n        if (STRIP_LENGTH < ctx.ledCount) {\n            // Corona color for strip 2: (0, corona >> 3, corona)\n            CRGB coronaColor2 = CRGB(0, corona >> 3, corona);\n            ctx.leds[STRIP_LENGTH + i] = coronaColor2;\n            ctx.leds[ctx.ledCount - 1 - i] = coronaColor2;\n        }\n    }\n}\n\nvoid LGPAuroraBorealisEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPAuroraBorealisEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Aurora Borealis\",\n        \"Shimmering curtain lights\",\n        plugins::EffectCategory::NATURE,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

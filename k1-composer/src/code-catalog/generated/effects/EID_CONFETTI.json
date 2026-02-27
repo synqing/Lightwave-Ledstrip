@@ -1,0 +1,125 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_CONFETTI",
+  "effectIdHex": "0x0103",
+  "className": "ConfettiEffect",
+  "displayName": "Confetti",
+  "headerPath": "firmware/v2/src/effects/ieffect/ConfettiEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/ConfettiEffect.cpp",
+  "renderRange": [
+    24,
+    72
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        24,
+        28
+      ]
+    ],
+    "mapping": [
+      [
+        29,
+        36
+      ]
+    ],
+    "modulation": [
+      [
+        37,
+        45
+      ]
+    ],
+    "render": [
+      [
+        27,
+        27
+      ],
+      [
+        32,
+        32
+      ],
+      [
+        37,
+        37
+      ],
+      [
+        39,
+        39
+      ],
+      [
+        42,
+        42
+      ],
+      [
+        48,
+        51
+      ],
+      [
+        55,
+        55
+      ],
+      [
+        61,
+        64
+      ],
+      [
+        68,
+        68
+      ]
+    ],
+    "post": [
+      [
+        25,
+        25
+      ],
+      [
+        31,
+        32
+      ],
+      [
+        51,
+        51
+      ],
+      [
+        64,
+        64
+      ]
+    ],
+    "output": [
+      [
+        27,
+        27
+      ],
+      [
+        39,
+        42
+      ],
+      [
+        49,
+        51
+      ],
+      [
+        53,
+        55
+      ],
+      [
+        61,
+        64
+      ],
+      [
+        66,
+        68
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'mapping' inferred from fallback segmentation.",
+    "Phase 'modulation' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file ConfettiEffect.cpp\n * @brief Confetti effect implementation\n */\n\n#include \"ConfettiEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nConfettiEffect::ConfettiEffect()\n{\n}\n\nbool ConfettiEffect::init(plugins::EffectContext& ctx) {\n    // Clear buffer for stateful effect\n    memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));\n    return true;\n}\n\nvoid ConfettiEffect::render(plugins::EffectContext& ctx) {\n    // CENTER ORIGIN CONFETTI - Sparks spawn at center 79/80 and fade outward\n    //\n    // BUFFER-FEEDBACK EFFECT: This effect reads from ctx.leds[i+1] and ctx.leds[i-1]\n    // to propagate confetti particles outward. This relies on the previous frame's\n    // LED buffer state, making it a stateful effect. Identified in PatternRegistry::isStatefulEffect().\n\n    // Fade all LEDs\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    // Spawn new confetti at CENTER PAIR\n    if (random8() < 80) {\n        int centerPos = CENTER_LEFT + random8(2);  // 79 or 80\n        CRGB color = ctx.palette.getColor(ctx.gHue + random8(64), 255);\n\n        ctx.leds[centerPos] = color;\n        if (centerPos + STRIP_LENGTH < ctx.ledCount) {\n            int mirrorPos = centerPos + STRIP_LENGTH;\n            ctx.leds[mirrorPos] = color;\n        }\n    }\n\n    // Propagate confetti outward (buffer feedback)\n    // Left side propagation\n    for (int i = CENTER_LEFT - 1; i >= 0; i--) {\n        if (ctx.leds[i + 1]) {\n            ctx.leds[i] = ctx.leds[i + 1];\n            ctx.leds[i].fadeToBlackBy(25);\n\n            // Mirror to strip 2\n            if (i + STRIP_LENGTH < ctx.ledCount) {\n                ctx.leds[i + STRIP_LENGTH] = ctx.leds[i];\n            }\n        }\n    }\n\n    // Right side propagation\n    for (int i = CENTER_RIGHT + 1; i < STRIP_LENGTH; i++) {\n        if (ctx.leds[i - 1]) {\n            ctx.leds[i] = ctx.leds[i - 1];\n            ctx.leds[i].fadeToBlackBy(25);\n\n            // Mirror to strip 2\n            if (i + STRIP_LENGTH < ctx.ledCount) {\n                ctx.leds[i + STRIP_LENGTH] = ctx.leds[i];\n            }\n        }\n    }\n}\n\nvoid ConfettiEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& ConfettiEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Confetti\",\n        \"Random colored speckles fading\",\n        plugins::EffectCategory::PARTY,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n\n"
+}

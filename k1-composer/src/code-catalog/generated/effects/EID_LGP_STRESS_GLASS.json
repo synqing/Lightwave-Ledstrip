@@ -1,0 +1,85 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_STRESS_GLASS",
+  "effectIdHex": "0x1602",
+  "className": "LGPStressGlassEffect",
+  "displayName": "LGP Stress Glass",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPStressGlassEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPStressGlassEffect.cpp",
+  "renderRange": [
+    30,
+    65
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        30,
+        33
+      ]
+    ],
+    "mapping": [
+      [
+        32,
+        32
+      ],
+      [
+        35,
+        35
+      ]
+    ],
+    "modulation": [
+      [
+        40,
+        45
+      ]
+    ],
+    "render": [
+      [
+        37,
+        37
+      ],
+      [
+        57,
+        57
+      ],
+      [
+        62,
+        62
+      ]
+    ],
+    "post": [
+      [
+        61,
+        63
+      ]
+    ],
+    "output": [
+      [
+        37,
+        37
+      ],
+      [
+        57,
+        57
+      ],
+      [
+        59,
+        59
+      ],
+      [
+        62,
+        62
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'modulation' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPStressGlassEffect.cpp\n * @brief LGP Stress Glass effect implementation\n */\n\n#include \"LGPStressGlassEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nstatic inline float clamp01(float x) {\n    return (x < 0.0f) ? 0.0f : (x > 1.0f) ? 1.0f : x;\n}\n\nLGPStressGlassEffect::LGPStressGlassEffect()\n    : m_analyser(0.0f)\n{\n}\n\nbool LGPStressGlassEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_analyser = 0.0f;\n    return true;\n}\n\nvoid LGPStressGlassEffect::render(plugins::EffectContext& ctx) {\n    // CENTRE ORIGIN STRESS GLASS - Photoelastic fringe field\n    const float speedNorm = ctx.speed / 50.0f;\n    const float master = ctx.brightness / 255.0f;\n\n    m_analyser += 0.010f + 0.060f * speedNorm;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        const float dist = (float)centerPairDistance((uint16_t)i);\n\n        float stress =\n            expf(-dist * dist * 0.020f)\n            + 0.65f * expf(-(dist - 6.0f) * (dist - 6.0f) * 0.030f)\n            + 0.65f * expf(-(dist - 12.0f) * (dist - 12.0f) * 0.030f);\n\n        stress = clamp01(stress);\n\n        const float retard = (8.0f * stress) + m_analyser;\n        const float fringe = sinf(retard);\n        const float wave = clamp01(fringe * fringe);\n\n        const uint8_t hueA = (uint8_t)(ctx.gHue + (int)(stress * 120.0f) + (int)(m_analyser * 12.0f));\n\n        const float base = 0.08f;\n        const float out = clamp01(base + (1.0f - base) * wave) * master;\n        const uint8_t br = (uint8_t)(255.0f * out);\n\n        ctx.leds[i] = ctx.palette.getColor(hueA, br);\n\n        const int j = i + STRIP_LENGTH;\n        if (j < ctx.ledCount) {\n            const uint8_t hueB = (uint8_t)(hueA + 24u);\n            ctx.leds[j] = ctx.palette.getColor(hueB, br);\n        }\n    }\n}\n\nvoid LGPStressGlassEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPStressGlassEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Stress Glass\",\n        \"Photoelastic birefringence fringes\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

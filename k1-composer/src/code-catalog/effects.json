@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "1.0.0",
+  "effects": [
+    {
+      "effectId": "EID_LGP_PERLIN_INTERFERENCE_WEAVE",
+      "displayName": "LGPPerlinInterferenceWeaveEffect",
+      "sourcePath": "firmware/v2/src/effects/ieffect/LGPPerlinInterferenceWeaveEffect.cpp",
+      "phaseLineMap": {
+        "input": [1, 2, 3, 4],
+        "mapping": [5, 6],
+        "modulation": [6, 7, 8],
+        "render": [7, 8, 9, 10],
+        "post": [11, 12],
+        "output": [13]
+      }
+    }
+  ]
+}

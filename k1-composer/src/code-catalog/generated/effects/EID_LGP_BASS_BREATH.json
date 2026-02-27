@@ -1,0 +1,147 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_BASS_BREATH",
+  "effectIdHex": "0x0A03",
+  "className": "LGPBassBreathEffect",
+  "displayName": "Bass Breath",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPBassBreathEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPBassBreathEffect.cpp",
+  "renderRange": [
+    47,
+    148
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        56,
+        61
+      ],
+      [
+        72,
+        73
+      ],
+      [
+        95,
+        95
+      ],
+      [
+        113,
+        114
+      ]
+    ],
+    "mapping": [
+      [
+        102,
+        105
+      ],
+      [
+        125,
+        125
+      ],
+      [
+        131,
+        131
+      ],
+      [
+        133,
+        133
+      ],
+      [
+        143,
+        143
+      ]
+    ],
+    "modulation": [
+      [
+        52,
+        53
+      ],
+      [
+        60,
+        61
+      ],
+      [
+        64,
+        65
+      ],
+      [
+        70,
+        70
+      ],
+      [
+        73,
+        75
+      ],
+      [
+        77,
+        79
+      ],
+      [
+        81,
+        83
+      ],
+      [
+        86,
+        86
+      ],
+      [
+        89,
+        89
+      ],
+      [
+        92,
+        93
+      ],
+      [
+        96,
+        97
+      ],
+      [
+        101,
+        102
+      ],
+      [
+        110,
+        110
+      ],
+      [
+        115,
+        115
+      ]
+    ],
+    "render": [
+      [
+        121,
+        121
+      ],
+      [
+        124,
+        124
+      ],
+      [
+        144,
+        144
+      ]
+    ],
+    "post": [
+      [
+        136,
+        142
+      ]
+    ],
+    "output": [
+      [
+        143,
+        148
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'post' inferred from fallback segmentation.",
+    "Phase 'output' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPBassBreathEffect.cpp\n * @brief Organic breathing effect implementation\n */\n\n#include \"LGPBassBreathEffect.h\"\n#include \"ChromaUtils.h\"\n#include \"../CoreEffects.h\"\n\n#ifndef NATIVE_BUILD\n#include <FastLED.h>\n#endif\n\n#include <cmath>\n#include <cstring>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nnamespace {\n\nstatic inline const float* selectChroma12(const audio::ControlBusFrame& cb) {\n    // Both backends now produce normalised chroma via Stage A/B pipeline.\n    return cb.chroma;\n}\n\nstatic inline float clamp01(float v) {\n    if (v < 0.0f) return 0.0f;\n    if (v > 1.0f) return 1.0f;\n    return v;\n}\n\n} // namespace\n\nbool LGPBassBreathEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_breathLevel = 0.0f;\n    m_chromaAngle = 0.0f;\n    m_lastHopSeq = 0;\n    m_lastBass = 0.0f;\n    m_lastFastFlux = 0.0f;\n    m_fluxKick = 0.0f;\n    return true;\n}\n\nvoid LGPBassBreathEffect::render(plugins::EffectContext& ctx) {\n    // Get dt early for all decay operations\n    float dt = ctx.getSafeRawDeltaSeconds();\n\n    float bass, mid, treble;\n    float beatStrength = 0.0f;\n    float beatPhase = 0.0f;\n    // silentScale handled globally by RendererActor\n\n    if (ctx.audio.available) {\n        bass = ctx.audio.bass();\n        mid = ctx.audio.mid();\n        treble = ctx.audio.treble();\n        beatStrength = ctx.audio.beatStrength();\n        beatPhase = ctx.audio.beatPhase();\n    } else {\n        // Fallback: slow sine wave breathing\n        float phase = (float)(ctx.totalTimeMs % 3000) / 3000.0f;\n        bass = 0.5f + 0.3f * sinf(phase * 6.283f);\n        mid = 0.3f;\n        treble = 0.2f;\n    }\n\n    // Backend-agnostic transient accent: flux kick (helps ES backend where \"snare\" triggers may be neutral).\n#if FEATURE_AUDIO_SYNC\n    if (ctx.audio.available) {\n        float flux = ctx.audio.fastFlux();\n        float fluxDelta = flux - m_lastFastFlux;\n        m_lastFastFlux = flux;\n\n        // Attack on flux spikes, then decay quickly (keeps \"breath\" lively on transients).\n        if (fluxDelta > 0.18f && flux > 0.20f) {\n            m_fluxKick = 1.0f;\n        } else {\n            // Also allow slow following of sustained flux (but bounded).\n            if (flux > m_fluxKick) m_fluxKick = flux;\n            m_fluxKick *= powf(0.86f, dt * 60.0f);  // dt-corrected\n        }\n    } else {\n        m_fluxKick *= powf(0.90f, dt * 60.0f);  // dt-corrected\n    }\n#else\n    m_fluxKick *= powf(0.90f, dt * 60.0f);  // dt-corrected\n#endif\n\n    // Beat-shaped inhale (smooth, centre-origin): raised cosine pulse per beat.\n    float beatInhale = 0.0f;\n#if FEATURE_AUDIO_SYNC\n    if (ctx.audio.available && ctx.audio.tempoConfidence() > 0.35f) {\n        beatInhale = 0.5f * (1.0f - cosf(beatPhase * 6.2831853f));\n        beatInhale *= beatStrength;\n    }\n#endif\n\n    // Breath dynamics: fast attack, slow decay (bass-led, with optional beat inhale).\n    float targetBreath = bass * 0.75f + mid * 0.15f + beatInhale * 0.35f + m_fluxKick * 0.20f;\n    targetBreath = clamp01(targetBreath);\n    if (targetBreath > m_breathLevel) {\n        m_breathLevel = targetBreath;  // Instant attack\n    } else {\n        m_breathLevel *= powf(0.97f, dt * 60.0f);  // Slow exhale (dt-corrected)\n    }\n\n    // Musically anchored hue (non-rainbow): circular chroma mean, smoothed.\n    uint8_t chromaHueOffset = 0;\n#if FEATURE_AUDIO_SYNC\n    if (ctx.audio.available) {\n        const float* chroma = selectChroma12(ctx.audio.controlBus);\n        chromaHueOffset = effects::chroma::circularChromaHueSmoothed(\n            chroma, m_chromaAngle, dt, 0.35f);\n    }\n#endif\n\n    // Clear buffer\n    memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));\n\n    // Render CENTER PAIR breathing\n    for (int dist = 0; dist < HALF_LENGTH; ++dist) {\n        float normalizedDist = (float)dist / HALF_LENGTH;\n\n        // Breath expands from center\n        float breathRadius = (m_breathLevel < 0.02f) ? 0.02f : m_breathLevel;\n        float brightness;\n\n        if (normalizedDist < breathRadius) {\n            // Inside breath: bright, fading toward edge of breath\n            brightness = 0.25f + 0.75f * (1.0f - normalizedDist / breathRadius);\n        } else {\n            // Outside breath: dim ambient\n            brightness = 0.03f;\n        }\n\n        // Apply master brightness and breath level\n        uint8_t bright = (uint8_t)(brightness * m_breathLevel * ctx.brightness);\n\n        // Colour: anchored to chroma (stable), with subtle treble lift (no cycling).\n        uint8_t hue = (uint8_t)(chromaHueOffset + (uint8_t)(treble * 18.0f) + (uint8_t)(normalizedDist * 20.0f));\n        CRGB color = ctx.palette.getColor(hue, bright);\n\n        SET_CENTER_PAIR(ctx, dist, color);\n    }\n}\n\nvoid LGPBassBreathEffect::cleanup() {}\n\nconst plugins::EffectMetadata& LGPBassBreathEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Bass Breath\",\n        \"Organic breathing driven by bass\",\n        plugins::EffectCategory::PARTY,\n        1,\n        \"LightwaveOS\"\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

@@ -1,0 +1,200 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_AUDIO_BLOOM",
+  "effectIdHex": "0x0A05",
+  "className": "AudioBloomEffect",
+  "displayName": "Audio Bloom",
+  "headerPath": "firmware/v2/src/effects/ieffect/AudioBloomEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/AudioBloomEffect.cpp",
+  "renderRange": [
+    134,
+    338
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        144,
+        144
+      ],
+      [
+        149,
+        149
+      ],
+      [
+        151,
+        151
+      ],
+      [
+        161,
+        161
+      ],
+      [
+        184,
+        184
+      ],
+      [
+        195,
+        195
+      ],
+      [
+        277,
+        277
+      ],
+      [
+        329,
+        330
+      ]
+    ],
+    "mapping": [
+      [
+        183,
+        183
+      ]
+    ],
+    "modulation": [
+      [
+        228,
+        228
+      ],
+      [
+        230,
+        230
+      ],
+      [
+        232,
+        233
+      ],
+      [
+        284,
+        285
+      ],
+      [
+        328,
+        328
+      ],
+      [
+        330,
+        332
+      ]
+    ],
+    "render": [
+      [
+        138,
+        138
+      ],
+      [
+        160,
+        160
+      ],
+      [
+        182,
+        182
+      ],
+      [
+        197,
+        197
+      ],
+      [
+        209,
+        211
+      ],
+      [
+        214,
+        214
+      ],
+      [
+        222,
+        222
+      ],
+      [
+        225,
+        225
+      ],
+      [
+        238,
+        238
+      ],
+      [
+        241,
+        241
+      ],
+      [
+        276,
+        276
+      ],
+      [
+        291,
+        291
+      ],
+      [
+        308,
+        308
+      ],
+      [
+        320,
+        320
+      ],
+      [
+        323,
+        323
+      ],
+      [
+        333,
+        334
+      ]
+    ],
+    "post": [
+      [
+        134,
+        134
+      ],
+      [
+        175,
+        175
+      ],
+      [
+        252,
+        252
+      ],
+      [
+        257,
+        258
+      ],
+      [
+        283,
+        283
+      ],
+      [
+        309,
+        311
+      ],
+      [
+        318,
+        318
+      ]
+    ],
+    "output": [
+      [
+        137,
+        137
+      ],
+      [
+        320,
+        320
+      ],
+      [
+        323,
+        323
+      ],
+      [
+        333,
+        334
+      ]
+    ]
+  },
+  "mappingConfidence": "high",
+  "mappingWarnings": [],
+  "sourceText": "/**\n * @file AudioBloomEffect.cpp\n * @brief Sensory Bridge-style scrolling bloom implementation\n */\n\n#include \"AudioBloomEffect.h\"\n#include \"ChromaUtils.h\"\n#include \"../CoreEffects.h\"\n#include \"../../config/features.h\"\n#include \"../../audio/contracts/ControlBus.h\"\n\n#ifdef FEATURE_EFFECT_VALIDATION\n#include \"../../validation/EffectValidationMacros.h\"\n#endif\n\n#ifndef NATIVE_BUILD\n#include <FastLED.h>\n#include <esp_heap_caps.h>\n#endif\n\n#include <cmath>\n#include <cstring>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nnamespace {\n\nstatic inline const float* selectChroma12(const audio::ControlBusFrame& cb, bool preferHeavy) {\n    // Both backends now produce normalised chroma via Stage A/B pipeline.\n    if (preferHeavy) {\n        float heavySum = 0.0f;\n        for (uint8_t i = 0; i < audio::CONTROLBUS_NUM_CHROMA; ++i) {\n            heavySum += cb.heavy_chroma[i];\n        }\n        if (heavySum > 0.001f) return cb.heavy_chroma;\n    }\n    return cb.chroma;\n}\n\n// Musically anchored palette offsets (no full hue-wheel sweep).\nstatic constexpr uint8_t NOTE_OFFSETS[12] = {\n    0, 10, 26, 38, 56, 70, 90, 106, 130, 150, 174, 202\n};\n\n/**\n * @brief Compute palette warmth offset from chord type.\n *\n * Maps chord qualities to hue offsets for emotional color mapping:\n *   MAJOR     -> +32 (warm/orange shift)\n *   MINOR     -> -24 (cool/blue shift)\n *   DIMINISHED-> -32 (darker/cooler)\n *   AUGMENTED -> +40 (bright/ethereal)\n *   NONE      -> 0   (neutral)\n *\n * @param type Detected chord type\n * @param confidence Chord detection confidence (0.0-1.0)\n * @return int8_t Signed hue offset (-40 to +40)\n */\nint8_t computeChordWarmthOffset(lightwaveos::audio::ChordType type, float confidence) {\n    // Base warmth values per chord type\n    int8_t baseOffset = 0;\n    switch (type) {\n        case lightwaveos::audio::ChordType::MAJOR:\n            baseOffset = 32;   // Warm/orange\n            break;\n        case lightwaveos::audio::ChordType::MINOR:\n            baseOffset = -24;  // Cool/blue\n            break;\n        case lightwaveos::audio::ChordType::DIMINISHED:\n            baseOffset = -32;  // Dark/cold\n            break;\n        case lightwaveos::audio::ChordType::AUGMENTED:\n            baseOffset = 40;   // Bright/ethereal\n            break;\n        case lightwaveos::audio::ChordType::NONE:\n        default:\n            return 0;  // No shift when no chord detected\n    }\n\n    // Scale offset by confidence (0.0-1.0) for smooth transitions\n    // Minimum confidence threshold of 0.3 before applying any shift\n    if (confidence < 0.3f) {\n        return 0;\n    }\n\n    // Scale linearly from 0.3-1.0 confidence\n    float scaledConfidence = (confidence - 0.3f) / 0.7f;\n    return (int8_t)(baseOffset * scaledConfidence);\n}\n\n/**\n * @brief Compute hue offset from chord root note.\n *\n * Maps root note (0-11) to a hue rotation that complements\n * the palette. Each semitone shifts by 21 hue units (252/12).\n *\n * @param rootNote Root note 0-11 (C=0, C#=1, ..., B=11)\n * @param confidence Chord detection confidence\n * @return uint8_t Hue rotation offset (0-252)\n */\nuint8_t computeRootNoteHueShift(uint8_t rootNote, float confidence) {\n    if (confidence < 0.3f) {\n        return 0;  // No shift below confidence threshold\n    }\n\n    // 21 hue units per semitone (252 / 12 = 21)\n    // Scale by confidence for smooth transitions\n    float scaledConfidence = (confidence - 0.3f) / 0.7f;\n    uint8_t baseShift = rootNote * 21;\n    return (uint8_t)(baseShift * scaledConfidence * 0.5f);  // 50% intensity to avoid over-rotation\n}\n\n} // anonymous namespace\n\nbool AudioBloomEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n#ifndef NATIVE_BUILD\n    if (!m_ps) {\n        m_ps = static_cast<AudioBloomPsram*>(\n            heap_caps_malloc(sizeof(AudioBloomPsram), MALLOC_CAP_SPIRAM));\n        if (!m_ps) return false;\n    }\n    memset(m_ps, 0, sizeof(AudioBloomPsram));\n#endif\n    m_iter = 0;\n    m_lastHopSeq = 0;\n    m_scrollPhase = 0.0f;\n    m_subBassPulse = 0.0f;\n    return true;\n}\n\nvoid AudioBloomEffect::render(plugins::EffectContext& ctx) {\n    if (!m_ps) return;\n    const float rawDt = ctx.getSafeRawDeltaSeconds();\n    // Clear output buffer\n    memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));\n\n#if !FEATURE_AUDIO_SYNC\n    (void)ctx;\n    return;\n#else\n    if (!ctx.audio.available) {\n        return;\n    }\n\n    // Check if we have a new hop (update on hop sequence change)\n    bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);\n    if (newHop) {\n        m_lastHopSeq = ctx.audio.controlBus.hop_seq;\n        m_iter++;\n\n        // =====================================================================\n        // 64-bin Sub-Bass Processing (bins 0-5 = 110-155 Hz for deep bass punch)\n        // Uses fine-grained frequency data for sub-bass detail the 8-band\n        // analyzer misses. This gives the effect more punch on bass drops.\n        // =====================================================================\n        float subBassSum = 0.0f;\n        for (uint8_t i = 0; i < 6; ++i) {\n            subBassSum += ctx.audio.binAdaptive(i);  // bins64Adaptive[0..5] is more robust across backends\n        }\n        float subBassAvg = subBassSum / 6.0f;\n\n        // Fast attack, slow release for punchy bass response\n        if (subBassAvg > m_subBassPulse) {\n            m_subBassPulse = subBassAvg;  // Instant attack\n        } else {\n            m_subBassPulse = effects::chroma::dtDecay(m_subBassPulse, 0.85f, rawDt);  // dt-corrected ~100ms decay\n        }\n    }\n\n    // Update on even iterations (matching Sensory Bridge's bitRead(iter, 0) == 0)\n    if ((m_iter & 1) == 0 && newHop) {\n        // Compute sum_color from chromagram (matching Sensory Bridge light_mode_bloom)\n        const float led_share = 255.0f / 12.0f;\n        CRGB sum_color = CRGB(0, 0, 0);\n        float brightness_sum = 0.0f;\n        const bool chromaticMode = (ctx.saturation >= 128);\n        // silentScale handled globally by RendererActor\n\n        // Chord-driven palette warmth adjustment\n        // Maps chord type to hue offset for emotional color response\n        const auto& chordState = ctx.audio.controlBus.chordState;\n        int8_t warmthOffset = computeChordWarmthOffset(chordState.type, chordState.confidence);\n        uint8_t rootHueShift = computeRootNoteHueShift(chordState.rootNote, chordState.confidence);\n\n        // Combined hue adjustment: base gHue + warmth + root note influence\n        // Cast to int16_t to handle signed arithmetic, then wrap to 0-255\n        int16_t adjustedHue = (int16_t)ctx.gHue + warmthOffset + rootHueShift;\n        if (adjustedHue < 0) adjustedHue += 256;\n        if (adjustedHue > 255) adjustedHue -= 256;\n        uint8_t chordAdjustedHue = (uint8_t)adjustedHue;\n\n        const float* chroma = selectChroma12(ctx.audio.controlBus, /*preferHeavy*/ true);\n\n        for (uint8_t i = 0; i < 12; ++i) {\n            float bin = chroma[i];\n\n            // Apply squaring (SQUARE_ITER, typically 1)\n            float bright = bin;\n            bright = bright * bright;  // Square once\n            bright *= 1.5f;  // Gain boost\n            if (bright > 1.0f) bright = 1.0f;\n\n            bright *= led_share;\n\n            if (chromaticMode) {\n                // Use palette for colour with chord-adjusted hue base\n                // Palette index includes chord warmth for emotional color response\n                uint8_t paletteIdx = (uint8_t)(chordAdjustedHue + NOTE_OFFSETS[i]);\n                uint8_t brightU8 = (uint8_t)bright;\n                brightU8 = (uint8_t)((brightU8 * ctx.brightness) / 255);\n                CRGB out_col = ctx.palette.getColor(paletteIdx, brightU8);\n                sum_color += out_col;\n            } else {\n                brightness_sum += bright;\n            }\n        }\n\n        if (!chromaticMode) {\n            // Non-chromatic mode: single color from palette with chord warmth\n            uint8_t brightU8 = (uint8_t)brightness_sum;\n            brightU8 = (uint8_t)((brightU8 * ctx.brightness) / 255);\n            sum_color = ctx.palette.getColor(chordAdjustedHue, brightU8);\n        }\n\n        // Fractional scroll accumulator (smooth motion)\n        float scrollRate = 0.3f + (ctx.speed / 50.0f) * 2.2f;  // 0.3-2.5 LEDs/hop\n        m_scrollPhase += scrollRate;\n\n        uint8_t step = (uint8_t)m_scrollPhase;\n        m_scrollPhase -= step;  // Keep fractional remainder\n\n        if (step > HALF_LENGTH - 1) step = HALF_LENGTH - 1;\n\n        if (step > 0) {\n            for (uint8_t i = 0; i < HALF_LENGTH - step; ++i) {\n                m_ps->radialTemp[(HALF_LENGTH - 1) - i] = m_ps->radial[(HALF_LENGTH - 1) - i - step];\n            }\n            for (uint8_t i = 0; i < step; ++i) {\n                m_ps->radialTemp[i] = sum_color;\n            }\n        } else {\n            memcpy(m_ps->radialTemp, m_ps->radial, sizeof(m_ps->radialTemp));\n            m_ps->radialTemp[0] = sum_color;\n        }\n\n        // Copy temp to main radial buffer\n        memcpy(m_ps->radial, m_ps->radialTemp, sizeof(m_ps->radial));\n\n        // Apply post-processing (matching Sensory Bridge)\n        // 1. Logarithmic distortion\n        distortLogarithmic(m_ps->radial, m_ps->radialTemp, HALF_LENGTH);\n        memcpy(m_ps->radial, m_ps->radialTemp, sizeof(m_ps->radial));\n\n        // 2. Fade top half (toward edge)\n        fadeTopHalf(m_ps->radial, HALF_LENGTH);\n\n        // 3. Increase saturation\n        increaseSaturation(m_ps->radial, HALF_LENGTH, 24);\n\n        // Save to aux buffer\n        memcpy(m_ps->radialAux, m_ps->radial, sizeof(m_ps->radial));\n    } else {\n        // Alternate frames: load from aux buffer\n        memcpy(m_ps->radial, m_ps->radialAux, sizeof(m_ps->radial));\n    }\n\n    // Compute scroll rate for validation (same as in update block)\n    float scrollRate = 0.3f + (ctx.speed / 50.0f) * 2.2f;  // 0.3-2.5 LEDs/hop\n\n    // Find maxBin and sum from heavy_chroma for validation\n    float maxBin = 0.0f;\n    float sum = 0.0f;\n    for (uint8_t i = 0; i < 12; ++i) {\n        float v = ctx.audio.controlBus.heavy_chroma[i];\n        sum += v;\n        if (v > maxBin) maxBin = v;\n    }\n\n#ifdef FEATURE_EFFECT_VALIDATION\n    VALIDATION_INIT(21);  // Effect ID for AudioBloom\n    VALIDATION_SCROLL(m_scrollPhase);\n    VALIDATION_SPEED(scrollRate, m_scrollPhase);  // Use scroll rate as speed proxy\n    VALIDATION_AUDIO(maxBin, sum, 0.0f);  // maxBin is dominant frequency\n    VALIDATION_SUBMIT(::lightwaveos::validation::g_validationRing);\n#endif\n\n    // Render radial buffer to LEDs (centre-origin)\n    for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {\n        SET_CENTER_PAIR(ctx, dist, m_ps->radial[dist]);\n    }\n\n    // =========================================================================\n    // 64-bin Sub-Bass Center Pulse\n    // Adds a brightness boost to center LEDs on bass hits using fine-grained\n    // sub-bass data from the 64-bin analyzer. Creates punchy bass response.\n    // =========================================================================\n    if (m_subBassPulse > 0.1f) {\n        // Pulse radius scales with sub-bass intensity (max ~20 LEDs from center)\n        uint16_t pulseRadius = (uint16_t)(m_subBassPulse * 20.0f);\n        if (pulseRadius > HALF_LENGTH / 4) pulseRadius = HALF_LENGTH / 4;\n\n        // Boost factor: subtle at low levels, strong on drops\n        uint8_t boost = (uint8_t)(m_subBassPulse * 80.0f);  // 0-80 brightness add\n\n        for (uint16_t dist = 0; dist < pulseRadius; ++dist) {\n            // Fade boost toward edge of pulse\n            float fadeIn = 1.0f - ((float)dist / (float)pulseRadius);\n            uint8_t fadedBoost = (uint8_t)(boost * fadeIn);\n\n            // Apply warm-tinted boost to center pair\n            uint16_t leftIdx = ctx.centerPoint - 1 - dist;\n            uint16_t rightIdx = ctx.centerPoint + dist;\n\n            // Warm tint: more red, some green, minimal blue\n            CRGB warmBoost = CRGB(fadedBoost, fadedBoost >> 2, fadedBoost >> 4);\n            if (leftIdx < ctx.ledCount) {\n                ctx.leds[leftIdx] += warmBoost;\n            }\n            if (rightIdx < ctx.ledCount) {\n                ctx.leds[rightIdx] += warmBoost;\n            }\n        }\n    }\n\n    // Beat confidence accent: a small centre lift that tracks tempo confidence without needing explicit beat triggers.\n    if (ctx.audio.tempoConfidence() > 0.35f) {\n        float beat = ctx.audio.beatStrength();\n        if (beat > 0.05f) {\n            uint8_t boost = (uint8_t)(beat * 22.0f);\n            ctx.leds[ctx.centerPoint - 1] += CRGB(boost, boost >> 2, 0);\n            ctx.leds[ctx.centerPoint] += CRGB(boost, boost >> 2, 0);\n        }\n    }\n#endif  // FEATURE_AUDIO_SYNC\n}\n\nvoid AudioBloomEffect::distortLogarithmic(CRGB* src, CRGB* dst, uint16_t len) {\n    // Logarithmic distortion: sqrt remap + lerp\n    // Maps linear position to sqrt(position) for compression toward centre\n    for (uint16_t i = 0; i < len; ++i) {\n        float prog = (float)i / (float)(len - 1);\n        float prog_distorted = sqrtf(prog);  // sqrt compresses toward 0\n        \n        // Linear interpolation to find source position\n        float srcPos = prog_distorted * (len - 1);\n        uint16_t srcIdx = (uint16_t)srcPos;\n        float fract = srcPos - srcIdx;\n        \n        if (srcIdx >= len - 1) {\n            dst[i] = src[len - 1];\n        } else {\n            // Lerp between src[srcIdx] and src[srcIdx+1]\n            CRGB c1 = src[srcIdx];\n            CRGB c2 = src[srcIdx + 1];\n            dst[i] = CRGB(\n                (uint8_t)(c1.r * (1.0f - fract) + c2.r * fract),\n                (uint8_t)(c1.g * (1.0f - fract) + c2.g * fract),\n                (uint8_t)(c1.b * (1.0f - fract) + c2.b * fract)\n            );\n        }\n    }\n}\n\nvoid AudioBloomEffect::fadeTopHalf(CRGB* buffer, uint16_t len) {\n    // Fade toward edge (top half = outer half in radial space)\n    uint16_t halfLen = len >> 1;\n    for (uint8_t i = 0; i < halfLen; ++i) {\n        float fade = (float)i / (float)halfLen;\n        uint16_t idx = (len - 1) - i;  // Index from edge toward centre\n        buffer[idx].r = (uint8_t)(buffer[idx].r * fade);\n        buffer[idx].g = (uint8_t)(buffer[idx].g * fade);\n        buffer[idx].b = (uint8_t)(buffer[idx].b * fade);\n    }\n}\n\nvoid AudioBloomEffect::increaseSaturation(CRGB* buffer, uint16_t len, uint8_t amount) {\n    for (uint16_t i = 0; i < len; ++i) {\n        CHSV hsv = rgb2hsv_approximate(buffer[i]);\n        hsv.s = qadd8(hsv.s, amount);\n        hsv2rgb_spectrum(hsv, buffer[i]);\n    }\n}\n\nvoid AudioBloomEffect::cleanup() {\n#ifndef NATIVE_BUILD\n    if (m_ps) {\n        heap_caps_free(m_ps);\n        m_ps = nullptr;\n    }\n#endif\n}\n\nconst plugins::EffectMetadata& AudioBloomEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Audio Bloom\",\n        \"Scrolling bloom effect with chromagram-driven colour, centre-origin push-outwards\",\n        plugins::EffectCategory::PARTY,\n        1,\n        \"LightwaveOS\"\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

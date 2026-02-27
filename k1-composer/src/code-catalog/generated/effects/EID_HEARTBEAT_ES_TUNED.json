@@ -1,0 +1,188 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_HEARTBEAT_ES_TUNED",
+  "effectIdHex": "0x1201",
+  "className": "HeartbeatEsTunedEffect",
+  "displayName": "Heartbeat (ES tuned)",
+  "headerPath": "firmware/v2/src/effects/ieffect/HeartbeatEsTunedEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/HeartbeatEsTunedEffect.cpp",
+  "renderRange": [
+    59,
+    223
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        71,
+        72
+      ],
+      [
+        91,
+        93
+      ],
+      [
+        96,
+        96
+      ],
+      [
+        98,
+        98
+      ],
+      [
+        114,
+        114
+      ],
+      [
+        123,
+        123
+      ],
+      [
+        133,
+        133
+      ],
+      [
+        213,
+        214
+      ]
+    ],
+    "mapping": [
+      [
+        65,
+        65
+      ],
+      [
+        154,
+        154
+      ]
+    ],
+    "modulation": [
+      [
+        59,
+        59
+      ],
+      [
+        68,
+        68
+      ],
+      [
+        73,
+        73
+      ],
+      [
+        86,
+        88
+      ],
+      [
+        92,
+        93
+      ],
+      [
+        95,
+        96
+      ],
+      [
+        98,
+        98
+      ],
+      [
+        101,
+        101
+      ],
+      [
+        105,
+        106
+      ],
+      [
+        108,
+        110
+      ],
+      [
+        114,
+        117
+      ],
+      [
+        123,
+        123
+      ],
+      [
+        129,
+        129
+      ],
+      [
+        133,
+        133
+      ],
+      [
+        135,
+        135
+      ],
+      [
+        137,
+        137
+      ],
+      [
+        140,
+        141
+      ],
+      [
+        144,
+        145
+      ],
+      [
+        155,
+        155
+      ],
+      [
+        212,
+        214
+      ]
+    ],
+    "render": [
+      [
+        61,
+        61
+      ],
+      [
+        178,
+        178
+      ],
+      [
+        190,
+        190
+      ],
+      [
+        203,
+        203
+      ],
+      [
+        218,
+        220
+      ]
+    ],
+    "post": [
+      [
+        61,
+        61
+      ],
+      [
+        185,
+        186
+      ],
+      [
+        198,
+        199
+      ]
+    ],
+    "output": [
+      [
+        219,
+        220
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [],
+  "sourceText": "/**\n * @file HeartbeatEsTunedEffect.cpp\n * @brief Heartbeat (ES tuned) effect implementation\n */\n\n#include \"HeartbeatEsTunedEffect.h\"\n#include \"ChromaUtils.h\"\n#include \"../CoreEffects.h\"\n\n#ifndef NATIVE_BUILD\n#include <FastLED.h>\n#endif\n\n#include <cmath>\n\nnamespace lightwaveos::effects::ieffect {\n\nnamespace {\n\nstatic inline float clamp01(float v) {\n    if (v < 0.0f) return 0.0f;\n    if (v > 1.0f) return 1.0f;\n    return v;\n}\n\nstatic inline const float* selectChroma12(const audio::ControlBusFrame& cb) {\n    // Both backends now produce normalised chroma via Stage A/B pipeline.\n    return cb.chroma;\n}\n\nstatic inline CRGB addSat(CRGB a, CRGB b) {\n    a.r = qadd8(a.r, b.r);\n    a.g = qadd8(a.g, b.g);\n    a.b = qadd8(a.b, b.b);\n    return a;\n}\n\n} // namespace\n\nbool HeartbeatEsTunedEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_lastHopSeq = 0;\n    m_chromaAngle = 0.0f;\n\n    m_lastBeatPhase = 0.0f;\n    m_lastFastFlux = 0.0f;\n    m_dubPending = false;\n\n    m_lubRadius = 999.0f;\n    m_dubRadius = 999.0f;\n    m_lubIntensity = 0.0f;\n    m_dubIntensity = 0.0f;\n\n    m_lastBeatTimeMs = millis();\n    m_beatState = 0;\n    return true;\n}\n\nvoid HeartbeatEsTunedEffect::render(plugins::EffectContext& ctx) {\n    // Trails: keep the original aesthetic, but all motion/trigger logic becomes audio-aware.\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    const float rawDt = ctx.getSafeRawDeltaSeconds();\n    const float dt = ctx.getSafeDeltaSeconds();\n    const float speedNorm = ctx.speed / 50.0f;\n\n    // ---------------------------------------------------------------------\n    // Chroma anchor (non-rainbow): circular weighted mean, smoothed.\n    // ---------------------------------------------------------------------\n    uint8_t baseHue = 0;\n    if (ctx.audio.available) {\n        const float* chroma = selectChroma12(ctx.audio.controlBus);\n        baseHue = effects::chroma::circularChromaHueSmoothed(\n            chroma, m_chromaAngle, rawDt, 0.25f);\n    } else {\n        // Drift very slowly back to 0 when audio is absent (keeps a stable default) - dt-corrected\n        m_chromaAngle *= powf(0.995f, rawDt * 60.0f);\n        baseHue = static_cast<uint8_t>(m_chromaAngle * (255.0f / 6.2831853f));\n    }\n    const uint8_t lubHue = baseHue;\n    const uint8_t dubHue = (uint8_t)(baseHue + 36);\n\n    // ---------------------------------------------------------------------\n    // Trigger logic\n    // ---------------------------------------------------------------------\n    bool useAudioBeat = false;\n    float beatStrength = 0.0f;\n    float beatPhase = 0.0f;\n    // silentScale handled globally by RendererActor\n\n    if (ctx.audio.available) {\n        beatStrength = ctx.audio.beatStrength();\n        beatPhase = ctx.audio.beatPhase();\n\n        // Require some confidence before we trust beat ticks for the heartbeat cadence.\n        useAudioBeat = (ctx.audio.tempoConfidence() > 0.40f);\n\n        if (useAudioBeat && ctx.audio.isOnBeat()) {\n            // \"Lub\"\n            m_lubRadius = 0.0f;\n            m_lubIntensity = 0.30f + 0.70f * clamp01(beatStrength);\n            m_dubPending = true;\n        }\n\n        // \"Dub\" timing: beat-phase offset OR flux spike (backend-agnostic transient proxy).\n        constexpr float DUB_PHASE = 0.28f;\n        bool dubTrigger = false;\n        if (useAudioBeat && m_dubPending) {\n            // Phase crossing detector (handles wrap cleanly because beatPhase resets).\n            if (m_lastBeatPhase < DUB_PHASE && beatPhase >= DUB_PHASE) {\n                dubTrigger = true;\n            }\n\n            float flux = ctx.audio.fastFlux();\n            float fluxDelta = flux - m_lastFastFlux;\n            m_lastFastFlux = flux;\n            if (fluxDelta > 0.22f && flux > 0.25f && beatPhase > 0.10f && beatPhase < 0.65f) {\n                dubTrigger = true;\n            }\n\n            if (dubTrigger) {\n                m_dubRadius = 0.0f;\n                float accent = clamp01(beatStrength * 0.75f + ctx.audio.fastFlux() * 0.35f);\n                m_dubIntensity = 0.20f + 0.65f * accent;\n                m_dubPending = false;\n            }\n        }\n\n        m_lastBeatPhase = beatPhase;\n    }\n\n    // Fallback behaviour: original fixed lub-dub cadence (~75 BPM).\n    if (!ctx.audio.available || !useAudioBeat) {\n        uint32_t nowMs = millis();\n        constexpr uint32_t BEAT2_DELAY_MS = 200;\n        constexpr uint32_t CYCLE_TIME_MS = 800;\n        uint32_t cyclePos = (nowMs - m_lastBeatTimeMs);\n\n        if (cyclePos >= CYCLE_TIME_MS) {\n            m_lastBeatTimeMs = nowMs;\n            m_beatState = 1;\n            m_lubRadius = 0.0f;\n            m_lubIntensity = 0.55f;\n        } else if (cyclePos >= BEAT2_DELAY_MS && m_beatState == 1) {\n            m_beatState = 2;\n            m_dubRadius = 0.0f;\n            m_dubIntensity = 0.45f;\n        }\n    }\n\n    // ---------------------------------------------------------------------\n    // Integrate ring motion (dt-based)\n    // ---------------------------------------------------------------------\n    const float speedLedsPerSec = 220.0f * (0.35f + 1.0f * speedNorm);\n    const float strengthSpeed = 0.80f + 0.50f * clamp01(beatStrength);\n    const float adv = speedLedsPerSec * strengthSpeed * dt;\n\n    if (m_lubIntensity > 0.001f && m_lubRadius < (float)HALF_LENGTH + 10.0f) {\n        m_lubRadius += adv;\n        m_lubIntensity *= expf(-rawDt / 0.28f);\n    } else {\n        m_lubIntensity = 0.0f;\n    }\n\n    if (m_dubIntensity > 0.001f && m_dubRadius < (float)HALF_LENGTH + 10.0f) {\n        m_dubRadius += adv * 1.10f;\n        m_dubIntensity *= expf(-rawDt / 0.22f);\n    } else {\n        m_dubIntensity = 0.0f;\n    }\n\n    // ---------------------------------------------------------------------\n    // Render rings (centre-origin, mirrored)\n    // ---------------------------------------------------------------------\n    constexpr float LUB_WIDTH = 8.0f;\n    constexpr float DUB_WIDTH = 6.0f;\n\n    for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {\n        CRGB out = CRGB::Black;\n\n        if (m_lubIntensity > 0.001f) {\n            float delta = fabsf((float)dist - m_lubRadius);\n            if (delta < LUB_WIDTH) {\n                float t = 1.0f - (delta / LUB_WIDTH);\n                float fade = 1.0f - (m_lubRadius / (float)HALF_LENGTH) * 0.75f;\n                float amp = clamp01(t * m_lubIntensity * fade);\n                uint8_t b = (uint8_t)(amp * 255.0f);\n                b = scale8(b, ctx.brightness);\n                uint8_t hue = (uint8_t)(lubHue + (uint8_t)(dist * 2));\n                out = addSat(out, ctx.palette.getColor(hue, b));\n            }\n        }\n\n        if (m_dubIntensity > 0.001f) {\n            float delta = fabsf((float)dist - m_dubRadius);\n            if (delta < DUB_WIDTH) {\n                float t = 1.0f - (delta / DUB_WIDTH);\n                float fade = 1.0f - (m_dubRadius / (float)HALF_LENGTH) * 0.78f;\n                float amp = clamp01(t * m_dubIntensity * fade);\n                uint8_t b = (uint8_t)(amp * 255.0f);\n                b = scale8(b, ctx.brightness);\n                uint8_t hue = (uint8_t)(dubHue + (uint8_t)(dist * 2));\n                out = addSat(out, ctx.palette.getColor(hue, b));\n            }\n        }\n\n        if (out.r || out.g || out.b) {\n            SET_CENTER_PAIR(ctx, dist, out);\n        }\n    }\n\n    // Subtle centre fill on strong beats (adds “cardiac core” presence).\n    if (ctx.audio.available && useAudioBeat) {\n        float core = clamp01(beatStrength * 0.35f + ctx.audio.fastRms() * 0.20f);\n        if (core > 0.02f) {\n            uint8_t b = (uint8_t)(core * 255.0f);\n            b = scale8(b, ctx.brightness);\n            CRGB coreCol = ctx.palette.getColor((uint8_t)(baseHue + 8), b);\n            ctx.leds[ctx.centerPoint - 1] = addSat(ctx.leds[ctx.centerPoint - 1], coreCol);\n            ctx.leds[ctx.centerPoint] = addSat(ctx.leds[ctx.centerPoint], coreCol);\n        }\n    }\n}\n\nvoid HeartbeatEsTunedEffect::cleanup() {}\n\nconst plugins::EffectMetadata& HeartbeatEsTunedEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Heartbeat (ES tuned)\",\n        \"Beat-locked lub-dub pulses with chroma colour (ES backend tuned)\",\n        plugins::EffectCategory::AMBIENT,\n        1,\n        \"LightwaveOS\"\n    };\n    return meta;\n}\n\n} // namespace lightwaveos::effects::ieffect\n\n"
+}

@@ -1,0 +1,104 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_PERLIN_BACKEND_FAST_LED",
+  "effectIdHex": "0x0D00",
+  "className": "LGPPerlinBackendFastLEDEffect",
+  "displayName": "Perlin Test: FastLED",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPPerlinBackendFastLEDEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPPerlinBackendFastLEDEffect.cpp",
+  "renderRange": [
+    41,
+    108
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        43,
+        43
+      ],
+      [
+        54,
+        54
+      ]
+    ],
+    "mapping": [
+      [
+        45,
+        46
+      ],
+      [
+        55,
+        55
+      ],
+      [
+        66,
+        66
+      ],
+      [
+        91,
+        91
+      ],
+      [
+        93,
+        96
+      ]
+    ],
+    "modulation": [
+      [
+        58,
+        58
+      ],
+      [
+        102,
+        102
+      ]
+    ],
+    "render": [
+      [
+        78,
+        78
+      ],
+      [
+        91,
+        92
+      ],
+      [
+        98,
+        99
+      ],
+      [
+        103,
+        105
+      ]
+    ],
+    "post": [
+      [
+        76,
+        76
+      ]
+    ],
+    "output": [
+      [
+        78,
+        78
+      ],
+      [
+        99,
+        99
+      ],
+      [
+        101,
+        102
+      ],
+      [
+        105,
+        105
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [],
+  "sourceText": "/**\n * @file LGPPerlinBackendFastLEDEffect.cpp\n * @brief Perlin Backend Test A: FastLED inoise8 baseline\n */\n\n#include \"LGPPerlinBackendFastLEDEffect.h\"\n#include \"../CoreEffects.h\"\n#include \"../../config/features.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPPerlinBackendFastLEDEffect::LGPPerlinBackendFastLEDEffect()\n    : m_seed(0)\n    , m_noiseX(0)\n    , m_noiseY(0)\n    , m_noiseZ(0)\n    , m_momentum(0.0f)\n    , m_time(0)\n{\n}\n\nbool LGPPerlinBackendFastLEDEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    // Seed for \"non-reproducible\" feel (different each boot/init)\n    m_seed = (uint32_t)random16() << 16 | random16();\n    \n    // Initialize noise coordinates with seed offset\n    m_noiseX = (uint16_t)(m_seed & 0xFFFF);\n    m_noiseY = (uint16_t)((m_seed >> 16) & 0xFFFF);\n    m_noiseZ = (uint16_t)((m_seed * 0x9E3779B9) & 0xFFFF);\n    m_momentum = 0.0f;\n    m_time = 0;\n    \n    return true;\n}\n\nvoid LGPPerlinBackendFastLEDEffect::render(plugins::EffectContext& ctx) {\n    // CENTRE ORIGIN - FastLED inoise8 baseline test\n    const bool hasAudio = ctx.audio.available;\n    float dt = ctx.getSafeDeltaSeconds();\n    float speedNorm = ctx.speed / 50.0f;\n    float intensityNorm = ctx.brightness / 255.0f;\n    \n    // =========================================================================\n    // Audio-Driven Momentum (Emotiscope-style)\n    // =========================================================================\n    float push = 0.0f;\n#if FEATURE_AUDIO_SYNC\n    if (hasAudio) {\n        float energy = ctx.audio.rms();\n        push = energy * energy * energy * energy * speedNorm * 0.1f; // Heavy emphasis on loud\n    }\n#endif\n    m_momentum *= powf(0.99f, dt * 60.0f); // Smooth decay (dt-corrected)\n    if (push > m_momentum) {\n        m_momentum = push; // Only boost, no jarring drops\n    }\n    \n    // =========================================================================\n    // Advection: slow drift through noise field (REVERSED for center→edges)\n    // =========================================================================\n    uint16_t baseStep = (uint16_t)(4 + (uint16_t)(speedNorm * 12.0f));\n    uint16_t momentumStep = (uint16_t)(m_momentum * 600.0f); // Scale momentum to step size\n    uint16_t tStep = baseStep + momentumStep;\n    \n    // Reverse: subtract instead of add (makes pattern flow center→edges)\n    m_time = (uint16_t)(m_time - tStep);\n    m_noiseX = (uint16_t)(m_noiseX - (uint16_t)(3 + (tStep >> 1)));\n    m_noiseY = (uint16_t)(m_noiseY - (uint16_t)(2 + (tStep >> 2)));\n    m_noiseZ = (uint16_t)(m_noiseZ - (uint16_t)(1 + (tStep >> 3)));\n    \n    // No fadeToBlackBy - we overwrite every LED each frame\n    \n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        // Centre-origin: distance from centre pair\n        uint16_t dist = centerPairDistance(i);\n        \n        // Sample noise with SMALL multipliers (like working effects: i*5, not dist*28)\n        // NO >>8 right-shifting (that collapses coordinate space!)\n        uint16_t x = (uint16_t)(m_noiseX + dist * 5);\n        uint16_t y = (uint16_t)(m_noiseY + m_time);\n        uint16_t z = m_noiseZ;\n        \n        // Sample 3D noise\n        uint8_t noise = inoise8(x, y, z);\n        \n        // Map to palette and brightness (same shaping for all three tests)\n        uint8_t paletteIndex = noise + ctx.gHue;\n        float noiseNorm = noise / 255.0f;\n        noiseNorm = noiseNorm * noiseNorm; // Bias toward darker, stronger highlights\n        float brightnessNorm = 0.2f + noiseNorm * 0.8f;\n        uint8_t brightness = (uint8_t)(brightnessNorm * 255.0f * intensityNorm);\n        \n        CRGB color = ctx.palette.getColor(paletteIndex, brightness);\n        ctx.leds[i] = color;\n        \n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            // Strip 2: phase offset for interference\n            uint8_t paletteIndex2 = (uint8_t)(paletteIndex + 32);\n            CRGB color2 = ctx.palette.getColor(paletteIndex2, brightness);\n            ctx.leds[i + STRIP_LENGTH] = color2;\n        }\n    }\n}\n\nvoid LGPPerlinBackendFastLEDEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPPerlinBackendFastLEDEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Perlin Test: FastLED\",\n        \"FastLED inoise8 baseline (TEST)\",\n        plugins::EffectCategory::UNCATEGORIZED,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n\n"
+}

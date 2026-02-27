@@ -1,0 +1,16 @@
+.git
+.github
+.claude
+.codex
+.gitignore
+.pre-commit-config.yaml
+AGENTS.md
+CLAUDE.md
+README.md
+CONTRIBUTING.md
+CHANGELOG.md
+instructions
+firmware-v3
+tab5-encoder
+lightwave-ios-v2
+k1-composer

@@ -1,0 +1,67 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_BEAT_PULSE_SHOCKWAVE",
+  "effectIdHex": "0x1401",
+  "className": "BeatPulseShockwaveEffect",
+  "displayName": "BeatPulseShockwaveEffect",
+  "headerPath": "firmware/v2/src/effects/ieffect/BeatPulseShockwaveEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/BeatPulseShockwaveEffect.cpp",
+  "renderRange": [
+    45,
+    54
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        45,
+        45
+      ]
+    ],
+    "mapping": [
+      [
+        46,
+        46
+      ]
+    ],
+    "modulation": [
+      [
+        45,
+        46
+      ],
+      [
+        53,
+        53
+      ]
+    ],
+    "render": [
+      [
+        49,
+        52
+      ]
+    ],
+    "post": [
+      [
+        53,
+        53
+      ]
+    ],
+    "output": [
+      [
+        54,
+        54
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'mapping' inferred from fallback segmentation.",
+    "Phase 'render' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation.",
+    "Phase 'output' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file BeatPulseShockwaveEffect.cpp\n * @brief Beat Pulse (Shockwave) - HTML PARITY implementation\n *\n * VISUAL IDENTITY:\n * Single ring expanding OUTWARD from centre (or INWARD from edges) with\n * AMPLITUDE-DRIVEN motion. Same HTML core maths as Stack, different direction.\n *\n * HTML PARITY (LOCKED):\n * - beatIntensity slams to 1.0 on beat, decays *= 0.94^(dt*60)\n * - Ring position inverted for outward vs inward:\n *   - Outward: ringPos = ringCentre (starts at centre, moves toward edge)\n *   - Inward: ringPos = 1 - ringCentre (starts at edge, moves toward centre)\n * - Triangle profile: waveHit = 1 - min(1, abs(dist - ringPos) * 3)\n * - intensity = max(0, waveHit) * beatIntensity\n * - brightness = 0.5 + intensity * 0.5\n * - whiteMix = intensity * 0.3\n */\n\n#include \"BeatPulseShockwaveEffect.h\"\n#include \"../CoreEffects.h\"\n#include \"BeatPulseCore.h\"\n\n#include <cmath>\n\nnamespace lightwaveos::effects::ieffect {\n\nBeatPulseShockwaveEffect::BeatPulseShockwaveEffect(bool inward)\n    : m_inward(inward)\n    , m_meta(\n          inward ? \"Beat Pulse (Shockwave In)\" : \"Beat Pulse (Shockwave)\",\n          inward ? \"HTML parity: amplitude-driven ring edge→centre\" : \"HTML parity: amplitude-driven ring centre→edge\",\n          plugins::EffectCategory::PARTY,\n          1,\n          \"LightwaveOS\")\n{\n}\n\nbool BeatPulseShockwaveEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    BeatPulseCore::reset(m_state, 128.0f);\n    return true;\n}\n\nvoid BeatPulseShockwaveEffect::render(plugins::EffectContext& ctx) {\n    const BeatPulseCore::Params p{\n        m_inward, // inward\n        3.0f,     // profileSlope\n        0.5f,     // brightnessBase\n        0.5f,     // brightnessGain\n        0.3f      // whiteGain\n    };\n    BeatPulseCore::renderSingleRing(ctx, m_state, p);\n}\n\nvoid BeatPulseShockwaveEffect::cleanup() {}\n\nconst plugins::EffectMetadata& BeatPulseShockwaveEffect::getMetadata() const {\n    return m_meta;\n}\n\nuint8_t BeatPulseShockwaveEffect::getParameterCount() const {\n    return 0;\n}\n\nconst plugins::EffectParameter* BeatPulseShockwaveEffect::getParameter(uint8_t index) const {\n    (void)index;\n    return nullptr;\n}\n\nbool BeatPulseShockwaveEffect::setParameter(const char* name, float value) {\n    (void)name;\n    (void)value;\n    return false;\n}\n\nfloat BeatPulseShockwaveEffect::getParameter(const char* name) const {\n    (void)name;\n    return 0.0f;\n}\n\n} // namespace lightwaveos::effects::ieffect\n"
+}

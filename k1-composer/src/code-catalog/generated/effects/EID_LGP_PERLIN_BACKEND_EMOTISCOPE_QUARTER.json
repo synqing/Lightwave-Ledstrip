@@ -1,0 +1,111 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_PERLIN_BACKEND_EMOTISCOPE_QUARTER",
+  "effectIdHex": "0x0D02",
+  "className": "LGPPerlinBackendEmotiscopeQuarterEffect",
+  "displayName": "Perlin Test: Emotiscope2 Quarter",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPPerlinBackendEmotiscopeQuarterEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPPerlinBackendEmotiscopeQuarterEffect.cpp",
+  "renderRange": [
+    141,
+    202
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        141,
+        147
+      ]
+    ],
+    "mapping": [
+      [
+        143,
+        144
+      ],
+      [
+        150,
+        150
+      ],
+      [
+        159,
+        159
+      ],
+      [
+        165,
+        165
+      ],
+      [
+        177,
+        177
+      ],
+      [
+        184,
+        185
+      ],
+      [
+        188,
+        191
+      ]
+    ],
+    "modulation": [
+      [
+        158,
+        168
+      ]
+    ],
+    "render": [
+      [
+        158,
+        158
+      ],
+      [
+        174,
+        174
+      ],
+      [
+        191,
+        191
+      ],
+      [
+        193,
+        194
+      ],
+      [
+        197,
+        199
+      ]
+    ],
+    "post": [
+      [
+        171,
+        171
+      ]
+    ],
+    "output": [
+      [
+        174,
+        174
+      ],
+      [
+        194,
+        194
+      ],
+      [
+        196,
+        196
+      ],
+      [
+        199,
+        199
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'modulation' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPPerlinBackendEmotiscopeQuarterEffect.cpp\n * @brief Perlin Backend Test C: Emotiscope 2.0 seedable Perlin (quarter-res)\n */\n\n#include \"LGPPerlinBackendEmotiscopeQuarterEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\n// Emotiscope 2.0 hash function (same as full-res)\nunsigned int LGPPerlinBackendEmotiscopeQuarterEffect::hash(unsigned int x, unsigned int seed) {\n    const unsigned int m = 0x5bd1e995U;\n    unsigned int h = seed;\n    unsigned int k = x;\n    k *= m;\n    k ^= k >> 24;\n    k *= m;\n    h *= m;\n    h ^= k;\n    h ^= h >> 13;\n    h *= m;\n    h ^= h >> 15;\n    return h;\n}\n\nunsigned int LGPPerlinBackendEmotiscopeQuarterEffect::hashVec2(UVec2 x, unsigned int seed) {\n    const unsigned int m = 0x5bd1e995U;\n    unsigned int h = seed;\n    unsigned int k;\n    \n    k = x.x;\n    k *= m;\n    k ^= k >> 24;\n    k *= m;\n    h *= m;\n    h ^= k;\n    \n    k = x.y;\n    k *= m;\n    k ^= k >> 24;\n    k *= m;\n    h *= m;\n    h ^= k;\n    \n    h ^= h >> 13;\n    h *= m;\n    h ^= h >> 15;\n    return h;\n}\n\nVec2 LGPPerlinBackendEmotiscopeQuarterEffect::gradientDirection(unsigned int hash) {\n    switch (hash & 7) {\n        case 0: return Vec2(1.0f, 1.0f);\n        case 1: return Vec2(-1.0f, 1.0f);\n        case 2: return Vec2(1.0f, -1.0f);\n        case 3: return Vec2(-1.0f, -1.0f);\n        case 4: return Vec2(1.0f, 0.0f);\n        case 5: return Vec2(-1.0f, 0.0f);\n        case 6: return Vec2(0.0f, 1.0f);\n        case 7: return Vec2(0.0f, -1.0f);\n    }\n    return Vec2(0.0f, 0.0f);\n}\n\nfloat LGPPerlinBackendEmotiscopeQuarterEffect::interpolatePerlin(float v1, float v2, float v3, float v4, Vec2 t) {\n    float mix1 = v1 + t.x * (v2 - v1);\n    float mix2 = v3 + t.x * (v4 - v3);\n    return mix1 + t.y * (mix2 - mix1);\n}\n\nVec2 LGPPerlinBackendEmotiscopeQuarterEffect::fade(Vec2 t) {\n    float tx = t.x * t.x * t.x * (t.x * (t.x * 6.0f - 15.0f) + 10.0f);\n    float ty = t.y * t.y * t.y * (t.y * (t.y * 6.0f - 15.0f) + 10.0f);\n    return Vec2(tx, ty);\n}\n\nfloat LGPPerlinBackendEmotiscopeQuarterEffect::dot(Vec2 a, Vec2 b) {\n    return a.x * b.x + a.y * b.y;\n}\n\nfloat LGPPerlinBackendEmotiscopeQuarterEffect::perlinNoise(Vec2 position, unsigned int seed) {\n    Vec2 floorPos(floorf(position.x), floorf(position.y));\n    Vec2 fractPos(position.x - floorPos.x, position.y - floorPos.y);\n    UVec2 cell((unsigned int)floorPos.x, (unsigned int)floorPos.y);\n    \n    float v1 = dot(gradientDirection(hashVec2(cell, seed)), fractPos);\n    float v2 = dot(gradientDirection(hashVec2(UVec2(cell.x + 1, cell.y), seed)), Vec2(fractPos.x - 1.0f, fractPos.y));\n    float v3 = dot(gradientDirection(hashVec2(UVec2(cell.x, cell.y + 1), seed)), Vec2(fractPos.x, fractPos.y - 1.0f));\n    float v4 = dot(gradientDirection(hashVec2(UVec2(cell.x + 1, cell.y + 1), seed)), Vec2(fractPos.x - 1.0f, fractPos.y - 1.0f));\n    \n    return interpolatePerlin(v1, v2, v3, v4, fade(fractPos));\n}\n\nfloat LGPPerlinBackendEmotiscopeQuarterEffect::perlinNoiseOctaves(Vec2 position, int frequency, int octaveCount, float persistence, float lacunarity, unsigned int seed) {\n    float value = 0.0f;\n    float amplitude = 1.0f;\n    float currentFreq = (float)frequency;\n    unsigned int currentSeed = seed;\n    \n    for (int i = 0; i < octaveCount; i++) {\n        currentSeed = hash(currentSeed, 0x0U);\n        value += perlinNoise(Vec2(position.x * currentFreq, position.y * currentFreq), currentSeed) * amplitude;\n        amplitude *= persistence;\n        currentFreq *= lacunarity;\n    }\n    return value;\n}\n\nLGPPerlinBackendEmotiscopeQuarterEffect::LGPPerlinBackendEmotiscopeQuarterEffect()\n    : m_noiseBuffer{}\n    , m_seed(0)\n    , m_positionX(0.0f)\n    , m_positionY(0.0f)\n    , m_lastUpdateMs(0)\n{\n    for (uint8_t i = 0; i < QUARTER_RES; i++) {\n        m_noiseBuffer[i] = 0.0f;\n    }\n}\n\nbool LGPPerlinBackendEmotiscopeQuarterEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_seed = (unsigned int)((uint32_t)random16() << 16 | random16());\n    m_positionX = (float)(random16() % 1000);\n    m_positionY = (float)(random16() % 1000);\n    m_lastUpdateMs = ctx.totalTimeMs;\n    \n    // Initialize buffer\n    for (uint8_t i = 0; i < QUARTER_RES; i++) {\n        m_noiseBuffer[i] = 0.0f;\n    }\n    \n    return true;\n}\n\nvoid LGPPerlinBackendEmotiscopeQuarterEffect::render(plugins::EffectContext& ctx) {\n    // CENTRE ORIGIN - Emotiscope 2.0 Perlin quarter-res + interpolation test\n    float speedNorm = ctx.speed / 50.0f;\n    float intensityNorm = ctx.brightness / 255.0f;\n    \n    // Advection (use ms-based delta like Emotiscope 2.0)\n    // Clamp delta to prevent teleport jumps after stalls (max 50ms)\n    float deltaMs = ctx.deltaTimeSeconds * 1000.0f;\n    if (deltaMs > 50) deltaMs = 50;\n    m_positionY += 0.001f * (float)deltaMs * (1.0f + speedNorm);\n    \n    // Update quarter-res buffer periodically (every 10ms like Emotiscope 2.0)\n    bool shouldUpdate = (ctx.totalTimeMs - m_lastUpdateMs >= UPDATE_INTERVAL_MS);\n    if (shouldUpdate) {\n        m_lastUpdateMs = ctx.totalTimeMs;\n        \n        // Sample at quarter resolution (20 points across 80 distances)\n        for (uint8_t i = 0; i < QUARTER_RES; i++) {\n            // Map quarter-res index to distance (0..79)\n            float dist = (float)i * (79.0f / (QUARTER_RES - 1));\n            \n            Vec2 pos(m_positionX + dist * SPATIAL_SCALE, m_positionY);\n            float noiseValue = perlinNoiseOctaves(pos, (int)FREQUENCY, OCTAVE_COUNT, PERSISTENCE, LACUNARITY, m_seed);\n            \n            // Normalize to [0, 1]\n            m_noiseBuffer[i] = (noiseValue + 1.0f) * 0.5f;\n            m_noiseBuffer[i] = fmaxf(0.0f, fminf(1.0f, m_noiseBuffer[i]));\n        }\n    }\n    \n    // No fadeToBlackBy - we overwrite every LED each frame\n    \n    // Render: interpolate from quarter-res buffer\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        uint16_t dist = centerPairDistance(i);\n        \n        // Map distance (0..79) to quarter-res buffer index (0..19)\n        float bufferIndex = (float)dist * ((QUARTER_RES - 1) / 79.0f);\n        uint8_t idx0 = (uint8_t)bufferIndex;\n        uint8_t idx1 = (idx0 < QUARTER_RES - 1) ? idx0 + 1 : idx0;\n        float t = bufferIndex - (float)idx0;\n        \n        // Linear interpolation\n        float noiseNorm = m_noiseBuffer[idx0] * (1.0f - t) + m_noiseBuffer[idx1] * t;\n        noiseNorm = fmaxf(0.0f, fminf(1.0f, noiseNorm));\n        \n        // Same shaping as other tests\n        noiseNorm = noiseNorm * noiseNorm;\n        float brightnessNorm = 0.2f + noiseNorm * 0.8f;\n        uint8_t brightness = (uint8_t)(brightnessNorm * 255.0f * intensityNorm);\n        uint8_t paletteIndex = (uint8_t)(noiseNorm * 255.0f) + ctx.gHue;\n        \n        CRGB color = ctx.palette.getColor(paletteIndex, brightness);\n        ctx.leds[i] = color;\n        \n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            uint8_t paletteIndex2 = (uint8_t)(paletteIndex + 32);\n            CRGB color2 = ctx.palette.getColor(paletteIndex2, brightness);\n            ctx.leds[i + STRIP_LENGTH] = color2;\n        }\n    }\n}\n\nvoid LGPPerlinBackendEmotiscopeQuarterEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPPerlinBackendEmotiscopeQuarterEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Perlin Test: Emotiscope2 Quarter\",\n        \"Emotiscope 2.0 Perlin quarter-res (TEST)\",\n        plugins::EffectCategory::UNCATEGORIZED,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n\n"
+}

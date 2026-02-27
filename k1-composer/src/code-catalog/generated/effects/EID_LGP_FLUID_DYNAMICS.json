@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_FLUID_DYNAMICS",
+  "effectIdHex": "0x0505",
+  "className": "LGPFluidDynamicsEffect",
+  "displayName": "LGP Fluid Dynamics",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPFluidDynamicsEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPFluidDynamicsEffect.cpp",
+  "renderRange": [
+    40,
+    95
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        68,
+        68
+      ]
+    ],
+    "mapping": [
+      [
+        46,
+        47
+      ]
+    ],
+    "modulation": [
+      [
+        55,
+        64
+      ]
+    ],
+    "render": [
+      [
+        50,
+        50
+      ],
+      [
+        75,
+        75
+      ],
+      [
+        86,
+        86
+      ],
+      [
+        88,
+        88
+      ],
+      [
+        90,
+        91
+      ]
+    ],
+    "post": [
+      [
+        89,
+        92
+      ]
+    ],
+    "output": [
+      [
+        50,
+        50
+      ],
+      [
+        53,
+        53
+      ],
+      [
+        75,
+        75
+      ],
+      [
+        88,
+        90
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'modulation' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPFluidDynamicsEffect.cpp\n * @brief LGP Fluid Dynamics effect implementation\n */\n\n#include \"LGPFluidDynamicsEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n#include <cstring>\n\n#ifndef NATIVE_BUILD\n#include <esp_heap_caps.h>\n#endif\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPFluidDynamicsEffect::LGPFluidDynamicsEffect()\n    : m_ps(nullptr)\n    , m_time(0)\n{\n}\n\nbool LGPFluidDynamicsEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_time = 0;\n#ifndef NATIVE_BUILD\n    if (!m_ps) {\n        m_ps = static_cast<FluidPsram*>(\n            heap_caps_malloc(sizeof(FluidPsram), MALLOC_CAP_SPIRAM));\n        if (!m_ps) return false;\n    }\n    memset(m_ps, 0, sizeof(FluidPsram));\n#endif\n    return true;\n}\n\nvoid LGPFluidDynamicsEffect::render(plugins::EffectContext& ctx) {\n    if (!m_ps) return;\n    // Laminar and turbulent flow visualization\n    float dt = ctx.getSafeDeltaSeconds();\n    m_time = (uint16_t)(m_time + (ctx.speed >> 2));\n\n    float speedNorm = ctx.speed / 50.0f;\n    float reynolds = speedNorm;\n\n    // Update fluid simulation\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        // Pressure gradient\n        float gradientForce = 0.0f;\n        if (i > 0 && i < STRIP_LENGTH - 1) {\n            gradientForce = (m_ps->pressure[i - 1] - m_ps->pressure[i + 1]) * 0.1f;\n        }\n\n        // Turbulence\n        float turbulence = (inoise8(i * 5, m_time) - 128) / 128.0f * reynolds;\n\n        // Update velocity\n        m_ps->velocity[i] += gradientForce + turbulence * 0.1f;\n        m_ps->velocity[i] *= powf(0.95f, dt * 60.0f);  // dt-corrected decay\n\n        // Update pressure\n        m_ps->pressure[i] += m_ps->velocity[i] * 0.1f;\n        m_ps->pressure[i] *= powf(0.98f, dt * 60.0f);  // dt-corrected decay\n\n        // Add source/sink at centre\n        if (centerPairDistance(i) < 5) {\n            m_ps->pressure[i] += sin8(m_time >> 2) / 255.0f;\n        }\n    }\n\n    // Render flow\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        float vel = fabsf(m_ps->velocity[i]) * 255.0f;\n        if (vel > 255.0f) vel = 255.0f;\n        uint8_t speed8 = (uint8_t)vel;\n\n        float brightnessFloat = (m_ps->pressure[i] + 1.0f) * 127.0f;\n        if (brightnessFloat < 0.0f) brightnessFloat = 0.0f;\n        if (brightnessFloat > 255.0f) brightnessFloat = 255.0f;\n        uint8_t brightness = scale8((uint8_t)brightnessFloat, ctx.brightness);\n\n        float distFromCenter = (float)centerPairDistance(i);\n        uint8_t paletteIndex = (uint8_t)(m_ps->velocity[i] * 20.0f) + (uint8_t)(distFromCenter / 4.0f);\n\n        ctx.leds[i] = ctx.palette.getColor((uint8_t)(ctx.gHue + paletteIndex), brightness);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor(\n                (uint8_t)(ctx.gHue + paletteIndex + 60),\n                scale8(brightness, (uint8_t)(200 + speed8 / 4)));\n        }\n    }\n}\n\nvoid LGPFluidDynamicsEffect::cleanup() {\n#ifndef NATIVE_BUILD\n    if (m_ps) {\n        heap_caps_free(m_ps);\n        m_ps = nullptr;\n    }\n#endif\n}\n\nconst plugins::EffectMetadata& LGPFluidDynamicsEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Fluid Dynamics\",\n        \"Fluid flow simulation\",\n        plugins::EffectCategory::NATURE,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

@@ -1,0 +1,95 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_DIAMOND_LATTICE",
+  "effectIdHex": "0x0300",
+  "className": "LGPDiamondLatticeEffect",
+  "displayName": "LGP Diamond Lattice",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPDiamondLatticeEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPDiamondLatticeEffect.cpp",
+  "renderRange": [
+    26,
+    56
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        26,
+        28
+      ]
+    ],
+    "mapping": [
+      [
+        29,
+        30
+      ],
+      [
+        32,
+        32
+      ],
+      [
+        38,
+        38
+      ],
+      [
+        41,
+        42
+      ],
+      [
+        48,
+        48
+      ]
+    ],
+    "modulation": [
+      [
+        32,
+        32
+      ],
+      [
+        41,
+        42
+      ]
+    ],
+    "render": [
+      [
+        36,
+        36
+      ],
+      [
+        49,
+        49
+      ],
+      [
+        51,
+        51
+      ],
+      [
+        53,
+        53
+      ]
+    ],
+    "post": [
+      [
+        53,
+        54
+      ]
+    ],
+    "output": [
+      [
+        36,
+        36
+      ],
+      [
+        51,
+        53
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPDiamondLatticeEffect.cpp\n * @brief LGP Diamond Lattice effect implementation\n */\n\n#include \"LGPDiamondLatticeEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPDiamondLatticeEffect::LGPDiamondLatticeEffect()\n    : m_phase(0.0f)\n{\n}\n\nbool LGPDiamondLatticeEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_phase = 0.0f;\n    return true;\n}\n\nvoid LGPDiamondLatticeEffect::render(plugins::EffectContext& ctx) {\n    // CENTER ORIGIN - Angled wave fronts create diamond patterns from center\n    float dt = ctx.getSafeDeltaSeconds();\n    float speedNorm = ctx.speed / 50.0f;\n    float intensityNorm = ctx.brightness / 255.0f;\n\n    m_phase += speedNorm * 0.02f * 60.0f * dt;  // dt-corrected\n\n    const float diamondFreq = 6.0f;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float distFromCenter = (float)centerPairDistance((uint16_t)i);\n        float normalizedDist = distFromCenter / (float)HALF_LENGTH;\n\n        // Create crossing diagonal waves from center\n        float wave1 = sinf((normalizedDist + m_phase) * diamondFreq * TWO_PI);\n        float wave2 = sinf((normalizedDist - m_phase) * diamondFreq * TWO_PI);\n\n        // Interference creates diamond nodes\n        float diamond = fabsf(wave1 * wave2);\n        diamond = sqrtf(diamond);  // Optimized: sqrtf faster than powf(x, 0.5f)\n\n        uint8_t brightness = (uint8_t)(diamond * 255.0f * intensityNorm);\n        uint8_t paletteIndex = (uint8_t)(distFromCenter * 2.0f);\n\n        ctx.leds[i] = ctx.palette.getColor((uint8_t)(ctx.gHue + paletteIndex), brightness);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(ctx.gHue + paletteIndex + 128), brightness);\n        }\n    }\n}\n\nvoid LGPDiamondLatticeEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPDiamondLatticeEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Diamond Lattice\",\n        \"Interwoven diamond patterns\",\n        plugins::EffectCategory::GEOMETRIC,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

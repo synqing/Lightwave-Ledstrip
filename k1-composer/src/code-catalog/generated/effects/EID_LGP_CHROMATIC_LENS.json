@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_CHROMATIC_LENS",
+  "effectIdHex": "0x0900",
+  "className": "LGPChromaticLensEffect",
+  "displayName": "LGP Chromatic Lens",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPChromaticLensEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPChromaticLensEffect.cpp",
+  "renderRange": [
+    131,
+    156
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        131,
+        133
+      ]
+    ],
+    "mapping": [
+      [
+        134,
+        137
+      ]
+    ],
+    "modulation": [
+      [
+        137,
+        138
+      ],
+      [
+        141,
+        141
+      ],
+      [
+        151,
+        151
+      ]
+    ],
+    "render": [
+      [
+        140,
+        142
+      ],
+      [
+        147,
+        147
+      ],
+      [
+        151,
+        152
+      ]
+    ],
+    "post": [
+      [
+        153,
+        154
+      ]
+    ],
+    "output": [
+      [
+        140,
+        140
+      ],
+      [
+        142,
+        142
+      ],
+      [
+        145,
+        150
+      ],
+      [
+        152,
+        152
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'mapping' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPChromaticLensEffect.cpp\n * @brief LGP Chromatic Lens effect implementation\n */\n\n#include \"LGPChromaticLensEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\n#ifndef PI\n#define PI 3.14159265358979323846f\n#endif\n#ifndef TWO_PI\n#define TWO_PI (2.0f * PI)\n#endif\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nnamespace {\n\nCRGB chromaticDispersion(float position, float aberration, float phase, float intensity) {\n    // Normalise position from centre (0.0 = centre, 1.0 = edge)\n    float distFromCenter = (float)centerPairDistance((uint16_t)position);\n    float normalizedDist = distFromCenter / (float)HALF_LENGTH;\n\n    // Cauchy dispersion approximation\n    const float n0 = 1.49f;\n    const float B = 0.0045f;\n    const float C = 0.0001f;\n\n    const float lambdaRed = 0.70f;\n    const float lambdaGreen = 0.55f;\n    const float lambdaBlue = 0.45f;\n\n    const float nRed = n0 + (B / ((lambdaRed * lambdaRed) - C));\n    const float nGreen = n0 + (B / ((lambdaGreen * lambdaGreen) - C));\n    const float nBlue = n0 + (B / ((lambdaBlue * lambdaBlue) - C));\n\n    const float deltaR = (nGreen - nRed);\n    const float deltaB = (nBlue - nGreen);\n    const float dispersionScale = 20.0f;\n\n    if (aberration < 0.0f) aberration = 0.0f;\n    if (aberration > 3.0f) aberration = 3.0f;\n\n    const float redOffset = -0.1f * aberration * deltaR * dispersionScale;\n    const float blueOffset = 0.1f * aberration * deltaB * dispersionScale;\n\n    float redFocus = sinf((normalizedDist + redOffset) * PI + phase);\n    float greenFocus = sinf(normalizedDist * PI + phase);\n    float blueFocus = sinf((normalizedDist + blueOffset) * PI + phase);\n\n    uint8_t r = (uint8_t)constrain((int)(128 + 127 * redFocus), 0, 255);\n    uint8_t g = (uint8_t)constrain((int)(128 + 127 * greenFocus), 0, 255);\n    uint8_t b = (uint8_t)constrain((int)(128 + 127 * blueFocus), 0, 255);\n\n    r = (uint8_t)(r * intensity);\n    g = (uint8_t)(g * intensity);\n    b = (uint8_t)(b * intensity);\n\n    return CRGB(r, g, b);\n}\n\nCRGB chromaticDispersionPalette(float position,\n                                float aberration,\n                                float phase,\n                                float intensity,\n                                const plugins::PaletteRef& palette,\n                                uint8_t baseHue)\n{\n    if (!palette.isValid()) {\n        return chromaticDispersion(position, aberration, phase, intensity);\n    }\n\n    float distFromCenter = (float)centerPairDistance((uint16_t)position);\n    float normalizedDist = distFromCenter / (float)HALF_LENGTH;\n    if (normalizedDist < 0.0f) normalizedDist = 0.0f;\n    if (normalizedDist > 1.0f) normalizedDist = 1.0f;\n\n    uint8_t phaseScroll = (uint8_t)((phase * 255.0f) / TWO_PI);\n    uint8_t idx = (uint8_t)(baseHue + (uint8_t)(normalizedDist * 255.0f) + phaseScroll);\n\n    int16_t sep = (int16_t)(8 + (aberration * 24.0f));\n\n    CRGB cR = palette.getColor((uint8_t)(idx - sep), 255);\n    CRGB cG = palette.getColor(idx, 255);\n    CRGB cB = palette.getColor((uint8_t)(idx + sep), 255);\n\n    float aberr = aberration;\n    if (aberr < 0.0f) aberr = 0.0f;\n    if (aberr > 3.0f) aberr = 3.0f;\n\n    float redOffset = -0.04f * aberr;\n    float blueOffset = 0.05f * aberr;\n\n    float redFocus = 0.5f + 0.5f * sinf((normalizedDist + redOffset) * PI + phase);\n    float greenFocus = 0.5f + 0.5f * sinf((normalizedDist) * PI + phase);\n    float blueFocus = 0.5f + 0.5f * sinf((normalizedDist + blueOffset) * PI + phase);\n\n    float weightSum = redFocus + greenFocus + blueFocus;\n    if (weightSum < 0.001f) weightSum = 1.0f;\n\n    float rF = (cR.r * redFocus + cG.r * greenFocus + cB.r * blueFocus) / weightSum;\n    float gF = (cR.g * redFocus + cG.g * greenFocus + cB.g * blueFocus) / weightSum;\n    float bF = (cR.b * redFocus + cG.b * greenFocus + cB.b * blueFocus) / weightSum;\n\n    CRGB out((uint8_t)constrain((int)rF, 0, 255),\n             (uint8_t)constrain((int)gF, 0, 255),\n             (uint8_t)constrain((int)bF, 0, 255));\n\n    out.nscale8_video((uint8_t)(constrain(intensity * 255.0f, 0.0f, 255.0f)));\n    return out;\n}\n\n} // namespace\n\nLGPChromaticLensEffect::LGPChromaticLensEffect()\n    : m_phase(0.0f)\n{\n}\n\nbool LGPChromaticLensEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_phase = 0.0f;\n    return true;\n}\n\nvoid LGPChromaticLensEffect::render(plugins::EffectContext& ctx) {\n    // Static aberration, lens position controlled by speed\n    float dt = ctx.getSafeDeltaSeconds();\n    float intensity = ctx.brightness / 255.0f;\n    float aberration = (ctx.complexity / 255.0f) * 3.0f;\n\n    m_phase += ctx.speed * 0.01f * 60.0f * dt;  // dt-corrected\n    if (m_phase > TWO_PI) m_phase -= TWO_PI;\n\n    for (int i = 0; i < STRIP_LENGTH && i < (int)ctx.ledCount; i++) {\n        CRGB color = chromaticDispersionPalette((float)i, aberration, m_phase, intensity, ctx.palette, ctx.gHue);\n        ctx.leds[i] = color;\n    }\n\n    // Strip 2: Centre-origin at LED 240 (not edge mirror)\n    if (ctx.ledCount >= STRIP_LENGTH * 2) {\n        for (int i = 0; i < STRIP_LENGTH; i++) {\n            // Calculate position on strip 2 using same centre-origin pattern\n            int strip2Idx = STRIP_LENGTH + i;\n            if (strip2Idx < (int)ctx.ledCount) {\n                CRGB color = chromaticDispersionPalette((float)i, aberration, m_phase + PI, intensity, ctx.palette, ctx.gHue);\n                ctx.leds[strip2Idx] = CRGB(color.b, color.g, color.r);  // RGB swap for visual interest\n            }\n        }\n    }\n}\n\nvoid LGPChromaticLensEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPChromaticLensEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Chromatic Lens\",\n        \"Simulated lens dispersion\",\n        plugins::EffectCategory::UNCATEGORIZED,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

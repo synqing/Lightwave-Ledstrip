@@ -1,0 +1,151 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_SPECTRUM_BARS",
+  "effectIdHex": "0x0A02",
+  "className": "LGPSpectrumBarsEffect",
+  "displayName": "Spectrum Bars",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPSpectrumBarsEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPSpectrumBarsEffect.cpp",
+  "renderRange": [
+    43,
+    117
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        49,
+        49
+      ],
+      [
+        51,
+        51
+      ],
+      [
+        70,
+        71
+      ],
+      [
+        79,
+        80
+      ]
+    ],
+    "mapping": [
+      [
+        48,
+        48
+      ],
+      [
+        51,
+        51
+      ],
+      [
+        55,
+        55
+      ],
+      [
+        57,
+        58
+      ],
+      [
+        84,
+        84
+      ],
+      [
+        98,
+        98
+      ],
+      [
+        102,
+        102
+      ]
+    ],
+    "modulation": [
+      [
+        46,
+        46
+      ],
+      [
+        54,
+        55
+      ],
+      [
+        57,
+        58
+      ],
+      [
+        60,
+        60
+      ],
+      [
+        67,
+        67
+      ],
+      [
+        72,
+        72
+      ],
+      [
+        77,
+        77
+      ],
+      [
+        80,
+        80
+      ],
+      [
+        94,
+        94
+      ],
+      [
+        103,
+        103
+      ],
+      [
+        105,
+        105
+      ]
+    ],
+    "render": [
+      [
+        47,
+        47
+      ],
+      [
+        65,
+        65
+      ],
+      [
+        88,
+        88
+      ],
+      [
+        110,
+        110
+      ],
+      [
+        113,
+        113
+      ]
+    ],
+    "post": [
+      [
+        109,
+        113
+      ]
+    ],
+    "output": [
+      [
+        114,
+        117
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'post' inferred from fallback segmentation.",
+    "Phase 'output' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPSpectrumBarsEffect.cpp\n * @brief 8-band spectrum analyzer implementation\n */\n\n#include \"LGPSpectrumBarsEffect.h\"\n#include \"ChromaUtils.h\"\n#include \"../CoreEffects.h\"\n\n#ifndef NATIVE_BUILD\n#include <FastLED.h>\n#endif\n\n#include <cmath>\n#include <cstring>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nnamespace {\n\nstatic inline const float* selectChroma12(const audio::ControlBusFrame& cb) {\n    // Both backends now produce normalised chroma via Stage A/B pipeline.\n    return cb.chroma;\n}\n\nstatic inline float clamp01(float v) {\n    if (v < 0.0f) return 0.0f;\n    if (v > 1.0f) return 1.0f;\n    return v;\n}\n\n} // namespace\n\nbool LGPSpectrumBarsEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    memset(m_smoothedBands, 0, sizeof(m_smoothedBands));\n    m_chromaAngle = 0.0f;\n    return true;\n}\n\nvoid LGPSpectrumBarsEffect::render(plugins::EffectContext& ctx) {\n    float dt = ctx.getSafeDeltaSeconds();\n\n    // Update smoothed bands (fast attack, slow decay)\n    for (int i = 0; i < 8; ++i) {\n        float target;\n        if (ctx.audio.available) {\n            // silentScale handled globally by RendererActor\n            target = ctx.audio.getBand(i);\n        } else {\n            // Fallback: gentle sine wave animation when no audio\n            float phase = ctx.totalTimeMs * 0.001f + i * 0.4f;\n            target = 0.3f + 0.2f * sinf(phase);\n        }\n        if (target > m_smoothedBands[i]) {\n            m_smoothedBands[i] = target;  // Instant attack\n        } else {\n            m_smoothedBands[i] *= powf(0.92f, dt * 60.0f);  // Slow decay (~200ms, dt-corrected)\n        }\n    }\n\n    // Clear buffer\n    memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));\n\n    // Musically anchored hue (non-rainbow): circular chroma mean, smoothed.\n    uint8_t baseHue = ctx.gHue;\n#if FEATURE_AUDIO_SYNC\n    if (ctx.audio.available) {\n        const float* chroma = selectChroma12(ctx.audio.controlBus);\n        baseHue = effects::chroma::circularChromaHueSmoothed(\n            chroma, m_chromaAngle, dt, 0.20f);\n    }\n#endif\n\n    float beatAccent = 0.0f;\n#if FEATURE_AUDIO_SYNC\n    if (ctx.audio.available) {\n        beatAccent = 0.10f * ctx.audio.beatStrength();\n    }\n#endif\n\n    // Render CENTER PAIR: bands map from center (bass) to edges (treble)\n    // Each band gets 10 LEDs (80 / 8 = 10)\n    constexpr int LEDS_PER_BAND = 10;\n\n    for (int dist = 0; dist < HALF_LENGTH; ++dist) {\n        // Which band does this LED belong to?\n        uint8_t bandIdx = (uint8_t)(dist / LEDS_PER_BAND);\n        if (bandIdx > 7) bandIdx = 7;\n\n        // Mild perceptual lift makes quieter content visible without blowing peaks.\n        float bandEnergy = powf(clamp01(m_smoothedBands[bandIdx]), 0.65f);\n\n        // Position within band (0-1)\n        int posInBand = dist % LEDS_PER_BAND;\n        float normalizedPos = (float)posInBand / LEDS_PER_BAND;\n\n        // Bar visualization: bright if energy > position in band\n        float brightness;\n        if (normalizedPos < bandEnergy) {\n            brightness = 0.55f + bandEnergy * 0.45f + beatAccent;\n        } else {\n            brightness = 0.02f + 0.05f * beatAccent;  // Dim background with subtle beat lift\n        }\n\n        uint8_t bright = (uint8_t)(brightness * ctx.brightness);\n\n        // Color: each band gets different hue (spread across palette)\n        // Fixed offsets per band (no time-based hue sweep).\n        uint8_t hue = (uint8_t)(baseHue + bandIdx * 10);\n        CRGB color = ctx.palette.getColor(hue, bright);\n\n        SET_CENTER_PAIR(ctx, dist, color);\n    }\n}\n\nvoid LGPSpectrumBarsEffect::cleanup() {}\n\nconst plugins::EffectMetadata& LGPSpectrumBarsEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"Spectrum Bars\",\n        \"8-band spectrum from center to edge\",\n        plugins::EffectCategory::PARTY,\n        1,\n        \"LightwaveOS\"\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

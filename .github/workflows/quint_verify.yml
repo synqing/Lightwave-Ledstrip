@@ -4,12 +4,12 @@ on:
   pull_request:
     branches: [ main, feat/* ]
     paths:
-      - 'firmware/v2/specs/quint/choreo/*.qnt'
+      - 'firmware-v3/specs/quint/choreo/*.qnt'
       - '.github/workflows/quint_verify.yml'
   push:
     branches: [ main, feat/* ]
     paths:
-      - 'firmware/v2/specs/quint/choreo/*.qnt'
+      - 'firmware-v3/specs/quint/choreo/*.qnt'
       - '.github/workflows/quint_verify.yml'
   workflow_dispatch:  # Allow manual trigger
 
@@ -28,7 +28,7 @@ jobs:
         run: npm install -g @informalsystems/quint@0.29.1
       
       - name: Check invariants via simulation
-        working-directory: firmware/v2/specs/quint/choreo
+        working-directory: firmware-v3/specs/quint/choreo
         run: |
           quint run lightwave_step.qnt \
             --main=lightwave_step \
@@ -37,7 +37,7 @@ jobs:
             --max-samples=10000
       
       - name: Verify invariants separately
-        working-directory: firmware/v2/specs/quint/choreo
+        working-directory: firmware-v3/specs/quint/choreo
         run: |
           # Run each invariant individually for clearer error messages
           quint run lightwave_step.qnt \

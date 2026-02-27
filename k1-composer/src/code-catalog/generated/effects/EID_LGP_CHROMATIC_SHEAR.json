@@ -1,0 +1,105 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_CHROMATIC_SHEAR",
+  "effectIdHex": "0x0404",
+  "className": "LGPChromaticShearEffect",
+  "displayName": "LGP Chromatic Shear",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPChromaticShearEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPChromaticShearEffect.cpp",
+  "renderRange": [
+    29,
+    69
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        29,
+        32
+      ]
+    ],
+    "mapping": [
+      [
+        33,
+        39
+      ]
+    ],
+    "modulation": [
+      [
+        31,
+        31
+      ],
+      [
+        50,
+        50
+      ],
+      [
+        54,
+        54
+      ]
+    ],
+    "render": [
+      [
+        33,
+        33
+      ],
+      [
+        35,
+        35
+      ],
+      [
+        41,
+        41
+      ],
+      [
+        50,
+        50
+      ],
+      [
+        54,
+        54
+      ],
+      [
+        64,
+        64
+      ],
+      [
+        66,
+        66
+      ]
+    ],
+    "post": [
+      [
+        65,
+        66
+      ]
+    ],
+    "output": [
+      [
+        41,
+        41
+      ],
+      [
+        49,
+        49
+      ],
+      [
+        53,
+        53
+      ],
+      [
+        64,
+        66
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'mapping' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPChromaticShearEffect.cpp\n * @brief LGP Chromatic Shear effect implementation\n */\n\n#include \"LGPChromaticShearEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPChromaticShearEffect::LGPChromaticShearEffect()\n    : m_phase(0)\n    , m_paletteOffset(0)\n    , m_lastUpdateFrame(0)\n{\n}\n\nbool LGPChromaticShearEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_phase = 0;\n    m_paletteOffset = 0;\n    m_lastUpdateFrame = 0;\n    return true;\n}\n\nvoid LGPChromaticShearEffect::render(plugins::EffectContext& ctx) {\n    // CENTER ORIGIN - Color planes sliding with velocity shear\n    m_phase = (uint16_t)(m_phase + ctx.speed);\n\n    // Palette rotation\n    if (ctx.frameNumber - m_lastUpdateFrame > 5) {\n        m_paletteOffset = (uint8_t)(m_paletteOffset + 2);\n        m_lastUpdateFrame = ctx.frameNumber;\n    }\n\n    const uint8_t shearAmount = 128;\n\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        float distFromCenter = (float)centerPairDistance(i);\n        uint8_t distPos = (uint8_t)((distFromCenter * 255.0f) / (float)HALF_LENGTH);\n\n        // Apply shear transformation\n        uint16_t shearOffset = ((uint16_t)distPos * shearAmount) >> 3;\n        (void)shearOffset;\n\n        // Left strip: base hue + shear\n        uint8_t leftHue = (uint8_t)(m_paletteOffset + distPos + (m_phase >> 8));\n        uint8_t leftBright = ctx.brightness;\n\n        // Right strip: complementary hue + inverse shear\n        uint8_t rightHue = (uint8_t)(m_paletteOffset + distPos + 120 - (m_phase >> 8));\n        uint8_t rightBright = ctx.brightness;\n\n        // Add interference at center\n        if (centerPairDistance(i) < 20) {\n            uint8_t centerBlend = (uint8_t)(255 - centerPairDistance(i) * 12);\n            leftBright = scale8(leftBright, (uint8_t)(255 - (centerBlend >> 1)));\n            rightBright = scale8(rightBright, (uint8_t)(255 - (centerBlend >> 1)));\n        }\n\n        ctx.leds[i] = ctx.palette.getColor(leftHue, leftBright);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor(rightHue, rightBright);\n        }\n    }\n}\n\nvoid LGPChromaticShearEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPChromaticShearEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Chromatic Shear\",\n        \"Color-splitting shear effect\",\n        plugins::EffectCategory::UNCATEGORIZED,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

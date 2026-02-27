@@ -75,7 +75,7 @@ LC_SelfContained/
 ### Device Port Mapping
 
 **CRITICAL: Device Port Assignments**
-- **ESP32-S3 (v2 firmware)**: `/dev/cu.usbmodem1101`
+- **ESP32-S3 (v3 firmware)**: `/dev/cu.usbmodem1101`
 - **Tab5 (encoder firmware)**: `/dev/cu.usbmodem101`
 
 Always use these specific ports for uploads and monitoring. Verify with `pio device list` before uploading.
@@ -87,16 +87,16 @@ Always use these specific ports for uploads and monitoring. Verify with `pio dev
 
 ### Build Instructions
 
-**v2 Firmware (ESP32-S3)**:
+**v3 Firmware (ESP32-S3)**:
 ```bash
-cd firmware/v2
+cd firmware-v3
 pio run -e esp32dev_audio -t upload --upload-port /dev/cu.usbmodem1101
 ```
 
 **Tab5 Encoder Firmware**:
 ```bash
 # From repository root:
-PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" pio run -e tab5 -t upload --upload-port /dev/cu.usbmodem101 -d firmware/Tab5.encoder
+PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" pio run -e tab5 -t upload --upload-port /dev/cu.usbmodem101 -d tab5-encoder
 ```
 
 ### Configuration

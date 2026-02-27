@@ -1,0 +1,118 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-02-25T01:16:03Z",
+  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "effectId": "EID_LGP_CRYSTALLINE_GROWTH",
+  "effectIdHex": "0x0504",
+  "className": "LGPCrystallineGrowthEffect",
+  "displayName": "LGP Crystalline Growth",
+  "headerPath": "firmware/v2/src/effects/ieffect/LGPCrystallineGrowthEffect.h",
+  "sourcePath": "firmware/v2/src/effects/ieffect/LGPCrystallineGrowthEffect.cpp",
+  "renderRange": [
+    34,
+    92
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        34,
+        40
+      ]
+    ],
+    "mapping": [
+      [
+        41,
+        49
+      ]
+    ],
+    "modulation": [
+      [
+        50,
+        60
+      ]
+    ],
+    "render": [
+      [
+        40,
+        40
+      ],
+      [
+        49,
+        49
+      ],
+      [
+        51,
+        51
+      ],
+      [
+        53,
+        53
+      ],
+      [
+        58,
+        58
+      ],
+      [
+        74,
+        74
+      ],
+      [
+        80,
+        80
+      ],
+      [
+        82,
+        83
+      ],
+      [
+        85,
+        85
+      ],
+      [
+        87,
+        87
+      ]
+    ],
+    "post": [
+      [
+        85,
+        89
+      ]
+    ],
+    "output": [
+      [
+        41,
+        41
+      ],
+      [
+        49,
+        49
+      ],
+      [
+        51,
+        53
+      ],
+      [
+        67,
+        67
+      ],
+      [
+        76,
+        76
+      ],
+      [
+        85,
+        87
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'mapping' inferred from fallback segmentation.",
+    "Phase 'modulation' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPCrystallineGrowthEffect.cpp\n * @brief LGP Crystalline Growth effect implementation\n */\n\n#include \"LGPCrystallineGrowthEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cstring>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPCrystallineGrowthEffect::LGPCrystallineGrowthEffect()\n    : m_time(0)\n    , m_seeds{}\n    , m_size{}\n    , m_hue{}\n    , m_initialized(false)\n{\n}\n\nbool LGPCrystallineGrowthEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_time = 0;\n    memset(m_seeds, 0, sizeof(m_seeds));\n    memset(m_size, 0, sizeof(m_size));\n    memset(m_hue, 0, sizeof(m_hue));\n    m_initialized = false;\n    return true;\n}\n\nvoid LGPCrystallineGrowthEffect::render(plugins::EffectContext& ctx) {\n    // Crystal formation with light refraction\n    m_time = (uint16_t)(m_time + (ctx.speed >> 3));\n\n    // Initialize crystal seeds\n    if (!m_initialized) {\n        for (uint8_t c = 0; c < 10; c++) {\n            m_seeds[c] = random8(STRIP_LENGTH);\n            m_size[c] = 0;\n            m_hue[c] = random8();\n        }\n        m_initialized = true;\n    }\n\n    // Background substrate\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        uint8_t substrate = (uint8_t)(20 + (inoise8(i * 10, m_time) >> 4));\n        ctx.leds[i] = CRGB(substrate >> 2, substrate >> 2, substrate);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = CRGB(substrate >> 3, substrate >> 3, substrate >> 1);\n        }\n    }\n\n    // Update crystals\n    for (uint8_t c = 0; c < 10; c++) {\n        // Grow crystals\n        if (m_size[c] < 20 && random8() < 32) {\n            m_size[c]++;\n        }\n\n        // Reset fully grown crystals occasionally\n        if (m_size[c] >= 20 && random8() < 5) {\n            m_size[c] = 0;\n            m_seeds[c] = random8(STRIP_LENGTH);\n            m_hue[c] = random8(30);\n        }\n\n        // Render crystal\n        uint8_t pos = m_seeds[c];\n\n        for (int8_t facet = -(int8_t)m_size[c]; facet <= (int8_t)m_size[c]; facet++) {\n            int16_t facetPos = (int16_t)pos + facet;\n            if (facetPos >= 0 && facetPos < STRIP_LENGTH) {\n                uint8_t facetBrightness = (uint8_t)(255 - (abs(facet) * 255 / (m_size[c] + 1)));\n                facetBrightness = scale8(facetBrightness, ctx.brightness);\n\n                uint8_t paletteIndex = (uint8_t)(m_hue[c] + abs(facet));\n\n                CRGB color1 = ctx.palette.getColor((uint8_t)(ctx.gHue + paletteIndex), facetBrightness);\n                CRGB color2 = ctx.palette.getColor((uint8_t)(ctx.gHue + paletteIndex + 30), scale8(facetBrightness, 200));\n\n                ctx.leds[facetPos] = blend(ctx.leds[facetPos], color1, 128);\n                if (facetPos + STRIP_LENGTH < ctx.ledCount) {\n                    ctx.leds[facetPos + STRIP_LENGTH] = blend(ctx.leds[facetPos + STRIP_LENGTH], color2, 128);\n                }\n            }\n        }\n    }\n}\n\nvoid LGPCrystallineGrowthEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPCrystallineGrowthEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Crystalline Growth\",\n        \"Growing crystal facets\",\n        plugins::EffectCategory::NATURE,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

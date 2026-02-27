@@ -43,7 +43,7 @@ namespace lightwaveos::effects::ieffect {
 
 class WaveformParityEffect final : public plugins::IEffect {
 public:
-    static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_OPAL_FILM;
+    static constexpr lightwaveos::EffectId kId = lightwaveos::INVALID_EFFECT_ID;  // Unregistered duplicate of SB_WAVEFORM310
     WaveformParityEffect() = default;
     ~WaveformParityEffect() override = default;
 

@@ -58,12 +58,13 @@ constexpr uint8_t FAMILY_REACTION_DIFFUSION = 0x17;  // Reaction Diffusion
 constexpr uint8_t FAMILY_SHAPE_BANGERS = 0x18;  // Shape Bangers Pack
 constexpr uint8_t FAMILY_HOLY_SHIT_BANGERS = 0x19;  // Holy Shit Bangers Pack
 constexpr uint8_t FAMILY_EXPERIMENTAL_AUDIO = 0x1A;  // Experimental Audio Pack
+constexpr uint8_t FAMILY_SHOWPIECE_PACK3 = 0x1B;  // Showpiece Pack 3
 
 // ============================================================================
 // Reserved Family Blocks
 // ============================================================================
 
-constexpr uint8_t FAMILY_RESERVED_START = 0x1B;  // 0x1B-0xEF reserved for expansion
+constexpr uint8_t FAMILY_RESERVED_START = 0x1C;  // 0x1C-0xEF reserved for expansion
 constexpr uint8_t FAMILY_OTA_USER       = 0xF0;  // OTA-provisioned / user-uploaded effects
 
 // ============================================================================
@@ -291,7 +292,18 @@ constexpr EffectId EID_LGP_SALIENCY_BLOOM                  = 0x1A07;  // old 159
 constexpr EffectId EID_LGP_TRANSIENT_LATTICE               = 0x1A08;  // old 160: LGP Transient Lattice
 constexpr EffectId EID_LGP_WAVELET_MIRROR                  = 0x1A09;  // old 161: LGP Wavelet Mirror
 
-// Total: 162 IDs assigned (161 active, 1 retired)
+// --- Showpiece Pack 3 (0x1Bxx) ---
+constexpr EffectId EID_LGP_TIME_REVERSAL_MIRROR            = 0x1B00;  // Time-Reversal Mirror base
+constexpr EffectId EID_LGP_KDV_SOLITON_PAIR               = 0x1B01;  // KdV Soliton Pair
+constexpr EffectId EID_LGP_GOLD_CODE_SPECKLE               = 0x1B02;  // Gold Code Speckle
+constexpr EffectId EID_LGP_QUASICRYSTAL_LATTICE            = 0x1B03;  // Quasicrystal Lattice
+constexpr EffectId EID_LGP_FRESNEL_CAUSTIC_SWEEP           = 0x1B04;  // Fresnel Caustic Sweep
+constexpr EffectId EID_LGP_TIME_REVERSAL_MIRROR_AR         = 0x1B05;  // Time-Reversal Mirror (Audio-Reactive)
+constexpr EffectId EID_LGP_TIME_REVERSAL_MIRROR_MOD1       = 0x1B06;  // Time-Reversal Mirror Mod1
+constexpr EffectId EID_LGP_TIME_REVERSAL_MIRROR_MOD2       = 0x1B07;  // Time-Reversal Mirror Mod2
+constexpr EffectId EID_LGP_TIME_REVERSAL_MIRROR_MOD3       = 0x1B08;  // Time-Reversal Mirror Mod3
+
+// Total: 171 IDs assigned (170 active, 1 retired)
 
 // ============================================================================
 // Migration: Old Sequential ID -> New Stable ID

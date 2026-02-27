@@ -159,6 +159,15 @@
 #include "ieffect/esv11_reference/EsBloomRefEffect.h"
 #include "ieffect/esv11_reference/EsWaveformRefEffect.h"
 #include "ieffect/sensorybridge_reference/SbWaveform310RefEffect.h"
+#include "ieffect/LGPTimeReversalMirrorEffect.h"
+#include "ieffect/LGPTimeReversalMirrorEffect_AR.h"
+#include "ieffect/LGPTimeReversalMirrorEffect_Mod1.h"
+#include "ieffect/LGPTimeReversalMirrorEffect_Mod2.h"
+#include "ieffect/LGPTimeReversalMirrorEffect_Mod3.h"
+#include "ieffect/LGPKdVSolitonPairEffect.h"
+#include "ieffect/LGPGoldCodeSpeckleEffect.h"
+#include "ieffect/LGPQuasicrystalLatticeEffect.h"
+#include "ieffect/LGPFresnelCausticSweepEffect.h"
 #include "utils/FastLEDOptim.h"
 #include "../core/narrative/NarrativeEngine.h"
 #include <FastLED.h>
@@ -939,201 +948,240 @@ uint16_t registerAllEffects(RendererActor* renderer) {
     renderer->registerEffect(EID_KURAMOTO_TRANSPORT, &kuramotoTransportInstance);
     total++;
 
-    // Waveform Parity - Sensory Bridge 3.1.0 waveform mode
-    // Intensity-only rendering + palette at output. dt-corrected. Dynamic normalisation.
-    // NOTE: Mapped to EID_LGP_OPAL_FILM in the stable ID scheme.
-    static ieffect::WaveformParityEffect waveformParityInstance;
-    renderer->registerEffect(EID_LGP_OPAL_FILM, &waveformParityInstance);
-    total++;
-
     // =============== HOLOGRAPHIC VARIANTS ===============
 
     // LGP Opal Film - Thin-film iridescence bands
     static ieffect::LGPOpalFilmEffect opalFilmInstance;
-    renderer->registerEffect(EID_LGP_GRATING_SCAN, &opalFilmInstance);
+    renderer->registerEffect(EID_LGP_OPAL_FILM, &opalFilmInstance);
     total++;
 
     // LGP Grating Scan - Diffraction scan highlight
     static ieffect::LGPGratingScanEffect gratingScanInstance;
-    renderer->registerEffect(EID_LGP_STRESS_GLASS, &gratingScanInstance);
+    renderer->registerEffect(EID_LGP_GRATING_SCAN, &gratingScanInstance);
     total++;
 
     // LGP Stress Glass - Photoelastic fringe field
     static ieffect::LGPStressGlassEffect stressGlassInstance;
-    renderer->registerEffect(EID_LGP_MOIRE_SILK, &stressGlassInstance);
+    renderer->registerEffect(EID_LGP_STRESS_GLASS, &stressGlassInstance);
     total++;
 
     // LGP Moire Silk - Two-lattice beat pattern
     static ieffect::LGPMoireSilkEffect moireSilkInstance;
-    renderer->registerEffect(EID_LGP_CAUSTIC_SHARDS, &moireSilkInstance);
+    renderer->registerEffect(EID_LGP_MOIRE_SILK, &moireSilkInstance);
     total++;
 
     // LGP Caustic Shards - Interference with prismatic glints
     static ieffect::LGPCausticShardsEffect causticShardsInstance;
-    renderer->registerEffect(EID_LGP_PARALLAX_DEPTH, &causticShardsInstance);
+    renderer->registerEffect(EID_LGP_CAUSTIC_SHARDS, &causticShardsInstance);
     total++;
 
     // LGP Parallax Depth - Two-layer refractive parallax
     static ieffect::LGPParallaxDepthEffect parallaxDepthInstance;
-    renderer->registerEffect(EID_LGP_STRESS_GLASS_MELT, &parallaxDepthInstance);
+    renderer->registerEffect(EID_LGP_PARALLAX_DEPTH, &parallaxDepthInstance);
     total++;
 
     // LGP Stress Glass (Melt) - Phase-locked wings
     static ieffect::LGPStressGlassMeltEffect stressGlassMeltInstance;
-    renderer->registerEffect(EID_LGP_GRATING_SCAN_BREAKUP, &stressGlassMeltInstance);
+    renderer->registerEffect(EID_LGP_STRESS_GLASS_MELT, &stressGlassMeltInstance);
     total++;
 
     // LGP Grating Scan (Breakup) - Halo breakup
     static ieffect::LGPGratingScanBreakupEffect gratingScanBreakupInstance;
-    renderer->registerEffect(EID_LGP_WATER_CAUSTICS, &gratingScanBreakupInstance);
+    renderer->registerEffect(EID_LGP_GRATING_SCAN_BREAKUP, &gratingScanBreakupInstance);
     total++;
 
     // LGP Water Caustics - Ray-envelope caustic filaments
     static ieffect::LGPWaterCausticsEffect waterCausticsInstance;
-    renderer->registerEffect(EID_LGP_SCHLIEREN_FLOW, &waterCausticsInstance);
+    renderer->registerEffect(EID_LGP_WATER_CAUSTICS, &waterCausticsInstance);
     total++;
 
     // LGP Schlieren Flow - Knife-edge gradient flow
     static ieffect::LGPSchlierenFlowEffect schlierenFlowInstance;
-    renderer->registerEffect(EID_LGP_REACTION_DIFFUSION, &schlierenFlowInstance);
+    renderer->registerEffect(EID_LGP_SCHLIEREN_FLOW, &schlierenFlowInstance);
     total++;
 
     // --- Reaction Diffusion ---
 
     // LGP Reaction Diffusion - Gray-Scott slime
     static ieffect::LGPReactionDiffusionEffect reactionDiffusionInstance;
-    renderer->registerEffect(EID_LGP_REACTION_DIFFUSION_TRIANGLE, &reactionDiffusionInstance);
+    renderer->registerEffect(EID_LGP_REACTION_DIFFUSION, &reactionDiffusionInstance);
     total++;
 
     // LGP RD Triangle - Reaction-diffusion front wedge isolation
     static ieffect::LGPReactionDiffusionTriangleEffect reactionDiffusionTriangleInstance;
-    renderer->registerEffect(EID_LGP_TALBOT_CARPET, &reactionDiffusionTriangleInstance);
+    renderer->registerEffect(EID_LGP_REACTION_DIFFUSION_TRIANGLE, &reactionDiffusionTriangleInstance);
     total++;
 
     // --- Shape Bangers Pack ---
 
     // LGP Talbot Carpet - Self-imaging lattice rug
     static ieffect::LGPTalbotCarpetEffect talbotCarpetInstance;
-    renderer->registerEffect(EID_LGP_AIRY_COMET, &talbotCarpetInstance);
+    renderer->registerEffect(EID_LGP_TALBOT_CARPET, &talbotCarpetInstance);
     total++;
 
     // LGP Airy Comet - Self-accelerating comet with trailing lobes
     static ieffect::LGPAiryCometEffect airyCometInstance;
-    renderer->registerEffect(EID_LGP_MOIRE_CATHEDRAL, &airyCometInstance);
+    renderer->registerEffect(EID_LGP_AIRY_COMET, &airyCometInstance);
     total++;
 
     // LGP Moire Cathedral - Interference arches from close gratings
     static ieffect::LGPMoireCathedralEffect moireCathedralInstance;
-    renderer->registerEffect(EID_LGP_SUPERFORMULA_GLYPH, &moireCathedralInstance);
+    renderer->registerEffect(EID_LGP_MOIRE_CATHEDRAL, &moireCathedralInstance);
     total++;
 
     // LGP Living Glyph - Superformula morphing supershapes
     static ieffect::LGPSuperformulaGlyphEffect superformulaGlyphInstance;
-    renderer->registerEffect(EID_LGP_SPIROGRAPH_CROWN, &superformulaGlyphInstance);
+    renderer->registerEffect(EID_LGP_SUPERFORMULA_GLYPH, &superformulaGlyphInstance);
     total++;
 
     // LGP Spirograph Crown - Hypotrochoid gear-flower loops
     static ieffect::LGPSpirographCrownEffect spirographCrownInstance;
-    renderer->registerEffect(EID_LGP_ROSE_BLOOM, &spirographCrownInstance);
+    renderer->registerEffect(EID_LGP_SPIROGRAPH_CROWN, &spirographCrownInstance);
     total++;
 
     // LGP Rose Bloom - Rhodonea petal engine
     static ieffect::LGPRoseBloomEffect roseBloomInstance;
-    renderer->registerEffect(EID_LGP_HARMONOGRAPH_HALO, &roseBloomInstance);
+    renderer->registerEffect(EID_LGP_ROSE_BLOOM, &roseBloomInstance);
     total++;
 
     // LGP Harmonograph Halo - Lissajous aura orbitals
     static ieffect::LGPHarmonographHaloEffect harmonographHaloInstance;
-    renderer->registerEffect(EID_LGP_RULE30_CATHEDRAL, &harmonographHaloInstance);
+    renderer->registerEffect(EID_LGP_HARMONOGRAPH_HALO, &harmonographHaloInstance);
     total++;
 
     // LGP Rule 30 Cathedral - Elementary CA textile
     static ieffect::LGPRule30CathedralEffect rule30CathedralInstance;
-    renderer->registerEffect(EID_LGP_LANGTON_HIGHWAY, &rule30CathedralInstance);
+    renderer->registerEffect(EID_LGP_RULE30_CATHEDRAL, &rule30CathedralInstance);
     total++;
 
     // LGP Langton Highway - Emergent ant-to-highway projection
     static ieffect::LGPLangtonHighwayEffect langtonHighwayInstance;
-    renderer->registerEffect(EID_LGP_CYMATIC_LADDER, &langtonHighwayInstance);
+    renderer->registerEffect(EID_LGP_LANGTON_HIGHWAY, &langtonHighwayInstance);
     total++;
 
     // LGP Cymatic Ladder - Standing-wave sculpture
     static ieffect::LGPCymaticLadderEffect cymaticLadderInstance;
-    renderer->registerEffect(EID_LGP_MACH_DIAMONDS, &cymaticLadderInstance);
+    renderer->registerEffect(EID_LGP_CYMATIC_LADDER, &cymaticLadderInstance);
     total++;
 
     // LGP Mach Diamonds - Shock-diamond jewellery
     static ieffect::LGPMachDiamondsEffect machDiamondsInstance;
-    renderer->registerEffect(EID_LGP_CHIMERA_CROWN, &machDiamondsInstance);
+    renderer->registerEffect(EID_LGP_MACH_DIAMONDS, &machDiamondsInstance);
     total++;
 
     // --- Holy Shit Bangers Pack ---
 
     static ieffect::LGPChimeraCrownEffect chimeraCrownInstance;
-    renderer->registerEffect(EID_LGP_CATASTROPHE_CAUSTICS, &chimeraCrownInstance);
+    renderer->registerEffect(EID_LGP_CHIMERA_CROWN, &chimeraCrownInstance);
     total++;
 
     static ieffect::LGPCatastropheCausticsEffect catastropheCausticsInstance;
-    renderer->registerEffect(EID_LGP_HYPERBOLIC_PORTAL, &catastropheCausticsInstance);
+    renderer->registerEffect(EID_LGP_CATASTROPHE_CAUSTICS, &catastropheCausticsInstance);
     total++;
 
     static ieffect::LGPHyperbolicPortalEffect hyperbolicPortalInstance;
-    renderer->registerEffect(EID_LGP_LORENZ_RIBBON, &hyperbolicPortalInstance);
+    renderer->registerEffect(EID_LGP_HYPERBOLIC_PORTAL, &hyperbolicPortalInstance);
     total++;
 
     static ieffect::LGPLorenzRibbonEffect lorenzRibbonInstance;
-    renderer->registerEffect(EID_LGP_IFS_BIO_RELIC, &lorenzRibbonInstance);
+    renderer->registerEffect(EID_LGP_LORENZ_RIBBON, &lorenzRibbonInstance);
     total++;
 
     static ieffect::LGPIFSBioRelicEffect ifsBioRelicInstance;
-    renderer->registerEffect(EID_LGP_FLUX_RIFT, &ifsBioRelicInstance);
+    renderer->registerEffect(EID_LGP_IFS_BIO_RELIC, &ifsBioRelicInstance);
     total++;
 
     // --- Experimental Audio Pack ---
 
     static ieffect::LGPFluxRiftEffect fluxRiftInstance;
-    renderer->registerEffect(EID_LGP_BEAT_PRISM, &fluxRiftInstance);
+    renderer->registerEffect(EID_LGP_FLUX_RIFT, &fluxRiftInstance);
     total++;
 
     static ieffect::LGPBeatPrismEffect beatPrismInstance;
-    renderer->registerEffect(EID_LGP_HARMONIC_TIDE, &beatPrismInstance);
+    renderer->registerEffect(EID_LGP_BEAT_PRISM, &beatPrismInstance);
     total++;
 
     static ieffect::LGPHarmonicTideEffect harmonicTideInstance;
-    renderer->registerEffect(EID_LGP_BASS_QUAKE, &harmonicTideInstance);
+    renderer->registerEffect(EID_LGP_HARMONIC_TIDE, &harmonicTideInstance);
     total++;
 
     static ieffect::LGPBassQuakeEffect bassQuakeInstance;
-    renderer->registerEffect(EID_LGP_TREBLE_NET, &bassQuakeInstance);
+    renderer->registerEffect(EID_LGP_BASS_QUAKE, &bassQuakeInstance);
     total++;
 
     static ieffect::LGPTrebleNetEffect trebleNetInstance;
-    renderer->registerEffect(EID_LGP_RHYTHMIC_GATE, &trebleNetInstance);
+    renderer->registerEffect(EID_LGP_TREBLE_NET, &trebleNetInstance);
     total++;
 
     static ieffect::LGPRhythmicGateEffect rhythmicGateInstance;
-    renderer->registerEffect(EID_LGP_SPECTRAL_KNOT, &rhythmicGateInstance);
+    renderer->registerEffect(EID_LGP_RHYTHMIC_GATE, &rhythmicGateInstance);
     total++;
 
     static ieffect::LGPSpectralKnotEffect spectralKnotInstance;
-    renderer->registerEffect(EID_LGP_SALIENCY_BLOOM, &spectralKnotInstance);
+    renderer->registerEffect(EID_LGP_SPECTRAL_KNOT, &spectralKnotInstance);
     total++;
 
     static ieffect::LGPSaliencyBloomEffect saliencyBloomInstance;
-    renderer->registerEffect(EID_LGP_TRANSIENT_LATTICE, &saliencyBloomInstance);
+    renderer->registerEffect(EID_LGP_SALIENCY_BLOOM, &saliencyBloomInstance);
     total++;
 
     static ieffect::LGPTransientLatticeEffect transientLatticeInstance;
-    renderer->registerEffect(EID_LGP_WAVELET_MIRROR, &transientLatticeInstance);
+    renderer->registerEffect(EID_LGP_TRANSIENT_LATTICE, &transientLatticeInstance);
     total++;
 
-    // NOTE: waveletMirrorInstance has no mapping entry (shifted out by retired ID 112 gap)
-    // It will be assigned a proper EID when the next batch of IDs is allocated.
-    // For now, it is not registered.
-    // static ieffect::LGPWaveletMirrorEffect waveletMirrorInstance;
+    static ieffect::LGPWaveletMirrorEffect waveletMirrorInstance;
+    renderer->registerEffect(EID_LGP_WAVELET_MIRROR, &waveletMirrorInstance);
+    total++;
+
+    // =============== SHOWPIECE PACK 3 ===============
+
+    // Time-Reversal Mirror - 1D damped wave recorded then replayed backwards
+    static ieffect::LGPTimeReversalMirrorEffect timeReversalMirrorInstance;
+    renderer->registerEffect(EID_LGP_TIME_REVERSAL_MIRROR, &timeReversalMirrorInstance);
+    total++;
+
+    // KdV Soliton Pair - Two soliton pulses that pass through each other
+    static ieffect::LGPKdVSolitonPairEffect kdvSolitonPairInstance;
+    renderer->registerEffect(EID_LGP_KDV_SOLITON_PAIR, &kdvSolitonPairInstance);
+    total++;
+
+    // Gold Code Speckle - CDMA Gold-code pseudo-random speckle field
+    static ieffect::LGPGoldCodeSpeckleEffect goldCodeSpeckleInstance;
+    renderer->registerEffect(EID_LGP_GOLD_CODE_SPECKLE, &goldCodeSpeckleInstance);
+    total++;
+
+    // Quasicrystal Lattice - Penrose-tiling aperiodic lattice shimmer
+    static ieffect::LGPQuasicrystalLatticeEffect quasicrystalLatticeInstance;
+    renderer->registerEffect(EID_LGP_QUASICRYSTAL_LATTICE, &quasicrystalLatticeInstance);
+    total++;
+
+    // Fresnel Caustic Sweep - Fresnel integral caustic envelope
+    static ieffect::LGPFresnelCausticSweepEffect fresnelCausticSweepInstance;
+    renderer->registerEffect(EID_LGP_FRESNEL_CAUSTIC_SWEEP, &fresnelCausticSweepInstance);
+    total++;
+
+    // Time-Reversal Mirror (Audio-Reactive) - Beat-triggered playback
+    static ieffect::LGPTimeReversalMirrorEffect_AR timeReversalMirrorARInstance;
+    renderer->registerEffect(EID_LGP_TIME_REVERSAL_MIRROR_AR, &timeReversalMirrorARInstance);
+    total++;
+
+    // Time-Reversal Mirror Mod1 - Dispersive medium variant
+    static ieffect::LGPTimeReversalMirrorEffect_Mod1 timeReversalMirrorMod1Instance;
+    renderer->registerEffect(EID_LGP_TIME_REVERSAL_MIRROR_MOD1, &timeReversalMirrorMod1Instance);
+    total++;
+
+    // Time-Reversal Mirror Mod2 - Nonlinear medium variant
+    static ieffect::LGPTimeReversalMirrorEffect_Mod2 timeReversalMirrorMod2Instance;
+    renderer->registerEffect(EID_LGP_TIME_REVERSAL_MIRROR_MOD2, &timeReversalMirrorMod2Instance);
+    total++;
+
+    // Time-Reversal Mirror Mod3 - Lossy medium variant
+    static ieffect::LGPTimeReversalMirrorEffect_Mod3 timeReversalMirrorMod3Instance;
+    renderer->registerEffect(EID_LGP_TIME_REVERSAL_MIRROR_MOD3, &timeReversalMirrorMod3Instance);
+    total++;
 
     // =============== EFFECT COUNT PARITY VALIDATION ===============
-    constexpr uint16_t EXPECTED_EFFECT_COUNT = 161;
+    constexpr uint16_t EXPECTED_EFFECT_COUNT = 170;
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

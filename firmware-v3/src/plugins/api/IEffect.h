@@ -97,7 +97,20 @@ struct EffectMetadata {
 };
 
 /**
- * @brief Effect parameter descriptor for dynamic UI generation
+ * @brief Parameter value type hint for UI generation
+ */
+enum class EffectParameterType : uint8_t {
+    FLOAT = 0,  // Continuous float slider
+    INT   = 1,  // Integer stepper
+    BOOL  = 2,  // Toggle switch
+    ENUM  = 3   // Discrete choice picker
+};
+
+/**
+ * @brief Effect parameter descriptor
+ *
+ * Extended metadata enables rich UI generation on iOS/Tab5 control surfaces.
+ * The 5-field constructor remains for backward compatibility with existing effects.
  */
 struct EffectParameter {
     const char* name;           // Parameter name (used as key)
@@ -105,10 +118,28 @@ struct EffectParameter {
     float minValue;             // Minimum allowed value
     float maxValue;             // Maximum allowed value
     float defaultValue;         // Initial value
+    EffectParameterType type;   // Value type for UI/validation
+    float step;                 // Suggested step size for UI
+    const char* group;          // Control group (timing/wave/blend/...)
+    const char* unit;           // Display unit (s, Hz, %, x, ...)
+    bool advanced;              // True = dense/internal control
 
+    // Full 10-field constructor
+    EffectParameter(const char* n, const char* d,
+                    float min, float max, float def,
+                    EffectParameterType t,
+                    float s,
+                    const char* g,
+                    const char* u,
+                    bool adv)
+        : name(n), displayName(d), minValue(min), maxValue(max), defaultValue(def),
+          type(t), step(s), group(g), unit(u), advanced(adv) {}
+
+    // Backward-compatible 5-field constructor (existing effects keep working)
     EffectParameter(const char* n = "", const char* d = "",
                     float min = 0.0f, float max = 1.0f, float def = 0.5f)
-        : name(n), displayName(d), minValue(min), maxValue(max), defaultValue(def) {}
+        : name(n), displayName(d), minValue(min), maxValue(max), defaultValue(def),
+          type(EffectParameterType::FLOAT), step(0.01f), group(""), unit(""), advanced(false) {}
 };
 
 /**

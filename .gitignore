@@ -58,6 +58,10 @@ wifi_credentials.ini
 # Local tooling caches
 .cache/
 
+# iOS build artifacts and design tool outputs
+lightwave-ios-v2/build/
+lightwave-ios-v2/docs/Rive/
+
 # Claude / local agent tooling (keep folder structure tracked via .claude/.gitkeep)
 .claude/**
 !.claude/.gitkeep

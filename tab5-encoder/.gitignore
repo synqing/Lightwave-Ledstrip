@@ -19,3 +19,9 @@ wifi_credentials.ini
 *.elf
 *.bin
 *.hex
+
+# Build-generated
+compile_commands.json
+
+# Local tooling / caches
+.cache/

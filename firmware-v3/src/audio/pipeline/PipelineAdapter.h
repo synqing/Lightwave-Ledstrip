@@ -88,12 +88,23 @@ public:
         // novelty at 1.0 during normal programme material.
         float fluxScale           = 20.0f;
 
-        // RMS silence gate for spectrum normalization.
-        // When RMS is below this threshold, spectrum output is zeroed.
-        // Prevents peak-normalization from amplifying mic noise to full scale.
-        // The Goertzel backend has its own noise floor subtraction; this is
-        // PipelineCore's equivalent.
-        float silenceRmsGate      = 0.0005f;  // ~-66 dBFS (lets very quiet-but-real mic signal through)
+        // RMS silence gate with Schmitt trigger hysteresis.
+        // Prevents dark flicker during quiet musical passages where RMS
+        // briefly dips below a single threshold. The gate opens at the
+        // higher threshold (sensitive) and only closes at the lower
+        // threshold (aggressive) after a hold period expires.
+        //
+        // silenceRmsGateOpen:  gate opens when RMS rises above this
+        // silenceRmsGateClose: gate closes when RMS drops below this
+        // silenceGateHoldHops: hold gate open for N hops after last
+        //                      above-threshold signal (~200ms at 125 Hz)
+        float silenceRmsGateOpen   = 0.02f;    // Open threshold (sensitive)
+        float silenceRmsGateClose  = 0.005f;   // Close threshold (aggressive low)
+        uint16_t silenceGateHoldHops = 25;     // Hold period in hops
+
+        // Legacy single-threshold field kept for reference / fallback.
+        // Not used by the Schmitt trigger logic.
+        float silenceRmsGate      = 0.0005f;  // ~-66 dBFS (UNUSED -- see above)
     };
 
     PipelineAdapter() = default;
@@ -106,6 +117,8 @@ public:
         m_freqMap.init(cfg.sampleRate, cfg.fftSize);
         m_prevSnareEnergy = 0.0f;
         m_prevHihatEnergy = 0.0f;
+        m_spectrumGateOpen = true;         // Start open, close naturally if silent
+        m_silenceGateHoldCounter = 0;
     }
 
     // Accessor for FrequencyMap (used by AudioContext extensions)
@@ -151,6 +164,10 @@ private:
     // Percussion onset state
     float m_prevSnareEnergy = 0.0f;
     float m_prevHihatEnergy = 0.0f;
+
+    // Schmitt trigger state for silence gate hysteresis
+    bool     m_spectrumGateOpen      = true;   // Initialise open
+    uint16_t m_silenceGateHoldCounter = 0;
 
     // Build bins64 backward-compat shim via 4:1 averaging
     void buildBins64Shim(const float* normSpectrum, float* bins64Out);

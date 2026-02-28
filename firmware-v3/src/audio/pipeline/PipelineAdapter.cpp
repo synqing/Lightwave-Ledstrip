@@ -85,9 +85,30 @@ void PipelineAdapter::adapt(
     out.flux = scaledFlux / (1.0f + scaledFlux);
 
     // ------------------------------------------------------------------
-    // 2. Band energies -- direct mapping (both are 8-band, [0,1])
+    // 2. Silence gate — Schmitt trigger with hold period
     // ------------------------------------------------------------------
-    if (out.rmsUngated >= m_config.silenceRmsGate) {
+    // Prevents dark flicker during quiet musical passages (soft vocals,
+    // ambient sections) where RMS briefly dips below a single threshold.
+    //
+    // - Gate opens when RMS rises above silenceRmsGateOpen  (sensitive)
+    // - Gate stays open for silenceGateHoldHops after last above-threshold hop
+    // - Gate closes only when RMS drops below silenceRmsGateClose (aggressive)
+    //   AND the hold counter has expired
+    //
+    if (out.rmsUngated >= m_config.silenceRmsGateOpen) {
+        m_spectrumGateOpen = true;
+        m_silenceGateHoldCounter = m_config.silenceGateHoldHops;
+    } else if (m_spectrumGateOpen && m_silenceGateHoldCounter > 0) {
+        --m_silenceGateHoldCounter;  // Hold open during countdown
+    } else if (out.rmsUngated < m_config.silenceRmsGateClose) {
+        m_spectrumGateOpen = false;
+    }
+    const bool spectrumGateOpen = m_spectrumGateOpen;
+
+    // ------------------------------------------------------------------
+    // 3. Band energies -- direct mapping (both are 8-band, [0,1])
+    // ------------------------------------------------------------------
+    if (spectrumGateOpen) {
         for (uint8_t i = 0; i < 8; ++i) {
             out.bands[i] = frame.bands[i];
         }
@@ -98,9 +119,9 @@ void PipelineAdapter::adapt(
     }
 
     // ------------------------------------------------------------------
-    // 3. Chroma -- direct mapping (both are 12-bin, [0,1])
+    // 4. Chroma -- direct mapping (both are 12-bin, [0,1])
     // ------------------------------------------------------------------
-    if (out.rmsUngated >= m_config.silenceRmsGate) {
+    if (spectrumGateOpen) {
         for (uint8_t i = 0; i < 12; ++i) {
             out.chroma[i] = frame.chroma[i];
         }
@@ -111,7 +132,7 @@ void PipelineAdapter::adapt(
     }
 
     // ------------------------------------------------------------------
-    // 4. Waveform -- subsample 256 -> 128 (every other sample)
+    // 5. Waveform -- subsample 256 -> 128 (every other sample)
     // ------------------------------------------------------------------
     if (hopBuffer) {
         for (uint8_t i = 0; i < 128; ++i) {
@@ -120,13 +141,8 @@ void PipelineAdapter::adapt(
     }
 
     // ------------------------------------------------------------------
-    // 5. Full-resolution spectrum (RMS-gated)
+    // 6. Full-resolution spectrum (gated by Schmitt trigger above)
     // ------------------------------------------------------------------
-    // Gate: If RMS is below silence threshold, zero the spectrum.
-    // Without this gate, peak-normalization amplifies mic noise to 1.0,
-    // saturating bins64/spectrogram and driving LEDs to max brightness.
-    const bool spectrumGateOpen = (out.rmsUngated >= m_config.silenceRmsGate);
-
     if (magSpectrum && spectrumGateOpen) {
         normaliseMagnitudes(magSpectrum, m_bins256, BINS256_COUNT);
         memcpy(out.bins256, m_bins256, sizeof(float) * BINS256_COUNT);
@@ -136,7 +152,7 @@ void PipelineAdapter::adapt(
     }
 
     // ------------------------------------------------------------------
-    // 6. Bins64 backward-compat shim (DEPRECATED)
+    // 7. Bins64 backward-compat shim (DEPRECATED)
     // ------------------------------------------------------------------
     if (magSpectrum && spectrumGateOpen) {
         buildBins64Shim(m_bins256, out.bins64);
@@ -150,7 +166,7 @@ void PipelineAdapter::adapt(
     }
 
     // ------------------------------------------------------------------
-    // 7. Percussion detection (derived from full spectrum)
+    // 8. Percussion detection (derived from full spectrum)
     // ------------------------------------------------------------------
     if (magSpectrum && spectrumGateOpen) {
         derivePercussion(
@@ -169,7 +185,7 @@ void PipelineAdapter::adapt(
     }
 
     // ------------------------------------------------------------------
-    // 8. Tempo/beat -- tracker-native lock and confidence passthrough
+    // 9. Tempo/beat -- tracker-native lock and confidence passthrough
     // ------------------------------------------------------------------
     out.tempoLocked = (frame.tempo_locked > 0.5f);
     float conf = frame.tempo_confidence;
@@ -179,7 +195,7 @@ void PipelineAdapter::adapt(
     out.tempoBeatTick  = (frame.beat_event > 0.0f);
 
     // ------------------------------------------------------------------
-    // 9. Full-resolution tempo fields for ControlBus passthrough
+    // 10. Full-resolution tempo fields for ControlBus passthrough
     // ------------------------------------------------------------------
     out.tempoBpm           = frame.tempo_bpm;
     out.tempoBeatStrength  = (frame.beat_event > 0.0f) ? frame.beat_event : 0.0f;

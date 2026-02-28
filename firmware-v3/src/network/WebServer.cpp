@@ -486,7 +486,7 @@ void WebServer::update() {
         if ((nowMs - s_lastWsDiagLogMs) >= 10000) {
             s_lastWsDiagLogMs = nowMs;
             const webserver::WsGateway::Stats wsStats = m_wsGateway->getStats();
-            LW_LOGI(
+            LW_LOGD(
                 "WS diag: active=%u ok=%lu rejCooldown=%lu rejOverlap=%lu rejLimit=%lu disc=%lu parseErr=%lu oversize=%lu unknown=%lu",
                 static_cast<unsigned>(m_ws ? m_ws->count() : 0),
                 static_cast<unsigned long>(wsStats.connectAccepted),

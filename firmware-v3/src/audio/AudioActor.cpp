@@ -663,7 +663,7 @@ void AudioActor::onTick()
     static uint32_t s_tickDbgCount = 0;
     s_tickDbgCount++;
     if (s_tickDbgCount <= 5 || (s_tickDbgCount % 1250) == 0) {
-        LW_LOGI("AudioActor tick #%lu (PipelineCore, state=%d)", (unsigned long)s_tickDbgCount, static_cast<int>(m_state));
+        LW_LOGD("AudioActor tick #%lu (PipelineCore, state=%d)", (unsigned long)s_tickDbgCount, static_cast<int>(m_state));
     }
 
     // Record tick start time
@@ -765,7 +765,7 @@ void AudioActor::captureHop()
                 dcSum += m_hopBuffer[i];
             }
             int32_t dcMean = static_cast<int32_t>(dcSum / HOP_SIZE);
-            LW_LOGI("DC_DIAG: mean=%ld min=%d max=%d rms=%.4f zeros=%lu",
+            LW_LOGD("DC_DIAG: mean=%ld min=%d max=%d rms=%.4f zeros=%lu",
                      (long)dcMean, rawMin, rawMax, m_diag.lastRawRms,
                      (unsigned long)m_diag.zeroHopCount);
         }
@@ -994,7 +994,7 @@ void AudioActor::processHop()
     if (++s_stackLogCounter >= 250) {
         s_stackLogCounter = 0;
         UBaseType_t hwm = uxTaskGetStackHighWaterMark(nullptr);
-        LW_LOGI("STACK: AudioActor high-water mark = %u words (%u bytes free)",
+        LW_LOGD("STACK: AudioActor high-water mark = %u words (%u bytes free)",
                 (unsigned)hwm, (unsigned)(hwm * sizeof(StackType_t)));
     }
 
@@ -1706,7 +1706,7 @@ void AudioActor::onTick()
     static uint32_t s_tickDbgCount = 0;
     s_tickDbgCount++;
     if (s_tickDbgCount <= 5 || (s_tickDbgCount % 1250) == 0) {
-        LW_LOGI("AudioActor tick #%lu (state=%d)", (unsigned long)s_tickDbgCount, static_cast<int>(m_state));
+        LW_LOGD("AudioActor tick #%lu (state=%d)", (unsigned long)s_tickDbgCount, static_cast<int>(m_state));
     }
 
     // Record tick start time

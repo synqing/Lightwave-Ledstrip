@@ -8,11 +8,11 @@ This file contains extracted constraints from code and documentation. Agents mus
 
 | Operation | Budget | Actual | Source |
 |-----------|--------|--------|--------|
-| **Frame total** | 8.33ms (120 FPS) | 5.68ms (176 FPS) | docs/architecture/00_* |
-| Effect calculation | 2ms max | ~1.2ms typical | Measured |
+| **Frame total (raw)** | 8.33ms (120 FPS target) | ~7.7ms on baseline effects | Measured (2026-02-28) |
+| Effect calculation | 2ms max | ~1.0-1.1ms typical | Measured (2026-02-28) |
 | Transition processing | 1ms max | ~0.8ms typical | Measured |
-| FastLED.show() | Fixed | ~2.5ms | Hardware limit |
-| LED data transfer | Fixed | 9.6ms for 320 LEDs @ 800kHz | WS2812 spec |
+| FastLED.show() | Fixed (wire + driver) | ~6.3ms (dual 160 + status 30) | Measured (2026-02-28) |
+| LED wire transfer | Fixed | ~4.8ms (2x160 parallel) + status overhead | WS2812 spec + measurement |
 
 **Rule:** Effect code must complete in < 2ms to maintain 120 FPS.
 
@@ -128,9 +128,9 @@ for (int i = 0; i < 80; i++) {
 | Constraint | Value | Source |
 |------------|-------|--------|
 | **Flash usage** | < 80% recommended | 3.34MB total |
-| **Current flash** | ~31% (1MB) | Last build |
+| **Current flash** | ~33.2% (2.17MB) | Build `esp32dev_audio_pipelinecore` (2026-02-28) |
 | **RAM usage** | < 80% recommended | 320KB total |
-| **Current RAM** | ~19% (63KB) | Last build |
+| **Current RAM** | ~30.3% (99KB) | Build `esp32dev_audio_pipelinecore` (2026-02-28) |
 
 ---
 
@@ -157,6 +157,7 @@ This section is updated when agents discover new constraints through failures.
 | Constraint | Discovered | Run ID | Evidence |
 |------------|------------|--------|----------|
 | ArduinoJson deprecation warnings are safe to ignore | 2025-12-12 | worker-002 | Build succeeds with warnings |
+| On ESP32-S3 FastLED RMT4 (`ESP-IDF 4.4.x`), `FASTLED_RMT_MAX_CHANNELS` must be `4` when `FASTLED_RMT_MEM_BLOCKS=2` to enable channel `0` + `2` parallel output | 2026-02-28 | manual-rmt-bottleneck | Live logs: `show` reduced from ~11.16ms to ~6.31ms after setting `4` |
 
 ---
 

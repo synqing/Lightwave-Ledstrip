@@ -225,10 +225,13 @@ greater than 20 ms, the audio task is being starved. Possible causes:
 
 #### RMT contention: `fastled_rmt_show` balloons
 
-Normal `fastled_rmt_show` duration is approximately 9.6 ms for 320 WS2812
-LEDs (30 us per LED). If it suddenly jumps to 15-20 ms, check:
+Normal `fastled_rmt_show` duration on ESP32-S3 (`esp32dev_audio_pipelinecore`)
+is approximately 6.2-6.4 ms for dual 160-LED strips plus the 30-LED status strip.
+If it jumps toward ~11 ms, check:
 
-- `FASTLED_RMT_MAX_CHANNELS` setting (should be 2 for dual-strip).
+- `FASTLED_RMT_MAX_CHANNELS` for the RMT4 path.
+  With `FASTLED_RMT_MEM_BLOCKS=2`, this must be `4` on ESP32-S3 to expose
+  channel indices `0` and `2` for parallel strip transmission.
 - Other peripherals using the RMT peripheral.
 
 #### Cross-core latency: gap between publish and read

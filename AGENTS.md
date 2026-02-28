@@ -6,9 +6,17 @@ ESP32-S3 LED controller for a dual-strip Light Guide Plate. 320 WS2812 LEDs, 100
 
 ```bash
 cd firmware-v3
-pio run -e esp32dev_audio              # build
-pio run -e esp32dev_audio -t upload    # build + flash
-pio device monitor -b 115200           # serial monitor
+
+# Primary development profile (PipelineCore backend)
+pio run -e esp32dev_audio_pipelinecore
+pio run -e esp32dev_audio_pipelinecore -t upload
+
+# Alternative default profile (ESV11 backend; [platformio] default_envs)
+pio run -e esp32dev_audio_esv11
+pio run -e esp32dev_audio_esv11 -t upload
+
+# Serial monitor
+pio device monitor -b 115200
 ```
 
 ## Hard Constraints

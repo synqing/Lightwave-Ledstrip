@@ -96,25 +96,11 @@ void RippleEnhancedEffect::render(plugins::EffectContext& ctx) {
         if (newHop) {
             m_lastHopSeq = ctx.audio.controlBus.hop_seq;
 
-            // =====================================================================
-            // 64-bin Sub-Bass Kick Detection (bins 0-5 = 110-155 Hz)
-            // Deep kick drums that the 12-bin chromagram misses entirely.
-            // =====================================================================
-            float kickSum = 0.0f;
-            for (uint8_t i = 0; i < 6; ++i) {
-                kickSum += ctx.audio.bin(i);
-            }
-            m_targetKick = kickSum / 6.0f;
+            // Sub-bass kick detection — deep kick drums the chromagram misses.
+            m_targetKick = ctx.audio.controlBus.bands[0];  // Migrated from bins64[0..5]
 
-            // =====================================================================
-            // 64-bin Treble Shimmer (bins 48-63 = 1.3-4.2 kHz)
-            // Hi-hat and cymbal energy for wavefront sparkle enhancement.
-            // =====================================================================
-            float trebleSum = 0.0f;
-            for (uint8_t i = 48; i < 64; ++i) {
-                trebleSum += ctx.audio.bin(i);
-            }
-            m_targetTreble = trebleSum / 16.0f;
+            // Treble shimmer — hi-hat/cymbal energy for wavefront sparkle.
+            m_targetTreble = (ctx.audio.controlBus.bands[5] + ctx.audio.controlBus.bands[6] + ctx.audio.controlBus.bands[7]) * (1.0f / 3.0f);  // Migrated from bins64[48..63]
 
             // Update chromagram targets
             for (uint8_t i = 0; i < 12; i++) {

@@ -36,13 +36,7 @@ static inline const float* selectChroma12(const audio::ControlBusFrame& cb) {
     return cb.chroma;
 }
 
-static inline float meanAdaptiveBins(const plugins::AudioContext& a, uint8_t start, uint8_t count) {
-    float sum = 0.0f;
-    for (uint8_t i = 0; i < count; ++i) {
-        sum += a.binAdaptive((uint8_t)(start + i));
-    }
-    return sum / (float)count;
-}
+// meanAdaptiveBins() removed — migrated to backend-agnostic bands[8] octave access.
 
 } // namespace
 
@@ -85,11 +79,14 @@ void LGPHolographicEsTunedEffect::render(plugins::EffectContext& ctx) {
     bool beatLock = false;
 
     if (ctx.audio.available) {
-        // 64-bin adaptive spectrum is stable across both legacy + ES backend.
-        // Zones: low (0..7), mid (16..31), high (48..63)
-        bass = meanAdaptiveBins(ctx.audio, 0, 8);
-        lowMid = meanAdaptiveBins(ctx.audio, 16, 16);
-        treble = meanAdaptiveBins(ctx.audio, 48, 16);
+        // Migrated from bins64 to backend-agnostic bands[8] octave access:
+        //   bins[0..7]   (bass)   -> (bands[0] + bands[1]) * 0.5f
+        //   bins[16..31] (mid)    -> (bands[3] + bands[4]) * 0.5f
+        //   bins[48..63] (treble) -> (bands[5] + bands[6] + bands[7]) / 3
+        const auto& b = ctx.audio.controlBus.bands;
+        bass   = (b[0] + b[1]) * 0.5f;
+        lowMid = (b[3] + b[4]) * 0.5f;
+        treble = (b[5] + b[6] + b[7]) * (1.0f / 3.0f);
 
         flux = ctx.audio.fastFlux();
         beatPhase = ctx.audio.beatPhase();

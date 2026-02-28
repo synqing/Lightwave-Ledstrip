@@ -55,28 +55,15 @@ static inline float decay(float value, float dt, float tauS) {
     return value * expf(-dt / tauS);
 }
 
-static inline float binsRangeEnergy(const plugins::EffectContext& ctx, uint8_t start, uint8_t end) {
-    if (!ctx.audio.available || start > end) return 0.0f;
-    float sum = 0.0f;
-    uint8_t count = 0;
-    for (uint8_t i = start; i <= end && i < 64; ++i) {
-        sum += clamp01f(ctx.audio.binAdaptive(i));
-        ++count;
-    }
-    return (count > 0) ? (sum / static_cast<float>(count)) : 0.0f;
-}
+// binsRangeEnergy() removed — migrated to backend-agnostic bands[8] octave access.
+// Call sites replaced with direct bands[] reads inline.
 
-static inline uint8_t dominantNoteFromBins(const plugins::EffectContext& ctx) {
+static inline uint8_t dominantNoteFromChroma(const plugins::EffectContext& ctx) {
     if (!ctx.audio.available) return 0;
 
-    // Accumulate per-note scores across octaves, then use circular weighted
-    // mean to avoid discontinuous jumps when two adjacent notes compete.
-    float scores[12] = {};
-    for (uint8_t note = 0; note < 12; ++note) {
-        for (uint8_t b = note; b < 48; b = static_cast<uint8_t>(b + 12)) {
-            scores[note] += clamp01f(ctx.audio.binAdaptive(b));
-        }
-    }
+    // Migrated from bin-walking (binAdaptive across octaves) to backend-agnostic
+    // chroma[12]. The control bus chroma already provides per-note energy.
+    const float* scores = ctx.audio.controlBus.chroma;
 
     // Circular weighted mean over 12 note positions (30-degree steps)
     float cx = 0.0f, sy = 0.0f;
@@ -103,7 +90,7 @@ static inline uint8_t selectMusicalHue(const plugins::EffectContext& ctx, bool& 
 
     const uint8_t note = chordGateOpen
         ? static_cast<uint8_t>(ctx.audio.rootNote() % 12)
-        : dominantNoteFromBins(ctx);
+        : dominantNoteFromChroma(ctx);
     return NOTE_HUES[note];
 }
 
@@ -275,7 +262,11 @@ void LGPBeatPrismEffect::render(plugins::EffectContext& ctx) {
     }
     const float master = (ctx.brightness / 255.0f) * m_audioPresence;
 
-    const float treble = binsRangeEnergy(ctx, 42, 63);
+    // Migrated from binsRangeEnergy(ctx, 42, 63) to bands[5..7] (presence/brilliance/air)
+    const auto& bands = ctx.audio.controlBus.bands;
+    const float treble = ctx.audio.available
+        ? (bands[5] + bands[6] + bands[7]) * (1.0f / 3.0f)
+        : 0.0f;
     const float prismTarget = ctx.audio.available
         ? clamp01f(0.55f * ctx.audio.beatStrength() + 0.45f * treble)
         : fallbackSine(ctx.rawTotalTimeMs, 0.0011f, 1.0f);
@@ -367,7 +358,7 @@ void LGPHarmonicTideEffect::render(plugins::EffectContext& ctx) {
     // Root note with hysteresis gate and circular smoothing (note domain wraps at 12)
     const float rootTarget = ctx.audio.available
         ? static_cast<float>(m_chordGateOpen ? (ctx.audio.rootNote() % 12)
-                                             : dominantNoteFromBins(ctx))
+                                             : dominantNoteFromChroma(ctx))
         : 2.0f;
     m_rootSmooth = smoothNoteCircular(m_rootSmooth, rootTarget, dtSignal, 0.30f);
 
@@ -705,9 +696,14 @@ void LGPSpectralKnotEffect::render(plugins::EffectContext& ctx) {
     }
     const float master = (ctx.brightness / 255.0f) * m_audioPresence;
 
-    const float low = binsRangeEnergy(ctx, 0, 10);
-    const float mid = binsRangeEnergy(ctx, 12, 32);
-    const float high = binsRangeEnergy(ctx, 36, 63);
+    // Migrated from binsRangeEnergy() to backend-agnostic bands[8]:
+    //   bins[0..10]  (low)  -> (bands[0] + bands[1]) * 0.5f
+    //   bins[12..32] (mid)  -> (bands[2] + bands[3]) * 0.5f
+    //   bins[36..63] (high) -> (bands[4] + bands[5] + bands[6] + bands[7]) * 0.25f
+    const auto& bands = ctx.audio.controlBus.bands;
+    const float low  = ctx.audio.available ? (bands[0] + bands[1]) * 0.5f : 0.0f;
+    const float mid  = ctx.audio.available ? (bands[2] + bands[3]) * 0.5f : 0.0f;
+    const float high = ctx.audio.available ? (bands[4] + bands[5] + bands[6] + bands[7]) * 0.25f : 0.0f;
 
     const float knotTarget = ctx.audio.available
         ? clamp01f(fabsf(low - high) + 0.45f * mid)

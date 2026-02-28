@@ -77,6 +77,12 @@ void LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {
         return;
     }
 
+    // TODO: Migrate to bins256 + FrequencyMap for accurate frequency-to-LED mapping.
+    // The bins64 shim path works but uses Goertzel log-spaced indexing which is not
+    // frequency-accurate under the PipelineCore FFT backend. The correct long-term fix
+    // is to use ControlBusFrame::bins256[] with linear Hz-to-LED mapping, or fall back
+    // to bands[8] mapped to 8 LED zones (each band -> 10 LEDs from centre).
+    //
     // Prefer adaptive normalisation (Sensory Bridge max follower); fall back to raw bins if unavailable.
     const float* bins64 = ctx.audio.bins64Adaptive();
     if (!bins64) {
@@ -219,6 +225,10 @@ void LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {
 }
 
 uint16_t LGPSpectrumDetailEffect::binToLedDistance(uint8_t bin) const {
+    // TODO: This assumes Goertzel log spacing. Under PipelineCore the bins64 shim
+    // uses 4:1 averaged FFT bins which are linearly spaced — the log mapping here
+    // is therefore not frequency-accurate. Migrate to bins256 + FrequencyMap.
+    //
     // Logarithmic mapping: lower bins closer to center
     // bin 0 (110 Hz) -> distance 0 (center)
     // bin 63 (4186 Hz) -> distance ~79 (edge)

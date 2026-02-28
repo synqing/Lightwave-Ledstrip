@@ -151,16 +151,8 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
         m_lastHopSeq = ctx.audio.controlBus.hop_seq;
         m_iter++;
 
-        // =====================================================================
-        // 64-bin Sub-Bass Processing (bins 0-5 = 110-155 Hz for deep bass punch)
-        // Uses fine-grained frequency data for sub-bass detail the 8-band
-        // analyzer misses. This gives the effect more punch on bass drops.
-        // =====================================================================
-        float subBassSum = 0.0f;
-        for (uint8_t i = 0; i < 6; ++i) {
-            subBassSum += ctx.audio.binAdaptive(i);  // bins64Adaptive[0..5] is more robust across backends
-        }
-        float subBassAvg = subBassSum / 6.0f;
+        // Migrated from bins64[0..5] to backend-agnostic bands[0]
+        float subBassAvg = ctx.audio.controlBus.bands[0];
 
         // Fast attack, slow release for punchy bass response
         if (subBassAvg > m_subBassPulse) {

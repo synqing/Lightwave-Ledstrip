@@ -79,12 +79,8 @@ void LGPStarBurstEnhancedEffect::render(plugins::EffectContext& ctx) {
                 m_burst = 1.0f;
             }
             
-            // Enhanced: 64-bin Sub-Bass Detection (bins 0-5 = ~110-155 Hz)
-            float subBassSum = 0.0f;
-            for (uint8_t i = 0; i < 6; ++i) {
-                subBassSum += ctx.audio.bin(i);
-            }
-            m_targetSubBass = subBassSum / 6.0f;
+            // Migrated from bins64[0..5] to backend-agnostic bands[0]
+            m_targetSubBass = ctx.audio.controlBus.bands[0];
         }
     }
 #endif

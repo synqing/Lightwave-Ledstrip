@@ -64,16 +64,8 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
             if (energyNorm < 0.0f) energyNorm = 0.0f;
             if (energyNorm > 1.0f) energyNorm = 1.0f;
 
-            // =================================================================
-            // 64-bin Sub-Bass Wavelength Modulation (bins 0-5 = 110-155 Hz)
-            // Deep bass widens the interference pattern - kick drums create
-            // slow, majestic wave expansion instead of tight fringes.
-            // =================================================================
-            float bassSum = 0.0f;
-            for (uint8_t i = 0; i < 6; ++i) {
-                bassSum += ctx.audio.binAdaptive(i);
-            }
-            float bassNorm = bassSum / 6.0f;
+            // Sub-bass wavelength modulation — kick drums widen interference fringes.
+            float bassNorm = ctx.audio.controlBus.bands[0];  // Migrated from bins64Adaptive[0..5]
             // Smooth with fast attack, slower decay for punchy response
             if (bassNorm > m_bassWavelength) {
                 m_bassWavelength = bassNorm;  // Instant attack
@@ -81,16 +73,8 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
                 m_bassWavelength = effects::chroma::dtDecay(m_bassWavelength, 0.85f, rawDtEarly);    // dt-corrected ~100ms decay
             }
 
-            // =================================================================
-            // 64-bin Treble Overlay (bins 48-63 = 1.3-4.2 kHz)
-            // Hi-hat and cymbal energy adds high-frequency sparkle on top
-            // of the interference pattern.
-            // =================================================================
-            float trebleSum = 0.0f;
-            for (uint8_t i = 48; i < 64; ++i) {
-                trebleSum += ctx.audio.binAdaptive(i);
-            }
-            m_trebleOverlay = trebleSum / 16.0f;
+            // Treble overlay — hi-hat/cymbal sparkle on interference pattern.
+            m_trebleOverlay = (ctx.audio.controlBus.bands[5] + ctx.audio.controlBus.bands[6] + ctx.audio.controlBus.bands[7]) * (1.0f / 3.0f);  // Migrated from bins64Adaptive[48..63]
 
             m_chromaEnergySum -= m_chromaEnergyHist[m_chromaHistIdx];
             m_chromaEnergyHist[m_chromaHistIdx] = energyNorm;

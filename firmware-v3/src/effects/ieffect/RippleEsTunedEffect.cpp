@@ -87,15 +87,8 @@ void RippleEsTunedEffect::render(plugins::EffectContext& ctx) {
         if (newHop) {
             m_lastHopSeq = ctx.audio.controlBus.hop_seq;
 
-            // FFT energy summaries (prefer adaptive bins when present).
-            // ES backend populates bins64 + bins64Adaptive; use adaptive for stability.
-            float subBassSum = 0.0f;
-            for (uint8_t i = 0; i < 6; i++) {
-                subBassSum += ctx.audio.binAdaptive(i);
-            }
-            float subBass = subBassSum * (1.0f / 6.0f);
-            if (subBass > 1.0f) subBass = 1.0f;
-            if (subBass < 0.0f) subBass = 0.0f;
+            // Sub-bass energy — backend-agnostic, already smoothed and normalised.
+            float subBass = ctx.audio.controlBus.bands[0];  // Migrated from bins64Adaptive[0..5]
             // Fast attack / medium decay to feel punchy but stable.
             if (subBass > m_subBass) {
                 m_subBass = subBass;
@@ -103,13 +96,8 @@ void RippleEsTunedEffect::render(plugins::EffectContext& ctx) {
                 m_subBass = (m_subBass * 0.86f) + (subBass * 0.14f);
             }
 
-            float trebleSum = 0.0f;
-            for (uint8_t i = 48; i < 64; i++) {
-                trebleSum += ctx.audio.binAdaptive(i);
-            }
-            float treble = trebleSum * (1.0f / 16.0f);
-            if (treble > 1.0f) treble = 1.0f;
-            if (treble < 0.0f) treble = 0.0f;
+            // Treble energy — hi-hat/cymbal sparkle, backend-agnostic.
+            float treble = (ctx.audio.controlBus.bands[5] + ctx.audio.controlBus.bands[6] + ctx.audio.controlBus.bands[7]) * (1.0f / 3.0f);  // Migrated from bins64Adaptive[48..63]
             m_treble = (m_treble * 0.80f) + (treble * 0.20f);
 
             float flux = ctx.audio.fastFlux();

@@ -57,6 +57,30 @@ using namespace lightwaveos::transitions;
 using namespace lightwaveos::palettes;
 
 namespace {
+
+/// Reinhard tone-map scale LUT (knee = 1.0).
+/// lut[avg] = round(255 * 255 / (avg + 255))
+/// Used with CRGB::nscale8() to replace per-pixel float maths.
+/// 256 bytes in .rodata (flash), zero DRAM cost.
+constexpr uint8_t kToneMapLUT[256] = {
+    255, 254, 253, 252, 251, 250, 249, 248, 247, 246, 245, 244, 244, 243, 242, 241,
+    240, 239, 238, 237, 236, 236, 235, 234, 233, 232, 231, 231, 230, 229, 228, 227,
+    227, 226, 225, 224, 223, 223, 222, 221, 220, 220, 219, 218, 217, 217, 216, 215,
+    215, 214, 213, 212, 212, 211, 210, 210, 209, 208, 208, 207, 206, 206, 205, 204,
+    204, 203, 203, 202, 201, 201, 200, 199, 199, 198, 198, 197, 196, 196, 195, 195,
+    194, 194, 193, 192, 192, 191, 191, 190, 190, 189, 188, 188, 187, 187, 186, 186,
+    185, 185, 184, 184, 183, 183, 182, 182, 181, 181, 180, 180, 179, 179, 178, 178,
+    177, 177, 176, 176, 175, 175, 174, 174, 173, 173, 172, 172, 172, 171, 171, 170,
+    170, 169, 169, 168, 168, 168, 167, 167, 166, 166, 165, 165, 165, 164, 164, 163,
+    163, 163, 162, 162, 161, 161, 161, 160, 160, 159, 159, 159, 158, 158, 157, 157,
+    157, 156, 156, 156, 155, 155, 154, 154, 154, 153, 153, 153, 152, 152, 152, 151,
+    151, 151, 150, 150, 149, 149, 149, 148, 148, 148, 147, 147, 147, 146, 146, 146,
+    145, 145, 145, 144, 144, 144, 144, 143, 143, 143, 142, 142, 142, 141, 141, 141,
+    140, 140, 140, 140, 139, 139, 139, 138, 138, 138, 137, 137, 137, 137, 136, 136,
+    136, 135, 135, 135, 135, 134, 134, 134, 134, 133, 133, 133, 132, 132, 132, 132,
+    131, 131, 131, 131, 130, 130, 130, 130, 129, 129, 129, 129, 128, 128, 128, 128,
+};
+
 constexpr float kMinSpeedTimeFactor = 0.04f;  // ~3-5 FPS feel at speed 1
 
 float computeSpeedTimeFactor(uint8_t speed) {
@@ -787,16 +811,7 @@ void RendererActor::onTick()
     }
 
 #ifndef NATIVE_BUILD
-    // Frame-rate throttle to ~120 FPS on targets with high tick rates.
-    if (rawFrameTimeUs < LedConfig::FRAME_TIME_US) {
-        uint32_t remainingUs = LedConfig::FRAME_TIME_US - rawFrameTimeUs;
-        if (remainingUs > 0) {
-            esp_rom_delay_us(remainingUs);
-        }
-        frameEndUs = micros();
-    }
-
-    // Reset watchdog every 10 frames (~83ms at 120 FPS)
+    // Reset watchdog every 10 frames
     // This prevents watchdog timeout since RendererActor monopolizes CPU 1
     // and prevents IDLE1 from running to reset the watchdog.
     if (++s_wdtResetFrames >= 10) {
@@ -1587,27 +1602,18 @@ void RendererActor::showLeds()
     if (m_strip1 == nullptr || m_strip2 == nullptr) {
         return;
     }
-
-    // Soft-knee tone map: prevent additive washout from flattening to white
-    // lum = (r+g+b)/3, lumT = lum/(lum+knee); scale RGB by lumT/lum (hue preserved)
-    constexpr float kToneMapKnee = 1.0f;
-    for (uint16_t i = 0; i < LedConfig::TOTAL_LEDS; ++i) {
-        float r = static_cast<float>(m_leds[i].r) * (1.0f / 255.0f);
-        float g = static_cast<float>(m_leds[i].g) * (1.0f / 255.0f);
-        float b = static_cast<float>(m_leds[i].b) * (1.0f / 255.0f);
-        float lum = (r + g + b) * (1.0f / 3.0f);
-        if (lum <= 0.0f) continue;
-        float lumT = lum / (lum + kToneMapKnee);
-        float scale = lumT / lum;
-        r *= scale;
-        g *= scale;
-        b *= scale;
-        if (r > 1.0f) r = 1.0f;
-        if (g > 1.0f) g = 1.0f;
-        if (b > 1.0f) b = 1.0f;
-        m_leds[i].r = static_cast<uint8_t>(r * 255.0f + 0.5f);
-        m_leds[i].g = static_cast<uint8_t>(g * 255.0f + 0.5f);
-        m_leds[i].b = static_cast<uint8_t>(b * 255.0f + 0.5f);
+    // Conditional tone map: only additive-blending effects need washout control.
+    // Non-additive effects skip entirely for sharper colour and ~3 ms savings.
+    // LUT Reinhard (knee = 1.0): scale = 255 / (avg + 255), applied via nscale8.
+    if (needsToneMap(m_currentEffect)) {
+        for (uint16_t i = 0; i < LedConfig::TOTAL_LEDS; ++i) {
+            const uint8_t r = m_leds[i].r;
+            const uint8_t g = m_leds[i].g;
+            const uint8_t b = m_leds[i].b;
+            if ((r | g | b) == 0) continue;  // Skip black pixels
+            const uint8_t avg = (uint16_t(r) + g + b) / 3;
+            m_leds[i].nscale8(kToneMapLUT[avg]);
+        }
     }
 
     // Copy from unified buffer to strip buffers

@@ -537,4 +537,37 @@ inline bool needsSilenceGate(EffectId id) {
     return effectFamily(id) >= FAMILY_SHAPE_BANGERS;
 }
 
+/**
+ * @brief Check if an effect uses additive blending that requires tone mapping.
+ *
+ * Only effects that accumulate colour via += on the LED buffer can produce
+ * values that clip to white.  Non-additive effects skip the tone mapper
+ * entirely for sharper colour and ~3 ms/frame savings.
+ *
+ * Unlike needsSilenceGate() this cannot use a family-range check because
+ * the additive effects span multiple families.  Explicit ID list instead.
+ *
+ * NOTE: When adding new effects that use additive blending (ctx.leds[i] += ...),
+ * add their EID here to enable washout prevention.
+ */
+inline bool needsToneMap(EffectId id) {
+    switch (id) {
+        case EID_AUDIO_BLOOM:                   // 0x0A05 — pulse += warmBoost
+        case EID_LGP_STAR_BURST_NARRATIVE:      // 0x0A06 — multi-layer += c
+        case EID_LGP_SPECTRUM_DETAIL:           // 0x0E05 — additive spectrum bars
+        case EID_LGP_SPECTRUM_DETAIL_ENHANCED:  // 0x0E06 — additive spectrum bars
+        case EID_SNAPWAVE_LINEAR:               // 0x0E0A — pulse += fadedColor
+        case EID_TRINITY_TEST:                  // 0x0F00 — additive white flash
+        case EID_LGP_GRAVITATIONAL_LENSING:     // 0x0601 — particle += palette
+        case EID_LGP_TIME_REVERSAL_MIRROR:      // 0x1B00 — tuned with tone map
+        case EID_LGP_TIME_REVERSAL_MIRROR_AR:   // 0x1B05
+        case EID_LGP_TIME_REVERSAL_MIRROR_MOD1: // 0x1B06
+        case EID_LGP_TIME_REVERSAL_MIRROR_MOD2: // 0x1B07
+        case EID_LGP_TIME_REVERSAL_MIRROR_MOD3: // 0x1B08
+            return true;
+        default:
+            return false;
+    }
+}
+
 } // namespace lightwaveos

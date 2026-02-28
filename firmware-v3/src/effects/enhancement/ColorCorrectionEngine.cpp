@@ -196,7 +196,9 @@ void ColorCorrectionEngine::processBuffer(CRGB* buffer, uint16_t count) {
         applyBrightnessClamp(buffer, count, m_config.maxBrightness);
     }
 
-    // Saturation Boost: Restore chromaticity after V-clamping
+    // Saturation Boost: Enhance chromaticity across all effects.
+    // Runs unconditionally (not gated on maxBrightness) — the +25 S bump
+    // is an intentional part of the visual pipeline, not just V-clamp recovery.
     if (m_config.vClampEnabled && m_config.saturationBoostAmount > 0) {
         applySaturationBoost(buffer, count, m_config.saturationBoostAmount);
     }

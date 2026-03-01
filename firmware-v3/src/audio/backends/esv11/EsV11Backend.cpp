@@ -128,16 +128,9 @@ void EsV11Backend::refreshOutputs(uint64_t now_us)
     out.vu_level = clamp01(vu_level);
     out.novelty_norm_last = clamp01(novelty_curve_normalized[NOVELTY_HISTORY_LENGTH - 1]);
 
-    // Tempo: pick top bin from ES smoothed tempi bank
-    float top_mag = 0.0f;
-    uint16_t top_i = 0;
-    for (uint16_t i = 0; i < NUM_TEMPI; ++i) {
-        const float m = tempi_smooth[i];
-        if (m > top_mag) {
-            top_mag = m;
-            top_i = i;
-        }
-    }
+    // Tempo: use octave-aware post-selection on top of ES smoothed bank.
+    const uint16_t top_i = esv11_pick_top_tempo_bin_octave_aware();
+    const float top_mag = tempi_smooth[top_i];
 
     const float bpm = static_cast<float>(TEMPO_LOW + top_i);
     out.top_bpm = bpm;

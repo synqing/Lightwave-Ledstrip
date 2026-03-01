@@ -26,30 +26,33 @@ static constexpr float kPi = 3.14159265358979323846f;
 
 static void es_reset_state()
 {
+    // Allocate heap-backed buffers (uses std::calloc on native)
+    esv11_init_buffers();
+
     // Reset timing
     esv11_set_time(0, 0);
 
     // Reset microphone/DC blocker state
     dc_blocker_x_prev = 0.0f;
     dc_blocker_y_prev = 0.0f;
-    memset(sample_history, 0, sizeof(sample_history));
+    memset(sample_history, 0, SAMPLE_HISTORY_LENGTH * sizeof(float));
 
-    // Reset DSP outputs/stateful buffers
+    // Reset DSP outputs/stateful buffers (header-level arrays use sizeof)
     memset(spectrogram, 0, sizeof(spectrogram));
     memset(spectrogram_smooth, 0, sizeof(spectrogram_smooth));
-    memset(spectrogram_average, 0, sizeof(spectrogram_average));
+    memset(spectrogram_average, 0, 12 * NUM_FREQS * sizeof(float));
     spectrogram_average_index = 0;
     memset(chromagram, 0, sizeof(chromagram));
 
-    // Tempo globals
+    // Tempo globals (pointer-backed: use element count × sizeof)
     silence_detected = true;
     silence_level = 1.0f;
-    memset(novelty_curve, 0, sizeof(novelty_curve));
-    memset(novelty_curve_normalized, 0, sizeof(novelty_curve_normalized));
-    memset(vu_curve, 0, sizeof(vu_curve));
-    memset(vu_curve_normalized, 0, sizeof(vu_curve_normalized));
+    memset(novelty_curve, 0, NOVELTY_HISTORY_LENGTH * sizeof(float));
+    memset(novelty_curve_normalized, 0, NOVELTY_HISTORY_LENGTH * sizeof(float));
+    memset(vu_curve, 0, NOVELTY_HISTORY_LENGTH * sizeof(float));
+    memset(vu_curve_normalized, 0, NOVELTY_HISTORY_LENGTH * sizeof(float));
     memset(tempi_smooth, 0, sizeof(tempi_smooth));
-    memset(tempi, 0, sizeof(tempi));
+    memset(tempi, 0, NUM_TEMPI * sizeof(tempo));
     tempi_power_sum = 0.0f;
     tempo_confidence = 0.0f;
 

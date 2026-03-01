@@ -77,13 +77,18 @@ inline void run_vu(){
         // SCALE OUTPUT -------------------------------------------------------
         max_amplitude_now = fmaxf(max_amplitude_now - vu_floor, 0.0f);
 
+        // Cap follower runs per chunk; retune against baseline chunk rate (12.8k/64 = 200 Hz).
+        static constexpr float kBaselineChunkRateHz = 12800.0f / 64.0f;
+        static constexpr float kCurrentChunkRateHz =
+            static_cast<float>(SAMPLE_RATE) / static_cast<float>(CHUNK_SIZE);
+        static const float kCapAlpha = 1.0f - powf(0.9f, kBaselineChunkRateHz / kCurrentChunkRateHz);
         if(max_amplitude_now > max_amplitude_cap){
             float distance = max_amplitude_now - max_amplitude_cap;
-            max_amplitude_cap += (distance * 0.1f);
+            max_amplitude_cap += (distance * kCapAlpha);
         }
         else if(max_amplitude_cap > max_amplitude_now){
             float distance = max_amplitude_cap - max_amplitude_now;
-            max_amplitude_cap -= (distance * 0.1f);
+            max_amplitude_cap -= (distance * kCapAlpha);
         }
         max_amplitude_cap = clip_float(max_amplitude_cap);
 
@@ -109,4 +114,3 @@ inline void run_vu(){
         vu_max = fmaxf(vu_max, vu_level);
     }, __func__);
 }
-

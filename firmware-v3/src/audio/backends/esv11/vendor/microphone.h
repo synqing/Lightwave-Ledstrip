@@ -26,10 +26,28 @@
 #endif
 #endif
 
-// Define I2S pins (ESP32-S3-DevKitC-1 target hardware)
-#define I2S_LRCLK_PIN 12
-#define I2S_BCLK_PIN  14
-#define I2S_DIN_PIN   13
+// Define I2S pins (overridable via K1_* build flags for hardware variants)
+#ifndef I2S_LRCLK_PIN
+  #ifdef K1_I2S_LRCL
+    #define I2S_LRCLK_PIN K1_I2S_LRCL
+  #else
+    #define I2S_LRCLK_PIN 12
+  #endif
+#endif
+#ifndef I2S_BCLK_PIN
+  #ifdef K1_I2S_BCLK
+    #define I2S_BCLK_PIN K1_I2S_BCLK
+  #else
+    #define I2S_BCLK_PIN 14
+  #endif
+#endif
+#ifndef I2S_DIN_PIN
+  #ifdef K1_I2S_DOUT
+    #define I2S_DIN_PIN K1_I2S_DOUT
+  #else
+    #define I2S_DIN_PIN 13
+  #endif
+#endif
 
 // sample_history is allocated during backend initialisation (PSRAM heap where available).
 const float recip_scale = 1.0f / 131072.0f; // max 18 bit signed value

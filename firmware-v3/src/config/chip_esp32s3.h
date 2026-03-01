@@ -59,18 +59,53 @@ constexpr uint32_t MIN_FREE_HEAP_KB = 40;
 
 namespace gpio {
 
-    // LED Strip pins (WS2812 via RMT)
+    // LED Strip pins (WS2812 via RMT) — overridable via -D build flags
+#ifdef K1_LED_STRIP1_DATA
+    constexpr uint8_t LED_STRIP1_DATA = K1_LED_STRIP1_DATA;
+#else
     constexpr uint8_t LED_STRIP1_DATA = 4;
+#endif
+#ifdef K1_LED_STRIP2_DATA
+    constexpr uint8_t LED_STRIP2_DATA = K1_LED_STRIP2_DATA;
+#else
     constexpr uint8_t LED_STRIP2_DATA = 5;
+#endif
 
-    // I2S Audio (SPH0645 microphone)
+    // I2S Audio (SPH0645 microphone) — overridable via -D build flags
+#ifdef K1_I2S_BCLK
+    constexpr uint8_t I2S_BCLK = K1_I2S_BCLK;
+#else
     constexpr uint8_t I2S_BCLK = 14;    ///< Bit clock
+#endif
+#ifdef K1_I2S_DOUT
+    constexpr uint8_t I2S_DOUT = K1_I2S_DOUT;
+#else
     constexpr uint8_t I2S_DOUT = 13;    ///< Data out (mic output)
+#endif
+#ifdef K1_I2S_LRCL
+    constexpr uint8_t I2S_LRCL = K1_I2S_LRCL;
+#else
     constexpr uint8_t I2S_LRCL = 12;    ///< Left/Right clock (word select)
+#endif
 
-    // I2C (M5ROTATE8 encoder)
+    // I2C (M5ROTATE8 encoder) — overridable via -D build flags
+#ifdef K1_I2C_SDA
+    constexpr uint8_t I2C_SDA = K1_I2C_SDA;
+#else
     constexpr uint8_t I2C_SDA = 17;
+#endif
+#ifdef K1_I2C_SCL
+    constexpr uint8_t I2C_SCL = K1_I2C_SCL;
+#else
     constexpr uint8_t I2C_SCL = 18;
+#endif
+
+    // TTP223 capacitive touch button (optional, -1 = not present)
+#ifdef K1_TTP223_PIN
+    constexpr int8_t TTP223 = K1_TTP223_PIN;
+#else
+    constexpr int8_t TTP223 = -1;
+#endif
 
 } // namespace gpio
 

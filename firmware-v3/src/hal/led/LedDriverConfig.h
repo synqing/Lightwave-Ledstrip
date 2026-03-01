@@ -15,6 +15,7 @@
 #define LIGHTWAVEOS_HAL_LED_DRIVER_CONFIG_H
 
 #include <cstdint>
+#include "config/chip_config.h"
 
 namespace lightwaveos {
 namespace hal {
@@ -143,8 +144,8 @@ struct LedDriverConfig {
      */
     constexpr LedDriverConfig()
         : strips{
-            StripConfig(4, 160, ColorOrder::GRB),   // Strip 1: GPIO4, 160 LEDs
-            StripConfig(5, 160, ColorOrder::GRB),   // Strip 2: GPIO5, 160 LEDs
+            StripConfig(chip::gpio::LED_STRIP1_DATA, 160, ColorOrder::GRB),   // Strip 1 (top)
+            StripConfig(chip::gpio::LED_STRIP2_DATA, 160, ColorOrder::GRB),   // Strip 2 (bottom)
             StripConfig(),                          // Unused
             StripConfig()                           // Unused
           }

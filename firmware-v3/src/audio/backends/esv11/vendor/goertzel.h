@@ -209,7 +209,12 @@ inline void calculate_magnitudes() {
                 avg_val /= 10.0f;
                 avg_val *= 0.90f;
 
-                noise_floor[i] = noise_floor[i] * 0.99f + avg_val * 0.01f;
+                // Noise floor EMA runs per chunk; retune against baseline chunk rate (12.8k/64 = 200 Hz).
+                static constexpr float kBaselineChunkRateHz = 12800.0f / 64.0f;
+                static constexpr float kCurrentChunkRateHz =
+                    static_cast<float>(SAMPLE_RATE) / static_cast<float>(CHUNK_SIZE);
+                static const float kNoiseAlpha = 1.0f - powf(0.99f, kBaselineChunkRateHz / kCurrentChunkRateHz);
+                noise_floor[i] = noise_floor[i] * (1.0f - kNoiseAlpha) + avg_val * kNoiseAlpha;
                 magnitudes_noise_filtered[i] = fmaxf(magnitudes_raw[i] - noise_floor[i], 0.0f);
             }
 
@@ -229,14 +234,19 @@ inline void calculate_magnitudes() {
             }
         }
 
-        // Smooth max_val with different speed limits for increases vs decreases
+        // Smooth max_val with different speed limits for increases vs decreases.
+        // Autoranger EMA runs per chunk; retune against baseline chunk rate.
+        static constexpr float kBaselineChunkRateHz = 12800.0f / 64.0f;
+        static constexpr float kCurrentChunkRateHz =
+            static_cast<float>(SAMPLE_RATE) / static_cast<float>(CHUNK_SIZE);
+        static const float kAutorangerAlpha = 1.0f - powf(0.995f, kBaselineChunkRateHz / kCurrentChunkRateHz);
         if (max_val > max_val_smooth) {
             float delta = max_val - max_val_smooth;
-            max_val_smooth += delta * 0.005f;
+            max_val_smooth += delta * kAutorangerAlpha;
         }
         if (max_val < max_val_smooth) {
             float delta = max_val_smooth - max_val;
-            max_val_smooth -= delta * 0.005f;
+            max_val_smooth -= delta * kAutorangerAlpha;
         }
 
         if (max_val_smooth < 0.0025f) {

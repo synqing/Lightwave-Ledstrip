@@ -93,7 +93,8 @@ bool esv11_init_buffers() {
     sample_history = static_cast<float*>(esv11_calloc(SAMPLE_HISTORY_LENGTH, sizeof(float)));
     if (!sample_history) goto fail;
 
-    window_lookup = static_cast<float*>(esv11_calloc(SAMPLE_HISTORY_LENGTH, sizeof(float)));
+    // Window lookup is always 4096 points regardless of sample rate / buffer size
+    window_lookup = static_cast<float*>(esv11_calloc(4096, sizeof(float)));
     if (!window_lookup) goto fail;
 
     novelty_curve = static_cast<float*>(esv11_calloc(NOVELTY_HISTORY_LENGTH, sizeof(float)));

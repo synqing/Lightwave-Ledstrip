@@ -210,10 +210,12 @@ inline void reduce_tempo_history(float reduction_amount) {
 
 inline void check_silence(float current_novelty) {
     profile_function([&]() {
+        // Silence window: 2.56s regardless of frame rate
+        static constexpr uint16_t kSilenceFrames = static_cast<uint16_t>(2.56f * NOVELTY_LOG_HZ);
         float min_val = 1.0f;
         float max_val = 0.0f;
-        for (uint16_t i = 0; i < 128; i++) {
-            float recent_novelty = novelty_curve_normalized[(NOVELTY_HISTORY_LENGTH - 1 - 128) + i];
+        for (uint16_t i = 0; i < kSilenceFrames; i++) {
+            float recent_novelty = novelty_curve_normalized[(NOVELTY_HISTORY_LENGTH - 1 - kSilenceFrames) + i];
             recent_novelty = fminf(0.5f, recent_novelty) * 2.0f;
 
             float scaled_value = sqrtf(recent_novelty);
@@ -280,7 +282,12 @@ inline void update_tempi_phase(float delta) {
         tempi_power_sum = 0.00000001f;
         for (uint16_t tempo_bin = 0; tempo_bin < NUM_TEMPI; tempo_bin++) {
             float tempi_magnitude = tempi[tempo_bin].magnitude;
-            tempi_smooth[tempo_bin] = tempi_smooth[tempo_bin] * 0.975f + (tempi_magnitude) * 0.025f;
+            // Tempo EMA runs per chunk; retune against baseline chunk rate (12.8k/64 = 200 Hz).
+            static constexpr float kBaselineChunkRateHz = 12800.0f / 64.0f;
+            static constexpr float kCurrentChunkRateHz =
+                static_cast<float>(SAMPLE_RATE) / static_cast<float>(CHUNK_SIZE);
+            static const float kTempoAlpha = 1.0f - powf(0.975f, kBaselineChunkRateHz / kCurrentChunkRateHz);
+            tempi_smooth[tempo_bin] = tempi_smooth[tempo_bin] * (1.0f - kTempoAlpha) + (tempi_magnitude) * kTempoAlpha;
             tempi_power_sum += tempi_smooth[tempo_bin];
             sync_beat_phase(tempo_bin, delta);
         }
@@ -291,4 +298,131 @@ inline void update_tempi_phase(float delta) {
         }
         tempo_confidence = max_contribution;
     }, __func__);
+}
+
+inline uint16_t esv11_pick_top_tempo_bin_raw() {
+    uint16_t top_bin = 0;
+    float top_mag = 0.0f;
+    for (uint16_t i = 0; i < NUM_TEMPI; ++i) {
+        const float m = tempi_smooth[i];
+        if (m > top_mag) {
+            top_mag = m;
+            top_bin = i;
+        }
+    }
+    return top_bin;
+}
+
+inline int16_t esv11_bpm_to_bin(float bpm) {
+    const int32_t idx = static_cast<int32_t>(lroundf(bpm - static_cast<float>(TEMPO_LOW)));
+    if (idx < 0 || idx >= static_cast<int32_t>(NUM_TEMPI)) {
+        return -1;
+    }
+    return static_cast<int16_t>(idx);
+}
+
+inline float esv11_pick_local_bin_magnitude(int16_t center_bin, uint8_t radius = 1) {
+    if (center_bin < 0 || center_bin >= static_cast<int16_t>(NUM_TEMPI)) {
+        return 0.0f;
+    }
+    float best = 0.0f;
+    const int16_t r = static_cast<int16_t>(radius);
+    for (int16_t o = -r; o <= r; ++o) {
+        const int16_t idx = static_cast<int16_t>(center_bin + o);
+        if (idx >= 0 && idx < static_cast<int16_t>(NUM_TEMPI)) {
+            best = fmaxf(best, tempi_smooth[idx]);
+        }
+    }
+    return best;
+}
+
+inline uint16_t esv11_find_peak_bin_in_bpm_window(float bpm_min, float bpm_max, uint8_t radius, float* out_mag = nullptr) {
+    int16_t start_bin = esv11_bpm_to_bin(bpm_min);
+    int16_t end_bin = esv11_bpm_to_bin(bpm_max);
+
+    if (start_bin < 0) start_bin = 0;
+    if (end_bin < 0) end_bin = static_cast<int16_t>(NUM_TEMPI - 1);
+    if (end_bin >= static_cast<int16_t>(NUM_TEMPI)) end_bin = static_cast<int16_t>(NUM_TEMPI - 1);
+    if (end_bin < start_bin) {
+        const int16_t swap_tmp = start_bin;
+        start_bin = end_bin;
+        end_bin = swap_tmp;
+    }
+
+    uint16_t best_bin = static_cast<uint16_t>(start_bin);
+    float best_mag = 0.0f;
+    for (int16_t bin = start_bin; bin <= end_bin; ++bin) {
+        const float mag = esv11_pick_local_bin_magnitude(bin, radius);
+        if (mag > best_mag) {
+            best_mag = mag;
+            best_bin = static_cast<uint16_t>(bin);
+        }
+    }
+
+    if (out_mag) {
+        *out_mag = best_mag;
+    }
+    return best_bin;
+}
+
+inline uint16_t esv11_pick_top_tempo_bin_octave_aware() {
+    const uint16_t raw_bin = esv11_pick_top_tempo_bin_raw();
+    const float raw_mag = fmaxf(tempi_smooth[raw_bin], 1e-6f);
+    const float raw_bpm = static_cast<float>(TEMPO_LOW + raw_bin);
+
+    uint16_t selected_bin = raw_bin;
+    float selected_score = raw_mag;
+
+    const int16_t double_bin = esv11_bpm_to_bin(raw_bpm * 2.0f);
+    if (double_bin >= 0) {
+        // Favour musical tactus over half-time aliases when the raw winner
+        // lands in sub-80 BPM territory and confidence indicates active music.
+        if (raw_bpm < 80.0f && tempo_confidence > 0.12f) {
+            selected_bin = static_cast<uint16_t>(double_bin);
+            selected_score = esv11_pick_local_bin_magnitude(double_bin, 1);
+        }
+
+        const float double_mag = esv11_pick_local_bin_magnitude(double_bin, 1);
+        const float ratio = double_mag / raw_mag;
+        const float ratio_threshold = (raw_bpm <= 72.0f) ? 0.56f : 0.72f;
+        if (ratio >= ratio_threshold && double_mag > selected_score) {
+            selected_bin = static_cast<uint16_t>(double_bin);
+            selected_score = double_mag;
+        }
+    }
+
+    // Edge rebound: when the raw winner is pinned near bank ceiling, recover
+    // tactus candidates around 78-84 BPM if they carry most of the raw energy.
+    if (raw_bpm >= 138.0f && tempo_confidence < 0.35f) {
+        float rebound_mag = 0.0f;
+        const uint16_t rebound_bin = esv11_find_peak_bin_in_bpm_window(76.0f, 84.0f, 1, &rebound_mag);
+        if (rebound_mag >= raw_mag * 0.70f) {
+            selected_bin = rebound_bin;
+            selected_score = rebound_mag;
+        }
+    }
+
+    // 210-BPM alias rescue: tracks can surface a strong ~133 BPM surrogate while
+    // retaining secondary tactus energy near 105 BPM; prefer that metrical anchor.
+    if (raw_bpm >= 128.0f && raw_bpm <= 136.0f && tempo_confidence < 0.32f) {
+        float rescue_mag = 0.0f;
+        const uint16_t rescue_bin = esv11_find_peak_bin_in_bpm_window(102.0f, 108.0f, 1, &rescue_mag);
+        if (rescue_mag >= 0.09f && rescue_mag >= raw_mag * 0.10f && rescue_mag > selected_score * 0.80f) {
+            selected_bin = rescue_bin;
+            selected_score = rescue_mag;
+        }
+    }
+
+    if (raw_bpm >= 132.0f) {
+        const int16_t half_bin = esv11_bpm_to_bin(raw_bpm * 0.5f);
+        if (half_bin >= 0) {
+            const float half_mag = esv11_pick_local_bin_magnitude(half_bin, 1);
+            if (half_mag >= selected_score * 0.92f) {
+                selected_bin = static_cast<uint16_t>(half_bin);
+                selected_score = half_mag;
+            }
+        }
+    }
+
+    return selected_bin;
 }

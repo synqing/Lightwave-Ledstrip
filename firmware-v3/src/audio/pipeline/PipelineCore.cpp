@@ -38,6 +38,7 @@ void PipelineCore::reset() {
   m_hasPrevMag = false;
   m_onsetMean = 0.0f;
   m_onsetVar = 0.0f;
+  m_lastBassFlux = 0.0f;
 
   // Peak picker state
   m_peakWriteIdx = 0;
@@ -353,16 +354,24 @@ float PipelineCore::computeLogFlux() {
   }
 
   float flux = 0.0f;
+  float bassFlux = 0.0f;
   for (size_t k = 1; k < kNumBins; ++k) {
     const float mag = fmaxf(m_magSpectrum[k] * magNorm, kMagFloor);
     const float logMag = log1pf(mag);
     const float diff = logMag - m_prevLogMag[k];
-    if (diff > 0.0f) flux += diff;
+    if (diff > 0.0f) {
+      flux += diff;
+      if (k <= 8) bassFlux += diff;  // bins 1-8: ~31-250 Hz (kick drum range)
+    }
     m_prevLogMag[k] = logMag;
   }
+  m_lastBassFlux = bassFlux;
 
-  // Average over bins to avoid sum-scaling with FFT size.
-  return flux / static_cast<float>(kNumBins - 1);
+  // Normalize flux. Default: average over bins. Override via fluxBinDivisor.
+  const float divisor = (m_cfg.fluxBinDivisor > 0.0f)
+      ? m_cfg.fluxBinDivisor
+      : static_cast<float>(kNumBins - 1);
+  return flux / divisor;
 }
 
 // ─── Stage F.3: Adaptive Threshold → Onset Envelope ────────────────
@@ -497,7 +506,10 @@ void PipelineCore::processHop(uint32_t timestamp_us) {
   m_frame.onset_event = peakPickUpdate(onsetEnv);
 
   // ── Stage H: Beat Tracking ──
-  m_beatTracker.update(onsetEnv);
+  // onset_env (full-band, continuous) drives CBSS phase tracking;
+  // bass flux (bins 1-8, ~31-250 Hz) drives tempo estimation via OSS —
+  // isolates kick drum transients from hi-hat/cymbal noise.
+  m_beatTracker.update(onsetEnv, m_lastBassFlux);
   m_frame.tempo_bpm  = m_beatTracker.tempoBpm();
   m_frame.tempo_confidence = m_beatTracker.tempoConfidence();
   m_frame.tempo_locked = m_beatTracker.tempoLocked() ? 1.0f : 0.0f;

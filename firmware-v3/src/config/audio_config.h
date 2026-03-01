@@ -61,20 +61,12 @@ constexpr gpio_num_t I2S_DIN_PIN = static_cast<gpio_num_t>(chip::gpio::I2S_DIN);
 constexpr gpio_num_t I2S_DOUT_PIN = static_cast<gpio_num_t>(chip::gpio::I2S_DOUT);
 constexpr gpio_num_t I2S_LRCL_PIN = static_cast<gpio_num_t>(chip::gpio::I2S_LRCL);
 constexpr uint16_t I2S_MCLK_MULTIPLE = 384;
-#elif FEATURE_AUDIO_BACKEND_PIPELINECORE
-// PipelineCore DSP with SPH0645 mic — same I2S pins as default backend.
-// GPIO 38 is reserved for StatusStrip (WS2812 RMT); do NOT use for I2S.
-constexpr gpio_num_t I2S_BCLK_PIN = GPIO_NUM_14;  // Bit Clock
-constexpr gpio_num_t I2S_DIN_PIN  = GPIO_NUM_13;  // Data In (mic -> ESP)
-constexpr gpio_num_t I2S_DOUT_PIN = GPIO_NUM_13;  // (alias for legacy driver compatibility)
-constexpr gpio_num_t I2S_LRCL_PIN = GPIO_NUM_12;  // Word Select (L/R Clock)
 #else
-// SPH0645 on K1 dev board
-// GPIO 12/13/14 — avoids LED (4/5), I2C (17/18), strapping (0/3/45/46)
-constexpr gpio_num_t I2S_BCLK_PIN = GPIO_NUM_14;  // Bit Clock
-constexpr gpio_num_t I2S_DIN_PIN  = GPIO_NUM_13;  // Data In (mic -> ESP)
-constexpr gpio_num_t I2S_DOUT_PIN = GPIO_NUM_13;  // (alias for legacy driver compatibility)
-constexpr gpio_num_t I2S_LRCL_PIN = GPIO_NUM_12;  // Word Select (L/R Clock)
+// ESP32-S3: all backends use chip::gpio pin assignments (overridable via build flags)
+constexpr gpio_num_t I2S_BCLK_PIN = static_cast<gpio_num_t>(chip::gpio::I2S_BCLK);
+constexpr gpio_num_t I2S_DIN_PIN  = static_cast<gpio_num_t>(chip::gpio::I2S_DOUT);
+constexpr gpio_num_t I2S_DOUT_PIN = static_cast<gpio_num_t>(chip::gpio::I2S_DOUT);
+constexpr gpio_num_t I2S_LRCL_PIN = static_cast<gpio_num_t>(chip::gpio::I2S_LRCL);
 #endif
 
 // ============================================================================
@@ -103,6 +95,10 @@ constexpr gpio_num_t I2S_LRCL_PIN = GPIO_NUM_12;  // Word Select (L/R Clock)
 // This eliminates timing drift and multi-hop compensation hacks
 constexpr uint16_t SAMPLE_RATE = 16000;       // 16 kHz (P4 onboard front end)
 constexpr uint16_t HOP_SIZE = 160;            // 10ms hop @ 16kHz = 100 Hz frames
+#elif FEATURE_AUDIO_BACKEND_SPINE16K
+// Spine16k: 16kHz / 128-hop = 125 Hz frames (DSP Spine v0.1)
+constexpr uint16_t SAMPLE_RATE = 16000;       // 16 kHz (SPH0645 native)
+constexpr uint16_t HOP_SIZE = 128;            // 8ms hop @ 16kHz = 125 Hz frames
 #elif FEATURE_AUDIO_BACKEND_PIPELINECORE
 // PipelineCore: 32kHz / 256-hop = 125 Hz frames (proven at 15% CPU on ESP32-S3)
 constexpr uint16_t SAMPLE_RATE = 32000;       // 32 kHz (SPH0645 overclocked)

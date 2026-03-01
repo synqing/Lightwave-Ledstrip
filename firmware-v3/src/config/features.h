@@ -115,6 +115,18 @@
 #define FEATURE_AUDIO_BACKEND_PIPELINECORE 0
 #endif
 
+// Spine16k: PipelineCore engine at 16kHz/128-hop (DSP Spine v0.1).
+// Implies FEATURE_AUDIO_BACKEND_PIPELINECORE. Only SAMPLE_RATE and HOP_SIZE differ.
+#ifndef FEATURE_AUDIO_BACKEND_SPINE16K
+#define FEATURE_AUDIO_BACKEND_SPINE16K 0
+#endif
+
+// Auto-enable PipelineCore when Spine16k variant is selected
+#if FEATURE_AUDIO_BACKEND_SPINE16K && !FEATURE_AUDIO_BACKEND_PIPELINECORE
+    #undef FEATURE_AUDIO_BACKEND_PIPELINECORE
+    #define FEATURE_AUDIO_BACKEND_PIPELINECORE 1
+#endif
+
 // Auto-speed trim (audio-driven base speed) - disabled by default
 #ifndef FEATURE_AUTO_SPEED
 #define FEATURE_AUTO_SPEED 0

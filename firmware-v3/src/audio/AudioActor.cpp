@@ -606,7 +606,7 @@ void AudioActor::onStart()
     PipelineConfig cfg;
     cfg.sampleRate = SAMPLE_RATE;
     cfg.hopSize = HOP_SIZE;
-    cfg.windowSize = HOP_SIZE * 2;  // 512
+    cfg.windowSize = FFT_SIZE;      // N=512 regardless of hop size
     m_pipeline.setConfig(cfg);
     LW_LOGI("PipelineCore initialized (sr=%lu, hop=%u, win=%u)",
              (unsigned long)cfg.sampleRate, cfg.hopSize, cfg.windowSize);
@@ -614,7 +614,7 @@ void AudioActor::onStart()
     // Initialize PipelineAdapter bridge
     PipelineAdapter::Config adapterCfg;
     adapterCfg.sampleRate = static_cast<float>(SAMPLE_RATE);
-    adapterCfg.fftSize = HOP_SIZE * 2;
+    adapterCfg.fftSize = FFT_SIZE;
     m_adapter.init(adapterCfg);
     LW_LOGI("PipelineAdapter initialized (binHz=%.1f)",
              adapterCfg.sampleRate / static_cast<float>(adapterCfg.fftSize));
@@ -828,7 +828,7 @@ void AudioActor::processHop()
         m_pipeline.reset();
         PipelineAdapter::Config adapterCfg;
         adapterCfg.sampleRate = static_cast<float>(SAMPLE_RATE);
-        adapterCfg.fftSize = HOP_SIZE * 2;
+        adapterCfg.fftSize = FFT_SIZE;
         m_adapter.init(adapterCfg);
 #if FEATURE_STYLE_DETECTION
         m_styleDetector.reset();

@@ -28,7 +28,7 @@ struct PeakPickConfig {
   uint16_t postMax = 1;     // local max lookahead (= latency in frames)
   uint16_t preAvg  = 10;    // local mean lookback (frames)
   uint16_t postAvg = 1;     // local mean lookahead (frames)
-  float    delta   = 2.0f;  // absolute onset_env floor (suppresses leakage noise)
+  float    delta   = 0.02f; // absolute onset_env floor (calibrated for div=1 flux scale)
   uint16_t wait    = 8;     // minimum inter-event spacing (frames)
 };
 
@@ -46,6 +46,9 @@ struct PipelineConfig {
   float onsetVarAlpha  = 0.01f;
   float onsetK         = 1.5f;
   float onsetGateRms   = 0.0018f; // RMS gate (~-55 dBFS), 0 = disabled
+
+  // Flux normalization: 1.0 = no per-bin averaging (preserves onset_env scale for beat tracker)
+  float fluxBinDivisor = 1.0f;  // 1.0 = sum (no averaging), 0 = auto (kNumBins-1)
 
   // Adaptive whitening (optional)
   float whitenDecay = 0.997f;
@@ -190,4 +193,5 @@ private:
 
   // Stage H: Beat tracker
   BeatTracker m_beatTracker;
+  float m_lastBassFlux = 0.0f;  // low-frequency spectral flux (bins 1-8, 31-250 Hz)
 };

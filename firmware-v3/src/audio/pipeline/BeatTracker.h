@@ -7,36 +7,37 @@ struct BeatConfig {
   float tempoMinBpm    = 60.0f;    // minimum tracked tempo
   float tempoMaxBpm    = 240.0f;   // maximum tracked tempo
   float tempoPriorBpm  = 120.0f;   // log-Gaussian prior center (resolves octave ambiguity)
-  float tempoPriorWidth = 1.0f;    // prior width in log-BPM space
-  float tempoDecay     = 0.999f;   // histogram decay per tempo update
+  float tempoPriorWidth = 50.0f;   // flat prior (no octave bias)
+  float tempoDecay     = 0.95f;    // fast histogram adaptation
   float cbssAlpha      = 0.9f;     // CBSS historical contribution weight
-  float minBeatFactor  = 0.75f;   // refractory = factor * T  (blocks comb harmonic at T/2)
+  float minBeatFactor  = 0.75f;    // refractory = factor * T  (blocks comb harmonic at T/2)
+
+  // Watchdog: force re-acquire after N consecutive low-confidence tempo updates
+  uint8_t watchdogCycles = 4;      // cycles at low confidence before histogram reset (~6s)
+  float   watchdogThresh = 0.08f;  // confidence below this triggers watchdog counter
+
 };
 
 class BeatTracker {
 public:
-  static constexpr size_t kOssLen  = 512;  // ~3s of onset history at 172 Hz hop rate
-  static constexpr size_t kMaxLag  = 256;  // max autocorrelation lag
-  static constexpr size_t kCbssLen = 256;  // CBSS ring buffer length
+  static constexpr size_t kOssLen      = 512;  // ~3s of onset history at 172 Hz hop rate
+  static constexpr size_t kMaxLag      = 256;  // max autocorrelation lag
+  static constexpr size_t kCbssLen     = 256;  // CBSS ring buffer length
 
   BeatTracker();
 
   void reset();
   void setConfig(const BeatConfig& cfg, uint32_t sampleRate, uint16_t hopSize);
 
-  // Call once per hop with continuous onset envelope value
-  void update(float onset_env);
+  // Call once per hop with onset envelope and bass onset.
+  // onset_env: full-band adaptive-threshold onset (used for CBSS phase)
+  // bass_onset: low-frequency onset strength (used for tempo estimation)
+  void update(float onset_env, float bass_onset = -1.0f);
 
   // ── Hot-reload parameter setter (no reset) ──────────────────────
-  // Updates a single config field by name.  Does NOT reset accumulated
-  // state — new value takes effect on the next hop.
-  // For tempo range changes (tempoMinBpm, tempoMaxBpm), lag bounds are
-  // recalculated immediately.
-  // Returns true if name matched, false otherwise.
   bool setParamFloat(const char* name, float value);
 
   // Read back current config value by name.
-  // Returns true if name matched, writes value to *out.
   bool getParamFloat(const char* name, float* out) const;
 
   // Output accessors
@@ -81,6 +82,12 @@ private:
   uint32_t m_totalHops = 0;
   uint32_t m_lastBeatHop = 0;
   uint32_t m_hopsSinceBeat = 0;
+
+  // Onset sparsification (adaptive threshold for OSS storage)
+  float m_ossMean = 0.0f;
+
+  // Watchdog: consecutive low-confidence tempo update cycles
+  uint8_t m_watchdogCount = 0;
 
   // Scheduling
   uint32_t m_hopCount = 0;

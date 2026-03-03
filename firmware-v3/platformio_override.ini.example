@@ -1,0 +1,38 @@
+; platformio_override.ini — Machine-specific overrides (gitignored)
+;
+; Copy this file to platformio_override.ini and uncomment the environments
+; you need. PlatformIO merges this file with platformio.ini automatically.
+;
+; Common use: upload_port for your specific USB device path
+;   macOS:   /dev/cu.usbmodem*
+;   Linux:   /dev/ttyACM0 or /dev/ttyUSB0
+;   Windows: COM3, COM4, etc.
+;
+; Find your port:
+;   pio device list
+;   ls /dev/cu.usb*          (macOS)
+;   ls /dev/ttyACM* /dev/ttyUSB*  (Linux)
+
+; [env:esp32dev_audio_esv11]
+; upload_port = /dev/cu.usbmodem212401
+
+; [env:esp32dev_audio_esv11_k1v2]
+; upload_port = /dev/cu.usbmodem1101
+
+; [env:esp32dev_audio_pipelinecore]
+; upload_port = /dev/cu.usbmodem212401
+
+; [env:esp32dev_FH4R2_pipelinecore]
+; upload_port = /dev/cu.usbmodem212401
+
+; [env:test_brightness_floor]
+; upload_port = /dev/cu.usbmodem212401
+
+; [env:test_esp_now_sync_master]
+; upload_port = /dev/cu.usbmodem1101
+
+; [env:test_esp_now_sync_slave]
+; upload_port = /dev/cu.usbmodem212401
+
+; [env:test_esp_now_sync_slave_lightwave]
+; upload_port = /dev/cu.usbmodem212401

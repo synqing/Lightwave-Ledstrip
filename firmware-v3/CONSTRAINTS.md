@@ -26,7 +26,7 @@ This file contains extracted constraints from code and documentation. Agents mus
 | **Available after boot** | ~280KB | FreeRTOS + framework overhead | Measured |
 | **LED buffer** | 960 bytes | 320 LEDs × 3 bytes (RGB) | hardware_config.h |
 | **Transition buffer** | 960 bytes | Same as LED buffer | hardware_config.h |
-| **Max effects** | 104 | `MAX_EFFECTS` constant | RendererActor.h |
+| **Max effects** | 256 | `MAX_EFFECTS` constant | limits.h |
 | **Zone buffer** | 480 bytes | 160 LEDs × 3 bytes (per zone) | hardware_config.h |
 
 **Rule:** No dynamic allocation in render loops. Use static buffers.
@@ -147,6 +147,43 @@ These compile-time flags control what's included:
 | `FEATURE_PHYSICS_SIMULATION` | 1 (on) | Physics effects |
 
 WiFi and WebServer are enabled by default in all hardware build environments via common build flags in platformio.ini.
+
+---
+
+## Effect Behavioral Gates
+
+Three independent gating systems silently modify or bypass post-processing for specific effects. **Agents must understand these gates before modifying effect behavior or "fixing" unresponsive effects.** Disabling a gate for a physics effect will produce garbled visual output.
+
+Full per-effect tracking: see `docs/EFFECTS_BEHAVIORAL_REFERENCE.md`
+
+### Gate 1: Color Correction Skip
+
+**Location:** `PatternRegistry.cpp` → `shouldSkipColorCorrection()`
+
+When active, the entire `processBuffer()` pipeline is bypassed — no Auto-Exposure, no V-Clamping, no Saturation Boost, no White/Brown Guardrails, no Gamma Correction.
+
+**Skip criteria (any match skips):**
+- `isLGPSensitive()` — effects that produce precise physics-based color (Interference family, Chromatic Lens, Birefringent Shear, Airy Disc, etc.)
+- `isStatefulEffect()` — effects with internal state that color correction would corrupt (Quantum family + CENTER_ORIGIN, Organic family + CENTER_ORIGIN + PHYSICS, Advanced Optical + CENTER_ORIGIN)
+- Individual overrides in `shouldSkipColorCorrection()` switch statement
+
+**Why it exists:** Physics simulations (interference patterns, wave optics) compute exact RGB values from wavelength math. Gamma correction or auto-exposure would destroy the physical accuracy.
+
+### Gate 2: Tone Mapping
+
+**Location:** `effect_ids.h` → `needsToneMap()`
+
+Effects using additive blending (where multiple color layers are summed) need tone mapping to prevent clipping to white. Returns `true` for ~15 effects.
+
+**Why it exists:** Without tone mapping, additive blends saturate at (255,255,255) creating ugly white patches.
+
+### Gate 3: Silence Gate
+
+**Location:** `effect_ids.h` → `needsSilenceGate()`
+
+Audio-reactive effects that should fade to black during silence. Returns `true` for ~12 effects.
+
+**Why it exists:** Audio-reactive effects with no input would otherwise display frozen/random patterns instead of gracefully fading out.
 
 ---
 

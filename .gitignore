@@ -138,7 +138,6 @@ z.md
 # LOCAL DEVELOPMENT ARTIFACTS
 # ==========================================
 # Tool/IDE configuration directories
-.nimbalyst/
 
 # Temporary working files
 LightwaveOS_Temp_Files/
@@ -168,3 +167,10 @@ context_engineering_runs/
 
 # Temporary working directory
 z_temp/
+
+# Session planning/analysis files (temporary dev artifacts)
+findings.md
+progress.md
+task_plan.md
+ztemp.md
+tmp_wifi_issue_bundle_*/

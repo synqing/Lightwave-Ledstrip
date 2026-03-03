@@ -57,9 +57,9 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
-        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+        bool newHop = (ctx.audio.hopSequence() != m_lastHopSeq);
         if (newHop) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+            m_lastHopSeq = ctx.audio.hopSequence();
 
             // Snare = burst (SIMPLE - like Wave Collision)
             if (ctx.audio.isSnareHit()) {
@@ -78,7 +78,7 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
 
     // Circular chroma hue (replaces argmax + linear EMA to eliminate bin-flip rainbow sweeps)
     uint8_t chromaHue = effects::chroma::circularChromaHueSmoothed(
-        ctx.audio.controlBus.chroma, m_chromaAngle, rawDt, 0.20f);
+        ctx.audio.chroma(), m_chromaAngle, rawDt, 0.20f);
 
     // Use heavy_bands for speed (like Wave Collision) with EMA smoothing
     float heavyEnergy = 0.0f;

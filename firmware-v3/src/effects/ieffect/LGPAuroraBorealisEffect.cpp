@@ -27,7 +27,7 @@ bool LGPAuroraBorealisEffect::init(plugins::EffectContext& ctx) {
 }
 
 void LGPAuroraBorealisEffect::render(plugins::EffectContext& ctx) {
-    // Northern lights simulation with waveguide color mixing
+    // Northern lights simulation with concentric curtains radiating from center
     m_time = (uint16_t)(m_time + (ctx.speed >> 4));
 
     const uint8_t curtainCount = 4;
@@ -36,45 +36,34 @@ void LGPAuroraBorealisEffect::render(plugins::EffectContext& ctx) {
 
     for (uint8_t c = 0; c < curtainCount; c++) {
         m_curtainPhase[c] = (uint8_t)(m_curtainPhase[c] + (c + 1));
-        uint16_t curtainCenter = beatsin16(1, 20, STRIP_LENGTH - 20, 0, (uint16_t)(m_curtainPhase[c] << 8));
+        // Curtain center is now a radial distance from center [0, HALF_LENGTH)
+        uint16_t curtainDist = beatsin16(1, 0, HALF_LENGTH - 1, 0, (uint16_t)(m_curtainPhase[c] << 8));
         uint8_t curtainWidth = beatsin8(1, 20, 35, 0, m_curtainPhase[c]);
 
         // Aurora colors - greens, blues, purples
         uint8_t hue = (uint8_t)(96 + (c * 32));
 
-        for (uint16_t i = 0; i < STRIP_LENGTH; i++) {
-            int16_t dist = abs((int16_t)i - (int16_t)curtainCenter);
-            if (dist < curtainWidth) {
-                uint8_t brightness = qsub8(255, (uint8_t)((dist * 255) / curtainWidth));
+        for (uint16_t d = 0; d < HALF_LENGTH; d++) {
+            int16_t radialDist = abs((int16_t)d - (int16_t)curtainDist);
+            if (radialDist < curtainWidth) {
+                uint8_t brightness = qsub8(255, (uint8_t)((radialDist * 255) / curtainWidth));
                 brightness = scale8(brightness, ctx.brightness);
 
-                // Shimmer effect
-                brightness = scale8(brightness, (uint8_t)(220 + (inoise8(i * 5, m_time >> 3) >> 3)));
+                // Shimmer effect keyed to distance from center
+                brightness = scale8(brightness, (uint8_t)(220 + (inoise8(d * 5, m_time >> 3) >> 3)));
 
-                CRGB color1 = ctx.palette.getColor(hue, brightness);
-                CRGB color2 = ctx.palette.getColor((uint8_t)(hue + 20), brightness);
-
-                ctx.leds[i] = color1;
-                if (i + STRIP_LENGTH < ctx.ledCount) {
-                    ctx.leds[i + STRIP_LENGTH] = color2;
-                }
+                CRGB color = ctx.palette.getColor(hue, brightness);
+                SET_CENTER_PAIR(ctx, d, color);
             }
         }
     }
 
-    // Add corona at edges
+    // Add corona at outer edges (high distances from center)
     for (uint8_t i = 0; i < 20; i++) {
+        uint16_t outerDist = HALF_LENGTH - 1 - i;
         uint8_t corona = scale8((uint8_t)(255 - i * 12), ctx.brightness >> 1);
-        // Corona color for strip 1: (0, corona >> 2, corona >> 1)
-        CRGB coronaColor1 = CRGB(0, corona >> 2, corona >> 1);
-        ctx.leds[i] = coronaColor1;
-        ctx.leds[STRIP_LENGTH - 1 - i] = coronaColor1;
-        if (STRIP_LENGTH < ctx.ledCount) {
-            // Corona color for strip 2: (0, corona >> 3, corona)
-            CRGB coronaColor2 = CRGB(0, corona >> 3, corona);
-            ctx.leds[STRIP_LENGTH + i] = coronaColor2;
-            ctx.leds[ctx.ledCount - 1 - i] = coronaColor2;
-        }
+        CRGB coronaColor = CRGB(0, corona >> 2, corona >> 1);
+        SET_CENTER_PAIR(ctx, outerDist, coronaColor);
     }
 }
 

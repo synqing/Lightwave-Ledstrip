@@ -65,13 +65,13 @@ void LGPStarBurstEnhancedEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
-        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+        bool newHop = (ctx.audio.hopSequence() != m_lastHopSeq);
         if (newHop) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+            m_lastHopSeq = ctx.audio.hopSequence();
             
             // Update chromagram targets
             for (uint8_t i = 0; i < 12; i++) {
-                m_chromaTargets[i] = ctx.audio.controlBus.heavy_chroma[i];
+                m_chromaTargets[i] = ctx.audio.getHeavyChroma(i);
             }
 
             // Enhanced: Snare = burst with sub-bass boost
@@ -80,7 +80,7 @@ void LGPStarBurstEnhancedEffect::render(plugins::EffectContext& ctx) {
             }
             
             // Migrated from bins64[0..5] to backend-agnostic bands[0]
-            m_targetSubBass = ctx.audio.controlBus.bands[0];
+            m_targetSubBass = ctx.audio.getBand(0);
         }
     }
 #endif
@@ -111,7 +111,7 @@ void LGPStarBurstEnhancedEffect::render(plugins::EffectContext& ctx) {
 
     // Circular chroma hue (replaces argmax + linear EMA to eliminate bin-flip rainbow sweeps)
     uint8_t chromaHue = effects::chroma::circularChromaHueSmoothed(
-        ctx.audio.controlBus.heavy_chroma, m_chromaAngle, rawDt, 0.20f);
+        ctx.audio.heavyChroma(), m_chromaAngle, rawDt, 0.20f);
 
     // Enhanced: Use 64-bin sub-bass for speed (more responsive)
     float heavyEnergy = 0.0f;

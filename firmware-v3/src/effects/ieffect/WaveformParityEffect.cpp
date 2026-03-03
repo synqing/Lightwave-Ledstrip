@@ -71,14 +71,14 @@ void WaveformParityEffect::render(plugins::EffectContext& ctx) {
     // ========================================================================
     // Step 1: Push waveform into 4-frame history ring (on new audio hop)
     // ========================================================================
-    const bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq[zone]);
+    const bool newHop = (ctx.audio.hopSequence() != m_lastHopSeq[zone]);
     if (newHop) {
-        m_lastHopSeq[zone] = ctx.audio.controlBus.hop_seq;
+        m_lastHopSeq[zone] = ctx.audio.hopSequence();
 
         // Prefer SB parity waveform; fall back to contract waveform.
-        const int16_t* wf = ctx.audio.controlBus.sb_waveform;
-        if (ctx.audio.controlBus.sb_waveform_peak_scaled < 0.0001f) {
-            wf = ctx.audio.controlBus.waveform;
+        const int16_t* wf = ctx.audio.preferredWaveform();
+        if (!wf) {
+            return;
         }
 
         if (!m_historyPrimed[zone]) {
@@ -117,7 +117,7 @@ void WaveformParityEffect::render(plugins::EffectContext& ctx) {
     // ========================================================================
     // Step 2: Smooth peak follower (SB parity: 0.05/0.95, dt-corrected)
     // ========================================================================
-    float peakScaled = ctx.audio.controlBus.sb_waveform_peak_scaled;
+    float peakScaled = ctx.audio.sbWaveformPeakScaled();
     if (peakScaled < 0.0001f) {
         // Fallback when SB sidecar isn't populated.
         peakScaled = clamp01(ctx.audio.rms() * 1.25f);

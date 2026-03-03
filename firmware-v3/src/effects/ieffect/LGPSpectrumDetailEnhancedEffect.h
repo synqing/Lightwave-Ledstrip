@@ -23,6 +23,7 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../CoreEffects.h"
+#include "../enhancement/SmoothingEngine.h"
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
@@ -70,23 +71,17 @@ private:
 
     // =========================================================================
     // FRAME-RATE INDEPENDENT TIME CONSTANTS (in seconds)
-    // Using tau-based exponential decay: alpha = 1 - exp(-dt/tau)
-    // This ensures identical visual behavior at any frame rate (60, 120, 144 FPS)
+    // Alpha computed per-frame from actual dt: alpha = 1 - exp(-dt/tau)
     // =========================================================================
-    static constexpr float FRAME_DT = 1.0f / 120.0f;     // 8.33ms at 120 FPS
     static constexpr float SMOOTHING_TAU = 0.050f;       // 50ms spectral smoothing
     static constexpr float ATTACK_TAU = 0.020f;          // 20ms momentum attack (fast)
     static constexpr float RELEASE_TAU = 0.300f;         // 300ms momentum release (slow)
     static constexpr float DECAY_TAU = 2.000f;           // 2s decay half-life for trails
     static constexpr float SHIMMER_SMOOTH_TAU = 0.100f;  // 100ms shimmer amplitude smoothing
+    static constexpr float SPRING_RETURN_TAU = 0.200f;   // 200ms spring return
 
-    // Pre-computed alpha values for 120 FPS (computed once, used every frame)
-    // alpha = 1 - exp(-dt/tau) for each time constant
-    float m_smoothingAlpha = 0.0f;
-    float m_attackAlpha = 0.0f;
-    float m_releaseAlpha = 0.0f;
-    float m_decayAlpha = 0.0f;
-    float m_shimmerAlpha = 0.0f;
+    // RMS energy follower for dynamic fade (fast attack, smooth release)
+    enhancement::AsymmetricFollower m_rmsFollower{0.0f, 0.03f, 0.25f};
 
     // Beat tracking for reverse trail trigger
     uint8_t m_lastBeatInBar = 255;  // Track to detect beat changes

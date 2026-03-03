@@ -66,8 +66,9 @@ bool SbWaveform310RefEffect::init(plugins::EffectContext& ctx) {
         m_lastHopSeq[z]           = 0;
         m_historyIndex[z]         = 0;
         m_historyPrimed[z]        = false;
-        m_waveformPeakScaledLast[z] = 0.0f;
-        m_waveformMaxFollower[z]  = 750.0f;
+        m_peakFollower[z] = enhancement::AsymmetricFollower{0.0f, 0.02f, 0.30f};
+        m_maxFollower[z] = enhancement::AsymmetricFollower{750.0f, 0.04f, 2.00f};
+        m_rmsFollower[z] = enhancement::AsymmetricFollower{0.0f, 0.03f, 0.25f};
     }
     return true;
 }
@@ -113,32 +114,29 @@ void SbWaveform310RefEffect::render(plugins::EffectContext& ctx) {
             m_historyIndex[z] = (uint8_t)((m_historyIndex[z] + 1) % HISTORY_FRAMES);
         }
 
-        // Adaptive max follower for int16_t domain normalisation.
+        // Adaptive max follower via AsymmetricFollower (fast attack, very slow release)
         float frameMaxAbs = 0.0f;
         for (uint8_t i = 0; i < WAVEFORM_POINTS; ++i) {
             const float a = fabsf(static_cast<float>(wf[i]));
             if (a > frameMaxAbs) frameMaxAbs = a;
         }
-        if (frameMaxAbs > m_waveformMaxFollower[z]) {
-            m_waveformMaxFollower[z] += (frameMaxAbs - m_waveformMaxFollower[z]) * 0.25f;
-        } else {
-            m_waveformMaxFollower[z] -= (m_waveformMaxFollower[z] - frameMaxAbs) * 0.005f;
-        }
-        if (m_waveformMaxFollower[z] < 100.0f) {
-            m_waveformMaxFollower[z] = 100.0f;
-        }
+        float maxVal = m_maxFollower[z].update(frameMaxAbs, dt);
+        if (maxVal < 100.0f) m_maxFollower[z].value = 100.0f;
     }
 
     // ---------------------------------------------------------------------
-    // Peak follower (SB uses waveform_peak_scaled_last = peakScaled*0.05 + last*0.95)
+    // Peak follower via AsymmetricFollower (20ms attack, 300ms release)
     // ---------------------------------------------------------------------
     float peakScaled = ctx.audio.controlBus.sb_waveform_peak_scaled;
     if (peakScaled < 0.0001f) {
         // Fallback when SB sidecar isn't populated: derive from RMS.
         peakScaled = clamp01(ctx.audio.rms() * 1.25f);
     }
-    const float peakAlpha = 1.0f - powf(0.95f, dt * 60.0f);
-    m_waveformPeakScaledLast[z] += (peakScaled - m_waveformPeakScaledLast[z]) * peakAlpha;
+    float smoothPeak = m_peakFollower[z].update(peakScaled, dt);
+
+    // RMS energy for dynamic fade
+    float rmsEnergy = clamp01(ctx.audio.rms());
+    float smoothRms = m_rmsFollower[z].update(rmsEnergy, dt);
 
     // ---------------------------------------------------------------------
     // Colour synthesis (SB 3.1.0: note chromagram → sum_color, smoothed 5/95)
@@ -193,6 +191,13 @@ void SbWaveform310RefEffect::render(plugins::EffectContext& ctx) {
     }
 
     // ---------------------------------------------------------------------
+    // Fade previous frame (trail persistence for waveform motion)
+    // Dynamic: loud = short punchy trails, quiet = long ambient trails
+    // ---------------------------------------------------------------------
+    uint8_t fadeAmount = (uint8_t)(25 + 35 * (1.0f - smoothRms));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmount);
+
+    // ---------------------------------------------------------------------
     // Waveform render (centre-origin resample of SB NATIVE_RESOLUTION=128)
     // ---------------------------------------------------------------------
     float moodNorm = ctx.getMoodNormalized();
@@ -201,12 +206,12 @@ void SbWaveform310RefEffect::render(plugins::EffectContext& ctx) {
     // Convert frame-based smoothing to dt-corrected alpha (~48 FPS reference).
     const float smoothingAlpha = 1.0f - powf(1.0f - smoothing, dt * 48.0f);
 
-    float peak = m_waveformPeakScaledLast[z] * 4.0f;
+    float peak = smoothPeak * 4.0f;
     if (peak > 1.0f) peak = 1.0f;
-    if (peak < 0.0f) peak = 0.0f;
+    if (peak < 0.15f) peak = 0.15f;  // Minimum peak floor for quiet audio visibility
 
     const float brightnessScale = (float)ctx.brightness / 255.0f;
-    const float invFollower = 1.0f / m_waveformMaxFollower[z];
+    const float invFollower = 1.0f / fmaxf(100.0f, m_maxFollower[z].value);
 
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         // Map dist 0..79 → waveform index 0..127 (SB NATIVE_RESOLUTION=128).
@@ -228,14 +233,25 @@ void SbWaveform310RefEffect::render(plugins::EffectContext& ctx) {
 
         output_brightness = 0.5f + output_brightness * 0.5f;
         output_brightness = clamp(output_brightness, 0.0f, 1.0f);
-        output_brightness *= peak;
+        output_brightness *= (0.3f + 0.7f * peak);  // 30% floor, peak adds 70%
         // Convert colour to final RGB with brightness and master brightness scaling.
         float r = m_ps->sumColourLast[z][0] * output_brightness * brightnessScale;
         float g = m_ps->sumColourLast[z][1] * output_brightness * brightnessScale;
         float b = m_ps->sumColourLast[z][2] * output_brightness * brightnessScale;
 
         CRGB c((uint8_t)fminf(r, 255.0f), (uint8_t)fminf(g, 255.0f), (uint8_t)fminf(b, 255.0f));
-        SET_CENTER_PAIR(ctx, dist, c);
+
+        // Blend new waveform with faded previous frame for temporal smoothing.
+        // nblend keeps ~80% new + ~20% residual from fadeToBlackBy.
+        uint16_t left1 = CENTER_LEFT - dist;
+        uint16_t right1 = CENTER_RIGHT + dist;
+        uint16_t left2 = STRIP_LENGTH + CENTER_LEFT - dist;
+        uint16_t right2 = STRIP_LENGTH + CENTER_RIGHT + dist;
+
+        if (left1 < ctx.ledCount)  nblend(ctx.leds[left1], c, 200);
+        if (right1 < ctx.ledCount) nblend(ctx.leds[right1], c, 200);
+        if (left2 < ctx.ledCount)  nblend(ctx.leds[left2], c, 200);
+        if (right2 < ctx.ledCount) nblend(ctx.leds[right2], c, 200);
     }
 #endif
 }

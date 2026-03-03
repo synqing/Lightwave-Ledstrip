@@ -31,9 +31,8 @@ static inline float clamp(float v, float lo, float hi) {
     return v;
 }
 
-static inline const float* selectChroma12(const audio::ControlBusFrame& cb) {
-    // Both backends now produce normalised chroma via Stage A/B pipeline.
-    return cb.chroma;
+static inline const float* selectChroma12(const plugins::AudioContext& audio) {
+    return audio.chroma();
 }
 
 // meanAdaptiveBins() removed — migrated to backend-agnostic bands[8] octave access.
@@ -53,6 +52,11 @@ bool LGPHolographicEsTunedEffect::init(plugins::EffectContext& ctx) {
     m_refraction = 0.0f;
     m_focus = 0.0f;
     m_lastBeatPhase = 0.0f;
+
+    m_bassFollower.reset(0.0f);
+    m_lowMidFollower.reset(0.0f);
+    m_trebleFollower.reset(0.0f);
+    m_energyFollower.reset(0.0f);
 
     return true;
 }
@@ -83,7 +87,7 @@ void LGPHolographicEsTunedEffect::render(plugins::EffectContext& ctx) {
         //   bins[0..7]   (bass)   -> (bands[0] + bands[1]) * 0.5f
         //   bins[16..31] (mid)    -> (bands[3] + bands[4]) * 0.5f
         //   bins[48..63] (treble) -> (bands[5] + bands[6] + bands[7]) / 3
-        const auto& b = ctx.audio.controlBus.bands;
+        const auto& b = ctx.audio.bands();
         bass   = (b[0] + b[1]) * 0.5f;
         lowMid = (b[3] + b[4]) * 0.5f;
         treble = (b[5] + b[6] + b[7]) * (1.0f / 3.0f);
@@ -94,11 +98,15 @@ void LGPHolographicEsTunedEffect::render(plugins::EffectContext& ctx) {
         tempoConfidence = ctx.audio.tempoConfidence();
         beatTick = ctx.audio.isOnBeat();
         downbeatTick = ctx.audio.isOnDownbeat();
-        beatLock = (tempoConfidence > 0.45f);
+
+        // Beat lock hysteresis (Schmitt trigger)
+        if (!m_beatLocked && tempoConfidence > 0.55f) m_beatLocked = true;
+        if (m_beatLocked && tempoConfidence < 0.35f) m_beatLocked = false;
+        beatLock = m_beatLocked;
 
         // Circular chroma hue (prevents argmax discontinuities and wrapping artefacts).
         // The return value is not used directly; baseHue is derived from m_chromaAngle below.
-        const float* chroma = selectChroma12(ctx.audio.controlBus);
+        const float* chroma = selectChroma12(ctx.audio);
         (void)effects::chroma::circularChromaHueSmoothed(
             chroma, m_chromaAngle, rawDt, 0.30f);
 
@@ -134,16 +142,20 @@ void LGPHolographicEsTunedEffect::render(plugins::EffectContext& ctx) {
     m_phase2 += baseRate * 0.85f * kTwoPi * dt;
     m_phase3 += baseRate * 1.25f * kTwoPi * dt;
 
-    // Wrap to prevent unbounded growth
-    if (m_phase1 > 1000.0f) m_phase1 = fmodf(m_phase1, kTwoPi);
-    if (m_phase2 > 1000.0f) m_phase2 = fmodf(m_phase2, kTwoPi);
-    if (m_phase3 > 1000.0f) m_phase3 = fmodf(m_phase3, kTwoPi);
+    // Normalize phases every frame to prevent unbounded growth
+    auto wrapTwoPi = [](float& p) {
+        constexpr float kTwoPi = 6.2831853f;
+        if (p > kTwoPi || p < 0.0f) p = fmodf(fmodf(p, kTwoPi) + kTwoPi, kTwoPi);
+    };
+    wrapTwoPi(m_phase1);
+    wrapTwoPi(m_phase2);
+    wrapTwoPi(m_phase3);
 
     float beatPhi = beatPhase * kTwoPi;
     if (ctx.audio.available && beatLock) {
-        // Target musical ratios (1×, 2×, 4×). Focus reduces detune for a crisp “lock”.
+        // Target musical ratios (1×, 2×, 4×). Focus reduces detune for a crisp "lock".
         float focus = clamp01(m_focus);
-        float pull = 1.0f - expf(-rawDt / 0.18f);
+        float pull = 1.0f - expf(-rawDt / 0.35f);
         pull *= (0.25f + 0.55f * tempoConfidence);
 
         float detune = (1.0f - focus) * (0.35f + 0.25f * speedNorm);
@@ -167,12 +179,28 @@ void LGPHolographicEsTunedEffect::render(plugins::EffectContext& ctx) {
     m_lastBeatPhase = beatPhase;
 
     // ---------------------------------------------------------------------
-    // Layer gains (instrument voicing)
-    // Wide→tight layers respond to bass→treble; shimmer responds to flux/refraction
+    // Smooth audio features via AsymmetricFollower (fast attack, smooth release)
     // ---------------------------------------------------------------------
-    float g1 = 0.55f + 1.05f * bass;
-    float g2 = 0.40f + 0.95f * lowMid;
-    float g3 = 0.30f + 0.85f * treble;
+    float smoothBass = m_bassFollower.update(bass, rawDt);
+    float smoothLowMid = m_lowMidFollower.update(lowMid, rawDt);
+    float smoothTreble = m_trebleFollower.update(treble, rawDt);
+    float smoothEnergy = m_energyFollower.update(
+        0.35f * bass + 0.25f * lowMid + 0.20f * treble + 0.20f * beatStrength, rawDt);
+
+    // ---------------------------------------------------------------------
+    // Fade previous frame (trail persistence)
+    // Dynamic: more energy = shorter trails (punchier), less energy = longer trails
+    // ---------------------------------------------------------------------
+    uint8_t fadeAmount = (uint8_t)(15 + 35 * (1.0f - clamp01(smoothEnergy)));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmount);
+
+    // ---------------------------------------------------------------------
+    // Layer gains (instrument voicing)
+    // Wide→tight layers respond to smoothed bass→treble; shimmer responds to flux/refraction
+    // ---------------------------------------------------------------------
+    float g1 = 0.55f + 1.05f * smoothBass;
+    float g2 = 0.40f + 0.95f * smoothLowMid;
+    float g3 = 0.30f + 0.85f * smoothTreble;
     float g4 = 0.20f + 1.10f * clamp01(flux * 0.8f + m_refraction);
 
     // Prevent hard zeros (keeps a base hologram even in quieter passages).
@@ -182,8 +210,7 @@ void LGPHolographicEsTunedEffect::render(plugins::EffectContext& ctx) {
     g4 = clamp(g4, 0.04f, 1.30f);
 
     // Contrast drive: more energy/beat → crisper interference.
-    float energy = clamp01(0.35f * bass + 0.25f * lowMid + 0.20f * treble + 0.20f * beatStrength);
-    float drive = 1.0f + 1.55f * energy + 0.55f * clamp01(m_focus);
+    float drive = 1.0f + 1.55f * smoothEnergy + 0.55f * clamp01(m_focus);
 
     // ---------------------------------------------------------------------
     // Colour anchoring (non-rainbow): circular chroma mean sets the base.
@@ -219,9 +246,14 @@ void LGPHolographicEsTunedEffect::render(plugins::EffectContext& ctx) {
         uint8_t paletteIndex1 = (uint8_t)(baseHue + (uint8_t)(dist * 0.60f) + (int8_t)(layerSum * shear));
         uint8_t paletteIndex2 = (uint8_t)(baseHue + dispersion - (uint8_t)(dist * 0.60f) - (int8_t)(layerSum * shear));
 
-        ctx.leds[i] = ctx.palette.getColor(paletteIndex1, brightness);
+        // Blend new frame with faded previous frame for temporal smoothing.
+        // nblend keeps ~75% new + ~25% previous (residual from fadeToBlackBy above).
+        CRGB color1 = ctx.palette.getColor(paletteIndex1, brightness);
+        nblend(ctx.leds[i], color1, 192);
+
         if (i + STRIP_LENGTH < ctx.ledCount) {
-            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor(paletteIndex2, brightness);
+            CRGB color2 = ctx.palette.getColor(paletteIndex2, brightness);
+            nblend(ctx.leds[i + STRIP_LENGTH], color2, 192);
         }
     }
 }

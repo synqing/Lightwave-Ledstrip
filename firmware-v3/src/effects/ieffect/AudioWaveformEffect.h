@@ -17,6 +17,7 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../enhancement/SmoothingEngine.h"
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
@@ -44,13 +45,9 @@ private:
     // Algorithm Constants (matched to original SensoryBridge)
     // ============================================================================
 
-    // Peak smoothing: 5% new, 95% old (original ratio)
-    static constexpr float PEAK_SMOOTH_NEW = 0.05f;
-    static constexpr float PEAK_SMOOTH_OLD = 0.95f;
-
-    // Color smoothing: 5% new, 95% old (original ratio)
-    static constexpr float COLOR_SMOOTH_NEW = 0.05f;
-    static constexpr float COLOR_SMOOTH_OLD = 0.95f;
+    // Color smoothing: 12% new, 88% old (adjusted for 120fps)
+    static constexpr float COLOR_SMOOTH_NEW = 0.12f;
+    static constexpr float COLOR_SMOOTH_OLD = 0.88f;
 
     // Brightness threshold for chromagram bins
     static constexpr float CHROMA_THRESHOLD = 0.05f;
@@ -73,8 +70,9 @@ private:
     // State Variables
     // ============================================================================
 
-    // Smoothed peak amplitude (0.0 to 1.0)
-    float m_peakSmoothed = 0.0f;
+    // Peak amplitude follower: fast attack (20ms), moderate release (120ms)
+    // Waveform needs crisp transient response so attack is very fast
+    enhancement::AsymmetricFollower m_peakFollower{0.0f, 0.02f, 0.12f};
 
     // Sum colour state (RGB smoothing)
     float m_sumColorLast[3] = {0.0f, 0.0f, 0.0f};

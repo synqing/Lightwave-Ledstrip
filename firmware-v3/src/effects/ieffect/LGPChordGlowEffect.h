@@ -19,6 +19,7 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../../audio/contracts/ControlBus.h"
+#include "../enhancement/SmoothingEngine.h"
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
@@ -79,6 +80,15 @@ private:
 
     // Last hop sequence for update detection
     uint32_t m_lastHopSeq = 0;
+
+    // Brightness envelope: fast attack (80ms), slow release (250ms) — prevents epileptic flashing
+    enhancement::AsymmetricFollower m_brightnessEnvelope{0.0f, 0.08f, 0.25f};
+
+    // Confidence smoother (120ms tau)
+    enhancement::ExpDecay m_confidenceSmoother{0.0f, 1.0f / 0.12f};
+
+    // Root note smoother (200ms tau)
+    enhancement::ExpDecay m_rootNoteSmoother{0.0f, 1.0f / 0.20f};
 
     // Helper methods
     uint8_t rootNoteToHue(uint8_t rootNote) const;

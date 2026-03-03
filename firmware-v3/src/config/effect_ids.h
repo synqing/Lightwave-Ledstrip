@@ -127,6 +127,7 @@ constexpr EffectId EID_LGP_PLASMA_MEMBRANE                 = 0x0502;  // old  36
 constexpr EffectId EID_LGP_NEURAL_NETWORK                  = 0x0503;  // old  37: LGP Neural Network
 constexpr EffectId EID_LGP_CRYSTALLINE_GROWTH              = 0x0504;  // old  38: LGP Crystalline Growth
 constexpr EffectId EID_LGP_FLUID_DYNAMICS                  = 0x0505;  // old  39: LGP Fluid Dynamics
+constexpr EffectId EID_LGP_NEURAL_NETWORK_RADIAL           = 0x0506;  // Radial variant of Neural Network
 
 // --- LGP Quantum (0x06xx) ---
 constexpr EffectId EID_LGP_QUANTUM_TUNNELING               = 0x0600;  // old  40: LGP Quantum Tunneling
@@ -139,6 +140,8 @@ constexpr EffectId EID_LGP_CAUSTIC_FAN                     = 0x0606;  // old  46
 constexpr EffectId EID_LGP_BIREFRINGENT_SHEAR              = 0x0607;  // old  47: LGP Birefringent Shear
 constexpr EffectId EID_LGP_ANISOTROPIC_CLOAK               = 0x0608;  // old  48: LGP Anisotropic Cloak
 constexpr EffectId EID_LGP_EVANESCENT_SKIN                 = 0x0609;  // old  49: LGP Evanescent Skin
+constexpr EffectId EID_LGP_BIREFRINGENT_SHEAR_RADIAL       = 0x060A;  // Radial variant of Birefringent Shear
+constexpr EffectId EID_LGP_SOLITON_WAVES_RADIAL            = 0x060B;  // Radial variant of Soliton Waves
 
 // --- LGP Colour Mixing (0x07xx) ---
 constexpr EffectId EID_LGP_COLOR_TEMPERATURE               = 0x0700;  // old  50: LGP Color Temperature
@@ -303,7 +306,7 @@ constexpr EffectId EID_LGP_TIME_REVERSAL_MIRROR_MOD1       = 0x1B06;  // Time-Re
 constexpr EffectId EID_LGP_TIME_REVERSAL_MIRROR_MOD2       = 0x1B07;  // Time-Reversal Mirror Mod2
 constexpr EffectId EID_LGP_TIME_REVERSAL_MIRROR_MOD3       = 0x1B08;  // Time-Reversal Mirror Mod3
 
-// Total: 171 IDs assigned (170 active, 1 retired)
+// Total: 174 IDs assigned (173 active, 1 retired)
 
 // ============================================================================
 // Migration: Old Sequential ID -> New Stable ID

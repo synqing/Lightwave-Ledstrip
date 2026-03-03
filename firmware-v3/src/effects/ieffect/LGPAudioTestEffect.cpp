@@ -26,6 +26,8 @@ bool LGPAudioTestEffect::init(plugins::EffectContext& ctx) {
     m_beatDecay = 0.0f;
     m_lastBeatPhase = 0.0f;
     m_fallbackPhase = 0.0f;
+    m_rmsFollower.reset(0.0f);
+    for (int i = 0; i < 8; ++i) m_bandFollowers[i].reset(0.0f);
     return true;
 }
 
@@ -38,6 +40,9 @@ void LGPAudioTestEffect::render(plugins::EffectContext& ctx) {
     float beatPhase = 0.0f;
     bool onBeat = false;
     float bands[8] = {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f};
+
+    // Get dt for frame-rate independent smoothing
+    float dt = ctx.getSafeRawDeltaSeconds();
 
     if (ctx.audio.available) {
         // Real audio data from AudioActor
@@ -74,8 +79,13 @@ void LGPAudioTestEffect::render(plugins::EffectContext& ctx) {
 
     m_lastBeatPhase = beatPhase;
 
-    // Get dt for frame-rate independent decay
-    float dt = ctx.getSafeRawDeltaSeconds();
+    // ========================================================================
+    // Smooth all audio values (eliminates per-frame jitter / flicker)
+    // ========================================================================
+    rms = m_rmsFollower.update(rms, dt);
+    for (int i = 0; i < 8; ++i) {
+        bands[i] = m_bandFollowers[i].update(bands[i], dt);
+    }
 
     // ========================================================================
     // Beat pulse animation (decays over time)
@@ -95,13 +105,14 @@ void LGPAudioTestEffect::render(plugins::EffectContext& ctx) {
 
     float masterIntensity = 0.3f + (rms * 0.5f) + (m_beatDecay * 0.2f);
     masterIntensity = fminf(1.0f, masterIntensity);
-    uint8_t masterBright = (uint8_t)(masterIntensity * 255.0f);
+    uint8_t masterBright = scale8((uint8_t)(masterIntensity * 255.0f), ctx.brightness);
 
     // ========================================================================
-    // Clear buffer
+    // Trail persistence (fade previous frame instead of hard clear)
+    // Dynamic: loud = short punchy trails, quiet = longer smooth trails
     // ========================================================================
-
-    memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+    uint8_t fadeAmount = (uint8_t)(25 + 35 * (1.0f - rms));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmount);
 
     // ========================================================================
     // CENTER PAIR rendering: bands map from center (bass) to edges (treble)
@@ -132,8 +143,13 @@ void LGPAudioTestEffect::render(plugins::EffectContext& ctx) {
 
         CRGB color = ctx.palette.getColor(hue, bright);
 
-        // Set center pair (both strips)
-        SET_CENTER_PAIR(ctx, dist, color);
+        // Blend into faded buffer (temporal smoothing, not hard overwrite)
+        uint16_t left = CENTER_LEFT - dist;
+        uint16_t right = CENTER_RIGHT + dist;
+        if (left < STRIP_LENGTH) nblend(ctx.leds[left], color, 180);
+        if (right < STRIP_LENGTH) nblend(ctx.leds[right], color, 180);
+        if (left + STRIP_LENGTH < ctx.ledCount) nblend(ctx.leds[left + STRIP_LENGTH], color, 180);
+        if (right + STRIP_LENGTH < ctx.ledCount) nblend(ctx.leds[right + STRIP_LENGTH], color, 180);
     }
 
     // ========================================================================

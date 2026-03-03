@@ -75,8 +75,8 @@ void BPMEffect::render(plugins::EffectContext& ctx) {
         // =====================================================================
         // v8 SPEED MODULATION: heavy_bands → EMA smoothing → Spring
         // =====================================================================
-        float rawHeavyEnergy = (ctx.audio.controlBus.heavy_bands[1] +
-                                 ctx.audio.controlBus.heavy_bands[2]) / 2.0f;
+        float rawHeavyEnergy = (ctx.audio.getHeavyBand(1) +
+                                 ctx.audio.getHeavyBand(2)) / 2.0f;
         
         // EMA smoothing with frame-rate-independent alpha (tau = 50ms)
         const float tau = 0.05f;

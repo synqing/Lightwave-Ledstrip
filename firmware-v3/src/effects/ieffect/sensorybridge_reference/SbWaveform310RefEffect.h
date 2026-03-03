@@ -19,6 +19,7 @@
 #include "../../CoreEffects.h"
 #include "../../../plugins/api/IEffect.h"
 #include "../../../plugins/api/EffectContext.h"
+#include "../../enhancement/SmoothingEngine.h"
 
 #ifndef NATIVE_BUILD
 #include <esp_heap_caps.h>
@@ -48,8 +49,15 @@ private:
     uint32_t m_lastHopSeq[kMaxZones]           = {};
     uint8_t  m_historyIndex[kMaxZones]         = {};
     bool     m_historyPrimed[kMaxZones]        = {};
-    float    m_waveformPeakScaledLast[kMaxZones] = {};
-    float    m_waveformMaxFollower[kMaxZones]  = {};
+
+    // Peak tracking via AsymmetricFollower (fast attack 20ms, slow release 300ms)
+    enhancement::AsymmetricFollower m_peakFollower[kMaxZones];
+
+    // Adaptive max follower via AsymmetricFollower (fast attack 40ms, very slow release 2000ms)
+    enhancement::AsymmetricFollower m_maxFollower[kMaxZones];
+
+    // RMS energy follower for dynamic fade (attack 30ms, release 250ms)
+    enhancement::AsymmetricFollower m_rmsFollower[kMaxZones];
 
     // PSRAM-allocated — large buffers MUST NOT live in DRAM (see MEMORY_ALLOCATION.md)
 #ifndef NATIVE_BUILD

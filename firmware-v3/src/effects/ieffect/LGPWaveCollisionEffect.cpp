@@ -51,14 +51,14 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
 
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
-        newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+        newHop = (ctx.audio.hopSequence() != m_lastHopSeq);
         if (newHop) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+            m_lastHopSeq = ctx.audio.hopSequence();
 
             const float led_share = 255.0f / 12.0f;
             float chromaEnergy = 0.0f;
             for (uint8_t i = 0; i < 12; ++i) {
-                float bin = ctx.audio.controlBus.chroma[i];
+                float bin = ctx.audio.getChroma(i);
                 float bright = bin * bin;
                 bright *= 1.5f;
                 if (bright > 1.0f) bright = 1.0f;
@@ -111,7 +111,7 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
 
     // Circular chroma hue (replaces argmax + linear EMA to eliminate bin-flip rainbow sweeps)
     uint8_t chromaHue = effects::chroma::circularChromaHueSmoothed(
-        ctx.audio.controlBus.chroma, m_chromaAngle, rawDt, 0.20f);
+        ctx.audio.chroma(), m_chromaAngle, rawDt, 0.20f);
 
     // Percussion-driven collision boost (snare = collision event!)
 #if FEATURE_AUDIO_SYNC

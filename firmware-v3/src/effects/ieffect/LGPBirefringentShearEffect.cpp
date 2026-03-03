@@ -23,7 +23,7 @@ bool LGPBirefringentShearEffect::init(plugins::EffectContext& ctx) {
 }
 
 void LGPBirefringentShearEffect::render(plugins::EffectContext& ctx) {
-    // Dual spatial modes slipping past one another
+    // Dual concentric modes slipping past one another (centre-origin compliant)
     m_time = (uint16_t)(m_time + (ctx.speed >> 1));
 
     float intensityNorm = ctx.brightness / 255.0f;
@@ -34,12 +34,12 @@ void LGPBirefringentShearEffect::render(plugins::EffectContext& ctx) {
     uint8_t mixWave = (uint8_t)(intensityNorm * 255.0f);
     uint8_t mixCarrier = (uint8_t)(255 - mixWave);
 
-    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {
-        float idx = (float)i;
+    for (uint16_t dist = 0; dist < HALF_LENGTH; dist++) {
+        float r = (float)dist;
 
         float phaseBase = m_time / 128.0f;
-        float phase1 = idx * (baseFrequency + deltaK) + phaseBase;
-        float phase2 = idx * (baseFrequency - deltaK) - phaseBase + drift * idx * 0.05f;
+        float phase1 = r * (baseFrequency + deltaK) + phaseBase;
+        float phase2 = r * (baseFrequency - deltaK) - phaseBase + drift * r * 0.05f;
 
         uint8_t wave1 = sin8((int16_t)(phase1 * 16.0f));
         uint8_t wave2 = sin8((int16_t)(phase2 * 16.0f));
@@ -48,14 +48,22 @@ void LGPBirefringentShearEffect::render(plugins::EffectContext& ctx) {
         uint8_t beat = (uint8_t)abs((int)wave1 - (int)wave2);
         uint8_t brightness = qadd8(combined, scale8(beat, 96));
 
-        uint8_t hue1 = (uint8_t)(ctx.gHue + (uint8_t)(idx) + (m_time >> 4));
+        uint8_t hue1 = (uint8_t)(ctx.gHue + (uint8_t)dist + (m_time >> 4));
         uint8_t hue2 = (uint8_t)(hue1 + 128);
 
         uint8_t brightU8 = (uint8_t)((brightness * ctx.brightness) / 255);
-        ctx.leds[i] = ctx.palette.getColor(hue1, brightU8);
-        if (i + STRIP_LENGTH < ctx.ledCount) {
-            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor(hue2, brightU8);
-        }
+        CRGB color1 = ctx.palette.getColor(hue1, brightU8);
+        CRGB color2 = ctx.palette.getColor(hue2, brightU8);
+
+        uint16_t left1 = CENTER_LEFT - dist;
+        uint16_t right1 = CENTER_RIGHT + dist;
+        if (left1 < STRIP_LENGTH) ctx.leds[left1] = color1;
+        if (right1 < STRIP_LENGTH) ctx.leds[right1] = color1;
+
+        uint16_t left2 = STRIP_LENGTH + CENTER_LEFT - dist;
+        uint16_t right2 = STRIP_LENGTH + CENTER_RIGHT + dist;
+        if (left2 < ctx.ledCount) ctx.leds[left2] = color2;
+        if (right2 < ctx.ledCount) ctx.leds[right2] = color2;
     }
 }
 

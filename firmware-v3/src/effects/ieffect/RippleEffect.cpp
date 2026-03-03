@@ -69,12 +69,12 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
     const float rawDtEarly = ctx.getSafeRawDeltaSeconds();
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
-        newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+        newHop = (ctx.audio.hopSequence() != m_lastHopSeq);
         if (newHop) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+            m_lastHopSeq = ctx.audio.hopSequence();
 
             // Sub-bass kick detection — instant attack, fast decay.
-            const float kickAvg = ctx.audio.controlBus.bands[0];  // Migrated from bins64[0..5]
+            const float kickAvg = ctx.audio.getBand(0);  // Migrated from bins64[0..5]
             if (kickAvg > m_kickPulse) {
                 m_kickPulse = kickAvg;  // Instant attack
             } else {
@@ -82,7 +82,7 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
             }
 
             // Treble shimmer — hi-hat/cymbal energy for wavefront sparkle.
-            m_trebleShimmer = (ctx.audio.controlBus.bands[5] + ctx.audio.controlBus.bands[6] + ctx.audio.controlBus.bands[7]) * (1.0f / 3.0f);  // Migrated from bins64[48..63]
+            m_trebleShimmer = (ctx.audio.getBand(5) + ctx.audio.getBand(6) + ctx.audio.getBand(7)) * (1.0f / 3.0f);  // Migrated from bins64[48..63]
         }
     }
 #endif
@@ -97,7 +97,7 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
     uint8_t chromaHueOffset = 0;
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
-        const float* chroma = ctx.audio.controlBus.chroma;
+        const float* chroma = ctx.audio.chroma();
         chromaHueOffset = effects::chroma::circularChromaHueSmoothed(
             chroma, m_chromaAngle, rawDt, 0.20f);
     }
@@ -108,7 +108,7 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
         const float led_share = 255.0f / 12.0f;
         float chromaEnergy = 0.0f;
         for (uint8_t i = 0; i < 12; ++i) {
-            float bin = ctx.audio.controlBus.chroma[i];
+            float bin = ctx.audio.getChroma(i);
             float bright = bin;
             bright = bright * bright;
             bright *= 1.5f;

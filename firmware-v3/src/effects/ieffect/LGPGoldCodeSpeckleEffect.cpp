@@ -157,12 +157,12 @@ void LGPGoldCodeSpeckleEffect::render(plugins::EffectContext& ctx) {
 #if FEATURE_AUDIO_SYNC
     if (ctx.audio.available) {
         // Update chroma targets on new hops
-        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+        bool newHop = (ctx.audio.hopSequence() != m_lastHopSeq);
         if (newHop) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+            m_lastHopSeq = ctx.audio.hopSequence();
             for (uint8_t i = 0; i < 12; ++i) {
                 // Smooth toward heavy_chroma using simple exponential approach
-                float target = ctx.audio.controlBus.heavy_chroma[i];
+                float target = ctx.audio.getHeavyChroma(i);
                 m_chromaSmoothed[i] += (target - m_chromaSmoothed[i]) * 0.3f;
             }
         }

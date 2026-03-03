@@ -49,7 +49,7 @@ void LGPGravitationalLensingEffect::render(plugins::EffectContext& ctx) {
         }
     }
 
-    fill_solid(ctx.leds, ctx.ledCount, CRGB::Black);
+    fadeToBlackBy(ctx.leds, ctx.ledCount, 20);
 
     // Generate light rays from center
     for (int16_t ray = -40; ray <= 40; ray += 2) {

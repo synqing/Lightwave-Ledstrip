@@ -21,7 +21,7 @@ class LGPColorTemperatureEffect : public plugins::IEffect {
 public:
     static constexpr lightwaveos::EffectId kId = lightwaveos::EID_LGP_COLOR_TEMPERATURE;
 
-    LGPColorTemperatureEffect() = default;
+    LGPColorTemperatureEffect();
     ~LGPColorTemperatureEffect() override = default;
 
     // IEffect interface
@@ -29,6 +29,9 @@ public:
     void render(plugins::EffectContext& ctx) override;
     void cleanup() override;
     const plugins::EffectMetadata& getMetadata() const override;
+
+private:
+    float m_phase;
 };
 
 } // namespace ieffect

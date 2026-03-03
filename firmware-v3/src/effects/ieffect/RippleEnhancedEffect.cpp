@@ -92,19 +92,19 @@ void RippleEnhancedEffect::render(plugins::EffectContext& ctx) {
         m_lastBeatState = currentBeat;
         m_lastDownbeatState = currentDownbeat;
 
-        newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+        newHop = (ctx.audio.hopSequence() != m_lastHopSeq);
         if (newHop) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+            m_lastHopSeq = ctx.audio.hopSequence();
 
             // Sub-bass kick detection — deep kick drums the chromagram misses.
-            m_targetKick = ctx.audio.controlBus.bands[0];  // Migrated from bins64[0..5]
+            m_targetKick = ctx.audio.getBand(0);  // Migrated from bins64[0..5]
 
             // Treble shimmer — hi-hat/cymbal energy for wavefront sparkle.
-            m_targetTreble = (ctx.audio.controlBus.bands[5] + ctx.audio.controlBus.bands[6] + ctx.audio.controlBus.bands[7]) * (1.0f / 3.0f);  // Migrated from bins64[48..63]
+            m_targetTreble = (ctx.audio.getBand(5) + ctx.audio.getBand(6) + ctx.audio.getBand(7)) * (1.0f / 3.0f);  // Migrated from bins64[48..63]
 
             // Update chromagram targets
             for (uint8_t i = 0; i < 12; i++) {
-                m_ps->chromaTargets[i] = ctx.audio.controlBus.heavy_chroma[i];
+                m_ps->chromaTargets[i] = ctx.audio.getHeavyChroma(i);
             }
         }
 
@@ -132,7 +132,7 @@ void RippleEnhancedEffect::render(plugins::EffectContext& ctx) {
     uint8_t chromaHueOffset = 0;
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
-        const float* chroma = ctx.audio.controlBus.chroma;
+        const float* chroma = ctx.audio.chroma();
         chromaHueOffset = effects::chroma::circularChromaHueSmoothed(
             chroma, m_chromaAngle, rawDt, 0.20f);
     }

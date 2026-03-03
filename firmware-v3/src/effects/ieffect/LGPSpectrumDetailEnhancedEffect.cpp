@@ -46,16 +46,7 @@ constexpr uint8_t STRIP2_PRE_SCALE = 60;     // Strip 2 at 66% of Strip 1 (suppo
 bool LGPSpectrumDetailEnhancedEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
 
-    // =========================================================================
-    // PRE-COMPUTE FRAME-RATE INDEPENDENT ALPHA VALUES
-    // Formula: alpha = 1 - exp(-dt/tau)
-    // This ensures identical visual behavior at any frame rate
-    // =========================================================================
-    m_smoothingAlpha = 1.0f - expf(-FRAME_DT / SMOOTHING_TAU);  // ~0.154 @ 120 FPS
-    m_attackAlpha = 1.0f - expf(-FRAME_DT / ATTACK_TAU);        // ~0.341 @ 120 FPS
-    m_releaseAlpha = 1.0f - expf(-FRAME_DT / RELEASE_TAU);      // ~0.027 @ 120 FPS
-    m_decayAlpha = expf(-FRAME_DT / DECAY_TAU);                 // ~0.9958 @ 120 FPS (retention)
-    m_shimmerAlpha = 1.0f - expf(-FRAME_DT / SHIMMER_SMOOTH_TAU); // ~0.080 @ 120 FPS
+    m_rmsFollower.reset(0.0f);
 
 #ifndef NATIVE_BUILD
     if (!m_ps) {
@@ -88,12 +79,33 @@ bool LGPSpectrumDetailEnhancedEffect::init(plugins::EffectContext& ctx) {
 
 void LGPSpectrumDetailEnhancedEffect::render(plugins::EffectContext& ctx) {
     if (!m_ps) return;
-    // Faster LED-level cleanup to prevent saturation buildup between frames
-    // fadeAmount=12 (4.7% per frame) - takes 14 frames to halve instead of 77
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 12);
 
-    // Fade reverse trail buffer - fixed faster rate for consistent decay
-    fadeToBlackBy(m_ps->radialTrail, HALF_LENGTH, 15);
+    // Compute per-frame dt for truly frame-rate independent alpha values
+    const float dt = ctx.getSafeDeltaSeconds();
+
+    // Audio energy for dynamic fade
+    float rmsEnergy = 0.0f;
+#if FEATURE_AUDIO_SYNC
+    if (ctx.audio.available) {
+        rmsEnergy = ctx.audio.rms();
+    }
+#endif
+    float smoothRms = m_rmsFollower.update(rmsEnergy, dt);
+
+    // Dynamic fade: loud = short punchy trails (40), quiet = long ambient trails (20)
+    uint8_t fadeAmount = (uint8_t)(20 + 40 * (1.0f - smoothRms));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmount);
+
+    // Fade reverse trail buffer - proportional to main fade
+    fadeToBlackBy(m_ps->radialTrail, HALF_LENGTH, (uint8_t)(fadeAmount * 3 / 4));
+
+    // Compute per-frame alpha values from actual dt (truly frame-rate independent)
+    const float smoothingAlpha = 1.0f - expf(-dt / SMOOTHING_TAU);
+    const float attackAlpha = 1.0f - expf(-dt / ATTACK_TAU);
+    const float releaseAlpha = 1.0f - expf(-dt / RELEASE_TAU);
+    const float decayAlpha = expf(-dt / DECAY_TAU);
+    const float shimmerAlpha = 1.0f - expf(-dt / SHIMMER_SMOOTH_TAU);
+    const float springReturnAlpha = 1.0f - expf(-dt / SPRING_RETURN_TAU);
 
 #if !FEATURE_AUDIO_SYNC
     (void)ctx;
@@ -120,9 +132,9 @@ void LGPSpectrumDetailEnhancedEffect::render(plugins::EffectContext& ctx) {
     // Sensory Bridge Pattern: Update targets ONLY on new hops
     // This prevents per-frame noise and matches Sensory Bridge exactly
     // =========================================================================
-    bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+    bool newHop = (ctx.audio.hopSequence() != m_lastHopSeq);
     if (newHop) {
-        m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+        m_lastHopSeq = ctx.audio.hopSequence();
         
         // Update history buffer ONLY on new hops (when data actually changes)
         // Sensory Bridge Pattern: History Buffer BEFORE Smoothing (filters spikes)
@@ -147,7 +159,7 @@ void LGPSpectrumDetailEnhancedEffect::render(plugins::EffectContext& ctx) {
     
     // =========================================================================
     // FRAME-RATE INDEPENDENT SMOOTHING (tau=50ms)
-    // Uses pre-computed m_smoothingAlpha = 1 - exp(-dt/tau)
+    // Uses pre-computed smoothingAlpha = 1 - exp(-dt/tau)
     // At 120 FPS: alpha ~0.154 (reaches 63% of target in 50ms = 6 frames)
     // =========================================================================
     for (uint8_t bin = 0; bin < NUM_BINS; ++bin) {
@@ -155,18 +167,18 @@ void LGPSpectrumDetailEnhancedEffect::render(plugins::EffectContext& ctx) {
         float current = m_ps->binSmoothing[bin];
 
         // Frame-rate independent exponential smoothing
-        m_ps->binSmoothing[bin] = current + (target - current) * m_smoothingAlpha;
+        m_ps->binSmoothing[bin] = current + (target - current) * smoothingAlpha;
     }
 
     // =========================================================================
     // FRAME-RATE INDEPENDENT DECAY (tau=2000ms)
-    // Uses pre-computed m_decayAlpha = exp(-dt/tau) for retention
+    // Uses pre-computed decayAlpha = exp(-dt/tau) for retention
     // At 120 FPS: alpha ~0.9958 (half-life = ln(2) * tau = ~1.4s)
     // Creates "fluid in slow mo" trails that decay uniformly
     // =========================================================================
     for (uint8_t bin = 0; bin < NUM_BINS; ++bin) {
         // Frame-rate independent uniform decay
-        m_ps->binSmoothing[bin] *= m_decayAlpha;
+        m_ps->binSmoothing[bin] *= decayAlpha;
     }
 
     // =========================================================================
@@ -174,8 +186,8 @@ void LGPSpectrumDetailEnhancedEffect::render(plugins::EffectContext& ctx) {
     //
     // Philosophy: Energy controls position DIRECTLY with smooth transitions.
     // Uses pre-computed alpha values for frame-rate independence:
-    // - m_attackAlpha: 20ms tau for fast attack (near-instant response)
-    // - m_releaseAlpha: 300ms tau for slow release (smooth decay)
+    // - attackAlpha: 20ms tau for fast attack (near-instant response)
+    // - releaseAlpha: 300ms tau for slow release (smooth decay)
     // =========================================================================
 
     // Motion parameters (frame-rate independent)
@@ -183,17 +195,14 @@ void LGPSpectrumDetailEnhancedEffect::render(plugins::EffectContext& ctx) {
     constexpr float MOMENTUM_FACTOR = 6.0f;     // Additional displacement from momentum
     constexpr float SILENCE_THRESHOLD = 0.01f;  // Below this = "silent"
     constexpr float MOMENTUM_THRESHOLD = 0.05f; // Below this = allow spring return
-    constexpr float SPRING_RETURN_TAU = 0.200f; // 200ms spring return time constant
-
-    // Pre-compute spring return alpha (could also be done in init())
-    float springReturnAlpha = 1.0f - expf(-FRAME_DT / SPRING_RETURN_TAU);
+    // springReturnAlpha computed per-frame from actual dt above
 
     for (uint8_t bin = 0; bin < NUM_BINS; ++bin) {
         float currentEnergy = m_ps->binSmoothing[bin];
         float staticBase = (float)binToLedDistance(bin);
 
         // ASYMMETRIC MOMENTUM: Frame-rate independent attack/release
-        float alpha = (currentEnergy > m_ps->binMomentum[bin]) ? m_attackAlpha : m_releaseAlpha;
+        float alpha = (currentEnergy > m_ps->binMomentum[bin]) ? attackAlpha : releaseAlpha;
         m_ps->binMomentum[bin] += (currentEnergy - m_ps->binMomentum[bin]) * alpha;
 
         // DIRECT COUPLING: Position = Base + Instant + MomentumTail
@@ -214,7 +223,7 @@ void LGPSpectrumDetailEnhancedEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
     // TREBLE SHIMMER: Frame-rate independent amplitude smoothing
     // Oscillation amplitude is smoothed to prevent abrupt size changes
-    // Uses m_shimmerAlpha (100ms tau) for smooth amplitude transitions
+    // Uses shimmerAlpha (100ms tau) for smooth amplitude transitions
     // =========================================================================
     float time = (float)millis() * 0.001f;  // Time in seconds
     for (uint8_t bin = 48; bin < 64; ++bin) {  // Treble bins only (highest 16 bins)
@@ -222,7 +231,7 @@ void LGPSpectrumDetailEnhancedEffect::render(plugins::EffectContext& ctx) {
         float targetAmp = (m_ps->binSmoothing[bin] > MIN_THRESHOLD) ? 0.3f * m_ps->binSmoothing[bin] : 0.0f;
 
         // Smooth the amplitude using frame-rate independent decay
-        m_ps->shimmerAmp[bin] += (targetAmp - m_ps->shimmerAmp[bin]) * m_shimmerAlpha;
+        m_ps->shimmerAmp[bin] += (targetAmp - m_ps->shimmerAmp[bin]) * shimmerAlpha;
 
         // Apply oscillation with smoothed amplitude
         if (m_ps->shimmerAmp[bin] > 0.001f) {
@@ -539,31 +548,15 @@ void LGPSpectrumDetailEnhancedEffect::render(plugins::EffectContext& ctx) {
 }
 
 uint16_t LGPSpectrumDetailEnhancedEffect::binToLedDistance(uint8_t bin) const {
-    // TODO: This assumes Goertzel log spacing. Under PipelineCore the bins64 shim
-    // uses 4:1 averaged FFT bins which are linearly spaced — the log mapping here
-    // is therefore not frequency-accurate. Migrate to bins256 + FrequencyMap.
-    //
-    // REVERSED: High frequencies at center, low frequencies at edges
-    // bin 63 (treble) -> distance 0 (center)
-    // bin 0 (bass) -> distance 80 (edge)
-    // This creates center-to-edges visual flow
-    
-    if (bin == 63) {
-        return 0;  // Treble at center
-    }
-    
-    // Calculate normalized position (0.0 = bin 0, 1.0 = bin 63)
-    float logPos = log10f((float)(bin + 1) / 64.0f);
-    float normalized = (logPos + 1.806f) / 1.806f;
-    normalized = fmaxf(0.0f, fminf(1.0f, normalized));
-    
-    // REVERSE: invert normalized (1.0 - normalized)
-    // Now: bin 0 → normalized=0 → reversed=1.0 → distance=80
-    //      bin 63 → normalized=1.0 → reversed=0.0 → distance=0
-    float reversed = 1.0f - normalized;
-    uint16_t distance = (uint16_t)(reversed * (float)HALF_LENGTH);
-    
-    return distance;
+    // Perceptual log mapping for linearly-spaced FFT bins (PipelineCore)
+    // Bass at center (dist=0), treble at edges (dist=HALF_LENGTH-1)
+    // Uses log2 for perceptual spacing that works with linear FFT
+
+    constexpr uint8_t numBins = 64;
+    float freq = (float)(bin + 1) / (float)numBins;  // 0..1 normalized frequency
+    float logFreq = log2f(1.0f + freq * 15.0f) / 4.0f;  // log2(16)=4, maps to 0..1
+    if (logFreq > 1.0f) logFreq = 1.0f;
+    return (uint16_t)(logFreq * 79.0f);  // HALF_LENGTH - 1 = 79
 }
 
 CRGB LGPSpectrumDetailEnhancedEffect::frequencyToColor(uint8_t bin, const plugins::EffectContext& ctx) const {

@@ -83,12 +83,12 @@ void RippleEsTunedEffect::render(plugins::EffectContext& ctx) {
     bool newHop = false;
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
-        newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+        newHop = (ctx.audio.hopSequence() != m_lastHopSeq);
         if (newHop) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+            m_lastHopSeq = ctx.audio.hopSequence();
 
             // Sub-bass energy — backend-agnostic, already smoothed and normalised.
-            float subBass = ctx.audio.controlBus.bands[0];  // Migrated from bins64Adaptive[0..5]
+            float subBass = ctx.audio.getBand(0);  // Migrated from bins64Adaptive[0..5]
             // Fast attack / medium decay to feel punchy but stable.
             if (subBass > m_subBass) {
                 m_subBass = subBass;
@@ -97,7 +97,7 @@ void RippleEsTunedEffect::render(plugins::EffectContext& ctx) {
             }
 
             // Treble energy — hi-hat/cymbal sparkle, backend-agnostic.
-            float treble = (ctx.audio.controlBus.bands[5] + ctx.audio.controlBus.bands[6] + ctx.audio.controlBus.bands[7]) * (1.0f / 3.0f);  // Migrated from bins64Adaptive[48..63]
+            float treble = (ctx.audio.getBand(5) + ctx.audio.getBand(6) + ctx.audio.getBand(7)) * (1.0f / 3.0f);  // Migrated from bins64Adaptive[48..63]
             m_treble = (m_treble * 0.80f) + (treble * 0.20f);
 
             float flux = ctx.audio.fastFlux();
@@ -115,7 +115,7 @@ void RippleEsTunedEffect::render(plugins::EffectContext& ctx) {
         // Circular chroma hue (prevents argmax discontinuities and wrapping artefacts).
         // Runs every frame for smooth tracking, not just on hops.
         float rawDt = ctx.getSafeRawDeltaSeconds();
-        const float* chroma = ctx.audio.controlBus.chroma;
+        const float* chroma = ctx.audio.chroma();
         m_baseHue = effects::chroma::circularChromaHueSmoothed(
             chroma, m_chromaAngle, rawDt, 0.20f);
     }

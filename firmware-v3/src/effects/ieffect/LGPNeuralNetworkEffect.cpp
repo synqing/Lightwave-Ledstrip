@@ -37,13 +37,13 @@ void LGPNeuralNetworkEffect::render(plugins::EffectContext& ctx) {
     // Fade to prevent color accumulation from additive blending
     fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 
-    // Synaptic firing patterns with signal propagation
+    // Synaptic firing patterns with radial signal propagation
     m_time = (uint16_t)(m_time + (ctx.speed >> 2));
 
     // Initialize neurons on first run
     if (!m_initialized) {
         for (uint8_t n = 0; n < 20; n++) {
-            m_neurons[n] = random8(STRIP_LENGTH);
+            m_neurons[n] = random8(HALF_LENGTH);
             m_neuronState[n] = 0;
         }
         for (uint8_t s = 0; s < 10; s++) {
@@ -53,12 +53,20 @@ void LGPNeuralNetworkEffect::render(plugins::EffectContext& ctx) {
     }
 
     // Background neural tissue
-    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {
-        uint8_t tissue = (uint8_t)(inoise8(i * 5, m_time >> 3) >> 2);
-        ctx.leds[i] = CRGB(tissue >> 1, 0, tissue);
-        if (i + STRIP_LENGTH < ctx.ledCount) {
-            ctx.leds[i + STRIP_LENGTH] = CRGB(tissue >> 2, 0, tissue >> 1);
-        }
+    for (uint16_t dist = 0; dist < HALF_LENGTH; dist++) {
+        uint8_t tissue = (uint8_t)(inoise8(dist * 5, m_time >> 3) >> 2);
+        CRGB tissueColor1 = CRGB(tissue >> 1, 0, tissue);
+        CRGB tissueColor2 = CRGB(tissue >> 2, 0, tissue >> 1);
+
+        uint16_t left1 = CENTER_LEFT - dist;
+        uint16_t right1 = CENTER_RIGHT + dist;
+        if (left1 < STRIP_LENGTH) ctx.leds[left1] = tissueColor1;
+        if (right1 < STRIP_LENGTH) ctx.leds[right1] = tissueColor1;
+
+        uint16_t left2 = STRIP_LENGTH + CENTER_LEFT - dist;
+        uint16_t right2 = STRIP_LENGTH + CENTER_RIGHT + dist;
+        if (left2 < ctx.ledCount) ctx.leds[left2] = tissueColor2;
+        if (right2 < ctx.ledCount) ctx.leds[right2] = tissueColor2;
     }
 
     // Update neurons
@@ -81,28 +89,40 @@ void LGPNeuralNetworkEffect::render(plugins::EffectContext& ctx) {
         }
 
         // Render neuron
-        uint8_t pos = m_neurons[n];
+        uint8_t dist = m_neurons[n];
         uint8_t intensity = scale8(m_neuronState[n], ctx.brightness);
         CRGB neuronColor = CRGB(intensity, intensity >> 3, intensity >> 1);
 
-        if (pos < STRIP_LENGTH) {
-            ctx.leds[pos] = neuronColor;
-            if (pos + STRIP_LENGTH < ctx.ledCount) {
-                ctx.leds[pos + STRIP_LENGTH] = neuronColor;
-            }
+        if (dist < HALF_LENGTH) {
+            uint16_t left1 = CENTER_LEFT - dist;
+            uint16_t right1 = CENTER_RIGHT + dist;
+            if (left1 < STRIP_LENGTH) ctx.leds[left1] = neuronColor;
+            if (right1 < STRIP_LENGTH) ctx.leds[right1] = neuronColor;
+
+            uint16_t left2 = STRIP_LENGTH + CENTER_LEFT - dist;
+            uint16_t right2 = STRIP_LENGTH + CENTER_RIGHT + dist;
+            if (left2 < ctx.ledCount) ctx.leds[left2] = neuronColor;
+            if (right2 < ctx.ledCount) ctx.leds[right2] = neuronColor;
         }
 
         // Dendrites
         for (int8_t d = -2; d <= 2; d++) {
             if (d != 0) {
-                int16_t dendPos = (int16_t)pos + d;
-                if (dendPos >= 0 && dendPos < STRIP_LENGTH) {
+                int16_t dendDist = (int16_t)dist + d;
+                if (dendDist >= 0 && dendDist < (int16_t)HALF_LENGTH) {
                     uint8_t dendIntensity = (uint8_t)(intensity >> (1 + abs(d)));
-                    ctx.leds[dendPos] = CRGB(dendIntensity >> 2, 0, dendIntensity >> 3);
-                    if (dendPos + STRIP_LENGTH < ctx.ledCount) {
-                        uint16_t idx = dendPos + STRIP_LENGTH;
-                        ctx.leds[idx] = CRGB(dendIntensity >> 3, 0, dendIntensity >> 2);
-                    }
+                    CRGB dendColor1 = CRGB(dendIntensity >> 2, 0, dendIntensity >> 3);
+                    CRGB dendColor2 = CRGB(dendIntensity >> 3, 0, dendIntensity >> 2);
+
+                    uint16_t left1 = CENTER_LEFT - (uint16_t)dendDist;
+                    uint16_t right1 = CENTER_RIGHT + (uint16_t)dendDist;
+                    if (left1 < STRIP_LENGTH) ctx.leds[left1] = dendColor1;
+                    if (right1 < STRIP_LENGTH) ctx.leds[right1] = dendColor1;
+
+                    uint16_t left2 = STRIP_LENGTH + CENTER_LEFT - (uint16_t)dendDist;
+                    uint16_t right2 = STRIP_LENGTH + CENTER_RIGHT + (uint16_t)dendDist;
+                    if (left2 < ctx.ledCount) ctx.leds[left2] = dendColor2;
+                    if (right2 < ctx.ledCount) ctx.leds[right2] = dendColor2;
                 }
             }
         }
@@ -114,18 +134,23 @@ void LGPNeuralNetworkEffect::render(plugins::EffectContext& ctx) {
             m_signalPos[s] += (random8(2) == 0) ? 1 : -1;
             m_signalStrength[s] = scale8(m_signalStrength[s], 240);
 
-            if (m_signalPos[s] >= 0 && m_signalPos[s] < STRIP_LENGTH) {
+            if (m_signalPos[s] >= 0 && m_signalPos[s] < (int8_t)HALF_LENGTH) {
                 uint8_t sigIntensity = scale8(m_signalStrength[s], ctx.brightness);
                 uint8_t sigR = sigIntensity >> 1;
                 uint8_t sigG = sigIntensity >> 2;
                 uint8_t sigB = sigIntensity;
+                CRGB sigColor = CRGB(sigR, sigG, sigB);
 
-                uint16_t pos = m_signalPos[s];
-                ctx.leds[pos] = CRGB(sigR, sigG, sigB);
-                if (pos + STRIP_LENGTH < ctx.ledCount) {
-                    uint16_t idx = pos + STRIP_LENGTH;
-                    ctx.leds[idx] = CRGB(sigR, sigG, sigB);
-                }
+                uint16_t dist = (uint16_t)m_signalPos[s];
+                uint16_t left1 = CENTER_LEFT - dist;
+                uint16_t right1 = CENTER_RIGHT + dist;
+                if (left1 < STRIP_LENGTH) ctx.leds[left1] = sigColor;
+                if (right1 < STRIP_LENGTH) ctx.leds[right1] = sigColor;
+
+                uint16_t left2 = STRIP_LENGTH + CENTER_LEFT - dist;
+                uint16_t right2 = STRIP_LENGTH + CENTER_RIGHT + dist;
+                if (left2 < ctx.ledCount) ctx.leds[left2] = sigColor;
+                if (right2 < ctx.ledCount) ctx.leds[right2] = sigColor;
             }
         }
     }

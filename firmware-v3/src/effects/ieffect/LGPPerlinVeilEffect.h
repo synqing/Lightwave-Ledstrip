@@ -21,6 +21,7 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../enhancement/SmoothingEngine.h"
 #include <FastLED.h>
 #include "../../config/effect_ids.h"
 
@@ -60,12 +61,15 @@ private:
     float m_targetFlux;
     float m_targetBeatStrength;
     float m_targetBass;
-    
-    // Smoothed audio parameters (eased toward targets every frame)
-    float m_smoothRms;
-    float m_smoothFlux;
-    float m_smoothBeatStrength;
-    float m_smoothBass;
+
+    // Smoothed audio parameters via AsymmetricFollower (fast attack, slower release)
+    enhancement::AsymmetricFollower m_smoothRms{0.0f, 0.08f, 0.25f};
+    enhancement::AsymmetricFollower m_smoothFlux{0.0f, 0.05f, 0.20f};
+    enhancement::AsymmetricFollower m_smoothBeatStrength{0.0f, 0.05f, 0.20f};
+    enhancement::AsymmetricFollower m_smoothBass{0.0f, 0.08f, 0.30f};
+
+    // Contrast smoother (tau=500ms, smooth approach)
+    enhancement::ExpDecay m_contrastSmoother{0.5f, 1.0f / 0.5f};
     
     // Time accumulator
     uint16_t m_time;

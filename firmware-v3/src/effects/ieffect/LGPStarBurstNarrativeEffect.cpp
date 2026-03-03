@@ -92,12 +92,12 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
 
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
-        const bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+        const bool newHop = (ctx.audio.hopSequence() != m_lastHopSeq);
         if (newHop) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+            m_lastHopSeq = ctx.audio.hopSequence();
 
             // Both backends now produce normalised chroma via Stage A/B pipeline.
-            const float* chroma = ctx.audio.controlBus.chroma;
+            const float* chroma = ctx.audio.chroma();
 
             float maxBin = 0.0f;
             uint8_t dominant = 0;

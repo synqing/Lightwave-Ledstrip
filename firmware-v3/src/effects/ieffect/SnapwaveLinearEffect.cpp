@@ -5,7 +5,7 @@
  * ORIGINAL SNAPWAVE ALGORITHM - Restored from SensoryBridge light_mode_snapwave()
  *
  * Algorithm per frame:
- * 1. Smooth peak (2% new, 98% old)
+ * 1. Smooth peak via AsymmetricFollower (20ms attack, 200ms release)
  * 2. Compute time-based oscillation from chromagram + sin(millis())
  * 3. Apply tanh() for "snap" characteristic
  * 4. Calculate dot distance from centre
@@ -37,7 +37,8 @@ bool SnapwaveLinearEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
 
     for (uint8_t z = 0; z < kMaxZones; ++z) {
-        m_peakSmoothed[z] = 0.0f;
+        m_peakFollower[z] = enhancement::AsymmetricFollower{0.0f, 0.02f, 0.20f};
+        m_rmsFollower[z] = enhancement::AsymmetricFollower{0.0f, 0.03f, 0.25f};
         m_historyIndex[z] = 0;
     }
 
@@ -64,7 +65,7 @@ void SnapwaveLinearEffect::renderHistoryToLeds(int z, plugins::EffectContext& ct
     uint16_t stripLen = (ctx.ledCount > 160) ? 160 : ctx.ledCount;
     uint16_t halfStrip = stripLen / 2;
 
-    memset(ctx.leds, 0, stripLen * sizeof(CRGB));
+    // fadeToBlackBy applied in render() before calling this method
 
     for (uint16_t i = 0; i < HISTORY_SIZE; ++i) {
         uint16_t idx = (m_historyIndex[z] + i) % HISTORY_SIZE;
@@ -116,7 +117,7 @@ float SnapwaveLinearEffect::computeOscillation(const plugins::EffectContext& ctx
         float timeMs = static_cast<float>(ctx.rawTotalTimeMs);
 
         for (uint8_t i = 0; i < 12; ++i) {
-            float chromaVal = ctx.audio.controlBus.chroma[i];
+            float chromaVal = ctx.audio.getChroma(i);
             if (chromaVal > NOTE_THRESHOLD) {
                 float freqMult = 1.0f + PHASE_SPREAD * i;
                 oscillation += chromaVal * sinf(timeMs * BASE_FREQUENCY * freqMult);
@@ -144,7 +145,7 @@ CRGB SnapwaveLinearEffect::computeChromaColor(const plugins::EffectContext& ctx)
     if (ctx.audio.available) {
         for (uint8_t c = 0; c < 12; ++c) {
             float prog = c / 12.0f;
-            float bin = ctx.audio.controlBus.chroma[c];
+            float bin = ctx.audio.getChroma(c);
 
             // Square for contrast (SQUARE_ITER = 1)
             float bright = bin * bin;
@@ -197,12 +198,31 @@ void SnapwaveLinearEffect::render(plugins::EffectContext& ctx) {
     if (!m_ps) return;
 
     const int z = (ctx.zoneId < kMaxZones) ? ctx.zoneId : 0;
+    const float dt = AudioReactivePolicy::signalDt(ctx);
 
     uint16_t stripLen = (ctx.ledCount > 160) ? 160 : ctx.ledCount;
     uint16_t halfStrip = stripLen / 2;  // 80
 
     // =========================================
-    // STEP 1: Smooth the peak (2% new, 98% old)
+    // STEP 0: Audio energy for dynamic fade
+    // =========================================
+    float rmsEnergy = 0.0f;
+#if FEATURE_AUDIO_SYNC
+    if (ctx.audio.available) {
+        rmsEnergy = ctx.audio.rms();
+    }
+#endif
+    float smoothRms = m_rmsFollower[z].update(rmsEnergy, dt);
+
+    // =========================================
+    // STEP 0b: Fade previous frame (trail persistence)
+    // Dynamic: loud = short punchy trails, quiet = long ambient trails
+    // =========================================
+    uint8_t fadeAmount = (uint8_t)(20 + 40 * (1.0f - smoothRms));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmount);
+
+    // =========================================
+    // STEP 1: Smooth the peak (AsymmetricFollower: 20ms attack, 200ms release)
     // =========================================
     float currentPeak = 0.0f;
 #if FEATURE_AUDIO_SYNC
@@ -217,9 +237,7 @@ void SnapwaveLinearEffect::render(plugins::EffectContext& ctx) {
 #else
     currentPeak = 0.4f;  // Compile-time no audio: constant demo
 #endif
-    const float dt = AudioReactivePolicy::signalDt(ctx);
-    const float peakAlpha = 1.0f - powf(PEAK_DECAY, dt * 60.0f);  // 0.02-at-60fps equivalent
-    m_peakSmoothed[z] += (currentPeak - m_peakSmoothed[z]) * peakAlpha;
+    float peakSmoothed = m_peakFollower[z].update(currentPeak, dt);
 
     // =========================================
     // STEP 2: Compute oscillation
@@ -230,7 +248,7 @@ void SnapwaveLinearEffect::render(plugins::EffectContext& ctx) {
     // STEP 3: Mix oscillation with amplitude
     // =========================================
     // CRITICAL: No forced minimum - silence = stillness (dot at centre)
-    float amp = oscillation * m_peakSmoothed[z] * AMPLITUDE_MIX;
+    float amp = oscillation * peakSmoothed * AMPLITUDE_MIX;
     if (amp > 1.0f) amp = 1.0f;
     if (amp < -1.0f) amp = -1.0f;
 
@@ -266,8 +284,7 @@ void SnapwaveLinearEffect::render(plugins::EffectContext& ctx) {
         uint16_t strip2Center = 240;  // Centre of strip 2
         uint16_t strip2HalfLen = 80;
 
-        // Clear strip 2 first
-        memset(&ctx.leds[strip2Start], 0, strip2HalfLen * 2 * sizeof(CRGB));
+        // fadeToBlackBy already applied to entire buffer above
 
         for (uint16_t i = 0; i < HISTORY_SIZE; ++i) {
             uint16_t idx = (m_historyIndex[z] + i) % HISTORY_SIZE;

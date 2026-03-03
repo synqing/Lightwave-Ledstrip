@@ -31,10 +31,6 @@ LGPPerlinVeilEffect::LGPPerlinVeilEffect()
     , m_targetFlux(0.0f)
     , m_targetBeatStrength(0.0f)
     , m_targetBass(0.0f)
-    , m_smoothRms(0.0f)
-    , m_smoothFlux(0.0f)
-    , m_smoothBeatStrength(0.0f)
-    , m_smoothBass(0.0f)
     , m_time(0)
 {
 }
@@ -52,10 +48,11 @@ bool LGPPerlinVeilEffect::init(plugins::EffectContext& ctx) {
     m_targetFlux = 0.0f;
     m_targetBeatStrength = 0.0f;
     m_targetBass = 0.0f;
-    m_smoothRms = 0.0f;
-    m_smoothFlux = 0.0f;
-    m_smoothBeatStrength = 0.0f;
-    m_smoothBass = 0.0f;
+    m_smoothRms.reset(0.0f);
+    m_smoothFlux.reset(0.0f);
+    m_smoothBeatStrength.reset(0.0f);
+    m_smoothBass.reset(0.0f);
+    m_contrastSmoother.reset(0.5f);
     m_time = 0;
     return true;
 }
@@ -73,9 +70,9 @@ void LGPPerlinVeilEffect::render(plugins::EffectContext& ctx) {
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
         // Check for new audio hop (fresh data)
-        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+        bool newHop = (ctx.audio.hopSequence() != m_lastHopSeq);
         if (newHop) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+            m_lastHopSeq = ctx.audio.hopSequence();
             // Update targets only on new hops (fresh audio data)
             m_targetRms = ctx.audio.rms();
             m_targetFlux = ctx.audio.flux();
@@ -83,15 +80,14 @@ void LGPPerlinVeilEffect::render(plugins::EffectContext& ctx) {
             m_targetBass = ctx.audio.bass();
         }
         
-        // Smooth toward targets every frame (keeps motion alive between hops)
-        float alpha = 1.0f - expf(-dt / 0.15f);  // True exponential, tau=150ms
-        m_smoothRms += (m_targetRms - m_smoothRms) * alpha;
-        m_smoothFlux += (m_targetFlux - m_smoothFlux) * alpha;
-        m_smoothBeatStrength += (m_targetBeatStrength - m_smoothBeatStrength) * alpha;
-        m_smoothBass += (m_targetBass - m_smoothBass) * alpha;
-        
+        // Smooth toward targets every frame via AsymmetricFollower (fast attack, slower release)
+        float sRms = m_smoothRms.update(m_targetRms, dt);
+        float sFlux = m_smoothFlux.update(m_targetFlux, dt);
+        float sBeat = m_smoothBeatStrength.update(m_targetBeatStrength, dt);
+        float sBass = m_smoothBass.update(m_targetBass, dt);
+
         // Flux/beatStrength → advection momentum (like Emotiscope's vu_level push)
-        float audioPush = m_smoothFlux * 0.3f + m_smoothBeatStrength * 0.2f;
+        float audioPush = sFlux * 0.3f + sBeat * 0.2f;
         audioPush = audioPush * audioPush * audioPush * audioPush; // ^4 for emphasis
         audioPush *= speedNorm * 0.1f;
         
@@ -101,27 +97,26 @@ void LGPPerlinVeilEffect::render(plugins::EffectContext& ctx) {
             m_momentum = audioPush;
         }
         
-        // RMS → contrast modulation (using smoothed value) - true exponential, tau=200ms
-        float targetContrast = 0.3f + m_smoothRms * 0.7f;
-        m_contrast += (targetContrast - m_contrast) * (1.0f - expf(-dt / 0.2f));
-        
+        // RMS → contrast modulation via ExpDecay (tau=500ms)
+        float targetContrast = 0.3f + sRms * 0.7f;
+        m_contrast = m_contrastSmoother.update(targetContrast, dt);
+
         // Bass → depth variation (using smoothed value)
-        m_depthVariation = m_smoothBass * 0.5f;
+        m_depthVariation = sBass * 0.5f;
     } else {
         // Ambient mode: slow decay (dt-corrected)
         m_momentum *= powf(0.98f, dt * 60.0f);
         m_contrast = 0.4f + 0.2f * sinf(ctx.totalTimeMs * 0.001f); // Slow breathing
         m_depthVariation = 0.0f;
-        // Smooth audio parameters to zero when no audio (true exponential, tau=200ms)
-        float alpha = 1.0f - expf(-dt / 0.2f);
+        // Smooth audio parameters to zero when no audio (AsymmetricFollower handles decay)
         m_targetRms = 0.0f;
         m_targetFlux = 0.0f;
         m_targetBeatStrength = 0.0f;
         m_targetBass = 0.0f;
-        m_smoothRms += (m_targetRms - m_smoothRms) * alpha;
-        m_smoothFlux += (m_targetFlux - m_smoothFlux) * alpha;
-        m_smoothBeatStrength += (m_targetBeatStrength - m_smoothBeatStrength) * alpha;
-        m_smoothBass += (m_targetBass - m_smoothBass) * alpha;
+        m_smoothRms.update(0.0f, dt);
+        m_smoothFlux.update(0.0f, dt);
+        m_smoothBeatStrength.update(0.0f, dt);
+        m_smoothBass.update(0.0f, dt);
     }
 #else
     // No audio: ambient mode (dt-corrected)
@@ -146,6 +141,7 @@ void LGPPerlinVeilEffect::render(plugins::EffectContext& ctx) {
 
     // Speed scales the drift rate, but clamp to avoid "teleporting" noise.
     uint16_t speedScale = (uint16_t)(6 + (uint16_t)(speedNorm * 20.0f));
+    if (speedScale > 16) speedScale = 16;  // Prevent strobing at max speed
     m_noiseX = (uint16_t)(m_noiseX + advX * speedScale);
     m_noiseY = (uint16_t)(m_noiseY + advY * speedScale);
     m_noiseZ = (uint16_t)(m_noiseZ + advZ * (uint16_t)(1 + (speedScale >> 2)));
@@ -156,7 +152,11 @@ void LGPPerlinVeilEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
     // Rendering (centre-origin pattern)
     // =========================================================================
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    // Dynamic fade: louder audio = shorter trails (punchier), quiet = long ambient trails
+    float smoothedRms = m_smoothRms.value;
+    uint8_t fadeAmt = (uint8_t)(20 + 40 * (1.0f - fminf(smoothedRms, 1.0f)));
+    if (fadeAmt < 20) fadeAmt = 20;   // Minimum fade for trail persistence
+    fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmt);
 
     for (uint16_t i = 0; i < STRIP_LENGTH; i++) {
         // Calculate distance from centre pair (0 at centre, 79 at edges)
@@ -198,13 +198,14 @@ void LGPPerlinVeilEffect::render(plugins::EffectContext& ctx) {
         uint8_t brightness = (uint8_t)(brightnessNorm * 255.0f * intensityNorm);
 
         CRGB color1 = ctx.palette.getColor(paletteIndex, brightness);
-        ctx.leds[i] = color1;
+        // Blend onto faded buffer instead of overwriting (preserves trail persistence)
+        nblend(ctx.leds[i], color1, 180);
 
         if (i + STRIP_LENGTH < ctx.ledCount) {
             // Second strip offset to encourage LGP interference without "rainbow sweeps"
             uint8_t paletteIndex2 = (uint8_t)(paletteIndex + 24);
             CRGB color2 = ctx.palette.getColor(paletteIndex2, brightness);
-            ctx.leds[i + STRIP_LENGTH] = color2;
+            nblend(ctx.leds[i + STRIP_LENGTH], color2, 180);
         }
     }
 }

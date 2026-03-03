@@ -64,7 +64,7 @@ static inline void clearAll(plugins::EffectContext& ctx) {
 #ifdef NATIVE_BUILD
     (void)ctx;
 #else
-    fill_solid(ctx.leds, ctx.ledCount, CRGB::Black);
+    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
 #endif
 }
 

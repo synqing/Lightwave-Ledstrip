@@ -187,13 +187,13 @@ void LGPTimeReversalMirrorEffect_AR::render(plugins::EffectContext& ctx) {
 
     if (ctx.audio.available) {
         // Hop-gated target updates
-        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+        bool newHop = (ctx.audio.hopSequence() != m_lastHopSeq);
         if (newHop) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+            m_lastHopSeq = ctx.audio.hopSequence();
             m_targetRms  = ctx.audio.rms();
 
             for (uint8_t i = 0; i < 12; i++) {
-                m_chromaTargets[i] = ctx.audio.controlBus.heavy_chroma[i];
+                m_chromaTargets[i] = ctx.audio.getHeavyChroma(i);
             }
         }
 

@@ -56,9 +56,9 @@ void LGPPerlinInterferenceWeaveEffect::render(plugins::EffectContext& ctx) {
     
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
-        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+        bool newHop = (ctx.audio.hopSequence() != m_lastHopSeq);
         if (newHop) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+            m_lastHopSeq = ctx.audio.hopSequence();
         }
         
         // Beat → phase separation modulation
@@ -101,7 +101,7 @@ void LGPPerlinInterferenceWeaveEffect::render(plugins::EffectContext& ctx) {
     // Chroma-based colour offset (circular weighted mean for smooth, continuous hue)
     uint8_t chromaOffset = hasAudio
         ? effects::chroma::circularChromaHueSmoothed(
-              ctx.audio.controlBus.chroma, m_chromaAngle, dt, 0.20f)
+              ctx.audio.chroma(), m_chromaAngle, dt, 0.20f)
         : 0;
 
     for (uint16_t i = 0; i < STRIP_LENGTH; i++) {

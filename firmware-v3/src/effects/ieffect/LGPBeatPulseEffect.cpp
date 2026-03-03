@@ -19,9 +19,8 @@ namespace ieffect {
 
 namespace {
 
-static inline const float* selectChroma12(const audio::ControlBusFrame& cb) {
-    // Both backends now produce normalised chroma via Stage A/B pipeline.
-    return cb.chroma;
+static inline const float* selectChroma12(const plugins::AudioContext& audio) {
+    return audio.chroma();
 }
 
 } // namespace
@@ -89,7 +88,7 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
 
         // Circular chroma hue (prevents argmax discontinuities and wrapping artefacts).
         float rawDt = ctx.getSafeRawDeltaSeconds();
-        const float* chroma = selectChroma12(ctx.audio.controlBus);
+        const float* chroma = selectChroma12(ctx.audio);
         chromaHueOffset = effects::chroma::circularChromaHueSmoothed(
             chroma, m_chromaAngle, rawDt, 0.20f);
 
@@ -196,7 +195,7 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
     if (m_hihatShimmer < 0.01f) m_hihatShimmer = 0.0f;
 
     // Clear buffer
-    memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, 35);
 
     // === RENDER CENTER PAIR OUTWARD ===
     uint8_t baseHue = chromaHueOffset;

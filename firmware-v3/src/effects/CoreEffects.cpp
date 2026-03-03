@@ -168,6 +168,9 @@
 #include "ieffect/LGPGoldCodeSpeckleEffect.h"
 #include "ieffect/LGPQuasicrystalLatticeEffect.h"
 #include "ieffect/LGPFresnelCausticSweepEffect.h"
+#include "ieffect/LGPBirefringentShearRadialEffect.h"
+#include "ieffect/LGPSolitonWavesRadialEffect.h"
+#include "ieffect/LGPNeuralNetworkRadialEffect.h"
 #include "utils/FastLEDOptim.h"
 #include "../core/narrative/NarrativeEngine.h"
 #include <FastLED.h>
@@ -787,9 +790,10 @@ uint16_t registerAllEffects(RendererActor* renderer) {
     total++;
 
     // LGP Spectrum Detail - 64-bin FFT direct visualisation
-    static ieffect::LGPSpectrumDetailEffect spectrumDetailInstance;
-    renderer->registerEffect(EID_LGP_SPECTRUM_DETAIL, &spectrumDetailInstance);
-    total++;
+    // Removed: Dead/broken effect (2026-03-02)
+    // static ieffect::LGPSpectrumDetailEffect spectrumDetailInstance;
+    // renderer->registerEffect(EID_LGP_SPECTRUM_DETAIL, &spectrumDetailInstance);
+    // total++;
 
     // LGP Spectrum Detail Enhanced - Saliency-weighted spectrum
     static ieffect::LGPSpectrumDetailEnhancedEffect spectrumDetailEnhancedInstance;
@@ -819,9 +823,10 @@ uint16_t registerAllEffects(RendererActor* renderer) {
     // =============== DIAGNOSTIC EFFECTS ===============
 
     // Trinity Test - Diagnostic effect for PRISM Trinity data flow verification
-    static ieffect::TrinityTestEffect trinityTestInstance;
-    renderer->registerEffect(EID_TRINITY_TEST, &trinityTestInstance);
-    total++;
+    // Removed: Dead/broken effect (2026-03-02)
+    // static ieffect::TrinityTestEffect trinityTestInstance;
+    // renderer->registerEffect(EID_TRINITY_TEST, &trinityTestInstance);
+    // total++;
 
     // =============== PALETTE AUTO-CYCLE EFFECTS ===============
 
@@ -833,25 +838,30 @@ uint16_t registerAllEffects(RendererActor* renderer) {
     // =============== ES v1.1 REFERENCE SHOWS ===============
     // These are ports of Emotiscope v1.1_320 light modes for parity comparisons.
 
-    static ieffect::esv11_reference::EsAnalogRefEffect esAnalogRefInstance;
-    renderer->registerEffect(EID_ES_ANALOG, &esAnalogRefInstance);
-    total++;
+    // Removed: Dead/broken effect (2026-03-02)
+    // static ieffect::esv11_reference::EsAnalogRefEffect esAnalogRefInstance;
+    // renderer->registerEffect(EID_ES_ANALOG, &esAnalogRefInstance);
+    // total++;
 
-    static ieffect::esv11_reference::EsSpectrumRefEffect esSpectrumRefInstance;
-    renderer->registerEffect(EID_ES_SPECTRUM, &esSpectrumRefInstance);
-    total++;
+    // Removed: Dead/broken effect (2026-03-02)
+    // static ieffect::esv11_reference::EsSpectrumRefEffect esSpectrumRefInstance;
+    // renderer->registerEffect(EID_ES_SPECTRUM, &esSpectrumRefInstance);
+    // total++;
 
-    static ieffect::esv11_reference::EsOctaveRefEffect esOctaveRefInstance;
-    renderer->registerEffect(EID_ES_OCTAVE, &esOctaveRefInstance);
-    total++;
+    // Removed: Dead/broken effect (2026-03-02)
+    // static ieffect::esv11_reference::EsOctaveRefEffect esOctaveRefInstance;
+    // renderer->registerEffect(EID_ES_OCTAVE, &esOctaveRefInstance);
+    // total++;
 
-    static ieffect::esv11_reference::EsBloomRefEffect esBloomRefInstance;
-    renderer->registerEffect(EID_ES_BLOOM, &esBloomRefInstance);
-    total++;
+    // Removed: Dead/broken effect (2026-03-02)
+    // static ieffect::esv11_reference::EsBloomRefEffect esBloomRefInstance;
+    // renderer->registerEffect(EID_ES_BLOOM, &esBloomRefInstance);
+    // total++;
 
-    static ieffect::esv11_reference::EsWaveformRefEffect esWaveformRefInstance;
-    renderer->registerEffect(EID_ES_WAVEFORM, &esWaveformRefInstance);
-    total++;
+    // Removed: Dead/broken effect (2026-03-02)
+    // static ieffect::esv11_reference::EsWaveformRefEffect esWaveformRefInstance;
+    // renderer->registerEffect(EID_ES_WAVEFORM, &esWaveformRefInstance);
+    // total++;
 
     // --- ES Tuned ---
 
@@ -1180,8 +1190,25 @@ uint16_t registerAllEffects(RendererActor* renderer) {
     renderer->registerEffect(EID_LGP_TIME_REVERSAL_MIRROR_MOD3, &timeReversalMirrorMod3Instance);
     total++;
 
+    // =============== RADIAL VARIANTS (Centre-Origin Comparisons) ===============
+
+    // Birefringent Shear (Radial) - Concentric polarization splitting
+    static ieffect::LGPBirefringentShearRadialEffect birefringentShearRadialInstance;
+    renderer->registerEffect(EID_LGP_BIREFRINGENT_SHEAR_RADIAL, &birefringentShearRadialInstance);
+    total++;
+
+    // Soliton Waves (Radial) - Radial soliton shells
+    static ieffect::LGPSolitonWavesRadialEffect solitonWavesRadialInstance;
+    renderer->registerEffect(EID_LGP_SOLITON_WAVES_RADIAL, &solitonWavesRadialInstance);
+    total++;
+
+    // Neural Network (Radial) - Radial synaptic pathways
+    static ieffect::LGPNeuralNetworkRadialEffect neuralNetworkRadialInstance;
+    renderer->registerEffect(EID_LGP_NEURAL_NETWORK_RADIAL, &neuralNetworkRadialInstance);
+    total++;
+
     // =============== EFFECT COUNT PARITY VALIDATION ===============
-    constexpr uint16_t EXPECTED_EFFECT_COUNT = 170;
+    constexpr uint16_t EXPECTED_EFFECT_COUNT = 166;  // Was 173, removed 7 dead/broken effects (2026-03-02)
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

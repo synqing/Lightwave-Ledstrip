@@ -34,8 +34,8 @@ float   BloomParityEffect::s_bulbOpacity     = 0.40f;
 float   BloomParityEffect::s_alpha           = 0.99f;   // Transport persistence (Sensory default: 0.99)
 uint8_t BloomParityEffect::s_squareIter      = 1;       // Contrast shaping (Sensory default: 1)
 uint8_t BloomParityEffect::s_prismIterations = 1;       // Prism passes (Sensory default: 0)
-float   BloomParityEffect::s_gHueSpeed       = 1.0f;    // Palette sweep multiplier (0=frozen, -1=reverse)
-float   BloomParityEffect::s_spatialSpread   = 128.0f;  // Palette spread centre→edge (0=mono, 255=full)
+float   BloomParityEffect::s_gHueSpeed       = 0.20f;   // Tonal drift multiplier (kept narrow to avoid rainbow sweep)
+float   BloomParityEffect::s_spatialSpread   = 96.0f;   // Palette spread centre→edge (bounded range)
 float   BloomParityEffect::s_intensityCoupling = 0.0f;  // 0=spatial colour, 1=intensity colour (heat map)
 
 // -----------------------------------------------------------------------------
@@ -91,109 +91,6 @@ void BloomParityEffect::cleanup() {
         heap_caps_free(m_ps);
         m_ps = nullptr;
     }
-}
-
-// -----------------------------------------------------------------------------
-// Core helpers (HSV + colour forcing)
-// -----------------------------------------------------------------------------
-BloomParityEffect::RGBf BloomParityEffect::hsv(float h, float s, float v) {
-    h = wrap01(h);
-    s = clamp01(s);
-    v = clamp01(v);
-
-#ifndef NATIVE_BUILD
-    // Sensory Bridge parity: uses FastLED's CHSV→CRGB (rainbow colour model)
-    // with value applied as post-multiply. The rainbow hue wheel is perceptually
-    // tuned and differs significantly from standard mathematical HSV.
-    CRGB base = CHSV(static_cast<uint8_t>(h * 255.0f),
-                      static_cast<uint8_t>(s * 255.0f),
-                      255);
-    return RGBf{(base.r / 255.0f) * v, (base.g / 255.0f) * v, (base.b / 255.0f) * v};
-#else
-    // Fallback: standard mathematical HSV for native builds without FastLED.
-    const float hh = h * 6.0f;
-    const int   i  = static_cast<int>(hh);
-    const float f  = hh - static_cast<float>(i);
-
-    const float p = v * (1.0f - s);
-    const float q = v * (1.0f - s * f);
-    const float t = v * (1.0f - s * (1.0f - f));
-
-    RGBf out;
-    switch (i % 6) {
-        case 0: out = {v, t, p}; break;
-        case 1: out = {q, v, p}; break;
-        case 2: out = {p, v, t}; break;
-        case 3: out = {p, q, v}; break;
-        case 4: out = {t, p, v}; break;
-        default: out = {v, p, q}; break;
-    }
-    return out;
-#endif
-}
-
-void BloomParityEffect::rgbToHsv(const RGBf& in, float& h, float& s, float& v) {
-    const float r = clamp01(in.r);
-    const float g = clamp01(in.g);
-    const float b = clamp01(in.b);
-
-    const float maxv = std::fmax(r, std::fmax(g, b));
-    const float minv = std::fmin(r, std::fmin(g, b));
-    const float d = maxv - minv;
-
-    v = maxv;
-    s = (maxv <= 1e-6f) ? 0.0f : (d / maxv);
-
-    if (d <= 1e-6f) {
-        h = 0.0f;
-        return;
-    }
-
-    float hh;
-    if (maxv == r) {
-        hh = (g - b) / d + (g < b ? 6.0f : 0.0f);
-    } else if (maxv == g) {
-        hh = (b - r) / d + 2.0f;
-    } else {
-        hh = (r - g) / d + 4.0f;
-    }
-
-    h = wrap01(hh / 6.0f);
-}
-
-BloomParityEffect::RGBf BloomParityEffect::forceSaturation(const RGBf& in, float sat) {
-#ifndef NATIVE_BUILD
-    // Sensory Bridge parity: deliberately round-trips through 8-bit CRGB and
-    // FastLED's rgb2hsv_approximate(). The quantisation artefacts are intentional.
-    CRGB rgb8(static_cast<uint8_t>(clamp01(in.r) * 255.0f),
-              static_cast<uint8_t>(clamp01(in.g) * 255.0f),
-              static_cast<uint8_t>(clamp01(in.b) * 255.0f));
-    CHSV hsv8 = rgb2hsv_approximate(rgb8);
-    CRGB out = CRGB(CHSV(hsv8.h, static_cast<uint8_t>(clamp01(sat) * 255.0f), hsv8.v));
-    return RGBf{out.r / 255.0f, out.g / 255.0f, out.b / 255.0f};
-#else
-    float h, s, v;
-    rgbToHsv(in, h, s, v);
-    (void)s;
-    return hsv(h, clamp01(sat), v);
-#endif
-}
-
-BloomParityEffect::RGBf BloomParityEffect::forceHue(const RGBf& in, float hue) {
-#ifndef NATIVE_BUILD
-    // Sensory Bridge parity: same 8-bit round-trip as forceSaturation.
-    CRGB rgb8(static_cast<uint8_t>(clamp01(in.r) * 255.0f),
-              static_cast<uint8_t>(clamp01(in.g) * 255.0f),
-              static_cast<uint8_t>(clamp01(in.b) * 255.0f));
-    CHSV hsv8 = rgb2hsv_approximate(rgb8);
-    CRGB out = CRGB(CHSV(static_cast<uint8_t>(wrap01(hue) * 255.0f), hsv8.s, hsv8.v));
-    return RGBf{out.r / 255.0f, out.g / 255.0f, out.b / 255.0f};
-#else
-    float h, s, v;
-    rgbToHsv(in, h, s, v);
-    (void)h;
-    return hsv(wrap01(hue), s, v);
-#endif
 }
 
 // -----------------------------------------------------------------------------
@@ -253,7 +150,7 @@ void BloomParityEffect::getChroma12(const plugins::EffectContext& ctx, float out
     // Prefer 12-bin chroma when populated.
     float chromaSum = 0.0f;
     for (uint16_t i = 0; i < kChromaBins; i++) {
-        const float v = clamp01(ctx.audio.controlBus.chroma[i]);
+        const float v = clamp01(ctx.audio.getChroma(i));
         outChroma12[i] = v;
         chromaSum += v;
     }
@@ -549,17 +446,14 @@ void BloomParityEffect::render(plugins::EffectContext& ctx) {
     }
 
     // ----- Write to LED buffer (palette-mapped from grayscale intensity)
-    // Transport carries intensity only (all channels equal). Palette colour is
-    // assigned here so every pixel is ONE clean palette.getColor() call.
-    //
-    // Two palette-position sources blended by s_intensityCoupling:
-    //   Spatial:   distance from centre × spread   → palette gradient across strip
-    //   Intensity: pixel brightness × 255          → heat-map / fire mode
-    // Both are offset by audio novelty drift + gHue time rotation.
+    // Keep colour movement in a constrained tonal window to avoid rainbow cycling.
+    // Spatial/intensity only modulate within that window.
     const float hueOffset = m_huePosition[zone];
     const uint16_t half = len / 2;
     const float hueRotation = static_cast<float>(ctx.gHue) * s_gHueSpeed;
     const float coupling = s_intensityCoupling;
+    const float tonalAnchor = 24.0f + hueRotation + hueOffset * 48.0f;
+    const float tonalWindow = 32.0f + (s_spatialSpread * 0.25f);  // 32..95.75
 
     for (uint16_t i = 0; i < len; i++) {
         // Extract intensity (average of channels — should be equal, but safe)
@@ -567,17 +461,17 @@ void BloomParityEffect::render(plugins::EffectContext& ctx) {
         if (lum > 1.0f) lum = 1.0f;
         if (lum < 0.0f) lum = 0.0f;
 
-        // Spatial palette position: distance from centre × spread
+        // Spatial palette position: distance from centre
         const float dist = static_cast<float>(std::abs(static_cast<int>(i) - static_cast<int>(half)))
                          / static_cast<float>(half);
-        const float spatialPal = dist * s_spatialSpread;
+        const float spatialPal = dist;
 
-        // Intensity palette position: brightness → palette (heat map)
-        const float intensityPal = lum * 255.0f;
+        // Intensity palette position: brightness
+        const float intensityPal = lum;
 
-        // Blend spatial ↔ intensity, add audio drift + time rotation
-        const float palFloat = spatialPal * (1.0f - coupling) + intensityPal * coupling
-                             + hueOffset * 255.0f + hueRotation;
+        // Blend spatial ↔ intensity inside constrained tonal window
+        const float driver = spatialPal * (1.0f - coupling) + intensityPal * coupling;
+        const float palFloat = tonalAnchor + driver * tonalWindow;
         const uint8_t palIdx = static_cast<uint8_t>(static_cast<uint16_t>(palFloat) & 0xFFu);
 
         ctx.leds[i] = ctx.palette.getColor(palIdx, static_cast<uint8_t>(lum * 255.0f));

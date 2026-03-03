@@ -95,7 +95,6 @@ BreathingEffect::BreathingEffect()
     , m_lastFlux(0.0f)
     , m_fluxBoost(0.0f)
     , m_texturePhase(0.0f)
-    , m_energySmoothed(0.0f)
     , m_radiusTargetSum(0.0f)
     , m_histIdx(0)
 {
@@ -122,7 +121,8 @@ bool BreathingEffect::init(plugins::EffectContext& ctx) {
     m_lastFlux = 0.0f;
     m_fluxBoost = 0.0f;
     m_texturePhase = 0.0f;
-    m_energySmoothed = 0.0f;
+    m_energyFollower.reset(0.0f);
+    m_radiusFollower.reset(0.0f);
 
     // Initialize history buffer
     for (uint8_t i = 0; i < HISTORY_SIZE; ++i) {
@@ -189,8 +189,32 @@ void BreathingEffect::renderBreathing(plugins::EffectContext& ctx) {
     // ========================================================================
     float dt = ctx.getSafeDeltaSeconds();
     float baseSpeed = ctx.speed / 200.0f;  // User speed parameter (like CONFIG.MOOD)
+
+#if FEATURE_AUDIO_SYNC
+    // When tempo locked, strengthen beat-phase coupling
+    if (ctx.audio.available && ctx.audio.tempoConfidence() > 0.35f) {
+        // Beat-phase coupling: pull m_phase toward audio beat phase
+        float targetPhase = ctx.audio.beatPhase() * 2.0f * 3.14159f;
+        float phaseError = targetPhase - fmodf(m_phase, 2.0f * 3.14159f);
+
+        // Normalize phase error to [-PI, PI]
+        while (phaseError > 3.14159f) phaseError -= 2.0f * 3.14159f;
+        while (phaseError < -3.14159f) phaseError += 2.0f * 3.14159f;
+
+        // Strong pull toward beat phase (dt-corrected)
+        float pullAlpha = 1.0f - expf(-dt / 0.15f);
+        m_phase += phaseError * pullAlpha;
+
+        // Reduce time-based contribution when beat-locked
+        m_phase += baseSpeed * dt * 0.2f;  // 20% time-based when beat-locked
+    } else {
+        // No audio or unreliable tempo: full time-based motion
+        m_phase += baseSpeed * dt;
+    }
+#else
     m_phase += baseSpeed * dt;  // Time-based phase accumulation
-    
+#endif
+
     // Generate breathing cycle from phase (sine wave)
     float timeBasedRadius = (sinf(m_phase) * 0.5f + 0.5f) * (float)HALF_LENGTH * 0.6f;
 
@@ -204,37 +228,30 @@ void BreathingEffect::renderBreathing(plugins::EffectContext& ctx) {
 #if FEATURE_AUDIO_SYNC
     if (ctx.audio.available) {
         // ====================================================================
-        // Multi-Stage Smoothing Pipeline (Sensory Bridge Pattern)
+        // Multi-Stage Smoothing Pipeline (dt-corrected)
         // ====================================================================
-        
-        // Stage 1: Smooth chromagram (0.75 alpha - fast attack/release)
+
+        // Stage 1: Smooth chromagram (dt-corrected, tau ~12ms for fast response at 120fps)
+        // Original 0.75 alpha at 120fps corresponds to tau ~ 12ms
+        float chromaAlpha = 1.0f - expf(-dt / 0.012f);
         for (int i = 0; i < 12; i++) {
-            float alpha = 0.75f;  // Like spectrogram_smooth in Sensory Bridge
-            m_chromaSmoothed[i] = ctx.audio.controlBus.heavy_chroma[i] * alpha + 
-                                  m_chromaSmoothed[i] * (1.0f - alpha);
+            m_chromaSmoothed[i] += (ctx.audio.getHeavyChroma(i) - m_chromaSmoothed[i]) * chromaAlpha;
         }
-        
-        // Stage 2: Smooth energy envelope (0.3 alpha - slower smoothing)
-        float alpha_energy = 0.3f;  // Like magnitudes_normalized_avg in Sensory Bridge
-        m_energySmoothed = ctx.audio.rms() * alpha_energy + 
-                           m_energySmoothed * (1.0f - alpha_energy);
-        
+
+        // Stage 2: Smooth energy envelope via AsymmetricFollower (50ms attack, 300ms release)
+        float energyRaw = ctx.audio.rms();
+        m_energyFollower.update(energyRaw, dt);
+
         // ====================================================================
         // Compute Chromatic Color from Smoothed Chromagram
         // ====================================================================
         chromaticColor = computeChromaticColor(m_chromaSmoothed, ctx);
-        
+
         // ====================================================================
         // Compute Energy Envelope for Brightness Modulation
         // ====================================================================
-        energyEnvelope = m_energySmoothed;
+        energyEnvelope = m_energyFollower.value;
         brightness = energyEnvelope * energyEnvelope;  // Quadratic contrast (like Sensory Bridge)
-        
-        // Optional: Beat sync - reset phase on beat (optional feature)
-        if (ctx.audio.isOnBeat()) {
-            // Optional: Could reset phase to 0.0f for beat sync, but Sensory Bridge doesn't do this
-            // m_phase = 0.0f;  // Uncomment if beat sync desired
-        }
     } else
 #endif
     {
@@ -261,12 +278,10 @@ void BreathingEffect::renderBreathing(plugins::EffectContext& ctx) {
     m_histIdx = (m_histIdx + 1) % HISTORY_SIZE;
 
     // ========================================================================
-    // PHASE 5: FRAME PERSISTENCE (Sensory Bridge Bloom Pattern)
+    // PHASE 5: FRAME PERSISTENCE via AsymmetricFollower (dt-corrected)
     // ========================================================================
-    // Alpha blending with previous frame (0.99 alpha = 99% persistence)
-    // This creates smooth motion through frame accumulation, not exponential decay
-    float alpha = 0.99f;  // Like Bloom's draw_sprite() alpha
-    m_currentRadius = m_prevRadius * alpha + avgTargetRadius * (1.0f - alpha);
+    // 80ms attack (responsive expansion), 400ms release (organic deflation)
+    m_currentRadius = m_radiusFollower.update(avgTargetRadius, dt);
     m_prevRadius = m_currentRadius;  // Store for next frame
 
     // Wrap phase to prevent overflow
@@ -379,8 +394,9 @@ void BreathingEffect::renderPulsing(plugins::EffectContext& ctx) {
     }
 #endif
 
-    // Apply decay
-    m_pulseIntensity *= decayRate;
+    // Apply decay (dt-corrected: decayRate is per-frame at 120fps, convert to dt-based)
+    float dtPulse = ctx.getSafeDeltaSeconds();
+    m_pulseIntensity *= powf(decayRate, dtPulse * 120.0f);
     if (m_pulseIntensity < 0.01f) m_pulseIntensity = 0.0f;
 
     // Compute effective radius from pulse
@@ -505,8 +521,9 @@ void BreathingEffect::renderTexture(plugins::EffectContext& ctx) {
         }
     }
 
-    // Update texture phase
-    m_texturePhase += driftSpeed;
+    // Update texture phase (dt-corrected)
+    float dtTexture = ctx.getSafeDeltaSeconds();
+    m_texturePhase += driftSpeed * dtTexture * 120.0f;  // Normalize to 120fps equivalent
     if (m_texturePhase > 2.0f * 3.14159f * 10.0f) {
         m_texturePhase -= 2.0f * 3.14159f * 10.0f;
     }

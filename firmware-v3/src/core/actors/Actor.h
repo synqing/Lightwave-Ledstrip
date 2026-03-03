@@ -137,7 +137,9 @@ enum class MessageType : uint8_t {
     TRINITY_BEAT  = 0xD0,  // param1=bpm_hi, param2=bpm_lo, param3=phase, param4=flags
     TRINITY_MACRO = 0xD1,  // param1-4 = packed macro values
     TRINITY_SYNC  = 0xD2,  // param1=action, param4=position_ms
-    TRINITY_SEGMENT = 0xD3 // param1=index, param2-3=labelHash16 (hi/lo), param4=start_ms, _reserved=end_ms
+    TRINITY_SEGMENT = 0xD3, // param1=index, param2-3=labelHash16 (hi/lo), param4=start_ms, _reserved=end_ms
+    STIMULUS_SET_MODE = 0xE0,
+    STIMULUS_CLEAR    = 0xE1
 };
 
 // ============================================================================

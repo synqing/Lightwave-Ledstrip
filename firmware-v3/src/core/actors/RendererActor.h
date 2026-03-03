@@ -72,6 +72,12 @@ namespace lightwaveos { namespace plugins { class IEffect; namespace runtime { c
 namespace lightwaveos {
 namespace actors {
 
+enum class AudioInputMode : uint8_t {
+    Live = 0,
+    Trinity = 1,
+    StimulusOverride = 2
+};
+
 // ============================================================================
 // Configuration
 // ============================================================================
@@ -96,7 +102,7 @@ struct LedConfig {
     static constexpr uint8_t MAX_SPEED = 100;  // Extended range (was 50)
 
     // Center origin point for effects
-    static constexpr uint8_t CENTER_POINT = 79;  // LED 79/80 split
+    static constexpr uint8_t CENTER_LED_INDEX = 79;  // LED 79/80 split
 };
 
 /**
@@ -359,9 +365,11 @@ public:
      *
      * @param buffer Pointer to AudioActor's SnapshotBuffer (nullptr to disable)
      */
-    void setAudioBuffer(const audio::SnapshotBuffer<audio::ControlBusFrame>* buffer) {
-        m_controlBusBuffer = buffer;
-    }
+    void setAudioBuffer(const audio::SnapshotBuffer<audio::ControlBusFrame>* buffer) { m_controlBusBuffer = buffer; }
+
+    void setStimulusBuffer(const audio::SnapshotBuffer<audio::ControlBusFrame>* buffer) { m_stimulusControlBusBuffer = buffer; }
+
+    void setAudioInputMode(AudioInputMode mode) { m_audioInputMode = mode; }
 
     /**
      * @brief Check if audio integration is active
@@ -655,7 +663,7 @@ private:
 
     struct EffectParamUpdate {
         EffectId effectId;
-        char name[24];
+        char name[64];
         float value;
     };
     static constexpr uint8_t PARAM_QUEUE_SIZE = 16;
@@ -782,6 +790,10 @@ private:
      * Set to nullptr if AudioActor isn't running.
      */
     const audio::SnapshotBuffer<audio::ControlBusFrame>* m_controlBusBuffer = nullptr;
+    const audio::SnapshotBuffer<audio::ControlBusFrame>* m_stimulusControlBusBuffer = nullptr;
+
+    AudioInputMode m_audioInputMode = AudioInputMode::Live;
+    bool m_stimulusHasFrame = false;
 
     /// Cached result of hasActiveMappings() - updated on effect change only
     bool m_effectHasAudioMappings = false;

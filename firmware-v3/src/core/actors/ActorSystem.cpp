@@ -40,6 +40,9 @@ ActorSystem::ActorSystem()
     : m_state(SystemState::UNINITIALIZED)
     , m_startTime(0)
 {
+#if FEATURE_AUDIO_SYNC
+    m_stimulusMutex = xSemaphoreCreateMutex();
+#endif
 }
 
 ActorSystem::~ActorSystem()
@@ -47,6 +50,12 @@ ActorSystem::~ActorSystem()
     if (m_state == SystemState::RUNNING) {
         shutdown();
     }
+#if FEATURE_AUDIO_SYNC
+    if (m_stimulusMutex) {
+        vSemaphoreDelete(m_stimulusMutex);
+        m_stimulusMutex = nullptr;
+    }
+#endif
 }
 
 // ============================================================================
@@ -200,6 +209,7 @@ bool ActorSystem::start()
             // Goertzel: TempoTracker pointer for 120 FPS phase advancement
             m_renderer->setTempo(&m_audio->getTempoMut());
 #endif
+            m_renderer->setStimulusBuffer(&m_stimulusControlBusBuffer);
 #ifndef NATIVE_BUILD
             ESP_LOGI(TAG, "Audio integration enabled - ControlBus%s",
 #if FEATURE_AUDIO_BACKEND_ESV11
@@ -246,11 +256,11 @@ void ActorSystem::shutdown()
 
 #if FEATURE_AUDIO_SYNC
     // Stop AudioActor (Phase 2) - must stop before renderer
-    if (m_audio) {
-        // Disconnect cross-actor wiring first
-        if (m_renderer) {
-            m_renderer->setAudioBuffer(nullptr);
-        }
+        if (m_audio) {
+            if (m_renderer) {
+                m_renderer->setAudioBuffer(nullptr);
+                m_renderer->setStimulusBuffer(nullptr);
+            }
         m_audio->stop();
 #ifndef NATIVE_BUILD
         ESP_LOGI(TAG, "AudioActor stopped");
@@ -593,6 +603,77 @@ bool ActorSystem::trinitySegment(uint8_t index, uint16_t labelHash16, float star
     msg._reserved = endMs;
 
     return m_renderer->send(msg, pdMS_TO_TICKS(10));
+}
+
+uint8_t ActorSystem::getStimulusMode() const
+{
+    return m_stimulusMode;
+}
+
+bool ActorSystem::setStimulusMode(uint8_t mode)
+{
+    if (!m_renderer || !m_renderer->isRunning()) {
+        return false;
+    }
+    Message msg(MessageType::STIMULUS_SET_MODE, mode);
+    bool success = m_renderer->send(msg, pdMS_TO_TICKS(10));
+    if (success) {
+        m_stimulusMode = mode;
+    }
+    return success;
+}
+
+bool ActorSystem::clearStimulus()
+{
+    if (!m_stimulusMutex) {
+        return false;
+    }
+    if (xSemaphoreTake(m_stimulusMutex, pdMS_TO_TICKS(50)) != pdTRUE) {
+        return false;
+    }
+    m_stimulusLastFrame = lightwaveos::audio::ControlBusFrame{};
+    m_stimulusLastPublishMs = millis();
+    m_stimulusControlBusBuffer.Publish(m_stimulusLastFrame);
+    xSemaphoreGive(m_stimulusMutex);
+    m_stimulusMode = 0;
+    if (m_renderer && m_renderer->isRunning()) {
+        Message msg(MessageType::STIMULUS_CLEAR);
+        (void)m_renderer->send(msg, pdMS_TO_TICKS(10));
+    }
+    return true;
+}
+
+lightwaveos::audio::ControlBusFrame ActorSystem::getStimulusFrame() const
+{
+    if (!m_stimulusMutex) {
+        return m_stimulusLastFrame;
+    }
+    if (xSemaphoreTake(m_stimulusMutex, pdMS_TO_TICKS(50)) != pdTRUE) {
+        return m_stimulusLastFrame;
+    }
+    lightwaveos::audio::ControlBusFrame frame = m_stimulusLastFrame;
+    xSemaphoreGive(m_stimulusMutex);
+    return frame;
+}
+
+bool ActorSystem::publishStimulusFrame(const lightwaveos::audio::ControlBusFrame& frame)
+{
+    if (!m_stimulusMutex) {
+        return false;
+    }
+    if (xSemaphoreTake(m_stimulusMutex, pdMS_TO_TICKS(50)) != pdTRUE) {
+        return false;
+    }
+    m_stimulusLastFrame = frame;
+    m_stimulusLastPublishMs = millis();
+    m_stimulusControlBusBuffer.Publish(m_stimulusLastFrame);
+    xSemaphoreGive(m_stimulusMutex);
+    return true;
+}
+
+const lightwaveos::audio::SnapshotBuffer<lightwaveos::audio::ControlBusFrame>& ActorSystem::getStimulusControlBusBuffer() const
+{
+    return m_stimulusControlBusBuffer;
 }
 #endif
 

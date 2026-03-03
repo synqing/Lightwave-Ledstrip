@@ -35,6 +35,8 @@
 // Audio integration (Phase 2)
 #if FEATURE_AUDIO_SYNC
 #include "../../audio/AudioActor.h"
+#include "../../audio/contracts/ControlBus.h"
+#include "../../audio/contracts/SnapshotBuffer.h"
 #endif
 
 namespace lightwaveos {
@@ -301,6 +303,15 @@ public:
     bool trinitySegment(uint8_t index, uint16_t labelHash16, float startSec, float endSec);
 #endif
 
+#if FEATURE_AUDIO_SYNC
+    uint8_t getStimulusMode() const;
+    bool setStimulusMode(uint8_t mode);
+    bool clearStimulus();
+    lightwaveos::audio::ControlBusFrame getStimulusFrame() const;
+    bool publishStimulusFrame(const lightwaveos::audio::ControlBusFrame& frame);
+    const lightwaveos::audio::SnapshotBuffer<lightwaveos::audio::ControlBusFrame>& getStimulusControlBusBuffer() const;
+#endif
+
     // ========================================================================
     // Diagnostics
     // ========================================================================
@@ -340,6 +351,13 @@ private:
     // State
     SystemState m_state;
     uint32_t m_startTime;
+#if FEATURE_AUDIO_SYNC
+    lightwaveos::audio::SnapshotBuffer<lightwaveos::audio::ControlBusFrame> m_stimulusControlBusBuffer;
+    lightwaveos::audio::ControlBusFrame m_stimulusLastFrame;
+    uint32_t m_stimulusLastPublishMs = 0;
+    uint8_t m_stimulusMode = 0;
+    SemaphoreHandle_t m_stimulusMutex = nullptr;
+#endif
 };
 
 } // namespace actors

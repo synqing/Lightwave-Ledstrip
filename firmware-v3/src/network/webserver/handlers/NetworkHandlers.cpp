@@ -2,6 +2,12 @@
  * @file NetworkHandlers.cpp
  * @brief Network management HTTP handlers implementation
  *
+ * ╔══════════════════════════════════════════════════════════════════════╗
+ * ║  ARCHITECTURAL CONSTRAINT: K1 IS AP-ONLY. NEVER ENABLE STA MODE.  ║
+ * ║  /network/connect exists for legacy/escape hatch only (unreliable).║
+ * ║  See WiFiManager.h and CLAUDE.md.                                  ║
+ * ╚══════════════════════════════════════════════════════════════════════╝
+ *
  * LightwaveOS v2 - Network Subsystem
  */
 

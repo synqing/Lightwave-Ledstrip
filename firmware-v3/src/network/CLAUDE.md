@@ -1,3 +1,18 @@
+# Network Subsystem
+
+## CRITICAL: K1 WiFi Architecture — AP-ONLY
+
+**K1 is an Access Point. It does NOT connect to external WiFi routers. This is a HARD architectural constraint.**
+
+- K1 boots `WIFI_MODE_AP`. Tab5 and iOS connect TO K1 at 192.168.4.1.
+- STA authentication FAILS at the ESP-IDF 802.11 driver level (AUTH_EXPIRE reason 2, AUTH_FAIL reason 202). This has been reproduced across multiple routers and 6+ firmware mitigation attempts — NONE worked. The failure is caused by ESP32 AP+STA concurrent mode resource contention.
+- Resolved architecturally Feb 2026. Re-confirmed March 2026.
+- **DO NOT**: add STA connection logic, change WiFi mode to APSTA, add router connection features, or modify AP configuration without explicit user approval.
+- The serial `wifi connect` escape hatch exists but is KNOWN UNRELIABLE.
+- See `WiFiManager.h` header block for the canonical warning.
+
+---
+
 <claude-mem-context>
 # Recent Activity
 

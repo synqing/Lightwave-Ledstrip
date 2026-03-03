@@ -2,6 +2,12 @@
  * @file WiFiCredentialsStorage.h
  * @brief NVS-based storage for WiFi network credentials
  *
+ * ╔══════════════════════════════════════════════════════════════════════╗
+ * ║  ARCHITECTURAL CONSTRAINT: K1 IS AP-ONLY. NEVER ENABLE STA MODE.  ║
+ * ║  Stored credentials are for the serial escape hatch only (known    ║
+ * ║  unreliable). See WiFiManager.h and CLAUDE.md.                     ║
+ * ╚══════════════════════════════════════════════════════════════════════╝
+ *
  * Stores multiple WiFi networks (SSID + password pairs) in NVS.
  * Provides methods to save, load, delete, and query saved networks.
  *

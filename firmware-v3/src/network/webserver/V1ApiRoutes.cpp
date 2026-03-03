@@ -30,6 +30,7 @@
 #include "handlers/ShowHandlers.h"
 #include "handlers/ModifierHandlers.h"
 #include "handlers/ColorCorrectionHandlers.h"
+#include "handlers/StimulusHandlers.h"
 #if FEATURE_API_AUTH
 #include "handlers/AuthHandlers.h"
 #endif
@@ -538,6 +539,38 @@ void V1ApiRoutes::registerRoutes(
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
         handlers::AudioHandlers::handleCalibrateApply(request, ctx.orchestrator);
+    });
+
+    registry.onPost("/api/v1/stimulus/mode",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::StimulusHandlers::handleMode(request, data, len, ctx.orchestrator, ctx.renderer);
+        }
+    );
+
+    registry.onPost("/api/v1/stimulus/patch",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::StimulusHandlers::handlePatch(request, data, len, ctx.orchestrator, ctx.renderer);
+        }
+    );
+
+    registry.onPost("/api/v1/stimulus/clear", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::StimulusHandlers::handleClear(request, ctx.orchestrator, ctx.renderer);
+    });
+
+    registry.onGet("/api/v1/stimulus/status", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::StimulusHandlers::handleStatus(request, ctx.orchestrator, ctx.renderer);
     });
 
 #if FEATURE_AUDIO_BENCHMARK

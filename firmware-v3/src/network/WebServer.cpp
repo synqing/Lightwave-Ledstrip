@@ -2,6 +2,12 @@
  * @file WebServer.cpp
  * @brief Web Server implementation for LightwaveOS v2
  *
+ * ╔══════════════════════════════════════════════════════════════════════╗
+ * ║  ARCHITECTURAL CONSTRAINT: K1 IS AP-ONLY. NEVER ENABLE STA MODE.  ║
+ * ║  WebServer runs on the AP interface (192.168.4.1). Do NOT add      ║
+ * ║  STA-dependent features. See WiFiManager.h and CLAUDE.md.          ║
+ * ╚══════════════════════════════════════════════════════════════════════╝
+ *
  * Implements REST API and WebSocket server integrated with Actor System.
  * All state changes are routed through m_orchestrator for thread safety.
  */
@@ -51,6 +57,7 @@
 #include "webserver/ws/WsBatchCommands.h"
 #if FEATURE_AUDIO_SYNC
 #include "webserver/ws/WsAudioCommands.h"
+#include "webserver/ws/WsStimulusCommands.h"
 #include "webserver/ws/WsDebugCommands.h"
 #endif
 #include "webserver/ws/WsStreamCommands.h"
@@ -480,15 +487,16 @@ void WebServer::update() {
     const uint32_t nowMs = millis();
     updateLowHeapShedState(nowMs);
 
-    // Periodic WS transport diagnostics (helps classify reconnect storms quickly).
+    // Periodic WS transport diagnostics (suppressed when no clients are connected).
     if (m_wsGateway) {
         static uint32_t s_lastWsDiagLogMs = 0;
-        if ((nowMs - s_lastWsDiagLogMs) >= 10000) {
+        const unsigned activeClients = static_cast<unsigned>(m_ws ? m_ws->count() : 0);
+        if (activeClients > 0 && (nowMs - s_lastWsDiagLogMs) >= 60000) {
             s_lastWsDiagLogMs = nowMs;
             const webserver::WsGateway::Stats wsStats = m_wsGateway->getStats();
             LW_LOGD(
                 "WS diag: active=%u ok=%lu rejCooldown=%lu rejOverlap=%lu rejLimit=%lu disc=%lu parseErr=%lu oversize=%lu unknown=%lu",
-                static_cast<unsigned>(m_ws ? m_ws->count() : 0),
+                activeClients,
                 static_cast<unsigned long>(wsStats.connectAccepted),
                 static_cast<unsigned long>(wsStats.connectRejectedCooldown),
                 static_cast<unsigned long>(wsStats.connectRejectedOverlap),
@@ -1015,6 +1023,7 @@ void WebServer::setupWebSocket() {
 #if FEATURE_AUDIO_SYNC
     webserver::ws::registerWsAudioCommands(ctx);
 #endif
+    webserver::ws::registerWsStimulusCommands(ctx);
     webserver::ws::registerWsDebugCommands(ctx);
     webserver::ws::registerWsStreamCommands(ctx);
     webserver::ws::registerWsModifierCommands(ctx);
@@ -1405,7 +1414,7 @@ void WebServer::doBroadcastStatus() {
 
         // Musical key/chord (formatted string)
         const audio::ControlBus& controlBus = audio->getControlBusRef();
-        const audio::ControlBusFrame& frame = controlBus.GetFrame();
+        const audio::ControlBusFrame& frame = controlBus.GetFrameRef();
         const audio::ChordState& chord = frame.chordState;
         if (chord.confidence > 0.1f && chord.type != audio::ChordType::NONE) {
             doc["key"] = formatKeyName(chord.rootNote, chord.type);

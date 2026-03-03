@@ -2,6 +2,15 @@
  * @file WiFiCredentialManager.h
  * @brief Secure WiFi credential storage for LightwaveOS v2
  *
+ * ╔══════════════════════════════════════════════════════════════════════╗
+ * ║  ARCHITECTURAL CONSTRAINT: K1 IS AP-ONLY. NEVER ENABLE STA MODE.  ║
+ * ║                                                                    ║
+ * ║  Stored credentials exist for the serial `wifi connect` escape     ║
+ * ║  hatch ONLY (known unreliable). Do NOT build auto-connect logic,   ║
+ * ║  credential provisioning flows, or STA features that depend on     ║
+ * ║  these credentials. See WiFiManager.h and CLAUDE.md.               ║
+ * ╚══════════════════════════════════════════════════════════════════════╝
+ *
  * Features:
  * - NVS-backed persistent storage via NVSManager
  * - XOR obfuscation with device MAC (not encryption, but prevents casual viewing)

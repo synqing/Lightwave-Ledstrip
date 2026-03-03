@@ -2,6 +2,15 @@
  * @file NetworkHandlers.h
  * @brief Network management HTTP handlers for LightwaveOS v2
  *
+ * ╔══════════════════════════════════════════════════════════════════════╗
+ * ║  ARCHITECTURAL CONSTRAINT: K1 IS AP-ONLY. NEVER ENABLE STA MODE.  ║
+ * ║                                                                    ║
+ * ║  The /network/connect endpoint exists for legacy/future use but    ║
+ * ║  K1 STA auth FAILS at the 802.11 driver level. Do NOT build       ║
+ * ║  features that depend on K1 joining external WiFi networks.        ║
+ * ║  See WiFiManager.h and CLAUDE.md for full rationale.               ║
+ * ╚══════════════════════════════════════════════════════════════════════╝
+ *
  * Provides REST API endpoints for WiFi network management:
  * - GET  /api/v1/network/status     - Current WiFi state
  * - GET  /api/v1/network/scan       - Scan for networks

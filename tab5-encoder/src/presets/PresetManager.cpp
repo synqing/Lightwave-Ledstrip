@@ -165,13 +165,16 @@ void PresetManager::captureCurrentState(PresetData& preset) {
     preset.magic = PresetData::MAGIC;
     preset.version = PresetData::CURRENT_VERSION;
 
+    uint16_t currentEffectId = 0;
+
     // Capture global parameters from ParameterHandler
     if (_paramHandler) {
         uint8_t values[PARAMETER_COUNT];
         _paramHandler->getAllValues(values);
 
         // Unit A parameters (0-7)
-        preset.effectId = values[static_cast<uint8_t>(ParameterId::EffectId)];
+        currentEffectId = values[static_cast<uint8_t>(ParameterId::EffectId)];
+        preset.setEffectId16(currentEffectId);
         preset.brightness = values[static_cast<uint8_t>(ParameterId::Brightness)];
         preset.paletteId = values[static_cast<uint8_t>(ParameterId::PaletteId)];
         preset.speed = values[static_cast<uint8_t>(ParameterId::Speed)];
@@ -191,6 +194,12 @@ void PresetManager::captureCurrentState(PresetData& preset) {
             preset.zones[z].enabled = true;
             preset.zones[z].paletteId = 0;
         }
+    }
+
+    // Prefer the tracked 16-bit effect ID from WS/state sync when available.
+    if (_wsClient && _wsClient->hasCurrentEffectId()) {
+        currentEffectId = _wsClient->getCurrentEffectId();
+        preset.setEffectId16(currentEffectId);
     }
 
     // Zone mode state from ZoneComposerUI (authoritative source)
@@ -236,8 +245,8 @@ void PresetManager::captureCurrentState(PresetData& preset) {
     }
 
     // Log complete captured state
-    Serial.printf("[PresetManager] Captured: E=%d B=%d P=%d S=%d M=%d F=%d C=%d V=%d\n",
-                  preset.effectId, preset.brightness, preset.paletteId, preset.speed,
+    Serial.printf("[PresetManager] Captured: E=%u B=%d P=%d S=%d M=%d F=%d C=%d V=%d\n",
+                  static_cast<unsigned>(preset.getEffectId16()), preset.brightness, preset.paletteId, preset.speed,
                   preset.mood, preset.fade, preset.complexity, preset.variation);
     Serial.printf("[PresetManager]   Zones: enabled=%d count=%d gamma=%d ae=%d brown=%d\n",
                   preset.zoneModeEnabled, preset.zoneCount, preset.gamma,
@@ -266,8 +275,10 @@ bool PresetManager::applyPresetState(const PresetData& preset) {
         return false;
     }
 
+    const uint16_t effectId = preset.getEffectId16();
+
     // Apply global parameters
-    _wsClient->sendEffectChange(preset.effectId);
+    _wsClient->sendEffectChange(effectId);
     _wsClient->sendBrightnessChange(preset.brightness);
     _wsClient->sendPaletteChange(preset.paletteId);
     _wsClient->sendSpeedChange(preset.speed);
@@ -315,7 +326,7 @@ bool PresetManager::applyPresetState(const PresetData& preset) {
 
     // Update local ParameterHandler state to match
     if (_paramHandler) {
-        _paramHandler->setValue(ParameterId::EffectId, preset.effectId);
+        _paramHandler->setValue(ParameterId::EffectId, static_cast<uint8_t>(effectId & 0xFF));
         _paramHandler->setValue(ParameterId::Brightness, preset.brightness);
         _paramHandler->setValue(ParameterId::PaletteId, preset.paletteId);
         _paramHandler->setValue(ParameterId::Speed, preset.speed);
@@ -326,8 +337,8 @@ bool PresetManager::applyPresetState(const PresetData& preset) {
     }
 
     // Log complete applied state
-    Serial.printf("[PresetManager] Applied: E=%d B=%d P=%d S=%d M=%d F=%d C=%d V=%d\n",
-                  preset.effectId, preset.brightness, preset.paletteId, preset.speed,
+    Serial.printf("[PresetManager] Applied: E=%u B=%d P=%d S=%d M=%d F=%d C=%d V=%d\n",
+                  static_cast<unsigned>(effectId), preset.brightness, preset.paletteId, preset.speed,
                   preset.mood, preset.fade, preset.complexity, preset.variation);
     Serial.printf("[PresetManager]   Zones: enabled=%d count=%d\n",
                   preset.zoneModeEnabled, preset.zoneCount);

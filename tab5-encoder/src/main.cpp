@@ -376,6 +376,15 @@ void cachePaletteName(uint8_t id, const char* name) {
     }
 }
 
+// Cache an effect name from status message (called from WsMessageRouter)
+void cacheEffectName(uint16_t id, const char* name) {
+    if (id < MAX_EFFECTS && name && name[0]) {
+        strncpy(s_effectNames[id], name, EFFECT_NAME_MAX - 1);
+        s_effectNames[id][EFFECT_NAME_MAX - 1] = '\0';
+        s_effectKnown[id] = true;
+    }
+}
+
 static void updateUiEffectPaletteLabels() {
     if (!g_ui || !g_encoders || !s_uiInitialized) return;  // Only update if UI is initialized
     uint8_t effectId = static_cast<uint8_t>(g_encoders->getValue(0));

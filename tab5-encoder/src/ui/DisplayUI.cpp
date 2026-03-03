@@ -33,6 +33,7 @@ static constexpr uint32_t TAB5_COLOR_BORDER_BASE = 0x2A2A2E;
 static constexpr uint32_t TAB5_COLOR_FG_PRIMARY = 0xFFFFFF;
 static constexpr uint32_t TAB5_COLOR_FG_SECONDARY = 0x9CA3AF;
 static constexpr uint32_t TAB5_COLOR_BRAND_PRIMARY = 0xFFC700;
+static constexpr uint32_t TAB5_COLOR_STATUS_SUCCESS = 0x22C55E;
 
 // Forward declaration
 static void formatDuration(uint32_t seconds, char* buf, size_t bufSize);
@@ -349,9 +350,17 @@ void DisplayUI::begin() {
         }
     }, LV_EVENT_CLICKED, reinterpret_cast<void*>(this));
 
+    static constexpr lv_coord_t kGaugeRowHeight = 125;
+    static constexpr lv_coord_t kFxRowHeight = 78;
+    static constexpr lv_coord_t kPresetRowHeight = 85;
+    static constexpr lv_coord_t kActionRowHeight = 100;
+
+    const int32_t contentTop = TAB5_STATUSBAR_HEIGHT + TAB5_GRID_MARGIN;
+    int32_t nextRowY = contentTop;
+
     _gauges_container = lv_obj_create(_screen_global);
-    lv_obj_set_size(_gauges_container, 1280 - 2 * TAB5_GRID_MARGIN, 125);
-    lv_obj_align(_gauges_container, LV_ALIGN_TOP_MID, 0, TAB5_STATUSBAR_HEIGHT + TAB5_GRID_MARGIN);
+    lv_obj_set_size(_gauges_container, 1280 - 2 * TAB5_GRID_MARGIN, kGaugeRowHeight);
+    lv_obj_align(_gauges_container, LV_ALIGN_TOP_MID, 0, nextRowY);
     lv_obj_set_style_bg_opa(_gauges_container, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(_gauges_container, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(_gauges_container, 0, LV_PART_MAIN);
@@ -360,7 +369,7 @@ void DisplayUI::begin() {
     static lv_coord_t col_dsc[9] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
                                     LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
                                     LV_GRID_TEMPLATE_LAST};
-    static lv_coord_t row_dsc[2] = {125, LV_GRID_TEMPLATE_LAST};
+    static lv_coord_t row_dsc[2] = {kGaugeRowHeight, LV_GRID_TEMPLATE_LAST};
     lv_obj_set_grid_dsc_array(_gauges_container, col_dsc, row_dsc);
     lv_obj_set_style_pad_column(_gauges_container, TAB5_GRID_GAP, LV_PART_MAIN);
 
@@ -392,15 +401,69 @@ void DisplayUI::begin() {
         lv_obj_set_style_radius(_gauge_bars[i], 8, LV_PART_INDICATOR);
     }
 
+    nextRowY += kGaugeRowHeight + TAB5_GRID_GAP;
+
+    auto createEffectParamRow = [&](lv_obj_t*& container,
+                                    lv_obj_t* cards[8],
+                                    lv_obj_t* labels[8],
+                                    lv_obj_t* values[8],
+                                    lv_obj_t* bars[8],
+                                    uint8_t slotBase) {
+        container = lv_obj_create(_screen_global);
+        lv_obj_set_size(container, 1280 - 2 * TAB5_GRID_MARGIN, kFxRowHeight);
+        lv_obj_align(container, LV_ALIGN_TOP_MID, 0, nextRowY);
+        lv_obj_set_style_bg_opa(container, LV_OPA_TRANSP, LV_PART_MAIN);
+        lv_obj_set_style_border_width(container, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(container, 0, LV_PART_MAIN);
+        lv_obj_set_layout(container, LV_LAYOUT_GRID);
+        static lv_coord_t fx_row_dsc[2] = {kFxRowHeight, LV_GRID_TEMPLATE_LAST};
+        lv_obj_set_grid_dsc_array(container, col_dsc, fx_row_dsc);
+        lv_obj_set_style_pad_column(container, TAB5_GRID_GAP, LV_PART_MAIN);
+
+        for (uint8_t i = 0; i < 8; ++i) {
+            cards[i] = make_card(container, false);
+            lv_obj_set_grid_cell(cards[i], LV_GRID_ALIGN_STRETCH, i, 1, LV_GRID_ALIGN_STRETCH, 0, 1);
+
+            labels[i] = lv_label_create(cards[i]);
+            lv_label_set_text_fmt(labels[i], "FX%u", static_cast<unsigned>(slotBase + i + 1));
+            lv_obj_set_style_text_font(labels[i], RAJDHANI_MED_24, LV_PART_MAIN);
+            lv_obj_set_style_text_color(labels[i], lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+            lv_obj_set_width(labels[i], LV_PCT(100));
+            lv_label_set_long_mode(labels[i], LV_LABEL_LONG_DOT);
+            lv_obj_set_style_text_align(labels[i], LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+            lv_obj_align(labels[i], LV_ALIGN_TOP_MID, 0, -2);
+
+            values[i] = lv_label_create(cards[i]);
+            lv_label_set_text(values[i], "--");
+            lv_obj_set_style_text_font(values[i], JETBRAINS_MONO_REG_24, LV_PART_MAIN);
+            lv_obj_set_style_text_color(values[i], lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
+            lv_obj_align(values[i], LV_ALIGN_TOP_MID, 0, 20);
+
+            bars[i] = lv_bar_create(cards[i]);
+            lv_bar_set_range(bars[i], 0, 255);
+            lv_bar_set_value(bars[i], 0, LV_ANIM_OFF);
+            lv_obj_set_size(bars[i], LV_PCT(90), 8);
+            lv_obj_align(bars[i], LV_ALIGN_BOTTOM_MID, 0, -8);
+            lv_obj_set_style_bg_color(bars[i], lv_color_hex(TAB5_COLOR_BORDER_BASE), LV_PART_MAIN);
+            lv_obj_set_style_bg_color(bars[i], lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_INDICATOR);
+            lv_obj_set_style_radius(bars[i], 6, LV_PART_MAIN);
+            lv_obj_set_style_radius(bars[i], 6, LV_PART_INDICATOR);
+        }
+    };
+
+    createEffectParamRow(_fx_row_a_container, _fxa_cards, _fxa_labels, _fxa_values, _fxa_bars, 0);
+    nextRowY += kFxRowHeight + TAB5_GRID_GAP;
+    createEffectParamRow(_fx_row_b_container, _fxb_cards, _fxb_labels, _fxb_values, _fxb_bars, 8);
+    nextRowY += kFxRowHeight + TAB5_GRID_GAP;
+
     _preset_container = lv_obj_create(_screen_global);
-    lv_obj_set_size(_preset_container, 1280 - 2 * TAB5_GRID_MARGIN, 85);
-    lv_obj_align(_preset_container, LV_ALIGN_TOP_MID, 0,
-                 TAB5_STATUSBAR_HEIGHT + TAB5_GRID_MARGIN + 125 + TAB5_GRID_GAP);
+    lv_obj_set_size(_preset_container, 1280 - 2 * TAB5_GRID_MARGIN, kPresetRowHeight);
+    lv_obj_align(_preset_container, LV_ALIGN_TOP_MID, 0, nextRowY);
     lv_obj_set_style_bg_opa(_preset_container, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(_preset_container, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(_preset_container, 0, LV_PART_MAIN);
     lv_obj_set_layout(_preset_container, LV_LAYOUT_GRID);
-    static lv_coord_t preset_row_dsc[2] = {85, LV_GRID_TEMPLATE_LAST};
+    static lv_coord_t preset_row_dsc[2] = {kPresetRowHeight, LV_GRID_TEMPLATE_LAST};
     lv_obj_set_grid_dsc_array(_preset_container, col_dsc, preset_row_dsc);
     lv_obj_set_style_pad_column(_preset_container, TAB5_GRID_GAP, LV_PART_MAIN);
 
@@ -421,17 +484,18 @@ void DisplayUI::begin() {
         lv_obj_align(_preset_values[i], LV_ALIGN_TOP_MID, 0, 28);  // Position below title with uniform spacing
     }
 
+    nextRowY += kPresetRowHeight + TAB5_GRID_GAP;
+
     // Create action row (third row) - 4 buttons for GAMMA, COLOUR, EXPOSURE, BROWN
     _action_container = lv_obj_create(_screen_global);
-    lv_obj_set_size(_action_container, 1280 - 2 * TAB5_GRID_MARGIN, 100);
-    lv_obj_align(_action_container, LV_ALIGN_TOP_MID, 0,
-                 TAB5_STATUSBAR_HEIGHT + TAB5_GRID_MARGIN + 125 + TAB5_GRID_GAP + 85 + TAB5_GRID_GAP);
+    lv_obj_set_size(_action_container, 1280 - 2 * TAB5_GRID_MARGIN, kActionRowHeight);
+    lv_obj_align(_action_container, LV_ALIGN_TOP_MID, 0, nextRowY);
     lv_obj_set_style_bg_opa(_action_container, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(_action_container, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(_action_container, 0, LV_PART_MAIN);
     lv_obj_set_layout(_action_container, LV_LAYOUT_GRID);
     static lv_coord_t action_col_dsc[6] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
-    static lv_coord_t action_row_dsc[2] = {100, LV_GRID_TEMPLATE_LAST};
+    static lv_coord_t action_row_dsc[2] = {kActionRowHeight, LV_GRID_TEMPLATE_LAST};
     lv_obj_set_grid_dsc_array(_action_container, action_col_dsc, action_row_dsc);
     lv_obj_set_style_pad_column(_action_container, TAB5_GRID_GAP, LV_PART_MAIN);
 
@@ -616,6 +680,41 @@ void DisplayUI::begin() {
     lv_obj_set_style_text_font(_footer_uptime_value, RAJDHANI_MED_24, LV_PART_MAIN);
     lv_obj_set_style_text_color(_footer_uptime_value, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
     lv_obj_set_style_pad_all(_footer_uptime_value, 0, LV_PART_MAIN);
+
+    _footer_k1_group = lv_obj_create(_footer);
+    lv_obj_set_style_bg_opa(_footer_k1_group, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(_footer_k1_group, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(_footer_k1_group, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(_footer_k1_group, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_layout(_footer_k1_group, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(_footer_k1_group, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(_footer_k1_group, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(_footer_k1_group, 16, LV_PART_MAIN);
+
+    for (int i = 0; i < 2; i++) {
+        _footer_k1_buttons[i] = lv_btn_create(_footer_k1_group);
+        lv_obj_set_size(_footer_k1_buttons[i], 80, 32);
+        lv_obj_set_style_bg_color(_footer_k1_buttons[i], lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
+        lv_obj_set_style_border_width(_footer_k1_buttons[i], 2, LV_PART_MAIN);
+        lv_obj_set_style_border_color(_footer_k1_buttons[i], lv_color_hex(TAB5_COLOR_BORDER_BASE), LV_PART_MAIN);
+        lv_obj_add_state(_footer_k1_buttons[i], LV_STATE_DISABLED);
+
+        lv_obj_t* label = lv_label_create(_footer_k1_buttons[i]);
+        lv_label_set_text(label, "K1");
+        lv_obj_set_style_text_font(label, RAJDHANI_MED_24, LV_PART_MAIN);
+        lv_obj_set_style_text_color(label, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+        lv_obj_center(label);
+
+        lv_obj_set_user_data(_footer_k1_buttons[i], reinterpret_cast<void*>(static_cast<uintptr_t>(i)));
+        lv_obj_add_event_cb(_footer_k1_buttons[i], [](lv_event_t* e) {
+            lv_obj_t* btn = static_cast<lv_obj_t*>(lv_event_get_target(e));
+            uint8_t index = static_cast<uint8_t>(reinterpret_cast<uintptr_t>(lv_obj_get_user_data(btn)));
+            DisplayUI* ui = static_cast<DisplayUI*>(lv_event_get_user_data(e));
+            if (ui && ui->_k1SelectionCallback) {
+                ui->_k1SelectionCallback(index);
+            }
+        }, LV_EVENT_CLICKED, reinterpret_cast<void*>(this));
+    }
 
     // Right side: WS and Battery (with bar) - aligned right, ensure it has space
     lv_obj_t* rightGroup = lv_obj_create(_footer);
@@ -845,6 +944,59 @@ void DisplayUI::updateEncoder(uint8_t index, int32_t value, bool highlight) {
         _gauge_cards[displayPos],
         lv_color_hex(highlight ? TAB5_COLOR_BRAND_PRIMARY : 0xFFFFFF),
         LV_PART_MAIN);
+}
+
+void DisplayUI::updateEffectParamSlot(uint8_t slot, int32_t value, bool highlight) {
+    if (slot >= 16) return;
+
+    lv_obj_t* card = nullptr;
+    lv_obj_t* valueLabel = nullptr;
+    lv_obj_t* bar = nullptr;
+    const uint8_t local = static_cast<uint8_t>(slot % 8);
+
+    if (slot < 8) {
+        card = _fxa_cards[local];
+        valueLabel = _fxa_values[local];
+        bar = _fxa_bars[local];
+    } else {
+        card = _fxb_cards[local];
+        valueLabel = _fxb_values[local];
+        bar = _fxb_bars[local];
+    }
+
+    if (!card || !valueLabel || !bar) return;
+
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%ld", static_cast<long>(value));
+    lv_label_set_text(valueLabel, buf);
+
+    int32_t clamped = value;
+    if (clamped < 0) clamped = 0;
+    if (clamped > 255) clamped = 255;
+    lv_bar_set_value(bar, clamped, LV_ANIM_OFF);
+
+    lv_obj_set_style_border_color(card,
+                                  lv_color_hex(highlight ? TAB5_COLOR_BRAND_PRIMARY : 0xFFFFFF),
+                                  LV_PART_MAIN);
+}
+
+void DisplayUI::setEffectParamSlotLabel(uint8_t slot, const char* label) {
+    if (slot >= 16) return;
+
+    lv_obj_t* labelObj = nullptr;
+    const uint8_t local = static_cast<uint8_t>(slot % 8);
+    if (slot < 8) {
+        labelObj = _fxa_labels[local];
+    } else {
+        labelObj = _fxb_labels[local];
+    }
+
+    if (!labelObj) return;
+    if (label && label[0]) {
+        lv_label_set_text(labelObj, label);
+    } else {
+        lv_label_set_text(labelObj, "--");
+    }
 }
 
 void DisplayUI::setConnectionState(bool wifi, bool ws, bool encA, bool encB) {
@@ -1147,6 +1299,30 @@ void DisplayUI::updateWebSocketStatus(WebSocketStatus status) {
     snprintf(buf, sizeof(buf), "WS: %s", statusText);
     lv_label_set_text(_footer_ws_status, buf);
     lv_obj_set_style_text_color(_footer_ws_status, lv_color_hex(statusColor), LV_PART_MAIN);
+}
+
+void DisplayUI::setK1SelectionCallback(void (*callback)(uint8_t index)) {
+    _k1SelectionCallback = callback;
+}
+
+void DisplayUI::updateK1Slots(bool slot0Online, bool slot1Online, int8_t selectedIndex) {
+    bool online[2] = {slot0Online, slot1Online};
+    for (int i = 0; i < 2; i++) {
+        if (!_footer_k1_buttons[i]) {
+            continue;
+        }
+        if (!online[i]) {
+            lv_obj_add_state(_footer_k1_buttons[i], LV_STATE_DISABLED);
+            lv_obj_set_style_bg_color(_footer_k1_buttons[i], lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
+            lv_obj_set_style_border_color(_footer_k1_buttons[i], lv_color_hex(TAB5_COLOR_BORDER_BASE), LV_PART_MAIN);
+        } else {
+            lv_obj_clear_state(_footer_k1_buttons[i], LV_STATE_DISABLED);
+            bool selected = (selectedIndex == i);
+            uint32_t borderColor = selected ? TAB5_COLOR_BRAND_PRIMARY : TAB5_COLOR_STATUS_SUCCESS;
+            lv_obj_set_style_bg_color(_footer_k1_buttons[i], lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
+            lv_obj_set_style_border_color(_footer_k1_buttons[i], lv_color_hex(borderColor), LV_PART_MAIN);
+        }
+    }
 }
 
 // Helper function to format duration in HH:MM:SS or Xm Ys
@@ -1602,6 +1778,17 @@ void DisplayUI::updateEncoder(uint8_t index, int32_t value, bool highlight) {
         _highlightIdx = index;  // Store encoder index for highlight tracking
         _highlightTime = EspHal::millis();
     }
+}
+
+void DisplayUI::updateEffectParamSlot(uint8_t slot, int32_t value, bool highlight) {
+    (void)slot;
+    (void)value;
+    (void)highlight;
+}
+
+void DisplayUI::setEffectParamSlotLabel(uint8_t slot, const char* label) {
+    (void)slot;
+    (void)label;
 }
 
 

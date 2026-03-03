@@ -30,6 +30,7 @@
 
 // External function to cache palette names (defined in main.cpp)
 extern void cachePaletteName(uint8_t id, const char* name);
+extern void cacheEffectName(uint16_t id, const char* name);
 
 // ============================================================================
 // Router logging (compile-time, default off)
@@ -183,6 +184,29 @@ private:
                 cachePaletteName(id, name);
             }
         }
+
+        // Extract and cache effectName from status message if present.
+        if (doc["effectName"].is<const char*>()) {
+            uint16_t effectId = 0;
+            bool hasEffectId = false;
+            if (doc["effectId"].is<int>()) {
+                int effectIdInt = doc["effectId"].as<int>();
+                if (effectIdInt >= 0 && effectIdInt <= 0xFFFF) {
+                    effectId = static_cast<uint16_t>(effectIdInt);
+                    hasEffectId = true;
+                }
+            } else if (doc["effectId"].is<uint16_t>()) {
+                effectId = doc["effectId"].as<uint16_t>();
+                hasEffectId = true;
+            }
+
+            if (hasEffectId) {
+                const char* effectName = doc["effectName"].as<const char*>();
+                if (effectName && effectName[0]) {
+                    cacheEffectName(effectId, effectName);
+                }
+            }
+        }
     }
 
     /**
@@ -225,6 +249,13 @@ private:
      */
     static void handleZoneStatus(JsonDocument& doc) {
         if (!s_paramHandler) {
+            return;
+        }
+
+        // Hard gate: Unit-B zone cache updates are only valid while the
+        // Zone Composer tab is active. Global screen repurposes Unit-B for
+        // effect-modifier slots and must not receive zone writes.
+        if (!s_displayUI || s_displayUI->getCurrentScreen() != UIScreen::ZONE_COMPOSER) {
             return;
         }
 

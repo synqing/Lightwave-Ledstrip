@@ -79,6 +79,12 @@ bool ParameterHandler::applyStatus(JsonDocument& doc) {
 
     // Apply each parameter from status message
     for (uint8_t i = 0; i < getParameterCount(); i++) {
+        // Unit-B indices are mode-multiplexed on Tab5 (effect modifiers on Global,
+        // zone controls in Zone Composer) and must not be force-synced from generic status.
+        if (i >= 8) {
+            continue;
+        }
+
         const ParameterDef* param = getParameterByIndex(i);
         if (!param) continue;
 

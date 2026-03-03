@@ -113,6 +113,14 @@ public:
     void refreshAllPresetSlots(PresetManager* pm);
     #endif
 
+    // Effect parameter slots (Unit-B encoder rows)
+    void updateEffectParamSlot(uint8_t slot, int32_t value, bool highlight);
+    void setEffectParamSlotLabel(uint8_t slot, const char* label);
+
+    // K1 dual-device selector
+    void setK1SelectionCallback(void (*callback)(uint8_t index));
+    void updateK1Slots(bool slot0Online, bool slot1Online, int8_t selectedIndex);
+
     // Colour correction state (touch action row)
     #ifndef SIMULATOR_BUILD
     void setColourCorrectionState(const ColorCorrectionState& state);
@@ -164,6 +172,19 @@ private:
     uint32_t _feedback_until_ms[8] = {0};
     uint32_t _feedback_color_hex[8] = {0};
 
+    // Effect parameter rows (FX Row A: slots 0-7, FX Row B: slots 8-15)
+    lv_obj_t* _fx_row_a_container = nullptr;
+    lv_obj_t* _fxa_cards[8] = {nullptr};
+    lv_obj_t* _fxa_labels[8] = {nullptr};
+    lv_obj_t* _fxa_values[8] = {nullptr};
+    lv_obj_t* _fxa_bars[8] = {nullptr};
+
+    lv_obj_t* _fx_row_b_container = nullptr;
+    lv_obj_t* _fxb_cards[8] = {nullptr};
+    lv_obj_t* _fxb_labels[8] = {nullptr};
+    lv_obj_t* _fxb_values[8] = {nullptr};
+    lv_obj_t* _fxb_bars[8] = {nullptr};
+
     lv_obj_t* _action_container = nullptr;
     lv_obj_t* _action_buttons[5] = {nullptr};
     lv_obj_t* _action_labels[5] = {nullptr};
@@ -177,6 +198,11 @@ private:
     
     // Connectivity Tab UI
     ConnectivityTab* _connectivityTab = nullptr;
+
+    // K1 dual-device selector (footer)
+    lv_obj_t* _footer_k1_group = nullptr;
+    lv_obj_t* _footer_k1_buttons[2] = {nullptr};
+    void (*_k1SelectionCallback)(uint8_t index) = nullptr;
 
     // Footer UI elements
     lv_obj_t* _footer = nullptr;

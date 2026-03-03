@@ -442,6 +442,31 @@ void WebSocketClient::requestPalettesList(uint8_t page, uint8_t limit, const cha
     sendJSON("palettes.list", doc);
 }
 
+void WebSocketClient::requestEffectParameters(uint16_t effectId, const char* requestId) {
+    if (!isConnected()) return;
+    JsonDocument doc;
+    doc["effectId"] = effectId;
+    if (requestId && *requestId) doc["requestId"] = requestId;
+    sendJSON("effects.parameters.get", doc);
+}
+
+void WebSocketClient::sendEffectParameterChange(uint8_t throttleIndex, uint16_t effectId, const char* paramName, float value) {
+    if (!isConnected() || !paramName || !paramName[0]) {
+        return;
+    }
+
+    // Reuse encoder throttle buckets to avoid flooding the WS command queue.
+    if (!canSend(throttleIndex)) {
+        return;
+    }
+
+    JsonDocument doc;
+    doc["effectId"] = effectId;
+    JsonObject params = doc["parameters"].to<JsonObject>();
+    params[paramName] = value;
+    sendJSON("effects.parameters.set", doc);
+}
+
 void WebSocketClient::requestZonesState() {
     if (!isConnected()) return;
     Serial.println("[WS] Requesting zone state (zones.get)");
@@ -454,20 +479,30 @@ void WebSocketClient::requestZonesState() {
 // Global Parameter Commands (Unit A, encoders 0-7)
 // ============================================================================
 
-void WebSocketClient::sendEffectChange(uint8_t effectId) {
+void WebSocketClient::sendEffectChange(uint16_t effectId) {
     if (!isConnected()) {
         return;
     }
 
-    // Queue if throttled, send immediately if allowed
-    if (!canSend(ParamIndex::EFFECT)) {
-        queueParameterChange(ParamIndex::EFFECT, effectId, "effects.setCurrent");
-        return;
-    }
+    // Keep a local cache so preset capture can retrieve the true 16-bit effect ID.
+    _currentEffectId = effectId;
+    _currentEffectKnown = true;
 
     JsonDocument doc;
     doc["effectId"] = effectId;
     sendJSON("effects.setCurrent", doc);
+}
+
+void WebSocketClient::sendNextEffect() {
+    if (!isConnected()) return;
+    JsonDocument doc;
+    sendJSON("nextEffect", doc);
+}
+
+void WebSocketClient::sendPrevEffect() {
+    if (!isConnected()) return;
+    JsonDocument doc;
+    sendJSON("prevEffect", doc);
 }
 
 void WebSocketClient::sendBrightnessChange(uint8_t brightness) {

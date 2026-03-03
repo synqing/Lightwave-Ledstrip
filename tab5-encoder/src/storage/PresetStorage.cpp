@@ -110,8 +110,8 @@ bool PresetStorage::save(uint8_t slotIndex, PresetData& preset) {
         return false;
     }
 
-    Serial.printf("[PresetStorage] Saved slot %d (effect=%d, brightness=%d, palette=%d)\n",
-                  slotIndex, preset.effectId, preset.brightness, preset.paletteId);
+    Serial.printf("[PresetStorage] Saved slot %d (effect=%u, brightness=%d, palette=%d)\n",
+                  slotIndex, static_cast<unsigned>(preset.getEffectId16()), preset.brightness, preset.paletteId);
     return true;
 }
 
@@ -152,8 +152,8 @@ bool PresetStorage::load(uint8_t slotIndex, PresetData& preset) {
         return false;
     }
 
-    Serial.printf("[PresetStorage] Loaded slot %d (effect=%d, brightness=%d, palette=%d)\n",
-                  slotIndex, preset.effectId, preset.brightness, preset.paletteId);
+    Serial.printf("[PresetStorage] Loaded slot %d (effect=%u, brightness=%d, palette=%d)\n",
+                  slotIndex, static_cast<unsigned>(preset.getEffectId16()), preset.brightness, preset.paletteId);
     return true;
 }
 

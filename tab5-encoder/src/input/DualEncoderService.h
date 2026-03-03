@@ -88,6 +88,13 @@ public:
     void setValue(uint8_t param, uint16_t value, bool triggerCallback = false);
 
     /**
+     * Simulate a button press (fires callback with wasReset=true)
+     * Used by encoder simulation API (serial/REST injection).
+     * @param index Encoder index (0-15)
+     */
+    void simulatePress(uint8_t index);
+
+    /**
      * Get all current values
      * @param values Array to fill (must have 16 elements)
      */
@@ -150,6 +157,21 @@ public:
      */
     bool areBothAvailable() const;
 
+    /**
+     * Get cached button state for an encoder index.
+     * This is sampled during update() and avoids extra direct I2C reads.
+     * @param index Global encoder index (0-15)
+     * @return true if pressed in the latest poll
+     */
+    bool getButtonPressed(uint8_t index) const;
+
+    /**
+     * Get cached switch state for a unit.
+     * @param unit 0 for Unit A, 1 for Unit B
+     * @return Raw switch value from latest poll
+     */
+    uint8_t getSwitchState(uint8_t unit) const;
+
     // ========================================================================
     // LED Control
     // ========================================================================
@@ -203,6 +225,9 @@ private:
 
     // Unified value storage (0-15)
     uint16_t _values[TOTAL_ENCODERS];
+    bool _buttonStates[TOTAL_ENCODERS] = {false};
+    uint8_t _switchStateA = 0;
+    uint8_t _switchStateB = 0;
 
     // Processing state for all 16 encoders
     DetentDebounce _detentDebounce[TOTAL_ENCODERS];
@@ -371,6 +396,7 @@ inline void DualEncoderService::update() {
 
     // Poll Unit A encoders (indices 0-7)
     if (_transportA.isAvailable()) {
+        _switchStateA = _transportA.getInputSwitch();
         const uint32_t _dbg_t0 = millis();
         for (uint8_t localIdx = 0; localIdx < ENCODERS_PER_UNIT; localIdx++) {
             uint8_t globalIdx = localIdx;  // 0-7
@@ -381,6 +407,7 @@ inline void DualEncoderService::update() {
 
             // Check button state
             bool isPressed = _transportA.getKeyPressed(localIdx);
+            _buttonStates[globalIdx] = isPressed;
             processButton(globalIdx, isPressed, now);
         }
         const uint32_t _dbg_dt = millis() - _dbg_t0;
@@ -403,6 +430,7 @@ inline void DualEncoderService::update() {
 
     // Poll Unit B encoders (indices 8-15)
     if (_transportB.isAvailable()) {
+        _switchStateB = _transportB.getInputSwitch();
         const uint32_t _dbg_t0 = millis();
         for (uint8_t localIdx = 0; localIdx < ENCODERS_PER_UNIT; localIdx++) {
             uint8_t globalIdx = localIdx + ENCODERS_PER_UNIT;  // 8-15
@@ -413,6 +441,7 @@ inline void DualEncoderService::update() {
 
             // Check button state
             bool isPressed = _transportB.getKeyPressed(localIdx);
+            _buttonStates[globalIdx] = isPressed;
             processButton(globalIdx, isPressed, now);
         }
         const uint32_t _dbg_dt = millis() - _dbg_t0;
@@ -451,6 +480,11 @@ inline void DualEncoderService::setValue(uint8_t param, uint16_t value, bool tri
     if (triggerCallback) {
         invokeCallback(param, _values[param], false);
     }
+}
+
+inline void DualEncoderService::simulatePress(uint8_t index) {
+    if (index >= TOTAL_ENCODERS) return;
+    invokeCallback(index, _values[index], true);
 }
 
 inline void DualEncoderService::getAllValues(uint16_t values[TOTAL_ENCODERS]) const {
@@ -514,6 +548,17 @@ inline bool DualEncoderService::isAnyAvailable() const {
 
 inline bool DualEncoderService::areBothAvailable() const {
     return _transportA.isAvailable() && _transportB.isAvailable();
+}
+
+inline bool DualEncoderService::getButtonPressed(uint8_t index) const {
+    if (index >= TOTAL_ENCODERS) return false;
+    return _buttonStates[index];
+}
+
+inline uint8_t DualEncoderService::getSwitchState(uint8_t unit) const {
+    if (unit == 0) return _switchStateA;
+    if (unit == 1) return _switchStateB;
+    return 0;
 }
 
 inline void DualEncoderService::flashLed(uint8_t index, uint8_t r, uint8_t g, uint8_t b) {

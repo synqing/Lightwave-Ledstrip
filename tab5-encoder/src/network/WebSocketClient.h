@@ -112,7 +112,9 @@ public:
     // Global Parameter Commands (Unit A, encoders 0-7)
     // ========================================================================
 
-    void sendEffectChange(uint8_t effectId);
+    void sendEffectChange(uint16_t effectId);
+    void sendNextEffect();
+    void sendPrevEffect();
     void sendPaletteChange(uint8_t paletteId);
     void sendSpeedChange(uint8_t speed);
     void sendMoodChange(uint8_t mood);
@@ -163,6 +165,8 @@ public:
     // messages with the same "type" (e.g. "effects.list", "palettes.list").
     void requestEffectsList(uint8_t page, uint8_t limit, const char* requestId);
     void requestPalettesList(uint8_t page, uint8_t limit, const char* requestId);
+    void requestEffectParameters(uint16_t effectId, const char* requestId = nullptr);
+    void sendEffectParameterChange(uint8_t throttleIndex, uint16_t effectId, const char* paramName, float value);
     void requestZonesState();
     /** Set flag to send zones.get on next update() (avoids sending inside WS receive callback). */
     void setPendingZonesRefresh() { _pendingZonesRefresh = true; }
@@ -174,6 +178,14 @@ public:
     void onMessage(WebSocketMessageCallback callback) { _messageCallback = callback; }
     void disconnect();
     const char* getStatusString() const;
+
+    // Current effect tracking (16-bit IDs from firmware-v3)
+    void setCurrentEffectId(uint16_t effectId) {
+        _currentEffectId = effectId;
+        _currentEffectKnown = true;
+    }
+    bool hasCurrentEffectId() const { return _currentEffectKnown; }
+    uint16_t getCurrentEffectId() const { return _currentEffectId; }
 
 private:
     WebSocketsClient _ws;
@@ -194,6 +206,8 @@ private:
     bool _useIP;
     bool _pendingHello;
     bool _pendingZonesRefresh = false;
+    uint16_t _currentEffectId = 0;
+    bool _currentEffectKnown = false;
 
     // Rate limiting state (16 parameters for dual encoder units)
     struct RateLimiter {

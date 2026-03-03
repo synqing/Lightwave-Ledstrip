@@ -55,7 +55,7 @@ struct PresetData {
     // ========================================================================
     // Global Parameters (8 bytes) - matches Unit-A encoder mapping
     // ========================================================================
-    uint8_t effectId;      // Current effect index (0-87, 88 effects total)
+    uint8_t effectId;      // Current effect low byte (legacy + compatibility)
     uint8_t brightness;    // Global brightness (0-255)
     uint8_t paletteId;     // Current palette index (0-63)
     uint8_t speed;         // Animation speed (1-100)
@@ -116,6 +116,17 @@ struct PresetData {
         speed = 25;
         gamma = 22;  // Default gamma 2.2 (stored as 22)
         zoneCount = 1;
+    }
+
+    // Store/retrieve full 16-bit effect IDs using reserved bytes for compatibility.
+    void setEffectId16(uint16_t effectId16) {
+        effectId = static_cast<uint8_t>(effectId16 & 0xFF);
+        reservedFuture[0] = static_cast<uint8_t>((effectId16 >> 8) & 0xFF);
+    }
+
+    uint16_t getEffectId16() const {
+        return static_cast<uint16_t>(effectId) |
+               (static_cast<uint16_t>(reservedFuture[0]) << 8);
     }
 
     // Validate preset data integrity

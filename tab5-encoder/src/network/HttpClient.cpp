@@ -269,7 +269,10 @@ bool HttpClient::runDiscovery() {
 
             String response = "";
             unsigned long startTime = millis();
-            while (millis() - startTime < 1000 && testClient.available()) {
+            while (!testClient.available() && (millis() - startTime) < 1000) {
+                vTaskDelay(pdMS_TO_TICKS(10));
+            }
+            while (testClient.available() && (millis() - startTime) < 1000) {
                 response += (char)testClient.read();
                 if (response.length() > 200) break;
             }
@@ -316,7 +319,10 @@ bool HttpClient::runDiscovery() {
 
             String response = "";
             unsigned long startTime = millis();
-            while (millis() - startTime < 500 && testClient.available()) {
+            while (!testClient.available() && (millis() - startTime) < 500) {
+                vTaskDelay(pdMS_TO_TICKS(10));
+            }
+            while (testClient.available() && (millis() - startTime) < 500) {
                 response += (char)testClient.read();
                 if (response.length() > 200) break;
             }

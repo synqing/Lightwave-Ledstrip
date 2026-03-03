@@ -29,12 +29,12 @@ class TransitionViewModel {
 
     // MARK: - API Methods
 
-    func triggerTransition(toEffect effectId: Int? = nil) async {
+    func triggerTransition(toEffect effectId: Int) async {
         guard let client = restClient else { return }
 
         do {
             try await client.triggerTransition(
-                toEffect: effectId ?? -1,
+                toEffect: effectId,
                 type: currentType.rawValue,
                 duration: duration
             )

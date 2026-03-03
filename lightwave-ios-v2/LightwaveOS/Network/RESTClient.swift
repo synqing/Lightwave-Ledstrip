@@ -687,11 +687,7 @@ actor RESTClient {
     }
 
     func loadZonePreset(id: Int) async throws {
-        let _: GenericResponse = try await request("POST", path: "zones/preset", body: ["presetId": id])
-    }
-
-    func setZoneCount(_ count: Int) async throws {
-        let _: GenericResponse = try await request("POST", path: "zones/count", body: ["count": count])
+        let _: GenericResponse = try await request("POST", path: "presets/zones/\(id)/load", body: [:])
     }
 
     // MARK: - Transition Endpoints
@@ -753,8 +749,9 @@ actor RESTClient {
         try await request("GET", path: "presets")
     }
 
-    func loadPreset(id: Int) async throws {
-        let _: GenericResponse = try await request("POST", path: "presets/\(id)/load", body: [:])
+    func loadPreset(name: String) async throws {
+        let encodedName = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? name
+        let _: GenericResponse = try await request("POST", path: "presets/\(encodedName)/load", body: [:])
     }
 
     func savePreset(name: String) async throws {

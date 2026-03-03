@@ -21,6 +21,7 @@ enum WebSocketMessageType: String {
     case zonesEffectChanged = "zones.effectChanged"
     case zonesLayoutChanged = "zones.layoutChanged"
     case zoneEnabledChanged = "zone.enabledChanged"
+    case zonesEnabledChanged = "zones.enabledChanged"
     case parametersChanged = "parameters.changed"
     case effectsChanged = "effects.changed"
     case effectsList = "effects.list"
@@ -272,7 +273,7 @@ actor WebSocketService {
         case .beatEvent:
             eventContinuation?.yield(.beat(payload))
 
-        case .zonesList, .zonesChanged, .zonesStateChanged, .zonesEffectChanged, .zonesLayoutChanged, .zoneEnabledChanged:
+        case .zonesList, .zonesChanged, .zonesStateChanged, .zonesEffectChanged, .zonesLayoutChanged, .zoneEnabledChanged, .zonesEnabledChanged:
             eventContinuation?.yield(.zoneUpdate(payload))
 
         case .parametersChanged:

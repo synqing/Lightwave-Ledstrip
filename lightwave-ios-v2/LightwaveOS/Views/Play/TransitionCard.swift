@@ -107,7 +107,7 @@ struct TransitionCard: View {
 
     private func triggerTransition() {
         Task {
-            await appVM.transition.triggerTransition()
+            await appVM.transition.triggerTransition(toEffect: appVM.effects.currentEffectId)
         }
     }
 }

@@ -105,7 +105,7 @@ enum PaletteStore {
         do {
             let data = try Data(contentsOf: url)
             let payload = try JSONDecoder().decode(MasterPalettePayload.self, from: data)
-            return payload.palettes
+            return payload.palettes.isEmpty ? nil : payload.palettes
         } catch {
             print("PaletteStore: failed to load bundle palettes: \(error)")
             return nil

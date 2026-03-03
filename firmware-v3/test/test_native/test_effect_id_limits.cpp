@@ -13,6 +13,7 @@
 #include "../../src/core/actors/RendererActor.h"
 #include "../../src/core/state/SystemState.h"
 #include "../../src/core/state/Commands.h"
+#include "../../src/config/limits.h"
 
 using namespace lightwaveos;
 
@@ -21,8 +22,8 @@ static constexpr uint8_t kHighestPerlinEffectId = 84;        // Last Perlin ambi
 
 void test_effect_id_caps_allow_perlin_suite() {
     TEST_ASSERT_TRUE_MESSAGE(
-        actors::RendererActor::MAX_EFFECTS >= kExpectedImplementedEffects,
-        "RendererActor::MAX_EFFECTS is too low; effects cannot register"
+        limits::MAX_EFFECTS >= kExpectedImplementedEffects,
+        "limits::MAX_EFFECTS is too low; effects cannot register"
     );
 
     TEST_ASSERT_TRUE_MESSAGE(
@@ -39,5 +40,4 @@ void test_set_effect_command_accepts_high_effect_ids() {
         "SetEffectCommand rejected a valid high effect ID"
     );
 }
-
 

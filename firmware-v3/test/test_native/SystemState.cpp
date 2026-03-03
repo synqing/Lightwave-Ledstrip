@@ -8,7 +8,7 @@ namespace state {
 // Matches v1 defaults for backward compatibility
 SystemState::SystemState()
     : version(0)
-    , currentEffectId(0)
+    , currentEffectId(EID_FIRE)
     , currentPaletteId(0)
     , brightness(128)        // Start at 50% brightness
     , speed(15)              // Medium speed
@@ -31,7 +31,7 @@ SystemState::SystemState()
 
 // ==================== Functional Update Methods ====================
 
-SystemState SystemState::withEffect(uint8_t effectId) const {
+SystemState SystemState::withEffect(EffectId effectId) const {
     SystemState newState = *this;
     newState.currentEffectId = effectId;
     newState.version++;
@@ -72,7 +72,7 @@ SystemState SystemState::withZoneEnabled(uint8_t zoneId, bool enabled) const {
     return newState;
 }
 
-SystemState SystemState::withZoneEffect(uint8_t zoneId, uint8_t effectId) const {
+SystemState SystemState::withZoneEffect(uint8_t zoneId, EffectId effectId) const {
     if (zoneId >= MAX_ZONES) {
         return *this;  // Invalid zone, return unchanged
     }

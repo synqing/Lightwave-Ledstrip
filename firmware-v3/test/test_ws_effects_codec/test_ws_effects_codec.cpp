@@ -19,6 +19,8 @@
 #include "../../src/codec/WsEffectsCodec.h"
 
 using namespace lightwaveos::codec;
+using lightwaveos::EffectId;
+using lightwaveos::INVALID_EFFECT_ID;
 
 // ============================================================================
 // Helper Functions
@@ -183,9 +185,10 @@ void test_encode_list() {
     JsonObject data = doc.to<JsonObject>();
 
     const char* effectNames[] = {"Effect0", "Effect1", "Effect2", nullptr, nullptr};
+    EffectId effectIds[] = {100, 101, 102, INVALID_EFFECT_ID, INVALID_EFFECT_ID};
     const char* categories[] = {"Classic", "Wave", "Physics", nullptr, nullptr};
     
-    WsEffectsCodec::encodeList(50, 0, 3, 1, 20, true, effectNames, categories, data);
+    WsEffectsCodec::encodeList(50, 0, 3, 1, 20, true, effectNames, effectIds, categories, data);
 
     TEST_ASSERT_TRUE_MESSAGE(data.containsKey("effects"), "effects array should be present");
     TEST_ASSERT_TRUE_MESSAGE(data.containsKey("pagination"), "pagination object should be present");
@@ -214,7 +217,7 @@ void test_encode_by_family() {
     JsonDocument doc;
     JsonObject data = doc.to<JsonObject>();
 
-    uint8_t patternIndices[] = {5, 10, 15, 20};
+    EffectId patternIndices[] = {5, 10, 15, 20};
     WsEffectsCodec::encodeByFamily(2, "Advanced Optical", patternIndices, 4, data);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(2, data["familyId"].as<uint8_t>(), "familyId should be 2");

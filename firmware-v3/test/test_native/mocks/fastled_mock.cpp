@@ -77,6 +77,7 @@ CRGB::CRGB(const CHSV& hsv) {
 //==============================================================================
 
 CFastLED FastLED;
+const CRGB TypicalLEDStrip(255, 176, 240);
 
 void CFastLED::delay(uint32_t ms) {
     ::delay(ms);  // Use FreeRTOS mock delay

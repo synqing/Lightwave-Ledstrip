@@ -60,6 +60,20 @@ namespace {
     };
     constexpr float PERCEPTUAL_BAND_WEIGHT_SUM =
         1.4f + 1.3f + 1.0f + 0.9f + 0.8f + 0.6f + 0.4f + 0.3f;  // 6.7f
+
+    inline bool shouldRunSbSidecar(uint32_t hopCount) {
+#if FEATURE_SB_PARITY_SIDECAR
+#if AUDIO_SB_SIDECAR_DECIMATION > 1
+        return (hopCount % static_cast<uint32_t>(AUDIO_SB_SIDECAR_DECIMATION)) == 0U;
+#else
+        (void)hopCount;
+        return true;
+#endif
+#else
+        (void)hopCount;
+        return false;
+#endif
+    }
 }
 
 #ifndef NATIVE_BUILD
@@ -361,7 +375,7 @@ void AudioActor::resetStats()
 void AudioActor::printStatus()
 {
 #ifndef NATIVE_BUILD
-    const ControlBusFrame& frame = m_controlBus.GetFrame();
+    const ControlBusFrame& frame = m_controlBus.GetFrameRef();
 
     Serial.println("=== Audio Status (PipelineCore) ===");
     Serial.printf("  RMS: %.4f (frame)\n", frame.rms);
@@ -421,7 +435,7 @@ void AudioActor::printSpectrum()
     Serial.printf("  Spectral Flux: %.3f\n", m_lastFrame.flux);
 
     // Chroma (12 pitch classes)
-    const ControlBusFrame& frame = m_controlBus.GetFrame();
+    const ControlBusFrame& frame = m_controlBus.GetFrameRef();
     Serial.print("  Chroma: [");
     for (int i = 0; i < 12; i++) {
         Serial.printf("%.2f%s", frame.chroma[i], (i < 11) ? " " : "");
@@ -447,7 +461,7 @@ void AudioActor::printBeat()
     Serial.printf("  Phase: %.2f\n", m_lastFrame.beat_phase);
     Serial.printf("  Beat Event: %.2f\n", m_lastFrame.beat_event);
 
-    const ControlBusFrame& frame = m_controlBus.GetFrame();
+    const ControlBusFrame& frame = m_controlBus.GetFrameRef();
     Serial.printf("  Locked: %s\n", frame.tempoLocked ? "YES" : "no");
     Serial.printf("  Confidence: %.2f\n", frame.tempoConfidence);
 #endif // NATIVE_BUILD
@@ -659,13 +673,6 @@ void AudioActor::onTick()
 
     m_stats.tickCount++;
 
-    // DEBUG: Log first few ticks and periodically to verify tick is running
-    static uint32_t s_tickDbgCount = 0;
-    s_tickDbgCount++;
-    if (s_tickDbgCount <= 5 || (s_tickDbgCount % 1250) == 0) {
-        LW_LOGD("AudioActor tick #%lu (PipelineCore, state=%d)", (unsigned long)s_tickDbgCount, static_cast<int>(m_state));
-    }
-
     // Record tick start time
     uint64_t tickStart = esp_timer_get_time();
 
@@ -756,9 +763,10 @@ void AudioActor::captureHop()
             return;
         }
 
-        // DC diagnostic: log raw sample mean every ~2 seconds
+        // DC diagnostic: trace-only logging (opt-in at verbosity 5).
         static uint32_t s_dcDiagCounter = 0;
-        if (++s_dcDiagCounter >= 250) {
+        auto& dbgCfg = getAudioDebugConfig();
+        if (dbgCfg.verbosity >= 5 && ++s_dcDiagCounter >= 1250) {
             s_dcDiagCounter = 0;
             int64_t dcSum = 0;
             for (size_t i = 0; i < HOP_SIZE; ++i) {
@@ -766,8 +774,8 @@ void AudioActor::captureHop()
             }
             int32_t dcMean = static_cast<int32_t>(dcSum / HOP_SIZE);
             LW_LOGD("DC_DIAG: mean=%ld min=%d max=%d rms=%.4f zeros=%lu",
-                     (long)dcMean, rawMin, rawMax, m_diag.lastRawRms,
-                     (unsigned long)m_diag.zeroHopCount);
+                    (long)dcMean, rawMin, rawMax, m_diag.lastRawRms,
+                    (unsigned long)m_diag.zeroHopCount);
         }
 
         // Process the hop through PipelineCore DSP
@@ -905,8 +913,10 @@ void AudioActor::processHop()
     BENCH_START_PHASE();
 
     // 4. SB parity sidecar (uses bins64 shim from adapter)
-    processSbWaveformSidecar(raw);
-    processSbBloomSidecar(raw);
+    if (shouldRunSbSidecar(m_hopCount)) {
+        processSbWaveformSidecar(raw);
+        processSbBloomSidecar(raw);
+    }
 
     BENCH_END_PHASE(goertzelUs);
 
@@ -935,8 +945,9 @@ void AudioActor::processHop()
     // === Phase: Style Detection ===
 #if FEATURE_STYLE_DETECTION
     {
-        bool chordChanged = (m_controlBus.GetFrame().chordState.rootNote != m_prevChordRoot);
-        m_prevChordRoot = m_controlBus.GetFrame().chordState.rootNote;
+        const ControlBusFrame& frameRef = m_controlBus.GetFrameRef();
+        bool chordChanged = (frameRef.chordState.rootNote != m_prevChordRoot);
+        m_prevChordRoot = frameRef.chordState.rootNote;
         float beatConfidence = raw.tempoLocked ? raw.tempoConfidence : 0.0f;
         m_styleDetector.update(
             raw.rms,
@@ -954,7 +965,7 @@ void AudioActor::processHop()
 
     // 5. Publish frame to renderer via lock-free SnapshotBuffer
     {
-        ControlBusFrame frameToPublish = m_controlBus.GetFrame();
+        ControlBusFrame frameToPublish = m_controlBus.GetFrameRef();
 #if FEATURE_STYLE_DETECTION
         frameToPublish.currentStyle = m_styleDetector.getStyle();
         frameToPublish.styleConfidence = m_styleDetector.getConfidence();
@@ -963,6 +974,7 @@ void AudioActor::processHop()
         frameToPublish.styleConfidence = 0.0f;
 #endif
         // Sensory Bridge parity fields (side-car pipeline)
+#if FEATURE_SB_PARITY_SIDECAR
         std::memcpy(frameToPublish.sb_waveform, m_sbWaveform, sizeof(m_sbWaveform));
         frameToPublish.sb_waveform_peak_scaled = m_sbWaveformPeakScaled;
         frameToPublish.sb_waveform_peak_scaled_last = m_sbWaveformPeakScaledLast;
@@ -973,6 +985,7 @@ void AudioActor::processHop()
         std::memcpy(frameToPublish.sb_chromagram_smooth, m_sbChromagramSmooth, sizeof(m_sbChromagramSmooth));
         frameToPublish.sb_hue_position = m_sbHuePosition;
         frameToPublish.sb_hue_shifting_mix = m_sbHueShiftingMix;
+#endif
         m_controlBusBuffer.Publish(frameToPublish);
 
         // Track publish statistics
@@ -989,9 +1002,10 @@ void AudioActor::processHop()
     TRACE_END();  // snapshot_publish
     BENCH_END_PHASE(publishUs);
 
-    // Stack high-water mark (every ~2 seconds at 125 Hz)
+    // Stack high-water mark (trace-only, every ~10 seconds at 125 Hz).
     static uint32_t s_stackLogCounter = 0;
-    if (++s_stackLogCounter >= 250) {
+    auto& dbgCfg = getAudioDebugConfig();
+    if (dbgCfg.verbosity >= 5 && ++s_stackLogCounter >= 1250) {
         s_stackLogCounter = 0;
         UBaseType_t hwm = uxTaskGetStackHighWaterMark(nullptr);
         LW_LOGD("STACK: AudioActor high-water mark = %u words (%u bytes free)",
@@ -1415,7 +1429,7 @@ void AudioActor::printStatus()
 {
 #ifndef NATIVE_BUILD
     const CaptureStats& cstats = m_capture.getStats();
-    const ControlBusFrame& frame = m_controlBus.GetFrame();
+    const ControlBusFrame& frame = m_controlBus.GetFrameRef();
     float micLevelDb = (m_lastRmsPreGain > 0.0001f) ? (20.0f * log10f(m_lastRmsPreGain)) : -80.0f;
 
     Serial.println("=== Audio Status ===");
@@ -1483,7 +1497,7 @@ void AudioActor::printSpectrum()
     Serial.printf("  Spectral Flux: %.3f\n", m_lastFluxMapped);
 
     // Chroma (12 pitch classes)
-    const ControlBusFrame& frame = m_controlBus.GetFrame();
+    const ControlBusFrame& frame = m_controlBus.GetFrameRef();
     Serial.print("  Chroma: [");
     for (int i = 0; i < 12; i++) {
         Serial.printf("%.2f%s", frame.chroma[i], (i < 11) ? " " : "");
@@ -1702,13 +1716,6 @@ void AudioActor::onTick()
 
     m_stats.tickCount++;
 
-    // DEBUG: Log first few ticks and periodically to verify tick is running
-    static uint32_t s_tickDbgCount = 0;
-    s_tickDbgCount++;
-    if (s_tickDbgCount <= 5 || (s_tickDbgCount % 1250) == 0) {
-        LW_LOGD("AudioActor tick #%lu (state=%d)", (unsigned long)s_tickDbgCount, static_cast<int>(m_state));
-    }
-
     // Record tick start time
     uint64_t tickStart = esp_timer_get_time();
 
@@ -1749,7 +1756,7 @@ void AudioActor::onTick()
     if (dbgCfg.verbosity >= 5 && (m_stats.tickCount % 620) == 0) {
         float micLevelDb = (m_lastRmsPreGain > 0.0001f) ? (20.0f * log10f(m_lastRmsPreGain)) : -80.0f;
         LW_LOGD("Audio: mic=%.1fdB rms=%.3f agc=%.2f bpm=%.1f lock=%s",
-                micLevelDb, m_controlBus.GetFrame().rms, m_lastAgcGain,
+                micLevelDb, m_controlBus.GetFrameRef().rms, m_lastAgcGain,
                 m_lastTempoOutput.bpm, m_lastTempoOutput.locked ? "Y" : "n");
     }
 
@@ -2426,8 +2433,10 @@ void AudioActor::processHop()
     }
 
     // === Phase: Sensory Bridge parity side-car ===
-    processSbWaveformSidecar(raw);
-    processSbBloomSidecar(raw);
+    if (shouldRunSbSidecar(m_hopCount)) {
+        processSbWaveformSidecar(raw);
+        processSbBloomSidecar(raw);
+    }
 
     // MabuTrace: Detect false trigger - activity gated but no significant band energy
     // This helps identify noise floor calibration issues
@@ -2516,8 +2525,9 @@ void AudioActor::processHop()
     // Update style detector with current hop features (after ControlBus has chord state)
 #if FEATURE_STYLE_DETECTION
     {
-        bool chordChanged = (m_controlBus.GetFrame().chordState.rootNote != m_prevChordRoot);
-        m_prevChordRoot = m_controlBus.GetFrame().chordState.rootNote;
+        const ControlBusFrame& frameRef = m_controlBus.GetFrameRef();
+        bool chordChanged = (frameRef.chordState.rootNote != m_prevChordRoot);
+        m_prevChordRoot = frameRef.chordState.rootNote;
         // Use TempoTracker beat tracker confidence for style detection
         float beatConfidence = m_lastTempoOutput.locked ? m_lastTempoOutput.confidence : 0.0f;
         m_styleDetector.update(
@@ -2537,7 +2547,7 @@ void AudioActor::processHop()
     // 8. Publish frame to renderer via lock-free SnapshotBuffer
     // Copy style detection results to frame before publishing
     {
-        ControlBusFrame frameToPublish = m_controlBus.GetFrame();
+        ControlBusFrame frameToPublish = m_controlBus.GetFrameRef();
 #if FEATURE_STYLE_DETECTION
         frameToPublish.currentStyle = m_styleDetector.getStyle();
         frameToPublish.styleConfidence = m_styleDetector.getConfidence();
@@ -2546,6 +2556,7 @@ void AudioActor::processHop()
         frameToPublish.styleConfidence = 0.0f;
 #endif
         // Sensory Bridge parity fields (side-car pipeline)
+#if FEATURE_SB_PARITY_SIDECAR
         std::memcpy(frameToPublish.sb_waveform, m_sbWaveform, sizeof(m_sbWaveform));
         frameToPublish.sb_waveform_peak_scaled = m_sbWaveformPeakScaled;
         frameToPublish.sb_waveform_peak_scaled_last = m_sbWaveformPeakScaledLast;
@@ -2556,6 +2567,7 @@ void AudioActor::processHop()
         std::memcpy(frameToPublish.sb_chromagram_smooth, m_sbChromagramSmooth, sizeof(m_sbChromagramSmooth));
         frameToPublish.sb_hue_position = m_sbHuePosition;
         frameToPublish.sb_hue_shifting_mix = m_sbHueShiftingMix;
+#endif
         m_controlBusBuffer.Publish(frameToPublish);
         
         // Phase 1.2: Track publish statistics

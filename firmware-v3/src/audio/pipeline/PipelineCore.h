@@ -12,6 +12,7 @@
 #endif
 
 #include "BeatTracker.h"
+#include "../tempo/TempoTracker.h"
 
 // Stage enable flags (onset envelope and peak picking are always enabled)
 struct StageFlags {
@@ -70,8 +71,9 @@ struct FeatureFrame {
   uint32_t timestamp_us = 0;
 
   // Time-domain features
-  float rms  = 0.0f;   // [0, 1]
-  float peak = 0.0f;   // [0, 1]
+  float rms  = 0.0f;         // [0, 1] mapped RMS used by downstream processing
+  float rms_ungated = 0.0f;  // [0, 1] pre-gate RMS for silence detection
+  float peak = 0.0f;         // [0, 1]
 
   // Spectral features
   float bands[8]   = {0};  // band energies
@@ -194,4 +196,11 @@ private:
   // Stage H: Beat tracker
   BeatTracker m_beatTracker;
   float m_lastBassFlux = 0.0f;  // low-frequency spectral flux (bins 1-8, 31-250 Hz)
+
+  // Stage H (compat): proven Goertzel-era TempoTracker driven from FFT-derived
+  // 64-bin envelope at 50 Hz cadence (matches legacy temporal dynamics).
+  lightwaveos::audio::TempoTracker m_tempoCompat;
+  lightwaveos::audio::TempoTrackerOutput m_tempoCompatOut{};
+  float m_tempoBins64[lightwaveos::audio::NUM_FREQS] = {0};
+  uint8_t m_tempoCompatHopDiv = 0;
 };

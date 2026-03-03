@@ -8,6 +8,40 @@
 
 namespace fft {
 
+namespace detail {
+
+constexpr size_t kMaxFftSize = 512;
+constexpr size_t kMaxUnpackBins = kMaxFftSize / 4;
+constexpr size_t kMaxStages = 10;
+
+inline void ensureTwiddles(size_t N, float* stageRe, float* stageIm, float* unpackRe, float* unpackIm) {
+  static size_t s_cachedN = 0;
+  if (s_cachedN == N) {
+    return;
+  }
+
+  constexpr float kPi = 3.14159265358979323846f;
+  const size_t half = N / 2;
+
+  size_t stageIdx = 0;
+  for (size_t len = 2; len <= half; len <<= 1) {
+    const float angle = -2.0f * kPi / static_cast<float>(len);
+    stageRe[stageIdx] = cosf(angle);
+    stageIm[stageIdx] = sinf(angle);
+    ++stageIdx;
+  }
+
+  for (size_t k = 1; k <= (half / 2); ++k) {
+    const float angle = -2.0f * kPi * static_cast<float>(k) / static_cast<float>(N);
+    unpackRe[k] = cosf(angle);
+    unpackIm[k] = sinf(angle);
+  }
+
+  s_cachedN = N;
+}
+
+}  // namespace detail
+
 // Bit-reversal permutation (in-place)
 inline void bitReverse(float* buf, size_t N) {
   size_t j = 0;
@@ -36,6 +70,15 @@ inline void rfft(float* buf, size_t N) {
   // Step 1: N/2-point complex FFT on interleaved even/odd samples
   const size_t half = N / 2;
   constexpr float kPi = 3.14159265358979323846f;
+  const bool useCachedTwiddles = (N <= detail::kMaxFftSize);
+
+  static float s_stageRe[detail::kMaxStages] = {0.0f};
+  static float s_stageIm[detail::kMaxStages] = {0.0f};
+  static float s_unpackRe[detail::kMaxUnpackBins + 1] = {0.0f};
+  static float s_unpackIm[detail::kMaxUnpackBins + 1] = {0.0f};
+  if (useCachedTwiddles) {
+    detail::ensureTwiddles(N, s_stageRe, s_stageIm, s_unpackRe, s_unpackIm);
+  }
 
   // Bit-reverse the N/2 complex pairs (stride-2 reversal)
   {
@@ -53,10 +96,14 @@ inline void rfft(float* buf, size_t N) {
   }
 
   // Butterfly passes for N/2-point complex FFT
-  for (size_t len = 2; len <= half; len <<= 1) {
-    const float angle = -2.0f * kPi / static_cast<float>(len);
-    const float wRe = cosf(angle);
-    const float wIm = sinf(angle);
+  size_t stageIdx = 0;
+  for (size_t len = 2; len <= half; len <<= 1, ++stageIdx) {
+    const float wRe = useCachedTwiddles
+        ? s_stageRe[stageIdx]
+        : cosf(-2.0f * kPi / static_cast<float>(len));
+    const float wIm = useCachedTwiddles
+        ? s_stageIm[stageIdx]
+        : sinf(-2.0f * kPi / static_cast<float>(len));
     for (size_t i = 0; i < half; i += len) {
       float curRe = 1.0f, curIm = 0.0f;
       for (size_t j = 0; j < len / 2; ++j) {
@@ -98,9 +145,12 @@ inline void rfft(float* buf, size_t N) {
     float oIm = 0.5f * (zIm + z2Im);
 
     // Twiddle: W^k = exp(-2πik/N)
-    float angle = -2.0f * kPi * static_cast<float>(k) / static_cast<float>(N);
-    float twRe = cosf(angle);
-    float twIm = sinf(angle);
+    const float twRe = useCachedTwiddles
+        ? s_unpackRe[k]
+        : cosf(-2.0f * kPi * static_cast<float>(k) / static_cast<float>(N));
+    const float twIm = useCachedTwiddles
+        ? s_unpackIm[k]
+        : sinf(-2.0f * kPi * static_cast<float>(k) / static_cast<float>(N));
 
     // -j * W^k * odd = -(twIm*oRe - twRe*oIm) + j*(twRe*oRe + twIm*oIm)  ... wait
     // -j * (twRe + j*twIm) * (oRe + j*oIm)

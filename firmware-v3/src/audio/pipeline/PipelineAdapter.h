@@ -168,6 +168,7 @@ private:
     // Schmitt trigger state for silence gate hysteresis
     bool     m_spectrumGateOpen      = true;   // Initialise open
     uint16_t m_silenceGateHoldCounter = 0;
+    uint16_t m_minHoldCounter        = 0;      // Minimum hold-open after gate opens
 
     // Build bins64 backward-compat shim via 4:1 averaging
     void buildBins64Shim(const float* normSpectrum, float* bins64Out);

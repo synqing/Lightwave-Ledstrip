@@ -32,11 +32,6 @@
 // For HOP_SIZE (backend-dependent; 256 in PipelineCore S3 env)
 #include "../../config/audio_config.h"
 
-#include <cmath>
-
-// For HOP_SIZE (used for time-domain RMS calculation)
-#include "../../config/audio_config.h"
-
 // FrequencyMap types are in ::audio namespace; bring NamedBand into scope
 // to keep the derivePercussion() call site readable.
 using ::audio::NamedBand;
@@ -56,26 +51,13 @@ void PipelineAdapter::adapt(
     // ------------------------------------------------------------------
     // 1. Direct scalar mappings
     // ------------------------------------------------------------------
-    // Prefer time-domain RMS computed from the hop buffer when available.
-    // This is robust against any upstream gating/zeroing inside PipelineCore,
-    // and gives ControlBus a true "pre-gate" RMS for silence detection.
-    float rmsTime = frame.rms;
-    if (hopBuffer) {
-        uint64_t sumSq = 0;
-        for (uint16_t i = 0; i < HOP_SIZE; ++i) {
-            const int32_t s = hopBuffer[i];
-            sumSq += static_cast<uint64_t>(s * s);
-        }
-        const float meanSq = static_cast<float>(sumSq) / static_cast<float>(HOP_SIZE);
-        rmsTime = std::sqrt(meanSq) / 32768.0f;
-    }
-
+    // PipelineCore now emits both mapped RMS and pre-gate RMS in FeatureFrame.
+    // Keep a cheap fallback to mapped RMS for older frames or edge cases.
     out.rms        = frame.rms;
-    out.rmsUngated = rmsTime;
+    out.rmsUngated = (frame.rms_ungated > 0.0f) ? frame.rms_ungated : frame.rms;
 
-    // If PipelineCore reports 0 RMS but time-domain RMS is non-zero, fall back.
-    if (out.rms <= 0.0f && rmsTime > 0.0f) {
-        out.rms = rmsTime;
+    if (out.rms <= 0.0f && out.rmsUngated > 0.0f) {
+        out.rms = out.rmsUngated;
     }
 
     // Flux mapping: PipelineCore log-flux -> bounded [0,1] novelty.
@@ -94,15 +76,24 @@ void PipelineAdapter::adapt(
     // - Gate stays open for silenceGateHoldHops after last above-threshold hop
     // - Gate closes only when RMS drops below silenceRmsGateClose (aggressive)
     //   AND the hold counter has expired
+    // - Minimum hold-open period (m_minHoldCounter) prevents rapid flapping
+    //   when RMS hovers near threshold after gate opens
     //
     if (out.rmsUngated >= m_config.silenceRmsGateOpen) {
         m_spectrumGateOpen = true;
         m_silenceGateHoldCounter = m_config.silenceGateHoldHops;
+        m_minHoldCounter = 12;  // ~540ms at 22Hz hop rate
     } else if (m_spectrumGateOpen && m_silenceGateHoldCounter > 0) {
         --m_silenceGateHoldCounter;  // Hold open during countdown
-    } else if (out.rmsUngated < m_config.silenceRmsGateClose) {
-        m_spectrumGateOpen = false;
+    } else if (out.rmsUngated < m_config.silenceRmsGateClose && m_minHoldCounter == 0) {
+        m_spectrumGateOpen = false;  // Only close if min hold period expired
     }
+
+    // Decrement minimum hold counter (runs independently of silence gate hold)
+    if (m_minHoldCounter > 0) {
+        --m_minHoldCounter;
+    }
+
     const bool spectrumGateOpen = m_spectrumGateOpen;
 
     // ------------------------------------------------------------------

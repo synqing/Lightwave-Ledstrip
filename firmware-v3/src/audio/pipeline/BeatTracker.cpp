@@ -293,12 +293,31 @@ void BeatTracker::updateTempoEstimate() {
     }
   }
 
+  // Octave guard: if a very fast candidate has comparable support at 2× lag
+  // (half tempo), prefer the slower lag to avoid persistent double-time locks.
+  int chosenLag = bestLag;
+  if (bestLag >= m_minLag && bestLag <= m_maxLag) {
+    const float bestBpm = 60.0f * m_hopRate / static_cast<float>(bestLag);
+    const int halfTempoLag = bestLag * 2;  // slower tempo (half BPM)
+    if (bestBpm > 170.0f && halfTempoLag <= m_maxLag) {
+      const float bestSupport =
+          0.6f * m_histogram[bestLag] +
+          0.4f * combEnh[bestLag];
+      const float halfSupport =
+          0.6f * m_histogram[halfTempoLag] +
+          0.4f * combEnh[halfTempoLag];
+      if (halfSupport >= bestSupport * 0.72f) {
+        chosenLag = halfTempoLag;
+      }
+    }
+  }
+
   const bool hasRecentBeat = m_hopsSinceBeat <= static_cast<uint32_t>(m_beatPeriodHops * 4);
   if (bestVal > 0.0f && hasRecentBeat) {
-    const float bpm = 60.0f * m_hopRate / static_cast<float>(bestLag);
+    const float bpm = 60.0f * m_hopRate / static_cast<float>(chosenLag);
     if (std::isfinite(bpm)) {
       m_tempoBpm = bpm;
-      m_beatPeriodHops = bestLag;
+      m_beatPeriodHops = chosenLag;
     }
   }
 

@@ -36,11 +36,10 @@ namespace audio {
 static constexpr float RECIP_SCALE = 1.0f / 131072.0f;
 
 // First-order DC blocker / high-pass filter coefficient
-// Using canonical formula: R = exp(-2*pi*fc/fs)
-// fc = 20 Hz (cutoff), fs = 16000 Hz (sample rate)
-// R = exp(-2 * 3.14159265 * 20 / 16000) = exp(-0.00785398) ≈ 0.992176
+// Using canonical formula: R = exp(-2*pi*fc/fs), approximated as 1 - 2*pi*fc/fs
+// fc = 20 Hz (cutoff), fs = SAMPLE_RATE (12800, 16000, or 32000 Hz)
 // This removes DC offset and very low frequency drift while preserving audio content
-static constexpr float DC_BLOCK_ALPHA = 0.992176f;
+static constexpr float DC_BLOCK_ALPHA = 1.0f - (2.0f * 3.14159265f * 20.0f / static_cast<float>(SAMPLE_RATE));
 
 AudioCapture::AudioCapture()
     : m_initialized(false)

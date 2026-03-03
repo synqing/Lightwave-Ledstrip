@@ -39,6 +39,11 @@ void PipelineCore::reset() {
   m_onsetMean = 0.0f;
   m_onsetVar = 0.0f;
   m_lastBassFlux = 0.0f;
+  m_tempoCompatHopDiv = 0;
+  for (size_t i = 0; i < lightwaveos::audio::NUM_FREQS; ++i) {
+    m_tempoBins64[i] = 0.0f;
+  }
+  m_tempoCompatOut = {};
 
   // Peak picker state
   m_peakWriteIdx = 0;
@@ -61,6 +66,7 @@ void PipelineCore::reset() {
 #endif
 
   m_beatTracker.setConfig(m_cfg.beat, m_cfg.sampleRate, m_cfg.hopSize);
+  m_tempoCompat.init();
 }
 
 void PipelineCore::setConfig(const PipelineConfig& cfg) {
@@ -434,38 +440,52 @@ void PipelineCore::processHop(uint32_t timestamp_us) {
   m_frame.seq = m_seq;
   m_frame.timestamp_us = timestamp_us;
 
-  // ── Stage B: DC Removal (in-place on hop buffer) ──
-  if (m_cfg.stages.enableDc) {
-    for (size_t i = 0; i < m_cfg.hopSize; ++i) {
-      float x = static_cast<float>(m_hopBuffer[i]);
+  // ── Stages B/E.3/E.4/C fused: DC, RMS, peak, window assembly ──
+  uint64_t sumSq = 0;
+  int32_t peakVal = 0;
+  const bool dcEnabled = m_cfg.stages.enableDc;
+  const bool rmsEnabled = m_cfg.stages.enableRms;
+
+  for (size_t i = 0; i < m_cfg.hopSize; ++i) {
+    int32_t xi = static_cast<int32_t>(m_hopBuffer[i]);
+
+    if (dcEnabled) {
+      float x = static_cast<float>(xi);
       m_dcEstimate += m_cfg.dcAlpha * (x - m_dcEstimate);
       x -= m_dcEstimate;
-      int32_t xi = static_cast<int32_t>(lroundf(x));
+
+      // Faster round-to-nearest than lroundf in the hot loop.
+      xi = static_cast<int32_t>(x + (x >= 0.0f ? 0.5f : -0.5f));
       if (xi < -32768) xi = -32768;
       if (xi > 32767) xi = 32767;
       m_hopBuffer[i] = static_cast<int16_t>(xi);
     }
-  }
 
-  // ── Stage E.3: RMS (from DC-removed hop buffer) ──
-  m_frame.rms = m_cfg.stages.enableRms ? computeRms(m_hopBuffer, m_cfg.hopSize) : 0.0f;
+    const int32_t absx = (xi < 0) ? -xi : xi;
+    if (absx > peakVal) {
+      peakVal = absx;
+    }
 
-  // ── Stage E.4: Peak (max |sample| in hop) ──
-  int32_t peakVal = 0;
-  for (size_t i = 0; i < m_cfg.hopSize; ++i) {
-    const int32_t absx = m_hopBuffer[i] < 0 ? -static_cast<int32_t>(m_hopBuffer[i]) : static_cast<int32_t>(m_hopBuffer[i]);
-    if (absx > peakVal) peakVal = absx;
-  }
-  m_frame.peak = clamp01(static_cast<float>(peakVal) / 32768.0f);
+    if (rmsEnabled) {
+      sumSq += static_cast<uint64_t>(xi * xi);
+    }
 
-  // ── Stage C: Window Assembly (circular buffer + Hann) ──
-  for (size_t i = 0; i < m_cfg.hopSize; ++i) {
-    m_windowBuffer[m_windowIndex++] = m_hopBuffer[i];
+    m_windowBuffer[m_windowIndex++] = static_cast<int16_t>(xi);
     if (m_windowIndex >= m_cfg.windowSize) {
       m_windowIndex = 0;
       m_windowFilled = true;
     }
   }
+
+  if (rmsEnabled && m_cfg.hopSize > 0) {
+    const float meanSq = static_cast<float>(sumSq) / static_cast<float>(m_cfg.hopSize);
+    m_frame.rms = clamp01(sqrtf(meanSq) / 32768.0f);
+  } else {
+    m_frame.rms = 0.0f;
+  }
+  m_frame.rms_ungated = m_frame.rms;
+  m_frame.peak = clamp01(static_cast<float>(peakVal) / 32768.0f);
+
   buildWindow();
 
   // ── Stage D: FFT → magnitude spectrum ──
@@ -505,16 +525,46 @@ void PipelineCore::processHop(uint32_t timestamp_us) {
   // ── Stage G: Peak Picking (discrete events) ──
   m_frame.onset_event = peakPickUpdate(onsetEnv);
 
-  // ── Stage H: Beat Tracking ──
-  // onset_env (full-band, continuous) drives CBSS phase tracking;
-  // bass flux (bins 1-8, ~31-250 Hz) drives tempo estimation via OSS —
-  // isolates kick drum transients from hi-hat/cymbal noise.
-  m_beatTracker.update(onsetEnv, m_lastBassFlux);
-  m_frame.tempo_bpm  = m_beatTracker.tempoBpm();
-  m_frame.tempo_confidence = m_beatTracker.tempoConfidence();
-  m_frame.tempo_locked = m_beatTracker.tempoLocked() ? 1.0f : 0.0f;
-  m_frame.beat_phase = m_beatTracker.beatPhase();
-  m_frame.beat_event = m_beatTracker.beatEvent() ? 1.0f : 0.0f;
+  // ── Stage H: Tempo/Beat (legacy-proven TempoTracker compatibility path) ──
+  //
+  // PipelineCore previously used a comb/CBSS beat tracker that consistently
+  // over-selected short lags (double-time 200+ BPM failures).
+  // For production stability, drive the proven Goertzel-era TempoTracker from
+  // FFT-derived 64-bin magnitudes at a 50 Hz cadence.
+  //
+  // 32 kHz / 128-hop = 250 Hz hop rate, so update tempo every 5 hops (~20 ms).
+  constexpr uint8_t kTempoCompatDiv = 5;
+  constexpr float kTempoCompatDtSec = 0.020f;  // 50 Hz
+  const float magNorm = 1.0f / (static_cast<float>(m_cfg.windowSize) * 32768.0f);
+  for (size_t i = 0; i < lightwaveos::audio::NUM_FREQS; ++i) {
+    const size_t k0 = 1 + i * 4;            // skip DC
+    const size_t k1 = (k0 + 4 < kNumBins) ? (k0 + 4) : kNumBins;
+    float v = 0.0f;
+    for (size_t k = k0; k < k1; ++k) {
+      const float m = m_magSpectrum[k] * magNorm;
+      if (m > v) v = m;
+    }
+    m_tempoBins64[i] = v;
+  }
+
+  m_tempoCompatHopDiv++;
+  if (m_tempoCompatHopDiv >= kTempoCompatDiv) {
+    m_tempoCompatHopDiv = 0;
+    m_tempoCompat.updateNovelty(
+        m_tempoBins64,
+        lightwaveos::audio::NUM_FREQS,
+        m_frame.rms,
+        true);
+    m_tempoCompat.updateTempo(kTempoCompatDtSec);
+    m_tempoCompat.advancePhase(kTempoCompatDtSec);
+    m_tempoCompatOut = m_tempoCompat.getOutput();
+  }
+
+  m_frame.tempo_bpm = m_tempoCompatOut.bpm;
+  m_frame.tempo_confidence = m_tempoCompatOut.confidence;
+  m_frame.tempo_locked = m_tempoCompatOut.locked ? 1.0f : 0.0f;
+  m_frame.beat_phase = m_tempoCompatOut.phase01;
+  m_frame.beat_event = m_tempoCompatOut.beat_tick ? 1.0f : 0.0f;
 
   m_frameReady = true;
 }

@@ -16,7 +16,7 @@
 #include <stdint.h>
 
 #ifdef NATIVE_BUILD
-#include "mocks/esp_timer_mock.h"
+#include "freertos_mock.h"
 #else
 #include <esp_timer.h>
 #endif

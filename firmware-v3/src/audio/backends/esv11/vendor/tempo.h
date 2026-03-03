@@ -15,8 +15,8 @@
 #include "goertzel.h"
 #include "vu.h"
 
-bool silence_detected = true;
-float silence_level = 1.0f;
+bool silence_detected = false;
+float silence_level = 0.0f;
 
 float tempo_confidence = 0.0f;
 

@@ -16,6 +16,7 @@ For detailed subsystem costs, delegation scenarios, and context traps: [CONTEXT_
 
 ## Hard Constraints
 
+- **K1 is AP-ONLY. NEVER enable STA mode.** The K1 device runs as a WiFi Access Point. Tab5 and iOS connect TO it. Do NOT attempt to connect K1 to external WiFi routers — STA authentication fails at the 802.11 driver level (AUTH_EXPIRE reason 2, AUTH_FAIL reason 202) and has NEVER been resolved despite 6+ mitigation attempts. This was architecturally resolved in Feb 2026. See `WiFiManager.h` for details. **Do not modify WiFi mode, add STA connection logic, or change AP configuration without explicit user approval.**
 - **Centre origin**: All effects originate from LED 79/80 outward (or inward to 79/80). No linear sweeps.
 - **No rainbows**: No rainbow cycling or full hue-wheel sweeps.
 - **No heap alloc in render**: No `new`/`malloc`/`String` in `render()` paths. Use static buffers.
@@ -81,6 +82,7 @@ Read **only** when the task requires it — do not load eagerly:
 | Context delegation guide | [firmware-v3/docs/CONTEXT_GUIDE.md](firmware-v3/docs/CONTEXT_GUIDE.md) | 80 | Before delegating complex research to subagents |
 | Timing & memory budgets | [firmware-v3/CONSTRAINTS.md](firmware-v3/CONSTRAINTS.md) | 170 | Performance work, memory optimisation |
 | Audio-reactive protocol | [firmware-v3/docs/audio-visual/audio-visual-semantic-mapping.md](firmware-v3/docs/audio-visual/audio-visual-semantic-mapping.md) | 467 | Writing/debugging audio-reactive effects |
+| Effect development standard | [firmware-v3/docs/EFFECT_DEVELOPMENT_STANDARD.md](firmware-v3/docs/EFFECT_DEVELOPMENT_STANDARD.md) | 500 | Creating or modifying effects |
 | Full REST API reference | [firmware-v3/docs/api/api-v1.md](firmware-v3/docs/api/api-v1.md) | 2,124 | API endpoint work — **search, don't read in full** |
 | CQRS state architecture | [firmware-v3/docs/CQRS_STATE_ARCHITECTURE.md](firmware-v3/docs/CQRS_STATE_ARCHITECTURE.md) | 652 | State management, command dispatch |
 | Harness worker mode | [.claude/harness/HARNESS_RULES.md](.claude/harness/HARNESS_RULES.md) | 364 | Harness/test infrastructure |

@@ -1,10 +1,13 @@
 # Audio-Visual Intelligence Architecture
 
 **Version:** 2.0.0
-**Last Updated:** 2025-12-28
+**Last Updated:** 2026-03-02
 **Status:** Reference Document
 
 This document establishes the architectural framework for audio-reactive visualizations in LightwaveOS. It rejects rigid frequency-to-visual bindings in favor of adaptive, musical-intelligence-driven approaches.
+
+For the concrete producer-consumer API/transport/performance contract, see
+[`audio-visual-contract-surface.md`](./audio-visual-contract-surface.md).
 
 ---
 

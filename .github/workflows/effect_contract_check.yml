@@ -1,0 +1,20 @@
+name: Effect Contract Check
+
+on:
+  push:
+    branches: [main, "migration/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  effect-contract:
+    name: Effect Contract Constraints
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run effect contract checker
+        run: python3 firmware-v3/tools/check_effect_contracts.py
+

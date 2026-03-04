@@ -24,10 +24,10 @@ namespace ieffect {
 static constexpr float SB_PI  = 3.14159265358979323846f;
 static constexpr float SB_TAU = 6.28318530717958647692f;
 
-static inline float clamp01(float x) { return (x < 0.0f) ? 0.0f : (x > 1.0f) ? 1.0f : x; }
-static inline float lerp(float a, float b, float t) { return a + (b - a) * t; }
+static inline float sbClamp01(float x) { return (x < 0.0f) ? 0.0f : (x > 1.0f) ? 1.0f : x; }
+static inline float sbLerp(float a, float b, float t) { return a + (b - a) * t; }
 static inline float smoothstep(float a, float b, float x) {
-    float t = clamp01((x - a) / (b - a));
+    float t = sbClamp01((x - a) / (b - a));
     return t * t * (3.0f - 2.0f * t);
 }
 static inline float fract(float x) { return x - floorf(x); }
@@ -35,7 +35,7 @@ static inline float tri01(float x) {
     // triangle wave in [0..1]
     float f = fract(x);
     float t = 1.0f - fabsf(2.0f * f - 1.0f);
-    return clamp01(t);
+    return sbClamp01(t);
 }
 static inline float gaussian(float x, float sigma) {
     // exp(-(x^2)/(2*sigma^2))
@@ -53,7 +53,7 @@ static inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRG
 // Shared "premium LGP" luminance mapping: contrast without harsh clipping
 static inline uint8_t luminanceToBr(float wave01, float master) {
     const float base = 0.06f;
-    float out = clamp01(base + (1.0f - base) * clamp01(wave01)) * master;
+    float out = sbClamp01(base + (1.0f - base) * sbClamp01(wave01)) * master;
     return (uint8_t)(255.0f * out);
 }
 
@@ -62,20 +62,43 @@ static inline uint8_t luminanceToBr(float wave01, float master) {
 // ---------------------------------------------
 LGPTalbotCarpetEffect::LGPTalbotCarpetEffect() : m_t(0.0f) {}
 
-bool LGPTalbotCarpetEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
+bool LGPTalbotCarpetEffect::init(plugins::EffectContext& ctx) {
+    m_controls.resetDefaults();
+    m_ar = lowrisk_ar::ArRuntimeState{};
+    m_ar.tonalHue = static_cast<float>(ctx.gHue);
+    m_ar.modeSmooth = 2.0f;
+    m_t = 0.0f;
+    lightwaveos::effects::cinema::reset();
+    return true;
+}
 
 void LGPTalbotCarpetEffect::render(plugins::EffectContext& ctx) {
+    const float dtSignal = AudioReactivePolicy::signalDt(ctx);
+    const float dtVisual = AudioReactivePolicy::visualDt(ctx);
     const float speedNorm = ctx.speed / 50.0f;
-    const float master = ctx.brightness / 255.0f;
+    const lowrisk_ar::ArSignalSnapshot sig = lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);
+    const float master = (ctx.brightness / 255.0f) * lowrisk_ar::clamp01f(m_ar.audioPresence);
+    const float tonalBase = lowrisk_ar::tonalBaseHue(ctx, m_controls, m_ar);
+    const float audioMix = lowrisk_ar::clamp01f(m_controls.audioMix());
 
     // "Propagation distance" (stylised Talbot carpet)
-    m_t += (0.010f + 0.040f * speedNorm);
+    const float tRate = (1.20f + 4.80f * speedNorm) * m_controls.motionRate() *
+                        (0.70f + 0.25f * sig.rhythmic + 0.15f * sig.mid);
+    m_t += tRate * dtVisual;
 
     const float mid = (STRIP_LENGTH - 1) * 0.5f;
     const float invMid = 1.0f / mid;
 
     // Base grating pitch in pixels
-    const float p = 10.0f + 8.0f * (1.0f - speedNorm);
+    const float pAmbient = 10.0f + 8.0f * (1.0f - speedNorm);
+    const float pReactive = lowrisk_ar::clampf(
+        pAmbient * (1.0f - 0.28f * sig.mid * m_controls.motionDepth()),
+        6.0f,
+        22.0f
+    );
+    const float p = lowrisk_ar::blendAmbientReactive(pAmbient, pReactive, m_controls);
+    const float zBeatLock = m_controls.beatGain() * sig.beat * 0.45f;
+    const float z = m_t + audioMix * zBeatLock;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         float dmid = (float)i - mid;
@@ -84,7 +107,6 @@ void LGPTalbotCarpetEffect::render(plugins::EffectContext& ctx) {
 
         // Fresnel-ish harmonic sum: phase ~ k^2 * z (Talbot self-imaging motif)
         float phi = SB_TAU* ((float)i / p);
-        float z = m_t;
 
         float sumC = 0.0f, sumS = 0.0f;
         float norm = 0.0f;
@@ -96,13 +118,22 @@ void LGPTalbotCarpetEffect::render(plugins::EffectContext& ctx) {
             norm += ak;
         }
         float amp = sqrtf(sumC * sumC + sumS * sumS) / (norm + 1e-6f);
-        float wave = powf(clamp01(amp), 1.7f);
+        const float ambientWaveBase = powf(sbClamp01(amp), 1.7f);
 
         // Carpet "loom" feel: edge gets slightly tighter
-        wave *= lerp(1.0f, 0.85f, distN);
+        const float ambientWave = ambientWaveBase * sbLerp(1.0f, 0.85f, distN);
+        const float lockPulse = expf(-fabsf((z * 0.09f - floorf(z * 0.09f)) - 0.5f) * 7.5f) * sig.beat;
+        const float reactiveWave = lowrisk_ar::clamp01f(
+            ambientWave * (0.75f + 0.25f * sig.mid) +
+            0.34f * lockPulse + 0.14f * m_ar.memory
+        );
+        const float wave = lowrisk_ar::blendAmbientReactive(ambientWave, reactiveWave, m_controls);
 
         uint8_t br = luminanceToBr(wave * glue, master);
-        uint8_t hue = (uint8_t)(ctx.gHue + (int)(wave * 60.0f) + (int)(distN * 20.0f));
+        const float ambientHue = static_cast<float>(ctx.gHue) + wave * 60.0f + distN * 20.0f;
+        const float anchorHue = tonalBase + distN * 22.0f + sig.harmonic * 34.0f;
+        const float hueMix = audioMix * lowrisk_ar::clamp01f(m_controls.colourAnchorMix());
+        uint8_t hue = (uint8_t)(ambientHue * (1.0f - hueMix) + anchorHue * hueMix);
 
         writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));
     }
@@ -121,52 +152,95 @@ const plugins::EffectMetadata& LGPTalbotCarpetEffect::getMetadata() const {
     return meta;
 }
 
+uint8_t LGPTalbotCarpetEffect::getParameterCount() const {
+    return lowrisk_ar::Ar16Controls::parameterCount();
+}
+
+const plugins::EffectParameter* LGPTalbotCarpetEffect::getParameter(uint8_t index) const {
+    return lowrisk_ar::Ar16Controls::parameter(index);
+}
+
+bool LGPTalbotCarpetEffect::setParameter(const char* name, float value) {
+    return m_controls.set(name, value);
+}
+
+float LGPTalbotCarpetEffect::getParameter(const char* name) const {
+    return m_controls.get(name);
+}
+
 // ---------------------------------------------
 // 2) Airy Comet
 // ---------------------------------------------
 LGPAiryCometEffect::LGPAiryCometEffect() : m_t(0.0f) {}
-bool LGPAiryCometEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
+bool LGPAiryCometEffect::init(plugins::EffectContext& ctx) {
+    m_controls.resetDefaults();
+    m_ar = lowrisk_ar::ArRuntimeState{};
+    m_ar.tonalHue = static_cast<float>(ctx.gHue);
+    m_ar.modeSmooth = 2.0f;
+    m_t = 0.0f;
+    lightwaveos::effects::cinema::reset();
+    return true;
+}
 
 void LGPAiryCometEffect::render(plugins::EffectContext& ctx) {
+    const float dtSignal = AudioReactivePolicy::signalDt(ctx);
+    const float dtVisual = AudioReactivePolicy::visualDt(ctx);
     const float speedNorm = ctx.speed / 50.0f;
-    const float master = ctx.brightness / 255.0f;
+    const lowrisk_ar::ArSignalSnapshot sig = lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);
+    const float master = (ctx.brightness / 255.0f) * lowrisk_ar::clamp01f(m_ar.audioPresence);
+    const float tonalBase = lowrisk_ar::tonalBaseHue(ctx, m_controls, m_ar);
+    const float audioMix = lowrisk_ar::clamp01f(m_controls.audioMix());
 
-    m_t += (0.010f + 0.045f * speedNorm);
+    const float tRate = (1.20f + 5.40f * speedNorm) * m_controls.motionRate() *
+                        (0.72f + 0.20f * sig.treble + 0.22f * sig.beat);
+    m_t += tRate * dtVisual;
 
     const float mid = (STRIP_LENGTH - 1) * 0.5f;
 
     // Parabolic "self-accelerating" motion across the strip (bounce)
-    float s = fract(m_t * 0.12f);
+    float s = fract(m_t * (0.10f + 0.05f * audioMix * m_controls.beatGain() * sig.beat));
     float parab = (s * s);              // 0..1 with accelerating slope
-    float x0 = lerp(-mid * 0.92f, mid * 0.92f, parab);
+    float x0 = sbLerp(-mid * 0.92f, mid * 0.92f, parab);
 
     // Alternate direction each half-cycle
-    bool flip = (fract(m_t * 0.06f) > 0.5f);
+    bool flip = (fract(m_t * 0.06f + sig.rhythmic * 0.14f) > 0.5f);
     float dir = flip ? -1.0f : 1.0f;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         float x = (float)i - mid;
         float dmid = x;
+        const float distN = fabsf(dmid) / mid;
 
         float glue = expf(-(dmid * dmid) * 0.0018f);
 
         float dx = x - x0;
-        float head = gaussian(dx, 3.2f); // sharp head
+        const float sigma = 3.2f * (1.0f + 0.30f * audioMix * (sig.rms - 0.5f));
+        float head = gaussian(dx, sigma); // sharp head
 
         // Airy-ish tail: oscillatory lobes behind the head, decaying
         float behind = (dx * dir > 0.0f) ? (dx * dir) : 0.0f;
-        float tail = expf(-behind * 0.12f) * (0.55f + 0.45f * cosf(behind * 1.25f - m_t * 0.9f));
+        float tail = expf(-behind * (0.12f - 0.03f * audioMix * sig.treble)) *
+                     (0.55f + 0.45f * cosf(behind * (1.25f + 0.35f * audioMix * sig.treble) - m_t * 0.9f));
 
-        float wave = clamp01(head + 0.75f * tail);
-        wave = powf(wave, 1.25f);
+        const float ambientWave0 = powf(sbClamp01(head + 0.75f * tail), 1.25f);
+        const float impact = expf(-behind * 0.18f) * sig.beat;
+        const float reactiveWave0 = lowrisk_ar::clamp01f(
+            ambientWave0 * (0.72f + 0.28f * sig.treble) +
+            0.34f * impact + 0.12f * m_ar.memory
+        );
+        const float wave0 = lowrisk_ar::blendAmbientReactive(ambientWave0, reactiveWave0, m_controls);
 
         // Melt into wings (no top/bottom fighting)
-        float glued = lerp(wave, wave * (0.45f + 0.55f * glue), 0.85f);
+        float glued = sbLerp(wave0, wave0 * (0.45f + 0.55f * glue), 0.85f);
 
         uint8_t br = luminanceToBr(glued, master);
 
         // Head warm, tail cool (subtle)
-        uint8_t hue = (uint8_t)(ctx.gHue + (int)(60.0f * (1.0f - smoothstep(0.0f, 1.0f, head))) + (int)(15.0f * glue));
+        const float ambientHue = static_cast<float>(ctx.gHue) +
+                                 (60.0f * (1.0f - smoothstep(0.0f, 1.0f, head))) + 15.0f * glue;
+        const float anchorHue = tonalBase + distN * 24.0f + sig.harmonic * 28.0f;
+        const float hueMix = audioMix * lowrisk_ar::clamp01f(m_controls.colourAnchorMix());
+        uint8_t hue = (uint8_t)(ambientHue * (1.0f - hueMix) + anchorHue * hueMix);
 
         writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));
     }
@@ -183,6 +257,22 @@ const plugins::EffectMetadata& LGPAiryCometEffect::getMetadata() const {
         1
     };
     return meta;
+}
+
+uint8_t LGPAiryCometEffect::getParameterCount() const {
+    return lowrisk_ar::Ar16Controls::parameterCount();
+}
+
+const plugins::EffectParameter* LGPAiryCometEffect::getParameter(uint8_t index) const {
+    return lowrisk_ar::Ar16Controls::parameter(index);
+}
+
+bool LGPAiryCometEffect::setParameter(const char* name, float value) {
+    return m_controls.set(name, value);
+}
+
+float LGPAiryCometEffect::getParameter(const char* name) const {
+    return m_controls.get(name);
 }
 
 // ---------------------------------------------
@@ -214,7 +304,7 @@ void LGPMoireCathedralEffect::render(plugins::EffectContext& ctx) {
         float g2 = sinf(SB_TAU * (x / p2) - m_t * w2);
 
         float moire = fabsf(g1 - g2);           // 0..2
-        float wave = clamp01(moire * 0.55f);    // ~0..1
+        float wave = sbClamp01(moire * 0.55f);    // ~0..1
 
         // Cathedral ribs: compress highlights slightly
         wave = powf(wave, 1.35f);
@@ -264,10 +354,10 @@ void LGPSuperformulaGlyphEffect::render(plugins::EffectContext& ctx) {
 
     // Morph parameters slowly (sigils)
     float morph = 0.5f + 0.5f * sinf(m_t * 0.35f);
-    float sfm = lerp(3.0f, 11.0f, morph);      // "lobes"
-    float n1 = lerp(0.7f, 1.6f, 1.0f - morph);
-    float n2 = lerp(0.8f, 2.4f, morph);
-    float n3 = lerp(0.8f, 2.4f, 1.0f - morph);
+    float sfm = sbLerp(3.0f, 11.0f, morph);      // "lobes"
+    float n1 = sbLerp(0.7f, 1.6f, 1.0f - morph);
+    float n2 = sbLerp(0.8f, 2.4f, morph);
+    float n3 = sbLerp(0.8f, 2.4f, 1.0f - morph);
 
     float rot = m_t * 0.20f;
 
@@ -277,7 +367,7 @@ void LGPSuperformulaGlyphEffect::render(plugins::EffectContext& ctx) {
         float distN = fabsf((float)i - mid) * invMid;  // 0..1
 
         float r = superformula(phi, sfm, n1, n2, n3);
-        r = clamp01(r * 0.92f);                        // keep inside
+        r = sbClamp01(r * 0.92f);                        // keep inside
 
         // Distance-to-curve band
         float bandW = 0.055f;
@@ -345,7 +435,7 @@ void LGPSpirographCrownEffect::render(plugins::EffectContext& ctx) {
         float distN = fabsf((float)i - mid) * invMid;
 
         float rr = hypotrochoid_radius(theta, R, r, d) / (maxRad + 1e-6f);
-        rr = clamp01(rr);
+        rr = sbClamp01(rr);
 
         float bandW = 0.050f;
         float wave = expf(-fabsf(distN - rr) / bandW);
@@ -402,7 +492,7 @@ void LGPRoseBloomEffect::render(plugins::EffectContext& ctx) {
         float distN = fabsf((float)i - mid) * invMid;
 
         float r = fabsf(cosf(kf * theta));
-        r = clamp01(r * 0.92f);
+        r = sbClamp01(r * 0.92f);
 
         float bandW = 0.060f;
         float wave = expf(-fabsf(distN - r) / bandW);
@@ -463,7 +553,7 @@ void LGPHarmonographHaloEffect::render(plugins::EffectContext& ctx) {
         float x = sinf(a * (phi + rot) + delta);
         float y = sinf(b * (phi - rot));
         float r = sqrtf(x * x + y * y);     // 0..~1.414
-        float rr = clamp01(r * 0.72f);
+        float rr = sbClamp01(r * 0.72f);
 
         float distN = fabsf((float)i - mid) * invMid;
 
@@ -550,7 +640,7 @@ void LGPRule30CathedralEffect::render(plugins::EffectContext& ctx) {
         float cell = (float)m_ps->cells[i];
         float blur = (cell + 0.7f * (float)m_ps->cells[im1] + 0.7f * (float)m_ps->cells[ip1]) / (1.0f + 0.7f + 0.7f);
 
-        float wave = powf(clamp01(blur), 1.35f) * glue;
+        float wave = powf(sbClamp01(blur), 1.35f) * glue;
 
         uint8_t br = luminanceToBr(wave, master);
 
@@ -656,11 +746,11 @@ void LGPLangtonHighwayEffect::render(plugins::EffectContext& ctx) {
         uint8_t gy1 = (uint8_t)((gy + 1) & (H - 1));
         float blur = (cell + m_grid[gy * W + gx1] + m_grid[gy1 * W + gx] + m_grid[gy1 * W + gx1]) * 0.25f;
 
-        float wave = powf(clamp01(blur), 1.35f) * glue;
+        float wave = powf(sbClamp01(blur), 1.35f) * glue;
 
         // Subtle "ant spark" when projection hits ant neighbourhood
         if ((gx == m_x && gy == m_y) || (gx1 == m_x && gy == m_y) || (gx == m_x && gy1 == m_y)) {
-            wave = clamp01(wave + 0.35f);
+            wave = sbClamp01(wave + 0.35f);
         }
 
         uint8_t br = luminanceToBr(wave, master);
@@ -689,38 +779,72 @@ const plugins::EffectMetadata& LGPLangtonHighwayEffect::getMetadata() const {
 // 10) Cymatic Ladder (standing waves)
 // ---------------------------------------------
 LGPCymaticLadderEffect::LGPCymaticLadderEffect() : m_t(0.0f) {}
-bool LGPCymaticLadderEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
+bool LGPCymaticLadderEffect::init(plugins::EffectContext& ctx) {
+    m_controls.resetDefaults();
+    m_ar = lowrisk_ar::ArRuntimeState{};
+    m_ar.tonalHue = static_cast<float>(ctx.gHue);
+    m_ar.modeSmooth = 2.0f;
+    m_t = 0.0f;
+    lightwaveos::effects::cinema::reset();
+    return true;
+}
 
 void LGPCymaticLadderEffect::render(plugins::EffectContext& ctx) {
+    const float dtSignal = AudioReactivePolicy::signalDt(ctx);
+    const float dtVisual = AudioReactivePolicy::visualDt(ctx);
     const float speedNorm = ctx.speed / 50.0f;
-    const float master = ctx.brightness / 255.0f;
-    m_t += (0.010f + 0.020f * speedNorm);
+    const lowrisk_ar::ArSignalSnapshot sig = lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);
+    const float master = (ctx.brightness / 255.0f) * lowrisk_ar::clamp01f(m_ar.audioPresence);
+    const float tonalBase = lowrisk_ar::tonalBaseHue(ctx, m_controls, m_ar);
+    const float audioMix = lowrisk_ar::clamp01f(m_controls.audioMix());
+
+    const float tRate = (0.90f + 2.20f * speedNorm) * m_controls.motionRate() *
+                        (0.70f + 0.20f * sig.rhythmic + 0.20f * sig.beat);
+    m_t += tRate * dtVisual;
 
     const float mid = (STRIP_LENGTH - 1) * 0.5f;
+    const float invMid = 1.0f / mid;
 
-    // Mode number (standing wave harmonic)
-    int n = 2 + (int)(6.0f * speedNorm); // 2..8
+    // Mode number (standing wave harmonic), quantised with smoothing/hysteresis.
+    const float ambientMode = 2.0f + 6.0f * lowrisk_ar::clamp01f(speedNorm);
+    const float reactiveMode = 2.0f + 6.0f * lowrisk_ar::clamp01f(0.10f + 0.58f * sig.harmonic + 0.32f * sig.rms);
+    const float modeTarget = lowrisk_ar::blendAmbientReactive(ambientMode, reactiveMode, m_controls);
+    if (fabsf(modeTarget - m_ar.modeSmooth) > 0.14f) {
+        m_ar.modeSmooth = lowrisk_ar::smoothTo(m_ar.modeSmooth, modeTarget, dtSignal, 0.30f);
+    }
+    const int n = static_cast<int>(lowrisk_ar::clampf(floorf(m_ar.modeSmooth + 0.5f), 2.0f, 8.0f));
 
-    float phase = m_t * (0.8f + 0.5f * speedNorm);
+    const float phase = m_t * (0.8f + 0.5f * speedNorm) * (0.85f + 0.15f * sig.rhythmic);
+    const float contrastExp = lowrisk_ar::clampf(
+        1.8f + audioMix * m_controls.motionDepth() * (0.95f * sig.rms + 0.65f * sig.harmonic + 0.45f * sig.beat),
+        1.4f,
+        3.4f
+    );
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float x = (float)i / (float)(STRIP_LENGTH - 1); // 0..1 along length
+        const float x = (float)i / (float)(STRIP_LENGTH - 1); // 0..1 along length
 
-        // Standing wave shape: sin(n*pi*x + phase) with nodes/antinodes
-        float s = fabsf(sinf((float)n * SB_PI * x + phase));
+        // Standing wave shape: sin(n*pi*x + phase) with nodes/antinodes.
+        const float s = fabsf(sinf((float)n * SB_PI * x + phase));
+        const float ambientWave0 = powf(s, 1.8f);
+        const float reactiveWave0 = lowrisk_ar::clamp01f(
+            powf(s, contrastExp) * (0.76f + 0.24f * sig.harmonic) +
+            0.16f * sig.beat + 0.10f * m_ar.memory
+        );
+        float wave = lowrisk_ar::blendAmbientReactive(ambientWave0, reactiveWave0, m_controls);
 
-        // Sharpen nodes and anti-nodes to "sculpture"
-        float wave = powf(s, 1.8f);
-
-        // LGP glue: centre continuity
-        float dmid = (float)i - mid;
-        float glue = 0.30f + 0.70f * expf(-(dmid * dmid) * 0.0016f);
+        // LGP glue: centre continuity.
+        const float dmid = (float)i - mid;
+        const float distN = fabsf(dmid) * invMid;
+        const float glue = 0.30f + 0.70f * expf(-(dmid * dmid) * 0.0016f);
         wave *= glue;
 
-        uint8_t br = luminanceToBr(wave, master);
+        const uint8_t br = luminanceToBr(wave, master);
 
-        // Cymatic vibe: hue shifts mainly with harmonic, not position
-        uint8_t hue = (uint8_t)(ctx.gHue + n * 9 + (int)(wave * 60.0f));
+        const float ambientHue = static_cast<float>(ctx.gHue) + n * 9.0f + wave * 60.0f;
+        const float anchorHue = tonalBase + n * 8.0f + sig.harmonic * 36.0f + distN * 12.0f;
+        const float hueMix = audioMix * lowrisk_ar::clamp01f(m_controls.colourAnchorMix());
+        const uint8_t hue = static_cast<uint8_t>(ambientHue * (1.0f - hueMix) + anchorHue * hueMix);
 
         writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));
     }
@@ -739,44 +863,98 @@ const plugins::EffectMetadata& LGPCymaticLadderEffect::getMetadata() const {
     return meta;
 }
 
+uint8_t LGPCymaticLadderEffect::getParameterCount() const {
+    return lowrisk_ar::Ar16Controls::parameterCount();
+}
+
+const plugins::EffectParameter* LGPCymaticLadderEffect::getParameter(uint8_t index) const {
+    return lowrisk_ar::Ar16Controls::parameter(index);
+}
+
+bool LGPCymaticLadderEffect::setParameter(const char* name, float value) {
+    return m_controls.set(name, value);
+}
+
+float LGPCymaticLadderEffect::getParameter(const char* name) const {
+    return m_controls.get(name);
+}
+
 // ---------------------------------------------
 // 11) Mach Diamonds (shock diamonds)
 // ---------------------------------------------
 LGPMachDiamondsEffect::LGPMachDiamondsEffect() : m_t(0.0f) {}
-bool LGPMachDiamondsEffect::init(plugins::EffectContext& ctx) { (void)ctx; m_t = 0.0f; lightwaveos::effects::cinema::reset(); return true; }
+bool LGPMachDiamondsEffect::init(plugins::EffectContext& ctx) {
+    m_controls.resetDefaults();
+    m_ar = lowrisk_ar::ArRuntimeState{};
+    m_ar.tonalHue = static_cast<float>(ctx.gHue);
+    m_ar.modeSmooth = 2.0f;
+    m_t = 0.0f;
+    lightwaveos::effects::cinema::reset();
+    return true;
+}
 
 void LGPMachDiamondsEffect::render(plugins::EffectContext& ctx) {
+    const float dtSignal = AudioReactivePolicy::signalDt(ctx);
+    const float dtVisual = AudioReactivePolicy::visualDt(ctx);
     const float speedNorm = ctx.speed / 50.0f;
-    const float master = ctx.brightness / 255.0f;
-    m_t += (0.010f + 0.040f * speedNorm);
+    const lowrisk_ar::ArSignalSnapshot sig = lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);
+    const float master = (ctx.brightness / 255.0f) * lowrisk_ar::clamp01f(m_ar.audioPresence);
+    const float tonalBase = lowrisk_ar::tonalBaseHue(ctx, m_controls, m_ar);
+    const float audioMix = lowrisk_ar::clamp01f(m_controls.audioMix());
+
+    const float tRate = (1.10f + 4.20f * speedNorm) * m_controls.motionRate() *
+                        (0.70f + 0.20f * sig.flux + 0.20f * sig.rhythmic);
+    m_t += tRate * dtVisual;
 
     const float mid = (STRIP_LENGTH - 1) * 0.5f;
     const float invMid = 1.0f / mid;
 
-    // Shock-cell spacing in centre-distance space
-    float spacing = 0.13f;      // in distN units
-    float drift = m_t * (0.20f + 0.35f * speedNorm);
+    // Shock-cell spacing in centre-distance space.
+    const float spacingAmbient = 0.13f;
+    const float bassSigned = (sig.bass - 0.5f) * 2.0f;
+    const float spacingReactive = lowrisk_ar::clampf(
+        spacingAmbient * (1.0f - 0.22f * bassSigned * m_controls.motionDepth()
+                               - 0.30f * sig.beat * m_controls.beatGain()),
+        0.07f,
+        0.24f
+    );
+    const float spacing = lowrisk_ar::blendAmbientReactive(spacingAmbient, spacingReactive, m_controls);
+    const float driftAmbient = m_t * (0.20f + 0.35f * speedNorm);
+    const float driftReactive = m_t * (0.22f + 0.40f * speedNorm) * (1.0f + 0.15f * sig.flux);
+    const float drift = lowrisk_ar::blendAmbientReactive(driftAmbient, driftReactive, m_controls);
+    const float sharpExp = lowrisk_ar::clampf(
+        2.2f + audioMix * m_controls.motionDepth() * (1.05f * sig.flux + 0.40f * sig.beat),
+        1.8f,
+        3.8f
+    );
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float dmid = (float)i - mid;
-        float distN = fabsf(dmid) * invMid;     // 0..1
+        const float dmid = (float)i - mid;
+        const float distN = fabsf(dmid) * invMid; // 0..1
 
-        // "Shock diamonds" as standing-wave-ish pulses along distance
-        float cellPhase = (distN / spacing) - drift;
-        float tri = tri01(cellPhase);           // 0..1 triangular peaks
-        float wave = powf(tri, 2.2f);           // jewel highlights
+        // "Shock diamonds" as standing-wave-ish pulses along distance.
+        const float cellPhase = (distN / spacing) - drift;
+        const float tri = tri01(cellPhase); // 0..1 triangular peaks
+        const float ambientWave = powf(tri, 2.2f);
+        float reactiveWave = lowrisk_ar::clamp01f(
+            powf(tri, sharpExp) * (0.80f + 0.20f * sig.bass) +
+            0.15f * sig.beat + 0.10f * m_ar.memory
+        );
+        float wave = lowrisk_ar::blendAmbientReactive(ambientWave, reactiveWave, m_controls);
 
-        // Diamond "breathing" (very subtle)
+        // Diamond "breathing" (very subtle).
         wave *= (0.85f + 0.15f * cosf(SB_TAU * cellPhase + m_t * 0.6f));
 
-        // Glue so the middle melts into wings
-        float glue = 0.35f + 0.65f * expf(-(dmid * dmid) * 0.0013f);
+        // Glue so the middle melts into wings.
+        const float glue = 0.35f + 0.65f * expf(-(dmid * dmid) * 0.0013f);
         wave *= glue;
 
-        uint8_t br = luminanceToBr(wave, master);
+        const uint8_t br = luminanceToBr(wave, master);
 
-        // Deep jewel tones: hue primarily tracks shock-cell rhythm
-        uint8_t hue = (uint8_t)(ctx.gHue + (int)(tri * 80.0f) + (int)(distN * 15.0f));
+        const float ambientHue = static_cast<float>(ctx.gHue) + tri * 80.0f + distN * 15.0f;
+        const float anchorHue = tonalBase + tri * 52.0f + sig.harmonic * 20.0f;
+        const float hueMix = audioMix * lowrisk_ar::clamp01f(m_controls.colourAnchorMix());
+        const uint8_t hue = static_cast<uint8_t>(ambientHue * (1.0f - hueMix) + anchorHue * hueMix);
 
         writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));
     }
@@ -793,6 +971,22 @@ const plugins::EffectMetadata& LGPMachDiamondsEffect::getMetadata() const {
         1
     };
     return meta;
+}
+
+uint8_t LGPMachDiamondsEffect::getParameterCount() const {
+    return lowrisk_ar::Ar16Controls::parameterCount();
+}
+
+const plugins::EffectParameter* LGPMachDiamondsEffect::getParameter(uint8_t index) const {
+    return lowrisk_ar::Ar16Controls::parameter(index);
+}
+
+bool LGPMachDiamondsEffect::setParameter(const char* name, float value) {
+    return m_controls.set(name, value);
+}
+
+float LGPMachDiamondsEffect::getParameter(const char* name) const {
+    return m_controls.get(name);
 }
 
 } // namespace ieffect

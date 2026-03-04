@@ -15,6 +15,7 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../../config/effect_ids.h"
+#include "AudioReactiveLowRiskPackHelpers.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -32,8 +33,14 @@ public:
     void render(plugins::EffectContext& ctx) override;
     void cleanup() override;
     const plugins::EffectMetadata& getMetadata() const override;
+    uint8_t getParameterCount() const override;
+    const plugins::EffectParameter* getParameter(uint8_t index) const override;
+    bool setParameter(const char* name, float value) override;
+    float getParameter(const char* name) const override;
 
 private:
+    lowrisk_ar::Ar16Controls m_controls;
+    lowrisk_ar::ArRuntimeState m_ar;
     float m_t1;
     float m_t2;
 };

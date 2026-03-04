@@ -486,6 +486,12 @@ static const EffectId REACTIVE_EFFECT_IDS[] PROGMEM = {
     EID_BEAT_PULSE_BLOOM,                    // old 121: Beat Pulse (Bloom)
     EID_BLOOM_PARITY,                        // old 122: Bloom (Parity)
     EID_KURAMOTO_TRANSPORT,                  // old 123: Kuramoto Transport
+    EID_LGP_WATER_CAUSTICS,                  // old 132: LGP Water Caustics
+    EID_LGP_SCHLIEREN_FLOW,                  // old 133: LGP Schlieren Flow
+    EID_LGP_TALBOT_CARPET,                   // old 136: LGP Talbot Carpet
+    EID_LGP_AIRY_COMET,                      // old 137: LGP Airy Comet
+    EID_LGP_CYMATIC_LADDER,                  // old 145: LGP Cymatic Ladder
+    EID_LGP_MACH_DIAMONDS,                   // old 146: LGP Mach Diamonds
     EID_LGP_FLUX_RIFT,                       // old 152: LGP Flux Rift
     EID_LGP_BEAT_PRISM,                      // old 153: LGP Beat Prism
     EID_LGP_HARMONIC_TIDE,                   // old 154: LGP Harmonic Tide

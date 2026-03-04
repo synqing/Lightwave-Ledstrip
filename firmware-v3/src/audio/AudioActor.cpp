@@ -87,6 +87,99 @@ inline uint32_t esp_log_timestamp() { return 0; }
 namespace lightwaveos {
 namespace audio {
 
+#if !FEATURE_AUDIO_BACKEND_ESV11
+AudioActor::ZoneAgcSnapshot AudioActor::getZoneAgcSnapshot() const {
+    ZoneAgcSnapshot snapshot;
+#ifndef NATIVE_BUILD
+    portENTER_CRITICAL(&m_controlBusApiMux);
+#endif
+    snapshot.enabled = m_controlBus.getZoneAGCEnabled();
+    snapshot.lookaheadEnabled = m_controlBus.getLookaheadEnabled();
+    for (uint8_t z = 0; z < CONTROLBUS_NUM_ZONES; ++z) {
+        snapshot.followers[z] = m_controlBus.getZoneFollower(z);
+        snapshot.maxMags[z] = m_controlBus.getZoneMaxMag(z);
+    }
+#ifndef NATIVE_BUILD
+    portEXIT_CRITICAL(&m_controlBusApiMux);
+#endif
+    return snapshot;
+}
+
+void AudioActor::setZoneAgcEnabled(bool enabled) {
+#ifndef NATIVE_BUILD
+    portENTER_CRITICAL(&m_controlBusApiMux);
+#endif
+    m_controlBus.setZoneAGCEnabled(enabled);
+#ifndef NATIVE_BUILD
+    portEXIT_CRITICAL(&m_controlBusApiMux);
+#endif
+}
+
+void AudioActor::setLookaheadEnabled(bool enabled) {
+#ifndef NATIVE_BUILD
+    portENTER_CRITICAL(&m_controlBusApiMux);
+#endif
+    m_controlBus.setLookaheadEnabled(enabled);
+#ifndef NATIVE_BUILD
+    portEXIT_CRITICAL(&m_controlBusApiMux);
+#endif
+}
+
+void AudioActor::setZoneAgcRates(float attackRate, float releaseRate) {
+#ifndef NATIVE_BUILD
+    portENTER_CRITICAL(&m_controlBusApiMux);
+#endif
+    m_controlBus.setZoneAGCRates(attackRate, releaseRate);
+#ifndef NATIVE_BUILD
+    portEXIT_CRITICAL(&m_controlBusApiMux);
+#endif
+}
+
+void AudioActor::setZoneMinFloor(float minFloor) {
+#ifndef NATIVE_BUILD
+    portENTER_CRITICAL(&m_controlBusApiMux);
+#endif
+    m_controlBus.setZoneMinFloor(minFloor);
+#ifndef NATIVE_BUILD
+    portEXIT_CRITICAL(&m_controlBusApiMux);
+#endif
+}
+
+SpikeDetectionStats AudioActor::getSpikeDetectionStats() const {
+    SpikeDetectionStats stats;
+#ifndef NATIVE_BUILD
+    portENTER_CRITICAL(&m_controlBusApiMux);
+#endif
+    stats = m_controlBus.getSpikeStats();
+#ifndef NATIVE_BUILD
+    portEXIT_CRITICAL(&m_controlBusApiMux);
+#endif
+    return stats;
+}
+
+void AudioActor::resetSpikeDetectionStats() {
+#ifndef NATIVE_BUILD
+    portENTER_CRITICAL(&m_controlBusApiMux);
+#endif
+    m_controlBus.resetSpikeStats();
+#ifndef NATIVE_BUILD
+    portEXIT_CRITICAL(&m_controlBusApiMux);
+#endif
+}
+
+ControlBusFrame AudioActor::getControlBusFrameSnapshot() const {
+    ControlBusFrame frame;
+#ifndef NATIVE_BUILD
+    portENTER_CRITICAL(&m_controlBusApiMux);
+#endif
+    frame = m_controlBus.GetFrameRef();
+#ifndef NATIVE_BUILD
+    portEXIT_CRITICAL(&m_controlBusApiMux);
+#endif
+    return frame;
+}
+#endif  // !FEATURE_AUDIO_BACKEND_ESV11
+
 #if FEATURE_AUDIO_BACKEND_ESV11
 
 // ============================================================================
@@ -197,11 +290,15 @@ void AudioActor::onStart()
         return;
     }
 
-    // Configure Stage B derived features (silence detection)
+    // Configure Stage B derived features (silence detection).
+    // ESV11 levels are lower than legacy Goertzel RMS, so keep the silence
+    // threshold permissive and use a longer hysteresis to avoid false closures.
+    constexpr float kEsSilenceThreshold = 0.005f;
+    constexpr float kEsSilenceHysteresisMs = 8000.0f;
 #ifdef AUDIO_SILENCE_GATE_DISABLED
-    m_controlBus.setSilenceParameters(0.01f, 0.0f);  // Disabled
+    m_controlBus.setSilenceParameters(kEsSilenceThreshold, 0.0f);  // Disabled
 #else
-    m_controlBus.setSilenceParameters(0.01f, 5000.0f);  // 5s hysteresis (default)
+    m_controlBus.setSilenceParameters(kEsSilenceThreshold, kEsSilenceHysteresisMs);
 #endif
 
     // Retune ControlBus smoothing for current frame rate (50 Hz or 125 Hz)
@@ -842,7 +939,13 @@ void AudioActor::processHop()
         m_styleDetector.reset();
 #endif
         m_prevChordRoot = 0;
+#ifndef NATIVE_BUILD
+        portENTER_CRITICAL(&m_controlBusApiMux);
+#endif
         m_controlBus.Reset();
+#ifndef NATIVE_BUILD
+        portEXIT_CRITICAL(&m_controlBusApiMux);
+#endif
     }
 
     // Build AudioTime with END-OF-HOP semantics
@@ -931,6 +1034,9 @@ void AudioActor::processHop()
     TRACE_BEGIN("controlbus_build");
 
     const AudioPipelineTuning tuning = getPipelineTuning();
+#ifndef NATIVE_BUILD
+    portENTER_CRITICAL(&m_controlBusApiMux);
+#endif
     m_controlBus.setSmoothing(tuning.controlBusAlphaFast, tuning.controlBusAlphaSlow);
 #ifdef AUDIO_SILENCE_GATE_DISABLED
     m_controlBus.setSilenceParameters(tuning.silenceThreshold, 0.0f);
@@ -938,6 +1044,9 @@ void AudioActor::processHop()
     m_controlBus.setSilenceParameters(tuning.silenceThreshold, tuning.silenceHysteresisMs);
 #endif
     m_controlBus.UpdateFromHop(now, raw);
+#ifndef NATIVE_BUILD
+    portEXIT_CRITICAL(&m_controlBusApiMux);
+#endif
 
     TRACE_END();  // controlbus_build
     BENCH_END_PHASE(controlBusUs);
@@ -945,7 +1054,7 @@ void AudioActor::processHop()
     // === Phase: Style Detection ===
 #if FEATURE_STYLE_DETECTION
     {
-        const ControlBusFrame& frameRef = m_controlBus.GetFrameRef();
+        const ControlBusFrame frameRef = getControlBusFrameSnapshot();
         bool chordChanged = (frameRef.chordState.rootNote != m_prevChordRoot);
         m_prevChordRoot = frameRef.chordState.rootNote;
         float beatConfidence = raw.tempoLocked ? raw.tempoConfidence : 0.0f;
@@ -965,7 +1074,7 @@ void AudioActor::processHop()
 
     // 5. Publish frame to renderer via lock-free SnapshotBuffer
     {
-        ControlBusFrame frameToPublish = m_controlBus.GetFrameRef();
+        ControlBusFrame frameToPublish = getControlBusFrameSnapshot();
 #if FEATURE_STYLE_DETECTION
         frameToPublish.currentStyle = m_styleDetector.getStyle();
         frameToPublish.styleConfidence = m_styleDetector.getConfidence();
@@ -1925,7 +2034,13 @@ void AudioActor::processHop()
         m_styleDetector.reset();
 #endif
         m_prevChordRoot = 0;
+#ifndef NATIVE_BUILD
+        portENTER_CRITICAL(&m_controlBusApiMux);
+#endif
         m_controlBus.Reset();
+#ifndef NATIVE_BUILD
+        portEXIT_CRITICAL(&m_controlBusApiMux);
+#endif
         // TempoTracker reset
         m_tempo.init();
         m_lastTempoOutput = m_tempo.getOutput();
@@ -2510,6 +2625,9 @@ void AudioActor::processHop()
     raw.tempoBeatTick = m_lastTempoOutput.beat_tick && m_lastTempoOutput.locked;
 
     // 7. Update ControlBus with attack/release smoothing
+#ifndef NATIVE_BUILD
+    portENTER_CRITICAL(&m_controlBusApiMux);
+#endif
     m_controlBus.setSmoothing(tuning.controlBusAlphaFast, tuning.controlBusAlphaSlow);
 #ifdef AUDIO_SILENCE_GATE_DISABLED
     m_controlBus.setSilenceParameters(tuning.silenceThreshold, 0.0f);
@@ -2517,6 +2635,9 @@ void AudioActor::processHop()
     m_controlBus.setSilenceParameters(tuning.silenceThreshold, tuning.silenceHysteresisMs);
 #endif
     m_controlBus.UpdateFromHop(now, raw);
+#ifndef NATIVE_BUILD
+    portEXIT_CRITICAL(&m_controlBusApiMux);
+#endif
 
     TRACE_END();  // controlbus_build
     BENCH_END_PHASE(controlBusUs);
@@ -2525,7 +2646,7 @@ void AudioActor::processHop()
     // Update style detector with current hop features (after ControlBus has chord state)
 #if FEATURE_STYLE_DETECTION
     {
-        const ControlBusFrame& frameRef = m_controlBus.GetFrameRef();
+        const ControlBusFrame frameRef = getControlBusFrameSnapshot();
         bool chordChanged = (frameRef.chordState.rootNote != m_prevChordRoot);
         m_prevChordRoot = frameRef.chordState.rootNote;
         // Use TempoTracker beat tracker confidence for style detection
@@ -2547,7 +2668,7 @@ void AudioActor::processHop()
     // 8. Publish frame to renderer via lock-free SnapshotBuffer
     // Copy style detection results to frame before publishing
     {
-        ControlBusFrame frameToPublish = m_controlBus.GetFrameRef();
+        ControlBusFrame frameToPublish = getControlBusFrameSnapshot();
 #if FEATURE_STYLE_DETECTION
         frameToPublish.currentStyle = m_styleDetector.getStyle();
         frameToPublish.styleConfidence = m_styleDetector.getConfidence();

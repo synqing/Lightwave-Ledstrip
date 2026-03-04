@@ -398,24 +398,54 @@ public:
     // ========================================================================
 
     /**
-     * @brief Get const reference to ControlBus for reading state
-     *
-     * Used by WebServer API handlers to access Zone AGC and spike detection
-     * telemetry. Thread-safe for reading from Core 0.
-     *
-     * @return Const reference to ControlBus
+     * @brief Snapshot of Zone AGC runtime state for API responses.
      */
-    const ControlBus& getControlBusRef() const { return m_controlBus; }
+    struct ZoneAgcSnapshot {
+        bool enabled = false;
+        bool lookaheadEnabled = false;
+        float followers[CONTROLBUS_NUM_ZONES] = {0.0f};
+        float maxMags[CONTROLBUS_NUM_ZONES] = {0.0f};
+    };
 
     /**
-     * @brief Get mutable reference to ControlBus for configuration
-     *
-     * Used by WebServer API handlers to configure Zone AGC parameters
-     * and reset spike detection stats. Should only be called from Core 0.
-     *
-     * @return Mutable reference to ControlBus
+     * @brief Get a thread-safe snapshot of Zone AGC state.
      */
-    ControlBus& getControlBusMut() { return m_controlBus; }
+    ZoneAgcSnapshot getZoneAgcSnapshot() const;
+
+    /**
+     * @brief Set Zone AGC enabled state.
+     */
+    void setZoneAgcEnabled(bool enabled);
+
+    /**
+     * @brief Set spike-detection lookahead enabled state.
+     */
+    void setLookaheadEnabled(bool enabled);
+
+    /**
+     * @brief Set Zone AGC attack/release rates.
+     */
+    void setZoneAgcRates(float attackRate, float releaseRate);
+
+    /**
+     * @brief Set minimum zone floor for AGC.
+     */
+    void setZoneMinFloor(float minFloor);
+
+    /**
+     * @brief Get a thread-safe copy of spike detection stats.
+     */
+    SpikeDetectionStats getSpikeDetectionStats() const;
+
+    /**
+     * @brief Reset spike detection statistics.
+     */
+    void resetSpikeDetectionStats();
+
+    /**
+     * @brief Get a thread-safe copy of the latest ControlBus frame.
+     */
+    ControlBusFrame getControlBusFrameSnapshot() const;
 
     // ========================================================================
     // Phase 2C: Noise Calibration (SensoryBridge pattern)
@@ -628,6 +658,9 @@ private:
 
     // ControlBus state machine (smoothing, attack/release)
     ControlBus m_controlBus;
+#ifndef NATIVE_BUILD
+    mutable portMUX_TYPE m_controlBusApiMux = portMUX_INITIALIZER_UNLOCKED;
+#endif
 
     // Lock-free buffer for cross-core sharing with RendererActor
     SnapshotBuffer<ControlBusFrame> m_controlBusBuffer;
@@ -749,6 +782,9 @@ private:
 
     // ControlBus state machine (smoothing, attack/release)
     ControlBus m_controlBus;
+#ifndef NATIVE_BUILD
+    mutable portMUX_TYPE m_controlBusApiMux = portMUX_INITIALIZER_UNLOCKED;
+#endif
 
     // Lock-free buffer for cross-core sharing with RendererActor
     SnapshotBuffer<ControlBusFrame> m_controlBusBuffer;

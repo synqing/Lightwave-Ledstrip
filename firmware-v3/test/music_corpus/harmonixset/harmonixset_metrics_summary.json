@@ -1,0 +1,36 @@
+{
+  "generated_at_utc": "2026-03-01T18:58:26Z",
+  "input_csv": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/firmware-v3/test/music_corpus/harmonixset/harmonixset_test_candidates.csv",
+  "total_rows": 685,
+  "valid_rows": 685,
+  "error_rows": 0,
+  "analysis_sample_rate_hz": 11025,
+  "analysis_max_seconds": 90.0,
+  "bpm_bucket_counts": {
+    "060-080": 62,
+    "080-100": 137,
+    "100-120": 111,
+    "120-140": 255,
+    "140-170": 83,
+    "170-220": 37
+  },
+  "bpm_stats": {
+    "min": 60.09265988372093,
+    "p25": 95.703125,
+    "p50": 123.046875,
+    "p75": 132.51201923076923,
+    "max": 215.33203125
+  },
+  "confidence_stats": {
+    "p25": 0.5101762790700561,
+    "p50": 0.5260074071397871,
+    "p75": 0.5572891429960547,
+    "mean": 0.5441820551905957
+  },
+  "output_files": {
+    "metrics_csv": "harmonixset_metrics.csv",
+    "challenge_pack": "harmonixset_challenge_pack_120.csv",
+    "reference_pack": "harmonixset_reference_pack_120.csv",
+    "balanced_pack": "harmonixset_balanced_pack_120.csv"
+  }
+}

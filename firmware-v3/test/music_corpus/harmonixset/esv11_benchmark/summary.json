@@ -1,0 +1,22 @@
+{
+  "generated_at_utc": "2026-03-01T19:35:27Z",
+  "metrics_csv": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/firmware-v3/test/music_corpus/harmonixset/harmonixset_metrics.csv",
+  "enriched_csv": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/firmware-v3/test/music_corpus/harmonixset/harmonixset_test_candidates_enriched.csv",
+  "out_dir": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/firmware-v3/test/music_corpus/harmonixset/esv11_benchmark",
+  "requested_size": 36,
+  "selected_size": 36,
+  "clip_seconds": 25.0,
+  "min_duration": 45.0,
+  "max_duration": 320.0,
+  "bucket_counts": {
+    "060-080": 6,
+    "080-100": 6,
+    "100-120": 6,
+    "120-140": 6,
+    "140-170": 6,
+    "170-220": 6
+  },
+  "manifest": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/firmware-v3/test/music_corpus/harmonixset/esv11_benchmark/manifest.tsv",
+  "audio_12k8_dir": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/firmware-v3/test/music_corpus/harmonixset/esv11_benchmark/audio_12k8",
+  "audio_32k_dir": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/firmware-v3/test/music_corpus/harmonixset/esv11_benchmark/audio_32k"
+}

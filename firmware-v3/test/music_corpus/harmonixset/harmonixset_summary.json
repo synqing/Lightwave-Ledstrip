@@ -1,0 +1,26 @@
+{
+  "generated_at_utc": "2026-03-01T18:58:05Z",
+  "input_dir": "/Users/spectrasynq/Workspace_Management/Software/K1.reinvented/Implementation.plans/harmonixset-main/audio",
+  "total_files": 737,
+  "unique_source_ids": 737,
+  "ext_counts": {
+    "mp3": 687,
+    "wav": 50
+  },
+  "duration_bucket_counts": {
+    "long": 27,
+    "medium": 683,
+    "short": 27
+  },
+  "sample_rate_counts": {
+    "44100": 11,
+    "48000": 726
+  },
+  "pairs": {
+    "source_ids_with_mp3": 687,
+    "source_ids_with_wav": 50,
+    "source_ids_with_both": 0
+  },
+  "preferred_rows": 737,
+  "test_candidate_rows": 685
+}

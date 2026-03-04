@@ -83,6 +83,11 @@ specs/quint/tools/_apalache-out/
 *.pyc
 
 # =============================================================================
+# Music corpus WAV files (large binaries — use Git LFS when available)
+# =============================================================================
+test/music_corpus/**/*.wav
+
+# =============================================================================
 # Duplicate/Orphan Files
 # =============================================================================
 # Example file that was deleted but recreated without .example extension

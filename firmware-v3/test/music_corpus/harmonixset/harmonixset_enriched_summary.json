@@ -1,0 +1,144 @@
+{
+  "generated_at_utc": "2026-03-01T19:08:56Z",
+  "preferred_csv": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/firmware-v3/test/music_corpus/harmonixset/harmonixset_preferred.csv",
+  "candidates_csv": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/firmware-v3/test/music_corpus/harmonixset/harmonixset_test_candidates.csv",
+  "out_dir": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/firmware-v3/test/music_corpus/harmonixset",
+  "total_source_ids": 737,
+  "cache_hits": 737,
+  "fetched_this_run": 0,
+  "ok_count": 735,
+  "error_count": 2,
+  "top_channels": [
+    [
+      "Justin Bieber",
+      15
+    ],
+    [
+      "Tegan and Sara",
+      12
+    ],
+    [
+      "Katy Perry",
+      10
+    ],
+    [
+      "Rihanna",
+      10
+    ],
+    [
+      "Britney Spears",
+      9
+    ],
+    [
+      "Lady Gaga",
+      8
+    ],
+    [
+      "Fueled By Ramen",
+      7
+    ],
+    [
+      "Chris Brown",
+      7
+    ],
+    [
+      "Bridgit Mendler",
+      7
+    ],
+    [
+      "Ultra Records",
+      6
+    ],
+    [
+      "P!NK",
+      6
+    ],
+    [
+      "David Guetta",
+      6
+    ],
+    [
+      "Kelly Clarkson",
+      5
+    ],
+    [
+      "Ellie Goulding",
+      5
+    ],
+    [
+      "Daughtry",
+      5
+    ],
+    [
+      "Flo Rida",
+      5
+    ],
+    [
+      "KillYourHero92",
+      5
+    ],
+    [
+      "Roadrunner Records",
+      5
+    ],
+    [
+      "Taylor Swift",
+      5
+    ],
+    [
+      "Black Eyed Peas",
+      5
+    ]
+  ],
+  "top_categories": [
+    [
+      "Music",
+      707
+    ],
+    [
+      "People & Blogs",
+      14
+    ],
+    [
+      "Entertainment",
+      10
+    ],
+    [
+      "Comedy",
+      2
+    ],
+    [
+      "Nonprofits & Activism",
+      1
+    ],
+    [
+      "Sports",
+      1
+    ]
+  ],
+  "upload_year_counts": {
+    "2006": 3,
+    "2007": 8,
+    "2008": 28,
+    "2009": 215,
+    "2010": 143,
+    "2011": 125,
+    "2012": 100,
+    "2013": 40,
+    "2014": 9,
+    "2015": 14,
+    "2016": 7,
+    "2017": 12,
+    "2018": 25,
+    "2019": 6
+  },
+  "unavailable_source_ids": [
+    "OKUO3R2zhXw",
+    "R1TLePn3NSs"
+  ],
+  "outputs": {
+    "cache_json": "harmonixset_youtube_cache.json",
+    "preferred_enriched_csv": "harmonixset_preferred_enriched.csv",
+    "candidates_enriched_csv": "harmonixset_test_candidates_enriched.csv"
+  }
+}

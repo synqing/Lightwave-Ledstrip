@@ -565,3 +565,18 @@ The following issues were found by the separate session audit (2026-03-02 throug
 - **Cross-Reference:** Compared against separate session audit (findings.md/progress.md/task_plan.md) to identify overlapping and unique findings.
 
 **Verification:** All CRITICAL and HIGH findings re-verified by reading actual source code with line numbers. Truth table above documents each verdict. MEDIUM findings verified by pattern-based grep detection.
+
+---
+
+## Incident Addendum (2026-03-04)
+
+A dedicated LED stability postmortem and rollback playbook was created after continued runtime instability and mixed-target triage:
+
+- `firmware-v3/docs/INCIDENT_LED_STABILITY_POSTMORTEM_2026-03-04.md`
+
+Key addendum outcomes:
+
+1. **Rollback baseline recommendation:** `f4c579ed` (clean pre-Phase-0).
+2. **Not recommended as baseline:** `54765b16` (post-Phase-0; includes risky render cluster).
+3. **High-risk refactor window:** `dfc05298` -> `9a59e899`, with `4a8338d6` as primary render-behaviour risk.
+4. **Operational control requirement:** verify target MAC before every flash to avoid port/device drift.

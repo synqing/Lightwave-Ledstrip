@@ -9,7 +9,7 @@
  * Performance notes:
  * - Frame budget: 8.33ms (120 FPS)
  * - Typical render: 2-4ms (effect dependent)
- * - LED driver show(): ~2ms for 320 LEDs
+ * - LED driver show(): ~6.3ms for 320 LEDs (dual 160 + status 30, measured 2026-02-28)
  * - Remaining budget for message processing: ~2-4ms
  *
  * @author LightwaveOS Team
@@ -176,13 +176,15 @@ RendererActor::RendererActor()
     , m_captureTapCValid(false)
 #if FEATURE_AUDIO_SYNC
 #if FEATURE_AUDIO_BACKEND_ESV11
-    , m_esBeatClock()                // Explicit default init for audio state
+    , m_esBeatClock()
 #else
-    , m_musicalGrid()                // Explicit default init for audio state
+    , m_musicalGrid()
 #endif
     , m_lastControlBus()
     , m_lastMusicalGrid()
     , m_lastAudioTime()
+    , m_audioInputMode(AudioInputMode::Live)
+    , m_stimulusHasFrame(false)
 #endif
 {
     // Initialize LED buffers to black
@@ -519,21 +521,6 @@ void RendererActor::onMessage(const Message& msg)
             break;
 
         case MessageType::SET_PALETTE:
-            // #region agent log
-            {
-                FILE* f = fopen("/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/.cursor/debug.log", "a");
-                if (f) {
-                    fprintf(f,
-                            "{\"sessionId\":\"debug-session\",\"runId\":\"palette-loop-1\",\"hypothesisId\":\"H2\","
-                            "\"location\":\"RendererActor.cpp:onMessage\",\"message\":\"SET_PALETTE received\","
-                            "\"data\":{\"paletteIndex\":%u,\"currentPalette\":%u},\"timestamp\":%lu}\n",
-                            static_cast<unsigned>(msg.param1),
-                            static_cast<unsigned>(m_paletteIndex),
-                            static_cast<unsigned long>(millis()));
-                    fclose(f);
-                }
-            }
-            // #endregion
             handleSetPalette(msg.param1);
             break;
 
@@ -583,22 +570,6 @@ void RendererActor::onMessage(const Message& msg)
             break;
 
         case MessageType::PALETTE_CHANGED:
-            // External palette change notification
-            // #region agent log
-            {
-                FILE* f = fopen("/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/.cursor/debug.log", "a");
-                if (f) {
-                    fprintf(f,
-                            "{\"sessionId\":\"debug-session\",\"runId\":\"palette-loop-1\",\"hypothesisId\":\"H2\","
-                            "\"location\":\"RendererActor.cpp:onMessage\",\"message\":\"PALETTE_CHANGED received\","
-                            "\"data\":{\"paletteIndex\":%u,\"currentPalette\":%u},\"timestamp\":%lu}\n",
-                            static_cast<unsigned>(msg.param1),
-                            static_cast<unsigned>(m_paletteIndex),
-                            static_cast<unsigned long>(millis()));
-                    fclose(f);
-                }
-            }
-            // #endregion
             handleSetPalette(msg.param1);
             break;
 
@@ -612,6 +583,27 @@ void RendererActor::onMessage(const Message& msg)
             break;
 
 #if FEATURE_AUDIO_SYNC
+        case MessageType::STIMULUS_SET_MODE:
+            switch (msg.param1) {
+                case 0:
+                    m_audioInputMode = AudioInputMode::Live;
+                    break;
+                case 1:
+                    m_audioInputMode = AudioInputMode::Trinity;
+                    break;
+                case 2:
+                    m_audioInputMode = AudioInputMode::StimulusOverride;
+                    break;
+                default:
+                    break;
+            }
+            break;
+
+        case MessageType::STIMULUS_CLEAR:
+            m_stimulusHasFrame = false;
+            m_audioInputMode = AudioInputMode::Live;
+            break;
+
         case MessageType::TRINITY_BEAT:
             {
                 // Unpack BPM (param1=hi, param2=lo)
@@ -1220,21 +1212,19 @@ void RendererActor::renderFrame()
     // Audio Context Preparation (used by both zone mode and single-effect mode)
     // =========================================================================
 #if FEATURE_AUDIO_SYNC
-    // NOTE: Keep AudioContext off the task stack. It is large (contains control bus,
-    // waveform, bins, etc.) and combined with deep effect call stacks it can trigger
-    // FreeRTOS stack overflow in the Renderer task.
     bool audioAvailable = false;
-    if (m_controlBusBuffer != nullptr) {
+    const audio::SnapshotBuffer<audio::ControlBusFrame>* activeBuffer = nullptr;
+    if (m_audioInputMode == AudioInputMode::StimulusOverride && m_stimulusControlBusBuffer != nullptr) {
+        activeBuffer = m_stimulusControlBusBuffer;
+    } else {
+        activeBuffer = m_controlBusBuffer;
+    }
+    if (activeBuffer != nullptr) {
         TRACE_SCOPE("audio_snapshot_read");
-        // 1. Read latest ControlBusFrame BY VALUE (thread-safe)
-        uint32_t seq = m_controlBusBuffer->ReadLatest(m_lastControlBus);
+        uint32_t seq = activeBuffer->ReadLatest(m_lastControlBus);
 
-        // Store previous sequence BEFORE updating (for availability gate)
         uint32_t prevSeq = m_lastControlBusSeq;
 
-        // 2. Extrapolate AudioTime from audio snapshot
-        // CLOCK SPINE FIX: Use esp_timer_get_time() (same clock as AudioActor)
-        // This ensures renderer and audio actor share a consistent timeline.
 #ifndef NATIVE_BUILD
         uint64_t now_us = static_cast<uint64_t>(esp_timer_get_time());
 #else
@@ -1247,8 +1237,6 @@ void RendererActor::renderFrame()
             m_lastControlBusSeq = seq;
         }
 
-        // 3. Build extrapolated render-time AudioTime
-        // CLOCK SPINE FIX: Wrap-safe subtraction (defensive, 64-bit shouldn't wrap)
         uint64_t dt_us = (now_us >= m_lastAudioMicros) ? (now_us - m_lastAudioMicros) : 0;
         uint64_t extrapolated_samples = m_lastAudioTime.sample_index +
             (dt_us * m_lastAudioTime.sample_rate_hz / 1000000);
@@ -1258,12 +1246,20 @@ void RendererActor::renderFrame()
             now_us
         );
 
-        // 4. Compute freshness + "new frame" detection
         float age_s = audio::AudioTime_SecondsBetween(m_lastControlBus.t, render_now);
         float staleness_s = m_audioContractTuning.audioStalenessMs / 1000.0f;
         bool sequence_changed = (seq != prevSeq);
         bool age_within_tolerance = (age_s >= -0.01f && age_s < staleness_s);
         audioAvailable = sequence_changed || age_within_tolerance;
+
+        if (m_audioInputMode == AudioInputMode::StimulusOverride) {
+            if (seq != 0) {
+                m_stimulusHasFrame = true;
+            }
+            if (m_stimulusHasFrame) {
+                audioAvailable = true;
+            }
+        }
 
         // DEBUG: Log clock spine renderer values every 2 seconds
         // Track stats over the interval to see actual behavior
@@ -1298,7 +1294,6 @@ void RendererActor::renderFrame()
         //     maxDt_us = 0;
         // }
 
-        // 5. Beat phase at 120 FPS (renderer-domain integration)
 #if FEATURE_AUDIO_BACKEND_ESV11
         m_esBeatClock.tick(m_lastControlBus, sequence_changed, render_now);
         m_lastMusicalGrid = m_esBeatClock.snapshot();
@@ -1330,8 +1325,6 @@ void RendererActor::renderFrame()
         m_musicalGrid.ReadLatest(m_lastMusicalGrid);
 #endif
         
-        // Debug: Log audio availability issues every 4 seconds (reduced frequency)
-        // Toggle with serial 'a' command via setAudioDebugEnabled()
         if (m_audioDebugEnabled) {
             static uint32_t lastAudioDbg = 0;
             uint32_t nowDbg = millis();
@@ -1365,11 +1358,14 @@ void RendererActor::renderFrame()
             }
         }
 
-        // 6. Populate shared AudioContext (member, reused across zone + single-effect mode)
-        // Check if Trinity sync is active and proxy is fresh
-        bool trinityActive = (m_trinitySyncActive && m_trinityProxy.isActive() && !m_trinitySyncPaused);
+        bool trinityCandidate = (m_trinitySyncActive && m_trinityProxy.isActive() && !m_trinitySyncPaused);
+        bool trinityActive = false;
+        if (m_audioInputMode == AudioInputMode::StimulusOverride) {
+            trinityActive = false;
+        } else {
+            trinityActive = trinityCandidate;
+        }
 
-        // Periodic Trinity state debug (every 2 seconds when trinity sync flag is set)
         static uint32_t lastTrinityDbg = 0;
         uint32_t nowMs = millis();
         if (m_trinitySyncActive && (nowMs - lastTrinityDbg >= 2000)) {
@@ -1379,19 +1375,16 @@ void RendererActor::renderFrame()
         }
 
         if (trinityActive) {
-            // Use Trinity proxy for offline ML analysis sync
             m_sharedAudioCtx.controlBus = m_trinityProxy.getFrame();
             m_sharedAudioCtx.musicalGrid = m_lastMusicalGrid;
             m_sharedAudioCtx.available = true;
             m_sharedAudioCtx.trinityActive = true;
         } else {
-            // Use live audio data
             m_sharedAudioCtx.controlBus = m_lastControlBus;
             m_sharedAudioCtx.musicalGrid = m_lastMusicalGrid;
             m_sharedAudioCtx.available = audioAvailable;
             m_sharedAudioCtx.trinityActive = false;
 
-            // Bands debug snapshot (lock-free double buffer for serial "bands" command)
             uint8_t idx = m_bandsDebugWriteIndex.load(std::memory_order_relaxed);
             BandsDebugSnapshot& snap = m_bandsDebugSnapshot[idx];
             for (uint8_t i = 0; i < 8; ++i) snap.bands[i] = m_lastControlBus.bands[i];
@@ -1399,7 +1392,6 @@ void RendererActor::renderFrame()
             snap.mid = (m_lastControlBus.bands[2] + m_lastControlBus.bands[3] + m_lastControlBus.bands[4]) / 3.0f;
             snap.treble = (m_lastControlBus.bands[5] + m_lastControlBus.bands[6] + m_lastControlBus.bands[7]) / 3.0f;
             snap.rms = m_lastControlBus.rms;
-            // Avoid rms=0 when bands have content (display fallback for "x" output)
             if (snap.rms <= 0.0f && (snap.bass + snap.mid + snap.treble) > 0.01f) {
                 float bandRms = 0.0f;
                 for (uint8_t i = 0; i < 8; ++i) bandRms += snap.bands[i] * snap.bands[i];
@@ -1411,8 +1403,10 @@ void RendererActor::renderFrame()
             m_bandsDebugWriteIndex.store(1u - idx, std::memory_order_release);
         }
     } else {
-        // No audio buffer - check Trinity proxy as fallback
         bool trinityActive = (m_trinitySyncActive && m_trinityProxy.isActive() && !m_trinitySyncPaused);
+        if (m_audioInputMode == AudioInputMode::StimulusOverride) {
+            trinityActive = false;
+        }
         if (trinityActive) {
             m_sharedAudioCtx.controlBus = m_trinityProxy.getFrame();
             m_sharedAudioCtx.musicalGrid = m_lastMusicalGrid;
@@ -1466,7 +1460,7 @@ void RendererActor::renderFrame()
         plugins::EffectContext& ctx = m_effectContext;
         ctx.leds = m_leds;
         ctx.ledCount = LedConfig::TOTAL_LEDS;
-        ctx.centerPoint = LedConfig::CENTER_POINT;
+        ctx.centerPoint = LedConfig::CENTER_LED_INDEX;
         ctx.palette = plugins::PaletteRef(&m_currentPalette);
         ctx.brightness = m_brightness;
         ctx.speed = m_speed;
@@ -1494,6 +1488,15 @@ void RendererActor::renderFrame()
         // =====================================================================
 #if FEATURE_AUDIO_SYNC
         ctx.audio = m_sharedAudioCtx;
+        if (ctx.audio.available) {
+            ctx.audio.behaviorContext = plugins::selectBehavior(
+                ctx.audio.musicStyle(),
+                ctx.audio.saliencyFrame(),
+                ctx.audio.styleConfidence()
+            );
+        } else {
+            ctx.audio.behaviorContext = plugins::BehaviorContext{};
+        }
 #else
         ctx.audio.available = false;
 #endif
@@ -1677,7 +1680,7 @@ void RendererActor::showLeds()
 
             uint8_t gateScale = static_cast<uint8_t>(m_highIdReactiveSilenceGate * 255.0f + 0.5f);
             // Snap-to-black at the bottom to prevent low-level flicker in "silence".
-            if (gateScale <= 2u) gateScale = 0u;
+            if (gateScale <= 1u) gateScale = 0u;
             if (gateScale < 255u) {
                 for (uint16_t i = 0; i < LedConfig::LEDS_PER_STRIP; ++i) {
                     if (gateScale == 0u) {
@@ -1783,7 +1786,7 @@ void RendererActor::handleSetEffect(EffectId effectId)
             plugins::EffectContext initCtx;
             initCtx.leds = m_leds;
             initCtx.ledCount = LedConfig::TOTAL_LEDS;
-            initCtx.centerPoint = LedConfig::CENTER_POINT;
+            initCtx.centerPoint = LedConfig::CENTER_LED_INDEX;
             initCtx.palette = plugins::PaletteRef(&m_currentPalette);
             initCtx.brightness = m_brightness;
             initCtx.speed = m_speed;
@@ -1882,22 +1885,6 @@ void RendererActor::handleSetPalette(uint8_t paletteIndex)
     uint8_t safe_palette = lightwaveos::palettes::validatePaletteId(paletteIndex);
 
     if (m_paletteIndex != safe_palette) {
-        // #region agent log
-        {
-            FILE* f = fopen("/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/.cursor/debug.log", "a");
-            if (f) {
-                fprintf(f,
-                        "{\"sessionId\":\"debug-session\",\"runId\":\"palette-loop-1\",\"hypothesisId\":\"H3\","
-                        "\"location\":\"RendererActor.cpp:handleSetPalette\",\"message\":\"palette update\","
-                        "\"data\":{\"incoming\":%u,\"safe\":%u,\"previous\":%u},\"timestamp\":%lu}\n",
-                        static_cast<unsigned>(paletteIndex),
-                        static_cast<unsigned>(safe_palette),
-                        static_cast<unsigned>(m_paletteIndex),
-                        static_cast<unsigned long>(millis()));
-                fclose(f);
-            }
-        }
-        // #endregion
         m_paletteIndex = safe_palette;
 
         // Load palette from master palette array (75 palettes)

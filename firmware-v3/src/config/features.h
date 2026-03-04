@@ -12,28 +12,9 @@
 #include "chip_config.h"
 
 // ============================================================================
-// Core Features (defined in platformio.ini)
+// Core Features (always enabled, no flag gating needed)
 // ============================================================================
-
-// Actor System - always enabled in v2
-#ifndef FEATURE_ACTOR_SYSTEM
-#define FEATURE_ACTOR_SYSTEM 1
-#endif
-
-// Plugin Runtime - effect plugin system
-#ifndef FEATURE_PLUGIN_RUNTIME
-#define FEATURE_PLUGIN_RUNTIME 1
-#endif
-
-// CQRS State Management
-#ifndef FEATURE_CQRS_STATE
-#define FEATURE_CQRS_STATE 1
-#endif
-
-// HAL Abstraction Layer
-#ifndef FEATURE_HAL_ABSTRACTION
-#define FEATURE_HAL_ABSTRACTION 1
-#endif
+// Actor System, Plugin Runtime, CQRS State, HAL Abstraction are always compiled in.
 
 // ============================================================================
 // Network Features (defined in common build flags)
@@ -65,15 +46,6 @@
 // Optional Features
 // ============================================================================
 
-// Serial Menu Interface
-#ifndef FEATURE_SERIAL_MENU
-#define FEATURE_SERIAL_MENU 1
-#endif
-
-// Performance Monitoring
-#ifndef FEATURE_PERFORMANCE_MONITOR
-#define FEATURE_PERFORMANCE_MONITOR 1
-#endif
 
 // Zone System
 #ifndef FEATURE_ZONE_SYSTEM
@@ -115,6 +87,22 @@
 #define FEATURE_AUDIO_BACKEND_PIPELINECORE 0
 #endif
 
+// Spine16k: PipelineCore engine at 16kHz/128-hop (DSP Spine v0.1).
+// Implies FEATURE_AUDIO_BACKEND_PIPELINECORE. Only SAMPLE_RATE and HOP_SIZE differ.
+#ifndef FEATURE_AUDIO_BACKEND_SPINE16K
+#define FEATURE_AUDIO_BACKEND_SPINE16K 0
+#endif
+
+// Auto-enable PipelineCore when Spine16k variant is selected
+#if FEATURE_AUDIO_BACKEND_SPINE16K && !FEATURE_AUDIO_BACKEND_PIPELINECORE
+    #undef FEATURE_AUDIO_BACKEND_PIPELINECORE
+    #define FEATURE_AUDIO_BACKEND_PIPELINECORE 1
+#endif
+
+// Mutual exclusion: only one audio backend may be active
+#if FEATURE_AUDIO_BACKEND_ESV11 && FEATURE_AUDIO_BACKEND_PIPELINECORE
+#error "Cannot enable both ESV11 and PipelineCore backends simultaneously"
+#endif
 // Auto-speed trim (audio-driven base speed) - disabled by default
 #ifndef FEATURE_AUTO_SPEED
 #define FEATURE_AUTO_SPEED 0
@@ -134,15 +122,23 @@
 #define FEATURE_STYLE_DETECTION FEATURE_AUDIO_SYNC
 #endif
 
+// Sensory Bridge parity side-car pipeline (waveform/chromagram/bloom payloads).
+// Disable on performance builds when effects do not consume SB parity fields.
+#ifndef FEATURE_SB_PARITY_SIDECAR
+#define FEATURE_SB_PARITY_SIDECAR FEATURE_AUDIO_SYNC
+#endif
+
+// Run SB side-car update once every N hops (1 = every hop).
+// Use values >1 to reduce side-car CPU while preserving last published payload.
+#ifndef AUDIO_SB_SIDECAR_DECIMATION
+#define AUDIO_SB_SIDECAR_DECIMATION 1
+#endif
+
 // Audio Overlap-Add sliding window for bands/chroma
 #ifndef FEATURE_AUDIO_OA
 #define FEATURE_AUDIO_OA 1
 #endif
 
-// Optional 75% overlap (128-sample advance within 256-sample hop)
-#ifndef FEATURE_AUDIO_OA_75
-#define FEATURE_AUDIO_OA_75 0
-#endif
 
 // Audio Pipeline Benchmarking - Enables metrics collection and A/B testing
 // Use with native_test environment for validation framework
@@ -169,11 +165,6 @@
 #define FEATURE_API_AUTH 0
 #endif
 
-// ESP-NOW Wireless Encoders
-#ifndef FEATURE_WIRELESS_ENCODERS
-#define FEATURE_WIRELESS_ENCODERS 0
-#endif
-
 // M5Stack ROTATE8 Encoder Support
 #ifndef FEATURE_ROTATE8_ENCODER
 #define FEATURE_ROTATE8_ENCODER 0
@@ -182,11 +173,6 @@
 // ============================================================================
 // Enhancement Engines (optional color and motion enhancements)
 // ============================================================================
-
-// Enhancement Engines - Combines ColorEngine and MotionEngine
-#ifndef FEATURE_ENHANCEMENT_ENGINES
-#define FEATURE_ENHANCEMENT_ENGINES 1
-#endif
 
 // ColorEngine - Cross-palette blending, diffusion, temporal rotation
 #ifndef FEATURE_COLOR_ENGINE
@@ -227,28 +213,11 @@
 // Debug Features
 // ============================================================================
 
-// Unified Logging System - Consistent colored output with timestamps
-// Enables LW_LOGI, LW_LOGW, LW_LOGE, LW_LOGD macros from utils/Log.h
-// Log levels: 0=None, 1=Error, 2=Warn, 3=Info, 4=Debug
-// Set level via: -D LW_LOG_LEVEL=3
-#ifndef FEATURE_UNIFIED_LOGGING
-#define FEATURE_UNIFIED_LOGGING 1
-#endif
-
 // Debug Mode
 #ifndef DEBUG
 #define DEBUG 0
 #endif
 
-// Memory Debug (tracks allocations)
-#ifndef FEATURE_MEMORY_DEBUG
-#define FEATURE_MEMORY_DEBUG 0
-#endif
-
-// Effect Profiling
-#ifndef FEATURE_EFFECT_PROFILER
-#define FEATURE_EFFECT_PROFILER 0
-#endif
 
 // MabuTrace Integration - Perfetto timeline visualization for audio pipeline
 // Enables detailed trace events viewable in Perfetto UI (ui.perfetto.dev)

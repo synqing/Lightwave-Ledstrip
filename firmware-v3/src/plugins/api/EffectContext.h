@@ -27,7 +27,7 @@
 
 // Forward declare FastLED types for native builds
 #ifdef NATIVE_BUILD
-#include "../../../test/unit/mocks/fastled_mock.h"
+#include "../../../test/test_native/mocks/fastled_mock.h"
 #else
 #include <FastLED.h>
 #endif
@@ -90,6 +90,10 @@ struct AudioContext {
     float getHeavyBand(uint8_t i) const {
         return (i < audio::CONTROLBUS_NUM_BANDS) ? controlBus.heavy_bands[i] : 0.0f;
     }
+    /// Get pointer to full band array (for efficient iteration)
+    const float* bands() const { return controlBus.bands; }
+    /// Get pointer to full heavy-smoothed band array
+    const float* heavyBands() const { return controlBus.heavy_bands; }
 
     /// Get bass energy (bands 0-1 averaged)
     float bass() const { return (controlBus.bands[0] + controlBus.bands[1]) * 0.5f; }
@@ -160,6 +164,23 @@ struct AudioContext {
         return 0.0f;
     }
 
+    /// Get pointer to contract waveform (128 samples)
+    const int16_t* waveform() const { return controlBus.waveform; }
+
+    /// Get pointer to Sensory Bridge parity waveform side-car (128 samples)
+    const int16_t* sbWaveform() const { return controlBus.sb_waveform; }
+
+    /// Get Sensory Bridge waveform peak scalar (0..1)
+    float sbWaveformPeakScaled() const { return controlBus.sb_waveform_peak_scaled; }
+
+    /// True when side-car waveform is populated and can be preferred
+    bool hasSbWaveform() const { return controlBus.sb_waveform_peak_scaled >= 0.0001f; }
+
+    /// Preferred waveform source for parity effects
+    const int16_t* preferredWaveform() const {
+        return hasSbWaveform() ? controlBus.sb_waveform : controlBus.waveform;
+    }
+
     // ========================================================================
     // Chord Detection Accessors (Priority 6: Musical intelligence)
     // ========================================================================
@@ -190,6 +211,33 @@ struct AudioContext {
 
     /// Check if any chord is detected (not NONE)
     bool hasChord() const { return controlBus.chordState.type != audio::ChordType::NONE; }
+
+    // ========================================================================
+    // Hop / Chroma / State Accessors (API completeness)
+    // ========================================================================
+
+    /// Get hop sequence counter (monotonically increasing per audio hop)
+    uint32_t hopSequence() const { return controlBus.hop_seq; }
+
+    /// Get single chroma bin value (0-11: C=0, C#=1, ..., B=11)
+    float getChroma(uint8_t i) const {
+        return (i < audio::CONTROLBUS_NUM_CHROMA) ? controlBus.chroma[i] : 0.0f;
+    }
+    /// Get single heavy-smoothed chroma bin value
+    float getHeavyChroma(uint8_t i) const {
+        return (i < audio::CONTROLBUS_NUM_CHROMA) ? controlBus.heavy_chroma[i] : 0.0f;
+    }
+    /// Get pointer to full chroma array (for efficient iteration)
+    const float* chroma() const { return controlBus.chroma; }
+    /// Get pointer to full heavy-smoothed chroma array
+    const float* heavyChroma() const { return controlBus.heavy_chroma; }
+
+    /// Get audio-driven liveliness scalar (0.0-1.0)
+    float liveliness() const { return controlBus.liveliness; }
+    /// Get silence fade scale (1.0=active, 0.0=silent)
+    float silentScale() const { return controlBus.silentScale; }
+    /// Check if audio is currently silent
+    bool isSilent() const { return controlBus.isSilent; }
 
     // ========================================================================
     // Multi-band Onset Detection Accessors (Phase 1.2: Percussive elements)
@@ -367,7 +415,7 @@ struct AudioContext {
     // Behavior Context Accessors (MIS Phase 3: Adaptive behavior selection)
     // ========================================================================
 
-    BehaviorContext behaviorContext{};  ///< Behavior selection context (populated from AudioActor)
+    BehaviorContext behaviorContext{};  ///< Behavior selection context (populated by RendererActor pre-render)
 
     /// Get the recommended primary visual behavior
     VisualBehavior recommendedBehavior() const { return behaviorContext.recommendedPrimary; }
@@ -415,6 +463,8 @@ struct AudioContext {
     float fastFlux() const { return 0.0f; }
     float getBand(uint8_t) const { return 0.0f; }
     float getHeavyBand(uint8_t) const { return 0.0f; }
+    const float* bands() const { return nullptr; }
+    const float* heavyBands() const { return nullptr; }
     float bass() const { return 0.0f; }
     float heavyBass() const { return 0.0f; }
     float mid() const { return 0.0f; }
@@ -431,6 +481,11 @@ struct AudioContext {
     int16_t getWaveformSample(uint8_t) const { return 0; }
     float getWaveformAmplitude(uint8_t) const { return 0.0f; }
     float getWaveformNormalized(uint8_t) const { return 0.0f; }
+    const int16_t* waveform() const { return nullptr; }
+    const int16_t* sbWaveform() const { return nullptr; }
+    float sbWaveformPeakScaled() const { return 0.0f; }
+    bool hasSbWaveform() const { return false; }
+    const int16_t* preferredWaveform() const { return nullptr; }
 
     // Chord detection stubs (always return "no chord")
     struct StubChordState {
@@ -456,6 +511,16 @@ struct AudioContext {
     float hihat() const { return 0.0f; }
     bool isSnareHit() const { return false; }
     bool isHihatHit() const { return false; }
+
+    // Hop / Chroma / State stubs
+    uint32_t hopSequence() const { return 0; }
+    float getChroma(uint8_t) const { return 0.0f; }
+    float getHeavyChroma(uint8_t) const { return 0.0f; }
+    const float* chroma() const { return nullptr; }
+    const float* heavyChroma() const { return nullptr; }
+    float liveliness() const { return 0.0f; }
+    float silentScale() const { return 1.0f; }
+    bool isSilent() const { return false; }
 
     // 64-bin FFT stubs
     static constexpr uint8_t bins64Count() { return 64; }

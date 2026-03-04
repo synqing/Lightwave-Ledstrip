@@ -286,6 +286,7 @@ public:
 
     void UpdateFromHop(const AudioTime& now, const ControlBusRawInput& raw);
 
+    const ControlBusFrame& GetFrameRef() const { return m_frame; }
     ControlBusFrame GetFrame() const { return m_frame; }
 
     void setSmoothing(float alphaFast, float alphaSlow);

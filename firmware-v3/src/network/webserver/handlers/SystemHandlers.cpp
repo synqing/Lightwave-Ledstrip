@@ -64,7 +64,7 @@ void SystemHandlers::handleApiDiscovery(AsyncWebServerRequest* request) {
         JsonObject hw = data["hardware"].to<JsonObject>();
         hw["ledsTotal"] = LedConfig::TOTAL_LEDS;
         hw["strips"] = LedConfig::NUM_STRIPS;
-        hw["centerPoint"] = LedConfig::CENTER_POINT;
+        hw["centerPoint"] = LedConfig::CENTER_LED_INDEX;
         hw["maxZones"] = 4;
 
         // HATEOAS links

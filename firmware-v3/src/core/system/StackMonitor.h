@@ -125,11 +125,22 @@ private:
         bool active;
     };
 
+    struct WarningState {
+        const char* taskName;
+        uint32_t lastWarnedFreeBytes;
+        bool active;
+    };
+
     static constexpr size_t MAX_PROFILED_TASKS = 16;
+    static constexpr uint32_t CRITICAL_FREE_BYTES = 256;
+    static constexpr uint32_t WARNING_DELTA_BYTES = 64;
     static TaskProfileData s_profiles[MAX_PROFILED_TASKS];
+    static WarningState s_warningStates[MAX_PROFILED_TASKS];
     static bool s_profilingEnabled;
     static uint8_t s_warningThreshold;  // Warning threshold (default 80%)
     static bool s_initialized;          // Initialization flag
+
+    static WarningState* getWarningState(const char* taskName);
 };
 
 } // namespace system

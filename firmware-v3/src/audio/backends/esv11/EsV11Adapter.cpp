@@ -15,6 +15,10 @@
 
 namespace lightwaveos::audio::esv11 {
 
+namespace {
+const lightwaveos::audio::ControlBusFrame kDefaultControlBusFrame{};
+}
+
 static inline float clamp01(float x) {
     if (x < 0.0f) return 0.0f;
     if (x > 1.0f) return 1.0f;
@@ -43,7 +47,7 @@ void EsV11Adapter::buildFrame(lightwaveos::audio::ControlBusFrame& out,
                               const EsV11Outputs& es,
                               uint32_t hopSeq)
 {
-    out = lightwaveos::audio::ControlBusFrame{};
+    out = kDefaultControlBusFrame;
 
     // AudioTime uses sample_index as the monotonic clock.
     out.t = lightwaveos::audio::AudioTime(es.sample_index, audio::SAMPLE_RATE, es.now_us);

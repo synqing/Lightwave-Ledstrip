@@ -22,6 +22,12 @@ static const char* TAG = "ActorSystem";
 namespace lightwaveos {
 namespace actors {
 
+#if FEATURE_AUDIO_SYNC
+namespace {
+const lightwaveos::audio::ControlBusFrame kDefaultStimulusFrame{};
+}
+#endif
+
 // ============================================================================
 // Singleton Instance
 // ============================================================================
@@ -631,7 +637,7 @@ bool ActorSystem::clearStimulus()
     if (xSemaphoreTake(m_stimulusMutex, pdMS_TO_TICKS(50)) != pdTRUE) {
         return false;
     }
-    m_stimulusLastFrame = lightwaveos::audio::ControlBusFrame{};
+    m_stimulusLastFrame = kDefaultStimulusFrame;
     m_stimulusLastPublishMs = millis();
     m_stimulusControlBusBuffer.Publish(m_stimulusLastFrame);
     xSemaphoreGive(m_stimulusMutex);
@@ -643,17 +649,19 @@ bool ActorSystem::clearStimulus()
     return true;
 }
 
-lightwaveos::audio::ControlBusFrame ActorSystem::getStimulusFrame() const
+bool ActorSystem::copyStimulusFrame(lightwaveos::audio::ControlBusFrame& out) const
 {
     if (!m_stimulusMutex) {
-        return m_stimulusLastFrame;
+        out = m_stimulusLastFrame;
+        return false;
     }
     if (xSemaphoreTake(m_stimulusMutex, pdMS_TO_TICKS(50)) != pdTRUE) {
-        return m_stimulusLastFrame;
+        out = m_stimulusLastFrame;
+        return false;
     }
-    lightwaveos::audio::ControlBusFrame frame = m_stimulusLastFrame;
+    out = m_stimulusLastFrame;
     xSemaphoreGive(m_stimulusMutex);
-    return frame;
+    return true;
 }
 
 bool ActorSystem::publishStimulusFrame(const lightwaveos::audio::ControlBusFrame& frame)
@@ -767,6 +775,9 @@ void ActorSystem::printStatus()
         Serial.printf("Frames: %lu, Drops: %lu\n", rs.framesRendered, rs.frameDrops);
         Serial.printf("Frame time: avg=%lu, min=%lu, max=%lu us\n",
                       rs.avgFrameTimeUs, rs.minFrameTimeUs, rs.maxFrameTimeUs);
+        const auto& lds = m_renderer->getLedDriverStats();
+        Serial.printf("LED show: avg=%lu, max=%lu us, skips=%lu\n",
+                      lds.avgShowUs, lds.maxShowUs, lds.showSkips);
         Serial.printf("Stack watermark: %d words\n",
                       m_renderer->getStackHighWaterMark());
     }

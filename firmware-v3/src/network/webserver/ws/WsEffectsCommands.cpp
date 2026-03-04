@@ -127,35 +127,46 @@ static void handleEffectsList(AsyncWebSocketClient* client, JsonDocument& doc, c
     // Values already validated by codec (page >= 1, limit 1-50)
 
     uint16_t effectCount = ctx.renderer->getEffectCount();
-    uint16_t startIdx = (page - 1) * limit;
-    uint16_t endIdx = (startIdx + limit < effectCount) ? (startIdx + limit) : effectCount;
+    uint16_t startIdx = static_cast<uint16_t>((page - 1U) * limit);
+    if (startIdx > effectCount) {
+        startIdx = effectCount;
+    }
+    uint16_t endIdx = static_cast<uint16_t>(startIdx + limit);
+    if (endIdx > effectCount) {
+        endIdx = effectCount;
+    }
+    uint16_t windowCount = static_cast<uint16_t>(endIdx - startIdx);
 
-    // Collect effect names, IDs, and categories into arrays
-    // Sized to MAX_CACHED_EFFECTS to handle full effect list
-    const char* effectNames[limits::MAX_EFFECTS];
-    EffectId effectIdArr[limits::MAX_EFFECTS];
-    const char* categories[limits::MAX_EFFECTS];
+    // Keep working buffers aligned with request limit (1..50) instead of full registry size.
+    static constexpr uint8_t kMaxListWindow = 50;
+    if (windowCount > kMaxListWindow) {
+        windowCount = kMaxListWindow;
+    }
+    const char* effectNames[kMaxListWindow] = {};
+    EffectId effectIdArr[kMaxListWindow] = {};
+    const char* categories[kMaxListWindow] = {};
     static const char* categoryClassic = "Classic";
     static const char* categoryWave = "Wave";
     static const char* categoryPhysics = "Physics";
     static const char* categoryCustom = "Custom";
 
-    for (uint16_t i = startIdx; i < endIdx; i++) {
-        EffectId eid = ctx.renderer->getEffectIdAt(i);
+    for (uint16_t i = 0; i < windowCount; ++i) {
+        const uint16_t effectIdx = static_cast<uint16_t>(startIdx + i);
+        EffectId eid = ctx.renderer->getEffectIdAt(effectIdx);
         effectIdArr[i] = eid;
         effectNames[i] = ctx.renderer->getEffectName(eid);
         if (details) {
-            if (i <= 4) categories[i] = categoryClassic;
-            else if (i <= 7) categories[i] = categoryWave;
-            else if (i <= 12) categories[i] = categoryPhysics;
+            if (effectIdx <= 4) categories[i] = categoryClassic;
+            else if (effectIdx <= 7) categories[i] = categoryWave;
+            else if (effectIdx <= 12) categories[i] = categoryPhysics;
             else categories[i] = categoryCustom;
         } else {
             categories[i] = nullptr;
         }
     }
     
-    String response = buildWsResponse("effects.list", requestId, [effectCount, startIdx, endIdx, page, limit, details, effectNames, effectIdArr, categories](JsonObject& data) {
-        codec::WsEffectsCodec::encodeList(effectCount, startIdx, endIdx, page, limit, details, effectNames, effectIdArr, categories, data);
+    String response = buildWsResponse("effects.list", requestId, [effectCount, windowCount, page, limit, details, effectNames, effectIdArr, categories](JsonObject& data) {
+        codec::WsEffectsCodec::encodeList(effectCount, 0, windowCount, page, limit, details, effectNames, effectIdArr, categories, data);
     });
     client->text(response);
 }

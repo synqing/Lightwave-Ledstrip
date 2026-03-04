@@ -307,7 +307,7 @@ public:
     uint8_t getStimulusMode() const;
     bool setStimulusMode(uint8_t mode);
     bool clearStimulus();
-    lightwaveos::audio::ControlBusFrame getStimulusFrame() const;
+    bool copyStimulusFrame(lightwaveos::audio::ControlBusFrame& out) const;
     bool publishStimulusFrame(const lightwaveos::audio::ControlBusFrame& frame);
     const lightwaveos::audio::SnapshotBuffer<lightwaveos::audio::ControlBusFrame>& getStimulusControlBusBuffer() const;
 #endif

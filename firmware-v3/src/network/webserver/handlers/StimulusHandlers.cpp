@@ -3,6 +3,10 @@
 #include "../../../core/actors/ActorSystem.h"
 #include "../../../core/actors/RendererActor.h"
 #include "../../../audio/contracts/ControlBus.h"
+#include <cstdlib>
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#endif
 #ifndef NATIVE_BUILD
 #include <esp_timer.h>
 #endif
@@ -11,6 +15,31 @@ namespace lightwaveos {
 namespace network {
 namespace webserver {
 namespace handlers {
+
+static lightwaveos::audio::ControlBusFrame* allocControlBusFrameScratch() {
+#ifndef NATIVE_BUILD
+    auto* frame = static_cast<lightwaveos::audio::ControlBusFrame*>(
+        heap_caps_malloc(sizeof(lightwaveos::audio::ControlBusFrame), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (frame == nullptr) {
+        frame = static_cast<lightwaveos::audio::ControlBusFrame*>(
+            heap_caps_malloc(sizeof(lightwaveos::audio::ControlBusFrame), MALLOC_CAP_8BIT));
+    }
+    return frame;
+#else
+    return static_cast<lightwaveos::audio::ControlBusFrame*>(malloc(sizeof(lightwaveos::audio::ControlBusFrame)));
+#endif
+}
+
+static void freeControlBusFrameScratch(lightwaveos::audio::ControlBusFrame* frame) {
+    if (frame == nullptr) {
+        return;
+    }
+#ifndef NATIVE_BUILD
+    heap_caps_free(frame);
+#else
+    free(frame);
+#endif
+}
 
 static bool parseJson(AsyncWebServerRequest* request, uint8_t* data, size_t len, JsonDocument& doc) {
     DeserializationError err = deserializeJson(doc, data, len);
@@ -63,16 +92,22 @@ void StimulusHandlers::handlePatch(AsyncWebServerRequest* request,
     if (!parseJson(request, data, len, doc)) {
         return;
     }
-    lightwaveos::audio::ControlBusFrame frame = actorSystem.getStimulusFrame();
-    frame.tempoBeatTick = false;
-    if (doc.containsKey("rms")) frame.rms = doc["rms"].as<float>();
-    if (doc.containsKey("flux")) frame.flux = doc["flux"].as<float>();
+    lightwaveos::audio::ControlBusFrame* frame = allocControlBusFrameScratch();
+    if (frame == nullptr) {
+        sendErrorResponse(request, HttpStatus::INTERNAL_ERROR, ErrorCodes::INTERNAL_ERROR,
+                          "Stimulus frame scratch allocation failed");
+        return;
+    }
+    (void)actorSystem.copyStimulusFrame(*frame);
+    frame->tempoBeatTick = false;
+    if (doc.containsKey("rms")) frame->rms = doc["rms"].as<float>();
+    if (doc.containsKey("flux")) frame->flux = doc["flux"].as<float>();
     if (doc.containsKey("bands")) {
         JsonArray arr = doc["bands"].as<JsonArray>();
         uint8_t i = 0;
         for (JsonVariant v : arr) {
             if (i >= lightwaveos::audio::CONTROLBUS_NUM_BANDS) break;
-            frame.bands[i] = v.as<float>();
+            frame->bands[i] = v.as<float>();
             ++i;
         }
     }
@@ -81,27 +116,29 @@ void StimulusHandlers::handlePatch(AsyncWebServerRequest* request,
         uint8_t i = 0;
         for (JsonVariant v : arr) {
             if (i >= lightwaveos::audio::CONTROLBUS_NUM_CHROMA) break;
-            frame.chroma[i] = v.as<float>();
+            frame->chroma[i] = v.as<float>();
             ++i;
         }
     }
-    if (doc.containsKey("tempo_bpm")) frame.tempoBpm = doc["tempo_bpm"].as<float>();
-    if (doc.containsKey("beat_tick")) frame.tempoBeatTick = doc["beat_tick"].as<bool>();
-    if (doc.containsKey("beat_strength")) frame.tempoBeatStrength = doc["beat_strength"].as<float>();
-    frame.hop_seq += 1;
+    if (doc.containsKey("tempo_bpm")) frame->tempoBpm = doc["tempo_bpm"].as<float>();
+    if (doc.containsKey("beat_tick")) frame->tempoBeatTick = doc["beat_tick"].as<bool>();
+    if (doc.containsKey("beat_strength")) frame->tempoBeatStrength = doc["beat_strength"].as<float>();
+    frame->hop_seq += 1;
 #ifndef NATIVE_BUILD
     uint64_t now_us = static_cast<uint64_t>(esp_timer_get_time());
 #else
     uint64_t now_us = static_cast<uint64_t>(micros());
 #endif
-    frame.t.monotonic_us = now_us;
-    if (!actorSystem.publishStimulusFrame(frame)) {
+    frame->t.monotonic_us = now_us;
+    if (!actorSystem.publishStimulusFrame(*frame)) {
+        freeControlBusFrameScratch(frame);
         sendErrorResponse(request, HttpStatus::INTERNAL_ERROR, ErrorCodes::OPERATION_FAILED, "Failed to publish stimulus frame");
         return;
     }
-    sendSuccessResponse(request, [&frame](JsonObject& dataObj) {
-        dataObj["hop_seq"] = frame.hop_seq;
+    sendSuccessResponse(request, [frame](JsonObject& dataObj) {
+        dataObj["hop_seq"] = frame->hop_seq;
     });
+    freeControlBusFrameScratch(frame);
 }
 
 void StimulusHandlers::handleClear(AsyncWebServerRequest* request,

@@ -28,7 +28,7 @@
 #include "../../plugins/runtime/LegacyEffectAdapter.h"
 #include "../../config/chip_config.h"
 #include "../../config/audio_config.h"
-#if CHIP_ESP32_S3 && !defined(NATIVE_BUILD)
+#if CHIP_ESP32_S3 && !defined(NATIVE_BUILD) && FEATURE_STATUS_STRIP_TOUCH
 #include "../../hal/esp32s3/StatusStripTouch.h"
 #endif
 #include <math.h>
@@ -564,7 +564,7 @@ void RendererActor::onMessage(const Message& msg)
             {
                 Message response(MessageType::HEALTH_STATUS);
                 response.param1 = 1; // Healthy
-                response.param2 = m_stats.currentFPS;
+                response.param2 = static_cast<uint8_t>((m_stats.currentFPS > 255U) ? 255U : m_stats.currentFPS);
                 response.param3 = m_stats.cpuPercent;
                 response.param4 = m_stats.framesRendered;
                 bus::MessageBus::instance().publish(response);
@@ -804,6 +804,25 @@ void RendererActor::onTick()
         rawFrameTimeUs = (UINT32_MAX - frameStartUs) + frameEndUs;
     }
 
+    uint32_t frameTimeUs = frameEndUs - frameStartUs;
+    if (frameEndUs < frameStartUs) {
+        frameTimeUs = (UINT32_MAX - frameStartUs) + frameEndUs;
+    }
+
+    // Self-clocked pacing to 120 FPS target (8.33ms budget).
+    if (frameTimeUs < LedConfig::FRAME_TIME_US) {
+        const uint32_t waitUs = LedConfig::FRAME_TIME_US - frameTimeUs;
+#ifndef NATIVE_BUILD
+        esp_rom_delay_us(waitUs);
+        frameEndUs = micros();
+        frameTimeUs = (frameEndUs >= frameStartUs)
+                        ? (frameEndUs - frameStartUs)
+                        : ((UINT32_MAX - frameStartUs) + frameEndUs);
+#else
+        (void)waitUs;
+#endif
+    }
+
 #ifndef NATIVE_BUILD
     // Reset watchdog every 10 frames
     // This prevents watchdog timeout since RendererActor monopolizes CPU 1
@@ -813,10 +832,6 @@ void RendererActor::onTick()
         esp_task_wdt_reset();
     }
 #endif
-    uint32_t frameTimeUs = frameEndUs - frameStartUs;
-    if (frameEndUs < frameStartUs) {
-        frameTimeUs = (UINT32_MAX - frameStartUs) + frameEndUs;
-    }
 
     // Update statistics (use raw time for drops, throttled time for FPS)
     TRACE_COUNTER("frame_us", frameTimeUs);
@@ -828,7 +843,7 @@ void RendererActor::onTick()
         Message evt(MessageType::FRAME_RENDERED);
         evt.param1 = static_cast<uint8_t>(m_currentEffect & 0xFF);
         evt.param2 = static_cast<uint8_t>((m_currentEffect >> 8) & 0xFF);
-        evt.param3 = m_stats.currentFPS;
+        evt.param3 = static_cast<uint8_t>((m_stats.currentFPS > 255U) ? 255U : m_stats.currentFPS);
         evt.param4 = m_frameCount;
         bus::MessageBus::instance().publish(evt);
     }
@@ -1886,7 +1901,7 @@ void RendererActor::handleSetPalette(uint8_t paletteIndex)
 
         LW_LOGD("Palette: %d (%s)", m_paletteIndex, getPaletteName(m_paletteIndex));
 
-#if CHIP_ESP32_S3 && !defined(NATIVE_BUILD)
+#if CHIP_ESP32_S3 && !defined(NATIVE_BUILD) && FEATURE_STATUS_STRIP_TOUCH
         statusStripShowPalette(m_paletteIndex);
 #endif
 

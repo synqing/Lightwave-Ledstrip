@@ -195,8 +195,17 @@ WebServer::WebServer(NodeOrchestrator& orchestrator, RendererNode* renderer)
     , m_zoneComposer(nullptr)
     , m_lastStateCacheUpdate(0)
     , m_ledBroadcaster(nullptr)
+    , m_ledFrameScratch(nullptr)
     , m_udpStreamer(nullptr)
     , m_logBroadcaster(nullptr)
+#if FEATURE_AUDIO_SYNC
+    , m_audioBroadcaster(nullptr)
+    , m_audioFrameScratch(nullptr)
+    , m_audioGridScratch(nullptr)
+#endif
+#if FEATURE_AUDIO_BENCHMARK
+    , m_benchmarkBroadcaster(nullptr)
+#endif
     , m_wsGateway(nullptr)
     , m_orchestrator(orchestrator)
     , m_renderer(renderer)
@@ -216,7 +225,19 @@ WebServer::~WebServer() {
 #endif
 #if FEATURE_AUDIO_SYNC
     delete m_audioBroadcaster;
+    if (m_audioGridScratch) {
+        heap_caps_free(m_audioGridScratch);
+        m_audioGridScratch = nullptr;
+    }
+    if (m_audioFrameScratch) {
+        heap_caps_free(m_audioFrameScratch);
+        m_audioFrameScratch = nullptr;
+    }
 #endif
+    if (m_ledFrameScratch) {
+        heap_caps_free(m_ledFrameScratch);
+        m_ledFrameScratch = nullptr;
+    }
     delete m_logBroadcaster;
     delete m_udpStreamer;
     delete m_ledBroadcaster;
@@ -281,6 +302,23 @@ bool WebServer::begin() {
     }
 #endif
 
+    // Allocate persistent LED snapshot scratch (PSRAM-preferred, DRAM fallback).
+    if ((m_ledBroadcaster || m_udpStreamer) && !m_ledFrameScratch) {
+#ifdef BOARD_HAS_PSRAM
+        m_ledFrameScratch = static_cast<CRGB*>(
+            heap_caps_calloc(webserver::LedStreamConfig::TOTAL_LEDS, sizeof(CRGB),
+                             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+#endif
+        if (!m_ledFrameScratch) {
+            m_ledFrameScratch = static_cast<CRGB*>(
+                heap_caps_calloc(webserver::LedStreamConfig::TOTAL_LEDS, sizeof(CRGB), MALLOC_CAP_8BIT));
+        }
+        if (!m_ledFrameScratch) {
+            LW_LOGE("LED stream scratch allocation failed (%u bytes)",
+                    static_cast<unsigned>(webserver::LedStreamConfig::TOTAL_LEDS * sizeof(CRGB)));
+        }
+    }
+
     // TODO: Implement logging callback system for WebSocket log streaming
     // setLogCallback() would register a callback to forward logs to WebSocket subscribers:
     // lightwaveos::logging::setLogCallback([this](const char* formattedLine) {
@@ -293,6 +331,42 @@ bool WebServer::begin() {
 #if FEATURE_AUDIO_SYNC && defined(BOARD_HAS_PSRAM)
     // Create audio stream broadcaster (skip on no-PSRAM to save RAM)
     m_audioBroadcaster = new webserver::AudioStreamBroadcaster(m_ws);
+#endif
+
+#if FEATURE_AUDIO_SYNC
+    // Allocate persistent audio snapshot scratch (PSRAM-preferred) to avoid loopTask stack spikes.
+    if (!m_audioFrameScratch) {
+#ifdef BOARD_HAS_PSRAM
+        m_audioFrameScratch = static_cast<audio::ControlBusFrame*>(
+            heap_caps_calloc(1, sizeof(audio::ControlBusFrame), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+#endif
+        if (!m_audioFrameScratch) {
+            m_audioFrameScratch = static_cast<audio::ControlBusFrame*>(
+                heap_caps_calloc(1, sizeof(audio::ControlBusFrame), MALLOC_CAP_8BIT));
+        }
+    }
+    if (!m_audioGridScratch) {
+#ifdef BOARD_HAS_PSRAM
+        m_audioGridScratch = static_cast<audio::MusicalGridSnapshot*>(
+            heap_caps_calloc(1, sizeof(audio::MusicalGridSnapshot), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+#endif
+        if (!m_audioGridScratch) {
+            m_audioGridScratch = static_cast<audio::MusicalGridSnapshot*>(
+                heap_caps_calloc(1, sizeof(audio::MusicalGridSnapshot), MALLOC_CAP_8BIT));
+        }
+    }
+    if (!m_audioFrameScratch || !m_audioGridScratch) {
+        LW_LOGE("Audio stream scratch allocation failed (frame=%p, grid=%p)",
+                static_cast<void*>(m_audioFrameScratch), static_cast<void*>(m_audioGridScratch));
+        if (m_audioFrameScratch) {
+            heap_caps_free(m_audioFrameScratch);
+            m_audioFrameScratch = nullptr;
+        }
+        if (m_audioGridScratch) {
+            heap_caps_free(m_audioGridScratch);
+            m_audioGridScratch = nullptr;
+        }
+    }
 #endif
 
 #if FEATURE_AUDIO_BENCHMARK
@@ -651,17 +725,15 @@ void WebServer::update() {
     // UDP streaming to subscribed clients (bypasses TCP backpressure)
     if (m_udpStreamer && m_renderer) {
         const bool hasLedSubscribers = m_udpStreamer->hasLedSubscribers();
-        if (hasLedSubscribers) {
-            CRGB udpLeds[webserver::LedStreamConfig::TOTAL_LEDS];
-            m_renderer->getBufferCopy(udpLeds);
-            m_udpStreamer->sendLedFrame(udpLeds);
+        if (hasLedSubscribers && m_ledFrameScratch) {
+            m_renderer->getBufferCopy(m_ledFrameScratch);
+            m_udpStreamer->sendLedFrame(m_ledFrameScratch);
         }
 
 #if FEATURE_AUDIO_SYNC
-        if (m_udpStreamer->hasAudioSubscribers()) {
-            const audio::ControlBusFrame& frame = m_renderer->getCachedAudioFrame();
-            const audio::MusicalGridSnapshot& grid = m_renderer->getLastMusicalGrid();
-            m_udpStreamer->sendAudioFrame(frame, grid);
+        if (m_udpStreamer->hasAudioSubscribers() && m_audioFrameScratch && m_audioGridScratch) {
+            m_renderer->copyCachedAudioSnapshot(*m_audioFrameScratch, *m_audioGridScratch);
+            m_udpStreamer->sendAudioFrame(*m_audioFrameScratch, *m_audioGridScratch);
         }
 #endif
     }
@@ -673,8 +745,11 @@ void WebServer::update() {
 
         // FFT frame streaming to subscribed clients (31 Hz)
         broadcastFftFrame();
+    }
 
-        // Beat event streaming (fires on beat_tick/downbeat_tick)
+    // Beat event streaming (fires on beat_tick/downbeat_tick)
+    // Keep this outside LED-output deferral to avoid dropping sparse beat ticks.
+    if (!m_lowHeapShed) {
         broadcastBeatEvent();
     }
 #endif
@@ -812,8 +887,8 @@ void WebServer::updateCachedRendererState() {
     m_cachedRendererState.audioTuning.barCorrectionGain = srcTuning.barCorrectionGain;
     m_cachedRendererState.audioTuning.beatsPerBar = srcTuning.beatsPerBar;
     m_cachedRendererState.audioTuning.beatUnit = srcTuning.beatUnit;
-    // lastMusicalGrid pointer removed — getLastMusicalGrid() now returns by value
-    // for cross-core safety.  Callers use getLastMusicalGrid() directly.
+    // Callers fetch live audio/tempo snapshots from RendererActor via
+    // copyCachedAudioFrame()/copyLastMusicalGrid() in safe contexts.
 #endif
 }
 
@@ -1382,28 +1457,34 @@ void WebServer::doBroadcastStatus() {
             doc["audioSyncMode"] = m_orchestrator.getRenderer()->getAudioSyncMode();
         }
 #if FEATURE_AUDIO_BACKEND_ESV11
-        audio::ControlBusFrame frame{};
-        audio->getControlBusBuffer().ReadLatest(frame);
+        if (m_audioFrameScratch) {
+            audio->getControlBusBuffer().ReadLatest(*m_audioFrameScratch);
+            const audio::ControlBusFrame& frame = *m_audioFrameScratch;
 
-        doc["bpm"] = frame.es_bpm;
+            doc["bpm"] = frame.es_bpm;
 
-        // Mic level in dB (approx; ES backend publishes mapped RMS 0..1)
-        float micLevelDb = (frame.rms > 0.0001f)
-            ? (20.0f * log10f(frame.rms))
-            : -80.0f;
-        doc["mic"] = micLevelDb;
+            // Mic level in dB (approx; ES backend publishes mapped RMS 0..1)
+            float micLevelDb = (frame.rms > 0.0001f)
+                ? (20.0f * log10f(frame.rms))
+                : -80.0f;
+            doc["mic"] = micLevelDb;
 
-        const audio::ChordState& chord = frame.chordState;
-        if (chord.confidence > 0.1f && chord.type != audio::ChordType::NONE) {
-            doc["key"] = formatKeyName(chord.rootNote, chord.type);
+            const audio::ChordState& chord = frame.chordState;
+            if (chord.confidence > 0.1f && chord.type != audio::ChordType::NONE) {
+                doc["key"] = formatKeyName(chord.rootNote, chord.type);
+            } else {
+                doc["key"] = "";
+            }
         } else {
+            doc["bpm"] = 0.0f;
+            doc["mic"] = -80.0f;
             doc["key"] = "";
         }
 #elif FEATURE_AUDIO_BACKEND_PIPELINECORE
         // PipelineCore: BPM from ControlBusFrame (flows through PipelineAdapter)
-        {
-            audio::ControlBusFrame frame{};
-            audio->getControlBusBuffer().ReadLatest(frame);
+        if (m_audioFrameScratch) {
+            audio->getControlBusBuffer().ReadLatest(*m_audioFrameScratch);
+            const audio::ControlBusFrame& frame = *m_audioFrameScratch;
             doc["bpm"] = frame.tempoBpm;
 
             audio::AudioDspState dsp = audio->getDspState();
@@ -1418,6 +1499,10 @@ void WebServer::doBroadcastStatus() {
             } else {
                 doc["key"] = "";
             }
+        } else {
+            doc["bpm"] = 0.0f;
+            doc["mic"] = -80.0f;
+            doc["key"] = "";
         }
 #else
         // Goertzel: BPM from TempoTrackerOutput
@@ -1432,12 +1517,16 @@ void WebServer::doBroadcastStatus() {
         doc["mic"] = micLevelDb;
 
         // Musical key/chord (formatted string)
-        const audio::ControlBusFrame frame = audio->getControlBusFrameSnapshot();
-        const audio::ChordState& chord = frame.chordState;
-        if (chord.confidence > 0.1f && chord.type != audio::ChordType::NONE) {
-            doc["key"] = formatKeyName(chord.rootNote, chord.type);
+        if (m_audioFrameScratch) {
+            audio->getControlBusBuffer().ReadLatest(*m_audioFrameScratch);
+            const audio::ChordState& chord = m_audioFrameScratch->chordState;
+            if (chord.confidence > 0.1f && chord.type != audio::ChordType::NONE) {
+                doc["key"] = formatKeyName(chord.rootNote, chord.type);
+            } else {
+                doc["key"] = "";  // Empty string when no valid key detected
+            }
         } else {
-            doc["key"] = "";  // Empty string when no valid key detected
+            doc["key"] = "";
         }
 #endif
     }
@@ -1656,7 +1745,7 @@ void WebServer::notifyParameterChange() {
 // ============================================================================
 
 void WebServer::broadcastLEDFrame() {
-    if (!m_ledBroadcaster || !m_renderer) return;
+    if (!m_ledBroadcaster || !m_renderer || !m_ledFrameScratch) return;
 
     // Streaming over WebSocket can consume significant internal heap when clients are slow.
     // When shedding, prioritise control plane (commands) and UDP streaming.
@@ -1669,12 +1758,11 @@ void WebServer::broadcastLEDFrame() {
         return;
     }
     
-    // Get LED buffer from renderer (cross-core safe copy)
-    CRGB leds[webserver::LedStreamConfig::TOTAL_LEDS];
-    m_renderer->getBufferCopy(leds);
+    // Get LED buffer from renderer (cross-core safe copy into persistent scratch)
+    m_renderer->getBufferCopy(m_ledFrameScratch);
     
     // Broadcast to subscribed clients (throttling handled internally)
-    m_ledBroadcaster->broadcast(leds);
+    m_ledBroadcaster->broadcast(m_ledFrameScratch);
 }
 
 bool WebServer::setLEDStreamSubscription(AsyncWebSocketClient* client, bool subscribe) {
@@ -1727,17 +1815,16 @@ bool WebServer::hasLogStreamSubscribers() const {
 // ============================================================================
 
 void WebServer::broadcastAudioFrame() {
-    if (!m_audioBroadcaster || !m_renderer) return;
+    if (!m_audioBroadcaster || !m_renderer || !m_audioFrameScratch || !m_audioGridScratch) return;
     if (m_lowHeapShed) {
         return;
     }
 
-    // Get audio frame from renderer (cross-core safe - returns by-value copy)
-    const audio::ControlBusFrame& frame = m_renderer->getCachedAudioFrame();
-    const audio::MusicalGridSnapshot& grid = m_renderer->getLastMusicalGrid();
+    // Get audio frame from renderer (cross-core safe copy into persistent buffers).
+    m_renderer->copyCachedAudioSnapshot(*m_audioFrameScratch, *m_audioGridScratch);
 
     // Broadcast to subscribed clients (throttling handled internally)
-    m_audioBroadcaster->broadcast(frame, grid);
+    m_audioBroadcaster->broadcast(*m_audioFrameScratch, *m_audioGridScratch);
 }
 
 void WebServer::broadcastBeatEvent() {
@@ -1758,21 +1845,22 @@ void WebServer::broadcastBeatEvent() {
 
     if (!m_renderer) return;
 
-    const auto& grid = m_renderer->getLastMusicalGrid();
+    if (!m_audioGridScratch) return;
+    m_renderer->copyLastMusicalGrid(*m_audioGridScratch);
 
     // Only broadcast on actual beat/downbeat (single-frame pulses)
-    if (!grid.beat_tick && !grid.downbeat_tick) return;
+    if (!m_audioGridScratch->beat_tick && !m_audioGridScratch->downbeat_tick) return;
 
     JsonDocument doc;
     doc["type"] = "beat.event";
-    doc["tick"] = grid.beat_tick;
-    doc["downbeat"] = grid.downbeat_tick;
-    doc["beat_index"] = (uint32_t)(grid.beat_index & 0xFFFFFFFF);
-    doc["bar_index"] = (uint32_t)(grid.bar_index & 0xFFFFFFFF);
-    doc["beat_in_bar"] = grid.beat_in_bar;
-    doc["beat_phase"] = grid.beat_phase01;
-    doc["bpm"] = grid.bpm_smoothed;
-    doc["confidence"] = grid.tempo_confidence;
+    doc["tick"] = m_audioGridScratch->beat_tick;
+    doc["downbeat"] = m_audioGridScratch->downbeat_tick;
+    doc["beat_index"] = (uint32_t)(m_audioGridScratch->beat_index & 0xFFFFFFFF);
+    doc["bar_index"] = (uint32_t)(m_audioGridScratch->bar_index & 0xFFFFFFFF);
+    doc["beat_in_bar"] = m_audioGridScratch->beat_in_bar;
+    doc["beat_phase"] = m_audioGridScratch->beat_phase01;
+    doc["bpm"] = m_audioGridScratch->bpm_smoothed;
+    doc["confidence"] = m_audioGridScratch->tempo_confidence;
 
     String json;
     serializeJson(doc, json);
@@ -1785,7 +1873,7 @@ void WebServer::broadcastBeatEvent() {
 
 void WebServer::broadcastFftFrame() {
     // SAFETY: Validate pointers and check if we have subscribers
-    if (!m_ws || !m_renderer) return;
+    if (!m_ws || !m_renderer || !m_audioFrameScratch) return;
 
     // Use WsAudioCommands helper to check if FFT subscribers exist
     // This avoids re-checking in broadcastFftFrame implementation
@@ -1793,15 +1881,15 @@ void WebServer::broadcastFftFrame() {
         return;
     }
 
-    // Get cached audio frame from renderer (cross-core safe)
-    const audio::ControlBusFrame& frame = m_renderer->getCachedAudioFrame();
+    // Get cached audio frame from renderer (cross-core safe copy into persistent buffer).
+    m_renderer->copyCachedAudioFrame(*m_audioFrameScratch);
 
     // Delegate to WsAudioCommands implementation which handles:
     // - Subscriber table management
     // - Throttling to 31 Hz
     // - JSON serialization with 64 FFT bins
     // - Cleanup of disconnected clients
-    webserver::ws::broadcastFftFrame(frame, m_ws);
+    webserver::ws::broadcastFftFrame(*m_audioFrameScratch, m_ws);
 }
 
 bool WebServer::setAudioStreamSubscription(AsyncWebSocketClient* client, bool subscribe) {

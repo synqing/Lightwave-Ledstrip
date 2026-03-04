@@ -18,6 +18,11 @@
 #include "../UdpStreamer.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
+#include <cstdlib>
+
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#endif
 
 #define LW_LOG_TAG "WsAudioCommands"
 #include "../../../utils/Log.h"
@@ -32,6 +37,31 @@ namespace ws {
 using namespace lightwaveos::audio;
 using namespace AudioStreamConfig;
 
+static ControlBusFrame* allocControlBusFrameScratch() {
+#ifndef NATIVE_BUILD
+    auto* frame = static_cast<ControlBusFrame*>(
+        heap_caps_malloc(sizeof(ControlBusFrame), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (frame == nullptr) {
+        frame = static_cast<ControlBusFrame*>(
+            heap_caps_malloc(sizeof(ControlBusFrame), MALLOC_CAP_8BIT));
+    }
+    return frame;
+#else
+    return static_cast<ControlBusFrame*>(malloc(sizeof(ControlBusFrame)));
+#endif
+}
+
+static void freeControlBusFrameScratch(ControlBusFrame* frame) {
+    if (frame == nullptr) {
+        return;
+    }
+#ifndef NATIVE_BUILD
+    heap_caps_free(frame);
+#else
+    free(frame);
+#endif
+}
+
 static void handleAudioParametersGet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     const char* requestId = doc["requestId"] | "";
     auto* audio = ctx.actorSystem.getAudio();
@@ -41,12 +71,16 @@ static void handleAudioParametersGet(AsyncWebSocketClient* client, JsonDocument&
     }
     
 #if FEATURE_AUDIO_BACKEND_ESV11
-    ControlBusFrame frame{};
-    uint32_t seq = audio->getControlBusBuffer().ReadLatest(frame);
+    ControlBusFrame* frame = allocControlBusFrameScratch();
+    if (frame == nullptr) {
+        client->text(buildWsError(ErrorCodes::INTERNAL_ERROR, "Audio frame scratch allocation failed", requestId));
+        return;
+    }
+    uint32_t seq = audio->getControlBusBuffer().ReadLatest(*frame);
     AudioContractTuning contract = ctx.renderer ? ctx.renderer->getAudioContractTuning()
                                                  : clampAudioContractTuning(AudioContractTuning{});
 
-    String response = buildWsResponse("audio.parameters", requestId, [&frame, seq, &contract](JsonObject& data) {
+    String response = buildWsResponse("audio.parameters", requestId, [frame, seq, &contract](JsonObject& data) {
         data["backend"] = "esv11";
         data["seq"] = seq;
 
@@ -62,18 +96,18 @@ static void handleAudioParametersGet(AsyncWebSocketClient* client, JsonDocument&
         contractObj["beatUnit"] = contract.beatUnit;
 
         JsonObject latest = data["latest"].to<JsonObject>();
-        latest["rms"] = frame.rms;
-        latest["flux"] = frame.flux;
-        latest["bpm"] = frame.es_bpm;
-        latest["tempoConfidence"] = frame.es_tempo_confidence;
-        latest["phase01AtAudioT"] = frame.es_phase01_at_audio_t;
-        latest["beatTick"] = frame.es_beat_tick;
-        latest["downbeatTick"] = frame.es_downbeat_tick;
-        latest["beatInBar"] = frame.es_beat_in_bar;
-        latest["beatStrength"] = frame.es_beat_strength;
+        latest["rms"] = frame->rms;
+        latest["flux"] = frame->flux;
+        latest["bpm"] = frame->es_bpm;
+        latest["tempoConfidence"] = frame->es_tempo_confidence;
+        latest["phase01AtAudioT"] = frame->es_phase01_at_audio_t;
+        latest["beatTick"] = frame->es_beat_tick;
+        latest["downbeatTick"] = frame->es_downbeat_tick;
+        latest["beatInBar"] = frame->es_beat_in_bar;
+        latest["beatStrength"] = frame->es_beat_strength;
 
         JsonObject caps = data["capabilities"].to<JsonObject>();
-        caps["sampleRate"] = frame.t.sample_rate_hz;
+        caps["sampleRate"] = frame->t.sample_rate_hz;
         caps["hopSize"] = 64 * 4;
         caps["bandCount"] = CONTROLBUS_NUM_BANDS;
         caps["chromaCount"] = CONTROLBUS_NUM_CHROMA;
@@ -81,6 +115,7 @@ static void handleAudioParametersGet(AsyncWebSocketClient* client, JsonDocument&
         caps["bins64"] = ControlBusFrame::BINS_64_COUNT;
     });
     client->text(response);
+    freeControlBusFrameScratch(frame);
 #else
     AudioPipelineTuning pipeline = audio->getPipelineTuning();
     AudioDspState state = audio->getDspState();

@@ -2,6 +2,7 @@
 
 #include "hal/interface/ILedDriver.h"
 #include "config/chip_config.h"
+#include <atomic>
 
 #ifndef NATIVE_BUILD
 #include <freertos/FreeRTOS.h>
@@ -39,6 +40,7 @@ public:
     bool isInitialized() const override { return m_initialized; }
     const LedDriverStats& getStats() const override { return m_stats; }
     void resetStats() override;
+    bool isShowInProgress() const override { return m_showInProgress.load(std::memory_order_relaxed); }
 
 private:
     static constexpr uint16_t kMaxLedsPerStrip = 160;
@@ -60,8 +62,9 @@ private:
     SemaphoreHandle_t m_showMutex = nullptr;
 #endif
 
-    static constexpr uint32_t kMinShowGapUs = 1000;  ///< 1ms minimum gap between show() calls
+    static constexpr uint32_t kMinShowGapUs = 250;  ///< Small settle gap between show() calls
     uint32_t m_lastShowEndUs = 0;
+    std::atomic<bool> m_showInProgress{false};
 
     LedDriverStats m_stats{};
 

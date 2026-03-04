@@ -64,6 +64,7 @@
 class AsyncWebServer;
 class AsyncWebSocket;
 class AsyncWebSocketClient;
+struct CRGB;
 
 namespace lightwaveos {
     namespace actors {
@@ -321,7 +322,7 @@ public:
             uint8_t beatsPerBar;
             uint8_t beatUnit;
         } audioTuning;
-        // lastMusicalGrid removed — use getLastMusicalGrid() by value instead
+        // lastMusicalGrid removed — handlers fetch fresh snapshots from RendererActor
 #endif
     };
     
@@ -583,6 +584,8 @@ private:
 
     // LED frame streaming (extracted to LedStreamBroadcaster)
     webserver::LedStreamBroadcaster* m_ledBroadcaster;
+    // Reused LED scratch frame to avoid large loopTask stack frames. Allocated at begin().
+    CRGB* m_ledFrameScratch;
 
     // UDP streaming (bypasses TCP backpressure for LED/audio frames)
     webserver::UdpStreamer* m_udpStreamer;
@@ -593,6 +596,11 @@ private:
 #if FEATURE_AUDIO_SYNC
     // Audio frame streaming
     webserver::AudioStreamBroadcaster* m_audioBroadcaster;
+
+    // Reused buffers for audio snapshot pulls from RendererActor.
+    // Allocated in begin() (PSRAM-preferred) to keep loopTask stack lean.
+    audio::ControlBusFrame* m_audioFrameScratch;
+    audio::MusicalGridSnapshot* m_audioGridScratch;
 #endif
 
 #if FEATURE_AUDIO_BENCHMARK

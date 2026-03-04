@@ -10,6 +10,11 @@
 #include "../../../core/actors/RendererActor.h"
 #include "../../../config/features.h"
 #include <cstring>
+#include <cstdlib>
+
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#endif
 
 #if FEATURE_AUDIO_SYNC
 #include "../../../audio/AudioTuning.h"
@@ -37,6 +42,31 @@ namespace handlers {
 
 #if FEATURE_AUDIO_SYNC
 
+static audio::ControlBusFrame* allocControlBusFrameScratch() {
+#ifndef NATIVE_BUILD
+    auto* frame = static_cast<audio::ControlBusFrame*>(
+        heap_caps_malloc(sizeof(audio::ControlBusFrame), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (frame == nullptr) {
+        frame = static_cast<audio::ControlBusFrame*>(
+            heap_caps_malloc(sizeof(audio::ControlBusFrame), MALLOC_CAP_8BIT));
+    }
+    return frame;
+#else
+    return static_cast<audio::ControlBusFrame*>(malloc(sizeof(audio::ControlBusFrame)));
+#endif
+}
+
+static void freeControlBusFrameScratch(audio::ControlBusFrame* frame) {
+    if (frame == nullptr) {
+        return;
+    }
+#ifndef NATIVE_BUILD
+    heap_caps_free(frame);
+#else
+    free(frame);
+#endif
+}
+
 void AudioHandlers::handleParametersGet(AsyncWebServerRequest* request,
                                          ActorSystem& actorSystem,
                                          RendererActor* renderer) {
@@ -48,12 +78,17 @@ void AudioHandlers::handleParametersGet(AsyncWebServerRequest* request,
     }
 
 #if FEATURE_AUDIO_BACKEND_ESV11
-    audio::ControlBusFrame frame{};
-    uint32_t seq = audio->getControlBusBuffer().ReadLatest(frame);
+    audio::ControlBusFrame* frame = allocControlBusFrameScratch();
+    if (frame == nullptr) {
+        sendErrorResponse(request, HttpStatus::INTERNAL_ERROR,
+                          ErrorCodes::INTERNAL_ERROR, "Audio frame scratch allocation failed");
+        return;
+    }
+    uint32_t seq = audio->getControlBusBuffer().ReadLatest(*frame);
     audio::AudioContractTuning contract = renderer ? renderer->getAudioContractTuning()
                                                     : audio::clampAudioContractTuning(audio::AudioContractTuning{});
 
-    sendSuccessResponse(request, [&](JsonObject& data) {
+    sendSuccessResponse(request, [frame, seq, &contract](JsonObject& data) {
         data["backend"] = "esv11";
         data["seq"] = seq;
 
@@ -69,24 +104,25 @@ void AudioHandlers::handleParametersGet(AsyncWebServerRequest* request,
         contractObj["beatUnit"] = contract.beatUnit;
 
         JsonObject latest = data["latest"].to<JsonObject>();
-        latest["rms"] = frame.rms;
-        latest["flux"] = frame.flux;
-        latest["bpm"] = frame.es_bpm;
-        latest["tempoConfidence"] = frame.es_tempo_confidence;
-        latest["phase01AtAudioT"] = frame.es_phase01_at_audio_t;
-        latest["beatTick"] = frame.es_beat_tick;
-        latest["downbeatTick"] = frame.es_downbeat_tick;
-        latest["beatInBar"] = frame.es_beat_in_bar;
-        latest["beatStrength"] = frame.es_beat_strength;
+        latest["rms"] = frame->rms;
+        latest["flux"] = frame->flux;
+        latest["bpm"] = frame->es_bpm;
+        latest["tempoConfidence"] = frame->es_tempo_confidence;
+        latest["phase01AtAudioT"] = frame->es_phase01_at_audio_t;
+        latest["beatTick"] = frame->es_beat_tick;
+        latest["downbeatTick"] = frame->es_downbeat_tick;
+        latest["beatInBar"] = frame->es_beat_in_bar;
+        latest["beatStrength"] = frame->es_beat_strength;
 
         JsonObject caps = data["capabilities"].to<JsonObject>();
-        caps["sampleRate"] = frame.t.sample_rate_hz;
+        caps["sampleRate"] = frame->t.sample_rate_hz;
         caps["hopSize"] = 64 * 4; // ES publish cadence: 4 chunks per hop
         caps["bins64"] = audio::ControlBusFrame::BINS_64_COUNT;
         caps["bandCount"] = audio::CONTROLBUS_NUM_BANDS;
         caps["chromaCount"] = audio::CONTROLBUS_NUM_CHROMA;
         caps["waveformPoints"] = audio::CONTROLBUS_WAVEFORM_N;
     });
+    freeControlBusFrameScratch(frame);
 #else
     audio::AudioPipelineTuning pipeline = audio->getPipelineTuning();
     audio::AudioDspState state = audio->getDspState();
@@ -457,7 +493,8 @@ void AudioHandlers::handleStateGet(AsyncWebServerRequest* request,
 
 #if FEATURE_AUDIO_SYNC
         if (renderer && renderer->isAudioEnabled()) {
-            const audio::ControlBusFrame& frame = renderer->getCachedAudioFrame();
+            audio::ControlBusFrame frame;
+            renderer->copyCachedAudioFrame(frame);
             JsonObject cb = d["controlBus"].to<JsonObject>();
             cb["silentScale"] = frame.silentScale;
             cb["isSilent"] = frame.isSilent;
@@ -479,7 +516,8 @@ void AudioHandlers::handleTempoGet(AsyncWebServerRequest* request,
         return;
     }
 
-    const audio::MusicalGridSnapshot& grid = renderer->getLastMusicalGrid();
+    audio::MusicalGridSnapshot grid;
+    renderer->copyLastMusicalGrid(grid);
 
     sendSuccessResponse(request, [&grid](JsonObject& d) {
         d["bpm"] = grid.bpm_smoothed;
@@ -1622,35 +1660,41 @@ void AudioHandlers::handleFftGet(AsyncWebServerRequest* request,
         return;
     }
 
-    audio::ControlBusFrame frame{};
-    uint32_t seq = audio->getControlBusBuffer().ReadLatest(frame);
+    audio::ControlBusFrame* frame = allocControlBusFrameScratch();
+    if (frame == nullptr) {
+        sendErrorResponse(request, HttpStatus::INTERNAL_ERROR,
+                          ErrorCodes::INTERNAL_ERROR, "Audio frame scratch allocation failed");
+        return;
+    }
+    uint32_t seq = audio->getControlBusBuffer().ReadLatest(*frame);
 
-    sendSuccessResponse(request, [&frame, seq](JsonObject& data) {
+    sendSuccessResponse(request, [frame, seq](JsonObject& data) {
         data["backend"] = FEATURE_AUDIO_BACKEND_ESV11 ? "esv11" : "lwls";
         data["seq"] = seq;
-        data["rms"] = frame.rms;
-        data["flux"] = frame.flux;
+        data["rms"] = frame->rms;
+        data["flux"] = frame->flux;
 
         JsonArray bands = data["bands"].to<JsonArray>();
         for (int i = 0; i < audio::CONTROLBUS_NUM_BANDS; ++i) {
-            bands.add(frame.bands[i]);
+            bands.add(frame->bands[i]);
         }
 
         JsonArray chroma = data["chroma"].to<JsonArray>();
         for (int i = 0; i < audio::CONTROLBUS_NUM_CHROMA; ++i) {
-            chroma.add(frame.chroma[i]);
+            chroma.add(frame->chroma[i]);
         }
 
         JsonArray bins64 = data["bins64"].to<JsonArray>();
         for (int i = 0; i < audio::ControlBusFrame::BINS_64_COUNT; ++i) {
-            bins64.add(frame.bins64[i]);
+            bins64.add(frame->bins64[i]);
         }
 
         JsonArray bins64Adaptive = data["bins64Adaptive"].to<JsonArray>();
         for (int i = 0; i < audio::ControlBusFrame::BINS_64_COUNT; ++i) {
-            bins64Adaptive.add(frame.bins64Adaptive[i]);
+            bins64Adaptive.add(frame->bins64Adaptive[i]);
         }
     });
+    freeControlBusFrameScratch(frame);
 }
 
 #else // !FEATURE_AUDIO_SYNC

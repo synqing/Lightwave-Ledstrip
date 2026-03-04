@@ -154,6 +154,14 @@ public:
      * @brief Reset statistics counters
      */
     virtual void resetStats() = 0;
+
+    /**
+     * @brief Check whether a timing-critical LED transmit is in progress
+     *
+     * Default is false for implementations that do not expose this state.
+     * S3 FastLED/RMT path overrides this so callers can defer non-critical work.
+     */
+    virtual bool isShowInProgress() const { return false; }
 };
 
 } // namespace hal

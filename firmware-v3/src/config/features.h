@@ -171,6 +171,11 @@
 #define FEATURE_ROTATE8_ENCODER 0
 #endif
 
+// ESP32-S3 status strip + touch helper strip (GPIO 38)
+#ifndef FEATURE_STATUS_STRIP_TOUCH
+#define FEATURE_STATUS_STRIP_TOUCH 1
+#endif
+
 // ============================================================================
 // Enhancement Engines (optional color and motion enhancements)
 // ============================================================================

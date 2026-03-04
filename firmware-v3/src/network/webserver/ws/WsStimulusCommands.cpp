@@ -7,8 +7,10 @@
 #include "../../../audio/contracts/ControlBus.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
+#include <cstdlib>
 
 #ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
 #include <esp_timer.h>
 #endif
 
@@ -20,6 +22,31 @@ namespace ws {
 using lightwaveos::actors::ActorSystem;
 using lightwaveos::actors::RendererActor;
 using lightwaveos::audio::ControlBusFrame;
+
+static ControlBusFrame* allocControlBusFrameScratch() {
+#ifndef NATIVE_BUILD
+    auto* frame = static_cast<ControlBusFrame*>(
+        heap_caps_malloc(sizeof(ControlBusFrame), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (frame == nullptr) {
+        frame = static_cast<ControlBusFrame*>(
+            heap_caps_malloc(sizeof(ControlBusFrame), MALLOC_CAP_8BIT));
+    }
+    return frame;
+#else
+    return static_cast<ControlBusFrame*>(malloc(sizeof(ControlBusFrame)));
+#endif
+}
+
+static void freeControlBusFrameScratch(ControlBusFrame* frame) {
+    if (frame == nullptr) {
+        return;
+    }
+#ifndef NATIVE_BUILD
+    heap_caps_free(frame);
+#else
+    free(frame);
+#endif
+}
 
 static void handleStimulusMode(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     const char* op = doc["op"] | "";
@@ -73,19 +100,31 @@ static void handleStimulusPatch(AsyncWebSocketClient* client, JsonDocument& doc,
         return;
     }
 
-    ControlBusFrame frame = ctx.actorSystem.getStimulusFrame();
-    frame.tempoBeatTick = false;
+    ControlBusFrame* frame = allocControlBusFrameScratch();
+    if (frame == nullptr) {
+        String response = buildWsResponse("stimulus.patch.ack", nullptr, [id](JsonObject& data) {
+            data["op"] = "stimulus.patch.ack";
+            data["id"] = id;
+            data["success"] = false;
+            data["error"] = "Stimulus frame scratch allocation failed";
+        });
+        client->text(response);
+        return;
+    }
+
+    (void)ctx.actorSystem.copyStimulusFrame(*frame);
+    frame->tempoBeatTick = false;
 
     JsonObject p = patch.as<JsonObject>();
-    if (p.containsKey("rms")) frame.rms = p["rms"].as<float>();
-    if (p.containsKey("flux")) frame.flux = p["flux"].as<float>();
+    if (p.containsKey("rms")) frame->rms = p["rms"].as<float>();
+    if (p.containsKey("flux")) frame->flux = p["flux"].as<float>();
 
     if (p.containsKey("bands")) {
         JsonArray arr = p["bands"].as<JsonArray>();
         uint8_t i = 0;
         for (JsonVariant v : arr) {
             if (i >= lightwaveos::audio::CONTROLBUS_NUM_BANDS) break;
-            frame.bands[i] = v.as<float>();
+            frame->bands[i] = v.as<float>();
             ++i;
         }
     }
@@ -95,34 +134,35 @@ static void handleStimulusPatch(AsyncWebSocketClient* client, JsonDocument& doc,
         uint8_t i = 0;
         for (JsonVariant v : arr) {
             if (i >= lightwaveos::audio::CONTROLBUS_NUM_CHROMA) break;
-            frame.chroma[i] = v.as<float>();
+            frame->chroma[i] = v.as<float>();
             ++i;
         }
     }
 
-    if (p.containsKey("tempo_bpm")) frame.tempoBpm = p["tempo_bpm"].as<float>();
-    if (p.containsKey("beat_tick")) frame.tempoBeatTick = p["beat_tick"].as<bool>();
-    if (p.containsKey("beat_strength")) frame.tempoBeatStrength = p["beat_strength"].as<float>();
+    if (p.containsKey("tempo_bpm")) frame->tempoBpm = p["tempo_bpm"].as<float>();
+    if (p.containsKey("beat_tick")) frame->tempoBeatTick = p["beat_tick"].as<bool>();
+    if (p.containsKey("beat_strength")) frame->tempoBeatStrength = p["beat_strength"].as<float>();
 
-    frame.hop_seq += 1;
+    frame->hop_seq += 1;
 #ifndef NATIVE_BUILD
     uint64_t now_us = static_cast<uint64_t>(esp_timer_get_time());
 #else
     uint64_t now_us = static_cast<uint64_t>(micros());
 #endif
-    frame.t.monotonic_us = now_us;
+    frame->t.monotonic_us = now_us;
 
-    bool ok = ctx.actorSystem.publishStimulusFrame(frame);
+    bool ok = ctx.actorSystem.publishStimulusFrame(*frame);
     uint32_t seq = ctx.actorSystem.getStimulusControlBusBuffer().Sequence();
 
-    String response = buildWsResponse("stimulus.patch.ack", nullptr, [ok, id, &frame, seq](JsonObject& data) {
+    String response = buildWsResponse("stimulus.patch.ack", nullptr, [ok, id, frame, seq](JsonObject& data) {
         data["op"] = "stimulus.patch.ack";
         data["id"] = id;
         data["success"] = ok;
-        data["hop_seq"] = frame.hop_seq;
+        data["hop_seq"] = frame->hop_seq;
         data["sequence"] = seq;
     });
     client->text(response);
+    freeControlBusFrameScratch(frame);
 }
 
 static void handleStimulusClear(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
@@ -169,4 +209,3 @@ void registerWsStimulusCommands(const WebServerContext& ctx) {
 } 
 } 
 } 
-

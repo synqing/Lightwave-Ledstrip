@@ -12,8 +12,12 @@
 #include "../../../effects/zones/ZoneComposer.h"
 #include "../UdpStreamer.h"
 #include <ArduinoJson.h>
+#ifndef NATIVE_BUILD
+#include <esp_heap_caps.h>
+#endif
 #include <esp_system.h>
 #include <cmath>  // for log10f
+#include <cstdlib>
 
 #if FEATURE_AUDIO_SYNC
 #include "../../../audio/AudioDebugConfig.h"
@@ -24,6 +28,33 @@ namespace lightwaveos {
 namespace network {
 namespace webserver {
 namespace handlers {
+
+#if FEATURE_AUDIO_SYNC && FEATURE_AUDIO_BACKEND_ESV11
+static audio::ControlBusFrame* allocControlBusFrameScratch() {
+#ifndef NATIVE_BUILD
+    auto* frame = static_cast<audio::ControlBusFrame*>(
+        heap_caps_malloc(sizeof(audio::ControlBusFrame), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (frame == nullptr) {
+        frame = static_cast<audio::ControlBusFrame*>(
+            heap_caps_malloc(sizeof(audio::ControlBusFrame), MALLOC_CAP_8BIT));
+    }
+    return frame;
+#else
+    return static_cast<audio::ControlBusFrame*>(malloc(sizeof(audio::ControlBusFrame)));
+#endif
+}
+
+static void freeControlBusFrameScratch(audio::ControlBusFrame* frame) {
+    if (frame == nullptr) {
+        return;
+    }
+#ifndef NATIVE_BUILD
+    heap_caps_free(frame);
+#else
+    free(frame);
+#endif
+}
+#endif
 
 // ============================================================================
 // Unified Debug Config Handlers (always available)
@@ -200,28 +231,40 @@ void DebugHandlers::handleDebugStatus(AsyncWebServerRequest* request,
     // Get audio actor reference once, use in both lambda and serial output
     auto* audioActor = actorSystem.getAudio();
     audio::AudioActorStats actorStats;
-    audio::ControlBusFrame lastFrame;
+    audio::ControlBusFrame* lastFrame = nullptr;
     uint32_t lastSeq = 0;
     bool hasAudio = false;
+#if FEATURE_AUDIO_BACKEND_ESV11
+    bool frameAllocFailed = false;
+#endif
 #if !FEATURE_AUDIO_BACKEND_ESV11
     audio::AudioDspState dspState;
 #endif
 
     if (audioActor) {
 #if FEATURE_AUDIO_BACKEND_ESV11
-        lastSeq = audioActor->getControlBusBuffer().ReadLatest(lastFrame);
+        lastFrame = allocControlBusFrameScratch();
+        if (lastFrame != nullptr) {
+            lastSeq = audioActor->getControlBusBuffer().ReadLatest(*lastFrame);
+            hasAudio = true;
+        } else {
+            frameAllocFailed = true;
+        }
 #else
         dspState = audioActor->getDspState();
+        hasAudio = true;
 #endif
         actorStats = audioActor->getStats();
-        hasAudio = true;
     }
 #endif
 
     // Collect system status data
     sendSuccessResponse(request, [
 #if FEATURE_AUDIO_SYNC
-        &actorStats, &lastFrame, lastSeq, hasAudio
+        &actorStats, lastFrame, lastSeq, hasAudio
+#if FEATURE_AUDIO_BACKEND_ESV11
+        , frameAllocFailed
+#endif
 #if !FEATURE_AUDIO_BACKEND_ESV11
         , &dspState
 #endif
@@ -240,18 +283,18 @@ void DebugHandlers::handleDebugStatus(AsyncWebServerRequest* request,
         if (hasAudio) {
 #if FEATURE_AUDIO_BACKEND_ESV11
             audio["seq"] = lastSeq;
-            audio["rms"] = lastFrame.rms;
-            audio["flux"] = lastFrame.flux;
-            audio["bpm"] = lastFrame.es_bpm;
-            audio["tempoConfidence"] = lastFrame.es_tempo_confidence;
-            audio["phase01AtAudioT"] = lastFrame.es_phase01_at_audio_t;
-            audio["beatTick"] = lastFrame.es_beat_tick;
-            audio["downbeatTick"] = lastFrame.es_downbeat_tick;
-            audio["beatInBar"] = lastFrame.es_beat_in_bar;
-            audio["beatStrength"] = lastFrame.es_beat_strength;
+            audio["rms"] = lastFrame->rms;
+            audio["flux"] = lastFrame->flux;
+            audio["bpm"] = lastFrame->es_bpm;
+            audio["tempoConfidence"] = lastFrame->es_tempo_confidence;
+            audio["phase01AtAudioT"] = lastFrame->es_phase01_at_audio_t;
+            audio["beatTick"] = lastFrame->es_beat_tick;
+            audio["downbeatTick"] = lastFrame->es_downbeat_tick;
+            audio["beatInBar"] = lastFrame->es_beat_in_bar;
+            audio["beatStrength"] = lastFrame->es_beat_strength;
 
-            float micLevelDb = (lastFrame.rms > 0.0001f)
-                ? 20.0f * log10f(lastFrame.rms)
+            float micLevelDb = (lastFrame->rms > 0.0001f)
+                ? 20.0f * log10f(lastFrame->rms)
                 : -60.0f;  // Floor at -60 dB
             audio["micLevelDb"] = micLevelDb;
 
@@ -280,6 +323,11 @@ void DebugHandlers::handleDebugStatus(AsyncWebServerRequest* request,
             audio["micLevelDb"] = micLevelDb;
 #endif
         } else {
+#if FEATURE_AUDIO_BACKEND_ESV11
+            if (frameAllocFailed) {
+                audio["error"] = "Audio frame scratch allocation failed";
+            } else
+#endif
             audio["error"] = "AudioActor not initialized";
         }
 #endif
@@ -302,10 +350,10 @@ void DebugHandlers::handleDebugStatus(AsyncWebServerRequest* request,
     if (hasAudio) {
 #if FEATURE_AUDIO_BACKEND_ESV11
         Serial.printf("Audio(ES): RMS=%.3f FLUX=%.3f BPM=%.1f conf=%.2f beat=%u/%u\n",
-                      lastFrame.rms, lastFrame.flux,
-                      lastFrame.es_bpm, lastFrame.es_tempo_confidence,
-                      (unsigned)lastFrame.es_beat_in_bar,
-                      (unsigned)lastFrame.es_beat_tick);
+                      lastFrame->rms, lastFrame->flux,
+                      lastFrame->es_bpm, lastFrame->es_tempo_confidence,
+                      (unsigned)lastFrame->es_beat_in_bar,
+                      (unsigned)lastFrame->es_beat_tick);
 #else
         Serial.printf("Audio: RMS=%.3f, AGC=%.2f, DC=%.1f, clips=%u\n",
                       dspState.rmsMapped, dspState.agcGain,
@@ -315,6 +363,9 @@ void DebugHandlers::handleDebugStatus(AsyncWebServerRequest* request,
                       (unsigned long)actorStats.captureFailCount);
 #endif
     }
+#if FEATURE_AUDIO_BACKEND_ESV11
+    freeControlBusFrameScratch(lastFrame);
+#endif
 #endif
     Serial.println(F("===============================\n"));
 }

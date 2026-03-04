@@ -15,6 +15,7 @@
 
 #ifndef NATIVE_BUILD
 #include <LittleFS.h>
+#include <esp_heap_caps.h>
 #endif
 
 #define LW_LOG_TAG "PluginMgr"
@@ -200,8 +201,23 @@ bool PluginManagerActor::reloadFromLittleFS() {
         return false;
     }
 
-    // Store previous state for rollback
-    ParsedManifest prevManifests[PluginConfig::MAX_MANIFESTS];
+    // Store previous state for rollback without using task stack.
+    ParsedManifest* prevManifests = static_cast<ParsedManifest*>(
+        heap_caps_malloc(sizeof(m_manifests), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (prevManifests == nullptr) {
+        prevManifests = static_cast<ParsedManifest*>(
+            heap_caps_malloc(sizeof(m_manifests), MALLOC_CAP_8BIT));
+    }
+    if (prevManifests == nullptr) {
+        LW_LOGE("Reload failed: could not allocate rollback buffer (%u bytes)",
+                static_cast<unsigned>(sizeof(m_manifests)));
+        snprintf(m_stats.lastErrorSummary, sizeof(m_stats.lastErrorSummary),
+                 "Rollback buffer allocation failed");
+        m_stats.lastReloadOk = false;
+        m_stats.lastReloadMillis = millis();
+        return false;
+    }
+
     uint8_t prevManifestCount = m_manifestCount;
     bool prevOverrideMode = m_overrideMode;
     memcpy(prevManifests, m_manifests, sizeof(m_manifests));
@@ -228,6 +244,7 @@ bool PluginManagerActor::reloadFromLittleFS() {
     if (errorCount > 0) {
         LW_LOGW("Reload failed: %u manifest errors, keeping previous state", errorCount);
         memcpy(m_manifests, prevManifests, sizeof(m_manifests));
+        heap_caps_free(prevManifests);
         m_manifestCount = prevManifestCount;
         m_overrideMode = prevOverrideMode;
         m_stats.lastReloadOk = false;
@@ -258,6 +275,7 @@ bool PluginManagerActor::reloadFromLittleFS() {
         LW_LOGE("Reload application failed unexpectedly");
     }
 
+    heap_caps_free(prevManifests);
     m_stats.lastReloadMillis = millis();
     return m_stats.lastReloadOk;
 #else

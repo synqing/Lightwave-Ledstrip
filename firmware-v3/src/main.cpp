@@ -15,6 +15,7 @@
 #include <Arduino.h>
 #ifndef NATIVE_BUILD
 #include <esp_task_wdt.h>
+#include <esp_heap_caps.h>
 #endif
 
 #define LW_LOG_TAG "Main"
@@ -122,12 +123,59 @@ static uint8_t currentShowIndex = 0;
 // Dynamic show store for Serial (PRISM Studio) show uploads
 static prism::DynamicShowStore serialShowStore;
 
+namespace {
+
+constexpr uint16_t LOOP_SCRATCH_EFFECT_ID_CAP = 170;
+constexpr uint16_t LOOP_SCRATCH_LED_COUNT = 320;
+
+EffectId s_loopEffectIdFallback[LOOP_SCRATCH_EFFECT_ID_CAP] = {};
+CRGB s_captureDumpFrameFallback[LOOP_SCRATCH_LED_COUNT] = {};
+CRGB s_validationFrameFallback[LOOP_SCRATCH_LED_COUNT] = {};
+
+EffectId* s_loopEffectIdScratch = s_loopEffectIdFallback;
+CRGB* s_captureDumpFrameScratch = s_captureDumpFrameFallback;
+CRGB* s_validationFrameScratch = s_validationFrameFallback;
+bool s_loopScratchInitialised = false;
+
+void initLoopScratchBuffers() {
+    if (s_loopScratchInitialised) return;
+    s_loopScratchInitialised = true;
+
+#if !defined(NATIVE_BUILD) && defined(BOARD_HAS_PSRAM)
+    if (auto* ids = static_cast<EffectId*>(
+            heap_caps_calloc(LOOP_SCRATCH_EFFECT_ID_CAP, sizeof(EffectId),
+                             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT))) {
+        s_loopEffectIdScratch = ids;
+    }
+    if (auto* capture = static_cast<CRGB*>(
+            heap_caps_calloc(LOOP_SCRATCH_LED_COUNT, sizeof(CRGB),
+                             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT))) {
+        s_captureDumpFrameScratch = capture;
+    }
+    if (auto* validation = static_cast<CRGB*>(
+            heap_caps_calloc(LOOP_SCRATCH_LED_COUNT, sizeof(CRGB),
+                             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT))) {
+        s_validationFrameScratch = validation;
+    }
+#endif
+
+    LW_LOGI("Loop scratch buffers: effectIds=%s capture=%s validation=%s",
+            (s_loopEffectIdScratch != s_loopEffectIdFallback) ? "PSRAM" : "DRAM",
+            (s_captureDumpFrameScratch != s_captureDumpFrameFallback) ? "PSRAM" : "DRAM",
+            (s_validationFrameScratch != s_validationFrameFallback) ? "PSRAM" : "DRAM");
+}
+
+}  // namespace
+
 // ==================== Setup ====================
 
 void setup() {
     // Initialize serial
     Serial.begin(115200);
     delay(1000);
+
+    // Allocate loop command scratch once so loopTask avoids large transient stack arrays.
+    initLoopScratchBuffers();
 
     // Telemetry boot heartbeat (for trace capture verification)
     Serial.println("{\"event\":\"telemetry.boot\",\"ts_mono_ms\":0,\"version\":\"2.0\"}");
@@ -239,11 +287,12 @@ void setup() {
         }
     }
 
-    // Status strip + touch: register with FastLED *before* render task starts,
-    // so show() never runs with a partially updated controller list (avoids RMT ADDRESS ERR).
-#ifndef NATIVE_BUILD
+    // Status strip + touch: register with FastLED *before* actors start,
+    // so no show() occurs with a partially built controller list.
+#if CHIP_ESP32_S3 && !defined(NATIVE_BUILD) && FEATURE_STATUS_STRIP_TOUCH
     statusStripTouchSetup();
 #endif
+
     // Start all actors (RendererActor runs on Core 1 at 120 FPS)
     LW_LOGI("Starting Actor System...");
     if (!actors.start()) {
@@ -1308,13 +1357,14 @@ void loop() {
     // One-time initialization of effect registers
     if (!registersInitialized && renderer) {
         uint16_t effectCount = renderer->getEffectCount();
+        const uint16_t cappedCount =
+            (effectCount <= LOOP_SCRATCH_EFFECT_ID_CAP) ? effectCount : LOOP_SCRATCH_EFFECT_ID_CAP;
         // Build array of all registered EffectIds for ambient filtering
-        EffectId allIds[170];
-        for (uint16_t i = 0; i < effectCount && i < 170; i++) {
-            allIds[i] = renderer->getEffectIdAt(i);
+        for (uint16_t i = 0; i < cappedCount; i++) {
+            s_loopEffectIdScratch[i] = renderer->getEffectIdAt(i);
         }
         ambientEffectCount = PatternRegistry::buildAmbientEffectArray(
-            ambientEffectIds, 170, allIds, effectCount);
+            ambientEffectIds, LOOP_SCRATCH_EFFECT_ID_CAP, s_loopEffectIdScratch, cappedCount);
         registersInitialized = true;
         LW_LOGI("Effect registers: %d reactive, %d ambient, %d total",
                 PatternRegistry::getReactiveEffectCount(), ambientEffectCount, effectCount);
@@ -1322,7 +1372,7 @@ void loop() {
 
     uint32_t now = millis();
 
-#ifndef NATIVE_BUILD
+#if !defined(NATIVE_BUILD) && FEATURE_STATUS_STRIP_TOUCH
     statusStripTouchLoop(now);
 #endif
 
@@ -1505,7 +1555,7 @@ void loop() {
                     else if (subcmd.indexOf('c') >= 0) { tap = RendererActor::CaptureTap::TAP_C_PRE_WS2812; valid = true; }
 
                     if (valid) {
-                        CRGB frame[320];
+                        CRGB* frame = s_captureDumpFrameScratch;
                         // If we have no captured frame yet (common right after enabling capture or switching effects),
                         // force a one-shot capture at the requested tap and retry.
                         if (!renderer->getCapturedFrame(tap, frame)) {
@@ -2020,7 +2070,7 @@ void loop() {
 
                     // Capture LED buffer without heap allocations
                     constexpr uint16_t TOTAL_LEDS = 320;  // 2 strips × 160 LEDs
-                    CRGB ledBuffer[TOTAL_LEDS];
+                    CRGB* ledBuffer = s_validationFrameScratch;
 
                     // Capture for 2 seconds total:
                     // - first 1 second: brightness + hue sampling
@@ -2517,7 +2567,7 @@ void loop() {
                     break;
 
                 case '`':
-#ifndef NATIVE_BUILD
+#if !defined(NATIVE_BUILD) && FEATURE_STATUS_STRIP_TOUCH
                     statusStripNextIdleMode();
 #endif
                     break;

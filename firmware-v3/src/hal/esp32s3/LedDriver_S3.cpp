@@ -4,6 +4,7 @@
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
+#include <esp_rom_sys.h>
 #include <esp_timer.h>
 #endif
 
@@ -132,25 +133,41 @@ void LedDriver_S3::show() {
         return;
     }
 
-    // Layer 1: Minimum interval guard — ensure RMT hardware has fully settled
-    // between transmissions. Prevents spinlock assertion on back-to-back show().
+    // Layer 1: Minimum interval guard — wait (do not drop) to keep RMT stable.
     uint32_t now = static_cast<uint32_t>(esp_timer_get_time());
     if (m_lastShowEndUs != 0 && (now - m_lastShowEndUs) < kMinShowGapUs) {
-        m_stats.showSkips++;
-        if (m_showMutex) xSemaphoreGive(m_showMutex);
-        return;
+        esp_rom_delay_us(kMinShowGapUs - (now - m_lastShowEndUs));
+        now = static_cast<uint32_t>(esp_timer_get_time());
     }
 
     // Assert: FastLED.show() must only ever run on Core 1 (renderer).
     // Cross-core calls cause RMT spinlock corruption (see fix/stable-effect-ids).
     configASSERT(xPortGetCoreID() == 1);
 
+    m_showInProgress.store(true, std::memory_order_relaxed);
+
     TRACE_SCOPE("fastled_rmt_show");
     FastLED.show();
 
     uint32_t end = static_cast<uint32_t>(esp_timer_get_time());
-    updateShowStats(end - now);
+
+    // FastLED on some S3 paths can return before wire transmission fully drains.
+    // Hold the buffer for at least one WS2812 frame time to avoid visible tearing.
+    constexpr uint32_t kWs2812UsPerLed = 30;  // 24 bits * 1.25us
+    constexpr uint32_t kLatchUs = 80;         // >50us reset/latch margin
+    const uint16_t longestStrip =
+        (m_stripCounts[0] > m_stripCounts[1]) ? m_stripCounts[0] : m_stripCounts[1];
+    const uint32_t minWireTimeUs = static_cast<uint32_t>(longestStrip) * kWs2812UsPerLed + kLatchUs;
+    uint32_t showUs = end - now;
+    if (showUs < minWireTimeUs) {
+        esp_rom_delay_us(minWireTimeUs - showUs);
+        end = static_cast<uint32_t>(esp_timer_get_time());
+        showUs = end - now;
+    }
+
+    updateShowStats(showUs);
     m_lastShowEndUs = end;
+    m_showInProgress.store(false, std::memory_order_relaxed);
 
     if (m_showMutex) xSemaphoreGive(m_showMutex);
 #else

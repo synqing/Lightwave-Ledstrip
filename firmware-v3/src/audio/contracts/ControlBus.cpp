@@ -6,6 +6,10 @@
 
 namespace lightwaveos::audio {
 
+namespace {
+const ControlBusFrame kDefaultControlBusFrame{};
+}
+
 static inline float clamp01(float x) {
     if (x < 0.0f) return 0.0f;
     if (x > 1.0f) return 1.0f;
@@ -19,7 +23,7 @@ static inline float lerp(float a, float b, float t) {
 ControlBus::ControlBus() { Reset(); }
 
 void ControlBus::Reset() {
-    m_frame = ControlBusFrame{};
+    m_frame = kDefaultControlBusFrame;
     m_rms_s = 0.0f;
     m_flux_s = 0.0f;
     m_liveliness_s = 0.0f;

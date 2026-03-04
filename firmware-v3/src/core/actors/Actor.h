@@ -458,7 +458,7 @@ namespace ActorConfigs {
  *
  * Runs on Core 1 at highest priority for deterministic 120 FPS rendering.
  * Large queue (32) to buffer commands during frame rendering.
- * Tick interval of 8ms (~120 FPS) for continuous rendering.
+ * Self-clocked tick mode (interval 0): renderer paces itself at 120 FPS.
  * 
  * Stack size: 6144 words (24KB) for zone mode safety margin.
  * Actual usage: ~8-10KB (effect rendering, FastLED, context setup).
@@ -471,7 +471,7 @@ inline ActorConfig Renderer() {
         5,              // priority (highest)
         1,              // coreId (Core 1 - application)
         32,             // queueSize
-        (pdMS_TO_TICKS(8) > 0 ? pdMS_TO_TICKS(8) : 1) // tickInterval (~120 FPS, clamp to 1 tick)
+        0               // tickInterval (self-clocked in RendererActor::onTick)
     );
 }
 

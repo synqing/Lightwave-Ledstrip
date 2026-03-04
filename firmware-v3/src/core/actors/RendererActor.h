@@ -114,7 +114,7 @@ struct RenderStats {
     uint32_t avgFrameTimeUs;      // Rolling average frame time
     uint32_t maxFrameTimeUs;      // Maximum frame time seen
     uint32_t minFrameTimeUs;      // Minimum frame time seen
-    uint8_t currentFPS;           // Measured FPS
+    uint16_t currentFPS;          // Measured FPS
     uint8_t cpuPercent;           // CPU usage estimate
 
     RenderStats()
@@ -203,6 +203,8 @@ public:
     uint8_t getMood() const { return m_mood; }
     uint8_t getFadeAmount() const { return m_fadeAmount; }
     const RenderStats& getStats() const { return m_stats; }
+    bool isLedOutputBusy() const { return m_ledDriver.isShowInProgress(); }
+    const hal::LedDriverStats& getLedDriverStats() const { return m_ledDriver.getStats(); }
 
     /**
      * @brief Get a copy of the current LED buffer
@@ -382,18 +384,29 @@ public:
     /**
      * @brief Get the cached ControlBusFrame for audio streaming
      *
-     * Returns by value to prevent cross-core torn reads.
-     * WebServer (Core 0) calls this while RendererActor (Core 1) writes m_lastControlBus.
+     * Copy latest cached frame.
      */
-    audio::ControlBusFrame getCachedAudioFrame() const { return m_lastControlBus; }
+    void copyCachedAudioFrame(audio::ControlBusFrame& out) const {
+        out = m_lastControlBus;
+    }
 
     /**
      * @brief Get the cached MusicalGridSnapshot for beat event streaming
      *
-     * Returns by value to prevent cross-core torn reads.
-     * WebServer (Core 0) calls this while RendererActor (Core 1) writes m_lastMusicalGrid.
+     * Copy latest cached snapshot.
      */
-    audio::MusicalGridSnapshot getLastMusicalGrid() const { return m_lastMusicalGrid; }
+    void copyLastMusicalGrid(audio::MusicalGridSnapshot& out) const {
+        out = m_lastMusicalGrid;
+    }
+
+    /**
+     * @brief Copy both cached audio snapshots atomically for network consumers.
+     */
+    void copyCachedAudioSnapshot(audio::ControlBusFrame& outFrame,
+                                 audio::MusicalGridSnapshot& outGrid) const {
+        outFrame = m_lastControlBus;
+        outGrid = m_lastMusicalGrid;
+    }
 
     /**
      * @brief Get current audio sync mode for status/telemetry.

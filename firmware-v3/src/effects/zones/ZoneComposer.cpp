@@ -31,6 +31,7 @@ namespace zones {
 
 namespace {
 constexpr float kMinSpeedTimeFactor = 0.04f;  // ~3-5 FPS feel at speed 1
+const lightwaveos::plugins::AudioContext kDefaultAudioContext{};
 
 float computeSpeedTimeFactor(uint8_t speed) {
     if (lightwaveos::actors::LedConfig::MAX_SPEED <= 1) {
@@ -262,7 +263,7 @@ void ZoneComposer::render(CRGB* leds, uint16_t numLeds, CRGBPalette16* palette,
         m_zoneContext.audio = *audioCtx;
     } else {
         // Reset audio context if not available
-        m_zoneContext.audio = plugins::AudioContext();
+        m_zoneContext.audio = kDefaultAudioContext;
     }
 
     // Always clear output buffer to prevent stale pixels from previous frames

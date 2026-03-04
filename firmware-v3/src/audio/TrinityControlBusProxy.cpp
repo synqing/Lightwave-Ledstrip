@@ -10,6 +10,10 @@
 namespace lightwaveos {
 namespace audio {
 
+namespace {
+const ControlBusFrame kDefaultControlBusFrame{};
+}
+
 TrinityControlBusProxy::TrinityControlBusProxy()
     : m_lastUpdate(0)
 {
@@ -114,8 +118,8 @@ void TrinityControlBusProxy::markActive()
 
 void TrinityControlBusProxy::reset()
 {
-    // Zero out the frame
-    m_frame = {};
+    // Reset to contract defaults
+    m_frame = kDefaultControlBusFrame;
     m_lastUpdate = 0;
     
     // Set default AudioTime

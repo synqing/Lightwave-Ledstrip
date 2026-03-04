@@ -1649,24 +1649,13 @@ void RendererActor::showLeds()
             if (dt < 0.0001f) dt = 0.0001f;
             if (dt > 0.05f) dt = 0.05f;
 
-            // Bezier-like ramp: debounce "audio present" into a smooth 0..1 gate.
-            // CRITICAL: Use post-gate RMS, NOT es_vu_level_raw.
-            // es_vu_level_raw is AGC-amplified (up to 40x) and stays elevated
-            // in silence because AGC pumps gain on noise floor. Post-gate RMS
-            // has noise floor subtracted and goes near-zero in true silence.
-            bool activityNow = false;
-            if (m_effectContext.audio.available) {
-                if (m_lastControlBus.isSilent) {
-                    activityNow = false;  // ControlBus says silent → force close
-                } else {
-                    const float rms = m_lastControlBus.rms;
-                    const float flux = m_lastControlBus.flux;
-                    activityNow = (rms >= 0.03f) || ((flux >= 0.10f) && (rms >= 0.01f));
-                }
-            }
+            // Debounce into a smooth 0..1 gate.
+            // Use ControlBus silence state as the single source of truth so
+            // quiet-but-valid passages do not collapse on per-frame RMS dips.
+            const bool activityNow = !m_lastControlBus.isSilent;
 
-            constexpr float kOpenTimeS = 0.22f;   // Require sustained activity to open (spike rejection)
-            constexpr float kCloseTimeS = 0.95f;  // Smooth fade-out in silence
+            constexpr float kOpenTimeS = 0.20f;   // Fast re-open when audio returns
+            constexpr float kCloseTimeS = 2.40f;  // Gentle fade once silence is confirmed
             if (activityNow) {
                 m_highIdReactiveActivityGate += dt / kOpenTimeS;
             } else {
@@ -1828,12 +1817,8 @@ void RendererActor::handleSetEffect(EffectId effectId)
         {
             const bool hardGateNew = needsSilenceGate(effectId) && ::PatternRegistry::isAudioReactive(effectId);
             if (hardGateNew) {
-                bool activityNow = false;
-                if (m_sharedAudioCtx.available && !m_lastControlBus.isSilent) {
-                    const float rms = m_lastControlBus.rms;
-                    const float flux = m_lastControlBus.flux;
-                    activityNow = (rms >= 0.03f) || ((flux >= 0.10f) && (rms >= 0.01f));
-                }
+                // Mirror runtime behaviour: gate follows ControlBus silence state.
+                const bool activityNow = !m_lastControlBus.isSilent;
                 m_highIdReactiveActivityGate = activityNow ? 1.0f : 0.0f;
                 const float g = m_highIdReactiveActivityGate;
                 m_highIdReactiveSilenceGate = g * g * (3.0f - 2.0f * g);

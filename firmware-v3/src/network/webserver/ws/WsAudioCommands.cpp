@@ -474,17 +474,17 @@ static void handleAudioZoneAgcGet(AsyncWebSocketClient* client, JsonDocument& do
     client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone AGC not available in ESV11 backend builds", requestId));
     return;
 #else
-    const ControlBus& controlBus = audio->getControlBusRef();
+    const AudioActor::ZoneAgcSnapshot snapshot = audio->getZoneAgcSnapshot();
     String response = buildWsResponse("audio.zone-agc.state", requestId,
-        [&controlBus](JsonObject& data) {
-            data["enabled"] = controlBus.getZoneAGCEnabled();
-            data["lookaheadEnabled"] = controlBus.getLookaheadEnabled();
+        [snapshot](JsonObject& data) {
+            data["enabled"] = snapshot.enabled;
+            data["lookaheadEnabled"] = snapshot.lookaheadEnabled;
             JsonArray zones = data["zones"].to<JsonArray>();
             for (uint8_t z = 0; z < CONTROLBUS_NUM_ZONES; ++z) {
                 JsonObject zone = zones.add<JsonObject>();
                 zone["index"] = z;
-                zone["follower"] = controlBus.getZoneFollower(z);
-                zone["maxMag"] = controlBus.getZoneMaxMag(z);
+                zone["follower"] = snapshot.followers[z];
+                zone["maxMag"] = snapshot.maxMags[z];
             }
         });
     client->text(response);
@@ -503,24 +503,23 @@ static void handleAudioZoneAgcSet(AsyncWebSocketClient* client, JsonDocument& do
     client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone AGC not available in ESV11 backend builds", requestId));
     return;
 #else
-    ControlBus& controlBus = audio->getControlBusMut();
     bool updated = false;
     if (doc.containsKey("enabled")) {
-        controlBus.setZoneAGCEnabled(doc["enabled"].as<bool>());
+        audio->setZoneAgcEnabled(doc["enabled"].as<bool>());
         updated = true;
     }
     if (doc.containsKey("lookaheadEnabled")) {
-        controlBus.setLookaheadEnabled(doc["lookaheadEnabled"].as<bool>());
+        audio->setLookaheadEnabled(doc["lookaheadEnabled"].as<bool>());
         updated = true;
     }
     if (doc.containsKey("attackRate") || doc.containsKey("releaseRate")) {
         float attack = doc["attackRate"] | 0.05f;
         float release = doc["releaseRate"] | 0.05f;
-        controlBus.setZoneAGCRates(attack, release);
+        audio->setZoneAgcRates(attack, release);
         updated = true;
     }
     if (doc.containsKey("minFloor")) {
-        controlBus.setZoneMinFloor(doc["minFloor"].as<float>());
+        audio->setZoneMinFloor(doc["minFloor"].as<float>());
         updated = true;
     }
     String response = buildWsResponse("audio.zone-agc.updated", requestId,
@@ -541,11 +540,11 @@ static void handleAudioSpikeDetectionGet(AsyncWebSocketClient* client, JsonDocum
     client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Spike detection not available in ESV11 backend builds", requestId));
     return;
 #else
-    const ControlBus& controlBus = audio->getControlBusRef();
-    const SpikeDetectionStats& stats = controlBus.getSpikeStats();
+    const AudioActor::ZoneAgcSnapshot snapshot = audio->getZoneAgcSnapshot();
+    const SpikeDetectionStats stats = audio->getSpikeDetectionStats();
     String response = buildWsResponse("audio.spike-detection.state", requestId,
-        [&controlBus, &stats](JsonObject& data) {
-            data["enabled"] = controlBus.getLookaheadEnabled();
+        [snapshot, stats](JsonObject& data) {
+            data["enabled"] = snapshot.lookaheadEnabled;
             JsonObject statsObj = data["stats"].to<JsonObject>();
             statsObj["totalFrames"] = stats.totalFrames;
             statsObj["spikesDetectedBands"] = stats.spikesDetectedBands;
@@ -571,7 +570,7 @@ static void handleAudioSpikeDetectionReset(AsyncWebSocketClient* client, JsonDoc
     client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Spike detection not available in ESV11 backend builds", requestId));
     return;
 #else
-    audio->getControlBusMut().resetSpikeStats();
+    audio->resetSpikeDetectionStats();
     String response = buildWsResponse("audio.spike-detection.reset", requestId,
         [](JsonObject& data) { data["reset"] = true; });
     client->text(response);

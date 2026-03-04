@@ -1040,18 +1040,17 @@ void AudioHandlers::handleZoneAGCGet(AsyncWebServerRequest* request,
                       "Zone AGC is not available in ESV11 backend builds");
     return;
 #else
-    const audio::ControlBus& controlBus = audio->getControlBusRef();
-
-    sendSuccessResponse(request, [&controlBus](JsonObject& data) {
-        data["enabled"] = controlBus.getZoneAGCEnabled();
-        data["lookaheadEnabled"] = controlBus.getLookaheadEnabled();
+    const auto snapshot = audio->getZoneAgcSnapshot();
+    sendSuccessResponse(request, [snapshot](JsonObject& data) {
+        data["enabled"] = snapshot.enabled;
+        data["lookaheadEnabled"] = snapshot.lookaheadEnabled;
 
         JsonArray zones = data["zones"].to<JsonArray>();
         for (uint8_t z = 0; z < audio::CONTROLBUS_NUM_ZONES; ++z) {
             JsonObject zone = zones.add<JsonObject>();
             zone["index"] = z;
-            zone["follower"] = controlBus.getZoneFollower(z);
-            zone["maxMag"] = controlBus.getZoneMaxMag(z);
+            zone["follower"] = snapshot.followers[z];
+            zone["maxMag"] = snapshot.maxMags[z];
         }
     });
 #endif
@@ -1083,28 +1082,27 @@ void AudioHandlers::handleZoneAGCSet(AsyncWebServerRequest* request,
         return;
     }
 
-    audio::ControlBus& controlBus = audio->getControlBusMut();
     bool updated = false;
 
     if (doc.containsKey("enabled")) {
-        controlBus.setZoneAGCEnabled(doc["enabled"].as<bool>());
+        audio->setZoneAgcEnabled(doc["enabled"].as<bool>());
         updated = true;
     }
 
     if (doc.containsKey("lookaheadEnabled")) {
-        controlBus.setLookaheadEnabled(doc["lookaheadEnabled"].as<bool>());
+        audio->setLookaheadEnabled(doc["lookaheadEnabled"].as<bool>());
         updated = true;
     }
 
     if (doc.containsKey("attackRate") || doc.containsKey("releaseRate")) {
         float attack = doc["attackRate"] | 0.05f;
         float release = doc["releaseRate"] | 0.05f;
-        controlBus.setZoneAGCRates(attack, release);
+        audio->setZoneAgcRates(attack, release);
         updated = true;
     }
 
     if (doc.containsKey("minFloor")) {
-        controlBus.setZoneMinFloor(doc["minFloor"].as<float>());
+        audio->setZoneMinFloor(doc["minFloor"].as<float>());
         updated = true;
     }
 
@@ -1130,11 +1128,11 @@ void AudioHandlers::handleSpikeDetectionGet(AsyncWebServerRequest* request,
                       "Spike detection is not available in ESV11 backend builds");
     return;
 #else
-    const audio::ControlBus& controlBus = audio->getControlBusRef();
-    const audio::SpikeDetectionStats& stats = controlBus.getSpikeStats();
+    const auto snapshot = audio->getZoneAgcSnapshot();
+    const audio::SpikeDetectionStats stats = audio->getSpikeDetectionStats();
 
-    sendSuccessResponse(request, [&controlBus, &stats](JsonObject& data) {
-        data["enabled"] = controlBus.getLookaheadEnabled();
+    sendSuccessResponse(request, [snapshot, stats](JsonObject& data) {
+        data["enabled"] = snapshot.lookaheadEnabled;
 
         JsonObject statsObj = data["stats"].to<JsonObject>();
         statsObj["totalFrames"] = stats.totalFrames;
@@ -1164,7 +1162,7 @@ void AudioHandlers::handleSpikeDetectionReset(AsyncWebServerRequest* request,
                       "Spike detection is not available in ESV11 backend builds");
     return;
 #else
-    audio->getControlBusMut().resetSpikeStats();
+    audio->resetSpikeDetectionStats();
     sendSuccessResponse(request);
 #endif
 }
@@ -1607,8 +1605,7 @@ void AudioHandlers::handleAGCToggle(AsyncWebServerRequest* request,
     bool enabled = doc["enabled"].as<bool>();
 
     // AGC is controlled via the control bus, not pipeline tuning
-    audio::ControlBus& controlBus = audio->getControlBusMut();
-    controlBus.setZoneAGCEnabled(enabled);
+    audio->setZoneAgcEnabled(enabled);
 
     sendSuccessResponse(request, [enabled](JsonObject& resp) {
         resp["agcEnabled"] = enabled;

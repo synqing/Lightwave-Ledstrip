@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "qmd": {
+      "command": "qmd",
+      "args": ["mcp"]
+    },
+    "clangd": {
+      "command": "node",
+      "args": ["/Users/spectrasynq/Workspace_Management/Software/clangd-mcp-server/dist/index.js"],
+      "env": {
+        "PROJECT_ROOT": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/firmware-v3",
+        "COMPILE_COMMANDS_DIR": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/firmware-v3",
+        "CLANGD_PATH": "/opt/homebrew/opt/llvm/bin/clangd",
+        "LOG_LEVEL": "WARN"
+      }
+    }
+  }
+}

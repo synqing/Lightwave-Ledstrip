@@ -1,0 +1,4 @@
+# Share PlatformIO build cache between worktrees (saves ~15MB copy per tree)
+.pio/build/
+# Share node_modules for landing page
+node_modules/

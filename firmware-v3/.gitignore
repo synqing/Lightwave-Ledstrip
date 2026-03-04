@@ -16,6 +16,9 @@
 # SENSITIVE DATA - NEVER COMMIT
 # =============================================================================
 
+# Machine-specific PlatformIO overrides (upload_port, etc.)
+platformio_override.ini
+
 # WiFi credentials (user-specific)
 wifi_credentials.ini
 src/config/network_config.h

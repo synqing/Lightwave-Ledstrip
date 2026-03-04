@@ -19,6 +19,7 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../../config/effect_ids.h"
+#include "../enhancement/SmoothingEngine.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -44,6 +45,15 @@ private:
 
     // Fallback animation state
     float m_fallbackPhase = 0.0f;  // Fake beat phase when audio unavailable
+
+    // Smoothed audio (fast attack, slow release — eliminates flicker)
+    enhancement::AsymmetricFollower m_rmsFollower{0.0f, 0.05f, 0.30f};     // 50ms attack, 300ms release
+    enhancement::AsymmetricFollower m_bandFollowers[8] = {
+        {0.0f, 0.03f, 0.20f}, {0.0f, 0.03f, 0.20f},
+        {0.0f, 0.03f, 0.20f}, {0.0f, 0.03f, 0.20f},
+        {0.0f, 0.03f, 0.20f}, {0.0f, 0.03f, 0.20f},
+        {0.0f, 0.03f, 0.20f}, {0.0f, 0.03f, 0.20f}
+    };  // 30ms attack, 200ms release per band
 };
 
 } // namespace ieffect

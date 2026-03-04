@@ -22,7 +22,7 @@ void PulseEffect::render(plugins::EffectContext& ctx) {
     float phase = (ctx.frameNumber * ctx.speed / 60.0f);
     float pulsePos = fmodf(phase, (float)HALF_LENGTH);
 
-    memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
 
     for (int dist = 0; dist < HALF_LENGTH; dist++) {
         float delta = fabsf((float)dist - pulsePos);

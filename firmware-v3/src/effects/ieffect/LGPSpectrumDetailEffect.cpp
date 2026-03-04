@@ -57,7 +57,7 @@ void LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {
     // #endregion
     
     // Clear buffer
-    memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
 
 #if !FEATURE_AUDIO_SYNC
     (void)ctx;
@@ -77,17 +77,17 @@ void LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {
         return;
     }
 
-    // TODO: Migrate to bins256 + FrequencyMap for accurate frequency-to-LED mapping.
-    // The bins64 shim path works but uses Goertzel log-spaced indexing which is not
-    // frequency-accurate under the PipelineCore FFT backend. The correct long-term fix
-    // is to use ControlBusFrame::bins256[] with linear Hz-to-LED mapping, or fall back
-    // to bands[8] mapped to 8 LED zones (each band -> 10 LEDs from centre).
-    //
-    // Prefer adaptive normalisation (Sensory Bridge max follower); fall back to raw bins if unavailable.
+    // Primary source: full-resolution 256-bin FFT from PipelineCore.
+    // Fallback source: 64-bin adaptive Goertzel spectrum.
     const float* bins64 = ctx.audio.bins64Adaptive();
-    if (!bins64) {
-        bins64 = ctx.audio.bins64();
-    }
+    if (!bins64) bins64 = ctx.audio.bins64();
+    const float* bins256 = nullptr;
+    float binHz = 0.0f;
+#if FEATURE_AUDIO_BACKEND_PIPELINECORE
+    bins256 = ctx.audio.bins256();
+    binHz = ctx.audio.binHz();
+#endif
+    const bool useBins256 = (bins256 != nullptr) && (binHz > 0.0f);
     constexpr uint8_t NUM_BINS = 64;
     
     float rawDt = ctx.getSafeRawDeltaSeconds();
@@ -95,20 +95,53 @@ void LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {
     float moodNorm = ctx.getMoodNormalized();
     
     // Hop-based updates: update targets only on new hops
-    bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+    bool newHop = (ctx.audio.hopSequence() != m_lastHopSeq);
     if (newHop) {
-        m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+        m_lastHopSeq = ctx.audio.hopSequence();
         float maxBin = 0.0f;
-        for (uint8_t bin = 0; bin < NUM_BINS; ++bin) {
-            m_ps->targetBins[bin] = bins64[bin];
-            if (bins64[bin] > maxBin) maxBin = bins64[bin];
+        if (useBins256) {
+            constexpr float kMinHz = 62.5f;
+            constexpr float kMaxHz = 12000.0f;
+            const float logMin = log10f(kMinHz);
+            const float logMax = log10f(kMaxHz);
+            constexpr uint16_t kFftBins = 256;
+
+            for (uint8_t bin = 0; bin < NUM_BINS; ++bin) {
+                const float t0 = static_cast<float>(bin) / static_cast<float>(NUM_BINS);
+                const float t1 = static_cast<float>(bin + 1) / static_cast<float>(NUM_BINS);
+
+                const float hzLo = powf(10.0f, logMin + (logMax - logMin) * t0);
+                const float hzHi = powf(10.0f, logMin + (logMax - logMin) * t1);
+
+                uint16_t lo = static_cast<uint16_t>(hzLo / binHz);
+                uint16_t hi = static_cast<uint16_t>(hzHi / binHz);
+                if (lo >= kFftBins) lo = kFftBins - 1;
+                if (hi <= lo) hi = static_cast<uint16_t>(lo + 1);
+                if (hi > kFftBins) hi = kFftBins;
+
+                float acc = 0.0f;
+                uint16_t count = 0;
+                for (uint16_t i = lo; i < hi; ++i) {
+                    acc += bins256[i];
+                    ++count;
+                }
+                const float v = (count > 0) ? (acc / static_cast<float>(count)) : 0.0f;
+                m_ps->targetBins[bin] = v;
+                if (v > maxBin) maxBin = v;
+            }
+        } else {
+            for (uint8_t bin = 0; bin < NUM_BINS; ++bin) {
+                const float v = bins64 ? bins64[bin] : 0.0f;
+                m_ps->targetBins[bin] = v;
+                if (v > maxBin) maxBin = v;
+            }
         }
         // #region agent log
         #ifndef NATIVE_BUILD
         if (debugNowMs - lastHopLogMs >= 10000) {  // Every 10 seconds
             lastHopLogMs = debugNowMs;
-            Serial.printf("{\"id\":\"spectrum_new_hop\",\"location\":\"LGPSpectrumDetailEffect.cpp:58\",\"message\":\"New hop detected\",\"data\":{\"hopSeq\":%u,\"maxBin\":%.4f,\"bins64[0]\":%.4f,\"bins64[31]\":%.4f,\"bins64[63]\":%.4f},\"timestamp\":%lu}\n",
-                m_lastHopSeq, maxBin, bins64[0], bins64[31], bins64[63], debugNowMs);
+            Serial.printf("{\"id\":\"spectrum_new_hop\",\"location\":\"LGPSpectrumDetailEffect.cpp\",\"message\":\"New hop detected\",\"data\":{\"hopSeq\":%u,\"maxBin\":%.4f,\"source\":\"%s\",\"binHz\":%.2f},\"timestamp\":%lu}\n",
+                m_lastHopSeq, maxBin, useBins256 ? "bins256" : "bins64", binHz, debugNowMs);
         }
         #endif
         // #endregion
@@ -124,7 +157,7 @@ void LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {
     }
     
     // =========================================================================
-    // Render: Logarithmic mapping of 64 bins to LED positions
+    // Render: Logarithmic mapping of 64 visual bins to LED positions
     // Low frequencies (bins 0-15) near center, high frequencies (bins 48-63) at edges
     // =========================================================================
     
@@ -133,12 +166,18 @@ void LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {
     // Map each bin to LED positions using logarithmic spacing
     uint16_t ledsWritten = 0;
     uint8_t maxBright = 0;
+    const bool pulseBehaviour = ctx.audio.shouldPulseOnBeat();
+    const bool textureBehaviour = ctx.audio.shouldTextureFlow();
+    const float styleConfidence = ctx.audio.styleConfidence();
+    const float behaviourGain = pulseBehaviour ? (ctx.audio.isOnBeat() ? 1.35f : 0.95f)
+                                               : (textureBehaviour ? 0.92f : 1.0f);
     for (uint8_t bin = 0; bin < NUM_BINS; ++bin) {
-        float magnitude = m_ps->binSmoothing[bin];
+        float magnitude = m_ps->binSmoothing[bin] * behaviourGain;
+        magnitude = fmaxf(0.0f, fminf(1.0f, magnitude));
 
-        // VISIBILITY FIX: Apply 2x gain boost to bass bins (0-15) for better visibility
+        // Apply gentle bass assist to avoid low-bin under-representation.
         if (bin < 16) {
-            magnitude *= 2.0f;
+            magnitude = fminf(1.0f, magnitude * 1.6f);
         }
 
         if (magnitude < 0.01f) {
@@ -152,7 +191,8 @@ void LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {
         CRGB color = frequencyToColor(bin, ctx);
         
         // Scale brightness by magnitude and master brightness
-        uint8_t bright = (uint8_t)(magnitude * ctx.brightness);
+        const float confidenceBoost = 0.85f + 0.15f * styleConfidence;
+        uint8_t bright = (uint8_t)(magnitude * confidenceBoost * ctx.brightness);
         if (bright > maxBright) maxBright = bright;
         color = color.nscale8(bright);
 
@@ -225,10 +265,6 @@ void LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {
 }
 
 uint16_t LGPSpectrumDetailEffect::binToLedDistance(uint8_t bin) const {
-    // TODO: This assumes Goertzel log spacing. Under PipelineCore the bins64 shim
-    // uses 4:1 averaged FFT bins which are linearly spaced — the log mapping here
-    // is therefore not frequency-accurate. Migrate to bins256 + FrequencyMap.
-    //
     // Logarithmic mapping: lower bins closer to center
     // bin 0 (110 Hz) -> distance 0 (center)
     // bin 63 (4186 Hz) -> distance ~79 (edge)
@@ -253,20 +289,32 @@ uint16_t LGPSpectrumDetailEffect::binToLedDistance(uint8_t bin) const {
 }
 
 CRGB LGPSpectrumDetailEffect::frequencyToColor(uint8_t bin, const plugins::EffectContext& ctx) const {
-    // Use palette system instead of hardcoded HSV rainbow
-    // Matches SensoryBridge pattern: chromatic_mode determines color source
-    const bool chromaticMode = (ctx.saturation >= 128);
-    
-    if (chromaticMode) {
-        // Chromatic mode: Map bin to palette position (rainbow-like cycling)
-        // SensoryBridge uses 21.333 * i, we'll use bin/64 * 255 for palette index
-        float prog = (float)bin / 64.0f;
-        uint8_t paletteIdx = (uint8_t)(prog * 255.0f + ctx.gHue);
-        return ctx.palette.getColor(paletteIdx, 255);
-    } else {
-        // Non-chromatic mode: Single hue from palette
-        return ctx.palette.getColor(ctx.gHue, 255);
+    // Constrained tonal mapping: keeps colour motion expressive without full hue-wheel sweeps.
+    const float prog = static_cast<float>(bin) / 63.0f;
+
+    float anchor = 20.0f;
+    float window = 84.0f;
+    if (ctx.audio.shouldPulseOnBeat()) {
+        anchor = 8.0f;
+        window = 64.0f;
+    } else if (ctx.audio.shouldDriftWithHarmony()) {
+        anchor = 32.0f;
+        window = 72.0f;
+    } else if (ctx.audio.shouldShimmerWithMelody()) {
+        anchor = 78.0f;
+        window = 56.0f;
+    } else if (ctx.audio.shouldTextureFlow()) {
+        anchor = 18.0f;
+        window = 48.0f;
     }
+
+    const float confidence = fmaxf(0.0f, fminf(1.0f, ctx.audio.styleConfidence()));
+    window *= (0.65f + 0.35f * confidence);
+
+    const float beatNudge = ctx.audio.isOnBeat() ? 7.0f : 0.0f;
+    const float paletteFloat = anchor + prog * window + beatNudge;
+    const uint8_t paletteIdx = static_cast<uint8_t>(static_cast<uint16_t>(paletteFloat) & 0xFFu);
+    return ctx.palette.getColor(paletteIdx, 255);
 }
 
 void LGPSpectrumDetailEffect::cleanup() {

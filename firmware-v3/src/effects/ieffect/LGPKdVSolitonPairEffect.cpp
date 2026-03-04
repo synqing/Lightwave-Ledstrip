@@ -134,10 +134,10 @@ void LGPKdVSolitonPairEffect::render(plugins::EffectContext& ctx) {
         }
 
         // Update chromagram targets on new hops only
-        if (ctx.audio.controlBus.hop_seq != m_lastHopSeq) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+        if (ctx.audio.hopSequence() != m_lastHopSeq) {
+            m_lastHopSeq = ctx.audio.hopSequence();
             for (uint8_t i = 0; i < 12; ++i) {
-                m_chromaSmoothed[i] = ctx.audio.controlBus.heavy_chroma[i];
+                m_chromaSmoothed[i] = ctx.audio.getHeavyChroma(i);
             }
         }
         chromaHueOffset = effects::chroma::circularChromaHueSmoothed(

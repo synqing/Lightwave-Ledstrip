@@ -51,8 +51,13 @@ bool LGPPerlinShocklinesAmbientEffect::init(plugins::EffectContext& ctx) {
 void LGPPerlinShocklinesAmbientEffect::render(plugins::EffectContext& ctx) {
     if (!m_ps) return;
     // CENTRE ORIGIN - Shockwaves propagate outward from centre (ambient)
+    float dt = ctx.getSafeDeltaSeconds();
     float speedNorm = ctx.speed / 50.0f;
-    float intensityNorm = ctx.brightness / 255.0f;
+
+    // =========================================================================
+    // Trail persistence: fade previous frame (long ambient trails)
+    // =========================================================================
+    fadeToBlackBy(ctx.leds, ctx.ledCount, 12);
 
     // =========================================================================
     // Periodic Shockwave Injection (time-based, no audio)
@@ -66,10 +71,10 @@ void LGPPerlinShocklinesAmbientEffect::render(plugins::EffectContext& ctx) {
     }
 
     // =========================================================================
-    // Shockwave Propagation (centre-origin)
+    // Shockwave Propagation (centre-origin) — scaled by dt
     // =========================================================================
-    float propagationSpeed = speedNorm * 0.5f;
-    float decayRate = 0.92f + speedNorm * 0.06f;
+    float propagationSpeed = speedNorm * 0.5f * dt * 120.0f;
+    float decayRate = powf(0.92f + speedNorm * 0.06f, dt * 120.0f);
 
     for (int16_t i = CENTER_LEFT - 1; i >= 0; i--) {
         if (i + 1 < STRIP_LENGTH) {
@@ -93,53 +98,53 @@ void LGPPerlinShocklinesAmbientEffect::render(plugins::EffectContext& ctx) {
     }
 
     // =========================================================================
-    // Noise Field Updates
+    // Noise Field Updates — frame-rate independent using dt
     // =========================================================================
-    m_noiseX += (uint16_t)(speedNorm * 3.0f);
-    m_noiseY += (uint16_t)(speedNorm * 1.5f);
-    m_time += (uint16_t)(speedNorm * 2.0f);
+    float dtScale = dt * 120.0f;
+    m_noiseX += (uint16_t)((50 + speedNorm * 100.0f) * dtScale);
+    m_noiseY += (uint16_t)((25 + speedNorm * 75.0f) * dtScale);
+    m_time += (uint16_t)((40 + speedNorm * 80.0f) * dtScale);
 
     // =========================================================================
     // Rendering (centre-origin pattern)
     // =========================================================================
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
-
     float sharpness = 0.5f; // Fixed sharpness for ambient
 
     for (uint16_t i = 0; i < STRIP_LENGTH; i++) {
         uint16_t dist = centerPairDistance(i);
-        
+
         // Sample base noise field
         uint16_t noiseXCoord = m_noiseX + (dist * 4);
         uint16_t noiseYCoord = m_noiseY + m_time;
-        uint8_t baseNoise = inoise8(noiseXCoord >> 8, noiseYCoord >> 8);
-        
+        uint8_t baseNoise = inoise8(noiseXCoord, noiseYCoord);
+
         // Get shockwave energy
         float shockEnergy = m_ps->shockBuffer[i];
-        
+
         // Combine noise with shockwave
         float noiseNorm = baseNoise / 255.0f;
-        float shockNorm = shockEnergy;
-        
-        float combined = noiseNorm + shockNorm * sharpness * 2.0f;
+
+        float combined = noiseNorm + shockEnergy * sharpness * 2.0f;
         combined = fmaxf(0.0f, fminf(1.0f, combined));
-        
-        // Map to palette and brightness
+
+        // Map to palette and brightness using scale8
         uint8_t paletteIndex = (uint8_t)(combined * 255.0f);
-        uint8_t brightness = (uint8_t)((0.2f + combined * 0.8f) * 255.0f * intensityNorm);
-        
+        uint8_t rawBright = (uint8_t)((0.2f + combined * 0.8f) * 255.0f);
+        uint8_t brightness = scale8(rawBright, ctx.brightness);
+
         if (shockEnergy > 0.1f) {
             brightness = qadd8(brightness, (uint8_t)(shockEnergy * 100.0f));
         }
-        
+
         CRGB color = ctx.palette.getColor(paletteIndex, brightness);
-        
-        ctx.leds[i] = color;
-        
+
+        // Blend into faded buffer (temporal smoothing — not hard overwrite)
+        nblend(ctx.leds[i], color, 90);
+
         if (i + STRIP_LENGTH < ctx.ledCount) {
             uint8_t paletteIndex2 = (uint8_t)(paletteIndex + 64);
             CRGB color2 = ctx.palette.getColor(paletteIndex2, brightness);
-            ctx.leds[i + STRIP_LENGTH] = color2;
+            nblend(ctx.leds[i + STRIP_LENGTH], color2, 90);
         }
     }
 }

@@ -53,9 +53,9 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
 
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
-        newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+        newHop = (ctx.audio.hopSequence() != m_lastHopSeq);
         if (newHop) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+            m_lastHopSeq = ctx.audio.hopSequence();
 
             // LGP-SMOOTH: Use heavy_bands mid-frequency for smoother energy signal
             // This replaces raw chroma processing which is prone to spikes
@@ -65,7 +65,7 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
             if (energyNorm > 1.0f) energyNorm = 1.0f;
 
             // Sub-bass wavelength modulation — kick drums widen interference fringes.
-            float bassNorm = ctx.audio.controlBus.bands[0];  // Migrated from bins64Adaptive[0..5]
+            float bassNorm = ctx.audio.getBand(0);  // Migrated from bins64Adaptive[0..5]
             // Smooth with fast attack, slower decay for punchy response
             if (bassNorm > m_bassWavelength) {
                 m_bassWavelength = bassNorm;  // Instant attack
@@ -74,7 +74,7 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
             }
 
             // Treble overlay — hi-hat/cymbal sparkle on interference pattern.
-            m_trebleOverlay = (ctx.audio.controlBus.bands[5] + ctx.audio.controlBus.bands[6] + ctx.audio.controlBus.bands[7]) * (1.0f / 3.0f);  // Migrated from bins64Adaptive[48..63]
+            m_trebleOverlay = (ctx.audio.getBand(5) + ctx.audio.getBand(6) + ctx.audio.getBand(7)) * (1.0f / 3.0f);  // Migrated from bins64Adaptive[48..63]
 
             m_chromaEnergySum -= m_chromaEnergyHist[m_chromaHistIdx];
             m_chromaEnergyHist[m_chromaHistIdx] = energyNorm;
@@ -104,7 +104,7 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
 
     // Circular chroma hue (replaces argmax + linear EMA to eliminate bin-flip rainbow sweeps)
     uint8_t chromaHue = effects::chroma::circularChromaHueSmoothed(
-        ctx.audio.controlBus.heavy_chroma, m_chromaAngle, rawDt, 0.20f);
+        ctx.audio.heavyChroma(), m_chromaAngle, rawDt, 0.20f);
 
     // Speed modulation with Spring physics (natural momentum, no jitter)
     // Target range: 0.6 to 1.4 (2.3x variation max, not 10x)

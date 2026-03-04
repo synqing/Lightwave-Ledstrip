@@ -71,9 +71,9 @@ void LGPPerlinCausticsEffect::render(plugins::EffectContext& ctx) {
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
         // Check for new audio hop (fresh data)
-        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+        bool newHop = (ctx.audio.hopSequence() != m_lastHopSeq);
         if (newHop) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+            m_lastHopSeq = ctx.audio.hopSequence();
             // Update targets only on new hops (fresh audio data)
             m_targetTreble = ctx.audio.treble();
             m_targetBass = ctx.audio.bass();

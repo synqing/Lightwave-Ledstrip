@@ -54,9 +54,9 @@ void LGPPerlinShocklinesEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
-        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+        bool newHop = (ctx.audio.hopSequence() != m_lastHopSeq);
         if (newHop) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+            m_lastHopSeq = ctx.audio.hopSequence();
             
             // Beat/flux → inject shockwave at centre
             float trigger = ctx.audio.flux() * 0.5f + ctx.audio.beatStrength() * 0.5f;

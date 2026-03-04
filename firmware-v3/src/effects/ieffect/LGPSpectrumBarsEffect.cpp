@@ -20,9 +20,8 @@ namespace ieffect {
 
 namespace {
 
-static inline const float* selectChroma12(const audio::ControlBusFrame& cb) {
-    // Both backends now produce normalised chroma via Stage A/B pipeline.
-    return cb.chroma;
+static inline const float* selectChroma12(const plugins::AudioContext& audio) {
+    return audio.chroma();
 }
 
 static inline float clamp01(float v) {
@@ -62,13 +61,13 @@ void LGPSpectrumBarsEffect::render(plugins::EffectContext& ctx) {
     }
 
     // Clear buffer
-    memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
 
     // Musically anchored hue (non-rainbow): circular chroma mean, smoothed.
     uint8_t baseHue = ctx.gHue;
 #if FEATURE_AUDIO_SYNC
     if (ctx.audio.available) {
-        const float* chroma = selectChroma12(ctx.audio.controlBus);
+        const float* chroma = selectChroma12(ctx.audio);
         baseHue = effects::chroma::circularChromaHueSmoothed(
             chroma, m_chromaAngle, dt, 0.20f);
     }

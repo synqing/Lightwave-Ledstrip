@@ -14,7 +14,7 @@ namespace ieffect {
 
 LGPAnisotropicCloakEffect::LGPAnisotropicCloakEffect()
     : m_time(0)
-    , m_pos(80.0f)
+    , m_pos(40.0f)
     , m_vel(0.45f)
 {
 }
@@ -22,7 +22,7 @@ LGPAnisotropicCloakEffect::LGPAnisotropicCloakEffect()
 bool LGPAnisotropicCloakEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
     m_time = 0;
-    m_pos = 80.0f;
+    m_pos = 40.0f;
     m_vel = 0.45f;
     return true;
 }
@@ -37,21 +37,22 @@ void LGPAnisotropicCloakEffect::render(plugins::EffectContext& ctx) {
     const float anisotropy = 0.5f;
 
     m_pos += m_vel * speedNorm;
-    if (m_pos < cloakRadius || m_pos > (float)STRIP_LENGTH - cloakRadius) {
+    if (m_pos < cloakRadius || m_pos > (float)HALF_LENGTH - cloakRadius) {
         m_vel = -m_vel;
     }
 
-    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {
-        float dist = fabsf((float)i - m_pos);
+    for (uint16_t d = 0; d < HALF_LENGTH; d++) {
+        float dist = fabsf((float)d - m_pos);
         float norm = (cloakRadius > 0.001f) ? (dist / cloakRadius) : 0.0f;
         norm = constrain(norm, 0.0f, 1.0f);
 
-        float sideBias = (i < m_pos) ? (1.0f + anisotropy) : (1.0f - anisotropy);
+        // Anisotropy: inner side (closer to centre) vs outer side (closer to edge)
+        float sideBias = (d < m_pos) ? (1.0f + anisotropy) : (1.0f - anisotropy);
         sideBias = constrain(sideBias, -2.0f, 2.0f);
 
         float offset = baseIndex * (norm * sqrtf(norm)) * sideBias * cloakRadius * 0.5f;  // Optimized: x^1.5 = x*sqrt(x)
-        float sample = (float)i + ((i < m_pos) ? -offset : offset);
-        sample = constrain(sample, 0.0f, (float)(STRIP_LENGTH - 1));
+        float sample = (float)d + ((d < m_pos) ? -offset : offset);
+        sample = constrain(sample, 0.0f, (float)(HALF_LENGTH - 1));
 
         uint8_t wave = sin8((int16_t)(sample * 4.0f) + (m_time >> 2));
         float brightnessF = wave;
@@ -67,10 +68,8 @@ void LGPAnisotropicCloakEffect::render(plugins::EffectContext& ctx) {
 
         uint8_t brightU8 = (uint8_t)constrain(brightnessF, 0.0f, 255.0f);
         brightU8 = (uint8_t)((brightU8 * ctx.brightness) / 255);
-        ctx.leds[i] = ctx.palette.getColor(hue, brightU8);
-        if (i + STRIP_LENGTH < ctx.ledCount) {
-            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(hue + 128), brightU8);
-        }
+        CRGB color = ctx.palette.getColor(hue, brightU8);
+        SET_CENTER_PAIR(ctx, d, color);
     }
 }
 

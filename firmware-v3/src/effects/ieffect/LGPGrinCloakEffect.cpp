@@ -14,7 +14,7 @@ namespace ieffect {
 
 LGPGrinCloakEffect::LGPGrinCloakEffect()
     : m_time(0)
-    , m_pos(80.0f)
+    , m_pos(40.0f)
     , m_vel(0.35f)
 {
 }
@@ -22,7 +22,7 @@ LGPGrinCloakEffect::LGPGrinCloakEffect()
 bool LGPGrinCloakEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
     m_time = 0;
-    m_pos = 80.0f;
+    m_pos = 40.0f;
     m_vel = 0.35f;
     return true;
 }
@@ -37,19 +37,19 @@ void LGPGrinCloakEffect::render(plugins::EffectContext& ctx) {
     const float gradient = 1.5f;
 
     m_pos += m_vel * speedNorm;
-    if (m_pos < cloakRadius || m_pos > (float)STRIP_LENGTH - cloakRadius) {
+    if (m_pos < cloakRadius || m_pos > (float)HALF_LENGTH - cloakRadius) {
         m_vel = -m_vel;
     }
 
-    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {
-        float dist = fabsf((float)i - m_pos);
+    for (uint16_t d = 0; d < HALF_LENGTH; d++) {
+        float dist = fabsf((float)d - m_pos);
         float norm = (cloakRadius > 0.001f) ? (dist / cloakRadius) : 0.0f;
         norm = constrain(norm, 0.0f, 1.0f);
 
-        float lensStrength = gradient * (norm * norm);  // Optimized: exponent=2.0 → x*x
-        float direction = (i < m_pos) ? -1.0f : 1.0f;
-        float sample = (float)i + direction * lensStrength * cloakRadius * 0.6f;
-        sample = constrain(sample, 0.0f, (float)(STRIP_LENGTH - 1));
+        float lensStrength = gradient * (norm * norm);  // Optimized: exponent=2.0 -> x*x
+        float direction = (d < m_pos) ? -1.0f : 1.0f;
+        float sample = (float)d + direction * lensStrength * cloakRadius * 0.6f;
+        sample = constrain(sample, 0.0f, (float)(HALF_LENGTH - 1));
 
         uint8_t wave = sin8((int16_t)(sample * 4.0f) + (m_time >> 2));
 
@@ -68,10 +68,8 @@ void LGPGrinCloakEffect::render(plugins::EffectContext& ctx) {
         uint8_t hue = (uint8_t)(ctx.gHue + (uint8_t)(sample * 1.5f));
 
         uint8_t brightU8 = (uint8_t)((brightness * ctx.brightness) / 255);
-        ctx.leds[i] = ctx.palette.getColor(hue, brightU8);
-        if (i + STRIP_LENGTH < ctx.ledCount) {
-            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(hue + 128), brightU8);
-        }
+        CRGB color = ctx.palette.getColor(hue, brightU8);
+        SET_CENTER_PAIR(ctx, d, color);
     }
 }
 

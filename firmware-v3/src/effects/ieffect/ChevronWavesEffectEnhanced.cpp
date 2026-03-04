@@ -69,13 +69,13 @@ void ChevronWavesEnhancedEffect::render(plugins::EffectContext& ctx) {
 
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
-        newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+        newHop = (ctx.audio.hopSequence() != m_lastHopSeq);
         if (newHop) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+            m_lastHopSeq = ctx.audio.hopSequence();
             
             // Update chromagram targets
             for (uint8_t i = 0; i < 12; i++) {
-                m_chromaTargets[i] = ctx.audio.controlBus.heavy_chroma[i];
+                m_chromaTargets[i] = ctx.audio.getHeavyChroma(i);
             }
 
             const float led_share = 255.0f / 12.0f;
@@ -146,7 +146,7 @@ void ChevronWavesEnhancedEffect::render(plugins::EffectContext& ctx) {
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
         m_chromaHue = static_cast<float>(effects::chroma::circularChromaHueSmoothed(
-            ctx.audio.controlBus.heavy_chroma, m_chromaAngle, rawDt, 0.20f));
+            ctx.audio.heavyChroma(), m_chromaAngle, rawDt, 0.20f));
     }
 #endif
 
@@ -154,8 +154,8 @@ void ChevronWavesEnhancedEffect::render(plugins::EffectContext& ctx) {
     float heavyEnergy = 0.0f;
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
-        heavyEnergy = (ctx.audio.controlBus.heavy_bands[1] +
-                       ctx.audio.controlBus.heavy_bands[2]) / 2.0f;
+        heavyEnergy = (ctx.audio.getHeavyBand(1) +
+                       ctx.audio.getHeavyBand(2)) / 2.0f;
     }
 #endif
     float targetSpeed = 0.6f + 1.2f * heavyEnergy;  // Reduced range for stability

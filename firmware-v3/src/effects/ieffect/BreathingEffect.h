@@ -82,10 +82,12 @@ private:
 
     // Multi-stage smoothing (Sensory Bridge pattern)
     float m_chromaSmoothed[12]; // Smoothed chromagram for color calculation
-    float m_energySmoothed;      // Smoothed energy envelope for brightness
 
-    // Frame-rate independent radius smoothing
-    enhancement::AsymmetricFollower m_radiusFollower;
+    // Energy envelope: fast attack (50ms), moderate release (300ms) for brightness
+    enhancement::AsymmetricFollower m_energyFollower{0.0f, 0.05f, 0.30f};
+
+    // Frame-rate independent radius smoothing: 80ms attack, 400ms release (organic breathing)
+    enhancement::AsymmetricFollower m_radiusFollower{0.0f, 0.08f, 0.40f};
 
     // History buffer for spike filtering (4-frame rolling average)
     static constexpr uint8_t HISTORY_SIZE = 4;

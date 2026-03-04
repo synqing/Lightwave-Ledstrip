@@ -77,6 +77,7 @@ constexpr EffectId DISPLAY_ORDER[] = {
     EID_LGP_BIOLUMINESCENT_WAVES,            //  35
     EID_LGP_PLASMA_MEMBRANE,                 //  36
     EID_LGP_NEURAL_NETWORK,                  //  37
+    EID_LGP_NEURAL_NETWORK_RADIAL,           //  37b (radial variant)
     EID_LGP_CRYSTALLINE_GROWTH,              //  38
     EID_LGP_FLUID_DYNAMICS,                  //  39
 
@@ -85,10 +86,12 @@ constexpr EffectId DISPLAY_ORDER[] = {
     EID_LGP_GRAVITATIONAL_LENSING,           //  41
     EID_LGP_TIME_CRYSTAL,                    //  42
     EID_LGP_SOLITON_WAVES,                   //  43
+    EID_LGP_SOLITON_WAVES_RADIAL,            //  43b (radial variant)
     EID_LGP_METAMATERIAL_CLOAK,              //  44
     EID_LGP_GRIN_CLOAK,                      //  45
     EID_LGP_CAUSTIC_FAN,                     //  46
     EID_LGP_BIREFRINGENT_SHEAR,              //  47
+    EID_LGP_BIREFRINGENT_SHEAR_RADIAL,       //  47b (radial variant)
     EID_LGP_ANISOTROPIC_CLOAK,               //  48
     EID_LGP_EVANESCENT_SKIN,                 //  49
 
@@ -150,7 +153,7 @@ constexpr EffectId DISPLAY_ORDER[] = {
     EID_CHEVRON_WAVES_ENHANCED,              //  90
     EID_LGP_INTERFERENCE_SCANNER_ENHANCED,   //  91
     EID_LGP_PHOTONIC_CRYSTAL_ENHANCED,       //  92
-    EID_LGP_SPECTRUM_DETAIL,                 //  93
+    // EID_LGP_SPECTRUM_DETAIL,              //  93 - REMOVED (dead/broken 2026-03-02)
     EID_LGP_SPECTRUM_DETAIL_ENHANCED,        //  94
     EID_LGP_STAR_BURST_ENHANCED,             //  95
     EID_LGP_WAVE_COLLISION_ENHANCED,         //  96
@@ -158,17 +161,17 @@ constexpr EffectId DISPLAY_ORDER[] = {
     EID_SNAPWAVE_LINEAR,                     //  98
 
     // Diagnostic
-    EID_TRINITY_TEST,                        //  99
+    // EID_TRINITY_TEST,                     //  99 - REMOVED (dead/broken 2026-03-02)
 
     // Palette Auto-Cycle
     EID_LGP_HOLOGRAPHIC_AUTO_CYCLE,          // 100
 
     // ES v1.1 Reference
-    EID_ES_ANALOG,                           // 101
-    EID_ES_SPECTRUM,                         // 102
-    EID_ES_OCTAVE,                           // 103
-    EID_ES_BLOOM,                            // 104
-    EID_ES_WAVEFORM,                         // 105
+    // EID_ES_ANALOG,                        // 101 - REMOVED (dead/broken 2026-03-02)
+    // EID_ES_SPECTRUM,                      // 102 - REMOVED (dead/broken 2026-03-02)
+    // EID_ES_OCTAVE,                        // 103 - REMOVED (dead/broken 2026-03-02)
+    // EID_ES_BLOOM,                         // 104 - REMOVED (dead/broken 2026-03-02)
+    // EID_ES_WAVEFORM,                      // 105 - REMOVED (dead/broken 2026-03-02)
 
     // ES Tuned
     EID_RIPPLE_ES_TUNED,                     // 106

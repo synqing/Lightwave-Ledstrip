@@ -19,6 +19,7 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../../config/effect_ids.h"
+#include "../enhancement/SmoothingEngine.h"
 
 namespace lightwaveos::effects::ieffect {
 
@@ -52,6 +53,15 @@ private:
 
     // Beat phase tracking
     float m_lastBeatPhase = 0.0f;
+
+    // Beat lock hysteresis
+    bool m_beatLocked = false;
+
+    // Smoothing: AsymmetricFollowers for audio-derived layer gains
+    enhancement::AsymmetricFollower m_bassFollower{0.0f, 0.03f, 0.20f};
+    enhancement::AsymmetricFollower m_lowMidFollower{0.0f, 0.03f, 0.20f};
+    enhancement::AsymmetricFollower m_trebleFollower{0.0f, 0.03f, 0.20f};
+    enhancement::AsymmetricFollower m_energyFollower{0.0f, 0.04f, 0.25f};
 };
 
 } // namespace lightwaveos::effects::ieffect

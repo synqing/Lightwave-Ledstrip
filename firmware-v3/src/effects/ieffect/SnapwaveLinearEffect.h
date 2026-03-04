@@ -27,6 +27,7 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../enhancement/SmoothingEngine.h"
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
@@ -56,21 +57,19 @@ private:
     // ============================================================================
     static constexpr uint8_t kMaxZones = 4;
 
-    // Peak smoothing: 2% new, 98% old (very aggressive)
-    static constexpr float PEAK_ATTACK = 0.02f;
-    static constexpr float PEAK_DECAY = 0.98f;
+    // Peak smoothing replaced by AsymmetricFollower (see m_peakFollower below)
 
     // History buffer for trails
     static constexpr uint16_t HISTORY_SIZE = 40;  // 40 frames of history = ~333ms at 120fps
 
     // Trail fade: each history step gets dimmer
-    // 0.85^40 ≈ 0.001, so oldest entries are nearly black
-    static constexpr float TRAIL_FADE_FACTOR = 0.85f;
+    // 0.92^40 ≈ 0.025, so oldest entries are slightly more visible
+    static constexpr float TRAIL_FADE_FACTOR = 0.92f;
 
     // Oscillation parameters
     static constexpr float BASE_FREQUENCY = 0.001f;     // Base frequency for sin()
     static constexpr float PHASE_SPREAD = 0.5f;         // Phase offset per chromagram note
-    static constexpr float TANH_SCALE = 2.0f;           // tanh() input multiplier
+    static constexpr float TANH_SCALE = 3.0f;           // tanh() input multiplier (snappier "snap")
     static constexpr float NOTE_THRESHOLD = 0.1f;       // Min chromagram value to contribute
     static constexpr float AMPLITUDE_MIX = 0.7f;        // Oscillation x peak mix factor
     static constexpr float ENERGY_GATE_THRESHOLD = 0.05f; // RMS below this = silence (no movement)
@@ -82,8 +81,11 @@ private:
     // Per-zone State (indexed by ctx.zoneId)
     // ============================================================================
 
-    // Smoothed peak follower -- per-zone to prevent cross-zone bleed
-    float m_peakSmoothed[kMaxZones] = {};
+    // Smoothed peak follower -- per-zone (fast attack 20ms, slow release 200ms)
+    enhancement::AsymmetricFollower m_peakFollower[kMaxZones];
+
+    // RMS energy follower for dynamic fade (attack 30ms, release 250ms)
+    enhancement::AsymmetricFollower m_rmsFollower[kMaxZones];
 
     // Ring buffer write position -- per-zone
     uint8_t m_historyIndex[kMaxZones] = {};

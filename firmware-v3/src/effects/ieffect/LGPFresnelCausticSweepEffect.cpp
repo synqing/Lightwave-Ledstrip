@@ -133,12 +133,12 @@ void LGPFresnelCausticSweepEffect::render(plugins::EffectContext& ctx) {
 #if FEATURE_AUDIO_SYNC
     if (ctx.audio.available) {
         // ----- Hop-gated chroma update -----
-        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+        bool newHop = (ctx.audio.hopSequence() != m_lastHopSeq);
         if (newHop) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+            m_lastHopSeq = ctx.audio.hopSequence();
             for (uint8_t i = 0; i < 12; i++) {
                 // Gentle exponential approach toward target (per-hop)
-                float target = ctx.audio.controlBus.heavy_chroma[i];
+                float target = ctx.audio.getHeavyChroma(i);
                 m_chromaSmoothed[i] += (target - m_chromaSmoothed[i]) * 0.25f;
             }
         }

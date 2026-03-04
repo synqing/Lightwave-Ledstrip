@@ -83,20 +83,20 @@ void BPMEnhancedEffect::render(plugins::EffectContext& ctx) {
         // =====================================================================
         // Hop-based updates: update targets only on new hops
         // =====================================================================
-        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+        bool newHop = (ctx.audio.hopSequence() != m_lastHopSeq);
         if (newHop) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
-            m_targetHeavyEnergy = (ctx.audio.controlBus.heavy_bands[1] +
-                                   ctx.audio.controlBus.heavy_bands[2]) / 2.0f;
+            m_lastHopSeq = ctx.audio.hopSequence();
+            m_targetHeavyEnergy = (ctx.audio.getHeavyBand(1) +
+                                   ctx.audio.getHeavyBand(2)) / 2.0f;
             m_targetBeatStrength = ctx.audio.beatStrength();
             m_targetTempoConf = ctx.audio.tempoConfidence();
             
             // Migrated from bins64[0..5] to backend-agnostic bands[0]
-            m_targetSubBass = ctx.audio.controlBus.bands[0];
+            m_targetSubBass = ctx.audio.getBand(0);
             
             // Update chromagram targets (use heavy_chroma for stability)
             for (uint8_t i = 0; i < 12; i++) {
-                m_chromaTargets[i] = ctx.audio.controlBus.heavy_chroma[i];
+                m_chromaTargets[i] = ctx.audio.getHeavyChroma(i);
             }
         }
         

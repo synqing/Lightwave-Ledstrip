@@ -42,7 +42,7 @@ void JuggleEffect::render(plugins::EffectContext& ctx) {
     const float flux = audioOk ? ctx.audio.fastFlux() : 0.0f;
 
     const float* bins = useBins ? ctx.audio.bins64Adaptive() : nullptr;
-    const float* chroma = audioOk ? ctx.audio.controlBus.chroma : nullptr;
+    const float* chroma = audioOk ? ctx.audio.chroma() : nullptr;
 
     // Dynamic dot count: more energy → more juggling balls.
     uint8_t dotCount = 8;

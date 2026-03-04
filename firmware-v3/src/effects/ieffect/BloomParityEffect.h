@@ -120,11 +120,6 @@ private:
         return v;
     }
 
-    static RGBf hsv(float h, float s, float v);
-    static void rgbToHsv(const RGBf& in, float& h, float& s, float& v);
-    static RGBf forceSaturation(const RGBf& in, float sat);
-    static RGBf forceHue(const RGBf& in, float hue);
-
     static inline void clearBuffer(RGBf* buf, uint16_t len) {
         for (uint16_t i = 0; i < len; i++) {
             buf[i].r = buf[i].g = buf[i].b = 0.0f;

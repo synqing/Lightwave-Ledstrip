@@ -27,16 +27,15 @@ namespace ieffect {
 
 namespace {
 
-static inline const float* selectChroma12(const audio::ControlBusFrame& cb, bool preferHeavy) {
-    // Both backends now produce normalised chroma via Stage A/B pipeline.
+static inline const float* selectChroma12(const plugins::AudioContext& audio, bool preferHeavy) {
     if (preferHeavy) {
         float heavySum = 0.0f;
         for (uint8_t i = 0; i < audio::CONTROLBUS_NUM_CHROMA; ++i) {
-            heavySum += cb.heavy_chroma[i];
+            heavySum += audio.getHeavyChroma(i);
         }
-        if (heavySum > 0.001f) return cb.heavy_chroma;
+        if (heavySum > 0.001f) return audio.heavyChroma();
     }
-    return cb.chroma;
+    return audio.chroma();
 }
 
 // Musically anchored palette offsets (no full hue-wheel sweep).
@@ -135,7 +134,7 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
     if (!m_ps) return;
     const float rawDt = ctx.getSafeRawDeltaSeconds();
     // Clear output buffer
-    memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, 25);
 
 #if !FEATURE_AUDIO_SYNC
     (void)ctx;
@@ -146,13 +145,13 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
     }
 
     // Check if we have a new hop (update on hop sequence change)
-    bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+    bool newHop = (ctx.audio.hopSequence() != m_lastHopSeq);
     if (newHop) {
-        m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+        m_lastHopSeq = ctx.audio.hopSequence();
         m_iter++;
 
         // Migrated from bins64[0..5] to backend-agnostic bands[0]
-        float subBassAvg = ctx.audio.controlBus.bands[0];
+        float subBassAvg = ctx.audio.getBand(0);
 
         // Fast attack, slow release for punchy bass response
         if (subBassAvg > m_subBassPulse) {
@@ -173,7 +172,7 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
 
         // Chord-driven palette warmth adjustment
         // Maps chord type to hue offset for emotional color response
-        const auto& chordState = ctx.audio.controlBus.chordState;
+        const auto& chordState = ctx.audio.chordState();
         int8_t warmthOffset = computeChordWarmthOffset(chordState.type, chordState.confidence);
         uint8_t rootHueShift = computeRootNoteHueShift(chordState.rootNote, chordState.confidence);
 
@@ -184,7 +183,7 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
         if (adjustedHue > 255) adjustedHue -= 256;
         uint8_t chordAdjustedHue = (uint8_t)adjustedHue;
 
-        const float* chroma = selectChroma12(ctx.audio.controlBus, /*preferHeavy*/ true);
+        const float* chroma = selectChroma12(ctx.audio, /*preferHeavy*/ true);
 
         for (uint8_t i = 0; i < 12; ++i) {
             float bin = chroma[i];
@@ -266,7 +265,7 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
     float maxBin = 0.0f;
     float sum = 0.0f;
     for (uint8_t i = 0; i < 12; ++i) {
-        float v = ctx.audio.controlBus.heavy_chroma[i];
+        float v = ctx.audio.getHeavyChroma(i);
         sum += v;
         if (v > maxBin) maxBin = v;
     }

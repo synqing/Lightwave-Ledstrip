@@ -99,8 +99,8 @@ void LGPPhotonicCrystalEffect::render(plugins::EffectContext& ctx) {
         // This matches ChevronWaves/WaveCollision/InterferenceScanner
         // heavy_bands are PRE-SMOOTHED by ControlBus (80ms rise / 15ms fall)
         // ================================================================
-        float heavyEnergy = (ctx.audio.controlBus.heavy_bands[1] +
-                             ctx.audio.controlBus.heavy_bands[2]) / 2.0f;
+        float heavyEnergy = (ctx.audio.getHeavyBand(1) +
+                             ctx.audio.getHeavyBand(2)) / 2.0f;
         float targetSpeed = 0.6f + 0.8f * heavyEnergy;  // 0.6-1.4x range
         speedMult = m_speedSpring.update(targetSpeed, rawDt);
         if (speedMult > 1.6f) speedMult = 1.6f;
@@ -110,9 +110,9 @@ void LGPPhotonicCrystalEffect::render(plugins::EffectContext& ctx) {
         // BRIGHTNESS: Per-hop sampling for energy baseline (separate from speed)
         // Rolling avg + AsymmetricFollower is fine for visual intensity
         // ================================================================
-        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+        bool newHop = (ctx.audio.hopSequence() != m_lastHopSeq);
         if (newHop) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+            m_lastHopSeq = ctx.audio.hopSequence();
 
             float currentEnergy = ctx.audio.heavyBass();
 
@@ -160,7 +160,7 @@ void LGPPhotonicCrystalEffect::render(plugins::EffectContext& ctx) {
 
         // Circular chroma hue (replaces argmax + linear EMA to eliminate bin-flip rainbow sweeps)
         chromaOffset = effects::chroma::circularChromaHueSmoothed(
-            ctx.audio.controlBus.chroma, m_chromaAngle, rawDt, 0.20f);
+            ctx.audio.chroma(), m_chromaAngle, rawDt, 0.20f);
     }
 #endif
 

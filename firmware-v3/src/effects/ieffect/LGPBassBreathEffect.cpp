@@ -20,9 +20,8 @@ namespace ieffect {
 
 namespace {
 
-static inline const float* selectChroma12(const audio::ControlBusFrame& cb) {
-    // Both backends now produce normalised chroma via Stage A/B pipeline.
-    return cb.chroma;
+static inline const float* selectChroma12(const plugins::AudioContext& audio) {
+    return audio.chroma();
 }
 
 static inline float clamp01(float v) {
@@ -35,7 +34,7 @@ static inline float clamp01(float v) {
 
 bool LGPBassBreathEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
-    m_breathLevel = 0.0f;
+    m_breathEnvelope.reset(0.0f);
     m_chromaAngle = 0.0f;
     m_lastHopSeq = 0;
     m_lastBass = 0.0f;
@@ -98,34 +97,31 @@ void LGPBassBreathEffect::render(plugins::EffectContext& ctx) {
     }
 #endif
 
-    // Breath dynamics: fast attack, slow decay (bass-led, with optional beat inhale).
+    // Breath dynamics via AsymmetricFollower: 50ms attack, 400ms release (organic breathing)
     float targetBreath = bass * 0.75f + mid * 0.15f + beatInhale * 0.35f + m_fluxKick * 0.20f;
     targetBreath = clamp01(targetBreath);
-    if (targetBreath > m_breathLevel) {
-        m_breathLevel = targetBreath;  // Instant attack
-    } else {
-        m_breathLevel *= powf(0.97f, dt * 60.0f);  // Slow exhale (dt-corrected)
-    }
+    float breathLevel = m_breathEnvelope.update(targetBreath, dt);
 
     // Musically anchored hue (non-rainbow): circular chroma mean, smoothed.
     uint8_t chromaHueOffset = 0;
 #if FEATURE_AUDIO_SYNC
     if (ctx.audio.available) {
-        const float* chroma = selectChroma12(ctx.audio.controlBus);
+        const float* chroma = selectChroma12(ctx.audio);
         chromaHueOffset = effects::chroma::circularChromaHueSmoothed(
             chroma, m_chromaAngle, dt, 0.35f);
     }
 #endif
 
-    // Clear buffer
-    memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+    // Fade previous frame for trail persistence (dynamic: loud = shorter trails)
+    uint8_t fadeAmt = (uint8_t)(15 + 35 * (1.0f - breathLevel));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmt);
 
     // Render CENTER PAIR breathing
     for (int dist = 0; dist < HALF_LENGTH; ++dist) {
         float normalizedDist = (float)dist / HALF_LENGTH;
 
         // Breath expands from center
-        float breathRadius = (m_breathLevel < 0.02f) ? 0.02f : m_breathLevel;
+        float breathRadius = (breathLevel < 0.02f) ? 0.02f : breathLevel;
         float brightness;
 
         if (normalizedDist < breathRadius) {
@@ -137,7 +133,7 @@ void LGPBassBreathEffect::render(plugins::EffectContext& ctx) {
         }
 
         // Apply master brightness and breath level
-        uint8_t bright = (uint8_t)(brightness * m_breathLevel * ctx.brightness);
+        uint8_t bright = (uint8_t)(brightness * breathLevel * ctx.brightness);
 
         // Colour: anchored to chroma (stable), with subtle treble lift (no cycling).
         uint8_t hue = (uint8_t)(chromaHueOffset + (uint8_t)(treble * 18.0f) + (uint8_t)(normalizedDist * 20.0f));

@@ -19,6 +19,15 @@
 | #37140 | 1:02 AM | 🔄 | Migrated 9 audio-reactive effects from argmax chroma to circular EMA pattern | ~627 |
 </claude-mem-context>
 
+## MANDATORY READING — Effect Development Standard
+
+**Before creating or modifying ANY effect, read:**
+`docs/EFFECT_DEVELOPMENT_STANDARD.md`
+
+This document defines the mandatory baseline every effect must meet: trail persistence, frame-rate independent timing, center-origin rendering, palette-driven color, smoothing infrastructure usage, audio integration patterns, and anti-patterns that produce garbage output. Agents that skip this document produce effects that look like shit and waste resources.
+
+---
+
 ## PSRAM ALLOCATION POLICY
 
 **ALL effect buffers >64 bytes MUST be allocated from PSRAM.**

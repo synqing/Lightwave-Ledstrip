@@ -15,6 +15,7 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../enhancement/SmoothingEngine.h"
 #include "../../config/effect_ids.h"
 
 namespace lightwaveos {
@@ -34,7 +35,8 @@ public:
     const plugins::EffectMetadata& getMetadata() const override;
 
 private:
-    float m_breathLevel = 0.0f;  // Current "breath" intensity
+    // Breath envelope: fast attack (50ms), slow release (400ms) — organic breathing
+    enhancement::AsymmetricFollower m_breathEnvelope{0.0f, 0.05f, 0.40f};
     // Circular chroma EMA state (radians) — replaces linear hue anchor.
     float m_chromaAngle = 0.0f;
     uint32_t m_lastHopSeq = 0;

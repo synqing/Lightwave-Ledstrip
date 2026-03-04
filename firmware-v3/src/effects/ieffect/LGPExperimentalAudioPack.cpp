@@ -63,7 +63,7 @@ static inline uint8_t dominantNoteFromChroma(const plugins::EffectContext& ctx) 
 
     // Migrated from bin-walking (binAdaptive across octaves) to backend-agnostic
     // chroma[12]. The control bus chroma already provides per-note energy.
-    const float* scores = ctx.audio.controlBus.chroma;
+    const float* scores = ctx.audio.chroma();
 
     // Circular weighted mean over 12 note positions (30-degree steps)
     float cx = 0.0f, sy = 0.0f;
@@ -180,7 +180,7 @@ void LGPFluxRiftEffect::render(plugins::EffectContext& ctx) {
     const float dtVisual = AudioReactivePolicy::visualDt(ctx);
     m_audioPresence = trackAudioPresence(m_audioPresence, ctx.audio.available, dtSignal);
     if (m_audioPresence <= 0.001f) {
-        memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+        fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
         return;
     }
     const float master = (ctx.brightness / 255.0f) * m_audioPresence;
@@ -205,7 +205,7 @@ void LGPFluxRiftEffect::render(plugins::EffectContext& ctx) {
     m_hue = smoothHue(m_hue, hueTarget, dtSignal, 0.45f);
     const uint8_t baseHue = static_cast<uint8_t>(m_hue);
 
-    memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         const float d = static_cast<float>(dist) / static_cast<float>(HALF_LENGTH);
         const float seam = tanhf((d - seamPos) * (8.0f + 16.0f * m_fluxEnv));
@@ -257,13 +257,13 @@ void LGPBeatPrismEffect::render(plugins::EffectContext& ctx) {
     const float dtVisual = AudioReactivePolicy::visualDt(ctx);
     m_audioPresence = trackAudioPresence(m_audioPresence, ctx.audio.available, dtSignal);
     if (m_audioPresence <= 0.001f) {
-        memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+        fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
         return;
     }
     const float master = (ctx.brightness / 255.0f) * m_audioPresence;
 
     // Migrated from binsRangeEnergy(ctx, 42, 63) to bands[5..7] (presence/brilliance/air)
-    const auto& bands = ctx.audio.controlBus.bands;
+    const auto& bands = ctx.audio.bands();
     const float treble = ctx.audio.available
         ? (bands[5] + bands[6] + bands[7]) * (1.0f / 3.0f)
         : 0.0f;
@@ -287,7 +287,7 @@ void LGPBeatPrismEffect::render(plugins::EffectContext& ctx) {
     m_hue = smoothHue(m_hue, hueTarget, dtSignal, 0.45f);
     const uint8_t baseHue = static_cast<uint8_t>(m_hue);
 
-    memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         const float d = static_cast<float>(dist) / static_cast<float>(HALF_LENGTH);
         const float spokes = fabsf(sinf((d * (5.5f + 13.0f * m_prism) - m_phase * 0.7f) * EX_PI));
@@ -338,7 +338,7 @@ void LGPHarmonicTideEffect::render(plugins::EffectContext& ctx) {
     const float dtVisual = AudioReactivePolicy::visualDt(ctx);
     m_audioPresence = trackAudioPresence(m_audioPresence, ctx.audio.available, dtSignal);
     if (m_audioPresence <= 0.001f) {
-        memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+        fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
         return;
     }
     const float master = (ctx.brightness / 255.0f) * m_audioPresence;
@@ -376,7 +376,7 @@ void LGPHarmonicTideEffect::render(plugins::EffectContext& ctx) {
     const uint8_t hueThird = static_cast<uint8_t>(ctx.gHue + thirdBin * binStep);
     const uint8_t hueFifth = static_cast<uint8_t>(ctx.gHue + fifthBin * binStep);
 
-    memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         const float d = static_cast<float>(dist) / static_cast<float>(HALF_LENGTH);
 
@@ -453,7 +453,7 @@ void LGPBassQuakeEffect::render(plugins::EffectContext& ctx) {
     const float dtVisual = AudioReactivePolicy::visualDt(ctx);
     m_audioPresence = trackAudioPresence(m_audioPresence, ctx.audio.available, dtSignal);
     if (m_audioPresence <= 0.001f) {
-        memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+        fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
         return;
     }
     const float master = (ctx.brightness / 255.0f) * m_audioPresence;
@@ -479,7 +479,7 @@ void LGPBassQuakeEffect::render(plugins::EffectContext& ctx) {
     m_hue = smoothHue(m_hue, hueTarget, dtSignal, 0.45f);
     const uint8_t baseHue = static_cast<uint8_t>(m_hue);
 
-    memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         const float d = static_cast<float>(dist) / static_cast<float>(HALF_LENGTH);
         const float compression = powf(clamp01f(1.0f - d), 0.55f + 2.30f * (1.0f - m_bassEnv));
@@ -529,7 +529,7 @@ void LGPTrebleNetEffect::render(plugins::EffectContext& ctx) {
     const float dtVisual = AudioReactivePolicy::visualDt(ctx);
     m_audioPresence = trackAudioPresence(m_audioPresence, ctx.audio.available, dtSignal);
     if (m_audioPresence <= 0.001f) {
-        memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+        fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
         return;
     }
     const float master = (ctx.brightness / 255.0f) * m_audioPresence;
@@ -553,7 +553,7 @@ void LGPTrebleNetEffect::render(plugins::EffectContext& ctx) {
     m_hue = smoothHue(m_hue, hueTarget, dtSignal, 0.45f);
     const uint8_t baseHue = static_cast<uint8_t>(m_hue);
 
-    memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         const float d = static_cast<float>(dist) / static_cast<float>(HALF_LENGTH);
 
@@ -608,7 +608,7 @@ void LGPRhythmicGateEffect::render(plugins::EffectContext& ctx) {
     const float dtVisual = AudioReactivePolicy::visualDt(ctx);
     m_audioPresence = trackAudioPresence(m_audioPresence, ctx.audio.available, dtSignal);
     if (m_audioPresence <= 0.001f) {
-        memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+        fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
         return;
     }
     const float master = (ctx.brightness / 255.0f) * m_audioPresence;
@@ -637,7 +637,7 @@ void LGPRhythmicGateEffect::render(plugins::EffectContext& ctx) {
     m_hue = smoothHue(m_hue, hueTarget, dtSignal, 0.45f);
     const uint8_t baseHue = static_cast<uint8_t>(m_hue);
 
-    memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         const float d = static_cast<float>(dist) / static_cast<float>(HALF_LENGTH);
 
@@ -691,7 +691,7 @@ void LGPSpectralKnotEffect::render(plugins::EffectContext& ctx) {
     const float dtVisual = AudioReactivePolicy::visualDt(ctx);
     m_audioPresence = trackAudioPresence(m_audioPresence, ctx.audio.available, dtSignal);
     if (m_audioPresence <= 0.001f) {
-        memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+        fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
         return;
     }
     const float master = (ctx.brightness / 255.0f) * m_audioPresence;
@@ -700,7 +700,7 @@ void LGPSpectralKnotEffect::render(plugins::EffectContext& ctx) {
     //   bins[0..10]  (low)  -> (bands[0] + bands[1]) * 0.5f
     //   bins[12..32] (mid)  -> (bands[2] + bands[3]) * 0.5f
     //   bins[36..63] (high) -> (bands[4] + bands[5] + bands[6] + bands[7]) * 0.25f
-    const auto& bands = ctx.audio.controlBus.bands;
+    const auto& bands = ctx.audio.bands();
     const float low  = ctx.audio.available ? (bands[0] + bands[1]) * 0.5f : 0.0f;
     const float mid  = ctx.audio.available ? (bands[2] + bands[3]) * 0.5f : 0.0f;
     const float high = ctx.audio.available ? (bands[4] + bands[5] + bands[6] + bands[7]) * 0.25f : 0.0f;
@@ -722,7 +722,7 @@ void LGPSpectralKnotEffect::render(plugins::EffectContext& ctx) {
     m_hue = smoothHue(m_hue, hueTarget, dtSignal, 0.45f);
     const uint8_t baseHue = static_cast<uint8_t>(m_hue);
 
-    memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         const float d = static_cast<float>(dist) / static_cast<float>(HALF_LENGTH);
 
@@ -776,7 +776,7 @@ void LGPSaliencyBloomEffect::render(plugins::EffectContext& ctx) {
     const float dtVisual = AudioReactivePolicy::visualDt(ctx);
     m_audioPresence = trackAudioPresence(m_audioPresence, ctx.audio.available, dtSignal);
     if (m_audioPresence <= 0.001f) {
-        memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+        fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
         return;
     }
     const float master = (ctx.brightness / 255.0f) * m_audioPresence;
@@ -802,7 +802,7 @@ void LGPSaliencyBloomEffect::render(plugins::EffectContext& ctx) {
     m_hue = smoothHue(m_hue, hueTarget, dtSignal, 0.45f);
     const uint8_t baseHue = static_cast<uint8_t>(m_hue);
 
-    memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         const float d = static_cast<float>(dist) / static_cast<float>(HALF_LENGTH);
 
@@ -853,7 +853,7 @@ void LGPTransientLatticeEffect::render(plugins::EffectContext& ctx) {
     const float dtVisual = AudioReactivePolicy::visualDt(ctx);
     m_audioPresence = trackAudioPresence(m_audioPresence, ctx.audio.available, dtSignal);
     if (m_audioPresence <= 0.001f) {
-        memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+        fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
         return;
     }
     const float master = (ctx.brightness / 255.0f) * m_audioPresence;
@@ -879,7 +879,7 @@ void LGPTransientLatticeEffect::render(plugins::EffectContext& ctx) {
     m_hue = smoothHue(m_hue, hueTarget, dtSignal, 0.45f);
     const uint8_t baseHue = static_cast<uint8_t>(m_hue);
 
-    memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         const float d = static_cast<float>(dist) / static_cast<float>(HALF_LENGTH);
 
@@ -932,7 +932,7 @@ void LGPWaveletMirrorEffect::render(plugins::EffectContext& ctx) {
     const float dtVisual = AudioReactivePolicy::visualDt(ctx);
     m_audioPresence = trackAudioPresence(m_audioPresence, ctx.audio.available, dtSignal);
     if (m_audioPresence <= 0.001f) {
-        memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+        fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
         return;
     }
     const float master = (ctx.brightness / 255.0f) * m_audioPresence;
@@ -966,7 +966,7 @@ void LGPWaveletMirrorEffect::render(plugins::EffectContext& ctx) {
     m_hue = smoothHue(m_hue, hueTarget, dtSignal, 0.45f);
     const uint8_t baseHue = static_cast<uint8_t>(m_hue);
 
-    memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         const float d = static_cast<float>(dist) / static_cast<float>(HALF_LENGTH);
         const uint8_t idx = static_cast<uint8_t>((dist * 128u) / HALF_LENGTH);

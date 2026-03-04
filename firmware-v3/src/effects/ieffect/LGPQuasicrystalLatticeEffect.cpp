@@ -87,7 +87,7 @@ void LGPQuasicrystalLatticeEffect::render(plugins::EffectContext& ctx) {
     if (ctx.audio.available) {
         // --- Chroma hue via circular weighted mean + circular EMA ---
         chromaHueOffset = effects::chroma::circularChromaHueSmoothed(
-            ctx.audio.controlBus.heavy_chroma, m_chromaAngle, rawDt, 0.22f);
+            ctx.audio.heavyChroma(), m_chromaAngle, rawDt, 0.22f);
 
         // --- RMS modulates time-phase speed (smooth follower) ---
         const float rmsTarget = ctx.audio.rms();

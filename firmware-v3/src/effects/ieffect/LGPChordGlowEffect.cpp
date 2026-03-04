@@ -74,6 +74,9 @@ bool LGPChordGlowEffect::init(plugins::EffectContext& ctx) {
     m_glowPhase = 0.0f;
     m_chordChangePulse = 0.0f;
     m_lastHopSeq = 0;
+    m_brightnessEnvelope.reset(0.0f);
+    m_confidenceSmoother.reset(0.0f);
+    m_rootNoteSmoother.reset(0.0f);
 
     return true;
 }
@@ -90,13 +93,16 @@ void LGPChordGlowEffect::render(plugins::EffectContext& ctx) {
     return;
 #else
     // Get chord detection state
-    const audio::ChordState& chord = ctx.audio.controlBus.chordState;
+    const audio::ChordState& chord = ctx.audio.chordState();
     const bool hasAudio = ctx.audio.available;
-    const bool newHop = hasAudio && (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+    const bool newHop = hasAudio && (ctx.audio.hopSequence() != m_lastHopSeq);
+
+    // Store target confidence from new hop data
+    float targetConfidence = m_currentConfidence;
 
     // Update chord state on new hop
     if (hasAudio && newHop) {
-        m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+        m_lastHopSeq = ctx.audio.hopSequence();
 
         // Check for chord change (significant change in root or type)
         bool chordChanged = false;
@@ -123,9 +129,12 @@ void LGPChordGlowEffect::render(plugins::EffectContext& ctx) {
             }
         }
 
-        // Always update confidence (smoothed)
-        m_currentConfidence = smoothValue(m_currentConfidence, chord.confidence, 0.15f);
+        // Update target confidence from new hop data
+        targetConfidence = chord.confidence;
     }
+
+    // Smooth confidence every frame (frame-rate independent via ExpDecay)
+    m_currentConfidence = m_confidenceSmoother.update(targetConfidence, dt);
 
     // Update transition progress
     if (m_isTransitioning) {
@@ -136,13 +145,14 @@ void LGPChordGlowEffect::render(plugins::EffectContext& ctx) {
         }
     }
 
-    // Smooth root note for gradual hue drift
+    // Smooth root note for gradual hue drift (via ExpDecay, tau=200ms)
     float targetRoot = (float)m_currentRootNote;
     // Handle wraparound (e.g., transitioning from B to C)
     float diff = targetRoot - m_rootNoteSmooth;
     if (diff > 6.0f) targetRoot -= 12.0f;
     else if (diff < -6.0f) targetRoot += 12.0f;
-    m_rootNoteSmooth += (targetRoot - m_rootNoteSmooth) * (1.0f - expf(-rawDt / 0.2f));  // True exponential, tau=200ms
+    m_rootNoteSmoother.value = m_rootNoteSmooth;
+    m_rootNoteSmooth = m_rootNoteSmoother.update(targetRoot, rawDt);
     // Wrap back to 0-11 range
     while (m_rootNoteSmooth < 0.0f) m_rootNoteSmooth += 12.0f;
     while (m_rootNoteSmooth >= 12.0f) m_rootNoteSmooth -= 12.0f;
@@ -177,6 +187,9 @@ void LGPChordGlowEffect::render(plugins::EffectContext& ctx) {
     // Brightness based on confidence
     float baseBrightness = m_currentConfidence * currentMood.brightnessScale;
     baseBrightness = baseBrightness * (0.6f + 0.4f * (ctx.brightness / 255.0f));
+
+    // Attack/release envelope to prevent epileptic flashing (AsymmetricFollower: 80ms rise, 250ms fall)
+    baseBrightness = m_brightnessEnvelope.update(baseBrightness, dt);
 
     // Blend saturation during transition
     float blendedSat = prevMood.saturation * (1.0f - m_transitionProgress) +

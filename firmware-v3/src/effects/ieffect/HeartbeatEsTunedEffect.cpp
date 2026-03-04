@@ -23,9 +23,8 @@ static inline float clamp01(float v) {
     return v;
 }
 
-static inline const float* selectChroma12(const audio::ControlBusFrame& cb) {
-    // Both backends now produce normalised chroma via Stage A/B pipeline.
-    return cb.chroma;
+static inline const float* selectChroma12(const plugins::AudioContext& audio) {
+    return audio.chroma();
 }
 
 static inline CRGB addSat(CRGB a, CRGB b) {
@@ -69,7 +68,7 @@ void HeartbeatEsTunedEffect::render(plugins::EffectContext& ctx) {
     // ---------------------------------------------------------------------
     uint8_t baseHue = 0;
     if (ctx.audio.available) {
-        const float* chroma = selectChroma12(ctx.audio.controlBus);
+        const float* chroma = selectChroma12(ctx.audio);
         baseHue = effects::chroma::circularChromaHueSmoothed(
             chroma, m_chromaAngle, rawDt, 0.25f);
     } else {
@@ -236,4 +235,3 @@ const plugins::EffectMetadata& HeartbeatEsTunedEffect::getMetadata() const {
 }
 
 } // namespace lightwaveos::effects::ieffect
-

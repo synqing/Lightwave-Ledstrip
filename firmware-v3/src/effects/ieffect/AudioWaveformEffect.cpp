@@ -32,9 +32,8 @@ namespace ieffect {
 
 namespace {
 
-static inline const float* selectChroma12(const audio::ControlBusFrame& cb) {
-    // Both backends now produce normalised chroma via Stage A/B pipeline.
-    return cb.chroma;
+static inline const float* selectChroma12(const plugins::AudioContext& audio) {
+    return audio.chroma();
 }
 
 static inline float clamp01(float v) {
@@ -47,7 +46,7 @@ static inline float clamp01(float v) {
 
 bool AudioWaveformEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
-    m_peakSmoothed = 0.0f;
+    m_peakFollower.reset(0.0f);
     m_sumColorLast[0] = 0.0f;
     m_sumColorLast[1] = 0.0f;
     m_sumColorLast[2] = 0.0f;
@@ -155,14 +154,16 @@ void AudioWaveformEffect::render(plugins::EffectContext& ctx) {
     currentAmp = clamp01(currentAmp);
 
     // =========================================
-    // STEP 2: Smooth the peak (5%/95% - original)
+    // STEP 2: Smooth the peak via AsymmetricFollower (20ms attack, 120ms release)
+    // Frame-rate independent, replaces static 20%/80% per-frame ratio
     // =========================================
-    m_peakSmoothed = currentAmp * PEAK_SMOOTH_NEW + m_peakSmoothed * PEAK_SMOOTH_OLD;
+    float dt = ctx.getSafeDeltaSeconds();
+    float peakSmoothed = m_peakFollower.update(currentAmp, dt);
 
     // =========================================
     // STEP 3: Apply DYNAMIC FADE (creates trails)
     // =========================================
-    applyDynamicFade(ctx, m_peakSmoothed);
+    applyDynamicFade(ctx, peakSmoothed);
 
     // =========================================
     // STEP 4: SHIFT LEDs outward from center
@@ -175,7 +176,7 @@ void AudioWaveformEffect::render(plugins::EffectContext& ctx) {
     CRGB dotColor = computeChromaColor(ctx);
 
     // Scale by smoothed peak amplitude
-    uint8_t brightness = (uint8_t)(m_peakSmoothed * 255.0f);
+    uint8_t brightness = (uint8_t)(peakSmoothed * 255.0f);
     dotColor.nscale8(brightness);
 
     // Apply global brightness
@@ -204,7 +205,7 @@ CRGB AudioWaveformEffect::computeChromaColor(const plugins::EffectContext& ctx) 
     float sumR = 0.0f, sumG = 0.0f, sumB = 0.0f;
 
 #if FEATURE_AUDIO_SYNC
-    const float* chroma = selectChroma12(ctx.audio.controlBus);
+    const float* chroma = selectChroma12(ctx.audio);
 
     // Musically anchored palette indices (no HSV hue-wheel sweep).
     // Offsets are deliberately non-linear to avoid a "rainbow ladder" look.

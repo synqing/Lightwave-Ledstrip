@@ -458,19 +458,19 @@ static const EffectId REACTIVE_EFFECT_IDS[] PROGMEM = {
     EID_CHEVRON_WAVES_ENHANCED,              // old  90: Chevron Waves Enhanced
     EID_LGP_INTERFERENCE_SCANNER_ENHANCED,   // old  91: Interference Scanner Enhanced
     EID_LGP_PHOTONIC_CRYSTAL_ENHANCED,       // old  92: Photonic Crystal Enhanced
-    EID_LGP_SPECTRUM_DETAIL,                 // old  93: Spectrum Detail
+    // EID_LGP_SPECTRUM_DETAIL,              // old  93: Spectrum Detail - REMOVED (dead/broken 2026-03-02)
     EID_LGP_SPECTRUM_DETAIL_ENHANCED,        // old  94: Spectrum Detail Enhanced
     EID_LGP_STAR_BURST_ENHANCED,             // old  95: Star Burst Enhanced
     EID_LGP_WAVE_COLLISION_ENHANCED,         // old  96: Wave Collision Enhanced
     EID_RIPPLE_ENHANCED,                     // old  97: Ripple Enhanced
     EID_SNAPWAVE_LINEAR,                     // old  98: Audio Bloom Parity
-    EID_TRINITY_TEST,                        // old  99: Audio Waveform Parity
+    // EID_TRINITY_TEST,                     // old  99: Audio Waveform Parity - REMOVED (dead/broken 2026-03-02)
     EID_LGP_HOLOGRAPHIC_AUTO_CYCLE,          // old 100: LGP Holographic Auto-Cycle
-    EID_ES_ANALOG,                           // old 101: ES Analog (Ref)
-    EID_ES_SPECTRUM,                         // old 102: ES Spectrum (Ref)
-    EID_ES_OCTAVE,                           // old 103: ES Octave (Ref)
-    EID_ES_BLOOM,                            // old 104: ES Bloom (Ref)
-    EID_ES_WAVEFORM,                         // old 105: ES Waveform (Ref)
+    // EID_ES_ANALOG,                        // old 101: ES Analog (Ref) - REMOVED (dead/broken 2026-03-02)
+    // EID_ES_SPECTRUM,                      // old 102: ES Spectrum (Ref) - REMOVED (dead/broken 2026-03-02)
+    // EID_ES_OCTAVE,                        // old 103: ES Octave (Ref) - REMOVED (dead/broken 2026-03-02)
+    // EID_ES_BLOOM,                         // old 104: ES Bloom (Ref) - REMOVED (dead/broken 2026-03-02)
+    // EID_ES_WAVEFORM,                      // old 105: ES Waveform (Ref) - REMOVED (dead/broken 2026-03-02)
     EID_SB_WAVEFORM310,                      // old 109: SB Waveform (Ref)
     EID_BEAT_PULSE_STACK,                    // old 110: Beat Pulse (Stack)
     EID_BEAT_PULSE_SHOCKWAVE,                // old 111: Beat Pulse (Shockwave)

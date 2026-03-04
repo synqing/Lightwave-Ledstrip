@@ -17,7 +17,7 @@ ConfettiEffect::ConfettiEffect()
 
 bool ConfettiEffect::init(plugins::EffectContext& ctx) {
     // Clear buffer for stateful effect
-    memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, 20);
     return true;
 }
 

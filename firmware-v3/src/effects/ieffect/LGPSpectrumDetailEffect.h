@@ -1,10 +1,10 @@
 /**
  * @file LGPSpectrumDetailEffect.h
- * @brief Detailed 64-bin FFT spectrum visualization with logarithmic mapping
+ * @brief Detailed spectrum visualisation with logarithmic centre-origin mapping
  *
- * Uses the full 64-bin Goertzel spectrum (110-4186 Hz) for detailed frequency visualization.
- * Logarithmic mapping places low frequencies at center, high frequencies at edges.
- * Center-origin pattern: bass at center (LEDs 79/80), treble at edges.
+ * Primary source is PipelineCore 256-bin FFT (`bins256` + `binHz`) rebucketed
+ * into 64 visual bins. Falls back to 64-bin control-bus spectrum when required.
+ * Bass maps near LEDs 79/80 and treble maps toward strip edges.
  *
  * Effect ID: 93
  * Family: AUDIO_REACTIVE

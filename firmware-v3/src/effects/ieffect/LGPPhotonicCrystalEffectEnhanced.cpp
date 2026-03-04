@@ -107,8 +107,8 @@ void LGPPhotonicCrystalEnhancedEffect::render(plugins::EffectContext& ctx) {
 #if FEATURE_AUDIO_SYNC
     if (ctx.audio.available) {
         // Enhanced: SPEED uses 64-bin sub-bass blended with heavy_bands
-        float heavyMid = (ctx.audio.controlBus.heavy_bands[1] +
-                          ctx.audio.controlBus.heavy_bands[2]) / 2.0f;
+        float heavyMid = (ctx.audio.getHeavyBand(1) +
+                          ctx.audio.getHeavyBand(2)) / 2.0f;
         float heavyEnergy = m_subBassEnergy * 0.6f + heavyMid * 0.4f;  // Blend sub-bass with heavy_bands
         float targetSpeed = 0.6f + 0.8f * heavyEnergy;  // 0.6-1.4x range
         speedMult = m_speedSpring.update(targetSpeed, dt);
@@ -119,9 +119,9 @@ void LGPPhotonicCrystalEnhancedEffect::render(plugins::EffectContext& ctx) {
         // BRIGHTNESS: Per-hop sampling for energy baseline (separate from speed)
         // Rolling avg + AsymmetricFollower is fine for visual intensity
         // ================================================================
-        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+        bool newHop = (ctx.audio.hopSequence() != m_lastHopSeq);
         if (newHop) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+            m_lastHopSeq = ctx.audio.hopSequence();
 
             float currentEnergy = ctx.audio.heavyBass();
 
@@ -138,11 +138,11 @@ void LGPPhotonicCrystalEnhancedEffect::render(plugins::EffectContext& ctx) {
 
             // Update chromagram targets
             for (uint8_t i = 0; i < 12; i++) {
-                m_chromaTargets[i] = ctx.audio.controlBus.heavy_chroma[i];
+                m_chromaTargets[i] = ctx.audio.getHeavyChroma(i);
             }
             
             // Migrated from bins64[0..5] to backend-agnostic bands[0]
-            m_targetSubBass = ctx.audio.controlBus.bands[0];
+            m_targetSubBass = ctx.audio.getBand(0);
             
         }
         
@@ -173,7 +173,7 @@ void LGPPhotonicCrystalEnhancedEffect::render(plugins::EffectContext& ctx) {
 
         // Circular chroma hue (replaces argmax + linear EMA to eliminate bin-flip rainbow sweeps)
         chromaOffset = effects::chroma::circularChromaHueSmoothed(
-            ctx.audio.controlBus.heavy_chroma, m_chromaAngle, rawDt, 0.20f);
+            ctx.audio.heavyChroma(), m_chromaAngle, rawDt, 0.20f);
     }
 #endif
 

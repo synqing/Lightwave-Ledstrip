@@ -403,7 +403,13 @@ void V1ApiRoutes::registerRoutes(
                               ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
             return;
         }
-        uint8_t id = request->getParam("id")->value().toInt();
+        int parsedId = request->getParam("id")->value().toInt();
+        if (parsedId < 0 || parsedId > 0xFFFF) {
+            sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                              ErrorCodes::INVALID_VALUE, "Invalid effect id", "id");
+            return;
+        }
+        uint16_t id = static_cast<uint16_t>(parsedId);
         handlers::AudioHandlers::handleMappingsGet(request, id, ctx.renderer);
     });
 
@@ -418,7 +424,13 @@ void V1ApiRoutes::registerRoutes(
                                   ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
                 return;
             }
-            uint8_t id = request->getParam("id")->value().toInt();
+            int parsedId = request->getParam("id")->value().toInt();
+            if (parsedId < 0 || parsedId > 0xFFFF) {
+                sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                                  ErrorCodes::INVALID_VALUE, "Invalid effect id", "id");
+                return;
+            }
+            uint16_t id = static_cast<uint16_t>(parsedId);
             handlers::AudioHandlers::handleMappingsSet(request, id, data, len, ctx.renderer);
         }
     );
@@ -431,7 +443,13 @@ void V1ApiRoutes::registerRoutes(
                               ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
             return;
         }
-        uint8_t id = request->getParam("id")->value().toInt();
+        int parsedId = request->getParam("id")->value().toInt();
+        if (parsedId < 0 || parsedId > 0xFFFF) {
+            sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                              ErrorCodes::INVALID_VALUE, "Invalid effect id", "id");
+            return;
+        }
+        uint16_t id = static_cast<uint16_t>(parsedId);
         handlers::AudioHandlers::handleMappingsDelete(request, id);
     });
 
@@ -443,7 +461,13 @@ void V1ApiRoutes::registerRoutes(
                               ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
             return;
         }
-        uint8_t id = request->getParam("id")->value().toInt();
+        int parsedId = request->getParam("id")->value().toInt();
+        if (parsedId < 0 || parsedId > 0xFFFF) {
+            sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                              ErrorCodes::INVALID_VALUE, "Invalid effect id", "id");
+            return;
+        }
+        uint16_t id = static_cast<uint16_t>(parsedId);
         handlers::AudioHandlers::handleMappingsEnable(request, id, true);
     });
 
@@ -455,7 +479,13 @@ void V1ApiRoutes::registerRoutes(
                               ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
             return;
         }
-        uint8_t id = request->getParam("id")->value().toInt();
+        int parsedId = request->getParam("id")->value().toInt();
+        if (parsedId < 0 || parsedId > 0xFFFF) {
+            sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                              ErrorCodes::INVALID_VALUE, "Invalid effect id", "id");
+            return;
+        }
+        uint16_t id = static_cast<uint16_t>(parsedId);
         handlers::AudioHandlers::handleMappingsEnable(request, id, false);
     });
 

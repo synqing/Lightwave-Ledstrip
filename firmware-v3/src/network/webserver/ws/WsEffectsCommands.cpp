@@ -11,6 +11,7 @@
 #include "../WebServerContext.h"
 #include "../../ApiResponse.h"
 #include "../../RequestValidator.h"
+#include "../../WebServer.h"
 #include "../../../codec/WsEffectsCodec.h"
 #include "../../../core/actors/ActorSystem.h"
 #include "../../../core/actors/RendererActor.h"
@@ -18,6 +19,7 @@
 #include "../../../config/display_order.h"
 #include "../../../plugins/api/IEffect.h"
 #include "../../../effects/transitions/TransitionTypes.h"
+#include "../../../effects/enhancement/ColorCorrectionEngine.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 #include <cstring>
@@ -26,6 +28,8 @@ namespace lightwaveos {
 namespace network {
 namespace webserver {
 namespace ws {
+
+using namespace lightwaveos::enhancement;
 
 static void handleEffectsGetMetadata(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     // Decode using codec (single canonical JSON parser)
@@ -409,19 +413,17 @@ static void handleEffectsGetCategories(AsyncWebSocketClient* client, JsonDocumen
     
     const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
     
-    // Collect family data into arrays
-    const char* familyNames[10];
-    uint8_t familyCounts[10];
-    for (uint8_t i = 0; i < 10; i++) {
-        PatternFamily family = static_cast<PatternFamily>(i);
-        familyCounts[i] = PatternRegistry::getFamilyCount(family);
-        
-        char familyNameBuf[32];
-        PatternRegistry::getFamilyName(family, familyNameBuf, sizeof(familyNameBuf));
-        familyNames[i] = familyNameBuf;
-    }
-    
-    String response = buildWsResponse("effects.categories", requestId, [familyNames, familyCounts](JsonObject& data) {
+    String response = buildWsResponse("effects.categories", requestId, [](JsonObject& data) {
+        const char* familyNames[10];
+        uint8_t familyCounts[10];
+        char familyNameBufs[10][32];
+
+        for (uint8_t i = 0; i < 10; ++i) {
+            PatternFamily family = static_cast<PatternFamily>(i);
+            familyCounts[i] = PatternRegistry::getFamilyCount(family);
+            PatternRegistry::getFamilyName(family, familyNameBufs[i], sizeof(familyNameBufs[i]));
+            familyNames[i] = familyNameBufs[i];
+        }
         codec::WsEffectsCodec::encodeCategories(familyNames, familyCounts, 10, data);
     });
     client->text(response);
@@ -576,6 +578,107 @@ static void handleParametersSet(AsyncWebSocketClient* client, JsonDocument& doc,
     client->text(response);
 }
 
+// ============================================================================
+// Camera Mode - Macro for recording with Sony a7s3 / cinema cameras
+// ============================================================================
+// Caps brightness (no blown whites), enables gamma (no crushed blacks),
+// reduces speed (less flicker), bumps fade (smoother transitions).
+// Toggle on/off preserves and restores previous values.
+
+static struct {
+    bool active = false;
+    uint8_t prevBrightness = 128;
+    uint8_t prevSpeed = 25;
+    uint8_t prevFadeAmount = 128;
+    bool prevGammaEnabled = true;
+    float prevGammaValue = 2.2f;
+} s_cameraMode;
+
+static constexpr uint8_t CAMERA_BRIGHTNESS_CAP = 180;
+static constexpr float CAMERA_SPEED_FACTOR = 0.7f;
+static constexpr float CAMERA_GAMMA_VALUE = 2.2f;
+static constexpr uint8_t CAMERA_FADE_BUMP = 180;  // Higher = smoother
+
+static void handleCameraModeSet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    const char* requestId = doc["requestId"] | "";
+    bool enabled = doc["enabled"] | false;
+
+    if (enabled && !s_cameraMode.active) {
+        // Save current values
+        const auto& cached = ctx.webServer->getCachedRendererState();
+        s_cameraMode.prevBrightness = cached.brightness;
+        s_cameraMode.prevSpeed = cached.speed;
+        auto& ccEngine = enhancement::ColorCorrectionEngine::getInstance();
+        auto& ccCfg = ccEngine.getConfig();
+        s_cameraMode.prevGammaEnabled = ccCfg.gammaEnabled;
+        s_cameraMode.prevGammaValue = ccCfg.gammaValue;
+        // prevFadeAmount: read from renderer if available, else use sensible default
+        s_cameraMode.prevFadeAmount = 128;
+
+        // Apply camera-friendly values
+        uint8_t cappedBrightness = (cached.brightness > CAMERA_BRIGHTNESS_CAP)
+            ? CAMERA_BRIGHTNESS_CAP : cached.brightness;
+        ctx.actorSystem.setBrightness(cappedBrightness);
+
+        uint8_t reducedSpeed = static_cast<uint8_t>(cached.speed * CAMERA_SPEED_FACTOR);
+        if (reducedSpeed < 1) reducedSpeed = 1;
+        ctx.actorSystem.setSpeed(reducedSpeed);
+
+        ctx.actorSystem.setFadeAmount(CAMERA_FADE_BUMP);
+
+        // Enable gamma correction
+        enhancement::ColorCorrectionConfig newCfg = ccCfg;
+        newCfg.gammaEnabled = true;
+        newCfg.gammaValue = CAMERA_GAMMA_VALUE;
+        ccEngine.setConfig(newCfg);
+
+        s_cameraMode.active = true;
+    } else if (!enabled && s_cameraMode.active) {
+        // Restore previous values
+        ctx.actorSystem.setBrightness(s_cameraMode.prevBrightness);
+        ctx.actorSystem.setSpeed(s_cameraMode.prevSpeed);
+        ctx.actorSystem.setFadeAmount(s_cameraMode.prevFadeAmount);
+
+        auto& ccEngine = enhancement::ColorCorrectionEngine::getInstance();
+        auto& ccCfg = ccEngine.getConfig();
+        enhancement::ColorCorrectionConfig restoreCfg = ccCfg;
+        restoreCfg.gammaEnabled = s_cameraMode.prevGammaEnabled;
+        restoreCfg.gammaValue = s_cameraMode.prevGammaValue;
+        ccEngine.setConfig(restoreCfg);
+
+        s_cameraMode.active = false;
+    }
+
+    // Broadcast status so all clients see the change
+    if (ctx.broadcastStatus) ctx.broadcastStatus();
+
+    // Respond with current state
+    String response = buildWsResponse("cameraMode.set", requestId, [](JsonObject& data) {
+        data["enabled"] = s_cameraMode.active;
+    });
+    client->text(response);
+
+    // Broadcast camera mode change to all clients
+    if (ctx.ws) {
+        JsonDocument broadcast;
+        broadcast["type"] = "cameraMode.changed";
+        JsonObject bData = broadcast["data"].to<JsonObject>();
+        bData["enabled"] = s_cameraMode.active;
+        String broadcastStr;
+        serializeJson(broadcast, broadcastStr);
+        ctx.ws->textAll(broadcastStr);
+    }
+}
+
+static void handleCameraModeGet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    const char* requestId = doc["requestId"] | "";
+
+    String response = buildWsResponse("cameraMode.get", requestId, [](JsonObject& data) {
+        data["enabled"] = s_cameraMode.active;
+    });
+    client->text(response);
+}
+
 void registerWsEffectsCommands(const WebServerContext& ctx) {
     WsCommandRouter::registerCommand("effects.getMetadata", handleEffectsGetMetadata);
     WsCommandRouter::registerCommand("effects.getCurrent", handleEffectsGetCurrent);
@@ -593,10 +696,11 @@ void registerWsEffectsCommands(const WebServerContext& ctx) {
     WsCommandRouter::registerCommand("effects.getByFamily", handleEffectsGetByFamily);
     WsCommandRouter::registerCommand("parameters.get", handleParametersGet);
     WsCommandRouter::registerCommand("parameters.set", handleParametersSet);
+    WsCommandRouter::registerCommand("cameraMode.set", handleCameraModeSet);
+    WsCommandRouter::registerCommand("cameraMode.get", handleCameraModeGet);
 }
 
 } // namespace ws
 } // namespace webserver
 } // namespace network
 } // namespace lightwaveos
-

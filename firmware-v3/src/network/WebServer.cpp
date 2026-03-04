@@ -1636,7 +1636,12 @@ void WebServer::broadcastLEDFrame() {
     if (m_lowHeapShed) {
         return;
     }
-    
+
+    // Avoid cross-core LED buffer copy when there are no stream subscribers.
+    if (!m_ledBroadcaster->hasSubscribers()) {
+        return;
+    }
+
     // Get LED buffer from renderer (cross-core safe copy)
     CRGB leds[webserver::LedStreamConfig::TOTAL_LEDS];
     m_renderer->getBufferCopy(leds);

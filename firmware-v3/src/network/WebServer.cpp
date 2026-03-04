@@ -2,6 +2,12 @@
  * @file WebServer.cpp
  * @brief Web Server implementation for LightwaveOS v2
  *
+ * ╔══════════════════════════════════════════════════════════════════════╗
+ * ║  ARCHITECTURAL CONSTRAINT: K1 IS AP-ONLY. NEVER ENABLE STA MODE.  ║
+ * ║  WebServer runs on the AP interface (192.168.4.1). Do NOT add      ║
+ * ║  STA-dependent features. See WiFiManager.h and CLAUDE.md.          ║
+ * ╚══════════════════════════════════════════════════════════════════════╝
+ *
  * Implements REST API and WebSocket server integrated with Actor System.
  * All state changes are routed through m_orchestrator for thread safety.
  */
@@ -139,6 +145,10 @@ IPAddress unpackIpKey(uint32_t key) {
 
 size_t getFreeInternalHeap() {
     return heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+}
+
+size_t getLargestInternalHeapBlock() {
+    return heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
 }
 
 } // namespace
@@ -437,12 +447,17 @@ bool WebServer::isClientAuthenticated(uint32_t clientId) const {
 
 void WebServer::updateLowHeapShedState(uint32_t nowMs) {
     const uint32_t freeInternal = static_cast<uint32_t>(getFreeInternalHeap());
+    const uint32_t largestInternal = static_cast<uint32_t>(getLargestInternalHeapBlock());
 
     if (!m_lowHeapShed) {
         if (freeInternal < INTERNAL_HEAP_SHED_BELOW_BYTES) {
             m_lowHeapShed = true;
             m_lastHeapShedLogMs = nowMs;
-            LW_LOGW("Low-heap shedding ENABLED (internal=%lu)", (unsigned long)freeInternal);
+            LW_LOGW("Low-heap shedding ENABLED (internal=%lu, largest=%lu, shed<%lu,resume>%lu)",
+                    (unsigned long)freeInternal,
+                    (unsigned long)largestInternal,
+                    (unsigned long)INTERNAL_HEAP_SHED_BELOW_BYTES,
+                    (unsigned long)INTERNAL_HEAP_RESUME_ABOVE_BYTES);
             // Cancel any pending broadcasts; when shedding we avoid creating/queuing WS payloads.
             m_broadcastPending = false;
             // Free queued WS frames immediately — internal heap starvation crashes WiFi/esp_timer.
@@ -454,12 +469,17 @@ void WebServer::updateLowHeapShedState(uint32_t nowMs) {
         if (freeInternal > INTERNAL_HEAP_RESUME_ABOVE_BYTES) {
             m_lowHeapShed = false;
             m_lastHeapShedLogMs = nowMs;
-            LW_LOGI("Low-heap shedding DISABLED (internal=%lu)", (unsigned long)freeInternal);
+            LW_LOGI("Low-heap shedding DISABLED (internal=%lu, largest=%lu)",
+                    (unsigned long)freeInternal,
+                    (unsigned long)largestInternal);
             // Force a one-shot status broadcast after recovery to resynchronise dashboards.
             m_broadcastPending = true;
-        } else if ((nowMs - m_lastHeapShedLogMs) > 5000) {
+        } else if ((nowMs - m_lastHeapShedLogMs) > INTERNAL_HEAP_SHED_LOG_INTERVAL_MS) {
             m_lastHeapShedLogMs = nowMs;
-            LW_LOGW("Low-heap shedding active (internal=%lu)", (unsigned long)freeInternal);
+            LW_LOGW("Low-heap shedding active (internal=%lu, largest=%lu, resume>%lu)",
+                    (unsigned long)freeInternal,
+                    (unsigned long)largestInternal,
+                    (unsigned long)INTERNAL_HEAP_RESUME_ABOVE_BYTES);
         }
     }
 }
@@ -480,15 +500,16 @@ void WebServer::update() {
     const uint32_t nowMs = millis();
     updateLowHeapShedState(nowMs);
 
-    // Periodic WS transport diagnostics (helps classify reconnect storms quickly).
+    // Periodic WS transport diagnostics (suppressed when no clients are connected).
     if (m_wsGateway) {
         static uint32_t s_lastWsDiagLogMs = 0;
-        if ((nowMs - s_lastWsDiagLogMs) >= 10000) {
+        const unsigned activeClients = static_cast<unsigned>(m_ws ? m_ws->count() : 0);
+        if (activeClients > 0 && (nowMs - s_lastWsDiagLogMs) >= 60000) {
             s_lastWsDiagLogMs = nowMs;
             const webserver::WsGateway::Stats wsStats = m_wsGateway->getStats();
             LW_LOGD(
                 "WS diag: active=%u ok=%lu rejCooldown=%lu rejOverlap=%lu rejLimit=%lu disc=%lu parseErr=%lu oversize=%lu unknown=%lu",
-                static_cast<unsigned>(m_ws ? m_ws->count() : 0),
+                activeClients,
                 static_cast<unsigned long>(wsStats.connectAccepted),
                 static_cast<unsigned long>(wsStats.connectRejectedCooldown),
                 static_cast<unsigned long>(wsStats.connectRejectedOverlap),
@@ -552,7 +573,7 @@ void WebServer::update() {
                 // Tear down AP first to avoid accumulating stale state.
                 WiFi.softAPdisconnect(false);
                 const char* apPw = config::NetworkConfig::AP_PASSWORD;
-                if (!WiFi.softAP(config::NetworkConfig::AP_SSID, apPw, apChannel, false, 4, WIFI_AUTH_WPA_WPA2_PSK)) {
+                if (!WiFi.softAP(config::NetworkConfig::AP_SSID, apPw, apChannel)) {
                     LW_LOGE("AP re-init failed");
                 } else {
                     m_lastApReinitMs = nowMs;
@@ -1636,7 +1657,12 @@ void WebServer::broadcastLEDFrame() {
     if (m_lowHeapShed) {
         return;
     }
-    
+
+    // Avoid cross-core LED buffer copy when there are no stream subscribers.
+    if (!m_ledBroadcaster->hasSubscribers()) {
+        return;
+    }
+
     // Get LED buffer from renderer (cross-core safe copy)
     CRGB leds[webserver::LedStreamConfig::TOTAL_LEDS];
     m_renderer->getBufferCopy(leds);

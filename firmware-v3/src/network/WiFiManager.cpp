@@ -72,15 +72,27 @@ bool WiFiManager::begin() {
 #ifdef WIFI_AP_ONLY
     LW_LOGW("WIFI_AP_ONLY enabled - starting in AP mode only");
 #endif
+    // Minimal AP startup — matches restructure commit (5ee8aa84) proven working path.
+    // Uses bare 3-param softAP call identical to the original startSoftAP().
     {
         WiFi.mode(WIFI_MODE_AP);
-        wifi_auth_mode_t authMode = m_apPassword.isEmpty() ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA_WPA2_PSK;
-        const char* pw = m_apPassword.isEmpty() ? NULL : m_apPassword.c_str();
-        if (WiFi.softAP(m_apSSID.c_str(), pw, m_apChannel,
-                        false, 4, authMode)) {
-            LW_LOGI("AP started: '%s' at %s (STA disabled — use serial 'wifi connect' to enable)",
+        if (WiFi.softAP(m_apSSID.c_str(), m_apPassword.c_str(), m_apChannel)) {
+            LW_LOGI("AP started: '%s' at %s",
                     m_apSSID.c_str(), WiFi.softAPIP().toString().c_str());
             xEventGroupSetBits(m_wifiEventGroup, EVENT_AP_START);
+            // DIAGNOSTIC: dump IDF-level AP config to verify radio state
+            wifi_config_t apConf;
+            if (esp_wifi_get_config(WIFI_IF_AP, &apConf) == ESP_OK) {
+                LW_LOGW("AP DIAG: ssid='%s' ssid_len=%d ch=%d auth=%d hidden=%d max_conn=%d",
+                        apConf.ap.ssid, apConf.ap.ssid_len, apConf.ap.channel,
+                        apConf.ap.authmode, apConf.ap.ssid_hidden, apConf.ap.max_connection);
+            }
+            wifi_mode_t wmode;
+            esp_wifi_get_mode(&wmode);
+            LW_LOGW("AP DIAG: wifi_mode=%d (1=STA 2=AP 3=APSTA)", wmode);
+            int8_t txPow;
+            esp_wifi_get_max_tx_power(&txPow);
+            LW_LOGW("AP DIAG: tx_power=%d (max=84 ~21dBm)", txPow);
         } else {
             LW_LOGE("Failed to start Soft-AP!");
         }
@@ -636,10 +648,10 @@ void WiFiManager::startSoftAP() {
     WiFi.mode(WIFI_MODE_APSTA);
 
     // Configure and start AP
-    wifi_auth_mode_t apAuth = m_apPassword.isEmpty() ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA_WPA2_PSK;
+    // Auth mode is set automatically by Arduino from passphrase (NULL → OPEN, ≥8 chars → WPA2).
     const char* apPw = m_apPassword.isEmpty() ? NULL : m_apPassword.c_str();
     if (WiFi.softAP(m_apSSID.c_str(), apPw, m_apChannel,
-                    false, 4, apAuth)) {
+                    false, 4)) {
         LW_LOGI("AP started - IP: %s", WiFi.softAPIP().toString().c_str());
         xEventGroupSetBits(m_wifiEventGroup, EVENT_AP_START);
     } else {

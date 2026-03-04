@@ -10,6 +10,7 @@
 #define LW_LOG_TAG "StackMonitor"
 #include "StackMonitor.h"
 #include "../../utils/Log.h"
+#include <climits>
 #include <cstring>
 
 #ifndef NATIVE_BUILD
@@ -25,6 +26,7 @@ namespace system {
 
 // Static members
 StackMonitor::TaskProfileData StackMonitor::s_profiles[StackMonitor::MAX_PROFILED_TASKS];
+StackMonitor::WarningState StackMonitor::s_warningStates[StackMonitor::MAX_PROFILED_TASKS];
 bool StackMonitor::s_profilingEnabled = false;
 uint8_t StackMonitor::s_warningThreshold = 80;  // 80% usage triggers warning
 bool StackMonitor::s_initialized = false;
@@ -36,6 +38,12 @@ void StackMonitor::init() {
 
     LW_LOGI("Initialized (overflow detection enabled)");
     LW_LOGI("Warning threshold: %d%%", s_warningThreshold);
+
+    for (size_t i = 0; i < MAX_PROFILED_TASKS; i++) {
+        s_warningStates[i].taskName = nullptr;
+        s_warningStates[i].lastWarnedFreeBytes = UINT32_MAX;
+        s_warningStates[i].active = false;
+    }
     
     s_initialized = true;
 }
@@ -67,6 +75,43 @@ uint8_t StackMonitor::getStackUsagePercent(TaskHandle_t taskHandle, uint32_t sta
     return percent;
 }
 
+StackMonitor::WarningState* StackMonitor::getWarningState(const char* taskName) {
+    if (taskName == nullptr) {
+        taskName = "Unknown";
+    }
+
+    for (size_t i = 0; i < MAX_PROFILED_TASKS; i++) {
+        if (s_warningStates[i].active && s_warningStates[i].taskName != nullptr &&
+            strcmp(s_warningStates[i].taskName, taskName) == 0) {
+            return &s_warningStates[i];
+        }
+    }
+
+    for (size_t i = 0; i < MAX_PROFILED_TASKS; i++) {
+        if (!s_warningStates[i].active) {
+            s_warningStates[i].taskName = taskName;
+            s_warningStates[i].lastWarnedFreeBytes = UINT32_MAX;
+            s_warningStates[i].active = true;
+            return &s_warningStates[i];
+        }
+    }
+
+    return &s_warningStates[0];
+}
+
+static uint32_t estimateTaskStackSizeBytes(const char* taskName, uint32_t freeBytes) {
+    if (taskName != nullptr && strcmp(taskName, "loopTask") == 0) {
+#ifdef CONFIG_ARDUINO_LOOP_STACK_SIZE
+        return static_cast<uint32_t>(CONFIG_ARDUINO_LOOP_STACK_SIZE);
+#else
+        return 8192U;
+#endif
+    }
+
+    // Conservative fallback when explicit task stack size is unknown.
+    return (freeBytes < 2048U) ? 4096U : (freeBytes * 2U);
+}
+
 void StackMonitor::checkAllTasks() {
     if (!s_initialized) {
         return;
@@ -88,18 +133,26 @@ void StackMonitor::checkAllTasks() {
         // Get high water mark (this is the minimum free space, not current)
         uint32_t freeBytes = getStackHighWaterMark(currentTask);
         
-        // Estimate stack size (conservative: assume at least 4KB if high water mark is small)
-        // This is an approximation since we can't get actual stack size easily
-        uint32_t estimatedStackSize = (freeBytes < 2048) ? 4096 : (freeBytes * 2);
+        // Estimate stack size for usage reporting. `loopTask` has a known default from Arduino.
+        uint32_t estimatedStackSize = estimateTaskStackSizeBytes(taskName, freeBytes);
         
         uint32_t usedBytes = estimatedStackSize - freeBytes;
         uint8_t usagePercent = (freeBytes < estimatedStackSize) ? 
             (uint8_t)((usedBytes * 100) / estimatedStackSize) : 0;
 
-        // Log warning if usage exceeds threshold
-        if (usagePercent >= s_warningThreshold) {
-            LW_LOGW("Task '%s': Stack usage %d%% (%u/%u bytes free, estimated)",
-                   taskName, usagePercent, freeBytes, estimatedStackSize);
+        // High-water marks are historical minima. Warn once, then only when
+        // headroom worsens, to avoid repeating the same value every cycle.
+        if (usagePercent >= s_warningThreshold || freeBytes <= CRITICAL_FREE_BYTES) {
+            WarningState* warningState = getWarningState(taskName);
+            const bool firstWarning = (warningState->lastWarnedFreeBytes == UINT32_MAX);
+            const bool worsened = (!firstWarning) &&
+                                  (freeBytes + WARNING_DELTA_BYTES < warningState->lastWarnedFreeBytes);
+
+            if (firstWarning || worsened) {
+                LW_LOGW("Task '%s': Low stack headroom (high-water=%u bytes, est usage=%d%% of %u bytes)",
+                       taskName, freeBytes, usagePercent, estimatedStackSize);
+                warningState->lastWarnedFreeBytes = freeBytes;
+            }
         }
         
         // Update profiling data if enabled
@@ -183,6 +236,9 @@ void StackMonitor::startProfiling() {
         s_profiles[i].peakUsed = 0;
         s_profiles[i].totalUsed = 0;
         s_profiles[i].sampleCount = 0;
+        s_warningStates[i].taskName = nullptr;
+        s_warningStates[i].lastWarnedFreeBytes = UINT32_MAX;
+        s_warningStates[i].active = false;
     }
 
     LW_LOGI("Stack profiling started");
@@ -209,8 +265,8 @@ void StackMonitor::generateProfileReport() {
         // Get high water mark
         uint32_t freeBytes = getStackHighWaterMark(currentTask);
         
-        // Estimate stack size (conservative: assume at least 4KB if high water mark is small)
-        uint32_t estimatedStackSize = (freeBytes < 2048) ? 4096 : (freeBytes * 2);
+        // Estimate stack size for reporting.
+        uint32_t estimatedStackSize = estimateTaskStackSizeBytes(taskName, freeBytes);
         
         uint32_t usedBytes = estimatedStackSize - freeBytes;
         uint8_t usagePercent = (usedBytes * 100) / estimatedStackSize;

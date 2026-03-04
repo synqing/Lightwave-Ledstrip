@@ -148,6 +148,10 @@ size_t getFreeInternalHeap() {
     return heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
 }
 
+size_t getLargestInternalHeapBlock() {
+    return heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
+}
+
 } // namespace
 
 #if FEATURE_EFFECT_VALIDATION
@@ -444,12 +448,17 @@ bool WebServer::isClientAuthenticated(uint32_t clientId) const {
 
 void WebServer::updateLowHeapShedState(uint32_t nowMs) {
     const uint32_t freeInternal = static_cast<uint32_t>(getFreeInternalHeap());
+    const uint32_t largestInternal = static_cast<uint32_t>(getLargestInternalHeapBlock());
 
     if (!m_lowHeapShed) {
         if (freeInternal < INTERNAL_HEAP_SHED_BELOW_BYTES) {
             m_lowHeapShed = true;
             m_lastHeapShedLogMs = nowMs;
-            LW_LOGW("Low-heap shedding ENABLED (internal=%lu)", (unsigned long)freeInternal);
+            LW_LOGW("Low-heap shedding ENABLED (internal=%lu, largest=%lu, shed<%lu,resume>%lu)",
+                    (unsigned long)freeInternal,
+                    (unsigned long)largestInternal,
+                    (unsigned long)INTERNAL_HEAP_SHED_BELOW_BYTES,
+                    (unsigned long)INTERNAL_HEAP_RESUME_ABOVE_BYTES);
             // Cancel any pending broadcasts; when shedding we avoid creating/queuing WS payloads.
             m_broadcastPending = false;
             // Free queued WS frames immediately — internal heap starvation crashes WiFi/esp_timer.
@@ -461,12 +470,17 @@ void WebServer::updateLowHeapShedState(uint32_t nowMs) {
         if (freeInternal > INTERNAL_HEAP_RESUME_ABOVE_BYTES) {
             m_lowHeapShed = false;
             m_lastHeapShedLogMs = nowMs;
-            LW_LOGI("Low-heap shedding DISABLED (internal=%lu)", (unsigned long)freeInternal);
+            LW_LOGI("Low-heap shedding DISABLED (internal=%lu, largest=%lu)",
+                    (unsigned long)freeInternal,
+                    (unsigned long)largestInternal);
             // Force a one-shot status broadcast after recovery to resynchronise dashboards.
             m_broadcastPending = true;
-        } else if ((nowMs - m_lastHeapShedLogMs) > 5000) {
+        } else if ((nowMs - m_lastHeapShedLogMs) > INTERNAL_HEAP_SHED_LOG_INTERVAL_MS) {
             m_lastHeapShedLogMs = nowMs;
-            LW_LOGW("Low-heap shedding active (internal=%lu)", (unsigned long)freeInternal);
+            LW_LOGW("Low-heap shedding active (internal=%lu, largest=%lu, resume>%lu)",
+                    (unsigned long)freeInternal,
+                    (unsigned long)largestInternal,
+                    (unsigned long)INTERNAL_HEAP_RESUME_ABOVE_BYTES);
         }
     }
 }
@@ -560,7 +574,7 @@ void WebServer::update() {
                 // Tear down AP first to avoid accumulating stale state.
                 WiFi.softAPdisconnect(false);
                 const char* apPw = config::NetworkConfig::AP_PASSWORD;
-                if (!WiFi.softAP(config::NetworkConfig::AP_SSID, apPw, apChannel, false, 4, WIFI_AUTH_WPA_WPA2_PSK)) {
+                if (!WiFi.softAP(config::NetworkConfig::AP_SSID, apPw, apChannel)) {
                     LW_LOGE("AP re-init failed");
                 } else {
                     m_lastApReinitMs = nowMs;
@@ -636,14 +650,19 @@ void WebServer::update() {
 
     // UDP streaming to subscribed clients (bypasses TCP backpressure)
     if (m_udpStreamer && m_renderer) {
-        CRGB udpLeds[webserver::LedStreamConfig::TOTAL_LEDS];
-        m_renderer->getBufferCopy(udpLeds);
-        m_udpStreamer->sendLedFrame(udpLeds);
+        const bool hasLedSubscribers = m_udpStreamer->hasLedSubscribers();
+        if (hasLedSubscribers) {
+            CRGB udpLeds[webserver::LedStreamConfig::TOTAL_LEDS];
+            m_renderer->getBufferCopy(udpLeds);
+            m_udpStreamer->sendLedFrame(udpLeds);
+        }
 
 #if FEATURE_AUDIO_SYNC
-        const audio::ControlBusFrame& frame = m_renderer->getCachedAudioFrame();
-        const audio::MusicalGridSnapshot& grid = m_renderer->getLastMusicalGrid();
-        m_udpStreamer->sendAudioFrame(frame, grid);
+        if (m_udpStreamer->hasAudioSubscribers()) {
+            const audio::ControlBusFrame& frame = m_renderer->getCachedAudioFrame();
+            const audio::MusicalGridSnapshot& grid = m_renderer->getLastMusicalGrid();
+            m_udpStreamer->sendAudioFrame(frame, grid);
+        }
 #endif
     }
 
@@ -1413,8 +1432,7 @@ void WebServer::doBroadcastStatus() {
         doc["mic"] = micLevelDb;
 
         // Musical key/chord (formatted string)
-        const audio::ControlBus& controlBus = audio->getControlBusRef();
-        const audio::ControlBusFrame& frame = controlBus.GetFrameRef();
+        const audio::ControlBusFrame frame = audio->getControlBusFrameSnapshot();
         const audio::ChordState& chord = frame.chordState;
         if (chord.confidence > 0.1f && chord.type != audio::ChordType::NONE) {
             doc["key"] = formatKeyName(chord.rootNote, chord.type);
@@ -1643,6 +1661,11 @@ void WebServer::broadcastLEDFrame() {
     // Streaming over WebSocket can consume significant internal heap when clients are slow.
     // When shedding, prioritise control plane (commands) and UDP streaming.
     if (m_lowHeapShed) {
+        return;
+    }
+
+    // Avoid cross-core LED buffer copy when there are no stream subscribers.
+    if (!m_ledBroadcaster->hasSubscribers()) {
         return;
     }
     

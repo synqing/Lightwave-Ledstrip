@@ -46,7 +46,7 @@ uint32_t StateStore::getVersion() const {
     return getState().version;
 }
 
-uint8_t StateStore::getCurrentEffect() const {
+EffectId StateStore::getCurrentEffect() const {
     return getState().currentEffectId;
 }
 

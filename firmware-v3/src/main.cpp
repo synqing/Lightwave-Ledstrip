@@ -84,9 +84,7 @@
 #include "network/WebServer.h"
 using namespace lightwaveos::network;
 using namespace lightwaveos::config;
-
-// Global WebServer instance pointer
-WebServer* webServerInstance = nullptr;
+// webServerInstance declared in WebServer.h, defined in WebServer.cpp
 #endif
 
 using namespace lightwaveos::persistence;
@@ -105,9 +103,7 @@ using namespace lightwaveos::plugins;
 ZoneComposer zoneComposer;
 ZoneConfigManager* zoneConfigMgr = nullptr;
 
-// Forward declaration for PresetManager (not yet implemented)
-namespace lightwaveos { namespace persistence { class PresetManager; } }
-lightwaveos::persistence::PresetManager* presetMgr = nullptr;
+// PresetManager removed — stub handlers remain in V1ApiRoutes until implemented
 
 // ==================== Global Plugin Manager ====================
 
@@ -2161,101 +2157,6 @@ void loop() {
                 // Treat non-validate 'v...' input as handled to avoid consuming and then reading a stale single-char command
                 handledMulti = true;
                 Serial.println("Unknown command. Use: validate <effect_id>");
-            }
-        }
-        else if (peekChar == 'c' && input.length() > 1) {
-            if (inputLower.startsWith("capture ")) {
-                handledMulti = true;
-                String subcmd = inputLower.substring(8);
-                
-                if (subcmd == "off") {
-                    renderer->setCaptureMode(false, 0);
-                    Serial.println("Capture mode disabled");
-                }
-                else if (subcmd.startsWith("on")) {
-                    // Parse tap mask: "on" (all), "on a" (tap A), "on b" (tap B), "on c" (tap C), "on ab" (taps A+B), etc.
-                    uint8_t tapMask = 0x07;  // Default: all taps
-                    if (subcmd.length() > 3) {
-                        tapMask = 0;
-                        if (subcmd.indexOf('a') >= 0) tapMask |= 0x01;  // Tap A
-                        if (subcmd.indexOf('b') >= 0) tapMask |= 0x02;  // Tap B
-                        if (subcmd.indexOf('c') >= 0) tapMask |= 0x04;  // Tap C
-                    }
-                    renderer->setCaptureMode(true, tapMask);
-                    Serial.printf("Capture mode enabled (tapMask=0x%02X: %s%s%s)\n",
-                                 tapMask,
-                                 (tapMask & 0x01) ? "A" : "",
-                                 (tapMask & 0x02) ? "B" : "",
-                                 (tapMask & 0x04) ? "C" : "");
-                }
-                else if (subcmd.startsWith("dump ")) {
-                    // Dump captured frame: "dump a", "dump b", "dump c"
-                    using namespace lightwaveos::actors;
-                    RendererActor::CaptureTap tap;
-                    bool valid = false;
-                    
-                    if (subcmd.indexOf(" a") >= 0) {
-                        tap = RendererActor::CaptureTap::TAP_A_PRE_CORRECTION;
-                        valid = true;
-                    } else if (subcmd.indexOf(" b") >= 0) {
-                        tap = RendererActor::CaptureTap::TAP_B_POST_CORRECTION;
-                        valid = true;
-                    } else if (subcmd.indexOf(" c") >= 0) {
-                        tap = RendererActor::CaptureTap::TAP_C_PRE_WS2812;
-                        valid = true;
-                    }
-                    
-                    if (valid) {
-                        CRGB frame[320];
-                        if (renderer->getCapturedFrame(tap, frame)) {
-                            auto metadata = renderer->getCaptureMetadata();
-                            
-                            // Binary frame format:
-                            // Header: [MAGIC=0xFD][VERSION=0x01][TAP_ID][EFFECT_ID][PALETTE_ID][BRIGHTNESS][SPEED][FRAME_INDEX(4)][TIMESTAMP(4)][FRAME_LEN(2)]
-                            // Payload: [RGB×320]
-                            Serial.write(0xFD);  // Magic
-                            Serial.write(0x01);  // Version
-                            Serial.write((uint8_t)tap);
-                            Serial.write(metadata.effectId);
-                            Serial.write(metadata.paletteId);
-                            Serial.write(metadata.brightness);
-                            Serial.write(metadata.speed);
-                            Serial.write((uint8_t)(metadata.frameIndex & 0xFF));
-                            Serial.write((uint8_t)((metadata.frameIndex >> 8) & 0xFF));
-                            Serial.write((uint8_t)((metadata.frameIndex >> 16) & 0xFF));
-                            Serial.write((uint8_t)((metadata.frameIndex >> 24) & 0xFF));
-                            Serial.write((uint8_t)(metadata.timestampUs & 0xFF));
-                            Serial.write((uint8_t)((metadata.timestampUs >> 8) & 0xFF));
-                            Serial.write((uint8_t)((metadata.timestampUs >> 16) & 0xFF));
-                            Serial.write((uint8_t)((metadata.timestampUs >> 24) & 0xFF));
-                            uint16_t frameLen = 320 * 3;  // RGB × 320 LEDs
-                            Serial.write((uint8_t)(frameLen & 0xFF));
-                            Serial.write((uint8_t)((frameLen >> 8) & 0xFF));
-                            
-                            // Payload: RGB data
-                            Serial.write((uint8_t*)frame, frameLen);
-                            
-                            Serial.printf("\nFrame dumped: tap=%d, effect=%d, palette=%d, frame=%u\n",
-                                         (int)tap, metadata.effectId, metadata.paletteId, (unsigned int)metadata.frameIndex);
-                        } else {
-                            Serial.println("No frame captured for this tap");
-                        }
-                    } else {
-                        Serial.println("Usage: capture dump <a|b|c>");
-                    }
-                }
-                else if (subcmd == "status") {
-                    handledMulti = true;
-                    auto metadata = renderer->getCaptureMetadata();
-                    Serial.println("\n=== Capture Status ===");
-                    Serial.printf("  Enabled: %s\n", renderer->isCaptureModeEnabled() ? "YES" : "NO");
-                    Serial.printf("  Last capture: effect=%d, palette=%d, frame=%lu\n",
-                                 metadata.effectId, metadata.paletteId, metadata.frameIndex);
-                    Serial.println();
-                }
-                else {
-                    Serial.println("Usage: capture <on [a|b|c]|off|dump <a|b|c>|status>");
-                }
             }
         }
 

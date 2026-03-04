@@ -241,7 +241,7 @@ void FastLedDriver::show() {
 #ifdef ESP32
     // Acquire mutex for thread-safe show
     if (m_mutex != nullptr) {
-        if (xSemaphoreTake(m_mutex, pdMS_TO_TICKS(10)) != pdTRUE) {
+        if (xSemaphoreTake(m_mutex, pdMS_TO_TICKS(2)) != pdTRUE) {
             return;  // Could not acquire mutex, skip this frame
         }
     }

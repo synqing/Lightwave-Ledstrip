@@ -574,8 +574,7 @@ bool WiFiManager::hasAnyStaCandidates() const {
     if (isValidStaSsid(m_ssid2)) return true;
 
     WiFiCredentialsStorage::NetworkCredential nvsNets[WiFiCredentialsStorage::MAX_NETWORKS];
-    WiFiCredentialsStorage& storage = const_cast<WiFiCredentialsStorage&>(m_credentialsStorage);
-    uint8_t nvsCount = storage.loadNetworks(nvsNets, WiFiCredentialsStorage::MAX_NETWORKS);
+    uint8_t nvsCount = m_credentialsStorage.loadNetworks(nvsNets, WiFiCredentialsStorage::MAX_NETWORKS);
     for (uint8_t i = 0; i < nvsCount; i++) {
         if (isValidStaSsid(nvsNets[i].ssid)) return true;
     }

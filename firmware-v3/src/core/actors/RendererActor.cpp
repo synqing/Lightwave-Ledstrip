@@ -140,6 +140,8 @@ static audio::MusicalGridTuning toMusicalGridTuning(const audio::AudioContractTu
 RendererActor::RendererActor()
     : Actor(ActorConfigs::Renderer())
     , m_currentEffect(INVALID_EFFECT_ID)
+    , m_currentEffectValid(false)
+    , m_validatedEffectId(INVALID_EFFECT_ID)
     , m_brightness(LedConfig::DEFAULT_BRIGHTNESS)
     , m_speed(LedConfig::DEFAULT_SPEED)
     , m_paletteIndex(0)
@@ -771,7 +773,7 @@ void RendererActor::onTick()
     // See PatternRegistry::shouldSkipColorCorrection() for full list
     {
         TRACE_SCOPE("color_correction");
-        EffectId safeEffectTick = validateEffectId(m_currentEffect);
+        const EffectId safeEffectTick = m_currentEffectValid ? m_validatedEffectId : validateEffectId(m_currentEffect);
         if (!::PatternRegistry::shouldSkipColorCorrection(safeEffectTick)) {
             enhancement::ColorCorrectionEngine::getInstance().processBuffer(m_leds, LedConfig::TOTAL_LEDS);
             m_correctionApplyCount++;
@@ -1041,9 +1043,8 @@ void RendererActor::forceOneShotCapture(CaptureTap tap) {
         return;
     }
 
-    // Preserve the live LED state buffer so buffer-feedback effects are not disturbed.
-    CRGB savedLeds[LedConfig::TOTAL_LEDS];
-    memcpy(savedLeds, m_leds, sizeof(savedLeds));
+    // Snapshot m_leds into the member scratch buffer (avoids 960-byte stack allocation).
+    memcpy(m_captureScratch, m_leds, sizeof(m_captureScratch));
 
     // Preserve hue increment side-effect inside renderFrame()
     const uint8_t savedHue = m_hue;
@@ -1054,23 +1055,20 @@ void RendererActor::forceOneShotCapture(CaptureTap tap) {
     if (tap == CaptureTap::TAP_A_PRE_CORRECTION) {
         captureFrame(CaptureTap::TAP_A_PRE_CORRECTION, m_leds);
     } else {
-        // For Tap B/C we need the post-correction buffer, but we must not mutate m_leds.
-        CRGB corrected[LedConfig::TOTAL_LEDS];
-        memcpy(corrected, m_leds, sizeof(corrected));
-
-        enhancement::ColorCorrectionEngine::getInstance().processBuffer(corrected, LedConfig::TOTAL_LEDS);
+        // For Tap B/C, apply colour correction in-place on m_leds (restored below).
+        enhancement::ColorCorrectionEngine::getInstance().processBuffer(m_leds, LedConfig::TOTAL_LEDS);
 
         if (tap == CaptureTap::TAP_B_POST_CORRECTION) {
-            captureFrame(CaptureTap::TAP_B_POST_CORRECTION, corrected);
+            captureFrame(CaptureTap::TAP_B_POST_CORRECTION, m_leds);
         } else if (tap == CaptureTap::TAP_C_PRE_WS2812) {
             // Tap C is "pre-WS2812" after strip split. The split is a straight copy in showLeds(),
             // so the unified interleaved buffer is equivalent to the corrected buffer.
-            captureFrame(CaptureTap::TAP_C_PRE_WS2812, corrected);
+            captureFrame(CaptureTap::TAP_C_PRE_WS2812, m_leds);
         }
     }
 
     // Restore state so this on-demand capture does not perturb effect behaviour.
-    memcpy(m_leds, savedLeds, sizeof(savedLeds));
+    memcpy(m_leds, m_captureScratch, sizeof(m_captureScratch));
     m_hue = savedHue;
 }
 
@@ -1444,8 +1442,8 @@ void RendererActor::renderFrame()
     }
 
     // Single-effect mode
-    // Validate current effect ID and find registry entry
-    EffectId safeEffect = validateEffectId(m_currentEffect);
+    // Use cached validation result (set on effect change) to avoid per-frame linear scan
+    EffectId safeEffect = m_currentEffectValid ? m_validatedEffectId : validateEffectId(m_currentEffect);
     const auto* safeReg = findById(safeEffect);
     if (!safeReg || !safeReg->active) {
         // No effect - clear buffer
@@ -1625,24 +1623,21 @@ void RendererActor::showLeds()
            sizeof(CRGB) * LedConfig::LEDS_PER_STRIP);
 
     // =========================================================================
-    // Silence-based brightness gate (Sensory Bridge silent_scale pattern)
-    // Fades ALL output to black after sustained silence
+    // Combined silence gate — merges the global silent_scale gate and the
+    // per-effect hard silence gate into a single nscale8 pass over 320 LEDs.
+    // Previously two separate 320-LED iterations; now one.
     // =========================================================================
 #if FEATURE_AUDIO_SYNC
-    if (m_controlBusBuffer != nullptr && m_lastControlBus.silentScale < 0.999f) {
-        uint8_t scale = static_cast<uint8_t>(m_lastControlBus.silentScale * 255.0f);
-        for (uint16_t i = 0; i < LedConfig::LEDS_PER_STRIP; ++i) {
-            m_strip1[i].nscale8(scale);
-            m_strip2[i].nscale8(scale);
-        }
-    }
-
-    // =========================================================================
-    // Hard silence gate for late-pack reactive effects
-    // Ensures no-audio state fades these effects to black.
-    // =========================================================================
     {
-        const EffectId safeId = validateEffectId(m_currentEffect);
+        // --- (1) Global silence scale (Sensory Bridge silent_scale pattern) ---
+        uint8_t silentScaleVal = 255;
+        if (m_controlBusBuffer != nullptr && m_lastControlBus.silentScale < 0.999f) {
+            silentScaleVal = static_cast<uint8_t>(m_lastControlBus.silentScale * 255.0f);
+        }
+
+        // --- (2) Hard silence gate for late-pack reactive effects ---
+        uint8_t gateScale = 255;
+        const EffectId safeId = m_currentEffectValid ? m_validatedEffectId : validateEffectId(m_currentEffect);
         const bool hardGateEffect = needsSilenceGate(safeId) && ::PatternRegistry::isAudioReactive(safeId);
         if (hardGateEffect) {
             float dt = m_effectContext.rawDeltaTimeSeconds;
@@ -1665,25 +1660,30 @@ void RendererActor::showLeds()
             if (m_highIdReactiveActivityGate > 1.0f) m_highIdReactiveActivityGate = 1.0f;
 
             const float g = m_highIdReactiveActivityGate;
-            m_highIdReactiveSilenceGate = g * g * (3.0f - 2.0f * g);  // smoothstep (bezier-like S-curve)
+            m_highIdReactiveSilenceGate = g * g * (3.0f - 2.0f * g);  // smoothstep
 
-            uint8_t gateScale = static_cast<uint8_t>(m_highIdReactiveSilenceGate * 255.0f + 0.5f);
+            gateScale = static_cast<uint8_t>(m_highIdReactiveSilenceGate * 255.0f + 0.5f);
             // Snap-to-black at the bottom to prevent low-level flicker in "silence".
             if (gateScale <= 1u) gateScale = 0u;
-            if (gateScale < 255u) {
-                for (uint16_t i = 0; i < LedConfig::LEDS_PER_STRIP; ++i) {
-                    if (gateScale == 0u) {
-                        m_strip1[i] = CRGB::Black;
-                        m_strip2[i] = CRGB::Black;
-                    } else {
-                        m_strip1[i].nscale8(gateScale);
-                        m_strip2[i].nscale8(gateScale);
-                    }
-                }
-            }
         } else {
             m_highIdReactiveSilenceGate = 1.0f;
             m_highIdReactiveActivityGate = 1.0f;
+        }
+
+        // --- (3) Combine both gates and apply in a single pass ---
+        // scale8() matches FastLED semantics: (a * b) >> 8, so 255*255 = 254.
+        // For the common fully-open case (both 255) we skip the loop entirely.
+        const uint8_t combined = (silentScaleVal == 255) ? gateScale
+                               : (gateScale == 255)     ? silentScaleVal
+                               : scale8(silentScaleVal, gateScale);
+        if (combined == 0) {
+            memset(m_strip1, 0, sizeof(CRGB) * LedConfig::LEDS_PER_STRIP);
+            memset(m_strip2, 0, sizeof(CRGB) * LedConfig::LEDS_PER_STRIP);
+        } else if (combined < 255) {
+            for (uint16_t i = 0; i < LedConfig::LEDS_PER_STRIP; ++i) {
+                m_strip1[i].nscale8(combined);
+                m_strip2[i].nscale8(combined);
+            }
         }
     }
 #endif
@@ -1797,11 +1797,16 @@ void RendererActor::handleSetEffect(EffectId effectId)
             if (!newReg->effect->init(initCtx)) {
                 // Initialization failed - revert to previous effect
                 m_currentEffect = oldEffectId;
+                m_currentEffectValid = false;  // Invalidate cache on revert
                 LW_LOGW("IEffect 0x%04X init failed, reverting to 0x%04X", effectId, oldEffectId);
                 return;
             }
             LW_LOGI("IEffect init: SUCCESS");
         }
+
+        // Cache validated effect ID — avoids 3x linear registry scan per frame
+        m_validatedEffectId = effectId;
+        m_currentEffectValid = true;
 
         TRACE_INSTANT("effect_change");
         LW_LOGI("Effect changed: 0x%04X (%s) -> 0x%04X (" LW_CLR_GREEN "%s" LW_ANSI_RESET ")",
@@ -1972,6 +1977,8 @@ void RendererActor::handleStartTransition(EffectId newEffectId, uint8_t transiti
 
     // Switch to new effect
     m_currentEffect = safeEffectId;
+    m_validatedEffectId = safeEffectId;
+    m_currentEffectValid = true;
 
     // Render one frame of new effect to get target
     renderFrame();
@@ -1992,6 +1999,8 @@ void RendererActor::handleStartTransition(EffectId newEffectId, uint8_t transiti
 #else
     // Instant switch (no transition engine on FH4)
     m_currentEffect = safeEffectId;
+    m_validatedEffectId = safeEffectId;
+    m_currentEffectValid = true;
 #endif
 }
 

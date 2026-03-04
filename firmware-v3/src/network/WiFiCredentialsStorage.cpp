@@ -425,9 +425,7 @@ String WiFiCredentialsStorage::getLastConnectedSSID() const {
         return String("");
     }
 
-    // Need to cast away const for Preferences (it's safe, getString doesn't modify state)
-    Preferences& prefs = const_cast<Preferences&>(m_prefs);
-    return prefs.getString("last_ssid", "");
+    return m_prefs.getString("last_ssid", "");
 }
 
 bool WiFiCredentialsStorage::getCredentialsForSSID(const String& ssid, String& outPassword) {

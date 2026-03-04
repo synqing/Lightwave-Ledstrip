@@ -812,8 +812,8 @@ void WebServer::updateCachedRendererState() {
     m_cachedRendererState.audioTuning.barCorrectionGain = srcTuning.barCorrectionGain;
     m_cachedRendererState.audioTuning.beatsPerBar = srcTuning.beatsPerBar;
     m_cachedRendererState.audioTuning.beatUnit = srcTuning.beatUnit;
-    // getLastMusicalGrid() returns a const reference to internal data - safe to cache pointer
-    m_cachedRendererState.lastMusicalGrid = &m_renderer->getLastMusicalGrid();
+    // lastMusicalGrid pointer removed — getLastMusicalGrid() now returns by value
+    // for cross-core safety.  Callers use getLastMusicalGrid() directly.
 #endif
 }
 

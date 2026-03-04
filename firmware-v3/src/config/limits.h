@@ -71,9 +71,9 @@ constexpr uint8_t MAX_PALETTES = 75;
 // ============================================================================
 
 /**
- * @brief Maximum number of LED zones
+ * @brief Maximum number of LED zones (must match zones::MAX_ZONES in ZoneDefinition.h)
  */
-constexpr uint8_t MAX_ZONES = 8;
+constexpr uint8_t MAX_ZONES = 4;
 
 } // namespace limits
 } // namespace lightwaveos

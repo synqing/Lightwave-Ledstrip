@@ -58,14 +58,14 @@ static void handleEffectsGetMetadata(AsyncWebSocketClient* client, JsonDocument&
 
     const PatternMetadata* meta = PatternRegistry::getPatternMetadata(effectId);
     const char* name = ctx.renderer->getEffectName(effectId);
-    const char* familyName = "Unknown";
+    char familyNameBuf[32] = "Unknown";
+    const char* familyName = familyNameBuf;
     uint8_t familyId = 255;
     const char* story = nullptr;
     const char* opticalIntent = nullptr;
     uint8_t tags = 0;
-    
+
     if (meta) {
-        char familyNameBuf[32];
         PatternRegistry::getFamilyName(meta->family, familyNameBuf, sizeof(familyNameBuf));
         familyName = familyNameBuf;
         familyId = static_cast<uint8_t>(meta->family);

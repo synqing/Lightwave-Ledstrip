@@ -321,7 +321,7 @@ public:
             uint8_t beatsPerBar;
             uint8_t beatUnit;
         } audioTuning;
-        const void* lastMusicalGrid;  // Opaque pointer to avoid include dependency
+        // lastMusicalGrid removed — use getLastMusicalGrid() by value instead
 #endif
     };
     
@@ -635,9 +635,9 @@ private:
 // ============================================================================
 
 /**
- * @brief Global WebServer instance
+ * @brief Global WebServer instance pointer (defined in WebServer.cpp, assigned in main setup)
  */
-extern WebServer webServer;
+extern WebServer* webServerInstance;
 
 } // namespace network
 } // namespace lightwaveos

@@ -52,7 +52,8 @@ class PresetManager;
 }
 }
 extern lightwaveos::persistence::ZoneConfigManager* zoneConfigMgr;
-extern lightwaveos::persistence::PresetManager* presetMgr;
+// PresetManager: file-local nullptr until persistence layer is implemented
+static lightwaveos::persistence::PresetManager* presetMgr = nullptr;
 
 namespace lightwaveos {
 namespace network {
@@ -342,7 +343,7 @@ void V1ApiRoutes::registerRoutes(
                               ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
             return;
         }
-        uint8_t id = request->getParam("id")->value().toInt();
+        uint16_t id = request->getParam("id")->value().toInt();
         handlers::AudioHandlers::handlePresetGet(request, id);
     });
 
@@ -354,7 +355,7 @@ void V1ApiRoutes::registerRoutes(
                               ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
             return;
         }
-        uint8_t id = request->getParam("id")->value().toInt();
+        uint16_t id = request->getParam("id")->value().toInt();
         handlers::AudioHandlers::handlePresetApply(request, id, ctx.orchestrator, ctx.renderer);
     });
 
@@ -366,7 +367,7 @@ void V1ApiRoutes::registerRoutes(
                               ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
             return;
         }
-        uint8_t id = request->getParam("id")->value().toInt();
+        uint16_t id = request->getParam("id")->value().toInt();
         handlers::AudioHandlers::handlePresetDelete(request, id);
     });
 
@@ -1198,7 +1199,7 @@ void V1ApiRoutes::registerRoutes(
                               ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
             return;
         }
-        uint8_t id = request->getParam("id")->value().toInt();
+        uint16_t id = request->getParam("id")->value().toInt();
         handlers::EffectPresetHandlers::handleGet(request, id);
     });
 
@@ -1211,7 +1212,7 @@ void V1ApiRoutes::registerRoutes(
                               ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
             return;
         }
-        uint8_t id = request->getParam("id")->value().toInt();
+        uint16_t id = request->getParam("id")->value().toInt();
         handlers::EffectPresetHandlers::handleApply(request, id, ctx.orchestrator, ctx.renderer);
     });
 
@@ -1224,7 +1225,7 @@ void V1ApiRoutes::registerRoutes(
                               ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
             return;
         }
-        uint8_t id = request->getParam("id")->value().toInt();
+        uint16_t id = request->getParam("id")->value().toInt();
         handlers::EffectPresetHandlers::handleDelete(request, id);
     });
 
@@ -1256,7 +1257,7 @@ void V1ApiRoutes::registerRoutes(
                               ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
             return;
         }
-        uint8_t id = request->getParam("id")->value().toInt();
+        uint16_t id = request->getParam("id")->value().toInt();
         handlers::ZonePresetHandlers::handleGet(request, id);
     });
 
@@ -1269,7 +1270,7 @@ void V1ApiRoutes::registerRoutes(
                               ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
             return;
         }
-        uint8_t id = request->getParam("id")->value().toInt();
+        uint16_t id = request->getParam("id")->value().toInt();
         handlers::ZonePresetHandlers::handleApply(request, id, ctx.orchestrator, ctx.zoneComposer, broadcastZoneState);
     });
 
@@ -1282,7 +1283,7 @@ void V1ApiRoutes::registerRoutes(
                               ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
             return;
         }
-        uint8_t id = request->getParam("id")->value().toInt();
+        uint16_t id = request->getParam("id")->value().toInt();
         handlers::ZonePresetHandlers::handleDelete(request, id);
     });
 
@@ -1311,7 +1312,7 @@ void V1ApiRoutes::registerRoutes(
                               ErrorCodes::MISSING_FIELD, "Invalid preset ID in URL path");
             return;
         }
-        uint8_t id = path.substring(lastSlash + 1).toInt();
+        uint16_t id = path.substring(lastSlash + 1).toInt();
         handlers::EffectPresetHandlers::handleGet(request, id);
     });
 
@@ -1343,7 +1344,7 @@ void V1ApiRoutes::registerRoutes(
                                   ErrorCodes::MISSING_FIELD, "Invalid preset ID in URL path");
                 return;
             }
-            uint8_t id = path.substring(effectsIdx + 9, loadIdx).toInt();
+            uint16_t id = path.substring(effectsIdx + 9, loadIdx).toInt();
             handlers::EffectPresetHandlers::handleApply(request, id, ctx.orchestrator, ctx.renderer);
         }
     );
@@ -1360,7 +1361,7 @@ void V1ApiRoutes::registerRoutes(
                               ErrorCodes::MISSING_FIELD, "Invalid preset ID in URL path");
             return;
         }
-        uint8_t id = path.substring(lastSlash + 1).toInt();
+        uint16_t id = path.substring(lastSlash + 1).toInt();
         handlers::EffectPresetHandlers::handleDelete(request, id);
     });
 
@@ -1385,7 +1386,7 @@ void V1ApiRoutes::registerRoutes(
                               ErrorCodes::MISSING_FIELD, "Invalid preset ID in URL path");
             return;
         }
-        uint8_t id = path.substring(lastSlash + 1).toInt();
+        uint16_t id = path.substring(lastSlash + 1).toInt();
         handlers::ZonePresetHandlers::handleGet(request, id);
     });
 
@@ -1417,7 +1418,7 @@ void V1ApiRoutes::registerRoutes(
                                   ErrorCodes::MISSING_FIELD, "Invalid preset ID in URL path");
                 return;
             }
-            uint8_t id = path.substring(zonesIdx + 7, loadIdx).toInt();
+            uint16_t id = path.substring(zonesIdx + 7, loadIdx).toInt();
             handlers::ZonePresetHandlers::handleApply(request, id, ctx.orchestrator, ctx.zoneComposer, broadcastZoneState);
         }
     );
@@ -1434,7 +1435,7 @@ void V1ApiRoutes::registerRoutes(
                               ErrorCodes::MISSING_FIELD, "Invalid preset ID in URL path");
             return;
         }
-        uint8_t id = path.substring(lastSlash + 1).toInt();
+        uint16_t id = path.substring(lastSlash + 1).toInt();
         handlers::ZonePresetHandlers::handleDelete(request, id);
     });
 

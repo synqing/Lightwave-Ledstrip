@@ -365,23 +365,21 @@ public:
      * @brief Get saved networks from NVS storage
      */
     uint8_t getSavedNetworks(WiFiCredentialsStorage::NetworkCredential* out, uint8_t maxNetworks) const {
-        // Cast away const for loadNetworks (it's safe, no state modification)
-        WiFiCredentialsStorage& storage = const_cast<WiFiCredentialsStorage&>(m_credentialsStorage);
-        return storage.loadNetworks(out, maxNetworks);
+        return m_credentialsStorage.loadNetworks(out, maxNetworks);
     }
 
     /**
      * @brief Add network to NVS storage
      */
     bool addNetwork(const String& ssid, const String& password) {
-        return const_cast<WiFiCredentialsStorage&>(m_credentialsStorage).saveNetwork(ssid, password);
+        return m_credentialsStorage.saveNetwork(ssid, password);
     }
 
     /**
      * @brief Delete saved network from NVS storage
      */
     bool deleteSavedNetwork(const String& ssid) {
-        return const_cast<WiFiCredentialsStorage&>(m_credentialsStorage).deleteNetwork(ssid);
+        return m_credentialsStorage.deleteNetwork(ssid);
     }
 
     /**
@@ -557,7 +555,7 @@ private:
     // Credential Storage
     // ========================================================================
 
-    WiFiCredentialsStorage m_credentialsStorage;
+    mutable WiFiCredentialsStorage m_credentialsStorage;
     bool m_credentialsSaved = false;  ///< Track if current credentials were saved this session
 };
 

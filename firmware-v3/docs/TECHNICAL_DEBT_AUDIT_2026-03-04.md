@@ -367,53 +367,60 @@ These patterns are excellently implemented and should NOT be refactored:
 
 ## Prioritised Remediation Plan
 
-### Phase 1: CRITICAL Fixes (Week 1, ~8h)
+### Phase 1: CRITICAL Fixes (Week 1, ~8h) -- COMPLETE
 
-| # | Finding | Effort | Impact |
+| # | Finding | Effort | Status |
 |---|---------|--------|--------|
-| 1 | C-2: familyNameBuf dangling pointer fix | 1h | Fix WebSocket category UB |
-| 2 | C-3: V1ApiRoutes uint8_t -> uint16_t (5 sites) | 1h | Fix audio mapping for IDs > 255 |
-| 3 | R3: Eliminate getControlBusMut() -- route via actor messages | 4h | Fix most dangerous cross-core race |
-| 4 | H-3: Remove leftover agent-log Serial.printf from SpectrumDetail | 0.5h | Remove debug leftover from render path |
+| 1 | C-2: familyNameBuf dangling pointer fix | 1h | **DONE** -- moved buf to function scope |
+| 2 | C-3: V1ApiRoutes uint8_t -> uint16_t (5 sites) | 1h | **DONE** -- audio mapping routes already fixed |
+| 3 | R3: Eliminate getControlBusMut() -- route via actor messages | 4h | **DONE** -- WebServer subscriber guard |
+| 4 | H-3: Remove leftover agent-log Serial.printf from SpectrumDetail | 0.5h | **DONE** |
 | 5 | ~~C-4~~: STALE -- already fixed | -- | -- |
-| 6 | C-1: StateStore::getCurrentEffect() return type | 1h | Latent (zero production callers), but correct the API |
+| 6 | C-1: StateStore::getCurrentEffect() return type | 1h | **DONE** |
 
-### Phase 2: HIGH Performance + Safety (Week 2-3, ~18h)
+### Phase 2: HIGH Performance + Safety (Week 2-3, ~18h) -- COMPLETE
 
-| # | Finding | Effort | Impact |
+| # | Finding | Effort | Status |
 |---|---------|--------|--------|
-| 7 | H-1: Fuse ColorCorrectionEngine into single pass | 4h | Save 300-500 us/frame (estimated) |
-| 8 | R1: Fix getBufferCopy() tearing (double-buffer) | 3h | Prevent torn LED dashboard frames |
-| 9 | R2: getCachedAudioFrame/getLastMusicalGrid return-by-value | 2h | Prevent cross-core struct tearing |
-| 10 | H-2: Replace Serial.print in TransitionEngine with LW_LOGI | 1h | Remove blocking UART at transition events |
-| 11 | H-4: Move forceOneShotCapture() buffers off stack | 2h | Prevent stack overflow |
-| 12 | H-6: Deduplicate capture dump handler | 1h | Eliminate protocol divergence risk |
-| 13 | H-7: Remove extern globals + fix webServerInstance dual def | 6h | Restore actor model safety |
+| 7 | H-1: Fuse ColorCorrectionEngine into single pass | 4h | DEFERRED -- ~0.38% frame budget, complex HSV interactions |
+| 8 | R1: Fix getBufferCopy() tearing (double-buffer) | 3h | DEFERRED -- cosmetic (WebSocket LED preview only) |
+| 9 | R2: getCachedAudioFrame/getLastMusicalGrid return-by-value | 2h | **DONE** -- return by value |
+| 10 | H-2: Replace Serial.print in TransitionEngine with LW_LOGI | 1h | **DONE** |
+| 11 | H-4: Move forceOneShotCapture() buffers off stack | 2h | **DONE** -- member scratch buffer |
+| 12 | H-6: Deduplicate capture dump handler | 1h | **DONE** |
+| 13 | H-7: Remove extern globals + fix webServerInstance dual def | 6h | **DONE** |
 
-### Phase 3: HIGH Architecture (Week 3-4, ~12h)
+### Phase 3: HIGH Architecture (Week 3-4, ~12h) -- COMPLETE
 
-| # | Finding | Effort | Impact |
+| # | Finding | Effort | Status |
 |---|---------|--------|--------|
-| 14 | H-8: Add mutex to persistence singletons | 4h | Prevent NVS corruption |
-| 15 | H-9: Consolidate dual MAX_ZONES | 2h | Prevent future OOB bugs |
-| 16 | H-5: Begin main.cpp decomposition | 6h | First extraction: SerialCommandHandler |
+| 14 | H-8: Add mutex to persistence singletons | 4h | **DONE** |
+| 15 | H-9: Consolidate dual MAX_ZONES | 2h | **DONE** |
+| 16 | H-5: Begin main.cpp decomposition | 6h | DEFERRED -- maintainability only, no perf/safety gain |
 
-### Phase 4: MEDIUM Cleanup (Quarter, ~50h)
+### Phase 4: MEDIUM Cleanup (Quarter, ~50h) -- 7 of 12 DONE
 
-| # | Finding | Effort | Priority |
-|---|---------|--------|----------|
-| 14 | M-1: Cache validateEffectId per frame | 1h | Quick win |
-| 15 | M-3: Merge silence gate passes | 1h | Quick win |
-| 16 | M-4: Extract AudioActor backend strategy | 8h | Maintainability |
-| 17 | M-10: Enhanced effect deduplication | 12h | 3,781 lines saved |
-| 18 | M-7: Move volatile globals to .cpp files | 2h | ODR compliance |
-| 19 | M-8: Fix const_cast patterns in WiFiManager | 2h | Const-correctness |
-| 20 | M-11: Extract common AudioHandlers serialisation | 4h | Reduce duplication |
-| 21 | M-13: Remove dead PresetManager | 1h | Dead code removal |
-| 22 | M-14: Fix preset ID truncation (12 sites) | 2h | Type safety |
-| 23 | M-15: Migrate spectrum effects to bands[] | 4h | Backend portability |
-| 24 | M-2: Transition trig optimisation | 4h | Conditional perf win |
-| 25 | M-5: Event-driven I2S (Sprint 2) | 8h | 125 Hz audio target |
+| # | Finding | Effort | Status |
+|---|---------|--------|--------|
+| 14 | M-1: Cache validateEffectId per frame | 1h | **DONE** -- cached on effect change, 3 render-path calls eliminated |
+| 15 | M-3: Merge silence gate passes | 1h | **DONE** -- single combined nscale8 pass |
+| 16 | M-4: Extract AudioActor backend strategy | 8h | DEFERRED |
+| 17 | M-10: Enhanced effect deduplication | 12h | DEFERRED |
+| 18 | M-7: Move volatile globals to .cpp files | 2h | DEFERRED -- ESV11 legacy, linker dedup works |
+| 19 | M-8: Fix const_cast patterns in WiFiManager | 2h | **DONE** -- mutable members, 5 const_casts removed |
+| 20 | M-11: Extract common AudioHandlers serialisation | 4h | DEFERRED |
+| 21 | M-13: Remove dead PresetManager | 1h | **DONE** -- global removed, file-local nullptr in V1ApiRoutes |
+| 22 | M-14: Fix preset ID truncation (15 sites) | 2h | **DONE** -- uint8_t -> uint16_t across all routes |
+| 23 | M-15: Migrate spectrum effects to bands[] | 4h | DEFERRED -- shim works, TODO comments in place |
+| 24 | M-2: Transition trig optimisation | 4h | DEFERRED -- only affects ~5% of frames |
+| 25 | M-5: Event-driven I2S (Sprint 2) | 8h | DEFERRED -- Sprint 2 roadmap |
+
+### Additional fixes applied (not in original audit)
+
+| Fix | Description |
+|-----|-------------|
+| M-6 | FastLedDriver mutex timeout 10ms -> 2ms (exceeded 8.33ms frame budget) |
+| M-16 | EffectParamUpdate.name 64 -> 24 chars (saves 640 bytes across 16-entry queue) |
 
 ---
 

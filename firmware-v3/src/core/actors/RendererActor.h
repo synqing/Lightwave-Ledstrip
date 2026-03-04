@@ -382,18 +382,18 @@ public:
     /**
      * @brief Get the cached ControlBusFrame for audio streaming
      *
-     * Returns a const reference to the last ControlBusFrame read from AudioActor.
-     * Safe to call from WebServer thread - returns a copy stored by value.
+     * Returns by value to prevent cross-core torn reads.
+     * WebServer (Core 0) calls this while RendererActor (Core 1) writes m_lastControlBus.
      */
-    const audio::ControlBusFrame& getCachedAudioFrame() const { return m_lastControlBus; }
+    audio::ControlBusFrame getCachedAudioFrame() const { return m_lastControlBus; }
 
     /**
      * @brief Get the cached MusicalGridSnapshot for beat event streaming
      *
-     * Returns a const reference to the last MusicalGridSnapshot.
-     * Safe to call from WebServer thread - returns a copy stored by value.
+     * Returns by value to prevent cross-core torn reads.
+     * WebServer (Core 0) calls this while RendererActor (Core 1) writes m_lastMusicalGrid.
      */
-    const audio::MusicalGridSnapshot& getLastMusicalGrid() const { return m_lastMusicalGrid; }
+    audio::MusicalGridSnapshot getLastMusicalGrid() const { return m_lastMusicalGrid; }
 
     /**
      * @brief Get current audio sync mode for status/telemetry.
@@ -628,6 +628,8 @@ private:
     // Current state
     EffectId m_currentEffect;
     bool m_effectInitialized;  // Track if current effect has been init()'d
+    bool m_currentEffectValid;        // Cached: m_currentEffect passes validateEffectId()
+    EffectId m_validatedEffectId;     // Cached result of last successful validation
     uint8_t m_brightness;
     uint8_t m_speed;
     uint8_t m_paletteIndex;
@@ -663,7 +665,7 @@ private:
 
     struct EffectParamUpdate {
         EffectId effectId;
-        char name[64];
+        char name[24];  // Max param name ~12 chars; was 64 (saves 640 bytes across 16-entry queue)
         float value;
     };
     static constexpr uint8_t PARAM_QUEUE_SIZE = 16;
@@ -723,6 +725,7 @@ private:
     bool m_captureTapAValid;
     bool m_captureTapBValid;
     bool m_captureTapCValid;
+    CRGB m_captureScratch[LedConfig::TOTAL_LEDS]; // Scratch buffer for forceOneShotCapture (avoids 1920-byte stack alloc)
 
     // ========================================================================
     // Audio State (Phase 2 - Audio Sync)

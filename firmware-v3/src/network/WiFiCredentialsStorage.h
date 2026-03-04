@@ -159,7 +159,7 @@ public:
     bool getCredentialsForSSID(const String& ssid, String& outPassword);
 
 private:
-    Preferences m_prefs;
+    mutable Preferences m_prefs;
     bool m_initialized;
     uint8_t m_networkCount;
 

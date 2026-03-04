@@ -113,15 +113,7 @@ void LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {
                 if (v > maxBin) maxBin = v;
             }
         }
-        // #region agent log
-        #ifndef NATIVE_BUILD
-        if (debugNowMs - lastHopLogMs >= 10000) {  // Every 10 seconds
-            lastHopLogMs = debugNowMs;
-            Serial.printf("{\"id\":\"spectrum_new_hop\",\"location\":\"LGPSpectrumDetailEffect.cpp\",\"message\":\"New hop detected\",\"data\":{\"hopSeq\":%u,\"maxBin\":%.4f,\"source\":\"%s\",\"binHz\":%.2f},\"timestamp\":%lu}\n",
-                m_lastHopSeq, maxBin, useBins256 ? "bins256" : "bins64", binHz, debugNowMs);
-        }
-        #endif
-        // #endregion
+        (void)maxBin;
     }
     
     // Smooth toward targets every frame with MOOD-adjusted smoothing
@@ -226,18 +218,10 @@ void LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {
         }
     }
     
-    // #region agent log
-    #ifndef NATIVE_BUILD
-    if (debugNowMs - lastStatsLogMs >= 10000) {  // Every 10 seconds
-        lastStatsLogMs = debugNowMs;
-        Serial.printf("{\"id\":\"spectrum_render_stats\",\"location\":\"LGPSpectrumDetailEffect.cpp:162\",\"message\":\"Render stats\",\"data\":{\"maxSmooth\":%.4f,\"binsAboveThreshold\":%u,\"ledsWritten\":%u,\"maxBright\":%u,\"brightness\":%u,\"colorR\":%u,\"colorG\":%u,\"colorB\":%u},\"timestamp\":%lu}\n",
-            maxSmooth, binsAboveThreshold, ledsWritten, maxBright, ctx.brightness, 
-            ledsWritten > 0 ? ctx.leds[ctx.centerPoint].r : 0,
-            ledsWritten > 0 ? ctx.leds[ctx.centerPoint].g : 0,
-            ledsWritten > 0 ? ctx.leds[ctx.centerPoint].b : 0, debugNowMs);
-    }
-    #endif
-    // #endregion
+    (void)maxSmooth;
+    (void)binsAboveThreshold;
+    (void)ledsWritten;
+    (void)maxBright;
 #endif  // FEATURE_AUDIO_SYNC
 }
 

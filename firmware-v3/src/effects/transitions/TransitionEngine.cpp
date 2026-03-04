@@ -14,7 +14,10 @@
 #include <Arduino.h>
 #ifndef NATIVE_BUILD
 #include <esp_heap_caps.h>
+#include <esp_log.h>
 #endif
+
+static const char* TAG = "Transition";
 
 namespace lightwaveos {
 namespace transitions {
@@ -73,7 +76,7 @@ TransitionEngine::TransitionEngine()
 
     m_buffersReady = (m_sourceBuffer != nullptr) && (m_targetBuffer != nullptr) && (m_dissolveOrder != nullptr);
     if (!m_buffersReady) {
-        Serial.println("[Transition] ERROR: Buffer allocation failed - transitions disabled");
+        ESP_LOGE(TAG, "Buffer allocation failed - transitions disabled");
     }
 
     memset(m_particles, 0, sizeof(m_particles));
@@ -159,8 +162,7 @@ void TransitionEngine::startTransition(const CRGB* sourceBuffer,
             break;
     }
 
-    Serial.printf("[Transition] Started: %s (%dms)\n",
-                  getTransitionName(type), durationMs);
+    ESP_LOGI(TAG, "Started: %s (%dms)", getTransitionName(type), durationMs);
 }
 
 void TransitionEngine::startTransition(const CRGB* sourceBuffer,
@@ -184,7 +186,7 @@ bool TransitionEngine::update() {
         memcpy(m_outputBuffer, m_targetBuffer, TOTAL_LEDS * sizeof(CRGB));
         m_active = false;
         m_progress = 1.0f;
-        Serial.println("[Transition] Complete");
+        ESP_LOGD(TAG, "Complete");
         return false;
     }
 

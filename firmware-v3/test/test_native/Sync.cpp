@@ -153,7 +153,7 @@ SyncRole LeaderElection::evaluate(const char (*connectedPeerUuids)[16], uint8_t 
 //==============================================================================
 
 size_t CommandSerializer::serializeSetEffect(
-    uint8_t effectId,
+    EffectId effectId,
     uint32_t version,
     const char* senderUuid,
     char* buffer,
@@ -202,7 +202,7 @@ size_t CommandSerializer::serializeSetPalette(
 
 size_t CommandSerializer::serializeZoneSetEffect(
     uint8_t zoneId,
-    uint8_t effectId,
+    EffectId effectId,
     uint32_t version,
     const char* senderUuid,
     char* buffer,

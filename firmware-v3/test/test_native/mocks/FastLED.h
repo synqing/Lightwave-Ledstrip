@@ -3,14 +3,6 @@
 #ifdef NATIVE_BUILD
 #include "fastled_mock.h"
 
-#ifndef max
-#define max(a, b) ((a) > (b) ? (a) : (b))
-#endif
-
-#ifndef min
-#define min(a, b) ((a) < (b) ? (a) : (b))
-#endif
-
 inline uint8_t qadd8(uint8_t a, uint8_t b) {
     uint16_t sum = static_cast<uint16_t>(a) + static_cast<uint16_t>(b);
     return (sum > 255) ? 255 : static_cast<uint8_t>(sum);

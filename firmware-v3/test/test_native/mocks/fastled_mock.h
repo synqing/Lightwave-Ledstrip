@@ -185,6 +185,7 @@ private:
 
 // Global FastLED instance
 extern CFastLED FastLED;
+extern const CRGB TypicalLEDStrip;
 
 //==============================================================================
 // CRGBPalette16 - 16-color palette
@@ -207,6 +208,11 @@ public:
     const CRGB& operator[](int index) const {
         return entries[index & 15];
     }
+};
+
+enum TBlendType : uint8_t {
+    NOBLEND = 0,
+    LINEARBLEND = 1
 };
 
 //==============================================================================
@@ -272,10 +278,17 @@ inline void nscale8(CRGB* leds, int numLeds, uint8_t scale) {
 inline CRGB ColorFromPalette(const CRGB* palette, uint8_t index,
                              uint8_t brightness = 255,
                              uint8_t blendType = 0) {
+    (void)blendType;
     // Simplified: just return palette color scaled by brightness
     CRGB color = palette[index % 16];  // Assume 16-color palette
     color *= brightness;
     return color;
+}
+
+inline CRGB ColorFromPalette(const CRGBPalette16& palette, uint8_t index,
+                             uint8_t brightness = 255,
+                             TBlendType blendType = LINEARBLEND) {
+    return ColorFromPalette(palette.entries, index, brightness, static_cast<uint8_t>(blendType));
 }
 
 #endif // NATIVE_BUILD

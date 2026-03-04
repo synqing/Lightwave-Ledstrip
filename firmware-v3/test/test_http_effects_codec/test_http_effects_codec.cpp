@@ -102,7 +102,7 @@ void test_http_effects_set_decode_missing_effectId() {
 }
 
 void test_http_effects_set_decode_invalid_effectId_range() {
-    const char* json = R"({"effectId": 200})";
+    const char* json = R"({"effectId": 70000})";
     JsonDocument doc;
     TEST_ASSERT_TRUE_MESSAGE(loadJsonString(json, doc), "JSON should parse");
 

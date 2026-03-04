@@ -118,7 +118,7 @@ void test_transition_trigger_missing_toEffect() {
 }
 
 void test_transition_trigger_out_of_range() {
-    const char* json = R"({"toEffect": 200})";
+    const char* json = R"({"toEffect": 70000})";
     
     JsonDocument doc;
     TEST_ASSERT_TRUE_MESSAGE(loadJsonString(json, doc), "JSON should parse");

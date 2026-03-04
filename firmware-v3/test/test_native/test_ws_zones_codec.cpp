@@ -30,7 +30,7 @@ namespace zones {
 
 ZoneComposer::ZoneComposer() {}
 
-uint8_t ZoneComposer::getZoneEffect(uint8_t) const { return 7; }
+EffectId ZoneComposer::getZoneEffect(uint8_t) const { return 7; }
 uint8_t ZoneComposer::getZoneBrightness(uint8_t) const { return 140; }
 uint8_t ZoneComposer::getZoneSpeed(uint8_t) const { return 33; }
 uint8_t ZoneComposer::getZonePalette(uint8_t) const { return 4; }
@@ -330,7 +330,7 @@ void test_encode_zone_enabled_changed() {
 
     TEST_ASSERT_TRUE_MESSAGE(data.containsKey("enabled"), "enabled should be present");
     TEST_ASSERT_TRUE_MESSAGE(data["enabled"].as<bool>(), "enabled should be true");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, countKeys(data.as<JsonObjectConst>()), "No extra keys allowed");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, countKeys(data), "No extra keys allowed");
 }
 
 void test_encode_zones_layout_changed() {
@@ -341,7 +341,7 @@ void test_encode_zones_layout_changed() {
 
     TEST_ASSERT_TRUE_MESSAGE(data.containsKey("zoneCount"), "zoneCount should be present");
     TEST_ASSERT_EQUAL_INT_MESSAGE(3, data["zoneCount"].as<int>(), "zoneCount should be 3");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, countKeys(data.as<JsonObjectConst>()), "No extra keys allowed");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, countKeys(data), "No extra keys allowed");
 }
 
 void test_encode_zones_changed_single_field() {
@@ -366,8 +366,8 @@ void test_encode_zones_changed_single_field() {
     TEST_ASSERT_EQUAL_INT_MESSAGE(static_cast<int>(lightwaveos::zones::BlendMode::ALPHA), current["blendMode"].as<int>(), "blendMode should match stub");
     TEST_ASSERT_EQUAL_STRING_MESSAGE("Alpha", current["blendModeName"].as<const char*>(), "blendModeName should match stub");
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(3, countKeys(data.as<JsonObjectConst>()), "No extra keys allowed");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(6, countKeys(current.as<JsonObjectConst>()), "No extra keys allowed in current");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(3, countKeys(data), "No extra keys allowed");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(6, countKeys(current), "No extra keys allowed in current");
 }
 
 void test_encode_zones_changed_multiple_fields() {
@@ -385,7 +385,7 @@ void test_encode_zones_changed_multiple_fields() {
     TEST_ASSERT_EQUAL_STRING_MESSAGE("speed", updated[1].as<const char*>(), "updated field should be speed");
     TEST_ASSERT_EQUAL_STRING_MESSAGE("paletteId", updated[2].as<const char*>(), "updated field should be paletteId");
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(3, countKeys(data.as<JsonObjectConst>()), "No extra keys allowed");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(3, countKeys(data), "No extra keys allowed");
 }
 
 void test_encode_zones_effect_changed() {
@@ -406,8 +406,8 @@ void test_encode_zones_effect_changed() {
     TEST_ASSERT_EQUAL_INT_MESSAGE(static_cast<int>(lightwaveos::zones::BlendMode::ALPHA), current["blendMode"].as<int>(), "blendMode should match stub");
     TEST_ASSERT_EQUAL_STRING_MESSAGE("Alpha", current["blendModeName"].as<const char*>(), "blendModeName should match stub");
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(2, countKeys(data.as<JsonObjectConst>()), "No extra keys allowed");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(7, countKeys(current.as<JsonObjectConst>()), "No extra keys allowed in current");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(2, countKeys(data), "No extra keys allowed");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(7, countKeys(current), "No extra keys allowed in current");
 }
 
 void test_encode_zone_palette_changed() {
@@ -422,8 +422,8 @@ void test_encode_zone_palette_changed() {
     TEST_ASSERT_EQUAL_INT_MESSAGE(6, current["paletteId"].as<int>(), "paletteId should be 6");
     TEST_ASSERT_EQUAL_STRING_MESSAGE("", current["effectName"].as<const char*>(), "effectName should be empty with null renderer");
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(2, countKeys(data.as<JsonObjectConst>()), "No extra keys allowed");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(7, countKeys(current.as<JsonObjectConst>()), "No extra keys allowed in current");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(2, countKeys(data), "No extra keys allowed");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(7, countKeys(current), "No extra keys allowed in current");
 }
 
 void test_encode_zone_blend_changed() {
@@ -438,8 +438,8 @@ void test_encode_zone_blend_changed() {
     TEST_ASSERT_EQUAL_INT_MESSAGE(3, current["blendMode"].as<int>(), "blendMode should be 3");
     TEST_ASSERT_EQUAL_STRING_MESSAGE("Screen", current["blendModeName"].as<const char*>(), "blendModeName should match blend mode");
 
-    TEST_ASSERT_EQUAL_INT_MESSAGE(2, countKeys(data.as<JsonObjectConst>()), "No extra keys allowed");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(7, countKeys(current.as<JsonObjectConst>()), "No extra keys allowed in current");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(2, countKeys(data), "No extra keys allowed");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(7, countKeys(current), "No extra keys allowed in current");
 }
 
 // ============================================================================

@@ -185,6 +185,14 @@ void WebSocketClient::update() {
         requestZonesState();
     }
 
+    // Deferred effects.parameters.get (set by WsMessageRouter on effect-changed messages).
+    if (_pendingEffectParamsRefresh && _status == WebSocketStatus::CONNECTED) {
+        _pendingEffectParamsRefresh = false;
+        if (_pendingEffectParamsEffectId != 0) {
+            requestEffectParameters(_pendingEffectParamsEffectId);
+        }
+    }
+
     // Check if stuck in CONNECTING state too long (timeout protection)
     static uint32_t s_connectingStartTime = 0;
     if (_status == WebSocketStatus::CONNECTING) {
@@ -216,6 +224,9 @@ void WebSocketClient::disconnect() {
     _ws.disconnect();
     _status = WebSocketStatus::DISCONNECTED;
     _pendingHello = false;
+    _pendingZonesRefresh = false;
+    _pendingEffectParamsRefresh = false;
+    _pendingEffectParamsEffectId = 0;
 }
 
 void WebSocketClient::handleEvent(WStype_t type, uint8_t* payload, size_t length) {
@@ -235,6 +246,9 @@ void WebSocketClient::handleEvent(WStype_t type, uint8_t* payload, size_t length
             }
             _status = WebSocketStatus::DISCONNECTED;
             _pendingHello = false;  // Clear pending hello on disconnect
+            _pendingZonesRefresh = false;
+            _pendingEffectParamsRefresh = false;
+            _pendingEffectParamsEffectId = 0;
             increaseReconnectBackoff();
             break;
 
@@ -476,6 +490,55 @@ void WebSocketClient::requestZonesState() {
 }
 
 // ============================================================================
+// Camera Mode Commands (Control Surface)
+// ============================================================================
+
+void WebSocketClient::sendCameraModeSet(bool enabled) {
+    if (!isConnected()) return;
+    JsonDocument doc;
+    doc["enabled"] = enabled;
+    sendJSON("cameraMode.set", doc);
+}
+
+void WebSocketClient::requestCameraModeGet() {
+    if (!isConnected()) return;
+    JsonDocument doc;
+    sendJSON("cameraMode.get", doc);
+}
+
+// ============================================================================
+// Preset Commands (Control Surface - uses K1's EffectPresetManager)
+// ============================================================================
+
+void WebSocketClient::requestEffectPresetsList() {
+    if (!isConnected()) return;
+    JsonDocument doc;
+    sendJSON("effectPresets.list", doc);
+}
+
+void WebSocketClient::sendEffectPresetSave(uint8_t slot, const char* name) {
+    if (!isConnected() || !name) return;
+    JsonDocument doc;
+    doc["slot"] = slot;
+    doc["name"] = name;
+    sendJSON("effectPresets.saveCurrent", doc);
+}
+
+void WebSocketClient::sendEffectPresetLoad(uint8_t slot) {
+    if (!isConnected()) return;
+    JsonDocument doc;
+    doc["id"] = slot;
+    sendJSON("effectPresets.load", doc);
+}
+
+void WebSocketClient::sendEffectPresetDelete(uint8_t slot) {
+    if (!isConnected()) return;
+    JsonDocument doc;
+    doc["id"] = slot;
+    sendJSON("effectPresets.delete", doc);
+}
+
+// ============================================================================
 // Global Parameter Commands (Unit A, encoders 0-7)
 // ============================================================================
 
@@ -503,6 +566,12 @@ void WebSocketClient::sendPrevEffect() {
     if (!isConnected()) return;
     JsonDocument doc;
     sendJSON("prevEffect", doc);
+}
+
+void WebSocketClient::requestCurrentEffect() {
+    if (!isConnected()) return;
+    JsonDocument doc;
+    sendJSON("effects.getCurrent", doc);
 }
 
 void WebSocketClient::sendBrightnessChange(uint8_t brightness) {

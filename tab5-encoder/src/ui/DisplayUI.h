@@ -33,6 +33,7 @@
 #ifndef SIMULATOR_BUILD
 class ZoneComposerUI;
 class ConnectivityTab;
+class ControlSurfaceUI;
 class PresetManager;
 #endif
 class UIHeader;
@@ -41,9 +42,10 @@ class UIHeader;
  * UI screen types
  */
 enum class UIScreen : uint8_t {
-    GLOBAL = 0,        // Default: 16-parameter gauge view
-    ZONE_COMPOSER = 1, // Zone composer dashboard
-    CONNECTIVITY = 2   // Network connectivity management
+    GLOBAL = 0,           // Default: 16-parameter gauge view
+    ZONE_COMPOSER = 1,    // Zone composer dashboard
+    CONNECTIVITY = 2,     // Network connectivity management
+    CONTROL_SURFACE = 3   // Effect parameter tuning + presets + camera mode
 };
 
 #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
@@ -85,9 +87,11 @@ public:
     #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL)
     ZoneComposerUI* getZoneComposerUI() { return _zoneComposer; }
     ConnectivityTab* getConnectivityTab() { return _connectivityTab; }
+    ControlSurfaceUI* getControlSurfaceUI() { return _controlSurface; }
     #else
     ZoneComposerUI* getZoneComposerUI() { return _zoneComposer; }
     ConnectivityTab* getConnectivityTab() { return _connectivityTab; }
+    ControlSurfaceUI* getControlSurfaceUI() { return _controlSurface; }
     #endif
     #endif
     
@@ -134,10 +138,11 @@ private:
     M5GFX& _display;
 
 #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
-    // Static callback for zone composer Back button
+    // Static callbacks for screen Back buttons
     static DisplayUI* s_instance;
     static void onZoneComposerBackButton();
     static void onConnectivityTabBackButton();
+    static void onControlSurfaceBackButton();
     uint8_t _activePresetSlot = 0xFF;
     UIScreen _currentScreen = UIScreen::GLOBAL;
 
@@ -198,6 +203,10 @@ private:
     
     // Connectivity Tab UI
     ConnectivityTab* _connectivityTab = nullptr;
+
+    // Control Surface UI
+    lv_obj_t* _screen_control_surface = nullptr;
+    ControlSurfaceUI* _controlSurface = nullptr;
 
     // K1 dual-device selector (footer)
     lv_obj_t* _footer_k1_group = nullptr;

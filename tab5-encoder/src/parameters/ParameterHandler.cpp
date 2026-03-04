@@ -43,14 +43,50 @@ void ParameterHandler::onEncoderChanged(uint8_t index, uint16_t value, bool wasR
         return;
     }
 
-    // Mark this parameter as locally “authoritative” for a short window to prevent
+    // Mark this parameter as locally "authoritative" for a short window to prevent
     // server status echo from snapping the UI/encoder back and forth.
     m_lastLocalChangeMs[index] = millis();
 
     // Clamp value to valid range
     uint8_t clampedValue = clampValue(param, static_cast<uint8_t>(value));
 
-    // Update local state
+    // EFFECT ENCODER: K1 uses 16-bit namespaced EffectIds (0x0100, 0x0201, etc.)
+    // that don't fit in uint8_t. Use nextEffect/prevEffect commands instead of
+    // sending raw absolute values. K1 handles display-order cycling internally.
+    if (param->id == ParameterId::EffectId) {
+        int delta = static_cast<int>(clampedValue) - static_cast<int>(m_values[index]);
+        uint8_t max = getParameterMax(index);
+        // Handle wrap-around (e.g. 99->0 or 0->99)
+        if (delta > static_cast<int>(max) / 2) delta -= (max + 1);
+        if (delta < -static_cast<int>(max) / 2) delta += (max + 1);
+
+        m_values[index] = clampedValue;
+        notifyDisplay(index);
+
+        if (m_wsClient->isConnected() && delta != 0) {
+            // Cap at 5 steps per callback to avoid flooding WS
+            int steps = (delta > 0) ? min(delta, 5) : min(-delta, 5);
+            for (int i = 0; i < steps; i++) {
+                if (delta > 0) {
+                    m_wsClient->sendNextEffect();
+                } else {
+                    m_wsClient->sendPrevEffect();
+                }
+            }
+
+            // Schedule delayed effects.getCurrent request to fetch the updated
+            // effect name. K1's broadcastStatus uses a stale cache; effects.getCurrent
+            // reads live renderer state after the actor processes the change.
+            extern void scheduleEffectNameRefresh();
+            scheduleEffectNameRefresh();
+        }
+
+        Serial.printf("[Param] Effect: next/prev (delta=%d)%s\n",
+                      delta, wasReset ? " (reset)" : "");
+        return;
+    }
+
+    // Normal parameter: update cache and send absolute value
     m_values[index] = clampedValue;
 
     // Notify display (with highlight)
@@ -82,6 +118,14 @@ bool ParameterHandler::applyStatus(JsonDocument& doc) {
         // Unit-B indices are mode-multiplexed on Tab5 (effect modifiers on Global,
         // zone controls in Zone Composer) and must not be force-synced from generic status.
         if (i >= 8) {
+            continue;
+        }
+
+        // Skip effectId sync — K1 sends 16-bit namespaced EffectIds (0x0100, 0x0201, etc.)
+        // that don't fit in the uint8_t parameter system. The effect encoder uses
+        // nextEffect/prevEffect commands instead. Effect name display is handled
+        // separately via the WsMessageRouter effect name cache.
+        if (i == static_cast<uint8_t>(ParameterId::EffectId)) {
             continue;
         }
 
@@ -169,7 +213,8 @@ void ParameterHandler::sendParameterChange(const ParameterDef* param, uint8_t va
     switch (param->id) {
         // Unit A (0-7) - Global parameters with dedicated methods
         case ParameterId::EffectId:
-            m_wsClient->sendEffectChange(value);
+            // Handled directly in onEncoderChanged() via nextEffect/prevEffect.
+            // This case should not be reached, but guard against it.
             break;
         case ParameterId::PaletteId:
             m_wsClient->sendPaletteChange(value);

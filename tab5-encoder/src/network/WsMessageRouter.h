@@ -21,16 +21,19 @@
 
 #include <ArduinoJson.h>
 #include <cstring>
+#include <cmath>
 #include "../parameters/ParameterHandler.h"
 #include "../parameters/ParameterMap.h"
 #include "../zones/ZoneDefinition.h"
 #include "../ui/ZoneComposerUI.h"
+#include "../ui/ControlSurfaceUI.h"
 #include "../ui/DisplayUI.h"
 #include "WebSocketClient.h"
 
 // External function to cache palette names (defined in main.cpp)
 extern void cachePaletteName(uint8_t id, const char* name);
 extern void cacheEffectName(uint16_t id, const char* name);
+extern bool isEffectNameHoldoffActive();
 
 // ============================================================================
 // Router logging (compile-time, default off)
@@ -124,9 +127,29 @@ public:
             handleEffectsChanged(doc);
             return true;
         }
-        
+
+        if (strcmp(type, "effects.current") == 0) {
+            handleEffectsCurrent(doc);
+            return true;
+        }
+
         if (strcmp(type, "colorCorrection.getConfig") == 0) {
             handleColorCorrectionConfig(doc);
+            return true;
+        }
+
+        if (strcmp(type, "effects.parameters") == 0) {
+            handleEffectParameters(doc);
+            return true;
+        }
+
+        if (strcmp(type, "cameraMode.changed") == 0) {
+            handleCameraModeChanged(doc);
+            return true;
+        }
+
+        if (strcmp(type, "effectPresets.list") == 0) {
+            handleEffectPresetsList(doc);
             return true;
         }
 
@@ -140,6 +163,7 @@ private:
     static inline WebSocketClient* s_wsClient = nullptr;
     static inline ZoneComposerUI* s_zoneComposerUI = nullptr;
     static inline DisplayUI* s_displayUI = nullptr;
+    static inline uint16_t s_lastKnownEffectId = 0xFFFF;  // Track effect changes for auto-request
 
     /**
      * @brief Handle "status" message from LightwaveOS
@@ -155,7 +179,22 @@ private:
                 TAB5_WS_PRINTLN("[WsRouter] Status applied");
             }
         }
-        
+
+        // Forward global params to Control Surface (read-only global row)
+        if (s_displayUI && s_displayUI->getCurrentScreen() == UIScreen::CONTROL_SURFACE) {
+            ControlSurfaceUI* csUI = s_displayUI->getControlSurfaceUI();
+            if (csUI) {
+                // Global row: BRI(0), SPD(1), MOOD(2), FADE(3), CPLX(4), VAR(5), HUE(6), SAT(7)
+                static const char* kFields[] = {"brightness", "speed", "mood", "fadeAmount",
+                                                 "complexity", "variation", "hue", "saturation"};
+                for (uint8_t i = 0; i < 8; i++) {
+                    if (doc[kFields[i]].is<int>()) {
+                        csUI->updateGlobalParam(i, static_cast<uint8_t>(doc[kFields[i]].as<int>()));
+                    }
+                }
+            }
+        }
+
         // Extract uptime from status message if present and update footer
         if (doc["uptime"].is<unsigned long>() || doc["uptime"].is<uint32_t>()) {
             uint32_t uptimeSeconds = 0;
@@ -186,7 +225,9 @@ private:
         }
 
         // Extract and cache effectName from status message if present.
-        if (doc["effectName"].is<const char*>()) {
+        // Skip during holdoff (after encoder turn) — status reads stale K1 cache
+        // and would overwrite the fresh name from effects.getCurrent.
+        if (doc["effectName"].is<const char*>() && !isEffectNameHoldoffActive()) {
             uint16_t effectId = 0;
             bool hasEffectId = false;
             if (doc["effectId"].is<int>()) {
@@ -204,6 +245,16 @@ private:
                 const char* effectName = doc["effectName"].as<const char*>();
                 if (effectName && effectName[0]) {
                     cacheEffectName(effectId, effectName);
+                }
+
+                // Auto-request effect params when effect changes and Control Surface is active
+                if (effectId != s_lastKnownEffectId) {
+                    s_lastKnownEffectId = effectId;
+                    if (s_displayUI && s_wsClient &&
+                        s_displayUI->getCurrentScreen() == UIScreen::CONTROL_SURFACE) {
+                        s_wsClient->setPendingEffectParamsRefresh(effectId);
+                        TAB5_WS_PRINTF("[WsRouter] Effect changed to %u, queued params refresh\n", effectId);
+                    }
                 }
             }
         }
@@ -339,9 +390,83 @@ private:
      * Could trigger effect metadata refresh.
      */
     static void handleEffectsChanged(JsonDocument& doc) {
-        // Optional: Could request updated effect list
-        TAB5_WS_PRINTLN("[WsRouter] Effects changed notification");
-        (void)doc;
+        // Extract effectId and effectName from effects.changed notification
+        extractAndCacheEffectName(doc);
+
+        // Auto-request effect params when effect changes and Control Surface is active
+        if (s_displayUI && s_wsClient &&
+            s_displayUI->getCurrentScreen() == UIScreen::CONTROL_SURFACE) {
+            // Extract effectId from data or root
+            uint16_t effectId = 0;
+            bool hasId = false;
+            JsonObject data = doc["data"].is<JsonObject>() ? doc["data"].as<JsonObject>() : JsonObject();
+            if (data && data["effectId"].is<int>()) {
+                effectId = static_cast<uint16_t>(data["effectId"].as<int>());
+                hasId = true;
+            } else if (data && data["id"].is<int>()) {
+                effectId = static_cast<uint16_t>(data["id"].as<int>());
+                hasId = true;
+            } else if (doc["effectId"].is<int>()) {
+                effectId = static_cast<uint16_t>(doc["effectId"].as<int>());
+                hasId = true;
+            }
+            if (hasId && effectId != s_lastKnownEffectId) {
+                s_lastKnownEffectId = effectId;
+                s_wsClient->setPendingEffectParamsRefresh(effectId);
+                TAB5_WS_PRINTF("[WsRouter] effects.changed: queued params refresh for %u\n", effectId);
+            }
+        }
+    }
+
+    /**
+     * @brief Handle "effects.current" response
+     *
+     * Response to effects.getCurrent request. Contains live renderer state
+     * (not cached), so effectId/effectName are always up-to-date.
+     */
+    static void handleEffectsCurrent(JsonDocument& doc) {
+        extractAndCacheEffectName(doc);
+    }
+
+    /**
+     * @brief Extract effectId + effectName from any message that carries them
+     * and update the display cache.
+     */
+    static void extractAndCacheEffectName(JsonDocument& doc) {
+        const char* effectName = nullptr;
+        uint16_t effectId = 0;
+        bool hasEffectId = false;
+
+        // Try "data" sub-object first (effects.current / effects.changed format)
+        JsonObject data;
+        if (doc["data"].is<JsonObject>()) {
+            data = doc["data"].as<JsonObject>();
+        }
+
+        // Search for effectName (check data first, then root)
+        if (data && data["effectName"].is<const char*>()) {
+            effectName = data["effectName"].as<const char*>();
+        } else if (data && data["name"].is<const char*>()) {
+            effectName = data["name"].as<const char*>();
+        } else if (doc["effectName"].is<const char*>()) {
+            effectName = doc["effectName"].as<const char*>();
+        }
+
+        // Search for effectId
+        if (data && data["effectId"].is<int>()) {
+            int v = data["effectId"].as<int>();
+            if (v >= 0 && v <= 0xFFFF) { effectId = v; hasEffectId = true; }
+        } else if (data && data["id"].is<int>()) {
+            int v = data["id"].as<int>();
+            if (v >= 0 && v <= 0xFFFF) { effectId = v; hasEffectId = true; }
+        } else if (doc["effectId"].is<int>()) {
+            int v = doc["effectId"].as<int>();
+            if (v >= 0 && v <= 0xFFFF) { effectId = v; hasEffectId = true; }
+        }
+
+        if (hasEffectId && effectName && effectName[0]) {
+            cacheEffectName(effectId, effectName);
+        }
     }
 
     /**
@@ -453,6 +578,169 @@ private:
     }
 
     /**
+     * @brief Handle "effects.parameters" message for Control Surface.
+     */
+    static void handleEffectParameters(JsonDocument& doc) {
+        if (!s_displayUI) return;
+        ControlSurfaceUI* csUI = s_displayUI->getControlSurfaceUI();
+        if (!csUI) return;
+
+        if (doc["success"].is<bool>() && !doc["success"].as<bool>()) {
+            return;
+        }
+
+        JsonObject data = doc["data"].is<JsonObject>()
+            ? doc["data"].as<JsonObject>()
+            : doc.as<JsonObject>();
+
+        uint16_t effectId = 0;
+        if (data["effectId"].is<int>()) {
+            int v = data["effectId"].as<int>();
+            if (v >= 0 && v <= 0xFFFF) effectId = static_cast<uint16_t>(v);
+        } else if (data["effectId"].is<uint16_t>()) {
+            effectId = data["effectId"].as<uint16_t>();
+        }
+
+        const char* effectName = data["name"].is<const char*>()
+            ? data["name"].as<const char*>()
+            : "";
+
+        CSEffectParam params[CS_MAX_EFFECT_PARAMS];
+        uint8_t paramCount = 0;
+
+        if (data["parameters"].is<JsonArray>()) {
+            JsonArray paramArray = data["parameters"].as<JsonArray>();
+            for (JsonObject p : paramArray) {
+                if (paramCount >= CS_MAX_EFFECT_PARAMS) break;
+                if (!p["name"].is<const char*>()) continue;
+
+                CSEffectParam& out = params[paramCount];
+                const char* name = p["name"].as<const char*>();
+                const char* displayName = p["displayName"].is<const char*>()
+                    ? p["displayName"].as<const char*>()
+                    : name;
+
+                strncpy(out.name, name, sizeof(out.name) - 1);
+                out.name[sizeof(out.name) - 1] = '\0';
+                strncpy(out.displayName, displayName, sizeof(out.displayName) - 1);
+                out.displayName[sizeof(out.displayName) - 1] = '\0';
+
+                out.minValue = p["min"] | 0.0f;
+                out.maxValue = p["max"] | 1.0f;
+                if (out.maxValue <= out.minValue) {
+                    out.maxValue = out.minValue + 1.0f;
+                }
+
+                out.defaultValue = p["default"] | out.minValue;
+                out.currentValue = p["value"] | out.defaultValue;
+
+                out.step = p["step"] | ((out.maxValue - out.minValue) / 255.0f);
+                if (out.step <= 0.0f) {
+                    out.step = (out.maxValue - out.minValue) / 255.0f;
+                    if (out.step <= 0.0f) out.step = 0.01f;
+                }
+
+                if (p["unit"].is<const char*>()) {
+                    const char* unit = p["unit"].as<const char*>();
+                    if (unit) {
+                        strncpy(out.unit, unit, sizeof(out.unit) - 1);
+                        out.unit[sizeof(out.unit) - 1] = '\0';
+                    }
+                }
+
+                // Infer type when firmware does not provide explicit type metadata.
+                const bool minInt = fabsf(out.minValue - roundf(out.minValue)) < 0.001f;
+                const bool maxInt = fabsf(out.maxValue - roundf(out.maxValue)) < 0.001f;
+                const bool defInt = fabsf(out.defaultValue - roundf(out.defaultValue)) < 0.001f;
+                if (minInt && maxInt && defInt &&
+                    out.minValue == 0.0f && out.maxValue == 1.0f) {
+                    out.type = CSParamType::BOOL;
+                } else if (minInt && maxInt) {
+                    out.type = CSParamType::INT;
+                } else {
+                    out.type = CSParamType::FLOAT;
+                }
+
+                out.valid = true;
+                paramCount++;
+            }
+        }
+
+        csUI->onEffectParametersReceived(effectId, effectName, params, paramCount);
+    }
+
+    /**
+     * @brief Handle "cameraMode.changed" broadcast for Control Surface.
+     */
+    static void handleCameraModeChanged(JsonDocument& doc) {
+        if (!s_displayUI) return;
+        ControlSurfaceUI* csUI = s_displayUI->getControlSurfaceUI();
+        if (!csUI) return;
+
+        JsonObject data = doc["data"].is<JsonObject>()
+            ? doc["data"].as<JsonObject>()
+            : doc.as<JsonObject>();
+
+        bool enabled = false;
+        if (data["enabled"].is<bool>()) {
+            enabled = data["enabled"].as<bool>();
+        } else if (data["active"].is<bool>()) {
+            enabled = data["active"].as<bool>();
+        }
+
+        csUI->setCameraMode(enabled);
+    }
+
+    /**
+     * @brief Handle "effectPresets.list" response for Control Surface.
+     */
+    static void handleEffectPresetsList(JsonDocument& doc) {
+        if (!s_displayUI) return;
+        ControlSurfaceUI* csUI = s_displayUI->getControlSurfaceUI();
+        if (!csUI) return;
+
+        if (doc["success"].is<bool>() && !doc["success"].as<bool>()) {
+            return;
+        }
+
+        CSPresetSlot slots[CS_MAX_PRESET_SLOTS];
+        for (uint8_t i = 0; i < CS_MAX_PRESET_SLOTS; i++) {
+            slots[i] = CSPresetSlot();
+        }
+
+        JsonObject data = doc["data"].is<JsonObject>()
+            ? doc["data"].as<JsonObject>()
+            : doc.as<JsonObject>();
+
+        if (data["presets"].is<JsonArray>()) {
+            JsonArray presets = data["presets"].as<JsonArray>();
+            for (JsonObject p : presets) {
+                if (!p["id"].is<int>()) continue;
+                int slot = p["id"].as<int>();
+                if (slot < 0 || slot >= CS_MAX_PRESET_SLOTS) continue;
+
+                CSPresetSlot& out = slots[slot];
+                out.occupied = p["occupied"] | true;
+                if (p["name"].is<const char*>()) {
+                    const char* name = p["name"].as<const char*>();
+                    if (name) {
+                        strncpy(out.name, name, sizeof(out.name) - 1);
+                        out.name[sizeof(out.name) - 1] = '\0';
+                    }
+                }
+                if (p["effectId"].is<int>()) {
+                    int v = p["effectId"].as<int>();
+                    if (v >= 0 && v <= 0xFFFF) {
+                        out.effectId = static_cast<uint16_t>(v);
+                    }
+                }
+            }
+        }
+
+        csUI->onPresetListReceived(slots, CS_MAX_PRESET_SLOTS);
+    }
+
+    /**
      * @brief Handle "colorCorrection.getConfig" response
      *
      * Caches color correction state from LightwaveOS v2 server.
@@ -496,4 +784,5 @@ private:
                       state.autoExposureEnabled ? "ON" : "OFF",
                       state.brownGuardrailEnabled ? "ON" : "OFF");
     }
+
 };

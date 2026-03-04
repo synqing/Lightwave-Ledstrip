@@ -115,6 +115,7 @@ public:
     void sendEffectChange(uint16_t effectId);
     void sendNextEffect();
     void sendPrevEffect();
+    void requestCurrentEffect();  // Request effects.getCurrent (reads live renderer state)
     void sendPaletteChange(uint8_t paletteId);
     void sendSpeedChange(uint8_t speed);
     void sendMoodChange(uint8_t mood);
@@ -153,6 +154,22 @@ public:
     void setColorCorrectionState(const ColorCorrectionState& state) { _colorCorrectionState = state; }
 
     // ========================================================================
+    // Camera Mode Commands (Control Surface)
+    // ========================================================================
+
+    void sendCameraModeSet(bool enabled);
+    void requestCameraModeGet();
+
+    // ========================================================================
+    // Preset Commands (Control Surface - uses K1's EffectPresetManager)
+    // ========================================================================
+
+    void requestEffectPresetsList();
+    void sendEffectPresetSave(uint8_t slot, const char* name);
+    void sendEffectPresetLoad(uint8_t slot);
+    void sendEffectPresetDelete(uint8_t slot);
+
+    // ========================================================================
     // Generic Commands
     // ========================================================================
 
@@ -170,6 +187,11 @@ public:
     void requestZonesState();
     /** Set flag to send zones.get on next update() (avoids sending inside WS receive callback). */
     void setPendingZonesRefresh() { _pendingZonesRefresh = true; }
+    /** Defer effects.parameters.get to update() to avoid WS callback re-entrancy. */
+    void setPendingEffectParamsRefresh(uint16_t effectId) {
+        _pendingEffectParamsEffectId = effectId;
+        _pendingEffectParamsRefresh = true;
+    }
 
     // ========================================================================
     // Message Handling
@@ -206,6 +228,8 @@ private:
     bool _useIP;
     bool _pendingHello;
     bool _pendingZonesRefresh = false;
+    bool _pendingEffectParamsRefresh = false;
+    uint16_t _pendingEffectParamsEffectId = 0;
     uint16_t _currentEffectId = 0;
     bool _currentEffectKnown = false;
 

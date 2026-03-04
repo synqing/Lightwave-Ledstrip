@@ -22,6 +22,7 @@
 #include "fonts/experimental_fonts.h"
 #include "ZoneComposerUI.h"
 #include "ConnectivityTab.h"
+#include "ControlSurfaceUI.h"
 
 // Forward declaration - WiFiManager instance is in main.cpp
 extern WiFiManager g_wifiManager;
@@ -91,12 +92,18 @@ DisplayUI::~DisplayUI() {
         delete _connectivityTab;
         _connectivityTab = nullptr;
     }
+    if (_controlSurface) {
+        delete _controlSurface;
+        _controlSurface = nullptr;
+    }
     if (_screen_global) lv_obj_del(_screen_global);
     if (_screen_zone) lv_obj_del(_screen_zone);
     if (_screen_connectivity) lv_obj_del(_screen_connectivity);
+    if (_screen_control_surface) lv_obj_del(_screen_control_surface);
     _screen_global = nullptr;
     _screen_zone = nullptr;
     _screen_connectivity = nullptr;
+    _screen_control_surface = nullptr;
 }
 
 void DisplayUI::begin() {
@@ -187,6 +194,15 @@ void DisplayUI::begin() {
                   // (int)lv_obj_get_style_text_decor(_header_effect, LV_PART_MAIN));
         // #endregion
     lv_obj_set_width(_header_effect, 220);
+
+    // Click handler: navigate to Control Surface screen
+    lv_obj_add_flag(_header_effect_container, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(_header_effect_container, [](lv_event_t* e) {
+        DisplayUI* ui = static_cast<DisplayUI*>(lv_event_get_user_data(e));
+        if (ui) {
+            ui->setScreen(UIScreen::CONTROL_SURFACE);
+        }
+    }, LV_EVENT_CLICKED, this);
 
     // Palette container (fixed width to prevent shifting) - moved to second position
     _header_palette_container = lv_obj_create(_header);
@@ -826,6 +842,17 @@ void DisplayUI::begin() {
         // Serial.println("[DisplayUI_TRACE] ENABLE_WIFI not defined - skipping ConnectivityTab");
 #endif
 
+    // Create Control Surface screen
+    esp_task_wdt_reset();
+    _screen_control_surface = lv_obj_create(nullptr);
+    lv_obj_set_style_bg_color(_screen_control_surface, lv_color_hex(0x0A0A0B), LV_PART_MAIN);
+    lv_obj_set_style_pad_all(_screen_control_surface, 0, LV_PART_MAIN);
+
+    _controlSurface = new ControlSurfaceUI(_display);
+    _controlSurface->setBackButtonCallback(onControlSurfaceBackButton);
+    _controlSurface->begin(_screen_control_surface);
+    Serial.println("[DisplayUI] Control Surface initialized");
+
     // Serial.printf("[DisplayUI_TRACE] Before lv_scr_load @ %lu ms\n", millis());
     esp_task_wdt_reset();
     lv_scr_load(_screen_global);
@@ -922,6 +949,11 @@ void DisplayUI::loop() {
             formatDuration(_hostUptime, buf, sizeof(buf));
             lv_label_set_text(_footer_uptime_value, buf);
         }
+    }
+
+    // Call Control Surface loop (dirty-flag rendering throttle)
+    if (_currentScreen == UIScreen::CONTROL_SURFACE && _controlSurface) {
+        _controlSurface->loop();
     }
 }
 
@@ -1092,6 +1124,12 @@ void DisplayUI::setScreen(UIScreen screen) {
         case UIScreen::CONNECTIVITY:
             targetScreen = _screen_connectivity;
             break;
+        case UIScreen::CONTROL_SURFACE:
+            targetScreen = _screen_control_surface;
+            if (_controlSurface) {
+                _controlSurface->onScreenEnter();
+            }
+            break;
     }
     lv_scr_load(targetScreen);
 }
@@ -1103,6 +1141,12 @@ void DisplayUI::onZoneComposerBackButton() {
 }
 
 void DisplayUI::onConnectivityTabBackButton() {
+    if (s_instance) {
+        s_instance->setScreen(UIScreen::GLOBAL);
+    }
+}
+
+void DisplayUI::onControlSurfaceBackButton() {
     if (s_instance) {
         s_instance->setScreen(UIScreen::GLOBAL);
     }
@@ -1658,6 +1702,13 @@ void DisplayUI::renderCurrentScreen() {
                 _connectivityTab->loop();
             }
             #endif
+            #endif
+            break;
+        case UIScreen::CONTROL_SURFACE:
+            #ifndef SIMULATOR_BUILD
+            if (_controlSurface) {
+                _controlSurface->loop();
+            }
             #endif
             break;
     }

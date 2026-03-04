@@ -29,7 +29,7 @@
 #define WIFI_SSID2 "LightwaveOS-AP"
 #endif
 #ifndef WIFI_PASSWORD2
-#define WIFI_PASSWORD2 "SpectraSynq"
+#define WIFI_PASSWORD2 ""
 #endif
 
 // LightwaveOS Server

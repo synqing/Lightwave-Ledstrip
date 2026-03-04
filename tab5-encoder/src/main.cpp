@@ -66,6 +66,7 @@
 #include "ui/LedFeedback.h"
 // #include "ui/PaletteLedDisplay.h"  // DISABLED - causing encoder regression
 #include "ui/DisplayUI.h"
+#include "ui/ControlSurfaceUI.h"
 #include "ui/LoadingScreen.h"
 #include "ui/Theme.h"
 #include "ui/lvgl_bridge.h"
@@ -154,6 +155,21 @@ static bool s_effectKnown[MAX_EFFECTS] = {false};
 static uint8_t s_effectPages = 0;
 static uint8_t s_effectNextPage = 1;
 
+// Last-known effect from K1 status (16-bit EffectIds don't fit in the 0-255 cache)
+static char s_k1EffectName[EFFECT_NAME_MAX] = {0};
+static uint16_t s_k1EffectId = 0;
+
+// Delayed effect name refresh: K1's broadcastStatus uses a stale cache after
+// nextEffect/prevEffect (setEffect is async). We request effects.getCurrent
+// after 300ms to get the live renderer state with the correct name.
+static uint32_t s_effectNameRefreshMs = 0;
+
+// Holdoff: block status-based effect name updates for 2s after encoder turn.
+// Without this, K1's periodic status (reading stale m_cachedRendererState)
+// immediately overwrites the fresh name from effects.getCurrent.
+static uint32_t s_effectNameHoldoffMs = 0;
+static constexpr uint32_t EFFECT_NAME_HOLDOFF_MS = 2000;
+
 static char s_paletteNames[MAX_PALETTES][PALETTE_NAME_MAX] = {{0}};
 static bool s_paletteKnown[MAX_PALETTES] = {false};
 
@@ -162,6 +178,206 @@ static uint8_t s_paletteNextPage = 1;
 
 static bool s_requestedLists = false;
 static bool s_uiInitialized = false;  // Track if DisplayUI::begin() has been called
+
+// ============================================================================
+// Dynamic effect-parameter slots (Row-2A + Row-2B)
+// ============================================================================
+static constexpr uint8_t FX_PARAM_SLOT_COUNT = 16;
+static constexpr uint8_t FX_PARAM_NAME_MAX = 32;
+static constexpr uint8_t FX_PARAM_LABEL_MAX = 32;
+static constexpr uint32_t FX_PARAM_REFRESH_DELAY_MS = 150;
+
+struct FxParamSlot {
+    bool valid = false;
+    char name[FX_PARAM_NAME_MAX] = {0};
+    char label[FX_PARAM_LABEL_MAX] = {0};
+    float minValue = 0.0f;
+    float maxValue = 1.0f;
+    float defaultValue = 0.0f;
+    float currentValue = 0.0f;
+};
+
+static FxParamSlot s_fxParamSlots[FX_PARAM_SLOT_COUNT];
+static uint8_t s_fxParamCount = 0;
+static uint16_t s_fxParamEffectId = 0;
+
+static bool s_fxParamRefreshPending = false;
+static uint32_t s_fxParamRefreshQueuedAtMs = 0;
+static uint16_t s_fxParamRefreshEffectId = 0;
+
+static float clampFxParamValue(float value, float minValue, float maxValue) {
+    if (value < minValue) return minValue;
+    if (value > maxValue) return maxValue;
+    return value;
+}
+
+static uint8_t encodeFxParamValue(const FxParamSlot& slot, float value) {
+    const float range = slot.maxValue - slot.minValue;
+    if (range <= 0.0001f) {
+        return 0;
+    }
+    const float normalized = (value - slot.minValue) / range;
+    int32_t encoded = static_cast<int32_t>(normalized * 255.0f + 0.5f);
+    if (encoded < 0) encoded = 0;
+    if (encoded > 255) encoded = 255;
+    return static_cast<uint8_t>(encoded);
+}
+
+static void syncFxParamSlotsToUi(int8_t highlightedSlot = -1) {
+    if (!g_ui || !s_uiInitialized) {
+        return;
+    }
+
+    for (uint8_t slot = 0; slot < FX_PARAM_SLOT_COUNT; slot++) {
+        const FxParamSlot& fx = s_fxParamSlots[slot];
+        if (fx.valid) {
+            const char* slotLabel = fx.label[0] ? fx.label : fx.name;
+            g_ui->setEffectParamSlotLabel(slot, slotLabel);
+            g_ui->updateEffectParamSlot(slot, encodeFxParamValue(fx, fx.currentValue),
+                                        highlightedSlot == static_cast<int8_t>(slot));
+        } else {
+            g_ui->setEffectParamSlotLabel(slot, "--");
+            g_ui->updateEffectParamSlot(slot, 0, false);
+        }
+    }
+}
+
+static void clearFxParamSlots(bool updateUi = true) {
+    s_fxParamCount = 0;
+    for (uint8_t i = 0; i < FX_PARAM_SLOT_COUNT; i++) {
+        s_fxParamSlots[i] = FxParamSlot();
+    }
+    if (updateUi) {
+        syncFxParamSlotsToUi();
+    }
+}
+
+static void scheduleFxParamRefresh(uint16_t effectId) {
+    if (effectId == 0) {
+        return;
+    }
+    s_fxParamRefreshPending = true;
+    s_fxParamRefreshEffectId = effectId;
+    s_fxParamRefreshQueuedAtMs = millis();
+}
+
+static uint8_t getActiveFxParamBank() {
+    if (!g_encoders) {
+        return 0;
+    }
+    return (g_encoders->getSwitchState(1) == 1) ? 1 : 0;
+}
+
+static bool handleFxParamEncoderChange(uint8_t encoderIndex, int32_t delta, bool hasDelta) {
+    if (encoderIndex < 8 || encoderIndex >= 16) {
+        return false;
+    }
+
+    const uint8_t localIndex = static_cast<uint8_t>(encoderIndex - 8);
+    const uint8_t slot = static_cast<uint8_t>(getActiveFxParamBank() * 8 + localIndex);
+    if (slot >= FX_PARAM_SLOT_COUNT) {
+        return true;
+    }
+
+    FxParamSlot& fx = s_fxParamSlots[slot];
+    if (!fx.valid) {
+        return true;  // Swallow Unit-B turns on global screen; no zone fallback here.
+    }
+
+    if (!hasDelta || delta == 0) {
+        return true;
+    }
+
+    const float range = fx.maxValue - fx.minValue;
+    const float step = (range > 0.0001f) ? (range / 255.0f) : 1.0f;
+    const float nextValue = clampFxParamValue(
+        fx.currentValue + (static_cast<float>(delta) * step), fx.minValue, fx.maxValue);
+
+    if (fabsf(nextValue - fx.currentValue) < 0.0001f) {
+        return true;
+    }
+
+    fx.currentValue = nextValue;
+
+    if (g_ui && s_uiInitialized) {
+        g_ui->updateEffectParamSlot(slot, encodeFxParamValue(fx, fx.currentValue), true);
+    }
+
+    uint16_t effectId = s_fxParamEffectId;
+    if (effectId == 0 && g_wsClient.hasCurrentEffectId()) {
+        effectId = g_wsClient.getCurrentEffectId();
+    }
+    if (effectId != 0 && g_wsClient.isConnected()) {
+        g_wsClient.sendEffectParameterChange(encoderIndex, effectId, fx.name, fx.currentValue);
+    }
+
+    return true;
+}
+
+static void applyFxParametersMessage(JsonDocument& doc) {
+    JsonObject data = doc["data"].is<JsonObject>()
+        ? doc["data"].as<JsonObject>()
+        : doc.as<JsonObject>();
+
+    uint16_t effectId = s_k1EffectId;
+    if (data["effectId"].is<int>()) {
+        int v = data["effectId"].as<int>();
+        if (v >= 0 && v <= 0xFFFF) {
+            effectId = static_cast<uint16_t>(v);
+        }
+    } else if (data["effectId"].is<uint16_t>()) {
+        effectId = data["effectId"].as<uint16_t>();
+    }
+
+    if (effectId != 0) {
+        s_fxParamEffectId = effectId;
+        g_wsClient.setCurrentEffectId(effectId);
+    }
+
+    clearFxParamSlots(false);
+
+    if (!data["parameters"].is<JsonArray>()) {
+        syncFxParamSlotsToUi();
+        return;
+    }
+
+    JsonArray params = data["parameters"].as<JsonArray>();
+    for (JsonObject param : params) {
+        if (s_fxParamCount >= FX_PARAM_SLOT_COUNT) {
+            break;
+        }
+        if (!param["name"].is<const char*>()) {
+            continue;
+        }
+
+        FxParamSlot& dst = s_fxParamSlots[s_fxParamCount];
+        const char* name = param["name"].as<const char*>();
+        const char* displayName = param["displayName"].is<const char*>()
+            ? param["displayName"].as<const char*>()
+            : name;
+
+        strncpy(dst.name, name, sizeof(dst.name) - 1);
+        dst.name[sizeof(dst.name) - 1] = '\0';
+        strncpy(dst.label, displayName, sizeof(dst.label) - 1);
+        dst.label[sizeof(dst.label) - 1] = '\0';
+
+        dst.minValue = param["min"] | 0.0f;
+        dst.maxValue = param["max"] | 1.0f;
+        if (dst.maxValue <= dst.minValue) {
+            dst.maxValue = dst.minValue + 1.0f;
+        }
+
+        dst.defaultValue = param["default"] | dst.minValue;
+        float incomingValue = param["value"] | dst.defaultValue;
+        dst.currentValue = clampFxParamValue(incomingValue, dst.minValue, dst.maxValue);
+        dst.valid = true;
+        s_fxParamCount++;
+    }
+
+    syncFxParamSlotsToUi();
+    Serial.printf("[FX] Synced %u effect parameters for effect 0x%04X\n",
+                  s_fxParamCount, effectId);
+}
 
 // ============================================================================
 // Touch Action Row (Colour Correction Controls)
@@ -378,30 +594,62 @@ void cachePaletteName(uint8_t id, const char* name) {
 
 // Cache an effect name from status message (called from WsMessageRouter)
 void cacheEffectName(uint16_t id, const char* name) {
-    if (id < MAX_EFFECTS && name && name[0]) {
+    if (!name || !name[0]) return;
+
+    const uint16_t previousEffectId = s_k1EffectId;
+
+    // Always store as last-known K1 effect (16-bit IDs may exceed cache bounds)
+    s_k1EffectId = id;
+    strncpy(s_k1EffectName, name, EFFECT_NAME_MAX - 1);
+    s_k1EffectName[EFFECT_NAME_MAX - 1] = '\0';
+
+    if (id != 0) {
+        g_wsClient.setCurrentEffectId(id);
+    }
+
+    // Also cache in indexed array if it fits (for legacy lookups)
+    if (id < MAX_EFFECTS) {
         strncpy(s_effectNames[id], name, EFFECT_NAME_MAX - 1);
         s_effectNames[id][EFFECT_NAME_MAX - 1] = '\0';
         s_effectKnown[id] = true;
     }
+
+    // Trigger immediate display update
+    if (g_ui && s_uiInitialized) {
+        g_ui->setCurrentEffect(0, s_k1EffectName);
+    }
+
+    // Effect-specific parameter descriptors are effect-bound; refresh when effect changes.
+    if (id != 0 && id != previousEffectId) {
+        scheduleFxParamRefresh(id);
+    }
+
+    Serial.printf("[EffectCache] id=0x%04X name='%s'\n", id, s_k1EffectName);
+}
+
+// Called from ParameterHandler after sending nextEffect/prevEffect.
+// Schedules a delayed effects.getCurrent request to fetch the updated name.
+void scheduleEffectNameRefresh() {
+    s_effectNameRefreshMs = millis();
+    if (s_effectNameRefreshMs == 0) s_effectNameRefreshMs = 1;  // avoid 0 (disabled sentinel)
+    // Also set holdoff to block stale status updates
+    s_effectNameHoldoffMs = s_effectNameRefreshMs;
+}
+
+// Check if effect name holdoff is active (called from WsMessageRouter)
+bool isEffectNameHoldoffActive() {
+    if (s_effectNameHoldoffMs == 0) return false;
+    if (millis() - s_effectNameHoldoffMs < EFFECT_NAME_HOLDOFF_MS) return true;
+    s_effectNameHoldoffMs = 0;  // expired
+    return false;
 }
 
 static void updateUiEffectPaletteLabels() {
     if (!g_ui || !g_encoders || !s_uiInitialized) return;  // Only update if UI is initialized
-    uint8_t effectId = static_cast<uint8_t>(g_encoders->getValue(0));
-    uint8_t paletteId = static_cast<uint8_t>(g_encoders->getValue(1));  // FIXED: Palette is encoder 1, not 2
+    uint8_t paletteId = static_cast<uint8_t>(g_encoders->getValue(1));  // Palette is encoder 1
 
-    char effectBuf[EFFECT_NAME_MAX];
     char paletteBuf[PALETTE_NAME_MAX];
-
-    const char* en = lookupEffectName(effectId);
     const char* pn = lookupPaletteName(paletteId);
-
-    if (en) {
-        strncpy(effectBuf, en, sizeof(effectBuf) - 1);
-        effectBuf[sizeof(effectBuf) - 1] = '\0';
-    } else {
-        snprintf(effectBuf, sizeof(effectBuf), "#%u", (unsigned)effectId);
-    }
 
     if (pn) {
         strncpy(paletteBuf, pn, sizeof(paletteBuf) - 1);
@@ -410,7 +658,13 @@ static void updateUiEffectPaletteLabels() {
         snprintf(paletteBuf, sizeof(paletteBuf), "#%u", (unsigned)paletteId);
     }
 
-    g_ui->setCurrentEffect(effectId, effectBuf);
+    // Effect name: use last-known name from K1 status (16-bit EffectIds don't
+    // fit in uint8_t encoder values, so we can't look up by encoder index)
+    if (s_k1EffectName[0]) {
+        g_ui->setCurrentEffect(0, s_k1EffectName);
+    } else {
+        g_ui->setCurrentEffect(0, "--");
+    }
     g_ui->setCurrentPalette(paletteId, paletteBuf);
 }
 
@@ -662,12 +916,53 @@ void onEncoderChange(uint8_t index, uint16_t value, bool wasReset) {
         }
     }
 
-    // Initialize encoder tracking for first use
+    // If Control Surface is active, route ALL encoders to Control Surface UI
+    if (g_ui && s_uiInitialized && g_ui->getCurrentScreen() == UIScreen::CONTROL_SURFACE) {
+        ControlSurfaceUI* csUI = g_ui->getControlSurfaceUI();
+        if (csUI) {
+            // Button press: route to handleEncoderButton for encoders 0-14.
+            // Encoder 15 (preset bank) uses ClickDetector in loop() for long-hold.
+            if (wasReset && index != 15) {
+                csUI->handleEncoderButton(index, false);
+                s_prevEncoderValues[index] = value;
+                s_encodersInitialized[index] = true;
+                return;
+            }
+
+            if (!s_encodersInitialized[index]) {
+                s_prevEncoderValues[index] = value;
+                s_encodersInitialized[index] = true;
+                return;
+            }
+
+            int32_t delta = static_cast<int32_t>(value) - static_cast<int32_t>(s_prevEncoderValues[index]);
+            if (delta > 128) delta -= 256;
+            else if (delta < -128) delta += 256;
+
+            csUI->handleEncoderChange(index, delta);
+            s_prevEncoderValues[index] = value;
+            return;
+        }
+    }
+
+    // Track delta for generic/global routing paths.
+    int32_t encoderDelta = 0;
+    bool hasEncoderDelta = false;
     if (!s_encodersInitialized[index]) {
         s_prevEncoderValues[index] = value;
         s_encodersInitialized[index] = true;
     } else {
+        encoderDelta = static_cast<int32_t>(value) - static_cast<int32_t>(s_prevEncoderValues[index]);
         s_prevEncoderValues[index] = value;
+        hasEncoderDelta = true;
+    }
+
+    // Global screen: Unit-B rotaries drive effect-specific parameter slots.
+    // Swallow these turns to avoid falling back to legacy zone commands.
+    if (g_ui && s_uiInitialized && g_ui->getCurrentScreen() == UIScreen::GLOBAL && index >= 8) {
+        if (handleFxParamEncoderChange(index, encoderDelta, hasEncoderDelta)) {
+            return;
+        }
     }
     // DISABLED - PaletteLedDisplay causing encoder regression
     // Special handling for encoder 15 (ENC-B encoder 7): Cycle palette animation modes
@@ -737,12 +1032,6 @@ void onEncoderChange(uint8_t index, uint16_t value, bool wasReset) {
     const char* unit = (index < 8) ? "A" : "B";
     uint8_t localIdx = index % 8;
 
-    // Mark this parameter as locally changed FIRST (for anti-snapback holdoff).
-    // This prevents incoming server status echoes from reverting our change.
-    if (g_paramHandler) {
-        g_paramHandler->markLocalChange(index);
-    }
-
     // Rate-limited logging (always log resets, but throttle normal changes)
     uint32_t now = millis();
     bool shouldLog = wasReset || (now - s_lastEncoderLogTime >= ENCODER_LOG_INTERVAL_MS);
@@ -759,6 +1048,10 @@ void onEncoderChange(uint8_t index, uint16_t value, bool wasReset) {
     // Update display with new value (fast, non-blocking)
     if (g_ui && s_uiInitialized) {  // Only update if UI is initialized
         g_ui->updateValue(index, value);
+        // Update header labels for effect/palette when those encoders change
+        if (index == 0 || index == 1) {
+            updateUiEffectPaletteLabels();
+        }
     }
 
     // DISABLED - PaletteLedDisplay causing encoder regression
@@ -782,43 +1075,11 @@ void onEncoderChange(uint8_t index, uint16_t value, bool wasReset) {
     // Queue parameter for NVS persistence (debounced to prevent flash wear)
     NvsStorage::requestSave(index, value);
 
-    // Send to LightwaveOS via WebSocket (Milestone F)
-    // Note: ParameterHandler also handles this, but we keep this as fallback
-    if (g_wsClient.isConnected()) {
-        // Unit A (0-7): Global parameters
-        if (index < 8) {
-            switch (index) {
-                case 0: g_wsClient.sendEffectChange(value); break;
-                case 1: g_wsClient.sendPaletteChange(value); break;      // FIXED: Encoder 1 = Palette
-                case 2: g_wsClient.sendSpeedChange(value); break;         // FIXED: Encoder 2 = Speed
-                case 3: g_wsClient.sendMoodChange(value); break;
-                case 4: g_wsClient.sendFadeAmountChange(value); break;
-                case 5: g_wsClient.sendComplexityChange(value); break;
-                case 6: g_wsClient.sendVariationChange(value); break;
-                case 7: g_wsClient.sendBrightnessChange(value); break;   // FIXED: Encoder 7 = Brightness
-            }
-        }
-        // Unit B (8-15): Zone parameters
-        // Note: Encoder 15 (index 15) is handled specially above for animation mode cycling
-        else if (index < 15) {  // Only process 8-14 as zone parameters
-            // #region agent log (DISABLED)
-            // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"D\",\"location\":\"main.cpp:648\",\"message\":\"onEncoderChange.encB\",\"data\":{\"index\":%u,\"value\":%u,\"unit\":\"B\",\"localIdx\":%u,\"timestamp\":%lu}\n",
-                // index, value, index % 8, static_cast<unsigned long>(millis()));
-                        // #endregion
-            
-            uint8_t zoneId = ZoneParam::getZoneId(index);
-            if (ZoneParam::isZoneEffect(index)) {
-                g_wsClient.sendZoneEffect(zoneId, value);
-            } else {
-                // Zone speed/palette (handled by ButtonHandler mode)
-                if (g_buttonHandler && g_buttonHandler->getZoneEncoderMode(zoneId) == SpeedPaletteMode::PALETTE) {
-                    g_wsClient.sendZonePalette(zoneId, value);
-                } else {
-                    g_wsClient.sendZoneSpeed(zoneId, value);
-                }
-            }
-        }
-        // Encoder 15 is handled above for animation mode cycling - no WebSocket message needed
+    // Send to LightwaveOS via ParameterHandler (handles effect nextEffect/prevEffect,
+    // zone speed/palette mode, and all other parameter WS commands).
+    // ParameterHandler::onEncoderChanged logs "[Param]" for each WS send.
+    if (g_paramHandler) {
+        g_paramHandler->onEncoderChanged(index, value, wasReset);
     }
 }
 
@@ -870,6 +1131,15 @@ void updateConnectionLeds() {
             // Just connected - record connection time
             g_ui->setWebSocketConnected(true, millis());
             g_ui->updateWebSocketStatus(WebSocketStatus::CONNECTED);
+        }
+        if (!s_wasWsConnected) {
+            uint16_t effectId = s_k1EffectId;
+            if (effectId == 0 && g_wsClient.hasCurrentEffectId()) {
+                effectId = g_wsClient.getCurrentEffectId();
+            }
+            if (effectId != 0) {
+                scheduleFxParamRefresh(effectId);
+            }
         }
         s_wasWsConnected = true;
     }
@@ -1275,6 +1545,10 @@ void setup() {
     if (zoneUI) {
         zoneUI->setWebSocketClient(&g_wsClient);
     }
+    ControlSurfaceUI* csUI = (g_ui) ? g_ui->getControlSurfaceUI() : nullptr;
+    if (csUI) {
+        csUI->setWebSocketClient(&g_wsClient);
+    }
     WsMessageRouter::init(g_paramHandler, &g_wsClient, zoneUI, g_ui);
 
     // Wire ZoneComposerUI to PresetManager for zone state capture
@@ -1292,26 +1566,27 @@ void setup() {
                 JsonObject data = doc["data"].as<JsonObject>();
                 JsonArray effects = data["effects"].as<JsonArray>();
                 uint8_t effectsOnPage = 0;
-                uint8_t highestEffectId = 0;
+                uint16_t highestEffectId = 0;
                 for (JsonObject e : effects) {
                     // ArduinoJson stores small integers as int - use is<int>()
                     if (!e["id"].is<int>() || !e["name"].is<const char*>()) continue;
                     int idInt = e["id"].as<int>();
-                    if (idInt < 0 || idInt > 255) continue;  // Invalid ID range
-                    uint8_t id = static_cast<uint8_t>(idInt);
+                    if (idInt < 0 || idInt > 0xFFFF) continue;
+                    uint16_t id = static_cast<uint16_t>(idInt);
                     const char* name = e["name"].as<const char*>();
-                    // Store effect if within range (0-87 for 88 effects)
-                    if (id < MAX_EFFECTS && name) {
+                    if (!name) continue;
+                    // Store in indexed array if ID fits (legacy 8-bit range)
+                    if (id < MAX_EFFECTS) {
                         strncpy(s_effectNames[id], name, EFFECT_NAME_MAX - 1);
                         s_effectNames[id][EFFECT_NAME_MAX - 1] = '\0';
                         s_effectKnown[id] = true;
-                        effectsOnPage++;
-                        if (id > highestEffectId) highestEffectId = id;
-                    } else if (id >= MAX_EFFECTS) {
-                        Serial.printf("[WARN] Invalid effect ID %u (max=%u), ignoring\n", id, MAX_EFFECTS - 1);
                     }
+                    // K1 16-bit IDs exceed array bounds — names are served
+                    // via s_k1EffectName (from status/effects.current) instead.
+                    effectsOnPage++;
+                    if (id > highestEffectId) highestEffectId = id;
                 }
-                Serial.printf("[Effects] Page received: %u effects stored, highest ID=%u\n", effectsOnPage, highestEffectId);
+                Serial.printf("[Effects] Page received: %u effects, highest ID=0x%04X\n", effectsOnPage, highestEffectId);
 
                 JsonObject pagination = data["pagination"].as<JsonObject>();
                 // ArduinoJson stores small integers as int, not uint8_t - use is<int>()
@@ -1414,6 +1689,50 @@ void setup() {
                                 // #endregion
 
                 updateUiEffectPaletteLabels();
+                return;
+            }
+
+            // Dynamic per-effect parameter payload (up to 16 exposed slots).
+            if (type && strcmp(type, "effects.parameters") == 0) {
+                bool success = !doc["success"].is<bool>() || doc["success"].as<bool>();
+                if (success) {
+                    applyFxParametersMessage(doc);
+                } else {
+                    clearFxParamSlots(true);
+                    if (s_k1EffectId != 0) {
+                        scheduleFxParamRefresh(s_k1EffectId);
+                    }
+                }
+                return;
+            }
+
+            if (type && strcmp(type, "effects.parameters.changed") == 0) {
+                JsonObject data = doc["data"].is<JsonObject>()
+                    ? doc["data"].as<JsonObject>()
+                    : doc.as<JsonObject>();
+
+                uint16_t effectId = s_k1EffectId;
+                if (data["effectId"].is<int>()) {
+                    int v = data["effectId"].as<int>();
+                    if (v >= 0 && v <= 0xFFFF) {
+                        effectId = static_cast<uint16_t>(v);
+                    }
+                } else if (data["effectId"].is<uint16_t>()) {
+                    effectId = data["effectId"].as<uint16_t>();
+                }
+
+                bool hasFailures = false;
+                if (data["failed"].is<JsonArray>()) {
+                    JsonArray failed = data["failed"].as<JsonArray>();
+                    hasFailures = failed.size() > 0;
+                }
+
+                bool success = !doc["success"].is<bool>() || doc["success"].as<bool>();
+                if (!success || hasFailures) {
+                    if (effectId != 0) {
+                        scheduleFxParamRefresh(effectId);
+                    }
+                }
                 return;
             }
 
@@ -1785,7 +2104,7 @@ void loop() {
     // =========================================================================
     static uint8_t s_lastSwitchState = 0;
     if (g_encoders && g_encoders->isUnitAAvailable()) {
-        uint8_t currentSwitchState = g_encoders->transportA().getInputSwitch();
+        uint8_t currentSwitchState = g_encoders->getSwitchState(0);
         if (currentSwitchState != s_lastSwitchState) {
             Serial.printf("[CoarseMode] Switch state changed: %d -> %d\n", 
                          s_lastSwitchState, currentSwitchState);
@@ -1925,6 +2244,7 @@ void loop() {
             }
             
             s_uiInitialized = true;
+            syncFxParamSlotsToUi();
             Serial.println("[UI] Full UI initialized after WiFi connection");
             
             // DISABLED - PaletteLedDisplay
@@ -2156,14 +2476,16 @@ void loop() {
             }
         }
 
-        // Reset g_wsConfigured if WebSocket disconnects (allows reconnection)
-        // Use existing global s_wasWsConnected from updateConnectionLeds()
+        // WebSocket disconnect detection (UI/logging only)
+        // DO NOT reset g_wsConfigured here — the WebSocketClient has built-in
+        // exponential backoff reconnection. Resetting g_wsConfigured causes the
+        // Priority 1 block above to call begin() every loop iteration (~5ms),
+        // fighting the library's backoff and creating a reconnect storm.
+        // See: claude-mem #34928 (Feb 16, 2026)
         bool isWsConnected = g_wsClient.isConnected();
         if (s_wasWsConnected && !isWsConnected) {
-            // WebSocket just disconnected (WiFi still connected)
-            Serial.println("[NETWORK] WebSocket disconnected, resetting connection state");
-            g_wsConfigured = false;  // Allow reconnection
-            s_mdnsLogged = false;    // Allow fresh mDNS log
+            Serial.println("[NETWORK] WebSocket disconnected — library will auto-reconnect with backoff");
+            s_requestedLists = false;  // Re-fetch lists after reconnect
         }
         // Note: s_wasWsConnected is updated in updateConnectionLeds() which is called later in the loop
 
@@ -2307,7 +2629,7 @@ void loop() {
         // Poll Unit-B button states and run through click detectors
         if (g_encoders->isUnitBAvailable()) {
             for (uint8_t slot = 0; slot < 8; slot++) {
-                bool isPressed = g_encoders->transportB().getKeyPressed(slot);
+                bool isPressed = g_encoders->getButtonPressed(static_cast<uint8_t>(8 + slot));
                 ClickType click = g_clickDetectors[slot].update(isPressed, now);
 
                 if (click != ClickType::NONE) {
@@ -2344,6 +2666,33 @@ void loop() {
     }
 
     // =========================================================================
+    // CONTROL SURFACE: Process encoder 15 button clicks (preset bank)
+    // =========================================================================
+    // Encoder 15 (Unit-B slot 7) needs ClickDetector for long-hold (delete preset).
+    // Encoders 0-14 are handled via wasReset in onEncoderChange().
+    if (g_ui && s_uiInitialized && g_ui->getCurrentScreen() == UIScreen::CONTROL_SURFACE) {
+        ControlSurfaceUI* csUI = g_ui->getControlSurfaceUI();
+        if (csUI && g_encoders && g_encoders->isUnitBAvailable()) {
+            uint32_t now = millis();
+            bool isPressed = g_encoders->getButtonPressed(15);
+            ClickType click = g_clickDetectors[7].update(isPressed, now);
+
+            if (click != ClickType::NONE) {
+                switch (click) {
+                    case ClickType::SINGLE_CLICK:
+                        csUI->handleEncoderButton(15, false);
+                        break;
+                    case ClickType::LONG_HOLD:
+                        csUI->handleEncoderButton(15, true);
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+    }
+
+    // =========================================================================
     // NVS: Process pending parameter saves (debounced writes)
     // =========================================================================
     NvsStorage::update();
@@ -2372,11 +2721,25 @@ void loop() {
 
         // Update WebSocket status for footer display
 #if ENABLE_WIFI
-        g_ui->updateWebSocketStatus(g_wsClient.getStatus());
+        static bool s_wsStatusInitialised = false;
+        static WebSocketStatus s_lastWsStatus = WebSocketStatus::DISCONNECTED;
+        WebSocketStatus wsStatus = g_wsClient.getStatus();
+        if (!s_wsStatusInitialised || wsStatus != s_lastWsStatus) {
+            g_ui->updateWebSocketStatus(wsStatus);
+            s_lastWsStatus = wsStatus;
+            s_wsStatusInitialised = true;
+        }
 #endif
 
         // Update WiFi details for header display
 #if ENABLE_WIFI
+        static bool s_uiWifiInfoValid = false;
+        static char s_uiLastIp[16] = {0};
+        static char s_uiLastSsid[33] = {0};
+        static int32_t s_uiLastRssi = 0;
+        static bool s_retryButtonInitialised = false;
+        static bool s_lastRetryVisible = false;
+
         if (wifiOk) {
             // Avoid per-frame heap churn (e.g. IPAddress::toString() + String copies).
             static uint32_t s_lastWiFiInfoMs = 0;
@@ -2397,14 +2760,37 @@ void loop() {
                 s_rssi = g_wifiManager.getRSSI();
             }
 
-            g_ui->setWiFiInfo(s_ipBuf, s_ssidBuf, s_rssi);
+            bool wifiInfoChanged = !s_uiWifiInfoValid ||
+                                   strcmp(s_uiLastIp, s_ipBuf) != 0 ||
+                                   strcmp(s_uiLastSsid, s_ssidBuf) != 0 ||
+                                   s_uiLastRssi != s_rssi;
+            if (wifiInfoChanged) {
+                g_ui->setWiFiInfo(s_ipBuf, s_ssidBuf, s_rssi);
+                strncpy(s_uiLastIp, s_ipBuf, sizeof(s_uiLastIp) - 1);
+                s_uiLastIp[sizeof(s_uiLastIp) - 1] = '\0';
+                strncpy(s_uiLastSsid, s_ssidBuf, sizeof(s_uiLastSsid) - 1);
+                s_uiLastSsid[sizeof(s_uiLastSsid) - 1] = '\0';
+                s_uiLastRssi = s_rssi;
+                s_uiWifiInfoValid = true;
+            }
         } else {
-            g_ui->setWiFiInfo("", "", 0);
+            if (s_uiWifiInfoValid) {
+                g_ui->setWiFiInfo("", "", 0);
+                s_uiWifiInfoValid = false;
+                s_uiLastIp[0] = '\0';
+                s_uiLastSsid[0] = '\0';
+                s_uiLastRssi = 0;
+            }
         }
         
         // Update retry button visibility
         #if ENABLE_WIFI
-        g_ui->updateRetryButton(g_wifiManager.shouldShowRetryButton());
+        bool retryVisible = g_wifiManager.shouldShowRetryButton();
+        if (!s_retryButtonInitialised || retryVisible != s_lastRetryVisible) {
+            g_ui->updateRetryButton(retryVisible);
+            s_lastRetryVisible = retryVisible;
+            s_retryButtonInitialised = true;
+        }
         #else
         g_ui->updateRetryButton(false);
         #endif
@@ -2413,8 +2799,30 @@ void loop() {
         g_ui->updateRetryButton(false);
 #endif
 
-        // Ensure Effect/Palette labels stay updated (names best-effort)
-        updateUiEffectPaletteLabels();
+        // Delayed effect name refresh after nextEffect/prevEffect
+        if (s_effectNameRefreshMs != 0 && (millis() - s_effectNameRefreshMs >= 300)) {
+            s_effectNameRefreshMs = 0;
+            g_wsClient.requestCurrentEffect();
+        }
+
+        // Deferred effect-parameter metadata refresh (triggered by effect changes).
+        if (s_fxParamRefreshPending && g_wsClient.isConnected()) {
+            if (millis() - s_fxParamRefreshQueuedAtMs >= FX_PARAM_REFRESH_DELAY_MS) {
+                s_fxParamRefreshPending = false;
+                uint16_t effectId = s_fxParamRefreshEffectId;
+                if (effectId == 0) {
+                    effectId = s_k1EffectId;
+                }
+                if (effectId != 0) {
+                    g_wsClient.requestEffectParameters(effectId, "tab5.fxparams");
+                }
+            }
+        }
+
+        // Effect/Palette labels updated on-change only:
+        //   - onEncoderChange (index 0 or 1)
+        //   - effects.list / palettes.list page receipt
+        //   - effects.current / effects.changed WS messages
 
         // Animate system monitor waveform
         g_ui->loop();

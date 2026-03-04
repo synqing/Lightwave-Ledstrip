@@ -100,17 +100,6 @@ namespace network {
 // Configuration
 // ============================================================================
 
-// Low-heap shedding thresholds may be overridden per PlatformIO environment.
-#ifndef LW_INTERNAL_HEAP_SHED_BELOW_BYTES
-#define LW_INTERNAL_HEAP_SHED_BELOW_BYTES (30U * 1024U)
-#endif
-#ifndef LW_INTERNAL_HEAP_RESUME_ABOVE_BYTES
-#define LW_INTERNAL_HEAP_RESUME_ABOVE_BYTES (45U * 1024U)
-#endif
-#ifndef LW_INTERNAL_HEAP_SHED_LOG_INTERVAL_MS
-#define LW_INTERNAL_HEAP_SHED_LOG_INTERVAL_MS 15000U
-#endif
-
 namespace WebServerConfig {
     constexpr uint16_t HTTP_PORT = config::NetworkConfig::WEB_SERVER_PORT;
     constexpr const char* MDNS_HOSTNAME = config::NetworkConfig::MDNS_HOSTNAME;
@@ -575,11 +564,8 @@ private:
     // Use hysteresis to prevent rapid toggling.
     bool m_lowHeapShed;
     uint32_t m_lastHeapShedLogMs;
-    static constexpr uint32_t INTERNAL_HEAP_SHED_BELOW_BYTES = LW_INTERNAL_HEAP_SHED_BELOW_BYTES;
-    static constexpr uint32_t INTERNAL_HEAP_RESUME_ABOVE_BYTES = LW_INTERNAL_HEAP_RESUME_ABOVE_BYTES;
-    static constexpr uint32_t INTERNAL_HEAP_SHED_LOG_INTERVAL_MS = LW_INTERNAL_HEAP_SHED_LOG_INTERVAL_MS;
-    static_assert(INTERNAL_HEAP_RESUME_ABOVE_BYTES > INTERNAL_HEAP_SHED_BELOW_BYTES,
-                  "Low-heap resume threshold must be greater than shed threshold");
+    static constexpr uint32_t INTERNAL_HEAP_SHED_BELOW_BYTES = 30U * 1024U;
+    static constexpr uint32_t INTERNAL_HEAP_RESUME_ABOVE_BYTES = 45U * 1024U;
 
     // LED frame streaming (extracted to LedStreamBroadcaster)
     webserver::LedStreamBroadcaster* m_ledBroadcaster;

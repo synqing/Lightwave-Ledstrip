@@ -23,6 +23,10 @@ namespace lightwaveos {
     namespace zones {
         class ZoneComposer;
     }
+    namespace persistence {
+        class ZoneConfigManager;
+        class PresetManager;
+    }
     namespace plugins {
         class PluginManagerActor;
     }
@@ -64,6 +68,8 @@ struct WebServerContext {
     actors::ActorSystem& orchestrator;  // Alias for actorSystem (V1ApiRoutes compatibility)
     actors::RendererActor* renderer;
     zones::ZoneComposer* zoneComposer;
+    persistence::ZoneConfigManager* zoneConfigMgr;  // Zone persistence (may be nullptr)
+    persistence::PresetManager* presetMgr;          // Preset persistence (may be nullptr)
     network::WebServer* webServer;  // WebServer instance (passed as 'this' from WebServer.cpp)
     plugins::PluginManagerActor* pluginManager;  // Plugin manager (may be nullptr)
 
@@ -139,12 +145,16 @@ struct WebServerContext {
 #endif
         std::function<bool(const String&, JsonVariant)> executeBatchFn = nullptr,
         UdpStreamer* udpStreamerPtr = nullptr,
-        plugins::PluginManagerActor* pluginMgr = nullptr
+        plugins::PluginManagerActor* pluginMgr = nullptr,
+        persistence::ZoneConfigManager* zoneConfigMgrPtr = nullptr,
+        persistence::PresetManager* presetMgrPtr = nullptr
     )
         : actorSystem(actors)
         , orchestrator(actors)  // Alias for actorSystem (V1ApiRoutes compatibility)
         , renderer(rendererPtr)
         , zoneComposer(zoneComposerPtr)
+        , zoneConfigMgr(zoneConfigMgrPtr)
+        , presetMgr(presetMgrPtr)
         , webServer(webServerPtr)
         , pluginManager(pluginMgr)
         , rateLimiter(limiter)

@@ -43,16 +43,6 @@
 #include "../../sync/DeviceUUID.h"
 #endif
 
-// Extern declaration for zone config manager (defined in main.cpp)
-namespace lightwaveos {
-namespace persistence {
-class ZoneConfigManager;
-class PresetManager;
-}
-}
-extern lightwaveos::persistence::ZoneConfigManager* zoneConfigMgr;
-extern lightwaveos::persistence::PresetManager* presetMgr;
-
 namespace lightwaveos {
 namespace network {
 namespace webserver {
@@ -923,21 +913,21 @@ void V1ApiRoutes::registerRoutes(
     registry.onGet("/api/v1/zones/config", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::ZoneHandlers::handleConfigGet(request, ctx.zoneComposer, zoneConfigMgr);
+        handlers::ZoneHandlers::handleConfigGet(request, ctx.zoneComposer, ctx.zoneConfigMgr);
     });
 
     // POST /api/v1/zones/config/save - Save zone config to NVS
     registry.onPost("/api/v1/zones/config/save", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::ZoneHandlers::handleConfigSave(request, ctx.zoneComposer, zoneConfigMgr);
+        handlers::ZoneHandlers::handleConfigSave(request, ctx.zoneComposer, ctx.zoneConfigMgr);
     });
 
     // POST /api/v1/zones/config/load - Reload config from NVS
     registry.onPost("/api/v1/zones/config/load", [ctx, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::ZoneHandlers::handleConfigLoad(request, ctx.zoneComposer, zoneConfigMgr, broadcastZoneState);
+        handlers::ZoneHandlers::handleConfigLoad(request, ctx.zoneComposer, ctx.zoneConfigMgr, broadcastZoneState);
     });
 
     // ==================== Zone Timing Metrics Routes (Phase 2a.1) ====================
@@ -1036,27 +1026,27 @@ void V1ApiRoutes::registerRoutes(
     // ==================== Zone Preset Library Routes ====================
 
     // GET /api/v1/presets - List all saved presets
-    registry.onGet("/api/v1/presets", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+    registry.onGet("/api/v1/presets", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::PresetHandlers::handleList(request, presetMgr);
+        handlers::PresetHandlers::handleList(request, ctx.presetMgr);
     });
 
     // GET /api/v1/presets/{name} - Download preset as JSON file
-    registry.onGetRegex("^\\/api\\/v1\\/presets\\/([^/]+)$", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+    registry.onGetRegex("^\\/api\\/v1\\/presets\\/([^/]+)$", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::PresetHandlers::handleGet(request, presetMgr);
+        handlers::PresetHandlers::handleGet(request, ctx.presetMgr);
     });
 
     // POST /api/v1/presets - Upload/save new preset (JSON body)
     registry.onPost("/api/v1/presets",
         [](AsyncWebServerRequest* request) {},
         nullptr,
-        [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+        [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
-            handlers::PresetHandlers::handleSave(request, data, len, presetMgr);
+            handlers::PresetHandlers::handleSave(request, data, len, ctx.presetMgr);
         }
     );
 
@@ -1064,28 +1054,28 @@ void V1ApiRoutes::registerRoutes(
     registry.onPutRegex("^\\/api\\/v1\\/presets\\/([^/]+)$",
         [](AsyncWebServerRequest* request) {},
         nullptr,
-        [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+        [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
-            handlers::PresetHandlers::handleUpdate(request, data, len, presetMgr);
+            handlers::PresetHandlers::handleUpdate(request, data, len, ctx.presetMgr);
         }
     );
 
     // DELETE /api/v1/presets/{name} - Delete a preset
-    registry.onDeleteRegex("^\\/api\\/v1\\/presets\\/([^/]+)$", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+    registry.onDeleteRegex("^\\/api\\/v1\\/presets\\/([^/]+)$", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::PresetHandlers::handleDelete(request, presetMgr);
+        handlers::PresetHandlers::handleDelete(request, ctx.presetMgr);
     });
 
     // POST /api/v1/presets/{name}/rename - Rename a preset
     registry.onPostRegex("^\\/api\\/v1\\/presets\\/([^/]+)\\/rename$",
         [](AsyncWebServerRequest* request) {},
         nullptr,
-        [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+        [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
-            handlers::PresetHandlers::handleRename(request, data, len, presetMgr);
+            handlers::PresetHandlers::handleRename(request, data, len, ctx.presetMgr);
         }
     );
 
@@ -1093,7 +1083,7 @@ void V1ApiRoutes::registerRoutes(
     registry.onPostRegex("^\\/api\\/v1\\/presets\\/([^/]+)\\/load$", [ctx, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::PresetHandlers::handleLoad(request, ctx.zoneComposer, zoneConfigMgr, presetMgr, broadcastZoneState);
+        handlers::PresetHandlers::handleLoad(request, ctx.zoneComposer, ctx.zoneConfigMgr, ctx.presetMgr, broadcastZoneState);
     });
 
     // POST /api/v1/presets/save-current - Save current config as new preset
@@ -1103,7 +1093,7 @@ void V1ApiRoutes::registerRoutes(
         [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
-            handlers::PresetHandlers::handleSaveCurrent(request, data, len, ctx.zoneComposer, zoneConfigMgr, presetMgr);
+            handlers::PresetHandlers::handleSaveCurrent(request, data, len, ctx.zoneComposer, ctx.zoneConfigMgr, ctx.presetMgr);
         }
     );
 

@@ -105,9 +105,6 @@
 #include "../sync/DeviceUUID.h"
 #endif
 
-// External zone config manager from main.cpp
-extern lightwaveos::persistence::ZoneConfigManager* zoneConfigMgr;
-
 using namespace lightwaveos::nodes;
 using namespace lightwaveos::zones;
 using namespace lightwaveos::transitions;
@@ -874,6 +871,8 @@ void WebServer::setupRoutes() {
         , millis()  // Will be updated to m_startTime after server starts
         , m_apMode
     );
+    ctx.zoneConfigMgr = m_zoneConfigMgr;
+    ctx.presetMgr = m_presetMgr;
 
     // Register routes using modular registrars
     // Order: V1 first (higher priority), then legacy, then static assets
@@ -924,6 +923,9 @@ void WebServer::setupWebSocket() {
 #endif
         , [this](const String& action, JsonVariant params) { return executeBatchAction(action, params); }
         , m_udpStreamer
+        , nullptr  // pluginMgr
+        , m_zoneConfigMgr
+        , m_presetMgr
     );
 
     // Create WebSocket gateway

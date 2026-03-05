@@ -73,6 +73,10 @@ namespace lightwaveos {
     namespace zones {
         class ZoneComposer;
     }
+    namespace persistence {
+        class ZoneConfigManager;
+        class PresetManager;
+    }
     // Type aliases for legacy handler compatibility
     // The codebase was originally designed with NodeOrchestrator/RendererNode
     // but evolved to use ActorSystem/RendererActor. These aliases maintain
@@ -219,6 +223,10 @@ public:
      * Handles WebSocket cleanup and periodic status broadcasts.
      */
     void update();
+
+    // Dependency injection setters (call BEFORE begin())
+    void setZoneConfigManager(persistence::ZoneConfigManager* mgr) { m_zoneConfigMgr = mgr; }
+    void setPresetManager(persistence::PresetManager* mgr) { m_presetMgr = mgr; }
 
     // ========================================================================
     // Status
@@ -613,6 +621,8 @@ private:
 
     // Reference to external components (not owned)
     zones::ZoneComposer* m_zoneComposer;
+    persistence::ZoneConfigManager* m_zoneConfigMgr = nullptr;
+    persistence::PresetManager* m_presetMgr = nullptr;
 
     // ========================================================================
     // Cached Renderer State (private implementation)

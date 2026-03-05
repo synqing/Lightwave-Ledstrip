@@ -330,6 +330,8 @@ void setup() {
 
         // Instantiate WebServer with dependencies
         webServerInstance = new WebServer(actors, renderer);
+        webServerInstance->setZoneConfigManager(zoneConfigMgr);
+        webServerInstance->setPresetManager(presetMgr);
 
         // Note: PluginManager wiring to WebServer not yet implemented
         // TODO: Add setPluginManager() to WebServer when plugin UI wiring is needed

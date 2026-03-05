@@ -1,6 +1,6 @@
 # K1 Competitive Landscape Monitor
 
-**Last updated:** 5 March 2026
+**Last updated:** 5 March 2026 (Cycle 3)
 **Monitoring cadence:** Per scheduled research cycle
 **Framing:** K1 is a creative instrument. Competitive set = creative tools and instruments, NOT consumer LED products.
 
@@ -23,17 +23,22 @@
 - Their colour-as-identity discipline (orange accents, now Black editions) reinforces our recognition device research.
 - The OP-1 Field firmware model (extend hardware via software) mirrors K1's 100+ effect library approach.
 
+**Update (Cycle 3 — 5 March 2026):**
+- **OP-XY shipped** (Nov 2024, not 2026 as previously rumoured). $2,299 launch price, now discounted to $1,699. 64-step sequencer, 24-voice poly, 8 tracks. Firmware 1.1.4 released Feb 2026. [INFERENCE] The $600 discount 4 months post-launch suggests softer-than-expected demand at the premium tier — relevant context for K1's $249 pricing strategy.
+- **Carhartt WIP × TE "Audio Archives" collaboration** (Feb 2026) — Limited-edition OB-4 Magic Radio, 1,200-page publication, graphic apparel. Celebrates 15 years of Carhartt WIP Radio with 17 independent radio stations. [INFERENCE] TE continues to build brand through cultural collaborations, not just products. This is the model: hardware as cultural artefact, not just tool. K1's positioning as "studies of music as motion" operates in the same register.
+
 ### Nothing
-**Status:** Active. Glyph interface evolving.
+**Status:** Very active. Phone 4a + 4a Pro launching 5 March 2026. Glyph system in flux.
 
 - **Phone (3)** — Launched July 2025. "Glyph Matrix" replaces prior Glyph Interface with circular dot-matrix LED on back. Significant design evolution.
 - **Phone (3a) Community Edition** — Transparent teal, retro Y2K gaming aesthetic. Community-driven design process.
-- **Phone (4a)** — Unveiled at MWC 2026. Redesigned Glyph: six white LED squares + single red LED. Four colourways.
-- No flagship until 2026 — consolidating into expanded 4a lineup.
+- **Phone (4a)** — Launched 5 March 2026. Redesigned Glyph: "Glyph Bar" — 9 individually controlled mini-LEDs, 40% brighter than previous (a) series. Simplified from previous designs. Four colourways including pink. £349 starting price.
+- **Phone (4a) Pro** — Also launching 5 March 2026. Returns to Glyph Matrix but scaled down: ~137 micro-LEDs vs Phone (3)'s 489. Fan backlash over the reduction — community disappointed by the downgrade. £499 starting price.
 
 **K1 relevance:**
 - Nothing continues to use LEDs as brand identity (Glyph), not just illumination. They've proven that light-as-interface creates brand recognition. Validates K1's core thesis.
-- Their iterative evolution of the Glyph (strips → matrix → squares) shows they're still searching for the right form. K1's LGP glow is already more distinctive than any Glyph iteration.
+- Their iterative evolution of the Glyph (strips → matrix → squares → bar → scaled-down matrix) now shows *regression* — they're reducing LED count and simplifying. The Glyph story is becoming less distinctive, not more.
+- [INFERENCE] Fan backlash at the 4a Pro's reduced Glyph Matrix reveals that the audience *cares* about the light features and will notice downgrades. For K1, this reinforces that light quality and expressiveness matter. The LGP's 320-LED, centre-origin architecture is architecturally superior to anything Nothing ships.
 
 ### Analogue
 **Status:** Shipping. Funtastic editions sold out.
@@ -73,6 +78,11 @@
 
 **Watch:** Kickstarter funding trajectory and pricing. If Monar succeeds at $300+, it validates K1's $249 price point for audio-visual hardware.
 
+**Update (Cycle 3 — 5 March 2026):**
+- Monar has **surpassed funding goal** — HK$57,393 of HK$39,088 (147%) within 2 days. However, only 8 backers — average pledge HK$7,174 (~$920 USD). [INFERENCE] The extremely high per-backer pledge suggests either a high unit price or backers selecting multi-unit/premium tiers. Campaign runs until 17 April (45 days). The early funding success validates the market thesis, but the low backer count means this is not yet a mass-market signal.
+- Key product details confirmed: 19-inch display in 32-inch frame, 6-speaker drivers, 3-way crossover, 20Hz bass, <0.1% THD. 12 "Live Lyrics Themes." AI-driven.
+- [FACT] Monar's approach (AI + screen) vs K1's approach (DSP + physical light) creates a clean competitive distinction. They are not competing for the same buyer — Monar is a visual display with speakers, K1 is a light instrument with ears.
+
 ### Sound Blaster Re:Imagine (Kickstarter — shipping June 2026)
 **What:** Modular audio hub from the original Sound Blaster team. DOS emulator, AI DJ, one-tap visualisers. Programmable stream deck functionality.
 
@@ -89,6 +99,22 @@
 
 ---
 
+### Bang & Olufsen
+**Status:** Active. 100-year anniversary. New product categories.
+
+**Update (Cycle 3 — 5 March 2026):**
+- **Beosound Premiere** — Statement soundbar with patent-pending "Wide Stage Technology" (spatial audio). Available in Natural Aluminium, Gold Tone (early 2026), Black Anthracite (spring 2026).
+- **Landscape Speaker** — Previewed at ISE 2026 (Barcelona). First outdoor speaker designed and crafted entirely in-house. Expected to ship by end of 2026.
+- **Reloved programme** — Refurbished products channel launched Oct 2025. Sustainability play.
+- New flagship stores: Paris (Nov 2025), San Francisco (Dec 2025, largest ever).
+
+**K1 relevance:**
+- B&O's expansion into outdoor speakers and spatial audio shows the premium audio brand stretching into new form factors. Their "architectural presence" recognition device (products as sculptural objects) applies directly to how K1 should be presented.
+- The Reloved programme is an interesting post-launch consideration — premium hardware that maintains value and can be recirculated.
+- [INFERENCE] B&O's 100-year anniversary positioning as "timeless craft" reinforces the principle that creative hardware brands benefit from patience and conviction over hype. Aligns with "Quiet Confidence."
+
+---
+
 ## WLED-SR Ecosystem
 
 **Status:** Stable. No major developments.
@@ -100,6 +126,11 @@
 **K1 relevance:**
 - WLED-SR users are the DIY upgrade path — technically curious people who've built their own sound-reactive LED setups and understand the limitations. They are the most likely early K1 buyers.
 - [INFERENCE] The absence of beat-tracking or onset detection in WLED-SR's roadmap means K1's PipelineCore advantage is not being eroded by the open-source ecosystem. No one in the consumer or DIY space is shipping beat-tracking in a consumer-accessible form factor.
+
+**Update (Cycle 3 — 5 March 2026):**
+- [FACT] Confirmed: WLED's beat detection remains a threshold-based approach (checking if sample exceeds average + threshold). Source code describes it as "poor man's beat detection." No PLL, no onset detection, no rhythmic lock.
+- Third-party tools (WLEDAudioSync-Chataigne-Module) offer enhanced features including BPM detection via OSC and music mood classification, but these run externally on a PC — not on the ESP32.
+- [INFERENCE] The gap between WLED-SR's "amplitude following" and K1's PipelineCore (256-bin FFT, onset detection, PLL beat tracking) remains wide and is not closing. This is a durable technical moat.
 
 ---
 
@@ -115,17 +146,27 @@
 
 ---
 
-## Key Takeaways for This Cycle
+## Key Takeaways — Cycle 3 (5 March 2026)
 
-1. **No one is shipping beat-tracking in a consumer form factor.** K1's PipelineCore (onset + PLL) remains a genuine, unmatched technical differentiator. WLED-SR has not added it. HyperCube doesn't have it. Monar uses AI, not DSP.
+1. **Beat-tracking moat confirmed and widening.** WLED-SR's beat detection is literally described as "poor man's beat detection" in its own source code. K1's PipelineCore (256-bin FFT, onset + PLL) remains categorically unmatched in the consumer and DIY space. No one is closing this gap.
 
-2. **Monar Canvas Speaker is the closest new entrant.** Just launched on Kickstarter (3 March 2026). Audio-reactive visual hardware, but screen-based + AI, not physical light + DSP. Watch their funding trajectory closely.
+2. **Monar funded at 147% in 2 days — but only 8 backers.** High per-unit pledges (~$920 USD average) suggest premium pricing. Validates the market thesis for audio-visual hardware but not yet a mass-market signal. Their AI + screen approach creates a clean competitive distinction from K1's DSP + physical light approach.
 
-3. **Teenage Engineering validates K1's launch model.** Culturally-themed limited editions (EP-40 Riddim), colour-as-identity (Field System Black), and firmware-extending-hardware (OP-1 Field v1.6) all parallel K1's strategy.
+3. **Nothing's Glyph is *regressing*.** Phone 4a simplifies to a 9-LED "Glyph Bar." Phone 4a Pro reduces Glyph Matrix from 489 to ~137 micro-LEDs. Fan backlash is real — the audience cares about light features. K1's 320-LED LGP is architecturally superior and evolving in the opposite direction (more expressiveness, not less).
 
-4. **The creative hardware audience absorbs premium pricing.** Analogue 3D at $270, TE's EP-40 system, Synthstrom's Deluge — all demonstrate willingness to pay for craft over commodity.
+4. **TE continues to build brand through cultural collaboration.** The Carhartt WIP × TE "Audio Archives" project (limited OB-4 radio + 1,200-page book + apparel) demonstrates that hardware as cultural artefact > hardware as product. K1's "studies of music as motion" framing operates in the same register.
 
-5. **Open-source community firmware models work.** Synthstrom's Deluge open-source experiment is producing meaningful contributions. Worth considering for K1 post-launch.
+5. **TE OP-XY discounted $600 four months post-launch.** [INFERENCE] The creative hardware audience has price limits even at the premium tier. $2,299 was too ambitious; $1,699 may be the ceiling. K1 at $249 is well within the proven comfort zone.
+
+6. **B&O at 100 years models "Quiet Confidence" in practice.** Timeless craft, architectural presence, premium materials. Their recognition device (products as sculpture) directly validates K1's approach.
+
+### Previous Cycle Takeaways (preserved)
+
+1. **No one is shipping beat-tracking in a consumer form factor.** Reconfirmed Cycle 3.
+2. **Monar Canvas Speaker is the closest new entrant.** Updated Cycle 3 — funded, tracking.
+3. **Teenage Engineering validates K1's launch model.** Culturally-themed limited editions, colour-as-identity, firmware-extending-hardware.
+4. **The creative hardware audience absorbs premium pricing.** Analogue 3D at $270, TE EP-40, Synthstrom Deluge.
+5. **Open-source community firmware models work.** Synthstrom's Deluge open-source experiment producing contributions.
 
 ---
 
@@ -143,3 +184,14 @@
 - [Hyperspace Lighting HyperCube — Amazon](https://www.amazon.com/Hyperspace-Lighting-Company-HyperCube-Infinity/dp/B0B87992JD)
 - [WLED Audio Reactive — WLED Project](https://kno.wled.ge/advanced/audio-reactive/)
 - [Hardware Launch Strategy 2026 — Silicon Roundabout](https://blog.siliconroundabout.ventures/p/welcome-to-2026-and-why-hardware)
+- [Monar Kickstarter Campaign — Kickstarter](https://www.kickstarter.com/projects/monar/monar-canvas-speaker)
+- [Monar Kickstarter Tracking — Kicktraq](http://www.kicktraq.com/projects/monar/monar-canvas-speaker/)
+- [TE OP-XY — Teenage Engineering](https://teenage.engineering/products/op-xy)
+- [TE OP-XY Pay What You Want — MusicRadar](https://www.musicradar.com/music-tech/teenage-engineering-is-letting-you-pay-what-you-want-for-the-op-xy)
+- [Carhartt WIP × TE Audio Archives — Hypebeast](https://hypebeast.com/2026/2/carhartt-wip-audio-archives-15th-anniversary-capsule-collection-release-info)
+- [Nothing Phone 4a Pro Glyph Matrix — 9to5Google](https://9to5google.com/2026/03/04/nothing-phone-4a-pro-glyph-matrix-teaser/)
+- [Nothing Phone 4a Glyph Bar — Gadget Hacks](https://smartphones.gadgethacks.com/news/nothing-phone-4a-ditches-glyph-matrix-for-simpler-bar/)
+- [Nothing 4a + 4a Pro Launch — Android Central](https://www.androidcentral.com/phones/nothing-phones/nothing-debuts-phone-4a-pro-and-phone-4a)
+- [B&O Landscape Speaker — Essential Install](https://essentialinstall.com/news/bang-olufsen-previews-new-landscape-speaker-at-ise-2026/)
+- [B&O Beosound Premiere — Essential Install](https://essentialinstall.com/news/products/bang-olufsen-launches-beosound-premiere-soundbar/)
+- [WLED Audio Reactive Source — GitHub](https://github.com/wled/WLED/blob/main/usermods/audioreactive/audio_reactive.cpp)

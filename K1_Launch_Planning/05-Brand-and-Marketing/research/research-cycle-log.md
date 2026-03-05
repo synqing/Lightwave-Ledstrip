@@ -1,5 +1,26 @@
 # K1 Launch Research — Cycle Log
 
+## Cycle: 2026-03-06 (Cowork scheduled task — Cycle 6)
+- **Decision targeted:** D5 (Pricing — EXPLORING, $449–549)
+- **Research action:** Full competitive pricing landscape for audio-reactive LED controllers, music visualisation hardware, and premium experience products. Mapped DIY/commodity (WLED $10–30), consumer (Audiorays $199, Nanoleaf $190–300+), professional (SoundSwitch $299+sub), and aspirational (Teenage Engineering $1,999) segments.
+- **Findings:**
+  - [FACT] No standalone music visualiser exceeds $360 (LiveLightMagic). Audiorays leads at $199.
+  - [FACT] ESP32 WLED boards at $10–30 advertise "100+ effects" and "sound reactive" — creates BOM perception anchor.
+  - [FACT] SoundSwitch Control One = $299 + $80/yr subscription. TCO exceeds $449 by year 3.
+  - [FACT] Nanoleaf Shapes music-reactive setup reaches $400–500 when fully expanded (9-panel at $190–220).
+  - [FACT] Teenage Engineering OP-1 Field at $1,999 proves design/experience premium exists but required 15+ years of brand equity.
+  - [INFERENCE] K1 at $449 = 2.25x the most expensive competitor in category. No precedent for this gap.
+  - [HYPOTHESIS] "Musical intelligence" as a value axis is unproven with consumers — buyers pay for LED count and form factor, not DSP quality.
+- **Juxtapositions surfaced:**
+  1. Visualiser ceiling ($360) vs. K1 ($449+) — 2.25x gap, no precedent
+  2. Teenage Engineering defence — viable but K1 has zero brand equity at launch
+  3. BOM anchor problem — ESP32 at $10–30 vs. K1 at $449+ undermines perceived value
+  4. SoundSwitch TCO — K1 wins on 3-year cost and autonomy (no laptop, no subscription)
+  5. Nanoleaf equivalence — same budget zone ($400–500), but K1 = zero installation + superior audio response
+- **Decision register impact:** D5 remains EXPLORING. Balanced evidence. Strongest PRO: Nanoleaf/SoundSwitch TCO comparison. Strongest CON: visualiser ceiling + BOM anchor combination.
+- **Next cycle should:** Research Teenage Engineering's original OP-1 (2011) launch — brand-building BEFORE first sale, whether first run was discounted. Also: search K1-adjacent Kickstarter/Indiegogo campaigns for music visualisation hardware — what actually raised, at what price points, and backer psychology.
+- **Output:** `K1_Launch_Planning/05-Brand-and-Marketing/research/D5-pricing-competitive-landscape-2026-03-06.md`
+
 ## Cycle: 2026-03-06 (Cowork scheduled task — Cycle 5)
 - Decision targeted: D3 (Manifesto Enemy — HARD GATE)
 - Research action: Consumer language validation across all three enemy candidates. Searched HyperCube, Nanoleaf, WLED, generic LED strip reviews for how buyers describe dissatisfaction with "sound reactive" products. Also researched D&AD 2025 manifesto as reference case for enemy-framing.

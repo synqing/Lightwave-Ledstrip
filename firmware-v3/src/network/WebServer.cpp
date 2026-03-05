@@ -1405,8 +1405,7 @@ void WebServer::doBroadcastStatus() {
         doc["mic"] = micLevelDb;
 
         // Musical key/chord (formatted string)
-        const audio::ControlBus& controlBus = audio->getControlBusRef();
-        const audio::ControlBusFrame& frame = controlBus.GetFrame();
+        const audio::ControlBusFrame frame = audio->getControlBusFrameSnapshot();
         const audio::ChordState& chord = frame.chordState;
         if (chord.confidence > 0.1f && chord.type != audio::ChordType::NONE) {
             doc["key"] = formatKeyName(chord.rootNote, chord.type);

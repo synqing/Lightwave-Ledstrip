@@ -457,7 +457,7 @@ void WebServer::updateLowHeapShedState(uint32_t nowMs) {
             LW_LOGI("Low-heap shedding DISABLED (internal=%lu)", (unsigned long)freeInternal);
             // Force a one-shot status broadcast after recovery to resynchronise dashboards.
             m_broadcastPending = true;
-        } else if ((nowMs - m_lastHeapShedLogMs) > 5000) {
+        } else if ((nowMs - m_lastHeapShedLogMs) > INTERNAL_HEAP_SHED_LOG_INTERVAL_MS) {
             m_lastHeapShedLogMs = nowMs;
             LW_LOGW("Low-heap shedding active (internal=%lu)", (unsigned long)freeInternal);
         }
@@ -480,15 +480,16 @@ void WebServer::update() {
     const uint32_t nowMs = millis();
     updateLowHeapShedState(nowMs);
 
-    // Periodic WS transport diagnostics (helps classify reconnect storms quickly).
+    // Periodic WS transport diagnostics (suppressed when no clients are connected).
     if (m_wsGateway) {
         static uint32_t s_lastWsDiagLogMs = 0;
-        if ((nowMs - s_lastWsDiagLogMs) >= 10000) {
+        const unsigned activeClients = static_cast<unsigned>(m_ws ? m_ws->count() : 0);
+        if (activeClients > 0 && (nowMs - s_lastWsDiagLogMs) >= 60000) {
             s_lastWsDiagLogMs = nowMs;
             const webserver::WsGateway::Stats wsStats = m_wsGateway->getStats();
             LW_LOGD(
                 "WS diag: active=%u ok=%lu rejCooldown=%lu rejOverlap=%lu rejLimit=%lu disc=%lu parseErr=%lu oversize=%lu unknown=%lu",
-                static_cast<unsigned>(m_ws ? m_ws->count() : 0),
+                activeClients,
                 static_cast<unsigned long>(wsStats.connectAccepted),
                 static_cast<unsigned long>(wsStats.connectRejectedCooldown),
                 static_cast<unsigned long>(wsStats.connectRejectedOverlap),
@@ -552,7 +553,7 @@ void WebServer::update() {
                 // Tear down AP first to avoid accumulating stale state.
                 WiFi.softAPdisconnect(false);
                 const char* apPw = config::NetworkConfig::AP_PASSWORD;
-                if (!WiFi.softAP(config::NetworkConfig::AP_SSID, apPw, apChannel, false, 4, WIFI_AUTH_WPA_WPA2_PSK)) {
+                if (!WiFi.softAP(config::NetworkConfig::AP_SSID, apPw, apChannel)) {
                     LW_LOGE("AP re-init failed");
                 } else {
                     m_lastApReinitMs = nowMs;

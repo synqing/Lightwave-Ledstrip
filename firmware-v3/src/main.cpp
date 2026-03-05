@@ -1294,6 +1294,66 @@ static void processSerialJsonCommand(const String& json) {
     }
 }
 
+// ==================== Capture Dump Helper ====================
+
+/**
+ * Write a captured frame in binary protocol format over Serial.
+ *
+ * Binary format:
+ *   Header (16 bytes): [MAGIC=0xFD][VERSION=0x01][TAP_ID][EFFECT_ID][PALETTE_ID]
+ *                       [BRIGHTNESS][SPEED][FRAME_INDEX(4)][TIMESTAMP(4)][FRAME_LEN(2)]
+ *   Payload: [RGB x 320 = 960 bytes]
+ *
+ * @param tap               Which capture tap to read
+ * @param allowForceCapture If true, call forceOneShotCapture() + delay(10) retry
+ *                          when no frame is available (original fallback path).
+ *                          If false, fail immediately (direct-only path).
+ */
+static void writeCaptureFrame(lightwaveos::actors::RendererActor::CaptureTap tap,
+                              bool allowForceCapture) {
+    using namespace lightwaveos::actors;
+
+    CRGB frame[320];
+
+    // When allowForceCapture is true, attempt a one-shot capture fallback
+    // if no frame is currently available (original Block 1 behaviour).
+    if (allowForceCapture && !renderer->getCapturedFrame(tap, frame)) {
+        renderer->forceOneShotCapture(tap);
+        delay(10);  // allow render thread to complete capture
+    }
+
+    if (renderer->getCapturedFrame(tap, frame)) {
+        auto metadata = renderer->getCaptureMetadata();
+
+        Serial.write(0xFD);  // Magic
+        Serial.write(0x01);  // Version
+        Serial.write((uint8_t)tap);
+        Serial.write(metadata.effectId);
+        Serial.write(metadata.paletteId);
+        Serial.write(metadata.brightness);
+        Serial.write(metadata.speed);
+        Serial.write((uint8_t)(metadata.frameIndex & 0xFF));
+        Serial.write((uint8_t)((metadata.frameIndex >> 8) & 0xFF));
+        Serial.write((uint8_t)((metadata.frameIndex >> 16) & 0xFF));
+        Serial.write((uint8_t)((metadata.frameIndex >> 24) & 0xFF));
+        Serial.write((uint8_t)(metadata.timestampUs & 0xFF));
+        Serial.write((uint8_t)((metadata.timestampUs >> 8) & 0xFF));
+        Serial.write((uint8_t)((metadata.timestampUs >> 16) & 0xFF));
+        Serial.write((uint8_t)((metadata.timestampUs >> 24) & 0xFF));
+        uint16_t frameLen = 320 * 3;  // RGB x 320 LEDs
+        Serial.write((uint8_t)(frameLen & 0xFF));
+        Serial.write((uint8_t)((frameLen >> 8) & 0xFF));
+
+        // Payload
+        Serial.write((uint8_t*)frame, frameLen);
+
+        Serial.printf("\nFrame dumped: tap=%d, effect=%d, palette=%d, frame=%u\n",
+                      (int)tap, metadata.effectId, metadata.paletteId, (unsigned int)metadata.frameIndex);
+    } else {
+        Serial.println("No frame captured for this tap");
+    }
+}
+
 // ==================== Loop ====================
 
 void loop() {
@@ -1509,44 +1569,7 @@ void loop() {
                     else if (subcmd.indexOf('c') >= 0) { tap = RendererActor::CaptureTap::TAP_C_PRE_WS2812; valid = true; }
 
                     if (valid) {
-                        CRGB frame[320];
-                        // If we have no captured frame yet (common right after enabling capture or switching effects),
-                        // force a one-shot capture at the requested tap and retry.
-                        if (!renderer->getCapturedFrame(tap, frame)) {
-                            renderer->forceOneShotCapture(tap);
-                            delay(10);  // allow capture to complete
-                        }
-
-                        if (renderer->getCapturedFrame(tap, frame)) {
-                            auto metadata = renderer->getCaptureMetadata();
-
-                            Serial.write(0xFD);  // Magic
-                            Serial.write(0x01);  // Version
-                            Serial.write((uint8_t)tap);
-                            Serial.write(metadata.effectId);
-                            Serial.write(metadata.paletteId);
-                            Serial.write(metadata.brightness);
-                            Serial.write(metadata.speed);
-                            Serial.write((uint8_t)(metadata.frameIndex & 0xFF));
-                            Serial.write((uint8_t)((metadata.frameIndex >> 8) & 0xFF));
-                            Serial.write((uint8_t)((metadata.frameIndex >> 16) & 0xFF));
-                            Serial.write((uint8_t)((metadata.frameIndex >> 24) & 0xFF));
-                            Serial.write((uint8_t)(metadata.timestampUs & 0xFF));
-                            Serial.write((uint8_t)((metadata.timestampUs >> 8) & 0xFF));
-                            Serial.write((uint8_t)((metadata.timestampUs >> 16) & 0xFF));
-                            Serial.write((uint8_t)((metadata.timestampUs >> 24) & 0xFF));
-                            uint16_t frameLen = 320 * 3;  // RGB × 320 LEDs
-                            Serial.write((uint8_t)(frameLen & 0xFF));
-                            Serial.write((uint8_t)((frameLen >> 8) & 0xFF));
-
-                            // Payload
-                            Serial.write((uint8_t*)frame, frameLen);
-
-                            Serial.printf("\nFrame dumped: tap=%d, effect=%d, palette=%d, frame=%u\n",
-                                          (int)tap, metadata.effectId, metadata.paletteId, (unsigned int)metadata.frameIndex);
-                        } else {
-                            Serial.println("No frame captured for this tap");
-                        }
+                        writeCaptureFrame(tap, /*allowForceCapture=*/true);
                     } else {
                         Serial.println("Usage: capture dump <a|b|c>");
                     }
@@ -2193,7 +2216,7 @@ void loop() {
                     using namespace lightwaveos::actors;
                     RendererActor::CaptureTap tap;
                     bool valid = false;
-                    
+
                     if (subcmd.indexOf(" a") >= 0) {
                         tap = RendererActor::CaptureTap::TAP_A_PRE_CORRECTION;
                         valid = true;
@@ -2204,42 +2227,9 @@ void loop() {
                         tap = RendererActor::CaptureTap::TAP_C_PRE_WS2812;
                         valid = true;
                     }
-                    
+
                     if (valid) {
-                        CRGB frame[320];
-                        if (renderer->getCapturedFrame(tap, frame)) {
-                            auto metadata = renderer->getCaptureMetadata();
-                            
-                            // Binary frame format:
-                            // Header: [MAGIC=0xFD][VERSION=0x01][TAP_ID][EFFECT_ID][PALETTE_ID][BRIGHTNESS][SPEED][FRAME_INDEX(4)][TIMESTAMP(4)][FRAME_LEN(2)]
-                            // Payload: [RGB×320]
-                            Serial.write(0xFD);  // Magic
-                            Serial.write(0x01);  // Version
-                            Serial.write((uint8_t)tap);
-                            Serial.write(metadata.effectId);
-                            Serial.write(metadata.paletteId);
-                            Serial.write(metadata.brightness);
-                            Serial.write(metadata.speed);
-                            Serial.write((uint8_t)(metadata.frameIndex & 0xFF));
-                            Serial.write((uint8_t)((metadata.frameIndex >> 8) & 0xFF));
-                            Serial.write((uint8_t)((metadata.frameIndex >> 16) & 0xFF));
-                            Serial.write((uint8_t)((metadata.frameIndex >> 24) & 0xFF));
-                            Serial.write((uint8_t)(metadata.timestampUs & 0xFF));
-                            Serial.write((uint8_t)((metadata.timestampUs >> 8) & 0xFF));
-                            Serial.write((uint8_t)((metadata.timestampUs >> 16) & 0xFF));
-                            Serial.write((uint8_t)((metadata.timestampUs >> 24) & 0xFF));
-                            uint16_t frameLen = 320 * 3;  // RGB × 320 LEDs
-                            Serial.write((uint8_t)(frameLen & 0xFF));
-                            Serial.write((uint8_t)((frameLen >> 8) & 0xFF));
-                            
-                            // Payload: RGB data
-                            Serial.write((uint8_t*)frame, frameLen);
-                            
-                            Serial.printf("\nFrame dumped: tap=%d, effect=%d, palette=%d, frame=%u\n",
-                                         (int)tap, metadata.effectId, metadata.paletteId, (unsigned int)metadata.frameIndex);
-                        } else {
-                            Serial.println("No frame captured for this tap");
-                        }
+                        writeCaptureFrame(tap, /*allowForceCapture=*/false);
                     } else {
                         Serial.println("Usage: capture dump <a|b|c>");
                     }

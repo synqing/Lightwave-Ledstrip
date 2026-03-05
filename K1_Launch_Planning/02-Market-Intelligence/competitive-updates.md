@@ -1,6 +1,6 @@
 # K1 Competitive Landscape Monitor
 
-**Last updated:** 5 March 2026 (Cycle 4)
+**Last updated:** 6 March 2026 (Cycle 5)
 **Monitoring cadence:** Per scheduled research cycle
 **Framing:** K1 is a creative instrument. Competitive set = creative tools and instruments, NOT consumer LED products.
 
@@ -42,6 +42,11 @@
 - Their iterative evolution of the Glyph (strips → matrix → squares → bar → scaled-down matrix) now shows *regression* — they're reducing LED count and simplifying. The Glyph story is becoming less distinctive, not more.
 - [INFERENCE] Fan backlash at the 4a Pro's reduced Glyph Matrix reveals that the audience *cares* about the light features and will notice downgrades. For K1, this reinforces that light quality and expressiveness matter. The LGP's 320-LED, centre-origin architecture is architecturally superior to anything Nothing ships.
 
+**Update (Cycle 5 — 6 March 2026):**
+- Post-launch reception confirms the split: 4a's Glyph Bar (63 mini-LEDs in 6 zones) praised as more useful due to larger physical size — can show text, time, caller info. 4a Pro's Glyph Matrix (137 micro-LEDs vs Phone 3's 489) criticised for lower resolution despite being brighter (3,000 nits, 100% brighter than previous a-series). The "Glyph Mirror" camera preview is described as "very bad" at 137 LEDs.
+- [FACT] Community reaction on Reddit shows two concerns: (1) fragmentation — developers now face two different Glyph APIs across 4a and 4a Pro, doubling integration work; (2) philosophical — fans questioning whether Nothing is losing its "pioneering spirit" as it scales toward mainstream.
+- [INFERENCE] Nothing's trajectory is a cautionary tale for K1: as a brand scales, the temptation to simplify distinctive features for cost/margin reasons erodes the recognition device. K1's 320-LED LGP with centre-origin architecture should be treated as inviolable — the moment you reduce LED count or simplify motion patterns for cost, the product loses what makes it recognisable. Nothing is learning this the hard way.
+
 ### Analogue
 **Status:** Shipping. Active firmware updates. New limited editions.
 
@@ -55,6 +60,9 @@
 - [INFERENCE] The "Prototype" editions are brilliant: they sell a *story* (cancelled N64 prototypes from the '90s), not just a colour. Each unit carries narrative weight. K1's Founders Edition should similarly embed meaning into the scarcity — not just "limited" but *why* it's limited and what story the first 100 units carry.
 - Their tariff-driven price increase ($20) was absorbed without visible backlash. The audience values the product enough to tolerate modest adjustments — relevant to K1's $249 pricing.
 - Firmware updates continuing months post-launch demonstrate the "extend hardware via software" model K1 should follow.
+
+**Update (Cycle 5 — 6 March 2026):**
+- **Firmware 1.2.2** (27 Feb 2026) — Added "Startup Action" (boot straight to cartridge, bypassing OS menu) and "Power Off" option from OS menu. Improved virtual Controller Pak and auto-overclock. This is the fourth firmware update since November 2025 shipping. Analogue's cadence: monthly quality-of-life improvements to shipped hardware. K1 should target similar post-launch firmware cadence for the effect library.
 
 ### Synthstrom Audible (Deluge)
 **Status:** Community firmware thriving. Open-source model working.
@@ -103,6 +111,15 @@
 - [FACT] HyperCube has no beat tracking, no onset detection, no rhythmic lock. Their audio reactivity is amplitude-following — the same approach WLED-SR uses. K1's PipelineCore is a genuine differentiator.
 
 ---
+
+### Etsy "Light Art Panels" — Emerging DIY/Artisan Segment
+**What:** Multiple sellers now offering "interactive LED display" panels marketed for art installations and creative spaces. Sound-reactive, 40×8 pixel matrices on matte acrylic, USB-C powered. Pricing in the $50–$200 range. Some list "100+ animation presets" and WLED-based control.
+
+**K1 relevance:** LOW-MEDIUM. These are essentially productised WLED builds sold on Etsy — the DIY upgrade path becoming a cottage industry. Key differences:
+- No beat tracking, no onset detection. Standard amplitude-following via WLED.
+- Strip-based, not LGP. Visible pixel grid, not diffused surface glow.
+- No centre-origin architecture — standard linear sweeps.
+- [INFERENCE] The existence of this segment validates the market for "sound-reactive light art as product" but confirms no one is approaching K1's technical or aesthetic territory. These are the products K1 buyers are currently settling for.
 
 ### Bang & Olufsen
 **Status:** Active. 100-year anniversary. New product categories.
@@ -167,6 +184,22 @@ Key launches relevant to K1's competitive context:
 **K1 relevance:**
 - The "Founders Edition" model is well-established and understood by hardware audiences.
 - Exclusivity (100 units for K1) is more constrained than most examples found. This scarcity should drive urgency if the brand positioning and recognition devices land correctly.
+
+---
+
+## Key Takeaways — Cycle 5 (6 March 2026)
+
+1. **Nothing's Glyph regression is now confirmed post-launch.** Reviews describe 4a Pro's 137-LED Glyph Matrix as "very bad" for camera preview and lower resolution despite higher brightness. Community fragmentation anxiety rising — two different Glyph APIs across 4a/4a Pro. K1 lesson: never dilute the light architecture for cost savings.
+
+2. **Etsy "Light Art Panel" segment emerging.** Productised WLED builds selling on Etsy as sound-reactive art panels. Confirms market demand for "sound-reactive light as product" — but all are strip-based, amplitude-following, with no beat tracking. K1's LGP + PipelineCore remains categorically unmatched.
+
+3. **Analogue's firmware cadence sets the bar.** Four updates in four months post-shipping. Monthly quality-of-life improvements. K1 should commit to similar cadence — one new effect pack or firmware refinement per month post-launch.
+
+4. **Monar Kickstarter still early-stage.** No significant backer growth beyond initial 8 backers at HK$57,393 (147% funded). High per-backer average (~$920 USD) suggests premium-tier backers, not mass-market demand. Campaign runs to 17 April — still 42 days remaining. Worth monitoring weekly.
+
+5. **TE OP-XY pricing erosion continues.** From $2,299 launch → $1,699 at "Flipped Out '25" → MoMA Design Store promotion in Feb 2026. [INFERENCE] The premium creative instrument market tolerates discounting better than consumer electronics — it reads as "accessibility" not "failure." Irrelevant to K1 at $249 (already entry-level for the segment).
+
+6. **No new audio-visual hardware entrants found.** Creative hardware space remains purely audio-focused. The AV software tools (TouchDesigner, Synesthesia, T3X2R) are thriving, but no one is shipping hardware that bridges audio instruments and visual output. K1's uncontested position holds.
 
 ---
 

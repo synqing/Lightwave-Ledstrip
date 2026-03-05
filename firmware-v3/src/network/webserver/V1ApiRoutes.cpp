@@ -402,7 +402,7 @@ void V1ApiRoutes::registerRoutes(
                               ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
             return;
         }
-        uint8_t id = request->getParam("id")->value().toInt();
+        uint16_t id = request->getParam("id")->value().toInt();
         handlers::AudioHandlers::handleMappingsGet(request, id, ctx.renderer);
     });
 
@@ -417,7 +417,7 @@ void V1ApiRoutes::registerRoutes(
                                   ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
                 return;
             }
-            uint8_t id = request->getParam("id")->value().toInt();
+            uint16_t id = request->getParam("id")->value().toInt();
             handlers::AudioHandlers::handleMappingsSet(request, id, data, len, ctx.renderer);
         }
     );
@@ -430,7 +430,7 @@ void V1ApiRoutes::registerRoutes(
                               ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
             return;
         }
-        uint8_t id = request->getParam("id")->value().toInt();
+        uint16_t id = request->getParam("id")->value().toInt();
         handlers::AudioHandlers::handleMappingsDelete(request, id);
     });
 
@@ -442,7 +442,7 @@ void V1ApiRoutes::registerRoutes(
                               ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
             return;
         }
-        uint8_t id = request->getParam("id")->value().toInt();
+        uint16_t id = request->getParam("id")->value().toInt();
         handlers::AudioHandlers::handleMappingsEnable(request, id, true);
     });
 
@@ -454,7 +454,7 @@ void V1ApiRoutes::registerRoutes(
                               ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
             return;
         }
-        uint8_t id = request->getParam("id")->value().toInt();
+        uint16_t id = request->getParam("id")->value().toInt();
         handlers::AudioHandlers::handleMappingsEnable(request, id, false);
     });
 

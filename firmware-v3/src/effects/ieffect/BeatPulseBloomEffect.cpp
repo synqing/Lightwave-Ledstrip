@@ -23,11 +23,6 @@ namespace lightwaveos::effects::ieffect {
 // NOTE: ZoneComposer uses one shared effect instance, so TransportCore itself must be per-zone internally.
 static BeatPulseTransportCore g_transport;
 
-// Global debug flag - toggled by 'd' key in main.cpp
-bool g_bloomDebugEnabled = false;
-
-static uint32_t g_lastDebugMs = 0;
-static constexpr uint32_t DEBUG_INTERVAL_MS = 500;  // Log every 500ms
 
 BeatPulseBloomEffect::BeatPulseBloomEffect()
     : m_meta(
@@ -129,26 +124,6 @@ void BeatPulseBloomEffect::render(plugins::EffectContext& ctx) {
     // Advect + decay (+ optional diffusion)
     g_transport.advectOutward(zoneId, radialLen, offsetPerFrame60, persistencePerFrame60, diffusion01, dt);
 
-#ifndef NATIVE_BUILD
-    // Debug output (toggle with 'd' key)
-    if (g_bloomDebugEnabled) {
-        // Rate-limited transport tuning output (any zone, but show which)
-        if ((nowMs - g_lastDebugMs) >= DEBUG_INTERVAL_MS) {
-            g_lastDebugMs = nowMs;
-            Serial.printf("[BLOOM z%d] mood=%.2f spdMul=%.2f vel=%.2f | fade=%d persist=%.3f | cplx=%d diff=%.2f | dt=%.4f\n",
-                zoneId, mood01, speedMul, offsetPerFrame60,
-                ctx.fadeAmount, persistencePerFrame60,
-                ctx.complexity, diffusion01,
-                dt);
-        }
-        // Immediate beat event logging
-        if (beatTick) {
-            Serial.printf("[BLOOM z%d] >>> BEAT! strength=%.2f env=%.2f audio=%s\n",
-                zoneId, beatStrength, m_beatEnv[zoneId],
-                ctx.audio.available ? "yes" : "no(metro)");
-        }
-    }
-#endif
 
     // ---------------------------------------------------------------------
     // Centre injection (audio → colour + energy)
@@ -190,15 +165,6 @@ void BeatPulseBloomEffect::render(plugins::EffectContext& ctx) {
 
     g_transport.injectAtCentre(zoneId, radialLen, inject, injectAmount, spread01);
 
-#ifndef NATIVE_BUILD
-    // Rate-limited injection logging (only if we just logged transport)
-    if (g_bloomDebugEnabled && (nowMs - g_lastDebugMs) < 50) {
-        Serial.printf("[BLOOM z%d] inj: drive=%.2f amt=%.2f spread=%.2f | rgb=(%d,%d,%d) palIdx=%d\n",
-            zoneId, drive, injectAmount, spread01,
-            inject.r, inject.g, inject.b,
-            baseIdx);
-    }
-#endif
 
     // ---------------------------------------------------------------------
     // Output mapping (centre-origin dual strip with palette enhancement)
@@ -210,13 +176,6 @@ void BeatPulseBloomEffect::render(plugins::EffectContext& ctx) {
     // This creates richer colour variation without losing the transport character.
     const float paletteMix = lerp(0.15f, 0.45f, variation01);
 
-#ifndef NATIVE_BUILD
-    // Rate-limited output logging (only if we just logged transport)
-    if (g_bloomDebugEnabled && (nowMs - g_lastDebugMs) < 50) {
-        Serial.printf("[BLOOM z%d] out: gain=%.2f palMix=%.2f var=%d | radLen=%d\n",
-            zoneId, outGain, paletteMix, ctx.variation, radialLen);
-    }
-#endif
 
     g_transport.readoutToLedsWithPalette(zoneId, ctx, radialLen, outGain, baseIdx, paletteMix);
 }

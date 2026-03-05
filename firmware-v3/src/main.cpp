@@ -2935,11 +2935,7 @@ void loop() {
                     break;
 
                 case 'd':
-                    // Toggle Bloom effect debug output
-                    lightwaveos::effects::ieffect::g_bloomDebugEnabled =
-                        !lightwaveos::effects::ieffect::g_bloomDebugEnabled;
-                    Serial.printf("[BLOOM DEBUG] %s\n",
-                        lightwaveos::effects::ieffect::g_bloomDebugEnabled ? "ENABLED (select effect 120)" : "DISABLED");
+                    // Reserved (was: Bloom debug toggle, removed with H-3 cleanup)
                     break;
 
                 case 't':

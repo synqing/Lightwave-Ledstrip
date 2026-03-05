@@ -42,20 +42,6 @@ bool LGPSpectrumDetailEffect::init(plugins::EffectContext& ctx) {
 
 void LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {
     if (!m_ps) return;
-    // #region agent log
-    #ifndef NATIVE_BUILD
-    static uint32_t lastRenderLogMs = 0;
-    static uint32_t lastHopLogMs = 0;
-    static uint32_t lastStatsLogMs = 0;
-    uint32_t debugNowMs = millis();
-    if (debugNowMs - lastRenderLogMs >= 10000) {  // Every 10 seconds
-        lastRenderLogMs = debugNowMs;
-        Serial.printf("{\"id\":\"spectrum_render_entry\",\"location\":\"LGPSpectrumDetailEffect.cpp:37\",\"message\":\"Render called\",\"data\":{\"audioAvailable\":%d,\"brightness\":%u,\"ledCount\":%u,\"centerPoint\":%u},\"timestamp\":%lu}\n",
-            ctx.audio.available ? 1 : 0, ctx.brightness, ctx.ledCount, ctx.centerPoint, debugNowMs);
-    }
-    #endif
-    // #endregion
-    
     // Clear buffer
     fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
 
@@ -64,16 +50,6 @@ void LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {
     return;
 #else
     if (!ctx.audio.available) {
-        // #region agent log
-        #ifndef NATIVE_BUILD
-        static uint32_t noAudioCount = 0;
-        noAudioCount++;
-        if (noAudioCount % 60 == 0) {
-            Serial.printf("{\"id\":\"spectrum_no_audio\",\"location\":\"LGPSpectrumDetailEffect.cpp:45\",\"message\":\"Audio not available\",\"data\":{\"count\":%u},\"timestamp\":%lu}\n",
-                noAudioCount, millis());
-        }
-        #endif
-        // #endregion
         return;
     }
 
@@ -136,15 +112,6 @@ void LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {
                 if (v > maxBin) maxBin = v;
             }
         }
-        // #region agent log
-        #ifndef NATIVE_BUILD
-        if (debugNowMs - lastHopLogMs >= 10000) {  // Every 10 seconds
-            lastHopLogMs = debugNowMs;
-            Serial.printf("{\"id\":\"spectrum_new_hop\",\"location\":\"LGPSpectrumDetailEffect.cpp\",\"message\":\"New hop detected\",\"data\":{\"hopSeq\":%u,\"maxBin\":%.4f,\"source\":\"%s\",\"binHz\":%.2f},\"timestamp\":%lu}\n",
-                m_lastHopSeq, maxBin, useBins256 ? "bins256" : "bins64", binHz, debugNowMs);
-        }
-        #endif
-        // #endregion
     }
     
     // Smooth toward targets every frame with MOOD-adjusted smoothing
@@ -249,18 +216,6 @@ void LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {
         }
     }
     
-    // #region agent log
-    #ifndef NATIVE_BUILD
-    if (debugNowMs - lastStatsLogMs >= 10000) {  // Every 10 seconds
-        lastStatsLogMs = debugNowMs;
-        Serial.printf("{\"id\":\"spectrum_render_stats\",\"location\":\"LGPSpectrumDetailEffect.cpp:162\",\"message\":\"Render stats\",\"data\":{\"maxSmooth\":%.4f,\"binsAboveThreshold\":%u,\"ledsWritten\":%u,\"maxBright\":%u,\"brightness\":%u,\"colorR\":%u,\"colorG\":%u,\"colorB\":%u},\"timestamp\":%lu}\n",
-            maxSmooth, binsAboveThreshold, ledsWritten, maxBright, ctx.brightness, 
-            ledsWritten > 0 ? ctx.leds[ctx.centerPoint].r : 0,
-            ledsWritten > 0 ? ctx.leds[ctx.centerPoint].g : 0,
-            ledsWritten > 0 ? ctx.leds[ctx.centerPoint].b : 0, debugNowMs);
-    }
-    #endif
-    // #endregion
 #endif  // FEATURE_AUDIO_SYNC
 }
 

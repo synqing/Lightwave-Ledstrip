@@ -410,15 +410,14 @@ static void handleEffectsGetCategories(AsyncWebSocketClient* client, JsonDocumen
     const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
     
     // Collect family data into arrays
+    char familyNameBufs[10][32];
     const char* familyNames[10];
     uint8_t familyCounts[10];
     for (uint8_t i = 0; i < 10; i++) {
         PatternFamily family = static_cast<PatternFamily>(i);
         familyCounts[i] = PatternRegistry::getFamilyCount(family);
-        
-        char familyNameBuf[32];
-        PatternRegistry::getFamilyName(family, familyNameBuf, sizeof(familyNameBuf));
-        familyNames[i] = familyNameBuf;
+        PatternRegistry::getFamilyName(family, familyNameBufs[i], sizeof(familyNameBufs[i]));
+        familyNames[i] = familyNameBufs[i];
     }
     
     String response = buildWsResponse("effects.categories", requestId, [familyNames, familyCounts](JsonObject& data) {

@@ -159,8 +159,6 @@ void TransitionEngine::startTransition(const CRGB* sourceBuffer,
             break;
     }
 
-    Serial.printf("[Transition] Started: %s (%dms)\n",
-                  getTransitionName(type), durationMs);
 }
 
 void TransitionEngine::startTransition(const CRGB* sourceBuffer,
@@ -184,7 +182,6 @@ bool TransitionEngine::update() {
         memcpy(m_outputBuffer, m_targetBuffer, TOTAL_LEDS * sizeof(CRGB));
         m_active = false;
         m_progress = 1.0f;
-        Serial.println("[Transition] Complete");
         return false;
     }
 

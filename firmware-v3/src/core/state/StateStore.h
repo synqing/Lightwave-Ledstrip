@@ -88,7 +88,7 @@ public:
      *
      * @return Current effect ID
      */
-    uint8_t getCurrentEffect() const;
+    EffectId getCurrentEffect() const;
 
     /**
      * Get current palette ID (convenience method)

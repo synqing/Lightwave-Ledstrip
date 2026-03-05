@@ -353,5 +353,53 @@ static inline float tonalBaseHue(const plugins::EffectContext& ctx, const Ar16Co
     return lerpf(24.0f, state.tonalHue, clamp01f(controls.colourAnchorMix())) + static_cast<float>(ctx.gHue) * (1.0f - clamp01f(controls.colourAnchorMix())) * 0.18f;
 }
 
-} // namespace lightwaveos::effects::ieffect::lowrisk_ar
+struct ArModulationProfile {
+    float audioMix = 0.35f;
+    float motionRate = 1.0f;
+    float motionDepth = 0.85f;
+    float baseHue = 24.0f;
+    float brightnessScale = 1.0f;
+    float beatAccent = 0.0f;
+};
 
+static inline ArModulationProfile buildModulation(
+    const Ar16Controls& controls,
+    const ArSignalSnapshot& signals,
+    ArRuntimeState& state,
+    const plugins::EffectContext& ctx
+) {
+    ArModulationProfile out{};
+    out.audioMix = clamp01f(controls.audioMix());
+    out.motionDepth = clamp01f(controls.motionDepth());
+    out.motionRate = controls.motionRate() * (0.82f + 0.36f * out.audioMix) * (0.78f + 0.52f * out.motionDepth);
+    out.baseHue = tonalBaseHue(ctx, controls, state);
+    out.brightnessScale = clampf(0.80f + 0.30f * out.audioMix + 0.24f * out.motionDepth, 0.70f, 1.35f);
+    out.beatAccent = clamp01f(signals.beat * (0.55f + 0.60f * controls.beatGain()));
+    return out;
+}
+
+static inline void applyBedImpactMemoryMix(
+    const Ar16Controls& controls,
+    float rawTimeMs,
+    float& bed,
+    float& impact,
+    float& memory
+) {
+    const uint32_t t = static_cast<uint32_t>(rawTimeMs < 0.0f ? 0.0f : rawTimeMs);
+    const float ambientBed = 0.28f + 0.16f * fallbackSine(t, 0.00050f, 0.9f);
+    const float ambientImpact = 0.04f + 0.05f * fallbackTriangle(t, 0.00110f);
+    const float ambientMemory = 0.16f + 0.10f * fallbackSine(t, 0.00032f, 1.6f);
+    const float depth = clamp01f(controls.motionDepth());
+    const float beatScale = clampf(0.55f + 0.35f * controls.beatGain(), 0.20f, 1.60f);
+    const float memoryScale = clampf(0.55f + 0.45f * controls.memoryGain(), 0.20f, 1.60f);
+
+    const float reactiveBed = clamp01f(bed * (0.80f + 0.35f * depth));
+    const float reactiveImpact = clamp01f(impact * beatScale);
+    const float reactiveMemory = clamp01f(memory * memoryScale);
+
+    bed = clamp01f(blendAmbientReactive(ambientBed, reactiveBed, controls));
+    impact = clamp01f(blendAmbientReactive(ambientImpact, reactiveImpact, controls));
+    memory = clamp01f(blendAmbientReactive(ambientMemory, reactiveMemory, controls));
+}
+
+} // namespace lightwaveos::effects::ieffect::lowrisk_ar

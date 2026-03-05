@@ -129,6 +129,9 @@ void LGPIFSBioRelicAREffect::render(plugins::EffectContext& ctx) {
     // --- Signals ---
     const lowrisk_ar::ArSignalSnapshot sig =
         lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);
+    const lowrisk_ar::ArModulationProfile mod =
+        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);
+    m_ar.tonalHue = mod.baseHue;
 
     // =================================================================
     // LAYER UPDATES
@@ -151,12 +154,18 @@ void LGPIFSBioRelicAREffect::render(plugins::EffectContext& ctx) {
     m_memory = lowrisk_ar::clamp01f(
         lowrisk_ar::decay(m_memory, dtSignal, 0.95f)
         + 0.08f * m_impact + 0.04f * sig.flux);
+    lowrisk_ar::applyBedImpactMemoryMix(
+        m_controls,
+        static_cast<float>(ctx.rawTotalTimeMs),
+        m_bed,
+        m_impact,
+        m_memory);
 
     // =================================================================
     // IFS BARNSLEY FERN PHYSICS
     // =================================================================
 
-    m_t += (0.010f + 0.020f * speedNorm) * m_controls.motionRate();
+    m_t += (0.010f + 0.020f * speedNorm) * mod.motionRate;
 
     // Structure modulates histogram decay rate
     float decay = (0.92f + 0.06f * (1.0f - speedNorm))
@@ -221,7 +230,7 @@ void LGPIFSBioRelicAREffect::render(plugins::EffectContext& ctx) {
 
     const float bedBright = 0.20f + 0.80f * m_bed;
     const float master = (ctx.brightness / 255.0f)
-                         * lowrisk_ar::clamp01f(m_ar.audioPresence);
+                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         float dn = distN_from_index(i);

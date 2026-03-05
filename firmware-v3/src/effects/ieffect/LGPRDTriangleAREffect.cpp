@@ -110,6 +110,9 @@ void LGPRDTriangleAREffect::render(plugins::EffectContext& ctx) {
     // --- Signals (shared infrastructure handles presence gate + fallback) ---
     const lowrisk_ar::ArSignalSnapshot sig =
         lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);
+    const lowrisk_ar::ArModulationProfile mod =
+        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);
+    m_ar.tonalHue = mod.baseHue;
 
     // =================================================================
     // LAYER UPDATES
@@ -132,6 +135,12 @@ void LGPRDTriangleAREffect::render(plugins::EffectContext& ctx) {
     m_memory = clamp01(
         lowrisk_ar::decay(m_memory, dtSignal, 0.85f)
         + 0.15f * m_impact + 0.08f * sig.flux);
+    lowrisk_ar::applyBedImpactMemoryMix(
+        m_controls,
+        static_cast<float>(ctx.rawTotalTimeMs),
+        m_bed,
+        m_impact,
+        m_memory);
 
     // =================================================================
     // STRUCTURE LAYER MODULATES GRAY-SCOTT PARAMETERS
@@ -156,7 +165,7 @@ void LGPRDTriangleAREffect::render(plugins::EffectContext& ctx) {
 
     const float Du = 1.0f;
     const float Dv = 0.5f;
-    const float dt = 0.9f + 0.6f * speedNorm;
+    const float dt = lowrisk_ar::clampf((0.9f + 0.6f * speedNorm) * mod.motionRate, 0.6f, 2.2f);
     const int iters = (speedNorm > 0.55f) ? 2 : 1;
 
     for (int iter = 0; iter < iters; iter++) {
@@ -205,7 +214,7 @@ void LGPRDTriangleAREffect::render(plugins::EffectContext& ctx) {
 
     const float mid = (STRIP_LENGTH - 1) * 0.5f;
     const float master = (ctx.brightness / 255.0f)
-                         * clamp01(m_ar.audioPresence);
+                         * clamp01(m_ar.audioPresence) * mod.brightnessScale;
     const float bedBright = 0.25f + 0.75f * m_bed;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {

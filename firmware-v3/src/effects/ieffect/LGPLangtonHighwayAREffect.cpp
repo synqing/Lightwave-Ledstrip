@@ -189,6 +189,9 @@ void LGPLangtonHighwayAREffect::render(plugins::EffectContext& ctx) {
     // --- Signals (shared infrastructure handles presence gate + fallback) ---
     const lowrisk_ar::ArSignalSnapshot sig =
         lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);
+    const lowrisk_ar::ArModulationProfile mod =
+        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);
+    m_ar.tonalHue = mod.baseHue;
 
     // =================================================================
     // LAYER UPDATES
@@ -211,6 +214,12 @@ void LGPLangtonHighwayAREffect::render(plugins::EffectContext& ctx) {
     m_memory = lowrisk_ar::clamp01f(
         lowrisk_ar::decay(m_memory, dtSignal, 0.85f)
         + 0.08f * m_structure);
+    lowrisk_ar::applyBedImpactMemoryMix(
+        m_controls,
+        static_cast<float>(ctx.rawTotalTimeMs),
+        m_bed,
+        m_impact,
+        m_memory);
 
     // =================================================================
     // ANT STEPPING
@@ -226,7 +235,7 @@ void LGPLangtonHighwayAREffect::render(plugins::EffectContext& ctx) {
     }
 
     // Slice drift
-    const float driftRate = (0.15f + 0.35f * speedNorm) * m_controls.motionRate();
+    const float driftRate = (0.15f + 0.35f * speedNorm) * mod.motionRate;
     m_sliceOffset += driftRate * dtVisual;
     m_sliceOffset = fract(m_sliceOffset / static_cast<float>(H)) * static_cast<float>(H);
 
@@ -237,7 +246,7 @@ void LGPLangtonHighwayAREffect::render(plugins::EffectContext& ctx) {
     const float mid    = (STRIP_LENGTH - 1) * 0.5f;
     const float invMid = 1.0f / mid;
     const float master = (ctx.brightness / 255.0f)
-                         * lowrisk_ar::clamp01f(m_ar.audioPresence);
+                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;
 
     // Ant position in grid space
     const float antXf = static_cast<float>(m_antX);

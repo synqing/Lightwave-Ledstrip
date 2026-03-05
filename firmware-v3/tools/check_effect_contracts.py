@@ -128,9 +128,36 @@ def check_heap_alloc_in_render(violations: list[str]) -> None:
             if HEAP_IN_RENDER_PATTERN.search(code_part):
                 violations.append(f"[heap] Heap allocation in render at {path}:{idx}")
 
-            brace_depth += line.count("{") - line.count("}")
-            if brace_depth <= 0:
-                in_render = False
+                brace_depth += line.count("{") - line.count("}")
+                if brace_depth <= 0:
+                    in_render = False
+
+
+def check_ar_control_liveness(violations: list[str]) -> None:
+    """
+    Ensure 5-layer AR effects are wired to the shared control modulation path.
+
+    We intentionally check for shared helper usage instead of raw control names:
+    - updateSignals(...) carries attack/release + spectral gains
+    - buildModulation(...) carries motion/colour/beat profile
+    - applyBedImpactMemoryMix(...) carries audio_mix + beat_gain + memory_gain + motion_depth blend
+    """
+    required_regex = {
+        "timing_pipeline": re.compile(r"\bupdateSignals\s*\("),
+        "modulation_pipeline": re.compile(r"\bbuildModulation\s*\("),
+        "ambient_reactive_mix": re.compile(r"\bapplyBedImpactMemoryMix\s*\("),
+        "motion_usage": re.compile(r"\bmod\.motionRate\b"),
+        "colour_anchor_usage": re.compile(r"\bm_ar\.tonalHue\s*=\s*mod\.baseHue\b"),
+        "spectral_usage": re.compile(r"\bsig\.(bass|mid|treble|flux|harmonic|rhythmic)\b"),
+    }
+
+    for path in sorted(IEFFECT_DIR.glob("*AREffect.cpp")):
+        text = read_text(path)
+        if "buildModulation(" not in text and "Ar16Controls" not in text:
+            continue
+        for check_name, pattern in required_regex.items():
+            if not pattern.search(text):
+                violations.append(f"[ar-liveness] Missing {check_name} in {path}")
 
 
 def main() -> int:
@@ -140,6 +167,7 @@ def main() -> int:
     check_no_rainbow_files(violations)
     check_raw_control_bus_usage(violations)
     check_heap_alloc_in_render(violations)
+    check_ar_control_liveness(violations)
 
     if violations:
         print("FAIL: effect contract checks found issues:")

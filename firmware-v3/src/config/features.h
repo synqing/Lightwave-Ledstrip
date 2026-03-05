@@ -176,6 +176,12 @@
 #define FEATURE_STATUS_STRIP_TOUCH 1
 #endif
 
+// Gate unstable/high-cost 0x1C audio-reactive effects in production builds.
+// 0 = hide experimental subset (default), 1 = register full 0x1C pack.
+#ifndef FEATURE_AR_1C_EXPERIMENTAL
+#define FEATURE_AR_1C_EXPERIMENTAL 0
+#endif
+
 // ============================================================================
 // Enhancement Engines (optional color and motion enhancements)
 // ============================================================================

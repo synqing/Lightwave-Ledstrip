@@ -111,6 +111,12 @@ namespace network {
 #ifndef LW_INTERNAL_HEAP_SHED_LOG_INTERVAL_MS
 #define LW_INTERNAL_HEAP_SHED_LOG_INTERVAL_MS 15000U
 #endif
+#ifndef LW_INTERNAL_HEAP_SHED_PROBE_INTERVAL_MS
+#define LW_INTERNAL_HEAP_SHED_PROBE_INTERVAL_MS 300U
+#endif
+#ifndef LW_INTERNAL_HEAP_LARGEST_BLOCK_NEAR_THRESHOLD_MARGIN
+#define LW_INTERNAL_HEAP_LARGEST_BLOCK_NEAR_THRESHOLD_MARGIN (8U * 1024U)
+#endif
 
 namespace WebServerConfig {
     constexpr uint16_t HTTP_PORT = config::NetworkConfig::WEB_SERVER_PORT;
@@ -576,9 +582,13 @@ private:
     // Use hysteresis to prevent rapid toggling.
     bool m_lowHeapShed;
     uint32_t m_lastHeapShedLogMs;
+    uint32_t m_lastHeapShedProbeMs;
+    uint32_t m_lastLargestInternalHeap;
     static constexpr uint32_t INTERNAL_HEAP_SHED_BELOW_BYTES = LW_INTERNAL_HEAP_SHED_BELOW_BYTES;
     static constexpr uint32_t INTERNAL_HEAP_RESUME_ABOVE_BYTES = LW_INTERNAL_HEAP_RESUME_ABOVE_BYTES;
     static constexpr uint32_t INTERNAL_HEAP_SHED_LOG_INTERVAL_MS = LW_INTERNAL_HEAP_SHED_LOG_INTERVAL_MS;
+    static constexpr uint32_t INTERNAL_HEAP_SHED_PROBE_INTERVAL_MS = LW_INTERNAL_HEAP_SHED_PROBE_INTERVAL_MS;
+    static constexpr uint32_t INTERNAL_HEAP_LARGEST_BLOCK_NEAR_THRESHOLD_MARGIN = LW_INTERNAL_HEAP_LARGEST_BLOCK_NEAR_THRESHOLD_MARGIN;
     static_assert(INTERNAL_HEAP_RESUME_ABOVE_BYTES > INTERNAL_HEAP_SHED_BELOW_BYTES,
                   "Low-heap resume threshold must be greater than shed threshold");
 

@@ -220,6 +220,27 @@ After Stage 1 cherry-picks, both LED channels showed visible corruption and appa
    - frame cadence near target;
    - no worsening stack/heap trend.
 
+## Addendum (2026-03-05): AR Retune Regression and Heap-Shed Pressure
+
+### Confirmed AR regression root cause cluster
+
+The major visual instability in the new 0x1C AR pack was not a single defect. It was a compound failure:
+
+1. **Dead control plumbing**:
+   - multiple effects exposed 16 params but only consumed a minimal subset in render logic.
+2. **Over-modulated formulas**:
+   - impact and structure terms were stacked without consistent bounds, causing chaotic output under transient-heavy input.
+3. **Hotspot math in inner loops**:
+   - per-pixel/per-sample `powf/expf/trig` pressure in heavy effects (`0x1C02`, `0x1C0F`, `0x1C12`) reduced render headroom and amplified stutter risk.
+
+### Low-heap shedding pressure finding
+
+The low-heap shed state probe was running in the high-frequency `WebServer::update()` loop. This added avoidable internal-heap introspection pressure in exactly the code path that must remain lightweight under AP+WS load.
+
+### Hard runtime rule (non-negotiable)
+
+Do **not** run expensive heap introspection every `WebServer::update()` iteration. Probe on a bounded interval, and only query largest-block detail when near thresholds or already shedding.
+
 ## Immediate Next Action
 
 Proceed with the rollback branch from `f4c579ed`, then run the staged cherry-pick plan above with strict per-step validation and written logs.

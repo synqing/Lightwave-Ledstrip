@@ -91,6 +91,9 @@ void LGPHyperbolicPortalAREffect::render(plugins::EffectContext& ctx) {
     // --- Signals (shared infrastructure handles presence gate + fallback) ---
     const lowrisk_ar::ArSignalSnapshot sig =
         lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);
+    const lowrisk_ar::ArModulationProfile mod =
+        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);
+    m_ar.tonalHue = mod.baseHue;
 
     // =================================================================
     // LAYER UPDATES
@@ -114,12 +117,18 @@ void LGPHyperbolicPortalAREffect::render(plugins::EffectContext& ctx) {
     m_memory = lowrisk_ar::clamp01f(
         lowrisk_ar::decay(m_memory, dtSignal, 0.70f)
         + 0.15f * m_impact + 0.08f * sig.flux);
+    lowrisk_ar::applyBedImpactMemoryMix(
+        m_controls,
+        static_cast<float>(ctx.rawTotalTimeMs),
+        m_bed,
+        m_impact,
+        m_memory);
 
     // =================================================================
     // MOTION
     // =================================================================
 
-    const float phiRate = (0.80f + 3.50f * speedNorm) * m_controls.motionRate()
+    const float phiRate = (0.80f + 3.50f * speedNorm) * mod.motionRate
                           * (0.75f + 0.25f * sig.rhythmic);
     m_phi += phiRate * dtVisual;
 
@@ -132,7 +141,7 @@ void LGPHyperbolicPortalAREffect::render(plugins::EffectContext& ctx) {
 
     const float bedBright = 0.30f + 0.70f * m_bed;
     const float master = (ctx.brightness / 255.0f)
-                         * lowrisk_ar::clamp01f(m_ar.audioPresence);
+                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         const float dmid  = static_cast<float>(i) - mid;

@@ -765,7 +765,54 @@ Before any effect modification is considered complete:
 
 ---
 
-## Part 10: File Reference
+## Part 10: AR Control-Liveness and Anti-Chaos Bounds (2026-03-05)
+
+This section is mandatory for the 5-layer AR pack (`0x1Cxx`) and any future ambient-to-audio conversions.
+
+### 10.1 Control-liveness is non-negotiable
+
+If an effect exposes controls but does not materially react to them, it is broken even if it compiles.
+
+Every AR effect render path must include all of the following:
+
+- `lowrisk_ar::updateSignals(...)` — attack/release envelope + spectral/rhythmic conditioning.
+- `lowrisk_ar::buildModulation(...)` — motion/colour/beat modulation profile.
+- `lowrisk_ar::applyBedImpactMemoryMix(...)` — ambient/reactive blending (`audio_mix`, `beat_gain`, `memory_gain`, `motion_depth`).
+- `m_ar.tonalHue = mod.baseHue` — ensures `colour_anchor_mix` actually drives hue anchoring.
+- `mod.motionRate` in at least one phase/integration term — ensures motion control is live.
+- At least one spectral term (`sig.bass/mid/treble/flux/harmonic/rhythmic`) in visible structure or colour.
+
+### 10.2 Beat-forward retune defaults (without chaos)
+
+Use these as safe defaults for expressive but controlled behaviour:
+
+| Control | Recommended default | Practical safe range |
+|---|---:|---:|
+| `audio_mix` | `0.35` | `0.20-0.65` |
+| `beat_gain` | `0.80` | `0.60-1.20` |
+| `motion_depth` | `0.85` | `0.55-1.00` |
+| `motion_rate` | `1.00` | `0.80-1.35` |
+| `colour_anchor_mix` | `0.65` | `0.50-0.85` |
+
+### 10.3 Anti-chaos bounds
+
+- Cap additive impact terms to prevent strobe collapse (`impactAdd` typically `<= 0.40`).
+- Keep memory tails bounded and slowly decaying (`0.70-0.95 s` decay windows).
+- Avoid unbounded per-pixel exponentials/trig loops in heavy effects.
+- For hotspot effects, reduce harmonic/sample budgets adaptively under high speed/load.
+- Use `cinema::QualityPreset::LIGHTWEIGHT` for known heavy AR effects when frame budget is at risk.
+
+### 10.4 Validation gate for AR changes
+
+An AR change is not complete until all are true:
+
+- Parameter changes (`audio_mix`, `beat_gain`, `motion_depth`, `colour_anchor_mix`) produce immediate visible differences.
+- Render remains within budget on K1 target (`~2 ms` per effect code path).
+- No new stutter/tearing under AP + active WS client load.
+
+---
+
+## Part 11: File Reference
 
 | File | Purpose |
 |------|---------|
@@ -788,3 +835,4 @@ Before any effect modification is considered complete:
 | Date | Change | Author |
 |------|--------|--------|
 | 2026-03-02 | Initial creation from episodic memory research (7200+ observations, 30+ source files) | Claude / Captain directive |
+| 2026-03-05 | Added AR control-liveness contract, beat-forward anti-chaos bounds, and lightweight post-processing guidance | Codex |

@@ -9,6 +9,7 @@
 #include "PatternRegistry.h"
 #include "../config/limits.h"
 #include "../config/effect_ids.h"
+#include "../config/features.h"
 #include "../core/actors/ActorSystem.h"
 #include "../core/actors/RendererActor.h"
 
@@ -526,7 +527,9 @@ static const EffectId REACTIVE_EFFECT_IDS[] PROGMEM = {
     // 5-layer audio-reactive variants (0x1Cxx)
     EID_LGP_WATER_CAUSTICS_AR,
     EID_LGP_SCHLIEREN_FLOW_AR,
+#if FEATURE_AR_1C_EXPERIMENTAL
     EID_LGP_TALBOT_CARPET_AR,
+#endif
     EID_LGP_AIRY_COMET_AR,
     EID_LGP_CYMATIC_LADDER_AR,
     EID_LGP_MACH_DIAMONDS_AR,
@@ -539,10 +542,14 @@ static const EffectId REACTIVE_EFFECT_IDS[] PROGMEM = {
     EID_LGP_HARMONOGRAPH_HALO_AR,
     EID_LGP_RULE30_CATHEDRAL_AR,
     EID_LGP_LANGTON_HIGHWAY_AR,
+#if FEATURE_AR_1C_EXPERIMENTAL
     EID_LGP_CHIMERA_CROWN_AR,
+#endif
     EID_LGP_CATASTROPHE_CAUSTICS_AR,
     EID_LGP_HYPERBOLIC_PORTAL_AR,
+#if FEATURE_AR_1C_EXPERIMENTAL
     EID_LGP_LORENZ_RIBBON_AR,
+#endif
     EID_LGP_IFS_BIO_RELIC_AR
 };
 static constexpr uint8_t REACTIVE_EFFECT_COUNT = sizeof(REACTIVE_EFFECT_IDS) / sizeof(EffectId);

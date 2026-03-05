@@ -26,12 +26,17 @@ namespace lightwaveos {
 namespace effects {
 namespace cinema {
 
+enum class QualityPreset : uint8_t {
+    FULL = 0,
+    LIGHTWEIGHT = 1
+};
+
 /// Call on effect init (or when switching effects).
 void reset();
 
 /// Call after your effect renders into ctx.leds[].
 /// speedNorm = ctx.speed / 50.0f (same convention you already use)
-void apply(plugins::EffectContext& ctx, float speedNorm);
+void apply(plugins::EffectContext& ctx, float speedNorm, QualityPreset preset = QualityPreset::FULL);
 
 } // namespace cinema
 } // namespace effects

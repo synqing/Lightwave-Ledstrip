@@ -192,6 +192,8 @@ WebServer::WebServer(NodeOrchestrator& orchestrator, RendererNode* renderer)
     , m_lastApReinitMs(0)
     , m_lowHeapShed(false)
     , m_lastHeapShedLogMs(0)
+    , m_lastHeapShedProbeMs(0)
+    , m_lastLargestInternalHeap(0)
     , m_zoneComposer(nullptr)
     , m_lastStateCacheUpdate(0)
     , m_ledBroadcaster(nullptr)
@@ -522,7 +524,13 @@ bool WebServer::isClientAuthenticated(uint32_t clientId) const {
 
 void WebServer::updateLowHeapShedState(uint32_t nowMs) {
     const uint32_t freeInternal = static_cast<uint32_t>(getFreeInternalHeap());
-    const uint32_t largestInternal = static_cast<uint32_t>(getLargestInternalHeapBlock());
+    const bool nearThreshold =
+        freeInternal < (INTERNAL_HEAP_SHED_BELOW_BYTES + INTERNAL_HEAP_LARGEST_BLOCK_NEAR_THRESHOLD_MARGIN);
+    uint32_t largestInternal = m_lastLargestInternalHeap;
+    if (m_lowHeapShed || nearThreshold || m_lastLargestInternalHeap == 0) {
+        largestInternal = static_cast<uint32_t>(getLargestInternalHeapBlock());
+        m_lastLargestInternalHeap = largestInternal;
+    }
 
     if (!m_lowHeapShed) {
         if (freeInternal < INTERNAL_HEAP_SHED_BELOW_BYTES) {
@@ -573,7 +581,11 @@ void WebServer::update() {
         }
     }
     const uint32_t nowMs = millis();
-    updateLowHeapShedState(nowMs);
+    const bool shedProbeDue = (nowMs - m_lastHeapShedProbeMs) >= INTERNAL_HEAP_SHED_PROBE_INTERVAL_MS;
+    if (m_lowHeapShed || shedProbeDue) {
+        updateLowHeapShedState(nowMs);
+        m_lastHeapShedProbeMs = nowMs;
+    }
 
     // Periodic WS transport diagnostics (suppressed when no clients are connected).
     if (m_wsGateway) {

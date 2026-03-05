@@ -145,6 +145,9 @@ void LGPChimeraCrownAREffect::render(plugins::EffectContext& ctx) {
     // --- Signals (shared infrastructure handles presence gate + fallback) ---
     const lowrisk_ar::ArSignalSnapshot sig =
         lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);
+    const lowrisk_ar::ArModulationProfile mod =
+        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);
+    m_ar.tonalHue = mod.baseHue;
 
     // =================================================================
     // LAYER UPDATES
@@ -167,6 +170,12 @@ void LGPChimeraCrownAREffect::render(plugins::EffectContext& ctx) {
     m_memory = lowrisk_ar::clamp01f(
         lowrisk_ar::decay(m_memory, dtSignal, 0.90f)
         + 0.12f * m_impact + 0.06f * sig.flux);
+    lowrisk_ar::applyBedImpactMemoryMix(
+        m_controls,
+        static_cast<float>(ctx.rawTotalTimeMs),
+        m_bed,
+        m_impact,
+        m_memory);
 
     // =================================================================
     // KURAMOTO PHYSICS
@@ -175,13 +184,32 @@ void LGPChimeraCrownAREffect::render(plugins::EffectContext& ctx) {
     // Structure controls coupling strength K and window width W
     const float baseW = 10.0f + 10.0f * speedNorm;
     const float W = baseW * (0.65f + 0.35f * m_structure);
-    const int iW = static_cast<int>(W);
+    static constexpr int kMaxWindowRadius = 24;
+    int iW = static_cast<int>(W);
+    if (iW < 2) iW = 2;
+    if (iW > kMaxWindowRadius) iW = kMaxWindowRadius;
 
     const float baseK = 1.4f + 1.2f * speedNorm;
     const float K = baseK * (0.70f + 0.50f * m_structure);
 
     const float alpha = 0.55f;
-    const float dt = (0.035f + 0.030f * speedNorm) * m_controls.motionRate();
+    const float dt = (0.035f + 0.030f * speedNorm) * mod.motionRate;
+
+    // Cap coupling window at high speed to keep render cost bounded.
+    const float invW = 1.0f / (W + 1e-6f);
+    static float kernel[2 * kMaxWindowRadius + 1];
+    for (int dj = -iW; dj <= iW; dj++) {
+        const float t = fabsf(static_cast<float>(dj)) * invW;
+        kernel[dj + kMaxWindowRadius] = 0.5f + 0.5f * cosf(kPi * t);
+    }
+
+    // Precompute sin/cos(theta) once for both Kuramoto passes.
+    static float thetaSin[STRIP_LENGTH];
+    static float thetaCos[STRIP_LENGTH];
+    for (int i = 0; i < STRIP_LENGTH; i++) {
+        thetaSin[i] = sinf(m_ps->theta[i]);
+        thetaCos[i] = cosf(m_ps->theta[i]);
+    }
 
     // Pass 1: compute local order parameter Rlocal via windowed cosine kernel
 #ifndef NATIVE_BUILD
@@ -191,10 +219,9 @@ void LGPChimeraCrownAREffect::render(plugins::EffectContext& ctx) {
             int j = i + dj;
             if (j < 0) j += STRIP_LENGTH;
             if (j >= STRIP_LENGTH) j -= STRIP_LENGTH;
-            const float t = fabsf(static_cast<float>(dj)) / W;
-            const float w = 0.5f + 0.5f * cosf(kPi * t);
-            csum += w * cosf(m_ps->theta[j]);
-            ssum += w * sinf(m_ps->theta[j]);
+            const float w = kernel[dj + kMaxWindowRadius];
+            csum += w * thetaCos[j];
+            ssum += w * thetaSin[j];
             wsum += w;
         }
         const float inv = 1.0f / (wsum + 1e-6f);
@@ -205,14 +232,16 @@ void LGPChimeraCrownAREffect::render(plugins::EffectContext& ctx) {
 
     // Pass 2: update theta via Kuramoto coupling
     for (int i = 0; i < STRIP_LENGTH; i++) {
+        const float thetaShift = m_ps->theta[i] + alpha;
+        const float sinShift = sinf(thetaShift);
+        const float cosShift = cosf(thetaShift);
         float sum = 0.0f, wsum = 0.0f;
         for (int dj = -iW; dj <= iW; dj++) {
             int j = i + dj;
             if (j < 0) j += STRIP_LENGTH;
             if (j >= STRIP_LENGTH) j -= STRIP_LENGTH;
-            const float t = fabsf(static_cast<float>(dj)) / W;
-            const float w = 0.5f + 0.5f * cosf(kPi * t);
-            sum += w * sinf(m_ps->theta[j] - m_ps->theta[i] - alpha);
+            const float w = kernel[dj + kMaxWindowRadius];
+            sum += w * (thetaSin[j] * cosShift - thetaCos[j] * sinShift);
             wsum += w;
         }
         const float coupling = (K / (wsum + 1e-6f)) * sum;
@@ -230,7 +259,7 @@ void LGPChimeraCrownAREffect::render(plugins::EffectContext& ctx) {
 
     const float bedBright = 0.25f + 0.75f * m_bed;
     const float master = (ctx.brightness / 255.0f)
-                         * lowrisk_ar::clamp01f(m_ar.audioPresence);
+                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;
 
 #ifndef NATIVE_BUILD
     for (int i = 0; i < STRIP_LENGTH; i++) {
@@ -275,7 +304,7 @@ void LGPChimeraCrownAREffect::render(plugins::EffectContext& ctx) {
     }
 #endif
 
-    lightwaveos::effects::cinema::apply(ctx, speedNorm);
+    lightwaveos::effects::cinema::apply(ctx, speedNorm, lightwaveos::effects::cinema::QualityPreset::LIGHTWEIGHT);
 }
 
 // =========================================================================

@@ -15,6 +15,7 @@
 #pragma once
 
 #include "effect_ids.h"
+#include "features.h"
 
 namespace lightwaveos {
 
@@ -262,7 +263,9 @@ constexpr EffectId DISPLAY_ORDER[] = {
     EID_LGP_SPIROGRAPH_CROWN_AR,            // 1C0A
     EID_LGP_WATER_CAUSTICS_AR,              // 1C00
     EID_LGP_SCHLIEREN_FLOW_AR,              // 1C01
+#if FEATURE_AR_1C_EXPERIMENTAL
     EID_LGP_TALBOT_CARPET_AR,               // 1C02
+#endif
     EID_LGP_AIRY_COMET_AR,                  // 1C03
     EID_LGP_CYMATIC_LADDER_AR,              // 1C04
     EID_LGP_REACTION_DIFFUSION_AR,          // 1C06
@@ -273,10 +276,14 @@ constexpr EffectId DISPLAY_ORDER[] = {
     EID_LGP_HARMONOGRAPH_HALO_AR,           // 1C0C
     EID_LGP_RULE30_CATHEDRAL_AR,            // 1C0D
     EID_LGP_LANGTON_HIGHWAY_AR,             // 1C0E
+#if FEATURE_AR_1C_EXPERIMENTAL
     EID_LGP_CHIMERA_CROWN_AR,               // 1C0F
+#endif
     EID_LGP_CATASTROPHE_CAUSTICS_AR,        // 1C10
     EID_LGP_HYPERBOLIC_PORTAL_AR,           // 1C11
+#if FEATURE_AR_1C_EXPERIMENTAL
     EID_LGP_LORENZ_RIBBON_AR,               // 1C12
+#endif
     EID_LGP_IFS_BIO_RELIC_AR,               // 1C13
 };
 

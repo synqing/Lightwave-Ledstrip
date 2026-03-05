@@ -9,6 +9,7 @@
 #include "CoreEffects.h"
 #include "../config/limits.h"  // For limits::MAX_EFFECTS validation
 #include "../config/effect_ids.h"
+#include "../config/features.h"
 #include "LGPInterferenceEffects.h"
 #include "LGPGeometricEffects.h"
 #include "LGPAdvancedEffects.h"
@@ -1245,9 +1246,11 @@ uint16_t registerAllEffects(RendererActor* renderer) {
     renderer->registerEffect(EID_LGP_SCHLIEREN_FLOW_AR, &schlierenFlowARInstance);
     total++;
 
+#if FEATURE_AR_1C_EXPERIMENTAL
     static ieffect::LGPTalbotCarpetAREffect talbotCarpetARInstance;
     renderer->registerEffect(EID_LGP_TALBOT_CARPET_AR, &talbotCarpetARInstance);
     total++;
+#endif
 
     static ieffect::LGPAiryCometAREffect airyCometARInstance;
     renderer->registerEffect(EID_LGP_AIRY_COMET_AR, &airyCometARInstance);
@@ -1289,9 +1292,11 @@ uint16_t registerAllEffects(RendererActor* renderer) {
     renderer->registerEffect(EID_LGP_LANGTON_HIGHWAY_AR, &langtonHighwayARInstance);
     total++;
 
+#if FEATURE_AR_1C_EXPERIMENTAL
     static ieffect::LGPChimeraCrownAREffect chimeraCrownARInstance;
     renderer->registerEffect(EID_LGP_CHIMERA_CROWN_AR, &chimeraCrownARInstance);
     total++;
+#endif
 
     static ieffect::LGPCatastropheCausticsAREffect catastropheCausticsARInstance;
     renderer->registerEffect(EID_LGP_CATASTROPHE_CAUSTICS_AR, &catastropheCausticsARInstance);
@@ -1301,16 +1306,18 @@ uint16_t registerAllEffects(RendererActor* renderer) {
     renderer->registerEffect(EID_LGP_HYPERBOLIC_PORTAL_AR, &hyperbolicPortalARInstance);
     total++;
 
+#if FEATURE_AR_1C_EXPERIMENTAL
     static ieffect::LGPLorenzRibbonAREffect lorenzRibbonARInstance;
     renderer->registerEffect(EID_LGP_LORENZ_RIBBON_AR, &lorenzRibbonARInstance);
     total++;
+#endif
 
     static ieffect::LGPIFSBioRelicAREffect ifsBioRelicARInstance;
     renderer->registerEffect(EID_LGP_IFS_BIO_RELIC_AR, &ifsBioRelicARInstance);
     total++;
 
     // =============== EFFECT COUNT PARITY VALIDATION ===============
-    constexpr uint16_t EXPECTED_EFFECT_COUNT = 186;  // 166 base + 6 wave-1 AR + 14 wave-2 AR
+    constexpr uint16_t EXPECTED_EFFECT_COUNT = FEATURE_AR_1C_EXPERIMENTAL ? 186 : 183;
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

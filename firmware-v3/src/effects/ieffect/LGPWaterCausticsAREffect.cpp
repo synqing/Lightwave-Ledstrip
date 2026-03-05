@@ -64,6 +64,9 @@ void LGPWaterCausticsAREffect::render(plugins::EffectContext& ctx) {
     // --- Signals (shared infrastructure handles presence gate + fallback) ---
     const lowrisk_ar::ArSignalSnapshot sig =
         lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);
+    const lowrisk_ar::ArModulationProfile mod =
+        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);
+    m_ar.tonalHue = mod.baseHue;
 
     // =================================================================
     // LAYER UPDATES
@@ -91,14 +94,20 @@ void LGPWaterCausticsAREffect::render(plugins::EffectContext& ctx) {
     m_memory = lowrisk_ar::clamp01f(
         lowrisk_ar::decay(m_memory, dtSignal, 0.90f)
         + 0.10f * m_impact + 0.05f * sig.flux);
+    lowrisk_ar::applyBedImpactMemoryMix(
+        m_controls,
+        static_cast<float>(ctx.rawTotalTimeMs),
+        m_bed,
+        m_impact,
+        m_memory);
 
     // =================================================================
     // MOTION — two time accumulators modulated by structure layer
     // =================================================================
 
-    const float t1Rate = (1.30f + 7.10f * speedNorm) * m_controls.motionRate()
+    const float t1Rate = (1.30f + 7.10f * speedNorm) * mod.motionRate
                          * (0.70f + 0.30f * m_structure);
-    const float t2Rate = (0.80f + 4.80f * speedNorm) * m_controls.motionRate()
+    const float t2Rate = (0.80f + 4.80f * speedNorm) * mod.motionRate
                          * (0.70f + 0.30f * m_structure);
     m_t1 += t1Rate * dtVisual;
     m_t2 += t2Rate * dtVisual;
@@ -118,7 +127,7 @@ void LGPWaterCausticsAREffect::render(plugins::EffectContext& ctx) {
 
     const float bedBright = 0.25f + 0.75f * m_bed;
     const float master = (ctx.brightness / 255.0f)
-                         * lowrisk_ar::clamp01f(m_ar.audioPresence);
+                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         const float dist  = static_cast<float>(centerPairDistance(static_cast<uint16_t>(i)));

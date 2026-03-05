@@ -25,6 +25,13 @@ namespace ieffect {
 // =========================================================================
 
 static constexpr float kTau = 6.28318530717958647692f;
+static constexpr uint8_t kMaxTalbotHarmonics = 7;
+static constexpr float kHarmonicOrder[kMaxTalbotHarmonics] = {
+    1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f
+};
+static constexpr float kHarmonicInv[kMaxTalbotHarmonics] = {
+    1.0f, 0.5f, 0.3333333f, 0.25f, 0.2f, 0.1666667f, 0.14285715f
+};
 
 static inline float fract(float x) { return x - floorf(x); }
 
@@ -80,6 +87,9 @@ void LGPTalbotCarpetAREffect::render(plugins::EffectContext& ctx) {
     // --- Signals (shared infrastructure handles presence gate + fallback) ---
     const lowrisk_ar::ArSignalSnapshot sig =
         lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);
+    const lowrisk_ar::ArModulationProfile mod =
+        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);
+    m_ar.tonalHue = mod.baseHue;
 
     // =================================================================
     // LAYER UPDATES
@@ -102,12 +112,18 @@ void LGPTalbotCarpetAREffect::render(plugins::EffectContext& ctx) {
     m_memory = lowrisk_ar::clamp01f(
         lowrisk_ar::decay(m_memory, dtSignal, 0.95f)
         + 0.08f * m_impact + 0.04f * sig.harmonic);
+    lowrisk_ar::applyBedImpactMemoryMix(
+        m_controls,
+        static_cast<float>(ctx.rawTotalTimeMs),
+        m_bed,
+        m_impact,
+        m_memory);
 
     // =================================================================
     // MOTION
     // =================================================================
 
-    const float tRate = (1.10f + 4.20f * speedNorm) * m_controls.motionRate()
+    const float tRate = (1.10f + 4.20f * speedNorm) * mod.motionRate
                         * (0.70f + 0.30f * m_structure);
     m_t += tRate * dtVisual;
 
@@ -127,13 +143,27 @@ void LGPTalbotCarpetAREffect::render(plugins::EffectContext& ctx) {
     // Lock pulse: peaks near rational Talbot fractions, driven by impact
     const float lockPulse = expf(-fabsf(fract(z * 0.09f) - 0.5f) * 7.5f) * m_impact;
 
+    // Adaptive harmonic budget keeps cost bounded at high-speed scenes.
+    int harmonicCount = 4 + static_cast<int>(3.0f * mod.motionDepth + 0.5f);
+    if (speedNorm > 1.25f) harmonicCount -= 1;
+    if (speedNorm > 1.70f) harmonicCount -= 1;
+    harmonicCount = static_cast<int>(lowrisk_ar::clampf(static_cast<float>(harmonicCount), 3.0f, static_cast<float>(kMaxTalbotHarmonics)));
+
+    const float phiBase = kTau / p;
+    float zPhase[kMaxTalbotHarmonics];
+    float harmonicNorm = 0.0f;
+    for (int k = 0; k < harmonicCount; k++) {
+        zPhase[k] = (kHarmonicOrder[k] * kHarmonicOrder[k]) * z * 0.55f;
+        harmonicNorm += kHarmonicInv[k];
+    }
+
     // =================================================================
     // PER-PIXEL RENDER
     // =================================================================
 
     const float bedBright = 0.25f + 0.75f * m_bed;
     const float master = (ctx.brightness / 255.0f)
-                         * lowrisk_ar::clamp01f(m_ar.audioPresence);
+                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         const float dmid  = static_cast<float>(i) - mid;
@@ -142,25 +172,24 @@ void LGPTalbotCarpetAREffect::render(plugins::EffectContext& ctx) {
         // Centre glue (Gaussian fall-off from centre)
         const float glue = 0.35f + 0.65f * expf(-(dmid * dmid) * 0.0016f);
 
-        // Fresnel harmonic sum -- 7 orders of diffraction
-        const float phi = kTau * (static_cast<float>(i) / p);
-        float sumC = 0.0f, sumS = 0.0f, norm = 0.0f;
-        for (int k = 1; k <= 7; k++) {
-            const float ak = 1.0f / static_cast<float>(k);
-            const float phase = static_cast<float>(k) * phi
-                              + static_cast<float>(k * k) * z * 0.55f;
+        // Fresnel harmonic sum with adaptive order under load.
+        const float phi = static_cast<float>(i) * phiBase;
+        float sumC = 0.0f, sumS = 0.0f;
+        for (int k = 0; k < harmonicCount; k++) {
+            const float ak = kHarmonicInv[k];
+            const float phase = kHarmonicOrder[k] * phi + zPhase[k];
             sumC += ak * cosf(phase);
             sumS += ak * sinf(phase);
-            norm += ak;
         }
-        const float amp = sqrtf(sumC * sumC + sumS * sumS) / (norm + 1e-6f);
+        const float amp = sqrtf(sumC * sumC + sumS * sumS) / (harmonicNorm + 1e-6f);
 
         // Structured amplitude with edge fade
-        const float structuredAmp = powf(lowrisk_ar::clamp01f(amp), 1.7f)
-                                  * lowrisk_ar::lerpf(1.0f, 0.85f, distN);
+        const float ampGamma = lowrisk_ar::lerpf(1.85f, 1.45f, mod.motionDepth);
+        const float structuredAmp = powf(lowrisk_ar::clamp01f(amp), ampGamma)
+                                  * lowrisk_ar::lerpf(1.0f, 0.82f, distN);
 
         // Impact: additive lock pulse
-        const float impactAdd = lockPulse * 0.38f;
+        const float impactAdd = lockPulse * (0.24f + 0.24f * mod.beatAccent);
 
         // Memory: gentle retention glow modulated by local amplitude
         const float memoryAdd = m_memory * amp * 0.16f;
@@ -178,7 +207,7 @@ void LGPTalbotCarpetAREffect::render(plugins::EffectContext& ctx) {
         writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));
     }
 
-    lightwaveos::effects::cinema::apply(ctx, speedNorm);
+    lightwaveos::effects::cinema::apply(ctx, speedNorm, lightwaveos::effects::cinema::QualityPreset::LIGHTWEIGHT);
 }
 
 // =========================================================================

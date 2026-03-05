@@ -102,6 +102,9 @@ void LGPReactionDiffusionAREffect::render(plugins::EffectContext& ctx) {
     // --- Signals (shared infrastructure handles presence gate + fallback) ---
     const lowrisk_ar::ArSignalSnapshot sig =
         lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);
+    const lowrisk_ar::ArModulationProfile mod =
+        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);
+    m_ar.tonalHue = mod.baseHue;
 
     // =================================================================
     // LAYER UPDATES
@@ -124,6 +127,12 @@ void LGPReactionDiffusionAREffect::render(plugins::EffectContext& ctx) {
     m_memory = lowrisk_ar::clamp01f(
         lowrisk_ar::decay(m_memory, dtSignal, 0.90f)
         + 0.08f * m_structure + 0.04f * sig.flux);
+    lowrisk_ar::applyBedImpactMemoryMix(
+        m_controls,
+        static_cast<float>(ctx.rawTotalTimeMs),
+        m_bed,
+        m_impact,
+        m_memory);
 
     // =================================================================
     // GRAY-SCOTT SIMULATION DRIVEN BY LAYERS
@@ -142,7 +151,7 @@ void LGPReactionDiffusionAREffect::render(plugins::EffectContext& ctx) {
 
     // Time step: faster at higher speed + structure, stable range
     const float dt = lowrisk_ar::clampf(
-        0.9f + 0.6f * speedNorm + 0.3f * m_structure, 0.8f, 1.8f);
+        (0.9f + 0.6f * speedNorm + 0.3f * m_structure) * mod.motionRate, 0.7f, 2.2f);
 
     // Beat impact: inject V concentration at centre seed region
     if (m_impact > 0.05f) {
@@ -193,7 +202,7 @@ void LGPReactionDiffusionAREffect::render(plugins::EffectContext& ctx) {
     const float mid = (STRIP_LENGTH - 1) * 0.5f;
     const float bedBright = 0.20f + 0.80f * m_bed;
     const float master = (ctx.brightness / 255.0f)
-                         * lowrisk_ar::clamp01f(m_ar.audioPresence);
+                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         const float x = static_cast<float>(i);

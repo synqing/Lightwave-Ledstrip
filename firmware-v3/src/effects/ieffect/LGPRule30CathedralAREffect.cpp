@@ -159,6 +159,9 @@ void LGPRule30CathedralAREffect::render(plugins::EffectContext& ctx) {
     // --- Signals ---
     const lowrisk_ar::ArSignalSnapshot sig =
         lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);
+    const lowrisk_ar::ArModulationProfile mod =
+        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);
+    m_ar.tonalHue = mod.baseHue;
 
     // =================================================================
     // LAYER UPDATES
@@ -187,13 +190,19 @@ void LGPRule30CathedralAREffect::render(plugins::EffectContext& ctx) {
     m_memory = lowrisk_ar::clamp01f(
         lowrisk_ar::decay(m_memory, dtSignal, 0.70f)
         + 0.15f * m_impact + 0.08f * sig.flux);
+    lowrisk_ar::applyBedImpactMemoryMix(
+        m_controls,
+        static_cast<float>(ctx.rawTotalTimeMs),
+        m_bed,
+        m_impact,
+        m_memory);
 
     // =================================================================
     // CA EVOLUTION
     // =================================================================
 
     // Step rate: 0.5 to 12 steps per frame at speed 100
-    const float baseStepsPerFrame = (0.5f + 11.5f * speedNorm) * m_controls.motionRate();
+    const float baseStepsPerFrame = (0.5f + 11.5f * speedNorm) * mod.motionRate;
     const float structureMod = (0.60f + 0.40f * m_structure);
     const float stepsPerFrame = baseStepsPerFrame * structureMod;
 
@@ -213,7 +222,7 @@ void LGPRule30CathedralAREffect::render(plugins::EffectContext& ctx) {
     const float mid    = (STRIP_LENGTH - 1) * 0.5f;
     const float bedBright = 0.20f + 0.80f * m_bed;
     const float master = (ctx.brightness / 255.0f)
-                         * lowrisk_ar::clamp01f(m_ar.audioPresence);
+                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
 #ifndef NATIVE_BUILD

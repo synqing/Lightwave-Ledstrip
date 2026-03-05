@@ -34,8 +34,8 @@ float   BloomParityEffect::s_bulbOpacity     = 0.40f;
 float   BloomParityEffect::s_alpha           = 0.99f;   // Transport persistence (Sensory default: 0.99)
 uint8_t BloomParityEffect::s_squareIter      = 1;       // Contrast shaping (Sensory default: 1)
 uint8_t BloomParityEffect::s_prismIterations = 1;       // Prism passes (Sensory default: 0)
-float   BloomParityEffect::s_gHueSpeed       = 0.20f;   // Tonal drift multiplier (kept narrow to avoid rainbow sweep)
-float   BloomParityEffect::s_spatialSpread   = 96.0f;   // Palette spread centre→edge (bounded range)
+float   BloomParityEffect::s_gHueSpeed       = 1.0f;    // Palette sweep multiplier (0=frozen, -1=reverse)
+float   BloomParityEffect::s_spatialSpread   = 128.0f;  // Palette spread centre→edge (0=mono, 255=full)
 float   BloomParityEffect::s_intensityCoupling = 0.0f;  // 0=spatial colour, 1=intensity colour (heat map)
 
 // -----------------------------------------------------------------------------
@@ -446,14 +446,17 @@ void BloomParityEffect::render(plugins::EffectContext& ctx) {
     }
 
     // ----- Write to LED buffer (palette-mapped from grayscale intensity)
-    // Keep colour movement in a constrained tonal window to avoid rainbow cycling.
-    // Spatial/intensity only modulate within that window.
+    // Transport carries intensity only (all channels equal). Palette colour is
+    // assigned here so every pixel is ONE clean palette.getColor() call.
+    //
+    // Two palette-position sources blended by s_intensityCoupling:
+    //   Spatial:   distance from centre × spread   → palette gradient across strip
+    //   Intensity: pixel brightness × 255          → heat-map / fire mode
+    // Both are offset by audio drift + gHue time rotation.
     const float hueOffset = m_huePosition[zone];
     const uint16_t half = len / 2;
     const float hueRotation = static_cast<float>(ctx.gHue) * s_gHueSpeed;
     const float coupling = s_intensityCoupling;
-    const float tonalAnchor = 24.0f + hueRotation + hueOffset * 48.0f;
-    const float tonalWindow = 32.0f + (s_spatialSpread * 0.25f);  // 32..95.75
 
     for (uint16_t i = 0; i < len; i++) {
         // Extract intensity (average of channels — should be equal, but safe)
@@ -461,17 +464,17 @@ void BloomParityEffect::render(plugins::EffectContext& ctx) {
         if (lum > 1.0f) lum = 1.0f;
         if (lum < 0.0f) lum = 0.0f;
 
-        // Spatial palette position: distance from centre
+        // Spatial palette position: distance from centre × spread
         const float dist = static_cast<float>(std::abs(static_cast<int>(i) - static_cast<int>(half)))
                          / static_cast<float>(half);
-        const float spatialPal = dist;
+        const float spatialPal = dist * s_spatialSpread;
 
-        // Intensity palette position: brightness
-        const float intensityPal = lum;
+        // Intensity palette position: brightness → palette (heat map)
+        const float intensityPal = lum * 255.0f;
 
-        // Blend spatial ↔ intensity inside constrained tonal window
-        const float driver = spatialPal * (1.0f - coupling) + intensityPal * coupling;
-        const float palFloat = tonalAnchor + driver * tonalWindow;
+        // Blend spatial ↔ intensity, add audio drift + time rotation
+        const float palFloat = spatialPal * (1.0f - coupling) + intensityPal * coupling
+                             + hueOffset * 255.0f + hueRotation;
         const uint8_t palIdx = static_cast<uint8_t>(static_cast<uint16_t>(palFloat) & 0xFFu);
 
         ctx.leds[i] = ctx.palette.getColor(palIdx, static_cast<uint8_t>(lum * 255.0f));

@@ -593,20 +593,54 @@ All effects in this family have **Silence Gate = Y** (family >= 0x18).
 
 ---
 
+### 5-Layer AR Variants (0x1Cxx)
+
+The 20 AR variants are integrated in `CoreEffects.cpp`, `display_order.h`, and `PatternRegistry.cpp` with compile-time gating:
+
+- `FEATURE_AR_1C_EXPERIMENTAL=0` (default): registers **17** stable AR effects.
+- `FEATURE_AR_1C_EXPERIMENTAL=1`: registers full **20** AR effects.
+
+Always-on AR effects (`FEATURE_AR_1C_EXPERIMENTAL=0`):
+
+| EID | Name |
+|-----|------|
+| `0x1C00` | LGP Water Caustics (5L-AR) |
+| `0x1C01` | LGP Schlieren Flow (5L-AR) |
+| `0x1C03` | LGP Airy Comet (5L-AR) |
+| `0x1C04` | LGP Cymatic Ladder (5L-AR) |
+| `0x1C05` | LGP Mach Diamonds (5L-AR) |
+| `0x1C06` | LGP Reaction Diffusion (5L-AR) |
+| `0x1C07` | LGP RD Triangle (5L-AR) |
+| `0x1C08` | LGP Moire Cathedral (5L-AR) |
+| `0x1C09` | LGP Superformula Glyph (5L-AR) |
+| `0x1C0A` | LGP Spirograph Crown (5L-AR) |
+| `0x1C0B` | LGP Rose Bloom (5L-AR) |
+| `0x1C0C` | LGP Harmonograph Halo (5L-AR) |
+| `0x1C0D` | LGP Rule 30 Cathedral (5L-AR) |
+| `0x1C0E` | LGP Langton Highway (5L-AR) |
+| `0x1C10` | LGP Catastrophe Caustics (5L-AR) |
+| `0x1C11` | LGP Hyperbolic Portal (5L-AR) |
+| `0x1C13` | LGP IFS Bio Relic (5L-AR) |
+
+Experimental-gated AR effects (`FEATURE_AR_1C_EXPERIMENTAL=1` required):
+
+| EID | Name | Gate reason |
+|-----|------|-------------|
+| `0x1C02` | LGP Talbot Carpet (5L-AR) | heavy harmonic inner-loop cost |
+| `0x1C0F` | LGP Chimera Crown (5L-AR) | heavy Kuramoto coupling loop |
+| `0x1C12` | LGP Lorenz Ribbon (5L-AR) | heavy trail projection loop |
+
+---
+
 ## Summary Statistics
 
 | Metric | Count |
 |--------|-------|
-| Total EIDs assigned | 174 |
-| Active effects | 173 |
-| Retired effects | 1 (`0x1402`) |
-| Skip color correction | ~75 (depends on metadata classification) |
-| Use tone mapping | 12 |
-| Have silence gate | 35 |
-| Audio-reactive | 67 (in `REACTIVE_EFFECT_IDS[]`) |
-| Ignore palette entirely | ~15 |
-| Ignore gHue entirely | ~35 |
-| Centre-origin exception (linear) | 3 |
+| Registered effects (default build) | 183 |
+| Registered effects (`FEATURE_AR_1C_EXPERIMENTAL=1`) | 186 |
+| Reactive effects (default build) | 93 |
+| Reactive effects (`FEATURE_AR_1C_EXPERIMENTAL=1`) | 96 |
+| Experimental-gated AR effects | 3 (`0x1C02`, `0x1C0F`, `0x1C12`) |
 | No PATTERN_METADATA entry | 3 (radial variants: `0x0506`, `0x060A`, `0x060B`) |
 
 ---

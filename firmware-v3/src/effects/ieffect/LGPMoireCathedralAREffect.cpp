@@ -77,6 +77,9 @@ void LGPMoireCathedralAREffect::render(plugins::EffectContext& ctx) {
     // --- Signals (shared infrastructure handles presence gate + fallback) ---
     const lowrisk_ar::ArSignalSnapshot sig =
         lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);
+    const lowrisk_ar::ArModulationProfile mod =
+        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);
+    m_ar.tonalHue = mod.baseHue;
 
     // =================================================================
     // LAYER UPDATES
@@ -99,12 +102,18 @@ void LGPMoireCathedralAREffect::render(plugins::EffectContext& ctx) {
     m_memory = lowrisk_ar::clamp01f(
         lowrisk_ar::decay(m_memory, dtSignal, 0.80f)
         + 0.15f * m_impact + 0.08f * sig.flux);
+    lowrisk_ar::applyBedImpactMemoryMix(
+        m_controls,
+        static_cast<float>(ctx.rawTotalTimeMs),
+        m_bed,
+        m_impact,
+        m_memory);
 
     // =================================================================
     // MOTION
     // =================================================================
 
-    const float tRate = (0.85f + 3.50f * speedNorm) * m_controls.motionRate()
+    const float tRate = (0.85f + 3.50f * speedNorm) * mod.motionRate
                         * (0.75f + 0.25f * m_structure);
     m_t += tRate * dtVisual;
 
@@ -133,7 +142,7 @@ void LGPMoireCathedralAREffect::render(plugins::EffectContext& ctx) {
 
     const float bedBright = 0.25f + 0.75f * m_bed;
     const float master = (ctx.brightness / 255.0f)
-                         * lowrisk_ar::clamp01f(m_ar.audioPresence);
+                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         const float x = static_cast<float>(i);

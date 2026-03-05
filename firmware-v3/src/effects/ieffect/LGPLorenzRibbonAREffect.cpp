@@ -65,6 +65,12 @@ static inline uint8_t luminanceToBr(float wave01, float master) {
     return static_cast<uint8_t>(lowrisk_ar::clampf(out * 255.0f, 0.0f, 255.0f));
 }
 
+// Rational approximation to exp(-x), accurate enough for ribbon falloff at a fraction of expf() cost.
+static inline float fastExpFalloff(float x) {
+    const float xClamped = (x < 0.0f) ? 0.0f : x;
+    return 1.0f / (1.0f + xClamped + 0.48f * xClamped * xClamped);
+}
+
 // =========================================================================
 // Construction / init / cleanup
 // =========================================================================
@@ -125,6 +131,9 @@ void LGPLorenzRibbonAREffect::render(plugins::EffectContext& ctx) {
     // --- Signals ---
     const lowrisk_ar::ArSignalSnapshot sig =
         lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);
+    const lowrisk_ar::ArModulationProfile mod =
+        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);
+    m_ar.tonalHue = mod.baseHue;
 
     // =================================================================
     // LAYER UPDATES
@@ -147,6 +156,12 @@ void LGPLorenzRibbonAREffect::render(plugins::EffectContext& ctx) {
     m_memory = lowrisk_ar::clamp01f(
         lowrisk_ar::decay(m_memory, dtSignal, 0.85f)
         + 0.10f * m_impact + 0.05f * sig.flux);
+    lowrisk_ar::applyBedImpactMemoryMix(
+        m_controls,
+        static_cast<float>(ctx.rawTotalTimeMs),
+        m_bed,
+        m_impact,
+        m_memory);
 
     // =================================================================
     // LORENZ ATTRACTOR PHYSICS
@@ -157,8 +172,10 @@ void LGPLorenzRibbonAREffect::render(plugins::EffectContext& ctx) {
     const float beta  = 8.0f / 3.0f;
 
     // Structure modulates integration speed and sub-step count
-    float dt = (0.0065f + 0.010f * speedNorm) * (0.7f + 0.5f * m_structure) * m_controls.motionRate();
-    int sub = 2 + (int)(4.0f * speedNorm * (0.6f + 0.4f * m_structure));
+    float dt = (0.0065f + 0.010f * speedNorm) * (0.7f + 0.5f * m_structure) * mod.motionRate;
+    int sub = 2 + static_cast<int>(3.5f * speedNorm * (0.6f + 0.4f * m_structure)
+                                    * (0.75f + 0.50f * mod.motionDepth));
+    if (sub > 7) sub = 7;
 
 #ifndef NATIVE_BUILD
     for (int s = 0; s < sub; s++) {
@@ -185,11 +202,31 @@ void LGPLorenzRibbonAREffect::render(plugins::EffectContext& ctx) {
 
     const float bedBright = 0.25f + 0.75f * m_bed;
     const float master = (ctx.brightness / 255.0f)
-                         * lowrisk_ar::clamp01f(m_ar.audioPresence);
+                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;
 
     // Structure modulates ribbon thickness
     const float thickBase = 0.040f + 0.030f * (1.0f - speedNorm);
-    const float thick = thickBase * (0.65f + 0.55f * m_structure);
+    const float thick = lowrisk_ar::clampf(
+        thickBase * (0.65f + 0.55f * m_structure) * (0.75f + 0.50f * mod.motionDepth),
+        0.020f, 0.140f);
+
+    const int trailStride = (speedNorm > 1.50f) ? 3 : ((speedNorm > 0.95f) ? 2 : 1);
+    static float trailR[TRAIL_N];
+    static float trailFade[TRAIL_N];
+    int trailSamples = 0;
+    for (int k = 0; k < TRAIL_N; k += trailStride) {
+        int idx = static_cast<int>(m_head) - 1 - k;
+        while (idx < 0) idx += TRAIL_N;
+        const float age = static_cast<float>(k) / static_cast<float>(TRAIL_N - 1);  // 0 newest .. 1 oldest
+        float fade = 1.0f - age;
+        fade = fade * fade * (0.70f + 0.30f * fade);  // ~pow(1-age, 1.6) without powf()
+        if (fade < 0.02f) {
+            break;
+        }
+        trailR[trailSamples] = m_ps->trail[idx];
+        trailFade[trailSamples] = fade;
+        ++trailSamples;
+    }
 
 #ifndef NATIVE_BUILD
     for (int i = 0; i < STRIP_LENGTH; i++) {
@@ -197,20 +234,13 @@ void LGPLorenzRibbonAREffect::render(plugins::EffectContext& ctx) {
         float glue = centreGlue(i);
         float best = 0.0f;
 
-        for (int k = 0; k < TRAIL_N; k++) {
-            int idx = (int)m_head - 1 - k;
-            while (idx < 0) idx += TRAIL_N;
-            float r = m_ps->trail[idx];
-
-            float age = (float)k / (float)(TRAIL_N - 1);     // 0 newest .. 1 oldest
-            float fade = powf(1.0f - age, 1.65f);
-
-            float g = expf(-fabsf(dn - r) / thick) * fade;
+        for (int k = 0; k < trailSamples; k++) {
+            const float g = fastExpFalloff(fabsf(dn - trailR[k]) / thick) * trailFade[k];
             best = fmaxf(best, g);
         }
 
         // Thin specular edge for ribbon feel
-        float spec = powf(best, 2.2f) * 0.55f;
+        float spec = best * best * sqrtf(best) * 0.55f;
 
         // Bed x structured geometry
         float ribbonGeom = lowrisk_ar::clamp01f((0.22f + 0.78f * best + spec) * glue);
@@ -237,7 +267,7 @@ void LGPLorenzRibbonAREffect::render(plugins::EffectContext& ctx) {
     }
 #endif
 
-    lightwaveos::effects::cinema::apply(ctx, speedNorm);
+    lightwaveos::effects::cinema::apply(ctx, speedNorm, lightwaveos::effects::cinema::QualityPreset::LIGHTWEIGHT);
 }
 
 // =========================================================================

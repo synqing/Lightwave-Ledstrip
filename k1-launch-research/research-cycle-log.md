@@ -41,3 +41,25 @@
 - Decision register impact: D5 remains EXPLORING. Evidence is balanced — supports and challenges the hypothesis in roughly equal measure. Key blocker identified: K1 needs a perceptual reframe from "LED product" to "music technology" before price can hold.
 - Next cycle should: Research HyperCube buyer reviews (what do they praise/criticise?), track Monar KS trajectory at week 1, search for any DTC LED art brands at $400+.
 - Output: `K1_Launch_Planning/02-Market-Intelligence/d5-pricing-validation-cycle1.md`
+
+## Cycle: 2026-03-06 ~08:15 UTC (Cowork scheduled task — D5 pricing cycle 2)
+- **Decision targeted:** D5 (Pricing — EXPLORING, $449-549)
+- **Research action:** Granular competitive price mapping with vendor-verified prices. Focused on products the previous cycle missed: LiveLightMagic (direct feature match), Nanoleaf panel kits (casual buyer ceiling), SoundSwitch (professional floor), Petru (audiophile beachhead).
+- **Findings:**
+  - [FACT] LiveLightMagic: $341 for 320 WS2812B LEDs, 100+ effects, browser/mobile control. This is the closest feature-comparable product to K1 on paper. K1's premium over this baseline is 32-61%.
+  - [FACT] HyperCube 15: $450 (was $500, currently discounted). Proves $450 payable for premium ambient light with basic sound reactivity and 95 patterns.
+  - [FACT] Nanoleaf 15-panel kit: ~$350-400. Defines casual buyer ceiling with smart home integration and basic music sync.
+  - [FACT] SoundSwitch Control One: $299 hardware + $8-20/mo software. Year-one cost: $395-539, directly overlapping K1's $449-549 range.
+  - [FACT] Petru vinyl stand: $240, 192 LEDs, 24-band analysis. Design-object positioning for audiophiles.
+  - [FACT] Audiorays Pro: $199, 384 LEDs, 24-band FFT. Best-in-class at the enthusiast tier.
+  - [INFERENCE] K1 sits in pricing no-man's-land between consumer ambient ($200-400) and professional DJ ($400-600+/yr). This is either moat or gap.
+  - [INFERENCE] K1's entire price premium over LiveLightMagic rests on audio intelligence (PLL beat tracking, 256-bin FFT, chroma) + Light Guide Plate form factor. If these aren't VISIBLE in the first demo experience, the premium evaporates.
+  - [HYPOTHESIS] Petru's vinyl/audiophile community may be K1's natural beachhead — they already pay premiums for musical fidelity in physical objects.
+- **Juxtapositions surfaced:**
+  1. LiveLightMagic Gap: identical LED/effect count at $341 — K1's entire premium = audio intelligence + form factor
+  2. HyperCube Anchor: $450 validated via visual mechanic (infinity mirrors), not musical intelligence — different buying motivation
+  3. Nanoleaf Ceiling: $350-400 = casual limit. K1 must attract a fundamentally different buyer
+  4. SoundSwitch Floor: at $549, K1 competes with professional DJ tools without brand equity
+- **Decision register impact:** D5 remains EXPLORING. This cycle adds specificity to previous cycle's finding. Supports $449 floor (HyperCube anchor). Challenges $549 ceiling (SoundSwitch overlap). Key question sharpened: the first-run demo experience (D6) is the pricing gatekeeper.
+- **Next cycle should:** Deep-dive HyperCube buyer reviews (what do $450 buyers praise/criticise?). Explore Petru/vinyl community as K1 beachhead. Investigate "first 10 seconds" demo requirements to justify price differential over LiveLightMagic.
+- **Output:** `k1-launch-research/pricing/d5-pricing-landscape-2026-03-06.md`

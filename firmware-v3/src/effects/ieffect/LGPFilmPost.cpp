@@ -21,6 +21,7 @@ static inline uint32_t hash32(uint32_t x) {
 
 static constexpr int MAX_N = 256;
 
+static bool s_enabled = true;
 static bool s_inited = false;
 static uint8_t s_gamma[256];
 static CRGB s_prev[MAX_N];
@@ -54,7 +55,11 @@ void reset() {
     s_inited = false;
 }
 
+bool isEnabled() { return s_enabled; }
+void setEnabled(bool on) { s_enabled = on; }
+
 void apply(plugins::EffectContext& ctx, float speedNorm, QualityPreset preset) {
+    if (!s_enabled) return;
     int N = (int)ctx.ledCount;
     if (N <= 0) return;
     if (N >= 2) N = N / 2;

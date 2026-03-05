@@ -38,6 +38,10 @@ void reset();
 /// speedNorm = ctx.speed / 50.0f (same convention you already use)
 void apply(plugins::EffectContext& ctx, float speedNorm, QualityPreset preset = QualityPreset::FULL);
 
+/// Runtime toggle — when disabled, apply() becomes a no-op.
+bool isEnabled();
+void setEnabled(bool on);
+
 } // namespace cinema
 } // namespace effects
 } // namespace lightwaveos

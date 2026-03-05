@@ -34,6 +34,7 @@
 #include "config/display_order.h"
 #include "effects/ieffect/BeatPulseBloomEffect.h"  // For debug toggle
 #include "effects/ieffect/BloomParityEffect.h"     // For runtime PostFX tuning
+#include "effects/ieffect/LGPFilmPost.h"           // For cinema post toggle
 #if FEATURE_TRANSITIONS
 #include "effects/transitions/TransitionEngine.h"
 #include "effects/transitions/TransitionTypes.h"
@@ -1418,6 +1419,7 @@ void loop() {
                 case 'b': case 'B':  // RD Triangle K +/-
                 case 't': case 'T':  // RD Triangle F +/-
                 case 'x': case 'X':  // Bands observability (one-shot dump)
+                case 'q':            // Cinema post-processing toggle
                 case '`':            // Status strip idle mode cycle
                     isImmediate = true;
                     break;
@@ -3182,6 +3184,15 @@ void loop() {
                                 Serial.println("Gamma: OFF");
                             }
                         }
+                    }
+                    break;
+
+                case 'q':
+                    // Toggle cinema post-processing (A/B visual comparison)
+                    {
+                        namespace cine = lightwaveos::effects::cinema;
+                        cine::setEnabled(!cine::isEnabled());
+                        Serial.printf("Cinema post: %s\n", cine::isEnabled() ? "ON" : "OFF");
                     }
                     break;
 

@@ -1,5 +1,20 @@
 # K1 Launch Research — Cycle Log
 
+## Cycle: 2026-03-06 (Cowork scheduled task — Cycle 5)
+- Decision targeted: D3 (Manifesto Enemy — HARD GATE)
+- Research action: Consumer language validation across all three enemy candidates. Searched HyperCube, Nanoleaf, WLED, generic LED strip reviews for how buyers describe dissatisfaction with "sound reactive" products. Also researched D&AD 2025 manifesto as reference case for enemy-framing.
+- Findings:
+  - [FACT] Consumers describe volume-driven chaos as "frantic," "sporadic," "random," "laggy," "no control" — but never use the word "volume" as the diagnosis
+  - [FACT] "No control" / "without the control we were promised" is a recurring complaint justifying premium pricing expectations
+  - [FACT] Nanoleaf Rhythm has 100–200ms latency; described as "sporadic" on beat-driven music
+  - [FACT] D&AD 2025 manifesto: "Creativity isn't being stolen by technology — it's being left undone" — maps to Spectacle Without Substance framing
+  - [INFERENCE] Enemy 1 (Volume as Meaning) has strongest consumer evidence but requires bridging from symptom ("frantic") to cause ("volume-only detection")
+  - [INFERENCE] Enemy 2 (Spectacle Without Substance) has broadest resonance but lowest specificity — any competitor can claim "substance"
+  - [HYPOTHESIS] Enemy 3 (Passive Consumption) may exclude "beautiful object" buyers who legitimately want passive enjoyment at $449+
+- Juxtapositions surfaced: Comparison table across all 3 enemies on 9 dimensions (consumer resonance, education required, K1 proof, content debut, specificity, vagueness risk, buyer exclusion, co-optability, manifesto energy). Three questions posed for Captain re: naming, specificity-resonance trade-off, and stacking.
+- Decision register impact: No status change. D3 remains PENDING. Data provided for Captain synthesis.
+- Next cycle should: Research how Teenage Engineering's manifesto/brand voice names its enemy (if any). Also: track Monar Kickstarter backer trajectory (was 8 backers on day 3).
+
 ## Cycle: 2026-03-05 (Cowork scheduled task)
 - Task worked on: Task 2 — Recognition Device Research
 - Progress: Complete. Researched 6 hardware brands (Teenage Engineering, Nothing, Apple, Dyson, Analogue, Bang & Olufsen) for recognition device patterns. Identified 5 candidates for K1: The Glow (luminous surface), The Breath (centre-origin pulse), The Edge (thin profile angle), The Dark Field (consistent dark composition), The Colour Moment (hero effect selection). Recommended combination: A (Glow) + B (Breath) + D (Dark Field) as primary stack. Full analysis with execution requirements saved.

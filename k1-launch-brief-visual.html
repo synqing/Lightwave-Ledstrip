@@ -1,0 +1,1200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>K1 Launch Brief — 6 March 2026</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+  :root {
+    --bg: #0a0a0c;
+    --surface: #111114;
+    --surface2: #1a1a1f;
+    --surface3: #222228;
+    --border: #2a2a32;
+    --text: #e8e8ec;
+    --text-dim: #8888a0;
+    --text-muted: #55556a;
+    --accent: #c8a882;
+    --accent-dim: #8a7560;
+    --red: #e05555;
+    --red-dim: rgba(224,85,85,0.15);
+    --green: #55c878;
+    --green-dim: rgba(85,200,120,0.15);
+    --blue: #5588dd;
+    --blue-dim: rgba(85,136,221,0.15);
+    --amber: #ddaa44;
+    --amber-dim: rgba(221,170,68,0.15);
+    --purple: #9977dd;
+    --purple-dim: rgba(153,119,221,0.15);
+    --glow: rgba(200,168,130,0.08);
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .hero {
+    position: relative;
+    padding: 80px 40px 60px;
+    text-align: center;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 600px;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.6;
+    filter: blur(1px);
+  }
+  .hero::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 400px;
+    height: 80px;
+    background: radial-gradient(ellipse, var(--glow), transparent);
+    filter: blur(20px);
+  }
+  .hero h1 {
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 8px;
+    position: relative;
+    z-index: 1;
+  }
+  .hero .date {
+    font-size: 13px;
+    color: var(--text-muted);
+    position: relative;
+    z-index: 1;
+  }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 32px 80px;
+  }
+
+  /* Section headers */
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin: 64px 0 32px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-num {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    color: var(--accent-dim);
+    text-transform: uppercase;
+    min-width: 24px;
+  }
+  .section-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  /* Status bar */
+  .status-bar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-top: 32px;
+  }
+  .status-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+  }
+  .status-card .value {
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--accent);
+    line-height: 1.1;
+  }
+  .status-card .label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-top: 8px;
+  }
+  .status-card.blocking .value { color: var(--red); }
+  .status-card.ready .value { color: var(--green); }
+
+  /* Reading list */
+  .reading-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .reading-item {
+    display: grid;
+    grid-template-columns: 32px 1fr auto auto;
+    gap: 16px;
+    align-items: center;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    transition: border-color 0.2s;
+  }
+  .reading-item:hover {
+    border-color: var(--accent-dim);
+  }
+  .reading-item .num {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--accent);
+    text-align: center;
+  }
+  .reading-item .title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .reading-item .desc {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+  .reading-item .time {
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+  .badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+  .badge.decision { background: var(--red-dim); color: var(--red); }
+  .badge.context { background: var(--blue-dim); color: var(--blue); }
+  .badge.reference { background: var(--surface3); color: var(--text-muted); }
+
+  /* Recognition device cards */
+  .device-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 16px;
+  }
+  .device-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+  }
+  .device-card.recommended {
+    border-color: var(--accent-dim);
+    box-shadow: 0 0 30px rgba(200,168,130,0.05);
+  }
+  .device-card.recommended::before {
+    content: 'RECOMMENDED';
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: var(--accent);
+    background: rgba(200,168,130,0.1);
+    padding: 4px 10px;
+    border-radius: 20px;
+  }
+  .device-visual {
+    height: 80px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+  }
+  .device-card .name {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .device-card .medium {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--accent-dim);
+    margin-bottom: 8px;
+  }
+  .device-card .explain {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+
+  /* Visual simulations for device cards */
+  .vis-glow {
+    background: radial-gradient(ellipse at center, rgba(200,168,130,0.25) 0%, rgba(200,168,130,0.05) 40%, transparent 70%);
+    width: 100%; height: 100%;
+  }
+  .vis-edge {
+    width: 100%; height: 100%;
+    position: relative;
+    background: var(--bg);
+  }
+  .vis-edge::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 10%;
+    width: 80%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent 0%, var(--accent) 20%, #fff 50%, var(--accent) 80%, transparent 100%);
+    box-shadow: 0 0 20px var(--accent), 0 0 60px rgba(200,168,130,0.3);
+  }
+  .vis-centre {
+    width: 100%; height: 100%;
+    background: var(--bg);
+    position: relative;
+  }
+  .vis-centre::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 20px var(--accent), 0 0 60px var(--accent), 0 0 120px rgba(200,168,130,0.3),
+                -60px 0 40px rgba(200,168,130,0.1), 60px 0 40px rgba(200,168,130,0.1),
+                -120px 0 30px rgba(200,168,130,0.05), 120px 0 30px rgba(200,168,130,0.05);
+  }
+  .vis-dark {
+    width: 100%; height: 100%;
+    background: linear-gradient(90deg, var(--bg) 0%, var(--bg) 48%, var(--surface3) 48.5%, var(--surface3) 49.5%,
+                var(--surface) 50%, rgba(200,168,130,0.15) 52%, rgba(200,168,130,0.25) 60%, rgba(200,168,130,0.15) 75%, var(--bg) 100%);
+  }
+  .vis-listen {
+    width: 100%; height: 100%;
+    background: var(--bg);
+    position: relative;
+    overflow: hidden;
+  }
+  .vis-listen::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 60%;
+    background: linear-gradient(0deg, rgba(200,168,130,0.2) 0%, transparent 100%);
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='60'%3E%3Cpath d='M0,50 Q15,45 30,48 Q45,20 60,35 Q75,10 90,30 Q105,5 120,25 Q135,15 150,10 Q165,15 180,25 Q195,5 210,30 Q225,10 240,35 Q255,20 270,48 Q285,45 300,50' fill='none' stroke='white' stroke-width='40'/%3E%3C/svg%3E") bottom/100% 100% no-repeat;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='60'%3E%3Cpath d='M0,50 Q15,45 30,48 Q45,20 60,35 Q75,10 90,30 Q105,5 120,25 Q135,15 150,10 Q165,15 180,25 Q195,5 210,30 Q225,10 240,35 Q255,20 270,48 Q285,45 300,50' fill='none' stroke='white' stroke-width='40'/%3E%3C/svg%3E") bottom/100% 100% no-repeat;
+  }
+
+  /* Competitive positioning map */
+  .comp-map {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 32px;
+    position: relative;
+    height: 420px;
+    overflow: hidden;
+  }
+  .comp-map .axis-label {
+    position: absolute;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .comp-map .axis-label.bottom { bottom: 12px; left: 50%; transform: translateX(-50%); }
+  .comp-map .axis-label.top { top: 12px; left: 50%; transform: translateX(-50%); }
+  .comp-map .axis-label.left { left: 12px; top: 50%; transform: translateY(-50%) rotate(-90deg); }
+  .comp-map .axis-label.right { right: 12px; top: 50%; transform: translateY(-50%) rotate(90deg); }
+  .comp-map .axis-line-h {
+    position: absolute;
+    top: 50%;
+    left: 32px;
+    right: 32px;
+    height: 1px;
+    background: var(--border);
+  }
+  .comp-map .axis-line-v {
+    position: absolute;
+    left: 50%;
+    top: 32px;
+    bottom: 32px;
+    width: 1px;
+    background: var(--border);
+  }
+  .comp-dot {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    text-align: center;
+  }
+  .comp-dot .dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin: 0 auto 6px;
+  }
+  .comp-dot .dot.k1 {
+    width: 18px; height: 18px;
+    background: var(--accent);
+    box-shadow: 0 0 20px rgba(200,168,130,0.4);
+  }
+  .comp-dot .dot.peer { background: var(--blue); opacity: 0.7; }
+  .comp-dot .dot.consumer { background: var(--text-muted); opacity: 0.4; }
+  .comp-dot .dot.diy { background: var(--green); opacity: 0.5; }
+  .comp-dot .dot.pro { background: var(--purple); opacity: 0.5; }
+  .comp-dot .lbl {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+  .comp-dot .price {
+    font-size: 9px;
+    color: var(--text-muted);
+  }
+
+  /* Enemy candidates */
+  .enemy-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  .enemy-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 28px 24px;
+    position: relative;
+  }
+  .enemy-card .rank {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .enemy-card.e1 .rank { color: var(--green); }
+  .enemy-card.e2 .rank { color: var(--blue); }
+  .enemy-card.e3 .rank { color: var(--purple); }
+  .enemy-card .enemy-name {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--text);
+    margin-bottom: 12px;
+    line-height: 1.2;
+  }
+  .enemy-card .enemy-desc {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.6;
+    margin-bottom: 16px;
+  }
+  .enemy-card .cascade {
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+  }
+  .cascade-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+  .cascade-value {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .strength-bar {
+    display: flex;
+    gap: 3px;
+    margin-top: 12px;
+  }
+  .strength-bar .seg {
+    height: 4px;
+    border-radius: 2px;
+    flex: 1;
+    background: var(--surface3);
+  }
+  .enemy-card.e1 .seg.on { background: var(--green); }
+  .enemy-card.e2 .seg.on { background: var(--blue); }
+  .enemy-card.e3 .seg.on { background: var(--purple); }
+
+  /* Leverage connections */
+  .leverage-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+  .leverage-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+  }
+  .leverage-card .tag {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 20px;
+    margin-bottom: 12px;
+  }
+  .leverage-card .tag.competitive { background: var(--amber-dim); color: var(--amber); }
+  .leverage-card .tag.content { background: var(--blue-dim); color: var(--blue); }
+  .leverage-card .tag.audience { background: var(--green-dim); color: var(--green); }
+  .leverage-card .tag.identity { background: var(--purple-dim); color: var(--purple); }
+  .leverage-card .leverage-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+  .leverage-card .leverage-body {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+  .leverage-card .arrow {
+    font-size: 13px;
+    color: var(--accent);
+    margin-top: 12px;
+    font-weight: 600;
+  }
+
+  /* Decision blocks */
+  .decision-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+  .decision-card {
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: 14px;
+    padding: 28px;
+    position: relative;
+  }
+  .decision-card.blocking {
+    border-color: rgba(224,85,85,0.3);
+  }
+  .decision-card.parallel {
+    border-color: rgba(221,170,68,0.3);
+  }
+  .decision-card .d-num {
+    font-size: 40px;
+    font-weight: 900;
+    color: var(--surface3);
+    position: absolute;
+    top: 16px;
+    right: 20px;
+    line-height: 1;
+  }
+  .decision-card .d-status {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .decision-card.blocking .d-status { color: var(--red); }
+  .decision-card.parallel .d-status { color: var(--amber); }
+  .decision-card .d-title {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--text);
+    margin-bottom: 12px;
+  }
+  .decision-card .d-options {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 16px;
+  }
+  .d-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--surface2);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  .d-option .opt-marker {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 2px solid var(--text-muted);
+    flex-shrink: 0;
+  }
+  .d-option.rec .opt-marker {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .d-option.rec {
+    color: var(--text);
+    font-weight: 500;
+  }
+  .decision-card .d-unlocks {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* Moat visual */
+  .moat-container {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 32px;
+  }
+  .moat-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  .moat-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+    width: 140px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .moat-bar-bg {
+    flex: 1;
+    height: 28px;
+    background: var(--surface2);
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+  }
+  .moat-bar {
+    height: 100%;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    padding-left: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .moat-bar.k1 { background: linear-gradient(90deg, var(--accent), rgba(200,168,130,0.4)); }
+  .moat-bar.wled { background: linear-gradient(90deg, var(--green), rgba(85,200,120,0.3)); }
+  .moat-bar.govee { background: linear-gradient(90deg, var(--text-muted), rgba(136,136,160,0.2)); }
+  .moat-bar.nothing { background: linear-gradient(90deg, var(--blue), rgba(85,136,221,0.3)); }
+
+  .beliefs-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 10px;
+    margin-bottom: 32px;
+  }
+  .belief-chip {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    text-align: center;
+  }
+  .belief-chip .belief-icon {
+    font-size: 24px;
+    margin-bottom: 8px;
+  }
+  .belief-chip .belief-text {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.3;
+  }
+
+  .voice-dna {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .voice-col {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+  }
+  .voice-col h4 {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  .voice-col.yes h4 { color: var(--green); }
+  .voice-col.no h4 { color: var(--red); }
+  .voice-col .phrase {
+    font-size: 14px;
+    color: var(--text-dim);
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-style: italic;
+  }
+  .voice-col .phrase:last-child { border: none; }
+
+  .note {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 8px;
+  }
+
+  @media (max-width: 768px) {
+    .status-bar { grid-template-columns: repeat(2, 1fr); }
+    .enemy-grid { grid-template-columns: 1fr; }
+    .device-grid { grid-template-columns: 1fr; }
+    .leverage-grid { grid-template-columns: 1fr; }
+    .decision-grid { grid-template-columns: 1fr; }
+    .voice-dna { grid-template-columns: 1fr; }
+    .comp-map { height: 360px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<div class="hero">
+  <h1>K1 Launch Research Brief</h1>
+  <div class="date">6 March 2026 — 3 cycles complete</div>
+</div>
+
+<div class="container">
+
+<!-- STATUS -->
+<div class="status-bar">
+  <div class="status-card ready">
+    <div class="value">3</div>
+    <div class="label">Cycles Complete</div>
+  </div>
+  <div class="status-card blocking">
+    <div class="value">4</div>
+    <div class="label">Decisions Pending</div>
+  </div>
+  <div class="status-card">
+    <div class="value">7</div>
+    <div class="label">Docs Produced</div>
+  </div>
+  <div class="status-card">
+    <div class="value">$249</div>
+    <div class="label">Founders Edition</div>
+  </div>
+</div>
+
+<!-- READING LIST -->
+<div class="section-header">
+  <span class="section-num">01</span>
+  <span class="section-title">Reading List</span>
+</div>
+
+<div class="reading-list">
+  <div class="reading-item">
+    <div class="num">1</div>
+    <div><div class="title">Colour Palette Research</div><div class="desc">3 palette candidates: Void, Mineral, Oxide</div></div>
+    <div class="time">~5 min</div>
+    <span class="badge decision">Decision</span>
+  </div>
+  <div class="reading-item">
+    <div class="num">2</div>
+    <div><div class="title">Recognition Device Research</div><div class="desc">5 candidates for visual identity without a logo — the strategic centrepiece</div></div>
+    <div class="time">~15 min</div>
+    <span class="badge decision">Decision</span>
+  </div>
+  <div class="reading-item">
+    <div class="num">3</div>
+    <div><div class="title">Day 1 Excavation</div><div class="desc">Beliefs, enemies, voice DNA — mined from all your existing docs</div></div>
+    <div class="time">~12 min</div>
+    <span class="badge decision">Decision</span>
+  </div>
+  <div class="reading-item">
+    <div class="num">4</div>
+    <div><div class="title">Competitive Landscape Monitor</div><div class="desc">TE, Nothing, Analogue, Synthstrom, WLED-SR — live market intel</div></div>
+    <div class="time">~10 min</div>
+    <span class="badge context">Context</span>
+  </div>
+  <div class="reading-item">
+    <div class="num">5</div>
+    <div><div class="title">Brand Manifesto Sprint Plan</div><div class="desc">5-day sprint structure — understand the process before the enemy decision</div></div>
+    <div class="time">~8 min</div>
+    <span class="badge context">Context</span>
+  </div>
+  <div class="reading-item">
+    <div class="num">6</div>
+    <div><div class="title">Quiet Confidence Spec v0.1</div><div class="desc">Your content strategy bible — skim to refresh</div></div>
+    <div class="time">~5 min</div>
+    <span class="badge reference">Refresh</span>
+  </div>
+  <div class="reading-item">
+    <div class="num">7</div>
+    <div><div class="title">Study Concepts Bank</div><div class="desc">20 production-ready concepts — Heavy Air, Phase Lock, Negative Space, etc.</div></div>
+    <div class="time">~10 min</div>
+    <span class="badge reference">Refresh</span>
+  </div>
+</div>
+
+<!-- RECOGNITION DEVICES -->
+<div class="section-header">
+  <span class="section-num">02</span>
+  <span class="section-title">Recognition Devices</span>
+</div>
+<p class="note" style="margin-bottom: 24px; font-size: 14px; color: var(--text-dim);">How people identify K1 in under 2 seconds without reading a logo. Reference brands studied: TE (orange), Nothing (transparency + Glyph), Apple iPod (silhouettes), Dyson (cyclone form), Analogue (material restraint), B&O (aluminium).</p>
+
+<div class="device-grid">
+  <div class="device-card">
+    <div class="device-visual"><div class="vis-glow"></div></div>
+    <div class="name">The Glow Sheet</div>
+    <div class="medium">Photography</div>
+    <div class="explain">The LGP's uniform luminous surface — unlike any LED dot or strip product. Subsurface glow, not point sources.</div>
+  </div>
+  <div class="device-card recommended">
+    <div class="device-visual"><div class="vis-edge"></div></div>
+    <div class="name">The Edge Line</div>
+    <div class="medium">All media — stills, video, print, favicon</div>
+    <div class="explain">The razor-thin bright edge where LEDs fire into the LGP. Extremely graphic. Abstractable into a brand motif. Works at every scale from billboard to social avatar.</div>
+  </div>
+  <div class="device-card recommended">
+    <div class="device-visual"><div class="vis-centre"></div></div>
+    <div class="name">Centre-Out</div>
+    <div class="medium">Video + Motion</div>
+    <div class="explain">Every effect radiates from LED 79/80 outward. A firmware constraint that becomes an ownable motion language. Unique to K1, already built into every effect.</div>
+  </div>
+  <div class="device-card">
+    <div class="device-visual"><div class="vis-dark"></div></div>
+    <div class="name">The Dark Frame</div>
+    <div class="medium">Photography + Video</div>
+    <div class="explain">Off-state → on-state contrast. The reveal moment. Aligned with Quiet Confidence: understated until it speaks.</div>
+  </div>
+  <div class="device-card">
+    <div class="device-visual"><div class="vis-listen"></div></div>
+    <div class="name">The Listening Moment</div>
+    <div class="medium">Video only</div>
+    <div class="explain">The instant K1 responds to a beat. The "wow" moment. Demonstrates the core value proposition directly. Requires video production.</div>
+  </div>
+</div>
+
+<!-- COMPETITIVE MAP -->
+<div class="section-header">
+  <span class="section-num">03</span>
+  <span class="section-title">Competitive Positioning</span>
+</div>
+
+<div class="comp-map">
+  <div class="axis-line-h"></div>
+  <div class="axis-line-v"></div>
+  <div class="axis-label top">Beat Tracking / Musical Intelligence</div>
+  <div class="axis-label bottom">Volume / Amplitude Only</div>
+  <div class="axis-label left">Low Price</div>
+  <div class="axis-label right">High Price</div>
+
+  <!-- K1 -->
+  <div class="comp-dot" style="left: 52%; top: 22%;">
+    <div class="dot k1"></div>
+    <div class="lbl" style="color: var(--accent); font-weight: 700;">K1</div>
+    <div class="price">$249</div>
+  </div>
+
+  <!-- Consumer tier -->
+  <div class="comp-dot" style="left: 22%; top: 78%;">
+    <div class="dot consumer"></div>
+    <div class="lbl">Govee</div>
+    <div class="price">$20-80</div>
+  </div>
+  <div class="comp-dot" style="left: 35%; top: 72%;">
+    <div class="dot consumer"></div>
+    <div class="lbl">Nanoleaf</div>
+    <div class="price">$80-200</div>
+  </div>
+  <div class="comp-dot" style="left: 40%; top: 76%;">
+    <div class="dot consumer"></div>
+    <div class="lbl">Hue</div>
+    <div class="price">$100-300</div>
+  </div>
+  <div class="comp-dot" style="left: 16%; top: 82%;">
+    <div class="dot consumer"></div>
+    <div class="lbl">Fosi Audio</div>
+    <div class="price">~$50</div>
+  </div>
+
+  <!-- DIY -->
+  <div class="comp-dot" style="left: 13%; top: 55%;">
+    <div class="dot diy"></div>
+    <div class="lbl">WLED-SR</div>
+    <div class="price">Free + HW</div>
+  </div>
+
+  <!-- Pro -->
+  <div class="comp-dot" style="left: 80%; top: 18%;">
+    <div class="dot pro"></div>
+    <div class="lbl">DMX/Pro</div>
+    <div class="price">$500+</div>
+  </div>
+
+  <!-- Aspirational peers -->
+  <div class="comp-dot" style="left: 55%; top: 38%;">
+    <div class="dot peer"></div>
+    <div class="lbl">TE EP-133</div>
+    <div class="price">$199</div>
+  </div>
+  <div class="comp-dot" style="left: 60%; top: 42%;">
+    <div class="dot peer"></div>
+    <div class="lbl">Analogue 3D</div>
+    <div class="price">$270</div>
+  </div>
+  <div class="comp-dot" style="left: 75%; top: 32%;">
+    <div class="dot peer"></div>
+    <div class="lbl">Deluge</div>
+    <div class="price">$799</div>
+  </div>
+</div>
+<p class="note" style="margin-top: 12px;">
+  <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--accent); margin-right:6px; vertical-align:middle;"></span> K1 &nbsp;&nbsp;
+  <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--blue); opacity:0.7; margin-right:6px; vertical-align:middle;"></span> Aspirational peers &nbsp;&nbsp;
+  <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--text-muted); opacity:0.4; margin-right:6px; vertical-align:middle;"></span> Consumer LED &nbsp;&nbsp;
+  <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--green); opacity:0.5; margin-right:6px; vertical-align:middle;"></span> DIY &nbsp;&nbsp;
+  <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--purple); opacity:0.5; margin-right:6px; vertical-align:middle;"></span> Professional
+</p>
+
+<!-- TECHNICAL MOAT -->
+<div class="section-header">
+  <span class="section-num">04</span>
+  <span class="section-title">Technical Moat — March 2026</span>
+</div>
+<p class="note" style="margin-bottom: 20px; font-size: 14px; color: var(--text-dim);">No consumer product found shipping PLL beat tracking. K1's audio pipeline moat is intact.</p>
+
+<div class="moat-container">
+  <div class="moat-row">
+    <div class="moat-label">K1 PipelineCore</div>
+    <div class="moat-bar-bg"><div class="moat-bar k1" style="width: 95%;">256-bin FFT + Onset + PLL Beat Tracking</div></div>
+  </div>
+  <div class="moat-row">
+    <div class="moat-label">DMX / Pro</div>
+    <div class="moat-bar-bg"><div class="moat-bar" style="width: 75%; background: linear-gradient(90deg, var(--purple), rgba(153,119,221,0.3));">Tempo sync + MIDI — expert setup, $500+</div></div>
+  </div>
+  <div class="moat-row">
+    <div class="moat-label">WLED-SR</div>
+    <div class="moat-bar-bg"><div class="moat-bar wled" style="width: 40%;">FFT magnitude — "poor man's beat detection"</div></div>
+  </div>
+  <div class="moat-row">
+    <div class="moat-label">Nothing Glyph</div>
+    <div class="moat-bar-bg"><div class="moat-bar nothing" style="width: 20%;">Notifications only — no audio reactivity</div></div>
+  </div>
+  <div class="moat-row">
+    <div class="moat-label">Govee / Nanoleaf</div>
+    <div class="moat-bar-bg"><div class="moat-bar govee" style="width: 15%;">Mic-only FFT — volume = brightness</div></div>
+  </div>
+</div>
+
+<!-- BELIEFS -->
+<div class="section-header">
+  <span class="section-num">05</span>
+  <span class="section-title">Belief System — What Already Exists</span>
+</div>
+<p class="note" style="margin-bottom: 20px; font-size: 14px; color: var(--text-dim);">Seven belief themes extracted from your existing documents. These are the philosophical raw material for the manifesto.</p>
+
+<div class="beliefs-grid">
+  <div class="belief-chip">
+    <div class="belief-icon">💡</div>
+    <div class="belief-text">Light is content, not decoration</div>
+  </div>
+  <div class="belief-chip">
+    <div class="belief-icon">🏛</div>
+    <div class="belief-text">Studio identity, not hardware company</div>
+  </div>
+  <div class="belief-chip">
+    <div class="belief-icon">🔨</div>
+    <div class="belief-text">Craft over spectacle</div>
+  </div>
+  <div class="belief-chip">
+    <div class="belief-icon">🤫</div>
+    <div class="belief-text">Quiet confidence — anti-marketing</div>
+  </div>
+  <div class="belief-chip">
+    <div class="belief-icon">🎹</div>
+    <div class="belief-text">Instrument, not product</div>
+  </div>
+  <div class="belief-chip">
+    <div class="belief-icon">🔬</div>
+    <div class="belief-text">Domain authenticity — 40+ research notes deep</div>
+  </div>
+  <div class="belief-chip">
+    <div class="belief-icon">👁</div>
+    <div class="belief-text">Observation as method</div>
+  </div>
+</div>
+
+<!-- ENEMY CANDIDATES -->
+<div class="section-header">
+  <span class="section-num">06</span>
+  <span class="section-title">The Enemy — Top 3 Candidates</span>
+</div>
+<p class="note" style="margin-bottom: 24px; font-size: 14px; color: var(--text-dim);">Every strong manifesto names what it opposes. Not a competitor — a condition in the world. This choice cascades into the debut content sequence.</p>
+
+<div class="enemy-grid">
+  <div class="enemy-card e1">
+    <div class="rank">Safest — most provable</div>
+    <div class="enemy-name">"Volume as Meaning"</div>
+    <div class="enemy-desc">Every "music-reactive" product collapses music to one number: amplitude. Loud = bright. That's not music reactivity. It's loudness reactivity. The entire signal — rhythm, pitch, timbre, structure — is ignored.</div>
+    <div class="cascade">
+      <div class="cascade-label">Content leads with</div>
+      <div class="cascade-value">Phase Lock — two pulses resolving into sync</div>
+    </div>
+    <div class="cascade">
+      <div class="cascade-label">Manifesto verb</div>
+      <div class="cascade-value">"study" — we study the full signal</div>
+    </div>
+    <div class="strength-bar">
+      <div class="seg on"></div><div class="seg on"></div><div class="seg on"></div><div class="seg on"></div><div class="seg on"></div>
+    </div>
+  </div>
+
+  <div class="enemy-card e2">
+    <div class="rank">Broadest — most intuitive</div>
+    <div class="enemy-name">"Spectacle Without Substance"</div>
+    <div class="enemy-desc">RGB excess. Rainbow cycling. Every colour at once. The visual equivalent of shouting. LED products default to spectacle because spectacle requires no understanding of the signal.</div>
+    <div class="cascade">
+      <div class="cascade-label">Content leads with</div>
+      <div class="cascade-value">Negative Space — what K1 does with silence</div>
+    </div>
+    <div class="cascade">
+      <div class="cascade-label">Manifesto verb</div>
+      <div class="cascade-value">"refine" — we remove, not add</div>
+    </div>
+    <div class="strength-bar">
+      <div class="seg on"></div><div class="seg on"></div><div class="seg on"></div><div class="seg on"></div><div class="seg"></div>
+    </div>
+  </div>
+
+  <div class="enemy-card e3">
+    <div class="rank">Most ambitious — hardest to execute</div>
+    <div class="enemy-name">"Passive Consumption"</div>
+    <div class="enemy-desc">Technology demands nothing. Music plays in the background. Light does what it does. The user isn't invited to notice, interpret, or engage — only to consume.</div>
+    <div class="cascade">
+      <div class="cascade-label">Content leads with</div>
+      <div class="cascade-value">The Grammar — "watching for the moment..."</div>
+    </div>
+    <div class="cascade">
+      <div class="cascade-label">Manifesto verb</div>
+      <div class="cascade-value">"observe" — we invite active watching</div>
+    </div>
+    <div class="strength-bar">
+      <div class="seg on"></div><div class="seg on"></div><div class="seg on"></div><div class="seg"></div><div class="seg"></div>
+    </div>
+  </div>
+</div>
+
+<!-- VOICE DNA -->
+<div class="section-header">
+  <span class="section-num">07</span>
+  <span class="section-title">Voice DNA — Already Established</span>
+</div>
+
+<div class="voice-dna">
+  <div class="voice-col yes">
+    <h4>Sounds like SpectraSynq</h4>
+    <div class="phrase">"Studies of music as motion."</div>
+    <div class="phrase">"An attempt to make bass feel like mass."</div>
+    <div class="phrase">"Watching for the moment the void changes shape."</div>
+    <div class="phrase">"It actually follows the beat."</div>
+    <div class="phrase">"Algorithms + custom hardware."</div>
+    <div class="phrase">"Not yet. I'm publishing the studies first."</div>
+  </div>
+  <div class="voice-col no">
+    <h4>Never sounds like this</h4>
+    <div class="phrase">"We're so excited to announce..."</div>
+    <div class="phrase">"Revolutionising the LED experience."</div>
+    <div class="phrase">"Big things coming — stay tuned!"</div>
+    <div class="phrase">"Powered by ESP32-S3 with 256-bin FFT."</div>
+    <div class="phrase">"We're humbled by the response."</div>
+    <div class="phrase">"Drop your email for early access!"</div>
+  </div>
+</div>
+
+<!-- CROSS-DOMAIN LEVERAGE -->
+<div class="section-header">
+  <span class="section-num">08</span>
+  <span class="section-title">Cross-Domain Leverage</span>
+</div>
+
+<div class="leverage-grid">
+  <div class="leverage-card">
+    <span class="tag competitive">Competitive Intel</span>
+    <div class="leverage-title">Nothing's Glyph Density Pushback</div>
+    <div class="leverage-body">Nothing launched 4a Pro today with 137 mini-LEDs. Fans are pushing back on the reduced density from the flagship. K1 has 320 LEDs. Audiences care about quality of the light implementation — this is free market research.</div>
+    <div class="arrow">→ K1's density is a talking point reviewers will make for us</div>
+  </div>
+  <div class="leverage-card">
+    <span class="tag audience">Audience</span>
+    <div class="leverage-title">WLED-SR = 50K Pre-Qualified Buyers</div>
+    <div class="leverage-body">~50K active WLED-SR users already understand audio-reactive LEDs and have experienced DIY limitations (no beat tracking, inconsistent hardware). They'd upgrade to a refined instrument.</div>
+    <div class="arrow">→ Side-by-side content: same music, K1 vs WLED-SR</div>
+  </div>
+  <div class="leverage-card">
+    <span class="tag identity">Visual Identity</span>
+    <div class="leverage-title">Edge Line → Brand Motif → Everything</div>
+    <div class="leverage-body">Approving Edge Line as recognition device cascades immediately into: product page hero angle, graphic motif, favicon, social avatar, Blender render library priority.</div>
+    <div class="arrow">→ One decision unblocks 4 downstream workstreams</div>
+  </div>
+  <div class="leverage-card">
+    <span class="tag competitive">Competitive Intel</span>
+    <div class="leverage-title">TE Validates Premium + Limited Runs</div>
+    <div class="leverage-body">TE's $199-$2,199 range + EP-40 collab with King Jammy/Mad Professor + Analogue's Prototype Editions at $30 premium. The creative instrument market supports K1's $249 and limited-run model.</div>
+    <div class="arrow">→ Price validation from 3 independent reference brands</div>
+  </div>
+  <div class="leverage-card">
+    <span class="tag content">Content Strategy</span>
+    <div class="leverage-title">Enemy Choice → Debut Content Sequence</div>
+    <div class="leverage-body">"Volume as Meaning" → Phase Lock first. "Spectacle" → Negative Space first. "Passive Consumption" → the grammar framing. The manifesto isn't just philosophical — it determines what gets produced first.</div>
+    <div class="arrow">→ Philosophical decision has direct production consequences</div>
+  </div>
+  <div class="leverage-card">
+    <span class="tag content">Content Strategy</span>
+    <div class="leverage-title">TE Collab Model → K1 Artist Partnerships</div>
+    <div class="leverage-body">TE's EP-40 with reggae legends validated artist partnerships as product legitimacy signals. Study Concepts Bank already specifies music pairings (Dilla, Burial, Frahm, Eno). Long-arc play.</div>
+    <div class="arrow">→ Artist engagement with studies = credibility signal</div>
+  </div>
+</div>
+
+<!-- DECISIONS -->
+<div class="section-header">
+  <span class="section-num">09</span>
+  <span class="section-title">Decisions Required</span>
+</div>
+<p class="note" style="margin-bottom: 24px; font-size: 14px; color: var(--text-dim);">Decisions 3 and 4 are hard blockers for the manifesto sprint. Decisions 1 and 2 can run in parallel.</p>
+
+<div class="decision-grid">
+  <div class="decision-card parallel">
+    <div class="d-num">1</div>
+    <div class="d-status">Can Run in Parallel</div>
+    <div class="d-title">Colour Palette</div>
+    <div class="d-options">
+      <div class="d-option">
+        <div class="opt-marker"></div>
+        Void
+      </div>
+      <div class="d-option">
+        <div class="opt-marker"></div>
+        Mineral
+      </div>
+      <div class="d-option">
+        <div class="opt-marker"></div>
+        Oxide
+      </div>
+    </div>
+    <div class="d-unlocks">Unlocks → Visual identity, product page, packaging, Blender renders</div>
+  </div>
+
+  <div class="decision-card parallel">
+    <div class="d-num">2</div>
+    <div class="d-status">Can Run in Parallel</div>
+    <div class="d-title">Recognition Device</div>
+    <div class="d-options">
+      <div class="d-option rec">
+        <div class="opt-marker"></div>
+        Edge Line (primary) — recommended
+      </div>
+      <div class="d-option rec">
+        <div class="opt-marker"></div>
+        Centre-Out (secondary) — recommended
+      </div>
+      <div class="d-option">
+        <div class="opt-marker"></div>
+        Glow Sheet / Dark Frame / Listening Moment
+      </div>
+    </div>
+    <div class="d-unlocks">Unlocks → Photography guide, Blender library, graphic motif, favicon, landing page hero</div>
+  </div>
+
+  <div class="decision-card blocking">
+    <div class="d-num">3</div>
+    <div class="d-status">Blocking — Manifesto Cannot Proceed</div>
+    <div class="d-title">The Enemy</div>
+    <div class="d-options">
+      <div class="d-option" style="border-left: 3px solid var(--green); padding-left: 11px;">
+        <div class="opt-marker"></div>
+        "Volume as Meaning" — safest, most provable
+      </div>
+      <div class="d-option" style="border-left: 3px solid var(--blue); padding-left: 11px;">
+        <div class="opt-marker"></div>
+        "Spectacle Without Substance" — broadest resonance
+      </div>
+      <div class="d-option" style="border-left: 3px solid var(--purple); padding-left: 11px;">
+        <div class="opt-marker"></div>
+        "Passive Consumption" — most ambitious
+      </div>
+    </div>
+    <div class="d-unlocks">Unlocks → Manifesto Days 2-5, debut content sequence, long-term audience filter</div>
+  </div>
+
+  <div class="decision-card blocking">
+    <div class="d-num">4</div>
+    <div class="d-status">Blocking — Manifesto Cannot Proceed</div>
+    <div class="d-title">Manifesto Audience</div>
+    <div class="d-options">
+      <div class="d-option">
+        <div class="opt-marker"></div>
+        Internal only — team alignment, never published
+      </div>
+      <div class="d-option">
+        <div class="opt-marker"></div>
+        Dual-purpose — internal + eventually public (about page, brand book)
+      </div>
+    </div>
+    <div class="d-unlocks">Unlocks → Tone calibration for manifesto writing (Day 3)</div>
+  </div>
+</div>
+
+</div>
+
+</body>
+</html>

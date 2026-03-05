@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>D2 — Base × Accent Matrix</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', sans-serif;
+    background: #060606;
+    color: #ccc;
+    min-height: 100vh;
+  }
+
+  .header {
+    padding: 40px 48px 20px;
+    border-bottom: 1px solid #1a1a1a;
+  }
+  .header h1 { font-size: 14px; font-weight: 400; color: #555; letter-spacing: 2px; text-transform: uppercase; }
+  .header h2 { font-size: 28px; font-weight: 300; color: #eee; margin-top: 8px; }
+  .header p { font-size: 14px; color: #666; margin-top: 8px; max-width: 700px; line-height: 1.6; }
+
+  /* Selector row */
+  .selector-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 48px;
+    border-bottom: 1px solid #1a1a1a;
+    background: #090909;
+    flex-wrap: wrap;
+  }
+  .sel-group-label {
+    font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;
+    color: #444; min-width: 60px;
+  }
+  .sel-btn {
+    padding: 8px 16px; border-radius: 6px; border: 1px solid #222;
+    background: #0e0e0e; cursor: pointer; transition: all 0.2s;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .sel-btn:hover { border-color: #444; }
+  .sel-btn.active { border-color: #666; background: #1a1a1a; }
+  .sel-btn .dot { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #333; }
+  .sel-btn .sel-name { font-size: 12px; color: #bbb; }
+  .sel-btn .sel-hex { font-size: 10px; color: #555; font-family: monospace; }
+  .sel-btn.active .sel-name { color: #fff; }
+  .sel-divider { width: 1px; height: 28px; background: #222; margin: 0 8px; }
+
+  /* Contrast badge */
+  .contrast-bar {
+    padding: 12px 48px;
+    background: #080808;
+    border-bottom: 1px solid #1a1a1a;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    font-size: 12px;
+  }
+  .cb-label { color: #555; }
+  .cb-ratio { font-family: monospace; font-weight: 600; font-size: 14px; }
+  .cb-badge {
+    padding: 3px 10px; border-radius: 3px; font-size: 10px;
+    font-weight: 600; letter-spacing: 0.5px;
+  }
+  .cb-badge.aaa { background: rgba(80,200,120,0.15); color: #50c878; }
+  .cb-badge.aa { background: rgba(240,192,0,0.15); color: #f0c000; }
+  .cb-temp { color: #444; font-size: 11px; }
+
+  /* Preview grid */
+  .preview-area { padding: 24px 48px 48px; }
+  .context-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  .context-card {
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid #1a1a1a;
+  }
+  .card-label {
+    font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase;
+    color: #555; padding: 14px 20px 8px; background: #0a0a0a;
+  }
+
+  /* Landing mock */
+  .landing-mock {
+    padding: 48px 32px;
+    min-height: 300px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    transition: background 0.4s;
+  }
+  .landing-mock .land-eyebrow {
+    font-size: 11px; letter-spacing: 3px; text-transform: uppercase;
+    margin-bottom: 12px; transition: color 0.3s;
+  }
+  .landing-mock h3 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 52px; font-weight: 400; color: #fff;
+    line-height: 1; letter-spacing: 2px;
+  }
+  .landing-mock .land-sub {
+    font-size: 14px; color: #888; margin-top: 14px; line-height: 1.7; max-width: 400px;
+  }
+  .landing-mock .land-underline {
+    height: 2px; width: 60px; margin-top: 20px; transition: background 0.3s;
+  }
+  .landing-mock .cta {
+    display: inline-block; margin-top: 20px; padding: 13px 30px;
+    border-radius: 0; font-size: 12px; font-weight: 600;
+    letter-spacing: 1.5px; text-transform: uppercase; border: none;
+    cursor: pointer; transition: all 0.3s;
+  }
+
+  /* Logo mock */
+  .logo-mock {
+    padding: 40px 32px;
+    min-height: 300px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.4s;
+  }
+  .logo-mock .triangle-wrap {
+    width: 80px; height: 70px; position: relative; margin-bottom: 20px;
+  }
+  .logo-mock .triangle-wrap svg { width: 100%; height: 100%; }
+  .logo-mock .brand-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 32px; letter-spacing: 6px; color: #fff;
+  }
+  .logo-mock .brand-underline {
+    height: 2px; width: 100%; margin-top: 6px; transition: background 0.3s;
+  }
+  .logo-mock .brand-tagline {
+    font-size: 10px; letter-spacing: 3px; text-transform: uppercase;
+    color: #555; margin-top: 12px;
+  }
+
+  /* Product context mock */
+  .product-mock {
+    padding: 32px;
+    min-height: 300px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.4s;
+    position: relative;
+  }
+  .k1-bar {
+    width: 85%;
+    height: 52px;
+    background: #2a2a2e;
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 2px 20px rgba(0,0,0,0.5);
+  }
+  .k1-lgp {
+    position: absolute;
+    top: 6px; bottom: 6px; left: 8px; right: 8px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, #1a0a2e, #0a2040 30%, #2a0a30 50%, #0a2040 70%, #1a0a2e);
+    animation: lgpShift 6s ease-in-out infinite;
+  }
+  @keyframes lgpShift {
+    0%, 100% { background: linear-gradient(90deg, #1a0a2e, #0a3060 30%, #2a0a40 50%, #0a3060 70%, #1a0a2e); }
+    33% { background: linear-gradient(90deg, #2a1000, #804010 30%, #f08020 50%, #804010 70%, #2a1000); }
+    66% { background: linear-gradient(90deg, #0a2020, #106050 30%, #20a080 50%, #106050 70%, #0a2020); }
+  }
+  .k1-connector {
+    position: absolute;
+    top: -2px; bottom: -2px;
+    left: 50%; transform: translateX(-50%);
+    width: 24px;
+    background: #888;
+    border-radius: 3px;
+    z-index: 2;
+  }
+  .k1-spill {
+    width: 70%;
+    height: 30px;
+    margin-top: 8px;
+    border-radius: 0 0 50% 50%;
+    filter: blur(12px);
+    opacity: 0.3;
+    background: radial-gradient(ellipse, rgba(100,140,255,0.5), transparent);
+    animation: spillShift 6s ease-in-out infinite;
+  }
+  @keyframes spillShift {
+    0%, 100% { background: radial-gradient(ellipse, rgba(80,100,200,0.4), transparent); }
+    33% { background: radial-gradient(ellipse, rgba(240,128,32,0.4), transparent); }
+    66% { background: radial-gradient(ellipse, rgba(32,160,128,0.4), transparent); }
+  }
+  .product-label {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 16px; letter-spacing: 4px; color: #fff;
+    margin-top: 24px;
+  }
+  .product-sub {
+    font-size: 11px; color: #555; margin-top: 6px; letter-spacing: 1px;
+  }
+  .product-price {
+    margin-top: 16px; padding: 8px 20px;
+    font-size: 11px; font-weight: 600; letter-spacing: 1.5px;
+    text-transform: uppercase; border: 1px solid;
+    transition: all 0.3s;
+  }
+
+  /* Type specimen */
+  .type-mock {
+    padding: 32px;
+    min-height: 300px;
+    transition: background 0.4s;
+  }
+  .type-mock .type-bebas {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 56px; line-height: 1; letter-spacing: 3px; color: #fff;
+  }
+  .type-mock .type-accent-line {
+    height: 2px; width: 40px; margin: 14px 0; transition: background 0.3s;
+  }
+  .type-mock .type-body {
+    font-size: 13px; line-height: 1.7; color: #888; max-width: 360px;
+  }
+  .type-mock .type-caption {
+    font-size: 10px; letter-spacing: 2.5px; text-transform: uppercase;
+    margin-top: 16px; transition: color 0.3s;
+  }
+  .type-mock .type-pillars {
+    display: flex; gap: 16px; margin-top: 20px;
+  }
+  .type-mock .pillar {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 14px; letter-spacing: 2px; padding: 6px 14px;
+    border: 1px solid; border-radius: 0; transition: all 0.3s;
+  }
+
+  /* Info bar */
+  .info-bar {
+    margin: 0 48px 32px;
+    padding: 16px 20px;
+    border-radius: 8px;
+    border: 1px solid #1a1a1a;
+    background: #0a0a0a;
+    font-size: 13px;
+    color: #666;
+    line-height: 1.6;
+  }
+  .info-bar strong { color: #bbb; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Decision D2</h1>
+  <h2>Base × Accent — Find the right foundation</h2>
+  <p>Warm Black is dead. Test three cool-toned bases against three gold accents. Click any base, then any accent. The preview updates live. Find the combination that feels like K1.</p>
+</div>
+
+<!-- Base selector -->
+<div class="selector-row">
+  <span class="sel-group-label">Base</span>
+  <div class="sel-btn active" onclick="selectBase('rich')">
+    <div class="dot" style="background:#0A0A0A"></div>
+    <div><div class="sel-name">Rich Black</div><div class="sel-hex">#0A0A0A</div></div>
+  </div>
+  <div class="sel-btn" onclick="selectBase('anthracite')">
+    <div class="dot" style="background:#121214"></div>
+    <div><div class="sel-name">Anthracite</div><div class="sel-hex">#121214</div></div>
+  </div>
+  <div class="sel-btn" onclick="selectBase('onyx')">
+    <div class="dot" style="background:#0E0E10"></div>
+    <div><div class="sel-name">Onyx</div><div class="sel-hex">#0E0E10</div></div>
+  </div>
+
+  <div class="sel-divider"></div>
+
+  <span class="sel-group-label">Accent</span>
+  <div class="sel-btn active" onclick="selectAccent('studio')">
+    <div class="dot" style="background:#F0C000"></div>
+    <div><div class="sel-name">Studio Gold</div><div class="sel-hex">#F0C000</div></div>
+  </div>
+  <div class="sel-btn" onclick="selectAccent('warm')">
+    <div class="dot" style="background:#E5B800"></div>
+    <div><div class="sel-name">Warm Gold</div><div class="sel-hex">#E5B800</div></div>
+  </div>
+  <div class="sel-btn" onclick="selectAccent('saffron')">
+    <div class="dot" style="background:#CF9B1A"></div>
+    <div><div class="sel-name">Deep Saffron</div><div class="sel-hex">#CF9B1A</div></div>
+  </div>
+</div>
+
+<!-- Contrast info -->
+<div class="contrast-bar" id="contrastBar">
+  <span class="cb-label">Current pairing:</span>
+  <span id="cbPairing" style="color:#aaa">Rich Black + Studio Gold</span>
+  <span class="cb-label">Contrast:</span>
+  <span class="cb-ratio" id="cbRatio">—</span>
+  <span class="cb-badge" id="cbBadge">—</span>
+  <span style="flex:1"></span>
+  <span class="cb-temp" id="cbTemp">Neutral · No undertone</span>
+</div>
+
+<div class="preview-area">
+  <div class="context-grid">
+
+    <!-- Landing Page -->
+    <div class="context-card">
+      <div class="card-label">Landing Page Hero</div>
+      <div class="landing-mock" id="landingMock">
+        <div class="land-eyebrow" id="landEye">Founders Edition — 100 Units</div>
+        <h3>SPECTRA<br>SYNQ K1</h3>
+        <div class="land-sub">Light Guide Plate. Beat-tracked. Centre-origin. Music, studied as motion.</div>
+        <div class="land-underline" id="landLine"></div>
+        <button class="cta" id="landCta">RESERVE NOW</button>
+      </div>
+    </div>
+
+    <!-- Logo -->
+    <div class="context-card">
+      <div class="card-label">Logo + Brand Mark</div>
+      <div class="logo-mock" id="logoMock">
+        <div class="triangle-wrap">
+          <svg viewBox="0 0 100 87" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M50 0 L100 87 L0 87 Z" stroke="white" stroke-width="1.5" fill="none"/>
+            <line x1="25" y1="43.5" x2="75" y2="43.5" stroke="white" stroke-width="0.8"/>
+            <line x1="50" y1="0" x2="50" y2="87" stroke="white" stroke-width="0.8" opacity="0.4"/>
+            <line x1="25" y1="43.5" x2="50" y2="87" stroke="white" stroke-width="0.8" opacity="0.4"/>
+            <line x1="75" y1="43.5" x2="50" y2="87" stroke="white" stroke-width="0.8" opacity="0.4"/>
+          </svg>
+        </div>
+        <div class="brand-name">SPECTRASYNQ</div>
+        <div class="brand-underline" id="logoLine"></div>
+        <div class="brand-tagline">Studies of music as motion</div>
+      </div>
+    </div>
+
+    <!-- Product context -->
+    <div class="context-card">
+      <div class="card-label">Product Context — K1 with Ambient Spill</div>
+      <div class="product-mock" id="productMock">
+        <div class="k1-bar">
+          <div class="k1-lgp"></div>
+          <div class="k1-connector"></div>
+        </div>
+        <div class="k1-spill"></div>
+        <div class="product-label">K1 LIGHTWAVE</div>
+        <div class="product-sub">330mm · 320 LEDs · Centre-origin · Beat-tracked</div>
+        <div class="product-price" id="productPrice">£249 — Founders Edition</div>
+      </div>
+    </div>
+
+    <!-- Typography -->
+    <div class="context-card">
+      <div class="card-label">Typography + Voice</div>
+      <div class="type-mock" id="typeMock">
+        <div class="type-bebas">LIGHT,<br>STUDIED.</div>
+        <div class="type-accent-line" id="typeLine"></div>
+        <div class="type-body">We study music as motion. Every effect is an observation — a hypothesis about what sound looks like when given permission to move through light.</div>
+        <div class="type-caption" id="typeCap">Studio Journal — Issue 01</div>
+        <div class="type-pillars">
+          <div class="pillar" id="pillar1">EMPOWER</div>
+          <div class="pillar" id="pillar2">ENRICH</div>
+          <div class="pillar" id="pillar3">EVOLVE</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="info-bar">
+  <strong>What changed:</strong> Warm Black (#141210) killed — warm undertone read as muddy. Testing three cool-toned bases that align with K1's anthracite housing. The gold accent references K1's most distinctive light state: the molten amber "analogue flame."
+</div>
+
+<script>
+const bases = {
+  rich:       { hex: '#0A0A0A', name: 'Rich Black',  temp: 'Neutral · No undertone · Industry standard' },
+  anthracite: { hex: '#121214', name: 'Anthracite',   temp: 'Cool (blue) · Matches K1 housing temperature' },
+  onyx:       { hex: '#0E0E10', name: 'Onyx',         temp: 'Cool (violet) · Pairs with K1 violet effect states' },
+};
+
+const accents = {
+  studio:  { hex: '#F0C000', name: 'Studio Gold' },
+  warm:    { hex: '#E5B800', name: 'Warm Gold' },
+  saffron: { hex: '#CF9B1A', name: 'Deep Saffron' },
+};
+
+// Precomputed contrast ratios (WCAG 2.1)
+const contrastMap = {
+  'rich_studio': 11.68, 'rich_warm': 10.66, 'rich_saffron': 7.96,
+  'anthracite_studio': 10.52, 'anthracite_warm': 9.60, 'anthracite_saffron': 7.17,
+  'onyx_studio': 11.12, 'onyx_warm': 10.16, 'onyx_saffron': 7.58,
+};
+
+let currentBase = 'rich';
+let currentAccent = 'studio';
+
+function getLuminance(hex) {
+  const r = parseInt(hex.slice(1,3),16)/255;
+  const g = parseInt(hex.slice(3,5),16)/255;
+  const b = parseInt(hex.slice(5,7),16)/255;
+  const sR = r <= 0.03928 ? r/12.92 : Math.pow((r+0.055)/1.055, 2.4);
+  const sG = g <= 0.03928 ? g/12.92 : Math.pow((g+0.055)/1.055, 2.4);
+  const sB = b <= 0.03928 ? b/12.92 : Math.pow((b+0.055)/1.055, 2.4);
+  return 0.2126*sR + 0.7152*sG + 0.0722*sB;
+}
+
+function getContrast(hex1, hex2) {
+  const l1 = getLuminance(hex1);
+  const l2 = getLuminance(hex2);
+  const lighter = Math.max(l1,l2);
+  const darker = Math.min(l1,l2);
+  return ((lighter + 0.05) / (darker + 0.05)).toFixed(2);
+}
+
+function selectBase(key) {
+  currentBase = key;
+  document.querySelectorAll('.selector-row .sel-btn').forEach((b,i) => {
+    if (i < 3) b.classList.toggle('active', ['rich','anthracite','onyx'][i] === key);
+  });
+  update();
+}
+
+function selectAccent(key) {
+  currentAccent = key;
+  document.querySelectorAll('.selector-row .sel-btn').forEach((b,i) => {
+    if (i >= 4) b.classList.toggle('active', ['studio','warm','saffron'][i-4] === key);
+  });
+  update();
+}
+
+function update() {
+  const base = bases[currentBase];
+  const accent = accents[currentAccent];
+  const ratio = getContrast(base.hex, accent.hex);
+  const ratioNum = parseFloat(ratio);
+
+  // Contrast bar
+  document.getElementById('cbPairing').textContent = base.name + ' + ' + accent.name;
+  document.getElementById('cbRatio').textContent = ratio + ':1';
+  document.getElementById('cbRatio').style.color = accent.hex;
+  const badge = document.getElementById('cbBadge');
+  if (ratioNum >= 7) {
+    badge.textContent = 'AAA PASS';
+    badge.className = 'cb-badge aaa';
+  } else if (ratioNum >= 4.5) {
+    badge.textContent = 'AA PASS';
+    badge.className = 'cb-badge aa';
+  }
+  document.getElementById('cbTemp').textContent = base.temp;
+
+  // All mock backgrounds
+  const mocks = ['landingMock','logoMock','productMock','typeMock'];
+  mocks.forEach(id => {
+    document.getElementById(id).style.background = base.hex;
+  });
+
+  // Landing
+  document.getElementById('landEye').style.color = accent.hex;
+  document.getElementById('landLine').style.background = accent.hex;
+  const cta = document.getElementById('landCta');
+  cta.style.background = accent.hex;
+  cta.style.color = base.hex;
+
+  // Logo
+  document.getElementById('logoLine').style.background = accent.hex;
+
+  // Product
+  const pp = document.getElementById('productPrice');
+  pp.style.borderColor = accent.hex;
+  pp.style.color = accent.hex;
+
+  // Type
+  document.getElementById('typeLine').style.background = accent.hex;
+  document.getElementById('typeCap').style.color = accent.hex;
+  ['pillar1','pillar2','pillar3'].forEach(id => {
+    document.getElementById(id).style.borderColor = accent.hex;
+    document.getElementById(id).style.color = accent.hex;
+  });
+}
+
+// Init
+update();
+</script>
+</body>
+</html>

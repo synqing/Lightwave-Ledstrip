@@ -248,6 +248,26 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
     {EID_LGP_QUASICRYSTAL_LATTICE, PM_STR("Quasicrystal Lattice"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP, PM_STR("Penrose-tiling aperiodic lattice shimmer"), PM_STR("5-fold rotational symmetry, Fibonacci spacing, diffraction peaks"), PM_STR("")},
     {EID_LGP_FRESNEL_CAUSTIC_SWEEP, PM_STR("Fresnel Caustic Sweep"), PatternFamily::QUANTUM, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::PHYSICS, PM_STR("Fresnel integral caustic envelope sweeping outward"), PM_STR("Fresnel integrals C(x)/S(x), Cornu spiral projection, caustic focus"), PM_STR("")},
     {EID_LGP_TIME_REVERSAL_MIRROR_AR, PM_STR("Time-Reversal Mirror AR"), PatternFamily::QUANTUM, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::PHYSICS | PatternTags::SPECTRAL, PM_STR("Audio-reactive time-reversal with beat-triggered playback"), PM_STR("Beat-gated record/play, audio envelope modulation, spectral colouring"), PM_STR("Time-Reversal Mirror")},
+    {EID_LGP_WATER_CAUSTICS_AR, PM_STR("LGP Water Caustics AR"), PatternFamily::ADVANCED_OPTICAL, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::SPECTRAL | PatternTags::PHYSICS, PM_STR("Audio-shaped caustic filaments with beat cresting"), PM_STR("Reactive ray-envelope warp, transient cusp density lift"), PM_STR("LGP Water Caustics")},
+    {EID_LGP_SCHLIEREN_FLOW_AR, PM_STR("LGP Schlieren Flow AR"), PatternFamily::ADVANCED_OPTICAL, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::SPECTRAL | PatternTags::PHYSICS, PM_STR("Gradient-flow shimmer driven by spectral transients"), PM_STR("Bass/mid flow advection, treble edge sharpening"), PM_STR("LGP Schlieren Flow")},
+    {EID_LGP_TALBOT_CARPET_AR, PM_STR("LGP Talbot Carpet AR"), PatternFamily::INTERFERENCE, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::STANDING | PatternTags::PHYSICS, PM_STR("Self-imaging Talbot lattice with rhythmic phase drive"), PM_STR("Fresnel harmonic sum, beat-coupled phase locks"), PM_STR("LGP Talbot Carpet")},
+    {EID_LGP_AIRY_COMET_AR, PM_STR("LGP Airy Comet AR"), PatternFamily::INTERFERENCE, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::TRAVELING | PatternTags::PHYSICS, PM_STR("Airy lobe comet with beat impulse acceleration"), PM_STR("Parabolic Airy motion with treble-tail contrast"), PM_STR("LGP Airy Comet")},
+    {EID_LGP_CYMATIC_LADDER_AR, PM_STR("LGP Cymatic Ladder AR"), PatternFamily::INTERFERENCE, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::STANDING | PatternTags::PHYSICS, PM_STR("Audio-quantised standing-wave ladder modes"), PM_STR("Harmonic mode quantisation with hysteretic node transitions"), PM_STR("LGP Cymatic Ladder")},
+    {EID_LGP_MACH_DIAMONDS_AR, PM_STR("LGP Mach Diamonds AR"), PatternFamily::INTERFERENCE, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::STANDING | PatternTags::PHYSICS, PM_STR("Shock-cell diamonds compressed by bass and beat"), PM_STR("Transient thrust compression with smooth spacing relaxation"), PM_STR("LGP Mach Diamonds")},
+    {EID_LGP_REACTION_DIFFUSION_AR, PM_STR("LGP Reaction Diffusion AR"), PatternFamily::NOVEL_PHYSICS, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::PHYSICS, PM_STR("Gray-Scott fields modulated by audio energy"), PM_STR("Audio-guided feed/kill drift with reactive contour gain"), PM_STR("LGP Reaction Diffusion")},
+    {EID_LGP_RD_TRIANGLE_AR, PM_STR("LGP RD Triangle AR"), PatternFamily::NOVEL_PHYSICS, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::PHYSICS, PM_STR("RD front wedge with beat-gated edge emphasis"), PM_STR("Triangle front thresholds with transient contour reinforcement"), PM_STR("LGP RD Triangle")},
+    {EID_LGP_MOIRE_CATHEDRAL_AR, PM_STR("LGP Moire Cathedral AR"), PatternFamily::INTERFERENCE, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::MOIRE | PatternTags::STANDING, PM_STR("Cathedral moire arches with rhythmic pressure"), PM_STR("Dual-grating beat envelopes with reactive rib contrast"), PM_STR("LGP Moire Cathedral")},
+    {EID_LGP_SUPERFORMULA_GLYPH_AR, PM_STR("LGP Living Glyph AR"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::PHYSICS, PM_STR("Morphing supershape sigils with audio contour drive"), PM_STR("Superformula parameter drift with beat-locked emphasis"), PM_STR("LGP Living Glyph")},
+    {EID_LGP_SPIROGRAPH_CROWN_AR, PM_STR("LGP Spirograph Crown AR"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP, PM_STR("Hypotrochoid crown loops with transient glint accents"), PM_STR("Reactive gear-flower phase and sparkle envelope"), PM_STR("LGP Spirograph Crown")},
+    {EID_LGP_ROSE_BLOOM_AR, PM_STR("LGP Rose Bloom AR"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP, PM_STR("Rhodonea petal bloom animated by musical energy"), PM_STR("Petal count drift with beat-breathing bloom envelope"), PM_STR("LGP Rose Bloom")},
+    {EID_LGP_HARMONOGRAPH_HALO_AR, PM_STR("LGP Harmonograph Halo AR"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP, PM_STR("Lissajous halo loops with chord and beat modulation"), PM_STR("Integer-ratio orbital field with reactive radius pressure"), PM_STR("LGP Harmonograph Halo")},
+    {EID_LGP_RULE30_CATHEDRAL_AR, PM_STR("LGP Rule 30 Cathedral AR"), PatternFamily::NOVEL_PHYSICS, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP, PM_STR("Rule-30 textile cathedral paced by rhythm"), PM_STR("Cellular automaton growth with transient-driven contrast bands"), PM_STR("LGP Rule 30 Cathedral")},
+    {EID_LGP_LANGTON_HIGHWAY_AR, PM_STR("LGP Langton Highway AR"), PatternFamily::NOVEL_PHYSICS, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP, PM_STR("Langton emergence with audio-guided reveal pacing"), PM_STR("Ant-grid projection with beat-biased route emphasis"), PM_STR("LGP Langton Highway")},
+    {EID_LGP_CHIMERA_CROWN_AR, PM_STR("Chimera Crown AR"), PatternFamily::MATHEMATICAL, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::PHYSICS, PM_STR("Kuramoto domain coherence fractured by transients"), PM_STR("Phase-coupled oscillator field with reactive coherence forcing"), PM_STR("Chimera Crown")},
+    {EID_LGP_CATASTROPHE_CAUSTICS_AR, PM_STR("Catastrophe Caustics AR"), PatternFamily::QUANTUM, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::PHYSICS, PM_STR("Caustic envelope focus driven by beat and flux"), PM_STR("Ray histogram concentration with transient cusp flares"), PM_STR("Catastrophe Caustics")},
+    {EID_LGP_HYPERBOLIC_PORTAL_AR, PM_STR("Hyperbolic Portal AR"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP, PM_STR("Poincare-style portal breathing with audio depth"), PM_STR("atanh edge stretch with reactive rib and core modulation"), PM_STR("Hyperbolic Portal")},
+    {EID_LGP_LORENZ_RIBBON_AR, PM_STR("Lorenz Ribbon AR"), PatternFamily::MATHEMATICAL, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::PHYSICS, PM_STR("Chaotic attractor ribbon energised by spectral motion"), PM_STR("Lorenz trail projection with audio-conditioned glow memory"), PM_STR("Lorenz Ribbon")},
+    {EID_LGP_IFS_BIO_RELIC_AR, PM_STR("IFS Botanical Relic AR"), PatternFamily::ORGANIC, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP, PM_STR("Fractal botanical growth sculpted by harmonic envelopes"), PM_STR("IFS radial histogram with reactive vein density and tint"), PM_STR("IFS Botanical Relic")},
     {EID_LGP_TIME_REVERSAL_MIRROR_MOD1, PM_STR("Time-Reversal Mirror Mod1"), PatternFamily::QUANTUM, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::PHYSICS, PM_STR("Time-reversal with dispersive medium (frequency-dependent speed)"), PM_STR("Dispersive wave equation, chromatic spreading on replay, focus inversion"), PM_STR("Time-Reversal Mirror")},
     {EID_LGP_TIME_REVERSAL_MIRROR_MOD2, PM_STR("Time-Reversal Mirror Mod2"), PatternFamily::QUANTUM, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::PHYSICS, PM_STR("Time-reversal with nonlinear medium (amplitude-dependent speed)"), PM_STR("Nonlinear wave, shock formation on forward, shock healing on reversal"), PM_STR("Time-Reversal Mirror")},
     {EID_LGP_TIME_REVERSAL_MIRROR_MOD3, PM_STR("Time-Reversal Mirror Mod3"), PatternFamily::QUANTUM, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::PHYSICS, PM_STR("Time-reversal with lossy medium (absorption on forward, gain on replay)"), PM_STR("Lossy wave equation, exponential decay forward, exponential gain reverse"), PM_STR("Time-Reversal Mirror")}
@@ -501,7 +521,29 @@ static const EffectId REACTIVE_EFFECT_IDS[] PROGMEM = {
     EID_LGP_SPECTRAL_KNOT,                   // old 158: LGP Spectral Knot
     EID_LGP_SALIENCY_BLOOM,                  // old 159: LGP Saliency Bloom
     EID_LGP_TRANSIENT_LATTICE,               // old 160: LGP Transient Lattice
-    EID_LGP_WAVELET_MIRROR                   // old 161: LGP Wavelet Mirror
+    EID_LGP_WAVELET_MIRROR,                  // old 161: LGP Wavelet Mirror
+
+    // 5-layer audio-reactive variants (0x1Cxx)
+    EID_LGP_WATER_CAUSTICS_AR,
+    EID_LGP_SCHLIEREN_FLOW_AR,
+    EID_LGP_TALBOT_CARPET_AR,
+    EID_LGP_AIRY_COMET_AR,
+    EID_LGP_CYMATIC_LADDER_AR,
+    EID_LGP_MACH_DIAMONDS_AR,
+    EID_LGP_REACTION_DIFFUSION_AR,
+    EID_LGP_RD_TRIANGLE_AR,
+    EID_LGP_MOIRE_CATHEDRAL_AR,
+    EID_LGP_SUPERFORMULA_GLYPH_AR,
+    EID_LGP_SPIROGRAPH_CROWN_AR,
+    EID_LGP_ROSE_BLOOM_AR,
+    EID_LGP_HARMONOGRAPH_HALO_AR,
+    EID_LGP_RULE30_CATHEDRAL_AR,
+    EID_LGP_LANGTON_HIGHWAY_AR,
+    EID_LGP_CHIMERA_CROWN_AR,
+    EID_LGP_CATASTROPHE_CAUSTICS_AR,
+    EID_LGP_HYPERBOLIC_PORTAL_AR,
+    EID_LGP_LORENZ_RIBBON_AR,
+    EID_LGP_IFS_BIO_RELIC_AR
 };
 static constexpr uint8_t REACTIVE_EFFECT_COUNT = sizeof(REACTIVE_EFFECT_IDS) / sizeof(EffectId);
 

@@ -171,6 +171,26 @@
 #include "ieffect/LGPBirefringentShearRadialEffect.h"
 #include "ieffect/LGPSolitonWavesRadialEffect.h"
 #include "ieffect/LGPNeuralNetworkRadialEffect.h"
+#include "ieffect/LGPMachDiamondsAREffect.h"
+#include "ieffect/LGPWaterCausticsAREffect.h"
+#include "ieffect/LGPSchlierenFlowAREffect.h"
+#include "ieffect/LGPTalbotCarpetAREffect.h"
+#include "ieffect/LGPAiryCometAREffect.h"
+#include "ieffect/LGPCymaticLadderAREffect.h"
+#include "ieffect/LGPReactionDiffusionAREffect.h"
+#include "ieffect/LGPRDTriangleAREffect.h"
+#include "ieffect/LGPMoireCathedralAREffect.h"
+#include "ieffect/LGPSuperformulaGlyphAREffect.h"
+#include "ieffect/LGPSpirographCrownAREffect.h"
+#include "ieffect/LGPRoseBloomAREffect.h"
+#include "ieffect/LGPHarmonographHaloAREffect.h"
+#include "ieffect/LGPRule30CathedralAREffect.h"
+#include "ieffect/LGPLangtonHighwayAREffect.h"
+#include "ieffect/LGPChimeraCrownAREffect.h"
+#include "ieffect/LGPCatastropheCausticsAREffect.h"
+#include "ieffect/LGPHyperbolicPortalAREffect.h"
+#include "ieffect/LGPLorenzRibbonAREffect.h"
+#include "ieffect/LGPIFSBioRelicAREffect.h"
 #include "utils/FastLEDOptim.h"
 #include "../core/narrative/NarrativeEngine.h"
 #include <FastLED.h>
@@ -1207,8 +1227,90 @@ uint16_t registerAllEffects(RendererActor* renderer) {
     renderer->registerEffect(EID_LGP_NEURAL_NETWORK_RADIAL, &neuralNetworkRadialInstance);
     total++;
 
+    // =============== 5-Layer Audio-Reactive Variants (0x1Cxx) ===============
+
+    static ieffect::LGPMachDiamondsAREffect machDiamondsARInstance;
+    renderer->registerEffect(EID_LGP_MACH_DIAMONDS_AR, &machDiamondsARInstance);
+    total++;
+
+    static ieffect::LGPSpirographCrownAREffect spirographCrownARInstance;
+    renderer->registerEffect(EID_LGP_SPIROGRAPH_CROWN_AR, &spirographCrownARInstance);
+    total++;
+
+    static ieffect::LGPWaterCausticsAREffect waterCausticsARInstance;
+    renderer->registerEffect(EID_LGP_WATER_CAUSTICS_AR, &waterCausticsARInstance);
+    total++;
+
+    static ieffect::LGPSchlierenFlowAREffect schlierenFlowARInstance;
+    renderer->registerEffect(EID_LGP_SCHLIEREN_FLOW_AR, &schlierenFlowARInstance);
+    total++;
+
+    static ieffect::LGPTalbotCarpetAREffect talbotCarpetARInstance;
+    renderer->registerEffect(EID_LGP_TALBOT_CARPET_AR, &talbotCarpetARInstance);
+    total++;
+
+    static ieffect::LGPAiryCometAREffect airyCometARInstance;
+    renderer->registerEffect(EID_LGP_AIRY_COMET_AR, &airyCometARInstance);
+    total++;
+
+    static ieffect::LGPCymaticLadderAREffect cymaticLadderARInstance;
+    renderer->registerEffect(EID_LGP_CYMATIC_LADDER_AR, &cymaticLadderARInstance);
+    total++;
+
+    static ieffect::LGPReactionDiffusionAREffect reactionDiffusionARInstance;
+    renderer->registerEffect(EID_LGP_REACTION_DIFFUSION_AR, &reactionDiffusionARInstance);
+    total++;
+
+    static ieffect::LGPRDTriangleAREffect rdTriangleARInstance;
+    renderer->registerEffect(EID_LGP_RD_TRIANGLE_AR, &rdTriangleARInstance);
+    total++;
+
+    static ieffect::LGPMoireCathedralAREffect moireCathedralARInstance;
+    renderer->registerEffect(EID_LGP_MOIRE_CATHEDRAL_AR, &moireCathedralARInstance);
+    total++;
+
+    static ieffect::LGPSuperformulaGlyphAREffect superformulaGlyphARInstance;
+    renderer->registerEffect(EID_LGP_SUPERFORMULA_GLYPH_AR, &superformulaGlyphARInstance);
+    total++;
+
+    static ieffect::LGPRoseBloomAREffect roseBloomARInstance;
+    renderer->registerEffect(EID_LGP_ROSE_BLOOM_AR, &roseBloomARInstance);
+    total++;
+
+    static ieffect::LGPHarmonographHaloAREffect harmonographHaloARInstance;
+    renderer->registerEffect(EID_LGP_HARMONOGRAPH_HALO_AR, &harmonographHaloARInstance);
+    total++;
+
+    static ieffect::LGPRule30CathedralAREffect rule30CathedralARInstance;
+    renderer->registerEffect(EID_LGP_RULE30_CATHEDRAL_AR, &rule30CathedralARInstance);
+    total++;
+
+    static ieffect::LGPLangtonHighwayAREffect langtonHighwayARInstance;
+    renderer->registerEffect(EID_LGP_LANGTON_HIGHWAY_AR, &langtonHighwayARInstance);
+    total++;
+
+    static ieffect::LGPChimeraCrownAREffect chimeraCrownARInstance;
+    renderer->registerEffect(EID_LGP_CHIMERA_CROWN_AR, &chimeraCrownARInstance);
+    total++;
+
+    static ieffect::LGPCatastropheCausticsAREffect catastropheCausticsARInstance;
+    renderer->registerEffect(EID_LGP_CATASTROPHE_CAUSTICS_AR, &catastropheCausticsARInstance);
+    total++;
+
+    static ieffect::LGPHyperbolicPortalAREffect hyperbolicPortalARInstance;
+    renderer->registerEffect(EID_LGP_HYPERBOLIC_PORTAL_AR, &hyperbolicPortalARInstance);
+    total++;
+
+    static ieffect::LGPLorenzRibbonAREffect lorenzRibbonARInstance;
+    renderer->registerEffect(EID_LGP_LORENZ_RIBBON_AR, &lorenzRibbonARInstance);
+    total++;
+
+    static ieffect::LGPIFSBioRelicAREffect ifsBioRelicARInstance;
+    renderer->registerEffect(EID_LGP_IFS_BIO_RELIC_AR, &ifsBioRelicARInstance);
+    total++;
+
     // =============== EFFECT COUNT PARITY VALIDATION ===============
-    constexpr uint16_t EXPECTED_EFFECT_COUNT = 166;  // Was 173, removed 7 dead/broken effects (2026-03-02)
+    constexpr uint16_t EXPECTED_EFFECT_COUNT = 186;  // 166 base + 6 wave-1 AR + 14 wave-2 AR
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

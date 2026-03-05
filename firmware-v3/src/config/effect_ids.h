@@ -64,7 +64,8 @@ constexpr uint8_t FAMILY_SHOWPIECE_PACK3 = 0x1B;  // Showpiece Pack 3
 // Reserved Family Blocks
 // ============================================================================
 
-constexpr uint8_t FAMILY_RESERVED_START = 0x1C;  // 0x1C-0xEF reserved for expansion
+constexpr uint8_t FAMILY_FIVE_LAYER_AR  = 0x1C;  // 5-Layer Audio-Reactive Variants
+constexpr uint8_t FAMILY_RESERVED_START = 0x1D;  // 0x1D-0xEF reserved for expansion
 constexpr uint8_t FAMILY_OTA_USER       = 0xF0;  // OTA-provisioned / user-uploaded effects
 
 // ============================================================================
@@ -306,7 +307,29 @@ constexpr EffectId EID_LGP_TIME_REVERSAL_MIRROR_MOD1       = 0x1B06;  // Time-Re
 constexpr EffectId EID_LGP_TIME_REVERSAL_MIRROR_MOD2       = 0x1B07;  // Time-Reversal Mirror Mod2
 constexpr EffectId EID_LGP_TIME_REVERSAL_MIRROR_MOD3       = 0x1B08;  // Time-Reversal Mirror Mod3
 
-// Total: 174 IDs assigned (173 active, 1 retired)
+// --- 5-Layer Audio-Reactive Variants (0x1Cxx) ---
+constexpr EffectId EID_LGP_WATER_CAUSTICS_AR               = 0x1C00;  // Water Caustics (5-Layer AR)
+constexpr EffectId EID_LGP_SCHLIEREN_FLOW_AR                = 0x1C01;  // Schlieren Flow (5-Layer AR)
+constexpr EffectId EID_LGP_TALBOT_CARPET_AR                 = 0x1C02;  // Talbot Carpet (5-Layer AR)
+constexpr EffectId EID_LGP_AIRY_COMET_AR                    = 0x1C03;  // Airy Comet (5-Layer AR)
+constexpr EffectId EID_LGP_CYMATIC_LADDER_AR                = 0x1C04;  // Cymatic Ladder (5-Layer AR)
+constexpr EffectId EID_LGP_MACH_DIAMONDS_AR                 = 0x1C05;  // Mach Diamonds (5-Layer AR)
+constexpr EffectId EID_LGP_REACTION_DIFFUSION_AR            = 0x1C06;  // Reaction Diffusion (5-Layer AR)
+constexpr EffectId EID_LGP_RD_TRIANGLE_AR                   = 0x1C07;  // RD Triangle (5-Layer AR)
+constexpr EffectId EID_LGP_MOIRE_CATHEDRAL_AR               = 0x1C08;  // Moire Cathedral (5-Layer AR)
+constexpr EffectId EID_LGP_SUPERFORMULA_GLYPH_AR            = 0x1C09;  // Living Glyph (5-Layer AR)
+constexpr EffectId EID_LGP_SPIROGRAPH_CROWN_AR              = 0x1C0A;  // Spirograph Crown (5-Layer AR)
+constexpr EffectId EID_LGP_ROSE_BLOOM_AR                    = 0x1C0B;  // Rose Bloom (5-Layer AR)
+constexpr EffectId EID_LGP_HARMONOGRAPH_HALO_AR             = 0x1C0C;  // Harmonograph Halo (5-Layer AR)
+constexpr EffectId EID_LGP_RULE30_CATHEDRAL_AR              = 0x1C0D;  // Rule 30 Cathedral (5-Layer AR)
+constexpr EffectId EID_LGP_LANGTON_HIGHWAY_AR               = 0x1C0E;  // Langton Highway (5-Layer AR)
+constexpr EffectId EID_LGP_CHIMERA_CROWN_AR                 = 0x1C0F;  // Chimera Crown (5-Layer AR)
+constexpr EffectId EID_LGP_CATASTROPHE_CAUSTICS_AR          = 0x1C10;  // Catastrophe Caustics (5-Layer AR)
+constexpr EffectId EID_LGP_HYPERBOLIC_PORTAL_AR             = 0x1C11;  // Hyperbolic Portal (5-Layer AR)
+constexpr EffectId EID_LGP_LORENZ_RIBBON_AR                 = 0x1C12;  // Lorenz Ribbon (5-Layer AR)
+constexpr EffectId EID_LGP_IFS_BIO_RELIC_AR                 = 0x1C13;  // IFS Botanical Relic (5-Layer AR)
+
+// Total: 194 IDs assigned (193 active, 1 retired)
 
 // ============================================================================
 // Migration: Old Sequential ID -> New Stable ID

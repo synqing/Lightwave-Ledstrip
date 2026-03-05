@@ -256,6 +256,28 @@ constexpr EffectId DISPLAY_ORDER[] = {
     EID_LGP_TIME_REVERSAL_MIRROR_MOD1,      // 168
     EID_LGP_TIME_REVERSAL_MIRROR_MOD2,      // 169
     EID_LGP_TIME_REVERSAL_MIRROR_MOD3,      // 170
+
+    // 5-Layer Audio-Reactive Variants (0x1Cxx)
+    EID_LGP_MACH_DIAMONDS_AR,               // 1C05
+    EID_LGP_SPIROGRAPH_CROWN_AR,            // 1C0A
+    EID_LGP_WATER_CAUSTICS_AR,              // 1C00
+    EID_LGP_SCHLIEREN_FLOW_AR,              // 1C01
+    EID_LGP_TALBOT_CARPET_AR,               // 1C02
+    EID_LGP_AIRY_COMET_AR,                  // 1C03
+    EID_LGP_CYMATIC_LADDER_AR,              // 1C04
+    EID_LGP_REACTION_DIFFUSION_AR,          // 1C06
+    EID_LGP_RD_TRIANGLE_AR,                 // 1C07
+    EID_LGP_MOIRE_CATHEDRAL_AR,             // 1C08
+    EID_LGP_SUPERFORMULA_GLYPH_AR,          // 1C09
+    EID_LGP_ROSE_BLOOM_AR,                  // 1C0B
+    EID_LGP_HARMONOGRAPH_HALO_AR,           // 1C0C
+    EID_LGP_RULE30_CATHEDRAL_AR,            // 1C0D
+    EID_LGP_LANGTON_HIGHWAY_AR,             // 1C0E
+    EID_LGP_CHIMERA_CROWN_AR,               // 1C0F
+    EID_LGP_CATASTROPHE_CAUSTICS_AR,        // 1C10
+    EID_LGP_HYPERBOLIC_PORTAL_AR,           // 1C11
+    EID_LGP_LORENZ_RIBBON_AR,               // 1C12
+    EID_LGP_IFS_BIO_RELIC_AR,               // 1C13
 };
 
 /// Number of effects in the display order (excludes retired slots)

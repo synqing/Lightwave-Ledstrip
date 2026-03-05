@@ -99,12 +99,6 @@ float computeSpeedTimeFactor(uint8_t speed) {
 }
 }  // namespace
 
-// Stub for legacy effect ID tracking - no-op when legacy effects are disabled
-// When legacy/LegacyEffectWrapper is re-enabled, this will be replaced by the real implementation
-namespace lightwaveos { namespace actors {
-    void setCurrentLegacyEffectId(uint8_t) {}  // No-op stub
-}}
-
 #include <cstring>
 #include <cstdio>
 

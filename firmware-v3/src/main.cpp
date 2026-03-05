@@ -3392,8 +3392,9 @@ void loop() {
     // Update NarrativeEngine (auto-play mode)
     NARRATIVE.update();
 
-    // Periodic system health checks every 10 seconds
-    if (now - lastStatus > 10000) {
+    // Periodic system health checks
+    static constexpr uint32_t kHealthCheckIntervalMs = 10000;
+    if (now - lastStatus > kHealthCheckIntervalMs) {
         // Periodic system health checks
 #if FEATURE_STACK_PROFILING
         lightwaveos::core::system::StackMonitor::checkAllTasks();

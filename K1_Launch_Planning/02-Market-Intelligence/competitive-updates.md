@@ -1,6 +1,6 @@
 # K1 Competitive Landscape Monitor
 
-**Last updated:** 5 March 2026 (Cycle 3)
+**Last updated:** 5 March 2026 (Cycle 4)
 **Monitoring cadence:** Per scheduled research cycle
 **Framing:** K1 is a creative instrument. Competitive set = creative tools and instruments, NOT consumer LED products.
 
@@ -17,6 +17,7 @@
 - **Field System Black** — Colourway refresh across mixer, recorder, and microphone. Demonstrates that colour editions are a reliable revenue and attention mechanism.
 - **OP-XY (rumoured)** — FCC filing discovered by Reddit users. CEO's Instagram dropping hints. New product category likely.
 - **NAMM 2026** — Featured among "best music tech gear" at NAMM 2026.
+- **Carhartt WIP "Audio Archives"** (Feb 2026) — Cultural collaboration: limited-edition OB-4 radio + 1,200-page publication + graphic apparel. 15 years of Carhartt WIP Radio celebrated with 17 independent radio stations.
 
 **K1 relevance:**
 - TE's strategy of culturally-themed limited editions (EP-40 Riddim) validates the Founders Edition approach.
@@ -28,12 +29,13 @@
 - **Carhartt WIP × TE "Audio Archives" collaboration** (Feb 2026) — Limited-edition OB-4 Magic Radio, 1,200-page publication, graphic apparel. Celebrates 15 years of Carhartt WIP Radio with 17 independent radio stations. [INFERENCE] TE continues to build brand through cultural collaborations, not just products. This is the model: hardware as cultural artefact, not just tool. K1's positioning as "studies of music as motion" operates in the same register.
 
 ### Nothing
-**Status:** Very active. Phone 4a + 4a Pro launching 5 March 2026. Glyph system in flux.
+**Status:** Very active. Phone 4a + 4a Pro launched 5 March 2026. Glyph system in flux.
 
 - **Phone (3)** — Launched July 2025. "Glyph Matrix" replaces prior Glyph Interface with circular dot-matrix LED on back. Significant design evolution.
 - **Phone (3a) Community Edition** — Transparent teal, retro Y2K gaming aesthetic. Community-driven design process.
-- **Phone (4a)** — Launched 5 March 2026. Redesigned Glyph: "Glyph Bar" — 9 individually controlled mini-LEDs, 40% brighter than previous (a) series. Simplified from previous designs. Four colourways including pink. £349 starting price.
-- **Phone (4a) Pro** — Also launching 5 March 2026. Returns to Glyph Matrix but scaled down: ~137 micro-LEDs vs Phone (3)'s 489. Fan backlash over the reduction — community disappointed by the downgrade. £499 starting price.
+- **Phone (4a)** — Launched 5 March 2026. Redesigned Glyph: "Glyph Bar" — 63 mini-LEDs across 6 square zones, 40% brighter than previous (a) series. Simplified from previous designs. [CORRECTION: Previous cycle stated 9 LEDs; actual count is 63 mini-LEDs in 6 independently controlled zones of 9 each.]
+- **Phone (4a) Pro** — Launched 5 March 2026. Returns to Glyph Matrix but scaled down: 137 micro-LEDs vs Phone (3)'s 489. Fan backlash over the reduction — community disappointed by the downgrade. New features include caller information display and shake-to-show charging progress.
+- **Phone (3) firmware update** (Feb 2026) — Improved camera, network stability, haptics, and Glyph features including bug fixes.
 
 **K1 relevance:**
 - Nothing continues to use LEDs as brand identity (Glyph), not just illumination. They've proven that light-as-interface creates brand recognition. Validates K1's core thesis.
@@ -41,15 +43,18 @@
 - [INFERENCE] Fan backlash at the 4a Pro's reduced Glyph Matrix reveals that the audience *cares* about the light features and will notice downgrades. For K1, this reinforces that light quality and expressiveness matter. The LGP's 320-LED, centre-origin architecture is architecturally superior to anything Nothing ships.
 
 ### Analogue
-**Status:** Shipping. Funtastic editions sold out.
+**Status:** Shipping. Active firmware updates. New limited editions.
 
-- **Analogue 3D** — Finally shipping (Nov 2025). N64 cartridge player in 4K via FPGA. $269.99 (price increase due to tariffs).
+- **Analogue 3D** — Shipping since Nov 2025. N64 cartridge player in 4K via FPGA. $269.99 (price increase due to tariffs).
 - **Funtastic Limited Editions** — Colourful translucent editions, shipped before Christmas 2025. Sold out rapidly.
-- Restocks ongoing into Jan 2026.
+- **"Prototype" Limited Editions** (Feb 2026) — Five transparent finishes (Ghost, Glacier, Extreme Green, Ocean, Atomic Purple) colour-matched to cancelled N64 prototypes from the late '90s. $300 each. Ships within 24–48 hours. Matching 8BitDo 64 controllers at $45.
+- **Firmware 1.2.0 + 1.2.1** (Feb 2026) — Force progressive output (removes interlacing for superior image quality), Nintendo Switch Online N64 controller support, improved auto-selection of Controller Pak/Rumble Pak.
 
 **K1 relevance:**
-- Analogue's premium pricing ($270 for a retro console) and "Funtastic" limited colourways demonstrate that the creative hardware audience pays for craft and aesthetic, not specs.
-- Their tariff-driven price increase ($20) was absorbed without visible backlash. [INFERENCE] The audience values the product enough to tolerate modest price adjustments — relevant to K1's $249 pricing.
+- Analogue's premium pricing ($270–$300 for a retro console) and limited colourway strategy demonstrates that the creative hardware audience pays for craft, aesthetic, and storytelling.
+- [INFERENCE] The "Prototype" editions are brilliant: they sell a *story* (cancelled N64 prototypes from the '90s), not just a colour. Each unit carries narrative weight. K1's Founders Edition should similarly embed meaning into the scarcity — not just "limited" but *why* it's limited and what story the first 100 units carry.
+- Their tariff-driven price increase ($20) was absorbed without visible backlash. The audience values the product enough to tolerate modest adjustments — relevant to K1's $249 pricing.
+- Firmware updates continuing months post-launch demonstrate the "extend hardware via software" model K1 should follow.
 
 ### Synthstrom Audible (Deluge)
 **Status:** Community firmware thriving. Open-source model working.
@@ -134,6 +139,25 @@
 
 ---
 
+## NAMM 2026 — Creative Instrument Landscape
+
+**Date:** January 2026 (Anaheim)
+**Status:** Covered. No audio-visual hardware exhibited.
+
+Key launches relevant to K1's competitive context:
+
+- **Korg Phase8** — Named "most creative instrument" at NAMM. Electro-acoustic instrument using 8 marimba-style steel resonators as input source. Physical vibrations → sound with infinite feedback. [INFERENCE] The award going to an instrument that bridges physical and digital (acoustic synthesis) validates the space K1 occupies — where physical light meets digital DSP. Both are about making the intangible tangible.
+- **ASM Leviasynth** — Polytouch engine, MPE, formant filter. $1,799 desktop / $2,499 keyboard. Spring 2026 shipping. Premium pricing accepted.
+- **Akai MPC XL** — Doubled CV outputs, 225GB SSD, touchstrip. Professional creative tool with premium positioning.
+- **Korg Kaoss Pad V** — 25-year legacy product updated. Demonstrates that creative hardware brands with conviction build multi-decade product lines.
+- **Eventide × Laurie Spiegel: Music Mouse** — Reviving a 40-year-old algorithmic composition tool. [INFERENCE] Heritage and artist collaboration drive attention in creative hardware. SpectraSynq should think about which artists/musicians would naturally align with the "studies of music as motion" framing.
+
+**K1 relevance:**
+- [FACT] No audio-visual hardware was exhibited at NAMM 2026. The creative instrument space remains purely audio-focused. K1 occupies an uncontested position at the intersection of creative instruments and visual output.
+- Premium pricing ($1,799–$2,499 for synths) is routine in the creative instrument space. K1 at $249 is entry-level by comparison.
+
+---
+
 ## Founders Edition / Limited Run Pricing Intel
 
 - **NVIDIA RTX 50 Founders Edition** — "Limited edition" positioning, sold through Best Buy. Demand exceeds supply.
@@ -146,26 +170,28 @@
 
 ---
 
-## Key Takeaways — Cycle 3 (5 March 2026)
+## Key Takeaways — Cycle 4 (5 March 2026)
 
-1. **Beat-tracking moat confirmed and widening.** WLED-SR's beat detection is literally described as "poor man's beat detection" in its own source code. K1's PipelineCore (256-bin FFT, onset + PLL) remains categorically unmatched in the consumer and DIY space. No one is closing this gap.
+1. **K1 occupies an uncontested position.** NAMM 2026 — the world's largest creative instrument show — had zero audio-visual hardware entries. The creative instrument space is purely audio. K1 is the only product that bridges creative instruments and visual output in a consumer-accessible form factor.
 
-2. **Monar funded at 147% in 2 days — but only 8 backers.** High per-unit pledges (~$920 USD average) suggest premium pricing. Validates the market thesis for audio-visual hardware but not yet a mass-market signal. Their AI + screen approach creates a clean competitive distinction from K1's DSP + physical light approach.
+2. **Beat-tracking moat intact and widening.** WLED-SR beat detection remains threshold-based ("poor man's beat detection" per their own source). No third-party solutions run on-device. K1's PipelineCore (256-bin FFT, onset + PLL) remains categorically unmatched. No one in the consumer, DIY, or creative instrument space is closing this gap.
 
-3. **Nothing's Glyph is *regressing*.** Phone 4a simplifies to a 9-LED "Glyph Bar." Phone 4a Pro reduces Glyph Matrix from 489 to ~137 micro-LEDs. Fan backlash is real — the audience cares about light features. K1's 320-LED LGP is architecturally superior and evolving in the opposite direction (more expressiveness, not less).
+3. **Analogue's "Prototype" editions prove storytelling sells scarcity.** Colour-matched to cancelled N64 prototypes from the '90s. $300 each. The story is the product. K1's Founders Edition needs similar narrative depth — not just "limited to 100 units" but why those 100 units matter.
 
-4. **TE continues to build brand through cultural collaboration.** The Carhartt WIP × TE "Audio Archives" project (limited OB-4 radio + 1,200-page book + apparel) demonstrates that hardware as cultural artefact > hardware as product. K1's "studies of music as motion" framing operates in the same register.
+4. **Nothing Phone 4a/4a Pro launched today — Glyph regression confirmed.** 4a has 63 mini-LEDs (simplified "Glyph Bar"). 4a Pro scales Glyph Matrix down from 489 to 137 micro-LEDs. Fan backlash visible and real. K1's 320-LED LGP continues in the opposite direction — more expressiveness, not less.
 
-5. **TE OP-XY discounted $600 four months post-launch.** [INFERENCE] The creative hardware audience has price limits even at the premium tier. $2,299 was too ambitious; $1,699 may be the ceiling. K1 at $249 is well within the proven comfort zone.
+5. **Creative instrument pricing makes K1 look accessible.** NAMM 2026 pricing: ASM Leviasynth $1,799–$2,499, Akai MPC XL premium tier, TE OP-XY at $1,699 (post-discount). K1 at $249 is entry-level by creative instrument standards.
 
-6. **B&O at 100 years models "Quiet Confidence" in practice.** Timeless craft, architectural presence, premium materials. Their recognition device (products as sculpture) directly validates K1's approach.
+6. **Monar Kickstarter tracking.** Still 8 backers at 147% funded. High average pledge (~$920) suggests premium SKUs. Campaign runs to 17 April. Watch backer count, not funding percentage.
+
+7. **Artist collaboration drives creative hardware attention.** TE × Carhartt WIP "Audio Archives", Eventide × Laurie Spiegel "Music Mouse" revival. [INFERENCE] K1's "studies of music as motion" needs equivalent artist/musician alignment — who would naturally use K1 as part of their creative practice?
 
 ### Previous Cycle Takeaways (preserved)
 
-1. **No one is shipping beat-tracking in a consumer form factor.** Reconfirmed Cycle 3.
-2. **Monar Canvas Speaker is the closest new entrant.** Updated Cycle 3 — funded, tracking.
-3. **Teenage Engineering validates K1's launch model.** Culturally-themed limited editions, colour-as-identity, firmware-extending-hardware.
-4. **The creative hardware audience absorbs premium pricing.** Analogue 3D at $270, TE EP-40, Synthstrom Deluge.
+1. **No one is shipping beat-tracking in a consumer form factor.** Reconfirmed Cycle 4.
+2. **Monar Canvas Speaker is the closest new entrant.** Funded, tracking. AI + screen vs K1's DSP + physical light.
+3. **Teenage Engineering validates K1's launch model.** Cultural editions, colour-as-identity, firmware-extending-hardware.
+4. **The creative hardware audience absorbs premium pricing.** Analogue 3D at $300, TE EP-40, Synthstrom Deluge, ASM Leviasynth at $1,799.
 5. **Open-source community firmware models work.** Synthstrom's Deluge open-source experiment producing contributions.
 
 ---
@@ -195,3 +221,12 @@
 - [B&O Landscape Speaker — Essential Install](https://essentialinstall.com/news/bang-olufsen-previews-new-landscape-speaker-at-ise-2026/)
 - [B&O Beosound Premiere — Essential Install](https://essentialinstall.com/news/products/bang-olufsen-launches-beosound-premiere-soundbar/)
 - [WLED Audio Reactive Source — GitHub](https://github.com/wled/WLED/blob/main/usermods/audioreactive/audio_reactive.cpp)
+- [Analogue 3D Prototype Limited Editions — Hypebeast](https://hypebeast.com/2026/2/analogue-n64-3d-prototype-limited-edition-consoles-release-info)
+- [Analogue 3D Firmware 1.2.0 — Time Extension](https://www.timeextension.com/news/2026/02/analogue-3d-firmware-update-brings-force-progressive-output-option-and-support-for-switch-n64-pad)
+- [Best Synths NAMM 2026 — Synthtopia](https://www.synthtopia.com/content/2026/01/27/the-best-new-synths-electronic-music-gear-of-the-2026-namm-show/)
+- [Best of NAMM 2026 — Attack Magazine](https://www.attackmagazine.com/reviews/the-best/best-of-namm-2026-for-electronic-music-producers/)
+- [NAMM 2026 Coverage — MusicRadar](https://www.musicradar.com/music-tech/the-best-new-music-tech-gear-of-namm-2026-epic-polys-acoustic-synths-budget-samplers-a-behringer-juno-and-much-more)
+- [Nothing Phone 4a Pro Glyph Matrix Launch — NotebookCheck](https://www.notebookcheck.net/Nothing-Phone-4a-Pro-launches-with-Glyph-Matrix-144-Hz-AMOLED-and-140x-zoom-alongside-new-Phone-4a.1243156.0.html)
+- [Nothing Phone 4a Pro Glyph Backlash — Android Authority](https://www.androidauthority.com/nothing-phone-4a-pro-glyph-matrix-3646705/)
+- [B&O Landscape Speaker ISE 2026 — Essential Install](https://essentialinstall.com/news/bang-olufsen-previews-new-landscape-speaker-at-ise-2026/)
+- [TE EP-133 K.O. II — Synth Anatomy](https://synthanatomy.com/2026/01/teenage-engineering-ep-133-ko-ii-an-evolved-po-33-sampler-with-more-power.html)

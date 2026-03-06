@@ -1,83 +1,39 @@
 # K1 Launch Research — Cycle Log
 
-## Cycle: 2026-03-06 (Cowork scheduled task — Cycle 6)
-- **Decision targeted:** D5 (Pricing — EXPLORING, $449–549)
-- **Research action:** Full competitive pricing landscape for audio-reactive LED controllers, music visualisation hardware, and premium experience products. Mapped DIY/commodity (WLED $10–30), consumer (Audiorays $199, Nanoleaf $190–300+), professional (SoundSwitch $299+sub), and aspirational (Teenage Engineering $1,999) segments.
+## Cycle: 2026-03-06 (Cycle 1)
+- **Decision targeted:** D5 (Pricing: $449–549 Founders Edition)
+- **Research action:** Mapped pricing landscape across 4 adjacent categories — commodity ESP32 controllers, premium visualiser devices, pro DJ lighting controllers, and limited-edition tech hardware. Sought both supporting and counter-evidence for the $449–549 hypothesis.
 - **Findings:**
-  - [FACT] No standalone music visualiser exceeds $360 (LiveLightMagic). Audiorays leads at $199.
-  - [FACT] ESP32 WLED boards at $10–30 advertise "100+ effects" and "sound reactive" — creates BOM perception anchor.
-  - [FACT] SoundSwitch Control One = $299 + $80/yr subscription. TCO exceeds $449 by year 3.
-  - [FACT] Nanoleaf Shapes music-reactive setup reaches $400–500 when fully expanded (9-panel at $190–220).
-  - [FACT] Teenage Engineering OP-1 Field at $1,999 proves design/experience premium exists but required 15+ years of brand equity.
-  - [INFERENCE] K1 at $449 = 2.25x the most expensive competitor in category. No precedent for this gap.
-  - [HYPOTHESIS] "Musical intelligence" as a value axis is unproven with consumers — buyers pay for LED count and form factor, not DSP quality.
+  - [FACT] Audiorays Audio Visualizer Pro (current best-in-class) = $199, 392 LEDs, 24-band FFT, 4.8★
+  - [FACT] Nanoleaf Lines 9-pack = $135–200, established brand, music sync, smart home
+  - [FACT] ESP32 WLED controllers = $8–35 commodity
+  - [FACT] SoundSwitch Control One = $499 MSRP ($299 street), DMX only (no lights included)
+  - [FACT] ChamSys QuickQ 10 = $500–750 range, pro DMX console
+  - [FACT] Teenage Engineering OP-1 Field = $1,999+, brand-first then premium pricing
+  - [INFERENCE] $449–549 sits in a potential "dead zone" — too high for impulse, too low for luxury signal
+  - [INFERENCE] The price is defensible ONLY if the buyer categorises K1 as "music technology" or "design object," NOT "LED controller"
 - **Juxtapositions surfaced:**
-  1. Visualiser ceiling ($360) vs. K1 ($449+) — 2.25x gap, no precedent
-  2. Teenage Engineering defence — viable but K1 has zero brand equity at launch
-  3. BOM anchor problem — ESP32 at $10–30 vs. K1 at $449+ undermines perceived value
-  4. SoundSwitch TCO — K1 wins on 3-year cost and autonomy (no laptop, no subscription)
-  5. Nanoleaf equivalence — same budget zone ($400–500), but K1 = zero installation + superior audio response
-- **Decision register impact:** D5 remains EXPLORING. Balanced evidence. Strongest PRO: Nanoleaf/SoundSwitch TCO comparison. Strongest CON: visualiser ceiling + BOM anchor combination.
-- **Next cycle should:** Research Teenage Engineering's original OP-1 (2011) launch — brand-building BEFORE first sale, whether first run was discounted. Also: search K1-adjacent Kickstarter/Indiegogo campaigns for music visualisation hardware — what actually raised, at what price points, and backer psychology.
-- **Output:** `K1_Launch_Planning/05-Brand-and-Marketing/research/D5-pricing-competitive-landscape-2026-03-06.md`
+  1. K1 vs. commodity ESP32 (15–70× price gap — category perception is make-or-break)
+  2. K1 vs. Audiorays (2.25× premium — what's the extra $250 for?)
+  3. K1 vs. SoundSwitch (same price band, but K1 is complete system vs. controller-only)
+  4. K1 vs. Teenage Engineering (brand-first vs. product-first pricing strategy)
+- **Decision register impact:** D5 remains EXPLORING. Key dependency identified: D3 (manifesto enemy) and D1 (colour palette) must resolve first because they determine category positioning, which determines whether $449–549 is viable.
+- **Next cycle should:** Research consumer language — how do buyers of $200–500 music/audio devices describe what they bought and why? Etsy reviews, Reddit, YouTube comments. The language buyers use reveals the category they place products in.
 
-## Cycle: 2026-03-06 (Cowork scheduled task — Cycle 5)
-- Decision targeted: D3 (Manifesto Enemy — HARD GATE)
-- Research action: Consumer language validation across all three enemy candidates. Searched HyperCube, Nanoleaf, WLED, generic LED strip reviews for how buyers describe dissatisfaction with "sound reactive" products. Also researched D&AD 2025 manifesto as reference case for enemy-framing.
-- Findings:
-  - [FACT] Consumers describe volume-driven chaos as "frantic," "sporadic," "random," "laggy," "no control" — but never use the word "volume" as the diagnosis
-  - [FACT] "No control" / "without the control we were promised" is a recurring complaint justifying premium pricing expectations
-  - [FACT] Nanoleaf Rhythm has 100–200ms latency; described as "sporadic" on beat-driven music
-  - [FACT] D&AD 2025 manifesto: "Creativity isn't being stolen by technology — it's being left undone" — maps to Spectacle Without Substance framing
-  - [INFERENCE] Enemy 1 (Volume as Meaning) has strongest consumer evidence but requires bridging from symptom ("frantic") to cause ("volume-only detection")
-  - [INFERENCE] Enemy 2 (Spectacle Without Substance) has broadest resonance but lowest specificity — any competitor can claim "substance"
-  - [HYPOTHESIS] Enemy 3 (Passive Consumption) may exclude "beautiful object" buyers who legitimately want passive enjoyment at $449+
-- Juxtapositions surfaced: Comparison table across all 3 enemies on 9 dimensions (consumer resonance, education required, K1 proof, content debut, specificity, vagueness risk, buyer exclusion, co-optability, manifesto energy). Three questions posed for Captain re: naming, specificity-resonance trade-off, and stacking.
-- Decision register impact: No status change. D3 remains PENDING. Data provided for Captain synthesis.
-- Next cycle should: Research how Teenage Engineering's manifesto/brand voice names its enemy (if any). Also: track Monar Kickstarter backer trajectory (was 8 backers on day 3).
-
-## Cycle: 2026-03-05 (Cowork scheduled task)
-- Task worked on: Task 2 — Recognition Device Research
-- Progress: Complete. Researched 6 hardware brands (Teenage Engineering, Nothing, Apple, Dyson, Analogue, Bang & Olufsen) for recognition device patterns. Identified 5 candidates for K1: The Glow (luminous surface), The Breath (centre-origin pulse), The Edge (thin profile angle), The Dark Field (consistent dark composition), The Colour Moment (hero effect selection). Recommended combination: A (Glow) + B (Breath) + D (Dark Field) as primary stack. Full analysis with execution requirements saved.
-- Status: Complete
-- Next: Task 3 — Brand Manifesto Sprint Plan (requires reading Quiet Confidence spec; blocked on K1 Launch Planning directory access — not mounted in current Cowork session)
-- Note: Output saved to `k1-launch-research/` in Lightwave-Ledstrip workspace. Needs moving to `/Users/spectrasynq/SpectraSynq_K1_Launch_Planning/05-Brand-and-Marketing/research/` on Mac.
-
-## Cycle: 2026-03-05 14:35 UTC (Cowork scheduled task)
-- Task worked on: Task 4 — Competitive Landscape Monitoring (first cycle)
-- Progress: Complete initial monitoring sweep. Searched 8 topic areas across aspirational peers and adjacent space. Key findings:
-  - **Monar Canvas Speaker** launched on Kickstarter 3 March 2026 — closest new entrant to K1's space (audio-reactive visual hardware). Uses AI + screen, not physical light + DSP. Watch funding trajectory.
-  - **Teenage Engineering** extremely active: EP-40 Riddim (culturally-themed edition), Field System Black (colour editions), OP-1 Field v1.6 (firmware-extending-hardware), OP-XY rumoured.
-  - **Nothing** evolved Glyph Interface to "Glyph Matrix" (Phone 3) then to LED squares (Phone 4a). Still iterating; K1's LGP glow is more distinctive.
-  - **No one shipping beat-tracking in consumer form factor.** K1's PipelineCore (onset + PLL) remains unmatched. WLED-SR has not added it. HyperCube doesn't have it. Monar uses AI.
-  - **Synthstrom Audible** open-source firmware model producing community contributions — potential post-launch model for K1 effect SDK.
-  - **Analogue 3D** absorbed $20 tariff price increase without backlash — creative hardware audience tolerates premium pricing.
-- Status: Complete (first cycle — ongoing monitoring in future cycles)
-- Next: Future cycles should track Monar Kickstarter funding, TE OP-XY announcement, and any WLED-SR audio pipeline developments.
-- Output: `K1_Launch_Planning/02-Market-Intelligence/competitive-updates.md`
-
-## Cycle: 2026-03-05 (Cowork scheduled task — Cycle 3)
-- Task worked on: Task 4 — Competitive Landscape Monitoring (second cycle) + Task 3 staging copy
-- Progress: Comprehensive monitoring sweep across all aspirational peers. Key findings:
-  - **Monar Kickstarter funded 147% in 2 days** — but only 8 backers (~$920 avg pledge). Validates audio-visual hardware market but not yet mass-market signal.
-  - **TE OP-XY shipped** (Nov 2024) at $2,299, now discounted $600 to $1,699. Price ceiling data point. Also launched Carhartt WIP "Audio Archives" cultural collaboration.
-  - **Nothing Phone 4a/4a Pro launching today (5 March)** — Glyph *regressing*: 4a has 9-LED "Glyph Bar", 4a Pro reduces Glyph Matrix from 489 to ~137 micro-LEDs. Fan backlash visible. K1's 320-LED LGP architecture is moving in opposite direction.
-  - **B&O at 100 years** — Landscape Speaker preview, Beosound Premiere spatial audio soundbar, Reloved refurb programme.
-  - **WLED-SR beat detection confirmed as "poor man's" threshold-based** — K1 PipelineCore moat intact and widening.
-  - Copied brand-manifesto-sprint-plan.md from staging to K1_Launch_Planning canonical location.
-- Status: Complete (cycle 3 — ongoing monitoring continues)
-- Next: Track Monar Kickstarter backer count trajectory (currently 8 backers). Monitor TE OP-XY sales signals. Watch for Nothing 4a Pro Glyph Matrix reviews. Check if any WLED community forks attempt beat tracking.
-- Output: `K1_Launch_Planning/02-Market-Intelligence/competitive-updates.md`, `K1_Launch_Planning/05-Brand-and-Marketing/brand-manifesto-sprint-plan.md`
-
-## Cycle: 2026-03-05 (Cowork scheduled task — Cycle 4)
-- Task worked on: Task 4 — Competitive Landscape Monitoring (third monitoring cycle)
-- Progress: Comprehensive sweep across all aspirational peers plus NAMM 2026 coverage. Key findings:
-  - **NAMM 2026: zero audio-visual hardware entries.** Creative instrument space is purely audio. K1 occupies uncontested position at the intersection of instruments and visual output. Korg Phase8 (acoustic synthesis) won "most creative instrument" — bridging physical and digital, validating K1's space.
-  - **Analogue 3D "Prototype" limited editions** at $300 — colour-matched to cancelled N64 prototypes. Sells the story, not just the colour. Directly relevant to K1 Founders Edition narrative.
-  - **Nothing Phone 4a/4a Pro launched today.** Corrected Glyph Bar LED count: 63 mini-LEDs in 6 zones (not 9). 4a Pro has 137 micro-LEDs (down from 489). Fan backlash confirmed by Android Authority, Gizmochina.
-  - **Creative instrument pricing context:** ASM Leviasynth $1,799–$2,499, Akai MPC XL premium, TE OP-XY $1,699. K1 at $249 is entry-level by comparison.
-  - **Artist collaboration trend:** TE × Carhartt WIP, Eventide × Laurie Spiegel. K1 needs artist alignment.
-  - WLED-SR beat detection unchanged. Monar still 8 backers.
-- Status: Complete (cycle 4 — ongoing monitoring continues)
-- Next: Track Monar backer count trajectory (still 8). Watch for Nothing 4a Pro Glyph Matrix reviews post-launch. Monitor NAMM 2026 shipping announcements (Korg Phase8, ASM Leviasynth). Check if any WLED community forks attempt beat tracking. Begin identifying potential K1 artist collaborators.
-- Output: `K1_Launch_Planning/02-Market-Intelligence/competitive-updates.md`
+## Cycle: 2026-03-06 (Cycle 2)
+- **Decision targeted:** D3 (Manifesto Enemy — HARD GATE)
+- **Research action:** Tested Cycle 1's Question #3 — "Can the enemies stack?" — by researching premium brand precedent for layering an emotional enemy over a technical proof. Examined Dyson, Apple, Nike, and Darko Audio.
+- **Findings:**
+  - [FACT] Dyson stacks "things that don't work properly" (emotional) over "cyclone separation" (technical). Clear bin = zero-education proof moment.
+  - [FACT] Apple "Think Different" ran emotional-only with NO technical proof at launch (1997). Brand carried until iMac delivered. Required existing cultural cachet.
+  - [FACT] Nike "Just Do It" stacks "overcoming limitation" (emotional) over product innovation (Air, Flyknit). Captain already chose Nike model for D4.
+  - [FACT] Darko Audio "Music-First Manifesto" (2024) names a technical enemy (room reverberation) that consumers feel but misdiagnose — structurally identical to K1's situation.
+  - [INFERENCE] The stacking pattern — "Spectacle Without Substance" as emotional umbrella, "Volume as Meaning" as technical proof — has strong precedent and resolves the specificity-vs-resonance tension from Cycle 1.
+  - [HYPOTHESIS] The stack only works if K1 has a "clear bin" — a visible proof moment that collapses the education gap. Three candidates proposed: side-by-side demo, silence test, wrong-beat test.
+- **Juxtapositions surfaced:**
+  1. Dyson's "clear bin" vs. K1's missing proof moment — what makes PLL beat tracking VISIBLE?
+  2. Apple's emotional-only launch vs. K1 launching cold — brand cachet is the variable
+  3. Stacked enemy (SWS + VaM) vs. unstacked — stacking captures both emotional AND technical buyers
+  4. "Passive Consumption" doesn't fit the stack — becomes content theme, not manifesto enemy
+- **Decision register impact:** D3 moved from PENDING to EXPLORING. The strategic choice (stack SWS + VaM) has strong precedent. The remaining gate is a design question: "What is K1's clear bin?" — which feeds into D6 (first-run choreography).
+- **Next cycle should:** Design the "clear bin" proof moment. Research how audio/music products demonstrate technical superiority in video content. The silence test and wrong-beat test are hypotheses — they need validation against how consumers actually watch product demos (attention span, comparison tolerance, YouTube vs. TikTok format).

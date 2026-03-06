@@ -59,11 +59,13 @@ WS_STRIP_HEADER_SIZE = 1  # strip ID byte
 WS_FRAME_SIZE = 966  # 4 + (1 + 480) + (1 + 480)
 
 # Serial capture format
+# Header: magic(1) + version(1) + tap(1) + effect(1) + palette(1) + brightness(1)
+#         + speed(1) + frameIndex(4) + timestampUs(4) + payloadLen(2) = 17 bytes
 SERIAL_MAGIC = 0xFD
-SERIAL_HEADER_SIZE = 16
-SERIAL_V1_FRAME_SIZE = 976   # 16 + 960
+SERIAL_HEADER_SIZE = 17
+SERIAL_V1_FRAME_SIZE = 977   # 17 + 960
 SERIAL_V2_TRAILER_SIZE = 32
-SERIAL_V2_FRAME_SIZE = 1008  # 16 + 960 + 32
+SERIAL_V2_FRAME_SIZE = 1009  # 17 + 960 + 32
 
 # Visualisation
 WATERFALL_PIXEL_HEIGHT = 3  # vertical pixels per frame row
@@ -99,7 +101,7 @@ def parse_ws_frame(data: bytes) -> Optional[np.ndarray]:
 
 
 def parse_serial_frame(data: bytes) -> Optional[tuple]:
-    """Parse a serial capture frame (v1=976 bytes, v2=1008 bytes).
+    """Parse a serial capture frame (v1=977 bytes, v2=1009 bytes).
 
     Returns (frame_array, metadata) or None.
     """

@@ -138,6 +138,17 @@ CRGB* s_captureDumpFrameScratch = s_captureDumpFrameFallback;
 CRGB* s_validationFrameScratch = s_validationFrameFallback;
 bool s_loopScratchInitialised = false;
 
+// Capture streaming state — `capture stream <tap> [fps]` pushes binary frames
+// continuously without command round-trip overhead.
+bool s_captureStreamActive = false;
+uint8_t s_captureStreamTapMask = 0x02;  // default: tap B
+lightwaveos::actors::RendererActor::CaptureTap s_captureStreamTap =
+    lightwaveos::actors::RendererActor::CaptureTap::TAP_B_POST_CORRECTION;
+uint32_t s_captureStreamIntervalMs = 66;  // ~15 FPS default
+uint32_t s_captureStreamLastPush = 0;
+uint32_t s_captureStreamLastFrameIdx = UINT32_MAX;
+uint8_t s_captureStreamVersion = 2;  // 1 = 976-byte legacy, 2 = 1008-byte with metrics
+
 void initLoopScratchBuffers() {
     if (s_loopScratchInitialised) return;
     s_loopScratchInitialised = true;
@@ -1373,6 +1384,103 @@ void loop() {
 
     uint32_t now = millis();
 
+    // --- Capture streaming tick ---
+    // Push binary frames at target FPS without command round-trip overhead.
+    // v1: 976 bytes (16-byte header + 960 RGB). v2: 1008 bytes (+ 32-byte metrics trailer).
+    if (s_captureStreamActive && renderer && (now - s_captureStreamLastPush >= s_captureStreamIntervalMs)) {
+        CRGB* frame = s_captureDumpFrameScratch;
+        if (renderer->getCapturedFrame(s_captureStreamTap, frame)) {
+            auto metadata = renderer->getCaptureMetadata();
+            // Only push if this is a new frame (avoid duplicates)
+            if (metadata.frameIndex != s_captureStreamLastFrameIdx) {
+                s_captureStreamLastFrameIdx = metadata.frameIndex;
+                s_captureStreamLastPush = now;
+
+                // --- Header (16 bytes) ---
+                Serial.write(0xFD);
+                Serial.write(s_captureStreamVersion);
+                Serial.write((uint8_t)s_captureStreamTap);
+                Serial.write(metadata.effectId);
+                Serial.write(metadata.paletteId);
+                Serial.write(metadata.brightness);
+                Serial.write(metadata.speed);
+                Serial.write((uint8_t)(metadata.frameIndex & 0xFF));
+                Serial.write((uint8_t)((metadata.frameIndex >> 8) & 0xFF));
+                Serial.write((uint8_t)((metadata.frameIndex >> 16) & 0xFF));
+                Serial.write((uint8_t)((metadata.frameIndex >> 24) & 0xFF));
+                Serial.write((uint8_t)(metadata.timestampUs & 0xFF));
+                Serial.write((uint8_t)((metadata.timestampUs >> 8) & 0xFF));
+                Serial.write((uint8_t)((metadata.timestampUs >> 16) & 0xFF));
+                Serial.write((uint8_t)((metadata.timestampUs >> 24) & 0xFF));
+                uint16_t frameLen = 320 * 3;
+                Serial.write((uint8_t)(frameLen & 0xFF));
+                Serial.write((uint8_t)((frameLen >> 8) & 0xFF));
+
+                // --- RGB payload (960 bytes) ---
+                Serial.write((uint8_t*)frame, frameLen);
+
+                // --- v2 metrics trailer (32 bytes) ---
+                if (s_captureStreamVersion >= 2) {
+                    using namespace lightwaveos::actors;
+
+                    // Gather metrics from existing thread-safe accessors
+                    auto& ledStats = renderer->getLedDriverStats();
+                    RendererActor::BandsDebugSnapshot bandsSnap;
+                    renderer->getBandsDebugSnapshot(bandsSnap);
+
+                    // Beat tick from cached ControlBusFrame (same pattern as network code)
+                    lightwaveos::audio::ControlBusFrame cbf;
+                    renderer->copyCachedAudioFrame(cbf);
+
+                    // [0:2] showTimeUs (u16 LE, capped)
+                    uint16_t showUs = (ledStats.lastShowUs > 65535) ? 65535 : (uint16_t)ledStats.lastShowUs;
+                    Serial.write((uint8_t)(showUs & 0xFF));
+                    Serial.write((uint8_t)((showUs >> 8) & 0xFF));
+
+                    // [2:4] rms (u16 LE, float * 65535)
+                    uint16_t rmsU16 = (uint16_t)(bandsSnap.rms * 65535.0f);
+                    Serial.write((uint8_t)(rmsU16 & 0xFF));
+                    Serial.write((uint8_t)((rmsU16 >> 8) & 0xFF));
+
+                    // [4:12] bands[8] (u8 each, float * 255)
+                    for (int i = 0; i < 8; i++) {
+                        float v = bandsSnap.bands[i];
+                        Serial.write((uint8_t)(v > 1.0f ? 255 : (uint8_t)(v * 255.0f)));
+                    }
+
+                    // [12] beatTick (u8)
+                    bool beat = cbf.tempoBeatTick || cbf.es_beat_tick;
+                    Serial.write(beat ? (uint8_t)1 : (uint8_t)0);
+
+                    // [13] onsetTick (u8, snare or hihat)
+                    bool onset = cbf.snareTrigger || cbf.hihatTrigger;
+                    Serial.write(onset ? (uint8_t)1 : (uint8_t)0);
+
+                    // [14:16] flux (u16 LE, float * 65535)
+                    uint16_t fluxU16 = (uint16_t)(bandsSnap.flux * 65535.0f);
+                    Serial.write((uint8_t)(fluxU16 & 0xFF));
+                    Serial.write((uint8_t)((fluxU16 >> 8) & 0xFF));
+
+                    // [16:20] heapFree (u32 LE)
+                    uint32_t heapFree = esp_get_free_heap_size();
+                    Serial.write((uint8_t)(heapFree & 0xFF));
+                    Serial.write((uint8_t)((heapFree >> 8) & 0xFF));
+                    Serial.write((uint8_t)((heapFree >> 16) & 0xFF));
+                    Serial.write((uint8_t)((heapFree >> 24) & 0xFF));
+
+                    // [20:22] showSkips (u16 LE, cumulative)
+                    uint16_t skips = (ledStats.showSkips > 65535) ? 65535 : (uint16_t)ledStats.showSkips;
+                    Serial.write((uint8_t)(skips & 0xFF));
+                    Serial.write((uint8_t)((skips >> 8) & 0xFF));
+
+                    // [22] reserved/pad (10 bytes of zeros)
+                    uint8_t pad[10] = {0};
+                    Serial.write(pad, 10);
+                }
+            }
+        }
+    }
+
 #if !defined(NATIVE_BUILD) && FEATURE_STATUS_STRIP_TOUCH
     statusStripTouchLoop(now);
 #endif
@@ -1599,16 +1707,105 @@ void loop() {
                         Serial.println("Usage: capture dump <a|b|c>");
                     }
                 }
+                else if (subcmd.startsWith("stream")) {
+                    // capture stream <a|b|c> [fps]  — start continuous binary streaming
+                    using namespace lightwaveos::actors;
+                    String streamArgs = subcmd.substring(6);
+                    streamArgs.trim();
+
+                    RendererActor::CaptureTap tap = RendererActor::CaptureTap::TAP_B_POST_CORRECTION;
+                    uint8_t tapMask = 0x02;
+                    int targetFps = 15;
+
+                    if (streamArgs.indexOf('a') >= 0) { tap = RendererActor::CaptureTap::TAP_A_PRE_CORRECTION; tapMask = 0x01; }
+                    else if (streamArgs.indexOf('c') >= 0) { tap = RendererActor::CaptureTap::TAP_C_PRE_WS2812; tapMask = 0x04; }
+
+                    // Parse optional FPS after tap letter
+                    int spaceIdx = streamArgs.indexOf(' ');
+                    if (spaceIdx >= 0) {
+                        int parsed = streamArgs.substring(spaceIdx + 1).toInt();
+                        if (parsed >= 1 && parsed <= 60) targetFps = parsed;
+                    }
+
+                    // Enable capture mode for the requested tap
+                    renderer->setCaptureMode(true, tapMask);
+
+                    s_captureStreamTap = tap;
+                    s_captureStreamTapMask = tapMask;
+                    s_captureStreamIntervalMs = 1000 / targetFps;
+                    s_captureStreamLastPush = 0;
+                    s_captureStreamLastFrameIdx = UINT32_MAX;
+                    s_captureStreamActive = true;
+
+                    Serial.printf("[CAPTURE] Streaming tap %c at %d FPS (%d ms interval)\n",
+                                  (tapMask & 0x01) ? 'A' : (tapMask & 0x04) ? 'C' : 'B',
+                                  targetFps, (int)s_captureStreamIntervalMs);
+                }
+                else if (subcmd == "stop") {
+                    s_captureStreamActive = false;
+                    Serial.println("[CAPTURE] Streaming stopped");
+                }
+                else if (subcmd.startsWith("fps")) {
+                    String fpsArg = subcmd.substring(3);
+                    fpsArg.trim();
+                    int newFps = fpsArg.toInt();
+                    if (newFps >= 1 && newFps <= 60) {
+                        s_captureStreamIntervalMs = 1000 / newFps;
+                        Serial.printf("[CAPTURE] FPS set to %d (%d ms interval)\n", newFps, (int)s_captureStreamIntervalMs);
+                    } else {
+                        Serial.println("Usage: capture fps <1-60>");
+                    }
+                }
+                else if (subcmd.startsWith("tap")) {
+                    using namespace lightwaveos::actors;
+                    String tapArg = subcmd.substring(3);
+                    tapArg.trim();
+                    if (tapArg == "a") {
+                        s_captureStreamTap = RendererActor::CaptureTap::TAP_A_PRE_CORRECTION;
+                        s_captureStreamTapMask = 0x01;
+                    } else if (tapArg == "b") {
+                        s_captureStreamTap = RendererActor::CaptureTap::TAP_B_POST_CORRECTION;
+                        s_captureStreamTapMask = 0x02;
+                    } else if (tapArg == "c") {
+                        s_captureStreamTap = RendererActor::CaptureTap::TAP_C_PRE_WS2812;
+                        s_captureStreamTapMask = 0x04;
+                    } else {
+                        Serial.println("Usage: capture tap <a|b|c>");
+                        tapArg = "";  // mark invalid
+                    }
+                    if (tapArg.length() > 0) {
+                        if (renderer->isCaptureModeEnabled()) {
+                            renderer->setCaptureMode(true, s_captureStreamTapMask);
+                        }
+                        Serial.printf("[CAPTURE] Tap switched to %s\n", tapArg.c_str());
+                    }
+                }
+                else if (subcmd.startsWith("format")) {
+                    String fmtArg = subcmd.substring(6);
+                    fmtArg.trim();
+                    if (fmtArg == "v1" || fmtArg == "1") {
+                        s_captureStreamVersion = 1;
+                        Serial.println("[CAPTURE] Format set to v1 (976 bytes, no metrics)");
+                    } else if (fmtArg == "v2" || fmtArg == "2") {
+                        s_captureStreamVersion = 2;
+                        Serial.println("[CAPTURE] Format set to v2 (1008 bytes, with metrics)");
+                    } else {
+                        Serial.println("Usage: capture format <v1|v2>");
+                    }
+                }
                 else if (subcmd == "status") {
                     auto metadata = renderer->getCaptureMetadata();
                     Serial.println("\n=== Capture Status ===");
                     Serial.printf("  Enabled: %s\n", renderer->isCaptureModeEnabled() ? "YES" : "NO");
+                    Serial.printf("  Streaming: %s (v%d, %d ms interval)\n",
+                                  s_captureStreamActive ? "YES" : "NO",
+                                  s_captureStreamVersion, (int)s_captureStreamIntervalMs);
                     Serial.printf("  Last capture: effect=%d, palette=%d, frame=%lu\n",
                                   metadata.effectId, metadata.paletteId, metadata.frameIndex);
                     Serial.println();
                 }
                 else {
-                    Serial.println("Usage: capture <on [a|b|c]|off|dump <a|b|c>|status>");
+                    Serial.println("Usage: capture <on|off|dump|stream|stop|fps|tap|format|status>");
                 }
             }
 

@@ -37,3 +37,24 @@
   4. "Passive Consumption" doesn't fit the stack — becomes content theme, not manifesto enemy
 - **Decision register impact:** D3 moved from PENDING to EXPLORING. The strategic choice (stack SWS + VaM) has strong precedent. The remaining gate is a design question: "What is K1's clear bin?" — which feeds into D6 (first-run choreography).
 - **Next cycle should:** Design the "clear bin" proof moment. Research how audio/music products demonstrate technical superiority in video content. The silence test and wrong-beat test are hypotheses — they need validation against how consumers actually watch product demos (attention span, comparison tolerance, YouTube vs. TikTok format).
+
+## Cycle: 2026-03-07 (Cycle 3)
+- **Decision targeted:** D3 (Manifesto Enemy — HARD GATE: "What is K1's clear bin?")
+- **Research action:** Researched (a) how audio/music tech products demonstrate technical superiority in video demos, (b) optimal demo format data for consumer electronics (TikTok/YouTube Shorts), (c) competitive landscape for music-reactive lighting with a focus on proof-moment design. Sought counter-evidence for both demo format assumptions and the proposed "wrong-beat test" / "silence test" candidates.
+- **Findings:**
+  - [FACT] Nanoleaf Orchestrator (CES 2024, now available) requires: Nanoleaf Desktop App on PC/Mac, Nanoleaf Premium subscription ($1.99/mo / $19.99/yr), audio routed through PC. No embedded intelligence.
+  - [FACT] SoundSwitch requires DJ software setup and monthly subscription (~£8/mo or £200 one-off). No standalone hardware.
+  - [FACT] Every credible music-reactive lighting system with comparable claims requires PC, subscription, or both. K1 is structurally different.
+  - [FACT] TikTok optimal demo: 24–38 seconds; first 3 seconds must hook (intro retention >70% target). Average social attention: 6–8 seconds.
+  - [FACT] YouTube Shorts: 15–30 seconds for highest retention (>80%). Under 10s feels incomplete; over 45s sees sharp drop-offs.
+  - [INFERENCE] At $449, short-form video is a funnel hook, not a closer. Consumers validate a $449 purchase with longer content (3–5 min reviews, product pages) after the hook creates initial desire.
+  - [INFERENCE] The beat-accuracy proof (wrong-beat test) is a DEPTH demo — requires musical reference to perceive, needs 30–60 seconds minimum to demonstrate, and demands education before it converts.
+  - [INFERENCE] The cold-start autonomy proof (no app, no PC, plug in → react) is a HOOK demo — immediately felt, 10–15 seconds, no explanation required. Attacks Passive Consumption + setup anxiety simultaneously.
+  - [HYPOTHESIS] The autonomy proof is stronger than the beat-accuracy proof as the primary hook because it eliminates a consumer anxiety they didn't know they had, rather than proving a technical claim they can't easily evaluate in real-time.
+- **Juxtapositions surfaced:**
+  1. K1 (standalone, embedded, no subscription) vs. Nanoleaf Orchestrator (PC-tethered, subscription-dependent, no embedded logic) — same promise, radically different architecture
+  2. Beat accuracy proof (technical, requires education, DEPTH) vs. Autonomy proof (emotional, instant, HOOK) — not competing proofs, funnel stages
+  3. Nanoleaf Lines ($200 hardware) + Orchestrator sub + PC dependency vs. K1 $449 all-in — TCO comparison shifts pricing optics IF buyer makes the comparison
+  4. Dyson's clear bin (shows collected dirt — eliminates doubt about bag-full) vs. K1's clear bin (shows instant reaction — eliminates doubt about setup friction)
+- **Decision register impact:** D3 updated. Clear bin has two layers confirmed: (1) cold-start autonomy hook (15s), (2) beat-accuracy depth demo (3–5 min). Nanoleaf Orchestrator adds a new D5 pricing angle: "autonomous vs. tethered intelligence" as a TCO argument.
+- **Next cycle should:** Script the 15-second cold-start hook demo. What is the specific scenario? (Vinyl → K1 reacts? Live instrument → K1 reacts? Someone presses play on Spotify, walks away, no phone in hand?) The scenario determines whether the autonomy message lands implicitly or needs narration. Also: validate whether the "buyer knows to compare K1 vs. Nanoleaf Orchestrator" assumption is true — awareness overlap research.

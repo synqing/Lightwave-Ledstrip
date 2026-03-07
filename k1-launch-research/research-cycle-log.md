@@ -63,3 +63,24 @@
 - **Decision register impact:** D5 remains EXPLORING. This cycle adds specificity to previous cycle's finding. Supports $449 floor (HyperCube anchor). Challenges $549 ceiling (SoundSwitch overlap). Key question sharpened: the first-run demo experience (D6) is the pricing gatekeeper.
 - **Next cycle should:** Deep-dive HyperCube buyer reviews (what do $450 buyers praise/criticise?). Explore Petru/vinyl community as K1 beachhead. Investigate "first 10 seconds" demo requirements to justify price differential over LiveLightMagic.
 - **Output:** `k1-launch-research/pricing/d5-pricing-landscape-2026-03-06.md`
+
+## Cycle: 2026-03-07 ~scheduled (D5 pricing cycle 3)
+- **Decision targeted:** D5 (Pricing — EXPLORING, $449–$549)
+- **Research action:** Broadened competitive sweep beyond reactive-LED niche into smart lighting market (Nanoleaf, Govee, LIFX, Twinkly), WLED open-source ecosystem, and DMX professional tier. Goal: validate whether the $300–$500 gap identified in cycles 1–2 holds when the frame is widened.
+- **Findings:**
+  - [FACT] Audiorays Visualiser Pro: $199, 392 LEDs, spectrum-only analysis — still the best-in-class enthusiast benchmark
+  - [FACT] Nanoleaf Skylight 3-panel: $249. Basic ambient colour sync, no beat tracking
+  - [FACT] WLED audio-reactive is now default in v0.15.0+. ESP32-S3 board + I2S mic + level shifter = ~$15–40 total hardware cost
+  - [FACT] Smart lighting market CAGR 18.5% through 2029 (Technavio). Cost remains #1 adoption barrier
+  - [FACT] Pro DMX controllers routinely exceed $500 but deliver zero musical intelligence — protocol translators only
+  - [FACT] NIQ: only a small % of consumers "fully willing" to pay premium for smart variants. Performance and experience are the leading purchase drivers
+  - [INFERENCE] The $300–500 gap HOLDS across all three frames (reactive LED, smart lighting, professional DMX). No product combines integrated LEDs + musical intelligence + premium form factor in this range
+  - [INFERENCE] K1 at $449 is a 10× multiplier over WLED DIY. The moat is PLL beat tracking + onset + chroma + Light Guide Plate form factor
+  - [HYPOTHESIS] Category novelty (Light Guide Plate) may prevent price anchoring — buyers have no reference product to compare against
+- **Juxtapositions surfaced:**
+  1. "No Man's Land" at $300–500 confirmed across third search vector — opportunity or warning?
+  2. K1 vs WLED: 10× price → moat depends entirely on buyer perceiving musical intelligence difference
+  3. K1 vs Nanoleaf: $249 basic sync → $449 PLL intelligence = 2× premium for qualitative leap. Can the leap be demonstrated pre-purchase?
+- **Decision register impact:** D5 remains EXPLORING. Three cycles now consistently find the same pattern: the price gap exists, the technical moat exists, but the CONVERSION MECHANISM (can buyer perceive the difference before purchase?) is the unresolved gatekeeper. This shifts focus to D6 (first-run choreography) as the pricing enabler.
+- **Next cycle should:** Research ViVi II post-KS retail pricing, premium audio-visual art installations ($500–$1000), Founders Edition pricing precedents in hardware. Investigate whether PLL vs FFT is visually distinguishable in short-form video — this is now the critical D5/D6 intersection.
+- **Output:** `k1-launch-research/2026-03-07-pricing-competitive-landscape.md`

@@ -87,7 +87,6 @@ namespace lightwaveos {
 namespace lightwaveos {
 namespace network {
 namespace webserver {
-    class V1ApiRoutes;  // Forward declaration for friend
     class WsGateway;    // WebSocket gateway (implementation in webserver/WsGateway.*)
     class UdpStreamer;  // UDP streaming (bypasses TCP for LED/audio frames)
 }
@@ -177,8 +176,6 @@ namespace RateLimitConfig {
  * ensuring thread-safe operation with the RendererActor on Core 1.
  */
 class WebServer {
-    friend class webserver::V1ApiRoutes;  // Allow V1ApiRoutes to access private handlers
-
 public:
     /**
      * @brief Construct WebServer

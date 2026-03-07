@@ -1729,21 +1729,21 @@ void V1ApiRoutes::registerRoutes(
     registry.onGet("/api/v1/auth/status", [server, checkRateLimit](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         // Public endpoint - no checkAPIKey
-        handlers::AuthHandlers::handleStatus(request, server->m_apiKeyManager);
+        handlers::AuthHandlers::handleStatus(request, server->getApiKeyManager());
     });
 
     // POST /api/v1/auth/rotate - Generate new API key (requires valid key)
     registry.onPost("/api/v1/auth/rotate", [server, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::AuthHandlers::handleRotate(request, server->m_apiKeyManager);
+        handlers::AuthHandlers::handleRotate(request, server->getApiKeyManager());
     });
 
     // DELETE /api/v1/auth/key - Clear NVS key (requires valid key)
     registry.onDelete("/api/v1/auth/key", [server, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::AuthHandlers::handleClear(request, server->m_apiKeyManager);
+        handlers::AuthHandlers::handleClear(request, server->getApiKeyManager());
     });
 #endif // FEATURE_API_AUTH
 }

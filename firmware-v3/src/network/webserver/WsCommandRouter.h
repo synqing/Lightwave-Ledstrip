@@ -68,6 +68,13 @@ public:
      */
     static size_t getMaxHandlers();
 
+#ifdef NATIVE_BUILD
+    /**
+     * @brief Reset router state (testing only)
+     */
+    static void reset() { s_handlerCount = 0; }
+#endif
+
 private:
     static constexpr size_t MAX_HANDLERS = 192;  // Capacity for all current commands (126 registered) plus ~50% headroom
     static WsCommandEntry s_handlers[MAX_HANDLERS];

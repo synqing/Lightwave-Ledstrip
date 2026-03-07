@@ -1,30 +1,51 @@
 {
-  "baseline_date": "2025-01-XX",
-  "description": "Pre-refactor WebServer performance baseline",
+  "baseline_date": "2026-03-07",
+  "description": "Post-refactor WsCommandRouter dispatch baseline (native x86-64)",
   "benchmarks": {
     "ws_routing": {
+      "handlers": 141,
+      "capacity": 192,
+      "utilisation_pct": 73.4,
       "iterations": 10000,
-      "p50_us": 0.0,
-      "p95_us": 0.0,
-      "p99_us": 0.0,
-      "avg_us": 0.0,
-      "ops_per_sec": 0,
-      "note": "Placeholder - actual baseline to be captured before refactor"
-    },
-    "broadcast_fanout": {
-      "clients": [1, 4, 8],
-      "time_ms": [0.0, 0.0, 0.0],
-      "note": "Placeholder - actual baseline to be captured"
-    },
-    "route_registration": {
-      "time_ms": 0.0,
-      "route_count": 0,
-      "note": "Placeholder - actual baseline to be captured"
+      "warmup": 1000,
+      "scenarios": [
+        {
+          "position": "first (best)",
+          "index": 0,
+          "p50_us": 0.333,
+          "p95_us": 0.375,
+          "p99_us": 0.417,
+          "avg_us": 0.321,
+          "ops_per_sec": 3112599
+        },
+        {
+          "position": "middle (avg)",
+          "index": 70,
+          "p50_us": 0.583,
+          "p95_us": 0.625,
+          "p99_us": 0.708,
+          "avg_us": 0.567,
+          "ops_per_sec": 1762796
+        },
+        {
+          "position": "last (worst)",
+          "index": 140,
+          "p50_us": 0.791,
+          "p95_us": 0.875,
+          "p99_us": 1.000,
+          "avg_us": 0.787,
+          "ops_per_sec": 1270128
+        }
+      ],
+      "note": "Linear scan with firstChar+length pre-filter. ESP32-S3 expect ~10-20x slower."
     }
   },
-  "memory": {
-    "webserver_ram_bytes": 0,
-    "note": "Placeholder - actual baseline to be captured"
+  "tests": {
+    "test_ws_router": {
+      "total": 13,
+      "passed": 13,
+      "failed": 0,
+      "categories": ["registration", "routing", "pre-filter", "error-handling"]
+    }
   }
 }
-

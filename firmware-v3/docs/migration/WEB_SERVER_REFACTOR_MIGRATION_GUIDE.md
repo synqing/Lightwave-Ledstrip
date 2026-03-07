@@ -1,34 +1,39 @@
 # WebServer Refactor Migration Guide
 
-**Purpose**: Guide for developers working with the refactored WebServer architecture  
+**Purpose**: Guide for developers working with the refactored WebServer architecture
 **Target Audience**: Developers adding new routes/commands or migrating existing code
+**Status**: Migration complete. All 141 WS commands migrated. `processWsCommand()` removed.
+**Last Updated**: 2026-03-07
 
 ## What Changed
 
 ### Public API (Stable)
 
-✅ **No changes** - All public `WebServer` methods remain unchanged:
-- `WebServer::begin()`
-- `WebServer::stop()`
-- `WebServer::broadcastStatus()`
-- `WebServer::broadcastZoneState()`
+All public `WebServer` methods remain unchanged:
+- `WebServer::begin()`, `WebServer::stop()`
+- `WebServer::broadcastStatus()`, `WebServer::broadcastZoneState()`
 - All HTTP endpoints (routes, payloads, responses)
 - All WebSocket message types and formats
+- `friend class webserver::V1ApiRoutes` removed — uses public `getApiKeyManager()` getter
 
 ### Internal Structure (Refactored)
 
-The monolithic `WebServer.cpp` (6633 LOC) has been split into:
+The monolithic `WebServer.cpp` (6,633 LOC) has been split into:
 
-1. **Route registration modules**: `StaticAssetRoutes`, `LegacyApiRoutes`, `V1ApiRoutes`
-2. **WebSocket gateway**: `WsGateway` for connection/message handling
-3. **Command modules**: Domain-specific WS command handlers in `ws/` directory
-4. **Shared context**: `WebServerContext` for dependency injection
+1. **WebServer.cpp** (1,360 LOC) — facade: lifecycle, setup, update loop
+2. **WebServerBroadcast.cpp** (685 LOC) — broadcasting, subscriptions, rate limiting (same class, separate TU)
+3. **V1ApiRoutes.cpp** (1,753 LOC) — all REST endpoints, delegates to 49 handler files
+4. **StaticAssetRoutes.cpp** (126 LOC) — static file serving
+5. **WsGateway.cpp** (848 LOC) — WebSocket connection/message management
+6. **WsCommandRouter.cpp** (95 LOC) — function-pointer dispatch table (192 slots)
+7. **24 WsXxxCommands modules** — 141 domain-specific WS command handlers
+8. **WebServerContext.h** (183 LOC) — dependency injection
 
 ## Adding New HTTP Routes
 
 ### V1 API Routes (`/api/v1/*`)
 
-**Location**: `v2/src/network/webserver/V1ApiRoutes.cpp`
+**Location**: `src/network/webserver/V1ApiRoutes.cpp`
 
 **Example**: Adding `/api/v1/new/endpoint`
 
@@ -48,17 +53,17 @@ registry.onGet("/api/v1/new/endpoint", [&ctx, checkRateLimit, checkAPIKey](Async
 });
 ```
 
-**Best Practice**: Create a handler class in `v2/src/network/webserver/handlers/` if the logic is substantial (>50 LOC).
+**Best Practice**: Create a handler class in `src/network/webserver/handlers/` if the logic is substantial (>50 LOC).
 
 ### Legacy API Routes (`/api/*`)
 
-**Location**: `v2/src/network/webserver/LegacyApiRoutes.cpp`
+**Location**: `src/network/webserver/LegacyApiRoutes.cpp`
 
 **Pattern**: Same as V1 routes, but use `sendLegacySuccess()` / `sendLegacyError()` for responses.
 
 ### Static Asset Routes
 
-**Location**: `v2/src/network/webserver/StaticAssetRoutes.cpp`
+**Location**: `src/network/webserver/StaticAssetRoutes.cpp`
 
 **Example**: Adding a new static file route
 
@@ -281,5 +286,5 @@ When adding/modifying routes or commands:
 
 - **Architecture questions**: See `docs/architecture/WEB_SERVER_MODULAR_ARCHITECTURE.md`
 - **Route inventory**: See `docs/architecture/WEBSERVER_BASELINE_INVENTORY.md`
-- **Code examples**: Check existing modules in `v2/src/network/webserver/`
+- **Code examples**: Check existing modules in `src/network/webserver/`
 

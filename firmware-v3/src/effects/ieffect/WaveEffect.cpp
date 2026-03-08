@@ -78,6 +78,10 @@ void WaveEffect::render(plugins::EffectContext& ctx) {
         float rmsScaled = sqrtf(rms);  // 0.1 RMS -> 0.316 scaled
         amplitude = 0.1f + 0.9f * rmsScaled;  // 10-100% amplitude (DRAMATIC)
 
+        // Blend beat-strength into amplitude (40% floor, +60% on beat)
+        float beatMod = 0.4f + 0.6f * ctx.audio.beatStrength();
+        amplitude *= beatMod;
+
         // Flux transient detection
         float flux = ctx.audio.flux();
         float fluxDelta = flux - m_lastFlux;

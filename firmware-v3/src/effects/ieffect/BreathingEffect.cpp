@@ -252,6 +252,10 @@ void BreathingEffect::renderBreathing(plugins::EffectContext& ctx) {
         // ====================================================================
         energyEnvelope = m_energyFollower.value;
         brightness = energyEnvelope * energyEnvelope;  // Quadratic contrast (like Sensory Bridge)
+
+        // Continuous beat-strength brightness modulation (40% floor, +60% on beat)
+        float beatMod = 0.4f + 0.6f * ctx.audio.beatStrength();
+        brightness *= beatMod;
     } else
 #endif
     {
@@ -503,6 +507,14 @@ void BreathingEffect::renderTexture(plugins::EffectContext& ctx) {
         // Apply combined wave and timbral modulation
         intensity *= combinedWave;
         intensity *= timbralMod;
+
+        // Continuous beat-strength brightness modulation (40% floor, +60% on beat)
+#if FEATURE_AUDIO_SYNC
+        if (ctx.audio.available) {
+            float beatMod = 0.4f + 0.6f * ctx.audio.beatStrength();
+            intensity *= beatMod;
+        }
+#endif
 
         uint8_t brightness = (uint8_t)(200.0f * intensity);
 

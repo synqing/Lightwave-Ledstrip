@@ -80,7 +80,9 @@ void LGPWaterCausticsEffect::render(plugins::EffectContext& ctx) {
         const float wave = lowrisk_ar::blendAmbientReactive(ambientWave, reactiveWave, m_controls);
 
         const float base = 0.08f;
-        const float out = lowrisk_ar::clamp01f(base + (1.0f - base) * wave) * master;
+        // Apply continuous beat-strength brightness modulation (40% floor, +60% on beat)
+        const float beatMod = 0.4f + 0.6f * sig.beat;
+        const float out = lowrisk_ar::clamp01f(base + (1.0f - base) * wave) * master * beatMod;
         const uint8_t brA = (uint8_t)(255.0f * out);
 
         const float ambientHue = static_cast<float>(ctx.gHue) + y * 8.0f + density * 58.0f;

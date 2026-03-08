@@ -129,6 +129,14 @@ void LGPPerlinCausticsEffect::render(plugins::EffectContext& ctx) {
     float lobeScale = 0.8f + bassNorm * 0.9f;        // 0.8-1.7
     float brightnessMod = 0.75f + midNorm * 0.25f;   // 0.75-1.0
 
+    // Continuous beat-strength brightness modulation (40% floor, +60% on beat)
+#if FEATURE_AUDIO_SYNC
+    if (hasAudio) {
+        float beatMod = 0.4f + 0.6f * ctx.audio.beatStrength();
+        brightnessMod *= beatMod;
+    }
+#endif
+
     for (uint16_t i = 0; i < STRIP_LENGTH; i++) {
         // Calculate distance from centre pair
         uint16_t dist = centerPairDistance(i);

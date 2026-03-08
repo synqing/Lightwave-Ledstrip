@@ -317,6 +317,88 @@ def compute_spatial_spread(frames: np.ndarray) -> np.ndarray:
     return active.astype(np.float64) / luminance.shape[1]
 
 
+def compute_hue_velocity(frames: np.ndarray, top_k: int = 32) -> np.ndarray:
+    """Angular velocity of the circular mean hue across the top-K brightest LEDs.
+
+    For each frame, selects the top-K brightest LEDs (by luminance), converts
+    their RGB to HSV, computes the circular mean hue using atan2(sin, cos),
+    then computes the per-frame angular velocity (wrapped difference).
+
+    Returns (N,) float in [0, pi].  The first element is 0.0 (no prior frame).
+    """
+    import colorsys
+
+    n = frames.shape[0]
+    n_leds = frames.shape[1]
+    k = min(top_k, n_leds)
+
+    # Per-LED luminance for top-K selection
+    luminance = (frames[:, :, 0] * 0.299
+                 + frames[:, :, 1] * 0.587
+                 + frames[:, :, 2] * 0.114)  # (N, n_leds) uint-weighted
+
+    # Compute circular mean hue per frame
+    mean_hues = np.zeros(n, dtype=np.float64)
+    for t in range(n):
+        # Indices of top-K brightest LEDs in this frame
+        top_indices = np.argpartition(luminance[t], -k)[-k:]
+        sin_sum = 0.0
+        cos_sum = 0.0
+        for idx in top_indices:
+            r_f = frames[t, idx, 0] / 255.0
+            g_f = frames[t, idx, 1] / 255.0
+            b_f = frames[t, idx, 2] / 255.0
+            h, _s, _v = colorsys.rgb_to_hsv(r_f, g_f, b_f)
+            angle = h * 2.0 * np.pi  # hue [0,1] -> [0, 2pi]
+            sin_sum += np.sin(angle)
+            cos_sum += np.cos(angle)
+        mean_hues[t] = np.arctan2(sin_sum / k, cos_sum / k)  # in [-pi, pi]
+
+    # Angular velocity: |angle_diff(hue[t], hue[t-1])|
+    velocity = np.zeros(n, dtype=np.float64)
+    for t in range(1, n):
+        diff = mean_hues[t] - mean_hues[t - 1]
+        # Wrap to [-pi, pi]
+        diff = (diff + np.pi) % (2.0 * np.pi) - np.pi
+        velocity[t] = abs(diff)
+
+    return velocity
+
+
+def compute_temporal_gradient_energy(frames: np.ndarray) -> np.ndarray:
+    """Total pixel-level motion between consecutive frames.
+
+    Computes the mean absolute difference across all LEDs and colour channels
+    between consecutive frames, normalised by LED count.
+
+    Returns (N,) float.  The first element is 0.0 (no prior frame).
+    """
+    n = frames.shape[0]
+    n_leds = frames.shape[1]
+    tge = np.zeros(n, dtype=np.float64)
+    # Cast to int16 to avoid uint8 underflow in subtraction
+    frames_i = frames.astype(np.int16)
+    for t in range(1, n):
+        tge[t] = np.sum(np.abs(frames_i[t] - frames_i[t - 1])) / n_leds
+    return tge
+
+
+def compute_active_pixel_delta(frames: np.ndarray) -> np.ndarray:
+    """Frame-to-frame change in the number of active (lit) LEDs.
+
+    Uses the same luminance threshold as ``compute_spatial_spread()`` to
+    count active pixels, then takes the absolute difference between frames.
+
+    Returns (N,) float.  The first element is 0.0 (no prior frame).
+    """
+    spread = compute_spatial_spread(frames)
+    n = len(spread)
+    apd = np.zeros(n, dtype=np.float64)
+    for t in range(1, n):
+        apd[t] = abs(spread[t] - spread[t - 1])
+    return apd
+
+
 def analyze_correlation(frames: np.ndarray, timestamps: np.ndarray,
                         metadata: list, label: str = "Device") -> dict:
     """Compute beat-brightness correlation metrics.
@@ -352,6 +434,13 @@ def analyze_correlation(frames: np.ndarray, timestamps: np.ndarray,
     heap = np.array([m.get('heap_free', 0) for m in metadata], dtype=np.float64)
     onset = np.array([m.get('onset', False) for m in metadata], dtype=bool)
     flux = np.array([m.get('flux', 0.0) for m in metadata], dtype=np.float64)
+    fw_bpm = np.array([m.get('bpm', 0.0) for m in metadata], dtype=np.float64)
+    fw_conf = np.array([m.get('beat_confidence', 0.0) for m in metadata], dtype=np.float64)
+
+    # Multi-dimensional coupling time-series
+    hue_velocity = compute_hue_velocity(frames)
+    tge = compute_temporal_gradient_energy(frames)
+    apd = compute_active_pixel_delta(frames)
 
     duration = timestamps[-1] - timestamps[0]
     actual_fps = n / max(0.1, duration)
@@ -360,7 +449,17 @@ def analyze_correlation(frames: np.ndarray, timestamps: np.ndarray,
     n_beats = int(beats.sum())
     n_onsets = int(onset.sum())
     beat_hz = n_beats / max(0.1, duration)
-    bpm = beat_hz * 60
+    # Prefer firmware-reported BPM (always accurate) over counting subsampled
+    # beat ticks. At 15 FPS capture / 120 FPS render, ~87% of single-frame
+    # beat pulses are missed, making tick-counted BPM wildly inaccurate.
+    fw_bpm_valid = fw_bpm[fw_bpm > 0.0]
+    if len(fw_bpm_valid) > 0:
+        bpm = float(np.median(fw_bpm_valid))
+        bpm_source = 'firmware'
+    else:
+        bpm = beat_hz * 60
+        bpm_source = 'tick-count'
+    fw_conf_mean = float(fw_conf.mean()) if len(fw_conf) > 0 else 0.0
 
     # Inter-beat intervals for tempo stability
     beat_idxs = np.where(beats)[0]
@@ -389,6 +488,21 @@ def analyze_correlation(frames: np.ndarray, timestamps: np.ndarray,
             if abs(c) > abs(best_band_corr):
                 best_band_corr = c
                 best_band_idx = bi
+
+    # --- Multi-dimensional coupling correlations ---
+    hue_vel_rms_corr = _safe_corrcoef(hue_velocity, rms)
+    hue_vel_bass_corr = _safe_corrcoef(hue_velocity, bass)
+    tge_rms_corr = _safe_corrcoef(tge, rms)
+    apd_rms_corr = _safe_corrcoef(apd, rms)
+
+    # Composite audio-visual score: weighted average of key correlations
+    composite_audio_visual_score = (
+        max(0, rms_corr) * 0.3
+        + max(0, hue_vel_rms_corr) * 0.2
+        + max(0, tge_rms_corr) * 0.3
+        + max(0, apd_rms_corr) * 0.1
+        + max(0, bass_corr) * 0.1
+    )
 
     # --- Beat trigger analysis ---
     if n_beats >= 3 and n > 5:
@@ -483,11 +597,13 @@ def analyze_correlation(frames: np.ndarray, timestamps: np.ndarray,
         total_missing = 0
         subsampling_ratio = 1.0
 
-    show_valid = show_times[show_times > 0]
-    heap_valid = heap[heap > 0]
+    show_valid = show_times[(show_times > 0) & (show_times < 50000)]  # <50ms sane
+    # ESP32-S3 has max ~8.3 MB with PSRAM; anything above 16 MB is corrupt
+    heap_valid = heap[(heap > 0) & (heap < 16_000_000)]
 
-    skip_vals = [m.get('show_skips', 0) for m in metadata]
-    show_skips_total = max(skip_vals) - min(skip_vals) if skip_vals else 0
+    skip_vals = np.array([m.get('show_skips', 0) for m in metadata])
+    skip_sane = skip_vals[skip_vals < 65535]  # u16 max = corrupt if near boundary
+    show_skips_total = int(skip_sane.max() - skip_sane.min()) if len(skip_sane) > 1 else 0
 
     # Heap trend (bytes per frame, positive = growing).
     # Guard against degenerate polyfit (constant heap, insufficient data).
@@ -511,6 +627,8 @@ def analyze_correlation(frames: np.ndarray, timestamps: np.ndarray,
         'n_onsets': n_onsets,
         'beat_hz': beat_hz,
         'bpm': bpm,
+        'bpm_source': bpm_source,
+        'fw_beat_confidence': fw_conf_mean,
         'tempo_stability': tempo_stability,
         'beat_warning': beat_warning,
         # Correlation
@@ -529,6 +647,12 @@ def analyze_correlation(frames: np.ndarray, timestamps: np.ndarray,
         'mean_spatial_spread': float(spatial_spread.mean()),
         'mean_spread_beat': mean_spread_beat,
         'mean_spread_nobeat': mean_spread_nobeat,
+        # Multi-dimensional coupling
+        'hue_vel_rms_corr': hue_vel_rms_corr,
+        'hue_vel_bass_corr': hue_vel_bass_corr,
+        'tge_rms_corr': tge_rms_corr,
+        'apd_rms_corr': apd_rms_corr,
+        'composite_audio_visual_score': composite_audio_visual_score,
         # Frame health
         'frame_drops': frame_drops,
         'total_missing_frames': total_missing,
@@ -551,6 +675,8 @@ def analyze_correlation(frames: np.ndarray, timestamps: np.ndarray,
         '_show_times': show_times,
         '_heap': heap,
         '_timestamps': timestamps,
+        '_hue_velocity': hue_velocity,
+        '_tge': tge,
     }
 
     if not v2:
@@ -596,14 +722,24 @@ def format_report(m: dict) -> str:
     lines.append(f"  Capture:  {m.get('n_frames', 0)} frames, "
                  f"{_safe_fmt(m.get('actual_fps'), '.1f')} FPS, "
                  f"{_safe_fmt(m.get('duration'), '.1f')}s")
-    lines.append(f"  Beats:    {m.get('n_beats', 0)} detected "
-                 f"({_safe_fmt(m.get('beat_hz'), '.1f')} Hz = "
-                 f"{_safe_fmt(m.get('bpm'), '.0f')} BPM)")
+    bpm_src = m.get('bpm_source', 'tick-count')
+    bpm_str = _safe_fmt(m.get('bpm'), '.0f')
+    if bpm_src == 'firmware':
+        fw_conf = m.get('fw_beat_confidence', 0.0)
+        lines.append(f"  BPM:      {bpm_str}  (firmware-reported, "
+                     f"confidence {_safe_fmt(fw_conf * 100, '.0f')}%)")
+        lines.append(f"  Ticks:    {m.get('n_beats', 0)} captured "
+                     f"(~{100 * m.get('n_beats', 0) / max(1, int(m.get('bpm', 120) / 60 * m.get('duration', 30))):.0f}% "
+                     f"of expected at {_safe_fmt(m.get('actual_fps'), '.0f')} FPS)")
+    else:
+        lines.append(f"  Beats:    {m.get('n_beats', 0)} detected "
+                     f"({_safe_fmt(m.get('beat_hz'), '.1f')} Hz = "
+                     f"{bpm_str} BPM) [tick-count, may be subsampled]")
     if m.get('beat_warning') == 'saturated':
         lines.append(f"  WARNING:  Beat flag saturated "
                      f"({m.get('n_beats', 0)}/{m.get('n_frames', 0)} frames)")
         lines.append(f"            Beat detection may be always-on or threshold too low.")
-    elif m.get('beat_warning') == 'absent':
+    elif m.get('beat_warning') == 'absent' and bpm_src != 'firmware':
         lines.append(f"  WARNING:  No beats detected. Audio input silent or detector offline?")
     lines.append(f"  Onsets:   {m.get('n_onsets', 0)} (snare/hihat)")
     tempo_stab = m.get('tempo_stability', 0)
@@ -647,6 +783,18 @@ def format_report(m: dict) -> str:
         spread_line += (f"  (beat: {_safe_fmt(m.get('mean_spread_beat', 0), '.1%')}"
                         f" / off: {_safe_fmt(m.get('mean_spread_nobeat', 0), '.1%')})")
     lines.append(spread_line)
+    lines.append('')
+
+    # Multi-Dimensional Coupling
+    lines.append('  --- Multi-Dimensional Coupling ---')
+    lines.append(f"  Hue velocity \u2194 RMS:    {_safe_fmt(m.get('hue_vel_rms_corr', 0), '+.3f')}")
+    lines.append(f"  Hue velocity \u2194 bass:   {_safe_fmt(m.get('hue_vel_bass_corr', 0), '+.3f')}")
+    lines.append(f"  TGE \u2194 RMS:             {_safe_fmt(m.get('tge_rms_corr', 0), '+.3f')}")
+    lines.append(f"  Active pixel \u0394 \u2194 RMS:  {_safe_fmt(m.get('apd_rms_corr', 0), '+.3f')}")
+    composite = m.get('composite_audio_visual_score', 0)
+    composite_rating = _rating(composite, [
+        (0.5, 'EXCELLENT'), (0.3, 'good'), (0.15, 'moderate'), (0.0, 'weak')])
+    lines.append(f"  Composite A/V score:    {_safe_fmt(composite, '+.3f')}  ({composite_rating})")
     lines.append('')
 
     # Health
@@ -1158,6 +1306,8 @@ def render_dashboard(metrics: dict, width: int = 900) -> Image.Image:
     bands = metrics.get('_bands', np.zeros((0, 8)))
     show_times = metrics.get('_show_times', np.array([]))
     heap = metrics.get('_heap', np.array([]))
+    hue_velocity = metrics.get('_hue_velocity', np.array([]))
+    tge_data = metrics.get('_tge', np.array([]))
 
     n = len(brightness)
     if n < 2:
@@ -1172,7 +1322,8 @@ def render_dashboard(metrics: dict, width: int = 900) -> Image.Image:
     row_gap = 6
     header_h = 50
     score_h = 80  # score summary block
-    rows = ['Brightness', 'RMS Audio', 'Bands [8]', 'Show Time', 'Heap']
+    rows = ['Brightness', 'RMS Audio', 'Bands [8]', 'Show Time', 'Heap',
+            'Hue Velocity', 'TGE']
     n_rows = len(rows)
     total_h = header_h + score_h + n_rows * (row_h + row_gap) + margin
 
@@ -1272,6 +1423,24 @@ def render_dashboard(metrics: dict, width: int = 900) -> Image.Image:
                         (200, 130, 255),
                         vmin=float(heap_kb[heap_kb > 0].min()) * 0.95 if (heap_kb > 0).any() else 0,
                         vmax=float(heap_kb.max()) * 1.02)
+    y += row_h + row_gap
+
+    # 6. Hue Velocity
+    draw.text((margin, y + row_h // 2 - 6), 'Hue Velocity', fill=(160, 160, 160), font=font)
+    if len(hue_velocity) > 0:
+        _draw_sparkline(draw, sx, y, spark_w, row_h, hue_velocity,
+                        (255, 150, 200), vmin=0,
+                        vmax=max(0.1, float(hue_velocity.max())),
+                        beat_markers=beats)
+    y += row_h + row_gap
+
+    # 7. Temporal Gradient Energy
+    draw.text((margin, y + row_h // 2 - 6), 'TGE', fill=(160, 160, 160), font=font)
+    if len(tge_data) > 0:
+        _draw_sparkline(draw, sx, y, spark_w, row_h, tge_data,
+                        (255, 130, 80), vmin=0,
+                        vmax=max(1.0, float(tge_data.max())),
+                        beat_markers=beats)
 
     return img
 

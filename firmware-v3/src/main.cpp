@@ -1473,9 +1473,25 @@ void loop() {
                     Serial.write((uint8_t)(skips & 0xFF));
                     Serial.write((uint8_t)((skips >> 8) & 0xFF));
 
-                    // [22] reserved/pad (10 bytes of zeros)
-                    uint8_t pad[10] = {0};
-                    Serial.write(pad, 10);
+                    // [22:24] bpm (u16 LE, BPM * 100 for 0.01 resolution)
+                    // Use whichever backend's BPM is non-default
+                    float bpmVal = (cbf.es_bpm > 0.0f && cbf.es_bpm != 120.0f)
+                                 ? cbf.es_bpm : cbf.tempoBpm;
+                    uint16_t bpmU16 = (uint16_t)(bpmVal * 100.0f);
+                    Serial.write((uint8_t)(bpmU16 & 0xFF));
+                    Serial.write((uint8_t)((bpmU16 >> 8) & 0xFF));
+
+                    // [24:26] beatConfidence (u16 LE, float * 65535)
+                    float conf = (cbf.es_tempo_confidence > 0.0f)
+                               ? cbf.es_tempo_confidence : cbf.tempoConfidence;
+                    if (conf > 1.0f) conf = 1.0f;
+                    uint16_t confU16 = (uint16_t)(conf * 65535.0f);
+                    Serial.write((uint8_t)(confU16 & 0xFF));
+                    Serial.write((uint8_t)((confU16 >> 8) & 0xFF));
+
+                    // [26:32] reserved/pad (6 bytes of zeros)
+                    uint8_t pad[6] = {0};
+                    Serial.write(pad, 6);
                 }
             }
         }
@@ -1857,7 +1873,15 @@ void loop() {
                 handledMulti = true;
 
                 // Parse as EffectId - accepts both namespaced IDs (0x0100) and display indices (0-161)
-                int rawId = input.substring(7).toInt();
+                // Supports hex input with 0x/0X prefix (e.g. "effect 0x1403")
+                String idStr = input.substring(7);
+                idStr.trim();
+                long rawId;
+                if (idStr.startsWith("0x") || idStr.startsWith("0X")) {
+                    rawId = strtol(idStr.c_str(), nullptr, 16);
+                } else {
+                    rawId = idStr.toInt();
+                }
                 EffectId effectId;
                 uint16_t effectCount = renderer->getEffectCount();
                 if (rawId >= 0 && rawId < effectCount) {

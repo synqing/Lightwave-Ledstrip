@@ -132,8 +132,13 @@ void LGPBassBreathEffect::render(plugins::EffectContext& ctx) {
             brightness = 0.03f;
         }
 
-        // Apply master brightness and breath level
-        uint8_t bright = (uint8_t)(brightness * breathLevel * ctx.brightness);
+        // Apply continuous beat-strength brightness modulation (40% floor, +60% on beat)
+        float beatMod = 0.4f + 0.6f * beatStrength;
+
+        // Intensity: breathLevel drives radius (above), NOT brightness.
+        // Use a floored intensity so quiet passages stay visible.
+        float intensityMod = 0.3f + 0.7f * breathLevel;
+        uint8_t bright = (uint8_t)(brightness * intensityMod * beatMod * ctx.brightness);
 
         // Colour: anchored to chroma (stable), with subtle treble lift (no cycling).
         uint8_t hue = (uint8_t)(chromaHueOffset + (uint8_t)(treble * 18.0f) + (uint8_t)(normalizedDist * 20.0f));

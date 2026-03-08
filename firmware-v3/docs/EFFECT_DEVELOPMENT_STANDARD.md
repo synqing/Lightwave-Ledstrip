@@ -314,6 +314,27 @@ enhancement::SubpixelRenderer::renderLine(
 
 ## Part 4: Audio Integration Pattern (The One That Works)
 
+### Signals You Should Know
+
+Quick reference for all audio signals available via `ctx.audio`. Use `ctx.audio.available` to guard access.
+
+| Signal | Accessor | Range | What it measures | Use for |
+|--------|----------|-------|-----------------|---------|
+| RMS | `ctx.audio.rms()` | 0-1 | Audio volume level | Brightness, intensity |
+| Beat Strength | `ctx.audio.beatStrength()` | 0-1 | Continuous beat envelope (peaks on beat, decays between) | Brightness pulsing, size pulsing |
+| Beat Tick | `ctx.audio.isOnBeat()` | bool | Single-frame pulse on detected beat | Spawning particles, triggering one-shot events |
+| Bass | `ctx.audio.bass()` | 0-1 | Bands 0-1 averaged | Breathing, pulsing |
+| Treble | `ctx.audio.treble()` | 0-1 | Bands 5-7 averaged | Sparkle, shimmer |
+| Band N | `ctx.audio.getBand(n)` | 0-1 | Octave band energy (0=sub-bass, 7=treble) | Per-frequency reactivity |
+| Liveliness | `ctx.audio.liveliness()` | 0-1 | RMS + spectral flux composite | Animation speed scaling |
+| Saliency | `ctx.audio.overallSaliency()` | 0-1 | Harmonic/rhythmic/timbral/dynamic novelty | Visual accents on musical surprises |
+| Chroma | `ctx.audio.getChroma(0..11)` | 0-1 | Pitch class energy (C=0, C#=1, ..., B=11) | Hue mapping |
+| BPM | `ctx.audio.bpm()` | float | Detected tempo (BPM) | Animation timing, phase sync |
+| Spectral Flux | `ctx.audio.fastFlux()` | 0-1 | Rate of spectral change | Onset/transient detection |
+| Onset | `controlBus.onset` | bool | Broadband onset (single-frame pulse) | Flash triggers |
+
+**Backend-agnostic signals** (safe on both PipelineCore and ESV11): `rms`, `beatStrength`, `bass`/`mid`/`treble`, `getBand`, `getChroma`, `liveliness`, `overallSaliency`, `bpm`.
+
 ### 4.1 The Proven Audio Mapping
 
 From `ChevronWavesEffect`, `LGPWaveCollisionEffect`, `LGPStarBurstEffect` — the three best audio-reactive effects in the system:
@@ -363,6 +384,7 @@ void MyEffect::render(plugins::EffectContext& ctx) {
     // --- Audio feature extraction ---
     float heavyEnergy = 0.0f;
     float rmsEnergy = 0.0f;
+    float beatMod = 1.0f;
     bool onsetDetected = false;
 
     #if FEATURE_AUDIO_SYNC
@@ -376,6 +398,9 @@ void MyEffect::render(plugins::EffectContext& ctx) {
 
         // Onset for flash triggers
         onsetDetected = ctx.audio.controlBus.onset;
+
+        // Beat-strength brightness modulation (0.4 floor, +60% on beat)
+        beatMod = 0.4f + 0.6f * ctx.audio.beatStrength();
     }
     #endif
 
@@ -400,16 +425,16 @@ void MyEffect::render(plugins::EffectContext& ctx) {
     float speedNorm = ctx.speed / 50.0f;
     m_phase = enhancement::advancePhase(m_phase, speedNorm, smoothSpeed, dt);
 
-    // --- Render from center out ---
+    // --- Render from centre out ---
     for (uint16_t dist = 0; dist < HALF_LENGTH; dist++) {
         float normalizedDist = (float)dist / (float)HALF_LENGTH;
 
-        // Compute color from palette
+        // Compute colour from palette (beatMod pulses brightness on beat)
         uint8_t hue = ctx.gHue + (uint8_t)(normalizedDist * 40.0f);
-        uint8_t bright = scale8((uint8_t)(smoothBrightness * 255.0f), ctx.brightness);
+        uint8_t bright = scale8((uint8_t)(smoothBrightness * beatMod * 255.0f), ctx.brightness);
         CRGB color = ctx.palette.getColor(hue, bright);
 
-        // Add onset flash at center
+        // Add onset flash at centre
         if (dist < 15 && m_flashIntensity > 0.01f) {
             float flashBright = m_flashIntensity * expf(-dist * 0.2f);
             CRGB flash = ctx.palette.getColor(ctx.gHue, (uint8_t)(flashBright * 200));
@@ -422,6 +447,63 @@ void MyEffect::render(plugins::EffectContext& ctx) {
     }
 }
 ```
+
+### 4.4 Audio-Visual Coupling Best Practices
+
+An audit of 349 effects found that the most expressive audio signals are severely underutilised. Most effects use `isOnBeat()` (boolean, single-frame pulse) or manual RMS smoothing, resulting in poor audio-visual coupling. The following signals are pre-smoothed, backend-agnostic, and ready to use.
+
+#### `beatStrength()` — Default Brightness Modulation
+
+`ctx.audio.beatStrength()` returns a float 0.0-1.0. It peaks to 1.0 on detected beats and decays exponentially between beats, producing a continuous envelope that tracks the rhythmic contour of the music.
+
+**Use as the default brightness modulation for any audio-reactive effect:**
+
+```cpp
+float beatMod = 0.4f + 0.6f * ctx.audio.beatStrength();
+bright = (uint8_t)(bright * beatMod);
+```
+
+- The 0.4 floor prevents complete blackout between beats.
+- The 0.6 range gives +60% brightness on beats — visible but not strobing.
+- `beatStrength()` is already smoothed by EsBeatClock (exponential decay). Do NOT add another smoothing layer.
+
+**Prefer `beatStrength()` over `isOnBeat()`.** `isOnBeat()` is a single-frame boolean pulse — at 120 FPS that is 8.33ms of visibility, impossible to perceive. `beatStrength()` gives the same timing information with natural visual persistence.
+
+**When `isOnBeat()` IS appropriate:** spawning particles, triggering one-shot state changes, or counting beats for pattern sequencing. Not for modulating brightness or colour.
+
+#### `liveliness()` — Animation Speed Scalar
+
+`ctx.audio.liveliness()` returns a float 0.0-1.0. It is a pre-computed composite of RMS energy and spectral flux, reflecting how "active" the music is at any moment.
+
+**Use to scale animation speed, particle spawn rate, or pattern evolution rate:**
+
+```cpp
+float speed = baseSpeed + ctx.audio.liveliness() * speedRange;
+```
+
+`liveliness()` is already used by RendererActor for global auto-speed trim. Using it in individual effects reinforces this mapping — quiet passages slow down, energetic passages speed up, without manual RMS smoothing or flux windowing.
+
+#### `overallSaliency()` — Accent Detection
+
+`ctx.audio.overallSaliency()` returns a float 0.0-1.0. It is a weighted composite of four novelty dimensions: harmonic (chord changes), rhythmic (beat pattern changes), timbral (spectral texture changes), and dynamic (loudness envelope changes).
+
+**Use for visual accents on musical surprises — moments where the music itself changes character:**
+
+```cpp
+if (ctx.audio.overallSaliency() > 0.6f) {
+    // Trigger visual accent: colour shift, flash, spatial expansion
+    float accentStrength = (ctx.audio.overallSaliency() - 0.6f) * 2.5f;  // 0-1 above threshold
+    // Apply to hue offset, brightness boost, or spatial scale
+}
+```
+
+For finer control, query individual novelty dimensions:
+- `ctx.audio.harmonicSaliency()` — chord/key changes
+- `ctx.audio.rhythmicSaliency()` — beat pattern shifts
+- `ctx.audio.timbralSaliency()` — spectral character changes
+- `ctx.audio.dynamicSaliency()` — loudness envelope changes
+
+**Saliency is NOT a beat signal.** It fires on musical structure changes (verse-to-chorus transitions, breakdowns, instrument entries). Do not use it as a substitute for `beatStrength()`.
 
 ---
 
@@ -682,6 +764,7 @@ void MyNewEffect::render(plugins::EffectContext& ctx) {
     // === 1. AUDIO FEATURE EXTRACTION ===
     float heavyEnergy = 0.0f;
     float rmsEnergy = 0.0f;
+    float beatMod = 1.0f;
     bool onset = false;
 
     #if FEATURE_AUDIO_SYNC
@@ -690,6 +773,9 @@ void MyNewEffect::render(plugins::EffectContext& ctx) {
                        ctx.audio.controlBus.heavy_bands[2]) / 2.0f;
         rmsEnergy = ctx.audio.controlBus.rms;
         onset = ctx.audio.controlBus.onset;
+
+        // Beat-strength brightness modulation (0.4 floor, +60% on beat)
+        beatMod = 0.4f + 0.6f * ctx.audio.beatStrength();
     }
     #endif
 
@@ -716,10 +802,10 @@ void MyNewEffect::render(plugins::EffectContext& ctx) {
 
         // Your effect math here...
         uint8_t hue = ctx.gHue + (uint8_t)(normalizedDist * 30.0f);
-        uint8_t bright = scale8((uint8_t)(brightness * 255.0f), ctx.brightness);
+        uint8_t bright = scale8((uint8_t)(brightness * beatMod * 255.0f), ctx.brightness);
         CRGB color = ctx.palette.getColor(hue, bright);
 
-        // Center flash on onset
+        // Centre flash on onset
         if (dist < 12 && m_flashIntensity > 0.01f) {
             float flash = m_flashIntensity * expf(-dist * 0.2f);
             CRGB flashColor = ctx.palette.getColor(ctx.gHue, (uint8_t)(flash * 200));
@@ -756,6 +842,7 @@ Before any effect modification is considered complete:
 - [ ] **Does it render from center outward?** (not linear left-to-right)
 - [ ] **Does it use `ctx.palette.getColor()` for color?** (not hardcoded RGB)
 - [ ] **Does every audio value pass through smoothing?** (AsymmetricFollower, Spring, or ExpDecay)
+- [ ] **Does it use `beatStrength()` for brightness modulation?** (not `isOnBeat()` — see 4.4)
 - [ ] **Does it use `scale8()` for brightness?** (not float multiplication)
 - [ ] **Does it use `qadd8()` for additive blending?** (not raw assignment for multi-layer)
 - [ ] **Is motion anti-aliased via SubpixelRenderer?** (for moving elements)
@@ -836,3 +923,4 @@ An AR change is not complete until all are true:
 |------|--------|--------|
 | 2026-03-02 | Initial creation from episodic memory research (7200+ observations, 30+ source files) | Claude / Captain directive |
 | 2026-03-05 | Added AR control-liveness contract, beat-forward anti-chaos bounds, and lightweight post-processing guidance | Codex |
+| 2026-03-08 | Added audio-visual coupling best practices (beatStrength, liveliness, overallSaliency), signals quick-reference table, beatStrength in effect template | Claude |

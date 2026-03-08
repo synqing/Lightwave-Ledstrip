@@ -166,6 +166,11 @@ def parse_serial_frame(data: bytes) -> Optional[tuple]:
         metadata['flux'] = struct.unpack_from('<H', t, 14)[0] / 65535.0
         metadata['heap_free'] = struct.unpack_from('<I', t, 16)[0]
         metadata['show_skips'] = struct.unpack_from('<H', t, 20)[0]
+        # v2.1 fields (repurposed padding, backwards-compatible: old firmware writes zeros)
+        bpm_raw = struct.unpack_from('<H', t, 22)[0]
+        metadata['bpm'] = bpm_raw / 100.0 if bpm_raw > 0 else 0.0
+        conf_raw = struct.unpack_from('<H', t, 24)[0]
+        metadata['beat_confidence'] = conf_raw / 65535.0
 
     return frame.copy(), metadata
 

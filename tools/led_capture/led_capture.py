@@ -66,6 +66,8 @@ SERIAL_HEADER_SIZE = 17
 SERIAL_V1_FRAME_SIZE = 977   # 17 + 960
 SERIAL_V2_TRAILER_SIZE = 32
 SERIAL_V2_FRAME_SIZE = 1009  # 17 + 960 + 32
+SERIAL_V3_FRAME_SIZE = 49    # 17 + 0 + 32 (metadata-only, no RGB)
+SERIAL_V4_FRAME_SIZE = 529   # 17 + 480 + 32 (slim RGB, every other LED)
 
 # Visualisation
 WATERFALL_PIXEL_HEIGHT = 3  # vertical pixels per frame row
@@ -110,14 +112,14 @@ def parse_serial_frame(data: bytes) -> Optional[tuple]:
     length validation. Corrupt frames that happen to pass these checks
     are flagged via the ``suspect`` metadata key (see below).
     """
-    if len(data) < SERIAL_V1_FRAME_SIZE:
+    if len(data) < SERIAL_HEADER_SIZE:
         return None
     if data[0] != SERIAL_MAGIC:
         return None
 
     version = data[1]
     # Reject frames with unrecognised version bytes — likely corruption.
-    if version not in (1, 2):
+    if version not in (1, 2, 3, 4):
         return None
 
     tap = data[2]
@@ -129,18 +131,37 @@ def parse_serial_frame(data: bytes) -> Optional[tuple]:
     timestamp_us = struct.unpack_from('<I', data, 11)[0]
     payload_len = struct.unpack_from('<H', data, 15)[0]
 
-    if payload_len != RGB_BYTES:
-        return None
+    # Validate payload length based on version.
+    if version in (1, 2):
+        if payload_len != RGB_BYTES:
+            return None
+    elif version == 3:
+        if payload_len != 0:
+            return None
+    elif version == 4:
+        if payload_len != 160 * 3:
+            return None
 
-    payload = data[SERIAL_HEADER_SIZE:SERIAL_HEADER_SIZE + RGB_BYTES]
-    frame = np.frombuffer(payload, dtype=np.uint8).reshape(NUM_LEDS, 3)
-
-    # Sanity check: if >90% of payload bytes are identical, the frame is
-    # likely corrupted (e.g. a stuck serial buffer or memset artefact).
-    # Note: np.unique on a bytes object treats it as a single element,
-    # so we must operate on the already-parsed uint8 frame array.
-    _unique_ratio = len(np.unique(frame)) / max(1, len(payload))
-    suspect = _unique_ratio < 0.10  # fewer than 10% unique byte values
+    # Build frame array depending on version.
+    if version == 3:
+        # Metadata-only: no RGB, return black frame.
+        frame = np.zeros((NUM_LEDS, 3), dtype=np.uint8)
+        suspect = False
+    elif version == 4:
+        # Slim: 160 LEDs (every other), expand to full 320 by duplication.
+        slim_payload = data[SERIAL_HEADER_SIZE:SERIAL_HEADER_SIZE + payload_len]
+        slim = np.frombuffer(slim_payload, dtype=np.uint8).reshape(160, 3)
+        frame = np.zeros((NUM_LEDS, 3), dtype=np.uint8)
+        frame[0::2] = slim      # even indices get actual data
+        frame[1::2] = slim      # odd indices duplicate neighbours
+        _unique_ratio = len(np.unique(slim)) / max(1, len(slim_payload))
+        suspect = _unique_ratio < 0.10
+    else:
+        # v1/v2: full 960-byte RGB payload.
+        payload = data[SERIAL_HEADER_SIZE:SERIAL_HEADER_SIZE + RGB_BYTES]
+        frame = np.frombuffer(payload, dtype=np.uint8).reshape(NUM_LEDS, 3)
+        _unique_ratio = len(np.unique(frame)) / max(1, len(payload))
+        suspect = _unique_ratio < 0.10
 
     metadata = {
         'version': version,
@@ -154,8 +175,8 @@ def parse_serial_frame(data: bytes) -> Optional[tuple]:
         'suspect': suspect,
     }
 
-    # v2 metrics trailer (32 bytes after RGB payload)
-    trailer_offset = SERIAL_HEADER_SIZE + RGB_BYTES
+    # v2+ metrics trailer (32 bytes after RGB payload)
+    trailer_offset = SERIAL_HEADER_SIZE + payload_len
     if version >= 2 and len(data) >= trailer_offset + SERIAL_V2_TRAILER_SIZE:
         t = data[trailer_offset:]
         metadata['show_time_us'] = struct.unpack_from('<H', t, 0)[0]

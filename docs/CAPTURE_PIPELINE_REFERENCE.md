@@ -10,6 +10,7 @@
 | Component | File |
 |-----------|------|
 | Firmware capture | `firmware-v3/src/main.cpp` (lines 141--1825) |
+| FPS sweep tool | `tools/led_capture/fps_sweep.py` |
 | Python capture & waterfall | `tools/led_capture/led_capture.py` (731 lines) |
 | Beat-brightness analyser | `tools/led_capture/analyze_beats.py` (~1750 lines) |
 
@@ -19,14 +20,14 @@
 
 ```
 +------------------+          USB CDC Serial (115200 baud)
-|   ESP32-S3 K1    |  ──────────────────────────────────────>  +-----------------+
+|   ESP32-S3       |  ──────────────────────────────────────>  +-----------------+
 |                  |  Binary frames:                           |  Python Host    |
-|  RendererActor   |    v1: 977 bytes                          |                 |
-|    (Core 1)      |    v2: 1009 bytes                         |  led_capture.py |
+|  RendererActor   |    v1: 977B, v2: 1009B                    |                 |
+|    (Core 1)      |    v3/meta: 49B, v4/slim: 529B            |  led_capture.py |
 |                  |  at 1--60 FPS (configurable)              |  or             |
-|  capture stream  |                                           |  analyze_beats  |
-|  command handler |  <── "capture stream b 15\n" (start)      |  .py            |
-|  in loop()       |  <── "capture stop\n"       (stop)        +---------+-------+
+|  captureProducer |                                           |  analyze_beats  |
+|  Task (Core 0)   |  <── "capture stream b 30\n" (start)      |  .py            |
+|  + esp_timer     |  <── "capture stop\n"       (stop)        +---------+-------+
 +------------------+                                                     |
                                                                          v
                                                               +----------+---------+
@@ -96,33 +97,52 @@ subcmd.trim();
 2. Global state variables are set:
    - `s_captureStreamTap` = `TAP_B_POST_CORRECTION`
    - `s_captureStreamTapMask` = `0x02`
-   - `s_captureStreamIntervalMs` = `1000 / 15` = `66`
-   - `s_captureStreamLastPush` = `0`
+   - `s_captureStreamIntervalUs` = `1000000 / 30` = `33333`
+   - `s_captureStreamLastPushUs` = `0`
    - `s_captureStreamLastFrameIdx` = `UINT32_MAX`
    - `s_captureStreamActive` = `true`
-3. Firmware prints: `[CAPTURE] Streaming tap B at 15 FPS (66 ms interval)`
+3. Firmware prints: `[CAPTURE] Streaming tap B at 30 FPS (33333 us interval) [async+timer]`
 
-### 2.3 Frame Transmission Loop
+### 2.3 Frame Transmission Architecture
 
-The streaming tick executes at the top of every `loop()` iteration
-(line ~1387). It is NOT interrupt-driven; it checks elapsed time:
+Capture runs on a **dedicated FreeRTOS task** (`captureProducerTask`) pinned to
+Core 0, paced by an `esp_timer` with microsecond resolution. This decouples
+capture from the Arduino `loop()` task and eliminates tick quantization.
 
-```cpp
-if (s_captureStreamActive && renderer &&
-    (now - s_captureStreamLastPush >= s_captureStreamIntervalMs))
+**Architecture:**
+
+```
+esp_timer (periodic, µs resolution)
+    │  fires at target interval
+    ▼
+captureTimerCallback()          ◀── runs in esp_timer task (high priority)
+    │  xTaskNotifyGive()             does NO work, just wakes the producer
+    ▼
+captureProducerTask             ◀── FreeRTOS task, Core 0, priority 2
+    │  ulTaskNotifyTake()            blocks until notified
+    │  getCapturedFrame()            copies 320 CRGBs from renderer snapshot
+    │  duplicate check               skips if frameIndex unchanged
+    │  assemble header+RGB+trailer   into s_captureFrameBuf
+    │  Serial.write(buf, pos)        blocking bulk write via HWCDC
+    ▼
+USB CDC host (Python)
 ```
 
-When the interval has elapsed:
+**Operational limits (measured, v2 1009-byte frames):**
 
-1. `renderer->getCapturedFrame(tap, frame)` copies 320 CRGBs into the
-   scratch buffer `s_captureDumpFrameScratch` (allocated in PSRAM if available,
-   otherwise DRAM fallback).
-2. `renderer->getCaptureMetadata()` returns the metadata struct for the most
-   recently captured frame.
-3. A duplicate check prevents re-sending the same frame:
-   `if (metadata.frameIndex != s_captureStreamLastFrameIdx)`.
-4. If the frame is new, the header + RGB payload + optional trailer are written
-   to `Serial` as raw bytes.
+| Mode | FPS | Notes |
+|------|-----|-------|
+| Reference | 30 | Exact target tracking, zero drops |
+| Stress | 40 | 97% of target, clean |
+| Lab-only | 50--60 | 3--4% drops, show time rises |
+
+The remaining ceiling at ~47 FPS is most likely dominated by blocking USB CDC
+writes (~14ms per 1009-byte frame) plus residual capture/assembly overhead.
+The HWCDC TX ring buffer is enlarged to 4096 bytes at boot
+(`Serial.setTxBufferSize(4096)`) to reduce write blocking.
+
+A sync fallback path in `loop()` remains for robustness — it runs only if
+the async task fails to create.
 
 ### 2.4 Binary Frame Format v2
 

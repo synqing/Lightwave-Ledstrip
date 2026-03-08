@@ -56,11 +56,13 @@ def find_knee(runs: list) -> int | None:
     return clean_runs[-1]['fps_target']
 
 
-def format_table(runs: list, port: str) -> str:
+def format_table(runs: list, port: str, fmt: str = 'v2') -> str:
     """Build the ASCII summary table from completed runs."""
     now = datetime.now().strftime('%Y-%m-%d %H:%M')
+    fmt_sizes = {'v1': 977, 'v2': 1009, 'meta': 49, 'slim': 529}
+    fmt_size = fmt_sizes.get(fmt, '?')
     lines = []
-    lines.append(f"FPS Sweep Results -- {port} -- {now}")
+    lines.append(f"FPS Sweep Results -- {port} -- {now} -- format: {fmt} ({fmt_size}B)")
     lines.append('=' * 80)
     lines.append(
         ' Target | Actual | Frames | Drops | Drop%  '
@@ -124,7 +126,7 @@ def format_table(runs: list, port: str) -> str:
 
 
 def run_sweep(port: str, fps_targets: list[int], duration: float,
-              settle: float, tap: str) -> list[dict]:
+              settle: float, tap: str, fmt: str = 'v2') -> list[dict]:
     """Execute the FPS sweep, returning a list of run result dicts."""
     n = len(fps_targets)
     # Estimate total time: each run = duration + ~3s board reset + settle.
@@ -132,8 +134,11 @@ def run_sweep(port: str, fps_targets: list[int], duration: float,
     est_total = n * (duration + boot_time + settle)
     est_min = est_total / 60.0
 
+    fmt_sizes = {'v1': 977, 'v2': 1009, 'meta': 49, 'slim': 529}
+    fmt_size = fmt_sizes.get(fmt, '?')
+
     print(f"FPS Sweep: {n} targets {fps_targets}")
-    print(f"Duration per target: {duration}s | Settle: {settle}s | Tap: {tap}")
+    print(f"Duration per target: {duration}s | Settle: {settle}s | Tap: {tap} | Format: {fmt} ({fmt_size}B)")
     print(f"Estimated total time: {est_total:.0f}s ({est_min:.1f} min)")
     print(f"Serial port: {port}")
 
@@ -152,7 +157,7 @@ def run_sweep(port: str, fps_targets: list[int], duration: float,
         )
         print('=' * 60)
 
-        result = capture_with_metadata(port, duration, fps, tap)
+        result = capture_with_metadata(port, duration, fps, tap, fmt=fmt)
 
         if result is None:
             print(f"  FAILED -- no frames captured at {fps} FPS")
@@ -234,6 +239,11 @@ def main():
         '--tap', choices=['a', 'b', 'c'], default='b',
         help='Capture tap point (default: b)'
     )
+    parser.add_argument(
+        '--format', choices=['v1', 'v2', 'meta', 'slim'], default='v2',
+        dest='fmt',
+        help='Frame format: v2 (1009B), meta (49B, no RGB), slim (529B, half-res) (default: v2)'
+    )
 
     args = parser.parse_args()
 
@@ -256,10 +266,11 @@ def main():
         duration=args.duration,
         settle=args.settle,
         tap=args.tap,
+        fmt=args.fmt,
     )
 
     # Build and display the summary table.
-    report = format_table(runs, args.serial)
+    report = format_table(runs, args.serial, args.fmt)
     print(f"\n{report}")
 
     # Optionally write to file.

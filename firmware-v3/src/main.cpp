@@ -16,6 +16,7 @@
 #ifndef NATIVE_BUILD
 #include <esp_task_wdt.h>
 #include <esp_heap_caps.h>
+#include <esp_timer.h>
 #endif
 
 #define LW_LOG_TAG "Main"
@@ -156,6 +157,8 @@ uint32_t s_captureWriteTotalUs = 0;    // cumulative write duration
 uint32_t s_captureWriteCount = 0;      // number of write attempts
 uint16_t s_captureAvailMin = UINT16_MAX; // smallest availableForWrite() seen
 uint32_t s_captureBackpressureSkips = 0; // frames skipped due to low buffer space
+uint32_t s_captureAssembleMaxUs = 0;   // longest frame assembly duration
+uint32_t s_captureAssembleTotalUs = 0; // cumulative assembly duration
 
 // Pre-assembled frame buffer for single bulk Serial.write() — allocated in PSRAM.
 // v2 max frame = 1009 bytes (17 header + 960 RGB + 32 metrics trailer).
@@ -197,12 +200,207 @@ void initLoopScratchBuffers() {
             (s_captureFrameBuf != s_captureFrameBufFallback) ? "PSRAM" : "DRAM");
 }
 
+// ==================== Capture Producer Task (Path B) ====================
+// Decouples frame capture from the Arduino loop() task.
+// The producer runs at a fixed cadence on its own FreeRTOS task,
+// breaking the ~18 FPS ceiling caused by loop() overhead.
+// Pinned to Core 0 (same as AudioActor), priority 2 (above loopTask=1).
+
+TaskHandle_t s_captureTaskHandle = nullptr;
+volatile bool s_captureTaskRunning = false;
+esp_timer_handle_t s_captureTimer = nullptr;
+
+// esp_timer callback — runs in the high-priority esp_timer task.
+// Does NO work here; just wakes the capture task via notification.
+void IRAM_ATTR captureTimerCallback(void* arg) {
+    TaskHandle_t h = s_captureTaskHandle;
+    if (h) {
+        xTaskNotifyGive(h);
+    }
+}
+
+// Dedicated CRGB buffer for the capture task (avoids racing with dump command
+// which uses s_captureDumpFrameScratch).
+CRGB s_captureTaskFrameBuf[LOOP_SCRATCH_LED_COUNT] = {};
+
+void captureProducerTask(void* param) {
+    auto* ren = static_cast<lightwaveos::actors::RendererActor*>(param);
+
+    uint32_t writeCount = 0;
+    uint32_t writeMaxUs = 0;
+    uint32_t writeTotalUs = 0;
+    uint32_t assembleMaxUs = 0;
+    uint32_t assembleTotalUs = 0;
+    uint16_t availMin = UINT16_MAX;
+    uint32_t txDropped = 0;
+    uint32_t lastFrameIdx = UINT32_MAX;
+
+    while (s_captureTaskRunning) {
+        // Block until the esp_timer fires a notification.
+        // Timeout after 100ms to check the running flag.
+        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(100));
+
+        if (!s_captureTaskRunning) break;
+
+        CRGB* frame = s_captureTaskFrameBuf;
+        if (!ren->getCapturedFrame(s_captureStreamTap, frame)) {
+            continue;
+        }
+
+        auto metadata = ren->getCaptureMetadata();
+        if (metadata.frameIndex == lastFrameIdx) {
+            continue;
+        }
+        lastFrameIdx = metadata.frameIndex;
+
+        // --- Assemble frame into bulk buffer ---
+        uint32_t assembleStart = micros();
+        uint8_t* buf = s_captureFrameBuf;
+        size_t pos = 0;
+
+        uint16_t rgbLen;
+        if (s_captureStreamVersion == 3) {
+            rgbLen = 0;
+        } else if (s_captureStreamVersion == 4) {
+            rgbLen = 160 * 3;
+        } else {
+            rgbLen = 320 * 3;
+        }
+
+        // Header (17 bytes)
+        buf[pos++] = 0xFD;
+        buf[pos++] = s_captureStreamVersion;
+        buf[pos++] = (uint8_t)s_captureStreamTap;
+        buf[pos++] = metadata.effectId;
+        buf[pos++] = metadata.paletteId;
+        buf[pos++] = metadata.brightness;
+        buf[pos++] = metadata.speed;
+        buf[pos++] = (uint8_t)(metadata.frameIndex & 0xFF);
+        buf[pos++] = (uint8_t)((metadata.frameIndex >> 8) & 0xFF);
+        buf[pos++] = (uint8_t)((metadata.frameIndex >> 16) & 0xFF);
+        buf[pos++] = (uint8_t)((metadata.frameIndex >> 24) & 0xFF);
+        buf[pos++] = (uint8_t)(metadata.timestampUs & 0xFF);
+        buf[pos++] = (uint8_t)((metadata.timestampUs >> 8) & 0xFF);
+        buf[pos++] = (uint8_t)((metadata.timestampUs >> 16) & 0xFF);
+        buf[pos++] = (uint8_t)((metadata.timestampUs >> 24) & 0xFF);
+        buf[pos++] = (uint8_t)(rgbLen & 0xFF);
+        buf[pos++] = (uint8_t)((rgbLen >> 8) & 0xFF);
+
+        // RGB payload
+        if (s_captureStreamVersion == 4) {
+            const uint8_t* src = (const uint8_t*)frame;
+            for (int i = 0; i < 320; i += 2) {
+                buf[pos++] = src[i * 3];
+                buf[pos++] = src[i * 3 + 1];
+                buf[pos++] = src[i * 3 + 2];
+            }
+        } else if (rgbLen > 0) {
+            memcpy(&buf[pos], (uint8_t*)frame, rgbLen);
+            pos += rgbLen;
+        }
+
+        // v2+ metrics trailer (32 bytes)
+        if (s_captureStreamVersion >= 2) {
+            using namespace lightwaveos::actors;
+
+            auto& ledStats = ren->getLedDriverStats();
+            RendererActor::BandsDebugSnapshot bandsSnap;
+            ren->getBandsDebugSnapshot(bandsSnap);
+
+            lightwaveos::audio::ControlBusFrame cbf;
+            ren->copyCachedAudioFrame(cbf);
+
+            uint16_t showUs = (ledStats.lastShowUs > 65535) ? 65535 : (uint16_t)ledStats.lastShowUs;
+            buf[pos++] = (uint8_t)(showUs & 0xFF);
+            buf[pos++] = (uint8_t)((showUs >> 8) & 0xFF);
+
+            uint16_t rmsU16 = (uint16_t)(bandsSnap.rms * 65535.0f);
+            buf[pos++] = (uint8_t)(rmsU16 & 0xFF);
+            buf[pos++] = (uint8_t)((rmsU16 >> 8) & 0xFF);
+
+            for (int i = 0; i < 8; i++) {
+                float v = bandsSnap.bands[i];
+                buf[pos++] = (uint8_t)(v > 1.0f ? 255 : (uint8_t)(v * 255.0f));
+            }
+
+            bool beat = cbf.tempoBeatTick || cbf.es_beat_tick;
+            buf[pos++] = beat ? 1 : 0;
+
+            bool onset = cbf.snareTrigger || cbf.hihatTrigger;
+            buf[pos++] = onset ? 1 : 0;
+
+            uint16_t fluxU16 = (uint16_t)(bandsSnap.flux * 65535.0f);
+            buf[pos++] = (uint8_t)(fluxU16 & 0xFF);
+            buf[pos++] = (uint8_t)((fluxU16 >> 8) & 0xFF);
+
+            uint32_t heapFree = esp_get_free_heap_size();
+            buf[pos++] = (uint8_t)(heapFree & 0xFF);
+            buf[pos++] = (uint8_t)((heapFree >> 8) & 0xFF);
+            buf[pos++] = (uint8_t)((heapFree >> 16) & 0xFF);
+            buf[pos++] = (uint8_t)((heapFree >> 24) & 0xFF);
+
+            uint16_t skips = (ledStats.showSkips > 65535) ? 65535 : (uint16_t)ledStats.showSkips;
+            buf[pos++] = (uint8_t)(skips & 0xFF);
+            buf[pos++] = (uint8_t)((skips >> 8) & 0xFF);
+
+            float bpmVal = (cbf.es_bpm > 0.0f && cbf.es_bpm != 120.0f)
+                         ? cbf.es_bpm : cbf.tempoBpm;
+            uint16_t bpmU16 = (uint16_t)(bpmVal * 100.0f);
+            buf[pos++] = (uint8_t)(bpmU16 & 0xFF);
+            buf[pos++] = (uint8_t)((bpmU16 >> 8) & 0xFF);
+
+            float conf = (cbf.es_tempo_confidence > 0.0f)
+                       ? cbf.es_tempo_confidence : cbf.tempoConfidence;
+            if (conf > 1.0f) conf = 1.0f;
+            uint16_t confU16 = (uint16_t)(conf * 65535.0f);
+            buf[pos++] = (uint8_t)(confU16 & 0xFF);
+            buf[pos++] = (uint8_t)((confU16 >> 8) & 0xFF);
+
+            memset(&buf[pos], 0, 6);
+            pos += 6;
+        }
+
+        uint32_t assembleDur = micros() - assembleStart;
+        assembleTotalUs += assembleDur;
+        if (assembleDur > assembleMaxUs) assembleMaxUs = assembleDur;
+
+        // TX
+        uint16_t avail = Serial.availableForWrite();
+        if (avail < availMin) availMin = avail;
+
+        uint32_t writeStart = micros();
+        size_t written = Serial.write(buf, pos);
+        uint32_t writeDur = micros() - writeStart;
+
+        writeCount++;
+        writeTotalUs += writeDur;
+        if (writeDur > writeMaxUs) writeMaxUs = writeDur;
+
+        if (written < pos) txDropped++;
+    }
+
+    // Copy final stats to globals for reporting.
+    s_captureWriteCount = writeCount;
+    s_captureWriteMaxUs = writeMaxUs;
+    s_captureWriteTotalUs = writeTotalUs;
+    s_captureAssembleMaxUs = assembleMaxUs;
+    s_captureAssembleTotalUs = assembleTotalUs;
+    s_captureAvailMin = availMin;
+    s_captureStreamDropped = txDropped;
+
+    s_captureTaskHandle = nullptr;
+    vTaskDelete(nullptr);
+}
+
 }  // namespace
 
 // ==================== Setup ====================
 
 void setup() {
     // Initialize serial
+    Serial.setTxBufferSize(4096);   // Tier 0: enlarge HWCDC TX ring buffer (default 256B)
+                                     // so Serial.write(1009) enqueues non-blocking instead
+                                     // of blocking through ~4 refill cycles.
     Serial.begin(115200);
     delay(1000);
 
@@ -1410,7 +1608,8 @@ void loop() {
     // Frame is pre-assembled into s_captureFrameBuf and sent as a single
     // bulk Serial.write() for efficient USB CDC transfer.
     // v1: 977 bytes (17-byte header + 960 RGB). v2: 1009 bytes (+ 32-byte metrics trailer).
-    if (s_captureStreamActive && renderer && (nowUs - s_captureStreamLastPushUs >= s_captureStreamIntervalUs)) {
+    // Sync capture path — only runs when NO async task is active (fallback).
+    if (s_captureStreamActive && !s_captureTaskHandle && renderer && (nowUs - s_captureStreamLastPushUs >= s_captureStreamIntervalUs)) {
         CRGB* frame = s_captureDumpFrameScratch;
         if (renderer->getCapturedFrame(s_captureStreamTap, frame)) {
             auto metadata = renderer->getCaptureMetadata();
@@ -1420,9 +1619,22 @@ void loop() {
                 s_captureStreamLastPushUs = nowUs;
 
                 // --- Assemble frame into bulk buffer ---
+                uint32_t assembleStart = micros();
                 uint8_t* buf = s_captureFrameBuf;
                 size_t pos = 0;
-                constexpr uint16_t rgbLen = 320 * 3;
+
+                // Determine RGB payload size based on version/mode:
+                //   v1/v2: full 960B (320 LEDs × 3)
+                //   v3: metadata-only, 0B RGB
+                //   v4: slim, 480B (160 LEDs × 3, every other LED)
+                uint16_t rgbLen;
+                if (s_captureStreamVersion == 3) {
+                    rgbLen = 0;
+                } else if (s_captureStreamVersion == 4) {
+                    rgbLen = 160 * 3;  // 480 bytes
+                } else {
+                    rgbLen = 320 * 3;  // 960 bytes
+                }
 
                 // Header (17 bytes)
                 buf[pos++] = 0xFD;
@@ -1443,9 +1655,19 @@ void loop() {
                 buf[pos++] = (uint8_t)(rgbLen & 0xFF);
                 buf[pos++] = (uint8_t)((rgbLen >> 8) & 0xFF);
 
-                // RGB payload (960 bytes)
-                memcpy(&buf[pos], (uint8_t*)frame, rgbLen);
-                pos += rgbLen;
+                // RGB payload (0, 480, or 960 bytes depending on version)
+                if (s_captureStreamVersion == 4) {
+                    // Slim: sample every other LED
+                    const uint8_t* src = (const uint8_t*)frame;
+                    for (int i = 0; i < 320; i += 2) {
+                        buf[pos++] = src[i * 3];
+                        buf[pos++] = src[i * 3 + 1];
+                        buf[pos++] = src[i * 3 + 2];
+                    }
+                } else if (rgbLen > 0) {
+                    memcpy(&buf[pos], (uint8_t*)frame, rgbLen);
+                    pos += rgbLen;
+                }
 
                 // v2 metrics trailer (32 bytes)
                 if (s_captureStreamVersion >= 2) {
@@ -1518,6 +1740,11 @@ void loop() {
                     memset(&buf[pos], 0, 6);
                     pos += 6;
                 }
+
+                // Record assembly duration.
+                uint32_t assembleDur = micros() - assembleStart;
+                s_captureAssembleTotalUs += assembleDur;
+                if (assembleDur > s_captureAssembleMaxUs) s_captureAssembleMaxUs = assembleDur;
 
                 // Record TX buffer state before write.
                 uint16_t avail = Serial.availableForWrite();
@@ -1801,20 +2028,72 @@ void loop() {
                     s_captureWriteCount = 0;
                     s_captureAvailMin = UINT16_MAX;
                     s_captureBackpressureSkips = 0;
+                    s_captureAssembleMaxUs = 0;
+                    s_captureAssembleTotalUs = 0;
                     s_captureStreamActive = true;
 
-                    Serial.printf("[CAPTURE] Streaming tap %c at %d FPS (%d us interval)\n",
+                    // Path B: launch dedicated capture task on Core 0.
+                    // This decouples capture from loop() overhead.
+                    s_captureTaskRunning = true;
+                    BaseType_t taskOk = xTaskCreatePinnedToCore(
+                        captureProducerTask,
+                        "captureTx",
+                        4096,           // stack (frame buf is global, not on stack)
+                        renderer,       // param — RendererActor*
+                        2,              // priority (above loopTask=1, below audio)
+                        &s_captureTaskHandle,
+                        0               // Core 0
+                    );
+                    if (taskOk != pdPASS) {
+                        s_captureTaskRunning = false;
+                        s_captureTaskHandle = nullptr;
+                        Serial.println("[CAPTURE] WARN: task create failed, using sync fallback");
+                    }
+
+                    // Create esp_timer for microsecond-resolution pacing.
+                    // The callback just notifies the task — no work in ISR context.
+                    if (s_captureTaskHandle && !s_captureTimer) {
+                        esp_timer_create_args_t timerArgs = {};
+                        timerArgs.callback = captureTimerCallback;
+                        timerArgs.name = "capTimer";
+                        if (esp_timer_create(&timerArgs, &s_captureTimer) == ESP_OK) {
+                            esp_timer_start_periodic(s_captureTimer, s_captureStreamIntervalUs);
+                        }
+                    }
+
+                    Serial.printf("[CAPTURE] Streaming tap %c at %d FPS (%d us interval) [%s]\n",
                                   (tapMask & 0x01) ? 'A' : (tapMask & 0x04) ? 'C' : 'B',
-                                  targetFps, (int)s_captureStreamIntervalUs);
+                                  targetFps, (int)s_captureStreamIntervalUs,
+                                  s_captureTaskHandle ? "async+timer" : "sync");
                 }
                 else if (subcmd == "stop") {
+                    // Stop timer first (prevents further notifications).
+                    if (s_captureTimer) {
+                        esp_timer_stop(s_captureTimer);
+                        esp_timer_delete(s_captureTimer);
+                        s_captureTimer = nullptr;
+                    }
+                    // Signal task to stop and wait for it to flush stats.
+                    if (s_captureTaskHandle) {
+                        s_captureTaskRunning = false;
+                        // Give one extra notification to unblock the task.
+                        xTaskNotifyGive(s_captureTaskHandle);
+                        // Wait up to 500ms for task to self-delete.
+                        for (int w = 0; w < 50 && s_captureTaskHandle; w++) {
+                            delay(10);
+                        }
+                    }
                     s_captureStreamActive = false;
-                    uint32_t avgUs = s_captureWriteCount ? (s_captureWriteTotalUs / s_captureWriteCount) : 0;
-                    Serial.printf("[CAPTURE] Stopped: %lu writes, max %lu us, avg %lu us, "
+                    uint32_t avgWriteUs = s_captureWriteCount ? (s_captureWriteTotalUs / s_captureWriteCount) : 0;
+                    uint32_t avgAssemUs = s_captureWriteCount ? (s_captureAssembleTotalUs / s_captureWriteCount) : 0;
+                    Serial.printf("[CAPTURE] Stopped: %lu writes, write max/avg %lu/%lu us, "
+                                  "assemble max/avg %lu/%lu us, "
                                   "min_avail %u B, bp_skip %lu, tx_drop %lu\n",
                                   (unsigned long)s_captureWriteCount,
                                   (unsigned long)s_captureWriteMaxUs,
-                                  (unsigned long)avgUs,
+                                  (unsigned long)avgWriteUs,
+                                  (unsigned long)s_captureAssembleMaxUs,
+                                  (unsigned long)avgAssemUs,
                                   (unsigned)s_captureAvailMin,
                                   (unsigned long)s_captureBackpressureSkips,
                                   (unsigned long)s_captureStreamDropped);
@@ -1825,6 +2104,11 @@ void loop() {
                     int newFps = fpsArg.toInt();
                     if (newFps >= 1 && newFps <= 60) {
                         s_captureStreamIntervalUs = 1000000 / newFps;
+                        // Restart timer with new period if active.
+                        if (s_captureTimer) {
+                            esp_timer_stop(s_captureTimer);
+                            esp_timer_start_periodic(s_captureTimer, s_captureStreamIntervalUs);
+                        }
                         Serial.printf("[CAPTURE] FPS set to %d (%d us interval)\n", newFps, (int)s_captureStreamIntervalUs);
                     } else {
                         Serial.println("Usage: capture fps <1-60>");
@@ -1859,26 +2143,37 @@ void loop() {
                     fmtArg.trim();
                     if (fmtArg == "v1" || fmtArg == "1") {
                         s_captureStreamVersion = 1;
-                        Serial.println("[CAPTURE] Format set to v1 (976 bytes, no metrics)");
+                        Serial.println("[CAPTURE] Format set to v1 (977 bytes, no metrics)");
                     } else if (fmtArg == "v2" || fmtArg == "2") {
                         s_captureStreamVersion = 2;
-                        Serial.println("[CAPTURE] Format set to v2 (1008 bytes, with metrics)");
+                        Serial.println("[CAPTURE] Format set to v2 (1009 bytes, with metrics)");
+                    } else if (fmtArg == "meta" || fmtArg == "v3" || fmtArg == "3") {
+                        s_captureStreamVersion = 3;
+                        Serial.println("[CAPTURE] Format set to v3/meta (49 bytes, metrics only)");
+                    } else if (fmtArg == "slim" || fmtArg == "v4" || fmtArg == "4") {
+                        s_captureStreamVersion = 4;
+                        Serial.println("[CAPTURE] Format set to v4/slim (529 bytes, half-res RGB)");
                     } else {
-                        Serial.println("Usage: capture format <v1|v2>");
+                        Serial.println("Usage: capture format <v1|v2|meta|slim>");
                     }
                 }
                 else if (subcmd == "status") {
                     auto metadata = renderer->getCaptureMetadata();
-                    uint32_t avgUs = s_captureWriteCount ? (s_captureWriteTotalUs / s_captureWriteCount) : 0;
+                    uint32_t avgWriteUs = s_captureWriteCount ? (s_captureWriteTotalUs / s_captureWriteCount) : 0;
+                    uint32_t avgAssemUs = s_captureWriteCount ? (s_captureAssembleTotalUs / s_captureWriteCount) : 0;
                     Serial.println("\n=== Capture Status ===");
                     Serial.printf("  Enabled: %s\n", renderer->isCaptureModeEnabled() ? "YES" : "NO");
-                    Serial.printf("  Streaming: %s (v%d, %d us interval)\n",
+                    Serial.printf("  Streaming: %s (v%d, %d us interval, %s)\n",
                                   s_captureStreamActive ? "YES" : "NO",
-                                  s_captureStreamVersion, (int)s_captureStreamIntervalUs);
-                    Serial.printf("  Writes: %lu, max %lu us, avg %lu us\n",
+                                  s_captureStreamVersion, (int)s_captureStreamIntervalUs,
+                                  s_captureTaskHandle ? "async" : "sync");
+                    Serial.printf("  Write: %lu, max/avg %lu/%lu us\n",
                                   (unsigned long)s_captureWriteCount,
                                   (unsigned long)s_captureWriteMaxUs,
-                                  (unsigned long)avgUs);
+                                  (unsigned long)avgWriteUs);
+                    Serial.printf("  Assemble: max/avg %lu/%lu us\n",
+                                  (unsigned long)s_captureAssembleMaxUs,
+                                  (unsigned long)avgAssemUs);
                     Serial.printf("  Min avail: %u B, bp_skip: %lu, tx_drop: %lu\n",
                                   (unsigned)s_captureAvailMin,
                                   (unsigned long)s_captureBackpressureSkips,

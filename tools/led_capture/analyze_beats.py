@@ -81,6 +81,7 @@ from PIL import Image, ImageDraw, ImageFont
 # Import shared constants and parsers from led_capture
 from led_capture import (
     SERIAL_MAGIC, SERIAL_V1_FRAME_SIZE, SERIAL_V2_FRAME_SIZE,
+    SERIAL_V3_FRAME_SIZE, SERIAL_V4_FRAME_SIZE,
     NUM_LEDS, parse_serial_frame,
 )
 
@@ -133,11 +134,14 @@ def _has_v2_metadata(metadata: list) -> bool:
 # ---------------------------------------------------------------------------
 
 def capture_with_metadata(port: str, duration: float, fps: int = 15,
-                          tap: str = 'b', stop_event: threading.Event = None):
-    """Capture frames + full v2 metadata via serial streaming.
+                          tap: str = 'b', stop_event: threading.Event = None,
+                          fmt: str = 'v2'):
+    """Capture frames + full v2+ metadata via serial streaming.
 
     Returns (frames, timestamps, metadata_list) or None.
     frames: (N, 320, 3) uint8, timestamps: (N,) float64, metadata: list[dict]
+
+    fmt: 'v1', 'v2' (default), 'meta' (v3, no RGB), 'slim' (v4, half-res RGB)
     """
     try:
         import serial
@@ -160,6 +164,12 @@ def capture_with_metadata(port: str, duration: float, fps: int = 15,
 
     time.sleep(3)  # Board reset stabilisation (USB CDC DTR/RTS toggle)
     ser.reset_input_buffer()
+
+    # Set format before starting stream (v2 is default, no-op for backwards compat).
+    if fmt and fmt != 'v2':
+        ser.write(f'capture format {fmt}\n'.encode())
+        time.sleep(0.1)  # let firmware process format switch
+        ser.reset_input_buffer()
 
     ser.write(f'capture stream {tap_letter} {fps}\n'.encode())
     # No sleep — start reading immediately. The frame parser scans for
@@ -217,15 +227,29 @@ def capture_with_metadata(port: str, duration: float, fps: int = 15,
                 if len(recv_buf) < 2:
                     break
                 version = recv_buf[1]
-                frame_size = SERIAL_V2_FRAME_SIZE if version >= 2 else SERIAL_V1_FRAME_SIZE
+                if version == 3:
+                    frame_size = SERIAL_V3_FRAME_SIZE
+                elif version == 4:
+                    frame_size = SERIAL_V4_FRAME_SIZE
+                elif version == 2:
+                    frame_size = SERIAL_V2_FRAME_SIZE
+                elif version == 1:
+                    frame_size = SERIAL_V1_FRAME_SIZE
+                else:
+                    # Unrecognised version — false magic byte, skip it.
+                    recv_buf = recv_buf[1:]
+                    continue
 
                 if len(recv_buf) < frame_size:
                     break
 
                 frame_data = bytes(recv_buf[:frame_size])
-                recv_buf = recv_buf[frame_size:]
-
                 result = parse_serial_frame(frame_data)
+                if result is None:
+                    # Failed validation — skip past false magic.
+                    recv_buf = recv_buf[1:]
+                    continue
+                recv_buf = recv_buf[frame_size:]
                 if result is not None:
                     frame, meta = result
                     frames.append(frame)
@@ -2051,16 +2075,29 @@ def _capture_on_open_port(ser, duration: float, fps: int, tap: str,
                 if len(recv_buf) < 2:
                     break
                 version = recv_buf[1]
-                frame_size = (SERIAL_V2_FRAME_SIZE if version >= 2
-                              else SERIAL_V1_FRAME_SIZE)
+                if version == 3:
+                    frame_size = SERIAL_V3_FRAME_SIZE
+                elif version == 4:
+                    frame_size = SERIAL_V4_FRAME_SIZE
+                elif version == 2:
+                    frame_size = SERIAL_V2_FRAME_SIZE
+                elif version == 1:
+                    frame_size = SERIAL_V1_FRAME_SIZE
+                else:
+                    # Unrecognised version — false magic byte, skip it.
+                    recv_buf = recv_buf[1:]
+                    continue
 
                 if len(recv_buf) < frame_size:
                     break
 
                 frame_data = bytes(recv_buf[:frame_size])
-                recv_buf = recv_buf[frame_size:]
-
                 result = parse_serial_frame(frame_data)
+                if result is None:
+                    # Failed validation — skip past false magic.
+                    recv_buf = recv_buf[1:]
+                    continue
+                recv_buf = recv_buf[frame_size:]
                 if result is not None:
                     frame, meta = result
                     frames.append(frame)

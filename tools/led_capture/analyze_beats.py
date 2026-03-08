@@ -30,6 +30,12 @@ Usage:
     # Gate with custom thresholds
     python analyze_beats.py --load session.npz --gate --gate-drop-rate 0.005 --gate-show-time 8000
 
+    # Comparison with temporal alignment (cross-correlate RMS to sync)
+    python analyze_beats.py \
+        --serial /dev/cu.usbmodem212401 --label "Main HEAD" \
+        --compare-serial /dev/cu.usbmodem21401 --compare-label "Milestone" \
+        --duration 30 --align
+
     # Comparison with regression gate on both devices
     python analyze_beats.py \
         --serial /dev/cu.usbmodem212401 --label "Main HEAD" \
@@ -1177,6 +1183,478 @@ def load_session(path: str):
 
 
 # ---------------------------------------------------------------------------
+# Temporal Alignment
+# ---------------------------------------------------------------------------
+
+# Maximum lag to search when cross-correlating two captures (~2 seconds at
+# 15 FPS).  Beyond this the captures are too misaligned to salvage.
+_MAX_ALIGN_OFFSET = 30
+
+
+def align_captures(metadata_a: list, metadata_b: list,
+                   timestamps_a: np.ndarray, timestamps_b: np.ndarray,
+                   target_fps: float = 15.0):
+    """Cross-correlate RMS signals to find the temporal offset between two
+    captures of the same audio environment.
+
+    Both devices hear the same room audio but their serial capture streams
+    start at slightly different wall-clock times (board reset jitter). This
+    function finds the lag that maximises normalised cross-correlation of
+    the RMS energy envelopes, giving a post-hoc time shift to align the
+    two streams frame-by-frame.
+
+    Parameters
+    ----------
+    metadata_a, metadata_b : list[dict]
+        Per-frame v2 metadata from each capture.
+    timestamps_a, timestamps_b : ndarray
+        Wall-clock timestamps (seconds) for each frame.
+    target_fps : float
+        Resample rate for the common time base.
+
+    Returns
+    -------
+    (offset_frames, correlation_score, offset_seconds) or None
+        offset_frames : int
+            How many frames to shift stream B relative to A.
+            Positive means B started *ahead* (B's events appear earlier).
+        correlation_score : float
+            Peak normalised cross-correlation value in [0, 1].
+        offset_seconds : float
+            Offset converted to seconds at the target FPS.
+        Returns None if alignment is not possible (e.g. silent RMS).
+    """
+    rms_a = np.array([m.get('rms', 0.0) for m in metadata_a], dtype=np.float64)
+    rms_b = np.array([m.get('rms', 0.0) for m in metadata_b], dtype=np.float64)
+
+    # Edge case: one device has no RMS data — alignment impossible.
+    if rms_a.max() < 1e-9 or rms_b.max() < 1e-9:
+        return None
+
+    # Resample both to a uniform time grid at target_fps.  The raw captures
+    # have irregular inter-frame intervals due to serial jitter.
+    def _resample(rms, timestamps, fps):
+        if len(timestamps) < 2:
+            return rms
+        t0 = timestamps[0]
+        duration = timestamps[-1] - t0
+        n_uniform = max(2, int(np.round(duration * fps)))
+        t_uniform = np.linspace(0, duration, n_uniform)
+        t_rel = timestamps - t0
+        return np.interp(t_uniform, t_rel, rms)
+
+    sig_a = _resample(rms_a, timestamps_a, target_fps)
+    sig_b = _resample(rms_b, timestamps_b, target_fps)
+
+    # Zero-mean normalisation for Pearson-style cross-correlation.
+    sig_a = sig_a - sig_a.mean()
+    sig_b = sig_b - sig_b.mean()
+
+    energy_a = np.sqrt(np.sum(sig_a ** 2))
+    energy_b = np.sqrt(np.sum(sig_b ** 2))
+    if energy_a < 1e-9 or energy_b < 1e-9:
+        return None
+
+    # Full cross-correlation.
+    xcorr = np.correlate(sig_a, sig_b, mode='full')
+    # Normalise by the geometric mean of the two signal energies.
+    xcorr /= (energy_a * energy_b)
+
+    # The zero-lag position in the 'full' output is at index len(sig_b) - 1.
+    zero_lag = len(sig_b) - 1
+
+    # Restrict the search window to +/- _MAX_ALIGN_OFFSET frames.
+    search_lo = max(0, zero_lag - _MAX_ALIGN_OFFSET)
+    search_hi = min(len(xcorr), zero_lag + _MAX_ALIGN_OFFSET + 1)
+    window = xcorr[search_lo:search_hi]
+
+    peak_idx_in_window = int(np.argmax(window))
+    peak_lag = (search_lo + peak_idx_in_window) - zero_lag
+    correlation_score = float(window[peak_idx_in_window])
+    # Clamp to [0, 1] — negative peaks indicate anti-correlation.
+    correlation_score = max(0.0, min(1.0, correlation_score))
+
+    offset_frames = int(peak_lag)
+    offset_seconds = offset_frames / target_fps
+
+    return (offset_frames, correlation_score, offset_seconds)
+
+
+def apply_alignment(frames_a, timestamps_a, metadata_a,
+                    frames_b, timestamps_b, metadata_b,
+                    offset_frames: int):
+    """Trim both capture streams so they overlap after the temporal shift.
+
+    Parameters
+    ----------
+    frames_a, frames_b : ndarray  (N, 320, 3)
+    timestamps_a, timestamps_b : ndarray  (N,)
+    metadata_a, metadata_b : list[dict]
+    offset_frames : int
+        From ``align_captures()``.  Positive means B is ahead of A, so we
+        trim the first ``offset_frames`` from B (or the first ``-offset``
+        from A if negative).
+
+    Returns
+    -------
+    (frames_a_aligned, ts_a_aligned, meta_a_aligned,
+     frames_b_aligned, ts_b_aligned, meta_b_aligned)
+    """
+    n_a = len(metadata_a)
+    n_b = len(metadata_b)
+
+    if offset_frames >= 0:
+        # B is ahead — drop the first `offset_frames` from B.
+        start_a = 0
+        start_b = offset_frames
+    else:
+        # A is ahead — drop the first `-offset_frames` from A.
+        start_a = -offset_frames
+        start_b = 0
+
+    # Common length after trimming the start.
+    remaining_a = n_a - start_a
+    remaining_b = n_b - start_b
+    common_len = min(remaining_a, remaining_b)
+
+    if common_len <= 0:
+        # No overlap — return empty arrays.  Caller should check length.
+        empty_f = np.zeros((0, frames_a.shape[1], 3), dtype=np.uint8)
+        empty_t = np.array([], dtype=np.float64)
+        return (empty_f, empty_t, [],
+                empty_f.copy(), empty_t.copy(), [])
+
+    end_a = start_a + common_len
+    end_b = start_b + common_len
+
+    return (
+        frames_a[start_a:end_a],
+        timestamps_a[start_a:end_a],
+        metadata_a[start_a:end_a],
+        frames_b[start_b:end_b],
+        timestamps_b[start_b:end_b],
+        metadata_b[start_b:end_b],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Effect Gallery
+# ---------------------------------------------------------------------------
+
+# Predefined gallery profiles — effect IDs to cycle through.
+# These are placeholders; customise for your firmware build.
+GALLERY_PROFILES = {
+    'quick': [0x0100, 0x0200, 0x0300, 0x0400, 0x0500],
+    'audio-reactive': [
+        0x0100, 0x0200, 0x0500, 0x0800,
+        0x0A00, 0x0B00, 0x1100, 0x1200,
+    ],
+}
+
+
+def _capture_on_open_port(ser, duration: float, fps: int, tap: str,
+                          stop_event: threading.Event):
+    """Capture frames from an already-open serial port.
+
+    Like ``capture_with_metadata`` but does NOT open or close the port,
+    so the ESP32-S3 is not reset between captures.  The caller is
+    responsible for port lifecycle.
+
+    Returns (frames, timestamps, metadata_list) or None.
+    """
+    tap_letter = tap.lower()
+    ser.reset_input_buffer()
+    ser.write(f'capture stream {tap_letter} {fps}\n'.encode())
+    time.sleep(0.3)
+
+    frames = []
+    timestamps = []
+    metadata_list = []
+    recv_buf = bytearray()
+    start_time = time.time()
+
+    try:
+        while not stop_event.is_set():
+            elapsed = time.time() - start_time
+            if elapsed >= duration:
+                break
+
+            waiting = ser.in_waiting
+            if waiting > 0:
+                recv_buf.extend(ser.read(waiting))
+            else:
+                time.sleep(0.005)
+                continue
+
+            # Scan for complete frames in buffer
+            while True:
+                magic_idx = recv_buf.find(bytes([SERIAL_MAGIC]))
+                if magic_idx < 0:
+                    recv_buf.clear()
+                    break
+
+                if magic_idx > 0:
+                    recv_buf = recv_buf[magic_idx:]
+
+                if len(recv_buf) < 2:
+                    break
+                version = recv_buf[1]
+                frame_size = (SERIAL_V2_FRAME_SIZE if version >= 2
+                              else SERIAL_V1_FRAME_SIZE)
+
+                if len(recv_buf) < frame_size:
+                    break
+
+                frame_data = bytes(recv_buf[:frame_size])
+                recv_buf = recv_buf[frame_size:]
+
+                result = parse_serial_frame(frame_data)
+                if result is not None:
+                    frame, meta = result
+                    frames.append(frame)
+                    timestamps.append(time.time())
+                    metadata_list.append(meta)
+
+                    count = len(frames)
+                    if count % 50 == 0:
+                        fps_actual = count / (time.time() - start_time)
+                        print(f"  [{count} frames, {elapsed:.1f}s, "
+                              f"{fps_actual:.1f} FPS]")
+    finally:
+        ser.write(b'capture stop\n')
+        time.sleep(0.2)
+
+    if not frames:
+        return None
+
+    return np.array(frames), np.array(timestamps), metadata_list
+
+
+def run_effect_gallery(port: str, effects: list, duration_per_effect: float,
+                       fps: int = 15, tap: str = 'b',
+                       stop_event: threading.Event = None):
+    """Cycle through effects, capturing and analysing each one.
+
+    Opens the serial port ONCE, then for each effect ID:
+      1. Sends ``effect <hex_id>`` to switch the firmware
+      2. Waits 2 seconds for the transition animation to settle
+      3. Captures for ``duration_per_effect`` seconds
+      4. Runs ``analyze_correlation()`` on the captured data
+
+    Parameters
+    ----------
+    port : str
+        Serial port path.
+    effects : list[int]
+        Effect IDs (e.g. ``[0x0100, 0x0200]``).
+    duration_per_effect : float
+        Seconds to capture per effect.
+    fps : int
+        Streaming FPS for capture.
+    tap : str
+        Capture tap point ('a', 'b', or 'c').
+    stop_event : threading.Event, optional
+        External stop signal.
+
+    Returns
+    -------
+    list[tuple[int, dict, tuple | None]]
+        (effect_id, metrics_dict, raw_data_tuple_or_None) per effect.
+        raw_data_tuple is (frames, timestamps, metadata) when available.
+    """
+    try:
+        import serial as pyserial
+    except ImportError:
+        print("ERROR: 'pyserial' required. pip install pyserial",
+              file=sys.stderr)
+        return []
+
+    if stop_event is None:
+        stop_event = threading.Event()
+
+    print(f"[Gallery] Opening {port} (one-time, {len(effects)} effects)...")
+    try:
+        ser = pyserial.Serial(port, 115200, timeout=0.1,
+                              dsrdtr=False, rtscts=False)
+    except Exception as e:
+        print(f"[Gallery] Failed to open {port}: {e}", file=sys.stderr)
+        return []
+
+    # Board reset stabilisation (USB CDC DTR/RTS toggle)
+    time.sleep(3)
+    ser.reset_input_buffer()
+
+    results = []
+    total = len(effects)
+
+    try:
+        for idx, eff_id in enumerate(effects):
+            if stop_event.is_set():
+                break
+
+            hex_str = f'{eff_id:04X}'
+            print(f"\n[Gallery] ({idx + 1}/{total}) Switching to effect "
+                  f"0x{hex_str}...")
+
+            # Send the effect-switch command
+            ser.write(f'effect {hex_str}\n'.encode())
+            time.sleep(0.1)
+            # Drain any text response from the firmware
+            if ser.in_waiting:
+                ser.read(ser.in_waiting)
+
+            # Wait for effect transition animation to settle
+            print(f"[Gallery] Stabilising (2s)...")
+            time.sleep(2)
+            if stop_event.is_set():
+                break
+
+            # Capture
+            print(f"[Gallery] Capturing 0x{hex_str} for "
+                  f"{duration_per_effect:.0f}s...")
+            cap = _capture_on_open_port(
+                ser, duration_per_effect, fps, tap, stop_event)
+
+            if cap is None:
+                print(f"[Gallery] WARNING: No frames for 0x{hex_str}")
+                metrics = {
+                    'label': f'0x{hex_str}',
+                    'n_frames': 0,
+                    'error': 'no_frames',
+                }
+                results.append((eff_id, metrics, None))
+                continue
+
+            frames, timestamps, metadata = cap
+            n = len(frames)
+            print(f"[Gallery] 0x{hex_str}: {n} frames captured")
+
+            metrics = analyze_correlation(
+                frames, timestamps, metadata, label=f'0x{hex_str}')
+            results.append((eff_id, metrics, (frames, timestamps, metadata)))
+
+    finally:
+        ser.close()
+
+    print(f"\n[Gallery] Complete: {len(results)}/{total} effects captured.")
+    return results
+
+
+def format_gallery_report(results: list, gate_thresholds: dict = None) -> str:
+    """Format a summary comparison table for all gallery effects.
+
+    Parameters
+    ----------
+    results : list
+        Output from ``run_effect_gallery()``.
+    gate_thresholds : dict, optional
+        If provided, run regression gate per-effect and include verdict.
+
+    Returns
+    -------
+    str
+        Multi-line formatted report.
+    """
+    lines = []
+    lines.append('')
+    lines.append('Effect Gallery Report')
+    lines.append('\u2550' * 72)
+
+    # Header row
+    lines.append(
+        f'  {"Effect":<8s}  {"Resp.":>6s}  {"RMS Corr":>9s}  '
+        f'{"Bass Corr":>9s}  {"Spread":>7s}  {"Drops":>5s}  {"Verdict":<6s}'
+    )
+    lines.append('  ' + '\u2500' * 66)
+
+    n_pass = 0
+    n_warn = 0
+    n_fail = 0
+    best_eff = None
+    best_resp = -1.0
+
+    for eff_id, metrics, _raw in results:
+        hex_str = f'0x{eff_id:04X}'
+
+        if metrics.get('error'):
+            lines.append(f'  {hex_str:<8s}  {"--":>6s}  {"--":>9s}  '
+                         f'{"--":>9s}  {"--":>7s}  {"--":>5s}  SKIP')
+            continue
+
+        resp = metrics.get('responsiveness', 0.0)
+        rms_c = metrics.get('rms_brightness_corr', 0.0)
+        bass_c = metrics.get('bass_brightness_corr', 0.0)
+        spread = metrics.get('mean_spatial_spread', 0.0)
+        drops = metrics.get('frame_drops', 0)
+
+        # Determine verdict
+        if gate_thresholds is not None:
+            gate_results = run_regression_gate(metrics, gate_thresholds)
+            if gate_has_failures(gate_results):
+                verdict = 'FAIL'
+                n_fail += 1
+            elif resp < 0.05 and abs(rms_c) < 0.1 and abs(bass_c) < 0.1:
+                verdict = 'WARN'
+                n_warn += 1
+            else:
+                verdict = 'PASS'
+                n_pass += 1
+        else:
+            # Without gate, use audio-reactivity heuristics only
+            if resp < 0.05 and abs(rms_c) < 0.1 and abs(bass_c) < 0.1:
+                verdict = 'WARN'
+                n_warn += 1
+            else:
+                verdict = 'PASS'
+                n_pass += 1
+
+        if resp > best_resp:
+            best_resp = resp
+            best_eff = hex_str
+
+        lines.append(
+            f'  {hex_str:<8s}  {resp:+.2f}   {rms_c:+.2f}      '
+            f'{bass_c:+.2f}      {spread:>5.0%}   {drops:>5d}  {verdict}'
+        )
+
+    lines.append('  ' + '\u2500' * 66)
+
+    total = n_pass + n_warn + n_fail
+    lines.append(
+        f'  Gallery: {total} effects, {n_pass} PASS, {n_warn} WARN, '
+        f'{n_fail} FAIL'
+    )
+    if best_eff is not None:
+        lines.append(
+            f'  Best audio-reactive: {best_eff} '
+            f'(responsiveness {best_resp:+.2f})'
+        )
+
+    lines.append('')
+    return '\n'.join(lines)
+
+
+def _parse_gallery_arg(value: str) -> list:
+    """Parse --gallery argument: profile name or comma-separated hex IDs."""
+    if value in GALLERY_PROFILES:
+        return GALLERY_PROFILES[value]
+
+    # Try parsing as comma-separated hex values
+    parts = [p.strip() for p in value.split(',')]
+    ids = []
+    for p in parts:
+        try:
+            ids.append(int(p, 16))
+        except ValueError:
+            print(f"ERROR: Invalid effect ID '{p}'. "
+                  f"Expected hex (e.g. 0x0100) or profile name "
+                  f"({', '.join(GALLERY_PROFILES.keys())})",
+                  file=sys.stderr)
+            sys.exit(1)
+    return ids
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -1205,6 +1683,10 @@ def main():
                         help='Streaming FPS (default: 15)')
     parser.add_argument('--tap', choices=['a', 'b', 'c'], default='b',
                         help='Capture tap point (default: b)')
+    # Temporal alignment
+    parser.add_argument('--align', action='store_true',
+                        help='Cross-correlate RMS to time-align two captures '
+                             '(use with --compare-serial or loaded comparison)')
     # Save/load
     parser.add_argument('--save', metavar='FILE',
                         help='Save raw session data (.npz)')
@@ -1234,7 +1716,85 @@ def main():
                             metavar='N',
                             help='Max show skips (default: 10)')
 
+    # Effect gallery
+    gallery_group = parser.add_argument_group('effect gallery')
+    gallery_group.add_argument(
+        '--gallery', metavar='PROFILE',
+        help='Run effect gallery: profile name (quick, audio-reactive) '
+             'or comma-separated hex IDs (e.g. 0x0100,0x0200,0x0500)')
+    gallery_group.add_argument(
+        '--gallery-duration', type=float, default=10.0, metavar='SEC',
+        help='Seconds to capture per effect (default: 10)')
+    gallery_group.add_argument(
+        '--gallery-save', metavar='FILE',
+        help='Save all per-effect capture data to .npz')
+
     args = parser.parse_args()
+
+    # ----- Gallery Mode (early return) -----
+    if args.gallery:
+        if not args.serial:
+            parser.error("--gallery requires --serial")
+        effects = _parse_gallery_arg(args.gallery)
+        gallery_results = run_effect_gallery(
+            args.serial, effects, args.gallery_duration,
+            args.fps, args.tap)
+
+        if not gallery_results:
+            print("ERROR: Gallery produced no results", file=sys.stderr)
+            sys.exit(1)
+
+        # Per-effect detailed reports
+        for eff_id, metrics, _raw in gallery_results:
+            print(format_report(metrics))
+
+        # Build gate overrides if --gate is active
+        gate_overrides = None
+        if args.gate:
+            gate_overrides = {}
+            if args.gate_drop_rate is not None:
+                gate_overrides['drop_rate'] = args.gate_drop_rate
+            if args.gate_show_time is not None:
+                gate_overrides['show_time'] = args.gate_show_time
+            if args.gate_heap_min is not None:
+                gate_overrides['heap_min'] = args.gate_heap_min
+            if args.gate_heap_trend is not None:
+                gate_overrides['heap_trend'] = args.gate_heap_trend
+            if args.gate_show_skips is not None:
+                gate_overrides['show_skips'] = args.gate_show_skips
+            gate_overrides = gate_overrides or None
+
+        # Summary table
+        print(format_gallery_report(gallery_results, gate_overrides))
+
+        # Per-effect gate reports when --gate is active
+        any_failure = False
+        if args.gate:
+            for eff_id, metrics, _raw in gallery_results:
+                if not metrics.get('error'):
+                    gate_r = run_regression_gate(metrics, gate_overrides)
+                    print(format_gate_report(gate_r, metrics.get('label', '')))
+                    if gate_has_failures(gate_r):
+                        any_failure = True
+
+        # Save gallery data if requested
+        if args.gallery_save:
+            save_dict = {}
+            for i, (eff_id, metrics, raw) in enumerate(gallery_results):
+                prefix = f'eff_{eff_id:04X}'
+                save_dict[f'{prefix}_id'] = eff_id
+                if raw is not None:
+                    frames, timestamps, metadata = raw
+                    save_dict[f'{prefix}_frames'] = frames
+                    save_dict[f'{prefix}_timestamps'] = timestamps
+                    save_dict[f'{prefix}_metadata'] = np.array(
+                        metadata, dtype=object)
+            np.savez_compressed(args.gallery_save, **save_dict)
+            print(f"[Gallery] Saved: {args.gallery_save}")
+
+        if any_failure:
+            sys.exit(1)
+        sys.exit(0)
 
     if not args.serial and not args.load:
         parser.error("Either --serial or --load is required")
@@ -1313,6 +1873,45 @@ def main():
                 label_a, label_b,
             )
 
+    # ----- Temporal Alignment -----
+    alignment_info = None
+    if args.align and frames_b is not None:
+        align_result = align_captures(
+            metadata_a, metadata_b, timestamps_a, timestamps_b)
+
+        if align_result is None:
+            print("[Align] WARNING: Cannot align — one or both devices "
+                  "have no RMS data (silent capture?).")
+        else:
+            offset_frames, corr_score, offset_secs = align_result
+
+            sign = '+' if offset_frames >= 0 else ''
+            print(f"[Align] Offset: {sign}{offset_frames} frames "
+                  f"({offset_secs:.2f}s), correlation: {corr_score:.2f}")
+
+            if corr_score < 0.3:
+                print(f"[Align] WARNING: Low correlation ({corr_score:.2f}). "
+                      f"Different audio environments?")
+
+            if offset_frames != 0:
+                (frames_a, timestamps_a, metadata_a,
+                 frames_b, timestamps_b, metadata_b) = apply_alignment(
+                    frames_a, timestamps_a, metadata_a,
+                    frames_b, timestamps_b, metadata_b,
+                    offset_frames)
+                print(f"[Align] Trimmed to {len(metadata_a)} overlapping frames.")
+
+                if len(metadata_a) < 10:
+                    print("[Align] ERROR: Too few overlapping frames after "
+                          "alignment.", file=sys.stderr)
+                    sys.exit(1)
+
+            alignment_info = {
+                'offset_frames': offset_frames,
+                'correlation': corr_score,
+                'offset_seconds': offset_secs,
+            }
+
     # ----- Analysis -----
     metrics_a = analyze_correlation(frames_a, timestamps_a, metadata_a, label_a)
     print(format_report(metrics_a))
@@ -1321,7 +1920,30 @@ def main():
     if frames_b is not None:
         metrics_b_result = analyze_correlation(frames_b, timestamps_b, metadata_b, label_b)
         print(format_report(metrics_b_result))
-        print(format_comparison(metrics_a, metrics_b_result))
+
+        # Inject alignment header into comparison report if alignment was applied.
+        comparison_text = format_comparison(metrics_a, metrics_b_result)
+        if alignment_info is not None:
+            ai = alignment_info
+            sign = '+' if ai['offset_frames'] >= 0 else ''
+            align_header = (
+                f"  [Aligned] Offset: {sign}{ai['offset_frames']} frames "
+                f"({ai['offset_seconds']:.2f}s), "
+                f"correlation: {ai['correlation']:.2f}\n"
+            )
+            # Insert after the COMPARISON header line.
+            lines = comparison_text.split('\n')
+            # Find the blank line after the header block and insert before it.
+            insert_idx = None
+            for i, line in enumerate(lines):
+                if line.strip().startswith('COMPARISON:'):
+                    insert_idx = i + 1
+                    break
+            if insert_idx is not None:
+                lines.insert(insert_idx, align_header)
+            comparison_text = '\n'.join(lines)
+
+        print(comparison_text)
 
     # ----- Dashboard -----
     if args.dashboard:

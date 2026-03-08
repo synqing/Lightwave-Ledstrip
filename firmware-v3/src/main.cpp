@@ -150,6 +150,13 @@ uint32_t s_captureStreamLastFrameIdx = UINT32_MAX;
 uint8_t s_captureStreamVersion = 2;  // 1 = 976-byte legacy, 2 = 1008-byte with metrics
 uint32_t s_captureStreamDropped = 0;  // frames skipped due to TX buffer full
 
+// Write instrumentation — reported on `capture stop` / `capture status`.
+uint32_t s_captureWriteMaxUs = 0;      // longest single write duration
+uint32_t s_captureWriteTotalUs = 0;    // cumulative write duration
+uint32_t s_captureWriteCount = 0;      // number of write attempts
+uint16_t s_captureAvailMin = UINT16_MAX; // smallest availableForWrite() seen
+uint32_t s_captureBackpressureSkips = 0; // frames skipped due to low buffer space
+
 // Pre-assembled frame buffer for single bulk Serial.write() — allocated in PSRAM.
 // v2 max frame = 1009 bytes (17 header + 960 RGB + 32 metrics trailer).
 constexpr size_t CAPTURE_FRAME_BUF_SIZE = 1024;
@@ -1512,10 +1519,21 @@ void loop() {
                     pos += 6;
                 }
 
-                // Single bulk write — much more efficient for USB CDC than
-                // 32+ individual Serial.write() calls. If TX buffer is full,
-                // the write returns fewer bytes than requested; count as drop.
+                // Record TX buffer state before write.
+                uint16_t avail = Serial.availableForWrite();
+                if (avail < s_captureAvailMin) s_captureAvailMin = avail;
+
+                // Instrumented blocking bulk write.  The USB CDC TX buffer
+                // is only 256 bytes — Serial.write() internally chunks the
+                // 1009-byte frame through it, blocking until complete.
+                uint32_t writeStart = micros();
                 size_t written = Serial.write(buf, pos);
+                uint32_t writeDur = micros() - writeStart;
+
+                s_captureWriteCount++;
+                s_captureWriteTotalUs += writeDur;
+                if (writeDur > s_captureWriteMaxUs) s_captureWriteMaxUs = writeDur;
+
                 if (written < pos) {
                     s_captureStreamDropped++;
                 }
@@ -1778,6 +1796,11 @@ void loop() {
                     s_captureStreamLastPushUs = 0;
                     s_captureStreamLastFrameIdx = UINT32_MAX;
                     s_captureStreamDropped = 0;
+                    s_captureWriteMaxUs = 0;
+                    s_captureWriteTotalUs = 0;
+                    s_captureWriteCount = 0;
+                    s_captureAvailMin = UINT16_MAX;
+                    s_captureBackpressureSkips = 0;
                     s_captureStreamActive = true;
 
                     Serial.printf("[CAPTURE] Streaming tap %c at %d FPS (%d us interval)\n",
@@ -1786,12 +1809,15 @@ void loop() {
                 }
                 else if (subcmd == "stop") {
                     s_captureStreamActive = false;
-                    if (s_captureStreamDropped > 0) {
-                        Serial.printf("[CAPTURE] Streaming stopped (%lu TX drops)\n",
-                                      (unsigned long)s_captureStreamDropped);
-                    } else {
-                        Serial.println("[CAPTURE] Streaming stopped");
-                    }
+                    uint32_t avgUs = s_captureWriteCount ? (s_captureWriteTotalUs / s_captureWriteCount) : 0;
+                    Serial.printf("[CAPTURE] Stopped: %lu writes, max %lu us, avg %lu us, "
+                                  "min_avail %u B, bp_skip %lu, tx_drop %lu\n",
+                                  (unsigned long)s_captureWriteCount,
+                                  (unsigned long)s_captureWriteMaxUs,
+                                  (unsigned long)avgUs,
+                                  (unsigned)s_captureAvailMin,
+                                  (unsigned long)s_captureBackpressureSkips,
+                                  (unsigned long)s_captureStreamDropped);
                 }
                 else if (subcmd.startsWith("fps")) {
                     String fpsArg = subcmd.substring(3);
@@ -1843,11 +1869,19 @@ void loop() {
                 }
                 else if (subcmd == "status") {
                     auto metadata = renderer->getCaptureMetadata();
+                    uint32_t avgUs = s_captureWriteCount ? (s_captureWriteTotalUs / s_captureWriteCount) : 0;
                     Serial.println("\n=== Capture Status ===");
                     Serial.printf("  Enabled: %s\n", renderer->isCaptureModeEnabled() ? "YES" : "NO");
-                    Serial.printf("  Streaming: %s (v%d, %d us interval, %lu TX drops)\n",
+                    Serial.printf("  Streaming: %s (v%d, %d us interval)\n",
                                   s_captureStreamActive ? "YES" : "NO",
-                                  s_captureStreamVersion, (int)s_captureStreamIntervalUs,
+                                  s_captureStreamVersion, (int)s_captureStreamIntervalUs);
+                    Serial.printf("  Writes: %lu, max %lu us, avg %lu us\n",
+                                  (unsigned long)s_captureWriteCount,
+                                  (unsigned long)s_captureWriteMaxUs,
+                                  (unsigned long)avgUs);
+                    Serial.printf("  Min avail: %u B, bp_skip: %lu, tx_drop: %lu\n",
+                                  (unsigned)s_captureAvailMin,
+                                  (unsigned long)s_captureBackpressureSkips,
                                   (unsigned long)s_captureStreamDropped);
                     Serial.printf("  Last capture: effect=%d, palette=%d, frame=%lu\n",
                                   metadata.effectId, metadata.paletteId, metadata.frameIndex);

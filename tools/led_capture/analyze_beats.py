@@ -42,6 +42,23 @@ Usage:
         --compare-serial /dev/cu.usbmodem21401 --compare-label "Milestone" \
         --duration 30 --gate
 
+    # Three-way comparison (three physical devices)
+    python analyze_beats.py \
+        --devices "/dev/cu.usbmodem212401:Main HEAD,/dev/cu.usbmodem21401:Milestone,/dev/cu.usbmodem101:Baseline" \
+        --duration 30
+
+    # Three-way comparison (individual args)
+    python analyze_beats.py \
+        --serial /dev/cu.usbmodem212401 --label "Main HEAD" \
+        --compare-serial /dev/cu.usbmodem21401 --compare-label "Milestone" \
+        --serial-c /dev/cu.usbmodem101 --label-c "Baseline" \
+        --duration 30
+
+    # Sequential capture (one device, multiple firmware states)
+    python analyze_beats.py \
+        --devices "/dev/cu.usbmodem212401:Main HEAD,/dev/cu.usbmodem212401:Milestone,/dev/cu.usbmodem212401:Baseline" \
+        --sequential --duration 30
+
 Output:
     A text report with:
     - Beat responsiveness score (0-1): how reliably beats cause brightness spikes
@@ -52,6 +69,7 @@ Output:
 """
 
 import argparse
+import math
 import sys
 import time
 import threading
@@ -65,6 +83,49 @@ from led_capture import (
     SERIAL_MAGIC, SERIAL_V1_FRAME_SIZE, SERIAL_V2_FRAME_SIZE,
     NUM_LEDS, parse_serial_frame,
 )
+
+# Version marker for saved sessions — bump when the .npz schema changes.
+_SESSION_FORMAT_VERSION = 2
+
+# Module-level verbosity flags, set from CLI args in main().
+_verbose = False
+_quiet = False
+
+
+def _safe_fmt(value, fmt: str, fallback: str = 'N/A') -> str:
+    """Format a numeric value, returning *fallback* for NaN/inf/None."""
+    if value is None:
+        return fallback
+    try:
+        if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
+            return fallback
+        return f'{value:{fmt}}'
+    except (ValueError, TypeError):
+        return fallback
+
+
+def _safe_corrcoef(a: np.ndarray, b: np.ndarray) -> float:
+    """Pearson correlation that returns 0.0 on constant/degenerate input."""
+    if a.std() < 1e-6 or b.std() < 1e-6:
+        return 0.0
+    try:
+        r = float(np.corrcoef(a, b)[0, 1])
+        if math.isnan(r) or math.isinf(r):
+            return 0.0
+        return r
+    except (FloatingPointError, ValueError):
+        return 0.0
+
+
+def _has_v2_metadata(metadata: list) -> bool:
+    """Return True if the metadata list contains v2 trailer fields."""
+    if not metadata:
+        return False
+    # Check the first few entries for a v2-specific key.
+    for m in metadata[:5]:
+        if 'rms' in m or 'bands' in m or 'beat' in m:
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -88,7 +149,8 @@ def capture_with_metadata(port: str, duration: float, fps: int = 15,
         stop_event = threading.Event()
 
     tap_letter = tap.lower()
-    print(f"[Capture] Opening {port} (tap {tap_letter.upper()}, {fps} FPS)...")
+    if not _quiet:
+        print(f"[Capture] Opening {port} (tap {tap_letter.upper()}, {fps} FPS)...")
 
     try:
         ser = serial.Serial(port, 115200, timeout=0.1, dsrdtr=False, rtscts=False)
@@ -107,6 +169,7 @@ def capture_with_metadata(port: str, duration: float, fps: int = 15,
     metadata_list = []
     recv_buf = bytearray()
     start_time = time.time()
+    first_frame_warned = False
 
     try:
         while not stop_event.is_set():
@@ -114,9 +177,26 @@ def capture_with_metadata(port: str, duration: float, fps: int = 15,
             if elapsed >= duration:
                 break
 
-            waiting = ser.in_waiting
+            # Timeout detection: warn if no frames after 5 seconds.
+            if not first_frame_warned and len(frames) == 0 and elapsed > 5.0:
+                first_frame_warned = True
+                print(f"[Capture] WARNING: No frames received after 5s. "
+                      f"Check firmware is running and port {port} is correct.",
+                      file=sys.stderr)
+
+            try:
+                waiting = ser.in_waiting
+            except Exception as e:
+                # Device disconnected mid-capture.
+                print(f"[Capture] Serial port error: {e}", file=sys.stderr)
+                break
+
             if waiting > 0:
-                recv_buf.extend(ser.read(waiting))
+                try:
+                    recv_buf.extend(ser.read(waiting))
+                except Exception as e:
+                    print(f"[Capture] Serial read error: {e}", file=sys.stderr)
+                    break
             else:
                 time.sleep(0.005)
                 continue
@@ -150,19 +230,34 @@ def capture_with_metadata(port: str, duration: float, fps: int = 15,
                     metadata_list.append(meta)
 
                     count = len(frames)
-                    if count % 50 == 0:
+                    if _verbose and count % 10 == 0:
+                        m = meta
+                        print(f"  [v] frame={m.get('frame_idx', '?')} "
+                              f"beat={m.get('beat', '?')} "
+                              f"rms={m.get('rms', '?'):.4f} "
+                              f"bright=--" if count < 2 else '', end='')
+                        # Brightness requires full array; skip in per-frame log.
+                        print()
+                    if not _quiet and count % 50 == 0:
                         fps_actual = count / (time.time() - start_time)
                         print(f"[Capture] {count} frames ({elapsed:.1f}s, {fps_actual:.1f} FPS)")
+    except Exception as e:
+        # Catch-all for unexpected serial errors (device yanked, etc.).
+        print(f"[Capture] Unexpected error: {e}", file=sys.stderr)
     finally:
-        ser.write(b'capture stop\n')
-        time.sleep(0.2)
-        ser.close()
+        try:
+            ser.write(b'capture stop\n')
+            time.sleep(0.2)
+            ser.close()
+        except Exception:
+            pass  # Port may already be dead.
 
     total_time = time.time() - start_time
     actual_fps = len(frames) / max(0.1, total_time)
     beats = sum(1 for m in metadata_list if m.get('beat'))
-    print(f"[Capture] Done: {len(frames)} frames in {total_time:.1f}s "
-          f"({actual_fps:.1f} FPS, {beats} beats)")
+    if not _quiet:
+        print(f"[Capture] Done: {len(frames)} frames in {total_time:.1f}s "
+              f"({actual_fps:.1f} FPS, {beats} beats)")
 
     if not frames:
         return None
@@ -228,11 +323,23 @@ def analyze_correlation(frames: np.ndarray, timestamps: np.ndarray,
 
     Returns a dict with scalar metrics and private time-series arrays
     (prefixed with '_') for dashboard rendering.
+
+    If metadata contains only v1 fields (no v2 trailer), a partial
+    metrics dict is returned with ``v1_only`` set to True and all
+    audio-reactive scores zeroed.  Frame-health and brightness metrics
+    are still computed from the RGB payload.
     """
     n = len(metadata)
     if n < 10:
-        print(f"[{label}] Too few frames ({n}) for meaningful analysis.")
+        if not _quiet:
+            print(f"[{label}] Too few frames ({n}) for meaningful analysis.")
         return {'label': label, 'n_frames': n, 'error': 'insufficient_frames'}
+
+    # --- Detect v1-only metadata (no audio fields) ---
+    v2 = _has_v2_metadata(metadata)
+    if not v2 and not _quiet:
+        print(f"[{label}] WARNING: v1 frames detected -- audio metrics "
+              f"will be zeroed. Use firmware with v2 capture for full analysis.")
 
     # --- Extract time series ---
     brightness = compute_brightness(frames)
@@ -264,19 +371,13 @@ def analyze_correlation(frames: np.ndarray, timestamps: np.ndarray,
     else:
         tempo_stability = 0.0
 
-    # --- RMS-Brightness Pearson correlation ---
-    if rms.std() > 1e-6 and brightness.std() > 1e-6:
-        rms_corr = float(np.corrcoef(rms, brightness)[0, 1])
-    else:
-        rms_corr = 0.0
+    # --- RMS-Brightness Pearson correlation (NaN-safe) ---
+    rms_corr = _safe_corrcoef(rms, brightness)
 
     # --- Bass-Brightness correlation ---
     # Many effects respond to bands[0] (sub-bass) directly, not the beat flag.
     bass = bands[:, 0] if bands.shape[1] > 0 else np.zeros(n)
-    if bass.std() > 1e-6 and brightness.std() > 1e-6:
-        bass_corr = float(np.corrcoef(bass, brightness)[0, 1])
-    else:
-        bass_corr = 0.0
+    bass_corr = _safe_corrcoef(bass, brightness)
 
     # Best audio correlation: whichever band correlates most with brightness
     best_band_corr = 0.0
@@ -284,11 +385,10 @@ def analyze_correlation(frames: np.ndarray, timestamps: np.ndarray,
     if brightness.std() > 1e-6:
         for bi in range(min(8, bands.shape[1])):
             band_data = bands[:, bi]
-            if band_data.std() > 1e-6:
-                c = float(np.corrcoef(band_data, brightness)[0, 1])
-                if abs(c) > abs(best_band_corr):
-                    best_band_corr = c
-                    best_band_idx = bi
+            c = _safe_corrcoef(band_data, brightness)
+            if abs(c) > abs(best_band_corr):
+                best_band_corr = c
+                best_band_idx = bi
 
     # --- Beat trigger analysis ---
     if n_beats >= 3 and n > 5:
@@ -310,9 +410,18 @@ def analyze_correlation(frames: np.ndarray, timestamps: np.ndarray,
         responsiveness = max(0.0, beat_trigger_ratio - nonbeat_spike_rate)
 
         # Mean brightness on-beat vs off-beat
-        mean_bright_beat = float(brightness[beats].mean())
+        mean_bright_beat = float(brightness[beats].mean()) if beats.sum() > 0 else 0.0
         mean_bright_nobeat = float(brightness[~beats].mean()) if (~beats).sum() > 0 else 0.0
-        contrast_ratio = mean_bright_beat / max(0.001, mean_bright_nobeat)
+
+        # Contrast ratio: guard against all-black frames (both values near 0).
+        if mean_bright_nobeat < 1e-6 and mean_bright_beat < 1e-6:
+            # All frames effectively black -- no meaningful contrast.
+            contrast_ratio = 1.0
+        elif mean_bright_nobeat < 1e-6:
+            # Off-beat is black but on-beat is not -- cap at 100x.
+            contrast_ratio = 100.0
+        else:
+            contrast_ratio = mean_bright_beat / mean_bright_nobeat
 
         # Beat-aligned response magnitude:
         # For each beat, measure peak brightness in a 3-frame window after
@@ -321,13 +430,13 @@ def analyze_correlation(frames: np.ndarray, timestamps: np.ndarray,
         for bi in beat_idxs:
             pre_start = max(0, bi - 2)
             post_end = min(n, bi + 4)
-            pre_level = float(brightness[pre_start:bi].mean()) if bi > 0 else brightness[0]
+            pre_level = float(brightness[pre_start:bi].mean()) if bi > 0 else float(brightness[0])
             post_peak = float(brightness[bi:post_end].max())
             beat_responses.append(post_peak - pre_level)
-        mean_beat_response = float(np.mean(beat_responses))
+        mean_beat_response = float(np.mean(beat_responses)) if beat_responses else 0.0
 
         # Spatial spread on-beat vs off-beat (bloom detection)
-        mean_spread_beat = float(spatial_spread[beats].mean())
+        mean_spread_beat = float(spatial_spread[beats].mean()) if beats.sum() > 0 else 0.0
         mean_spread_nobeat = float(spatial_spread[~beats].mean()) if (~beats).sum() > 0 else 0.0
     else:
         beat_trigger_ratio = 0.0
@@ -380,17 +489,23 @@ def analyze_correlation(frames: np.ndarray, timestamps: np.ndarray,
     skip_vals = [m.get('show_skips', 0) for m in metadata]
     show_skips_total = max(skip_vals) - min(skip_vals) if skip_vals else 0
 
-    # Heap trend (bytes per frame, positive = growing)
+    # Heap trend (bytes per frame, positive = growing).
+    # Guard against degenerate polyfit (constant heap, insufficient data).
+    heap_trend = 0.0
     if len(heap_valid) > 10:
-        heap_trend = float(np.polyfit(range(len(heap_valid)), heap_valid, 1)[0])
-    else:
-        heap_trend = 0.0
+        try:
+            heap_trend = float(np.polyfit(range(len(heap_valid)), heap_valid, 1)[0])
+            if math.isnan(heap_trend) or math.isinf(heap_trend):
+                heap_trend = 0.0
+        except (np.linalg.LinAlgError, FloatingPointError, ValueError):
+            heap_trend = 0.0
 
-    return {
+    result = {
         'label': label,
         'n_frames': n,
         'duration': duration,
         'actual_fps': actual_fps,
+        'v1_only': not v2,
         # Beat stats
         'n_beats': n_beats,
         'n_onsets': n_onsets,
@@ -438,6 +553,12 @@ def analyze_correlation(frames: np.ndarray, timestamps: np.ndarray,
         '_timestamps': timestamps,
     }
 
+    if not v2:
+        result['v1_warning'] = ('v1 frames lack audio metrics; '
+                                'beat/RMS/band correlations are zeroed.')
+
+    return result
+
 
 # ---------------------------------------------------------------------------
 # Text Report
@@ -452,113 +573,139 @@ def _rating(value: float, thresholds: list) -> str:
 
 
 def format_report(m: dict) -> str:
-    """Format analysis metrics as a human-readable text report."""
+    """Format analysis metrics as a human-readable text report.
+
+    All numeric values are fetched via ``.get()`` with safe defaults;
+    NaN/inf values are printed as 'N/A'.
+    """
     if m.get('error'):
-        return f"\n  [{m['label']}] Analysis failed: {m['error']}\n"
+        return f"\n  [{m.get('label', '?')}] Analysis failed: {m['error']}\n"
 
     lines = []
-    lines.append(f"")
-    lines.append(f"{'=' * 60}")
-    lines.append(f"  Beat-Brightness Correlation: {m['label']}")
-    lines.append(f"{'=' * 60}")
-    lines.append(f"")
-    lines.append(f"  Capture:  {m['n_frames']} frames, {m['actual_fps']:.1f} FPS, {m['duration']:.1f}s")
-    lines.append(f"  Beats:    {m['n_beats']} detected ({m['beat_hz']:.1f} Hz = {m['bpm']:.0f} BPM)")
+    lines.append('')
+    lines.append('=' * 60)
+    lines.append(f"  Beat-Brightness Correlation: {m.get('label', '?')}")
+    lines.append('=' * 60)
+    lines.append('')
+
+    # v1-only warning banner
+    if m.get('v1_warning'):
+        lines.append(f"  NOTE: {m['v1_warning']}")
+        lines.append('')
+
+    lines.append(f"  Capture:  {m.get('n_frames', 0)} frames, "
+                 f"{_safe_fmt(m.get('actual_fps'), '.1f')} FPS, "
+                 f"{_safe_fmt(m.get('duration'), '.1f')}s")
+    lines.append(f"  Beats:    {m.get('n_beats', 0)} detected "
+                 f"({_safe_fmt(m.get('beat_hz'), '.1f')} Hz = "
+                 f"{_safe_fmt(m.get('bpm'), '.0f')} BPM)")
     if m.get('beat_warning') == 'saturated':
-        lines.append(f"  WARNING:  Beat flag saturated ({m['n_beats']}/{m['n_frames']} frames)")
+        lines.append(f"  WARNING:  Beat flag saturated "
+                     f"({m.get('n_beats', 0)}/{m.get('n_frames', 0)} frames)")
         lines.append(f"            Beat detection may be always-on or threshold too low.")
     elif m.get('beat_warning') == 'absent':
         lines.append(f"  WARNING:  No beats detected. Audio input silent or detector offline?")
-    lines.append(f"  Onsets:   {m['n_onsets']} (snare/hihat)")
-    if m['tempo_stability'] > 0:
-        stab_pct = m['tempo_stability'] * 100
-        lines.append(f"  Tempo:    {stab_pct:.0f}% stable")
-    lines.append(f"")
+    lines.append(f"  Onsets:   {m.get('n_onsets', 0)} (snare/hihat)")
+    tempo_stab = m.get('tempo_stability', 0)
+    if isinstance(tempo_stab, (int, float)) and tempo_stab > 0:
+        lines.append(f"  Tempo:    {_safe_fmt(tempo_stab * 100, '.0f')}% stable")
+    lines.append('')
 
     # Score card
-    resp = m['responsiveness']
+    resp = m.get('responsiveness', 0.0)
     resp_rating = _rating(resp, [(0.5, 'EXCELLENT'), (0.3, 'good'), (0.1, 'weak'), (0.0, 'none')])
 
-    rms_corr = m['rms_brightness_corr']
+    rms_corr = m.get('rms_brightness_corr', 0.0)
     corr_rating = _rating(rms_corr, [(0.7, 'STRONG'), (0.4, 'moderate'), (0.1, 'weak'), (-1.0, 'none')])
 
-    lines.append(f"  Audio-Reactive Quality")
+    lines.append('  Audio-Reactive Quality')
     lines.append(f"  {'~' * 44}")
     band_names = ['Sub', 'Bass', 'Low-Mid', 'Mid', 'Upper-Mid', 'Presence', 'Brilliance', 'Air']
     best_bi = m.get('best_band_idx', 0)
     best_bn = band_names[best_bi] if best_bi < len(band_names) else f'band{best_bi}'
 
-    bass_corr = m.get('bass_brightness_corr', 0)
+    bass_corr = m.get('bass_brightness_corr', 0.0)
     bass_rating = _rating(abs(bass_corr), [(0.7, 'STRONG'), (0.4, 'moderate'), (0.1, 'weak'), (0.0, 'none')])
 
-    lines.append(f"  Responsiveness score:    {resp:+.3f}  ({resp_rating})")
-    lines.append(f"  RMS-brightness corr:     {rms_corr:+.3f}  ({corr_rating})")
-    lines.append(f"  Bass-brightness corr:    {bass_corr:+.3f}  ({bass_rating})")
-    lines.append(f"  Best band correlation:   {m.get('best_band_corr', 0):+.3f}  ({best_bn})")
-    lines.append(f"  Beat trigger ratio:      {m['beat_trigger_ratio']:.0%}  "
+    lines.append(f"  Responsiveness score:    {_safe_fmt(resp, '+.3f')}  ({resp_rating})")
+    lines.append(f"  RMS-brightness corr:     {_safe_fmt(rms_corr, '+.3f')}  ({corr_rating})")
+    lines.append(f"  Bass-brightness corr:    {_safe_fmt(bass_corr, '+.3f')}  ({bass_rating})")
+    lines.append(f"  Best band correlation:   {_safe_fmt(m.get('best_band_corr', 0), '+.3f')}  ({best_bn})")
+    lines.append(f"  Beat trigger ratio:      {_safe_fmt(m.get('beat_trigger_ratio', 0), '.0%')}  "
                  f"(beats causing brightness spike)")
-    lines.append(f"  Non-beat spike rate:     {m['nonbeat_spike_rate']:.0%}  "
+    lines.append(f"  Non-beat spike rate:     {_safe_fmt(m.get('nonbeat_spike_rate', 0), '.0%')}  "
                  f"(background noise)")
-    lines.append(f"  Mean beat response:      {m['mean_beat_response']:+.4f}")
-    lines.append(f"")
-    lines.append(f"  Brightness on beat:      {m['mean_bright_beat']:.4f}")
-    lines.append(f"  Brightness off beat:     {m['mean_bright_nobeat']:.4f}")
-    lines.append(f"  Contrast ratio:          {m['contrast_ratio']:.2f}x")
-    lines.append(f"  Mean brightness:         {m['mean_brightness']:.4f}")
+    lines.append(f"  Mean beat response:      {_safe_fmt(m.get('mean_beat_response', 0), '+.4f')}")
+    lines.append('')
+    lines.append(f"  Brightness on beat:      {_safe_fmt(m.get('mean_bright_beat', 0), '.4f')}")
+    lines.append(f"  Brightness off beat:     {_safe_fmt(m.get('mean_bright_nobeat', 0), '.4f')}")
+    lines.append(f"  Contrast ratio:          {_safe_fmt(m.get('contrast_ratio', 0), '.2f')}x")
+    lines.append(f"  Mean brightness:         {_safe_fmt(m.get('mean_brightness', 0), '.4f')}")
     spread = m.get('mean_spatial_spread', 0)
-    spread_line = f"  Spatial spread:          {spread:.1%} of strip active"
+    spread_line = f"  Spatial spread:          {_safe_fmt(spread, '.1%')} of strip active"
     if m.get('n_beats', 0) >= 3:
-        spread_line += (f"  (beat: {m.get('mean_spread_beat', 0):.1%}"
-                        f" / off: {m.get('mean_spread_nobeat', 0):.1%})")
+        spread_line += (f"  (beat: {_safe_fmt(m.get('mean_spread_beat', 0), '.1%')}"
+                        f" / off: {_safe_fmt(m.get('mean_spread_nobeat', 0), '.1%')})")
     lines.append(spread_line)
-    lines.append(f"")
+    lines.append('')
 
     # Health
-    lines.append(f"  Frame Health")
+    lines.append('  Frame Health')
     lines.append(f"  {'~' * 44}")
     sub = m.get('subsampling_ratio', 1)
-    lines.append(f"  Subsampling:      1:{sub:.0f}  (renderer FPS / capture FPS)")
-    lines.append(f"  Frame drops:      {m['frame_drops']}  "
-                 f"({m['total_missing_frames']} missed streaming slots)")
-    lines.append(f"  Drop rate:        {m['drop_rate']:.4f}")
-    lines.append(f"  Show skips:       {m['show_skips_total']}")
+    lines.append(f"  Subsampling:      1:{_safe_fmt(sub, '.0f')}  (renderer FPS / capture FPS)")
+    lines.append(f"  Frame drops:      {m.get('frame_drops', 0)}  "
+                 f"({m.get('total_missing_frames', 0)} missed streaming slots)")
+    lines.append(f"  Drop rate:        {_safe_fmt(m.get('drop_rate', 0), '.4f')}")
+    lines.append(f"  Show skips:       {m.get('show_skips_total', 0)}")
 
-    if m['show_time_median_us'] > 0:
-        lines.append(f"  Show time:        median {m['show_time_median_us'] / 1000:.1f}ms, "
-                     f"p99 {m['show_time_p99_us'] / 1000:.1f}ms")
+    show_med = m.get('show_time_median_us', 0)
+    if isinstance(show_med, (int, float)) and show_med > 0:
+        lines.append(f"  Show time:        median {show_med / 1000:.1f}ms, "
+                     f"p99 {m.get('show_time_p99_us', 0) / 1000:.1f}ms")
 
-    if m['heap_min'] > 0:
-        trend = 'rising' if m['heap_trend'] > 10 else ('falling' if m['heap_trend'] < -10 else 'stable')
-        lines.append(f"  Heap:             {m['heap_min']:,} - {m['heap_max']:,} bytes ({trend})")
+    heap_min = m.get('heap_min', 0)
+    if isinstance(heap_min, (int, float)) and heap_min > 0:
+        ht = m.get('heap_trend', 0)
+        trend = 'rising' if ht > 10 else ('falling' if ht < -10 else 'stable')
+        lines.append(f"  Heap:             {heap_min:,} - {m.get('heap_max', 0):,} bytes ({trend})")
 
-    lines.append(f"")
+    lines.append('')
     return '\n'.join(lines)
 
 
 def format_comparison(ma: dict, mb: dict) -> str:
-    """Format a side-by-side comparison table of two devices."""
+    """Format a side-by-side comparison table of two devices.
+
+    Uses ``.get()`` with defaults throughout so missing keys never crash.
+    """
     if ma.get('error') or mb.get('error'):
         return "  Cannot compare: one or both analyses failed.\n"
 
     lines = []
-    lines.append(f"")
-    lines.append(f"{'=' * 62}")
-    lines.append(f"  COMPARISON: {ma['label']}  vs  {mb['label']}")
-    lines.append(f"{'=' * 62}")
-    lines.append(f"")
+    lines.append('')
+    lines.append('=' * 62)
+    lines.append(f"  COMPARISON: {ma.get('label', '?')}  vs  {mb.get('label', '?')}")
+    lines.append('=' * 62)
+    lines.append('')
 
-    hdr_a = ma['label'][:12]
-    hdr_b = mb['label'][:12]
+    hdr_a = ma.get('label', '?')[:12]
+    hdr_b = mb.get('label', '?')[:12]
     lines.append(f"  {'Metric':<30s}  {hdr_a:>10s}       {hdr_b:>10s}")
     lines.append(f"  {'~' * 58}")
 
     def row(label, key, fmt='.3f', higher_better=True):
         va = ma.get(key, 0)
         vb = mb.get(key, 0)
+        # Guard against NaN/inf from either side.
+        if isinstance(va, float) and (math.isnan(va) or math.isinf(va)):
+            va = 0.0
+        if isinstance(vb, float) and (math.isnan(vb) or math.isinf(vb)):
+            vb = 0.0
 
         if fmt.endswith('%'):
-            sa = f"{va:.0%}"
-            sb = f"{vb:.0%}"
+            sa = _safe_fmt(va, '.0%')
+            sb = _safe_fmt(vb, '.0%')
             diff = va - vb
         elif fmt == ',d':
             sa = f"{int(va):,}"
@@ -569,8 +716,8 @@ def format_comparison(ma: dict, mb: dict) -> str:
             sb = str(int(vb))
             diff = va - vb
         else:
-            sa = f"{va:{fmt}}"
-            sb = f"{vb:{fmt}}"
+            sa = _safe_fmt(va, fmt)
+            sb = _safe_fmt(vb, fmt)
             diff = va - vb
 
         if abs(diff) < 0.005:
@@ -600,27 +747,29 @@ def format_comparison(ma: dict, mb: dict) -> str:
     # Composite score: weighted combination of all audio-reactive indicators
     # Use best of RMS/bass correlation to capture effects that respond to
     # specific bands rather than overall energy.
-    best_corr_a = max(max(0, ma['rms_brightness_corr']),
+    best_corr_a = max(max(0, ma.get('rms_brightness_corr', 0)),
                       max(0, ma.get('bass_brightness_corr', 0)),
                       max(0, ma.get('best_band_corr', 0)))
-    best_corr_b = max(max(0, mb['rms_brightness_corr']),
+    best_corr_b = max(max(0, mb.get('rms_brightness_corr', 0)),
                       max(0, mb.get('bass_brightness_corr', 0)),
                       max(0, mb.get('best_band_corr', 0)))
 
     w_resp, w_corr, w_contrast = 0.4, 0.4, 0.2
-    score_a = (ma['responsiveness'] * w_resp
+    score_a = (ma.get('responsiveness', 0) * w_resp
                + best_corr_a * w_corr
-               + min(1, ma['contrast_ratio'] / 3) * w_contrast)
-    score_b = (mb['responsiveness'] * w_resp
+               + min(1, ma.get('contrast_ratio', 1) / 3) * w_contrast)
+    score_b = (mb.get('responsiveness', 0) * w_resp
                + best_corr_b * w_corr
-               + min(1, mb['contrast_ratio'] / 3) * w_contrast)
+               + min(1, mb.get('contrast_ratio', 1) / 3) * w_contrast)
 
     if abs(score_a - score_b) < 0.02:
-        verdict = "TIE — no significant difference"
+        verdict = "TIE -- no significant difference"
     elif score_a > score_b:
-        verdict = f"{ma['label']} wins  (composite {score_a:.3f} vs {score_b:.3f})"
+        verdict = (f"{ma.get('label', '?')} wins  "
+                   f"(composite {score_a:.3f} vs {score_b:.3f})")
     else:
-        verdict = f"{mb['label']} wins  (composite {score_b:.3f} vs {score_a:.3f})"
+        verdict = (f"{mb.get('label', '?')} wins  "
+                   f"(composite {score_b:.3f} vs {score_a:.3f})")
 
     lines.append(f"  Verdict: {verdict}")
     lines.append(f"")
@@ -1143,14 +1292,324 @@ def render_comparison_dashboard(ma: dict, mb: dict, width: int = 900) -> Image.I
 
 
 # ---------------------------------------------------------------------------
+# N-Way Multi-Device Capture & Comparison
+# ---------------------------------------------------------------------------
+
+def capture_multiple_devices(device_specs: list, duration: float,
+                             fps: int = 15, tap: str = 'b') -> list:
+    """Capture from N devices in parallel.
+
+    Spawns a capture thread per device (same pattern as the existing
+    dual-device capture in main()) and collects results.
+
+    Parameters
+    ----------
+    device_specs : list[tuple[str, str]]
+        List of (port, label) tuples for each device.
+    duration : float
+        Capture duration in seconds.
+    fps : int
+        Streaming FPS for capture.
+    tap : str
+        Capture tap point ('a', 'b', or 'c').
+
+    Returns
+    -------
+    list[tuple[str, ndarray | None, ndarray | None, list | None]]
+        List of (label, frames, timestamps, metadata) tuples.
+        frames/timestamps/metadata are None if that device failed.
+    """
+    n = len(device_specs)
+    results = [None] * n
+    stop_events = [threading.Event() for _ in range(n)]
+
+    def _worker(idx, port, label, stop_evt):
+        results[idx] = capture_with_metadata(port, duration, fps, tap, stop_evt)
+
+    threads = []
+    for i, (port, label) in enumerate(device_specs):
+        t = threading.Thread(
+            target=_worker, args=(i, port, label, stop_events[i]),
+            daemon=True,
+        )
+        threads.append(t)
+        t.start()
+
+    # Wait for all threads with a generous timeout
+    timeout = duration + 20
+    for t in threads:
+        t.join(timeout=timeout)
+
+    # Signal any stragglers to stop
+    for evt in stop_events:
+        evt.set()
+
+    # Build output list, warning on partial failures
+    output = []
+    for i, (port, label) in enumerate(device_specs):
+        cap = results[i]
+        if cap is None:
+            print(f"WARNING: No frames captured from {label} ({port})",
+                  file=sys.stderr)
+            output.append((label, None, None, None))
+        else:
+            frames, timestamps, metadata = cap
+            output.append((label, frames, timestamps, metadata))
+
+    return output
+
+
+def capture_sequential_devices(port: str, labels: list, duration: float,
+                               fps: int = 15, tap: str = 'b') -> list:
+    """Capture from the same port multiple times, prompting between runs.
+
+    Useful for three-way comparison when only one physical device is
+    available. The user reflashes firmware between captures.
+
+    Parameters
+    ----------
+    port : str
+        Serial port path.
+    labels : list[str]
+        Label for each sequential capture run.
+    duration : float
+        Capture duration in seconds per run.
+    fps : int
+        Streaming FPS.
+    tap : str
+        Capture tap point.
+
+    Returns
+    -------
+    list[tuple[str, ndarray | None, ndarray | None, list | None]]
+        Same format as ``capture_multiple_devices()``.
+    """
+    output = []
+    for i, label in enumerate(labels):
+        if i > 0:
+            print(f"\n{'=' * 60}")
+            print(f"  Flash firmware for: {label}")
+            print(f"  Then press Enter to begin capture {i + 1}/{len(labels)}...")
+            print(f"{'=' * 60}")
+            try:
+                input()
+            except EOFError:
+                print("WARNING: stdin closed, skipping remaining captures",
+                      file=sys.stderr)
+                output.append((label, None, None, None))
+                continue
+
+        print(f"\n[Sequential] Capturing {label} ({i + 1}/{len(labels)})...")
+        cap = capture_with_metadata(port, duration, fps, tap)
+        if cap is None:
+            print(f"WARNING: No frames captured for {label}", file=sys.stderr)
+            output.append((label, None, None, None))
+        else:
+            frames, timestamps, metadata = cap
+            output.append((label, frames, timestamps, metadata))
+
+    return output
+
+
+def format_multi_comparison(metrics_list: list) -> str:
+    """Format an N-way comparison table with ranking.
+
+    Parameters
+    ----------
+    metrics_list : list[dict]
+        List of metrics dicts from ``analyze_correlation()``.
+
+    Returns
+    -------
+    str
+        Formatted multi-line comparison table.
+    """
+    # Filter out errored entries for the table body
+    valid = [m for m in metrics_list if not m.get('error')]
+    if len(valid) < 2:
+        return "  Cannot compare: fewer than 2 valid analyses.\n"
+
+    n = len(valid)
+    labels = [m['label'] for m in valid]
+
+    # Truncate labels to fit columns
+    max_label = 14
+    short_labels = [lbl[:max_label] for lbl in labels]
+
+    # Column widths
+    metric_col = 28
+    val_col = max_label + 2
+    total_w = metric_col + val_col * n
+
+    lines = []
+    lines.append('')
+    lines.append(f"N-Way Comparison ({n} devices)")
+    lines.append('\u2550' * total_w)
+
+    # Header row
+    hdr = f"  {'Metric':<{metric_col - 2}s}"
+    for sl in short_labels:
+        hdr += f"  {sl:>{val_col - 2}s}"
+    lines.append(hdr)
+    lines.append('\u2500' * total_w)
+
+    # Row definitions: (display_name, key, fmt, higher_is_better)
+    rows_def = [
+        ('Responsiveness',       'responsiveness',        '+.3f',  True),
+        ('RMS-brightness corr',  'rms_brightness_corr',   '+.3f',  True),
+        ('Bass-brightness corr', 'bass_brightness_corr',  '+.3f',  True),
+        ('Best band corr',       'best_band_corr',        '+.3f',  True),
+        ('Beat trigger ratio',   'beat_trigger_ratio',    '.0%',   True),
+        ('Non-beat spike rate',  'nonbeat_spike_rate',    '.0%',   False),
+        ('Contrast ratio',       'contrast_ratio',        '.2f',   True),
+        ('Mean beat response',   'mean_beat_response',    '+.4f',  True),
+        (None, None, None, None),  # separator
+        ('Frame drops',          'frame_drops',           'd',     False),
+        ('Show time median (us)','show_time_median_us',   '.0f',   False),
+        ('Heap min',             'heap_min',              ',d',    True),
+        ('Tempo stability',      'tempo_stability',       '.0%',   True),
+    ]
+
+    for row_name, key, fmt, higher_better in rows_def:
+        if row_name is None:
+            lines.append('\u2500' * total_w)
+            continue
+
+        vals = [m.get(key, 0) for m in valid]
+
+        # Format each value
+        formatted = []
+        for v in vals:
+            if fmt == '.0%':
+                formatted.append(f"{v:.0%}")
+            elif fmt == ',d':
+                formatted.append(f"{int(v):,}")
+            elif fmt == 'd':
+                formatted.append(str(int(v)))
+            else:
+                formatted.append(f"{v:{fmt}}")
+
+        # Find the best value index
+        if higher_better:
+            best_idx = int(np.argmax(vals))
+        else:
+            best_idx = int(np.argmin(vals))
+
+        # Build row with best value marked
+        row_str = f"  {row_name:<{metric_col - 2}s}"
+        for i, fv in enumerate(formatted):
+            marker = ' *' if i == best_idx else '  '
+            row_str += f"{marker}{fv:>{val_col - 4}s}  "
+        lines.append(row_str)
+
+    lines.append('\u2500' * total_w)
+
+    # Composite scores and ranking
+    scores = [_compute_composite_score(m) for m in valid]
+    ranked = sorted(range(n), key=lambda i: scores[i], reverse=True)
+    ordinals = ['1st', '2nd', '3rd'] + [f'{i+1}th' for i in range(3, n)]
+
+    score_row = f"  {'Composite score':<{metric_col - 2}s}"
+    rank_row = f"  {'Rank':<{metric_col - 2}s}"
+    for i in range(n):
+        score_row += f"  {scores[i]:>{val_col - 2}.3f}"
+        rank_pos = next(j for j, ri in enumerate(ranked) if ri == i)
+        rank_row += f"  {ordinals[rank_pos]:>{val_col - 2}s}"
+
+    lines.append(score_row)
+    lines.append(rank_row)
+    lines.append('\u2550' * total_w)
+
+    # Verdict
+    winner_idx = ranked[0]
+    if len(ranked) >= 2 and abs(scores[ranked[0]] - scores[ranked[1]]) < 0.02:
+        lines.append(f"  Verdict: TIE between {labels[ranked[0]]} and "
+                     f"{labels[ranked[1]]}")
+    else:
+        lines.append(f"  Verdict: {labels[winner_idx]} wins  "
+                     f"(composite {scores[winner_idx]:.3f})")
+
+    lines.append('')
+    return '\n'.join(lines)
+
+
+def render_multi_dashboard(metrics_list: list,
+                           width: int = 900) -> Image.Image:
+    """Render N dashboards stacked vertically with dividers.
+
+    Extends the existing ``render_comparison_dashboard`` pattern to
+    support an arbitrary number of devices.
+
+    Parameters
+    ----------
+    metrics_list : list[dict]
+        List of metrics dicts from ``analyze_correlation()``.
+    width : int
+        Image width in pixels.
+
+    Returns
+    -------
+    Image.Image or None
+        Combined dashboard image, or None if no valid data.
+    """
+    panels = []
+    for m in metrics_list:
+        if not m.get('error'):
+            panel = render_dashboard(m, width)
+            if panel is not None:
+                panels.append(panel)
+
+    if not panels:
+        return None
+
+    if len(panels) == 1:
+        return panels[0]
+
+    gap = 4
+    total_h = sum(p.height for p in panels) + gap * (len(panels) - 1)
+    combined = Image.new('RGB', (width, total_h), (50, 50, 50))
+
+    y_offset = 0
+    for i, panel in enumerate(panels):
+        combined.paste(panel, (0, y_offset))
+        y_offset += panel.height + gap
+
+    return combined
+
+
+def _parse_devices_arg(value: str) -> list:
+    """Parse --devices argument into a list of (port, label) tuples.
+
+    Format: "port1:label1,port2:label2,..."
+    If a label is omitted, a default "Device N" label is assigned.
+    """
+    specs = []
+    for i, entry in enumerate(value.split(',')):
+        entry = entry.strip()
+        if not entry:
+            continue
+        if ':' in entry:
+            port, label = entry.split(':', 1)
+            specs.append((port.strip(), label.strip()))
+        else:
+            specs.append((entry.strip(), f'Device {chr(65 + i)}'))
+    return specs
+
+
+# ---------------------------------------------------------------------------
 # Save / Load
 # ---------------------------------------------------------------------------
 
 def save_session(path: str, frames_a, ts_a, meta_a,
                  frames_b=None, ts_b=None, meta_b=None,
                  label_a='Device A', label_b='Device B'):
-    """Save capture session to compressed .npz file."""
+    """Save capture session to compressed .npz file.
+
+    Includes a ``_format_version`` key so future loaders can detect
+    schema changes.
+    """
     d = {
+        '_format_version': _SESSION_FORMAT_VERSION,
         'frames_a': frames_a,
         'timestamps_a': ts_a,
         'metadata_a': np.array(meta_a, dtype=object),
@@ -1162,12 +1621,33 @@ def save_session(path: str, frames_a, ts_a, meta_a,
         d['metadata_b'] = np.array(meta_b, dtype=object)
         d['label_b'] = label_b
     np.savez_compressed(path, **d)
-    print(f"[Save] Session data: {path}")
+    if not _quiet:
+        print(f"[Save] Session data: {path}")
 
 
 def load_session(path: str):
-    """Load saved session. Returns dict with keys frames_a, timestamps_a, etc."""
+    """Load saved session. Returns dict with keys frames_a, timestamps_a, etc.
+
+    Validates that the file contains the minimum required keys before
+    accessing them, and warns on format version mismatches.
+    """
     data = np.load(path, allow_pickle=True)
+
+    # Check format version (absent in v0/v1 files -- that is fine).
+    file_ver = int(data['_format_version']) if '_format_version' in data else 1
+    if file_ver > _SESSION_FORMAT_VERSION:
+        print(f"[Load] WARNING: File format version {file_ver} is newer than "
+              f"this tool supports ({_SESSION_FORMAT_VERSION}). "
+              f"Some fields may be missing.", file=sys.stderr)
+
+    # Validate required keys.
+    required = ['frames_a', 'timestamps_a', 'metadata_a']
+    missing = [k for k in required if k not in data]
+    if missing:
+        print(f"[Load] ERROR: Malformed session file '{path}' -- "
+              f"missing keys: {', '.join(missing)}", file=sys.stderr)
+        sys.exit(1)
+
     result = {
         'frames_a': data['frames_a'],
         'timestamps_a': data['timestamps_a'],
@@ -1555,6 +2035,9 @@ def format_gallery_report(results: list, gate_thresholds: dict = None) -> str:
     str
         Multi-line formatted report.
     """
+    if not results:
+        return '\n  Effect Gallery Report\n  (no results)\n'
+
     lines = []
     lines.append('')
     lines.append('Effect Gallery Report')
@@ -1634,6 +2117,22 @@ def format_gallery_report(results: list, gate_thresholds: dict = None) -> str:
     return '\n'.join(lines)
 
 
+def _build_gate_overrides(args) -> dict:
+    """Extract gate threshold overrides from parsed CLI args."""
+    overrides = {}
+    if args.gate_drop_rate is not None:
+        overrides['drop_rate'] = args.gate_drop_rate
+    if args.gate_show_time is not None:
+        overrides['show_time'] = args.gate_show_time
+    if args.gate_heap_min is not None:
+        overrides['heap_min'] = args.gate_heap_min
+    if args.gate_heap_trend is not None:
+        overrides['heap_trend'] = args.gate_heap_trend
+    if args.gate_show_skips is not None:
+        overrides['show_skips'] = args.gate_show_skips
+    return overrides or None
+
+
 def _parse_gallery_arg(value: str) -> list:
     """Parse --gallery argument: profile name or comma-separated hex IDs."""
     if value in GALLERY_PROFILES:
@@ -1671,11 +2170,30 @@ def main():
     # Device B (comparison)
     parser.add_argument('--compare-serial', metavar='PORT',
                         help='Serial port for comparison device')
+    # Device C (third device)
+    parser.add_argument('--serial-c', metavar='PORT',
+                        help='Serial port for a third device')
     # Labels
     parser.add_argument('--label', default='Device A',
                         help='Label for primary device')
     parser.add_argument('--compare-label', default='Device B',
                         help='Label for comparison device')
+    parser.add_argument('--label-c', default='Device C',
+                        help='Label for the third device')
+
+    # N-way multi-device
+    parser.add_argument(
+        '--devices', metavar='SPECS',
+        help='Comma-separated port:label pairs for N-way comparison. '
+             'e.g. "/dev/cu.usbmodem212401:Main HEAD,'
+             '/dev/cu.usbmodem21401:Milestone,'
+             '/dev/cu.usbmodem101:Baseline". '
+             'Takes precedence over --serial/--compare-serial/--serial-c.')
+    parser.add_argument(
+        '--sequential', action='store_true',
+        help='Capture sequentially from --serial, prompting between runs. '
+             'Use with --devices to specify labels (port is ignored, '
+             '--serial is used). Useful for N-way on a single physical device.')
     # Capture settings
     parser.add_argument('--duration', type=float, default=30.0,
                         help='Capture duration in seconds (default: 30)')
@@ -1683,6 +2201,14 @@ def main():
                         help='Streaming FPS (default: 15)')
     parser.add_argument('--tap', choices=['a', 'b', 'c'], default='b',
                         help='Capture tap point (default: b)')
+    parser.add_argument('--retries', type=int, default=1, metavar='N',
+                        help='Number of capture retries if 0 frames received (default: 1)')
+    # Verbosity
+    parser.add_argument('--verbose', '-v', action='store_true',
+                        help='Print per-frame metadata every 10 frames, '
+                             'alignment diagnostics, and gate thresholds')
+    parser.add_argument('--quiet', '-q', action='store_true',
+                        help='Suppress all output except the final report/gate result')
     # Temporal alignment
     parser.add_argument('--align', action='store_true',
                         help='Cross-correlate RMS to time-align two captures '
@@ -1731,6 +2257,19 @@ def main():
 
     args = parser.parse_args()
 
+    # Set module-level verbosity flags.
+    global _verbose, _quiet
+    _verbose = getattr(args, 'verbose', False)
+    _quiet = getattr(args, 'quiet', False)
+    if _verbose and _quiet:
+        parser.error("--verbose and --quiet are mutually exclusive")
+
+    if _verbose and not _quiet:
+        # Print the gate thresholds being used so the user can verify.
+        print("[Verbose] Gate thresholds (default or overridden):")
+        for k, (v, d) in DEFAULT_GATE_THRESHOLDS.items():
+            print(f"  {k}: {v} ({d})")
+
     # ----- Gallery Mode (early return) -----
     if args.gallery:
         if not args.serial:
@@ -1749,20 +2288,7 @@ def main():
             print(format_report(metrics))
 
         # Build gate overrides if --gate is active
-        gate_overrides = None
-        if args.gate:
-            gate_overrides = {}
-            if args.gate_drop_rate is not None:
-                gate_overrides['drop_rate'] = args.gate_drop_rate
-            if args.gate_show_time is not None:
-                gate_overrides['show_time'] = args.gate_show_time
-            if args.gate_heap_min is not None:
-                gate_overrides['heap_min'] = args.gate_heap_min
-            if args.gate_heap_trend is not None:
-                gate_overrides['heap_trend'] = args.gate_heap_trend
-            if args.gate_show_skips is not None:
-                gate_overrides['show_skips'] = args.gate_show_skips
-            gate_overrides = gate_overrides or None
+        gate_overrides = _build_gate_overrides(args) if args.gate else None
 
         # Summary table
         print(format_gallery_report(gallery_results, gate_overrides))
@@ -1796,10 +2322,113 @@ def main():
             sys.exit(1)
         sys.exit(0)
 
+    # ----- Resolve device list -----
+    # Build a unified device_specs list: [(port, label), ...].
+    # --devices takes precedence; otherwise assemble from individual args.
+    device_specs = []
+
+    if args.devices:
+        device_specs = _parse_devices_arg(args.devices)
+        if not device_specs:
+            parser.error("--devices: no valid port:label pairs found")
+    elif not args.load:
+        if args.serial:
+            device_specs.append((args.serial, args.label))
+        if args.compare_serial:
+            device_specs.append((args.compare_serial, args.compare_label))
+        if args.serial_c:
+            device_specs.append((args.serial_c, args.label_c))
+
+    if not device_specs and not args.load:
+        parser.error("Either --serial, --devices, or --load is required")
+
+    # Determine whether to use the N-way (multi) path.
+    # Multi path: --devices given, or 3+ individual ports, or --sequential.
+    use_multi = (args.devices is not None
+                 or len(device_specs) >= 3
+                 or args.sequential)
+
+    # =================================================================
+    # N-WAY MULTI-DEVICE PATH
+    # =================================================================
+    if use_multi and not args.load:
+        if args.sequential:
+            # Sequential capture: use first port, labels from device_specs
+            seq_port = device_specs[0][0] if device_specs else args.serial
+            if not seq_port:
+                parser.error("--sequential requires --serial or --devices")
+            seq_labels = [label for (_port, label) in device_specs]
+            if len(seq_labels) < 2:
+                parser.error("--sequential requires at least 2 labels "
+                             "(use --devices or --serial + --compare-serial)")
+            captures = capture_sequential_devices(
+                seq_port, seq_labels, args.duration, args.fps, args.tap)
+        else:
+            captures = capture_multiple_devices(
+                device_specs, args.duration, args.fps, args.tap)
+
+        # Analyse each device
+        all_metrics = []
+        for label, frames, timestamps, metadata in captures:
+            if frames is None:
+                all_metrics.append({
+                    'label': label, 'n_frames': 0,
+                    'error': 'capture_failed',
+                })
+                continue
+            m = analyze_correlation(frames, timestamps, metadata, label)
+            all_metrics.append(m)
+            print(format_report(m))
+
+        valid_metrics = [m for m in all_metrics if not m.get('error')]
+        if not valid_metrics:
+            print("ERROR: No devices produced valid captures",
+                  file=sys.stderr)
+            sys.exit(1)
+
+        # Pairwise alignment note (raw data not retained post-analysis)
+        if args.align and len(valid_metrics) >= 2:
+            print("[Align] NOTE: Pairwise alignment in N-way mode is not "
+                  "yet supported. Re-run with 2-device mode for post-hoc "
+                  "alignment if needed.")
+
+        # N-way comparison table
+        if len(valid_metrics) >= 2:
+            print(format_multi_comparison(all_metrics))
+
+        # Dashboard
+        if args.dashboard:
+            dashboard = render_multi_dashboard(all_metrics)
+            if dashboard:
+                dashboard.save(args.dashboard, 'PNG')
+                print(f"[Dashboard] Saved: {args.dashboard} "
+                      f"({dashboard.width}x{dashboard.height})")
+            else:
+                print("[Dashboard] Could not render (insufficient data)")
+
+        # Regression gate on each device independently
+        if args.gate:
+            gate_overrides = _build_gate_overrides(args)
+            any_failure = False
+
+            for m in all_metrics:
+                if not m.get('error'):
+                    gate_r = run_regression_gate(m, gate_overrides)
+                    print(format_gate_report(gate_r, m.get('label', '')))
+                    if gate_has_failures(gate_r):
+                        any_failure = True
+
+            if any_failure:
+                sys.exit(1)
+
+        sys.exit(0)
+
+    # =================================================================
+    # CLASSIC 1- OR 2-DEVICE PATH (backwards compatible)
+    # =================================================================
     if not args.serial and not args.load:
         parser.error("Either --serial or --load is required")
 
-    # ----- Capture or Load -----
     frames_b = None
 
     if args.load:
@@ -1834,7 +2463,8 @@ def main():
 
             def cap_b():
                 result_b[0] = capture_with_metadata(
-                    args.compare_serial, args.duration, args.fps, args.tap, stop_b)
+                    args.compare_serial, args.duration, args.fps, args.tap,
+                    stop_b)
 
             ta = threading.Thread(target=cap_a, daemon=True)
             tb = threading.Thread(target=cap_b, daemon=True)
@@ -1854,12 +2484,25 @@ def main():
             if result_b[0] is not None:
                 frames_b, timestamps_b, metadata_b = result_b[0]
             else:
-                print("WARNING: No frames from comparison device", file=sys.stderr)
+                print("WARNING: No frames from comparison device",
+                      file=sys.stderr)
         else:
-            result = capture_with_metadata(
-                args.serial, args.duration, args.fps, args.tap)
+            # Single-device capture with retry support.
+            max_attempts = max(1, getattr(args, 'retries', 1))
+            result = None
+            for attempt in range(max_attempts):
+                result = capture_with_metadata(
+                    args.serial, args.duration, args.fps, args.tap)
+                if result is not None:
+                    break
+                if attempt < max_attempts - 1:
+                    print(f"[Capture] WARNING: 0 frames on attempt "
+                          f"{attempt + 1}/{max_attempts}, retrying...",
+                          file=sys.stderr)
+                    time.sleep(1)
             if result is None:
-                print("ERROR: No frames captured", file=sys.stderr)
+                print("ERROR: No frames captured after "
+                      f"{max_attempts} attempt(s)", file=sys.stderr)
                 sys.exit(1)
             frames_a, timestamps_a, metadata_a = result
 
@@ -1886,8 +2529,20 @@ def main():
             offset_frames, corr_score, offset_secs = align_result
 
             sign = '+' if offset_frames >= 0 else ''
-            print(f"[Align] Offset: {sign}{offset_frames} frames "
-                  f"({offset_secs:.2f}s), correlation: {corr_score:.2f}")
+            if not _quiet:
+                print(f"[Align] Offset: {sign}{offset_frames} frames "
+                      f"({offset_secs:.2f}s), correlation: {corr_score:.2f}")
+
+            if _verbose:
+                rms_a_arr = np.array([m.get('rms', 0.0) for m in metadata_a])
+                rms_b_arr = np.array([m.get('rms', 0.0) for m in metadata_b])
+                print(f"  [v] RMS A: mean={rms_a_arr.mean():.4f} "
+                      f"std={rms_a_arr.std():.4f} "
+                      f"len={len(rms_a_arr)}")
+                print(f"  [v] RMS B: mean={rms_b_arr.mean():.4f} "
+                      f"std={rms_b_arr.std():.4f} "
+                      f"len={len(rms_b_arr)}")
+                print(f"  [v] Search window: +/- {_MAX_ALIGN_OFFSET} frames")
 
             if corr_score < 0.3:
                 print(f"[Align] WARNING: Low correlation ({corr_score:.2f}). "
@@ -1899,7 +2554,8 @@ def main():
                     frames_a, timestamps_a, metadata_a,
                     frames_b, timestamps_b, metadata_b,
                     offset_frames)
-                print(f"[Align] Trimmed to {len(metadata_a)} overlapping frames.")
+                print(f"[Align] Trimmed to {len(metadata_a)} overlapping "
+                      f"frames.")
 
                 if len(metadata_a) < 10:
                     print("[Align] ERROR: Too few overlapping frames after "
@@ -1913,15 +2569,17 @@ def main():
             }
 
     # ----- Analysis -----
-    metrics_a = analyze_correlation(frames_a, timestamps_a, metadata_a, label_a)
+    metrics_a = analyze_correlation(
+        frames_a, timestamps_a, metadata_a, label_a)
     print(format_report(metrics_a))
 
     metrics_b_result = None
     if frames_b is not None:
-        metrics_b_result = analyze_correlation(frames_b, timestamps_b, metadata_b, label_b)
+        metrics_b_result = analyze_correlation(
+            frames_b, timestamps_b, metadata_b, label_b)
         print(format_report(metrics_b_result))
 
-        # Inject alignment header into comparison report if alignment was applied.
+        # Inject alignment header if alignment was applied.
         comparison_text = format_comparison(metrics_a, metrics_b_result)
         if alignment_info is not None:
             ai = alignment_info
@@ -1931,61 +2589,51 @@ def main():
                 f"({ai['offset_seconds']:.2f}s), "
                 f"correlation: {ai['correlation']:.2f}\n"
             )
-            # Insert after the COMPARISON header line.
-            lines = comparison_text.split('\n')
-            # Find the blank line after the header block and insert before it.
+            clines = comparison_text.split('\n')
             insert_idx = None
-            for i, line in enumerate(lines):
+            for i, line in enumerate(clines):
                 if line.strip().startswith('COMPARISON:'):
                     insert_idx = i + 1
                     break
             if insert_idx is not None:
-                lines.insert(insert_idx, align_header)
-            comparison_text = '\n'.join(lines)
+                clines.insert(insert_idx, align_header)
+            comparison_text = '\n'.join(clines)
 
         print(comparison_text)
 
     # ----- Dashboard -----
     if args.dashboard:
         if metrics_b_result is not None:
-            dashboard = render_comparison_dashboard(metrics_a, metrics_b_result)
+            dashboard = render_comparison_dashboard(
+                metrics_a, metrics_b_result)
         else:
             dashboard = render_dashboard(metrics_a)
 
         if dashboard:
             dashboard.save(args.dashboard, 'PNG')
-            print(f"[Dashboard] Saved: {args.dashboard} ({dashboard.width}x{dashboard.height})")
+            print(f"[Dashboard] Saved: {args.dashboard} "
+                  f"({dashboard.width}x{dashboard.height})")
         else:
             print("[Dashboard] Could not render (insufficient data)")
 
     # ----- Regression Gate -----
     if args.gate:
-        # Build threshold overrides from CLI flags
-        gate_overrides = {}
-        if args.gate_drop_rate is not None:
-            gate_overrides['drop_rate'] = args.gate_drop_rate
-        if args.gate_show_time is not None:
-            gate_overrides['show_time'] = args.gate_show_time
-        if args.gate_heap_min is not None:
-            gate_overrides['heap_min'] = args.gate_heap_min
-        if args.gate_heap_trend is not None:
-            gate_overrides['heap_trend'] = args.gate_heap_trend
-        if args.gate_show_skips is not None:
-            gate_overrides['show_skips'] = args.gate_show_skips
-
+        gate_overrides = _build_gate_overrides(args)
         any_failure = False
 
         # Gate for device A
         if not metrics_a.get('error'):
-            gate_a = run_regression_gate(metrics_a, gate_overrides or None)
+            gate_a = run_regression_gate(metrics_a, gate_overrides)
             print(format_gate_report(gate_a, metrics_a.get('label', '')))
             if gate_has_failures(gate_a):
                 any_failure = True
 
         # Gate for device B (if comparison mode)
         if metrics_b_result is not None and not metrics_b_result.get('error'):
-            gate_b = run_regression_gate(metrics_b_result, gate_overrides or None)
-            print(format_gate_report(gate_b, metrics_b_result.get('label', '')))
+            gate_b = run_regression_gate(
+                metrics_b_result, gate_overrides)
+            print(format_gate_report(
+                gate_b, metrics_b_result.get('label', '')))
             if gate_has_failures(gate_b):
                 any_failure = True
 

@@ -104,6 +104,11 @@ def parse_serial_frame(data: bytes) -> Optional[tuple]:
     """Parse a serial capture frame (v1=977 bytes, v2=1009 bytes).
 
     Returns (frame_array, metadata) or None.
+
+    Known limitation: the serial capture protocol has no CRC or checksum
+    field. Frame integrity relies solely on the magic byte and payload
+    length validation. Corrupt frames that happen to pass these checks
+    are flagged via the ``suspect`` metadata key (see below).
     """
     if len(data) < SERIAL_V1_FRAME_SIZE:
         return None
@@ -111,6 +116,10 @@ def parse_serial_frame(data: bytes) -> Optional[tuple]:
         return None
 
     version = data[1]
+    # Reject frames with unrecognised version bytes — likely corruption.
+    if version not in (1, 2):
+        return None
+
     tap = data[2]
     effect_id = data[3]
     palette_id = data[4]
@@ -126,6 +135,13 @@ def parse_serial_frame(data: bytes) -> Optional[tuple]:
     payload = data[SERIAL_HEADER_SIZE:SERIAL_HEADER_SIZE + RGB_BYTES]
     frame = np.frombuffer(payload, dtype=np.uint8).reshape(NUM_LEDS, 3)
 
+    # Sanity check: if >90% of payload bytes are identical, the frame is
+    # likely corrupted (e.g. a stuck serial buffer or memset artefact).
+    # Note: np.unique on a bytes object treats it as a single element,
+    # so we must operate on the already-parsed uint8 frame array.
+    _unique_ratio = len(np.unique(frame)) / max(1, len(payload))
+    suspect = _unique_ratio < 0.10  # fewer than 10% unique byte values
+
     metadata = {
         'version': version,
         'tap': tap,
@@ -135,6 +151,7 @@ def parse_serial_frame(data: bytes) -> Optional[tuple]:
         'speed': speed,
         'frame_idx': frame_idx,
         'timestamp_us': timestamp_us,
+        'suspect': suspect,
     }
 
     # v2 metrics trailer (32 bytes after RGB payload)

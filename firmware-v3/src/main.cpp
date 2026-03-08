@@ -144,10 +144,17 @@ bool s_captureStreamActive = false;
 uint8_t s_captureStreamTapMask = 0x02;  // default: tap B
 lightwaveos::actors::RendererActor::CaptureTap s_captureStreamTap =
     lightwaveos::actors::RendererActor::CaptureTap::TAP_B_POST_CORRECTION;
-uint32_t s_captureStreamIntervalMs = 66;  // ~15 FPS default
-uint32_t s_captureStreamLastPush = 0;
+uint32_t s_captureStreamIntervalUs = 66667;  // ~15 FPS default (microseconds)
+uint32_t s_captureStreamLastPushUs = 0;
 uint32_t s_captureStreamLastFrameIdx = UINT32_MAX;
 uint8_t s_captureStreamVersion = 2;  // 1 = 976-byte legacy, 2 = 1008-byte with metrics
+uint32_t s_captureStreamDropped = 0;  // frames skipped due to TX buffer full
+
+// Pre-assembled frame buffer for single bulk Serial.write() — allocated in PSRAM.
+// v2 max frame = 1009 bytes (17 header + 960 RGB + 32 metrics trailer).
+constexpr size_t CAPTURE_FRAME_BUF_SIZE = 1024;
+uint8_t s_captureFrameBufFallback[CAPTURE_FRAME_BUF_SIZE] = {};
+uint8_t* s_captureFrameBuf = s_captureFrameBufFallback;
 
 void initLoopScratchBuffers() {
     if (s_loopScratchInitialised) return;
@@ -169,12 +176,18 @@ void initLoopScratchBuffers() {
                              MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT))) {
         s_validationFrameScratch = validation;
     }
+    if (auto* frameBuf = static_cast<uint8_t*>(
+            heap_caps_calloc(CAPTURE_FRAME_BUF_SIZE, 1,
+                             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT))) {
+        s_captureFrameBuf = frameBuf;
+    }
 #endif
 
-    LW_LOGI("Loop scratch buffers: effectIds=%s capture=%s validation=%s",
+    LW_LOGI("Loop scratch buffers: effectIds=%s capture=%s validation=%s frameBuf=%s",
             (s_loopEffectIdScratch != s_loopEffectIdFallback) ? "PSRAM" : "DRAM",
             (s_captureDumpFrameScratch != s_captureDumpFrameFallback) ? "PSRAM" : "DRAM",
-            (s_validationFrameScratch != s_validationFrameFallback) ? "PSRAM" : "DRAM");
+            (s_validationFrameScratch != s_validationFrameFallback) ? "PSRAM" : "DRAM",
+            (s_captureFrameBuf != s_captureFrameBufFallback) ? "PSRAM" : "DRAM");
 }
 
 }  // namespace
@@ -1383,115 +1396,128 @@ void loop() {
     }
 
     uint32_t now = millis();
+    uint32_t nowUs = micros();
 
     // --- Capture streaming tick ---
     // Push binary frames at target FPS without command round-trip overhead.
-    // v1: 976 bytes (16-byte header + 960 RGB). v2: 1008 bytes (+ 32-byte metrics trailer).
-    if (s_captureStreamActive && renderer && (now - s_captureStreamLastPush >= s_captureStreamIntervalMs)) {
+    // Frame is pre-assembled into s_captureFrameBuf and sent as a single
+    // bulk Serial.write() for efficient USB CDC transfer.
+    // v1: 977 bytes (17-byte header + 960 RGB). v2: 1009 bytes (+ 32-byte metrics trailer).
+    if (s_captureStreamActive && renderer && (nowUs - s_captureStreamLastPushUs >= s_captureStreamIntervalUs)) {
         CRGB* frame = s_captureDumpFrameScratch;
         if (renderer->getCapturedFrame(s_captureStreamTap, frame)) {
             auto metadata = renderer->getCaptureMetadata();
             // Only push if this is a new frame (avoid duplicates)
             if (metadata.frameIndex != s_captureStreamLastFrameIdx) {
                 s_captureStreamLastFrameIdx = metadata.frameIndex;
-                s_captureStreamLastPush = now;
+                s_captureStreamLastPushUs = nowUs;
 
-                // --- Header (16 bytes) ---
-                Serial.write(0xFD);
-                Serial.write(s_captureStreamVersion);
-                Serial.write((uint8_t)s_captureStreamTap);
-                Serial.write(metadata.effectId);
-                Serial.write(metadata.paletteId);
-                Serial.write(metadata.brightness);
-                Serial.write(metadata.speed);
-                Serial.write((uint8_t)(metadata.frameIndex & 0xFF));
-                Serial.write((uint8_t)((metadata.frameIndex >> 8) & 0xFF));
-                Serial.write((uint8_t)((metadata.frameIndex >> 16) & 0xFF));
-                Serial.write((uint8_t)((metadata.frameIndex >> 24) & 0xFF));
-                Serial.write((uint8_t)(metadata.timestampUs & 0xFF));
-                Serial.write((uint8_t)((metadata.timestampUs >> 8) & 0xFF));
-                Serial.write((uint8_t)((metadata.timestampUs >> 16) & 0xFF));
-                Serial.write((uint8_t)((metadata.timestampUs >> 24) & 0xFF));
-                uint16_t frameLen = 320 * 3;
-                Serial.write((uint8_t)(frameLen & 0xFF));
-                Serial.write((uint8_t)((frameLen >> 8) & 0xFF));
+                // --- Assemble frame into bulk buffer ---
+                uint8_t* buf = s_captureFrameBuf;
+                size_t pos = 0;
+                constexpr uint16_t rgbLen = 320 * 3;
 
-                // --- RGB payload (960 bytes) ---
-                Serial.write((uint8_t*)frame, frameLen);
+                // Header (17 bytes)
+                buf[pos++] = 0xFD;
+                buf[pos++] = s_captureStreamVersion;
+                buf[pos++] = (uint8_t)s_captureStreamTap;
+                buf[pos++] = metadata.effectId;
+                buf[pos++] = metadata.paletteId;
+                buf[pos++] = metadata.brightness;
+                buf[pos++] = metadata.speed;
+                buf[pos++] = (uint8_t)(metadata.frameIndex & 0xFF);
+                buf[pos++] = (uint8_t)((metadata.frameIndex >> 8) & 0xFF);
+                buf[pos++] = (uint8_t)((metadata.frameIndex >> 16) & 0xFF);
+                buf[pos++] = (uint8_t)((metadata.frameIndex >> 24) & 0xFF);
+                buf[pos++] = (uint8_t)(metadata.timestampUs & 0xFF);
+                buf[pos++] = (uint8_t)((metadata.timestampUs >> 8) & 0xFF);
+                buf[pos++] = (uint8_t)((metadata.timestampUs >> 16) & 0xFF);
+                buf[pos++] = (uint8_t)((metadata.timestampUs >> 24) & 0xFF);
+                buf[pos++] = (uint8_t)(rgbLen & 0xFF);
+                buf[pos++] = (uint8_t)((rgbLen >> 8) & 0xFF);
 
-                // --- v2 metrics trailer (32 bytes) ---
+                // RGB payload (960 bytes)
+                memcpy(&buf[pos], (uint8_t*)frame, rgbLen);
+                pos += rgbLen;
+
+                // v2 metrics trailer (32 bytes)
                 if (s_captureStreamVersion >= 2) {
                     using namespace lightwaveos::actors;
 
-                    // Gather metrics from existing thread-safe accessors
                     auto& ledStats = renderer->getLedDriverStats();
                     RendererActor::BandsDebugSnapshot bandsSnap;
                     renderer->getBandsDebugSnapshot(bandsSnap);
 
-                    // Beat tick from cached ControlBusFrame (same pattern as network code)
                     lightwaveos::audio::ControlBusFrame cbf;
                     renderer->copyCachedAudioFrame(cbf);
 
-                    // [0:2] showTimeUs (u16 LE, capped)
+                    // [0:2] showTimeUs (u16 LE)
                     uint16_t showUs = (ledStats.lastShowUs > 65535) ? 65535 : (uint16_t)ledStats.lastShowUs;
-                    Serial.write((uint8_t)(showUs & 0xFF));
-                    Serial.write((uint8_t)((showUs >> 8) & 0xFF));
+                    buf[pos++] = (uint8_t)(showUs & 0xFF);
+                    buf[pos++] = (uint8_t)((showUs >> 8) & 0xFF);
 
                     // [2:4] rms (u16 LE, float * 65535)
                     uint16_t rmsU16 = (uint16_t)(bandsSnap.rms * 65535.0f);
-                    Serial.write((uint8_t)(rmsU16 & 0xFF));
-                    Serial.write((uint8_t)((rmsU16 >> 8) & 0xFF));
+                    buf[pos++] = (uint8_t)(rmsU16 & 0xFF);
+                    buf[pos++] = (uint8_t)((rmsU16 >> 8) & 0xFF);
 
                     // [4:12] bands[8] (u8 each, float * 255)
                     for (int i = 0; i < 8; i++) {
                         float v = bandsSnap.bands[i];
-                        Serial.write((uint8_t)(v > 1.0f ? 255 : (uint8_t)(v * 255.0f)));
+                        buf[pos++] = (uint8_t)(v > 1.0f ? 255 : (uint8_t)(v * 255.0f));
                     }
 
                     // [12] beatTick (u8)
                     bool beat = cbf.tempoBeatTick || cbf.es_beat_tick;
-                    Serial.write(beat ? (uint8_t)1 : (uint8_t)0);
+                    buf[pos++] = beat ? 1 : 0;
 
-                    // [13] onsetTick (u8, snare or hihat)
+                    // [13] onsetTick (u8)
                     bool onset = cbf.snareTrigger || cbf.hihatTrigger;
-                    Serial.write(onset ? (uint8_t)1 : (uint8_t)0);
+                    buf[pos++] = onset ? 1 : 0;
 
                     // [14:16] flux (u16 LE, float * 65535)
                     uint16_t fluxU16 = (uint16_t)(bandsSnap.flux * 65535.0f);
-                    Serial.write((uint8_t)(fluxU16 & 0xFF));
-                    Serial.write((uint8_t)((fluxU16 >> 8) & 0xFF));
+                    buf[pos++] = (uint8_t)(fluxU16 & 0xFF);
+                    buf[pos++] = (uint8_t)((fluxU16 >> 8) & 0xFF);
 
                     // [16:20] heapFree (u32 LE)
                     uint32_t heapFree = esp_get_free_heap_size();
-                    Serial.write((uint8_t)(heapFree & 0xFF));
-                    Serial.write((uint8_t)((heapFree >> 8) & 0xFF));
-                    Serial.write((uint8_t)((heapFree >> 16) & 0xFF));
-                    Serial.write((uint8_t)((heapFree >> 24) & 0xFF));
+                    buf[pos++] = (uint8_t)(heapFree & 0xFF);
+                    buf[pos++] = (uint8_t)((heapFree >> 8) & 0xFF);
+                    buf[pos++] = (uint8_t)((heapFree >> 16) & 0xFF);
+                    buf[pos++] = (uint8_t)((heapFree >> 24) & 0xFF);
 
-                    // [20:22] showSkips (u16 LE, cumulative)
+                    // [20:22] showSkips (u16 LE)
                     uint16_t skips = (ledStats.showSkips > 65535) ? 65535 : (uint16_t)ledStats.showSkips;
-                    Serial.write((uint8_t)(skips & 0xFF));
-                    Serial.write((uint8_t)((skips >> 8) & 0xFF));
+                    buf[pos++] = (uint8_t)(skips & 0xFF);
+                    buf[pos++] = (uint8_t)((skips >> 8) & 0xFF);
 
-                    // [22:24] bpm (u16 LE, BPM * 100 for 0.01 resolution)
-                    // Use whichever backend's BPM is non-default
+                    // [22:24] bpm (u16 LE, BPM * 100)
                     float bpmVal = (cbf.es_bpm > 0.0f && cbf.es_bpm != 120.0f)
                                  ? cbf.es_bpm : cbf.tempoBpm;
                     uint16_t bpmU16 = (uint16_t)(bpmVal * 100.0f);
-                    Serial.write((uint8_t)(bpmU16 & 0xFF));
-                    Serial.write((uint8_t)((bpmU16 >> 8) & 0xFF));
+                    buf[pos++] = (uint8_t)(bpmU16 & 0xFF);
+                    buf[pos++] = (uint8_t)((bpmU16 >> 8) & 0xFF);
 
                     // [24:26] beatConfidence (u16 LE, float * 65535)
                     float conf = (cbf.es_tempo_confidence > 0.0f)
                                ? cbf.es_tempo_confidence : cbf.tempoConfidence;
                     if (conf > 1.0f) conf = 1.0f;
                     uint16_t confU16 = (uint16_t)(conf * 65535.0f);
-                    Serial.write((uint8_t)(confU16 & 0xFF));
-                    Serial.write((uint8_t)((confU16 >> 8) & 0xFF));
+                    buf[pos++] = (uint8_t)(confU16 & 0xFF);
+                    buf[pos++] = (uint8_t)((confU16 >> 8) & 0xFF);
 
-                    // [26:32] reserved/pad (6 bytes of zeros)
-                    uint8_t pad[6] = {0};
-                    Serial.write(pad, 6);
+                    // [26:32] reserved (6 bytes)
+                    memset(&buf[pos], 0, 6);
+                    pos += 6;
+                }
+
+                // Single bulk write — much more efficient for USB CDC than
+                // 32+ individual Serial.write() calls. If TX buffer is full,
+                // the write returns fewer bytes than requested; count as drop.
+                size_t written = Serial.write(buf, pos);
+                if (written < pos) {
+                    s_captureStreamDropped++;
                 }
             }
         }
@@ -1748,26 +1774,32 @@ void loop() {
 
                     s_captureStreamTap = tap;
                     s_captureStreamTapMask = tapMask;
-                    s_captureStreamIntervalMs = 1000 / targetFps;
-                    s_captureStreamLastPush = 0;
+                    s_captureStreamIntervalUs = 1000000 / targetFps;
+                    s_captureStreamLastPushUs = 0;
                     s_captureStreamLastFrameIdx = UINT32_MAX;
+                    s_captureStreamDropped = 0;
                     s_captureStreamActive = true;
 
-                    Serial.printf("[CAPTURE] Streaming tap %c at %d FPS (%d ms interval)\n",
+                    Serial.printf("[CAPTURE] Streaming tap %c at %d FPS (%d us interval)\n",
                                   (tapMask & 0x01) ? 'A' : (tapMask & 0x04) ? 'C' : 'B',
-                                  targetFps, (int)s_captureStreamIntervalMs);
+                                  targetFps, (int)s_captureStreamIntervalUs);
                 }
                 else if (subcmd == "stop") {
                     s_captureStreamActive = false;
-                    Serial.println("[CAPTURE] Streaming stopped");
+                    if (s_captureStreamDropped > 0) {
+                        Serial.printf("[CAPTURE] Streaming stopped (%lu TX drops)\n",
+                                      (unsigned long)s_captureStreamDropped);
+                    } else {
+                        Serial.println("[CAPTURE] Streaming stopped");
+                    }
                 }
                 else if (subcmd.startsWith("fps")) {
                     String fpsArg = subcmd.substring(3);
                     fpsArg.trim();
                     int newFps = fpsArg.toInt();
                     if (newFps >= 1 && newFps <= 60) {
-                        s_captureStreamIntervalMs = 1000 / newFps;
-                        Serial.printf("[CAPTURE] FPS set to %d (%d ms interval)\n", newFps, (int)s_captureStreamIntervalMs);
+                        s_captureStreamIntervalUs = 1000000 / newFps;
+                        Serial.printf("[CAPTURE] FPS set to %d (%d us interval)\n", newFps, (int)s_captureStreamIntervalUs);
                     } else {
                         Serial.println("Usage: capture fps <1-60>");
                     }
@@ -1813,9 +1845,10 @@ void loop() {
                     auto metadata = renderer->getCaptureMetadata();
                     Serial.println("\n=== Capture Status ===");
                     Serial.printf("  Enabled: %s\n", renderer->isCaptureModeEnabled() ? "YES" : "NO");
-                    Serial.printf("  Streaming: %s (v%d, %d ms interval)\n",
+                    Serial.printf("  Streaming: %s (v%d, %d us interval, %lu TX drops)\n",
                                   s_captureStreamActive ? "YES" : "NO",
-                                  s_captureStreamVersion, (int)s_captureStreamIntervalMs);
+                                  s_captureStreamVersion, (int)s_captureStreamIntervalUs,
+                                  (unsigned long)s_captureStreamDropped);
                     Serial.printf("  Last capture: effect=%d, palette=%d, frame=%lu\n",
                                   metadata.effectId, metadata.paletteId, metadata.frameIndex);
                     Serial.println();

@@ -162,7 +162,10 @@ def capture_with_metadata(port: str, duration: float, fps: int = 15,
     ser.reset_input_buffer()
 
     ser.write(f'capture stream {tap_letter} {fps}\n'.encode())
-    time.sleep(0.3)
+    # No sleep — start reading immediately. The frame parser scans for
+    # magic byte 0xFD so any text ack is harmlessly skipped. A 300ms nap
+    # here caused TX buffer saturation at 30+ FPS (firmware fills ~9KB
+    # into CDC buffer while host sleeps, Serial.write() blocks, loop dies).
 
     frames = []
     timestamps = []

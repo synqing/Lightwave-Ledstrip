@@ -26,6 +26,57 @@ This is not theoretical. We ran it. Two K1 devices, two firmware builds (main HE
 
 **What changes:** You see both builds running live, side by side. The comparison is objective (pixel data, beat correlation, timing metrics). You can re-run the comparison any time without reflashing. You can change what you're measuring without changing what you're testing.
 
+## Quick-Start Checklist
+
+Ten commands from zero to first comparison capture. Assumes two K1 devices connected, main repo at the project root, and a target commit or branch to compare against.
+
+```bash
+# 1. Create the worktree at the comparison commit
+git worktree add /tmp/comparison-baseline <commit-or-branch>
+
+# 2. Build primary firmware (K1v2, GPIO 6/7)
+cd firmware-v3 && ./.venv-pio/bin/pio run -e esp32dev_audio_esv11_k1v2_32khz
+
+# 3. Build comparison firmware (original K1, GPIO 4/5) — uses main repo's PlatformIO
+cd /tmp/comparison-baseline/firmware-v3 && \
+  /Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/firmware-v3/.venv-pio/bin/pio \
+  run -e esp32dev_audio_esv11
+
+# 4. Flash primary K1v2
+cd /Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/firmware-v3 && \
+  ./.venv-pio/bin/pio run -e esp32dev_audio_esv11_k1v2_32khz \
+  -t upload --upload-port /dev/cu.usbmodem212401
+
+# 5. Flash comparison K1
+cd /tmp/comparison-baseline/firmware-v3 && \
+  /Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/firmware-v3/.venv-pio/bin/pio \
+  run -e esp32dev_audio_esv11 -t upload --upload-port /dev/cu.usbmodem21401
+
+# 6. Wait for both boards to reboot (~5 seconds after flash completes)
+sleep 5
+
+# 7. Activate the capture tool venv
+cd /Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/tools/led_capture && \
+  source .venv/bin/activate
+
+# 8. Run a 15-second side-by-side comparison capture
+python led_capture.py \
+  --serial /dev/cu.usbmodem212401 \
+  --compare-serial /dev/cu.usbmodem21401 \
+  --duration 15 \
+  --label "Main HEAD" --compare-label "Baseline" \
+  -o comparison.png
+
+# 9. (Optional) Capture a GIF from the primary device
+python led_capture.py --serial /dev/cu.usbmodem212401 --duration 15 -o primary.gif
+
+# 10. Clean up the worktree when finished
+cd /Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip && \
+  git worktree remove /tmp/comparison-baseline
+```
+
+**Before you start:** Verify port assignments with `ls /dev/cu.usbmodem*`. If ports differ from the above, substitute throughout. K1v2 MAC: `b4:3a:45:a5:87:f8`, secondary K1 MAC: `b4:3a:45:a5:89:b4`.
+
 ## The Setup
 
 ### Prerequisites
@@ -225,6 +276,108 @@ Each frame renders the two LED strips as they appear physically — 160 coloured
 
 6. **PlatformIO build directories are per-worktree.** Each worktree gets its own `.pio/build/`. This is correct — the builds should be independent. But the toolchain (`~/.platformio/`) is shared.
 
+## Troubleshooting
+
+Every failure mode encountered so far, with fixes.
+
+### Port busy — "Resource busy" or "Permission denied"
+
+**Symptom:** Flash or capture fails with `Resource busy` or the serial port cannot be opened.
+
+**Cause:** Another process is holding the TTY. Common culprits are Cursor's built-in serial monitor, `screen`, `minicom`, or a previous capture tool instance that did not exit cleanly.
+
+**Fix:**
+```bash
+# Find what is holding the port
+lsof /dev/tty.usbmodem*
+
+# Kill the offending process, or close the serial monitor tab in your IDE
+kill <pid>
+```
+
+### Dark strips — wrong GPIO mapping
+
+**Symptom:** Firmware flashes and boots (serial output looks normal), but one or both LED strips stay dark.
+
+**Cause:** Build environment does not match the hardware. K1v2 uses GPIO 6/7 for LED data; original K1 uses GPIO 4/5. Flashing the wrong env sends data to pins that are not connected to strips.
+
+**Fix:** Verify the build environment matches the device:
+- K1v2 hardware → `esp32dev_audio_esv11_k1v2_32khz`
+- Original K1 hardware → `esp32dev_audio_esv11`
+
+Rebuild with the correct environment and reflash. There is no runtime override — GPIO assignment is a compile-time constant.
+
+### PEP 668 — pip refuses to install packages
+
+**Symptom:** `pip install` fails with `externally-managed-environment` error on Python 3.12+.
+
+**Cause:** macOS and Homebrew Python enforce PEP 668, which prevents installing packages into the system Python.
+
+**Fix:** Always use a virtual environment:
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+The capture tool's venv already exists at `tools/led_capture/.venv/`. Activate it rather than installing globally.
+
+### Missing PlatformIO in worktree
+
+**Symptom:** `pio: command not found` or `No such file or directory` when building in the worktree.
+
+**Cause:** The worktree does not have its own `.venv-pio/` directory. PlatformIO was installed in the main repo's venv, not globally.
+
+**Fix:** Point to the main repo's PlatformIO binary directly:
+```bash
+/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/firmware-v3/.venv-pio/bin/pio \
+  run -e esp32dev_audio_esv11
+```
+
+Do not create a second PlatformIO venv in the worktree — it wastes disk and diverges from the known-working toolchain.
+
+### Flash completes but "no serial data received"
+
+**Symptom:** PlatformIO reports successful upload, but serial monitor shows nothing, or the board appears unresponsive.
+
+**Cause:** The ESP32-S3 USB CDC interface occasionally fails to re-enumerate after flash. The board is running but the USB link is stale.
+
+**Fix:**
+1. Press the physical **RST** button on the board.
+2. If that does not help, unplug the USB cable, wait 2 seconds, and replug.
+3. Verify the port reappears: `ls /dev/cu.usbmodem*`
+
+### Board resets when serial port is opened
+
+**This is expected behaviour**, not a bug. Opening the USB CDC serial port toggles DTR/RTS, which the ESP32-S3 interprets as a reset signal. The capture tool accounts for this with a 3-second stabilisation wait after opening the port. If you open the port manually (e.g., `screen`), expect a reboot and a brief delay before output appears.
+
+### WebSocket capture drops internet connection
+
+**Symptom:** Running a WebSocket-based capture causes your Mac to lose internet access.
+
+**Cause:** Both K1 devices broadcast as WiFi access points at `192.168.4.1`. Connecting to a K1's AP makes your Mac route traffic through an AP that has no upstream internet. macOS may also auto-join the open K1 network.
+
+**Fix:** Do not use WebSocket capture for dual-device comparison. Serial is the only viable dual-device transport. If your Mac auto-joins the K1 AP, remove it from the known networks list in System Settings > Wi-Fi.
+
+### Python 3.14+ breaks PlatformIO
+
+**Symptom:** PlatformIO crashes or fails to import modules on Python 3.14 or later.
+
+**Cause:** PlatformIO has not yet updated for Python 3.14 API changes.
+
+**Fix:** Use the `./pio` wrapper script in the firmware-v3 directory, which selects a compatible Python version. Alternatively, ensure your PlatformIO venv was created with Python 3.12 or 3.13.
+
+### "No frames captured" — capture tool exits with zero frames
+
+**Symptom:** The capture tool runs for the specified duration but reports no frames received.
+
+**Checklist:**
+1. **Correct port?** Verify with `ls /dev/cu.usbmodem*` and cross-check MAC addresses.
+2. **Board powered and running?** Check for serial output: `screen /dev/cu.usbmodem212401 115200` (then `Ctrl-A K` to exit).
+3. **Capture streaming firmware?** The build must include the `capture stream` command handler. If comparing against an older build that lacks it, you need to add the instrumentation layer (see "Adding Instrumentation to a New Build" above).
+4. **Streaming started?** The capture tool sends `capture stream b 15` automatically. If the board rebooted mid-capture (DTR/RTS), the stream command may not have been received. Restart the capture.
+5. **Baud rate mismatch?** The capture tool defaults to 115200. If the firmware uses a different rate, pass `--baud`.
+
 ## The Principle
 
 **Isolate the code under test. Share the measurement infrastructure.**
@@ -237,9 +390,9 @@ This pattern is not specific to firmware. Any time you need to compare two code 
 
 ### Immediate (Next Session)
 
-1. **Quick-start checklist.** Distill this guide into a 10-command copy-paste sequence from zero to first comparison capture. Reduce friction to near-zero for future sessions.
+1. ~~**Quick-start checklist.**~~ **DONE** — see "Quick-Start Checklist" section above.
 
-2. **Troubleshooting section.** Document every failure mode we hit: port busy (Cursor holding tty), wrong GPIO (dark strips), PEP 668 pip block, missing worktree venv, flash "no serial data" (needs physical reset). These are guaranteed to recur.
+2. ~~**Troubleshooting section.**~~ **DONE** — see "Troubleshooting" section above.
 
 3. **Beat-brightness correlation score.** The v2 metrics trailer already streams beat flags and RMS per frame. Build a Python analyser that computes a single scalar: "how tightly does brightness respond to beats?" This is the killer metric for audio-reactive quality comparison. A correlation coefficient between beat events and brightness spikes across the capture window. Higher = tighter response. Compare the score between builds.
 

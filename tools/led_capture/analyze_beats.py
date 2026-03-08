@@ -24,12 +24,25 @@ Usage:
     # Generate dashboard PNG alongside text report
     python analyze_beats.py --serial /dev/cu.usbmodem212401 --duration 30 --dashboard report.png
 
+    # Run regression gate (exit 1 on failure, for CI)
+    python analyze_beats.py --serial /dev/cu.usbmodem212401 --duration 30 --gate
+
+    # Gate with custom thresholds
+    python analyze_beats.py --load session.npz --gate --gate-drop-rate 0.005 --gate-show-time 8000
+
+    # Comparison with regression gate on both devices
+    python analyze_beats.py \
+        --serial /dev/cu.usbmodem212401 --label "Main HEAD" \
+        --compare-serial /dev/cu.usbmodem21401 --compare-label "Milestone" \
+        --duration 30 --gate
+
 Output:
     A text report with:
     - Beat responsiveness score (0-1): how reliably beats cause brightness spikes
     - RMS-brightness correlation: overall audio-reactive coupling strength
     - Beat timing and tempo estimation
     - Frame health (drops, show time, heap stability)
+    - Optional regression gate pass/fail table (with --gate)
 """
 
 import argparse
@@ -155,14 +168,18 @@ def capture_with_metadata(port: str, duration: float, fps: int = 15,
 # Analysis
 # ---------------------------------------------------------------------------
 
-def compute_brightness(frames: np.ndarray) -> np.ndarray:
-    """Perceived brightness per frame using the active LED region.
+def compute_brightness(frames: np.ndarray, top_k: int = 32) -> np.ndarray:
+    """Perceived brightness per frame using the top-K brightest LEDs.
 
     Centre-origin effects only light ~20-40 LEDs out of 320. Taking the
-    mean across ALL LEDs dilutes the signal to ~5% even when the lit
-    region is visually bright. Instead, we compute per-LED luminance,
-    then use the 90th percentile — capturing the brightness of the
-    active region while ignoring dark LEDs.
+    mean or even p90 across ALL LEDs dilutes the signal because the lit
+    region is typically smaller than 10% of the strip. Instead, we sort
+    per-LED luminance and average the top K values — directly measuring
+    the brightness of the active region regardless of how many LEDs are
+    dark.
+
+    K=32 (~10% of 320) covers the typical active region of centre-origin
+    effects without being so small that single-pixel noise dominates.
 
     Returns (N,) float in [0, 1].
     """
@@ -170,8 +187,33 @@ def compute_brightness(frames: np.ndarray) -> np.ndarray:
     luminance = (frames[:, :, 0] * 0.299
                  + frames[:, :, 1] * 0.587
                  + frames[:, :, 2] * 0.114) / 255.0  # (N, 320)
-    # 90th percentile captures the active region brightness
-    return np.percentile(luminance, 90, axis=1)
+    # np.partition is O(n) vs O(n log n) for full sort — only need top K
+    k = min(top_k, luminance.shape[1])
+    partitioned = np.partition(luminance, -k, axis=1)[:, -k:]
+    return partitioned.mean(axis=1)
+
+
+def compute_spatial_spread(frames: np.ndarray) -> np.ndarray:
+    """Fraction of the strip that is actively lit per frame.
+
+    For each frame, counts LEDs with luminance > 5% of that frame's
+    maximum luminance, then normalises by total LED count. A value of
+    0.1 means ~32 LEDs are lit; 1.0 means the entire strip is active.
+
+    Useful for detecting effects that "bloom" outward on beats — the
+    spread value jumps when the lit region expands from the centre.
+
+    Returns (N,) float in [0, 1].
+    """
+    luminance = (frames[:, :, 0] * 0.299
+                 + frames[:, :, 1] * 0.587
+                 + frames[:, :, 2] * 0.114) / 255.0  # (N, 320)
+    # Per-frame maximum luminance (avoid division by zero)
+    frame_max = luminance.max(axis=1, keepdims=True)
+    frame_max = np.maximum(frame_max, 1e-6)
+    # Count LEDs above 5% of that frame's peak
+    active = (luminance > frame_max * 0.05).sum(axis=1)
+    return active.astype(np.float64) / luminance.shape[1]
 
 
 def analyze_correlation(frames: np.ndarray, timestamps: np.ndarray,
@@ -188,6 +230,7 @@ def analyze_correlation(frames: np.ndarray, timestamps: np.ndarray,
 
     # --- Extract time series ---
     brightness = compute_brightness(frames)
+    spatial_spread = compute_spatial_spread(frames)
     beats = np.array([m.get('beat', False) for m in metadata], dtype=bool)
     rms = np.array([m.get('rms', 0.0) for m in metadata], dtype=np.float64)
     bands = np.array([m.get('bands', [0.0] * 8) for m in metadata], dtype=np.float64)
@@ -276,6 +319,10 @@ def analyze_correlation(frames: np.ndarray, timestamps: np.ndarray,
             post_peak = float(brightness[bi:post_end].max())
             beat_responses.append(post_peak - pre_level)
         mean_beat_response = float(np.mean(beat_responses))
+
+        # Spatial spread on-beat vs off-beat (bloom detection)
+        mean_spread_beat = float(spatial_spread[beats].mean())
+        mean_spread_nobeat = float(spatial_spread[~beats].mean()) if (~beats).sum() > 0 else 0.0
     else:
         beat_trigger_ratio = 0.0
         nonbeat_spike_rate = 0.0
@@ -284,6 +331,8 @@ def analyze_correlation(frames: np.ndarray, timestamps: np.ndarray,
         mean_bright_nobeat = float(brightness.mean())
         contrast_ratio = 1.0
         mean_beat_response = 0.0
+        mean_spread_beat = float(spatial_spread.mean())
+        mean_spread_nobeat = float(spatial_spread.mean())
 
     # --- Beat flag diagnostics ---
     beat_pct = n_beats / n if n > 0 else 0
@@ -356,6 +405,9 @@ def analyze_correlation(frames: np.ndarray, timestamps: np.ndarray,
         'contrast_ratio': contrast_ratio,
         'mean_beat_response': mean_beat_response,
         'mean_brightness': float(brightness.mean()),
+        'mean_spatial_spread': float(spatial_spread.mean()),
+        'mean_spread_beat': mean_spread_beat,
+        'mean_spread_nobeat': mean_spread_nobeat,
         # Frame health
         'frame_drops': frame_drops,
         'total_missing_frames': total_missing,
@@ -369,6 +421,7 @@ def analyze_correlation(frames: np.ndarray, timestamps: np.ndarray,
         'subsampling_ratio': subsampling_ratio,
         # Private time-series for dashboard (not printed in text report)
         '_brightness': brightness,
+        '_spatial_spread': spatial_spread,
         '_rms': rms,
         '_beats': beats,
         '_onset': onset,
@@ -446,6 +499,12 @@ def format_report(m: dict) -> str:
     lines.append(f"  Brightness off beat:     {m['mean_bright_nobeat']:.4f}")
     lines.append(f"  Contrast ratio:          {m['contrast_ratio']:.2f}x")
     lines.append(f"  Mean brightness:         {m['mean_brightness']:.4f}")
+    spread = m.get('mean_spatial_spread', 0)
+    spread_line = f"  Spatial spread:          {spread:.1%} of strip active"
+    if m.get('n_beats', 0) >= 3:
+        spread_line += (f"  (beat: {m.get('mean_spread_beat', 0):.1%}"
+                        f" / off: {m.get('mean_spread_nobeat', 0):.1%})")
+    lines.append(spread_line)
     lines.append(f"")
 
     # Health
@@ -559,6 +618,291 @@ def format_comparison(ma: dict, mb: dict) -> str:
 
     lines.append(f"  Verdict: {verdict}")
     lines.append(f"")
+    return '\n'.join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Regression Gate
+# ---------------------------------------------------------------------------
+
+# Default thresholds for the regression gate. Each key maps to a tuple of
+# (threshold_value, comparison_direction) where direction is 'lt' (actual must
+# be less than threshold) or 'gt' (actual must be greater than threshold).
+DEFAULT_GATE_THRESHOLDS = {
+    'drop_rate':  (0.01,    'lt'),   # < 1% frame drops
+    'show_time':  (10000.0, 'lt'),   # p99 < 10 ms (in microseconds)
+    'heap_min':   (100000,  'gt'),   # > 100 KB free
+    'heap_trend': (-100.0,  'gt'),   # not leaking faster than 100 B/frame
+    'show_skips': (10,      'lt'),   # fewer than 10 skip events
+}
+
+# Human-readable names for gate checks (used in the report table).
+_GATE_CHECK_NAMES = {
+    'drop_rate':  'Frame drop rate',
+    'show_time':  'Show time p99',
+    'heap_min':   'Heap minimum',
+    'heap_trend': 'Heap trend',
+    'show_skips': 'Show skips',
+}
+
+
+class GateResult:
+    """Result of a single regression gate check."""
+
+    __slots__ = ('name', 'status', 'actual', 'threshold', 'direction',
+                 'actual_display', 'threshold_display')
+
+    def __init__(self, name: str, status: str, actual, threshold,
+                 direction: str, actual_display: str = '',
+                 threshold_display: str = ''):
+        self.name = name
+        self.status = status              # 'PASS', 'FAIL', or 'SKIP'
+        self.actual = actual
+        self.threshold = threshold
+        self.direction = direction        # 'lt' or 'gt'
+        self.actual_display = actual_display
+        self.threshold_display = threshold_display
+
+
+def _human_bytes(b: float) -> str:
+    """Format a byte count for human display (e.g. 8.1 MB, 100 KB)."""
+    if b >= 1_000_000:
+        return f'{b / 1_000_000:.1f} MB'
+    elif b >= 1_000:
+        return f'{b / 1_000:.0f} KB'
+    else:
+        return f'{int(b)} B'
+
+
+def run_regression_gate(metrics: dict,
+                        thresholds: dict = None) -> list:
+    """Evaluate pass/fail for each regression gate check.
+
+    Parameters
+    ----------
+    metrics : dict
+        Output from ``analyze_correlation()``.
+    thresholds : dict, optional
+        Override individual thresholds. Keys match ``DEFAULT_GATE_THRESHOLDS``.
+
+    Returns
+    -------
+    list[GateResult]
+        One result per check, in display order.
+    """
+    th = dict(DEFAULT_GATE_THRESHOLDS)
+    if thresholds:
+        for k, v in thresholds.items():
+            if k in th:
+                th[k] = (v, th[k][1])
+
+    results = []
+
+    # 1. Frame drop rate  (always evaluated)
+    val = metrics.get('drop_rate', 0.0)
+    limit, direction = th['drop_rate']
+    results.append(GateResult(
+        name='drop_rate',
+        status='PASS' if val < limit else 'FAIL',
+        actual=val, threshold=limit, direction=direction,
+        actual_display=f'{val:.4f}',
+        threshold_display=f'< {limit:.4f}',
+    ))
+
+    # 2. Show time p99  (skip if firmware doesn't report show_time)
+    val = metrics.get('show_time_p99_us', 0.0)
+    limit, direction = th['show_time']
+    if val > 0:
+        results.append(GateResult(
+            name='show_time',
+            status='PASS' if val < limit else 'FAIL',
+            actual=val, threshold=limit, direction=direction,
+            actual_display=f'{val / 1000:.1f}ms',
+            threshold_display=f'< {limit / 1000:.1f}ms',
+        ))
+    else:
+        results.append(GateResult(
+            name='show_time',
+            status='SKIP',
+            actual=0, threshold=limit, direction=direction,
+            actual_display='n/a',
+            threshold_display=f'< {limit / 1000:.1f}ms',
+        ))
+
+    # 3. Heap minimum  (skip if firmware doesn't report heap)
+    val = metrics.get('heap_min', 0)
+    limit, direction = th['heap_min']
+    if val > 0:
+        results.append(GateResult(
+            name='heap_min',
+            status='PASS' if val > limit else 'FAIL',
+            actual=val, threshold=limit, direction=direction,
+            actual_display=_human_bytes(val),
+            threshold_display=f'> {_human_bytes(limit)}',
+        ))
+    else:
+        results.append(GateResult(
+            name='heap_min',
+            status='SKIP',
+            actual=0, threshold=limit, direction=direction,
+            actual_display='n/a',
+            threshold_display=f'> {_human_bytes(limit)}',
+        ))
+
+    # 4. Heap trend  (skip if no heap data)
+    val = metrics.get('heap_trend', 0.0)
+    limit, direction = th['heap_trend']
+    heap_min = metrics.get('heap_min', 0)
+    if heap_min > 0:
+        if val > 10:
+            trend_str = f'+{val:.0f} B/frame'
+        elif val < -10:
+            trend_str = f'{val:.0f} B/frame'
+        else:
+            trend_str = 'stable'
+        results.append(GateResult(
+            name='heap_trend',
+            status='PASS' if val > limit else 'FAIL',
+            actual=val, threshold=limit, direction=direction,
+            actual_display=trend_str,
+            threshold_display=f'> {limit:.0f} B/frame',
+        ))
+    else:
+        results.append(GateResult(
+            name='heap_trend',
+            status='SKIP',
+            actual=0, threshold=limit, direction=direction,
+            actual_display='n/a',
+            threshold_display=f'> {limit:.0f} B/frame',
+        ))
+
+    # 5. Show skips  (always evaluated)
+    val = metrics.get('show_skips_total', 0)
+    limit, direction = th['show_skips']
+    results.append(GateResult(
+        name='show_skips',
+        status='PASS' if val < limit else 'FAIL',
+        actual=val, threshold=limit, direction=direction,
+        actual_display=str(int(val)),
+        threshold_display=f'< {int(limit)}',
+    ))
+
+    return results
+
+
+def format_gate_report(results: list, label: str = '') -> str:
+    """Format regression gate results as a clear pass/fail table.
+
+    Parameters
+    ----------
+    results : list[GateResult]
+        Output from ``run_regression_gate()``.
+    label : str
+        Device/build label for the header.
+
+    Returns
+    -------
+    str
+        Formatted multi-line report.
+    """
+    header = f'Regression Gate: {label}' if label else 'Regression Gate'
+    rule = '\u2500' * 50  # thin horizontal line
+
+    lines = ['']
+    lines.append(f'  {header}')
+    lines.append(f'  {rule}')
+
+    n_pass = 0
+    n_fail = 0
+    n_skip = 0
+
+    for r in results:
+        tag = f'[{r.status}]'
+        name = _GATE_CHECK_NAMES.get(r.name, r.name)
+
+        if r.status == 'PASS':
+            n_pass += 1
+        elif r.status == 'FAIL':
+            n_fail += 1
+        else:
+            n_skip += 1
+
+        lines.append(
+            f'  {tag:<6s} {name:<22s} {r.actual_display:<12s} {r.threshold_display}'
+        )
+
+    lines.append(f'  {rule}')
+
+    evaluated = n_pass + n_fail
+    if n_fail > 0:
+        verdict = f'FAIL ({n_pass}/{evaluated} passed, {n_fail} failed)'
+    else:
+        verdict = f'PASS ({n_pass}/{evaluated})'
+    if n_skip > 0:
+        verdict += f'  [{n_skip} skipped]'
+
+    lines.append(f'  RESULT: {verdict}')
+    lines.append('')
+    return '\n'.join(lines)
+
+
+def gate_has_failures(results: list) -> bool:
+    """Return True if any gate check has status FAIL."""
+    return any(r.status == 'FAIL' for r in results)
+
+
+def _compute_composite_score(metrics: dict) -> float:
+    """Compute the weighted composite audio-reactive score for a device.
+
+    Matches the formula used in ``format_comparison()``.
+    """
+    best_corr = max(
+        max(0, metrics.get('rms_brightness_corr', 0)),
+        max(0, metrics.get('bass_brightness_corr', 0)),
+        max(0, metrics.get('best_band_corr', 0)),
+    )
+    w_resp, w_corr, w_contrast = 0.4, 0.4, 0.2
+    return (metrics.get('responsiveness', 0) * w_resp
+            + best_corr * w_corr
+            + min(1, metrics.get('contrast_ratio', 1) / 3) * w_contrast)
+
+
+def format_comparison_gate(metrics_a: dict, metrics_b: dict,
+                           regression_threshold: float = 0.1) -> str:
+    """Comparative regression gate between two devices.
+
+    Flags a REGRESSION WARNING if device A's composite score is more
+    than ``regression_threshold`` below device B's. This is advisory
+    (not a hard fail).
+    """
+    if metrics_a.get('error') or metrics_b.get('error'):
+        return '  Comparative gate skipped: one or both analyses failed.\n'
+
+    score_a = _compute_composite_score(metrics_a)
+    score_b = _compute_composite_score(metrics_b)
+    delta = score_a - score_b
+
+    rule = '\u2500' * 50
+
+    lines = ['']
+    lines.append('  Comparative Gate')
+    lines.append(f'  {rule}')
+    lines.append(f'  {metrics_a["label"]:<20s}  composite = {score_a:.3f}')
+    lines.append(f'  {metrics_b["label"]:<20s}  composite = {score_b:.3f}')
+    lines.append(
+        f'  Delta (A - B):         {delta:+.3f}'
+        f'  (threshold: {regression_threshold:.3f})'
+    )
+
+    if delta < -regression_threshold:
+        lines.append(
+            f'  WARNING: REGRESSION -- {metrics_a["label"]} scores '
+            f'{abs(delta):.3f} below {metrics_b["label"]}'
+        )
+    else:
+        lines.append('  OK -- no regression detected')
+
+    lines.append('')
     return '\n'.join(lines)
 
 
@@ -870,6 +1214,26 @@ def main():
     parser.add_argument('--dashboard', metavar='FILE',
                         help='Save metrics dashboard as PNG')
 
+    # Regression gate
+    gate_group = parser.add_argument_group('regression gate')
+    gate_group.add_argument('--gate', action='store_true',
+                            help='Enable regression gate (exit 1 on failure)')
+    gate_group.add_argument('--gate-drop-rate', type=float, default=None,
+                            metavar='RATE',
+                            help='Max frame drop rate (default: 0.01)')
+    gate_group.add_argument('--gate-show-time', type=float, default=None,
+                            metavar='US',
+                            help='Max show time p99 in microseconds (default: 10000)')
+    gate_group.add_argument('--gate-heap-min', type=int, default=None,
+                            metavar='BYTES',
+                            help='Min heap free bytes (default: 100000)')
+    gate_group.add_argument('--gate-heap-trend', type=float, default=None,
+                            metavar='BPF',
+                            help='Min heap trend in bytes/frame (default: -100)')
+    gate_group.add_argument('--gate-show-skips', type=int, default=None,
+                            metavar='N',
+                            help='Max show skips (default: 10)')
+
     args = parser.parse_args()
 
     if not args.serial and not args.load:
@@ -971,6 +1335,43 @@ def main():
             print(f"[Dashboard] Saved: {args.dashboard} ({dashboard.width}x{dashboard.height})")
         else:
             print("[Dashboard] Could not render (insufficient data)")
+
+    # ----- Regression Gate -----
+    if args.gate:
+        # Build threshold overrides from CLI flags
+        gate_overrides = {}
+        if args.gate_drop_rate is not None:
+            gate_overrides['drop_rate'] = args.gate_drop_rate
+        if args.gate_show_time is not None:
+            gate_overrides['show_time'] = args.gate_show_time
+        if args.gate_heap_min is not None:
+            gate_overrides['heap_min'] = args.gate_heap_min
+        if args.gate_heap_trend is not None:
+            gate_overrides['heap_trend'] = args.gate_heap_trend
+        if args.gate_show_skips is not None:
+            gate_overrides['show_skips'] = args.gate_show_skips
+
+        any_failure = False
+
+        # Gate for device A
+        if not metrics_a.get('error'):
+            gate_a = run_regression_gate(metrics_a, gate_overrides or None)
+            print(format_gate_report(gate_a, metrics_a.get('label', '')))
+            if gate_has_failures(gate_a):
+                any_failure = True
+
+        # Gate for device B (if comparison mode)
+        if metrics_b_result is not None and not metrics_b_result.get('error'):
+            gate_b = run_regression_gate(metrics_b_result, gate_overrides or None)
+            print(format_gate_report(gate_b, metrics_b_result.get('label', '')))
+            if gate_has_failures(gate_b):
+                any_failure = True
+
+            # Comparative gate (advisory, not a hard fail)
+            print(format_comparison_gate(metrics_a, metrics_b_result))
+
+        if any_failure:
+            sys.exit(1)
 
 
 if __name__ == '__main__':

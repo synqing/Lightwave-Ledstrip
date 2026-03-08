@@ -17,6 +17,19 @@
 9. [Examples](#examples)
 10. [Related Documentation](#related-documentation)
 
+**Subsection index (REST API Endpoints):**
+- [API Discovery](#api-discovery)
+- [Device Endpoints](#device-endpoints)
+- [Effects Endpoints](#effects-endpoints)
+- [Parameters Endpoints](#parameters-endpoints)
+- [Transitions Endpoints](#transitions-endpoints)
+- [Zones Endpoints](#zones-endpoints)
+- [Batch Operations](#batch-operations)
+- [Palettes Endpoints](#palettes-endpoints)
+- [Audio Endpoints](#audio-endpoints)
+- [Presets Endpoints](#presets-endpoints)
+- [Debug Endpoints](#debug-endpoints)
+
 ---
 
 ## Introduction
@@ -1074,6 +1087,687 @@ curl -X POST http://lightwaveos.local/api/v1/batch \
       {"action": "setEffect", "effectId": 9}
     ]
   }'
+```
+
+---
+
+### Palettes Endpoints
+
+#### `GET /api/v1/palettes`
+
+List all available colour palettes with optional filtering and pagination.
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `category` | string | — | Filter by category: `artistic`, `scientific`, or `lgpOptimized` |
+| `warm` | bool | — | When `true`, return only warm-toned palettes |
+| `cool` | bool | — | When `true`, return only cool-toned palettes |
+| `calm` | bool | — | When `true`, return only calm palettes |
+| `vivid` | bool | — | When `true`, return only vivid palettes |
+| `cvd` | bool | — | When `true`, return only colour-vision-deficiency-friendly palettes |
+| `page` | int | 1 | Page number (1-based) |
+| `limit` | int | 20 | Items per page (1–100) |
+| `offset` | int | — | Alternative to `page`: zero-based item offset |
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "total": 75,
+    "offset": 0,
+    "limit": 20,
+    "count": 20,
+    "categories": {
+      "artistic": 50,
+      "scientific": 15,
+      "lgpOptimized": 10
+    },
+    "palettes": [
+      {
+        "id": 0,
+        "name": "Fire",
+        "category": "artistic",
+        "flags": {
+          "warm": true,
+          "cool": false,
+          "calm": false,
+          "vivid": true,
+          "cvdFriendly": false,
+          "whiteHeavy": false
+        },
+        "avgBrightness": 180,
+        "maxBrightness": 255
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 20,
+      "total": 75,
+      "pages": 4
+    }
+  },
+  "timestamp": 123456789,
+  "version": "1.0.0"
+}
+```
+
+**cURL Examples:**
+```bash
+# List all palettes (first page)
+curl http://lightwaveos.local/api/v1/palettes
+
+# Filter to warm, vivid palettes only
+curl "http://lightwaveos.local/api/v1/palettes?warm=true&vivid=true"
+
+# Fetch all scientific palettes
+curl "http://lightwaveos.local/api/v1/palettes?category=scientific&limit=100"
+```
+
+---
+
+#### `GET /api/v1/palettes/current`
+
+Get the currently active colour palette.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "paletteId": 3,
+    "name": "Ocean",
+    "category": "artistic",
+    "flags": {
+      "warm": false,
+      "cool": true,
+      "calm": true,
+      "vivid": false,
+      "cvdFriendly": true
+    },
+    "avgBrightness": 140,
+    "maxBrightness": 220
+  },
+  "timestamp": 123456789,
+  "version": "1.0.0"
+}
+```
+
+**cURL Example:**
+```bash
+curl http://lightwaveos.local/api/v1/palettes/current
+```
+
+---
+
+#### `POST /api/v1/palettes/set`
+
+Set the active colour palette.
+
+**Request Body:**
+```json
+{
+  "paletteId": 5
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `paletteId` | uint8 | Yes | Palette ID (0–74) |
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "paletteId": 5,
+    "name": "Aurora",
+    "category": "artistic"
+  },
+  "timestamp": 123456789,
+  "version": "1.0.0"
+}
+```
+
+**Error Responses:**
+
+| Condition | HTTP | Code | Description |
+|-----------|------|------|-------------|
+| `paletteId` out of range | 400 | `OUT_OF_RANGE` | Palette ID must be 0–74 |
+| Invalid JSON | 400 | `INVALID_JSON` | Request body is not valid JSON |
+
+**cURL Example:**
+```bash
+curl -X POST http://lightwaveos.local/api/v1/palettes/set \
+  -H "Content-Type: application/json" \
+  -d '{"paletteId": 5}'
+```
+
+---
+
+### Audio Endpoints
+
+The audio endpoints require the firmware to be built with `FEATURE_AUDIO_SYNC` enabled (all production builds). Requests to these endpoints when audio is unavailable return HTTP 503 with error code `FEATURE_DISABLED` or `AUDIO_UNAVAILABLE`.
+
+#### `GET /api/v1/audio/parameters`
+
+Get current audio DSP pipeline tuning and contract parameters. The response shape differs by audio backend.
+
+**Response (PipelineCore backend — `esp32dev_audio_pipelinecore`):**
+```json
+{
+  "success": true,
+  "data": {
+    "pipeline": {
+      "dcAlpha": 0.995,
+      "agcTargetRms": 0.25,
+      "agcMinGain": 0.5,
+      "agcMaxGain": 8.0,
+      "agcAttack": 0.05,
+      "agcRelease": 0.002,
+      "agcClipReduce": 0.8,
+      "agcIdleReturnRate": 0.001,
+      "noiseFloorMin": 0.01,
+      "noiseFloorRise": 0.1,
+      "noiseFloorFall": 0.005,
+      "gateStartFactor": 1.5,
+      "gateRangeFactor": 3.0,
+      "gateRangeMin": 0.05,
+      "rmsDbFloor": -60.0,
+      "rmsDbCeil": 0.0,
+      "bandDbFloor": -60.0,
+      "bandDbCeil": 0.0,
+      "chromaDbFloor": -60.0,
+      "chromaDbCeil": 0.0,
+      "fluxScale": 1.0,
+      "bandAttack": 0.3,
+      "bandRelease": 0.05,
+      "heavyBandAttack": 0.5,
+      "heavyBandRelease": 0.02,
+      "usePerBandNoiseFloor": false,
+      "silenceHysteresisMs": 200,
+      "silenceThreshold": 0.005,
+      "perBandGains": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+      "perBandNoiseFloors": [0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01],
+      "bins64Adaptive": {
+        "scale": 1.0,
+        "floor": 0.0,
+        "rise": 0.3,
+        "fall": 0.05,
+        "decay": 0.98
+      },
+      "novelty": {
+        "useSpectralFlux": true,
+        "spectralFluxScale": 1.0
+      }
+    },
+    "controlBus": {
+      "alphaFast": 0.3,
+      "alphaSlow": 0.05
+    },
+    "contract": {
+      "audioStalenessMs": 500,
+      "bpmMin": 60.0,
+      "bpmMax": 200.0,
+      "bpmTau": 4.0,
+      "confidenceTau": 8.0,
+      "phaseCorrectionGain": 0.1,
+      "barCorrectionGain": 0.05,
+      "beatsPerBar": 4,
+      "beatUnit": 4
+    },
+    "state": {
+      "rmsRaw": 0.12,
+      "rmsMapped": 0.35,
+      "rmsPreGain": 0.10,
+      "fluxMapped": 0.28,
+      "agcGain": 2.5,
+      "dcEstimate": 0.001,
+      "noiseFloor": 0.015,
+      "minSample": -0.42,
+      "maxSample": 0.45,
+      "peakCentered": 0.87,
+      "meanSample": 0.0002,
+      "clipCount": 0
+    },
+    "capabilities": {
+      "sampleRate": 44100,
+      "hopSize": 256,
+      "fftSize": 512,
+      "goertzelWindow": 64,
+      "bandCount": 8,
+      "chromaCount": 12,
+      "waveformPoints": 64
+    }
+  },
+  "timestamp": 123456789,
+  "version": "1.0.0"
+}
+```
+
+**Response (ESV11 backend — `esp32dev_audio_esv11`):**
+```json
+{
+  "success": true,
+  "data": {
+    "backend": "esv11",
+    "seq": 4821,
+    "contract": {
+      "audioStalenessMs": 500,
+      "bpmMin": 60.0,
+      "bpmMax": 200.0,
+      "bpmTau": 4.0,
+      "confidenceTau": 8.0,
+      "phaseCorrectionGain": 0.1,
+      "barCorrectionGain": 0.05,
+      "beatsPerBar": 4,
+      "beatUnit": 4
+    },
+    "latest": {
+      "rms": 0.22,
+      "flux": 0.15,
+      "bpm": 124.0,
+      "tempoConfidence": 0.85,
+      "phase01AtAudioT": 0.42,
+      "beatTick": 183,
+      "downbeatTick": 46,
+      "beatInBar": 2,
+      "beatStrength": 0.91
+    },
+    "capabilities": {
+      "sampleRate": 32000,
+      "hopSize": 256,
+      "bins64": 64,
+      "bandCount": 8,
+      "chromaCount": 12,
+      "waveformPoints": 64
+    }
+  },
+  "timestamp": 123456789,
+  "version": "1.0.0"
+}
+```
+
+**cURL Example:**
+```bash
+curl http://lightwaveos.local/api/v1/audio/parameters
+```
+
+---
+
+#### `POST /api/v1/audio/parameters`
+
+Replace audio DSP tuning parameters. All fields are optional; only supplied fields are applied.
+
+**Request Body (PipelineCore backend):**
+```json
+{
+  "pipeline": {
+    "agcTargetRms": 0.3,
+    "noiseFloorMin": 0.008,
+    "bandAttack": 0.25,
+    "bandRelease": 0.04,
+    "perBandGains": [1.2, 1.0, 0.9, 0.9, 1.0, 1.1, 1.1, 1.2]
+  },
+  "contract": {
+    "bpmMin": 70.0,
+    "bpmMax": 180.0,
+    "beatsPerBar": 4
+  },
+  "resetState": false
+}
+```
+
+**Request Body (ESV11 backend):**
+```json
+{
+  "contract": {
+    "bpmMin": 70.0,
+    "bpmMax": 180.0,
+    "beatsPerBar": 4,
+    "beatUnit": 4
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `pipeline` | object | DSP pipeline tuning (PipelineCore only) |
+| `contract` | object | Beat-tracking / tempo contract |
+| `resetState` | bool | When `true`, resets DSP statistics (PipelineCore only) |
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "updated": ["pipeline", "contract"]
+  },
+  "timestamp": 123456789,
+  "version": "1.0.0"
+}
+```
+
+The `updated` array lists which top-level groups were modified (`pipeline`, `contract`, `state`).
+
+**Error Responses:**
+
+| Condition | HTTP | Code | Description |
+|-----------|------|------|-------------|
+| Invalid JSON | 400 | `INVALID_JSON` | Request body is not valid JSON |
+| Missing `contract` key (ESV11) | 400 | `MISSING_FIELD` | ESV11 requires the `contract` wrapper |
+| Audio unavailable | 503 | `SYSTEM_NOT_READY` | Audio actor not initialised |
+
+**cURL Example:**
+```bash
+curl -X POST http://lightwaveos.local/api/v1/audio/parameters \
+  -H "Content-Type: application/json" \
+  -d '{"contract": {"bpmMin": 70.0, "bpmMax": 180.0}}'
+```
+
+---
+
+#### `PATCH /api/v1/audio/parameters`
+
+Partial update to audio DSP tuning parameters. Identical request/response contract to `POST /api/v1/audio/parameters`; both methods accept the same body and apply only the supplied fields.
+
+**cURL Example:**
+```bash
+curl -X PATCH http://lightwaveos.local/api/v1/audio/parameters \
+  -H "Content-Type: application/json" \
+  -d '{"pipeline": {"agcTargetRms": 0.2}}'
+```
+
+---
+
+#### `GET /api/v1/audio/state`
+
+Get the current operational state of the audio actor.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "state": "RUNNING",
+    "capturing": true,
+    "hopCount": 9234,
+    "sampleIndex": 2367744,
+    "stats": {
+      "tickCount": 9234,
+      "captureSuccess": 9230,
+      "captureFail": 4
+    },
+    "controlBus": {
+      "silentScale": 1.0,
+      "isSilent": false,
+      "tempoLocked": true,
+      "tempoConfidence": 0.87,
+      "style": 2,
+      "styleConfidence": 0.72
+    }
+  },
+  "timestamp": 123456789,
+  "version": "1.0.0"
+}
+```
+
+**State Values:**
+
+| Value | Description |
+|-------|-------------|
+| `UNINITIALIZED` | Actor has not yet started |
+| `INITIALIZING` | I2S and DSP pipeline starting up |
+| `RUNNING` | Capturing and processing audio |
+| `PAUSED` | Capture suspended via `POST /api/v1/audio/control` |
+| `ERROR` | Unrecoverable audio error; device restart required |
+
+The `controlBus` object is present only when `FEATURE_AUDIO_SYNC` is enabled and the renderer has a cached audio frame.
+
+**cURL Example:**
+```bash
+curl http://lightwaveos.local/api/v1/audio/state
+```
+
+---
+
+#### `GET /api/v1/audio/tempo`
+
+Get the current beat-tracking and tempo grid snapshot.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "bpm": 124.0,
+    "confidence": 0.87,
+    "beat_phase": 0.42,
+    "bar_phase": 0.11,
+    "beat_in_bar": 2,
+    "beats_per_bar": 4
+  },
+  "timestamp": 123456789,
+  "version": "1.0.0"
+}
+```
+
+| Field | Type | Range | Description |
+|-------|------|-------|-------------|
+| `bpm` | float | 30–300 | Smoothed tempo estimate in beats per minute |
+| `confidence` | float | 0–1 | Beat-detection confidence (0 = no signal, 1 = locked) |
+| `beat_phase` | float | 0–1 | Position within current beat cycle |
+| `bar_phase` | float | 0–1 | Position within current bar |
+| `beat_in_bar` | uint8 | 0–N | Current beat index within the bar (zero-based) |
+| `beats_per_bar` | uint8 | 1–16 | Time signature numerator |
+
+**cURL Example:**
+```bash
+curl http://lightwaveos.local/api/v1/audio/tempo
+```
+
+---
+
+#### `GET /api/v1/audio/fft`
+
+Get the latest audio analysis frame containing spectral data. Returns a snapshot of the most recent ControlBus frame.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "backend": "lwls",
+    "seq": 9234,
+    "rms": 0.35,
+    "flux": 0.22,
+    "bands": [0.82, 0.61, 0.45, 0.30, 0.18, 0.12, 0.08, 0.04],
+    "chroma": [0.1, 0.0, 0.3, 0.0, 0.2, 0.1, 0.0, 0.4, 0.0, 0.2, 0.0, 0.1],
+    "bins64": [0.02, 0.05, 0.12, 0.41, 0.38, 0.21, 0.14, 0.08],
+    "bins64Adaptive": [0.03, 0.07, 0.18, 0.55, 0.50, 0.28, 0.19, 0.11]
+  },
+  "timestamp": 123456789,
+  "version": "1.0.0"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `backend` | string | Audio backend identifier: `"lwls"` (PipelineCore) or `"esv11"` |
+| `seq` | uint32 | Monotonically increasing frame sequence number |
+| `rms` | float | Smoothed RMS energy level (0–1) |
+| `flux` | float | Spectral flux / onset strength (0–1) |
+| `bands` | float[8] | Octave energy bands (60 Hz to ~8 kHz, each 0–1) |
+| `chroma` | float[12] | Pitch-class energy (C through B, each 0–1) |
+| `bins64` | float[64] | Raw 64-bin spectral magnitude array |
+| `bins64Adaptive` | float[64] | Adaptively normalised 64-bin magnitude array |
+
+**Band Centre Frequencies:**
+
+| Index | Frequency | Label |
+|-------|-----------|-------|
+| 0 | ~60 Hz | Sub-bass |
+| 1 | ~120 Hz | Bass |
+| 2 | ~250 Hz | Low-mid |
+| 3 | ~500 Hz | Mid |
+| 4 | ~1000 Hz | High-mid |
+| 5 | ~2000 Hz | Presence |
+| 6 | ~4000 Hz | Brilliance |
+| 7 | ~7800 Hz | Air |
+
+**cURL Example:**
+```bash
+curl http://lightwaveos.local/api/v1/audio/fft
+```
+
+---
+
+### Presets Endpoints
+
+Zone-layout presets let you save and restore complete multi-zone configurations (effect assignments, per-zone parameters, blend modes, and zone layout). All preset handlers are currently implemented as stubs and return `NOT_IMPLEMENTED`; the routes are reserved for a forthcoming release.
+
+#### `GET /api/v1/presets`
+
+List all saved zone-configuration presets.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "presets": [],
+    "count": 0,
+    "status": "stub"
+  },
+  "timestamp": 123456789,
+  "version": "1.0.0"
+}
+```
+
+**cURL Example:**
+```bash
+curl http://lightwaveos.local/api/v1/presets
+```
+
+---
+
+#### `GET /api/v1/presets/{name}`
+
+Download a named preset as a JSON document.
+
+**Path Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `name` | URL-encoded preset name (matches the `name` field used when saving) |
+
+**Response:** Returns the stored preset JSON document on success.
+
+**Error Responses:**
+
+| Condition | HTTP | Code |
+|-----------|------|------|
+| Not yet implemented | 404 | `NOT_IMPLEMENTED` |
+
+---
+
+#### `POST /api/v1/presets`
+
+Upload a new zone-configuration preset.
+
+**Request Body:** A preset JSON document (structure defined when the feature is released).
+
+**Error Responses:**
+
+| Condition | HTTP | Code |
+|-----------|------|------|
+| Not yet implemented | 404 | `NOT_IMPLEMENTED` |
+
+---
+
+#### `PUT /api/v1/presets/{name}`
+
+Update an existing preset by name.
+
+**Error Responses:**
+
+| Condition | HTTP | Code |
+|-----------|------|------|
+| Not yet implemented | 404 | `NOT_IMPLEMENTED` |
+
+---
+
+#### `DELETE /api/v1/presets/{name}`
+
+Delete a preset by name.
+
+**Error Responses:**
+
+| Condition | HTTP | Code |
+|-----------|------|------|
+| Not yet implemented | 404 | `NOT_IMPLEMENTED` |
+
+---
+
+#### `POST /api/v1/presets/{name}/rename`
+
+Rename an existing preset.
+
+**Request Body:**
+```json
+{
+  "newName": "My Live Set"
+}
+```
+
+**Error Responses:**
+
+| Condition | HTTP | Code |
+|-----------|------|------|
+| Not yet implemented | 404 | `NOT_IMPLEMENTED` |
+
+---
+
+#### `POST /api/v1/presets/{name}/load`
+
+Apply a saved preset to the active zone configuration.
+
+**Error Responses:**
+
+| Condition | HTTP | Code |
+|-----------|------|------|
+| Not yet implemented | 404 | `NOT_IMPLEMENTED` |
+
+---
+
+#### `POST /api/v1/presets/save-current`
+
+Save the current zone configuration as a new named preset.
+
+**Request Body:**
+```json
+{
+  "name": "My Live Set"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Human-readable preset name |
+
+**Error Responses:**
+
+| Condition | HTTP | Code |
+|-----------|------|------|
+| Not yet implemented | 404 | `NOT_IMPLEMENTED` |
+
+**cURL Example:**
+```bash
+curl -X POST http://lightwaveos.local/api/v1/presets/save-current \
+  -H "Content-Type: application/json" \
+  -d '{"name": "My Live Set"}'
 ```
 
 ---

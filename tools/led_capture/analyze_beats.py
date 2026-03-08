@@ -2017,7 +2017,7 @@ def _capture_on_open_port(ser, duration: float, fps: int, tap: str,
     tap_letter = tap.lower()
     ser.reset_input_buffer()
     ser.write(f'capture stream {tap_letter} {fps}\n'.encode())
-    time.sleep(0.3)
+    # No sleep — frame parser scans for 0xFD magic, text is skipped.
 
     frames = []
     timestamps = []

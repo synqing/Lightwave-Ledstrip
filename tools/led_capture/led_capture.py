@@ -303,7 +303,7 @@ def capture_serial(port: str, buffer: FrameBuffer, duration: float,
 
         # Start streaming — firmware pushes frames continuously
         ser.write(f'capture stream {tap_letter} {fps}\n'.encode())
-        time.sleep(0.3)
+        # No sleep — frame parser scans for 0xFD magic, text is skipped.
 
         start_time = time.time()
         frame_count = 0
@@ -622,7 +622,7 @@ def main():
         sys.exit(1)
 
     # Create buffers
-    max_frames = int(args.duration * 20) + 100  # generous headroom
+    max_frames = int(args.duration * max(20, getattr(args, 'fps', 20) * 1.5)) + 100
     buf_a = FrameBuffer(max_frames)
     buf_b = FrameBuffer(max_frames) if (args.compare_ws or args.compare_serial) else None
 

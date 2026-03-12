@@ -39,6 +39,11 @@
 #include "../../audio/contracts/SnapshotBuffer.h"
 #endif
 
+// AMOLED test rig display
+#if FEATURE_AMOLED_DISPLAY
+#include "../../hal/display/DisplayActor.h"
+#endif
+
 namespace lightwaveos {
 namespace actors {
 
@@ -167,6 +172,13 @@ public:
      */
     lightwaveos::audio::AudioActor* getAudio() { return m_audio.get(); }
     const lightwaveos::audio::AudioActor* getAudio() const { return m_audio.get(); }
+#endif
+
+#if FEATURE_AMOLED_DISPLAY
+    /**
+     * @brief Get the DisplayActor (AMOLED test rig)
+     */
+    lightwaveos::display::DisplayActor* getDisplay() { return m_display.get(); }
 #endif
 
     // Future: getNetwork(), getHmi(), getStateStore(), etc.
@@ -341,6 +353,9 @@ private:
     std::unique_ptr<ShowDirectorActor> m_showDirector;
 #if FEATURE_AUDIO_SYNC
     std::unique_ptr<lightwaveos::audio::AudioActor> m_audio;  // Phase 2: Audio capture and DSP
+#endif
+#if FEATURE_AMOLED_DISPLAY
+    std::unique_ptr<lightwaveos::display::DisplayActor> m_display;  // AMOLED test rig
 #endif
     // Future: std::unique_ptr<NetworkActor> m_network;
     // Future: std::unique_ptr<HmiActor> m_hmi;

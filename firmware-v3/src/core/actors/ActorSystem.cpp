@@ -130,6 +130,22 @@ bool ActorSystem::init()
 #endif
 #endif
 
+#if FEATURE_AMOLED_DISPLAY
+        // Create DisplayActor (AMOLED test rig)
+        m_display = std::make_unique<lightwaveos::display::DisplayActor>(m_renderer.get());
+
+        if (m_display == nullptr) {
+#ifndef NATIVE_BUILD
+            ESP_LOGE(TAG, "Failed to create DisplayActor");
+#endif
+            m_state = SystemState::UNINITIALIZED;
+            return false;
+        }
+#ifndef NATIVE_BUILD
+        ESP_LOGI(TAG, "DisplayActor created (AMOLED test rig)");
+#endif
+#endif
+
 #ifndef NATIVE_BUILD
         ESP_LOGI(TAG, "Actors created successfully");
         ESP_LOGI(TAG, "Free heap after init: %lu bytes", esp_get_free_heap_size());
@@ -231,6 +247,16 @@ bool ActorSystem::start()
     }
 #endif
 
+#if FEATURE_AMOLED_DISPLAY
+    // Start DisplayActor (AMOLED test rig — non-fatal, informational only)
+    if (m_display && !m_display->start()) {
+#ifndef NATIVE_BUILD
+        ESP_LOGW(TAG, "Failed to start DisplayActor — continuing without AMOLED");
+#endif
+        // Non-fatal: display is purely diagnostic
+    }
+#endif
+
     m_startTime = millis();
     m_state = SystemState::RUNNING;
 
@@ -270,6 +296,16 @@ void ActorSystem::shutdown()
         m_audio->stop();
 #ifndef NATIVE_BUILD
         ESP_LOGI(TAG, "AudioActor stopped");
+#endif
+    }
+#endif
+
+#if FEATURE_AMOLED_DISPLAY
+    // Stop DisplayActor (before renderer — it reads from renderer)
+    if (m_display) {
+        m_display->stop();
+#ifndef NATIVE_BUILD
+        ESP_LOGI(TAG, "DisplayActor stopped");
 #endif
     }
 #endif
@@ -742,6 +778,9 @@ SystemStats ActorSystem::getStats() const
     if (m_showDirector && m_showDirector->isRunning()) stats.activeActors++;
 #if FEATURE_AUDIO_SYNC
     if (m_audio && m_audio->isRunning()) stats.activeActors++;
+#endif
+#if FEATURE_AMOLED_DISPLAY
+    if (m_display && m_display->isRunning()) stats.activeActors++;
 #endif
     // Future: count other actors
 

@@ -62,7 +62,12 @@
 // ============================================================================
 
 #if CHIP_ESP32_S3
-    #include "chip_esp32s3.h"
+    // Board-specific overrides for S3 variants
+    #if defined(BOARD_AMOLED241) && BOARD_AMOLED241
+        #include "chip_amoled241.h"
+    #else
+        #include "chip_esp32s3.h"
+    #endif
 #elif CHIP_ESP32_P4
     #include "chip_esp32p4.h"
 #endif

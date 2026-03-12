@@ -239,5 +239,17 @@
 #define FEATURE_MABUTRACE 0
 #endif
 
+// AMOLED Display - Test rig diagnostic display (Waveshare 2.41" RM690B0)
+// Enables DisplayActor with strip preview, spacetime heatmap, metrics, status
+#ifndef FEATURE_AMOLED_DISPLAY
+#define FEATURE_AMOLED_DISPLAY 0
+#endif
+
+// Motion-Semantic Extension (Layer 2): timing jitter field wired in ControlBusFrame.
+// Enables fluidity inference from inter-onset timing regularity in MotionSemantics.h.
+#ifndef CONTROLBUS_HAS_TIMING_JITTER
+#define CONTROLBUS_HAS_TIMING_JITTER 1
+#endif
+
 // Note: K1 beat tracker has been replaced by TempoTracker
 // Use 'tempo' serial command for tempo debugging

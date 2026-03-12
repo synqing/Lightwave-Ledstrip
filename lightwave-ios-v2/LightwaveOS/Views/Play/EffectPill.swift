@@ -1,5 +1,5 @@
 //
-//  PatternPill.swift
+//  EffectPill.swift
 //  LightwaveOS
 //
 //  Full-width tappable card with prev/next buttons and effect gallery sheet.
@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct PatternPill: View {
+struct EffectPill: View {
     @Environment(AppViewModel.self) private var appVM
     @State private var showEffectSelector = false
 
@@ -31,7 +31,7 @@ struct PatternPill: View {
             } label: {
                 HStack(alignment: .top, spacing: Spacing.md) {
                     VStack(alignment: .leading, spacing: Spacing.xs) {
-                        Text("PATTERN")
+                        Text("EFFECT")
                             .font(.sectionHeader)
                             .foregroundStyle(Color.lwTextTertiary)
                             .textCase(.uppercase)
@@ -89,7 +89,7 @@ struct PatternPill: View {
                 .fill(Color.lwCardGradient)
         )
         .overlay(alignment: .topTrailing) {
-            patternAccent
+            effectAccent
                 .padding(.top, 8)
                 .padding(.trailing, 12)
         }
@@ -99,10 +99,10 @@ struct PatternPill: View {
         }
     }
 
-    private var patternAccent: some View {
+    private var effectAccent: some View {
         return AnyView(
             RiveViewContainer(
-                asset: RiveAssetRegistry.patternPillAccent,
+                asset: RiveAssetRegistry.effectPillAccent,
                 inputs: [
                     .number("index", Double(appVM.effects.currentEffectId)),
                     .number("count", Double(appVM.effects.allEffects.count))
@@ -118,11 +118,11 @@ struct PatternPill: View {
 
 // MARK: - Preview
 
-#Preview("Pattern Pill") {
+#Preview("Effect Pill") {
     VStack(spacing: Spacing.lg) {
-        PatternPill()
+        EffectPill()
 
-        PatternPill()
+        EffectPill()
             .environment({
                 let vm = AppViewModel()
                 vm.effects.currentEffectName = "Starfield"

@@ -171,7 +171,7 @@ extension Font {
     /// Status label: 12pt Rajdhani Medium (connection status)
     static let statusLabel = Font.custom("Rajdhani-Medium", size: 12, relativeTo: .footnote)
 
-    /// Pill label: 11pt Bebas Neue Bold (PATTERN, PALETTE)
+    /// Pill label: 11pt Bebas Neue Bold (EFFECT, PALETTE)
     static let pillLabel = Font.custom("BebasNeue-Bold", size: 11, relativeTo: .caption)
 
     // MARK: JetBrains Mono — Values / Monospace

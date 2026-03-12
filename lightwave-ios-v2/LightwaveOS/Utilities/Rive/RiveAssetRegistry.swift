@@ -24,7 +24,7 @@ enum RiveAssetRegistry {
     static let beatPulse = RiveAsset(fileName: "beat_pulse")
     static let connectionIndicator = RiveAsset(fileName: "connection_indicator")
     static let discoveryEmptyState = RiveAsset(fileName: "discovery_empty_state")
-    static let patternPillAccent = RiveAsset(fileName: "pattern_pill_accent")
+    static let effectPillAccent = RiveAsset(fileName: "effect_pill_accent")
     static let palettePillAccent = RiveAsset(fileName: "palette_pill_accent")
     static let audioMicroInteraction = RiveAsset(fileName: "audio_micro_interaction")
 }

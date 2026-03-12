@@ -17,8 +17,8 @@ struct PlayTab: View {
                 // Hero LED preview (120pt)
                 HeroLEDPreview()
 
-                // Pattern and Palette pills
-                PatternPill()
+                // Effect and Palette pills
+                EffectPill()
                 PalettePill()
 
                 // Primary controls (brightness + speed)

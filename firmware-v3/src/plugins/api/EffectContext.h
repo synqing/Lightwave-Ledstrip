@@ -40,6 +40,7 @@
 #if FEATURE_AUDIO_BACKEND_PIPELINECORE
 #include "../../audio/pipeline/FrequencyMap.h"
 #endif
+#include "../../audio/contracts/MotionSemantics.h"
 #endif
 
 // Behavior selection (Phase 3)
@@ -417,6 +418,27 @@ struct AudioContext {
 
     BehaviorContext behaviorContext{};  ///< Behavior selection context (populated by RendererActor pre-render)
 
+    // ========================================================================
+    // Motion-Semantic Accessors (Layer 2: Laban 4D + modifiers)
+    // ========================================================================
+
+    audio::MotionSemanticFrame motionFrame{};  ///< 6-axis motion-semantic frame (populated by RendererActor)
+
+    /// Weight (Light ↔ Strong) [0.0, 1.0]
+    float motionWeight() const { return motionFrame.weight; }
+    /// Time quality (Sustained ↔ Sudden) [0.0, 1.0]
+    float motionTime() const { return motionFrame.time_quality; }
+    /// Space (Direct ↔ Indirect) [0.0, 1.0]
+    float motionSpace() const { return motionFrame.space; }
+    /// Flow (Bound ↔ Free) [0.0, 1.0]
+    float motionFlow() const { return motionFrame.flow; }
+    /// Fluidity (Jerky ↔ Fluid) [0.0, 1.0]
+    float motionFluidity() const { return motionFrame.fluidity; }
+    /// Impulse Strength (Weak ↔ Explosive) [0.0, 1.0]
+    float motionImpulse() const { return motionFrame.impulse_strength; }
+    /// Minimum confidence across inferred dimensions (0-255)
+    uint8_t motionConfidence() const { return motionFrame.confidence_min; }
+
     /// Get the recommended primary visual behavior
     VisualBehavior recommendedBehavior() const { return behaviorContext.recommendedPrimary; }
 
@@ -557,6 +579,21 @@ struct AudioContext {
     bool isMelodicMusic() const { return false; }
     bool isTextureMusic() const { return false; }
     bool isDynamicMusic() const { return false; }
+
+    // Motion-semantic stubs (neutral defaults)
+    struct StubMotionFrame {
+        float weight = 0.5f; float time_quality = 0.5f; float space = 0.5f;
+        float flow = 0.5f; float fluidity = 0.5f; float impulse_strength = 0.0f;
+        uint8_t confidence_min = 0;
+    };
+    StubMotionFrame motionFrame{};
+    float motionWeight() const { return 0.5f; }
+    float motionTime() const { return 0.5f; }
+    float motionSpace() const { return 0.5f; }
+    float motionFlow() const { return 0.5f; }
+    float motionFluidity() const { return 0.5f; }
+    float motionImpulse() const { return 0.0f; }
+    uint8_t motionConfidence() const { return 0; }
 
     // Behavior context stubs (always return default behavior)
     BehaviorContext behaviorContext{};  ///< Default behavior context

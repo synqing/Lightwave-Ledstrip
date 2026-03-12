@@ -175,6 +175,17 @@ struct ControlBusFrame {
     // silentScale fades from 1.0 to 0.0 after silenceHysteresisMs of silence
     float silentScale = 1.0f;       ///< 0.0=silent, 1.0=active (multiply with brightness)
     bool isSilent = false;          ///< True when silence threshold exceeded duration
+
+    // -----------------------------------------------------------------------
+    // Stage 2: Motion-Semantic Extension Fields
+    // -----------------------------------------------------------------------
+    // These fields support the Layer 2 motion-semantic inference chain.
+    // Additive extension — no existing fields modified.
+    // See: SPEC · Multi · Firmware Mapping and dsp_frame_t Extension
+
+    float timing_jitter = 0.0f;       ///< CV of inter-onset intervals [0.0=regular, 1.0=irregular]
+    float syncopation_level = 0.0f;   ///< Onset deviation from metric grid [0.0=on-beat, 1.0=off-beat]
+    float pitch_contour_dir = 0.0f;   ///< Spectral centroid movement [-1.0=descending, 0.0=flat, +1.0=ascending]
 };
 
 /**
@@ -453,6 +464,78 @@ private:
     
     /// Temporary buffer for clamped chroma values (moved from stack to reduce stack usage)
     float m_clamped_chroma[CONTROLBUS_NUM_CHROMA] = {0};
+
+    // ========================================================================
+    // Stage 2: Motion-Semantic Jitter/Syncopation/PitchContour State
+    // ========================================================================
+
+    /// Ring buffer for inter-onset intervals (timing jitter computation)
+    static constexpr uint8_t JITTER_WINDOW = 16;
+    float m_ioi_buffer[JITTER_WINDOW] = {0};
+    uint32_t m_last_onset_ms = 0;
+    uint8_t m_ioi_head = 0;
+    uint8_t m_ioi_count = 0;
+
+    /// Syncopation: EMA of onset deviation from beat grid
+    float m_syncopation_ema = 0.0f;
+    static constexpr float SYNCOPATION_EMA_ALPHA = 0.15f;
+
+    /// Pitch contour: previous centroid for direction computation
+    float m_prev_centroid = 0.0f;
+    float m_pitch_contour_smooth = 0.0f;  ///< Smoothed output
+
+    /// Compute timing jitter from onset event (call when onset detected)
+    void updateTimingJitter(uint32_t now_ms, bool onsetDetected) {
+        if (!onsetDetected || now_ms <= m_last_onset_ms) return;
+        float ioi = (float)(now_ms - m_last_onset_ms);
+        m_last_onset_ms = now_ms;
+        m_ioi_buffer[m_ioi_head] = ioi;
+        m_ioi_head = (m_ioi_head + 1) % JITTER_WINDOW;
+        if (m_ioi_count < JITTER_WINDOW) m_ioi_count++;
+
+        if (m_ioi_count < 4) { m_frame.timing_jitter = 0.0f; return; }
+
+        // Compute mean and SD of IOIs
+        float sum = 0, sum2 = 0;
+        for (uint8_t i = 0; i < m_ioi_count; i++) {
+            sum += m_ioi_buffer[i];
+            sum2 += m_ioi_buffer[i] * m_ioi_buffer[i];
+        }
+        float mean = sum / m_ioi_count;
+        if (mean < 1.0f) { m_frame.timing_jitter = 0.0f; return; }
+        float variance = (sum2 / m_ioi_count) - (mean * mean);
+        float sd = (variance > 0) ? sqrtf(variance) : 0.0f;
+        float cv = sd / mean;  // Coefficient of variation
+        m_frame.timing_jitter = (cv > 1.0f) ? 1.0f : cv;
+    }
+
+    /// Compute syncopation from onset phase relative to beat grid
+    void updateSyncopation(float beatPhase, bool onsetDetected) {
+        if (!onsetDetected) return;
+        // Distance from nearest strong beat position (0.0 or 1.0)
+        float dist = beatPhase;
+        if (dist > 0.5f) dist = 1.0f - dist;
+        // Normalize: 0.0 = on beat, 0.5 = maximally off-beat → scale to [0,1]
+        float deviation = dist * 2.0f;
+        m_syncopation_ema += SYNCOPATION_EMA_ALPHA * (deviation - m_syncopation_ema);
+        m_frame.syncopation_level = m_syncopation_ema;
+    }
+
+    /// Compute pitch contour direction from spectral centroid
+    void updatePitchContour(float centroid, float dt) {
+        if (m_prev_centroid <= 0.0f) { m_prev_centroid = centroid; return; }
+        float delta = centroid - m_prev_centroid;
+        m_prev_centroid = centroid;
+        // Normalize: threshold at ±0.1 for meaningful change
+        float raw_dir = 0.0f;
+        if (fabsf(delta) > 0.01f) {
+            raw_dir = (delta > 0) ? fminf(delta / 0.1f, 1.0f) : fmaxf(delta / 0.1f, -1.0f);
+        }
+        // Smooth
+        float alpha = 1.0f - expf(-5.0f * dt);  // lambda=5 → ~200ms tau
+        m_pitch_contour_smooth += (raw_dir - m_pitch_contour_smooth) * alpha;
+        m_frame.pitch_contour_dir = m_pitch_contour_smooth;
+    }
 
     // Private methods for spike detection
     void detectAndRemoveSpikes(LookaheadBuffer& buffer,

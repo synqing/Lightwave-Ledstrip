@@ -552,6 +552,33 @@ void ControlBus::applyDerivedFeatures(ControlBusFrame& frame, float dt, float rm
 #endif
 
     // ========================================================================
+    // Stage 4e: Motion-Semantic Extension Fields (Layer 2)
+    // Timing jitter, syncopation, and pitch contour for MotionSemanticEngine.
+    // ========================================================================
+    {
+        uint32_t now_ms = frame.t.monotonic_us / 1000;
+
+        // Onset detection: threshold on fast_flux (>0.3 = onset event)
+        bool onsetDetected = (frame.fast_flux > 0.3f);
+
+        // Timing jitter from inter-onset interval regularity
+        updateTimingJitter(now_ms, onsetDetected);
+
+        // Syncopation from onset-to-beat phase alignment
+        float beatPhase = frame.es_phase01_at_audio_t;
+        updateSyncopation(beatPhase, onsetDetected);
+
+        // Pitch contour from approximate spectral centroid (8-band weighted average)
+        float centroidSum = 0.0f, energySum = 0.0f;
+        for (uint8_t i = 0; i < CONTROLBUS_NUM_BANDS; i++) {
+            centroidSum += frame.bands[i] * static_cast<float>(i + 1);
+            energySum += frame.bands[i];
+        }
+        float centroid = (energySum > 0.001f) ? (centroidSum / energySum) : 0.0f;
+        updatePitchContour(centroid, dt);
+    }
+
+    // ========================================================================
     // Stage 7: Silence detection (Sensory Bridge silent_scale pattern)
     // Fades all output to black after sustained silence (default 10s)
     // ========================================================================

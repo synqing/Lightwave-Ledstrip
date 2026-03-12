@@ -407,6 +407,21 @@ void AudioActor::onTick()
     }
     m_diag.lastPublishSeq = frame.hop_seq;
     TRACE_END();  // snapshot_publish
+
+    // GROUND-TRUTH DIAGNOSTIC (TEMPORARY): 2-second periodic tempo field dump.
+    // Captures raw backend confidence before any translation/smoothing.
+    // Enable with `-D LW_TEMPO_GT_LOG=1`. Remove after validation.
+#if !defined(NATIVE_BUILD) && defined(LW_TEMPO_GT_LOG) && LW_TEMPO_GT_LOG
+    // ~62 Hz hop rate → 124 hops ≈ 2s.
+    if ((m_hopCount % 124) == 0) {
+        Serial.printf("[TEMPO_GT] bpm=%.1f conf=%.3f str=%.3f tick=%d down=%d rms=%.3f\n",
+                      frame.es_bpm, frame.es_tempo_confidence,
+                      frame.es_beat_strength,
+                      frame.es_beat_tick ? 1 : 0,
+                      frame.es_downbeat_tick ? 1 : 0,
+                      frame.rms);
+    }
+#endif
 }
 
 void AudioActor::onStop()

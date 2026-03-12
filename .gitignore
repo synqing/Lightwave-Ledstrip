@@ -187,3 +187,6 @@ K1_Animation.mov
 k1-animation*.mp4
 k1-hero-cropped.mp4
 CN\ 3/
+
+# Native test build artifacts
+firmware-v3/test/test_native/gen_reference

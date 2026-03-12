@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SpectraSynq K1 — Founders Edition</title>
+<meta name="description" content="K1 Lightwave. 320 LEDs. Beat-tracked. Centre-origin. Music, studied as motion. 100 units. Founders Edition.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Bebas+Neue&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --base: #121214;
+    --base-deep: #0a0a0c;
+    --accent: #F0C000;
+    --accent-dim: rgba(240,192,0,0.08);
+    --accent-mid: rgba(240,192,0,0.15);
+    --text-primary: #f0f0f0;
+    --text-secondary: #888;
+    --text-muted: #555;
+    --surface: #161618;
+    --border: #1e1e20;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--base-deep);
+    color: var(--text-primary);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* NAV */
+  nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    padding: 20px 48px;
+    display: flex; align-items: center; justify-content: space-between;
+    background: rgba(10,10,12,0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(30,30,32,0.6);
+  }
+  .nav-brand {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px; letter-spacing: 4px; color: var(--text-primary);
+    text-decoration: none;
+  }
+  .nav-tag {
+    font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--accent); opacity: 0.8;
+  }
+
+  /* HERO */
+  .hero {
+    min-height: 100vh;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 120px 48px 80px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: 35%; left: 50%; transform: translate(-50%, -50%);
+    width: 600px; height: 200px;
+    background: radial-gradient(ellipse, rgba(240,192,0,0.04) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .hero-eyebrow {
+    font-size: 11px; letter-spacing: 4px; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 24px;
+    opacity: 0; animation: fadeUp 0.8s 0.2s forwards;
+  }
+
+  .hero-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(64px, 10vw, 120px);
+    line-height: 0.9; letter-spacing: 4px;
+    text-align: center; color: var(--text-primary);
+    opacity: 0; animation: fadeUp 0.8s 0.4s forwards;
+  }
+
+  .hero-accent-line {
+    width: 60px; height: 2px;
+    background: var(--accent);
+    margin: 28px 0;
+    opacity: 0; animation: fadeUp 0.8s 0.6s forwards;
+  }
+
+  .hero-sub {
+    font-size: 16px; font-weight: 300;
+    color: var(--text-secondary);
+    text-align: center;
+    max-width: 480px; line-height: 1.7;
+    opacity: 0; animation: fadeUp 0.8s 0.8s forwards;
+  }
+
+  /* K1 VIDEO — orientation aware */
+  .k1-video-wrap {
+    margin: 56px 0 48px;
+    width: 100%; max-width: 720px;
+    opacity: 0; animation: fadeUp 1s 1s forwards;
+    position: relative;
+  }
+
+  .k1-video-wrap video {
+    width: 100%;
+    display: block;
+    border-radius: 4px;
+  }
+
+  .k1-video-full { display: block; }
+  .k1-video-portrait { display: none; }
+
+  @media (orientation: portrait) {
+    .k1-video-full { display: none; }
+    .k1-video-portrait { display: block; }
+    .k1-video-wrap { max-width: 100%; margin: 40px 0 36px; }
+  }
+
+  .k1-video-vignette {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: 4px;
+    box-shadow: inset 0 0 80px rgba(10,10,12,0.5);
+  }
+
+  /* SPECS LINE */
+  .specs-line {
+    display: flex; gap: 32px; flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 48px;
+    opacity: 0; animation: fadeUp 0.8s 1.2s forwards;
+  }
+  .spec { text-align: center; }
+  .spec-val {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px; letter-spacing: 2px; color: var(--text-primary);
+  }
+  .spec-label {
+    font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--text-muted); margin-top: 4px;
+  }
+
+  /* CTA */
+  .cta-section {
+    display: flex; flex-direction: column; align-items: center;
+    opacity: 0; animation: fadeUp 0.8s 1.4s forwards;
+  }
+
+  .cta-form {
+    display: flex; gap: 0; max-width: 440px; width: 100%;
+  }
+
+  .cta-input {
+    flex: 1;
+    padding: 14px 20px;
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-right: none;
+    color: var(--text-primary);
+    outline: none;
+    transition: border-color 0.3s;
+  }
+  .cta-input::placeholder { color: var(--text-muted); }
+  .cta-input:focus { border-color: var(--accent); }
+
+  .cta-btn {
+    padding: 14px 28px;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 16px; letter-spacing: 2px;
+    background: var(--accent);
+    color: var(--base-deep);
+    border: none; cursor: pointer;
+    transition: all 0.3s;
+    white-space: nowrap;
+  }
+  .cta-btn:hover {
+    background: #ffd030;
+    box-shadow: 0 0 24px rgba(240,192,0,0.2);
+  }
+
+  .cta-note {
+    font-size: 11px; color: var(--text-muted);
+    margin-top: 12px; letter-spacing: 0.5px;
+  }
+
+  .cta-success {
+    display: none;
+    text-align: center;
+    padding: 16px 24px;
+  }
+  .cta-success .check { font-size: 28px; margin-bottom: 8px; }
+  .cta-success .msg { font-size: 14px; color: var(--text-secondary); }
+  .cta-success .msg strong { color: var(--accent); }
+
+  /* FEATURES */
+  .features {
+    padding: 120px 48px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .features-eyebrow {
+    font-size: 10px; letter-spacing: 4px; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 32px;
+  }
+
+  .feature-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px 56px;
+  }
+
+  .feature h4 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px; letter-spacing: 2px;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+  }
+
+  .feature p {
+    font-size: 14px; line-height: 1.7;
+    color: var(--text-secondary);
+  }
+
+  /* QUOTE */
+  .quote-section {
+    padding: 80px 48px;
+    text-align: center;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .quote-text {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(32px, 5vw, 56px);
+    letter-spacing: 3px;
+    color: var(--text-primary);
+    line-height: 1.1;
+    max-width: 700px;
+    margin: 0 auto;
+  }
+
+  .quote-accent {
+    width: 40px; height: 2px;
+    background: var(--accent);
+    margin: 24px auto;
+  }
+
+  .quote-attr {
+    font-size: 12px; letter-spacing: 3px; text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  /* FOOTER */
+  footer {
+    padding: 48px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+
+  .footer-brand {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 14px; letter-spacing: 3px; color: var(--text-muted);
+  }
+
+  .footer-links { display: flex; gap: 24px; }
+  .footer-links a {
+    font-size: 12px; color: var(--text-muted);
+    text-decoration: none; letter-spacing: 0.5px;
+    transition: color 0.3s;
+  }
+  .footer-links a:hover { color: var(--accent); }
+
+  /* ANIMATIONS */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* RESPONSIVE */
+  @media (max-width: 768px) {
+    nav { padding: 16px 24px; }
+    .hero { padding: 100px 24px 60px; }
+    .hero-sub { font-size: 15px; }
+    .specs-line { gap: 20px; }
+    .spec-val { font-size: 22px; }
+    .cta-form { flex-direction: column; }
+    .cta-input { border-right: 1px solid var(--border); border-bottom: none; }
+    .features { padding: 80px 24px; }
+    .feature-grid { grid-template-columns: 1fr; gap: 32px; }
+    .quote-section { padding: 60px 24px; }
+    footer { padding: 32px 24px; flex-direction: column; gap: 16px; }
+  }
+
+  @media (max-width: 480px) {
+    .hero-title { letter-spacing: 2px; }
+    .specs-line { gap: 16px; }
+    .cta-btn { width: 100%; text-align: center; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a href="#" class="nav-brand">SPECTRASYNQ</a>
+  <span class="nav-tag">Founders Edition</span>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-eyebrow">Founders Edition &mdash; Limited to 100 Units</div>
+  <h1 class="hero-title">K1<br>LIGHTWAVE</h1>
+  <div class="hero-accent-line"></div>
+  <p class="hero-sub">Music, studied as motion. A light guide plate that translates sound into liquid colour. Beat-tracked. Centre-origin. No pixels. No screen. Just light.</p>
+
+  <!-- K1 Blender render — orientation aware -->
+  <div class="k1-video-wrap">
+    <video class="k1-video-full" autoplay muted loop playsinline>
+      <source src="k1-animation-dark-bg.mp4" type="video/mp4">
+    </video>
+    <video class="k1-video-portrait" autoplay muted loop playsinline>
+      <source src="k1-hero-cropped.mp4" type="video/mp4">
+    </video>
+    <div class="k1-video-vignette"></div>
+  </div>
+
+  <!-- SPECS -->
+  <div class="specs-line">
+    <div class="spec">
+      <div class="spec-val">320</div>
+      <div class="spec-label">LEDs</div>
+    </div>
+    <div class="spec">
+      <div class="spec-val">330MM</div>
+      <div class="spec-label">Length</div>
+    </div>
+    <div class="spec">
+      <div class="spec-val">120</div>
+      <div class="spec-label">FPS</div>
+    </div>
+    <div class="spec">
+      <div class="spec-val">100+</div>
+      <div class="spec-label">Effects</div>
+    </div>
+    <div class="spec">
+      <div class="spec-val">&pound;249</div>
+      <div class="spec-label">Founders</div>
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <div class="cta-section">
+    <form class="cta-form" id="ctaForm" onsubmit="handleSubmit(event)">
+      <input type="email" class="cta-input" id="emailInput" placeholder="your@email.com" required>
+      <button type="submit" class="cta-btn">JOIN THE LIST</button>
+    </form>
+    <div class="cta-note">No spam. One email when the Founders Edition opens.</div>
+    <div class="cta-success" id="ctaSuccess">
+      <div class="check">&#10003;</div>
+      <div class="msg">You&rsquo;re on the list. We&rsquo;ll be in touch.<br><strong>Welcome to the study.</strong></div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="features">
+  <div class="features-eyebrow">What makes K1 different</div>
+  <div class="feature-grid">
+    <div class="feature">
+      <h4>LIGHT GUIDE PLATE</h4>
+      <p>Not a screen. Not a strip. A 51mm diffused optical surface that produces volumetric, liquid colour. No visible LEDs. No pixels. Just light with depth.</p>
+    </div>
+    <div class="feature">
+      <h4>BEAT-TRACKED</h4>
+      <p>Onset detection and PLL beat tracking lock the light to the music&rsquo;s actual rhythm. Not volume-reactive. Beat-reactive. The difference is everything.</p>
+    </div>
+    <div class="feature">
+      <h4>CENTRE-ORIGIN</h4>
+      <p>Every pattern radiates from the centre outward &mdash; or collapses inward. No linear scrolling. The light breathes, blooms, and pulses like a living thing.</p>
+    </div>
+    <div class="feature">
+      <h4>ZERO LATENCY</h4>
+      <p>256-bin FFT audio pipeline running at 120 FPS on dedicated silicon. The light doesn&rsquo;t follow the music &mdash; it moves with it.</p>
+    </div>
+  </div>
+</section>
+
+<!-- QUOTE -->
+<section class="quote-section">
+  <div class="quote-text">WE DON&rsquo;T MAKE LIGHTS.<br>WE STUDY MUSIC AS MOTION.</div>
+  <div class="quote-accent"></div>
+  <div class="quote-attr">SpectraSynq Studio</div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-brand">SPECTRASYNQ &copy; 2026</div>
+  <div class="footer-links">
+    <a href="#">Instagram</a>
+    <a href="#">Contact</a>
+  </div>
+</footer>
+
+<script>
+function handleSubmit(e) {
+  e.preventDefault();
+  const email = document.getElementById('emailInput').value;
+  // TODO: Wire to backend (Mailchimp, Buttondown, Supabase, etc.)
+  console.log('Waitlist signup:', email);
+
+  document.getElementById('ctaForm').style.display = 'none';
+  document.querySelector('.cta-note').style.display = 'none';
+  const success = document.getElementById('ctaSuccess');
+  success.style.display = 'block';
+  success.style.animation = 'fadeUp 0.5s forwards';
+}
+
+// Orientation-aware video playback
+function updateVideoForOrientation() {
+  const isPortrait = window.matchMedia("(orientation: portrait)").matches;
+  const fullVid = document.querySelector('.k1-video-full');
+  const portVid = document.querySelector('.k1-video-portrait');
+
+  if (isPortrait) {
+    fullVid.pause();
+    portVid.play().catch(() => {});
+  } else {
+    portVid.pause();
+    fullVid.play().catch(() => {});
+  }
+}
+
+window.matchMedia("(orientation: portrait)").addEventListener('change', updateVideoForOrientation);
+document.addEventListener('DOMContentLoaded', updateVideoForOrientation);
+</script>
+
+</body>
+</html>

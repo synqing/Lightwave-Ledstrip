@@ -8,6 +8,7 @@
 #include "../../RequestValidator.h"
 #include "../../WebServer.h"  // For CachedRendererState
 #include "../../../core/actors/ActorSystem.h"
+#include "../../../config/persistence_trigger.h"
 #include "../../../core/actors/RendererActor.h"
 
 using namespace lightwaveos::actors;
@@ -112,6 +113,7 @@ void ParameterHandlers::handleSet(AsyncWebServerRequest* request,
     }
 
     if (updated) {
+        g_externalNvsSaveRequest.store(true, std::memory_order_release);
         sendSuccessResponse(request);
         broadcastStatus();
     } else {

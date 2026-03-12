@@ -20,9 +20,13 @@
 #include "../../../plugins/api/IEffect.h"
 #include "../../../effects/transitions/TransitionTypes.h"
 #include "../../../effects/enhancement/ColorCorrectionEngine.h"
+#include "../../../config/persistence_trigger.h"
+#include "../../../config/factory_presets.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 #include <cstring>
+
+extern uint8_t g_factoryPresetIndex;  // defined in main.cpp
 
 namespace lightwaveos {
 namespace network {
@@ -278,6 +282,7 @@ static void handleEffectsSetCurrent(AsyncWebSocketClient* client, JsonDocument& 
         ctx.actorSystem.setEffect(effectId);
     }
 
+    g_externalNvsSaveRequest.store(true, std::memory_order_release);
     if (ctx.broadcastStatus) ctx.broadcastStatus();
 
     const char* name = ctx.renderer->getEffectName(effectId);
@@ -557,6 +562,12 @@ static void handleParametersSet(AsyncWebSocketClient* client, JsonDocument& doc,
         updatedHue = true;
     }
 
+    // Trigger debounced NVS save for expression param persistence (D4 § 2.4)
+    if (updatedIntensity || updatedSaturation || updatedComplexity ||
+        updatedVariation || updatedHue) {
+        g_externalNvsSaveRequest.store(true, std::memory_order_release);
+    }
+
     if (ctx.broadcastStatus) ctx.broadcastStatus();
 
     // Collect updated keys into array
@@ -681,6 +692,73 @@ static void handleCameraModeSet(AsyncWebSocketClient* client, JsonDocument& doc,
     }
 }
 
+// ── Factory Preset WS Commands (D4 § 2.8) ───────────────────────────────────
+
+static void handleFactoryPresetsList(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    const char* requestId = doc["requestId"] | "";
+
+    String response = buildWsResponse("factoryPresets.list", requestId, [](JsonObject& data) {
+        data["activeIndex"] = g_factoryPresetIndex;
+        JsonArray arr = data["presets"].to<JsonArray>();
+        for (uint8_t i = 0; i < FACTORY_PRESET_COUNT; ++i) {
+            const auto& p = FACTORY_PRESETS[i];
+            JsonObject obj = arr.add<JsonObject>();
+            obj["index"] = i;
+            obj["name"] = p.name;
+            obj["effectId"] = static_cast<uint16_t>(p.effectId);
+            obj["paletteIndex"] = p.paletteIndex;
+        }
+    });
+    client->text(response);
+}
+
+static void handleFactoryPresetsLoad(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    const char* requestId = doc["requestId"] | "";
+
+    if (!doc.containsKey("index")) {
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "Missing 'index' field", requestId));
+        return;
+    }
+
+    uint8_t idx = doc["index"];
+    if (idx >= FACTORY_PRESET_COUNT) {
+        client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Index out of range (0-7)", requestId));
+        return;
+    }
+
+    const auto& p = FACTORY_PRESETS[idx];
+    ctx.actorSystem.setEffect(p.effectId);
+    ctx.actorSystem.setPalette(p.paletteIndex);
+    ctx.actorSystem.setHue(p.hue);
+    ctx.actorSystem.setSaturation(p.saturation);
+    ctx.actorSystem.setMood(p.mood);
+    ctx.actorSystem.setIntensity(p.intensity);
+    ctx.actorSystem.setComplexity(p.complexity);
+    ctx.actorSystem.setVariation(p.variation);
+    ctx.actorSystem.setFadeAmount(p.trails);
+    g_factoryPresetIndex = idx;
+    g_externalNvsSaveRequest.store(true, std::memory_order_release);
+
+    String response = buildWsResponse("factoryPresets.loaded", requestId, [idx, &p](JsonObject& data) {
+        data["index"] = idx;
+        data["name"] = p.name;
+    });
+    client->text(response);
+
+    // Broadcast preset change to all connected clients
+    if (ctx.ws) {
+        JsonDocument broadcast;
+        broadcast["type"] = "factoryPresets.changed";
+        JsonObject bData = broadcast["data"].to<JsonObject>();
+        bData["activeIndex"] = idx;
+        bData["name"] = p.name;
+        String broadcastStr;
+        serializeJson(broadcast, broadcastStr);
+        ctx.ws->textAll(broadcastStr);
+    }
+    if (ctx.broadcastStatus) ctx.broadcastStatus();
+}
+
 static void handleCameraModeGet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     const char* requestId = doc["requestId"] | "";
 
@@ -709,6 +787,8 @@ void registerWsEffectsCommands(const WebServerContext& ctx) {
     WsCommandRouter::registerCommand("parameters.set", handleParametersSet);
     WsCommandRouter::registerCommand("cameraMode.set", handleCameraModeSet);
     WsCommandRouter::registerCommand("cameraMode.get", handleCameraModeGet);
+    WsCommandRouter::registerCommand("factoryPresets.list", handleFactoryPresetsList);
+    WsCommandRouter::registerCommand("factoryPresets.load", handleFactoryPresetsLoad);
 }
 
 } // namespace ws

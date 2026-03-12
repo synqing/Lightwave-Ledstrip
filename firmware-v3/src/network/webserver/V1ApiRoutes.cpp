@@ -36,6 +36,9 @@
 #if FEATURE_API_AUTH
 #include "handlers/AuthHandlers.h"
 #endif
+#include "../../config/factory_presets.h"
+#include "../../config/persistence_trigger.h"
+#include "../../core/actors/ActorSystem.h"
 #include <ESPAsyncWebServer.h>
 #include <Arduino.h>
 
@@ -56,6 +59,9 @@ class PresetManager;
 extern lightwaveos::persistence::ZoneConfigManager* zoneConfigMgr;
 // PresetManager: file-local nullptr until persistence layer is implemented
 static lightwaveos::persistence::PresetManager* presetMgr = nullptr;
+
+// Factory preset state (defined in main.cpp)
+extern uint8_t g_factoryPresetIndex;
 
 namespace lightwaveos {
 namespace network {
@@ -252,6 +258,71 @@ void V1ApiRoutes::registerRoutes(
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
             handlers::ParameterHandlers::handleSet(request, data, len, ctx.orchestrator, broadcastStatus);
+        }
+    );
+
+    // Factory Presets - GET /api/v1/factoryPresets (D4 § 2.8)
+    registry.onGet("/api/v1/factoryPresets", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        JsonDocument doc;
+        doc["activeIndex"] = g_factoryPresetIndex;
+        JsonArray arr = doc["presets"].to<JsonArray>();
+        for (uint8_t i = 0; i < lightwaveos::FACTORY_PRESET_COUNT; ++i) {
+            const auto& p = lightwaveos::FACTORY_PRESETS[i];
+            JsonObject obj = arr.add<JsonObject>();
+            obj["index"] = i;
+            obj["name"] = p.name;
+            obj["effectId"] = static_cast<uint16_t>(p.effectId);
+            obj["paletteIndex"] = p.paletteIndex;
+        }
+        String json;
+        serializeJson(doc, json);
+        request->send(200, "application/json", json);
+    });
+
+    // Factory Presets - POST /api/v1/factoryPresets/load (D4 § 2.8)
+    registry.onPost("/api/v1/factoryPresets/load",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [ctx, checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            JsonDocument doc;
+            DeserializationError err = deserializeJson(doc, data, len);
+            if (err) {
+                sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                    ErrorCodes::INVALID_JSON, "Invalid JSON");
+                return;
+            }
+            if (!doc.containsKey("index")) {
+                sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                    ErrorCodes::MISSING_FIELD, "Missing 'index' field");
+                return;
+            }
+            uint8_t idx = doc["index"];
+            if (idx >= lightwaveos::FACTORY_PRESET_COUNT) {
+                sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                    ErrorCodes::OUT_OF_RANGE, "Index out of range (0-7)");
+                return;
+            }
+            const auto& p = lightwaveos::FACTORY_PRESETS[idx];
+            ctx.orchestrator.setEffect(p.effectId);
+            ctx.orchestrator.setPalette(p.paletteIndex);
+            ctx.orchestrator.setHue(p.hue);
+            ctx.orchestrator.setSaturation(p.saturation);
+            ctx.orchestrator.setMood(p.mood);
+            ctx.orchestrator.setIntensity(p.intensity);
+            ctx.orchestrator.setComplexity(p.complexity);
+            ctx.orchestrator.setVariation(p.variation);
+            ctx.orchestrator.setFadeAmount(p.trails);
+            g_factoryPresetIndex = idx;
+            g_externalNvsSaveRequest.store(true, std::memory_order_release);
+            sendSuccessResponse(request, [idx, &p](JsonObject& respData) {
+                respData["index"] = idx;
+                respData["name"] = p.name;
+            });
+            if (broadcastStatus) broadcastStatus();
         }
     );
 

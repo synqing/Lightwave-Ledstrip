@@ -1,0 +1,13 @@
+# Name,   Type, SubType, Offset,  Size, Flags
+# Partition table for voice harness with ESP-SR model storage (16MB flash)
+# app0:  3 MB — firmware (no OTA needed for harness)
+# spiffs: 7 MB — general storage
+# model:  ~2.9 MB — ESP-SR models (WakeNet9 + MultiNet5 EN Q8)
+# Total flash usage: ~15.9 MB of 16 MB
+nvs,      data, nvs,       0x9000,   0x5000,
+otadata,  data, ota,       0xe000,   0x2000,
+app0,     app,  ota_0,    0x10000, 0x300000,
+app1,     app,  ota_1,   0x310000, 0x300000,
+spiffs,   data, spiffs,  0x610000, 0x700000,
+model,    data, spiffs,  0xD10000, 0x2E0000,
+coredump, data, coredump,0xFF0000,  0x10000,

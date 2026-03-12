@@ -1,0 +1,17 @@
+## ESP-IDF Component Dependencies for Voice Feasibility Harness
+##
+## ESP-SR is distributed via the ESP Component Registry.
+## With Arduino ESP32 v3.x (IDF 5.x), the component manager should
+## resolve these automatically during build.
+##
+## If auto-resolution fails, manual installation:
+##   idf.py add-dependency "espressif/esp-sr^2.2.0"
+##
+## Or clone directly:
+##   git clone --depth 1 https://github.com/espressif/esp-sr.git components/esp-sr
+
+dependencies:
+  espressif/esp-sr:
+    version: "^2.2.0"
+  espressif/esp-dsp:
+    version: "^1.6.0"

@@ -174,3 +174,13 @@ progress.md
 task_plan.md
 ztemp.md
 tmp_wifi_issue_bundle_*/
+
+# ==========================================
+# LOCAL MEDIA / OFFICE ARTEFACTS (do not commit)
+# ==========================================
+.~lock.*#
+K1-Master-Tracker.xlsx
+K1_Animation.mov
+k1-animation*.mp4
+k1-hero-cropped.mp4
+CN\ 3/

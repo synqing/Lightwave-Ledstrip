@@ -19,8 +19,12 @@
 #define SAMPLE_RATE             (32000)     // 32 kHz (was 12800)
 #define CHUNK_SIZE              (128)       // 4ms @ 32kHz, 2 chunks per 256-hop (was 64 = 5ms @ 12.8kHz)
 #define SAMPLE_HISTORY_LENGTH   (10240)     // 320ms @ 32kHz (was 4096 = 320ms @ 12.8kHz)
-#define NOVELTY_LOG_HZ          (125)       // Match new frame rate (was 50)
-#define NOVELTY_HISTORY_LENGTH  (2560)      // 20.48s @ 125 Hz (was 1024 = 20.48s @ 50Hz)
+// EXPERIMENT: restore original novelty rate to test whether tempo resolution
+// failure is caused by novelty log rate vs novelty curve content.
+// If this fixes 132 BPM detection → the 125 Hz rate was the problem.
+// If this still fails → the 32kHz spectral content produces different novelty.
+#define NOVELTY_LOG_HZ          (50)        // Restored original (was 125 in shim, 50 in ES)
+#define NOVELTY_HISTORY_LENGTH  (1024)      // Restored original (was 2560 in shim, 1024 in ES)
 
 // ============================================================================
 // DC Blocker Coefficients (override microphone.h)

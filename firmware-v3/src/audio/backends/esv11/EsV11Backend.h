@@ -60,13 +60,44 @@ public:
      */
     void getLatestOutputs(EsV11Outputs& out) const;
 
+    // Runtime-tuneable tempo stabilisation parameters.
+    // Modify via serial commands (e.g. "tempo gate_base 1.3") without reflashing.
+    struct TempoParams {
+        float gateBase      = 1.2f;   // Minimum magnitude ratio for generic bin switch
+        float gateScale     = 0.8f;   // Additional gate from stability (max gate = base+scale)
+        float gateTau       = 4.0f;   // Seconds for gate to reach halfway to max
+        float confFloor     = 0.10f;  // Below this raw conf, freeze bin switches
+        float validationThr = 0.08f;  // Raw conf must exceed this to validate a bin
+        float stabilityTau  = 4.0f;   // Seconds for stability confidence to reach 0.5
+        uint32_t holdUs     = 200000; // Minimum hold time before allowing switch (us)
+        uint8_t octaveRuns  = 4;      // Consecutive hops for octave promotion
+        float decayFloor    = 0.005f; // Magnitude below this = "decayed" (escape hatch + freeze)
+        float octRatioLo    = 1.9f;   // Lower bound for octave detection (candidate/stable)
+        float octRatioHi    = 2.1f;   // Upper bound for octave detection
+        float wsSepFloor    = 0.001f; // Winner separation denominator floor
+        float confDecay     = 0.994f; // Confidence smoothing decay factor (per 1/60s)
+        uint32_t genericPersistUs = 1000000; // Generic candidate must persist this long before promotion (us)
+    };
+    TempoParams m_tp;
+
+public:
+    TempoParams& tempoParams() { return m_tp; }
+    const TempoParams& tempoParams() const { return m_tp; }
+
 private:
     uint64_t m_sampleIndex = 0;
     uint64_t m_lastGpuTickUs = 0;
 
-    // Beat tracking for selected tempo (wrap detection)
-    uint16_t m_lastTopTempoIndex = 0;
-    bool m_lastTopPhaseInverted = false;
+    // Beat tracking: free-running phase accumulator (pre-v3 EsBeatClock approach)
+    uint16_t m_stableTopBin = 0;       // Hysteresis-stabilised bin selection
+    uint64_t m_stableBinLockedUs = 0;  // Timestamp when stable bin was last changed
+    uint16_t m_octaveCandBin = 0;      // Last octave-related candidate seen
+    uint8_t  m_octaveCandRuns = 0;     // Consecutive windows octave candidate persisted
+    uint16_t m_genericCandBin = 0;     // Last generic candidate seen (for persistence check)
+    uint64_t m_genericCandFirstUs = 0; // Timestamp when generic candidate first appeared
+    bool     m_stableBinValidated = false; // True once raw conf > threshold on current bin
+    float m_beatPhase = 0.0f;          // 0..1, wraps at 1.0 → beat_tick
+    uint64_t m_lastRefreshUs = 0;      // Delta timing for phase accumulator
     uint8_t m_beatInBar = 0;
 
     // Cached outputs

@@ -142,7 +142,7 @@ struct BeatPulse: View {
                         }
                     }
 
-                    LWCard(title: "Simulated Beat Pattern") {
+                    LWCard(title: "Simulated Beat") {
                         VStack(spacing: Spacing.md) {
                             HStack(spacing: Spacing.md) {
                                 BeatPulse(isBeating: true, isDownbeat: false, confidence: 0.9)

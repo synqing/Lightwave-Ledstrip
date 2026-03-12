@@ -47,7 +47,7 @@ Before doing anything:
 | Get hover info (type, docs) | `mcp__clangd__get_hover` | Quick type lookup |
 | Find interface implementations | `mcp__clangd__find_implementations` | Virtual method overrides |
 
-**Prerequisite:** compile_commands.json must exist in firmware-v3/. If missing: `pio run -e esp32dev_audio_pipelinecore --target compiledb`
+**clangd Status (7 Mar 2026):** OPERATIONAL. llvm 22.1.0 installed, compile_commands.json exists (510 entries, 331 src/ files), MCP server configured. If compile_commands.json is stale after adding new files: `pio run -e esp32dev_audio_pipelinecore --target compiledb`
 
 ### Code Intelligence (General / Cross-Language)
 
@@ -58,7 +58,10 @@ Before doing anything:
 | Deep search with context | `mcp__qmd__qmd_deep_search` | Multi-step retrieval with reranking |
 | Get specific doc by path | `mcp__qmd__qmd_get` | Exact retrieval when you know the doc |
 | Check QMD index health | `mcp__qmd__qmd_status` | Verify collections are populated |
-| Look up library API docs | Context7 (via CC built-in) | Version-specific, prevents hallucination |
+
+**QMD Status (7 Mar 2026):** OPERATIONAL. 330 files indexed, 2,421 vectors, 5 collections (war-room-knowledge, war-room-ops, war-room-sources, firmware-docs, landing-page-docs). Models: embeddinggemma-300M (embeddings), Qwen3 0.6B (reranking), 1.7B (query expansion). Runs on Metal GPU. Re-index: `scripts/setup-qmd.sh`
+| Look up library API docs (step 1) | `mcp__Context7__resolve-library-id` | Resolve library name to Context7 ID — call this FIRST |
+| Look up library API docs (step 2) | `mcp__Context7__get-library-docs` | Fetch version-specific docs using ID from step 1 |
 
 ### Memory & Context
 
@@ -181,7 +184,7 @@ IDEA → BRAINSTORM → DESIGN → PLAN → TEST-FIRST → IMPLEMENT → REVIEW 
 
 1. **Do NOT grep for code when clangd can find it.** `find_definition`, `find_references`, and `get_call_hierarchy` are faster and more accurate than text search for C++ symbols.
 
-2. **Do NOT search docs by reading files when QMD can search them.** `qmd_search` and `qmd_vector_search` cover 330 docs / 2,421 chunks. Use them.
+2. **Do NOT search docs by reading files when QMD can search them.** `qmd_search` and `qmd_vector_search` cover indexed collections. Check `qmd_status` first — if collections show zero, QMD needs indexing (run `scripts/setup-qmd.sh` on host Mac with Node 22).
 
 3. **Do NOT start coding without checking brainstorming + TDD skills.** The brainstorming skill refines ideas BEFORE you commit to an approach. The TDD skill ensures tests exist BEFORE implementation.
 
@@ -238,3 +241,4 @@ Am I finishing a branch?
 | Date | Change |
 |------|--------|
 | 5 Mar 2026 | Initial creation. Full inventory: 29 skills, 13 MCP groups, 47 tools. Routing table, lifecycle phases, anti-patterns, decision tree. |
+| 7 Mar 2026 | Added operational status blocks for clangd (510 entries) and QMD (330 files, 2,421 vectors). Updated QMD anti-pattern to reference `scripts/setup-qmd.sh` and `qmd_status` check. |

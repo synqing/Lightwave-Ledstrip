@@ -2,9 +2,18 @@
 
 > **Context:** Phases 0–2 of the toolchain installation are complete. The items below are what could NOT be done from Cowork and require a CC CLI session or Captain's direct input.
 
+> **Status update 7 Mar 2026:**
+> - ~~AgentKeeper~~ **CANCELLED 5 Mar** ($37/mo, no docs). claude-mem + CLAUDE.md covers this.
+> - ~~MCP Code Graph / CodeGPT~~ **REMOVED 5 Mar**. Redundant — clangd + Auggie cover C++ and code intelligence.
+> - **clangd** — DONE. llvm 22.1.0 installed, compile_commands.json exists (510 entries), MCP configured.
+> - **Worktrunk** — DONE. Functional. Shell integration cosmetic. 12 prunable worktrees to clean.
+> - **QMD** — DONE. Fully indexed: 330 files, 2,421 vectors, 5 collections (war-room-knowledge, war-room-ops, war-room-sources, firmware-docs, landing-page-docs). Verified 7 Mar with 93% relevance on test queries.
+> - **X Bearer token** — PARKED. Not blocking. $100/mo X API. Manual browser research is viable alternative.
+> - **CLAUDE.md enforcement** — UPDATED 7 Mar. Hard gate rules added for clangd, QMD, Context7. Anti-pattern table inline.
+
 ---
 
-## 1. API Keys (Captain must provide)
+## 1. ~~API Keys~~ (RESOLVED — mostly parked/cancelled)
 
 ### X API Bearer Token (Tool 1: x-research-skill)
 ```bash

@@ -131,6 +131,9 @@ LESSONS_LEARNED.md
 STRATEGY_VALIDATION.md
 z.md
 
+# Keep curated commit context docs tracked
+!docs/COMMIT_CONTEXT_*.md
+
 # Development dashboard (separate build project)
 # lightwave-dashboard/ -> Now tracked
 

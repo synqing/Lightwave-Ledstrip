@@ -2,10 +2,9 @@
  * @file SbK1BaseEffect.cpp
  * @brief Shared base class implementation for K1.Lightwave effect ports
  *
- * Frame-rate note: K1's smoothing constants are frame-coupled (designed for
- * ~120 FPS loop). Since firmware-v3 also targets 120 FPS, the constants are
- * used directly WITHOUT dt-correction for initial parity. If the target FPS
- * changes, these constants will need dt-correction via exponential conversion.
+ * All smoothing uses rate-independent exponential moving averages:
+ *   alpha = 1 - exp(-dt / tau)
+ * Tau constants were derived from original frame-coupled alphas at 120 FPS.
  */
 
 #include "SbK1BaseEffect.h"
@@ -128,6 +127,9 @@ void SbK1BaseEffect::baseProcessAudio(plugins::EffectContext& ctx) {
 #else
     const auto& cb = ctx.audio.controlBus;
 
+    // Compute rate-independent dt from render context
+    m_dt = ctx.getSafeDeltaSeconds();
+
     // -----------------------------------------------------------------
     // SB parity shortcut: if the pipeline already provides K1-style data,
     // use it directly instead of reconstructing from bins256.
@@ -142,7 +144,9 @@ void SbK1BaseEffect::baseProcessAudio(plugins::EffectContext& ctx) {
         m_huePosition = cb.sb_hue_position;
         m_wfPeakScaled = cb.sb_waveform_peak_scaled;
         // Must also compute smoothed peak (K1's waveform_peak_scaled_last)
-        m_wfPeakLast = m_wfPeakScaled * 0.3f + m_wfPeakLast * 0.7f;
+        // tau=0.023s (was alpha=0.3/0.7 at 120 FPS)
+        float aWfPeak = 1.0f - expf(-m_dt / kTauWfPeakLast);
+        m_wfPeakLast += (m_wfPeakScaled - m_wfPeakLast) * aWfPeak;
     } else {
 #if FEATURE_AUDIO_BACKEND_PIPELINECORE
         // Reconstruct from bins256 → full pipeline
@@ -177,8 +181,9 @@ void SbK1BaseEffect::baseProcessAudio(plugins::EffectContext& ctx) {
 
     // Update VU level (always, regardless of path)
     float rmsNow = ctx.audio.rms();
-    // Frame-coupled EMA: K1 uses ~120 FPS constants directly
-    m_vuAvg = m_vuAvg * 0.8f + rmsNow * 0.2f;
+    // tau=0.037s (was alpha=0.2/0.8 at 120 FPS)
+    float aVu = 1.0f - expf(-m_dt / kTauVuAvg);
+    m_vuAvg += (rmsNow - m_vuAvg) * aVu;
     m_vuLast = rmsNow;
 
 #endif
@@ -304,7 +309,9 @@ void SbK1BaseEffect::reconstructSpectrum96(const float* bins256, float binHz) {
         }
 
         // Magnitude averaging: near-passthrough for sharp response
-        m_ps->magAvg[note] = m_ps->magAvg[note] * 0.3f + mag * 0.7f;
+        // tau=0.007s (was alpha=0.7 new/0.3 old at 120 FPS)
+        float aMag = 1.0f - expf(-m_dt / kTauMagAvg);
+        m_ps->magAvg[note] += (mag - m_ps->magAvg[note]) * aMag;
     }
 #else
     (void)bins256;
@@ -326,10 +333,11 @@ void SbK1BaseEffect::smoothSpectrogram() {
 
         if (current > smooth) {
             // Attack: near-instant
-            smooth += (current - smooth) * 0.85f;
+            // tau=0.004s (was alpha=0.85 at 120 FPS)
+            smooth += (current - smooth) * (1.0f - expf(-m_dt / kTauSpecAttack));
         } else {
-            // Decay: fast fall
-            smooth += (current - smooth) * 0.6f;
+            // tau=0.009s (was alpha=0.6 at 120 FPS)
+            smooth += (current - smooth) * (1.0f - expf(-m_dt / kTauSpecDecay));
         }
         m_ps->specSmooth[i] = smooth;
     }
@@ -358,9 +366,11 @@ void SbK1BaseEffect::buildChromagram() {
         if (chroma[i] > maxChroma) maxChroma = chroma[i];
     }
 
-    m_chromaPeakTracker *= 0.98f;
+    // tau=0.413s (was *=0.98 at 120 FPS)
+    m_chromaPeakTracker *= expf(-m_dt / kTauChromaPeakDecay);
     if (maxChroma > m_chromaPeakTracker) {
-        m_chromaPeakTracker += (maxChroma - m_chromaPeakTracker) * 0.4f;
+        // tau=0.016s (was alpha=0.4 at 120 FPS)
+        m_chromaPeakTracker += (maxChroma - m_chromaPeakTracker) * (1.0f - expf(-m_dt / kTauChromaPeakAttack));
     }
 
     // Normalise and store
@@ -429,7 +439,8 @@ void SbK1BaseEffect::processColorShift(float noveltyNow) {
     if (noveltyNow > m_hueShiftSpeed * 0.5f) {
         m_hueShiftSpeed = noveltyNow * 0.75f;
     } else {
-        m_hueShiftSpeed *= 0.99f;
+        // tau=0.829s (was *=0.99 at 120 FPS)
+        m_hueShiftSpeed *= expf(-m_dt / kTauHueSpeedDecay);
         if (m_hueShiftSpeed < 0.0001f) m_hueShiftSpeed = 0.0001f;
     }
 
@@ -455,7 +466,8 @@ void SbK1BaseEffect::processColorShift(float noveltyNow) {
 
     // Mix: approach target at distance*0.01 rate
     float mixDist = m_hueShiftMixTarget - m_hueShiftMix;
-    m_hueShiftMix += mixDist * 0.01f;
+    // tau=0.829s (was alpha=0.01 at 120 FPS)
+    m_hueShiftMix += mixDist * (1.0f - expf(-m_dt / kTauHueMix));
 }
 
 // =========================================================================
@@ -480,9 +492,11 @@ void SbK1BaseEffect::updateWaveformPeak(plugins::EffectContext& ctx) {
 
     // Stage 1: Envelope follower — aggressive attack/decay for sharp tracking
     if (peak > m_wfFollower) {
-        m_wfFollower += (peak - m_wfFollower) * 0.7f;
+        // tau=0.007s (was alpha=0.7 at 120 FPS)
+        m_wfFollower += (peak - m_wfFollower) * (1.0f - expf(-m_dt / kTauWfFollowerAttack));
     } else {
-        m_wfFollower += (peak - m_wfFollower) * 0.08f;
+        // tau=0.100s (was alpha=0.08 at 120 FPS)
+        m_wfFollower += (peak - m_wfFollower) * (1.0f - expf(-m_dt / kTauWfFollowerDecay));
     }
     if (m_wfFollower < 750.0f) m_wfFollower = 750.0f;
 
@@ -494,9 +508,9 @@ void SbK1BaseEffect::updateWaveformPeak(plugins::EffectContext& ctx) {
     // No second-stage follower — K1 doesn't have one.
     m_wfPeakScaled = peakNorm;
 
-    // K1 parity: waveform_peak_scaled_last = 0.02/0.98 EMA smoothing (used for dot position)
-    // K1: smoothed = waveform_peak_scaled * 0.02 + waveform_peak_scaled_last * 0.98
-    m_wfPeakLast = m_wfPeakScaled * 0.3f + m_wfPeakLast * 0.7f;
+    // tau=0.023s (was alpha=0.3/0.7 at 120 FPS)
+    float aWfPk = 1.0f - expf(-m_dt / kTauWfPeakLast);
+    m_wfPeakLast += (m_wfPeakScaled - m_wfPeakLast) * aWfPk;
 #else
     (void)ctx;
 #endif

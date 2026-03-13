@@ -147,12 +147,31 @@ protected:
     float m_wfPeakLast          = 0.0f;
     float m_wfFollower          = 750.0f;
 
+    // Frame delta time for rate-independent smoothing
+    float m_dt              = 1.0f / 120.0f;
+
     // Per-zone tracking
     uint32_t m_lastHopSeq       = 0;
 
     // Chromagram color output (written by synthesizeChromaColor)
     CRGB_F m_chromaColor;
     float  m_chromaTotalMag     = 0.0f;
+
+    // -----------------------------------------------------------------
+    // Rate-independent time constants (tau in seconds)
+    // Derived from original frame-coupled alphas assuming 120 FPS
+    // -----------------------------------------------------------------
+    static constexpr float kTauMagAvg           = 0.0069f;  // was alpha=0.7 new/0.3 old
+    static constexpr float kTauSpecAttack       = 0.0044f;  // was alpha=0.85
+    static constexpr float kTauSpecDecay        = 0.0091f;  // was alpha=0.6
+    static constexpr float kTauChromaPeakDecay  = 0.4125f;  // was *=0.98 per frame
+    static constexpr float kTauChromaPeakAttack = 0.0163f;  // was alpha=0.4
+    static constexpr float kTauHueSpeedDecay    = 0.8291f;  // was *=0.99 per frame
+    static constexpr float kTauHueMix           = 0.8291f;  // was alpha=0.01
+    static constexpr float kTauWfFollowerAttack = 0.0069f;  // was alpha=0.7
+    static constexpr float kTauWfFollowerDecay  = 0.0999f;  // was alpha=0.08
+    static constexpr float kTauWfPeakLast       = 0.0234f;  // was alpha=0.3
+    static constexpr float kTauVuAvg            = 0.0374f;  // was alpha=0.2
 
     // -----------------------------------------------------------------
     // Protected methods — called by derived effects

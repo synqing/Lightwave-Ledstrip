@@ -201,29 +201,31 @@ void SbK1WaveformEffect::renderEffect(plugins::EffectContext& ctx) {
     m_ps->trailBuffer[0] = {0.0f, 0.0f, 0.0f};
 
     // --- DOT POSITION ---
-    // K1 order: threshold FIRST, then sensitivity scaling
-    // K1: amp = waveform_peak_scaled_last (the SMOOTHED 0.02/0.98 version)
-    float amp = m_wfPeakLast;  // Smoothed peak (K1's waveform_peak_scaled_last)
-
-    // K1: threshold before sensitivity
+    float amp = m_wfPeakLast;
     if (fabsf(amp) < 0.05f) amp = 0.0f;
 
     float safeSensitivity = (m_sensitivity > 0.01f) ? m_sensitivity : 0.01f;
     amp *= 0.7f / safeSensitivity;
-
     if (amp > 1.0f) amp = 1.0f;
     if (amp < -1.0f) amp = -1.0f;
 
-    // K1: pos = center + amp * (NATIVE_RESOLUTION / 2)
-    // center = NATIVE_RESOLUTION / 2 = 80
-    int center = kStripLength / 2;
-    float posF = (float)center + amp * (float)(kStripLength / 2);
-    int pos = (int)(posF + (posF >= 0 ? 0.5f : -0.5f));
-    if (pos < 0) pos = 0;
-    if (pos >= (int)kStripLength) pos = (int)kStripLength - 1;
+    float posF = (float)(kStripLength / 2) + amp * (float)(kStripLength / 2);
 
-    // --- DRAW DOT ---
-    m_ps->trailBuffer[pos] = dotColor;
+    // --- SUB-PIXEL DOT RENDERING ---
+    // Blend dot across two adjacent pixels using fractional position
+    int posI = static_cast<int>(posF);
+    float frac = posF - static_cast<float>(posI);
+
+    if (posI >= 0 && posI < (int)kStripLength) {
+        m_ps->trailBuffer[posI].r += dotColor.r * (1.0f - frac);
+        m_ps->trailBuffer[posI].g += dotColor.g * (1.0f - frac);
+        m_ps->trailBuffer[posI].b += dotColor.b * (1.0f - frac);
+    }
+    if (posI + 1 >= 0 && posI + 1 < (int)kStripLength) {
+        m_ps->trailBuffer[posI + 1].r += dotColor.r * frac;
+        m_ps->trailBuffer[posI + 1].g += dotColor.g * frac;
+        m_ps->trailBuffer[posI + 1].b += dotColor.b * frac;
+    }
 
     // --- MIRROR right half to left half ---
     for (uint16_t i = 0; i < kHalfLength; ++i) {

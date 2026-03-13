@@ -527,6 +527,34 @@ bool ActorSystem::setFadeAmount(uint8_t fadeAmount)
     return m_renderer->send(msg, pdMS_TO_TICKS(10));
 }
 
+bool ActorSystem::setEdgeMixerMode(uint8_t mode)
+{
+    if (!m_renderer || !m_renderer->isRunning()) return false;
+    Message msg(MessageType::SET_EDGE_MIXER_MODE, mode);
+    return m_renderer->send(msg, pdMS_TO_TICKS(10));
+}
+
+bool ActorSystem::setEdgeMixerSpread(uint8_t spread)
+{
+    if (!m_renderer || !m_renderer->isRunning()) return false;
+    Message msg(MessageType::SET_EDGE_MIXER_SPREAD, spread);
+    return m_renderer->send(msg, pdMS_TO_TICKS(10));
+}
+
+bool ActorSystem::setEdgeMixerStrength(uint8_t strength)
+{
+    if (!m_renderer || !m_renderer->isRunning()) return false;
+    Message msg(MessageType::SET_EDGE_MIXER_STRENGTH, strength);
+    return m_renderer->send(msg, pdMS_TO_TICKS(10));
+}
+
+bool ActorSystem::saveEdgeMixerToNVS()
+{
+    if (!m_renderer || !m_renderer->isRunning()) return false;
+    Message msg(MessageType::SAVE_EDGE_MIXER_NVS);
+    return m_renderer->send(msg, pdMS_TO_TICKS(10));
+}
+
 #if FEATURE_AUDIO_SYNC
 // ============================================================================
 // Trinity Sync Commands (Offline ML Analysis)

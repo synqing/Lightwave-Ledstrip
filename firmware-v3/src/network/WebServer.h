@@ -290,6 +290,10 @@ public:
         uint8_t variation;
         uint8_t mood;
         uint8_t fadeAmount;
+        // EdgeMixer state
+        uint8_t edgeMixerMode;
+        uint8_t edgeMixerSpread;
+        uint8_t edgeMixerStrength;
         bool isRunning;
         uint8_t queueUtilization;
         uint16_t queueLength;

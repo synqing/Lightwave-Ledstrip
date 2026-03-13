@@ -8,6 +8,7 @@
 #include "../WebServerContext.h"
 #include "../../ApiResponse.h"
 #include "../../../effects/enhancement/EdgeMixer.h"
+#include "../../../core/actors/ActorSystem.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 
@@ -26,45 +27,49 @@ using namespace lightwaveos::enhancement;
  */
 static void handleEdgeMixerSet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     const char* requestId = doc["requestId"] | "";
-    auto& mixer = EdgeMixer::getInstance();
 
-    bool anySet = false;
+    // Validate-all-then-apply: extract and validate all fields before applying any
+    uint8_t mode = 0; bool hasMode = false;
+    uint8_t spread = 0; bool hasSpread = false;
+    uint8_t strength = 0; bool hasStrength = false;
 
     if (doc.containsKey("mode")) {
-        uint8_t mode = doc["mode"] | 0;
+        mode = doc["mode"] | 0;
         if (mode > 2) {
             client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "mode must be 0-2", requestId));
             return;
         }
-        mixer.setMode(static_cast<EdgeMixerMode>(mode));
-        anySet = true;
+        hasMode = true;
     }
 
     if (doc.containsKey("spread")) {
-        uint8_t spread = doc["spread"] | 30;
+        spread = doc["spread"] | 30;
         if (spread > 60) {
             client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "spread must be 0-60", requestId));
             return;
         }
-        mixer.setSpread(spread);
-        anySet = true;
+        hasSpread = true;
     }
 
     if (doc.containsKey("strength")) {
-        uint8_t strength = doc["strength"] | 255;
-        mixer.setStrength(strength);
-        anySet = true;
+        strength = doc["strength"] | 255;
+        hasStrength = true;
     }
 
-    if (!anySet) {
+    if (!hasMode && !hasSpread && !hasStrength) {
         client->text(buildWsError(ErrorCodes::MISSING_FIELD, "Provide mode, spread, or strength", requestId));
         return;
     }
 
+    // Apply all after all validated — route through ActorSystem for thread safety
+    if (hasMode) ctx.actorSystem.setEdgeMixerMode(mode);
+    if (hasSpread) ctx.actorSystem.setEdgeMixerSpread(spread);
+    if (hasStrength) ctx.actorSystem.setEdgeMixerStrength(strength);
+
+    auto& mixer = EdgeMixer::getInstance();
     String response = buildWsResponse("edge_mixer.set", requestId, [&mixer](JsonObject& data) {
         data["mode"] = static_cast<uint8_t>(mixer.getMode());
-        const char* modeNames[] = {"mirror", "analogous", "complementary"};
-        data["modeName"] = modeNames[static_cast<uint8_t>(mixer.getMode())];
+        data["modeName"] = mixer.modeName();
         data["spread"] = mixer.getSpread();
         data["strength"] = mixer.getStrength();
     });
@@ -82,8 +87,7 @@ static void handleEdgeMixerGet(AsyncWebSocketClient* client, JsonDocument& doc, 
 
     String response = buildWsResponse("edge_mixer.get", requestId, [&mixer](JsonObject& data) {
         data["mode"] = static_cast<uint8_t>(mixer.getMode());
-        const char* modeNames[] = {"mirror", "analogous", "complementary"};
-        data["modeName"] = modeNames[static_cast<uint8_t>(mixer.getMode())];
+        data["modeName"] = mixer.modeName();
         data["spread"] = mixer.getSpread();
         data["strength"] = mixer.getStrength();
     });
@@ -97,7 +101,7 @@ static void handleEdgeMixerGet(AsyncWebSocketClient* client, JsonDocument& doc, 
  */
 static void handleEdgeMixerSave(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     const char* requestId = doc["requestId"] | "";
-    EdgeMixer::getInstance().saveToNVS();
+    ctx.actorSystem.saveEdgeMixerToNVS();
 
     String response = buildWsResponse("edge_mixer.save", requestId, [](JsonObject& data) {
         data["saved"] = true;

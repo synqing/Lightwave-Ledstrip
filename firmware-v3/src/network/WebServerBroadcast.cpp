@@ -27,6 +27,7 @@
 #include "../core/actors/NodeOrchestrator.h"
 #include "../core/actors/RendererNode.h"
 #include "../effects/zones/ZoneComposer.h"
+#include "../effects/enhancement/EdgeMixer.h"
 #include "../effects/zones/ZoneDefinition.h"
 #include "../effects/zones/BlendMode.h"
 #include "../config/network_config.h"
@@ -154,6 +155,13 @@ void WebServer::doBroadcastStatus() {
     doc["freeHeapInternal"] = static_cast<uint32_t>(getFreeInternalHeap());
     doc["freePsram"] = ESP.getFreePsram();
     doc["uptime"] = millis() / 1000;
+
+    // Edge mixer state (from cache)
+    doc["edgeMixerMode"] = cached.edgeMixerMode;
+    doc["edgeMixerModeName"] = enhancement::EdgeMixer::modeName(
+        static_cast<enhancement::EdgeMixerMode>(cached.edgeMixerMode));
+    doc["edgeMixerSpread"] = cached.edgeMixerSpread;
+    doc["edgeMixerStrength"] = cached.edgeMixerStrength;
 
 #if FEATURE_AUDIO_SYNC
     auto* audio = m_orchestrator.getAudio();

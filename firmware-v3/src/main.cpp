@@ -25,6 +25,7 @@
 #include "config/features.h"
 #include "config/Trace.h"
 #include "core/actors/ActorSystem.h"
+#include "effects/enhancement/EdgeMixer.h"
 #include "hardware/EncoderManager.h"
 #include "core/actors/RendererActor.h"
 #include "core/persistence/NVSManager.h"
@@ -1083,6 +1084,59 @@ static void processSerialJsonCommand(const String& json) {
         char buf[48];
         snprintf(buf, sizeof(buf), "{\"fadeAmount\":%u}", (unsigned)val);
         serialJsonResponse(type, reqId, buf);
+    }
+    // ------------------------------------------------------------------
+    // getEdgeMixer
+    // ------------------------------------------------------------------
+    else if (strcmp(type, "getEdgeMixer") == 0) {
+        auto& mixer = lightwaveos::enhancement::EdgeMixer::getInstance();
+        char buf[128];
+        snprintf(buf, sizeof(buf),
+            "{\"mode\":%u,\"modeName\":\"%s\",\"spread\":%u,\"strength\":%u}",
+            (unsigned)static_cast<uint8_t>(mixer.getMode()),
+            mixer.modeName(),
+            (unsigned)mixer.getSpread(),
+            (unsigned)mixer.getStrength());
+        serialJsonResponse(type, reqId, buf);
+    }
+    // ------------------------------------------------------------------
+    // setEdgeMixer
+    // ------------------------------------------------------------------
+    else if (strcmp(type, "setEdgeMixer") == 0) {
+        bool anySet = false;
+        if (doc.containsKey("mode")) {
+            uint8_t mode = doc["mode"] | 0;
+            if (mode > 2) { serialJsonError(reqId, "mode must be 0-2"); return; }
+            actors.setEdgeMixerMode(mode);
+            anySet = true;
+        }
+        if (doc.containsKey("spread")) {
+            uint8_t spread = doc["spread"] | 30;
+            if (spread > 60) { serialJsonError(reqId, "spread must be 0-60"); return; }
+            actors.setEdgeMixerSpread(spread);
+            anySet = true;
+        }
+        if (doc.containsKey("strength")) {
+            actors.setEdgeMixerStrength(doc["strength"] | 255);
+            anySet = true;
+        }
+        if (!anySet) { serialJsonError(reqId, "provide mode, spread, or strength"); return; }
+        auto& mixer = lightwaveos::enhancement::EdgeMixer::getInstance();
+        char buf[128];
+        snprintf(buf, sizeof(buf),
+            "{\"mode\":%u,\"modeName\":\"%s\",\"spread\":%u,\"strength\":%u}",
+            (unsigned)static_cast<uint8_t>(mixer.getMode()),
+            mixer.modeName(),
+            (unsigned)mixer.getSpread(),
+            (unsigned)mixer.getStrength());
+        serialJsonResponse(type, reqId, buf);
+    }
+    // ------------------------------------------------------------------
+    // saveEdgeMixer
+    // ------------------------------------------------------------------
+    else if (strcmp(type, "saveEdgeMixer") == 0) {
+        actors.saveEdgeMixerToNVS();
+        serialJsonResponse(type, reqId, "{\"saved\":true}");
     }
     // ------------------------------------------------------------------
     // prim8.set  (Prim8 8-dimensional semantic vector)

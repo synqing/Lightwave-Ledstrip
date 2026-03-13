@@ -496,6 +496,9 @@ void RendererActor::onStart()
 
     initLeds();
 
+    // Restore persisted EdgeMixer settings from NVS
+    enhancement::EdgeMixer::getInstance().loadFromNVS();
+
     // Subscribe to relevant events
     bus::MessageBus::instance().subscribe(MessageType::PALETTE_CHANGED, this);
 
@@ -555,14 +558,19 @@ void RendererActor::onMessage(const Message& msg)
             break;
 
         case MessageType::SET_EDGE_MIXER_MODE:
-            enhancement::EdgeMixer::getInstance().setMode(
-                static_cast<enhancement::EdgeMixerMode>(msg.param1));
+            if (msg.param1 <= 2) {
+                enhancement::EdgeMixer::getInstance().setMode(
+                    static_cast<enhancement::EdgeMixerMode>(msg.param1));
+            }
             break;
         case MessageType::SET_EDGE_MIXER_SPREAD:
             enhancement::EdgeMixer::getInstance().setSpread(msg.param1);
             break;
         case MessageType::SET_EDGE_MIXER_STRENGTH:
             enhancement::EdgeMixer::getInstance().setStrength(msg.param1);
+            break;
+        case MessageType::SAVE_EDGE_MIXER_NVS:
+            enhancement::EdgeMixer::getInstance().saveToNVS();
             break;
 
         case MessageType::START_TRANSITION:

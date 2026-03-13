@@ -51,6 +51,7 @@
 #include "webserver/ws/WsMotionCommands.h"
 #include "webserver/ws/WsColorCommands.h"
 #include "webserver/ws/WsEdgeMixerCommands.h"
+#include "../effects/enhancement/EdgeMixer.h"
 #include "webserver/ws/WsPaletteCommands.h"
 #include "webserver/ws/WsPresetCommands.h"
 #include "webserver/ws/WsZonePresetCommands.h"
@@ -863,6 +864,13 @@ void WebServer::updateCachedRendererState() {
     m_cachedRendererState.variation = m_renderer->getVariation();
     m_cachedRendererState.mood = m_renderer->getMood();
     m_cachedRendererState.fadeAmount = m_renderer->getFadeAmount();
+    // EdgeMixer state (singleton reads are atomic uint8_t on Xtensa)
+    {
+        auto& mixer = enhancement::EdgeMixer::getInstance();
+        m_cachedRendererState.edgeMixerMode = static_cast<uint8_t>(mixer.getMode());
+        m_cachedRendererState.edgeMixerSpread = mixer.getSpread();
+        m_cachedRendererState.edgeMixerStrength = mixer.getStrength();
+    }
     m_cachedRendererState.isRunning = m_renderer->isRunning();
     m_cachedRendererState.queueUtilization = m_renderer->getQueueUtilization();
     m_cachedRendererState.queueLength = m_renderer->getQueueLength();

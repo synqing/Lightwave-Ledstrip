@@ -76,13 +76,12 @@ static void handleLegacyGetStatus(AsyncWebSocketClient* client, JsonDocument& do
         response["cpuPercent"] = cached.stats.cpuPercent;
         response["freeHeap"] = ESP.getFreeHeap();
         response["uptime"] = millis() / 1000;
-        // Edge mixer state
-        {
-            auto& mixer = lightwaveos::enhancement::EdgeMixer::getInstance();
-            response["edgeMixerMode"] = static_cast<uint8_t>(mixer.getMode());
-            response["edgeMixerSpread"] = mixer.getSpread();
-            response["edgeMixerStrength"] = mixer.getStrength();
-        }
+        // Edge mixer state (from cache)
+        response["edgeMixerMode"] = cached.edgeMixerMode;
+        response["edgeMixerModeName"] = lightwaveos::enhancement::EdgeMixer::modeName(
+            static_cast<lightwaveos::enhancement::EdgeMixerMode>(cached.edgeMixerMode));
+        response["edgeMixerSpread"] = cached.edgeMixerSpread;
+        response["edgeMixerStrength"] = cached.edgeMixerStrength;
         String output;
         serializeJson(response, output);
         client->text(output);

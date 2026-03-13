@@ -268,6 +268,29 @@ public:
      */
     bool setFadeAmount(uint8_t fadeAmount);
 
+    /**
+     * @brief Set edge mixer mode
+     * @param mode 0=mirror, 1=analogous, 2=complementary
+     */
+    bool setEdgeMixerMode(uint8_t mode);
+
+    /**
+     * @brief Set edge mixer spread
+     * @param spread Hue spread in degrees (0-60)
+     */
+    bool setEdgeMixerSpread(uint8_t spread);
+
+    /**
+     * @brief Set edge mixer strength
+     * @param strength Mix strength (0-255)
+     */
+    bool setEdgeMixerStrength(uint8_t strength);
+
+    /**
+     * @brief Persist EdgeMixer state to NVS
+     */
+    bool saveEdgeMixerToNVS();
+
 #if FEATURE_AUDIO_SYNC
     // ========================================================================
     // Trinity Sync Commands (Offline ML Analysis)

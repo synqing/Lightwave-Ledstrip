@@ -5,7 +5,7 @@
  * The EdgeMixer takes the rendered strip buffers and applies harmonic hue
  * shifts to Strip 2, creating perceived depth through the LGP. Three modes:
  *   - MIRROR: No processing (current behaviour, default)
- *   - ANALOGOUS: Shifts Strip 2 hue by +spread/2 (warm/cool split)
+ *   - ANALOGOUS: Shifts Strip 2 hue by +spread (warm/cool split)
  *   - COMPLEMENTARY: Shifts Strip 2 hue by 180° with saturation reduction
  *
  * Performance: Operates in-place on m_strip2[160]. Target: <0.5ms per frame.
@@ -27,7 +27,7 @@ namespace enhancement {
  */
 enum class EdgeMixerMode : uint8_t {
     MIRROR        = 0,  ///< No processing (default, current behaviour)
-    ANALOGOUS     = 1,  ///< Hue shift +spread/2 on Strip 2
+    ANALOGOUS     = 1,  ///< Hue shift +spread on Strip 2
     COMPLEMENTARY = 2   ///< 180° hue shift with saturation reduction on Strip 2
 };
 
@@ -69,6 +69,16 @@ public:
 
     void setMode(EdgeMixerMode mode) { m_mode = mode; }
     EdgeMixerMode getMode() const { return m_mode; }
+
+    /**
+     * @brief Get human-readable name for current mode
+     */
+    static const char* modeName(EdgeMixerMode mode) {
+        static const char* const names[] = {"mirror", "analogous", "complementary"};
+        const uint8_t idx = static_cast<uint8_t>(mode);
+        return (idx <= 2) ? names[idx] : "unknown";
+    }
+    const char* modeName() const { return modeName(m_mode); }
 
     /**
      * @brief Set analogous hue spread in degrees (0-60)
@@ -131,11 +141,14 @@ private:
     EdgeMixer& operator=(const EdgeMixer&) = delete;
 
     /**
-     * @brief Analogous mode: shift hue by +spread/2
+     * @brief Analogous mode: shift hue by +spread
+     *
+     * Strip 1 stays at original hue, Strip 2 shifts by the full spread value.
+     * The perceptual separation through the LGP equals the spread setting.
      */
     void processAnalogous(CRGB* strip2, uint16_t count) {
-        const uint8_t hueShift = m_spreadHue >> 1;  // Half spread each side
-        if (hueShift == 0 && m_strength == 0) return;
+        const uint8_t hueShift = m_spreadHue;  // Full spread on Strip 2
+        if (hueShift == 0 || m_strength == 0) return;
 
         for (uint16_t i = 0; i < count; ++i) {
             // Black pixel skip — critical optimisation
@@ -160,6 +173,7 @@ private:
      * @brief Complementary mode: 180° shift + saturation reduction
      */
     void processComplementary(CRGB* strip2, uint16_t count) {
+        if (m_strength == 0) return;
         for (uint16_t i = 0; i < count; ++i) {
             // Black pixel skip
             if ((strip2[i].r | strip2[i].g | strip2[i].b) == 0) continue;

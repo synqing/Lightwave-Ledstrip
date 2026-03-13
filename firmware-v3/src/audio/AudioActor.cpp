@@ -1176,10 +1176,10 @@ void AudioActor::processSbWaveformSidecar(const ControlBusRawInput& raw)
 
     if (maxWaveformVal > m_sbMaxWaveformValFollower) {
         float delta = maxWaveformVal - m_sbMaxWaveformValFollower;
-        m_sbMaxWaveformValFollower += delta * 0.25f;
+        m_sbMaxWaveformValFollower += delta * 0.6f;
     } else if (maxWaveformVal < m_sbMaxWaveformValFollower) {
         float delta = m_sbMaxWaveformValFollower - maxWaveformVal;
-        m_sbMaxWaveformValFollower -= delta * 0.005f;
+        m_sbMaxWaveformValFollower -= delta * 0.03f;
         if (m_sbMaxWaveformValFollower < 750.0f) m_sbMaxWaveformValFollower = 750.0f;
     }
 
@@ -1190,14 +1190,14 @@ void AudioActor::processSbWaveformSidecar(const ControlBusRawInput& raw)
 
     if (waveformPeakScaledRaw > m_sbWaveformPeakScaled) {
         float delta = waveformPeakScaledRaw - m_sbWaveformPeakScaled;
-        m_sbWaveformPeakScaled += delta * 0.25f;
+        m_sbWaveformPeakScaled += delta * 0.7f;
     } else if (waveformPeakScaledRaw < m_sbWaveformPeakScaled) {
         float delta = m_sbWaveformPeakScaled - waveformPeakScaledRaw;
-        m_sbWaveformPeakScaled -= delta * 0.25f;
+        m_sbWaveformPeakScaled -= delta * 0.7f;
     }
 
     m_sbWaveformPeakScaledLast =
-        (m_sbWaveformPeakScaled * 0.05f) + (m_sbWaveformPeakScaledLast * 0.95f);
+        (m_sbWaveformPeakScaled * 0.3f) + (m_sbWaveformPeakScaledLast * 0.7f);
 
     m_sbChromaMaxVal = 0.0f;
     for (uint8_t i = 0; i < CONTROLBUS_NUM_CHROMA; ++i) {
@@ -1220,7 +1220,7 @@ void AudioActor::processSbWaveformSidecar(const ControlBusRawInput& raw)
 void AudioActor::processSbBloomSidecar(const ControlBusRawInput& raw)
 {
     float moodNorm = static_cast<float>(m_controlBus.getMood()) / 255.0f;
-    float smoothingRate = 1.0f + (10.0f * moodNorm);
+    float smoothingRate = 25.0f + (5.0f * moodNorm);
     float alpha = 1.0f - std::exp(-smoothingRate * (HOP_DURATION_MS * 0.001f));
 
     for (uint8_t i = 0; i < SB_NUM_FREQS; ++i) {
@@ -1232,10 +1232,10 @@ void AudioActor::processSbBloomSidecar(const ControlBusRawInput& raw)
         float noteBrightness = m_sbSpectrogram[i];
         if (m_sbSpectrogramSmooth[i] < noteBrightness) {
             float distance = noteBrightness - m_sbSpectrogramSmooth[i];
-            m_sbSpectrogramSmooth[i] += distance * 0.75f;
+            m_sbSpectrogramSmooth[i] += distance * 0.95f;
         } else if (m_sbSpectrogramSmooth[i] > noteBrightness) {
             float distance = m_sbSpectrogramSmooth[i] - noteBrightness;
-            m_sbSpectrogramSmooth[i] -= distance * 0.75f;
+            m_sbSpectrogramSmooth[i] -= distance * 0.95f;
         }
         if (m_sbSpectrogramSmooth[i] < 0.0f) m_sbSpectrogramSmooth[i] = 0.0f;
         if (m_sbSpectrogramSmooth[i] > 1.0f) m_sbSpectrogramSmooth[i] = 1.0f;
@@ -1253,12 +1253,12 @@ void AudioActor::processSbBloomSidecar(const ControlBusRawInput& raw)
         m_sbChromagramSmooth[chromaBin] += noteMagnitude / chromaDiv;
     }
 
-    m_sbChromagramMaxPeak *= 0.999f;
+    m_sbChromagramMaxPeak *= 0.98f;
     if (m_sbChromagramMaxPeak < 0.01f) m_sbChromagramMaxPeak = 0.01f;
     for (uint8_t i = 0; i < CONTROLBUS_NUM_CHROMA; ++i) {
         if (m_sbChromagramSmooth[i] > m_sbChromagramMaxPeak) {
             float distance = m_sbChromagramSmooth[i] - m_sbChromagramMaxPeak;
-            m_sbChromagramMaxPeak += distance * 0.05f;
+            m_sbChromagramMaxPeak += distance * 0.5f;
         }
     }
     float multiplier = 1.0f / m_sbChromagramMaxPeak;
@@ -2763,10 +2763,10 @@ void AudioActor::processSbWaveformSidecar(const ControlBusRawInput& raw)
 
     if (maxWaveformVal > m_sbMaxWaveformValFollower) {
         float delta = maxWaveformVal - m_sbMaxWaveformValFollower;
-        m_sbMaxWaveformValFollower += delta * 0.25f;
+        m_sbMaxWaveformValFollower += delta * 0.6f;
     } else if (maxWaveformVal < m_sbMaxWaveformValFollower) {
         float delta = m_sbMaxWaveformValFollower - maxWaveformVal;
-        m_sbMaxWaveformValFollower -= delta * 0.005f;
+        m_sbMaxWaveformValFollower -= delta * 0.03f;
         if (m_sbMaxWaveformValFollower < 750.0f) {
             m_sbMaxWaveformValFollower = 750.0f;
         }
@@ -2779,14 +2779,14 @@ void AudioActor::processSbWaveformSidecar(const ControlBusRawInput& raw)
 
     if (waveformPeakScaledRaw > m_sbWaveformPeakScaled) {
         float delta = waveformPeakScaledRaw - m_sbWaveformPeakScaled;
-        m_sbWaveformPeakScaled += delta * 0.25f;
+        m_sbWaveformPeakScaled += delta * 0.7f;
     } else if (waveformPeakScaledRaw < m_sbWaveformPeakScaled) {
         float delta = m_sbWaveformPeakScaled - waveformPeakScaledRaw;
-        m_sbWaveformPeakScaled -= delta * 0.25f;
+        m_sbWaveformPeakScaled -= delta * 0.7f;
     }
 
     m_sbWaveformPeakScaledLast =
-        (m_sbWaveformPeakScaled * 0.05f) + (m_sbWaveformPeakScaledLast * 0.95f);
+        (m_sbWaveformPeakScaled * 0.3f) + (m_sbWaveformPeakScaledLast * 0.7f);
 
     // 3.1.0 chromagram (note_spectrogram -> note_chromagram)
     m_sbChromaMaxVal = 0.0f;
@@ -2817,7 +2817,7 @@ void AudioActor::processSbBloomSidecar(const ControlBusRawInput& raw)
 {
     // 4.1.1 spectrogram smoothing (low-pass with mood influence)
     float moodNorm = static_cast<float>(m_controlBus.getMood()) / 255.0f;
-    float smoothingRate = 1.0f + (10.0f * moodNorm);
+    float smoothingRate = 25.0f + (5.0f * moodNorm);
     float alpha = 1.0f - std::exp(-smoothingRate * (HOP_DURATION_MS * 0.001f));
 
     for (uint8_t i = 0; i < SB_NUM_FREQS; ++i) {
@@ -2830,10 +2830,10 @@ void AudioActor::processSbBloomSidecar(const ControlBusRawInput& raw)
         float noteBrightness = m_sbSpectrogram[i];
         if (m_sbSpectrogramSmooth[i] < noteBrightness) {
             float distance = noteBrightness - m_sbSpectrogramSmooth[i];
-            m_sbSpectrogramSmooth[i] += distance * 0.75f;
+            m_sbSpectrogramSmooth[i] += distance * 0.95f;
         } else if (m_sbSpectrogramSmooth[i] > noteBrightness) {
             float distance = m_sbSpectrogramSmooth[i] - noteBrightness;
-            m_sbSpectrogramSmooth[i] -= distance * 0.75f;
+            m_sbSpectrogramSmooth[i] -= distance * 0.95f;
         }
         if (m_sbSpectrogramSmooth[i] < 0.0f) m_sbSpectrogramSmooth[i] = 0.0f;
         if (m_sbSpectrogramSmooth[i] > 1.0f) m_sbSpectrogramSmooth[i] = 1.0f;
@@ -2852,14 +2852,14 @@ void AudioActor::processSbBloomSidecar(const ControlBusRawInput& raw)
         m_sbChromagramSmooth[chromaBin] += noteMagnitude / chromaDiv;
     }
 
-    m_sbChromagramMaxPeak *= 0.999f;
+    m_sbChromagramMaxPeak *= 0.98f;
     if (m_sbChromagramMaxPeak < 0.01f) {
         m_sbChromagramMaxPeak = 0.01f;
     }
     for (uint8_t i = 0; i < CONTROLBUS_NUM_CHROMA; ++i) {
         if (m_sbChromagramSmooth[i] > m_sbChromagramMaxPeak) {
             float distance = m_sbChromagramSmooth[i] - m_sbChromagramMaxPeak;
-            m_sbChromagramMaxPeak += distance * 0.05f;
+            m_sbChromagramMaxPeak += distance * 0.5f;
         }
     }
     float multiplier = 1.0f / m_sbChromagramMaxPeak;

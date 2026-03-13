@@ -161,21 +161,20 @@ void SbK1BloomEffect::renderEffect(plugins::EffectContext& ctx) {
     std::memset(workBuf, 0, kStripLen * sizeof(CRGB_F));
 
     // -----------------------------------------------------------------
-    // Step 2: Integer pixel scroll — right half outward (K1 algo 0 parity)
-    //   NO per-pixel decay. Colors persist at full brightness in the
-    //   scroll state; only the display-side edge fade creates dimming.
-    //   This is what creates sharp, visible color bands.
-    //   MOOD controls speed: <= 0.5 = 1px/frame, > 0.5 = 2px/frame.
+    // Step 2: Fractional-pixel scroll — right half outward
+    //   Sub-pixel accumulator makes scroll speed continuous instead of
+    //   binary 1px/2px step. MOOD controls base speed (0.5–2.0 px/frame).
     // -----------------------------------------------------------------
     {
-        const bool fast = (m_mood > 0.5f);
-        if (fast) {
-            for (int j = kStripLen - 1; j >= (int)(kHalf + 2); --j) {
-                workBuf[j] = prevBuf[j - 2];
-            }
-        } else {
-            for (int j = kStripLen - 1; j >= (int)(kHalf + 1); --j) {
-                workBuf[j] = prevBuf[j - 1];
+        float scrollSpeed = 0.5f + m_mood * 1.5f;
+        m_scrollAccum += scrollSpeed;
+        int pixelsToScroll = static_cast<int>(m_scrollAccum);
+        m_scrollAccum -= static_cast<float>(pixelsToScroll);
+        if (pixelsToScroll > 3) pixelsToScroll = 3;  // Prevent buffer overrun
+
+        if (pixelsToScroll > 0) {
+            for (int j = kStripLen - 1; j >= (int)(kHalf + pixelsToScroll); --j) {
+                workBuf[j] = prevBuf[j - pixelsToScroll];
             }
         }
     }
@@ -271,9 +270,6 @@ void SbK1BloomEffect::renderEffect(plugins::EffectContext& ctx) {
     // Step 7: Insert colour at centre (K1 algo 0 parity)
     // -----------------------------------------------------------------
     workBuf[kHalf] = bloomColor;
-    if (m_mood > 0.5f) {
-        workBuf[kHalf + 1] = bloomColor;
-    }
 
     // -----------------------------------------------------------------
     // Step 8: Save undistorted right half to scroll state

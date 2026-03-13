@@ -81,6 +81,7 @@ private:
     float m_incandescent = 0.0f;   // Warm-white filter blend
     float m_prismCount  = 1.42f;   // Prism layers (scale→mirror→additive blend)
     float m_bulbOpacity = 0.0f;    // Discrete bulb cover pattern opacity
+    float m_scrollAccum = 0.0f;  // Sub-pixel scroll accumulator
 
     // Parameter descriptors (defined in .cpp)
     static const plugins::EffectParameter s_params[kParamCount];

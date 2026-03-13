@@ -166,7 +166,10 @@ void SbK1BloomEffect::renderEffect(plugins::EffectContext& ctx) {
     //   binary 1px/2px step. MOOD controls base speed (0.5–2.0 px/frame).
     // -----------------------------------------------------------------
     {
-        float scrollSpeed = 0.5f + m_mood * 1.5f;
+        float baseSpeed = 0.5f + m_mood * 1.5f;
+        // Audio-reactive modulation: novelty boosts scroll 1.0x–1.5x
+        float energyMod = 1.0f + m_noveltyCurve[0] * 0.5f;
+        float scrollSpeed = fminf(baseSpeed * energyMod, 3.0f);
         m_scrollAccum += scrollSpeed;
         int pixelsToScroll = static_cast<int>(m_scrollAccum);
         m_scrollAccum -= static_cast<float>(pixelsToScroll);

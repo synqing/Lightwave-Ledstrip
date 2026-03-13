@@ -209,7 +209,8 @@ void SbK1WaveformEffect::renderEffect(plugins::EffectContext& ctx) {
     if (amp > 1.0f) amp = 1.0f;
     if (amp < -1.0f) amp = -1.0f;
 
-    float posF = (float)(kStripLength / 2) + amp * (float)(kStripLength / 2);
+    float halfLen = static_cast<float>(kStripLength) * 0.5f;
+    float posF = halfLen + amp * halfLen;
 
     // --- SUB-PIXEL DOT RENDERING ---
     // Blend dot across two adjacent pixels using fractional position

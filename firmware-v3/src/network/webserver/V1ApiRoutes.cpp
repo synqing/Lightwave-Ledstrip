@@ -30,6 +30,7 @@
 #include "handlers/ShowHandlers.h"
 #include "handlers/ModifierHandlers.h"
 #include "handlers/ColorCorrectionHandlers.h"
+#include "../../effects/enhancement/EdgeMixer.h"
 #include "handlers/StimulusHandlers.h"
 #if FEATURE_API_AUTH
 #include "handlers/AuthHandlers.h"
@@ -1719,6 +1720,75 @@ void V1ApiRoutes::registerRoutes(
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
             handlers::ColorCorrectionHandlers::handleSetPreset(request, data, len);
+        }
+    );
+
+    // ==================== Edge Mixer Routes ====================
+
+    // GET /api/v1/edgeMixer - Get current edge mixer state
+    registry.onGet("/api/v1/edgeMixer", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        auto& mixer = lightwaveos::enhancement::EdgeMixer::getInstance();
+        JsonDocument doc;
+        doc["success"] = true;
+        auto data = doc["data"].to<JsonObject>();
+        data["mode"] = static_cast<uint8_t>(mixer.getMode());
+        const char* modeNames[] = {"mirror", "analogous", "complementary"};
+        data["modeName"] = modeNames[static_cast<uint8_t>(mixer.getMode())];
+        data["spread"] = mixer.getSpread();
+        data["strength"] = mixer.getStrength();
+        String output;
+        serializeJson(doc, output);
+        request->send(200, "application/json", output);
+    });
+
+    // POST /api/v1/edgeMixer - Set edge mixer parameters (JSON body)
+    registry.onPost("/api/v1/edgeMixer",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            JsonDocument doc;
+            if (deserializeJson(doc, data, len)) {
+                request->send(400, "application/json", "{\"success\":false,\"error\":\"Invalid JSON\"}");
+                return;
+            }
+            auto& mixer = lightwaveos::enhancement::EdgeMixer::getInstance();
+            if (doc.containsKey("mode")) {
+                uint8_t mode = doc["mode"] | 0;
+                if (mode > 2) {
+                    request->send(400, "application/json", "{\"success\":false,\"error\":\"mode must be 0-2\"}");
+                    return;
+                }
+                mixer.setMode(static_cast<lightwaveos::enhancement::EdgeMixerMode>(mode));
+            }
+            if (doc.containsKey("spread")) {
+                uint8_t spread = doc["spread"] | 30;
+                if (spread > 60) {
+                    request->send(400, "application/json", "{\"success\":false,\"error\":\"spread must be 0-60\"}");
+                    return;
+                }
+                mixer.setSpread(spread);
+            }
+            if (doc.containsKey("strength")) {
+                mixer.setStrength(doc["strength"] | 255);
+            }
+            if (doc.containsKey("save") && doc["save"].as<bool>()) {
+                mixer.saveToNVS();
+            }
+            JsonDocument resp;
+            resp["success"] = true;
+            auto respData = resp["data"].to<JsonObject>();
+            respData["mode"] = static_cast<uint8_t>(mixer.getMode());
+            const char* modeNames[] = {"mirror", "analogous", "complementary"};
+            respData["modeName"] = modeNames[static_cast<uint8_t>(mixer.getMode())];
+            respData["spread"] = mixer.getSpread();
+            respData["strength"] = mixer.getStrength();
+            String output;
+            serializeJson(resp, output);
+            request->send(200, "application/json", output);
         }
     );
 

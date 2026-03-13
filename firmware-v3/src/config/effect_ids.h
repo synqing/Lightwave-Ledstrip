@@ -229,6 +229,17 @@ constexpr EffectId EID_LGP_HOLOGRAPHIC_ES_TUNED            = 0x1202;  // old 108
 
 // --- SensoryBridge Reference (0x13xx) ---
 constexpr EffectId EID_SB_WAVEFORM310                      = 0x1300;  // old 109: SB Waveform (Ref)
+constexpr EffectId EID_SB_K1_BLOOM                         = 0x1301;  // K1 Lightwave Bloom parity
+constexpr EffectId EID_SB_K1_WAVEFORM                      = 0x1302;  // K1 Lightwave Waveform parity
+constexpr EffectId EID_SB_K1_BLOOM_V2                      = 0x1303;  // K1 Lightwave Bloom V2 (faithful algo 0 port) — Mean energy
+constexpr EffectId EID_SB_K1_BLOOM_V2_MAXBIN               = 0x1304;  // K1 Bloom V2 — Max Bin energy variant
+constexpr EffectId EID_SB_K1_BLOOM_V2_RENORM               = 0x1305;  // K1 Bloom V2 — Re-normalized energy variant
+constexpr EffectId EID_SB_K1_BLOOM_V2_BEAT_PULSE           = 0x1306;  // K1 Bloom V2 — Beat Pulse (onset-gated)
+constexpr EffectId EID_SB_K1_BLOOM_V2_COLOR_HISTORY        = 0x1307;  // K1 Bloom V2 — Color History Scroll
+constexpr EffectId EID_SB_K1_BLOOM_V2_SPECTRAL_DELTA       = 0x1308;  // K1 Bloom V2 — Spectral Delta (change-reactive)
+constexpr EffectId EID_SB_K1_BLOOM_V2_BASS_TREBLE          = 0x1309;  // K1 Bloom V2 — Bass-Treble Split
+constexpr EffectId EID_SB_K1_BLOOM_V2_EXPONENTIAL          = 0x130A;  // K1 Bloom V2 — Exponential Energy (cubed)
+constexpr EffectId EID_SB_K1_BLOOM_V2_SPECTRAL_SPREAD      = 0x130B;  // K1 Bloom V2 — Spectral Spread (flatness)
 
 // --- Beat Pulse Family (0x14xx) ---
 constexpr EffectId EID_BEAT_PULSE_STACK                    = 0x1400;  // old 110: Beat Pulse (Stack)
@@ -329,7 +340,7 @@ constexpr EffectId EID_LGP_HYPERBOLIC_PORTAL_AR             = 0x1C11;  // Hyperb
 constexpr EffectId EID_LGP_LORENZ_RIBBON_AR                 = 0x1C12;  // Lorenz Ribbon (5-Layer AR)
 constexpr EffectId EID_LGP_IFS_BIO_RELIC_AR                 = 0x1C13;  // IFS Botanical Relic (5-Layer AR)
 
-// Total: 194 IDs assigned (193 active, 1 retired)
+// Total: 196 IDs assigned (195 active, 1 retired)
 
 // ============================================================================
 // Migration: Old Sequential ID -> New Stable ID

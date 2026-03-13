@@ -160,6 +160,9 @@
 #include "ieffect/esv11_reference/EsBloomRefEffect.h"
 #include "ieffect/esv11_reference/EsWaveformRefEffect.h"
 #include "ieffect/sensorybridge_reference/SbWaveform310RefEffect.h"
+#include "ieffect/sensorybridge_reference/SbK1BloomEffect.h"
+#include "ieffect/sensorybridge_reference/SbK1BloomV2Effect.h"
+#include "ieffect/sensorybridge_reference/SbK1WaveformEffect.h"
 #include "ieffect/LGPTimeReversalMirrorEffect.h"
 #include "ieffect/LGPTimeReversalMirrorEffect_AR.h"
 #include "ieffect/LGPTimeReversalMirrorEffect_Mod1.h"
@@ -903,6 +906,51 @@ uint16_t registerAllEffects(RendererActor* renderer) {
 
     static ieffect::sensorybridge_reference::SbWaveform310RefEffect sbWaveform310RefInstance;
     renderer->registerEffect(EID_SB_WAVEFORM310, &sbWaveform310RefInstance);
+    total++;
+
+    // K1 Lightwave parity ports
+    static ieffect::sensorybridge_reference::SbK1BloomEffect sbK1BloomInstance;
+    renderer->registerEffect(EID_SB_K1_BLOOM, &sbK1BloomInstance);
+    total++;
+
+    static ieffect::sensorybridge_reference::SbK1BloomV2Effect sbK1BloomV2Instance(ieffect::sensorybridge_reference::BloomEnergyMode::MEAN);
+    renderer->registerEffect(EID_SB_K1_BLOOM_V2, &sbK1BloomV2Instance);
+    total++;
+
+    static ieffect::sensorybridge_reference::SbK1BloomV2MaxBinEffect sbK1BloomV2MaxBinInstance;
+    renderer->registerEffect(EID_SB_K1_BLOOM_V2_MAXBIN, &sbK1BloomV2MaxBinInstance);
+    total++;
+
+    static ieffect::sensorybridge_reference::SbK1BloomV2ReNormEffect sbK1BloomV2ReNormInstance;
+    renderer->registerEffect(EID_SB_K1_BLOOM_V2_RENORM, &sbK1BloomV2ReNormInstance);
+    total++;
+
+    static ieffect::sensorybridge_reference::SbK1BloomV2BeatPulseEffect sbK1BloomV2BeatPulseInstance;
+    renderer->registerEffect(EID_SB_K1_BLOOM_V2_BEAT_PULSE, &sbK1BloomV2BeatPulseInstance);
+    total++;
+
+    static ieffect::sensorybridge_reference::SbK1BloomV2ColorHistoryEffect sbK1BloomV2ColorHistoryInstance;
+    renderer->registerEffect(EID_SB_K1_BLOOM_V2_COLOR_HISTORY, &sbK1BloomV2ColorHistoryInstance);
+    total++;
+
+    static ieffect::sensorybridge_reference::SbK1BloomV2SpectralDeltaEffect sbK1BloomV2SpectralDeltaInstance;
+    renderer->registerEffect(EID_SB_K1_BLOOM_V2_SPECTRAL_DELTA, &sbK1BloomV2SpectralDeltaInstance);
+    total++;
+
+    static ieffect::sensorybridge_reference::SbK1BloomV2BassTrebleEffect sbK1BloomV2BassTrebleInstance;
+    renderer->registerEffect(EID_SB_K1_BLOOM_V2_BASS_TREBLE, &sbK1BloomV2BassTrebleInstance);
+    total++;
+
+    static ieffect::sensorybridge_reference::SbK1BloomV2ExponentialEffect sbK1BloomV2ExponentialInstance;
+    renderer->registerEffect(EID_SB_K1_BLOOM_V2_EXPONENTIAL, &sbK1BloomV2ExponentialInstance);
+    total++;
+
+    static ieffect::sensorybridge_reference::SbK1BloomV2SpectralSpreadEffect sbK1BloomV2SpectralSpreadInstance;
+    renderer->registerEffect(EID_SB_K1_BLOOM_V2_SPECTRAL_SPREAD, &sbK1BloomV2SpectralSpreadInstance);
+    total++;
+
+    static ieffect::sensorybridge_reference::SbK1WaveformEffect sbK1WaveformInstance;
+    renderer->registerEffect(EID_SB_K1_WAVEFORM, &sbK1WaveformInstance);
     total++;
 
     // =============== BEAT PULSE FAMILY ===============

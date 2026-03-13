@@ -285,6 +285,19 @@ constexpr EffectId DISPLAY_ORDER[] = {
     EID_LGP_LORENZ_RIBBON_AR,               // 1C12
 #endif
     EID_LGP_IFS_BIO_RELIC_AR,               // 1C13
+
+    // K1 Lightwave Parity
+    EID_SB_K1_BLOOM,                         // K1 Bloom parity
+    EID_SB_K1_WAVEFORM,                      // K1 Waveform parity
+    EID_SB_K1_BLOOM_V2,                      // K1 Bloom V2 (Mean energy)
+    EID_SB_K1_BLOOM_V2_MAXBIN,               // K1 Bloom V2 (Max Bin energy)
+    EID_SB_K1_BLOOM_V2_RENORM,               // K1 Bloom V2 (Re-normalized energy)
+    EID_SB_K1_BLOOM_V2_BEAT_PULSE,           // K1 Bloom V2 (Beat Pulse)
+    EID_SB_K1_BLOOM_V2_COLOR_HISTORY,        // K1 Bloom V2 (Color History)
+    EID_SB_K1_BLOOM_V2_SPECTRAL_DELTA,       // K1 Bloom V2 (Spectral Delta)
+    EID_SB_K1_BLOOM_V2_BASS_TREBLE,          // K1 Bloom V2 (Bass-Treble Split)
+    EID_SB_K1_BLOOM_V2_EXPONENTIAL,          // K1 Bloom V2 (Exponential Energy)
+    EID_SB_K1_BLOOM_V2_SPECTRAL_SPREAD,      // K1 Bloom V2 (Spectral Spread)
 };
 
 /// Number of effects in the display order (excludes retired slots)

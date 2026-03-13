@@ -269,7 +269,13 @@ void SbK1BloomEffect::renderEffect(plugins::EffectContext& ctx) {
     // -----------------------------------------------------------------
     // Step 7: Insert colour at centre (K1 algo 0 parity)
     // -----------------------------------------------------------------
-    workBuf[kHalf] = bloomColor;
+    // Smooth centre colour transitions (tau ~30ms — responsive but not jarring)
+    {
+        float blendAlpha = 1.0f - expf(-m_dt / 0.030f);
+        workBuf[kHalf].r = prevBuf[kHalf].r + (bloomColor.r - prevBuf[kHalf].r) * blendAlpha;
+        workBuf[kHalf].g = prevBuf[kHalf].g + (bloomColor.g - prevBuf[kHalf].g) * blendAlpha;
+        workBuf[kHalf].b = prevBuf[kHalf].b + (bloomColor.b - prevBuf[kHalf].b) * blendAlpha;
+    }
 
     // -----------------------------------------------------------------
     // Step 8: Save undistorted right half to scroll state

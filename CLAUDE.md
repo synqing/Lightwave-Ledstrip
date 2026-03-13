@@ -201,3 +201,18 @@ Read **only** when the task requires it — do not load eagerly. Exception: WORK
 | Full REST API reference | [firmware-v3/docs/api/api-v1.md](firmware-v3/docs/api/api-v1.md) | 2,124 | API endpoint work — use QMD to search, do NOT read in full |
 | CQRS state architecture | [firmware-v3/docs/CQRS_STATE_ARCHITECTURE.md](firmware-v3/docs/CQRS_STATE_ARCHITECTURE.md) | 652 | State management, command dispatch |
 | Harness worker mode | [.claude/harness/HARNESS_RULES.md](.claude/harness/HARNESS_RULES.md) | 364 | Harness/test infrastructure |
+
+## gstack
+
+This project uses [gstack](https://github.com/garrytan/gstack) workflow skills.
+
+Available skills:
+- `/plan-ceo-review` — Founder/product thinking mode
+- `/plan-eng-review` — Engineering architecture review mode
+- `/review` — Paranoid pre-landing code review
+- `/ship` — Automated release workflow (sync, test, push, PR)
+- `/browse` — Browser-based QA via Playwright
+- `/retro` — Weekly engineering retrospective
+
+For web browsing tasks, use the /browse skill from gstack.
+If skills aren't working, run: `cd ~/.claude/skills/gstack && ./setup`

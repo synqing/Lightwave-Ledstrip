@@ -1807,6 +1807,91 @@ curl http://lightwaveos.local/api/v1/debug/udp
 
 ---
 
+### Edge Mixer
+
+Controls dual-edge hue splitting for Light Guide Plate colour differentiation. Three modes shift Strip 2 hue relative to Strip 1.
+
+**Parameters:**
+
+| Field | Type | Range | Description |
+|-------|------|-------|-------------|
+| `mode` | uint8 | 0-2 | 0=mirror (no processing), 1=analogous (+spread hue shift), 2=complementary (180° shift) |
+| `spread` | uint8 | 0-60 | Analogous hue spread in degrees (only affects mode 1) |
+| `strength` | uint8 | 0-255 | Mix strength: 0=no effect, 255=full shift |
+
+#### REST: `GET /api/v1/edgeMixer`
+
+Returns current edge mixer state.
+
+```json
+{
+  "success": true,
+  "data": {
+    "mode": 1,
+    "modeName": "analogous",
+    "spread": 30,
+    "strength": 255
+  },
+  "timestamp": 123456,
+  "version": "2.0"
+}
+```
+
+#### REST: `POST /api/v1/edgeMixer`
+
+Set one or more edge mixer parameters. All fields are optional; omitted fields remain unchanged. Include `"save": true` to persist to NVS.
+
+```bash
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"mode":1,"spread":45,"strength":200,"save":true}' \
+  http://192.168.4.1/api/v1/edgeMixer
+```
+
+#### WebSocket: `edge_mixer.get`
+
+```json
+{"type":"edge_mixer.get"}
+```
+
+Response includes `mode`, `modeName`, `spread`, `strength`.
+
+#### WebSocket: `edge_mixer.set`
+
+```json
+{"type":"edge_mixer.set","mode":2,"spread":30,"strength":128}
+```
+
+All fields optional. Validates all before applying any.
+
+#### WebSocket: `edge_mixer.save`
+
+```json
+{"type":"edge_mixer.save"}
+```
+
+Persists current settings to NVS.
+
+#### Serial JSON: `getEdgeMixer` / `setEdgeMixer` / `saveEdgeMixer`
+
+```json
+{"type":"getEdgeMixer"}
+{"type":"setEdgeMixer","mode":1,"spread":45}
+{"type":"saveEdgeMixer"}
+```
+
+#### Broadcast Fields
+
+The periodic WebSocket status broadcast includes:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `edgeMixerMode` | uint8 | Current mode (0-2) |
+| `edgeMixerModeName` | string | Human-readable mode name |
+| `edgeMixerSpread` | uint8 | Current spread (0-60) |
+| `edgeMixerStrength` | uint8 | Current strength (0-255) |
+
+---
+
 ## WebSocket Commands
 
 **WebSocket URL:** `ws://lightwaveos.local/ws`
@@ -1824,6 +1909,7 @@ All WebSocket messages use JSON format with a `type` field.
 | Device | `device.getStatus` |
 | Batch | `batch` |
 | Streaming | `ledStream.subscribe`, `ledStream.unsubscribe`, `audio.subscribe`, `audio.unsubscribe` |
+| Edge Mixer | `edge_mixer.get`, `edge_mixer.set`, `edge_mixer.save` |
 | Debug | `debug.audio.get`, `debug.audio.set`, `debug.udp.get` |
 
 ### Connection

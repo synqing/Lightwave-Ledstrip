@@ -554,6 +554,17 @@ void RendererActor::onMessage(const Message& msg)
             handleSetFadeAmount(msg.param1);
             break;
 
+        case MessageType::SET_EDGE_MIXER_MODE:
+            enhancement::EdgeMixer::getInstance().setMode(
+                static_cast<enhancement::EdgeMixerMode>(msg.param1));
+            break;
+        case MessageType::SET_EDGE_MIXER_SPREAD:
+            enhancement::EdgeMixer::getInstance().setSpread(msg.param1);
+            break;
+        case MessageType::SET_EDGE_MIXER_STRENGTH:
+            enhancement::EdgeMixer::getInstance().setStrength(msg.param1);
+            break;
+
         case MessageType::START_TRANSITION:
             // ActorSystem packs EffectId as 2 bytes: param1=low, param2=high, param3=transitionType
             handleStartTransition(static_cast<EffectId>(msg.param1) | (static_cast<EffectId>(msg.param2) << 8), msg.param3);
@@ -1702,6 +1713,9 @@ void RendererActor::showLeds()
         }
     }
 #endif
+
+    // Edge mixer: apply hue splitting to Strip 2 for LGP depth differentiation
+    enhancement::EdgeMixer::getInstance().process(m_strip2, LedConfig::LEDS_PER_STRIP);
 
     // TAP C: Capture pre-WS2812 (after strip split, before show)
     if (m_captureEnabled && (m_captureTapMask & 0x04) && m_captureTapC != nullptr) {

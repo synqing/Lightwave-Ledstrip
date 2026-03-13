@@ -10,6 +10,7 @@
 #include "../../WebServer.h"
 #include "../../../codec/WsDeviceCodec.h"
 #include "../../../core/actors/RendererActor.h"
+#include "../../../effects/enhancement/EdgeMixer.h"
 #include <ESPAsyncWebServer.h>
 #include <WiFi.h>
 #include <ArduinoJson.h>
@@ -75,6 +76,13 @@ static void handleLegacyGetStatus(AsyncWebSocketClient* client, JsonDocument& do
         response["cpuPercent"] = cached.stats.cpuPercent;
         response["freeHeap"] = ESP.getFreeHeap();
         response["uptime"] = millis() / 1000;
+        // Edge mixer state
+        {
+            auto& mixer = lightwaveos::enhancement::EdgeMixer::getInstance();
+            response["edgeMixerMode"] = static_cast<uint8_t>(mixer.getMode());
+            response["edgeMixerSpread"] = mixer.getSpread();
+            response["edgeMixerStrength"] = mixer.getStrength();
+        }
         String output;
         serializeJson(response, output);
         client->text(output);

@@ -60,6 +60,9 @@ enum class MessageType : uint8_t {
     SET_HUE             = 0x08,
     SET_MOOD            = 0x09,  // Sensory Bridge mood (0-255): reactive to smooth
     SET_FADE_AMOUNT     = 0x0A,  // Trail fade speed (0-255): 0=no fade, higher=faster
+    SET_EDGE_MIXER_MODE = 0x0B,  // param1 = EdgeMixerMode (0=mirror, 1=analogous, 2=complementary)
+    SET_EDGE_MIXER_SPREAD = 0x0C, // param1 = spread degrees (0-60)
+    SET_EDGE_MIXER_STRENGTH = 0x0D, // param1 = strength (0-255)
 
     // Zone commands (0x20-0x3F)
     ZONE_ENABLE         = 0x20,

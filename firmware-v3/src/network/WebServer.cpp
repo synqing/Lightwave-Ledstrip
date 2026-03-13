@@ -50,6 +50,7 @@
 #include "webserver/ws/WsNarrativeCommands.h"
 #include "webserver/ws/WsMotionCommands.h"
 #include "webserver/ws/WsColorCommands.h"
+#include "webserver/ws/WsEdgeMixerCommands.h"
 #include "webserver/ws/WsPaletteCommands.h"
 #include "webserver/ws/WsPresetCommands.h"
 #include "webserver/ws/WsZonePresetCommands.h"
@@ -1121,6 +1122,7 @@ void WebServer::setupWebSocket() {
     webserver::ws::registerWsNarrativeCommands(ctx);
     webserver::ws::registerWsMotionCommands(ctx);
     webserver::ws::registerWsColorCommands(ctx);
+    webserver::ws::registerWsEdgeMixerCommands(ctx);
     webserver::ws::registerWsPaletteCommands(ctx);
     webserver::ws::registerWsPresetCommands(ctx);
     webserver::ws::registerWsZonePresetCommands(ctx);

@@ -31,6 +31,7 @@
 #include "Actor.h"
 #include "../bus/MessageBus.h"
 #include "../../effects/enhancement/ColorCorrectionEngine.h"
+#include "../../effects/enhancement/EdgeMixer.h"
 #include "../../config/features.h"
 #include "../../config/limits.h"
 #include "../../plugins/api/EffectContext.h"

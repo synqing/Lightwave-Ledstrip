@@ -79,10 +79,11 @@ bool SbK1WaveformEffect::init(plugins::EffectContext& ctx) {
     }
 #endif
 
-    // Zero the trail buffer
+    // Zero the trail buffer and scroll accumulator
     for (uint16_t i = 0; i < kStripLength; ++i) {
         m_ps->trailBuffer[i] = {0.0f, 0.0f, 0.0f};
     }
+    m_ps->scrollAccum = 0.0f;
 
     // Reset parameters to defaults
     m_sensitivity = 1.0f;
@@ -193,14 +194,17 @@ void SbK1WaveformEffect::renderEffect(plugins::EffectContext& ctx) {
     dotColor *= photons;
     dotColor.clip();
 
-    // --- DYNAMIC TRAIL FADE ---
-    // K1: abs_amp from waveform_peak_scaled (RAW, not smoothed)
+    // --- DYNAMIC TRAIL FADE (dt-corrected) ---
+    // Rate-independent exponential decay. The decay rate scales with
+    // waveform amplitude: louder audio = faster fade (shorter trails).
+    // At silence the minimum rate produces ~2.5s full decay.
+    // At moderate audio (absAmp=0.5): half-life ~0.35s (visible trail ~1s).
+    // At full amplitude: half-life ~0.12s (tight, punchy trail).
     float absAmp = clampF(fabsf(m_wfPeakScaled), 0.0f, 1.0f);
-    // Minimum 2% per-frame decay prevents permanent trail retention during
-    // silence. At 120 FPS, 2%/frame = full decay from 255→0 in ~1.9s.
-    // During active playback (absAmp=0.5), fade=0.95 — unchanged behaviour.
-    static constexpr float kMinFade = 0.02f;
-    float fade = 1.0f - fmaxf(kMinFade, 0.10f * absAmp);
+    static constexpr float kMinDecayRate = 0.8f;   // per-second (silence floor, ~3.5s full decay)
+    static constexpr float kDecayScale   = 3.5f;   // additional rate per unit amplitude
+    float decayRate = kMinDecayRate + kDecayScale * absAmp;
+    float fade = expf(-decayRate * m_dt);
 
     for (uint16_t i = 0; i < kStripLength; ++i) {
         m_ps->trailBuffer[i].r *= fade;
@@ -208,13 +212,21 @@ void SbK1WaveformEffect::renderEffect(plugins::EffectContext& ctx) {
         m_ps->trailBuffer[i].b *= fade;
     }
 
-    // --- SHIFT UP (K1 shift_leds_up parity) ---
-    // K1 shifts ENTIRE array up by 1 (higher indices), zeros index 0
-    // Then mirrors right→left, so only right half scroll matters
-    for (int i = kStripLength - 1; i > 0; --i) {
-        m_ps->trailBuffer[i] = m_ps->trailBuffer[i - 1];
+    // --- SHIFT (dt-corrected sub-pixel scroll) ---
+    // Scroll speed in pixels/second, decoupled from frame rate.
+    // At 120 FPS this produces ~0.5 pixels/frame (vs old 1.0 px/frame),
+    // giving trails roughly twice the visual persistence on the strip.
+    static constexpr float kScrollPixelsPerSec = 80.0f;
+    m_ps->scrollAccum += kScrollPixelsPerSec * m_dt;
+    int pixelsToScroll = static_cast<int>(m_ps->scrollAccum);
+    m_ps->scrollAccum -= static_cast<float>(pixelsToScroll);
+
+    for (int s = 0; s < pixelsToScroll; ++s) {
+        for (int i = kStripLength - 1; i > 0; --i) {
+            m_ps->trailBuffer[i] = m_ps->trailBuffer[i - 1];
+        }
+        m_ps->trailBuffer[0] = {0.0f, 0.0f, 0.0f};
     }
-    m_ps->trailBuffer[0] = {0.0f, 0.0f, 0.0f};
 
     // --- DOT POSITION ---
     float amp = m_wfPeakLast;

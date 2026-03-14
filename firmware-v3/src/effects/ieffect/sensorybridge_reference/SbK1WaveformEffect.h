@@ -61,6 +61,7 @@ private:
     // PSRAM-allocated trail buffer for float-precision persistence
     struct SbK1WaveformPsram {
         CRGB_F trailBuffer[160];
+        float scrollAccum;  // Sub-pixel scroll accumulator for dt-independent scroll
     };
 
 #ifndef NATIVE_BUILD

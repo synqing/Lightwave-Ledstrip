@@ -34,7 +34,6 @@ namespace lightwaveos::effects::ieffect::sensorybridge_reference {
 const plugins::EffectParameter SbK1WaveformEffect::s_params[kParamCount] = {
     {"sensitivity", "Waveform Gain", 0.01f, 10.0f, 1.0f, plugins::EffectParameterType::FLOAT, 0.1f, "audio", "x", false},
     {"contrast", "Contrast", 0.0f, 3.0f, 1.0f, plugins::EffectParameterType::FLOAT, 0.25f, "visual", "x", false},
-    {"saturation", "Saturation", 0.0f, 1.0f, 1.0f, plugins::EffectParameterType::FLOAT, 0.05f, "colour", "", false},
     {"chromaHue", "Hue Offset", 0.0f, 1.0f, 0.0f, plugins::EffectParameterType::FLOAT, 0.01f, "colour", "", false},
 };
 
@@ -88,7 +87,6 @@ bool SbK1WaveformEffect::init(plugins::EffectContext& ctx) {
     // Reset parameters to defaults
     m_sensitivity = 1.0f;
     m_contrast    = 1.0f;
-    m_saturation  = 1.0f;
     m_chromaHue   = 0.0f;
 
     (void)ctx;
@@ -320,10 +318,6 @@ bool SbK1WaveformEffect::setParameter(const char* name, float value) {
         m_contrast = clampF(value, 0.0f, 3.0f);
         return true;
     }
-    if (strcmp(name, "saturation") == 0) {
-        m_saturation = clampF(value, 0.0f, 1.0f);
-        return true;
-    }
     if (strcmp(name, "chromaHue") == 0) {
         m_chromaHue = clampF(value, 0.0f, 1.0f);
         return true;
@@ -336,7 +330,6 @@ float SbK1WaveformEffect::getParameter(const char* name) const {
 
     if (strcmp(name, "sensitivity") == 0) return m_sensitivity;
     if (strcmp(name, "contrast") == 0)    return m_contrast;
-    if (strcmp(name, "saturation") == 0)  return m_saturation;
     if (strcmp(name, "chromaHue") == 0)   return m_chromaHue;
     return 0.0f;
 }

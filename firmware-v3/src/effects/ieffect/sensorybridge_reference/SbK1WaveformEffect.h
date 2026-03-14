@@ -52,10 +52,9 @@ private:
     // Effect parameters
     float m_sensitivity = 1.0f;
     float m_contrast    = 1.0f;
-    float m_saturation  = 1.0f;
     float m_chromaHue   = 0.0f;
 
-    static constexpr uint8_t kParamCount = 4;
+    static constexpr uint8_t kParamCount = 3;
     static const plugins::EffectParameter s_params[kParamCount];
 
     // PSRAM-allocated trail buffer for float-precision persistence

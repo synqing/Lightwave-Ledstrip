@@ -1,0 +1,43 @@
+name: Firmware Build Check
+
+on:
+  pull_request:
+    paths:
+      - 'firmware-v3/**'
+  push:
+    branches:
+      - main
+    paths:
+      - 'firmware-v3/**'
+
+jobs:
+  firmware-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Create dummy WiFi credentials
+        working-directory: firmware-v3
+        run: |
+          cat > wifi_credentials.ini << 'CREDS'
+          [wifi_credentials]
+          build_flags = -D AP_SSID_CUSTOM=\"CI-Build\"
+          CREDS
+
+      - name: Production compile check
+        working-directory: firmware-v3
+        run: pio run -e esp32dev_audio_esv11_k1v2_32khz
+
+      - name: Core unit tests
+        working-directory: firmware-v3
+        run: pio test -e native_test

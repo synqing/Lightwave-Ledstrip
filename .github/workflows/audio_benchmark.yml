@@ -3,18 +3,18 @@ name: Audio Benchmark Regression Testing
 on:
   pull_request:
     paths:
-      - 'v2/src/audio/**'
-      - 'v2/test/test_audio/**'
-      - 'v2/test/baseline/**'
-      - 'v2/platformio.ini'
+      - 'firmware-v3/src/audio/**'
+      - 'firmware-v3/test/test_audio/**'
+      - 'firmware-v3/test/baseline/**'
+      - 'firmware-v3/platformio.ini'
       - '.github/workflows/audio_benchmark.yml'
   push:
     branches:
       - main
       - 'feature/audio-*'
     paths:
-      - 'v2/src/audio/**'
-      - 'v2/test/test_audio/**'
+      - 'firmware-v3/src/audio/**'
+      - 'firmware-v3/test/test_audio/**'
   workflow_dispatch:  # Allow manual trigger
 
 env:
@@ -44,7 +44,7 @@ jobs:
           path: |
             ~/.platformio
             .platformio
-            v2/.pio
+            firmware-v3/.pio
           key: ${{ runner.os }}-pio-${{ hashFiles('**/platformio.ini') }}
           restore-keys: |
             ${{ runner.os }}-pio-
@@ -57,16 +57,16 @@ jobs:
 
       - name: Install analysis tools
         run: |
-          pip install -r v2/test/tools/requirements.txt || echo "No requirements.txt, skipping"
+          pip install -r firmware-v3/test/tools/requirements.txt || echo "No requirements.txt, skipping"
 
       - name: Build native test environment
-        working-directory: v2
+        working-directory: firmware-v3
         run: |
           pio test -e native_test --without-testing --verbose
 
       - name: Run audio benchmark tests
         id: benchmark
-        working-directory: v2
+        working-directory: firmware-v3
         continue-on-error: true
         run: |
           echo "Running audio benchmark tests..."
@@ -76,36 +76,36 @@ jobs:
       - name: Parse benchmark results
         id: parse
         run: |
-          python v2/test/tools/parse_benchmark_serial.py \
-            v2/benchmark_output.log \
-            --output v2/test/results/current_benchmark.json \
+          python firmware-v3/test/tools/parse_benchmark_serial.py \
+            firmware-v3/benchmark_output.log \
+            --output firmware-v3/test/results/current_benchmark.json \
             --platformio
 
           # Also generate summary for console
-          python v2/test/tools/parse_benchmark_serial.py \
-            v2/benchmark_output.log \
+          python firmware-v3/test/tools/parse_benchmark_serial.py \
+            firmware-v3/benchmark_output.log \
             --format summary \
             --platformio
 
       - name: Create results directory
-        run: mkdir -p v2/test/results
+        run: mkdir -p firmware-v3/test/results
 
       - name: Detect regressions
         id: regression
         continue-on-error: true
         run: |
           # Compare against baseline
-          python v2/test/tools/detect_regressions.py \
-            v2/test/baseline/benchmark_baseline.json \
-            v2/test/results/current_benchmark.json \
+          python firmware-v3/test/tools/detect_regressions.py \
+            firmware-v3/test/baseline/benchmark_baseline.json \
+            firmware-v3/test/results/current_benchmark.json \
             --format console
 
           # Generate markdown report for PR comment
-          python v2/test/tools/detect_regressions.py \
-            v2/test/baseline/benchmark_baseline.json \
-            v2/test/results/current_benchmark.json \
+          python firmware-v3/test/tools/detect_regressions.py \
+            firmware-v3/test/baseline/benchmark_baseline.json \
+            firmware-v3/test/results/current_benchmark.json \
             --format markdown \
-            --output v2/test/results/regression_report.md
+            --output firmware-v3/test/results/regression_report.md
 
       - name: Upload benchmark results
         uses: actions/upload-artifact@v4
@@ -113,9 +113,9 @@ jobs:
         with:
           name: benchmark-results
           path: |
-            v2/test/results/*.json
-            v2/test/results/*.md
-            v2/benchmark_output.log
+            firmware-v3/test/results/*.json
+            firmware-v3/test/results/*.md
+            firmware-v3/benchmark_output.log
           retention-days: 30
 
       - name: Comment on PR with results
@@ -125,7 +125,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
-            const reportPath = 'v2/test/results/regression_report.md';
+            const reportPath = 'firmware-v3/test/results/regression_report.md';
 
             let comment = '## Audio Benchmark Results\n\n';
 
@@ -178,9 +178,9 @@ jobs:
         if: always()
         run: |
           # Re-run regression detection with exit code check
-          python v2/test/tools/detect_regressions.py \
-            v2/test/baseline/benchmark_baseline.json \
-            v2/test/results/current_benchmark.json \
+          python firmware-v3/test/tools/detect_regressions.py \
+            firmware-v3/test/baseline/benchmark_baseline.json \
+            firmware-v3/test/results/current_benchmark.json \
             --format console
 
       - name: Generate job summary
@@ -189,8 +189,8 @@ jobs:
           echo "## Audio Benchmark Job Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          if [ -f v2/test/results/regression_report.md ]; then
-            cat v2/test/results/regression_report.md >> $GITHUB_STEP_SUMMARY
+          if [ -f firmware-v3/test/results/regression_report.md ]; then
+            cat firmware-v3/test/results/regression_report.md >> $GITHUB_STEP_SUMMARY
           else
             echo ":x: Benchmark results not available" >> $GITHUB_STEP_SUMMARY
           fi
@@ -198,7 +198,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Test Output" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          tail -n 50 v2/benchmark_output.log >> $GITHUB_STEP_SUMMARY || echo "No output log available"
+          tail -n 50 firmware-v3/benchmark_output.log >> $GITHUB_STEP_SUMMARY || echo "No output log available"
           echo '```' >> $GITHUB_STEP_SUMMARY
 
   update-baseline:
@@ -215,19 +215,19 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: benchmark-results
-          path: v2/test/results
+          path: firmware-v3/test/results
 
       - name: Update baseline
         run: |
           # Copy current results to baseline
-          cp v2/test/results/current_benchmark.json v2/test/baseline/benchmark_baseline.json
+          cp firmware-v3/test/results/current_benchmark.json firmware-v3/test/baseline/benchmark_baseline.json
 
           # Update metadata
           python -c "
           import json
           from datetime import datetime
 
-          with open('v2/test/baseline/benchmark_baseline.json', 'r') as f:
+          with open('firmware-v3/test/baseline/benchmark_baseline.json', 'r') as f:
               data = json.load(f)
 
           if '_metadata' not in data:
@@ -237,7 +237,7 @@ jobs:
           data['_metadata']['git_commit'] = '${{ github.sha }}'
           data['_metadata']['updated_by'] = 'GitHub Actions'
 
-          with open('v2/test/baseline/benchmark_baseline.json', 'w') as f:
+          with open('firmware-v3/test/baseline/benchmark_baseline.json', 'w') as f:
               json.dump(data, f, indent=2)
           "
 

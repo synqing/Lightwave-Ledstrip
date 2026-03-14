@@ -162,6 +162,16 @@ void SbK1WaveformEffect::renderEffect(plugins::EffectContext& ctx) {
         }
     }
 
+    // Soft-knee brightness cap: scale dotColor so the brightest channel
+    // never exceeds 1.0. Preserves hue ratios (unlike hard clip which
+    // desaturates toward white). Only engages when accumulation overflows.
+    if (chromaticMode) {
+        float peak = fmaxf(dotColor.r, fmaxf(dotColor.g, dotColor.b));
+        if (peak > 1.0f) {
+            dotColor *= (1.0f / peak);
+        }
+    }
+
     // FAILSAFE: invisible dot prevention (K1 parity)
     if (totalMag < 0.01f && ctx.audio.rms() > 0.02f) {
         float fbPos = m_chromaHue + m_huePosition;

@@ -1,0 +1,82 @@
+{
+  "test_id": "T2.2",
+  "name": "ANALOGOUS (mode=1)",
+  "device": "/dev/cu.usbmodem212401",
+  "effect": "0x1302",
+  "edgemixer": {
+    "mode": 1,
+    "spread": 30,
+    "strength": 200,
+    "spatial": 0,
+    "temporal": 0
+  },
+  "frames_captured": 900,
+  "metrics": {
+    "L0": {
+      "black_frame_ratio": 0.0,
+      "clipped_frame_ratio": 0.0,
+      "mean_brightness": 0.9529411764705882
+    },
+    "L1": {
+      "stability_lss": 1.0,
+      "flicker_elatcsf": 1.1650488530017075e-16,
+      "vmcr": 0.9999999999999999
+    },
+    "L2": {
+      "energy_correlation": 4.385305836213469e-17,
+      "beat_alignment": 1.0,
+      "onset_response": 0.9999999999999999
+    },
+    "composite": 0.7249999999999999,
+    "strip_divergence_l2": 64.38944012802098,
+    "near_black_leaks": 0
+  },
+  "gates": {
+    "near_black_leaks": {
+      "value": 0,
+      "bounds": {
+        "max": 0
+      },
+      "pass": true
+    }
+  },
+  "degradation": {
+    "stability_lss": {
+      "baseline": 0.9982774978734542,
+      "current": 1.0,
+      "delta": -0.0017225021265457885,
+      "max_allowed": 0.2,
+      "pass": true
+    },
+    "flicker_elatcsf": {
+      "baseline": 0.1111741918299812,
+      "current": 1.1650488530017075e-16,
+      "delta": -0.11117419182998109,
+      "max_allowed": -0.15,
+      "pass": true
+    },
+    "energy_correlation": {
+      "baseline": 0.21731032937862596,
+      "current": 4.385305836213469e-17,
+      "delta": 0.2173103293786259,
+      "max_allowed": 0.25,
+      "pass": true
+    },
+    "onset_response": {
+      "baseline": 0.9427354796313324,
+      "current": 0.9999999999999999,
+      "delta": -0.05726452036866747,
+      "max_allowed": 0.3,
+      "pass": true
+    },
+    "composite": {
+      "baseline": 0.7091484551058999,
+      "current": 0.7249999999999999,
+      "delta": -0.01585154489410001,
+      "max_allowed": 0.15,
+      "pass": true
+    }
+  },
+  "extra_checks": {},
+  "pass": true
+}

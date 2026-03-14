@@ -28,22 +28,37 @@ jobs:
           set -euo pipefail
 
           ALLOWLIST=(
+            # Hidden entries (dotfiles / dotdirs)
             ".git"
             ".github"
             ".claude"
             ".codex"
             ".gitignore"
+            ".mcp.json"
             ".pre-commit-config.yaml"
+            ".worktreeinclude"
+            # Governance / standard root files
             "AGENTS.md"
-            "CLAUDE.md"
-            "README.md"
-            "CONTRIBUTING.md"
+            "BACKLOG.md"
             "CHANGELOG.md"
-            "instructions"
+            "CLAUDE.md"
+            "CONTRIBUTING.md"
+            "LICENSE"
+            "NOTICE"
+            "README.md"
+            "TRADEMARK.md"
+            # Root directories
+            "_archive"
+            "docs"
             "firmware-v3"
-            "tab5-encoder"
-            "lightwave-ios-v2"
+            "harness"
+            "instructions"
             "k1-composer"
+            "lightwave-dashboard"
+            "lightwave-ios-v2"
+            "scripts"
+            "tab5-encoder"
+            "tools"
           )
 
           echo "Checking root directory entries against allowlist..."

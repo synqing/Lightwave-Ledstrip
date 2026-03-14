@@ -197,17 +197,20 @@ These rules supplement the global workspace hygiene policy. Violations will be f
 
 ### Root Allowlist
 
-Only these files are permitted at the project root:
+Only these entries are permitted at the project root (enforced by CI — see `.github/workflows/repo_hygiene_check.yml`):
+
+**Root files (12):**
 - `README.md`, `LICENSE`, `NOTICE`, `CHANGELOG.md`, `CONTRIBUTING.md`, `TRADEMARK.md`
 - `CLAUDE.md`, `AGENTS.md`, `BACKLOG.md`
 - `.gitignore`, `.pre-commit-config.yaml`, `.mcp.json`, `.worktreeinclude`
 
-**That's it. 12 files. Nothing else.**
+**Root directories (10+3 hidden):** `.git`, `.github`, `.claude`, `.codex`, `_archive`, `docs`, `firmware-v3`, `harness`, `instructions`, `k1-composer`, `lightwave-dashboard`, `lightwave-ios-v2`, `scripts`, `tab5-encoder`, `tools`
+
+**Nothing else goes at root.**
 
 - Governance docs → `instructions/`
 - Decision registers → `k1-launch-research/`
 - Research, brand, media, launch planning → `~/SpectraSynq_K1_Launch_Planning/` (separate repo)
-- Governance docs → `instructions/`
 - Temporary working notes → `.claude/`
 
 **Any file not on this list MUST be placed in a subdirectory.** No exceptions. No "keep at root while active." If you need a new root file, get explicit Captain approval first.
@@ -219,6 +222,7 @@ Only these files are permitted at the project root:
 | `firmware-v3/` | ESP32-S3 firmware (LightwaveOS) | Source, docs, tests, configs |
 | `lightwave-ios-v2/` | iOS companion app | Swift/SwiftUI source |
 | `tab5-encoder/` | M5Stack Tab5 controller | PlatformIO project |
+| `harness/` | Feasibility test harnesses | Voice recognition, hardware probes |
 | `k1-composer/` | Web compositor/debug tool | HTML/JS/CSS |
 | `lightwave-dashboard/` | Web dashboard app | TypeScript/React |
 | `docs/` | Technical documentation | Workflow routing, toolchain guides |
@@ -283,6 +287,45 @@ pio run -e esp32dev_audio_esv11_k1v2_32khz -t upload
 # Serial monitor
 pio device monitor -b 115200
 ```
+
+## Build (iOS)
+
+```bash
+cd lightwave-ios-v2
+
+# Generate Xcode project (required after adding/removing files)
+xcodegen generate
+
+# Build
+xcodebuild build -scheme LightwaveOS -destination 'platform=iOS Simulator,name=iPhone 16'
+
+# Run tests
+xcodebuild test -scheme LightwaveOS -destination 'platform=iOS Simulator,name=iPhone 16'
+```
+
+### iOS Hard Constraints
+
+- **All ViewModels** must be `@MainActor @Observable class` — no exceptions
+- **All network services** (`RESTClient`, `WebSocketService`, `UDPStreamReceiver`) must be `actor` — thread safety is non-negotiable
+- **Task closures** capturing `self` must use `[weak self]` — prevents retain cycles
+- **All networking** goes through `RESTClient` or `WebSocketService` — no raw `URLSession` calls elsewhere
+- **Parameter slider debounce**: 150ms minimum before sending REST/WS updates — prevents flooding the K1
+- **British English** in all comments, logs, and UI strings
+
+### iOS Tool Routing
+
+| I need to... | Use this | NOT this |
+|---|---|---|
+| Check Swift compilation errors | `xcodebuild build` or IDE diagnostics | ~~clangd (C++ only)~~ |
+| Find Swift symbol definitions | Read tool + grep | ~~clangd~~ |
+| Verify iOS API usage | Context7 or Apple Developer docs | ~~training data~~ |
+| Run iOS tests | `xcodebuild test` | ~~pytest~~ |
+
+### iOS Reference Files
+
+Read BEFORE exploring iOS source code:
+- `lightwave-ios-v2/docs/reference/codebase-map.md` — 111 files, 12K LOC, directory structure
+- `lightwave-ios-v2/docs/reference/fsm-reference.md` — 10 state machines (ConnectionState, WebSocket, UDP fallback, etc.)
 
 ### Subagent Delegation Protocol (MANDATORY)
 

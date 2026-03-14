@@ -558,7 +558,7 @@ Add to the effect registry in the RendererActor initialization.
 | Document | Purpose |
 |----------|---------|
 | [docs/audio-visual/audio-visual-semantic-mapping.md](/docs/audio-visual/audio-visual-semantic-mapping.md) | **REQUIRED** for audio-reactive effects |
-| [docs/audio-visual/audio-reactive-effects-analysis.md](/docs/audio-visual/audio-reactive-effects-analysis.md) | Audio effect patterns |
+| [docs/audio-visual/AUDIO_REACTIVE_EFFECTS_ANALYSIS.md](/docs/audio-visual/AUDIO_REACTIVE_EFFECTS_ANALYSIS.md) | Audio effect patterns |
 | [firmware/v2/docs/audio-visual/VISUAL_PIPELINE_MECHANICS.md](../../../docs/audio-visual/VISUAL_PIPELINE_MECHANICS.md) | Rendering pipeline details |
 | [firmware/v2/docs/audio-visual/COLOR_PALETTE_SYSTEM.md](../../../docs/audio-visual/COLOR_PALETTE_SYSTEM.md) | Palette organization |
 | [firmware/v2/src/plugins/api/IEffect.h](../plugins/api/IEffect.h) | Interface definition |

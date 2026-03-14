@@ -1,7 +1,7 @@
 # Workflow Routing — Tool & Skill Dispatch Guide
 
 > **This document is loaded via CLAUDE.md. Every CC session must follow these routing rules.**
-> Last updated: 5 Mar 2026
+> Last updated: 14 Mar 2026
 
 ---
 
@@ -20,14 +20,15 @@ Before doing anything:
 1. **Read this file** (you're doing it now — good)
 2. **Check Claude-mem for recent context:**
    ```
-   mcp__plugin_claude-mem_mem-search__search("recent activity on [topic]")
-   mcp__plugin_claude-mem_mem-search__timeline()
+   mcp__plugin_claude-mem_mcp-search__search("recent activity on [topic]")
+   mcp__plugin_claude-mem_mcp-search__timeline()
    ```
 3. **If the task touches code, query Auggie first:**
    ```
    mcp__auggie__codebase-retrieval("[what you're looking for]")
    ```
    Auggie understands code structure. Use it before grep/glob fishing expeditions.
+   **[NOT CONFIGURED — requires setup]** Auggie is not in project `.mcp.json` or global settings. Skip until configured.
 
 ---
 
@@ -47,19 +48,19 @@ Before doing anything:
 | Get hover info (type, docs) | `mcp__clangd__get_hover` | Quick type lookup |
 | Find interface implementations | `mcp__clangd__find_implementations` | Virtual method overrides |
 
-**clangd Status (7 Mar 2026):** OPERATIONAL. llvm 22.1.0 installed, compile_commands.json exists (510 entries, 331 src/ files), MCP server configured. If compile_commands.json is stale after adding new files: `pio run -e esp32dev_audio_pipelinecore --target compiledb`
+**clangd Status:** Run `mcp__clangd__get_diagnostics` on any source file to verify clangd is operational. If compile_commands.json is stale after adding new files: `pio run -e esp32dev_audio_pipelinecore --target compiledb`
 
 ### Code Intelligence (General / Cross-Language)
 
 | I need to... | Use this | How |
 |---|---|---|
-| Understand code structure semantically | `mcp__auggie__codebase-retrieval` | Natural language query, understands code not just text |
+| Understand code structure semantically | `mcp__auggie__codebase-retrieval` **[NOT CONFIGURED — requires setup]** | Natural language query, understands code not just text |
 | Search project documentation | `mcp__qmd__qmd_search` or `mcp__qmd__qmd_vector_search` | Keyword or semantic search across indexed docs |
 | Deep search with context | `mcp__qmd__qmd_deep_search` | Multi-step retrieval with reranking |
 | Get specific doc by path | `mcp__qmd__qmd_get` | Exact retrieval when you know the doc |
 | Check QMD index health | `mcp__qmd__qmd_status` | Verify collections are populated |
 
-**QMD Status (7 Mar 2026):** OPERATIONAL. 330 files indexed, 2,421 vectors, 5 collections (war-room-knowledge, war-room-ops, war-room-sources, firmware-docs, landing-page-docs). Models: embeddinggemma-300M (embeddings), Qwen3 0.6B (reranking), 1.7B (query expansion). Runs on Metal GPU. Re-index: `scripts/setup-qmd.sh`
+**QMD Status:** Run `mcp__qmd__qmd_status` to verify QMD is operational and check collection health. Re-index if needed: `scripts/setup-qmd.sh`
 | Look up library API docs (step 1) | `mcp__Context7__resolve-library-id` | Resolve library name to Context7 ID — call this FIRST |
 | Look up library API docs (step 2) | `mcp__Context7__get-library-docs` | Fetch version-specific docs using ID from step 1 |
 
@@ -67,13 +68,13 @@ Before doing anything:
 
 | I need to... | Use this | How |
 |---|---|---|
-| Recall what happened in past sessions | `mcp__plugin_claude-mem_mem-search__search` | Natural language query across session history |
-| Get observations from memory | `mcp__plugin_claude-mem_mem-search__get_observations` | Structured facts stored by past sessions |
-| View session timeline | `mcp__plugin_claude-mem_mem-search__timeline` | Chronological session activity |
+| Recall what happened in past sessions | `mcp__plugin_claude-mem_mcp-search__search` | Natural language query across session history |
+| Get observations from memory | `mcp__plugin_claude-mem_mcp-search__get_observations` | Structured facts stored by past sessions |
+| View session timeline | `mcp__plugin_claude-mem_mcp-search__timeline` | Chronological session activity |
 | Search MCP-specific memory | `mcp__plugin_claude-mem_mcp-search__search` | Tool usage history |
-| Get memory system help | `mcp__plugin_claude-mem_mem-search__help` | When unsure how to query |
+| Get memory system help | `mcp__plugin_claude-mem_mcp-search__help` | When unsure how to query |
 | Read episodic memory | `mcp__plugin_episodic-memory_episodic-memory__read` | Detailed episode recall |
-| Get current task list | `mcp__taskmaster-ai__get_tasks` | Taskmaster project state |
+| Get current task list | `mcp__taskmaster-ai__get_tasks` **[NOT CONFIGURED — requires setup]** | Taskmaster project state |
 
 ### Browser & Testing
 
@@ -89,12 +90,12 @@ Before doing anything:
 
 | I need to... | Use this | How |
 |---|---|---|
-| Work with Figma designs | `mcp__figma__add_figma_file` | Import Figma files for reference |
+| Work with Figma designs | `mcp__figma__add_figma_file` **[NOT CONFIGURED — requires setup]** | Import Figma files for reference |
 | 3D work / Blender scenes | `mcp__blender__*` | 7 tools: scene info, viewport, code execution, PolyHaven assets |
 | Build frontend UI | `/front-end-design` skill | Production-grade, avoids generic AI aesthetics |
 | Build React artifacts | `/web-artifacts-builder` skill | Multi-component with shadcn/ui |
 | D3.js visualisations | `/claude-d3js-skill-main` skill | Interactive data viz |
-| Apply themes to outputs | `/theme-factory` skill | 10 presets + custom generation |
+| Apply themes to outputs | `/theme-factory` **[REMOVED -- skill deleted]** | 10 presets + custom generation |
 
 ### Feature Planning
 
@@ -102,7 +103,7 @@ Before doing anything:
 |---|---|---|
 | Develop a concept / plan a feature | `mcp__Context-Engineer__concept_development` or `mcp__Context-Engineer__plan_feature` | Structured feature planning |
 | Brainstorm before coding | `/brainstorming` skill | **MANDATORY before implementation plans** — refines ideas through questioning |
-| Display results to user | `mcp__nimbalyst-mcp__display_to_user` | Formatted output display |
+| Display results to user | `mcp__nimbalyst-mcp__display_to_user` **[NOT CONFIGURED — requires setup]** | Formatted output display |
 
 ---
 
@@ -153,22 +154,22 @@ IDEA → BRAINSTORM → DESIGN → PLAN → TEST-FIRST → IMPLEMENT → REVIEW 
 | Organise files | `/file-organizer` | Finds duplicates, suggests structure |
 | Use Git worktrees | `/using-git-worktrees` | Smart worktree creation with safety checks |
 | Work with PDFs | `/pdf` | Extract, create, merge, split, fill forms |
-| Supabase anything | `/supabase-expert` | 2,616 official docs. Auth, realtime, storage, edge functions, pgvector. |
+| Supabase anything | `/supabase-expert` **[REMOVED -- skill deleted]** | 2,616 official docs. Auth, realtime, storage, edge functions, pgvector. |
 
 ### Formatting & Output
 
 | I need to... | Skill | Notes |
 |---|---|---|
-| Format structured data efficiently | `/toon-formatter` | TOON v2.0 for arrays/tables ≥5 items. **Use by default when tokens matter.** |
+| Format structured data efficiently | `/toon-formatter` **[REMOVED -- skill deleted]** | TOON v2.0 for arrays/tables ≥5 items. **Use by default when tokens matter.** |
 | Apply brand styling | `/brand-guidelines` | Anthropic brand colours/typography |
-| Theme any artifact | `/theme-factory` | 10 presets + custom |
+| Theme any artifact | `/theme-factory` **[REMOVED -- skill deleted]** | 10 presets + custom |
 | Apply front-end design quality | `/front-end-design` | Avoids generic AI aesthetics |
 
 ---
 
 ## ORCHESTRATION: Ralph
 
-**Ralph** (snarktank) is already active on this project. It's an autonomous iteration loop that:
+**Ralph** (snarktank) **[NOT ACTIVE -- no configuration found]** (`ralph-wiggum` plugin is disabled in global settings; no MCP server configured). It's an autonomous iteration loop that:
 - Breaks features into discrete user stories
 - Spawns fresh CC instances per iteration with clean context
 - Uses git history + AGENTS.md for cross-iteration persistence
@@ -190,13 +191,13 @@ IDEA → BRAINSTORM → DESIGN → PLAN → TEST-FIRST → IMPLEMENT → REVIEW 
 
 4. **Do NOT run 3+ independent tasks sequentially.** The parallel agents skill is marked MANDATORY. Use it.
 
-5. **Do NOT ignore Auggie.** Before writing "let me search the codebase..." — query Auggie first. It understands code structure, not just text patterns.
+5. **Do NOT ignore Auggie (when configured).** Before writing "let me search the codebase..." -- query Auggie first. It understands code structure, not just text patterns. **[NOT CONFIGURED -- requires setup]**
 
 6. **Do NOT forget Claude-mem.** Start sessions by checking recent memory. End sessions knowing the memory system captures what happened.
 
 7. **Do NOT write frontend without checking `/front-end-design`.** It exists specifically to prevent generic AI-looking output.
 
-8. **Do NOT build Supabase features without `/supabase-expert`.** 2,616 official docs are indexed. Use them.
+8. ~~**Do NOT build Supabase features without `/supabase-expert`.**~~ **[REMOVED -- skill deleted]**
 
 ---
 
@@ -204,7 +205,7 @@ IDEA → BRAINSTORM → DESIGN → PLAN → TEST-FIRST → IMPLEMENT → REVIEW 
 
 ```
 Is this about C++ firmware code?
-├── YES → clangd (9 tools) for navigation, Auggie for semantic queries
+├── YES → clangd (9 tools) for navigation, Auggie for semantic queries [NOT CONFIGURED]
 │         QMD for documentation, Context7 for library APIs
 │
 Is this about iOS / Swift?
@@ -222,7 +223,7 @@ Is this about testing a web UI?
 ├── YES → Playwright MCP tools + /webapp-testing or /playwright-skill
 │
 Is this a research task?
-├── YES → Auggie (code), QMD (docs), Claude-mem (history),
+├── YES → Auggie [NOT CONFIGURED] (code), QMD (docs), Claude-mem (history),
 │         /x-research (Twitter), /Content Research Writer (general)
 │
 Am I about to write code?
@@ -242,3 +243,4 @@ Am I finishing a branch?
 |------|--------|
 | 5 Mar 2026 | Initial creation. Full inventory: 29 skills, 13 MCP groups, 47 tools. Routing table, lifecycle phases, anti-patterns, decision tree. |
 | 7 Mar 2026 | Added operational status blocks for clangd (510 entries) and QMD (330 files, 2,421 vectors). Updated QMD anti-pattern to reference `scripts/setup-qmd.sh` and `qmd_status` check. |
+| 14 Mar 2026 | Dead reference cleanup. Marked 3 deleted skills (`supabase-expert`, `toon-formatter`, `theme-factory`) as REMOVED. Marked 4 unconfigured MCP servers (`auggie`, `nimbalyst-mcp`, `taskmaster-ai`, `figma`) as NOT CONFIGURED. Fixed `claude-mem` tool prefix (`mem-search` -> `mcp-search`). Replaced static status assertions with live-check instructions. Marked Ralph as NOT ACTIVE. |

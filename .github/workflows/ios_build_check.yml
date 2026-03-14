@@ -1,0 +1,42 @@
+name: iOS Build Check
+
+on:
+  pull_request:
+    paths:
+      - 'lightwave-ios-v2/**'
+  push:
+    branches:
+      - main
+    paths:
+      - 'lightwave-ios-v2/**'
+
+jobs:
+  ios-build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: lightwave-ios-v2
+        run: xcodegen generate
+
+      - name: Build LightwaveOS
+        working-directory: lightwave-ios-v2
+        run: |
+          xcodebuild build \
+            -scheme LightwaveOS \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -skipPackagePluginValidation
+
+      - name: Run tests
+        working-directory: lightwave-ios-v2
+        run: |
+          xcodebuild test \
+            -scheme LightwaveOS \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -skipPackagePluginValidation

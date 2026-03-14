@@ -22,8 +22,10 @@
 		3233C8CD1AD0C3F1CDF06FBA /* AudioTuningParameters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70567498B0EBA5C80F60D128 /* AudioTuningParameters.swift */; };
 		39BBEFD7203ADA9A031D70BD /* RiveAssetRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8AA077BE40C504F5857BAF8 /* RiveAssetRegistry.swift */; };
 		3AAECAF9F115A60F48C53CF6 /* StateCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6835286C5F9C9CFBB0342C18 /* StateCard.swift */; };
+		3AF06F3675C282D02B2BC195 /* RESTClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52D73EF3D7C1E288AC6782DF /* RESTClientTests.swift */; };
 		3B728228347413E7091E32CA /* TransitionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F36409ABC36BCB430CD9E0A4 /* TransitionCard.swift */; };
 		3D89807695C36EF268ECF7F4 /* AppViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F30172340FDF0956E377E609 /* AppViewModel.swift */; };
+		4350CD8F75E49952A1284E85 /* LightwaveOSUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09C42796DB076B87025D874C /* LightwaveOSUITests.swift */; };
 		45694336ED60BDA41BFA3540 /* PresetsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF92DC1993E1D866C81B1AF2 /* PresetsViewModel.swift */; };
 		46A01374A6FEBB0BD76B44B0 /* HeroLEDPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4CB0B4835A9BACD84EF9FB5 /* HeroLEDPreview.swift */; };
 		46F56671E92063AFF9D4DEDE /* AudioMicroInteractionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8654E76A2F4CB516999727B1 /* AudioMicroInteractionCard.swift */; };
@@ -31,6 +33,7 @@
 		4B3C99D5686D76D39E70E94A /* PalettePill.swift in Sources */ = {isa = PBXBuildFile; fileRef = C370B32AA140BBEF43C6E2C2 /* PalettePill.swift */; };
 		4C425AF22BF7A28DCC290BDA /* Rajdhani-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 8E59AECEC7E904EDD6218285 /* Rajdhani-Medium.ttf */; };
 		4D751605DDEF7E6FDFD34564 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB07CA24EADEF6BA881D646F /* ContentView.swift */; };
+		52210E5419973556A24AF67A /* WebSocketServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 938801B35C7257EBBD79FA9B /* WebSocketServiceTests.swift */; };
 		5459AE85295E1B2195C348FC /* NoveltyOnsetCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AE9C345B8D6E90338187465 /* NoveltyOnsetCard.swift */; };
 		5570105A1AFE44E78C87C12F /* EffectSelectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BEF66607D6EB7A86DAB1A24 /* EffectSelectorView.swift */; };
 		55BDAF64661B13330D6FAC75 /* DSPHealthCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84846BE14BEFB7AD1474515D /* DSPHealthCard.swift */; };
@@ -39,6 +42,7 @@
 		5C1C06EBB274C051A439A797 /* ZonePreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = C22F18DAE2719E6988E4786B /* ZonePreset.swift */; };
 		5CAB43DF6F29197959F5DD73 /* PersistentStatusBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 254F0C219FB5F9F4CE8A47D4 /* PersistentStatusBar.swift */; };
 		5D1AFF73F547DEB373796126 /* ZonesTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E1E87FD587D3F3C005F248C /* ZonesTab.swift */; };
+		5EDD044D3AE1983502A2E478 /* ConnectionStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7D8F9B42DEDA3EB8245673C /* ConnectionStateTests.swift */; };
 		5FDC20B426C20FB926696A29 /* ZoneHeaderCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = C704DF2FFFAD9DA38DF9AAC2 /* ZoneHeaderCard.swift */; };
 		6398FD62C2DE608465A3F7B6 /* BandEnvelopeCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B7CC4054A122FC375E195C9 /* BandEnvelopeCard.swift */; };
 		651D94812D47ACEF73F02D22 /* WaveformSpectrumCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 015EA9550AB44879E2FEDC47 /* WaveformSpectrumCard.swift */; };
@@ -47,12 +51,12 @@
 		6E5C18C5632D04039B31DE2E /* DesignReferenceData.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7EE77E551ADFC8B7142DFCA /* DesignReferenceData.swift */; };
 		6EB45E88A8F52BD4E073B17A /* AudioMetricsFrame.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58FF25A0E1C1057E09C88FD6 /* AudioMetricsFrame.swift */; };
 		7199AF4B6F1AC075548475CF /* PaletteViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 224698FD7FB174C316FBE60D /* PaletteViewModel.swift */; };
+		7251C2FE4CDF352B477B1E99 /* EffectPill.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EFBB5EBE67DC3FDB66CE5BF /* EffectPill.swift */; };
 		731AD47052D2320BBE28F2C3 /* ConnectionDot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CA3B90727EBB0CF6103AEA1 /* ConnectionDot.swift */; };
 		798069C686F9B5DADBE9494F /* ExpressionParametersCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF78CFCA2FCF79A5CDB755D9 /* ExpressionParametersCard.swift */; };
 		7BC7BCDD524D77A5D2AF0044 /* BeatEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CE2A301EC4BB1F6157369C3 /* BeatEvent.swift */; };
 		7EAF563DD7A9FD7FD55F114D /* PaletteLUT.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6416631D7DB3C5D87A0AB6B /* PaletteLUT.swift */; };
 		800432784DA7C15F40CA4A21 /* DeviceDiscoveryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A06B1F5D1B76135389E8A37 /* DeviceDiscoveryService.swift */; };
-		8552E2FE7937823BA926DF2E /* EffectPill.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C1ED4C5F6EC72A53B9AEC1C /* EffectPill.swift */; };
 		8F8A144428E389596FDF1A0E /* BooleanIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21FB60C98C375E8F04A95D75 /* BooleanIndicator.swift */; };
 		91C002843B54FEC54EA87C4C /* APIResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = E448948AAFAA0CD844A14110 /* APIResponse.swift */; };
 		964260B8CD010BFD9E4B6328 /* AudioViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6653D1E80D92C64FAC24AD3 /* AudioViewModel.swift */; };
@@ -78,6 +82,7 @@
 		C57C8477A4CEC46122235A5B /* BeatPulse.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1C44B4393BF8BAEE1D5974 /* BeatPulse.swift */; };
 		C8AD2FB3D54FFCF4DEEFC4FB /* RiveReferenceGallery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E9220213A1BC42D7DC9736C /* RiveReferenceGallery.swift */; };
 		CD8C706BCC146AE424D532E2 /* RiveAppleRuntimeAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5925C7D2FEBD45A8B24782D /* RiveAppleRuntimeAdapter.swift */; };
+		D3B4E6050C010E3C5166EB97 /* AudioMetricsFrameTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADCCAFA202716653F902787 /* AudioMetricsFrameTests.swift */; };
 		D40C0E29EE75A444D41C091B /* DeviceInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24F263BD5B2BE3B042FD6500 /* DeviceInfo.swift */; };
 		D4858ADE55BA3233EAC10336 /* StepperControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB077354363CFEC33A7BCC55 /* StepperControl.swift */; };
 		D7B1E0FA82137B04E351A3AC /* PrimaryControlsCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3683BF0C58E2D73196B6C24F /* PrimaryControlsCard.swift */; };
@@ -95,11 +100,9 @@
 		EAD83A8923DD6CA8F03A0887 /* WaterfallCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 374C885FB86340D0868A0F17 /* WaterfallCanvas.swift */; };
 		EE6E92BCD446F432BFB4D1A9 /* ColourCorrectionConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C193AB587158FAE17B70076 /* ColourCorrectionConfig.swift */; };
 		EEB9D4CB8A3A284E3FC897E2 /* RiveRuntimeFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9EEA486B10C7508EF9BEFB8 /* RiveRuntimeFactory.swift */; };
-		F012D64C3954D7C9018F7F9E /* RiveAssetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FC30F2B1E7E2A002235D10B /* RiveAssetTests.swift */; };
 		F0E737F62762F2F3CBD94E41 /* DebugLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3312C970BE3E5BC4D373D9AA /* DebugLogView.swift */; };
 		F201C9ADFB5282D9B2FDC3BD /* Palettes_Master.json in Resources */ = {isa = PBXBuildFile; fileRef = 6A5074FF917C2B57C4CE67E0 /* Palettes_Master.json */; };
 		F2115B1183C10DA720A36477 /* ZoneCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = E806390A509CCD91CCE62C34 /* ZoneCard.swift */; };
-		F620A6280CABB7373751D286 /* RiveReferenceScreenshotsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41B105BA1C641A3CE67651CC /* RiveReferenceScreenshotsUITests.swift */; };
 		F9B02ED4E22BECB3EFD01829 /* RESTClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DABC7E4FD7AB390A7413924 /* RESTClient.swift */; };
 		F9F00E9852A03ABB2DC113AD /* SpectrumVisualisationCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70BC4E2523308275C0B38ECC /* SpectrumVisualisationCard.swift */; };
 		F9F86388A7F4ACC8530A4B99 /* PresetsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F546C8A2C99339CAF146E5B8 /* PresetsView.swift */; };
@@ -128,8 +131,8 @@
 		01B2B27348B24F57C57E84EE /* ShowsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowsView.swift; sourceTree = "<group>"; };
 		08AA2C21356E7DCE870D100D /* RiveCppRuntimeAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RiveCppRuntimeAdapter.swift; sourceTree = "<group>"; };
 		08C2D77D1CFF5748E86799D6 /* ZoneConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoneConfig.swift; sourceTree = "<group>"; };
+		09C42796DB076B87025D874C /* LightwaveOSUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LightwaveOSUITests.swift; sourceTree = "<group>"; };
 		0AE9C345B8D6E90338187465 /* NoveltyOnsetCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoveltyOnsetCard.swift; sourceTree = "<group>"; };
-		0C1ED4C5F6EC72A53B9AEC1C /* EffectPill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EffectPill.swift; sourceTree = "<group>"; };
 		168C9F678A0019152BC2DB77 /* ZonePaletteSelectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZonePaletteSelectorView.swift; sourceTree = "<group>"; };
 		18BB5AEC76BDB1042E10C43A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		1A8573E656EDD28AD85E9F93 /* LightwaveOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = LightwaveOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -146,6 +149,7 @@
 		25C2C8B36E0F08C57DD1C8ED /* LWCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LWCard.swift; sourceTree = "<group>"; };
 		27730B746017F71702677C14 /* LightwaveOSUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = LightwaveOSUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2A8486C05EF5A54BF248CBC5 /* LightwaveOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LightwaveOSApp.swift; sourceTree = "<group>"; };
+		2ADCCAFA202716653F902787 /* AudioMetricsFrameTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMetricsFrameTests.swift; sourceTree = "<group>"; };
 		2CEDD5DA50941F20E512D1B2 /* ZoneViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoneViewModel.swift; sourceTree = "<group>"; };
 		3312C970BE3E5BC4D373D9AA /* DebugLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogView.swift; sourceTree = "<group>"; };
 		3683BF0C58E2D73196B6C24F /* PrimaryControlsCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrimaryControlsCard.swift; sourceTree = "<group>"; };
@@ -153,13 +157,13 @@
 		3A1727B0FD097BC45F09E2AE /* BeatHapticsCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeatHapticsCard.swift; sourceTree = "<group>"; };
 		3A450B5387DC386220A98816 /* TransitionConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitionConfig.swift; sourceTree = "<group>"; };
 		3CA3B90727EBB0CF6103AEA1 /* ConnectionDot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionDot.swift; sourceTree = "<group>"; };
-		41B105BA1C641A3CE67651CC /* RiveReferenceScreenshotsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RiveReferenceScreenshotsUITests.swift; sourceTree = "<group>"; };
 		455F2E537DDB7B2763EC9AD0 /* EffectMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EffectMetadata.swift; sourceTree = "<group>"; };
 		456CA5276801070F23B37070 /* PlayTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayTab.swift; sourceTree = "<group>"; };
 		4A06B1F5D1B76135389E8A37 /* DeviceDiscoveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceDiscoveryService.swift; sourceTree = "<group>"; };
 		4BEF66607D6EB7A86DAB1A24 /* EffectSelectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EffectSelectorView.swift; sourceTree = "<group>"; };
 		4C2DEC421D3DDA638E3C0A64 /* ParametersViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParametersViewModel.swift; sourceTree = "<group>"; };
 		4EE7EA23FBC59A906EFEB025 /* ColourCorrectionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColourCorrectionCard.swift; sourceTree = "<group>"; };
+		52D73EF3D7C1E288AC6782DF /* RESTClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RESTClientTests.swift; sourceTree = "<group>"; };
 		58FF25A0E1C1057E09C88FD6 /* AudioMetricsFrame.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMetricsFrame.swift; sourceTree = "<group>"; };
 		5A666FDABA22F3869FE52E0A /* UDPStreamReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UDPStreamReceiver.swift; sourceTree = "<group>"; };
 		5E90C94F5CB5CFECA0207056 /* DotRidgeCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DotRidgeCanvas.swift; sourceTree = "<group>"; };
@@ -181,6 +185,7 @@
 		7DABC7E4FD7AB390A7413924 /* RESTClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RESTClient.swift; sourceTree = "<group>"; };
 		7E185DC09E48C5BAB0DA19E5 /* LEDStripView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LEDStripView.swift; sourceTree = "<group>"; };
 		7E24D590F91011F14E7284A3 /* PaletteSelectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaletteSelectorView.swift; sourceTree = "<group>"; };
+		7EFBB5EBE67DC3FDB66CE5BF /* EffectPill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EffectPill.swift; sourceTree = "<group>"; };
 		84846BE14BEFB7AD1474515D /* DSPHealthCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DSPHealthCard.swift; sourceTree = "<group>"; };
 		8654E76A2F4CB516999727B1 /* AudioMicroInteractionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMicroInteractionCard.swift; sourceTree = "<group>"; };
 		87205249A100EE9FB99CC9D8 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
@@ -188,8 +193,7 @@
 		8CE2A301EC4BB1F6157369C3 /* BeatEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeatEvent.swift; sourceTree = "<group>"; };
 		8DC45A333675D7720ED18E93 /* SilenceDetectionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SilenceDetectionCard.swift; sourceTree = "<group>"; };
 		8E59AECEC7E904EDD6218285 /* Rajdhani-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Rajdhani-Medium.ttf"; sourceTree = "<group>"; };
-		8FC30F2B1E7E2A002235D10B /* RiveAssetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RiveAssetTests.swift; sourceTree = "<group>"; };
-		90AD2F85C4937E8ECB655CE7 /* .keep */ = {isa = PBXFileReference; path = .keep; sourceTree = "<group>"; };
+		938801B35C7257EBBD79FA9B /* WebSocketServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSocketServiceTests.swift; sourceTree = "<group>"; };
 		968C3EBBFE6704A938BC735B /* DotMatrixCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DotMatrixCanvas.swift; sourceTree = "<group>"; };
 		9C193AB587158FAE17B70076 /* ColourCorrectionConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColourCorrectionConfig.swift; sourceTree = "<group>"; };
 		9E098D8F3CD5BB4C24E6F3BE /* PaletteMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaletteMetadata.swift; sourceTree = "<group>"; };
@@ -206,6 +210,7 @@
 		C72251A9FB2D4BBDBF401161 /* ColourCorrectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColourCorrectionView.swift; sourceTree = "<group>"; };
 		D6416631D7DB3C5D87A0AB6B /* PaletteLUT.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaletteLUT.swift; sourceTree = "<group>"; };
 		D6653D1E80D92C64FAC24AD3 /* AudioViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioViewModel.swift; sourceTree = "<group>"; };
+		D7D8F9B42DEDA3EB8245673C /* ConnectionStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionStateTests.swift; sourceTree = "<group>"; };
 		DB07CA24EADEF6BA881D646F /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		DF78CFCA2FCF79A5CDB755D9 /* ExpressionParametersCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpressionParametersCard.swift; sourceTree = "<group>"; };
 		E448948AAFAA0CD844A14110 /* APIResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIResponse.swift; sourceTree = "<group>"; };
@@ -310,7 +315,10 @@
 		275A3BEE403997031628F68D /* LightwaveOSTests */ = {
 			isa = PBXGroup;
 			children = (
-				8FC30F2B1E7E2A002235D10B /* RiveAssetTests.swift */,
+				2ADCCAFA202716653F902787 /* AudioMetricsFrameTests.swift */,
+				D7D8F9B42DEDA3EB8245673C /* ConnectionStateTests.swift */,
+				52D73EF3D7C1E288AC6782DF /* RESTClientTests.swift */,
+				938801B35C7257EBBD79FA9B /* WebSocketServiceTests.swift */,
 			);
 			path = LightwaveOSTests;
 			sourceTree = "<group>";
@@ -392,7 +400,6 @@
 				1BE5EB53F03D24EAA9BF8845 /* Info.plist */,
 				DB7BA626F16B465550D83683 /* Fonts */,
 				B676359C63D1809E9421C3F1 /* Palettes */,
-				9792F5440C6381B042D14284 /* Rive */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -405,14 +412,6 @@
 				1E05BAD71A0ACC174551DDB7 /* Rive */,
 			);
 			path = Utilities;
-			sourceTree = "<group>";
-		};
-		9792F5440C6381B042D14284 /* Rive */ = {
-			isa = PBXGroup;
-			children = (
-				90AD2F85C4937E8ECB655CE7 /* .keep */,
-			);
-			path = Rive;
 			sourceTree = "<group>";
 		};
 		A49F221A8F4B0335D35F3A33 /* Zones */ = {
@@ -484,10 +483,10 @@
 			isa = PBXGroup;
 			children = (
 				4EE7EA23FBC59A906EFEB025 /* ColourCorrectionCard.swift */,
+				7EFBB5EBE67DC3FDB66CE5BF /* EffectPill.swift */,
 				DF78CFCA2FCF79A5CDB755D9 /* ExpressionParametersCard.swift */,
 				E4CB0B4835A9BACD84EF9FB5 /* HeroLEDPreview.swift */,
 				C370B32AA140BBEF43C6E2C2 /* PalettePill.swift */,
-				0C1ED4C5F6EC72A53B9AEC1C /* EffectPill.swift */,
 				3683BF0C58E2D73196B6C24F /* PrimaryControlsCard.swift */,
 				F36409ABC36BCB430CD9E0A4 /* TransitionCard.swift */,
 			);
@@ -527,7 +526,7 @@
 		EC3BA00DFF7C7A4F2557BF62 /* LightwaveOSUITests */ = {
 			isa = PBXGroup;
 			children = (
-				41B105BA1C641A3CE67651CC /* RiveReferenceScreenshotsUITests.swift */,
+				09C42796DB076B87025D874C /* LightwaveOSUITests.swift */,
 			);
 			path = LightwaveOSUITests;
 			sourceTree = "<group>";
@@ -664,7 +663,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F012D64C3954D7C9018F7F9E /* RiveAssetTests.swift in Sources */,
+				D3B4E6050C010E3C5166EB97 /* AudioMetricsFrameTests.swift in Sources */,
+				5EDD044D3AE1983502A2E478 /* ConnectionStateTests.swift in Sources */,
+				3AF06F3675C282D02B2BC195 /* RESTClientTests.swift in Sources */,
+				52210E5419973556A24AF67A /* WebSocketServiceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -672,7 +674,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F620A6280CABB7373751D286 /* RiveReferenceScreenshotsUITests.swift in Sources */,
+				4350CD8F75E49952A1284E85 /* LightwaveOSUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -714,6 +716,7 @@
 				A9750C3CA3D06B429608AF83 /* DotMatrixCanvas.swift in Sources */,
 				139C02DFEF7D538F1AAD62DA /* DotRidgeCanvas.swift in Sources */,
 				DD9590BF303220F7E3701DD7 /* EffectMetadata.swift in Sources */,
+				7251C2FE4CDF352B477B1E99 /* EffectPill.swift in Sources */,
 				5570105A1AFE44E78C87C12F /* EffectSelectorView.swift in Sources */,
 				ABC80644A6EF1724A606D6CF /* EffectViewModel.swift in Sources */,
 				A6D3AE786BE1C665F29E1387 /* EnergyCard.swift in Sources */,
@@ -732,7 +735,6 @@
 				96C9D4D2DCE98659FD34D56F /* PaletteSelectorView.swift in Sources */,
 				7199AF4B6F1AC075548475CF /* PaletteViewModel.swift in Sources */,
 				0A1D15C59D3B43DF3C54945F /* ParametersViewModel.swift in Sources */,
-				8552E2FE7937823BA926DF2E /* EffectPill.swift in Sources */,
 				5CAB43DF6F29197959F5DD73 /* PersistentStatusBar.swift in Sources */,
 				98512C417EA442B34802EB83 /* PlayTab.swift in Sources */,
 				F9F86388A7F4ACC8530A4B99 /* PresetsView.swift in Sources */,

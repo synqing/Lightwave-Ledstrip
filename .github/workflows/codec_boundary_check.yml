@@ -89,10 +89,18 @@ jobs:
             }
           fi
       
+      - name: Create dummy WiFi credentials
+        working-directory: firmware-v3
+        run: |
+          cat > wifi_credentials.ini << 'CREDS'
+          [wifi_credentials]
+          build_flags = -D AP_SSID_CUSTOM=\"CI-Build\"
+          CREDS
+
       - name: Run Codec Tests
         working-directory: firmware-v3
         run: pio test -e native_codec_test_ws
       
       - name: Build Check
         working-directory: firmware-v3
-        run: pio run -e esp32dev_audio
+        run: pio run -e esp32dev_audio_esv11_k1v2_32khz

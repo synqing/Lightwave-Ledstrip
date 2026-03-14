@@ -504,11 +504,16 @@ void SbK1BaseEffect::updateWaveformPeak(plugins::EffectContext& ctx) {
     float peakNorm = peak / m_wfFollower;
     if (peakNorm > 1.0f) peakNorm = 1.0f;
 
-    // K1 parity: waveform_peak_scaled = raw normalized peak (used for trail fade)
-    // No second-stage follower — K1 doesn't have one.
-    m_wfPeakScaled = peakNorm;
+    // K1 parity: two-stage peak smoothing.
+    // Stage 1: symmetric follower (K1's alpha=0.5 attack/decay at ~90 FPS).
+    // This smooths the raw peak before it drives trail fade, making the
+    // fade response more fluid and less twitchy on transients.
+    static constexpr float kTauWfPeakStage1 = 0.016f;  // alpha=0.5 at 90 FPS
+    float aStage1 = 1.0f - expf(-m_dt / kTauWfPeakStage1);
+    m_wfPeakScaled += (peakNorm - m_wfPeakScaled) * aStage1;
 
-    // tau=0.023s (was alpha=0.3/0.7 at 120 FPS)
+    // Stage 2: slower EMA (K1's alpha=0.08 at 120 FPS). This produces
+    // the smoothed peak used for dot position (waveform_peak_scaled_last).
     float aWfPk = 1.0f - expf(-m_dt / kTauWfPeakLast);
     m_wfPeakLast += (m_wfPeakScaled - m_wfPeakLast) * aWfPk;
 #else

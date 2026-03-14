@@ -80,6 +80,9 @@ class AppViewModel {
     private let udpFallbackDelaySeconds: TimeInterval = 3.0
     private var udpHealthTask: Task<Void, Never>?
 
+    /// Timestamp recorded when the app enters the background, used to detect stale connections on foreground.
+    private var lastBackgroundedAt: Date?
+
     // MARK: - Initialization
 
     init() {
@@ -234,6 +237,45 @@ class AppViewModel {
         audio.reset()
         ledData = Array(repeating: 0, count: 960)
         isLEDStreamActive = false
+    }
+
+    // MARK: - Scene Phase Lifecycle
+
+    /// Pauses background-wasteful polling when the app is backgrounded.
+    /// Does not tear down the WebSocket — it handles its own reconnection.
+    func handleBackgrounding() {
+        statusPollTask?.cancel()
+        statusPollTask = nil
+        udpHealthTask?.cancel()
+        udpHealthTask = nil
+        lastBackgroundedAt = Date()
+        log("Backgrounded — paused polling", category: "LIFECYCLE")
+        print("[AppViewModel] Backgrounded — paused polling")
+    }
+
+    /// Resumes polling when the app returns to the foreground.
+    /// If the connection has gone stale (backgrounded >30s and WebSocket dropped),
+    /// triggers a full reconnect to the last-known device.
+    func handleForegrounding() async {
+        guard connectionState == .connected else { return }
+
+        // Detect stale connections after extended background periods
+        if let backgroundedAt = lastBackgroundedAt,
+           Date().timeIntervalSince(backgroundedAt) > 30 {
+            let wsUp = await ws.isConnected
+            if !wsUp, let device = currentDevice {
+                log("Stale connection detected after background — reconnecting", category: "LIFECYCLE")
+                print("[AppViewModel] Foregrounded — stale connection, reconnecting")
+                await connect(to: device)
+                return
+            }
+        }
+
+        // Connection still healthy — just restart the polling tasks
+        startDeviceStatusPolling()
+        startUdpHealthMonitor()
+        log("Foregrounded — resumed polling", category: "LIFECYCLE")
+        print("[AppViewModel] Foregrounded — resumed polling")
     }
 
     // MARK: - Device Discovery

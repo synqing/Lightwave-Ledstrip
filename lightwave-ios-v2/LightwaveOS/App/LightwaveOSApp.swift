@@ -11,6 +11,7 @@ import SwiftUI
 @main
 struct LightwaveOSApp: App {
     @State private var appVM = AppViewModel()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -40,6 +41,18 @@ struct LightwaveOSApp: App {
                 .environment(appVM.audio)
                 .preferredColorScheme(.dark)
 #endif
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            switch newPhase {
+            case .background:
+                appVM.handleBackgrounding()
+            case .active:
+                Task { await appVM.handleForegrounding() }
+            case .inactive:
+                break
+            @unknown default:
+                break
+            }
         }
     }
 }

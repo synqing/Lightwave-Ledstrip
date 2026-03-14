@@ -79,10 +79,11 @@ bool SbK1WaveformEffect::init(plugins::EffectContext& ctx) {
     }
 #endif
 
-    // Zero the trail buffer
+    // Zero the trail buffer and scroll accumulator
     for (uint16_t i = 0; i < kStripLength; ++i) {
         m_ps->trailBuffer[i] = {0.0f, 0.0f, 0.0f};
     }
+    m_ps->scrollAccum = 0.0f;
 
     // Reset parameters to defaults
     m_sensitivity = 1.0f;
@@ -162,6 +163,16 @@ void SbK1WaveformEffect::renderEffect(plugins::EffectContext& ctx) {
         }
     }
 
+    // Soft-knee brightness cap: scale dotColor so the brightest channel
+    // never exceeds 1.0. Preserves hue ratios (unlike hard clip which
+    // desaturates toward white). Only engages when accumulation overflows.
+    if (chromaticMode) {
+        float peak = fmaxf(dotColor.r, fmaxf(dotColor.g, dotColor.b));
+        if (peak > 1.0f) {
+            dotColor *= (1.0f / peak);
+        }
+    }
+
     // FAILSAFE: invisible dot prevention (K1 parity)
     if (totalMag < 0.01f && ctx.audio.rms() > 0.02f) {
         float fbPos = m_chromaHue + m_huePosition;
@@ -173,7 +184,9 @@ void SbK1WaveformEffect::renderEffect(plugins::EffectContext& ctx) {
     // K1 parity: hsv(chroma_val + hue_position, SATURATION, total_magnitude)
     if (!chromaticMode) {
         float forcedPos = m_chromaHue + m_huePosition;
-        dotColor = paletteColorF(ctx.palette, forcedPos, totalMag);
+        // Clamp totalMag to [0,1] — unbounded sum passed as brightness
+        // to paletteColorF produces channels >1.0 which clip to white.
+        dotColor = paletteColorF(ctx.palette, forcedPos, fminf(totalMag, 1.0f));
     }
 
     // Apply PHOTONS brightness
@@ -181,10 +194,17 @@ void SbK1WaveformEffect::renderEffect(plugins::EffectContext& ctx) {
     dotColor *= photons;
     dotColor.clip();
 
-    // --- DYNAMIC TRAIL FADE ---
-    // K1: abs_amp from waveform_peak_scaled (RAW, not smoothed)
+    // --- DYNAMIC TRAIL FADE (dt-corrected) ---
+    // Rate-independent exponential decay. The decay rate scales with
+    // waveform amplitude: louder audio = faster fade (shorter trails).
+    // At silence the minimum rate produces ~2.5s full decay.
+    // At moderate audio (absAmp=0.5): half-life ~0.35s (visible trail ~1s).
+    // At full amplitude: half-life ~0.12s (tight, punchy trail).
     float absAmp = clampF(fabsf(m_wfPeakScaled), 0.0f, 1.0f);
-    float fade = 1.0f - 0.10f * absAmp;
+    static constexpr float kMinDecayRate = 0.8f;   // per-second (silence floor, ~3.5s full decay)
+    static constexpr float kDecayScale   = 3.5f;   // additional rate per unit amplitude
+    float decayRate = kMinDecayRate + kDecayScale * absAmp;
+    float fade = expf(-decayRate * m_dt);
 
     for (uint16_t i = 0; i < kStripLength; ++i) {
         m_ps->trailBuffer[i].r *= fade;
@@ -192,17 +212,29 @@ void SbK1WaveformEffect::renderEffect(plugins::EffectContext& ctx) {
         m_ps->trailBuffer[i].b *= fade;
     }
 
-    // --- SHIFT UP (K1 shift_leds_up parity) ---
-    // K1 shifts ENTIRE array up by 1 (higher indices), zeros index 0
-    // Then mirrors right→left, so only right half scroll matters
-    for (int i = kStripLength - 1; i > 0; --i) {
-        m_ps->trailBuffer[i] = m_ps->trailBuffer[i - 1];
+    // --- SHIFT (dt-corrected sub-pixel scroll) ---
+    // Scroll speed in pixels/second, decoupled from frame rate.
+    // At 120 FPS this produces ~0.5 pixels/frame (vs old 1.0 px/frame),
+    // giving trails roughly twice the visual persistence on the strip.
+    static constexpr float kBaseScrollRate = 150.0f;
+    static constexpr float kSpeedMidpoint = 10.0f;  // DEFAULT_SPEED from RendererActor
+    float scrollRate = kBaseScrollRate * (static_cast<float>(ctx.speed) / kSpeedMidpoint);
+    m_ps->scrollAccum += scrollRate * m_dt;
+    int pixelsToScroll = static_cast<int>(m_ps->scrollAccum);
+    m_ps->scrollAccum -= static_cast<float>(pixelsToScroll);
+
+    for (int s = 0; s < pixelsToScroll; ++s) {
+        for (int i = kStripLength - 1; i > 0; --i) {
+            m_ps->trailBuffer[i] = m_ps->trailBuffer[i - 1];
+        }
+        m_ps->trailBuffer[0] = {0.0f, 0.0f, 0.0f};
     }
-    m_ps->trailBuffer[0] = {0.0f, 0.0f, 0.0f};
 
     // --- DOT POSITION ---
     float amp = m_wfPeakLast;
-    if (fabsf(amp) < 0.05f) amp = 0.0f;
+    // Hard gate removed. m_wfPeakLast is already EMA-smoothed (tau=23ms)
+    // so it doesn't jitter near zero. With the fade floor, a near-zero dot
+    // at centre fades naturally instead of painting a permanent stripe.
 
     float safeSensitivity = (m_sensitivity > 0.01f) ? m_sensitivity : 0.01f;
     amp *= 0.7f / safeSensitivity;

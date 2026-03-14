@@ -317,6 +317,7 @@ constexpr EffectId EID_LGP_TIME_REVERSAL_MIRROR_AR         = 0x1B05;  // Time-Re
 constexpr EffectId EID_LGP_TIME_REVERSAL_MIRROR_MOD1       = 0x1B06;  // Time-Reversal Mirror Mod1
 constexpr EffectId EID_LGP_TIME_REVERSAL_MIRROR_MOD2       = 0x1B07;  // Time-Reversal Mirror Mod2
 constexpr EffectId EID_LGP_TIME_REVERSAL_MIRROR_MOD3       = 0x1B08;  // Time-Reversal Mirror Mod3
+constexpr EffectId EID_LGP_FRESNEL_CAUSTIC_REACTIVE        = 0x1B09;  // Fresnel Caustic Reactive
 
 // --- 5-Layer Audio-Reactive Variants (0x1Cxx) ---
 constexpr EffectId EID_LGP_WATER_CAUSTICS_AR               = 0x1C00;  // Water Caustics (5-Layer AR)
@@ -601,6 +602,8 @@ inline bool needsToneMap(EffectId id) {
         case EID_LGP_TIME_REVERSAL_MIRROR_MOD1: // 0x1B06
         case EID_LGP_TIME_REVERSAL_MIRROR_MOD2: // 0x1B07
         case EID_LGP_TIME_REVERSAL_MIRROR_MOD3: // 0x1B08
+        case EID_SB_K1_BLOOM:                   // 0x1301 — additive chromagram sum
+        case EID_SB_K1_WAVEFORM:                // 0x1302 — additive chromagram sum
             return true;
         default:
             return false;

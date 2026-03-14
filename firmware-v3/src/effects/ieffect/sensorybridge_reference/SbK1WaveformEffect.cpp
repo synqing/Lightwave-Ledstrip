@@ -173,7 +173,9 @@ void SbK1WaveformEffect::renderEffect(plugins::EffectContext& ctx) {
     // K1 parity: hsv(chroma_val + hue_position, SATURATION, total_magnitude)
     if (!chromaticMode) {
         float forcedPos = m_chromaHue + m_huePosition;
-        dotColor = paletteColorF(ctx.palette, forcedPos, totalMag);
+        // Clamp totalMag to [0,1] — unbounded sum passed as brightness
+        // to paletteColorF produces channels >1.0 which clip to white.
+        dotColor = paletteColorF(ctx.palette, forcedPos, fminf(totalMag, 1.0f));
     }
 
     // Apply PHOTONS brightness

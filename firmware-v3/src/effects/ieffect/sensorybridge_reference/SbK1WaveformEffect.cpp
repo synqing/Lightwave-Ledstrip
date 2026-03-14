@@ -216,8 +216,10 @@ void SbK1WaveformEffect::renderEffect(plugins::EffectContext& ctx) {
     // Scroll speed in pixels/second, decoupled from frame rate.
     // At 120 FPS this produces ~0.5 pixels/frame (vs old 1.0 px/frame),
     // giving trails roughly twice the visual persistence on the strip.
-    static constexpr float kScrollPixelsPerSec = 80.0f;
-    m_ps->scrollAccum += kScrollPixelsPerSec * m_dt;
+    static constexpr float kBaseScrollRate = 150.0f;
+    static constexpr float kSpeedMidpoint = 10.0f;  // DEFAULT_SPEED from RendererActor
+    float scrollRate = kBaseScrollRate * (static_cast<float>(ctx.speed) / kSpeedMidpoint);
+    m_ps->scrollAccum += scrollRate * m_dt;
     int pixelsToScroll = static_cast<int>(m_ps->scrollAccum);
     m_ps->scrollAccum -= static_cast<float>(pixelsToScroll);
 

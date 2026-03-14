@@ -1736,6 +1736,10 @@ void V1ApiRoutes::registerRoutes(
             data["modeName"] = mixer.modeName();
             data["spread"] = mixer.getSpread();
             data["strength"] = mixer.getStrength();
+            data["spatial"] = static_cast<uint8_t>(mixer.getSpatial());
+            data["spatialName"] = mixer.spatialName();
+            data["temporal"] = static_cast<uint8_t>(mixer.getTemporal());
+            data["temporalName"] = mixer.temporalName();
         });
     });
 
@@ -1756,12 +1760,14 @@ void V1ApiRoutes::registerRoutes(
             uint8_t mode = 0; bool hasMode = false;
             uint8_t spread = 0; bool hasSpread = false;
             uint8_t strength = 0; bool hasStrength = false;
+            uint8_t spatial = 0; bool hasSpatial = false;
+            uint8_t temporal = 0; bool hasTemporal = false;
             bool save = false;
 
             if (doc.containsKey("mode")) {
                 mode = doc["mode"] | 0;
-                if (mode > 2) {
-                    sendErrorResponse(request, 400, ErrorCodes::OUT_OF_RANGE, "mode must be 0-2", "mode");
+                if (mode > 4) {
+                    sendErrorResponse(request, 400, ErrorCodes::OUT_OF_RANGE, "mode must be 0-4", "mode");
                     return;
                 }
                 hasMode = true;
@@ -1778,22 +1784,55 @@ void V1ApiRoutes::registerRoutes(
                 strength = doc["strength"] | 255;
                 hasStrength = true;
             }
+            if (doc.containsKey("spatial")) {
+                spatial = doc["spatial"] | 0;
+                if (spatial > 1) {
+                    sendErrorResponse(request, 400, ErrorCodes::OUT_OF_RANGE, "spatial must be 0-1", "spatial");
+                    return;
+                }
+                hasSpatial = true;
+            }
+            if (doc.containsKey("temporal")) {
+                temporal = doc["temporal"] | 0;
+                if (temporal > 1) {
+                    sendErrorResponse(request, 400, ErrorCodes::OUT_OF_RANGE, "temporal must be 0-1", "temporal");
+                    return;
+                }
+                hasTemporal = true;
+            }
             if (doc.containsKey("save") && doc["save"].as<bool>()) {
                 save = true;
             }
+
+            // Snapshot current + override with requested values for response.
+            auto& mixer = lightwaveos::enhancement::EdgeMixer::getInstance();
+            uint8_t rMode     = hasMode     ? mode     : static_cast<uint8_t>(mixer.getMode());
+            uint8_t rSpread   = hasSpread   ? spread   : mixer.getSpread();
+            uint8_t rStrength = hasStrength ? strength : mixer.getStrength();
+            uint8_t rSpatial  = hasSpatial  ? spatial  : static_cast<uint8_t>(mixer.getSpatial());
+            uint8_t rTemporal = hasTemporal ? temporal : static_cast<uint8_t>(mixer.getTemporal());
 
             // Apply all after all validated — route through ActorSystem
             if (hasMode) ctx.actorSystem.setEdgeMixerMode(mode);
             if (hasSpread) ctx.actorSystem.setEdgeMixerSpread(spread);
             if (hasStrength) ctx.actorSystem.setEdgeMixerStrength(strength);
+            if (hasSpatial) ctx.actorSystem.setEdgeMixerSpatial(spatial);
+            if (hasTemporal) ctx.actorSystem.setEdgeMixerTemporal(temporal);
             if (save) ctx.actorSystem.saveEdgeMixerToNVS();
 
-            sendSuccessResponse(request, [](JsonObject& respData) {
-                auto& mixer = lightwaveos::enhancement::EdgeMixer::getInstance();
-                respData["mode"] = static_cast<uint8_t>(mixer.getMode());
-                respData["modeName"] = mixer.modeName();
-                respData["spread"] = mixer.getSpread();
-                respData["strength"] = mixer.getStrength();
+            // Respond with requested values (not stale singleton).
+            sendSuccessResponse(request, [rMode, rSpread, rStrength, rSpatial, rTemporal](JsonObject& respData) {
+                using EM = lightwaveos::enhancement::EdgeMixerMode;
+                using ES = lightwaveos::enhancement::EdgeMixerSpatial;
+                using ET = lightwaveos::enhancement::EdgeMixerTemporal;
+                respData["mode"] = rMode;
+                respData["modeName"] = lightwaveos::enhancement::EdgeMixer::modeName(static_cast<EM>(rMode));
+                respData["spread"] = rSpread;
+                respData["strength"] = rStrength;
+                respData["spatial"] = rSpatial;
+                respData["spatialName"] = lightwaveos::enhancement::EdgeMixer::spatialName(static_cast<ES>(rSpatial));
+                respData["temporal"] = rTemporal;
+                respData["temporalName"] = lightwaveos::enhancement::EdgeMixer::temporalName(static_cast<ET>(rTemporal));
             });
         }
     );

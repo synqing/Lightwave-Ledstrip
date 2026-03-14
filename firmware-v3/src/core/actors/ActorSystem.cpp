@@ -548,6 +548,20 @@ bool ActorSystem::setEdgeMixerStrength(uint8_t strength)
     return m_renderer->send(msg, pdMS_TO_TICKS(10));
 }
 
+bool ActorSystem::setEdgeMixerSpatial(uint8_t spatial)
+{
+    if (!m_renderer || !m_renderer->isRunning()) return false;
+    Message msg(MessageType::SET_EDGE_MIXER_SPATIAL, spatial);
+    return m_renderer->send(msg, pdMS_TO_TICKS(10));
+}
+
+bool ActorSystem::setEdgeMixerTemporal(uint8_t temporal)
+{
+    if (!m_renderer || !m_renderer->isRunning()) return false;
+    Message msg(MessageType::SET_EDGE_MIXER_TEMPORAL, temporal);
+    return m_renderer->send(msg, pdMS_TO_TICKS(10));
+}
+
 bool ActorSystem::saveEdgeMixerToNVS()
 {
     if (!m_renderer || !m_renderer->isRunning()) return false;

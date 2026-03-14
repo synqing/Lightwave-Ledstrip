@@ -870,6 +870,8 @@ void WebServer::updateCachedRendererState() {
         m_cachedRendererState.edgeMixerMode = static_cast<uint8_t>(mixer.getMode());
         m_cachedRendererState.edgeMixerSpread = mixer.getSpread();
         m_cachedRendererState.edgeMixerStrength = mixer.getStrength();
+        m_cachedRendererState.edgeMixerSpatial = static_cast<uint8_t>(mixer.getSpatial());
+        m_cachedRendererState.edgeMixerTemporal = static_cast<uint8_t>(mixer.getTemporal());
     }
     m_cachedRendererState.isRunning = m_renderer->isRunning();
     m_cachedRendererState.queueUtilization = m_renderer->getQueueUtilization();

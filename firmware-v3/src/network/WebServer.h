@@ -294,6 +294,8 @@ public:
         uint8_t edgeMixerMode;
         uint8_t edgeMixerSpread;
         uint8_t edgeMixerStrength;
+        uint8_t edgeMixerSpatial;
+        uint8_t edgeMixerTemporal;
         bool isRunning;
         uint8_t queueUtilization;
         uint16_t queueLength;

@@ -287,6 +287,18 @@ public:
     bool setEdgeMixerStrength(uint8_t strength);
 
     /**
+     * @brief Set edge mixer spatial mode
+     * @param spatial 0=uniform, 1=centre_gradient
+     */
+    bool setEdgeMixerSpatial(uint8_t spatial);
+
+    /**
+     * @brief Set edge mixer temporal mode
+     * @param temporal 0=static, 1=rms_gate
+     */
+    bool setEdgeMixerTemporal(uint8_t temporal);
+
+    /**
      * @brief Persist EdgeMixer state to NVS
      */
     bool saveEdgeMixerToNVS();

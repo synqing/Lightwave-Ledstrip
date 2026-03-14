@@ -82,6 +82,12 @@ static void handleLegacyGetStatus(AsyncWebSocketClient* client, JsonDocument& do
             static_cast<lightwaveos::enhancement::EdgeMixerMode>(cached.edgeMixerMode));
         response["edgeMixerSpread"] = cached.edgeMixerSpread;
         response["edgeMixerStrength"] = cached.edgeMixerStrength;
+        response["edgeMixerSpatial"] = cached.edgeMixerSpatial;
+        response["edgeMixerSpatialName"] = lightwaveos::enhancement::EdgeMixer::spatialName(
+            static_cast<lightwaveos::enhancement::EdgeMixerSpatial>(cached.edgeMixerSpatial));
+        response["edgeMixerTemporal"] = cached.edgeMixerTemporal;
+        response["edgeMixerTemporalName"] = lightwaveos::enhancement::EdgeMixer::temporalName(
+            static_cast<lightwaveos::enhancement::EdgeMixerTemporal>(cached.edgeMixerTemporal));
         String output;
         serializeJson(response, output);
         client->text(output);

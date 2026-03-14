@@ -162,6 +162,12 @@ void WebServer::doBroadcastStatus() {
         static_cast<enhancement::EdgeMixerMode>(cached.edgeMixerMode));
     doc["edgeMixerSpread"] = cached.edgeMixerSpread;
     doc["edgeMixerStrength"] = cached.edgeMixerStrength;
+    doc["edgeMixerSpatial"] = cached.edgeMixerSpatial;
+    doc["edgeMixerSpatialName"] = enhancement::EdgeMixer::spatialName(
+        static_cast<enhancement::EdgeMixerSpatial>(cached.edgeMixerSpatial));
+    doc["edgeMixerTemporal"] = cached.edgeMixerTemporal;
+    doc["edgeMixerTemporalName"] = enhancement::EdgeMixer::temporalName(
+        static_cast<enhancement::EdgeMixerTemporal>(cached.edgeMixerTemporal));
 
 #if FEATURE_AUDIO_SYNC
     auto* audio = m_orchestrator.getAudio();

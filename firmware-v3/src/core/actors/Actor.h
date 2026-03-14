@@ -64,6 +64,8 @@ enum class MessageType : uint8_t {
     SET_EDGE_MIXER_SPREAD = 0x0C, // param1 = spread degrees (0-60)
     SET_EDGE_MIXER_STRENGTH = 0x0D, // param1 = strength (0-255)
     SAVE_EDGE_MIXER_NVS = 0x0E,    // Persist EdgeMixer state to NVS (no params)
+    SET_EDGE_MIXER_SPATIAL  = 0x0F,  // param1 = EdgeMixerSpatial (0-1)
+    SET_EDGE_MIXER_TEMPORAL = 0x10,  // param1 = EdgeMixerTemporal (0-1)
 
     // Zone commands (0x20-0x3F)
     ZONE_ENABLE         = 0x20,

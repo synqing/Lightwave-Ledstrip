@@ -1809,15 +1809,29 @@ curl http://lightwaveos.local/api/v1/debug/udp
 
 ### Edge Mixer
 
-Controls dual-edge hue splitting for Light Guide Plate colour differentiation. Three modes shift Strip 2 hue relative to Strip 1.
+Composable 3-stage post-processor for Light Guide Plate colour differentiation. Applies hue/saturation transforms to Strip 2 via three independent stages: Colour (5 transform modes), Spatial (positional mask), and Temporal (audio-reactive modulation).
+
+Effective pixel strength = `scale8(scale8(globalStrength, temporalAmount), spatialAmount)`.
 
 **Parameters:**
 
 | Field | Type | Range | Description |
 |-------|------|-------|-------------|
-| `mode` | uint8 | 0-2 | 0=mirror (no processing), 1=analogous (+spread hue shift), 2=complementary (180° shift) |
-| `spread` | uint8 | 0-60 | Analogous hue spread in degrees (only affects mode 1) |
-| `strength` | uint8 | 0-255 | Mix strength: 0=no effect, 255=full shift |
+| `mode` | uint8 | 0-4 | Colour transform: 0=mirror, 1=analogous, 2=complementary, 3=split_complementary, 4=saturation_veil |
+| `spread` | uint8 | 0-60 | Hue spread in degrees (affects modes 1, 4) |
+| `strength` | uint8 | 0-255 | Global mix strength: 0=no effect, 255=full shift |
+| `spatial` | uint8 | 0-1 | Spatial mask: 0=uniform, 1=centre_gradient (0 at LED 79, 255 at edges) |
+| `temporal` | uint8 | 0-1 | Temporal modulation: 0=static, 1=rms_gate (strength tracks audio RMS) |
+
+**Mode details:**
+
+| Mode | Name | Description |
+|------|------|-------------|
+| 0 | mirror | No processing (zero overhead) |
+| 1 | analogous | Shift hue by +spread degrees |
+| 2 | complementary | +180° hue shift with ~15% desaturation |
+| 3 | split_complementary | +150° hue shift with ~10% desaturation |
+| 4 | saturation_veil | Desaturate by spread amount (spread 0 = no change, spread 60 = near-greyscale) |
 
 #### REST: `GET /api/v1/edgeMixer`
 
@@ -1830,7 +1844,11 @@ Returns current edge mixer state.
     "mode": 1,
     "modeName": "analogous",
     "spread": 30,
-    "strength": 255
+    "strength": 255,
+    "spatial": 0,
+    "spatialName": "uniform",
+    "temporal": 0,
+    "temporalName": "static"
   },
   "timestamp": 123456,
   "version": "2.0"
@@ -1843,7 +1861,7 @@ Set one or more edge mixer parameters. All fields are optional; omitted fields r
 
 ```bash
 curl -X POST -H "Content-Type: application/json" \
-  -d '{"mode":1,"spread":45,"strength":200,"save":true}' \
+  -d '{"mode":3,"spatial":1,"temporal":1,"save":true}' \
   http://192.168.4.1/api/v1/edgeMixer
 ```
 
@@ -1853,12 +1871,12 @@ curl -X POST -H "Content-Type: application/json" \
 {"type":"edge_mixer.get"}
 ```
 
-Response includes `mode`, `modeName`, `spread`, `strength`.
+Response includes `mode`, `modeName`, `spread`, `strength`, `spatial`, `spatialName`, `temporal`, `temporalName`.
 
 #### WebSocket: `edge_mixer.set`
 
 ```json
-{"type":"edge_mixer.set","mode":2,"spread":30,"strength":128}
+{"type":"edge_mixer.set","mode":3,"spatial":1,"temporal":1}
 ```
 
 All fields optional. Validates all before applying any.
@@ -1869,13 +1887,13 @@ All fields optional. Validates all before applying any.
 {"type":"edge_mixer.save"}
 ```
 
-Persists current settings to NVS.
+Persists current settings (including spatial and temporal) to NVS.
 
 #### Serial JSON: `getEdgeMixer` / `setEdgeMixer` / `saveEdgeMixer`
 
 ```json
 {"type":"getEdgeMixer"}
-{"type":"setEdgeMixer","mode":1,"spread":45}
+{"type":"setEdgeMixer","mode":3,"spatial":1,"temporal":1}
 {"type":"saveEdgeMixer"}
 ```
 
@@ -1885,10 +1903,14 @@ The periodic WebSocket status broadcast includes:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `edgeMixerMode` | uint8 | Current mode (0-2) |
+| `edgeMixerMode` | uint8 | Current mode (0-4) |
 | `edgeMixerModeName` | string | Human-readable mode name |
 | `edgeMixerSpread` | uint8 | Current spread (0-60) |
 | `edgeMixerStrength` | uint8 | Current strength (0-255) |
+| `edgeMixerSpatial` | uint8 | Current spatial mode (0-1) |
+| `edgeMixerSpatialName` | string | Human-readable spatial name |
+| `edgeMixerTemporal` | uint8 | Current temporal mode (0-1) |
+| `edgeMixerTemporalName` | string | Human-readable temporal name |
 
 ---
 

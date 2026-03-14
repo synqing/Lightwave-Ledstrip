@@ -676,16 +676,16 @@ void setup() {
     Serial.println("\nAuto-Play (Narrative) Commands:");
     Serial.println("  A       - Toggle auto-play mode");
     Serial.println("  @       - Print narrative status");
-    Serial.println("\nShow Playback Commands:");
-    Serial.println("  W       - List all shows (10 presets)");
-    Serial.println("  w       - Toggle show playback");
-    Serial.println("  </>     - Previous/Next show");
-    Serial.println("  {/}     - Seek backward/forward 30s");
-    Serial.println("  #       - Print show status");
+    Serial.println("\nEdgeMixer Commands:");
+    Serial.println("  e       - Cycle mode (mirror/analog/comp/split_comp/sat_veil)");
+    Serial.println("  w/W     - Spread +/- (hue width, 0-60)");
+    Serial.println("  </>     - Strength -/+ (0-255)");
+    Serial.println("  }       - Save EdgeMixer to NVS");
+    Serial.println("  #       - Print EdgeMixer status");
     Serial.println("\nColor Correction Commands:");
     Serial.println("  c       - Cycle correction mode (OFF→HSV→RGB→BOTH→OFF)");
     Serial.println("  C       - Show color correction status");
-    Serial.println("  e       - Toggle auto-exposure");
+    Serial.println("  E       - Toggle auto-exposure");
     Serial.println("  g       - Toggle/cycle gamma (off→2.2→2.5→2.8→off)");
     Serial.println("  b/B     - RD Triangle K +/- (auto-selects RD Triangle)");
     Serial.println("  cc      - Show correction mode (0=OFF,1=HSV,2=RGB,3=BOTH)");
@@ -1090,45 +1090,87 @@ static void processSerialJsonCommand(const String& json) {
     // ------------------------------------------------------------------
     else if (strcmp(type, "getEdgeMixer") == 0) {
         auto& mixer = lightwaveos::enhancement::EdgeMixer::getInstance();
-        char buf[128];
+        char buf[256];
         snprintf(buf, sizeof(buf),
-            "{\"mode\":%u,\"modeName\":\"%s\",\"spread\":%u,\"strength\":%u}",
+            "{\"mode\":%u,\"modeName\":\"%s\",\"spread\":%u,\"strength\":%u,"
+            "\"spatial\":%u,\"spatialName\":\"%s\",\"temporal\":%u,\"temporalName\":\"%s\"}",
             (unsigned)static_cast<uint8_t>(mixer.getMode()),
             mixer.modeName(),
             (unsigned)mixer.getSpread(),
-            (unsigned)mixer.getStrength());
+            (unsigned)mixer.getStrength(),
+            (unsigned)static_cast<uint8_t>(mixer.getSpatial()),
+            mixer.spatialName(),
+            (unsigned)static_cast<uint8_t>(mixer.getTemporal()),
+            mixer.temporalName());
         serialJsonResponse(type, reqId, buf);
     }
     // ------------------------------------------------------------------
     // setEdgeMixer
     // ------------------------------------------------------------------
     else if (strcmp(type, "setEdgeMixer") == 0) {
+        // Snapshot current state; override with requested values for response.
+        // Actor messages are queued (async), so the singleton may not reflect
+        // the new state by the time we build the response. Responding with the
+        // REQUESTED values is correct: "here is what will take effect."
+        auto& mixer = lightwaveos::enhancement::EdgeMixer::getInstance();
+        uint8_t rMode     = static_cast<uint8_t>(mixer.getMode());
+        uint8_t rSpread   = mixer.getSpread();
+        uint8_t rStrength = mixer.getStrength();
+        uint8_t rSpatial  = static_cast<uint8_t>(mixer.getSpatial());
+        uint8_t rTemporal = static_cast<uint8_t>(mixer.getTemporal());
+
         bool anySet = false;
         if (doc.containsKey("mode")) {
             uint8_t mode = doc["mode"] | 0;
-            if (mode > 2) { serialJsonError(reqId, "mode must be 0-2"); return; }
+            if (mode > 4) { serialJsonError(reqId, "mode must be 0-4"); return; }
             actors.setEdgeMixerMode(mode);
+            rMode = mode;
             anySet = true;
         }
         if (doc.containsKey("spread")) {
             uint8_t spread = doc["spread"] | 30;
             if (spread > 60) { serialJsonError(reqId, "spread must be 0-60"); return; }
             actors.setEdgeMixerSpread(spread);
+            rSpread = spread;
             anySet = true;
         }
         if (doc.containsKey("strength")) {
-            actors.setEdgeMixerStrength(doc["strength"] | 255);
+            uint8_t s = doc["strength"] | 255;
+            actors.setEdgeMixerStrength(s);
+            rStrength = s;
             anySet = true;
         }
-        if (!anySet) { serialJsonError(reqId, "provide mode, spread, or strength"); return; }
-        auto& mixer = lightwaveos::enhancement::EdgeMixer::getInstance();
-        char buf[128];
+        if (doc.containsKey("spatial")) {
+            uint8_t spatial = doc["spatial"] | 0;
+            if (spatial > 1) { serialJsonError(reqId, "spatial must be 0-1"); return; }
+            actors.setEdgeMixerSpatial(spatial);
+            rSpatial = spatial;
+            anySet = true;
+        }
+        if (doc.containsKey("temporal")) {
+            uint8_t temporal = doc["temporal"] | 0;
+            if (temporal > 1) { serialJsonError(reqId, "temporal must be 0-1"); return; }
+            actors.setEdgeMixerTemporal(temporal);
+            rTemporal = temporal;
+            anySet = true;
+        }
+        if (!anySet) { serialJsonError(reqId, "provide mode, spread, strength, spatial, or temporal"); return; }
+        // Respond with the values that will take effect (not stale singleton).
+        using EM = lightwaveos::enhancement::EdgeMixerMode;
+        using ES = lightwaveos::enhancement::EdgeMixerSpatial;
+        using ET = lightwaveos::enhancement::EdgeMixerTemporal;
+        char buf[256];
         snprintf(buf, sizeof(buf),
-            "{\"mode\":%u,\"modeName\":\"%s\",\"spread\":%u,\"strength\":%u}",
-            (unsigned)static_cast<uint8_t>(mixer.getMode()),
-            mixer.modeName(),
-            (unsigned)mixer.getSpread(),
-            (unsigned)mixer.getStrength());
+            "{\"mode\":%u,\"modeName\":\"%s\",\"spread\":%u,\"strength\":%u,"
+            "\"spatial\":%u,\"spatialName\":\"%s\",\"temporal\":%u,\"temporalName\":\"%s\"}",
+            (unsigned)rMode,
+            lightwaveos::enhancement::EdgeMixer::modeName(static_cast<EM>(rMode)),
+            (unsigned)rSpread,
+            (unsigned)rStrength,
+            (unsigned)rSpatial,
+            lightwaveos::enhancement::EdgeMixer::spatialName(static_cast<ES>(rSpatial)),
+            (unsigned)rTemporal,
+            lightwaveos::enhancement::EdgeMixer::temporalName(static_cast<ET>(rTemporal)));
         serialJsonResponse(type, reqId, buf);
     }
     // ------------------------------------------------------------------
@@ -1853,8 +1895,10 @@ void loop() {
                 case '-': case '_':  // Brightness down
                 case '[': case ']':  // Speed
                 case ',': case '.':  // Palette
-                case '<': case '>':  // Show navigation
-                case '}':            // Seek forward ('{' excluded: must buffer for JSON commands)
+                case 'e':            // EdgeMixer mode cycle
+                case 'w': case 'W':  // EdgeMixer spread +/-
+                case '<': case '>':  // EdgeMixer strength -/+
+                case '}':            // EdgeMixer save to NVS
                 case 'a':            // Audio debug toggle
                 case 'p': case 'P':  // Bloom prism opacity
                 case 'o': case 'O':  // Bloom bulb opacity
@@ -3601,154 +3645,83 @@ void loop() {
                     NARRATIVE.printStatus();
                     break;
 
-                // ========== Show Playback Commands ==========
+                // ========== EdgeMixer Commands ==========
 
-                case 'W':
-                    // List all shows
+                case 'e':
+                    // Cycle EdgeMixer mode: mirror -> analogous -> complementary -> split_comp -> sat_veil -> mirror
                     {
-                        Serial.printf("\n=== Shows (%d available) ===\n", BUILTIN_SHOW_COUNT);
-                        for (uint8_t i = 0; i < BUILTIN_SHOW_COUNT; i++) {
-                            // Read show info from PROGMEM
-                            ShowDefinition show;
-                            memcpy_P(&show, &BUILTIN_SHOWS[i], sizeof(ShowDefinition));
-                            char nameBuf[20];
-                            strncpy_P(nameBuf, show.name, sizeof(nameBuf) - 1);
-                            nameBuf[sizeof(nameBuf) - 1] = '\0';
-
-                            uint32_t mins = show.totalDurationMs / 60000;
-                            uint32_t secs = (show.totalDurationMs % 60000) / 1000;
-
-                            Serial.printf("  %d: %-12s %d:%02d %s%s\n",
-                                          i, nameBuf, mins, secs,
-                                          show.looping ? "[loops]" : "",
-                                          (i == currentShowIndex) ? " <--" : "");
-                        }
-                        Serial.println();
+                        auto& mixer = lightwaveos::enhancement::EdgeMixer::getInstance();
+                        uint8_t next = (static_cast<uint8_t>(mixer.getMode()) + 1) % 5;
+                        actors.setEdgeMixerMode(next);
+                        Serial.printf("EdgeMixer mode: " LW_CLR_CYAN "%s" LW_ANSI_RESET "\n",
+                                      lightwaveos::enhancement::EdgeMixer::modeName(
+                                          static_cast<lightwaveos::enhancement::EdgeMixerMode>(next)));
                     }
                     break;
 
                 case 'w':
-                    // Toggle show playback
+                    // EdgeMixer spread +
                     {
-                        ShowDirectorActor* showDir = actors.getShowDirector();
-                        if (showDir) {
-                            if (showDir->isPlaying()) {
-                                // Stop the show
-                                Message stopMsg(MessageType::SHOW_STOP);
-                                showDir->send(stopMsg);
-                                Serial.println("Show: STOPPED");
-                            } else {
-                                // Load and start the show
-                                Message loadMsg(MessageType::SHOW_LOAD, currentShowIndex);
-                                showDir->send(loadMsg);
-                                delay(10);  // Allow load to process
-                                Message startMsg(MessageType::SHOW_START);
-                                showDir->send(startMsg);
+                        auto& mixer = lightwaveos::enhancement::EdgeMixer::getInstance();
+                        uint8_t spread = mixer.getSpread();
+                        spread = (spread + 5 > 60) ? 60 : spread + 5;
+                        actors.setEdgeMixerSpread(spread);
+                        Serial.printf("EdgeMixer spread: %d\n", spread);
+                    }
+                    break;
 
-                                // Get show name for display
-                                ShowDefinition show;
-                                memcpy_P(&show, &BUILTIN_SHOWS[currentShowIndex], sizeof(ShowDefinition));
-                                char nameBuf[20];
-                                strncpy_P(nameBuf, show.name, sizeof(nameBuf) - 1);
-                                nameBuf[sizeof(nameBuf) - 1] = '\0';
-                                Serial.printf("Show: PLAYING '%s'\n", nameBuf);
-                            }
-                        } else {
-                            Serial.println("ERROR: ShowDirector not available");
-                        }
+                case 'W':
+                    // EdgeMixer spread -
+                    {
+                        auto& mixer = lightwaveos::enhancement::EdgeMixer::getInstance();
+                        uint8_t spread = mixer.getSpread();
+                        spread = (spread < 5) ? 0 : spread - 5;
+                        actors.setEdgeMixerSpread(spread);
+                        Serial.printf("EdgeMixer spread: %d\n", spread);
                     }
                     break;
 
                 case '<':
-                    // Previous show
+                    // EdgeMixer strength -
                     {
-                        currentShowIndex = (currentShowIndex + BUILTIN_SHOW_COUNT - 1) % BUILTIN_SHOW_COUNT;
-                        ShowDefinition show;
-                        memcpy_P(&show, &BUILTIN_SHOWS[currentShowIndex], sizeof(ShowDefinition));
-                        char nameBuf[20];
-                        strncpy_P(nameBuf, show.name, sizeof(nameBuf) - 1);
-                        nameBuf[sizeof(nameBuf) - 1] = '\0';
-                        Serial.printf("Show %d: %s\n", currentShowIndex, nameBuf);
+                        auto& mixer = lightwaveos::enhancement::EdgeMixer::getInstance();
+                        uint8_t strength = mixer.getStrength();
+                        strength = (strength < 15) ? 0 : strength - 15;
+                        actors.setEdgeMixerStrength(strength);
+                        Serial.printf("EdgeMixer strength: %d\n", strength);
                     }
                     break;
 
                 case '>':
-                    // Next show
+                    // EdgeMixer strength +
                     {
-                        currentShowIndex = (currentShowIndex + 1) % BUILTIN_SHOW_COUNT;
-                        ShowDefinition show;
-                        memcpy_P(&show, &BUILTIN_SHOWS[currentShowIndex], sizeof(ShowDefinition));
-                        char nameBuf[20];
-                        strncpy_P(nameBuf, show.name, sizeof(nameBuf) - 1);
-                        nameBuf[sizeof(nameBuf) - 1] = '\0';
-                        Serial.printf("Show %d: %s\n", currentShowIndex, nameBuf);
-                    }
-                    break;
-
-                case '{':
-                    // Seek backward 30s
-                    {
-                        ShowDirectorActor* showDir = actors.getShowDirector();
-                        if (showDir && showDir->isPlaying()) {
-                            uint32_t elapsed = showDir->getElapsedMs();
-                            uint32_t newTime = (elapsed > 30000) ? (elapsed - 30000) : 0;
-                            Message seekMsg(MessageType::SHOW_SEEK, 0, 0, 0, newTime);
-                            showDir->send(seekMsg);
-                            Serial.printf("Seek: %d:%02d\n", newTime / 60000, (newTime % 60000) / 1000);
-                        } else {
-                            Serial.println("No show playing");
-                        }
+                        auto& mixer = lightwaveos::enhancement::EdgeMixer::getInstance();
+                        uint8_t strength = mixer.getStrength();
+                        strength = (strength + 15 > 255) ? 255 : strength + 15;
+                        actors.setEdgeMixerStrength(strength);
+                        Serial.printf("EdgeMixer strength: %d\n", strength);
                     }
                     break;
 
                 case '}':
-                    // Seek forward 30s
+                    // Save EdgeMixer to NVS
                     {
-                        ShowDirectorActor* showDir = actors.getShowDirector();
-                        if (showDir && showDir->isPlaying()) {
-                            uint32_t elapsed = showDir->getElapsedMs();
-                            uint32_t remaining = showDir->getRemainingMs();
-                            uint32_t newTime = (remaining > 30000) ? (elapsed + 30000) : (elapsed + remaining);
-                            Message seekMsg(MessageType::SHOW_SEEK, 0, 0, 0, newTime);
-                            showDir->send(seekMsg);
-                            Serial.printf("Seek: %d:%02d\n", newTime / 60000, (newTime % 60000) / 1000);
-                        } else {
-                            Serial.println("No show playing");
-                        }
+                        actors.saveEdgeMixerToNVS();
+                        Serial.println("EdgeMixer: " LW_CLR_GREEN "saved to NVS" LW_ANSI_RESET);
                     }
                     break;
 
                 case '#':
-                    // Print show status
+                    // Print EdgeMixer status
                     {
-                        ShowDirectorActor* showDir = actors.getShowDirector();
-                        if (showDir) {
-                            if (showDir->hasShow()) {
-                                ShowDefinition show;
-                                memcpy_P(&show, &BUILTIN_SHOWS[showDir->getCurrentShowId()], sizeof(ShowDefinition));
-                                char nameBuf[20];
-                                strncpy_P(nameBuf, show.name, sizeof(nameBuf) - 1);
-                                nameBuf[sizeof(nameBuf) - 1] = '\0';
-
-                                uint32_t elapsed = showDir->getElapsedMs();
-                                uint32_t total = show.totalDurationMs;
-
-                                Serial.println("\n=== Show Status ===");
-                                Serial.printf("  Show: %s\n", nameBuf);
-                                Serial.printf("  State: %s\n",
-                                              showDir->isPlaying() ? (showDir->isPaused() ? "PAUSED" : "PLAYING") : "STOPPED");
-                                Serial.printf("  Progress: %d:%02d / %d:%02d (%.0f%%)\n",
-                                              elapsed / 60000, (elapsed % 60000) / 1000,
-                                              total / 60000, (total % 60000) / 1000,
-                                              showDir->getProgress() * 100.0f);
-                                Serial.printf("  Chapter: %d\n", showDir->getCurrentChapter());
-                                Serial.println();
-                            } else {
-                                Serial.printf("No show loaded. Selected: %d\n", currentShowIndex);
-                            }
-                        } else {
-                            Serial.println("ShowDirector not available");
-                        }
+                        auto& mixer = lightwaveos::enhancement::EdgeMixer::getInstance();
+                        Serial.println("\n=== EdgeMixer Status ===");
+                        Serial.printf("  Mode:     %s\n", mixer.modeName());
+                        Serial.printf("  Spread:   %d\n", mixer.getSpread());
+                        Serial.printf("  Strength: %d\n", mixer.getStrength());
+                        Serial.printf("  Spatial:  %s\n", mixer.spatialName());
+                        Serial.printf("  Temporal: %s\n", mixer.temporalName());
+                        Serial.println();
                     }
                     break;
 
@@ -3788,7 +3761,7 @@ void loop() {
                     }
                     break;
 
-                case 'e':
+                case 'E':
                     // Toggle auto-exposure
                     {
                         auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();

@@ -184,7 +184,11 @@ void SbK1WaveformEffect::renderEffect(plugins::EffectContext& ctx) {
     // --- DYNAMIC TRAIL FADE ---
     // K1: abs_amp from waveform_peak_scaled (RAW, not smoothed)
     float absAmp = clampF(fabsf(m_wfPeakScaled), 0.0f, 1.0f);
-    float fade = 1.0f - 0.10f * absAmp;
+    // Minimum 2% per-frame decay prevents permanent trail retention during
+    // silence. At 120 FPS, 2%/frame = full decay from 255→0 in ~1.9s.
+    // During active playback (absAmp=0.5), fade=0.95 — unchanged behaviour.
+    static constexpr float kMinFade = 0.02f;
+    float fade = 1.0f - fmaxf(kMinFade, 0.10f * absAmp);
 
     for (uint16_t i = 0; i < kStripLength; ++i) {
         m_ps->trailBuffer[i].r *= fade;
@@ -202,7 +206,9 @@ void SbK1WaveformEffect::renderEffect(plugins::EffectContext& ctx) {
 
     // --- DOT POSITION ---
     float amp = m_wfPeakLast;
-    if (fabsf(amp) < 0.05f) amp = 0.0f;
+    // Hard gate removed. m_wfPeakLast is already EMA-smoothed (tau=23ms)
+    // so it doesn't jitter near zero. With the fade floor, a near-zero dot
+    // at centre fades naturally instead of painting a permanent stripe.
 
     float safeSensitivity = (m_sensitivity > 0.01f) ? m_sensitivity : 0.01f;
     amp *= 0.7f / safeSensitivity;

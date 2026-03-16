@@ -680,6 +680,8 @@ void setup() {
     Serial.println("  e       - Cycle mode (mirror/analog/comp/split_comp/sat_veil)");
     Serial.println("  w/W     - Spread +/- (hue width, 0-60)");
     Serial.println("  </>     - Strength -/+ (0-255)");
+    Serial.println("  y       - Toggle spatial (uniform/centre_gradient)");
+    Serial.println("  Y       - Toggle temporal (static/rms_gate)");
     Serial.println("  }       - Save EdgeMixer to NVS");
     Serial.println("  #       - Print EdgeMixer status");
     Serial.println("\nColor Correction Commands:");
@@ -1898,6 +1900,8 @@ void loop() {
                 case 'e':            // EdgeMixer mode cycle
                 case 'w': case 'W':  // EdgeMixer spread +/-
                 case '<': case '>':  // EdgeMixer strength -/+
+                case 'y':            // EdgeMixer spatial toggle
+                case 'Y':            // EdgeMixer temporal toggle
                 case '}':            // EdgeMixer save to NVS
                 case 'a':            // Audio debug toggle
                 case 'p': case 'P':  // Bloom prism opacity
@@ -3700,6 +3704,30 @@ void loop() {
                         strength = (strength + 15 > 255) ? 255 : strength + 15;
                         actors.setEdgeMixerStrength(strength);
                         Serial.printf("EdgeMixer strength: %d\n", strength);
+                    }
+                    break;
+
+                case 'y':
+                    // Toggle EdgeMixer spatial: uniform ↔ centre_gradient
+                    {
+                        auto& mixer = lightwaveos::enhancement::EdgeMixer::getInstance();
+                        uint8_t next = (static_cast<uint8_t>(mixer.getSpatial()) == 0) ? 1 : 0;
+                        actors.setEdgeMixerSpatial(next);
+                        Serial.printf("EdgeMixer spatial: " LW_CLR_CYAN "%s" LW_ANSI_RESET "\n",
+                                      lightwaveos::enhancement::EdgeMixer::spatialName(
+                                          static_cast<lightwaveos::enhancement::EdgeMixerSpatial>(next)));
+                    }
+                    break;
+
+                case 'Y':
+                    // Toggle EdgeMixer temporal: static ↔ rms_gate
+                    {
+                        auto& mixer = lightwaveos::enhancement::EdgeMixer::getInstance();
+                        uint8_t next = (static_cast<uint8_t>(mixer.getTemporal()) == 0) ? 1 : 0;
+                        actors.setEdgeMixerTemporal(next);
+                        Serial.printf("EdgeMixer temporal: " LW_CLR_CYAN "%s" LW_ANSI_RESET "\n",
+                                      lightwaveos::enhancement::EdgeMixer::temporalName(
+                                          static_cast<lightwaveos::enhancement::EdgeMixerTemporal>(next)));
                     }
                     break;
 

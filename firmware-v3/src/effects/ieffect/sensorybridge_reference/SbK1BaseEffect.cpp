@@ -131,10 +131,32 @@ void SbK1BaseEffect::baseProcessAudio(plugins::EffectContext& ctx) {
     m_dt = ctx.getSafeDeltaSeconds();
 
     // -----------------------------------------------------------------
-    // SB parity shortcut: if the pipeline already provides K1-style data,
-    // use it directly instead of reconstructing from bins256.
+    // Audio path selection.
+    //
+    // PipelineCore: has bins256 → reconstruct full 96-semitone spectrum.
+    // ESV11: no bins256 → use ControlBus chroma/waveform directly.
+    //
+    // The SB parity shortcut (sb_chromagram_smooth, sb_hue_position) is
+    // only used when BOTH fields are populated AND stable. On ESV11 the
+    // sidecar hue position often stays at zero, creating a flaky gate
+    // that can intermittently switch paths between boots and cause the
+    // effect to produce zero output. Require sb_chromagram_smooth to
+    // have actual energy (not just a non-zero hue) before trusting it.
     // -----------------------------------------------------------------
-    bool hasSbParity = ctx.audio.hasSbWaveform() && (cb.sb_hue_position > 0.0001f);
+    bool hasSbParity = false;
+#if FEATURE_AUDIO_BACKEND_PIPELINECORE
+    // PipelineCore always populates the sidecar reliably
+    hasSbParity = ctx.audio.hasSbWaveform() && (cb.sb_hue_position > 0.0001f);
+#else
+    // ESV11: require BOTH hue position AND chromagram energy to be non-trivial.
+    // This prevents the flaky gate where sbHue=0 on most boots but briefly
+    // drifts above the threshold on others, activating an unreliable path.
+    if (ctx.audio.hasSbWaveform() && cb.sb_hue_position > 0.01f) {
+        float sbChrEnergy = 0.0f;
+        for (int i = 0; i < kChromaBins; ++i) sbChrEnergy += cb.sb_chromagram_smooth[i];
+        hasSbParity = (sbChrEnergy > 0.5f);
+    }
+#endif
 
     if (hasSbParity) {
         // Use pre-computed SB chromagram

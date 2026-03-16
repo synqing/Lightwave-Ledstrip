@@ -172,6 +172,7 @@
 #include "ieffect/LGPGoldCodeSpeckleEffect.h"
 #include "ieffect/LGPQuasicrystalLatticeEffect.h"
 #include "ieffect/LGPFresnelCausticSweepEffect.h"
+#include "ieffect/LGPFresnelCausticReactiveEffect.h"
 #include "ieffect/LGPBirefringentShearRadialEffect.h"
 #include "ieffect/LGPSolitonWavesRadialEffect.h"
 #include "ieffect/LGPNeuralNetworkRadialEffect.h"
@@ -1239,6 +1240,10 @@ uint16_t registerAllEffects(RendererActor* renderer) {
     renderer->registerEffect(EID_LGP_FRESNEL_CAUSTIC_SWEEP, &fresnelCausticSweepInstance);
     total++;
 
+    static ieffect::LGPFresnelCausticReactiveEffect fresnelCausticReactiveInstance;
+    renderer->registerEffect(EID_LGP_FRESNEL_CAUSTIC_REACTIVE, &fresnelCausticReactiveInstance);
+    total++;
+
     // Time-Reversal Mirror (Audio-Reactive) - Beat-triggered playback
     static ieffect::LGPTimeReversalMirrorEffect_AR timeReversalMirrorARInstance;
     renderer->registerEffect(EID_LGP_TIME_REVERSAL_MIRROR_AR, &timeReversalMirrorARInstance);
@@ -1365,7 +1370,7 @@ uint16_t registerAllEffects(RendererActor* renderer) {
     total++;
 
     // =============== EFFECT COUNT PARITY VALIDATION ===============
-    constexpr uint16_t EXPECTED_EFFECT_COUNT = FEATURE_AR_1C_EXPERIMENTAL ? 186 : 183;
+    constexpr uint16_t EXPECTED_EFFECT_COUNT = FEATURE_AR_1C_EXPERIMENTAL ? 187 : 184;
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

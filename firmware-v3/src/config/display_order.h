@@ -298,6 +298,8 @@ constexpr EffectId DISPLAY_ORDER[] = {
     EID_SB_K1_BLOOM_V2_BASS_TREBLE,          // K1 Bloom V2 (Bass-Treble Split)
     EID_SB_K1_BLOOM_V2_EXPONENTIAL,          // K1 Bloom V2 (Exponential Energy)
     EID_SB_K1_BLOOM_V2_SPECTRAL_SPREAD,      // K1 Bloom V2 (Spectral Spread)
+
+    EID_LGP_FRESNEL_CAUSTIC_REACTIVE,        // Fresnel Caustic Reactive (tension/release)
 };
 
 /// Number of effects in the display order (excludes retired slots)

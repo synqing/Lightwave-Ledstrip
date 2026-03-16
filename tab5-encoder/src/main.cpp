@@ -1327,15 +1327,28 @@ void setup() {
         Serial.println("[NVS] WARNING: NVS init failed - parameters will not persist");
     }
 
-    // Scan external I2C bus for devices
-    uint8_t found = scanI2CBus(Wire, "External I2C (Grove Port.A)");
+    // Probe only known encoder addresses (0x41, 0x42) — a full 1-126 scan
+    // takes 126 × 50ms = 6.3s when nothing is connected, triggering the WDT.
+    {
+        Serial.println("\n=== Probing encoder addresses ===");
+        const uint8_t targets[] = {ADDR_UNIT_A, ADDR_UNIT_B};
+        for (uint8_t i = 0; i < 2; ++i) {
+            esp_task_wdt_reset();
+            Wire.beginTransmission(targets[i]);
+            uint8_t err = Wire.endTransmission();
+            Serial.printf("  0x%02X: %s\n", targets[i],
+                          (err == 0) ? "FOUND" : "not responding");
+        }
+    }
 
     // Initialize DualEncoderService with both addresses
     // Unit A @ 0x42 (reprogrammed), Unit B @ 0x41 (factory)
+    esp_task_wdt_reset();
     LoadingScreen::update(M5.Display, "INITIALISING ENCODERS...", false, false);
     g_encoders = new DualEncoderService(&Wire, ADDR_UNIT_A, ADDR_UNIT_B);
     g_encoders->setChangeCallback(onEncoderChange);
     bool encoderOk = g_encoders->begin();
+    esp_task_wdt_reset();
 
     // Initialize ButtonHandler (handles Unit-A button resets)
     // NOTE: Unit-B buttons (8-15) are now reserved for Preset System.
@@ -1399,6 +1412,8 @@ void setup() {
 
     Serial.printf("\n[INIT] Unit A (0x%02X): %s\n", ADDR_UNIT_A, unitA ? "OK" : "NOT FOUND");
     Serial.printf("[INIT] Unit B (0x%02X): %s\n", ADDR_UNIT_B, unitB ? "OK" : "NOT FOUND");
+
+    esp_task_wdt_reset();
 
     if (unitA && unitB) {
         Serial.println("\n[OK] Both units detected - 16 encoders available!");

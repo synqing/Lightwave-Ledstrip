@@ -34,32 +34,63 @@ try:
 except Exception as e:
     _ndjson("H1", "pio_pre.py:35", "get_package_dir_failed", {"error": str(e)})
 
-def _has_compiler(dir_path: str) -> bool:
+def _compiler_path(dir_path: str) -> str:
+    """Return the g++ binary path if it exists, else empty string."""
     if not dir_path:
+        return ""
+    for sub in ("bin", os.path.join("riscv32-esp-elf", "bin")):
+        p = os.path.join(dir_path, sub, "riscv32-esp-elf-g++")
+        if os.path.isfile(p):
+            return p
+    return ""
+
+def _has_compiler(dir_path: str) -> bool:
+    return bool(_compiler_path(dir_path))
+
+def _compiler_supports_gnu2b(dir_path: str) -> bool:
+    """Check if the compiler supports -std=gnu++2b (GCC >= 12)."""
+    gpp = _compiler_path(dir_path)
+    if not gpp:
         return False
-    return (
-        os.path.isfile(os.path.join(dir_path, "bin", "riscv32-esp-elf-g++"))
-        or os.path.isfile(os.path.join(dir_path, "riscv32-esp-elf", "bin", "riscv32-esp-elf-g++"))
-    )
+    import subprocess
+    try:
+        result = subprocess.run(
+            [gpp, "-std=gnu++2b", "-E", "-x", "c++", "-"],
+            input="", capture_output=True, text=True, timeout=5
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
 
 if toolchain_dir and not _has_compiler(toolchain_dir):
     # Some PlatformIO installs can leave a metadata-only toolchain directory around; fall back to scanning.
+    toolchain_dir = None
+
+if toolchain_dir and not _compiler_supports_gnu2b(toolchain_dir):
+    # Platform requires gnu++2b but this toolchain is too old (e.g. GCC 8.4). Skip it.
+    _ndjson("H1", "pio_pre.py", "toolchain_too_old", {"dir": toolchain_dir})
     toolchain_dir = None
 
 # Fallback: search for toolchain package manually if get_package_dirs fails
 if not toolchain_dir:
     pio_packages_dir = os.path.expanduser("~/.platformio/packages")
     # Search for a toolchain directory that actually contains the compiler binaries.
+    # Collect ALL candidates and pick the newest (by directory mtime) to avoid
+    # selecting an ancient GCC 8.4 over a working GCC 14.2.
     if os.path.isdir(pio_packages_dir):
+        candidates = []
         for item in os.listdir(pio_packages_dir):
             if not item.startswith("toolchain-riscv32-esp"):
                 continue
             candidate = os.path.join(pio_packages_dir, item)
             if not os.path.isdir(candidate):
                 continue
-            if _has_compiler(candidate):
-                toolchain_dir = candidate
-                break
+            if _has_compiler(candidate) and _compiler_supports_gnu2b(candidate):
+                candidates.append(candidate)
+        if candidates:
+            # Prefer newest by modification time
+            candidates.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+            toolchain_dir = candidates[0]
 
 _ndjson("H1", "pio_pre.py:37", "toolchain_dir", {"toolchainDir": toolchain_dir})
 

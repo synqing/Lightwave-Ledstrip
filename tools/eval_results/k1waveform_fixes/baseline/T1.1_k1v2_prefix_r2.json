@@ -1,0 +1,103 @@
+{
+  "test_id": "T1.1",
+  "name": "K1 Waveform Baseline \u2014 Music",
+  "device": "/dev/cu.usbmodem212401",
+  "effect": "0x1302",
+  "edgemixer": {
+    "mode": 0,
+    "spread": 30,
+    "strength": 200,
+    "spatial": 0,
+    "temporal": 0
+  },
+  "frames_captured": 900,
+  "metrics": {
+    "L0": {
+      "black_frame_ratio": 0.0,
+      "clipped_frame_ratio": 0.0,
+      "mean_brightness": 0.23283713235294115
+    },
+    "L1": {
+      "stability_lss": 0.8574429649501625,
+      "flicker_elatcsf": 0.7528596966049795,
+      "vmcr": 0.35205543046583265
+    },
+    "L2": {
+      "energy_correlation": -0.06298926473125238,
+      "beat_alignment": 0.2222222222222222,
+      "onset_response": 0.524797166610487
+    },
+    "composite": 0.21149277111659856,
+    "strip_divergence_l2": 0.46099868086408013,
+    "near_black_leaks": 186
+  },
+  "gates": {
+    "black_frame_ratio": {
+      "value": 0.0,
+      "bounds": {
+        "max": 0.15
+      },
+      "pass": true
+    },
+    "clipped_frame_ratio": {
+      "value": 0.0,
+      "bounds": {
+        "max": 0.1
+      },
+      "pass": true
+    },
+    "mean_brightness": {
+      "value": 0.23283713235294115,
+      "bounds": {
+        "min": 0.05,
+        "max": 0.99
+      },
+      "pass": true
+    },
+    "stability_lss": {
+      "value": 0.8574429649501625,
+      "bounds": {
+        "min": 0.4
+      },
+      "pass": true
+    },
+    "flicker_elatcsf": {
+      "value": 0.7528596966049795,
+      "bounds": {
+        "max": 0.6
+      },
+      "pass": false
+    },
+    "vmcr": {
+      "value": 0.35205543046583265,
+      "bounds": {
+        "min": 0.3
+      },
+      "pass": true
+    },
+    "beat_alignment": {
+      "value": 0.2222222222222222,
+      "bounds": {
+        "min": 0.05
+      },
+      "pass": true
+    },
+    "onset_response": {
+      "value": 0.524797166610487,
+      "bounds": {
+        "min": 0.8
+      },
+      "pass": false
+    },
+    "composite": {
+      "value": 0.21149277111659856,
+      "bounds": {
+        "min": 0.3
+      },
+      "pass": false
+    }
+  },
+  "degradation": {},
+  "extra_checks": {},
+  "pass": false
+}

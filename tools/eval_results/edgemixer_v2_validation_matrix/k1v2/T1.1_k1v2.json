@@ -1,0 +1,110 @@
+{
+  "test_id": "T1.1",
+  "name": "K1 Waveform Baseline \u2014 Music",
+  "device": "/dev/cu.usbmodem212401",
+  "effect": "0x1302",
+  "edgemixer": {
+    "mode": 0,
+    "spread": 30,
+    "strength": 200,
+    "spatial": 0,
+    "temporal": 0
+  },
+  "frames_captured": 900,
+  "metrics": {
+    "L0": {
+      "black_frame_ratio": 0.0,
+      "clipped_frame_ratio": 0.0,
+      "mean_brightness": 0.9627557734204791
+    },
+    "L1": {
+      "stability_lss": 0.9982728085672534,
+      "flicker_elatcsf": 0.10973500383660956,
+      "vmcr": 0.9856261102453721
+    },
+    "L2": {
+      "energy_correlation": 0.13320387828061495,
+      "beat_alignment": 0.9090909090909091,
+      "onset_response": 0.9886385621823587
+    },
+    "composite": 0.6999381649762939,
+    "strip_divergence_l2": 0.13946128290345164,
+    "near_black_leaks": 0
+  },
+  "gates": {
+    "black_frame_ratio": {
+      "value": 0.0,
+      "bounds": {
+        "max": 0.15
+      },
+      "pass": true
+    },
+    "clipped_frame_ratio": {
+      "value": 0.0,
+      "bounds": {
+        "max": 0.1
+      },
+      "pass": true
+    },
+    "mean_brightness": {
+      "value": 0.9627557734204791,
+      "bounds": {
+        "min": 0.05,
+        "max": 0.85
+      },
+      "pass": false
+    },
+    "stability_lss": {
+      "value": 0.9982728085672534,
+      "bounds": {
+        "min": 0.4
+      },
+      "pass": true
+    },
+    "flicker_elatcsf": {
+      "value": 0.10973500383660956,
+      "bounds": {
+        "max": 0.6
+      },
+      "pass": true
+    },
+    "vmcr": {
+      "value": 0.9856261102453721,
+      "bounds": {
+        "min": 0.3
+      },
+      "pass": true
+    },
+    "energy_correlation": {
+      "value": 0.13320387828061495,
+      "bounds": {
+        "min": 0.1
+      },
+      "pass": true
+    },
+    "beat_alignment": {
+      "value": 0.9090909090909091,
+      "bounds": {
+        "min": 0.05
+      },
+      "pass": true
+    },
+    "onset_response": {
+      "value": 0.9886385621823587,
+      "bounds": {
+        "min": 0.8
+      },
+      "pass": true
+    },
+    "composite": {
+      "value": 0.6999381649762939,
+      "bounds": {
+        "min": 0.3
+      },
+      "pass": true
+    }
+  },
+  "degradation": {},
+  "extra_checks": {},
+  "pass": false
+}

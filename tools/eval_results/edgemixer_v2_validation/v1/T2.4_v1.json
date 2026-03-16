@@ -1,0 +1,82 @@
+{
+  "test_id": "T2.4",
+  "name": "SPLIT_COMPLEMENTARY (mode=3)",
+  "device": "/dev/cu.usbmodem21401",
+  "effect": "0x1302",
+  "edgemixer": {
+    "mode": 3,
+    "spread": 30,
+    "strength": 200,
+    "spatial": 0,
+    "temporal": 0
+  },
+  "frames_captured": 900,
+  "metrics": {
+    "L0": {
+      "black_frame_ratio": 0.0,
+      "clipped_frame_ratio": 0.0,
+      "mean_brightness": 0.6184213235294117
+    },
+    "L1": {
+      "stability_lss": 0.9918944524417108,
+      "flicker_elatcsf": 0.04661843969828986,
+      "vmcr": 0.9825279486945622
+    },
+    "L2": {
+      "energy_correlation": 0.08900974303130345,
+      "beat_alignment": 0.0,
+      "onset_response": 0.9962383499339671
+    },
+    "composite": 0.5712592351319987,
+    "strip_divergence_l2": 190.53065400630672,
+    "near_black_leaks": 0
+  },
+  "gates": {
+    "near_black_leaks": {
+      "value": 0,
+      "bounds": {
+        "max": 0
+      },
+      "pass": true
+    }
+  },
+  "degradation": {
+    "stability_lss": {
+      "baseline": 0.9999077951536566,
+      "current": 0.9918944524417108,
+      "delta": 0.008013342711945759,
+      "max_allowed": 0.2,
+      "pass": true
+    },
+    "flicker_elatcsf": {
+      "baseline": 0.0010647713990514847,
+      "current": 0.04661843969828986,
+      "delta": 0.045553668299238376,
+      "max_allowed": -0.15,
+      "pass": true
+    },
+    "energy_correlation": {
+      "baseline": -0.0965094380315139,
+      "current": 0.08900974303130345,
+      "delta": -0.18551918106281734,
+      "max_allowed": 0.25,
+      "pass": true
+    },
+    "onset_response": {
+      "baseline": 0.9998317626935019,
+      "current": 0.9962383499339671,
+      "delta": 0.003593412759534842,
+      "max_allowed": 0.3,
+      "pass": true
+    },
+    "composite": {
+      "baseline": 0.7189396663251847,
+      "current": 0.5712592351319987,
+      "delta": 0.14768043119318597,
+      "max_allowed": 0.15,
+      "pass": true
+    }
+  },
+  "extra_checks": {},
+  "pass": true
+}

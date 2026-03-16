@@ -1,0 +1,53 @@
+{
+  "test_id": "T5.2",
+  "name": "Audio-reactive (LGP Holographic) + COMPLEMENTARY",
+  "device": "/dev/cu.usbmodem212401",
+  "effect": "0x0201",
+  "edgemixer": {
+    "mode": 2,
+    "spread": 30,
+    "strength": 200,
+    "spatial": 0,
+    "temporal": 0
+  },
+  "frames_captured": 900,
+  "metrics": {
+    "L0": {
+      "black_frame_ratio": 0.0,
+      "clipped_frame_ratio": 0.0,
+      "mean_brightness": 0.26696638071895423
+    },
+    "L1": {
+      "stability_lss": 0.984554897598639,
+      "flicker_elatcsf": 0.2322382097384209,
+      "vmcr": 0.9561408306627124
+    },
+    "L2": {
+      "energy_correlation": 0.048970108144416165,
+      "beat_alignment": 0.6,
+      "onset_response": 0.9049253197751895
+    },
+    "composite": 0.5179717086051789,
+    "strip_divergence_l2": 64.16383523467651,
+    "near_black_leaks": 0
+  },
+  "gates": {
+    "energy_correlation": {
+      "value": 0.048970108144416165,
+      "bounds": {
+        "min": 0.1
+      },
+      "pass": false
+    },
+    "composite": {
+      "value": 0.5179717086051789,
+      "bounds": {
+        "min": 0.3
+      },
+      "pass": true
+    }
+  },
+  "degradation": {},
+  "extra_checks": {},
+  "pass": false
+}

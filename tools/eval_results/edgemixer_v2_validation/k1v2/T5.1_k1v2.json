@@ -1,0 +1,53 @@
+{
+  "test_id": "T5.1",
+  "name": "Palette effect (Fire) + COMPLEMENTARY",
+  "device": "/dev/cu.usbmodem212401",
+  "effect": "0x0100",
+  "edgemixer": {
+    "mode": 2,
+    "spread": 30,
+    "strength": 200,
+    "spatial": 0,
+    "temporal": 0
+  },
+  "frames_captured": 300,
+  "metrics": {
+    "L0": {
+      "black_frame_ratio": 0.0,
+      "clipped_frame_ratio": 0.0,
+      "mean_brightness": 0.029539705882352944
+    },
+    "L1": {
+      "stability_lss": 0.9942929864253394,
+      "flicker_elatcsf": 0.09757559905415306,
+      "vmcr": 0.9608877189535393
+    },
+    "L2": {
+      "energy_correlation": -0.2646349417419367,
+      "beat_alignment": 0.75,
+      "onset_response": 0.9384308992763978
+    },
+    "composite": 0.45630611335527227,
+    "strip_divergence_l2": 9.459165500207606,
+    "near_black_leaks": 0
+  },
+  "gates": {
+    "stability_lss": {
+      "value": 0.9942929864253394,
+      "bounds": {
+        "min": 0.7
+      },
+      "pass": true
+    },
+    "flicker_elatcsf": {
+      "value": 0.09757559905415306,
+      "bounds": {
+        "max": 0.25
+      },
+      "pass": true
+    }
+  },
+  "degradation": {},
+  "extra_checks": {},
+  "pass": true
+}

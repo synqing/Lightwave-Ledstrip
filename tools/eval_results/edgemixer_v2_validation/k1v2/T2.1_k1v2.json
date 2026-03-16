@@ -1,0 +1,38 @@
+{
+  "test_id": "T2.1",
+  "name": "MIRROR Control Repeat",
+  "device": "/dev/cu.usbmodem212401",
+  "effect": "0x1302",
+  "edgemixer": {
+    "mode": 0,
+    "spread": 30,
+    "strength": 200,
+    "spatial": 0,
+    "temporal": 0
+  },
+  "frames_captured": 900,
+  "metrics": {
+    "L0": {
+      "black_frame_ratio": 0.0,
+      "clipped_frame_ratio": 0.0,
+      "mean_brightness": 0.9842863698257077
+    },
+    "L1": {
+      "stability_lss": 0.9999451187594058,
+      "flicker_elatcsf": 0.0008333081766917987,
+      "vmcr": 1.0
+    },
+    "L2": {
+      "energy_correlation": -0.12289067868205635,
+      "beat_alignment": 0.9523809523809523,
+      "onset_response": 0.9988089309428949
+    },
+    "composite": 0.7175013695725702,
+    "strip_divergence_l2": 0.12500301612610246,
+    "near_black_leaks": 0
+  },
+  "gates": {},
+  "degradation": {},
+  "extra_checks": {},
+  "pass": true
+}

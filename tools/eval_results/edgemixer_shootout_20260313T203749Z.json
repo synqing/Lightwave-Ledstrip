@@ -1,0 +1,498 @@
+{
+  "tool": "edgemixer_eval",
+  "version": 1,
+  "timestamp": "2026-03-13T20:37:49.199216+00:00",
+  "results": [
+    {
+      "profile": {
+        "name": "mirror",
+        "description": "Control baseline -- no processing",
+        "mode": 0,
+        "spread": 30,
+        "strength": 255,
+        "spatial": 0,
+        "temporal": 0
+      },
+      "run_metrics": {
+        "strip_divergence_l2_mean": 0.8571130948180473,
+        "strip_divergence_l2_std": 0.6092358885360638,
+        "strip_divergence_l2_p5": 0.21584315060907056,
+        "strip_divergence_l2_p95": 1.7689667207521564,
+        "strip_divergence_max_mean": 15.200505855719609,
+        "strip_divergence_max_std": 8.226256037645594,
+        "strip_divergence_max_p5": 6.839512162874653,
+        "strip_divergence_max_p95": 32.882693405771064,
+        "hue_shift_mean_mean": 27.95870394105489,
+        "hue_shift_mean_std": 34.692396802824454,
+        "hue_shift_mean_p5": 0.0,
+        "hue_shift_mean_p95": 108.73555555555556,
+        "hue_shift_std_mean": 1.234987757803417,
+        "hue_shift_std_std": 1.3971613330976662,
+        "hue_shift_std_p5": 0.0,
+        "hue_shift_std_p95": 4.1535856994668485,
+        "saturation_delta_mean_mean": -0.2533948035395404,
+        "saturation_delta_mean_std": 0.21028270390616594,
+        "saturation_delta_mean_p5": -0.6,
+        "saturation_delta_mean_p95": 0.0,
+        "brightness_ratio_mean": 0.7746780381494974,
+        "brightness_ratio_std": 0.4890960939371506,
+        "brightness_ratio_p5": 0.24518530250237566,
+        "brightness_ratio_p95": 1.399644412191581,
+        "near_black_leaks_mean": 2.2533333333333334,
+        "near_black_leaks_std": 3.9212016298862036,
+        "near_black_leaks_p5": 0.0,
+        "near_black_leaks_p95": 12.0,
+        "active_pixel_count_mean": 12.2,
+        "active_pixel_count_std": 6.432210610150552,
+        "active_pixel_count_p5": 6.0,
+        "active_pixel_count_p95": 26.0,
+        "spatial_gradient_effectiveness_mean": 0.0,
+        "spatial_gradient_effectiveness_std": 0.0,
+        "spatial_gradient_effectiveness_p5": 0.0,
+        "spatial_gradient_effectiveness_p95": 0.0,
+        "rms_mean": 0.37901172401515726,
+        "rms_std": 0.19600112462841882,
+        "rms_p5": 0.05204013122758831,
+        "rms_p95": 0.6420820935378041,
+        "temporal_responsiveness": -0.10071829637142193,
+        "near_black_total_leaks": 338,
+        "n_frames": 150,
+        "n_beats": 4
+      },
+      "safety": {
+        "profile": "mirror",
+        "gates": {
+          "near_black_leaks": {
+            "value": 2.2533333333333334,
+            "threshold": 0,
+            "pass": false
+          },
+          "brightness_preservation": {
+            "value": 0.7746780381494974,
+            "threshold": "0.70 - 1.30",
+            "pass": true
+          },
+          "mirror_identity": {
+            "value": 0.8571130948180473,
+            "threshold": 1.0,
+            "pass": true
+          }
+        },
+        "overall_pass": false
+      },
+      "metadata": {
+        "timestamp": "2026-03-13T20:37:20.151775+00:00",
+        "port": "/dev/cu.usbmodem21401",
+        "profile": "mirror",
+        "n_frames": 150,
+        "fps": 30,
+        "stimulus": null
+      }
+    },
+    {
+      "profile": {
+        "name": "split_comp",
+        "description": "Split complementary (+150deg, -10% sat)",
+        "mode": 3,
+        "spread": 30,
+        "strength": 255,
+        "spatial": 0,
+        "temporal": 0
+      },
+      "run_metrics": {
+        "strip_divergence_l2_mean": 2.1974412713976825,
+        "strip_divergence_l2_std": 1.2188493585424076,
+        "strip_divergence_l2_p5": 0.6954182829258324,
+        "strip_divergence_l2_p95": 4.798517309800512,
+        "strip_divergence_max_mean": 42.44767796856919,
+        "strip_divergence_max_std": 13.761587907771146,
+        "strip_divergence_max_p5": 17.260501621116244,
+        "strip_divergence_max_p95": 61.98386886924694,
+        "hue_shift_mean_mean": 120.65797781425427,
+        "hue_shift_mean_std": 24.168488383521463,
+        "hue_shift_mean_p5": 57.32481684981685,
+        "hue_shift_mean_p95": 144.58538224479696,
+        "hue_shift_std_mean": 2.180997679249655,
+        "hue_shift_std_std": 1.6524788150838166,
+        "hue_shift_std_p5": 0.4691685623114762,
+        "hue_shift_std_p95": 4.8655957611875165,
+        "saturation_delta_mean_mean": -0.10591010079245375,
+        "saturation_delta_mean_std": 0.17651418070776778,
+        "saturation_delta_mean_p5": -0.5,
+        "saturation_delta_mean_p95": 0.0,
+        "brightness_ratio_mean": 0.9388200920968196,
+        "brightness_ratio_std": 0.4283194497809311,
+        "brightness_ratio_p5": 0.39513642806520205,
+        "brightness_ratio_p95": 1.7577819198508855,
+        "near_black_leaks_mean": 5.733333333333333,
+        "near_black_leaks_std": 5.099891066374741,
+        "near_black_leaks_p5": 0.0,
+        "near_black_leaks_p95": 14.0,
+        "active_pixel_count_mean": 11.826666666666666,
+        "active_pixel_count_std": 6.298938182124209,
+        "active_pixel_count_p5": 6.0,
+        "active_pixel_count_p95": 25.099999999999966,
+        "spatial_gradient_effectiveness_mean": 0.0,
+        "spatial_gradient_effectiveness_std": 0.0,
+        "spatial_gradient_effectiveness_p5": 0.0,
+        "spatial_gradient_effectiveness_p95": 0.0,
+        "rms_mean": 0.342431270822207,
+        "rms_std": 0.20759452003509143,
+        "rms_p5": 0.0282230869001297,
+        "rms_p95": 0.6255481803616388,
+        "temporal_responsiveness": -0.29777225192463086,
+        "near_black_total_leaks": 860,
+        "n_frames": 150,
+        "n_beats": 2
+      },
+      "safety": {
+        "profile": "split_comp",
+        "gates": {
+          "near_black_leaks": {
+            "value": 5.733333333333333,
+            "threshold": 0,
+            "pass": false
+          },
+          "brightness_preservation": {
+            "value": 0.9388200920968196,
+            "threshold": "0.70 - 1.30",
+            "pass": true
+          }
+        },
+        "overall_pass": false
+      },
+      "metadata": {
+        "timestamp": "2026-03-13T20:37:25.958454+00:00",
+        "port": "/dev/cu.usbmodem21401",
+        "profile": "split_comp",
+        "n_frames": 150,
+        "fps": 30,
+        "stimulus": null
+      }
+    },
+    {
+      "profile": {
+        "name": "sat_veil",
+        "description": "Saturation veil (desaturate by spread)",
+        "mode": 4,
+        "spread": 30,
+        "strength": 255,
+        "spatial": 0,
+        "temporal": 0
+      },
+      "run_metrics": {
+        "strip_divergence_l2_mean": 0.9685503478897456,
+        "strip_divergence_l2_std": 0.6729017758938665,
+        "strip_divergence_l2_p5": 0.2584549574044989,
+        "strip_divergence_l2_p95": 1.940479318184734,
+        "strip_divergence_max_mean": 19.0527255221088,
+        "strip_divergence_max_std": 10.966022532312431,
+        "strip_divergence_max_p5": 7.594122389744736,
+        "strip_divergence_max_p95": 45.2642079346645,
+        "hue_shift_mean_mean": 24.48046369815088,
+        "hue_shift_mean_std": 33.200657747081145,
+        "hue_shift_mean_p5": 0.0,
+        "hue_shift_mean_p95": 117.30681818181807,
+        "hue_shift_std_mean": 1.5846588443148573,
+        "hue_shift_std_std": 1.368914193334429,
+        "hue_shift_std_p5": 0.0,
+        "hue_shift_std_p95": 4.198920774085865,
+        "saturation_delta_mean_mean": -0.3313668151306792,
+        "saturation_delta_mean_std": 0.157219034972232,
+        "saturation_delta_mean_p5": -0.5966722160689552,
+        "saturation_delta_mean_p95": -0.16177287581699362,
+        "brightness_ratio_mean": 0.7989881109015593,
+        "brightness_ratio_std": 0.37246328218179797,
+        "brightness_ratio_p5": 0.25987298774184014,
+        "brightness_ratio_p95": 1.2667091836734694,
+        "near_black_leaks_mean": 3.1333333333333333,
+        "near_black_leaks_std": 4.480575359879081,
+        "near_black_leaks_p5": 0.0,
+        "near_black_leaks_p95": 11.099999999999966,
+        "active_pixel_count_mean": 10.933333333333334,
+        "active_pixel_count_std": 5.564969801255789,
+        "active_pixel_count_p5": 6.0,
+        "active_pixel_count_p95": 22.0,
+        "spatial_gradient_effectiveness_mean": 0.0,
+        "spatial_gradient_effectiveness_std": 0.0,
+        "spatial_gradient_effectiveness_p5": 0.0,
+        "spatial_gradient_effectiveness_p95": 0.0,
+        "rms_mean": 0.3500695302764426,
+        "rms_std": 0.21021388832978677,
+        "rms_p5": 0.061692988479438465,
+        "rms_p95": 0.6749370565346762,
+        "temporal_responsiveness": 0.044124915214774116,
+        "near_black_total_leaks": 470,
+        "n_frames": 150,
+        "n_beats": 6
+      },
+      "safety": {
+        "profile": "sat_veil",
+        "gates": {
+          "near_black_leaks": {
+            "value": 3.1333333333333333,
+            "threshold": 0,
+            "pass": false
+          },
+          "brightness_preservation": {
+            "value": 0.7989881109015593,
+            "threshold": "0.70 - 1.30",
+            "pass": true
+          }
+        },
+        "overall_pass": false
+      },
+      "metadata": {
+        "timestamp": "2026-03-13T20:37:31.722316+00:00",
+        "port": "/dev/cu.usbmodem21401",
+        "profile": "sat_veil",
+        "n_frames": 150,
+        "fps": 30,
+        "stimulus": null
+      }
+    },
+    {
+      "profile": {
+        "name": "split_comp_gradient",
+        "description": "Split comp + centre gradient",
+        "mode": 3,
+        "spread": 30,
+        "strength": 255,
+        "spatial": 1,
+        "temporal": 0
+      },
+      "run_metrics": {
+        "strip_divergence_l2_mean": 1.1014240853549682,
+        "strip_divergence_l2_std": 0.7020128884329521,
+        "strip_divergence_l2_p5": 0.2567307896929663,
+        "strip_divergence_l2_p95": 2.5739740474259154,
+        "strip_divergence_max_mean": 21.55881889773492,
+        "strip_divergence_max_std": 6.09950771795022,
+        "strip_divergence_max_p5": 8.838063032976251,
+        "strip_divergence_max_p95": 31.17497960409212,
+        "hue_shift_mean_mean": 93.93982024248481,
+        "hue_shift_mean_std": 31.606585102519226,
+        "hue_shift_mean_p5": 37.25926120448179,
+        "hue_shift_mean_p95": 151.64753996003995,
+        "hue_shift_std_mean": 7.576336124376135,
+        "hue_shift_std_std": 2.857681670291119,
+        "hue_shift_std_p5": 3.0564786756619045,
+        "hue_shift_std_p95": 11.477792223636092,
+        "saturation_delta_mean_mean": -0.2822453266764942,
+        "saturation_delta_mean_std": 0.22320743850978947,
+        "saturation_delta_mean_p5": -0.6527248359279609,
+        "saturation_delta_mean_p95": -0.031872519841269896,
+        "brightness_ratio_mean": 0.5656427898184587,
+        "brightness_ratio_std": 0.3238040706120161,
+        "brightness_ratio_p5": 0.18232020547945205,
+        "brightness_ratio_p95": 1.2022321428571423,
+        "near_black_leaks_mean": 3.46,
+        "near_black_leaks_std": 4.479032633653536,
+        "near_black_leaks_p5": 0.0,
+        "near_black_leaks_p95": 13.099999999999966,
+        "active_pixel_count_mean": 10.426666666666666,
+        "active_pixel_count_std": 6.628571154898736,
+        "active_pixel_count_p5": 4.0,
+        "active_pixel_count_p95": 25.099999999999966,
+        "spatial_gradient_effectiveness_mean": 0.0,
+        "spatial_gradient_effectiveness_std": 0.0,
+        "spatial_gradient_effectiveness_p5": 0.0,
+        "spatial_gradient_effectiveness_p95": 0.0,
+        "rms_mean": 0.34575153226011546,
+        "rms_std": 0.2050655656212394,
+        "rms_p5": 0.04003891050583658,
+        "rms_p95": 0.6249942778667887,
+        "temporal_responsiveness": -0.1932943638561414,
+        "near_black_total_leaks": 519,
+        "n_frames": 150,
+        "n_beats": 3
+      },
+      "safety": {
+        "profile": "split_comp_gradient",
+        "gates": {
+          "near_black_leaks": {
+            "value": 3.46,
+            "threshold": 0,
+            "pass": false
+          },
+          "brightness_preservation": {
+            "value": 0.5656427898184587,
+            "threshold": "0.70 - 1.30",
+            "pass": false
+          }
+        },
+        "overall_pass": false
+      },
+      "metadata": {
+        "timestamp": "2026-03-13T20:37:37.509584+00:00",
+        "port": "/dev/cu.usbmodem21401",
+        "profile": "split_comp_gradient",
+        "n_frames": 150,
+        "fps": 30,
+        "stimulus": null
+      }
+    },
+    {
+      "profile": {
+        "name": "sat_veil_gradient",
+        "description": "Sat veil + centre gradient",
+        "mode": 4,
+        "spread": 30,
+        "strength": 255,
+        "spatial": 1,
+        "temporal": 0
+      },
+      "run_metrics": {
+        "strip_divergence_l2_mean": 0.6660487074917221,
+        "strip_divergence_l2_std": 0.5604373392914739,
+        "strip_divergence_l2_p5": 0.11508452401415606,
+        "strip_divergence_l2_p95": 1.520054270807807,
+        "strip_divergence_max_mean": 13.600559686763404,
+        "strip_divergence_max_std": 8.873074037415265,
+        "strip_divergence_max_p5": 3.705255888325765,
+        "strip_divergence_max_p95": 34.296907643087586,
+        "hue_shift_mean_mean": 25.804603698633514,
+        "hue_shift_mean_std": 37.21041459838561,
+        "hue_shift_mean_p5": 0.0,
+        "hue_shift_mean_p95": 120.0,
+        "hue_shift_std_mean": 1.3991289405730463,
+        "hue_shift_std_std": 1.858075657624423,
+        "hue_shift_std_p5": 0.0,
+        "hue_shift_std_p95": 4.964626531345629,
+        "saturation_delta_mean_mean": -0.20723378103327575,
+        "saturation_delta_mean_std": 0.20568016503548525,
+        "saturation_delta_mean_p5": -0.6219597825420193,
+        "saturation_delta_mean_p95": -0.04826168929110108,
+        "brightness_ratio_mean": 0.8794555742704457,
+        "brightness_ratio_std": 0.47874769427968167,
+        "brightness_ratio_p5": 0.18966278602970693,
+        "brightness_ratio_p95": 1.4766666666666668,
+        "near_black_leaks_mean": 3.0533333333333332,
+        "near_black_leaks_std": 4.212341655447979,
+        "near_black_leaks_p5": 0.0,
+        "near_black_leaks_p95": 12.0,
+        "active_pixel_count_mean": 9.4,
+        "active_pixel_count_std": 5.305343218554919,
+        "active_pixel_count_p5": 4.0,
+        "active_pixel_count_p95": 19.099999999999966,
+        "spatial_gradient_effectiveness_mean": 0.0,
+        "spatial_gradient_effectiveness_std": 0.0,
+        "spatial_gradient_effectiveness_p5": 0.0,
+        "spatial_gradient_effectiveness_p95": 0.0,
+        "rms_mean": 0.3627191577019913,
+        "rms_std": 0.20880241773546357,
+        "rms_p5": 0.02300526436255436,
+        "rms_p95": 0.6992568856336308,
+        "temporal_responsiveness": -0.17105350611387554,
+        "near_black_total_leaks": 458,
+        "n_frames": 150,
+        "n_beats": 4
+      },
+      "safety": {
+        "profile": "sat_veil_gradient",
+        "gates": {
+          "near_black_leaks": {
+            "value": 3.0533333333333332,
+            "threshold": 0,
+            "pass": false
+          },
+          "brightness_preservation": {
+            "value": 0.8794555742704457,
+            "threshold": "0.70 - 1.30",
+            "pass": true
+          }
+        },
+        "overall_pass": false
+      },
+      "metadata": {
+        "timestamp": "2026-03-13T20:37:43.296647+00:00",
+        "port": "/dev/cu.usbmodem21401",
+        "profile": "sat_veil_gradient",
+        "n_frames": 150,
+        "fps": 30,
+        "stimulus": null
+      }
+    },
+    {
+      "profile": {
+        "name": "split_comp_rms",
+        "description": "Split comp + RMS gate",
+        "mode": 3,
+        "spread": 30,
+        "strength": 255,
+        "spatial": 0,
+        "temporal": 1
+      },
+      "run_metrics": {
+        "strip_divergence_l2_mean": 1.388517009549698,
+        "strip_divergence_l2_std": 1.1020481070747725,
+        "strip_divergence_l2_p5": 0.2942624159185026,
+        "strip_divergence_l2_p95": 3.615370876890309,
+        "strip_divergence_max_mean": 24.558304231404055,
+        "strip_divergence_max_std": 14.661617462310726,
+        "strip_divergence_max_p5": 8.145036824620096,
+        "strip_divergence_max_p95": 50.08359503119374,
+        "hue_shift_mean_mean": 69.38506169022916,
+        "hue_shift_mean_std": 50.71295234228331,
+        "hue_shift_mean_p5": 1.508403999251522,
+        "hue_shift_mean_p95": 136.25041460646753,
+        "hue_shift_std_mean": 2.1449700499787023,
+        "hue_shift_std_std": 1.970932373924034,
+        "hue_shift_std_p5": 0.0,
+        "hue_shift_std_p95": 4.559833359358572,
+        "saturation_delta_mean_mean": -0.2550088984426146,
+        "saturation_delta_mean_std": 0.207212667127666,
+        "saturation_delta_mean_p5": -0.5762996031746032,
+        "saturation_delta_mean_p95": 0.0,
+        "brightness_ratio_mean": 0.7308135919188266,
+        "brightness_ratio_std": 0.39808374296214144,
+        "brightness_ratio_p5": 0.2991495507060334,
+        "brightness_ratio_p95": 1.6537037037037017,
+        "near_black_leaks_mean": 1.7333333333333334,
+        "near_black_leaks_std": 2.777688887466621,
+        "near_black_leaks_p5": 0.0,
+        "near_black_leaks_p95": 8.0,
+        "active_pixel_count_mean": 12.96,
+        "active_pixel_count_std": 7.2982920376391265,
+        "active_pixel_count_p5": 6.0,
+        "active_pixel_count_p95": 28.0,
+        "spatial_gradient_effectiveness_mean": 0.0,
+        "spatial_gradient_effectiveness_std": 0.0,
+        "spatial_gradient_effectiveness_p5": 0.0,
+        "spatial_gradient_effectiveness_p95": 0.0,
+        "rms_mean": 0.28832247399608346,
+        "rms_std": 0.19892724245812693,
+        "rms_p5": 0.030035095750362402,
+        "rms_p95": 0.6204623483634697,
+        "temporal_responsiveness": 0.24419957217638508,
+        "near_black_total_leaks": 260,
+        "n_frames": 150,
+        "n_beats": 8
+      },
+      "safety": {
+        "profile": "split_comp_rms",
+        "gates": {
+          "near_black_leaks": {
+            "value": 1.7333333333333334,
+            "threshold": 0,
+            "pass": false
+          },
+          "brightness_preservation": {
+            "value": 0.7308135919188266,
+            "threshold": "0.70 - 1.30",
+            "pass": true
+          }
+        },
+        "overall_pass": false
+      },
+      "metadata": {
+        "timestamp": "2026-03-13T20:37:49.092123+00:00",
+        "port": "/dev/cu.usbmodem21401",
+        "profile": "split_comp_rms",
+        "n_frames": 150,
+        "fps": 30,
+        "stimulus": null
+      }
+    }
+  ]
+}

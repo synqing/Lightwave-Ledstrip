@@ -190,3 +190,22 @@ CN\ 3/
 
 # Native test build artifacts
 firmware-v3/test/test_native/gen_reference
+
+# ==========================================
+# TIER 6 CLEANUP ADDITIONS (2026-03-14)
+# ==========================================
+
+# Archive directory (historical artifacts, not version-controlled)
+_archive/
+
+# Music test corpus (large binary data)
+firmware-v3/test/music_corpus/
+
+# Python virtual environments in tools
+tools/led_capture/.venv/
+
+# Media assets (binary, tracked in separate system)
+media/
+
+# Brand assets (HTML prototypes, not source code)
+brand/

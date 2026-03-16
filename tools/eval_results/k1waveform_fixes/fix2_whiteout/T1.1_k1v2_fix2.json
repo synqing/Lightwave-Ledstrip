@@ -1,0 +1,103 @@
+{
+  "test_id": "T1.1",
+  "name": "K1 Waveform Baseline \u2014 Music",
+  "device": "/dev/cu.usbmodem212401",
+  "effect": "0x1302",
+  "edgemixer": {
+    "mode": 0,
+    "spread": 30,
+    "strength": 200,
+    "spatial": 0,
+    "temporal": 0
+  },
+  "frames_captured": 900,
+  "metrics": {
+    "L0": {
+      "black_frame_ratio": 0.0,
+      "clipped_frame_ratio": 0.0,
+      "mean_brightness": 0.6301941721132899
+    },
+    "L1": {
+      "stability_lss": 0.9782357030687692,
+      "flicker_elatcsf": 0.15357551754889748,
+      "vmcr": 0.821596409650262
+    },
+    "L2": {
+      "energy_correlation": 0.12143427732020093,
+      "beat_alignment": 0.2608695652173913,
+      "onset_response": 0.9898287681327249
+    },
+    "composite": 0.5417396488587969,
+    "strip_divergence_l2": 0.23990058015062232,
+    "near_black_leaks": 0
+  },
+  "gates": {
+    "black_frame_ratio": {
+      "value": 0.0,
+      "bounds": {
+        "max": 0.15
+      },
+      "pass": true
+    },
+    "clipped_frame_ratio": {
+      "value": 0.0,
+      "bounds": {
+        "max": 0.1
+      },
+      "pass": true
+    },
+    "mean_brightness": {
+      "value": 0.6301941721132899,
+      "bounds": {
+        "min": 0.05,
+        "max": 0.99
+      },
+      "pass": true
+    },
+    "stability_lss": {
+      "value": 0.9782357030687692,
+      "bounds": {
+        "min": 0.4
+      },
+      "pass": true
+    },
+    "flicker_elatcsf": {
+      "value": 0.15357551754889748,
+      "bounds": {
+        "max": 0.6
+      },
+      "pass": true
+    },
+    "vmcr": {
+      "value": 0.821596409650262,
+      "bounds": {
+        "min": 0.3
+      },
+      "pass": true
+    },
+    "beat_alignment": {
+      "value": 0.2608695652173913,
+      "bounds": {
+        "min": 0.05
+      },
+      "pass": true
+    },
+    "onset_response": {
+      "value": 0.9898287681327249,
+      "bounds": {
+        "min": 0.8
+      },
+      "pass": true
+    },
+    "composite": {
+      "value": 0.5417396488587969,
+      "bounds": {
+        "min": 0.3
+      },
+      "pass": true
+    }
+  },
+  "degradation": {},
+  "extra_checks": {},
+  "pass": true
+}

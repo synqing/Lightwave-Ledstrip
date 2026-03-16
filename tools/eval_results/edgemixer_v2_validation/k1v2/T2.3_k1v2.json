@@ -1,0 +1,93 @@
+{
+  "test_id": "T2.3",
+  "name": "COMPLEMENTARY (mode=2)",
+  "device": "/dev/cu.usbmodem212401",
+  "effect": "0x1302",
+  "edgemixer": {
+    "mode": 2,
+    "spread": 30,
+    "strength": 200,
+    "spatial": 0,
+    "temporal": 0
+  },
+  "frames_captured": 900,
+  "metrics": {
+    "L0": {
+      "black_frame_ratio": 0.0,
+      "clipped_frame_ratio": 0.0,
+      "mean_brightness": 0.6117078703703702
+    },
+    "L1": {
+      "stability_lss": 0.9996590438177496,
+      "flicker_elatcsf": 0.0019703852772471157,
+      "vmcr": 0.9991684295919605
+    },
+    "L2": {
+      "energy_correlation": 0.04961344276679167,
+      "beat_alignment": 0.0,
+      "onset_response": 0.9981823090858423
+    },
+    "composite": 0.5838442661643977,
+    "strip_divergence_l2": 192.2738327992315,
+    "near_black_leaks": 0
+  },
+  "gates": {
+    "near_black_leaks": {
+      "value": 0,
+      "bounds": {
+        "max": 0
+      },
+      "pass": true
+    }
+  },
+  "degradation": {
+    "stability_lss": {
+      "baseline": 0.9998304761281598,
+      "current": 0.9996590438177496,
+      "delta": 0.00017143231041016893,
+      "max_allowed": 0.2,
+      "pass": true
+    },
+    "flicker_elatcsf": {
+      "baseline": 0.0015188026344853797,
+      "current": 0.0019703852772471157,
+      "delta": 0.00045158264276173605,
+      "max_allowed": -0.15,
+      "pass": true
+    },
+    "energy_correlation": {
+      "baseline": -0.08369270206798092,
+      "current": 0.04961344276679167,
+      "delta": -0.1333061448347726,
+      "max_allowed": 0.25,
+      "pass": true
+    },
+    "onset_response": {
+      "baseline": 0.998575230211445,
+      "current": 0.9981823090858423,
+      "delta": 0.00039292112560274095,
+      "max_allowed": 0.3,
+      "pass": true
+    },
+    "composite": {
+      "baseline": 0.7128482600174901,
+      "current": 0.5838442661643977,
+      "delta": 0.12900399385309247,
+      "max_allowed": 0.15,
+      "pass": true
+    }
+  },
+  "extra_checks": {
+    "saturation_preservation": {
+      "pass": false,
+      "detail": "sat ratio=0.578 (threshold \u22650.70)",
+      "value": 0.5779652431659266
+    },
+    "hue_offset_128": {
+      "pass": false,
+      "detail": "hue delta=19.4 FL units (threshold 100-156)",
+      "value": 19.42819855039151
+    }
+  },
+  "pass": false
+}

@@ -1,0 +1,4610 @@
+{
+  "generated_at": "2026-02-21T00:35:00Z",
+  "generator": "effects-inventory-agent",
+  "source_files": {
+    "pattern_registry": "firmware/v2/src/effects/PatternRegistry.cpp",
+    "core_effects": "firmware/v2/src/effects/CoreEffects.cpp",
+    "limits": "firmware/v2/src/config/limits.h",
+    "chroma_spec": "firmware/v2/docs/CHROMA_ARGMAX_FIX_SPEC.md",
+    "manifest": ".claude/orchestration/effects-docs/output/manifest.json"
+  },
+  "total_effects": 162,
+  "max_effects_limit": 162,
+  "registered_effects": 161,
+  "removed_slots": [
+    112
+  ],
+  "effects": [
+    {
+      "id": 0,
+      "display_name": "Fire",
+      "class_name": "FireEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Realistic fire simulation radiating from centre",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/FireEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/FireEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 1,
+      "display_name": "Ocean",
+      "class_name": "OceanEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "Deep ocean wave patterns from centre point",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/OceanEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/OceanEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 2,
+      "display_name": "Plasma",
+      "class_name": "PlasmaEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Smoothly shifting color plasma",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/PlasmaEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/PlasmaEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 3,
+      "display_name": "Confetti",
+      "class_name": "ConfettiEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Random colored speckles fading",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": true,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/ConfettiEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/ConfettiEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 4,
+      "display_name": "Sinelon",
+      "class_name": "SinelonEffect",
+      "family": "GEOMETRIC",
+      "family_id": 1,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "Bouncing particle with palette trails",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/SinelonEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/SinelonEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 5,
+      "display_name": "Juggle",
+      "class_name": "JuggleEffect",
+      "family": "GEOMETRIC",
+      "family_id": 1,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "Multiple colored balls juggling",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/JuggleEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/JuggleEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": true,
+        "migration_pattern": "C",
+        "chroma_source": "circularChromaHueSmoothed (replaced raw argmax)"
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 6,
+      "display_name": "BPM",
+      "class_name": "BPMEffect",
+      "family": "GEOMETRIC",
+      "family_id": 1,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "Beat-synced pulsing sawtooth waves",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/BPMEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/BPMEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 7,
+      "display_name": "Wave",
+      "class_name": "WaveAmbientEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "Simple sine wave propagation",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/WaveAmbientEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/WaveAmbientEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 8,
+      "display_name": "Ripple",
+      "class_name": "RippleEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "Expanding water ripples",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": true,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/RippleEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/RippleEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": true,
+        "migration_pattern": "A",
+        "chroma_source": "circularChromaHueSmoothed via selectChroma12()"
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 9,
+      "display_name": "Heartbeat",
+      "class_name": "HeartbeatEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Rhythmic cardiac pulsing",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/HeartbeatEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/HeartbeatEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 10,
+      "display_name": "Interference",
+      "class_name": "InterferenceEffect",
+      "family": "INTERFERENCE",
+      "family_id": 0,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Basic wave interference",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/InterferenceEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/InterferenceEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 11,
+      "display_name": "Breathing",
+      "class_name": "BreathingEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Slow rhythmic brightness pulsing",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/BreathingEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/BreathingEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 12,
+      "display_name": "Pulse",
+      "class_name": "PulseEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "Sharp energy pulses",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/PulseEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/PulseEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 13,
+      "display_name": "LGP Box Wave",
+      "class_name": "LGPBoxWaveEffect",
+      "family": "INTERFERENCE",
+      "family_id": 0,
+      "tags": [
+        "CENTER_ORIGIN",
+        "STANDING"
+      ],
+      "description": "Square wave standing patterns",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPBoxWaveEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPBoxWaveEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 14,
+      "display_name": "LGP Holographic",
+      "class_name": "LGPHolographicEffect",
+      "family": "INTERFERENCE",
+      "family_id": 0,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "MOIRE",
+        "DEPTH"
+      ],
+      "description": "Holographic interference patterns through multi-layer depth",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPHolographicEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPHolographicEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 15,
+      "display_name": "LGP Modal Resonance",
+      "class_name": "ModalResonanceEffect",
+      "family": "INTERFERENCE",
+      "family_id": 0,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "STANDING"
+      ],
+      "description": "Explores different optical cavity resonance modes",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/ModalResonanceEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/ModalResonanceEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 16,
+      "display_name": "LGP Interference Scanner",
+      "class_name": "LGPInterferenceScannerEffect",
+      "family": "INTERFERENCE",
+      "family_id": 0,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "TRAVELING"
+      ],
+      "description": "Scanning beam with interference fringes",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPInterferenceScannerEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPInterferenceScannerEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": true,
+        "migration_pattern": "additional_user",
+        "chroma_source": "circularChromaHueSmoothed()"
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 17,
+      "display_name": "LGP Wave Collision",
+      "class_name": "LGPWaveCollisionEffect",
+      "family": "INTERFERENCE",
+      "family_id": 0,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "TRAVELING"
+      ],
+      "description": "Colliding wave fronts creating standing nodes",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPWaveCollisionEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPWaveCollisionEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": true,
+        "migration_pattern": "B",
+        "chroma_source": "circularChromaHueSmoothed (replaced linear EMA)"
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 18,
+      "display_name": "LGP Diamond Lattice",
+      "class_name": "LGPDiamondLatticeEffect",
+      "family": "GEOMETRIC",
+      "family_id": 1,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Interwoven diamond patterns",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPDiamondLatticeEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPDiamondLatticeEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 19,
+      "display_name": "LGP Hexagonal Grid",
+      "class_name": "LGPHexagonalGridEffect",
+      "family": "GEOMETRIC",
+      "family_id": 1,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Hexagonal cell structure",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPHexagonalGridEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPHexagonalGridEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 20,
+      "display_name": "LGP Spiral Vortex",
+      "class_name": "LGPSpiralVortexEffect",
+      "family": "GEOMETRIC",
+      "family_id": 1,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Rotating spiral arms",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPSpiralVortexEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPSpiralVortexEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 21,
+      "display_name": "LGP Sierpinski",
+      "class_name": "LGPSierpinskiEffect",
+      "family": "GEOMETRIC",
+      "family_id": 1,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Fractal triangle generation",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPSierpinskiEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPSierpinskiEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 22,
+      "display_name": "LGP Chevron Waves",
+      "class_name": "ChevronWavesEffect",
+      "family": "GEOMETRIC",
+      "family_id": 1,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "V-shaped wave propagation",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/ChevronWavesEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/ChevronWavesEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": true,
+        "migration_pattern": "B",
+        "chroma_source": "circularChromaHueSmoothed (replaced linear EMA)"
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 23,
+      "display_name": "LGP Concentric Rings",
+      "class_name": "LGPConcentricRingsEffect",
+      "family": "GEOMETRIC",
+      "family_id": 1,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Expanding circular rings",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPConcentricRingsEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPConcentricRingsEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 24,
+      "display_name": "LGP Star Burst",
+      "class_name": "LGPStarBurstEffect",
+      "family": "GEOMETRIC",
+      "family_id": 1,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Explosive radial lines",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": true,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPStarBurstEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPStarBurstEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": true,
+        "migration_pattern": "C",
+        "chroma_source": "circularChromaHueSmoothed (replaced raw argmax)"
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 25,
+      "display_name": "LGP Mesh Network",
+      "class_name": "LGPMeshNetworkEffect",
+      "family": "GEOMETRIC",
+      "family_id": 1,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Interconnected node graph",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPMeshNetworkEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPMeshNetworkEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 26,
+      "display_name": "LGP Moire Curtains",
+      "class_name": "LGPMoireCurtainsEffect",
+      "family": "ADVANCED_OPTICAL",
+      "family_id": 2,
+      "tags": [
+        "CENTER_ORIGIN",
+        "MOIRE"
+      ],
+      "description": "Shifting moire interference layers",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPMoireCurtainsEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPMoireCurtainsEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 27,
+      "display_name": "LGP Radial Ripple",
+      "class_name": "LGPRadialRippleEffect",
+      "family": "ADVANCED_OPTICAL",
+      "family_id": 2,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "Complex radial wave interference",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPRadialRippleEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPRadialRippleEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 28,
+      "display_name": "LGP Holographic Vortex",
+      "class_name": "LGPHolographicVortexEffect",
+      "family": "ADVANCED_OPTICAL",
+      "family_id": 2,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DEPTH"
+      ],
+      "description": "Deep 3D vortex illusion",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPHolographicVortexEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPHolographicVortexEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 29,
+      "display_name": "LGP Evanescent Drift",
+      "class_name": "LGPEvanescentDriftEffect",
+      "family": "ADVANCED_OPTICAL",
+      "family_id": 2,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Ghostly drifting particles",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPEvanescentDriftEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPEvanescentDriftEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 30,
+      "display_name": "LGP Chromatic Shear",
+      "class_name": "LGPChromaticShearEffect",
+      "family": "ADVANCED_OPTICAL",
+      "family_id": 2,
+      "tags": [
+        "CENTER_ORIGIN",
+        "SPECTRAL"
+      ],
+      "description": "Color-splitting shear effect",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPChromaticShearEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPChromaticShearEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 31,
+      "display_name": "LGP Modal Cavity",
+      "class_name": "LGPModalCavityEffect",
+      "family": "ADVANCED_OPTICAL",
+      "family_id": 2,
+      "tags": [
+        "CENTER_ORIGIN",
+        "STANDING"
+      ],
+      "description": "Resonant optical cavity modes",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPModalCavityEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPModalCavityEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 32,
+      "display_name": "LGP Fresnel Zones",
+      "class_name": "LGPFresnelZonesEffect",
+      "family": "ADVANCED_OPTICAL",
+      "family_id": 2,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Fresnel lens zone plate pattern",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPFresnelZonesEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPFresnelZonesEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 33,
+      "display_name": "LGP Photonic Crystal",
+      "class_name": "LGPPhotonicCrystalEffect",
+      "family": "ADVANCED_OPTICAL",
+      "family_id": 2,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Bandgap structure simulation",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPPhotonicCrystalEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPPhotonicCrystalEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": true,
+        "migration_pattern": "C",
+        "chroma_source": "circularChromaHueSmoothed (replaced raw argmax)"
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 34,
+      "display_name": "LGP Aurora Borealis",
+      "class_name": "LGPAuroraBorealisEffect",
+      "family": "ORGANIC",
+      "family_id": 3,
+      "tags": [
+        "CENTER_ORIGIN",
+        "SPECTRAL"
+      ],
+      "description": "Shimmering curtain lights",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPAuroraBorealisEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPAuroraBorealisEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 35,
+      "display_name": "LGP Bioluminescent Waves",
+      "class_name": "LGPBioluminescentWavesEffect",
+      "family": "ORGANIC",
+      "family_id": 3,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "Glowing plankton in waves",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPBioluminescentWavesEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPBioluminescentWavesEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 36,
+      "display_name": "LGP Plasma Membrane",
+      "class_name": "LGPPlasmaMembraneEffect",
+      "family": "ORGANIC",
+      "family_id": 3,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Cellular membrane fluctuations",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPPlasmaMembraneEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPPlasmaMembraneEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 37,
+      "display_name": "LGP Neural Network",
+      "class_name": "LGPNeuralNetworkEffect",
+      "family": "ORGANIC",
+      "family_id": 3,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Firing synaptic pathways",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPNeuralNetworkEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPNeuralNetworkEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 38,
+      "display_name": "LGP Crystalline Growth",
+      "class_name": "LGPCrystallineGrowthEffect",
+      "family": "ORGANIC",
+      "family_id": 3,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Growing crystal facets",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPCrystallineGrowthEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPCrystallineGrowthEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 39,
+      "display_name": "LGP Fluid Dynamics",
+      "class_name": "LGPFluidDynamicsEffect",
+      "family": "ORGANIC",
+      "family_id": 3,
+      "tags": [
+        "CENTER_ORIGIN",
+        "PHYSICS"
+      ],
+      "description": "Fluid flow simulation",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPFluidDynamicsEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPFluidDynamicsEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 40,
+      "display_name": "LGP Quantum Tunneling",
+      "class_name": "LGPQuantumTunnelingEffect",
+      "family": "QUANTUM",
+      "family_id": 4,
+      "tags": [
+        "CENTER_ORIGIN",
+        "PHYSICS"
+      ],
+      "description": "Particles passing through barriers",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPQuantumTunnelingEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPQuantumTunnelingEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 41,
+      "display_name": "LGP Gravitational Lensing",
+      "class_name": "LGPGravitationalLensingEffect",
+      "family": "QUANTUM",
+      "family_id": 4,
+      "tags": [
+        "CENTER_ORIGIN",
+        "PHYSICS"
+      ],
+      "description": "Light bending around mass",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPGravitationalLensingEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPGravitationalLensingEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 42,
+      "display_name": "LGP Time Crystal",
+      "class_name": "LGPTimeCrystalEffect",
+      "family": "QUANTUM",
+      "family_id": 4,
+      "tags": [
+        "CENTER_ORIGIN",
+        "PHYSICS"
+      ],
+      "description": "Periodic structure in time",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPTimeCrystalEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPTimeCrystalEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 43,
+      "display_name": "LGP Soliton Waves",
+      "class_name": "LGPSolitonWavesEffect",
+      "family": "QUANTUM",
+      "family_id": 4,
+      "tags": [
+        "CENTER_ORIGIN",
+        "PHYSICS",
+        "TRAVELING"
+      ],
+      "description": "Self-reinforcing wave packets",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPSolitonWavesEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPSolitonWavesEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 44,
+      "display_name": "LGP Metamaterial Cloak",
+      "class_name": "LGPMetamaterialCloakEffect",
+      "family": "QUANTUM",
+      "family_id": 4,
+      "tags": [
+        "CENTER_ORIGIN",
+        "PHYSICS"
+      ],
+      "description": "Invisibility cloak simulation",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPMetamaterialCloakEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPMetamaterialCloakEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 45,
+      "display_name": "LGP GRIN Cloak",
+      "class_name": "LGPGrinCloakEffect",
+      "family": "QUANTUM",
+      "family_id": 4,
+      "tags": [
+        "CENTER_ORIGIN",
+        "PHYSICS"
+      ],
+      "description": "Gradient index optics",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPGrinCloakEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPGrinCloakEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 46,
+      "display_name": "LGP Caustic Fan",
+      "class_name": "LGPCausticFanEffect",
+      "family": "QUANTUM",
+      "family_id": 4,
+      "tags": [
+        "CENTER_ORIGIN",
+        "PHYSICS"
+      ],
+      "description": "Focused light caustics",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPCausticFanEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPCausticFanEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 47,
+      "display_name": "LGP Birefringent Shear",
+      "class_name": "LGPBirefringentShearEffect",
+      "family": "QUANTUM",
+      "family_id": 4,
+      "tags": [
+        "CENTER_ORIGIN",
+        "PHYSICS",
+        "SPECTRAL"
+      ],
+      "description": "Polarization splitting",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPBirefringentShearEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPBirefringentShearEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 48,
+      "display_name": "LGP Anisotropic Cloak",
+      "class_name": "LGPAnisotropicCloakEffect",
+      "family": "QUANTUM",
+      "family_id": 4,
+      "tags": [
+        "CENTER_ORIGIN",
+        "PHYSICS"
+      ],
+      "description": "Direction-dependent visibility",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPAnisotropicCloakEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPAnisotropicCloakEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 49,
+      "display_name": "LGP Evanescent Skin",
+      "class_name": "LGPEvanescentSkinEffect",
+      "family": "QUANTUM",
+      "family_id": 4,
+      "tags": [
+        "CENTER_ORIGIN",
+        "PHYSICS"
+      ],
+      "description": "Surface wave propagation",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPEvanescentSkinEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPEvanescentSkinEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 50,
+      "display_name": "LGP Color Temperature",
+      "class_name": "LGPColorTemperatureEffect",
+      "family": "COLOR_MIXING",
+      "family_id": 5,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Blackbody radiation gradients",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPColorTemperatureEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPColorTemperatureEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 51,
+      "display_name": "LGP RGB Prism",
+      "class_name": "LGPRGBPrismEffect",
+      "family": "COLOR_MIXING",
+      "family_id": 5,
+      "tags": [
+        "CENTER_ORIGIN",
+        "SPECTRAL"
+      ],
+      "description": "RGB component splitting",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPRGBPrismEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPRGBPrismEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 52,
+      "display_name": "LGP Complementary Mixing",
+      "class_name": "LGPComplementaryMixingEffect",
+      "family": "COLOR_MIXING",
+      "family_id": 5,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Complementary color gradients",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPComplementaryMixingEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPComplementaryMixingEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 53,
+      "display_name": "LGP Quantum Colors",
+      "class_name": "LGPQuantumColorsEffect",
+      "family": "COLOR_MIXING",
+      "family_id": 5,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Quantized energy levels",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPQuantumColorsEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPQuantumColorsEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 54,
+      "display_name": "LGP Doppler Shift",
+      "class_name": "LGPDopplerShiftEffect",
+      "family": "COLOR_MIXING",
+      "family_id": 5,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "Red/Blue shift based on velocity",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPDopplerShiftEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPDopplerShiftEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 55,
+      "display_name": "LGP Color Accelerator",
+      "class_name": "LGPColorAcceleratorEffect",
+      "family": "COLOR_MIXING",
+      "family_id": 5,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Color cycling with momentum",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPColorAcceleratorEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPColorAcceleratorEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 56,
+      "display_name": "LGP DNA Helix",
+      "class_name": "LGPDNAHelixEffect",
+      "family": "COLOR_MIXING",
+      "family_id": 5,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Double helix structure",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPDNAHelixEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPDNAHelixEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 57,
+      "display_name": "LGP Phase Transition",
+      "class_name": "LGPPhaseTransitionEffect",
+      "family": "COLOR_MIXING",
+      "family_id": 5,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "State change simulation",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPPhaseTransitionEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPPhaseTransitionEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 58,
+      "display_name": "LGP Chromatic Aberration",
+      "class_name": "LGPChromaticAberrationEffect",
+      "family": "COLOR_MIXING",
+      "family_id": 5,
+      "tags": [
+        "CENTER_ORIGIN",
+        "SPECTRAL"
+      ],
+      "description": "Lens dispersion edge effects",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPChromaticAberrationEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPChromaticAberrationEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 59,
+      "display_name": "LGP Perceptual Blend",
+      "class_name": "LGPPerceptualBlendEffect",
+      "family": "COLOR_MIXING",
+      "family_id": 5,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Lab color space mixing",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPPerceptualBlendEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPPerceptualBlendEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 60,
+      "display_name": "LGP Chladni Harmonics",
+      "class_name": "LGPChladniHarmonicsEffect",
+      "family": "NOVEL_PHYSICS",
+      "family_id": 7,
+      "tags": [
+        "CENTER_ORIGIN",
+        "STANDING"
+      ],
+      "description": "Resonant nodal patterns",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPChladniHarmonicsEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPChladniHarmonicsEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 61,
+      "display_name": "LGP Gravitational Wave Chirp",
+      "class_name": "LGPGravitationalWaveChirpEffect",
+      "family": "NOVEL_PHYSICS",
+      "family_id": 7,
+      "tags": [
+        "CENTER_ORIGIN",
+        "PHYSICS"
+      ],
+      "description": "Inspiral merger signal",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPGravitationalWaveChirpEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPGravitationalWaveChirpEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 62,
+      "display_name": "LGP Quantum Entanglement",
+      "class_name": "LGPQuantumEntanglementEffect",
+      "family": "NOVEL_PHYSICS",
+      "family_id": 7,
+      "tags": [
+        "CENTER_ORIGIN",
+        "PHYSICS"
+      ],
+      "description": "Correlated state collapse",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPQuantumEntanglementEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPQuantumEntanglementEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 63,
+      "display_name": "LGP Mycelial Network",
+      "class_name": "LGPMycelialNetworkEffect",
+      "family": "NOVEL_PHYSICS",
+      "family_id": 7,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Fungal network expansion",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPMycelialNetworkEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPMycelialNetworkEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 64,
+      "display_name": "LGP Riley Dissonance",
+      "class_name": "LGPRileyDissonanceEffect",
+      "family": "NOVEL_PHYSICS",
+      "family_id": 7,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Op-art visual vibration",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPRileyDissonanceEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPRileyDissonanceEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 65,
+      "display_name": "LGP Chromatic Lens",
+      "class_name": "LGPChromaticLensEffect",
+      "family": "ADVANCED_OPTICAL",
+      "family_id": 2,
+      "tags": [
+        "CENTER_ORIGIN",
+        "SPECTRAL"
+      ],
+      "description": "Simulated lens dispersion",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPChromaticLensEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPChromaticLensEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 66,
+      "display_name": "LGP Chromatic Pulse",
+      "class_name": "LGPChromaticPulseEffect",
+      "family": "ADVANCED_OPTICAL",
+      "family_id": 2,
+      "tags": [
+        "CENTER_ORIGIN",
+        "SPECTRAL"
+      ],
+      "description": "Pulsing dispersion wave",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPChromaticPulseEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPChromaticPulseEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 67,
+      "display_name": "LGP Chromatic Interference",
+      "class_name": "ChromaticInterferenceEffect",
+      "family": "ADVANCED_OPTICAL",
+      "family_id": 2,
+      "tags": [
+        "CENTER_ORIGIN",
+        "SPECTRAL"
+      ],
+      "description": "Interfering dispersion patterns",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/ChromaticInterferenceEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/ChromaticInterferenceEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 68,
+      "display_name": "Audio Test",
+      "class_name": "LGPAudioTestEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Audio-reactive spectrum visualization",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPAudioTestEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPAudioTestEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 69,
+      "display_name": "Beat Pulse",
+      "class_name": "LGPBeatPulseEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Beat-synchronized radial pulse from centre",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPBeatPulseEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPBeatPulseEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": true,
+        "migration_pattern": "A",
+        "chroma_source": "circularChromaHueSmoothed via selectChroma12()"
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 70,
+      "display_name": "Spectrum Bars",
+      "class_name": "LGPSpectrumBarsEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "8-band spectrum analyzer from centre to edge",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPSpectrumBarsEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPSpectrumBarsEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": true,
+        "migration_pattern": "A",
+        "chroma_source": "circularChromaHueSmoothed via selectChroma12()"
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 71,
+      "display_name": "Bass Breath",
+      "class_name": "LGPBassBreathEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Organic breathing driven by bass energy",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPBassBreathEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPBassBreathEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": true,
+        "migration_pattern": "A",
+        "chroma_source": "circularChromaHueSmoothed via selectChroma12()"
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 72,
+      "display_name": "Audio Waveform",
+      "class_name": "AudioWaveformEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "True time-domain waveform visualization mirrored from centre",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/AudioWaveformEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/AudioWaveformEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": true,
+        "migration_pattern": "additional_user",
+        "chroma_source": "circularChromaHueSmoothed()"
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 73,
+      "display_name": "Audio Bloom",
+      "class_name": "AudioBloomEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Centre bloom pulses triggered by audio transients",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/AudioBloomEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/AudioBloomEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 74,
+      "display_name": "LGP Star Burst (Narrative)",
+      "class_name": "LGPStarBurstNarrativeEffect",
+      "family": "GEOMETRIC",
+      "family_id": 1,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Legacy starburst core with phrase-gated harmonic colour commits",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": true,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPStarBurstNarrativeEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPStarBurstNarrativeEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": false,
+        "migration_pattern": "additional_user",
+        "chroma_source": "circularEma() direct (key root bin smoothing)"
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 75,
+      "display_name": "Chord Glow",
+      "class_name": "LGPChordGlowEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Full chord detection showcase with harmonic color mapping",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPChordGlowEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPChordGlowEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 76,
+      "display_name": "Wave Reactive",
+      "class_name": "WaveReactiveEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "Energy-accumulating wave with audio-driven motion",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/WaveReactiveEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/WaveReactiveEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 77,
+      "display_name": "LGP Perlin Veil",
+      "class_name": "LGPPerlinVeilEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Slow drifting noise curtains from centre, audio-driven advection",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPPerlinVeilEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPPerlinVeilEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 78,
+      "display_name": "LGP Perlin Shocklines",
+      "class_name": "LGPPerlinShocklinesEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "Beat-driven travelling ridges propagating from centre",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPPerlinShocklinesEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPPerlinShocklinesEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 79,
+      "display_name": "LGP Perlin Caustics",
+      "class_name": "LGPPerlinCausticsEffect",
+      "family": "ADVANCED_OPTICAL",
+      "family_id": 2,
+      "tags": [
+        "CENTER_ORIGIN",
+        "SPECTRAL"
+      ],
+      "description": "Sparkling caustic lobes, treble->sparkle, bass->scale",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPPerlinCausticsEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPPerlinCausticsEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 80,
+      "display_name": "LGP Perlin Interference Weave",
+      "class_name": "LGPPerlinInterferenceWeaveEffect",
+      "family": "ADVANCED_OPTICAL",
+      "family_id": 2,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "MOIRE"
+      ],
+      "description": "Dual-strip moire interference, beat->phase, chroma->colour",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPPerlinInterferenceWeaveEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPPerlinInterferenceWeaveEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": true,
+        "migration_pattern": "additional_user",
+        "chroma_source": "circularChromaHueSmoothed()"
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 81,
+      "display_name": "LGP Perlin Veil Ambient",
+      "class_name": "LGPPerlinVeilAmbientEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Slow drifting noise curtains from centre, time-driven",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPPerlinVeilAmbientEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPPerlinVeilAmbientEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 82,
+      "display_name": "LGP Perlin Shocklines Ambient",
+      "class_name": "LGPPerlinShocklinesAmbientEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "Time-driven travelling ridges propagating from centre",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPPerlinShocklinesAmbientEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPPerlinShocklinesAmbientEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 83,
+      "display_name": "LGP Perlin Caustics Ambient",
+      "class_name": "LGPPerlinCausticsAmbientEffect",
+      "family": "ADVANCED_OPTICAL",
+      "family_id": 2,
+      "tags": [
+        "CENTER_ORIGIN",
+        "SPECTRAL"
+      ],
+      "description": "Sparkling caustic lobes, time-driven modulation",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPPerlinCausticsAmbientEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPPerlinCausticsAmbientEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 84,
+      "display_name": "LGP Perlin Interference Weave Ambient",
+      "class_name": "LGPPerlinInterferenceWeaveAmbientEffect",
+      "family": "ADVANCED_OPTICAL",
+      "family_id": 2,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "MOIRE"
+      ],
+      "description": "Dual-strip moire interference, time-driven phase",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPPerlinInterferenceWeaveAmbientEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPPerlinInterferenceWeaveAmbientEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 85,
+      "display_name": "Perlin Test: FastLED",
+      "class_name": "LGPPerlinBackendFastLEDEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "FastLED inoise8 baseline test",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPPerlinBackendFastLEDEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPPerlinBackendFastLEDEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 86,
+      "display_name": "Perlin Test: Emotiscope2 Full",
+      "class_name": "LGPPerlinBackendEmotiscopeFullEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Emotiscope 2.0 Perlin full-res per-frame test",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPPerlinBackendEmotiscopeFullEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPPerlinBackendEmotiscopeFullEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 87,
+      "display_name": "Perlin Test: Emotiscope2 Quarter",
+      "class_name": "LGPPerlinBackendEmotiscopeQuarterEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Emotiscope 2.0 Perlin quarter-res + interpolation test",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPPerlinBackendEmotiscopeQuarterEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPPerlinBackendEmotiscopeQuarterEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 88,
+      "display_name": "BPM Enhanced",
+      "class_name": "BPMEnhancedEffect",
+      "family": "GEOMETRIC",
+      "family_id": 1,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "Tempo-locked pulse rings with beat-phase sync",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/BPMEnhancedEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/BPMEnhancedEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": true,
+        "migration_pattern": "C",
+        "chroma_source": "circularChromaHueSmoothed (replaced raw argmax)"
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 89,
+      "display_name": "Breathing Enhanced",
+      "class_name": "BreathingEnhancedEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Style-adaptive breathing with harmonic saliency",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/BreathingEnhancedEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/BreathingEnhancedEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 90,
+      "display_name": "LGP Chevron Waves Enhanced",
+      "class_name": "ChevronWavesEnhancedEffect",
+      "family": "GEOMETRIC",
+      "family_id": 1,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "Beat-synced chevron propagation with chroma detail",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/ChevronWavesEffectEnhanced.h",
+        "source": "firmware/v2/src/effects/ieffect/ChevronWavesEffectEnhanced.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": true,
+        "migration_pattern": "B",
+        "chroma_source": "circularChromaHueSmoothed (replaced linear EMA)"
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 91,
+      "display_name": "LGP Interference Scanner Enhanced",
+      "class_name": "LGPInterferenceScannerEnhancedEffect",
+      "family": "INTERFERENCE",
+      "family_id": 0,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "TRAVELING"
+      ],
+      "description": "Audio-reactive scan speed with interference fringes",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPInterferenceScannerEffectEnhanced.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPInterferenceScannerEffectEnhanced.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": true,
+        "migration_pattern": "additional_user",
+        "chroma_source": "circularChromaHueSmoothed()"
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 92,
+      "display_name": "LGP Photonic Crystal Enhanced",
+      "class_name": "LGPPhotonicCrystalEnhancedEffect",
+      "family": "ADVANCED_OPTICAL",
+      "family_id": 2,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Harmonic lattice modulation with saliency weighting",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPPhotonicCrystalEffectEnhanced.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPPhotonicCrystalEffectEnhanced.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": true,
+        "migration_pattern": "C",
+        "chroma_source": "circularChromaHueSmoothed (replaced raw argmax)"
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 93,
+      "display_name": "LGP Spectrum Detail",
+      "class_name": "LGPSpectrumDetailEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "64-bin spectrum detail, bass at centre and treble at edges",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPSpectrumDetailEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPSpectrumDetailEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 94,
+      "display_name": "LGP Spectrum Detail Enhanced",
+      "class_name": "LGPSpectrumDetailEnhancedEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Saliency-weighted spectrum detail with adaptive emphasis",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPSpectrumDetailEnhancedEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPSpectrumDetailEnhancedEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 95,
+      "display_name": "LGP Star Burst Enhanced",
+      "class_name": "LGPStarBurstEnhancedEffect",
+      "family": "GEOMETRIC",
+      "family_id": 1,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Beat-triggered star bursts with sub-bass boost",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPStarBurstEffectEnhanced.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPStarBurstEffectEnhanced.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": true,
+        "migration_pattern": "C",
+        "chroma_source": "circularChromaHueSmoothed (replaced raw argmax)"
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 96,
+      "display_name": "LGP Wave Collision Enhanced",
+      "class_name": "LGPWaveCollisionEnhancedEffect",
+      "family": "INTERFERENCE",
+      "family_id": 0,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "TRAVELING"
+      ],
+      "description": "Audio-driven wave collision with sub-bass boost",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPWaveCollisionEffectEnhanced.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPWaveCollisionEffectEnhanced.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": true,
+        "migration_pattern": "B",
+        "chroma_source": "circularChromaHueSmoothed (replaced linear EMA)"
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 97,
+      "display_name": "Ripple Enhanced",
+      "class_name": "RippleEnhancedEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "Beat-sync ripple propagation with musical intelligence",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/RippleEnhancedEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/RippleEnhancedEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": true,
+        "migration_pattern": "A",
+        "chroma_source": "circularChromaHueSmoothed via selectChroma12()"
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 98,
+      "display_name": "Audio Bloom Parity",
+      "class_name": "SnapwaveLinearEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "SB 4.1.1 bloom parity with centre smear",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/SnapwaveLinearEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/SnapwaveLinearEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 99,
+      "display_name": "Audio Waveform Parity",
+      "class_name": "TrinityTestEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "SB 3.1.0 waveform parity with MOOD smoothing",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/TrinityTestEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/TrinityTestEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 100,
+      "display_name": "LGP Holographic Auto-Cycle",
+      "class_name": "LGPHolographicAutoCycleEffect",
+      "family": "INTERFERENCE",
+      "family_id": 0,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "MOIRE",
+        "DEPTH"
+      ],
+      "description": "Holographic effect with internal palette auto-cycling",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPHolographicAutoCycleEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPHolographicAutoCycleEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 101,
+      "display_name": "ES Analog (Ref)",
+      "class_name": "EsAnalogRefEffect",
+      "family": "GEOMETRIC",
+      "family_id": 1,
+      "tags": [
+        "CENTER_ORIGIN",
+        "SPECTRAL"
+      ],
+      "description": "Emotiscope v1.1 reference: VU dot display",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/esv11_reference/EsAnalogRefEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/esv11_reference/EsAnalogRefEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 102,
+      "display_name": "ES Spectrum (Ref)",
+      "class_name": "EsSpectrumRefEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "SPECTRAL"
+      ],
+      "description": "Emotiscope v1.1 reference: 64-bin spectrum strip",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/esv11_reference/EsSpectrumRefEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/esv11_reference/EsSpectrumRefEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 103,
+      "display_name": "ES Octave (Ref)",
+      "class_name": "EsOctaveRefEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "SPECTRAL"
+      ],
+      "description": "Emotiscope v1.1 reference: chromagram strip",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/esv11_reference/EsOctaveRefEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/esv11_reference/EsOctaveRefEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 104,
+      "display_name": "ES Bloom (Ref)",
+      "class_name": "EsBloomRefEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "SPECTRAL"
+      ],
+      "description": "Emotiscope v1.1 reference: chroma bloom",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/esv11_reference/EsBloomRefEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/esv11_reference/EsBloomRefEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 105,
+      "display_name": "ES Waveform (Ref)",
+      "class_name": "EsWaveformRefEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "SPECTRAL"
+      ],
+      "description": "Emotiscope v1.1 reference: waveform strip",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/esv11_reference/EsWaveformRefEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/esv11_reference/EsWaveformRefEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 106,
+      "display_name": "Ripple (ES tuned)",
+      "class_name": "RippleEsTunedEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "Beat-locked ripples tuned for ES v1.1 audio backend",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/RippleEsTunedEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/RippleEsTunedEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": true,
+        "migration_pattern": "A",
+        "chroma_source": "circularChromaHueSmoothed via selectChroma12()"
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 107,
+      "display_name": "Heartbeat (ES tuned)",
+      "class_name": "HeartbeatEsTunedEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Beat-locked lub-dub heartbeat tuned for ES v1.1 audio backend",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/HeartbeatEsTunedEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/HeartbeatEsTunedEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": true,
+        "migration_pattern": "additional_user",
+        "chroma_source": "circularChromaHueSmoothed()"
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 108,
+      "display_name": "LGP Holographic (ES tuned)",
+      "class_name": "LGPHolographicEsTunedEffect",
+      "family": "INTERFERENCE",
+      "family_id": 0,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "MOIRE",
+        "DEPTH"
+      ],
+      "description": "Musically driven holographic depth layers tuned for ES v1.1 audio backend",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPHolographicEsTunedEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPHolographicEsTunedEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": true,
+        "migration_pattern": "additional_user",
+        "chroma_source": "circularChromaHueSmoothed()"
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 109,
+      "display_name": "SB Waveform (Ref)",
+      "class_name": "SbWaveform310RefEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "SPECTRAL"
+      ],
+      "description": "Sensory Bridge 3.1.0 reference: waveform mode",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/sensorybridge_reference/SbWaveform310RefEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/sensorybridge_reference/SbWaveform310RefEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 110,
+      "display_name": "Beat Pulse (Stack)",
+      "class_name": "BeatPulseStackEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "UI preview parity: static palette gradient with beat-driven white push",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/BeatPulseStackEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/BeatPulseStackEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 111,
+      "display_name": "Beat Pulse (Shockwave)",
+      "class_name": "BeatPulseShockwaveEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "Canonical shockwave: ring travels outward from centre on beat",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/BeatPulseShockwaveEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/BeatPulseShockwaveEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 112,
+      "display_name": "Beat Pulse (Shockwave In)",
+      "class_name": null,
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "Inward shockwave: ring travels edge->centre on beat",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": null,
+        "source": null
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": true,
+      "removal_note": "ID 112 (Shockwave In) removed. Slot preserved for ID stability."
+    },
+    {
+      "id": 113,
+      "display_name": "Beat Pulse (Void)",
+      "class_name": "BeatPulseVoidEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "Hard detonation in darkness: palette ring against black",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/BeatPulseVoidEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/BeatPulseVoidEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 114,
+      "display_name": "Beat Pulse (Resonant)",
+      "class_name": "BeatPulseResonantEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "Double ring contracting inward: sharp attack + warm resonant body",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/BeatPulseResonantEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/BeatPulseResonantEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 115,
+      "display_name": "Beat Pulse (Ripple)",
+      "class_name": "BeatPulseRippleEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "Cascading implosion ripples: up to 3 rings converge on centre",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/BeatPulseRippleEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/BeatPulseRippleEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 116,
+      "display_name": "Beat Pulse (Shockwave Cascade)",
+      "class_name": "BeatPulseShockwaveCascadeEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "Outward pressure wave with trailing echo rings",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/BeatPulseShockwaveCascadeEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/BeatPulseShockwaveCascadeEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 117,
+      "display_name": "Beat Pulse (Spectral)",
+      "class_name": "BeatPulseSpectralEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "SPECTRAL"
+      ],
+      "description": "Three frequency-driven rings: bass outer, mid middle, treble centre",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/BeatPulseSpectralEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/BeatPulseSpectralEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 118,
+      "display_name": "Beat Pulse (Spectral Pulse)",
+      "class_name": "BeatPulseSpectralPulseEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "SPECTRAL"
+      ],
+      "description": "Stationary zones pulsing by frequency band",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/BeatPulseSpectralPulseEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/BeatPulseSpectralPulseEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 119,
+      "display_name": "Beat Pulse (Breathe)",
+      "class_name": "BeatPulseBreatheEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Warm whole-strip amplitude pump with centre-weighted glow",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/BeatPulseBreatheEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/BeatPulseBreatheEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 120,
+      "display_name": "Beat Pulse (LGP Interference)",
+      "class_name": "BeatPulseLGPInterferenceEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "STANDING"
+      ],
+      "description": "Dual-strip interference: standing waves exploit LGP optics",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/BeatPulseLGPInterferenceEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/BeatPulseLGPInterferenceEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 121,
+      "display_name": "Beat Pulse (Bloom)",
+      "class_name": "BeatPulseBloomEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "TRAVELING"
+      ],
+      "description": "Beat Pulse transport bloom with beat-envelope driven injection",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/BeatPulseBloomEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/BeatPulseBloomEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 122,
+      "display_name": "Bloom (Parity)",
+      "class_name": "BloomParityEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP"
+      ],
+      "description": "Bloom-style subpixel transport (liquid trails)",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/BloomParityEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/BloomParityEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 123,
+      "display_name": "Kuramoto Transport",
+      "class_name": "KuramotoTransportEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "Invisible oscillator field -> event-driven light transport",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/KuramotoTransportEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/KuramotoTransportEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 124,
+      "display_name": "LGP Opal Film",
+      "class_name": "LGPOpalFilmEffect",
+      "family": "ADVANCED_OPTICAL",
+      "family_id": 2,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "SPECTRAL",
+        "DEPTH",
+        "PHYSICS"
+      ],
+      "description": "Iridescent thin-film bands drifting from centre",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPOpalFilmEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPOpalFilmEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 125,
+      "display_name": "LGP Grating Scan",
+      "class_name": "LGPGratingScanEffect",
+      "family": "ADVANCED_OPTICAL",
+      "family_id": 2,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "SPECTRAL",
+        "TRAVELING",
+        "PHYSICS"
+      ],
+      "description": "Spectral scan highlight sweeping from centre",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPGratingScanEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPGratingScanEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 126,
+      "display_name": "LGP Stress Glass",
+      "class_name": "LGPStressGlassEffect",
+      "family": "ADVANCED_OPTICAL",
+      "family_id": 2,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "SPECTRAL",
+        "PHYSICS"
+      ],
+      "description": "Polarised stress fringes with slow analyser rotation",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPStressGlassEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPStressGlassEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 127,
+      "display_name": "LGP Moire Silk",
+      "class_name": "LGPMoireSilkEffect",
+      "family": "ADVANCED_OPTICAL",
+      "family_id": 2,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "MOIRE"
+      ],
+      "description": "Large moire beat envelopes with fine ribbing",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPMoireSilkEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPMoireSilkEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 128,
+      "display_name": "LGP Caustic Shards",
+      "class_name": "LGPCausticShardsEffect",
+      "family": "ADVANCED_OPTICAL",
+      "family_id": 2,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "SPECTRAL",
+        "PHYSICS"
+      ],
+      "description": "Interference field punctuated by prismatic glints",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPCausticShardsEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPCausticShardsEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 129,
+      "display_name": "LGP Parallax Depth",
+      "class_name": "LGPParallaxDepthEffect",
+      "family": "ADVANCED_OPTICAL",
+      "family_id": 2,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "DEPTH"
+      ],
+      "description": "Two-layer field with subtle parallax between strips",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPParallaxDepthEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPParallaxDepthEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 130,
+      "display_name": "LGP Stress Glass (Melt)",
+      "class_name": "LGPStressGlassMeltEffect",
+      "family": "ADVANCED_OPTICAL",
+      "family_id": 2,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "SPECTRAL",
+        "PHYSICS"
+      ],
+      "description": "Photoelastic fringes with phase-locked wings",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPStressGlassMeltEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPStressGlassMeltEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 131,
+      "display_name": "LGP Grating Scan (Breakup)",
+      "class_name": "LGPGratingScanBreakupEffect",
+      "family": "ADVANCED_OPTICAL",
+      "family_id": 2,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "SPECTRAL",
+        "TRAVELING",
+        "PHYSICS"
+      ],
+      "description": "Diffraction scan with controlled halo breakup",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPGratingScanBreakupEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPGratingScanBreakupEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 132,
+      "display_name": "LGP Water Caustics",
+      "class_name": "LGPWaterCausticsEffect",
+      "family": "ADVANCED_OPTICAL",
+      "family_id": 2,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "SPECTRAL",
+        "PHYSICS"
+      ],
+      "description": "Ray-envelope caustic filaments with cusp spikes",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPWaterCausticsEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPWaterCausticsEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 133,
+      "display_name": "LGP Schlieren Flow",
+      "class_name": "LGPSchlierenFlowEffect",
+      "family": "ADVANCED_OPTICAL",
+      "family_id": 2,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "SPECTRAL",
+        "PHYSICS"
+      ],
+      "description": "Knife-edge gradient flow with heat-haze shimmer",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPSchlierenFlowEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPSchlierenFlowEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 134,
+      "display_name": "LGP Reaction Diffusion",
+      "class_name": "LGPReactionDiffusionEffect",
+      "family": "NOVEL_PHYSICS",
+      "family_id": 7,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "PHYSICS"
+      ],
+      "description": "Gray-Scott slime with self-replicating dynamics",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPReactionDiffusionEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPReactionDiffusionEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 135,
+      "display_name": "LGP RD Triangle",
+      "class_name": "LGPReactionDiffusionTriangleEffect",
+      "family": "NOVEL_PHYSICS",
+      "family_id": 7,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "PHYSICS"
+      ],
+      "description": "Front wedge isolation from reaction-diffusion field",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPReactionDiffusionTriangleEffect.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPReactionDiffusionTriangleEffect.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 136,
+      "display_name": "LGP Talbot Carpet",
+      "class_name": "LGPTalbotCarpetEffect",
+      "family": "INTERFERENCE",
+      "family_id": 0,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "STANDING",
+        "PHYSICS"
+      ],
+      "description": "Self-imaging lattice rug (near-field diffraction vibe)",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 137,
+      "display_name": "LGP Airy Comet",
+      "class_name": "LGPAiryCometEffect",
+      "family": "INTERFERENCE",
+      "family_id": 0,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "TRAVELING",
+        "PHYSICS"
+      ],
+      "description": "Self-accelerating comet with trailing lobes",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 138,
+      "display_name": "LGP Moire Cathedral",
+      "class_name": "LGPMoireCathedralEffect",
+      "family": "INTERFERENCE",
+      "family_id": 0,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "MOIRE",
+        "STANDING"
+      ],
+      "description": "Interference arches from close gratings (giant beats)",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 139,
+      "display_name": "LGP Living Glyph",
+      "class_name": "LGPSuperformulaGlyphEffect",
+      "family": "GEOMETRIC",
+      "family_id": 1,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "PHYSICS"
+      ],
+      "description": "Superformula sigils (morphing supershapes)",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 140,
+      "display_name": "LGP Spirograph Crown",
+      "class_name": "LGPSpirographCrownEffect",
+      "family": "GEOMETRIC",
+      "family_id": 1,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP"
+      ],
+      "description": "Hypotrochoid crown loops (gear-flower royal seal)",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 141,
+      "display_name": "LGP Rose Bloom",
+      "class_name": "LGPRoseBloomEffect",
+      "family": "GEOMETRIC",
+      "family_id": 1,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP"
+      ],
+      "description": "Rhodonea petals (geometric bloom)",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 142,
+      "display_name": "LGP Harmonograph Halo",
+      "class_name": "LGPHarmonographHaloEffect",
+      "family": "GEOMETRIC",
+      "family_id": 1,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP"
+      ],
+      "description": "Lissajous orbitals (aura loops, premium calm)",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 143,
+      "display_name": "LGP Rule 30 Cathedral",
+      "class_name": "LGPRule30CathedralEffect",
+      "family": "NOVEL_PHYSICS",
+      "family_id": 7,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP"
+      ],
+      "description": "Elementary CA textile (triangles + chaos + ribs)",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 144,
+      "display_name": "LGP Langton Highway",
+      "class_name": "LGPLangtonHighwayEffect",
+      "family": "NOVEL_PHYSICS",
+      "family_id": 7,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP"
+      ],
+      "description": "Emergent order reveal (ant to chaos to highway) projected to 1D",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 145,
+      "display_name": "LGP Cymatic Ladder",
+      "class_name": "LGPCymaticLadderEffect",
+      "family": "INTERFERENCE",
+      "family_id": 0,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "STANDING",
+        "PHYSICS"
+      ],
+      "description": "Standing-wave nodes/antinodes sculpted into LGP glass",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 146,
+      "display_name": "LGP Mach Diamonds",
+      "class_name": "LGPMachDiamondsEffect",
+      "family": "INTERFERENCE",
+      "family_id": 0,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "STANDING",
+        "PHYSICS"
+      ],
+      "description": "Shock-diamond jewellery (standing shock-cell pulses)",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPShapeBangersPack.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 147,
+      "display_name": "Chimera Crown",
+      "class_name": "LGPChimeraCrownEffect",
+      "family": "MATHEMATICAL",
+      "family_id": 9,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "PHYSICS"
+      ],
+      "description": "Coherent and incoherent domains (sync fracture line)",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPHolyShitBangersPack.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPHolyShitBangersPack.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 148,
+      "display_name": "Catastrophe Caustics",
+      "class_name": "LGPCatastropheCausticsEffect",
+      "family": "QUANTUM",
+      "family_id": 4,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "PHYSICS"
+      ],
+      "description": "Ray-envelope filaments (focus pull + cusp spark)",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPHolyShitBangersPack.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPHolyShitBangersPack.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 149,
+      "display_name": "Hyperbolic Portal",
+      "class_name": "LGPHyperbolicPortalEffect",
+      "family": "GEOMETRIC",
+      "family_id": 1,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP"
+      ],
+      "description": "Edge densification via atanh(r) (Poincare vibe)",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPHolyShitBangersPack.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPHolyShitBangersPack.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 150,
+      "display_name": "Lorenz Ribbon",
+      "class_name": "LGPLorenzRibbonEffect",
+      "family": "MATHEMATICAL",
+      "family_id": 9,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP",
+        "PHYSICS"
+      ],
+      "description": "Chaotic attractor ribbon (never repeats the same way twice)",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPHolyShitBangersPack.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPHolyShitBangersPack.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 151,
+      "display_name": "IFS Botanical Relic",
+      "class_name": "LGPIFSBioRelicEffect",
+      "family": "ORGANIC",
+      "family_id": 3,
+      "tags": [
+        "CENTER_ORIGIN",
+        "DUAL_STRIP"
+      ],
+      "description": "Mirrored IFS growth (fractal botany in glass)",
+      "audio_reactive": false,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPHolyShitBangersPack.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPHolyShitBangersPack.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": false,
+        "has_m_chromaAngle": false,
+        "migration_pattern": null,
+        "chroma_source": null
+      },
+      "psram_allocation": true,
+      "removed": false
+    },
+    {
+      "id": 152,
+      "display_name": "LGP Flux Rift",
+      "class_name": "LGPFluxRiftEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING",
+        "SPECTRAL"
+      ],
+      "description": "Transient flux opens a travelling centre-out rift",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": false,
+        "migration_pattern": "D",
+        "chroma_source": "selectMusicalHue() + smoothHue() (Schmitt trigger)"
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 153,
+      "display_name": "LGP Beat Prism",
+      "class_name": "LGPBeatPrismEffect",
+      "family": "GEOMETRIC",
+      "family_id": 1,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING",
+        "SPECTRAL"
+      ],
+      "description": "Beat-front prism rays with edgeward pressure travel",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": false,
+        "migration_pattern": "D",
+        "chroma_source": "selectMusicalHue() + smoothHue() (Schmitt trigger)"
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 154,
+      "display_name": "LGP Harmonic Tide",
+      "class_name": "LGPHarmonicTideEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "Chord-anchored tidal bands with centre-held continuity",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": false,
+        "migration_pattern": "D",
+        "chroma_source": "selectMusicalHue() + smoothHue() (Schmitt trigger)"
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 155,
+      "display_name": "LGP Bass Quake",
+      "class_name": "LGPBassQuakeEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "Sub-bass compression waves with outward shock release",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": false,
+        "migration_pattern": "D",
+        "chroma_source": "selectMusicalHue() + smoothHue() (Schmitt trigger)"
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 156,
+      "display_name": "LGP Treble Net",
+      "class_name": "LGPTrebleNetEffect",
+      "family": "INTERFERENCE",
+      "family_id": 0,
+      "tags": [
+        "CENTER_ORIGIN",
+        "STANDING",
+        "SPECTRAL"
+      ],
+      "description": "Timbral shimmer lattice with edge-biased spectral filaments",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": false,
+        "migration_pattern": "D",
+        "chroma_source": "selectMusicalHue() + smoothHue() (Schmitt trigger)"
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 157,
+      "display_name": "LGP Rhythmic Gate",
+      "class_name": "LGPRhythmicGateEffect",
+      "family": "GEOMETRIC",
+      "family_id": 1,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "Beat-gated lattice shutters with travelling pulse seams",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": false,
+        "migration_pattern": "D",
+        "chroma_source": "selectMusicalHue() + smoothHue() (Schmitt trigger)"
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 158,
+      "display_name": "LGP Spectral Knot",
+      "class_name": "LGPSpectralKnotEffect",
+      "family": "GEOMETRIC",
+      "family_id": 1,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING",
+        "SPECTRAL"
+      ],
+      "description": "Frequency-balance knot fields crossing in mirrored rings",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": false,
+        "migration_pattern": "D",
+        "chroma_source": "selectMusicalHue() + smoothHue() (Schmitt trigger)"
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 159,
+      "display_name": "LGP Saliency Bloom",
+      "class_name": "LGPSaliencyBloomEffect",
+      "family": "FLUID_PLASMA",
+      "family_id": 8,
+      "tags": [
+        "CENTER_ORIGIN"
+      ],
+      "description": "Overall novelty drives expanding bloom radius and density",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": false,
+        "migration_pattern": "D",
+        "chroma_source": "selectMusicalHue() + smoothHue() (Schmitt trigger)"
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 160,
+      "display_name": "LGP Transient Lattice",
+      "class_name": "LGPTransientLatticeEffect",
+      "family": "INTERFERENCE",
+      "family_id": 0,
+      "tags": [
+        "CENTER_ORIGIN",
+        "TRAVELING"
+      ],
+      "description": "Snare and flux impacts drive a decaying interference scaffold",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": false,
+        "migration_pattern": "D",
+        "chroma_source": "selectMusicalHue() + smoothHue() (Schmitt trigger)"
+      },
+      "psram_allocation": false,
+      "removed": false
+    },
+    {
+      "id": 161,
+      "display_name": "LGP Wavelet Mirror",
+      "class_name": "LGPWaveletMirrorEffect",
+      "family": "GEOMETRIC",
+      "family_id": 1,
+      "tags": [
+        "CENTER_ORIGIN",
+        "SPECTRAL"
+      ],
+      "description": "Waveform crest mirroring with beat-travel ridge reinforcement",
+      "audio_reactive": true,
+      "centre_origin": true,
+      "stateful": false,
+      "files": {
+        "header": "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.h",
+        "source": "firmware/v2/src/effects/ieffect/LGPExperimentalAudioPack.cpp"
+      },
+      "chroma": {
+        "uses_chromautils": true,
+        "has_m_chromaAngle": false,
+        "migration_pattern": "D",
+        "chroma_source": "selectMusicalHue() + smoothHue() (Schmitt trigger)"
+      },
+      "psram_allocation": false,
+      "removed": false
+    }
+  ],
+  "families": {
+    "FLUID_PLASMA": 55,
+    "GEOMETRIC": 25,
+    "INTERFERENCE": 17,
+    "ADVANCED_OPTICAL": 26,
+    "ORGANIC": 7,
+    "QUANTUM": 11,
+    "COLOR_MIXING": 10,
+    "NOVEL_PHYSICS": 9,
+    "MATHEMATICAL": 2
+  },
+  "audio_reactive_ids": [
+    5,
+    6,
+    7,
+    8,
+    9,
+    11,
+    16,
+    17,
+    22,
+    24,
+    33,
+    68,
+    69,
+    70,
+    71,
+    72,
+    73,
+    74,
+    75,
+    76,
+    77,
+    78,
+    79,
+    80,
+    88,
+    89,
+    90,
+    91,
+    92,
+    93,
+    94,
+    95,
+    96,
+    97,
+    98,
+    99,
+    100,
+    101,
+    102,
+    103,
+    104,
+    105,
+    106,
+    107,
+    108,
+    109,
+    110,
+    111,
+    112,
+    113,
+    114,
+    115,
+    116,
+    117,
+    118,
+    119,
+    120,
+    121,
+    122,
+    123,
+    152,
+    153,
+    154,
+    155,
+    156,
+    157,
+    158,
+    159,
+    160,
+    161
+  ],
+  "audio_reactive_count": 70,
+  "chroma_migration_summary": {
+    "pattern_A": {
+      "description": "Static utility functions removed (selectChroma12 helper)",
+      "count": 6,
+      "effect_ids": [
+        8,
+        69,
+        70,
+        71,
+        97,
+        106
+      ]
+    },
+    "pattern_B": {
+      "description": "Linear EMA on circular quantity replaced with circularChromaHueSmoothed",
+      "count": 4,
+      "effect_ids": [
+        17,
+        22,
+        90,
+        96
+      ]
+    },
+    "pattern_C": {
+      "description": "Raw argmax bin selection replaced with circular weighted mean",
+      "count": 6,
+      "effect_ids": [
+        5,
+        24,
+        33,
+        88,
+        92,
+        95
+      ]
+    },
+    "pattern_D": {
+      "description": "Experimental Audio Pack with Schmitt trigger hysteresis and dominantNoteFromBins",
+      "count": 10,
+      "effect_ids": [
+        152,
+        153,
+        154,
+        155,
+        156,
+        157,
+        158,
+        159,
+        160,
+        161
+      ]
+    },
+    "additional_chromautils_users": {
+      "description": "Effects using ChromaUtils not classified as A/B/C/D (Section 5.6)",
+      "count": 7,
+      "effect_ids": [
+        16,
+        72,
+        74,
+        80,
+        91,
+        107,
+        108
+      ]
+    },
+    "total_chroma_effects": 33,
+    "m_chromaAngle_headers": 22
+  },
+  "psram_effects": {
+    "count": 32,
+    "effect_ids": [
+      0,
+      8,
+      39,
+      63,
+      73,
+      82,
+      86,
+      93,
+      94,
+      97,
+      98,
+      106,
+      122,
+      123,
+      134,
+      135,
+      136,
+      137,
+      138,
+      139,
+      140,
+      141,
+      142,
+      143,
+      144,
+      145,
+      146,
+      147,
+      148,
+      149,
+      150,
+      151
+    ]
+  },
+  "gaps": [
+    {
+      "type": "removed_slot",
+      "id": 112,
+      "description": "Beat Pulse (Shockwave In) removed. Metadata position preserved but no class registered. Code comment says slot left empty for ID stability, but the code does not actually skip the total counter, causing a -1 offset in registered IDs for effects 112+ vs their PATTERN_METADATA positions.",
+      "impact": "medium",
+      "affects": "All effect IDs >= 112 may have a -1 offset between code registration (total counter) and PATTERN_METADATA array position. This means registered ID in RendererActor may not match the metadata lookup index."
+    },
+    {
+      "type": "metadata_id_mismatch",
+      "context": "CHROMA_ARGMAX_FIX_SPEC Section 5.3 lists Chevron Waves as ID 18, but PATTERN_METADATA position 18 is LGP Diamond Lattice. Chevron Waves is at metadata position 22.",
+      "impact": "low",
+      "note": "Spec document has incorrect ID for Chevron Waves. Actual ID from PatternRegistry is 22."
+    },
+    {
+      "type": "code_name_mismatch",
+      "context": "PATTERN_METADATA position 98 = 'Audio Bloom Parity' but CoreEffects registers SnapwaveLinearEffect at code total 98. Position 99 = 'Audio Waveform Parity' but CoreEffects registers TrinityTestEffect at code total 99.",
+      "impact": "high",
+      "note": "Display names in PatternRegistry at positions 98-99 do not match the actual class implementations registered at those code positions. SnapwaveLinearEffect (linear, not centre-origin) is registered where 'Audio Bloom Parity' metadata sits."
+    }
+  ]
+}

@@ -1,0 +1,103 @@
+{
+  "test_id": "T1.1",
+  "name": "K1 Waveform Baseline \u2014 Music",
+  "device": "/dev/cu.usbmodem212401",
+  "effect": "0x1302",
+  "edgemixer": {
+    "mode": 0,
+    "spread": 30,
+    "strength": 200,
+    "spatial": 0,
+    "temporal": 0
+  },
+  "frames_captured": 900,
+  "metrics": {
+    "L0": {
+      "black_frame_ratio": 0.027777777777777776,
+      "clipped_frame_ratio": 0.0,
+      "mean_brightness": 0.8132973175381263
+    },
+    "L1": {
+      "stability_lss": 0.9685725970032062,
+      "flicker_elatcsf": 0.33187273273408363,
+      "vmcr": 0.7676115370129504
+    },
+    "L2": {
+      "energy_correlation": 0.36778076110716257,
+      "beat_alignment": 0.5384615384615384,
+      "onset_response": 1.1362360833828016
+    },
+    "composite": 0.5830108151540332,
+    "strip_divergence_l2": 0.3123110306693214,
+    "near_black_leaks": 0
+  },
+  "gates": {
+    "black_frame_ratio": {
+      "value": 0.027777777777777776,
+      "bounds": {
+        "max": 0.15
+      },
+      "pass": true
+    },
+    "clipped_frame_ratio": {
+      "value": 0.0,
+      "bounds": {
+        "max": 0.1
+      },
+      "pass": true
+    },
+    "mean_brightness": {
+      "value": 0.8132973175381263,
+      "bounds": {
+        "min": 0.05,
+        "max": 0.99
+      },
+      "pass": true
+    },
+    "stability_lss": {
+      "value": 0.9685725970032062,
+      "bounds": {
+        "min": 0.4
+      },
+      "pass": true
+    },
+    "flicker_elatcsf": {
+      "value": 0.33187273273408363,
+      "bounds": {
+        "max": 0.6
+      },
+      "pass": true
+    },
+    "vmcr": {
+      "value": 0.7676115370129504,
+      "bounds": {
+        "min": 0.3
+      },
+      "pass": true
+    },
+    "beat_alignment": {
+      "value": 0.5384615384615384,
+      "bounds": {
+        "min": 0.05
+      },
+      "pass": true
+    },
+    "onset_response": {
+      "value": 1.1362360833828016,
+      "bounds": {
+        "min": 0.8
+      },
+      "pass": true
+    },
+    "composite": {
+      "value": 0.5830108151540332,
+      "bounds": {
+        "min": 0.3
+      },
+      "pass": true
+    }
+  },
+  "degradation": {},
+  "extra_checks": {},
+  "pass": true
+}

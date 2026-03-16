@@ -1,0 +1,103 @@
+{
+  "test_id": "T1.1",
+  "name": "K1 Waveform Baseline \u2014 Music",
+  "device": "/dev/cu.usbmodem212401",
+  "effect": "0x1302",
+  "edgemixer": {
+    "mode": 0,
+    "spread": 30,
+    "strength": 200,
+    "spatial": 0,
+    "temporal": 0
+  },
+  "frames_captured": 900,
+  "metrics": {
+    "L0": {
+      "black_frame_ratio": 0.0,
+      "clipped_frame_ratio": 0.0,
+      "mean_brightness": 0.1505190223311547
+    },
+    "L1": {
+      "stability_lss": 0.9347065912015529,
+      "flicker_elatcsf": 0.1884498250934104,
+      "vmcr": 0.7712825322175341
+    },
+    "L2": {
+      "energy_correlation": -0.22042480800044903,
+      "beat_alignment": 0.5,
+      "onset_response": 1.02993686606141
+    },
+    "composite": 0.40302429965116515,
+    "strip_divergence_l2": 0.31234147223410164,
+    "near_black_leaks": 86
+  },
+  "gates": {
+    "black_frame_ratio": {
+      "value": 0.0,
+      "bounds": {
+        "max": 0.15
+      },
+      "pass": true
+    },
+    "clipped_frame_ratio": {
+      "value": 0.0,
+      "bounds": {
+        "max": 0.1
+      },
+      "pass": true
+    },
+    "mean_brightness": {
+      "value": 0.1505190223311547,
+      "bounds": {
+        "min": 0.05,
+        "max": 0.99
+      },
+      "pass": true
+    },
+    "stability_lss": {
+      "value": 0.9347065912015529,
+      "bounds": {
+        "min": 0.4
+      },
+      "pass": true
+    },
+    "flicker_elatcsf": {
+      "value": 0.1884498250934104,
+      "bounds": {
+        "max": 0.6
+      },
+      "pass": true
+    },
+    "vmcr": {
+      "value": 0.7712825322175341,
+      "bounds": {
+        "min": 0.3
+      },
+      "pass": true
+    },
+    "beat_alignment": {
+      "value": 0.5,
+      "bounds": {
+        "min": 0.05
+      },
+      "pass": true
+    },
+    "onset_response": {
+      "value": 1.02993686606141,
+      "bounds": {
+        "min": 0.8
+      },
+      "pass": true
+    },
+    "composite": {
+      "value": 0.40302429965116515,
+      "bounds": {
+        "min": 0.3
+      },
+      "pass": true
+    }
+  },
+  "degradation": {},
+  "extra_checks": {},
+  "pass": true
+}

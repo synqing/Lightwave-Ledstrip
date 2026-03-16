@@ -1,0 +1,88 @@
+{
+  "test_id": "T3.1",
+  "name": "COMPLEMENTARY + CENTRE_GRADIENT",
+  "device": "/dev/cu.usbmodem21401",
+  "effect": "0x1302",
+  "edgemixer": {
+    "mode": 2,
+    "spread": 30,
+    "strength": 200,
+    "spatial": 1,
+    "temporal": 0
+  },
+  "frames_captured": 900,
+  "metrics": {
+    "L0": {
+      "black_frame_ratio": 0.0,
+      "clipped_frame_ratio": 0.0,
+      "mean_brightness": 0.7826924291938998
+    },
+    "L1": {
+      "stability_lss": 0.9865003735086916,
+      "flicker_elatcsf": 0.06081166829668522,
+      "vmcr": 0.9457135063456448
+    },
+    "L2": {
+      "energy_correlation": -0.059203470232702914,
+      "beat_alignment": 0.15384615384615385,
+      "onset_response": 1.006013870992713
+    },
+    "composite": 0.5613917674993754,
+    "strip_divergence_l2": 95.10675974491961,
+    "near_black_leaks": 0
+  },
+  "gates": {
+    "near_black_leaks": {
+      "value": 0,
+      "bounds": {
+        "max": 0
+      },
+      "pass": true
+    }
+  },
+  "degradation": {
+    "stability_lss": {
+      "baseline": 0.9999077951536566,
+      "current": 0.9865003735086916,
+      "delta": 0.013407421644965,
+      "max_allowed": 0.2,
+      "pass": true
+    },
+    "flicker_elatcsf": {
+      "baseline": 0.0010647713990514847,
+      "current": 0.06081166829668522,
+      "delta": 0.05974689689763373,
+      "max_allowed": -0.15,
+      "pass": true
+    },
+    "energy_correlation": {
+      "baseline": -0.0965094380315139,
+      "current": -0.059203470232702914,
+      "delta": -0.03730596779881099,
+      "max_allowed": 0.25,
+      "pass": true
+    },
+    "onset_response": {
+      "baseline": 0.9998317626935019,
+      "current": 1.006013870992713,
+      "delta": -0.006182108299211175,
+      "max_allowed": 0.3,
+      "pass": true
+    },
+    "composite": {
+      "baseline": 0.7189396663251847,
+      "current": 0.5613917674993754,
+      "delta": 0.15754789882580933,
+      "max_allowed": 0.15,
+      "pass": false
+    }
+  },
+  "extra_checks": {
+    "centre_gradient_monotonicity": {
+      "pass": true,
+      "detail": "centre=10.1 edge=170.4",
+      "value": 16.934773417964273
+    }
+  },
+  "pass": false
+}

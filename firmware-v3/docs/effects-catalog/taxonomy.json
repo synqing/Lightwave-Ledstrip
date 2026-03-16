@@ -1,0 +1,4580 @@
+{
+  "generated_at": "2026-02-21T00:43:17Z",
+  "rendering_patterns": [
+    {
+      "pattern_id": "continuous_field_computation",
+      "name": "Continuous Field Computation",
+      "description": "Continuous field computations including noise, reaction-diffusion, fire simulation, or coupled oscillators.",
+      "implementation_markers": [
+        "inoise8",
+        "perlin",
+        "reaction-diffusion",
+        "HeatColor",
+        "kuramoto"
+      ],
+      "effects_using": [
+        {
+          "id": 0,
+          "name": "Fire",
+          "class": "FireEffect"
+        },
+        {
+          "id": 34,
+          "name": "LGP Aurora Borealis",
+          "class": "LGPAuroraBorealisEffect"
+        },
+        {
+          "id": 36,
+          "name": "LGP Plasma Membrane",
+          "class": "LGPPlasmaMembraneEffect"
+        },
+        {
+          "id": 37,
+          "name": "LGP Neural Network",
+          "class": "LGPNeuralNetworkEffect"
+        },
+        {
+          "id": 38,
+          "name": "LGP Crystalline Growth",
+          "class": "LGPCrystallineGrowthEffect"
+        },
+        {
+          "id": 39,
+          "name": "LGP Fluid Dynamics",
+          "class": "LGPFluidDynamicsEffect"
+        },
+        {
+          "id": 77,
+          "name": "LGP Perlin Veil",
+          "class": "LGPPerlinVeilEffect"
+        },
+        {
+          "id": 78,
+          "name": "LGP Perlin Shocklines",
+          "class": "LGPPerlinShocklinesEffect"
+        },
+        {
+          "id": 79,
+          "name": "LGP Perlin Caustics",
+          "class": "LGPPerlinCausticsEffect"
+        },
+        {
+          "id": 80,
+          "name": "LGP Perlin Interference Weave",
+          "class": "LGPPerlinInterferenceWeaveEffect"
+        },
+        {
+          "id": 81,
+          "name": "LGP Perlin Veil Ambient",
+          "class": "LGPPerlinVeilAmbientEffect"
+        },
+        {
+          "id": 82,
+          "name": "LGP Perlin Shocklines Ambient",
+          "class": "LGPPerlinShocklinesAmbientEffect"
+        },
+        {
+          "id": 83,
+          "name": "LGP Perlin Caustics Ambient",
+          "class": "LGPPerlinCausticsAmbientEffect"
+        },
+        {
+          "id": 84,
+          "name": "LGP Perlin Interference Weave Ambient",
+          "class": "LGPPerlinInterferenceWeaveAmbientEffect"
+        },
+        {
+          "id": 85,
+          "name": "Perlin Test: FastLED",
+          "class": "LGPPerlinBackendFastLEDEffect"
+        },
+        {
+          "id": 86,
+          "name": "Perlin Test: Emotiscope2 Full",
+          "class": "LGPPerlinBackendEmotiscopeFullEffect"
+        },
+        {
+          "id": 87,
+          "name": "Perlin Test: Emotiscope2 Quarter",
+          "class": "LGPPerlinBackendEmotiscopeQuarterEffect"
+        },
+        {
+          "id": 88,
+          "name": "BPM Enhanced",
+          "class": "BPMEnhancedEffect"
+        },
+        {
+          "id": 89,
+          "name": "Breathing Enhanced",
+          "class": "BreathingEnhancedEffect"
+        },
+        {
+          "id": 90,
+          "name": "LGP Chevron Waves Enhanced",
+          "class": "ChevronWavesEnhancedEffect"
+        },
+        {
+          "id": 92,
+          "name": "LGP Photonic Crystal Enhanced",
+          "class": "LGPPhotonicCrystalEnhancedEffect"
+        },
+        {
+          "id": 95,
+          "name": "LGP Star Burst Enhanced",
+          "class": "LGPStarBurstEnhancedEffect"
+        },
+        {
+          "id": 96,
+          "name": "LGP Wave Collision Enhanced",
+          "class": "LGPWaveCollisionEnhancedEffect"
+        },
+        {
+          "id": 123,
+          "name": "Kuramoto Transport",
+          "class": "KuramotoTransportEffect"
+        },
+        {
+          "id": 136,
+          "name": "LGP Talbot Carpet",
+          "class": "LGPTalbotCarpetEffect"
+        },
+        {
+          "id": 137,
+          "name": "LGP Airy Comet",
+          "class": "LGPAiryCometEffect"
+        },
+        {
+          "id": 138,
+          "name": "LGP Moire Cathedral",
+          "class": "LGPMoireCathedralEffect"
+        },
+        {
+          "id": 139,
+          "name": "LGP Living Glyph",
+          "class": "LGPSuperformulaGlyphEffect"
+        },
+        {
+          "id": 140,
+          "name": "LGP Spirograph Crown",
+          "class": "LGPSpirographCrownEffect"
+        },
+        {
+          "id": 141,
+          "name": "LGP Rose Bloom",
+          "class": "LGPRoseBloomEffect"
+        },
+        {
+          "id": 142,
+          "name": "LGP Harmonograph Halo",
+          "class": "LGPHarmonographHaloEffect"
+        },
+        {
+          "id": 143,
+          "name": "LGP Rule 30 Cathedral",
+          "class": "LGPRule30CathedralEffect"
+        },
+        {
+          "id": 144,
+          "name": "LGP Langton Highway",
+          "class": "LGPLangtonHighwayEffect"
+        },
+        {
+          "id": 145,
+          "name": "LGP Cymatic Ladder",
+          "class": "LGPCymaticLadderEffect"
+        },
+        {
+          "id": 146,
+          "name": "LGP Mach Diamonds",
+          "class": "LGPMachDiamondsEffect"
+        },
+        {
+          "id": 41,
+          "name": "LGP Gravitational Lensing",
+          "class": "LGPGravitationalLensingEffect"
+        }
+      ],
+      "effect_count": 36,
+      "category": "spatial",
+      "subcategory": "field",
+      "compliant_with_centre_origin": true,
+      "notes": ""
+    },
+    {
+      "pattern_id": "centre_origin_radial_expand",
+      "name": "Centre-Origin Radial Expansion",
+      "description": "LED values computed as a function of distance from centre points (LED 79/80), propagating outward.",
+      "implementation_markers": [
+        "centerPairDistance",
+        "SET_CENTER_PAIR",
+        "abs(i - center)"
+      ],
+      "effects_using": [
+        {
+          "id": 1,
+          "name": "Ocean",
+          "class": "OceanEffect"
+        },
+        {
+          "id": 5,
+          "name": "Juggle",
+          "class": "JuggleEffect"
+        },
+        {
+          "id": 6,
+          "name": "BPM",
+          "class": "BPMEffect"
+        },
+        {
+          "id": 7,
+          "name": "Wave",
+          "class": "WaveAmbientEffect"
+        },
+        {
+          "id": 8,
+          "name": "Ripple",
+          "class": "RippleEffect"
+        },
+        {
+          "id": 10,
+          "name": "Interference",
+          "class": "InterferenceEffect"
+        },
+        {
+          "id": 11,
+          "name": "Breathing",
+          "class": "BreathingEffect"
+        },
+        {
+          "id": 13,
+          "name": "LGP Box Wave",
+          "class": "LGPBoxWaveEffect"
+        },
+        {
+          "id": 14,
+          "name": "LGP Holographic",
+          "class": "LGPHolographicEffect"
+        },
+        {
+          "id": 16,
+          "name": "LGP Interference Scanner",
+          "class": "LGPInterferenceScannerEffect"
+        },
+        {
+          "id": 17,
+          "name": "LGP Wave Collision",
+          "class": "LGPWaveCollisionEffect"
+        },
+        {
+          "id": 18,
+          "name": "LGP Diamond Lattice",
+          "class": "LGPDiamondLatticeEffect"
+        },
+        {
+          "id": 20,
+          "name": "LGP Spiral Vortex",
+          "class": "LGPSpiralVortexEffect"
+        },
+        {
+          "id": 21,
+          "name": "LGP Sierpinski",
+          "class": "LGPSierpinskiEffect"
+        },
+        {
+          "id": 22,
+          "name": "LGP Chevron Waves",
+          "class": "ChevronWavesEffect"
+        },
+        {
+          "id": 23,
+          "name": "LGP Concentric Rings",
+          "class": "LGPConcentricRingsEffect"
+        },
+        {
+          "id": 24,
+          "name": "LGP Star Burst",
+          "class": "LGPStarBurstEffect"
+        },
+        {
+          "id": 25,
+          "name": "LGP Mesh Network",
+          "class": "LGPMeshNetworkEffect"
+        },
+        {
+          "id": 26,
+          "name": "LGP Moire Curtains",
+          "class": "LGPMoireCurtainsEffect"
+        },
+        {
+          "id": 27,
+          "name": "LGP Radial Ripple",
+          "class": "LGPRadialRippleEffect"
+        },
+        {
+          "id": 28,
+          "name": "LGP Holographic Vortex",
+          "class": "LGPHolographicVortexEffect"
+        },
+        {
+          "id": 29,
+          "name": "LGP Evanescent Drift",
+          "class": "LGPEvanescentDriftEffect"
+        },
+        {
+          "id": 30,
+          "name": "LGP Chromatic Shear",
+          "class": "LGPChromaticShearEffect"
+        },
+        {
+          "id": 31,
+          "name": "LGP Modal Cavity",
+          "class": "LGPModalCavityEffect"
+        },
+        {
+          "id": 32,
+          "name": "LGP Fresnel Zones",
+          "class": "LGPFresnelZonesEffect"
+        },
+        {
+          "id": 33,
+          "name": "LGP Photonic Crystal",
+          "class": "LGPPhotonicCrystalEffect"
+        },
+        {
+          "id": 39,
+          "name": "LGP Fluid Dynamics",
+          "class": "LGPFluidDynamicsEffect"
+        },
+        {
+          "id": 42,
+          "name": "LGP Time Crystal",
+          "class": "LGPTimeCrystalEffect"
+        },
+        {
+          "id": 49,
+          "name": "LGP Evanescent Skin",
+          "class": "LGPEvanescentSkinEffect"
+        },
+        {
+          "id": 50,
+          "name": "LGP Color Temperature",
+          "class": "LGPColorTemperatureEffect"
+        },
+        {
+          "id": 51,
+          "name": "LGP RGB Prism",
+          "class": "LGPRGBPrismEffect"
+        },
+        {
+          "id": 52,
+          "name": "LGP Complementary Mixing",
+          "class": "LGPComplementaryMixingEffect"
+        },
+        {
+          "id": 53,
+          "name": "LGP Quantum Colors",
+          "class": "LGPQuantumColorsEffect"
+        },
+        {
+          "id": 54,
+          "name": "LGP Doppler Shift",
+          "class": "LGPDopplerShiftEffect"
+        },
+        {
+          "id": 55,
+          "name": "LGP Color Accelerator",
+          "class": "LGPColorAcceleratorEffect"
+        },
+        {
+          "id": 56,
+          "name": "LGP DNA Helix",
+          "class": "LGPDNAHelixEffect"
+        },
+        {
+          "id": 57,
+          "name": "LGP Phase Transition",
+          "class": "LGPPhaseTransitionEffect"
+        },
+        {
+          "id": 58,
+          "name": "LGP Chromatic Aberration",
+          "class": "LGPChromaticAberrationEffect"
+        },
+        {
+          "id": 59,
+          "name": "LGP Perceptual Blend",
+          "class": "LGPPerceptualBlendEffect"
+        },
+        {
+          "id": 60,
+          "name": "LGP Chladni Harmonics",
+          "class": "LGPChladniHarmonicsEffect"
+        },
+        {
+          "id": 61,
+          "name": "LGP Gravitational Wave Chirp",
+          "class": "LGPGravitationalWaveChirpEffect"
+        },
+        {
+          "id": 62,
+          "name": "LGP Quantum Entanglement",
+          "class": "LGPQuantumEntanglementEffect"
+        },
+        {
+          "id": 63,
+          "name": "LGP Mycelial Network",
+          "class": "LGPMycelialNetworkEffect"
+        },
+        {
+          "id": 64,
+          "name": "LGP Riley Dissonance",
+          "class": "LGPRileyDissonanceEffect"
+        },
+        {
+          "id": 65,
+          "name": "LGP Chromatic Lens",
+          "class": "LGPChromaticLensEffect"
+        },
+        {
+          "id": 66,
+          "name": "LGP Chromatic Pulse",
+          "class": "LGPChromaticPulseEffect"
+        },
+        {
+          "id": 67,
+          "name": "LGP Chromatic Interference",
+          "class": "ChromaticInterferenceEffect"
+        },
+        {
+          "id": 68,
+          "name": "Audio Test",
+          "class": "LGPAudioTestEffect"
+        },
+        {
+          "id": 69,
+          "name": "Beat Pulse",
+          "class": "LGPBeatPulseEffect"
+        },
+        {
+          "id": 70,
+          "name": "Spectrum Bars",
+          "class": "LGPSpectrumBarsEffect"
+        },
+        {
+          "id": 71,
+          "name": "Bass Breath",
+          "class": "LGPBassBreathEffect"
+        },
+        {
+          "id": 73,
+          "name": "Audio Bloom",
+          "class": "AudioBloomEffect"
+        },
+        {
+          "id": 74,
+          "name": "LGP Star Burst (Narrative)",
+          "class": "LGPStarBurstNarrativeEffect"
+        },
+        {
+          "id": 75,
+          "name": "Chord Glow",
+          "class": "LGPChordGlowEffect"
+        },
+        {
+          "id": 76,
+          "name": "Wave Reactive",
+          "class": "WaveReactiveEffect"
+        },
+        {
+          "id": 77,
+          "name": "LGP Perlin Veil",
+          "class": "LGPPerlinVeilEffect"
+        },
+        {
+          "id": 78,
+          "name": "LGP Perlin Shocklines",
+          "class": "LGPPerlinShocklinesEffect"
+        },
+        {
+          "id": 79,
+          "name": "LGP Perlin Caustics",
+          "class": "LGPPerlinCausticsEffect"
+        },
+        {
+          "id": 80,
+          "name": "LGP Perlin Interference Weave",
+          "class": "LGPPerlinInterferenceWeaveEffect"
+        },
+        {
+          "id": 81,
+          "name": "LGP Perlin Veil Ambient",
+          "class": "LGPPerlinVeilAmbientEffect"
+        },
+        {
+          "id": 82,
+          "name": "LGP Perlin Shocklines Ambient",
+          "class": "LGPPerlinShocklinesAmbientEffect"
+        },
+        {
+          "id": 83,
+          "name": "LGP Perlin Caustics Ambient",
+          "class": "LGPPerlinCausticsAmbientEffect"
+        },
+        {
+          "id": 84,
+          "name": "LGP Perlin Interference Weave Ambient",
+          "class": "LGPPerlinInterferenceWeaveAmbientEffect"
+        },
+        {
+          "id": 85,
+          "name": "Perlin Test: FastLED",
+          "class": "LGPPerlinBackendFastLEDEffect"
+        },
+        {
+          "id": 86,
+          "name": "Perlin Test: Emotiscope2 Full",
+          "class": "LGPPerlinBackendEmotiscopeFullEffect"
+        },
+        {
+          "id": 87,
+          "name": "Perlin Test: Emotiscope2 Quarter",
+          "class": "LGPPerlinBackendEmotiscopeQuarterEffect"
+        },
+        {
+          "id": 88,
+          "name": "BPM Enhanced",
+          "class": "BPMEnhancedEffect"
+        },
+        {
+          "id": 89,
+          "name": "Breathing Enhanced",
+          "class": "BreathingEnhancedEffect"
+        },
+        {
+          "id": 90,
+          "name": "LGP Chevron Waves Enhanced",
+          "class": "ChevronWavesEnhancedEffect"
+        },
+        {
+          "id": 91,
+          "name": "LGP Interference Scanner Enhanced",
+          "class": "LGPInterferenceScannerEnhancedEffect"
+        },
+        {
+          "id": 92,
+          "name": "LGP Photonic Crystal Enhanced",
+          "class": "LGPPhotonicCrystalEnhancedEffect"
+        },
+        {
+          "id": 95,
+          "name": "LGP Star Burst Enhanced",
+          "class": "LGPStarBurstEnhancedEffect"
+        },
+        {
+          "id": 96,
+          "name": "LGP Wave Collision Enhanced",
+          "class": "LGPWaveCollisionEnhancedEffect"
+        },
+        {
+          "id": 97,
+          "name": "Ripple Enhanced",
+          "class": "RippleEnhancedEffect"
+        },
+        {
+          "id": 99,
+          "name": "Audio Waveform Parity",
+          "class": "TrinityTestEffect"
+        },
+        {
+          "id": 100,
+          "name": "LGP Holographic Auto-Cycle",
+          "class": "LGPHolographicAutoCycleEffect"
+        },
+        {
+          "id": 101,
+          "name": "ES Analog (Ref)",
+          "class": "EsAnalogRefEffect"
+        },
+        {
+          "id": 102,
+          "name": "ES Spectrum (Ref)",
+          "class": "EsSpectrumRefEffect"
+        },
+        {
+          "id": 103,
+          "name": "ES Octave (Ref)",
+          "class": "EsOctaveRefEffect"
+        },
+        {
+          "id": 104,
+          "name": "ES Bloom (Ref)",
+          "class": "EsBloomRefEffect"
+        },
+        {
+          "id": 105,
+          "name": "ES Waveform (Ref)",
+          "class": "EsWaveformRefEffect"
+        },
+        {
+          "id": 106,
+          "name": "Ripple (ES tuned)",
+          "class": "RippleEsTunedEffect"
+        },
+        {
+          "id": 107,
+          "name": "Heartbeat (ES tuned)",
+          "class": "HeartbeatEsTunedEffect"
+        },
+        {
+          "id": 108,
+          "name": "LGP Holographic (ES tuned)",
+          "class": "LGPHolographicEsTunedEffect"
+        },
+        {
+          "id": 109,
+          "name": "SB Waveform (Ref)",
+          "class": "SbWaveform310RefEffect"
+        },
+        {
+          "id": 110,
+          "name": "Beat Pulse (Stack)",
+          "class": "BeatPulseStackEffect"
+        },
+        {
+          "id": 111,
+          "name": "Beat Pulse (Shockwave)",
+          "class": "BeatPulseShockwaveEffect"
+        },
+        {
+          "id": 113,
+          "name": "Beat Pulse (Void)",
+          "class": "BeatPulseVoidEffect"
+        },
+        {
+          "id": 114,
+          "name": "Beat Pulse (Resonant)",
+          "class": "BeatPulseResonantEffect"
+        },
+        {
+          "id": 115,
+          "name": "Beat Pulse (Ripple)",
+          "class": "BeatPulseRippleEffect"
+        },
+        {
+          "id": 116,
+          "name": "Beat Pulse (Shockwave Cascade)",
+          "class": "BeatPulseShockwaveCascadeEffect"
+        },
+        {
+          "id": 117,
+          "name": "Beat Pulse (Spectral)",
+          "class": "BeatPulseSpectralEffect"
+        },
+        {
+          "id": 118,
+          "name": "Beat Pulse (Spectral Pulse)",
+          "class": "BeatPulseSpectralPulseEffect"
+        },
+        {
+          "id": 119,
+          "name": "Beat Pulse (Breathe)",
+          "class": "BeatPulseBreatheEffect"
+        },
+        {
+          "id": 121,
+          "name": "Beat Pulse (Bloom)",
+          "class": "BeatPulseBloomEffect"
+        },
+        {
+          "id": 122,
+          "name": "Bloom (Parity)",
+          "class": "BloomParityEffect"
+        },
+        {
+          "id": 124,
+          "name": "LGP Opal Film",
+          "class": "LGPOpalFilmEffect"
+        },
+        {
+          "id": 125,
+          "name": "LGP Grating Scan",
+          "class": "LGPGratingScanEffect"
+        },
+        {
+          "id": 126,
+          "name": "LGP Stress Glass",
+          "class": "LGPStressGlassEffect"
+        },
+        {
+          "id": 127,
+          "name": "LGP Moire Silk",
+          "class": "LGPMoireSilkEffect"
+        },
+        {
+          "id": 128,
+          "name": "LGP Caustic Shards",
+          "class": "LGPCausticShardsEffect"
+        },
+        {
+          "id": 129,
+          "name": "LGP Parallax Depth",
+          "class": "LGPParallaxDepthEffect"
+        },
+        {
+          "id": 130,
+          "name": "LGP Stress Glass (Melt)",
+          "class": "LGPStressGlassMeltEffect"
+        },
+        {
+          "id": 131,
+          "name": "LGP Grating Scan (Breakup)",
+          "class": "LGPGratingScanBreakupEffect"
+        },
+        {
+          "id": 132,
+          "name": "LGP Water Caustics",
+          "class": "LGPWaterCausticsEffect"
+        },
+        {
+          "id": 133,
+          "name": "LGP Schlieren Flow",
+          "class": "LGPSchlierenFlowEffect"
+        },
+        {
+          "id": 134,
+          "name": "LGP Reaction Diffusion",
+          "class": "LGPReactionDiffusionEffect"
+        },
+        {
+          "id": 135,
+          "name": "LGP RD Triangle",
+          "class": "LGPReactionDiffusionTriangleEffect"
+        },
+        {
+          "id": 9,
+          "name": "Heartbeat",
+          "class": "HeartbeatEffect"
+        }
+      ],
+      "effect_count": 109,
+      "category": "spatial",
+      "subcategory": "radial",
+      "compliant_with_centre_origin": true,
+      "notes": ""
+    },
+    {
+      "pattern_id": "centre_origin_wave_propagation",
+      "name": "Centre-Origin Wave Propagation",
+      "description": "Wavefronts expanding or contracting from/to centre with sinusoidal or triangular profiles.",
+      "implementation_markers": [
+        "sinf(distFromCenter)",
+        "sin8()",
+        "wave equation"
+      ],
+      "effects_using": [
+        {
+          "id": 1,
+          "name": "Ocean",
+          "class": "OceanEffect"
+        },
+        {
+          "id": 2,
+          "name": "Plasma",
+          "class": "PlasmaEffect"
+        },
+        {
+          "id": 6,
+          "name": "BPM",
+          "class": "BPMEffect"
+        },
+        {
+          "id": 7,
+          "name": "Wave",
+          "class": "WaveAmbientEffect"
+        },
+        {
+          "id": 10,
+          "name": "Interference",
+          "class": "InterferenceEffect"
+        },
+        {
+          "id": 11,
+          "name": "Breathing",
+          "class": "BreathingEffect"
+        },
+        {
+          "id": 13,
+          "name": "LGP Box Wave",
+          "class": "LGPBoxWaveEffect"
+        },
+        {
+          "id": 14,
+          "name": "LGP Holographic",
+          "class": "LGPHolographicEffect"
+        },
+        {
+          "id": 15,
+          "name": "LGP Modal Resonance",
+          "class": "ModalResonanceEffect"
+        },
+        {
+          "id": 16,
+          "name": "LGP Interference Scanner",
+          "class": "LGPInterferenceScannerEffect"
+        },
+        {
+          "id": 17,
+          "name": "LGP Wave Collision",
+          "class": "LGPWaveCollisionEffect"
+        },
+        {
+          "id": 18,
+          "name": "LGP Diamond Lattice",
+          "class": "LGPDiamondLatticeEffect"
+        },
+        {
+          "id": 19,
+          "name": "LGP Hexagonal Grid",
+          "class": "LGPHexagonalGridEffect"
+        },
+        {
+          "id": 20,
+          "name": "LGP Spiral Vortex",
+          "class": "LGPSpiralVortexEffect"
+        },
+        {
+          "id": 21,
+          "name": "LGP Sierpinski",
+          "class": "LGPSierpinskiEffect"
+        },
+        {
+          "id": 22,
+          "name": "LGP Chevron Waves",
+          "class": "ChevronWavesEffect"
+        },
+        {
+          "id": 23,
+          "name": "LGP Concentric Rings",
+          "class": "LGPConcentricRingsEffect"
+        },
+        {
+          "id": 24,
+          "name": "LGP Star Burst",
+          "class": "LGPStarBurstEffect"
+        },
+        {
+          "id": 25,
+          "name": "LGP Mesh Network",
+          "class": "LGPMeshNetworkEffect"
+        },
+        {
+          "id": 26,
+          "name": "LGP Moire Curtains",
+          "class": "LGPMoireCurtainsEffect"
+        },
+        {
+          "id": 27,
+          "name": "LGP Radial Ripple",
+          "class": "LGPRadialRippleEffect"
+        },
+        {
+          "id": 28,
+          "name": "LGP Holographic Vortex",
+          "class": "LGPHolographicVortexEffect"
+        },
+        {
+          "id": 29,
+          "name": "LGP Evanescent Drift",
+          "class": "LGPEvanescentDriftEffect"
+        },
+        {
+          "id": 31,
+          "name": "LGP Modal Cavity",
+          "class": "LGPModalCavityEffect"
+        },
+        {
+          "id": 33,
+          "name": "LGP Photonic Crystal",
+          "class": "LGPPhotonicCrystalEffect"
+        },
+        {
+          "id": 35,
+          "name": "LGP Bioluminescent Waves",
+          "class": "LGPBioluminescentWavesEffect"
+        },
+        {
+          "id": 39,
+          "name": "LGP Fluid Dynamics",
+          "class": "LGPFluidDynamicsEffect"
+        },
+        {
+          "id": 42,
+          "name": "LGP Time Crystal",
+          "class": "LGPTimeCrystalEffect"
+        },
+        {
+          "id": 46,
+          "name": "LGP Caustic Fan",
+          "class": "LGPCausticFanEffect"
+        },
+        {
+          "id": 47,
+          "name": "LGP Birefringent Shear",
+          "class": "LGPBirefringentShearEffect"
+        },
+        {
+          "id": 49,
+          "name": "LGP Evanescent Skin",
+          "class": "LGPEvanescentSkinEffect"
+        },
+        {
+          "id": 51,
+          "name": "LGP RGB Prism",
+          "class": "LGPRGBPrismEffect"
+        },
+        {
+          "id": 53,
+          "name": "LGP Quantum Colors",
+          "class": "LGPQuantumColorsEffect"
+        },
+        {
+          "id": 56,
+          "name": "LGP DNA Helix",
+          "class": "LGPDNAHelixEffect"
+        },
+        {
+          "id": 57,
+          "name": "LGP Phase Transition",
+          "class": "LGPPhaseTransitionEffect"
+        },
+        {
+          "id": 58,
+          "name": "LGP Chromatic Aberration",
+          "class": "LGPChromaticAberrationEffect"
+        },
+        {
+          "id": 59,
+          "name": "LGP Perceptual Blend",
+          "class": "LGPPerceptualBlendEffect"
+        },
+        {
+          "id": 60,
+          "name": "LGP Chladni Harmonics",
+          "class": "LGPChladniHarmonicsEffect"
+        },
+        {
+          "id": 61,
+          "name": "LGP Gravitational Wave Chirp",
+          "class": "LGPGravitationalWaveChirpEffect"
+        },
+        {
+          "id": 62,
+          "name": "LGP Quantum Entanglement",
+          "class": "LGPQuantumEntanglementEffect"
+        },
+        {
+          "id": 63,
+          "name": "LGP Mycelial Network",
+          "class": "LGPMycelialNetworkEffect"
+        },
+        {
+          "id": 64,
+          "name": "LGP Riley Dissonance",
+          "class": "LGPRileyDissonanceEffect"
+        },
+        {
+          "id": 65,
+          "name": "LGP Chromatic Lens",
+          "class": "LGPChromaticLensEffect"
+        },
+        {
+          "id": 66,
+          "name": "LGP Chromatic Pulse",
+          "class": "LGPChromaticPulseEffect"
+        },
+        {
+          "id": 67,
+          "name": "LGP Chromatic Interference",
+          "class": "ChromaticInterferenceEffect"
+        },
+        {
+          "id": 68,
+          "name": "Audio Test",
+          "class": "LGPAudioTestEffect"
+        },
+        {
+          "id": 70,
+          "name": "Spectrum Bars",
+          "class": "LGPSpectrumBarsEffect"
+        },
+        {
+          "id": 71,
+          "name": "Bass Breath",
+          "class": "LGPBassBreathEffect"
+        },
+        {
+          "id": 74,
+          "name": "LGP Star Burst (Narrative)",
+          "class": "LGPStarBurstNarrativeEffect"
+        },
+        {
+          "id": 75,
+          "name": "Chord Glow",
+          "class": "LGPChordGlowEffect"
+        },
+        {
+          "id": 76,
+          "name": "Wave Reactive",
+          "class": "WaveReactiveEffect"
+        },
+        {
+          "id": 77,
+          "name": "LGP Perlin Veil",
+          "class": "LGPPerlinVeilEffect"
+        },
+        {
+          "id": 81,
+          "name": "LGP Perlin Veil Ambient",
+          "class": "LGPPerlinVeilAmbientEffect"
+        },
+        {
+          "id": 83,
+          "name": "LGP Perlin Caustics Ambient",
+          "class": "LGPPerlinCausticsAmbientEffect"
+        },
+        {
+          "id": 84,
+          "name": "LGP Perlin Interference Weave Ambient",
+          "class": "LGPPerlinInterferenceWeaveAmbientEffect"
+        },
+        {
+          "id": 88,
+          "name": "BPM Enhanced",
+          "class": "BPMEnhancedEffect"
+        },
+        {
+          "id": 89,
+          "name": "Breathing Enhanced",
+          "class": "BreathingEnhancedEffect"
+        },
+        {
+          "id": 90,
+          "name": "LGP Chevron Waves Enhanced",
+          "class": "ChevronWavesEnhancedEffect"
+        },
+        {
+          "id": 91,
+          "name": "LGP Interference Scanner Enhanced",
+          "class": "LGPInterferenceScannerEnhancedEffect"
+        },
+        {
+          "id": 92,
+          "name": "LGP Photonic Crystal Enhanced",
+          "class": "LGPPhotonicCrystalEnhancedEffect"
+        },
+        {
+          "id": 95,
+          "name": "LGP Star Burst Enhanced",
+          "class": "LGPStarBurstEnhancedEffect"
+        },
+        {
+          "id": 96,
+          "name": "LGP Wave Collision Enhanced",
+          "class": "LGPWaveCollisionEnhancedEffect"
+        },
+        {
+          "id": 100,
+          "name": "LGP Holographic Auto-Cycle",
+          "class": "LGPHolographicAutoCycleEffect"
+        },
+        {
+          "id": 108,
+          "name": "LGP Holographic (ES tuned)",
+          "class": "LGPHolographicEsTunedEffect"
+        },
+        {
+          "id": 117,
+          "name": "Beat Pulse (Spectral)",
+          "class": "BeatPulseSpectralEffect"
+        },
+        {
+          "id": 118,
+          "name": "Beat Pulse (Spectral Pulse)",
+          "class": "BeatPulseSpectralPulseEffect"
+        },
+        {
+          "id": 124,
+          "name": "LGP Opal Film",
+          "class": "LGPOpalFilmEffect"
+        },
+        {
+          "id": 126,
+          "name": "LGP Stress Glass",
+          "class": "LGPStressGlassEffect"
+        },
+        {
+          "id": 127,
+          "name": "LGP Moire Silk",
+          "class": "LGPMoireSilkEffect"
+        },
+        {
+          "id": 128,
+          "name": "LGP Caustic Shards",
+          "class": "LGPCausticShardsEffect"
+        },
+        {
+          "id": 129,
+          "name": "LGP Parallax Depth",
+          "class": "LGPParallaxDepthEffect"
+        },
+        {
+          "id": 130,
+          "name": "LGP Stress Glass (Melt)",
+          "class": "LGPStressGlassMeltEffect"
+        },
+        {
+          "id": 132,
+          "name": "LGP Water Caustics",
+          "class": "LGPWaterCausticsEffect"
+        },
+        {
+          "id": 133,
+          "name": "LGP Schlieren Flow",
+          "class": "LGPSchlierenFlowEffect"
+        },
+        {
+          "id": 12,
+          "name": "Pulse",
+          "class": "PulseEffect"
+        }
+      ],
+      "effect_count": 75,
+      "category": "spatial",
+      "subcategory": "wave_propagation",
+      "compliant_with_centre_origin": true,
+      "notes": ""
+    },
+    {
+      "pattern_id": "discrete_particle_system",
+      "name": "Discrete Particle System",
+      "description": "Discrete particle-like elements with position/velocity state, bouncing or moving independently.",
+      "implementation_markers": [
+        "velocity",
+        "position[]",
+        "particle"
+      ],
+      "effects_using": [
+        {
+          "id": 3,
+          "name": "Confetti",
+          "class": "ConfettiEffect"
+        },
+        {
+          "id": 4,
+          "name": "Sinelon",
+          "class": "SinelonEffect"
+        },
+        {
+          "id": 40,
+          "name": "LGP Quantum Tunneling",
+          "class": "LGPQuantumTunnelingEffect"
+        },
+        {
+          "id": 43,
+          "name": "LGP Soliton Waves",
+          "class": "LGPSolitonWavesEffect"
+        },
+        {
+          "id": 44,
+          "name": "LGP Metamaterial Cloak",
+          "class": "LGPMetamaterialCloakEffect"
+        },
+        {
+          "id": 45,
+          "name": "LGP GRIN Cloak",
+          "class": "LGPGrinCloakEffect"
+        },
+        {
+          "id": 48,
+          "name": "LGP Anisotropic Cloak",
+          "class": "LGPAnisotropicCloakEffect"
+        },
+        {
+          "id": 94,
+          "name": "LGP Spectrum Detail Enhanced",
+          "class": "LGPSpectrumDetailEnhancedEffect"
+        },
+        {
+          "id": 123,
+          "name": "Kuramoto Transport",
+          "class": "KuramotoTransportEffect"
+        }
+      ],
+      "effect_count": 9,
+      "category": "spatial",
+      "subcategory": "particle",
+      "compliant_with_centre_origin": true,
+      "notes": ""
+    },
+    {
+      "pattern_id": "multi_wave_interference",
+      "name": "Multi-Wave Interference",
+      "description": "Superposition of multiple wave sources creating interference patterns, moire, or standing waves.",
+      "implementation_markers": [
+        "moire",
+        "superposition",
+        "standing wave"
+      ],
+      "effects_using": [
+        {
+          "id": 13,
+          "name": "LGP Box Wave",
+          "class": "LGPBoxWaveEffect"
+        },
+        {
+          "id": 17,
+          "name": "LGP Wave Collision",
+          "class": "LGPWaveCollisionEffect"
+        },
+        {
+          "id": 23,
+          "name": "LGP Concentric Rings",
+          "class": "LGPConcentricRingsEffect"
+        },
+        {
+          "id": 26,
+          "name": "LGP Moire Curtains",
+          "class": "LGPMoireCurtainsEffect"
+        },
+        {
+          "id": 60,
+          "name": "LGP Chladni Harmonics",
+          "class": "LGPChladniHarmonicsEffect"
+        },
+        {
+          "id": 62,
+          "name": "LGP Quantum Entanglement",
+          "class": "LGPQuantumEntanglementEffect"
+        },
+        {
+          "id": 120,
+          "name": "Beat Pulse (LGP Interference)",
+          "class": "BeatPulseLGPInterferenceEffect"
+        },
+        {
+          "id": 127,
+          "name": "LGP Moire Silk",
+          "class": "LGPMoireSilkEffect"
+        },
+        {
+          "id": 136,
+          "name": "LGP Talbot Carpet",
+          "class": "LGPTalbotCarpetEffect"
+        },
+        {
+          "id": 137,
+          "name": "LGP Airy Comet",
+          "class": "LGPAiryCometEffect"
+        },
+        {
+          "id": 138,
+          "name": "LGP Moire Cathedral",
+          "class": "LGPMoireCathedralEffect"
+        },
+        {
+          "id": 139,
+          "name": "LGP Living Glyph",
+          "class": "LGPSuperformulaGlyphEffect"
+        },
+        {
+          "id": 140,
+          "name": "LGP Spirograph Crown",
+          "class": "LGPSpirographCrownEffect"
+        },
+        {
+          "id": 141,
+          "name": "LGP Rose Bloom",
+          "class": "LGPRoseBloomEffect"
+        },
+        {
+          "id": 142,
+          "name": "LGP Harmonograph Halo",
+          "class": "LGPHarmonographHaloEffect"
+        },
+        {
+          "id": 143,
+          "name": "LGP Rule 30 Cathedral",
+          "class": "LGPRule30CathedralEffect"
+        },
+        {
+          "id": 144,
+          "name": "LGP Langton Highway",
+          "class": "LGPLangtonHighwayEffect"
+        },
+        {
+          "id": 145,
+          "name": "LGP Cymatic Ladder",
+          "class": "LGPCymaticLadderEffect"
+        },
+        {
+          "id": 146,
+          "name": "LGP Mach Diamonds",
+          "class": "LGPMachDiamondsEffect"
+        },
+        {
+          "id": 152,
+          "name": "LGP Flux Rift",
+          "class": "LGPFluxRiftEffect"
+        },
+        {
+          "id": 153,
+          "name": "LGP Beat Prism",
+          "class": "LGPBeatPrismEffect"
+        },
+        {
+          "id": 154,
+          "name": "LGP Harmonic Tide",
+          "class": "LGPHarmonicTideEffect"
+        },
+        {
+          "id": 155,
+          "name": "LGP Bass Quake",
+          "class": "LGPBassQuakeEffect"
+        },
+        {
+          "id": 156,
+          "name": "LGP Treble Net",
+          "class": "LGPTrebleNetEffect"
+        },
+        {
+          "id": 157,
+          "name": "LGP Rhythmic Gate",
+          "class": "LGPRhythmicGateEffect"
+        },
+        {
+          "id": 158,
+          "name": "LGP Spectral Knot",
+          "class": "LGPSpectralKnotEffect"
+        },
+        {
+          "id": 159,
+          "name": "LGP Saliency Bloom",
+          "class": "LGPSaliencyBloomEffect"
+        },
+        {
+          "id": 160,
+          "name": "LGP Transient Lattice",
+          "class": "LGPTransientLatticeEffect"
+        },
+        {
+          "id": 161,
+          "name": "LGP Wavelet Mirror",
+          "class": "LGPWaveletMirrorEffect"
+        }
+      ],
+      "effect_count": 29,
+      "category": "spatial",
+      "subcategory": "interference",
+      "compliant_with_centre_origin": true,
+      "notes": ""
+    },
+    {
+      "pattern_id": "mathematical_geometric",
+      "name": "Mathematical Geometric Structures",
+      "description": "Mathematical geometric shapes including fractals, superformulae, spirographs, cellular automata.",
+      "implementation_markers": [
+        "fractal",
+        "superformula",
+        "spirograph",
+        "rule30",
+        "IFS"
+      ],
+      "effects_using": [
+        {
+          "id": 21,
+          "name": "LGP Sierpinski",
+          "class": "LGPSierpinskiEffect"
+        },
+        {
+          "id": 63,
+          "name": "LGP Mycelial Network",
+          "class": "LGPMycelialNetworkEffect"
+        },
+        {
+          "id": 136,
+          "name": "LGP Talbot Carpet",
+          "class": "LGPTalbotCarpetEffect"
+        },
+        {
+          "id": 137,
+          "name": "LGP Airy Comet",
+          "class": "LGPAiryCometEffect"
+        },
+        {
+          "id": 138,
+          "name": "LGP Moire Cathedral",
+          "class": "LGPMoireCathedralEffect"
+        },
+        {
+          "id": 139,
+          "name": "LGP Living Glyph",
+          "class": "LGPSuperformulaGlyphEffect"
+        },
+        {
+          "id": 140,
+          "name": "LGP Spirograph Crown",
+          "class": "LGPSpirographCrownEffect"
+        },
+        {
+          "id": 141,
+          "name": "LGP Rose Bloom",
+          "class": "LGPRoseBloomEffect"
+        },
+        {
+          "id": 142,
+          "name": "LGP Harmonograph Halo",
+          "class": "LGPHarmonographHaloEffect"
+        },
+        {
+          "id": 143,
+          "name": "LGP Rule 30 Cathedral",
+          "class": "LGPRule30CathedralEffect"
+        },
+        {
+          "id": 144,
+          "name": "LGP Langton Highway",
+          "class": "LGPLangtonHighwayEffect"
+        },
+        {
+          "id": 145,
+          "name": "LGP Cymatic Ladder",
+          "class": "LGPCymaticLadderEffect"
+        },
+        {
+          "id": 146,
+          "name": "LGP Mach Diamonds",
+          "class": "LGPMachDiamondsEffect"
+        },
+        {
+          "id": 147,
+          "name": "Chimera Crown",
+          "class": "LGPChimeraCrownEffect"
+        },
+        {
+          "id": 148,
+          "name": "Catastrophe Caustics",
+          "class": "LGPCatastropheCausticsEffect"
+        },
+        {
+          "id": 149,
+          "name": "Hyperbolic Portal",
+          "class": "LGPHyperbolicPortalEffect"
+        },
+        {
+          "id": 150,
+          "name": "Lorenz Ribbon",
+          "class": "LGPLorenzRibbonEffect"
+        },
+        {
+          "id": 151,
+          "name": "IFS Botanical Relic",
+          "class": "LGPIFSBioRelicEffect"
+        }
+      ],
+      "effect_count": 18,
+      "category": "spatial",
+      "subcategory": "geometric",
+      "compliant_with_centre_origin": true,
+      "notes": ""
+    },
+    {
+      "pattern_id": "direct_audio_waveform",
+      "name": "Direct Audio Waveform Visualisation",
+      "description": "Direct rendering of audio waveform samples or spectrum data onto LED positions.",
+      "implementation_markers": [
+        "samples[]",
+        "waveform",
+        "waveBuf"
+      ],
+      "effects_using": [
+        {
+          "id": 72,
+          "name": "Audio Waveform",
+          "class": "AudioWaveformEffect"
+        },
+        {
+          "id": 98,
+          "name": "Audio Bloom Parity",
+          "class": "SnapwaveLinearEffect"
+        },
+        {
+          "id": 105,
+          "name": "ES Waveform (Ref)",
+          "class": "EsWaveformRefEffect"
+        },
+        {
+          "id": 109,
+          "name": "SB Waveform (Ref)",
+          "class": "SbWaveform310RefEffect"
+        },
+        {
+          "id": 152,
+          "name": "LGP Flux Rift",
+          "class": "LGPFluxRiftEffect"
+        },
+        {
+          "id": 153,
+          "name": "LGP Beat Prism",
+          "class": "LGPBeatPrismEffect"
+        },
+        {
+          "id": 154,
+          "name": "LGP Harmonic Tide",
+          "class": "LGPHarmonicTideEffect"
+        },
+        {
+          "id": 155,
+          "name": "LGP Bass Quake",
+          "class": "LGPBassQuakeEffect"
+        },
+        {
+          "id": 156,
+          "name": "LGP Treble Net",
+          "class": "LGPTrebleNetEffect"
+        },
+        {
+          "id": 157,
+          "name": "LGP Rhythmic Gate",
+          "class": "LGPRhythmicGateEffect"
+        },
+        {
+          "id": 158,
+          "name": "LGP Spectral Knot",
+          "class": "LGPSpectralKnotEffect"
+        },
+        {
+          "id": 159,
+          "name": "LGP Saliency Bloom",
+          "class": "LGPSaliencyBloomEffect"
+        },
+        {
+          "id": 160,
+          "name": "LGP Transient Lattice",
+          "class": "LGPTransientLatticeEffect"
+        },
+        {
+          "id": 161,
+          "name": "LGP Wavelet Mirror",
+          "class": "LGPWaveletMirrorEffect"
+        },
+        {
+          "id": 93,
+          "name": "LGP Spectrum Detail",
+          "class": "LGPSpectrumDetailEffect"
+        }
+      ],
+      "effect_count": 15,
+      "category": "spatial",
+      "subcategory": "waveform",
+      "compliant_with_centre_origin": true,
+      "notes": ""
+    }
+  ],
+  "migration_patterns": [
+    {
+      "pattern_id": "chroma_pattern_A",
+      "name": "Static Utility Functions (dominantChromaBin12 + chromaBinToHue)",
+      "description": "Duplicated static functions for argmax bin selection and bin-to-hue mapping. Replaced by ChromaUtils.h circularChromaHueSmoothed().",
+      "before_code_signature": "dominantChromaBin12(chroma) -> chromaBinToHue(bin)",
+      "after_code_signature": "effects::chroma::circularChromaHueSmoothed(chroma, m_chromaAngle, dt, tau)",
+      "effects_using": [
+        {
+          "id": 8,
+          "name": "Ripple"
+        },
+        {
+          "id": 97,
+          "name": "Ripple Enhanced"
+        },
+        {
+          "id": 106,
+          "name": "Ripple (ES tuned)"
+        },
+        {
+          "id": 69,
+          "name": "LGP Beat Pulse"
+        },
+        {
+          "id": 71,
+          "name": "LGP Bass Breath"
+        },
+        {
+          "id": 70,
+          "name": "LGP Spectrum Bars"
+        }
+      ],
+      "effect_count": 6,
+      "status": "migrated"
+    },
+    {
+      "pattern_id": "chroma_pattern_B",
+      "name": "Inline Argmax + Linear EMA (m_dominantBinSmooth)",
+      "description": "Inline argmax loop with linear exponential moving average on circular bin index. Linear EMA caused rainbow sweeps at B/C boundary. Replaced by circularChromaHueSmoothed().",
+      "before_code_signature": "m_dominantBinSmooth = m_dominantBinSmooth * 0.88f + dominantBin * 0.12f; hue = m_dominantBinSmooth * 21.25f",
+      "after_code_signature": "effects::chroma::circularChromaHueSmoothed(chroma, m_chromaAngle, dt, tau)",
+      "effects_using": [
+        {
+          "id": 22,
+          "name": "LGP Chevron Waves"
+        },
+        {
+          "id": 90,
+          "name": "LGP Chevron Waves Enhanced"
+        },
+        {
+          "id": 17,
+          "name": "LGP Wave Collision"
+        },
+        {
+          "id": 96,
+          "name": "LGP Wave Collision Enhanced"
+        }
+      ],
+      "effect_count": 4,
+      "status": "migrated"
+    },
+    {
+      "pattern_id": "chroma_pattern_C",
+      "name": "Raw Inline Argmax (No Smoothing)",
+      "description": "Raw argmax loop producing immediate hue jumps with no temporal smoothing. Every hop could produce a full-frame colour discontinuity. Replaced by circularChromaHueSmoothed().",
+      "before_code_signature": "maxBin = argmax(chroma); hue = maxBin * 21",
+      "after_code_signature": "effects::chroma::circularChromaHueSmoothed(chroma, m_chromaAngle, dt, tau)",
+      "effects_using": [
+        {
+          "id": 5,
+          "name": "Juggle"
+        },
+        {
+          "id": 88,
+          "name": "BPM Enhanced"
+        },
+        {
+          "id": 24,
+          "name": "LGP Star Burst"
+        },
+        {
+          "id": 95,
+          "name": "LGP Star Burst Enhanced"
+        },
+        {
+          "id": 33,
+          "name": "LGP Photonic Crystal"
+        },
+        {
+          "id": 92,
+          "name": "LGP Photonic Crystal Enhanced"
+        }
+      ],
+      "effect_count": 6,
+      "status": "migrated"
+    },
+    {
+      "pattern_id": "chroma_pattern_D",
+      "name": "LGP Experimental Audio Pack (selectMusicalHue + Schmitt Trigger)",
+      "description": "Pack-level shared hue selection using selectMusicalHue() with Schmitt trigger hysteresis between chord-root and bin-derived paths. Uses dominantNoteFromBins() with circular weighted mean via kCos/kSin, and smoothHue()/smoothNoteCircular() for temporal smoothing.",
+      "before_code_signature": "N/A (built with circular chroma fix incorporated)",
+      "after_code_signature": "selectMusicalHue() + smoothHue() + dominantNoteFromBins() using kCos/kSin",
+      "effects_using": [
+        {
+          "id": 152,
+          "name": "LGP Flux Rift"
+        },
+        {
+          "id": 153,
+          "name": "LGP Beat Prism"
+        },
+        {
+          "id": 154,
+          "name": "LGP Harmonic Tide"
+        },
+        {
+          "id": 155,
+          "name": "LGP Bass Quake"
+        },
+        {
+          "id": 156,
+          "name": "LGP Treble Net"
+        },
+        {
+          "id": 157,
+          "name": "LGP Rhythmic Gate"
+        },
+        {
+          "id": 158,
+          "name": "LGP Spectral Knot"
+        },
+        {
+          "id": 159,
+          "name": "LGP Saliency Bloom"
+        },
+        {
+          "id": 160,
+          "name": "LGP Transient Lattice"
+        },
+        {
+          "id": 161,
+          "name": "LGP Wavelet Mirror"
+        }
+      ],
+      "effect_count": 10,
+      "status": "native_implementation"
+    }
+  ],
+  "spatial_categories": {
+    "radial": {
+      "description": "Distance-from-centre based patterns",
+      "pattern_count": 109,
+      "pattern_ids": [
+        "centre_origin_radial_expand"
+      ]
+    },
+    "wave_propagation": {
+      "description": "Wavefronts expanding or contracting from/to centre",
+      "pattern_count": 75,
+      "pattern_ids": [
+        "centre_origin_wave_propagation"
+      ]
+    },
+    "interference": {
+      "description": "Superposition of multiple wave sources",
+      "pattern_count": 29,
+      "pattern_ids": [
+        "multi_wave_interference"
+      ]
+    },
+    "particle": {
+      "description": "Discrete particle-like elements with position/velocity",
+      "pattern_count": 9,
+      "pattern_ids": [
+        "discrete_particle_system"
+      ]
+    },
+    "field": {
+      "description": "Continuous field computations (noise, reaction-diffusion)",
+      "pattern_count": 36,
+      "pattern_ids": [
+        "continuous_field_computation"
+      ]
+    },
+    "waveform": {
+      "description": "Direct audio waveform visualisation",
+      "pattern_count": 15,
+      "pattern_ids": [
+        "direct_audio_waveform"
+      ]
+    },
+    "geometric": {
+      "description": "Mathematical geometric shapes and structures",
+      "pattern_count": 18,
+      "pattern_ids": [
+        "mathematical_geometric"
+      ]
+    }
+  },
+  "colour_derivation_methods": [
+    {
+      "method_id": "circular_chroma_smoothed",
+      "name": "Circular Chroma Hue (Smoothed)",
+      "description": "Weighted circular mean of 12 chroma bins with circular EMA temporal smoothing",
+      "function": "circularChromaHueSmoothed()",
+      "effects_using": [
+        {
+          "id": 5,
+          "name": "Juggle"
+        },
+        {
+          "id": 8,
+          "name": "Ripple"
+        },
+        {
+          "id": 16,
+          "name": "LGP Interference Scanner"
+        },
+        {
+          "id": 17,
+          "name": "LGP Wave Collision"
+        },
+        {
+          "id": 22,
+          "name": "LGP Chevron Waves"
+        },
+        {
+          "id": 24,
+          "name": "LGP Star Burst"
+        },
+        {
+          "id": 33,
+          "name": "LGP Photonic Crystal"
+        },
+        {
+          "id": 69,
+          "name": "Beat Pulse"
+        },
+        {
+          "id": 70,
+          "name": "Spectrum Bars"
+        },
+        {
+          "id": 71,
+          "name": "Bass Breath"
+        },
+        {
+          "id": 72,
+          "name": "Audio Waveform"
+        },
+        {
+          "id": 74,
+          "name": "LGP Star Burst (Narrative)"
+        },
+        {
+          "id": 80,
+          "name": "LGP Perlin Interference Weave"
+        },
+        {
+          "id": 88,
+          "name": "BPM Enhanced"
+        },
+        {
+          "id": 90,
+          "name": "LGP Chevron Waves Enhanced"
+        },
+        {
+          "id": 91,
+          "name": "LGP Interference Scanner Enhanced"
+        },
+        {
+          "id": 92,
+          "name": "LGP Photonic Crystal Enhanced"
+        },
+        {
+          "id": 95,
+          "name": "LGP Star Burst Enhanced"
+        },
+        {
+          "id": 96,
+          "name": "LGP Wave Collision Enhanced"
+        },
+        {
+          "id": 97,
+          "name": "Ripple Enhanced"
+        },
+        {
+          "id": 106,
+          "name": "Ripple (ES tuned)"
+        },
+        {
+          "id": 107,
+          "name": "Heartbeat (ES tuned)"
+        },
+        {
+          "id": 108,
+          "name": "LGP Holographic (ES tuned)"
+        },
+        {
+          "id": 152,
+          "name": "LGP Flux Rift"
+        },
+        {
+          "id": 153,
+          "name": "LGP Beat Prism"
+        },
+        {
+          "id": 154,
+          "name": "LGP Harmonic Tide"
+        },
+        {
+          "id": 155,
+          "name": "LGP Bass Quake"
+        },
+        {
+          "id": 156,
+          "name": "LGP Treble Net"
+        },
+        {
+          "id": 157,
+          "name": "LGP Rhythmic Gate"
+        },
+        {
+          "id": 158,
+          "name": "LGP Spectral Knot"
+        },
+        {
+          "id": 159,
+          "name": "LGP Saliency Bloom"
+        },
+        {
+          "id": 160,
+          "name": "LGP Transient Lattice"
+        },
+        {
+          "id": 161,
+          "name": "LGP Wavelet Mirror"
+        }
+      ],
+      "effect_count": 33
+    },
+    {
+      "method_id": "chroma_hue",
+      "name": "Chroma Hue (Legacy or Pack-specific)",
+      "description": "Chroma-derived hue using pack-specific functions (e.g. selectMusicalHue, dominantNoteFromBins)",
+      "function": "selectMusicalHue() / dominantNoteFromBins()",
+      "effects_using": [
+        {
+          "id": 6,
+          "name": "BPM"
+        },
+        {
+          "id": 11,
+          "name": "Breathing"
+        },
+        {
+          "id": 65,
+          "name": "LGP Chromatic Lens"
+        },
+        {
+          "id": 66,
+          "name": "LGP Chromatic Pulse"
+        },
+        {
+          "id": 67,
+          "name": "LGP Chromatic Interference"
+        },
+        {
+          "id": 73,
+          "name": "Audio Bloom"
+        },
+        {
+          "id": 75,
+          "name": "Chord Glow"
+        },
+        {
+          "id": 89,
+          "name": "Breathing Enhanced"
+        },
+        {
+          "id": 93,
+          "name": "LGP Spectrum Detail"
+        },
+        {
+          "id": 98,
+          "name": "Audio Bloom Parity"
+        },
+        {
+          "id": 103,
+          "name": "ES Octave (Ref)"
+        },
+        {
+          "id": 104,
+          "name": "ES Bloom (Ref)"
+        },
+        {
+          "id": 109,
+          "name": "SB Waveform (Ref)"
+        },
+        {
+          "id": 122,
+          "name": "Bloom (Parity)"
+        },
+        {
+          "id": 129,
+          "name": "LGP Parallax Depth"
+        }
+      ],
+      "effect_count": 15
+    },
+    {
+      "method_id": "palette_position",
+      "name": "Palette Position Mapping",
+      "description": "LED position or computed value mapped to palette index",
+      "function": "ctx.palette.getColor(position)",
+      "effects_using": [
+        {
+          "id": 1,
+          "name": "Ocean"
+        },
+        {
+          "id": 2,
+          "name": "Plasma"
+        },
+        {
+          "id": 3,
+          "name": "Confetti"
+        },
+        {
+          "id": 4,
+          "name": "Sinelon"
+        },
+        {
+          "id": 5,
+          "name": "Juggle"
+        },
+        {
+          "id": 6,
+          "name": "BPM"
+        },
+        {
+          "id": 7,
+          "name": "Wave"
+        },
+        {
+          "id": 8,
+          "name": "Ripple"
+        },
+        {
+          "id": 9,
+          "name": "Heartbeat"
+        },
+        {
+          "id": 10,
+          "name": "Interference"
+        },
+        {
+          "id": 11,
+          "name": "Breathing"
+        },
+        {
+          "id": 12,
+          "name": "Pulse"
+        },
+        {
+          "id": 13,
+          "name": "LGP Box Wave"
+        },
+        {
+          "id": 14,
+          "name": "LGP Holographic"
+        },
+        {
+          "id": 15,
+          "name": "LGP Modal Resonance"
+        },
+        {
+          "id": 16,
+          "name": "LGP Interference Scanner"
+        },
+        {
+          "id": 17,
+          "name": "LGP Wave Collision"
+        },
+        {
+          "id": 18,
+          "name": "LGP Diamond Lattice"
+        },
+        {
+          "id": 19,
+          "name": "LGP Hexagonal Grid"
+        },
+        {
+          "id": 20,
+          "name": "LGP Spiral Vortex"
+        },
+        {
+          "id": 21,
+          "name": "LGP Sierpinski"
+        },
+        {
+          "id": 22,
+          "name": "LGP Chevron Waves"
+        },
+        {
+          "id": 23,
+          "name": "LGP Concentric Rings"
+        },
+        {
+          "id": 24,
+          "name": "LGP Star Burst"
+        },
+        {
+          "id": 25,
+          "name": "LGP Mesh Network"
+        },
+        {
+          "id": 26,
+          "name": "LGP Moire Curtains"
+        },
+        {
+          "id": 27,
+          "name": "LGP Radial Ripple"
+        },
+        {
+          "id": 28,
+          "name": "LGP Holographic Vortex"
+        },
+        {
+          "id": 29,
+          "name": "LGP Evanescent Drift"
+        },
+        {
+          "id": 30,
+          "name": "LGP Chromatic Shear"
+        },
+        {
+          "id": 31,
+          "name": "LGP Modal Cavity"
+        },
+        {
+          "id": 32,
+          "name": "LGP Fresnel Zones"
+        },
+        {
+          "id": 33,
+          "name": "LGP Photonic Crystal"
+        },
+        {
+          "id": 34,
+          "name": "LGP Aurora Borealis"
+        },
+        {
+          "id": 36,
+          "name": "LGP Plasma Membrane"
+        },
+        {
+          "id": 38,
+          "name": "LGP Crystalline Growth"
+        },
+        {
+          "id": 39,
+          "name": "LGP Fluid Dynamics"
+        },
+        {
+          "id": 40,
+          "name": "LGP Quantum Tunneling"
+        },
+        {
+          "id": 41,
+          "name": "LGP Gravitational Lensing"
+        },
+        {
+          "id": 42,
+          "name": "LGP Time Crystal"
+        },
+        {
+          "id": 43,
+          "name": "LGP Soliton Waves"
+        },
+        {
+          "id": 44,
+          "name": "LGP Metamaterial Cloak"
+        },
+        {
+          "id": 45,
+          "name": "LGP GRIN Cloak"
+        },
+        {
+          "id": 46,
+          "name": "LGP Caustic Fan"
+        },
+        {
+          "id": 47,
+          "name": "LGP Birefringent Shear"
+        },
+        {
+          "id": 48,
+          "name": "LGP Anisotropic Cloak"
+        },
+        {
+          "id": 49,
+          "name": "LGP Evanescent Skin"
+        },
+        {
+          "id": 52,
+          "name": "LGP Complementary Mixing"
+        },
+        {
+          "id": 53,
+          "name": "LGP Quantum Colors"
+        },
+        {
+          "id": 54,
+          "name": "LGP Doppler Shift"
+        },
+        {
+          "id": 55,
+          "name": "LGP Color Accelerator"
+        },
+        {
+          "id": 56,
+          "name": "LGP DNA Helix"
+        },
+        {
+          "id": 57,
+          "name": "LGP Phase Transition"
+        },
+        {
+          "id": 60,
+          "name": "LGP Chladni Harmonics"
+        },
+        {
+          "id": 61,
+          "name": "LGP Gravitational Wave Chirp"
+        },
+        {
+          "id": 62,
+          "name": "LGP Quantum Entanglement"
+        },
+        {
+          "id": 63,
+          "name": "LGP Mycelial Network"
+        },
+        {
+          "id": 64,
+          "name": "LGP Riley Dissonance"
+        },
+        {
+          "id": 65,
+          "name": "LGP Chromatic Lens"
+        },
+        {
+          "id": 66,
+          "name": "LGP Chromatic Pulse"
+        },
+        {
+          "id": 67,
+          "name": "LGP Chromatic Interference"
+        },
+        {
+          "id": 68,
+          "name": "Audio Test"
+        },
+        {
+          "id": 69,
+          "name": "Beat Pulse"
+        },
+        {
+          "id": 70,
+          "name": "Spectrum Bars"
+        },
+        {
+          "id": 71,
+          "name": "Bass Breath"
+        },
+        {
+          "id": 72,
+          "name": "Audio Waveform"
+        },
+        {
+          "id": 73,
+          "name": "Audio Bloom"
+        },
+        {
+          "id": 74,
+          "name": "LGP Star Burst (Narrative)"
+        },
+        {
+          "id": 75,
+          "name": "Chord Glow"
+        },
+        {
+          "id": 76,
+          "name": "Wave Reactive"
+        },
+        {
+          "id": 77,
+          "name": "LGP Perlin Veil"
+        },
+        {
+          "id": 78,
+          "name": "LGP Perlin Shocklines"
+        },
+        {
+          "id": 79,
+          "name": "LGP Perlin Caustics"
+        },
+        {
+          "id": 80,
+          "name": "LGP Perlin Interference Weave"
+        },
+        {
+          "id": 81,
+          "name": "LGP Perlin Veil Ambient"
+        },
+        {
+          "id": 82,
+          "name": "LGP Perlin Shocklines Ambient"
+        },
+        {
+          "id": 83,
+          "name": "LGP Perlin Caustics Ambient"
+        },
+        {
+          "id": 84,
+          "name": "LGP Perlin Interference Weave Ambient"
+        },
+        {
+          "id": 85,
+          "name": "Perlin Test: FastLED"
+        },
+        {
+          "id": 86,
+          "name": "Perlin Test: Emotiscope2 Full"
+        },
+        {
+          "id": 87,
+          "name": "Perlin Test: Emotiscope2 Quarter"
+        },
+        {
+          "id": 88,
+          "name": "BPM Enhanced"
+        },
+        {
+          "id": 89,
+          "name": "Breathing Enhanced"
+        },
+        {
+          "id": 90,
+          "name": "LGP Chevron Waves Enhanced"
+        },
+        {
+          "id": 91,
+          "name": "LGP Interference Scanner Enhanced"
+        },
+        {
+          "id": 92,
+          "name": "LGP Photonic Crystal Enhanced"
+        },
+        {
+          "id": 93,
+          "name": "LGP Spectrum Detail"
+        },
+        {
+          "id": 94,
+          "name": "LGP Spectrum Detail Enhanced"
+        },
+        {
+          "id": 95,
+          "name": "LGP Star Burst Enhanced"
+        },
+        {
+          "id": 96,
+          "name": "LGP Wave Collision Enhanced"
+        },
+        {
+          "id": 97,
+          "name": "Ripple Enhanced"
+        },
+        {
+          "id": 98,
+          "name": "Audio Bloom Parity"
+        },
+        {
+          "id": 100,
+          "name": "LGP Holographic Auto-Cycle"
+        },
+        {
+          "id": 106,
+          "name": "Ripple (ES tuned)"
+        },
+        {
+          "id": 107,
+          "name": "Heartbeat (ES tuned)"
+        },
+        {
+          "id": 108,
+          "name": "LGP Holographic (ES tuned)"
+        },
+        {
+          "id": 113,
+          "name": "Beat Pulse (Void)"
+        },
+        {
+          "id": 114,
+          "name": "Beat Pulse (Resonant)"
+        },
+        {
+          "id": 115,
+          "name": "Beat Pulse (Ripple)"
+        },
+        {
+          "id": 116,
+          "name": "Beat Pulse (Shockwave Cascade)"
+        },
+        {
+          "id": 117,
+          "name": "Beat Pulse (Spectral)"
+        },
+        {
+          "id": 118,
+          "name": "Beat Pulse (Spectral Pulse)"
+        },
+        {
+          "id": 119,
+          "name": "Beat Pulse (Breathe)"
+        },
+        {
+          "id": 120,
+          "name": "Beat Pulse (LGP Interference)"
+        },
+        {
+          "id": 121,
+          "name": "Beat Pulse (Bloom)"
+        },
+        {
+          "id": 122,
+          "name": "Bloom (Parity)"
+        },
+        {
+          "id": 123,
+          "name": "Kuramoto Transport"
+        },
+        {
+          "id": 125,
+          "name": "LGP Grating Scan"
+        },
+        {
+          "id": 126,
+          "name": "LGP Stress Glass"
+        },
+        {
+          "id": 127,
+          "name": "LGP Moire Silk"
+        },
+        {
+          "id": 128,
+          "name": "LGP Caustic Shards"
+        },
+        {
+          "id": 129,
+          "name": "LGP Parallax Depth"
+        },
+        {
+          "id": 130,
+          "name": "LGP Stress Glass (Melt)"
+        },
+        {
+          "id": 131,
+          "name": "LGP Grating Scan (Breakup)"
+        },
+        {
+          "id": 132,
+          "name": "LGP Water Caustics"
+        },
+        {
+          "id": 133,
+          "name": "LGP Schlieren Flow"
+        },
+        {
+          "id": 134,
+          "name": "LGP Reaction Diffusion"
+        },
+        {
+          "id": 135,
+          "name": "LGP RD Triangle"
+        },
+        {
+          "id": 136,
+          "name": "LGP Talbot Carpet"
+        },
+        {
+          "id": 137,
+          "name": "LGP Airy Comet"
+        },
+        {
+          "id": 138,
+          "name": "LGP Moire Cathedral"
+        },
+        {
+          "id": 139,
+          "name": "LGP Living Glyph"
+        },
+        {
+          "id": 140,
+          "name": "LGP Spirograph Crown"
+        },
+        {
+          "id": 141,
+          "name": "LGP Rose Bloom"
+        },
+        {
+          "id": 142,
+          "name": "LGP Harmonograph Halo"
+        },
+        {
+          "id": 143,
+          "name": "LGP Rule 30 Cathedral"
+        },
+        {
+          "id": 144,
+          "name": "LGP Langton Highway"
+        },
+        {
+          "id": 145,
+          "name": "LGP Cymatic Ladder"
+        },
+        {
+          "id": 146,
+          "name": "LGP Mach Diamonds"
+        },
+        {
+          "id": 147,
+          "name": "Chimera Crown"
+        },
+        {
+          "id": 148,
+          "name": "Catastrophe Caustics"
+        },
+        {
+          "id": 149,
+          "name": "Hyperbolic Portal"
+        },
+        {
+          "id": 150,
+          "name": "Lorenz Ribbon"
+        },
+        {
+          "id": 151,
+          "name": "IFS Botanical Relic"
+        },
+        {
+          "id": 152,
+          "name": "LGP Flux Rift"
+        },
+        {
+          "id": 153,
+          "name": "LGP Beat Prism"
+        },
+        {
+          "id": 154,
+          "name": "LGP Harmonic Tide"
+        },
+        {
+          "id": 155,
+          "name": "LGP Bass Quake"
+        },
+        {
+          "id": 156,
+          "name": "LGP Treble Net"
+        },
+        {
+          "id": 157,
+          "name": "LGP Rhythmic Gate"
+        },
+        {
+          "id": 158,
+          "name": "LGP Spectral Knot"
+        },
+        {
+          "id": 159,
+          "name": "LGP Saliency Bloom"
+        },
+        {
+          "id": 160,
+          "name": "LGP Transient Lattice"
+        },
+        {
+          "id": 161,
+          "name": "LGP Wavelet Mirror"
+        },
+        {
+          "id": 51,
+          "name": "LGP RGB Prism"
+        },
+        {
+          "id": 58,
+          "name": "LGP Chromatic Aberration"
+        },
+        {
+          "id": 59,
+          "name": "LGP Perceptual Blend"
+        },
+        {
+          "id": 101,
+          "name": "ES Analog (Ref)"
+        },
+        {
+          "id": 102,
+          "name": "ES Spectrum (Ref)"
+        },
+        {
+          "id": 105,
+          "name": "ES Waveform (Ref)"
+        },
+        {
+          "id": 110,
+          "name": "Beat Pulse (Stack)"
+        },
+        {
+          "id": 111,
+          "name": "Beat Pulse (Shockwave)"
+        }
+      ],
+      "effect_count": 152
+    },
+    {
+      "method_id": "global_hue",
+      "name": "Global Rotating Hue",
+      "description": "Uses ctx.gHue (auto-incrementing global hue)",
+      "function": "ctx.gHue",
+      "effects_using": [
+        {
+          "id": 1,
+          "name": "Ocean"
+        },
+        {
+          "id": 2,
+          "name": "Plasma"
+        },
+        {
+          "id": 3,
+          "name": "Confetti"
+        },
+        {
+          "id": 4,
+          "name": "Sinelon"
+        },
+        {
+          "id": 5,
+          "name": "Juggle"
+        },
+        {
+          "id": 6,
+          "name": "BPM"
+        },
+        {
+          "id": 8,
+          "name": "Ripple"
+        },
+        {
+          "id": 9,
+          "name": "Heartbeat"
+        },
+        {
+          "id": 10,
+          "name": "Interference"
+        },
+        {
+          "id": 11,
+          "name": "Breathing"
+        },
+        {
+          "id": 12,
+          "name": "Pulse"
+        },
+        {
+          "id": 13,
+          "name": "LGP Box Wave"
+        },
+        {
+          "id": 14,
+          "name": "LGP Holographic"
+        },
+        {
+          "id": 15,
+          "name": "LGP Modal Resonance"
+        },
+        {
+          "id": 16,
+          "name": "LGP Interference Scanner"
+        },
+        {
+          "id": 17,
+          "name": "LGP Wave Collision"
+        },
+        {
+          "id": 18,
+          "name": "LGP Diamond Lattice"
+        },
+        {
+          "id": 19,
+          "name": "LGP Hexagonal Grid"
+        },
+        {
+          "id": 20,
+          "name": "LGP Spiral Vortex"
+        },
+        {
+          "id": 21,
+          "name": "LGP Sierpinski"
+        },
+        {
+          "id": 22,
+          "name": "LGP Chevron Waves"
+        },
+        {
+          "id": 23,
+          "name": "LGP Concentric Rings"
+        },
+        {
+          "id": 24,
+          "name": "LGP Star Burst"
+        },
+        {
+          "id": 25,
+          "name": "LGP Mesh Network"
+        },
+        {
+          "id": 26,
+          "name": "LGP Moire Curtains"
+        },
+        {
+          "id": 27,
+          "name": "LGP Radial Ripple"
+        },
+        {
+          "id": 28,
+          "name": "LGP Holographic Vortex"
+        },
+        {
+          "id": 29,
+          "name": "LGP Evanescent Drift"
+        },
+        {
+          "id": 31,
+          "name": "LGP Modal Cavity"
+        },
+        {
+          "id": 32,
+          "name": "LGP Fresnel Zones"
+        },
+        {
+          "id": 33,
+          "name": "LGP Photonic Crystal"
+        },
+        {
+          "id": 38,
+          "name": "LGP Crystalline Growth"
+        },
+        {
+          "id": 39,
+          "name": "LGP Fluid Dynamics"
+        },
+        {
+          "id": 40,
+          "name": "LGP Quantum Tunneling"
+        },
+        {
+          "id": 41,
+          "name": "LGP Gravitational Lensing"
+        },
+        {
+          "id": 42,
+          "name": "LGP Time Crystal"
+        },
+        {
+          "id": 43,
+          "name": "LGP Soliton Waves"
+        },
+        {
+          "id": 44,
+          "name": "LGP Metamaterial Cloak"
+        },
+        {
+          "id": 45,
+          "name": "LGP GRIN Cloak"
+        },
+        {
+          "id": 46,
+          "name": "LGP Caustic Fan"
+        },
+        {
+          "id": 47,
+          "name": "LGP Birefringent Shear"
+        },
+        {
+          "id": 48,
+          "name": "LGP Anisotropic Cloak"
+        },
+        {
+          "id": 49,
+          "name": "LGP Evanescent Skin"
+        },
+        {
+          "id": 52,
+          "name": "LGP Complementary Mixing"
+        },
+        {
+          "id": 53,
+          "name": "LGP Quantum Colors"
+        },
+        {
+          "id": 54,
+          "name": "LGP Doppler Shift"
+        },
+        {
+          "id": 56,
+          "name": "LGP DNA Helix"
+        },
+        {
+          "id": 57,
+          "name": "LGP Phase Transition"
+        },
+        {
+          "id": 60,
+          "name": "LGP Chladni Harmonics"
+        },
+        {
+          "id": 61,
+          "name": "LGP Gravitational Wave Chirp"
+        },
+        {
+          "id": 62,
+          "name": "LGP Quantum Entanglement"
+        },
+        {
+          "id": 63,
+          "name": "LGP Mycelial Network"
+        },
+        {
+          "id": 64,
+          "name": "LGP Riley Dissonance"
+        },
+        {
+          "id": 65,
+          "name": "LGP Chromatic Lens"
+        },
+        {
+          "id": 66,
+          "name": "LGP Chromatic Pulse"
+        },
+        {
+          "id": 67,
+          "name": "LGP Chromatic Interference"
+        },
+        {
+          "id": 68,
+          "name": "Audio Test"
+        },
+        {
+          "id": 70,
+          "name": "Spectrum Bars"
+        },
+        {
+          "id": 73,
+          "name": "Audio Bloom"
+        },
+        {
+          "id": 74,
+          "name": "LGP Star Burst (Narrative)"
+        },
+        {
+          "id": 75,
+          "name": "Chord Glow"
+        },
+        {
+          "id": 77,
+          "name": "LGP Perlin Veil"
+        },
+        {
+          "id": 78,
+          "name": "LGP Perlin Shocklines"
+        },
+        {
+          "id": 79,
+          "name": "LGP Perlin Caustics"
+        },
+        {
+          "id": 80,
+          "name": "LGP Perlin Interference Weave"
+        },
+        {
+          "id": 85,
+          "name": "Perlin Test: FastLED"
+        },
+        {
+          "id": 86,
+          "name": "Perlin Test: Emotiscope2 Full"
+        },
+        {
+          "id": 87,
+          "name": "Perlin Test: Emotiscope2 Quarter"
+        },
+        {
+          "id": 88,
+          "name": "BPM Enhanced"
+        },
+        {
+          "id": 89,
+          "name": "Breathing Enhanced"
+        },
+        {
+          "id": 90,
+          "name": "LGP Chevron Waves Enhanced"
+        },
+        {
+          "id": 91,
+          "name": "LGP Interference Scanner Enhanced"
+        },
+        {
+          "id": 92,
+          "name": "LGP Photonic Crystal Enhanced"
+        },
+        {
+          "id": 93,
+          "name": "LGP Spectrum Detail"
+        },
+        {
+          "id": 94,
+          "name": "LGP Spectrum Detail Enhanced"
+        },
+        {
+          "id": 95,
+          "name": "LGP Star Burst Enhanced"
+        },
+        {
+          "id": 96,
+          "name": "LGP Wave Collision Enhanced"
+        },
+        {
+          "id": 97,
+          "name": "Ripple Enhanced"
+        },
+        {
+          "id": 98,
+          "name": "Audio Bloom Parity"
+        },
+        {
+          "id": 100,
+          "name": "LGP Holographic Auto-Cycle"
+        },
+        {
+          "id": 106,
+          "name": "Ripple (ES tuned)"
+        },
+        {
+          "id": 109,
+          "name": "SB Waveform (Ref)"
+        },
+        {
+          "id": 121,
+          "name": "Beat Pulse (Bloom)"
+        },
+        {
+          "id": 122,
+          "name": "Bloom (Parity)"
+        },
+        {
+          "id": 123,
+          "name": "Kuramoto Transport"
+        },
+        {
+          "id": 124,
+          "name": "LGP Opal Film"
+        },
+        {
+          "id": 125,
+          "name": "LGP Grating Scan"
+        },
+        {
+          "id": 126,
+          "name": "LGP Stress Glass"
+        },
+        {
+          "id": 127,
+          "name": "LGP Moire Silk"
+        },
+        {
+          "id": 128,
+          "name": "LGP Caustic Shards"
+        },
+        {
+          "id": 129,
+          "name": "LGP Parallax Depth"
+        },
+        {
+          "id": 130,
+          "name": "LGP Stress Glass (Melt)"
+        },
+        {
+          "id": 131,
+          "name": "LGP Grating Scan (Breakup)"
+        },
+        {
+          "id": 132,
+          "name": "LGP Water Caustics"
+        },
+        {
+          "id": 133,
+          "name": "LGP Schlieren Flow"
+        },
+        {
+          "id": 134,
+          "name": "LGP Reaction Diffusion"
+        },
+        {
+          "id": 135,
+          "name": "LGP RD Triangle"
+        },
+        {
+          "id": 136,
+          "name": "LGP Talbot Carpet"
+        },
+        {
+          "id": 137,
+          "name": "LGP Airy Comet"
+        },
+        {
+          "id": 138,
+          "name": "LGP Moire Cathedral"
+        },
+        {
+          "id": 139,
+          "name": "LGP Living Glyph"
+        },
+        {
+          "id": 140,
+          "name": "LGP Spirograph Crown"
+        },
+        {
+          "id": 141,
+          "name": "LGP Rose Bloom"
+        },
+        {
+          "id": 142,
+          "name": "LGP Harmonograph Halo"
+        },
+        {
+          "id": 143,
+          "name": "LGP Rule 30 Cathedral"
+        },
+        {
+          "id": 144,
+          "name": "LGP Langton Highway"
+        },
+        {
+          "id": 145,
+          "name": "LGP Cymatic Ladder"
+        },
+        {
+          "id": 146,
+          "name": "LGP Mach Diamonds"
+        },
+        {
+          "id": 147,
+          "name": "Chimera Crown"
+        },
+        {
+          "id": 148,
+          "name": "Catastrophe Caustics"
+        },
+        {
+          "id": 149,
+          "name": "Hyperbolic Portal"
+        },
+        {
+          "id": 150,
+          "name": "Lorenz Ribbon"
+        },
+        {
+          "id": 151,
+          "name": "IFS Botanical Relic"
+        },
+        {
+          "id": 152,
+          "name": "LGP Flux Rift"
+        },
+        {
+          "id": 153,
+          "name": "LGP Beat Prism"
+        },
+        {
+          "id": 154,
+          "name": "LGP Harmonic Tide"
+        },
+        {
+          "id": 155,
+          "name": "LGP Bass Quake"
+        },
+        {
+          "id": 156,
+          "name": "LGP Treble Net"
+        },
+        {
+          "id": 157,
+          "name": "LGP Rhythmic Gate"
+        },
+        {
+          "id": 158,
+          "name": "LGP Spectral Knot"
+        },
+        {
+          "id": 159,
+          "name": "LGP Saliency Bloom"
+        },
+        {
+          "id": 160,
+          "name": "LGP Transient Lattice"
+        },
+        {
+          "id": 161,
+          "name": "LGP Wavelet Mirror"
+        }
+      ],
+      "effect_count": 123
+    },
+    {
+      "method_id": "static_colour",
+      "name": "Static Colour Values",
+      "description": "Hardcoded CHSV or CRGB values",
+      "function": "CHSV(...) / CRGB(...)",
+      "effects_using": [
+        {
+          "id": 35,
+          "name": "LGP Bioluminescent Waves"
+        },
+        {
+          "id": 37,
+          "name": "LGP Neural Network"
+        },
+        {
+          "id": 99,
+          "name": "Audio Waveform Parity"
+        },
+        {
+          "id": 50,
+          "name": "LGP Color Temperature"
+        }
+      ],
+      "effect_count": 4
+    },
+    {
+      "method_id": "heat_color",
+      "name": "Heat Colour Palette",
+      "description": "Temperature-to-colour mapping via FastLED HeatColor()",
+      "function": "HeatColor()",
+      "effects_using": [
+        {
+          "id": 0,
+          "name": "Fire"
+        }
+      ],
+      "effect_count": 1
+    }
+  ],
+  "audio_coupling_modes": [
+    {
+      "mode_id": "rms_intensity",
+      "name": "RMS Intensity Mapping",
+      "description": "Audio RMS level drives brightness or effect radius",
+      "controlbus_field": "rms / smoothRms / ctx.audio.rms()",
+      "effects_using": [
+        {
+          "id": 5,
+          "name": "Juggle"
+        },
+        {
+          "id": 7,
+          "name": "Wave"
+        },
+        {
+          "id": 11,
+          "name": "Breathing"
+        },
+        {
+          "id": 68,
+          "name": "Audio Test"
+        },
+        {
+          "id": 72,
+          "name": "Audio Waveform"
+        },
+        {
+          "id": 74,
+          "name": "LGP Star Burst (Narrative)"
+        },
+        {
+          "id": 76,
+          "name": "Wave Reactive"
+        },
+        {
+          "id": 77,
+          "name": "LGP Perlin Veil"
+        },
+        {
+          "id": 78,
+          "name": "LGP Perlin Shocklines"
+        },
+        {
+          "id": 89,
+          "name": "Breathing Enhanced"
+        },
+        {
+          "id": 98,
+          "name": "Audio Bloom Parity"
+        },
+        {
+          "id": 99,
+          "name": "Audio Waveform Parity"
+        },
+        {
+          "id": 106,
+          "name": "Ripple (ES tuned)"
+        },
+        {
+          "id": 109,
+          "name": "SB Waveform (Ref)"
+        },
+        {
+          "id": 121,
+          "name": "Beat Pulse (Bloom)"
+        },
+        {
+          "id": 152,
+          "name": "LGP Flux Rift"
+        },
+        {
+          "id": 153,
+          "name": "LGP Beat Prism"
+        },
+        {
+          "id": 154,
+          "name": "LGP Harmonic Tide"
+        },
+        {
+          "id": 155,
+          "name": "LGP Bass Quake"
+        },
+        {
+          "id": 156,
+          "name": "LGP Treble Net"
+        },
+        {
+          "id": 157,
+          "name": "LGP Rhythmic Gate"
+        },
+        {
+          "id": 158,
+          "name": "LGP Spectral Knot"
+        },
+        {
+          "id": 159,
+          "name": "LGP Saliency Bloom"
+        },
+        {
+          "id": 160,
+          "name": "LGP Transient Lattice"
+        },
+        {
+          "id": 161,
+          "name": "LGP Wavelet Mirror"
+        },
+        {
+          "id": 101,
+          "name": "ES Analog (Ref)"
+        },
+        {
+          "id": 105,
+          "name": "ES Waveform (Ref)"
+        },
+        {
+          "id": 123,
+          "name": "Kuramoto Transport"
+        }
+      ],
+      "effect_count": 28
+    },
+    {
+      "mode_id": "beat_trigger",
+      "name": "Beat Event Trigger",
+      "description": "Beat detection events trigger discrete visual events",
+      "controlbus_field": "beatStrength / onBeat / BeatPulseCore",
+      "effects_using": [
+        {
+          "id": 5,
+          "name": "Juggle"
+        },
+        {
+          "id": 6,
+          "name": "BPM"
+        },
+        {
+          "id": 11,
+          "name": "Breathing"
+        },
+        {
+          "id": 68,
+          "name": "Audio Test"
+        },
+        {
+          "id": 69,
+          "name": "Beat Pulse"
+        },
+        {
+          "id": 70,
+          "name": "Spectrum Bars"
+        },
+        {
+          "id": 71,
+          "name": "Bass Breath"
+        },
+        {
+          "id": 73,
+          "name": "Audio Bloom"
+        },
+        {
+          "id": 77,
+          "name": "LGP Perlin Veil"
+        },
+        {
+          "id": 78,
+          "name": "LGP Perlin Shocklines"
+        },
+        {
+          "id": 80,
+          "name": "LGP Perlin Interference Weave"
+        },
+        {
+          "id": 88,
+          "name": "BPM Enhanced"
+        },
+        {
+          "id": 89,
+          "name": "Breathing Enhanced"
+        },
+        {
+          "id": 90,
+          "name": "LGP Chevron Waves Enhanced"
+        },
+        {
+          "id": 91,
+          "name": "LGP Interference Scanner Enhanced"
+        },
+        {
+          "id": 92,
+          "name": "LGP Photonic Crystal Enhanced"
+        },
+        {
+          "id": 95,
+          "name": "LGP Star Burst Enhanced"
+        },
+        {
+          "id": 96,
+          "name": "LGP Wave Collision Enhanced"
+        },
+        {
+          "id": 99,
+          "name": "Audio Waveform Parity"
+        },
+        {
+          "id": 106,
+          "name": "Ripple (ES tuned)"
+        },
+        {
+          "id": 107,
+          "name": "Heartbeat (ES tuned)"
+        },
+        {
+          "id": 108,
+          "name": "LGP Holographic (ES tuned)"
+        },
+        {
+          "id": 110,
+          "name": "Beat Pulse (Stack)"
+        },
+        {
+          "id": 111,
+          "name": "Beat Pulse (Shockwave)"
+        },
+        {
+          "id": 113,
+          "name": "Beat Pulse (Void)"
+        },
+        {
+          "id": 114,
+          "name": "Beat Pulse (Resonant)"
+        },
+        {
+          "id": 115,
+          "name": "Beat Pulse (Ripple)"
+        },
+        {
+          "id": 116,
+          "name": "Beat Pulse (Shockwave Cascade)"
+        },
+        {
+          "id": 117,
+          "name": "Beat Pulse (Spectral)"
+        },
+        {
+          "id": 118,
+          "name": "Beat Pulse (Spectral Pulse)"
+        },
+        {
+          "id": 119,
+          "name": "Beat Pulse (Breathe)"
+        },
+        {
+          "id": 120,
+          "name": "Beat Pulse (LGP Interference)"
+        },
+        {
+          "id": 121,
+          "name": "Beat Pulse (Bloom)"
+        },
+        {
+          "id": 152,
+          "name": "LGP Flux Rift"
+        },
+        {
+          "id": 153,
+          "name": "LGP Beat Prism"
+        },
+        {
+          "id": 154,
+          "name": "LGP Harmonic Tide"
+        },
+        {
+          "id": 155,
+          "name": "LGP Bass Quake"
+        },
+        {
+          "id": 156,
+          "name": "LGP Treble Net"
+        },
+        {
+          "id": 157,
+          "name": "LGP Rhythmic Gate"
+        },
+        {
+          "id": 158,
+          "name": "LGP Spectral Knot"
+        },
+        {
+          "id": 159,
+          "name": "LGP Saliency Bloom"
+        },
+        {
+          "id": 160,
+          "name": "LGP Transient Lattice"
+        },
+        {
+          "id": 161,
+          "name": "LGP Wavelet Mirror"
+        },
+        {
+          "id": 100,
+          "name": "LGP Holographic Auto-Cycle"
+        }
+      ],
+      "effect_count": 44
+    },
+    {
+      "mode_id": "frequency_band",
+      "name": "Frequency Band Mapping",
+      "description": "Specific frequency bands drive specific visual parameters",
+      "controlbus_field": "heavy_bands / bins64Adaptive / bins64",
+      "effects_using": [
+        {
+          "id": 5,
+          "name": "Juggle"
+        },
+        {
+          "id": 6,
+          "name": "BPM"
+        },
+        {
+          "id": 16,
+          "name": "LGP Interference Scanner"
+        },
+        {
+          "id": 17,
+          "name": "LGP Wave Collision"
+        },
+        {
+          "id": 22,
+          "name": "LGP Chevron Waves"
+        },
+        {
+          "id": 24,
+          "name": "LGP Star Burst"
+        },
+        {
+          "id": 33,
+          "name": "LGP Photonic Crystal"
+        },
+        {
+          "id": 73,
+          "name": "Audio Bloom"
+        },
+        {
+          "id": 88,
+          "name": "BPM Enhanced"
+        },
+        {
+          "id": 90,
+          "name": "LGP Chevron Waves Enhanced"
+        },
+        {
+          "id": 91,
+          "name": "LGP Interference Scanner Enhanced"
+        },
+        {
+          "id": 92,
+          "name": "LGP Photonic Crystal Enhanced"
+        },
+        {
+          "id": 93,
+          "name": "LGP Spectrum Detail"
+        },
+        {
+          "id": 94,
+          "name": "LGP Spectrum Detail Enhanced"
+        },
+        {
+          "id": 95,
+          "name": "LGP Star Burst Enhanced"
+        },
+        {
+          "id": 96,
+          "name": "LGP Wave Collision Enhanced"
+        },
+        {
+          "id": 102,
+          "name": "ES Spectrum (Ref)"
+        },
+        {
+          "id": 106,
+          "name": "Ripple (ES tuned)"
+        },
+        {
+          "id": 79,
+          "name": "LGP Perlin Caustics"
+        }
+      ],
+      "effect_count": 19
+    },
+    {
+      "mode_id": "chroma_hue",
+      "name": "Chromagram Hue Derivation",
+      "description": "Chroma bins drive palette hue selection",
+      "controlbus_field": "chroma / heavy_chroma",
+      "effects_using": [
+        {
+          "id": 5,
+          "name": "Juggle"
+        },
+        {
+          "id": 6,
+          "name": "BPM"
+        },
+        {
+          "id": 8,
+          "name": "Ripple"
+        },
+        {
+          "id": 11,
+          "name": "Breathing"
+        },
+        {
+          "id": 16,
+          "name": "LGP Interference Scanner"
+        },
+        {
+          "id": 17,
+          "name": "LGP Wave Collision"
+        },
+        {
+          "id": 22,
+          "name": "LGP Chevron Waves"
+        },
+        {
+          "id": 24,
+          "name": "LGP Star Burst"
+        },
+        {
+          "id": 33,
+          "name": "LGP Photonic Crystal"
+        },
+        {
+          "id": 69,
+          "name": "Beat Pulse"
+        },
+        {
+          "id": 70,
+          "name": "Spectrum Bars"
+        },
+        {
+          "id": 71,
+          "name": "Bass Breath"
+        },
+        {
+          "id": 72,
+          "name": "Audio Waveform"
+        },
+        {
+          "id": 73,
+          "name": "Audio Bloom"
+        },
+        {
+          "id": 74,
+          "name": "LGP Star Burst (Narrative)"
+        },
+        {
+          "id": 75,
+          "name": "Chord Glow"
+        },
+        {
+          "id": 80,
+          "name": "LGP Perlin Interference Weave"
+        },
+        {
+          "id": 88,
+          "name": "BPM Enhanced"
+        },
+        {
+          "id": 89,
+          "name": "Breathing Enhanced"
+        },
+        {
+          "id": 90,
+          "name": "LGP Chevron Waves Enhanced"
+        },
+        {
+          "id": 91,
+          "name": "LGP Interference Scanner Enhanced"
+        },
+        {
+          "id": 92,
+          "name": "LGP Photonic Crystal Enhanced"
+        },
+        {
+          "id": 93,
+          "name": "LGP Spectrum Detail"
+        },
+        {
+          "id": 95,
+          "name": "LGP Star Burst Enhanced"
+        },
+        {
+          "id": 96,
+          "name": "LGP Wave Collision Enhanced"
+        },
+        {
+          "id": 97,
+          "name": "Ripple Enhanced"
+        },
+        {
+          "id": 98,
+          "name": "Audio Bloom Parity"
+        },
+        {
+          "id": 103,
+          "name": "ES Octave (Ref)"
+        },
+        {
+          "id": 104,
+          "name": "ES Bloom (Ref)"
+        },
+        {
+          "id": 106,
+          "name": "Ripple (ES tuned)"
+        },
+        {
+          "id": 107,
+          "name": "Heartbeat (ES tuned)"
+        },
+        {
+          "id": 108,
+          "name": "LGP Holographic (ES tuned)"
+        },
+        {
+          "id": 109,
+          "name": "SB Waveform (Ref)"
+        },
+        {
+          "id": 122,
+          "name": "Bloom (Parity)"
+        },
+        {
+          "id": 152,
+          "name": "LGP Flux Rift"
+        },
+        {
+          "id": 153,
+          "name": "LGP Beat Prism"
+        },
+        {
+          "id": 154,
+          "name": "LGP Harmonic Tide"
+        },
+        {
+          "id": 155,
+          "name": "LGP Bass Quake"
+        },
+        {
+          "id": 156,
+          "name": "LGP Treble Net"
+        },
+        {
+          "id": 157,
+          "name": "LGP Rhythmic Gate"
+        },
+        {
+          "id": 158,
+          "name": "LGP Spectral Knot"
+        },
+        {
+          "id": 159,
+          "name": "LGP Saliency Bloom"
+        },
+        {
+          "id": 160,
+          "name": "LGP Transient Lattice"
+        },
+        {
+          "id": 161,
+          "name": "LGP Wavelet Mirror"
+        }
+      ],
+      "effect_count": 44
+    }
+  ],
+  "cross_reference_validation": {
+    "total_effects_in_inventory": 162,
+    "total_effects_classified": 161,
+    "unclassified_effects": [],
+    "effects_in_multiple_spatial_categories": [
+      {
+        "id": 1,
+        "name": "Ocean",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 6,
+        "name": "BPM",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 7,
+        "name": "Wave",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 10,
+        "name": "Interference",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 11,
+        "name": "Breathing",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 13,
+        "name": "LGP Box Wave",
+        "primary": "radial",
+        "secondary": [
+          "interference",
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 14,
+        "name": "LGP Holographic",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 16,
+        "name": "LGP Interference Scanner",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 17,
+        "name": "LGP Wave Collision",
+        "primary": "radial",
+        "secondary": [
+          "interference",
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 18,
+        "name": "LGP Diamond Lattice",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 20,
+        "name": "LGP Spiral Vortex",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 21,
+        "name": "LGP Sierpinski",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation",
+          "geometric"
+        ]
+      },
+      {
+        "id": 22,
+        "name": "LGP Chevron Waves",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 23,
+        "name": "LGP Concentric Rings",
+        "primary": "radial",
+        "secondary": [
+          "interference",
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 24,
+        "name": "LGP Star Burst",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 25,
+        "name": "LGP Mesh Network",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 26,
+        "name": "LGP Moire Curtains",
+        "primary": "radial",
+        "secondary": [
+          "interference",
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 27,
+        "name": "LGP Radial Ripple",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 28,
+        "name": "LGP Holographic Vortex",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 29,
+        "name": "LGP Evanescent Drift",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 31,
+        "name": "LGP Modal Cavity",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 33,
+        "name": "LGP Photonic Crystal",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 39,
+        "name": "LGP Fluid Dynamics",
+        "primary": "radial",
+        "secondary": [
+          "field",
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 42,
+        "name": "LGP Time Crystal",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 49,
+        "name": "LGP Evanescent Skin",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 51,
+        "name": "LGP RGB Prism",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 53,
+        "name": "LGP Quantum Colors",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 56,
+        "name": "LGP DNA Helix",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 57,
+        "name": "LGP Phase Transition",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 58,
+        "name": "LGP Chromatic Aberration",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 59,
+        "name": "LGP Perceptual Blend",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 60,
+        "name": "LGP Chladni Harmonics",
+        "primary": "radial",
+        "secondary": [
+          "interference",
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 61,
+        "name": "LGP Gravitational Wave Chirp",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 62,
+        "name": "LGP Quantum Entanglement",
+        "primary": "radial",
+        "secondary": [
+          "interference",
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 63,
+        "name": "LGP Mycelial Network",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation",
+          "geometric"
+        ]
+      },
+      {
+        "id": 64,
+        "name": "LGP Riley Dissonance",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 65,
+        "name": "LGP Chromatic Lens",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 66,
+        "name": "LGP Chromatic Pulse",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 67,
+        "name": "LGP Chromatic Interference",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 68,
+        "name": "Audio Test",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 70,
+        "name": "Spectrum Bars",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 71,
+        "name": "Bass Breath",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 74,
+        "name": "LGP Star Burst (Narrative)",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 75,
+        "name": "Chord Glow",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 76,
+        "name": "Wave Reactive",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 77,
+        "name": "LGP Perlin Veil",
+        "primary": "radial",
+        "secondary": [
+          "field",
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 78,
+        "name": "LGP Perlin Shocklines",
+        "primary": "radial",
+        "secondary": [
+          "field"
+        ]
+      },
+      {
+        "id": 79,
+        "name": "LGP Perlin Caustics",
+        "primary": "radial",
+        "secondary": [
+          "field"
+        ]
+      },
+      {
+        "id": 80,
+        "name": "LGP Perlin Interference Weave",
+        "primary": "radial",
+        "secondary": [
+          "field"
+        ]
+      },
+      {
+        "id": 81,
+        "name": "LGP Perlin Veil Ambient",
+        "primary": "radial",
+        "secondary": [
+          "field",
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 82,
+        "name": "LGP Perlin Shocklines Ambient",
+        "primary": "radial",
+        "secondary": [
+          "field"
+        ]
+      },
+      {
+        "id": 83,
+        "name": "LGP Perlin Caustics Ambient",
+        "primary": "radial",
+        "secondary": [
+          "field",
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 84,
+        "name": "LGP Perlin Interference Weave Ambient",
+        "primary": "radial",
+        "secondary": [
+          "field",
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 85,
+        "name": "Perlin Test: FastLED",
+        "primary": "radial",
+        "secondary": [
+          "field"
+        ]
+      },
+      {
+        "id": 86,
+        "name": "Perlin Test: Emotiscope2 Full",
+        "primary": "radial",
+        "secondary": [
+          "field"
+        ]
+      },
+      {
+        "id": 87,
+        "name": "Perlin Test: Emotiscope2 Quarter",
+        "primary": "radial",
+        "secondary": [
+          "field"
+        ]
+      },
+      {
+        "id": 88,
+        "name": "BPM Enhanced",
+        "primary": "radial",
+        "secondary": [
+          "field",
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 89,
+        "name": "Breathing Enhanced",
+        "primary": "radial",
+        "secondary": [
+          "field",
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 90,
+        "name": "LGP Chevron Waves Enhanced",
+        "primary": "radial",
+        "secondary": [
+          "field",
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 91,
+        "name": "LGP Interference Scanner Enhanced",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 92,
+        "name": "LGP Photonic Crystal Enhanced",
+        "primary": "radial",
+        "secondary": [
+          "field",
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 95,
+        "name": "LGP Star Burst Enhanced",
+        "primary": "radial",
+        "secondary": [
+          "field",
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 96,
+        "name": "LGP Wave Collision Enhanced",
+        "primary": "radial",
+        "secondary": [
+          "field",
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 100,
+        "name": "LGP Holographic Auto-Cycle",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 105,
+        "name": "ES Waveform (Ref)",
+        "primary": "radial",
+        "secondary": [
+          "waveform"
+        ]
+      },
+      {
+        "id": 108,
+        "name": "LGP Holographic (ES tuned)",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 109,
+        "name": "SB Waveform (Ref)",
+        "primary": "radial",
+        "secondary": [
+          "waveform"
+        ]
+      },
+      {
+        "id": 117,
+        "name": "Beat Pulse (Spectral)",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 118,
+        "name": "Beat Pulse (Spectral Pulse)",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 123,
+        "name": "Kuramoto Transport",
+        "primary": "field",
+        "secondary": [
+          "particle"
+        ]
+      },
+      {
+        "id": 124,
+        "name": "LGP Opal Film",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 126,
+        "name": "LGP Stress Glass",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 127,
+        "name": "LGP Moire Silk",
+        "primary": "radial",
+        "secondary": [
+          "interference",
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 128,
+        "name": "LGP Caustic Shards",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 129,
+        "name": "LGP Parallax Depth",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 130,
+        "name": "LGP Stress Glass (Melt)",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 132,
+        "name": "LGP Water Caustics",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 133,
+        "name": "LGP Schlieren Flow",
+        "primary": "radial",
+        "secondary": [
+          "wave_propagation"
+        ]
+      },
+      {
+        "id": 136,
+        "name": "LGP Talbot Carpet",
+        "primary": "field",
+        "secondary": [
+          "interference",
+          "geometric"
+        ]
+      },
+      {
+        "id": 137,
+        "name": "LGP Airy Comet",
+        "primary": "field",
+        "secondary": [
+          "interference",
+          "geometric"
+        ]
+      },
+      {
+        "id": 138,
+        "name": "LGP Moire Cathedral",
+        "primary": "field",
+        "secondary": [
+          "interference",
+          "geometric"
+        ]
+      },
+      {
+        "id": 139,
+        "name": "LGP Living Glyph",
+        "primary": "field",
+        "secondary": [
+          "interference",
+          "geometric"
+        ]
+      },
+      {
+        "id": 140,
+        "name": "LGP Spirograph Crown",
+        "primary": "field",
+        "secondary": [
+          "interference",
+          "geometric"
+        ]
+      },
+      {
+        "id": 141,
+        "name": "LGP Rose Bloom",
+        "primary": "field",
+        "secondary": [
+          "interference",
+          "geometric"
+        ]
+      },
+      {
+        "id": 142,
+        "name": "LGP Harmonograph Halo",
+        "primary": "field",
+        "secondary": [
+          "interference",
+          "geometric"
+        ]
+      },
+      {
+        "id": 143,
+        "name": "LGP Rule 30 Cathedral",
+        "primary": "field",
+        "secondary": [
+          "interference",
+          "geometric"
+        ]
+      },
+      {
+        "id": 144,
+        "name": "LGP Langton Highway",
+        "primary": "field",
+        "secondary": [
+          "interference",
+          "geometric"
+        ]
+      },
+      {
+        "id": 145,
+        "name": "LGP Cymatic Ladder",
+        "primary": "field",
+        "secondary": [
+          "interference",
+          "geometric"
+        ]
+      },
+      {
+        "id": 146,
+        "name": "LGP Mach Diamonds",
+        "primary": "field",
+        "secondary": [
+          "interference",
+          "geometric"
+        ]
+      },
+      {
+        "id": 152,
+        "name": "LGP Flux Rift",
+        "primary": "waveform",
+        "secondary": [
+          "interference"
+        ]
+      },
+      {
+        "id": 153,
+        "name": "LGP Beat Prism",
+        "primary": "waveform",
+        "secondary": [
+          "interference"
+        ]
+      },
+      {
+        "id": 154,
+        "name": "LGP Harmonic Tide",
+        "primary": "waveform",
+        "secondary": [
+          "interference"
+        ]
+      },
+      {
+        "id": 155,
+        "name": "LGP Bass Quake",
+        "primary": "waveform",
+        "secondary": [
+          "interference"
+        ]
+      },
+      {
+        "id": 156,
+        "name": "LGP Treble Net",
+        "primary": "waveform",
+        "secondary": [
+          "interference"
+        ]
+      },
+      {
+        "id": 157,
+        "name": "LGP Rhythmic Gate",
+        "primary": "waveform",
+        "secondary": [
+          "interference"
+        ]
+      },
+      {
+        "id": 158,
+        "name": "LGP Spectral Knot",
+        "primary": "waveform",
+        "secondary": [
+          "interference"
+        ]
+      },
+      {
+        "id": 159,
+        "name": "LGP Saliency Bloom",
+        "primary": "waveform",
+        "secondary": [
+          "interference"
+        ]
+      },
+      {
+        "id": 160,
+        "name": "LGP Transient Lattice",
+        "primary": "waveform",
+        "secondary": [
+          "interference"
+        ]
+      },
+      {
+        "id": 161,
+        "name": "LGP Wavelet Mirror",
+        "primary": "waveform",
+        "secondary": [
+          "interference"
+        ]
+      }
+    ]
+  },
+  "gaps": [
+    {
+      "type": "unknown_audio_coupling",
+      "effect_id": 9,
+      "effect_name": "Heartbeat",
+      "context": "Audio coupling mode could not be determined from code markers"
+    },
+    {
+      "type": "removed_slot",
+      "effect_id": 112,
+      "effect_name": "Beat Pulse (Shockwave In)",
+      "context": "Effect slot removed from registry, no source file"
+    },
+    {
+      "type": "internal_timer_beat",
+      "effect_id": 9,
+      "effect_name": "Heartbeat",
+      "context": "Effect is marked audio_reactive but uses internal timer-based lub-dub pattern, not ControlBus audio data. Audio coupling is self-generated timing."
+    }
+  ]
+}

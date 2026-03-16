@@ -1,0 +1,93 @@
+{
+  "test_id": "T2.5",
+  "name": "SATURATION_VEIL (mode=4)",
+  "device": "/dev/cu.usbmodem21401",
+  "effect": "0x1302",
+  "edgemixer": {
+    "mode": 4,
+    "spread": 30,
+    "strength": 200,
+    "spatial": 0,
+    "temporal": 0
+  },
+  "frames_captured": 900,
+  "metrics": {
+    "L0": {
+      "black_frame_ratio": 0.0,
+      "clipped_frame_ratio": 0.0,
+      "mean_brightness": 0.7158640250544662
+    },
+    "L1": {
+      "stability_lss": 0.9944902287945211,
+      "flicker_elatcsf": 0.016323090521474036,
+      "vmcr": 0.9836886997297588
+    },
+    "L2": {
+      "energy_correlation": 0.008733790428271146,
+      "beat_alignment": 0.7857142857142857,
+      "onset_response": 0.9977519705253407
+    },
+    "composite": 0.6831254276959491,
+    "strip_divergence_l2": 137.1311137011398,
+    "near_black_leaks": 0
+  },
+  "gates": {
+    "near_black_leaks": {
+      "value": 0,
+      "bounds": {
+        "max": 0
+      },
+      "pass": true
+    }
+  },
+  "degradation": {
+    "stability_lss": {
+      "baseline": 0.9999077951536566,
+      "current": 0.9944902287945211,
+      "delta": 0.005417566359135484,
+      "max_allowed": 0.2,
+      "pass": true
+    },
+    "flicker_elatcsf": {
+      "baseline": 0.0010647713990514847,
+      "current": 0.016323090521474036,
+      "delta": 0.01525831912242255,
+      "max_allowed": -0.15,
+      "pass": true
+    },
+    "energy_correlation": {
+      "baseline": -0.0965094380315139,
+      "current": 0.008733790428271146,
+      "delta": -0.10524322845978505,
+      "max_allowed": 0.25,
+      "pass": true
+    },
+    "onset_response": {
+      "baseline": 0.9998317626935019,
+      "current": 0.9977519705253407,
+      "delta": 0.002079792168161232,
+      "max_allowed": 0.3,
+      "pass": true
+    },
+    "composite": {
+      "baseline": 0.7189396663251847,
+      "current": 0.6831254276959491,
+      "delta": 0.035814238629235606,
+      "max_allowed": 0.15,
+      "pass": true
+    }
+  },
+  "extra_checks": {
+    "hue_preservation": {
+      "pass": true,
+      "detail": "hue delta=0.2 FL units (threshold <15)",
+      "value": 0.19611822826465805
+    },
+    "saturation_reduction": {
+      "pass": true,
+      "detail": "s1_sat=0.929 s2_sat=0.789",
+      "value": -0.14039781195842127
+    }
+  },
+  "pass": true
+}

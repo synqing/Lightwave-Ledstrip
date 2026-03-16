@@ -1,0 +1,82 @@
+{
+  "test_id": "T2.2",
+  "name": "ANALOGOUS (mode=1)",
+  "device": "/dev/cu.usbmodem21401",
+  "effect": "0x1302",
+  "edgemixer": {
+    "mode": 1,
+    "spread": 30,
+    "strength": 200,
+    "spatial": 0,
+    "temporal": 0
+  },
+  "frames_captured": 900,
+  "metrics": {
+    "L0": {
+      "black_frame_ratio": 0.0,
+      "clipped_frame_ratio": 0.0,
+      "mean_brightness": 0.6882062227668845
+    },
+    "L1": {
+      "stability_lss": 0.9998418449693559,
+      "flicker_elatcsf": 0.0012665620229271866,
+      "vmcr": 0.999528932280303
+    },
+    "L2": {
+      "energy_correlation": -0.11244004844660545,
+      "beat_alignment": 0.9583333333333334,
+      "onset_response": 0.9997999137801767
+    },
+    "composite": 0.7181665195086352,
+    "strip_divergence_l2": 151.37605579347272,
+    "near_black_leaks": 0
+  },
+  "gates": {
+    "near_black_leaks": {
+      "value": 0,
+      "bounds": {
+        "max": 0
+      },
+      "pass": true
+    }
+  },
+  "degradation": {
+    "stability_lss": {
+      "baseline": 0.9999077951536566,
+      "current": 0.9998418449693559,
+      "delta": 6.595018430066713e-05,
+      "max_allowed": 0.2,
+      "pass": true
+    },
+    "flicker_elatcsf": {
+      "baseline": 0.0010647713990514847,
+      "current": 0.0012665620229271866,
+      "delta": 0.00020179062387570184,
+      "max_allowed": -0.15,
+      "pass": true
+    },
+    "energy_correlation": {
+      "baseline": -0.0965094380315139,
+      "current": -0.11244004844660545,
+      "delta": 0.015930610415091542,
+      "max_allowed": 0.25,
+      "pass": true
+    },
+    "onset_response": {
+      "baseline": 0.9998317626935019,
+      "current": 0.9997999137801767,
+      "delta": 3.184891332519424e-05,
+      "max_allowed": 0.3,
+      "pass": true
+    },
+    "composite": {
+      "baseline": 0.7189396663251847,
+      "current": 0.7181665195086352,
+      "delta": 0.000773146816549497,
+      "max_allowed": 0.15,
+      "pass": true
+    }
+  },
+  "extra_checks": {},
+  "pass": true
+}

@@ -50,9 +50,10 @@ private:
     static constexpr uint16_t kCenterLeft   = lightwaveos::effects::CENTER_LEFT;    // 79
     static constexpr uint16_t kCenterRight  = lightwaveos::effects::CENTER_RIGHT;   // 80
 
-    // PSRAM-allocated per-pixel smoothing buffer
+    // PSRAM-allocated per-pixel smoothing + trail persistence buffer
     struct SbFullSpectrumPsram {
-        float smoothed[80];  ///< Per-pixel smoothed energy
+        float smoothed[80];       ///< Per-pixel smoothed bin energy (input stage)
+        CRGB  trailBuffer[160];   ///< Persistent pixel buffer for frame-to-frame trails
     };
 
 #ifndef NATIVE_BUILD

@@ -56,8 +56,8 @@ bool SbFullSpectrumEffect::init(plugins::EffectContext& ctx) {
     }
 #endif
 
-    // Zero smoothing buffer
-    memset(m_ps->smoothed, 0, sizeof(m_ps->smoothed));
+    // Zero smoothing buffer and trail buffer
+    memset(m_ps, 0, sizeof(SbFullSpectrumPsram));
 
     (void)ctx;
     return true;
@@ -124,7 +124,23 @@ void SbFullSpectrumEffect::renderEffect(plugins::EffectContext& ctx) {
     }
 
     // -----------------------------------------------------------------
-    // Render right half (centre → edge, pixels 80..159)
+    // Trail persistence: decay the persistent buffer BEFORE writing new
+    // Audio-coupled: loud = faster decay (punchy), quiet = slower (ambient)
+    // Matches K1 Waveform pattern: decayRate = base + scale * amplitude
+    // -----------------------------------------------------------------
+    float rmsNow = ctx.audio.available ? ctx.audio.rms() : 0.0f;
+    static constexpr float kMinDecayRate = 1.5f;   // per-second (silence: ~2s full decay)
+    static constexpr float kDecayScale   = 6.0f;   // additional rate per unit RMS
+    float decayRate = kMinDecayRate + kDecayScale * rmsNow;
+    uint8_t fadeAmount = static_cast<uint8_t>(decayRate * dt * 255.0f);
+    if (fadeAmount < 1) fadeAmount = 1;
+    if (fadeAmount > 200) fadeAmount = 200;
+    fadeToBlackBy(m_ps->trailBuffer, kStripLength, fadeAmount);
+
+    // -----------------------------------------------------------------
+    // Render target pixels into the trail buffer (additive blend)
+    // New spectral energy is ADDED to the persistent buffer, creating
+    // bright cores where audio is active and smooth decay where it fades.
     // -----------------------------------------------------------------
     const uint8_t userBrightness = ctx.brightness;
 
@@ -145,27 +161,30 @@ void SbFullSpectrumEffect::renderEffect(plugins::EffectContext& ctx) {
         CRGB pixel;
         hsv2rgb_rainbow(CHSV(hue, sat, val), pixel);
 
-        // Write to right half of strip 1
+        // Additive blend into trail buffer (bright cores accumulate)
         uint16_t ledIdx = kCenterRight + p;
-        if (ledIdx < kStripLength && ledIdx < ctx.ledCount) {
-            ctx.leds[ledIdx] = pixel;
+        if (ledIdx < kStripLength) {
+            m_ps->trailBuffer[ledIdx] += pixel;
         }
     }
 
     // -----------------------------------------------------------------
-    // Mirror right → left (centre-origin symmetry)
+    // Mirror right → left in trail buffer (centre-origin symmetry)
     // -----------------------------------------------------------------
     for (uint16_t i = 0; i < kHalfLength; ++i) {
         uint16_t rightIdx = kCenterRight + i;
         uint16_t leftIdx  = kCenterLeft - i;
-        if (rightIdx < ctx.ledCount && leftIdx < ctx.ledCount) {
-            ctx.leds[leftIdx] = ctx.leds[rightIdx];
+        if (rightIdx < kStripLength && leftIdx < kStripLength) {
+            m_ps->trailBuffer[leftIdx] = m_ps->trailBuffer[rightIdx];
         }
     }
 
     // -----------------------------------------------------------------
-    // Copy strip 1 → strip 2
+    // Output trail buffer to LEDs + copy strip 1 → strip 2
     // -----------------------------------------------------------------
+    for (uint16_t i = 0; i < kStripLength && i < ctx.ledCount; ++i) {
+        ctx.leds[i] = m_ps->trailBuffer[i];
+    }
     for (uint16_t i = 0; i < kStripLength && (kStripLength + i) < ctx.ledCount; ++i) {
         ctx.leds[kStripLength + i] = ctx.leds[i];
     }

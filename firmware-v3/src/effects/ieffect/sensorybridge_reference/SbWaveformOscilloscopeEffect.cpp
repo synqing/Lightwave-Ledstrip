@@ -1,24 +1,29 @@
 /**
  * @file SbWaveformOscilloscopeEffect.cpp
- * @brief SB 3.0.0 Waveform oscilloscope — exact parity + brightness-boosted variant
+ * @brief SB Waveform oscilloscope — rewritten with proven K1 patterns
  *
- * True port of Sensory Bridge 3.0.0's light_mode_waveform()
- * (lightshow_modes.h:128-228). Full-strip oscilloscope rendering the raw
- * audio waveform shape across all LEDs.
+ * Full-strip oscilloscope rendering the audio waveform shape across all LEDs.
+ * Combines three proven patterns from the codebase:
  *
- * Algorithm:
- *   1. Copy 128 waveform samples into 4-frame ring buffer
- *   2. Smooth peak envelope (dt-corrected EMA, tau=0.217s)
- *   3. Chromagram colour synthesis (12 chroma bins → additive RGB)
- *   4. Temporal colour smoothing (dt-corrected EMA, tau=0.217s)
- *   5. Per-pixel waveform rendering:
- *      a. Resample 128→80 with linear interpolation
- *      b. Average 4 history frames
- *      c. Normalise by 128.0
- *      d. Per-pixel EMA smoothing (mood-dependent tau)
- *      e. Peak-gated brightness: 0.5 + waveformLast * 0.5
- *   6. Mirror right half to left half (centre-origin)
- *   7. Copy strip 1 to strip 2
+ *   1. Waveform rendering from EsWaveformRefEffect:
+ *      - Hop-gated 4-frame history ring buffer
+ *      - History frame averaging to stabilise morphology
+ *      - 3-pass one-pole low-pass filter (alpha ~0.54, ~2.1 kHz cutoff)
+ *      - Auto-scaling by peak magnitude to fill [-1, 1]
+ *      - interp128-style linear interpolation (128 samples -> 80 pixels)
+ *
+ *   2. Colour synthesis from SbK1WaveformEffect:
+ *      - Palette-based additive accumulation per chromagram bin
+ *      - Soft-knee cap (preserves hue ratios, no white clipping)
+ *      - Non-chromatic fallback via paletteColorF
+ *      - PHOTONS brightness scaling
+ *
+ *   3. Per-pixel brightness from waveform:
+ *      - 0.5 pedestal + auto-scaled sample * 0.5 => [0, 1]
+ *      - Peak-gated dimming during silence
+ *
+ * Centre-origin mirror: renders right half (80 -> 159), mirrors to left.
+ * Copy strip 1 to strip 2.
  */
 
 #include "SbWaveformOscilloscopeEffect.h"
@@ -33,7 +38,6 @@
 
 #include <cmath>
 #include <cstring>
-#include <algorithm>
 
 namespace lightwaveos::effects::ieffect::sensorybridge_reference {
 
@@ -94,6 +98,11 @@ bool SbWaveformOscilloscopeBase::init(plugins::EffectContext& ctx) {
     m_chromaHue = 0.0f;
     m_contrast  = 1.0f;
 
+    // Sentinel for hop-gate: UINT32_MAX guarantees the first frame detects
+    // a "new hop" and primes all 4 history slots (m_lastHopSeq was zeroed
+    // by baseInit, override it here).
+    m_lastHopSeq = UINT32_MAX;
+
     (void)ctx;
     return true;
 }
@@ -137,21 +146,96 @@ void SbWaveformOscilloscopeBase::renderEffect(plugins::EffectContext& ctx) {
     const float boost = brightnessBoost();
 
     // =====================================================================
-    // Stage 1: Waveform History (SB lines 189-193)
+    // Stage 1: Hop-gated waveform history update
+    // (EsWaveformRefEffect pattern: only store new waveform when hop changes)
     // =====================================================================
-    // Prefer SB waveform if present; otherwise use contract waveform.
-    const int16_t* wfSrc = ctx.audio.controlBus.sb_waveform;
-    if (ctx.audio.controlBus.sb_waveform_peak_scaled < 0.0001f) {
-        wfSrc = ctx.audio.controlBus.waveform;
+    const uint32_t hopSeq = ctx.audio.controlBus.hop_seq;
+    const bool newHop = (hopSeq != m_lastHopSeq);
+    const bool firstHop = (m_lastHopSeq == UINT32_MAX);  // Sentinel from init()
+
+    if (newHop || firstHop) {
+        m_lastHopSeq = hopSeq;
+
+        if (firstHop) {
+            // First time: fill all 4 history slots with the current waveform
+            for (uint8_t f = 0; f < kHistFrames; ++f) {
+                memcpy(m_ps->wfHistory[f], ctx.audio.controlBus.waveform,
+                       kWfPoints * sizeof(int16_t));
+            }
+            m_ps->wfHistoryIdx = 0;
+        } else {
+            // Normal: write current waveform into ring buffer slot
+            memcpy(m_ps->wfHistory[m_ps->wfHistoryIdx], ctx.audio.controlBus.waveform,
+                   kWfPoints * sizeof(int16_t));
+            m_ps->wfHistoryIdx = (m_ps->wfHistoryIdx + 1) % kHistFrames;
+        }
     }
 
-    memcpy(m_ps->wfHistory[m_ps->wfHistoryIdx], wfSrc, kWfPoints * sizeof(int16_t));
-    m_ps->wfHistoryIdx = (m_ps->wfHistoryIdx + 1) % kHistFrames;
+    // =====================================================================
+    // Stage 2: Average 4 history frames into local float buffer
+    // (Stack allocation: 128 floats = 512 bytes — well within budget)
+    // =====================================================================
+    float samples[kWfPoints];
+    for (uint8_t i = 0; i < kWfPoints; ++i) {
+        float sum = 0.0f;
+        for (uint8_t f = 0; f < kHistFrames; ++f) {
+            sum += static_cast<float>(m_ps->wfHistory[f][i]);
+        }
+        // Normalise: int16_t range to [-1, 1]
+        samples[i] = (sum / static_cast<float>(kHistFrames)) / 32768.0f;
+    }
 
     // =====================================================================
-    // Stage 2: Peak Smoothing (SB line 134)
+    // Stage 3: Aggressive spatial low-pass filter (6-pass)
+    // The activity gate attenuates waveform samples to ±1000 of ±32768,
+    // leaving high-frequency noise. 6 passes at alpha=0.35 produce a
+    // smooth bass/mid-frequency envelope rather than choppy noise stripes.
+    // Forward + reverse passes prevent phase shift (symmetric filtering).
     // =====================================================================
-    // dt-corrected: tau = 0.217s (equivalent to SB's alpha=0.05 at ~90 FPS)
+    static constexpr float kLpfAlpha = 0.35f;
+
+    for (uint8_t pass = 0; pass < 3; ++pass) {
+        // Forward pass
+        float y = samples[0];
+        for (uint8_t i = 0; i < kWfPoints; ++i) {
+            y = y + kLpfAlpha * (samples[i] - y);
+            samples[i] = y;
+        }
+        // Reverse pass (prevents rightward phase shift)
+        y = samples[kWfPoints - 1];
+        for (int16_t i = kWfPoints - 1; i >= 0; --i) {
+            y = y + kLpfAlpha * (samples[i] - y);
+            samples[i] = y;
+        }
+    }
+
+    // =====================================================================
+    // Stage 4: Auto-scale by SMOOTHED peak magnitude
+    // Use a follower on the peak rather than raw max to prevent
+    // frame-to-frame noise amplification during quiet passages.
+    // =====================================================================
+    float maxAbs = 0.0f;
+    for (uint8_t i = 0; i < kWfPoints; ++i) {
+        const float a = fabsf(samples[i]);
+        if (a > maxAbs) maxAbs = a;
+    }
+    // Smoothed peak follower: fast attack (track loud passages immediately),
+    // slow release (don't amplify noise when audio drops)
+    static constexpr float kPeakAttackAlpha = 0.3f;
+    static constexpr float kPeakReleaseAlpha = 0.02f;
+    if (maxAbs > m_ps->waveformLast[79]) {
+        // Reuse waveformLast[79] as peak follower storage (last pixel, rarely read)
+        m_ps->waveformLast[79] = m_ps->waveformLast[79] + kPeakAttackAlpha * (maxAbs - m_ps->waveformLast[79]);
+    } else {
+        m_ps->waveformLast[79] = m_ps->waveformLast[79] + kPeakReleaseAlpha * (maxAbs - m_ps->waveformLast[79]);
+    }
+    const float smoothedPeak = fmaxf(m_ps->waveformLast[79], 0.001f);
+    const float autoScale = 1.0f / smoothedPeak;
+
+    // =====================================================================
+    // Stage 5: Peak smoothing for silence gate
+    // dt-corrected EMA, tau=0.217s
+    // =====================================================================
     float rawPeak = ctx.audio.controlBus.sb_waveform_peak_scaled;
     if (rawPeak < 0.0001f) {
         // Fallback: derive from RMS when SB sidecar not populated
@@ -160,122 +244,100 @@ void SbWaveformOscilloscopeBase::renderEffect(plugins::EffectContext& ctx) {
     const float alphaPeak = 1.0f - expf(-dt / 0.217f);
     m_ps->wfPeakScaledLast += (rawPeak - m_ps->wfPeakScaledLast) * alphaPeak;
 
+    // Peak gate: ramp up quickly, [0, 1]
+    const float peakGate = fminf(m_ps->wfPeakScaledLast * 4.0f, 1.0f);
+
     // =====================================================================
-    // Stage 3: Colour Synthesis (SB lines 136-169)
+    // Stage 6: Colour synthesis (palette-based, from SbK1WaveformEffect)
+    // Uses paletteColorF for bright, palette-driven output instead of
+    // the original dim HSV/kLedShare approach.
     // =====================================================================
     const bool chromaticMode = (ctx.saturation >= 128);
-    static constexpr float kLedShare = 255.0f / 12.0f;  // ~21.25
 
-    float newColour[3] = {0.0f, 0.0f, 0.0f};
+    CRGB_F dotColor = {0.0f, 0.0f, 0.0f};
+    float totalMag = 0.0f;
 
+    for (uint8_t c = 0; c < 12; ++c) {
+        float bin = m_chromaSmooth[c];
+        float bright = applyContrast(bin, m_contrast);
+
+        // Apply brightness boost (1.0 for parity, 1.5 for bright variant)
+        bright *= boost;
+        if (bright > 1.0f) bright = 1.0f;
+
+        if (bright > 0.05f) {
+            float prog = c / 12.0f;
+            CRGB_F noteColor = paletteColorF(ctx.palette, prog, bright);
+            dotColor += noteColor;
+            totalMag += bright;
+        }
+    }
+
+    // Soft-knee brightness cap: scale so brightest channel <= 1.0
+    // Preserves hue ratios (unlike hard clip which desaturates to white)
     if (chromaticMode) {
-        // Chromatic mode: sum HSV-derived colours per chroma bin
-        for (uint8_t c = 0; c < 12; ++c) {
-            float bin = m_chromaSmooth[c];
-            float bright = applyContrast(bin, m_contrast);
-
-            // Apply brightness boost (1.0 for parity, 1.5 for bright variant)
-            bright *= boost;
-            if (bright > 1.0f) bright = 1.0f;
-
-            uint8_t hue = (uint8_t)(255.0f * (float)c / 12.0f);
-            CRGB noteCol;
-            hsv2rgb_spectrum(CHSV(hue, 255, (uint8_t)(bright * kLedShare)), noteCol);
-            newColour[0] += (float)noteCol.r;
-            newColour[1] += (float)noteCol.g;
-            newColour[2] += (float)noteCol.b;
+        float peak = fmaxf(dotColor.r, fmaxf(dotColor.g, dotColor.b));
+        if (peak > 1.0f) {
+            dotColor *= (1.0f / peak);
         }
-    } else {
-        // Non-chromatic mode: sum brightness, apply single hue
-        float brightnessSum = 0.0f;
-        for (uint8_t c = 0; c < 12; ++c) {
-            float bin = m_chromaSmooth[c];
-            float bright = applyContrast(bin, m_contrast);
-
-            bright *= boost;
-            if (bright > 1.0f) bright = 1.0f;
-
-            brightnessSum += bright * kLedShare;
-        }
-
-        // Derive hue from chromaHue parameter + auto-shifted hue position
-        uint8_t chromaHue8 = (uint8_t)((m_chromaHue + m_huePosition) * 255.0f);
-        CRGB sumCol;
-        hsv2rgb_spectrum(CHSV(chromaHue8, 255, (uint8_t)fminf(brightnessSum, 255.0f)), sumCol);
-        newColour[0] = (float)sumCol.r;
-        newColour[1] = (float)sumCol.g;
-        newColour[2] = (float)sumCol.b;
     }
 
-    // =====================================================================
-    // Stage 4: Colour Temporal Smoothing (SB lines 178-186)
-    // =====================================================================
-    const float alphaColour = 1.0f - expf(-dt / 0.217f);
-    for (int ch = 0; ch < 3; ++ch) {
-        m_ps->sumColourFloat[ch] += (newColour[ch] - m_ps->sumColourFloat[ch]) * alphaColour;
+    // Non-chromatic: force palette position to chroma hue + auto-shifted position
+    if (!chromaticMode) {
+        float forcedPos = m_chromaHue + m_huePosition;
+        dotColor = paletteColorF(ctx.palette, forcedPos, fminf(totalMag, 1.0f));
     }
 
+    // Failsafe: invisible dot prevention
+    if (totalMag < 0.01f && ctx.audio.rms() > 0.02f) {
+        float fbPos = m_chromaHue + m_huePosition;
+        dotColor = paletteColorF(ctx.palette, fbPos, ctx.audio.rms());
+    }
+
+    // Apply PHOTONS brightness
+    float photons = static_cast<float>(ctx.brightness) / 255.0f;
+    dotColor *= photons;
+    dotColor.clip();
+
     // =====================================================================
-    // Stage 5: Per-Pixel Waveform Rendering (SB lines 188-227)
+    // Stage 7: Per-pixel waveform rendering (80 pixels, right half)
+    // interp128-style interpolation: map 128 filtered samples to 80 pixels
     // =====================================================================
-    // Map ctx.speed to SB MOOD: mood = clamp(speed / 20.0, 0.0, 1.0)
-    const float mood = clampF((float)ctx.speed / 20.0f, 0.0f, 1.0f);
-
-    // SB smoothing factor: (0.1 + mood * 0.9) * 0.05 at ~90 FPS
-    // dt-correct: tau = -1.0 / (90.0 * log(1.0 - (0.1 + mood * 0.9) * 0.05))
-    const float sbSmooth = (0.1f + mood * 0.9f) * 0.05f;
-    const float tau = -1.0f / (90.0f * logf(1.0f - sbSmooth));
-    const float alphaWf = 1.0f - expf(-dt / tau);
-
-    // Peak gate: clamp peak * 4 to [0, 1]
-    const float peak = fminf(m_ps->wfPeakScaledLast * 4.0f, 1.0f);
-
     for (uint16_t pixel = 0; pixel < kHalfLength; ++pixel) {
-        // Resample: linearly interpolate from 128 history samples to 80 pixels
-        const float srcIdx = (float)pixel * (128.0f / 80.0f);
-        const int lo = (int)srcIdx;
-        const float frac = srcIdx - (float)lo;
+        // Progress: 0.0 at centre, 1.0 at edge
+        const float progress = (kHalfLength <= 1) ? 0.0f
+            : (static_cast<float>(pixel) / static_cast<float>(kHalfLength - 1));
+
+        // Interpolate from 128 filtered samples
+        const float srcIdx = progress * 127.0f;
+        const int lo = static_cast<int>(srcIdx);
+        const float frac = srcIdx - static_cast<float>(lo);
         const int hi = (lo + 1 < kWfPoints) ? (lo + 1) : (kWfPoints - 1);
 
-        // Average 4 history frames at this sample position
-        float avgSample = 0.0f;
-        for (uint8_t h = 0; h < kHistFrames; ++h) {
-            const float s0 = (float)m_ps->wfHistory[h][lo];
-            const float s1 = (float)m_ps->wfHistory[h][hi];
-            avgSample += s0 * (1.0f - frac) + s1 * frac;
-        }
-        avgSample *= 0.25f;
+        float signedSample = (samples[lo] * (1.0f - frac) + samples[hi] * frac) * autoScale;
 
-        // Normalise: int16_t domain → [-1, 1] range (SB uses /128.0 for 8-bit;
-        // we use /32768.0 for int16_t domain then scale to match SB's visual range)
-        // SB's waveform is 8-bit (-128..127), ours is int16_t (-32768..32767).
-        // Divide by 32768 to normalise, but SB divides by 128 for its 8-bit range.
-        // The waveform values on ControlBus are already scaled int16_t.
-        const float inputWaveSample = avgSample / 32768.0f;
+        // Envelope mode: brightness tracks waveform AMPLITUDE (not signed value).
+        // Avoids dark bands at zero crossings and removes the need for a 0.5
+        // pedestal that makes the strip uniformly dim.
+        float brightness = fabsf(signedSample);
+        if (brightness > 1.0f) brightness = 1.0f;
 
-        // Per-pixel EMA smoothing (mood-dependent)
-        m_ps->waveformLast[pixel] += (inputWaveSample - m_ps->waveformLast[pixel]) * alphaWf;
-
-        // Brightness: 0.5 + waveformLast * 0.5, clamped to [0, 1]
-        float outputBrightness = 0.5f + m_ps->waveformLast[pixel] * 0.5f;
-        outputBrightness = clampF(outputBrightness, 0.0f, 1.0f);
-
-        // Apply peak gate
-        outputBrightness *= peak;
+        // Dim during silence via peak gate
+        brightness *= peakGate;
 
         // Write pixel: right half (centre-origin outward)
         const uint16_t ledIdx = kCenterRight + pixel;
         if (ledIdx < ctx.ledCount) {
             ctx.leds[ledIdx] = CRGB(
-                (uint8_t)clampF(m_ps->sumColourFloat[0] * outputBrightness, 0.0f, 255.0f),
-                (uint8_t)clampF(m_ps->sumColourFloat[1] * outputBrightness, 0.0f, 255.0f),
-                (uint8_t)clampF(m_ps->sumColourFloat[2] * outputBrightness, 0.0f, 255.0f)
+                static_cast<uint8_t>(clampF(dotColor.r * brightness * 255.0f, 0.0f, 255.0f)),
+                static_cast<uint8_t>(clampF(dotColor.g * brightness * 255.0f, 0.0f, 255.0f)),
+                static_cast<uint8_t>(clampF(dotColor.b * brightness * 255.0f, 0.0f, 255.0f))
             );
         }
     }
 
     // =====================================================================
-    // Stage 6: Mirror right half to left half (centre-origin)
+    // Stage 8: Mirror right half to left half (centre-origin)
     // =====================================================================
     for (uint16_t i = 0; i < kHalfLength; ++i) {
         const uint16_t rightIdx = kCenterRight + i;
@@ -286,7 +348,7 @@ void SbWaveformOscilloscopeBase::renderEffect(plugins::EffectContext& ctx) {
     }
 
     // =====================================================================
-    // Stage 7: Copy strip 1 to strip 2
+    // Stage 9: Copy strip 1 to strip 2
     // =====================================================================
     for (uint16_t i = 0; i < kStripLength && (kStripLength + i) < ctx.ledCount; ++i) {
         ctx.leds[kStripLength + i] = ctx.leds[i];
@@ -296,7 +358,7 @@ void SbWaveformOscilloscopeBase::renderEffect(plugins::EffectContext& ctx) {
 }
 
 // ---------------------------------------------------------------------------
-// Metadata — parity variant
+// Metadata -- parity variant
 // ---------------------------------------------------------------------------
 
 const plugins::EffectMetadata& SbWaveformOscilloscopeEffect::getMetadata() const {
@@ -311,7 +373,7 @@ const plugins::EffectMetadata& SbWaveformOscilloscopeEffect::getMetadata() const
 }
 
 // ---------------------------------------------------------------------------
-// Metadata — bright variant
+// Metadata -- bright variant
 // ---------------------------------------------------------------------------
 
 const plugins::EffectMetadata& SbWaveformOscilloscopyBrightEffect::getMetadata() const {

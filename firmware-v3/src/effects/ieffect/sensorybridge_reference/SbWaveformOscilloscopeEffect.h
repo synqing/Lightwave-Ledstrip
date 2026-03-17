@@ -40,6 +40,7 @@ struct SbWfOscPsram {
     float wfPeakScaledLast;          ///< Local peak smoother
     int16_t wfHistory[4][128];       ///< 4-frame waveform ring buffer
     uint8_t wfHistoryIdx;            ///< Ring buffer write index (0-3)
+    CRGB trailBuffer[160];           ///< Persistent pixel buffer for frame-to-frame trails
 };
 
 // =========================================================================

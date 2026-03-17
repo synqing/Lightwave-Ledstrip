@@ -134,7 +134,7 @@ void SbSpectralBeatPulseEffect::renderEffect(plugins::EffectContext& ctx) {
     // =====================================================================
     {
         float rmsNow = ctx.audio.rms();
-        float decayRate = 2.0f + 6.0f * rmsNow;
+        float decayRate = 5.0f + 18.0f * rmsNow;
         uint8_t fadeAmt = static_cast<uint8_t>(fminf(decayRate * dt * 255.0f, 220.0f));
         if (fadeAmt < 1) fadeAmt = 1;
         fadeToBlackBy(m_ps->trailBuffer, kStripLength, fadeAmt);
@@ -145,8 +145,8 @@ void SbSpectralBeatPulseEffect::renderEffect(plugins::EffectContext& ctx) {
     // =====================================================================
 
     // Exponential decay of existing envelopes (rate-independent)
-    m_ps->snareDecay *= expf(-dt / 0.12f);  // ~120ms tau for snare
-    m_ps->hihatDecay *= expf(-dt / 0.08f);  // ~80ms tau for hi-hat (faster)
+    m_ps->snareDecay *= expf(-dt / 0.05f);  // ~120ms tau for snare
+    m_ps->hihatDecay *= expf(-dt / 0.03f);  // ~80ms tau for hi-hat (faster)
 
     if (m_ps->snareDecay < 0.005f) m_ps->snareDecay = 0.0f;
     if (m_ps->hihatDecay < 0.005f) m_ps->hihatDecay = 0.0f;

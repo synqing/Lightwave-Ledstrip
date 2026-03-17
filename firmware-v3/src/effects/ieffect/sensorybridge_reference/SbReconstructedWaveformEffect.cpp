@@ -109,7 +109,7 @@ void SbReconstructedWaveformEffect::renderEffect(plugins::EffectContext& ctx) {
     // Gentle persistence — releasing = faster decay, building = slower.
     // =================================================================
     {
-        float decayRate = 0.3f + 1.0f * fmaxf(0.0f, -m_ps->rmsTrend * 5.0f);
+        float decayRate = 1.5f + 5.0f * fmaxf(0.0f, -m_ps->rmsTrend * 5.0f);
         uint8_t fadeAmt = static_cast<uint8_t>(fminf(decayRate * dt * 255.0f, 100.0f));
         if (fadeAmt < 1) fadeAmt = 1;
         fadeToBlackBy(m_ps->trailBuffer, kStripLength, fadeAmt);

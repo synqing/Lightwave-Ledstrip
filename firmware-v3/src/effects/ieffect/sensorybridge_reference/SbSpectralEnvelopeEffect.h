@@ -65,7 +65,7 @@ private:
     };
 
     /// Outward scroll rate in pixels per second
-    static constexpr float kScrollRate = 60.0f;
+    static constexpr float kScrollRate = 200.0f;
 
     // Effect parameters
     float m_contrast    = 1.0f;

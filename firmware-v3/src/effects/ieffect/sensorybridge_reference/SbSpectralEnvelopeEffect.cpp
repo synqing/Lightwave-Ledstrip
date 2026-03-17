@@ -137,7 +137,7 @@ void SbSpectralEnvelopeEffect::renderEffect(plugins::EffectContext& ctx) {
     // =================================================================
     {
         float rms = ctx.audio.rms();
-        float decayRate = 0.8f + 3.5f * rms;
+        float decayRate = 3.0f + 12.0f * rms;
         uint8_t fadeAmt = static_cast<uint8_t>(fminf(decayRate * dt * 255.0f, 200.0f));
         if (fadeAmt < 1) fadeAmt = 1;
         fadeToBlackBy(m_ps->trailBuffer, kStripLength, fadeAmt);

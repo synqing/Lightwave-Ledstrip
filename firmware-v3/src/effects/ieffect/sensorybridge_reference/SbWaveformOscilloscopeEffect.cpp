@@ -131,10 +131,11 @@ void SbWaveformOscilloscopeBase::renderEffect(plugins::EffectContext& ctx) {
     (void)ctx;
     return;
 #else
-    // No audio: fade to black
+    // No audio: decay trail buffer toward black
     if (!ctx.audio.available) {
+        fadeToBlackBy(m_ps->trailBuffer, kStripLength, 20);
         for (uint16_t i = 0; i < kStripLength && i < ctx.ledCount; ++i) {
-            ctx.leds[i].fadeToBlackBy(20);
+            ctx.leds[i] = m_ps->trailBuffer[i];
         }
         for (uint16_t i = 0; i < kStripLength && (kStripLength + i) < ctx.ledCount; ++i) {
             ctx.leds[kStripLength + i] = ctx.leds[i];
@@ -300,8 +301,22 @@ void SbWaveformOscilloscopeBase::renderEffect(plugins::EffectContext& ctx) {
     dotColor.clip();
 
     // =====================================================================
+    // Trail persistence: decay the persistent buffer BEFORE writing new
+    // Audio-coupled: loud = faster decay (punchy), quiet = slower (ambient)
+    // Matches K1 Waveform pattern: decayRate = base + scale * amplitude
+    // =====================================================================
+    {
+        float rmsNow = ctx.audio.rms();
+        float decayRate = 0.8f + 3.5f * rmsNow;
+        uint8_t fadeAmt = static_cast<uint8_t>(fminf(decayRate * dt * 255.0f, 200.0f));
+        if (fadeAmt < 1) fadeAmt = 1;
+        fadeToBlackBy(m_ps->trailBuffer, kStripLength, fadeAmt);
+    }
+
+    // =====================================================================
     // Stage 7: Per-pixel waveform rendering (80 pixels, right half)
     // interp128-style interpolation: map 128 filtered samples to 80 pixels
+    // Additive blend into trail buffer for frame-to-frame persistence
     // =====================================================================
     for (uint16_t pixel = 0; pixel < kHalfLength; ++pixel) {
         // Progress: 0.0 at centre, 1.0 at edge
@@ -325,26 +340,30 @@ void SbWaveformOscilloscopeBase::renderEffect(plugins::EffectContext& ctx) {
         // Dim during silence via peak gate
         brightness *= peakGate;
 
-        // Write pixel: right half (centre-origin outward)
+        // Additive blend into trail buffer (right half, centre-origin outward)
         const uint16_t ledIdx = kCenterRight + pixel;
-        if (ledIdx < ctx.ledCount) {
-            ctx.leds[ledIdx] = CRGB(
+        if (ledIdx < kStripLength) {
+            CRGB pixel_crgb = CRGB(
                 static_cast<uint8_t>(clampF(dotColor.r * brightness * 255.0f, 0.0f, 255.0f)),
                 static_cast<uint8_t>(clampF(dotColor.g * brightness * 255.0f, 0.0f, 255.0f)),
                 static_cast<uint8_t>(clampF(dotColor.b * brightness * 255.0f, 0.0f, 255.0f))
             );
+            m_ps->trailBuffer[ledIdx] += pixel_crgb;
         }
     }
 
     // =====================================================================
-    // Stage 8: Mirror right half to left half (centre-origin)
+    // Stage 8: Mirror right half to left half IN the trail buffer
     // =====================================================================
     for (uint16_t i = 0; i < kHalfLength; ++i) {
-        const uint16_t rightIdx = kCenterRight + i;
-        const uint16_t leftIdx  = kCenterLeft - i;
-        if (rightIdx < ctx.ledCount && leftIdx < ctx.ledCount) {
-            ctx.leds[leftIdx] = ctx.leds[rightIdx];
-        }
+        m_ps->trailBuffer[kCenterLeft - i] = m_ps->trailBuffer[kCenterRight + i];
+    }
+
+    // =====================================================================
+    // Output trail buffer to LEDs
+    // =====================================================================
+    for (uint16_t i = 0; i < kStripLength && i < ctx.ledCount; ++i) {
+        ctx.leds[i] = m_ps->trailBuffer[i];
     }
 
     // =====================================================================

@@ -88,7 +88,7 @@ void SbFullSpectrumEffect::renderEffect(plugins::EffectContext& ctx) {
     // Stage 1: Decay trail buffer (audio-coupled, punchy for beats)
     // =================================================================
     float rms = ctx.audio.available ? ctx.audio.rms() : 0.0f;
-    float decayRate = 1.5f + 5.0f * rms;  // Faster than K1 Waveform — beats need punchy decay
+    float decayRate = 4.0f + 15.0f * rms;  // Faster than K1 Waveform — beats need punchy decay
     uint8_t fadeAmt = static_cast<uint8_t>(fminf(decayRate * dt * 255.0f, 200.0f));
     if (fadeAmt < 1) fadeAmt = 1;
     fadeToBlackBy(m_ps->trailBuffer, kStripLength, fadeAmt);
@@ -106,7 +106,7 @@ void SbFullSpectrumEffect::renderEffect(plugins::EffectContext& ctx) {
     }
 
     // Decay envelope: tau ~150ms (fast contraction)
-    m_ps->beatEnvelope *= expf(-dt / 0.15f);
+    m_ps->beatEnvelope *= expf(-dt / 0.06f);
     if (m_ps->beatEnvelope < 0.01f) m_ps->beatEnvelope = 0.0f;
 
     // Smoothed RMS for fallback breathing

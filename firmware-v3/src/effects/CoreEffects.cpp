@@ -164,6 +164,11 @@
 #include "ieffect/sensorybridge_reference/SbK1BloomV2Effect.h"
 #include "ieffect/sensorybridge_reference/SbK1WaveformEffect.h"
 #include "ieffect/sensorybridge_reference/SbWaveformOscilloscopeEffect.h"
+#include "ieffect/sensorybridge_reference/SbSpectralEnvelopeEffect.h"
+#include "ieffect/sensorybridge_reference/SbFullSpectrumEffect.h"
+#include "ieffect/sensorybridge_reference/SbRawWaveformScopeEffect.h"
+#include "ieffect/sensorybridge_reference/SbReconstructedWaveformEffect.h"
+#include "ieffect/sensorybridge_reference/SbSpectralBeatPulseEffect.h"
 #include "ieffect/LGPTimeReversalMirrorEffect.h"
 #include "ieffect/LGPTimeReversalMirrorEffect_AR.h"
 #include "ieffect/LGPTimeReversalMirrorEffect_Mod1.h"
@@ -964,6 +969,31 @@ uint16_t registerAllEffects(RendererActor* renderer) {
     renderer->registerEffect(EID_SB_WAVEFORM_OSCILLOSCOPE_BRIGHT, &wfOscBrightInstance);
     total++;
 
+    // SB Spectral Envelope (bands[8] → spatial)
+    static ieffect::sensorybridge_reference::SbSpectralEnvelopeEffect spectralEnvelopeInstance;
+    renderer->registerEffect(EID_SB_SPECTRAL_ENVELOPE, &spectralEnvelopeInstance);
+    total++;
+
+    // SB Full Spectrum (bins64 → spatial)
+    static ieffect::sensorybridge_reference::SbFullSpectrumEffect fullSpectrumInstance;
+    renderer->registerEffect(EID_SB_FULL_SPECTRUM, &fullSpectrumInstance);
+    total++;
+
+    // SB Raw Waveform Scope (time-domain + heavy processing)
+    static ieffect::sensorybridge_reference::SbRawWaveformScopeEffect rawWfScopeInstance;
+    renderer->registerEffect(EID_SB_RAW_WAVEFORM_SCOPE, &rawWfScopeInstance);
+    total++;
+
+    // SB Reconstructed Waveform (spectral → synthetic wave)
+    static ieffect::sensorybridge_reference::SbReconstructedWaveformEffect reconWfInstance;
+    renderer->registerEffect(EID_SB_RECONSTRUCTED_WAVEFORM, &reconWfInstance);
+    total++;
+
+    // SB Spectral Beat Pulse (spectrum + beat expansion)
+    static ieffect::sensorybridge_reference::SbSpectralBeatPulseEffect spectralBeatPulseInstance;
+    renderer->registerEffect(EID_SB_SPECTRAL_BEAT_PULSE, &spectralBeatPulseInstance);
+    total++;
+
     // =============== BEAT PULSE FAMILY ===============
 
     // Beat Pulse (Stack) - UI preview parity (static gradient + white push)
@@ -1380,7 +1410,7 @@ uint16_t registerAllEffects(RendererActor* renderer) {
     total++;
 
     // =============== EFFECT COUNT PARITY VALIDATION ===============
-    constexpr uint16_t EXPECTED_EFFECT_COUNT = FEATURE_AR_1C_EXPERIMENTAL ? 189 : 186;
+    constexpr uint16_t EXPECTED_EFFECT_COUNT = FEATURE_AR_1C_EXPERIMENTAL ? 194 : 191;
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

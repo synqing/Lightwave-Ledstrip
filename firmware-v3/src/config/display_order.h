@@ -307,6 +307,13 @@ constexpr EffectId DISPLAY_ORDER[] = {
     // activity-gated waveform data makes raw time-domain display difficult.
     // EID_SB_WAVEFORM_OSCILLOSCOPE,         // 0x130C — dev only
     // EID_SB_WAVEFORM_OSCILLOSCOPE_BRIGHT,  // 0x130D — dev only
+
+    // Oscilloscope design exploration — 5 approaches for A/B evaluation
+    EID_SB_SPECTRAL_ENVELOPE,                // A: bands[8] → spatial envelope
+    EID_SB_FULL_SPECTRUM,                    // B: bins64 → high-res spectrum
+    EID_SB_RAW_WAVEFORM_SCOPE,              // C: time-domain + heavy processing
+    EID_SB_RECONSTRUCTED_WAVEFORM,           // D: spectral → synthetic wave
+    EID_SB_SPECTRAL_BEAT_PULSE,              // E: spectrum + beat expansion
 };
 
 /// Number of effects in the display order (excludes retired slots)

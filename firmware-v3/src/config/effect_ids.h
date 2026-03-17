@@ -240,8 +240,13 @@ constexpr EffectId EID_SB_K1_BLOOM_V2_SPECTRAL_DELTA       = 0x1308;  // K1 Bloo
 constexpr EffectId EID_SB_K1_BLOOM_V2_BASS_TREBLE          = 0x1309;  // K1 Bloom V2 — Bass-Treble Split
 constexpr EffectId EID_SB_K1_BLOOM_V2_EXPONENTIAL          = 0x130A;  // K1 Bloom V2 — Exponential Energy (cubed)
 constexpr EffectId EID_SB_K1_BLOOM_V2_SPECTRAL_SPREAD      = 0x130B;  // K1 Bloom V2 — Spectral Spread (flatness)
-constexpr EffectId EID_SB_WAVEFORM_OSCILLOSCOPE            = 0x130C;  // SB 3.0.0 Waveform oscilloscope (exact parity)
-constexpr EffectId EID_SB_WAVEFORM_OSCILLOSCOPE_BRIGHT     = 0x130D;  // SB 3.0.0 Waveform oscilloscope (1.5x brightness boost)
+constexpr EffectId EID_SB_WAVEFORM_OSCILLOSCOPE            = 0x130C;  // SB 3.0.0 Waveform oscilloscope (dev only)
+constexpr EffectId EID_SB_WAVEFORM_OSCILLOSCOPE_BRIGHT     = 0x130D;  // SB 3.0.0 Waveform oscilloscope bright (dev only)
+constexpr EffectId EID_SB_SPECTRAL_ENVELOPE                = 0x130E;  // Spectral Envelope (bands[8] → spatial)
+constexpr EffectId EID_SB_FULL_SPECTRUM                    = 0x130F;  // Full Spectrum Display (bins64 → spatial)
+constexpr EffectId EID_SB_RAW_WAVEFORM_SCOPE              = 0x1310;  // Raw Waveform Scope (time-domain + heavy processing)
+constexpr EffectId EID_SB_RECONSTRUCTED_WAVEFORM           = 0x1311;  // Reconstructed Waveform (spectral → synthetic wave)
+constexpr EffectId EID_SB_SPECTRAL_BEAT_PULSE              = 0x1312;  // Spectral Beat Pulse (spectrum + beat expansion)
 
 // --- Beat Pulse Family (0x14xx) ---
 constexpr EffectId EID_BEAT_PULSE_STACK                    = 0x1400;  // old 110: Beat Pulse (Stack)

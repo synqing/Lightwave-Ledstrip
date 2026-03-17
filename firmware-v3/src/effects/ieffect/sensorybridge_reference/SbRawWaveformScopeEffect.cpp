@@ -1,10 +1,9 @@
 /**
  * @file SbRawWaveformScopeEffect.cpp
- * @brief SB Raw Waveform Scope — time-domain oscilloscope with aggressive processing
+ * @brief SB Spectral Shape — spectral centroid/flatness visualiser
  *
- * Aggressively processes the activity-gated waveform data with 8-pass
- * bidirectional low-pass filtering, asymmetric peak following, and temporal
- * smoothing to extract a clean oscilloscope display from attenuated samples.
+ * Renders spectral shape as a positioned gaussian blob whose width is
+ * controlled by spectral flatness: pure tone = tight line, noise = wide band.
  *
  * See header for full algorithm description.
  */
@@ -109,10 +108,11 @@ void SbRawWaveformScopeEffect::renderEffect(plugins::EffectContext& ctx) {
     (void)ctx;
     return;
 #else
-    // No audio: fade to black
+    // No audio: decay trail buffer toward black
     if (!ctx.audio.available) {
+        fadeToBlackBy(m_ps->trailBuffer, kStripLength, 20);
         for (uint16_t i = 0; i < kStripLength && i < ctx.ledCount; ++i) {
-            ctx.leds[i].fadeToBlackBy(20);
+            ctx.leds[i] = m_ps->trailBuffer[i];
         }
         for (uint16_t i = 0; i < kStripLength && (kStripLength + i) < ctx.ledCount; ++i) {
             ctx.leds[kStripLength + i] = ctx.leds[i];
@@ -121,75 +121,72 @@ void SbRawWaveformScopeEffect::renderEffect(plugins::EffectContext& ctx) {
     }
 
     const float photons = static_cast<float>(ctx.brightness) / 255.0f;
+    const float dt = m_dt;
 
     // =====================================================================
-    // Stage 1: Read waveform — normalise int16_t to float [-1, 1]
+    // Stage 1: Decay trail buffer (audio-coupled, K1 Waveform pattern)
     // =====================================================================
-    for (uint8_t i = 0; i < kWfPoints; ++i) {
-        m_ps->samples[i] = static_cast<float>(ctx.audio.controlBus.waveform[i]) / 32768.0f;
+    {
+        float rmsNow = ctx.audio.rms();
+        float decayRate = 0.8f + 3.5f * rmsNow;
+        uint8_t fadeAmt = static_cast<uint8_t>(fminf(decayRate * dt * 255.0f, 200.0f));
+        if (fadeAmt < 1) fadeAmt = 1;
+        fadeToBlackBy(m_ps->trailBuffer, kStripLength, fadeAmt);
     }
 
     // =====================================================================
-    // Stage 2: Compute RMS of current frame (for peak follower input)
+    // Stage 2: Smooth bins64 temporally (asymmetric: fast attack, slow decay)
+    // dt-corrected EMA: alpha = 1 - exp(-dt / tau)
+    // Attack tau ~20ms (snappy response), decay tau ~150ms (smooth release)
     // =====================================================================
-    float frameRms = 0.0f;
-    for (uint8_t i = 0; i < kWfPoints; ++i) {
-        frameRms += m_ps->samples[i] * m_ps->samples[i];
+    static constexpr float kAttackTau = 0.02f;
+    static constexpr float kDecayTau  = 0.15f;
+    const float alphaAttack = 1.0f - expf(-dt / kAttackTau);
+    const float alphaDecay  = 1.0f - expf(-dt / kDecayTau);
+
+    for (uint8_t i = 0; i < kBinCount; ++i) {
+        float target = ctx.audio.controlBus.bins64[i];
+        float alpha = (target > m_ps->smoothedBins[i]) ? alphaAttack : alphaDecay;
+        m_ps->smoothedBins[i] += (target - m_ps->smoothedBins[i]) * alpha;
     }
-    frameRms = sqrtf(frameRms / static_cast<float>(kWfPoints));
 
     // =====================================================================
-    // Stage 3: 8-pass bidirectional low-pass filter (very aggressive)
-    // 4 forward + 4 reverse passes at alpha=0.25 produce extremely smooth
-    // bass/mid-frequency envelope from the noisy activity-gated waveform.
-    // Bidirectional passes prevent phase shift (symmetric filtering).
+    // Stage 3: Compute spectral centroid and flatness
+    // Centroid = weighted mean bin index (0-63). Tracks perceived pitch centre.
+    // Flatness = geometric mean / arithmetic mean of bin energies.
+    //   0 = tonal (one dominant frequency), 1 = white noise (flat spectrum).
     // =====================================================================
-    static constexpr float kLpfAlpha = 0.25f;
-    static constexpr uint8_t kFilterPasses = 4; // 4 forward+reverse = 8 total
+    float sumEnergy = 0.0f;
+    float weightedSum = 0.0f;
+    float logSum = 0.0f;
+    int logCount = 0;
 
-    for (uint8_t pass = 0; pass < kFilterPasses; ++pass) {
-        // Forward pass
-        float y = m_ps->samples[0];
-        for (uint8_t i = 0; i < kWfPoints; ++i) {
-            y += kLpfAlpha * (m_ps->samples[i] - y);
-            m_ps->samples[i] = y;
+    for (uint8_t i = 0; i < kBinCount; ++i) {
+        float e = m_ps->smoothedBins[i];
+        sumEnergy += e;
+        weightedSum += static_cast<float>(i) * e;
+        if (e > 0.001f) {
+            logSum += logf(e);
+            logCount++;
         }
-        // Reverse pass
-        y = m_ps->samples[kWfPoints - 1];
-        for (int16_t i = kWfPoints - 1; i >= 0; --i) {
-            y += kLpfAlpha * (m_ps->samples[i] - y);
-            m_ps->samples[i] = y;
-        }
     }
 
-    // =====================================================================
-    // Stage 4: Auto-scale with smoothed peak follower
-    // Asymmetric: fast attack (0.3) tracks loud passages immediately,
-    // slow release (0.01) avoids amplifying noise during quiet passages.
-    // =====================================================================
-    float maxAbs = 0.0f;
-    for (uint8_t i = 0; i < kWfPoints; ++i) {
-        const float a = fabsf(m_ps->samples[i]);
-        if (a > maxAbs) maxAbs = a;
-    }
+    float centroid = (sumEnergy > 0.01f) ? (weightedSum / sumEnergy) : 32.0f;
+    float arithMean = sumEnergy / static_cast<float>(kBinCount);
+    float flatness = (logCount > 0 && arithMean > 0.001f)
+        ? expf(logSum / static_cast<float>(logCount)) / arithMean
+        : 0.0f;
+    flatness = fminf(flatness, 1.0f);
 
-    static constexpr float kPeakAttackAlpha  = 0.3f;
-    static constexpr float kPeakReleaseAlpha = 0.01f;
-
-    if (maxAbs > m_ps->smoothedPeak) {
-        m_ps->smoothedPeak += kPeakAttackAlpha * (maxAbs - m_ps->smoothedPeak);
-    } else {
-        m_ps->smoothedPeak += kPeakReleaseAlpha * (maxAbs - m_ps->smoothedPeak);
-    }
-
-    // Floor: prevent division by zero / extreme amplification
-    if (m_ps->smoothedPeak < 0.0001f) m_ps->smoothedPeak = 0.0001f;
-
-    const float autoScale = 1.0f / m_ps->smoothedPeak;
+    // Smooth centroid and flatness (tau ~100ms for stable visual tracking)
+    static constexpr float kFeatureTau = 0.1f;
+    float alphaFeature = 1.0f - expf(-dt / kFeatureTau);
+    m_ps->smoothedCentroid += (centroid - m_ps->smoothedCentroid) * alphaFeature;
+    m_ps->smoothedFlatness += (flatness - m_ps->smoothedFlatness) * alphaFeature;
 
     // =====================================================================
-    // Stage 5: Colour synthesis (palette-based, from SbK1WaveformEffect)
-    // Uses additive chromagram accumulation with soft-knee cap.
+    // Stage 4: Colour synthesis (palette-based chromagram accumulation)
+    // Same pattern as K1 Waveform: additive chromagram with soft-knee cap.
     // =====================================================================
     const bool chromaticMode = (ctx.saturation >= 128);
 
@@ -209,8 +206,7 @@ void SbRawWaveformScopeEffect::renderEffect(plugins::EffectContext& ctx) {
         }
     }
 
-    // Soft-knee brightness cap: scale so brightest channel <= 1.0
-    // Preserves hue ratios (unlike hard clip which desaturates to white)
+    // Soft-knee brightness cap: preserve hue ratios
     if (chromaticMode) {
         float peak = fmaxf(dotColor.r, fmaxf(dotColor.g, dotColor.b));
         if (peak > 1.0f) {
@@ -235,58 +231,54 @@ void SbRawWaveformScopeEffect::renderEffect(plugins::EffectContext& ctx) {
     dotColor.clip();
 
     // =====================================================================
-    // Stage 6: Interpolate 128 -> 80 pixels + temporal smoothing
-    // Linear interpolation maps 128 filtered samples to 80 pixel positions.
-    // Temporal smoothing (alpha=0.3) blends with previous frame to reduce
-    // flicker without losing transient response.
+    // Stage 5: Gaussian blob injection at centroid position
+    // Centroid (0-63) maps to pixel position (0-79) in the right half.
+    // Flatness controls blob width: tonal (~0) = 2px, noisy (~1) = 10px.
+    // Energy (sumEnergy) scales overall blob brightness.
     // =====================================================================
-    static constexpr float kTemporalAlpha = 0.3f;
+    float centroidPx = m_ps->smoothedCentroid * 79.0f / 63.0f;
+    float width = 2.0f + m_ps->smoothedFlatness * 8.0f;
 
-    for (uint16_t pixel = 0; pixel < kHalfLength; ++pixel) {
-        // Progress: 0.0 at centre, 1.0 at edge
-        const float progress = (kHalfLength <= 1) ? 0.0f
-            : (static_cast<float>(pixel) / static_cast<float>(kHalfLength - 1));
+    // Scale blob brightness by total spectral energy (prevents phantom blobs in silence)
+    float energyScale = fminf(sumEnergy * 4.0f, 1.0f);
 
-        // Interpolate from 128 filtered samples
-        const float srcIdx = progress * 127.0f;
-        const int lo = static_cast<int>(srcIdx);
-        const float frac = srcIdx - static_cast<float>(lo);
-        const int hi = (lo + 1 < kWfPoints) ? (lo + 1) : (kWfPoints - 1);
+    for (uint16_t p = 0; p < kHalfLength; ++p) {
+        float dist = fabsf(static_cast<float>(p) - centroidPx);
+        // Skip pixels far outside the gaussian bell (>2 sigma)
+        if (dist > width * 2.0f) continue;
+        float gauss = expf(-(dist * dist) / (2.0f * width * width));
+        if (gauss < 0.05f) continue;
 
-        float raw = (m_ps->samples[lo] * (1.0f - frac) + m_ps->samples[hi] * frac) * autoScale;
-        raw = clampF(raw, -1.0f, 1.0f);
+        float intensity = gauss * energyScale;
+        CRGB scaled = CRGB(
+            static_cast<uint8_t>(clampF(dotColor.r * intensity * 255.0f, 0.0f, 255.0f)),
+            static_cast<uint8_t>(clampF(dotColor.g * intensity * 255.0f, 0.0f, 255.0f)),
+            static_cast<uint8_t>(clampF(dotColor.b * intensity * 255.0f, 0.0f, 255.0f))
+        );
 
-        // Temporal smoothing between frames
-        m_ps->prevPixels[pixel] += kTemporalAlpha * (raw - m_ps->prevPixels[pixel]);
-
-        // Envelope mode: absolute value of temporally-smoothed signal
-        float val = fabsf(m_ps->prevPixels[pixel]);
-        if (val > 1.0f) val = 1.0f;
-
-        // Write pixel: right half (centre-origin outward)
-        const uint16_t ledIdx = kCenterRight + pixel;
-        if (ledIdx < ctx.ledCount) {
-            ctx.leds[ledIdx] = CRGB(
-                static_cast<uint8_t>(clampF(dotColor.r * val * 255.0f, 0.0f, 255.0f)),
-                static_cast<uint8_t>(clampF(dotColor.g * val * 255.0f, 0.0f, 255.0f)),
-                static_cast<uint8_t>(clampF(dotColor.b * val * 255.0f, 0.0f, 255.0f))
-            );
+        // Additive blend into trail buffer (right half, centre-origin outward)
+        uint16_t ledIdx = kCenterRight + p;
+        if (ledIdx < kStripLength) {
+            m_ps->trailBuffer[ledIdx] += scaled;
         }
     }
 
     // =====================================================================
-    // Stage 7: Mirror right half to left half (centre-origin)
+    // Stage 6: Mirror right half to left half IN the trail buffer
     // =====================================================================
     for (uint16_t i = 0; i < kHalfLength; ++i) {
-        const uint16_t rightIdx = kCenterRight + i;
-        const uint16_t leftIdx  = kCenterLeft - i;
-        if (rightIdx < ctx.ledCount && leftIdx < ctx.ledCount) {
-            ctx.leds[leftIdx] = ctx.leds[rightIdx];
-        }
+        m_ps->trailBuffer[kCenterLeft - i] = m_ps->trailBuffer[kCenterRight + i];
     }
 
     // =====================================================================
-    // Stage 8: Copy strip 1 to strip 2
+    // Output trail buffer to LEDs
+    // =====================================================================
+    for (uint16_t i = 0; i < kStripLength && i < ctx.ledCount; ++i) {
+        ctx.leds[i] = m_ps->trailBuffer[i];
+    }
+
+    // =====================================================================
+    // Stage 7: Copy strip 1 to strip 2
     // =====================================================================
     for (uint16_t i = 0; i < kStripLength && (kStripLength + i) < ctx.ledCount; ++i) {
         ctx.leds[kStripLength + i] = ctx.leds[i];
@@ -301,8 +293,8 @@ void SbRawWaveformScopeEffect::renderEffect(plugins::EffectContext& ctx) {
 
 const plugins::EffectMetadata& SbRawWaveformScopeEffect::getMetadata() const {
     static plugins::EffectMetadata meta{
-        "SB Raw Waveform Scope",
-        "Time-domain waveform oscilloscope with aggressive activity-gate compensation",
+        "SB Spectral Shape",
+        "Spectral centroid/flatness visualiser: tone=sharp line, noise=wide shimmer",
         plugins::EffectCategory::PARTY,
         1,
         "SB.Waveform"

@@ -1,18 +1,19 @@
 /**
  * @file SbFullSpectrumEffect.h
- * @brief SB Full Spectrum — high-resolution frequency display
+ * @brief SB Beat Pulse — radial expansion pulse on each beat
  *
- * Maps all 64 Goertzel bins to 80 pixels via linear interpolation for a
- * detailed frequency spectrum visualisation. Bass (110 Hz) at the centre,
- * treble (4186 Hz) at the edges.
+ * When a beat lands, a bright ring launches outward from centre.
+ * Between beats, the ring contracts as the beat envelope decays.
+ * In the absence of beats, gentle RMS-driven breathing provides
+ * ambient visual motion.
  *
  * Features:
- *   1. Linear interpolation of 64 bins → 80 pixels
- *   2. Per-pixel asymmetric EMA smoothing (fast attack, slow decay) in PSRAM
- *   3. Frequency-position hue mapping with gHue rotation
- *   4. dt-corrected smoothing via baseProcessAudio m_dt
- *   5. Mirror right half → left half (centre-origin)
- *   6. Copy strip 1 → strip 2
+ *   1. Beat-envelope driven radial expansion (snap high, decay ~150ms)
+ *   2. Sparse 3-pixel wavefront ring (only the leading edge is drawn)
+ *   3. Audio-coupled trail decay (punchy fade in loud passages)
+ *   4. RMS-breathing fallback when no beat is detected
+ *   5. Mirror right half -> left half (centre-origin)
+ *   6. Copy strip 1 -> strip 2
  *
  * Depends on SbK1BaseEffect for baseProcessAudio (provides m_dt).
  */
@@ -50,10 +51,11 @@ private:
     static constexpr uint16_t kCenterLeft   = lightwaveos::effects::CENTER_LEFT;    // 79
     static constexpr uint16_t kCenterRight  = lightwaveos::effects::CENTER_RIGHT;   // 80
 
-    // PSRAM-allocated per-pixel smoothing + trail persistence buffer
+    // PSRAM-allocated beat pulse state + trail persistence buffer
     struct SbFullSpectrumPsram {
-        float smoothed[80];       ///< Per-pixel smoothed bin energy (input stage)
         CRGB  trailBuffer[160];   ///< Persistent pixel buffer for frame-to-frame trails
+        float beatEnvelope;       ///< 0-1, snaps to 1 on beat, decays between
+        float smoothedRms;        ///< Smoothed RMS for fallback breathing when no beat
     };
 
 #ifndef NATIVE_BUILD

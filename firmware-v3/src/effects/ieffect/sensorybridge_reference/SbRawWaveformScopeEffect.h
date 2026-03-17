@@ -1,23 +1,21 @@
 /**
  * @file SbRawWaveformScopeEffect.h
- * @brief SB Raw Waveform Scope — time-domain oscilloscope with aggressive processing
+ * @brief SB Spectral Shape — spectral centroid/flatness visualiser
  *
- * Renders the activity-gated waveform data as a full-strip oscilloscope.
- * The waveform in ControlBus is multiplied by an activity factor (0.05-1.0)
- * by AudioActor, reducing it to ~3% of full range during typical audio.
- * This effect compensates with:
+ * Renders spectral shape as a positioned gaussian blob:
+ *   - Pure tone = single sharp bright line (2-4 pixels wide)
+ *   - Dense chord / noise = wide shimmering band (8-10 pixels wide)
  *
- *   1. 8-pass bidirectional low-pass filter (alpha=0.25) — very aggressive
- *      spatial smoothing that extracts the bass/mid envelope from noisy
- *      attenuated samples
- *   2. Asymmetric smoothed peak follower — fast attack / slow release auto-scale
- *      that tracks loudness changes without amplifying inter-frame noise
- *   3. Temporal smoothing between frames — moderate alpha EMA on pixel values
- *      to reduce flicker without losing transient response
- *   4. Envelope-mode brightness — absolute value of signed waveform, no pedestal
+ * Algorithm:
+ *   1. Decay trail buffer (audio-coupled, same pattern as K1 Waveform)
+ *   2. Smooth bins64 temporally (asymmetric: fast attack, slow decay)
+ *   3. Compute spectral centroid (weighted mean frequency) and flatness
+ *      (geometric/arithmetic mean ratio — 0=tonal, 1=white noise)
+ *   4. Render a gaussian blob at centroid position, width driven by flatness
+ *   5. Mirror right half to left half (centre-origin), copy strip 1 to strip 2
  *
  * Colour synthesis uses the SbK1BaseEffect chromagram pipeline with palette-based
- * additive accumulation (same pattern as SbWaveformOscilloscopeEffect).
+ * additive accumulation.
  *
  * Centre-origin mirror: renders right half (80 -> 159), mirrors to left.
  * Copy strip 1 to strip 2.
@@ -42,9 +40,10 @@ namespace lightwaveos::effects::ieffect::sensorybridge_reference {
 // =========================================================================
 
 struct SbRawWfScopePsram {
-    float samples[128];          ///< Current filtered waveform (workspace)
-    float smoothedPeak;          ///< Peak follower for auto-scale
-    float prevPixels[80];        ///< Previous frame pixel values for temporal smoothing
+    CRGB trailBuffer[160];       ///< Persistent pixel buffer for frame-to-frame trails
+    float smoothedBins[64];      ///< Temporally smoothed spectrum (asymmetric attack/decay)
+    float smoothedCentroid;      ///< Smoothed spectral centroid position (0-63)
+    float smoothedFlatness;      ///< Smoothed spectral flatness (0=tonal, 1=noise)
 };
 
 // =========================================================================
@@ -76,7 +75,7 @@ private:
     static constexpr uint16_t kStripLength  = lightwaveos::effects::STRIP_LENGTH;   // 160
     static constexpr uint16_t kCenterLeft   = lightwaveos::effects::CENTER_LEFT;    // 79
     static constexpr uint16_t kCenterRight  = lightwaveos::effects::CENTER_RIGHT;   // 80
-    static constexpr uint8_t  kWfPoints     = 128;
+    static constexpr uint8_t  kBinCount     = 64;
 
     // Effect parameters
     float m_chromaHue   = 0.0f;

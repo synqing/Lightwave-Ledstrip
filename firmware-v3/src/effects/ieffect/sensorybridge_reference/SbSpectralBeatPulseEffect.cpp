@@ -1,15 +1,17 @@
 /**
  * @file SbSpectralBeatPulseEffect.cpp
- * @brief SB Spectral Beat Pulse — spectral envelope that pulses outward on beats
+ * @brief SB Onset Map — percussive transient mapper
  *
  * Algorithm:
- *   1. Smooth 8 octave bands with asymmetric attack/decay
- *   2. Track beat envelope (snap to 1.0 on beat, exponential decay between)
- *   3. Compute expansion factor from beat envelope
- *   4. Per-pixel: map adjusted position through spectral shape, apply smoothstep
- *   5. Colour via palette with hue varying from centre (warm bass) to edge (cool treble)
- *   6. Add bright edge glow at the expansion front on beat
- *   7. Mirror right half to left half, copy strip 1 to strip 2
+ *   1. Decay trail buffer (fast, RMS-coupled for percussive snap)
+ *   2. Update onset envelopes: snare (~120ms tau), hi-hat (~80ms tau)
+ *   3. Draw sparse onset flashes at mapped spatial positions:
+ *      - Snare: Gaussian blob near centre (~pixel 20 from centre, ~20px wide)
+ *      - Hi-hat: Gaussian blob near edges (~pixel 68 from centre, ~10px wide)
+ *   4. Add dim ambient flux shimmer at centre point between onsets
+ *   5. Mirror right half to left half, copy strip 1 to strip 2
+ *
+ * Crossmodal: snare (low freq) = warm/central/large, hi-hat (high freq) = cool/peripheral/small.
  */
 
 #include "SbSpectralBeatPulseEffect.h"
@@ -32,7 +34,7 @@ namespace lightwaveos::effects::ieffect::sensorybridge_reference {
 // ---------------------------------------------------------------------------
 
 const plugins::EffectParameter SbSpectralBeatPulseEffect::s_params[kParamCount] = {
-    {"contrast", "Contrast", 0.0f, 3.0f, 1.0f, plugins::EffectParameterType::FLOAT, 0.25f, "visual", "x", false},
+    {"sensitivity", "Sensitivity", 0.1f, 3.0f, 1.0f, plugins::EffectParameterType::FLOAT, 0.1f, "audio", "x", false},
     {"chromaHue", "Hue Offset", 0.0f, 1.0f, 0.0f, plugins::EffectParameterType::FLOAT, 0.01f, "colour", "", false},
 };
 
@@ -48,12 +50,6 @@ static inline float clampF(float v, float lo, float hi) {
     return v;
 }
 
-/// Smoothstep contrast curve: t*t*(3 - 2*t)
-static inline float smoothstep01(float t) {
-    t = clampF(t, 0.0f, 1.0f);
-    return t * t * (3.0f - 2.0f * t);
-}
-
 } // anonymous namespace
 
 // ---------------------------------------------------------------------------
@@ -66,8 +62,8 @@ bool SbSpectralBeatPulseEffect::init(plugins::EffectContext& ctx) {
 
 #ifndef NATIVE_BUILD
     if (!m_ps) {
-        m_ps = static_cast<SbSpecBeatPsram*>(
-            heap_caps_malloc(sizeof(SbSpecBeatPsram), MALLOC_CAP_SPIRAM));
+        m_ps = static_cast<SbOnsetMapPsram*>(
+            heap_caps_malloc(sizeof(SbOnsetMapPsram), MALLOC_CAP_SPIRAM));
         if (!m_ps) {
             baseCleanup();
             return false;
@@ -75,7 +71,7 @@ bool SbSpectralBeatPulseEffect::init(plugins::EffectContext& ctx) {
     }
 #else
     if (!m_ps) {
-        m_ps = new (std::nothrow) SbSpecBeatPsram;
+        m_ps = new (std::nothrow) SbOnsetMapPsram;
         if (!m_ps) {
             baseCleanup();
             return false;
@@ -83,15 +79,12 @@ bool SbSpectralBeatPulseEffect::init(plugins::EffectContext& ctx) {
     }
 #endif
 
-    // Zero PSRAM state
-    for (int i = 0; i < 8; ++i) {
-        m_ps->smoothedBands[i] = 0.0f;
-    }
-    m_ps->beatEnvelope = 0.0f;
+    // Zero all PSRAM state (trail buffer, envelopes, flux)
+    memset(m_ps, 0, sizeof(SbOnsetMapPsram));
 
     // Reset parameters to defaults
-    m_contrast  = 1.0f;
-    m_chromaHue = 0.0f;
+    m_sensitivity = 1.0f;
+    m_chromaHue   = 0.0f;
 
     (void)ctx;
     return true;
@@ -124,9 +117,10 @@ void SbSpectralBeatPulseEffect::renderEffect(plugins::EffectContext& ctx) {
     const float dt = ctx.getSafeDeltaSeconds();
 
     if (!ctx.audio.available) {
-        // No audio: fade toward black
+        // No audio: decay trail buffer toward black
+        fadeToBlackBy(m_ps->trailBuffer, kStripLength, 16);
         for (uint16_t i = 0; i < kStripLength && i < ctx.ledCount; ++i) {
-            ctx.leds[i].fadeToBlackBy(16);
+            ctx.leds[i] = m_ps->trailBuffer[i];
         }
         // Copy strip 1 to strip 2
         for (uint16_t i = 0; i < kStripLength && (kStripLength + i) < ctx.ledCount; ++i) {
@@ -136,115 +130,129 @@ void SbSpectralBeatPulseEffect::renderEffect(plugins::EffectContext& ctx) {
     }
 
     // =====================================================================
-    // 1. Smooth band energies (asymmetric attack/decay)
+    // 1. Decay trail buffer (fast, RMS-coupled for percussive snap)
     // =====================================================================
-    const float* rawBands = ctx.audio.bands();
-    if (rawBands) {
-        for (int i = 0; i < 8; ++i) {
-            float target = rawBands[i];
-            // Rate-independent smoothing: alpha = 1 - exp(-dt / tau)
-            // Attack tau ~0.025s (fast), decay tau ~0.14s (slow)
-            float tau = (target > m_ps->smoothedBands[i]) ? 0.025f : 0.14f;
-            float alpha = 1.0f - expf(-dt / tau);
-            m_ps->smoothedBands[i] += alpha * (target - m_ps->smoothedBands[i]);
-        }
+    {
+        float rmsNow = ctx.audio.rms();
+        float decayRate = 2.0f + 6.0f * rmsNow;
+        uint8_t fadeAmt = static_cast<uint8_t>(fminf(decayRate * dt * 255.0f, 220.0f));
+        if (fadeAmt < 1) fadeAmt = 1;
+        fadeToBlackBy(m_ps->trailBuffer, kStripLength, fadeAmt);
     }
 
     // =====================================================================
-    // 2. Update beat envelope
+    // 2. Update onset envelopes
     // =====================================================================
-    float beatStrength = ctx.audio.beatStrength();
 
-    // On beat: snap envelope toward 1.0 scaled by strength
-    if (ctx.audio.isOnBeat()) {
-        float snapTarget = clampF(beatStrength, 0.3f, 1.0f);
-        if (snapTarget > m_ps->beatEnvelope) {
-            m_ps->beatEnvelope = snapTarget;
-        }
+    // Exponential decay of existing envelopes (rate-independent)
+    m_ps->snareDecay *= expf(-dt / 0.12f);  // ~120ms tau for snare
+    m_ps->hihatDecay *= expf(-dt / 0.08f);  // ~80ms tau for hi-hat (faster)
+
+    if (m_ps->snareDecay < 0.005f) m_ps->snareDecay = 0.0f;
+    if (m_ps->hihatDecay < 0.005f) m_ps->hihatDecay = 0.0f;
+
+    // Snare trigger: snap envelope to energy level (scaled by sensitivity)
+    if (ctx.audio.isSnareHit()) {
+        float energy = clampF(ctx.audio.snare() * m_sensitivity, 0.0f, 1.0f);
+        m_ps->snareDecay = fmaxf(m_ps->snareDecay, energy);
     }
 
-    // Exponential decay (half-life ~150ms)
-    m_ps->beatEnvelope *= expf(-dt / 0.15f);
-    if (m_ps->beatEnvelope < 0.01f) m_ps->beatEnvelope = 0.0f;
+    // Hi-hat trigger: snap envelope to energy level
+    if (ctx.audio.isHihatHit()) {
+        float energy = clampF(ctx.audio.hihat() * m_sensitivity, 0.0f, 1.0f);
+        m_ps->hihatDecay = fmaxf(m_ps->hihatDecay, energy);
+    }
+
+    // Ambient flux: smooth follower of spectral flux for inter-onset shimmer
+    {
+        float rawFlux = ctx.audio.fastFlux();
+        float aFlux = 1.0f - expf(-dt / 0.2f);
+        m_ps->fluxSmoothed += (rawFlux - m_ps->fluxSmoothed) * aFlux;
+    }
 
     // =====================================================================
-    // 3. Compute expansion factor
+    // 3. Draw SPARSE onset flashes (right half only, mirrored later)
     // =====================================================================
-    // 0.5 (resting — inner half lit) to 1.0 (on-beat — full strip)
-    float expansion = 0.5f + m_ps->beatEnvelope * 0.5f;
 
-    // =====================================================================
-    // 4. Per-pixel rendering (right half: kCenterRight..kCenterRight+79)
-    // =====================================================================
-    float photons = static_cast<float>(ctx.brightness) / 255.0f;
+    // --- Snare flash: warm colour, centred at pixel 20 from centre, width ~20px ---
+    if (m_ps->snareDecay > 0.02f) {
+        uint8_t bright = static_cast<uint8_t>(clampF(m_ps->snareDecay * 255.0f, 0.0f, 255.0f));
 
-    for (uint16_t p = 0; p < kHalfLength; ++p) {
-        float progress = static_cast<float>(p) / 79.0f; // 0=centre, 1=edge
+        // Warm hue offset (+10 from gHue)
+        CRGB snareColor;
+        hsv2rgb_rainbow(CHSV(ctx.gHue + 10, ctx.saturation, bright), snareColor);
+        snareColor.nscale8(ctx.brightness);
 
-        // Contract progress toward centre based on expansion
-        float adjustedProgress = progress / expansion;
+        // Gaussian blob: centre at pixel 20, sigma ~5px
+        // Loop range [10, 35) covers ~3 sigma each side
+        for (int p = 10; p < 35; ++p) {
+            float dist = fabsf(static_cast<float>(p) - 20.0f);
+            float gauss = expf(-(dist * dist) / 50.0f);  // sigma^2 = 25, denom = 2*sigma^2
+            if (gauss < 0.05f) continue;
 
-        CRGB pixelColor = CRGB::Black;
+            CRGB scaled = snareColor;
+            scaled.nscale8(static_cast<uint8_t>(gauss * 255.0f));
 
-        if (adjustedProgress <= 1.0f) {
-            // Interpolate band energy at this adjusted position
-            float bandPos = adjustedProgress * 7.0f; // Map [0,1] -> [0,7] across 8 bands
-            int lo = static_cast<int>(bandPos);
-            float frac = bandPos - static_cast<float>(lo);
-            int hi = lo + 1;
-            if (hi > 7) hi = 7;
-            if (lo > 7) lo = 7;
-
-            float energy = m_ps->smoothedBands[lo] * (1.0f - frac)
-                         + m_ps->smoothedBands[hi] * frac;
-
-            // Apply contrast via smoothstep
-            energy = smoothstep01(energy);
-
-            // Apply user contrast scaling
-            if (m_contrast != 1.0f) {
-                energy = applyContrast(energy, m_contrast);
+            uint16_t idx = kCenterRight + static_cast<uint16_t>(p);
+            if (idx < kStripLength) {
+                m_ps->trailBuffer[idx] += scaled;
             }
-
-            float brightness = clampF(energy, 0.0f, 1.0f);
-
-            // --- Edge glow on beat ---
-            // Near the expansion front: add bright white-ish pulse
-            if (adjustedProgress > 0.90f && m_ps->beatEnvelope > 0.3f) {
-                float edgeFactor = (adjustedProgress - 0.90f) / 0.10f; // 0..1 within edge zone
-                float glowStrength = edgeFactor * m_ps->beatEnvelope;
-                brightness = fmaxf(brightness, glowStrength);
-            }
-
-            // --- Colour: palette with hue varying by position ---
-            // Warm bass (centre) to cool treble (edge)
-            float huePos = m_chromaHue + m_huePosition + adjustedProgress * 0.78f;
-            CRGB_F col = paletteColorF(ctx.palette, huePos, brightness * photons);
-            col.clip();
-            pixelColor = col.toCRGB();
         }
+    }
 
-        // Write to right half (centre outward)
-        uint16_t rightIdx = kCenterRight + p;
-        if (rightIdx < kStripLength && rightIdx < ctx.ledCount) {
-            ctx.leds[rightIdx] = pixelColor;
+    // --- Hi-hat flash: cool colour, centred at pixel 68 from centre, width ~10px ---
+    if (m_ps->hihatDecay > 0.02f) {
+        uint8_t bright = static_cast<uint8_t>(clampF(m_ps->hihatDecay * 255.0f, 0.0f, 255.0f));
+
+        // Cool hue offset (+160 from gHue)
+        CRGB hihatColor;
+        hsv2rgb_rainbow(CHSV(ctx.gHue + 160, ctx.saturation, bright), hihatColor);
+        hihatColor.nscale8(ctx.brightness);
+
+        // Gaussian blob: centre at pixel 68, sigma ~3px
+        // Loop range [60, 79) covers ~3 sigma each side
+        for (int p = 60; p < 79; ++p) {
+            float dist = fabsf(static_cast<float>(p) - 68.0f);
+            float gauss = expf(-(dist * dist) / 18.0f);  // sigma^2 = 9, denom = 2*sigma^2
+            if (gauss < 0.05f) continue;
+
+            CRGB scaled = hihatColor;
+            scaled.nscale8(static_cast<uint8_t>(gauss * 255.0f));
+
+            uint16_t idx = kCenterRight + static_cast<uint16_t>(p);
+            if (idx < kStripLength) {
+                m_ps->trailBuffer[idx] += scaled;
+            }
+        }
+    }
+
+    // --- Ambient flux shimmer (very dim, between onsets) ---
+    if (m_ps->fluxSmoothed > 0.02f) {
+        uint8_t fluxBright = static_cast<uint8_t>(clampF(m_ps->fluxSmoothed * 40.0f, 0.0f, 40.0f));
+        if (fluxBright > 0) {
+            CRGB dimGlow;
+            hsv2rgb_rainbow(CHSV(ctx.gHue, ctx.saturation, fluxBright), dimGlow);
+            dimGlow.nscale8(ctx.brightness);
+            m_ps->trailBuffer[kCenterRight] += dimGlow;
         }
     }
 
     // =====================================================================
-    // 5. Mirror right half to left half
+    // 4. Mirror right half to left half IN the trail buffer
     // =====================================================================
     for (uint16_t i = 0; i < kHalfLength; ++i) {
-        uint16_t leftIdx = kCenterLeft - i;
-        uint16_t rightIdx = kCenterRight + i;
-        if (leftIdx < kStripLength && rightIdx < kStripLength
-            && leftIdx < ctx.ledCount && rightIdx < ctx.ledCount) {
-            ctx.leds[leftIdx] = ctx.leds[rightIdx];
-        }
+        m_ps->trailBuffer[kCenterLeft - i] = m_ps->trailBuffer[kCenterRight + i];
     }
 
     // =====================================================================
-    // 6. Copy strip 1 to strip 2
+    // Output trail buffer to LEDs
+    // =====================================================================
+    for (uint16_t i = 0; i < kStripLength && i < ctx.ledCount; ++i) {
+        ctx.leds[i] = m_ps->trailBuffer[i];
+    }
+
+    // =====================================================================
+    // 5. Copy strip 1 to strip 2
     // =====================================================================
     for (uint16_t i = 0; i < kStripLength && (kStripLength + i) < ctx.ledCount; ++i) {
         ctx.leds[kStripLength + i] = ctx.leds[i];
@@ -259,8 +267,8 @@ void SbSpectralBeatPulseEffect::renderEffect(plugins::EffectContext& ctx) {
 
 const plugins::EffectMetadata& SbSpectralBeatPulseEffect::getMetadata() const {
     static plugins::EffectMetadata meta{
-        "SB Spectral Beat Pulse",
-        "Spectral envelope that pulses outward on beats",
+        "SB Onset Map",
+        "Percussive transient mapper: snare near centre, hi-hat at edges",
         plugins::EffectCategory::PARTY,
         1,
         "SpectraSynq"
@@ -284,8 +292,8 @@ const plugins::EffectParameter* SbSpectralBeatPulseEffect::getParameter(uint8_t 
 bool SbSpectralBeatPulseEffect::setParameter(const char* name, float value) {
     if (!name) return false;
 
-    if (strcmp(name, "contrast") == 0) {
-        m_contrast = clampF(value, 0.0f, 3.0f);
+    if (strcmp(name, "sensitivity") == 0) {
+        m_sensitivity = clampF(value, 0.1f, 3.0f);
         return true;
     }
     if (strcmp(name, "chromaHue") == 0) {
@@ -298,7 +306,7 @@ bool SbSpectralBeatPulseEffect::setParameter(const char* name, float value) {
 float SbSpectralBeatPulseEffect::getParameter(const char* name) const {
     if (!name) return 0.0f;
 
-    if (strcmp(name, "contrast") == 0)    return m_contrast;
+    if (strcmp(name, "sensitivity") == 0) return m_sensitivity;
     if (strcmp(name, "chromaHue") == 0)   return m_chromaHue;
     return 0.0f;
 }

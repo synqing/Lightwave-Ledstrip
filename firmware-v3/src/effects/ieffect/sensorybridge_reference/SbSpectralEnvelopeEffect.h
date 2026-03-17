@@ -1,15 +1,20 @@
 /**
  * @file SbSpectralEnvelopeEffect.h
- * @brief SB Spectral Envelope — maps 8 octave bands to pixel positions
+ * @brief SB Spectral Envelope — sparse anchor dots with outward scroll
  *
- * Maps the 8 ControlBus octave energy bands to spatial positions along the
- * LED strip with smooth Hermite interpolation. Bass at centre, treble at
- * edges (centre-origin). Colour is derived from the chromagram palette via
- * the SbK1BaseEffect base class.
+ * Contract: "When bass hits, the centre glows. When treble hits, the edges glow."
  *
- * Data flow:
- *   controlBus.bands[0..7] → spatial interpolation (80 px) → smoothstep
- *     → palette colour at interpolated brightness → mirror + copy
+ * Writes ONLY 8 sparse anchor dots (one per octave band) into a persistent
+ * trail buffer. Audio-coupled decay + outward scroll create temporal history
+ * visible as trails. Bass anchors sit near the centre, treble anchors at
+ * the edges (centre-origin). Mirror + copy to both strips.
+ *
+ * Pipeline per frame:
+ *   1. Decay trail buffer (audio-coupled)
+ *   2. Scroll trail outward (~60 px/s)
+ *   3. Write 8 sparse anchor dots from bands[0..7]
+ *   4. Mirror right half → left half
+ *   5. Output trail buffer to LEDs + copy strip 2
  */
 
 #pragma once
@@ -50,13 +55,17 @@ private:
     static constexpr uint16_t kCenterLeft   = lightwaveos::effects::CENTER_LEFT;    // 79
     static constexpr uint16_t kCenterRight  = lightwaveos::effects::CENTER_RIGHT;   // 80
 
-    /// Number of octave band anchor points for interpolation
+    /// Number of octave band anchor points
     static constexpr uint8_t kBandCount = 8;
 
-    /// Pixel positions of each band anchor (right half, centre-origin)
-    static constexpr float kBandPositions[kBandCount] = {
-        0.0f, 10.0f, 20.0f, 30.0f, 40.0f, 50.0f, 60.0f, 79.0f
+    /// Pixel offsets of each band anchor within the right half (centre-origin).
+    /// Band 0 (sub-bass) at centre, band 7 (air) at edge.
+    static constexpr uint8_t kAnchors[kBandCount] = {
+        0, 10, 20, 30, 40, 50, 60, 79
     };
+
+    /// Outward scroll rate in pixels per second
+    static constexpr float kScrollRate = 60.0f;
 
     // Effect parameters
     float m_contrast    = 1.0f;
@@ -65,9 +74,17 @@ private:
     static constexpr uint8_t kParamCount = 2;
     static const plugins::EffectParameter s_params[kParamCount];
 
-    /// Smooth Hermite interpolation between band anchor points.
-    /// Returns interpolated energy at a given pixel position [0, 79].
-    static float interpolateBands(const float* bands, float pixelPos);
+    // PSRAM-allocated trail buffer for frame-to-frame persistence
+    struct SbSpecEnvPsram {
+        CRGB trailBuffer[160];   ///< Persistent pixel buffer with decay + scroll
+        float scrollAccum;       ///< Sub-pixel scroll accumulator
+    };
+
+#ifndef NATIVE_BUILD
+    SbSpecEnvPsram* m_ps = nullptr;
+#else
+    SbSpecEnvPsram* m_ps = nullptr;
+#endif
 };
 
 } // namespace lightwaveos::effects::ieffect::sensorybridge_reference

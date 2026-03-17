@@ -1,10 +1,11 @@
 /**
  * @file SbFullSpectrumEffect.cpp
- * @brief SB Full Spectrum — maps 64 Goertzel bins to 80 pixels
+ * @brief SB Beat Pulse — radial expansion pulse on each beat
  *
- * High-resolution frequency display with per-pixel smoothing.
- * Centre origin: pixel 0 (centre) = bass, pixel 79 (edge) = treble.
- * Uses asymmetric dt-corrected EMA for smooth attack/decay.
+ * When a beat lands, a bright ring launches outward from centre.
+ * Between beats, the ring contracts as the beat envelope decays.
+ * Sparse injection: only 3 pixels (the wavefront ring) are written
+ * per frame. The trail buffer decay creates the dark background.
  */
 
 #include "SbFullSpectrumEffect.h"
@@ -19,15 +20,9 @@
 
 #include <cmath>
 #include <cstring>
+#include <algorithm>
 
 namespace lightwaveos::effects::ieffect::sensorybridge_reference {
-
-// ---------------------------------------------------------------------------
-// Smoothing time constants (seconds)
-// ---------------------------------------------------------------------------
-
-static constexpr float kTauAttack = 0.02f;   // ~0.4 alpha at 120 FPS — fast rise
-static constexpr float kTauDecay  = 0.1f;    // ~0.08 alpha at 120 FPS — slow fade
 
 // ---------------------------------------------------------------------------
 // Lifecycle
@@ -56,7 +51,7 @@ bool SbFullSpectrumEffect::init(plugins::EffectContext& ctx) {
     }
 #endif
 
-    // Zero smoothing buffer and trail buffer
+    // Zero trail buffer and state
     memset(m_ps, 0, sizeof(SbFullSpectrumPsram));
 
     (void)ctx;
@@ -87,104 +82,86 @@ void SbFullSpectrumEffect::renderEffect(plugins::EffectContext& ctx) {
     (void)ctx;
     return;
 #else
-    // dt-corrected smoothing alphas
     const float dt = m_dt;
-    const float alphaAttack = 1.0f - expf(-dt / kTauAttack);
-    const float alphaDecay  = 1.0f - expf(-dt / kTauDecay);
 
-    // Get raw 64-bin spectrum
-    const float* bins = ctx.audio.bins64();
+    // =================================================================
+    // Stage 1: Decay trail buffer (audio-coupled, punchy for beats)
+    // =================================================================
+    float rms = ctx.audio.available ? ctx.audio.rms() : 0.0f;
+    float decayRate = 1.5f + 5.0f * rms;  // Faster than K1 Waveform — beats need punchy decay
+    uint8_t fadeAmt = static_cast<uint8_t>(fminf(decayRate * dt * 255.0f, 200.0f));
+    if (fadeAmt < 1) fadeAmt = 1;
+    fadeToBlackBy(m_ps->trailBuffer, kStripLength, fadeAmt);
 
-    if (!ctx.audio.available || !bins) {
-        // No audio: decay smoothed values and output
-        for (uint16_t p = 0; p < kHalfLength; ++p) {
-            m_ps->smoothed[p] *= (1.0f - alphaDecay);
-        }
-    } else {
-        // -----------------------------------------------------------------
-        // Map 64 bins → 80 pixels via linear interpolation + smooth
-        // -----------------------------------------------------------------
-        for (uint16_t p = 0; p < kHalfLength; ++p) {
-            // Source position in bin space
-            const float srcIdx = static_cast<float>(p) * (63.0f / 79.0f);
-            const uint8_t lo = static_cast<uint8_t>(srcIdx);
-            const uint8_t hi = (lo < 63) ? (lo + 1) : 63;
-            const float frac = srcIdx - static_cast<float>(lo);
+    // =================================================================
+    // Stage 2: Update beat envelope
+    // =================================================================
 
-            // Linearly interpolate between adjacent bins
-            float energy = bins[lo] * (1.0f - frac) + bins[hi] * frac;
-            if (energy < 0.0f) energy = 0.0f;
-            if (energy > 1.0f) energy = 1.0f;
-
-            // Asymmetric EMA: fast attack, slow decay
-            float prev = m_ps->smoothed[p];
-            float alpha = (energy > prev) ? alphaAttack : alphaDecay;
-            m_ps->smoothed[p] = prev + alpha * (energy - prev);
+    // On beat: snap envelope to beat strength
+    if (ctx.audio.available && ctx.audio.isOnBeat()) {
+        float strength = ctx.audio.beatStrength();
+        if (strength > m_ps->beatEnvelope) {
+            m_ps->beatEnvelope = strength;
         }
     }
 
-    // -----------------------------------------------------------------
-    // Trail persistence: decay the persistent buffer BEFORE writing new
-    // Audio-coupled: loud = faster decay (punchy), quiet = slower (ambient)
-    // Matches K1 Waveform pattern: decayRate = base + scale * amplitude
-    // -----------------------------------------------------------------
-    float rmsNow = ctx.audio.available ? ctx.audio.rms() : 0.0f;
-    static constexpr float kMinDecayRate = 1.5f;   // per-second (silence: ~2s full decay)
-    static constexpr float kDecayScale   = 6.0f;   // additional rate per unit RMS
-    float decayRate = kMinDecayRate + kDecayScale * rmsNow;
-    uint8_t fadeAmount = static_cast<uint8_t>(decayRate * dt * 255.0f);
-    if (fadeAmount < 1) fadeAmount = 1;
-    if (fadeAmount > 200) fadeAmount = 200;
-    fadeToBlackBy(m_ps->trailBuffer, kStripLength, fadeAmount);
+    // Decay envelope: tau ~150ms (fast contraction)
+    m_ps->beatEnvelope *= expf(-dt / 0.15f);
+    if (m_ps->beatEnvelope < 0.01f) m_ps->beatEnvelope = 0.0f;
 
-    // -----------------------------------------------------------------
-    // Render target pixels into the trail buffer (additive blend)
-    // New spectral energy is ADDED to the persistent buffer, creating
-    // bright cores where audio is active and smooth decay where it fades.
-    // -----------------------------------------------------------------
-    const uint8_t userBrightness = ctx.brightness;
+    // Smoothed RMS for fallback breathing
+    float alphaRms = 1.0f - expf(-dt / 0.3f);
+    m_ps->smoothedRms += (rms - m_ps->smoothedRms) * alphaRms;
 
-    for (uint16_t p = 0; p < kHalfLength; ++p) {
-        float smoothedEnergy = m_ps->smoothed[p];
-        if (smoothedEnergy < 0.0f) smoothedEnergy = 0.0f;
-        if (smoothedEnergy > 1.0f) smoothedEnergy = 1.0f;
+    // =================================================================
+    // Stage 3: Compute expansion and draw sparse wavefront
+    // =================================================================
+    float expansion = m_ps->beatEnvelope;
 
-        // Hue from frequency position + gHue rotation
-        uint8_t hue = static_cast<uint8_t>(
-            static_cast<uint16_t>(p) * 255 / kHalfLength + ctx.gHue);
-        uint8_t sat = ctx.saturation;
-        uint8_t val = static_cast<uint8_t>(smoothedEnergy * 255.0f);
+    // If beat confidence is low, use smoothed RMS for gentle breathing
+    if (expansion < 0.05f) {
+        expansion = m_ps->smoothedRms * 0.4f;  // Gentle breath, max 40% of strip
+    }
 
-        // Scale by master brightness
-        val = scale8(val, userBrightness);
+    // Wavefront position (in pixels from centre)
+    float frontPos = expansion * 79.0f;
+    int frontPixel = static_cast<int>(frontPos + 0.5f);
 
-        CRGB pixel;
-        hsv2rgb_rainbow(CHSV(hue, sat, val), pixel);
+    // Colour from gHue with slight hue shift during expansion
+    uint8_t hue = ctx.gHue + static_cast<uint8_t>(expansion * 60);
+    CRGB frontColor;
+    hsv2rgb_rainbow(CHSV(hue, ctx.saturation, 255), frontColor);
+    frontColor.nscale8(ctx.brightness);
 
-        // Additive blend into trail buffer (bright cores accumulate)
-        uint16_t ledIdx = kCenterRight + p;
-        if (ledIdx < kStripLength) {
-            m_ps->trailBuffer[ledIdx] += pixel;
+    // Scale by envelope (brighter at peak, dim as it contracts)
+    uint8_t envelopeScale = static_cast<uint8_t>(expansion * 255.0f);
+    if (envelopeScale > 0) {
+        frontColor.nscale8(envelopeScale);
+
+        // Draw 3-pixel wavefront ring at the expansion edge
+        for (int d = -1; d <= 1; ++d) {
+            int p = frontPixel + d;
+            if (p >= 0 && p < static_cast<int>(kHalfLength)) {
+                uint16_t ledIdx = kCenterRight + static_cast<uint16_t>(p);
+                if (ledIdx < kStripLength) {
+                    m_ps->trailBuffer[ledIdx] += frontColor;
+                }
+            }
         }
     }
 
-    // -----------------------------------------------------------------
-    // Mirror right → left in trail buffer (centre-origin symmetry)
-    // -----------------------------------------------------------------
+    // =================================================================
+    // Stage 4: Mirror right -> left + output
+    // =================================================================
     for (uint16_t i = 0; i < kHalfLength; ++i) {
-        uint16_t rightIdx = kCenterRight + i;
-        uint16_t leftIdx  = kCenterLeft - i;
-        if (rightIdx < kStripLength && leftIdx < kStripLength) {
-            m_ps->trailBuffer[leftIdx] = m_ps->trailBuffer[rightIdx];
-        }
+        m_ps->trailBuffer[kCenterLeft - i] = m_ps->trailBuffer[kCenterRight + i];
     }
 
-    // -----------------------------------------------------------------
-    // Output trail buffer to LEDs + copy strip 1 → strip 2
-    // -----------------------------------------------------------------
-    for (uint16_t i = 0; i < kStripLength && i < ctx.ledCount; ++i) {
-        ctx.leds[i] = m_ps->trailBuffer[i];
-    }
+    // Copy trail buffer to LED output
+    uint16_t copyLen = std::min(kStripLength, ctx.ledCount);
+    memcpy(ctx.leds, m_ps->trailBuffer, sizeof(CRGB) * copyLen);
+
+    // Copy strip 1 -> strip 2
     for (uint16_t i = 0; i < kStripLength && (kStripLength + i) < ctx.ledCount; ++i) {
         ctx.leds[kStripLength + i] = ctx.leds[i];
     }
@@ -198,8 +175,8 @@ void SbFullSpectrumEffect::renderEffect(plugins::EffectContext& ctx) {
 
 const plugins::EffectMetadata& SbFullSpectrumEffect::getMetadata() const {
     static plugins::EffectMetadata meta{
-        "SB Full Spectrum",
-        "High-resolution 64-bin frequency display across 80 pixels",
+        "SB Beat Pulse",
+        "Radial expansion pulse on each beat with sparse wavefront",
         plugins::EffectCategory::PARTY,
         1,
         "SpectraSynq"

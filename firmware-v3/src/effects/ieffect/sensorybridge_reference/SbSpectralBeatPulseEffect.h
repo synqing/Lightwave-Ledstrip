@@ -1,14 +1,14 @@
 /**
  * @file SbSpectralBeatPulseEffect.h
- * @brief SB Spectral Beat Pulse — spectral envelope that pulses outward on beats
+ * @brief SB Onset Map — percussive transient mapper
  *
- * Combines frequency display with rhythmic physicality. Eight smoothed
- * octave bands are spatially mapped from centre to edge. A beat-driven
- * expansion envelope controls how far the spectral shape reaches along
- * the strip: on-beat the spectrum expands to fill the full length,
- * between beats it contracts back toward the centre.
+ * Maps percussive onsets to specific spatial positions along the strip:
+ *   - Snare triggers flash near centre (warm colour, wide blob)
+ *   - Hi-hat triggers flash near edges (cool colour, narrow blob)
+ *   - Ghost notes produce subtle ambient shimmer via spectral flux
  *
- * The result is a breathing spectral analyser that pumps with the music.
+ * Crossmodal mapping: low-frequency events are larger and central,
+ * high-frequency events are smaller and peripheral.
  *
  * Depends on SbK1BaseEffect for chromagram colour synthesis, peak envelope
  * following, and auto-hue-shift. See SbK1BaseEffect.h for the base contract.
@@ -54,22 +54,24 @@ private:
     static constexpr uint16_t kCenterRight  = lightwaveos::effects::CENTER_RIGHT;   // 80
 
     // Effect parameters
-    float m_contrast    = 1.0f;
-    float m_chromaHue   = 0.0f;
+    float m_sensitivity = 1.0f;   ///< Onset sensitivity multiplier
+    float m_chromaHue   = 0.0f;   ///< Hue offset for palette lookup
 
     static constexpr uint8_t kParamCount = 2;
     static const plugins::EffectParameter s_params[kParamCount];
 
     // PSRAM-allocated state
-    struct SbSpecBeatPsram {
-        float smoothedBands[8];    ///< Temporally smoothed band energies
-        float beatEnvelope;        ///< Beat-driven expansion envelope (0-1)
+    struct SbOnsetMapPsram {
+        CRGB trailBuffer[160];   ///< Persistent pixel buffer for frame-to-frame trails
+        float snareDecay;        ///< Snare flash envelope (fast decay)
+        float hihatDecay;        ///< Hi-hat flash envelope (fast decay)
+        float fluxSmoothed;      ///< Background flux for ambient shimmer
     };
 
 #ifndef NATIVE_BUILD
-    SbSpecBeatPsram* m_ps = nullptr;
+    SbOnsetMapPsram* m_ps = nullptr;
 #else
-    SbSpecBeatPsram* m_ps = nullptr;
+    SbOnsetMapPsram* m_ps = nullptr;
 #endif
 };
 

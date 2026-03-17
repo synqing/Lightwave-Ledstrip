@@ -1,22 +1,20 @@
 /**
  * @file SbSpectralEnvelopeEffect.cpp
- * @brief SB Spectral Envelope — octave bands mapped to pixel positions
+ * @brief SB Spectral Envelope — sparse anchor dots with outward scroll
  *
- * Maps 8 ControlBus octave energy bands (sub-bass through air) to spatial
- * positions along the LED strip. Bass sits at the centre, treble at the
- * edges. Smooth Hermite interpolation fills the gaps between the 8 anchor
- * points. Colour comes from the palette via the SbK1BaseEffect chromagram
- * pipeline, producing a musically coherent spectral visualiser.
+ * Contract: "When bass hits, the centre glows. When treble hits, the edges glow."
  *
- * Algorithm:
- *   1. Read bands[0..7] from ControlBus (already smoothed, 0-1)
- *   2. For each of 80 right-half pixels, Hermite-interpolate between the
- *      two nearest band anchors to get energy
- *   3. Apply smoothstep contrast curve to the interpolated energy
- *   4. Look up palette colour at (huePosition + pixel/80) scaled by energy
- *   5. Apply photons brightness
- *   6. Mirror right half to left half (centre-origin)
- *   7. Copy strip 1 to strip 2
+ * Writes ONLY 8 sparse anchor dots (2 pixels wide each, ~20% of strip) per
+ * frame. The trail buffer provides temporal history via audio-coupled decay
+ * and outward scroll. This replaces the previous Hermite interpolation
+ * approach that wrote all 80 pixels per frame, producing a saturated blob.
+ *
+ * Pipeline per frame:
+ *   1. Decay trail buffer (audio-coupled: louder = faster fade)
+ *   2. Scroll trail outward at ~60 px/s (slower than K1 Waveform's 150)
+ *   3. Write 8 sparse anchor dots from bands[0..7] via HSV
+ *   4. Mirror right half → left half (centre-origin)
+ *   5. Output trail buffer to LEDs + copy strip 2
  */
 
 #include "SbSpectralEnvelopeEffect.h"
@@ -58,74 +56,34 @@ static inline float clampF(float v, float lo, float hi) {
 } // anonymous namespace
 
 // ---------------------------------------------------------------------------
-// Smooth Hermite interpolation between band anchor points
-// ---------------------------------------------------------------------------
-
-float SbSpectralEnvelopeEffect::interpolateBands(const float* bands, float pixelPos) {
-    // Clamp pixel position to valid range
-    if (pixelPos <= kBandPositions[0]) return bands[0];
-    if (pixelPos >= kBandPositions[kBandCount - 1]) return bands[kBandCount - 1];
-
-    // Find the segment containing this pixel position
-    uint8_t seg = 0;
-    for (uint8_t i = 1; i < kBandCount; ++i) {
-        if (pixelPos < kBandPositions[i]) {
-            seg = i - 1;
-            break;
-        }
-    }
-
-    // Normalised position within this segment [0, 1]
-    float segLen = kBandPositions[seg + 1] - kBandPositions[seg];
-    float t = (segLen > 0.001f) ? (pixelPos - kBandPositions[seg]) / segLen : 0.0f;
-
-    // Catmull-Rom style tangent estimation for smooth cubic interpolation.
-    // For boundary points, use the nearest available difference.
-    float p0 = bands[seg];
-    float p1 = bands[seg + 1];
-
-    // Tangent at p0 (central difference, or forward difference at boundary)
-    float m0;
-    if (seg > 0) {
-        float dPrev = kBandPositions[seg] - kBandPositions[seg - 1];
-        float dCurr = segLen;
-        // Weighted average of slopes on either side
-        m0 = 0.5f * ((bands[seg] - bands[seg - 1]) / (dPrev > 0.001f ? dPrev : 1.0f) * dCurr
-                    + (p1 - p0) / (dCurr > 0.001f ? dCurr : 1.0f) * dCurr);
-    } else {
-        m0 = (p1 - p0);  // Forward difference scaled by segment length
-    }
-
-    // Tangent at p1
-    float m1;
-    if (seg + 2 < kBandCount) {
-        float dCurr = segLen;
-        float dNext = kBandPositions[seg + 2] - kBandPositions[seg + 1];
-        m1 = 0.5f * ((p1 - p0) / (dCurr > 0.001f ? dCurr : 1.0f) * dCurr
-                    + (bands[seg + 2] - p1) / (dNext > 0.001f ? dNext : 1.0f) * dCurr);
-    } else {
-        m1 = (p1 - p0);  // Backward difference scaled by segment length
-    }
-
-    // Hermite basis functions
-    float t2 = t * t;
-    float t3 = t2 * t;
-    float h00 = 2.0f * t3 - 3.0f * t2 + 1.0f;
-    float h10 = t3 - 2.0f * t2 + t;
-    float h01 = -2.0f * t3 + 3.0f * t2;
-    float h11 = t3 - t2;
-
-    float result = h00 * p0 + h10 * m0 + h01 * p1 + h11 * m1;
-    return clampF(result, 0.0f, 1.0f);
-}
-
-// ---------------------------------------------------------------------------
 // Lifecycle
 // ---------------------------------------------------------------------------
 
 bool SbSpectralEnvelopeEffect::init(plugins::EffectContext& ctx) {
     // Initialise base class (chromagram, peak follower, hue shift)
     if (!baseInit()) return false;
+
+#ifndef NATIVE_BUILD
+    if (!m_ps) {
+        m_ps = static_cast<SbSpecEnvPsram*>(
+            heap_caps_malloc(sizeof(SbSpecEnvPsram), MALLOC_CAP_SPIRAM));
+        if (!m_ps) {
+            baseCleanup();
+            return false;
+        }
+    }
+#else
+    if (!m_ps) {
+        m_ps = new (std::nothrow) SbSpecEnvPsram;
+        if (!m_ps) {
+            baseCleanup();
+            return false;
+        }
+    }
+#endif
+
+    // Zero PSRAM state (trail buffer + scroll accumulator)
+    memset(m_ps, 0, sizeof(SbSpecEnvPsram));
 
     // Reset parameters to defaults
     m_contrast  = 1.0f;
@@ -136,75 +94,116 @@ bool SbSpectralEnvelopeEffect::init(plugins::EffectContext& ctx) {
 }
 
 void SbSpectralEnvelopeEffect::cleanup() {
+#ifndef NATIVE_BUILD
+    if (m_ps) {
+        heap_caps_free(m_ps);
+        m_ps = nullptr;
+    }
+#else
+    delete m_ps;
+    m_ps = nullptr;
+#endif
     baseCleanup();
 }
 
 // ---------------------------------------------------------------------------
-// Render
+// Render — sparse anchor dots with outward scroll
 // ---------------------------------------------------------------------------
 
 void SbSpectralEnvelopeEffect::renderEffect(plugins::EffectContext& ctx) {
+    if (!m_ps) return;
+
 #if !FEATURE_AUDIO_SYNC
     (void)ctx;
     return;
 #else
     if (!ctx.audio.available) {
-        // No audio: fade to black gracefully
-        for (uint16_t i = 0; i < kStripLength && i < ctx.ledCount; ++i) {
-            ctx.leds[i].fadeToBlackBy(16);
-        }
+        // No audio: gentle decay and output
+        fadeToBlackBy(m_ps->trailBuffer, kStripLength, 16);
+        memcpy(ctx.leds, m_ps->trailBuffer,
+               sizeof(CRGB) * (kStripLength < ctx.ledCount ? kStripLength : ctx.ledCount));
         for (uint16_t i = 0; i < kStripLength && (kStripLength + i) < ctx.ledCount; ++i) {
             ctx.leds[kStripLength + i] = ctx.leds[i];
         }
         return;
     }
 
-    // Read the 8 octave energy bands from the ControlBus
-    const float* bands = ctx.audio.controlBus.bands;
+    const float dt = m_dt;
 
-    // Photons brightness scaling
-    const float photons = static_cast<float>(ctx.brightness) / 255.0f;
+    // =================================================================
+    // Stage 1: Decay trail buffer (audio-coupled)
+    // Louder audio = faster fade, keeping trails tight during loud
+    // passages and lingering during quiet ones.
+    // =================================================================
+    {
+        float rms = ctx.audio.rms();
+        float decayRate = 0.8f + 3.5f * rms;
+        uint8_t fadeAmt = static_cast<uint8_t>(fminf(decayRate * dt * 255.0f, 200.0f));
+        if (fadeAmt < 1) fadeAmt = 1;
+        fadeToBlackBy(m_ps->trailBuffer, kStripLength, fadeAmt);
+    }
 
-    // --- PER-PIXEL RENDERING (right half: pixels 80..159, centre-origin) ---
-    for (uint16_t px = 0; px < kHalfLength; ++px) {
-        const float pixelPos = static_cast<float>(px);
+    // =================================================================
+    // Stage 2: Scroll trail outward from centre (~60 px/s)
+    // Old anchor readings drift outward, creating visible temporal
+    // history as trails. Slower than K1 Waveform (150 px/s) so the
+    // spectral envelope reads as a spatial map, not a rapid stream.
+    // =================================================================
+    m_ps->scrollAccum += kScrollRate * dt;
+    int pixelsToScroll = static_cast<int>(m_ps->scrollAccum);
+    m_ps->scrollAccum -= static_cast<float>(pixelsToScroll);
 
-        // Interpolate band energy at this spatial position
-        float energy = interpolateBands(bands, pixelPos);
+    for (int s = 0; s < pixelsToScroll; ++s) {
+        for (int i = 159; i > 0; --i) {
+            m_ps->trailBuffer[i] = m_ps->trailBuffer[i - 1];
+        }
+        m_ps->trailBuffer[0] = CRGB::Black;
+    }
 
-        // Apply configurable contrast via the base class K1 contrast curve
+    // =================================================================
+    // Stage 3: Write 8 SPARSE anchor dots (not all 80 pixels)
+    // Each band maps to a fixed position in the right half. Band 0
+    // (sub-bass) sits at the centre, band 7 (air) at the edge.
+    // Two pixels wide per dot for sub-pixel coverage.
+    // =================================================================
+    for (uint8_t i = 0; i < kBandCount; ++i) {
+        float energy = ctx.audio.controlBus.bands[i];
+        if (energy < 0.02f) continue;  // Skip silent bands
+
+        // Apply contrast curve for perceptual shaping
         energy = applyContrast(energy, m_contrast);
 
-        // Smoothstep for perceptual contrast shaping
-        energy = energy * energy * (3.0f - 2.0f * energy);
+        // HSV colour: hue spreads across bands, shifts with gHue
+        uint8_t hue = static_cast<uint8_t>(i * 32 + ctx.gHue);
+        uint8_t val = static_cast<uint8_t>(clampF(energy * 255.0f, 0.0f, 255.0f));
 
-        // Palette colour: position shifts with hue + spatial gradient
-        float palettePos = m_chromaHue + m_huePosition + static_cast<float>(px) / static_cast<float>(kHalfLength);
+        CRGB dotColour;
+        hsv2rgb_rainbow(CHSV(hue, ctx.saturation, val), dotColour);
+        dotColour.nscale8(ctx.brightness);
 
-        // Get colour from palette at this position, scaled by energy
-        CRGB_F colour = paletteColorF(ctx.palette, palettePos, energy);
-
-        // Apply photons brightness
-        colour *= photons;
-        colour.clip();
-
-        // Write to right half (centre-origin: pixel 80 + px)
-        const uint16_t rightIdx = kCenterRight + px;
-        if (rightIdx < ctx.ledCount) {
-            ctx.leds[rightIdx] = colour.toCRGB();
+        // Place dot at anchor position in right half (2 pixels wide)
+        uint16_t pos = kCenterRight + kAnchors[i];
+        if (pos < kStripLength) {
+            m_ps->trailBuffer[pos] += dotColour;
+        }
+        if (pos + 1 < kStripLength) {
+            m_ps->trailBuffer[pos + 1] += dotColour;
         }
     }
 
-    // --- MIRROR right half to left half ---
+    // =================================================================
+    // Stage 4: Mirror right half → left half in trail buffer
+    // =================================================================
     for (uint16_t i = 0; i < kHalfLength; ++i) {
-        const uint16_t leftIdx  = kCenterLeft - i;
-        const uint16_t rightIdx = kCenterRight + i;
-        if (rightIdx < ctx.ledCount && leftIdx < ctx.ledCount) {
-            ctx.leds[leftIdx] = ctx.leds[rightIdx];
-        }
+        m_ps->trailBuffer[kCenterLeft - i] = m_ps->trailBuffer[kCenterRight + i];
     }
 
-    // --- COPY strip 1 to strip 2 ---
+    // =================================================================
+    // Stage 5: Output trail buffer to LEDs + copy strip 1 → strip 2
+    // =================================================================
+    memcpy(ctx.leds, m_ps->trailBuffer,
+           sizeof(CRGB) * (kStripLength < ctx.ledCount ? kStripLength : ctx.ledCount));
+
     for (uint16_t i = 0; i < kStripLength && (kStripLength + i) < ctx.ledCount; ++i) {
         ctx.leds[kStripLength + i] = ctx.leds[i];
     }

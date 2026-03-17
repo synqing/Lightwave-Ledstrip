@@ -300,6 +300,10 @@ constexpr EffectId DISPLAY_ORDER[] = {
     EID_SB_K1_BLOOM_V2_SPECTRAL_SPREAD,      // K1 Bloom V2 (Spectral Spread)
 
     EID_LGP_FRESNEL_CAUSTIC_REACTIVE,        // Fresnel Caustic Reactive (tension/release)
+
+    // SB Waveform Oscilloscope
+    EID_SB_WAVEFORM_OSCILLOSCOPE,            // SB Waveform Oscilloscope (exact parity)
+    EID_SB_WAVEFORM_OSCILLOSCOPE_BRIGHT,     // SB Waveform Oscilloscope (1.5x bright)
 };
 
 /// Number of effects in the display order (excludes retired slots)

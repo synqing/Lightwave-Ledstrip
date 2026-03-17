@@ -163,6 +163,7 @@
 #include "ieffect/sensorybridge_reference/SbK1BloomEffect.h"
 #include "ieffect/sensorybridge_reference/SbK1BloomV2Effect.h"
 #include "ieffect/sensorybridge_reference/SbK1WaveformEffect.h"
+#include "ieffect/sensorybridge_reference/SbWaveformOscilloscopeEffect.h"
 #include "ieffect/LGPTimeReversalMirrorEffect.h"
 #include "ieffect/LGPTimeReversalMirrorEffect_AR.h"
 #include "ieffect/LGPTimeReversalMirrorEffect_Mod1.h"
@@ -954,6 +955,15 @@ uint16_t registerAllEffects(RendererActor* renderer) {
     renderer->registerEffect(EID_SB_K1_WAVEFORM, &sbK1WaveformInstance);
     total++;
 
+    // SB Waveform Oscilloscope (exact SB 3.0.0 parity)
+    static ieffect::sensorybridge_reference::SbWaveformOscilloscopeEffect wfOscInstance;
+    renderer->registerEffect(EID_SB_WAVEFORM_OSCILLOSCOPE, &wfOscInstance);
+    total++;
+
+    static ieffect::sensorybridge_reference::SbWaveformOscilloscopyBrightEffect wfOscBrightInstance;
+    renderer->registerEffect(EID_SB_WAVEFORM_OSCILLOSCOPE_BRIGHT, &wfOscBrightInstance);
+    total++;
+
     // =============== BEAT PULSE FAMILY ===============
 
     // Beat Pulse (Stack) - UI preview parity (static gradient + white push)
@@ -1370,7 +1380,7 @@ uint16_t registerAllEffects(RendererActor* renderer) {
     total++;
 
     // =============== EFFECT COUNT PARITY VALIDATION ===============
-    constexpr uint16_t EXPECTED_EFFECT_COUNT = FEATURE_AR_1C_EXPERIMENTAL ? 187 : 184;
+    constexpr uint16_t EXPECTED_EFFECT_COUNT = FEATURE_AR_1C_EXPERIMENTAL ? 189 : 186;
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

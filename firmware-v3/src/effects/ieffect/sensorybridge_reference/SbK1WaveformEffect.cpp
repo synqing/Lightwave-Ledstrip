@@ -1,15 +1,21 @@
 /**
  * @file SbK1WaveformEffect.cpp
- * @brief K1 Lightwave waveform dot mode (parity port)
+ * @brief K1 Lightwave waveform dot mode
  *
- * Exact algorithm from lightshow_modes.h:1393-1507:
- *   1. Base class provides smoothed peak, chromagram colour synthesis, failsafe
- *   2. Dynamic trail fade based on waveform amplitude
- *   3. Shift right-half trail buffer outward by 1 pixel (scroll)
- *   4. Sensitivity-scaled dot position from waveform peak
- *   5. Draw coloured dot at computed position
- *   6. Mirror right half to left half
+ * K1-native audio-reactive dot mode inspired by Sensory Bridge's chromagram
+ * colour synthesis. This is NOT a 1:1 parity port of SB's light_mode_waveform()
+ * — the SB original was a full-strip oscilloscope that was never shipped
+ * (dead code in SB 3.0.0 and 3.1.0). This effect is an original K1 design:
+ *
+ *   1. Chromagram-driven colour synthesis (shared with SB)
+ *   2. Single bouncing dot positioned by waveform peak amplitude
+ *   3. Dynamic amplitude-responsive trail fade (K1 original)
+ *   4. dt-corrected sub-pixel scroll (K1 original)
+ *   5. Sub-pixel dot rendering (K1 original)
+ *   6. Mirror right half to left half (centre-origin)
  *   7. Copy strip 1 to strip 2
+ *
+ * For the true SB waveform oscilloscope, see SbWaveformOscilloscopeEffect.
  */
 
 #include "SbK1WaveformEffect.h"
@@ -134,7 +140,7 @@ void SbK1WaveformEffect::renderEffect(plugins::EffectContext& ctx) {
     }
 
     // =====================================================================
-    // K1 Waveform — exact parity with light_mode_waveform()
+    // K1 Waveform — chromagram dot mode (K1-native design)
     // =====================================================================
 
     // --- K1 WAVEFORM COLOUR SYNTHESIS ---

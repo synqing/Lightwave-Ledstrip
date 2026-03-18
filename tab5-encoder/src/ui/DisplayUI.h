@@ -128,6 +128,7 @@ public:
     // Colour correction state (touch action row)
     #ifndef SIMULATOR_BUILD
     void setColourCorrectionState(const ColorCorrectionState& state);
+    void setEdgeMixerState(const EdgeMixerState& state);
     #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL)
     void setActionButtonCallback(ActionButtonCallback cb) { _action_callback = cb; }
     void setRetryButtonCallback(RetryButtonCallback cb) { _retry_callback = cb; }

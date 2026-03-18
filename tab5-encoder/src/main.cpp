@@ -425,6 +425,12 @@ static void syncColourCorrectionUi() {
     }
 }
 
+static void syncEdgeMixerUi() {
+    if (g_ui && s_uiInitialized) {
+        g_ui->setEdgeMixerState(g_wsClient.getEdgeMixerState());
+    }
+}
+
 static void handleActionButton(uint8_t buttonIndex) {
     // Debounce: prevent rapid repeated calls (300ms debounce)
     static uint32_t s_lastActionTime[4] = {0, 0, 0, 0};
@@ -439,6 +445,28 @@ static void handleActionButton(uint8_t buttonIndex) {
                   // buttonIndex, g_wsClient.isConnected() ? 1 : 0, (int)g_wsClient.getStatus(), (unsigned long)now);
         // #endregion
     
+    // EdgeMixer buttons (2=mode cycle, 3=spatial+temporal cycle)
+    if (buttonIndex == 2 || buttonIndex == 3) {
+        EdgeMixerState em = g_wsClient.getEdgeMixerState();
+        if (!em.valid) { em = EdgeMixerState{}; em.valid = true; }
+        if (buttonIndex == 2) {
+            em.mode = (em.mode + 1) % 5;
+            Serial.printf("[TOUCH] EdgeMixer mode: %d\n", em.mode);
+        } else {
+            uint8_t combo = em.spatial | (em.temporal << 1);
+            combo = (combo + 1) % 4;
+            em.spatial  = combo & 1;
+            em.temporal = (combo >> 1) & 1;
+            Serial.printf("[TOUCH] EdgeMixer spatial=%d temporal=%d\n", em.spatial, em.temporal);
+        }
+        g_wsClient.setEdgeMixerState(em);
+        syncEdgeMixerUi();
+        if (g_wsClient.isConnected()) {
+            g_wsClient.sendEdgeMixerSet(em.mode, em.spread, em.strength, em.spatial, em.temporal);
+        }
+        return;
+    }
+
     // Get current state (use defaults if not valid)
     ColorCorrectionState cc = g_wsClient.getColorCorrectionState();
     
@@ -489,18 +517,6 @@ static void handleActionButton(uint8_t buttonIndex) {
             stateChanged = true;
             break;
         }
-        case 2: {  // Auto exposure (toggle)
-            uint8_t target = (cc.autoExposureTarget == 0) ? 110 : cc.autoExposureTarget;
-            cc.autoExposureEnabled = !cc.autoExposureEnabled;
-            cc.autoExposureTarget = target;
-            stateChanged = true;
-            break;
-        }
-        case 3: {  // Brown guardrail (toggle)
-            cc.brownGuardrailEnabled = !cc.brownGuardrailEnabled;
-            stateChanged = true;
-            break;
-        }
         default:
             return;
     }
@@ -541,24 +557,6 @@ static void handleActionButton(uint8_t buttonIndex) {
                     // Colour mode: Use dedicated setMode command
                     Serial.printf("[TOUCH] Colour button: mode=%d\n", cc.mode);
                     g_wsClient.sendColourCorrectionMode(cc.mode);
-                    break;
-                case 2:
-                    // Auto exposure: Use setConfig with all fields including mode
-                    Serial.printf("[TOUCH] Exposure button: enabled=%s target=%d\n", 
-                                  cc.autoExposureEnabled ? "true" : "false", cc.autoExposureTarget);
-                    g_wsClient.sendColorCorrectionConfig(
-                        cc.gammaEnabled, cc.gammaValue,
-                        cc.autoExposureEnabled, cc.autoExposureTarget,
-                        cc.brownGuardrailEnabled, cc.mode);
-                    break;
-                case 3:
-                    // Brown guardrail: Use setConfig with all fields including mode
-                    Serial.printf("[TOUCH] Brown button: enabled=%s\n", 
-                                  cc.brownGuardrailEnabled ? "true" : "false");
-                    g_wsClient.sendColorCorrectionConfig(
-                        cc.gammaEnabled, cc.gammaValue,
-                        cc.autoExposureEnabled, cc.autoExposureTarget,
-                        cc.brownGuardrailEnabled, cc.mode);
                     break;
             }
         } else {

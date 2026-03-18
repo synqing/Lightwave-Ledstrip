@@ -515,7 +515,7 @@ void DisplayUI::begin() {
     lv_obj_set_grid_dsc_array(_action_container, action_col_dsc, action_row_dsc);
     lv_obj_set_style_pad_column(_action_container, TAB5_GRID_GAP, LV_PART_MAIN);
 
-    const char* action_names[] = {"GAMMA", "COLOUR", "EXPOSURE", "BROWN", "ZONES"};
+    const char* action_names[] = {"GAMMA", "COLOUR", "EDGE", "SPATIAL", "ZONES"};
     for (int i = 0; i < 5; i++) {
         _action_buttons[i] = make_card(_action_container, false);
         lv_obj_set_grid_cell(_action_buttons[i], LV_GRID_ALIGN_STRETCH, i, 1,
@@ -1240,16 +1240,27 @@ void DisplayUI::setColourCorrectionState(const ColorCorrectionState& state) {
                                    lv_color_hex(state.mode != 0 ? TAB5_COLOR_BRAND_PRIMARY : 0xFFFFFF),
                                    LV_PART_MAIN);
 
-    // EXPOSURE button (index 2)
-    lv_label_set_text(_action_values[2], state.autoExposureEnabled ? "ON" : "OFF");
+}
+
+void DisplayUI::setEdgeMixerState(const EdgeMixerState& state) {
+    if (!_action_buttons[2] || !_action_values[2]) return;
+
+    // EDGE button (index 2) — EdgeMixer mode cycle
+    static const char* kModeNames[] = {"MIRROR", "ANALOG", "COMPL", "SPLIT", "SATUR"};
+    const char* modeName = (state.mode < 5) ? kModeNames[state.mode] : "???";
+    lv_label_set_text(_action_values[2], modeName);
     lv_obj_set_style_border_color(_action_buttons[2],
-                                   lv_color_hex(state.autoExposureEnabled ? TAB5_COLOR_BRAND_PRIMARY : 0xFFFFFF),
+                                   lv_color_hex(state.mode != 0 ? TAB5_COLOR_BRAND_PRIMARY : 0xFFFFFF),
                                    LV_PART_MAIN);
 
-    // BROWN button (index 3)
-    lv_label_set_text(_action_values[3], state.brownGuardrailEnabled ? "ON" : "OFF");
+    // SPATIAL button (index 3) — Spatial + Temporal combo
+    // Combos: 00=OFF, 10=CENT, 01=RMS, 11=C+R
+    static const char* kComboNames[] = {"OFF", "CENT", "RMS", "C+R"};
+    uint8_t combo = state.spatial | (state.temporal << 1);
+    const char* comboName = (combo < 4) ? kComboNames[combo] : "???";
+    lv_label_set_text(_action_values[3], comboName);
     lv_obj_set_style_border_color(_action_buttons[3],
-                                   lv_color_hex(state.brownGuardrailEnabled ? TAB5_COLOR_BRAND_PRIMARY : 0xFFFFFF),
+                                   lv_color_hex((state.spatial || state.temporal) ? TAB5_COLOR_BRAND_PRIMARY : 0xFFFFFF),
                                    LV_PART_MAIN);
 }
 

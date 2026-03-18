@@ -80,6 +80,15 @@ struct ColorCorrectionState {
     bool valid = false;  // True after first sync from server
 };
 
+struct EdgeMixerState {
+    uint8_t mode     = 0;   // 0=MIRROR, 1=ANALOGOUS, 2=COMPLEMENTARY, 3=SPLIT_COMPLEMENTARY, 4=SATURATION_VEIL
+    uint8_t spread   = 30;  // 0-60 degrees
+    uint8_t strength = 255; // 0-255
+    uint8_t spatial  = 0;   // 0=UNIFORM, 1=CENTRE_GRADIENT
+    uint8_t temporal = 0;   // 0=STATIC, 1=RMS_GATE
+    bool valid = false;
+};
+
 class WebSocketClient {
 public:
     WebSocketClient();
@@ -154,6 +163,18 @@ public:
     void setColorCorrectionState(const ColorCorrectionState& state) { _colorCorrectionState = state; }
 
     // ========================================================================
+    // EdgeMixer Commands
+    // ========================================================================
+
+    void sendEdgeMixerSet(uint8_t mode, uint8_t spread, uint8_t strength,
+                          uint8_t spatial, uint8_t temporal);
+    void requestEdgeMixerGet();
+
+    // EdgeMixer state accessors
+    const EdgeMixerState& getEdgeMixerState() const { return _edgeMixerState; }
+    void setEdgeMixerState(const EdgeMixerState& state) { _edgeMixerState = state; }
+
+    // ========================================================================
     // Camera Mode Commands (Control Surface)
     // ========================================================================
 
@@ -216,6 +237,9 @@ private:
 
     // Color correction state (cached from server)
     ColorCorrectionState _colorCorrectionState;
+
+    // EdgeMixer state (locally tracked, updated on button press)
+    EdgeMixerState _edgeMixerState;
 
     // Reconnection state
     unsigned long _lastReconnectAttempt;

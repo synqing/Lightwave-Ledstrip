@@ -938,6 +938,29 @@ void WebSocketClient::sendColourCorrectionMode(uint8_t mode) {
 }
 
 // ============================================================================
+// EdgeMixer Commands
+// ============================================================================
+
+void WebSocketClient::sendEdgeMixerSet(uint8_t mode, uint8_t spread, uint8_t strength,
+                                        uint8_t spatial, uint8_t temporal) {
+    if (!isConnected()) return;
+    JsonDocument doc;
+    doc["mode"]     = mode;
+    doc["spread"]   = spread;
+    doc["strength"] = strength;
+    doc["spatial"]  = spatial;
+    doc["temporal"] = temporal;
+    sendJSON("edge_mixer.set", doc);
+    Serial.printf("[WS] edge_mixer.set: mode=%d spatial=%d temporal=%d\n", mode, spatial, temporal);
+}
+
+void WebSocketClient::requestEdgeMixerGet() {
+    if (!isConnected()) return;
+    JsonDocument doc;
+    sendJSON("edge_mixer.get", doc);
+}
+
+// ============================================================================
 // Send Queue Management (non-blocking, prevents freeze on rapid encoder changes)
 // ============================================================================
 

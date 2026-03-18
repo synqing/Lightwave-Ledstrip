@@ -19,6 +19,14 @@
 //   - Stored as binary blobs in NVS namespace "tab5prst"
 //   - Keys: "slot0", "slot1", ..., "slot7"
 //
+// Version history:
+//   v1 - Initial layout. Global effectId stored low byte only + reservedFuture[0]
+//        for high byte (but high byte was outside CRC coverage). Zone effectId
+//        was bare uint8_t — values > 255 silently truncated.
+//   v2 - 16-bit zone effect IDs: effectIdHigh bytes stored in reservedFuture[1..4].
+//        Checksum moved to end of struct (offset 62) so it covers all bytes
+//        including zone high bytes and global effectId high byte.
+//
 // Usage:
 //   PresetData preset;
 //   preset.captureFrom(paramHandler, wsClient);  // Snapshot current state
@@ -34,8 +42,14 @@
 #pragma pack(push, 1)
 
 // Per-zone configuration (4 bytes per zone)
+//
+// NOTE: effectIdLow stores bits [7:0] of the zone's 16-bit effect ID.
+// The corresponding high byte (bits [15:8]) lives in
+// PresetData::reservedFuture[1 + zoneIndex] so that it is covered by the
+// CRC16 checksum.  Use setZoneEffectId() / getZoneEffectId() on the parent
+// PresetData struct rather than accessing effectIdLow directly.
 struct ZonePresetConfig {
-    uint8_t effectId;      // Zone effect index
+    uint8_t effectIdLow;   // Zone effect ID low byte (bits [7:0])
     uint8_t speed;         // Zone speed (1-100)
     uint8_t brightness;    // Zone brightness (0-255)
     uint8_t enabled : 1;   // Zone enabled flag
@@ -50,12 +64,13 @@ struct PresetData {
 
     // Version for forward compatibility (1 byte)
     uint8_t version;
-    static constexpr uint8_t CURRENT_VERSION = 1;
+    static constexpr uint8_t CURRENT_VERSION = 2;
+    static constexpr uint8_t V1_VERSION      = 1;  // Used for migration
 
     // ========================================================================
     // Global Parameters (8 bytes) - matches Unit-A encoder mapping
     // ========================================================================
-    uint8_t effectId;      // Current effect low byte (legacy + compatibility)
+    uint8_t effectId;      // Current effect low byte (bits [7:0])
     uint8_t brightness;    // Global brightness (0-255)
     uint8_t paletteId;     // Current palette index (0-63)
     uint8_t speed;         // Animation speed (1-100)
@@ -92,19 +107,25 @@ struct PresetData {
     uint32_t timestamp;           // millis() when saved
 
     // ========================================================================
-    // Checksum (2 bytes) - CRC16 of all preceding bytes
+    // Reserved / overflow space (22 bytes)
+    // Layout (v2+):
+    //   [0]    Global effectId high byte (bits [15:8])
+    //   [1..4] Zone[0..3] effectId high bytes (bits [15:8] per zone)
+    //   [5..21] Available for future expansion
+    // ========================================================================
+    uint8_t reservedFuture[22];
+
+    // ========================================================================
+    // Checksum (2 bytes) — CRC16 of ALL preceding bytes (offset 0..61)
+    // Placed at end so it covers reservedFuture, including effectId high bytes.
     // ========================================================================
     uint16_t checksum;
-
-    // Reserved space for future expansion (22 bytes)
-    // Total: 2+1+8+18+3+8+2+22 = 64 bytes
-    uint8_t reservedFuture[22];
 
     // ========================================================================
     // Methods
     // ========================================================================
 
-    // Initialize to empty/default state
+    // Initialise to empty/default state
     void clear() {
         memset(this, 0, sizeof(PresetData));
         magic = MAGIC;
@@ -118,7 +139,8 @@ struct PresetData {
         zoneCount = 1;
     }
 
-    // Store/retrieve full 16-bit effect IDs using reserved bytes for compatibility.
+    // Store / retrieve the full 16-bit global effect ID.
+    // Low byte goes into effectId; high byte into reservedFuture[0].
     void setEffectId16(uint16_t effectId16) {
         effectId = static_cast<uint8_t>(effectId16 & 0xFF);
         reservedFuture[0] = static_cast<uint8_t>((effectId16 >> 8) & 0xFF);
@@ -127,6 +149,20 @@ struct PresetData {
     uint16_t getEffectId16() const {
         return static_cast<uint16_t>(effectId) |
                (static_cast<uint16_t>(reservedFuture[0]) << 8);
+    }
+
+    // Store / retrieve the full 16-bit zone effect ID for zone index z (0-3).
+    // Low byte goes into zones[z].effectIdLow; high byte into reservedFuture[1+z].
+    void setZoneEffectId(uint8_t z, uint16_t effectId16) {
+        if (z >= 4) return;
+        zones[z].effectIdLow = static_cast<uint8_t>(effectId16 & 0xFF);
+        reservedFuture[1 + z] = static_cast<uint8_t>((effectId16 >> 8) & 0xFF);
+    }
+
+    uint16_t getZoneEffectId(uint8_t z) const {
+        if (z >= 4) return 0;
+        return static_cast<uint16_t>(zones[z].effectIdLow) |
+               (static_cast<uint16_t>(reservedFuture[1 + z]) << 8);
     }
 
     // Validate preset data integrity
@@ -142,14 +178,14 @@ struct PresetData {
         return !occupied || magic != MAGIC;
     }
 
-    // Calculate CRC16 checksum of preset data
+    // Calculate CRC16-CCITT checksum covering all bytes before the checksum
+    // field (i.e. bytes 0 through offsetof(PresetData, checksum) - 1).
+    // With checksum at the end of the struct this now covers reservedFuture,
+    // protecting both the global and zone effectId high bytes.
     uint16_t calculateChecksum() const {
-        // CRC16-CCITT implementation
         uint16_t crc = 0xFFFF;
         const uint8_t* data = reinterpret_cast<const uint8_t*>(this);
 
-        // Calculate CRC over all bytes except the checksum field itself
-        // checksum is at offset 40 (2 bytes before reservedFuture)
         constexpr size_t checksumOffset = offsetof(PresetData, checksum);
 
         for (size_t i = 0; i < checksumOffset; i++) {

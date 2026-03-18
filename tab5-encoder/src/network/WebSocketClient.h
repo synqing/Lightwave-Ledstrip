@@ -129,7 +129,7 @@ public:
     // ========================================================================
 
     void sendZoneEnable(bool enable);
-    void sendZoneEffect(uint8_t zoneId, uint8_t effectId);
+    void sendZoneEffect(uint8_t zoneId, uint16_t effectId);
     void sendZoneBrightness(uint8_t zoneId, uint8_t value);
     void sendZoneSpeed(uint8_t zoneId, uint8_t value);
     void sendZonePalette(uint8_t zoneId, uint8_t paletteId);

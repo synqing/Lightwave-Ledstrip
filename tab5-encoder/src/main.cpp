@@ -571,9 +571,10 @@ static void handleActionButton(uint8_t buttonIndex) {
     }
 }
 
-const char* lookupEffectName(uint8_t id) {
-    // Note: id is uint8_t (0-255), MAX_EFFECTS is 256, so id < MAX_EFFECTS is always true
-    // But we also check id <= 99 to enforce actual effect range
+const char* lookupEffectName(uint16_t id) {
+    // For K1 16-bit hex IDs (e.g. 0x1100), prefer the live s_k1EffectName cache.
+    // Fall back to the indexed array for IDs within the legacy 0-255 range.
+    if (id == s_k1EffectId && s_k1EffectName[0]) return s_k1EffectName;
     if (id < MAX_EFFECTS && s_effectKnown[id] && s_effectNames[id][0]) return s_effectNames[id];
     return nullptr;
 }

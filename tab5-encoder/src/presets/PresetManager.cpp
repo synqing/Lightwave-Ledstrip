@@ -183,12 +183,15 @@ void PresetManager::captureCurrentState(PresetData& preset) {
         preset.complexity = values[static_cast<uint8_t>(ParameterId::Complexity)];
         preset.variation = values[static_cast<uint8_t>(ParameterId::Variation)];
 
-        // Unit B zone parameters from encoder values (fallback)
+        // Unit B zone parameters from encoder values (fallback).
+        // Encoder values are uint8_t — store as low byte with zero high byte.
+        // The parallel fix-effect-id-chain agent is responsible for promoting
+        // ZoneState.effectId to uint16_t; once that lands, update this path.
         for (int z = 0; z < 4; z++) {
             uint8_t effectIdx = 8 + (z * 2);   // Zone effect indices: 8, 10, 12, 14
             uint8_t speedIdx = 9 + (z * 2);    // Zone speed indices: 9, 11, 13, 15
 
-            preset.zones[z].effectId = values[effectIdx];
+            preset.setZoneEffectId(static_cast<uint8_t>(z), values[effectIdx]);
             preset.zones[z].speed = values[speedIdx];
             preset.zones[z].brightness = 255;  // Default
             preset.zones[z].enabled = true;
@@ -197,6 +200,11 @@ void PresetManager::captureCurrentState(PresetData& preset) {
     }
 
     // Prefer the tracked 16-bit effect ID from WS/state sync when available.
+    // The ParameterHandler only carries an 8-bit shadow; the WS client holds
+    // the authoritative 16-bit value from the K1's last state-push message.
+    // If the WS client has not yet received a state update (hasCurrentEffectId()
+    // is false), the currentEffectId from getAllValues() above is already set
+    // as a best-effort fallback — leave it unchanged rather than storing 0.
     if (_wsClient && _wsClient->hasCurrentEffectId()) {
         currentEffectId = _wsClient->getCurrentEffectId();
         preset.setEffectId16(currentEffectId);
@@ -207,10 +215,14 @@ void PresetManager::captureCurrentState(PresetData& preset) {
         preset.zoneModeEnabled = _zoneUI->isZoneModeEnabled();
         preset.zoneCount = _zoneUI->getZoneCount();
 
-        // Override zone configs with actual state from UI
+        // Override zone configs with actual state from UI.
+        // ZoneState.effectId is currently uint8_t (parallel fix-effect-id-chain
+        // agent is migrating it to uint16_t).  Use setZoneEffectId() so that
+        // when ZoneState gains a uint16_t field the cast here becomes the only
+        // change needed.
         for (uint8_t z = 0; z < 4; z++) {
             const ZoneState& zs = _zoneUI->getZoneState(z);
-            preset.zones[z].effectId = zs.effectId;
+            preset.setZoneEffectId(z, static_cast<uint16_t>(zs.effectId));
             preset.zones[z].speed = zs.speed;
             preset.zones[z].paletteId = zs.paletteId;
             preset.zones[z].enabled = zs.enabled;
@@ -253,8 +265,9 @@ void PresetManager::captureCurrentState(PresetData& preset) {
                   preset.autoExposure, preset.brownGuardrail);
     if (preset.zoneModeEnabled && preset.zoneCount > 0) {
         for (uint8_t z = 0; z < preset.zoneCount && z < 4; z++) {
-            Serial.printf("[PresetManager]   Zone%d: E=%d S=%d P=%d en=%d\n",
-                          z, preset.zones[z].effectId, preset.zones[z].speed,
+            Serial.printf("[PresetManager]   Zone%d: E=%u S=%d P=%d en=%d\n",
+                          z, static_cast<unsigned>(preset.getZoneEffectId(z)),
+                          preset.zones[z].speed,
                           preset.zones[z].paletteId, preset.zones[z].enabled);
         }
     }
@@ -293,7 +306,7 @@ bool PresetManager::applyPresetState(const PresetData& preset) {
 
         for (uint8_t z = 0; z < preset.zoneCount && z < 4; z++) {
             if (preset.zones[z].enabled) {
-                _wsClient->sendZoneEffect(z, preset.zones[z].effectId);
+                _wsClient->sendZoneEffect(z, preset.getZoneEffectId(z));
                 _wsClient->sendZoneSpeed(z, preset.zones[z].speed);
                 _wsClient->sendZoneBrightness(z, preset.zones[z].brightness);
                 _wsClient->sendZonePalette(z, preset.zones[z].paletteId);

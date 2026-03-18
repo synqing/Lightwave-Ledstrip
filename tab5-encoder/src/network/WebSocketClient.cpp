@@ -693,7 +693,7 @@ void WebSocketClient::sendZoneEnable(bool enable) {
     sendJSON("zone.enable", doc);
 }
 
-void WebSocketClient::sendZoneEffect(uint8_t zoneId, uint8_t effectId) {
+void WebSocketClient::sendZoneEffect(uint8_t zoneId, uint16_t effectId) {
     if (!isConnected()) {
         return;
     }
@@ -705,21 +705,31 @@ void WebSocketClient::sendZoneEffect(uint8_t zoneId, uint8_t effectId) {
     }
 
     if (!canSend(paramIndex)) {
-        queueParameterChange(paramIndex, effectId, "zone.setEffect", zoneId);
+        // queueParameterChange stores uint8_t value; zone effects use direct send only
+        // (rate limiter index is just used for the canSend check above)
         return;
     }
 
     JsonDocument doc;
     doc["zoneId"] = zoneId;
-    doc["effectId"] = effectId;
+    doc["effectId"] = static_cast<int>(effectId);  // Send as integer — K1 uses 16-bit hex IDs
     sendJSON("zone.setEffect", doc);
 }
 
 void WebSocketClient::sendZoneBrightness(uint8_t zoneId, uint8_t value) {
+    if (!isConnected()) {
+        return;
+    }
+
     // Zone brightness uses rate limiter slot for zone effect (same encoder pair)
     // Note: Brightness is no longer a parameter in new layout, but API still supports it
     uint8_t paramIndex = ParamIndex::ZONE0_EFFECT + (zoneId * 2);
-    if (zoneId > 3 || !canSend(paramIndex)) {
+    if (zoneId > 3) {
+        return;
+    }
+
+    if (!canSend(paramIndex)) {
+        queueParameterChange(paramIndex, value, "zone.setBrightness", zoneId);
         return;
     }
 
@@ -774,9 +784,18 @@ void WebSocketClient::sendZonePalette(uint8_t zoneId, uint8_t paletteId) {
 }
 
 void WebSocketClient::sendZoneBlend(uint8_t zoneId, uint8_t blendMode) {
+    if (!isConnected()) {
+        return;
+    }
+
     // Zone blend uses rate limiter slot for zone effect (same encoder pair)
     uint8_t paramIndex = ParamIndex::ZONE0_EFFECT + (zoneId * 2);
-    if (zoneId > 3 || blendMode > 7 || !canSend(paramIndex)) {
+    if (zoneId > 3 || blendMode > 7) {
+        return;
+    }
+
+    if (!canSend(paramIndex)) {
+        queueParameterChange(paramIndex, blendMode, "zone.setBlend", zoneId);
         return;
     }
 

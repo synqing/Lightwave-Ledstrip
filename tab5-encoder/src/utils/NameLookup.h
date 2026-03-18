@@ -12,6 +12,7 @@
 #include <cstdint>
 
 // Forward declarations for global name lookup functions
-extern const char* lookupEffectName(uint8_t id);
+// effectId is uint16_t — K1 firmware uses 16-bit hex IDs (e.g. 0x1100)
+extern const char* lookupEffectName(uint16_t id);
 extern const char* lookupPaletteName(uint8_t id);
 

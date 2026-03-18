@@ -145,6 +145,22 @@ bool PresetStorage::load(uint8_t slotIndex, PresetData& preset) {
         return false;
     }
 
+    // Migrate v1 presets to v2 format.
+    // v1 stored zone effectIds as bare uint8_t with no high byte, and the
+    // global effectId high byte was outside CRC coverage.  The only safe
+    // migration is to reset zone effectIds to zero (the default "no effect"
+    // sentinel), then rewrite the struct with the updated version and checksum.
+    if (preset.magic == PresetData::MAGIC && preset.version == PresetData::V1_VERSION) {
+        Serial.printf("[PresetStorage] Migrating slot %d from v1 to v2\n", slotIndex);
+        for (uint8_t z = 0; z < 4; z++) {
+            preset.setZoneEffectId(z, 0);  // Cannot recover truncated high bytes
+        }
+        preset.version = PresetData::CURRENT_VERSION;
+        preset.updateChecksum();
+        // Persist the migrated data so future loads skip migration
+        save(slotIndex, preset);
+    }
+
     // Validate loaded data
     if (!preset.isValid()) {
         Serial.printf("[PresetStorage] Slot %d checksum/magic invalid\n", slotIndex);

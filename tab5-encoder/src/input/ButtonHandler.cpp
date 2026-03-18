@@ -17,16 +17,29 @@ ButtonHandler::ButtonHandler() {
 
 bool ButtonHandler::handleButtonPress(uint8_t index) {
     // =========================================================================
-    // Unit-B buttons (8-15): Reserved for Preset System
+    // Unit-B button dispatch (indices 8-15)
     // =========================================================================
-    // These are handled by ClickDetector + PresetManager in main.cpp.
-    // Return TRUE to prevent DualEncoderService from resetting the encoder,
-    // but do NOT call any zone mode functions - presets only.
+    // Index 8  (Enc0): Zone Mode global toggle
+    // Index 9  (Enc1): SpeedPalette toggle for zone 0
+    // Index 11 (Enc3): SpeedPalette toggle for zone 1
+    // Index 13 (Enc5): SpeedPalette toggle for zone 2
+    // Index 15 (Enc7): SpeedPalette toggle for zone 3
+    // Indices 10, 12, 14 (Enc2/4/6): Reserved for Preset System — no toggle action
+    if (index == 8) {
+        toggleZoneMode();
+        return true;
+    }
+    if (index == 9 || index == 11 || index == 13 || index == 15) {
+        const uint8_t zoneId = (index - 9) / 2;
+        toggleSpeedPaletteMode(zoneId);
+        return true;
+    }
     if (index >= 8) {
-        return true;  // Handled (no action) - prevent reset behavior
+        // Remaining Unit-B buttons (10, 12, 14): handled by PresetManager in main.cpp
+        return true;
     }
 
-    // Unit-A buttons (0-7): Allow default reset-to-default behavior
+    // Unit-A buttons (0-7): allow default reset-to-default behaviour
     return false;
 }
 

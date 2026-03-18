@@ -27,6 +27,7 @@
 #include "../../hal/EspHal.h"
 #include "../Theme.h"
 #include "../../config/Config.h"
+#include "PresetTypes.h"
 #include <cstdio>
 
 #ifdef SIMULATOR_BUILD
@@ -34,15 +35,6 @@
     #define TL_DATUM textdatum_t::top_left
     #define MC_DATUM textdatum_t::middle_center
 #endif
-
-// Preset slot visual state (reuse from PresetBankWidget if needed)
-enum class PresetSlotState : uint8_t {
-    EMPTY,     // No preset stored
-    OCCUPIED,  // Preset stored, not active
-    ACTIVE,    // Preset stored and last recalled
-    SAVING,    // Feedback: save in progress
-    DELETING   // Feedback: delete in progress
-};
 
 class PresetSlotWidget {
 public:

@@ -356,10 +356,10 @@ private:
                     continue;  // Should not reach here
             }
 
-            // Zone effectId
-            if (zone["effectId"].is<uint8_t>()) {
-                uint8_t effectId = zone["effectId"].as<uint8_t>();
-                s_paramHandler->setValue(effectParam, effectId);
+            // Zone effectId (16-bit — K1 firmware uses hex IDs such as 0x1100)
+            if (zone["effectId"].is<int>()) {
+                uint16_t effectId = static_cast<uint16_t>(zone["effectId"].as<int>());
+                s_paramHandler->setValue(effectParam, static_cast<uint8_t>(effectId & 0xFF));
             }
 
             // Zone speed

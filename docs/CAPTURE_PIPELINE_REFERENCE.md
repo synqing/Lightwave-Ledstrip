@@ -1,3 +1,7 @@
+---
+abstract: "Canonical reference for ESP32 LED frame capture pipeline: binary frame formats v1/v2 (1009 bytes), Python serial parser, waterfall/GIF/MP4 export, beat analyser dashboard, regression gate thresholds, and CLI usage."
+---
+
 # LED Capture Pipeline Reference
 
 > Canonical reference for the LightwaveOS LED frame capture, visualisation, and

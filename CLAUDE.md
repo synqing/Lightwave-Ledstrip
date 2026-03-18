@@ -427,6 +427,28 @@ Read **only** when the task requires it — do not load eagerly. Exception: WORK
 | CQRS state architecture | [firmware-v3/docs/CQRS_STATE_ARCHITECTURE.md](firmware-v3/docs/CQRS_STATE_ARCHITECTURE.md) | 652 | State management, command dispatch |
 | Harness worker mode | [.claude/harness/HARNESS_RULES.md](.claude/harness/HARNESS_RULES.md) | 364 | Harness/test infrastructure |
 
+## autocontext — Evolved Strategy Scenarios
+
+autocontext MCP is configured globally (`uv run autoctx mcp-serve` from the autocontext package). Two agent task scenarios are seeded with real LightwaveOS history and are available for iterative strategy improvement.
+
+| Scenario | Tool | When to use |
+|----------|------|-------------|
+| `embedded_effect_design` | `autocontext_run_improvement_loop` | Designing a new LED effect — iterates until it meets centre-origin, no-heap, dt-correction, and audio-reactivity rubric (max 3 rounds, threshold 0.80) |
+| `ios_feature_implementation` | `autocontext_run_improvement_loop` | Implementing a new SwiftUI feature — iterates until it meets @Observable, debounce, 44pt, Codable, and architecture rubric (max 3 rounds, threshold 0.82) |
+
+**Usage:**
+```python
+# Evaluate and iteratively improve an effect design
+autocontext_run_improvement_loop(
+    scenario_name="embedded_effect_design",
+    initial_output="<your C++ implementation>",
+    max_rounds=3,
+    quality_threshold=0.80,
+)
+```
+
+Reference context and calibration examples are seeded from past LightwaveOS sessions (effects audit, RendererActor architecture, trail buffer discovery). Playbooks accumulate across runs in `knowledge/embedded_effect_design/` and `knowledge/ios_feature_implementation/`.
+
 ## gstack
 
 This project uses [gstack](https://github.com/garrytan/gstack) workflow skills.

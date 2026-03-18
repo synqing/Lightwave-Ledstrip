@@ -1,3 +1,7 @@
+---
+abstract: "Mandatory session-start routing table: maps tasks to specific MCP tools, skills, and agents. Covers C++ intelligence (clangd 9 tools), memory, browser testing, feature planning lifecycle, anti-patterns, and decision tree."
+---
+
 # Workflow Routing — Tool & Skill Dispatch Guide
 
 > **This document is loaded via CLAUDE.md. Every CC session must follow these routing rules.**

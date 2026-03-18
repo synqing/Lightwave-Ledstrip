@@ -247,6 +247,8 @@ constexpr EffectId EID_SB_FULL_SPECTRUM                    = 0x130F;  // Full Sp
 constexpr EffectId EID_SB_RAW_WAVEFORM_SCOPE              = 0x1310;  // Raw Waveform Scope (time-domain + heavy processing)
 constexpr EffectId EID_SB_RECONSTRUCTED_WAVEFORM           = 0x1311;  // Reconstructed Waveform (spectral → synthetic wave)
 constexpr EffectId EID_SB_SPECTRAL_BEAT_PULSE              = 0x1312;  // Spectral Beat Pulse (spectrum + beat expansion)
+constexpr EffectId EID_SB_K1_WAVEFORM_HYBRID               = 0x1313;  // K1 Waveform Hybrid — SB colour character on K1 dot mode
+constexpr EffectId EID_SB_K1_WAVEFORM_HARMONIC             = 0x1314;  // K1 Waveform Harmonic — one dot per chroma bin at pitch-mapped position
 
 // --- Beat Pulse Family (0x14xx) ---
 constexpr EffectId EID_BEAT_PULSE_STACK                    = 0x1400;  // old 110: Beat Pulse (Stack)
@@ -611,6 +613,8 @@ inline bool needsToneMap(EffectId id) {
         case EID_LGP_TIME_REVERSAL_MIRROR_MOD3: // 0x1B08
         case EID_SB_K1_BLOOM:                   // 0x1301 — additive chromagram sum
         case EID_SB_K1_WAVEFORM:                // 0x1302 — additive chromagram sum
+        case EID_SB_K1_WAVEFORM_HYBRID:         // 0x1313 — additive chromagram sum (SB colour)
+        case EID_SB_K1_WAVEFORM_HARMONIC:       // 0x1314 — per-bin pitch-mapped dots
             return true;
         default:
             return false;

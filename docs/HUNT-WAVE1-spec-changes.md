@@ -1,3 +1,7 @@
+---
+abstract: "16 firmware spec changes from HUNT Wave 1 research (60 web searches, 6 vectors). Tier 1 critical: vibrato-suppressed onset (SuperFlux), asymmetric smoothing, K-weighted RMS. Tiers 2-4 cover refractory, weights, hue caps, motion variation."
+---
+
 # K1 Translation Engine — HUNT Wave 1 Spec Change Document
 
 **Date:** 2026-03-09

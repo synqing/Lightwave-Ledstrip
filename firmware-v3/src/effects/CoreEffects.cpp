@@ -163,6 +163,8 @@
 #include "ieffect/sensorybridge_reference/SbK1BloomEffect.h"
 #include "ieffect/sensorybridge_reference/SbK1BloomV2Effect.h"
 #include "ieffect/sensorybridge_reference/SbK1WaveformEffect.h"
+#include "ieffect/sensorybridge_reference/SbK1WaveformHybridEffect.h"
+#include "ieffect/sensorybridge_reference/SbK1WaveformHarmonicEffect.h"
 #include "ieffect/sensorybridge_reference/SbWaveformOscilloscopeEffect.h"
 #include "ieffect/sensorybridge_reference/SbSpectralEnvelopeEffect.h"
 #include "ieffect/sensorybridge_reference/SbFullSpectrumEffect.h"
@@ -958,6 +960,16 @@ uint16_t registerAllEffects(RendererActor* renderer) {
 
     static ieffect::sensorybridge_reference::SbK1WaveformEffect sbK1WaveformInstance;
     renderer->registerEffect(EID_SB_K1_WAVEFORM, &sbK1WaveformInstance);
+    total++;
+
+    // K1 Waveform Hybrid — SB colour character on K1 dot mode
+    static ieffect::sensorybridge_reference::SbK1WaveformHybridEffect sbK1WaveformHybridInstance;
+    renderer->registerEffect(EID_SB_K1_WAVEFORM_HYBRID, &sbK1WaveformHybridInstance);
+    total++;
+
+    // K1 Waveform Harmonic — pitch-mapped chroma dot constellation
+    static ieffect::sensorybridge_reference::SbK1WaveformHarmonicEffect sbK1WaveformHarmonicInstance;
+    renderer->registerEffect(EID_SB_K1_WAVEFORM_HARMONIC, &sbK1WaveformHarmonicInstance);
     total++;
 
     // SB Waveform Oscilloscope (exact SB 3.0.0 parity)

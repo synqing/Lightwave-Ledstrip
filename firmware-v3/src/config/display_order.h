@@ -289,6 +289,8 @@ constexpr EffectId DISPLAY_ORDER[] = {
     // K1 Lightwave Parity
     EID_SB_K1_BLOOM,                         // K1 Bloom parity
     EID_SB_K1_WAVEFORM,                      // K1 Waveform parity
+    EID_SB_K1_WAVEFORM_HYBRID,               // K1 Waveform Hybrid (SB colour)
+    EID_SB_K1_WAVEFORM_HARMONIC,             // K1 Waveform Harmonic (pitch-mapped)
     EID_SB_K1_BLOOM_V2,                      // K1 Bloom V2 (Mean energy)
     EID_SB_K1_BLOOM_V2_MAXBIN,               // K1 Bloom V2 (Max Bin energy)
     EID_SB_K1_BLOOM_V2_RENORM,               // K1 Bloom V2 (Re-normalized energy)

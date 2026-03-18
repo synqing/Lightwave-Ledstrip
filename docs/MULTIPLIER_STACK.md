@@ -1,3 +1,7 @@
+---
+abstract: "Full AI toolchain inventory: Claude Code + 13 MCP servers + 29 skills. Gap analysis vs community consensus (March 2026). Cost is ~$20/mo. Includes Dicklesworthstone and snarktank repo assessments."
+---
+
 # The SpectraSynq Multiplier Stack
 
 > Canonical reference — what we run, why we chose it, what the world runs, and where we diverge on purpose.

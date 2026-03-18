@@ -16,3 +16,27 @@
 | #23299 | 8:45 AM | ✅ | AsyncTCP Core Affinity Changed to Core 0 | ~448 |
 | #23251 | 8:15 AM | 🔵 | ESP32-S3 Secondary Board Custom Configuration | ~563 |
 </claude-mem-context>
+
+## Available Agents
+
+Activate by name in any prompt: `"Activate [Agent] and..."` or `"Use [Agent] to..."`.
+
+### The Agency — Firmware Specialists
+
+| Agent | Activate When |
+|-------|--------------|
+| `Embedded Firmware Engineer` | ESP32-S3 hardware, PlatformIO builds, peripheral drivers, RTOS tasks, memory layout, partition tables |
+| `Software Architect` | Module boundaries, driver abstraction layers, architectural decisions, writing ADRs |
+| `SRE` | Watchdog timers, OTA reliability, crash analysis, uptime design, fault tolerance |
+| `Incident Response Commander` | Production firmware failures, field rollback, hardware incident triage and post-mortems |
+| `Code Reviewer` | Code quality review — before committing any significant change |
+
+### Existing Engineering Utilities
+
+| Agent | Activate When |
+|-------|--------------|
+| `systematic-debugger` | Bugs, logic errors, unexpected firmware behaviour, assertion failures |
+| `c-pro` | C code quality, memory management, pointer arithmetic, system calls |
+| `cpp-pro` | C++ patterns, RAII, template use, embedded C++ |
+| `deep-technical-analyst` | Forensic performance analysis, stack traces, architecture deep-dives |
+| `mlops-engineer` | Beat tracking models, PyTorch port, inference pipeline optimisation |

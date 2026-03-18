@@ -1572,6 +1572,11 @@ void setup() {
         g_presetManager->setZoneComposerUI(zoneUI);
     }
 
+    // Wire ZoneComposerUI to ButtonHandler so zone layout is sent before zone.enable
+    if (g_buttonHandler && zoneUI) {
+        g_buttonHandler->setZoneComposerUI(zoneUI);
+    }
+
     // Register WebSocket message callback
     g_wsClient.onMessage([](JsonDocument& doc) {
         // Handle metadata lists (effect/palette names) for UI

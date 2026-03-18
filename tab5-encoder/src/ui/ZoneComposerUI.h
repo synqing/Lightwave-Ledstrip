@@ -111,6 +111,18 @@ public:
     uint8_t getZoneCount() const { return _zoneCount; }
 
     /**
+     * Get current editing segments (for sending layout to K1 on zone mode enable)
+     * @return Pointer to editing segments array (zones::MAX_ZONES entries)
+     */
+    const zones::ZoneSegment* getEditingSegments() const { return _editingSegments; }
+
+    /**
+     * Get current editing zone count
+     * @return Number of zones in the editing buffer
+     */
+    uint8_t getEditingZoneCount() const { return _editingZoneCount; }
+
+    /**
      * Get zone state
      * @param zoneId Zone ID (0-3)
      * @return Const reference to ZoneState

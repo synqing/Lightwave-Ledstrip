@@ -181,15 +181,11 @@ public:
                 // #endregion
         
         if (!_available || channel > 8) {
-            // #region agent log (DISABLED)
-            // if (channel > 8) {
-                // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"F\",\"location\":\"Rotate8Transport.h:167\",\"message\":\"setLED.invalidChannel\",\"data\":{\"channel\":%u,\"timestamp\":%lu}\n",
-                    // channel, static_cast<unsigned long>(millis()));
-            // }
-                        // #endregion
             return;
         }
-        _encoder.writeRGB(channel, r, g, b);
+        if (!_encoder.writeRGB(channel, r, g, b)) {
+            I2CRecovery::recordError();
+        }
     }
 
     /**

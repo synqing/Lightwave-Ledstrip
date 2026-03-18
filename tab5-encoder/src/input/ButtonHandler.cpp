@@ -6,6 +6,7 @@
 
 #include "ButtonHandler.h"
 #include "../network/WebSocketClient.h"
+#include "../ui/ZoneComposerUI.h"
 #include <Arduino.h>
 
 ButtonHandler::ButtonHandler() {
@@ -47,8 +48,15 @@ void ButtonHandler::toggleZoneMode() {
     _zoneModeEnabled = !_zoneModeEnabled;
     Serial.printf("[Button] Zone mode %s\n", _zoneModeEnabled ? "ENABLED" : "DISABLED");
 
-    // Send zone mode command to LightwaveOS
+    // Send zone mode command to LightwaveOS.
+    // When enabling, send the current zone layout first so K1 has segment
+    // definitions — without layout, zone.enable is a no-op on the K1 renderer.
     if (_wsClient && _wsClient->isConnected()) {
+        if (_zoneModeEnabled && _zoneUI && _zoneUI->getEditingZoneCount() > 0) {
+            _wsClient->sendZonesSetLayout(
+                _zoneUI->getEditingSegments(),
+                _zoneUI->getEditingZoneCount());
+        }
         _wsClient->sendZoneEnable(_zoneModeEnabled);
     }
     

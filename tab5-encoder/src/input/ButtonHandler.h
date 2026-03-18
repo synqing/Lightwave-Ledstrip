@@ -16,6 +16,7 @@
 
 // Forward declarations
 class WebSocketClient;
+class ZoneComposerUI;
 
 /**
  * Speed/Palette mode for zone encoders
@@ -79,6 +80,14 @@ public:
         _wsClient = wsClient;
     }
 
+    /**
+     * Set ZoneComposerUI so zone layout can be sent alongside zone.enable
+     * @param zoneUI ZoneComposerUI instance (may be null)
+     */
+    void setZoneComposerUI(ZoneComposerUI* zoneUI) {
+        _zoneUI = zoneUI;
+    }
+
 private:
     bool _zoneModeEnabled = false;
     SpeedPaletteMode _zoneEncoderMode[4] = {
@@ -91,6 +100,7 @@ private:
     std::function<void(bool)> _zoneModeToggleCallback;
     std::function<void(uint8_t, SpeedPaletteMode)> _speedPaletteToggleCallback;
     WebSocketClient* _wsClient = nullptr;
+    ZoneComposerUI* _zoneUI = nullptr;
 
     /**
      * Toggle zone mode ON/OFF

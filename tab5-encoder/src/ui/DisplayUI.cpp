@@ -515,7 +515,7 @@ void DisplayUI::begin() {
     lv_obj_set_grid_dsc_array(_action_container, action_col_dsc, action_row_dsc);
     lv_obj_set_style_pad_column(_action_container, TAB5_GRID_GAP, LV_PART_MAIN);
 
-    const char* action_names[] = {"GAMMA", "COLOUR", "EDGE", "SPATIAL", "ZONES"};
+    const char* action_names[] = {"GAMMA", "COLOUR", "EDGEMIXER", "SPATIAL", "ZONES"};
     for (int i = 0; i < 5; i++) {
         _action_buttons[i] = make_card(_action_container, false);
         lv_obj_set_grid_cell(_action_buttons[i], LV_GRID_ALIGN_STRETCH, i, 1,
@@ -534,8 +534,11 @@ void DisplayUI::begin() {
         _action_values[i] = lv_label_create(_action_buttons[i]);
         lv_label_set_text(_action_values[i], "--");
         lv_obj_set_style_text_color(_action_values[i], lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
-        // GAMMA (index 0) uses monospace bold for numeric values; others use Rajdhani bold for text
-        lv_obj_set_style_text_font(_action_values[i], (i == 0) ? JETBRAINS_MONO_BOLD_32 : RAJDHANI_BOLD_32, LV_PART_MAIN);
+        // GAMMA=monospace bold 32, EDGEMIXER/SPATIAL=Rajdhani bold 24 (full names), others=Rajdhani bold 32
+        const lv_font_t* val_font = (i == 0) ? JETBRAINS_MONO_BOLD_32
+                                  : (i == 2 || i == 3) ? RAJDHANI_BOLD_24
+                                  : RAJDHANI_BOLD_32;
+        lv_obj_set_style_text_font(_action_values[i], val_font, LV_PART_MAIN);
         lv_obj_align(_action_values[i], LV_ALIGN_TOP_MID, 0, 28);  // Position below title with uniform spacing
         lv_obj_clear_flag(_action_values[i], LV_OBJ_FLAG_CLICKABLE);  // Prevent value from capturing touch
         lv_obj_add_flag(_action_values[i], LV_OBJ_FLAG_EVENT_BUBBLE);  // Let touch events bubble to button
@@ -1245,8 +1248,8 @@ void DisplayUI::setColourCorrectionState(const ColorCorrectionState& state) {
 void DisplayUI::setEdgeMixerState(const EdgeMixerState& state) {
     if (!_action_buttons[2] || !_action_values[2]) return;
 
-    // EDGE button (index 2) — EdgeMixer mode cycle
-    static const char* kModeNames[] = {"MIRROR", "ANALOG", "COMPL", "SPLIT", "SATUR"};
+    // EDGEMIXER button (index 2) — mode cycle
+    static const char* kModeNames[] = {"MIRROR", "ANALOGOUS", "COMPLEMENTARY", "SPLIT-COMP", "SATURATION VEIL"};
     const char* modeName = (state.mode < 5) ? kModeNames[state.mode] : "???";
     lv_label_set_text(_action_values[2], modeName);
     lv_obj_set_style_border_color(_action_buttons[2],
@@ -1254,8 +1257,8 @@ void DisplayUI::setEdgeMixerState(const EdgeMixerState& state) {
                                    LV_PART_MAIN);
 
     // SPATIAL button (index 3) — Spatial + Temporal combo
-    // Combos: 00=OFF, 10=CENT, 01=RMS, 11=C+R
-    static const char* kComboNames[] = {"OFF", "CENT", "RMS", "C+R"};
+    // Combos: spatial | (temporal<<1): 0=OFF, 1=CENTRE GRADIENT, 2=RMS GATE, 3=CENTRE+RMS
+    static const char* kComboNames[] = {"OFF", "CENTRE GRADIENT", "RMS GATE", "CENTRE+RMS"};
     uint8_t combo = state.spatial | (state.temporal << 1);
     const char* comboName = (combo < 4) ? kComboNames[combo] : "???";
     lv_label_set_text(_action_values[3], comboName);

@@ -2192,7 +2192,17 @@ void loop() {
             // Serial.printf("[DEBUG] After DisplayUI::begin() - Heap: free=%u minFree=%u largest=%u\n",
                           // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
                         // #endregion
-            
+
+            // Re-wire ZoneComposerUI now that begin() has created it
+            #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
+            if (ZoneComposerUI* zoneUI = g_ui->getZoneComposerUI()) {
+                zoneUI->setWebSocketClient(&g_wsClient);
+                if (g_buttonHandler) g_buttonHandler->setZoneComposerUI(zoneUI);
+                if (g_presetManager) g_presetManager->setZoneComposerUI(zoneUI);
+                Serial.println("[MAIN] ZoneComposerUI wired after begin()");
+            }
+            #endif
+
             // Wire up action button callback for LVGL
             #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
             g_ui->setActionButtonCallback(handleActionButton);

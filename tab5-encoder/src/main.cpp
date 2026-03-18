@@ -450,7 +450,7 @@ static void handleActionButton(uint8_t buttonIndex) {
         EdgeMixerState em = g_wsClient.getEdgeMixerState();
         if (!em.valid) { em = EdgeMixerState{}; em.valid = true; }
         if (buttonIndex == 2) {
-            em.mode = (em.mode + 1) % 5;
+            em.mode = (em.mode + 1) % 7;
             Serial.printf("[TOUCH] EdgeMixer mode: %d\n", em.mode);
         } else {
             uint8_t combo = em.spatial | (em.temporal << 1);

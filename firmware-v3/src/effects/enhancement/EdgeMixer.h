@@ -42,7 +42,9 @@ enum class EdgeMixerMode : uint8_t {
     ANALOGOUS           = 1,  ///< Hue shift +spread on Strip 2
     COMPLEMENTARY       = 2,  ///< 180deg hue shift with saturation reduction on Strip 2
     SPLIT_COMPLEMENTARY = 3,  ///< +150deg near-complement with lighter saturation
-    SATURATION_VEIL     = 4   ///< Desaturate Strip 2 by spread amount
+    SATURATION_VEIL     = 4,  ///< Desaturate Strip 2 by spread amount
+    TRIADIC             = 5,  ///< 120deg hue shift; spread controls saturation (0=full, 60=70%)
+    TETRADIC            = 6   ///< 90deg hue shift; spread controls saturation (0=full, 60=70%)
 };
 
 /**
@@ -144,10 +146,11 @@ public:
     static const char* modeName(EdgeMixerMode mode) {
         static const char* const names[] = {
             "mirror", "analogous", "complementary",
-            "split_complementary", "saturation_veil"
+            "split_complementary", "saturation_veil",
+            "triadic", "tetradic"
         };
         const uint8_t idx = static_cast<uint8_t>(mode);
-        return (idx <= 4) ? names[idx] : "unknown";
+        return (idx <= 6) ? names[idx] : "unknown";
     }
     const char* modeName() const { return modeName(m_mode); }
 
@@ -219,7 +222,7 @@ public:
         Preferences prefs;
         if (prefs.begin("edgemixer", true)) {
             uint8_t mode = prefs.getUChar("mode", 0);
-            if (mode <= 4) {
+            if (mode <= 6) {
                 m_mode = static_cast<EdgeMixerMode>(mode);
             }
             setSpread(prefs.getUChar("spread", 30));
@@ -398,6 +401,14 @@ private:
             case EdgeMixerMode::SATURATION_VEIL:
                 // No hue rotation, desaturation only
                 satRetain = static_cast<float>(m_satScale) / 255.0f;
+                break;
+            case EdgeMixerMode::TRIADIC:
+                theta = 120.0f * (M_PI / 180.0f);
+                satRetain = 1.0f - (static_cast<float>(m_spreadDegrees) / 60.0f) * 0.30f;
+                break;
+            case EdgeMixerMode::TETRADIC:
+                theta = 90.0f * (M_PI / 180.0f);
+                satRetain = 1.0f - (static_cast<float>(m_spreadDegrees) / 60.0f) * 0.30f;
                 break;
             case EdgeMixerMode::MIRROR:
             default:

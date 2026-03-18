@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - ESP32-P4 Audio Pipeline & iOS App
 
 ### Added
+- **firmware:** EdgeMixer two new colour harmony modes — Triadic (120° hue shift) and Tetradic (90° hue shift); spread controls saturation blend (0=full sat, 60=70% sat)
+- **tab5:** EdgeMixer mode button cycles through all 7 modes including Triadic and Tetradic
 - **ESP32-P4 Platform Support**: Full audio capture and LED control on Waveshare ESP32-P4-WIFI6
   - ES8311 audio codec integration via I2S standard driver
   - Dual WS2812 LED strips (320 LEDs total) via RMT peripheral

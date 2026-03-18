@@ -1249,8 +1249,8 @@ void DisplayUI::setEdgeMixerState(const EdgeMixerState& state) {
     if (!_action_buttons[2] || !_action_values[2]) return;
 
     // EDGEMIXER button (index 2) — mode cycle
-    static const char* kModeNames[] = {"MIRROR", "ANALOGOUS", "COMPLEMENTARY", "SPLIT-COMP", "SATURATION VEIL"};
-    const char* modeName = (state.mode < 5) ? kModeNames[state.mode] : "???";
+    static const char* kModeNames[] = {"MIRROR", "ANALOGOUS", "COMPLEMENTARY", "SPLIT-COMP", "SATURATION VEIL", "TRIADIC", "TETRADIC"};
+    const char* modeName = (state.mode < 7) ? kModeNames[state.mode] : "???";
     lv_label_set_text(_action_values[2], modeName);
     lv_obj_set_style_border_color(_action_buttons[2],
                                    lv_color_hex(state.mode != 0 ? TAB5_COLOR_BRAND_PRIMARY : 0xFFFFFF),

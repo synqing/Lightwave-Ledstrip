@@ -38,8 +38,8 @@ static void handleEdgeMixerSet(AsyncWebSocketClient* client, JsonDocument& doc, 
 
     if (doc.containsKey("mode")) {
         mode = doc["mode"] | 0;
-        if (mode > 4) {
-            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "mode must be 0-4", requestId));
+        if (mode > 6) {
+            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "mode must be 0-6", requestId));
             return;
         }
         hasMode = true;

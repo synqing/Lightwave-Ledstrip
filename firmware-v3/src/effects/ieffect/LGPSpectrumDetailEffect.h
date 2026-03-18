@@ -45,6 +45,7 @@ private:
         enhancement::AsymmetricFollower binFollowers[64];
         float binSmoothing[64];
         float targetBins[64];
+        CRGB  trailBuffer[160];  ///< Audio-reactive trail persistence (strip 1, LEDs 0–159)
     };
     SpectrumDetailPsram* m_ps = nullptr;
 #else

@@ -35,6 +35,14 @@ public:
 private:
     float m_smoothedBands[8] = {0};  // Smoothed band values for animation
     float m_chromaAngle = 0.0f;      ///< Circular chroma EMA state (radians)
+
+#ifndef NATIVE_BUILD
+    // PSRAM-backed trail buffer for audio-reactive persistence
+    struct SpectrumBarsPsram {
+        CRGB trailBuffer[160];  ///< Per-pixel trail (strip 1, LEDs 0–159)
+    };
+    SpectrumBarsPsram* m_ps = nullptr;
+#endif
 };
 
 } // namespace ieffect

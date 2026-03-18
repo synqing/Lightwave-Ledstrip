@@ -43,8 +43,24 @@ bool LGPSpectrumDetailEffect::init(plugins::EffectContext& ctx) {
 void LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {
     if (!m_ps) return;
 
-    // Clear buffer
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
+    // Audio-reactive trail: decay trail buffer, zero strip 1 for fresh additive accumulation.
+    // Strip 2 keeps the original fixed fade so its independent hue rendering is unaffected.
+    float rmsNow = ctx.audio.available ? ctx.audio.rms() : 0.0f;
+    {
+        static constexpr float kDecayBase  = 1.5f;
+        static constexpr float kDecayScale = 7.0f;
+        float trailDt = ctx.getSafeDeltaSeconds();
+        float decayRate = kDecayBase + kDecayScale * rmsNow;
+        uint8_t trailFade = static_cast<uint8_t>(decayRate * trailDt * 255.0f);
+        if (trailFade < 1) trailFade = 1;
+        if (trailFade > 200) trailFade = 200;
+        fadeToBlackBy(m_ps->trailBuffer, 160, trailFade);
+    }
+    uint16_t strip1Len = ctx.ledCount < 160u ? ctx.ledCount : 160u;
+    memset(ctx.leds, 0, strip1Len * sizeof(CRGB));
+    if (ctx.ledCount > 160u) {
+        fadeToBlackBy(ctx.leds + 160, ctx.ledCount - 160u, 30);
+    }
 
 #if !FEATURE_AUDIO_SYNC
     (void)ctx;
@@ -222,6 +238,14 @@ void LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {
     (void)binsAboveThreshold;
     (void)ledsWritten;
     (void)maxBright;
+
+    // Additive accumulate strip 1 into trail buffer, then output trail to LEDs.
+    // fadeToBlackBy above controls decay; += here adds each new frame's energy.
+    for (uint16_t i = 0; i < strip1Len; ++i) {
+        m_ps->trailBuffer[i] += ctx.leds[i];
+        ctx.leds[i] = m_ps->trailBuffer[i];
+    }
+    (void)rmsNow;  // decay already applied via trailFade above
 #endif  // FEATURE_AUDIO_SYNC
 }
 

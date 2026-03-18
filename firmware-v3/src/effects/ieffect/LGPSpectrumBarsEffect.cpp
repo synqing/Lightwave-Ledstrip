@@ -9,6 +9,7 @@
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
+#include <esp_heap_caps.h>
 #endif
 
 #include <cmath>
@@ -36,6 +37,14 @@ bool LGPSpectrumBarsEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
     memset(m_smoothedBands, 0, sizeof(m_smoothedBands));
     m_chromaAngle = 0.0f;
+#ifndef NATIVE_BUILD
+    if (!m_ps) {
+        m_ps = static_cast<SpectrumBarsPsram*>(
+            heap_caps_malloc(sizeof(SpectrumBarsPsram), MALLOC_CAP_SPIRAM));
+        if (!m_ps) return false;
+    }
+    memset(m_ps, 0, sizeof(SpectrumBarsPsram));
+#endif
     return true;
 }
 
@@ -60,8 +69,19 @@ void LGPSpectrumBarsEffect::render(plugins::EffectContext& ctx) {
         }
     }
 
-    // Clear buffer
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
+    // Audio-reactive trail decay: loud = faster fade (punchy), quiet = slower (ambient)
+#ifndef NATIVE_BUILD
+    if (m_ps) {
+        float rmsNow = ctx.audio.available ? ctx.audio.rms() : 0.0f;
+        static constexpr float kDecayBase  = 1.5f;  // decays/sec at silence
+        static constexpr float kDecayScale = 7.0f;  // extra decays/sec per unit RMS
+        float decayRate = kDecayBase + kDecayScale * rmsNow;
+        uint8_t trailFade = static_cast<uint8_t>(decayRate * dt * 255.0f);
+        if (trailFade < 1) trailFade = 1;
+        if (trailFade > 200) trailFade = 200;
+        fadeToBlackBy(m_ps->trailBuffer, 160, trailFade);
+    }
+#endif
 
     // Musically anchored hue (non-rainbow): circular chroma mean, smoothed.
     uint8_t baseHue = ctx.gHue;
@@ -113,9 +133,37 @@ void LGPSpectrumBarsEffect::render(plugins::EffectContext& ctx) {
 
         SET_CENTER_PAIR(ctx, dist, color);
     }
+
+#ifndef NATIVE_BUILD
+    if (m_ps) {
+        // Blend current frame into trail buffer (audio-coupled):
+        // loud → high blend amount → frame dominates → short trail
+        // quiet → low blend amount → trail dominates → long ambient trail
+        float rmsNow2 = ctx.audio.available ? ctx.audio.rms() : 0.0f;
+        uint8_t blendAmt = static_cast<uint8_t>(30.0f + 200.0f * rmsNow2);
+        uint16_t stripLen = ctx.ledCount < 160 ? ctx.ledCount : 160;
+        for (uint16_t i = 0; i < stripLen; ++i) {
+            m_ps->trailBuffer[i] = blend(m_ps->trailBuffer[i], ctx.leds[i], blendAmt);
+        }
+        // Output trail to strip 1 and mirror to strip 2
+        for (uint16_t i = 0; i < stripLen; ++i) {
+            ctx.leds[i] = m_ps->trailBuffer[i];
+        }
+        for (uint16_t i = 0; i < stripLen && (160u + i) < ctx.ledCount; ++i) {
+            ctx.leds[160u + i] = m_ps->trailBuffer[i];
+        }
+    }
+#endif
 }
 
-void LGPSpectrumBarsEffect::cleanup() {}
+void LGPSpectrumBarsEffect::cleanup() {
+#ifndef NATIVE_BUILD
+    if (m_ps) {
+        heap_caps_free(m_ps);
+        m_ps = nullptr;
+    }
+#endif
+}
 
 const plugins::EffectMetadata& LGPSpectrumBarsEffect::getMetadata() const {
     static plugins::EffectMetadata meta{

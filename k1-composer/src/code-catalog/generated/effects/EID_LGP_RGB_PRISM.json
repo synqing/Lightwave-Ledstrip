@@ -1,93 +1,118 @@
 {
   "schemaVersion": "2.0.0",
-  "generatedAtUtc": "2026-02-25T01:16:03Z",
-  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "generatedAtUtc": "2026-03-18T01:14:51Z",
+  "firmwareSourceHash": "25d1555df9030ad0f3db4c6565c25fec023f8cb74c6e74182e4a1a0db91afb2e",
   "effectId": "EID_LGP_RGB_PRISM",
   "effectIdHex": "0x0701",
   "className": "LGPRGBPrismEffect",
   "displayName": "LGP RGB Prism",
-  "headerPath": "firmware/v2/src/effects/ieffect/LGPRGBPrismEffect.h",
-  "sourcePath": "firmware/v2/src/effects/ieffect/LGPRGBPrismEffect.cpp",
+  "headerPath": "firmware-v3/src/effects/ieffect/LGPRGBPrismEffect.h",
+  "sourcePath": "firmware-v3/src/effects/ieffect/LGPRGBPrismEffect.cpp",
   "renderRange": [
     26,
-    62
+    89
   ],
   "phaseRanges": {
     "input": [
       [
         26,
-        29
+        32
       ]
     ],
     "mapping": [
       [
-        36,
-        36
+        43,
+        43
       ],
       [
-        38,
-        40
+        46,
+        48
       ]
     ],
     "modulation": [
       [
-        36,
-        42
+        32,
+        32
       ]
     ],
     "render": [
       [
-        34,
-        34
+        27,
+        27
       ],
       [
-        43,
-        45
+        33,
+        33
       ],
       [
-        49,
-        51
+        37,
+        37
       ],
       [
-        56,
-        56
+        42,
+        42
       ],
       [
-        58,
-        58
+        59,
+        60
+      ],
+      [
+        65,
+        66
+      ],
+      [
+        73,
+        73
+      ],
+      [
+        81,
+        82
+      ],
+      [
+        86,
+        87
       ]
     ],
     "post": [
       [
-        58,
-        60
+        32,
+        33
       ]
     ],
     "output": [
       [
-        34,
-        34
-      ],
-      [
-        42,
-        45
-      ],
-      [
-        47,
-        51
-      ],
-      [
-        56,
+        58,
         58
+      ],
+      [
+        61,
+        62
+      ],
+      [
+        64,
+        64
+      ],
+      [
+        67,
+        68
+      ],
+      [
+        74,
+        75
+      ],
+      [
+        81,
+        82
+      ],
+      [
+        84,
+        87
       ]
     ]
   },
-  "mappingConfidence": "low",
+  "mappingConfidence": "medium",
   "mappingWarnings": [
-    "Phase inference used fallback segmentation due to sparse signal.",
-    "Phase 'input' inferred from fallback segmentation.",
-    "Phase 'modulation' inferred from fallback segmentation.",
-    "Phase 'post' inferred from fallback segmentation."
+    "Phase 'input' inferred from fallback segmentation."
   ],
-  "sourceText": "/**\n * @file LGPRGBPrismEffect.cpp\n * @brief LGP RGB Prism effect implementation\n */\n\n#include \"LGPRGBPrismEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPRGBPrismEffect::LGPRGBPrismEffect()\n    : m_prismAngle(0.0f)\n{\n}\n\nbool LGPRGBPrismEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_prismAngle = 0.0f;\n    return true;\n}\n\nvoid LGPRGBPrismEffect::render(plugins::EffectContext& ctx) {\n    // Simulates light passing through a prism\n    float speed = ctx.speed / 255.0f;\n    float intensity = ctx.brightness / 255.0f;\n    const float dispersion = 1.5f;\n\n    m_prismAngle += speed * 0.02f;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float distFromCenter = (float)centerPairDistance((uint16_t)i);\n        float normalizedDist = distFromCenter / (float)HALF_LENGTH;\n\n        float redAngle = sinf(normalizedDist * dispersion + m_prismAngle);\n        float greenAngle = sinf(normalizedDist * dispersion * 1.1f + m_prismAngle);\n        float blueAngle = sinf(normalizedDist * dispersion * 1.2f + m_prismAngle);\n\n        // Strip 1: Red channel dominant\n        ctx.leds[i].r = (uint8_t)((128.0f + 127.0f * redAngle) * intensity);\n        ctx.leds[i].g = (uint8_t)(64.0f * fabsf(greenAngle) * intensity);\n        ctx.leds[i].b = 0;\n\n        // Strip 2: Blue channel dominant\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH].r = 0;\n            ctx.leds[i + STRIP_LENGTH].g = (uint8_t)(64.0f * fabsf(greenAngle) * intensity);\n            ctx.leds[i + STRIP_LENGTH].b = (uint8_t)((128.0f + 127.0f * blueAngle) * intensity);\n        }\n\n        // Green emerges at center\n        if (distFromCenter < 10.0f) {\n            ctx.leds[i].g += (uint8_t)(128.0f * intensity);\n            if (i + STRIP_LENGTH < ctx.ledCount) {\n                ctx.leds[i + STRIP_LENGTH].g += (uint8_t)(128.0f * intensity);\n            }\n        }\n    }\n}\n\nvoid LGPRGBPrismEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPRGBPrismEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP RGB Prism\",\n        \"RGB component splitting\",\n        plugins::EffectCategory::UNCATEGORIZED,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+  "sourceText": "/**\n * @file LGPRGBPrismEffect.cpp\n * @brief LGP RGB Prism effect implementation\n */\n\n#include \"LGPRGBPrismEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPRGBPrismEffect::LGPRGBPrismEffect()\n    : m_prismAngle(0.0f)\n{\n}\n\nbool LGPRGBPrismEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_prismAngle = 0.0f;\n    return true;\n}\n\nvoid LGPRGBPrismEffect::render(plugins::EffectContext& ctx) {\n    // Palette-driven prism dispersion — 3 palette colors at different spatial frequencies\n    float dt = ctx.getSafeDeltaSeconds();\n    float speed = ctx.speed / 255.0f;\n    const float dispersion = 1.5f;\n\n    // Trail persistence — long fade for smooth ambient colour blending\n    fadeToBlackBy(ctx.leds, ctx.ledCount, 10);\n\n    m_prismAngle += speed * 0.02f * 60.0f * dt;\n\n    // Three palette colors spaced 120° apart — the \"spectral components\"\n    uint8_t hue1 = ctx.gHue;\n    uint8_t hue2 = (uint8_t)(ctx.gHue + 85);\n    uint8_t hue3 = (uint8_t)(ctx.gHue + 170);\n\n    for (uint16_t dist = 0; dist < HALF_LENGTH; dist++) {\n        float normalizedDist = (float)dist / (float)HALF_LENGTH;\n\n        // Each spectral component disperses at a slightly different rate\n        float wave1 = sinf(normalizedDist * dispersion + m_prismAngle);\n        float wave2 = sinf(normalizedDist * dispersion * 1.1f + m_prismAngle);\n        float wave3 = sinf(normalizedDist * dispersion * 1.2f + m_prismAngle);\n\n        // Convert sine to brightness envelope [0, 255], scaled by ctx.brightness via scale8\n        uint8_t rawBright1 = (uint8_t)(128.0f + 127.0f * wave1);\n        uint8_t rawBright2 = (uint8_t)(128.0f + 127.0f * wave2);\n        uint8_t rawBright3 = (uint8_t)(128.0f + 127.0f * wave3);\n        uint8_t bright1 = scale8(rawBright1, ctx.brightness);\n        uint8_t bright2 = scale8(rawBright2, ctx.brightness);\n        uint8_t bright3 = scale8(rawBright3, ctx.brightness);\n\n        // Strip 1: first two spectral components dominate\n        CRGB c1a = ctx.palette.getColor(hue1, bright1);\n        CRGB c1b = ctx.palette.getColor(hue2, scale8(bright2, 128));\n        CRGB strip1Color = c1a;\n        strip1Color += c1b;\n\n        // Strip 2: last two spectral components dominate\n        CRGB c2a = ctx.palette.getColor(hue3, bright3);\n        CRGB c2b = ctx.palette.getColor(hue2, scale8(bright2, 128));\n        CRGB strip2Color = c2a;\n        strip2Color += c2b;\n\n        // Center convergence — all 3 components merge\n        if (dist < 10) {\n            uint8_t centerBoost = scale8((uint8_t)((10 - dist) * 6), ctx.brightness);\n            CRGB centerColor = ctx.palette.getColor((uint8_t)(ctx.gHue + 42), centerBoost);\n            strip1Color += centerColor;\n            strip2Color += centerColor;\n        }\n\n        // Write symmetric center pair\n        uint16_t left1 = CENTER_LEFT - dist;\n        uint16_t right1 = CENTER_RIGHT + dist;\n        if (left1 < STRIP_LENGTH) ctx.leds[left1] = strip1Color;\n        if (right1 < STRIP_LENGTH) ctx.leds[right1] = strip1Color;\n\n        uint16_t left2 = STRIP_LENGTH + CENTER_LEFT - dist;\n        uint16_t right2 = STRIP_LENGTH + CENTER_RIGHT + dist;\n        if (left2 < ctx.ledCount) ctx.leds[left2] = strip2Color;\n        if (right2 < ctx.ledCount) ctx.leds[right2] = strip2Color;\n    }\n}\n\nvoid LGPRGBPrismEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPRGBPrismEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP RGB Prism\",\n        \"RGB component splitting\",\n        plugins::EffectCategory::UNCATEGORIZED,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
 }

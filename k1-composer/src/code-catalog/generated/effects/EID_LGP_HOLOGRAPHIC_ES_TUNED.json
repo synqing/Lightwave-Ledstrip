@@ -1,105 +1,109 @@
 {
   "schemaVersion": "2.0.0",
-  "generatedAtUtc": "2026-02-25T01:16:03Z",
-  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "generatedAtUtc": "2026-03-18T01:14:51Z",
+  "firmwareSourceHash": "25d1555df9030ad0f3db4c6565c25fec023f8cb74c6e74182e4a1a0db91afb2e",
   "effectId": "EID_LGP_HOLOGRAPHIC_ES_TUNED",
   "effectIdHex": "0x1202",
   "className": "LGPHolographicEsTunedEffect",
   "displayName": "LGP Holographic (ES tuned)",
-  "headerPath": "firmware/v2/src/effects/ieffect/LGPHolographicEsTunedEffect.h",
-  "sourcePath": "firmware/v2/src/effects/ieffect/LGPHolographicEsTunedEffect.cpp",
+  "headerPath": "firmware-v3/src/effects/ieffect/LGPHolographicEsTunedEffect.h",
+  "sourcePath": "firmware-v3/src/effects/ieffect/LGPHolographicEsTunedEffect.cpp",
   "renderRange": [
-    66,
-    230
+    64,
+    259
   ],
   "phaseRanges": {
     "input": [
       [
-        87,
-        87
+        85,
+        85
       ],
       [
         90,
-        92
+        90
       ],
       [
-        94,
-        99
+        95,
+        100
       ],
       [
-        104,
-        104
+        109,
+        109
       ],
       [
-        146,
-        146
+        155,
+        155
       ]
     ],
     "mapping": [
       [
-        69,
-        70
+        67,
+        68
       ],
       [
-        135,
-        135
+        140,
+        140
       ],
       [
-        147,
-        147
+        145,
+        145
       ],
       [
-        152,
-        152
+        156,
+        156
       ],
       [
-        158,
-        158
+        161,
+        161
       ],
       [
-        218,
-        218
+        167,
+        167
+      ],
+      [
+        242,
+        242
       ]
     ],
     "modulation": [
       [
-        78,
-        80
+        76,
+        78
       ],
       [
-        83,
-        85
+        81,
+        83
       ],
       [
-        94,
-        96
+        95,
+        97
       ],
       [
-        98,
+        99,
         100
       ],
       [
-        105,
+        102,
         105
       ],
       [
-        108,
-        111
+        110,
+        110
       ],
       [
-        117,
-        118
+        113,
+        116
       ],
       [
-        131,
-        131
-      ],
-      [
-        133,
-        133
+        122,
+        123
       ],
       [
         136,
+        136
+      ],
+      [
+        138,
         138
       ],
       [
@@ -108,87 +112,129 @@
       ],
       [
         145,
-        146
+        145
+      ],
+      [
+        150,
+        152
       ],
       [
         154,
-        156
-      ],
-      [
-        159,
-        161
+        155
       ],
       [
         163,
         165
       ],
       [
-        169,
+        168,
         170
       ],
       [
-        174,
+        172,
         174
       ],
       [
-        179,
+        178,
         179
       ],
       [
-        187,
+        182,
+        182
+      ],
+      [
+        184,
         188
       ],
       [
-        193,
-        193
+        194,
+        194
       ],
       [
-        210,
+        199,
+        199
+      ],
+      [
+        201,
+        204
+      ],
+      [
+        212,
         213
+      ],
+      [
+        217,
+        217
+      ],
+      [
+        234,
+        237
+      ],
+      [
+        249,
+        249
       ]
     ],
     "render": [
       [
-        203,
-        203
-      ],
-      [
-        220,
-        220
-      ],
-      [
-        222,
-        223
-      ],
-      [
-        225,
-        225
+        195,
+        195
       ],
       [
         227,
         227
+      ],
+      [
+        244,
+        244
+      ],
+      [
+        246,
+        247
+      ],
+      [
+        251,
+        252
+      ],
+      [
+        255,
+        256
       ]
     ],
     "post": [
       [
-        211,
-        221
+        191,
+        191
+      ],
+      [
+        194,
+        195
+      ],
+      [
+        249,
+        250
       ]
     ],
     "output": [
       [
-        203,
-        203
+        227,
+        227
       ],
       [
-        225,
-        227
+        252,
+        252
+      ],
+      [
+        254,
+        254
+      ],
+      [
+        256,
+        256
       ]
     ]
   },
   "mappingConfidence": "medium",
-  "mappingWarnings": [
-    "Phase 'post' inferred from fallback segmentation."
-  ],
-  "sourceText": "/**\n * @file LGPHolographicEsTunedEffect.cpp\n * @brief LGP Holographic (ES tuned) effect implementation\n */\n\n#include \"LGPHolographicEsTunedEffect.h\"\n#include \"ChromaUtils.h\"\n#include \"../CoreEffects.h\"\n\n#ifndef NATIVE_BUILD\n#include <FastLED.h>\n#endif\n\n#include <cmath>\n\nnamespace lightwaveos::effects::ieffect {\n\nnamespace {\n\nstatic constexpr float kTwoPi = 6.2831853f;\n\nstatic inline float clamp01(float v) {\n    if (v < 0.0f) return 0.0f;\n    if (v > 1.0f) return 1.0f;\n    return v;\n}\n\nstatic inline float clamp(float v, float lo, float hi) {\n    if (v < lo) return lo;\n    if (v > hi) return hi;\n    return v;\n}\n\nstatic inline const float* selectChroma12(const audio::ControlBusFrame& cb) {\n    // Both backends now produce normalised chroma via Stage A/B pipeline.\n    return cb.chroma;\n}\n\nstatic inline float meanAdaptiveBins(const plugins::AudioContext& a, uint8_t start, uint8_t count) {\n    float sum = 0.0f;\n    for (uint8_t i = 0; i < count; ++i) {\n        sum += a.binAdaptive((uint8_t)(start + i));\n    }\n    return sum / (float)count;\n}\n\n} // namespace\n\nbool LGPHolographicEsTunedEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_phase1 = 0.0f;\n    m_phase2 = 0.0f;\n    m_phase3 = 0.0f;\n\n    m_lastHopSeq = 0;\n    m_chromaAngle = 0.0f;\n\n    m_lastFastFlux = 0.0f;\n    m_refraction = 0.0f;\n    m_focus = 0.0f;\n    m_lastBeatPhase = 0.0f;\n\n    return true;\n}\n\nvoid LGPHolographicEsTunedEffect::render(plugins::EffectContext& ctx) {\n    const float rawDt = ctx.getSafeRawDeltaSeconds();\n    const float dt = ctx.getSafeDeltaSeconds();\n    const float speedNorm = ctx.speed / 50.0f;\n    const float intensityNorm = ctx.brightness / 255.0f;\n\n    // ---------------------------------------------------------------------\n    // Audio features (backend-agnostic)\n    // ---------------------------------------------------------------------\n    float bass = 0.0f;\n    float lowMid = 0.0f;\n    float treble = 0.0f;\n    float flux = 0.0f;\n    float beatPhase = 0.0f;\n    float beatStrength = 0.0f;\n    float tempoConfidence = 0.0f;\n    // silentScale handled globally by RendererActor\n    bool beatTick = false;\n    bool downbeatTick = false;\n    bool beatLock = false;\n\n    if (ctx.audio.available) {\n        // 64-bin adaptive spectrum is stable across both legacy + ES backend.\n        // Zones: low (0..7), mid (16..31), high (48..63)\n        bass = meanAdaptiveBins(ctx.audio, 0, 8);\n        lowMid = meanAdaptiveBins(ctx.audio, 16, 16);\n        treble = meanAdaptiveBins(ctx.audio, 48, 16);\n\n        flux = ctx.audio.fastFlux();\n        beatPhase = ctx.audio.beatPhase();\n        beatStrength = ctx.audio.beatStrength();\n        tempoConfidence = ctx.audio.tempoConfidence();\n        beatTick = ctx.audio.isOnBeat();\n        downbeatTick = ctx.audio.isOnDownbeat();\n        beatLock = (tempoConfidence > 0.45f);\n\n        // Circular chroma hue (prevents argmax discontinuities and wrapping artefacts).\n        // The return value is not used directly; baseHue is derived from m_chromaAngle below.\n        const float* chroma = selectChroma12(ctx.audio.controlBus);\n        (void)effects::chroma::circularChromaHueSmoothed(\n            chroma, m_chromaAngle, rawDt, 0.30f);\n\n        // Flux spike → refraction accent (fast attack, short decay).\n        float fluxDelta = flux - m_lastFastFlux;\n        m_lastFastFlux = flux;\n        if (fluxDelta > 0.22f && flux > 0.25f) {\n            m_refraction = 1.0f;\n        } else {\n            m_refraction *= expf(-rawDt / 0.18f);\n        }\n\n        // Downbeat focus: briefly \"snap into focus\", then drift.\n        if (downbeatTick) {\n            m_focus = 1.0f;\n        } else {\n            m_focus *= expf(-rawDt / 0.35f);\n        }\n    } else {\n        // No audio: decay accents slowly.\n        m_refraction *= expf(-rawDt / 0.25f);\n        m_focus *= expf(-rawDt / 0.40f);\n        m_chromaAngle *= powf(0.995f, rawDt * 60.0f);  // dt-corrected\n    }\n\n    // ---------------------------------------------------------------------\n    // Phase system\n    // - Always advances with time (keeps hologram alive)\n    // - When beat-locked, phases are gently pulled towards musical ratios\n    // ---------------------------------------------------------------------\n    const float baseRate = (0.35f + 1.10f * speedNorm);\n    m_phase1 += baseRate * 0.55f * kTwoPi * dt;\n    m_phase2 += baseRate * 0.85f * kTwoPi * dt;\n    m_phase3 += baseRate * 1.25f * kTwoPi * dt;\n\n    // Wrap to prevent unbounded growth\n    if (m_phase1 > 1000.0f) m_phase1 = fmodf(m_phase1, kTwoPi);\n    if (m_phase2 > 1000.0f) m_phase2 = fmodf(m_phase2, kTwoPi);\n    if (m_phase3 > 1000.0f) m_phase3 = fmodf(m_phase3, kTwoPi);\n\n    float beatPhi = beatPhase * kTwoPi;\n    if (ctx.audio.available && beatLock) {\n        // Target musical ratios (1×, 2×, 4×). Focus reduces detune for a crisp “lock”.\n        float focus = clamp01(m_focus);\n        float pull = 1.0f - expf(-rawDt / 0.18f);\n        pull *= (0.25f + 0.55f * tempoConfidence);\n\n        float detune = (1.0f - focus) * (0.35f + 0.25f * speedNorm);\n\n        float t1 = beatPhi + detune * 0.15f;\n        float t2 = beatPhi * 2.0f + detune * 0.32f;\n        float t3 = beatPhi * 4.0f + detune * 0.55f;\n\n        // Soft pull towards targets (keeps it musical but not rigid/robotic).\n        m_phase1 += (t1 - m_phase1) * pull;\n        m_phase2 += (t2 - m_phase2) * pull;\n        m_phase3 += (t3 - m_phase3) * pull;\n\n        // Beat tick can slightly increase refraction to punch on beat without extra triggers.\n        if (beatTick && beatStrength > 0.25f) {\n            m_refraction = fmaxf(m_refraction, clamp01(beatStrength));\n        }\n    }\n\n    // Track beat phase for potential future phase-crossing logic (kept for stability parity with other effects).\n    m_lastBeatPhase = beatPhase;\n\n    // ---------------------------------------------------------------------\n    // Layer gains (instrument voicing)\n    // Wide→tight layers respond to bass→treble; shimmer responds to flux/refraction\n    // ---------------------------------------------------------------------\n    float g1 = 0.55f + 1.05f * bass;\n    float g2 = 0.40f + 0.95f * lowMid;\n    float g3 = 0.30f + 0.85f * treble;\n    float g4 = 0.20f + 1.10f * clamp01(flux * 0.8f + m_refraction);\n\n    // Prevent hard zeros (keeps a base hologram even in quieter passages).\n    g1 = clamp(g1, 0.10f, 1.60f);\n    g2 = clamp(g2, 0.08f, 1.45f);\n    g3 = clamp(g3, 0.06f, 1.35f);\n    g4 = clamp(g4, 0.04f, 1.30f);\n\n    // Contrast drive: more energy/beat → crisper interference.\n    float energy = clamp01(0.35f * bass + 0.25f * lowMid + 0.20f * treble + 0.20f * beatStrength);\n    float drive = 1.0f + 1.55f * energy + 0.55f * clamp01(m_focus);\n\n    // ---------------------------------------------------------------------\n    // Colour anchoring (non-rainbow): circular chroma mean sets the base.\n    // Derive hue from persisted angle (updated by circularChromaHueSmoothed or decayed).\n    // ---------------------------------------------------------------------\n    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle * (255.0f / 6.2831853f));\n    uint8_t dispersion = (uint8_t)(96 + (uint8_t)(m_refraction * 28.0f));\n\n    // ---------------------------------------------------------------------\n    // Render\n    // ---------------------------------------------------------------------\n    const int numLayers = 4;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float dist = (float)centerPairDistance((uint16_t)i);\n\n        float layerSum = 0.0f;\n\n        // Spatial frequencies are the same \"holographic\" family as the base effect.\n        // Audio only modulates gains and time bases.\n        layerSum += sinf(dist * 0.05f + m_phase1) * g1;\n        layerSum += sinf(dist * 0.15f + m_phase2) * (0.7f * g2);\n        layerSum += sinf(dist * 0.30f + m_phase3) * (0.5f * g3);\n        layerSum += sinf(dist * 0.60f - m_phase1 * 3.0f) * (0.3f * g4);\n\n        layerSum = layerSum / (float)numLayers;\n        layerSum = tanhf(layerSum * drive);\n\n        uint8_t brightness = (uint8_t)(128.0f + 127.0f * layerSum * intensityNorm);\n\n        // “Refraction” is palette shear; not a hue sweep.\n        float shear = 10.0f + 18.0f * m_refraction + 10.0f * clamp01(m_focus);\n        uint8_t paletteIndex1 = (uint8_t)(baseHue + (uint8_t)(dist * 0.60f) + (int8_t)(layerSum * shear));\n        uint8_t paletteIndex2 = (uint8_t)(baseHue + dispersion - (uint8_t)(dist * 0.60f) - (int8_t)(layerSum * shear));\n\n        ctx.leds[i] = ctx.palette.getColor(paletteIndex1, brightness);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor(paletteIndex2, brightness);\n        }\n    }\n}\n\nvoid LGPHolographicEsTunedEffect::cleanup() {}\n\nconst plugins::EffectMetadata& LGPHolographicEsTunedEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Holographic (ES tuned)\",\n        \"Musically driven holographic interference (beat/flux/chroma)\",\n        plugins::EffectCategory::QUANTUM,\n        1,\n        \"LightwaveOS\"\n    };\n    return meta;\n}\n\n} // namespace lightwaveos::effects::ieffect\n"
+  "mappingWarnings": [],
+  "sourceText": "/**\n * @file LGPHolographicEsTunedEffect.cpp\n * @brief LGP Holographic (ES tuned) effect implementation\n */\n\n#include \"LGPHolographicEsTunedEffect.h\"\n#include \"ChromaUtils.h\"\n#include \"../CoreEffects.h\"\n\n#ifndef NATIVE_BUILD\n#include <FastLED.h>\n#endif\n\n#include <cmath>\n\nnamespace lightwaveos::effects::ieffect {\n\nnamespace {\n\nstatic constexpr float kTwoPi = 6.2831853f;\n\nstatic inline float clamp01(float v) {\n    if (v < 0.0f) return 0.0f;\n    if (v > 1.0f) return 1.0f;\n    return v;\n}\n\nstatic inline float clamp(float v, float lo, float hi) {\n    if (v < lo) return lo;\n    if (v > hi) return hi;\n    return v;\n}\n\nstatic inline const float* selectChroma12(const plugins::AudioContext& audio) {\n    return audio.chroma();\n}\n\n// meanAdaptiveBins() removed — migrated to backend-agnostic bands[8] octave access.\n\n} // namespace\n\nbool LGPHolographicEsTunedEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_phase1 = 0.0f;\n    m_phase2 = 0.0f;\n    m_phase3 = 0.0f;\n\n    m_lastHopSeq = 0;\n    m_chromaAngle = 0.0f;\n\n    m_lastFastFlux = 0.0f;\n    m_refraction = 0.0f;\n    m_focus = 0.0f;\n    m_lastBeatPhase = 0.0f;\n\n    m_bassFollower.reset(0.0f);\n    m_lowMidFollower.reset(0.0f);\n    m_trebleFollower.reset(0.0f);\n    m_energyFollower.reset(0.0f);\n\n    return true;\n}\n\nvoid LGPHolographicEsTunedEffect::render(plugins::EffectContext& ctx) {\n    const float rawDt = ctx.getSafeRawDeltaSeconds();\n    const float dt = ctx.getSafeDeltaSeconds();\n    const float speedNorm = ctx.speed / 50.0f;\n    const float intensityNorm = ctx.brightness / 255.0f;\n\n    // ---------------------------------------------------------------------\n    // Audio features (backend-agnostic)\n    // ---------------------------------------------------------------------\n    float bass = 0.0f;\n    float lowMid = 0.0f;\n    float treble = 0.0f;\n    float flux = 0.0f;\n    float beatPhase = 0.0f;\n    float beatStrength = 0.0f;\n    float tempoConfidence = 0.0f;\n    // silentScale handled globally by RendererActor\n    bool beatTick = false;\n    bool downbeatTick = false;\n    bool beatLock = false;\n\n    if (ctx.audio.available) {\n        // Migrated from bins64 to backend-agnostic bands[8] octave access:\n        //   bins[0..7]   (bass)   -> (bands[0] + bands[1]) * 0.5f\n        //   bins[16..31] (mid)    -> (bands[3] + bands[4]) * 0.5f\n        //   bins[48..63] (treble) -> (bands[5] + bands[6] + bands[7]) / 3\n        const auto& b = ctx.audio.bands();\n        bass   = (b[0] + b[1]) * 0.5f;\n        lowMid = (b[3] + b[4]) * 0.5f;\n        treble = (b[5] + b[6] + b[7]) * (1.0f / 3.0f);\n\n        flux = ctx.audio.fastFlux();\n        beatPhase = ctx.audio.beatPhase();\n        beatStrength = ctx.audio.beatStrength();\n        tempoConfidence = ctx.audio.tempoConfidence();\n        beatTick = ctx.audio.isOnBeat();\n        downbeatTick = ctx.audio.isOnDownbeat();\n\n        // Beat lock hysteresis (Schmitt trigger)\n        if (!m_beatLocked && tempoConfidence > 0.55f) m_beatLocked = true;\n        if (m_beatLocked && tempoConfidence < 0.35f) m_beatLocked = false;\n        beatLock = m_beatLocked;\n\n        // Circular chroma hue (prevents argmax discontinuities and wrapping artefacts).\n        // The return value is not used directly; baseHue is derived from m_chromaAngle below.\n        const float* chroma = selectChroma12(ctx.audio);\n        (void)effects::chroma::circularChromaHueSmoothed(\n            chroma, m_chromaAngle, rawDt, 0.30f);\n\n        // Flux spike → refraction accent (fast attack, short decay).\n        float fluxDelta = flux - m_lastFastFlux;\n        m_lastFastFlux = flux;\n        if (fluxDelta > 0.22f && flux > 0.25f) {\n            m_refraction = 1.0f;\n        } else {\n            m_refraction *= expf(-rawDt / 0.18f);\n        }\n\n        // Downbeat focus: briefly \"snap into focus\", then drift.\n        if (downbeatTick) {\n            m_focus = 1.0f;\n        } else {\n            m_focus *= expf(-rawDt / 0.35f);\n        }\n    } else {\n        // No audio: decay accents slowly.\n        m_refraction *= expf(-rawDt / 0.25f);\n        m_focus *= expf(-rawDt / 0.40f);\n        m_chromaAngle *= powf(0.995f, rawDt * 60.0f);  // dt-corrected\n    }\n\n    // ---------------------------------------------------------------------\n    // Phase system\n    // - Always advances with time (keeps hologram alive)\n    // - When beat-locked, phases are gently pulled towards musical ratios\n    // ---------------------------------------------------------------------\n    const float baseRate = (0.35f + 1.10f * speedNorm);\n    m_phase1 += baseRate * 0.55f * kTwoPi * dt;\n    m_phase2 += baseRate * 0.85f * kTwoPi * dt;\n    m_phase3 += baseRate * 1.25f * kTwoPi * dt;\n\n    // Normalize phases every frame to prevent unbounded growth\n    auto wrapTwoPi = [](float& p) {\n        constexpr float kTwoPi = 6.2831853f;\n        if (p > kTwoPi || p < 0.0f) p = fmodf(fmodf(p, kTwoPi) + kTwoPi, kTwoPi);\n    };\n    wrapTwoPi(m_phase1);\n    wrapTwoPi(m_phase2);\n    wrapTwoPi(m_phase3);\n\n    float beatPhi = beatPhase * kTwoPi;\n    if (ctx.audio.available && beatLock) {\n        // Target musical ratios (1×, 2×, 4×). Focus reduces detune for a crisp \"lock\".\n        float focus = clamp01(m_focus);\n        float pull = 1.0f - expf(-rawDt / 0.35f);\n        pull *= (0.25f + 0.55f * tempoConfidence);\n\n        float detune = (1.0f - focus) * (0.35f + 0.25f * speedNorm);\n\n        float t1 = beatPhi + detune * 0.15f;\n        float t2 = beatPhi * 2.0f + detune * 0.32f;\n        float t3 = beatPhi * 4.0f + detune * 0.55f;\n\n        // Soft pull towards targets (keeps it musical but not rigid/robotic).\n        m_phase1 += (t1 - m_phase1) * pull;\n        m_phase2 += (t2 - m_phase2) * pull;\n        m_phase3 += (t3 - m_phase3) * pull;\n\n        // Beat tick can slightly increase refraction to punch on beat without extra triggers.\n        if (beatTick && beatStrength > 0.25f) {\n            m_refraction = fmaxf(m_refraction, clamp01(beatStrength));\n        }\n    }\n\n    // Track beat phase for potential future phase-crossing logic (kept for stability parity with other effects).\n    m_lastBeatPhase = beatPhase;\n\n    // ---------------------------------------------------------------------\n    // Smooth audio features via AsymmetricFollower (fast attack, smooth release)\n    // ---------------------------------------------------------------------\n    float smoothBass = m_bassFollower.update(bass, rawDt);\n    float smoothLowMid = m_lowMidFollower.update(lowMid, rawDt);\n    float smoothTreble = m_trebleFollower.update(treble, rawDt);\n    float smoothEnergy = m_energyFollower.update(\n        0.35f * bass + 0.25f * lowMid + 0.20f * treble + 0.20f * beatStrength, rawDt);\n\n    // ---------------------------------------------------------------------\n    // Fade previous frame (trail persistence)\n    // Dynamic: more energy = shorter trails (punchier), less energy = longer trails\n    // ---------------------------------------------------------------------\n    uint8_t fadeAmount = (uint8_t)(15 + 35 * (1.0f - clamp01(smoothEnergy)));\n    fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmount);\n\n    // ---------------------------------------------------------------------\n    // Layer gains (instrument voicing)\n    // Wide→tight layers respond to smoothed bass→treble; shimmer responds to flux/refraction\n    // ---------------------------------------------------------------------\n    float g1 = 0.55f + 1.05f * smoothBass;\n    float g2 = 0.40f + 0.95f * smoothLowMid;\n    float g3 = 0.30f + 0.85f * smoothTreble;\n    float g4 = 0.20f + 1.10f * clamp01(flux * 0.8f + m_refraction);\n\n    // Prevent hard zeros (keeps a base hologram even in quieter passages).\n    g1 = clamp(g1, 0.10f, 1.60f);\n    g2 = clamp(g2, 0.08f, 1.45f);\n    g3 = clamp(g3, 0.06f, 1.35f);\n    g4 = clamp(g4, 0.04f, 1.30f);\n\n    // Contrast drive: more energy/beat → crisper interference.\n    float drive = 1.0f + 1.55f * smoothEnergy + 0.55f * clamp01(m_focus);\n\n    // ---------------------------------------------------------------------\n    // Colour anchoring (non-rainbow): circular chroma mean sets the base.\n    // Derive hue from persisted angle (updated by circularChromaHueSmoothed or decayed).\n    // ---------------------------------------------------------------------\n    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle * (255.0f / 6.2831853f));\n    uint8_t dispersion = (uint8_t)(96 + (uint8_t)(m_refraction * 28.0f));\n\n    // ---------------------------------------------------------------------\n    // Render\n    // ---------------------------------------------------------------------\n    const int numLayers = 4;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float dist = (float)centerPairDistance((uint16_t)i);\n\n        float layerSum = 0.0f;\n\n        // Spatial frequencies are the same \"holographic\" family as the base effect.\n        // Audio only modulates gains and time bases.\n        layerSum += sinf(dist * 0.05f + m_phase1) * g1;\n        layerSum += sinf(dist * 0.15f + m_phase2) * (0.7f * g2);\n        layerSum += sinf(dist * 0.30f + m_phase3) * (0.5f * g3);\n        layerSum += sinf(dist * 0.60f - m_phase1 * 3.0f) * (0.3f * g4);\n\n        layerSum = layerSum / (float)numLayers;\n        layerSum = tanhf(layerSum * drive);\n\n        uint8_t brightness = (uint8_t)(128.0f + 127.0f * layerSum * intensityNorm);\n\n        // “Refraction” is palette shear; not a hue sweep.\n        float shear = 10.0f + 18.0f * m_refraction + 10.0f * clamp01(m_focus);\n        uint8_t paletteIndex1 = (uint8_t)(baseHue + (uint8_t)(dist * 0.60f) + (int8_t)(layerSum * shear));\n        uint8_t paletteIndex2 = (uint8_t)(baseHue + dispersion - (uint8_t)(dist * 0.60f) - (int8_t)(layerSum * shear));\n\n        // Blend new frame with faded previous frame for temporal smoothing.\n        // nblend keeps ~75% new + ~25% previous (residual from fadeToBlackBy above).\n        CRGB color1 = ctx.palette.getColor(paletteIndex1, brightness);\n        nblend(ctx.leds[i], color1, 192);\n\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            CRGB color2 = ctx.palette.getColor(paletteIndex2, brightness);\n            nblend(ctx.leds[i + STRIP_LENGTH], color2, 192);\n        }\n    }\n}\n\nvoid LGPHolographicEsTunedEffect::cleanup() {}\n\nconst plugins::EffectMetadata& LGPHolographicEsTunedEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Holographic (ES tuned)\",\n        \"Musically driven holographic interference (beat/flux/chroma)\",\n        plugins::EffectCategory::QUANTUM,\n        1,\n        \"LightwaveOS\"\n    };\n    return meta;\n}\n\n} // namespace lightwaveos::effects::ieffect\n"
 }

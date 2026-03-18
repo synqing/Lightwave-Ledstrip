@@ -1,0 +1,139 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-03-18T01:14:51Z",
+  "firmwareSourceHash": "25d1555df9030ad0f3db4c6565c25fec023f8cb74c6e74182e4a1a0db91afb2e",
+  "effectId": "EID_LGP_IFS_BIO_RELIC_AR",
+  "effectIdHex": "0x1C13",
+  "className": "LGPIFSBioRelicAREffect",
+  "displayName": "LGP IFS Bio Relic (5L-AR)",
+  "headerPath": "firmware-v3/src/effects/ieffect/LGPIFSBioRelicAREffect.h",
+  "sourcePath": "firmware-v3/src/effects/ieffect/LGPIFSBioRelicAREffect.cpp",
+  "renderRange": [
+    118,
+    270
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        118,
+        135
+      ]
+    ],
+    "mapping": [
+      [
+        127,
+        127
+      ],
+      [
+        141,
+        142
+      ],
+      [
+        145,
+        145
+      ],
+      [
+        147,
+        147
+      ],
+      [
+        168,
+        168
+      ],
+      [
+        171,
+        171
+      ],
+      [
+        178,
+        178
+      ],
+      [
+        269,
+        269
+      ]
+    ],
+    "modulation": [
+      [
+        142,
+        142
+      ],
+      [
+        144,
+        144
+      ],
+      [
+        146,
+        147
+      ],
+      [
+        149,
+        150
+      ],
+      [
+        153,
+        153
+      ],
+      [
+        156,
+        156
+      ]
+    ],
+    "render": [
+      [
+        175,
+        175
+      ],
+      [
+        181,
+        181
+      ],
+      [
+        228,
+        228
+      ],
+      [
+        235,
+        235
+      ],
+      [
+        265,
+        265
+      ]
+    ],
+    "post": [
+      [
+        252,
+        262
+      ]
+    ],
+    "output": [
+      [
+        175,
+        175
+      ],
+      [
+        214,
+        215
+      ],
+      [
+        228,
+        228
+      ],
+      [
+        235,
+        235
+      ],
+      [
+        239,
+        240
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPIFSBioRelicAREffect.cpp\n * @brief IFS Botanical Relic (5-Layer Audio-Reactive)\n *\n * Barnsley fern IFS with histogram projection and full 5-layer AR composition.\n * Base maths from LGPIFSBioRelicEffect (HolyShitBangersPack), restructured\n * into explicit bed/structure/impact/tonal/memory layers.\n *\n * Physics: 4-transform Barnsley IFS (probabilities 0.01/0.85/0.07/0.07)\n *   Points mirrored for centre-origin symmetry, projected onto 160-LED histogram\n *\n * Audio mapping:\n *   Bed       - RMS-driven relic luminance (tau 0.45s)\n *   Structure - points/frame + decay from flux + saliency (tau 0.15s)\n *   Impact    - beat-triggered vein pulse (decay 0.25s)\n *   Memory    - accumulated vein glow (decay 0.95s)\n *   Tonal     - museum-relic hue from chord\n *\n * Centre-origin compliant. Dual-strip locked.\n */\n\n#include \"LGPIFSBioRelicAREffect.h\"\n#include \"LGPFilmPost.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n#include <cstring>\n\n#ifndef NATIVE_BUILD\n#include <esp_heap_caps.h>\n#endif\n\n#include \"../../utils/Log.h\"\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\n// =========================================================================\n// Local helpers\n// =========================================================================\n\nstatic inline uint32_t lcg_next(uint32_t& state) {\n    state = state * 1664525u + 1013904223u;\n    return state;\n}\n\nstatic inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRGB& c) {\n    ctx.leds[i] = c;\n    int j = i + STRIP_LENGTH;\n    if (j < (int)ctx.ledCount) ctx.leds[j] = c;\n}\n\nstatic inline float distN_from_index(int i) {\n    const float mid = (STRIP_LENGTH - 1) * 0.5f;\n    return fabsf((float)i - mid) / mid;\n}\n\nstatic inline float centreGlue(int i) {\n    const float mid = (STRIP_LENGTH - 1) * 0.5f;\n    const float d = (float)i - mid;\n    return 0.30f + 0.70f * expf(-(d * d) * 0.0016f);\n}\n\nstatic inline uint8_t luminanceToBr(float wave01, float master) {\n    const float base = 0.055f;\n    float out = lowrisk_ar::clamp01f(base + (1.0f - base) * lowrisk_ar::clamp01f(wave01));\n    out = out / (1.0f + 0.60f * out);  // filmic shoulder\n    out *= master;\n    return static_cast<uint8_t>(lowrisk_ar::clampf(out * 255.0f, 0.0f, 255.0f));\n}\n\n// =========================================================================\n// Construction / init / cleanup\n// =========================================================================\n\nLGPIFSBioRelicAREffect::LGPIFSBioRelicAREffect()\n    : m_ps(nullptr)\n    , m_px(0.0f), m_py(0.0f), m_t(0.0f), m_rng(0xBADC0DEu)\n    , m_bed(0.3f), m_structure(0.5f), m_impact(0.0f), m_memory(0.0f)\n{\n}\n\nbool LGPIFSBioRelicAREffect::init(plugins::EffectContext& ctx) {\n    m_controls.resetDefaults();\n    m_ar = lowrisk_ar::ArRuntimeState{};\n    m_ar.tonalHue = static_cast<float>(ctx.gHue);\n    m_ar.modeSmooth = 2.0f;\n    m_px   = 0.0f;\n    m_py   = 0.0f;\n    m_t    = 0.0f;\n    m_rng  = 0xBADC0DEu;\n    m_bed       = 0.3f;\n    m_structure = 0.5f;\n    m_impact    = 0.0f;\n    m_memory    = 0.0f;\n\n    lightwaveos::effects::cinema::reset();\n\n#ifndef NATIVE_BUILD\n    if (!m_ps) {\n        m_ps = static_cast<IFSPsram*>(heap_caps_malloc(sizeof(IFSPsram), MALLOC_CAP_SPIRAM));\n        if (!m_ps) {\n            LW_LOGE(\"LGPIFSBioRelicAREffect: PSRAM alloc failed\");\n            return false;\n        }\n    }\n    memset(m_ps, 0, sizeof(IFSPsram));\n#endif\n\n    return true;\n}\n\n// =========================================================================\n// render() - 5-Layer composition\n// =========================================================================\n\nvoid LGPIFSBioRelicAREffect::render(plugins::EffectContext& ctx) {\n#ifndef NATIVE_BUILD\n    if (!m_ps) return;\n#endif\n\n    // --- Timing ---\n    const float dtSignal = AudioReactivePolicy::signalDt(ctx);\n    const float dtVisual = AudioReactivePolicy::visualDt(ctx);\n    (void)dtVisual;\n    const float speedNorm = ctx.speed / 50.0f;\n\n    // --- Signals ---\n    const lowrisk_ar::ArSignalSnapshot sig =\n        lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);\n    const lowrisk_ar::ArModulationProfile mod =\n        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);\n    m_ar.tonalHue = mod.baseHue;\n\n    // =================================================================\n    // LAYER UPDATES\n    // =================================================================\n\n    // Bed: RMS-driven relic luminance (tau 0.45s)\n    const float bedTarget = lowrisk_ar::clamp01f(0.20f + 0.80f * sig.rms);\n    m_bed = lowrisk_ar::smoothTo(m_bed, bedTarget, dtSignal, 0.45f);\n\n    // Structure: points/frame + decay from flux + saliency (tau 0.15s)\n    const float structTarget = lowrisk_ar::clamp01f(\n        0.30f + 0.30f * sig.flux + 0.25f * sig.mid + 0.15f * sig.bass);\n    m_structure = lowrisk_ar::smoothTo(m_structure, structTarget, dtSignal, 0.15f);\n\n    // Impact: beat-triggered vein pulse (decay 0.25s)\n    if (sig.beatTick) m_impact = fmaxf(m_impact, 0.85f);\n    m_impact = lowrisk_ar::decay(m_impact, dtSignal, 0.25f);\n\n    // Memory: accumulated vein glow (slow decay, fed by beat + flux)\n    m_memory = lowrisk_ar::clamp01f(\n        lowrisk_ar::decay(m_memory, dtSignal, 0.95f)\n        + 0.08f * m_impact + 0.04f * sig.flux);\n    lowrisk_ar::applyBedImpactMemoryMix(\n        m_controls,\n        static_cast<float>(ctx.rawTotalTimeMs),\n        m_bed,\n        m_impact,\n        m_memory);\n\n    // =================================================================\n    // IFS BARNSLEY FERN PHYSICS\n    // =================================================================\n\n    m_t += (0.010f + 0.020f * speedNorm) * mod.motionRate;\n\n    // Structure modulates histogram decay rate\n    float decay = (0.92f + 0.06f * (1.0f - speedNorm))\n                  * (0.90f + 0.10f * (1.0f - m_structure));\n\n#ifndef NATIVE_BUILD\n    for (int i = 0; i < STRIP_LENGTH; i++) m_ps->hist[i] *= decay;\n\n    // Structure modulates points per frame\n    int P = 220 + (int)(520.0f * speedNorm * (0.6f + 0.6f * m_structure));\n\n    // Barnsley-style IFS (classic fern family), mirrored for centre-origin\n    for (int k = 0; k < P; k++) {\n        uint32_t r = lcg_next(m_rng);\n        float u = (float)(r & 0xFFFFu) / 65535.0f;\n\n        float x = m_px, y = m_py;\n        float nx, ny;\n\n        if (u < 0.01f) {\n            nx = 0.0f;\n            ny = 0.16f * y;\n        } else if (u < 0.86f) {\n            nx = 0.85f * x + 0.04f * y;\n            ny = -0.04f * x + 0.85f * y + 1.6f;\n        } else if (u < 0.93f) {\n            nx = 0.20f * x - 0.26f * y;\n            ny = 0.23f * x + 0.22f * y + 1.6f;\n        } else {\n            nx = -0.15f * x + 0.28f * y;\n            ny = 0.26f * x + 0.24f * y + 0.44f;\n        }\n\n        m_px = nx;\n        m_py = ny;\n\n        // Mirror x for centre-origin symmetry\n        float ax = fabsf(nx);\n        float yy = ny;\n\n        float yN = lowrisk_ar::clamp01f(yy / 10.0f);\n        float xN = lowrisk_ar::clamp01f(ax / 3.0f);\n\n        float radial = lowrisk_ar::clamp01f(0.10f + 0.78f * (0.70f * yN + 0.30f * xN));\n\n        int bin = (int)lroundf(radial * (STRIP_LENGTH - 1));\n        if (bin >= 0 && bin < STRIP_LENGTH) {\n            float pulse = 0.85f + 0.15f * sinf(m_t * 0.7f + radial * 6.0f);\n            // Impact adds a brightness burst to the IFS scatter\n            float impactBoost = 1.0f + 0.5f * m_impact;\n            m_ps->hist[bin] += 0.80f * pulse * impactBoost;\n        }\n    }\n\n    // =================================================================\n    // PER-PIXEL RENDER\n    // =================================================================\n\n    float maxH = 1e-6f;\n    for (int i = 0; i < STRIP_LENGTH; i++) maxH = fmaxf(maxH, m_ps->hist[i]);\n    float inv = 1.0f / maxH;\n\n    const float bedBright = 0.20f + 0.80f * m_bed;\n    const float master = (ctx.brightness / 255.0f)\n                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float dn = distN_from_index(i);\n        float glue = centreGlue(i);\n\n        int bin = (int)lroundf(dn * (STRIP_LENGTH - 1));\n        bin = (bin < 0) ? 0 : (bin >= STRIP_LENGTH) ? STRIP_LENGTH - 1 : bin;\n\n        float v = lowrisk_ar::clamp01f(m_ps->hist[bin] * inv);\n        float veins = powf(v, 1.65f);\n        float spec  = powf(veins, 2.2f) * 0.45f;\n\n        // Bed x structured vein geometry\n        float veinGeom = lowrisk_ar::clamp01f((0.18f + 0.82f * veins + spec) * glue);\n\n        // Impact: additive vein pulse\n        float impactAdd = m_impact * veins * glue * 0.25f;\n\n        // Memory: gentle accumulated glow\n        float memoryAdd = m_memory * (0.4f + 0.6f * veins) * 0.12f;\n\n        // Compose: bed x vein + impact + memory\n        float brightness = bedBright * veinGeom + impactAdd + memoryAdd;\n        brightness = lowrisk_ar::clamp01f(brightness);\n\n        uint8_t br = luminanceToBr(brightness, master);\n\n        // Tonal: museum relic hue with chord anchor\n        float hueShift = 10.0f * dn + 35.0f * spec + sig.harmonic * 12.0f;\n        uint8_t hue = static_cast<uint8_t>(m_ar.tonalHue + hueShift);\n\n        writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));\n    }\n#endif\n\n    lightwaveos::effects::cinema::apply(ctx, speedNorm);\n}\n\n// =========================================================================\n// cleanup / metadata / parameters\n// =========================================================================\n\nvoid LGPIFSBioRelicAREffect::cleanup() {\n#ifndef NATIVE_BUILD\n    if (m_ps) {\n        heap_caps_free(m_ps);\n        m_ps = nullptr;\n    }\n#endif\n}\n\nconst plugins::EffectMetadata& LGPIFSBioRelicAREffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP IFS Bio Relic (5L-AR)\",\n        \"Barnsley fern botanical relic with 5-layer audio-reactive composition\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\nuint8_t LGPIFSBioRelicAREffect::getParameterCount() const {\n    return lowrisk_ar::Ar16Controls::parameterCount();\n}\n\nconst plugins::EffectParameter* LGPIFSBioRelicAREffect::getParameter(uint8_t index) const {\n    return lowrisk_ar::Ar16Controls::parameter(index);\n}\n\nbool LGPIFSBioRelicAREffect::setParameter(const char* name, float value) {\n    return m_controls.set(name, value);\n}\n\nfloat LGPIFSBioRelicAREffect::getParameter(const char* name) const {\n    return m_controls.get(name);\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

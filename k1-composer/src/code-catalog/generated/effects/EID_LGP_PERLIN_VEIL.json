@@ -1,72 +1,68 @@
 {
   "schemaVersion": "2.0.0",
-  "generatedAtUtc": "2026-02-25T01:16:03Z",
-  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "generatedAtUtc": "2026-03-18T01:14:51Z",
+  "firmwareSourceHash": "25d1555df9030ad0f3db4c6565c25fec023f8cb74c6e74182e4a1a0db91afb2e",
   "effectId": "EID_LGP_PERLIN_VEIL",
   "effectIdHex": "0x0B00",
   "className": "LGPPerlinVeilEffect",
   "displayName": "LGP Perlin Veil",
-  "headerPath": "firmware/v2/src/effects/ieffect/LGPPerlinVeilEffect.h",
-  "sourcePath": "firmware/v2/src/effects/ieffect/LGPPerlinVeilEffect.cpp",
+  "headerPath": "firmware-v3/src/effects/ieffect/LGPPerlinVeilEffect.h",
+  "sourcePath": "firmware-v3/src/effects/ieffect/LGPPerlinVeilEffect.cpp",
   "renderRange": [
-    63,
-    210
+    60,
+    211
   ],
   "phaseRanges": {
     "input": [
       [
-        65,
-        65
+        62,
+        62
       ],
       [
-        71,
-        71
+        68,
+        68
       ],
       [
-        76,
-        76
+        73,
+        73
       ],
       [
-        78,
-        78
+        75,
+        75
       ],
       [
-        80,
-        83
+        77,
+        80
       ]
     ],
     "mapping": [
       [
-        67,
-        68
+        64,
+        65
       ],
       [
-        79,
-        83
+        76,
+        80
       ],
       [
-        86,
-        86
+        83,
+        87
       ],
       [
-        88,
-        91
+        92,
+        92
       ],
       [
-        96,
-        96
+        101,
+        102
       ],
       [
-        105,
-        106
+        112,
+        115
       ],
       [
-        117,
-        124
-      ],
-      [
-        148,
-        148
+        143,
+        143
       ],
       [
         184,
@@ -87,42 +83,50 @@
     ],
     "modulation": [
       [
-        81,
-        82
+        78,
+        79
       ],
       [
-        86,
-        91
+        83,
+        87
       ],
       [
-        93,
-        94
+        89,
+        90
+      ],
+      [
+        100,
+        100
+      ],
+      [
+        102,
+        102
       ],
       [
         104,
-        105
+        104
       ],
       [
-        108,
-        109
+        111,
+        111
       ],
       [
-        115,
-        116
+        113,
+        114
       ],
       [
-        118,
+        116,
         119
       ],
       [
-        121,
-        124
+        156,
+        157
       ]
     ],
     "render": [
       [
-        157,
-        157
+        153,
+        153
       ],
       [
         159,
@@ -138,21 +142,33 @@
       ],
       [
         200,
-        201
+        200
       ],
       [
-        205,
-        207
+        202,
+        202
+      ],
+      [
+        206,
+        208
       ]
     ],
     "post": [
       [
-        159,
+        155,
+        155
+      ],
+      [
+        157,
         159
       ],
       [
         192,
         192
+      ],
+      [
+        201,
+        201
       ]
     ],
     "output": [
@@ -161,20 +177,20 @@
         161
       ],
       [
-        201,
-        201
+        202,
+        202
       ],
       [
-        203,
-        204
+        204,
+        205
       ],
       [
-        207,
-        207
+        208,
+        208
       ]
     ]
   },
   "mappingConfidence": "high",
   "mappingWarnings": [],
-  "sourceText": "/**\n * @file LGPPerlinVeilEffect.cpp\n * @brief LGP Perlin Veil - Slow drifting curtains/fog from centre\n * \n * Audio-reactive Perlin noise field effect:\n * - Two independent noise fields: hue index and luminance mask\n * - Centre-origin sampling: distance from centre pair (79/80)\n * - Audio drives advection speed (flux/beatStrength) and contrast (RMS)\n * - Bass modulates depth variation\n */\n\n#include \"LGPPerlinVeilEffect.h\"\n#include \"../CoreEffects.h\"\n#include \"../../config/features.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPPerlinVeilEffect::LGPPerlinVeilEffect()\n    : m_noiseX(0)\n    , m_noiseY(0)\n    , m_noiseZ(0)\n    , m_momentum(0.0f)\n    , m_contrast(0.5f)\n    , m_depthVariation(0.0f)\n    , m_lastHopSeq(0)\n    , m_targetRms(0.0f)\n    , m_targetFlux(0.0f)\n    , m_targetBeatStrength(0.0f)\n    , m_targetBass(0.0f)\n    , m_smoothRms(0.0f)\n    , m_smoothFlux(0.0f)\n    , m_smoothBeatStrength(0.0f)\n    , m_smoothBass(0.0f)\n    , m_time(0)\n{\n}\n\nbool LGPPerlinVeilEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_noiseX = random16();\n    m_noiseY = random16();\n    m_noiseZ = random16();\n    m_momentum = 0.0f;\n    m_contrast = 0.5f;\n    m_depthVariation = 0.0f;\n    m_lastHopSeq = 0;\n    m_targetRms = 0.0f;\n    m_targetFlux = 0.0f;\n    m_targetBeatStrength = 0.0f;\n    m_targetBass = 0.0f;\n    m_smoothRms = 0.0f;\n    m_smoothFlux = 0.0f;\n    m_smoothBeatStrength = 0.0f;\n    m_smoothBass = 0.0f;\n    m_time = 0;\n    return true;\n}\n\nvoid LGPPerlinVeilEffect::render(plugins::EffectContext& ctx) {\n    // CENTRE ORIGIN - Perlin noise veils drifting from centre\n    const bool hasAudio = ctx.audio.available;\n    float dt = ctx.getSafeRawDeltaSeconds();\n    float speedNorm = ctx.speed / 50.0f;\n    float intensityNorm = ctx.brightness / 255.0f;\n\n    // =========================================================================\n    // Audio Analysis & State Updates (hop_seq checking for fresh data)\n    // =========================================================================\n#if FEATURE_AUDIO_SYNC\n    if (hasAudio) {\n        // Check for new audio hop (fresh data)\n        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);\n        if (newHop) {\n            m_lastHopSeq = ctx.audio.controlBus.hop_seq;\n            // Update targets only on new hops (fresh audio data)\n            m_targetRms = ctx.audio.rms();\n            m_targetFlux = ctx.audio.flux();\n            m_targetBeatStrength = ctx.audio.beatStrength();\n            m_targetBass = ctx.audio.bass();\n        }\n        \n        // Smooth toward targets every frame (keeps motion alive between hops)\n        float alpha = 1.0f - expf(-dt / 0.15f);  // True exponential, tau=150ms\n        m_smoothRms += (m_targetRms - m_smoothRms) * alpha;\n        m_smoothFlux += (m_targetFlux - m_smoothFlux) * alpha;\n        m_smoothBeatStrength += (m_targetBeatStrength - m_smoothBeatStrength) * alpha;\n        m_smoothBass += (m_targetBass - m_smoothBass) * alpha;\n        \n        // Flux/beatStrength → advection momentum (like Emotiscope's vu_level push)\n        float audioPush = m_smoothFlux * 0.3f + m_smoothBeatStrength * 0.2f;\n        audioPush = audioPush * audioPush * audioPush * audioPush; // ^4 for emphasis\n        audioPush *= speedNorm * 0.1f;\n        \n        // Momentum decay and boost (like Emotiscope) - dt-corrected\n        m_momentum *= powf(0.99f, dt * 60.0f);\n        if (audioPush > m_momentum) {\n            m_momentum = audioPush;\n        }\n        \n        // RMS → contrast modulation (using smoothed value) - true exponential, tau=200ms\n        float targetContrast = 0.3f + m_smoothRms * 0.7f;\n        m_contrast += (targetContrast - m_contrast) * (1.0f - expf(-dt / 0.2f));\n        \n        // Bass → depth variation (using smoothed value)\n        m_depthVariation = m_smoothBass * 0.5f;\n    } else {\n        // Ambient mode: slow decay (dt-corrected)\n        m_momentum *= powf(0.98f, dt * 60.0f);\n        m_contrast = 0.4f + 0.2f * sinf(ctx.totalTimeMs * 0.001f); // Slow breathing\n        m_depthVariation = 0.0f;\n        // Smooth audio parameters to zero when no audio (true exponential, tau=200ms)\n        float alpha = 1.0f - expf(-dt / 0.2f);\n        m_targetRms = 0.0f;\n        m_targetFlux = 0.0f;\n        m_targetBeatStrength = 0.0f;\n        m_targetBass = 0.0f;\n        m_smoothRms += (m_targetRms - m_smoothRms) * alpha;\n        m_smoothFlux += (m_targetFlux - m_smoothFlux) * alpha;\n        m_smoothBeatStrength += (m_targetBeatStrength - m_smoothBeatStrength) * alpha;\n        m_smoothBass += (m_targetBass - m_smoothBass) * alpha;\n    }\n#else\n    // No audio: ambient mode (dt-corrected)\n    m_momentum *= powf(0.98f, dt * 60.0f);\n    m_contrast = 0.4f + 0.2f * sinf(ctx.totalTimeMs * 0.001f);\n    m_depthVariation = 0.0f;\n#endif\n\n    // =========================================================================\n    // Noise Field Advection (centre-origin sampling)\n    // =========================================================================\n    // Base drift (slow wobble like Emotiscope), but keep coordinates in the\n    // same \"scale space\" as existing working inoise8 usage (i*5, time>>3 etc.)\n    float angle = ctx.totalTimeMs * 0.001f;\n    float wobble = sinf(angle * 0.12f);\n\n    // Keep coordinate deltas large enough to create visible structure.\n    // (The previous >>8 coordinate collapse made the field near-constant.)\n    uint16_t advX = (uint16_t)(20 + (uint16_t)(wobble * 12.0f) + (uint16_t)(m_momentum * 900.0f));\n    uint16_t advY = (uint16_t)(18 + (uint16_t)(m_momentum * 1200.0f));\n    uint16_t advZ = (uint16_t)(4 + (uint16_t)(m_depthVariation * 180.0f));\n\n    // Speed scales the drift rate, but clamp to avoid \"teleporting\" noise.\n    uint16_t speedScale = (uint16_t)(6 + (uint16_t)(speedNorm * 20.0f));\n    m_noiseX = (uint16_t)(m_noiseX + advX * speedScale);\n    m_noiseY = (uint16_t)(m_noiseY + advY * speedScale);\n    m_noiseZ = (uint16_t)(m_noiseZ + advZ * (uint16_t)(1 + (speedScale >> 2)));\n\n    // Time accumulator kept for legacy, but not used for sampling directly.\n    m_time = (uint16_t)(m_time + (uint16_t)(1 + (speedScale >> 3)));\n\n    // =========================================================================\n    // Rendering (centre-origin pattern)\n    // =========================================================================\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        // Calculate distance from centre pair (0 at centre, 79 at edges)\n        uint16_t dist = centerPairDistance(i);\n        uint8_t dist8 = (uint8_t)dist;\n\n        // Visible \"veil\" wants broad structures: use low spatial frequency,\n        // but still enough delta across 0..79 to show gradients.\n        uint16_t x1 = (uint16_t)(m_noiseX + dist * 28);\n        uint16_t y1 = (uint16_t)(m_noiseY + (uint16_t)(dist8 << 2));\n        uint16_t z1 = m_noiseZ;\n\n        uint16_t x2 = (uint16_t)(m_noiseX + 10000u + dist * 46);\n        uint16_t y2 = (uint16_t)(m_noiseY + 5000u + (uint16_t)(dist8 << 3));\n        uint16_t z2 = (uint16_t)(m_noiseZ + 25000u);\n\n        // Sample two independent 3D noise fields (time is implicit via m_noise*)\n        uint8_t hueNoise = inoise8(x1, y1, z1);\n        uint8_t lumNoise = inoise8(x2, y2, z2);\n\n        // Palette index: avoid hue-wheel logic; palette selection defines colour language\n        uint8_t paletteIndex = hueNoise + ctx.gHue;\n\n        // Luminance shaping: contrast + centre emphasis (so it \"reads\" on LGP)\n        float lumNorm = lumNoise / 255.0f; // 0..1\n        lumNorm = lumNorm * lumNorm;       // bias darker, stronger highlights\n\n        // Contrast: scale around mid-grey\n        float c = 0.35f + 0.65f * m_contrast; // 0.35..1.0\n        lumNorm = 0.5f + (lumNorm - 0.5f) * (0.7f + 0.6f * c);\n        lumNorm = fmaxf(0.0f, fminf(1.0f, lumNorm));\n\n        // Centre emphasis (strongest at centre, fades outward)\n        float centreGain = 1.0f - (dist / 79.0f) * 0.35f; // 1.0 -> 0.65\n        lumNorm *= centreGain;\n\n        // Brightness range: keep a floor so it doesn't vanish at low noise values\n        float brightnessNorm = 0.18f + lumNorm * 0.82f;\n        uint8_t brightness = (uint8_t)(brightnessNorm * 255.0f * intensityNorm);\n\n        CRGB color1 = ctx.palette.getColor(paletteIndex, brightness);\n        ctx.leds[i] = color1;\n\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            // Second strip offset to encourage LGP interference without \"rainbow sweeps\"\n            uint8_t paletteIndex2 = (uint8_t)(paletteIndex + 24);\n            CRGB color2 = ctx.palette.getColor(paletteIndex2, brightness);\n            ctx.leds[i + STRIP_LENGTH] = color2;\n        }\n    }\n}\n\nvoid LGPPerlinVeilEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPPerlinVeilEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Perlin Veil\",\n        \"Slow drifting noise curtains from centre, audio-driven advection\",\n        plugins::EffectCategory::PARTY,  // Audio-reactive, not ambient\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n\n"
+  "sourceText": "/**\n * @file LGPPerlinVeilEffect.cpp\n * @brief LGP Perlin Veil - Slow drifting curtains/fog from centre\n * \n * Audio-reactive Perlin noise field effect:\n * - Two independent noise fields: hue index and luminance mask\n * - Centre-origin sampling: distance from centre pair (79/80)\n * - Audio drives advection speed (flux/beatStrength) and contrast (RMS)\n * - Bass modulates depth variation\n */\n\n#include \"LGPPerlinVeilEffect.h\"\n#include \"../CoreEffects.h\"\n#include \"../../config/features.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPPerlinVeilEffect::LGPPerlinVeilEffect()\n    : m_noiseX(0)\n    , m_noiseY(0)\n    , m_noiseZ(0)\n    , m_momentum(0.0f)\n    , m_contrast(0.5f)\n    , m_depthVariation(0.0f)\n    , m_lastHopSeq(0)\n    , m_targetRms(0.0f)\n    , m_targetFlux(0.0f)\n    , m_targetBeatStrength(0.0f)\n    , m_targetBass(0.0f)\n    , m_time(0)\n{\n}\n\nbool LGPPerlinVeilEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_noiseX = random16();\n    m_noiseY = random16();\n    m_noiseZ = random16();\n    m_momentum = 0.0f;\n    m_contrast = 0.5f;\n    m_depthVariation = 0.0f;\n    m_lastHopSeq = 0;\n    m_targetRms = 0.0f;\n    m_targetFlux = 0.0f;\n    m_targetBeatStrength = 0.0f;\n    m_targetBass = 0.0f;\n    m_smoothRms.reset(0.0f);\n    m_smoothFlux.reset(0.0f);\n    m_smoothBeatStrength.reset(0.0f);\n    m_smoothBass.reset(0.0f);\n    m_contrastSmoother.reset(0.5f);\n    m_time = 0;\n    return true;\n}\n\nvoid LGPPerlinVeilEffect::render(plugins::EffectContext& ctx) {\n    // CENTRE ORIGIN - Perlin noise veils drifting from centre\n    const bool hasAudio = ctx.audio.available;\n    float dt = ctx.getSafeRawDeltaSeconds();\n    float speedNorm = ctx.speed / 50.0f;\n    float intensityNorm = ctx.brightness / 255.0f;\n\n    // =========================================================================\n    // Audio Analysis & State Updates (hop_seq checking for fresh data)\n    // =========================================================================\n#if FEATURE_AUDIO_SYNC\n    if (hasAudio) {\n        // Check for new audio hop (fresh data)\n        bool newHop = (ctx.audio.hopSequence() != m_lastHopSeq);\n        if (newHop) {\n            m_lastHopSeq = ctx.audio.hopSequence();\n            // Update targets only on new hops (fresh audio data)\n            m_targetRms = ctx.audio.rms();\n            m_targetFlux = ctx.audio.flux();\n            m_targetBeatStrength = ctx.audio.beatStrength();\n            m_targetBass = ctx.audio.bass();\n        }\n        \n        // Smooth toward targets every frame via AsymmetricFollower (fast attack, slower release)\n        float sRms = m_smoothRms.update(m_targetRms, dt);\n        float sFlux = m_smoothFlux.update(m_targetFlux, dt);\n        float sBeat = m_smoothBeatStrength.update(m_targetBeatStrength, dt);\n        float sBass = m_smoothBass.update(m_targetBass, dt);\n\n        // Flux/beatStrength → advection momentum (like Emotiscope's vu_level push)\n        float audioPush = sFlux * 0.3f + sBeat * 0.2f;\n        audioPush = audioPush * audioPush * audioPush * audioPush; // ^4 for emphasis\n        audioPush *= speedNorm * 0.1f;\n        \n        // Momentum decay and boost (like Emotiscope) - dt-corrected\n        m_momentum *= powf(0.99f, dt * 60.0f);\n        if (audioPush > m_momentum) {\n            m_momentum = audioPush;\n        }\n        \n        // RMS → contrast modulation via ExpDecay (tau=500ms)\n        float targetContrast = 0.3f + sRms * 0.7f;\n        m_contrast = m_contrastSmoother.update(targetContrast, dt);\n\n        // Bass → depth variation (using smoothed value)\n        m_depthVariation = sBass * 0.5f;\n    } else {\n        // Ambient mode: slow decay (dt-corrected)\n        m_momentum *= powf(0.98f, dt * 60.0f);\n        m_contrast = 0.4f + 0.2f * sinf(ctx.totalTimeMs * 0.001f); // Slow breathing\n        m_depthVariation = 0.0f;\n        // Smooth audio parameters to zero when no audio (AsymmetricFollower handles decay)\n        m_targetRms = 0.0f;\n        m_targetFlux = 0.0f;\n        m_targetBeatStrength = 0.0f;\n        m_targetBass = 0.0f;\n        m_smoothRms.update(0.0f, dt);\n        m_smoothFlux.update(0.0f, dt);\n        m_smoothBeatStrength.update(0.0f, dt);\n        m_smoothBass.update(0.0f, dt);\n    }\n#else\n    // No audio: ambient mode (dt-corrected)\n    m_momentum *= powf(0.98f, dt * 60.0f);\n    m_contrast = 0.4f + 0.2f * sinf(ctx.totalTimeMs * 0.001f);\n    m_depthVariation = 0.0f;\n#endif\n\n    // =========================================================================\n    // Noise Field Advection (centre-origin sampling)\n    // =========================================================================\n    // Base drift (slow wobble like Emotiscope), but keep coordinates in the\n    // same \"scale space\" as existing working inoise8 usage (i*5, time>>3 etc.)\n    float angle = ctx.totalTimeMs * 0.001f;\n    float wobble = sinf(angle * 0.12f);\n\n    // Keep coordinate deltas large enough to create visible structure.\n    // (The previous >>8 coordinate collapse made the field near-constant.)\n    uint16_t advX = (uint16_t)(20 + (uint16_t)(wobble * 12.0f) + (uint16_t)(m_momentum * 900.0f));\n    uint16_t advY = (uint16_t)(18 + (uint16_t)(m_momentum * 1200.0f));\n    uint16_t advZ = (uint16_t)(4 + (uint16_t)(m_depthVariation * 180.0f));\n\n    // Speed scales the drift rate, but clamp to avoid \"teleporting\" noise.\n    uint16_t speedScale = (uint16_t)(6 + (uint16_t)(speedNorm * 20.0f));\n    if (speedScale > 16) speedScale = 16;  // Prevent strobing at max speed\n    m_noiseX = (uint16_t)(m_noiseX + advX * speedScale);\n    m_noiseY = (uint16_t)(m_noiseY + advY * speedScale);\n    m_noiseZ = (uint16_t)(m_noiseZ + advZ * (uint16_t)(1 + (speedScale >> 2)));\n\n    // Time accumulator kept for legacy, but not used for sampling directly.\n    m_time = (uint16_t)(m_time + (uint16_t)(1 + (speedScale >> 3)));\n\n    // =========================================================================\n    // Rendering (centre-origin pattern)\n    // =========================================================================\n    // Dynamic fade: louder audio = shorter trails (punchier), quiet = long ambient trails\n    float smoothedRms = m_smoothRms.value;\n    uint8_t fadeAmt = (uint8_t)(20 + 40 * (1.0f - fminf(smoothedRms, 1.0f)));\n    if (fadeAmt < 20) fadeAmt = 20;   // Minimum fade for trail persistence\n    fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmt);\n\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        // Calculate distance from centre pair (0 at centre, 79 at edges)\n        uint16_t dist = centerPairDistance(i);\n        uint8_t dist8 = (uint8_t)dist;\n\n        // Visible \"veil\" wants broad structures: use low spatial frequency,\n        // but still enough delta across 0..79 to show gradients.\n        uint16_t x1 = (uint16_t)(m_noiseX + dist * 28);\n        uint16_t y1 = (uint16_t)(m_noiseY + (uint16_t)(dist8 << 2));\n        uint16_t z1 = m_noiseZ;\n\n        uint16_t x2 = (uint16_t)(m_noiseX + 10000u + dist * 46);\n        uint16_t y2 = (uint16_t)(m_noiseY + 5000u + (uint16_t)(dist8 << 3));\n        uint16_t z2 = (uint16_t)(m_noiseZ + 25000u);\n\n        // Sample two independent 3D noise fields (time is implicit via m_noise*)\n        uint8_t hueNoise = inoise8(x1, y1, z1);\n        uint8_t lumNoise = inoise8(x2, y2, z2);\n\n        // Palette index: avoid hue-wheel logic; palette selection defines colour language\n        uint8_t paletteIndex = hueNoise + ctx.gHue;\n\n        // Luminance shaping: contrast + centre emphasis (so it \"reads\" on LGP)\n        float lumNorm = lumNoise / 255.0f; // 0..1\n        lumNorm = lumNorm * lumNorm;       // bias darker, stronger highlights\n\n        // Contrast: scale around mid-grey\n        float c = 0.35f + 0.65f * m_contrast; // 0.35..1.0\n        lumNorm = 0.5f + (lumNorm - 0.5f) * (0.7f + 0.6f * c);\n        lumNorm = fmaxf(0.0f, fminf(1.0f, lumNorm));\n\n        // Centre emphasis (strongest at centre, fades outward)\n        float centreGain = 1.0f - (dist / 79.0f) * 0.35f; // 1.0 -> 0.65\n        lumNorm *= centreGain;\n\n        // Brightness range: keep a floor so it doesn't vanish at low noise values\n        float brightnessNorm = 0.18f + lumNorm * 0.82f;\n        uint8_t brightness = (uint8_t)(brightnessNorm * 255.0f * intensityNorm);\n\n        CRGB color1 = ctx.palette.getColor(paletteIndex, brightness);\n        // Blend onto faded buffer instead of overwriting (preserves trail persistence)\n        nblend(ctx.leds[i], color1, 180);\n\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            // Second strip offset to encourage LGP interference without \"rainbow sweeps\"\n            uint8_t paletteIndex2 = (uint8_t)(paletteIndex + 24);\n            CRGB color2 = ctx.palette.getColor(paletteIndex2, brightness);\n            nblend(ctx.leds[i + STRIP_LENGTH], color2, 180);\n        }\n    }\n}\n\nvoid LGPPerlinVeilEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPPerlinVeilEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Perlin Veil\",\n        \"Slow drifting noise curtains from centre, audio-driven advection\",\n        plugins::EffectCategory::PARTY,  // Audio-reactive, not ambient\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n\n"
 }

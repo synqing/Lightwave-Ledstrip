@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-03-18T01:14:51Z",
+  "firmwareSourceHash": "25d1555df9030ad0f3db4c6565c25fec023f8cb74c6e74182e4a1a0db91afb2e",
+  "effectId": "EID_LGP_BIREFRINGENT_SHEAR_RADIAL",
+  "effectIdHex": "0x060A",
+  "className": "LGPBirefringentShearRadialEffect",
+  "displayName": "LGP Birefringent Shear R",
+  "headerPath": "firmware-v3/src/effects/ieffect/LGPBirefringentShearRadialEffect.h",
+  "sourcePath": "firmware-v3/src/effects/ieffect/LGPBirefringentShearRadialEffect.cpp",
+  "renderRange": [
+    29,
+    74
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        29,
+        33
+      ]
+    ],
+    "mapping": [
+      [
+        33,
+        33
+      ],
+      [
+        38,
+        38
+      ]
+    ],
+    "modulation": [
+      [
+        44,
+        46
+      ],
+      [
+        48,
+        49
+      ],
+      [
+        52,
+        53
+      ]
+    ],
+    "render": [
+      [
+        41,
+        41
+      ],
+      [
+        59,
+        60
+      ],
+      [
+        65,
+        66
+      ],
+      [
+        71,
+        72
+      ]
+    ],
+    "post": [
+      [
+        69,
+        71
+      ]
+    ],
+    "output": [
+      [
+        62,
+        62
+      ],
+      [
+        65,
+        66
+      ],
+      [
+        68,
+        72
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPBirefringentShearRadialEffect.cpp\n * @brief LGP Birefringent Shear (Radial) - Concentric polarization splitting\n *\n * Radial variant of LGPBirefringentShearEffect.\n * Two concentric wave modes expand from center, creating standing wave\n * interference at radial distances from the center pair.\n */\n\n#include \"LGPBirefringentShearRadialEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPBirefringentShearRadialEffect::LGPBirefringentShearRadialEffect()\n    : m_time(0)\n{\n}\n\nbool LGPBirefringentShearRadialEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_time = 0;\n    return true;\n}\n\nvoid LGPBirefringentShearRadialEffect::render(plugins::EffectContext& ctx) {\n    // Dual concentric modes slipping past one another — radial standing wave\n    m_time = (uint16_t)(m_time + (ctx.speed >> 1));\n\n    float intensityNorm = ctx.brightness / 255.0f;\n    const float baseFrequency = 3.5f;\n    const float deltaK = 1.5f;\n    const float drift = 0.3f;\n\n    uint8_t mixWave = (uint8_t)(intensityNorm * 255.0f);\n    uint8_t mixCarrier = (uint8_t)(255 - mixWave);\n\n    for (uint16_t dist = 0; dist < HALF_LENGTH; dist++) {\n        float r = (float)dist;\n\n        float phaseBase = m_time / 128.0f;\n        float phase1 = r * (baseFrequency + deltaK) + phaseBase;\n        float phase2 = r * (baseFrequency - deltaK) - phaseBase + drift * r * 0.05f;\n\n        uint8_t wave1 = sin8((int16_t)(phase1 * 16.0f));\n        uint8_t wave2 = sin8((int16_t)(phase2 * 16.0f));\n\n        uint8_t combined = qadd8(scale8(wave1, mixCarrier), scale8(wave2, mixWave));\n        uint8_t beat = (uint8_t)abs((int)wave1 - (int)wave2);\n        uint8_t brightness = qadd8(combined, scale8(beat, 96));\n\n        uint8_t hue1 = (uint8_t)(ctx.gHue + (uint8_t)(dist) + (m_time >> 4));\n        uint8_t hue2 = (uint8_t)(hue1 + 128);\n\n        uint8_t brightU8 = (uint8_t)((brightness * ctx.brightness) / 255);\n        CRGB color1 = ctx.palette.getColor(hue1, brightU8);\n        CRGB color2 = ctx.palette.getColor(hue2, brightU8);\n\n        // Strip 1: symmetric from center\n        uint16_t left1 = CENTER_LEFT - dist;\n        uint16_t right1 = CENTER_RIGHT + dist;\n        if (left1 < STRIP_LENGTH) ctx.leds[left1] = color1;\n        if (right1 < STRIP_LENGTH) ctx.leds[right1] = color1;\n\n        // Strip 2: complementary hue at same radial distance\n        uint16_t left2 = STRIP_LENGTH + CENTER_LEFT - dist;\n        uint16_t right2 = STRIP_LENGTH + CENTER_RIGHT + dist;\n        if (left2 < ctx.ledCount) ctx.leds[left2] = color2;\n        if (right2 < ctx.ledCount) ctx.leds[right2] = color2;\n    }\n}\n\nvoid LGPBirefringentShearRadialEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPBirefringentShearRadialEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Birefringent Shear R\",\n        \"Radial polarization split\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

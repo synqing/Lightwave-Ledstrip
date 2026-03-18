@@ -1,0 +1,163 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-03-18T01:14:51Z",
+  "firmwareSourceHash": "25d1555df9030ad0f3db4c6565c25fec023f8cb74c6e74182e4a1a0db91afb2e",
+  "effectId": "EID_LGP_SUPERFORMULA_GLYPH_AR",
+  "effectIdHex": "0x1C09",
+  "className": "LGPSuperformulaGlyphAREffect",
+  "displayName": "LGP Superformula Glyph (5L-AR)",
+  "headerPath": "firmware-v3/src/effects/ieffect/LGPSuperformulaGlyphAREffect.h",
+  "sourcePath": "firmware-v3/src/effects/ieffect/LGPSuperformulaGlyphAREffect.cpp",
+  "renderRange": [
+    115,
+    246
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        115,
+        129
+      ]
+    ],
+    "mapping": [
+      [
+        119,
+        119
+      ],
+      [
+        138,
+        138
+      ],
+      [
+        141,
+        141
+      ],
+      [
+        144,
+        144
+      ],
+      [
+        147,
+        147
+      ],
+      [
+        150,
+        150
+      ],
+      [
+        153,
+        153
+      ],
+      [
+        155,
+        155
+      ],
+      [
+        158,
+        158
+      ],
+      [
+        179,
+        179
+      ],
+      [
+        245,
+        245
+      ]
+    ],
+    "modulation": [
+      [
+        133,
+        133
+      ],
+      [
+        136,
+        136
+      ],
+      [
+        141,
+        141
+      ],
+      [
+        143,
+        143
+      ],
+      [
+        145,
+        145
+      ],
+      [
+        147,
+        147
+      ],
+      [
+        153,
+        153
+      ],
+      [
+        158,
+        158
+      ],
+      [
+        160,
+        161
+      ],
+      [
+        164,
+        164
+      ],
+      [
+        167,
+        167
+      ],
+      [
+        198,
+        198
+      ],
+      [
+        238,
+        238
+      ]
+    ],
+    "render": [
+      [
+        196,
+        196
+      ],
+      [
+        201,
+        201
+      ],
+      [
+        214,
+        214
+      ],
+      [
+        242,
+        242
+      ]
+    ],
+    "post": [
+      [
+        231,
+        239
+      ]
+    ],
+    "output": [
+      [
+        189,
+        189
+      ],
+      [
+        201,
+        201
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPSuperformulaGlyphAREffect.cpp\n * @brief Superformula Living Glyph (5-Layer Audio-Reactive)\n *\n * Morphing organic glyph using Superformula mathematics with full 5-layer AR composition.\n * Superformula creates complex organic/geometric hybrids through parametric polar equation.\n * Parameters morph with audio, creating living sigil patterns.\n *\n * Centre-origin compliant. Dual-strip locked.\n */\n\n#include \"LGPSuperformulaGlyphAREffect.h\"\n#include \"LGPFilmPost.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\n// =========================================================================\n// Local helpers\n// =========================================================================\n\nstatic constexpr float kTau = 6.28318530717958647692f;\nstatic constexpr float kPi  = 3.14159265358979323846f;\n\nstatic inline float fract(float x) { return x - floorf(x); }\n\nstatic inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRGB& c) {\n    ctx.leds[i] = c;\n    int j = i + STRIP_LENGTH;\n    if (j < (int)ctx.ledCount) ctx.leds[j] = c;\n}\n\nstatic inline uint8_t luminanceToBr(float wave01, float master) {\n    const float base = 0.06f;\n    float out = lowrisk_ar::clamp01f(base + (1.0f - base) * lowrisk_ar::clamp01f(wave01)) * master;\n    return static_cast<uint8_t>(255.0f * out);\n}\n\n// =========================================================================\n// Superformula evaluation\n// =========================================================================\n\n/**\n * Superformula: r(phi) = (|cos(m*phi/4)/a|^n2 + |sin(m*phi/4)/b|^n3)^(-1/n1)\n * Returns normalized radius [0..1] for given angle phi.\n */\nstatic float evalSuperformula(float phi, float m, float n1, float n2, float n3) {\n    const float a = 1.0f;  // Keep a=b=1 for simplicity\n    const float b = 1.0f;\n\n    const float mPhi4 = m * phi * 0.25f;\n\n    // Prevent domain errors\n    const float cosT = fabsf(cosf(mPhi4));\n    const float sinT = fabsf(sinf(mPhi4));\n\n    // Handle edge cases\n    if (cosT < 1e-6f && sinT < 1e-6f) return 0.5f;\n\n    const float term1 = powf(cosT / a, n2);\n    const float term2 = powf(sinT / b, n3);\n    const float sum   = term1 + term2;\n\n    if (sum < 1e-6f) return 0.5f;\n\n    float r = powf(sum, -1.0f / n1);\n\n    // Normalize to [0..1] range (superformula can vary wildly)\n    return lowrisk_ar::clampf(r * 0.35f, 0.0f, 1.0f);\n}\n\n// =========================================================================\n// Construction / init / cleanup\n// =========================================================================\n\nLGPSuperformulaGlyphAREffect::LGPSuperformulaGlyphAREffect()\n    : m_t(0.0f)\n    , m_bed(0.3f)\n    , m_impact(0.0f)\n    , m_memory(0.0f)\n    , m_param_m(6.0f)\n    , m_param_n1(1.0f)\n    , m_param_n2(1.5f)\n    , m_param_n3(1.5f)\n{\n}\n\nbool LGPSuperformulaGlyphAREffect::init(plugins::EffectContext& ctx) {\n    m_controls.resetDefaults();\n    m_ar = lowrisk_ar::ArRuntimeState{};\n    m_ar.tonalHue = static_cast<float>(ctx.gHue);\n    m_ar.modeSmooth = 2.0f;\n\n    m_t        = 0.0f;\n    m_bed      = 0.3f;\n    m_impact   = 0.0f;\n    m_memory   = 0.0f;\n    m_param_m  = 6.0f;\n    m_param_n1 = 1.0f;\n    m_param_n2 = 1.5f;\n    m_param_n3 = 1.5f;\n\n    lightwaveos::effects::cinema::reset();\n    return true;\n}\n\n// =========================================================================\n// render() — 5-Layer composition\n// =========================================================================\n\nvoid LGPSuperformulaGlyphAREffect::render(plugins::EffectContext& ctx) {\n    // --- Timing ---\n    const float dtSignal = AudioReactivePolicy::signalDt(ctx);\n    const float dtVisual = AudioReactivePolicy::visualDt(ctx);\n    const float speedNorm = ctx.speed / 50.0f;\n\n    // --- Signals (shared infrastructure handles presence gate + fallback) ---\n    const lowrisk_ar::ArSignalSnapshot sig =\n        lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);\n    const lowrisk_ar::ArModulationProfile mod =\n        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);\n    m_ar.tonalHue = mod.baseHue;\n\n    // =================================================================\n    // LAYER UPDATES\n    // =================================================================\n\n    // Bed: slow atmosphere from RMS (tau 0.42s)\n    m_bed = lowrisk_ar::smoothTo(m_bed,\n        0.20f + 0.80f * sig.rms, dtSignal, 0.42f);\n\n    // Structure: morph superformula params from harmonic + flux (tau 0.20s)\n    // m: symmetry (3-11), modulated by harmonic\n    const float target_m = lowrisk_ar::clampf(\n        6.0f + 5.0f * sig.harmonic * (0.5f + 0.5f * sinf(m_t * 0.3f)),\n        3.0f, 11.0f);\n    m_param_m = lowrisk_ar::smoothTo(m_param_m, target_m, dtSignal, 0.20f);\n\n    // n1: overall shape (0.7-1.6), modulated by flux\n    const float target_n1 = lowrisk_ar::clampf(\n        1.0f + 0.6f * sig.flux * cosf(m_t * 0.25f),\n        0.7f, 1.6f);\n    m_param_n1 = lowrisk_ar::smoothTo(m_param_n1, target_n1, dtSignal, 0.20f);\n\n    // n2/n3: exponents (0.8-2.4), modulated by bass + rhythmic\n    const float target_n2 = lowrisk_ar::clampf(\n        1.5f + 0.9f * (sig.bass * 0.7f + sig.rhythmic * 0.3f),\n        0.8f, 2.4f);\n    m_param_n2 = lowrisk_ar::smoothTo(m_param_n2, target_n2, dtSignal, 0.20f);\n\n    const float target_n3 = lowrisk_ar::clampf(\n        1.5f + 0.9f * (sig.bass * 0.3f + sig.rhythmic * 0.7f) * sinf(m_t * 0.4f),\n        0.8f, 2.4f);\n    m_param_n3 = lowrisk_ar::smoothTo(m_param_n3, target_n3, dtSignal, 0.20f);\n\n    // Impact: beat-triggered burst (fast attack, decay 0.18s)\n    if (sig.beatTick) m_impact = fmaxf(m_impact, 1.00f);\n    m_impact = lowrisk_ar::decay(m_impact, dtSignal, 0.18f);\n\n    // Memory: sigil persistence (slow decay, fed by beat + flux)\n    m_memory = lowrisk_ar::clamp01f(\n        lowrisk_ar::decay(m_memory, dtSignal, 0.75f)\n        + 0.15f * m_impact + 0.08f * sig.flux);\n    lowrisk_ar::applyBedImpactMemoryMix(\n        m_controls,\n        static_cast<float>(ctx.rawTotalTimeMs),\n        m_bed,\n        m_impact,\n        m_memory);\n\n    // =================================================================\n    // MOTION\n    // =================================================================\n\n    const float tRate = (0.80f + 3.50f * speedNorm) * mod.motionRate;\n    m_t += tRate * dtVisual;\n\n    // Glyph rotation\n    const float glyphRotation = m_t * 0.15f + sig.harmonic * 0.5f;\n\n    // =================================================================\n    // PER-PIXEL RENDER\n    // =================================================================\n\n    const float mid    = (STRIP_LENGTH - 1) * 0.5f;\n    const float invMid = 1.0f / mid;\n\n    const float bedBright = 0.20f + 0.80f * m_bed;\n    const float master = (ctx.brightness / 255.0f)\n                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;\n\n    // Band width for distance-to-curve rendering\n    const float bandWidth = lowrisk_ar::clampf(\n        0.12f - 0.04f * sig.flux,\n        0.06f, 0.16f);\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        const float dmid  = static_cast<float>(i) - mid;\n        const float distN = fabsf(dmid) * invMid;  // [0..1] from centre\n\n        // Convert pixel to polar coordinates (centre = origin)\n        const float phi = atan2f(dmid, 1.0f) + glyphRotation;  // Angular position\n\n        // Evaluate superformula at this angle\n        const float r_formula = evalSuperformula(phi, m_param_m, m_param_n1, m_param_n2, m_param_n3);\n\n        // Distance from pixel to the superformula curve\n        const float distToCurve = fabsf(distN - r_formula);\n\n        // Exponential band rendering\n        const float bandWave = expf(-distToCurve / bandWidth);\n\n        // Centre glue: stronger gaussian anchor\n        const float glue = 0.30f + 0.70f * expf(-(dmid * dmid) * 0.0018f);\n\n        // Breathing pulse\n        const float breathing = 0.90f + 0.10f * cosf(kTau * distN * 2.0f + m_t * 0.8f);\n\n        // Bed x structured geometry\n        float structuredGeom = bandWave * glue * breathing;\n\n        // Impact: additive brightening across glyph\n        float impactAdd = m_impact * bandWave * glue * 0.40f;\n\n        // Memory: gentle additive sigil persistence\n        float memoryAdd = m_memory * (0.4f + 0.6f * bandWave) * 0.22f;\n\n        // Compose: bed x structure + impact + memory\n        float brightness = bedBright * structuredGeom + impactAdd + memoryAdd;\n        brightness = lowrisk_ar::clamp01f(brightness);\n\n        const uint8_t br = luminanceToBr(brightness, master);\n\n        // Tonal hue: chord-driven anchor + spatial modulation\n        const uint8_t hue = static_cast<uint8_t>(\n            m_ar.tonalHue + r_formula * 60.0f + sig.harmonic * 25.0f);\n\n        writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));\n    }\n\n    lightwaveos::effects::cinema::apply(ctx, speedNorm);\n}\n\n// =========================================================================\n// cleanup / metadata / parameters\n// =========================================================================\n\nvoid LGPSuperformulaGlyphAREffect::cleanup() {}\n\nconst plugins::EffectMetadata& LGPSuperformulaGlyphAREffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Superformula Glyph (5L-AR)\",\n        \"Living organic glyph with superformula morphing and 5-layer audio-reactive composition\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\nuint8_t LGPSuperformulaGlyphAREffect::getParameterCount() const {\n    return lowrisk_ar::Ar16Controls::parameterCount();\n}\n\nconst plugins::EffectParameter* LGPSuperformulaGlyphAREffect::getParameter(uint8_t index) const {\n    return lowrisk_ar::Ar16Controls::parameter(index);\n}\n\nbool LGPSuperformulaGlyphAREffect::setParameter(const char* name, float value) {\n    return m_controls.set(name, value);\n}\n\nfloat LGPSuperformulaGlyphAREffect::getParameter(const char* name) const {\n    return m_controls.get(name);\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

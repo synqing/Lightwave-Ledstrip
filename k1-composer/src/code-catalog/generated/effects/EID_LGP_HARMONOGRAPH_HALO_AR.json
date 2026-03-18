@@ -1,0 +1,135 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-03-18T01:14:51Z",
+  "firmwareSourceHash": "25d1555df9030ad0f3db4c6565c25fec023f8cb74c6e74182e4a1a0db91afb2e",
+  "effectId": "EID_LGP_HARMONOGRAPH_HALO_AR",
+  "effectIdHex": "0x1C0C",
+  "className": "LGPHarmonographHaloAREffect",
+  "displayName": "LGP Harmonograph Halo (5L-AR)",
+  "headerPath": "firmware-v3/src/effects/ieffect/LGPHarmonographHaloAREffect.h",
+  "sourcePath": "firmware-v3/src/effects/ieffect/LGPHarmonographHaloAREffect.cpp",
+  "renderRange": [
+    77,
+    217
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        77,
+        92
+      ]
+    ],
+    "mapping": [
+      [
+        81,
+        81
+      ],
+      [
+        100,
+        101
+      ],
+      [
+        104,
+        105
+      ],
+      [
+        130,
+        130
+      ],
+      [
+        148,
+        148
+      ],
+      [
+        173,
+        174
+      ],
+      [
+        216,
+        216
+      ]
+    ],
+    "modulation": [
+      [
+        95,
+        95
+      ],
+      [
+        101,
+        101
+      ],
+      [
+        105,
+        105
+      ],
+      [
+        107,
+        108
+      ],
+      [
+        111,
+        112
+      ],
+      [
+        115,
+        115
+      ],
+      [
+        118,
+        118
+      ],
+      [
+        209,
+        209
+      ]
+    ],
+    "render": [
+      [
+        143,
+        143
+      ],
+      [
+        169,
+        169
+      ],
+      [
+        179,
+        179
+      ],
+      [
+        213,
+        213
+      ]
+    ],
+    "post": [
+      [
+        201,
+        209
+      ]
+    ],
+    "output": [
+      [
+        148,
+        148
+      ],
+      [
+        157,
+        157
+      ],
+      [
+        169,
+        169
+      ],
+      [
+        175,
+        175
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPHarmonographHaloAREffect.cpp\n * @brief Harmonograph Halo (5-Layer Audio-Reactive)\n *\n * Lissajous orbital halos with full 5-layer AR composition.\n * Maths: x = sin(a*(phi+rot)+delta), y = sin(b*(phi-rot)), r = sqrt(x²+y²)*0.72\n * Distance-to-curve band creates halo, energy pulses on beat.\n *\n * Centre-origin compliant. Dual-strip locked.\n */\n\n#include \"LGPHarmonographHaloAREffect.h\"\n#include \"LGPFilmPost.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\n// =========================================================================\n// Local helpers\n// =========================================================================\n\nstatic constexpr float kTau = 6.28318530717958647692f;\n\nstatic inline float fract(float x) { return x - floorf(x); }\n\nstatic inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRGB& c) {\n    ctx.leds[i] = c;\n    int j = i + STRIP_LENGTH;\n    if (j < (int)ctx.ledCount) ctx.leds[j] = c;\n}\n\nstatic inline uint8_t luminanceToBr(float wave01, float master) {\n    const float base = 0.06f;\n    float out = lowrisk_ar::clamp01f(base + (1.0f - base) * lowrisk_ar::clamp01f(wave01)) * master;\n    return static_cast<uint8_t>(255.0f * out);\n}\n\n// =========================================================================\n// Construction / init / cleanup\n// =========================================================================\n\nLGPHarmonographHaloAREffect::LGPHarmonographHaloAREffect()\n    : m_t(0.0f)\n    , m_bed(0.3f)\n    , m_freqA(3.0f)\n    , m_freqB(2.5f)\n    , m_delta(0.0f)\n    , m_impact(0.0f)\n    , m_memory(0.0f)\n{\n}\n\nbool LGPHarmonographHaloAREffect::init(plugins::EffectContext& ctx) {\n    m_controls.resetDefaults();\n    m_ar = lowrisk_ar::ArRuntimeState{};\n    m_ar.tonalHue = static_cast<float>(ctx.gHue);\n    m_ar.modeSmooth = 2.0f;\n    m_t      = 0.0f;\n    m_bed    = 0.3f;\n    m_freqA  = 3.0f;\n    m_freqB  = 2.5f;\n    m_delta  = 0.0f;\n    m_impact = 0.0f;\n    m_memory = 0.0f;\n    lightwaveos::effects::cinema::reset();\n    return true;\n}\n\n// =========================================================================\n// render() — 5-Layer composition\n// =========================================================================\n\nvoid LGPHarmonographHaloAREffect::render(plugins::EffectContext& ctx) {\n    // --- Timing ---\n    const float dtSignal = AudioReactivePolicy::signalDt(ctx);\n    const float dtVisual = AudioReactivePolicy::visualDt(ctx);\n    const float speedNorm = ctx.speed / 50.0f;\n\n    // --- Signals (shared infrastructure handles presence gate + fallback) ---\n    const lowrisk_ar::ArSignalSnapshot sig =\n        lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);\n    const lowrisk_ar::ArModulationProfile mod =\n        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);\n    m_ar.tonalHue = mod.baseHue;\n\n    // =================================================================\n    // LAYER UPDATES\n    // =================================================================\n\n    // Bed: slow atmosphere from RMS (tau 0.40s)\n    m_bed = lowrisk_ar::smoothTo(m_bed,\n        0.25f + 0.75f * sig.rms, dtSignal, 0.40f);\n\n    // Structure: Lissajous frequency ratios from harmonic + mid bands (tau 0.20s)\n    // freqA: 2.5 - 3.5 driven by harmonic content\n    const float freqATarget = 2.5f + 1.0f * sig.harmonic;\n    m_freqA = lowrisk_ar::smoothTo(m_freqA, freqATarget, dtSignal, 0.20f);\n\n    // freqB: 2.0 - 3.0 driven by mid-range energy\n    const float freqBTarget = 2.0f + 1.0f * sig.mid;\n    m_freqB = lowrisk_ar::smoothTo(m_freqB, freqBTarget, dtSignal, 0.20f);\n\n    // delta: phase offset drifts with flux + harmonic\n    const float deltaDrift = (0.5f + 0.8f * sig.flux + 0.3f * sig.harmonic) * dtSignal;\n    m_delta = fract(m_delta + deltaDrift);\n\n    // Impact: beat-triggered orbital flash (decay 0.20s)\n    if (sig.beatTick) m_impact = fmaxf(m_impact, 0.85f);\n    m_impact = lowrisk_ar::decay(m_impact, dtSignal, 0.20f);\n\n    // Memory: halo persistence (slow decay 0.75s, fed by beat + flux)\n    m_memory = lowrisk_ar::clamp01f(\n        lowrisk_ar::decay(m_memory, dtSignal, 0.75f)\n        + 0.15f * m_impact + 0.08f * sig.flux);\n    lowrisk_ar::applyBedImpactMemoryMix(\n        m_controls,\n        static_cast<float>(ctx.rawTotalTimeMs),\n        m_bed,\n        m_impact,\n        m_memory);\n\n    // =================================================================\n    // MOTION\n    // =================================================================\n\n    const float rotRate = (0.85f + 3.50f * speedNorm) * mod.motionRate\n                          * (0.65f + 0.35f * sig.rhythmic);\n    m_t += rotRate * dtVisual;\n\n    // =================================================================\n    // LISSAJOUS ORBITAL SAMPLING (parametric curve)\n    // =================================================================\n\n    // Sample 64 points around the orbital (phi ∈ [0, 2π])\n    static constexpr int kOrbitSamples = 64;\n    float orbitX[kOrbitSamples];\n    float orbitY[kOrbitSamples];\n\n    for (int s = 0; s < kOrbitSamples; s++) {\n        const float phi = kTau * (static_cast<float>(s) / static_cast<float>(kOrbitSamples));\n        // Lissajous: x = sin(a*(phi+rot)+delta), y = sin(b*(phi-rot))\n        const float x = sinf(m_freqA * (phi + m_t) + m_delta * kTau);\n        const float y = sinf(m_freqB * (phi - m_t));\n        // Map to LED strip coordinate space (scaled by 0.72 for halo aesthetic)\n        orbitX[s] = x * 0.72f;\n        orbitY[s] = y * 0.72f;\n    }\n\n    // =================================================================\n    // PER-PIXEL RENDER\n    // =================================================================\n\n    const float mid    = (STRIP_LENGTH - 1) * 0.5f;\n    const float invMid = 1.0f / mid;\n\n    const float bedBright = 0.25f + 0.75f * m_bed;\n    const float master = (ctx.brightness / 255.0f)\n                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;\n\n    // Halo band width (affected by structure)\n    const float bandWidth = lowrisk_ar::clampf(\n        0.12f + 0.08f * sig.bass + 0.05f * m_impact,\n        0.08f, 0.25f);\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        const float dmid  = static_cast<float>(i) - mid;\n        const float distN = fabsf(dmid) * invMid;  // 0 at centre, 1 at edges\n\n        // Map LED position to 2D polar (simple radial mapping for LGP)\n        const float ledX = distN;  // Assume LEDs map to radius\n        const float ledY = 0.0f;   // Simplified: 1D strip as radial slice\n\n        // Find minimum distance to orbital curve\n        float minDist = 999.0f;\n        for (int s = 0; s < kOrbitSamples; s++) {\n            const float dx = ledX - orbitX[s];\n            const float dy = ledY - orbitY[s];\n            const float dist = sqrtf(dx * dx + dy * dy);\n            if (dist < minDist) minDist = dist;\n        }\n\n        // Distance-to-curve band creates halo\n        const float distBand = 1.0f - lowrisk_ar::clamp01f(minDist / bandWidth);\n        const float geom = powf(distBand, 2.2f);\n\n        // Centre glue\n        const float glue = 0.40f + 0.60f * expf(-(dmid * dmid) * 0.0015f);\n\n        // Bed x structured geometry\n        float structuredGeom = geom * glue;\n\n        // Impact: additive orbital flash at curve points\n        float impactShape = powf(distBand, 1.5f) * glue;\n        float impactAdd   = m_impact * impactShape * 0.40f;\n\n        // Memory: gentle additive glow\n        float memoryAdd = m_memory * (0.4f + 0.6f * geom) * 0.20f;\n\n        // Compose: bed x structure + impact + memory\n        float brightness = bedBright * structuredGeom + impactAdd + memoryAdd;\n        brightness = lowrisk_ar::clamp01f(brightness);\n\n        const uint8_t br = luminanceToBr(brightness, master);\n\n        // Tonal hue: chord-driven anchor + spatial offset + orbital phase\n        const uint8_t hue = static_cast<uint8_t>(\n            m_ar.tonalHue + distBand * 48.0f + sig.harmonic * 25.0f + m_delta * 64.0f);\n\n        writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));\n    }\n\n    lightwaveos::effects::cinema::apply(ctx, speedNorm);\n}\n\n// =========================================================================\n// cleanup / metadata / parameters\n// =========================================================================\n\nvoid LGPHarmonographHaloAREffect::cleanup() {}\n\nconst plugins::EffectMetadata& LGPHarmonographHaloAREffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Harmonograph Halo (5L-AR)\",\n        \"Lissajous orbital halos with 5-layer audio-reactive composition\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\nuint8_t LGPHarmonographHaloAREffect::getParameterCount() const {\n    return lowrisk_ar::Ar16Controls::parameterCount();\n}\n\nconst plugins::EffectParameter* LGPHarmonographHaloAREffect::getParameter(uint8_t index) const {\n    return lowrisk_ar::Ar16Controls::parameter(index);\n}\n\nbool LGPHarmonographHaloAREffect::setParameter(const char* name, float value) {\n    return m_controls.set(name, value);\n}\n\nfloat LGPHarmonographHaloAREffect::getParameter(const char* name) const {\n    return m_controls.get(name);\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

@@ -1,0 +1,115 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-03-18T01:14:51Z",
+  "firmwareSourceHash": "25d1555df9030ad0f3db4c6565c25fec023f8cb74c6e74182e4a1a0db91afb2e",
+  "effectId": "EID_LGP_LANGTON_HIGHWAY_AR",
+  "effectIdHex": "0x1C0E",
+  "className": "LGPLangtonHighwayAREffect",
+  "displayName": "LGP Langton Highway (5L-AR)",
+  "headerPath": "firmware-v3/src/effects/ieffect/LGPLangtonHighwayAREffect.h",
+  "sourcePath": "firmware-v3/src/effects/ieffect/LGPLangtonHighwayAREffect.cpp",
+  "renderRange": [
+    181,
+    302
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        181,
+        194
+      ]
+    ],
+    "mapping": [
+      [
+        187,
+        187
+      ],
+      [
+        205,
+        205
+      ],
+      [
+        207,
+        207
+      ],
+      [
+        229,
+        229
+      ],
+      [
+        238,
+        238
+      ],
+      [
+        259,
+        259
+      ],
+      [
+        301,
+        301
+      ]
+    ],
+    "modulation": [
+      [
+        201,
+        201
+      ],
+      [
+        207,
+        207
+      ],
+      [
+        209,
+        210
+      ],
+      [
+        294,
+        294
+      ]
+    ],
+    "render": [
+      [
+        232,
+        232
+      ],
+      [
+        255,
+        255
+      ],
+      [
+        264,
+        264
+      ],
+      [
+        298,
+        298
+      ]
+    ],
+    "post": [
+      [
+        288,
+        295
+      ]
+    ],
+    "output": [
+      [
+        246,
+        246
+      ],
+      [
+        255,
+        255
+      ],
+      [
+        259,
+        259
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPLangtonHighwayAREffect.cpp\n * @brief Langton Highway (5-Layer Audio-Reactive)\n *\n * Langton's ant cellular automaton on 64x64 grid, projected to 1D via drifting\n * diagonal slice. Full 5-layer AR composition:\n *   Bed       - RMS brightness (tau 0.45s)\n *   Structure - step count from rhythmic+rms (tau 0.10s)\n *   Impact    - beat ant-spark amplification (decay 0.20s)\n *   Memory    - highway persistence (tau 0.85s)\n *   Tonal     - chord hue\n *\n * Centre-origin compliant. Dual-strip locked. PSRAM grid allocation.\n */\n\n#include \"LGPLangtonHighwayAREffect.h\"\n#include \"LGPFilmPost.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\n#ifndef NATIVE_BUILD\n#include <esp_heap_caps.h>\n#endif\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\n// =========================================================================\n// Local helpers\n// =========================================================================\n\nstatic inline float fract(float x) { return x - floorf(x); }\n\nstatic inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRGB& c) {\n    ctx.leds[i] = c;\n    int j = i + STRIP_LENGTH;\n    if (j < (int)ctx.ledCount) ctx.leds[j] = c;\n}\n\nstatic inline uint8_t luminanceToBr(float wave01, float master) {\n    const float base = 0.06f;\n    float out = lowrisk_ar::clamp01f(base + (1.0f - base) * lowrisk_ar::clamp01f(wave01)) * master;\n    return static_cast<uint8_t>(255.0f * out);\n}\n\n// =========================================================================\n// Construction / destruction\n// =========================================================================\n\nLGPLangtonHighwayAREffect::LGPLangtonHighwayAREffect()\n    : m_bed(0.3f)\n    , m_structure(0.5f)\n    , m_impact(0.0f)\n    , m_memory(0.0f)\n    , m_grid(nullptr)\n    , m_antX(32)\n    , m_antY(32)\n    , m_antDir(0)\n    , m_antStepAccum(0.0f)\n    , m_sliceOffset(0.0f)\n{\n}\n\nLGPLangtonHighwayAREffect::~LGPLangtonHighwayAREffect() {\n    cleanup();\n}\n\n// =========================================================================\n// Init / cleanup\n// =========================================================================\n\nbool LGPLangtonHighwayAREffect::init(plugins::EffectContext& ctx) {\n    m_controls.resetDefaults();\n    m_ar = lowrisk_ar::ArRuntimeState{};\n    m_ar.tonalHue = static_cast<float>(ctx.gHue);\n    m_ar.modeSmooth = 2.0f;\n\n    m_bed         = 0.3f;\n    m_structure   = 0.5f;\n    m_impact      = 0.0f;\n    m_memory      = 0.0f;\n\n    m_antX = 32;\n    m_antY = 32;\n    m_antDir = 0;\n    m_antStepAccum = 0.0f;\n    m_sliceOffset = 0.0f;\n\n    // Allocate PSRAM grid (64*64 = 4096 bytes)\n    #ifndef NATIVE_BUILD\n    m_grid = (uint8_t*)heap_caps_malloc(W * H, MALLOC_CAP_SPIRAM);\n    if (!m_grid) return false;\n    #else\n    m_grid = new uint8_t[W * H];\n    #endif\n\n    // Clear grid (all white)\n    for (uint16_t i = 0; i < W * H; i++) {\n        m_grid[i] = 255;\n    }\n\n    lightwaveos::effects::cinema::reset();\n    return true;\n}\n\nvoid LGPLangtonHighwayAREffect::cleanup() {\n    if (m_grid) {\n        #ifndef NATIVE_BUILD\n        heap_caps_free(m_grid);\n        #else\n        delete[] m_grid;\n        #endif\n        m_grid = nullptr;\n    }\n}\n\n// =========================================================================\n// Langton's ant step\n// =========================================================================\n\nvoid LGPLangtonHighwayAREffect::stepAnt() {\n    if (!m_grid) return;\n\n    // Bounds check\n    if (m_antX < 0 || m_antX >= W || m_antY < 0 || m_antY >= H) {\n        // Wrap or reset\n        m_antX = (m_antX + W) % W;\n        m_antY = (m_antY + H) % H;\n        return;\n    }\n\n    const uint16_t idx = m_antY * W + m_antX;\n    const uint8_t cell = m_grid[idx];\n\n    // White → turn right, flip to black, move\n    // Black → turn left, flip to white, move\n    if (cell > 127) {\n        m_antDir = (m_antDir + 1) & 3; // turn right\n        m_grid[idx] = 0; // flip to black\n    } else {\n        m_antDir = (m_antDir + 3) & 3; // turn left (same as -1 mod 4)\n        m_grid[idx] = 255; // flip to white\n    }\n\n    // Move forward\n    switch (m_antDir) {\n        case 0: m_antY--; break; // N\n        case 1: m_antX++; break; // E\n        case 2: m_antY++; break; // S\n        case 3: m_antX--; break; // W\n    }\n}\n\n// =========================================================================\n// Drifting diagonal slice projection\n// =========================================================================\n\nfloat LGPLangtonHighwayAREffect::sampleProjection(float offset) {\n    if (!m_grid) return 0.0f;\n\n    // Diagonal slice: y = x + offset (wrapped)\n    float x = offset;\n    x = x - floorf(x / static_cast<float>(W)) * static_cast<float>(W); // wrap to [0, W)\n\n    int xi = static_cast<int>(x);\n    int yi = (xi + static_cast<int>(m_sliceOffset)) % H;\n\n    if (xi < 0 || xi >= W) return 0.0f;\n    if (yi < 0 || yi >= H) yi = (yi + H) % H;\n\n    const uint16_t idx = yi * W + xi;\n    return m_grid[idx] / 255.0f;\n}\n\n// =========================================================================\n// render() — 5-Layer composition\n// =========================================================================\n\nvoid LGPLangtonHighwayAREffect::render(plugins::EffectContext& ctx) {\n    if (!m_grid) return;\n\n    // --- Timing ---\n    const float dtSignal = AudioReactivePolicy::signalDt(ctx);\n    const float dtVisual = AudioReactivePolicy::visualDt(ctx);\n    const float speedNorm = ctx.speed / 50.0f;\n\n    // --- Signals (shared infrastructure handles presence gate + fallback) ---\n    const lowrisk_ar::ArSignalSnapshot sig =\n        lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);\n    const lowrisk_ar::ArModulationProfile mod =\n        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);\n    m_ar.tonalHue = mod.baseHue;\n\n    // =================================================================\n    // LAYER UPDATES\n    // =================================================================\n\n    // Bed: slow atmosphere from RMS (tau 0.45s)\n    m_bed = lowrisk_ar::smoothTo(m_bed,\n        0.25f + 0.75f * sig.rms, dtSignal, 0.45f);\n\n    // Structure: step rate from rhythmic + rms (tau 0.10s)\n    const float structTarget = lowrisk_ar::clamp01f(\n        0.30f + 0.45f * sig.rhythmic + 0.25f * sig.rms);\n    m_structure = lowrisk_ar::smoothTo(m_structure, structTarget, dtSignal, 0.10f);\n\n    // Impact: beat-triggered ant spark (decay 0.20s)\n    if (sig.beatTick) m_impact = fmaxf(m_impact, 1.0f);\n    m_impact = lowrisk_ar::decay(m_impact, dtSignal, 0.20f);\n\n    // Memory: highway persistence (slow decay, fed by structure)\n    m_memory = lowrisk_ar::clamp01f(\n        lowrisk_ar::decay(m_memory, dtSignal, 0.85f)\n        + 0.08f * m_structure);\n    lowrisk_ar::applyBedImpactMemoryMix(\n        m_controls,\n        static_cast<float>(ctx.rawTotalTimeMs),\n        m_bed,\n        m_impact,\n        m_memory);\n\n    // =================================================================\n    // ANT STEPPING\n    // =================================================================\n\n    // Step count controlled by structure layer (0.5-8 steps/frame at speed 50)\n    const float stepsPerSec = (0.5f + 7.5f * m_structure) * speedNorm;\n    m_antStepAccum += stepsPerSec * dtVisual;\n\n    while (m_antStepAccum >= 1.0f) {\n        stepAnt();\n        m_antStepAccum -= 1.0f;\n    }\n\n    // Slice drift\n    const float driftRate = (0.15f + 0.35f * speedNorm) * mod.motionRate;\n    m_sliceOffset += driftRate * dtVisual;\n    m_sliceOffset = fract(m_sliceOffset / static_cast<float>(H)) * static_cast<float>(H);\n\n    // =================================================================\n    // PER-PIXEL RENDER\n    // =================================================================\n\n    const float mid    = (STRIP_LENGTH - 1) * 0.5f;\n    const float invMid = 1.0f / mid;\n    const float master = (ctx.brightness / 255.0f)\n                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;\n\n    // Ant position in grid space\n    const float antXf = static_cast<float>(m_antX);\n    const float antYf = static_cast<float>(m_antY);\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        const float dmid  = static_cast<float>(i) - mid;\n        const float distN = fabsf(dmid) * invMid;\n\n        // Map strip position to grid diagonal\n        const float gridPos = distN * static_cast<float>(W);\n\n        // Sample grid at this position (with neighbourhood blur)\n        float highway = 0.0f;\n        for (int blur = -1; blur <= 1; blur++) {\n            float samplePos = gridPos + static_cast<float>(blur) * 1.5f;\n            highway += sampleProjection(samplePos) * (blur == 0 ? 0.5f : 0.25f);\n        }\n        highway = lowrisk_ar::clamp01f(highway);\n\n        // Centre glue (stronger adhesion near origin)\n        const float glue = 0.40f + 0.60f * expf(-(dmid * dmid) * 0.0018f);\n\n        // Ant spark (proximity to ant position in grid)\n        const float antDist = sqrtf(\n            (gridPos - antXf) * (gridPos - antXf) +\n            (m_sliceOffset - antYf) * (m_sliceOffset - antYf));\n        const float antSpark = expf(-antDist * 0.12f);\n\n        // Bed × highway field\n        float structuredField = m_bed * highway * glue;\n\n        // Impact × ant spark (additive burst)\n        float impactAdd = m_impact * antSpark * 0.45f;\n\n        // Memory (gentle additive glow)\n        float memoryAdd = m_memory * (0.4f + 0.6f * highway) * 0.15f;\n\n        // Compose: bed × highway + impact + memory\n        float brightness = structuredField + impactAdd + memoryAdd;\n        brightness = lowrisk_ar::clamp01f(brightness);\n\n        const uint8_t br = luminanceToBr(brightness, master);\n\n        // Tonal hue: chord-driven + highway modulation\n        const uint8_t hue = static_cast<uint8_t>(\n            m_ar.tonalHue + highway * 40.0f + sig.harmonic * 15.0f);\n\n        writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));\n    }\n\n    lightwaveos::effects::cinema::apply(ctx, speedNorm);\n}\n\n// =========================================================================\n// Metadata / parameters\n// =========================================================================\n\nconst plugins::EffectMetadata& LGPLangtonHighwayAREffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Langton Highway (5L-AR)\",\n        \"Langton's ant cellular automaton with 5-layer audio-reactive composition\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\nuint8_t LGPLangtonHighwayAREffect::getParameterCount() const {\n    return lowrisk_ar::Ar16Controls::parameterCount();\n}\n\nconst plugins::EffectParameter* LGPLangtonHighwayAREffect::getParameter(uint8_t index) const {\n    return lowrisk_ar::Ar16Controls::parameter(index);\n}\n\nbool LGPLangtonHighwayAREffect::setParameter(const char* name, float value) {\n    return m_controls.set(name, value);\n}\n\nfloat LGPLangtonHighwayAREffect::getParameter(const char* name) const {\n    return m_controls.get(name);\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

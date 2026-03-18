@@ -1,0 +1,114 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-03-18T01:14:51Z",
+  "firmwareSourceHash": "25d1555df9030ad0f3db4c6565c25fec023f8cb74c6e74182e4a1a0db91afb2e",
+  "effectId": "EID_LGP_MACH_DIAMONDS_AR",
+  "effectIdHex": "0x1C05",
+  "className": "LGPMachDiamondsAREffect",
+  "displayName": "LGP Mach Diamonds (5L-AR)",
+  "headerPath": "firmware-v3/src/effects/ieffect/LGPMachDiamondsAREffect.h",
+  "sourcePath": "firmware-v3/src/effects/ieffect/LGPMachDiamondsAREffect.cpp",
+  "renderRange": [
+    80,
+    200
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        111,
+        111
+      ]
+    ],
+    "mapping": [
+      [
+        84,
+        84
+      ],
+      [
+        102,
+        102
+      ],
+      [
+        104,
+        104
+      ],
+      [
+        130,
+        130
+      ],
+      [
+        146,
+        146
+      ],
+      [
+        199,
+        199
+      ]
+    ],
+    "modulation": [
+      [
+        98,
+        98
+      ],
+      [
+        101,
+        101
+      ],
+      [
+        103,
+        104
+      ],
+      [
+        106,
+        107
+      ],
+      [
+        115,
+        115
+      ],
+      [
+        118,
+        118
+      ],
+      [
+        165,
+        166
+      ],
+      [
+        170,
+        170
+      ]
+    ],
+    "render": [
+      [
+        160,
+        160
+      ],
+      [
+        196,
+        196
+      ]
+    ],
+    "post": [
+      [
+        186,
+        193
+      ]
+    ],
+    "output": [
+      [
+        138,
+        138
+      ],
+      [
+        160,
+        160
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPMachDiamondsAREffect.cpp\n * @brief Mach Diamonds (5-Layer Audio-Reactive)\n *\n * Shock-diamond standing-wave pulses with full 5-layer AR composition.\n * Base maths from the lowrisk_ar LGPMachDiamondsEffect, restructured into\n * explicit bed/structure/impact/tonal/memory layers.\n *\n * Centre-origin compliant. Dual-strip locked.\n */\n\n#include \"LGPMachDiamondsAREffect.h\"\n#include \"LGPFilmPost.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\n// =========================================================================\n// Local helpers (shared with ShapeBangersPack pattern)\n// =========================================================================\n\nstatic constexpr float kTau = 6.28318530717958647692f;\n\nstatic inline float fract(float x) { return x - floorf(x); }\n\nstatic inline float tri01(float x) {\n    float f = fract(x);\n    return lowrisk_ar::clamp01f(1.0f - fabsf(2.0f * f - 1.0f));\n}\n\nstatic inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRGB& c) {\n    ctx.leds[i] = c;\n    int j = i + STRIP_LENGTH;\n    if (j < (int)ctx.ledCount) ctx.leds[j] = c;\n}\n\nstatic inline uint8_t luminanceToBr(float wave01, float master) {\n    const float base = 0.06f;\n    float out = lowrisk_ar::clamp01f(base + (1.0f - base) * lowrisk_ar::clamp01f(wave01)) * master;\n    return static_cast<uint8_t>(255.0f * out);\n}\n\n// =========================================================================\n// Construction / init / cleanup\n// =========================================================================\n\nLGPMachDiamondsAREffect::LGPMachDiamondsAREffect()\n    : m_t(0.0f)\n    , m_bed(0.3f)\n    , m_structure(0.5f)\n    , m_impact(0.0f)\n    , m_snareImpact(0.0f)\n    , m_memory(0.0f)\n{\n}\n\nbool LGPMachDiamondsAREffect::init(plugins::EffectContext& ctx) {\n    m_controls.resetDefaults();\n    m_ar = lowrisk_ar::ArRuntimeState{};\n    m_ar.tonalHue = static_cast<float>(ctx.gHue);\n    m_ar.modeSmooth = 2.0f;\n    m_t           = 0.0f;\n    m_bed         = 0.3f;\n    m_structure   = 0.5f;\n    m_impact      = 0.0f;\n    m_snareImpact = 0.0f;\n    m_memory      = 0.0f;\n    lightwaveos::effects::cinema::reset();\n    return true;\n}\n\n// =========================================================================\n// render() — 5-Layer composition\n// =========================================================================\n\nvoid LGPMachDiamondsAREffect::render(plugins::EffectContext& ctx) {\n    // --- Timing ---\n    const float dtSignal = AudioReactivePolicy::signalDt(ctx);\n    const float dtVisual = AudioReactivePolicy::visualDt(ctx);\n    const float speedNorm = ctx.speed / 50.0f;\n\n    // --- Signals (shared infrastructure handles presence gate + fallback) ---\n    const lowrisk_ar::ArSignalSnapshot sig =\n        lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);\n    const lowrisk_ar::ArModulationProfile mod =\n        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);\n    m_ar.tonalHue = mod.baseHue;\n\n    // =================================================================\n    // LAYER UPDATES\n    // =================================================================\n\n    // Bed: slow atmosphere from RMS (tau 0.40s)\n    m_bed = lowrisk_ar::smoothTo(m_bed,\n        0.25f + 0.75f * sig.rms, dtSignal, 0.40f);\n\n    // Structure: geometry modulation from bass + flux (tau 0.15s)\n    const float structTarget = lowrisk_ar::clamp01f(\n        0.35f + 0.35f * sig.bass + 0.20f * sig.flux + 0.10f * sig.rhythmic);\n    m_structure = lowrisk_ar::smoothTo(m_structure, structTarget, dtSignal, 0.15f);\n\n    // Impact: beat-triggered burst (fast attack, decay 0.20s)\n    if (sig.beatTick) m_impact = fmaxf(m_impact, 0.90f);\n    m_impact = lowrisk_ar::decay(m_impact, dtSignal, 0.20f);\n\n    // Snare: separate fast envelope\n    if (ctx.audio.available && ctx.audio.isSnareHit())\n        m_snareImpact = fmaxf(m_snareImpact, 0.70f);\n    m_snareImpact = lowrisk_ar::decay(m_snareImpact, dtSignal, 0.25f);\n\n    // Memory: accumulated glow (slow decay, fed by beat + flux)\n    m_memory = lowrisk_ar::clamp01f(\n        lowrisk_ar::decay(m_memory, dtSignal, 0.80f)\n        + 0.12f * m_impact + 0.06f * sig.flux);\n    lowrisk_ar::applyBedImpactMemoryMix(\n        m_controls,\n        static_cast<float>(ctx.rawTotalTimeMs),\n        m_bed,\n        m_impact,\n        m_memory);\n\n    // =================================================================\n    // MOTION\n    // =================================================================\n\n    const float tRate = (1.10f + 4.20f * speedNorm) * mod.motionRate\n                        * (0.70f + 0.30f * m_structure);\n    m_t += tRate * dtVisual;\n\n    // =================================================================\n    // EFFECT GEOMETRY DRIVEN BY LAYERS\n    // =================================================================\n\n    const float mid    = (STRIP_LENGTH - 1) * 0.5f;\n    const float invMid = 1.0f / mid;\n\n    // Spacing: structure widens/narrows shock cells, impact compresses\n    const float spacing = lowrisk_ar::clampf(\n        0.13f * (1.0f - 0.25f * (m_structure - 0.5f)) - 0.08f * m_impact,\n        0.07f, 0.24f);\n\n    const float drift = m_t * (0.20f + 0.35f * speedNorm + 0.10f * m_structure);\n\n    // Contrast: sharper with structure + impact\n    const float sharpExp = lowrisk_ar::clampf(\n        2.2f + 0.8f * m_structure + 0.6f * m_impact, 1.8f, 3.8f);\n\n    // =================================================================\n    // PER-PIXEL RENDER\n    // =================================================================\n\n    const float bedBright = 0.25f + 0.75f * m_bed;\n    const float master = (ctx.brightness / 255.0f)\n                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        const float dmid  = static_cast<float>(i) - mid;\n        const float distN = fabsf(dmid) * invMid;\n\n        // Shock diamond triangular wave\n        const float cellPhase = (distN / spacing) - drift;\n        const float tri = tri01(cellPhase);\n        const float geom = powf(tri, sharpExp);\n\n        // Diamond breathing\n        const float breathing = 0.85f + 0.15f * cosf(kTau * cellPhase + m_t * 0.6f);\n\n        // Centre glue\n        const float glue = 0.35f + 0.65f * expf(-(dmid * dmid) * 0.0013f);\n\n        // Bed x structured geometry\n        float structuredGeom = geom * breathing * glue;\n\n        // Impact: additive spike at diamond peaks\n        float impactShape = powf(tri, 1.5f) * glue;\n        float impactAdd   = m_impact * impactShape * 0.35f\n                          + m_snareImpact * impactShape * 0.20f;\n\n        // Memory: gentle additive glow\n        float memoryAdd = m_memory * (0.5f + 0.5f * tri) * 0.18f;\n\n        // Compose: bed x structure + impact + memory\n        float brightness = bedBright * structuredGeom + impactAdd + memoryAdd;\n        brightness = lowrisk_ar::clamp01f(brightness);\n\n        const uint8_t br = luminanceToBr(brightness, master);\n\n        // Tonal hue: chord-driven anchor + spatial offset\n        const uint8_t hue = static_cast<uint8_t>(\n            m_ar.tonalHue + tri * 52.0f + sig.harmonic * 20.0f);\n\n        writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));\n    }\n\n    lightwaveos::effects::cinema::apply(ctx, speedNorm);\n}\n\n// =========================================================================\n// cleanup / metadata / parameters\n// =========================================================================\n\nvoid LGPMachDiamondsAREffect::cleanup() {}\n\nconst plugins::EffectMetadata& LGPMachDiamondsAREffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Mach Diamonds (5L-AR)\",\n        \"Shock-diamond jewellery with 5-layer audio-reactive composition\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\nuint8_t LGPMachDiamondsAREffect::getParameterCount() const {\n    return lowrisk_ar::Ar16Controls::parameterCount();\n}\n\nconst plugins::EffectParameter* LGPMachDiamondsAREffect::getParameter(uint8_t index) const {\n    return lowrisk_ar::Ar16Controls::parameter(index);\n}\n\nbool LGPMachDiamondsAREffect::setParameter(const char* name, float value) {\n    return m_controls.set(name, value);\n}\n\nfloat LGPMachDiamondsAREffect::getParameter(const char* name) const {\n    return m_controls.get(name);\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

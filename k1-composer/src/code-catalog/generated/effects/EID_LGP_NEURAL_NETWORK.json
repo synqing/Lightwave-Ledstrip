@@ -1,34 +1,34 @@
 {
   "schemaVersion": "2.0.0",
-  "generatedAtUtc": "2026-02-25T01:16:03Z",
-  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "generatedAtUtc": "2026-03-18T01:14:51Z",
+  "firmwareSourceHash": "25d1555df9030ad0f3db4c6565c25fec023f8cb74c6e74182e4a1a0db91afb2e",
   "effectId": "EID_LGP_NEURAL_NETWORK",
   "effectIdHex": "0x0503",
   "className": "LGPNeuralNetworkEffect",
   "displayName": "LGP Neural Network",
-  "headerPath": "firmware/v2/src/effects/ieffect/LGPNeuralNetworkEffect.h",
-  "sourcePath": "firmware/v2/src/effects/ieffect/LGPNeuralNetworkEffect.cpp",
+  "headerPath": "firmware-v3/src/effects/ieffect/LGPNeuralNetworkEffect.h",
+  "sourcePath": "firmware-v3/src/effects/ieffect/LGPNeuralNetworkEffect.cpp",
   "renderRange": [
     36,
-    132
+    157
   ],
   "phaseRanges": {
     "input": [
       [
         36,
-        46
+        49
       ]
     ],
     "mapping": [
       [
-        47,
-        62
+        50,
+        69
       ]
     ],
     "modulation": [
       [
-        63,
-        79
+        70,
+        91
       ]
     ],
     "render": [
@@ -49,52 +49,52 @@
         56
       ],
       [
-        58,
-        58
+        63,
+        64
       ],
       [
-        60,
-        60
-      ],
-      [
-        65,
-        65
+        68,
+        69
       ],
       [
         73,
         73
       ],
       [
-        89,
-        89
+        81,
+        81
       ],
       [
-        91,
-        91
-      ],
-      [
-        96,
-        96
-      ],
-      [
-        101,
-        101
+        99,
+        100
       ],
       [
         104,
-        104
+        105
       ],
       [
-        112,
-        112
+        109,
+        109
+      ],
+      [
+        119,
+        120
       ],
       [
         124,
-        124
+        125
       ],
       [
-        127,
-        127
+        132,
+        132
+      ],
+      [
+        147,
+        148
+      ],
+      [
+        152,
+        153
       ]
     ],
     "post": [
@@ -105,36 +105,36 @@
     ],
     "output": [
       [
-        46,
-        46
+        63,
+        64
       ],
       [
-        56,
-        56
-      ],
-      [
-        58,
-        60
-      ],
-      [
-        88,
-        91
+        66,
+        69
       ],
       [
         99,
-        99
+        100
       ],
       [
-        101,
-        104
+        102,
+        105
       ],
       [
-        117,
-        117
+        119,
+        120
       ],
       [
-        124,
-        127
+        122,
+        125
+      ],
+      [
+        147,
+        148
+      ],
+      [
+        150,
+        153
       ]
     ]
   },
@@ -145,5 +145,5 @@
     "Phase 'mapping' inferred from fallback segmentation.",
     "Phase 'modulation' inferred from fallback segmentation."
   ],
-  "sourceText": "/**\n * @file LGPNeuralNetworkEffect.cpp\n * @brief LGP Neural Network effect implementation\n */\n\n#include \"LGPNeuralNetworkEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cstring>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPNeuralNetworkEffect::LGPNeuralNetworkEffect()\n    : m_time(0)\n    , m_neurons{}\n    , m_neuronState{}\n    , m_signalPos{}\n    , m_signalStrength{}\n    , m_initialized(false)\n{\n}\n\nbool LGPNeuralNetworkEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_time = 0;\n    memset(m_neurons, 0, sizeof(m_neurons));\n    memset(m_neuronState, 0, sizeof(m_neuronState));\n    memset(m_signalPos, 0, sizeof(m_signalPos));\n    memset(m_signalStrength, 0, sizeof(m_signalStrength));\n    m_initialized = false;\n    return true;\n}\n\nvoid LGPNeuralNetworkEffect::render(plugins::EffectContext& ctx) {\n    // Fade to prevent color accumulation from additive blending\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    // Synaptic firing patterns with signal propagation\n    m_time = (uint16_t)(m_time + (ctx.speed >> 2));\n\n    // Initialize neurons on first run\n    if (!m_initialized) {\n        for (uint8_t n = 0; n < 20; n++) {\n            m_neurons[n] = random8(STRIP_LENGTH);\n            m_neuronState[n] = 0;\n        }\n        for (uint8_t s = 0; s < 10; s++) {\n            m_signalStrength[s] = 0;\n        }\n        m_initialized = true;\n    }\n\n    // Background neural tissue\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        uint8_t tissue = (uint8_t)(inoise8(i * 5, m_time >> 3) >> 2);\n        ctx.leds[i] = CRGB(tissue >> 1, 0, tissue);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = CRGB(tissue >> 2, 0, tissue >> 1);\n        }\n    }\n\n    // Update neurons\n    for (uint8_t n = 0; n < 20; n++) {\n        if (m_neuronState[n] > 0) {\n            m_neuronState[n] = scale8(m_neuronState[n], 230);\n        } else {\n            if (random8() < 16) {\n                m_neuronState[n] = 255;\n\n                // Spawn signal\n                for (uint8_t s = 0; s < 10; s++) {\n                    if (m_signalStrength[s] == 0) {\n                        m_signalPos[s] = (int8_t)m_neurons[n];\n                        m_signalStrength[s] = 255;\n                        break;\n                    }\n                }\n            }\n        }\n\n        // Render neuron\n        uint8_t pos = m_neurons[n];\n        uint8_t intensity = scale8(m_neuronState[n], ctx.brightness);\n        CRGB neuronColor = CRGB(intensity, intensity >> 3, intensity >> 1);\n\n        if (pos < STRIP_LENGTH) {\n            ctx.leds[pos] = neuronColor;\n            if (pos + STRIP_LENGTH < ctx.ledCount) {\n                ctx.leds[pos + STRIP_LENGTH] = neuronColor;\n            }\n        }\n\n        // Dendrites\n        for (int8_t d = -2; d <= 2; d++) {\n            if (d != 0) {\n                int16_t dendPos = (int16_t)pos + d;\n                if (dendPos >= 0 && dendPos < STRIP_LENGTH) {\n                    uint8_t dendIntensity = (uint8_t)(intensity >> (1 + abs(d)));\n                    ctx.leds[dendPos] = CRGB(dendIntensity >> 2, 0, dendIntensity >> 3);\n                    if (dendPos + STRIP_LENGTH < ctx.ledCount) {\n                        uint16_t idx = dendPos + STRIP_LENGTH;\n                        ctx.leds[idx] = CRGB(dendIntensity >> 3, 0, dendIntensity >> 2);\n                    }\n                }\n            }\n        }\n    }\n\n    // Update and render signals\n    for (uint8_t s = 0; s < 10; s++) {\n        if (m_signalStrength[s] > 0) {\n            m_signalPos[s] += (random8(2) == 0) ? 1 : -1;\n            m_signalStrength[s] = scale8(m_signalStrength[s], 240);\n\n            if (m_signalPos[s] >= 0 && m_signalPos[s] < STRIP_LENGTH) {\n                uint8_t sigIntensity = scale8(m_signalStrength[s], ctx.brightness);\n                uint8_t sigR = sigIntensity >> 1;\n                uint8_t sigG = sigIntensity >> 2;\n                uint8_t sigB = sigIntensity;\n\n                uint16_t pos = m_signalPos[s];\n                ctx.leds[pos] = CRGB(sigR, sigG, sigB);\n                if (pos + STRIP_LENGTH < ctx.ledCount) {\n                    uint16_t idx = pos + STRIP_LENGTH;\n                    ctx.leds[idx] = CRGB(sigR, sigG, sigB);\n                }\n            }\n        }\n    }\n}\n\nvoid LGPNeuralNetworkEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPNeuralNetworkEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Neural Network\",\n        \"Firing synaptic pathways\",\n        plugins::EffectCategory::NATURE,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+  "sourceText": "/**\n * @file LGPNeuralNetworkEffect.cpp\n * @brief LGP Neural Network effect implementation\n */\n\n#include \"LGPNeuralNetworkEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cstring>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPNeuralNetworkEffect::LGPNeuralNetworkEffect()\n    : m_time(0)\n    , m_neurons{}\n    , m_neuronState{}\n    , m_signalPos{}\n    , m_signalStrength{}\n    , m_initialized(false)\n{\n}\n\nbool LGPNeuralNetworkEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_time = 0;\n    memset(m_neurons, 0, sizeof(m_neurons));\n    memset(m_neuronState, 0, sizeof(m_neuronState));\n    memset(m_signalPos, 0, sizeof(m_signalPos));\n    memset(m_signalStrength, 0, sizeof(m_signalStrength));\n    m_initialized = false;\n    return true;\n}\n\nvoid LGPNeuralNetworkEffect::render(plugins::EffectContext& ctx) {\n    // Fade to prevent color accumulation from additive blending\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    // Synaptic firing patterns with radial signal propagation\n    m_time = (uint16_t)(m_time + (ctx.speed >> 2));\n\n    // Initialize neurons on first run\n    if (!m_initialized) {\n        for (uint8_t n = 0; n < 20; n++) {\n            m_neurons[n] = random8(HALF_LENGTH);\n            m_neuronState[n] = 0;\n        }\n        for (uint8_t s = 0; s < 10; s++) {\n            m_signalStrength[s] = 0;\n        }\n        m_initialized = true;\n    }\n\n    // Background neural tissue\n    for (uint16_t dist = 0; dist < HALF_LENGTH; dist++) {\n        uint8_t tissue = (uint8_t)(inoise8(dist * 5, m_time >> 3) >> 2);\n        CRGB tissueColor1 = CRGB(tissue >> 1, 0, tissue);\n        CRGB tissueColor2 = CRGB(tissue >> 2, 0, tissue >> 1);\n\n        uint16_t left1 = CENTER_LEFT - dist;\n        uint16_t right1 = CENTER_RIGHT + dist;\n        if (left1 < STRIP_LENGTH) ctx.leds[left1] = tissueColor1;\n        if (right1 < STRIP_LENGTH) ctx.leds[right1] = tissueColor1;\n\n        uint16_t left2 = STRIP_LENGTH + CENTER_LEFT - dist;\n        uint16_t right2 = STRIP_LENGTH + CENTER_RIGHT + dist;\n        if (left2 < ctx.ledCount) ctx.leds[left2] = tissueColor2;\n        if (right2 < ctx.ledCount) ctx.leds[right2] = tissueColor2;\n    }\n\n    // Update neurons\n    for (uint8_t n = 0; n < 20; n++) {\n        if (m_neuronState[n] > 0) {\n            m_neuronState[n] = scale8(m_neuronState[n], 230);\n        } else {\n            if (random8() < 16) {\n                m_neuronState[n] = 255;\n\n                // Spawn signal\n                for (uint8_t s = 0; s < 10; s++) {\n                    if (m_signalStrength[s] == 0) {\n                        m_signalPos[s] = (int8_t)m_neurons[n];\n                        m_signalStrength[s] = 255;\n                        break;\n                    }\n                }\n            }\n        }\n\n        // Render neuron\n        uint8_t dist = m_neurons[n];\n        uint8_t intensity = scale8(m_neuronState[n], ctx.brightness);\n        CRGB neuronColor = CRGB(intensity, intensity >> 3, intensity >> 1);\n\n        if (dist < HALF_LENGTH) {\n            uint16_t left1 = CENTER_LEFT - dist;\n            uint16_t right1 = CENTER_RIGHT + dist;\n            if (left1 < STRIP_LENGTH) ctx.leds[left1] = neuronColor;\n            if (right1 < STRIP_LENGTH) ctx.leds[right1] = neuronColor;\n\n            uint16_t left2 = STRIP_LENGTH + CENTER_LEFT - dist;\n            uint16_t right2 = STRIP_LENGTH + CENTER_RIGHT + dist;\n            if (left2 < ctx.ledCount) ctx.leds[left2] = neuronColor;\n            if (right2 < ctx.ledCount) ctx.leds[right2] = neuronColor;\n        }\n\n        // Dendrites\n        for (int8_t d = -2; d <= 2; d++) {\n            if (d != 0) {\n                int16_t dendDist = (int16_t)dist + d;\n                if (dendDist >= 0 && dendDist < (int16_t)HALF_LENGTH) {\n                    uint8_t dendIntensity = (uint8_t)(intensity >> (1 + abs(d)));\n                    CRGB dendColor1 = CRGB(dendIntensity >> 2, 0, dendIntensity >> 3);\n                    CRGB dendColor2 = CRGB(dendIntensity >> 3, 0, dendIntensity >> 2);\n\n                    uint16_t left1 = CENTER_LEFT - (uint16_t)dendDist;\n                    uint16_t right1 = CENTER_RIGHT + (uint16_t)dendDist;\n                    if (left1 < STRIP_LENGTH) ctx.leds[left1] = dendColor1;\n                    if (right1 < STRIP_LENGTH) ctx.leds[right1] = dendColor1;\n\n                    uint16_t left2 = STRIP_LENGTH + CENTER_LEFT - (uint16_t)dendDist;\n                    uint16_t right2 = STRIP_LENGTH + CENTER_RIGHT + (uint16_t)dendDist;\n                    if (left2 < ctx.ledCount) ctx.leds[left2] = dendColor2;\n                    if (right2 < ctx.ledCount) ctx.leds[right2] = dendColor2;\n                }\n            }\n        }\n    }\n\n    // Update and render signals\n    for (uint8_t s = 0; s < 10; s++) {\n        if (m_signalStrength[s] > 0) {\n            m_signalPos[s] += (random8(2) == 0) ? 1 : -1;\n            m_signalStrength[s] = scale8(m_signalStrength[s], 240);\n\n            if (m_signalPos[s] >= 0 && m_signalPos[s] < (int8_t)HALF_LENGTH) {\n                uint8_t sigIntensity = scale8(m_signalStrength[s], ctx.brightness);\n                uint8_t sigR = sigIntensity >> 1;\n                uint8_t sigG = sigIntensity >> 2;\n                uint8_t sigB = sigIntensity;\n                CRGB sigColor = CRGB(sigR, sigG, sigB);\n\n                uint16_t dist = (uint16_t)m_signalPos[s];\n                uint16_t left1 = CENTER_LEFT - dist;\n                uint16_t right1 = CENTER_RIGHT + dist;\n                if (left1 < STRIP_LENGTH) ctx.leds[left1] = sigColor;\n                if (right1 < STRIP_LENGTH) ctx.leds[right1] = sigColor;\n\n                uint16_t left2 = STRIP_LENGTH + CENTER_LEFT - dist;\n                uint16_t right2 = STRIP_LENGTH + CENTER_RIGHT + dist;\n                if (left2 < ctx.ledCount) ctx.leds[left2] = sigColor;\n                if (right2 < ctx.ledCount) ctx.leds[right2] = sigColor;\n            }\n        }\n    }\n}\n\nvoid LGPNeuralNetworkEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPNeuralNetworkEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Neural Network\",\n        \"Firing synaptic pathways\",\n        plugins::EffectCategory::NATURE,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
 }

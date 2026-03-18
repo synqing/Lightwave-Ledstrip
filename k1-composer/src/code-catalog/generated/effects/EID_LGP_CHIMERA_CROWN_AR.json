@@ -1,0 +1,171 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-03-18T01:14:51Z",
+  "firmwareSourceHash": "25d1555df9030ad0f3db4c6565c25fec023f8cb74c6e74182e4a1a0db91afb2e",
+  "effectId": "EID_LGP_CHIMERA_CROWN_AR",
+  "effectIdHex": "0x1C0F",
+  "className": "LGPChimeraCrownAREffect",
+  "displayName": "LGP Chimera Crown (5L-AR)",
+  "headerPath": "firmware-v3/src/effects/ieffect/LGPChimeraCrownAREffect.h",
+  "sourcePath": "firmware-v3/src/effects/ieffect/LGPChimeraCrownAREffect.cpp",
+  "renderRange": [
+    135,
+    308
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        135,
+        154
+      ]
+    ],
+    "mapping": [
+      [
+        143,
+        143
+      ],
+      [
+        157,
+        158
+      ],
+      [
+        161,
+        161
+      ],
+      [
+        163,
+        163
+      ],
+      [
+        185,
+        185
+      ],
+      [
+        192,
+        192
+      ],
+      [
+        196,
+        196
+      ],
+      [
+        307,
+        307
+      ]
+    ],
+    "modulation": [
+      [
+        158,
+        158
+      ],
+      [
+        160,
+        160
+      ],
+      [
+        162,
+        163
+      ],
+      [
+        165,
+        166
+      ],
+      [
+        169,
+        169
+      ],
+      [
+        172,
+        172
+      ],
+      [
+        195,
+        195
+      ],
+      [
+        235,
+        235
+      ],
+      [
+        269,
+        270
+      ],
+      [
+        280,
+        280
+      ]
+    ],
+    "render": [
+      [
+        201,
+        201
+      ],
+      [
+        209,
+        209
+      ],
+      [
+        216,
+        216
+      ],
+      [
+        218,
+        218
+      ],
+      [
+        234,
+        234
+      ],
+      [
+        239,
+        239
+      ],
+      [
+        265,
+        265
+      ],
+      [
+        303,
+        303
+      ]
+    ],
+    "post": [
+      [
+        288,
+        299
+      ]
+    ],
+    "output": [
+      [
+        207,
+        209
+      ],
+      [
+        216,
+        216
+      ],
+      [
+        220,
+        221
+      ],
+      [
+        234,
+        234
+      ],
+      [
+        241,
+        242
+      ],
+      [
+        265,
+        265
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPChimeraCrownAREffect.cpp\n * @brief Chimera Crown (5-Layer Audio-Reactive)\n *\n * Kuramoto-ish oscillator coupling on 160 elements with full 5-layer AR composition.\n * Base maths from LGPChimeraCrownEffect, restructured into explicit bed/structure/impact/tonal/memory layers.\n *\n * Physics: Two-pass Kuramoto model\n *   Pass 1: compute local order parameter Rlocal[i] via windowed cosine kernel\n *   Pass 2: update theta[i] via Kuramoto coupling + intrinsic omega[i]\n *\n * Audio mapping:\n *   Bed       - RMS-driven crown brightness base (tau 0.45s)\n *   Structure - coupling K + window W from bass + flux (tau 0.15s) → sync strength\n *   Impact    - beat-triggered crown spike (decay 0.22s)\n *   Memory    - post-impact sync persistence (decay 0.90s)\n *   Tonal     - chord hue anchor\n *\n * Centre-origin compliant. Dual-strip locked.\n */\n\n#include \"LGPChimeraCrownAREffect.h\"\n#include \"LGPFilmPost.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n#include <cstring>\n\n#ifndef NATIVE_BUILD\n#include <esp_heap_caps.h>\n#endif\n\n#include \"../../utils/Log.h\"\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\n// =========================================================================\n// Local helpers (shared with HolyShitBangersPack pattern)\n// =========================================================================\n\nstatic constexpr float kPi  = 3.14159265358979323846f;\nstatic constexpr float kTau = 6.28318530717958647692f;\n\nstatic inline float fract(float x) { return x - floorf(x); }\n\nstatic inline float smoothstep(float a, float b, float x) {\n    const float t = lowrisk_ar::clamp01f((x - a) / (b - a));\n    return t * t * (3.0f - 2.0f * t);\n}\n\nstatic inline uint32_t hash32(uint32_t x) {\n    x ^= x >> 16; x *= 0x7feb352dU; x ^= x >> 15; x *= 0x846ca68bU; x ^= x >> 16;\n    return x;\n}\n\nstatic inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRGB& c) {\n    ctx.leds[i] = c;\n    int j = i + STRIP_LENGTH;\n    if (j < (int)ctx.ledCount) ctx.leds[j] = c;\n}\n\nstatic inline float centreGlue(int i) {\n    const float mid = (STRIP_LENGTH - 1) * 0.5f;\n    const float d = static_cast<float>(i) - mid;\n    return 0.30f + 0.70f * expf(-(d * d) * 0.0016f);\n}\n\nstatic inline uint8_t luminanceToBr(float wave01, float master) {\n    const float base = 0.055f;\n    float out = lowrisk_ar::clamp01f(base + (1.0f - base) * lowrisk_ar::clamp01f(wave01));\n    out = out / (1.0f + 0.60f * out);  // filmic shoulder\n    out *= master;\n    return static_cast<uint8_t>(lowrisk_ar::clampf(out * 255.0f, 0.0f, 255.0f));\n}\n\n// =========================================================================\n// Construction / init / cleanup\n// =========================================================================\n\nLGPChimeraCrownAREffect::LGPChimeraCrownAREffect()\n    : m_ps(nullptr)\n    , m_t(0.0f)\n    , m_bed(0.3f)\n    , m_structure(0.5f)\n    , m_impact(0.0f)\n    , m_memory(0.0f)\n{\n}\n\nbool LGPChimeraCrownAREffect::init(plugins::EffectContext& ctx) {\n    m_controls.resetDefaults();\n    m_ar = lowrisk_ar::ArRuntimeState{};\n    m_ar.tonalHue = static_cast<float>(ctx.gHue);\n    m_ar.modeSmooth = 2.0f;\n    m_t           = 0.0f;\n    m_bed         = 0.3f;\n    m_structure   = 0.5f;\n    m_impact      = 0.0f;\n    m_memory      = 0.0f;\n\n    lightwaveos::effects::cinema::reset();\n\n#ifndef NATIVE_BUILD\n    if (!m_ps) {\n        m_ps = static_cast<ChimeraPsram*>(heap_caps_malloc(sizeof(ChimeraPsram), MALLOC_CAP_SPIRAM));\n        if (!m_ps) {\n            LW_LOGE(\"LGPChimeraCrownAREffect: PSRAM alloc failed\");\n            return false;\n        }\n    }\n    memset(m_ps, 0, sizeof(ChimeraPsram));\n\n    // Deterministic hash-based init for theta/omega (no rand())\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        uint32_t h = hash32(0xC0FFEEu ^ (static_cast<uint32_t>(i) * 2654435761u));\n        float u = static_cast<float>(h & 0xFFFFu) / 65535.0f;\n        m_ps->theta[i] = u * kTau;\n\n        uint32_t h2 = hash32(h ^ 0xA5A5A5A5u);\n        float v = (static_cast<float>(static_cast<int>(h2 & 0xFFFFu) - 32768) / 32768.0f);\n        m_ps->omega[i] = 0.20f * v;\n        m_ps->Rlocal[i] = 0.0f;\n    }\n#endif\n\n    return true;\n}\n\n// =========================================================================\n// render() — 5-Layer composition\n// =========================================================================\n\nvoid LGPChimeraCrownAREffect::render(plugins::EffectContext& ctx) {\n#ifndef NATIVE_BUILD\n    if (!m_ps) return;\n#endif\n\n    // --- Timing ---\n    const float dtSignal = AudioReactivePolicy::signalDt(ctx);\n    const float dtVisual = AudioReactivePolicy::visualDt(ctx);\n    const float speedNorm = ctx.speed / 50.0f;\n\n    // --- Signals (shared infrastructure handles presence gate + fallback) ---\n    const lowrisk_ar::ArSignalSnapshot sig =\n        lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);\n    const lowrisk_ar::ArModulationProfile mod =\n        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);\n    m_ar.tonalHue = mod.baseHue;\n\n    // =================================================================\n    // LAYER UPDATES\n    // =================================================================\n\n    // Bed: RMS-driven crown brightness (tau 0.45s)\n    const float bedTarget = lowrisk_ar::clamp01f(0.25f + 0.75f * sig.rms);\n    m_bed = lowrisk_ar::smoothTo(m_bed, bedTarget, dtSignal, 0.45f);\n\n    // Structure: coupling strength + window width from bass + flux (tau 0.15s)\n    const float structTarget = lowrisk_ar::clamp01f(\n        0.35f + 0.35f * sig.bass + 0.20f * sig.flux + 0.10f * sig.rhythmic);\n    m_structure = lowrisk_ar::smoothTo(m_structure, structTarget, dtSignal, 0.15f);\n\n    // Impact: beat-triggered crown spike (decay 0.22s)\n    if (sig.beatTick) m_impact = fmaxf(m_impact, 0.90f);\n    m_impact = lowrisk_ar::decay(m_impact, dtSignal, 0.22f);\n\n    // Memory: accumulated sync persistence (slow decay, fed by beat + flux)\n    m_memory = lowrisk_ar::clamp01f(\n        lowrisk_ar::decay(m_memory, dtSignal, 0.90f)\n        + 0.12f * m_impact + 0.06f * sig.flux);\n    lowrisk_ar::applyBedImpactMemoryMix(\n        m_controls,\n        static_cast<float>(ctx.rawTotalTimeMs),\n        m_bed,\n        m_impact,\n        m_memory);\n\n    // =================================================================\n    // KURAMOTO PHYSICS\n    // =================================================================\n\n    // Structure controls coupling strength K and window width W\n    const float baseW = 10.0f + 10.0f * speedNorm;\n    const float W = baseW * (0.65f + 0.35f * m_structure);\n    static constexpr int kMaxWindowRadius = 24;\n    int iW = static_cast<int>(W);\n    if (iW < 2) iW = 2;\n    if (iW > kMaxWindowRadius) iW = kMaxWindowRadius;\n\n    const float baseK = 1.4f + 1.2f * speedNorm;\n    const float K = baseK * (0.70f + 0.50f * m_structure);\n\n    const float alpha = 0.55f;\n    const float dt = (0.035f + 0.030f * speedNorm) * mod.motionRate;\n\n    // Cap coupling window at high speed to keep render cost bounded.\n    const float invW = 1.0f / (W + 1e-6f);\n    static float kernel[2 * kMaxWindowRadius + 1];\n    for (int dj = -iW; dj <= iW; dj++) {\n        const float t = fabsf(static_cast<float>(dj)) * invW;\n        kernel[dj + kMaxWindowRadius] = 0.5f + 0.5f * cosf(kPi * t);\n    }\n\n    // Precompute sin/cos(theta) once for both Kuramoto passes.\n    static float thetaSin[STRIP_LENGTH];\n    static float thetaCos[STRIP_LENGTH];\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        thetaSin[i] = sinf(m_ps->theta[i]);\n        thetaCos[i] = cosf(m_ps->theta[i]);\n    }\n\n    // Pass 1: compute local order parameter Rlocal via windowed cosine kernel\n#ifndef NATIVE_BUILD\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float csum = 0.0f, ssum = 0.0f, wsum = 0.0f;\n        for (int dj = -iW; dj <= iW; dj++) {\n            int j = i + dj;\n            if (j < 0) j += STRIP_LENGTH;\n            if (j >= STRIP_LENGTH) j -= STRIP_LENGTH;\n            const float w = kernel[dj + kMaxWindowRadius];\n            csum += w * thetaCos[j];\n            ssum += w * thetaSin[j];\n            wsum += w;\n        }\n        const float inv = 1.0f / (wsum + 1e-6f);\n        const float c = csum * inv;\n        const float s = ssum * inv;\n        m_ps->Rlocal[i] = lowrisk_ar::clamp01f(sqrtf(c * c + s * s));\n    }\n\n    // Pass 2: update theta via Kuramoto coupling\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        const float thetaShift = m_ps->theta[i] + alpha;\n        const float sinShift = sinf(thetaShift);\n        const float cosShift = cosf(thetaShift);\n        float sum = 0.0f, wsum = 0.0f;\n        for (int dj = -iW; dj <= iW; dj++) {\n            int j = i + dj;\n            if (j < 0) j += STRIP_LENGTH;\n            if (j >= STRIP_LENGTH) j -= STRIP_LENGTH;\n            const float w = kernel[dj + kMaxWindowRadius];\n            sum += w * (thetaSin[j] * cosShift - thetaCos[j] * sinShift);\n            wsum += w;\n        }\n        const float coupling = (K / (wsum + 1e-6f)) * sum;\n        m_ps->theta[i] += (m_ps->omega[i] + coupling) * dt;\n        if (m_ps->theta[i] > kTau) m_ps->theta[i] -= kTau;\n        if (m_ps->theta[i] < 0.0f) m_ps->theta[i] += kTau;\n    }\n#endif\n\n    m_t += dt;\n\n    // =================================================================\n    // PER-PIXEL RENDER\n    // =================================================================\n\n    const float bedBright = 0.25f + 0.75f * m_bed;\n    const float master = (ctx.brightness / 255.0f)\n                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;\n\n#ifndef NATIVE_BUILD\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        const float R = m_ps->Rlocal[i];\n        const float glue = centreGlue(i);\n\n        // Crown: smoothstep of R, power for extra punch\n        float crown = smoothstep(0.55f, 0.92f, R);\n        crown = powf(crown, 1.35f);\n\n        // Bed: sin-based base pattern\n        float bed = 0.30f + 0.70f * (0.5f + 0.5f * sinf(m_ps->theta[i]));\n        bed = powf(bed, 1.15f) * 0.55f;\n\n        // Grain: hash-based texture (stronger in unsynced regions)\n        const uint32_t h = hash32(static_cast<uint32_t>(i) * 2654435761u ^ static_cast<uint32_t>(m_t * 1000.0f));\n        const float n = static_cast<float>(h & 0xFFu) / 255.0f;\n        const float grain = (1.0f - smoothstep(0.35f, 0.75f, R)) * (n - 0.5f) * 0.10f;\n\n        // Bed x structured geometry\n        float structuredGeom = (bed + crown) * glue + grain;\n\n        // Impact: additive spike on crown peaks\n        const float impactAdd = m_impact * crown * glue * 0.35f;\n\n        // Memory: gentle additive glow\n        const float memoryAdd = m_memory * (0.5f + 0.5f * crown) * 0.18f;\n\n        // Compose: bed x structure + impact + memory\n        float brightness = bedBright * structuredGeom + impactAdd + memoryAdd;\n        brightness = lowrisk_ar::clamp01f(brightness);\n\n        const uint8_t br = luminanceToBr(brightness, master);\n\n        // Tonal hue: chord-driven anchor + crown-driven shift\n        const float hueShift = lowrisk_ar::lerpf(18.0f, 55.0f, crown)\n                             - lowrisk_ar::lerpf(0.0f, 14.0f, 1.0f - R)\n                             + sig.harmonic * 20.0f;\n        const uint8_t hue = static_cast<uint8_t>(m_ar.tonalHue + hueShift);\n\n        writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));\n    }\n#endif\n\n    lightwaveos::effects::cinema::apply(ctx, speedNorm, lightwaveos::effects::cinema::QualityPreset::LIGHTWEIGHT);\n}\n\n// =========================================================================\n// cleanup / metadata / parameters\n// =========================================================================\n\nvoid LGPChimeraCrownAREffect::cleanup() {\n#ifndef NATIVE_BUILD\n    if (m_ps) {\n        heap_caps_free(m_ps);\n        m_ps = nullptr;\n    }\n#endif\n}\n\nconst plugins::EffectMetadata& LGPChimeraCrownAREffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Chimera Crown (5L-AR)\",\n        \"Kuramoto sync + fracture dynamics with 5-layer audio-reactive composition\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\nuint8_t LGPChimeraCrownAREffect::getParameterCount() const {\n    return lowrisk_ar::Ar16Controls::parameterCount();\n}\n\nconst plugins::EffectParameter* LGPChimeraCrownAREffect::getParameter(uint8_t index) const {\n    return lowrisk_ar::Ar16Controls::parameter(index);\n}\n\nbool LGPChimeraCrownAREffect::setParameter(const char* name, float value) {\n    return m_controls.set(name, value);\n}\n\nfloat LGPChimeraCrownAREffect::getParameter(const char* name) const {\n    return m_controls.get(name);\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

@@ -1,16 +1,16 @@
 {
   "schemaVersion": "2.0.0",
-  "generatedAtUtc": "2026-02-25T01:16:03Z",
-  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "generatedAtUtc": "2026-03-18T01:14:51Z",
+  "firmwareSourceHash": "25d1555df9030ad0f3db4c6565c25fec023f8cb74c6e74182e4a1a0db91afb2e",
   "effectId": "EID_LGP_ANISOTROPIC_CLOAK",
   "effectIdHex": "0x0608",
   "className": "LGPAnisotropicCloakEffect",
   "displayName": "LGP Anisotropic Cloak",
-  "headerPath": "firmware/v2/src/effects/ieffect/LGPAnisotropicCloakEffect.h",
-  "sourcePath": "firmware/v2/src/effects/ieffect/LGPAnisotropicCloakEffect.cpp",
+  "headerPath": "firmware-v3/src/effects/ieffect/LGPAnisotropicCloakEffect.h",
+  "sourcePath": "firmware-v3/src/effects/ieffect/LGPAnisotropicCloakEffect.cpp",
   "renderRange": [
     30,
-    75
+    74
   ],
   "phaseRanges": {
     "input": [
@@ -33,22 +33,22 @@
         47
       ],
       [
-        52,
-        52
+        53,
+        53
       ],
       [
-        59,
-        60
+        60,
+        61
       ],
       [
-        62,
-        62
+        63,
+        63
       ]
     ],
     "modulation": [
       [
         42,
-        50
+        49
       ]
     ],
     "render": [
@@ -57,36 +57,20 @@
         44
       ],
       [
-        70,
-        70
-      ],
-      [
-        72,
-        72
+        71,
+        71
       ]
     ],
     "post": [
       [
-        70,
-        72
+        69,
+        71
       ]
     ],
     "output": [
       [
-        40,
-        40
-      ],
-      [
-        44,
-        44
-      ],
-      [
-        54,
-        54
-      ],
-      [
-        70,
-        72
+        72,
+        74
       ]
     ]
   },
@@ -95,7 +79,8 @@
     "Phase inference used fallback segmentation due to sparse signal.",
     "Phase 'input' inferred from fallback segmentation.",
     "Phase 'modulation' inferred from fallback segmentation.",
-    "Phase 'post' inferred from fallback segmentation."
+    "Phase 'post' inferred from fallback segmentation.",
+    "Phase 'output' inferred from fallback segmentation."
   ],
-  "sourceText": "/**\n * @file LGPAnisotropicCloakEffect.cpp\n * @brief LGP Anisotropic Cloak effect implementation\n */\n\n#include \"LGPAnisotropicCloakEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPAnisotropicCloakEffect::LGPAnisotropicCloakEffect()\n    : m_time(0)\n    , m_pos(80.0f)\n    , m_vel(0.45f)\n{\n}\n\nbool LGPAnisotropicCloakEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_time = 0;\n    m_pos = 80.0f;\n    m_vel = 0.45f;\n    return true;\n}\n\nvoid LGPAnisotropicCloakEffect::render(plugins::EffectContext& ctx) {\n    // Directionally biased refractive shell\n    m_time = (uint16_t)(m_time + (ctx.speed >> 2));\n\n    float speedNorm = ctx.speed / 50.0f;\n    const float cloakRadius = 20.0f;\n    const float baseIndex = 1.0f;\n    const float anisotropy = 0.5f;\n\n    m_pos += m_vel * speedNorm;\n    if (m_pos < cloakRadius || m_pos > (float)STRIP_LENGTH - cloakRadius) {\n        m_vel = -m_vel;\n    }\n\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        float dist = fabsf((float)i - m_pos);\n        float norm = (cloakRadius > 0.001f) ? (dist / cloakRadius) : 0.0f;\n        norm = constrain(norm, 0.0f, 1.0f);\n\n        float sideBias = (i < m_pos) ? (1.0f + anisotropy) : (1.0f - anisotropy);\n        sideBias = constrain(sideBias, -2.0f, 2.0f);\n\n        float offset = baseIndex * (norm * sqrtf(norm)) * sideBias * cloakRadius * 0.5f;  // Optimized: x^1.5 = x*sqrt(x)\n        float sample = (float)i + ((i < m_pos) ? -offset : offset);\n        sample = constrain(sample, 0.0f, (float)(STRIP_LENGTH - 1));\n\n        uint8_t wave = sin8((int16_t)(sample * 4.0f) + (m_time >> 2));\n        float brightnessF = wave;\n\n        if (norm < 0.25f) {\n            brightnessF *= norm / 0.25f;\n        }\n        if (fabsf(norm - 1.0f) < 0.06f) {\n            brightnessF = 255.0f;\n        }\n\n        uint8_t hue = (uint8_t)(ctx.gHue + (uint8_t)(sample) + (uint8_t)(sideBias * 20.0f));\n\n        uint8_t brightU8 = (uint8_t)constrain(brightnessF, 0.0f, 255.0f);\n        brightU8 = (uint8_t)((brightU8 * ctx.brightness) / 255);\n        ctx.leds[i] = ctx.palette.getColor(hue, brightU8);\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(hue + 128), brightU8);\n        }\n    }\n}\n\nvoid LGPAnisotropicCloakEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPAnisotropicCloakEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Anisotropic Cloak\",\n        \"Direction-dependent visibility\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+  "sourceText": "/**\n * @file LGPAnisotropicCloakEffect.cpp\n * @brief LGP Anisotropic Cloak effect implementation\n */\n\n#include \"LGPAnisotropicCloakEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPAnisotropicCloakEffect::LGPAnisotropicCloakEffect()\n    : m_time(0)\n    , m_pos(40.0f)\n    , m_vel(0.45f)\n{\n}\n\nbool LGPAnisotropicCloakEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_time = 0;\n    m_pos = 40.0f;\n    m_vel = 0.45f;\n    return true;\n}\n\nvoid LGPAnisotropicCloakEffect::render(plugins::EffectContext& ctx) {\n    // Directionally biased refractive shell\n    m_time = (uint16_t)(m_time + (ctx.speed >> 2));\n\n    float speedNorm = ctx.speed / 50.0f;\n    const float cloakRadius = 20.0f;\n    const float baseIndex = 1.0f;\n    const float anisotropy = 0.5f;\n\n    m_pos += m_vel * speedNorm;\n    if (m_pos < cloakRadius || m_pos > (float)HALF_LENGTH - cloakRadius) {\n        m_vel = -m_vel;\n    }\n\n    for (uint16_t d = 0; d < HALF_LENGTH; d++) {\n        float dist = fabsf((float)d - m_pos);\n        float norm = (cloakRadius > 0.001f) ? (dist / cloakRadius) : 0.0f;\n        norm = constrain(norm, 0.0f, 1.0f);\n\n        // Anisotropy: inner side (closer to centre) vs outer side (closer to edge)\n        float sideBias = (d < m_pos) ? (1.0f + anisotropy) : (1.0f - anisotropy);\n        sideBias = constrain(sideBias, -2.0f, 2.0f);\n\n        float offset = baseIndex * (norm * sqrtf(norm)) * sideBias * cloakRadius * 0.5f;  // Optimized: x^1.5 = x*sqrt(x)\n        float sample = (float)d + ((d < m_pos) ? -offset : offset);\n        sample = constrain(sample, 0.0f, (float)(HALF_LENGTH - 1));\n\n        uint8_t wave = sin8((int16_t)(sample * 4.0f) + (m_time >> 2));\n        float brightnessF = wave;\n\n        if (norm < 0.25f) {\n            brightnessF *= norm / 0.25f;\n        }\n        if (fabsf(norm - 1.0f) < 0.06f) {\n            brightnessF = 255.0f;\n        }\n\n        uint8_t hue = (uint8_t)(ctx.gHue + (uint8_t)(sample) + (uint8_t)(sideBias * 20.0f));\n\n        uint8_t brightU8 = (uint8_t)constrain(brightnessF, 0.0f, 255.0f);\n        brightU8 = (uint8_t)((brightU8 * ctx.brightness) / 255);\n        CRGB color = ctx.palette.getColor(hue, brightU8);\n        SET_CENTER_PAIR(ctx, d, color);\n    }\n}\n\nvoid LGPAnisotropicCloakEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPAnisotropicCloakEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Anisotropic Cloak\",\n        \"Direction-dependent visibility\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
 }

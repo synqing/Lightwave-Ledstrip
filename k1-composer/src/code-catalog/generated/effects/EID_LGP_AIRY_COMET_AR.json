@@ -1,0 +1,103 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-03-18T01:14:51Z",
+  "firmwareSourceHash": "25d1555df9030ad0f3db4c6565c25fec023f8cb74c6e74182e4a1a0db91afb2e",
+  "effectId": "EID_LGP_AIRY_COMET_AR",
+  "effectIdHex": "0x1C03",
+  "className": "LGPAiryCometAREffect",
+  "displayName": "LGP Airy Comet (5L-AR)",
+  "headerPath": "firmware-v3/src/effects/ieffect/LGPAiryCometAREffect.h",
+  "sourcePath": "firmware-v3/src/effects/ieffect/LGPAiryCometAREffect.cpp",
+  "renderRange": [
+    89,
+    207
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        89,
+        102
+      ]
+    ],
+    "mapping": [
+      [
+        93,
+        93
+      ],
+      [
+        111,
+        111
+      ],
+      [
+        113,
+        113
+      ],
+      [
+        134,
+        134
+      ],
+      [
+        206,
+        206
+      ]
+    ],
+    "modulation": [
+      [
+        107,
+        107
+      ],
+      [
+        112,
+        113
+      ],
+      [
+        115,
+        116
+      ],
+      [
+        149,
+        149
+      ],
+      [
+        199,
+        199
+      ]
+    ],
+    "render": [
+      [
+        161,
+        161
+      ],
+      [
+        203,
+        203
+      ]
+    ],
+    "post": [
+      [
+        193,
+        201
+      ]
+    ],
+    "output": [
+      [
+        142,
+        142
+      ],
+      [
+        161,
+        161
+      ],
+      [
+        189,
+        189
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPAiryCometAREffect.cpp\n * @brief LGP Airy Comet (5-Layer AR) implementation\n *\n * Self-accelerating parabolic comet with oscillatory Airy-ish tail lobes,\n * restructured with 5-layer audio-reactive composition. Impact accelerates\n * the head, structure modulates tail decay and lobe spacing, memory\n * persists luminance in the tail region.\n *\n * Original comet physics preserved from LGPAiryCometEffect (Shape Bangers).\n * Centre-origin compliant. Dual-strip locked.\n */\n\n#include \"LGPAiryCometAREffect.h\"\n#include \"LGPFilmPost.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\n// =========================================================================\n// Local helpers (no heap, no state)\n// =========================================================================\n\nstatic constexpr float kTau = 6.28318530717958647692f;\n\nstatic inline float fract(float x) { return x - floorf(x); }\n\nstatic inline float gaussian(float x, float sigma) {\n    const float s2 = sigma * sigma;\n    return expf(-(x * x) / (2.0f * s2));\n}\n\nstatic inline float smoothstep(float a, float b, float x) {\n    float t = lowrisk_ar::clamp01f((x - a) / (b - a));\n    return t * t * (3.0f - 2.0f * t);\n}\n\nstatic inline float sbLerp(float a, float b, float t) { return a + (b - a) * t; }\n\nstatic inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRGB& c) {\n    ctx.leds[i] = c;\n    int j = i + STRIP_LENGTH;\n    if (j < static_cast<int>(ctx.ledCount)) ctx.leds[j] = c;\n}\n\nstatic inline uint8_t luminanceToBr(float wave01, float master) {\n    const float base = 0.06f;\n    float out = lowrisk_ar::clamp01f(base + (1.0f - base) * lowrisk_ar::clamp01f(wave01)) * master;\n    return static_cast<uint8_t>(255.0f * out);\n}\n\n// =========================================================================\n// Construction / init / cleanup\n// =========================================================================\n\nLGPAiryCometAREffect::LGPAiryCometAREffect()\n    : m_controls()\n    , m_ar()\n    , m_t(0.0f)\n    , m_bed(0.3f)\n    , m_structure(0.5f)\n    , m_impact(0.0f)\n    , m_memory(0.0f)\n{\n}\n\nbool LGPAiryCometAREffect::init(plugins::EffectContext& ctx) {\n    m_controls.resetDefaults();\n    m_ar = lowrisk_ar::ArRuntimeState{};\n    m_ar.tonalHue = static_cast<float>(ctx.gHue);\n    m_ar.modeSmooth = 2.0f;\n    m_t         = 0.0f;\n    m_bed       = 0.3f;\n    m_structure = 0.5f;\n    m_impact    = 0.0f;\n    m_memory    = 0.0f;\n    lightwaveos::effects::cinema::reset();\n    return true;\n}\n\n// =========================================================================\n// render() -- 5-Layer composition\n// =========================================================================\n\nvoid LGPAiryCometAREffect::render(plugins::EffectContext& ctx) {\n    // --- Timing ---\n    const float dtSignal = AudioReactivePolicy::signalDt(ctx);\n    const float dtVisual = AudioReactivePolicy::visualDt(ctx);\n    const float speedNorm = ctx.speed / 50.0f;\n\n    // --- Signals (shared infrastructure handles presence gate + fallback) ---\n    const lowrisk_ar::ArSignalSnapshot sig =\n        lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);\n    const lowrisk_ar::ArModulationProfile mod =\n        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);\n    m_ar.tonalHue = mod.baseHue;\n\n    // =================================================================\n    // LAYER UPDATES\n    // =================================================================\n\n    // Bed: soft glow ribbon brightness from RMS (tau 0.42s)\n    m_bed = lowrisk_ar::smoothTo(m_bed,\n        0.20f + 0.80f * sig.rms, dtSignal, 0.42f);\n\n    // Structure: head trajectory speed, tail decay, lobe spacing (tau 0.14s)\n    const float structTarget = lowrisk_ar::clamp01f(\n        0.30f + 0.35f * sig.treble + 0.20f * sig.flux + 0.15f * sig.rhythmic);\n    m_structure = lowrisk_ar::smoothTo(m_structure, structTarget, dtSignal, 0.14f);\n\n    // Impact: beat-driven thrust pulse (fast attack, decay 0.18s)\n    if (sig.beatTick) m_impact = fmaxf(m_impact, 0.92f);\n    m_impact = lowrisk_ar::decay(m_impact, dtSignal, 0.18f);\n\n    // Memory: tail persistence (slow decay, fed by impact + treble)\n    m_memory = lowrisk_ar::clamp01f(\n        lowrisk_ar::decay(m_memory, dtSignal, 1.00f)\n        + 0.14f * m_impact + 0.05f * sig.treble);\n    lowrisk_ar::applyBedImpactMemoryMix(\n        m_controls,\n        static_cast<float>(ctx.rawTotalTimeMs),\n        m_bed,\n        m_impact,\n        m_memory);\n\n    // =================================================================\n    // MOTION — time accumulator modulated by structure layer\n    // =================================================================\n\n    const float tRate = (1.20f + 5.40f * speedNorm) * mod.motionRate\n                        * (0.72f + 0.28f * m_structure);\n    m_t += tRate * dtVisual;\n\n    // =================================================================\n    // COMET GEOMETRY — parabolic self-accelerating bounce\n    // =================================================================\n\n    const float mid = (STRIP_LENGTH - 1) * 0.5f;\n\n    // Impact accelerates the head through parabolic speed\n    float s = fract(m_t * (0.10f + 0.06f * m_impact));\n    float parab = s * s;\n    float x0 = sbLerp(-mid * 0.92f, mid * 0.92f, parab);\n\n    // Direction flip includes rhythmic modulation\n    bool flip = (fract(m_t * 0.06f + 0.14f * sig.rhythmic) > 0.5f);\n    float dir = flip ? -1.0f : 1.0f;\n\n    // =================================================================\n    // PER-PIXEL RENDER\n    // =================================================================\n\n    const float bedBright = 0.25f + 0.75f * m_bed;\n    const float master = (ctx.brightness / 255.0f)\n                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float x = static_cast<float>(i) - mid;\n        float dmid = x;\n\n        // Centre glue envelope\n        float glue = expf(-(dmid * dmid) * 0.0018f);\n\n        float dx = x - x0;\n\n        // Head gaussian — RMS widens/narrows\n        const float sigma = 3.2f * (1.0f + 0.30f * (sig.rms - 0.5f));\n        float head = gaussian(dx, sigma);\n\n        // Airy-ish tail: oscillatory lobes behind the head, decaying\n        float behind = (dx * dir > 0.0f) ? (dx * dir) : 0.0f;\n\n        // Structure extends tail decay and modulates lobe spacing\n        float tail = expf(-behind * (0.12f - 0.04f * m_structure)) *\n                     (0.55f + 0.45f * cosf(behind * (1.25f + 0.35f * m_structure) - m_t * 0.9f));\n\n        // Tail mask for memory layer spatial gating\n        float tail_mask = lowrisk_ar::clamp01f(expf(-behind * 0.08f));\n\n        // 5-layer per-pixel composition\n        float structuredWave = powf(lowrisk_ar::clamp01f(head + 0.75f * tail), 1.25f);\n        float impactAdd = expf(-behind * 0.18f) * m_impact * 0.38f;   // thrust at head\n        float memoryAdd = m_memory * tail_mask * 0.16f;                // persist in tail region\n\n        // Melt into wings (no strip rivalry)\n        float glued = sbLerp(structuredWave, structuredWave * (0.45f + 0.55f * glue), 0.85f);\n\n        float brightness = bedBright * glued + impactAdd + memoryAdd;\n        brightness = lowrisk_ar::clamp01f(brightness);\n\n        uint8_t br = luminanceToBr(brightness, master);\n\n        // Hue: warm head, cool tail — tonal anchor drives base\n        float hue = m_ar.tonalHue\n                    + (60.0f * (1.0f - smoothstep(0.0f, 1.0f, head)))\n                    + 15.0f * glue;\n        uint8_t hueU8 = static_cast<uint8_t>(hue);\n\n        writeDualLocked(ctx, i, ctx.palette.getColor(hueU8, br));\n    }\n\n    lightwaveos::effects::cinema::apply(ctx, speedNorm);\n}\n\n// =========================================================================\n// cleanup / metadata / parameters\n// =========================================================================\n\nvoid LGPAiryCometAREffect::cleanup() {\n    // No resources to free (no PSRAM allocation)\n}\n\nconst plugins::EffectMetadata& LGPAiryCometAREffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Airy Comet (5L-AR)\",\n        \"Self-accelerating comet with 5-layer audio-reactive composition\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\nuint8_t LGPAiryCometAREffect::getParameterCount() const {\n    return lowrisk_ar::Ar16Controls::parameterCount();\n}\n\nconst plugins::EffectParameter* LGPAiryCometAREffect::getParameter(uint8_t index) const {\n    return lowrisk_ar::Ar16Controls::parameter(index);\n}\n\nbool LGPAiryCometAREffect::setParameter(const char* name, float value) {\n    return m_controls.set(name, value);\n}\n\nfloat LGPAiryCometAREffect::getParameter(const char* name) const {\n    return m_controls.get(name);\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

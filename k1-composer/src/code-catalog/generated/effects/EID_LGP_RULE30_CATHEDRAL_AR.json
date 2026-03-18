@@ -1,0 +1,111 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-03-18T01:14:51Z",
+  "firmwareSourceHash": "25d1555df9030ad0f3db4c6565c25fec023f8cb74c6e74182e4a1a0db91afb2e",
+  "effectId": "EID_LGP_RULE30_CATHEDRAL_AR",
+  "effectIdHex": "0x1C0D",
+  "className": "LGPRule30CathedralAREffect",
+  "displayName": "LGP Rule 30 Cathedral (5L-AR)",
+  "headerPath": "firmware-v3/src/effects/ieffect/LGPRule30CathedralAREffect.h",
+  "sourcePath": "firmware-v3/src/effects/ieffect/LGPRule30CathedralAREffect.cpp",
+  "renderRange": [
+    149,
+    271
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        149,
+        162
+      ]
+    ],
+    "mapping": [
+      [
+        157,
+        157
+      ],
+      [
+        175,
+        175
+      ],
+      [
+        177,
+        177
+      ],
+      [
+        205,
+        205
+      ],
+      [
+        270,
+        270
+      ]
+    ],
+    "modulation": [
+      [
+        171,
+        171
+      ],
+      [
+        177,
+        177
+      ],
+      [
+        179,
+        180
+      ],
+      [
+        183,
+        183
+      ],
+      [
+        192,
+        192
+      ],
+      [
+        229,
+        229
+      ]
+    ],
+    "render": [
+      [
+        211,
+        211
+      ],
+      [
+        227,
+        227
+      ],
+      [
+        267,
+        267
+      ]
+    ],
+    "post": [
+      [
+        257,
+        264
+      ]
+    ],
+    "output": [
+      [
+        222,
+        222
+      ],
+      [
+        227,
+        227
+      ],
+      [
+        232,
+        232
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPRule30CathedralAREffect.cpp\n * @brief Rule 30 Cathedral (5-Layer Audio-Reactive)\n *\n * Cellular automaton with Rule 30 (l ^ (c | r)) rendered as glowing cathedral\n * arches with full 5-layer AR composition. Steps per frame scale with bass+rhythmic.\n * Blur neighbours for rendering, neighbourhood-based hue shift.\n *\n * Centre-origin compliant. Dual-strip locked. PSRAM CA buffers.\n */\n\n#include \"LGPRule30CathedralAREffect.h\"\n#include \"LGPFilmPost.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\n#ifndef NATIVE_BUILD\n#include <esp_heap_caps.h>\n#endif\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\n// =========================================================================\n// Local helpers\n// =========================================================================\n\nstatic inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRGB& c) {\n    ctx.leds[i] = c;\n    int j = i + STRIP_LENGTH;\n    if (j < (int)ctx.ledCount) ctx.leds[j] = c;\n}\n\nstatic inline uint8_t luminanceToBr(float wave01, float master) {\n    const float base = 0.06f;\n    float out = lowrisk_ar::clamp01f(base + (1.0f - base) * lowrisk_ar::clamp01f(wave01)) * master;\n    return static_cast<uint8_t>(255.0f * out);\n}\n\n// =========================================================================\n// Construction / destruction\n// =========================================================================\n\nLGPRule30CathedralAREffect::LGPRule30CathedralAREffect()\n    : m_t(0.0f)\n    , m_stepAccum(0.0f)\n    , m_bed(0.3f)\n    , m_structure(0.5f)\n    , m_impact(0.0f)\n    , m_memory(0.0f)\n#ifndef NATIVE_BUILD\n    , m_ps(nullptr)\n#endif\n{\n}\n\nLGPRule30CathedralAREffect::~LGPRule30CathedralAREffect() {\n    cleanup();\n}\n\n// =========================================================================\n// CA helpers\n// =========================================================================\n\nvoid LGPRule30CathedralAREffect::seedCA() {\n#ifndef NATIVE_BUILD\n    if (!m_ps) return;\n\n    // Clear field\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        m_ps->cells[i] = 0;\n        m_ps->next[i] = 0;\n    }\n\n    // Centre seed\n    const int mid = (STRIP_LENGTH - 1) / 2;\n    m_ps->cells[mid] = 1;\n#endif\n}\n\nvoid LGPRule30CathedralAREffect::stepCA() {\n#ifndef NATIVE_BUILD\n    if (!m_ps) return;\n\n    // Rule 30: new = l ^ (c | r)\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        const uint8_t l = (i > 0) ? m_ps->cells[i - 1] : 0;\n        const uint8_t c = m_ps->cells[i];\n        const uint8_t r = (i < STRIP_LENGTH - 1) ? m_ps->cells[i + 1] : 0;\n\n        m_ps->next[i] = l ^ (c | r);\n    }\n\n    // Swap buffers\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        m_ps->cells[i] = m_ps->next[i];\n    }\n#endif\n}\n\n// =========================================================================\n// Init / cleanup\n// =========================================================================\n\nbool LGPRule30CathedralAREffect::init(plugins::EffectContext& ctx) {\n    m_controls.resetDefaults();\n    m_ar = lowrisk_ar::ArRuntimeState{};\n    m_ar.tonalHue = static_cast<float>(ctx.gHue);\n    m_ar.modeSmooth = 2.0f;\n\n    m_t           = 0.0f;\n    m_stepAccum   = 0.0f;\n    m_bed         = 0.3f;\n    m_structure   = 0.5f;\n    m_impact      = 0.0f;\n    m_memory      = 0.0f;\n\n#ifndef NATIVE_BUILD\n    // Allocate PSRAM CA buffers\n    if (!m_ps) {\n        m_ps = static_cast<Rule30Psram*>(\n            heap_caps_malloc(sizeof(Rule30Psram), MALLOC_CAP_SPIRAM)\n        );\n    }\n    if (m_ps) {\n        seedCA();\n    }\n#endif\n\n    lightwaveos::effects::cinema::reset();\n    return true;\n}\n\nvoid LGPRule30CathedralAREffect::cleanup() {\n#ifndef NATIVE_BUILD\n    if (m_ps) {\n        heap_caps_free(m_ps);\n        m_ps = nullptr;\n    }\n#endif\n}\n\n// =========================================================================\n// render() — 5-Layer composition\n// =========================================================================\n\nvoid LGPRule30CathedralAREffect::render(plugins::EffectContext& ctx) {\n#ifndef NATIVE_BUILD\n    if (!m_ps) return;\n#endif\n\n    // --- Timing ---\n    const float dtSignal = AudioReactivePolicy::signalDt(ctx);\n    const float dtVisual = AudioReactivePolicy::visualDt(ctx);\n    const float speedNorm = ctx.speed / 50.0f;\n\n    // --- Signals ---\n    const lowrisk_ar::ArSignalSnapshot sig =\n        lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);\n    const lowrisk_ar::ArModulationProfile mod =\n        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);\n    m_ar.tonalHue = mod.baseHue;\n\n    // =================================================================\n    // LAYER UPDATES\n    // =================================================================\n\n    // Bed: slow RMS-driven base brightness (tau 0.40s)\n    m_bed = lowrisk_ar::smoothTo(m_bed,\n        0.20f + 0.80f * sig.rms, dtSignal, 0.40f);\n\n    // Structure: CA step rate from rhythmic + bass (tau 0.12s)\n    const float structTarget = lowrisk_ar::clamp01f(\n        0.25f + 0.45f * sig.bass + 0.30f * sig.rhythmic);\n    m_structure = lowrisk_ar::smoothTo(m_structure, structTarget, dtSignal, 0.12f);\n\n    // Impact: beat-triggered reset burst (decay 0.22s)\n    if (sig.beatTick) {\n        m_impact = fmaxf(m_impact, 1.0f);\n#ifndef NATIVE_BUILD\n        // Beat reseeds the CA\n        seedCA();\n#endif\n    }\n    m_impact = lowrisk_ar::decay(m_impact, dtSignal, 0.22f);\n\n    // Memory: textile persistence (tau 0.70s)\n    m_memory = lowrisk_ar::clamp01f(\n        lowrisk_ar::decay(m_memory, dtSignal, 0.70f)\n        + 0.15f * m_impact + 0.08f * sig.flux);\n    lowrisk_ar::applyBedImpactMemoryMix(\n        m_controls,\n        static_cast<float>(ctx.rawTotalTimeMs),\n        m_bed,\n        m_impact,\n        m_memory);\n\n    // =================================================================\n    // CA EVOLUTION\n    // =================================================================\n\n    // Step rate: 0.5 to 12 steps per frame at speed 100\n    const float baseStepsPerFrame = (0.5f + 11.5f * speedNorm) * mod.motionRate;\n    const float structureMod = (0.60f + 0.40f * m_structure);\n    const float stepsPerFrame = baseStepsPerFrame * structureMod;\n\n    m_stepAccum += stepsPerFrame * dtVisual;\n\n    while (m_stepAccum >= 1.0f) {\n        stepCA();\n        m_stepAccum -= 1.0f;\n    }\n\n    m_t += dtVisual;\n\n    // =================================================================\n    // RENDER WITH NEIGHBOURHOOD BLUR\n    // =================================================================\n\n    const float mid    = (STRIP_LENGTH - 1) * 0.5f;\n    const float bedBright = 0.20f + 0.80f * m_bed;\n    const float master = (ctx.brightness / 255.0f)\n                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n#ifndef NATIVE_BUILD\n        // 3-tap neighbourhood blur for smooth arches\n        const float l = (i > 0) ? static_cast<float>(m_ps->cells[i - 1]) : 0.0f;\n        const float c = static_cast<float>(m_ps->cells[i]);\n        const float r = (i < STRIP_LENGTH - 1) ? static_cast<float>(m_ps->cells[i + 1]) : 0.0f;\n\n        const float caValue = (0.25f * l + 0.50f * c + 0.25f * r);\n#else\n        const float caValue = 0.5f;\n#endif\n\n        const float dmid  = static_cast<float>(i) - mid;\n\n        // Centre glue (cathedral foundation)\n        const float glue = 0.30f + 0.70f * expf(-(dmid * dmid) * 0.0012f);\n\n        // Neighbourhood-based hue shift (local CA density)\n        const float neighbourhoodSum = l + c + r;\n        const float hueShift = neighbourhoodSum * 15.0f;\n\n        // Bed × CA geometry\n        float structuredGeom = caValue * glue;\n\n        // Impact: additive burst at CA cells\n        float impactAdd = m_impact * caValue * 0.40f;\n\n        // Memory: gentle glow\n        float memoryAdd = m_memory * (0.4f + 0.6f * caValue) * 0.20f;\n\n        // Compose: bed × structure + impact + memory\n        float brightness = bedBright * structuredGeom + impactAdd + memoryAdd;\n        brightness = lowrisk_ar::clamp01f(brightness);\n\n        const uint8_t br = luminanceToBr(brightness, master);\n\n        // Tonal hue: chord anchor + neighbourhood density\n        const uint8_t hue = static_cast<uint8_t>(\n            m_ar.tonalHue + hueShift + sig.harmonic * 18.0f);\n\n        writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));\n    }\n\n    lightwaveos::effects::cinema::apply(ctx, speedNorm);\n}\n\n// =========================================================================\n// Metadata / parameters\n// =========================================================================\n\nconst plugins::EffectMetadata& LGPRule30CathedralAREffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Rule 30 Cathedral (5L-AR)\",\n        \"Cellular automaton cathedral with 5-layer audio-reactive composition\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\nuint8_t LGPRule30CathedralAREffect::getParameterCount() const {\n    return lowrisk_ar::Ar16Controls::parameterCount();\n}\n\nconst plugins::EffectParameter* LGPRule30CathedralAREffect::getParameter(uint8_t index) const {\n    return lowrisk_ar::Ar16Controls::parameter(index);\n}\n\nbool LGPRule30CathedralAREffect::setParameter(const char* name, float value) {\n    return m_controls.set(name, value);\n}\n\nfloat LGPRule30CathedralAREffect::getParameter(const char* name) const {\n    return m_controls.get(name);\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

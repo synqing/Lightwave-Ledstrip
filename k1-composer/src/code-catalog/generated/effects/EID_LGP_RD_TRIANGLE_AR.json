@@ -1,0 +1,143 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-03-18T01:14:51Z",
+  "firmwareSourceHash": "25d1555df9030ad0f3db4c6565c25fec023f8cb74c6e74182e4a1a0db91afb2e",
+  "effectId": "EID_LGP_RD_TRIANGLE_AR",
+  "effectIdHex": "0x1C07",
+  "className": "LGPRDTriangleAREffect",
+  "displayName": "LGP RD Triangle (5L-AR)",
+  "headerPath": "firmware-v3/src/effects/ieffect/LGPRDTriangleAREffect.h",
+  "sourcePath": "firmware-v3/src/effects/ieffect/LGPRDTriangleAREffect.cpp",
+  "renderRange": [
+    102,
+    254
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        102,
+        119
+      ]
+    ],
+    "mapping": [
+      [
+        108,
+        108
+      ],
+      [
+        126,
+        126
+      ],
+      [
+        128,
+        128
+      ],
+      [
+        168,
+        169
+      ],
+      [
+        253,
+        253
+      ]
+    ],
+    "modulation": [
+      [
+        122,
+        122
+      ],
+      [
+        125,
+        125
+      ],
+      [
+        127,
+        128
+      ],
+      [
+        130,
+        131
+      ],
+      [
+        134,
+        134
+      ],
+      [
+        137,
+        137
+      ],
+      [
+        197,
+        197
+      ],
+      [
+        246,
+        246
+      ]
+    ],
+    "render": [
+      [
+        171,
+        172
+      ],
+      [
+        191,
+        191
+      ],
+      [
+        201,
+        201
+      ],
+      [
+        220,
+        220
+      ],
+      [
+        250,
+        250
+      ]
+    ],
+    "post": [
+      [
+        236,
+        246
+      ]
+    ],
+    "output": [
+      [
+        172,
+        172
+      ],
+      [
+        174,
+        174
+      ],
+      [
+        191,
+        191
+      ],
+      [
+        199,
+        199
+      ],
+      [
+        202,
+        202
+      ],
+      [
+        215,
+        215
+      ],
+      [
+        220,
+        220
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPRDTriangleAREffect.cpp\n * @brief LGP Reaction Diffusion Triangle (5-Layer Audio-Reactive)\n *\n * Gray-Scott reaction-diffusion system with full 5-layer AR composition.\n * Base maths from LGPReactionDiffusionTriangleEffect, restructured into\n * explicit bed/structure/impact/tonal/memory layers.\n *\n * Centre-origin compliant. Dual-strip locked.\n */\n\n#include \"LGPRDTriangleAREffect.h\"\n#include \"LGPFilmPost.h\"\n#include \"../CoreEffects.h\"\n#include \"../../utils/Log.h\"\n#include <FastLED.h>\n#include <cmath>\n#include <cstring>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\n// =========================================================================\n// Local helpers\n// =========================================================================\n\nstatic inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRGB& c) {\n    ctx.leds[i] = c;\n    int j = i + STRIP_LENGTH;\n    if (j < (int)ctx.ledCount) ctx.leds[j] = c;\n}\n\nstatic inline uint8_t luminanceToBr(float wave01, float master) {\n    const float base = 0.06f;\n    float out = clamp01(base + (1.0f - base) * clamp01(wave01)) * master;\n    return static_cast<uint8_t>(255.0f * out);\n}\n\n// =========================================================================\n// Construction / init / cleanup\n// =========================================================================\n\nLGPRDTriangleAREffect::LGPRDTriangleAREffect()\n    : m_bed(0.3f)\n    , m_structure(0.5f)\n    , m_impact(0.0f)\n    , m_memory(0.0f)\n    , m_F(0.0380f)\n    , m_K(0.0630f)\n    , m_meltK(0.0018f)\n{\n}\n\nbool LGPRDTriangleAREffect::init(plugins::EffectContext& ctx) {\n    m_controls.resetDefaults();\n    m_ar = lowrisk_ar::ArRuntimeState{};\n    m_ar.tonalHue = static_cast<float>(ctx.gHue);\n    m_ar.modeSmooth = 2.0f;\n\n    m_bed         = 0.3f;\n    m_structure   = 0.5f;\n    m_impact      = 0.0f;\n    m_memory      = 0.0f;\n\n    m_F     = 0.0380f;\n    m_K     = 0.0630f;\n    m_meltK = 0.0018f;\n\n    // Allocate large buffers in PSRAM\n    if (!m_ps) {\n        m_ps = static_cast<PsramData*>(heap_caps_malloc(sizeof(PsramData), MALLOC_CAP_SPIRAM));\n        if (!m_ps) {\n            LW_LOGE(\"LGPRDTriangleAREffect: PSRAM alloc failed (%u bytes)\", (unsigned)sizeof(PsramData));\n            return false;\n        }\n    }\n\n    // Initialise reaction-diffusion fields\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        m_ps->u[i] = 1.0f;\n        m_ps->v[i] = 0.0f;\n    }\n\n    // Seed centre with V\n    const int mid = STRIP_LENGTH / 2;\n    for (int i = mid - 6; i <= mid + 6; i++) {\n        if (i >= 0 && i < STRIP_LENGTH) {\n            m_ps->v[i] = 1.0f;\n            m_ps->u[i] = 0.0f;\n        }\n    }\n\n    lightwaveos::effects::cinema::reset();\n    return true;\n}\n\n// =========================================================================\n// render() — 5-Layer composition\n// =========================================================================\n\nvoid LGPRDTriangleAREffect::render(plugins::EffectContext& ctx) {\n    if (!m_ps) return;\n\n    // --- Timing ---\n    const float dtSignal = AudioReactivePolicy::signalDt(ctx);\n    const float dtVisual = AudioReactivePolicy::visualDt(ctx);\n    const float speedNorm = ctx.speed / 50.0f;\n\n    // --- Signals (shared infrastructure handles presence gate + fallback) ---\n    const lowrisk_ar::ArSignalSnapshot sig =\n        lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);\n    const lowrisk_ar::ArModulationProfile mod =\n        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);\n    m_ar.tonalHue = mod.baseHue;\n\n    // =================================================================\n    // LAYER UPDATES\n    // =================================================================\n\n    // Bed: slow RMS-driven atmosphere (tau 0.45s)\n    m_bed = lowrisk_ar::smoothTo(m_bed,\n        0.25f + 0.75f * sig.rms, dtSignal, 0.45f);\n\n    // Structure: F/K/meltK modulation from bass + mid + flux (tau 0.18s)\n    const float structTarget = clamp01(\n        0.30f + 0.35f * sig.bass + 0.25f * sig.mid + 0.10f * sig.flux);\n    m_structure = lowrisk_ar::smoothTo(m_structure, structTarget, dtSignal, 0.18f);\n\n    // Impact: beat-triggered V-injection at centre (decay 0.20s)\n    if (sig.beatTick) m_impact = fmaxf(m_impact, 1.0f);\n    m_impact = lowrisk_ar::decay(m_impact, dtSignal, 0.20f);\n\n    // Memory: accumulated glow (slow decay, fed by beat + flux)\n    m_memory = clamp01(\n        lowrisk_ar::decay(m_memory, dtSignal, 0.85f)\n        + 0.15f * m_impact + 0.08f * sig.flux);\n    lowrisk_ar::applyBedImpactMemoryMix(\n        m_controls,\n        static_cast<float>(ctx.rawTotalTimeMs),\n        m_bed,\n        m_impact,\n        m_memory);\n\n    // =================================================================\n    // STRUCTURE LAYER MODULATES GRAY-SCOTT PARAMETERS\n    // =================================================================\n\n    // F/K: structure layer pushes into different reaction regimes\n    m_F = lowrisk_ar::clampf(\n        0.0380f + 0.0080f * (m_structure - 0.5f),\n        0.0300f, 0.0500f);\n    m_K = lowrisk_ar::clampf(\n        0.0630f + 0.0100f * (m_structure - 0.5f),\n        0.0550f, 0.0750f);\n\n    // meltK: centre-glue strength modulated by structure\n    m_meltK = lowrisk_ar::clampf(\n        0.0018f + 0.0008f * m_structure,\n        0.0010f, 0.0035f);\n\n    // =================================================================\n    // GRAY-SCOTT REACTION-DIFFUSION STEP\n    // =================================================================\n\n    const float Du = 1.0f;\n    const float Dv = 0.5f;\n    const float dt = lowrisk_ar::clampf((0.9f + 0.6f * speedNorm) * mod.motionRate, 0.6f, 2.2f);\n    const int iters = (speedNorm > 0.55f) ? 2 : 1;\n\n    for (int iter = 0; iter < iters; iter++) {\n        for (int i = 0; i < STRIP_LENGTH; i++) {\n            const int im1 = (i == 0) ? 0 : (i - 1);\n            const int ip1 = (i == STRIP_LENGTH - 1) ? (STRIP_LENGTH - 1) : (i + 1);\n\n            const float lapU = m_ps->u[im1] - 2.0f * m_ps->u[i] + m_ps->u[ip1];\n            const float lapV = m_ps->v[im1] - 2.0f * m_ps->v[i] + m_ps->v[ip1];\n\n            const float u = m_ps->u[i];\n            const float v = m_ps->v[i];\n            const float uvv = u * v * v;\n\n            m_ps->u2[i] = u + (Du * lapU - uvv + m_F * (1.0f - u)) * dt;\n            m_ps->v2[i] = v + (Dv * lapV + uvv - (m_K + m_F) * v) * dt;\n\n            m_ps->u2[i] = clamp01(m_ps->u2[i]);\n            m_ps->v2[i] = clamp01(m_ps->v2[i]);\n        }\n\n        // Swap buffers\n        for (int i = 0; i < STRIP_LENGTH; i++) {\n            m_ps->u[i] = m_ps->u2[i];\n            m_ps->v[i] = m_ps->v2[i];\n        }\n    }\n\n    // Impact layer: inject V at centre on beat\n    if (m_impact > 0.05f) {\n        const int mid = STRIP_LENGTH / 2;\n        const int radius = 8;\n        for (int i = mid - radius; i <= mid + radius; i++) {\n            if (i >= 0 && i < STRIP_LENGTH) {\n                const float dist = fabsf(static_cast<float>(i - mid)) / static_cast<float>(radius);\n                const float inject = m_impact * (1.0f - dist) * 0.4f;\n                m_ps->v[i] = fminf(m_ps->v[i] + inject, 1.0f);\n                m_ps->u[i] = fmaxf(m_ps->u[i] - inject * 0.5f, 0.0f);\n            }\n        }\n    }\n\n    // =================================================================\n    // PER-PIXEL RENDER: 5-LAYER COMPOSITION\n    // =================================================================\n\n    const float mid = (STRIP_LENGTH - 1) * 0.5f;\n    const float master = (ctx.brightness / 255.0f)\n                         * clamp01(m_ar.audioPresence) * mod.brightnessScale;\n    const float bedBright = 0.25f + 0.75f * m_bed;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        const float x = static_cast<float>(i);\n        const float dist = static_cast<float>(centerPairDistance(static_cast<uint16_t>(i)));\n\n        const float dmid = x - mid;\n        const float melt = expf(-(dmid * dmid) * m_meltK);\n\n        const float v = m_ps->v[i];\n\n        // Bed × structure (V concentration × centre-glue)\n        float structuredV = v * melt;\n\n        // Impact: additive spike at centre\n        const float impactDist = fabsf(dmid) / mid;\n        const float impactAdd = m_impact * (1.0f - impactDist) * 0.25f;\n\n        // Memory: gentle additive glow\n        const float memoryAdd = m_memory * (0.4f + 0.6f * v) * 0.15f;\n\n        // Compose: bed × (v × melt) + impact + memory\n        float brightness = bedBright * (0.15f * melt + 0.85f * structuredV)\n                         + impactAdd + memoryAdd;\n        brightness = clamp01(brightness);\n\n        const uint8_t br = luminanceToBr(brightness, master);\n\n        // Tonal hue: chord-driven anchor + spatial offset + V modulation\n        const uint8_t hue = static_cast<uint8_t>(\n            m_ar.tonalHue + dist * 0.6f + v * 180.0f + sig.harmonic * 15.0f);\n\n        writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));\n    }\n\n    lightwaveos::effects::cinema::apply(ctx, speedNorm);\n}\n\n// =========================================================================\n// cleanup / metadata / parameters\n// =========================================================================\n\nvoid LGPRDTriangleAREffect::cleanup() {\n    if (m_ps) { heap_caps_free(m_ps); m_ps = nullptr; }\n}\n\nconst plugins::EffectMetadata& LGPRDTriangleAREffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP RD Triangle (5L-AR)\",\n        \"Reaction-diffusion with 5-layer audio-reactive composition\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\nuint8_t LGPRDTriangleAREffect::getParameterCount() const {\n    return lowrisk_ar::Ar16Controls::parameterCount();\n}\n\nconst plugins::EffectParameter* LGPRDTriangleAREffect::getParameter(uint8_t index) const {\n    return lowrisk_ar::Ar16Controls::parameter(index);\n}\n\nbool LGPRDTriangleAREffect::setParameter(const char* name, float value) {\n    return m_controls.set(name, value);\n}\n\nfloat LGPRDTriangleAREffect::getParameter(const char* name) const {\n    return m_controls.get(name);\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

@@ -1,0 +1,103 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-03-18T01:14:51Z",
+  "firmwareSourceHash": "25d1555df9030ad0f3db4c6565c25fec023f8cb74c6e74182e4a1a0db91afb2e",
+  "effectId": "EID_LGP_HYPERBOLIC_PORTAL_AR",
+  "effectIdHex": "0x1C11",
+  "className": "LGPHyperbolicPortalAREffect",
+  "displayName": "LGP Hyperbolic Portal (5L-AR)",
+  "headerPath": "firmware-v3/src/effects/ieffect/LGPHyperbolicPortalAREffect.h",
+  "sourcePath": "firmware-v3/src/effects/ieffect/LGPHyperbolicPortalAREffect.cpp",
+  "renderRange": [
+    85,
+    192
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        85,
+        96
+      ]
+    ],
+    "mapping": [
+      [
+        89,
+        89
+      ],
+      [
+        107,
+        110
+      ],
+      [
+        131,
+        131
+      ],
+      [
+        150,
+        150
+      ],
+      [
+        191,
+        191
+      ]
+    ],
+    "modulation": [
+      [
+        103,
+        103
+      ],
+      [
+        109,
+        110
+      ],
+      [
+        112,
+        113
+      ],
+      [
+        119,
+        119
+      ],
+      [
+        159,
+        161
+      ],
+      [
+        176,
+        176
+      ]
+    ],
+    "render": [
+      [
+        146,
+        146
+      ],
+      [
+        188,
+        188
+      ]
+    ],
+    "post": [
+      [
+        180,
+        186
+      ]
+    ],
+    "output": [
+      [
+        139,
+        139
+      ],
+      [
+        146,
+        146
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPHyperbolicPortalAREffect.cpp\n * @brief Hyperbolic Portal (5-Layer Audio-Reactive)\n *\n * Poincaré-style hyperbolic portal with multi-band ribs.\n * Hyperbolic coordinate: u = artanh(r * 0.985)\n * Rib pattern: sin(w1*u + phi) + 0.62*sin(w2*u - 0.7*phi)\n * Sharp bands via smoothstep + pow, edge boost, centre glue.\n *\n * Centre-origin compliant. Dual-strip locked.\n */\n\n#include \"LGPHyperbolicPortalAREffect.h\"\n#include \"LGPFilmPost.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\n// =========================================================================\n// Local helpers\n// =========================================================================\n\nstatic constexpr float kTau = 6.28318530717958647692f;\n\nstatic inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRGB& c) {\n    ctx.leds[i] = c;\n    int j = i + STRIP_LENGTH;\n    if (j < (int)ctx.ledCount) ctx.leds[j] = c;\n}\n\nstatic inline uint8_t luminanceToBr(float wave01, float master) {\n    const float base = 0.06f;\n    float out = lowrisk_ar::clamp01f(base + (1.0f - base) * lowrisk_ar::clamp01f(wave01)) * master;\n    return static_cast<uint8_t>(255.0f * out);\n}\n\n// Safe artanh with clamp near singularity at r=1\nstatic inline float artanh_safe(float r) {\n    const float clamped = lowrisk_ar::clampf(r, -0.9999f, 0.9999f);\n    return 0.5f * logf((1.0f + clamped) / (1.0f - clamped));\n}\n\nstatic inline float smoothstep(float edge0, float edge1, float x) {\n    float t = lowrisk_ar::clamp01f((x - edge0) / (edge1 - edge0));\n    return t * t * (3.0f - 2.0f * t);\n}\n\n// =========================================================================\n// Construction / init / cleanup\n// =========================================================================\n\nLGPHyperbolicPortalAREffect::LGPHyperbolicPortalAREffect()\n    : m_phi(0.0f)\n    , m_bed(0.3f)\n    , m_w1(8.0f)\n    , m_w2(13.0f)\n    , m_impact(0.0f)\n    , m_memory(0.0f)\n{\n}\n\nbool LGPHyperbolicPortalAREffect::init(plugins::EffectContext& ctx) {\n    m_controls.resetDefaults();\n    m_ar = lowrisk_ar::ArRuntimeState{};\n    m_ar.tonalHue = static_cast<float>(ctx.gHue);\n    m_ar.modeSmooth = 2.0f;\n    m_phi         = 0.0f;\n    m_bed         = 0.3f;\n    m_w1          = 8.0f;\n    m_w2          = 13.0f;\n    m_impact      = 0.0f;\n    m_memory      = 0.0f;\n    lightwaveos::effects::cinema::reset();\n    return true;\n}\n\n// =========================================================================\n// render() — 5-Layer composition\n// =========================================================================\n\nvoid LGPHyperbolicPortalAREffect::render(plugins::EffectContext& ctx) {\n    // --- Timing ---\n    const float dtSignal = AudioReactivePolicy::signalDt(ctx);\n    const float dtVisual = AudioReactivePolicy::visualDt(ctx);\n    const float speedNorm = ctx.speed / 50.0f;\n\n    // --- Signals (shared infrastructure handles presence gate + fallback) ---\n    const lowrisk_ar::ArSignalSnapshot sig =\n        lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);\n    const lowrisk_ar::ArModulationProfile mod =\n        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);\n    m_ar.tonalHue = mod.baseHue;\n\n    // =================================================================\n    // LAYER UPDATES\n    // =================================================================\n\n    // Bed: RMS portal glow (tau 0.40s)\n    m_bed = lowrisk_ar::smoothTo(m_bed,\n        0.20f + 0.80f * sig.rms, dtSignal, 0.40f);\n\n    // Structure: rib frequencies from harmonic + rhythmic (tau 0.18s)\n    const float w1Target = 6.0f + 6.0f * sig.harmonic + 3.0f * sig.rhythmic;\n    const float w2Target = 10.0f + 8.0f * sig.harmonic + 5.0f * sig.rhythmic;\n    m_w1 = lowrisk_ar::smoothTo(m_w1, w1Target, dtSignal, 0.18f);\n    m_w2 = lowrisk_ar::smoothTo(m_w2, w2Target, dtSignal, 0.18f);\n\n    // Impact: beat rib brightening (decay 0.20s)\n    if (sig.beatTick) m_impact = fmaxf(m_impact, 0.85f);\n    m_impact = lowrisk_ar::decay(m_impact, dtSignal, 0.20f);\n\n    // Memory: portal persistence (tau 0.70s)\n    m_memory = lowrisk_ar::clamp01f(\n        lowrisk_ar::decay(m_memory, dtSignal, 0.70f)\n        + 0.15f * m_impact + 0.08f * sig.flux);\n    lowrisk_ar::applyBedImpactMemoryMix(\n        m_controls,\n        static_cast<float>(ctx.rawTotalTimeMs),\n        m_bed,\n        m_impact,\n        m_memory);\n\n    // =================================================================\n    // MOTION\n    // =================================================================\n\n    const float phiRate = (0.80f + 3.50f * speedNorm) * mod.motionRate\n                          * (0.75f + 0.25f * sig.rhythmic);\n    m_phi += phiRate * dtVisual;\n\n    // =================================================================\n    // PER-PIXEL RENDER\n    // =================================================================\n\n    const float mid    = (STRIP_LENGTH - 1) * 0.5f;\n    const float invMid = 1.0f / mid;\n\n    const float bedBright = 0.30f + 0.70f * m_bed;\n    const float master = (ctx.brightness / 255.0f)\n                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        const float dmid  = static_cast<float>(i) - mid;\n        const float distN = fabsf(dmid) * invMid;\n\n        // Hyperbolic coordinate mapping\n        const float r = distN * 0.985f;\n        const float u = artanh_safe(r);\n\n        // Multi-band ribs\n        const float rib1 = sinf(m_w1 * u + m_phi);\n        const float rib2 = sinf(m_w2 * u - 0.7f * m_phi);\n        const float ribRaw = rib1 + 0.62f * rib2;\n\n        // Sharp bands via smoothstep + pow\n        const float ribSmooth = smoothstep(-0.5f, 0.5f, ribRaw);\n        const float ribSharp = powf(ribSmooth, 2.8f);\n\n        // Edge boost (stronger at hyperbolic infinity)\n        const float edgeBoost = 1.0f + 0.6f * distN;\n\n        // Centre glue\n        const float glue = 0.40f + 0.60f * expf(-(dmid * dmid) * 0.0015f);\n\n        // Portal base shape\n        const float portalShape = ribSharp * edgeBoost * glue;\n\n        // Impact: brightens ribs\n        const float impactAdd = m_impact * ribSharp * 0.40f;\n\n        // Memory: gentle additive persistence\n        const float memoryAdd = m_memory * (0.4f + 0.6f * ribSmooth) * 0.22f;\n\n        // Compose: bed x portal + impact + memory\n        float brightness = bedBright * portalShape + impactAdd + memoryAdd;\n        brightness = lowrisk_ar::clamp01f(brightness);\n\n        const uint8_t br = luminanceToBr(brightness, master);\n\n        // Tonal hue: chord-driven anchor + hyperbolic spatial offset\n        const uint8_t hue = static_cast<uint8_t>(\n            m_ar.tonalHue + u * 35.0f + sig.harmonic * 18.0f);\n\n        writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));\n    }\n\n    lightwaveos::effects::cinema::apply(ctx, speedNorm);\n}\n\n// =========================================================================\n// cleanup / metadata / parameters\n// =========================================================================\n\nvoid LGPHyperbolicPortalAREffect::cleanup() {}\n\nconst plugins::EffectMetadata& LGPHyperbolicPortalAREffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Hyperbolic Portal (5L-AR)\",\n        \"Poincaré-style portal with multi-band hyperbolic ribs\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\nuint8_t LGPHyperbolicPortalAREffect::getParameterCount() const {\n    return lowrisk_ar::Ar16Controls::parameterCount();\n}\n\nconst plugins::EffectParameter* LGPHyperbolicPortalAREffect::getParameter(uint8_t index) const {\n    return lowrisk_ar::Ar16Controls::parameter(index);\n}\n\nbool LGPHyperbolicPortalAREffect::setParameter(const char* name, float value) {\n    return m_controls.set(name, value);\n}\n\nfloat LGPHyperbolicPortalAREffect::getParameter(const char* name) const {\n    return m_controls.get(name);\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

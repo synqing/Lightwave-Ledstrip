@@ -1,16 +1,16 @@
 {
   "schemaVersion": "2.0.0",
-  "generatedAtUtc": "2026-02-25T01:16:03Z",
-  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "generatedAtUtc": "2026-03-18T01:14:51Z",
+  "firmwareSourceHash": "25d1555df9030ad0f3db4c6565c25fec023f8cb74c6e74182e4a1a0db91afb2e",
   "effectId": "EID_LGP_PERLIN_VEIL_AMBIENT",
   "effectIdHex": "0x0C00",
   "className": "LGPPerlinVeilAmbientEffect",
   "displayName": "LGP Perlin Veil Ambient",
-  "headerPath": "firmware/v2/src/effects/ieffect/LGPPerlinVeilAmbientEffect.h",
-  "sourcePath": "firmware/v2/src/effects/ieffect/LGPPerlinVeilAmbientEffect.cpp",
+  "headerPath": "firmware-v3/src/effects/ieffect/LGPPerlinVeilAmbientEffect.h",
+  "sourcePath": "firmware-v3/src/effects/ieffect/LGPPerlinVeilAmbientEffect.cpp",
   "renderRange": [
     37,
-    113
+    116
   ],
   "phaseRanges": {
     "input": [
@@ -21,7 +21,7 @@
     ],
     "mapping": [
       [
-        39,
+        40,
         40
       ],
       [
@@ -29,12 +29,16 @@
         60
       ],
       [
-        80,
-        80
+        62,
+        64
+      ],
+      [
+        66,
+        66
       ],
       [
         83,
-        84
+        83
       ],
       [
         86,
@@ -42,11 +46,11 @@
       ],
       [
         89,
-        89
+        90
       ],
       [
-        91,
-        91
+        92,
+        92
       ],
       [
         94,
@@ -54,71 +58,87 @@
       ],
       [
         97,
-        98
+        97
+      ],
+      [
+        100,
+        100
       ]
     ],
     "modulation": [
       [
-        49,
-        49
+        54,
+        54
       ],
       [
-        83,
-        83
+        86,
+        86
+      ],
+      [
+        106,
+        106
       ]
     ],
     "render": [
       [
-        63,
-        63
+        45,
+        45
       ],
       [
-        65,
-        65
+        69,
+        69
       ],
       [
-        67,
-        67
+        71,
+        71
       ],
       [
-        80,
-        81
-      ],
-      [
-        100,
-        101
-      ],
-      [
-        104,
-        104
-      ],
-      [
-        108,
-        110
-      ]
-    ],
-    "post": [
-      [
-        65,
-        65
-      ]
-    ],
-    "output": [
-      [
-        67,
-        67
+        83,
+        84
       ],
       [
         103,
         104
       ],
       [
-        106,
+        107,
         107
       ],
       [
-        110,
+        111,
+        113
+      ]
+    ],
+    "post": [
+      [
+        43,
+        43
+      ],
+      [
+        45,
+        45
+      ],
+      [
+        106,
+        106
+      ]
+    ],
+    "output": [
+      [
+        71,
+        71
+      ],
+      [
+        107,
+        107
+      ],
+      [
+        109,
         110
+      ],
+      [
+        113,
+        113
       ]
     ]
   },
@@ -126,5 +146,5 @@
   "mappingWarnings": [
     "Phase 'input' inferred from fallback segmentation."
   ],
-  "sourceText": "/**\n * @file LGPPerlinVeilAmbientEffect.cpp\n * @brief LGP Perlin Veil Ambient - Slow drifting curtains/fog from centre (time-driven)\n * \n * Ambient Perlin noise field effect:\n * - Two independent noise fields: hue index and luminance mask\n * - Centre-origin sampling: distance from centre pair (79/80)\n * - Time-driven slow drift and breathing contrast\n */\n\n#include \"LGPPerlinVeilAmbientEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPPerlinVeilAmbientEffect::LGPPerlinVeilAmbientEffect()\n    : m_noiseX(0)\n    , m_noiseY(0)\n    , m_noiseZ(0)\n    , m_time(0)\n{\n}\n\nbool LGPPerlinVeilAmbientEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_noiseX = random16();\n    m_noiseY = random16();\n    m_noiseZ = random16();\n    m_time = 0;\n    return true;\n}\n\nvoid LGPPerlinVeilAmbientEffect::render(plugins::EffectContext& ctx) {\n    // CENTRE ORIGIN - Perlin noise veils drifting from centre (ambient)\n    float speedNorm = ctx.speed / 50.0f;\n    float intensityNorm = ctx.brightness / 255.0f;\n\n    // =========================================================================\n    // Time-driven State Updates (no audio)\n    // =========================================================================\n    // Slow sine-based drift\n    float angle = ctx.totalTimeMs * 0.001f;\n    float sine = sinf(angle * 0.1f);\n    \n    // Breathing contrast modulation\n    float contrast = 0.4f + 0.2f * sinf(angle * 0.3f); // Slow breathing\n\n    // =========================================================================\n    // Noise Field Advection (centre-origin sampling)\n    // =========================================================================\n    // Update noise coordinates (slow drift)\n    m_noiseX += (uint16_t)((0.01f * sine) * 255.0f);\n    m_noiseY += (uint16_t)(0.0001f * 255.0f);\n    m_noiseZ += (uint16_t)(0.0005f * 255.0f);\n    \n    m_time += (uint16_t)(speedNorm * 2.0f);\n\n    // =========================================================================\n    // Rendering (centre-origin pattern)\n    // =========================================================================\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        // Calculate distance from centre pair (0 at centre, 79 at edges)\n        uint16_t dist = centerPairDistance(i);\n        \n        // Sample noise fields at centre-origin coordinates\n        uint16_t noiseXCoord = m_noiseX + (dist * 4);\n        uint16_t noiseYCoord = m_noiseY + m_time;\n        uint16_t noiseZCoord = m_noiseZ + (dist * 2);\n        \n        // Sample two independent noise fields\n        uint8_t hueNoise = inoise8(noiseXCoord >> 8, noiseYCoord >> 8);\n        uint8_t lumNoise = inoise8((noiseXCoord + 10000) >> 8, (noiseYCoord + 5000) >> 8);\n        \n        // Map hue noise to palette index\n        uint8_t paletteIndex = hueNoise;\n        \n        // Map luminance noise with contrast modulation\n        float lumNorm = (lumNoise / 255.0f);\n        // Apply contrast\n        if (lumNorm < 0.5f) {\n            lumNorm = lumNorm * (1.0f - contrast * 0.5f);\n        } else {\n            lumNorm = 0.5f + (lumNorm - 0.5f) * (1.0f + contrast * 0.5f);\n        }\n        lumNorm = fmaxf(0.0f, fminf(1.0f, lumNorm));\n        \n        // Square for bias toward darker\n        lumNorm = lumNorm * lumNorm;\n        \n        // Scale to brightness range\n        float brightnessNorm = 0.1f + lumNorm * 0.9f;\n        uint8_t brightness = (uint8_t)(brightnessNorm * 255.0f * intensityNorm);\n        \n        // Get colour from palette\n        CRGB color = ctx.palette.getColor(paletteIndex, brightness);\n        \n        // Apply to strip 1\n        ctx.leds[i] = color;\n        \n        // Apply to strip 2 (mirrored)\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            uint8_t paletteIndex2 = (uint8_t)(paletteIndex + 32);\n            CRGB color2 = ctx.palette.getColor(paletteIndex2, brightness);\n            ctx.leds[i + STRIP_LENGTH] = color2;\n        }\n    }\n}\n\nvoid LGPPerlinVeilAmbientEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPPerlinVeilAmbientEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Perlin Veil Ambient\",\n        \"Slow drifting noise curtains from centre, time-driven\",\n        plugins::EffectCategory::AMBIENT,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n\n"
+  "sourceText": "/**\n * @file LGPPerlinVeilAmbientEffect.cpp\n * @brief LGP Perlin Veil Ambient - Slow drifting curtains/fog from centre (time-driven)\n * \n * Ambient Perlin noise field effect:\n * - Two independent noise fields: hue index and luminance mask\n * - Centre-origin sampling: distance from centre pair (79/80)\n * - Time-driven slow drift and breathing contrast\n */\n\n#include \"LGPPerlinVeilAmbientEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPPerlinVeilAmbientEffect::LGPPerlinVeilAmbientEffect()\n    : m_noiseX(0)\n    , m_noiseY(0)\n    , m_noiseZ(0)\n    , m_time(0)\n{\n}\n\nbool LGPPerlinVeilAmbientEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_noiseX = random16();\n    m_noiseY = random16();\n    m_noiseZ = random16();\n    m_time = 0;\n    return true;\n}\n\nvoid LGPPerlinVeilAmbientEffect::render(plugins::EffectContext& ctx) {\n    // CENTRE ORIGIN - Perlin noise veils drifting from centre (ambient)\n    float dt = ctx.getSafeDeltaSeconds();\n    float speedNorm = ctx.speed / 50.0f;\n\n    // =========================================================================\n    // Trail persistence: fade previous frame (long ambient trails)\n    // =========================================================================\n    fadeToBlackBy(ctx.leds, ctx.ledCount, 10);\n\n    // =========================================================================\n    // Time-driven State Updates (no audio)\n    // =========================================================================\n    // Slow sine-based drift\n    float angle = ctx.totalTimeMs * 0.001f;\n    float sine = sinf(angle * 0.1f);\n\n    // Breathing contrast modulation\n    float contrast = 0.4f + 0.2f * sinf(angle * 0.3f); // Slow breathing\n\n    // =========================================================================\n    // Noise Field Advection — frame-rate independent using dt\n    // =========================================================================\n    // Scale noise step by dt (targeting ~120 FPS base rate)\n    float dtScale = dt * 120.0f;\n    m_noiseX += (uint16_t)((40 + speedNorm * 80.0f + sine * 20.0f) * dtScale);\n    m_noiseY += (uint16_t)((20 + speedNorm * 60.0f) * dtScale);\n    m_noiseZ += (uint16_t)((10 + speedNorm * 30.0f) * dtScale);\n\n    m_time += (uint16_t)((40 + speedNorm * 80.0f) * dtScale);\n\n    // =========================================================================\n    // Rendering (centre-origin pattern)\n    // =========================================================================\n    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {\n        // Calculate distance from centre pair (0 at centre, 79 at edges)\n        uint16_t dist = centerPairDistance(i);\n\n        // Sample noise fields at centre-origin coordinates\n        uint16_t noiseXCoord = m_noiseX + (dist * 4);\n        uint16_t noiseYCoord = m_noiseY + m_time;\n\n        // Sample two independent noise fields\n        uint8_t hueNoise = inoise8(noiseXCoord, noiseYCoord);\n        uint8_t lumNoise = inoise8(noiseXCoord + 10000, noiseYCoord + 5000);\n\n        // Map hue noise to palette index\n        uint8_t paletteIndex = hueNoise;\n\n        // Map luminance noise with contrast modulation\n        float lumNorm = (lumNoise / 255.0f);\n        // Apply contrast\n        if (lumNorm < 0.5f) {\n            lumNorm = lumNorm * (1.0f - contrast * 0.5f);\n        } else {\n            lumNorm = 0.5f + (lumNorm - 0.5f) * (1.0f + contrast * 0.5f);\n        }\n        lumNorm = fmaxf(0.0f, fminf(1.0f, lumNorm));\n\n        // Square for bias toward darker\n        lumNorm = lumNorm * lumNorm;\n\n        // Scale to brightness range using scale8\n        uint8_t rawBright = (uint8_t)(25 + lumNorm * 230.0f);\n        uint8_t brightness = scale8(rawBright, ctx.brightness);\n\n        // Get colour from palette\n        CRGB color = ctx.palette.getColor(paletteIndex, brightness);\n\n        // Blend into faded buffer (temporal smoothing — not hard overwrite)\n        nblend(ctx.leds[i], color, 80);\n\n        // Apply to strip 2 (mirrored)\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            uint8_t paletteIndex2 = (uint8_t)(paletteIndex + 32);\n            CRGB color2 = ctx.palette.getColor(paletteIndex2, brightness);\n            nblend(ctx.leds[i + STRIP_LENGTH], color2, 80);\n        }\n    }\n}\n\nvoid LGPPerlinVeilAmbientEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPPerlinVeilAmbientEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Perlin Veil Ambient\",\n        \"Slow drifting noise curtains from centre, time-driven\",\n        plugins::EffectCategory::AMBIENT,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n\n"
 }

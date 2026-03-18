@@ -1,0 +1,138 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-03-18T01:14:51Z",
+  "firmwareSourceHash": "25d1555df9030ad0f3db4c6565c25fec023f8cb74c6e74182e4a1a0db91afb2e",
+  "effectId": "EID_LGP_LORENZ_RIBBON_AR",
+  "effectIdHex": "0x1C12",
+  "className": "LGPLorenzRibbonAREffect",
+  "displayName": "LGP Lorenz Ribbon (5L-AR)",
+  "headerPath": "firmware-v3/src/effects/ieffect/LGPLorenzRibbonAREffect.h",
+  "sourcePath": "firmware-v3/src/effects/ieffect/LGPLorenzRibbonAREffect.cpp",
+  "renderRange": [
+    120,
+    271
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        120,
+        137
+      ]
+    ],
+    "mapping": [
+      [
+        129,
+        129
+      ],
+      [
+        143,
+        144
+      ],
+      [
+        147,
+        147
+      ],
+      [
+        149,
+        149
+      ],
+      [
+        175,
+        176
+      ],
+      [
+        208,
+        208
+      ],
+      [
+        213,
+        213
+      ],
+      [
+        270,
+        270
+      ]
+    ],
+    "modulation": [
+      [
+        144,
+        144
+      ],
+      [
+        146,
+        146
+      ],
+      [
+        148,
+        149
+      ],
+      [
+        151,
+        152
+      ],
+      [
+        155,
+        155
+      ],
+      [
+        158,
+        158
+      ]
+    ],
+    "render": [
+      [
+        181,
+        181
+      ],
+      [
+        217,
+        217
+      ],
+      [
+        219,
+        219
+      ],
+      [
+        232,
+        232
+      ],
+      [
+        237,
+        237
+      ],
+      [
+        266,
+        266
+      ]
+    ],
+    "post": [
+      [
+        215,
+        215
+      ],
+      [
+        221,
+        223
+      ],
+      [
+        227,
+        227
+      ],
+      [
+        238,
+        238
+      ]
+    ],
+    "output": [
+      [
+        232,
+        232
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPLorenzRibbonAREffect.cpp\n * @brief Lorenz Ribbon (5-Layer Audio-Reactive)\n *\n * Lorenz attractor trail projected radially with full 5-layer AR composition.\n * Base maths from LGPLorenzRibbonEffect (HolyShitBangersPack), restructured\n * into explicit bed/structure/impact/tonal/memory layers.\n *\n * Physics: Classic Lorenz system (sigma=10, rho=28, beta=8/3)\n *   96-sample trail with age-dependent fade, projected as ribbon thickness\n *\n * Audio mapping:\n *   Bed       - RMS-driven ribbon brightness (tau 0.40s)\n *   Structure - sub-steps + thickness from bass + flux (tau 0.12s)\n *   Impact    - beat-triggered trajectory burst (decay 0.20s)\n *   Memory    - tail persistence (decay 0.85s)\n *   Tonal     - chaotic energy hue from chord\n *\n * Centre-origin compliant. Dual-strip locked.\n */\n\n#include \"LGPLorenzRibbonAREffect.h\"\n#include \"LGPFilmPost.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n#include <cstring>\n\n#ifndef NATIVE_BUILD\n#include <esp_heap_caps.h>\n#endif\n\n#include \"../../utils/Log.h\"\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\n// =========================================================================\n// Local helpers\n// =========================================================================\n\nstatic inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRGB& c) {\n    ctx.leds[i] = c;\n    int j = i + STRIP_LENGTH;\n    if (j < (int)ctx.ledCount) ctx.leds[j] = c;\n}\n\nstatic inline float distN_from_index(int i) {\n    const float mid = (STRIP_LENGTH - 1) * 0.5f;\n    return fabsf((float)i - mid) / mid;\n}\n\nstatic inline float centreGlue(int i) {\n    const float mid = (STRIP_LENGTH - 1) * 0.5f;\n    const float d = (float)i - mid;\n    return 0.30f + 0.70f * expf(-(d * d) * 0.0016f);\n}\n\nstatic inline uint8_t luminanceToBr(float wave01, float master) {\n    const float base = 0.055f;\n    float out = lowrisk_ar::clamp01f(base + (1.0f - base) * lowrisk_ar::clamp01f(wave01));\n    out = out / (1.0f + 0.60f * out);  // filmic shoulder\n    out *= master;\n    return static_cast<uint8_t>(lowrisk_ar::clampf(out * 255.0f, 0.0f, 255.0f));\n}\n\n// Rational approximation to exp(-x), accurate enough for ribbon falloff at a fraction of expf() cost.\nstatic inline float fastExpFalloff(float x) {\n    const float xClamped = (x < 0.0f) ? 0.0f : x;\n    return 1.0f / (1.0f + xClamped + 0.48f * xClamped * xClamped);\n}\n\n// =========================================================================\n// Construction / init / cleanup\n// =========================================================================\n\nLGPLorenzRibbonAREffect::LGPLorenzRibbonAREffect()\n    : m_ps(nullptr)\n    , m_x(1.0f), m_y(0.0f), m_z(0.0f), m_t(0.0f), m_head(0)\n    , m_bed(0.3f), m_structure(0.5f), m_impact(0.0f), m_memory(0.0f)\n{\n}\n\nbool LGPLorenzRibbonAREffect::init(plugins::EffectContext& ctx) {\n    m_controls.resetDefaults();\n    m_ar = lowrisk_ar::ArRuntimeState{};\n    m_ar.tonalHue = static_cast<float>(ctx.gHue);\n    m_ar.modeSmooth = 2.0f;\n    m_x    = 1.0f;\n    m_y    = 0.0f;\n    m_z    = 0.0f;\n    m_t    = 0.0f;\n    m_head = 0;\n    m_bed       = 0.3f;\n    m_structure = 0.5f;\n    m_impact    = 0.0f;\n    m_memory    = 0.0f;\n\n    lightwaveos::effects::cinema::reset();\n\n#ifndef NATIVE_BUILD\n    if (!m_ps) {\n        m_ps = static_cast<LorenzPsram*>(heap_caps_malloc(sizeof(LorenzPsram), MALLOC_CAP_SPIRAM));\n        if (!m_ps) {\n            LW_LOGE(\"LGPLorenzRibbonAREffect: PSRAM alloc failed\");\n            return false;\n        }\n    }\n    memset(m_ps, 0, sizeof(LorenzPsram));\n#endif\n\n    return true;\n}\n\n// =========================================================================\n// render() - 5-Layer composition\n// =========================================================================\n\nvoid LGPLorenzRibbonAREffect::render(plugins::EffectContext& ctx) {\n#ifndef NATIVE_BUILD\n    if (!m_ps) return;\n#endif\n\n    // --- Timing ---\n    const float dtSignal = AudioReactivePolicy::signalDt(ctx);\n    const float dtVisual = AudioReactivePolicy::visualDt(ctx);\n    (void)dtVisual;\n    const float speedNorm = ctx.speed / 50.0f;\n\n    // --- Signals ---\n    const lowrisk_ar::ArSignalSnapshot sig =\n        lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);\n    const lowrisk_ar::ArModulationProfile mod =\n        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);\n    m_ar.tonalHue = mod.baseHue;\n\n    // =================================================================\n    // LAYER UPDATES\n    // =================================================================\n\n    // Bed: RMS-driven ribbon brightness (tau 0.40s)\n    const float bedTarget = lowrisk_ar::clamp01f(0.25f + 0.75f * sig.rms);\n    m_bed = lowrisk_ar::smoothTo(m_bed, bedTarget, dtSignal, 0.40f);\n\n    // Structure: sub-step intensity + ribbon thickness from bass + flux (tau 0.12s)\n    const float structTarget = lowrisk_ar::clamp01f(\n        0.30f + 0.35f * sig.bass + 0.25f * sig.flux + 0.10f * sig.rhythmic);\n    m_structure = lowrisk_ar::smoothTo(m_structure, structTarget, dtSignal, 0.12f);\n\n    // Impact: beat-triggered trajectory burst (decay 0.20s)\n    if (sig.beatTick) m_impact = fmaxf(m_impact, 0.85f);\n    m_impact = lowrisk_ar::decay(m_impact, dtSignal, 0.20f);\n\n    // Memory: accumulated tail persistence (slow decay, fed by beat + flux)\n    m_memory = lowrisk_ar::clamp01f(\n        lowrisk_ar::decay(m_memory, dtSignal, 0.85f)\n        + 0.10f * m_impact + 0.05f * sig.flux);\n    lowrisk_ar::applyBedImpactMemoryMix(\n        m_controls,\n        static_cast<float>(ctx.rawTotalTimeMs),\n        m_bed,\n        m_impact,\n        m_memory);\n\n    // =================================================================\n    // LORENZ ATTRACTOR PHYSICS\n    // =================================================================\n\n    const float sigma = 10.0f;\n    const float rho   = 28.0f;\n    const float beta  = 8.0f / 3.0f;\n\n    // Structure modulates integration speed and sub-step count\n    float dt = (0.0065f + 0.010f * speedNorm) * (0.7f + 0.5f * m_structure) * mod.motionRate;\n    int sub = 2 + static_cast<int>(3.5f * speedNorm * (0.6f + 0.4f * m_structure)\n                                    * (0.75f + 0.50f * mod.motionDepth));\n    if (sub > 7) sub = 7;\n\n#ifndef NATIVE_BUILD\n    for (int s = 0; s < sub; s++) {\n        float dx = sigma * (m_y - m_x);\n        float dy = m_x * (rho - m_z) - m_y;\n        float dz = m_x * m_y - beta * m_z;\n\n        m_x += dx * dt;\n        m_y += dy * dt;\n        m_z += dz * dt;\n        m_t += dt;\n\n        float r = (0.55f * fabsf(m_x) / 22.0f) + (0.45f * m_z / 55.0f);\n        r = lowrisk_ar::clamp01f(r);\n\n        m_ps->trail[m_head] = r;\n        m_head = (uint8_t)((m_head + 1) % TRAIL_N);\n    }\n#endif\n\n    // =================================================================\n    // PER-PIXEL RENDER\n    // =================================================================\n\n    const float bedBright = 0.25f + 0.75f * m_bed;\n    const float master = (ctx.brightness / 255.0f)\n                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;\n\n    // Structure modulates ribbon thickness\n    const float thickBase = 0.040f + 0.030f * (1.0f - speedNorm);\n    const float thick = lowrisk_ar::clampf(\n        thickBase * (0.65f + 0.55f * m_structure) * (0.75f + 0.50f * mod.motionDepth),\n        0.020f, 0.140f);\n\n    const int trailStride = (speedNorm > 1.50f) ? 3 : ((speedNorm > 0.95f) ? 2 : 1);\n    static float trailR[TRAIL_N];\n    static float trailFade[TRAIL_N];\n    int trailSamples = 0;\n    for (int k = 0; k < TRAIL_N; k += trailStride) {\n        int idx = static_cast<int>(m_head) - 1 - k;\n        while (idx < 0) idx += TRAIL_N;\n        const float age = static_cast<float>(k) / static_cast<float>(TRAIL_N - 1);  // 0 newest .. 1 oldest\n        float fade = 1.0f - age;\n        fade = fade * fade * (0.70f + 0.30f * fade);  // ~pow(1-age, 1.6) without powf()\n        if (fade < 0.02f) {\n            break;\n        }\n        trailR[trailSamples] = m_ps->trail[idx];\n        trailFade[trailSamples] = fade;\n        ++trailSamples;\n    }\n\n#ifndef NATIVE_BUILD\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float dn = distN_from_index(i);\n        float glue = centreGlue(i);\n        float best = 0.0f;\n\n        for (int k = 0; k < trailSamples; k++) {\n            const float g = fastExpFalloff(fabsf(dn - trailR[k]) / thick) * trailFade[k];\n            best = fmaxf(best, g);\n        }\n\n        // Thin specular edge for ribbon feel\n        float spec = best * best * sqrtf(best) * 0.55f;\n\n        // Bed x structured geometry\n        float ribbonGeom = lowrisk_ar::clamp01f((0.22f + 0.78f * best + spec) * glue);\n\n        // Impact: additive trajectory burst\n        float impactAdd = m_impact * best * glue * 0.30f;\n\n        // Memory: gentle additive persistence\n        float memoryAdd = m_memory * (0.4f + 0.6f * best) * 0.15f;\n\n        // Compose: bed x ribbon + impact + memory\n        float brightness = bedBright * ribbonGeom + impactAdd + memoryAdd;\n        brightness = lowrisk_ar::clamp01f(brightness);\n\n        uint8_t br = luminanceToBr(brightness, master);\n\n        // Tonal: chaotic energy drives hue with chord anchor\n        float energy = lowrisk_ar::clamp01f(\n            (fabsf(m_x) / 22.0f) * 0.6f + (fabsf(m_y) / 28.0f) * 0.4f);\n        float hueShift = 25.0f * energy + 45.0f * spec + sig.harmonic * 15.0f;\n        uint8_t hue = static_cast<uint8_t>(m_ar.tonalHue + hueShift);\n\n        writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));\n    }\n#endif\n\n    lightwaveos::effects::cinema::apply(ctx, speedNorm, lightwaveos::effects::cinema::QualityPreset::LIGHTWEIGHT);\n}\n\n// =========================================================================\n// cleanup / metadata / parameters\n// =========================================================================\n\nvoid LGPLorenzRibbonAREffect::cleanup() {\n#ifndef NATIVE_BUILD\n    if (m_ps) {\n        heap_caps_free(m_ps);\n        m_ps = nullptr;\n    }\n#endif\n}\n\nconst plugins::EffectMetadata& LGPLorenzRibbonAREffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Lorenz Ribbon (5L-AR)\",\n        \"Chaotic attractor ribbon with 5-layer audio-reactive composition\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\nuint8_t LGPLorenzRibbonAREffect::getParameterCount() const {\n    return lowrisk_ar::Ar16Controls::parameterCount();\n}\n\nconst plugins::EffectParameter* LGPLorenzRibbonAREffect::getParameter(uint8_t index) const {\n    return lowrisk_ar::Ar16Controls::parameter(index);\n}\n\nbool LGPLorenzRibbonAREffect::setParameter(const char* name, float value) {\n    return m_controls.set(name, value);\n}\n\nfloat LGPLorenzRibbonAREffect::getParameter(const char* name) const {\n    return m_controls.get(name);\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

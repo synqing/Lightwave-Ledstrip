@@ -1,0 +1,141 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-03-18T01:14:51Z",
+  "firmwareSourceHash": "25d1555df9030ad0f3db4c6565c25fec023f8cb74c6e74182e4a1a0db91afb2e",
+  "effectId": "EID_LGP_NEURAL_NETWORK_RADIAL",
+  "effectIdHex": "0x0506",
+  "className": "LGPNeuralNetworkRadialEffect",
+  "displayName": "LGP Neural Network R",
+  "headerPath": "firmware-v3/src/effects/ieffect/LGPNeuralNetworkRadialEffect.h",
+  "sourcePath": "firmware-v3/src/effects/ieffect/LGPNeuralNetworkRadialEffect.cpp",
+  "renderRange": [
+    40,
+    156
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        40,
+        53
+      ]
+    ],
+    "mapping": [
+      [
+        54,
+        71
+      ]
+    ],
+    "modulation": [
+      [
+        72,
+        92
+      ]
+    ],
+    "render": [
+      [
+        42,
+        42
+      ],
+      [
+        48,
+        48
+      ],
+      [
+        52,
+        52
+      ],
+      [
+        59,
+        59
+      ],
+      [
+        67,
+        68
+      ],
+      [
+        73,
+        74
+      ],
+      [
+        78,
+        78
+      ],
+      [
+        86,
+        86
+      ],
+      [
+        104,
+        105
+      ],
+      [
+        108,
+        109
+      ],
+      [
+        113,
+        113
+      ],
+      [
+        123,
+        124
+      ],
+      [
+        127,
+        128
+      ],
+      [
+        135,
+        135
+      ],
+      [
+        147,
+        148
+      ],
+      [
+        151,
+        152
+      ]
+    ],
+    "post": [
+      [
+        41,
+        42
+      ]
+    ],
+    "output": [
+      [
+        64,
+        64
+      ],
+      [
+        67,
+        68
+      ],
+      [
+        70,
+        74
+      ],
+      [
+        104,
+        109
+      ],
+      [
+        123,
+        128
+      ],
+      [
+        147,
+        152
+      ]
+    ]
+  },
+  "mappingConfidence": "low",
+  "mappingWarnings": [
+    "Phase inference used fallback segmentation due to sparse signal.",
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'mapping' inferred from fallback segmentation.",
+    "Phase 'modulation' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPNeuralNetworkRadialEffect.cpp\n * @brief LGP Neural Network (Radial) - Radial synaptic pathways\n *\n * Radial variant of LGPNeuralNetworkEffect.\n * Neurons placed at radial distances from center pair.\n * Signals propagate inward/outward as concentric rings.\n */\n\n#include \"LGPNeuralNetworkRadialEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cstring>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPNeuralNetworkRadialEffect::LGPNeuralNetworkRadialEffect()\n    : m_time(0)\n    , m_neurons{}\n    , m_neuronState{}\n    , m_signalPos{}\n    , m_signalStrength{}\n    , m_initialized(false)\n{\n}\n\nbool LGPNeuralNetworkRadialEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_time = 0;\n    memset(m_neurons, 0, sizeof(m_neurons));\n    memset(m_neuronState, 0, sizeof(m_neuronState));\n    memset(m_signalPos, 0, sizeof(m_signalPos));\n    memset(m_signalStrength, 0, sizeof(m_signalStrength));\n    m_initialized = false;\n    return true;\n}\n\nvoid LGPNeuralNetworkRadialEffect::render(plugins::EffectContext& ctx) {\n    // Fade background\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    m_time = (uint16_t)(m_time + (ctx.speed >> 2));\n\n    // Initialize neurons at radial distances\n    if (!m_initialized) {\n        for (uint8_t n = 0; n < 20; n++) {\n            m_neurons[n] = random8(HALF_LENGTH);\n            m_neuronState[n] = 0;\n        }\n        for (uint8_t s = 0; s < 10; s++) {\n            m_signalStrength[s] = 0;\n        }\n        m_initialized = true;\n    }\n\n    // Background neural tissue — radial Perlin noise\n    for (uint16_t dist = 0; dist < HALF_LENGTH; dist++) {\n        uint8_t tissue = (uint8_t)(inoise8(dist * 5, m_time >> 3) >> 2);\n        CRGB tissueColor1 = CRGB(tissue >> 1, 0, tissue);\n        CRGB tissueColor2 = CRGB(tissue >> 2, 0, tissue >> 1);\n\n        // Symmetric center pair for strip 1\n        uint16_t left1 = CENTER_LEFT - dist;\n        uint16_t right1 = CENTER_RIGHT + dist;\n        if (left1 < STRIP_LENGTH) ctx.leds[left1] = tissueColor1;\n        if (right1 < STRIP_LENGTH) ctx.leds[right1] = tissueColor1;\n\n        // Strip 2\n        uint16_t left2 = STRIP_LENGTH + CENTER_LEFT - dist;\n        uint16_t right2 = STRIP_LENGTH + CENTER_RIGHT + dist;\n        if (left2 < ctx.ledCount) ctx.leds[left2] = tissueColor2;\n        if (right2 < ctx.ledCount) ctx.leds[right2] = tissueColor2;\n    }\n\n    // Update neurons\n    for (uint8_t n = 0; n < 20; n++) {\n        if (m_neuronState[n] > 0) {\n            m_neuronState[n] = scale8(m_neuronState[n], 230);\n        } else {\n            if (random8() < 16) {\n                m_neuronState[n] = 255;\n\n                // Spawn signal\n                for (uint8_t s = 0; s < 10; s++) {\n                    if (m_signalStrength[s] == 0) {\n                        m_signalPos[s] = (int8_t)m_neurons[n];\n                        m_signalStrength[s] = 255;\n                        break;\n                    }\n                }\n            }\n        }\n\n        // Render neuron at radial distance\n        uint8_t dist = m_neurons[n];\n        uint8_t intensity = scale8(m_neuronState[n], ctx.brightness);\n        CRGB neuronColor = CRGB(intensity, intensity >> 3, intensity >> 1);\n\n        if (dist < HALF_LENGTH) {\n            uint16_t left1 = CENTER_LEFT - dist;\n            uint16_t right1 = CENTER_RIGHT + dist;\n            if (left1 < STRIP_LENGTH) ctx.leds[left1] = neuronColor;\n            if (right1 < STRIP_LENGTH) ctx.leds[right1] = neuronColor;\n            uint16_t left2 = STRIP_LENGTH + CENTER_LEFT - dist;\n            uint16_t right2 = STRIP_LENGTH + CENTER_RIGHT + dist;\n            if (left2 < ctx.ledCount) ctx.leds[left2] = neuronColor;\n            if (right2 < ctx.ledCount) ctx.leds[right2] = neuronColor;\n        }\n\n        // Dendrites — nearby radial distances\n        for (int8_t d = -2; d <= 2; d++) {\n            if (d != 0) {\n                int16_t dendDist = (int16_t)dist + d;\n                if (dendDist >= 0 && dendDist < (int16_t)HALF_LENGTH) {\n                    uint8_t dendIntensity = (uint8_t)(intensity >> (1 + abs(d)));\n                    CRGB dendColor1 = CRGB(dendIntensity >> 2, 0, dendIntensity >> 3);\n                    CRGB dendColor2 = CRGB(dendIntensity >> 3, 0, dendIntensity >> 2);\n\n                    uint16_t dl1 = CENTER_LEFT - (uint16_t)dendDist;\n                    uint16_t dr1 = CENTER_RIGHT + (uint16_t)dendDist;\n                    if (dl1 < STRIP_LENGTH) ctx.leds[dl1] = dendColor1;\n                    if (dr1 < STRIP_LENGTH) ctx.leds[dr1] = dendColor1;\n                    uint16_t dl2 = STRIP_LENGTH + CENTER_LEFT - (uint16_t)dendDist;\n                    uint16_t dr2 = STRIP_LENGTH + CENTER_RIGHT + (uint16_t)dendDist;\n                    if (dl2 < ctx.ledCount) ctx.leds[dl2] = dendColor2;\n                    if (dr2 < ctx.ledCount) ctx.leds[dr2] = dendColor2;\n                }\n            }\n        }\n    }\n\n    // Update and render signals — propagate in/out radially\n    for (uint8_t s = 0; s < 10; s++) {\n        if (m_signalStrength[s] > 0) {\n            m_signalPos[s] += (random8(2) == 0) ? 1 : -1;\n            m_signalStrength[s] = scale8(m_signalStrength[s], 240);\n\n            if (m_signalPos[s] >= 0 && m_signalPos[s] < (int8_t)HALF_LENGTH) {\n                uint8_t sigIntensity = scale8(m_signalStrength[s], ctx.brightness);\n                CRGB sigColor = CRGB(sigIntensity >> 1, sigIntensity >> 2, sigIntensity);\n\n                uint16_t dist = (uint16_t)m_signalPos[s];\n                uint16_t left1 = CENTER_LEFT - dist;\n                uint16_t right1 = CENTER_RIGHT + dist;\n                if (left1 < STRIP_LENGTH) ctx.leds[left1] = sigColor;\n                if (right1 < STRIP_LENGTH) ctx.leds[right1] = sigColor;\n                uint16_t left2 = STRIP_LENGTH + CENTER_LEFT - dist;\n                uint16_t right2 = STRIP_LENGTH + CENTER_RIGHT + dist;\n                if (left2 < ctx.ledCount) ctx.leds[left2] = sigColor;\n                if (right2 < ctx.ledCount) ctx.leds[right2] = sigColor;\n            }\n        }\n    }\n}\n\nvoid LGPNeuralNetworkRadialEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPNeuralNetworkRadialEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Neural Network R\",\n        \"Radial synaptic pathways\",\n        plugins::EffectCategory::NATURE,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

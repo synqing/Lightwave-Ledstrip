@@ -1,13 +1,13 @@
 {
   "schemaVersion": "2.0.0",
-  "generatedAtUtc": "2026-02-25T01:16:03Z",
-  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "generatedAtUtc": "2026-03-18T01:14:51Z",
+  "firmwareSourceHash": "25d1555df9030ad0f3db4c6565c25fec023f8cb74c6e74182e4a1a0db91afb2e",
   "effectId": "EID_HEARTBEAT",
   "effectIdHex": "0x0109",
   "className": "HeartbeatEffect",
   "displayName": "Heartbeat",
-  "headerPath": "firmware/v2/src/effects/ieffect/HeartbeatEffect.h",
-  "sourcePath": "firmware/v2/src/effects/ieffect/HeartbeatEffect.cpp",
+  "headerPath": "firmware-v3/src/effects/ieffect/HeartbeatEffect.h",
+  "sourcePath": "firmware-v3/src/effects/ieffect/HeartbeatEffect.cpp",
   "renderRange": [
     29,
     100

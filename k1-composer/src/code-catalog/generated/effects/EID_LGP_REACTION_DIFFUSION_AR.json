@@ -1,0 +1,139 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-03-18T01:14:51Z",
+  "firmwareSourceHash": "25d1555df9030ad0f3db4c6565c25fec023f8cb74c6e74182e4a1a0db91afb2e",
+  "effectId": "EID_LGP_REACTION_DIFFUSION_AR",
+  "effectIdHex": "0x1C06",
+  "className": "LGPReactionDiffusionAREffect",
+  "displayName": "LGP Reaction Diffusion (5L-AR)",
+  "headerPath": "firmware-v3/src/effects/ieffect/LGPReactionDiffusionAREffect.h",
+  "sourcePath": "firmware-v3/src/effects/ieffect/LGPReactionDiffusionAREffect.cpp",
+  "renderRange": [
+    94,
+    240
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        94,
+        110
+      ]
+    ],
+    "mapping": [
+      [
+        100,
+        100
+      ],
+      [
+        118,
+        118
+      ],
+      [
+        120,
+        120
+      ],
+      [
+        154,
+        154
+      ],
+      [
+        168,
+        168
+      ],
+      [
+        238,
+        238
+      ]
+    ],
+    "modulation": [
+      [
+        114,
+        114
+      ],
+      [
+        117,
+        117
+      ],
+      [
+        119,
+        120
+      ],
+      [
+        122,
+        123
+      ],
+      [
+        129,
+        129
+      ],
+      [
+        156,
+        156
+      ]
+    ],
+    "render": [
+      [
+        160,
+        160
+      ],
+      [
+        170,
+        171
+      ],
+      [
+        192,
+        192
+      ],
+      [
+        207,
+        207
+      ],
+      [
+        235,
+        235
+      ]
+    ],
+    "post": [
+      [
+        223,
+        232
+      ]
+    ],
+    "output": [
+      [
+        158,
+        158
+      ],
+      [
+        161,
+        161
+      ],
+      [
+        171,
+        171
+      ],
+      [
+        173,
+        173
+      ],
+      [
+        192,
+        192
+      ],
+      [
+        202,
+        202
+      ],
+      [
+        207,
+        207
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPReactionDiffusionAREffect.cpp\n * @brief Reaction Diffusion (5-Layer Audio-Reactive)\n *\n * Gray-Scott 1D reaction-diffusion with full 5-layer AR composition.\n * Base maths from LGPReactionDiffusionEffect, restructured into\n * explicit bed/structure/impact/tonal/memory layers.\n *\n * Centre-origin compliant. Dual-strip locked. PSRAM-allocated.\n */\n\n#include \"LGPReactionDiffusionAREffect.h\"\n#include \"LGPFilmPost.h\"\n#include \"../CoreEffects.h\"\n#include \"../../utils/Log.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\n// =========================================================================\n// Local helpers\n// =========================================================================\n\nstatic inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRGB& c) {\n    ctx.leds[i] = c;\n    int j = i + STRIP_LENGTH;\n    if (j < (int)ctx.ledCount) ctx.leds[j] = c;\n}\n\nstatic inline uint8_t luminanceToBr(float wave01, float master) {\n    const float base = 0.06f;\n    float out = clamp01(base + (1.0f - base) * clamp01(wave01)) * master;\n    return static_cast<uint8_t>(255.0f * out);\n}\n\n// =========================================================================\n// Construction / init / cleanup\n// =========================================================================\n\nLGPReactionDiffusionAREffect::LGPReactionDiffusionAREffect()\n    : m_t(0.0f)\n    , m_bed(0.3f)\n    , m_structure(0.5f)\n    , m_impact(0.0f)\n    , m_memory(0.0f)\n{\n}\n\nbool LGPReactionDiffusionAREffect::init(plugins::EffectContext& ctx) {\n    m_controls.resetDefaults();\n    m_ar = lowrisk_ar::ArRuntimeState{};\n    m_ar.tonalHue = static_cast<float>(ctx.gHue);\n    m_ar.modeSmooth = 2.0f;\n    m_t           = 0.0f;\n    m_bed         = 0.3f;\n    m_structure   = 0.5f;\n    m_impact      = 0.0f;\n    m_memory      = 0.0f;\n    lightwaveos::effects::cinema::reset();\n\n    // Allocate PSRAM buffers for reaction-diffusion simulation\n    if (!m_ps) {\n        m_ps = static_cast<PsramData*>(heap_caps_malloc(sizeof(PsramData), MALLOC_CAP_SPIRAM));\n        if (!m_ps) {\n            LW_LOGE(\"LGPReactionDiffusionAREffect: PSRAM alloc failed (%u bytes)\",\n                    (unsigned)sizeof(PsramData));\n            return false;\n        }\n    }\n\n    // Standard Gray-Scott init: U=1 everywhere, V=0; seed centre region with V\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        m_ps->u[i] = 1.0f;\n        m_ps->v[i] = 0.0f;\n    }\n    const int mid = STRIP_LENGTH / 2;\n    for (int i = mid - 6; i <= mid + 6; i++) {\n        if (i >= 0 && i < STRIP_LENGTH) {\n            m_ps->v[i] = 1.0f;\n            m_ps->u[i] = 0.0f;\n        }\n    }\n\n    return true;\n}\n\n// =========================================================================\n// render() — 5-Layer composition + Gray-Scott simulation\n// =========================================================================\n\nvoid LGPReactionDiffusionAREffect::render(plugins::EffectContext& ctx) {\n    if (!m_ps) return;\n\n    // --- Timing ---\n    const float dtSignal = AudioReactivePolicy::signalDt(ctx);\n    const float dtVisual = AudioReactivePolicy::visualDt(ctx);\n    const float speedNorm = ctx.speed / 50.0f;\n\n    // --- Signals (shared infrastructure handles presence gate + fallback) ---\n    const lowrisk_ar::ArSignalSnapshot sig =\n        lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);\n    const lowrisk_ar::ArModulationProfile mod =\n        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);\n    m_ar.tonalHue = mod.baseHue;\n\n    // =================================================================\n    // LAYER UPDATES\n    // =================================================================\n\n    // Bed: slow atmosphere from RMS (tau 0.45s)\n    m_bed = lowrisk_ar::smoothTo(m_bed,\n        0.20f + 0.80f * sig.rms, dtSignal, 0.45f);\n\n    // Structure: F/K parameter modulation from bass + flux (tau 0.15s)\n    const float structTarget = lowrisk_ar::clamp01f(\n        0.30f + 0.40f * sig.bass + 0.25f * sig.flux + 0.05f * sig.rhythmic);\n    m_structure = lowrisk_ar::smoothTo(m_structure, structTarget, dtSignal, 0.15f);\n\n    // Impact: beat-triggered V-concentration spike at centre (decay 0.22s)\n    if (sig.beatTick) m_impact = fmaxf(m_impact, 0.85f);\n    m_impact = lowrisk_ar::decay(m_impact, dtSignal, 0.22f);\n\n    // Memory: accumulated glow from reaction activity (slow decay, fed by structure)\n    m_memory = lowrisk_ar::clamp01f(\n        lowrisk_ar::decay(m_memory, dtSignal, 0.90f)\n        + 0.08f * m_structure + 0.04f * sig.flux);\n    lowrisk_ar::applyBedImpactMemoryMix(\n        m_controls,\n        static_cast<float>(ctx.rawTotalTimeMs),\n        m_bed,\n        m_impact,\n        m_memory);\n\n    // =================================================================\n    // GRAY-SCOTT SIMULATION DRIVEN BY LAYERS\n    // =================================================================\n\n    // F/K parameters modulated by structure layer\n    // F range: 0.035-0.042 (feed rate)\n    // K range: 0.058-0.068 (kill rate)\n    const float F = lowrisk_ar::clampf(\n        0.0380f + 0.0070f * (m_structure - 0.5f), 0.035f, 0.042f);\n    const float K = lowrisk_ar::clampf(\n        0.0630f + 0.0100f * (m_structure - 0.5f), 0.058f, 0.068f);\n\n    const float Du = 1.0f;\n    const float Dv = 0.5f;\n\n    // Time step: faster at higher speed + structure, stable range\n    const float dt = lowrisk_ar::clampf(\n        (0.9f + 0.6f * speedNorm + 0.3f * m_structure) * mod.motionRate, 0.7f, 2.2f);\n\n    // Beat impact: inject V concentration at centre seed region\n    if (m_impact > 0.05f) {\n        const int mid = STRIP_LENGTH / 2;\n        const float injectAmount = m_impact * 0.15f;\n        for (int i = mid - 5; i <= mid + 5; i++) {\n            if (i >= 0 && i < STRIP_LENGTH) {\n                m_ps->v[i] = lowrisk_ar::clamp01f(m_ps->v[i] + injectAmount);\n            }\n        }\n    }\n\n    // Do 1-2 iterations per frame depending on speed (keeps cost bounded)\n    const int iters = (speedNorm > 0.55f) ? 2 : 1;\n\n    for (int iter = 0; iter < iters; iter++) {\n        for (int i = 0; i < STRIP_LENGTH; i++) {\n            const int im1 = (i == 0) ? 0 : (i - 1);\n            const int ip1 = (i == STRIP_LENGTH - 1) ? (STRIP_LENGTH - 1) : (i + 1);\n\n            // 1D Laplacian (stable for this use)\n            const float lapU = m_ps->u[im1] - 2.0f * m_ps->u[i] + m_ps->u[ip1];\n            const float lapV = m_ps->v[im1] - 2.0f * m_ps->v[i] + m_ps->v[ip1];\n\n            const float u = m_ps->u[i];\n            const float v = m_ps->v[i];\n\n            // Gray-Scott reaction term (u*v^2) and feed/kill\n            const float uvv = u * v * v;\n\n            m_ps->u2[i] = u + (Du * lapU - uvv + F * (1.0f - u)) * dt;\n            m_ps->v2[i] = v + (Dv * lapV + uvv - (K + F) * v) * dt;\n\n            m_ps->u2[i] = clamp01(m_ps->u2[i]);\n            m_ps->v2[i] = clamp01(m_ps->v2[i]);\n        }\n\n        for (int i = 0; i < STRIP_LENGTH; i++) {\n            m_ps->u[i] = m_ps->u2[i];\n            m_ps->v[i] = m_ps->v2[i];\n        }\n    }\n\n    // =================================================================\n    // PER-PIXEL RENDER WITH 5-LAYER COMPOSITION\n    // =================================================================\n\n    const float mid = (STRIP_LENGTH - 1) * 0.5f;\n    const float bedBright = 0.20f + 0.80f * m_bed;\n    const float master = (ctx.brightness / 255.0f)\n                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        const float x = static_cast<float>(i);\n        const float dist = static_cast<float>(centerPairDistance(static_cast<uint16_t>(i)));\n\n        const float dmid = x - mid;\n        const float melt = expf(-(dmid * dmid) * 0.0018f);\n\n        const float v = m_ps->v[i];\n\n        // Bed x structured geometry: V concentration with centre melt glue\n        float structuredGeom = v * melt + 0.25f * v;\n\n        // Impact: additive spike at centre region\n        float impactAdd = m_impact * melt * 0.30f;\n\n        // Memory: gentle additive glow from accumulated activity\n        float memoryAdd = m_memory * (0.5f + 0.5f * v) * 0.15f;\n\n        // Compose: bed x structure + impact + memory\n        float brightness = bedBright * structuredGeom + impactAdd + memoryAdd;\n        brightness = clamp01(brightness);\n\n        const uint8_t br = luminanceToBr(brightness, master);\n\n        // Tonal hue: chord-driven anchor + spatial offset + V-driven tonal range\n        const uint8_t hue = static_cast<uint8_t>(\n            m_ar.tonalHue + dist * 0.6f + v * 180.0f + sig.harmonic * 15.0f);\n\n        writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));\n    }\n\n    lightwaveos::effects::cinema::apply(ctx, speedNorm);\n    m_t += 1.0f;\n}\n\n// =========================================================================\n// cleanup / metadata / parameters\n// =========================================================================\n\nvoid LGPReactionDiffusionAREffect::cleanup() {\n    if (m_ps) {\n        heap_caps_free(m_ps);\n        m_ps = nullptr;\n    }\n}\n\nconst plugins::EffectMetadata& LGPReactionDiffusionAREffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Reaction Diffusion (5L-AR)\",\n        \"Gray-Scott slime with 5-layer audio-reactive composition\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\nuint8_t LGPReactionDiffusionAREffect::getParameterCount() const {\n    return lowrisk_ar::Ar16Controls::parameterCount();\n}\n\nconst plugins::EffectParameter* LGPReactionDiffusionAREffect::getParameter(uint8_t index) const {\n    return lowrisk_ar::Ar16Controls::parameter(index);\n}\n\nbool LGPReactionDiffusionAREffect::setParameter(const char* name, float value) {\n    return m_controls.set(name, value);\n}\n\nfloat LGPReactionDiffusionAREffect::getParameter(const char* name) const {\n    return m_controls.get(name);\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

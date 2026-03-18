@@ -1,0 +1,134 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-03-18T01:14:51Z",
+  "firmwareSourceHash": "25d1555df9030ad0f3db4c6565c25fec023f8cb74c6e74182e4a1a0db91afb2e",
+  "effectId": "EID_LGP_TALBOT_CARPET_AR",
+  "effectIdHex": "0x1C02",
+  "className": "LGPTalbotCarpetAREffect",
+  "displayName": "LGP Talbot Carpet (5L-AR)",
+  "headerPath": "firmware-v3/src/effects/ieffect/LGPTalbotCarpetAREffect.h",
+  "sourcePath": "firmware-v3/src/effects/ieffect/LGPTalbotCarpetAREffect.cpp",
+  "renderRange": [
+    81,
+    211
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        81,
+        95
+      ]
+    ],
+    "mapping": [
+      [
+        85,
+        85
+      ],
+      [
+        103,
+        103
+      ],
+      [
+        105,
+        105
+      ],
+      [
+        126,
+        126
+      ],
+      [
+        148,
+        149
+      ],
+      [
+        154,
+        154
+      ],
+      [
+        157,
+        157
+      ],
+      [
+        184,
+        184
+      ],
+      [
+        210,
+        210
+      ]
+    ],
+    "modulation": [
+      [
+        99,
+        99
+      ],
+      [
+        102,
+        102
+      ],
+      [
+        105,
+        105
+      ],
+      [
+        107,
+        108
+      ],
+      [
+        153,
+        153
+      ],
+      [
+        156,
+        156
+      ],
+      [
+        180,
+        182
+      ],
+      [
+        192,
+        192
+      ]
+    ],
+    "render": [
+      [
+        155,
+        155
+      ],
+      [
+        168,
+        168
+      ],
+      [
+        178,
+        178
+      ],
+      [
+        207,
+        207
+      ]
+    ],
+    "post": [
+      [
+        186,
+        188
+      ]
+    ],
+    "output": [
+      [
+        134,
+        134
+      ],
+      [
+        168,
+        168
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPTalbotCarpetAREffect.cpp\n * @brief Talbot Carpet (5-Layer Audio-Reactive)\n *\n * Fresnel self-imaging lattice with full 5-layer AR composition.\n * The Talbot effect produces periodic revivals of a grating pattern at\n * rational fractions of the Talbot distance — here driven by audio layers\n * that modulate grating pitch, propagation depth, and self-image locking.\n *\n * Centre-origin compliant. Dual-strip locked.\n */\n\n#include \"LGPTalbotCarpetAREffect.h\"\n#include \"LGPFilmPost.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\n// =========================================================================\n// Local helpers\n// =========================================================================\n\nstatic constexpr float kTau = 6.28318530717958647692f;\nstatic constexpr uint8_t kMaxTalbotHarmonics = 7;\nstatic constexpr float kHarmonicOrder[kMaxTalbotHarmonics] = {\n    1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f\n};\nstatic constexpr float kHarmonicInv[kMaxTalbotHarmonics] = {\n    1.0f, 0.5f, 0.3333333f, 0.25f, 0.2f, 0.1666667f, 0.14285715f\n};\n\nstatic inline float fract(float x) { return x - floorf(x); }\n\nstatic inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRGB& c) {\n    ctx.leds[i] = c;\n    int j = i + STRIP_LENGTH;\n    if (j < (int)ctx.ledCount) ctx.leds[j] = c;\n}\n\nstatic inline uint8_t luminanceToBr(float wave01, float master) {\n    const float base = 0.06f;\n    float out = lowrisk_ar::clamp01f(base + (1.0f - base) * lowrisk_ar::clamp01f(wave01)) * master;\n    return static_cast<uint8_t>(255.0f * out);\n}\n\n// =========================================================================\n// Construction / init / cleanup\n// =========================================================================\n\nLGPTalbotCarpetAREffect::LGPTalbotCarpetAREffect()\n    : m_t(0.0f)\n    , m_bed(0.3f)\n    , m_structure(0.5f)\n    , m_impact(0.0f)\n    , m_memory(0.0f)\n{\n}\n\nbool LGPTalbotCarpetAREffect::init(plugins::EffectContext& ctx) {\n    m_controls.resetDefaults();\n    m_ar = lowrisk_ar::ArRuntimeState{};\n    m_ar.tonalHue = static_cast<float>(ctx.gHue);\n    m_ar.modeSmooth = 2.0f;\n    m_t         = 0.0f;\n    m_bed       = 0.3f;\n    m_structure = 0.5f;\n    m_impact    = 0.0f;\n    m_memory    = 0.0f;\n    lightwaveos::effects::cinema::reset();\n    return true;\n}\n\n// =========================================================================\n// render() -- 5-Layer composition\n// =========================================================================\n\nvoid LGPTalbotCarpetAREffect::render(plugins::EffectContext& ctx) {\n    // --- Timing ---\n    const float dtSignal = AudioReactivePolicy::signalDt(ctx);\n    const float dtVisual = AudioReactivePolicy::visualDt(ctx);\n    const float speedNorm = ctx.speed / 50.0f;\n\n    // --- Signals (shared infrastructure handles presence gate + fallback) ---\n    const lowrisk_ar::ArSignalSnapshot sig =\n        lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);\n    const lowrisk_ar::ArModulationProfile mod =\n        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);\n    m_ar.tonalHue = mod.baseHue;\n\n    // =================================================================\n    // LAYER UPDATES\n    // =================================================================\n\n    // Bed: low-contrast carpet luminance from RMS (tau 0.45s)\n    m_bed = lowrisk_ar::smoothTo(m_bed,\n        0.20f + 0.80f * sig.rms, dtSignal, 0.45f);\n\n    // Structure: phase warp from rhythmicSaliency, pitch from mid (tau 0.18s)\n    const float structTarget = lowrisk_ar::clamp01f(\n        0.30f + 0.30f * sig.rhythmic + 0.25f * sig.mid + 0.15f * sig.harmonic);\n    m_structure = lowrisk_ar::smoothTo(m_structure, structTarget, dtSignal, 0.18f);\n\n    // Impact: downbeat self-image lock pulse (fast attack, decay 0.25s)\n    if (sig.beatTick) m_impact = fmaxf(m_impact, 0.90f);\n    m_impact = lowrisk_ar::decay(m_impact, dtSignal, 0.25f);\n\n    // Memory: slow retention of last image clarity\n    m_memory = lowrisk_ar::clamp01f(\n        lowrisk_ar::decay(m_memory, dtSignal, 0.95f)\n        + 0.08f * m_impact + 0.04f * sig.harmonic);\n    lowrisk_ar::applyBedImpactMemoryMix(\n        m_controls,\n        static_cast<float>(ctx.rawTotalTimeMs),\n        m_bed,\n        m_impact,\n        m_memory);\n\n    // =================================================================\n    // MOTION\n    // =================================================================\n\n    const float tRate = (1.10f + 4.20f * speedNorm) * mod.motionRate\n                        * (0.70f + 0.30f * m_structure);\n    m_t += tRate * dtVisual;\n\n    // =================================================================\n    // EFFECT GEOMETRY -- Fresnel harmonic sum (Talbot self-imaging)\n    // =================================================================\n\n    const float mid    = (STRIP_LENGTH - 1) * 0.5f;\n    const float invMid = 1.0f / mid;\n\n    // Grating pitch driven by structure layer (6..22 px range)\n    const float p = lowrisk_ar::clampf(10.0f - 4.0f * m_structure, 6.0f, 22.0f);\n\n    // Propagation depth: time + impact triggers self-image lock\n    const float z = m_t + 0.45f * m_impact;\n\n    // Lock pulse: peaks near rational Talbot fractions, driven by impact\n    const float lockPulse = expf(-fabsf(fract(z * 0.09f) - 0.5f) * 7.5f) * m_impact;\n\n    // Adaptive harmonic budget keeps cost bounded at high-speed scenes.\n    int harmonicCount = 4 + static_cast<int>(3.0f * mod.motionDepth + 0.5f);\n    if (speedNorm > 1.25f) harmonicCount -= 1;\n    if (speedNorm > 1.70f) harmonicCount -= 1;\n    harmonicCount = static_cast<int>(lowrisk_ar::clampf(static_cast<float>(harmonicCount), 3.0f, static_cast<float>(kMaxTalbotHarmonics)));\n\n    const float phiBase = kTau / p;\n    float zPhase[kMaxTalbotHarmonics];\n    float harmonicNorm = 0.0f;\n    for (int k = 0; k < harmonicCount; k++) {\n        zPhase[k] = (kHarmonicOrder[k] * kHarmonicOrder[k]) * z * 0.55f;\n        harmonicNorm += kHarmonicInv[k];\n    }\n\n    // =================================================================\n    // PER-PIXEL RENDER\n    // =================================================================\n\n    const float bedBright = 0.25f + 0.75f * m_bed;\n    const float master = (ctx.brightness / 255.0f)\n                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        const float dmid  = static_cast<float>(i) - mid;\n        const float distN = fabsf(dmid) * invMid;\n\n        // Centre glue (Gaussian fall-off from centre)\n        const float glue = 0.35f + 0.65f * expf(-(dmid * dmid) * 0.0016f);\n\n        // Fresnel harmonic sum with adaptive order under load.\n        const float phi = static_cast<float>(i) * phiBase;\n        float sumC = 0.0f, sumS = 0.0f;\n        for (int k = 0; k < harmonicCount; k++) {\n            const float ak = kHarmonicInv[k];\n            const float phase = kHarmonicOrder[k] * phi + zPhase[k];\n            sumC += ak * cosf(phase);\n            sumS += ak * sinf(phase);\n        }\n        const float amp = sqrtf(sumC * sumC + sumS * sumS) / (harmonicNorm + 1e-6f);\n\n        // Structured amplitude with edge fade\n        const float ampGamma = lowrisk_ar::lerpf(1.85f, 1.45f, mod.motionDepth);\n        const float structuredAmp = powf(lowrisk_ar::clamp01f(amp), ampGamma)\n                                  * lowrisk_ar::lerpf(1.0f, 0.82f, distN);\n\n        // Impact: additive lock pulse\n        const float impactAdd = lockPulse * (0.24f + 0.24f * mod.beatAccent);\n\n        // Memory: gentle retention glow modulated by local amplitude\n        const float memoryAdd = m_memory * amp * 0.16f;\n\n        // Compose: bed x structure + impact + memory\n        float brightness = bedBright * structuredAmp + impactAdd + memoryAdd;\n        brightness = lowrisk_ar::clamp01f(brightness);\n\n        const uint8_t br = luminanceToBr(brightness * glue, master);\n\n        // Tonal hue: chord-driven + spatial offset + harmonic shimmer\n        const uint8_t hue = static_cast<uint8_t>(\n            m_ar.tonalHue + distN * 22.0f + sig.harmonic * 34.0f);\n\n        writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));\n    }\n\n    lightwaveos::effects::cinema::apply(ctx, speedNorm, lightwaveos::effects::cinema::QualityPreset::LIGHTWEIGHT);\n}\n\n// =========================================================================\n// cleanup / metadata / parameters\n// =========================================================================\n\nvoid LGPTalbotCarpetAREffect::cleanup() {}\n\nconst plugins::EffectMetadata& LGPTalbotCarpetAREffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Talbot Carpet (5L-AR)\",\n        \"Self-imaging lattice with 5-layer audio-reactive composition\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\nuint8_t LGPTalbotCarpetAREffect::getParameterCount() const {\n    return lowrisk_ar::Ar16Controls::parameterCount();\n}\n\nconst plugins::EffectParameter* LGPTalbotCarpetAREffect::getParameter(uint8_t index) const {\n    return lowrisk_ar::Ar16Controls::parameter(index);\n}\n\nbool LGPTalbotCarpetAREffect::setParameter(const char* name, float value) {\n    return m_controls.set(name, value);\n}\n\nfloat LGPTalbotCarpetAREffect::getParameter(const char* name) const {\n    return m_controls.get(name);\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

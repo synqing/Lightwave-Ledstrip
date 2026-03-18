@@ -1,0 +1,118 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-03-18T01:14:51Z",
+  "firmwareSourceHash": "25d1555df9030ad0f3db4c6565c25fec023f8cb74c6e74182e4a1a0db91afb2e",
+  "effectId": "EID_LGP_SCHLIEREN_FLOW_AR",
+  "effectIdHex": "0x1C01",
+  "className": "LGPSchlierenFlowAREffect",
+  "displayName": "LGP Schlieren Flow (5L-AR)",
+  "headerPath": "firmware-v3/src/effects/ieffect/LGPSchlierenFlowAREffect.h",
+  "sourcePath": "firmware-v3/src/effects/ieffect/LGPSchlierenFlowAREffect.cpp",
+  "renderRange": [
+    55,
+    197
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        86,
+        86
+      ],
+      [
+        91,
+        91
+      ]
+    ],
+    "mapping": [
+      [
+        59,
+        59
+      ],
+      [
+        77,
+        77
+      ],
+      [
+        79,
+        79
+      ],
+      [
+        110,
+        110
+      ]
+    ],
+    "modulation": [
+      [
+        72,
+        73
+      ],
+      [
+        78,
+        79
+      ],
+      [
+        81,
+        82
+      ],
+      [
+        95,
+        95
+      ],
+      [
+        98,
+        98
+      ],
+      [
+        165,
+        165
+      ]
+    ],
+    "render": [
+      [
+        139,
+        139
+      ],
+      [
+        191,
+        191
+      ],
+      [
+        194,
+        194
+      ]
+    ],
+    "post": [
+      [
+        180,
+        189
+      ]
+    ],
+    "output": [
+      [
+        129,
+        129
+      ],
+      [
+        139,
+        139
+      ],
+      [
+        185,
+        185
+      ],
+      [
+        191,
+        192
+      ],
+      [
+        194,
+        194
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPSchlierenFlowAREffect.cpp\n * @brief Schlieren Flow (5-Layer Audio-Reactive)\n *\n * Knife-edge gradient flow with full 5-layer AR composition.\n * Base maths from the lowrisk_ar LGPSchlierenFlowEffect, restructured into\n * explicit bed/structure/impact/tonal/memory layers.\n *\n * Centre-origin compliant. Dual-strip with independent hue/brightness offsets.\n */\n\n#include \"LGPSchlierenFlowAREffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\n// =========================================================================\n// Construction / init / cleanup\n// =========================================================================\n\nLGPSchlierenFlowAREffect::LGPSchlierenFlowAREffect()\n    : m_t(0.0f)\n    , m_bed(0.3f)\n    , m_structure(0.5f)\n    , m_impact(0.0f)\n    , m_snareImpact(0.0f)\n    , m_hihatImpact(0.0f)\n    , m_memory(0.0f)\n{\n}\n\nbool LGPSchlierenFlowAREffect::init(plugins::EffectContext& ctx) {\n    m_controls.resetDefaults();\n    m_ar = lowrisk_ar::ArRuntimeState{};\n    m_ar.tonalHue = static_cast<float>(ctx.gHue);\n    m_ar.modeSmooth = 2.0f;\n    m_t           = 0.0f;\n    m_bed         = 0.3f;\n    m_structure   = 0.5f;\n    m_impact      = 0.0f;\n    m_snareImpact = 0.0f;\n    m_hihatImpact = 0.0f;\n    m_memory      = 0.0f;\n    return true;\n}\n\n// =========================================================================\n// render() -- 5-Layer composition\n// =========================================================================\n\nvoid LGPSchlierenFlowAREffect::render(plugins::EffectContext& ctx) {\n    // --- Timing ---\n    const float dtSignal = AudioReactivePolicy::signalDt(ctx);\n    const float dtVisual = AudioReactivePolicy::visualDt(ctx);\n    const float speedNorm = ctx.speed / 50.0f;\n\n    // --- Signals (shared infrastructure handles presence gate + fallback) ---\n    const lowrisk_ar::ArSignalSnapshot sig =\n        lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);\n    const lowrisk_ar::ArModulationProfile mod =\n        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);\n    m_ar.tonalHue = mod.baseHue;\n\n    // =================================================================\n    // LAYER UPDATES\n    // =================================================================\n\n    // Bed: smooth haze from RMS (tau 0.50s)\n    m_bed = lowrisk_ar::smoothTo(m_bed,\n        0.20f + 0.80f * sig.rms, dtSignal, 0.50f);\n\n    // Structure: gradient slope from bass, edge sharpening from treble (tau 0.12s)\n    const float structTarget = lowrisk_ar::clamp01f(\n        0.30f + 0.35f * sig.bass + 0.15f * sig.treble + 0.20f * sig.flux);\n    m_structure = lowrisk_ar::smoothTo(m_structure, structTarget, dtSignal, 0.12f);\n\n    // Impact: beat-triggered burst (decay 0.18s)\n    if (sig.beatTick) m_impact = fmaxf(m_impact, 0.85f);\n    m_impact = lowrisk_ar::decay(m_impact, dtSignal, 0.18f);\n\n    // Hihat: fast edge-intensity pop (decay 0.15s)\n    if (ctx.audio.available && ctx.audio.isHihatHit())\n        m_hihatImpact = fmaxf(m_hihatImpact, 0.75f);\n    m_hihatImpact = lowrisk_ar::decay(m_hihatImpact, dtSignal, 0.15f);\n\n    // Snare: separate envelope (decay 0.22s)\n    if (ctx.audio.available && ctx.audio.isSnareHit())\n        m_snareImpact = fmaxf(m_snareImpact, 0.70f);\n    m_snareImpact = lowrisk_ar::decay(m_snareImpact, dtSignal, 0.22f);\n\n    // Memory: turbulence persistence after hits (slow decay, fed by impact + flux)\n    m_memory = lowrisk_ar::clamp01f(\n        lowrisk_ar::decay(m_memory, dtSignal, 0.85f)\n        + 0.10f * m_impact + 0.08f * m_hihatImpact + 0.04f * sig.flux);\n    lowrisk_ar::applyBedImpactMemoryMix(\n        m_controls,\n        static_cast<float>(ctx.rawTotalTimeMs),\n        m_bed,\n        m_impact,\n        m_memory);\n\n    // =================================================================\n    // MOTION\n    // =================================================================\n\n    const float flowRate = (1.45f + 8.40f * speedNorm) * mod.motionRate\n                           * (0.70f + 0.30f * m_structure);\n    m_t += flowRate * dtVisual;\n\n    // =================================================================\n    // SCHLIEREN GEOMETRY DRIVEN BY LAYERS\n    // =================================================================\n\n    // Spatial frequencies modulated by structure\n    const float f1 = 0.060f * (1.0f + 0.16f * m_structure);\n    const float f2 = 0.145f * (1.0f + 0.14f * m_structure);\n    const float f3 = 0.310f * (1.0f + 0.18f * m_structure);\n\n    // Edge gain: structure sharpens edges, hihat pops\n    const float edgeGain = 6.0f + 3.0f * m_structure + 2.5f * m_hihatImpact;\n\n    // Turbulence: structure + memory drive distortion\n    const float turbulence = m_structure * 0.45f + m_memory * 0.30f;\n\n    const float midPos = (STRIP_LENGTH - 1) * 0.5f;\n\n    // =================================================================\n    // PER-PIXEL RENDER\n    // =================================================================\n\n    const float bedBright = 0.25f + 0.75f * m_bed;\n    const float master = (ctx.brightness / 255.0f)\n                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        const float x = static_cast<float>(i);\n        const float dist = static_cast<float>(centerPairDistance(static_cast<uint16_t>(i)));\n        const float distN = dist / static_cast<float>(HALF_LENGTH);\n        const float dmid = x - midPos;\n\n        // Knife-edge gradient flow (original Schlieren physics)\n        float rho =\n            sinf(x * f1 + m_t)\n            + 0.7f * sinf(x * f2 - m_t * 1.2f)\n            + 0.3f * sinf(x * f3 + m_t * 2.1f + turbulence * 2.0f);\n\n        float grad =\n            f1 * cosf(x * f1 + m_t)\n            + 0.7f * f2 * cosf(x * f2 - m_t * 1.2f)\n            + 0.3f * f3 * cosf(x * f3 + m_t * 2.1f);\n\n        float edge = 0.5f + 0.5f * tanhf(grad * edgeGain);\n\n        // Centre glue\n        const float melt = expf(-(dmid * dmid) * 0.0028f);\n\n        // Structured edge: blend edge*melt with softer sinusoidal fill\n        float structuredEdge = 0.65f * (edge * melt + 0.25f * melt)\n                             + 0.35f * (0.5f + 0.5f * sinf(rho));\n\n        // Impact: hihat/snare/beat pops at edge positions\n        float impactAdd = m_impact * edge * 0.30f\n                        + m_hihatImpact * edge * 0.25f\n                        + m_snareImpact * edge * 0.18f;\n\n        // Memory: gentle turbulence persistence at centre\n        float memoryAdd = m_memory * melt * 0.14f;\n\n        // Compose: bed x structure + impact + memory\n        float brightness = bedBright * structuredEdge + impactAdd + memoryAdd;\n        brightness = lowrisk_ar::clamp01f(brightness);\n\n        const float base = 0.06f;\n        const float out = lowrisk_ar::clamp01f(base + (1.0f - base) * brightness) * master;\n        const uint8_t brA = static_cast<uint8_t>(255.0f * out);\n\n        // Tonal hue: chord-driven with spatial offset (no ambient blend)\n        const uint8_t hueA = static_cast<uint8_t>(\n            m_ar.tonalHue + distN * 18.0f + sig.harmonic * 32.0f);\n\n        // Strip B: slight hue and brightness offset\n        const uint8_t hueB = static_cast<uint8_t>(\n            hueA + 5u + static_cast<uint8_t>(sig.rhythmic * 4.0f));\n        const uint8_t brB = scale8_video(brA,\n            static_cast<uint8_t>(240 + static_cast<uint8_t>(sig.treble * 10.0f)));\n\n        ctx.leds[i] = ctx.palette.getColor(hueA, brA);\n        const int j = i + STRIP_LENGTH;\n        if (j < ctx.ledCount) {\n            ctx.leds[j] = ctx.palette.getColor(hueB, brB);\n        }\n    }\n}\n\n// =========================================================================\n// cleanup / metadata / parameters\n// =========================================================================\n\nvoid LGPSchlierenFlowAREffect::cleanup() {}\n\nconst plugins::EffectMetadata& LGPSchlierenFlowAREffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Schlieren Flow (5L-AR)\",\n        \"Knife-edge gradient flow with 5-layer audio-reactive composition\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\nuint8_t LGPSchlierenFlowAREffect::getParameterCount() const {\n    return lowrisk_ar::Ar16Controls::parameterCount();\n}\n\nconst plugins::EffectParameter* LGPSchlierenFlowAREffect::getParameter(uint8_t index) const {\n    return lowrisk_ar::Ar16Controls::parameter(index);\n}\n\nbool LGPSchlierenFlowAREffect::setParameter(const char* name, float value) {\n    return m_controls.set(name, value);\n}\n\nfloat LGPSchlierenFlowAREffect::getParameter(const char* name) const {\n    return m_controls.get(name);\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

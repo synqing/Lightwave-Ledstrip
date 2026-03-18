@@ -1,0 +1,126 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-03-18T01:14:51Z",
+  "firmwareSourceHash": "25d1555df9030ad0f3db4c6565c25fec023f8cb74c6e74182e4a1a0db91afb2e",
+  "effectId": "EID_LGP_CYMATIC_LADDER_AR",
+  "effectIdHex": "0x1C04",
+  "className": "LGPCymaticLadderAREffect",
+  "displayName": "LGP Cymatic Ladder (5L-AR)",
+  "headerPath": "firmware-v3/src/effects/ieffect/LGPCymaticLadderAREffect.h",
+  "sourcePath": "firmware-v3/src/effects/ieffect/LGPCymaticLadderAREffect.cpp",
+  "renderRange": [
+    75,
+    196
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        75,
+        88
+      ]
+    ],
+    "mapping": [
+      [
+        79,
+        79
+      ],
+      [
+        97,
+        97
+      ],
+      [
+        99,
+        99
+      ],
+      [
+        114,
+        115
+      ],
+      [
+        119,
+        120
+      ],
+      [
+        135,
+        135
+      ],
+      [
+        147,
+        147
+      ],
+      [
+        195,
+        195
+      ]
+    ],
+    "modulation": [
+      [
+        93,
+        93
+      ],
+      [
+        99,
+        99
+      ],
+      [
+        101,
+        102
+      ],
+      [
+        119,
+        120
+      ],
+      [
+        123,
+        123
+      ],
+      [
+        146,
+        147
+      ],
+      [
+        170,
+        171
+      ],
+      [
+        174,
+        174
+      ]
+    ],
+    "render": [
+      [
+        162,
+        162
+      ],
+      [
+        192,
+        192
+      ]
+    ],
+    "post": [
+      [
+        101,
+        101
+      ],
+      [
+        174,
+        174
+      ]
+    ],
+    "output": [
+      [
+        143,
+        143
+      ],
+      [
+        162,
+        163
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPCymaticLadderAREffect.cpp\n * @brief Cymatic Ladder (5-Layer Audio-Reactive)\n *\n * Standing-wave modes with full 5-layer AR composition. The harmonic mode\n * number n (2-8) is driven by structure + harmonic content with hysteresis\n * to prevent rapid mode jumps. Antinode blooms on beat; memory holds mode\n * persistence for organic transitions between standing-wave patterns.\n *\n * Centre-origin compliant. Dual-strip locked.\n */\n\n#include \"LGPCymaticLadderAREffect.h\"\n#include \"LGPFilmPost.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\n// =========================================================================\n// Local helpers\n// =========================================================================\n\nstatic constexpr float kPi  = 3.14159265358979323846f;\nstatic constexpr float kTau = 6.28318530717958647692f;\n\nstatic inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRGB& c) {\n    ctx.leds[i] = c;\n    int j = i + STRIP_LENGTH;\n    if (j < (int)ctx.ledCount) ctx.leds[j] = c;\n}\n\nstatic inline uint8_t luminanceToBr(float wave01, float master) {\n    const float base = 0.06f;\n    float out = lowrisk_ar::clamp01f(base + (1.0f - base) * lowrisk_ar::clamp01f(wave01)) * master;\n    return static_cast<uint8_t>(255.0f * out);\n}\n\n// =========================================================================\n// Construction / init / cleanup\n// =========================================================================\n\nLGPCymaticLadderAREffect::LGPCymaticLadderAREffect()\n    : m_t(0.0f)\n    , m_bed(0.3f)\n    , m_structure(0.5f)\n    , m_impact(0.0f)\n    , m_memory(0.0f)\n    , m_modeSmooth(2.0f)\n{\n}\n\nbool LGPCymaticLadderAREffect::init(plugins::EffectContext& ctx) {\n    m_controls.resetDefaults();\n    m_ar = lowrisk_ar::ArRuntimeState{};\n    m_ar.tonalHue = static_cast<float>(ctx.gHue);\n    m_ar.modeSmooth = 2.0f;\n    m_t         = 0.0f;\n    m_bed       = 0.3f;\n    m_structure = 0.5f;\n    m_impact    = 0.0f;\n    m_memory    = 0.0f;\n    m_modeSmooth = 2.0f;\n    lightwaveos::effects::cinema::reset();\n    return true;\n}\n\n// =========================================================================\n// render() -- 5-Layer composition\n// =========================================================================\n\nvoid LGPCymaticLadderAREffect::render(plugins::EffectContext& ctx) {\n    // --- Timing ---\n    const float dtSignal = AudioReactivePolicy::signalDt(ctx);\n    const float dtVisual = AudioReactivePolicy::visualDt(ctx);\n    const float speedNorm = ctx.speed / 50.0f;\n\n    // --- Signals (shared infrastructure handles presence gate + fallback) ---\n    const lowrisk_ar::ArSignalSnapshot sig =\n        lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);\n    const lowrisk_ar::ArModulationProfile mod =\n        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);\n    m_ar.tonalHue = mod.baseHue;\n\n    // =================================================================\n    // LAYER UPDATES\n    // =================================================================\n\n    // Bed: standing-wave body brightness from RMS (tau 0.48s)\n    m_bed = lowrisk_ar::smoothTo(m_bed,\n        0.25f + 0.75f * sig.rms, dtSignal, 0.48f);\n\n    // Structure: mode selection from harmonic + rhythmic + RMS (tau 0.18s)\n    const float structTarget = lowrisk_ar::clamp01f(\n        0.30f + 0.30f * sig.harmonic + 0.25f * sig.rhythmic + 0.15f * sig.rms);\n    m_structure = lowrisk_ar::smoothTo(m_structure, structTarget, dtSignal, 0.18f);\n\n    // Impact: antinode bloom on beat (fast attack, decay 0.22s)\n    if (sig.beatTick) m_impact = fmaxf(m_impact, 0.88f);\n    m_impact = lowrisk_ar::decay(m_impact, dtSignal, 0.22f);\n\n    // Memory: mode hold persistence (tau 1.10s, slow)\n    m_memory = lowrisk_ar::clamp01f(\n        lowrisk_ar::decay(m_memory, dtSignal, 1.10f)\n        + 0.09f * m_impact + 0.05f * sig.harmonic);\n\n    // =================================================================\n    // MODE SELECTION WITH HYSTERESIS\n    // =================================================================\n\n    // Mode target from harmonic content + structure (range 2..8)\n    const float modeTarget = 2.0f + 6.0f * lowrisk_ar::clamp01f(\n        0.10f + 0.58f * sig.harmonic + 0.32f * m_structure);\n\n    // Hysteresis: only update if delta exceeds threshold\n    if (fabsf(modeTarget - m_modeSmooth) > 0.14f) {\n        m_modeSmooth = lowrisk_ar::smoothTo(m_modeSmooth, modeTarget, dtSignal, 0.30f);\n    }\n    const int n = static_cast<int>(lowrisk_ar::clampf(\n        floorf(m_modeSmooth + 0.5f), 2.0f, 8.0f));\n    lowrisk_ar::applyBedImpactMemoryMix(\n        m_controls,\n        static_cast<float>(ctx.rawTotalTimeMs),\n        m_bed,\n        m_impact,\n        m_memory);\n\n    // =================================================================\n    // MOTION\n    // =================================================================\n\n    const float tRate = (1.10f + 4.20f * speedNorm) * mod.motionRate\n                        * (0.70f + 0.30f * m_structure);\n    m_t += tRate * dtVisual;\n\n    // =================================================================\n    // EFFECT GEOMETRY -- Standing wave with mode-aware composition\n    // =================================================================\n\n    const float mid    = (STRIP_LENGTH - 1) * 0.5f;\n    const float invMid = 1.0f / mid;\n\n    // Phase driven by structure layer\n    const float phase = m_t * (0.8f + 0.5f * speedNorm)\n                       * (0.85f + 0.15f * m_structure);\n\n    // Contrast exponent driven by structure + impact\n    const float contrastExp = lowrisk_ar::clampf(\n        1.8f + 0.8f * m_structure + 0.6f * m_impact, 1.4f, 3.4f);\n\n    // =================================================================\n    // PER-PIXEL RENDER\n    // =================================================================\n\n    const float bedBright = 0.25f + 0.75f * m_bed;\n    const float master = (ctx.brightness / 255.0f)\n                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        const float x     = static_cast<float>(i) / static_cast<float>(STRIP_LENGTH - 1);\n        const float dmid  = static_cast<float>(i) - mid;\n        const float distN = fabsf(dmid) * invMid;\n\n        // Centre glue (Gaussian fall-off from centre)\n        const float glue = 0.30f + 0.70f * expf(-(dmid * dmid) * 0.0016f);\n\n        // Standing wave: sin(n * pi * x + phase)\n        const float s = fabsf(sinf(static_cast<float>(n) * kPi * x + phase));\n        const float structuredWave = powf(s, contrastExp);\n\n        // Impact: antinode bloom on beat (additive at antinode positions)\n        const float antinodeStrength = powf(s, 1.2f);\n        const float impactAdd = m_impact * antinodeStrength * 0.32f;\n\n        // Memory: gentle persistent glow\n        const float memoryAdd = m_memory * s * 0.15f;\n\n        // Compose: bed x structure + impact + memory\n        float brightness = bedBright * structuredWave * glue + impactAdd + memoryAdd;\n        brightness = lowrisk_ar::clamp01f(brightness);\n\n        const uint8_t br = luminanceToBr(brightness, master);\n\n        // Tonal hue: mode-aware chord hue with spatial offset\n        const uint8_t hue = static_cast<uint8_t>(\n            m_ar.tonalHue + static_cast<float>(n) * 8.0f\n            + sig.harmonic * 36.0f + distN * 12.0f);\n\n        writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));\n    }\n\n    lightwaveos::effects::cinema::apply(ctx, speedNorm);\n}\n\n// =========================================================================\n// cleanup / metadata / parameters\n// =========================================================================\n\nvoid LGPCymaticLadderAREffect::cleanup() {}\n\nconst plugins::EffectMetadata& LGPCymaticLadderAREffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Cymatic Ladder (5L-AR)\",\n        \"Standing-wave modes with 5-layer audio-reactive composition\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\nuint8_t LGPCymaticLadderAREffect::getParameterCount() const {\n    return lowrisk_ar::Ar16Controls::parameterCount();\n}\n\nconst plugins::EffectParameter* LGPCymaticLadderAREffect::getParameter(uint8_t index) const {\n    return lowrisk_ar::Ar16Controls::parameter(index);\n}\n\nbool LGPCymaticLadderAREffect::setParameter(const char* name, float value) {\n    return m_controls.set(name, value);\n}\n\nfloat LGPCymaticLadderAREffect::getParameter(const char* name) const {\n    return m_controls.get(name);\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

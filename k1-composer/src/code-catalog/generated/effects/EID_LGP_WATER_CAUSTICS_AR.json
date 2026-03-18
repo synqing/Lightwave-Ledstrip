@@ -1,0 +1,118 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-03-18T01:14:51Z",
+  "firmwareSourceHash": "25d1555df9030ad0f3db4c6565c25fec023f8cb74c6e74182e4a1a0db91afb2e",
+  "effectId": "EID_LGP_WATER_CAUSTICS_AR",
+  "effectIdHex": "0x1C00",
+  "className": "LGPWaterCausticsAREffect",
+  "displayName": "LGP Water Caustics (5L-AR)",
+  "headerPath": "firmware-v3/src/effects/ieffect/LGPWaterCausticsAREffect.h",
+  "sourcePath": "firmware-v3/src/effects/ieffect/LGPWaterCausticsAREffect.cpp",
+  "renderRange": [
+    58,
+    187
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        89,
+        89
+      ]
+    ],
+    "mapping": [
+      [
+        62,
+        62
+      ],
+      [
+        80,
+        80
+      ],
+      [
+        82,
+        82
+      ],
+      [
+        108,
+        108
+      ],
+      [
+        110,
+        110
+      ]
+    ],
+    "modulation": [
+      [
+        76,
+        76
+      ],
+      [
+        81,
+        82
+      ],
+      [
+        84,
+        85
+      ],
+      [
+        93,
+        93
+      ],
+      [
+        96,
+        96
+      ]
+    ],
+    "render": [
+      [
+        132,
+        132
+      ],
+      [
+        179,
+        179
+      ],
+      [
+        184,
+        184
+      ]
+    ],
+    "post": [
+      [
+        172,
+        180
+      ]
+    ],
+    "output": [
+      [
+        132,
+        132
+      ],
+      [
+        163,
+        163
+      ],
+      [
+        172,
+        172
+      ],
+      [
+        178,
+        179
+      ],
+      [
+        181,
+        182
+      ],
+      [
+        184,
+        184
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'post' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPWaterCausticsAREffect.cpp\n * @brief LGP Water Caustics (5-Layer AR) implementation\n *\n * Ray-envelope cusp filaments with 5-layer audio-reactive composition.\n * Base refractive maths preserved from the original LGPWaterCausticsEffect,\n * restructured so that bed/structure/impact/snare/memory layers drive the\n * physics coefficients directly rather than blendAmbientReactive.\n *\n * Centre-origin compliant. Dual-strip with per-strip hue/brightness offset.\n */\n\n#include \"LGPWaterCausticsAREffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\n// =========================================================================\n// Construction / init / cleanup\n// =========================================================================\n\nLGPWaterCausticsAREffect::LGPWaterCausticsAREffect()\n    : m_controls()\n    , m_ar()\n    , m_t1(0.0f)\n    , m_t2(0.0f)\n    , m_bed(0.3f)\n    , m_structure(0.5f)\n    , m_impact(0.0f)\n    , m_snareImpact(0.0f)\n    , m_memory(0.0f)\n{\n}\n\nbool LGPWaterCausticsAREffect::init(plugins::EffectContext& ctx) {\n    m_controls.resetDefaults();\n    m_ar = lowrisk_ar::ArRuntimeState{};\n    m_ar.tonalHue = static_cast<float>(ctx.gHue);\n    m_ar.modeSmooth = 2.0f;\n    m_t1          = 0.0f;\n    m_t2          = 0.0f;\n    m_bed         = 0.3f;\n    m_structure   = 0.5f;\n    m_impact      = 0.0f;\n    m_snareImpact = 0.0f;\n    m_memory      = 0.0f;\n    return true;\n}\n\n// =========================================================================\n// render() -- 5-Layer composition\n// =========================================================================\n\nvoid LGPWaterCausticsAREffect::render(plugins::EffectContext& ctx) {\n    // --- Timing ---\n    const float dtSignal = AudioReactivePolicy::signalDt(ctx);\n    const float dtVisual = AudioReactivePolicy::visualDt(ctx);\n    const float speedNorm = ctx.speed / 50.0f;\n\n    // --- Signals (shared infrastructure handles presence gate + fallback) ---\n    const lowrisk_ar::ArSignalSnapshot sig =\n        lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);\n    const lowrisk_ar::ArModulationProfile mod =\n        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);\n    m_ar.tonalHue = mod.baseHue;\n\n    // =================================================================\n    // LAYER UPDATES\n    // =================================================================\n\n    // Bed: slow caustic sheet brightness from RMS (tau 0.45s)\n    m_bed = lowrisk_ar::smoothTo(m_bed,\n        0.25f + 0.75f * sig.rms, dtSignal, 0.45f);\n\n    // Structure: modulates refractive field warp (A, B, k1, k2) (tau 0.12s)\n    const float structTarget = lowrisk_ar::clamp01f(\n        0.30f + 0.35f * sig.mid + 0.20f * sig.flux + 0.15f * sig.bass);\n    m_structure = lowrisk_ar::smoothTo(m_structure, structTarget, dtSignal, 0.12f);\n\n    // Impact: beat-triggered cusp gain burst (fast attack, decay 0.22s)\n    if (sig.beatTick) m_impact = fmaxf(m_impact, 0.85f);\n    m_impact = lowrisk_ar::decay(m_impact, dtSignal, 0.22f);\n\n    // Snare: separate fast transient envelope (decay 0.28s)\n    if (ctx.audio.available && ctx.audio.isSnareHit())\n        m_snareImpact = fmaxf(m_snareImpact, 0.65f);\n    m_snareImpact = lowrisk_ar::decay(m_snareImpact, dtSignal, 0.28f);\n\n    // Memory: lingering glint (slow decay, fed by impact + flux)\n    m_memory = lowrisk_ar::clamp01f(\n        lowrisk_ar::decay(m_memory, dtSignal, 0.90f)\n        + 0.10f * m_impact + 0.05f * sig.flux);\n    lowrisk_ar::applyBedImpactMemoryMix(\n        m_controls,\n        static_cast<float>(ctx.rawTotalTimeMs),\n        m_bed,\n        m_impact,\n        m_memory);\n\n    // =================================================================\n    // MOTION — two time accumulators modulated by structure layer\n    // =================================================================\n\n    const float t1Rate = (1.30f + 7.10f * speedNorm) * mod.motionRate\n                         * (0.70f + 0.30f * m_structure);\n    const float t2Rate = (0.80f + 4.80f * speedNorm) * mod.motionRate\n                         * (0.70f + 0.30f * m_structure);\n    m_t1 += t1Rate * dtVisual;\n    m_t2 += t2Rate * dtVisual;\n\n    // =================================================================\n    // REFRACTIVE COEFFICIENTS — driven by structure layer\n    // =================================================================\n\n    const float A  = 0.75f + 0.30f * m_structure;   // refractive amplitude\n    const float B  = 0.35f + 0.22f * m_structure;   // secondary amplitude\n    const float k1 = 0.18f * (1.0f + 0.25f * m_structure);  // wave number 1\n    const float k2 = 0.41f * (1.0f + 0.22f * m_structure);  // wave number 2\n\n    // =================================================================\n    // PER-PIXEL RENDER\n    // =================================================================\n\n    const float bedBright = 0.25f + 0.75f * m_bed;\n    const float master = (ctx.brightness / 255.0f)\n                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        const float dist  = static_cast<float>(centerPairDistance(static_cast<uint16_t>(i)));\n        const float distN = dist / static_cast<float>(HALF_LENGTH);\n\n        // Ray-envelope cusp filament maths (preserved from original)\n        const float y =\n            dist\n            + A * sinf(dist * k1 + m_t1)\n            + B * sinf(dist * k2 - m_t2 * 1.3f);\n\n        const float dydx =\n            1.0f\n            + A * k1 * cosf(dist * k1 + m_t1)\n            + B * k2 * cosf(dist * k2 - m_t2 * 1.3f);\n\n        float density = 1.0f / (0.20f + fabsf(dydx));\n        density = lowrisk_ar::clamp01f(density * 0.85f);\n\n        const float sheet = 0.5f + 0.5f * sinf(y * 0.22f + m_t2);\n\n        // Cusp detection: impact drives the bright caustic lines\n        const float cusp = expf(-fabsf(density - 0.90f) * 14.0f) * m_impact;\n\n        // 5-layer per-pixel composition\n        const float structuredDensity = 0.72f * density + 0.28f * sheet;\n        const float impactAdd = cusp * 0.45f + m_snareImpact * cusp * 0.25f;\n        const float memoryAdd = m_memory * density * 0.15f;\n\n        float brightness = bedBright * structuredDensity + impactAdd + memoryAdd;\n        brightness = lowrisk_ar::clamp01f(brightness);\n\n        // Output brightness with base floor\n        const float base = 0.08f;\n        const float out = lowrisk_ar::clamp01f(base + (1.0f - base) * brightness) * master;\n        const uint8_t brA = static_cast<uint8_t>(255.0f * out);\n\n        // Hue: purely tonal anchor + spatial offset (no ambient/reactive blend)\n        const uint8_t hueA = static_cast<uint8_t>(\n            m_ar.tonalHue + distN * 20.0f + density * 32.0f);\n\n        // Strip B: offset hue and brightness for depth\n        const uint8_t hueB = static_cast<uint8_t>(\n            hueA + 4u + static_cast<uint8_t>(sig.harmonic * 6.0f));\n        const uint8_t brB = scale8_video(brA,\n            static_cast<uint8_t>(239 + static_cast<uint8_t>(sig.bass * 12.0f)));\n\n        // Write strip A\n        ctx.leds[i] = ctx.palette.getColor(hueA, brA);\n\n        // Write strip B\n        const int j = i + STRIP_LENGTH;\n        if (j < ctx.ledCount) {\n            ctx.leds[j] = ctx.palette.getColor(hueB, brB);\n        }\n    }\n}\n\n// =========================================================================\n// cleanup / metadata / parameters\n// =========================================================================\n\nvoid LGPWaterCausticsAREffect::cleanup() {\n    // No resources to free (no PSRAM allocation)\n}\n\nconst plugins::EffectMetadata& LGPWaterCausticsAREffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Water Caustics (5L-AR)\",\n        \"Ray-envelope caustic filaments with 5-layer audio-reactive composition\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\nuint8_t LGPWaterCausticsAREffect::getParameterCount() const {\n    return lowrisk_ar::Ar16Controls::parameterCount();\n}\n\nconst plugins::EffectParameter* LGPWaterCausticsAREffect::getParameter(uint8_t index) const {\n    return lowrisk_ar::Ar16Controls::parameter(index);\n}\n\nbool LGPWaterCausticsAREffect::setParameter(const char* name, float value) {\n    return m_controls.set(name, value);\n}\n\nfloat LGPWaterCausticsAREffect::getParameter(const char* name) const {\n    return m_controls.get(name);\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

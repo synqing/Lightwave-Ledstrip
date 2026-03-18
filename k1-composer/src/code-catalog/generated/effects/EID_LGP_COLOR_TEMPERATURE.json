@@ -1,81 +1,110 @@
 {
   "schemaVersion": "2.0.0",
-  "generatedAtUtc": "2026-02-25T01:16:03Z",
-  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "generatedAtUtc": "2026-03-18T01:14:51Z",
+  "firmwareSourceHash": "25d1555df9030ad0f3db4c6565c25fec023f8cb74c6e74182e4a1a0db91afb2e",
   "effectId": "EID_LGP_COLOR_TEMPERATURE",
   "effectIdHex": "0x0700",
   "className": "LGPColorTemperatureEffect",
   "displayName": "LGP Color Temperature",
-  "headerPath": "firmware/v2/src/effects/ieffect/LGPColorTemperatureEffect.h",
-  "sourcePath": "firmware/v2/src/effects/ieffect/LGPColorTemperatureEffect.cpp",
+  "headerPath": "firmware-v3/src/effects/ieffect/LGPColorTemperatureEffect.h",
+  "sourcePath": "firmware-v3/src/effects/ieffect/LGPColorTemperatureEffect.cpp",
   "renderRange": [
-    19,
-    44
+    25,
+    69
   ],
   "phaseRanges": {
     "input": [
       [
-        19,
-        21
+        25,
+        29
       ]
     ],
     "mapping": [
       [
-        25,
-        25
+        37,
+        37
       ],
       [
-        31,
-        32
+        41,
+        41
       ],
       [
-        35,
-        36
+        48,
+        48
       ]
     ],
     "modulation": [
       [
-        26,
-        29
+        31,
+        31
+      ],
+      [
+        34,
+        34
+      ],
+      [
+        39,
+        40
+      ],
+      [
+        50,
+        50
       ]
     ],
     "render": [
       [
-        23,
-        23
+        26,
+        26
       ],
       [
-        39,
-        39
+        32,
+        32
       ],
       [
-        41,
-        41
+        36,
+        36
+      ],
+      [
+        43,
+        43
+      ],
+      [
+        54,
+        55
+      ],
+      [
+        60,
+        61
+      ],
+      [
+        66,
+        67
       ]
     ],
     "post": [
       [
-        41,
-        42
+        31,
+        32
       ]
     ],
     "output": [
       [
-        23,
-        23
+        57,
+        57
       ],
       [
-        39,
-        41
+        60,
+        61
+      ],
+      [
+        63,
+        67
       ]
     ]
   },
-  "mappingConfidence": "low",
+  "mappingConfidence": "medium",
   "mappingWarnings": [
-    "Phase inference used fallback segmentation due to sparse signal.",
-    "Phase 'input' inferred from fallback segmentation.",
-    "Phase 'modulation' inferred from fallback segmentation.",
-    "Phase 'post' inferred from fallback segmentation."
+    "Phase 'input' inferred from fallback segmentation."
   ],
-  "sourceText": "/**\n * @file LGPColorTemperatureEffect.cpp\n * @brief LGP Color Temperature effect implementation\n */\n\n#include \"LGPColorTemperatureEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nbool LGPColorTemperatureEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    return true;\n}\n\nvoid LGPColorTemperatureEffect::render(plugins::EffectContext& ctx) {\n    // Warm colors from edges meet cool colors at center, creating white\n    float intensity = ctx.brightness / 255.0f;\n\n    for (int i = 0; i < STRIP_LENGTH; i++) {\n        float distFromCenter = (float)centerPairDistance((uint16_t)i);\n        float normalizedDist = distFromCenter / (float)HALF_LENGTH;\n\n        CRGB warm, cool;\n\n        // Warm side (reds/oranges)\n        warm.r = 255;\n        warm.g = (uint8_t)(180.0f - normalizedDist * 100.0f);\n        warm.b = (uint8_t)(50.0f + normalizedDist * 50.0f);\n\n        // Cool side (blues/cyans)\n        cool.r = (uint8_t)(150.0f + normalizedDist * 50.0f);\n        cool.g = (uint8_t)(200.0f + normalizedDist * 55.0f);\n        cool.b = 255;\n\n        ctx.leds[i] = warm.scale8((uint8_t)(intensity * 255.0f));\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            ctx.leds[i + STRIP_LENGTH] = cool.scale8((uint8_t)(intensity * 255.0f));\n        }\n    }\n}\n\nvoid LGPColorTemperatureEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPColorTemperatureEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Color Temperature\",\n        \"Blackbody radiation gradients\",\n        plugins::EffectCategory::UNCATEGORIZED,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+  "sourceText": "/**\n * @file LGPColorTemperatureEffect.cpp\n * @brief LGP Color Temperature effect implementation\n */\n\n#include \"LGPColorTemperatureEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPColorTemperatureEffect::LGPColorTemperatureEffect()\n    : m_phase(0.0f)\n{\n}\n\nbool LGPColorTemperatureEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_phase = 0.0f;\n    return true;\n}\n\nvoid LGPColorTemperatureEffect::render(plugins::EffectContext& ctx) {\n    // Palette-driven warm↔cool temperature gradient with animated convergence\n    // Warm end (gHue) and cool end (gHue+128) converge toward neutral at center\n    float dt = ctx.getSafeDeltaSeconds();\n    float speed = ctx.speed / 255.0f;\n\n    // Trail persistence — long fade for smooth ambient colour blending\n    fadeToBlackBy(ctx.leds, ctx.ledCount, 8);\n\n    m_phase += speed * 0.015f * 60.0f * dt;\n\n    for (uint16_t dist = 0; dist < HALF_LENGTH; dist++) {\n        float normalizedDist = (float)dist / (float)HALF_LENGTH;\n\n        // Animated breathing modulation on the temperature spread\n        float breathe = 0.7f + 0.3f * sinf(m_phase * 0.5f);\n        float spread = normalizedDist * breathe;\n\n        // Warm hue at edges, cool hue at center — both from palette\n        uint8_t warmHue = (uint8_t)(ctx.gHue + (uint8_t)(spread * 40.0f));\n        uint8_t coolHue = (uint8_t)(ctx.gHue + 128 + (uint8_t)(spread * 40.0f));\n\n        // Brightness: brighter at edges, softer at center (convergence zone)\n        uint8_t edgeBright = (uint8_t)(153 + (uint8_t)(normalizedDist * 102.0f)); // 0.6*255=153, 0.4*255=102\n        // Subtle shimmer at the convergence point\n        float shimmer = 1.0f + 0.15f * sinf(m_phase * 2.0f + dist * 0.1f);\n        uint8_t warmBright = scale8((uint8_t)(edgeBright * shimmer), ctx.brightness);\n        uint8_t coolBright = scale8((uint8_t)(edgeBright * shimmer), ctx.brightness);\n\n        CRGB warmColor = ctx.palette.getColor(warmHue, warmBright);\n        CRGB coolColor = ctx.palette.getColor(coolHue, coolBright);\n\n        // Strip 1: warm spectrum\n        uint16_t left1 = CENTER_LEFT - dist;\n        uint16_t right1 = CENTER_RIGHT + dist;\n        if (left1 < STRIP_LENGTH) ctx.leds[left1] = warmColor;\n        if (right1 < STRIP_LENGTH) ctx.leds[right1] = warmColor;\n\n        // Strip 2: cool spectrum\n        uint16_t left2 = STRIP_LENGTH + CENTER_LEFT - dist;\n        uint16_t right2 = STRIP_LENGTH + CENTER_RIGHT + dist;\n        if (left2 < ctx.ledCount) ctx.leds[left2] = coolColor;\n        if (right2 < ctx.ledCount) ctx.leds[right2] = coolColor;\n    }\n}\n\nvoid LGPColorTemperatureEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPColorTemperatureEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Color Temperature\",\n        \"Blackbody radiation gradients\",\n        plugins::EffectCategory::UNCATEGORIZED,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
 }

@@ -1,0 +1,103 @@
+{
+  "schemaVersion": "2.0.0",
+  "generatedAtUtc": "2026-03-18T01:14:51Z",
+  "firmwareSourceHash": "25d1555df9030ad0f3db4c6565c25fec023f8cb74c6e74182e4a1a0db91afb2e",
+  "effectId": "EID_LGP_SOLITON_WAVES_RADIAL",
+  "effectIdHex": "0x060B",
+  "className": "LGPSolitonWavesRadialEffect",
+  "displayName": "LGP Soliton Waves R",
+  "headerPath": "firmware-v3/src/effects/ieffect/LGPSolitonWavesRadialEffect.h",
+  "sourcePath": "firmware-v3/src/effects/ieffect/LGPSolitonWavesRadialEffect.cpp",
+  "renderRange": [
+    36,
+    112
+  ],
+  "phaseRanges": {
+    "input": [
+      [
+        36,
+        44
+      ]
+    ],
+    "mapping": [
+      [
+        38,
+        38
+      ],
+      [
+        45,
+        45
+      ]
+    ],
+    "modulation": [
+      [
+        57,
+        70
+      ]
+    ],
+    "render": [
+      [
+        42,
+        42
+      ],
+      [
+        44,
+        44
+      ],
+      [
+        54,
+        54
+      ],
+      [
+        67,
+        67
+      ],
+      [
+        74,
+        74
+      ],
+      [
+        84,
+        84
+      ],
+      [
+        89,
+        90
+      ],
+      [
+        94,
+        94
+      ],
+      [
+        97,
+        98
+      ]
+    ],
+    "post": [
+      [
+        42,
+        42
+      ]
+    ],
+    "output": [
+      [
+        89,
+        90
+      ],
+      [
+        92,
+        92
+      ],
+      [
+        94,
+        98
+      ]
+    ]
+  },
+  "mappingConfidence": "medium",
+  "mappingWarnings": [
+    "Phase 'input' inferred from fallback segmentation.",
+    "Phase 'modulation' inferred from fallback segmentation."
+  ],
+  "sourceText": "/**\n * @file LGPSolitonWavesRadialEffect.cpp\n * @brief LGP Soliton Waves (Radial) - Radial soliton shells\n *\n * Radial variant of LGPSolitonWavesEffect.\n * Soliton shells expand/contract from center pair, bouncing at\n * center (dist=0) and edge (dist=HALF_LENGTH). Collisions exchange velocity.\n */\n\n#include \"LGPSolitonWavesRadialEffect.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nLGPSolitonWavesRadialEffect::LGPSolitonWavesRadialEffect()\n    : m_pos{10.0f, 30.0f, 50.0f, 70.0f}\n    , m_vel{0.8f, -0.6f, 1.0f, -0.9f}\n    , m_amp{255, 200, 230, 180}\n    , m_hue{0, 60, 120, 180}\n{\n}\n\nbool LGPSolitonWavesRadialEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n    m_pos[0] = 10.0f;  m_pos[1] = 30.0f;  m_pos[2] = 50.0f;  m_pos[3] = 70.0f;\n    m_vel[0] = 0.8f;   m_vel[1] = -0.6f;  m_vel[2] = 1.0f;   m_vel[3] = -0.9f;\n    m_amp[0] = 255;     m_amp[1] = 200;     m_amp[2] = 230;     m_amp[3] = 180;\n    m_hue[0] = 0;       m_hue[1] = 60;      m_hue[2] = 120;     m_hue[3] = 180;\n    return true;\n}\n\nvoid LGPSolitonWavesRadialEffect::render(plugins::EffectContext& ctx) {\n    // Radial soliton shells expanding/contracting from center\n    float speedNorm = ctx.speed / 50.0f;\n    const uint8_t solitonCount = 4;\n    const float damping = 0.996f;\n\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    for (uint8_t s = 0; s < solitonCount; s++) {\n        m_pos[s] += m_vel[s] * speedNorm;\n\n        // Bounce at center (0) and edge (HALF_LENGTH)\n        if (m_pos[s] < 0.0f || m_pos[s] >= (float)HALF_LENGTH) {\n            m_vel[s] = -m_vel[s];\n            m_pos[s] = constrain(m_pos[s], 0.0f, (float)(HALF_LENGTH - 1));\n        }\n\n        // Check for collisions between shells\n        for (uint8_t other = s + 1; other < solitonCount; other++) {\n            float dist = fabsf(m_pos[s] - m_pos[other]);\n            if (dist < 8.0f) {\n                float tempVel = m_vel[s];\n                m_vel[s] = m_vel[other];\n                m_vel[other] = tempVel;\n\n                // Collision flash at midpoint radial distance\n                uint16_t collisionDist = (uint16_t)((m_pos[s] + m_pos[other]) / 2.0f);\n                if (collisionDist < HALF_LENGTH) {\n                    uint8_t blendHue = (uint8_t)((m_hue[s] + m_hue[other]) / 2);\n                    uint8_t blendBright = (uint8_t)(qadd8(m_amp[s], m_amp[other]) / 2);\n                    uint8_t brightU8 = (uint8_t)((blendBright * ctx.brightness) / 255);\n                    CRGB collisionColor = ctx.palette.getColor((uint8_t)(blendHue + ctx.gHue), brightU8);\n                    SET_CENTER_PAIR(ctx, collisionDist, collisionColor);\n                }\n            }\n        }\n\n        // Draw soliton shell — sech^2 profile at radial distance\n        for (int16_t dr = -15; dr <= 15; dr++) {\n            int16_t r = (int16_t)m_pos[s] + dr;\n            if (r >= 0 && r < (int16_t)HALF_LENGTH) {\n                float sech = 1.0f / coshf(dr * 0.18f);\n                float profile = sech * sech;\n\n                uint8_t brightness = (uint8_t)(m_amp[s] * profile);\n                uint8_t hue = (uint8_t)(m_hue[s] + ctx.gHue);\n\n                uint8_t brightU8 = (uint8_t)((brightness * ctx.brightness) / 255);\n                CRGB solitonColor = ctx.palette.getColor(hue, brightU8);\n\n                // Symmetric center pair at radial distance r\n                uint16_t left1 = CENTER_LEFT - (uint16_t)r;\n                uint16_t right1 = CENTER_RIGHT + (uint16_t)r;\n                if (left1 < STRIP_LENGTH) ctx.leds[left1] = solitonColor;\n                if (right1 < STRIP_LENGTH) ctx.leds[right1] = solitonColor;\n\n                // Strip 2 with slight hue offset\n                uint8_t brightU8_2 = (uint8_t)((scale8(brightness, 200) * ctx.brightness) / 255);\n                CRGB strip2Color = ctx.palette.getColor((uint8_t)(hue + 30), brightU8_2);\n                uint16_t left2 = STRIP_LENGTH + CENTER_LEFT - (uint16_t)r;\n                uint16_t right2 = STRIP_LENGTH + CENTER_RIGHT + (uint16_t)r;\n                if (left2 < ctx.ledCount) ctx.leds[left2] = strip2Color;\n                if (right2 < ctx.ledCount) ctx.leds[right2] = strip2Color;\n            }\n        }\n\n        m_amp[s] = (uint8_t)(m_amp[s] * damping);\n\n        // Regenerate dead solitons\n        if (m_amp[s] < 50) {\n            m_pos[s] = (float)random16(HALF_LENGTH);\n            m_vel[s] = (random8(2) ? 1 : -1) * (0.4f + random8(100) / 100.0f);\n            m_amp[s] = (uint8_t)(200 + random8(55));\n            m_hue[s] = random8();\n        }\n    }\n}\n\nvoid LGPSolitonWavesRadialEffect::cleanup() {\n    // No resources to free\n}\n\nconst plugins::EffectMetadata& LGPSolitonWavesRadialEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP Soliton Waves R\",\n        \"Radial soliton shells\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+}

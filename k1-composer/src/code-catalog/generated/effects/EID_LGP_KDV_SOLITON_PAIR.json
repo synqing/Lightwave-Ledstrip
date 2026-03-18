@@ -1,160 +1,160 @@
 {
   "schemaVersion": "2.0.0",
-  "generatedAtUtc": "2026-02-25T01:16:03Z",
-  "firmwareSourceHash": "867836f805a20b5903d4e8b8d260368364f51dd60a9b7208dc990b4103e4e30b",
+  "generatedAtUtc": "2026-03-18T01:14:51Z",
+  "firmwareSourceHash": "25d1555df9030ad0f3db4c6565c25fec023f8cb74c6e74182e4a1a0db91afb2e",
   "effectId": "EID_LGP_KDV_SOLITON_PAIR",
   "effectIdHex": "0x1B01",
   "className": "LGPKdVSolitonPairEffect",
   "displayName": "LGP KdV Soliton Pair",
-  "headerPath": "firmware/v2/src/effects/ieffect/LGPKdVSolitonPairEffect.h",
-  "sourcePath": "firmware/v2/src/effects/ieffect/LGPKdVSolitonPairEffect.cpp",
+  "headerPath": "firmware-v3/src/effects/ieffect/LGPKdVSolitonPairEffect.h",
+  "sourcePath": "firmware-v3/src/effects/ieffect/LGPKdVSolitonPairEffect.cpp",
   "renderRange": [
-    90,
-    251
+    108,
+    269
   ],
   "phaseRanges": {
     "input": [
       [
-        105,
-        105
+        123,
+        123
       ],
       [
-        107,
-        107
+        125,
+        125
       ],
       [
-        113,
-        114
+        131,
+        132
       ],
       [
-        119,
-        120
+        137,
+        138
       ],
       [
-        122,
-        122
+        140,
+        140
       ]
     ],
     "mapping": [
       [
-        96,
-        96
+        114,
+        114
       ],
       [
-        118,
-        118
+        136,
+        136
       ],
       [
-        129,
-        129
+        147,
+        147
       ],
       [
-        134,
-        134
+        152,
+        152
       ],
       [
-        144,
-        145
+        162,
+        163
       ],
       [
-        175,
-        176
+        193,
+        194
       ]
     ],
     "modulation": [
       [
-        112,
-        115
+        130,
+        133
       ],
       [
-        122,
-        122
+        140,
+        140
       ],
       [
-        125,
-        126
+        143,
+        144
       ],
       [
-        129,
-        130
+        147,
+        148
       ],
       [
-        134,
-        135
+        152,
+        153
       ],
       [
-        138,
-        139
+        156,
+        157
       ],
       [
-        170,
-        171
+        188,
+        189
       ]
     ],
     "render": [
       [
-        121,
-        121
+        139,
+        139
       ],
       [
-        205,
-        205
+        223,
+        223
       ],
       [
-        208,
-        208
+        226,
+        226
       ],
       [
-        210,
-        210
+        228,
+        228
       ],
       [
-        235,
-        235
+        253,
+        253
       ],
       [
-        241,
-        242
+        259,
+        260
       ],
       [
-        247,
-        247
+        265,
+        265
       ]
     ],
     "post": [
       [
-        203,
-        203
+        221,
+        221
       ],
       [
-        205,
-        205
+        223,
+        223
       ]
     ],
     "output": [
       [
-        208,
-        208
+        226,
+        226
       ],
       [
-        210,
-        210
+        228,
+        228
       ],
       [
-        240,
-        240
+        258,
+        258
       ],
       [
-        242,
-        242
+        260,
+        260
       ],
       [
-        244,
-        248
+        262,
+        266
       ]
     ]
   },
   "mappingConfidence": "medium",
   "mappingWarnings": [],
-  "sourceText": "/**\n * @file LGPKdVSolitonPairEffect.cpp\n * @brief LGP KdV Soliton Pair -- two sech^2 solitons pass through each other unchanged\n *\n * Korteweg--de Vries soliton pair rendered in distance-from-centre space.\n * Taller soliton travels faster; both pass through each other with an\n * additive \"spark\" at the collision region, then re-emerge intact.\n *\n * Timed 12-second loop:\n *   Stage 0 (6 s): Approach -- solitons travel inward from opposite edges\n *   Stage 1 (3 s): Collision -- overlap near centre, bright spark\n *   Stage 2 (3 s): Re-emergence -- solitons travel outward, wrap back\n */\n\n#include \"LGPKdVSolitonPairEffect.h\"\n#include \"ChromaUtils.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\n// ---------------------------------------------------------------------------\n// KdV constants\n// ---------------------------------------------------------------------------\nstatic constexpr float kA1         = 1.00f;   // Soliton 1 amplitude (tall)\nstatic constexpr float kA2         = 0.55f;   // Soliton 2 amplitude (short)\nstatic constexpr float kWidth1     = 0.18f;   // Soliton 1 inverse width\nstatic constexpr float kWidth2     = 0.23f;   // Soliton 2 inverse width\nstatic constexpr float kSparkGain  = 6.0f;    // Overlap spark multiplier\nstatic constexpr float kMaxDist    = 80.0f;   // Half-strip length (distance range)\n\n// Stage durations (seconds)\nstatic constexpr float kStage0Dur  = 6.0f;    // Approach\nstatic constexpr float kStage1Dur  = 3.0f;    // Collision\nstatic constexpr float kStage2Dur  = 3.0f;    // Re-emergence\n// Velocities: KdV says velocity ~ amplitude, so soliton 1 is faster\nstatic constexpr float kBaseVel1   = 14.0f;   // LEDs/second in distance space (tall)\nstatic constexpr float kBaseVel2   =  8.0f;   // LEDs/second in distance space (short)\n\n// Colour offsets\nstatic constexpr uint8_t kSparkHueShift  = 20;  // Warm accent for collision spark\nstatic constexpr uint8_t kStrip2HueShift = 30;  // Strip 2 hue offset\nstatic constexpr uint8_t kStrip2Bright   = 217; // Strip 2 brightness scale (~85%)\n\n// ---------------------------------------------------------------------------\n// Constructor\n// ---------------------------------------------------------------------------\nLGPKdVSolitonPairEffect::LGPKdVSolitonPairEffect()\n    : m_soliton1Pos(0.0f)\n    , m_soliton2Pos(0.0f)\n    , m_time(0.0f)\n    , m_stage(0)\n    , m_stageTime(0.0f)\n    , m_chromaAngle(0.0f)\n    , m_beatPulse(0.0f)\n    , m_fallbackPhase(0.0f)\n    , m_lastHopSeq(0)\n{\n    for (uint8_t i = 0; i < 12; ++i) m_chromaSmoothed[i] = 0.0f;\n}\n\n// ---------------------------------------------------------------------------\n// init\n// ---------------------------------------------------------------------------\nbool LGPKdVSolitonPairEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n\n    // Start solitons at opposite edges of distance space\n    m_soliton1Pos = kMaxDist;     // Starts at edge\n    m_soliton2Pos = kMaxDist;     // Also starts at edge (different speed makes them separate)\n    m_time        = 0.0f;\n    m_stage       = 0;\n    m_stageTime   = 0.0f;\n    m_chromaAngle = 0.0f;\n    m_beatPulse   = 0.0f;\n    m_fallbackPhase = 0.0f;\n    m_lastHopSeq  = 0;\n\n    for (uint8_t i = 0; i < 12; ++i) m_chromaSmoothed[i] = 0.0f;\n\n    return true;\n}\n\n// ---------------------------------------------------------------------------\n// render\n// ---------------------------------------------------------------------------\nvoid LGPKdVSolitonPairEffect::render(plugins::EffectContext& ctx) {\n    // =====================================================================\n    // Safe delta time\n    // =====================================================================\n    float rawDt = ctx.getSafeRawDeltaSeconds();\n    float dt    = ctx.getSafeDeltaSeconds();\n    float speedNorm = ctx.speed / 50.0f;\n\n    // =====================================================================\n    // Audio reactivity\n    // =====================================================================\n    float rmsModulation = 1.0f;        // Amplitude modulation from RMS\n    uint8_t chromaHueOffset = 0;       // Hue offset from chroma analysis\n\n#if FEATURE_AUDIO_SYNC\n    if (ctx.audio.available) {\n        // RMS modulates soliton amplitude +/-15%\n        float rms = ctx.audio.rms();\n        rmsModulation = 1.0f + (rms - 0.5f) * 0.30f;  // 0.85 .. 1.15\n        if (rmsModulation < 0.85f) rmsModulation = 0.85f;\n        if (rmsModulation > 1.15f) rmsModulation = 1.15f;\n\n        // Beat triggers amplitude pulse on soliton 1\n        if (ctx.audio.isOnBeat()) {\n            float bs = ctx.audio.beatStrength();\n            if (bs > m_beatPulse) m_beatPulse = bs;\n        }\n\n        // Update chromagram targets on new hops only\n        if (ctx.audio.controlBus.hop_seq != m_lastHopSeq) {\n            m_lastHopSeq = ctx.audio.controlBus.hop_seq;\n            for (uint8_t i = 0; i < 12; ++i) {\n                m_chromaSmoothed[i] = ctx.audio.controlBus.heavy_chroma[i];\n            }\n        }\n        chromaHueOffset = effects::chroma::circularChromaHueSmoothed(\n            m_chromaSmoothed, m_chromaAngle, rawDt, 0.25f);\n    } else {\n        // No audio fallback\n        m_fallbackPhase += speedNorm * 0.3f * dt;\n        if (m_fallbackPhase > 100.0f) m_fallbackPhase -= 100.0f;\n    }\n#else\n    // No audio feature compiled\n    m_fallbackPhase += speedNorm * 0.3f * dt;\n    if (m_fallbackPhase > 100.0f) m_fallbackPhase -= 100.0f;\n#endif\n\n    // Decay beat pulse (dt-corrected)\n    m_beatPulse = effects::chroma::dtDecay(m_beatPulse, 0.88f, rawDt);\n\n    // =====================================================================\n    // Timed sequence: advance stage clock\n    // =====================================================================\n    m_stageTime += dt * speedNorm;\n    m_time      += dt * speedNorm;\n\n    // Determine current stage boundaries\n    float stageDur = 0.0f;\n    switch (m_stage) {\n        case 0: stageDur = kStage0Dur; break;\n        case 1: stageDur = kStage1Dur; break;\n        case 2: stageDur = kStage2Dur; break;\n        default: stageDur = kStage0Dur; break;\n    }\n\n    if (m_stageTime >= stageDur) {\n        m_stageTime -= stageDur;\n        m_stage = (m_stage + 1) % 3;\n\n        // Reset soliton positions at stage 0 start (new loop)\n        if (m_stage == 0) {\n            m_soliton1Pos = kMaxDist;\n            m_soliton2Pos = kMaxDist;\n        }\n    }\n\n    // =====================================================================\n    // Update soliton positions\n    // =====================================================================\n    // Effective amplitudes with audio modulation\n    float effA1 = kA1 * rmsModulation * (1.0f + m_beatPulse * 0.25f);\n    float effA2 = kA2 * rmsModulation;\n\n    // KdV: velocity proportional to amplitude\n    float vel1 = kBaseVel1 * speedNorm * (effA1 / kA1);\n    float vel2 = kBaseVel2 * speedNorm * (effA2 / kA2);\n\n    switch (m_stage) {\n        case 0:\n            // Approach: both travel inward (decreasing distance)\n            m_soliton1Pos -= vel1 * dt;\n            m_soliton2Pos -= vel2 * dt;\n            break;\n        case 1:\n            // Collision: continue through each other\n            m_soliton1Pos -= vel1 * dt;\n            m_soliton2Pos -= vel2 * dt;\n            break;\n        case 2:\n            // Re-emergence: travel outward (increasing distance)\n            m_soliton1Pos += vel1 * dt;\n            m_soliton2Pos += vel2 * dt;\n            break;\n    }\n\n    // Clamp to valid range (no hard wrap -- the timed sequence handles reset)\n    if (m_soliton1Pos < -10.0f) m_soliton1Pos = -10.0f;\n    if (m_soliton1Pos > kMaxDist + 10.0f) m_soliton1Pos = kMaxDist + 10.0f;\n    if (m_soliton2Pos < -10.0f) m_soliton2Pos = -10.0f;\n    if (m_soliton2Pos > kMaxDist + 10.0f) m_soliton2Pos = kMaxDist + 10.0f;\n\n    // =====================================================================\n    // Fade for trail persistence\n    // =====================================================================\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    // =====================================================================\n    // Render loop: per-LED in strip 1 (mirrored via centerPairDistance)\n    // =====================================================================\n    for (uint16_t i = 0; i < STRIP_LENGTH; ++i) {\n        float d = static_cast<float>(centerPairDistance(i));\n\n        // sech^2 profiles\n        float z1 = (d - m_soliton1Pos) * kWidth1;\n        float cosh1 = coshf(z1);\n        float u1 = effA1 / (cosh1 * cosh1);\n\n        float z2 = (d - m_soliton2Pos) * kWidth2;\n        float cosh2 = coshf(z2);\n        float u2 = effA2 / (cosh2 * cosh2);\n\n        // Additive combination (KdV superposition)\n        float total = u1 + u2;\n        if (total > 1.5f) total = 1.5f;  // Soft clamp for headroom\n\n        // Collision spark: product of overlapping solitons\n        float spark = u1 * u2 * kSparkGain;\n        if (spark > 1.0f) spark = 1.0f;\n\n        // Final brightness\n        float rawBright = total + spark * 0.5f;  // Spark adds extra glow\n        if (rawBright > 1.0f) rawBright = 1.0f;\n        uint8_t brightness = static_cast<uint8_t>(rawBright * ctx.brightness);\n\n        // Hue: palette base + chroma offset + spark warm shift\n        uint8_t baseHue = ctx.gHue + chromaHueOffset;\n        uint8_t sparkShift = static_cast<uint8_t>(spark * kSparkHueShift);\n        uint8_t hue = static_cast<uint8_t>(baseHue + sparkShift);\n\n        // Strip 1\n        CRGB color1 = ctx.palette.getColor(hue, brightness);\n        ctx.leds[i] = color1;\n\n        // Strip 2: +30 hue offset, 85% brightness\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            uint8_t bright2 = scale8(brightness, kStrip2Bright);\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor(\n                static_cast<uint8_t>(hue + kStrip2HueShift), bright2);\n        }\n    }\n}\n\n// ---------------------------------------------------------------------------\n// cleanup\n// ---------------------------------------------------------------------------\nvoid LGPKdVSolitonPairEffect::cleanup() {\n    // No resources to free -- all state is in-class members\n}\n\n// ---------------------------------------------------------------------------\n// getMetadata\n// ---------------------------------------------------------------------------\nconst plugins::EffectMetadata& LGPKdVSolitonPairEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP KdV Soliton Pair\",\n        \"Two sech^2 solitons pass through each other unchanged -- KdV physics\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
+  "sourceText": "/**\n * @file LGPKdVSolitonPairEffect.cpp\n * @brief LGP KdV Soliton Pair -- two sech^2 solitons pass through each other unchanged\n *\n * Korteweg--de Vries soliton pair rendered in distance-from-centre space.\n * Taller soliton travels faster; both pass through each other with an\n * additive \"spark\" at the collision region, then re-emerge intact.\n *\n * Timed 12-second loop:\n *   Stage 0 (6 s): Approach -- solitons travel inward from opposite edges\n *   Stage 1 (3 s): Collision -- overlap near centre, bright spark\n *   Stage 2 (3 s): Re-emergence -- solitons travel outward, wrap back\n */\n\n#include \"LGPKdVSolitonPairEffect.h\"\n#include \"ChromaUtils.h\"\n#include \"../CoreEffects.h\"\n#include <FastLED.h>\n#include <cmath>\n#include <cstring>\n\nnamespace lightwaveos {\nnamespace effects {\nnamespace ieffect {\n\nnamespace {\nconst plugins::EffectParameter kParameters[] = {\n    {\"a1\", \"Amplitude 1\", 0.10f, 3.0f, 1.00f,\n     plugins::EffectParameterType::FLOAT, 0.01f, \"wave\", \"\", false},\n    {\"a2\", \"Amplitude 2\", 0.10f, 3.0f, 0.55f,\n     plugins::EffectParameterType::FLOAT, 0.01f, \"wave\", \"\", false},\n    {\"width1\", \"Width 1\", 0.05f, 1.0f, 0.18f,\n     plugins::EffectParameterType::FLOAT, 0.01f, \"wave\", \"\", false},\n    {\"width2\", \"Width 2\", 0.05f, 1.0f, 0.23f,\n     plugins::EffectParameterType::FLOAT, 0.01f, \"wave\", \"\", false},\n    {\"spark_gain\", \"Spark Gain\", 0.0f, 20.0f, 6.0f,\n     plugins::EffectParameterType::FLOAT, 0.1f, \"blend\", \"\", false},\n    {\"stage0_dur\", \"Stage 0 Duration\", 0.2f, 30.0f, 6.0f,\n     plugins::EffectParameterType::FLOAT, 0.1f, \"timing\", \"s\", false},\n    {\"stage1_dur\", \"Stage 1 Duration\", 0.2f, 30.0f, 3.0f,\n     plugins::EffectParameterType::FLOAT, 0.1f, \"timing\", \"s\", false},\n    {\"stage2_dur\", \"Stage 2 Duration\", 0.2f, 30.0f, 3.0f,\n     plugins::EffectParameterType::FLOAT, 0.1f, \"timing\", \"s\", false},\n    {\"base_vel1\", \"Base Velocity 1\", 0.1f, 60.0f, 14.0f,\n     plugins::EffectParameterType::FLOAT, 0.1f, \"timing\", \"led/s\", false},\n    {\"base_vel2\", \"Base Velocity 2\", 0.1f, 60.0f, 8.0f,\n     plugins::EffectParameterType::FLOAT, 0.1f, \"timing\", \"led/s\", false},\n    {\"spark_hue_shift\", \"Spark Hue Shift\", 0.0f, 255.0f, 20.0f,\n     plugins::EffectParameterType::INT, 1.0f, \"colour\", \"\", false},\n    {\"strip2_hue_shift\", \"Strip 2 Hue Shift\", 0.0f, 255.0f, 30.0f,\n     plugins::EffectParameterType::INT, 1.0f, \"colour\", \"\", false},\n    {\"strip2_bright\", \"Strip 2 Brightness\", 0.0f, 255.0f, 217.0f,\n     plugins::EffectParameterType::INT, 1.0f, \"colour\", \"\", false},\n};\n\nstatic inline float clampf(float x, float lo, float hi) {\n    return (x < lo) ? lo : (x > hi) ? hi : x;\n}\n}\n\n// ---------------------------------------------------------------------------\n// KdV constants\n// ---------------------------------------------------------------------------\nstatic constexpr float kMaxDist    = 80.0f;   // Half-strip length (distance range)\n\n// ---------------------------------------------------------------------------\n// Constructor\n// ---------------------------------------------------------------------------\nLGPKdVSolitonPairEffect::LGPKdVSolitonPairEffect()\n    : m_soliton1Pos(0.0f)\n    , m_soliton2Pos(0.0f)\n    , m_time(0.0f)\n    , m_stage(0)\n    , m_stageTime(0.0f)\n    , m_chromaAngle(0.0f)\n    , m_beatPulse(0.0f)\n    , m_fallbackPhase(0.0f)\n    , m_lastHopSeq(0)\n{\n    for (uint8_t i = 0; i < 12; ++i) m_chromaSmoothed[i] = 0.0f;\n}\n\n// ---------------------------------------------------------------------------\n// init\n// ---------------------------------------------------------------------------\nbool LGPKdVSolitonPairEffect::init(plugins::EffectContext& ctx) {\n    (void)ctx;\n\n    // Start solitons at opposite edges of distance space\n    m_soliton1Pos = kMaxDist;     // Starts at edge\n    m_soliton2Pos = kMaxDist;     // Also starts at edge (different speed makes them separate)\n    m_time        = 0.0f;\n    m_stage       = 0;\n    m_stageTime   = 0.0f;\n    m_chromaAngle = 0.0f;\n    m_beatPulse   = 0.0f;\n    m_fallbackPhase = 0.0f;\n    m_lastHopSeq  = 0;\n\n    for (uint8_t i = 0; i < 12; ++i) m_chromaSmoothed[i] = 0.0f;\n\n    return true;\n}\n\n// ---------------------------------------------------------------------------\n// render\n// ---------------------------------------------------------------------------\nvoid LGPKdVSolitonPairEffect::render(plugins::EffectContext& ctx) {\n    // =====================================================================\n    // Safe delta time\n    // =====================================================================\n    float rawDt = ctx.getSafeRawDeltaSeconds();\n    float dt    = ctx.getSafeDeltaSeconds();\n    float speedNorm = ctx.speed / 50.0f;\n\n    // =====================================================================\n    // Audio reactivity\n    // =====================================================================\n    float rmsModulation = 1.0f;        // Amplitude modulation from RMS\n    uint8_t chromaHueOffset = 0;       // Hue offset from chroma analysis\n\n#if FEATURE_AUDIO_SYNC\n    if (ctx.audio.available) {\n        // RMS modulates soliton amplitude +/-15%\n        float rms = ctx.audio.rms();\n        rmsModulation = 1.0f + (rms - 0.5f) * 0.30f;  // 0.85 .. 1.15\n        if (rmsModulation < 0.85f) rmsModulation = 0.85f;\n        if (rmsModulation > 1.15f) rmsModulation = 1.15f;\n\n        // Beat triggers amplitude pulse on soliton 1\n        if (ctx.audio.isOnBeat()) {\n            float bs = ctx.audio.beatStrength();\n            if (bs > m_beatPulse) m_beatPulse = bs;\n        }\n\n        // Update chromagram targets on new hops only\n        if (ctx.audio.hopSequence() != m_lastHopSeq) {\n            m_lastHopSeq = ctx.audio.hopSequence();\n            for (uint8_t i = 0; i < 12; ++i) {\n                m_chromaSmoothed[i] = ctx.audio.getHeavyChroma(i);\n            }\n        }\n        chromaHueOffset = effects::chroma::circularChromaHueSmoothed(\n            m_chromaSmoothed, m_chromaAngle, rawDt, 0.25f);\n    } else {\n        // No audio fallback\n        m_fallbackPhase += speedNorm * 0.3f * dt;\n        if (m_fallbackPhase > 100.0f) m_fallbackPhase -= 100.0f;\n    }\n#else\n    // No audio feature compiled\n    m_fallbackPhase += speedNorm * 0.3f * dt;\n    if (m_fallbackPhase > 100.0f) m_fallbackPhase -= 100.0f;\n#endif\n\n    // Decay beat pulse (dt-corrected)\n    m_beatPulse = effects::chroma::dtDecay(m_beatPulse, 0.88f, rawDt);\n\n    // =====================================================================\n    // Timed sequence: advance stage clock\n    // =====================================================================\n    m_stageTime += dt * speedNorm;\n    m_time      += dt * speedNorm;\n\n    // Determine current stage boundaries\n    float stageDur = 0.0f;\n    switch (m_stage) {\n        case 0: stageDur = m_stage0Dur; break;\n        case 1: stageDur = m_stage1Dur; break;\n        case 2: stageDur = m_stage2Dur; break;\n        default: stageDur = m_stage0Dur; break;\n    }\n\n    if (m_stageTime >= stageDur) {\n        m_stageTime -= stageDur;\n        m_stage = (m_stage + 1) % 3;\n\n        // Reset soliton positions at stage 0 start (new loop)\n        if (m_stage == 0) {\n            m_soliton1Pos = kMaxDist;\n            m_soliton2Pos = kMaxDist;\n        }\n    }\n\n    // =====================================================================\n    // Update soliton positions\n    // =====================================================================\n    // Effective amplitudes with audio modulation\n    float effA1 = m_a1 * rmsModulation * (1.0f + m_beatPulse * 0.25f);\n    float effA2 = m_a2 * rmsModulation;\n\n    // KdV: velocity proportional to amplitude\n    float vel1 = m_baseVel1 * speedNorm * (effA1 / fmaxf(m_a1, 0.001f));\n    float vel2 = m_baseVel2 * speedNorm * (effA2 / fmaxf(m_a2, 0.001f));\n\n    switch (m_stage) {\n        case 0:\n            // Approach: both travel inward (decreasing distance)\n            m_soliton1Pos -= vel1 * dt;\n            m_soliton2Pos -= vel2 * dt;\n            break;\n        case 1:\n            // Collision: continue through each other\n            m_soliton1Pos -= vel1 * dt;\n            m_soliton2Pos -= vel2 * dt;\n            break;\n        case 2:\n            // Re-emergence: travel outward (increasing distance)\n            m_soliton1Pos += vel1 * dt;\n            m_soliton2Pos += vel2 * dt;\n            break;\n    }\n\n    // Clamp to valid range (no hard wrap -- the timed sequence handles reset)\n    if (m_soliton1Pos < -10.0f) m_soliton1Pos = -10.0f;\n    if (m_soliton1Pos > kMaxDist + 10.0f) m_soliton1Pos = kMaxDist + 10.0f;\n    if (m_soliton2Pos < -10.0f) m_soliton2Pos = -10.0f;\n    if (m_soliton2Pos > kMaxDist + 10.0f) m_soliton2Pos = kMaxDist + 10.0f;\n\n    // =====================================================================\n    // Fade for trail persistence\n    // =====================================================================\n    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);\n\n    // =====================================================================\n    // Render loop: per-LED in strip 1 (mirrored via centerPairDistance)\n    // =====================================================================\n    for (uint16_t i = 0; i < STRIP_LENGTH; ++i) {\n        float d = static_cast<float>(centerPairDistance(i));\n\n        // sech^2 profiles\n        float z1 = (d - m_soliton1Pos) * m_width1;\n        float cosh1 = coshf(z1);\n        float u1 = effA1 / (cosh1 * cosh1);\n\n        float z2 = (d - m_soliton2Pos) * m_width2;\n        float cosh2 = coshf(z2);\n        float u2 = effA2 / (cosh2 * cosh2);\n\n        // Additive combination (KdV superposition)\n        float total = u1 + u2;\n        if (total > 1.5f) total = 1.5f;  // Soft clamp for headroom\n\n        // Collision spark: product of overlapping solitons\n        float spark = u1 * u2 * m_sparkGain;\n        if (spark > 1.0f) spark = 1.0f;\n\n        // Final brightness\n        float rawBright = total + spark * 0.5f;  // Spark adds extra glow\n        if (rawBright > 1.0f) rawBright = 1.0f;\n        uint8_t brightness = static_cast<uint8_t>(rawBright * ctx.brightness);\n\n        // Hue: palette base + chroma offset + spark warm shift\n        uint8_t baseHue = ctx.gHue + chromaHueOffset;\n        uint8_t sparkShift = static_cast<uint8_t>(spark * m_sparkHueShift);\n        uint8_t hue = static_cast<uint8_t>(baseHue + sparkShift);\n\n        // Strip 1\n        CRGB color1 = ctx.palette.getColor(hue, brightness);\n        ctx.leds[i] = color1;\n\n        // Strip 2: +30 hue offset, 85% brightness\n        if (i + STRIP_LENGTH < ctx.ledCount) {\n            uint8_t bright2 = scale8(brightness, m_strip2Bright);\n            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor(\n                static_cast<uint8_t>(hue + m_strip2HueShift), bright2);\n        }\n    }\n}\n\n// ---------------------------------------------------------------------------\n// cleanup\n// ---------------------------------------------------------------------------\nvoid LGPKdVSolitonPairEffect::cleanup() {\n    // No resources to free -- all state is in-class members\n}\n\n// ---------------------------------------------------------------------------\n// getMetadata\n// ---------------------------------------------------------------------------\nconst plugins::EffectMetadata& LGPKdVSolitonPairEffect::getMetadata() const {\n    static plugins::EffectMetadata meta{\n        \"LGP KdV Soliton Pair\",\n        \"Two sech^2 solitons pass through each other unchanged -- KdV physics\",\n        plugins::EffectCategory::QUANTUM,\n        1\n    };\n    return meta;\n}\n\nuint8_t LGPKdVSolitonPairEffect::getParameterCount() const {\n    return static_cast<uint8_t>(sizeof(kParameters) / sizeof(kParameters[0]));\n}\n\nconst plugins::EffectParameter* LGPKdVSolitonPairEffect::getParameter(uint8_t index) const {\n    if (index >= getParameterCount()) return nullptr;\n    return &kParameters[index];\n}\n\nbool LGPKdVSolitonPairEffect::setParameter(const char* name, float value) {\n    if (!name) return false;\n    if (std::strcmp(name, \"a1\") == 0) { m_a1 = clampf(value, 0.10f, 3.0f); return true; }\n    if (std::strcmp(name, \"a2\") == 0) { m_a2 = clampf(value, 0.10f, 3.0f); return true; }\n    if (std::strcmp(name, \"width1\") == 0) { m_width1 = clampf(value, 0.05f, 1.0f); return true; }\n    if (std::strcmp(name, \"width2\") == 0) { m_width2 = clampf(value, 0.05f, 1.0f); return true; }\n    if (std::strcmp(name, \"spark_gain\") == 0) { m_sparkGain = clampf(value, 0.0f, 20.0f); return true; }\n    if (std::strcmp(name, \"stage0_dur\") == 0) { m_stage0Dur = clampf(value, 0.2f, 30.0f); return true; }\n    if (std::strcmp(name, \"stage1_dur\") == 0) { m_stage1Dur = clampf(value, 0.2f, 30.0f); return true; }\n    if (std::strcmp(name, \"stage2_dur\") == 0) { m_stage2Dur = clampf(value, 0.2f, 30.0f); return true; }\n    if (std::strcmp(name, \"base_vel1\") == 0) { m_baseVel1 = clampf(value, 0.1f, 60.0f); return true; }\n    if (std::strcmp(name, \"base_vel2\") == 0) { m_baseVel2 = clampf(value, 0.1f, 60.0f); return true; }\n    if (std::strcmp(name, \"spark_hue_shift\") == 0) {\n        m_sparkHueShift = static_cast<uint8_t>(clampf(value, 0.0f, 255.0f) + 0.5f);\n        return true;\n    }\n    if (std::strcmp(name, \"strip2_hue_shift\") == 0) {\n        m_strip2HueShift = static_cast<uint8_t>(clampf(value, 0.0f, 255.0f) + 0.5f);\n        return true;\n    }\n    if (std::strcmp(name, \"strip2_bright\") == 0) {\n        m_strip2Bright = static_cast<uint8_t>(clampf(value, 0.0f, 255.0f) + 0.5f);\n        return true;\n    }\n    return false;\n}\n\nfloat LGPKdVSolitonPairEffect::getParameter(const char* name) const {\n    if (!name) return 0.0f;\n    if (std::strcmp(name, \"a1\") == 0) return m_a1;\n    if (std::strcmp(name, \"a2\") == 0) return m_a2;\n    if (std::strcmp(name, \"width1\") == 0) return m_width1;\n    if (std::strcmp(name, \"width2\") == 0) return m_width2;\n    if (std::strcmp(name, \"spark_gain\") == 0) return m_sparkGain;\n    if (std::strcmp(name, \"stage0_dur\") == 0) return m_stage0Dur;\n    if (std::strcmp(name, \"stage1_dur\") == 0) return m_stage1Dur;\n    if (std::strcmp(name, \"stage2_dur\") == 0) return m_stage2Dur;\n    if (std::strcmp(name, \"base_vel1\") == 0) return m_baseVel1;\n    if (std::strcmp(name, \"base_vel2\") == 0) return m_baseVel2;\n    if (std::strcmp(name, \"spark_hue_shift\") == 0) return static_cast<float>(m_sparkHueShift);\n    if (std::strcmp(name, \"strip2_hue_shift\") == 0) return static_cast<float>(m_strip2HueShift);\n    if (std::strcmp(name, \"strip2_bright\") == 0) return static_cast<float>(m_strip2Bright);\n    return 0.0f;\n}\n\n} // namespace ieffect\n} // namespace effects\n} // namespace lightwaveos\n"
 }

@@ -53,6 +53,20 @@ void LGPWaveCollisionEnhancedEffect::render(plugins::EffectContext& ctx) {
     const bool hasAudio = ctx.audio.available;
     bool newHop = false;
 
+    // Scene modulation (translation engine)
+    float sceneSpeedMul = 1.0f;
+    float sceneBeatBoost = 0.0f;
+    float sceneTension = 0.0f;
+#if FEATURE_TRANSLATION_ENGINE
+    if (hasAudio) {
+        const auto& scene = ctx.audio.sceneParameters();
+        sceneSpeedMul = scene.motion_rate;
+        sceneBeatBoost = scene.beat_pulse;
+        sceneTension = scene.tension;
+        intensityNorm *= scene.brightness_scale;
+    }
+#endif
+
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
         newHop = (ctx.audio.hopSequence() != m_lastHopSeq);
@@ -129,6 +143,8 @@ void LGPWaveCollisionEnhancedEffect::render(plugins::EffectContext& ctx) {
         // Fallback: energy delta still contributes, but weaker
         m_collisionBoost += energyDeltaSmooth * 0.4f;
     }
+    // Scene beat pulse lifts collision during translator-detected beats
+    m_collisionBoost = fmaxf(m_collisionBoost, sceneBeatBoost * 0.8f);
     if (m_collisionBoost > 1.3f) m_collisionBoost = 1.3f;  // Enhanced: Allow higher boost
     m_collisionBoost = effects::chroma::dtDecay(m_collisionBoost, 0.88f, rawDt);  // dt-corrected decay for snappier response
 
@@ -151,7 +167,7 @@ void LGPWaveCollisionEnhancedEffect::render(plugins::EffectContext& ctx) {
 
     // Speed modulation with Spring physics (natural momentum, no jitter)
     // Now modulated by bassEnergy (from heavy_bands) and speedTarget (from hi-hat)
-    float rawSpeedScale = (0.7f + 0.6f * bassEnergy) * m_speedTarget;  // Capture raw speed for validation
+    float rawSpeedScale = (0.7f + 0.6f * bassEnergy) * m_speedTarget * sceneSpeedMul;  // Capture raw speed for validation
     float speedTargetClamped = rawSpeedScale;
     if (speedTargetClamped > 1.6f) speedTargetClamped = 1.6f;  // Allow higher speed with hi-hat boost
 
@@ -250,7 +266,7 @@ void LGPWaveCollisionEnhancedEffect::render(plugins::EffectContext& ctx) {
         float collisionFlash = m_collisionBoost * expf(-distFromCenter * 0.12f);  // Bright at center, fades out
 
         // Base audio intensity (without uniform collision boost - moved to spatial flash)
-        float audioIntensity = 0.4f + 0.5f * energyAvgSmooth + 0.4f * energyDeltaSmooth;
+        float audioIntensity = 0.4f + 0.5f * energyAvgSmooth + 0.4f * energyDeltaSmooth + 0.25f * sceneTension;
         // FIX: Add minimum amplitude floor for wave visibility at low bass
         audioIntensity = fmaxf(0.2f, audioIntensity);
         float interference = wave1 * audioIntensity + collisionFlash * 0.8f;  // Collision adds separate layer

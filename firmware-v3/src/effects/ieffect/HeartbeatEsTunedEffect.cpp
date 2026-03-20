@@ -97,7 +97,8 @@ void HeartbeatEsTunedEffect::render(plugins::EffectContext& ctx) {
         if (useAudioBeat && ctx.audio.isOnBeat()) {
             // "Lub"
             m_lubRadius = 0.0f;
-            m_lubIntensity = 0.30f + 0.70f * clamp01(beatStrength);
+            float shapeMod = ctx.audio.shapingActive() ? (0.6f + 0.4f * ctx.audio.shapedIntensity()) : 1.0f;
+            m_lubIntensity = (0.30f + 0.70f * clamp01(beatStrength)) * shapeMod * ctx.audio.shapedAccent();
             m_dubPending = true;
         }
 
@@ -151,19 +152,22 @@ void HeartbeatEsTunedEffect::render(plugins::EffectContext& ctx) {
     // Integrate ring motion (dt-based)
     // ---------------------------------------------------------------------
     const float speedLedsPerSec = 220.0f * (0.35f + 1.0f * speedNorm);
-    const float strengthSpeed = 0.80f + 0.50f * clamp01(beatStrength);
+    float weightBoost = ctx.audio.available ? ctx.audio.motionWeight() : 0.5f;
+    const float strengthSpeed = (0.80f + 0.50f * clamp01(beatStrength)) * (0.7f + 0.6f * weightBoost);
     const float adv = speedLedsPerSec * strengthSpeed * dt;
 
     if (m_lubIntensity > 0.001f && m_lubRadius < (float)HALF_LENGTH + 10.0f) {
         m_lubRadius += adv;
-        m_lubIntensity *= expf(-rawDt / 0.28f);
+        float lubDecaySec = ctx.audio.shapingActive() ? fmaxf(ctx.audio.shapedDecayMs() * 0.001f * 0.7f, 0.05f) : 0.28f;
+        m_lubIntensity *= expf(-rawDt / lubDecaySec);
     } else {
         m_lubIntensity = 0.0f;
     }
 
     if (m_dubIntensity > 0.001f && m_dubRadius < (float)HALF_LENGTH + 10.0f) {
         m_dubRadius += adv * 1.10f;
-        m_dubIntensity *= expf(-rawDt / 0.22f);
+        float dubDecaySec = ctx.audio.shapingActive() ? fmaxf(ctx.audio.shapedDecayMs() * 0.001f * 0.55f, 0.05f) : 0.22f;
+        m_dubIntensity *= expf(-rawDt / dubDecaySec);
     } else {
         m_dubIntensity = 0.0f;
     }

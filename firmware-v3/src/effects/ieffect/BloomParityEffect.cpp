@@ -381,6 +381,21 @@ void BloomParityEffect::render(plugins::EffectContext& ctx) {
     RGBf* curr = &m_ps->curr[zone][0];
     RGBf* prev = &m_ps->prev[zone][0];
 
+    // Scene modulation (translation engine)
+    float sceneSpeedMul = 1.0f;
+    float sceneBrightScale = 1.0f;
+    float sceneHueShift = 0.0f;
+    float sceneTension = 0.0f;
+#if FEATURE_TRANSLATION_ENGINE
+    if (ctx.audio.available) {
+        const auto& scene = ctx.audio.sceneParameters();
+        sceneSpeedMul = scene.motion_rate;
+        sceneBrightScale = scene.brightness_scale;
+        sceneHueShift = scene.hue_shift_speed;
+        sceneTension = scene.tension;
+    }
+#endif
+
     // ----- (1) Clear output
     clearBuffer(curr, len);
 
@@ -388,15 +403,22 @@ void BloomParityEffect::render(plugins::EffectContext& ctx) {
     // THE SPINE: position = 0.250 + 1.750 * MOOD, alpha = 0.99 (at 60 FPS)
     // dt-correct: persistence alpha = powf(0.99, dt*60) instead of fixed 0.99 per frame
     const float mood = clamp01(static_cast<float>(ctx.mood) / 255.0f);
-    const float position = 0.250f + 1.750f * mood;
+    // Scene motion rate modulates transport velocity
+    const float position = (0.250f + 1.750f * mood) * sceneSpeedMul;
     const float dtAlpha = powf(s_alpha, dtVis * 60.0f);
     drawSprite(curr, prev, len, len, position, dtAlpha);
 
     // ----- (Parity) Update hue shift state (kept invisible unless chromatic mode off)
     processHueShift(zone, ctx, dtVis);
 
-    // ----- (3) Compute injection colour
-    const RGBf inject = computeInjection(zone, ctx, dtRaw);
+    // ----- (3) Compute injection colour, boosted by scene tension
+    RGBf inject = computeInjection(zone, ctx, dtRaw);
+    if (sceneTension > 0.0f) {
+        const float boost = 1.0f + 0.5f * sceneTension;
+        inject.r = clamp01(inject.r * boost);
+        inject.g = clamp01(inject.g * boost);
+        inject.b = clamp01(inject.b * boost);
+    }
 
     // ----- (4) Overwrite centre pixels (parity: leds_16[63] and [64])
     const uint16_t centerL = (len / 2) - 1;
@@ -457,6 +479,8 @@ void BloomParityEffect::render(plugins::EffectContext& ctx) {
     const uint16_t half = len / 2;
     const float hueRotation = static_cast<float>(ctx.gHue) * s_gHueSpeed;
     const float coupling = s_intensityCoupling;
+    const float tonalAnchor = 24.0f + hueRotation + hueOffset * 48.0f + sceneHueShift * 48.0f;
+    const float tonalWindow = 32.0f + (s_spatialSpread * 0.25f);  // 32..95.75
 
     for (uint16_t i = 0; i < len; i++) {
         // Extract intensity (average of channels — should be equal, but safe)
@@ -477,7 +501,7 @@ void BloomParityEffect::render(plugins::EffectContext& ctx) {
                              + hueOffset * 255.0f + hueRotation;
         const uint8_t palIdx = static_cast<uint8_t>(static_cast<uint16_t>(palFloat) & 0xFFu);
 
-        ctx.leds[i] = ctx.palette.getColor(palIdx, static_cast<uint8_t>(lum * 255.0f));
+        ctx.leds[i] = ctx.palette.getColor(palIdx, static_cast<uint8_t>(lum * sceneBrightScale * 255.0f));
     }
 
     // If ctx.ledCount > len, clear remainder to avoid stale pixels in odd configs.

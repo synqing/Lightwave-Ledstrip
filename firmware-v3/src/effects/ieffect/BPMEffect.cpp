@@ -70,6 +70,19 @@ void BPMEffect::render(plugins::EffectContext& ctx) {
     float speedMult = 1.0f;
     float expansionRate = 80.0f;
 
+    // Scene modulation (translation engine)
+    float sceneSpeedMul = 1.0f;
+    float sceneBeatBoost = 0.0f;
+    float sceneBrightScale = 1.0f;
+#if FEATURE_TRANSLATION_ENGINE && FEATURE_AUDIO_SYNC
+    if (ctx.audio.available) {
+        const auto& scene = ctx.audio.sceneParameters();
+        sceneSpeedMul = scene.motion_rate;
+        sceneBeatBoost = scene.beat_pulse;
+        sceneBrightScale = scene.brightness_scale;
+    }
+#endif
+
 #if FEATURE_AUDIO_SYNC
     if (ctx.audio.available) {
         // =====================================================================
@@ -92,7 +105,7 @@ void BPMEffect::render(plugins::EffectContext& ctx) {
         
         float heavyEnergy = m_heavyEnergySmooth;
         float targetSpeed = 0.6f + 0.8f * heavyEnergy;  // 0.6-1.4x range
-        speedMult = m_speedSpring.update(targetSpeed, rawDt);
+        speedMult = m_speedSpring.update(targetSpeed, rawDt) * sceneSpeedMul;
         if (speedMult > 1.6f) speedMult = 1.6f;
         if (speedMult < 0.3f) speedMult = 0.3f;
 
@@ -113,6 +126,8 @@ void BPMEffect::render(plugins::EffectContext& ctx) {
             float strength = ctx.audio.beatStrength();
             // Scale by confidence for gentler response on uncertain beats
             float weightedStrength = strength * (0.5f + 0.5f * tempoConf);
+            // Scene beat pulse amplifies ring spawns
+            weightedStrength = fmaxf(weightedStrength, sceneBeatBoost);
 
             // Spawn new ring
             m_ringRadius[m_nextRing] = 0.0f;
@@ -174,8 +189,9 @@ void BPMEffect::render(plugins::EffectContext& ctx) {
             }
         }
 
-        // Combine layers
-        uint8_t intensity = qadd8(baseIntensity, ringBoost);
+        // Combine layers, scale by scene brightness
+        uint8_t intensity = scale8(qadd8(baseIntensity, ringBoost),
+            (uint8_t)(sceneBrightScale * 255.0f));
 
         // =====================================================================
         // PALETTE-BASED COLOR (NO chromagram - causes muddy colors!)

@@ -146,7 +146,8 @@ void BreathingEnhancedEffect::render(plugins::EffectContext& ctx) {
             
             // Proportional correction (tau ~100ms gives smooth lock)
             // Compute ONCE per frame, not per pixel
-            const float tau = 0.1f;
+            float impulseMod = ctx.audio.motionImpulse();
+            const float tau = 0.05f + 0.10f * (1.0f - impulseMod);  // 0.05s (tight) to 0.15s (loose)
             const float correctionAlpha = 1.0f - expf(-dt / tau);
             m_phase += phaseError * correctionAlpha;
         }
@@ -222,7 +223,8 @@ void BreathingEnhancedEffect::render(plugins::EffectContext& ctx) {
         }
         
         // Decay pulse intensity (dt-corrected)
-        m_pulseIntensity *= powf(0.92f, rawDt * 60.0f);
+        float decayRate = ctx.audio.shapingActive() ? powf(0.92f, rawDt * 60.0f * (300.0f / fmaxf(ctx.audio.shapedDecayMs(), 50.0f))) : powf(0.92f, rawDt * 60.0f);
+        m_pulseIntensity *= decayRate;
         if (m_pulseIntensity < 0.01f) m_pulseIntensity = 0.0f;
         
         // Boost brightness with pulse
@@ -239,7 +241,8 @@ void BreathingEnhancedEffect::render(plugins::EffectContext& ctx) {
     // ========================================================================
     // PHASE 3: COMBINE MOTION + AUDIO (Audio modulates size, not speed)
     // ========================================================================
-    float targetRadius = timeBasedRadius * (0.4f + 0.6f * brightness);
+    float shapeAmp = ctx.audio.shapingActive() ? (0.8f + 0.4f * ctx.audio.shapedIntensity()) : 1.0f;
+    float targetRadius = timeBasedRadius * (0.4f + 0.6f * brightness) * shapeAmp;
     targetRadius = fmaxf(0.0f, fminf(targetRadius, (float)HALF_LENGTH));
 
     // ========================================================================

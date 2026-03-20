@@ -125,8 +125,21 @@ void RippleEsTunedEffect::render(plugins::EffectContext& ctx) {
         m_spawnCooldown--;
     }
 
+    // Scene modulation (translation engine)
+    float sceneSpeedMul = 1.0f;
+    float sceneBeatBoost = 0.0f;
+    float sceneBrightScale = 1.0f;
+#if FEATURE_TRANSLATION_ENGINE
+    if (hasAudio) {
+        const auto& scene = ctx.audio.sceneParameters();
+        sceneSpeedMul = scene.motion_rate;
+        sceneBeatBoost = scene.beat_pulse;
+        sceneBrightScale = scene.brightness_scale;
+    }
+#endif
+
     // Unified speed scaling from slider: 0..50 → ~0.6..2.4
-    float speedScale = 0.6f + (1.8f * (ctx.speed / 50.0f));
+    float speedScale = (0.6f + (1.8f * (ctx.speed / 50.0f))) * sceneSpeedMul;
     if (speedScale < 0.25f) speedScale = 0.25f;
 
     // Spawn logic:
@@ -138,7 +151,8 @@ void RippleEsTunedEffect::render(plugins::EffectContext& ctx) {
         const bool beatTick = tempoOk && ctx.audio.isOnBeat();
 
         // Base intensity driven by sub-bass + flux. Beat strength boosts when tempo locked.
-        float intensity01 = 0.25f + (0.55f * m_subBass) + (0.45f * m_fluxEnv);
+        // Scene beat pulse lifts the floor during translator-detected beats.
+        float intensity01 = 0.25f + (0.55f * m_subBass) + (0.45f * m_fluxEnv) + (0.30f * sceneBeatBoost);
         if (tempoOk) {
             intensity01 *= 0.75f + (0.60f * beatStrength);
         }
@@ -205,7 +219,8 @@ void RippleEsTunedEffect::render(plugins::EffectContext& ctx) {
                 // Edge fade to keep the centre clean.
                 uint8_t edgeFade = (uint8_t)((HALF_LENGTH - m_ripples[r].radius) * 255.0f / HALF_LENGTH);
                 b = scale8(b, edgeFade);
-                b = scale8(b, m_ripples[r].intensity);
+                b = scale8(b, scale8(m_ripples[r].intensity,
+                    (uint8_t)(sceneBrightScale * 255.0f)));
 
                 // Treble shimmer: add sparkle to the leading edge.
                 if (m_treble > 0.08f) {

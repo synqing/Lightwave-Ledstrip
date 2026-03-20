@@ -8,6 +8,7 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "AudioReactivePolicy.h"
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -147,6 +148,7 @@ struct Ar16Controls {
 
     void resetDefaults() {
         for (uint8_t i = 0; i < COUNT; ++i) values[i] = kDefaults[i];
+        resetSceneModifiers();
     }
 
     bool set(const char* name, float value) {
@@ -177,7 +179,9 @@ struct Ar16Controls {
         return &kParameters[index];
     }
 
-    float audioMix() const { return values[AUDIO_MIX]; }
+    float audioMix() const {
+        return clampf(values[AUDIO_MIX] + (0.25f * m_sceneTension), kMins[AUDIO_MIX], kMaxs[AUDIO_MIX]);
+    }
     float beatGain() const { return values[BEAT_GAIN]; }
     float bassGain() const { return values[BASS_GAIN]; }
     float midGain() const { return values[MID_GAIN]; }
@@ -187,12 +191,49 @@ struct Ar16Controls {
     float rhythmicGain() const { return values[RHYTHMIC_GAIN]; }
     float attackS() const { return values[ATTACK_S]; }
     float releaseS() const { return values[RELEASE_S]; }
-    float motionRate() const { return values[MOTION_RATE]; }
-    float motionDepth() const { return values[MOTION_DEPTH]; }
+    float motionRate() const {
+        return clampf(values[MOTION_RATE] * m_sceneMotionRate, kMins[MOTION_RATE], kMaxs[MOTION_RATE]);
+    }
+    float motionDepth() const {
+        const float blended = lerpf(values[MOTION_DEPTH], m_sceneMotionDepth, 0.50f);
+        return clampf(blended, kMins[MOTION_DEPTH], kMaxs[MOTION_DEPTH]);
+    }
     float colourAnchorMix() const { return values[COLOUR_ANCHOR_MIX]; }
     float eventDecayS() const { return values[EVENT_DECAY_S]; }
     float memoryGain() const { return values[MEMORY_GAIN]; }
     float silenceHold() const { return values[SILENCE_HOLD]; }
+
+    void resetSceneModifiers() {
+        m_sceneMotionRate = 1.0f;
+        m_sceneMotionDepth = values[MOTION_DEPTH];
+        m_sceneBrightnessScale = 1.0f;
+        m_sceneBeatPulse = 0.0f;
+        m_sceneHueShiftSpeed = 0.0f;
+        m_sceneTension = 0.0f;
+    }
+
+    void applySceneModifiers(const plugins::EffectContext& ctx) {
+        resetSceneModifiers();
+#if FEATURE_TRANSLATION_ENGINE
+        if (!ctx.audio.available) {
+            return;
+        }
+        const auto& scene = ctx.audio.sceneParameters();
+        m_sceneMotionRate = scene.motion_rate;
+        m_sceneMotionDepth = scene.motion_depth;
+        m_sceneBrightnessScale = scene.brightness_scale;
+        m_sceneBeatPulse = scene.beat_pulse;
+        m_sceneHueShiftSpeed = scene.hue_shift_speed;
+        m_sceneTension = scene.tension;
+#else
+        (void)ctx;
+#endif
+    }
+
+    float sceneBrightnessScale() const { return m_sceneBrightnessScale; }
+    float sceneBeatPulse() const { return m_sceneBeatPulse; }
+    float sceneHueShiftSpeed() const { return m_sceneHueShiftSpeed; }
+    float sceneTension() const { return m_sceneTension; }
 
 private:
     static constexpr const char* kNames[COUNT] = {
@@ -272,6 +313,13 @@ private:
     };
 
     static const plugins::EffectParameter kParameters[COUNT];
+
+    float m_sceneMotionRate = 1.0f;
+    float m_sceneMotionDepth = 0.85f;
+    float m_sceneBrightnessScale = 1.0f;
+    float m_sceneBeatPulse = 0.0f;
+    float m_sceneHueShiftSpeed = 0.0f;
+    float m_sceneTension = 0.0f;
 };
 
 inline const plugins::EffectParameter Ar16Controls::kParameters[COUNT] = {
@@ -300,10 +348,11 @@ static inline float blendAmbientReactive(float ambient, float reactive, const Ar
 static inline ArSignalSnapshot updateSignals(
     ArRuntimeState& state,
     const plugins::EffectContext& ctx,
-    const Ar16Controls& controls,
+    Ar16Controls& controls,
     float dtSignal
 ) {
     ArSignalSnapshot s{};
+    controls.applySceneModifiers(ctx);
     const float attackTau = clampf(controls.attackS(), 0.01f, 1.50f);
     const float releaseTau = clampf(controls.releaseS(), 0.05f, 2.50f);
 
@@ -314,6 +363,8 @@ static inline ArSignalSnapshot updateSignals(
         dtSignal,
         ctx.audio.available ? attackTau : releaseTau
     );
+    // Shared helper brightness shaping: scene scale lifts/suppresses master output.
+    state.audioPresence = clamp01f(state.audioPresence * controls.sceneBrightnessScale());
 
     const float bassTarget = ctx.audio.available ? clamp01f(ctx.audio.heavyBass()) : fallbackSine(ctx.rawTotalTimeMs, 0.0011f, 0.3f);
     const float midTarget = ctx.audio.available ? clamp01f(ctx.audio.heavyMid()) : fallbackSine(ctx.rawTotalTimeMs, 0.0009f, 1.1f);
@@ -330,7 +381,8 @@ static inline ArSignalSnapshot updateSignals(
     else state.impactBeat = decay(state.impactBeat, dtSignal, controls.eventDecayS());
 
     const float beatStrength = ctx.audio.available ? clamp01f(ctx.audio.beatStrength()) : fallbackTriangle(ctx.rawTotalTimeMs, 0.0015f);
-    s.beat = clamp01f((0.65f * state.impactBeat + 0.35f * beatStrength) * controls.beatGain());
+    const float helperBeat = clamp01f((0.65f * state.impactBeat + 0.35f * beatStrength) * controls.beatGain());
+    s.beat = clamp01f(std::max(helperBeat, controls.sceneBeatPulse()));
     state.memory = clamp01f(
         decay(state.memory, dtSignal, releaseTau * 1.5f) +
         controls.memoryGain() * (0.18f * s.beat + 0.10f * state.envFlux)
@@ -338,7 +390,6 @@ static inline ArSignalSnapshot updateSignals(
 
     const uint8_t targetHue = selectMusicalHue(ctx, state.chordGateOpen);
     state.tonalHue = smoothHue(state.tonalHue, static_cast<float>(targetHue), dtSignal, clampf(0.20f + 0.40f * controls.harmonicGain(), 0.15f, 0.90f));
-
     s.bass = clamp01f(state.envBass * controls.bassGain());
     s.mid = clamp01f(state.envMid * controls.midGain());
     s.treble = clamp01f(state.envTreble * controls.trebleGain());
@@ -350,7 +401,9 @@ static inline ArSignalSnapshot updateSignals(
 }
 
 static inline float tonalBaseHue(const plugins::EffectContext& ctx, const Ar16Controls& controls, const ArRuntimeState& state) {
-    return lerpf(24.0f, state.tonalHue, clamp01f(controls.colourAnchorMix())) + static_cast<float>(ctx.gHue) * (1.0f - clamp01f(controls.colourAnchorMix())) * 0.18f;
+    return lerpf(24.0f, state.tonalHue, clamp01f(controls.colourAnchorMix()))
+        + static_cast<float>(ctx.gHue) * (1.0f - clamp01f(controls.colourAnchorMix())) * 0.18f
+        + controls.sceneHueShiftSpeed() * 48.0f;
 }
 
 struct ArModulationProfile {

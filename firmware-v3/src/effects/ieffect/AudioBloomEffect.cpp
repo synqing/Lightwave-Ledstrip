@@ -217,7 +217,8 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
         }
 
         // Fractional scroll accumulator (smooth motion)
-        float scrollRate = 0.3f + (ctx.speed / 50.0f) * 2.2f;  // 0.3-2.5 LEDs/hop
+        float fluidityMod = ctx.audio.available ? (0.8f + 0.4f * ctx.audio.motionFluidity()) : 1.0f;
+        float scrollRate = (0.3f + (ctx.speed / 50.0f) * 2.2f) * fluidityMod;  // 0.3-2.5 LEDs/hop * fluidity
         m_scrollPhase += scrollRate;
 
         uint8_t step = (uint8_t)m_scrollPhase;
@@ -259,7 +260,8 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
     }
 
     // Compute scroll rate for validation (same as in update block)
-    float scrollRate = 0.3f + (ctx.speed / 50.0f) * 2.2f;  // 0.3-2.5 LEDs/hop
+    float fluidityModV = ctx.audio.available ? (0.8f + 0.4f * ctx.audio.motionFluidity()) : 1.0f;
+    float scrollRate = (0.3f + (ctx.speed / 50.0f) * 2.2f) * fluidityModV;  // 0.3-2.5 LEDs/hop * fluidity
 
     // Find maxBin and sum from heavy_chroma for validation
     float maxBin = 0.0f;
@@ -294,7 +296,8 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
         if (pulseRadius > HALF_LENGTH / 4) pulseRadius = HALF_LENGTH / 4;
 
         // Boost factor: subtle at low levels, strong on drops
-        uint8_t boost = (uint8_t)(m_subBassPulse * 80.0f);  // 0-80 brightness add
+        float shapeBoost = ctx.audio.shapingActive() ? (0.7f + 0.6f * ctx.audio.shapedIntensity()) : 1.0f;
+        uint8_t boost = (uint8_t)(m_subBassPulse * 80.0f * shapeBoost);  // 0-80 brightness add * shaping
 
         for (uint16_t dist = 0; dist < pulseRadius; ++dist) {
             // Fade boost toward edge of pulse

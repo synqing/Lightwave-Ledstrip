@@ -6,17 +6,19 @@ Prioritised engineering backlog. Items are tagged by category and roughly ordere
 
 ## Performance
 
-### [P0] RendererActor vTaskDelay(1) costs 10 ms per frame
-- **File:** `firmware-v3/src/core/actors/RendererActor.cpp:653`
-- **Problem:** `vTaskDelay(1)` before `showLeds()` yields for one FreeRTOS tick (10 ms at `configTICK_RATE_HZ=100`). This alone exceeds the 8.33 ms frame budget for 120 FPS, making the target physically unreachable.
-- **Root cause:** Added to prevent IDLE1 task starvation and watchdog timeout. Same pattern as the AudioActor fix (see MEMORY.md), but the renderer has different constraints.
-- **Investigation needed:**
-  - Can `taskYIELD()` work here? (It only yields to equal/higher priority tasks -- may not feed IDLE1)
-  - Can `configTICK_RATE_HZ` be raised to 1000? (1 ms ticks instead of 10 ms)
-  - Can the yield be moved AFTER `FastLED.show()` since show() itself blocks for ~2 ms (natural preemption)?
-  - Event-driven architecture: wake on RMT DMA complete interrupt instead of polling
-- **Impact:** Fixing this could double effective frame rate from ~60 FPS to true 120 FPS.
-- **Discovered:** 2026-02-27 via MabuTrace instrumentation analysis
+### [DONE] ~~RendererActor vTaskDelay(1) costs 10 ms per frame~~ — resolved in d943101a
+- Original `vTaskDelay(1)` before `showLeds()` replaced with `vTaskDelay(0)` (equivalent to `taskYIELD()`)
+- Pre-show delay removed entirely; renderer now self-clocked at 120 FPS via `esp_rom_delay_us` frame pacer
+- FastLED.show() yields naturally via `xSemaphoreTake(gTX_sem)` during ~4.8ms RMT DMA transmission
+- Watchdog fed explicitly via `esp_task_wdt_reset()` every 10 frames (no IDLE1 dependency)
+- **Discovered:** 2026-02-27 | **Resolved:** d943101a (2026-02-27, stable-effect-ids integration)
+
+### [P1] Frame pacer uses esp_rom_delay_us busy-wait
+- **File:** `firmware-v3/src/core/actors/RendererActor.cpp:878`
+- **Problem:** Self-clocked frame pacing uses `esp_rom_delay_us()` (CPU spin) for the remainder of the 8.33ms budget. When effects render fast (<2ms), this burns 1-2ms of Core 1 CPU with no yield.
+- **Practical impact:** Low — typically 0-1ms of spin since show() takes ~6.3ms. IDLE1 gets CPU during the semaphore wait inside FastLED.show(). No watchdog risk (explicit WDT reset every 10 frames).
+- **Clean fix:** Replace with `esp_timer` one-shot + `ulTaskNotifyTake()` for event-driven pacing (zero-overhead wait, no tick rate change needed).
+- **Discovered:** 2026-03-21 via code audit
 
 ---
 

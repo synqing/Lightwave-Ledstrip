@@ -38,7 +38,6 @@
 #endif
 #include "../../config/factory_presets.h"
 #include "../../config/persistence_trigger.h"
-#include "../../core/actors/ActorSystem.h"
 #include <ESPAsyncWebServer.h>
 #include <Arduino.h>
 

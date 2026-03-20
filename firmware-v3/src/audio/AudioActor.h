@@ -40,6 +40,7 @@
 #include "contracts/AudioTime.h"
 #include "contracts/ControlBus.h"
 #include "contracts/SnapshotBuffer.h"
+#include "TranslationEngine.h"
 
 #if FEATURE_AUDIO_BACKEND_ESV11
 #include "backends/esv11/EsV11Backend.h"
@@ -209,6 +210,10 @@ public:
      * Uses configuration from audio_config.h for timing and core affinity.
      */
     AudioActor();
+
+#if FEATURE_AUDIO_BACKEND_ESV11
+    esv11::EsV11Backend& esBackend() { return m_esBackend; }
+#endif
 
     /**
      * @brief Destructor
@@ -596,6 +601,27 @@ private:
     // Internal State
     // ========================================================================
 
+#if FEATURE_TRANSLATION_ENGINE
+    // Perceptual translation state (persistent across hops, reset on hard DSP reset).
+    TranslationState m_translationState{};
+    AudioTime m_translationLastAudioTime{};
+    bool m_translationHaveLastAudioTime = false;
+    float m_smoothedTempoConfidence = 0.0f;     // Asymmetric follower: instant attack, ~500ms decay
+    uint64_t m_translationLastDebugLogUs = 0ULL;
+#if FEATURE_TRANSLATION_DEBUG
+    bool m_translationLastLatchValid = false;
+    float m_translationLastLatchBpm = 0.0f;
+    float m_translationLastLatchConfidence = 0.0f;
+    uint64_t m_translationLastLatchUs = 0ULL;
+    bool m_translationLastLatchTempoLocked = false;
+    bool m_translationLastLatchBeatTick = false;
+    bool m_translationLastLatchDownbeatTick = false;
+#endif
+#endif
+
+    /// Backend-neutral beat position counter (4/4) for standardized downbeat transport.
+    uint8_t m_standardBeatInBar = 0;
+
 #if FEATURE_AUDIO_BACKEND_ESV11
     AudioActorState m_state;
     AudioActorStats m_stats;
@@ -674,6 +700,10 @@ private:
     // Capture stall recovery state
     uint32_t m_consecutiveZeroHops = 0;
     uint32_t m_lastRecoveryAttemptHop = 0;
+
+    // DMA failure signalling (DEC-011: degraded-mode, D4 § 2.6)
+    uint32_t m_consecutiveDmaTimeouts = 0;
+    bool     m_dmaFailureSignalled    = false;
 
     // Pipeline tuning
     AudioPipelineTuning m_pipelineTuning;

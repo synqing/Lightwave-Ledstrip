@@ -22,11 +22,10 @@
 #include "../../../effects/enhancement/ColorCorrectionEngine.h"
 #include "../../../config/persistence_trigger.h"
 #include "../../../config/factory_presets.h"
+#include "../../../config/runtime_state.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 #include <cstring>
-
-extern uint8_t g_factoryPresetIndex;  // defined in main.cpp
 
 namespace lightwaveos {
 namespace network {

@@ -1,8 +1,12 @@
 #pragma once
 
-#include <atomic>
+/**
+ * @file persistence_trigger.h
+ * @brief Re-exports the g_externalNvsSaveRequest flag from runtime_state.h.
+ *
+ * Existing code includes this header to access the NVS save trigger.
+ * The actual extern declaration now lives in runtime_state.h; this file
+ * forwards it for backward compatibility.
+ */
 
-/// Global flag for triggering debounced NVS save from network handlers.
-/// Set by REST/WS handlers (Core 0), cleared by main loop (Core 1).
-/// Defined in main.cpp.
-extern std::atomic<bool> g_externalNvsSaveRequest;
+#include "runtime_state.h"

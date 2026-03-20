@@ -114,8 +114,7 @@
 #include "../sync/DeviceUUID.h"
 #endif
 
-// External zone config manager from main.cpp
-extern lightwaveos::persistence::ZoneConfigManager* zoneConfigMgr;
+#include "../config/runtime_state.h"
 
 using namespace lightwaveos::nodes;
 using namespace lightwaveos::zones;

@@ -38,6 +38,7 @@
 #endif
 #include "../../config/factory_presets.h"
 #include "../../config/persistence_trigger.h"
+#include "../../config/runtime_state.h"
 #include <ESPAsyncWebServer.h>
 #include <Arduino.h>
 
@@ -48,19 +49,13 @@
 #include "../../sync/DeviceUUID.h"
 #endif
 
-// Extern declaration for zone config manager (defined in main.cpp)
+// PresetManager forward declaration — file-local nullptr until persistence layer is implemented
 namespace lightwaveos {
 namespace persistence {
-class ZoneConfigManager;
 class PresetManager;
 }
 }
-extern lightwaveos::persistence::ZoneConfigManager* zoneConfigMgr;
-// PresetManager: file-local nullptr until persistence layer is implemented
 static lightwaveos::persistence::PresetManager* presetMgr = nullptr;
-
-// Factory preset state (defined in main.cpp)
-extern uint8_t g_factoryPresetIndex;
 
 namespace lightwaveos {
 namespace network {

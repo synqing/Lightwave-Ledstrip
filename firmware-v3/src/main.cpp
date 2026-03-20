@@ -79,6 +79,7 @@
 #endif
 
 #include "config/DebugConfig.h"
+#include "serial/CaptureStreamer.h"
 #include <ArduinoJson.h>
 
 #if FEATURE_WEB_SERVER
@@ -192,40 +193,11 @@ constexpr uint16_t LOOP_SCRATCH_EFFECT_ID_CAP = 170;
 constexpr uint16_t LOOP_SCRATCH_LED_COUNT = 320;
 
 EffectId s_loopEffectIdFallback[LOOP_SCRATCH_EFFECT_ID_CAP] = {};
-CRGB s_captureDumpFrameFallback[LOOP_SCRATCH_LED_COUNT] = {};
 CRGB s_validationFrameFallback[LOOP_SCRATCH_LED_COUNT] = {};
 
 EffectId* s_loopEffectIdScratch = s_loopEffectIdFallback;
-CRGB* s_captureDumpFrameScratch = s_captureDumpFrameFallback;
 CRGB* s_validationFrameScratch = s_validationFrameFallback;
 bool s_loopScratchInitialised = false;
-
-// Capture streaming state — `capture stream <tap> [fps]` pushes binary frames
-// continuously without command round-trip overhead.
-bool s_captureStreamActive = false;
-uint8_t s_captureStreamTapMask = 0x02;  // default: tap B
-lightwaveos::actors::RendererActor::CaptureTap s_captureStreamTap =
-    lightwaveos::actors::RendererActor::CaptureTap::TAP_B_POST_CORRECTION;
-uint32_t s_captureStreamIntervalUs = 66667;  // ~15 FPS default (microseconds)
-uint32_t s_captureStreamLastPushUs = 0;
-uint32_t s_captureStreamLastFrameIdx = UINT32_MAX;
-uint8_t s_captureStreamVersion = 2;  // 1 = 976-byte legacy, 2 = 1008-byte with metrics
-uint32_t s_captureStreamDropped = 0;  // frames skipped due to TX buffer full
-
-// Write instrumentation — reported on `capture stop` / `capture status`.
-uint32_t s_captureWriteMaxUs = 0;      // longest single write duration
-uint32_t s_captureWriteTotalUs = 0;    // cumulative write duration
-uint32_t s_captureWriteCount = 0;      // number of write attempts
-uint16_t s_captureAvailMin = UINT16_MAX; // smallest availableForWrite() seen
-uint32_t s_captureBackpressureSkips = 0; // frames skipped due to low buffer space
-uint32_t s_captureAssembleMaxUs = 0;   // longest frame assembly duration
-uint32_t s_captureAssembleTotalUs = 0; // cumulative assembly duration
-
-// Pre-assembled frame buffer for single bulk Serial.write() — allocated in PSRAM.
-// v2 max frame = 1009 bytes (17 header + 960 RGB + 32 metrics trailer).
-constexpr size_t CAPTURE_FRAME_BUF_SIZE = 1024;
-uint8_t s_captureFrameBufFallback[CAPTURE_FRAME_BUF_SIZE] = {};
-uint8_t* s_captureFrameBuf = s_captureFrameBufFallback;
 
 void initLoopScratchBuffers() {
     if (s_loopScratchInitialised) return;
@@ -237,223 +209,22 @@ void initLoopScratchBuffers() {
                              MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT))) {
         s_loopEffectIdScratch = ids;
     }
-    if (auto* capture = static_cast<CRGB*>(
-            heap_caps_calloc(LOOP_SCRATCH_LED_COUNT, sizeof(CRGB),
-                             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT))) {
-        s_captureDumpFrameScratch = capture;
-    }
     if (auto* validation = static_cast<CRGB*>(
             heap_caps_calloc(LOOP_SCRATCH_LED_COUNT, sizeof(CRGB),
                              MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT))) {
         s_validationFrameScratch = validation;
     }
-    if (auto* frameBuf = static_cast<uint8_t*>(
-            heap_caps_calloc(CAPTURE_FRAME_BUF_SIZE, 1,
-                             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT))) {
-        s_captureFrameBuf = frameBuf;
-    }
 #endif
 
-    LW_LOGI("Loop scratch buffers: effectIds=%s capture=%s validation=%s frameBuf=%s",
+    LW_LOGI("Loop scratch buffers: effectIds=%s validation=%s",
             (s_loopEffectIdScratch != s_loopEffectIdFallback) ? "PSRAM" : "DRAM",
-            (s_captureDumpFrameScratch != s_captureDumpFrameFallback) ? "PSRAM" : "DRAM",
-            (s_validationFrameScratch != s_validationFrameFallback) ? "PSRAM" : "DRAM",
-            (s_captureFrameBuf != s_captureFrameBufFallback) ? "PSRAM" : "DRAM");
-}
-
-// ==================== Capture Producer Task (Path B) ====================
-// Decouples frame capture from the Arduino loop() task.
-// The producer runs at a fixed cadence on its own FreeRTOS task,
-// breaking the ~18 FPS ceiling caused by loop() overhead.
-// Pinned to Core 0 (same as AudioActor), priority 2 (above loopTask=1).
-
-TaskHandle_t s_captureTaskHandle = nullptr;
-volatile bool s_captureTaskRunning = false;
-esp_timer_handle_t s_captureTimer = nullptr;
-
-// esp_timer callback — runs in the high-priority esp_timer task.
-// Does NO work here; just wakes the capture task via notification.
-void IRAM_ATTR captureTimerCallback(void* arg) {
-    TaskHandle_t h = s_captureTaskHandle;
-    if (h) {
-        xTaskNotifyGive(h);
-    }
-}
-
-// Dedicated CRGB buffer for the capture task (avoids racing with dump command
-// which uses s_captureDumpFrameScratch).
-CRGB s_captureTaskFrameBuf[LOOP_SCRATCH_LED_COUNT] = {};
-
-void captureProducerTask(void* param) {
-    auto* ren = static_cast<lightwaveos::actors::RendererActor*>(param);
-
-    uint32_t writeCount = 0;
-    uint32_t writeMaxUs = 0;
-    uint32_t writeTotalUs = 0;
-    uint32_t assembleMaxUs = 0;
-    uint32_t assembleTotalUs = 0;
-    uint16_t availMin = UINT16_MAX;
-    uint32_t txDropped = 0;
-    uint32_t lastFrameIdx = UINT32_MAX;
-
-    while (s_captureTaskRunning) {
-        // Block until the esp_timer fires a notification.
-        // Timeout after 100ms to check the running flag.
-        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(100));
-
-        if (!s_captureTaskRunning) break;
-
-        CRGB* frame = s_captureTaskFrameBuf;
-        if (!ren->getCapturedFrame(s_captureStreamTap, frame)) {
-            continue;
-        }
-
-        auto metadata = ren->getCaptureMetadata();
-        if (metadata.frameIndex == lastFrameIdx) {
-            continue;
-        }
-        lastFrameIdx = metadata.frameIndex;
-
-        // --- Assemble frame into bulk buffer ---
-        uint32_t assembleStart = micros();
-        uint8_t* buf = s_captureFrameBuf;
-        size_t pos = 0;
-
-        uint16_t rgbLen;
-        if (s_captureStreamVersion == 3) {
-            rgbLen = 0;
-        } else if (s_captureStreamVersion == 4) {
-            rgbLen = 160 * 3;
-        } else {
-            rgbLen = 320 * 3;
-        }
-
-        // Header (17 bytes)
-        buf[pos++] = 0xFD;
-        buf[pos++] = s_captureStreamVersion;
-        buf[pos++] = (uint8_t)s_captureStreamTap;
-        buf[pos++] = metadata.effectId;
-        buf[pos++] = metadata.paletteId;
-        buf[pos++] = metadata.brightness;
-        buf[pos++] = metadata.speed;
-        buf[pos++] = (uint8_t)(metadata.frameIndex & 0xFF);
-        buf[pos++] = (uint8_t)((metadata.frameIndex >> 8) & 0xFF);
-        buf[pos++] = (uint8_t)((metadata.frameIndex >> 16) & 0xFF);
-        buf[pos++] = (uint8_t)((metadata.frameIndex >> 24) & 0xFF);
-        buf[pos++] = (uint8_t)(metadata.timestampUs & 0xFF);
-        buf[pos++] = (uint8_t)((metadata.timestampUs >> 8) & 0xFF);
-        buf[pos++] = (uint8_t)((metadata.timestampUs >> 16) & 0xFF);
-        buf[pos++] = (uint8_t)((metadata.timestampUs >> 24) & 0xFF);
-        buf[pos++] = (uint8_t)(rgbLen & 0xFF);
-        buf[pos++] = (uint8_t)((rgbLen >> 8) & 0xFF);
-
-        // RGB payload
-        if (s_captureStreamVersion == 4) {
-            const uint8_t* src = (const uint8_t*)frame;
-            for (int i = 0; i < 320; i += 2) {
-                buf[pos++] = src[i * 3];
-                buf[pos++] = src[i * 3 + 1];
-                buf[pos++] = src[i * 3 + 2];
-            }
-        } else if (rgbLen > 0) {
-            memcpy(&buf[pos], (uint8_t*)frame, rgbLen);
-            pos += rgbLen;
-        }
-
-        // v2+ metrics trailer (32 bytes)
-        if (s_captureStreamVersion >= 2) {
-            using namespace lightwaveos::actors;
-
-            auto& ledStats = ren->getLedDriverStats();
-            RendererActor::BandsDebugSnapshot bandsSnap;
-            ren->getBandsDebugSnapshot(bandsSnap);
-
-            lightwaveos::audio::ControlBusFrame cbf;
-            ren->copyCachedAudioFrame(cbf);
-
-            uint16_t showUs = (ledStats.lastShowUs > 65535) ? 65535 : (uint16_t)ledStats.lastShowUs;
-            buf[pos++] = (uint8_t)(showUs & 0xFF);
-            buf[pos++] = (uint8_t)((showUs >> 8) & 0xFF);
-
-            uint16_t rmsU16 = (uint16_t)(bandsSnap.rms * 65535.0f);
-            buf[pos++] = (uint8_t)(rmsU16 & 0xFF);
-            buf[pos++] = (uint8_t)((rmsU16 >> 8) & 0xFF);
-
-            for (int i = 0; i < 8; i++) {
-                float v = bandsSnap.bands[i];
-                buf[pos++] = (uint8_t)(v > 1.0f ? 255 : (uint8_t)(v * 255.0f));
-            }
-
-            bool beat = cbf.tempoBeatTick || cbf.es_beat_tick;
-            buf[pos++] = beat ? 1 : 0;
-
-            bool onset = cbf.snareTrigger || cbf.hihatTrigger;
-            buf[pos++] = onset ? 1 : 0;
-
-            uint16_t fluxU16 = (uint16_t)(bandsSnap.flux * 65535.0f);
-            buf[pos++] = (uint8_t)(fluxU16 & 0xFF);
-            buf[pos++] = (uint8_t)((fluxU16 >> 8) & 0xFF);
-
-            uint32_t heapFree = esp_get_free_heap_size();
-            buf[pos++] = (uint8_t)(heapFree & 0xFF);
-            buf[pos++] = (uint8_t)((heapFree >> 8) & 0xFF);
-            buf[pos++] = (uint8_t)((heapFree >> 16) & 0xFF);
-            buf[pos++] = (uint8_t)((heapFree >> 24) & 0xFF);
-
-            uint16_t skips = (ledStats.showSkips > 65535) ? 65535 : (uint16_t)ledStats.showSkips;
-            buf[pos++] = (uint8_t)(skips & 0xFF);
-            buf[pos++] = (uint8_t)((skips >> 8) & 0xFF);
-
-            float bpmVal = (cbf.es_bpm > 0.0f && cbf.es_bpm != 120.0f)
-                         ? cbf.es_bpm : cbf.tempoBpm;
-            uint16_t bpmU16 = (uint16_t)(bpmVal * 100.0f);
-            buf[pos++] = (uint8_t)(bpmU16 & 0xFF);
-            buf[pos++] = (uint8_t)((bpmU16 >> 8) & 0xFF);
-
-            float conf = (cbf.es_tempo_confidence > 0.0f)
-                       ? cbf.es_tempo_confidence : cbf.tempoConfidence;
-            if (conf > 1.0f) conf = 1.0f;
-            uint16_t confU16 = (uint16_t)(conf * 65535.0f);
-            buf[pos++] = (uint8_t)(confU16 & 0xFF);
-            buf[pos++] = (uint8_t)((confU16 >> 8) & 0xFF);
-
-            memset(&buf[pos], 0, 6);
-            pos += 6;
-        }
-
-        uint32_t assembleDur = micros() - assembleStart;
-        assembleTotalUs += assembleDur;
-        if (assembleDur > assembleMaxUs) assembleMaxUs = assembleDur;
-
-        // TX
-        uint16_t avail = Serial.availableForWrite();
-        if (avail < availMin) availMin = avail;
-
-        uint32_t writeStart = micros();
-        size_t written = Serial.write(buf, pos);
-        uint32_t writeDur = micros() - writeStart;
-
-        writeCount++;
-        writeTotalUs += writeDur;
-        if (writeDur > writeMaxUs) writeMaxUs = writeDur;
-
-        if (written < pos) txDropped++;
-    }
-
-    // Copy final stats to globals for reporting.
-    s_captureWriteCount = writeCount;
-    s_captureWriteMaxUs = writeMaxUs;
-    s_captureWriteTotalUs = writeTotalUs;
-    s_captureAssembleMaxUs = assembleMaxUs;
-    s_captureAssembleTotalUs = assembleTotalUs;
-    s_captureAvailMin = availMin;
-    s_captureStreamDropped = txDropped;
-
-    s_captureTaskHandle = nullptr;
-    vTaskDelete(nullptr);
+            (s_validationFrameScratch != s_validationFrameFallback) ? "PSRAM" : "DRAM");
 }
 
 }  // namespace
+
+// Capture streamer — binary frame streaming over Serial (Phase 2 extraction)
+static lightwaveos::serial::CaptureStreamer captureStreamer;
 
 // ==================== Setup ====================
 
@@ -467,6 +238,9 @@ void setup() {
 
     // Allocate loop command scratch once so loopTask avoids large transient stack arrays.
     initLoopScratchBuffers();
+
+    // Allocate capture streamer PSRAM buffers (Phase 2 extraction).
+    captureStreamer.init();
 
     // Telemetry boot heartbeat (for trace capture verification)
     Serial.println("{\"event\":\"telemetry.boot\",\"ts_mono_ms\":0,\"version\":\"2.0\"}");
@@ -535,6 +309,7 @@ void setup() {
         while(1) delay(1000);  // Halt
     }
     renderer = actors.getRenderer();
+    captureStreamer.setRenderer(renderer);
     LW_LOGI("Actor System: INITIALIZED");
 
     // Register ALL effects (core + LGP) BEFORE starting actors
@@ -914,170 +689,8 @@ void loop() {
     uint32_t now = millis();
     uint32_t nowUs = micros();
 
-    // --- Capture streaming tick ---
-    // Push binary frames at target FPS without command round-trip overhead.
-    // Frame is pre-assembled into s_captureFrameBuf and sent as a single
-    // bulk Serial.write() for efficient USB CDC transfer.
-    // v1: 977 bytes (17-byte header + 960 RGB). v2: 1009 bytes (+ 32-byte metrics trailer).
-    // Sync capture path — only runs when NO async task is active (fallback).
-    if (s_captureStreamActive && !s_captureTaskHandle && renderer && (nowUs - s_captureStreamLastPushUs >= s_captureStreamIntervalUs)) {
-        CRGB* frame = s_captureDumpFrameScratch;
-        if (renderer->getCapturedFrame(s_captureStreamTap, frame)) {
-            auto metadata = renderer->getCaptureMetadata();
-            // Only push if this is a new frame (avoid duplicates)
-            if (metadata.frameIndex != s_captureStreamLastFrameIdx) {
-                s_captureStreamLastFrameIdx = metadata.frameIndex;
-                s_captureStreamLastPushUs = nowUs;
-
-                // --- Assemble frame into bulk buffer ---
-                uint32_t assembleStart = micros();
-                uint8_t* buf = s_captureFrameBuf;
-                size_t pos = 0;
-
-                // Determine RGB payload size based on version/mode:
-                //   v1/v2: full 960B (320 LEDs × 3)
-                //   v3: metadata-only, 0B RGB
-                //   v4: slim, 480B (160 LEDs × 3, every other LED)
-                uint16_t rgbLen;
-                if (s_captureStreamVersion == 3) {
-                    rgbLen = 0;
-                } else if (s_captureStreamVersion == 4) {
-                    rgbLen = 160 * 3;  // 480 bytes
-                } else {
-                    rgbLen = 320 * 3;  // 960 bytes
-                }
-
-                // Header (17 bytes)
-                buf[pos++] = 0xFD;
-                buf[pos++] = s_captureStreamVersion;
-                buf[pos++] = (uint8_t)s_captureStreamTap;
-                buf[pos++] = metadata.effectId;
-                buf[pos++] = metadata.paletteId;
-                buf[pos++] = metadata.brightness;
-                buf[pos++] = metadata.speed;
-                buf[pos++] = (uint8_t)(metadata.frameIndex & 0xFF);
-                buf[pos++] = (uint8_t)((metadata.frameIndex >> 8) & 0xFF);
-                buf[pos++] = (uint8_t)((metadata.frameIndex >> 16) & 0xFF);
-                buf[pos++] = (uint8_t)((metadata.frameIndex >> 24) & 0xFF);
-                buf[pos++] = (uint8_t)(metadata.timestampUs & 0xFF);
-                buf[pos++] = (uint8_t)((metadata.timestampUs >> 8) & 0xFF);
-                buf[pos++] = (uint8_t)((metadata.timestampUs >> 16) & 0xFF);
-                buf[pos++] = (uint8_t)((metadata.timestampUs >> 24) & 0xFF);
-                buf[pos++] = (uint8_t)(rgbLen & 0xFF);
-                buf[pos++] = (uint8_t)((rgbLen >> 8) & 0xFF);
-
-                // RGB payload (0, 480, or 960 bytes depending on version)
-                if (s_captureStreamVersion == 4) {
-                    // Slim: sample every other LED
-                    const uint8_t* src = (const uint8_t*)frame;
-                    for (int i = 0; i < 320; i += 2) {
-                        buf[pos++] = src[i * 3];
-                        buf[pos++] = src[i * 3 + 1];
-                        buf[pos++] = src[i * 3 + 2];
-                    }
-                } else if (rgbLen > 0) {
-                    memcpy(&buf[pos], (uint8_t*)frame, rgbLen);
-                    pos += rgbLen;
-                }
-
-                // v2 metrics trailer (32 bytes)
-                if (s_captureStreamVersion >= 2) {
-                    using namespace lightwaveos::actors;
-
-                    auto& ledStats = renderer->getLedDriverStats();
-                    RendererActor::BandsDebugSnapshot bandsSnap;
-                    renderer->getBandsDebugSnapshot(bandsSnap);
-
-                    lightwaveos::audio::ControlBusFrame cbf;
-                    renderer->copyCachedAudioFrame(cbf);
-
-                    // [0:2] showTimeUs (u16 LE)
-                    uint16_t showUs = (ledStats.lastShowUs > 65535) ? 65535 : (uint16_t)ledStats.lastShowUs;
-                    buf[pos++] = (uint8_t)(showUs & 0xFF);
-                    buf[pos++] = (uint8_t)((showUs >> 8) & 0xFF);
-
-                    // [2:4] rms (u16 LE, float * 65535)
-                    uint16_t rmsU16 = (uint16_t)(bandsSnap.rms * 65535.0f);
-                    buf[pos++] = (uint8_t)(rmsU16 & 0xFF);
-                    buf[pos++] = (uint8_t)((rmsU16 >> 8) & 0xFF);
-
-                    // [4:12] bands[8] (u8 each, float * 255)
-                    for (int i = 0; i < 8; i++) {
-                        float v = bandsSnap.bands[i];
-                        buf[pos++] = (uint8_t)(v > 1.0f ? 255 : (uint8_t)(v * 255.0f));
-                    }
-
-                    // [12] beatTick (u8)
-                    bool beat = cbf.tempoBeatTick || cbf.es_beat_tick;
-                    buf[pos++] = beat ? 1 : 0;
-
-                    // [13] onsetTick (u8)
-                    bool onset = cbf.snareTrigger || cbf.hihatTrigger;
-                    buf[pos++] = onset ? 1 : 0;
-
-                    // [14:16] flux (u16 LE, float * 65535)
-                    uint16_t fluxU16 = (uint16_t)(bandsSnap.flux * 65535.0f);
-                    buf[pos++] = (uint8_t)(fluxU16 & 0xFF);
-                    buf[pos++] = (uint8_t)((fluxU16 >> 8) & 0xFF);
-
-                    // [16:20] heapFree (u32 LE)
-                    uint32_t heapFree = esp_get_free_heap_size();
-                    buf[pos++] = (uint8_t)(heapFree & 0xFF);
-                    buf[pos++] = (uint8_t)((heapFree >> 8) & 0xFF);
-                    buf[pos++] = (uint8_t)((heapFree >> 16) & 0xFF);
-                    buf[pos++] = (uint8_t)((heapFree >> 24) & 0xFF);
-
-                    // [20:22] showSkips (u16 LE)
-                    uint16_t skips = (ledStats.showSkips > 65535) ? 65535 : (uint16_t)ledStats.showSkips;
-                    buf[pos++] = (uint8_t)(skips & 0xFF);
-                    buf[pos++] = (uint8_t)((skips >> 8) & 0xFF);
-
-                    // [22:24] bpm (u16 LE, BPM * 100)
-                    float bpmVal = (cbf.es_bpm > 0.0f && cbf.es_bpm != 120.0f)
-                                 ? cbf.es_bpm : cbf.tempoBpm;
-                    uint16_t bpmU16 = (uint16_t)(bpmVal * 100.0f);
-                    buf[pos++] = (uint8_t)(bpmU16 & 0xFF);
-                    buf[pos++] = (uint8_t)((bpmU16 >> 8) & 0xFF);
-
-                    // [24:26] beatConfidence (u16 LE, float * 65535)
-                    float conf = (cbf.es_tempo_confidence > 0.0f)
-                               ? cbf.es_tempo_confidence : cbf.tempoConfidence;
-                    if (conf > 1.0f) conf = 1.0f;
-                    uint16_t confU16 = (uint16_t)(conf * 65535.0f);
-                    buf[pos++] = (uint8_t)(confU16 & 0xFF);
-                    buf[pos++] = (uint8_t)((confU16 >> 8) & 0xFF);
-
-                    // [26:32] reserved (6 bytes)
-                    memset(&buf[pos], 0, 6);
-                    pos += 6;
-                }
-
-                // Record assembly duration.
-                uint32_t assembleDur = micros() - assembleStart;
-                s_captureAssembleTotalUs += assembleDur;
-                if (assembleDur > s_captureAssembleMaxUs) s_captureAssembleMaxUs = assembleDur;
-
-                // Record TX buffer state before write.
-                uint16_t avail = Serial.availableForWrite();
-                if (avail < s_captureAvailMin) s_captureAvailMin = avail;
-
-                // Instrumented blocking bulk write.  The USB CDC TX buffer
-                // is only 256 bytes — Serial.write() internally chunks the
-                // 1009-byte frame through it, blocking until complete.
-                uint32_t writeStart = micros();
-                size_t written = Serial.write(buf, pos);
-                uint32_t writeDur = micros() - writeStart;
-
-                s_captureWriteCount++;
-                s_captureWriteTotalUs += writeDur;
-                if (writeDur > s_captureWriteMaxUs) s_captureWriteMaxUs = writeDur;
-
-                if (written < pos) {
-                    s_captureStreamDropped++;
-                }
-            }
-        }
-    }
+    // --- Capture streaming tick (sync fallback) ---
+    captureStreamer.tick(nowUs);
 
 #if !defined(NATIVE_BUILD) && FEATURE_STATUS_STRIP_TOUCH
     statusStripTouchLoop(now);
@@ -1304,281 +917,10 @@ void loop() {
         // Color correction commands (cc, ae, gamma, brown) and capture commands
         if (peekChar == 'c' && input.length() > 1) {
 
-            // -----------------------------------------------------------------
-            // Capture commands: capture on/off/status/dump
-            // -----------------------------------------------------------------
+            // Capture commands — delegated to CaptureStreamer (Phase 2 extraction).
             if (inputLower.startsWith("capture")) {
                 handledMulti = true;
-
-                // Ack what we received
-                Serial.printf("[CAPTURE] recv='%s'\n", input.c_str());
-
-                // Strip the leading keyword
-                String subcmd = inputLower.substring(7); // after "capture"
-                subcmd.trim();
-
-                if (subcmd == "off") {
-                    renderer->setCaptureMode(false, 0);
-                    Serial.println("Capture mode disabled");
-                }
-                else if (subcmd.startsWith("on")) {
-                    uint8_t tapMask = 0x07;  // default all taps
-                    if (subcmd.length() > 2) {
-                        tapMask = 0;
-                        if (subcmd.indexOf('a') >= 0) tapMask |= 0x01;
-                        if (subcmd.indexOf('b') >= 0) tapMask |= 0x02;
-                        if (subcmd.indexOf('c') >= 0) tapMask |= 0x04;
-                    }
-                    renderer->setCaptureMode(true, tapMask);
-                    Serial.printf("Capture mode enabled (tapMask=0x%02X: %s%s%s)\n",
-                                  tapMask,
-                                  (tapMask & 0x01) ? "A" : "",
-                                  (tapMask & 0x02) ? "B" : "",
-                                  (tapMask & 0x04) ? "C" : "");
-                }
-                else if (subcmd.startsWith("dump")) {
-                    using namespace lightwaveos::actors;
-                    RendererActor::CaptureTap tap;
-                    bool valid = false;
-
-                    if (subcmd.indexOf('a') >= 0) { tap = RendererActor::CaptureTap::TAP_A_PRE_CORRECTION; valid = true; }
-                    else if (subcmd.indexOf('b') >= 0) { tap = RendererActor::CaptureTap::TAP_B_POST_CORRECTION; valid = true; }
-                    else if (subcmd.indexOf('c') >= 0) { tap = RendererActor::CaptureTap::TAP_C_PRE_WS2812; valid = true; }
-
-                    if (valid) {
-                        CRGB* frame = s_captureDumpFrameScratch;
-                        // If we have no captured frame yet (common right after enabling capture or switching effects),
-                        // force a one-shot capture at the requested tap and retry.
-                        if (!renderer->getCapturedFrame(tap, frame)) {
-                            renderer->forceOneShotCapture(tap);
-                            delay(10);  // allow capture to complete
-                        }
-
-                        if (renderer->getCapturedFrame(tap, frame)) {
-                            auto metadata = renderer->getCaptureMetadata();
-
-                            Serial.write(0xFD);  // Magic
-                            Serial.write(0x01);  // Version
-                            Serial.write((uint8_t)tap);
-                            Serial.write(metadata.effectId);
-                            Serial.write(metadata.paletteId);
-                            Serial.write(metadata.brightness);
-                            Serial.write(metadata.speed);
-                            Serial.write((uint8_t)(metadata.frameIndex & 0xFF));
-                            Serial.write((uint8_t)((metadata.frameIndex >> 8) & 0xFF));
-                            Serial.write((uint8_t)((metadata.frameIndex >> 16) & 0xFF));
-                            Serial.write((uint8_t)((metadata.frameIndex >> 24) & 0xFF));
-                            Serial.write((uint8_t)(metadata.timestampUs & 0xFF));
-                            Serial.write((uint8_t)((metadata.timestampUs >> 8) & 0xFF));
-                            Serial.write((uint8_t)((metadata.timestampUs >> 16) & 0xFF));
-                            Serial.write((uint8_t)((metadata.timestampUs >> 24) & 0xFF));
-                            uint16_t frameLen = 320 * 3;  // RGB × 320 LEDs
-                            Serial.write((uint8_t)(frameLen & 0xFF));
-                            Serial.write((uint8_t)((frameLen >> 8) & 0xFF));
-
-                            // Payload
-                            Serial.write((uint8_t*)frame, frameLen);
-
-                            Serial.printf("\nFrame dumped: tap=%d, effect=%d, palette=%d, frame=%u\n",
-                                          (int)tap, metadata.effectId, metadata.paletteId, (unsigned int)metadata.frameIndex);
-                        } else {
-                            Serial.println("No frame captured for this tap");
-                        }
-                    } else {
-                        Serial.println("Usage: capture dump <a|b|c>");
-                    }
-                }
-                else if (subcmd.startsWith("stream")) {
-                    // capture stream <a|b|c> [fps]  — start continuous binary streaming
-                    using namespace lightwaveos::actors;
-                    String streamArgs = subcmd.substring(6);
-                    streamArgs.trim();
-
-                    RendererActor::CaptureTap tap = RendererActor::CaptureTap::TAP_B_POST_CORRECTION;
-                    uint8_t tapMask = 0x02;
-                    int targetFps = 15;
-
-                    if (streamArgs.indexOf('a') >= 0) { tap = RendererActor::CaptureTap::TAP_A_PRE_CORRECTION; tapMask = 0x01; }
-                    else if (streamArgs.indexOf('c') >= 0) { tap = RendererActor::CaptureTap::TAP_C_PRE_WS2812; tapMask = 0x04; }
-
-                    // Parse optional FPS after tap letter
-                    int spaceIdx = streamArgs.indexOf(' ');
-                    if (spaceIdx >= 0) {
-                        int parsed = streamArgs.substring(spaceIdx + 1).toInt();
-                        if (parsed >= 1 && parsed <= 60) targetFps = parsed;
-                    }
-
-                    // Enable capture mode for the requested tap
-                    renderer->setCaptureMode(true, tapMask);
-
-                    s_captureStreamTap = tap;
-                    s_captureStreamTapMask = tapMask;
-                    s_captureStreamIntervalUs = 1000000 / targetFps;
-                    s_captureStreamLastPushUs = 0;
-                    s_captureStreamLastFrameIdx = UINT32_MAX;
-                    s_captureStreamDropped = 0;
-                    s_captureWriteMaxUs = 0;
-                    s_captureWriteTotalUs = 0;
-                    s_captureWriteCount = 0;
-                    s_captureAvailMin = UINT16_MAX;
-                    s_captureBackpressureSkips = 0;
-                    s_captureAssembleMaxUs = 0;
-                    s_captureAssembleTotalUs = 0;
-                    s_captureStreamActive = true;
-
-                    // Path B: launch dedicated capture task on Core 0.
-                    // This decouples capture from loop() overhead.
-                    s_captureTaskRunning = true;
-                    BaseType_t taskOk = xTaskCreatePinnedToCore(
-                        captureProducerTask,
-                        "captureTx",
-                        4096,           // stack (frame buf is global, not on stack)
-                        renderer,       // param — RendererActor*
-                        2,              // priority (above loopTask=1, below audio)
-                        &s_captureTaskHandle,
-                        0               // Core 0
-                    );
-                    if (taskOk != pdPASS) {
-                        s_captureTaskRunning = false;
-                        s_captureTaskHandle = nullptr;
-                        Serial.println("[CAPTURE] WARN: task create failed, using sync fallback");
-                    }
-
-                    // Create esp_timer for microsecond-resolution pacing.
-                    // The callback just notifies the task — no work in ISR context.
-                    if (s_captureTaskHandle && !s_captureTimer) {
-                        esp_timer_create_args_t timerArgs = {};
-                        timerArgs.callback = captureTimerCallback;
-                        timerArgs.name = "capTimer";
-                        if (esp_timer_create(&timerArgs, &s_captureTimer) == ESP_OK) {
-                            esp_timer_start_periodic(s_captureTimer, s_captureStreamIntervalUs);
-                        }
-                    }
-
-                    Serial.printf("[CAPTURE] Streaming tap %c at %d FPS (%d us interval) [%s]\n",
-                                  (tapMask & 0x01) ? 'A' : (tapMask & 0x04) ? 'C' : 'B',
-                                  targetFps, (int)s_captureStreamIntervalUs,
-                                  s_captureTaskHandle ? "async+timer" : "sync");
-                }
-                else if (subcmd == "stop") {
-                    // Stop timer first (prevents further notifications).
-                    if (s_captureTimer) {
-                        esp_timer_stop(s_captureTimer);
-                        esp_timer_delete(s_captureTimer);
-                        s_captureTimer = nullptr;
-                    }
-                    // Signal task to stop and wait for it to flush stats.
-                    if (s_captureTaskHandle) {
-                        s_captureTaskRunning = false;
-                        // Give one extra notification to unblock the task.
-                        xTaskNotifyGive(s_captureTaskHandle);
-                        // Wait up to 500ms for task to self-delete.
-                        for (int w = 0; w < 50 && s_captureTaskHandle; w++) {
-                            delay(10);
-                        }
-                    }
-                    s_captureStreamActive = false;
-                    uint32_t avgWriteUs = s_captureWriteCount ? (s_captureWriteTotalUs / s_captureWriteCount) : 0;
-                    uint32_t avgAssemUs = s_captureWriteCount ? (s_captureAssembleTotalUs / s_captureWriteCount) : 0;
-                    Serial.printf("[CAPTURE] Stopped: %lu writes, write max/avg %lu/%lu us, "
-                                  "assemble max/avg %lu/%lu us, "
-                                  "min_avail %u B, bp_skip %lu, tx_drop %lu\n",
-                                  (unsigned long)s_captureWriteCount,
-                                  (unsigned long)s_captureWriteMaxUs,
-                                  (unsigned long)avgWriteUs,
-                                  (unsigned long)s_captureAssembleMaxUs,
-                                  (unsigned long)avgAssemUs,
-                                  (unsigned)s_captureAvailMin,
-                                  (unsigned long)s_captureBackpressureSkips,
-                                  (unsigned long)s_captureStreamDropped);
-                }
-                else if (subcmd.startsWith("fps")) {
-                    String fpsArg = subcmd.substring(3);
-                    fpsArg.trim();
-                    int newFps = fpsArg.toInt();
-                    if (newFps >= 1 && newFps <= 60) {
-                        s_captureStreamIntervalUs = 1000000 / newFps;
-                        // Restart timer with new period if active.
-                        if (s_captureTimer) {
-                            esp_timer_stop(s_captureTimer);
-                            esp_timer_start_periodic(s_captureTimer, s_captureStreamIntervalUs);
-                        }
-                        Serial.printf("[CAPTURE] FPS set to %d (%d us interval)\n", newFps, (int)s_captureStreamIntervalUs);
-                    } else {
-                        Serial.println("Usage: capture fps <1-60>");
-                    }
-                }
-                else if (subcmd.startsWith("tap")) {
-                    using namespace lightwaveos::actors;
-                    String tapArg = subcmd.substring(3);
-                    tapArg.trim();
-                    if (tapArg == "a") {
-                        s_captureStreamTap = RendererActor::CaptureTap::TAP_A_PRE_CORRECTION;
-                        s_captureStreamTapMask = 0x01;
-                    } else if (tapArg == "b") {
-                        s_captureStreamTap = RendererActor::CaptureTap::TAP_B_POST_CORRECTION;
-                        s_captureStreamTapMask = 0x02;
-                    } else if (tapArg == "c") {
-                        s_captureStreamTap = RendererActor::CaptureTap::TAP_C_PRE_WS2812;
-                        s_captureStreamTapMask = 0x04;
-                    } else {
-                        Serial.println("Usage: capture tap <a|b|c>");
-                        tapArg = "";  // mark invalid
-                    }
-                    if (tapArg.length() > 0) {
-                        if (renderer->isCaptureModeEnabled()) {
-                            renderer->setCaptureMode(true, s_captureStreamTapMask);
-                        }
-                        Serial.printf("[CAPTURE] Tap switched to %s\n", tapArg.c_str());
-                    }
-                }
-                else if (subcmd.startsWith("format")) {
-                    String fmtArg = subcmd.substring(6);
-                    fmtArg.trim();
-                    if (fmtArg == "v1" || fmtArg == "1") {
-                        s_captureStreamVersion = 1;
-                        Serial.println("[CAPTURE] Format set to v1 (977 bytes, no metrics)");
-                    } else if (fmtArg == "v2" || fmtArg == "2") {
-                        s_captureStreamVersion = 2;
-                        Serial.println("[CAPTURE] Format set to v2 (1009 bytes, with metrics)");
-                    } else if (fmtArg == "meta" || fmtArg == "v3" || fmtArg == "3") {
-                        s_captureStreamVersion = 3;
-                        Serial.println("[CAPTURE] Format set to v3/meta (49 bytes, metrics only)");
-                    } else if (fmtArg == "slim" || fmtArg == "v4" || fmtArg == "4") {
-                        s_captureStreamVersion = 4;
-                        Serial.println("[CAPTURE] Format set to v4/slim (529 bytes, half-res RGB)");
-                    } else {
-                        Serial.println("Usage: capture format <v1|v2|meta|slim>");
-                    }
-                }
-                else if (subcmd == "status") {
-                    auto metadata = renderer->getCaptureMetadata();
-                    uint32_t avgWriteUs = s_captureWriteCount ? (s_captureWriteTotalUs / s_captureWriteCount) : 0;
-                    uint32_t avgAssemUs = s_captureWriteCount ? (s_captureAssembleTotalUs / s_captureWriteCount) : 0;
-                    Serial.println("\n=== Capture Status ===");
-                    Serial.printf("  Enabled: %s\n", renderer->isCaptureModeEnabled() ? "YES" : "NO");
-                    Serial.printf("  Streaming: %s (v%d, %d us interval, %s)\n",
-                                  s_captureStreamActive ? "YES" : "NO",
-                                  s_captureStreamVersion, (int)s_captureStreamIntervalUs,
-                                  s_captureTaskHandle ? "async" : "sync");
-                    Serial.printf("  Write: %lu, max/avg %lu/%lu us\n",
-                                  (unsigned long)s_captureWriteCount,
-                                  (unsigned long)s_captureWriteMaxUs,
-                                  (unsigned long)avgWriteUs);
-                    Serial.printf("  Assemble: max/avg %lu/%lu us\n",
-                                  (unsigned long)s_captureAssembleMaxUs,
-                                  (unsigned long)avgAssemUs);
-                    Serial.printf("  Min avail: %u B, bp_skip: %lu, tx_drop: %lu\n",
-                                  (unsigned)s_captureAvailMin,
-                                  (unsigned long)s_captureBackpressureSkips,
-                                  (unsigned long)s_captureStreamDropped);
-                    Serial.printf("  Last capture: effect=%d, palette=%d, frame=%lu\n",
-                                  metadata.effectId, metadata.paletteId, metadata.frameIndex);
-                    Serial.println();
-                }
-                else {
-                    Serial.println("Usage: capture <on|off|dump|stream|stop|fps|tap|format|status>");
-                }
+                captureStreamer.handleCommand(input);
             }
 
             if (input == "c") {

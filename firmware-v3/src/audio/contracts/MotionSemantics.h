@@ -219,6 +219,8 @@ public:
 
         m_frame.inferred_mask  = mask;
         m_frame.confidence_min = (mask == 0) ? 255 : conf_min;
+
+        // Trace: engine output logged by consuming .cpp (ControlBus.cpp covers raw signals)
     }
 
     /**

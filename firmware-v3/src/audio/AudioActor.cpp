@@ -13,6 +13,7 @@
  */
 
 #include "AudioActor.h"
+#include "../core/bus/MessageBus.h"
 
 #if FEATURE_AUDIO_SYNC
 
@@ -74,6 +75,218 @@ namespace {
         return false;
 #endif
     }
+
+#if FEATURE_TRANSLATION_ENGINE
+    inline float clamp01(float x) {
+        if (x < 0.0f) return 0.0f;
+        if (x > 1.0f) return 1.0f;
+        return x;
+    }
+
+    inline float clampf(float x, float lo, float hi) {
+        if (x < lo) return lo;
+        if (x > hi) return hi;
+        return x;
+    }
+
+    inline float computeTranslationDeltaSeconds(
+        const lightwaveos::audio::ControlBusFrame& frame,
+        lightwaveos::audio::AudioTime& previous,
+        bool& hasPrevious
+    ) {
+        const uint32_t sampleRate = (frame.t.sample_rate_hz > 0U)
+            ? frame.t.sample_rate_hz
+            : lightwaveos::audio::SAMPLE_RATE;
+        float dt = static_cast<float>(lightwaveos::audio::HOP_SIZE) / static_cast<float>(sampleRate);
+        if (hasPrevious) {
+            const float measured = lightwaveos::audio::AudioTime_SecondsBetween(previous, frame.t);
+            if (measured > 0.0f) {
+                dt = measured;
+            }
+        }
+        previous = frame.t;
+        hasPrevious = true;
+        return clampf(dt, 0.0005f, 0.05f);
+    }
+
+    inline lightwaveos::audio::AudioFeatures buildTranslationFeatures(
+        const lightwaveos::audio::ControlBusFrame& frame
+    ) {
+        lightwaveos::audio::AudioFeatures features{};
+        features.hop_sequence = frame.hop_seq;
+        features.rms = clamp01(frame.rms);
+        features.fast_rms = clamp01(frame.fast_rms);
+        features.flux = clamp01(frame.flux);
+        features.fast_flux = clamp01(frame.fast_flux);
+        features.bass = clamp01((frame.bands[0] + frame.bands[1]) * 0.5f);
+        features.mid = clamp01((frame.bands[2] + frame.bands[3] + frame.bands[4]) / 3.0f);
+        features.treble = clamp01((frame.bands[5] + frame.bands[6] + frame.bands[7]) / 3.0f);
+        features.harmonic_saliency = clamp01(frame.saliency.harmonicNoveltySmooth);
+        features.rhythmic_saliency = clamp01(frame.saliency.rhythmicNoveltySmooth);
+        features.timbral_saliency = clamp01(frame.saliency.timbralNoveltySmooth);
+        features.dynamic_saliency = clamp01(frame.saliency.dynamicNoveltySmooth);
+        features.liveliness = clamp01(frame.liveliness);
+        features.tempo_bpm = frame.tempoBpm;
+        features.tempo_confidence = clamp01(frame.tempoConfidence);
+        features.beat_strength = clamp01(frame.tempoBeatStrength);
+        features.beat_tick = frame.tempoBeatTick;
+        features.downbeat_tick = frame.tempoDownbeatTick;
+        features.snare_trigger = frame.snareTrigger;
+        features.hihat_trigger = frame.hihatTrigger;
+        features.is_silent = frame.isSilent;
+        features.silent_scale = clamp01(frame.silentScale);
+        features.style = frame.currentStyle;
+        features.style_confidence = clamp01(frame.styleConfidence);
+        features.chord_root = static_cast<uint8_t>(frame.chordState.rootNote % 12u);
+        features.chord_type = frame.chordState.type;
+        features.chord_confidence = clamp01(frame.chordState.confidence);
+        return features;
+    }
+
+#if FEATURE_TRANSLATION_DEBUG
+    inline float computeChangeScoreEstimate(const lightwaveos::audio::TranslationState& state) {
+        const float beatCountEstimate =
+            static_cast<float>(state.bar_in_phrase * 4u + state.beat_in_bar + 1u);
+        const float inv = 1.0f / std::max(1.0f, beatCountEstimate);
+        const float meanEnergy = state.phrase_energy_accum * inv;
+        const float meanFlux = state.phrase_flux_accum * inv;
+        const float meanHarmonic = state.phrase_harmonic_accum * inv;
+        return clamp01(
+            0.45f * fabsf(meanEnergy - state.previous_phrase_energy) +
+            0.30f * fabsf(meanFlux - state.previous_phrase_flux) +
+            0.25f * fabsf(meanHarmonic - state.previous_phrase_harmonic)
+        );
+    }
+
+    inline float computeRefractoryRemaining(const lightwaveos::audio::TranslationState& state) {
+        const float bpm = clampf(state.held_bpm, 60.0f, 180.0f);
+        const float beatPeriod = 60.0f / bpm;
+        const float refractory = std::max(0.06f, 0.25f * beatPeriod);
+        return std::max(0.0f, refractory - state.time_since_last_onset_s);
+    }
+
+    inline void maybeLogTranslationSnapshot(
+        const lightwaveos::audio::AudioFeatures& features,
+        const lightwaveos::audio::TranslationState& state,
+        float silenceSourceRms,
+        bool lastLatchValid,
+        float lastLatchBpm,
+        float lastLatchConfidence,
+        uint64_t lastLatchUs,
+        bool lastLatchTempoLocked,
+        bool lastLatchBeatTick,
+        bool lastLatchDownbeatTick,
+        uint64_t nowUs,
+        uint64_t& lastLogUs
+    ) {
+        if (nowUs == 0ULL) {
+            return;
+        }
+        if (lastLogUs != 0ULL && (nowUs - lastLogUs) < 2000000ULL) {
+            return;
+        }
+        lastLogUs = nowUs;
+        LW_LOGD(
+            "xlat in rms=%.3f srcsil=%.3f frms=%.3f flux=%.3f fflux=%.3f bpm=%.1f conf=%.3f beat=%.3f tick=%u down=%u silent=%u sscale=%.3f",
+            features.rms,
+            silenceSourceRms,
+            features.fast_rms,
+            features.flux,
+            features.fast_flux,
+            features.tempo_bpm,
+            features.tempo_confidence,
+            features.beat_strength,
+            features.beat_tick ? 1u : 0u,
+            features.downbeat_tick ? 1u : 0u,
+            features.is_silent ? 1u : 0u,
+            features.silent_scale
+        );
+        LW_LOGD("xlat st motion=%u timing=%u held_bpm=%.1f hold_age=%.2f phrase=%.3f bpulse=%.3f bright=%.3f change=%.3f refr=%.3f",
+                static_cast<unsigned>(state.current_motion),
+                state.timing_reliable ? 1u : 0u,
+                state.held_bpm,
+                state.held_bpm_age_s,
+                state.phrase_progress,
+                state.beat_pulse,
+                state.brightness_scale,
+                computeChangeScoreEstimate(state),
+                computeRefractoryRemaining(state));
+        const float lastLatchAgeSeconds =
+            (lastLatchValid && nowUs >= lastLatchUs)
+                ? static_cast<float>(nowUs - lastLatchUs) / 1000000.0f
+                : 0.0f;
+        LW_LOGD(
+            "xlat lat valid=%u bpm=%.1f conf=%.3f age=%.2f lock=%u tick=%u down=%u",
+            lastLatchValid ? 1u : 0u,
+            lastLatchBpm,
+            lastLatchConfidence,
+            lastLatchAgeSeconds,
+            lastLatchTempoLocked ? 1u : 0u,
+            lastLatchBeatTick ? 1u : 0u,
+            lastLatchDownbeatTick ? 1u : 0u
+        );
+    }
+
+    inline void recordTranslationLatch(
+        const lightwaveos::audio::AudioFeatures& features,
+        bool tempoLocked,
+        bool latchDetected,
+        uint64_t nowUs,
+        bool& lastLatchValid,
+        float& lastLatchBpm,
+        float& lastLatchConfidence,
+        uint64_t& lastLatchUs,
+        bool& lastLatchTempoLocked,
+        bool& lastLatchBeatTick,
+        bool& lastLatchDownbeatTick
+    ) {
+        if (!latchDetected || nowUs == 0ULL) {
+            return;
+        }
+        lastLatchValid = true;
+        lastLatchBpm = features.tempo_bpm;
+        lastLatchConfidence = features.tempo_confidence;
+        lastLatchUs = nowUs;
+        lastLatchTempoLocked = tempoLocked;
+        lastLatchBeatTick = features.beat_tick;
+        lastLatchDownbeatTick = features.downbeat_tick;
+    }
+
+    inline void maybeLogTranslationEvent(
+        const lightwaveos::audio::AudioFeatures& features,
+        const lightwaveos::audio::TranslationState& state,
+        float silenceSourceRms,
+        bool tempoLocked,
+        float previousHeldBpm,
+        bool previousTimingReliable,
+        uint64_t nowUs
+    ) {
+        if (nowUs == 0ULL) {
+            return;
+        }
+        const bool heldChanged = fabsf(state.held_bpm - previousHeldBpm) > 0.05f;
+        const bool timingChanged = state.timing_reliable != previousTimingReliable;
+        if (!heldChanged && !timingChanged) {
+            return;
+        }
+        LW_LOGD(
+            "xlat evt heldchg=%u timechg=%u motion=%u timing=%u bpm=%.1f conf=%.3f lock=%u tick=%u down=%u srcsil=%.3f held=%.1f hold_age=%.2f",
+            heldChanged ? 1u : 0u,
+            timingChanged ? 1u : 0u,
+            static_cast<unsigned>(state.current_motion),
+            state.timing_reliable ? 1u : 0u,
+            features.tempo_bpm,
+            features.tempo_confidence,
+            tempoLocked ? 1u : 0u,
+            features.beat_tick ? 1u : 0u,
+            features.downbeat_tick ? 1u : 0u,
+            silenceSourceRms,
+            state.held_bpm,
+            state.held_bpm_age_s
+        );
+    }
+#endif
+#endif
 }
 
 #ifndef NATIVE_BUILD
@@ -283,6 +496,23 @@ void AudioActor::onStart()
     m_state = AudioActorState::INITIALIZING;
     m_diag.reset();
     m_diag.diagStartTimeUs = esp_timer_get_time();
+#if FEATURE_TRANSLATION_ENGINE
+    translation_init(&m_translationState);
+    m_translationLastAudioTime = AudioTime{};
+    m_translationHaveLastAudioTime = false;
+    m_smoothedTempoConfidence = 0.0f;
+    m_translationLastDebugLogUs = 0ULL;
+#if FEATURE_TRANSLATION_DEBUG
+    m_translationLastLatchValid = false;
+    m_translationLastLatchBpm = 0.0f;
+    m_translationLastLatchConfidence = 0.0f;
+    m_translationLastLatchUs = 0ULL;
+    m_translationLastLatchTempoLocked = false;
+    m_translationLastLatchBeatTick = false;
+    m_translationLastLatchDownbeatTick = false;
+#endif
+#endif
+    m_standardBeatInBar = 0u;
 
     if (!m_esBackend.init()) {
         m_state = AudioActorState::ERROR;
@@ -376,7 +606,15 @@ void AudioActor::onTick()
     // Bridge ES tempo fields → standard fields consumed by Stage B
     frame.tempoLocked = frame.es_tempo_confidence > 0.5f;
     frame.tempoConfidence = frame.es_tempo_confidence;
-    frame.tempoBeatTick = frame.es_beat_tick && frame.tempoLocked;
+    // P1 seam fix: pass beat/downbeat through unconditionally.
+    // The translator has its own confidence check (kTempoConfidenceReliable = 0.35)
+    // and timing_reliable state machine. The old gate (&&tempoLocked, conf>0.5)
+    // suppressed ALL beat events in the 0.35-0.5 confidence zone, preventing
+    // BLOOM and RECOIL motion states from ever triggering.
+    frame.tempoBeatTick = frame.es_beat_tick;
+    frame.tempoDownbeatTick = frame.es_downbeat_tick;
+    frame.tempoBpm = frame.es_bpm;
+    frame.tempoBeatStrength = frame.es_beat_strength;
 
     // Derive rmsUngated from band energy average (autorange max gain ~20x,
     // far less noise amplification than VU's 40,000x AGC).
@@ -390,6 +628,77 @@ void AudioActor::onTick()
     constexpr float ES_HOP_DT = audio::HOP_DURATION_MS / 1000.0f;
 
     m_controlBus.applyDerivedFeatures(frame, ES_HOP_DT, rmsUngated);
+#if FEATURE_TRANSLATION_ENGINE
+    {
+        AudioFeatures translated = buildTranslationFeatures(frame);
+        const float previousHeldBpm = m_translationState.held_bpm;
+        const bool previousTimingReliable = m_translationState.timing_reliable;
+        const float dtSeconds = computeTranslationDeltaSeconds(
+            frame,
+            m_translationLastAudioTime,
+            m_translationHaveLastAudioTime
+        );
+
+        // Asymmetric confidence follower: instant attack, ~2s half-life decay.
+        // Bridges confidence dips that kill timing_reliable.
+        // 0.994^(dt*60): at 62Hz each hop decays by 0.994^0.97≈0.994,
+        // after 2s (124 hops) retains ~48% of peak (half-life ≈ 2s).
+        const float rawConf = translated.tempo_confidence;
+        if (rawConf > m_smoothedTempoConfidence) {
+            m_smoothedTempoConfidence = rawConf;  // instant attack
+        } else {
+            m_smoothedTempoConfidence *= powf(m_esBackend.tempoParams().confDecay, dtSeconds * 60.0f);
+        }
+        translated.tempo_confidence = m_smoothedTempoConfidence;
+
+        translation_update(&translated, dtSeconds, &m_translationState);
+        translation_get_parameters(&m_translationState, &frame.scene);
+#if FEATURE_TRANSLATION_DEBUG
+        const uint64_t logNowUs = (frame.t.monotonic_us != 0ULL) ? frame.t.monotonic_us : esp_timer_get_time();
+        const bool latchDetected =
+            (fabsf(m_translationState.held_bpm - previousHeldBpm) > 0.05f) ||
+            (!previousTimingReliable && m_translationState.timing_reliable);
+        recordTranslationLatch(
+            translated,
+            frame.tempoLocked,
+            latchDetected,
+            logNowUs,
+            m_translationLastLatchValid,
+            m_translationLastLatchBpm,
+            m_translationLastLatchConfidence,
+            m_translationLastLatchUs,
+            m_translationLastLatchTempoLocked,
+            m_translationLastLatchBeatTick,
+            m_translationLastLatchDownbeatTick
+        );
+        maybeLogTranslationEvent(
+            translated,
+            m_translationState,
+            clamp01(rmsUngated),
+            frame.tempoLocked,
+            previousHeldBpm,
+            previousTimingReliable,
+            logNowUs
+        );
+        maybeLogTranslationSnapshot(
+            translated,
+            m_translationState,
+            clamp01(rmsUngated),
+            m_translationLastLatchValid,
+            m_translationLastLatchBpm,
+            m_translationLastLatchConfidence,
+            m_translationLastLatchUs,
+            m_translationLastLatchTempoLocked,
+            m_translationLastLatchBeatTick,
+            m_translationLastLatchDownbeatTick,
+            logNowUs,
+            m_translationLastDebugLogUs
+        );
+#endif
+    }
+#else
+    frame.scene = kDefaultSceneParameters;
+#endif
     TRACE_END();  // controlbus_build
     TRACE_COUNTER("audio_rms", static_cast<int32_t>(frame.rms * 10000));
 
@@ -408,18 +717,28 @@ void AudioActor::onTick()
     m_diag.lastPublishSeq = frame.hop_seq;
     TRACE_END();  // snapshot_publish
 
-    // GROUND-TRUTH DIAGNOSTIC (TEMPORARY): 2-second periodic tempo field dump.
-    // Captures raw backend confidence before any translation/smoothing.
-    // Enable with `-D LW_TEMPO_GT_LOG=1`. Remove after validation.
+    // GROUND-TRUTH DIAGNOSTIC: 2-second periodic translator field dump.
+    // Shows raw vs smoothed confidence + translator state.
+    // Remove after validation. ~62 Hz hop rate → 124 hops ≈ 2s.
 #if !defined(NATIVE_BUILD) && defined(LW_TEMPO_GT_LOG) && LW_TEMPO_GT_LOG
-    // ~62 Hz hop rate → 124 hops ≈ 2s.
     if ((m_hopCount % 124) == 0) {
+        const float rawConf = frame.es_tempo_confidence;
+#if FEATURE_TRANSLATION_ENGINE
+        Serial.printf("[XLAT_GT] bpm=%.1f rawC=%.3f smC=%.3f held=%.1f timing=%d tick=%d motion=%u rms=%.3f\n",
+                      frame.es_bpm, rawConf, m_smoothedTempoConfidence,
+                      m_translationState.held_bpm,
+                      m_translationState.timing_reliable ? 1 : 0,
+                      frame.es_beat_tick ? 1 : 0,
+                      static_cast<unsigned>(m_translationState.current_motion),
+                      frame.rms);
+#else
         Serial.printf("[TEMPO_GT] bpm=%.1f conf=%.3f str=%.3f tick=%d down=%d rms=%.3f\n",
-                      frame.es_bpm, frame.es_tempo_confidence,
+                      frame.es_bpm, rawConf,
                       frame.es_beat_strength,
                       frame.es_beat_tick ? 1 : 0,
                       frame.es_downbeat_tick ? 1 : 0,
                       frame.rms);
+#endif
     }
 #endif
 }
@@ -719,6 +1038,22 @@ void AudioActor::onStart()
     m_diag.diagStartTimeUs = esp_timer_get_time();
     m_consecutiveZeroHops = 0;
     m_lastRecoveryAttemptHop = 0;
+#if FEATURE_TRANSLATION_ENGINE
+    translation_init(&m_translationState);
+    m_translationLastAudioTime = AudioTime{};
+    m_translationHaveLastAudioTime = false;
+    m_translationLastDebugLogUs = 0ULL;
+#if FEATURE_TRANSLATION_DEBUG
+    m_translationLastLatchValid = false;
+    m_translationLastLatchBpm = 0.0f;
+    m_translationLastLatchConfidence = 0.0f;
+    m_translationLastLatchUs = 0ULL;
+    m_translationLastLatchTempoLocked = false;
+    m_translationLastLatchBeatTick = false;
+    m_translationLastLatchDownbeatTick = false;
+#endif
+#endif
+    m_standardBeatInBar = 0u;
 
     // Initialize I2S audio capture
     if (!m_capture.init()) {
@@ -841,6 +1176,16 @@ void AudioActor::captureHop()
         m_diag.captureSuccesses++;
         m_newHopAvailable = true;
 
+        // DMA recovered — clear consecutive timeout counter, post recovery event
+        if (m_consecutiveDmaTimeouts > 0) {
+            if (m_dmaFailureSignalled) {
+                m_dmaFailureSignalled = false;
+                MSG_BUS.publish(actors::Message(actors::MessageType::AUDIO_FAILURE_RECOVERED));
+                LW_LOGI("Audio DMA recovered after %lu timeouts", (unsigned long)m_consecutiveDmaTimeouts);
+            }
+            m_consecutiveDmaTimeouts = 0;
+        }
+
         // Analyze raw samples before processing
         int16_t rawMin = 32767, rawMax = -32768;
         int64_t rawSumSq = 0;
@@ -906,6 +1251,13 @@ void AudioActor::captureHop()
         m_stats.captureFailCount++;
         if (result == CaptureResult::DMA_TIMEOUT) {
             m_diag.captureDmaTimeouts++;
+            m_consecutiveDmaTimeouts++;
+            // DEC-011: signal sustained DMA failure after ~2s (250 hops at 125 Hz)
+            if (m_consecutiveDmaTimeouts >= ZERO_HOPS_RECOVERY_THRESHOLD && !m_dmaFailureSignalled) {
+                m_dmaFailureSignalled = true;
+                MSG_BUS.publish(actors::Message(actors::MessageType::AUDIO_FAILURE_DETECTED));
+                LW_LOGW("Audio DMA failure sustained (%lu timeouts)", (unsigned long)m_consecutiveDmaTimeouts);
+            }
         } else {
             m_diag.captureReadErrors++;
         }
@@ -961,6 +1313,22 @@ void AudioActor::processHop()
 #ifndef NATIVE_BUILD
         portEXIT_CRITICAL(&m_controlBusApiMux);
 #endif
+#if FEATURE_TRANSLATION_ENGINE
+        translation_init(&m_translationState);
+        m_translationLastAudioTime = AudioTime{};
+        m_translationHaveLastAudioTime = false;
+        m_translationLastDebugLogUs = 0ULL;
+#if FEATURE_TRANSLATION_DEBUG
+        m_translationLastLatchValid = false;
+        m_translationLastLatchBpm = 0.0f;
+        m_translationLastLatchConfidence = 0.0f;
+        m_translationLastLatchUs = 0ULL;
+        m_translationLastLatchTempoLocked = false;
+        m_translationLastLatchBeatTick = false;
+        m_translationLastLatchDownbeatTick = false;
+#endif
+#endif
+        m_standardBeatInBar = 0u;
     }
 
     // Build AudioTime with END-OF-HOP semantics
@@ -1004,6 +1372,11 @@ void AudioActor::processHop()
         m_pipeline.getHopBuffer(),
         raw
     );
+    raw.tempoDownbeatTick = false;
+    if (raw.tempoBeatTick) {
+        raw.tempoDownbeatTick = (m_standardBeatInBar == 0u);
+        m_standardBeatInBar = static_cast<uint8_t>((m_standardBeatInBar + 1u) % 4u);
+    }
 
     TRACE_END();  // rms_flux
     TRACE_COUNTER("audio_rms", static_cast<int32_t>(raw.rms * 10000));
@@ -1109,6 +1482,66 @@ void AudioActor::processHop()
         std::memcpy(frameToPublish.sb_chromagram_smooth, m_sbChromagramSmooth, sizeof(m_sbChromagramSmooth));
         frameToPublish.sb_hue_position = m_sbHuePosition;
         frameToPublish.sb_hue_shifting_mix = m_sbHueShiftingMix;
+#endif
+#if FEATURE_TRANSLATION_ENGINE
+        {
+            const AudioFeatures translated = buildTranslationFeatures(frameToPublish);
+            const float previousHeldBpm = m_translationState.held_bpm;
+            const bool previousTimingReliable = m_translationState.timing_reliable;
+            const float dtSeconds = computeTranslationDeltaSeconds(
+                frameToPublish,
+                m_translationLastAudioTime,
+                m_translationHaveLastAudioTime
+            );
+            translation_update(&translated, dtSeconds, &m_translationState);
+            translation_get_parameters(&m_translationState, &frameToPublish.scene);
+#if FEATURE_TRANSLATION_DEBUG
+            const uint64_t logNowUs = (frameToPublish.t.monotonic_us != 0ULL)
+                ? frameToPublish.t.monotonic_us
+                : esp_timer_get_time();
+            const bool latchDetected =
+                (fabsf(m_translationState.held_bpm - previousHeldBpm) > 0.05f) ||
+                (!previousTimingReliable && m_translationState.timing_reliable);
+            recordTranslationLatch(
+                translated,
+                frameToPublish.tempoLocked,
+                latchDetected,
+                logNowUs,
+                m_translationLastLatchValid,
+                m_translationLastLatchBpm,
+                m_translationLastLatchConfidence,
+                m_translationLastLatchUs,
+                m_translationLastLatchTempoLocked,
+                m_translationLastLatchBeatTick,
+                m_translationLastLatchDownbeatTick
+            );
+            maybeLogTranslationEvent(
+                translated,
+                m_translationState,
+                clamp01(raw.rmsUngated),
+                frameToPublish.tempoLocked,
+                previousHeldBpm,
+                previousTimingReliable,
+                logNowUs
+            );
+            maybeLogTranslationSnapshot(
+                translated,
+                m_translationState,
+                clamp01(raw.rmsUngated),
+                m_translationLastLatchValid,
+                m_translationLastLatchBpm,
+                m_translationLastLatchConfidence,
+                m_translationLastLatchUs,
+                m_translationLastLatchTempoLocked,
+                m_translationLastLatchBeatTick,
+                m_translationLastLatchDownbeatTick,
+                logNowUs,
+                m_translationLastDebugLogUs
+            );
+#endif
+        }
+#else
+        frameToPublish.scene = kDefaultSceneParameters;
 #endif
         m_controlBusBuffer.Publish(frameToPublish);
 
@@ -1780,6 +2213,22 @@ void AudioActor::onStart()
     // Initialize diagnostics
     m_diag.reset();
     m_diag.diagStartTimeUs = esp_timer_get_time();
+#if FEATURE_TRANSLATION_ENGINE
+    translation_init(&m_translationState);
+    m_translationLastAudioTime = AudioTime{};
+    m_translationHaveLastAudioTime = false;
+    m_translationLastDebugLogUs = 0ULL;
+#if FEATURE_TRANSLATION_DEBUG
+    m_translationLastLatchValid = false;
+    m_translationLastLatchBpm = 0.0f;
+    m_translationLastLatchConfidence = 0.0f;
+    m_translationLastLatchUs = 0ULL;
+    m_translationLastLatchTempoLocked = false;
+    m_translationLastLatchBeatTick = false;
+    m_translationLastLatchDownbeatTick = false;
+#endif
+#endif
+    m_standardBeatInBar = 0u;
 
     // Initialize I2S audio capture
     if (!m_capture.init()) {
@@ -2060,6 +2509,22 @@ void AudioActor::processHop()
         m_tempo.init();
         m_lastTempoOutput = m_tempo.getOutput();
         m_bins64AdaptiveMax = 0.0001f;
+#if FEATURE_TRANSLATION_ENGINE
+        translation_init(&m_translationState);
+        m_translationLastAudioTime = AudioTime{};
+        m_translationHaveLastAudioTime = false;
+        m_translationLastDebugLogUs = 0ULL;
+#if FEATURE_TRANSLATION_DEBUG
+        m_translationLastLatchValid = false;
+        m_translationLastLatchBpm = 0.0f;
+        m_translationLastLatchConfidence = 0.0f;
+        m_translationLastLatchUs = 0ULL;
+        m_translationLastLatchTempoLocked = false;
+        m_translationLastLatchBeatTick = false;
+        m_translationLastLatchDownbeatTick = false;
+#endif
+#endif
+        m_standardBeatInBar = 0u;
     }
 
     // 1. Build AudioTime for this hop
@@ -2638,6 +3103,11 @@ void AudioActor::processHop()
     raw.tempoLocked = m_lastTempoOutput.locked;
     raw.tempoConfidence = m_lastTempoOutput.confidence;
     raw.tempoBeatTick = m_lastTempoOutput.beat_tick && m_lastTempoOutput.locked;
+    raw.tempoDownbeatTick = false;
+    if (raw.tempoBeatTick) {
+        raw.tempoDownbeatTick = (m_standardBeatInBar == 0u);
+        m_standardBeatInBar = static_cast<uint8_t>((m_standardBeatInBar + 1u) % 4u);
+    }
 
     // 7. Update ControlBus with attack/release smoothing
 #ifndef NATIVE_BUILD
@@ -2703,6 +3173,66 @@ void AudioActor::processHop()
         std::memcpy(frameToPublish.sb_chromagram_smooth, m_sbChromagramSmooth, sizeof(m_sbChromagramSmooth));
         frameToPublish.sb_hue_position = m_sbHuePosition;
         frameToPublish.sb_hue_shifting_mix = m_sbHueShiftingMix;
+#endif
+#if FEATURE_TRANSLATION_ENGINE
+        {
+            const AudioFeatures translated = buildTranslationFeatures(frameToPublish);
+            const float previousHeldBpm = m_translationState.held_bpm;
+            const bool previousTimingReliable = m_translationState.timing_reliable;
+            const float dtSeconds = computeTranslationDeltaSeconds(
+                frameToPublish,
+                m_translationLastAudioTime,
+                m_translationHaveLastAudioTime
+            );
+            translation_update(&translated, dtSeconds, &m_translationState);
+            translation_get_parameters(&m_translationState, &frameToPublish.scene);
+#if FEATURE_TRANSLATION_DEBUG
+            const uint64_t logNowUs = (frameToPublish.t.monotonic_us != 0ULL)
+                ? frameToPublish.t.monotonic_us
+                : esp_timer_get_time();
+            const bool latchDetected =
+                (fabsf(m_translationState.held_bpm - previousHeldBpm) > 0.05f) ||
+                (!previousTimingReliable && m_translationState.timing_reliable);
+            recordTranslationLatch(
+                translated,
+                frameToPublish.tempoLocked,
+                latchDetected,
+                logNowUs,
+                m_translationLastLatchValid,
+                m_translationLastLatchBpm,
+                m_translationLastLatchConfidence,
+                m_translationLastLatchUs,
+                m_translationLastLatchTempoLocked,
+                m_translationLastLatchBeatTick,
+                m_translationLastLatchDownbeatTick
+            );
+            maybeLogTranslationEvent(
+                translated,
+                m_translationState,
+                clamp01(raw.rmsUngated),
+                frameToPublish.tempoLocked,
+                previousHeldBpm,
+                previousTimingReliable,
+                logNowUs
+            );
+            maybeLogTranslationSnapshot(
+                translated,
+                m_translationState,
+                clamp01(raw.rmsUngated),
+                m_translationLastLatchValid,
+                m_translationLastLatchBpm,
+                m_translationLastLatchConfidence,
+                m_translationLastLatchUs,
+                m_translationLastLatchTempoLocked,
+                m_translationLastLatchBeatTick,
+                m_translationLastLatchDownbeatTick,
+                logNowUs,
+                m_translationLastDebugLogUs
+            );
+#endif
+        }
+#else
+        frameToPublish.scene = kDefaultSceneParameters;
 #endif
         m_controlBusBuffer.Publish(frameToPublish);
         

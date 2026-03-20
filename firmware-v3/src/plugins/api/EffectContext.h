@@ -24,6 +24,7 @@
 
 // Feature flags
 #include "../../config/features.h"
+#include "../../audio/TranslationEngine.h"
 
 // Forward declare FastLED types for native builds
 #ifdef NATIVE_BUILD
@@ -41,6 +42,7 @@
 #include "../../audio/pipeline/FrequencyMap.h"
 #endif
 #include "../../audio/contracts/MotionSemantics.h"
+#include "../../audio/contracts/MotionShaper.h"
 #endif
 
 // Behavior selection (Phase 3)
@@ -135,6 +137,17 @@ struct AudioContext {
     /// Use this to scale visual intensity by beat confidence
     /// Example: brightness *= 0.5f + 0.5f * ctx.audio.beatStrength();
     float beatStrength() const { return musicalGrid.beat_strength; }
+
+    // --------------------------------------------------------------------
+    // Translation scene accessors (perceptual mapping layer)
+    // --------------------------------------------------------------------
+
+    const audio::SceneParameters& sceneParameters() const { return controlBus.scene; }
+    audio::MotionPrimitive motionType() const { return controlBus.scene.motion_type; }
+    float phraseProgress() const { return controlBus.scene.phrase_progress; }
+    float tension() const { return controlBus.scene.tension; }
+    float beatPulse() const { return controlBus.scene.beat_pulse; }
+    bool timingReliable() const { return controlBus.scene.timing_reliable; }
 
     /// Get waveform sample count
     uint8_t waveformSize() const { return audio::CONTROLBUS_WAVEFORM_N; }
@@ -423,6 +436,7 @@ struct AudioContext {
     // ========================================================================
 
     audio::MotionSemanticFrame motionFrame{};  ///< 6-axis motion-semantic frame (populated by RendererActor)
+    audio::MotionShaping motionShaping{};       ///< Layer 3: temporal envelope shaping
 
     /// Weight (Light ↔ Strong) [0.0, 1.0]
     float motionWeight() const { return motionFrame.weight; }
@@ -438,6 +452,19 @@ struct AudioContext {
     float motionImpulse() const { return motionFrame.impulse_strength; }
     /// Minimum confidence across inferred dimensions (0-255)
     uint8_t motionConfidence() const { return motionFrame.confidence_min; }
+
+    // ========================================================================
+    // Layer 3: Temporal Envelope Shaping Accessors
+    // ========================================================================
+
+    /// Envelope-shaped onset intensity [0-1]
+    float shapedIntensity() const { return motionShaping.intensity; }
+    /// Recommended decay time from fluidity [150-600ms]
+    float shapedDecayMs() const { return motionShaping.decayMs; }
+    /// Syncopation-derived accent multiplier [0.7-1.3]
+    float shapedAccent() const { return motionShaping.accentScale; }
+    /// True during active envelope
+    bool shapingActive() const { return motionShaping.active; }
 
     /// Get the recommended primary visual behavior
     VisualBehavior recommendedBehavior() const { return behaviorContext.recommendedPrimary; }
@@ -499,6 +526,12 @@ struct AudioContext {
     float bpm() const { return 120.0f; }
     float tempoConfidence() const { return 0.0f; }
     float beatStrength() const { return 0.0f; }
+    const audio::SceneParameters& sceneParameters() const { return audio::kDefaultSceneParameters; }
+    audio::MotionPrimitive motionType() const { return audio::MotionPrimitive::DRIFT; }
+    float phraseProgress() const { return 0.0f; }
+    float tension() const { return 0.0f; }
+    float beatPulse() const { return 0.0f; }
+    bool timingReliable() const { return false; }
     uint8_t waveformSize() const { return 128; }
     int16_t getWaveformSample(uint8_t) const { return 0; }
     float getWaveformAmplitude(uint8_t) const { return 0.0f; }
@@ -594,6 +627,12 @@ struct AudioContext {
     float motionFluidity() const { return 0.5f; }
     float motionImpulse() const { return 0.0f; }
     uint8_t motionConfidence() const { return 0; }
+
+    // Layer 3: Temporal shaping stubs (inactive when no audio)
+    float shapedIntensity() const { return 0.0f; }
+    float shapedDecayMs() const { return 300.0f; }
+    float shapedAccent() const { return 1.0f; }
+    bool shapingActive() const { return false; }
 
     // Behavior context stubs (always return default behavior)
     BehaviorContext behaviorContext{};  ///< Default behavior context

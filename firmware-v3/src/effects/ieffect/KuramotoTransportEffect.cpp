@@ -121,6 +121,21 @@ void KuramotoTransportEffect::render(lightwaveos::plugins::EffectContext& ctx) {
     const float rawDt = AudioReactivePolicy::signalDt(ctx);
     const float dt = ctx.getSafeDeltaSeconds();
 
+    // Scene modulation (translation engine)
+    float sceneSpeedMul = 1.0f;
+    float sceneBrightScale = 1.0f;
+    float sceneTension = 0.0f;
+    float sceneBeatPulse = 0.0f;
+#if FEATURE_TRANSLATION_ENGINE
+    if (ctx.audio.available) {
+        const auto& scene = ctx.audio.sceneParameters();
+        sceneSpeedMul = scene.motion_rate;
+        sceneBrightScale = scene.brightness_scale;
+        sceneTension = scene.tension;
+        sceneBeatPulse = scene.beat_pulse;
+    }
+#endif
+
     // --- Audio steering (NO direct audio -> per-LED brightness mapping)
     // We ONLY steer regime parameters.
     float overall = ctx.audio.available ? clamp01(ctx.audio.overallSaliency()) : 0.25f;
@@ -142,7 +157,7 @@ void KuramotoTransportEffect::render(lightwaveos::plugins::EffectContext& ctx) {
     const float noiseSigma   = 0.15f + 0.35f * timbre;              // rad/sqrt(s)
     const float flux01       = ctx.audio.available ? clamp01(ctx.audio.flux()) : 0.0f;
     const float kickRateHz   = 1.5f + 6.0f * flux01;                // events/sec
-    const float kickStrength = 1.2f + 1.8f * overall;               // radians [1.2, 3.0]
+    const float kickStrength = 1.2f + 1.8f * overall + 1.0f * sceneTension; // radians [1.2, 4.0], tension boosts kicks
 
     // Step the invisible field (raw dt for physics).
     m_field.step(zid, rawDt, K, spread, radius, noiseSigma, kickRateHz, kickStrength);
@@ -168,7 +183,7 @@ void KuramotoTransportEffect::render(lightwaveos::plugins::EffectContext& ctx) {
     // - MOOD=0 (reactive): offset=0.25 (fast outward motion)
     // - MOOD=1 (dreamy): offset=2.0 (slower, more viscous)
     // Audio saliency adds extra push for energetic response.
-    const float baseOffset60 = 0.25f + 1.75f * mood01 + 0.50f * overall;
+    const float baseOffset60 = (0.25f + 1.75f * mood01 + 0.50f * overall) * sceneSpeedMul;
 
     // Persistence per-frame @60fps. MOOD modulation.
     const float persistence60 = clamp01(0.96f + 0.03f * mood01);
@@ -197,8 +212,11 @@ void KuramotoTransportEffect::render(lightwaveos::plugins::EffectContext& ctx) {
     // Base hue comes from global hue + slow drift.
     const uint8_t baseHue = (uint8_t)(ctx.gHue + (uint8_t)(m_palettePhase * 29.0f));
 
+    // Scene beat pulse injects extra centre energy during translator-detected beats.
+    float beatPulseInjection = sceneBeatPulse * 0.4f;
+
     // Accumulate centre injection: sum all event energy, inject at centre.
-    float centerEnergy = 0.0f;
+    float centerEnergy = beatPulseInjection;
     float centerPhaseSum = 0.0f;
     float centerCohSum = 0.0f;
     float totalWeight = 0.0f;
@@ -274,7 +292,7 @@ void KuramotoTransportEffect::render(lightwaveos::plugins::EffectContext& ctx) {
     // --- Readout to LEDs with tone mapping + centre-origin symmetry.
     // Brightness is applied inside TransportBuffer::readoutToLeds() via ctx.brightness.
     // We control only "scene exposure" here (ties to intensity, not audio).
-    const float exposure = 1.2f + 1.8f * injectGain;                      // brighter output
+    const float exposure = (1.2f + 1.8f * injectGain) * sceneBrightScale;  // brighter output, scene-modulated
     const float satBoost = 0.10f + 0.35f * (1.0f - sync01) + 0.10f * mood01; // more haze in incoherent regimes
 
     m_transport.readoutToLeds(zid, ctx, radialLen, exposure, satBoost);

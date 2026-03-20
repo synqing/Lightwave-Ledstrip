@@ -4,6 +4,9 @@
 #include "../AudioMath.h"  // retunedAlpha()
 #include <cstring>  // for memcpy
 
+#define LW_LOG_TAG "CtrlBus"
+#include "../../utils/Log.h"
+
 namespace lightwaveos::audio {
 
 namespace {
@@ -477,6 +480,7 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
     m_frame.tempoLocked = raw.tempoLocked;
     m_frame.tempoConfidence = raw.tempoConfidence;
     m_frame.tempoBeatTick = raw.tempoBeatTick;
+    m_frame.tempoDownbeatTick = raw.tempoDownbeatTick;
     m_frame.tempoBpm = raw.tempoBpm;
     m_frame.tempoBeatStrength = raw.tempoBeatStrength;
 
@@ -558,8 +562,8 @@ void ControlBus::applyDerivedFeatures(ControlBusFrame& frame, float dt, float rm
     {
         uint32_t now_ms = frame.t.monotonic_us / 1000;
 
-        // Onset detection: threshold on fast_flux (>0.3 = onset event)
-        bool onsetDetected = (frame.fast_flux > 0.3f);
+        // Onset detection: threshold on fast_flux (>0.1 = onset event)
+        bool onsetDetected = (frame.fast_flux > 0.1f);
 
         // Timing jitter from inter-onset interval regularity
         updateTimingJitter(now_ms, onsetDetected);
@@ -576,6 +580,22 @@ void ControlBus::applyDerivedFeatures(ControlBusFrame& frame, float dt, float rm
         }
         float centroid = (energySum > 0.001f) ? (centroidSum / energySum) : 0.0f;
         updatePitchContour(centroid, dt);
+
+        // Copy motion fields from m_frame (where update* methods write)
+        // back into the caller's frame reference so they get published
+        frame.timing_jitter = m_frame.timing_jitter;
+        frame.syncopation_level = m_frame.syncopation_level;
+        frame.pitch_contour_dir = m_frame.pitch_contour_dir;
+
+        // Motion-semantic raw signal trace (every 2s)
+        static uint32_t s_msem_last_log = 0;
+        uint32_t msem_now = frame.t.monotonic_us / 1000;
+        if (msem_now - s_msem_last_log >= 2000) {
+            s_msem_last_log = msem_now;
+            LW_MOTION_LOGT("raw jitter=%.3f syncop=%.3f pitch_dir=%.3f onset=%u flux=%.3f phase=%.3f",
+                frame.timing_jitter, frame.syncopation_level, frame.pitch_contour_dir,
+                onsetDetected ? 1u : 0u, frame.fast_flux, beatPhase);
+        }
     }
 
     // ========================================================================

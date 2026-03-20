@@ -54,7 +54,8 @@ enum class DebugDomain : uint8_t {
     NETWORK = 2,
     ACTOR = 3,
     SYSTEM = 4,
-    _COUNT = 5
+    MOTION = 5,
+    _COUNT = 6
 };
 
 /**
@@ -92,7 +93,8 @@ constexpr const char* DEBUG_DOMAIN_NAMES[] = {
     "render",
     "network",
     "actor",
-    "system"
+    "system",
+    "motion"
 };
 
 /**
@@ -111,6 +113,7 @@ struct DebugConfig {
     int8_t networkLevel = -1;
     int8_t actorLevel = -1;
     int8_t systemLevel = -1;
+    int8_t motionLevel = -1;
 
     /// Periodic output intervals in seconds (0 = disabled)
     uint16_t statusIntervalSec = 0;    ///< Auto-print status every N seconds
@@ -129,6 +132,7 @@ struct DebugConfig {
             case DebugDomain::NETWORK: domainLevel = networkLevel; break;
             case DebugDomain::ACTOR:   domainLevel = actorLevel; break;
             case DebugDomain::SYSTEM:  domainLevel = systemLevel; break;
+            case DebugDomain::MOTION:  domainLevel = motionLevel; break;
             default: break;
         }
         return (domainLevel >= 0) ? static_cast<uint8_t>(domainLevel) : globalLevel;
@@ -146,6 +150,7 @@ struct DebugConfig {
             case DebugDomain::NETWORK: networkLevel = level; break;
             case DebugDomain::ACTOR:   actorLevel = level; break;
             case DebugDomain::SYSTEM:  systemLevel = level; break;
+            case DebugDomain::MOTION:  motionLevel = level; break;
             default: break;
         }
     }
@@ -162,6 +167,7 @@ struct DebugConfig {
             case DebugDomain::NETWORK: return networkLevel;
             case DebugDomain::ACTOR:   return actorLevel;
             case DebugDomain::SYSTEM:  return systemLevel;
+            case DebugDomain::MOTION:  return motionLevel;
             default: return -1;
         }
     }

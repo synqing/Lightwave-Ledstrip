@@ -54,6 +54,7 @@
 #define LW_CLR_INFO        LW_CLR_GREEN
 #define LW_CLR_DEBUG       LW_CLR_GRAY
 #define LW_CLR_VERBOSE     LW_CLR_GRAY    // Alias for domain-aware macros
+#define LW_CLR_TRACE       LW_CLR_GRAY    // Alias for TRACE level
 
 // ============================================================================
 // Log Level Configuration
@@ -295,3 +296,14 @@
 #define LW_SYS_LOGI(fmt, ...) LW_DOMAIN_LOG(SYSTEM, INFO, fmt, ##__VA_ARGS__)
 #define LW_SYS_LOGD(fmt, ...) LW_DOMAIN_LOG(SYSTEM, VERBOSE, fmt, ##__VA_ARGS__)
 #define LW_SYS_LOGT(fmt, ...) LW_DOMAIN_LOG(SYSTEM, TRACE, fmt, ##__VA_ARGS__)
+
+// ----------------------------------------------------------------------------
+// Motion-Semantic Domain Logging (Layer 2: Laban 4D inference)
+// ----------------------------------------------------------------------------
+// Use for: motion-semantic inference, timing jitter, syncopation, pitch contour,
+//          temporal operators, validation mode
+#define LW_MOTION_LOGE(fmt, ...) LW_DOMAIN_LOG(MOTION, ERROR, fmt, ##__VA_ARGS__)
+#define LW_MOTION_LOGW(fmt, ...) LW_DOMAIN_LOG(MOTION, WARN, fmt, ##__VA_ARGS__)
+#define LW_MOTION_LOGI(fmt, ...) LW_DOMAIN_LOG(MOTION, INFO, fmt, ##__VA_ARGS__)
+#define LW_MOTION_LOGD(fmt, ...) LW_DOMAIN_LOG(MOTION, VERBOSE, fmt, ##__VA_ARGS__)
+#define LW_MOTION_LOGT(fmt, ...) LW_DOMAIN_LOG(MOTION, TRACE, fmt, ##__VA_ARGS__)

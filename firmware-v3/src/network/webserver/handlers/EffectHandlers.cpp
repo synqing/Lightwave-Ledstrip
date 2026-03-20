@@ -6,6 +6,7 @@
 #include "../../RequestValidator.h"
 #include "../../ApiResponse.h"
 #include "../../WebServer.h"  // For CachedRendererState
+#include "../../../config/persistence_trigger.h"
 #include <cstring>
 
 using namespace lightwaveos::actors;
@@ -380,6 +381,8 @@ void EffectHandlers::handleSet(AsyncWebServerRequest* request, uint8_t* data, si
     } else {
         actors.setEffect(effectId);
     }
+
+    g_externalNvsSaveRequest.store(true, std::memory_order_release);
 
     sendSuccessResponse(request, [effectId](JsonObject& respData) {
         respData["effectId"] = effectId;

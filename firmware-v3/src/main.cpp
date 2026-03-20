@@ -67,7 +67,9 @@
 
 #ifndef NATIVE_BUILD
 #include "hal/esp32s3/StatusStripTouch.h"
+#include <esp_system.h>
 #endif
+#include "config/factory_presets.h"
 
 // TempoTracker debug included via AudioActor.h
 
@@ -122,6 +124,64 @@ RendererActor* renderer = nullptr;
 
 // Current show index for serial navigation
 static uint8_t currentShowIndex = 0;
+
+// ==================== Factory Preset + Expression Persistence ====================
+
+uint8_t g_factoryPresetIndex = 0;  // non-static: accessed by V1ApiRoutes for REST endpoint
+static bool    g_wdtSafeMode        = false;
+static bool    g_nvsCorrupted       = false;
+
+// Debounced NVS save state (DEC-011/E2: 500ms coalesced writes)
+static bool     g_nvsSavePending     = false;
+static uint32_t g_nvsSaveRequestMs   = 0;
+static constexpr uint32_t NVS_SAVE_DEBOUNCE_MS = 500;
+
+// Audio failure tracking for degraded-mode relay
+static bool g_audioFailureActive = false;
+
+// External NVS save trigger (set by REST/WS handlers via persistence_trigger.h)
+#include "config/persistence_trigger.h"
+std::atomic<bool> g_externalNvsSaveRequest{false};
+
+// Forced idle state (D4 § 2.7: long press toggles idle/active)
+static bool    g_forcedIdle            = false;
+static uint8_t g_preIdleBrightness     = 128;
+static constexpr uint8_t IDLE_BRIGHTNESS_FLOOR = 20;  // ~8% of 255 (AC-14)
+
+/// Schedule a debounced NVS save. Call whenever effect/palette/expression changes.
+static void requestDebouncedSave(uint32_t now) {
+    g_nvsSavePending = true;
+    g_nvsSaveRequestMs = now;
+}
+
+/// Apply a factory preset: sets effect, palette, and all 7 expression params.
+static void applyFactoryPreset(uint8_t index) {
+    if (index >= lightwaveos::FACTORY_PRESET_COUNT) return;
+    const lightwaveos::FactoryPreset& p = lightwaveos::FACTORY_PRESETS[index];
+
+    ActorSystem& sys = ActorSystem::instance();
+    sys.setEffect(p.effectId);
+    sys.setPalette(p.paletteIndex);
+    sys.setHue(p.hue);
+    sys.setSaturation(p.saturation);
+    sys.setMood(p.mood);
+    sys.setIntensity(p.intensity);
+    sys.setComplexity(p.complexity);
+    sys.setVariation(p.variation);
+    // trails → SET_FADE_AMOUNT
+    if (renderer) {
+        renderer->send(lightwaveos::actors::Message(
+            lightwaveos::actors::MessageType::SET_FADE_AMOUNT, p.trails));
+    }
+
+    g_factoryPresetIndex = index;
+
+#if !defined(NATIVE_BUILD) && FEATURE_STATUS_STRIP_TOUCH
+    statusStripShowPalette(p.paletteIndex);
+#endif
+
+    LW_LOGI("Factory preset %u: %s", index, p.name);
+}
 
 // Dynamic show store for Serial (PRISM Studio) show uploads
 static prism::DynamicShowStore serialShowStore;
@@ -428,6 +488,17 @@ void setup() {
     }
 #endif
 
+    // ── WDT safe-mode check (DEC-011 § 2.6) ────────────────────────────
+#ifndef NATIVE_BUILD
+    {
+        esp_reset_reason_t reason = esp_reset_reason();
+        if (reason == ESP_RST_TASK_WDT || reason == ESP_RST_INT_WDT) {
+            g_wdtSafeMode = true;
+            LW_LOGW("WDT recovery boot — will load safe default (Prism)");
+        }
+    }
+#endif
+
     LW_LOGI("==========================================");
     LW_LOGI("LightwaveOS v2 - Actor System + Zones");
     LW_LOGI("==========================================");
@@ -524,6 +595,12 @@ void setup() {
     statusStripTouchSetup();
 #endif
 
+    // TTP223 button init (independent of status strip)
+#if !defined(NATIVE_BUILD) && defined(K1_TTP223_PIN)
+    pinMode(K1_TTP223_PIN, INPUT);
+    LW_LOGI("TTP223 button: GPIO %d", K1_TTP223_PIN);
+#endif
+
     // Start all actors (RendererActor runs on Core 1 at 120 FPS)
     LW_LOGI("Starting Actor System...");
     if (!actors.start()) {
@@ -554,21 +631,60 @@ void setup() {
 
     // Load or set initial state
     LW_LOGI("Loading system state...");
-    EffectId savedEffect; uint8_t savedBrightness, savedSpeed, savedPalette;
-    if (zoneConfigMgr && zoneConfigMgr->loadSystemState(savedEffect, savedBrightness, savedSpeed, savedPalette)) {
-        actors.setEffect(savedEffect);
-        actors.setBrightness(savedBrightness);
-        actors.setSpeed(savedSpeed);
-        actors.setPalette(savedPalette);
-        LW_LOGI("Restored: Effect=0x%04X, Brightness=%d, Speed=%d, Palette=%d",
-                savedEffect, savedBrightness, savedSpeed, savedPalette);
+
+    if (g_wdtSafeMode) {
+        // WDT recovery: force safe default, ignore NVS (may have caused crash)
+        applyFactoryPreset(lightwaveos::FACTORY_PRESET_DEFAULT_INDEX);
+        actors.setBrightness(128);
+        actors.setSpeed(15);
+        LW_LOGW("WDT safe-mode: loaded Prism factory preset");
     } else {
-        // First boot defaults
-        actors.setEffect(lightwaveos::EID_LGP_HOLOGRAPHIC_AUTO_CYCLE);  // LGP Holographic Auto-Cycle
-        actors.setBrightness(128); // 50% brightness
-        actors.setSpeed(15);       // Medium speed
-        actors.setPalette(0);      // Party colors
-        LW_LOGI("Using defaults (first boot)");
+        EffectId savedEffect; uint8_t savedBrightness, savedSpeed, savedPalette;
+        uint8_t savedPresetIdx = 0;
+        lightwaveos::persistence::SystemExpressionParams savedExpr;
+
+        bool loaded = zoneConfigMgr && zoneConfigMgr->loadSystemState(
+            savedEffect, savedBrightness, savedSpeed, savedPalette,
+            &savedPresetIdx, &savedExpr);
+
+        if (loaded) {
+            actors.setEffect(savedEffect);
+            actors.setBrightness(savedBrightness);
+            actors.setSpeed(savedSpeed);
+            actors.setPalette(savedPalette);
+            actors.setHue(savedExpr.hue);
+            actors.setSaturation(savedExpr.saturation);
+            actors.setMood(savedExpr.mood);
+            actors.setIntensity(savedExpr.intensity);
+            actors.setComplexity(savedExpr.complexity);
+            actors.setVariation(savedExpr.variation);
+            // trails
+            if (renderer) {
+                renderer->send(lightwaveos::actors::Message(
+                    lightwaveos::actors::MessageType::SET_FADE_AMOUNT, savedExpr.trails));
+            }
+            g_factoryPresetIndex = savedPresetIdx;
+            LW_LOGI("Restored: Effect=0x%04X, Bri=%d, Spd=%d, Pal=%d, Preset=%d",
+                    savedEffect, savedBrightness, savedSpeed, savedPalette, savedPresetIdx);
+            LW_LOGI("Expression: H=%d S=%d M=%d T=%d I=%d C=%d V=%d",
+                    savedExpr.hue, savedExpr.saturation, savedExpr.mood,
+                    savedExpr.trails, savedExpr.intensity, savedExpr.complexity,
+                    savedExpr.variation);
+        } else if (zoneConfigMgr && zoneConfigMgr->getLastError() ==
+                   lightwaveos::persistence::NVSResult::CHECKSUM_ERROR) {
+            // NVS corruption detected
+            g_nvsCorrupted = true;
+            applyFactoryPreset(lightwaveos::FACTORY_PRESET_DEFAULT_INDEX);
+            actors.setBrightness(128);
+            actors.setSpeed(15);
+            LW_LOGW("NVS corruption — loaded Prism factory preset");
+        } else {
+            // First boot defaults
+            applyFactoryPreset(lightwaveos::FACTORY_PRESET_DEFAULT_INDEX);
+            actors.setBrightness(128);
+            actors.setSpeed(15);
+            LW_LOGI("Using defaults (first boot)");
+        }
     }
 
     // Initialize Network (if enabled)
@@ -636,6 +752,20 @@ void setup() {
         bool wsOk = false;
 #endif
         lightwaveos::core::system::OtaBootVerifier::markAppValidIfHealthy(wifiOk, wsOk);
+    }
+#endif
+
+    // ── Boot-time degraded-mode signals (DEC-011 § 2.6) ────────────────
+#if !defined(NATIVE_BUILD) && FEATURE_STATUS_STRIP_TOUCH
+    if (g_nvsCorrupted) {
+        statusStripTriggerWhiteFlash();
+    }
+    {
+        uint32_t freeHeap = esp_get_free_heap_size();
+        if (freeHeap < 38 * 1024) {
+            statusStripSetLowHeap(true);
+            LW_LOGW("Low heap at boot: %u bytes", freeHeap);
+        }
     }
 #endif
 
@@ -1868,7 +1998,77 @@ void loop() {
 
 #if !defined(NATIVE_BUILD) && FEATURE_STATUS_STRIP_TOUCH
     statusStripTouchLoop(now);
+
+    // ── Audio failure relay to status strip (D4 § 2.6) ───────────────────
+    {
+        auto* audioActor = ::actors.getAudio();
+        if (audioActor) {
+            bool audioFailed = (audioActor->getState() == lightwaveos::audio::AudioActorState::ERROR);
+            if (audioFailed != g_audioFailureActive) {
+                g_audioFailureActive = audioFailed;
+                statusStripSetAudioFailure(audioFailed);
+            }
+        }
+    }
 #endif
+
+    // ── Button polling: factory preset cycling (D4 § 2.3, § 2.7) ────────
+#if !defined(NATIVE_BUILD) && defined(K1_TTP223_PIN)
+    {
+        ButtonEvent evt = statusStripPollButton(now);
+        if (evt == ButtonEvent::TAP) {
+            if (g_forcedIdle) {
+                // Exit idle on tap — restore brightness before applying preset
+                g_forcedIdle = false;
+                ActorSystem::instance().setBrightness(g_preIdleBrightness);
+                LW_LOGI("Idle OFF (tap exit, brightness → %u)", g_preIdleBrightness);
+            }
+            g_factoryPresetIndex = (g_factoryPresetIndex + 1) % lightwaveos::FACTORY_PRESET_COUNT;
+            applyFactoryPreset(g_factoryPresetIndex);
+            requestDebouncedSave(now);
+            if (webServerInstance) webServerInstance->broadcastStatus();
+        }
+        if (evt == ButtonEvent::LONG_PRESS) {
+            g_forcedIdle = !g_forcedIdle;
+            if (g_forcedIdle) {
+                g_preIdleBrightness = renderer ? renderer->getBrightness() : 128;
+                ActorSystem::instance().setBrightness(IDLE_BRIGHTNESS_FLOOR);
+                LW_LOGI("Idle ON (brightness %u → %u)", g_preIdleBrightness, IDLE_BRIGHTNESS_FLOOR);
+            } else {
+                ActorSystem::instance().setBrightness(g_preIdleBrightness);
+                LW_LOGI("Idle OFF (brightness → %u)", g_preIdleBrightness);
+            }
+            if (webServerInstance) webServerInstance->broadcastStatus();
+        }
+    }
+#endif
+
+    // ── External save trigger from REST/WS handlers (D4 § 2.4) ────────────
+    if (g_externalNvsSaveRequest.exchange(false)) {
+        requestDebouncedSave(now);
+    }
+
+    // ── Debounced NVS save (DEC-011/E2: 500ms coalesced writes) ──────────
+    if (g_nvsSavePending && (now - g_nvsSaveRequestMs) >= NVS_SAVE_DEBOUNCE_MS) {
+        g_nvsSavePending = false;
+        if (zoneConfigMgr && renderer) {
+            lightwaveos::persistence::SystemExpressionParams expr;
+            expr.hue        = renderer->getHue();
+            expr.saturation = renderer->getSaturation();
+            expr.mood       = renderer->getMood();
+            expr.trails     = renderer->getFadeAmount();
+            expr.intensity  = renderer->getIntensity();
+            expr.complexity = renderer->getComplexity();
+            expr.variation  = renderer->getVariation();
+            zoneConfigMgr->saveSystemState(
+                renderer->getCurrentEffect(),
+                renderer->getBrightness(),
+                renderer->getSpeed(),
+                renderer->getPaletteIndex(),
+                g_factoryPresetIndex,
+                &expr);
+        }
+    }
 
 #if FEATURE_ROTATE8_ENCODER
     // Handle encoder events
@@ -1959,7 +2159,14 @@ void loop() {
         serialCmdBuffer = ""; // Clear for next command
         input.trim();
 
-        // Use firstChar for single immediate commands, trimmed input for multi-char
+        // Intercept VAL: commands → forward to RendererActor validation mode
+        if (input.startsWith("VAL:")) {
+            auto* ren = actors.getRenderer();
+            if (ren) {
+                ren->enqueueValidationCommand(input.c_str());
+            }
+        }
+        else // Use firstChar for single immediate commands, trimmed input for multi-char
         if (input.length() == 0 && firstChar != ' ' && firstChar != '+' && firstChar != '-' &&
             firstChar != '=' && firstChar != '[' && firstChar != ']' &&
             firstChar != ',' && firstChar != '.' && firstChar != '<' && firstChar != '>' &&
@@ -2411,7 +2618,6 @@ void loop() {
                 }
             }
 #if FEATURE_AUDIO_SYNC
-            // Audio Debug Verbosity: adbg (backwards-compatible alias for dbg audio)
             // adbg        -> show audio debug config
             // (x | bands handled at top level so "x" and "bands" are not gated by peekChar == 'a')
             if (inputLower.startsWith("adbg")) {
@@ -2427,7 +2633,7 @@ void loop() {
                     Serial.println("One-shot: adbg status | adbg spectrum | adbg beat");
                 } else if (inputLower == "adbg status") {
                     // One-shot status via AudioActor method
-                    auto* audio = actors.getAudio();
+                    auto* audio = ::actors.getAudio();
                     if (audio) {
                         audio->printStatus();
                     } else {
@@ -2435,7 +2641,7 @@ void loop() {
                     }
                 } else if (inputLower == "adbg spectrum") {
                     // One-shot spectrum via AudioActor method
-                    auto* audio = actors.getAudio();
+                    auto* audio = ::actors.getAudio();
                     if (audio) {
                         audio->printSpectrum();
                     } else {
@@ -2443,7 +2649,7 @@ void loop() {
                     }
                 } else if (inputLower == "adbg beat") {
                     // One-shot beat tracking via AudioActor method
-                    auto* audio = actors.getAudio();
+                    auto* audio = ::actors.getAudio();
                     if (audio) {
                         audio->printBeat();
                     } else {
@@ -2479,6 +2685,63 @@ void loop() {
             }
 #endif
         }
+#if FEATURE_AUDIO_SYNC && FEATURE_AUDIO_BACKEND_ESV11
+        // Runtime tempo parameter tuning: "tempo" shows current, "tempo <param> <value>" sets.
+        else if (peekChar == 't' && inputLower.startsWith("tempo")) {
+            handledMulti = true;
+            auto* aa = ::actors.getAudio();
+            if (aa) {
+                auto& tp = aa->esBackend().tempoParams();
+                String subcmd = input.substring(5);
+                subcmd.trim();
+                if (subcmd.length() == 0) {
+                    Serial.printf("tempo params:\n"
+                        "  gate_base=%.2f gate_scale=%.2f gate_tau=%.1f\n"
+                        "  conf_floor=%.2f valid_thr=%.2f stab_tau=%.1f\n"
+                        "  hold_us=%lu oct_runs=%u decay_floor=%.4f\n"
+                        "  oct_ratio_lo=%.2f oct_ratio_hi=%.2f\n"
+                        "  ws_sep_floor=%.4f conf_decay=%.4f\n"
+                        "  generic_persist_us=%lu\n",
+                        tp.gateBase, tp.gateScale, tp.gateTau,
+                        tp.confFloor, tp.validationThr, tp.stabilityTau,
+                        (unsigned long)tp.holdUs, (unsigned)tp.octaveRuns, tp.decayFloor,
+                        tp.octRatioLo, tp.octRatioHi,
+                        tp.wsSepFloor, tp.confDecay,
+                        (unsigned long)tp.genericPersistUs);
+                } else {
+                    int sp = subcmd.indexOf(' ');
+                    if (sp > 0) {
+                        String key = subcmd.substring(0, sp); key.trim();
+                        float val = subcmd.substring(sp + 1).toFloat();
+                        if (key == "gate_base") tp.gateBase = val;
+                        else if (key == "gate_scale") tp.gateScale = val;
+                        else if (key == "gate_tau") tp.gateTau = val;
+                        else if (key == "conf_floor") tp.confFloor = val;
+                        else if (key == "valid_thr") tp.validationThr = val;
+                        else if (key == "stab_tau") tp.stabilityTau = val;
+                        else if (key == "hold_us") tp.holdUs = static_cast<uint32_t>(val);
+                        else if (key == "oct_runs") tp.octaveRuns = static_cast<uint8_t>(val);
+                        else if (key == "decay_floor") tp.decayFloor = val;
+                        else if (key == "oct_ratio_lo") tp.octRatioLo = val;
+                        else if (key == "oct_ratio_hi") tp.octRatioHi = val;
+                        else if (key == "ws_sep_floor") tp.wsSepFloor = val;
+                        else if (key == "conf_decay") tp.confDecay = val;
+                        else if (key == "generic_persist_us") tp.genericPersistUs = static_cast<uint32_t>(val);
+                        else { Serial.printf("Unknown param: %s\n", key.c_str()); }
+                        Serial.printf("tempo %s = %.4f\n", key.c_str(), val);
+                    } else {
+                        Serial.println("Usage: tempo <param> <value>");
+                        Serial.println("Params: gate_base gate_scale gate_tau conf_floor valid_thr");
+                        Serial.println("        stab_tau hold_us oct_runs decay_floor");
+                        Serial.println("        oct_ratio_lo oct_ratio_hi ws_sep_floor conf_decay");
+                        Serial.println("        generic_persist_us");
+                    }
+                }
+            } else {
+                Serial.println("AudioActor not available");
+            }
+        }
+#endif
         else if (peekChar == 'g' && input.length() > 1) {
             if (input.startsWith("gamma")) {
                 handledMulti = true;
@@ -2580,10 +2843,60 @@ void loop() {
                         Serial.println("Invalid level. Use 0-5.");
                     }
                 }
+                else if (subcmd.startsWith("motion ")) {
+                    // dbg motion <0-5>
+                    int level = subcmd.substring(7).toInt();
+                    if (level >= 0 && level <= 5) {
+                        cfg.setDomainLevel(lightwaveos::config::DebugDomain::MOTION, level);
+                        Serial.printf("Motion debug level: %d (%s)\n", level,
+                                      lightwaveos::config::DebugConfig::levelName(static_cast<uint8_t>(level)));
+                    } else {
+                        Serial.println("Invalid level (0-5)");
+                    }
+                }
+                else if (subcmd == "motion") {
+                    // One-shot motion-semantic field print
+#if FEATURE_AUDIO_SYNC
+                    auto* audio = ::actors.getAudio();
+                    if (audio) {
+                        lightwaveos::audio::ControlBusFrame bus;
+                        audio->getControlBusBuffer().ReadLatest(bus);
+                        Serial.println("\n=== Motion-Semantic Fields ===");
+                        Serial.println("  --- Layer 1 (raw DSP) ---");
+                        Serial.printf("  timing_jitter:    %.4f\n", bus.timing_jitter);
+                        Serial.printf("  syncopation_level:%.4f\n", bus.syncopation_level);
+                        Serial.printf("  pitch_contour_dir:%.4f\n", bus.pitch_contour_dir);
+                        auto* ren = actors.getRenderer();
+                        if (ren) {
+                            const auto& mf = ren->getMotionFrame();
+                            Serial.println("  --- Layer 2 (Laban 6-axis) ---");
+                            Serial.printf("  Weight:    %.3f\n", mf.weight);
+                            Serial.printf("  Time:      %.3f\n", mf.time_quality);
+                            Serial.printf("  Space:     %.3f\n", mf.space);
+                            Serial.printf("  Flow:      %.3f\n", mf.flow);
+                            Serial.printf("  Fluidity:  %.3f\n", mf.fluidity);
+                            Serial.printf("  Impulse:   %.3f\n", mf.impulse_strength);
+                            Serial.printf("  Confidence:%u\n", mf.confidence_min);
+                            const auto& ms = ren->getMotionShaping();
+                            Serial.println("  --- Layer 3 (temporal shaping) ---");
+                            Serial.printf("  Intensity: %.3f\n", ms.intensity);
+                            Serial.printf("  DecayMs:   %.0f\n", ms.decayMs);
+                            Serial.printf("  Accent:    %.2f\n", ms.accentScale);
+                            Serial.printf("  EnvType:   %u\n", ms.envType);
+                            Serial.printf("  Active:    %s\n", ms.active ? "yes" : "no");
+                        }
+                        Serial.println();
+                    } else {
+                        Serial.println("[DBG] Audio not available");
+                    }
+#else
+                    Serial.println("[DBG] Audio not enabled in this build");
+#endif
+                }
                 else if (subcmd == "status") {
                     // One-shot status print - use AudioActor's printStatus() method
 #if FEATURE_AUDIO_SYNC
-                    auto* audio = actors.getAudio();
+                    auto* audio = ::actors.getAudio();
                     if (audio) {
                         audio->printStatus();
                     } else {
@@ -2596,7 +2909,7 @@ void loop() {
                 else if (subcmd == "spectrum") {
                     // One-shot spectrum print - use AudioActor's printSpectrum() method
 #if FEATURE_AUDIO_SYNC
-                    auto* audio = actors.getAudio();
+                    auto* audio = ::actors.getAudio();
                     if (audio) {
                         audio->printSpectrum();
                     } else {
@@ -2609,7 +2922,7 @@ void loop() {
                 else if (subcmd == "beat") {
                     // One-shot beat print - use AudioActor's printBeat() method
 #if FEATURE_AUDIO_SYNC
-                    auto* audio = actors.getAudio();
+                    auto* audio = ::actors.getAudio();
                     if (audio) {
                         audio->printBeat();
                     } else {
@@ -2655,13 +2968,15 @@ void loop() {
                     }
                 }
                 else {
-                    Serial.println("Usage: dbg [0-5|audio|render|network|actor|status|spectrum|beat|memory|interval]");
+                    Serial.println("Usage: dbg [0-5|audio|render|network|actor|motion|status|spectrum|beat|memory|interval]");
                     Serial.println("  dbg           - Show debug config");
                     Serial.println("  dbg <0-5>     - Set global level");
                     Serial.println("  dbg audio <0-5>   - Set audio domain level");
                     Serial.println("  dbg render <0-5>  - Set render domain level");
                     Serial.println("  dbg network <0-5> - Set network domain level");
                     Serial.println("  dbg actor <0-5>   - Set actor domain level");
+                    Serial.println("  dbg motion <0-5>  - Set motion-semantic domain level");
+                    Serial.println("  dbg motion        - Print motion-semantic fields NOW");
                     Serial.println("  dbg status    - Print audio health NOW");
                     Serial.println("  dbg spectrum  - Print spectrum NOW");
                     Serial.println("  dbg beat      - Print beat tracking NOW");
@@ -2921,7 +3236,7 @@ void loop() {
             handledMulti = true;
 
             // Get TempoTracker from AudioActor
-            auto* audio = actors.getAudio();
+            auto* audio = ::actors.getAudio();
             if (audio) {
                 const auto& tempo = audio->getTempo();
                 auto output = tempo.getOutput();

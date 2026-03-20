@@ -53,6 +53,9 @@
 #include "../../audio/contracts/MusicalGrid.h"
 #include "../../audio/contracts/SnapshotBuffer.h"
 #include "../../audio/contracts/AudioEffectMapping.h"
+#include "../../audio/contracts/MotionSemantics.h"
+#include "../../audio/contracts/MotionShaper.h"
+#include "../../serial/ValidationMode.h"
 #include "../../audio/TrinityControlBusProxy.h"
 #if FEATURE_AUDIO_BACKEND_ESV11
 #include "../../audio/backends/esv11/EsBeatClock.h"
@@ -392,6 +395,20 @@ public:
     }
 
     /**
+     * @brief Get the latest Layer 2 motion-semantic frame.
+     */
+    const audio::MotionSemanticFrame& getMotionFrame() const {
+        return m_motionEngine.frame();
+    }
+
+    /**
+     * @brief Get the latest Layer 3 temporal shaping output.
+     */
+    const audio::MotionShaping& getMotionShaping() const {
+        return m_motionShaper.shaping();
+    }
+
+    /**
      * @brief Get the cached MusicalGridSnapshot for beat event streaming
      *
      * Copy latest cached snapshot.
@@ -713,7 +730,40 @@ private:
     // single-effect mode. Keeping this as a member avoids large stack usage in
     // renderFrame() that can trigger FreeRTOS stack overflow in the Renderer task.
     plugins::AudioContext m_sharedAudioCtx;
+    audio::MotionSemanticEngine m_motionEngine;  ///< Layer 2: ControlBusFrame -> 6-axis motion-semantic frame
+    audio::MotionShaper m_motionShaper;          ///< Layer 3: onset-driven temporal envelope shaping
 #endif
+
+    // ========================================================================
+    // Validation Mode (Stage 3B: perceptual testing)
+    // ========================================================================
+
+    serial::ValidationMode m_validationMode{m_leds, LedConfig::TOTAL_LEDS};
+
+    /// Lock-free command queue: Core 0 writes, Core 1 reads
+    static constexpr uint8_t VAL_CMD_QUEUE_SIZE = 4;
+    static constexpr uint16_t VAL_CMD_MAX_LEN = 256;
+    char m_valCmdQueue[VAL_CMD_QUEUE_SIZE][VAL_CMD_MAX_LEN];
+    std::atomic<uint8_t> m_valCmdHead{0};
+    std::atomic<uint8_t> m_valCmdTail{0};
+
+public:
+    /**
+     * @brief Enqueue a VAL: command from Core 0 for processing on Core 1.
+     * @return true if enqueued, false if queue full
+     */
+    bool enqueueValidationCommand(const char* cmd) {
+        uint8_t head = m_valCmdHead.load(std::memory_order_relaxed);
+        uint8_t next = (head + 1) % VAL_CMD_QUEUE_SIZE;
+        if (next == m_valCmdTail.load(std::memory_order_acquire)) return false;
+        strncpy(m_valCmdQueue[head], cmd, VAL_CMD_MAX_LEN - 1);
+        m_valCmdQueue[head][VAL_CMD_MAX_LEN - 1] = '\0';
+        m_valCmdHead.store(next, std::memory_order_release);
+        return true;
+    }
+
+    /** @brief Check if validation mode is actively rendering */
+    bool isValidationActive() const { return m_validationMode.isActive(); }
 
     // Transition system
 #if FEATURE_TRANSITIONS

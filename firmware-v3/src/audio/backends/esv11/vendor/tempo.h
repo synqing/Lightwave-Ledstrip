@@ -377,7 +377,18 @@ inline uint16_t esv11_pick_top_tempo_bin_octave_aware() {
     if (double_bin >= 0) {
         // Favour musical tactus over half-time aliases when the raw winner
         // lands in sub-80 BPM territory and confidence indicates active music.
-        if (raw_bpm < 80.0f && tempo_confidence > 0.12f) {
+        // Gate lowered from 0.12 to 0.06 for ESV11 validation (ESV11 conf
+        // range is ~0.04-0.20, original gate was unreachable in practice).
+        // Persistence: require 50 consecutive calls (~200ms @ 250Hz) in the
+        // doubling zone before committing, to avoid transient half-time flips.
+        static uint8_t octave_double_persist = 0;
+        const bool want_double = (raw_bpm < 80.0f && tempo_confidence > 0.06f);
+        if (want_double) {
+            if (octave_double_persist < 255u) ++octave_double_persist;
+        } else {
+            octave_double_persist = 0u;
+        }
+        if (octave_double_persist >= 50u) {
             selected_bin = static_cast<uint16_t>(double_bin);
             selected_score = esv11_pick_local_bin_magnitude(double_bin, 1);
         }

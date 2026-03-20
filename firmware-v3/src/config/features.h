@@ -62,6 +62,17 @@
 #define FEATURE_AUDIO_SYNC 1
 #endif
 
+// Perceptual translation layer from audio structure -> scene parameters
+// Defaults ON whenever audio sync is enabled, can be disabled for bisect/safety.
+#ifndef FEATURE_TRANSLATION_ENGINE
+#define FEATURE_TRANSLATION_ENGINE FEATURE_AUDIO_SYNC
+#endif
+
+// Debug logging for translation engine (verbose, OFF by default).
+#ifndef FEATURE_TRANSLATION_DEBUG
+#define FEATURE_TRANSLATION_DEBUG 0
+#endif
+
 // Alternate audio backend: Emotiscope v1.1_320 end-to-end pipeline.
 // When enabled, LWLS audio analysis/tempo codepaths must not run.
 #ifndef FEATURE_AUDIO_BACKEND_ESV11

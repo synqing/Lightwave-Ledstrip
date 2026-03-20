@@ -134,27 +134,21 @@ public:
     {}
 
     /**
-     * @brief Poll serial for incoming commands, render active animation
+     * @brief Handle a complete command line (called from serial handler on Core 0)
      *
-     * Call once per frame from the render loop.
+     * Thread-safe: sets state that render() reads. No concurrent writes
+     * because commands arrive sequentially from the serial handler.
      */
-    void poll() {
-#ifndef NATIVE_BUILD
-        // Read serial input
-        while (Serial.available()) {
-            char c = Serial.read();
-            if (c == '\n' || c == '\r') {
-                if (bufPos_ > 0) {
-                    buf_[bufPos_] = '\0';
-                    parseCommand(buf_);
-                    bufPos_ = 0;
-                }
-            } else if (bufPos_ < kMaxBuf - 1) {
-                buf_[bufPos_++] = c;
-            }
-        }
-#endif
-        // Render current animation
+    void handleCommand(const char* line) {
+        parseCommand(line);
+    }
+
+    /**
+     * @brief Render active animation to LED buffer
+     *
+     * Call once per frame from the render loop (Core 1).
+     */
+    void render() {
         if (active_) {
             renderFrame();
         }
@@ -237,6 +231,8 @@ private:
 
         // Parse key=value pairs from remaining string
         const char* params = space ? space + 1 : "";
+
+        // Command logged by caller if MOTION domain enabled
 
         if (strcmp(cmdName, "PULSE") == 0) {
             pulse_ = PulseParams{};

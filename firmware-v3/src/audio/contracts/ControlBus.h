@@ -4,6 +4,7 @@
 #include "AudioTime.h"
 #include "MusicalSaliency.h"
 #include "StyleDetector.h"
+#include "../TranslationEngine.h"
 
 namespace lightwaveos::audio {
 
@@ -77,6 +78,7 @@ struct ControlBusRawInput {
     bool tempoLocked = false;       ///< TempoTracker lock state (saliency; effects read MusicalGrid)
     float tempoConfidence = 0.0f;   ///< TempoTracker confidence (saliency; effects read MusicalGrid.confidence)
     bool tempoBeatTick = false;     ///< TempoTracker beat tick gated by lock (saliency support)
+    bool tempoDownbeatTick = false; ///< Backend-neutral downbeat tick (4/4)
     float tempoBpm = 120.0f;        ///< Tempo BPM estimate (PipelineCore/TempoTracker)
     float tempoBeatStrength = 0.0f; ///< Beat event strength [0,1] (0 = no beat this hop)
 };
@@ -97,6 +99,9 @@ struct ControlBusFrame {
 
     // Audio-driven liveliness scalar for global speed trim (0..1)
     float liveliness = 0.0f;
+
+    // Perceptual translation output consumed by renderer/effects helper path.
+    SceneParameters scene = kDefaultSceneParameters;
 
     float bands[CONTROLBUS_NUM_BANDS] = {0};
     float chroma[CONTROLBUS_NUM_CHROMA] = {0};
@@ -146,6 +151,7 @@ struct ControlBusFrame {
     bool tempoLocked = false;       ///< TempoTracker lock state (saliency; effects read MusicalGrid)
     float tempoConfidence = 0.0f;   ///< TempoTracker confidence (saliency; effects read MusicalGrid.confidence)
     bool tempoBeatTick = false;     ///< TempoTracker beat tick gated by lock (saliency support)
+    bool tempoDownbeatTick = false; ///< Backend-neutral downbeat tick (4/4)
     float tempoBpm = 120.0f;        ///< Tempo BPM estimate
     float tempoBeatStrength = 0.0f; ///< Beat event strength [0,1]
 
@@ -489,6 +495,7 @@ private:
         if (!onsetDetected || now_ms <= m_last_onset_ms) return;
         float ioi = (float)(now_ms - m_last_onset_ms);
         m_last_onset_ms = now_ms;
+        if (ioi < 80.0f) return;  // Min IOI gate: reject double-triggers < 80ms
         m_ioi_buffer[m_ioi_head] = ioi;
         m_ioi_head = (m_ioi_head + 1) % JITTER_WINDOW;
         if (m_ioi_count < JITTER_WINDOW) m_ioi_count++;

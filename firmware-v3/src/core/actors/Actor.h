@@ -115,6 +115,10 @@ enum class MessageType : uint8_t {
     ERROR_OCCURRED      = 0x86,
     HEALTH_STATUS       = 0x87,
 
+    // Degraded-mode events (0x88-0x8F) — DEC-011
+    AUDIO_FAILURE_DETECTED  = 0x88,  // Sustained DMA timeout > 2s
+    AUDIO_FAILURE_RECOVERED = 0x89,  // Audio capture resumed after failure
+
     // HMI Events (0x90-0x9F)
     ENCODER_ROTATED     = 0x90,
     ENCODER_PRESSED     = 0x91,

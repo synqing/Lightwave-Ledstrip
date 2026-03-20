@@ -345,7 +345,9 @@ bool ZoneConfigManager::loadFromNVS() {
 // ==================== System State Operations ====================
 
 bool ZoneConfigManager::saveSystemState(EffectId effectId, uint8_t brightness,
-                                        uint8_t speed, uint8_t paletteId) {
+                                        uint8_t speed, uint8_t paletteId,
+                                        uint8_t factoryPresetIndex,
+                                        const SystemExpressionParams* expr) {
     // Ensure NVS is initialized
     if (!NVS_MANAGER.isInitialized()) {
         if (!NVS_MANAGER.init()) {
@@ -354,12 +356,23 @@ bool ZoneConfigManager::saveSystemState(EffectId effectId, uint8_t brightness,
         }
     }
 
+    SystemExpressionParams defaults;
+    if (!expr) expr = &defaults;
+
     SystemConfigData config;
     config.version = SYSTEM_CONFIG_VERSION;
     config.effectId = effectId;
     config.brightness = brightness;
     config.speed = speed;
     config.paletteId = paletteId;
+    config.factoryPresetIndex = factoryPresetIndex;
+    config.expr_hue        = expr->hue;
+    config.expr_saturation = expr->saturation;
+    config.expr_mood       = expr->mood;
+    config.expr_trails     = expr->trails;
+    config.expr_intensity  = expr->intensity;
+    config.expr_complexity = expr->complexity;
+    config.expr_variation  = expr->variation;
     config.calculateChecksum();
 
     m_lastError = NVS_MANAGER.saveBlob(NVS_NS_SYSTEM, NVS_KEY_STATE, &config, sizeof(config));
@@ -375,7 +388,14 @@ bool ZoneConfigManager::saveSystemState(EffectId effectId, uint8_t brightness,
 }
 
 bool ZoneConfigManager::loadSystemState(EffectId& effectId, uint8_t& brightness,
-                                        uint8_t& speed, uint8_t& paletteId) {
+                                        uint8_t& speed, uint8_t& paletteId,
+                                        uint8_t* factoryPresetIndex,
+                                        SystemExpressionParams* expr) {
+    // Helper: fill expression param outputs with defaults
+    auto defaultExpr = [&]() {
+        if (expr) *expr = SystemExpressionParams{};
+    };
+
     // Ensure NVS is initialized
     if (!NVS_MANAGER.isInitialized()) {
         if (!NVS_MANAGER.init()) {
@@ -384,7 +404,28 @@ bool ZoneConfigManager::loadSystemState(EffectId& effectId, uint8_t& brightness,
         }
     }
 
-    // Try loading current format first
+    // V3 struct for migration (pre-factoryPresetIndex)
+    struct SystemConfigDataV3 {
+        uint8_t version;
+        EffectId effectId;
+        uint8_t brightness;
+        uint8_t speed;
+        uint8_t paletteId;
+        uint32_t checksum;
+    };
+
+    // V4 struct for migration (pre-expression params)
+    struct SystemConfigDataV4 {
+        uint8_t version;
+        EffectId effectId;
+        uint8_t brightness;
+        uint8_t speed;
+        uint8_t paletteId;
+        uint8_t factoryPresetIndex;
+        uint32_t checksum;
+    };
+
+    // Try loading current v5 format first
     SystemConfigData config;
     m_lastError = NVS_MANAGER.loadBlob(NVS_NS_SYSTEM, NVS_KEY_STATE, &config, sizeof(config));
 
@@ -394,7 +435,35 @@ bool ZoneConfigManager::loadSystemState(EffectId& effectId, uint8_t& brightness,
     }
 
     if (m_lastError != NVSResult::OK) {
-        // May be old (smaller) format -- try loading legacy struct
+        // May be old (smaller) format — try v4 first
+        SystemConfigDataV4 v4;
+        m_lastError = NVS_MANAGER.loadBlob(NVS_NS_SYSTEM, NVS_KEY_STATE, &v4, sizeof(v4));
+        if (m_lastError == NVSResult::OK && v4.version == 4) {
+            effectId = (v4.effectId != INVALID_EFFECT_ID) ? v4.effectId : EID_FIRE;
+            brightness = v4.brightness;
+            speed = (v4.speed >= MIN_SPEED && v4.speed <= MAX_SPEED) ? v4.speed : 25;
+            paletteId = (v4.paletteId <= MAX_PALETTE_ID) ? v4.paletteId : 0;
+            if (factoryPresetIndex) *factoryPresetIndex = (v4.factoryPresetIndex < 8) ? v4.factoryPresetIndex : 0;
+            defaultExpr();
+            Serial.println("[ZoneConfig] System state migrated from v4 (no expression params)");
+            return true;
+        }
+
+        // Try v3
+        SystemConfigDataV3 v3;
+        m_lastError = NVS_MANAGER.loadBlob(NVS_NS_SYSTEM, NVS_KEY_STATE, &v3, sizeof(v3));
+        if (m_lastError == NVSResult::OK && v3.version == 3) {
+            effectId = (v3.effectId != INVALID_EFFECT_ID) ? v3.effectId : EID_FIRE;
+            brightness = v3.brightness;
+            speed = (v3.speed >= MIN_SPEED && v3.speed <= MAX_SPEED) ? v3.speed : 25;
+            paletteId = (v3.paletteId <= MAX_PALETTE_ID) ? v3.paletteId : 0;
+            if (factoryPresetIndex) *factoryPresetIndex = 0;
+            defaultExpr();
+            Serial.println("[ZoneConfig] System state migrated from v3 (no preset index)");
+            return true;
+        }
+
+        // Try legacy v1 (uint8_t effectId)
         struct SystemConfigDataV1 {
             uint8_t version;
             uint8_t effectId;
@@ -411,14 +480,15 @@ bool ZoneConfigManager::loadSystemState(EffectId& effectId, uint8_t& brightness,
             return false;
         }
 
-        // Migrate old uint8_t effectId to new EffectId via oldIdToNew()
         effectId = oldIdToNew(v1.effectId);
         if (effectId == INVALID_EFFECT_ID) {
-            effectId = EID_FIRE;  // Safe fallback
+            effectId = EID_FIRE;
         }
         brightness = v1.brightness;
         speed = (v1.speed >= MIN_SPEED && v1.speed <= MAX_SPEED) ? v1.speed : 25;
         paletteId = (v1.paletteId <= MAX_PALETTE_ID) ? v1.paletteId : 0;
+        if (factoryPresetIndex) *factoryPresetIndex = 0;
+        defaultExpr();
 
         Serial.println("[ZoneConfig] System state migrated from v1 (uint8_t effectId)");
         return true;
@@ -432,9 +502,38 @@ bool ZoneConfigManager::loadSystemState(EffectId& effectId, uint8_t& brightness,
     }
 
     // Check version for migration
-    if (config.version < SYSTEM_CONFIG_VERSION) {
-        // Pre-v3 format: effectId was stored as uint8_t at the same field offset
-        // Re-read as legacy and migrate
+    if (config.version == 4) {
+        // V4 loaded into v5 struct — expression param fields have garbage
+        SystemConfigDataV4 v4;
+        memcpy(&v4, &config, sizeof(v4));
+
+        effectId = (v4.effectId != INVALID_EFFECT_ID) ? v4.effectId : EID_FIRE;
+        brightness = v4.brightness;
+        speed = (v4.speed >= MIN_SPEED && v4.speed <= MAX_SPEED) ? v4.speed : 25;
+        paletteId = (v4.paletteId <= MAX_PALETTE_ID) ? v4.paletteId : 0;
+        if (factoryPresetIndex) *factoryPresetIndex = (v4.factoryPresetIndex < 8) ? v4.factoryPresetIndex : 0;
+        defaultExpr();
+
+        Serial.println("[ZoneConfig] System state migrated from v4 (no expression params)");
+        return true;
+    }
+
+    if (config.version == 3) {
+        SystemConfigDataV3 v3;
+        memcpy(&v3, &config, sizeof(v3));
+
+        effectId = (v3.effectId != INVALID_EFFECT_ID) ? v3.effectId : EID_FIRE;
+        brightness = v3.brightness;
+        speed = (v3.speed >= MIN_SPEED && v3.speed <= MAX_SPEED) ? v3.speed : 25;
+        paletteId = (v3.paletteId <= MAX_PALETTE_ID) ? v3.paletteId : 0;
+        if (factoryPresetIndex) *factoryPresetIndex = 0;
+        defaultExpr();
+
+        Serial.println("[ZoneConfig] System state migrated from v3 (no preset index)");
+        return true;
+    }
+
+    if (config.version < 3) {
         struct SystemConfigDataV1 {
             uint8_t version;
             uint8_t effectId;
@@ -453,16 +552,30 @@ bool ZoneConfigManager::loadSystemState(EffectId& effectId, uint8_t& brightness,
         brightness = v1.brightness;
         speed = (v1.speed >= MIN_SPEED && v1.speed <= MAX_SPEED) ? v1.speed : 25;
         paletteId = (v1.paletteId <= MAX_PALETTE_ID) ? v1.paletteId : 0;
+        if (factoryPresetIndex) *factoryPresetIndex = 0;
+        defaultExpr();
 
         Serial.println("[ZoneConfig] System state migrated from legacy version");
         return true;
     }
 
-    // Current version: read EffectId (uint16_t) directly
+    // Current v5 format: read all fields including expression params
     effectId = (config.effectId != INVALID_EFFECT_ID) ? config.effectId : EID_FIRE;
     brightness = config.brightness;
     speed = (config.speed >= MIN_SPEED && config.speed <= MAX_SPEED) ? config.speed : 25;
     paletteId = (config.paletteId <= MAX_PALETTE_ID) ? config.paletteId : 0;
+    if (factoryPresetIndex) {
+        *factoryPresetIndex = (config.factoryPresetIndex < 8) ? config.factoryPresetIndex : 0;
+    }
+    if (expr) {
+        expr->hue        = config.expr_hue;
+        expr->saturation = config.expr_saturation;
+        expr->mood       = config.expr_mood;
+        expr->trails     = config.expr_trails;
+        expr->intensity  = config.expr_intensity;
+        expr->complexity = config.expr_complexity;
+        expr->variation  = config.expr_variation;
+    }
 
     Serial.println("[ZoneConfig] System state loaded from NVS");
     return true;

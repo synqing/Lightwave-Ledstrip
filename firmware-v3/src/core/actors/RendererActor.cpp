@@ -31,6 +31,7 @@
 #if CHIP_ESP32_S3 && !defined(NATIVE_BUILD) && FEATURE_STATUS_STRIP_TOUCH
 #include "../../hal/esp32s3/StatusStripTouch.h"
 #endif
+#include <algorithm>
 #include <math.h>
 #if FEATURE_VALIDATION_PROFILING
 #include "../../core/system/ValidationProfiler.h"
@@ -97,6 +98,36 @@ float computeSpeedTimeFactor(uint8_t speed) {
     float curved = sqrtf(norm);
     return kMinSpeedTimeFactor + (1.0f - kMinSpeedTimeFactor) * curved;
 }
+
+#if FEATURE_AUDIO_SYNC && FEATURE_TRANSLATION_ENGINE
+lightwaveos::plugins::VisualBehavior behaviorFromMotion(const lightwaveos::plugins::AudioContext& audioCtx) {
+    using lightwaveos::plugins::VisualBehavior;
+    using lightwaveos::audio::MotionPrimitive;
+    const MotionPrimitive motion = audioCtx.motionType();
+
+    switch (motion) {
+        case MotionPrimitive::BLOOM:
+        case MotionPrimitive::RECOIL:
+            return VisualBehavior::PULSE_ON_BEAT;
+        case MotionPrimitive::FLOW:
+            return VisualBehavior::TEXTURE_FLOW;
+        case MotionPrimitive::DRIFT:
+            return audioCtx.isHarmonicDominant()
+                ? VisualBehavior::DRIFT_WITH_HARMONY
+                : VisualBehavior::TEXTURE_FLOW;
+        case MotionPrimitive::LOCK:
+        case MotionPrimitive::DECAY:
+            return VisualBehavior::BREATHE_WITH_DYNAMICS;
+        default:
+            return VisualBehavior::BREATHE_WITH_DYNAMICS;
+    }
+}
+
+uint8_t applySceneBrightnessBias(uint8_t baseBrightness, float sceneBrightnessScale) {
+    const int adjusted = static_cast<int>(baseBrightness * sceneBrightnessScale + 0.5f);
+    return static_cast<uint8_t>(std::max(0, std::min(adjusted, 255)));
+}
+#endif
 }  // namespace
 
 // Stub for legacy effect ID tracking - no-op when legacy effects are disabled
@@ -1461,7 +1492,53 @@ void RendererActor::renderFrame()
             m_sharedAudioCtx.trinityActive = false;
         }
     }
+
+    // Layer 2: Motion-Semantic inference (ControlBusFrame -> 6-axis MotionSemanticFrame)
+    if (m_sharedAudioCtx.available) {
+        constexpr float RENDER_DT = 1.0f / 120.0f;  // 120 FPS render rate
+        m_motionEngine.update(m_sharedAudioCtx.controlBus, RENDER_DT);
+        m_sharedAudioCtx.motionFrame = m_motionEngine.frame();
+
+        // Throttled Layer 2 trace (every 2s)
+        static uint32_t s_l2_last_log = 0;
+        uint32_t l2_now = millis();
+        if (l2_now - s_l2_last_log >= 2000) {
+            s_l2_last_log = l2_now;
+            const auto& mf = m_sharedAudioCtx.motionFrame;
+            LW_MOTION_LOGT("L2 W=%.2f T=%.2f S=%.2f Fl=%.2f Flu=%.2f I=%.2f conf=%u",
+                mf.weight, mf.time_quality, mf.space, mf.flow,
+                mf.fluidity, mf.impulse_strength, mf.confidence_min);
+        }
+
+        // Layer 3: Temporal envelope shaping (onset-driven, semantic-selected)
+        m_motionShaper.update(m_sharedAudioCtx.controlBus, m_motionEngine.frame(), millis());
+        m_sharedAudioCtx.motionShaping = m_motionShaper.shaping();
+
+        // Throttled Layer 3 trace (every 2s, only when active)
+        static uint32_t s_l3_last_log = 0;
+        uint32_t l3_now = millis();
+        if (l3_now - s_l3_last_log >= 2000) {
+            s_l3_last_log = l3_now;
+            const auto& ms = m_sharedAudioCtx.motionShaping;
+            LW_MOTION_LOGT("L3 int=%.2f decay=%.0f accent=%.2f env=%u active=%u",
+                ms.intensity, ms.decayMs, ms.accentScale, ms.envType, ms.active ? 1u : 0u);
+        }
+    }
 #endif
+
+    // Drain validation command queue (Core 0 → Core 1)
+    while (m_valCmdTail.load(std::memory_order_relaxed) != m_valCmdHead.load(std::memory_order_acquire)) {
+        uint8_t tail = m_valCmdTail.load(std::memory_order_relaxed);
+        m_validationMode.handleCommand(m_valCmdQueue[tail]);
+        m_valCmdTail.store((tail + 1) % VAL_CMD_QUEUE_SIZE, std::memory_order_release);
+    }
+
+    // Validation mode: render directly, skip normal effect pipeline
+    if (m_validationMode.isActive()) {
+        m_validationMode.render();
+        showLeds();
+        return;
+    }
 
     // Calculate delta time (in ms) - needed for both zone mode and single-effect mode
     uint32_t now = micros();
@@ -1538,6 +1615,14 @@ void RendererActor::renderFrame()
                 ctx.audio.saliencyFrame(),
                 ctx.audio.styleConfidence()
             );
+#if FEATURE_TRANSLATION_ENGINE
+            ctx.audio.behaviorContext.recommendedPrimary =
+                behaviorFromMotion(ctx.audio);
+            ctx.brightness = applySceneBrightnessBias(
+                ctx.brightness,
+                ctx.audio.sceneParameters().brightness_scale
+            );
+#endif
         } else {
             ctx.audio.behaviorContext = plugins::BehaviorContext{};
         }

@@ -8,6 +8,7 @@
 #include "utils/Log.h"
 
 #include "palettes/Palettes_Master.h"
+#include "config/chip_esp32s3.h"
 
 namespace {
 
@@ -18,6 +19,20 @@ static constexpr uint8_t STATUS_BRIGHTNESS = 50;
 static constexpr uint8_t STATUS_CENTRE     = (STATUS_LED_COUNT - 1u) / 2u;  // 14
 
 static_assert(STATUS_LED_COUNT >= 2, "Need at least 2 LEDs for gradient mapping");
+
+// ── Button state (TTP223) ────────────────────────────────────────────────────
+static constexpr uint32_t TAP_MAX_MS       = 500;   // press < 500ms = tap
+static constexpr uint32_t LONG_PRESS_MS    = 1000;  // press >= 1000ms = long press
+static bool     btnLastRaw       = false;
+static bool     btnPressed       = false;
+static bool     btnLongFired     = false;
+static uint32_t btnPressStartMs  = 0;
+
+// ── Degraded-mode state ──────────────────────────────────────────────────────
+static bool     degradedAudioFailure = false;
+static bool     degradedLowHeap      = false;
+static bool     degradedWhiteFlash   = false;
+static uint32_t whiteFlashStartMs    = 0;
 
 // ── Idle modes ──────────────────────────────────────────────────────────────
 // MODE_COUNT must match the number of cases in the render switch.
@@ -330,6 +345,55 @@ static void applyCentreReveal(uint32_t now, uint8_t bri) {
 }
 
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Degraded-mode render functions
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Amber breathing: 3s sinusoidal cycle, CRGB(255, 191, 0).
+// Overrides normal idle animation while audio failure is active.
+static void renderAmberBreathing(uint32_t now) {
+    // 3-second cycle: sin8 input = now / (3000/256) ≈ now / 11.7
+    uint8_t phase = static_cast<uint8_t>(now / 12u);
+    uint8_t breathVal = sin8(phase);
+    // Map [0..255] → [40..255] brightness for perceptible minimum
+    uint8_t bri = static_cast<uint8_t>(40u + ((uint16_t)breathVal * 215u >> 8));
+    CRGB amber(255, 191, 0);
+    amber.nscale8_video(bri);
+    fill_solid(statusLeds, STATUS_LED_COUNT, amber);
+}
+
+// White flash: 1-second full white sweep, then auto-clears.
+static void renderWhiteFlash(uint32_t now) {
+    uint32_t elapsed = now - whiteFlashStartMs;
+    if (elapsed >= 1000u) {
+        degradedWhiteFlash = false;
+        return;
+    }
+    // Brightness ramps up then down over 1 second
+    uint8_t bri;
+    if (elapsed < 200u) {
+        bri = static_cast<uint8_t>((elapsed * 255u) / 200u);
+    } else if (elapsed < 800u) {
+        bri = 255u;
+    } else {
+        bri = static_cast<uint8_t>(((1000u - elapsed) * 255u) / 200u);
+    }
+    fill_solid(statusLeds, STATUS_LED_COUNT, CRGB(bri, bri, bri));
+}
+
+// Dim pulse: 5-second subtle brightness dip on status strip.
+static void renderDimPulse(uint32_t now) {
+    // 5-second cycle
+    uint8_t phase = static_cast<uint8_t>(now / 20u);  // 5120ms cycle
+    uint8_t breathVal = sin8(phase);
+    // Subtle: scale between 60% and 100% of normal
+    uint8_t scale = static_cast<uint8_t>(153u + ((uint16_t)breathVal * 102u >> 8));
+    // Dim all LEDs by the scale factor (applied on top of existing content)
+    for (uint8_t i = 0; i < STATUS_LED_COUNT; ++i) {
+        statusLeds[i].nscale8_video(scale);
+    }
+}
+
 }  // namespace
 
 
@@ -384,13 +448,19 @@ void statusStripTouchLoop(uint32_t now) {
     if (dt >= 30u) {
         lastUpdateMs = now;
 
-        // Compensate for the global FastLED.setBrightness() that the main
-        // strip driver applies.  Without this, our STATUS_BRIGHTNESS=50 gets
-        // further scaled by the global value, crushing pixel values to near-zero
-        // and causing dark endpoints where palette colours are slightly dimmer.
-        uint8_t bri = compensatedBrightness();
+        // ── Degraded-mode priority: white flash > amber > normal (+dim pulse overlay)
+        if (degradedWhiteFlash) {
+            renderWhiteFlash(now);
+            return;
+        }
 
-        // currentPalette is already validated by statusStripShowPalette
+        if (degradedAudioFailure) {
+            renderAmberBreathing(now);
+            return;
+        }
+
+        // Normal idle animation
+        uint8_t bri = compensatedBrightness();
         const CRGBPalette16& palette = gMasterPalettes[currentPalette];
         uint8_t avg = getPaletteAvgBrightness(currentPalette);
 
@@ -426,6 +496,11 @@ void statusStripTouchLoop(uint32_t now) {
 
         // Post-processing
         applyCentreReveal(now, bri);
+
+        // Dim pulse overlay (subtle, applied after normal render)
+        if (degradedLowHeap) {
+            renderDimPulse(now);
+        }
     }
 }
 
@@ -469,6 +544,68 @@ void statusStripNextIdleMode() {
     autoModeActive = false;  // manual override until next palette change
     idleMode = static_cast<uint8_t>((idleMode + 1u) % MODE_COUNT);
     LW_LOGI("StatusStrip mode=%u (manual)", idleMode);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Button polling (TTP223 on configurable GPIO)
+// ═══════════════════════════════════════════════════════════════════════════
+
+ButtonEvent statusStripPollButton(uint32_t now) {
+    // Guard: TTP223 pin not configured (-1)
+    if (chip::gpio::TTP223 < 0) return ButtonEvent::NONE;
+
+    bool raw = digitalRead(static_cast<uint8_t>(chip::gpio::TTP223)) == HIGH;
+
+    // Rising edge: button pressed
+    if (raw && !btnLastRaw) {
+        btnPressed = true;
+        btnLongFired = false;
+        btnPressStartMs = now;
+    }
+
+    // Held: check for long press threshold
+    if (raw && btnPressed && !btnLongFired) {
+        if ((now - btnPressStartMs) >= LONG_PRESS_MS) {
+            btnLongFired = true;
+            btnLastRaw = raw;
+            return ButtonEvent::LONG_PRESS;
+        }
+    }
+
+    // Falling edge: button released
+    if (!raw && btnLastRaw && btnPressed) {
+        btnPressed = false;
+        btnLastRaw = raw;
+        // Only fire TAP if long press wasn't already fired
+        if (!btnLongFired && (now - btnPressStartMs) < TAP_MAX_MS) {
+            return ButtonEvent::TAP;
+        }
+        return ButtonEvent::NONE;
+    }
+
+    btnLastRaw = raw;
+    return ButtonEvent::NONE;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Degraded-mode signal control (DEC-011)
+// ═══════════════════════════════════════════════════════════════════════════
+
+void statusStripSetAudioFailure(bool failed) {
+    if (degradedAudioFailure != failed) {
+        degradedAudioFailure = failed;
+        LW_LOGI("StatusStrip audio failure: %s", failed ? "ACTIVE" : "cleared");
+    }
+}
+
+void statusStripTriggerWhiteFlash() {
+    degradedWhiteFlash = true;
+    whiteFlashStartMs = millis();
+    LW_LOGI("StatusStrip white flash triggered (NVS corruption)");
+}
+
+void statusStripSetLowHeap(bool low) {
+    degradedLowHeap = low;
 }
 
 #endif  // NATIVE_BUILD

@@ -73,13 +73,38 @@ struct ZoneConfigData {
  *
  * Stores the non-zone-specific settings that persist across reboots.
  */
+/**
+ * @brief Expression parameter snapshot for NVS persistence
+ *
+ * 7 sliders that survive power cycle (DEC-011/E2).
+ */
+struct SystemExpressionParams {
+    uint8_t hue         = 128;
+    uint8_t saturation  = 128;
+    uint8_t mood        = 128;
+    uint8_t trails      = 128;
+    uint8_t intensity   = 128;
+    uint8_t complexity  = 128;
+    uint8_t variation   = 128;
+};
+
 struct SystemConfigData {
-    uint8_t version;                    // Config format version (2 = EffectId uint16_t)
+    uint8_t version;                    // Config format version (5 = expression params)
 
     EffectId effectId;                  // Current effect ID (stable namespaced)
     uint8_t brightness;                 // Global brightness (0-255)
     uint8_t speed;                      // Animation speed (1-50)
     uint8_t paletteId;                  // Current palette ID
+    uint8_t factoryPresetIndex;         // Last-used factory preset index (0-7). v4.
+
+    // Expression parameter persistence (DEC-011/E2). v5.
+    uint8_t expr_hue;
+    uint8_t expr_saturation;
+    uint8_t expr_mood;
+    uint8_t expr_trails;
+    uint8_t expr_intensity;
+    uint8_t expr_complexity;
+    uint8_t expr_variation;
 
     uint32_t checksum;
 
@@ -147,24 +172,32 @@ public:
     // ==================== System State Operations ====================
 
     /**
-     * @brief Save system state (effect, brightness, speed, palette) to NVS
+     * @brief Save system state to NVS (including expression params)
      * @param effectId Current effect ID (stable namespaced EffectId)
      * @param brightness Current brightness
      * @param speed Current speed
      * @param paletteId Current palette ID
+     * @param factoryPresetIndex Last-used factory preset index (0-7)
+     * @param expr Expression params snapshot (nullptr = use defaults 128)
      * @return true if saved successfully
      */
-    bool saveSystemState(EffectId effectId, uint8_t brightness, uint8_t speed, uint8_t paletteId);
+    bool saveSystemState(EffectId effectId, uint8_t brightness, uint8_t speed, uint8_t paletteId,
+                         uint8_t factoryPresetIndex = 0,
+                         const SystemExpressionParams* expr = nullptr);
 
     /**
-     * @brief Load system state from NVS
-     * @param effectId Output: loaded effect ID (stable namespaced EffectId)
+     * @brief Load system state from NVS (including expression params)
+     * @param effectId Output: loaded effect ID
      * @param brightness Output: loaded brightness
      * @param speed Output: loaded speed
      * @param paletteId Output: loaded palette ID
+     * @param factoryPresetIndex Output: loaded preset index (nullptr to skip)
+     * @param expr Output: loaded expression params (nullptr to skip)
      * @return true if loaded successfully
      */
-    bool loadSystemState(EffectId& effectId, uint8_t& brightness, uint8_t& speed, uint8_t& paletteId);
+    bool loadSystemState(EffectId& effectId, uint8_t& brightness, uint8_t& speed, uint8_t& paletteId,
+                         uint8_t* factoryPresetIndex = nullptr,
+                         SystemExpressionParams* expr = nullptr);
 
     // ==================== Preset Management ====================
 
@@ -227,7 +260,7 @@ private:
 
     // Config version for future compatibility
     static constexpr uint8_t CONFIG_VERSION = 3;       // Zone config format version (3 = EffectId uint16_t in zoneEffects)
-    static constexpr uint8_t SYSTEM_CONFIG_VERSION = 3; // System config version (3 = EffectId uint16_t)
+    static constexpr uint8_t SYSTEM_CONFIG_VERSION = 5; // System config version (5 = expression params)
 
     // Effect limits - reference centralised limits (upper bound for NVS validation)
     static constexpr EffectId MAX_EFFECT_ID = 0x1FFF;  // Covers all family blocks (0x0100-0x1Axx)

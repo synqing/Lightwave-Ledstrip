@@ -153,9 +153,8 @@ public:
     void sendColorCorrectionConfig(bool gammaEnabled, float gammaValue,
                                    bool autoExposureEnabled, uint8_t autoExposureTarget,
                                    bool brownGuardrailEnabled, uint8_t mode = 2);
-    void sendGammaChange(bool enabled, float value);
-    void sendAutoExposureChange(bool enabled, uint8_t target);
-    void sendBrownGuardrailChange(bool enabled);
+    // REMOVED: sendGammaChange, sendAutoExposureChange, sendBrownGuardrailChange
+    // K1 has no handlers for these. Use sendColorCorrectionConfig() instead.
     void sendColourCorrectionMode(uint8_t mode);
 
     // Color correction state accessors

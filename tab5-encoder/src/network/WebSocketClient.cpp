@@ -895,37 +895,11 @@ void WebSocketClient::sendColorCorrectionConfig(bool gammaEnabled, float gammaVa
     sendJSON("colorCorrection.setConfig", doc);
 }
 
-void WebSocketClient::sendGammaChange(bool enabled, float value) {
-    if (!isConnected()) {
-        return;
-    }
-    
-    JsonDocument doc;
-    doc["enabled"] = enabled;
-    doc["value"] = value;
-    sendJSON("colorCorrection.setGamma", doc);
-}
-
-void WebSocketClient::sendAutoExposureChange(bool enabled, uint8_t target) {
-    if (!isConnected()) {
-        return;
-    }
-    
-    JsonDocument doc;
-    doc["enabled"] = enabled;
-    doc["target"] = target;
-    sendJSON("colorCorrection.setAutoExposure", doc);
-}
-
-void WebSocketClient::sendBrownGuardrailChange(bool enabled) {
-    if (!isConnected()) {
-        return;
-    }
-    
-    JsonDocument doc;
-    doc["enabled"] = enabled;
-    sendJSON("colorCorrection.setBrownGuardrail", doc);
-}
+// REMOVED: sendGammaChange, sendAutoExposureChange, sendBrownGuardrailChange
+// These sent colorCorrection.setGamma/setAutoExposure/setBrownGuardrail which
+// K1 has no handlers for (silently dropped). Use sendColorCorrectionConfig()
+// instead, which sends colorCorrection.setConfig with all fields.
+// See: docs/protocol/k1-ws-contract.yaml (deprecated section)
 
 void WebSocketClient::sendColourCorrectionMode(uint8_t mode) {
     if (!isConnected()) {

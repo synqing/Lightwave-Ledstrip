@@ -113,7 +113,7 @@ public:
             return true;
         }
 
-        if (strcmp(type, "zones.changed") == 0) {
+        if (strcmp(type, "zones.changed") == 0 || strcmp(type, "zones.stateChanged") == 0 || strcmp(type, "zones.enabledChanged") == 0) {
             handleZonesChanged(doc);
             return true;
         }
@@ -123,7 +123,7 @@ public:
             return true;
         }
 
-        if (strcmp(type, "effects.changed") == 0) {
+        if (strcmp(type, "effects.changed") == 0 || strcmp(type, "effectChanged") == 0) {
             handleEffectsChanged(doc);
             return true;
         }

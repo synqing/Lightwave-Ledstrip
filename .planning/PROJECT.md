@@ -1,57 +1,31 @@
-# Critical Bug Fixes: C-2, C-3, C-4
+# K1↔Tab5 Protocol Contract + LVGL Component Reference
 
 ## What This Is
 
-Fixing three critical bugs identified in the codebase audit: API type truncation (C-2), dangling pointer in WebSocket response (C-3), and cross-core data race via getControlBusMut() (C-4). All are production bugs with defined fix approaches.
+Building two agent harness documents that prevent protocol drift between K1 and Tab5, and prevent LVGL UI breakage when agents modify Tab5 screens. Plus fixing 3 real bugs found during protocol research (naming mismatches, dead commands).
 
 ## Core Value
 
-Eliminate undefined behaviour and silent data corruption in the network API layer before production release.
+Agents must be able to modify K1 network code or Tab5 UI code without breaking the other side or producing visual garbage.
 
 ## Requirements
 
-### Validated
-
-- ✓ Bugs identified and root-caused in CONCERNS.md audit — existing
-- ✓ Fix approaches defined with estimated effort — existing
-- ✓ Codebase map and architecture docs available — existing
-
 ### Active
 
-- [ ] C-2: Fix uint8_t→uint16_t type truncation in 5 audio mapping endpoints
-- [ ] C-3: Fix dangling pointer in handleEffectsGetCategories()
-- [ ] C-4: Remove getControlBusMut(), route audio config through actor message queue
-- [ ] Build + flash + soak test after fixes
+- [ ] WebSocket protocol contract (YAML) covering all 141 commands + broadcasts
+- [ ] REST protocol contract (YAML) covering all 93 endpoints
+- [ ] LVGL component reference (~300 lines) with widget trees, fonts, colours, anti-patterns, templates
+- [ ] Fix Tab5 WsMessageRouter broadcast naming mismatches (effectChanged, zones.stateChanged)
+- [ ] Remove 3 dead commands from Tab5 WebSocketClient + document as deprecated
+- [ ] CLAUDE.md updates making both harnesses mandatory reading
+- [ ] Build + flash Tab5 to verify bug fixes
 
 ### Out of Scope
 
-- C-1 PipelineCore — already mitigated, separate concern
-- New API features — fix only, no additions
-- WiFi architecture — AP-only constraint preserved
-
-## Context
-
-**C-2** (1 hour): Five endpoints in V1ApiRoutes.cpp parse effect IDs as uint8_t instead of uint16_t (EffectId). Effect IDs >= 256 are silently truncated to 0. Fix: change type + add validation.
-
-**C-3** (30 min): WsEffectsCommands.cpp handleEffectsGetCategories() stores pointers to a stack-local char buffer that gets destroyed each loop iteration. All family name pointers alias dead stack memory. Fix: use array of buffers outside loop.
-
-**C-4** (3-4 hours): WebServer's AsyncTCP task calls getControlBusMut() to mutate AudioActor's ControlBus state without synchronisation. Both run on Core 0 but in different FreeRTOS tasks with preemptive scheduling. Fix: remove getControlBusMut(), route changes through actor message queue, add read-only snapshot for telemetry.
-
-## Constraints
-
-- **Thread safety**: C-4 fix must use actor message queue pattern, not add mutexes
-- **No functional changes beyond the fixes**: Don't refactor surrounding code
-- **British English**: All comments use centre, colour, initialise
-- **Build verification**: pio run -e esp32dev_audio_esv11_k1v2_32khz must succeed
-- **Hardware verification**: Flash to K1, soak test 5+ minutes
-
-## Key Decisions
-
-| Decision | Rationale | Outcome |
-|----------|-----------|---------|
-| Fix C-2 and C-3 first (quick wins) | 30-60 min each, eliminates 2 critical bugs immediately | — Pending |
-| C-4 uses message queue, not mutex | Consistent with actor model architecture, avoids deadlock risk | — Pending |
-| Remove getControlBusMut() entirely | No mutable cross-task access — force all mutations through message queue | — Pending |
+- Protocol lint script (Phase 2, after contract stabilises)
+- C++ enum code generation from YAML (Phase 3)
+- Tab5 test infrastructure (separate milestone)
+- Consolidating duplicated TAB5_COLOR_* / make_card() (document, don't fix)
 
 ---
-*Last updated: 2026-03-21 after project initialisation*
+*Last updated: 2026-03-21 after eng review*

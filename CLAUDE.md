@@ -81,6 +81,14 @@ READBACK:
 
 These files contain pre-extracted codebase structure, frameworks, dependencies, entrypoints, and all state machine definitions. Reading them costs ~200 lines. Re-discovering the same information by exploring source files costs 20,000+ tokens. **Read the reference files.**
 
+### Protocol Contract (MANDATORY for network code)
+
+**Gate rule:** Before adding, modifying, or consuming any WebSocket command or REST endpoint, read `docs/protocol/k1-ws-contract.yaml` (WebSocket) and/or `docs/protocol/k1-rest-contract.yaml` (REST). These are the single source of truth for what K1 exposes and what Tab5/iOS consumes. If a command is not in the contract, it does not exist. **Update the contract FIRST, then implement.** Do NOT add WS commands to K1 without updating the YAML. Do NOT consume commands from Tab5 without verifying they exist in the contract and your field names match.
+
+### LVGL Code (MANDATORY before touching tab5-encoder/src/ui/)
+
+**Gate rule:** Before modifying any file in `tab5-encoder/src/ui/`, read `tab5-encoder/docs/reference/lvgl-component-reference.md`. This documents the exact widget tree, colour system, font assignments, layout patterns, and 12 anti-patterns that cause visual bugs, memory leaks, and WDT panics. Deviating from these patterns wastes entire sessions on debugging invisible rendering issues.
+
 ### C++ Symbol Navigation — clangd FIRST, grep NEVER (for symbols)
 
 **Gate rule:** When you need to find a C++ function definition, caller, reference, or type — you MUST call clangd. Do NOT grep/glob for C++ symbol names. If clangd fails, STOP and report per the Tool Failure Protocol. Do NOT silently fall back to grep.

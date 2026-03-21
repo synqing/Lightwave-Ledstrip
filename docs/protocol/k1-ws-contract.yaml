@@ -1,0 +1,1994 @@
+# LightwaveOS WebSocket Protocol Contract v1
+# Source of truth for K1 <-> Tab5 (and iOS) communication.
+# Agents MUST read this before modifying network code on either side.
+#
+# Extracted from firmware-v3/src/network/webserver/ws/*.cpp
+# and tab5-encoder/src/network/{WebSocketClient.cpp, WsMessageRouter.h}
+#
+# Rule: update this contract FIRST, implement SECOND.
+
+version: "1.0"
+transport: "WebSocket JSON text frames"
+endpoint: "ws://<k1-ip>:80/ws"
+k1_ap_ip: "192.168.4.1"
+
+# ===========================================================================
+# Envelope Format
+# ===========================================================================
+envelope:
+  request:
+    type: "string (command name, REQUIRED)"
+    requestId: "string (optional correlation ID for request/response matching)"
+  response:
+    type: "string (echoes command name or response-specific type)"
+    success: "bool (present on structured responses)"
+    requestId: "string (echoed from request if provided)"
+    data: "object (command-specific payload)"
+  broadcast:
+    type: "string (broadcast type name)"
+    # Broadcasts have NO requestId. They are unsolicited K1 -> all clients.
+  error:
+    type: "string (echoes command name)"
+    success: false
+    error:
+      code: "string (error code)"
+      message: "string (human-readable)"
+
+# ===========================================================================
+# Commands — Effects Domain
+# ===========================================================================
+commands:
+
+  # ── Legacy effect commands (Tab5 primary path) ─────────────────────────
+  setEffect:
+    direction: "client -> K1"
+    description: "Set active effect by EffectId (legacy, no response)"
+    request:
+      effectId: { type: uint16, required: true }
+    response: "none (silent, triggers broadcastStatus)"
+    consumers: [tab5]
+
+  nextEffect:
+    direction: "client -> K1"
+    description: "Advance to next effect in display order"
+    request: {}
+    response: "none (triggers broadcastStatus)"
+    consumers: [tab5]
+
+  prevEffect:
+    direction: "client -> K1"
+    description: "Go to previous effect in display order"
+    request: {}
+    response: "none (triggers broadcastStatus)"
+    consumers: [tab5]
+
+  setBrightness:
+    direction: "client -> K1"
+    description: "Set global brightness (legacy)"
+    request:
+      value: { type: uint8, required: true }
+    response: "none (triggers broadcastStatus)"
+    consumers: [tab5]
+
+  setSpeed:
+    direction: "client -> K1"
+    description: "Set global speed (legacy, range 1-50)"
+    request:
+      value: { type: uint8, required: true, min: 1, max: 50 }
+    response: "none (triggers broadcastStatus)"
+    consumers: [tab5]
+
+  setPalette:
+    direction: "client -> K1"
+    description: "Set active palette (legacy)"
+    request:
+      paletteId: { type: uint8, required: true }
+    response: "none (triggers broadcastStatus)"
+    consumers: [tab5]
+
+  # ── Structured effect commands ─────────────────────────────────────────
+  effects.setCurrent:
+    direction: "client -> K1"
+    description: "Set active effect with optional transition"
+    request:
+      effectId: { type: uint16, required: true }
+      requestId: { type: string, optional: true }
+      transition: { type: bool, optional: true }
+      transitionType: { type: uint8, optional: true }
+    response:
+      type: "effects.changed"
+      data:
+        effectId: uint16
+        name: string
+        transition: bool
+    broadcast: "broadcastStatus (all clients)"
+    consumers: [tab5, ios]
+
+  effects.getCurrent:
+    direction: "client -> K1"
+    description: "Get current effect and all global parameters"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "effects.current"
+      data:
+        effectId: uint16
+        name: string
+        brightness: uint8
+        speed: uint8
+        paletteIndex: uint8
+        hue: uint8
+        intensity: uint8
+        saturation: uint8
+        complexity: uint8
+        variation: uint8
+    consumers: [tab5, ios]
+
+  effects.list:
+    direction: "client -> K1"
+    description: "Paginated list of effects"
+    request:
+      page: { type: uint8, optional: true, default: 1 }
+      limit: { type: uint8, optional: true, default: 20, max: 50 }
+      details: { type: bool, optional: true, default: false }
+      requestId: { type: string, optional: true }
+    response:
+      type: "effects.list"
+      data:
+        total: uint16
+        page: uint8
+        limit: uint8
+        effects: "array of {effectId, name, category?}"
+    consumers: [tab5, ios]
+
+  effects.getMetadata:
+    direction: "client -> K1"
+    description: "Get metadata for a specific effect"
+    request:
+      effectId: { type: uint16, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "effects.metadata"
+      data:
+        effectId: uint16
+        name: string
+        familyName: string
+        familyId: uint8
+        story: "string or null"
+        opticalIntent: "string or null"
+        tags: uint8
+    consumers: [ios]
+
+  effects.getCategories:
+    direction: "client -> K1"
+    description: "Get all effect families and counts"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "effects.categories"
+      data:
+        families: "array of {name, count}"
+    consumers: [ios]
+
+  effects.getByFamily:
+    direction: "client -> K1"
+    description: "Get effects in a family"
+    request:
+      familyId: { type: uint8, required: true, range: "0-9" }
+      requestId: { type: string, optional: true }
+    response:
+      type: "effects.byFamily"
+      data:
+        familyId: uint8
+        familyName: string
+        effects: "array of effectId"
+    consumers: [ios]
+
+  effects.parameters.get:
+    direction: "client -> K1"
+    description: "Get effect-specific parameters (IEffect plugin params)"
+    request:
+      effectId: { type: uint16, optional: true, note: "defaults to current effect" }
+      requestId: { type: string, optional: true }
+    response:
+      type: "effects.parameters"
+      data:
+        effectId: uint16
+        name: string
+        hasParameters: bool
+        parameters: "array of {name, displayName, min, max, default, value}"
+    consumers: [tab5, ios]
+
+  effects.parameters.set:
+    direction: "client -> K1"
+    description: "Set effect-specific parameters"
+    request:
+      effectId: { type: uint16, optional: true, note: "defaults to current effect" }
+      parameters: { type: object, required: true, note: "key-value map of param name -> float value" }
+      requestId: { type: string, optional: true }
+    response:
+      type: "effects.parameters.changed"
+      data:
+        effectId: uint16
+        name: string
+        queued: "array of string (successfully queued param names)"
+        failed: "array of string (unrecognised or failed param names)"
+    consumers: [tab5, ios]
+
+  # ── Global Parameters ──────────────────────────────────────────────────
+  parameters.get:
+    direction: "client -> K1"
+    description: "Get all global renderer parameters"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "parameters"
+      data:
+        brightness: uint8
+        speed: uint8
+        paletteId: uint8
+        hue: uint8
+        intensity: uint8
+        saturation: uint8
+        complexity: uint8
+        variation: uint8
+    consumers: [tab5, ios]
+
+  parameters.set:
+    direction: "client -> K1"
+    description: "Set one or more global parameters (partial update)"
+    request:
+      brightness: { type: uint8, optional: true }
+      speed: { type: uint8, optional: true, range: "1-50" }
+      paletteId: { type: uint8, optional: true }
+      intensity: { type: uint8, optional: true }
+      saturation: { type: uint8, optional: true }
+      complexity: { type: uint8, optional: true }
+      variation: { type: uint8, optional: true }
+      hue: { type: uint8, optional: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "parameters.changed"
+      data:
+        updated: "array of string (field names that were changed)"
+        brightness: uint8
+        speed: uint8
+        paletteId: uint8
+        hue: uint8
+        intensity: uint8
+        saturation: uint8
+        complexity: uint8
+        variation: uint8
+    broadcast: "broadcastStatus"
+    consumers: [tab5, ios]
+
+  # ── Camera Mode ────────────────────────────────────────────────────────
+  cameraMode.set:
+    direction: "client -> K1"
+    description: "Toggle cinema/camera mode (caps brightness, enables gamma, reduces speed)"
+    request:
+      enabled: { type: bool, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "cameraMode.set"
+      data:
+        enabled: bool
+    broadcast: "cameraMode.changed (to all clients)"
+    consumers: [tab5]
+
+  cameraMode.get:
+    direction: "client -> K1"
+    description: "Get current camera mode state"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "cameraMode.get"
+      data:
+        enabled: bool
+    consumers: [tab5]
+
+  # ── Factory Presets ────────────────────────────────────────────────────
+  factoryPresets.list:
+    direction: "client -> K1"
+    description: "List all factory presets"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "factoryPresets.list"
+      data:
+        activeIndex: uint8
+        presets: "array of {index, name, effectId, paletteIndex}"
+    consumers: [ios]
+
+  factoryPresets.load:
+    direction: "client -> K1"
+    description: "Load a factory preset by index"
+    request:
+      index: { type: uint8, required: true, range: "0-7" }
+      requestId: { type: string, optional: true }
+    response:
+      type: "factoryPresets.loaded"
+      data:
+        index: uint8
+        name: string
+    broadcast: "factoryPresets.changed (to all clients), broadcastStatus"
+    consumers: [ios]
+
+  # ── Palettes ───────────────────────────────────────────────────────────
+  palettes.list:
+    direction: "client -> K1"
+    description: "Paginated palette list"
+    request:
+      page: { type: uint8, optional: true, default: 1 }
+      limit: { type: uint8, optional: true, default: 20, max: 50 }
+      requestId: { type: string, optional: true }
+    response:
+      type: "palettes.list"
+      data:
+        palettes: "array of {id, name, category}"
+        pagination: "{page, limit, total, pages}"
+    consumers: [tab5, ios]
+
+  palettes.get:
+    direction: "client -> K1"
+    description: "Get detailed palette info"
+    request:
+      paletteId: { type: uint8, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "palettes.get"
+      data:
+        palette:
+          id: uint8
+          name: string
+          category: string
+          flags: "{warm, cool, calm, vivid, cvdFriendly, whiteHeavy}"
+          avgBrightness: uint8
+          maxBrightness: uint8
+    consumers: [ios]
+
+  palettes.set:
+    direction: "client -> K1"
+    description: "Set active palette"
+    request:
+      paletteId: { type: uint8, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "palettes.set"
+      data:
+        paletteId: uint8
+        name: string
+        category: string
+    consumers: [tab5, ios]
+
+  # ── Transitions ────────────────────────────────────────────────────────
+  transition.trigger:
+    direction: "client -> K1"
+    description: "Trigger transition to a target effect (legacy)"
+    request:
+      toEffect: { type: uint16, required: true }
+      transitionType: { type: uint8, optional: true }
+      random: { type: bool, optional: true }
+    response: "none (triggers broadcastStatus)"
+    consumers: [ios]
+
+  transition.getTypes:
+    direction: "client -> K1"
+    description: "Get list of available transition types"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "transitions.types"
+      data: "encoded by WsTransitionCodec"
+    consumers: [ios]
+
+  transition.config:
+    direction: "client -> K1"
+    description: "Get or set default transition config (dual-purpose)"
+    request:
+      # GET mode: no extra fields
+      # SET mode: include defaultDuration and/or defaultType
+      defaultDuration: { type: uint16, optional: true }
+      defaultType: { type: uint8, optional: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "transitions.config"
+    consumers: [ios]
+
+  transitions.list:
+    direction: "client -> K1"
+    description: "List all transition types with names"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "transitions.list"
+    consumers: [ios]
+
+  transitions.trigger:
+    direction: "client -> K1"
+    description: "Structured transition trigger with response"
+    request:
+      toEffect: { type: uint16, required: true }
+      type: { type: uint8, required: true }
+      duration: { type: uint16, optional: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "transition.started"
+      data:
+        fromEffect: uint16
+        toEffect: uint16
+        toEffectName: string
+        transitionType: uint8
+        transitionName: string
+        duration: uint16
+    consumers: [ios]
+
+  # ── Zones ──────────────────────────────────────────────────────────────
+  zone.enable:
+    direction: "client -> K1"
+    description: "Enable or disable the zone system globally"
+    request:
+      enable: { type: bool, required: true }
+      requestId: { type: string, optional: true }
+    response: "none"
+    broadcast: "zone.enabledChanged (to all clients), broadcastZoneState"
+    consumers: [tab5]
+
+  zone.enableZone:
+    direction: "client -> K1"
+    description: "Enable or disable an individual zone"
+    request:
+      zoneId: { type: uint8, required: true }
+      enabled: { type: bool, required: true }
+      requestId: { type: string, optional: true }
+    response: "none"
+    broadcast: "zone.zoneEnabledChanged (to all clients), broadcastZoneState"
+    consumers: [tab5]
+
+  zone.setEffect:
+    direction: "client -> K1"
+    description: "Set effect for a specific zone"
+    request:
+      zoneId: { type: uint8, required: true }
+      effectId: { type: uint16, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "zones.effectChanged"
+    broadcast: "broadcastZoneState"
+    consumers: [tab5]
+
+  zone.setBrightness:
+    direction: "client -> K1"
+    description: "Set brightness for a specific zone"
+    request:
+      zoneId: { type: uint8, required: true }
+      brightness: { type: uint8, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "zones.changed"
+    broadcast: "broadcastZoneState"
+    consumers: [tab5]
+
+  zone.setSpeed:
+    direction: "client -> K1"
+    description: "Set speed for a specific zone"
+    request:
+      zoneId: { type: uint8, required: true }
+      speed: { type: uint8, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "zones.changed"
+    broadcast: "broadcastZoneState"
+    consumers: [tab5]
+
+  zone.setPalette:
+    direction: "client -> K1"
+    description: "Set palette for a specific zone"
+    request:
+      zoneId: { type: uint8, required: true }
+      paletteId: { type: uint8, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "zone.paletteChanged"
+    broadcast: "broadcastZoneState"
+    consumers: [tab5]
+
+  zone.setBlend:
+    direction: "client -> K1"
+    description: "Set blend mode for a specific zone"
+    request:
+      zoneId: { type: uint8, required: true }
+      blendMode: { type: uint8, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "zone.blendChanged"
+    broadcast: "broadcastZoneState"
+    consumers: [tab5]
+
+  zone.loadPreset:
+    direction: "client -> K1"
+    description: "Load a zone preset"
+    request:
+      presetId: { type: uint8, required: true }
+    response: "none (silent)"
+    broadcast: "broadcastZoneState"
+    consumers: [tab5]
+
+  zones.get:
+    direction: "client -> K1"
+    description: "Get full zone state"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "zones"
+      data: "Full zone state encoded by WsZonesCodec"
+    consumers: [tab5, ios]
+
+  zones.list:
+    direction: "client -> K1"
+    description: "Get full zone list with segments"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "zones.list"
+      data:
+        enabled: bool
+        zoneCount: uint8
+        segments: "array of zone segment definitions"
+        zones: "array of zone runtime state"
+    consumers: [tab5]
+
+  zones.update:
+    direction: "client -> K1"
+    description: "Update multiple zone properties at once"
+    request:
+      zoneId: { type: uint8, required: true }
+      effectId: { type: uint16, optional: true }
+      brightness: { type: uint8, optional: true }
+      speed: { type: uint8, optional: true }
+      paletteId: { type: uint8, optional: true }
+      blendMode: { type: uint8, optional: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "zones.changed"
+      data:
+        zoneId: uint8
+        updated: "array of field names"
+    consumers: [tab5]
+
+  zones.setEffect:
+    direction: "client -> K1"
+    description: "Set effect for a zone (namespaced alias of zone.setEffect)"
+    request:
+      zoneId: { type: uint8, required: true }
+      effectId: { type: uint16, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "zones.effectChanged"
+    consumers: [tab5]
+
+  zones.setLayout:
+    direction: "client -> K1"
+    description: "Set zone segment layout"
+    request:
+      zones: "array of {zoneId, s1LeftStart, s1LeftEnd, s1RightStart, s1RightEnd}"
+      requestId: { type: string, optional: true }
+    response:
+      type: "zones.layoutChanged"
+      data:
+        zoneCount: uint8
+    consumers: [tab5]
+
+  getZoneState:
+    direction: "client -> K1"
+    description: "Legacy zone state request (triggers broadcastZoneState)"
+    request: {}
+    response: "none (triggers broadcastZoneState to all)"
+    consumers: [tab5]
+
+  # ── Zone Presets ───────────────────────────────────────────────────────
+  zonePresets.list:
+    direction: "client -> K1"
+    description: "List zone presets"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "zonePresets.list"
+    consumers: [ios]
+
+  zonePresets.get:
+    direction: "client -> K1"
+    description: "Get a specific zone preset"
+    request:
+      id: { type: uint8, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "zonePresets.get"
+    consumers: [ios]
+
+  zonePresets.saveCurrent:
+    direction: "client -> K1"
+    description: "Save current zone state as a preset"
+    request:
+      id: { type: uint8, required: true }
+      name: { type: string, optional: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "zonePresets.saved"
+    consumers: [ios]
+
+  zonePresets.load:
+    direction: "client -> K1"
+    description: "Load a zone preset"
+    request:
+      id: { type: uint8, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "zonePresets.loaded"
+    consumers: [ios]
+
+  zonePresets.delete:
+    direction: "client -> K1"
+    description: "Delete a zone preset"
+    request:
+      id: { type: uint8, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "zonePresets.deleted"
+    consumers: [ios]
+
+  # ── Effect Presets ─────────────────────────────────────────────────────
+  effectPresets.list:
+    direction: "client -> K1"
+    description: "List all effect presets"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "effectPresets.list"
+      data:
+        presets: "array of {id, occupied, name, effectId, ...}"
+    consumers: [tab5, ios]
+
+  effectPresets.get:
+    direction: "client -> K1"
+    description: "Get a specific effect preset"
+    request:
+      id: { type: uint8, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "effectPresets.get"
+    consumers: [tab5, ios]
+
+  effectPresets.saveCurrent:
+    direction: "client -> K1"
+    description: "Save current effect state as a preset"
+    request:
+      id: { type: uint8, required: true }
+      name: { type: string, optional: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "effectPresets.saved"
+    broadcast: "effectPresets.saved (to all clients)"
+    consumers: [tab5, ios]
+
+  effectPresets.load:
+    direction: "client -> K1"
+    description: "Load an effect preset"
+    request:
+      id: { type: uint8, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "effectPresets.loaded"
+    consumers: [tab5, ios]
+
+  effectPresets.delete:
+    direction: "client -> K1"
+    description: "Delete an effect preset"
+    request:
+      id: { type: uint8, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "effectPresets.deleted"
+    broadcast: "effectPresets.deleted (to all clients)"
+    consumers: [tab5, ios]
+
+  # ── Audio ──────────────────────────────────────────────────────────────
+  audio.parameters.get:
+    direction: "client -> K1"
+    description: "Get audio pipeline/contract/state parameters"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "audio.parameters"
+      data:
+        backend: "string (esv11 or pipelinecore)"
+        contract: "object (AudioContractTuning fields)"
+        latest: "object (ESV11: rms, flux, bpm, tempoConfidence, etc.)"
+        capabilities: "object (sampleRate, hopSize, bandCount, chromaCount, waveformPoints)"
+        # PipelineCore also includes: pipeline, controlBus, state objects
+    consumers: [ios]
+
+  audio.parameters.set:
+    direction: "client -> K1"
+    description: "Modify audio pipeline/contract tuning parameters"
+    request:
+      contract: "object (partial AudioContractTuning fields)"
+      pipeline: "object (partial AudioPipelineTuning fields, PipelineCore only)"
+      resetState: { type: bool, optional: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "audio.parameters.changed"
+      data:
+        updated: "array of string (pipeline, contract, state)"
+    consumers: [ios]
+
+  audio.subscribe:
+    direction: "client -> K1"
+    description: "Subscribe to audio stream (WS binary frames or UDP)"
+    request:
+      udpPort: { type: uint16, optional: true, note: "If provided, use UDP transport" }
+      requestId: { type: string, optional: true }
+    response:
+      type: "audio.subscribed"
+      data:
+        clientId: uint32
+        transport: "string (ws or udp)"
+        frameSize: uint16
+        streamVersion: uint8
+        numBands: uint8
+        numChroma: uint8
+        waveformSize: uint8
+        targetFps: uint8
+    consumers: [ios]
+
+  audio.unsubscribe:
+    direction: "client -> K1"
+    description: "Unsubscribe from audio stream"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "audio.unsubscribed"
+      data:
+        clientId: uint32
+    consumers: [ios]
+
+  audio.zone-agc.get:
+    direction: "client -> K1"
+    description: "Get zone AGC state (PipelineCore only)"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "audio.zone-agc.state"
+    consumers: [ios]
+
+  audio.zone-agc.set:
+    direction: "client -> K1"
+    description: "Configure zone AGC (PipelineCore only)"
+    request:
+      enabled: { type: bool, optional: true }
+      lookaheadEnabled: { type: bool, optional: true }
+      attackRate: { type: float, optional: true }
+      releaseRate: { type: float, optional: true }
+      minFloor: { type: float, optional: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "audio.zone-agc.updated"
+    consumers: [ios]
+
+  audio.spike-detection.get:
+    direction: "client -> K1"
+    description: "Get spike detection stats (PipelineCore only)"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "audio.spike-detection.state"
+    consumers: [ios]
+
+  audio.spike-detection.reset:
+    direction: "client -> K1"
+    description: "Reset spike detection stats (PipelineCore only)"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "audio.spike-detection.reset"
+    consumers: [ios]
+
+  audio.mic-gain.get:
+    direction: "client -> K1"
+    description: "Get microphone gain (ESP32-P4 only)"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "audio.mic-gain.state"
+      data:
+        gainDb: int8
+        supported: bool
+        validValues: "array of int (ESP32-P4 only)"
+    consumers: [ios]
+
+  audio.mic-gain.set:
+    direction: "client -> K1"
+    description: "Set microphone gain (ESP32-P4 only)"
+    request:
+      gainDb: { type: int8, required: true, valid: "0, 6, 12, 18, 24, 30, 36, 42" }
+      requestId: { type: string, optional: true }
+    response:
+      type: "audio.mic-gain.updated"
+    consumers: [ios]
+
+  # ── Colour Enhancement ─────────────────────────────────────────────────
+  color.getStatus:
+    direction: "client -> K1"
+    description: "Get colour engine status"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "color.getStatus"
+      data:
+        active: bool
+        blendEnabled: bool
+        blendFactors: "array of 3 float"
+        rotationEnabled: bool
+        rotationSpeed: float
+        rotationPhase: float
+        diffusionEnabled: bool
+        diffusionAmount: uint8
+    consumers: [ios]
+
+  color.enableBlend:
+    direction: "client -> K1"
+    description: "Enable/disable palette cross-blending"
+    request:
+      enable: { type: bool, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "color.enableBlend"
+      data:
+        blendEnabled: bool
+    consumers: [ios]
+
+  color.setBlendPalettes:
+    direction: "client -> K1"
+    description: "Set palettes for cross-blend"
+    request:
+      palette1: { type: uint8, required: true }
+      palette2: { type: uint8, required: true }
+      palette3: { type: uint8, optional: true, note: "255 = disabled" }
+      requestId: { type: string, optional: true }
+    response:
+      type: "color.setBlendPalettes"
+    consumers: [ios]
+
+  color.setBlendFactors:
+    direction: "client -> K1"
+    description: "Set blend factors for palette cross-blend"
+    request:
+      factor1: { type: uint8, required: true }
+      factor2: { type: uint8, required: true }
+      factor3: { type: uint8, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "color.setBlendFactors"
+    consumers: [ios]
+
+  color.enableRotation:
+    direction: "client -> K1"
+    description: "Enable/disable hue temporal rotation"
+    request:
+      enable: { type: bool, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "color.enableRotation"
+    consumers: [ios]
+
+  color.setRotationSpeed:
+    direction: "client -> K1"
+    description: "Set rotation speed"
+    request:
+      degreesPerFrame: { type: float, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "color.setRotationSpeed"
+    consumers: [ios]
+
+  color.enableDiffusion:
+    direction: "client -> K1"
+    description: "Enable/disable spatial diffusion"
+    request:
+      enable: { type: bool, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "color.enableDiffusion"
+    consumers: [ios]
+
+  color.setDiffusionAmount:
+    direction: "client -> K1"
+    description: "Set diffusion amount"
+    request:
+      amount: { type: uint8, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "color.setDiffusionAmount"
+    consumers: [ios]
+
+  # ── Colour Correction ──────────────────────────────────────────────────
+  colorCorrection.getConfig:
+    direction: "client -> K1"
+    description: "Get colour correction config"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "colorCorrection.getConfig"
+      data:
+        mode: uint8
+        modeNames: string
+        hsvMinSaturation: uint8
+        rgbWhiteThreshold: uint8
+        rgbTargetMin: uint8
+        autoExposureEnabled: bool
+        autoExposureTarget: uint8
+        gammaEnabled: bool
+        gammaValue: float
+        brownGuardrailEnabled: bool
+        maxGreenPercentOfRed: uint8
+        maxBluePercentOfRed: uint8
+    consumers: [tab5, ios]
+
+  colorCorrection.setMode:
+    direction: "client -> K1"
+    description: "Set colour correction mode (0=OFF, 1=HSV, 2=RGB, 3=BOTH)"
+    request:
+      mode: { type: uint8, required: true, range: "0-3" }
+      requestId: { type: string, optional: true }
+    response:
+      type: "colorCorrection.setMode"
+    consumers: [tab5]
+
+  colorCorrection.setConfig:
+    direction: "client -> K1"
+    description: "Set multiple colour correction config fields"
+    request:
+      mode: { type: uint8, optional: true }
+      hsvMinSaturation: { type: uint8, optional: true }
+      rgbWhiteThreshold: { type: uint8, optional: true }
+      rgbTargetMin: { type: uint8, optional: true }
+      autoExposureEnabled: { type: bool, optional: true }
+      autoExposureTarget: { type: uint8, optional: true }
+      gammaEnabled: { type: bool, optional: true }
+      gammaValue: { type: float, optional: true, range: "1.0-3.0" }
+      brownGuardrailEnabled: { type: bool, optional: true }
+      maxGreenPercentOfRed: { type: uint8, optional: true }
+      maxBluePercentOfRed: { type: uint8, optional: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "colorCorrection.setConfig"
+    consumers: [tab5]
+
+  colorCorrection.save:
+    direction: "client -> K1"
+    description: "Persist colour correction config to NVS"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "colorCorrection.save"
+      data:
+        saved: bool
+    consumers: [tab5]
+
+  # ── EdgeMixer ──────────────────────────────────────────────────────────
+  edge_mixer.set:
+    direction: "client -> K1"
+    description: "Set EdgeMixer properties (partial update)"
+    request:
+      mode: { type: uint8, optional: true, range: "0-6" }
+      spread: { type: uint8, optional: true, range: "0-60" }
+      strength: { type: uint8, optional: true }
+      spatial: { type: uint8, optional: true, range: "0-1" }
+      temporal: { type: uint8, optional: true, range: "0-1" }
+      requestId: { type: string, optional: true }
+    response:
+      type: "edge_mixer.set"
+      data:
+        mode: uint8
+        modeName: string
+        spread: uint8
+        strength: uint8
+        spatial: uint8
+        spatialName: string
+        temporal: uint8
+        temporalName: string
+    consumers: [tab5, ios]
+
+  edge_mixer.get:
+    direction: "client -> K1"
+    description: "Get current EdgeMixer state"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "edge_mixer.get"
+      data:
+        mode: uint8
+        modeName: string
+        spread: uint8
+        strength: uint8
+        spatial: uint8
+        spatialName: string
+        temporal: uint8
+        temporalName: string
+    consumers: [tab5, ios]
+
+  edge_mixer.save:
+    direction: "client -> K1"
+    description: "Persist EdgeMixer settings to NVS"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "edge_mixer.save"
+      data:
+        saved: bool
+    consumers: [tab5]
+
+  # ── Motion Engine ──────────────────────────────────────────────────────
+  motion.getStatus:
+    direction: "client -> K1"
+    description: "Get motion engine status"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "motion.getStatus"
+      data:
+        enabled: bool
+        phaseOffset: float
+        autoRotateSpeed: float
+        baseSpeed: float
+    consumers: [ios]
+
+  motion.enable:
+    direction: "client -> K1"
+    description: "Enable motion engine"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "motion.enable"
+    consumers: [ios]
+
+  motion.disable:
+    direction: "client -> K1"
+    description: "Disable motion engine"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "motion.disable"
+    consumers: [ios]
+
+  motion.phase.setOffset:
+    direction: "client -> K1"
+    description: "Set strip phase offset"
+    request:
+      degrees: { type: float, required: true, range: "0-360" }
+      requestId: { type: string, optional: true }
+    response:
+      type: "motion.phase.setOffset"
+    consumers: [ios]
+
+  motion.phase.enableAutoRotate:
+    direction: "client -> K1"
+    description: "Enable phase auto-rotation"
+    request:
+      degreesPerSecond: { type: float, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "motion.phase.enableAutoRotate"
+    consumers: [ios]
+
+  motion.phase.getPhase:
+    direction: "client -> K1"
+    description: "Get current phase in degrees and radians"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "motion.phase.getPhase"
+      data:
+        degrees: float
+        radians: float
+    consumers: [ios]
+
+  motion.speed.setModulation:
+    direction: "client -> K1"
+    description: "Set speed modulation type and depth"
+    request:
+      type: { type: string, required: true, values: "CONSTANT, SINE_WAVE, EXPONENTIAL_DECAY" }
+      depth: { type: float, required: true, range: "0.0-1.0" }
+      requestId: { type: string, optional: true }
+    response:
+      type: "motion.speed.setModulation"
+    consumers: [ios]
+
+  motion.speed.setBaseSpeed:
+    direction: "client -> K1"
+    description: "Set base speed for speed modulator"
+    request:
+      speed: { type: float, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "motion.speed.setBaseSpeed"
+    consumers: [ios]
+
+  motion.momentum.getStatus:
+    direction: "client -> K1"
+    description: "Get momentum engine status"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "motion.momentum.getStatus"
+      data:
+        activeCount: uint8
+        maxParticles: uint8
+    consumers: [ios]
+
+  motion.momentum.addParticle:
+    direction: "client -> K1"
+    description: "Add a particle to the momentum engine"
+    request:
+      position: { type: float, optional: true, default: 0.5 }
+      velocity: { type: float, optional: true, default: 0.0 }
+      mass: { type: float, optional: true, default: 1.0 }
+      boundary: { type: string, optional: true, default: "WRAP", values: "WRAP, BOUNCE, CLAMP, DIE" }
+      requestId: { type: string, optional: true }
+    response:
+      type: "motion.momentum.addParticle"
+      data:
+        particleId: int
+        success: bool
+    consumers: [ios]
+
+  motion.momentum.applyForce:
+    direction: "client -> K1"
+    description: "Apply force to a particle"
+    request:
+      particleId: { type: int, required: true, range: "0-31" }
+      force: { type: float, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "motion.momentum.applyForce"
+    consumers: [ios]
+
+  motion.momentum.getParticle:
+    direction: "client -> K1"
+    description: "Get particle state"
+    request:
+      particleId: { type: int, required: true, range: "0-31" }
+      requestId: { type: string, optional: true }
+    response:
+      type: "motion.momentum.getParticle"
+      data:
+        particleId: int
+        position: float
+        velocity: float
+        mass: float
+        alive: bool
+    consumers: [ios]
+
+  motion.momentum.reset:
+    direction: "client -> K1"
+    description: "Clear all particles"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "motion.momentum.reset"
+    consumers: [ios]
+
+  motion.momentum.update:
+    direction: "client -> K1"
+    description: "Advance momentum simulation by deltaTime"
+    request:
+      deltaTime: { type: float, optional: true, default: 0.016 }
+      requestId: { type: string, optional: true }
+    response:
+      type: "motion.momentum.update"
+    consumers: [ios]
+
+  # ── Narrative Engine ───────────────────────────────────────────────────
+  narrative.getStatus:
+    direction: "client -> K1"
+    description: "Get narrative engine state"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "narrative.status"
+    consumers: [ios]
+
+  narrative.config:
+    direction: "client -> K1"
+    description: "Get or set narrative engine config (dual-purpose: omit fields for GET)"
+    request:
+      # All fields optional — presence triggers SET mode
+      buildDuration: { type: float, optional: true }
+      holdDuration: { type: float, optional: true }
+      releaseDuration: { type: float, optional: true }
+      restDuration: { type: float, optional: true }
+      buildCurveId: { type: uint8, optional: true }
+      releaseCurveId: { type: uint8, optional: true }
+      holdBreathe: { type: float, optional: true }
+      snapAmount: { type: float, optional: true }
+      durationVariance: { type: float, optional: true }
+      enabled: { type: bool, optional: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "narrative.config"
+    consumers: [ios]
+
+  # ── Shows (PRISM Studio) ───────────────────────────────────────────────
+  show.upload:
+    direction: "client -> K1"
+    description: "Upload a ShowBundle JSON"
+    request: "Entire JSON document is the ShowBundle"
+    response:
+      cmd: "show.upload"
+      success: bool
+      showId: string
+      cueCount: uint16
+      chapterCount: uint8
+      ramUsageBytes: uint32
+      slot: uint8
+    consumers: [ios]
+
+  show.play:
+    direction: "client -> K1"
+    description: "Start show playback"
+    request:
+      showId: { type: string, required: true }
+    response:
+      cmd: "show.play"
+      success: bool
+      showId: string
+      source: "string (dynamic or builtin)"
+    consumers: [ios]
+
+  show.pause:
+    direction: "client -> K1"
+    description: "Pause current show"
+    request: {}
+    response:
+      cmd: "show.pause"
+      success: true
+    consumers: [ios]
+
+  show.resume:
+    direction: "client -> K1"
+    description: "Resume paused show"
+    request: {}
+    response:
+      cmd: "show.resume"
+      success: true
+    consumers: [ios]
+
+  show.stop:
+    direction: "client -> K1"
+    description: "Stop current show"
+    request: {}
+    response:
+      cmd: "show.stop"
+      success: true
+    consumers: [ios]
+
+  show.seek:
+    direction: "client -> K1"
+    description: "Seek to time position"
+    request:
+      timeMs: { type: uint32, required: true }
+    response:
+      cmd: "show.seek"
+      success: true
+      timeMs: uint32
+    consumers: [ios]
+
+  show.status:
+    direction: "client -> K1"
+    description: "Get show playback status"
+    request: {}
+    response:
+      cmd: "show.status"
+      playing: bool
+      showId: "string or null"
+      elapsedMs: uint32
+      durationMs: uint32
+      paused: bool
+    consumers: [ios]
+
+  show.list:
+    direction: "client -> K1"
+    description: "List all available shows"
+    request: {}
+    response:
+      cmd: "show.list"
+      shows: "array of {id, name, durationMs, builtin, looping, ...}"
+    consumers: [ios]
+
+  show.delete:
+    direction: "client -> K1"
+    description: "Delete an uploaded show"
+    request:
+      showId: { type: string, required: true }
+    response:
+      cmd: "show.delete"
+      success: bool
+    consumers: [ios]
+
+  show.cue.inject:
+    direction: "client -> K1"
+    description: "Inject a single cue in real-time"
+    request:
+      cue: { type: object, required: true, note: "Contains type, zone, data fields" }
+    response:
+      cmd: "show.cue.inject"
+      success: bool
+    consumers: [ios]
+
+  prim8.set:
+    direction: "client -> K1"
+    description: "Apply Prim8 semantic vector (pressure, impact, mass, etc.)"
+    request:
+      pressure: { type: float, optional: true, default: 0.5 }
+      impact: { type: float, optional: true, default: 0.5 }
+      mass: { type: float, optional: true, default: 0.5 }
+      momentum: { type: float, optional: true, default: 0.5 }
+      heat: { type: float, optional: true, default: 0.5 }
+      space: { type: float, optional: true, default: 0.5 }
+      texture: { type: float, optional: true, default: 0.5 }
+      gravity: { type: float, optional: true, default: 0.5 }
+      zone: { type: uint8, optional: true, default: 0xFF }
+      paletteId: { type: uint8, optional: true, default: 0 }
+    response:
+      cmd: "prim8.set"
+      success: true
+      zone: uint8
+      mapped: "object (brightness, speed, hue, intensity, saturation, complexity, variation, mood, fadeAmount)"
+    consumers: [ios]
+
+  # ── Trinity (External Beat/Sync Source) ────────────────────────────────
+  trinity.beat:
+    direction: "client -> K1"
+    description: "Send beat timing data from external source (e.g. Ableton)"
+    request:
+      bpm: { type: float, required: true, range: "30-300" }
+      beat_phase: { type: float, required: true, range: "0-1" }
+      tick: { type: bool, optional: true }
+      downbeat: { type: bool, optional: true }
+      beat_in_bar: { type: int, optional: true }
+    response: "none on success (error on validation failure or queue saturation)"
+    consumers: [ios]
+    note: "High-frequency, no response on success to minimise latency"
+
+  trinity.macro:
+    direction: "client -> K1"
+    description: "Send macro analysis values from external source"
+    request:
+      energy: { type: float, optional: true, range: "0-1" }
+      vocal_presence: { type: float, optional: true, range: "0-1" }
+      bass_weight: { type: float, optional: true, range: "0-1" }
+      percussiveness: { type: float, optional: true, range: "0-1" }
+      brightness: { type: float, optional: true, range: "0-1" }
+    response: "none on success"
+    consumers: [ios]
+
+  trinity.segment:
+    direction: "client -> K1"
+    description: "Define a song structure segment"
+    request:
+      index: { type: uint8, required: true }
+      label: { type: string, required: true, maxLength: 64 }
+      start: { type: float, required: true }
+      end: { type: float, optional: true }
+    response: "none on success"
+    consumers: [ios]
+
+  trinity.sync:
+    direction: "client -> K1"
+    description: "Transport sync command (start/stop/pause/resume/seek)"
+    request:
+      action: { type: string, required: true, values: "start, stop, pause, resume, seek" }
+      position_sec: { type: float, required: true }
+      bpm: { type: float, optional: true, default: 120 }
+      _id: { type: int64, optional: true, note: "If provided, K1 sends ACK" }
+    response:
+      _type: "ack"
+      _id: int64
+    note: "ACK only sent if _id was provided in request"
+    consumers: [ios]
+
+  # ── Stimulus (Audio Injection) ─────────────────────────────────────────
+  stimulus.mode:
+    direction: "client -> K1"
+    description: "Set stimulus source mode"
+    request:
+      mode: { type: string, required: true, values: "live, trinity, stimulus" }
+      id: { type: int, optional: true }
+    response:
+      type: "stimulus.mode.ack"
+    consumers: [ios]
+
+  stimulus.patch:
+    direction: "client -> K1"
+    description: "Patch ControlBusFrame fields (inject synthetic audio data)"
+    request:
+      id: { type: int, optional: true }
+      patch:
+        rms: { type: float, optional: true }
+        flux: { type: float, optional: true }
+        bands: { type: "array of float", optional: true }
+        chroma: { type: "array of float", optional: true }
+        tempo_bpm: { type: float, optional: true }
+        beat_tick: { type: bool, optional: true }
+        beat_strength: { type: float, optional: true }
+    response:
+      type: "stimulus.patch.ack"
+    consumers: [ios]
+
+  stimulus.clear:
+    direction: "client -> K1"
+    description: "Clear stimulus state, revert to live audio"
+    request:
+      id: { type: int, optional: true }
+    response:
+      type: "stimulus.clear.ack"
+    consumers: [ios]
+
+  stimulus.status:
+    direction: "client -> K1"
+    description: "Get current stimulus mode and sequence"
+    request:
+      id: { type: int, optional: true }
+    response:
+      type: "stimulus.status.rsp"
+      data:
+        mode: string
+        usingStimulus: bool
+        sequence: uint32
+    consumers: [ios]
+
+  # ── Streaming Subscriptions ────────────────────────────────────────────
+  ledStream.subscribe:
+    direction: "client -> K1"
+    description: "Subscribe to LED frame stream (WS binary or UDP)"
+    request:
+      udpPort: { type: uint16, optional: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "ledStream.subscribed"
+      data:
+        clientId: uint32
+        transport: "string (ws or udp)"
+        frameSize: uint16
+        frameVersion: uint8
+        numStrips: uint8
+        ledsPerStrip: uint8
+        targetFps: uint8
+        magic: uint8
+    consumers: [ios]
+
+  ledStream.unsubscribe:
+    direction: "client -> K1"
+    description: "Unsubscribe from LED frame stream"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "ledStream.unsubscribed"
+    consumers: [ios]
+
+  validation.subscribe:
+    direction: "client -> K1"
+    description: "Subscribe to validation frame stream (feature-gated)"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "validation.subscribed"
+    consumers: [ios]
+    gate: "FEATURE_EFFECT_VALIDATION"
+
+  validation.unsubscribe:
+    direction: "client -> K1"
+    description: "Unsubscribe from validation stream"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "validation.unsubscribed"
+    consumers: [ios]
+    gate: "FEATURE_EFFECT_VALIDATION"
+
+  benchmark.subscribe:
+    direction: "client -> K1"
+    description: "Subscribe to audio benchmark stream (feature-gated)"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "benchmark.subscribed"
+    consumers: [ios]
+    gate: "FEATURE_AUDIO_BENCHMARK"
+
+  benchmark.unsubscribe:
+    direction: "client -> K1"
+    description: "Unsubscribe from benchmark stream"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "benchmark.unsubscribed"
+    consumers: [ios]
+    gate: "FEATURE_AUDIO_BENCHMARK"
+
+  benchmark.start:
+    direction: "client -> K1"
+    description: "Reset benchmark stats and begin streaming"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "benchmark.started"
+    consumers: [ios]
+    gate: "FEATURE_AUDIO_BENCHMARK"
+
+  benchmark.stop:
+    direction: "client -> K1"
+    description: "Stop benchmark streaming and return final stats"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "benchmark.stopped"
+      data:
+        avgTotalUs: float
+        avgGoertzelUs: float
+        cpuLoadPercent: float
+        hopCount: uint32
+        peakTotalUs: uint32
+    consumers: [ios]
+    gate: "FEATURE_AUDIO_BENCHMARK"
+
+  benchmark.get:
+    direction: "client -> K1"
+    description: "Get current benchmark stats"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "benchmark.stats"
+    consumers: [ios]
+    gate: "FEATURE_AUDIO_BENCHMARK"
+
+  beat.subscribe:
+    direction: "client -> K1"
+    description: "Subscribe to beat events"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "beat.subscribed"
+      data:
+        clientId: uint32
+    consumers: [ios]
+
+  beat.unsubscribe:
+    direction: "client -> K1"
+    description: "Unsubscribe from beat events"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "beat.unsubscribed"
+    consumers: [ios]
+
+  # ── OTA ────────────────────────────────────────────────────────────────
+  ota.check:
+    direction: "client -> K1"
+    description: "Check OTA readiness"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "ota.check"
+    consumers: [ios]
+
+  ota.begin:
+    direction: "client -> K1"
+    description: "Begin OTA session"
+    request:
+      size: { type: uint32, required: true }
+      md5: { type: string, optional: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "ota.begin"
+    consumers: [ios]
+
+  ota.chunk:
+    direction: "client -> K1"
+    description: "Send firmware chunk (base64 encoded)"
+    request:
+      data: { type: string, required: true, note: "Base64-encoded binary chunk" }
+      offset: { type: uint32, required: true }
+      requestId: { type: string, optional: true }
+    response:
+      type: "ota.chunk"
+    consumers: [ios]
+
+  ota.abort:
+    direction: "client -> K1"
+    description: "Abort OTA session"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "ota.abort"
+    consumers: [ios]
+
+  ota.verify:
+    direction: "client -> K1"
+    description: "Verify and finalise OTA"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "ota.verify"
+    consumers: [ios]
+
+  # ── Device ─────────────────────────────────────────────────────────────
+  getStatus:
+    direction: "client -> K1"
+    description: "Legacy status request (unicast response, not textAll)"
+    request:
+      _id: { type: int64, optional: true, note: "If provided, triggers pong" }
+      _time: { type: int64, optional: true, note: "Client timestamp for RTT" }
+      requestId: { type: string, optional: true }
+    response:
+      type: "status"
+      note: "Unicast to requesting client only"
+    consumers: [tab5, ios]
+
+  device.getStatus:
+    direction: "client -> K1"
+    description: "Structured device status"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "device.status"
+      data:
+        uptime: uint32
+        freeHeap: uint32
+        heapSize: uint32
+        cpuFreq: uint16
+        fps: float
+        cpuPercent: float
+        network: "{connected, apMode, ip?, rssi?}"
+    consumers: [ios]
+
+  device.getInfo:
+    direction: "client -> K1"
+    description: "Hardware/firmware info"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "device.info"
+      data:
+        chipModel: string
+        chipRevision: uint8
+        chipCores: uint8
+        cpuFreqMHz: uint16
+        flashSize: uint32
+        freeHeap: uint32
+        heapSize: uint32
+        sketchSize: uint32
+        freeSketchSpace: uint32
+        effectCount: uint16
+    consumers: [ios]
+
+  # ── System ─────────────────────────────────────────────────────────────
+  sys.capabilities:
+    direction: "client -> K1"
+    description: "Discover device capabilities (feature flags)"
+    request: {}
+    response:
+      type: "sys.capabilities"
+      trinity: bool
+      audio_sync: bool
+      zones: bool
+      ota: bool
+      transitions: bool
+      pattern_registry: bool
+    consumers: [ios]
+
+  # ── Batch ──────────────────────────────────────────────────────────────
+  batch:
+    direction: "client -> K1"
+    description: "Execute multiple operations in one message"
+    request:
+      operations: { type: "array of {action, ...}", required: true, maxItems: 10 }
+      requestId: { type: string, optional: true }
+    response:
+      type: "batch.result"
+      data:
+        processed: uint8
+        failed: uint8
+    consumers: [ios]
+
+  # ── Auth ───────────────────────────────────────────────────────────────
+  auth.status:
+    direction: "client -> K1"
+    description: "Get authentication status (public, no auth required)"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "auth.status"
+      data:
+        enabled: bool
+        keyConfigured: bool
+    gate: "FEATURE_API_AUTH"
+    consumers: [ios]
+
+  auth.rotate:
+    direction: "client -> K1"
+    description: "Rotate API key (requires authentication)"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "auth.rotate"
+      data:
+        key: string
+        message: string
+    gate: "FEATURE_API_AUTH"
+    consumers: [ios]
+
+  # ── Debug ──────────────────────────────────────────────────────────────
+  debug.audio.get:
+    direction: "client -> K1"
+    description: "Get audio debug config"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "debug.audio.state"
+    gate: "FEATURE_AUDIO_SYNC"
+    consumers: [ios]
+
+  debug.audio.set:
+    direction: "client -> K1"
+    description: "Set audio debug verbosity/interval"
+    request:
+      verbosity: { type: uint8, optional: true, range: "0-5" }
+      baseInterval: { type: uint16, optional: true, range: "1-1000" }
+      requestId: { type: string, optional: true }
+    response:
+      type: "debug.audio.updated"
+    gate: "FEATURE_AUDIO_SYNC"
+    consumers: [ios]
+
+  debug.udp.get:
+    direction: "client -> K1"
+    description: "Get UDP streamer diagnostic stats"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "debug.udp.stats"
+    consumers: [ios]
+
+  # ── Plugins ────────────────────────────────────────────────────────────
+  plugins.list:
+    direction: "client -> K1"
+    description: "List all loaded plugins"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "plugins.list"
+    consumers: [ios]
+
+  plugins.stats:
+    direction: "client -> K1"
+    description: "Get plugin system stats"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "plugins.stats"
+    consumers: [ios]
+
+  plugins.reload:
+    direction: "client -> K1"
+    description: "Reload plugins from filesystem"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "plugins.reload.result"
+    consumers: [ios]
+
+# ===========================================================================
+# Broadcasts (K1 -> all connected clients, unsolicited)
+# ===========================================================================
+broadcasts:
+
+  status:
+    direction: "K1 -> all clients"
+    trigger: "Periodic (5s) or after any parameter/effect change"
+    type: "status"
+    fields:
+      effectId: uint16
+      effectName: string
+      brightness: uint8
+      speed: uint8
+      paletteId: uint8
+      paletteName: string
+      hue: uint8
+      intensity: uint8
+      saturation: uint8
+      complexity: uint8
+      variation: uint8
+      fps: float
+      cpuPercent: float
+      freeHeap: uint32
+      uptime: uint32
+      edgeMixerMode: uint8
+      edgeMixerModeName: string
+      edgeMixerSpread: uint8
+      edgeMixerStrength: uint8
+      edgeMixerSpatial: uint8
+      edgeMixerSpatialName: string
+      edgeMixerTemporal: uint8
+      edgeMixerTemporalName: string
+    consumers: [tab5, ios]
+    note: "Tab5 WsMessageRouter handles this as 'status' type"
+
+  zones.list:
+    direction: "K1 -> all clients"
+    trigger: "After any zone change (broadcastZoneState), throttled to 4 Hz"
+    type: "zones.list"
+    fields:
+      enabled: bool
+      zoneCount: uint8
+      segments: "array of zone segment objects"
+      zones: "array of zone runtime state objects"
+      presets: "array of zone preset objects"
+    consumers: [tab5]
+    note: "Tab5 WsMessageRouter handles this via handleZonesList()"
+
+  zone.enabledChanged:
+    direction: "K1 -> all clients"
+    trigger: "zone.enable command"
+    type: "zone.enabledChanged"
+    fields:
+      enabled: bool
+    consumers: [tab5]
+
+  zone.zoneEnabledChanged:
+    direction: "K1 -> all clients"
+    trigger: "zone.enableZone command"
+    type: "zone.zoneEnabledChanged"
+    fields:
+      zoneId: uint8
+      enabled: bool
+    consumers: [tab5]
+
+  cameraMode.changed:
+    direction: "K1 -> all clients"
+    trigger: "cameraMode.set command"
+    type: "cameraMode.changed"
+    fields:
+      enabled: bool
+    consumers: [tab5]
+    note: "Tab5 WsMessageRouter handles this via handleCameraModeChanged()"
+
+  factoryPresets.changed:
+    direction: "K1 -> all clients"
+    trigger: "factoryPresets.load command"
+    type: "factoryPresets.changed"
+    fields:
+      activeIndex: uint8
+      name: string
+    consumers: [ios]
+
+  effectPresets.saved:
+    direction: "K1 -> all clients"
+    trigger: "effectPresets.saveCurrent command"
+    type: "effectPresets.saved"
+    consumers: [tab5, ios]
+
+  effectPresets.deleted:
+    direction: "K1 -> all clients"
+    trigger: "effectPresets.delete command"
+    type: "effectPresets.deleted"
+    fields:
+      id: uint8
+    consumers: [tab5, ios]
+
+# ===========================================================================
+# Tab5 Incoming Message Types (handled by WsMessageRouter)
+# ===========================================================================
+tab5_handled_types:
+  - "status"
+  - "device.status"
+  - "parameters.changed"
+  - "zone.status"
+  - "zones.changed"
+  - "zones.list"
+  - "effects.changed"
+  - "effects.current"
+  - "colorCorrection.getConfig"
+  - "effects.parameters"
+  - "cameraMode.changed"
+  - "effectPresets.list"
+
+# Tab5 Outgoing Commands (sent by WebSocketClient)
+tab5_sent_commands:
+  - "getStatus"
+  - "effects.list"
+  - "palettes.list"
+  - "effects.parameters.get"
+  - "effects.parameters.set"
+  - "zones.get"
+  - "cameraMode.set"
+  - "cameraMode.get"
+  - "effectPresets.list"
+  - "effectPresets.saveCurrent"
+  - "effectPresets.load"
+  - "effectPresets.delete"
+  - "effects.setCurrent"
+  - "nextEffect"
+  - "prevEffect"
+  - "effects.getCurrent"
+  - "parameters.set"
+  - "zone.enable"
+  - "zone.setEffect"
+  - "zone.setBrightness"
+  - "zone.setSpeed"
+  - "zone.setPalette"
+  - "zone.setBlend"
+  - "zones.setLayout"
+  - "colorCorrection.getConfig"
+  - "colorCorrection.setConfig"
+  - "colorCorrection.setMode"
+  - "edge_mixer.set"
+  - "edge_mixer.get"
+
+# ===========================================================================
+# Deprecated Commands
+# ===========================================================================
+deprecated:
+  colorCorrection.setGamma:
+    removed_from: tab5
+    reason: "Redundant — use colorCorrection.setConfig with gammaEnabled/gammaValue fields"
+    removed_date: "2026-03-21"
+    note: "Tab5 WebSocketClient.cpp still has sendJSON call at line 906 but K1 has NO handler for this command"
+
+  colorCorrection.setAutoExposure:
+    removed_from: tab5
+    reason: "Redundant — use colorCorrection.setConfig with autoExposureEnabled field"
+    removed_date: "2026-03-21"
+    note: "Tab5 WebSocketClient.cpp still has sendJSON call at line 917 but K1 has NO handler"
+
+  colorCorrection.setBrownGuardrail:
+    removed_from: tab5
+    reason: "Redundant — use colorCorrection.setConfig with brownGuardrailEnabled field"
+    removed_date: "2026-03-21"
+    note: "Tab5 WebSocketClient.cpp still has sendJSON call at line 927 but K1 has NO handler"
+
+# ===========================================================================
+# Commented-Out / Unregistered Commands
+# ===========================================================================
+unregistered:
+  filesystem.list:
+    note: "Commented out in WsFilesystemCommands.cpp"
+  filesystem.read:
+    note: "Commented out"
+  filesystem.write:
+    note: "Commented out"
+  filesystem.delete:
+    note: "Commented out"
+  filesystem.info:
+    note: "Commented out"
+
+# ===========================================================================
+# Known Issues
+# ===========================================================================
+known_issues:
+  - id: "MISMATCH-001"
+    summary: "Tab5 sends 3 colour correction commands that K1 does not handle"
+    detail: >
+      Tab5 WebSocketClient.cpp sends colorCorrection.setGamma, colorCorrection.setAutoExposure,
+      and colorCorrection.setBrownGuardrail but K1 only registers colorCorrection.setConfig
+      (which accepts all those fields). The individual commands are silently ignored by K1.
+    severity: "low"
+    fix: "Remove Tab5 individual senders, use setConfig exclusively"
+
+  - id: "ENVELOPE-001"
+    summary: "Show commands use 'cmd' field instead of 'type' for responses"
+    detail: >
+      WsShowCommands.cpp uses 'cmd' key for responses (e.g. resp["cmd"] = "show.upload")
+      instead of the standard 'type' key used by all other handlers via buildWsResponse().
+    severity: "low"
+    fix: "Standardise show responses to use buildWsResponse()"

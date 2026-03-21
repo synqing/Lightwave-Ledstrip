@@ -1,0 +1,682 @@
+# LightwaveOS REST API Contract v1
+# Source of truth for K1 HTTP API.
+# Agents MUST read this before modifying REST routes on K1.
+#
+# Extracted from firmware-v3/src/network/webserver/V1ApiRoutes.cpp
+#
+# Rule: update this contract FIRST, implement SECOND.
+
+version: "1.0"
+base_url: "http://<k1-ip>/api/v1"
+k1_ap_ip: "192.168.4.1"
+cors: "Access-Control-Allow-Origin: *"
+auth: "Optional X-API-Key header (FEATURE_API_AUTH build flag)"
+
+# ===========================================================================
+# System / Discovery
+# ===========================================================================
+endpoints:
+
+  /api/v1/ping:
+    method: GET
+    auth: false
+    description: "Simple connectivity test"
+    response:
+      pong: true
+
+  /api/v1/:
+    method: GET
+    auth: false
+    description: "API discovery — lists all available endpoints"
+
+  /api/v1/health:
+    method: GET
+    auth: false
+    description: "System health check"
+
+  /api/v1/openapi.json:
+    method: GET
+    auth: false
+    description: "OpenAPI 3.0.3 specification"
+
+  # ── Device ─────────────────────────────────────────────────────────────
+  /api/v1/device/status:
+    method: GET
+    description: "Device status (uptime, heap, FPS, network, effect state)"
+    consumers: [ios]
+
+  /api/v1/device/info:
+    method: GET
+    description: "Hardware/firmware info (chip, flash, sketch size)"
+    consumers: [ios]
+
+  /api/v1/device/ota-token:
+    method: GET
+    description: "Get OTA authentication token"
+
+  /api/v1/device/ota-token:
+    method: POST
+    description: "Generate or rotate OTA token"
+
+  # ── Effects ────────────────────────────────────────────────────────────
+  /api/v1/effects:
+    method: GET
+    description: "Paginated list of all effects"
+    query_params:
+      page: { type: uint8, optional: true, default: 1 }
+      limit: { type: uint8, optional: true, default: 20 }
+    consumers: [ios]
+
+  /api/v1/effects/current:
+    method: GET
+    description: "Current active effect with parameters"
+    consumers: [ios]
+
+  /api/v1/effects/current:
+    method: PUT
+    description: "Set current effect (compat alias for /effects/set)"
+    body:
+      effectId: { type: uint16, required: true }
+    consumers: [ios]
+
+  /api/v1/effects/set:
+    method: POST
+    description: "Set active effect by ID"
+    body:
+      effectId: { type: uint16, required: true }
+      transition: { type: bool, optional: true }
+      transitionType: { type: uint8, optional: true }
+    consumers: [ios]
+
+  /api/v1/effects/metadata:
+    method: GET
+    description: "Effect metadata (family, story, optical intent)"
+    query_params:
+      id: { type: uint16, required: true }
+    consumers: [ios]
+
+  /api/v1/effects/parameters:
+    method: GET
+    description: "Get IEffect plugin parameters for an effect"
+    query_params:
+      id: { type: uint16, optional: true, note: "defaults to current effect" }
+    consumers: [ios]
+
+  /api/v1/effects/parameters:
+    method: [POST, PATCH]
+    description: "Set IEffect plugin parameters"
+    body:
+      effectId: { type: uint16, optional: true }
+      parameters: { type: object, required: true }
+    consumers: [ios]
+
+  /api/v1/effects/families:
+    method: GET
+    description: "List all effect families and counts"
+    consumers: [ios]
+
+  # ── Parameters ─────────────────────────────────────────────────────────
+  /api/v1/parameters:
+    method: GET
+    description: "Get all global renderer parameters"
+    consumers: [ios]
+
+  /api/v1/parameters:
+    method: [POST, PATCH]
+    description: "Set global parameters (partial update)"
+    body:
+      brightness: { type: uint8, optional: true }
+      speed: { type: uint8, optional: true }
+      paletteId: { type: uint8, optional: true }
+      intensity: { type: uint8, optional: true }
+      saturation: { type: uint8, optional: true }
+      complexity: { type: uint8, optional: true }
+      variation: { type: uint8, optional: true }
+      hue: { type: uint8, optional: true }
+    consumers: [ios]
+
+  # ── Factory Presets ────────────────────────────────────────────────────
+  /api/v1/factoryPresets:
+    method: GET
+    description: "List all factory presets"
+    consumers: [ios]
+
+  /api/v1/factoryPresets/load:
+    method: POST
+    description: "Load a factory preset by index"
+    body:
+      index: { type: uint8, required: true }
+    consumers: [ios]
+
+  # ── Palettes ───────────────────────────────────────────────────────────
+  /api/v1/palettes:
+    method: GET
+    description: "List all palettes"
+    consumers: [ios]
+
+  /api/v1/palettes/current:
+    method: GET
+    description: "Get current palette"
+    consumers: [ios]
+
+  /api/v1/palettes/set:
+    method: POST
+    description: "Set active palette"
+    body:
+      paletteId: { type: uint8, required: true }
+    consumers: [ios]
+
+  # ── Audio ──────────────────────────────────────────────────────────────
+  /api/v1/audio/parameters:
+    method: GET
+    description: "Get audio pipeline/contract parameters"
+
+  /api/v1/audio/parameters:
+    method: [POST, PATCH]
+    description: "Set audio parameters"
+
+  /api/v1/audio/control:
+    method: POST
+    description: "Audio control commands"
+
+  /api/v1/audio/agc:
+    method: PUT
+    description: "Configure AGC"
+
+  /api/v1/audio/state:
+    method: GET
+    description: "Get audio DSP state"
+
+  /api/v1/audio/tempo:
+    method: GET
+    description: "Get tempo/beat tracking state"
+
+  /api/v1/audio/fft:
+    method: GET
+    description: "Get FFT/spectrum data"
+
+  /api/v1/audio/presets:
+    method: GET
+    description: "List audio presets"
+
+  /api/v1/audio/presets:
+    method: POST
+    description: "Save audio preset"
+
+  /api/v1/audio/presets/get:
+    method: GET
+    description: "Get specific audio preset"
+
+  /api/v1/audio/presets/apply:
+    method: POST
+    description: "Apply audio preset"
+
+  /api/v1/audio/presets/delete:
+    method: DELETE
+    description: "Delete audio preset"
+
+  /api/v1/audio/mappings/sources:
+    method: GET
+    description: "List available audio mapping sources"
+
+  /api/v1/audio/mappings/targets:
+    method: GET
+    description: "List available audio mapping targets"
+
+  /api/v1/audio/mappings/curves:
+    method: GET
+    description: "List available mapping curves"
+
+  /api/v1/audio/mappings:
+    method: GET
+    description: "Get current audio mappings"
+
+  /api/v1/audio/mappings/effect:
+    method: GET
+    description: "Get effect-specific audio mappings"
+
+  /api/v1/audio/mappings/effect:
+    method: POST
+    description: "Create/update effect-specific audio mapping"
+
+  /api/v1/audio/mappings/effect:
+    method: DELETE
+    description: "Delete effect-specific audio mapping"
+
+  /api/v1/audio/mappings/enable:
+    method: POST
+    description: "Enable audio mapping"
+
+  /api/v1/audio/mappings/disable:
+    method: POST
+    description: "Disable audio mapping"
+
+  /api/v1/audio/mappings/stats:
+    method: GET
+    description: "Get audio mapping statistics"
+
+  /api/v1/audio/zone-agc:
+    method: GET
+    description: "Get zone AGC state"
+
+  /api/v1/audio/zone-agc:
+    method: POST
+    description: "Configure zone AGC"
+
+  /api/v1/audio/spike-detection:
+    method: GET
+    description: "Get spike detection stats"
+
+  /api/v1/audio/spike-detection/reset:
+    method: POST
+    description: "Reset spike detection stats"
+
+  /api/v1/audio/mic-gain:
+    method: GET
+    description: "Get microphone gain"
+
+  /api/v1/audio/mic-gain:
+    method: POST
+    description: "Set microphone gain"
+
+  /api/v1/audio/calibrate:
+    method: GET
+    description: "Get calibration state"
+
+  /api/v1/audio/calibrate/start:
+    method: POST
+    description: "Start audio calibration"
+
+  /api/v1/audio/calibrate/cancel:
+    method: POST
+    description: "Cancel audio calibration"
+
+  /api/v1/audio/calibrate/apply:
+    method: POST
+    description: "Apply calibration results"
+
+  /api/v1/audio/benchmark:
+    method: GET
+    description: "Get audio benchmark stats"
+
+  /api/v1/audio/benchmark/start:
+    method: POST
+    description: "Start audio benchmarking"
+
+  /api/v1/audio/benchmark/stop:
+    method: POST
+    description: "Stop audio benchmarking"
+
+  /api/v1/audio/benchmark/history:
+    method: GET
+    description: "Get benchmark history"
+
+  # ── Stimulus ───────────────────────────────────────────────────────────
+  /api/v1/stimulus/mode:
+    method: POST
+    description: "Set stimulus mode (live/trinity/stimulus)"
+
+  /api/v1/stimulus/patch:
+    method: POST
+    description: "Patch ControlBusFrame fields"
+
+  /api/v1/stimulus/clear:
+    method: POST
+    description: "Clear stimulus, revert to live audio"
+
+  /api/v1/stimulus/status:
+    method: GET
+    description: "Get stimulus mode and state"
+
+  # ── Transitions ────────────────────────────────────────────────────────
+  /api/v1/transitions/types:
+    method: GET
+    description: "List all transition types"
+    consumers: [ios]
+
+  /api/v1/transitions/trigger:
+    method: POST
+    description: "Trigger a transition"
+    body:
+      toEffect: { type: uint16, required: true }
+      type: { type: uint8, required: true }
+      duration: { type: uint16, optional: true }
+    consumers: [ios]
+
+  /api/v1/transitions/config:
+    method: GET
+    description: "Get transition config"
+
+  /api/v1/transitions/config:
+    method: POST
+    description: "Set transition config"
+
+  # ── Zones ──────────────────────────────────────────────────────────────
+  /api/v1/zones:
+    method: GET
+    description: "Get full zone state"
+    consumers: [tab5, ios]
+
+  /api/v1/zones/layout:
+    method: POST
+    description: "Set zone layout (segment definitions)"
+
+  /api/v1/zones/enabled:
+    method: POST
+    description: "Enable/disable zone system"
+
+  /api/v1/zones/config:
+    method: GET
+    description: "Get zone configuration"
+
+  /api/v1/zones/config/save:
+    method: POST
+    description: "Save zone configuration to NVS"
+
+  /api/v1/zones/config/load:
+    method: POST
+    description: "Load zone configuration from NVS"
+
+  /api/v1/zones/timing:
+    method: GET
+    description: "Get zone timing debug info"
+
+  /api/v1/zones/timing/reset:
+    method: POST
+    description: "Reset zone timing stats"
+
+  /api/v1/zones/reorder:
+    method: POST
+    description: "Reorder zones"
+
+  # ── Presets ────────────────────────────────────────────────────────────
+  /api/v1/presets:
+    method: GET
+    description: "List all presets"
+
+  /api/v1/presets:
+    method: POST
+    description: "Create or update a preset"
+
+  /api/v1/presets/save-current:
+    method: POST
+    description: "Save current state as preset"
+
+  # ── Effect Presets ─────────────────────────────────────────────────────
+  /api/v1/effect-presets:
+    method: GET
+    description: "List effect presets"
+
+  /api/v1/effect-presets:
+    method: POST
+    description: "Save effect preset"
+
+  /api/v1/effect-presets/get:
+    method: GET
+    description: "Get specific effect preset"
+
+  /api/v1/effect-presets/apply:
+    method: POST
+    description: "Apply effect preset"
+
+  /api/v1/effect-presets/delete:
+    method: DELETE
+    description: "Delete effect preset"
+
+  # ── Zone Presets ───────────────────────────────────────────────────────
+  /api/v1/zone-presets:
+    method: GET
+    description: "List zone presets"
+
+  /api/v1/zone-presets:
+    method: POST
+    description: "Save zone preset"
+
+  /api/v1/zone-presets/get:
+    method: GET
+    description: "Get specific zone preset"
+
+  /api/v1/zone-presets/apply:
+    method: POST
+    description: "Apply zone preset"
+
+  /api/v1/zone-presets/delete:
+    method: DELETE
+    description: "Delete zone preset"
+
+  # ── Preset Aliases ─────────────────────────────────────────────────────
+  /api/v1/presets/effects:
+    method: GET
+    description: "List effect presets (alias)"
+
+  /api/v1/presets/effects/save-current:
+    method: POST
+    description: "Save current as effect preset (alias)"
+
+  /api/v1/presets/zones:
+    method: GET
+    description: "List zone presets (alias)"
+
+  /api/v1/presets/zones/save-current:
+    method: POST
+    description: "Save current as zone preset (alias)"
+
+  # ── Shows ──────────────────────────────────────────────────────────────
+  /api/v1/shows:
+    method: GET
+    description: "List all shows"
+
+  /api/v1/shows:
+    method: POST
+    description: "Upload a show"
+
+  /api/v1/shows:
+    method: PUT
+    description: "Update a show"
+
+  /api/v1/shows:
+    method: DELETE
+    description: "Delete a show"
+
+  /api/v1/shows/current:
+    method: GET
+    description: "Get current show status"
+
+  /api/v1/shows/control:
+    method: POST
+    description: "Show playback control (play, pause, stop, seek)"
+
+  # ── Narrative ──────────────────────────────────────────────────────────
+  /api/v1/narrative/status:
+    method: GET
+    description: "Get narrative engine state"
+
+  /api/v1/narrative/config:
+    method: GET
+    description: "Get narrative config"
+
+  /api/v1/narrative/config:
+    method: POST
+    description: "Set narrative config"
+
+  # ── Batch ──────────────────────────────────────────────────────────────
+  /api/v1/batch:
+    method: POST
+    description: "Execute multiple operations"
+    body:
+      operations: { type: array, required: true, maxItems: 10 }
+
+  # ── Debug ──────────────────────────────────────────────────────────────
+  /api/v1/debug/audio:
+    method: GET
+    description: "Get audio debug config"
+
+  /api/v1/debug/audio:
+    method: POST
+    description: "Set audio debug verbosity"
+
+  /api/v1/debug/memory/zones:
+    method: GET
+    description: "Get zone memory debug info"
+
+  /api/v1/debug/udp:
+    method: GET
+    description: "Get UDP streamer debug stats"
+
+  # ── Firmware ───────────────────────────────────────────────────────────
+  /api/v1/firmware/version:
+    method: GET
+    auth: false
+    description: "Get firmware version"
+
+  /api/v1/firmware/update:
+    method: POST
+    description: "Upload firmware binary (OTA)"
+
+  /api/v1/firmware/filesystem:
+    method: POST
+    description: "Upload filesystem image"
+
+  /update:
+    method: POST
+    auth: false
+    description: "Legacy OTA update endpoint"
+
+  # ── Network ────────────────────────────────────────────────────────────
+  /api/v1/network/status:
+    method: GET
+    auth: false
+    description: "Get network status"
+
+  /api/v1/network/sta/enable:
+    method: POST
+    description: "Enable STA mode (KNOWN BROKEN on K1 — do NOT use)"
+
+  /api/v1/network/ap/enable:
+    method: POST
+    description: "Enable AP mode"
+
+  /api/v1/network/networks:
+    method: GET
+    description: "List saved networks"
+
+  /api/v1/network/networks:
+    method: POST
+    description: "Add/update saved network"
+
+  /api/v1/network/connect:
+    method: POST
+    description: "Connect to a network (KNOWN BROKEN on K1)"
+
+  /api/v1/network/disconnect:
+    method: POST
+    description: "Disconnect from network"
+
+  /api/v1/network/scan:
+    method: GET
+    description: "Scan for WiFi networks"
+
+  /api/v1/network/scan/status:
+    method: GET
+    description: "Get scan results"
+
+  # ── Filesystem ─────────────────────────────────────────────────────────
+  /api/v1/filesystem/status:
+    method: GET
+    description: "Get SPIFFS/LittleFS status"
+
+  /api/v1/filesystem/mount:
+    method: POST
+    description: "Mount filesystem"
+
+  /api/v1/filesystem/unmount:
+    method: POST
+    description: "Unmount filesystem"
+
+  /api/v1/filesystem/restart:
+    method: POST
+    description: "Restart filesystem"
+
+  # ── Sync (Multi-Device) ────────────────────────────────────────────────
+  /api/v1/sync/status:
+    method: GET
+    description: "Get device sync status (FEATURE_MULTI_DEVICE only)"
+    gate: "FEATURE_MULTI_DEVICE"
+
+  # ── Modifiers ──────────────────────────────────────────────────────────
+  /api/v1/modifiers/list:
+    method: GET
+    description: "List active modifiers"
+
+  /api/v1/modifiers/add:
+    method: POST
+    description: "Add a modifier"
+
+  /api/v1/modifiers/remove:
+    method: POST
+    description: "Remove a modifier"
+
+  /api/v1/modifiers/clear:
+    method: POST
+    description: "Clear all modifiers"
+
+  /api/v1/modifiers/update:
+    method: POST
+    description: "Update modifier parameters"
+
+  # ── Colour Correction ──────────────────────────────────────────────────
+  /api/v1/colorCorrection/config:
+    method: GET
+    description: "Get colour correction config"
+
+  /api/v1/colorCorrection/mode:
+    method: POST
+    description: "Set colour correction mode"
+
+  /api/v1/colorCorrection/config:
+    method: POST
+    description: "Set colour correction config"
+
+  /api/v1/colorCorrection/save:
+    method: POST
+    description: "Save colour correction to NVS"
+
+  /api/v1/colorCorrection/presets:
+    method: GET
+    description: "List colour correction presets"
+
+  /api/v1/colorCorrection/preset:
+    method: POST
+    description: "Apply colour correction preset"
+
+  # ── EdgeMixer ──────────────────────────────────────────────────────────
+  /api/v1/edgeMixer:
+    method: GET
+    description: "Get EdgeMixer state"
+
+  /api/v1/edgeMixer:
+    method: POST
+    description: "Set EdgeMixer properties"
+
+  # ── Auth ───────────────────────────────────────────────────────────────
+  /api/v1/auth/status:
+    method: GET
+    auth: false
+    description: "Get auth status"
+    gate: "FEATURE_API_AUTH"
+
+  /api/v1/auth/rotate:
+    method: POST
+    description: "Rotate API key"
+    gate: "FEATURE_API_AUTH"
+
+  /api/v1/auth/key:
+    method: DELETE
+    description: "Delete API key"
+    gate: "FEATURE_API_AUTH"
+
+# ===========================================================================
+# Endpoint Count Summary
+# ===========================================================================
+# Total distinct routes: ~110
+# GET: ~55   POST: ~45   PUT: ~3   PATCH: ~3   DELETE: ~5

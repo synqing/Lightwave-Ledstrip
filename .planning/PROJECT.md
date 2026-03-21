@@ -1,74 +1,57 @@
-# LightwaveOS main.cpp Decomposition
+# Critical Bug Fixes: C-2, C-3, C-4
 
 ## What This Is
 
-Refactoring `firmware-v3/src/main.cpp` from a 4,356-line monolith into focused, testable modules. The file currently conflates 7+ responsibilities: board init, serial JSON gateway, serial CLI (42 command handlers), WiFi management, show playback, effect parameter tuning, and system health monitoring. This is a maintainability-driven decomposition with no functional changes — behaviour must be identical before and after.
+Fixing three critical bugs identified in the codebase audit: API type truncation (C-2), dangling pointer in WebSocket response (C-3), and cross-core data race via getControlBusMut() (C-4). All are production bugs with defined fix approaches.
 
 ## Core Value
 
-Every extraction must produce byte-identical runtime behaviour. No regressions, no new features, no "improvements while we're in there." The K1 must soak-test clean after each phase.
+Eliminate undefined behaviour and silent data corruption in the network API layer before production release.
 
 ## Requirements
 
 ### Validated
 
-- ✓ Risk assessment completed — 11 CONCERNS.md items cross-referenced, safe extraction order identified — existing
-- ✓ SRAM/stack headroom confirmed — loopTask 12KB (healthy), renderer 43KB free, internal DRAM 41KB free — existing
-- ✓ Cherry-picked translation engine code locations mapped across all sections — existing
+- ✓ Bugs identified and root-caused in CONCERNS.md audit — existing
+- ✓ Fix approaches defined with estimated effort — existing
+- ✓ Codebase map and architecture docs available — existing
 
 ### Active
 
-- [ ] P0: Create `config/runtime_state.h` — move extern-visible globals to shared header
-- [ ] P1: Extract `SerialJsonGateway.cpp` — ~920 lines, JSON command dispatch
-- [ ] P2: Extract `CaptureStreamer.cpp` — ~650 lines, capture infra + unify sync/async frame assembly
-- [ ] P3: Extract `SerialCLI.cpp` — ~2,100 lines, multi-char + single-char command handlers
-- [ ] P4: Extract `SystemInit.cpp` — ~300 lines, init helpers (setup() stays as thin orchestrator)
-- [ ] Build + flash + soak test after each phase
-- [ ] main.cpp reduced to ~400-500 lines (includes, setup() orchestrator, loop() skeleton)
+- [ ] C-2: Fix uint8_t→uint16_t type truncation in 5 audio mapping endpoints
+- [ ] C-3: Fix dangling pointer in handleEffectsGetCategories()
+- [ ] C-4: Remove getControlBusMut(), route audio config through actor message queue
+- [ ] Build + flash + soak test after fixes
 
 ### Out of Scope
 
-- Functional changes — no new features, no parameter tuning, no "improvements"
-- PipelineCore fixes — broken audio backend is a separate concern (C-1)
-- API type truncation fixes — V1ApiRoutes uint8_t issue is separate (C-2)
-- WiFi architecture changes — AP-only constraint must be preserved exactly
-- Test coverage expansion — testing is a follow-up milestone, not this one
+- C-1 PipelineCore — already mitigated, separate concern
+- New API features — fix only, no additions
+- WiFi architecture — AP-only constraint preserved
 
 ## Context
 
-**Codebase:** firmware-v3 is an ESP32-S3 firmware using FreeRTOS actor model (AudioActor Core 0, RendererActor Core 1). main.cpp runs on the Arduino loopTask (Core 0, priority 1).
+**C-2** (1 hour): Five endpoints in V1ApiRoutes.cpp parse effect IDs as uint8_t instead of uint16_t (EffectId). Effect IDs >= 256 are silently truncated to 0. Fix: change type + add validation.
 
-**Recent changes:** 363 lines cherry-picked from codex/perceptual-translation-v3 on 2026-03-21, adding factory presets, WDT safe-mode, TTP223 button init, VAL: command forwarding, tempo parameter tuning, and dbg motion domain — all scattered across main.cpp sections.
+**C-3** (30 min): WsEffectsCommands.cpp handleEffectsGetCategories() stores pointers to a stack-local char buffer that gets destroyed each loop iteration. All family name pointers alias dead stack memory. Fix: use array of buffers outside loop.
 
-**Why now:** The file has grown from 3,441 to 4,356 lines. Every modification risks unintended side effects. The translation engine cherry-pick demonstrated the problem — the v3 branch had 363 lines of additions that auto-merged cleanly only because they happened to land in non-overlapping regions. Next time we may not be so lucky.
-
-**Key risks identified in pre-assessment:**
-- `g_factoryPresetIndex` extern'd in 2 other files — must create shared header first (P0)
-- `ambientEffectIds[170]` static local — must NOT become stack variable (340 bytes)
-- 12 init ordering dependencies in setup() — do NOT reorder
-- WiFi `wifi connect` is the ONLY STA entry point — must preserve with prominent warning
-- Capture frame assembly duplicated in sync/async paths — extraction should unify (net improvement)
-- `webServerInstance->update()` must remain on loopTask
+**C-4** (3-4 hours): WebServer's AsyncTCP task calls getControlBusMut() to mutate AudioActor's ControlBus state without synchronisation. Both run on Core 0 but in different FreeRTOS tasks with preemptive scheduling. Fix: remove getControlBusMut(), route changes through actor message queue, add read-only snapshot for telemetry.
 
 ## Constraints
 
-- **Thread safety**: All extracted modules must preserve existing thread assumptions — loopTask runs on Core 0, renderer on Core 1. No cross-core state access without existing mutex/snapshot patterns.
-- **Stack budget**: loopTask is 12,288 bytes. Static locals must stay static (not become stack vars). No new heap allocation in any path.
-- **Init ordering**: setup() has 12 ordering dependencies. Extraction creates helper functions called in sequence — the ORDER stays in one place.
-- **AP-only WiFi**: K1 boots AP-only. WiFi CLI extraction must carry explicit warning about STA escape hatch.
-- **British English**: All new files use centre, colour, initialise, serialise, behaviour.
-- **Build verification**: `pio run -e esp32dev_audio_esv11_k1v2_32khz` must succeed after each phase.
-- **Hardware verification**: Flash to K1 via `/dev/cu.usbmodem1101`, soak test 5+ minutes, check serial for errors after each phase.
+- **Thread safety**: C-4 fix must use actor message queue pattern, not add mutexes
+- **No functional changes beyond the fixes**: Don't refactor surrounding code
+- **British English**: All comments use centre, colour, initialise
+- **Build verification**: pio run -e esp32dev_audio_esv11_k1v2_32khz must succeed
+- **Hardware verification**: Flash to K1, soak test 5+ minutes
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Full teardown (P0-P4), not incremental | Maintainability debt compounds — partial extraction leaves an awkward middle state | — Pending |
-| Build + flash + soak between each phase | Stage 1 experience showed transient stutter can appear and disappear — only hardware soak catches it | — Pending |
-| Keep setup() as thin orchestrator (P4) | 12 init ordering dependencies make full extraction dangerous — helpers yes, reordering no | — Pending |
-| Unify sync/async capture frame assembly in P2 | 150 lines duplicated — extraction is the natural moment to consolidate | — Pending |
-| Create runtime_state.h before any extraction (P0) | Extern declarations in V1ApiRoutes.cpp and WsEffectsCommands.cpp will break without it | — Pending |
+| Fix C-2 and C-3 first (quick wins) | 30-60 min each, eliminates 2 critical bugs immediately | — Pending |
+| C-4 uses message queue, not mutex | Consistent with actor model architecture, avoids deadlock risk | — Pending |
+| Remove getControlBusMut() entirely | No mutable cross-task access — force all mutations through message queue | — Pending |
 
 ---
 *Last updated: 2026-03-21 after project initialisation*

@@ -36,11 +36,11 @@ abstract: "Inventory of technical debt, security risks, and known bugs across fi
 
 ---
 
-### C-2: Type Truncation in V1 Audio Mapping API
+### C-2: ~~Type Truncation in V1 Audio Mapping API~~ — RESOLVED
 
-**Severity:** CRITICAL
-**Files:** `firmware-v3/src/network/webserver/V1ApiRoutes.cpp:406, 421, 434, 446, 458`
-**Status:** Confirmed, needs fix
+**Severity:** ~~CRITICAL~~ RESOLVED
+**Files:** `firmware-v3/src/network/webserver/V1ApiRoutes.cpp`
+**Status:** Already fixed — endpoints use uint16_t with int→uint16_t validation and HTTP 400 on out-of-range. Verified 2026-03-21.
 
 **Issue:** Five audio mapping endpoints parse effect IDs as `uint8_t` instead of `uint16_t`, silently truncating IDs > 255. EffectId is a 16-bit namespaced type (high byte = family). Effect IDs outside family 0 (0x0100+) are truncated to 0.
 
@@ -62,11 +62,11 @@ handlers::AudioHandlers::handleMappingsGet(request, id, ctx.renderer);  // Expec
 
 ---
 
-### C-3: Dangling Pointer in WebSocket Effects Command
+### C-3: ~~Dangling Pointer in WebSocket Effects Command~~ — RESOLVED
 
-**Severity:** CRITICAL
-**Files:** `firmware-v3/src/network/webserver/ws/WsEffectsCommands.cpp:417-430`
-**Status:** Confirmed
+**Severity:** ~~CRITICAL~~ RESOLVED
+**Files:** `firmware-v3/src/network/webserver/ws/WsEffectsCommands.cpp`
+**Status:** Already fixed — uses `char familyNameBufs[10][32]` outside loop with per-family persistent buffers. Verified 2026-03-21.
 
 **Issue:** Function `handleEffectsGetCategories()` creates a stack-local `char familyNameBuf[32]`, fills it in a loop, and stores pointers to it in an array. All 10 pointers alias the same dead stack slot after the loop ends. WebSocket response contains garbage or last-written name.
 
@@ -92,11 +92,11 @@ for (uint8_t i = 0; i < 10; i++) {
 
 ---
 
-### C-4: Cross-Core Data Race — getControlBusMut()
+### C-4: ~~Cross-Core Data Race — getControlBusMut()~~ — RESOLVED
 
-**Severity:** CRITICAL
-**Files:** `firmware-v3/src/audio/AudioActor.h`, `firmware-v3/src/network/webserver/ws/WsAudioCommands.cpp:506`, `firmware-v3/src/network/webserver/handlers/AudioHandlers.cpp:1086,1610`
-**Status:** Confirmed, partially mitigated
+**Severity:** ~~CRITICAL~~ RESOLVED
+**Files:** `firmware-v3/src/audio/AudioActor.h`
+**Status:** Already fixed — getControlBusMut() removed entirely, no callers remain. Audio config mutations route through actor message queue. Snapshot API used for read-only access. Verified 2026-03-21.
 
 **Issue:** WebServer (AsyncTCP task on Core 0) obtains **mutable** reference to AudioActor's ControlBus via `getControlBusMut()`, allowing unsynchronised mutation of DSP state while AudioActor processes audio on Core 0 (different FreeRTOS task, preemptive scheduling).
 

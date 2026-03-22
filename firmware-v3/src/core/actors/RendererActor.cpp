@@ -530,6 +530,19 @@ void RendererActor::onStart()
     // Restore persisted EdgeMixer settings from NVS
     enhancement::EdgeMixer::getInstance().loadFromNVS();
 
+#if FEATURE_VRMS_METRICS
+    m_vrmsMetrics.init();
+    LW_LOGI("VRMS Metrics engine initialized (60Hz decimation)");
+#endif
+#if FEATURE_VRMS_BENCHMARK
+    m_vrmsBenchmark.init();
+    LW_LOGI("VRMS Benchmark overlay enabled");
+#endif
+#if FEATURE_INPUT_MERGE_LAYER
+    m_mergeLayer.init();
+    LW_LOGI("Input Merge Layer initialized");
+#endif
+
     // Subscribe to relevant events
     bus::MessageBus::instance().subscribe(MessageType::PALETTE_CHANGED, this);
 
@@ -587,6 +600,16 @@ void RendererActor::onMessage(const Message& msg)
         case MessageType::SET_FADE_AMOUNT:
             handleSetFadeAmount(msg.param1);
             break;
+
+#if FEATURE_INPUT_MERGE_LAYER
+        case MessageType::MERGE_SUBMIT:
+            // param1=sourceId, param2=paramIndex, param3=value
+            m_mergeLayer.updateSource(
+                static_cast<merge::SourceId>(msg.param1),
+                msg.param2,
+                msg.param3);
+            break;
+#endif
 
         case MessageType::SET_EDGE_MIXER_MODE:
             if (msg.param1 <= 4) {
@@ -848,6 +871,26 @@ void RendererActor::onTick()
     if (m_captureEnabled && (m_captureTapMask & 0x02)) {
         captureFrame(CaptureTap::TAP_B_POST_CORRECTION, m_leds);
     }
+
+#if FEATURE_VRMS_METRICS
+    if (m_stats.framesRendered % 2 == 0) {
+        TRACE_SCOPE("vrms_metrics");
+        float audioRms = 0.0f;
+#if FEATURE_AUDIO_SYNC
+        audioRms = m_lastControlBus.rms;
+#endif
+        m_vrmsMetrics.compute(m_leds, audioRms);
+    }
+#endif
+#if FEATURE_VRMS_BENCHMARK
+    if (m_stats.framesRendered % 2 == 0) {
+        float audioRms = 0.0f;
+#if FEATURE_AUDIO_SYNC
+        audioRms = m_lastControlBus.rms;
+#endif
+        m_vrmsBenchmark.compute(m_leds, audioRms);
+    }
+#endif
 
     // Push to strips
     // NOTE: showLeds() blocks for ~4.8ms (WS2812 wire time for 160 LEDs).
@@ -1628,6 +1671,31 @@ void RendererActor::renderFrame()
         }
 #else
         ctx.audio.available = false;
+#endif
+
+        // =====================================================================
+        // Phase 3.5: Input Merge Layer
+        // Arbitrate MANUAL (+ future AUDIO/AI/GESTURE) sources into merged params
+        // =====================================================================
+#if FEATURE_INPUT_MERGE_LAYER
+        {
+            uint8_t manualParams[10] = {
+                m_brightness, m_speed, m_intensity, m_saturation,
+                m_complexity, m_variation, m_hue, m_mood,
+                m_fadeAmount, m_paletteIndex
+            };
+            float mergeDt = static_cast<float>(deltaTimeMs) * 0.001f;
+            m_mergeLayer.updateSourceAll(merge::SourceId::MANUAL, manualParams);
+            m_mergeLayer.merge(millis(), mergeDt);
+
+            ctx.brightness = m_mergeLayer.getMerged(0);
+            ctx.speed      = m_mergeLayer.getMerged(1);
+            ctx.intensity  = m_mergeLayer.getMerged(2);
+            ctx.saturation = m_mergeLayer.getMerged(3);
+            ctx.complexity = m_mergeLayer.getMerged(4);
+            ctx.variation  = m_mergeLayer.getMerged(5);
+            ctx.gHue       = m_mergeLayer.getMerged(6);
+        }
 #endif
 
         // =====================================================================

@@ -6,6 +6,9 @@
 #include "WsStreamCommands.h"
 #include "../WsCommandRouter.h"
 #include "../WebServerContext.h"
+#if FEATURE_INPUT_MERGE_LAYER
+#include "../../../core/actors/ActorSystem.h"
+#endif
 #include "../../ApiResponse.h"
 #include "../LedStreamBroadcaster.h"
 #include "../UdpStreamer.h"
@@ -390,6 +393,135 @@ static void handleBeatUnsubscribe(AsyncWebSocketClient* client, JsonDocument& do
     client->text(response);
 }
 
+#if FEATURE_VRMS_METRICS
+
+static constexpr size_t MAX_VRMS_SUBSCRIBERS = 4;
+static uint32_t s_vrmsSubscribers[MAX_VRMS_SUBSCRIBERS] = {0};
+
+bool hasVrmsStreamSubscribers() {
+    for (size_t i = 0; i < MAX_VRMS_SUBSCRIBERS; ++i) {
+        if (s_vrmsSubscribers[i] != 0) return true;
+    }
+    return false;
+}
+
+void removeVrmsSubscriber(uint32_t clientId) {
+    for (size_t i = 0; i < MAX_VRMS_SUBSCRIBERS; ++i) {
+        if (s_vrmsSubscribers[i] == clientId) {
+            s_vrmsSubscribers[i] = 0;
+        }
+    }
+}
+
+uint32_t* getVrmsSubscriberTable(size_t& outCount) {
+    outCount = MAX_VRMS_SUBSCRIBERS;
+    return s_vrmsSubscribers;
+}
+
+static void handleVrmsSubscribe(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    uint32_t clientId = client->id();
+    const char* requestId = doc["requestId"] | "";
+
+    bool subscribed = false;
+    for (size_t i = 0; i < MAX_VRMS_SUBSCRIBERS; ++i) {
+        if (s_vrmsSubscribers[i] == clientId) { subscribed = true; break; }
+        if (!subscribed && s_vrmsSubscribers[i] == 0) { s_vrmsSubscribers[i] = clientId; subscribed = true; break; }
+    }
+
+    if (subscribed) {
+        String response = buildWsResponse("vrms.subscribed", requestId, [clientId](JsonObject& data) {
+            data["clientId"] = clientId;
+            data["intervalMs"] = 100;
+        });
+        client->text(response);
+    } else {
+        client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "VRMS subscriber table full", requestId));
+    }
+}
+
+static void handleVrmsUnsubscribe(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    uint32_t clientId = client->id();
+    const char* requestId = doc["requestId"] | "";
+    removeVrmsSubscriber(clientId);
+    String response = buildWsResponse("vrms.unsubscribed", requestId, [clientId](JsonObject& data) {
+        data["clientId"] = clientId;
+    });
+    client->text(response);
+}
+#endif
+
+// ============================================================================
+// Input Merge Layer — AI Agent Parameter Submission
+// ============================================================================
+
+#if FEATURE_INPUT_MERGE_LAYER
+
+// Param name → index lookup (matches InputMergeLayer.h constants)
+static int8_t mergeParamIndex(const char* name) {
+    if (!name) return -1;
+    if (strcmp(name, "brightness") == 0) return 0;
+    if (strcmp(name, "speed") == 0) return 1;
+    if (strcmp(name, "intensity") == 0) return 2;
+    if (strcmp(name, "saturation") == 0) return 3;
+    if (strcmp(name, "complexity") == 0) return 4;
+    if (strcmp(name, "variation") == 0) return 5;
+    if (strcmp(name, "hue") == 0) return 6;
+    if (strcmp(name, "mood") == 0) return 7;
+    if (strcmp(name, "fadeAmount") == 0) return 8;
+    if (strcmp(name, "paletteIndex") == 0) return 9;
+    return -1;
+}
+
+static void handleMergeSubmit(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    const char* requestId = doc["requestId"] | "";
+    uint8_t sourceId = doc["source"] | 2;  // Default: AI_AGENT (2)
+
+    // Validate source (only AI_AGENT=2 and GESTURE=3 allowed via WS)
+    if (sourceId < 2 || sourceId > 3) {
+        client->text(buildWsError(ErrorCodes::INVALID_PARAMETER,
+            "source must be 2 (ai_agent) or 3 (gesture)", requestId));
+        return;
+    }
+
+    auto* renderer = ctx.actorSystem.getRenderer();
+    if (!renderer) {
+        client->text(buildWsError(ErrorCodes::SYSTEM_NOT_READY, "Renderer not available", requestId));
+        return;
+    }
+
+    // Parse params object: {"brightness": 128, "speed": 50, ...}
+    JsonObject params = doc["params"];
+    if (params.isNull()) {
+        client->text(buildWsError(ErrorCodes::INVALID_PARAMETER,
+            "Missing 'params' object", requestId));
+        return;
+    }
+
+    uint8_t count = 0;
+    for (JsonPair kv : params) {
+        int8_t idx = mergeParamIndex(kv.key().c_str());
+        if (idx < 0) continue;
+        uint8_t val = kv.value().as<uint8_t>();
+
+        lightwaveos::actors::Message msg;
+        msg.type = lightwaveos::actors::MessageType::MERGE_SUBMIT;
+        msg.param1 = sourceId;
+        msg.param2 = static_cast<uint8_t>(idx);
+        msg.param3 = val;
+        msg.timestamp = millis();
+        renderer->send(msg);
+        count++;
+    }
+
+    String response = buildWsResponse("merge.accepted", requestId,
+        [count, sourceId](JsonObject& data) {
+            data["paramsApplied"] = count;
+            data["source"] = sourceId;
+        });
+    client->text(response);
+}
+#endif  // FEATURE_INPUT_MERGE_LAYER
+
 // ============================================================================
 // Registration
 // ============================================================================
@@ -414,6 +546,15 @@ void registerWsStreamCommands(const WebServerContext& ctx) {
     // Beat event subscription (gated: no textAll() spam to non-subscribing clients)
     WsCommandRouter::registerCommand("beat.subscribe", handleBeatSubscribe);
     WsCommandRouter::registerCommand("beat.unsubscribe", handleBeatUnsubscribe);
+
+#if FEATURE_VRMS_METRICS
+    WsCommandRouter::registerCommand("vrms.subscribe", handleVrmsSubscribe);
+    WsCommandRouter::registerCommand("vrms.unsubscribe", handleVrmsUnsubscribe);
+#endif
+
+#if FEATURE_INPUT_MERGE_LAYER
+    WsCommandRouter::registerCommand("merge.submit", handleMergeSubmit);
+#endif
 }
 
 } // namespace ws

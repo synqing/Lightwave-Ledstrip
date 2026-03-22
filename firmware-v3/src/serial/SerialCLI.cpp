@@ -52,6 +52,10 @@
 #include "core/system/StackMonitor.h"
 #endif
 
+#if !defined(NATIVE_BUILD) && FEATURE_STATUS_STRIP_TOUCH
+#include "hal/esp32s3/StatusStripTouch.h"
+#endif
+
 #if FEATURE_VALIDATION_PROFILING
 #include "core/system/ValidationProfiler.h"
 #endif
@@ -284,6 +288,28 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
             }
         } else {
             Serial.println("Renderer not available");
+        }
+    }
+    else
+#endif
+#if FEATURE_VRMS_METRICS
+    if (inputLower == "vrms") {
+        handledMulti = true;
+        RendererActor* ren = actors.getRenderer();
+        if (ren) {
+            metrics::VRMSVector v = ren->getVrmsVector();
+            Serial.println("\n=== VRMS Metrics ===");
+            Serial.printf("  Dominant Hue:      %.1f\n", v.dominantHue);
+            Serial.printf("  Colour Variance:   %.3f\n", v.colourVariance);
+            Serial.printf("  Spatial Centroid:   %.1f\n", v.spatialCentroid);
+            Serial.printf("  Symmetry Score:    %.3f\n", v.symmetryScore);
+            Serial.printf("  Brightness Mean:   %.1f\n", v.brightnessMean);
+            Serial.printf("  Brightness Var:    %.0f\n", v.brightnessVariance);
+            Serial.printf("  Temporal Freq:     %.3f\n", v.temporalFreq);
+            Serial.printf("  Audio-Visual Corr: %.3f\n", v.audioVisualCorr);
+            Serial.println("====================");
+        } else {
+            Serial.println("[VRMS] Renderer not available");
         }
     }
     else

@@ -67,6 +67,9 @@ enum class MessageType : uint8_t {
     SET_EDGE_MIXER_SPATIAL  = 0x0F,  // param1 = EdgeMixerSpatial (0-1)
     SET_EDGE_MIXER_TEMPORAL = 0x10,  // param1 = EdgeMixerTemporal (0-1)
 
+    // Input Merge Layer (0x11-0x1F)
+    MERGE_SUBMIT            = 0x11,  // param1=sourceId, param2=paramIndex, param3=value
+
     // Zone commands (0x20-0x3F)
     ZONE_ENABLE         = 0x20,
     ZONE_DISABLE        = 0x21,

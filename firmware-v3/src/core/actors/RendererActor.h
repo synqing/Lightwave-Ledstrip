@@ -66,6 +66,16 @@
 #include "../../utils/LockFreeQueue.h"
 #endif
 
+#if FEATURE_VRMS_METRICS
+#include "../../metrics/VRMSMetrics.h"
+#endif
+#if FEATURE_VRMS_BENCHMARK
+#include "../../metrics/VRMSBenchmark.h"
+#endif
+#if FEATURE_INPUT_MERGE_LAYER
+#include "../../core/merge/InputMergeLayer.h"
+#endif
+
 // Forward declarations
 namespace lightwaveos { namespace zones { class ZoneComposer; } }
 namespace lightwaveos { namespace transitions { class TransitionEngine; enum class TransitionType : uint8_t; } }
@@ -460,6 +470,10 @@ public:
      * Thread-safe: reads from the slot the renderer is not currently writing.
      */
     void getBandsDebugSnapshot(BandsDebugSnapshot& out) const;
+
+#if FEATURE_VRMS_METRICS
+    metrics::VRMSVector getVrmsVector() const { return m_vrmsMetrics.getLatestVector(); }
+#endif
 
 #if !FEATURE_AUDIO_BACKEND_ESV11 && !FEATURE_AUDIO_BACKEND_PIPELINECORE
     // ========================================================================
@@ -875,6 +889,16 @@ public:
     /// Bands debug snapshot (double buffer for lock-free read from serial handler)
     mutable BandsDebugSnapshot m_bandsDebugSnapshot[2];
     mutable std::atomic<uint8_t> m_bandsDebugWriteIndex{0};
+
+#if FEATURE_VRMS_METRICS
+    metrics::VRMSMetricsEngine m_vrmsMetrics;
+#endif
+#if FEATURE_VRMS_BENCHMARK
+    metrics::VRMSBenchmark m_vrmsBenchmark;
+#endif
+#if FEATURE_INPUT_MERGE_LAYER
+    merge::InputMergeLayer m_mergeLayer;
+#endif
 
     // ========================================================================
     // TempoTracker Integration (replaces K1)

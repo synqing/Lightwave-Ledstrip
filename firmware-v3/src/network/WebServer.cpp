@@ -103,6 +103,9 @@
 #include "../validation/ValidationFrameEncoder.h"
 #include "../validation/EffectValidationMetrics.h"
 #endif
+#if FEATURE_VRMS_METRICS
+#include "../metrics/VRMSMetrics.h"
+#endif
 #include <cstring>
 #include <ESPmDNS.h>
 #include <LittleFS.h>
@@ -767,6 +770,48 @@ void WebServer::update() {
     }
 #endif
 
+#if FEATURE_VRMS_METRICS
+    if (!m_lowHeapShed && m_ws && m_renderer) {
+        if (webserver::ws::hasVrmsStreamSubscribers()) {
+            static uint32_t s_vrmsLastBroadcastMs = 0;
+            uint32_t now = millis();
+            if (now - s_vrmsLastBroadcastMs >= 100) {
+                s_vrmsLastBroadcastMs = now;
+                metrics::VRMSVector v = m_renderer->getVrmsVector();
+
+                JsonDocument doc;
+                doc["type"] = "vrms.frame";
+                JsonObject m = doc["metrics"].to<JsonObject>();
+                m["dominantHue"] = serialized(String(v.dominantHue, 1));
+                m["colourVariance"] = serialized(String(v.colourVariance, 3));
+                m["spatialCentroid"] = serialized(String(v.spatialCentroid, 1));
+                m["symmetryScore"] = serialized(String(v.symmetryScore, 3));
+                m["brightnessMean"] = serialized(String(v.brightnessMean, 1));
+                m["brightnessVariance"] = serialized(String(v.brightnessVariance, 0));
+                m["temporalFreq"] = serialized(String(v.temporalFreq, 3));
+                m["audioVisualCorr"] = serialized(String(v.audioVisualCorr, 3));
+                doc["timestamp"] = now;
+
+                String output;
+                serializeJson(doc, output);
+
+                size_t count = 0;
+                uint32_t* subs = webserver::ws::getVrmsSubscriberTable(count);
+                for (size_t i = 0; i < count; ++i) {
+                    if (subs[i] != 0) {
+                        AsyncWebSocketClient* client = m_ws->client(subs[i]);
+                        if (client && client->status() == WS_CONNECTED) {
+                            client->text(output);
+                        } else {
+                            subs[i] = 0;
+                        }
+                    }
+                }
+            }
+        }
+    }
+#endif
+
 #if FEATURE_AUDIO_BENCHMARK
     // Benchmark metrics streaming to subscribed clients (10 FPS)
     if (!m_lowHeapShed) {
@@ -1312,6 +1357,11 @@ void WebServer::handleWsDisconnect(AsyncWebSocketClient* client) {
 
     // Cleanup beat event subscription
     webserver::ws::removeBeatSubscriber(clientId);
+
+#if FEATURE_VRMS_METRICS
+    // Cleanup VRMS stream subscription
+    webserver::ws::removeVrmsSubscriber(clientId);
+#endif
 
     // Cleanup UDP stream subscriptions
     if (m_udpStreamer) {

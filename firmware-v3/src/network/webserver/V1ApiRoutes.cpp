@@ -33,6 +33,9 @@
 #include "../../effects/enhancement/EdgeMixer.h"
 #include "../../core/actors/ActorSystem.h"
 #include "handlers/StimulusHandlers.h"
+#if FEATURE_VRMS_METRICS
+#include "handlers/VrmsHandlers.h"
+#endif
 #if FEATURE_API_AUTH
 #include "handlers/AuthHandlers.h"
 #endif
@@ -695,6 +698,14 @@ void V1ApiRoutes::registerRoutes(
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
         handlers::AudioHandlers::handleBenchmarkHistory(request, ctx.orchestrator);
+    });
+#endif
+
+#if FEATURE_VRMS_METRICS
+    registry.onGet("/api/v1/vrms", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::VrmsHandlers::handleGetVrms(request, ctx.renderer);
     });
 #endif
 

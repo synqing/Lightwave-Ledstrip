@@ -158,6 +158,27 @@
 #define FEATURE_AUDIO_BENCHMARK 0
 #endif
 
+// VRMS Benchmark (Experiment 4.1) - Computes 7 perceptual metrics per frame
+// and reports per-metric cycle counts to serial every 120 frames.
+// Target: all 7 metrics ≤ 300us total at 240MHz.
+#ifndef FEATURE_VRMS_BENCHMARK
+#define FEATURE_VRMS_BENCHMARK 0
+#endif
+
+// VRMS Metrics (Production) - Computes 7 perceptual metrics from frame buffer.
+// Exposes via REST API (/api/v1/vrms) and WebSocket (vrms.subscribe).
+// Default ON. Network endpoints require FEATURE_WEB_SERVER.
+#ifndef FEATURE_VRMS_METRICS
+#define FEATURE_VRMS_METRICS 1
+#endif
+
+// Input Merge Layer - Arbitrates multiple input sources (manual, audio, AI, gesture)
+// onto shared effect parameters with per-source IIR smoothing and staleness detection.
+// Default ON. Enable: -D FEATURE_INPUT_MERGE_LAYER=1
+#ifndef FEATURE_INPUT_MERGE_LAYER
+#define FEATURE_INPUT_MERGE_LAYER 1
+#endif
+
 // Effect Validation Framework - Enables real-time effect validation streaming
 // Captures phase, speed, audio metrics for debugging jog-dial behavior
 #ifndef FEATURE_EFFECT_VALIDATION

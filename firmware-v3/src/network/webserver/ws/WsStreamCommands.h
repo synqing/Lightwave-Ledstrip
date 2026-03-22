@@ -6,6 +6,8 @@
 #pragma once
 
 #include "../../../config/features.h"
+#include <cstdint>
+#include <cstddef>
 
 // Forward declarations for FFT stream stubs
 class AsyncWebSocket;
@@ -13,6 +15,8 @@ class AsyncWebSocket;
 #if FEATURE_AUDIO_SYNC
 namespace lightwaveos { namespace audio { struct ControlBusFrame; } }
 #endif
+
+namespace lightwaveos { namespace actors { class RendererActor; } }
 
 namespace lightwaveos {
 namespace network {
@@ -80,6 +84,12 @@ bool hasBeatEventSubscribers();
  * @brief Remove a disconnected client from beat subscriber list
  */
 void removeBeatSubscriber(uint32_t clientId);
+
+#if FEATURE_VRMS_METRICS
+bool hasVrmsStreamSubscribers();
+void removeVrmsSubscriber(uint32_t clientId);
+uint32_t* getVrmsSubscriberTable(size_t& outCount);
+#endif
 
 } // namespace ws
 } // namespace webserver

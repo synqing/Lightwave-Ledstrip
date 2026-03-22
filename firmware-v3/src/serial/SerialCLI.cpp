@@ -1919,10 +1919,10 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
         // ========== EdgeMixer Commands ==========
 
         case 'e':
-            // Cycle EdgeMixer mode: mirror -> analogous -> complementary -> split_comp -> sat_veil -> mirror
+            // Cycle EdgeMixer mode: mirror -> analogous -> complementary -> split_comp -> sat_veil -> triadic -> tetradic -> mirror
             {
                 auto& mixer = lightwaveos::enhancement::EdgeMixer::getInstance();
-                uint8_t next = (static_cast<uint8_t>(mixer.getMode()) + 1) % 5;
+                uint8_t next = (static_cast<uint8_t>(mixer.getMode()) + 1) % 7;
                 actors.setEdgeMixerMode(next);
                 Serial.printf("EdgeMixer mode: " LW_CLR_CYAN "%s" LW_ANSI_RESET "\n",
                               lightwaveos::enhancement::EdgeMixer::modeName(

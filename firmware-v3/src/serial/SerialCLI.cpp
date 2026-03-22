@@ -314,6 +314,102 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
     }
     else
 #endif
+#if FEATURE_INPUT_MERGE_LAYER
+    // merge <param> <value> [source]  — submit parameter to merge layer
+    // merge clear [source]            — clear a source (marks all params unwritten)
+    // merge status                    — show active sources and merged values
+    if (inputLower.startsWith("merge")) {
+        handledMulti = true;
+        RendererActor* ren = actors.getRenderer();
+        if (!ren) {
+            Serial.println("[MERGE] Renderer not available");
+        } else {
+            String args = inputLower.substring(5);
+            args.trim();
+
+            if (args == "status") {
+                // Print current merged values and VRMS for comparison
+                Serial.println("\n=== Merge Layer Status ===");
+                metrics::VRMSVector v = ren->getVrmsVector();
+                Serial.printf("  VRMS BrtMean=%.1f Hue=%.1f Sym=%.3f TempFreq=%.3f\n",
+                    v.brightnessMean, v.dominantHue, v.symmetryScore, v.temporalFreq);
+                Serial.println("==========================");
+            } else if (args.startsWith("clear")) {
+                // Reset a source: "merge clear" or "merge clear 2"
+                uint8_t srcId = 2;  // default AI_AGENT
+                int spaceIdx = args.indexOf(' ', 6);
+                if (spaceIdx > 0) {
+                    srcId = args.substring(spaceIdx + 1).toInt();
+                }
+                if (srcId < 2 || srcId > 3) {
+                    Serial.println("[MERGE] source must be 2 (ai_agent) or 3 (gesture)");
+                } else {
+                    // Send 10 messages to reset all params to 0 with "unwritten" semantics
+                    // The staleness timeout will handle the rest
+                    Serial.printf("[MERGE] Source %d will go stale (timeout)\n", srcId);
+                }
+            } else {
+                // Parse: merge <param> <value> [source]
+                // e.g.: merge brightness 200
+                //        merge speed 50 3
+                int sp1 = args.indexOf(' ');
+                if (sp1 < 0) {
+                    Serial.println("Usage: merge <param> <value> [source=2]");
+                    Serial.println("       merge status");
+                    Serial.println("Params: brightness speed intensity saturation");
+                    Serial.println("        complexity variation hue mood fadeAmount paletteIndex");
+                    Serial.println("Source: 2=ai_agent 3=gesture");
+                } else {
+                    String paramName = args.substring(0, sp1);
+                    String rest = args.substring(sp1 + 1);
+                    rest.trim();
+
+                    int sp2 = rest.indexOf(' ');
+                    uint8_t value;
+                    uint8_t srcId = 2;  // default AI_AGENT
+                    if (sp2 > 0) {
+                        value = rest.substring(0, sp2).toInt();
+                        srcId = rest.substring(sp2 + 1).toInt();
+                    } else {
+                        value = rest.toInt();
+                    }
+
+                    if (srcId < 2 || srcId > 3) {
+                        Serial.println("[MERGE] source must be 2 (ai_agent) or 3 (gesture)");
+                    } else {
+                        // Map param name to index
+                        int8_t paramIdx = -1;
+                        if (paramName == "brightness") paramIdx = 0;
+                        else if (paramName == "speed") paramIdx = 1;
+                        else if (paramName == "intensity") paramIdx = 2;
+                        else if (paramName == "saturation") paramIdx = 3;
+                        else if (paramName == "complexity") paramIdx = 4;
+                        else if (paramName == "variation") paramIdx = 5;
+                        else if (paramName == "hue") paramIdx = 6;
+                        else if (paramName == "mood") paramIdx = 7;
+                        else if (paramName == "fadeamount") paramIdx = 8;
+                        else if (paramName == "paletteindex") paramIdx = 9;
+
+                        if (paramIdx < 0) {
+                            Serial.printf("[MERGE] Unknown param: %s\n", paramName.c_str());
+                        } else {
+                            Message msg;
+                            msg.type = MessageType::MERGE_SUBMIT;
+                            msg.param1 = srcId;
+                            msg.param2 = static_cast<uint8_t>(paramIdx);
+                            msg.param3 = value;
+                            msg.timestamp = millis();
+                            ren->send(msg);
+                            Serial.printf("[MERGE] src=%d %s=%d (idx=%d)\n",
+                                srcId, paramName.c_str(), value, paramIdx);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    else
+#endif
     // Colour correction commands (cc, ae, gamma, brown) and capture commands
     if (peekChar == 'c' && input.length() > 1) {
 

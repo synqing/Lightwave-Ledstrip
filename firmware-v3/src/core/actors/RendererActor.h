@@ -474,6 +474,9 @@ public:
 #if FEATURE_VRMS_METRICS
     metrics::VRMSVector getVrmsVector() const { return m_vrmsMetrics.getLatestVector(); }
 #endif
+#if FEATURE_INPUT_MERGE_LAYER
+    uint8_t getMergedParam(uint8_t idx) const { return m_mergeLayer.getMerged(idx); }
+#endif
 
 #if !FEATURE_AUDIO_BACKEND_ESV11 && !FEATURE_AUDIO_BACKEND_PIPELINECORE
     // ========================================================================

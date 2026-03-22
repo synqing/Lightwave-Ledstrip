@@ -327,13 +327,33 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
             String args = inputLower.substring(5);
             args.trim();
 
-            if (args == "status") {
-                // Print current merged values and VRMS for comparison
-                Serial.println("\n=== Merge Layer Status ===");
+            if (args == "status" || args == "dump") {
+                // Print all 10 merged parameter values + VRMS for comparison
+                static const char* paramNames[] = {
+                    "brightness", "speed", "intensity", "saturation",
+                    "complexity", "variation", "hue", "mood",
+                    "fadeAmount", "paletteIdx"
+                };
+                Serial.println("\n=== Merge Layer Dump ===");
+                Serial.println("MERGED_PARAMS_START");
+                for (uint8_t i = 0; i < 10; i++) {
+                    Serial.printf("  %s=%d\n", paramNames[i], ren->getMergedParam(i));
+                }
+                Serial.println("MERGED_PARAMS_END");
+                // Also print manual member state for comparison
+                Serial.println("MANUAL_STATE_START");
+                Serial.printf("  brightness=%d\n", ren->getBrightness());
+                Serial.println("MANUAL_STATE_END");
+#if FEATURE_VRMS_METRICS
                 metrics::VRMSVector v = ren->getVrmsVector();
-                Serial.printf("  VRMS BrtMean=%.1f Hue=%.1f Sym=%.3f TempFreq=%.3f\n",
-                    v.brightnessMean, v.dominantHue, v.symmetryScore, v.temporalFreq);
-                Serial.println("==========================");
+                Serial.println("VRMS_START");
+                Serial.printf("  brightnessMean=%.1f\n", v.brightnessMean);
+                Serial.printf("  dominantHue=%.1f\n", v.dominantHue);
+                Serial.printf("  symmetryScore=%.3f\n", v.symmetryScore);
+                Serial.printf("  temporalFreq=%.3f\n", v.temporalFreq);
+                Serial.println("VRMS_END");
+#endif
+                Serial.println("========================");
             } else if (args.startsWith("clear")) {
                 // Reset a source: "merge clear" or "merge clear 2"
                 uint8_t srcId = 2;  // default AI_AGENT

@@ -612,7 +612,7 @@ void RendererActor::onMessage(const Message& msg)
 #endif
 
         case MessageType::SET_EDGE_MIXER_MODE:
-            if (msg.param1 <= 4) {
+            if (msg.param1 <= 6) {
                 enhancement::EdgeMixer::getInstance().setMode(
                     static_cast<enhancement::EdgeMixerMode>(msg.param1));
             }

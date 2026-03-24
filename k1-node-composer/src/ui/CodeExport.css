@@ -1,0 +1,113 @@
+/* Code Export side panel */
+
+.code-export-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: #111;
+  border-left: 1px solid #222;
+  height: 100%;
+  min-width: 360px;
+  max-width: 480px;
+  overflow: hidden;
+}
+
+.code-export-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.code-export-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #ccc;
+}
+
+.code-export-name-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.code-export-label {
+  font-size: 11px;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.code-export-name-input {
+  padding: 6px 8px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #ddd;
+  font-size: 13px;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  outline: none;
+}
+
+.code-export-name-input:focus {
+  border-color: #555;
+}
+
+.code-export-textarea {
+  flex: 1;
+  padding: 8px;
+  background: #0a0a0a;
+  border: 1px solid #222;
+  border-radius: 4px;
+  color: #b0c4b0;
+  font-size: 11px;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  line-height: 1.5;
+  resize: none;
+  overflow: auto;
+  tab-size: 4;
+}
+
+.code-export-textarea:focus {
+  outline: none;
+  border-color: #333;
+}
+
+.code-export-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.code-export-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #333;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.code-export-btn-copy {
+  background: #1a2a1a;
+  color: #8fbc8f;
+  border-color: #2a4a2a;
+}
+
+.code-export-btn-copy:hover {
+  background: #2a3a2a;
+  border-color: #3a5a3a;
+}
+
+.code-export-btn-download {
+  background: #1a1a2a;
+  color: #8f8fbc;
+  border-color: #2a2a4a;
+}
+
+.code-export-btn-download:hover {
+  background: #2a2a3a;
+  border-color: #3a3a5a;
+}

@@ -1,0 +1,22 @@
+/* LED Strip Preview — dark background, rounded corners, centred */
+
+.led-preview-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 8px;
+  background: #0a0a0a;
+  border-radius: 8px;
+  border: 1px solid #222;
+}
+
+.led-preview-canvas {
+  display: block;
+  border-radius: 4px;
+  background: #000;
+  /* Scale down from 960x80 native to fit common layouts */
+  max-width: 100%;
+  height: auto;
+  image-rendering: auto;
+  /* No blur — match the capture tool's faithful discrete-block rendering */
+}

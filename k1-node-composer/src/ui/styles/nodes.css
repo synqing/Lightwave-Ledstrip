@@ -1,0 +1,443 @@
+/**
+ * Dark theme styling for the K1 Node Composer.
+ * Colour-coded headers, handle sizes, connection lines.
+ */
+
+/* ---------------------------------------------------------------------------
+   React Flow overrides
+   --------------------------------------------------------------------------- */
+
+.react-flow {
+  background-color: #0a0a0a !important;
+}
+
+.react-flow__edge-path {
+  stroke: #4488ff;
+  stroke-width: 2;
+}
+
+.react-flow__connection-line {
+  stroke: #4488ff;
+  stroke-width: 2;
+  stroke-dasharray: 5 5;
+}
+
+.react-flow__controls {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 4px;
+}
+
+.react-flow__controls button {
+  background: #1a1a1a;
+  border-color: #333;
+  color: #aaa;
+}
+
+.react-flow__controls button:hover {
+  background: #2a2a2a;
+}
+
+.react-flow__controls svg {
+  fill: #aaa;
+}
+
+.react-flow__minimap {
+  background-color: #111 !important;
+  border: 1px solid #333;
+  border-radius: 4px;
+}
+
+/* ---------------------------------------------------------------------------
+   Composer Node
+   --------------------------------------------------------------------------- */
+
+.composer-node {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 6px;
+  min-width: 180px;
+  max-width: 280px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 11px;
+  color: #ccc;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.composer-node:hover {
+  border-color: #555;
+}
+
+.composer-node--error {
+  border-color: #f44;
+}
+
+.composer-node.selected,
+.composer-node:focus-within {
+  border-color: #4488ff;
+  box-shadow: 0 0 0 1px #4488ff, 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* Bypass state — dimmed, dashed border, desaturated */
+.composer-node--bypassed {
+  opacity: 0.55;
+  border-style: dashed;
+  border-color: #666;
+}
+
+.composer-node--bypassed .composer-node__viz-container {
+  /* Ghost viz: show what the node WOULD produce, semi-transparent */
+  opacity: 0.4;
+}
+
+/* Header */
+.composer-node__header {
+  padding: 4px 10px;
+  border-radius: 5px 5px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+  font-size: 12px;
+  color: #000;
+  text-align: centre;
+  letter-spacing: 0.3px;
+}
+
+.composer-node__header-label {
+  flex: 1;
+}
+
+/* Bypass button in node header */
+.composer-node__bypass-btn {
+  padding: 1px 5px;
+  font-size: 8px;
+  font-weight: 700;
+  font-family: monospace;
+  border: 1px solid rgba(0,0,0,0.3);
+  border-radius: 3px;
+  background: rgba(0,0,0,0.15);
+  color: rgba(0,0,0,0.5);
+  cursor: pointer;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.composer-node__bypass-btn:hover {
+  background: rgba(0,0,0,0.3);
+  color: rgba(0,0,0,0.8);
+}
+
+.composer-node__bypass-btn--active {
+  background: #ff8800;
+  color: #000;
+  border-color: #ff8800;
+}
+
+/* Body */
+.composer-node__body {
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ---------------------------------------------------------------------------
+   Ports
+   --------------------------------------------------------------------------- */
+
+.composer-node__port {
+  display: flex;
+  align-items: center;
+  position: relative;
+  min-height: 18px;
+}
+
+.composer-node__port--input {
+  justify-content: flex-start;
+}
+
+.composer-node__port--output {
+  justify-content: flex-end;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.composer-node__port-label {
+  font-size: 10px;
+  color: #888;
+  text-transform: lowercase;
+}
+
+.composer-node__port-label--left {
+  margin-left: 8px;
+}
+
+.composer-node__port-label--right {
+  margin-right: 8px;
+  margin-bottom: 2px;
+}
+
+/* Handles */
+.composer-handle {
+  width: 10px !important;
+  height: 10px !important;
+  border: 2px solid #0a0a0a !important;
+  border-radius: 50% !important;
+}
+
+.composer-handle:hover {
+  transform: scale(1.3);
+}
+
+/* ---------------------------------------------------------------------------
+   Viz container
+   --------------------------------------------------------------------------- */
+
+.composer-node__viz-container {
+  margin: 2px 0;
+  border-radius: 2px;
+  overflow: hidden;
+  line-height: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Parameter sliders
+   --------------------------------------------------------------------------- */
+
+.composer-node__param {
+  padding: 2px 0;
+}
+
+.composer-node__param-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: #888;
+  margin-bottom: 2px;
+}
+
+.composer-node__param-value {
+  color: #aaa;
+  font-family: monospace;
+  font-size: 9px;
+}
+
+.composer-node__param-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  background: #333;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.composer-node__param-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #4488ff;
+  cursor: pointer;
+}
+
+.composer-node__param-slider::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #4488ff;
+  border: none;
+  cursor: pointer;
+}
+
+/* ---------------------------------------------------------------------------
+   Node Palette (sidebar)
+   --------------------------------------------------------------------------- */
+
+.node-palette {
+  width: 180px;
+  background: #111;
+  border-right: 1px solid #222;
+  padding: 12px 0;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.node-palette__title {
+  padding: 0 12px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #aaa;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.node-palette__group {
+  margin-bottom: 8px;
+}
+
+.node-palette__group-label {
+  padding: 4px 12px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-left: 3px solid transparent;
+}
+
+.node-palette__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 12px 5px 18px;
+  background: none;
+  border: none;
+  color: #aaa;
+  font-size: 11px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+
+.node-palette__item:hover {
+  background: #1a1a1a;
+  color: #ddd;
+}
+
+.node-palette__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   App layout
+   --------------------------------------------------------------------------- */
+
+.app-container {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #0a0a0a;
+  color: #ccc;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.app-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 12px;
+  border-bottom: 1px solid #222;
+  background: #0d0d0d;
+  flex-shrink: 0;
+  height: 52px;
+  gap: 12px;
+}
+
+.app-topbar__title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #555;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.app-topbar__led-wrapper {
+  flex: 1;
+  max-width: 800px;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-topbar__led-wrapper .led-preview-container {
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-topbar__led-wrapper .led-preview-canvas {
+  width: 100%;
+  height: 40px;
+  border-radius: 3px;
+}
+
+.app-topbar__controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.app-topbar__btn {
+  padding: 3px 10px;
+  background: #222;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #aaa;
+  font-size: 11px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.app-topbar__btn:hover {
+  background: #2a2a2a;
+  color: #ddd;
+}
+
+.app-topbar__btn--active {
+  background: #1a3a1a;
+  border-color: #44ff44;
+  color: #44ff44;
+}
+
+.app-topbar__btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+  pointer-events: none;
+}
+
+.app-topbar__btn--undo,
+.app-topbar__btn--redo {
+  font-size: 14px;
+  padding: 3px 8px;
+  min-width: 28px;
+  text-align: centre;
+}
+
+.app-topbar__fps {
+  font-size: 10px;
+  font-family: monospace;
+  color: #666;
+  min-width: 60px;
+}
+
+.app-main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.app-canvas {
+  flex: 1;
+  position: relative;
+}
+
+/* Bottom bar removed — LED preview is now in the header */

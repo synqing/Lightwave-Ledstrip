@@ -13,12 +13,11 @@ Prioritised engineering backlog. Items are tagged by category and roughly ordere
 - Watchdog fed explicitly via `esp_task_wdt_reset()` every 10 frames (no IDLE1 dependency)
 - **Discovered:** 2026-02-27 | **Resolved:** d943101a (2026-02-27, stable-effect-ids integration)
 
-### [P1] Frame pacer uses esp_rom_delay_us busy-wait
-- **File:** `firmware-v3/src/core/actors/RendererActor.cpp:878`
-- **Problem:** Self-clocked frame pacing uses `esp_rom_delay_us()` (CPU spin) for the remainder of the 8.33ms budget. When effects render fast (<2ms), this burns 1-2ms of Core 1 CPU with no yield.
-- **Practical impact:** Low — typically 0-1ms of spin since show() takes ~6.3ms. IDLE1 gets CPU during the semaphore wait inside FastLED.show(). No watchdog risk (explicit WDT reset every 10 frames).
-- **Clean fix:** Replace with `esp_timer` one-shot + `ulTaskNotifyTake()` for event-driven pacing (zero-overhead wait, no tick rate change needed).
-- **Discovered:** 2026-03-21 via code audit
+### [DONE] ~~Frame pacer uses esp_rom_delay_us busy-wait~~ — resolved in 9a055687
+- Replaced `esp_rom_delay_us()` CPU spin with `esp_timer` one-shot + `ulTaskNotifyTake()`
+- Zero-overhead event-driven wait, falls back to `taskYIELD()` for <100us remainders
+- Saves 0-2ms CPU spin per frame, yielded to IDLE1 instead
+- **Discovered:** 2026-03-21 | **Resolved:** 9a055687 (2026-03-24)
 
 ---
 

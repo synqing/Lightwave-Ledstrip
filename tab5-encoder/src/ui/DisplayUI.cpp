@@ -602,6 +602,14 @@ void DisplayUI::begin() {
                         LV_PART_MAIN);
                 }
             }
+            // Refresh zone param value labels from cached state
+            const auto& zs = ui->_zoneSidebarState[idx];
+            char buf[16];
+            if (ui->_zone_param_values[0]) lv_label_set_text(ui->_zone_param_values[0], zs.effectName);
+            if (ui->_zone_param_values[1]) { snprintf(buf, sizeof(buf), "%u", zs.speed);      lv_label_set_text(ui->_zone_param_values[1], buf); }
+            if (ui->_zone_param_values[2]) lv_label_set_text(ui->_zone_param_values[2], zs.paletteName);
+            if (ui->_zone_param_values[3]) { snprintf(buf, sizeof(buf), "%u", zs.blendMode);  lv_label_set_text(ui->_zone_param_values[3], buf); }
+            if (ui->_zone_param_values[4]) { snprintf(buf, sizeof(buf), "%u", zs.brightness); lv_label_set_text(ui->_zone_param_values[4], buf); }
         }, LV_EVENT_CLICKED, reinterpret_cast<void*>(this));
     }
 

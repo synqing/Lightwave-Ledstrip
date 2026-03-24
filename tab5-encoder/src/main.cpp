@@ -315,6 +315,73 @@ static bool handleFxParamEncoderChange(uint8_t encoderIndex, int32_t delta, bool
     return true;
 }
 
+/**
+ * Handle Unit-B encoder changes when ZONES sidebar tab is active.
+ * Maps local index 0-4 to zone parameters, sends WS commands to K1.
+ */
+static bool handleZoneEncoderChange(uint8_t encoderIndex, int32_t delta, bool hasDelta) {
+    if (encoderIndex < 8 || encoderIndex >= 16 || !hasDelta || delta == 0) return true;
+    const uint8_t localIdx = static_cast<uint8_t>(encoderIndex - 8);
+    if (!g_ui) return true;
+
+    const uint8_t zoneId = g_ui->getSelectedZone();
+    auto state = g_ui->getZoneSidebarState(zoneId);
+
+    switch (localIdx) {
+        case 0: { // EFFECT — scroll effect IDs
+            int32_t newId = static_cast<int32_t>(state.effectId) + delta;
+            if (newId < 0) newId = 0;
+            state.effectId = static_cast<uint16_t>(newId);
+            g_ui->updateZoneSidebarState(zoneId, state.effectId, "",
+                state.speed, state.paletteId, state.paletteName,
+                state.blendMode, state.brightness);
+            if (g_wsClient.isConnected()) g_wsClient.sendZoneEffect(zoneId, state.effectId);
+            break;
+        }
+        case 1: { // SPEED
+            int32_t newSpeed = static_cast<int32_t>(state.speed) + delta;
+            state.speed = static_cast<uint8_t>(constrain(newSpeed, 0, 255));
+            g_ui->updateZoneSidebarState(zoneId, state.effectId, state.effectName,
+                state.speed, state.paletteId, state.paletteName,
+                state.blendMode, state.brightness);
+            if (g_wsClient.isConnected()) g_wsClient.sendZoneSpeed(zoneId, state.speed);
+            break;
+        }
+        case 2: { // PALETTE
+            int32_t newPal = static_cast<int32_t>(state.paletteId) + delta;
+            if (newPal < 0) newPal = 0;
+            state.paletteId = static_cast<uint8_t>(newPal);
+            g_ui->updateZoneSidebarState(zoneId, state.effectId, state.effectName,
+                state.speed, state.paletteId, "",
+                state.blendMode, state.brightness);
+            if (g_wsClient.isConnected()) g_wsClient.sendZonePalette(zoneId, state.paletteId);
+            break;
+        }
+        case 3: { // BLEND
+            int32_t newBlend = static_cast<int32_t>(state.blendMode) + delta;
+            if (newBlend < 0) newBlend = 0;
+            state.blendMode = static_cast<uint8_t>(newBlend);
+            g_ui->updateZoneSidebarState(zoneId, state.effectId, state.effectName,
+                state.speed, state.paletteId, state.paletteName,
+                state.blendMode, state.brightness);
+            if (g_wsClient.isConnected()) g_wsClient.sendZoneBlend(zoneId, state.blendMode);
+            break;
+        }
+        case 4: { // BRIGHTNESS
+            int32_t newBri = static_cast<int32_t>(state.brightness) + delta;
+            state.brightness = static_cast<uint8_t>(constrain(newBri, 0, 255));
+            g_ui->updateZoneSidebarState(zoneId, state.effectId, state.effectName,
+                state.speed, state.paletteId, state.paletteName,
+                state.blendMode, state.brightness);
+            if (g_wsClient.isConnected()) g_wsClient.sendZoneBrightness(zoneId, state.brightness);
+            break;
+        }
+        default:
+            break;  // Slots 5-7 unused, swallow
+    }
+    return true;
+}
+
 static void applyFxParametersMessage(JsonDocument& doc) {
     JsonObject data = doc["data"].is<JsonObject>()
         ? doc["data"].as<JsonObject>()
@@ -1023,20 +1090,11 @@ void onEncoderChange(uint8_t index, uint16_t value, bool wasReset) {
                 }
                 break;
 
-            case SidebarTab::ZONES: {
-                // Placeholder: update zone parameter display values.
-                // Actual zone WS commands are a future task.
-                if (hasEncoderDelta && encoderDelta != 0) {
-                    const uint8_t localIdx = static_cast<uint8_t>(index - 8);
-                    // Zone params: 0=effect, 1=speed, 2=palette, 3=blend, 4=brightness, 5-7=unused
-                    static const char* kZoneParamNames[] = {
-                        "EFFECT", "SPEED", "PALETTE", "BLEND", "BRIGHT", "---", "---", "---"
-                    };
-                    Serial.printf("[ZONE] Encoder %u (%s) delta=%d (tab=ZONES, zone=%u)\n",
-                                  localIdx, kZoneParamNames[localIdx], (int)encoderDelta, 0);
+            case SidebarTab::ZONES:
+                if (handleZoneEncoderChange(index, encoderDelta, hasEncoderDelta)) {
+                    return;
                 }
-                return;  // Swallow — do not fall through to legacy routing
-            }
+                break;
 
             case SidebarTab::PRESETS: {
                 // Placeholder: preset selection/navigation via encoders.

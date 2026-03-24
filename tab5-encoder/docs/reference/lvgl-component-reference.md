@@ -226,15 +226,15 @@ lv_obj_set_flex_align(c, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_F
 
 ### Card Factory
 
-The `make_card()` pattern is duplicated in each `.cpp` file. Use this form:
+The shared `make_card()` lives in `DesignTokens.h`. All param cards use 1px subtle border (`BORDER_SUBTLE` = `#1E1E24`). Header and footer retain their own 2px white borders.
 
 ```cpp
-static lv_obj_t* make_card(lv_obj_t* parent, bool elevated) {
+inline lv_obj_t* make_card(lv_obj_t* parent, bool elevated = false) {
     lv_obj_t* card = lv_obj_create(parent);
     lv_obj_set_style_bg_color(card,
         lv_color_hex(elevated ? 0x1A1A1C : 0x121214), LV_PART_MAIN);
-    lv_obj_set_style_border_width(card, 2, LV_PART_MAIN);
-    lv_obj_set_style_border_color(card, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    lv_obj_set_style_border_width(card, 1, LV_PART_MAIN);   // Phase 7: was 2
+    lv_obj_set_style_border_color(card, lv_color_hex(0x1E1E24), LV_PART_MAIN);  // Phase 7: was 0xFFFFFF
     lv_obj_set_style_radius(card, 14, LV_PART_MAIN);
     lv_obj_set_style_pad_all(card, 10, LV_PART_MAIN);
     lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
@@ -432,3 +432,4 @@ The `loop()` / tick methods should only update existing widget properties (`lv_l
 | Date | Author | Change |
 |------|--------|--------|
 | 2026-03-21 | agent:lvgl-specialist | Created. Extracted patterns from DisplayUI, ControlSurfaceUI, ZoneComposerUI, ConnectivityTab, and lvgl_bridge source files. |
+| 2026-03-22 | agent:lvgl-specialist | Updated card factory section to reflect Phase 7 border treatment (1px BORDER_SUBTLE instead of 2px white). |

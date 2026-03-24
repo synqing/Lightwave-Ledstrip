@@ -269,3 +269,155 @@ The gates are not bureaucracy. They are scar tissue. Each one marks a wound that
 | Date | Author | Change |
 |------|--------|--------|
 | 2026-03-22 | agent:prompt-engineer | Created. Five complete rebuilds of the design decision mandate: Natural Law, Failure Autopsy, Conversation, Decision Tree, and One-Page Synthesis. |
+| 2026-03-23 | captain + cowork:opus | Appended K1 Node Composer audit. Backtest of research design against firmware reality. |
+
+---
+
+## K1 Node Composer — Design Audit
+
+### Context
+
+This audit backtests the Node Composer research dump (5-vector investigation, 2026-03-23) against actual firmware primitives, audio pipeline architecture, and the forensic findings from the 5L-AR effect failure analysis. The question: does this design, as proposed, actually solve the problem it claims to solve?
+
+### Verdict
+
+The architecture is sound. The node catalogue has gaps. The audio parity assumption is wrong and must be addressed or the tool's core promise is undermined.
+
+---
+
+### 1. Framework Choice: React Flow — ACCEPTABLE WITH CAVEAT
+
+React Flow is event-driven, not per-frame. The research acknowledges this and proposes a custom `requestAnimationFrame` execution loop. That's correct — the graph UI and the execution engine are separate concerns.
+
+**Caveat:** React Flow renders 50+ nodes as React components, each with a canvas mini-visualisation. React's reconciliation overhead at 60fps is real. The performance budget claims "0.50ms React/DOM overhead" — that is optimistic. React re-renders triggered by state changes (node values updating every frame) will propagate through the virtual DOM. This needs either: (a) aggressive memoisation with `React.memo` on every node component, (b) canvas rendering decoupled from React's render cycle via refs, or (c) acceptance of 30fps for the UI while the execution engine runs at 60fps internally.
+
+Litegraph.js would be mechanically simpler (Canvas2D, native per-frame loop, proven at 100+ nodes) but has worse documentation and ecosystem. The choice is defensible if the React rendering cost is managed.
+
+### 2. Audio Parity: CRITICAL GAP — THE DESIGN'S BIGGEST RISK
+
+The research assumes browser audio analysis (Meyda.js FFT + Essentia.js beat detection) will produce results comparable to the firmware's ESV11 pipeline. **They won't.** The divergence is structural, not parametric.
+
+| Dimension | Firmware (ESV11) | Browser (Meyda/Essentia) | Consequence |
+|---|---|---|---|
+| Frequency analysis | Goertzel, 64 adaptive-width pitch bins | FFT, uniform bin spacing | Non-uniform vs uniform frequency resolution. Low-frequency accuracy diverges. |
+| Chroma | Octave-summing of Goertzel bins (no tuning correction) | Tuning-aware filter banks | Firmware shows octave confusion; browser resolves octaves. Different chroma profiles from same audio. |
+| Beat detection | Phase-locked oscillator on novelty Goertzel curve | Autocorrelation / onset peak-picking | Can be ~180° out of phase on weak fundamentals. |
+| Smoothing | Asymmetric attack/release (fast up, slow down) + spike removal + zone-wise AGC | Fixed EMA or simple max-follower | Firmware emphasises transients; browser is uniformly smooth. |
+| Sample rate | 12.8 kHz, 50 Hz hop rate | 44.1/48 kHz, variable hop rate | Different aliasing profiles, different temporal resolution. |
+
+**What this means:** An effect that looks great in the browser preview may look different on the K1 hardware — not because the rendering math is different, but because the *audio input data* is different. The whole point of this tool is "see what it looks like before you flash." If the audio inputs diverge 15–25% on magnitude and potentially 180° on beat phase, the preview is misleading.
+
+**Mitigation options (pick one):**
+- **Option A (best):** Implement a "firmware-faithful" audio analysis mode in the browser that replicates the ESV11 Goertzel pipeline in JavaScript/WASM. Expensive to build but eliminates the parity gap entirely.
+- **Option B (pragmatic):** Accept the divergence for the POC. Add Phase 4 (live WebSocket preview to K1) as the "ground truth" mode. The browser preview becomes a fast approximation; the hardware preview becomes the validation step.
+- **Option C (calibration):** Run identical audio through both pipelines, measure the divergence per ControlBus field, and apply correction curves in the browser. Fragile but may be sufficient.
+
+**Recommendation:** Option B for POC. Option A for production. The tool is still valuable with approximate browser audio — it shows signal flow, value distributions, and spatial patterns. But the user must know the browser preview is an approximation, not a prediction.
+
+### 3. Type System: GAP — ARRAY_8 and ARRAY_12 MISSING
+
+The type enum defines: SCALAR, ARRAY_160, CRGB_160, ANGLE, BOOL, INT.
+
+The node catalogue defines "All Bands" (ARRAY_8) and "All Chroma" (ARRAY_12). These types don't exist in the type system. How does a Band(i) source node (SCALAR output) connect to a node that expects all 8 bands? How does a chroma-driven colour node receive 12 chroma values?
+
+**Options:**
+- Add ARRAY_8 and ARRAY_12 as types. Simple, but proliferates types.
+- Remove "All Bands" and "All Chroma" nodes. Force per-bin wiring. Verbose but type-safe.
+- Implement a generic ARRAY type with runtime length checking. Flexible but loses static type safety.
+
+**Recommendation:** Add ARRAY_8 and ARRAY_12. Two extra types for a total of 8. The firmware has these as fixed-size arrays; the node editor should mirror that.
+
+### 4. Node Catalogue: MOSTLY COMPLETE — THREE GAPS
+
+Cross-referencing the proposed 30 node types against what the working effects actually use:
+
+**Present and correct:**
+- EMA Smooth, Asymmetric Follower, Max Follower, Scale, Power, Clamp — all map to SmoothingEngine.h
+- Gaussian, Triangular Wave, Standing Wave, Centre Melt — geometry coverage is good
+- HSV→RGB, Palette Lookup, Blend, Scale Brightness, Fade To Black — composition coverage is good
+- SET_CENTER_PAIR output with mirror — correct
+
+**Missing:**
+
+**Gap A: TemporalOperator / Envelope system.** The firmware has 8 temporal operators (Anticipation, Attack, Sustain, Decay, Follow-Through, Recoil, Ease-In-Out, Suspension) with 4 preset envelopes (Impact, Standard, Dramatic, Tension). These are used for beat-triggered dynamics — a beat fires, an envelope shapes the response over time. The node catalogue has no envelope/trigger node. Without this, beat-reactive dynamics are limited to simple exponential decay.
+
+**Gap B: SubpixelRenderer.** The firmware has anti-aliased fractional LED positioning (`renderPoint`, `renderLine`). Effects that position elements at non-integer LED positions use this for smooth motion. No node equivalent exists.
+
+**Gap C: Circular Chroma Hue.** ChromaUtils provides `circularChromaHueSmoothed()` — a combined circular weighted mean of 12 chroma bins + circular EMA smoothing. This produces the tonal anchor hue that working effects use for colour. The node catalogue has "Circular EMA" and "Circular Chroma Hue" separately, which is correct for modularity, but the combined function is the most-used pattern and deserves a convenience node.
+
+**Gap D: Per-zone state.** Working effects (EsOctaveRef, EsBloomRef) maintain per-zone state arrays (`chromaSmooth[kMaxZones][12]`, `maxFollower[kMaxZones]`). The node editor's state management (`Map<NodeId, NodeState>`) doesn't model zone-awareness. For POC this is acceptable (single zone), but the full design needs it.
+
+### 5. Architecture Decisions: SOUND
+
+ADR-001 (pull-based synchronous): Correct. Matches firmware's render() pattern. No caching needed for per-frame audio data.
+
+ADR-002 (code generation over interpretation): Correct. Zero graph overhead on ESP32. The precedent (Max/MSP gen~, Unreal Blueprints) is well-established.
+
+ADR-003 (explicit state management): Correct. State in engine-owned Map enables reset, snapshot, scrubbing, and clean C++ export.
+
+ADR-004 (fixed type system with ARRAY_160): Correct in principle, needs ARRAY_8/ARRAY_12 additions per §3 above.
+
+### 6. What's Missing from the Design
+
+Beyond the node catalogue gaps:
+
+**A. Graph validation.** What happens with cycles? Disconnected subgraphs? The topological sort will fail or produce undefined behaviour on cyclic graphs. Need either: cycle detection at connection time (reject the edge) or feedback edges with one-frame delay (like audio feedback loops in Pure Data).
+
+**B. Error propagation.** What if a node produces NaN? Infinity? A negative brightness? Each node needs output clamping or sanitisation, or NaN propagation will corrupt the entire downstream graph in one frame.
+
+**C. Dual-strip architecture.** The K1 has 2×160 LEDs. The type system models CRGB_160 (one half-strip). SET_CENTER_PAIR mirrors to CRGB_320. But some working effects (Holographic) treat the two strips differently — strip1 and strip2 get complementary palette indices. The output node needs a mode: "mirror" (default) or "independent" (two CRGB_160 inputs).
+
+**D. Undo/redo.** Mentioned in passing ("snapshot for undo/redo") but not designed. For a creative tool where you're experimenting with parameter values, undo is not optional.
+
+### 7. Does This Tool Solve the Problem?
+
+Yes — with a qualification.
+
+The problem: agents make perceptual decisions they cannot evaluate. The tool's answer: put human eyes at every node in the signal chain. That's correct. The mini-visualisations (sparklines for scalars, waveforms for arrays, colour strips for CRGB) mean the human sees the value distribution transform at every processing stage. No more guessing what `normBass * wave * beatMod; brightness *= brightness` produces.
+
+The qualification: the tool solves the *design* problem (how do you create an effect that looks good?) but not the *production* problem (how do you generate 30+ effects efficiently?). Each effect designed in the node editor is hand-crafted by a human turning knobs. That's the right approach for quality — but it doesn't scale the way agent-generated effects were supposed to.
+
+That may be the correct trade-off. Twenty hand-crafted effects that work are worth more than a hundred agent-generated effects that don't. But it's worth being explicit: this tool replaces the agent as effect designer. The agent's role moves to building and maintaining the tool itself.
+
+### 8. POC Scoping Assessment
+
+The proposed POC (9 node types, all layers exercised) is correctly scoped with one addition: the POC must include at least one TemporalOperator/envelope node (Gap A above), because beat-triggered dynamics are the single most common pattern in working effects, and the POC must prove that pattern works end-to-end.
+
+Revised POC node count: 10 (add one Envelope node to Layer 2: Processing).
+
+---
+
+### Summary of Findings
+
+| Area | Verdict | Action Required |
+|---|---|---|
+| Framework (React Flow) | Acceptable | Manage React rendering cost at 60fps |
+| Audio parity | **Critical gap** | Option B (accept for POC, add hardware preview in Phase 4) |
+| Type system | Gap | Add ARRAY_8, ARRAY_12 |
+| Node catalogue | Mostly complete | Add Envelope, SubpixelRenderer, dual-strip output mode |
+| Architecture (ADRs) | Sound | No changes |
+| Graph validation | Missing | Add cycle detection, NaN sanitisation |
+| Undo/redo | Missing | Design before POC |
+| Problem-solution fit | Yes, with trade-off | Tool replaces agent as effect designer |
+| POC scope | Correct | Add one Envelope node (10 types total) |
+
+---
+
+### Post-Audit Update (2026-03-24)
+
+**Status: POC → Full catalogue in one session.** The agent expanded from 10 to 44 node types (18 sources, 12 processing, 8 geometry, 5 composition, 1 output) across 45 files, 8,416 LOC, 409KB bundle. Zero compilation errors. All ControlBus fields are now exposed as source nodes. All processing primitives from the research spec are implemented.
+
+**Audit findings addressed:**
+
+| Original Finding | Status | Notes |
+|---|---|---|
+| Audio parity (§2) | **RESOLVED — Option A** | Agent ported ESV11 Goertzel pipeline line-by-line to TypeScript (717 lines). Gaussian windowing, adaptive block sizing, interlacing, noise floor, autoranging — all faithful to C source. This was the audit's critical gap; it no longer exists. |
+| Node catalogue gaps (§4) | **Partially resolved** | Asymmetric Follower, Circular EMA, dt-Decay, Schmitt Trigger, Centre Melt, Scroll Buffer, all composition nodes now present. Still missing: TemporalOperator/Envelope, SubpixelRenderer, Palette Lookup node. |
+| Type system (§3) | **Open** | ARRAY_8 and ARRAY_12 still not in the type enum. Per-bin wiring works for POC but won't scale to chroma-driven effects. |
+| React 60fps (§1) | **Confirmed concern** | Screenshot shows 18 FPS with 6 nodes. With 44 available, complex graphs will hit this harder. Decoupling canvas rendering from React reconciliation is now priority. |
+| Graph validation (§6A) | **Open** | No cycle detection observed in engine.ts. |
+| Undo/redo (§6D) | **Open** | State snapshot/restore exists in engine but no UI binding. |
+
+**New observation from screenshot:** The Gaussian node's Centre parameter defaults to 0.00 (LED 0), not 79/80. The centre-origin rule is a hard constraint. Either the Gaussian node should default centre to 79, or the output node's mirror stage must handle this. Needs verification.
+
+**Overall assessment:** The tool has moved from "promising design" to "functional prototype with the full node vocabulary." The critical audio parity risk is eliminated. The remaining gaps (Envelope node, type system, FPS, undo) are engineering tasks, not architectural risks. The tool is ready for real effect design attempts.

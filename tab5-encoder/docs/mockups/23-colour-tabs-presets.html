@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tab5 A/B — Colour Tabs: PRESETS (Purple)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@400;700&family=Rajdhani:wght@400;500;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #1a1a1a;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: 'Rajdhani', sans-serif;
+  }
+
+  .label-above {
+    color: #666;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    text-align: center;
+  }
+
+  .display-frame {
+    width: 1280px;
+    height: 720px;
+    background: #08080A;
+    border: 2px solid #333;
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ================================================================
+     HEADER
+     ================================================================ */
+  .header {
+    position: relative;
+    margin: 7px 10px 0 10px;
+    height: 66px;
+    min-height: 66px;
+    background: #1A1A1C;
+    border: 2px solid #fff;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 10px;
+    z-index: 10;
+    flex-shrink: 0;
+  }
+
+  .header .effect-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 24px;
+    color: #9CA3AF;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 220px;
+    flex-shrink: 0;
+  }
+
+  .header .palette-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 24px;
+    color: #9CA3AF;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 180px;
+    flex-shrink: 0;
+    padding-left: 10px;
+  }
+
+  .header .brand-title {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: baseline;
+  }
+  .header .brand-title .main {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 40px;
+    color: #FFFFFF;
+    letter-spacing: 1px;
+  }
+  .header .brand-title .os {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 40px;
+    color: #FFC700;
+    letter-spacing: 1px;
+  }
+
+  .header .net-info {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .header .net-info span {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+  }
+  .header .net-info .ssid { color: #9CA3AF; }
+  .header .net-info .rssi { color: #22C55E; }
+  .header .net-info .ip { color: #FFFFFF; padding-left: 4px; }
+
+  /* ================================================================
+     MIDDLE SECTION
+     ================================================================ */
+  .middle-section {
+    flex: 1;
+    display: flex;
+    margin-top: 8px;
+    margin-bottom: 8px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* ================================================================
+     LEFT SIDEBAR
+     ================================================================ */
+  .sidebar {
+    width: 70px;
+    background: #0A0A0D;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+    border-right: 1px solid #1E1E24;
+    position: relative;
+    z-index: 10;
+  }
+
+  .sidebar-tab {
+    flex: 1;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    cursor: pointer;
+    position: relative;
+    transition: background 0.15s ease;
+    user-select: none;
+    border-bottom: 1px solid #1A1A1E;
+  }
+  .sidebar-tab:last-child {
+    border-bottom: none;
+  }
+
+  .sidebar-tab .tab-icon {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0;
+    transition: color 0.15s ease, opacity 0.15s ease;
+  }
+
+  .sidebar-tab .tab-label {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    transition: color 0.15s ease, opacity 0.15s ease;
+  }
+
+  /* Colour assignments */
+  .sidebar-tab.tab-fx .tab-icon,
+  .sidebar-tab.tab-fx .tab-label { color: #FFC700; }
+
+  .sidebar-tab.tab-edge .tab-icon,
+  .sidebar-tab.tab-edge .tab-label { color: #00D4AA; }
+
+  .sidebar-tab.tab-zones .tab-icon,
+  .sidebar-tab.tab-zones .tab-label { color: #22C55E; }
+
+  .sidebar-tab.tab-presets .tab-icon,
+  .sidebar-tab.tab-presets .tab-label { color: #A78BFA; }
+
+  .sidebar-tab.inactive .tab-icon,
+  .sidebar-tab.inactive .tab-label { opacity: 0.4; }
+
+  .sidebar-tab.active .tab-icon,
+  .sidebar-tab.active .tab-label { opacity: 1; }
+
+  /* FX active */
+  .sidebar-tab.tab-fx.active {
+    background: rgba(255, 199, 0, 0.08);
+  }
+  .sidebar-tab.tab-fx.active::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 12px; bottom: 12px;
+    width: 3px;
+    background: #FFC700;
+    border-radius: 0 2px 2px 0;
+  }
+
+  /* Edge active */
+  .sidebar-tab.tab-edge.active {
+    background: rgba(0, 212, 170, 0.08);
+  }
+  .sidebar-tab.tab-edge.active::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 12px; bottom: 12px;
+    width: 3px;
+    background: #00D4AA;
+    border-radius: 0 2px 2px 0;
+  }
+
+  /* Zones active */
+  .sidebar-tab.tab-zones.active {
+    background: rgba(34, 197, 94, 0.08);
+  }
+  .sidebar-tab.tab-zones.active::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 12px; bottom: 12px;
+    width: 3px;
+    background: #22C55E;
+    border-radius: 0 2px 2px 0;
+  }
+
+  /* Presets active */
+  .sidebar-tab.tab-presets.active {
+    background: rgba(167, 139, 250, 0.08);
+  }
+  .sidebar-tab.tab-presets.active::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 12px; bottom: 12px;
+    width: 3px;
+    background: #A78BFA;
+    border-radius: 0 2px 2px 0;
+  }
+
+  /* ================================================================
+     MAIN CONTENT AREA
+     ================================================================ */
+  .main-area {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .row-strip {
+    position: absolute;
+    left: 0;
+    right: 0;
+  }
+  .strip-unita {
+    top: 0;
+    height: 132px;
+    background: #0C0C0E;
+  }
+  .strip-unitb {
+    top: 132px;
+    height: 132px;
+    background: #08080A;
+  }
+  .strip-action {
+    top: 264px;
+    height: 108px;
+    background: #0A0A0E;
+  }
+
+  /* ================================================================
+     UNIT A ROW — global params (ALWAYS yellow)
+     ================================================================ */
+  .unit-a-row {
+    position: absolute;
+    top: 6px;
+    left: 16px;
+    right: 16px;
+    height: 120px;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 8px;
+  }
+
+  .gauge-card {
+    background: #111114;
+    border: 1px solid #1E1E24;
+    border-radius: 10px;
+    padding: 10px 10px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .gauge-card.active {
+    border: 1px solid #FFC700;
+    box-shadow: 0 0 12px rgba(255,199,0,0.06);
+  }
+
+  .gauge-card .label {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 18px;
+    font-weight: 500;
+    color: #8891A0;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+  .gauge-card.active .label {
+    color: #FFC700;
+  }
+
+  .gauge-card .value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 28px;
+    font-weight: 700;
+    color: #F0F0F0;
+    text-align: center;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .gauge-card .bar-track {
+    height: 4px;
+    background: #1E1E24;
+    border-radius: 2px;
+    position: relative;
+    margin-top: 6px;
+  }
+  .gauge-card .bar-fill {
+    height: 100%;
+    background: #FFC700;
+    border-radius: 2px;
+    position: absolute;
+    left: 0;
+    top: 0;
+    transition: width 0.3s ease;
+  }
+
+  /* ================================================================
+     UNIT B ROW — preset slots (purple = #A78BFA)
+     ================================================================ */
+  .unit-b-row {
+    position: absolute;
+    top: 138px;
+    left: 16px;
+    right: 16px;
+    height: 120px;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 8px;
+  }
+
+  .preset-card {
+    background: #111114;
+    border: 1px solid #1E1E24;
+    border-radius: 10px;
+    padding: 10px 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  /* Occupied preset: purple border */
+  .preset-card.occupied {
+    border: 1px solid #A78BFA;
+    box-shadow: 0 0 10px rgba(167,139,250,0.05);
+  }
+
+  /* Active/loaded preset: green border (overrides purple) */
+  .preset-card.loaded {
+    border: 1px solid #22C55E;
+    box-shadow: 0 0 12px rgba(34,197,94,0.08);
+  }
+
+  /* Empty preset: dimmed */
+  .preset-card.empty {
+    border-color: #151518;
+  }
+
+  .preset-card .slot-id {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+  }
+  .preset-card.loaded .slot-id {
+    color: #22C55E;
+  }
+  .preset-card.occupied .slot-id {
+    color: #A78BFA;
+  }
+  .preset-card.empty .slot-id {
+    color: #2A2A2E;
+  }
+
+  .preset-card .preset-name {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    text-align: center;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.2;
+  }
+  .preset-card.loaded .preset-name {
+    color: #F0F0F0;
+  }
+  .preset-card.occupied .preset-name {
+    color: #C4B5FD;
+  }
+  .preset-card.empty .preset-name {
+    color: #1E1E24;
+    font-size: 14px;
+  }
+
+  .preset-card .preset-status {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    margin-top: 4px;
+  }
+  .preset-card.loaded .preset-status {
+    color: #22C55E;
+  }
+  .preset-card.occupied .preset-status {
+    color: #8B7DC8;
+  }
+  .preset-card.empty .preset-status {
+    color: #1A1A1E;
+  }
+
+  /* Bar track for presets — purple fill for occupied, green for loaded */
+  .preset-card .bar-track {
+    height: 4px;
+    background: #1E1E24;
+    border-radius: 2px;
+    position: relative;
+    margin-top: 6px;
+    width: 100%;
+  }
+  .preset-card .bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    position: absolute;
+    left: 0;
+    top: 0;
+    transition: width 0.3s ease;
+  }
+  .preset-card.loaded .bar-fill {
+    background: #22C55E;
+    opacity: 0.8;
+  }
+  .preset-card.occupied .bar-fill {
+    background: #A78BFA;
+    opacity: 0.5;
+  }
+
+  /* ================================================================
+     ACTION ROW
+     ================================================================ */
+  .action-row {
+    position: absolute;
+    top: 272px;
+    left: 16px;
+    right: 16px;
+    height: 90px;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+  }
+
+  .action-card {
+    background: #111114;
+    border: 1px solid #1E1E24;
+    border-radius: 10px;
+    padding: 8px 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .action-card.active-action {
+    border-color: #A78BFA;
+  }
+  .action-card .label {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 19px;
+    font-weight: 500;
+    color: #8891A0;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .action-card .value {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 23px;
+    font-weight: 700;
+    color: #F0F0F0;
+  }
+  .action-card.active-action .value {
+    color: #A78BFA;
+  }
+
+  /* ================================================================
+     FOOTER
+     ================================================================ */
+  .footer {
+    position: relative;
+    margin: 0 10px 7px 10px;
+    height: 84px;
+    min-height: 84px;
+    background: #1A1A1C;
+    border: 2px solid #fff;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 20px;
+    z-index: 10;
+    flex-shrink: 0;
+  }
+
+  .footer-metric {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+  .footer-metric .metric-title {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    color: #9CA3AF;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .footer-metric .metric-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+  }
+  .footer-metric .metric-value.brand { color: #FFC700; }
+  .footer-metric .metric-value.ok { color: #22C55E; }
+  .footer-metric .metric-value.dim { color: #9CA3AF; }
+
+  .footer-spacer { flex: 1; }
+
+  .footer .k1-buttons {
+    display: flex;
+    gap: 8px;
+  }
+  .footer .k1-btn {
+    width: 44px;
+    height: 44px;
+    background: #121214;
+    border: 2px solid #2A2A2E;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    color: #2A2A2E;
+  }
+
+  .footer .ws-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .footer .ws-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #22C55E;
+  }
+  .footer .ws-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    color: #9CA3AF;
+  }
+
+  .footer .battery-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .footer .battery-bar {
+    width: 36px;
+    height: 16px;
+    border: 2px solid #9CA3AF;
+    border-radius: 3px;
+    position: relative;
+    overflow: hidden;
+  }
+  .footer .battery-bar::after {
+    content: '';
+    position: absolute;
+    right: -5px;
+    top: 3px;
+    width: 3px;
+    height: 8px;
+    background: #9CA3AF;
+    border-radius: 0 2px 2px 0;
+  }
+  .footer .battery-fill {
+    height: 100%;
+    background: #22C55E;
+    width: 87%;
+  }
+  .footer .battery-pct {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    color: #9CA3AF;
+  }
+
+  /* ================================================================
+     CAPTION
+     ================================================================ */
+  .caption {
+    color: #555;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 13px;
+    font-weight: 400;
+    margin-top: 16px;
+    text-align: center;
+    max-width: 900px;
+    line-height: 1.6;
+  }
+  .caption strong { color: #888; }
+</style>
+</head>
+<body>
+  <div class="label-above">Colour Identity Tabs &mdash; Presets (Purple) &mdash; 1280 x 720</div>
+
+  <div class="display-frame">
+
+    <!-- HEADER -->
+    <div class="header">
+      <span class="effect-name">LGP Time-Reversal Mirror Mod2</span>
+      <span class="palette-name">Sunset Glow</span>
+      <div class="brand-title">
+        <span class="main">LIGHTWAVE</span><span class="os">OS</span>
+      </div>
+      <div class="net-info">
+        <span class="ssid">LightwaveK1</span>
+        <span class="rssi" style="color:#22C55E;">(-42)</span>
+        <span class="ip">192.168.4.1</span>
+      </div>
+    </div>
+
+    <!-- MIDDLE SECTION -->
+    <div class="middle-section">
+
+      <!-- LEFT SIDEBAR -->
+      <div class="sidebar">
+        <div class="sidebar-tab tab-fx inactive">
+          <span class="tab-icon">FX</span>
+          <span class="tab-label">Params</span>
+        </div>
+        <div class="sidebar-tab tab-edge inactive">
+          <span class="tab-icon">EDGE</span>
+          <span class="tab-label">Colour</span>
+        </div>
+        <div class="sidebar-tab tab-zones inactive">
+          <span class="tab-icon">ZN</span>
+          <span class="tab-label">Zones</span>
+        </div>
+        <div class="sidebar-tab tab-presets active">
+          <span class="tab-icon">PRE</span>
+          <span class="tab-label">Presets</span>
+        </div>
+      </div>
+
+      <!-- MAIN CONTENT AREA -->
+      <div class="main-area">
+
+        <div class="row-strip strip-unita"></div>
+        <div class="row-strip strip-unitb"></div>
+        <div class="row-strip strip-action"></div>
+
+        <!-- UNIT A: global params (always yellow) -->
+        <div class="unit-a-row">
+          <div class="gauge-card">
+            <span class="label">Effect</span>
+            <span class="value">27</span>
+            <div class="bar-track"><div class="bar-fill" style="width:10.6%"></div></div>
+          </div>
+          <div class="gauge-card">
+            <span class="label">Palette</span>
+            <span class="value">31</span>
+            <div class="bar-track"><div class="bar-fill" style="width:12.2%"></div></div>
+          </div>
+          <div class="gauge-card active">
+            <span class="label">Speed</span>
+            <span class="value">25</span>
+            <div class="bar-track"><div class="bar-fill" style="width:9.8%"></div></div>
+          </div>
+          <div class="gauge-card">
+            <span class="label">Mood</span>
+            <span class="value">128</span>
+            <div class="bar-track"><div class="bar-fill" style="width:50.2%"></div></div>
+          </div>
+          <div class="gauge-card">
+            <span class="label">Fade</span>
+            <span class="value">64</span>
+            <div class="bar-track"><div class="bar-fill" style="width:25.1%"></div></div>
+          </div>
+          <div class="gauge-card">
+            <span class="label">Cmplx</span>
+            <span class="value">200</span>
+            <div class="bar-track"><div class="bar-fill" style="width:78.4%"></div></div>
+          </div>
+          <div class="gauge-card">
+            <span class="label">Var</span>
+            <span class="value">128</span>
+            <div class="bar-track"><div class="bar-fill" style="width:50.2%"></div></div>
+          </div>
+          <div class="gauge-card">
+            <span class="label">Bri</span>
+            <span class="value">192</span>
+            <div class="bar-track"><div class="bar-fill" style="width:75.3%"></div></div>
+          </div>
+        </div>
+
+        <!-- UNIT B: preset slots (purple borders + green for loaded) -->
+        <div class="unit-b-row">
+          <!-- P1: currently loaded — green border -->
+          <div class="preset-card loaded">
+            <span class="slot-id">P1</span>
+            <span class="preset-name">Sunset Chill</span>
+            <span class="preset-status">Active</span>
+            <div class="bar-track"><div class="bar-fill" style="width:100%"></div></div>
+          </div>
+          <!-- P2: occupied — purple border -->
+          <div class="preset-card occupied">
+            <span class="slot-id">P2</span>
+            <span class="preset-name">Deep Bass</span>
+            <span class="preset-status">Saved</span>
+            <div class="bar-track"><div class="bar-fill" style="width:100%"></div></div>
+          </div>
+          <!-- P3: occupied — purple border -->
+          <div class="preset-card occupied">
+            <span class="slot-id">P3</span>
+            <span class="preset-name">Ambient Flow</span>
+            <span class="preset-status">Saved</span>
+            <div class="bar-track"><div class="bar-fill" style="width:100%"></div></div>
+          </div>
+          <!-- P4: empty -->
+          <div class="preset-card empty">
+            <span class="slot-id">P4</span>
+            <span class="preset-name">&mdash;</span>
+            <span class="preset-status">Empty</span>
+            <div class="bar-track"><div class="bar-fill" style="width:0%"></div></div>
+          </div>
+          <!-- P5: empty -->
+          <div class="preset-card empty">
+            <span class="slot-id">P5</span>
+            <span class="preset-name">&mdash;</span>
+            <span class="preset-status">Empty</span>
+            <div class="bar-track"><div class="bar-fill" style="width:0%"></div></div>
+          </div>
+          <!-- P6: empty -->
+          <div class="preset-card empty">
+            <span class="slot-id">P6</span>
+            <span class="preset-name">&mdash;</span>
+            <span class="preset-status">Empty</span>
+            <div class="bar-track"><div class="bar-fill" style="width:0%"></div></div>
+          </div>
+          <!-- P7: empty -->
+          <div class="preset-card empty">
+            <span class="slot-id">P7</span>
+            <span class="preset-name">&mdash;</span>
+            <span class="preset-status">Empty</span>
+            <div class="bar-track"><div class="bar-fill" style="width:0%"></div></div>
+          </div>
+          <!-- P8: empty -->
+          <div class="preset-card empty">
+            <span class="slot-id">P8</span>
+            <span class="preset-name">&mdash;</span>
+            <span class="preset-status">Empty</span>
+            <div class="bar-track"><div class="bar-fill" style="width:0%"></div></div>
+          </div>
+        </div>
+
+        <!-- ACTION ROW -->
+        <div class="action-row">
+          <div class="action-card active-action">
+            <span class="label">Save</span>
+            <span class="value">To P1</span>
+          </div>
+          <div class="action-card">
+            <span class="label">Load</span>
+            <span class="value">Select</span>
+          </div>
+          <div class="action-card">
+            <span class="label">Delete</span>
+            <span class="value">Select</span>
+          </div>
+          <div class="action-card">
+            <span class="label">Rename</span>
+            <span class="value">Select</span>
+          </div>
+          <div class="action-card">
+            <span class="label">Slots</span>
+            <span class="value">3 / 8</span>
+          </div>
+        </div>
+
+      </div><!-- end main-area -->
+
+    </div><!-- end middle-section -->
+
+    <!-- FOOTER -->
+    <div class="footer">
+      <div class="footer-metric">
+        <span class="metric-title">BPM</span>
+        <span class="metric-value brand">138</span>
+      </div>
+      <div class="footer-metric">
+        <span class="metric-title">KEY</span>
+        <span class="metric-value">Am</span>
+      </div>
+      <div class="footer-metric">
+        <span class="metric-title">MIC</span>
+        <span class="metric-value dim">-12.4 dB</span>
+      </div>
+      <div class="footer-metric">
+        <span class="metric-title">UPTIME</span>
+        <span class="metric-value dim">2h 14m</span>
+      </div>
+
+      <div class="k1-buttons">
+        <div class="k1-btn">K1</div>
+        <div class="k1-btn">K2</div>
+      </div>
+
+      <div class="footer-spacer"></div>
+
+      <div class="ws-status">
+        <div class="ws-dot"></div>
+        <span class="ws-label">WS</span>
+      </div>
+
+      <div class="battery-group">
+        <div class="battery-bar"><div class="battery-fill"></div></div>
+        <span class="battery-pct">87%</span>
+      </div>
+    </div>
+
+  </div>
+
+  <p class="caption">
+    <strong>PRESETS tab selected (purple #A78BFA).</strong>
+    The sidebar's PRE tab shows a 3px purple left accent bar, purple text at full brightness, and a subtle purple background tint.
+    Inactive tabs retain their own colour identity (yellow, cyan, green) dimmed to 40%.
+    Unit B shows 8 preset slots: P1 "Sunset Chill" is the currently loaded preset (green border #22C55E),
+    P2 "Deep Bass" and P3 "Ambient Flow" are occupied (purple border #A78BFA), P4&ndash;P8 are empty (dimmed).
+    The action row uses purple accents for the Save action. Unit A remains brand yellow throughout.
+  </p>
+</body>
+</html>

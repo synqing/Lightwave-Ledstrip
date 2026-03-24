@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tab5 GLOBAL — Presets Tab Selected</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@400;700&family=Rajdhani:wght@400;500;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #111;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: 'Rajdhani', sans-serif;
+  }
+
+  .label-above {
+    color: #555;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    text-align: center;
+  }
+
+  .display-frame {
+    width: 1280px;
+    height: 720px;
+    background: #08080A;
+    border: 1px solid #2A2A2E;
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  /* ---- HEADER ---- */
+  .header {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 50px;
+    background: #0D0D10;
+    border-bottom: 1px solid #1E1E24;
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 16px;
+  }
+
+  .conn-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #22C55E;
+    flex-shrink: 0;
+    box-shadow: 0 0 6px rgba(34,197,94,0.4);
+  }
+
+  .header .effect-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 40px;
+    color: #F0F0F0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1;
+    letter-spacing: 0.5px;
+  }
+
+  .header .palette-name {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 24px;
+    font-weight: 500;
+    color: #8891A0;
+    white-space: nowrap;
+    padding-left: 8px;
+    border-left: 1px solid #1E1E24;
+    line-height: 1;
+  }
+
+  .header .bpm {
+    margin-left: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 28px;
+    font-weight: 700;
+    color: #FFC700;
+    flex-shrink: 0;
+    line-height: 1;
+  }
+
+  /* ---- UNIT A ROW ---- */
+  .unit-a-row {
+    position: absolute;
+    top: 58px;
+    left: 16px;
+    right: 16px;
+    height: 130px;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 8px;
+  }
+
+  .gauge-card {
+    background: #111114;
+    border: 1px solid #1E1E24;
+    border-radius: 10px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+  .gauge-card.active {
+    border-color: #FFC700;
+    box-shadow: 0 0 12px rgba(255,199,0,0.08);
+  }
+
+  .gauge-card .label {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 18px;
+    font-weight: 500;
+    color: #8891A0;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .gauge-card .value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 28px;
+    font-weight: 700;
+    color: #F0F0F0;
+    text-align: center;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .gauge-card .bar-track {
+    height: 4px;
+    background: #1E1E24;
+    border-radius: 2px;
+    position: relative;
+    margin-top: 8px;
+  }
+  .gauge-card .bar-fill {
+    height: 100%;
+    background: #FFC700;
+    border-radius: 2px;
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+
+  /* ---- TAB BAR ---- */
+  .tab-bar {
+    position: absolute;
+    top: 196px;
+    left: 16px;
+    right: 16px;
+    height: 44px;
+    display: flex;
+    align-items: stretch;
+    border-bottom: 1px solid #1E1E24;
+  }
+
+  .tab {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: #8891A0;
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+    transition: color 0.15s ease;
+    user-select: none;
+  }
+  .tab:hover {
+    color: #B0B8C4;
+  }
+  .tab.active {
+    color: #FFC700;
+  }
+  .tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 12px;
+    right: 12px;
+    height: 2px;
+    background: #FFC700;
+    border-radius: 1px 1px 0 0;
+  }
+
+  .tab-spacer { flex: 1; }
+
+  /* ---- UNIT B ROW (Presets) ---- */
+  .unit-b-row {
+    position: absolute;
+    top: 248px;
+    left: 16px;
+    right: 16px;
+    height: 130px;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 8px;
+  }
+
+  .preset-card {
+    background: #111114;
+    border: 1px solid #1E1E24;
+    border-radius: 10px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.15s ease;
+    cursor: pointer;
+  }
+  .preset-card:hover {
+    border-color: #2A2A2E;
+    background: #141418;
+  }
+
+  .preset-card .slot-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 400;
+    color: #3A3F4A;
+    letter-spacing: 1px;
+  }
+
+  .preset-card .preset-name {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 18px;
+    font-weight: 600;
+    color: #F0F0F0;
+    text-align: center;
+    line-height: 1.2;
+  }
+
+  .preset-card .preset-icon {
+    font-size: 24px;
+    line-height: 1;
+  }
+
+  /* Active preset (currently loaded) */
+  .preset-card.active-preset {
+    border-color: #22C55E;
+    box-shadow: 0 0 12px rgba(34,197,94,0.1);
+  }
+  .preset-card.active-preset .slot-num {
+    color: #22C55E;
+  }
+  .preset-card.active-preset .preset-name {
+    color: #22C55E;
+  }
+
+  /* Occupied but not active */
+  .preset-card.occupied {
+    border-color: #FFC700;
+    box-shadow: 0 0 8px rgba(255,199,0,0.05);
+  }
+  .preset-card.occupied .slot-num {
+    color: #665200;
+  }
+
+  /* Empty slot */
+  .preset-card.empty {
+    border-color: #151518;
+  }
+  .preset-card.empty .preset-name {
+    color: #1E1E24;
+    font-size: 28px;
+    font-weight: 400;
+  }
+  .preset-card.empty .slot-num {
+    color: #1E1E24;
+  }
+
+  /* Status bar at bottom of card */
+  .preset-card .status-bar {
+    width: 100%;
+    height: 3px;
+    border-radius: 2px;
+    background: #1E1E24;
+    margin-top: auto;
+  }
+  .preset-card.active-preset .status-bar {
+    background: #22C55E;
+  }
+  .preset-card.occupied .status-bar {
+    background: #FFC700;
+    opacity: 0.4;
+  }
+
+  /* ---- ACTION ROW ---- */
+  .action-row {
+    position: absolute;
+    top: 390px;
+    left: 16px;
+    right: 16px;
+    height: 70px;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+  }
+
+  .action-card {
+    background: #111114;
+    border: 1px solid #1E1E24;
+    border-radius: 10px;
+    padding: 8px 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+  }
+  .action-card .label {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 16px;
+    font-weight: 500;
+    color: #8891A0;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .action-card .value {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    color: #F0F0F0;
+  }
+
+  /* ---- FOOTER ---- */
+  .footer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 36px;
+    background: #0D0D10;
+    border-top: 1px solid #1E1E24;
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 24px;
+  }
+
+  .footer-item {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 16px;
+    font-weight: 500;
+    color: #8891A0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .footer-item .val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 15px;
+    font-weight: 400;
+    color: #8891A0;
+  }
+
+  .footer-spacer { flex: 1; }
+
+  .footer .ws-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #22C55E;
+    box-shadow: 0 0 4px rgba(34,197,94,0.4);
+  }
+
+  .footer .battery-bar {
+    width: 28px;
+    height: 12px;
+    border: 1px solid #3A3F4A;
+    border-radius: 2px;
+    position: relative;
+    overflow: hidden;
+  }
+  .footer .battery-bar::after {
+    content: '';
+    position: absolute;
+    right: -4px;
+    top: 2px;
+    width: 2px;
+    height: 6px;
+    background: #3A3F4A;
+    border-radius: 0 1px 1px 0;
+  }
+  .footer .battery-fill {
+    height: 100%;
+    background: #22C55E;
+    width: 87%;
+  }
+
+  .caption {
+    color: #444;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 13px;
+    font-weight: 400;
+    margin-top: 16px;
+    text-align: center;
+    max-width: 900px;
+    line-height: 1.6;
+  }
+  .caption strong { color: #777; }
+</style>
+</head>
+<body>
+  <div class="label-above">Proposed: GLOBAL &mdash; Presets Tab &mdash; 1280 x 720</div>
+
+  <div class="display-frame">
+
+    <!-- HEADER -->
+    <div class="header">
+      <div class="conn-dot"></div>
+      <span class="effect-name">LGP Time-Reversal Mirror Mod2</span>
+      <span class="palette-name">Sunset Glow</span>
+      <span class="bpm">138</span>
+    </div>
+
+    <!-- UNIT A ROW (persistent global gauges) -->
+    <div class="unit-a-row">
+      <div class="gauge-card">
+        <span class="label">Effect</span>
+        <span class="value">0x1B07</span>
+        <div class="bar-track"><div class="bar-fill" style="width:10%"></div></div>
+      </div>
+      <div class="gauge-card">
+        <span class="label">Palette</span>
+        <span class="value">31</span>
+        <div class="bar-track"><div class="bar-fill" style="width:12%"></div></div>
+      </div>
+      <div class="gauge-card active">
+        <span class="label">Speed</span>
+        <span class="value">25</span>
+        <div class="bar-track"><div class="bar-fill" style="width:10%"></div></div>
+      </div>
+      <div class="gauge-card">
+        <span class="label">Mood</span>
+        <span class="value">128</span>
+        <div class="bar-track"><div class="bar-fill" style="width:50%"></div></div>
+      </div>
+      <div class="gauge-card">
+        <span class="label">Fade</span>
+        <span class="value">64</span>
+        <div class="bar-track"><div class="bar-fill" style="width:25%"></div></div>
+      </div>
+      <div class="gauge-card">
+        <span class="label">Cmplx</span>
+        <span class="value">200</span>
+        <div class="bar-track"><div class="bar-fill" style="width:78%"></div></div>
+      </div>
+      <div class="gauge-card">
+        <span class="label">Var</span>
+        <span class="value">128</span>
+        <div class="bar-track"><div class="bar-fill" style="width:50%"></div></div>
+      </div>
+      <div class="gauge-card">
+        <span class="label">Bri</span>
+        <span class="value">192</span>
+        <div class="bar-track"><div class="bar-fill" style="width:75%"></div></div>
+      </div>
+    </div>
+
+    <!-- TAB BAR -->
+    <div class="tab-bar">
+      <div class="tab">FX Params</div>
+      <div class="tab">Edge / Clr</div>
+      <div class="tab">Zones</div>
+      <div class="tab active">Presets</div>
+      <div class="tab-spacer"></div>
+    </div>
+
+    <!-- UNIT B ROW (contextual: 8 preset slots) -->
+    <div class="unit-b-row">
+      <div class="preset-card active-preset">
+        <span class="slot-num">P1</span>
+        <span class="preset-name">Sunset<br>Chill</span>
+        <div class="status-bar"></div>
+      </div>
+      <div class="preset-card occupied">
+        <span class="slot-num">P2</span>
+        <span class="preset-name">Deep<br>Bass</span>
+        <div class="status-bar"></div>
+      </div>
+      <div class="preset-card occupied">
+        <span class="slot-num">P3</span>
+        <span class="preset-name">Ambient<br>Flow</span>
+        <div class="status-bar"></div>
+      </div>
+      <div class="preset-card empty">
+        <span class="slot-num">P4</span>
+        <span class="preset-name">&mdash;</span>
+        <div class="status-bar"></div>
+      </div>
+      <div class="preset-card empty">
+        <span class="slot-num">P5</span>
+        <span class="preset-name">&mdash;</span>
+        <div class="status-bar"></div>
+      </div>
+      <div class="preset-card empty">
+        <span class="slot-num">P6</span>
+        <span class="preset-name">&mdash;</span>
+        <div class="status-bar"></div>
+      </div>
+      <div class="preset-card empty">
+        <span class="slot-num">P7</span>
+        <span class="preset-name">&mdash;</span>
+        <div class="status-bar"></div>
+      </div>
+      <div class="preset-card empty">
+        <span class="slot-num">P8</span>
+        <span class="preset-name">&mdash;</span>
+        <div class="status-bar"></div>
+      </div>
+    </div>
+
+    <!-- ACTION ROW -->
+    <div class="action-row">
+      <div class="action-card">
+        <span class="label">Gamma</span>
+        <span class="value">2.2</span>
+      </div>
+      <div class="action-card">
+        <span class="label">Colour</span>
+        <span class="value">Warm</span>
+      </div>
+      <div class="action-card">
+        <span class="label">EdgeMixer</span>
+        <span class="value">Triadic</span>
+      </div>
+      <div class="action-card">
+        <span class="label">Spatial</span>
+        <span class="value">Blend</span>
+      </div>
+      <div class="action-card">
+        <span class="label">Zones</span>
+        <span class="value">2</span>
+      </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+      <div class="footer-item">KEY: <span class="val">Am</span></div>
+      <div class="footer-item">MIC: <span class="val">-12dB</span></div>
+      <div class="footer-spacer"></div>
+      <div class="footer-item">
+        <div class="ws-dot"></div>
+        <span style="font-size:14px; color:#555;">WS</span>
+      </div>
+      <div class="footer-item">
+        BAT:
+        <div class="battery-bar"><div class="battery-fill"></div></div>
+        <span class="val">87%</span>
+      </div>
+    </div>
+
+  </div>
+
+  <p class="caption">
+    <strong>PRESETS tab selected.</strong>
+    8 preset slots mapped 1:1 to Unit B encoders. P1 "Sunset Chill" is the active preset (green border + status bar).
+    P2 and P3 are occupied (yellow border). P4-P8 are empty (dimmed).
+    Short press = load. Double press = save. Long press = delete.
+    Each encoder rotates through presets for preview before committing.
+  </p>
+</body>
+</html>

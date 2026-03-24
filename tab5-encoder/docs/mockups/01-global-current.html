@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tab5 GLOBAL Screen — Current Layout</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@400;700&family=Rajdhani:wght@400;500;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #1a1a1a;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: 'Rajdhani', sans-serif;
+  }
+
+  .label-above {
+    color: #666;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    text-align: center;
+  }
+
+  .display-frame {
+    width: 1280px;
+    height: 720px;
+    background: #0A0A0B;
+    border: 2px solid #333;
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  /* ---- HEADER ---- */
+  .header {
+    position: absolute;
+    top: 7px;
+    left: 10px;
+    right: 10px;
+    height: 66px;
+    background: #1A1A1C;
+    border: 2px solid #fff;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+    gap: 10px;
+  }
+
+  .header .effect-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 24px;
+    color: #9CA3AF;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 220px;
+    flex-shrink: 0;
+  }
+
+  .header .palette-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 24px;
+    color: #9CA3AF;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 220px;
+    flex-shrink: 0;
+    padding-left: 10px;
+  }
+
+  .header .brand-title {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: baseline;
+  }
+  .header .brand-title .main {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 40px;
+    color: #FFFFFF;
+    letter-spacing: 1px;
+  }
+  .header .brand-title .os {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 40px;
+    color: #FFC700;
+    letter-spacing: 1px;
+  }
+
+  .header .net-info {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .header .net-info span {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 24px;
+  }
+  .header .net-info .ssid { color: #9CA3AF; }
+  .header .net-info .rssi { color: #22C55E; }
+  .header .net-info .ip { color: #FFFFFF; padding-left: 4px; }
+
+  /* ---- GAUGE ROW ---- */
+  .gauge-row {
+    position: absolute;
+    top: 90px;
+    left: 24px;
+    right: 24px;
+    height: 125px;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 14px;
+  }
+
+  .gauge-card {
+    background: #121214;
+    border: 2px solid #fff;
+    border-radius: 14px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+  }
+  .gauge-card.active {
+    border-color: #FFC700;
+    box-shadow: 0 0 8px rgba(255,199,0,0.2);
+  }
+
+  .gauge-card .label {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+  .gauge-card .value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 32px;
+    font-weight: 700;
+    color: #fff;
+    text-align: center;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .gauge-card .bar-track {
+    height: 16px;
+    background: #0A0A0B;
+    border-radius: 2px;
+    position: relative;
+    margin-top: auto;
+  }
+  .gauge-card .bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+
+  /* Gauge colours */
+  .g0 .label { color: #FF00FF; } .g0 .bar-fill { background: #FF00FF; }
+  .g1 .label { color: #FF0099; } .g1 .bar-fill { background: #FF0099; }
+  .g2 .label { color: #00FF99; } .g2 .bar-fill { background: #00FF99; }
+  .g3 .label { color: #9900FF; } .g3 .bar-fill { background: #9900FF; }
+  .g4 .label { color: #FFFF00; } .g4 .bar-fill { background: #FFFF00; }
+  .g5 .label { color: #FF6600; } .g5 .bar-fill { background: #FF6600; }
+  .g6 .label { color: #0099FF; } .g6 .bar-fill { background: #0099FF; }
+  .g7 .label { color: #00FFFF; } .g7 .bar-fill { background: #00FFFF; }
+
+  /* ---- FX ROW A ---- */
+  .fx-row {
+    position: absolute;
+    left: 24px;
+    right: 24px;
+    height: 78px;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 14px;
+  }
+  .fx-row-a { top: 229px; }
+  .fx-row-b { top: 321px; }
+
+  .fx-card {
+    background: #121214;
+    border: 2px solid #fff;
+    border-radius: 14px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    overflow: hidden;
+  }
+  .fx-card .label {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 13px;
+    color: #9CA3AF;
+    letter-spacing: 0.5px;
+  }
+  .fx-card .value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 22px;
+    font-weight: 700;
+    color: #fff;
+    text-align: center;
+  }
+  .fx-card .bar-track {
+    height: 6px;
+    background: #0A0A0B;
+    border-radius: 2px;
+    position: relative;
+  }
+  .fx-card .bar-fill {
+    height: 100%;
+    background: #9CA3AF;
+    border-radius: 2px;
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+
+  /* ---- PRESET ROW ---- */
+  .preset-row {
+    position: absolute;
+    top: 413px;
+    left: 24px;
+    right: 24px;
+    height: 85px;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 14px;
+  }
+
+  .preset-card {
+    background: #121214;
+    border: 2px solid #fff;
+    border-radius: 14px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+  .preset-card .label {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 14px;
+    color: #9CA3AF;
+    letter-spacing: 0.5px;
+  }
+  .preset-card .value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+  }
+  .preset-card.empty .value { color: #2A2A2E; }
+  .preset-card.occupied { border-color: #0099FF; }
+  .preset-card.occupied .value { color: #0099FF; }
+  .preset-card.active-preset { border-color: #22C55E; }
+  .preset-card.active-preset .value { color: #22C55E; }
+
+  /* ---- ACTION ROW ---- */
+  .action-row {
+    position: absolute;
+    top: 516px;
+    left: 24px;
+    right: 24px;
+    height: 100px;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 14px;
+  }
+
+  .action-card {
+    background: #121214;
+    border: 2px solid #fff;
+    border-radius: 14px;
+    padding: 8px 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+  .action-card .label {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: #9CA3AF;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .action-card .value {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 24px;
+    font-weight: 700;
+    color: #fff;
+  }
+  .action-card.active-action {
+    border-color: #22C55E;
+  }
+  .action-card.active-action .value {
+    color: #22C55E;
+  }
+
+  /* ---- FOOTER ---- */
+  .footer {
+    position: absolute;
+    bottom: 7px;
+    left: 10px;
+    right: 10px;
+    height: 84px;
+    background: #1A1A1C;
+    border: 2px solid #fff;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+    gap: 24px;
+  }
+
+  .footer-metric {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+  .footer-metric .metric-title {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    color: #9CA3AF;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .footer-metric .metric-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+  }
+  .footer-metric .metric-value.brand { color: #FFC700; }
+  .footer-metric .metric-value.ok { color: #22C55E; }
+  .footer-metric .metric-value.dim { color: #9CA3AF; }
+
+  .footer-spacer { flex: 1; }
+
+  .footer .k1-buttons {
+    display: flex;
+    gap: 8px;
+  }
+  .footer .k1-btn {
+    width: 44px;
+    height: 44px;
+    background: #121214;
+    border: 2px solid #2A2A2E;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    color: #2A2A2E;
+  }
+
+  .footer .ws-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .footer .ws-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #22C55E;
+  }
+  .footer .ws-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    color: #9CA3AF;
+  }
+
+  .footer .battery-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .footer .battery-bar {
+    width: 36px;
+    height: 16px;
+    border: 2px solid #9CA3AF;
+    border-radius: 3px;
+    position: relative;
+    overflow: hidden;
+  }
+  .footer .battery-bar::after {
+    content: '';
+    position: absolute;
+    right: -5px;
+    top: 3px;
+    width: 3px;
+    height: 8px;
+    background: #9CA3AF;
+    border-radius: 0 2px 2px 0;
+  }
+  .footer .battery-fill {
+    height: 100%;
+    background: #22C55E;
+    width: 87%;
+  }
+  .footer .battery-pct {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    color: #9CA3AF;
+  }
+
+  .caption {
+    color: #555;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 13px;
+    font-weight: 400;
+    margin-top: 16px;
+    text-align: center;
+    max-width: 800px;
+    line-height: 1.5;
+  }
+  .caption strong { color: #888; }
+</style>
+</head>
+<body>
+  <div class="label-above">Current Layout &mdash; 116 Data Points &mdash; 1280 x 720</div>
+
+  <div class="display-frame">
+
+    <!-- HEADER -->
+    <div class="header">
+      <span class="effect-name">LGP Time-Reversal Mirror Mod2</span>
+      <span class="palette-name">Sunset Glow</span>
+      <div class="brand-title">
+        <span class="main">LIGHTWAVE</span><span class="os">OS</span>
+      </div>
+      <div class="net-info">
+        <span class="ssid">LightwaveK1</span>
+        <span class="rssi" style="color:#22C55E;">(-42)</span>
+        <span class="ip">192.168.4.1</span>
+      </div>
+    </div>
+
+    <!-- GAUGE ROW (8 cards) -->
+    <div class="gauge-row">
+      <div class="gauge-card g0 active">
+        <span class="label">EFFECT</span>
+        <span class="value">27</span>
+        <div class="bar-track"><div class="bar-fill" style="width:10.6%"></div></div>
+      </div>
+      <div class="gauge-card g1">
+        <span class="label">PALETTE</span>
+        <span class="value">31</span>
+        <div class="bar-track"><div class="bar-fill" style="width:12.2%"></div></div>
+      </div>
+      <div class="gauge-card g2">
+        <span class="label">SPEED</span>
+        <span class="value">25</span>
+        <div class="bar-track"><div class="bar-fill" style="width:9.8%"></div></div>
+      </div>
+      <div class="gauge-card g3">
+        <span class="label">MOOD</span>
+        <span class="value">128</span>
+        <div class="bar-track"><div class="bar-fill" style="width:50.2%"></div></div>
+      </div>
+      <div class="gauge-card g4">
+        <span class="label">FADE</span>
+        <span class="value">64</span>
+        <div class="bar-track"><div class="bar-fill" style="width:25.1%"></div></div>
+      </div>
+      <div class="gauge-card g5">
+        <span class="label">COMPLEXITY</span>
+        <span class="value">200</span>
+        <div class="bar-track"><div class="bar-fill" style="width:78.4%"></div></div>
+      </div>
+      <div class="gauge-card g6">
+        <span class="label">VARIATION</span>
+        <span class="value">128</span>
+        <div class="bar-track"><div class="bar-fill" style="width:50.2%"></div></div>
+      </div>
+      <div class="gauge-card g7">
+        <span class="label">BRIGHTNESS</span>
+        <span class="value">192</span>
+        <div class="bar-track"><div class="bar-fill" style="width:75.3%"></div></div>
+      </div>
+    </div>
+
+    <!-- FX ROW A (8 cards, params 0-7) -->
+    <div class="fx-row fx-row-a">
+      <div class="fx-card"><span class="label">FX PARAM 0</span><span class="value">142</span><div class="bar-track"><div class="bar-fill" style="width:55.7%"></div></div></div>
+      <div class="fx-card"><span class="label">FX PARAM 1</span><span class="value">88</span><div class="bar-track"><div class="bar-fill" style="width:34.5%"></div></div></div>
+      <div class="fx-card"><span class="label">FX PARAM 2</span><span class="value">215</span><div class="bar-track"><div class="bar-fill" style="width:84.3%"></div></div></div>
+      <div class="fx-card"><span class="label">FX PARAM 3</span><span class="value">64</span><div class="bar-track"><div class="bar-fill" style="width:25.1%"></div></div></div>
+      <div class="fx-card"><span class="label">FX PARAM 4</span><span class="value">--</span><div class="bar-track"><div class="bar-fill" style="width:0%"></div></div></div>
+      <div class="fx-card"><span class="label">FX PARAM 5</span><span class="value">--</span><div class="bar-track"><div class="bar-fill" style="width:0%"></div></div></div>
+      <div class="fx-card"><span class="label">FX PARAM 6</span><span class="value">--</span><div class="bar-track"><div class="bar-fill" style="width:0%"></div></div></div>
+      <div class="fx-card"><span class="label">FX PARAM 7</span><span class="value">--</span><div class="bar-track"><div class="bar-fill" style="width:0%"></div></div></div>
+    </div>
+
+    <!-- FX ROW B (8 cards, params 8-15) -->
+    <div class="fx-row fx-row-b">
+      <div class="fx-card"><span class="label">FX PARAM 8</span><span class="value">--</span><div class="bar-track"><div class="bar-fill" style="width:0%"></div></div></div>
+      <div class="fx-card"><span class="label">FX PARAM 9</span><span class="value">--</span><div class="bar-track"><div class="bar-fill" style="width:0%"></div></div></div>
+      <div class="fx-card"><span class="label">FX PARAM 10</span><span class="value">--</span><div class="bar-track"><div class="bar-fill" style="width:0%"></div></div></div>
+      <div class="fx-card"><span class="label">FX PARAM 11</span><span class="value">--</span><div class="bar-track"><div class="bar-fill" style="width:0%"></div></div></div>
+      <div class="fx-card"><span class="label">FX PARAM 12</span><span class="value">--</span><div class="bar-track"><div class="bar-fill" style="width:0%"></div></div></div>
+      <div class="fx-card"><span class="label">FX PARAM 13</span><span class="value">--</span><div class="bar-track"><div class="bar-fill" style="width:0%"></div></div></div>
+      <div class="fx-card"><span class="label">FX PARAM 14</span><span class="value">--</span><div class="bar-track"><div class="bar-fill" style="width:0%"></div></div></div>
+      <div class="fx-card"><span class="label">FX PARAM 15</span><span class="value">--</span><div class="bar-track"><div class="bar-fill" style="width:0%"></div></div></div>
+    </div>
+
+    <!-- PRESET ROW (8 cards) -->
+    <div class="preset-row">
+      <div class="preset-card active-preset"><span class="label">PRESET 1</span><span class="value">P1</span></div>
+      <div class="preset-card occupied"><span class="label">PRESET 2</span><span class="value">P2</span></div>
+      <div class="preset-card occupied"><span class="label">PRESET 3</span><span class="value">P3</span></div>
+      <div class="preset-card empty"><span class="label">PRESET 4</span><span class="value">--</span></div>
+      <div class="preset-card empty"><span class="label">PRESET 5</span><span class="value">--</span></div>
+      <div class="preset-card empty"><span class="label">PRESET 6</span><span class="value">--</span></div>
+      <div class="preset-card empty"><span class="label">PRESET 7</span><span class="value">--</span></div>
+      <div class="preset-card empty"><span class="label">PRESET 8</span><span class="value">--</span></div>
+    </div>
+
+    <!-- ACTION ROW (5 buttons) -->
+    <div class="action-row">
+      <div class="action-card active-action"><span class="label">GAMMA</span><span class="value">2.2</span></div>
+      <div class="action-card"><span class="label">COLOUR</span><span class="value">RGB</span></div>
+      <div class="action-card"><span class="label">EDGEMIXER</span><span class="value">Complementary</span></div>
+      <div class="action-card"><span class="label">SPATIAL</span><span class="value">Temporal</span></div>
+      <div class="action-card"><span class="label">ZONES</span><span class="value">Global</span></div>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+      <div class="footer-metric">
+        <span class="metric-title">BPM</span>
+        <span class="metric-value brand">138</span>
+      </div>
+      <div class="footer-metric">
+        <span class="metric-title">KEY</span>
+        <span class="metric-value">Am</span>
+      </div>
+      <div class="footer-metric">
+        <span class="metric-title">MIC</span>
+        <span class="metric-value dim">-12.4 dB</span>
+      </div>
+      <div class="footer-metric">
+        <span class="metric-title">UPTIME</span>
+        <span class="metric-value dim">2h 14m</span>
+      </div>
+
+      <div class="k1-buttons">
+        <div class="k1-btn">K1</div>
+        <div class="k1-btn">K2</div>
+      </div>
+
+      <div class="footer-spacer"></div>
+
+      <div class="ws-status">
+        <div class="ws-dot"></div>
+        <span class="ws-label">WS</span>
+      </div>
+
+      <div class="battery-group">
+        <div class="battery-bar"><div class="battery-fill"></div></div>
+        <span class="battery-pct">87%</span>
+      </div>
+    </div>
+
+  </div>
+
+  <p class="caption">
+    <strong>Current GLOBAL screen.</strong> 116 data points at uniform visual weight. FX Row A/B show mostly empty "--" cards.
+    The largest text is the static "LIGHTWAVEOS" brand title, which carries zero operational information.
+    Preset row is display-only on GLOBAL. All cards use identical white 2px borders, creating visual flatness.
+  </p>
+</body>
+</html>

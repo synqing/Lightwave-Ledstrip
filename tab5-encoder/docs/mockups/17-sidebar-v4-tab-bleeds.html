@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tab5 Sidebar V4 — Tab Bleeds</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@400;700&family=Rajdhani:wght@400;500;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #1a1a1a;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: 'Rajdhani', sans-serif;
+  }
+
+  .label-above {
+    color: #666;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    text-align: center;
+  }
+
+  .display-frame {
+    width: 1280px;
+    height: 720px;
+    background: #08080A;
+    border: 2px solid #333;
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ================================================================
+     HEADER
+     ================================================================ */
+  .header {
+    position: relative;
+    margin: 7px 10px 0 10px;
+    height: 66px;
+    min-height: 66px;
+    background: #1A1A1C;
+    border: 2px solid #fff;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 10px;
+    z-index: 10;
+    flex-shrink: 0;
+  }
+
+  .header .effect-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 24px;
+    color: #9CA3AF;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 220px;
+    flex-shrink: 0;
+  }
+
+  .header .palette-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 24px;
+    color: #9CA3AF;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 180px;
+    flex-shrink: 0;
+    padding-left: 10px;
+  }
+
+  .header .brand-title {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: baseline;
+  }
+  .header .brand-title .main {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 40px;
+    color: #FFFFFF;
+    letter-spacing: 1px;
+  }
+  .header .brand-title .os {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 40px;
+    color: #FFC700;
+    letter-spacing: 1px;
+  }
+
+  .header .net-info {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .header .net-info span {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+  }
+  .header .net-info .ssid { color: #9CA3AF; }
+  .header .net-info .rssi { color: #22C55E; }
+  .header .net-info .ip { color: #FFFFFF; padding-left: 4px; }
+
+  /* ================================================================
+     MIDDLE SECTION
+     ================================================================ */
+  .middle-section {
+    flex: 1;
+    display: flex;
+    margin-top: 8px;
+    margin-bottom: 8px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* ================================================================
+     LEFT SIDEBAR — V4: Tab Bleeds Into Content
+     Active tab background matches content and has no right border,
+     creating a seamless merge like a browser tab.
+     ================================================================ */
+  .sidebar {
+    width: 70px;
+    background: #0E0E12;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 10;
+  }
+
+  .sidebar-tab {
+    flex: 1;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    cursor: pointer;
+    position: relative;
+    transition: background 0.15s ease;
+    user-select: none;
+    /* Inactive tabs: right border present */
+    border-right: 1px solid #1E1E24;
+    border-bottom: 1px solid #1A1A1E;
+  }
+  .sidebar-tab:last-child {
+    border-bottom: none;
+  }
+  .sidebar-tab:hover {
+    background: #121216;
+  }
+
+  .sidebar-tab .tab-icon {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px;
+    font-weight: 700;
+    color: #6B7280;
+    letter-spacing: 0;
+    transition: color 0.15s ease;
+  }
+
+  .sidebar-tab .tab-label {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    color: #6B7280;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    transition: color 0.15s ease;
+  }
+
+  /* ACTIVE TAB — bleeds into content area */
+  .sidebar-tab.active {
+    /* Background matches the Unit A content row it sits adjacent to */
+    background: #0C0C0E;
+    /* NO right border — seamless merge with content */
+    border-right: none;
+    /* Top and bottom borders create the "tab" shape */
+    border-top: 1px solid #1E1E24;
+    border-bottom: 1px solid #1E1E24;
+  }
+  .sidebar-tab.active:first-child {
+    border-top: none;
+  }
+  .sidebar-tab.active .tab-icon {
+    color: #FFC700;
+  }
+  .sidebar-tab.active .tab-label {
+    color: #FFC700;
+  }
+
+  .sidebar .variant-label {
+    position: absolute;
+    bottom: 6px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: #3A3F4A;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 11;
+  }
+
+  /* ================================================================
+     MAIN CONTENT AREA
+     ================================================================ */
+  .main-area {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* ================================================================
+     ROW BACKGROUND STRIPS
+     ================================================================ */
+  .row-strip {
+    position: absolute;
+    left: 0;
+    right: 0;
+  }
+  .strip-unita {
+    top: 0;
+    height: 132px;
+    background: #0C0C0E;
+  }
+  .strip-unitb {
+    top: 132px;
+    height: 132px;
+    background: #08080A;
+  }
+  .strip-action {
+    top: 264px;
+    height: 108px;
+    background: #0A0A0E;
+  }
+
+  /* ================================================================
+     UNIT A ROW
+     ================================================================ */
+  .unit-a-row {
+    position: absolute;
+    top: 6px;
+    left: 16px;
+    right: 16px;
+    height: 120px;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 8px;
+  }
+
+  .gauge-card {
+    background: #111114;
+    border: 1px solid #1E1E24;
+    border-radius: 10px;
+    padding: 10px 10px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .gauge-card.active {
+    border: 1px solid #FFC700;
+    box-shadow: 0 0 12px rgba(255,199,0,0.06);
+  }
+
+  .gauge-card .label {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 18px;
+    font-weight: 500;
+    color: #8891A0;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+  .gauge-card.active .label {
+    color: #FFC700;
+  }
+
+  .gauge-card .value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 28px;
+    font-weight: 700;
+    color: #F0F0F0;
+    text-align: center;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .gauge-card .bar-track {
+    height: 4px;
+    background: #1E1E24;
+    border-radius: 2px;
+    position: relative;
+    margin-top: 6px;
+  }
+  .gauge-card .bar-fill {
+    height: 100%;
+    background: #FFC700;
+    border-radius: 2px;
+    position: absolute;
+    left: 0;
+    top: 0;
+    transition: width 0.3s ease;
+  }
+
+  /* ================================================================
+     UNIT B ROW
+     ================================================================ */
+  .unit-b-row {
+    position: absolute;
+    top: 138px;
+    left: 16px;
+    right: 16px;
+    height: 120px;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 8px;
+  }
+
+  .fx-card {
+    background: #111114;
+    border: 1px solid #1E1E24;
+    border-radius: 10px;
+    padding: 10px 10px;
+    display: flex;
+    flex-direction: column;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .fx-card.active {
+    border: 1px solid #FFC700;
+    box-shadow: 0 0 12px rgba(255,199,0,0.06);
+  }
+
+  .fx-card .label {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 18px;
+    font-weight: 500;
+    color: #8891A0;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+
+  .fx-card .value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 28px;
+    font-weight: 700;
+    color: #F0F0F0;
+    text-align: center;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .fx-card .bar-track {
+    height: 4px;
+    background: #1E1E24;
+    border-radius: 2px;
+    position: relative;
+    margin-top: 6px;
+  }
+  .fx-card .bar-fill {
+    height: 100%;
+    background: #FFC700;
+    border-radius: 2px;
+    position: absolute;
+    left: 0;
+    top: 0;
+    opacity: 0.7;
+    transition: width 0.3s ease;
+  }
+  .fx-card.active .bar-fill {
+    opacity: 1;
+  }
+
+  .fx-card.page-nav {
+    justify-content: center;
+    align-items: center;
+    background: #0D0D10;
+    border-color: #1A1A1E;
+  }
+  .fx-card.page-nav .arrow {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 28px;
+    font-weight: 700;
+    color: #3A3F4A;
+    transition: color 0.15s ease;
+  }
+  .fx-card.page-nav:hover .arrow {
+    color: #8891A0;
+  }
+  .fx-card.page-nav .page-label {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: #3A3F4A;
+    margin-top: 2px;
+  }
+
+  /* ================================================================
+     ACTION ROW
+     ================================================================ */
+  .action-row {
+    position: absolute;
+    top: 272px;
+    left: 16px;
+    right: 16px;
+    height: 90px;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+  }
+
+  .action-card {
+    background: #111114;
+    border: 1px solid #1E1E24;
+    border-radius: 10px;
+    padding: 8px 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .action-card.active-action {
+    border-color: #22C55E;
+  }
+  .action-card .label {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 19px;
+    font-weight: 500;
+    color: #8891A0;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .action-card .value {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 23px;
+    font-weight: 700;
+    color: #F0F0F0;
+  }
+  .action-card.active-action .value {
+    color: #22C55E;
+  }
+
+  /* ================================================================
+     FOOTER
+     ================================================================ */
+  .footer {
+    position: relative;
+    margin: 0 10px 7px 10px;
+    height: 84px;
+    min-height: 84px;
+    background: #1A1A1C;
+    border: 2px solid #fff;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 20px;
+    z-index: 10;
+    flex-shrink: 0;
+  }
+
+  .footer-metric {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+  .footer-metric .metric-title {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    color: #9CA3AF;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .footer-metric .metric-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+  }
+  .footer-metric .metric-value.brand { color: #FFC700; }
+  .footer-metric .metric-value.ok { color: #22C55E; }
+  .footer-metric .metric-value.dim { color: #9CA3AF; }
+
+  .footer-spacer { flex: 1; }
+
+  .footer .k1-buttons {
+    display: flex;
+    gap: 8px;
+  }
+  .footer .k1-btn {
+    width: 44px;
+    height: 44px;
+    background: #121214;
+    border: 2px solid #2A2A2E;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    color: #2A2A2E;
+  }
+
+  .footer .ws-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .footer .ws-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #22C55E;
+  }
+  .footer .ws-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    color: #9CA3AF;
+  }
+
+  .footer .battery-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .footer .battery-bar {
+    width: 36px;
+    height: 16px;
+    border: 2px solid #9CA3AF;
+    border-radius: 3px;
+    position: relative;
+    overflow: hidden;
+  }
+  .footer .battery-bar::after {
+    content: '';
+    position: absolute;
+    right: -5px;
+    top: 3px;
+    width: 3px;
+    height: 8px;
+    background: #9CA3AF;
+    border-radius: 0 2px 2px 0;
+  }
+  .footer .battery-fill {
+    height: 100%;
+    background: #22C55E;
+    width: 87%;
+  }
+  .footer .battery-pct {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    color: #9CA3AF;
+  }
+
+  /* ================================================================
+     CAPTION
+     ================================================================ */
+  .caption {
+    color: #555;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 13px;
+    font-weight: 400;
+    margin-top: 16px;
+    text-align: center;
+    max-width: 900px;
+    line-height: 1.6;
+  }
+  .caption strong { color: #888; }
+</style>
+</head>
+<body>
+  <div class="label-above">V4 &mdash; Tab Bleeds Into Content &mdash; 1280 x 720</div>
+
+  <div class="display-frame">
+
+    <!-- HEADER -->
+    <div class="header">
+      <span class="effect-name">LGP Time-Reversal Mirror Mod2</span>
+      <span class="palette-name">Sunset Glow</span>
+      <div class="brand-title">
+        <span class="main">LIGHTWAVE</span><span class="os">OS</span>
+      </div>
+      <div class="net-info">
+        <span class="ssid">LightwaveK1</span>
+        <span class="rssi" style="color:#22C55E;">(-42)</span>
+        <span class="ip">192.168.4.1</span>
+      </div>
+    </div>
+
+    <!-- MIDDLE SECTION -->
+    <div class="middle-section">
+
+      <!-- LEFT SIDEBAR — V4: Tab Bleeds -->
+      <div class="sidebar">
+        <div class="sidebar-tab active">
+          <span class="tab-icon">FX</span>
+          <span class="tab-label">Params</span>
+        </div>
+        <div class="sidebar-tab">
+          <span class="tab-icon">E/C</span>
+          <span class="tab-label">Edge</span>
+        </div>
+        <div class="sidebar-tab">
+          <span class="tab-icon">ZN</span>
+          <span class="tab-label">Zones</span>
+        </div>
+        <div class="sidebar-tab">
+          <span class="tab-icon">PRE</span>
+          <span class="tab-label">Presets</span>
+        </div>
+        <span class="variant-label">V4: Tab Bleeds</span>
+      </div>
+
+      <!-- MAIN CONTENT AREA -->
+      <div class="main-area">
+
+        <!-- ROW BACKGROUND STRIPS -->
+        <div class="row-strip strip-unita"></div>
+        <div class="row-strip strip-unitb"></div>
+        <div class="row-strip strip-action"></div>
+
+        <!-- UNIT A: global params -->
+        <div class="unit-a-row">
+          <div class="gauge-card">
+            <span class="label">Effect</span>
+            <span class="value">27</span>
+            <div class="bar-track"><div class="bar-fill" style="width:10.6%"></div></div>
+          </div>
+          <div class="gauge-card">
+            <span class="label">Palette</span>
+            <span class="value">31</span>
+            <div class="bar-track"><div class="bar-fill" style="width:12.2%"></div></div>
+          </div>
+          <div class="gauge-card active">
+            <span class="label">Speed</span>
+            <span class="value">25</span>
+            <div class="bar-track"><div class="bar-fill" style="width:9.8%"></div></div>
+          </div>
+          <div class="gauge-card">
+            <span class="label">Mood</span>
+            <span class="value">128</span>
+            <div class="bar-track"><div class="bar-fill" style="width:50.2%"></div></div>
+          </div>
+          <div class="gauge-card">
+            <span class="label">Fade</span>
+            <span class="value">64</span>
+            <div class="bar-track"><div class="bar-fill" style="width:25.1%"></div></div>
+          </div>
+          <div class="gauge-card">
+            <span class="label">Cmplx</span>
+            <span class="value">200</span>
+            <div class="bar-track"><div class="bar-fill" style="width:78.4%"></div></div>
+          </div>
+          <div class="gauge-card">
+            <span class="label">Var</span>
+            <span class="value">128</span>
+            <div class="bar-track"><div class="bar-fill" style="width:50.2%"></div></div>
+          </div>
+          <div class="gauge-card">
+            <span class="label">Bri</span>
+            <span class="value">192</span>
+            <div class="bar-track"><div class="bar-fill" style="width:75.3%"></div></div>
+          </div>
+        </div>
+
+        <!-- UNIT B: contextual params -->
+        <div class="unit-b-row">
+          <div class="fx-card active">
+            <span class="label">Audio Mix</span>
+            <span class="value">0.35</span>
+            <div class="bar-track"><div class="bar-fill" style="width:35%"></div></div>
+          </div>
+          <div class="fx-card">
+            <span class="label">Beat Gain</span>
+            <span class="value">0.70</span>
+            <div class="bar-track"><div class="bar-fill" style="width:70%"></div></div>
+          </div>
+          <div class="fx-card">
+            <span class="label">Bass Gain</span>
+            <span class="value">0.85</span>
+            <div class="bar-track"><div class="bar-fill" style="width:85%"></div></div>
+          </div>
+          <div class="fx-card">
+            <span class="label">Trail Decay</span>
+            <span class="value">0.30</span>
+            <div class="bar-track"><div class="bar-fill" style="width:30%"></div></div>
+          </div>
+          <div class="fx-card">
+            <span class="label">Motion Rate</span>
+            <span class="value">1.0</span>
+            <div class="bar-track"><div class="bar-fill" style="width:100%"></div></div>
+          </div>
+          <div class="fx-card">
+            <span class="label">Colour Anchor</span>
+            <span class="value">0.65</span>
+            <div class="bar-track"><div class="bar-fill" style="width:65%"></div></div>
+          </div>
+          <div class="fx-card page-nav">
+            <span class="arrow">&#9664;</span>
+          </div>
+          <div class="fx-card page-nav">
+            <span class="arrow">&#9654;</span>
+            <span class="page-label">1/3</span>
+          </div>
+        </div>
+
+        <!-- ACTION ROW -->
+        <div class="action-row">
+          <div class="action-card active-action">
+            <span class="label">Gamma</span>
+            <span class="value">2.2</span>
+          </div>
+          <div class="action-card">
+            <span class="label">Colour</span>
+            <span class="value">RGB</span>
+          </div>
+          <div class="action-card">
+            <span class="label">EdgeMixer</span>
+            <span class="value">Complementary</span>
+          </div>
+          <div class="action-card">
+            <span class="label">Spatial</span>
+            <span class="value">Temporal</span>
+          </div>
+          <div class="action-card">
+            <span class="label">Zones</span>
+            <span class="value">Global</span>
+          </div>
+        </div>
+
+      </div><!-- end main-area -->
+
+    </div><!-- end middle-section -->
+
+    <!-- FOOTER -->
+    <div class="footer">
+      <div class="footer-metric">
+        <span class="metric-title">BPM</span>
+        <span class="metric-value brand">138</span>
+      </div>
+      <div class="footer-metric">
+        <span class="metric-title">KEY</span>
+        <span class="metric-value">Am</span>
+      </div>
+      <div class="footer-metric">
+        <span class="metric-title">MIC</span>
+        <span class="metric-value dim">-12.4 dB</span>
+      </div>
+      <div class="footer-metric">
+        <span class="metric-title">UPTIME</span>
+        <span class="metric-value dim">2h 14m</span>
+      </div>
+
+      <div class="k1-buttons">
+        <div class="k1-btn">K1</div>
+        <div class="k1-btn">K2</div>
+      </div>
+
+      <div class="footer-spacer"></div>
+
+      <div class="ws-status">
+        <div class="ws-dot"></div>
+        <span class="ws-label">WS</span>
+      </div>
+
+      <div class="battery-group">
+        <div class="battery-bar"><div class="battery-fill"></div></div>
+        <span class="battery-pct">87%</span>
+      </div>
+    </div>
+
+  </div>
+
+  <p class="caption">
+    <strong>V4: Tab Bleeds Into Content.</strong>
+    Sidebar background #0E0E12. Inactive tabs have a right border (1px #1E1E24); the active tab has NO
+    right border and its background (#0C0C0E) matches the Unit A content row, creating a seamless merge.
+    Top and bottom borders on the active tab create a "browser tab" shape. The selected tab and its content
+    become one continuous surface.
+  </p>
+</body>
+</html>

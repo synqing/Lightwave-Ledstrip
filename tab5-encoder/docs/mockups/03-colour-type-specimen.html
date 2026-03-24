@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Tab5 Design System — Colour &amp; Typography Specimen</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@400;700&family=Rajdhani:wght@400;500;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #111;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 100vh;
+    font-family: 'Rajdhani', sans-serif;
+    padding: 40px 20px;
+  }
+
+  .label-above {
+    color: #666;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    text-align: center;
+  }
+
+  .display-frame {
+    width: 1280px;
+    min-height: 720px;
+    background: #08080A;
+    border: 2px solid #2a2a2a;
+    position: relative;
+    overflow: hidden;
+    padding: 40px 48px;
+    flex-shrink: 0;
+  }
+
+  /* ---- SECTION HEADERS ---- */
+  .section-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 32px;
+    color: #F0F0F0;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+    line-height: 1;
+  }
+  .section-rule {
+    height: 1px;
+    background: #1E1E24;
+    margin-bottom: 28px;
+  }
+
+  /* ---- COLOUR SWATCHES ---- */
+  .colour-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+    margin-bottom: 48px;
+  }
+
+  .swatch {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .swatch-box {
+    width: 100%;
+    height: 72px;
+    border-radius: 10px;
+    border: 1px solid #1E1E24;
+    position: relative;
+  }
+  .swatch-box.has-contrast-border {
+    border-color: #2A2A2E;
+  }
+
+  .swatch-token {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    color: #F0F0F0;
+    letter-spacing: 0.5px;
+  }
+  .swatch-hex {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 400;
+    color: #8891A0;
+  }
+  .swatch-usage {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 14px;
+    font-weight: 400;
+    color: #3A3F4A;
+    line-height: 1.3;
+  }
+
+  /* Specific swatches that need light text overlay */
+  .swatch-box .inner-label {
+    position: absolute;
+    bottom: 8px;
+    right: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 400;
+    opacity: 0.5;
+  }
+
+  /* ---- TYPOGRAPHY SPECIMENS ---- */
+  .type-section {
+    margin-bottom: 48px;
+  }
+
+  .type-specimen {
+    display: flex;
+    align-items: baseline;
+    gap: 32px;
+    margin-bottom: 20px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #111114;
+  }
+  .type-specimen:last-child {
+    border-bottom: none;
+  }
+
+  .type-meta {
+    width: 260px;
+    flex-shrink: 0;
+  }
+  .type-meta .meta-context {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: #FFC700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .type-meta .meta-font {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: #8891A0;
+    line-height: 1.5;
+  }
+  .type-meta .meta-colour {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: #3A3F4A;
+  }
+
+  .type-sample {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ---- HIERARCHY DEMO ---- */
+  .hierarchy-demo {
+    margin-top: 24px;
+    background: #0C0C0E;
+    border: 1px solid #1E1E24;
+    border-radius: 12px;
+    padding: 32px 36px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .hierarchy-row {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+  .hierarchy-badge {
+    width: 80px;
+    flex-shrink: 0;
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 4px 8px;
+    border-radius: 4px;
+  }
+  .hierarchy-badge.primary { background: #332600; color: #FFC700; }
+  .hierarchy-badge.secondary { background: #1A1A1E; color: #8891A0; }
+  .hierarchy-badge.tertiary { background: #111114; color: #3A3F4A; }
+
+  .hierarchy-arrow {
+    color: #1E1E24;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+
+  .caption {
+    color: #555;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 13px;
+    font-weight: 400;
+    margin-top: 16px;
+    text-align: center;
+    max-width: 800px;
+    line-height: 1.5;
+  }
+  .caption strong { color: #888; }
+</style>
+</head>
+<body>
+  <div class="label-above">Design System Specimen &mdash; Colour Tokens + Typography</div>
+
+  <div class="display-frame">
+
+    <!-- ============ COLOUR PALETTE ============ -->
+    <div class="section-title">Colour Palette</div>
+    <div class="section-rule"></div>
+
+    <!-- Row 1: Backgrounds + Surfaces -->
+    <div class="colour-grid">
+      <div class="swatch">
+        <div class="swatch-box has-contrast-border" style="background:#08080A;">
+          <span class="inner-label" style="color:#3A3F4A;">BG</span>
+        </div>
+        <span class="swatch-token">BG_DEEP</span>
+        <span class="swatch-hex">#08080A</span>
+        <span class="swatch-usage">Screen background</span>
+      </div>
+      <div class="swatch">
+        <div class="swatch-box has-contrast-border" style="background:#111114;">
+          <span class="inner-label" style="color:#3A3F4A;">SRF</span>
+        </div>
+        <span class="swatch-token">SURFACE</span>
+        <span class="swatch-hex">#111114</span>
+        <span class="swatch-usage">Card background</span>
+      </div>
+      <div class="swatch">
+        <div class="swatch-box has-contrast-border" style="background:#1A1A1E;">
+          <span class="inner-label" style="color:#3A3F4A;">ELV</span>
+        </div>
+        <span class="swatch-token">SURFACE_ELEVATED</span>
+        <span class="swatch-hex">#1A1A1E</span>
+        <span class="swatch-usage">Header, footer, active cards</span>
+      </div>
+      <div class="swatch">
+        <div class="swatch-box" style="background:#1E1E24;">
+          <span class="inner-label" style="color:#3A3F4A;">BRD</span>
+        </div>
+        <span class="swatch-token">BORDER_SUBTLE</span>
+        <span class="swatch-hex">#1E1E24</span>
+        <span class="swatch-usage">Card borders (1px)</span>
+      </div>
+      <div class="swatch">
+        <div class="swatch-box" style="background:#FFC700; border-color:#FFC700;">
+          <span class="inner-label" style="color:#332600;">ACT</span>
+        </div>
+        <span class="swatch-token">BORDER_ACTIVE</span>
+        <span class="swatch-hex">#FFC700</span>
+        <span class="swatch-usage">Active/selected card border</span>
+      </div>
+    </div>
+
+    <!-- Row 2: Foreground + Brand + Status -->
+    <div class="colour-grid">
+      <div class="swatch">
+        <div class="swatch-box" style="background:#F0F0F0; border-color:#F0F0F0;">
+          <span class="inner-label" style="color:#999;">FG1</span>
+        </div>
+        <span class="swatch-token">FG_PRIMARY</span>
+        <span class="swatch-hex">#F0F0F0</span>
+        <span class="swatch-usage">Primary text</span>
+      </div>
+      <div class="swatch">
+        <div class="swatch-box" style="background:#8891A0;">
+          <span class="inner-label" style="color:#555;">FG2</span>
+        </div>
+        <span class="swatch-token">FG_SECONDARY</span>
+        <span class="swatch-hex">#8891A0</span>
+        <span class="swatch-usage">Labels, secondary text</span>
+      </div>
+      <div class="swatch">
+        <div class="swatch-box" style="background:#3A3F4A;">
+          <span class="inner-label" style="color:#222;">DIM</span>
+        </div>
+        <span class="swatch-token">FG_DIMMED</span>
+        <span class="swatch-hex">#3A3F4A</span>
+        <span class="swatch-usage">Inactive/disabled</span>
+      </div>
+      <div class="swatch">
+        <div class="swatch-box" style="background:#FFC700; border-color:#FFC700;">
+          <span class="inner-label" style="color:#332600;">BND</span>
+        </div>
+        <span class="swatch-token">BRAND</span>
+        <span class="swatch-hex">#FFC700</span>
+        <span class="swatch-usage">Accent, active indicators, bars</span>
+      </div>
+      <div class="swatch">
+        <div class="swatch-box" style="background:#665200;">
+          <span class="inner-label" style="color:#332600;">B/D</span>
+        </div>
+        <span class="swatch-token">BRAND_DIM</span>
+        <span class="swatch-hex">#665200</span>
+        <span class="swatch-usage">Inactive brand elements</span>
+      </div>
+    </div>
+
+    <!-- Row 3: Status colours -->
+    <div class="colour-grid" style="grid-template-columns: repeat(3, 1fr) repeat(2, 0fr); margin-bottom: 48px;">
+      <div class="swatch">
+        <div class="swatch-box" style="background:#22C55E;">
+          <span class="inner-label" style="color:#0a4a24;">OK</span>
+        </div>
+        <span class="swatch-token">STATUS_OK</span>
+        <span class="swatch-hex">#22C55E</span>
+        <span class="swatch-usage">Connected, enabled</span>
+      </div>
+      <div class="swatch">
+        <div class="swatch-box" style="background:#F59E0B;">
+          <span class="inner-label" style="color:#5a3a00;">WRN</span>
+        </div>
+        <span class="swatch-token">STATUS_WARN</span>
+        <span class="swatch-hex">#F59E0B</span>
+        <span class="swatch-usage">Connecting, degraded</span>
+      </div>
+      <div class="swatch">
+        <div class="swatch-box" style="background:#EF4444;">
+          <span class="inner-label" style="color:#4a1111;">ERR</span>
+        </div>
+        <span class="swatch-token">STATUS_ERROR</span>
+        <span class="swatch-hex">#EF4444</span>
+        <span class="swatch-usage">Error, disconnected</span>
+      </div>
+    </div>
+
+    <!-- ============ TYPOGRAPHY ============ -->
+    <div class="section-title">Typography</div>
+    <div class="section-rule"></div>
+
+    <div class="type-section">
+      <!-- Hero: Effect / Palette name -->
+      <div class="type-specimen">
+        <div class="type-meta">
+          <div class="meta-context">Hero &mdash; Effect / Palette Name</div>
+          <div class="meta-font">Bebas Neue Regular &middot; 44px</div>
+          <div class="meta-colour">FG_PRIMARY #F0F0F0</div>
+        </div>
+        <div class="type-sample" style="font-family:'Bebas Neue',sans-serif; font-size:44px; color:#F0F0F0; letter-spacing:1px; line-height:1;">
+          LGP Time-Reversal Mirror Mod2
+        </div>
+      </div>
+
+      <!-- Hero secondary: palette at dimmer colour -->
+      <div class="type-specimen">
+        <div class="type-meta">
+          <div class="meta-context">Hero Secondary &mdash; Palette</div>
+          <div class="meta-font">Bebas Neue Regular &middot; 44px</div>
+          <div class="meta-colour">FG_SECONDARY #8891A0</div>
+        </div>
+        <div class="type-sample" style="font-family:'Bebas Neue',sans-serif; font-size:44px; color:#8891A0; letter-spacing:1px; line-height:1;">
+          Sunset Glow
+        </div>
+      </div>
+
+      <!-- Gauge values -->
+      <div class="type-specimen">
+        <div class="type-meta">
+          <div class="meta-context">Gauge Values</div>
+          <div class="meta-font">JetBrains Mono Bold &middot; 36px</div>
+          <div class="meta-colour">FG_PRIMARY #F0F0F0</div>
+        </div>
+        <div class="type-sample" style="font-family:'JetBrains Mono',monospace; font-size:36px; font-weight:700; color:#F0F0F0; line-height:1;">
+          128 &nbsp; 192 &nbsp; 0x1B &nbsp; 64 &nbsp; 200
+        </div>
+      </div>
+
+      <!-- BPM hero metric -->
+      <div class="type-specimen">
+        <div class="type-meta">
+          <div class="meta-context">BPM &mdash; Hero Metric</div>
+          <div class="meta-font">JetBrains Mono Bold &middot; 28px</div>
+          <div class="meta-colour">BRAND #FFC700</div>
+        </div>
+        <div class="type-sample" style="font-family:'JetBrains Mono',monospace; font-size:28px; font-weight:700; color:#FFC700; line-height:1;">
+          138 <span style="font-family:'Rajdhani',sans-serif; font-size:16px; font-weight:500; color:#665200; letter-spacing:1px;">BPM</span>
+        </div>
+      </div>
+
+      <!-- Action row values -->
+      <div class="type-specimen">
+        <div class="type-meta">
+          <div class="meta-context">Action Row Values</div>
+          <div class="meta-font">Rajdhani Bold &middot; 28px</div>
+          <div class="meta-colour">FG_PRIMARY #F0F0F0</div>
+        </div>
+        <div class="type-sample" style="font-family:'Rajdhani',sans-serif; font-size:28px; font-weight:700; color:#F0F0F0; line-height:1;">
+          2.2 &nbsp; RGB &nbsp; Complementary &nbsp; Temporal &nbsp; Global
+        </div>
+      </div>
+
+      <!-- Gauge labels -->
+      <div class="type-specimen">
+        <div class="type-meta">
+          <div class="meta-context">Gauge Labels</div>
+          <div class="meta-font">Rajdhani Medium &middot; 20px</div>
+          <div class="meta-colour">FG_SECONDARY #8891A0</div>
+        </div>
+        <div class="type-sample" style="font-family:'Rajdhani',sans-serif; font-size:20px; font-weight:500; color:#8891A0; letter-spacing:1.5px; text-transform:uppercase; line-height:1;">
+          Effect &nbsp;&nbsp; Palette &nbsp;&nbsp; Speed &nbsp;&nbsp; Mood &nbsp;&nbsp; Fade &nbsp;&nbsp; Complexity &nbsp;&nbsp; Variation &nbsp;&nbsp; Brightness
+        </div>
+      </div>
+
+      <!-- Action row labels -->
+      <div class="type-specimen">
+        <div class="type-meta">
+          <div class="meta-context">Action Row Labels</div>
+          <div class="meta-font">Rajdhani Medium &middot; 20px</div>
+          <div class="meta-colour">FG_SECONDARY #8891A0</div>
+        </div>
+        <div class="type-sample" style="font-family:'Rajdhani',sans-serif; font-size:20px; font-weight:500; color:#8891A0; letter-spacing:1px; text-transform:uppercase; line-height:1;">
+          Gamma &nbsp;&nbsp; Colour &nbsp;&nbsp; EdgeMixer &nbsp;&nbsp; Spatial &nbsp;&nbsp; Zones
+        </div>
+      </div>
+
+      <!-- Footer metrics -->
+      <div class="type-specimen">
+        <div class="type-meta">
+          <div class="meta-context">Footer Metrics</div>
+          <div class="meta-font">JetBrains Mono Regular &middot; 20px</div>
+          <div class="meta-colour">FG_SECONDARY #8891A0</div>
+        </div>
+        <div class="type-sample" style="font-family:'JetBrains Mono',monospace; font-size:20px; font-weight:400; color:#8891A0; line-height:1;">
+          KEY Am &nbsp;&nbsp; MIC -12 dB &nbsp;&nbsp; BAT 87% &nbsp;&nbsp; WS
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ HIERARCHY DEMO ============ -->
+    <div class="section-title">Visual Hierarchy</div>
+    <div class="section-rule"></div>
+
+    <div class="hierarchy-demo">
+      <div class="hierarchy-row">
+        <span class="hierarchy-badge primary">PRIMARY</span>
+        <span style="font-family:'Bebas Neue',sans-serif; font-size:44px; color:#F0F0F0; letter-spacing:1px; line-height:1;">LGP Time-Reversal Mirror</span>
+        <span class="hierarchy-arrow">&rarr;</span>
+        <span style="font-family:'JetBrains Mono',monospace; font-size:36px; font-weight:700; color:#F0F0F0; line-height:1;">192</span>
+        <span class="hierarchy-arrow">&rarr;</span>
+        <span style="font-family:'JetBrains Mono',monospace; font-size:28px; font-weight:700; color:#FFC700; line-height:1;">138</span>
+      </div>
+      <div style="margin-left:100px; color:#1E1E24; font-size:13px; font-family:'JetBrains Mono',monospace; letter-spacing:1px;">
+        Effect name (44px) &nbsp;&rarr;&nbsp; Gauge value (36px) &nbsp;&rarr;&nbsp; BPM accent (28px)
+      </div>
+
+      <div class="hierarchy-row" style="margin-top:8px;">
+        <span class="hierarchy-badge secondary">SECONDARY</span>
+        <span style="font-family:'Rajdhani',sans-serif; font-size:28px; font-weight:700; color:#F0F0F0; line-height:1;">Complementary</span>
+        <span class="hierarchy-arrow">&rarr;</span>
+        <span style="font-family:'Rajdhani',sans-serif; font-size:20px; font-weight:500; color:#8891A0; letter-spacing:1.5px; text-transform:uppercase; line-height:1;">Speed</span>
+      </div>
+      <div style="margin-left:100px; color:#1E1E24; font-size:13px; font-family:'JetBrains Mono',monospace; letter-spacing:1px;">
+        Action values (28px) &nbsp;&rarr;&nbsp; Gauge labels (20px)
+      </div>
+
+      <div class="hierarchy-row" style="margin-top:8px;">
+        <span class="hierarchy-badge tertiary">TERTIARY</span>
+        <span style="font-family:'JetBrains Mono',monospace; font-size:20px; font-weight:400; color:#8891A0; line-height:1;">KEY Am</span>
+        <span class="hierarchy-arrow">&rarr;</span>
+        <span style="font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:400; color:#3A3F4A; line-height:1;">87%</span>
+      </div>
+      <div style="margin-left:100px; color:#1E1E24; font-size:13px; font-family:'JetBrains Mono',monospace; letter-spacing:1px;">
+        Footer metrics (20px) &nbsp;&rarr;&nbsp; Battery/status (dimmed)
+      </div>
+    </div>
+
+  </div>
+
+  <p class="caption">
+    <strong>Design system specimen.</strong> 13 colour tokens, 3 typefaces, 8 size/weight combinations.
+    Brand yellow is the accent &mdash; it marks active states and the BPM hero metric.
+    The hierarchy runs from 44px hero text down to 15px dimmed status, creating a clear reading order even at arm's length.
+  </p>
+</body>
+</html>

@@ -703,6 +703,21 @@ void DisplayUI::begin() {
         lv_obj_align(_preset_values[i], LV_ALIGN_CENTER, 0, 8);
         lv_obj_clear_flag(_preset_values[i], LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_flag(_preset_values[i], LV_OBJ_FLAG_EVENT_BUBBLE);
+
+        // Click-to-load handler — load preset if occupied
+        lv_obj_set_user_data(_preset_cards[i], reinterpret_cast<void*>(static_cast<uintptr_t>(i)));
+        lv_obj_add_event_cb(_preset_cards[i], [](lv_event_t* e) {
+            lv_obj_t* target = static_cast<lv_obj_t*>(lv_event_get_target(e));
+            uint8_t slot = static_cast<uint8_t>(reinterpret_cast<uintptr_t>(lv_obj_get_user_data(target)));
+            auto* ui = static_cast<DisplayUI*>(lv_event_get_user_data(e));
+            if (!ui || !ui->_wsClient || slot >= 8) return;
+            if (ui->_presetSidebarSlots[slot].occupied) {
+                ui->_wsClient->sendEffectPresetLoad(slot);
+                // Brief visual feedback — highlight the loaded card
+                lv_obj_set_style_border_color(target,
+                    lv_color_hex(DesignTokens::PRESET_ACTIVE_BORDER), LV_PART_MAIN);
+            }
+        }, LV_EVENT_CLICKED, reinterpret_cast<void*>(this));
     }
 
     // --- Mode buttons (6-column grid, child of top zone) ---

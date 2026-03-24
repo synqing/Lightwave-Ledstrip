@@ -1096,16 +1096,10 @@ void onEncoderChange(uint8_t index, uint16_t value, bool wasReset) {
                 }
                 break;
 
-            case SidebarTab::PRESETS: {
-                // Placeholder: preset selection/navigation via encoders.
-                // Actual preset WS commands handled by existing preset system.
-                if (hasEncoderDelta && encoderDelta != 0) {
-                    const uint8_t localIdx = static_cast<uint8_t>(index - 8);
-                    Serial.printf("[PRESET] Encoder %u delta=%d (tab=PRESETS)\n",
-                                  localIdx, (int)encoderDelta);
-                }
-                return;  // Swallow — do not fall through to legacy routing
-            }
+            case SidebarTab::PRESETS:
+                // Presets use click-to-load (touch), not encoder rotation.
+                // Swallow encoder input on presets tab.
+                return;
         }
     }
     #else

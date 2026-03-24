@@ -32,6 +32,7 @@
 #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
 #include "lvgl_bridge.h"
 #include "fonts/experimental_fonts.h"
+#include "DesignTokens.h"
 #endif
 
 namespace LoadingScreen {
@@ -145,7 +146,7 @@ void show(M5GFX& display, const char* message, bool unitA, bool unitB) {
     s_subtitleLabel = lv_label_create(cont);
     const char* displayMessage = message ? message : "";
     lv_label_set_text(s_subtitleLabel, displayMessage);
-    lv_obj_set_style_text_color(s_subtitleLabel, lv_color_hex(0x848484), 0); // TAB5_COLOR_FG_SECONDARY
+    lv_obj_set_style_text_color(s_subtitleLabel, lv_color_hex(DesignTokens::FG_SECONDARY), 0);
     lv_obj_set_style_text_font(s_subtitleLabel, BEBAS_BOLD_24, 0);
     lv_obj_set_style_margin_top(s_subtitleLabel, 10, 0);
     // Initialize subtitle tracking for dots animation control

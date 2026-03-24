@@ -2,16 +2,19 @@
 // ============================================================================
 // WiFiAntenna - Tab5 runtime antenna selection (MMCX vs internal 3D)
 // ============================================================================
-// Tab5 uses PI4IOE5V6408 IO expander (E1) pin P0: HIGH = external MMCX,
-// LOW = internal 3D antenna. This module allows switching at runtime.
-//
-// Caveat: ESP32-C6 may only sample the antenna pin at WiFi init. If runtime
-// switch does not change RSSI, reconnect WiFi or reboot to apply.
+// PI4IOE5V6408 IO expander 0, pin P0: HIGH = external MMCX, LOW = internal 3D.
+// MUST call initWiFiAntennaPin() before WiFi.begin() — the IO expander powers
+// up with all pins as INPUT/high-impedance. Without init, the antenna select
+// line is floating and WiFi association will fail intermittently.
 // ============================================================================
 
 #include "config/Config.h"
 
 #if ENABLE_WIFI
+
+/** Configure IO expander pin P0 as push-pull OUTPUT and set to external MMCX.
+ *  MUST be called once during setup(), before WiFi.begin(). */
+void initWiFiAntennaPin();
 
 /** Set WiFi antenna: true = external MMCX, false = internal 3D. */
 void setWiFiAntenna(bool useExternal);
@@ -21,6 +24,7 @@ bool isWiFiAntennaExternal();
 
 #else
 
+inline void initWiFiAntennaPin() {}
 inline void setWiFiAntenna(bool /* useExternal */) {}
 inline bool isWiFiAntennaExternal() { return false; }
 

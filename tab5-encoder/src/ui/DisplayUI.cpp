@@ -23,18 +23,11 @@
 #include "ZoneComposerUI.h"
 #include "ConnectivityTab.h"
 #include "ControlSurfaceUI.h"
+#include "DesignTokens.h"
 
 // Forward declaration - WiFiManager instance is in main.cpp
 extern WiFiManager g_wifiManager;
 
-static constexpr uint32_t TAB5_COLOR_BG_PAGE = 0x0A0A0B;
-static constexpr uint32_t TAB5_COLOR_BG_SURFACE_BASE = 0x121214;
-static constexpr uint32_t TAB5_COLOR_BG_SURFACE_ELEVATED = 0x1A1A1C;
-static constexpr uint32_t TAB5_COLOR_BORDER_BASE = 0x2A2A2E;
-static constexpr uint32_t TAB5_COLOR_FG_PRIMARY = 0xFFFFFF;
-static constexpr uint32_t TAB5_COLOR_FG_SECONDARY = 0x9CA3AF;
-static constexpr uint32_t TAB5_COLOR_BRAND_PRIMARY = 0xFFC700;
-static constexpr uint32_t TAB5_COLOR_STATUS_SUCCESS = 0x22C55E;
 
 // Forward declaration
 static void formatDuration(uint32_t seconds, char* buf, size_t bufSize);
@@ -42,9 +35,6 @@ static void formatDuration(uint32_t seconds, char* buf, size_t bufSize);
 // Static member initialization
 DisplayUI* DisplayUI::s_instance = nullptr;
 
-static constexpr int32_t TAB5_STATUSBAR_HEIGHT = 66;
-static constexpr int32_t TAB5_GRID_GAP = 14;
-static constexpr int32_t TAB5_GRID_MARGIN = 24;
 
 // Display order: Effect, Palette, Speed, Mood, Fade, Complexity, Variation, Brightness
 static constexpr const char* kParamNames[8] = {
@@ -64,21 +54,6 @@ static constexpr uint8_t kEncoderToDisplayPos[8] = {
     7   // Encoder 7 (Brightness) -> Display 7
 };
 
-static lv_obj_t* make_card(lv_obj_t* parent, bool elevated) {
-    lv_obj_t* card = lv_obj_create(parent);
-    lv_obj_set_style_bg_color(card,
-                              lv_color_hex(elevated ? TAB5_COLOR_BG_SURFACE_ELEVATED
-                                                    : TAB5_COLOR_BG_SURFACE_BASE),
-                              LV_PART_MAIN);
-    // White borders matching src/src/deck_ui.cpp implementation (2px instead of 3px)
-    lv_obj_set_style_border_width(card, 2, LV_PART_MAIN);
-    lv_obj_set_style_border_color(card, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-    lv_obj_set_style_radius(card, 14, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(card, 10, LV_PART_MAIN);
-    lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
-    return card;
-}
-
 DisplayUI::DisplayUI(M5GFX& display) : _display(display) {
     s_instance = this;
 }
@@ -96,6 +71,10 @@ DisplayUI::~DisplayUI() {
         delete _controlSurface;
         _controlSurface = nullptr;
     }
+    if (_sidebar) {
+        delete _sidebar;
+        _sidebar = nullptr;
+    }
     if (_screen_global) lv_obj_del(_screen_global);
     if (_screen_zone) lv_obj_del(_screen_zone);
     if (_screen_connectivity) lv_obj_del(_screen_connectivity);
@@ -110,7 +89,7 @@ void DisplayUI::begin() {
     if (!LVGLBridge::init()) return;
 
     _screen_global = lv_obj_create(nullptr);
-    lv_obj_set_style_bg_color(_screen_global, lv_color_hex(TAB5_COLOR_BG_PAGE), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(_screen_global, lv_color_hex(DesignTokens::BG_PAGE), LV_PART_MAIN);
     lv_obj_set_style_pad_all(_screen_global, 0, LV_PART_MAIN);
 
     _header = lv_obj_create(_screen_global);
@@ -121,14 +100,14 @@ void DisplayUI::begin() {
     // Screen width = 1280px, border = 2px, need margin on both sides
     // Maximum safe width = 1280 - left_margin - right_margin
     // Using 10px margin each side: width = 1280 - 10 - 10 = 1260
-    lv_obj_set_size(_header, 1260, TAB5_STATUSBAR_HEIGHT);
+    lv_obj_set_size(_header, 1260, DesignTokens::STATUSBAR_HEIGHT);
     // Position with 10px margin from left edge (more than 7px to ensure no clipping)
     lv_obj_set_pos(_header, 10, 7);
     // #region agent log (DISABLED)
     // Serial.printf("[DEBUG] Header: pos=(%d,%d), size=(%d,%d), right_edge=%d, margin_left=10, margin_right=%d\n", 
-                  // 10, 7, 1260, TAB5_STATUSBAR_HEIGHT, 10 + 1260, 1280 - (10 + 1260));
+                  // 10, 7, 1260, DesignTokens::STATUSBAR_HEIGHT, 10 + 1260, 1280 - (10 + 1260));
         // #endregion
-    lv_obj_set_style_bg_color(_header, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(_header, lv_color_hex(DesignTokens::SURFACE_ELEVATED), LV_PART_MAIN);
     // White border and rounded corners matching src/src/deck_ui.cpp (2px instead of 3px)
     lv_obj_set_style_border_width(_header, 2, LV_PART_MAIN);
     lv_obj_set_style_border_color(_header, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
@@ -138,20 +117,21 @@ void DisplayUI::begin() {
                   // (int)lv_obj_get_width(_header), (int)lv_obj_get_height(_header),
                   // (int)lv_obj_get_style_border_width(_header, LV_PART_MAIN));
         // #endregion
-    lv_obj_set_style_pad_left(_header, TAB5_GRID_MARGIN, LV_PART_MAIN);
-    lv_obj_set_style_pad_right(_header, TAB5_GRID_MARGIN, LV_PART_MAIN);
+    lv_obj_set_style_pad_left(_header, DesignTokens::GRID_MARGIN, LV_PART_MAIN);
+    lv_obj_set_style_pad_right(_header, DesignTokens::GRID_MARGIN, LV_PART_MAIN);
     lv_obj_set_style_pad_top(_header, 16, LV_PART_MAIN);  // Equal top and bottom padding for proper centering
     lv_obj_set_style_pad_bottom(_header, 16, LV_PART_MAIN);  // Equal top and bottom padding for proper centering
     lv_obj_set_layout(_header, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(_header, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(_header, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(_header, LV_OBJ_FLAG_SCROLLABLE);
 
     // Pattern container (fixed width to prevent shifting) - moved to first position
     _header_effect_container = lv_obj_create(_header);
     // Set height explicitly to font size (24px) instead of line height (26px) to prevent extra space at bottom
     lv_obj_set_size(_header_effect_container, 220, 24);
     // Explicitly set background color to match header (not just opacity) to prevent any default color rendering
-    lv_obj_set_style_bg_color(_header_effect_container, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(_header_effect_container, lv_color_hex(DesignTokens::SURFACE_ELEVATED), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(_header_effect_container, LV_OPA_TRANSP, LV_PART_MAIN);
     // Clip overflow to prevent any rendering outside the container bounds
     // Clear borders on ALL parts and ALL states
@@ -164,11 +144,12 @@ void DisplayUI::begin() {
     lv_obj_set_style_bg_opa(_header_effect_container, LV_OPA_TRANSP, LV_PART_INDICATOR);
     lv_obj_set_style_pad_all(_header_effect_container, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_left(_header_effect_container, 0, LV_PART_MAIN); // No left padding - header padding provides edge spacing
+    lv_obj_clear_flag(_header_effect_container, LV_OBJ_FLAG_SCROLLABLE);
 
     _header_effect = lv_label_create(_header_effect_container);
-    lv_label_set_text(_header_effect, "--");
+    lv_label_set_text(_header_effect, "");
     lv_obj_set_style_text_font(_header_effect, &bebas_neue_24px, LV_PART_MAIN);
-    lv_obj_set_style_text_color(_header_effect, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(_header_effect, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
     // #region agent log (DISABLED)
     // Serial.printf("[DEBUG] Pattern label created, checking styles before clear\n");
         // #endregion
@@ -209,7 +190,7 @@ void DisplayUI::begin() {
     // Set height explicitly to font size (24px) instead of line height (26px) to prevent extra space at bottom
     lv_obj_set_size(_header_palette_container, 220, 24);
     // Explicitly set background color to match header (not just opacity) to prevent any default color rendering
-    lv_obj_set_style_bg_color(_header_palette_container, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(_header_palette_container, lv_color_hex(DesignTokens::SURFACE_ELEVATED), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(_header_palette_container, LV_OPA_TRANSP, LV_PART_MAIN);
     // Clip overflow to prevent any rendering outside the container bounds
     // Clear borders on ALL parts
@@ -221,6 +202,7 @@ void DisplayUI::begin() {
     lv_obj_set_style_bg_opa(_header_palette_container, LV_OPA_TRANSP, LV_PART_INDICATOR);
     lv_obj_set_style_pad_all(_header_palette_container, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_left(_header_palette_container, 10, LV_PART_MAIN); // 10px gap after Effect container
+    lv_obj_clear_flag(_header_palette_container, LV_OBJ_FLAG_SCROLLABLE);
 
     _header_palette = lv_label_create(_header_palette_container);
     // #region agent log (DISABLED)
@@ -229,9 +211,9 @@ void DisplayUI::begin() {
                   // (int)lv_obj_get_style_text_decor(_header_palette, LV_PART_MAIN),
                   // (int)lv_obj_get_style_outline_width(_header_palette, LV_PART_MAIN));
         // #endregion
-    lv_label_set_text(_header_palette, "--");
+    lv_label_set_text(_header_palette, "");
     lv_obj_set_style_text_font(_header_palette, &bebas_neue_24px, LV_PART_MAIN);
-    lv_obj_set_style_text_color(_header_palette, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(_header_palette, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
     // Clear borders, text decoration, outline, and shadow
     lv_obj_set_style_border_width(_header_palette, 0, LV_PART_MAIN);
     lv_obj_set_style_text_decor(_header_palette, LV_TEXT_DECOR_NONE, LV_PART_MAIN);
@@ -272,7 +254,7 @@ void DisplayUI::begin() {
     _header_title_main = lv_label_create(title_container);
     lv_label_set_text(_header_title_main, "LIGHTWAVE");
     lv_obj_set_style_text_font(_header_title_main, &bebas_neue_40px, LV_PART_MAIN);
-    lv_obj_set_style_text_color(_header_title_main, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(_header_title_main, lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
     lv_obj_set_style_text_align(_header_title_main, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
     // Ensure consistent vertical alignment
     lv_obj_set_style_pad_top(_header_title_main, 0, LV_PART_MAIN);
@@ -281,7 +263,7 @@ void DisplayUI::begin() {
     _header_title_os = lv_label_create(title_container);
     lv_label_set_text(_header_title_os, "OS");
     lv_obj_set_style_text_font(_header_title_os, &bebas_neue_40px, LV_PART_MAIN);
-    lv_obj_set_style_text_color(_header_title_os, lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(_header_title_os, lv_color_hex(DesignTokens::BRAND_PRIMARY), LV_PART_MAIN);
     lv_obj_set_style_text_align(_header_title_os, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
     // Match padding to align baseline with main title
     lv_obj_set_style_pad_top(_header_title_os, 0, LV_PART_MAIN);
@@ -291,6 +273,8 @@ void DisplayUI::begin() {
     lv_obj_t* right_spacer = lv_obj_create(_header);
     lv_obj_set_style_bg_opa(right_spacer, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(right_spacer, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(right_spacer, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(right_spacer, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_grow(right_spacer, 1);
 
     // Network info: SSID (RSSI) IP - wrapped in clickable container for navigation
@@ -319,9 +303,9 @@ void DisplayUI::begin() {
 
     // SSID label (inside container)
     _header_net_ssid = lv_label_create(_header_net_container);
-    lv_label_set_text(_header_net_ssid, "--");
+    lv_label_set_text(_header_net_ssid, "");
     lv_obj_set_style_text_font(_header_net_ssid, &bebas_neue_24px, LV_PART_MAIN);
-    lv_obj_set_style_text_color(_header_net_ssid, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(_header_net_ssid, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
 
     // RSSI label (inside container)
     _header_net_rssi = lv_label_create(_header_net_container);
@@ -331,9 +315,9 @@ void DisplayUI::begin() {
 
     // IP label (inside container)
     _header_net_ip = lv_label_create(_header_net_container);
-    lv_label_set_text(_header_net_ip, "--");
+    lv_label_set_text(_header_net_ip, "");
     lv_obj_set_style_text_font(_header_net_ip, &bebas_neue_24px, LV_PART_MAIN);
-    lv_obj_set_style_text_color(_header_net_ip, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(_header_net_ip, lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
     lv_obj_set_style_pad_left(_header_net_ip, 8, LV_PART_MAIN);
 
     // Click handler: navigate to ConnectivityTab
@@ -349,7 +333,7 @@ void DisplayUI::begin() {
     _header_retry_button = lv_label_create(_header);
     lv_label_set_text(_header_retry_button, "RETRY");
     lv_obj_set_style_text_font(_header_retry_button, RAJDHANI_MED_24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(_header_retry_button, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(_header_retry_button, lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
     lv_obj_set_style_pad_left(_header_retry_button, 12, LV_PART_MAIN);
     lv_obj_set_style_pad_right(_header_retry_button, 8, LV_PART_MAIN);
     lv_obj_set_style_pad_top(_header_retry_button, 4, LV_PART_MAIN);
@@ -366,20 +350,64 @@ void DisplayUI::begin() {
         }
     }, LV_EVENT_CLICKED, reinterpret_cast<void*>(this));
 
+    // --- Sidebar (GLOBAL screen only) ------------------------------------
+    esp_task_wdt_reset();
+    _sidebar = new SidebarWidget();
+    _sidebar->setTabCallback([](SidebarTab tab) {
+        if (!DisplayUI::s_instance) return;
+        auto* self = DisplayUI::s_instance;
+        self->_currentTab = tab;
+
+        // Show/hide bottom-zone panels
+        if (self->_fx_panel) {
+            if (tab == SidebarTab::FX_PARAMS)
+                lv_obj_clear_flag(self->_fx_panel, LV_OBJ_FLAG_HIDDEN);
+            else
+                lv_obj_add_flag(self->_fx_panel, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (self->_zones_panel) {
+            if (tab == SidebarTab::ZONES)
+                lv_obj_clear_flag(self->_zones_panel, LV_OBJ_FLAG_HIDDEN);
+            else
+                lv_obj_add_flag(self->_zones_panel, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (self->_presets_panel) {
+            if (tab == SidebarTab::PRESETS)
+                lv_obj_clear_flag(self->_presets_panel, LV_OBJ_FLAG_HIDDEN);
+            else
+                lv_obj_add_flag(self->_presets_panel, LV_OBJ_FLAG_HIDDEN);
+        }
+
+        // Phase 5 — apply neon colour to Unit B bars
+        self->applyTabColour(tab);
+    });
+    _sidebar->begin(_screen_global);
+    esp_task_wdt_reset();
+
     static constexpr lv_coord_t kGaugeRowHeight = 125;
-    static constexpr lv_coord_t kFxRowHeight = 78;
-    static constexpr lv_coord_t kPresetRowHeight = 85;
-    static constexpr lv_coord_t kActionRowHeight = 100;
+    static constexpr lv_coord_t kModeRowHeight = 80;
+    static constexpr lv_coord_t kTopZoneHeight = 232;
 
-    const int32_t contentTop = TAB5_STATUSBAR_HEIGHT + TAB5_GRID_MARGIN;
-    int32_t nextRowY = contentTop;
+    // --- Top zone (persistent, always visible) ---
+    esp_task_wdt_reset();
+    _top_zone = lv_obj_create(_screen_global);
+    lv_obj_set_pos(_top_zone, DesignTokens::SIDEBAR_WIDTH, 73);
+    lv_obj_set_size(_top_zone, 1280 - DesignTokens::SIDEBAR_WIDTH, kTopZoneHeight);
+    lv_obj_set_style_bg_color(_top_zone, lv_color_hex(DesignTokens::ROW_TOP), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(_top_zone, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(_top_zone, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(_top_zone, 10, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(_top_zone, 8, LV_PART_MAIN);
+    lv_obj_clear_flag(_top_zone, LV_OBJ_FLAG_SCROLLABLE);
 
-    _gauges_container = lv_obj_create(_screen_global);
-    lv_obj_set_size(_gauges_container, 1280 - 2 * TAB5_GRID_MARGIN, kGaugeRowHeight);
-    lv_obj_align(_gauges_container, LV_ALIGN_TOP_MID, 0, nextRowY);
+    // --- Gauges container (child of top zone) ---
+    _gauges_container = lv_obj_create(_top_zone);
+    lv_obj_set_size(_gauges_container, 1210 - 2 * 10, kGaugeRowHeight);
+    lv_obj_align(_gauges_container, LV_ALIGN_TOP_MID, 0, 0);
     lv_obj_set_style_bg_opa(_gauges_container, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(_gauges_container, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(_gauges_container, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(_gauges_container, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_layout(_gauges_container, LV_LAYOUT_GRID);
 
     static lv_coord_t col_dsc[9] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
@@ -387,7 +415,7 @@ void DisplayUI::begin() {
                                     LV_GRID_TEMPLATE_LAST};
     static lv_coord_t row_dsc[2] = {kGaugeRowHeight, LV_GRID_TEMPLATE_LAST};
     lv_obj_set_grid_dsc_array(_gauges_container, col_dsc, row_dsc);
-    lv_obj_set_style_pad_column(_gauges_container, TAB5_GRID_GAP, LV_PART_MAIN);
+    lv_obj_set_style_pad_column(_gauges_container, DesignTokens::GRID_GAP, LV_PART_MAIN);
 
     for (int i = 0; i < 8; i++) {
         _gauge_cards[i] = make_card(_gauges_container, false);
@@ -397,184 +425,342 @@ void DisplayUI::begin() {
         _gauge_labels[i] = lv_label_create(_gauge_cards[i]);
         lv_label_set_text(_gauge_labels[i], kParamNames[i]);
         lv_obj_set_style_text_font(_gauge_labels[i], BEBAS_BOLD_24, LV_PART_MAIN);
-        lv_obj_set_style_text_color(_gauge_labels[i], lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+        lv_obj_set_style_text_color(_gauge_labels[i], lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
         lv_obj_align(_gauge_labels[i], LV_ALIGN_TOP_MID, 0, 0);
 
         _gauge_values[i] = lv_label_create(_gauge_cards[i]);
-        lv_label_set_text(_gauge_values[i], "--");
+        lv_label_set_text(_gauge_values[i], "");
         lv_obj_set_style_text_font(_gauge_values[i], JETBRAINS_MONO_REG_32, LV_PART_MAIN);
-        lv_obj_set_style_text_color(_gauge_values[i], lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
-        lv_obj_align(_gauge_values[i], LV_ALIGN_TOP_MID, 0, 30);  // Moved down 2px for even spacing
+        lv_obj_set_style_text_color(_gauge_values[i], lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
+        lv_obj_align(_gauge_values[i], LV_ALIGN_TOP_MID, 0, 30);
 
         _gauge_bars[i] = lv_bar_create(_gauge_cards[i]);
         lv_bar_set_range(_gauge_bars[i], 0, 255);
         lv_bar_set_value(_gauge_bars[i], 0, LV_ANIM_OFF);
-        lv_obj_set_size(_gauge_bars[i], LV_PCT(90), 10);  // 90% width, 10px height
-        lv_obj_align(_gauge_bars[i], LV_ALIGN_BOTTOM_MID, 0, -10);  // Adjusted for even spacing
-        lv_obj_set_style_bg_color(_gauge_bars[i], lv_color_hex(TAB5_COLOR_BORDER_BASE), LV_PART_MAIN);
-        lv_obj_set_style_bg_color(_gauge_bars[i], lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_INDICATOR);
+        lv_obj_set_size(_gauge_bars[i], LV_PCT(90), 10);
+        lv_obj_align(_gauge_bars[i], LV_ALIGN_BOTTOM_MID, 0, -10);
+        lv_obj_set_style_bg_color(_gauge_bars[i], lv_color_hex(DesignTokens::BORDER_BASE), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(_gauge_bars[i], lv_color_hex(DesignTokens::BRAND_PRIMARY), LV_PART_INDICATOR);
         lv_obj_set_style_radius(_gauge_bars[i], 8, LV_PART_MAIN);
         lv_obj_set_style_radius(_gauge_bars[i], 8, LV_PART_INDICATOR);
     }
 
-    nextRowY += kGaugeRowHeight + TAB5_GRID_GAP;
+    // --- Separator line (must precede panel creation) ---
+    _separator = lv_obj_create(_screen_global);
+    lv_obj_set_pos(_separator, DesignTokens::SIDEBAR_WIDTH, 73 + kTopZoneHeight);
+    lv_obj_set_size(_separator, 1280 - DesignTokens::SIDEBAR_WIDTH, 1);
+    lv_obj_set_style_bg_color(_separator, lv_color_hex(DesignTokens::BORDER_SUBTLE), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(_separator, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(_separator, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(_separator, LV_OBJ_FLAG_SCROLLABLE);
 
-    auto createEffectParamRow = [&](lv_obj_t*& container,
-                                    lv_obj_t* cards[8],
-                                    lv_obj_t* labels[8],
-                                    lv_obj_t* values[8],
-                                    lv_obj_t* bars[8],
-                                    uint8_t slotBase) {
-        container = lv_obj_create(_screen_global);
-        lv_obj_set_size(container, 1280 - 2 * TAB5_GRID_MARGIN, kFxRowHeight);
-        lv_obj_align(container, LV_ALIGN_TOP_MID, 0, nextRowY);
-        lv_obj_set_style_bg_opa(container, LV_OPA_TRANSP, LV_PART_MAIN);
-        lv_obj_set_style_border_width(container, 0, LV_PART_MAIN);
-        lv_obj_set_style_pad_all(container, 0, LV_PART_MAIN);
-        lv_obj_set_layout(container, LV_LAYOUT_GRID);
-        static lv_coord_t fx_row_dsc[2] = {kFxRowHeight, LV_GRID_TEMPLATE_LAST};
-        lv_obj_set_grid_dsc_array(container, col_dsc, fx_row_dsc);
-        lv_obj_set_style_pad_column(container, TAB5_GRID_GAP, LV_PART_MAIN);
+    // --- Bottom zone (parent for tab content panels) ---
+    _bottom_zone = lv_obj_create(_screen_global);
+    lv_obj_set_pos(_bottom_zone, DesignTokens::SIDEBAR_WIDTH, 73 + kTopZoneHeight + 1);
+    lv_obj_set_size(_bottom_zone, 1280 - DesignTokens::SIDEBAR_WIDTH,
+                    720 - 73 - kTopZoneHeight - 1 - 69);
+    lv_obj_set_style_bg_color(_bottom_zone, lv_color_hex(DesignTokens::ROW_BOTTOM), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(_bottom_zone, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(_bottom_zone, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(_bottom_zone, 10, LV_PART_MAIN);
+    lv_obj_clear_flag(_bottom_zone, LV_OBJ_FLAG_SCROLLABLE);
+    esp_task_wdt_reset();
 
-        for (uint8_t i = 0; i < 8; ++i) {
-            cards[i] = make_card(container, false);
-            lv_obj_set_grid_cell(cards[i], LV_GRID_ALIGN_STRETCH, i, 1, LV_GRID_ALIGN_STRETCH, 0, 1);
+    // =================================================================
+    // Phase 4 — Tab content panels (children of _bottom_zone)
+    // =================================================================
 
-            labels[i] = lv_label_create(cards[i]);
-            lv_label_set_text_fmt(labels[i], "FX%u", static_cast<unsigned>(slotBase + i + 1));
-            lv_obj_set_style_text_font(labels[i], RAJDHANI_MED_24, LV_PART_MAIN);
-            lv_obj_set_style_text_color(labels[i], lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
-            lv_obj_set_width(labels[i], LV_PCT(100));
-            lv_label_set_long_mode(labels[i], LV_LABEL_LONG_DOT);
-            lv_obj_set_style_text_align(labels[i], LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-            lv_obj_align(labels[i], LV_ALIGN_TOP_MID, 0, -2);
+    // --- Panel 1: FX PARAMS (8-column grid, encoders 8-15) ---
+    _fx_panel = lv_obj_create(_bottom_zone);
+    lv_obj_set_size(_fx_panel, LV_PCT(100), LV_PCT(100));
+    lv_obj_set_style_bg_opa(_fx_panel, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(_fx_panel, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(_fx_panel, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(_fx_panel, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_layout(_fx_panel, LV_LAYOUT_GRID);
 
-            values[i] = lv_label_create(cards[i]);
-            lv_label_set_text(values[i], "--");
-            lv_obj_set_style_text_font(values[i], JETBRAINS_MONO_REG_24, LV_PART_MAIN);
-            lv_obj_set_style_text_color(values[i], lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
-            lv_obj_align(values[i], LV_ALIGN_TOP_MID, 0, 20);
-
-            bars[i] = lv_bar_create(cards[i]);
-            lv_bar_set_range(bars[i], 0, 255);
-            lv_bar_set_value(bars[i], 0, LV_ANIM_OFF);
-            lv_obj_set_size(bars[i], LV_PCT(90), 8);
-            lv_obj_align(bars[i], LV_ALIGN_BOTTOM_MID, 0, -8);
-            lv_obj_set_style_bg_color(bars[i], lv_color_hex(TAB5_COLOR_BORDER_BASE), LV_PART_MAIN);
-            lv_obj_set_style_bg_color(bars[i], lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_INDICATOR);
-            lv_obj_set_style_radius(bars[i], 6, LV_PART_MAIN);
-            lv_obj_set_style_radius(bars[i], 6, LV_PART_INDICATOR);
-        }
-    };
-
-    createEffectParamRow(_fx_row_a_container, _fxa_cards, _fxa_labels, _fxa_values, _fxa_bars, 0);
-    nextRowY += kFxRowHeight + TAB5_GRID_GAP;
-    createEffectParamRow(_fx_row_b_container, _fxb_cards, _fxb_labels, _fxb_values, _fxb_bars, 8);
-    nextRowY += kFxRowHeight + TAB5_GRID_GAP;
-
-    _preset_container = lv_obj_create(_screen_global);
-    lv_obj_set_size(_preset_container, 1280 - 2 * TAB5_GRID_MARGIN, kPresetRowHeight);
-    lv_obj_align(_preset_container, LV_ALIGN_TOP_MID, 0, nextRowY);
-    lv_obj_set_style_bg_opa(_preset_container, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_border_width(_preset_container, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(_preset_container, 0, LV_PART_MAIN);
-    lv_obj_set_layout(_preset_container, LV_LAYOUT_GRID);
-    static lv_coord_t preset_row_dsc[2] = {kPresetRowHeight, LV_GRID_TEMPLATE_LAST};
-    lv_obj_set_grid_dsc_array(_preset_container, col_dsc, preset_row_dsc);
-    lv_obj_set_style_pad_column(_preset_container, TAB5_GRID_GAP, LV_PART_MAIN);
+    static lv_coord_t fx_col_dsc[9] = {
+        LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
+        LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
+        LV_GRID_TEMPLATE_LAST};
+    static lv_coord_t fx_row_dsc[2] = {150, LV_GRID_TEMPLATE_LAST};
+    lv_obj_set_grid_dsc_array(_fx_panel, fx_col_dsc, fx_row_dsc);
+    lv_obj_set_style_pad_column(_fx_panel, DesignTokens::GRID_GAP, LV_PART_MAIN);
 
     for (int i = 0; i < 8; i++) {
-        _preset_cards[i] = make_card(_preset_container, true);
-        lv_obj_set_grid_cell(_preset_cards[i], LV_GRID_ALIGN_STRETCH, i, 1,
+        _fxa_cards[i] = make_card(_fx_panel, false);
+        lv_obj_set_grid_cell(_fxa_cards[i], LV_GRID_ALIGN_STRETCH, i, 1,
                              LV_GRID_ALIGN_STRETCH, 0, 1);
 
-        _preset_labels[i] = lv_label_create(_preset_cards[i]);
-        lv_label_set_text_fmt(_preset_labels[i], "P%d", i + 1);
-        lv_obj_set_style_text_font(_preset_labels[i], &bebas_neue_24px, LV_PART_MAIN);
-        lv_obj_set_style_text_color(_preset_labels[i], lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
-        lv_obj_align(_preset_labels[i], LV_ALIGN_TOP_MID, 0, 0);
+        char defaultLabel[8];
+        snprintf(defaultLabel, sizeof(defaultLabel), "FX%d", i + 1);
+        _fxa_labels[i] = lv_label_create(_fxa_cards[i]);
+        lv_label_set_text(_fxa_labels[i], defaultLabel);
+        lv_obj_set_style_text_font(_fxa_labels[i], RAJDHANI_MED_24, LV_PART_MAIN);
+        lv_obj_set_style_text_color(_fxa_labels[i], lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
+        lv_obj_set_width(_fxa_labels[i], LV_PCT(100));
+        lv_label_set_long_mode(_fxa_labels[i], LV_LABEL_LONG_DOT);
+        lv_obj_set_style_text_align(_fxa_labels[i], LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+        lv_obj_align(_fxa_labels[i], LV_ALIGN_TOP_MID, 0, 0);
 
-        _preset_values[i] = lv_label_create(_preset_cards[i]);
-        lv_label_set_text(_preset_values[i], "--");
-        lv_obj_set_style_text_color(_preset_values[i], lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
-        lv_obj_align(_preset_values[i], LV_ALIGN_TOP_MID, 0, 28);  // Position below title with uniform spacing
+        _fxa_values[i] = lv_label_create(_fxa_cards[i]);
+        lv_label_set_text(_fxa_values[i], "");
+        lv_obj_set_style_text_font(_fxa_values[i], JETBRAINS_MONO_REG_24, LV_PART_MAIN);
+        lv_obj_set_style_text_color(_fxa_values[i], lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
+        lv_obj_align(_fxa_values[i], LV_ALIGN_TOP_MID, 0, 50);
+
+        _fxa_bars[i] = lv_bar_create(_fxa_cards[i]);
+        lv_bar_set_range(_fxa_bars[i], 0, 255);
+        lv_bar_set_value(_fxa_bars[i], 0, LV_ANIM_OFF);
+        lv_obj_set_size(_fxa_bars[i], LV_PCT(90), 8);
+        lv_obj_align(_fxa_bars[i], LV_ALIGN_BOTTOM_MID, 0, -8);
+        lv_obj_set_style_bg_color(_fxa_bars[i], lv_color_hex(DesignTokens::BORDER_BASE), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(_fxa_bars[i], lv_color_hex(DesignTokens::BRAND_PRIMARY), LV_PART_INDICATOR);
+        lv_obj_set_style_radius(_fxa_bars[i], 8, LV_PART_MAIN);
+        lv_obj_set_style_radius(_fxa_bars[i], 8, LV_PART_INDICATOR);
     }
+    // FX panel visible by default (matches initial _currentTab = FX_PARAMS)
 
-    nextRowY += kPresetRowHeight + TAB5_GRID_GAP;
+    esp_task_wdt_reset();
 
-    // Create action row (third row) - 4 buttons for GAMMA, COLOUR, EXPOSURE, BROWN
-    _action_container = lv_obj_create(_screen_global);
-    lv_obj_set_size(_action_container, 1280 - 2 * TAB5_GRID_MARGIN, kActionRowHeight);
-    lv_obj_align(_action_container, LV_ALIGN_TOP_MID, 0, nextRowY);
-    lv_obj_set_style_bg_opa(_action_container, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_border_width(_action_container, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(_action_container, 0, LV_PART_MAIN);
-    lv_obj_set_layout(_action_container, LV_LAYOUT_GRID);
-    static lv_coord_t action_col_dsc[6] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
-    static lv_coord_t action_row_dsc[2] = {kActionRowHeight, LV_GRID_TEMPLATE_LAST};
-    lv_obj_set_grid_dsc_array(_action_container, action_col_dsc, action_row_dsc);
-    lv_obj_set_style_pad_column(_action_container, TAB5_GRID_GAP, LV_PART_MAIN);
+    // --- Panel 2: ZONES (zone selector strip + 8-column param grid) ---
+    _zones_panel = lv_obj_create(_bottom_zone);
+    lv_obj_set_size(_zones_panel, LV_PCT(100), LV_PCT(100));
+    lv_obj_set_style_bg_opa(_zones_panel, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(_zones_panel, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(_zones_panel, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(_zones_panel, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_layout(_zones_panel, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(_zones_panel, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(_zones_panel, 8, LV_PART_MAIN);
+    lv_obj_add_flag(_zones_panel, LV_OBJ_FLAG_HIDDEN);  // Hidden initially
 
-    const char* action_names[] = {"GAMMA", "COLOUR", "EDGEMIXER", "SPATIAL", "ZONES"};
-    for (int i = 0; i < 5; i++) {
-        _action_buttons[i] = make_card(_action_container, false);
-        lv_obj_set_grid_cell(_action_buttons[i], LV_GRID_ALIGN_STRETCH, i, 1,
-                             LV_GRID_ALIGN_STRETCH, 0, 1);
-        lv_obj_add_flag(_action_buttons[i], LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_clear_flag(_action_buttons[i], LV_OBJ_FLAG_SCROLLABLE);
+    // Zone selector strip (3 equal buttons in a flex row)
+    lv_obj_t* zone_selector = lv_obj_create(_zones_panel);
+    lv_obj_set_size(zone_selector, LV_PCT(100), 44);
+    lv_obj_set_style_bg_opa(zone_selector, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(zone_selector, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(zone_selector, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(zone_selector, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_layout(zone_selector, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(zone_selector, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(zone_selector, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(zone_selector, DesignTokens::GRID_GAP, LV_PART_MAIN);
 
-        _action_labels[i] = lv_label_create(_action_buttons[i]);
-        lv_label_set_text(_action_labels[i], action_names[i]);
-        lv_obj_set_style_text_color(_action_labels[i], lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
-        lv_obj_set_style_text_font(_action_labels[i], RAJDHANI_MED_24, LV_PART_MAIN);
-        lv_obj_align(_action_labels[i], LV_ALIGN_TOP_MID, 0, 0);
-        lv_obj_clear_flag(_action_labels[i], LV_OBJ_FLAG_CLICKABLE);  // Prevent label from capturing touch
-        lv_obj_add_flag(_action_labels[i], LV_OBJ_FLAG_EVENT_BUBBLE);  // Let touch events bubble to button
+    const char* zoneLabels[] = {"ZONE 1", "ZONE 2", "ZONE 3"};
+    for (int i = 0; i < 3; i++) {
+        _zone_selector_buttons[i] = lv_obj_create(zone_selector);
+        lv_obj_set_flex_grow(_zone_selector_buttons[i], 1);
+        lv_obj_set_height(_zone_selector_buttons[i], 44);
+        lv_obj_set_style_bg_color(_zone_selector_buttons[i], lv_color_hex(DesignTokens::SURFACE_BASE), LV_PART_MAIN);
+        lv_obj_set_style_border_width(_zone_selector_buttons[i], 2, LV_PART_MAIN);
+        // First zone active by default
+        lv_obj_set_style_border_color(_zone_selector_buttons[i],
+            lv_color_hex(i == 0 ? DesignTokens::NEON_PURPLE : DesignTokens::BORDER_SUBTLE),
+            LV_PART_MAIN);
+        lv_obj_set_style_radius(_zone_selector_buttons[i], DesignTokens::CARD_RADIUS, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(_zone_selector_buttons[i], 0, LV_PART_MAIN);
+        lv_obj_clear_flag(_zone_selector_buttons[i], LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(_zone_selector_buttons[i], LV_OBJ_FLAG_CLICKABLE);
 
-        _action_values[i] = lv_label_create(_action_buttons[i]);
-        lv_label_set_text(_action_values[i], "--");
-        lv_obj_set_style_text_color(_action_values[i], lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
-        // GAMMA=monospace bold 32, EDGEMIXER/SPATIAL=Rajdhani bold 24 (full names), others=Rajdhani bold 32
-        const lv_font_t* val_font = (i == 0) ? JETBRAINS_MONO_BOLD_32
-                                  : (i == 2 || i == 3) ? RAJDHANI_BOLD_24
-                                  : RAJDHANI_BOLD_32;
-        lv_obj_set_style_text_font(_action_values[i], val_font, LV_PART_MAIN);
-        lv_obj_align(_action_values[i], LV_ALIGN_TOP_MID, 0, 28);  // Position below title with uniform spacing
-        lv_obj_clear_flag(_action_values[i], LV_OBJ_FLAG_CLICKABLE);  // Prevent value from capturing touch
-        lv_obj_add_flag(_action_values[i], LV_OBJ_FLAG_EVENT_BUBBLE);  // Let touch events bubble to button
+        _zone_selector_labels[i] = lv_label_create(_zone_selector_buttons[i]);
+        lv_label_set_text(_zone_selector_labels[i], zoneLabels[i]);
+        lv_obj_set_style_text_font(_zone_selector_labels[i], RAJDHANI_BOLD_24, LV_PART_MAIN);
+        lv_obj_set_style_text_color(_zone_selector_labels[i],
+            lv_color_hex(i == 0 ? DesignTokens::NEON_PURPLE : DesignTokens::FG_SECONDARY),
+            LV_PART_MAIN);
+        lv_obj_center(_zone_selector_labels[i]);
+        lv_obj_clear_flag(_zone_selector_labels[i], LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_flag(_zone_selector_labels[i], LV_OBJ_FLAG_EVENT_BUBBLE);
 
-        // Add event handler for button clicks
-        lv_obj_set_user_data(_action_buttons[i], reinterpret_cast<void*>(static_cast<uintptr_t>(i)));
-        lv_obj_add_event_cb(_action_buttons[i], [](lv_event_t* e) {
+        // Click handler — store zone index on widget, recover this via event user_data
+        lv_obj_set_user_data(_zone_selector_buttons[i], reinterpret_cast<void*>(static_cast<uintptr_t>(i)));
+        lv_obj_add_event_cb(_zone_selector_buttons[i], [](lv_event_t* e) {
             lv_obj_t* btn = static_cast<lv_obj_t*>(lv_event_get_target(e));
-            uint8_t index = static_cast<uint8_t>(reinterpret_cast<uintptr_t>(lv_obj_get_user_data(btn)));
+            uint8_t idx = static_cast<uint8_t>(reinterpret_cast<uintptr_t>(lv_obj_get_user_data(btn)));
             DisplayUI* ui = static_cast<DisplayUI*>(lv_event_get_user_data(e));
-
-            // Special handling for ZONES button (index 4)
-            if (index == 4) {
-                Serial.println("[DisplayUI] ZONES button pressed - switching to Zone Composer");
-                if (ui) {
-                    ui->setScreen(UIScreen::ZONE_COMPOSER);
+            if (!ui) return;
+            ui->_selectedZone = idx;
+            // Update all three buttons
+            for (int z = 0; z < 3; z++) {
+                if (!ui->_zone_selector_buttons[z]) continue;
+                bool active = (z == idx);
+                lv_obj_set_style_border_color(ui->_zone_selector_buttons[z],
+                    lv_color_hex(active ? DesignTokens::NEON_PURPLE : DesignTokens::BORDER_SUBTLE),
+                    LV_PART_MAIN);
+                if (ui->_zone_selector_labels[z]) {
+                    lv_obj_set_style_text_color(ui->_zone_selector_labels[z],
+                        lv_color_hex(active ? DesignTokens::NEON_PURPLE : DesignTokens::FG_SECONDARY),
+                        LV_PART_MAIN);
                 }
-            } else if (ui && ui->_action_callback) {
-                // Other buttons call the registered callback
-                ui->_action_callback(index);
             }
         }, LV_EVENT_CLICKED, reinterpret_cast<void*>(this));
     }
 
+    // Zone params grid (8-column, fills remaining height)
+    lv_obj_t* zone_grid = lv_obj_create(_zones_panel);
+    lv_obj_set_size(zone_grid, LV_PCT(100), LV_PCT(100));
+    lv_obj_set_flex_grow(zone_grid, 1);
+    lv_obj_set_style_bg_opa(zone_grid, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(zone_grid, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(zone_grid, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(zone_grid, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_layout(zone_grid, LV_LAYOUT_GRID);
+
+    static lv_coord_t zone_col_dsc[9] = {
+        LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
+        LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
+        LV_GRID_TEMPLATE_LAST};
+    static lv_coord_t zone_row_dsc[2] = {125, LV_GRID_TEMPLATE_LAST};
+    lv_obj_set_grid_dsc_array(zone_grid, zone_col_dsc, zone_row_dsc);
+    lv_obj_set_style_pad_column(zone_grid, DesignTokens::GRID_GAP, LV_PART_MAIN);
+
+    const char* zoneParamNames[] = {"EFFECT", "SPEED", "PALETTE", "BLEND", "BRI", "", "", ""};
+    for (int i = 0; i < 8; i++) {
+        _zone_param_cards[i] = make_card(zone_grid, false);
+        lv_obj_set_grid_cell(_zone_param_cards[i], LV_GRID_ALIGN_STRETCH, i, 1,
+                             LV_GRID_ALIGN_STRETCH, 0, 1);
+        // Dim empty placeholder cards (indices 5-7)
+        if (i >= 5) {
+            lv_obj_set_style_bg_opa(_zone_param_cards[i], LV_OPA_40, LV_PART_MAIN);
+            lv_obj_set_style_border_color(_zone_param_cards[i],
+                lv_color_hex(DesignTokens::BORDER_SUBTLE), LV_PART_MAIN);
+        }
+
+        _zone_param_labels[i] = lv_label_create(_zone_param_cards[i]);
+        lv_label_set_text(_zone_param_labels[i], zoneParamNames[i]);
+        lv_obj_set_style_text_font(_zone_param_labels[i], RAJDHANI_MED_24, LV_PART_MAIN);
+        lv_obj_set_style_text_color(_zone_param_labels[i],
+            lv_color_hex(i < 5 ? DesignTokens::FG_SECONDARY : DesignTokens::FG_DIMMED),
+            LV_PART_MAIN);
+        lv_obj_align(_zone_param_labels[i], LV_ALIGN_TOP_MID, 0, 0);
+
+        _zone_param_values[i] = lv_label_create(_zone_param_cards[i]);
+        lv_label_set_text(_zone_param_values[i], "");
+        lv_obj_set_style_text_font(_zone_param_values[i], JETBRAINS_MONO_REG_24, LV_PART_MAIN);
+        lv_obj_set_style_text_color(_zone_param_values[i],
+            lv_color_hex(i < 5 ? DesignTokens::FG_PRIMARY : DesignTokens::FG_DIMMED),
+            LV_PART_MAIN);
+        lv_obj_align(_zone_param_values[i], LV_ALIGN_CENTER, 0, 8);
+    }
+
+    esp_task_wdt_reset();
+
+    // --- Panel 3: PRESETS (8-column grid, preset cards) ---
+    _presets_panel = lv_obj_create(_bottom_zone);
+    lv_obj_set_size(_presets_panel, LV_PCT(100), LV_PCT(100));
+    lv_obj_set_style_bg_opa(_presets_panel, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(_presets_panel, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(_presets_panel, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(_presets_panel, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_layout(_presets_panel, LV_LAYOUT_GRID);
+    lv_obj_add_flag(_presets_panel, LV_OBJ_FLAG_HIDDEN);  // Hidden initially
+
+    static lv_coord_t preset_col_dsc[9] = {
+        LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
+        LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
+        LV_GRID_TEMPLATE_LAST};
+    static lv_coord_t preset_row_dsc[2] = {125, LV_GRID_TEMPLATE_LAST};
+    lv_obj_set_grid_dsc_array(_presets_panel, preset_col_dsc, preset_row_dsc);
+    lv_obj_set_style_pad_column(_presets_panel, DesignTokens::GRID_GAP, LV_PART_MAIN);
+
+    for (int i = 0; i < 8; i++) {
+        _preset_cards[i] = make_card(_presets_panel, true);
+        lv_obj_set_grid_cell(_preset_cards[i], LV_GRID_ALIGN_STRETCH, i, 1,
+                             LV_GRID_ALIGN_STRETCH, 0, 1);
+        lv_obj_add_flag(_preset_cards[i], LV_OBJ_FLAG_CLICKABLE);
+
+        char pLabel[4];
+        snprintf(pLabel, sizeof(pLabel), "P%d", i + 1);
+        _preset_labels[i] = lv_label_create(_preset_cards[i]);
+        lv_label_set_text(_preset_labels[i], pLabel);
+        lv_obj_set_style_text_font(_preset_labels[i], &bebas_neue_24px, LV_PART_MAIN);
+        lv_obj_set_style_text_color(_preset_labels[i], lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
+        lv_obj_align(_preset_labels[i], LV_ALIGN_TOP_MID, 0, 0);
+        lv_obj_clear_flag(_preset_labels[i], LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_flag(_preset_labels[i], LV_OBJ_FLAG_EVENT_BUBBLE);
+
+        _preset_values[i] = lv_label_create(_preset_cards[i]);
+        lv_label_set_text(_preset_values[i], "");
+        lv_obj_set_style_text_font(_preset_values[i], JETBRAINS_MONO_REG_24, LV_PART_MAIN);
+        lv_obj_set_style_text_color(_preset_values[i], lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
+        lv_obj_align(_preset_values[i], LV_ALIGN_CENTER, 0, 8);
+        lv_obj_clear_flag(_preset_values[i], LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_flag(_preset_values[i], LV_OBJ_FLAG_EVENT_BUBBLE);
+    }
+
+    // --- Mode buttons (6-column grid, child of top zone) ---
+    _mode_container = lv_obj_create(_top_zone);
+    lv_obj_set_size(_mode_container, 1210 - 2 * 10, kModeRowHeight);
+    lv_obj_align(_mode_container, LV_ALIGN_TOP_MID, 0, kGaugeRowHeight + 8);
+    lv_obj_set_style_bg_opa(_mode_container, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(_mode_container, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(_mode_container, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(_mode_container, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_layout(_mode_container, LV_LAYOUT_GRID);
+    static lv_coord_t mode_col_dsc[7] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
+                                          LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
+                                          LV_GRID_TEMPLATE_LAST};
+    static lv_coord_t mode_row_dsc[2] = {kModeRowHeight, LV_GRID_TEMPLATE_LAST};
+    lv_obj_set_grid_dsc_array(_mode_container, mode_col_dsc, mode_row_dsc);
+    lv_obj_set_style_pad_column(_mode_container, DesignTokens::GRID_GAP, LV_PART_MAIN);
+
+    const char* mode_names[] = {"GAMMA", "COLOUR", "EDGEMIXER", "SPATIAL", "EM SPREAD", "EM STRENGTH"};
+    for (int i = 0; i < 6; i++) {
+        _mode_buttons[i] = make_card(_mode_container, false);
+        lv_obj_set_grid_cell(_mode_buttons[i], LV_GRID_ALIGN_STRETCH, i, 1,
+                             LV_GRID_ALIGN_STRETCH, 0, 1);
+        lv_obj_add_flag(_mode_buttons[i], LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_clear_flag(_mode_buttons[i], LV_OBJ_FLAG_SCROLLABLE);
+
+        _mode_labels[i] = lv_label_create(_mode_buttons[i]);
+        lv_label_set_text(_mode_labels[i], mode_names[i]);
+        lv_obj_set_style_text_color(_mode_labels[i], lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
+        lv_obj_set_style_text_font(_mode_labels[i], RAJDHANI_MED_18, LV_PART_MAIN);
+        lv_obj_set_width(_mode_labels[i], LV_PCT(100));
+        lv_label_set_long_mode(_mode_labels[i], LV_LABEL_LONG_DOT);
+        lv_obj_set_style_text_align(_mode_labels[i], LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+        lv_obj_align(_mode_labels[i], LV_ALIGN_TOP_MID, 0, 0);
+        lv_obj_clear_flag(_mode_labels[i], LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_flag(_mode_labels[i], LV_OBJ_FLAG_EVENT_BUBBLE);
+
+        _mode_values[i] = lv_label_create(_mode_buttons[i]);
+        lv_label_set_text(_mode_values[i], "");
+        lv_obj_set_style_text_color(_mode_values[i], lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
+        // All mode values use Rajdhani Bold 24 for consistency
+        lv_obj_set_style_text_font(_mode_values[i], RAJDHANI_BOLD_24, LV_PART_MAIN);
+        lv_obj_set_width(_mode_values[i], LV_PCT(100));
+        lv_label_set_long_mode(_mode_values[i], LV_LABEL_LONG_DOT);
+        lv_obj_set_style_text_align(_mode_values[i], LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+        lv_obj_align(_mode_values[i], LV_ALIGN_TOP_MID, 0, 18);
+        lv_obj_clear_flag(_mode_values[i], LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_flag(_mode_values[i], LV_OBJ_FLAG_EVENT_BUBBLE);
+
+        // Event handler — all 6 buttons call _action_callback(index)
+        lv_obj_set_user_data(_mode_buttons[i], reinterpret_cast<void*>(static_cast<uintptr_t>(i)));
+        lv_obj_add_event_cb(_mode_buttons[i], [](lv_event_t* e) {
+            lv_obj_t* btn = static_cast<lv_obj_t*>(lv_event_get_target(e));
+            uint8_t index = static_cast<uint8_t>(reinterpret_cast<uintptr_t>(lv_obj_get_user_data(btn)));
+            DisplayUI* ui = static_cast<DisplayUI*>(lv_event_get_user_data(e));
+            if (ui && ui->_action_callback) {
+                ui->_action_callback(index);
+            }
+        }, LV_EVENT_CLICKED, reinterpret_cast<void*>(this));
+    }
+    esp_task_wdt_reset();  // Reset after mode-button row (6 cards × 3 objects = 18 LVGL objects)
+
     // Create footer (66px height, matching header)
     _footer = lv_obj_create(_screen_global);
     // Reduce width by 2 * (border_width + padding) = 2 * (2 + 1) = 6px to prevent border clipping
-    lv_obj_set_size(_footer, 1280 - 6, TAB5_STATUSBAR_HEIGHT);
+    lv_obj_set_size(_footer, 1280 - 6, DesignTokens::STATUSBAR_HEIGHT);
     // Position at bottom: 720px - 66px - 3px (border/padding offset) = 651px from top
-    lv_obj_set_pos(_footer, 3, 720 - TAB5_STATUSBAR_HEIGHT - 3);
-    lv_obj_set_style_bg_color(_footer, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
+    lv_obj_set_pos(_footer, 3, 720 - DesignTokens::STATUSBAR_HEIGHT - 3);
+    lv_obj_set_style_bg_color(_footer, lv_color_hex(DesignTokens::SURFACE_ELEVATED), LV_PART_MAIN);
     lv_obj_set_style_border_width(_footer, 2, LV_PART_MAIN);
     lv_obj_set_style_border_color(_footer, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
     lv_obj_set_style_radius(_footer, 14, LV_PART_MAIN);
-    lv_obj_set_style_pad_left(_footer, TAB5_GRID_MARGIN, LV_PART_MAIN);
-    lv_obj_set_style_pad_right(_footer, TAB5_GRID_MARGIN, LV_PART_MAIN);
+    lv_obj_set_style_pad_left(_footer, DesignTokens::GRID_MARGIN, LV_PART_MAIN);
+    lv_obj_set_style_pad_right(_footer, DesignTokens::GRID_MARGIN, LV_PART_MAIN);
     lv_obj_set_style_pad_top(_footer, 16, LV_PART_MAIN);
     lv_obj_set_style_pad_bottom(_footer, 16, LV_PART_MAIN);
     lv_obj_clear_flag(_footer, LV_OBJ_FLAG_SCROLLABLE);  // Disable scrolling on footer
@@ -583,41 +769,43 @@ void DisplayUI::begin() {
     lv_obj_set_flex_align(_footer, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     // Left side: BPM, KEY, MIC, UPTIME - each in fixed-width containers
+    // Total: 95+112+125+185 = 517px + 3×24px gaps = 589px minimum
     lv_obj_t* leftGroup = lv_obj_create(_footer);
+    lv_obj_set_size(leftGroup, 589, 24);
     lv_obj_set_style_bg_opa(leftGroup, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(leftGroup, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(leftGroup, 0, LV_PART_MAIN);
-    lv_obj_clear_flag(leftGroup, LV_OBJ_FLAG_SCROLLABLE);  // Disable scrolling
-    // Removed flex_grow(1) - let leftGroup only take space it needs, allowing battery to be closer
+    lv_obj_clear_flag(leftGroup, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_layout(leftGroup, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(leftGroup, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(leftGroup, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(leftGroup, 40, LV_PART_MAIN);  // Increased gap between metric groups (was 24px)
+    lv_obj_set_style_pad_column(leftGroup, 24, LV_PART_MAIN);  // 24px gap between metric groups
 
     // BPM: Fixed-width container with title + value
     lv_obj_t* bpmContainer = lv_obj_create(leftGroup);
     lv_obj_set_size(bpmContainer, 95, 24);  // +20px - fits "BPM: 999" comfortably
     // Explicitly set background color to match footer (not just opacity) to prevent any default color rendering
-    lv_obj_set_style_bg_color(bpmContainer, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(bpmContainer, lv_color_hex(DesignTokens::SURFACE_ELEVATED), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(bpmContainer, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(bpmContainer, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(bpmContainer, 0, LV_PART_MAIN);
     // Clear background on all parts to ensure no rendering
     lv_obj_set_style_bg_opa(bpmContainer, LV_OPA_TRANSP, LV_PART_SCROLLBAR);
     lv_obj_set_style_bg_opa(bpmContainer, LV_OPA_TRANSP, LV_PART_INDICATOR);
+    lv_obj_clear_flag(bpmContainer, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_layout(bpmContainer, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(bpmContainer, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(bpmContainer, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     _footer_bpm = lv_label_create(bpmContainer);
     lv_label_set_text(_footer_bpm, "BPM:");
     lv_obj_set_style_text_font(_footer_bpm, RAJDHANI_MED_24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(_footer_bpm, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(_footer_bpm, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
     lv_obj_set_style_pad_all(_footer_bpm, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_right(_footer_bpm, 2, LV_PART_MAIN);  // Tiny gap: 2px
     _footer_bpm_value = lv_label_create(bpmContainer);
-    lv_label_set_text(_footer_bpm_value, "--");
+    lv_label_set_text(_footer_bpm_value, "");
     lv_obj_set_style_text_font(_footer_bpm_value, RAJDHANI_MED_24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(_footer_bpm_value, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(_footer_bpm_value, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
     lv_obj_set_style_pad_all(_footer_bpm_value, 0, LV_PART_MAIN);
 
     // KEY: Fixed-width container with title + value
@@ -626,79 +814,84 @@ void DisplayUI::begin() {
     lv_obj_t* keyContainer = lv_obj_create(leftGroup);
     lv_obj_set_size(keyContainer, 112, 24);  // Fixed width for longest key (C#dim, A#aug)
     // Explicitly set background color to match footer (not just opacity) to prevent any default color rendering
-    lv_obj_set_style_bg_color(keyContainer, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(keyContainer, lv_color_hex(DesignTokens::SURFACE_ELEVATED), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(keyContainer, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(keyContainer, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(keyContainer, 0, LV_PART_MAIN);
     // Clear background on all parts to ensure no rendering
     lv_obj_set_style_bg_opa(keyContainer, LV_OPA_TRANSP, LV_PART_SCROLLBAR);
     lv_obj_set_style_bg_opa(keyContainer, LV_OPA_TRANSP, LV_PART_INDICATOR);
+    lv_obj_clear_flag(keyContainer, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_layout(keyContainer, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(keyContainer, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(keyContainer, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     _footer_key = lv_label_create(keyContainer);
     lv_label_set_text(_footer_key, "KEY:");
     lv_obj_set_style_text_font(_footer_key, RAJDHANI_MED_24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(_footer_key, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(_footer_key, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
     lv_obj_set_style_pad_all(_footer_key, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_right(_footer_key, 2, LV_PART_MAIN);  // Tiny gap: 2px
     _footer_key_value = lv_label_create(keyContainer);
-    lv_label_set_text(_footer_key_value, "--");
+    lv_label_set_text(_footer_key_value, "");
     lv_obj_set_style_text_font(_footer_key_value, RAJDHANI_MED_24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(_footer_key_value, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(_footer_key_value, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
     lv_obj_set_style_pad_all(_footer_key_value, 0, LV_PART_MAIN);
 
     // MIC: Fixed-width container with title + value
     lv_obj_t* micContainer = lv_obj_create(leftGroup);
     lv_obj_set_size(micContainer, 125, 24);  // +25px - fits "MIC: -99.9 DB" comfortably
     // Explicitly set background color to match footer (not just opacity) to prevent any default color rendering
-    lv_obj_set_style_bg_color(micContainer, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(micContainer, lv_color_hex(DesignTokens::SURFACE_ELEVATED), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(micContainer, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(micContainer, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(micContainer, 0, LV_PART_MAIN);
     // Clear background on all parts to ensure no rendering
     lv_obj_set_style_bg_opa(micContainer, LV_OPA_TRANSP, LV_PART_SCROLLBAR);
     lv_obj_set_style_bg_opa(micContainer, LV_OPA_TRANSP, LV_PART_INDICATOR);
+    lv_obj_clear_flag(micContainer, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_layout(micContainer, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(micContainer, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(micContainer, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     _footer_mic = lv_label_create(micContainer);
     lv_label_set_text(_footer_mic, "MIC:");
     lv_obj_set_style_text_font(_footer_mic, RAJDHANI_MED_24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(_footer_mic, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(_footer_mic, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
     lv_obj_set_style_pad_all(_footer_mic, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_right(_footer_mic, 2, LV_PART_MAIN);  // Tiny gap: 2px
     _footer_mic_value = lv_label_create(micContainer);
-    lv_label_set_text(_footer_mic_value, "--");
+    lv_label_set_text(_footer_mic_value, "");
     lv_obj_set_style_text_font(_footer_mic_value, RAJDHANI_MED_24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(_footer_mic_value, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(_footer_mic_value, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
     lv_obj_set_style_pad_all(_footer_mic_value, 0, LV_PART_MAIN);
 
     // UPTIME: Fixed-width container with title + value
     lv_obj_t* uptimeContainer = lv_obj_create(leftGroup);
-    lv_obj_set_size(uptimeContainer, 145, 24);  // +25px - fits "UPTIME: 999h 59m" comfortably
+    lv_obj_set_size(uptimeContainer, 185, 24);  // Fits "UPTIME: 999h 59m" at Rajdhani 24px
     // Explicitly set background color to match footer (not just opacity) to prevent any default color rendering
-    lv_obj_set_style_bg_color(uptimeContainer, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(uptimeContainer, lv_color_hex(DesignTokens::SURFACE_ELEVATED), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(uptimeContainer, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(uptimeContainer, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(uptimeContainer, 0, LV_PART_MAIN);
     // Clear background on all parts to ensure no rendering
     lv_obj_set_style_bg_opa(uptimeContainer, LV_OPA_TRANSP, LV_PART_SCROLLBAR);
     lv_obj_set_style_bg_opa(uptimeContainer, LV_OPA_TRANSP, LV_PART_INDICATOR);
+    lv_obj_clear_flag(uptimeContainer, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_layout(uptimeContainer, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(uptimeContainer, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(uptimeContainer, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     _footer_host_uptime = lv_label_create(uptimeContainer);
     lv_label_set_text(_footer_host_uptime, "UPTIME:");
     lv_obj_set_style_text_font(_footer_host_uptime, RAJDHANI_MED_24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(_footer_host_uptime, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(_footer_host_uptime, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
     lv_obj_set_style_pad_all(_footer_host_uptime, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_right(_footer_host_uptime, 2, LV_PART_MAIN);  // Tiny gap: 2px
     _footer_uptime_value = lv_label_create(uptimeContainer);
-    lv_label_set_text(_footer_uptime_value, "--");
+    lv_label_set_text(_footer_uptime_value, "");
     lv_obj_set_style_text_font(_footer_uptime_value, RAJDHANI_MED_24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(_footer_uptime_value, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(_footer_uptime_value, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
     lv_obj_set_style_pad_all(_footer_uptime_value, 0, LV_PART_MAIN);
+
+    esp_task_wdt_reset();  // Reset after footer left-group (BPM/KEY/MIC/UPTIME labels)
 
     _footer_k1_group = lv_obj_create(_footer);
     lv_obj_set_style_bg_opa(_footer_k1_group, LV_OPA_TRANSP, LV_PART_MAIN);
@@ -711,17 +904,18 @@ void DisplayUI::begin() {
     lv_obj_set_style_pad_column(_footer_k1_group, 16, LV_PART_MAIN);
 
     for (int i = 0; i < 2; i++) {
-        _footer_k1_buttons[i] = lv_btn_create(_footer_k1_group);
+        _footer_k1_buttons[i] = lv_obj_create(_footer_k1_group);
+        lv_obj_add_flag(_footer_k1_buttons[i], LV_OBJ_FLAG_CLICKABLE);
         lv_obj_set_size(_footer_k1_buttons[i], 80, 32);
-        lv_obj_set_style_bg_color(_footer_k1_buttons[i], lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(_footer_k1_buttons[i], lv_color_hex(DesignTokens::SURFACE_ELEVATED), LV_PART_MAIN);
         lv_obj_set_style_border_width(_footer_k1_buttons[i], 2, LV_PART_MAIN);
-        lv_obj_set_style_border_color(_footer_k1_buttons[i], lv_color_hex(TAB5_COLOR_BORDER_BASE), LV_PART_MAIN);
+        lv_obj_set_style_border_color(_footer_k1_buttons[i], lv_color_hex(DesignTokens::BORDER_BASE), LV_PART_MAIN);
         lv_obj_add_state(_footer_k1_buttons[i], LV_STATE_DISABLED);
 
         lv_obj_t* label = lv_label_create(_footer_k1_buttons[i]);
         lv_label_set_text(label, "K1");
         lv_obj_set_style_text_font(label, RAJDHANI_MED_24, LV_PART_MAIN);
-        lv_obj_set_style_text_color(label, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+        lv_obj_set_style_text_color(label, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
         lv_obj_center(label);
 
         lv_obj_set_user_data(_footer_k1_buttons[i], reinterpret_cast<void*>(static_cast<uintptr_t>(i)));
@@ -742,7 +936,7 @@ void DisplayUI::begin() {
     // Set height explicitly to font size (24px) instead of line height (26px) to prevent extra space at bottom
     lv_obj_set_size(rightGroup, 345, 24);  // +25px for safety margin - prevents battery text clipping
     // Explicitly set background color to match footer (not just opacity) to prevent any default color rendering
-    lv_obj_set_style_bg_color(rightGroup, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(rightGroup, lv_color_hex(DesignTokens::SURFACE_ELEVATED), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(rightGroup, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(rightGroup, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(rightGroup, 0, LV_PART_MAIN);
@@ -758,7 +952,7 @@ void DisplayUI::begin() {
     _footer_ws_status = lv_label_create(rightGroup);
     lv_label_set_text(_footer_ws_status, "WS: --");
     lv_obj_set_style_text_font(_footer_ws_status, RAJDHANI_MED_24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(_footer_ws_status, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(_footer_ws_status, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
     lv_obj_set_style_pad_top(_footer_ws_status, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_bottom(_footer_ws_status, 0, LV_PART_MAIN);
 
@@ -767,13 +961,14 @@ void DisplayUI::begin() {
     // Set height explicitly to font size (24px) instead of line height (26px) to prevent extra space at bottom
     lv_obj_set_size(batteryContainer, LV_SIZE_CONTENT, 24);  // Height fixed to font size
     // Explicitly set background color to match footer (not just opacity) to prevent any default color rendering
-    lv_obj_set_style_bg_color(batteryContainer, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(batteryContainer, lv_color_hex(DesignTokens::SURFACE_ELEVATED), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(batteryContainer, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(batteryContainer, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(batteryContainer, 0, LV_PART_MAIN);
     // Clear background on all parts to ensure no rendering
     lv_obj_set_style_bg_opa(batteryContainer, LV_OPA_TRANSP, LV_PART_SCROLLBAR);
     lv_obj_set_style_bg_opa(batteryContainer, LV_OPA_TRANSP, LV_PART_INDICATOR);
+    lv_obj_clear_flag(batteryContainer, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_layout(batteryContainer, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(batteryContainer, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(batteryContainer, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -782,7 +977,7 @@ void DisplayUI::begin() {
     _footer_battery = lv_label_create(batteryContainer);
     lv_label_set_text(_footer_battery, "BATTERY: --");
     lv_obj_set_style_text_font(_footer_battery, RAJDHANI_MED_24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(_footer_battery, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(_footer_battery, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
     lv_obj_set_style_pad_top(_footer_battery, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_bottom(_footer_battery, 0, LV_PART_MAIN);
 
@@ -793,14 +988,14 @@ void DisplayUI::begin() {
     lv_obj_set_size(_footer_battery_bar, 60, 8);  // 60px wide, 8px tall
     lv_obj_set_style_radius(_footer_battery_bar, 4, LV_PART_MAIN);
     lv_obj_set_style_radius(_footer_battery_bar, 4, LV_PART_INDICATOR);
-    lv_obj_set_style_bg_color(_footer_battery_bar, lv_color_hex(TAB5_COLOR_BORDER_BASE), LV_PART_MAIN);
-    lv_obj_set_style_bg_color(_footer_battery_bar, lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(_footer_battery_bar, lv_color_hex(DesignTokens::BORDER_BASE), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(_footer_battery_bar, lv_color_hex(DesignTokens::BRAND_PRIMARY), LV_PART_INDICATOR);
     lv_obj_set_style_pad_top(_footer_battery_bar, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_bottom(_footer_battery_bar, 0, LV_PART_MAIN);
 
     // Create zone composer screen
     _screen_zone = lv_obj_create(nullptr);
-    lv_obj_set_style_bg_color(_screen_zone, lv_color_hex(TAB5_COLOR_BG_PAGE), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(_screen_zone, lv_color_hex(DesignTokens::BG_PAGE), LV_PART_MAIN);
     lv_obj_set_style_pad_all(_screen_zone, 0, LV_PART_MAIN);
 
     // Create ZoneComposerUI and initialize with zone screen as parent
@@ -815,7 +1010,7 @@ void DisplayUI::begin() {
 
     // Create connectivity screen
     _screen_connectivity = lv_obj_create(nullptr);
-    lv_obj_set_style_bg_color(_screen_connectivity, lv_color_hex(TAB5_COLOR_BG_PAGE), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(_screen_connectivity, lv_color_hex(DesignTokens::BG_PAGE), LV_PART_MAIN);
     lv_obj_set_style_pad_all(_screen_connectivity, 0, LV_PART_MAIN);
 
         // Serial.printf("[DisplayUI_TRACE] Connectivity screen created @ %lu ms\n", millis());
@@ -865,33 +1060,106 @@ void DisplayUI::begin() {
     // Serial.printf("[DisplayUI_TRACE] begin() complete @ %lu ms\n", millis());
 }
 
+// =========================================================================
+// Phase 5 — Neon colour system
+// =========================================================================
+// Updates Unit B bar indicator colours to match the active tab's neon colour.
+// Unit A gauge bars (_gauge_bars) are NEVER touched — they stay gold always.
+// =========================================================================
+// Static helpers: neon and dim-tint per tab
+static uint32_t neonForTab(SidebarTab tab) {
+    switch (tab) {
+        case SidebarTab::FX_PARAMS: return DesignTokens::NEON_GOLD;
+        case SidebarTab::ZONES:     return DesignTokens::NEON_PURPLE;
+        case SidebarTab::PRESETS:   return DesignTokens::NEON_TEAL;
+        default:                    return DesignTokens::NEON_GOLD;
+    }
+}
+static uint32_t dimBorderForTab(SidebarTab tab) {
+    switch (tab) {
+        case SidebarTab::FX_PARAMS: return DesignTokens::DIM_BORDER_GOLD;
+        case SidebarTab::ZONES:     return DesignTokens::DIM_BORDER_PURPLE;
+        case SidebarTab::PRESETS:   return DesignTokens::DIM_BORDER_TEAL;
+        default:                    return DesignTokens::DIM_BORDER_GOLD;
+    }
+}
+
+void DisplayUI::applyTabColour(SidebarTab tab) {
+    const uint32_t neon = neonForTab(tab);
+    const uint32_t dimBorder = dimBorderForTab(tab);
+
+    // Unit A gauge bars: always gold (never change)
+    // Unit A gauge card borders: always dim-tinted gold
+    for (int i = 0; i < 8; i++) {
+        if (_gauge_cards[i]) {
+            lv_obj_set_style_border_color(_gauge_cards[i],
+                lv_color_hex(DesignTokens::DIM_BORDER_GOLD), LV_PART_MAIN);
+        }
+    }
+
+    // Unit B FX param card borders: dim-tinted neon per active tab
+    for (int i = 0; i < 8; i++) {
+        if (_fxa_cards[i]) {
+            lv_obj_set_style_border_color(_fxa_cards[i],
+                lv_color_hex(dimBorder), LV_PART_MAIN);
+        }
+        if (_fxa_bars[i]) {
+            lv_obj_set_style_bg_color(_fxa_bars[i],
+                lv_color_hex(neon), LV_PART_INDICATOR);
+        }
+    }
+
+    // Zone param card borders: dim-tinted neon
+    for (int i = 0; i < 8; i++) {
+        if (_zone_param_cards[i]) {
+            lv_obj_set_style_border_color(_zone_param_cards[i],
+                lv_color_hex(dimBorder), LV_PART_MAIN);
+        }
+    }
+
+    // Preset card borders: dim-tinted neon (for empty slots only — occupied/active handled separately)
+    for (int i = 0; i < 8; i++) {
+        if (_preset_cards[i] && _preset_values[i]) {
+            const char* val = lv_label_get_text(_preset_values[i]);
+            if (!val || val[0] == '\0' || strcmp(val, "--") == 0) {
+                lv_obj_set_style_border_color(_preset_cards[i],
+                    lv_color_hex(dimBorder), LV_PART_MAIN);
+            }
+        }
+    }
+
+    // FX Row B bars — future-proof
+    for (int i = 0; i < 8; i++) {
+        if (_fxb_bars[i]) {
+            lv_obj_set_style_bg_color(_fxb_bars[i],
+                lv_color_hex(neon), LV_PART_INDICATOR);
+        }
+    }
+}
+
 void DisplayUI::loop() {
     const uint32_t now = millis();
     for (int i = 0; i < 8; i++) {
         if (_feedback_until_ms[i] != 0 && now >= _feedback_until_ms[i]) {
             _feedback_until_ms[i] = 0;
-            // After feedback expires, restore the appropriate border color:
+            // Preset cards removed in Phase 3 — null-guard
+            if (!_preset_cards[i]) continue;
+            // After feedback expires, restore the appropriate border colour:
             // - Green (0x00FF99) if this is the active preset
-            // - Yellow (TAB5_COLOR_BRAND_PRIMARY) if preset is saved (occupied) but not active
-            // - White (0xFFFFFF) if preset is empty
+            // - Yellow (DesignTokens::BRAND_PRIMARY) if preset is saved (occupied) but not active
+            // - Subtle (BORDER_SUBTLE) if preset is empty
             if (i == _activePresetSlot && _activePresetSlot < 8) {
-                // Active preset: green border
                 lv_obj_set_style_border_color(_preset_cards[i], lv_color_hex(0x00FF99), LV_PART_MAIN);
             } else {
-                // Check if preset is occupied (saved) - if so, use yellow, otherwise white
-                // We can check if the preset value label is not "--" to determine if it's saved
                 if (_preset_values[i]) {
                     const char* valueText = lv_label_get_text(_preset_values[i]);
-                    if (valueText && strcmp(valueText, "--") != 0) {
-                        // Preset is saved but not active: yellow border
-                        lv_obj_set_style_border_color(_preset_cards[i], lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_MAIN);
+                    if (valueText && valueText[0] != '\0' && strcmp(valueText, "--") != 0) {
+                        lv_obj_set_style_border_color(_preset_cards[i], lv_color_hex(DesignTokens::BRAND_PRIMARY), LV_PART_MAIN);
                     } else {
-                        // Preset is empty: white border
-                        lv_obj_set_style_border_color(_preset_cards[i], lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+                        lv_obj_set_style_border_color(_preset_cards[i], lv_color_hex(DesignTokens::BORDER_SUBTLE), LV_PART_MAIN);
                     }
                 } else {
-                    // Fallback: white border
-                    lv_obj_set_style_border_color(_preset_cards[i], lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+                    lv_obj_set_style_border_color(_preset_cards[i], lv_color_hex(DesignTokens::BORDER_SUBTLE), LV_PART_MAIN);
                 }
             }
         }
@@ -916,7 +1184,7 @@ void DisplayUI::loop() {
                 if (batteryPercent > 50) {
                     batColor = 0x00FF00;  // Green
                 } else if (batteryPercent > 20) {
-                    batColor = TAB5_COLOR_BRAND_PRIMARY;  // Yellow (0xFFC700)
+                    batColor = DesignTokens::BRAND_PRIMARY;  // Yellow (0xFFC700)
                 } else {
                     batColor = 0xFF0000;  // Red (low battery)
                 }
@@ -930,10 +1198,10 @@ void DisplayUI::loop() {
                 }
             } else {
                 strcpy(buf, "BATTERY: --");
-                lv_obj_set_style_text_color(_footer_battery, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+                lv_obj_set_style_text_color(_footer_battery, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
                 if (_footer_battery_bar) {
                     lv_bar_set_value(_footer_battery_bar, 0, LV_ANIM_OFF);
-                    lv_obj_set_style_bg_color(_footer_battery_bar, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_INDICATOR);
+                    lv_obj_set_style_bg_color(_footer_battery_bar, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_INDICATOR);
                 }
             }
             lv_label_set_text(_footer_battery, buf);
@@ -946,9 +1214,13 @@ void DisplayUI::loop() {
         }
 
         // Update host uptime value (title stays fixed)
+        // K1 sends uptime periodically but may not send every second —
+        // increment locally each tick so the display always advances.
+        if (_hostUptime > 0) {
+            _hostUptime++;
+        }
         if (_footer_uptime_value) {
             char buf[32];
-            // Always format uptime - even if 0, show "0s" instead of "--"
             formatDuration(_hostUptime, buf, sizeof(buf));
             lv_label_set_text(_footer_uptime_value, buf);
         }
@@ -975,9 +1247,10 @@ void DisplayUI::updateEncoder(uint8_t index, int32_t value, bool highlight) {
     if (v > 255) v = 255;
     lv_bar_set_value(_gauge_bars[displayPos], v, LV_ANIM_OFF);
 
+    // Neon border system: active card = full neon, inactive = dim-tinted neon
     lv_obj_set_style_border_color(
         _gauge_cards[displayPos],
-        lv_color_hex(highlight ? TAB5_COLOR_BRAND_PRIMARY : 0xFFFFFF),
+        lv_color_hex(highlight ? DesignTokens::NEON_GOLD : DesignTokens::DIM_BORDER_GOLD),
         LV_PART_MAIN);
 }
 
@@ -1010,8 +1283,11 @@ void DisplayUI::updateEffectParamSlot(uint8_t slot, int32_t value, bool highligh
     if (clamped > 255) clamped = 255;
     lv_bar_set_value(bar, clamped, LV_ANIM_OFF);
 
+    // Neon border system: active card = full tab neon, inactive = dim-tinted tab neon
+    const uint32_t neon = neonForTab(_currentTab);
+    const uint32_t dim = dimBorderForTab(_currentTab);
     lv_obj_set_style_border_color(card,
-                                  lv_color_hex(highlight ? TAB5_COLOR_BRAND_PRIMARY : 0xFFFFFF),
+                                  lv_color_hex(highlight ? neon : dim),
                                   LV_PART_MAIN);
 }
 
@@ -1028,9 +1304,15 @@ void DisplayUI::setEffectParamSlotLabel(uint8_t slot, const char* label) {
 
     if (!labelObj) return;
     if (label && label[0]) {
-        lv_label_set_text(labelObj, label);
+        // Force two-word labels onto two lines for consistent alignment
+        char buf[64];
+        strncpy(buf, label, sizeof(buf) - 1);
+        buf[sizeof(buf) - 1] = '\0';
+        char* space = strchr(buf, ' ');
+        if (space) *space = '\n';
+        lv_label_set_text(labelObj, buf);
     } else {
-        lv_label_set_text(labelObj, "--");
+        lv_label_set_text(labelObj, "");
     }
 }
 
@@ -1047,7 +1329,7 @@ void DisplayUI::setCurrentEffect(uint8_t id, const char* name) {
     if (name && name[0]) {
         lv_label_set_text(_header_effect, name);
     } else {
-        lv_label_set_text(_header_effect, "--");
+        lv_label_set_text(_header_effect, "");
     }
     (void)id; // ID no longer displayed
 }
@@ -1057,7 +1339,7 @@ void DisplayUI::setCurrentPalette(uint8_t id, const char* name) {
     if (name && name[0]) {
         lv_label_set_text(_header_palette, name);
     } else {
-        lv_label_set_text(_header_palette, "--");
+        lv_label_set_text(_header_palette, "");
     }
     (void)id; // ID no longer displayed
 }
@@ -1068,7 +1350,7 @@ void DisplayUI::setWiFiInfo(const char* ip, const char* ssid, int32_t rssi) {
     if (ip && ssid && ip[0] && ssid[0]) {
         // Format: "SSID (RSSI dBm) IP" - SSID in secondary color, RSSI color-coded, IP in primary color
         lv_label_set_text(_header_net_ssid, ssid);
-        lv_obj_set_style_text_color(_header_net_ssid, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+        lv_obj_set_style_text_color(_header_net_ssid, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
         
         // Format RSSI with parentheses and unit (dBm)
         char rssiText[20];
@@ -1076,12 +1358,12 @@ void DisplayUI::setWiFiInfo(const char* ip, const char* ssid, int32_t rssi) {
         lv_label_set_text(_header_net_rssi, rssiText);
         
         // Color-code RSSI: Green (>-50), Yellow (-50 to -70), Red (<-70)
-        // Yellow uses the same color as "OS" (TAB5_COLOR_BRAND_PRIMARY = 0xFFC700)
+        // Yellow uses the same color as "OS" (DesignTokens::BRAND_PRIMARY = 0xFFC700)
         uint32_t rssiColor;
         if (rssi > -50) {
             rssiColor = 0x00FF00;  // Green - excellent signal
         } else if (rssi > -70) {
-            rssiColor = TAB5_COLOR_BRAND_PRIMARY;  // Yellow (same as "OS") - good signal
+            rssiColor = DesignTokens::BRAND_PRIMARY;  // Yellow (same as "OS") - good signal
         } else {
             rssiColor = 0xFF0000;  // Red - poor signal
         }
@@ -1089,15 +1371,15 @@ void DisplayUI::setWiFiInfo(const char* ip, const char* ssid, int32_t rssi) {
         
         // IP address comes after RSSI
         lv_label_set_text(_header_net_ip, ip);
-        lv_obj_set_style_text_color(_header_net_ip, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
+        lv_obj_set_style_text_color(_header_net_ip, lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
         // Update padding: 8px between RSSI and IP (was 4px between SSID and RSSI)
         lv_obj_set_style_pad_left(_header_net_ip, 8, LV_PART_MAIN);
     } else {
-        lv_label_set_text(_header_net_ssid, "--");
-        lv_obj_set_style_text_color(_header_net_ssid, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+        lv_label_set_text(_header_net_ssid, "");
+        lv_obj_set_style_text_color(_header_net_ssid, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
         lv_label_set_text(_header_net_rssi, "");
-        lv_label_set_text(_header_net_ip, "--");
-        lv_obj_set_style_text_color(_header_net_ip, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
+        lv_label_set_text(_header_net_ip, "");
+        lv_obj_set_style_text_color(_header_net_ip, lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
         lv_obj_set_style_pad_left(_header_net_ip, 8, LV_PART_MAIN);  // Keep 8px padding
     }
 }
@@ -1160,13 +1442,13 @@ void DisplayUI::updatePresetSlot(uint8_t slot, bool occupied, uint8_t effectId, 
     if (!_preset_values[slot] || !_preset_cards[slot]) return;
 
     if (!occupied) {
-        lv_label_set_text(_preset_values[slot], "--");
-        lv_obj_set_style_border_color(_preset_cards[slot], lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+        lv_label_set_text(_preset_values[slot], "");
+        lv_obj_set_style_border_color(_preset_cards[slot], lv_color_hex(DesignTokens::BORDER_SUBTLE), LV_PART_MAIN);
         return;
     }
 
     lv_label_set_text_fmt(_preset_values[slot], "E%u P%u %u", effectId, paletteId, brightness);
-    lv_obj_set_style_border_color(_preset_cards[slot], lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_border_color(_preset_cards[slot], lv_color_hex(DesignTokens::BRAND_PRIMARY), LV_PART_MAIN);
 }
 
 void DisplayUI::setActivePresetSlot(uint8_t slot) {
@@ -1178,19 +1460,19 @@ void DisplayUI::setActivePresetSlot(uint8_t slot) {
             // Active preset: green border
             lv_obj_set_style_border_color(_preset_cards[i], lv_color_hex(0x00FF99), LV_PART_MAIN);
         } else {
-            // Not active: check if saved (yellow) or empty (white)
+            // Not active: check if saved (yellow) or empty (subtle)
             if (_preset_values[i]) {
                 const char* valueText = lv_label_get_text(_preset_values[i]);
-                if (valueText && strcmp(valueText, "--") != 0) {
+                if (valueText && valueText[0] != '\0' && strcmp(valueText, "--") != 0) {
                     // Preset is saved but not active: yellow border
-                    lv_obj_set_style_border_color(_preset_cards[i], lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_MAIN);
+                    lv_obj_set_style_border_color(_preset_cards[i], lv_color_hex(DesignTokens::BRAND_PRIMARY), LV_PART_MAIN);
                 } else {
-                    // Preset is empty: white border
-                    lv_obj_set_style_border_color(_preset_cards[i], lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+                    // Preset is empty: subtle border
+                    lv_obj_set_style_border_color(_preset_cards[i], lv_color_hex(DesignTokens::BORDER_SUBTLE), LV_PART_MAIN);
                 }
             } else {
-                // Fallback: white border
-                lv_obj_set_style_border_color(_preset_cards[i], lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+                // Fallback: subtle border
+                lv_obj_set_style_border_color(_preset_cards[i], lv_color_hex(DesignTokens::BORDER_SUBTLE), LV_PART_MAIN);
             }
         }
     }
@@ -1218,7 +1500,7 @@ void DisplayUI::showPresetDeleteFeedback(uint8_t slot) {
 }
 
 void DisplayUI::setColourCorrectionState(const ColorCorrectionState& state) {
-    if (!_action_buttons[0] || !_action_values[0]) return;
+    if (!_mode_buttons[0] || !_mode_values[0]) return;
 
     // GAMMA button (index 0)
     // Display format: "2.2" for 2.2, "2.5" for 2.5, "2.8" for 2.8, "OFF" when disabled
@@ -1228,9 +1510,9 @@ void DisplayUI::setColourCorrectionState(const ColorCorrectionState& state) {
     } else {
         strcpy(gamma_buf, "OFF");
     }
-    lv_label_set_text(_action_values[0], gamma_buf);
-    lv_obj_set_style_border_color(_action_buttons[0],
-                                   lv_color_hex(state.gammaEnabled ? TAB5_COLOR_BRAND_PRIMARY : 0xFFFFFF),
+    lv_label_set_text(_mode_values[0], gamma_buf);
+    lv_obj_set_style_border_color(_mode_buttons[0],
+                                   lv_color_hex(state.gammaEnabled ? DesignTokens::BRAND_PRIMARY : 0xFFFFFF),
                                    LV_PART_MAIN);
 
     // COLOUR button (index 1)
@@ -1238,22 +1520,22 @@ void DisplayUI::setColourCorrectionState(const ColorCorrectionState& state) {
     if (state.mode == 1) colour_mode = "HSV";
     else if (state.mode == 2) colour_mode = "RGB";
     else if (state.mode == 3) colour_mode = "BOTH";
-    lv_label_set_text(_action_values[1], colour_mode);
-    lv_obj_set_style_border_color(_action_buttons[1],
-                                   lv_color_hex(state.mode != 0 ? TAB5_COLOR_BRAND_PRIMARY : 0xFFFFFF),
+    lv_label_set_text(_mode_values[1], colour_mode);
+    lv_obj_set_style_border_color(_mode_buttons[1],
+                                   lv_color_hex(state.mode != 0 ? DesignTokens::BRAND_PRIMARY : 0xFFFFFF),
                                    LV_PART_MAIN);
 
 }
 
 void DisplayUI::setEdgeMixerState(const EdgeMixerState& state) {
-    if (!_action_buttons[2] || !_action_values[2]) return;
+    if (!_mode_buttons[2] || !_mode_values[2]) return;
 
     // EDGEMIXER button (index 2) — mode cycle
     static const char* kModeNames[] = {"MIRROR", "ANALOGOUS", "COMPLEMENTARY", "SPLIT-COMP", "SATURATION VEIL", "TRIADIC", "TETRADIC"};
     const char* modeName = (state.mode < 7) ? kModeNames[state.mode] : "???";
-    lv_label_set_text(_action_values[2], modeName);
-    lv_obj_set_style_border_color(_action_buttons[2],
-                                   lv_color_hex(state.mode != 0 ? TAB5_COLOR_BRAND_PRIMARY : 0xFFFFFF),
+    lv_label_set_text(_mode_values[2], modeName);
+    lv_obj_set_style_border_color(_mode_buttons[2],
+                                   lv_color_hex(state.mode != 0 ? DesignTokens::BRAND_PRIMARY : 0xFFFFFF),
                                    LV_PART_MAIN);
 
     // SPATIAL button (index 3) — Spatial + Temporal combo
@@ -1261,10 +1543,54 @@ void DisplayUI::setEdgeMixerState(const EdgeMixerState& state) {
     static const char* kComboNames[] = {"OFF", "CENTRE GRADIENT", "RMS GATE", "CENTRE+RMS"};
     uint8_t combo = state.spatial | (state.temporal << 1);
     const char* comboName = (combo < 4) ? kComboNames[combo] : "???";
-    lv_label_set_text(_action_values[3], comboName);
-    lv_obj_set_style_border_color(_action_buttons[3],
-                                   lv_color_hex((state.spatial || state.temporal) ? TAB5_COLOR_BRAND_PRIMARY : 0xFFFFFF),
+    lv_label_set_text(_mode_values[3], comboName);
+    lv_obj_set_style_border_color(_mode_buttons[3],
+                                   lv_color_hex((state.spatial || state.temporal) ? DesignTokens::BRAND_PRIMARY : 0xFFFFFF),
                                    LV_PART_MAIN);
+
+    // EM SPREAD button (index 4) — spread in degrees, displayed as named step
+    if (_mode_buttons[4] && _mode_values[4]) {
+        const char* spreadName;
+        switch (state.spread) {
+            case  0: spreadName = "None";   break;
+            case 10: spreadName = "Subtle"; break;
+            case 20: spreadName = "Medium"; break;
+            case 30: spreadName = "Wide";   break;
+            case 45: spreadName = "Max";    break;
+            case 60: spreadName = "Ultra";  break;
+            default: {
+                static char spreadBuf[8];
+                snprintf(spreadBuf, sizeof(spreadBuf), "%u", state.spread);
+                spreadName = spreadBuf;
+                break;
+            }
+        }
+        lv_label_set_text(_mode_values[4], spreadName);
+        lv_obj_set_style_border_color(_mode_buttons[4],
+                                       lv_color_hex(state.spread != 0 ? DesignTokens::BRAND_PRIMARY : 0xFFFFFF),
+                                       LV_PART_MAIN);
+    }
+
+    // EM STRENGTH button (index 5) — mix strength, displayed as named step
+    if (_mode_buttons[5] && _mode_values[5]) {
+        const char* strengthName;
+        switch (state.strength) {
+            case   0: strengthName = "Off";    break;
+            case  64: strengthName = "Light";  break;
+            case 128: strengthName = "Medium"; break;
+            case 255: strengthName = "Full";   break;
+            default: {
+                static char strengthBuf[8];
+                snprintf(strengthBuf, sizeof(strengthBuf), "%u", state.strength);
+                strengthName = strengthBuf;
+                break;
+            }
+        }
+        lv_label_set_text(_mode_values[5], strengthName);
+        lv_obj_set_style_border_color(_mode_buttons[5],
+                                       lv_color_hex(state.strength != 0 ? DesignTokens::BRAND_PRIMARY : 0xFFFFFF),
+                                       LV_PART_MAIN);
+    }
 }
 
 void DisplayUI::updateAudioMetrics(float bpm, const char* key, float micLevel) {
@@ -1280,10 +1606,10 @@ void DisplayUI::updateAudioMetrics(float bpm, const char* key, float micLevel) {
     // Update footer value labels only (titles stay fixed)
     if (_footer_bpm_value) {
         char buf[32];
-        if (_bpm >= 0.0f) {  // Valid BPM (allow 0.0f)
+        if (_bpm >= 0.0f) {
             snprintf(buf, sizeof(buf), "%.0f", _bpm);
         } else {
-            strcpy(buf, "--");
+            buf[0] = '\0';
         }
         lv_label_set_text(_footer_bpm_value, buf);
     }
@@ -1293,17 +1619,17 @@ void DisplayUI::updateAudioMetrics(float bpm, const char* key, float micLevel) {
         if (_key[0] != '\0') {
             snprintf(buf, sizeof(buf), "%s", _key);
         } else {
-            strcpy(buf, "--");
+            buf[0] = '\0';
         }
         lv_label_set_text(_footer_key_value, buf);
     }
 
     if (_footer_mic_value) {
         char buf[32];
-        if (_micLevel > -80.0f) {  // Valid mic level (above silence threshold)
-            snprintf(buf, sizeof(buf), "%.1f DB", _micLevel);  // Added space before DB
+        if (_micLevel > -80.0f) {
+            snprintf(buf, sizeof(buf), "%.1f DB", _micLevel);
         } else {
-            strcpy(buf, "--");
+            buf[0] = '\0';
         }
         lv_label_set_text(_footer_mic_value, buf);
     }
@@ -1332,7 +1658,7 @@ void DisplayUI::updateWebSocketStatus(WebSocketStatus status) {
     // Longer text causes battery bar to clip off-screen
     // Current states: "OK" (~50px), "OFF" (~55px), "..." (~25px), "ERR" (~45px)
     const char* statusText = "OFF";  // Abbreviated from "DISCONNECTED"
-    uint32_t statusColor = TAB5_COLOR_FG_SECONDARY;  // Gray for disconnected
+    uint32_t statusColor = DesignTokens::FG_SECONDARY;  // Gray for disconnected
 
     switch (status) {
         case WebSocketStatus::CONNECTED:
@@ -1341,11 +1667,11 @@ void DisplayUI::updateWebSocketStatus(WebSocketStatus status) {
             break;
         case WebSocketStatus::CONNECTING:
             statusText = "...";  // Abbreviated from "CONNECTING" (~25px vs ~120px)
-            statusColor = TAB5_COLOR_BRAND_PRIMARY;  // Yellow
+            statusColor = DesignTokens::BRAND_PRIMARY;  // Yellow
             break;
         case WebSocketStatus::DISCONNECTED:
             statusText = "OFF";  // Abbreviated from "DISCONNECTED" (~55px vs ~160px)
-            statusColor = TAB5_COLOR_FG_SECONDARY;  // Gray
+            statusColor = DesignTokens::FG_SECONDARY;  // Gray
             break;
         case WebSocketStatus::ERROR:
             statusText = "ERR";  // Abbreviated from "ERROR" (~45px vs ~75px)
@@ -1371,13 +1697,13 @@ void DisplayUI::updateK1Slots(bool slot0Online, bool slot1Online, int8_t selecte
         }
         if (!online[i]) {
             lv_obj_add_state(_footer_k1_buttons[i], LV_STATE_DISABLED);
-            lv_obj_set_style_bg_color(_footer_k1_buttons[i], lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
-            lv_obj_set_style_border_color(_footer_k1_buttons[i], lv_color_hex(TAB5_COLOR_BORDER_BASE), LV_PART_MAIN);
+            lv_obj_set_style_bg_color(_footer_k1_buttons[i], lv_color_hex(DesignTokens::SURFACE_ELEVATED), LV_PART_MAIN);
+            lv_obj_set_style_border_color(_footer_k1_buttons[i], lv_color_hex(DesignTokens::BORDER_BASE), LV_PART_MAIN);
         } else {
             lv_obj_clear_state(_footer_k1_buttons[i], LV_STATE_DISABLED);
             bool selected = (selectedIndex == i);
-            uint32_t borderColor = selected ? TAB5_COLOR_BRAND_PRIMARY : TAB5_COLOR_STATUS_SUCCESS;
-            lv_obj_set_style_bg_color(_footer_k1_buttons[i], lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
+            uint32_t borderColor = selected ? DesignTokens::BRAND_PRIMARY : DesignTokens::STATUS_SUCCESS;
+            lv_obj_set_style_bg_color(_footer_k1_buttons[i], lv_color_hex(DesignTokens::SURFACE_ELEVATED), LV_PART_MAIN);
             lv_obj_set_style_border_color(_footer_k1_buttons[i], lv_color_hex(borderColor), LV_PART_MAIN);
         }
     }
@@ -1902,23 +2228,23 @@ void DisplayUI::setColourCorrectionState(const ColorCorrectionState& state) {
 void DisplayUI::setCurrentEffect(uint8_t id, const char* name) {
     (void)id;  // ID available if needed for future use
     if (_header_effect) {
-        lv_label_set_text(_header_effect, name ? name : "--");
+        lv_label_set_text(_header_effect, name ? name : "");
     }
 }
 
 void DisplayUI::setCurrentPalette(uint8_t id, const char* name) {
     (void)id;  // ID available if needed for future use
     if (_header_palette) {
-        lv_label_set_text(_header_palette, name ? name : "--");
+        lv_label_set_text(_header_palette, name ? name : "");
     }
 }
 
 void DisplayUI::setWiFiInfo(const char* ip, const char* ssid, int32_t rssi) {
     if (_header_net_ip) {
-        lv_label_set_text(_header_net_ip, ip ? ip : "--");
+        lv_label_set_text(_header_net_ip, ip ? ip : "");
     }
     if (_header_net_ssid) {
-        lv_label_set_text(_header_net_ssid, ssid ? ssid : "--");
+        lv_label_set_text(_header_net_ssid, ssid ? ssid : "");
     }
     if (_header_net_rssi) {
         lv_label_set_text_fmt(_header_net_rssi, "%d dBm", rssi);
@@ -1983,7 +2309,7 @@ void DisplayUI::showNetworkConfigScreen() {
     // Create modal screen
     _network_config_screen = lv_obj_create(nullptr);
     lv_obj_set_size(_network_config_screen, LV_PCT(100), LV_PCT(100));
-    lv_obj_set_style_bg_color(_network_config_screen, lv_color_hex(TAB5_COLOR_BG_PAGE), 0);
+    lv_obj_set_style_bg_color(_network_config_screen, lv_color_hex(DesignTokens::BG_PAGE), 0);
     lv_obj_set_style_bg_opa(_network_config_screen, LV_OPA_COVER, 0);
     lv_obj_clear_flag(_network_config_screen, LV_OBJ_FLAG_SCROLLABLE);
 
@@ -1991,7 +2317,7 @@ void DisplayUI::showNetworkConfigScreen() {
     lv_obj_t* title = lv_label_create(_network_config_screen);
     lv_label_set_text(title, "Network Configuration");
     lv_obj_set_style_text_font(title, &bebas_neue_48, 0);
-    lv_obj_set_style_text_color(title, lv_color_hex(TAB5_COLOR_FG_PRIMARY), 0);
+    lv_obj_set_style_text_color(title, lv_color_hex(DesignTokens::FG_PRIMARY), 0);
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 40);
 
     // IP input field
@@ -2000,40 +2326,42 @@ void DisplayUI::showNetworkConfigScreen() {
     lv_textarea_set_max_length(_network_config_ip_input, 15);
     lv_obj_set_width(_network_config_ip_input, 400);
     lv_obj_align(_network_config_ip_input, LV_ALIGN_CENTER, 0, -60);
-    lv_obj_set_style_bg_color(_network_config_ip_input, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), 0);
-    lv_obj_set_style_border_color(_network_config_ip_input, lv_color_hex(TAB5_COLOR_BORDER_BASE), 0);
-    lv_obj_set_style_text_color(_network_config_ip_input, lv_color_hex(TAB5_COLOR_FG_PRIMARY), 0);
+    lv_obj_set_style_bg_color(_network_config_ip_input, lv_color_hex(DesignTokens::SURFACE_ELEVATED), 0);
+    lv_obj_set_style_border_color(_network_config_ip_input, lv_color_hex(DesignTokens::BORDER_BASE), 0);
+    lv_obj_set_style_text_color(_network_config_ip_input, lv_color_hex(DesignTokens::FG_PRIMARY), 0);
 
     // Toggle: Use Manual IP
     _network_config_toggle = lv_switch_create(_network_config_screen);
     lv_obj_align(_network_config_toggle, LV_ALIGN_CENTER, 0, -20);
-    lv_obj_set_style_bg_color(_network_config_toggle, lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(_network_config_toggle, lv_color_hex(DesignTokens::BRAND_PRIMARY), LV_PART_INDICATOR);
 
     lv_obj_t* toggle_label = lv_label_create(_network_config_screen);
     lv_label_set_text(toggle_label, "Use Manual IP");
     lv_obj_align_to(toggle_label, _network_config_toggle, LV_ALIGN_OUT_LEFT_MID, -10, 0);
-    lv_obj_set_style_text_color(toggle_label, lv_color_hex(TAB5_COLOR_FG_SECONDARY), 0);
+    lv_obj_set_style_text_color(toggle_label, lv_color_hex(DesignTokens::FG_SECONDARY), 0);
 
     // Status label
     _network_config_status_label = lv_label_create(_network_config_screen);
     lv_label_set_text(_network_config_status_label, "");
     lv_obj_align(_network_config_status_label, LV_ALIGN_CENTER, 0, 20);
-    lv_obj_set_style_text_color(_network_config_status_label, lv_color_hex(TAB5_COLOR_FG_SECONDARY), 0);
+    lv_obj_set_style_text_color(_network_config_status_label, lv_color_hex(DesignTokens::FG_SECONDARY), 0);
 
     // Save button
-    lv_obj_t* save_btn = lv_btn_create(_network_config_screen);
+    lv_obj_t* save_btn = lv_obj_create(_network_config_screen);
+    lv_obj_add_flag(save_btn, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(save_btn, 150, 50);
     lv_obj_align(save_btn, LV_ALIGN_BOTTOM_LEFT, 50, -40);
-    lv_obj_set_style_bg_color(save_btn, lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), 0);
+    lv_obj_set_style_bg_color(save_btn, lv_color_hex(DesignTokens::BRAND_PRIMARY), 0);
     lv_obj_t* save_label = lv_label_create(save_btn);
     lv_label_set_text(save_label, "Save");
     lv_obj_center(save_label);
 
     // Cancel button
-    lv_obj_t* cancel_btn = lv_btn_create(_network_config_screen);
+    lv_obj_t* cancel_btn = lv_obj_create(_network_config_screen);
+    lv_obj_add_flag(cancel_btn, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(cancel_btn, 150, 50);
     lv_obj_align(cancel_btn, LV_ALIGN_BOTTOM_RIGHT, -50, -40);
-    lv_obj_set_style_bg_color(cancel_btn, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), 0);
+    lv_obj_set_style_bg_color(cancel_btn, lv_color_hex(DesignTokens::SURFACE_ELEVATED), 0);
     lv_obj_t* cancel_label = lv_label_create(cancel_btn);
     lv_label_set_text(cancel_label, "Cancel");
     lv_obj_center(cancel_label);

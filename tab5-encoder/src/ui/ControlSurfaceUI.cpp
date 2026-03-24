@@ -12,37 +12,19 @@
 #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
 
 #include <Arduino.h>
+#include <esp_task_wdt.h>
 #include <cstdio>
 #include <cstring>
 #include <algorithm>
 #include "fonts/bebas_neue_fonts.h"
 #include "fonts/experimental_fonts.h"
 #include "../network/WebSocketClient.h"
+#include "DesignTokens.h"
 
 // ============================================================================
-// Color Constants (match DisplayUI.cpp cyberpunk theme)
+// Layout Constants (ControlSurface-specific)
 // ============================================================================
 
-static constexpr uint32_t CS_COLOR_BG_PAGE = 0x0A0A0B;
-static constexpr uint32_t CS_COLOR_BG_SURFACE_BASE = 0x121214;
-static constexpr uint32_t CS_COLOR_BG_SURFACE_ELEVATED = 0x1A1A1C;
-static constexpr uint32_t CS_COLOR_BORDER_BASE = 0x2A2A2E;
-static constexpr uint32_t CS_COLOR_FG_PRIMARY = 0xFFFFFF;
-static constexpr uint32_t CS_COLOR_FG_SECONDARY = 0x9CA3AF;
-static constexpr uint32_t CS_COLOR_FG_DIMMED = 0x4B5563;
-static constexpr uint32_t CS_COLOR_BRAND_PRIMARY = 0xFFC700;
-static constexpr uint32_t CS_COLOR_STATUS_SUCCESS = 0x22C55E;
-static constexpr uint32_t CS_COLOR_CAMERA_ACTIVE = 0xEF4444;   // Red for REC
-static constexpr uint32_t CS_COLOR_CAMERA_STANDBY = 0x6B7280;  // Gray for standby
-static constexpr uint32_t CS_COLOR_PRESET_OCCUPIED = 0x3B82F6;  // Blue for occupied slot
-
-// ============================================================================
-// Layout Constants
-// ============================================================================
-
-static constexpr int32_t CS_GRID_GAP = 14;
-static constexpr int32_t CS_GRID_MARGIN = 24;
-static constexpr int32_t CS_STATUSBAR_HEIGHT = 66;
 static constexpr int32_t CS_PARAM_ROW_HEIGHT = 110;
 static constexpr int32_t CS_GLOBAL_ROW_HEIGHT = 50;
 
@@ -50,24 +32,6 @@ static constexpr int32_t CS_GLOBAL_ROW_HEIGHT = 50;
 static constexpr const char* kGlobalParamNames[8] = {
     "BRI", "SPD", "MOOD", "FADE", "CPLX", "VAR", "HUE", "SAT"
 };
-
-// ============================================================================
-// Helper: Create a card (matches DisplayUI make_card pattern)
-// ============================================================================
-
-static lv_obj_t* cs_make_card(lv_obj_t* parent, bool elevated) {
-    lv_obj_t* card = lv_obj_create(parent);
-    lv_obj_set_style_bg_color(card,
-                              lv_color_hex(elevated ? CS_COLOR_BG_SURFACE_ELEVATED
-                                                    : CS_COLOR_BG_SURFACE_BASE),
-                              LV_PART_MAIN);
-    lv_obj_set_style_border_width(card, 2, LV_PART_MAIN);
-    lv_obj_set_style_border_color(card, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-    lv_obj_set_style_radius(card, 14, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(card, 10, LV_PART_MAIN);
-    lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
-    return card;
-}
 
 // ============================================================================
 // Constructor / Destructor
@@ -86,12 +50,14 @@ ControlSurfaceUI::~ControlSurfaceUI() {
 void ControlSurfaceUI::begin(lv_obj_t* parent) {
     if (!parent) return;
 
+    esp_task_wdt_reset();
+
     // Set page background
-    lv_obj_set_style_bg_color(parent, lv_color_hex(CS_COLOR_BG_PAGE), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(parent, lv_color_hex(DesignTokens::BG_PAGE), LV_PART_MAIN);
     lv_obj_set_style_pad_all(parent, 0, LV_PART_MAIN);
 
     // Content starts below header area (header is shared, managed by DisplayUI)
-    int32_t contentTop = CS_STATUSBAR_HEIGHT + CS_GRID_GAP + 7;
+    int32_t contentTop = DesignTokens::STATUSBAR_HEIGHT + DesignTokens::GRID_GAP + 7;
     int32_t nextRowY = contentTop;
 
     // Grid column template (8 equal columns)
@@ -106,14 +72,18 @@ void ControlSurfaceUI::begin(lv_obj_t* parent) {
     // ====================================================================
     createParamRow(parent, _rowA_cards, _rowA_labels, _rowA_values, _rowA_bars,
                    _rowA_container, nextRowY, "A");
-    nextRowY += CS_PARAM_ROW_HEIGHT + CS_GRID_GAP;
+    nextRowY += CS_PARAM_ROW_HEIGHT + DesignTokens::GRID_GAP;
+
+    esp_task_wdt_reset();  // After Row A (8 cards x 4 widgets = 32 LVGL objects)
 
     // ====================================================================
     // Row B: Effect Params 8-13 + Camera Mode + Preset Bank (encoders 8-15)
     // ====================================================================
     createParamRow(parent, _rowB_cards, _rowB_labels, _rowB_values, _rowB_bars,
                    _rowB_container, nextRowY, "B");
-    nextRowY += CS_PARAM_ROW_HEIGHT + CS_GRID_GAP;
+    nextRowY += CS_PARAM_ROW_HEIGHT + DesignTokens::GRID_GAP;
+
+    esp_task_wdt_reset();  // After Row B (another 32 LVGL objects)
 
     // Override cards 6 and 7 in Row B for Camera Mode and Preset Bank
     updateCameraCard();
@@ -124,6 +94,8 @@ void ControlSurfaceUI::begin(lv_obj_t* parent) {
     // ====================================================================
     createGlobalRow(parent);
 
+    esp_task_wdt_reset();  // After Global Row (8 cells x 3 widgets = 24 LVGL objects)
+
     // ====================================================================
     // Back Button
     // ====================================================================
@@ -131,6 +103,8 @@ void ControlSurfaceUI::begin(lv_obj_t* parent) {
 
     // Initialize all param cards to empty state
     rebindEncoders();
+
+    esp_task_wdt_reset();
 
     Serial.println("[ControlSurface] UI initialized");
 }
@@ -152,17 +126,18 @@ void ControlSurfaceUI::createParamRow(lv_obj_t* parent,
     static lv_coord_t row_dsc[2] = {CS_PARAM_ROW_HEIGHT, LV_GRID_TEMPLATE_LAST};
 
     container = lv_obj_create(parent);
-    lv_obj_set_size(container, 1280 - 2 * CS_GRID_MARGIN, CS_PARAM_ROW_HEIGHT);
+    lv_obj_set_size(container, 1280 - 2 * DesignTokens::GRID_MARGIN, CS_PARAM_ROW_HEIGHT);
     lv_obj_align(container, LV_ALIGN_TOP_MID, 0, yPos);
     lv_obj_set_style_bg_opa(container, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(container, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(container, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(container, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_layout(container, LV_LAYOUT_GRID);
     lv_obj_set_grid_dsc_array(container, col_dsc, row_dsc);
-    lv_obj_set_style_pad_column(container, CS_GRID_GAP, LV_PART_MAIN);
+    lv_obj_set_style_pad_column(container, DesignTokens::GRID_GAP, LV_PART_MAIN);
 
     for (uint8_t i = 0; i < 8; ++i) {
-        cards[i] = cs_make_card(container, false);
+        cards[i] = make_card(container, false);
         lv_obj_set_grid_cell(cards[i], LV_GRID_ALIGN_STRETCH, i, 1,
                              LV_GRID_ALIGN_STRETCH, 0, 1);
 
@@ -170,7 +145,7 @@ void ControlSurfaceUI::createParamRow(lv_obj_t* parent,
         labels[i] = lv_label_create(cards[i]);
         lv_label_set_text(labels[i], "--");
         lv_obj_set_style_text_font(labels[i], RAJDHANI_MED_24, LV_PART_MAIN);
-        lv_obj_set_style_text_color(labels[i], lv_color_hex(CS_COLOR_FG_SECONDARY), LV_PART_MAIN);
+        lv_obj_set_style_text_color(labels[i], lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
         lv_obj_set_width(labels[i], LV_PCT(100));
         lv_label_set_long_mode(labels[i], LV_LABEL_LONG_DOT);
         lv_obj_set_style_text_align(labels[i], LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
@@ -180,7 +155,7 @@ void ControlSurfaceUI::createParamRow(lv_obj_t* parent,
         values[i] = lv_label_create(cards[i]);
         lv_label_set_text(values[i], "--");
         lv_obj_set_style_text_font(values[i], JETBRAINS_MONO_REG_24, LV_PART_MAIN);
-        lv_obj_set_style_text_color(values[i], lv_color_hex(CS_COLOR_FG_PRIMARY), LV_PART_MAIN);
+        lv_obj_set_style_text_color(values[i], lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
         lv_obj_align(values[i], LV_ALIGN_TOP_MID, 0, 22);
 
         // Progress bar
@@ -189,8 +164,8 @@ void ControlSurfaceUI::createParamRow(lv_obj_t* parent,
         lv_bar_set_value(bars[i], 0, LV_ANIM_OFF);
         lv_obj_set_size(bars[i], LV_PCT(90), 8);
         lv_obj_align(bars[i], LV_ALIGN_BOTTOM_MID, 0, -8);
-        lv_obj_set_style_bg_color(bars[i], lv_color_hex(CS_COLOR_BORDER_BASE), LV_PART_MAIN);
-        lv_obj_set_style_bg_color(bars[i], lv_color_hex(CS_COLOR_BRAND_PRIMARY), LV_PART_INDICATOR);
+        lv_obj_set_style_bg_color(bars[i], lv_color_hex(DesignTokens::BORDER_BASE), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(bars[i], lv_color_hex(DesignTokens::BRAND_PRIMARY), LV_PART_INDICATOR);
         lv_obj_set_style_radius(bars[i], 6, LV_PART_MAIN);
         lv_obj_set_style_radius(bars[i], 6, LV_PART_INDICATOR);
     }
@@ -208,26 +183,27 @@ void ControlSurfaceUI::createGlobalRow(lv_obj_t* parent) {
     };
     static lv_coord_t row_dsc[2] = {CS_GLOBAL_ROW_HEIGHT, LV_GRID_TEMPLATE_LAST};
 
-    int32_t yPos = CS_STATUSBAR_HEIGHT + CS_GRID_GAP + 7 +
-                   2 * (CS_PARAM_ROW_HEIGHT + CS_GRID_GAP);
+    int32_t yPos = DesignTokens::STATUSBAR_HEIGHT + DesignTokens::GRID_GAP + 7 +
+                   2 * (CS_PARAM_ROW_HEIGHT + DesignTokens::GRID_GAP);
 
     _globalRow_container = lv_obj_create(parent);
-    lv_obj_set_size(_globalRow_container, 1280 - 2 * CS_GRID_MARGIN, CS_GLOBAL_ROW_HEIGHT);
+    lv_obj_set_size(_globalRow_container, 1280 - 2 * DesignTokens::GRID_MARGIN, CS_GLOBAL_ROW_HEIGHT);
     lv_obj_align(_globalRow_container, LV_ALIGN_TOP_MID, 0, yPos);
     lv_obj_set_style_bg_opa(_globalRow_container, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(_globalRow_container, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(_globalRow_container, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(_globalRow_container, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_layout(_globalRow_container, LV_LAYOUT_GRID);
     lv_obj_set_grid_dsc_array(_globalRow_container, col_dsc, row_dsc);
-    lv_obj_set_style_pad_column(_globalRow_container, CS_GRID_GAP, LV_PART_MAIN);
+    lv_obj_set_style_pad_column(_globalRow_container, DesignTokens::GRID_GAP, LV_PART_MAIN);
 
     for (uint8_t i = 0; i < 8; ++i) {
         lv_obj_t* cell = lv_obj_create(_globalRow_container);
         lv_obj_set_grid_cell(cell, LV_GRID_ALIGN_STRETCH, i, 1,
                              LV_GRID_ALIGN_STRETCH, 0, 1);
-        lv_obj_set_style_bg_color(cell, lv_color_hex(CS_COLOR_BG_SURFACE_BASE), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(cell, lv_color_hex(DesignTokens::SURFACE_BASE), LV_PART_MAIN);
         lv_obj_set_style_border_width(cell, 1, LV_PART_MAIN);
-        lv_obj_set_style_border_color(cell, lv_color_hex(CS_COLOR_BORDER_BASE), LV_PART_MAIN);
+        lv_obj_set_style_border_color(cell, lv_color_hex(DesignTokens::BORDER_BASE), LV_PART_MAIN);
         lv_obj_set_style_radius(cell, 8, LV_PART_MAIN);
         lv_obj_set_style_pad_all(cell, 4, LV_PART_MAIN);
         lv_obj_clear_flag(cell, LV_OBJ_FLAG_SCROLLABLE);
@@ -235,13 +211,13 @@ void ControlSurfaceUI::createGlobalRow(lv_obj_t* parent) {
         _globalRow_labels[i] = lv_label_create(cell);
         lv_label_set_text(_globalRow_labels[i], kGlobalParamNames[i]);
         lv_obj_set_style_text_font(_globalRow_labels[i], RAJDHANI_MED_24, LV_PART_MAIN);
-        lv_obj_set_style_text_color(_globalRow_labels[i], lv_color_hex(CS_COLOR_FG_DIMMED), LV_PART_MAIN);
+        lv_obj_set_style_text_color(_globalRow_labels[i], lv_color_hex(DesignTokens::FG_DIMMED), LV_PART_MAIN);
         lv_obj_align(_globalRow_labels[i], LV_ALIGN_LEFT_MID, 0, 0);
 
         _globalRow_values[i] = lv_label_create(cell);
         lv_label_set_text(_globalRow_values[i], "--");
         lv_obj_set_style_text_font(_globalRow_values[i], RAJDHANI_MED_24, LV_PART_MAIN);
-        lv_obj_set_style_text_color(_globalRow_values[i], lv_color_hex(CS_COLOR_FG_SECONDARY), LV_PART_MAIN);
+        lv_obj_set_style_text_color(_globalRow_values[i], lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
         lv_obj_align(_globalRow_values[i], LV_ALIGN_RIGHT_MID, 0, 0);
     }
 }
@@ -251,11 +227,12 @@ void ControlSurfaceUI::createGlobalRow(lv_obj_t* parent) {
 // ============================================================================
 
 void ControlSurfaceUI::createBackButton(lv_obj_t* parent) {
-    _backButton = lv_btn_create(parent);
+    _backButton = lv_obj_create(parent);
+    lv_obj_add_flag(_backButton, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(_backButton, 100, 40);
-    lv_obj_set_pos(_backButton, 1280 - 110, CS_STATUSBAR_HEIGHT + CS_GRID_GAP + 7 +
-                   2 * (CS_PARAM_ROW_HEIGHT + CS_GRID_GAP) + CS_GLOBAL_ROW_HEIGHT + 10);
-    lv_obj_set_style_bg_color(_backButton, lv_color_hex(CS_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
+    lv_obj_set_pos(_backButton, 1280 - 110, DesignTokens::STATUSBAR_HEIGHT + DesignTokens::GRID_GAP + 7 +
+                   2 * (CS_PARAM_ROW_HEIGHT + DesignTokens::GRID_GAP) + CS_GLOBAL_ROW_HEIGHT + 10);
+    lv_obj_set_style_bg_color(_backButton, lv_color_hex(DesignTokens::SURFACE_ELEVATED), LV_PART_MAIN);
     lv_obj_set_style_border_width(_backButton, 2, LV_PART_MAIN);
     lv_obj_set_style_border_color(_backButton, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
     lv_obj_set_style_radius(_backButton, 10, LV_PART_MAIN);
@@ -263,7 +240,7 @@ void ControlSurfaceUI::createBackButton(lv_obj_t* parent) {
     lv_obj_t* label = lv_label_create(_backButton);
     lv_label_set_text(label, "BACK");
     lv_obj_set_style_text_font(label, RAJDHANI_MED_24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(label, lv_color_hex(CS_COLOR_FG_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(label, lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
     lv_obj_center(label);
 
     lv_obj_add_event_cb(_backButton, backButtonCb, LV_EVENT_CLICKED, this);
@@ -566,9 +543,9 @@ void ControlSurfaceUI::updateParamCard(uint8_t encoderIndex) {
         lv_label_set_text(labels[cardIndex], "--");
         lv_label_set_text(values[cardIndex], "--");
         lv_bar_set_value(bars[cardIndex], 0, LV_ANIM_OFF);
-        lv_obj_set_style_text_color(labels[cardIndex], lv_color_hex(CS_COLOR_FG_DIMMED), LV_PART_MAIN);
-        lv_obj_set_style_text_color(values[cardIndex], lv_color_hex(CS_COLOR_FG_DIMMED), LV_PART_MAIN);
-        lv_obj_set_style_border_color(cards[cardIndex], lv_color_hex(CS_COLOR_BORDER_BASE), LV_PART_MAIN);
+        lv_obj_set_style_text_color(labels[cardIndex], lv_color_hex(DesignTokens::FG_DIMMED), LV_PART_MAIN);
+        lv_obj_set_style_text_color(values[cardIndex], lv_color_hex(DesignTokens::FG_DIMMED), LV_PART_MAIN);
+        lv_obj_set_style_border_color(cards[cardIndex], lv_color_hex(DesignTokens::BORDER_BASE), LV_PART_MAIN);
         return;
     }
 
@@ -577,13 +554,13 @@ void ControlSurfaceUI::updateParamCard(uint8_t encoderIndex) {
     // Update label with displayName (or name as fallback)
     const char* displayLabel = p.displayName[0] ? p.displayName : p.name;
     lv_label_set_text(labels[cardIndex], displayLabel);
-    lv_obj_set_style_text_color(labels[cardIndex], lv_color_hex(CS_COLOR_FG_SECONDARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(labels[cardIndex], lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
 
     // Format value
     char buf[24];
     formatParamValue(buf, sizeof(buf), p);
     lv_label_set_text(values[cardIndex], buf);
-    lv_obj_set_style_text_color(values[cardIndex], lv_color_hex(CS_COLOR_FG_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(values[cardIndex], lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
 
     // Update bar (normalized 0-1000)
     float range = p.maxValue - p.minValue;
@@ -595,8 +572,8 @@ void ControlSurfaceUI::updateParamCard(uint8_t encoderIndex) {
     }
     lv_bar_set_value(bars[cardIndex], barValue, LV_ANIM_OFF);
 
-    // Active border
-    lv_obj_set_style_border_color(cards[cardIndex], lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    // Default border (subtle — neon highlight reserved for active encoder)
+    lv_obj_set_style_border_color(cards[cardIndex], lv_color_hex(DesignTokens::BORDER_SUBTLE), LV_PART_MAIN);
 }
 
 // ============================================================================
@@ -635,20 +612,20 @@ void ControlSurfaceUI::updateCameraCard() {
     if (!_rowB_labels[6] || !_rowB_values[6] || !_rowB_cards[6] || !_rowB_bars[6]) return;
 
     lv_label_set_text(_rowB_labels[6], "CAMERA");
-    lv_obj_set_style_text_color(_rowB_labels[6], lv_color_hex(CS_COLOR_FG_SECONDARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(_rowB_labels[6], lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
 
     if (_cameraModeActive) {
         lv_label_set_text(_rowB_values[6], "REC");
-        lv_obj_set_style_text_color(_rowB_values[6], lv_color_hex(CS_COLOR_CAMERA_ACTIVE), LV_PART_MAIN);
-        lv_obj_set_style_border_color(_rowB_cards[6], lv_color_hex(CS_COLOR_CAMERA_ACTIVE), LV_PART_MAIN);
+        lv_obj_set_style_text_color(_rowB_values[6], lv_color_hex(DesignTokens::CAMERA_ACTIVE), LV_PART_MAIN);
+        lv_obj_set_style_border_color(_rowB_cards[6], lv_color_hex(DesignTokens::CAMERA_ACTIVE), LV_PART_MAIN);
         lv_bar_set_value(_rowB_bars[6], 1000, LV_ANIM_OFF);
-        lv_obj_set_style_bg_color(_rowB_bars[6], lv_color_hex(CS_COLOR_CAMERA_ACTIVE), LV_PART_INDICATOR);
+        lv_obj_set_style_bg_color(_rowB_bars[6], lv_color_hex(DesignTokens::CAMERA_ACTIVE), LV_PART_INDICATOR);
     } else {
         lv_label_set_text(_rowB_values[6], "STANDBY");
-        lv_obj_set_style_text_color(_rowB_values[6], lv_color_hex(CS_COLOR_CAMERA_STANDBY), LV_PART_MAIN);
-        lv_obj_set_style_border_color(_rowB_cards[6], lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+        lv_obj_set_style_text_color(_rowB_values[6], lv_color_hex(DesignTokens::CAMERA_STANDBY), LV_PART_MAIN);
+        lv_obj_set_style_border_color(_rowB_cards[6], lv_color_hex(DesignTokens::BORDER_SUBTLE), LV_PART_MAIN);
         lv_bar_set_value(_rowB_bars[6], 0, LV_ANIM_OFF);
-        lv_obj_set_style_bg_color(_rowB_bars[6], lv_color_hex(CS_COLOR_BRAND_PRIMARY), LV_PART_INDICATOR);
+        lv_obj_set_style_bg_color(_rowB_bars[6], lv_color_hex(DesignTokens::BRAND_PRIMARY), LV_PART_INDICATOR);
     }
 }
 
@@ -660,18 +637,18 @@ void ControlSurfaceUI::updatePresetCard() {
     if (!_rowB_labels[7] || !_rowB_values[7] || !_rowB_cards[7] || !_rowB_bars[7]) return;
 
     lv_label_set_text(_rowB_labels[7], "PRESET");
-    lv_obj_set_style_text_color(_rowB_labels[7], lv_color_hex(CS_COLOR_FG_SECONDARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(_rowB_labels[7], lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
 
     char buf[16];
     if (_presetSlots[_selectedPresetSlot].occupied) {
         snprintf(buf, sizeof(buf), "S%u [*]", _selectedPresetSlot + 1);
-        lv_obj_set_style_border_color(_rowB_cards[7], lv_color_hex(CS_COLOR_PRESET_OCCUPIED), LV_PART_MAIN);
+        lv_obj_set_style_border_color(_rowB_cards[7], lv_color_hex(DesignTokens::PRESET_OCCUPIED), LV_PART_MAIN);
     } else {
         snprintf(buf, sizeof(buf), "S%u [_]", _selectedPresetSlot + 1);
-        lv_obj_set_style_border_color(_rowB_cards[7], lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+        lv_obj_set_style_border_color(_rowB_cards[7], lv_color_hex(DesignTokens::BORDER_SUBTLE), LV_PART_MAIN);
     }
     lv_label_set_text(_rowB_values[7], buf);
-    lv_obj_set_style_text_color(_rowB_values[7], lv_color_hex(CS_COLOR_FG_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(_rowB_values[7], lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
 
     // Bar shows slot position (0-7 mapped to 0-1000)
     int32_t barVal = (_selectedPresetSlot * 1000) / (CS_MAX_PRESET_SLOTS - 1);

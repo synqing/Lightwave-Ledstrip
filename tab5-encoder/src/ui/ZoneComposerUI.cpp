@@ -623,7 +623,7 @@ bool ZoneComposerUI::validateLayout(const zones::ZoneSegment* segments, uint8_t 
 void ZoneComposerUI::initStyles() {
     // Selected parameter style (blue accent border + bg tint)
     lv_style_init(&_styleSelected);
-    lv_style_set_border_color(&_styleSelected, lv_color_hex(Theme::ACCENT));
+    lv_style_set_border_color(&_styleSelected, lv_color_hex(0x00FFFF));  // Cyan accent (RGB888)
     lv_style_set_border_width(&_styleSelected, 3);
     lv_style_set_bg_color(&_styleSelected, lv_color_hex(0x1A237E));  // Dark blue tint
     lv_style_set_bg_opa(&_styleSelected, LV_OPA_30);
@@ -1022,34 +1022,12 @@ void ZoneComposerUI::updatePresetLabel() {
 // ============================================================================
 
 #include "fonts/experimental_fonts.h"
+#include "DesignTokens.h"
 
-// Theme constants matching DisplayUI.cpp
-static constexpr uint32_t TAB5_COLOR_BG_PAGE = 0x0A0A0B;
-static constexpr uint32_t TAB5_COLOR_BG_SURFACE_BASE = 0x121214;
-static constexpr uint32_t TAB5_COLOR_BG_SURFACE_ELEVATED = 0x1A1A1C;
-static constexpr uint32_t TAB5_COLOR_BORDER_BASE = 0x2A2A2E;
-static constexpr uint32_t TAB5_COLOR_FG_PRIMARY = 0xFFFFFF;
-static constexpr uint32_t TAB5_COLOR_FG_SECONDARY = 0x9CA3AF;
-static constexpr uint32_t TAB5_COLOR_BRAND_PRIMARY = 0xFFC700;
-
-// Layout constants
-static constexpr int TAB5_GRID_MARGIN = 20;
-static constexpr int TAB5_GRID_GAP = 12;
-
-// Helper function matching DisplayUI's make_card()
-static lv_obj_t* make_zone_card(lv_obj_t* parent, bool elevated) {
-    lv_obj_t* card = lv_obj_create(parent);
-    lv_obj_set_style_bg_color(card,
-                              lv_color_hex(elevated ? TAB5_COLOR_BG_SURFACE_ELEVATED
-                                                    : TAB5_COLOR_BG_SURFACE_BASE),
-                              LV_PART_MAIN);
-    lv_obj_set_style_border_width(card, 2, LV_PART_MAIN);
-    lv_obj_set_style_border_color(card, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-    lv_obj_set_style_radius(card, 14, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(card, 10, LV_PART_MAIN);
-    lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
-    return card;
-}
+// ZoneComposer uses a narrower grid than the DisplayUI canonical values,
+// so these local layout constants are retained.
+static constexpr int ZC_GRID_MARGIN = 20;
+static constexpr int ZC_GRID_GAP = 12;
 
 void ZoneComposerUI::createInteractiveUI(lv_obj_t* parent) {
     uint32_t t0 = millis();
@@ -1059,8 +1037,8 @@ void ZoneComposerUI::createInteractiveUI(lv_obj_t* parent) {
     lv_obj_set_layout(parent, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(parent, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(parent, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_all(parent, TAB5_GRID_MARGIN, LV_PART_MAIN);
-    lv_obj_set_style_pad_row(parent, TAB5_GRID_GAP, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(parent, ZC_GRID_MARGIN, LV_PART_MAIN);
+    lv_obj_set_style_pad_row(parent, ZC_GRID_GAP, LV_PART_MAIN);
     lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
 
     uint32_t t1 = millis();
@@ -1070,7 +1048,7 @@ void ZoneComposerUI::createInteractiveUI(lv_obj_t* parent) {
     // HEADER: Title + Back Button
     // ═══════════════════════════════════════════════════════════════════════
     lv_obj_t* header = lv_obj_create(parent);
-    lv_obj_set_size(header, 1280 - 2 * TAB5_GRID_MARGIN, 50);
+    lv_obj_set_size(header, 1280 - 2 * ZC_GRID_MARGIN, 50);
     lv_obj_set_style_bg_opa(header, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(header, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(header, 0, LV_PART_MAIN);
@@ -1080,26 +1058,26 @@ void ZoneComposerUI::createInteractiveUI(lv_obj_t* parent) {
     lv_obj_clear_flag(header, LV_OBJ_FLAG_SCROLLABLE);
 
     // Back button (left side)
-    _backButton = make_zone_card(header, true);
+    _backButton = make_card(header, true);
     lv_obj_set_size(_backButton, 120, 44);
-    lv_obj_set_style_border_color(_backButton, lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_border_color(_backButton, lv_color_hex(DesignTokens::BRAND_PRIMARY), LV_PART_MAIN);
     lv_obj_add_flag(_backButton, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(_backButton, backButtonCb, LV_EVENT_CLICKED, this);
 
     lv_obj_t* backLabel = lv_label_create(_backButton);
     lv_label_set_text(backLabel, "< BACK");
     lv_obj_set_style_text_font(backLabel, RAJDHANI_BOLD_24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(backLabel, lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(backLabel, lv_color_hex(DesignTokens::BRAND_PRIMARY), LV_PART_MAIN);
     lv_obj_center(backLabel);
 
     // Title (center)
     lv_obj_t* title = lv_label_create(header);
     lv_label_set_text(title, "ZONE COMPOSER");
     lv_obj_set_style_text_font(title, BEBAS_BOLD_40, LV_PART_MAIN);
-    lv_obj_set_style_text_color(title, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(title, lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
 
     // Zone Enable Toggle Button (right side)
-    _zoneEnableButton = make_zone_card(header, true);
+    _zoneEnableButton = make_card(header, true);
     lv_obj_set_size(_zoneEnableButton, 160, 44);
     lv_obj_set_style_border_width(_zoneEnableButton, 2, LV_PART_MAIN);
     lv_obj_set_style_border_color(_zoneEnableButton,
@@ -1123,17 +1101,17 @@ void ZoneComposerUI::createInteractiveUI(lv_obj_t* parent) {
     // CONTROLS ROW: Zone Count + Preset Selector
     // ═══════════════════════════════════════════════════════════════════════
     lv_obj_t* controlsRow = lv_obj_create(parent);
-    lv_obj_set_size(controlsRow, 1280 - 2 * TAB5_GRID_MARGIN, 80);
+    lv_obj_set_size(controlsRow, 1280 - 2 * ZC_GRID_MARGIN, 80);
     lv_obj_set_style_bg_opa(controlsRow, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(controlsRow, 0, LV_PART_MAIN);
     lv_obj_set_layout(controlsRow, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(controlsRow, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(controlsRow, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(controlsRow, TAB5_GRID_GAP * 2, LV_PART_MAIN);
+    lv_obj_set_style_pad_column(controlsRow, ZC_GRID_GAP * 2, LV_PART_MAIN);
     lv_obj_clear_flag(controlsRow, LV_OBJ_FLAG_SCROLLABLE);
 
     // Zone Count Card
-    _zoneCountRow = make_zone_card(controlsRow, false);
+    _zoneCountRow = make_card(controlsRow, false);
     lv_obj_set_size(_zoneCountRow, 280, 70);
     lv_obj_add_flag(_zoneCountRow, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(_zoneCountRow, zoneCountTouchCb, LV_EVENT_CLICKED, this);
@@ -1141,17 +1119,17 @@ void ZoneComposerUI::createInteractiveUI(lv_obj_t* parent) {
     lv_obj_t* zoneCountTitle = lv_label_create(_zoneCountRow);
     lv_label_set_text(zoneCountTitle, "ZONES");
     lv_obj_set_style_text_font(zoneCountTitle, RAJDHANI_MED_24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(zoneCountTitle, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(zoneCountTitle, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
     lv_obj_align(zoneCountTitle, LV_ALIGN_TOP_MID, 0, 0);
 
     _zoneCountValueLabel = lv_label_create(_zoneCountRow);
     lv_label_set_text(_zoneCountValueLabel, "3");
     lv_obj_set_style_text_font(_zoneCountValueLabel, JETBRAINS_MONO_BOLD_32, LV_PART_MAIN);
-    lv_obj_set_style_text_color(_zoneCountValueLabel, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(_zoneCountValueLabel, lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
     lv_obj_align(_zoneCountValueLabel, LV_ALIGN_BOTTOM_MID, 0, 0);
 
     // Preset Card
-    _presetRow = make_zone_card(controlsRow, false);
+    _presetRow = make_card(controlsRow, false);
     lv_obj_set_size(_presetRow, 400, 70);
     lv_obj_add_flag(_presetRow, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(_presetRow, presetTouchCb, LV_EVENT_CLICKED, this);
@@ -1159,13 +1137,13 @@ void ZoneComposerUI::createInteractiveUI(lv_obj_t* parent) {
     lv_obj_t* presetTitle = lv_label_create(_presetRow);
     lv_label_set_text(presetTitle, "PRESET");
     lv_obj_set_style_text_font(presetTitle, RAJDHANI_MED_24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(presetTitle, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(presetTitle, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
     lv_obj_align(presetTitle, LV_ALIGN_TOP_MID, 0, 0);
 
     _presetValueLabel = lv_label_create(_presetRow);
     lv_label_set_text(_presetValueLabel, "UNIFIED");
     lv_obj_set_style_text_font(_presetValueLabel, RAJDHANI_BOLD_32, LV_PART_MAIN);
-    lv_obj_set_style_text_color(_presetValueLabel, lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(_presetValueLabel, lv_color_hex(DesignTokens::BRAND_PRIMARY), LV_PART_MAIN);
     lv_obj_align(_presetValueLabel, LV_ALIGN_BOTTOM_MID, 0, 0);
 
     uint32_t t3 = millis();
@@ -1198,7 +1176,7 @@ lv_obj_t* ZoneComposerUI::createZoneCountRow(lv_obj_t* parent) {
     lv_obj_t* label = lv_label_create(parent);
     lv_label_set_text(label, "Zone Count: 1");
     lv_obj_set_style_text_font(label, BEBAS_BOLD_32, LV_PART_MAIN);
-    lv_obj_set_style_text_color(label, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(label, lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
     lv_obj_add_flag(label, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(label, zoneCountTouchCb, LV_EVENT_CLICKED, this);
     _zoneCountValueLabel = label;
@@ -1209,7 +1187,7 @@ lv_obj_t* ZoneComposerUI::createPresetRow(lv_obj_t* parent) {
     lv_obj_t* label = lv_label_create(parent);
     lv_label_set_text(label, "Preset: Unified");
     lv_obj_set_style_text_font(label, BEBAS_BOLD_32, LV_PART_MAIN);
-    lv_obj_set_style_text_color(label, lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(label, lv_color_hex(DesignTokens::BRAND_PRIMARY), LV_PART_MAIN);
     lv_obj_add_flag(label, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(label, presetTouchCb, LV_EVENT_CLICKED, this);
     _presetValueLabel = label;
@@ -1222,7 +1200,7 @@ void ZoneComposerUI::createZoneParameterGrid(lv_obj_t* parent) {
     
     // Container for zone cards
     lv_obj_t* zoneGrid = lv_obj_create(parent);
-    lv_obj_set_size(zoneGrid, 1280 - 2 * TAB5_GRID_MARGIN, 280);
+    lv_obj_set_size(zoneGrid, 1280 - 2 * ZC_GRID_MARGIN, 280);
     lv_obj_set_style_bg_opa(zoneGrid, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(zoneGrid, 0, LV_PART_MAIN);
     lv_obj_set_layout(zoneGrid, LV_LAYOUT_GRID);
@@ -1232,7 +1210,7 @@ void ZoneComposerUI::createZoneParameterGrid(lv_obj_t* parent) {
     static lv_coord_t col_dsc[5] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
     static lv_coord_t row_dsc[2] = {280, LV_GRID_TEMPLATE_LAST};
     lv_obj_set_grid_dsc_array(zoneGrid, col_dsc, row_dsc);
-    lv_obj_set_style_pad_column(zoneGrid, TAB5_GRID_GAP, LV_PART_MAIN);
+    lv_obj_set_style_pad_column(zoneGrid, ZC_GRID_GAP, LV_PART_MAIN);
 
     uint32_t t1 = millis();
     for (uint8_t i = 0; i < 4; i++) {
@@ -1251,13 +1229,12 @@ void ZoneComposerUI::createZoneParameterGrid(lv_obj_t* parent) {
 
 lv_obj_t* ZoneComposerUI::createZoneParamRow(lv_obj_t* parent, uint8_t zoneIndex) {
     // Create zone card
-    lv_obj_t* card = make_zone_card(parent, false);
+    lv_obj_t* card = make_card(parent, false);
     lv_obj_set_grid_cell(card, LV_GRID_ALIGN_STRETCH, zoneIndex, 1, LV_GRID_ALIGN_STRETCH, 0, 1);
     _zoneParamContainers[zoneIndex] = card;
 
-    // Color code based on zone (matching LED strip visualization)
-    uint32_t zoneColors[] = {0x00FF88, 0x00AAFF, 0xFF6600, 0xFF00AA};
-    lv_obj_set_style_border_color(card, lv_color_hex(zoneColors[zoneIndex]), LV_PART_MAIN);
+    // Colour code based on zone — uses canonical ZONE_COLORS from header
+    lv_obj_set_style_border_color(card, lv_color_hex(ZONE_COLORS[zoneIndex]), LV_PART_MAIN);
 
     // Zone header
     lv_obj_t* zoneHeader = lv_label_create(card);
@@ -1265,7 +1242,7 @@ lv_obj_t* ZoneComposerUI::createZoneParamRow(lv_obj_t* parent, uint8_t zoneIndex
     snprintf(zoneName, sizeof(zoneName), "ZONE %d", zoneIndex + 1);
     lv_label_set_text(zoneHeader, zoneName);
     lv_obj_set_style_text_font(zoneHeader, BEBAS_BOLD_32, LV_PART_MAIN);
-    lv_obj_set_style_text_color(zoneHeader, lv_color_hex(zoneColors[zoneIndex]), LV_PART_MAIN);
+    lv_obj_set_style_text_color(zoneHeader, lv_color_hex(ZONE_COLORS[zoneIndex]), LV_PART_MAIN);
     lv_obj_align(zoneHeader, LV_ALIGN_TOP_MID, 0, 0);
 
     // Effect
@@ -1296,10 +1273,10 @@ lv_obj_t* ZoneComposerUI::createClickableParameter(lv_obj_t* parent,
     // Container for label + value
     lv_obj_t* container = lv_obj_create(parent);
     lv_obj_set_size(container, LV_PCT(95), 48);
-    lv_obj_set_style_bg_color(container, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(container, lv_color_hex(DesignTokens::SURFACE_ELEVATED), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(container, LV_OPA_50, LV_PART_MAIN);
     lv_obj_set_style_border_width(container, 1, LV_PART_MAIN);
-    lv_obj_set_style_border_color(container, lv_color_hex(TAB5_COLOR_BORDER_BASE), LV_PART_MAIN);
+    lv_obj_set_style_border_color(container, lv_color_hex(DesignTokens::BORDER_BASE), LV_PART_MAIN);
     lv_obj_set_style_radius(container, 8, LV_PART_MAIN);
     lv_obj_set_style_pad_all(container, 6, LV_PART_MAIN);
     lv_obj_clear_flag(container, LV_OBJ_FLAG_SCROLLABLE);
@@ -1308,14 +1285,14 @@ lv_obj_t* ZoneComposerUI::createClickableParameter(lv_obj_t* parent,
     lv_obj_t* paramLabel = lv_label_create(container);
     lv_label_set_text(paramLabel, label);
     lv_obj_set_style_text_font(paramLabel, RAJDHANI_MED_24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(paramLabel, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(paramLabel, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
     lv_obj_align(paramLabel, LV_ALIGN_LEFT_MID, 0, 0);
 
     // Value (right)
     lv_obj_t* valueLabel = lv_label_create(container);
     lv_label_set_text(valueLabel, value);
     lv_obj_set_style_text_font(valueLabel, RAJDHANI_BOLD_24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(valueLabel, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(valueLabel, lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
     lv_obj_align(valueLabel, LV_ALIGN_RIGHT_MID, 0, 0);
 
     // Store metadata for touch handling
@@ -1333,28 +1310,28 @@ lv_obj_t* ZoneComposerUI::createClickableParameter(lv_obj_t* parent,
 void ZoneComposerUI::createModeSelector(lv_obj_t* parent) {
     // Mode selector row
     lv_obj_t* modeRow = lv_obj_create(parent);
-    lv_obj_set_size(modeRow, 1280 - 2 * TAB5_GRID_MARGIN, 60);
+    lv_obj_set_size(modeRow, 1280 - 2 * ZC_GRID_MARGIN, 60);
     lv_obj_set_style_bg_opa(modeRow, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(modeRow, 0, LV_PART_MAIN);
     lv_obj_set_layout(modeRow, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(modeRow, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(modeRow, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(modeRow, TAB5_GRID_GAP, LV_PART_MAIN);
+    lv_obj_set_style_pad_column(modeRow, ZC_GRID_GAP, LV_PART_MAIN);
     lv_obj_clear_flag(modeRow, LV_OBJ_FLAG_SCROLLABLE);
 
     const char* modeNames[] = {"EFFECT", "PALETTE", "SPEED", "BRIGHTNESS"};
 
     for (int i = 0; i < 4; i++) {
-        lv_obj_t* btn = make_zone_card(modeRow, i == 0);  // First mode selected by default
+        lv_obj_t* btn = make_card(modeRow, i == 0);  // First mode selected by default
         lv_obj_set_size(btn, 180, 50);
         if (i == 0) {
-            lv_obj_set_style_border_color(btn, lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_MAIN);
+            lv_obj_set_style_border_color(btn, lv_color_hex(DesignTokens::BRAND_PRIMARY), LV_PART_MAIN);
         }
 
         lv_obj_t* label = lv_label_create(btn);
         lv_label_set_text(label, modeNames[i]);
         lv_obj_set_style_text_font(label, RAJDHANI_BOLD_24, LV_PART_MAIN);
-        lv_obj_set_style_text_color(label, lv_color_hex(i == 0 ? TAB5_COLOR_BRAND_PRIMARY : TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
+        lv_obj_set_style_text_color(label, lv_color_hex(i == 0 ? DesignTokens::BRAND_PRIMARY : DesignTokens::FG_PRIMARY), LV_PART_MAIN);
         lv_obj_center(label);
 
         lv_obj_set_user_data(btn, (void*)(intptr_t)i);

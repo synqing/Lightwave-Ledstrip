@@ -6,7 +6,7 @@
  * Experimental Font Collection - LVGL Format
  *
  * Additional font weights and families for UI experimentation
- * Available sizes: 24, 32, 40, 48 px
+ * Available sizes: 18, 24, 32, 40, 48 px
  */
 
 #include <lvgl.h>
@@ -40,8 +40,9 @@ LV_FONT_DECLARE(rajdhani_regular_40px);
 LV_FONT_DECLARE(rajdhani_regular_48px);
 
 // ============================================================================
-// Rajdhani Medium (4 sizes)
+// Rajdhani Medium (5 sizes)
 // ============================================================================
+LV_FONT_DECLARE(rajdhani_medium_18px);
 LV_FONT_DECLARE(rajdhani_medium_24px);
 LV_FONT_DECLARE(rajdhani_medium_32px);
 LV_FONT_DECLARE(rajdhani_medium_40px);
@@ -98,6 +99,7 @@ LV_FONT_DECLARE(jetbrains_mono_bold_48px);
 #define RAJDHANI_REG_48  &rajdhani_regular_48px
 
 // Rajdhani Medium
+#define RAJDHANI_MED_18  &rajdhani_medium_18px
 #define RAJDHANI_MED_24  &rajdhani_medium_24px
 #define RAJDHANI_MED_32  &rajdhani_medium_32px
 #define RAJDHANI_MED_40  &rajdhani_medium_40px

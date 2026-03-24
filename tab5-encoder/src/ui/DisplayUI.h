@@ -13,6 +13,7 @@
     #include <lvgl.h>
     #include "lvgl_bridge.h"
     #include "../network/WebSocketClient.h"
+    #include "SidebarWidget.h"
 #else
     #ifdef SIMULATOR_BUILD
         #include "M5GFX_Mock.h"
@@ -82,6 +83,11 @@ public:
     void setScreen(UIScreen screen);
     UIScreen getCurrentScreen() const { return _currentScreen; }
     
+    // Active sidebar tab (for encoder routing by tab)
+    #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
+    SidebarTab getCurrentTab() const { return _currentTab; }
+    #endif
+
     // Get zone composer UI (for router initialization)
     #ifndef SIMULATOR_BUILD
     #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL)
@@ -191,10 +197,26 @@ private:
     lv_obj_t* _fxb_values[8] = {nullptr};
     lv_obj_t* _fxb_bars[8] = {nullptr};
 
-    lv_obj_t* _action_container = nullptr;
-    lv_obj_t* _action_buttons[5] = {nullptr};
-    lv_obj_t* _action_labels[5] = {nullptr};
-    lv_obj_t* _action_values[5] = {nullptr};
+    // --- Layout zones (Phase 3) ---
+    lv_obj_t* _top_zone = nullptr;
+    lv_obj_t* _bottom_zone = nullptr;
+    lv_obj_t* _separator = nullptr;
+
+    // --- Tab content panels (Phase 4) ---
+    lv_obj_t* _fx_panel = nullptr;
+    lv_obj_t* _zones_panel = nullptr;
+    lv_obj_t* _presets_panel = nullptr;
+    lv_obj_t* _zone_selector_buttons[3] = {nullptr};
+    lv_obj_t* _zone_selector_labels[3] = {nullptr};
+    lv_obj_t* _zone_param_cards[8] = {nullptr};
+    lv_obj_t* _zone_param_labels[8] = {nullptr};
+    lv_obj_t* _zone_param_values[8] = {nullptr};
+    uint8_t _selectedZone = 0;
+
+    lv_obj_t* _mode_container = nullptr;
+    lv_obj_t* _mode_buttons[6] = {nullptr};
+    lv_obj_t* _mode_labels[6] = {nullptr};
+    lv_obj_t* _mode_values[6] = {nullptr};
 
     ActionButtonCallback _action_callback = nullptr;
     RetryButtonCallback _retry_callback = nullptr;
@@ -208,6 +230,13 @@ private:
     // Control Surface UI
     lv_obj_t* _screen_control_surface = nullptr;
     ControlSurfaceUI* _controlSurface = nullptr;
+
+    // Sidebar (GLOBAL screen only)
+    SidebarWidget* _sidebar = nullptr;
+    SidebarTab _currentTab = SidebarTab::FX_PARAMS;
+
+    // Neon colour system — updates Unit B bar indicators on tab switch
+    void applyTabColour(SidebarTab tab);
 
     // K1 dual-device selector (footer)
     lv_obj_t* _footer_k1_group = nullptr;

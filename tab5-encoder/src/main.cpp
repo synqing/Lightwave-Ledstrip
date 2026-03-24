@@ -52,6 +52,7 @@
 #include "input/TouchHandler.h"
 #include "input/ButtonHandler.h"
 #include "input/CoarseModeManager.h"
+#include "network/WiFiAntenna.h"
 #include "network/WiFiManager.h"
 #include "network/WebSocketClient.h"
 #include "network/WsMessageRouter.h"
@@ -236,7 +237,7 @@ static void syncFxParamSlotsToUi(int8_t highlightedSlot = -1) {
             g_ui->updateEffectParamSlot(slot, encodeFxParamValue(fx, fx.currentValue),
                                         highlightedSlot == static_cast<int8_t>(slot));
         } else {
-            g_ui->setEffectParamSlotLabel(slot, "--");
+            g_ui->setEffectParamSlotLabel(slot, "");
             g_ui->updateEffectParamSlot(slot, 0, false);
         }
     }
@@ -433,12 +434,12 @@ static void syncEdgeMixerUi() {
 
 static void handleActionButton(uint8_t buttonIndex) {
     // Debounce: prevent rapid repeated calls (300ms debounce)
-    static uint32_t s_lastActionTime[4] = {0, 0, 0, 0};
+    static uint32_t s_lastActionTime[6] = {0, 0, 0, 0, 0, 0};
     uint32_t now = millis();
-    if (buttonIndex < 4 && (now - s_lastActionTime[buttonIndex]) < 300) {
+    if (buttonIndex < 6 && (now - s_lastActionTime[buttonIndex]) < 300) {
         return;  // Ignore rapid repeated clicks
     }
-    s_lastActionTime[buttonIndex] = now;
+    if (buttonIndex < 6) s_lastActionTime[buttonIndex] = now;
     
     // #region agent log (DISABLED)
     // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1,H2,H5\",\"location\":\"main.cpp:200\",\"message\":\"handleActionButton.entry\",\"data\":{\"buttonIndex\":%d,\"wsConnected\":%d,\"wsStatus\":%d},\"timestamp\":%lu}\n",
@@ -459,6 +460,58 @@ static void handleActionButton(uint8_t buttonIndex) {
             em.temporal = (combo >> 1) & 1;
             Serial.printf("[TOUCH] EdgeMixer spatial=%d temporal=%d\n", em.spatial, em.temporal);
         }
+        g_wsClient.setEdgeMixerState(em);
+        syncEdgeMixerUi();
+        if (g_wsClient.isConnected()) {
+            g_wsClient.sendEdgeMixerSet(em.mode, em.spread, em.strength, em.spatial, em.temporal);
+        }
+        return;
+    }
+
+    // EM SPREAD (4): cycle None/Subtle/Medium/Wide/Max → 0/10/20/30/45/60 degrees
+    if (buttonIndex == 4) {
+        static const uint8_t kSpreadSteps[] = {0, 10, 20, 30, 45, 60};
+        static const char*   kSpreadNames[] = {"None", "Subtle", "Medium", "Wide", "Max", "Ultra"};
+        static constexpr uint8_t kSpreadCount = sizeof(kSpreadSteps) / sizeof(kSpreadSteps[0]);
+
+        EdgeMixerState em = g_wsClient.getEdgeMixerState();
+        if (!em.valid) { em = EdgeMixerState{}; em.valid = true; }
+
+        // Find current step index, then advance
+        uint8_t stepIdx = 0;
+        for (uint8_t i = 0; i < kSpreadCount; ++i) {
+            if (em.spread == kSpreadSteps[i]) { stepIdx = i; break; }
+        }
+        stepIdx = (stepIdx + 1) % kSpreadCount;
+        em.spread = kSpreadSteps[stepIdx];
+
+        Serial.printf("[TOUCH] EdgeMixer spread: %s (%u deg)\n", kSpreadNames[stepIdx], em.spread);
+        g_wsClient.setEdgeMixerState(em);
+        syncEdgeMixerUi();
+        if (g_wsClient.isConnected()) {
+            g_wsClient.sendEdgeMixerSet(em.mode, em.spread, em.strength, em.spatial, em.temporal);
+        }
+        return;
+    }
+
+    // EM STRENGTH (5): cycle Off/Light/Medium/Full → 0/64/128/255
+    if (buttonIndex == 5) {
+        static const uint8_t kStrengthSteps[] = {0, 64, 128, 255};
+        static const char*   kStrengthNames[] = {"Off", "Light", "Medium", "Full"};
+        static constexpr uint8_t kStrengthCount = sizeof(kStrengthSteps) / sizeof(kStrengthSteps[0]);
+
+        EdgeMixerState em = g_wsClient.getEdgeMixerState();
+        if (!em.valid) { em = EdgeMixerState{}; em.valid = true; }
+
+        // Find current step index, then advance
+        uint8_t stepIdx = 0;
+        for (uint8_t i = 0; i < kStrengthCount; ++i) {
+            if (em.strength == kStrengthSteps[i]) { stepIdx = i; break; }
+        }
+        stepIdx = (stepIdx + 1) % kStrengthCount;
+        em.strength = kStrengthSteps[stepIdx];
+
+        Serial.printf("[TOUCH] EdgeMixer strength: %s (%u)\n", kStrengthNames[stepIdx], em.strength);
         g_wsClient.setEdgeMixerState(em);
         syncEdgeMixerUi();
         if (g_wsClient.isConnected()) {
@@ -662,7 +715,7 @@ static void updateUiEffectPaletteLabels() {
     if (s_k1EffectName[0]) {
         g_ui->setCurrentEffect(0, s_k1EffectName);
     } else {
-        g_ui->setCurrentEffect(0, "--");
+        g_ui->setCurrentEffect(0, "");
     }
     g_ui->setCurrentPalette(paletteId, paletteBuf);
 }
@@ -956,13 +1009,55 @@ void onEncoderChange(uint8_t index, uint16_t value, bool wasReset) {
         hasEncoderDelta = true;
     }
 
-    // Global screen: Unit-B rotaries drive effect-specific parameter slots.
-    // Swallow these turns to avoid falling back to legacy zone commands.
+    // Global screen: Unit-B rotaries route based on active sidebar tab.
+    // FX_PARAMS → effect-specific parameter slots (existing behaviour).
+    // ZONES / PRESETS → placeholder routing (future WS commands).
+    #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
+    if (g_ui && s_uiInitialized && g_ui->getCurrentScreen() == UIScreen::GLOBAL && index >= 8) {
+        SidebarTab activeTab = g_ui->getCurrentTab();
+        switch (activeTab) {
+            case SidebarTab::FX_PARAMS:
+                // Route to effect-specific params (existing behaviour)
+                if (handleFxParamEncoderChange(index, encoderDelta, hasEncoderDelta)) {
+                    return;
+                }
+                break;
+
+            case SidebarTab::ZONES: {
+                // Placeholder: update zone parameter display values.
+                // Actual zone WS commands are a future task.
+                if (hasEncoderDelta && encoderDelta != 0) {
+                    const uint8_t localIdx = static_cast<uint8_t>(index - 8);
+                    // Zone params: 0=effect, 1=speed, 2=palette, 3=blend, 4=brightness, 5-7=unused
+                    static const char* kZoneParamNames[] = {
+                        "EFFECT", "SPEED", "PALETTE", "BLEND", "BRIGHT", "---", "---", "---"
+                    };
+                    Serial.printf("[ZONE] Encoder %u (%s) delta=%d (tab=ZONES, zone=%u)\n",
+                                  localIdx, kZoneParamNames[localIdx], (int)encoderDelta, 0);
+                }
+                return;  // Swallow — do not fall through to legacy routing
+            }
+
+            case SidebarTab::PRESETS: {
+                // Placeholder: preset selection/navigation via encoders.
+                // Actual preset WS commands handled by existing preset system.
+                if (hasEncoderDelta && encoderDelta != 0) {
+                    const uint8_t localIdx = static_cast<uint8_t>(index - 8);
+                    Serial.printf("[PRESET] Encoder %u delta=%d (tab=PRESETS)\n",
+                                  localIdx, (int)encoderDelta);
+                }
+                return;  // Swallow — do not fall through to legacy routing
+            }
+        }
+    }
+    #else
+    // Non-LVGL fallback: original behaviour — Unit-B always drives FX params
     if (g_ui && s_uiInitialized && g_ui->getCurrentScreen() == UIScreen::GLOBAL && index >= 8) {
         if (handleFxParamEncoderChange(index, encoderDelta, hasEncoderDelta)) {
             return;
         }
     }
+    #endif
     // DISABLED - PaletteLedDisplay causing encoder regression
     // Special handling for encoder 15 (ENC-B encoder 7): Cycle palette animation modes
     /*
@@ -1468,6 +1563,11 @@ void setup() {
     // =========================================================================
 #if ENABLE_WIFI
     Serial.println("\n[NETWORK] Initialising WiFi...");
+
+    // Configure antenna pin as push-pull OUTPUT and force external MMCX.
+    // PI4IOE5V6408 powers up with all pins as INPUT/hi-Z — without this,
+    // the antenna select line is floating and WiFi association fails.
+    initWiFiAntennaPin();
 
     // Initialize ParameterHandler (bridges encoders ↔ WebSocket ↔ display)
     // CRITICAL FIX: Add null check validation

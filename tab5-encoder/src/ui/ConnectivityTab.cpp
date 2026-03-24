@@ -23,35 +23,25 @@
 #include "../input/ButtonHandler.h"
 #include "../network/WebSocketClient.h"
 #include "fonts/experimental_fonts.h"
+#include "DesignTokens.h"
+
+// ConnectivityTab uses a narrower grid and different border style to the shared
+// make_card() in DesignTokens.h, so these local constants are retained.
+static constexpr int CT_GRID_MARGIN = 20;
+static constexpr int CT_GRID_GAP = 12;
 
 // ============================================================================
-// TAB5 Design System Colors (matches ZoneComposerUI)
+// Local Card Helper (BORDER_BASE border + bg_opa — differs from shared make_card)
 // ============================================================================
-static constexpr uint32_t TAB5_COLOR_BG_PAGE             = 0x0A0A0B;  // Page background
-static constexpr uint32_t TAB5_COLOR_BG_SURFACE_BASE     = 0x121214;  // Card base
-static constexpr uint32_t TAB5_COLOR_BG_SURFACE_ELEVATED = 0x1A1A1C;  // Elevated cards
-static constexpr uint32_t TAB5_COLOR_BORDER_BASE         = 0x2A2A2E;  // Default borders
-static constexpr uint32_t TAB5_COLOR_FG_PRIMARY          = 0xFFFFFF;  // White text
-static constexpr uint32_t TAB5_COLOR_FG_SECONDARY        = 0x9CA3AF;  // Gray text
-static constexpr uint32_t TAB5_COLOR_BRAND_PRIMARY       = 0xFFC700;  // Brand yellow
-static constexpr uint32_t TAB5_COLOR_STATUS_SUCCESS      = 0x22C55E;  // Green
-static constexpr uint32_t TAB5_COLOR_STATUS_ERROR        = 0xEF4444;  // Red
-static constexpr uint32_t TAB5_COLOR_STATUS_WARNING      = 0xF59E0B;  // Amber
-static constexpr int TAB5_GRID_MARGIN = 20;
-static constexpr int TAB5_GRID_GAP = 12;
-
-// ============================================================================
-// TAB5 Card Helper (matches ZoneComposerUI make_zone_card pattern)
-// ============================================================================
-static lv_obj_t* make_card(lv_obj_t* parent, bool elevated = false) {
+static lv_obj_t* ct_make_card(lv_obj_t* parent, bool elevated = false) {
     lv_obj_t* card = lv_obj_create(parent);
     lv_obj_set_style_bg_color(card,
-        lv_color_hex(elevated ? TAB5_COLOR_BG_SURFACE_ELEVATED : TAB5_COLOR_BG_SURFACE_BASE),
+        lv_color_hex(elevated ? DesignTokens::SURFACE_ELEVATED : DesignTokens::SURFACE_BASE),
         LV_PART_MAIN);
     lv_obj_set_style_bg_opa(card, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_width(card, 2, LV_PART_MAIN);
-    lv_obj_set_style_border_color(card, lv_color_hex(TAB5_COLOR_BORDER_BASE), LV_PART_MAIN);
-    lv_obj_set_style_radius(card, 14, LV_PART_MAIN);
+    lv_obj_set_style_border_width(card, DesignTokens::CARD_BORDER_WIDTH, LV_PART_MAIN);
+    lv_obj_set_style_border_color(card, lv_color_hex(DesignTokens::BORDER_BASE), LV_PART_MAIN);
+    lv_obj_set_style_radius(card, DesignTokens::CARD_RADIUS, LV_PART_MAIN);
     lv_obj_set_style_pad_all(card, 10, LV_PART_MAIN);
     lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
     return card;
@@ -129,17 +119,17 @@ void ConnectivityTab::begin(lv_obj_t* parent) {
 void ConnectivityTab::initStyles() {
     // Initialize normal style (TAB5 design system)
     lv_style_init(&_styleNormal);
-    lv_style_set_bg_color(&_styleNormal, lv_color_hex(TAB5_COLOR_BG_SURFACE_BASE));
+    lv_style_set_bg_color(&_styleNormal, lv_color_hex(DesignTokens::SURFACE_BASE));
     lv_style_set_border_width(&_styleNormal, 2);
-    lv_style_set_border_color(&_styleNormal, lv_color_hex(TAB5_COLOR_BORDER_BASE));
+    lv_style_set_border_color(&_styleNormal, lv_color_hex(DesignTokens::BORDER_BASE));
     lv_style_set_radius(&_styleNormal, 14);
     lv_style_set_pad_all(&_styleNormal, 10);
 
     // Initialize selected style (brand yellow highlight)
     lv_style_init(&_styleSelected);
-    lv_style_set_bg_color(&_styleSelected, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED));
+    lv_style_set_bg_color(&_styleSelected, lv_color_hex(DesignTokens::SURFACE_ELEVATED));
     lv_style_set_border_width(&_styleSelected, 3);
-    lv_style_set_border_color(&_styleSelected, lv_color_hex(TAB5_COLOR_BRAND_PRIMARY));
+    lv_style_set_border_color(&_styleSelected, lv_color_hex(DesignTokens::BRAND_PRIMARY));
     lv_style_set_radius(&_styleSelected, 14);
     lv_style_set_pad_all(&_styleSelected, 10);
 
@@ -147,7 +137,7 @@ void ConnectivityTab::initStyles() {
     lv_style_init(&_styleError);
     lv_style_set_bg_color(&_styleError, lv_color_hex(0x2A1515));  // Dark red tint
     lv_style_set_border_width(&_styleError, 2);
-    lv_style_set_border_color(&_styleError, lv_color_hex(TAB5_COLOR_STATUS_ERROR));
+    lv_style_set_border_color(&_styleError, lv_color_hex(DesignTokens::STATUS_ERROR));
     lv_style_set_radius(&_styleError, 14);
     lv_style_set_pad_all(&_styleError, 10);
 }
@@ -158,13 +148,13 @@ void ConnectivityTab::createInteractiveUI(lv_obj_t* parent) {
     _screen = parent;
 
     // Set TAB5 page background (dark charcoal, not pure black)
-    lv_obj_set_style_bg_color(_screen, lv_color_hex(TAB5_COLOR_BG_PAGE), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(_screen, lv_color_hex(DesignTokens::BG_PAGE), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(_screen, LV_OPA_COVER, LV_PART_MAIN);
 
     // Create page title with BEBAS_BOLD_40 font - CENTER ALIGNED
     lv_obj_t* title = lv_label_create(_screen);
     lv_label_set_text(title, "NETWORK SETTINGS");
-    lv_obj_set_style_text_color(title, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(title, lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
     lv_obj_set_style_text_font(title, BEBAS_BOLD_40, LV_PART_MAIN);
     // Center the title: starts at X=160 (after back button), spans remaining width
     lv_obj_set_width(title, 1280 - 160 - 20);  // Full width minus back button area minus margin
@@ -221,17 +211,18 @@ void ConnectivityTab::createInteractiveUI(lv_obj_t* parent) {
 
 void ConnectivityTab::createBackButton(lv_obj_t* parent) {
     // TAB5 back button: elevated card with brand yellow border
-    _backButton = lv_btn_create(parent);
+    _backButton = lv_obj_create(parent);
+    lv_obj_add_flag(_backButton, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(_backButton, 120, 44);  // TAB5 standard back button height
-    lv_obj_set_pos(_backButton, TAB5_GRID_MARGIN, TAB5_GRID_MARGIN);
-    lv_obj_set_style_bg_color(_backButton, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
-    lv_obj_set_style_border_color(_backButton, lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_pos(_backButton, CT_GRID_MARGIN, CT_GRID_MARGIN);
+    lv_obj_set_style_bg_color(_backButton, lv_color_hex(DesignTokens::SURFACE_ELEVATED), LV_PART_MAIN);
+    lv_obj_set_style_border_color(_backButton, lv_color_hex(DesignTokens::BRAND_PRIMARY), LV_PART_MAIN);
     lv_obj_set_style_border_width(_backButton, 2, LV_PART_MAIN);
     lv_obj_set_style_radius(_backButton, 14, LV_PART_MAIN);
 
     lv_obj_t* label = lv_label_create(_backButton);
     lv_label_set_text(label, "BACK");
-    lv_obj_set_style_text_color(label, lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(label, lv_color_hex(DesignTokens::BRAND_PRIMARY), LV_PART_MAIN);
     lv_obj_set_style_text_font(label, RAJDHANI_BOLD_24, LV_PART_MAIN);
     lv_obj_center(label);
 
@@ -241,10 +232,10 @@ void ConnectivityTab::createBackButton(lv_obj_t* parent) {
 void ConnectivityTab::createStatusLabel(lv_obj_t* parent) {
     // TAB5 status label with RAJDHANI font
     _statusLabel = lv_label_create(parent);
-    lv_obj_set_pos(_statusLabel, TAB5_GRID_MARGIN, STATUS_Y);
+    lv_obj_set_pos(_statusLabel, CT_GRID_MARGIN, STATUS_Y);
     lv_obj_set_size(_statusLabel, 1200, 30);
     lv_label_set_text(_statusLabel, "Status: Disconnected");
-    lv_obj_set_style_text_color(_statusLabel, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(_statusLabel, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
     lv_obj_set_style_text_font(_statusLabel, RAJDHANI_BOLD_24, LV_PART_MAIN);
 }
 
@@ -252,14 +243,14 @@ void ConnectivityTab::createStatusLabel(lv_obj_t* parent) {
 // AVAILABLE NETWORKS CARD (TOP) - Shows scanned WiFi networks
 // ==========================================================================
 void ConnectivityTab::createAvailableNetworksCard(lv_obj_t* parent) {
-    lv_obj_t* card = make_card(parent, false);
+    lv_obj_t* card = ct_make_card(parent, false);
     lv_obj_set_pos(card, NETWORK_CARD_X, AVAILABLE_Y);
     lv_obj_set_size(card, NETWORK_CARD_W, NETWORK_CARD_H);
 
     // Section title - CENTER ALIGNED
     lv_obj_t* title = lv_label_create(card);
     lv_label_set_text(title, "AVAILABLE NETWORKS");
-    lv_obj_set_style_text_color(title, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(title, lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
     lv_obj_set_style_text_font(title, BEBAS_BOLD_32, LV_PART_MAIN);
     lv_obj_set_width(title, NETWORK_CARD_W - 20);
     lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
@@ -270,9 +261,9 @@ void ConnectivityTab::createAvailableNetworksCard(lv_obj_t* parent) {
     // Serial.printf("[CT_DEBUG] createAvailableNetworksCard: widget=%p\n", (void*)_scannedNetworksList);
     lv_obj_set_pos(_scannedNetworksList, 0, 40);
     lv_obj_set_size(_scannedNetworksList, NETWORK_CARD_W - 20, NETWORK_LIST_H);
-    lv_obj_set_style_bg_color(_scannedNetworksList, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(_scannedNetworksList, lv_color_hex(DesignTokens::SURFACE_ELEVATED), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(_scannedNetworksList, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_color(_scannedNetworksList, lv_color_hex(TAB5_COLOR_BORDER_BASE), LV_PART_MAIN);
+    lv_obj_set_style_border_color(_scannedNetworksList, lv_color_hex(DesignTokens::BORDER_BASE), LV_PART_MAIN);
     lv_obj_set_style_border_width(_scannedNetworksList, 1, LV_PART_MAIN);
     lv_obj_set_style_radius(_scannedNetworksList, 8, LV_PART_MAIN);
     lv_obj_set_style_pad_all(_scannedNetworksList, 6, LV_PART_MAIN);
@@ -295,11 +286,12 @@ void ConnectivityTab::createAvailableNetworksButtons(lv_obj_t* parent) {
     constexpr int AVAILABLE_BTN_START_Y = 195;
 
     // SCAN button: Yellow primary action
-    _scanButton = lv_btn_create(parent);
+    _scanButton = lv_obj_create(parent);
+    lv_obj_add_flag(_scanButton, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(_scanButton, BUTTON_W, BUTTON_H);
     lv_obj_set_pos(_scanButton, BUTTON_COLUMN_X, AVAILABLE_BTN_START_Y);
-    lv_obj_set_style_bg_color(_scanButton, lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_MAIN);
-    lv_obj_set_style_border_color(_scanButton, lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(_scanButton, lv_color_hex(DesignTokens::BRAND_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_border_color(_scanButton, lv_color_hex(DesignTokens::BRAND_PRIMARY), LV_PART_MAIN);
     lv_obj_set_style_border_width(_scanButton, 2, LV_PART_MAIN);
     lv_obj_set_style_radius(_scanButton, 14, LV_PART_MAIN);
 
@@ -316,17 +308,18 @@ void ConnectivityTab::createAvailableNetworksButtons(lv_obj_t* parent) {
     lv_obj_add_event_cb(_scanButton, scanButtonCb, LV_EVENT_CLICKED, this);
 
     // ADD button: White border secondary action
-    _addNetworkButton = lv_btn_create(parent);
+    _addNetworkButton = lv_obj_create(parent);
+    lv_obj_add_flag(_addNetworkButton, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(_addNetworkButton, BUTTON_W, BUTTON_H);
     lv_obj_set_pos(_addNetworkButton, BUTTON_COLUMN_X, AVAILABLE_BTN_START_Y + BUTTON_H + BUTTON_GAP);
-    lv_obj_set_style_bg_color(_addNetworkButton, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
-    lv_obj_set_style_border_color(_addNetworkButton, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(_addNetworkButton, lv_color_hex(DesignTokens::SURFACE_ELEVATED), LV_PART_MAIN);
+    lv_obj_set_style_border_color(_addNetworkButton, lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
     lv_obj_set_style_border_width(_addNetworkButton, 2, LV_PART_MAIN);
     lv_obj_set_style_radius(_addNetworkButton, 14, LV_PART_MAIN);
 
     lv_obj_t* addLabel = lv_label_create(_addNetworkButton);
     lv_label_set_text(addLabel, "ADD");
-    lv_obj_set_style_text_color(addLabel, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(addLabel, lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
     lv_obj_set_style_text_font(addLabel, RAJDHANI_BOLD_24, LV_PART_MAIN);
     lv_obj_center(addLabel);
     lv_obj_add_event_cb(_addNetworkButton, addNetworkButtonCb, LV_EVENT_CLICKED, this);
@@ -336,14 +329,14 @@ void ConnectivityTab::createAvailableNetworksButtons(lv_obj_t* parent) {
 // SAVED NETWORKS CARD (BOTTOM) - Shows saved WiFi credentials
 // ==========================================================================
 void ConnectivityTab::createSavedNetworksCard(lv_obj_t* parent) {
-    lv_obj_t* card = make_card(parent, false);
+    lv_obj_t* card = ct_make_card(parent, false);
     lv_obj_set_pos(card, NETWORK_CARD_X, SAVED_Y);
     lv_obj_set_size(card, NETWORK_CARD_W, NETWORK_CARD_H);
 
     // Section title - CENTER ALIGNED
     lv_obj_t* title = lv_label_create(card);
     lv_label_set_text(title, "SAVED NETWORKS");
-    lv_obj_set_style_text_color(title, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(title, lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
     lv_obj_set_style_text_font(title, BEBAS_BOLD_32, LV_PART_MAIN);
     lv_obj_set_width(title, NETWORK_CARD_W - 20);
     lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
@@ -353,9 +346,9 @@ void ConnectivityTab::createSavedNetworksCard(lv_obj_t* parent) {
     _savedNetworksList = lv_obj_create(card);
     lv_obj_set_pos(_savedNetworksList, 0, 40);
     lv_obj_set_size(_savedNetworksList, NETWORK_CARD_W - 20, NETWORK_LIST_H);
-    lv_obj_set_style_bg_color(_savedNetworksList, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(_savedNetworksList, lv_color_hex(DesignTokens::SURFACE_ELEVATED), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(_savedNetworksList, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_color(_savedNetworksList, lv_color_hex(TAB5_COLOR_BORDER_BASE), LV_PART_MAIN);
+    lv_obj_set_style_border_color(_savedNetworksList, lv_color_hex(DesignTokens::BORDER_BASE), LV_PART_MAIN);
     lv_obj_set_style_border_width(_savedNetworksList, 1, LV_PART_MAIN);
     lv_obj_set_style_radius(_savedNetworksList, 8, LV_PART_MAIN);
     lv_obj_set_style_pad_all(_savedNetworksList, 6, LV_PART_MAIN);
@@ -378,11 +371,12 @@ void ConnectivityTab::createSavedNetworksButtons(lv_obj_t* parent) {
     constexpr int SAVED_BTN_START_Y = 445;
 
     // CONNECT button: Green primary action
-    _connectButton = lv_btn_create(parent);
+    _connectButton = lv_obj_create(parent);
+    lv_obj_add_flag(_connectButton, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(_connectButton, BUTTON_W, BUTTON_H);
     lv_obj_set_pos(_connectButton, BUTTON_COLUMN_X, SAVED_BTN_START_Y);
-    lv_obj_set_style_bg_color(_connectButton, lv_color_hex(TAB5_COLOR_STATUS_SUCCESS), LV_PART_MAIN);
-    lv_obj_set_style_border_color(_connectButton, lv_color_hex(TAB5_COLOR_STATUS_SUCCESS), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(_connectButton, lv_color_hex(DesignTokens::STATUS_SUCCESS), LV_PART_MAIN);
+    lv_obj_set_style_border_color(_connectButton, lv_color_hex(DesignTokens::STATUS_SUCCESS), LV_PART_MAIN);
     lv_obj_set_style_border_width(_connectButton, 2, LV_PART_MAIN);
     lv_obj_set_style_radius(_connectButton, 14, LV_PART_MAIN);
 
@@ -394,33 +388,35 @@ void ConnectivityTab::createSavedNetworksButtons(lv_obj_t* parent) {
     lv_obj_add_event_cb(_connectButton, connectButtonCb, LV_EVENT_CLICKED, this);
 
     // DISCONNECT button: Amber warning action
-    _disconnectButton = lv_btn_create(parent);
+    _disconnectButton = lv_obj_create(parent);
+    lv_obj_add_flag(_disconnectButton, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(_disconnectButton, BUTTON_W, BUTTON_H);
     lv_obj_set_pos(_disconnectButton, BUTTON_COLUMN_X, SAVED_BTN_START_Y + BUTTON_H + BUTTON_GAP);
-    lv_obj_set_style_bg_color(_disconnectButton, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
-    lv_obj_set_style_border_color(_disconnectButton, lv_color_hex(TAB5_COLOR_STATUS_WARNING), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(_disconnectButton, lv_color_hex(DesignTokens::SURFACE_ELEVATED), LV_PART_MAIN);
+    lv_obj_set_style_border_color(_disconnectButton, lv_color_hex(DesignTokens::STATUS_WARNING), LV_PART_MAIN);
     lv_obj_set_style_border_width(_disconnectButton, 2, LV_PART_MAIN);
     lv_obj_set_style_radius(_disconnectButton, 14, LV_PART_MAIN);
 
     label = lv_label_create(_disconnectButton);
     lv_label_set_text(label, "DISCONNECT");  // Full spelling with 180px button
-    lv_obj_set_style_text_color(label, lv_color_hex(TAB5_COLOR_STATUS_WARNING), LV_PART_MAIN);
+    lv_obj_set_style_text_color(label, lv_color_hex(DesignTokens::STATUS_WARNING), LV_PART_MAIN);
     lv_obj_set_style_text_font(label, RAJDHANI_BOLD_24, LV_PART_MAIN);
     lv_obj_center(label);
     lv_obj_add_event_cb(_disconnectButton, disconnectButtonCb, LV_EVENT_CLICKED, this);
 
     // DELETE button: Red danger action
-    _deleteButton = lv_btn_create(parent);
+    _deleteButton = lv_obj_create(parent);
+    lv_obj_add_flag(_deleteButton, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(_deleteButton, BUTTON_W, BUTTON_H);
     lv_obj_set_pos(_deleteButton, BUTTON_COLUMN_X, SAVED_BTN_START_Y + (BUTTON_H + BUTTON_GAP) * 2);
-    lv_obj_set_style_bg_color(_deleteButton, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
-    lv_obj_set_style_border_color(_deleteButton, lv_color_hex(TAB5_COLOR_STATUS_ERROR), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(_deleteButton, lv_color_hex(DesignTokens::SURFACE_ELEVATED), LV_PART_MAIN);
+    lv_obj_set_style_border_color(_deleteButton, lv_color_hex(DesignTokens::STATUS_ERROR), LV_PART_MAIN);
     lv_obj_set_style_border_width(_deleteButton, 2, LV_PART_MAIN);
     lv_obj_set_style_radius(_deleteButton, 14, LV_PART_MAIN);
 
     label = lv_label_create(_deleteButton);
     lv_label_set_text(label, "DELETE");
-    lv_obj_set_style_text_color(label, lv_color_hex(TAB5_COLOR_STATUS_ERROR), LV_PART_MAIN);
+    lv_obj_set_style_text_color(label, lv_color_hex(DesignTokens::STATUS_ERROR), LV_PART_MAIN);
     lv_obj_set_style_text_font(label, RAJDHANI_BOLD_24, LV_PART_MAIN);
     lv_obj_center(label);
     lv_obj_add_event_cb(_deleteButton, deleteButtonCb, LV_EVENT_CLICKED, this);
@@ -431,9 +427,9 @@ void ConnectivityTab::createAddNetworkDialog(lv_obj_t* parent) {
     _addDialog = lv_obj_create(parent);
     lv_obj_set_size(_addDialog, 600, 380);
     lv_obj_align(_addDialog, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_set_style_bg_color(_addDialog, lv_color_hex(TAB5_COLOR_BG_SURFACE_BASE), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(_addDialog, lv_color_hex(DesignTokens::SURFACE_BASE), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(_addDialog, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_color(_addDialog, lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_border_color(_addDialog, lv_color_hex(DesignTokens::BRAND_PRIMARY), LV_PART_MAIN);
     lv_obj_set_style_border_width(_addDialog, 3, LV_PART_MAIN);
     lv_obj_set_style_radius(_addDialog, 14, LV_PART_MAIN);
     lv_obj_set_style_pad_all(_addDialog, 20, LV_PART_MAIN);
@@ -443,14 +439,14 @@ void ConnectivityTab::createAddNetworkDialog(lv_obj_t* parent) {
     // Title with BEBAS_BOLD_32
     lv_obj_t* title = lv_label_create(_addDialog);
     lv_label_set_text(title, "ADD NETWORK");
-    lv_obj_set_style_text_color(title, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(title, lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
     lv_obj_set_style_text_font(title, BEBAS_BOLD_32, LV_PART_MAIN);
     lv_obj_set_pos(title, 0, 0);
 
     // SSID label
     lv_obj_t* ssidLabel = lv_label_create(_addDialog);
     lv_label_set_text(ssidLabel, "SSID");
-    lv_obj_set_style_text_color(ssidLabel, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(ssidLabel, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
     lv_obj_set_style_text_font(ssidLabel, RAJDHANI_MED_24, LV_PART_MAIN);
     lv_obj_set_pos(ssidLabel, 0, 50);
 
@@ -458,18 +454,18 @@ void ConnectivityTab::createAddNetworkDialog(lv_obj_t* parent) {
     _ssidInput = lv_textarea_create(_addDialog);
     lv_obj_set_size(_ssidInput, 560, 50);
     lv_obj_set_pos(_ssidInput, 0, 80);
-    lv_obj_set_style_bg_color(_ssidInput, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
-    lv_obj_set_style_border_color(_ssidInput, lv_color_hex(TAB5_COLOR_BORDER_BASE), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(_ssidInput, lv_color_hex(DesignTokens::SURFACE_ELEVATED), LV_PART_MAIN);
+    lv_obj_set_style_border_color(_ssidInput, lv_color_hex(DesignTokens::BORDER_BASE), LV_PART_MAIN);
     lv_obj_set_style_border_width(_ssidInput, 2, LV_PART_MAIN);
     lv_obj_set_style_radius(_ssidInput, 8, LV_PART_MAIN);
-    lv_obj_set_style_text_color(_ssidInput, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(_ssidInput, lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
     lv_obj_set_style_text_font(_ssidInput, RAJDHANI_BOLD_24, LV_PART_MAIN);
     lv_textarea_set_placeholder_text(_ssidInput, "Enter network name");
 
     // Password label
     lv_obj_t* passwordLabel = lv_label_create(_addDialog);
     lv_label_set_text(passwordLabel, "PASSWORD");
-    lv_obj_set_style_text_color(passwordLabel, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(passwordLabel, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
     lv_obj_set_style_text_font(passwordLabel, RAJDHANI_MED_24, LV_PART_MAIN);
     lv_obj_set_pos(passwordLabel, 0, 145);
 
@@ -477,36 +473,38 @@ void ConnectivityTab::createAddNetworkDialog(lv_obj_t* parent) {
     _passwordInput = lv_textarea_create(_addDialog);
     lv_obj_set_size(_passwordInput, 560, 50);
     lv_obj_set_pos(_passwordInput, 0, 175);
-    lv_obj_set_style_bg_color(_passwordInput, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
-    lv_obj_set_style_border_color(_passwordInput, lv_color_hex(TAB5_COLOR_BORDER_BASE), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(_passwordInput, lv_color_hex(DesignTokens::SURFACE_ELEVATED), LV_PART_MAIN);
+    lv_obj_set_style_border_color(_passwordInput, lv_color_hex(DesignTokens::BORDER_BASE), LV_PART_MAIN);
     lv_obj_set_style_border_width(_passwordInput, 2, LV_PART_MAIN);
     lv_obj_set_style_radius(_passwordInput, 8, LV_PART_MAIN);
-    lv_obj_set_style_text_color(_passwordInput, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(_passwordInput, lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
     lv_obj_set_style_text_font(_passwordInput, RAJDHANI_BOLD_24, LV_PART_MAIN);
     lv_textarea_set_placeholder_text(_passwordInput, "Enter password");
     lv_textarea_set_password_mode(_passwordInput, true);
 
     // Cancel button: Gray border/text
-    lv_obj_t* cancelBtn = lv_btn_create(_addDialog);
+    lv_obj_t* cancelBtn = lv_obj_create(_addDialog);
+    lv_obj_add_flag(cancelBtn, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(cancelBtn, 140, 50);
     lv_obj_set_pos(cancelBtn, 280, 260);
-    lv_obj_set_style_bg_color(cancelBtn, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
-    lv_obj_set_style_border_color(cancelBtn, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(cancelBtn, lv_color_hex(DesignTokens::SURFACE_ELEVATED), LV_PART_MAIN);
+    lv_obj_set_style_border_color(cancelBtn, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
     lv_obj_set_style_border_width(cancelBtn, 2, LV_PART_MAIN);
     lv_obj_set_style_radius(cancelBtn, 14, LV_PART_MAIN);
     lv_obj_t* cancelLabel = lv_label_create(cancelBtn);
     lv_label_set_text(cancelLabel, "CANCEL");
-    lv_obj_set_style_text_color(cancelLabel, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(cancelLabel, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
     lv_obj_set_style_text_font(cancelLabel, RAJDHANI_BOLD_24, LV_PART_MAIN);
     lv_obj_center(cancelLabel);
     lv_obj_add_event_cb(cancelBtn, addDialogCancelCb, LV_EVENT_CLICKED, this);
 
     // Save button: Yellow bg, black text (primary action)
-    lv_obj_t* saveBtn = lv_btn_create(_addDialog);
+    lv_obj_t* saveBtn = lv_obj_create(_addDialog);
+    lv_obj_add_flag(saveBtn, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(saveBtn, 140, 50);
     lv_obj_set_pos(saveBtn, 430, 260);
-    lv_obj_set_style_bg_color(saveBtn, lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_MAIN);
-    lv_obj_set_style_border_color(saveBtn, lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(saveBtn, lv_color_hex(DesignTokens::BRAND_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_border_color(saveBtn, lv_color_hex(DesignTokens::BRAND_PRIMARY), LV_PART_MAIN);
     lv_obj_set_style_border_width(saveBtn, 2, LV_PART_MAIN);
     lv_obj_set_style_radius(saveBtn, 14, LV_PART_MAIN);
     lv_obj_t* saveLabel = lv_label_create(saveBtn);
@@ -528,7 +526,7 @@ void ConnectivityTab::createAddNetworkDialog(lv_obj_t* parent) {
     // ===== MAIN CONTAINER STYLING =====
     lv_obj_set_style_bg_color(_keyboard, lv_color_hex(0x1A1A1C), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(_keyboard, LV_OPA_100, LV_PART_MAIN);
-    lv_obj_set_style_border_color(_keyboard, lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_border_color(_keyboard, lv_color_hex(DesignTokens::BRAND_PRIMARY), LV_PART_MAIN);
     lv_obj_set_style_border_width(_keyboard, 2, LV_PART_MAIN);
     lv_obj_set_style_radius(_keyboard, 12, LV_PART_MAIN);
 
@@ -557,7 +555,7 @@ void ConnectivityTab::createAddNetworkDialog(lv_obj_t* parent) {
     lv_obj_set_style_pad_column(_keyboard, 6, LV_PART_MAIN);
 
     // ===== PRESSED STATE - Visual feedback when tapping =====
-    lv_obj_set_style_bg_color(_keyboard, lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_ITEMS | LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(_keyboard, lv_color_hex(DesignTokens::BRAND_PRIMARY), LV_PART_ITEMS | LV_STATE_PRESSED);
     lv_obj_set_style_text_color(_keyboard, lv_color_hex(0x000000), LV_PART_ITEMS | LV_STATE_PRESSED);
 
     // ===== CHECKED STATE (Shift/Caps indicator) =====
@@ -612,17 +610,18 @@ void ConnectivityTab::createAntennaRow(lv_obj_t* parent) {
     static constexpr int ANTENNA_ROW_H = 44;
     static constexpr int ANTENNA_ROW_W = 1240;  // 1280 - 20*2
 
-    _antennaButton = lv_btn_create(parent);
+    _antennaButton = lv_obj_create(parent);
+    lv_obj_add_flag(_antennaButton, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(_antennaButton, ANTENNA_ROW_W, ANTENNA_ROW_H);
-    lv_obj_set_pos(_antennaButton, TAB5_GRID_MARGIN, ANTENNA_ROW_Y);
-    lv_obj_set_style_bg_color(_antennaButton, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
-    lv_obj_set_style_border_color(_antennaButton, lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_pos(_antennaButton, CT_GRID_MARGIN, ANTENNA_ROW_Y);
+    lv_obj_set_style_bg_color(_antennaButton, lv_color_hex(DesignTokens::SURFACE_ELEVATED), LV_PART_MAIN);
+    lv_obj_set_style_border_color(_antennaButton, lv_color_hex(DesignTokens::BRAND_PRIMARY), LV_PART_MAIN);
     lv_obj_set_style_border_width(_antennaButton, 2, LV_PART_MAIN);
     lv_obj_set_style_radius(_antennaButton, 14, LV_PART_MAIN);
 
     lv_obj_t* label = lv_label_create(_antennaButton);
     lv_obj_center(label);
-    lv_obj_set_style_text_color(label, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(label, lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
     lv_obj_set_style_text_font(label, RAJDHANI_BOLD_24, LV_PART_MAIN);
     updateAntennaButtonLabel();
 
@@ -639,9 +638,19 @@ void ConnectivityTab::updateAntennaButtonLabel() {
 void ConnectivityTab::antennaButtonCb(lv_event_t* e) {
     ConnectivityTab* tab = static_cast<ConnectivityTab*>(lv_event_get_user_data(e));
     if (!tab || !tab->_antennaButton) return;
+
+    // Disconnect WiFi before switching antenna — the C6 coprocessor
+    // may only sample the antenna pin at WiFi init.
+    WiFi.disconnect();
+    delay(100);
+
     setWiFiAntenna(!isWiFiAntennaExternal());
     tab->updateAntennaButtonLabel();
-    Serial.println(isWiFiAntennaExternal() ? "[Antenna] Switched to external MMCX" : "[Antenna] Switched to internal 3D");
+    Serial.println(isWiFiAntennaExternal()
+        ? "[Antenna] Switched to external MMCX — WiFi will reconnect"
+        : "[Antenna] Switched to internal 3D — WiFi will reconnect");
+
+    // WiFiManager will auto-reconnect on next update() cycle
 }
 #endif
 
@@ -782,14 +791,14 @@ void ConnectivityTab::updateStatusLabel() {
         snprintf(statusText, sizeof(statusText), "Connected: %s (%s)",
                  _wifiManager->getSSID().c_str(), ipStr);
         lv_label_set_text(_statusLabel, statusText);
-        lv_obj_set_style_text_color(_statusLabel, lv_color_hex(TAB5_COLOR_STATUS_SUCCESS), LV_PART_MAIN);
+        lv_obj_set_style_text_color(_statusLabel, lv_color_hex(DesignTokens::STATUS_SUCCESS), LV_PART_MAIN);
     } else {
         lv_label_set_text(_statusLabel, "Status: Disconnected");
-        lv_obj_set_style_text_color(_statusLabel, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+        lv_obj_set_style_text_color(_statusLabel, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
     }
     #else
     lv_label_set_text(_statusLabel, "WiFi disabled");
-    lv_obj_set_style_text_color(_statusLabel, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(_statusLabel, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
     #endif
 }
 
@@ -812,7 +821,7 @@ lv_obj_t* ConnectivityTab::createNetworkItem(
     // Item container (48px for touch-friendly targets)
     lv_obj_t* item = lv_obj_create(parent);
     lv_obj_set_size(item, itemWidth, ITEM_H);
-    lv_obj_set_style_bg_color(item, lv_color_hex(TAB5_COLOR_BG_SURFACE_BASE), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(item, lv_color_hex(DesignTokens::SURFACE_BASE), LV_PART_MAIN);
     lv_obj_set_style_radius(item, 8, LV_PART_MAIN);
     lv_obj_set_style_pad_all(item, 0, LV_PART_MAIN);
     lv_obj_set_style_border_width(item, 0, LV_PART_MAIN);
@@ -838,7 +847,7 @@ lv_obj_t* ConnectivityTab::createNetworkItem(
     lv_label_set_long_mode(ssidLabel, LV_LABEL_LONG_MODE_SCROLL_CIRCULAR);  // LVGL 9.x
     lv_label_set_text(ssidLabel, ssid);
     lv_obj_set_style_text_font(ssidLabel, RAJDHANI_BOLD_24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(ssidLabel, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_text_color(ssidLabel, lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
     lv_obj_align(ssidLabel, LV_ALIGN_LEFT_MID, 0, 0);
 
     // === ZONE 2: RSSI (fixed width, right-aligned text) ===
@@ -858,9 +867,9 @@ lv_obj_t* ConnectivityTab::createNetworkItem(
         lv_obj_set_style_text_font(rssiLabel, RAJDHANI_MED_24, LV_PART_MAIN);
 
         // Color code signal strength
-        uint32_t rssiColor = (rssi >= -50) ? TAB5_COLOR_STATUS_SUCCESS :  // Green
-                             (rssi >= -70) ? TAB5_COLOR_STATUS_WARNING :  // Amber
-                                             TAB5_COLOR_STATUS_ERROR;     // Red
+        uint32_t rssiColor = (rssi >= -50) ? DesignTokens::STATUS_SUCCESS :  // Green
+                             (rssi >= -70) ? DesignTokens::STATUS_WARNING :  // Amber
+                                             DesignTokens::STATUS_ERROR;     // Red
         lv_obj_set_style_text_color(rssiLabel, lv_color_hex(rssiColor), LV_PART_MAIN);
         lv_obj_align(rssiLabel, LV_ALIGN_RIGHT_MID, -4, 0);
     }
@@ -876,7 +885,7 @@ lv_obj_t* ConnectivityTab::createNetworkItem(
     lv_obj_t* dot = lv_obj_create(dotZone);
     lv_obj_set_size(dot, 16, 16);
     lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(dot, lv_color_hex(TAB5_COLOR_STATUS_SUCCESS), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(dot, lv_color_hex(DesignTokens::STATUS_SUCCESS), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(dot, 0, LV_PART_MAIN);
     lv_obj_align(dot, LV_ALIGN_CENTER, 0, 0);
@@ -890,7 +899,7 @@ lv_obj_t* ConnectivityTab::createNetworkItem(
 
     // === SELECTION STYLING (yellow border + tinted background) ===
     if (isSelected) {
-        lv_obj_set_style_border_color(item, lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_MAIN);
+        lv_obj_set_style_border_color(item, lv_color_hex(DesignTokens::BRAND_PRIMARY), LV_PART_MAIN);
         lv_obj_set_style_border_width(item, 3, LV_PART_MAIN);
         lv_obj_set_style_bg_color(item, lv_color_hex(0x252528), LV_PART_MAIN);  // Tinted
     }
@@ -898,7 +907,7 @@ lv_obj_t* ConnectivityTab::createNetworkItem(
     // === CONNECTED STATE (green left border accent) ===
     if (isConnected && !isSelected) {
         lv_obj_set_style_border_side(item, LV_BORDER_SIDE_LEFT, LV_PART_MAIN);
-        lv_obj_set_style_border_color(item, lv_color_hex(TAB5_COLOR_STATUS_SUCCESS), LV_PART_MAIN);
+        lv_obj_set_style_border_color(item, lv_color_hex(DesignTokens::STATUS_SUCCESS), LV_PART_MAIN);
         lv_obj_set_style_border_width(item, 4, LV_PART_MAIN);
     }
 
@@ -938,7 +947,7 @@ void ConnectivityTab::refreshNetworkLists() {
             lv_obj_t* emptyLabel = lv_label_create(_scannedNetworksList);
             lv_label_set_text(emptyLabel, "No networks found\nTap SCAN to search");
             lv_obj_set_style_text_align(emptyLabel, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-            lv_obj_set_style_text_color(emptyLabel, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+            lv_obj_set_style_text_color(emptyLabel, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
             lv_obj_set_style_text_font(emptyLabel, RAJDHANI_MED_24, LV_PART_MAIN);
             lv_obj_set_width(emptyLabel, NETWORK_CARD_W - 60);
             lv_obj_center(emptyLabel);
@@ -978,7 +987,7 @@ void ConnectivityTab::refreshNetworkLists() {
             lv_obj_t* emptyLabel = lv_label_create(_savedNetworksList);
             lv_label_set_text(emptyLabel, "No saved networks\nAdd from Available Networks");
             lv_obj_set_style_text_align(emptyLabel, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-            lv_obj_set_style_text_color(emptyLabel, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+            lv_obj_set_style_text_color(emptyLabel, lv_color_hex(DesignTokens::FG_SECONDARY), LV_PART_MAIN);
             lv_obj_set_style_text_font(emptyLabel, RAJDHANI_MED_24, LV_PART_MAIN);
             lv_obj_set_width(emptyLabel, NETWORK_CARD_W - 60);
             lv_obj_center(emptyLabel);

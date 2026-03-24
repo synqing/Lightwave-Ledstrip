@@ -1665,6 +1665,13 @@ void setup() {
     }
     WsMessageRouter::init(g_paramHandler, &g_wsClient, zoneUI, g_ui);
 
+    // Wire sidebar to WebSocket client for zone/preset data requests
+    #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
+    if (g_ui) {
+        g_ui->setWebSocketClient(&g_wsClient);
+    }
+    #endif
+
     // Wire ZoneComposerUI to PresetManager for zone state capture
     if (g_presetManager && zoneUI) {
         g_presetManager->setZoneComposerUI(zoneUI);

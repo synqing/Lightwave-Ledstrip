@@ -572,6 +572,32 @@ private:
 
             // Also update parameter handler for encoder sync
             handleZoneStatus(doc);
+
+            // Update sidebar zone state cache (independent of active screen)
+            if (s_displayUI) {
+                for (JsonObject zone : zones) {
+                    if (!zone["id"].is<uint8_t>()) continue;
+                    uint8_t zid = zone["id"].as<uint8_t>();
+                    if (zid >= 3) continue;  // Sidebar supports 3 zones
+
+                    uint16_t eid = 0;
+                    if (zone["effectId"].is<int>()) {
+                        int v = zone["effectId"].as<int>();
+                        if (v >= 0 && v <= 0xFFFF) eid = static_cast<uint16_t>(v);
+                    }
+                    const char* eName = zone["effectName"].is<const char*>()
+                        ? zone["effectName"].as<const char*>() : "";
+                    uint8_t spd = zone["speed"].as<uint8_t>();
+                    uint8_t palId = zone["paletteId"].as<uint8_t>();
+                    const char* palName = zone["paletteName"].is<const char*>()
+                        ? zone["paletteName"].as<const char*>() : "";
+                    uint8_t blend = zone["blendMode"].as<uint8_t>();
+                    uint8_t bri = zone["brightness"].is<uint8_t>()
+                        ? zone["brightness"].as<uint8_t>() : 128;
+
+                    s_displayUI->updateZoneSidebarState(zid, eid, eName, spd, palId, palName, blend, bri);
+                }
+            }
         }
 
         TAB5_WS_PRINTF("[WsRouter] Zones list: enabled=%d, count=%d\n", enabled, zoneCount);
@@ -692,12 +718,10 @@ private:
     }
 
     /**
-     * @brief Handle "effectPresets.list" response for Control Surface.
+     * @brief Handle "effectPresets.list" response for Control Surface + sidebar.
      */
     static void handleEffectPresetsList(JsonDocument& doc) {
         if (!s_displayUI) return;
-        ControlSurfaceUI* csUI = s_displayUI->getControlSurfaceUI();
-        if (!csUI) return;
 
         if (doc["success"].is<bool>() && !doc["success"].as<bool>()) {
             return;
@@ -737,7 +761,21 @@ private:
             }
         }
 
-        csUI->onPresetListReceived(slots, CS_MAX_PRESET_SLOTS);
+        // Forward to Control Surface if available
+        ControlSurfaceUI* csUI = s_displayUI->getControlSurfaceUI();
+        if (csUI) {
+            csUI->onPresetListReceived(slots, CS_MAX_PRESET_SLOTS);
+        }
+
+        // Update sidebar preset slots (independent of Control Surface screen)
+        DisplayUI::PresetSidebarSlot sidebarSlots[8];
+        for (uint8_t i = 0; i < CS_MAX_PRESET_SLOTS && i < 8; i++) {
+            sidebarSlots[i].occupied = slots[i].occupied;
+            strncpy(sidebarSlots[i].name, slots[i].name, sizeof(sidebarSlots[i].name) - 1);
+            sidebarSlots[i].name[sizeof(sidebarSlots[i].name) - 1] = '\0';
+            sidebarSlots[i].effectId = slots[i].effectId;
+        }
+        s_displayUI->updatePresetSidebarSlots(sidebarSlots, 8);
     }
 
     /**

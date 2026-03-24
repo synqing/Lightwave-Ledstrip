@@ -86,6 +86,35 @@ public:
     // Active sidebar tab (for encoder routing by tab)
     #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
     SidebarTab getCurrentTab() const { return _currentTab; }
+
+    // Zone sidebar state cache struct
+    struct ZoneSidebarParam {
+        uint16_t effectId = 0;
+        char effectName[32] = {0};
+        uint8_t speed = 25;
+        uint8_t paletteId = 0;
+        char paletteName[32] = {0};
+        uint8_t blendMode = 0;
+        uint8_t brightness = 128;
+    };
+
+    // Preset sidebar state cache struct
+    struct PresetSidebarSlot {
+        bool occupied = false;
+        char name[32] = {0};
+        uint16_t effectId = 0;
+    };
+
+    // Zone sidebar data binding
+    void setWebSocketClient(WebSocketClient* ws) { _wsClient = ws; }
+    void updateZoneSidebarState(uint8_t zoneId, uint16_t effectId, const char* effectName,
+                                 uint8_t speed, uint8_t paletteId, const char* paletteName,
+                                 uint8_t blendMode, uint8_t brightness);
+    uint8_t getSelectedZone() const { return _selectedZone; }
+    const ZoneSidebarParam& getZoneSidebarState(uint8_t zone) const;
+
+    // Preset sidebar data binding
+    void updatePresetSidebarSlots(const PresetSidebarSlot* slots, uint8_t count);
     #endif
 
     // Get zone composer UI (for router initialization)
@@ -212,6 +241,16 @@ private:
     lv_obj_t* _zone_param_labels[8] = {nullptr};
     lv_obj_t* _zone_param_values[8] = {nullptr};
     uint8_t _selectedZone = 0;
+
+    // Zone sidebar state cache (populated from WsMessageRouter zone data)
+    ZoneSidebarParam _zoneSidebarState[3];
+
+    // Preset sidebar state cache (populated from WsMessageRouter preset data)
+    PresetSidebarSlot _presetSidebarSlots[8];
+    uint8_t _highlightedPresetIdx = 0xFF;
+
+    // WebSocket client reference (for tab-switch data requests)
+    WebSocketClient* _wsClient = nullptr;
 
     lv_obj_t* _mode_container = nullptr;
     lv_obj_t* _mode_buttons[6] = {nullptr};

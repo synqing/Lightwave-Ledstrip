@@ -378,6 +378,14 @@ void DisplayUI::begin() {
                 lv_obj_add_flag(self->_presets_panel, LV_OBJ_FLAG_HIDDEN);
         }
 
+        // Request fresh data from K1 when switching to zones or presets
+        if (tab == SidebarTab::ZONES && self->_wsClient) {
+            self->_wsClient->requestZonesState();
+        }
+        if (tab == SidebarTab::PRESETS && self->_wsClient) {
+            self->_wsClient->requestEffectPresetsList();
+        }
+
         // Phase 5 — apply neon colour to Unit B bars
         self->applyTabColour(tab);
     });
@@ -1058,6 +1066,79 @@ void DisplayUI::begin() {
     esp_task_wdt_reset();
     _currentScreen = UIScreen::GLOBAL;
     // Serial.printf("[DisplayUI_TRACE] begin() complete @ %lu ms\n", millis());
+}
+
+// =========================================================================
+// Zone / Preset sidebar state binding
+// =========================================================================
+
+void DisplayUI::updateZoneSidebarState(uint8_t zoneId, uint16_t effectId, const char* effectName,
+                                        uint8_t speed, uint8_t paletteId, const char* paletteName,
+                                        uint8_t blendMode, uint8_t brightness) {
+    if (zoneId >= 3) return;  // Bounds check — sidebar supports 3 zones
+
+    ZoneSidebarParam& z = _zoneSidebarState[zoneId];
+    z.effectId = effectId;
+    if (effectName && effectName[0]) {
+        strncpy(z.effectName, effectName, sizeof(z.effectName) - 1);
+        z.effectName[sizeof(z.effectName) - 1] = '\0';
+    }
+    z.speed = speed;
+    z.paletteId = paletteId;
+    if (paletteName && paletteName[0]) {
+        strncpy(z.paletteName, paletteName, sizeof(z.paletteName) - 1);
+        z.paletteName[sizeof(z.paletteName) - 1] = '\0';
+    }
+    z.blendMode = blendMode;
+    z.brightness = brightness;
+
+    // Refresh visible labels if zones panel is showing the selected zone
+    if (_currentTab == SidebarTab::ZONES && _selectedZone == zoneId) {
+        char buf[16];
+        if (_zone_param_values[0]) lv_label_set_text(_zone_param_values[0], z.effectName);
+        if (_zone_param_values[1]) { snprintf(buf, sizeof(buf), "%u", z.speed);      lv_label_set_text(_zone_param_values[1], buf); }
+        if (_zone_param_values[2]) lv_label_set_text(_zone_param_values[2], z.paletteName);
+        if (_zone_param_values[3]) { snprintf(buf, sizeof(buf), "%u", z.blendMode);  lv_label_set_text(_zone_param_values[3], buf); }
+        if (_zone_param_values[4]) { snprintf(buf, sizeof(buf), "%u", z.brightness); lv_label_set_text(_zone_param_values[4], buf); }
+    }
+}
+
+const DisplayUI::ZoneSidebarParam& DisplayUI::getZoneSidebarState(uint8_t zone) const {
+    if (zone >= 3) return _zoneSidebarState[0];
+    return _zoneSidebarState[zone];
+}
+
+void DisplayUI::updatePresetSidebarSlots(const PresetSidebarSlot* slots, uint8_t count) {
+    if (!slots) return;
+    const uint8_t n = (count > 8) ? 8 : count;
+
+    for (uint8_t i = 0; i < 8; i++) {
+        if (i < n) {
+            _presetSidebarSlots[i] = slots[i];
+        } else {
+            _presetSidebarSlots[i] = PresetSidebarSlot();
+        }
+
+        // Update preset card labels
+        if (_preset_values[i]) {
+            if (_presetSidebarSlots[i].occupied && _presetSidebarSlots[i].name[0]) {
+                lv_label_set_text(_preset_values[i], _presetSidebarSlots[i].name);
+            } else {
+                lv_label_set_text(_preset_values[i], "");
+            }
+        }
+
+        // Adjust card border: occupied = blue highlight, empty = subtle
+        if (_preset_cards[i]) {
+            if (_presetSidebarSlots[i].occupied) {
+                lv_obj_set_style_border_color(_preset_cards[i],
+                    lv_color_hex(DesignTokens::PRESET_OCCUPIED), LV_PART_MAIN);
+            } else {
+                lv_obj_set_style_border_color(_preset_cards[i],
+                    lv_color_hex(DesignTokens::BORDER_SUBTLE), LV_PART_MAIN);
+            }
+        }
+    }
 }
 
 // =========================================================================

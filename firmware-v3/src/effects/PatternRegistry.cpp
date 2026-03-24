@@ -271,7 +271,10 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
     {EID_LGP_IFS_BIO_RELIC_AR, PM_STR("IFS Botanical Relic AR"), PatternFamily::ORGANIC, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP, PM_STR("Fractal botanical growth sculpted by harmonic envelopes"), PM_STR("IFS radial histogram with reactive vein density and tint"), PM_STR("IFS Botanical Relic")},
     {EID_LGP_TIME_REVERSAL_MIRROR_MOD1, PM_STR("Time-Reversal Mirror Mod1"), PatternFamily::QUANTUM, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::PHYSICS, PM_STR("Time-reversal with dispersive medium (frequency-dependent speed)"), PM_STR("Dispersive wave equation, chromatic spreading on replay, focus inversion"), PM_STR("Time-Reversal Mirror")},
     {EID_LGP_TIME_REVERSAL_MIRROR_MOD2, PM_STR("Time-Reversal Mirror Mod2"), PatternFamily::QUANTUM, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::PHYSICS, PM_STR("Time-reversal with nonlinear medium (amplitude-dependent speed)"), PM_STR("Nonlinear wave, shock formation on forward, shock healing on reversal"), PM_STR("Time-Reversal Mirror")},
-    {EID_LGP_TIME_REVERSAL_MIRROR_MOD3, PM_STR("Time-Reversal Mirror Mod3"), PatternFamily::QUANTUM, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::PHYSICS, PM_STR("Time-reversal with lossy medium (absorption on forward, gain on replay)"), PM_STR("Lossy wave equation, exponential decay forward, exponential gain reverse"), PM_STR("Time-Reversal Mirror")}
+    {EID_LGP_TIME_REVERSAL_MIRROR_MOD3, PM_STR("Time-Reversal Mirror Mod3"), PatternFamily::QUANTUM, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::PHYSICS, PM_STR("Time-reversal with lossy medium (absorption on forward, gain on replay)"), PM_STR("Lossy wave equation, exponential decay forward, exponential gain reverse"), PM_STR("Time-Reversal Mirror")},
+
+    // --- Node Composer Generated Effects (0x1D) ---
+    {EID_GENERATED_AIRY_COMET, PM_STR("Generated Airy Comet"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP, PM_STR("Node Composer export test — Airy Comet (Fixed) preset"), PM_STR("Gaussian centre-origin, single EMA, max follower, squared brightness"), PM_STR("")}
 };
 
 const uint16_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(PatternMetadata);

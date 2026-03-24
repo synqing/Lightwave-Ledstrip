@@ -20,9 +20,15 @@ import {
   templateRms,
   templateBand,
   templateBeatStrength,
+  templateSilentScale,
   templateEmaSmooth,
   templateMaxFollower,
   templateScale,
+  templateMultiply,
+  templateMultiplyArray,
+  templateAdd,
+  templatePower,
+  templatePowerArray,
   templateGaussian,
   templateTriangularWave,
   templateHsvToRgb,
@@ -138,6 +144,12 @@ export function generateCpp(
         break;
       }
 
+      case 'silent-scale-source': {
+        const varName = makeVarName(nodeId, 'out', index);
+        renderLines.push(templateSilentScale(varName));
+        break;
+      }
+
       // -------------------------------------------------------------------
       // Processing
       // -------------------------------------------------------------------
@@ -186,6 +198,58 @@ export function generateCpp(
         );
 
         renderLines.push(templateScale(varName, inputVar, factor));
+        break;
+      }
+
+      case 'multiply': {
+        const varName = makeVarName(nodeId, 'out', index);
+        const inputA = resolveInputVar(edges, nodeId, 'a', nodeIndexMap, '0.0f');
+        const inputB = resolveInputVar(edges, nodeId, 'b', nodeIndexMap, '0.0f');
+
+        // Detect array × scalar (geometry output is float[kHalfStrip])
+        const edgeA = findInputEdge(edges, nodeId, 'a');
+        const edgeB = findInputEdge(edges, nodeId, 'b');
+        const sourceANode = edgeA ? nodes.get(edgeA.from.nodeId) : undefined;
+        const sourceBNode = edgeB ? nodes.get(edgeB.from.nodeId) : undefined;
+        const sourceADef = sourceANode ? getNodeDefinition(sourceANode.definitionType) : undefined;
+        const sourceBDef = sourceBNode ? getNodeDefinition(sourceBNode.definitionType) : undefined;
+        const isArrayA = sourceADef?.type === 'gaussian' || sourceADef?.type === 'triangular-wave' || sourceADef?.type === 'multiply';
+        const isArrayB = sourceBDef?.type === 'gaussian' || sourceBDef?.type === 'triangular-wave' || sourceBDef?.type === 'multiply';
+
+        if (isArrayA && !isArrayB) {
+          renderLines.push(templateMultiplyArray(varName, inputA, inputB));
+        } else if (!isArrayA && isArrayB) {
+          renderLines.push(templateMultiplyArray(varName, inputB, inputA));
+        } else {
+          renderLines.push(templateMultiply(varName, inputA, inputB));
+        }
+        break;
+      }
+
+      case 'add': {
+        const varName = makeVarName(nodeId, 'out', index);
+        const inputA = resolveInputVar(edges, nodeId, 'a', nodeIndexMap, '0.0f');
+        const inputB = resolveInputVar(edges, nodeId, 'b', nodeIndexMap, '0.0f');
+        renderLines.push(templateAdd(varName, inputA, inputB));
+        break;
+      }
+
+      case 'power': {
+        const varName = makeVarName(nodeId, 'out', index);
+        const exponent = instance.parameters.get('exponent') ?? 2.0;
+        const inputVar = resolveInputVar(edges, nodeId, 'value', nodeIndexMap, '0.0f');
+
+        // Detect if input is an array
+        const inputEdge = findInputEdge(edges, nodeId, 'value');
+        const sourceNode = inputEdge ? nodes.get(inputEdge.from.nodeId) : undefined;
+        const sourceDef = sourceNode ? getNodeDefinition(sourceNode.definitionType) : undefined;
+        const isArray = sourceDef?.type === 'gaussian' || sourceDef?.type === 'triangular-wave' || sourceDef?.type === 'multiply';
+
+        if (isArray) {
+          renderLines.push(templatePowerArray(varName, inputVar, exponent));
+        } else {
+          renderLines.push(templatePower(varName, inputVar, exponent));
+        }
         break;
       }
 

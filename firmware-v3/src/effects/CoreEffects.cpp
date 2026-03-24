@@ -204,6 +204,7 @@
 #include "ieffect/LGPHyperbolicPortalAREffect.h"
 #include "ieffect/LGPLorenzRibbonAREffect.h"
 #include "ieffect/LGPIFSBioRelicAREffect.h"
+#include "ieffect/GeneratedAiryCometEffect.h"
 #include "utils/FastLEDOptim.h"
 #include "../core/narrative/NarrativeEngine.h"
 #include <FastLED.h>
@@ -1421,8 +1422,13 @@ uint16_t registerAllEffects(RendererActor* renderer) {
     renderer->registerEffect(EID_LGP_IFS_BIO_RELIC_AR, &ifsBioRelicARInstance);
     total++;
 
+    // --- Node Composer Generated Effects (0x1D) ---
+    static ieffect::GeneratedAiryCometEffect generatedAiryCometInstance;
+    renderer->registerEffect(EID_GENERATED_AIRY_COMET, &generatedAiryCometInstance);
+    total++;
+
     // =============== EFFECT COUNT PARITY VALIDATION ===============
-    constexpr uint16_t EXPECTED_EFFECT_COUNT = FEATURE_AR_1C_EXPERIMENTAL ? 194 : 191;
+    constexpr uint16_t EXPECTED_EFFECT_COUNT = FEATURE_AR_1C_EXPERIMENTAL ? 195 : 192;
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

@@ -1,15 +1,15 @@
 /**
- * C++ code generation templates for all 10 node types.
+ * C++ code generation templates for node types.
  *
  * Each template function returns one or more lines of C++ code
  * to be inserted into the render() method body, or member variable
  * declarations for the class body.
  *
- * Generated code targets the LightwaveOS IEffect interface:
+ * Generated code targets the LightwaveOS plugins::IEffect interface:
  *   - Centre-origin rendering via SET_CENTER_PAIR
  *   - No heap allocation in render()
  *   - British English in comments
- *   - bands[] for audio, not bin()
+ *   - ctx.audio.* for audio access (backend-agnostic)
  */
 
 // ---------------------------------------------------------------------------
@@ -17,15 +17,19 @@
 // ---------------------------------------------------------------------------
 
 export function templateRms(varName: string): string {
-  return `    const float ${varName} = ctx.controlBus.rms;`;
+  return `    const float ${varName} = ctx.audio.available ? ctx.audio.rms() : 0.0f;`;
 }
 
 export function templateBand(varName: string, index: number): string {
-  return `    const float ${varName} = ctx.controlBus.bands[${index}];`;
+  return `    const float ${varName} = ctx.audio.available ? ctx.audio.getBand(${index}) : 0.0f;`;
 }
 
 export function templateBeatStrength(varName: string): string {
-  return `    const float ${varName} = ctx.controlBus.beatStrength;`;
+  return `    const float ${varName} = ctx.audio.available ? ctx.audio.beatStrength() : 0.0f;`;
+}
+
+export function templateSilentScale(varName: string): string {
+  return `    const float ${varName} = ctx.audio.available ? ctx.audio.silentScale() : 1.0f;`;
 }
 
 // ---------------------------------------------------------------------------
@@ -74,6 +78,67 @@ export function templateScale(
   factor: number,
 ): string {
   return `    const float ${varName} = ${inputVar} * ${factor.toFixed(4)}f;`;
+}
+
+export function templateMultiply(
+  varName: string,
+  inputA: string,
+  inputB: string,
+): string {
+  return `    const float ${varName} = ${inputA} * ${inputB};`;
+}
+
+export function templateMultiplyArray(
+  varName: string,
+  inputA: string,
+  inputB: string,
+): string {
+  return [
+    `    float ${varName}[kHalfStrip];`,
+    `    for (int i = 0; i < kHalfStrip; i++) {`,
+    `        ${varName}[i] = ${inputA}[i] * ${inputB};`,
+    `    }`,
+  ].join('\n');
+}
+
+export function templateAdd(
+  varName: string,
+  inputA: string,
+  inputB: string,
+): string {
+  return `    const float ${varName} = ${inputA} + ${inputB};`;
+}
+
+export function templatePower(
+  varName: string,
+  inputVar: string,
+  exponent: number,
+): string {
+  if (exponent === 2.0) {
+    return `    const float ${varName} = ${inputVar} * ${inputVar};`;
+  }
+  return `    const float ${varName} = powf(${inputVar}, ${exponent.toFixed(1)}f);`;
+}
+
+export function templatePowerArray(
+  varName: string,
+  inputVar: string,
+  exponent: number,
+): string {
+  if (exponent === 2.0) {
+    return [
+      `    float ${varName}[kHalfStrip];`,
+      `    for (int i = 0; i < kHalfStrip; i++) {`,
+      `        ${varName}[i] = ${inputVar}[i] * ${inputVar}[i];`,
+      `    }`,
+    ].join('\n');
+  }
+  return [
+    `    float ${varName}[kHalfStrip];`,
+    `    for (int i = 0; i < kHalfStrip; i++) {`,
+    `        ${varName}[i] = powf(${inputVar}[i], ${exponent.toFixed(1)}f);`,
+    `    }`,
+  ].join('\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -163,11 +228,11 @@ export function templateLedOutput(
   return [
     `    // Centre-origin output with trail persistence`,
     `    const uint8_t fadeScale = ${Math.max(0, 255 - fadeAmount)};`,
-    `    for (int i = 0; i < kTotalLeds; i++) {`,
+    `    for (uint16_t i = 0; i < ctx.ledCount; i++) {`,
     `        ctx.leds[i].nscale8(fadeScale);`,
     `    }`,
     `    for (int dist = 0; dist < kHalfStrip; dist++) {`,
-    `        SET_CENTER_PAIR(ctx.leds, dist, ${colourArrayVar}[dist]);`,
+    `        SET_CENTER_PAIR(ctx, dist, ${colourArrayVar}[dist]);`,
     `    }`,
   ].join('\n');
 }
@@ -185,38 +250,53 @@ export function templateEffectShell(
 ): string {
   return `#pragma once
 
-#include "effects/IEffect.h"
-#include "effects/EffectContext.h"
-#include "effects/CoreEffects.h"
-#include "audio/SmoothingEngine.h"
+#include "../../plugins/api/IEffect.h"
+#include "../../plugins/api/EffectContext.h"
+#include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
 
-namespace lightwaveos::effects::generated {
+namespace lightwaveos {
+namespace effects {
+namespace ieffect {
 
-static constexpr int kHalfStrip = 160;
-static constexpr int kTotalLeds = 320;
-
-class ${className} : public IEffect {
+class ${className} final : public plugins::IEffect {
 public:
 ${memberDeclarations}
 
-    void init() override {
+    ${className}() = default;
+    ~${className}() override = default;
+
+    bool init(plugins::EffectContext& ctx) override {
+        (void)ctx;
 ${initBody}
+        return true;
     }
 
-    void render(EffectContext& ctx) override {
-        const float rawDt = ctx.dt;
+    void render(plugins::EffectContext& ctx) override {
+        const float rawDt = ctx.getSafeRawDeltaSeconds();
 ${renderBody}
     }
 
     void cleanup() override {}
 
-    EffectMetadata getMetadata() const override {
-        return { "${effectName}", "generated" };
+    const plugins::EffectMetadata& getMetadata() const override {
+        static plugins::EffectMetadata meta{
+            "${effectName}",
+            "Generated by K1 Node Composer",
+            plugins::EffectCategory::CUSTOM, 1
+        };
+        return meta;
     }
+
+    uint8_t getParameterCount() const override { return 0; }
+    const plugins::EffectParameter* getParameter(uint8_t) const override { return nullptr; }
+    bool setParameter(const char*, float) override { return false; }
+    float getParameter(const char*) const override { return 0.0f; }
 };
 
-} // namespace lightwaveos::effects::generated
+} // namespace ieffect
+} // namespace effects
+} // namespace lightwaveos
 `;
 }

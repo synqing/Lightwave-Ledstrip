@@ -350,7 +350,10 @@ constexpr EffectId EID_LGP_HYPERBOLIC_PORTAL_AR             = 0x1C11;  // Hyperb
 constexpr EffectId EID_LGP_LORENZ_RIBBON_AR                 = 0x1C12;  // Lorenz Ribbon (5-Layer AR)
 constexpr EffectId EID_LGP_IFS_BIO_RELIC_AR                 = 0x1C13;  // IFS Botanical Relic (5-Layer AR)
 
-// Total: 196 IDs assigned (195 active, 1 retired)
+// --- Node Composer Generated Effects (0x1D) ---
+constexpr EffectId EID_GENERATED_AIRY_COMET                 = 0x1D00;  // Generated: Airy Comet (Node Composer export test)
+
+// Total: 197 IDs assigned (196 active, 1 retired)
 
 // ============================================================================
 // Migration: Old Sequential ID -> New Stable ID

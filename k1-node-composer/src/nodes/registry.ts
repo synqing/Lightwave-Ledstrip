@@ -61,8 +61,9 @@ import { scaleBrightnessNode } from './composition/scale-brightness-node';
 import { addColourNode } from './composition/add-colour-node';
 import { fadeToBlackNode } from './composition/fade-to-black-node';
 
-// Output (1)
+// Output (2)
 import { ledOutputNode } from './output/led-output-node';
+import { subpixelRendererNode } from './output/subpixel-renderer-node';
 
 const ALL_NODES = [
   // Sources (20)
@@ -82,8 +83,8 @@ const ALL_NODES = [
   sinusoidalSumNode, centreMeltNode, linearGradientNode, scrollBufferNode,
   // Composition (6)
   hsvToRgbNode, paletteLookupNode, blendNode, scaleBrightnessNode, addColourNode, fadeToBlackNode,
-  // Output (1)
-  ledOutputNode,
+  // Output (2)
+  ledOutputNode, subpixelRendererNode,
 ] as const;
 
 export function registerAllNodes(): void {

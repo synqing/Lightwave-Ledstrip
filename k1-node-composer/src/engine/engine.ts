@@ -4,6 +4,9 @@
  * Evaluates the node graph once per frame in topological order.
  * No caching (audio data changes every frame). No lazy evaluation.
  * Matches the firmware's render() call pattern exactly.
+ *
+ * Supports per-zone execution where stateful nodes maintain
+ * separate state per zone ID (matching firmware's kMaxZones = 4).
  */
 
 import type {
@@ -19,6 +22,7 @@ import { isTypeCompatible } from './types';
 import { topoSort } from './topo-sort';
 import { broadcast } from './broadcast';
 import { StateManager } from './state';
+import { ZoneStateManager, ZONE_GLOBAL } from './zone-state';
 
 // ---------------------------------------------------------------------------
 // Node registry (type string → definition)
@@ -47,9 +51,27 @@ export class GraphEngine {
   private edges: Edge[] = [];
   private sortedIds: NodeId[] | null = null;
   private stateManager = new StateManager();
+  private zoneStateManager = new ZoneStateManager();
+
+  /** Whether per-zone state execution is enabled. */
+  private _zoneAware = false;
 
   /** Last tick's output values for each node (for mini-visualisations). */
   private lastOutputs = new Map<NodeId, Map<PortName, PortValue>>();
+
+  // -----------------------------------------------------------------------
+  // Zone configuration
+  // -----------------------------------------------------------------------
+
+  /** Enable or disable zone-aware execution mode. */
+  setZoneAware(enabled: boolean): void {
+    this._zoneAware = enabled;
+  }
+
+  /** Check if zone-aware execution is enabled. */
+  get zoneAware(): boolean {
+    return this._zoneAware;
+  }
 
   // -----------------------------------------------------------------------
   // Graph mutation
@@ -69,6 +91,7 @@ export class GraphEngine {
     // Initialise state if stateful
     if (def.hasState && def.getInitialState) {
       this.stateManager.init(instance.id, def.getInitialState);
+      this.zoneStateManager.initAll(instance.id, def.getInitialState);
     }
 
     this.invalidateSort();
@@ -90,6 +113,7 @@ export class GraphEngine {
   removeNode(nodeId: NodeId): void {
     this.nodes.delete(nodeId);
     this.stateManager.remove(nodeId);
+    this.zoneStateManager.removeAll(nodeId);
     this.edges = this.edges.filter(
       (e) => e.from.nodeId !== nodeId && e.to.nodeId !== nodeId,
     );
@@ -133,9 +157,19 @@ export class GraphEngine {
 
   /**
    * Evaluate the entire graph for one frame.
-   * Returns per-node output values (for mini-visualisations and LED preview).
+   *
+   * @param dt Delta time in seconds.
+   * @param controlBus Audio/beat data for this frame.
+   * @param zoneId Optional zone ID (0..3). When zone-aware mode is enabled
+   *               and zoneId is provided, stateful nodes use per-zone state.
+   *               Default: ZONE_GLOBAL (0xFF) — uses global state.
+   * @returns Per-node output values (for mini-visualisations and LED preview).
    */
-  tick(dt: number, controlBus: ControlBusFrame | null): Map<NodeId, Map<PortName, PortValue>> {
+  tick(
+    dt: number,
+    controlBus: ControlBusFrame | null,
+    zoneId: number = ZONE_GLOBAL,
+  ): Map<NodeId, Map<PortName, PortValue>> {
     // Rebuild topological sort if invalidated
     if (!this.sortedIds) {
       const nodeIds = new Set(this.nodes.keys());
@@ -179,8 +213,15 @@ export class GraphEngine {
         }
       }
 
-      // Get current state
-      const currentState = def.hasState ? this.stateManager.get(nodeId) : null;
+      // Get current state — use zone state if zone-aware mode is on
+      let currentState: NodeState | null = null;
+      if (def.hasState) {
+        if (this._zoneAware) {
+          currentState = this.zoneStateManager.get(nodeId, zoneId);
+        } else {
+          currentState = this.stateManager.get(nodeId);
+        }
+      }
 
       // Always evaluate — even bypassed nodes compute for ghost visualisation
       const result = def.evaluate(
@@ -192,9 +233,9 @@ export class GraphEngine {
       );
 
       // Sanitise outputs — NaN/Infinity from one node corrupts the entire graph
-      for (const [portName, value] of result.outputs) {
+      for (const [_portName, value] of result.outputs) {
         if (typeof value === 'number' && !Number.isFinite(value)) {
-          result.outputs.set(portName, 0);
+          result.outputs.set(_portName, 0);
         } else if (value instanceof Float32Array) {
           for (let i = 0; i < value.length; i++) {
             if (!Number.isFinite(value[i]!)) value[i] = 0;
@@ -204,7 +245,11 @@ export class GraphEngine {
 
       // Update state (even when bypassed — keeps stateful nodes in sync)
       if (def.hasState && result.nextState) {
-        this.stateManager.set(nodeId, result.nextState);
+        if (this._zoneAware) {
+          this.zoneStateManager.set(nodeId, zoneId, result.nextState);
+        } else {
+          this.stateManager.set(nodeId, result.nextState);
+        }
       }
 
       if (instance.bypassed) {
@@ -259,6 +304,7 @@ export class GraphEngine {
       }
     }
     this.stateManager.resetAll(factories);
+    this.zoneStateManager.resetAll(factories);
   }
 
   snapshot() {

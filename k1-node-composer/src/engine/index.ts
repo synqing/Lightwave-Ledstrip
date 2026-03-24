@@ -15,4 +15,5 @@ export type {
 export { topoSort } from './topo-sort';
 export { broadcast, mulArrays, addArrays, scaleArray } from './broadcast';
 export { StateManager } from './state';
+export { ZoneStateManager, MAX_ZONES, ZONE_GLOBAL } from './zone-state';
 export { GraphEngine, registerNodeType, getNodeDefinition, getRegisteredTypes } from './engine';

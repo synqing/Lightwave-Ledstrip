@@ -5,10 +5,14 @@
  * Outputs are stored in a ref (not state) to avoid re-rendering React
  * on every frame. Consumers that need to paint on output changes
  * subscribe via the subscribe() method.
+ *
+ * Supports zone-aware execution mode where the engine ticks with
+ * a configurable zoneId for per-zone state isolation.
  */
 
 import { useRef, useCallback, useEffect } from 'react';
 import { GraphEngine, getNodeDefinition, getRegisteredTypes } from '../../engine/engine';
+import { ZONE_GLOBAL } from '../../engine/zone-state';
 import { registerAllNodes } from '../../nodes/registry';
 import { isTypeCompatible } from '../../engine/types';
 import type {
@@ -38,6 +42,8 @@ export interface GraphEngineHandle {
   reset: () => void;
   subscribe: (callback: OutputSubscriber) => () => void;
   setAudioProvider: (provider: (() => ControlBusFrame | null) | null) => void;
+  setZoneAware: (enabled: boolean) => void;
+  setZoneId: (zoneId: number) => void;
   getNodeDefinition: typeof getNodeDefinition;
   getRegisteredTypes: typeof getRegisteredTypes;
 }
@@ -55,6 +61,7 @@ export function useGraphEngine(): GraphEngineHandle {
   const audioProviderRef = useRef<(() => ControlBusFrame | null) | null>(null);
   const rafIdRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
+  const zoneIdRef = useRef<number>(ZONE_GLOBAL);
 
   // Lazily create engine singleton
   if (!engineRef.current) {
@@ -104,6 +111,14 @@ export function useGraphEngine(): GraphEngineHandle {
     audioProviderRef.current = provider;
   }, []);
 
+  const setZoneAware = useCallback((enabled: boolean) => {
+    engine.setZoneAware(enabled);
+  }, [engine]);
+
+  const setZoneId = useCallback((zoneId: number) => {
+    zoneIdRef.current = zoneId;
+  }, []);
+
   // rAF loop: tick engine at ~60fps
   useEffect(() => {
     const loop = (timestamp: number) => {
@@ -116,7 +131,7 @@ export function useGraphEngine(): GraphEngineHandle {
       const dt = Math.min(dtMs / 1000, 0.1); // Cap at 100ms to prevent spiral
 
       const controlBus = audioProviderRef.current ? audioProviderRef.current() : null;
-      const outputs = engine.tick(dt, controlBus);
+      const outputs = engine.tick(dt, controlBus, zoneIdRef.current);
 
       outputsRef.current = outputs;
 
@@ -148,6 +163,8 @@ export function useGraphEngine(): GraphEngineHandle {
     reset,
     subscribe,
     setAudioProvider,
+    setZoneAware,
+    setZoneId,
     getNodeDefinition,
     getRegisteredTypes,
   };

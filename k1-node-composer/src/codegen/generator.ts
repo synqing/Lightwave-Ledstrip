@@ -10,6 +10,9 @@
  *   - No heap allocation in render()
  *   - bands[] for audio access (backend-agnostic)
  *   - British English in comments
+ *
+ * When zone-aware mode is enabled, stateful member variables
+ * become arrays indexed by kMaxZones with bounds-checked access.
  */
 
 import type { GraphEngine } from '../engine/engine';
@@ -33,6 +36,7 @@ import {
   templateTriangularWave,
   templateHsvToRgb,
   templateLedOutput,
+  templateSubpixelRenderer,
   templateEffectShell,
 } from './templates';
 
@@ -79,6 +83,42 @@ function resolveInputVar(
 }
 
 // ---------------------------------------------------------------------------
+// Zone-aware member declaration helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate a member declaration. In zone-aware mode, scalar members
+ * become arrays of kMaxZones.
+ */
+function zoneMember(memberVar: string, initVal: string, zoneAware: boolean): string {
+  if (zoneAware) {
+    return `    float ${memberVar}[kMaxZones] = {${initVal}};`;
+  }
+  return `    float ${memberVar} = ${initVal};`;
+}
+
+/**
+ * Generate an init line. In zone-aware mode, initialise all zone slots.
+ */
+function zoneInit(memberVar: string, initVal: string, zoneAware: boolean): string {
+  if (zoneAware) {
+    return `        for (int z = 0; z < kMaxZones; z++) ${memberVar}[z] = ${initVal};`;
+  }
+  return `        ${memberVar} = ${initVal};`;
+}
+
+/**
+ * Generate the render-time member access expression.
+ * In zone-aware mode, access via the zone index (z).
+ */
+function zoneMemberAccess(memberVar: string, zoneAware: boolean): string {
+  if (zoneAware) {
+    return `${memberVar}[z]`;
+  }
+  return memberVar;
+}
+
+// ---------------------------------------------------------------------------
 // Main generator
 // ---------------------------------------------------------------------------
 
@@ -90,12 +130,16 @@ export interface GeneratedCode {
 /**
  * Generate a complete C++ IEffect header from the current node graph.
  *
- * Returns { header, source } where header contains the full class
- * and source is empty (header-only for POC simplicity).
+ * @param engine The graph engine with the connected node graph.
+ * @param effectName Display name for the effect.
+ * @param zoneAware When true, generates per-zone state management code.
+ * @returns { header, source } where header contains the full class
+ *          and source is empty (header-only for POC simplicity).
  */
 export function generateCpp(
   engine: GraphEngine,
   effectName: string,
+  zoneAware: boolean = false,
 ): GeneratedCode {
   const sortedIds = engine.getSortedIds();
   const nodes = engine.getNodes();
@@ -110,6 +154,12 @@ export function generateCpp(
   const memberLines: string[] = [];
   const initLines: string[] = [];
   const renderLines: string[] = [];
+
+  // In zone-aware mode, add the zone index variable at the start of render()
+  if (zoneAware) {
+    renderLines.push(`    // Per-zone state: resolve zone index with bounds check`);
+    renderLines.push(`    const int z = (ctx.zoneId < kMaxZones) ? ctx.zoneId : 0;`);
+  }
 
   // Walk topo order, emit C++ code per node
   for (const nodeId of sortedIds) {
@@ -162,9 +212,12 @@ export function generateCpp(
           edges, nodeId, 'value', nodeIndexMap, '0.0f',
         );
 
-        memberLines.push(`    float ${memberVar} = 0.0f;`);
-        initLines.push(`        ${memberVar} = 0.0f;`);
-        renderLines.push(templateEmaSmooth(varName, inputVar, memberVar, tau));
+        memberLines.push(zoneMember(memberVar, '0.0f', zoneAware));
+        initLines.push(zoneInit(memberVar, '0.0f', zoneAware));
+
+        // In zone-aware mode, use the zone-indexed member access
+        const memberAccess = zoneMemberAccess(memberVar, zoneAware);
+        renderLines.push(templateEmaSmooth(varName, inputVar, memberAccess, tau));
         break;
       }
 
@@ -180,11 +233,13 @@ export function generateCpp(
           edges, nodeId, 'value', nodeIndexMap, '0.0f',
         );
 
-        memberLines.push(`    float ${memberFollower} = 0.15f;`);
-        initLines.push(`        ${memberFollower} = 0.15f;`);
+        memberLines.push(zoneMember(memberFollower, '0.15f', zoneAware));
+        initLines.push(zoneInit(memberFollower, '0.15f', zoneAware));
+
+        const memberAccess = zoneMemberAccess(memberFollower, zoneAware);
         renderLines.push(templateMaxFollower(
           normalisedVar, followerVar, inputVar,
-          memberFollower, attackTau, decayTau, floor,
+          memberAccess, attackTau, decayTau, floor,
         ));
         break;
       }
@@ -206,7 +261,7 @@ export function generateCpp(
         const inputA = resolveInputVar(edges, nodeId, 'a', nodeIndexMap, '0.0f');
         const inputB = resolveInputVar(edges, nodeId, 'b', nodeIndexMap, '0.0f');
 
-        // Detect array × scalar (geometry output is float[kHalfStrip])
+        // Detect array x scalar (geometry output is float[kHalfStrip])
         const edgeA = findInputEdge(edges, nodeId, 'a');
         const edgeB = findInputEdge(edges, nodeId, 'b');
         const sourceANode = edgeA ? nodes.get(edgeA.from.nodeId) : undefined;
@@ -280,10 +335,12 @@ export function generateCpp(
           edges, nodeId, 'amplitude', nodeIndexMap, '1.0f',
         );
 
-        memberLines.push(`    float ${memberPhase} = 0.0f;`);
-        initLines.push(`        ${memberPhase} = 0.0f;`);
+        memberLines.push(zoneMember(memberPhase, '0.0f', zoneAware));
+        initLines.push(zoneInit(memberPhase, '0.0f', zoneAware));
+
+        const memberAccess = zoneMemberAccess(memberPhase, zoneAware);
         renderLines.push(templateTriangularWave(
-          varName, amplitudeVar, memberPhase,
+          varName, amplitudeVar, memberAccess,
           spacing, driftSpeed, sharpness,
         ));
         break;
@@ -319,12 +376,32 @@ export function generateCpp(
       // -------------------------------------------------------------------
       case 'led-output': {
         const fadeAmount = instance.parameters.get('fadeAmount') ?? 20;
+        const dualMode = Math.round(instance.parameters.get('dualStripMode') ?? 0);
 
         const colourVar = resolveInputVar(
           edges, nodeId, 'colour', nodeIndexMap, 'nullptr /* unconnected */',
         );
+        const colour2Var = dualMode === 1
+          ? resolveInputVar(edges, nodeId, 'colour2', nodeIndexMap, colourVar)
+          : '';
 
-        renderLines.push(templateLedOutput(colourVar, fadeAmount));
+        renderLines.push(templateLedOutput(colourVar, fadeAmount, dualMode, colour2Var));
+        break;
+      }
+
+      case 'subpixel-renderer': {
+        const spFadeAmount = instance.parameters.get('fadeAmount') ?? 20;
+        const spResolution = instance.parameters.get('resolution') ?? 2.0;
+        const spDualMode = Math.round(instance.parameters.get('dualStripMode') ?? 0);
+
+        const spColourVar = resolveInputVar(
+          edges, nodeId, 'colour', nodeIndexMap, 'nullptr /* unconnected */',
+        );
+        const spColour2Var = spDualMode === 1
+          ? resolveInputVar(edges, nodeId, 'colour2', nodeIndexMap, spColourVar)
+          : '';
+
+        renderLines.push(templateSubpixelRenderer(spColourVar, spFadeAmount, spResolution, spDualMode, spColour2Var));
         break;
       }
 

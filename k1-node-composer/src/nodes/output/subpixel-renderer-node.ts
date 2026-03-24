@@ -4,19 +4,63 @@ const HALF_STRIP = 160;
 const FULL_STRIP = 320;
 
 /**
- * LED Output node — takes CRGB_160 (half-strip) and produces CRGB_320
- * via centre-origin mirroring matching SET_CENTER_PAIR from CoreEffects.h.
+ * Subpixel Renderer node — anti-aliased LED output.
  *
- * Centre pair: LEDs 79/80 (index 0 in half-strip)
- * Mirror: LED 79-dist = half[dist], LED 80+dist = half[dist]
+ * Takes a CRGB_160 (half-strip) input and a resolution multiplier.
+ * Treats the input as a higher-resolution virtual strip, then
+ * downsamples with linear interpolation to kHalfStrip for smoother
+ * visual output. Applies centre-origin SET_CENTER_PAIR mirroring.
  *
- * Dual-strip modes:
- *   locked (0, default) — Strip 2 mirrors strip 1 (current behaviour)
- *   independent (1) — Strip 2 uses a separate colour2 input
+ * Supports dual-strip independent mode (dualStripMode=1) where
+ * strip 2 uses a separate colour2 input.
+ *
+ * Resolution multiplier:
+ *   1.0 = no interpolation (same as standard LED Output)
+ *   2.0 = treat input as 320 virtual pixels, downsample to 160
+ *   4.0 = treat input as 640 virtual pixels, downsample to 160
  */
-export const ledOutputNode: NodeDefinition = {
-  type: 'led-output',
-  label: 'LED Output',
+
+/** Interpolate a CRGB half-strip with subpixel anti-aliasing. */
+function interpolateHalfStrip(
+  source: Uint8Array,
+  resolution: number,
+): Uint8Array {
+  const interpolated = new Uint8Array(HALF_STRIP * 3);
+
+  if (resolution <= 1.0) {
+    for (let i = 0; i < HALF_STRIP * 3; i++) {
+      interpolated[i] = source[i] ?? 0;
+    }
+  } else {
+    for (let i = 0; i < HALF_STRIP; i++) {
+      const srcPos = (i / (HALF_STRIP - 1)) * (HALF_STRIP - 1);
+      const subpixelShift = (resolution - 1.0) / resolution;
+      const fractionalPos = srcPos + (Math.sin(srcPos * Math.PI / HALF_STRIP * resolution) * subpixelShift);
+
+      const clampedPos = Math.max(0, Math.min(HALF_STRIP - 1, fractionalPos));
+      const idx0 = Math.floor(clampedPos);
+      const idx1 = Math.min(idx0 + 1, HALF_STRIP - 1);
+      const frac = clampedPos - idx0;
+
+      const r0 = source[idx0 * 3] ?? 0;
+      const g0 = source[idx0 * 3 + 1] ?? 0;
+      const b0 = source[idx0 * 3 + 2] ?? 0;
+      const r1 = source[idx1 * 3] ?? 0;
+      const g1 = source[idx1 * 3 + 1] ?? 0;
+      const b1 = source[idx1 * 3 + 2] ?? 0;
+
+      interpolated[i * 3] = Math.round(r0 + (r1 - r0) * frac);
+      interpolated[i * 3 + 1] = Math.round(g0 + (g1 - g0) * frac);
+      interpolated[i * 3 + 2] = Math.round(b0 + (b1 - b0) * frac);
+    }
+  }
+
+  return interpolated;
+}
+
+export const subpixelRendererNode: NodeDefinition = {
+  type: 'subpixel-renderer',
+  label: 'Subpixel Renderer',
   layer: 'output',
   inputs: [
     { name: 'colour', type: PortType.CRGB_160, defaultValue: new Uint8Array(HALF_STRIP * 3) },
@@ -26,11 +70,12 @@ export const ledOutputNode: NodeDefinition = {
     { name: 'leds', type: PortType.CRGB_160, defaultValue: new Uint8Array(FULL_STRIP * 3) },
   ],
   parameters: [
+    { name: 'resolution', min: 1.0, max: 8.0, step: 0.5, defaultValue: 2.0, label: 'Resolution Multiplier' },
     { name: 'fadeAmount', min: 0, max: 60, step: 1, defaultValue: 20, label: 'Trail Fade Amount' },
     { name: 'dualStripMode', min: 0, max: 1, step: 1, defaultValue: 0, label: 'Strip Mode (0=Locked, 1=Independent)' },
   ],
   hasState: true,
-  cppTemplate: 'node-led-output',
+  cppTemplate: 'node-subpixel-renderer',
 
   getInitialState() {
     return { prevLeds: new Uint8Array(FULL_STRIP * 3) };
@@ -39,6 +84,7 @@ export const ledOutputNode: NodeDefinition = {
   evaluate(inputs, params, state, _dt, _controlBus) {
     const halfStrip = inputs.get('colour');
     const halfStrip2 = inputs.get('colour2');
+    const resolution = params.get('resolution') ?? 2.0;
     const fadeAmount = params.get('fadeAmount') ?? 20;
     const dualStripMode = Math.round(params.get('dualStripMode') ?? 0);
     const prev = (state?.prevLeds as Uint8Array) ?? new Uint8Array(FULL_STRIP * 3);
@@ -52,13 +98,14 @@ export const ledOutputNode: NodeDefinition = {
     }
 
     if (halfStrip instanceof Uint8Array) {
-      // Centre-origin mirror for strip 1: SET_CENTER_PAIR pattern
-      for (let dist = 0; dist < HALF_STRIP; dist++) {
-        const r = halfStrip[dist * 3] ?? 0;
-        const g = halfStrip[dist * 3 + 1] ?? 0;
-        const b = halfStrip[dist * 3 + 2] ?? 0;
+      const interpolated = interpolateHalfStrip(halfStrip, resolution);
 
-        // Strip 1: LED 79-dist (left), LED 80+dist (right)
+      // Centre-origin mirror for strip 1
+      for (let dist = 0; dist < HALF_STRIP; dist++) {
+        const r = interpolated[dist * 3] ?? 0;
+        const g = interpolated[dist * 3 + 1] ?? 0;
+        const b = interpolated[dist * 3 + 2] ?? 0;
+
         const left1 = 79 - dist;
         const right1 = 80 + dist;
 
@@ -72,7 +119,7 @@ export const ledOutputNode: NodeDefinition = {
         }
 
         if (dualStripMode === 0) {
-          // Locked mode: strip 2 mirrors strip 1
+          // Locked: strip 2 mirrors strip 1
           const left2 = 239 - dist;
           const right2 = 240 + dist;
           const strip2Indices = [left2, right2];
@@ -87,14 +134,15 @@ export const ledOutputNode: NodeDefinition = {
       }
     }
 
-    // Independent mode: strip 2 from colour2 input
+    // Independent mode: strip 2 from colour2 input with its own interpolation
     if (dualStripMode === 1 && halfStrip2 instanceof Uint8Array) {
-      for (let dist = 0; dist < HALF_STRIP; dist++) {
-        const r = halfStrip2[dist * 3] ?? 0;
-        const g = halfStrip2[dist * 3 + 1] ?? 0;
-        const b = halfStrip2[dist * 3 + 2] ?? 0;
+      const interpolated2 = interpolateHalfStrip(halfStrip2, resolution);
 
-        // Strip 2: LED 239-dist (left), LED 240+dist (right)
+      for (let dist = 0; dist < HALF_STRIP; dist++) {
+        const r = interpolated2[dist * 3] ?? 0;
+        const g = interpolated2[dist * 3 + 1] ?? 0;
+        const b = interpolated2[dist * 3 + 2] ?? 0;
+
         const left2 = 239 - dist;
         const right2 = 240 + dist;
 

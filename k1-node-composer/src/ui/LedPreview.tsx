@@ -4,6 +4,9 @@
  *
  * Uses requestAnimationFrame for rendering, NOT React state.
  * Exposes an imperative update(leds) method for the engine loop.
+ *
+ * When dualStripIndependent is true, a divider and strip labels
+ * are rendered to visually distinguish the two independent strips.
  */
 
 import {
@@ -34,6 +37,8 @@ const DIVIDER_Y = STRIP_HEIGHT;
 export interface LedPreviewHandle {
   /** Push a new frame of LED data. Uint8Array(960) = 320 x RGB. */
   update(leds: Uint8Array): void;
+  /** Set whether dual-strip independent mode is active. */
+  setDualStripIndependent(enabled: boolean): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -54,6 +59,7 @@ export const LedPreview = forwardRef<LedPreviewHandle, LedPreviewProps>(
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const ledsRef = useRef<Uint8Array | null>(null);
     const rafRef = useRef<number>(0);
+    const dualIndependentRef = useRef<boolean>(false);
 
     // Keep ledsRef in sync with prop for the initial/prop-driven path
     useEffect(() => {
@@ -65,7 +71,11 @@ export const LedPreview = forwardRef<LedPreviewHandle, LedPreviewProps>(
       ledsRef.current = data;
     }, []);
 
-    useImperativeHandle(ref, () => ({ update }), [update]);
+    const setDualStripIndependent = useCallback((enabled: boolean) => {
+      dualIndependentRef.current = enabled;
+    }, []);
+
+    useImperativeHandle(ref, () => ({ update, setDualStripIndependent }), [update, setDualStripIndependent]);
 
     // ---------------------------------------------------------------------------
     // Render loop
@@ -82,6 +92,7 @@ export const LedPreview = forwardRef<LedPreviewHandle, LedPreviewProps>(
         if (!ctx) return;
 
         const data = ledsRef.current;
+        const isDualIndependent = dualIndependentRef.current;
 
         // Clear to black
         ctx.fillStyle = '#000';
@@ -107,12 +118,23 @@ export const LedPreview = forwardRef<LedPreviewHandle, LedPreviewProps>(
         }
 
         // --- Divider line between strip 1 and strip 2 ---
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-        ctx.lineWidth = 1;
+        ctx.strokeStyle = isDualIndependent
+          ? 'rgba(0, 188, 212, 0.4)'
+          : 'rgba(255, 255, 255, 0.08)';
+        ctx.lineWidth = isDualIndependent ? 2 : 1;
         ctx.beginPath();
         ctx.moveTo(0, DIVIDER_Y);
         ctx.lineTo(CANVAS_WIDTH, DIVIDER_Y);
         ctx.stroke();
+
+        // Strip labels when in independent mode
+        if (isDualIndependent) {
+          ctx.font = '9px monospace';
+          ctx.fillStyle = 'rgba(0, 188, 212, 0.6)';
+          ctx.textBaseline = 'top';
+          ctx.fillText('S1', 2, 2);
+          ctx.fillText('S2', 2, STRIP_HEIGHT + 2);
+        }
 
         rafRef.current = requestAnimationFrame(draw);
       }

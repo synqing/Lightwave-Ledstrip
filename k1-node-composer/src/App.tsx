@@ -18,6 +18,7 @@ import { EffectsLibrary } from './ui/EffectsLibrary';
 import { useGraphEngine } from './ui/hooks/useGraphEngine';
 import { useAudioManager } from './ui/hooks/useAudioManager';
 import { useUndoRedo } from './ui/hooks/useUndoRedo';
+import { MAX_ZONES, ZONE_GLOBAL } from './engine/zone-state';
 import './ui/styles/nodes.css';
 
 export function App() {
@@ -28,6 +29,8 @@ export function App() {
   const [showCodeExport, setShowCodeExport] = useState(false);
   const [showEffectsLibrary, setShowEffectsLibrary] = useState(false);
   const [codeGeneration, setCodeGeneration] = useState(0);
+  const [zoneAware, setZoneAware] = useState(false);
+  const [activeZone, setActiveZone] = useState(ZONE_GLOBAL);
   const frameCountRef = useRef(0);
   const lastFpsTimeRef = useRef(performance.now());
   const ledPreviewRef = useRef<LedPreviewHandle>(null);
@@ -59,12 +62,24 @@ export function App() {
       }
 
       // Find the LED output node and push its data to the preview
-      for (const [_nodeId, nodeOutputs] of outputs) {
+      // Also detect dual-strip independent mode for visual feedback
+      let foundLeds = false;
+      for (const [nodeId, nodeOutputs] of outputs) {
         const leds = nodeOutputs.get('leds');
         if (leds instanceof Uint8Array && leds.length >= 960) {
           ledPreviewRef.current?.update(leds);
+          // Check if this output node uses independent dual-strip mode
+          const instance = engineHandle.engine.getNodes().get(nodeId);
+          const isDualIndependent = instance
+            ? Math.round(instance.parameters.get('dualStripMode') ?? 0) === 1
+            : false;
+          ledPreviewRef.current?.setDualStripIndependent(isDualIndependent);
+          foundLeds = true;
           break;
         }
+      }
+      if (!foundLeds) {
+        ledPreviewRef.current?.setDualStripIndependent(false);
       }
     });
     return unsub;
@@ -91,6 +106,26 @@ export function App() {
   const handleEffectsToggle = useCallback(() => {
     setShowEffectsLibrary((prev) => !prev);
   }, []);
+
+  // Zone-aware toggle
+  const handleZoneToggle = useCallback(() => {
+    setZoneAware((prev) => {
+      const next = !prev;
+      engineHandle.setZoneAware(next);
+      if (!next) {
+        // When disabling zone mode, reset to global zone
+        setActiveZone(ZONE_GLOBAL);
+        engineHandle.setZoneId(ZONE_GLOBAL);
+      }
+      return next;
+    });
+  }, [engineHandle]);
+
+  // Zone selector
+  const handleZoneChange = useCallback((zoneId: number) => {
+    setActiveZone(zoneId);
+    engineHandle.setZoneId(zoneId);
+  }, [engineHandle]);
 
   // Undo/redo
   const undoRedo = useUndoRedo(engineHandle.engine);
@@ -191,6 +226,26 @@ export function App() {
           >
             Effects
           </button>
+          <button
+            className={`app-topbar__btn ${zoneAware ? 'app-topbar__btn--active' : ''}`}
+            onClick={handleZoneToggle}
+            title="Toggle per-zone state execution"
+          >
+            Zones
+          </button>
+          {zoneAware && (
+            <select
+              className="app-topbar__zone-select"
+              value={activeZone}
+              onChange={(e) => handleZoneChange(Number(e.target.value))}
+              title="Select active zone for preview"
+            >
+              <option value={ZONE_GLOBAL}>Global</option>
+              {Array.from({ length: MAX_ZONES }, (_, i) => (
+                <option key={i} value={i}>Zone {i}</option>
+              ))}
+            </select>
+          )}
           <button
             className={`app-topbar__btn ${showCodeExport ? 'app-topbar__btn--active' : ''}`}
             onClick={handleCodeExportToggle}

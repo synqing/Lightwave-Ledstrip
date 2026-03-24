@@ -429,6 +429,27 @@
   min-width: 60px;
 }
 
+.app-topbar__zone-select {
+  padding: 3px 6px;
+  background: #1a1a2a;
+  border: 1px solid #00bcd4;
+  border-radius: 4px;
+  color: #00bcd4;
+  font-size: 11px;
+  font-family: monospace;
+  cursor: pointer;
+  outline: none;
+}
+
+.app-topbar__zone-select:hover {
+  background: #222;
+}
+
+.app-topbar__zone-select option {
+  background: #111;
+  color: #ccc;
+}
+
 .app-main {
   display: flex;
   flex: 1;

@@ -224,17 +224,118 @@ export function templateHsvToRgb(
 export function templateLedOutput(
   colourArrayVar: string,
   fadeAmount: number,
+  dualStripMode: number = 0,
+  colour2Var: string = '',
 ): string {
-  return [
+  const lines = [
     `    // Centre-origin output with trail persistence`,
     `    const uint8_t fadeScale = ${Math.max(0, 255 - fadeAmount)};`,
     `    for (uint16_t i = 0; i < ctx.ledCount; i++) {`,
     `        ctx.leds[i].nscale8(fadeScale);`,
     `    }`,
-    `    for (int dist = 0; dist < kHalfStrip; dist++) {`,
-    `        SET_CENTER_PAIR(ctx, dist, ${colourArrayVar}[dist]);`,
+  ];
+
+  if (dualStripMode === 1 && colour2Var) {
+    // Independent dual-strip mode
+    lines.push(
+      `    // Strip 1: centre-origin from colour input`,
+      `    for (int dist = 0; dist < kHalfStrip; dist++) {`,
+      `        const uint16_t left = 79 - dist;`,
+      `        const uint16_t right = 80 + dist;`,
+      `        if (left < kHalfStrip) ctx.leds[left] = ${colourArrayVar}[dist];`,
+      `        if (right < kHalfStrip) ctx.leds[right] = ${colourArrayVar}[dist];`,
+      `    }`,
+      `    // Strip 2: independent centre-origin from colour2 input`,
+      `    for (int dist = 0; dist < kHalfStrip; dist++) {`,
+      `        const uint16_t left2 = 239 - dist;`,
+      `        const uint16_t right2 = 240 + dist;`,
+      `        if (left2 >= kHalfStrip && left2 < ctx.ledCount) ctx.leds[left2] = ${colour2Var}[dist];`,
+      `        if (right2 >= kHalfStrip && right2 < ctx.ledCount) ctx.leds[right2] = ${colour2Var}[dist];`,
+      `    }`,
+    );
+  } else {
+    // Locked mode: both strips identical via SET_CENTER_PAIR
+    lines.push(
+      `    for (int dist = 0; dist < kHalfStrip; dist++) {`,
+      `        SET_CENTER_PAIR(ctx, dist, ${colourArrayVar}[dist]);`,
+      `    }`,
+    );
+  }
+
+  return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// Subpixel renderer output node
+// ---------------------------------------------------------------------------
+
+export function templateSubpixelRenderer(
+  colourArrayVar: string,
+  fadeAmount: number,
+  resolution: number,
+  dualStripMode: number = 0,
+  colour2Var: string = '',
+): string {
+  const interpBlock = (srcVar: string, pixelVar: string): string[] => [
+    `        if (spResolution <= 1.0f) {`,
+    `            ${pixelVar} = ${srcVar}[dist];`,
+    `        } else {`,
+    `            const float subpixelShift = (spResolution - 1.0f) / spResolution;`,
+    `            const float srcPos = static_cast<float>(dist);`,
+    `            const float fractionalPos = srcPos + sinf(srcPos * M_PI / kHalfStrip * spResolution) * subpixelShift;`,
+    `            const float clampedPos = fminf(static_cast<float>(kHalfStrip - 1), fmaxf(0.0f, fractionalPos));`,
+    `            const int idx0 = static_cast<int>(clampedPos);`,
+    `            const int idx1 = min(idx0 + 1, kHalfStrip - 1);`,
+    `            const float frac = clampedPos - static_cast<float>(idx0);`,
+    `            ${pixelVar}.r = static_cast<uint8_t>(${srcVar}[idx0].r + (${srcVar}[idx1].r - ${srcVar}[idx0].r) * frac);`,
+    `            ${pixelVar}.g = static_cast<uint8_t>(${srcVar}[idx0].g + (${srcVar}[idx1].g - ${srcVar}[idx0].g) * frac);`,
+    `            ${pixelVar}.b = static_cast<uint8_t>(${srcVar}[idx0].b + (${srcVar}[idx1].b - ${srcVar}[idx0].b) * frac);`,
+    `        }`,
+  ];
+
+  const lines = [
+    `    // Subpixel renderer — anti-aliased centre-origin output`,
+    `    const uint8_t spFadeScale = ${Math.max(0, 255 - fadeAmount)};`,
+    `    for (uint16_t i = 0; i < ctx.ledCount; i++) {`,
+    `        ctx.leds[i].nscale8(spFadeScale);`,
     `    }`,
-  ].join('\n');
+    `    const float spResolution = ${resolution.toFixed(1)}f;`,
+  ];
+
+  if (dualStripMode === 1 && colour2Var) {
+    // Independent mode: strip 1 and strip 2 rendered separately
+    lines.push(
+      `    // Strip 1: subpixel-interpolated centre-origin`,
+      `    for (int dist = 0; dist < kHalfStrip; dist++) {`,
+      `        CRGB pixel;`,
+      ...interpBlock(colourArrayVar, 'pixel'),
+      `        const uint16_t left = 79 - dist;`,
+      `        const uint16_t right = 80 + dist;`,
+      `        if (left < kHalfStrip) ctx.leds[left] = pixel;`,
+      `        if (right < kHalfStrip) ctx.leds[right] = pixel;`,
+      `    }`,
+      `    // Strip 2: independent subpixel-interpolated centre-origin`,
+      `    for (int dist = 0; dist < kHalfStrip; dist++) {`,
+      `        CRGB pixel2;`,
+      ...interpBlock(colour2Var, 'pixel2'),
+      `        const uint16_t left2 = 239 - dist;`,
+      `        const uint16_t right2 = 240 + dist;`,
+      `        if (left2 >= kHalfStrip && left2 < ctx.ledCount) ctx.leds[left2] = pixel2;`,
+      `        if (right2 >= kHalfStrip && right2 < ctx.ledCount) ctx.leds[right2] = pixel2;`,
+      `    }`,
+    );
+  } else {
+    // Locked mode: both strips via SET_CENTER_PAIR
+    lines.push(
+      `    for (int dist = 0; dist < kHalfStrip; dist++) {`,
+      `        CRGB pixel;`,
+      ...interpBlock(colourArrayVar, 'pixel'),
+      `        SET_CENTER_PAIR(ctx, dist, pixel);`,
+      `    }`,
+    );
+  }
+
+  return lines.join('\n');
 }
 
 // ---------------------------------------------------------------------------

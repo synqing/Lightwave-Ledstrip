@@ -3,6 +3,7 @@
  * copy-to-clipboard and download functionality.
  *
  * Regenerates on every call to refresh() (driven by graph changes).
+ * Passes zone-aware flag from the engine to the code generator.
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -33,7 +34,7 @@ export function CodeExport({ engine, generation }: CodeExportProps) {
   // Regenerate code when graph changes or effect name changes
   useEffect(() => {
     try {
-      const generated = generateCpp(engine, effectName);
+      const generated = generateCpp(engine, effectName, engine.zoneAware);
       setCode(generated);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -81,6 +82,9 @@ export function CodeExport({ engine, generation }: CodeExportProps) {
     <div className="code-export-panel">
       <div className="code-export-header">
         <h3 className="code-export-title">C++ Export</h3>
+        {engine.zoneAware && (
+          <span className="code-export-zone-badge">Zone-Aware</span>
+        )}
       </div>
 
       <div className="code-export-name-row">

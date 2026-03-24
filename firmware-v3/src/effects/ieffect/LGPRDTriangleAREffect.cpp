@@ -1,10 +1,13 @@
 /**
  * @file LGPRDTriangleAREffect.cpp
- * @brief LGP Reaction Diffusion Triangle (5-Layer Audio-Reactive)
+ * @brief LGP Reaction Diffusion Triangle (5-Layer AR) -- REWRITTEN
  *
- * Gray-Scott reaction-diffusion system with full 5-layer AR composition.
- * Base maths from LGPReactionDiffusionTriangleEffect, restructured into
- * explicit bed/structure/impact/tonal/memory layers.
+ * Gray-Scott reaction-diffusion system with direct audio-reactive composition.
+ * Base maths from LGPReactionDiffusionTriangleEffect preserved exactly.
+ *
+ * Divergence fixes: Direct ControlBus reads, single-stage smoothing (50ms),
+ * asymmetric max follower (58ms/500ms, floor 0.04), no brightness floors,
+ * beatStrength() continuous, squared brightness for punch.
  *
  * Centre-origin compliant. Dual-strip locked.
  */
@@ -22,8 +25,33 @@ namespace effects {
 namespace ieffect {
 
 // =========================================================================
+// Constants
+// =========================================================================
+
+static constexpr float kTwoPi = 6.28318530717958647692f;
+static constexpr float kPi    = 3.14159265358979323846f;
+static constexpr float kBassTau    = 0.050f;
+static constexpr float kTrebleTau  = 0.040f;
+static constexpr float kChromaTau  = 0.300f;
+static constexpr float kFollowerAttackTau = 0.058f;
+static constexpr float kFollowerDecayTau  = 0.500f;
+static constexpr float kFollowerFloor     = 0.04f;
+static constexpr float kImpactDecayTau = 0.180f;
+
+// =========================================================================
 // Local helpers
 // =========================================================================
+
+static inline float clamp01(float x) {
+    if (x < 0.0f) return 0.0f;
+    if (x > 1.0f) return 1.0f;
+    return x;
+}
+static inline float clampf(float x, float lo, float hi) {
+    if (x < lo) return lo;
+    if (x > hi) return hi;
+    return x;
+}
 
 static inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRGB& c) {
     ctx.leds[i] = c;
@@ -31,41 +59,24 @@ static inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRG
     if (j < (int)ctx.ledCount) ctx.leds[j] = c;
 }
 
-static inline uint8_t luminanceToBr(float wave01, float master) {
-    const float base = 0.06f;
-    float out = clamp01(base + (1.0f - base) * clamp01(wave01)) * master;
-    return static_cast<uint8_t>(255.0f * out);
-}
-
 // =========================================================================
 // Construction / init / cleanup
 // =========================================================================
 
 LGPRDTriangleAREffect::LGPRDTriangleAREffect()
-    : m_bed(0.3f)
-    , m_structure(0.5f)
+    : m_ps(nullptr)
+    , m_bass(0.0f), m_treble(0.0f), m_chromaAngle(0.0f)
+    , m_bassMax(0.15f), m_trebleMax(0.15f)
     , m_impact(0.0f)
-    , m_memory(0.0f)
-    , m_F(0.0380f)
-    , m_K(0.0630f)
-    , m_meltK(0.0018f)
+    , m_F(0.0380f), m_K(0.0630f), m_meltK(0.0018f)
 {
 }
 
 bool LGPRDTriangleAREffect::init(plugins::EffectContext& ctx) {
-    m_controls.resetDefaults();
-    m_ar = lowrisk_ar::ArRuntimeState{};
-    m_ar.tonalHue = static_cast<float>(ctx.gHue);
-    m_ar.modeSmooth = 2.0f;
-
-    m_bed         = 0.3f;
-    m_structure   = 0.5f;
-    m_impact      = 0.0f;
-    m_memory      = 0.0f;
-
-    m_F     = 0.0380f;
-    m_K     = 0.0630f;
-    m_meltK = 0.0018f;
+    m_bass = 0.0f; m_treble = 0.0f; m_chromaAngle = 0.0f;
+    m_bassMax = 0.15f; m_trebleMax = 0.15f;
+    m_impact = 0.0f;
+    m_F = 0.0380f; m_K = 0.0630f; m_meltK = 0.0018f;
 
     // Allocate large buffers in PSRAM
     if (!m_ps) {
@@ -96,67 +107,86 @@ bool LGPRDTriangleAREffect::init(plugins::EffectContext& ctx) {
 }
 
 // =========================================================================
-// render() — 5-Layer composition
+// render() -- direct audio-reactive composition
 // =========================================================================
 
 void LGPRDTriangleAREffect::render(plugins::EffectContext& ctx) {
     if (!m_ps) return;
 
-    // --- Timing ---
-    const float dtSignal = AudioReactivePolicy::signalDt(ctx);
-    const float dtVisual = AudioReactivePolicy::visualDt(ctx);
+    const float dt = ctx.getSafeRawDeltaSeconds();
+    const float dtVis = ctx.getSafeDeltaSeconds();
     const float speedNorm = ctx.speed / 50.0f;
 
-    // --- Signals (shared infrastructure handles presence gate + fallback) ---
-    const lowrisk_ar::ArSignalSnapshot sig =
-        lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);
-    const lowrisk_ar::ArModulationProfile mod =
-        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);
-    m_ar.tonalHue = mod.baseHue;
+    // STEP 1: Direct ControlBus reads
+    const float rawBass = ctx.audio.available ? ctx.audio.bass() : 0.0f;
+    const float rawTreble = ctx.audio.available ? ctx.audio.treble() : 0.0f;
+    const float beatStr = ctx.audio.available ? ctx.audio.beatStrength() : 0.0f;
+    const float silScale = ctx.audio.available ? ctx.audio.silentScale() : 0.0f;
+    const float* chroma = ctx.audio.available ? ctx.audio.chroma() : nullptr;
 
-    // =================================================================
-    // LAYER UPDATES
-    // =================================================================
+    // STEP 2: Single-stage smoothing
+    m_bass += (rawBass - m_bass) * (1.0f - expf(-dt / kBassTau));
+    m_treble += (rawTreble - m_treble) * (1.0f - expf(-dt / kTrebleTau));
 
-    // Bed: slow RMS-driven atmosphere (tau 0.45s)
-    m_bed = lowrisk_ar::smoothTo(m_bed,
-        0.25f + 0.75f * sig.rms, dtSignal, 0.45f);
+    // Circular chroma EMA
+    if (chroma) {
+        float sx = 0.0f, sy = 0.0f;
+        for (int i = 0; i < 12; i++) {
+            float angle = static_cast<float>(i) * (kTwoPi / 12.0f);
+            sx += chroma[i] * cosf(angle);
+            sy += chroma[i] * sinf(angle);
+        }
+        if (sx * sx + sy * sy > 0.0001f) {
+            float target = atan2f(sy, sx);
+            if (target < 0.0f) target += kTwoPi;
+            float delta = target - m_chromaAngle;
+            while (delta > kPi) delta -= kTwoPi;
+            while (delta < -kPi) delta += kTwoPi;
+            m_chromaAngle += delta * (1.0f - expf(-dt / kChromaTau));
+            if (m_chromaAngle < 0.0f) m_chromaAngle += kTwoPi;
+            if (m_chromaAngle >= kTwoPi) m_chromaAngle -= kTwoPi;
+        }
+    }
 
-    // Structure: F/K/meltK modulation from bass + mid + flux (tau 0.18s)
-    const float structTarget = clamp01(
-        0.30f + 0.35f * sig.bass + 0.25f * sig.mid + 0.10f * sig.flux);
-    m_structure = lowrisk_ar::smoothTo(m_structure, structTarget, dtSignal, 0.18f);
+    // STEP 3: Max followers
+    {
+        float aA = 1.0f - expf(-dt / kFollowerAttackTau);
+        float dA = 1.0f - expf(-dt / kFollowerDecayTau);
+        if (m_bass > m_bassMax) m_bassMax += (m_bass - m_bassMax) * aA;
+        else m_bassMax += (m_bass - m_bassMax) * dA;
+        if (m_bassMax < kFollowerFloor) m_bassMax = kFollowerFloor;
 
-    // Impact: beat-triggered V-injection at centre (decay 0.20s)
-    if (sig.beatTick) m_impact = fmaxf(m_impact, 1.0f);
-    m_impact = lowrisk_ar::decay(m_impact, dtSignal, 0.20f);
+        if (m_treble > m_trebleMax) m_trebleMax += (m_treble - m_trebleMax) * aA;
+        else m_trebleMax += (m_treble - m_trebleMax) * dA;
+        if (m_trebleMax < kFollowerFloor) m_trebleMax = kFollowerFloor;
+    }
+    const float normBass = clamp01(m_bass / m_bassMax);
+    const float normTreble = clamp01(m_treble / m_trebleMax);
 
-    // Memory: accumulated glow (slow decay, fed by beat + flux)
-    m_memory = clamp01(
-        lowrisk_ar::decay(m_memory, dtSignal, 0.85f)
-        + 0.15f * m_impact + 0.08f * sig.flux);
-    lowrisk_ar::applyBedImpactMemoryMix(
-        m_controls,
-        static_cast<float>(ctx.rawTotalTimeMs),
-        m_bed,
-        m_impact,
-        m_memory);
+    // STEP 4: Impact (continuous beatStrength rise, exponential decay)
+    if (beatStr > m_impact) m_impact = beatStr;
+    m_impact *= expf(-dt / kImpactDecayTau);
+
+    // Beat modulation
+    const float beatMod = 0.3f + 0.7f * beatStr;
 
     // =================================================================
     // STRUCTURE LAYER MODULATES GRAY-SCOTT PARAMETERS
     // =================================================================
 
-    // F/K: structure layer pushes into different reaction regimes
-    m_F = lowrisk_ar::clampf(
-        0.0380f + 0.0080f * (m_structure - 0.5f),
+    // Use normBass + normTreble to drive F/K (replacing old structure layer)
+    const float structureProxy = clamp01(0.5f * normBass + 0.5f * normTreble);
+
+    m_F = clampf(
+        0.0380f + 0.0080f * (structureProxy - 0.5f),
         0.0300f, 0.0500f);
-    m_K = lowrisk_ar::clampf(
-        0.0630f + 0.0100f * (m_structure - 0.5f),
+    m_K = clampf(
+        0.0630f + 0.0100f * (structureProxy - 0.5f),
         0.0550f, 0.0750f);
 
-    // meltK: centre-glue strength modulated by structure
-    m_meltK = lowrisk_ar::clampf(
-        0.0018f + 0.0008f * m_structure,
+    // meltK: centre-glue strength modulated by bass energy
+    m_meltK = clampf(
+        0.0018f + 0.0008f * structureProxy,
         0.0010f, 0.0035f);
 
     // =================================================================
@@ -165,7 +195,7 @@ void LGPRDTriangleAREffect::render(plugins::EffectContext& ctx) {
 
     const float Du = 1.0f;
     const float Dv = 0.5f;
-    const float dt = lowrisk_ar::clampf((0.9f + 0.6f * speedNorm) * mod.motionRate, 0.6f, 2.2f);
+    const float rdDt = clampf((0.9f + 0.6f * speedNorm) * (0.7f + 0.6f * normBass), 0.6f, 2.2f);
     const int iters = (speedNorm > 0.55f) ? 2 : 1;
 
     for (int iter = 0; iter < iters; iter++) {
@@ -180,8 +210,8 @@ void LGPRDTriangleAREffect::render(plugins::EffectContext& ctx) {
             const float v = m_ps->v[i];
             const float uvv = u * v * v;
 
-            m_ps->u2[i] = u + (Du * lapU - uvv + m_F * (1.0f - u)) * dt;
-            m_ps->v2[i] = v + (Dv * lapV + uvv - (m_K + m_F) * v) * dt;
+            m_ps->u2[i] = u + (Du * lapU - uvv + m_F * (1.0f - u)) * rdDt;
+            m_ps->v2[i] = v + (Dv * lapV + uvv - (m_K + m_F) * v) * rdDt;
 
             m_ps->u2[i] = clamp01(m_ps->u2[i]);
             m_ps->v2[i] = clamp01(m_ps->v2[i]);
@@ -209,45 +239,42 @@ void LGPRDTriangleAREffect::render(plugins::EffectContext& ctx) {
     }
 
     // =================================================================
-    // PER-PIXEL RENDER: 5-LAYER COMPOSITION
+    // PER-PIXEL RENDER
     // =================================================================
 
     const float mid = (STRIP_LENGTH - 1) * 0.5f;
-    const float master = (ctx.brightness / 255.0f)
-                         * clamp01(m_ar.audioPresence) * mod.brightnessScale;
-    const float bedBright = 0.25f + 0.75f * m_bed;
+
+    // Hue from chroma
+    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle * (255.0f / kTwoPi)) + ctx.gHue;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         const float x = static_cast<float>(i);
-        const float dist = static_cast<float>(centerPairDistance(static_cast<uint16_t>(i)));
-
         const float dmid = x - mid;
         const float melt = expf(-(dmid * dmid) * m_meltK);
 
         const float v = m_ps->v[i];
 
-        // Bed × structure (V concentration × centre-glue)
+        // Geometry: V concentration x centre-glue
         float structuredV = v * melt;
 
         // Impact: additive spike at centre
         const float impactDist = fabsf(dmid) / mid;
         const float impactAdd = m_impact * (1.0f - impactDist) * 0.25f;
 
-        // Memory: gentle additive glow
-        const float memoryAdd = m_memory * (0.4f + 0.6f * v) * 0.15f;
+        // Compose: geometry * normBass * silScale * beatMod
+        float brightness = (structuredV * normBass + impactAdd) * beatMod * silScale;
 
-        // Compose: bed × (v × melt) + impact + memory
-        float brightness = bedBright * (0.15f * melt + 0.85f * structuredV)
-                         + impactAdd + memoryAdd;
-        brightness = clamp01(brightness);
+        // Squared for punch
+        brightness *= brightness;
 
-        const uint8_t br = luminanceToBr(brightness, master);
+        uint8_t val = static_cast<uint8_t>(clamp01(brightness) * 255.0f);
+        val = scale8(val, ctx.brightness);
 
-        // Tonal hue: chord-driven anchor + spatial offset + V modulation
-        const uint8_t hue = static_cast<uint8_t>(
-            m_ar.tonalHue + dist * 0.6f + v * 180.0f + sig.harmonic * 15.0f);
+        // Tonal hue: chroma anchor + spatial offset + V modulation
+        const float dist = static_cast<float>(centerPairDistance(static_cast<uint16_t>(i)));
+        uint8_t hue = baseHue + static_cast<uint8_t>(dist * 0.6f + v * 180.0f);
 
-        writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));
+        writeDualLocked(ctx, i, ctx.palette.getColor(hue, val));
     }
 
     lightwaveos::effects::cinema::apply(ctx, speedNorm);
@@ -264,28 +291,17 @@ void LGPRDTriangleAREffect::cleanup() {
 const plugins::EffectMetadata& LGPRDTriangleAREffect::getMetadata() const {
     static plugins::EffectMetadata meta{
         "LGP RD Triangle (5L-AR)",
-        "Reaction-diffusion with 5-layer audio-reactive composition",
+        "Reaction-diffusion with direct audio-reactive composition",
         plugins::EffectCategory::QUANTUM,
         1
     };
     return meta;
 }
 
-uint8_t LGPRDTriangleAREffect::getParameterCount() const {
-    return lowrisk_ar::Ar16Controls::parameterCount();
-}
-
-const plugins::EffectParameter* LGPRDTriangleAREffect::getParameter(uint8_t index) const {
-    return lowrisk_ar::Ar16Controls::parameter(index);
-}
-
-bool LGPRDTriangleAREffect::setParameter(const char* name, float value) {
-    return m_controls.set(name, value);
-}
-
-float LGPRDTriangleAREffect::getParameter(const char* name) const {
-    return m_controls.get(name);
-}
+uint8_t LGPRDTriangleAREffect::getParameterCount() const { return 0; }
+const plugins::EffectParameter* LGPRDTriangleAREffect::getParameter(uint8_t) const { return nullptr; }
+bool LGPRDTriangleAREffect::setParameter(const char*, float) { return false; }
+float LGPRDTriangleAREffect::getParameter(const char*) const { return 0.0f; }
 
 } // namespace ieffect
 } // namespace effects

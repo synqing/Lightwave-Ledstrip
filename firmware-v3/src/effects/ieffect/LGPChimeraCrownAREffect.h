@@ -1,27 +1,14 @@
 /**
  * @file LGPChimeraCrownAREffect.h
- * @brief Chimera Crown (5-Layer Audio-Reactive)
+ * @brief Chimera Crown (5-Layer AR) — REWRITTEN
  *
  * Effect ID: 0x1C0F (EID_LGP_CHIMERA_CROWN_AR)
- * Family: FIVE_LAYER_AR
- * Category: QUANTUM
- * Tags: CENTER_ORIGIN | DUAL_STRIP | PHYSICS | AUDIO_REACTIVE
- *
- * 5-layer composition model (NOT flat lerp):
- *   Bed       - RMS-driven crown brightness base (tau ~0.45s)
- *   Structure - coupling K + window W from bass + flux (tau ~0.15s)
- *   Impact    - beat-triggered crown spike (decay ~0.22s)
- *   Tonal     - chord-driven hue anchor
- *   Memory    - sync persistence accumulator (decay ~0.90s)
- *
- * Composition: brightness = bed * (crown + grain) + impact + memory
+ * Direct ControlBus reads, single-stage smoothing, max follower normalisation.
  *
  * Kuramoto oscillator physics:
  *   theta[160] — phase per LED
  *   omega[160] — intrinsic frequency (heterogeneity)
  *   Rlocal[160] — local order parameter (windowed coherence)
- *
- * Crown = smoothstep(Rlocal), Bed = sin(theta), Grain = hash-based texture
  */
 
 #pragma once
@@ -29,7 +16,6 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../../config/effect_ids.h"
-#include "AudioReactiveLowRiskPackHelpers.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -61,15 +47,19 @@ private:
     };
 
     ChimeraPsram* m_ps = nullptr;
-    lowrisk_ar::Ar16Controls m_controls;
-    lowrisk_ar::ArRuntimeState m_ar;
     float m_t = 0.0f;
 
-    // 5-Layer composition state
-    float m_bed         = 0.3f;
-    float m_structure   = 0.5f;
-    float m_impact      = 0.0f;
-    float m_memory      = 0.0f;
+    // Single-stage smoothed audio
+    float m_bass       = 0.0f;
+    float m_treble     = 0.0f;
+    float m_chromaAngle = 0.0f;
+
+    // Asymmetric max followers
+    float m_bassMax    = 0.15f;
+    float m_trebleMax  = 0.15f;
+
+    // Impact
+    float m_impact     = 0.0f;
 };
 
 } // namespace ieffect

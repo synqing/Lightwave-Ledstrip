@@ -1,23 +1,11 @@
 /**
  * @file LGPRule30CathedralAREffect.h
- * @brief Rule 30 Cathedral (5-Layer Audio-Reactive)
+ * @brief Rule 30 Cathedral (5-Layer AR) -- REWRITTEN
  *
  * Effect ID: 0x1C0D (EID_LGP_RULE30_CATHEDRAL_AR)
- * Family: FIVE_LAYER_AR
- * Category: QUANTUM
- * Tags: CENTER_ORIGIN | DUAL_STRIP | CELLULAR_AUTOMATON | AUDIO_REACTIVE
- *
- * 5-layer composition model (NOT flat lerp):
- *   Bed       - slow RMS-driven base brightness (tau ~0.40s)
- *   Structure - CA step rate from rhythmic + bass (tau ~0.12s)
- *   Impact    - beat-triggered CA reset/seed burst (decay ~0.22s)
- *   Tonal     - chord-driven hue anchor
- *   Memory    - textile persistence glow (tau ~0.70s)
- *
- * Composition: brightness = bed * (blur_wave * glue) + impact + memory
- *
+ * Direct ControlBus reads, single-stage smoothing, max follower normalisation.
+ * PSRAM-backed CA buffers: cells[160] + next[160].
  * Rule 30 CA: new = l ^ (c | r)
- * PSRAM storage: cells[160] + next[160]
  */
 
 #pragma once
@@ -25,7 +13,6 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../../config/effect_ids.h"
-#include "AudioReactiveLowRiskPackHelpers.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -48,9 +35,6 @@ public:
     float getParameter(const char* name) const override;
 
 private:
-    lowrisk_ar::Ar16Controls m_controls;
-    lowrisk_ar::ArRuntimeState m_ar;
-
 #ifndef NATIVE_BUILD
     // PSRAM storage for CA state
     struct Rule30Psram {
@@ -63,11 +47,17 @@ private:
     float m_t = 0.0f;
     float m_stepAccum = 0.0f;
 
-    // 5-Layer composition state
-    float m_bed       = 0.3f;
-    float m_structure = 0.5f;
-    float m_impact    = 0.0f;
-    float m_memory    = 0.0f;
+    // Single-stage smoothed audio
+    float m_bass       = 0.0f;
+    float m_treble     = 0.0f;
+    float m_chromaAngle = 0.0f;
+
+    // Asymmetric max followers
+    float m_bassMax    = 0.15f;
+    float m_trebleMax  = 0.15f;
+
+    // Impact
+    float m_impact     = 0.0f;
 
     void seedCA();
     void stepCA();

@@ -1,23 +1,12 @@
 /**
  * @file LGPLangtonHighwayAREffect.h
- * @brief Langton Highway (5-Layer Audio-Reactive)
+ * @brief Langton Highway (5-Layer AR) — REWRITTEN
  *
  * Effect ID: 0x1C0E (EID_LGP_LANGTON_HIGHWAY_AR)
- * Family: FIVE_LAYER_AR
- * Category: QUANTUM
- * Tags: CENTER_ORIGIN | DUAL_STRIP | CELLULAR_AUTOMATON | AUDIO_REACTIVE
- *
- * 5-layer composition model (NOT flat lerp):
- *   Bed       - slow RMS-driven atmosphere (tau ~0.45s)
- *   Structure - ant step rate from rhythmic+rms (tau ~0.10s)
- *   Impact    - beat-triggered ant spark amplification (decay ~0.20s)
- *   Tonal     - chord-driven highway hue
- *   Memory    - highway persistence glow accumulator (decay ~0.85s)
- *
- * Composition: brightness = bed * highwayField + antSpark * impact + memory
+ * Direct ControlBus reads, single-stage smoothing, max follower normalisation.
  *
  * Langton's ant on 64x64 grid, projected to 1D via drifting diagonal slice.
- * Neighbourhood blur + centre glue. PSRAM-allocated grid.
+ * PSRAM-allocated grid.
  */
 
 #pragma once
@@ -25,7 +14,6 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../../config/effect_ids.h"
-#include "AudioReactiveLowRiskPackHelpers.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -48,15 +36,6 @@ public:
     float getParameter(const char* name) const override;
 
 private:
-    lowrisk_ar::Ar16Controls m_controls;
-    lowrisk_ar::ArRuntimeState m_ar;
-
-    // 5-Layer composition state
-    float m_bed         = 0.3f;
-    float m_structure   = 0.5f;
-    float m_impact      = 0.0f;
-    float m_memory      = 0.0f;
-
     // Langton's ant state
     static constexpr uint8_t W = 64;
     static constexpr uint8_t H = 64;
@@ -68,6 +47,18 @@ private:
 
     float m_antStepAccum = 0.0f;
     float m_sliceOffset = 0.0f;
+
+    // Single-stage smoothed audio
+    float m_bass       = 0.0f;
+    float m_treble     = 0.0f;
+    float m_chromaAngle = 0.0f;
+
+    // Asymmetric max followers
+    float m_bassMax    = 0.15f;
+    float m_trebleMax  = 0.15f;
+
+    // Impact
+    float m_impact     = 0.0f;
 
     void stepAnt();
     float sampleProjection(float offset);

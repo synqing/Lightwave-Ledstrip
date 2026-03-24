@@ -1,12 +1,15 @@
 /**
  * @file LGPCatastropheCausticsAREffect.cpp
- * @brief Catastrophe Caustics (5-Layer Audio-Reactive)
+ * @brief Catastrophe Caustics (5-Layer AR) -- REWRITTEN
  *
  * Ray-envelope histogram with catastrophe optics. Lens thickness field h(x,t)
  * with 3 sinusoidal terms + centre bias. Rays deflect by dh/dx, land at X=x+z*a.
  * Histogram accumulation + decay. Cusp detection via Laplacian.
  *
- * Full 5-layer AR composition: bed, structure, impact, memory, tonal.
+ * Divergence fixes: Direct ControlBus reads, single-stage smoothing (50ms),
+ * asymmetric max follower (58ms/500ms, floor 0.04), no brightness floors,
+ * beatStrength() continuous, squared brightness for punch.
+ *
  * Centre-origin compliant. Dual-strip locked.
  */
 
@@ -25,25 +28,39 @@ namespace effects {
 namespace ieffect {
 
 // =========================================================================
+// Constants
+// =========================================================================
+
+static constexpr float kTwoPi = 6.28318530717958647692f;
+static constexpr float kPi    = 3.14159265358979323846f;
+static constexpr float kInv160 = 1.0f / 160.0f;
+static constexpr float kBassTau    = 0.050f;
+static constexpr float kTrebleTau  = 0.040f;
+static constexpr float kChromaTau  = 0.300f;
+static constexpr float kFollowerAttackTau = 0.058f;
+static constexpr float kFollowerDecayTau  = 0.500f;
+static constexpr float kFollowerFloor     = 0.04f;
+static constexpr float kImpactDecayTau = 0.180f;
+
+// =========================================================================
 // Local helpers
 // =========================================================================
 
-static constexpr float kTau = 6.28318530717958647692f;
-static constexpr float kInv160 = 1.0f / 160.0f;
-
-static inline float fract(float x) { return x - floorf(x); }
+static inline float clamp01(float x) {
+    if (x < 0.0f) return 0.0f;
+    if (x > 1.0f) return 1.0f;
+    return x;
+}
+static inline float clampf(float x, float lo, float hi) {
+    if (x < lo) return lo;
+    if (x > hi) return hi;
+    return x;
+}
 
 static inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRGB& c) {
     ctx.leds[i] = c;
     int j = i + STRIP_LENGTH;
     if (j < (int)ctx.ledCount) ctx.leds[j] = c;
-}
-
-// Filmic brightness mapping (base + soft-sat curve)
-static inline uint8_t waveToBr(float wave01, float master) {
-    const float base = 0.04f;
-    float out = lowrisk_ar::clamp01f(base + (1.0f - base) * lowrisk_ar::clamp01f(wave01)) * master;
-    return static_cast<uint8_t>(255.0f * out);
 }
 
 // =========================================================================
@@ -52,10 +69,9 @@ static inline uint8_t waveToBr(float wave01, float master) {
 
 LGPCatastropheCausticsAREffect::LGPCatastropheCausticsAREffect()
     : m_t(0.0f)
-    , m_bed(0.3f)
-    , m_structure(0.5f)
+    , m_bass(0.0f), m_treble(0.0f), m_chromaAngle(0.0f)
+    , m_bassMax(0.15f), m_trebleMax(0.15f)
     , m_impact(0.0f)
-    , m_memory(0.0f)
 #ifdef NATIVE_BUILD
     , m_I{}
 #endif
@@ -83,15 +99,10 @@ bool LGPCatastropheCausticsAREffect::init(plugins::EffectContext& ctx) {
     for (int i = 0; i < 160; i++) m_I[i] = 0.0f;
 #endif
 
-    m_controls.resetDefaults();
-    m_ar = lowrisk_ar::ArRuntimeState{};
-    m_ar.tonalHue = static_cast<float>(ctx.gHue);
-    m_ar.modeSmooth = 2.0f;
-    m_t           = 0.0f;
-    m_bed         = 0.3f;
-    m_structure   = 0.5f;
-    m_impact      = 0.0f;
-    m_memory      = 0.0f;
+    m_t = 0.0f;
+    m_bass = 0.0f; m_treble = 0.0f; m_chromaAngle = 0.0f;
+    m_bassMax = 0.15f; m_trebleMax = 0.15f;
+    m_impact = 0.0f;
     lightwaveos::effects::cinema::reset();
     return true;
 }
@@ -106,7 +117,7 @@ void LGPCatastropheCausticsAREffect::cleanup() {
 }
 
 // =========================================================================
-// render() — 5-Layer composition
+// render() -- direct audio-reactive composition
 // =========================================================================
 
 void LGPCatastropheCausticsAREffect::render(plugins::EffectContext& ctx) {
@@ -117,53 +128,70 @@ void LGPCatastropheCausticsAREffect::render(plugins::EffectContext& ctx) {
     float* I = m_I;
 #endif
 
-    // --- Timing ---
-    const float dtSignal = AudioReactivePolicy::signalDt(ctx);
-    const float dtVisual = AudioReactivePolicy::visualDt(ctx);
+    const float dt = ctx.getSafeRawDeltaSeconds();
+    const float dtVis = ctx.getSafeDeltaSeconds();
     const float speedNorm = ctx.speed / 50.0f;
 
-    // --- Signals (shared infrastructure handles presence gate + fallback) ---
-    const lowrisk_ar::ArSignalSnapshot sig =
-        lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);
-    const lowrisk_ar::ArModulationProfile mod =
-        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);
-    m_ar.tonalHue = mod.baseHue;
+    // STEP 1: Direct ControlBus reads
+    const float rawBass = ctx.audio.available ? ctx.audio.bass() : 0.0f;
+    const float rawTreble = ctx.audio.available ? ctx.audio.treble() : 0.0f;
+    const float beatStr = ctx.audio.available ? ctx.audio.beatStrength() : 0.0f;
+    const float silScale = ctx.audio.available ? ctx.audio.silentScale() : 0.0f;
+    const float* chroma = ctx.audio.available ? ctx.audio.chroma() : nullptr;
 
-    // =================================================================
-    // LAYER UPDATES
-    // =================================================================
+    // STEP 2: Single-stage smoothing
+    m_bass += (rawBass - m_bass) * (1.0f - expf(-dt / kBassTau));
+    m_treble += (rawTreble - m_treble) * (1.0f - expf(-dt / kTrebleTau));
 
-    // Bed: RMS-driven caustic brightness (tau 0.42s)
-    m_bed = lowrisk_ar::smoothTo(m_bed,
-        0.20f + 0.80f * sig.rms, dtSignal, 0.42f);
+    // Circular chroma EMA
+    if (chroma) {
+        float sx = 0.0f, sy = 0.0f;
+        for (int i = 0; i < 12; i++) {
+            float angle = static_cast<float>(i) * (kTwoPi / 12.0f);
+            sx += chroma[i] * cosf(angle);
+            sy += chroma[i] * sinf(angle);
+        }
+        if (sx * sx + sy * sy > 0.0001f) {
+            float target = atan2f(sy, sx);
+            if (target < 0.0f) target += kTwoPi;
+            float delta = target - m_chromaAngle;
+            while (delta > kPi) delta -= kTwoPi;
+            while (delta < -kPi) delta += kTwoPi;
+            m_chromaAngle += delta * (1.0f - expf(-dt / kChromaTau));
+            if (m_chromaAngle < 0.0f) m_chromaAngle += kTwoPi;
+            if (m_chromaAngle >= kTwoPi) m_chromaAngle -= kTwoPi;
+        }
+    }
 
-    // Structure: focus z + strength from mid+flux (tau 0.14s)
-    const float structTarget = lowrisk_ar::clamp01f(
-        0.30f + 0.40f * sig.mid + 0.20f * sig.flux + 0.10f * sig.rhythmic);
-    m_structure = lowrisk_ar::smoothTo(m_structure, structTarget, dtSignal, 0.14f);
+    // STEP 3: Max followers
+    {
+        float aA = 1.0f - expf(-dt / kFollowerAttackTau);
+        float dA = 1.0f - expf(-dt / kFollowerDecayTau);
+        if (m_bass > m_bassMax) m_bassMax += (m_bass - m_bassMax) * aA;
+        else m_bassMax += (m_bass - m_bassMax) * dA;
+        if (m_bassMax < kFollowerFloor) m_bassMax = kFollowerFloor;
 
-    // Impact: beat-triggered burst (decay 0.20s)
-    if (sig.beatTick) m_impact = fmaxf(m_impact, 0.85f);
-    m_impact = lowrisk_ar::decay(m_impact, dtSignal, 0.20f);
+        if (m_treble > m_trebleMax) m_trebleMax += (m_treble - m_trebleMax) * aA;
+        else m_trebleMax += (m_treble - m_trebleMax) * dA;
+        if (m_trebleMax < kFollowerFloor) m_trebleMax = kFollowerFloor;
+    }
+    const float normBass = clamp01(m_bass / m_bassMax);
+    const float normTreble = clamp01(m_treble / m_trebleMax);
 
-    // Memory: caustic persistence (slow decay, fed by beat + flux)
-    m_memory = lowrisk_ar::clamp01f(
-        lowrisk_ar::decay(m_memory, dtSignal, 0.85f)
-        + 0.10f * m_impact + 0.08f * sig.flux);
-    lowrisk_ar::applyBedImpactMemoryMix(
-        m_controls,
-        static_cast<float>(ctx.rawTotalTimeMs),
-        m_bed,
-        m_impact,
-        m_memory);
+    // STEP 4: Impact (continuous beatStrength rise, exponential decay)
+    if (beatStr > m_impact) m_impact = beatStr;
+    m_impact *= expf(-dt / kImpactDecayTau);
+
+    // Beat modulation
+    const float beatMod = 0.3f + 0.7f * beatStr;
 
     // =================================================================
     // MOTION
     // =================================================================
 
-    const float tRate = (0.80f + 3.50f * speedNorm) * mod.motionRate
-                        * (0.60f + 0.40f * m_structure);
-    m_t += tRate * dtVisual;
+    const float tRate = (0.80f + 3.50f * speedNorm) * (0.7f + 0.6f * normBass)
+                        * (0.60f + 0.40f * normTreble);
+    m_t += tRate * dtVis;
 
     // =================================================================
     // CAUSTIC PHYSICS LAYER PARAMS
@@ -171,24 +199,24 @@ void LGPCatastropheCausticsAREffect::render(plugins::EffectContext& ctx) {
 
     const float mid = (STRIP_LENGTH - 1) * 0.5f;
 
-    // Focus depth z: structure modulates how sharply rays converge
-    const float focusZ = lowrisk_ar::clampf(
-        1.8f + 0.8f * m_structure - 0.4f * m_impact, 1.2f, 3.0f);
+    // Focus depth z: treble modulates convergence, impact defocuses
+    const float focusZ = clampf(
+        1.8f + 0.8f * normTreble - 0.4f * m_impact, 1.2f, 3.0f);
 
     // Lens wave amplitudes (3 sinusoidal terms)
-    const float A1 = 0.18f * (0.80f + 0.20f * m_structure);
-    const float A2 = 0.12f * (0.70f + 0.30f * sig.flux);
-    const float A3 = 0.09f * (0.75f + 0.25f * sig.harmonic);
+    const float A1 = 0.18f * (0.80f + 0.20f * normTreble);
+    const float A2 = 0.12f * (0.70f + 0.30f * normBass);
+    const float A3 = 0.09f * (0.75f + 0.25f * normTreble);
 
     // Centre bias: pulls rays towards centre LED
-    const float centreBias = 0.22f * (0.80f + 0.20f * m_bed);
+    const float centreBias = 0.22f * (0.80f + 0.20f * normBass);
 
     // =================================================================
     // RAY-ENVELOPE HISTOGRAM
     // =================================================================
 
     // Decay intensity accumulator (frame-rate independent)
-    const float decayRate = expf(-dtVisual * 2.2f);
+    const float decayRate = expf(-dtVis * 2.2f);
     for (int i = 0; i < 160; i++) {
         I[i] *= decayRate;
     }
@@ -200,9 +228,9 @@ void LGPCatastropheCausticsAREffect::render(plugins::EffectContext& ctx) {
         const float xN = x * kInv160;  // Normalised position [-0.5, 0.5]
 
         // Lens thickness: 3 travelling waves + centre bias
-        const float h = A1 * sinf(kTau * (xN * 2.5f - m_t * 0.30f))
-                      + A2 * sinf(kTau * (xN * 4.0f + m_t * 0.18f))
-                      + A3 * sinf(kTau * (xN * 6.5f - m_t * 0.25f))
+        const float h = A1 * sinf(kTwoPi * (xN * 2.5f - m_t * 0.30f))
+                      + A2 * sinf(kTwoPi * (xN * 4.0f + m_t * 0.18f))
+                      + A3 * sinf(kTwoPi * (xN * 6.5f - m_t * 0.25f))
                       - centreBias * (xN * xN);
 
         // Lens thickness at offset position for gradient (central difference)
@@ -210,17 +238,17 @@ void LGPCatastropheCausticsAREffect::render(plugins::EffectContext& ctx) {
         const float xN_left  = (x - dx) * kInv160;
         const float xN_right = (x + dx) * kInv160;
 
-        const float h_left = A1 * sinf(kTau * (xN_left * 2.5f - m_t * 0.30f))
-                           + A2 * sinf(kTau * (xN_left * 4.0f + m_t * 0.18f))
-                           + A3 * sinf(kTau * (xN_left * 6.5f - m_t * 0.25f))
+        const float h_left = A1 * sinf(kTwoPi * (xN_left * 2.5f - m_t * 0.30f))
+                           + A2 * sinf(kTwoPi * (xN_left * 4.0f + m_t * 0.18f))
+                           + A3 * sinf(kTwoPi * (xN_left * 6.5f - m_t * 0.25f))
                            - centreBias * (xN_left * xN_left);
 
-        const float h_right = A1 * sinf(kTau * (xN_right * 2.5f - m_t * 0.30f))
-                            + A2 * sinf(kTau * (xN_right * 4.0f + m_t * 0.18f))
-                            + A3 * sinf(kTau * (xN_right * 6.5f - m_t * 0.25f))
+        const float h_right = A1 * sinf(kTwoPi * (xN_right * 2.5f - m_t * 0.30f))
+                            + A2 * sinf(kTwoPi * (xN_right * 4.0f + m_t * 0.18f))
+                            + A3 * sinf(kTwoPi * (xN_right * 6.5f - m_t * 0.25f))
                             - centreBias * (xN_right * xN_right);
 
-        // Gradient: dh/dx ≈ (h_right - h_left) / (2*dx)
+        // Gradient: dh/dx = (h_right - h_left) / (2*dx)
         const float dhdx = (h_right - h_left) / (2.0f * dx);
 
         // Ray deflection angle a = -dh/dx
@@ -246,11 +274,11 @@ void LGPCatastropheCausticsAREffect::render(plugins::EffectContext& ctx) {
     for (int i = 0; i < 160; i++) cusps[i] = 0.0f;
 
     for (int i = 1; i < 159; i++) {
-        // Laplacian: d²I/dx² ≈ I[i-1] - 2*I[i] + I[i+1]
+        // Laplacian: d^2I/dx^2 = I[i-1] - 2*I[i] + I[i+1]
         const float laplacian = I[i-1] - 2.0f * I[i] + I[i+1];
         // Positive laplacian = local concave (potential caustic cusp)
         if (laplacian > 0.0f) {
-            cusps[i] = lowrisk_ar::clamp01f(laplacian * 0.35f);
+            cusps[i] = clamp01(laplacian * 0.35f);
         }
     }
 
@@ -258,13 +286,12 @@ void LGPCatastropheCausticsAREffect::render(plugins::EffectContext& ctx) {
     // PER-PIXEL RENDER
     // =================================================================
 
-    const float bedBright = 0.20f + 0.80f * m_bed;
-    const float master = (ctx.brightness / 255.0f)
-                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;
+    // Hue from chroma
+    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle * (255.0f / kTwoPi)) + ctx.gHue;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         // Caustic intensity (clamped, normalised)
-        float caustic = lowrisk_ar::clamp01f(I[i] * 0.20f);
+        float caustic = clamp01(I[i] * 0.20f);
 
         // Cusp intensity
         float cusp = cusps[i];
@@ -273,26 +300,25 @@ void LGPCatastropheCausticsAREffect::render(plugins::EffectContext& ctx) {
         const float dmid = static_cast<float>(i) - mid;
         const float glue = 0.30f + 0.70f * expf(-(dmid * dmid) * 0.0010f);
 
-        // Bed × (caustic + cusps)
+        // Geometry: (caustic + cusps) x glue
         float structuredCaustic = (caustic + 0.5f * cusp) * glue;
 
         // Impact: additive spike at cusps
         float impactAdd = m_impact * cusp * 0.40f;
 
-        // Memory: gentle additive glow
-        float memoryAdd = m_memory * (0.4f + 0.6f * caustic) * 0.15f;
+        // Compose: geometry * normBass * silScale * beatMod
+        float brightness = (structuredCaustic * normBass + impactAdd) * beatMod * silScale;
 
-        // Compose: bed × structure + impact + memory
-        float brightness = bedBright * structuredCaustic + impactAdd + memoryAdd;
-        brightness = lowrisk_ar::clamp01f(brightness);
+        // Squared for punch
+        brightness *= brightness;
 
-        const uint8_t br = waveToBr(brightness, master);
+        uint8_t val = static_cast<uint8_t>(clamp01(brightness) * 255.0f);
+        val = scale8(val, ctx.brightness);
 
-        // Tonal hue: chord-driven anchor + caustic offset
-        const uint8_t hue = static_cast<uint8_t>(
-            m_ar.tonalHue + caustic * 48.0f + cusp * 35.0f + sig.harmonic * 18.0f);
+        // Tonal hue: chroma anchor + caustic offset
+        uint8_t hue = baseHue + static_cast<uint8_t>(caustic * 48.0f + cusp * 35.0f);
 
-        writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));
+        writeDualLocked(ctx, i, ctx.palette.getColor(hue, val));
     }
 
     lightwaveos::effects::cinema::apply(ctx, speedNorm);
@@ -305,28 +331,17 @@ void LGPCatastropheCausticsAREffect::render(plugins::EffectContext& ctx) {
 const plugins::EffectMetadata& LGPCatastropheCausticsAREffect::getMetadata() const {
     static plugins::EffectMetadata meta{
         "LGP Catastrophe Caustics (5L-AR)",
-        "Ray-envelope caustics with 5-layer audio-reactive composition",
+        "Ray-envelope caustics with direct audio-reactive composition",
         plugins::EffectCategory::QUANTUM,
         1
     };
     return meta;
 }
 
-uint8_t LGPCatastropheCausticsAREffect::getParameterCount() const {
-    return lowrisk_ar::Ar16Controls::parameterCount();
-}
-
-const plugins::EffectParameter* LGPCatastropheCausticsAREffect::getParameter(uint8_t index) const {
-    return lowrisk_ar::Ar16Controls::parameter(index);
-}
-
-bool LGPCatastropheCausticsAREffect::setParameter(const char* name, float value) {
-    return m_controls.set(name, value);
-}
-
-float LGPCatastropheCausticsAREffect::getParameter(const char* name) const {
-    return m_controls.get(name);
-}
+uint8_t LGPCatastropheCausticsAREffect::getParameterCount() const { return 0; }
+const plugins::EffectParameter* LGPCatastropheCausticsAREffect::getParameter(uint8_t) const { return nullptr; }
+bool LGPCatastropheCausticsAREffect::setParameter(const char*, float) { return false; }
+float LGPCatastropheCausticsAREffect::getParameter(const char*) const { return 0.0f; }
 
 } // namespace ieffect
 } // namespace effects

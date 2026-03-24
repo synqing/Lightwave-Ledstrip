@@ -1,14 +1,13 @@
 /**
  * @file LGPLangtonHighwayAREffect.cpp
- * @brief Langton Highway (5-Layer Audio-Reactive)
+ * @brief Langton Highway (5-Layer AR) — REWRITTEN
  *
  * Langton's ant cellular automaton on 64x64 grid, projected to 1D via drifting
- * diagonal slice. Full 5-layer AR composition:
- *   Bed       - RMS brightness (tau 0.45s)
- *   Structure - step count from rhythmic+rms (tau 0.10s)
- *   Impact    - beat ant-spark amplification (decay 0.20s)
- *   Memory    - highway persistence (tau 0.85s)
- *   Tonal     - chord hue
+ * diagonal slice. Direct audio-reactive composition.
+ *
+ * Divergence fixes: Direct ControlBus reads, single-stage smoothing (50ms),
+ * asymmetric max follower (58ms/500ms, floor 0.04), no brightness floors,
+ * beatStrength() continuous, squared brightness for punch.
  *
  * Centre-origin compliant. Dual-strip locked. PSRAM grid allocation.
  */
@@ -28,8 +27,33 @@ namespace effects {
 namespace ieffect {
 
 // =========================================================================
+// Constants
+// =========================================================================
+
+static constexpr float kTwoPi = 6.28318530717958647692f;
+static constexpr float kPi    = 3.14159265358979323846f;
+static constexpr float kBassTau    = 0.050f;
+static constexpr float kTrebleTau  = 0.040f;
+static constexpr float kChromaTau  = 0.300f;
+static constexpr float kFollowerAttackTau = 0.058f;
+static constexpr float kFollowerDecayTau  = 0.500f;
+static constexpr float kFollowerFloor     = 0.04f;
+static constexpr float kImpactDecayTau = 0.180f;
+
+// =========================================================================
 // Local helpers
 // =========================================================================
+
+static inline float clamp01(float x) {
+    if (x < 0.0f) return 0.0f;
+    if (x > 1.0f) return 1.0f;
+    return x;
+}
+static inline float clampf(float x, float lo, float hi) {
+    if (x < lo) return lo;
+    if (x > hi) return hi;
+    return x;
+}
 
 static inline float fract(float x) { return x - floorf(x); }
 
@@ -39,27 +63,17 @@ static inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRG
     if (j < (int)ctx.ledCount) ctx.leds[j] = c;
 }
 
-static inline uint8_t luminanceToBr(float wave01, float master) {
-    const float base = 0.06f;
-    float out = lowrisk_ar::clamp01f(base + (1.0f - base) * lowrisk_ar::clamp01f(wave01)) * master;
-    return static_cast<uint8_t>(255.0f * out);
-}
-
 // =========================================================================
 // Construction / destruction
 // =========================================================================
 
 LGPLangtonHighwayAREffect::LGPLangtonHighwayAREffect()
-    : m_bed(0.3f)
-    , m_structure(0.5f)
+    : m_grid(nullptr)
+    , m_antX(32), m_antY(32), m_antDir(0)
+    , m_antStepAccum(0.0f), m_sliceOffset(0.0f)
+    , m_bass(0.0f), m_treble(0.0f), m_chromaAngle(0.0f)
+    , m_bassMax(0.15f), m_trebleMax(0.15f)
     , m_impact(0.0f)
-    , m_memory(0.0f)
-    , m_grid(nullptr)
-    , m_antX(32)
-    , m_antY(32)
-    , m_antDir(0)
-    , m_antStepAccum(0.0f)
-    , m_sliceOffset(0.0f)
 {
 }
 
@@ -72,15 +86,9 @@ LGPLangtonHighwayAREffect::~LGPLangtonHighwayAREffect() {
 // =========================================================================
 
 bool LGPLangtonHighwayAREffect::init(plugins::EffectContext& ctx) {
-    m_controls.resetDefaults();
-    m_ar = lowrisk_ar::ArRuntimeState{};
-    m_ar.tonalHue = static_cast<float>(ctx.gHue);
-    m_ar.modeSmooth = 2.0f;
-
-    m_bed         = 0.3f;
-    m_structure   = 0.5f;
-    m_impact      = 0.0f;
-    m_memory      = 0.0f;
+    m_bass = 0.0f; m_treble = 0.0f; m_chromaAngle = 0.0f;
+    m_bassMax = 0.15f; m_trebleMax = 0.15f;
+    m_impact = 0.0f;
 
     m_antX = 32;
     m_antY = 32;
@@ -117,7 +125,7 @@ void LGPLangtonHighwayAREffect::cleanup() {
 }
 
 // =========================================================================
-// Langton's ant step
+// Langton's ant step (PRESERVED EXACTLY)
 // =========================================================================
 
 void LGPLangtonHighwayAREffect::stepAnt() {
@@ -134,8 +142,8 @@ void LGPLangtonHighwayAREffect::stepAnt() {
     const uint16_t idx = m_antY * W + m_antX;
     const uint8_t cell = m_grid[idx];
 
-    // White → turn right, flip to black, move
-    // Black → turn left, flip to white, move
+    // White -> turn right, flip to black, move
+    // Black -> turn left, flip to white, move
     if (cell > 127) {
         m_antDir = (m_antDir + 1) & 3; // turn right
         m_grid[idx] = 0; // flip to black
@@ -154,7 +162,7 @@ void LGPLangtonHighwayAREffect::stepAnt() {
 }
 
 // =========================================================================
-// Drifting diagonal slice projection
+// Drifting diagonal slice projection (PRESERVED EXACTLY)
 // =========================================================================
 
 float LGPLangtonHighwayAREffect::sampleProjection(float offset) {
@@ -175,68 +183,86 @@ float LGPLangtonHighwayAREffect::sampleProjection(float offset) {
 }
 
 // =========================================================================
-// render() — 5-Layer composition
+// render() — direct audio-reactive composition
 // =========================================================================
 
 void LGPLangtonHighwayAREffect::render(plugins::EffectContext& ctx) {
     if (!m_grid) return;
 
-    // --- Timing ---
-    const float dtSignal = AudioReactivePolicy::signalDt(ctx);
-    const float dtVisual = AudioReactivePolicy::visualDt(ctx);
+    const float dt = ctx.getSafeRawDeltaSeconds();
+    const float dtVis = ctx.getSafeDeltaSeconds();
     const float speedNorm = ctx.speed / 50.0f;
 
-    // --- Signals (shared infrastructure handles presence gate + fallback) ---
-    const lowrisk_ar::ArSignalSnapshot sig =
-        lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);
-    const lowrisk_ar::ArModulationProfile mod =
-        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);
-    m_ar.tonalHue = mod.baseHue;
+    // STEP 1: Direct ControlBus reads
+    const float rawBass = ctx.audio.available ? ctx.audio.bass() : 0.0f;
+    const float rawTreble = ctx.audio.available ? ctx.audio.treble() : 0.0f;
+    const float beatStr = ctx.audio.available ? ctx.audio.beatStrength() : 0.0f;
+    const float silScale = ctx.audio.available ? ctx.audio.silentScale() : 0.0f;
+    const float* chroma = ctx.audio.available ? ctx.audio.chroma() : nullptr;
+
+    // STEP 2: Single-stage smoothing
+    m_bass += (rawBass - m_bass) * (1.0f - expf(-dt / kBassTau));
+    m_treble += (rawTreble - m_treble) * (1.0f - expf(-dt / kTrebleTau));
+
+    // Circular chroma EMA
+    if (chroma) {
+        float sx = 0.0f, sy = 0.0f;
+        for (int i = 0; i < 12; i++) {
+            float angle = static_cast<float>(i) * (kTwoPi / 12.0f);
+            sx += chroma[i] * cosf(angle);
+            sy += chroma[i] * sinf(angle);
+        }
+        if (sx * sx + sy * sy > 0.0001f) {
+            float target = atan2f(sy, sx);
+            if (target < 0.0f) target += kTwoPi;
+            float delta = target - m_chromaAngle;
+            while (delta > kPi) delta -= kTwoPi;
+            while (delta < -kPi) delta += kTwoPi;
+            m_chromaAngle += delta * (1.0f - expf(-dt / kChromaTau));
+            if (m_chromaAngle < 0.0f) m_chromaAngle += kTwoPi;
+            if (m_chromaAngle >= kTwoPi) m_chromaAngle -= kTwoPi;
+        }
+    }
+
+    // STEP 3: Max followers
+    {
+        float aA = 1.0f - expf(-dt / kFollowerAttackTau);
+        float dA = 1.0f - expf(-dt / kFollowerDecayTau);
+        if (m_bass > m_bassMax) m_bassMax += (m_bass - m_bassMax) * aA;
+        else m_bassMax += (m_bass - m_bassMax) * dA;
+        if (m_bassMax < kFollowerFloor) m_bassMax = kFollowerFloor;
+
+        if (m_treble > m_trebleMax) m_trebleMax += (m_treble - m_trebleMax) * aA;
+        else m_trebleMax += (m_treble - m_trebleMax) * dA;
+        if (m_trebleMax < kFollowerFloor) m_trebleMax = kFollowerFloor;
+    }
+    const float normBass = clamp01(m_bass / m_bassMax);
+    const float normTreble = clamp01(m_treble / m_trebleMax);
+
+    // STEP 4: Impact (continuous beatStrength rise, exponential decay)
+    if (beatStr > m_impact) m_impact = beatStr;
+    m_impact *= expf(-dt / kImpactDecayTau);
+
+    const float beatMod = 0.3f + 0.7f * beatStr;
 
     // =================================================================
-    // LAYER UPDATES
+    // ANT STEPPING (PRESERVED EXACTLY)
     // =================================================================
 
-    // Bed: slow atmosphere from RMS (tau 0.45s)
-    m_bed = lowrisk_ar::smoothTo(m_bed,
-        0.25f + 0.75f * sig.rms, dtSignal, 0.45f);
-
-    // Structure: step rate from rhythmic + rms (tau 0.10s)
-    const float structTarget = lowrisk_ar::clamp01f(
-        0.30f + 0.45f * sig.rhythmic + 0.25f * sig.rms);
-    m_structure = lowrisk_ar::smoothTo(m_structure, structTarget, dtSignal, 0.10f);
-
-    // Impact: beat-triggered ant spark (decay 0.20s)
-    if (sig.beatTick) m_impact = fmaxf(m_impact, 1.0f);
-    m_impact = lowrisk_ar::decay(m_impact, dtSignal, 0.20f);
-
-    // Memory: highway persistence (slow decay, fed by structure)
-    m_memory = lowrisk_ar::clamp01f(
-        lowrisk_ar::decay(m_memory, dtSignal, 0.85f)
-        + 0.08f * m_structure);
-    lowrisk_ar::applyBedImpactMemoryMix(
-        m_controls,
-        static_cast<float>(ctx.rawTotalTimeMs),
-        m_bed,
-        m_impact,
-        m_memory);
-
-    // =================================================================
-    // ANT STEPPING
-    // =================================================================
-
-    // Step count controlled by structure layer (0.5-8 steps/frame at speed 50)
-    const float stepsPerSec = (0.5f + 7.5f * m_structure) * speedNorm;
-    m_antStepAccum += stepsPerSec * dtVisual;
+    // Step count controlled by normalised audio (rhythmic drive from bass + treble)
+    const float rhythmicDrive = clamp01(0.30f + 0.45f * normBass + 0.25f * normTreble);
+    const float stepsPerSec = (0.5f + 7.5f * rhythmicDrive) * speedNorm;
+    m_antStepAccum += stepsPerSec * dtVis;
 
     while (m_antStepAccum >= 1.0f) {
         stepAnt();
         m_antStepAccum -= 1.0f;
     }
 
-    // Slice drift
-    const float driftRate = (0.15f + 0.35f * speedNorm) * mod.motionRate;
-    m_sliceOffset += driftRate * dtVisual;
+    // Slice drift — motionRate replaced with bass-driven rate
+    const float motionRate = 0.6f + 0.8f * normBass + 0.3f * m_impact;
+    const float driftRate = (0.15f + 0.35f * speedNorm) * motionRate;
+    m_sliceOffset += driftRate * dtVis;
     m_sliceOffset = fract(m_sliceOffset / static_cast<float>(H)) * static_cast<float>(H);
 
     // =================================================================
@@ -245,8 +271,9 @@ void LGPLangtonHighwayAREffect::render(plugins::EffectContext& ctx) {
 
     const float mid    = (STRIP_LENGTH - 1) * 0.5f;
     const float invMid = 1.0f / mid;
-    const float master = (ctx.brightness / 255.0f)
-                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;
+
+    // Hue from chroma
+    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle * (255.0f / kTwoPi)) + ctx.gHue;
 
     // Ant position in grid space
     const float antXf = static_cast<float>(m_antX);
@@ -265,7 +292,7 @@ void LGPLangtonHighwayAREffect::render(plugins::EffectContext& ctx) {
             float samplePos = gridPos + static_cast<float>(blur) * 1.5f;
             highway += sampleProjection(samplePos) * (blur == 0 ? 0.5f : 0.25f);
         }
-        highway = lowrisk_ar::clamp01f(highway);
+        highway = clamp01(highway);
 
         // Centre glue (stronger adhesion near origin)
         const float glue = 0.40f + 0.60f * expf(-(dmid * dmid) * 0.0018f);
@@ -276,26 +303,25 @@ void LGPLangtonHighwayAREffect::render(plugins::EffectContext& ctx) {
             (m_sliceOffset - antYf) * (m_sliceOffset - antYf));
         const float antSpark = expf(-antDist * 0.12f);
 
-        // Bed × highway field
-        float structuredField = m_bed * highway * glue;
+        // Geometry: highway field modulated by glue
+        float geometry = highway * glue;
 
-        // Impact × ant spark (additive burst)
+        // Impact x ant spark (additive burst)
         float impactAdd = m_impact * antSpark * 0.45f;
 
-        // Memory (gentle additive glow)
-        float memoryAdd = m_memory * (0.4f + 0.6f * highway) * 0.15f;
+        // Compose brightness: geometry x normBass x silScale x beatMod
+        float brightness = (geometry * normBass + impactAdd) * beatMod * silScale;
 
-        // Compose: bed × highway + impact + memory
-        float brightness = structuredField + impactAdd + memoryAdd;
-        brightness = lowrisk_ar::clamp01f(brightness);
+        // Squared for punch
+        brightness *= brightness;
 
-        const uint8_t br = luminanceToBr(brightness, master);
+        uint8_t val = static_cast<uint8_t>(clamp01(brightness) * 255.0f);
+        val = scale8(val, ctx.brightness);
 
         // Tonal hue: chord-driven + highway modulation
-        const uint8_t hue = static_cast<uint8_t>(
-            m_ar.tonalHue + highway * 40.0f + sig.harmonic * 15.0f);
+        uint8_t hue = baseHue + static_cast<uint8_t>(highway * 40.0f);
 
-        writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));
+        writeDualLocked(ctx, i, CHSV(hue, ctx.saturation, val));
     }
 
     lightwaveos::effects::cinema::apply(ctx, speedNorm);
@@ -308,28 +334,17 @@ void LGPLangtonHighwayAREffect::render(plugins::EffectContext& ctx) {
 const plugins::EffectMetadata& LGPLangtonHighwayAREffect::getMetadata() const {
     static plugins::EffectMetadata meta{
         "LGP Langton Highway (5L-AR)",
-        "Langton's ant cellular automaton with 5-layer audio-reactive composition",
+        "Langton's ant cellular automaton with direct audio-reactive composition",
         plugins::EffectCategory::QUANTUM,
         1
     };
     return meta;
 }
 
-uint8_t LGPLangtonHighwayAREffect::getParameterCount() const {
-    return lowrisk_ar::Ar16Controls::parameterCount();
-}
-
-const plugins::EffectParameter* LGPLangtonHighwayAREffect::getParameter(uint8_t index) const {
-    return lowrisk_ar::Ar16Controls::parameter(index);
-}
-
-bool LGPLangtonHighwayAREffect::setParameter(const char* name, float value) {
-    return m_controls.set(name, value);
-}
-
-float LGPLangtonHighwayAREffect::getParameter(const char* name) const {
-    return m_controls.get(name);
-}
+uint8_t LGPLangtonHighwayAREffect::getParameterCount() const { return 0; }
+const plugins::EffectParameter* LGPLangtonHighwayAREffect::getParameter(uint8_t) const { return nullptr; }
+bool LGPLangtonHighwayAREffect::setParameter(const char*, float) { return false; }
+float LGPLangtonHighwayAREffect::getParameter(const char*) const { return 0.0f; }
 
 } // namespace ieffect
 } // namespace effects

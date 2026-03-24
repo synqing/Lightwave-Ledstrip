@@ -1,24 +1,11 @@
 /**
  * @file LGPIFSBioRelicAREffect.h
- * @brief IFS Botanical Relic (5-Layer Audio-Reactive)
+ * @brief IFS Botanical Relic (5-Layer AR) -- REWRITTEN
  *
  * Effect ID: 0x1C13 (EID_LGP_IFS_BIO_RELIC_AR)
- * Family: FIVE_LAYER_AR
- * Category: QUANTUM
- * Tags: CENTER_ORIGIN | DUAL_STRIP | PHYSICS | AUDIO_REACTIVE
- *
- * 5-layer composition model (NOT flat lerp):
- *   Bed       - RMS-driven relic luminance base (tau ~0.45s)
- *   Structure - points/frame + decay rate from flux + saliency (tau ~0.15s)
- *   Impact    - beat-triggered vein pulse (decay ~0.25s)
- *   Tonal     - museum-relic hue anchor from chord/root
- *   Memory    - accumulated vein glow persistence (decay ~0.95s)
- *
- * Composition: brightness = bed * veinGeom + impact + memory
- *
- * Barnsley fern IFS physics:
- *   4-transform IFS with classic probabilities (0.01, 0.85, 0.07, 0.07)
- *   Mirror x for centre-origin symmetry, project onto 160-LED histogram
+ * Direct ControlBus reads, single-stage smoothing, max follower normalisation.
+ * PSRAM-backed histogram buffer (160 floats).
+ * Barnsley fern IFS with 4-transform probabilities (0.01, 0.85, 0.07, 0.07).
  */
 
 #pragma once
@@ -26,7 +13,6 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../../config/effect_ids.h"
-#include "AudioReactiveLowRiskPackHelpers.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -56,19 +42,23 @@ private:
     };
 
     IFSPsram* m_ps = nullptr;
-    lowrisk_ar::Ar16Controls m_controls;
-    lowrisk_ar::ArRuntimeState m_ar;
 
     float m_px  = 0.0f;
     float m_py  = 0.0f;
     float m_t   = 0.0f;
     uint32_t m_rng = 0xBADC0DEu;
 
-    // 5-Layer composition state
-    float m_bed       = 0.3f;
-    float m_structure = 0.5f;
-    float m_impact    = 0.0f;
-    float m_memory    = 0.0f;
+    // Single-stage smoothed audio
+    float m_bass       = 0.0f;
+    float m_treble     = 0.0f;
+    float m_chromaAngle = 0.0f;
+
+    // Asymmetric max followers
+    float m_bassMax    = 0.15f;
+    float m_trebleMax  = 0.15f;
+
+    // Impact
+    float m_impact     = 0.0f;
 };
 
 } // namespace ieffect

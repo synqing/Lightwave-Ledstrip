@@ -1,20 +1,9 @@
 /**
  * @file LGPLorenzRibbonAREffect.h
- * @brief Lorenz Ribbon (5-Layer Audio-Reactive)
+ * @brief Lorenz Ribbon (5-Layer AR) — REWRITTEN
  *
  * Effect ID: 0x1C12 (EID_LGP_LORENZ_RIBBON_AR)
- * Family: FIVE_LAYER_AR
- * Category: QUANTUM
- * Tags: CENTER_ORIGIN | DUAL_STRIP | PHYSICS | AUDIO_REACTIVE
- *
- * 5-layer composition model (NOT flat lerp):
- *   Bed       - RMS-driven ribbon brightness base (tau ~0.40s)
- *   Structure - sub-steps + thickness from bass + flux (tau ~0.12s)
- *   Impact    - beat-triggered trajectory burst (decay ~0.20s)
- *   Tonal     - chaotic energy hue anchor from chord/root
- *   Memory    - tail persistence accumulator (decay ~0.85s)
- *
- * Composition: brightness = bed * ribbonGeom + impact + memory
+ * Direct ControlBus reads, single-stage smoothing, max follower normalisation.
  *
  * Lorenz attractor physics:
  *   dx/dt = sigma*(y-x), dy/dt = x*(rho-z)-y, dz/dt = x*y - beta*z
@@ -26,7 +15,6 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../../config/effect_ids.h"
-#include "AudioReactiveLowRiskPackHelpers.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -57,8 +45,6 @@ private:
     };
 
     LorenzPsram* m_ps = nullptr;
-    lowrisk_ar::Ar16Controls m_controls;
-    lowrisk_ar::ArRuntimeState m_ar;
 
     float m_x = 1.0f;
     float m_y = 0.0f;
@@ -66,11 +52,17 @@ private:
     float m_t = 0.0f;
     uint8_t m_head = 0;
 
-    // 5-Layer composition state
-    float m_bed       = 0.3f;
-    float m_structure = 0.5f;
-    float m_impact    = 0.0f;
-    float m_memory    = 0.0f;
+    // Single-stage smoothed audio
+    float m_bass       = 0.0f;
+    float m_treble     = 0.0f;
+    float m_chromaAngle = 0.0f;
+
+    // Asymmetric max followers
+    float m_bassMax    = 0.15f;
+    float m_trebleMax  = 0.15f;
+
+    // Impact
+    float m_impact     = 0.0f;
 };
 
 } // namespace ieffect

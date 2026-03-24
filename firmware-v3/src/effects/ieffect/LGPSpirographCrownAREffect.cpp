@@ -1,10 +1,14 @@
 /**
  * @file LGPSpirographCrownAREffect.cpp
- * @brief Spirograph Crown (5-Layer Audio-Reactive)
+ * @brief Spirograph Crown (5-Layer AR) — REWRITTEN
  *
  * Hypotrochoid crown geometry with facet sparkle.
  * Base maths: parametric hypotrochoid with R=1.0, r=0.30+drift, d=0.78.
  * Distance-to-curve metric creates luminous band structure.
+ *
+ * Divergence fixes: Direct ControlBus reads, single-stage smoothing (50ms),
+ * asymmetric max follower (58ms/500ms, floor 0.04), no brightness floors,
+ * beatStrength() continuous, squared brightness for punch.
  *
  * Centre-origin compliant. Dual-strip locked.
  */
@@ -19,28 +23,38 @@ namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
-// =========================================================================
-// Local helpers
-// =========================================================================
+// Constants
+static constexpr float kTwoPi = 6.28318530717958647692f;
+static constexpr float kPi    = 3.14159265358979323846f;
+static constexpr float kBassTau    = 0.050f;
+static constexpr float kTrebleTau  = 0.040f;
+static constexpr float kChromaTau  = 0.300f;
+static constexpr float kFollowerAttackTau = 0.058f;
+static constexpr float kFollowerDecayTau  = 0.500f;
+static constexpr float kFollowerFloor     = 0.04f;
+static constexpr float kImpactDecayTau = 0.180f;
 
-static constexpr float kTau = 6.28318530717958647692f;
-
+// Helpers
+static inline float clamp01(float x) {
+    if (x < 0.0f) return 0.0f;
+    if (x > 1.0f) return 1.0f;
+    return x;
+}
+static inline float clampf(float x, float lo, float hi) {
+    if (x < lo) return lo;
+    if (x > hi) return hi;
+    return x;
+}
 static inline float fract(float x) { return x - floorf(x); }
 
 static inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRGB& c) {
     ctx.leds[i] = c;
     int j = i + STRIP_LENGTH;
-    if (j < (int)ctx.ledCount) ctx.leds[j] = c;
-}
-
-static inline uint8_t luminanceToBr(float wave01, float master) {
-    const float base = 0.06f;
-    float out = lowrisk_ar::clamp01f(base + (1.0f - base) * lowrisk_ar::clamp01f(wave01)) * master;
-    return static_cast<uint8_t>(255.0f * out);
+    if (j < static_cast<int>(ctx.ledCount)) ctx.leds[j] = c;
 }
 
 // =========================================================================
-// Hypotrochoid distance metric
+// Hypotrochoid distance metric (simulation physics — PRESERVED)
 // =========================================================================
 
 /**
@@ -62,7 +76,7 @@ static float distToCurve(float r, float theta, float r_param) {
     const float ratio = (R - r_param) / r_param;
 
     for (int i = 0; i < samples; i++) {
-        const float t = (kTau * static_cast<float>(i)) / static_cast<float>(samples);
+        const float t = (kTwoPi * static_cast<float>(i)) / static_cast<float>(samples);
 
         // Hypotrochoid parametric equations
         const float x = (R - r_param) * cosf(t) + d * cosf(ratio * t);
@@ -74,7 +88,7 @@ static float distToCurve(float r, float theta, float r_param) {
 
         // Angular distance (wrapped)
         float dtheta = fabsf(theta - curve_theta);
-        if (dtheta > M_PI) dtheta = kTau - dtheta;
+        if (dtheta > kPi) dtheta = kTwoPi - dtheta;
 
         // Combined distance metric (radial + angular weighted)
         const float dist = sqrtf((r - curve_r) * (r - curve_r) +
@@ -86,110 +100,96 @@ static float distToCurve(float r, float theta, float r_param) {
     return minDist;
 }
 
-// =========================================================================
-// Construction / init / cleanup
-// =========================================================================
-
+// Constructor
 LGPSpirographCrownAREffect::LGPSpirographCrownAREffect()
-    : m_t(0.0f)
-    , m_bed(0.3f)
-    , m_structure(0.5f)
-    , m_impact(0.0f)
-    , m_memory(0.0f)
-{
-}
+    : m_t(0.0f), m_bass(0.0f), m_treble(0.0f), m_chromaAngle(0.0f),
+      m_bassMax(0.15f), m_trebleMax(0.15f), m_impact(0.0f) {}
 
 bool LGPSpirographCrownAREffect::init(plugins::EffectContext& ctx) {
-    m_controls.resetDefaults();
-    m_ar = lowrisk_ar::ArRuntimeState{};
-    m_ar.tonalHue = static_cast<float>(ctx.gHue);
-    m_ar.modeSmooth = 2.0f;
-    m_t           = 0.0f;
-    m_bed         = 0.3f;
-    m_structure   = 0.5f;
-    m_impact      = 0.0f;
-    m_memory      = 0.0f;
+    m_t = 0.0f; m_bass = 0.0f; m_treble = 0.0f; m_chromaAngle = 0.0f;
+    m_bassMax = 0.15f; m_trebleMax = 0.15f; m_impact = 0.0f;
     lightwaveos::effects::cinema::reset();
     return true;
 }
 
-// =========================================================================
-// render() — 5-Layer composition
-// =========================================================================
-
 void LGPSpirographCrownAREffect::render(plugins::EffectContext& ctx) {
-    // --- Timing ---
-    const float dtSignal = AudioReactivePolicy::signalDt(ctx);
-    const float dtVisual = AudioReactivePolicy::visualDt(ctx);
+    const float dt = ctx.getSafeRawDeltaSeconds();
+    const float dtVis = ctx.getSafeDeltaSeconds();
     const float speedNorm = ctx.speed / 50.0f;
 
-    // --- Signals (shared infrastructure handles presence gate + fallback) ---
-    const lowrisk_ar::ArSignalSnapshot sig =
-        lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);
-    const lowrisk_ar::ArModulationProfile mod =
-        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);
-    m_ar.tonalHue = mod.baseHue;
+    // STEP 1: Direct ControlBus reads
+    const float rawBass = ctx.audio.available ? ctx.audio.bass() : 0.0f;
+    const float rawTreble = ctx.audio.available ? ctx.audio.treble() : 0.0f;
+    const float beatStr = ctx.audio.available ? ctx.audio.beatStrength() : 0.0f;
+    const float silScale = ctx.audio.available ? ctx.audio.silentScale() : 0.0f;
+    const float* chroma = ctx.audio.available ? ctx.audio.chroma() : nullptr;
 
-    // =================================================================
-    // LAYER UPDATES
-    // =================================================================
+    // STEP 2: Single-stage smoothing
+    m_bass += (rawBass - m_bass) * (1.0f - expf(-dt / kBassTau));
+    m_treble += (rawTreble - m_treble) * (1.0f - expf(-dt / kTrebleTau));
 
-    // Bed: slow atmosphere from RMS (tau 0.40s)
-    m_bed = lowrisk_ar::smoothTo(m_bed,
-        0.25f + 0.75f * sig.rms, dtSignal, 0.40f);
+    // Circular chroma EMA
+    if (chroma) {
+        float sx = 0.0f, sy = 0.0f;
+        for (int i = 0; i < 12; i++) {
+            float angle = static_cast<float>(i) * (kTwoPi / 12.0f);
+            sx += chroma[i] * cosf(angle);
+            sy += chroma[i] * sinf(angle);
+        }
+        if (sx * sx + sy * sy > 0.0001f) {
+            float target = atan2f(sy, sx);
+            if (target < 0.0f) target += kTwoPi;
+            float delta = target - m_chromaAngle;
+            while (delta > kPi) delta -= kTwoPi;
+            while (delta < -kPi) delta += kTwoPi;
+            m_chromaAngle += delta * (1.0f - expf(-dt / kChromaTau));
+            if (m_chromaAngle < 0.0f) m_chromaAngle += kTwoPi;
+            if (m_chromaAngle >= kTwoPi) m_chromaAngle -= kTwoPi;
+        }
+    }
 
-    // Structure: r parameter + facet from rhythmic + mid (tau 0.16s)
-    const float structTarget = lowrisk_ar::clamp01f(
-        0.45f + 0.30f * sig.rhythmic + 0.25f * sig.mid);
-    m_structure = lowrisk_ar::smoothTo(m_structure, structTarget, dtSignal, 0.16f);
+    // STEP 3: Max followers
+    {
+        float aA = 1.0f - expf(-dt / kFollowerAttackTau);
+        float dA = 1.0f - expf(-dt / kFollowerDecayTau);
+        if (m_bass > m_bassMax) m_bassMax += (m_bass - m_bassMax) * aA;
+        else m_bassMax += (m_bass - m_bassMax) * dA;
+        if (m_bassMax < kFollowerFloor) m_bassMax = kFollowerFloor;
 
-    // Impact: beat-triggered crown flash (fast attack, decay 0.20s)
-    if (sig.beatTick) m_impact = fmaxf(m_impact, 1.0f);
-    m_impact = lowrisk_ar::decay(m_impact, dtSignal, 0.20f);
+        if (m_treble > m_trebleMax) m_trebleMax += (m_treble - m_trebleMax) * aA;
+        else m_trebleMax += (m_treble - m_trebleMax) * dA;
+        if (m_trebleMax < kFollowerFloor) m_trebleMax = kFollowerFloor;
+    }
+    const float normBass = clamp01(m_bass / m_bassMax);
+    const float normTreble = clamp01(m_treble / m_trebleMax);
 
-    // Memory: crown persistence (slow decay 0.70s, fed by beat)
-    m_memory = lowrisk_ar::clamp01f(
-        lowrisk_ar::decay(m_memory, dtSignal, 0.70f)
-        + 0.15f * m_impact);
-    lowrisk_ar::applyBedImpactMemoryMix(
-        m_controls,
-        static_cast<float>(ctx.rawTotalTimeMs),
-        m_bed,
-        m_impact,
-        m_memory);
+    // STEP 4: Impact (continuous beatStrength rise, exponential decay)
+    if (beatStr > m_impact) m_impact = beatStr;
+    m_impact *= expf(-dt / kImpactDecayTau);
 
-    // =================================================================
-    // MOTION
-    // =================================================================
+    // STEP 5: Crown visual parameters
+    const float beatMod = 0.3f + 0.7f * beatStr;
 
-    const float tRate = (0.80f + 3.50f * speedNorm) * mod.motionRate
-                        * (0.65f + 0.35f * m_structure);
-    m_t += tRate * dtVisual;
-
-    // =================================================================
-    // EFFECT GEOMETRY DRIVEN BY LAYERS
-    // =================================================================
-
-    const float mid    = (STRIP_LENGTH - 1) * 0.5f;
-    const float invMid = 1.0f / mid;
-
-    // r parameter drift: structure modulates the hypotrochoid shape
-    const float r_drift = 0.30f + 0.12f * (m_structure - 0.5f);
-
-    // Facet sparkle: rhythmic modulation creates glinting effect
-    const float facet = 0.85f + 0.15f * sig.rhythmic;
+    // r parameter drift: treble modulates the hypotrochoid shape
+    const float r_drift = 0.30f + 0.12f * (normTreble - 0.5f);
 
     // Band width: impact narrows the crown band
-    const float bandWidth = lowrisk_ar::clampf(
-        0.08f - 0.03f * m_impact, 0.03f, 0.10f);
+    const float bandWidth = clampf(0.08f - 0.03f * m_impact, 0.03f, 0.10f);
 
-    // =================================================================
-    // PER-PIXEL RENDER
-    // =================================================================
+    // Time accumulation
+    float tRate = 0.80f + 3.50f * speedNorm;
+    m_t += tRate * dtVis;
 
-    const float bedBright = 0.25f + 0.75f * m_bed;
-    const float master = (ctx.brightness / 255.0f)
-                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;
+    // Hue from chroma
+    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle * (255.0f / kTwoPi)) + ctx.gHue;
+
+    // Trail persistence: more energy = shorter trails
+    uint8_t fadeAmt = static_cast<uint8_t>(clampf(20.0f + 30.0f * (1.0f - normBass), 14.0f, 52.0f));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmt);
+
+    // STEP 6: Per-pixel render (centre-origin)
+    const float mid    = (STRIP_LENGTH - 1) * 0.5f;
+    const float invMid = 1.0f / mid;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         const float dmid  = static_cast<float>(i) - mid;
@@ -203,71 +203,55 @@ void LGPSpirographCrownAREffect::render(plugins::EffectContext& ctx) {
         const float dist = distToCurve(r, theta, r_drift);
 
         // Band structure: crown appears where dist is small
-        const float band = 1.0f - lowrisk_ar::clamp01f(dist / bandWidth);
+        const float band = 1.0f - clamp01(dist / bandWidth);
         const float bandSharp = powf(band, 2.2f);
 
-        // Facet sparkle modulation
-        const float facetMod = facet * (0.90f + 0.10f * cosf(kTau * theta * 3.7f));
+        // Facet sparkle modulation (treble-driven)
+        const float facet = (0.85f + 0.15f * normTreble) *
+                            (0.90f + 0.10f * cosf(kTwoPi * theta * 3.7f));
 
         // Centre glue: stronger near centre
         const float glue = 0.40f + 0.60f * expf(-(dmid * dmid) * 0.0015f);
 
-        // Bed x structured geometry
-        float structuredGeom = bandSharp * facetMod * glue;
+        // Crown geometry
+        const float crownShape = bandSharp * facet * glue;
 
         // Impact: additive flash at crown band
-        float impactAdd = m_impact * bandSharp * glue * 0.40f;
+        const float impactAdd = m_impact * bandSharp * glue * 0.4f;
 
-        // Memory: gentle persistent glow
-        float memoryAdd = m_memory * band * 0.22f;
+        // Compose brightness: audio magnitude x geometry x beat x silence
+        float brightness = (crownShape * normBass + impactAdd) * beatMod * silScale;
 
-        // Compose: bed x structure + impact + memory
-        float brightness = bedBright * structuredGeom + impactAdd + memoryAdd;
-        brightness = lowrisk_ar::clamp01f(brightness);
+        // Squared for punch
+        brightness *= brightness;
 
-        const uint8_t br = luminanceToBr(brightness, master);
+        uint8_t val = static_cast<uint8_t>(clamp01(brightness) * 255.0f);
+        val = scale8(val, ctx.brightness);
 
-        // Tonal hue: chord-driven anchor + spatial modulation
-        const uint8_t hue = static_cast<uint8_t>(
-            m_ar.tonalHue + band * 45.0f + sig.harmonic * 18.0f);
+        // Hue: chroma anchor + crown spatial offset
+        uint8_t hue = baseHue + static_cast<uint8_t>(band * 45.0f);
 
-        writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));
+        writeDualLocked(ctx, i, CHSV(hue, ctx.saturation, val));
     }
 
     lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }
 
-// =========================================================================
-// cleanup / metadata / parameters
-// =========================================================================
-
+// Cleanup / metadata / parameters
 void LGPSpirographCrownAREffect::cleanup() {}
 
 const plugins::EffectMetadata& LGPSpirographCrownAREffect::getMetadata() const {
     static plugins::EffectMetadata meta{
         "LGP Spirograph Crown (5L-AR)",
-        "Hypotrochoid crown jewellery with 5-layer audio-reactive composition",
-        plugins::EffectCategory::QUANTUM,
-        1
+        "Hypotrochoid crown with direct audio-reactive composition",
+        plugins::EffectCategory::QUANTUM, 1
     };
     return meta;
 }
-
-uint8_t LGPSpirographCrownAREffect::getParameterCount() const {
-    return lowrisk_ar::Ar16Controls::parameterCount();
-}
-
-const plugins::EffectParameter* LGPSpirographCrownAREffect::getParameter(uint8_t index) const {
-    return lowrisk_ar::Ar16Controls::parameter(index);
-}
-
-bool LGPSpirographCrownAREffect::setParameter(const char* name, float value) {
-    return m_controls.set(name, value);
-}
-
-float LGPSpirographCrownAREffect::getParameter(const char* name) const {
-    return m_controls.get(name);
-}
+uint8_t LGPSpirographCrownAREffect::getParameterCount() const { return 0; }
+const plugins::EffectParameter* LGPSpirographCrownAREffect::getParameter(uint8_t) const { return nullptr; }
+bool LGPSpirographCrownAREffect::setParameter(const char*, float) { return false; }
+float LGPSpirographCrownAREffect::getParameter(const char*) const { return 0.0f; }
 
 } // namespace ieffect
 } // namespace effects

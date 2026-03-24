@@ -31,7 +31,6 @@
 #if CHIP_ESP32_S3 && !defined(NATIVE_BUILD) && FEATURE_STATUS_STRIP_TOUCH
 #include "../../hal/esp32s3/StatusStripTouch.h"
 #endif
-#include <algorithm>
 #include <math.h>
 #if FEATURE_VALIDATION_PROFILING
 #include "../../core/system/ValidationProfiler.h"
@@ -98,36 +97,6 @@ float computeSpeedTimeFactor(uint8_t speed) {
     float curved = sqrtf(norm);
     return kMinSpeedTimeFactor + (1.0f - kMinSpeedTimeFactor) * curved;
 }
-
-#if FEATURE_AUDIO_SYNC && FEATURE_TRANSLATION_ENGINE
-lightwaveos::plugins::VisualBehavior behaviorFromMotion(const lightwaveos::plugins::AudioContext& audioCtx) {
-    using lightwaveos::plugins::VisualBehavior;
-    using lightwaveos::audio::MotionPrimitive;
-    const MotionPrimitive motion = audioCtx.motionType();
-
-    switch (motion) {
-        case MotionPrimitive::BLOOM:
-        case MotionPrimitive::RECOIL:
-            return VisualBehavior::PULSE_ON_BEAT;
-        case MotionPrimitive::FLOW:
-            return VisualBehavior::TEXTURE_FLOW;
-        case MotionPrimitive::DRIFT:
-            return audioCtx.isHarmonicDominant()
-                ? VisualBehavior::DRIFT_WITH_HARMONY
-                : VisualBehavior::TEXTURE_FLOW;
-        case MotionPrimitive::LOCK:
-        case MotionPrimitive::DECAY:
-            return VisualBehavior::BREATHE_WITH_DYNAMICS;
-        default:
-            return VisualBehavior::BREATHE_WITH_DYNAMICS;
-    }
-}
-
-uint8_t applySceneBrightnessBias(uint8_t baseBrightness, float sceneBrightnessScale) {
-    const int adjusted = static_cast<int>(baseBrightness * sceneBrightnessScale + 0.5f);
-    return static_cast<uint8_t>(std::max(0, std::min(adjusted, 255)));
-}
-#endif
 }  // namespace
 
 // Stub for legacy effect ID tracking - no-op when legacy effects are disabled
@@ -511,6 +480,23 @@ EffectId RendererActor::validateEffectId(EffectId effectId) const {
 }
 
 // ============================================================================
+// Frame Pacer — esp_timer one-shot replaces esp_rom_delay_us busy-wait
+// ============================================================================
+#ifndef NATIVE_BUILD
+static TaskHandle_t s_framePacerTaskHandle = nullptr;
+static esp_timer_handle_t s_framePacerTimer = nullptr;
+
+static void framePacerTimerCallback(void* arg)
+{
+    // esp_timer callbacks run in task context (ESP_TIMER_TASK dispatch),
+    // so xTaskNotifyGive is safe here (no ISR variant needed).
+    if (s_framePacerTaskHandle) {
+        xTaskNotifyGive(s_framePacerTaskHandle);
+    }
+}
+#endif
+
+// ============================================================================
 // Actor Lifecycle
 // ============================================================================
 
@@ -523,25 +509,28 @@ void RendererActor::onStart()
     // Without this, esp_task_wdt_reset() calls in onTick() have no effect
     esp_task_wdt_add(nullptr);  // nullptr means current task
     LW_LOGI("Renderer task added to watchdog");
+
+    // Frame pacer: create one-shot esp_timer for event-driven pacing
+    // (replaces esp_rom_delay_us busy-wait in onTick)
+    s_framePacerTaskHandle = xTaskGetCurrentTaskHandle();
+    const esp_timer_create_args_t timerArgs = {
+        .callback = framePacerTimerCallback,
+        .arg = nullptr,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "frame_pacer",
+        .skip_unhandled_events = true,
+    };
+    esp_err_t err = esp_timer_create(&timerArgs, &s_framePacerTimer);
+    if (err != ESP_OK) {
+        LW_LOGW("Frame pacer timer creation failed (0x%x), falling back to busy-wait", err);
+        s_framePacerTimer = nullptr;
+    }
 #endif
 
     initLeds();
 
     // Restore persisted EdgeMixer settings from NVS
     enhancement::EdgeMixer::getInstance().loadFromNVS();
-
-#if FEATURE_VRMS_METRICS
-    m_vrmsMetrics.init();
-    LW_LOGI("VRMS Metrics engine initialized (60Hz decimation)");
-#endif
-#if FEATURE_VRMS_BENCHMARK
-    m_vrmsBenchmark.init();
-    LW_LOGI("VRMS Benchmark overlay enabled");
-#endif
-#if FEATURE_INPUT_MERGE_LAYER
-    m_mergeLayer.init();
-    LW_LOGI("Input Merge Layer initialized");
-#endif
 
     // Subscribe to relevant events
     bus::MessageBus::instance().subscribe(MessageType::PALETTE_CHANGED, this);
@@ -601,18 +590,8 @@ void RendererActor::onMessage(const Message& msg)
             handleSetFadeAmount(msg.param1);
             break;
 
-#if FEATURE_INPUT_MERGE_LAYER
-        case MessageType::MERGE_SUBMIT:
-            // param1=sourceId, param2=paramIndex, param3=value
-            m_mergeLayer.updateSource(
-                static_cast<merge::SourceId>(msg.param1),
-                msg.param2,
-                msg.param3);
-            break;
-#endif
-
         case MessageType::SET_EDGE_MIXER_MODE:
-            if (msg.param1 <= 6) {
+            if (msg.param1 <= 4) {
                 enhancement::EdgeMixer::getInstance().setMode(
                     static_cast<enhancement::EdgeMixerMode>(msg.param1));
             }
@@ -872,26 +851,6 @@ void RendererActor::onTick()
         captureFrame(CaptureTap::TAP_B_POST_CORRECTION, m_leds);
     }
 
-#if FEATURE_VRMS_METRICS
-    if (m_stats.framesRendered % 2 == 0) {
-        TRACE_SCOPE("vrms_metrics");
-        float audioRms = 0.0f;
-#if FEATURE_AUDIO_SYNC
-        audioRms = m_lastControlBus.rms;
-#endif
-        m_vrmsMetrics.compute(m_leds, audioRms);
-    }
-#endif
-#if FEATURE_VRMS_BENCHMARK
-    if (m_stats.framesRendered % 2 == 0) {
-        float audioRms = 0.0f;
-#if FEATURE_AUDIO_SYNC
-        audioRms = m_lastControlBus.rms;
-#endif
-        m_vrmsBenchmark.compute(m_leds, audioRms);
-    }
-#endif
-
     // Push to strips
     // NOTE: showLeds() blocks for ~4.8ms (WS2812 wire time for 160 LEDs).
     // All 3 RMT channels (strip1, strip2, status) transmit in parallel,
@@ -915,10 +874,21 @@ void RendererActor::onTick()
     }
 
     // Self-clocked pacing to 120 FPS target (8.33ms budget).
+    // Uses esp_timer one-shot + task notification for zero-overhead wait,
+    // yielding Core 1 CPU to IDLE1 (watchdog) instead of busy-spinning.
     if (frameTimeUs < LedConfig::FRAME_TIME_US) {
         const uint32_t waitUs = LedConfig::FRAME_TIME_US - frameTimeUs;
 #ifndef NATIVE_BUILD
-        esp_rom_delay_us(waitUs);
+        if (s_framePacerTimer && waitUs > 100) {
+            // Clear any stale notifications before arming the timer
+            ulTaskNotifyTake(pdTRUE, 0);
+            esp_timer_start_once(s_framePacerTimer, waitUs);
+            // Block until timer fires; 20ms timeout as safety net
+            ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(20));
+        } else {
+            // Sub-100us remainder: not worth the timer overhead, just yield
+            taskYIELD();
+        }
         frameEndUs = micros();
         frameTimeUs = (frameEndUs >= frameStartUs)
                         ? (frameEndUs - frameStartUs)
@@ -968,6 +938,16 @@ void RendererActor::onStop()
 {
     LW_LOGI("Stopping - rendered %lu frames, %lu drops",
              m_stats.framesRendered, m_stats.frameDrops);
+
+#ifndef NATIVE_BUILD
+    // Clean up frame pacer timer before task exits
+    if (s_framePacerTimer) {
+        esp_timer_stop(s_framePacerTimer);   // Safe even if not running
+        esp_timer_delete(s_framePacerTimer);
+        s_framePacerTimer = nullptr;
+    }
+    s_framePacerTaskHandle = nullptr;
+#endif
 
     // Unsubscribe from events
     bus::MessageBus::instance().unsubscribeAll(this);
@@ -1535,53 +1515,7 @@ void RendererActor::renderFrame()
             m_sharedAudioCtx.trinityActive = false;
         }
     }
-
-    // Layer 2: Motion-Semantic inference (ControlBusFrame -> 6-axis MotionSemanticFrame)
-    if (m_sharedAudioCtx.available) {
-        constexpr float RENDER_DT = 1.0f / 120.0f;  // 120 FPS render rate
-        m_motionEngine.update(m_sharedAudioCtx.controlBus, RENDER_DT);
-        m_sharedAudioCtx.motionFrame = m_motionEngine.frame();
-
-        // Throttled Layer 2 trace (every 2s)
-        static uint32_t s_l2_last_log = 0;
-        uint32_t l2_now = millis();
-        if (l2_now - s_l2_last_log >= 2000) {
-            s_l2_last_log = l2_now;
-            const auto& mf = m_sharedAudioCtx.motionFrame;
-            LW_MOTION_LOGT("L2 W=%.2f T=%.2f S=%.2f Fl=%.2f Flu=%.2f I=%.2f conf=%u",
-                mf.weight, mf.time_quality, mf.space, mf.flow,
-                mf.fluidity, mf.impulse_strength, mf.confidence_min);
-        }
-
-        // Layer 3: Temporal envelope shaping (onset-driven, semantic-selected)
-        m_motionShaper.update(m_sharedAudioCtx.controlBus, m_motionEngine.frame(), millis());
-        m_sharedAudioCtx.motionShaping = m_motionShaper.shaping();
-
-        // Throttled Layer 3 trace (every 2s, only when active)
-        static uint32_t s_l3_last_log = 0;
-        uint32_t l3_now = millis();
-        if (l3_now - s_l3_last_log >= 2000) {
-            s_l3_last_log = l3_now;
-            const auto& ms = m_sharedAudioCtx.motionShaping;
-            LW_MOTION_LOGT("L3 int=%.2f decay=%.0f accent=%.2f env=%u active=%u",
-                ms.intensity, ms.decayMs, ms.accentScale, ms.envType, ms.active ? 1u : 0u);
-        }
-    }
 #endif
-
-    // Drain validation command queue (Core 0 → Core 1)
-    while (m_valCmdTail.load(std::memory_order_relaxed) != m_valCmdHead.load(std::memory_order_acquire)) {
-        uint8_t tail = m_valCmdTail.load(std::memory_order_relaxed);
-        m_validationMode.handleCommand(m_valCmdQueue[tail]);
-        m_valCmdTail.store((tail + 1) % VAL_CMD_QUEUE_SIZE, std::memory_order_release);
-    }
-
-    // Validation mode: render directly, skip normal effect pipeline
-    if (m_validationMode.isActive()) {
-        m_validationMode.render();
-        showLeds();
-        return;
-    }
 
     // Calculate delta time (in ms) - needed for both zone mode and single-effect mode
     uint32_t now = micros();
@@ -1658,44 +1592,11 @@ void RendererActor::renderFrame()
                 ctx.audio.saliencyFrame(),
                 ctx.audio.styleConfidence()
             );
-#if FEATURE_TRANSLATION_ENGINE
-            ctx.audio.behaviorContext.recommendedPrimary =
-                behaviorFromMotion(ctx.audio);
-            ctx.brightness = applySceneBrightnessBias(
-                ctx.brightness,
-                ctx.audio.sceneParameters().brightness_scale
-            );
-#endif
         } else {
             ctx.audio.behaviorContext = plugins::BehaviorContext{};
         }
 #else
         ctx.audio.available = false;
-#endif
-
-        // =====================================================================
-        // Phase 3.5: Input Merge Layer
-        // Arbitrate MANUAL (+ future AUDIO/AI/GESTURE) sources into merged params
-        // =====================================================================
-#if FEATURE_INPUT_MERGE_LAYER
-        {
-            uint8_t manualParams[10] = {
-                m_brightness, m_speed, m_intensity, m_saturation,
-                m_complexity, m_variation, m_hue, m_mood,
-                m_fadeAmount, m_paletteIndex
-            };
-            float mergeDt = static_cast<float>(deltaTimeMs) * 0.001f;
-            m_mergeLayer.updateSourceAll(merge::SourceId::MANUAL, manualParams);
-            m_mergeLayer.merge(millis(), mergeDt);
-
-            ctx.brightness = m_mergeLayer.getMerged(0);
-            ctx.speed      = m_mergeLayer.getMerged(1);
-            ctx.intensity  = m_mergeLayer.getMerged(2);
-            ctx.saturation = m_mergeLayer.getMerged(3);
-            ctx.complexity = m_mergeLayer.getMerged(4);
-            ctx.variation  = m_mergeLayer.getMerged(5);
-            ctx.gHue       = m_mergeLayer.getMerged(6);
-        }
 #endif
 
         // =====================================================================

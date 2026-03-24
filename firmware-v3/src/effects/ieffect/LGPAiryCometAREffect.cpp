@@ -1,14 +1,16 @@
 /**
  * @file LGPAiryCometAREffect.cpp
- * @brief LGP Airy Comet (5-Layer AR) implementation
+ * @brief LGP Airy Comet (5-Layer AR) — REWRITTEN
  *
- * Self-accelerating parabolic comet with oscillatory Airy-ish tail lobes,
- * restructured with 5-layer audio-reactive composition. Impact accelerates
- * the head, structure modulates tail decay and lobe spacing, memory
- * persists luminance in the tail region.
+ * Self-accelerating parabolic comet with Gaussian head and oscillatory
+ * Airy-ish tail lobes. Audio drives brightness and motion directly.
  *
- * Original comet physics preserved from LGPAiryCometEffect (Shape Bangers).
+ * Divergence fixes: Direct ControlBus reads, single-stage smoothing (50ms),
+ * asymmetric max follower (58ms/500ms, floor 0.04), no brightness floors,
+ * beatStrength() continuous, squared brightness for punch.
+ *
  * Centre-origin compliant. Dual-strip locked.
+ * NOTE: Comet is inherently asymmetric — keeps linear iteration + writeDualLocked.
  */
 
 #include "LGPAiryCometAREffect.h"
@@ -21,25 +23,33 @@ namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
-// =========================================================================
-// Local helpers (no heap, no state)
-// =========================================================================
+// Constants
+static constexpr float kTwoPi = 6.28318530717958647692f;
+static constexpr float kPi    = 3.14159265358979323846f;
+static constexpr float kBassTau    = 0.050f;
+static constexpr float kTrebleTau  = 0.040f;
+static constexpr float kChromaTau  = 0.300f;
+static constexpr float kFollowerAttackTau = 0.058f;
+static constexpr float kFollowerDecayTau  = 0.500f;
+static constexpr float kFollowerFloor     = 0.04f;
+static constexpr float kImpactDecayTau = 0.180f;
 
-static constexpr float kTau = 6.28318530717958647692f;
-
+// Helpers
+static inline float clamp01(float x) {
+    if (x < 0.0f) return 0.0f;
+    if (x > 1.0f) return 1.0f;
+    return x;
+}
+static inline float clampf(float x, float lo, float hi) {
+    if (x < lo) return lo;
+    if (x > hi) return hi;
+    return x;
+}
 static inline float fract(float x) { return x - floorf(x); }
 
 static inline float gaussian(float x, float sigma) {
-    const float s2 = sigma * sigma;
-    return expf(-(x * x) / (2.0f * s2));
+    return expf(-(x * x) / (2.0f * sigma * sigma));
 }
-
-static inline float smoothstep(float a, float b, float x) {
-    float t = lowrisk_ar::clamp01f((x - a) / (b - a));
-    return t * t * (3.0f - 2.0f * t);
-}
-
-static inline float sbLerp(float a, float b, float t) { return a + (b - a) * t; }
 
 static inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRGB& c) {
     ctx.leds[i] = c;
@@ -47,198 +57,156 @@ static inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRG
     if (j < static_cast<int>(ctx.ledCount)) ctx.leds[j] = c;
 }
 
-static inline uint8_t luminanceToBr(float wave01, float master) {
-    const float base = 0.06f;
-    float out = lowrisk_ar::clamp01f(base + (1.0f - base) * lowrisk_ar::clamp01f(wave01)) * master;
-    return static_cast<uint8_t>(255.0f * out);
-}
-
-// =========================================================================
-// Construction / init / cleanup
-// =========================================================================
-
+// Constructor
 LGPAiryCometAREffect::LGPAiryCometAREffect()
-    : m_controls()
-    , m_ar()
-    , m_t(0.0f)
-    , m_bed(0.3f)
-    , m_structure(0.5f)
-    , m_impact(0.0f)
-    , m_memory(0.0f)
-{
-}
+    : m_t(0.0f), m_bass(0.0f), m_treble(0.0f), m_chromaAngle(0.0f),
+      m_bassMax(0.15f), m_trebleMax(0.15f), m_impact(0.0f) {}
 
 bool LGPAiryCometAREffect::init(plugins::EffectContext& ctx) {
-    m_controls.resetDefaults();
-    m_ar = lowrisk_ar::ArRuntimeState{};
-    m_ar.tonalHue = static_cast<float>(ctx.gHue);
-    m_ar.modeSmooth = 2.0f;
-    m_t         = 0.0f;
-    m_bed       = 0.3f;
-    m_structure = 0.5f;
-    m_impact    = 0.0f;
-    m_memory    = 0.0f;
+    m_t = 0.0f; m_bass = 0.0f; m_treble = 0.0f; m_chromaAngle = 0.0f;
+    m_bassMax = 0.15f; m_trebleMax = 0.15f; m_impact = 0.0f;
     lightwaveos::effects::cinema::reset();
     return true;
 }
 
-// =========================================================================
-// render() -- 5-Layer composition
-// =========================================================================
-
 void LGPAiryCometAREffect::render(plugins::EffectContext& ctx) {
-    // --- Timing ---
-    const float dtSignal = AudioReactivePolicy::signalDt(ctx);
-    const float dtVisual = AudioReactivePolicy::visualDt(ctx);
+    const float dt = ctx.getSafeRawDeltaSeconds();
+    const float dtVis = ctx.getSafeDeltaSeconds();
     const float speedNorm = ctx.speed / 50.0f;
 
-    // --- Signals (shared infrastructure handles presence gate + fallback) ---
-    const lowrisk_ar::ArSignalSnapshot sig =
-        lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);
-    const lowrisk_ar::ArModulationProfile mod =
-        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);
-    m_ar.tonalHue = mod.baseHue;
+    // STEP 1: Direct ControlBus reads
+    const float rawBass = ctx.audio.available ? ctx.audio.bass() : 0.0f;
+    const float rawTreble = ctx.audio.available ? ctx.audio.treble() : 0.0f;
+    const float beatStr = ctx.audio.available ? ctx.audio.beatStrength() : 0.0f;
+    const float silScale = ctx.audio.available ? ctx.audio.silentScale() : 0.0f;
+    const float* chroma = ctx.audio.available ? ctx.audio.chroma() : nullptr;
 
-    // =================================================================
-    // LAYER UPDATES
-    // =================================================================
+    // STEP 2: Single-stage smoothing
+    m_bass += (rawBass - m_bass) * (1.0f - expf(-dt / kBassTau));
+    m_treble += (rawTreble - m_treble) * (1.0f - expf(-dt / kTrebleTau));
 
-    // Bed: soft glow ribbon brightness from RMS (tau 0.42s)
-    m_bed = lowrisk_ar::smoothTo(m_bed,
-        0.20f + 0.80f * sig.rms, dtSignal, 0.42f);
+    // Circular chroma EMA
+    if (chroma) {
+        float sx = 0.0f, sy = 0.0f;
+        for (int i = 0; i < 12; i++) {
+            float angle = static_cast<float>(i) * (kTwoPi / 12.0f);
+            sx += chroma[i] * cosf(angle);
+            sy += chroma[i] * sinf(angle);
+        }
+        if (sx * sx + sy * sy > 0.0001f) {
+            float target = atan2f(sy, sx);
+            if (target < 0.0f) target += kTwoPi;
+            float delta = target - m_chromaAngle;
+            while (delta > kPi) delta -= kTwoPi;
+            while (delta < -kPi) delta += kTwoPi;
+            m_chromaAngle += delta * (1.0f - expf(-dt / kChromaTau));
+            if (m_chromaAngle < 0.0f) m_chromaAngle += kTwoPi;
+            if (m_chromaAngle >= kTwoPi) m_chromaAngle -= kTwoPi;
+        }
+    }
 
-    // Structure: head trajectory speed, tail decay, lobe spacing (tau 0.14s)
-    const float structTarget = lowrisk_ar::clamp01f(
-        0.30f + 0.35f * sig.treble + 0.20f * sig.flux + 0.15f * sig.rhythmic);
-    m_structure = lowrisk_ar::smoothTo(m_structure, structTarget, dtSignal, 0.14f);
+    // STEP 3: Max followers
+    {
+        float aA = 1.0f - expf(-dt / kFollowerAttackTau);
+        float dA = 1.0f - expf(-dt / kFollowerDecayTau);
+        if (m_bass > m_bassMax) m_bassMax += (m_bass - m_bassMax) * aA;
+        else m_bassMax += (m_bass - m_bassMax) * dA;
+        if (m_bassMax < kFollowerFloor) m_bassMax = kFollowerFloor;
 
-    // Impact: beat-driven thrust pulse (fast attack, decay 0.18s)
-    if (sig.beatTick) m_impact = fmaxf(m_impact, 0.92f);
-    m_impact = lowrisk_ar::decay(m_impact, dtSignal, 0.18f);
+        if (m_treble > m_trebleMax) m_trebleMax += (m_treble - m_trebleMax) * aA;
+        else m_trebleMax += (m_treble - m_trebleMax) * dA;
+        if (m_trebleMax < kFollowerFloor) m_trebleMax = kFollowerFloor;
+    }
+    const float normBass = clamp01(m_bass / m_bassMax);
+    const float normTreble = clamp01(m_treble / m_trebleMax);
 
-    // Memory: tail persistence (slow decay, fed by impact + treble)
-    m_memory = lowrisk_ar::clamp01f(
-        lowrisk_ar::decay(m_memory, dtSignal, 1.00f)
-        + 0.14f * m_impact + 0.05f * sig.treble);
-    lowrisk_ar::applyBedImpactMemoryMix(
-        m_controls,
-        static_cast<float>(ctx.rawTotalTimeMs),
-        m_bed,
-        m_impact,
-        m_memory);
+    // STEP 4: Impact (continuous beatStrength rise, exponential decay)
+    if (beatStr > m_impact) m_impact = beatStr;
+    m_impact *= expf(-dt / kImpactDecayTau);
 
-    // =================================================================
-    // MOTION — time accumulator modulated by structure layer
-    // =================================================================
-
-    const float tRate = (1.20f + 5.40f * speedNorm) * mod.motionRate
-                        * (0.72f + 0.28f * m_structure);
-    m_t += tRate * dtVisual;
-
-    // =================================================================
-    // COMET GEOMETRY — parabolic self-accelerating bounce
-    // =================================================================
-
+    // STEP 5: Comet visual parameters
+    const float beatMod = 0.3f + 0.7f * beatStr;
     const float mid = (STRIP_LENGTH - 1) * 0.5f;
 
-    // Impact accelerates the head through parabolic speed
-    float s = fract(m_t * (0.10f + 0.06f * m_impact));
+    // Comet position: parabolic self-acceleration, bass drives speed
+    float s = fract(m_t * (0.08f + 0.08f * normBass + 0.04f * m_impact));
     float parab = s * s;
-    float x0 = sbLerp(-mid * 0.92f, mid * 0.92f, parab);
+    float x0 = -mid * 0.90f + 2.0f * mid * 0.90f * parab;
 
-    // Direction flip includes rhythmic modulation
-    bool flip = (fract(m_t * 0.06f + 0.14f * sig.rhythmic) > 0.5f);
+    // Direction flip (rhythmic via treble variation)
+    bool flip = (fract(m_t * 0.06f) > 0.5f);
     float dir = flip ? -1.0f : 1.0f;
 
-    // =================================================================
-    // PER-PIXEL RENDER
-    // =================================================================
+    // Tail parameters driven by normalised treble
+    float tailDecay = 0.12f - 0.04f * normTreble;   // More treble = longer tail
+    float lobeFreq = 1.25f + 0.50f * normTreble;    // More treble = tighter lobes
 
-    const float bedBright = 0.25f + 0.75f * m_bed;
-    const float master = (ctx.brightness / 255.0f)
-                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;
+    // Head width driven by bass
+    float sigma = 3.0f + 1.5f * normBass;
 
+    // Motion accumulation
+    float tRate = 1.0f + 4.5f * speedNorm;
+    m_t += tRate * dtVis;
+
+    // Hue from chroma
+    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle * (255.0f / kTwoPi)) + ctx.gHue;
+
+    // Trail persistence: more energy = shorter trails
+    uint8_t fadeAmt = static_cast<uint8_t>(clampf(18.0f + 35.0f * (1.0f - normBass), 12.0f, 55.0f));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmt);
+
+    // STEP 6: Per-pixel render (linear — comet is asymmetric)
     for (int i = 0; i < STRIP_LENGTH; i++) {
         float x = static_cast<float>(i) - mid;
-        float dmid = x;
-
-        // Centre glue envelope
-        float glue = expf(-(dmid * dmid) * 0.0018f);
-
         float dx = x - x0;
 
-        // Head gaussian — RMS widens/narrows
-        const float sigma = 3.2f * (1.0f + 0.30f * (sig.rms - 0.5f));
+        // Gaussian head
         float head = gaussian(dx, sigma);
 
-        // Airy-ish tail: oscillatory lobes behind the head, decaying
+        // Airy tail: oscillatory lobes behind the head, decaying
         float behind = (dx * dir > 0.0f) ? (dx * dir) : 0.0f;
+        float tail = expf(-behind * tailDecay) *
+                     (0.55f + 0.45f * cosf(behind * lobeFreq - m_t * 0.9f));
+        tail = clamp01(tail);
 
-        // Structure extends tail decay and modulates lobe spacing
-        float tail = expf(-behind * (0.12f - 0.04f * m_structure)) *
-                     (0.55f + 0.45f * cosf(behind * (1.25f + 0.35f * m_structure) - m_t * 0.9f));
+        // Impact thrust at head
+        float impactAdd = gaussian(dx, sigma * 1.5f) * m_impact * 0.4f;
 
-        // Tail mask for memory layer spatial gating
-        float tail_mask = lowrisk_ar::clamp01f(expf(-behind * 0.08f));
+        // Compose brightness: audio magnitude x geometry x beat x silence
+        float wave = clamp01(head + 0.70f * tail * normBass);
+        float brightness = (wave * normBass + impactAdd) * beatMod * silScale;
 
-        // 5-layer per-pixel composition
-        float structuredWave = powf(lowrisk_ar::clamp01f(head + 0.75f * tail), 1.25f);
-        float impactAdd = expf(-behind * 0.18f) * m_impact * 0.38f;   // thrust at head
-        float memoryAdd = m_memory * tail_mask * 0.16f;                // persist in tail region
+        // Squared for punch
+        brightness *= brightness;
 
-        // Melt into wings (no strip rivalry)
-        float glued = sbLerp(structuredWave, structuredWave * (0.45f + 0.55f * glue), 0.85f);
+        uint8_t val = static_cast<uint8_t>(clamp01(brightness) * 255.0f);
+        val = scale8(val, ctx.brightness);
 
-        float brightness = bedBright * glued + impactAdd + memoryAdd;
-        brightness = lowrisk_ar::clamp01f(brightness);
+        // Hue: warm head (base), cool tail (+60)
+        float headness = gaussian(dx, sigma * 2.0f);
+        uint8_t hue = baseHue + static_cast<uint8_t>(60.0f * (1.0f - headness));
 
-        uint8_t br = luminanceToBr(brightness, master);
-
-        // Hue: warm head, cool tail — tonal anchor drives base
-        float hue = m_ar.tonalHue
-                    + (60.0f * (1.0f - smoothstep(0.0f, 1.0f, head)))
-                    + 15.0f * glue;
-        uint8_t hueU8 = static_cast<uint8_t>(hue);
-
-        writeDualLocked(ctx, i, ctx.palette.getColor(hueU8, br));
+        writeDualLocked(ctx, i, CHSV(hue, ctx.saturation, val));
     }
 
     lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }
 
-// =========================================================================
-// cleanup / metadata / parameters
-// =========================================================================
-
-void LGPAiryCometAREffect::cleanup() {
-    // No resources to free (no PSRAM allocation)
-}
+// Cleanup / metadata / parameters
+void LGPAiryCometAREffect::cleanup() {}
 
 const plugins::EffectMetadata& LGPAiryCometAREffect::getMetadata() const {
     static plugins::EffectMetadata meta{
         "LGP Airy Comet (5L-AR)",
-        "Self-accelerating comet with 5-layer audio-reactive composition",
-        plugins::EffectCategory::QUANTUM,
-        1
+        "Self-accelerating comet with direct audio-reactive composition",
+        plugins::EffectCategory::QUANTUM, 1
     };
     return meta;
 }
-
-uint8_t LGPAiryCometAREffect::getParameterCount() const {
-    return lowrisk_ar::Ar16Controls::parameterCount();
-}
-
-const plugins::EffectParameter* LGPAiryCometAREffect::getParameter(uint8_t index) const {
-    return lowrisk_ar::Ar16Controls::parameter(index);
-}
-
-bool LGPAiryCometAREffect::setParameter(const char* name, float value) {
-    return m_controls.set(name, value);
-}
-
-float LGPAiryCometAREffect::getParameter(const char* name) const {
-    return m_controls.get(name);
-}
+uint8_t LGPAiryCometAREffect::getParameterCount() const { return 0; }
+const plugins::EffectParameter* LGPAiryCometAREffect::getParameter(uint8_t) const { return nullptr; }
+bool LGPAiryCometAREffect::setParameter(const char*, float) { return false; }
+float LGPAiryCometAREffect::getParameter(const char*) const { return 0.0f; }
 
 } // namespace ieffect
 } // namespace effects

@@ -1,12 +1,9 @@
 /**
  * @file LGPMoireCathedralAREffect.cpp
- * @brief Moire Cathedral (5-Layer Audio-Reactive)
+ * @brief Moire Cathedral (5-Layer AR) — REWRITTEN
  *
- * Interference arches from close gratings with full 5-layer AR composition.
- * Base maths from ShapeBangersPack LGPMoireCathedralEffect, restructured into
- * explicit bed/structure/impact/tonal/memory layers.
- *
- * Centre-origin compliant. Dual-strip locked.
+ * Two close-pitch gratings creating interference arches.
+ * Audio drives brightness directly. Centre-origin, dual-strip mirrored.
  */
 
 #include "LGPMoireCathedralAREffect.h"
@@ -19,205 +16,154 @@ namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
-// =========================================================================
-// Local helpers
-// =========================================================================
+static constexpr float kTwoPi = 6.28318530717958647692f;
+static constexpr float kPi    = 3.14159265358979323846f;
+static constexpr float kBassTau   = 0.050f;
+static constexpr float kMidTau    = 0.055f;
+static constexpr float kChromaTau = 0.300f;
+static constexpr float kFollowerAttackTau = 0.058f;
+static constexpr float kFollowerDecayTau  = 0.500f;
+static constexpr float kFollowerFloor     = 0.04f;
+static constexpr float kImpactDecayTau    = 0.200f;
 
-static constexpr float kTau = 6.28318530717958647692f;
-
-static inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRGB& c) {
-    ctx.leds[i] = c;
-    int j = i + STRIP_LENGTH;
-    if (j < (int)ctx.ledCount) ctx.leds[j] = c;
+static inline float clamp01(float x) {
+    if (x < 0.0f) return 0.0f;
+    if (x > 1.0f) return 1.0f;
+    return x;
 }
-
-static inline uint8_t luminanceToBr(float wave01, float master) {
-    const float base = 0.06f;
-    float out = lowrisk_ar::clamp01f(base + (1.0f - base) * lowrisk_ar::clamp01f(wave01)) * master;
-    return static_cast<uint8_t>(255.0f * out);
+static inline float clampf(float x, float lo, float hi) {
+    if (x < lo) return lo;
+    if (x > hi) return hi;
+    return x;
 }
-
-// =========================================================================
-// Construction / init / cleanup
-// =========================================================================
 
 LGPMoireCathedralAREffect::LGPMoireCathedralAREffect()
-    : m_t(0.0f)
-    , m_bed(0.3f)
-    , m_structure(0.5f)
-    , m_impact(0.0f)
-    , m_memory(0.0f)
-{
-}
+    : m_t(0.0f), m_bass(0.0f), m_mid(0.0f), m_chromaAngle(0.0f),
+      m_bassMax(0.15f), m_midMax(0.15f), m_impact(0.0f) {}
 
 bool LGPMoireCathedralAREffect::init(plugins::EffectContext& ctx) {
-    m_controls.resetDefaults();
-    m_ar = lowrisk_ar::ArRuntimeState{};
-    m_ar.tonalHue = static_cast<float>(ctx.gHue);
-    m_ar.modeSmooth = 2.0f;
-    m_t         = 0.0f;
-    m_bed       = 0.3f;
-    m_structure = 0.5f;
-    m_impact    = 0.0f;
-    m_memory    = 0.0f;
+    m_t = 0.0f; m_bass = 0.0f; m_mid = 0.0f; m_chromaAngle = 0.0f;
+    m_bassMax = 0.15f; m_midMax = 0.15f; m_impact = 0.0f;
     lightwaveos::effects::cinema::reset();
     return true;
 }
 
-// =========================================================================
-// render() — 5-Layer composition
-// =========================================================================
-
 void LGPMoireCathedralAREffect::render(plugins::EffectContext& ctx) {
-    // --- Timing ---
-    const float dtSignal = AudioReactivePolicy::signalDt(ctx);
-    const float dtVisual = AudioReactivePolicy::visualDt(ctx);
+    const float dt = ctx.getSafeRawDeltaSeconds();
+    const float dtVis = ctx.getSafeDeltaSeconds();
     const float speedNorm = ctx.speed / 50.0f;
 
-    // --- Signals (shared infrastructure handles presence gate + fallback) ---
-    const lowrisk_ar::ArSignalSnapshot sig =
-        lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);
-    const lowrisk_ar::ArModulationProfile mod =
-        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);
-    m_ar.tonalHue = mod.baseHue;
+    const float rawBass = ctx.audio.available ? ctx.audio.bass() : 0.0f;
+    const float rawMid = ctx.audio.available ? ctx.audio.mid() : 0.0f;
+    const float beatStr = ctx.audio.available ? ctx.audio.beatStrength() : 0.0f;
+    const float silScale = ctx.audio.available ? ctx.audio.silentScale() : 0.0f;
+    const float* chroma = ctx.audio.available ? ctx.audio.chroma() : nullptr;
 
-    // =================================================================
-    // LAYER UPDATES
-    // =================================================================
+    m_bass += (rawBass - m_bass) * (1.0f - expf(-dt / kBassTau));
+    m_mid += (rawMid - m_mid) * (1.0f - expf(-dt / kMidTau));
 
-    // Bed: slow atmosphere from RMS (tau 0.40s)
-    m_bed = lowrisk_ar::smoothTo(m_bed,
-        0.25f + 0.75f * sig.rms, dtSignal, 0.40f);
+    if (chroma) {
+        float sx = 0.0f, sy = 0.0f;
+        for (int i = 0; i < 12; i++) {
+            float angle = static_cast<float>(i) * (kTwoPi / 12.0f);
+            sx += chroma[i] * cosf(angle);
+            sy += chroma[i] * sinf(angle);
+        }
+        if (sx * sx + sy * sy > 0.0001f) {
+            float target = atan2f(sy, sx);
+            if (target < 0.0f) target += kTwoPi;
+            float delta = target - m_chromaAngle;
+            while (delta > kPi) delta -= kTwoPi;
+            while (delta < -kPi) delta += kTwoPi;
+            m_chromaAngle += delta * (1.0f - expf(-dt / kChromaTau));
+            if (m_chromaAngle < 0.0f) m_chromaAngle += kTwoPi;
+            if (m_chromaAngle >= kTwoPi) m_chromaAngle -= kTwoPi;
+        }
+    }
 
-    // Structure: grating pitch modulation from bass + mid (tau 0.14s)
-    const float structTarget = lowrisk_ar::clamp01f(
-        0.30f + 0.40f * sig.bass + 0.20f * sig.mid + 0.10f * sig.rhythmic);
-    m_structure = lowrisk_ar::smoothTo(m_structure, structTarget, dtSignal, 0.14f);
+    {
+        float aA = 1.0f - expf(-dt / kFollowerAttackTau);
+        float dA = 1.0f - expf(-dt / kFollowerDecayTau);
+        if (m_bass > m_bassMax) m_bassMax += (m_bass - m_bassMax) * aA;
+        else m_bassMax += (m_bass - m_bassMax) * dA;
+        if (m_bassMax < kFollowerFloor) m_bassMax = kFollowerFloor;
+        if (m_mid > m_midMax) m_midMax += (m_mid - m_midMax) * aA;
+        else m_midMax += (m_mid - m_midMax) * dA;
+        if (m_midMax < kFollowerFloor) m_midMax = kFollowerFloor;
+    }
+    const float normBass = clamp01(m_bass / m_bassMax);
+    const float normMid = clamp01(m_mid / m_midMax);
 
-    // Impact: beat-triggered arch brightening (fast attack, decay 0.20s)
-    if (sig.beatTick) m_impact = fmaxf(m_impact, 0.85f);
-    m_impact = lowrisk_ar::decay(m_impact, dtSignal, 0.20f);
+    if (beatStr > m_impact) m_impact = beatStr;
+    m_impact *= expf(-dt / kImpactDecayTau);
 
-    // Memory: accumulated arch glow (slow decay, fed by impact + flux)
-    m_memory = lowrisk_ar::clamp01f(
-        lowrisk_ar::decay(m_memory, dtSignal, 0.80f)
-        + 0.15f * m_impact + 0.08f * sig.flux);
-    lowrisk_ar::applyBedImpactMemoryMix(
-        m_controls,
-        static_cast<float>(ctx.rawTotalTimeMs),
-        m_bed,
-        m_impact,
-        m_memory);
+    const float beatMod = 0.3f + 0.7f * beatStr;
 
-    // =================================================================
-    // MOTION
-    // =================================================================
+    // Grating pitches: mid energy shifts pitch
+    float p1 = clampf(7.5f + 3.0f * (normMid - 0.5f), 6.0f, 9.0f);
+    float p2 = p1 + 0.6f;
 
-    const float tRate = (0.85f + 3.50f * speedNorm) * mod.motionRate
-                        * (0.75f + 0.25f * m_structure);
-    m_t += tRate * dtVisual;
+    float w1 = 0.65f + 0.40f * speedNorm;
+    float w2 = 0.58f + 0.35f * speedNorm;
 
-    // =================================================================
-    // EFFECT GEOMETRY DRIVEN BY LAYERS
-    // =================================================================
+    float tRate = 0.85f + 3.5f * speedNorm;
+    m_t += tRate * dtVis;
 
-    const float mid    = (STRIP_LENGTH - 1) * 0.5f;
+    // Rib sharpening: bass sharpens, impact boosts
+    float ribPow = clampf(1.35f + 0.45f * normBass + 0.3f * m_impact, 1.30f, 2.50f);
 
-    // Grating pitches: structure modulates p1 (6-9 range), p2 tracks p1+0.6
-    const float p1 = lowrisk_ar::clampf(
-        7.5f + (m_structure - 0.5f) * 3.0f, 6.0f, 9.0f);
-    const float p2 = p1 + 0.6f;
+    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle * (255.0f / kTwoPi)) + ctx.gHue;
 
-    // Grating rotation rates (from original w1/w2)
-    const float w1 = 0.65f + 0.40f * speedNorm;
-    const float w2 = 0.58f + 0.35f * speedNorm;
+    uint8_t fadeAmt = static_cast<uint8_t>(clampf(18.0f + 35.0f * (1.0f - normBass), 12.0f, 55.0f));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmt);
 
-    // Cathedral rib sharpening: original 1.35, increased by impact
-    const float ribPow = lowrisk_ar::clampf(
-        1.35f + 0.45f * m_impact, 1.30f, 2.20f);
-
-    // =================================================================
-    // PER-PIXEL RENDER
-    // =================================================================
-
-    const float bedBright = 0.25f + 0.75f * m_bed;
-    const float master = (ctx.brightness / 255.0f)
-                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;
-
-    for (int i = 0; i < STRIP_LENGTH; i++) {
-        const float x = static_cast<float>(i);
-        const float dmid = x - mid;
-
-        // Centre glue (original 0.0011 decay)
-        const float glue = 0.40f + 0.60f * expf(-(dmid * dmid) * 0.0011f);
+    // Per-pixel render — centre-outward, 4-way symmetric
+    for (uint16_t dist = 0; dist < HALF_LENGTH; dist++) {
+        const float progress = (HALF_LENGTH <= 1) ? 0.0f
+            : (static_cast<float>(dist) / static_cast<float>(HALF_LENGTH - 1));
+        const float x = static_cast<float>(dist);
 
         // Two grating waves
-        const float g1 = sinf(kTau * (x / p1) + m_t * w1);
-        const float g2 = sinf(kTau * (x / p2) - m_t * w2);
+        float g1 = sinf(kTwoPi * (x / p1) + m_t * w1);
+        float g2 = sinf(kTwoPi * (x / p2) - m_t * w2);
 
-        // Moire interference (0..2 range)
-        const float moire = fabsf(g1 - g2);
-        float wave = lowrisk_ar::clamp01f(moire * 0.55f);
-
-        // Cathedral ribs: compress highlights (impact sharpens)
+        // Moire interference
+        float moire = fabsf(g1 - g2);
+        float wave = clamp01(moire * 0.55f);
         wave = powf(wave, ribPow);
 
-        // Bed x structured geometry
-        float structuredGeom = wave * glue;
+        // Impact at arch peaks
+        float impactAdd = m_impact * wave * 0.35f;
 
-        // Impact: additive brightness at arch peaks
-        float impactAdd = m_impact * wave * glue * 0.30f;
+        // Compose: audio x geometry x beat x silence
+        float brightness = (normBass * wave + impactAdd) * beatMod * silScale;
+        brightness *= brightness;
 
-        // Memory: gentle additive glow at arches
-        float memoryAdd = m_memory * (0.5f + 0.5f * wave) * glue * 0.20f;
+        uint8_t val = static_cast<uint8_t>(clamp01(brightness) * 255.0f);
+        val = scale8(val, ctx.brightness);
 
-        // Compose: bed x structure + impact + memory
-        float brightness = bedBright * structuredGeom + impactAdd + memoryAdd;
-        brightness = lowrisk_ar::clamp01f(brightness);
+        uint8_t hue = baseHue + static_cast<uint8_t>(wave * 42.0f + progress * 12.0f);
 
-        const uint8_t br = luminanceToBr(brightness, master);
-
-        // Tonal hue: chord-driven anchor + spatial offset (original two-tone pattern)
-        const uint8_t hue = static_cast<uint8_t>(
-            m_ar.tonalHue + wave * 42.0f + glue * 12.0f + sig.harmonic * 15.0f);
-
-        writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));
+        SET_CENTER_PAIR(ctx, dist, CHSV(hue, ctx.saturation, val));
     }
 
     lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }
-
-// =========================================================================
-// cleanup / metadata / parameters
-// =========================================================================
 
 void LGPMoireCathedralAREffect::cleanup() {}
 
 const plugins::EffectMetadata& LGPMoireCathedralAREffect::getMetadata() const {
     static plugins::EffectMetadata meta{
         "LGP Moire Cathedral (5L-AR)",
-        "Interference arches with 5-layer audio-reactive composition",
-        plugins::EffectCategory::QUANTUM,
-        1
+        "Interference arches with direct audio-reactive composition",
+        plugins::EffectCategory::QUANTUM, 1
     };
     return meta;
 }
-
-uint8_t LGPMoireCathedralAREffect::getParameterCount() const {
-    return lowrisk_ar::Ar16Controls::parameterCount();
-}
-
-const plugins::EffectParameter* LGPMoireCathedralAREffect::getParameter(uint8_t index) const {
-    return lowrisk_ar::Ar16Controls::parameter(index);
-}
-
-bool LGPMoireCathedralAREffect::setParameter(const char* name, float value) {
-    return m_controls.set(name, value);
-}
-
-float LGPMoireCathedralAREffect::getParameter(const char* name) const {
-    return m_controls.get(name);
-}
+uint8_t LGPMoireCathedralAREffect::getParameterCount() const { return 0; }
+const plugins::EffectParameter* LGPMoireCathedralAREffect::getParameter(uint8_t) const { return nullptr; }
+bool LGPMoireCathedralAREffect::setParameter(const char*, float) { return false; }
+float LGPMoireCathedralAREffect::getParameter(const char*) const { return 0.0f; }
 
 } // namespace ieffect
 } // namespace effects

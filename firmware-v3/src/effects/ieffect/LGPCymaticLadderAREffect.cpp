@@ -1,13 +1,14 @@
 /**
  * @file LGPCymaticLadderAREffect.cpp
- * @brief Cymatic Ladder (5-Layer Audio-Reactive)
+ * @brief Cymatic Ladder (5-Layer Audio-Reactive) — REWRITTEN
  *
- * Standing-wave modes with full 5-layer AR composition. The harmonic mode
- * number n (2-8) is driven by structure + harmonic content with hysteresis
- * to prevent rapid mode jumps. Antinode blooms on beat; memory holds mode
- * persistence for organic transitions between standing-wave patterns.
+ * Standing-wave modes with harmonic mode selection. Mode number n (2-8)
+ * driven by mid-frequency content. Audio drives brightness directly.
  *
- * Centre-origin compliant. Dual-strip locked.
+ * Divergence fixes: Direct ControlBus reads, single-stage smoothing,
+ * asymmetric max follower, no brightness floors, SET_CENTER_PAIR.
+ *
+ * Centre-origin compliant. Dual-strip mirrored.
  */
 
 #include "LGPCymaticLadderAREffect.h"
@@ -20,212 +21,165 @@ namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
-// =========================================================================
-// Local helpers
-// =========================================================================
+static constexpr float kTwoPi = 6.28318530717958647692f;
+static constexpr float kPi    = 3.14159265358979323846f;
+static constexpr float kBassTau    = 0.050f;
+static constexpr float kMidTau     = 0.055f;
+static constexpr float kChromaTau  = 0.300f;
+static constexpr float kFollowerAttackTau = 0.058f;
+static constexpr float kFollowerDecayTau  = 0.500f;
+static constexpr float kFollowerFloor     = 0.04f;
+static constexpr float kImpactDecayTau = 0.200f;
 
-static constexpr float kPi  = 3.14159265358979323846f;
-static constexpr float kTau = 6.28318530717958647692f;
-
-static inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRGB& c) {
-    ctx.leds[i] = c;
-    int j = i + STRIP_LENGTH;
-    if (j < (int)ctx.ledCount) ctx.leds[j] = c;
+static inline float clamp01(float x) {
+    if (x < 0.0f) return 0.0f;
+    if (x > 1.0f) return 1.0f;
+    return x;
 }
-
-static inline uint8_t luminanceToBr(float wave01, float master) {
-    const float base = 0.06f;
-    float out = lowrisk_ar::clamp01f(base + (1.0f - base) * lowrisk_ar::clamp01f(wave01)) * master;
-    return static_cast<uint8_t>(255.0f * out);
+static inline float clampf(float x, float lo, float hi) {
+    if (x < lo) return lo;
+    if (x > hi) return hi;
+    return x;
 }
-
-// =========================================================================
-// Construction / init / cleanup
-// =========================================================================
 
 LGPCymaticLadderAREffect::LGPCymaticLadderAREffect()
-    : m_t(0.0f)
-    , m_bed(0.3f)
-    , m_structure(0.5f)
-    , m_impact(0.0f)
-    , m_memory(0.0f)
-    , m_modeSmooth(2.0f)
-{
-}
+    : m_t(0.0f), m_bass(0.0f), m_mid(0.0f), m_chromaAngle(0.0f),
+      m_bassMax(0.15f), m_midMax(0.15f), m_modeSmooth(3.0f), m_impact(0.0f) {}
 
 bool LGPCymaticLadderAREffect::init(plugins::EffectContext& ctx) {
-    m_controls.resetDefaults();
-    m_ar = lowrisk_ar::ArRuntimeState{};
-    m_ar.tonalHue = static_cast<float>(ctx.gHue);
-    m_ar.modeSmooth = 2.0f;
-    m_t         = 0.0f;
-    m_bed       = 0.3f;
-    m_structure = 0.5f;
-    m_impact    = 0.0f;
-    m_memory    = 0.0f;
-    m_modeSmooth = 2.0f;
+    m_t = 0.0f; m_bass = 0.0f; m_mid = 0.0f; m_chromaAngle = 0.0f;
+    m_bassMax = 0.15f; m_midMax = 0.15f; m_modeSmooth = 3.0f; m_impact = 0.0f;
     lightwaveos::effects::cinema::reset();
     return true;
 }
 
-// =========================================================================
-// render() -- 5-Layer composition
-// =========================================================================
-
 void LGPCymaticLadderAREffect::render(plugins::EffectContext& ctx) {
-    // --- Timing ---
-    const float dtSignal = AudioReactivePolicy::signalDt(ctx);
-    const float dtVisual = AudioReactivePolicy::visualDt(ctx);
+    const float dt = ctx.getSafeRawDeltaSeconds();
+    const float dtVis = ctx.getSafeDeltaSeconds();
     const float speedNorm = ctx.speed / 50.0f;
 
-    // --- Signals (shared infrastructure handles presence gate + fallback) ---
-    const lowrisk_ar::ArSignalSnapshot sig =
-        lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);
-    const lowrisk_ar::ArModulationProfile mod =
-        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);
-    m_ar.tonalHue = mod.baseHue;
+    // STEP 1: Direct ControlBus reads
+    const float rawBass = ctx.audio.available ? ctx.audio.bass() : 0.0f;
+    const float rawMid = ctx.audio.available ? ctx.audio.mid() : 0.0f;
+    const float beatStr = ctx.audio.available ? ctx.audio.beatStrength() : 0.0f;
+    const float silScale = ctx.audio.available ? ctx.audio.silentScale() : 0.0f;
+    const float* chroma = ctx.audio.available ? ctx.audio.chroma() : nullptr;
 
-    // =================================================================
-    // LAYER UPDATES
-    // =================================================================
+    // STEP 2: Single-stage smoothing
+    m_bass += (rawBass - m_bass) * (1.0f - expf(-dt / kBassTau));
+    m_mid += (rawMid - m_mid) * (1.0f - expf(-dt / kMidTau));
 
-    // Bed: standing-wave body brightness from RMS (tau 0.48s)
-    m_bed = lowrisk_ar::smoothTo(m_bed,
-        0.25f + 0.75f * sig.rms, dtSignal, 0.48f);
-
-    // Structure: mode selection from harmonic + rhythmic + RMS (tau 0.18s)
-    const float structTarget = lowrisk_ar::clamp01f(
-        0.30f + 0.30f * sig.harmonic + 0.25f * sig.rhythmic + 0.15f * sig.rms);
-    m_structure = lowrisk_ar::smoothTo(m_structure, structTarget, dtSignal, 0.18f);
-
-    // Impact: antinode bloom on beat (fast attack, decay 0.22s)
-    if (sig.beatTick) m_impact = fmaxf(m_impact, 0.88f);
-    m_impact = lowrisk_ar::decay(m_impact, dtSignal, 0.22f);
-
-    // Memory: mode hold persistence (tau 1.10s, slow)
-    m_memory = lowrisk_ar::clamp01f(
-        lowrisk_ar::decay(m_memory, dtSignal, 1.10f)
-        + 0.09f * m_impact + 0.05f * sig.harmonic);
-
-    // =================================================================
-    // MODE SELECTION WITH HYSTERESIS
-    // =================================================================
-
-    // Mode target from harmonic content + structure (range 2..8)
-    const float modeTarget = 2.0f + 6.0f * lowrisk_ar::clamp01f(
-        0.10f + 0.58f * sig.harmonic + 0.32f * m_structure);
-
-    // Hysteresis: only update if delta exceeds threshold
-    if (fabsf(modeTarget - m_modeSmooth) > 0.14f) {
-        m_modeSmooth = lowrisk_ar::smoothTo(m_modeSmooth, modeTarget, dtSignal, 0.30f);
+    // Circular chroma EMA
+    if (chroma) {
+        float sx = 0.0f, sy = 0.0f;
+        for (int i = 0; i < 12; i++) {
+            float angle = static_cast<float>(i) * (kTwoPi / 12.0f);
+            sx += chroma[i] * cosf(angle);
+            sy += chroma[i] * sinf(angle);
+        }
+        if (sx * sx + sy * sy > 0.0001f) {
+            float target = atan2f(sy, sx);
+            if (target < 0.0f) target += kTwoPi;
+            float delta = target - m_chromaAngle;
+            while (delta > kPi) delta -= kTwoPi;
+            while (delta < -kPi) delta += kTwoPi;
+            m_chromaAngle += delta * (1.0f - expf(-dt / kChromaTau));
+            if (m_chromaAngle < 0.0f) m_chromaAngle += kTwoPi;
+            if (m_chromaAngle >= kTwoPi) m_chromaAngle -= kTwoPi;
+        }
     }
-    const int n = static_cast<int>(lowrisk_ar::clampf(
-        floorf(m_modeSmooth + 0.5f), 2.0f, 8.0f));
-    lowrisk_ar::applyBedImpactMemoryMix(
-        m_controls,
-        static_cast<float>(ctx.rawTotalTimeMs),
-        m_bed,
-        m_impact,
-        m_memory);
 
-    // =================================================================
-    // MOTION
-    // =================================================================
+    // STEP 3: Max followers
+    {
+        float aA = 1.0f - expf(-dt / kFollowerAttackTau);
+        float dA = 1.0f - expf(-dt / kFollowerDecayTau);
+        if (m_bass > m_bassMax) m_bassMax += (m_bass - m_bassMax) * aA;
+        else m_bassMax += (m_bass - m_bassMax) * dA;
+        if (m_bassMax < kFollowerFloor) m_bassMax = kFollowerFloor;
 
-    const float tRate = (1.10f + 4.20f * speedNorm) * mod.motionRate
-                        * (0.70f + 0.30f * m_structure);
-    m_t += tRate * dtVisual;
+        if (m_mid > m_midMax) m_midMax += (m_mid - m_midMax) * aA;
+        else m_midMax += (m_mid - m_midMax) * dA;
+        if (m_midMax < kFollowerFloor) m_midMax = kFollowerFloor;
+    }
+    const float normBass = clamp01(m_bass / m_bassMax);
+    const float normMid = clamp01(m_mid / m_midMax);
 
-    // =================================================================
-    // EFFECT GEOMETRY -- Standing wave with mode-aware composition
-    // =================================================================
+    // STEP 4: Impact
+    if (beatStr > m_impact) m_impact = beatStr;
+    m_impact *= expf(-dt / kImpactDecayTau);
 
-    const float mid    = (STRIP_LENGTH - 1) * 0.5f;
-    const float invMid = 1.0f / mid;
+    // STEP 5: Standing wave mode selection with hysteresis
+    // Mid energy drives mode number: more energy = higher harmonics
+    float modeTarget = 2.0f + 6.0f * normMid;  // Range 2-8
+    if (fabsf(modeTarget - m_modeSmooth) > 0.3f) {
+        float modeAlpha = 1.0f - expf(-dt / 0.20f);
+        m_modeSmooth += (modeTarget - m_modeSmooth) * modeAlpha;
+    }
+    const int n = static_cast<int>(clampf(floorf(m_modeSmooth + 0.5f), 2.0f, 8.0f));
 
-    // Phase driven by structure layer
-    const float phase = m_t * (0.8f + 0.5f * speedNorm)
-                       * (0.85f + 0.15f * m_structure);
+    // Beat modulation
+    const float beatMod = 0.3f + 0.7f * beatStr;
 
-    // Contrast exponent driven by structure + impact
-    const float contrastExp = lowrisk_ar::clampf(
-        1.8f + 0.8f * m_structure + 0.6f * m_impact, 1.4f, 3.4f);
+    // Standing wave phase
+    float tRate = 1.0f + 4.0f * speedNorm;
+    m_t += tRate * dtVis;
+    const float phase = m_t * (0.8f + 0.5f * speedNorm);
 
-    // =================================================================
-    // PER-PIXEL RENDER
-    // =================================================================
+    // Wave contrast: more bass = sharper peaks
+    const float contrastExp = clampf(2.0f + 1.2f * normBass + 0.5f * m_impact, 1.5f, 3.8f);
 
-    const float bedBright = 0.25f + 0.75f * m_bed;
-    const float master = (ctx.brightness / 255.0f)
-                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;
+    // Hue from chroma
+    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle * (255.0f / kTwoPi)) + ctx.gHue;
 
-    for (int i = 0; i < STRIP_LENGTH; i++) {
-        const float x     = static_cast<float>(i) / static_cast<float>(STRIP_LENGTH - 1);
-        const float dmid  = static_cast<float>(i) - mid;
-        const float distN = fabsf(dmid) * invMid;
+    // Trail persistence
+    uint8_t fadeAmt = static_cast<uint8_t>(clampf(18.0f + 35.0f * (1.0f - normBass), 12.0f, 55.0f));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmt);
 
-        // Centre glue (Gaussian fall-off from centre)
-        const float glue = 0.30f + 0.70f * expf(-(dmid * dmid) * 0.0016f);
+    // STEP 6: Per-pixel render — centre-outward, 4-way symmetric
+    for (uint16_t dist = 0; dist < HALF_LENGTH; dist++) {
+        const float progress = (HALF_LENGTH <= 1) ? 0.0f
+            : (static_cast<float>(dist) / static_cast<float>(HALF_LENGTH - 1));
 
-        // Standing wave: sin(n * pi * x + phase)
-        const float s = fabsf(sinf(static_cast<float>(n) * kPi * x + phase));
-        const float structuredWave = powf(s, contrastExp);
+        // Standing wave: |sin(n * pi * progress + phase)|
+        float s = fabsf(sinf(static_cast<float>(n) * kPi * progress + phase));
+        float wave = powf(s, contrastExp);
 
-        // Impact: antinode bloom on beat (additive at antinode positions)
-        const float antinodeStrength = powf(s, 1.2f);
-        const float impactAdd = m_impact * antinodeStrength * 0.32f;
+        // Antinode bloom on beat
+        float antinodeStr = powf(s, 1.2f);
+        float impactAdd = m_impact * antinodeStr * 0.35f;
 
-        // Memory: gentle persistent glow
-        const float memoryAdd = m_memory * s * 0.15f;
+        // Compose: audio magnitude x wave geometry x beat x silence
+        float brightness = (normBass * wave + impactAdd) * beatMod * silScale;
 
-        // Compose: bed x structure + impact + memory
-        float brightness = bedBright * structuredWave * glue + impactAdd + memoryAdd;
-        brightness = lowrisk_ar::clamp01f(brightness);
+        // Squared for punch
+        brightness *= brightness;
 
-        const uint8_t br = luminanceToBr(brightness, master);
+        uint8_t val = static_cast<uint8_t>(clamp01(brightness) * 255.0f);
+        val = scale8(val, ctx.brightness);
 
-        // Tonal hue: mode-aware chord hue with spatial offset
-        const uint8_t hue = static_cast<uint8_t>(
-            m_ar.tonalHue + static_cast<float>(n) * 8.0f
-            + sig.harmonic * 36.0f + distN * 12.0f);
+        // Hue: mode-offset + spatial gradient
+        uint8_t hue = baseHue + static_cast<uint8_t>(static_cast<float>(n) * 8.0f + progress * 30.0f);
 
-        writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));
+        SET_CENTER_PAIR(ctx, dist, CHSV(hue, ctx.saturation, val));
     }
 
     lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }
-
-// =========================================================================
-// cleanup / metadata / parameters
-// =========================================================================
 
 void LGPCymaticLadderAREffect::cleanup() {}
 
 const plugins::EffectMetadata& LGPCymaticLadderAREffect::getMetadata() const {
     static plugins::EffectMetadata meta{
         "LGP Cymatic Ladder (5L-AR)",
-        "Standing-wave modes with 5-layer audio-reactive composition",
-        plugins::EffectCategory::QUANTUM,
-        1
+        "Standing-wave modes with direct audio-reactive composition",
+        plugins::EffectCategory::QUANTUM, 1
     };
     return meta;
 }
-
-uint8_t LGPCymaticLadderAREffect::getParameterCount() const {
-    return lowrisk_ar::Ar16Controls::parameterCount();
-}
-
-const plugins::EffectParameter* LGPCymaticLadderAREffect::getParameter(uint8_t index) const {
-    return lowrisk_ar::Ar16Controls::parameter(index);
-}
-
-bool LGPCymaticLadderAREffect::setParameter(const char* name, float value) {
-    return m_controls.set(name, value);
-}
-
-float LGPCymaticLadderAREffect::getParameter(const char* name) const {
-    return m_controls.get(name);
-}
+uint8_t LGPCymaticLadderAREffect::getParameterCount() const { return 0; }
+const plugins::EffectParameter* LGPCymaticLadderAREffect::getParameter(uint8_t) const { return nullptr; }
+bool LGPCymaticLadderAREffect::setParameter(const char*, float) { return false; }
+float LGPCymaticLadderAREffect::getParameter(const char*) const { return 0.0f; }
 
 } // namespace ieffect
 } // namespace effects

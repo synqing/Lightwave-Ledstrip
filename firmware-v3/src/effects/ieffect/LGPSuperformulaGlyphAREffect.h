@@ -1,23 +1,10 @@
 /**
  * @file LGPSuperformulaGlyphAREffect.h
- * @brief Superformula Living Glyph (5-Layer Audio-Reactive)
+ * @brief Superformula Living Glyph (5-Layer Audio-Reactive) — REWRITTEN
  *
  * Effect ID: 0x1C09 (EID_LGP_SUPERFORMULA_GLYPH_AR)
- * Family: FIVE_LAYER_AR
- * Category: QUANTUM
- * Tags: CENTER_ORIGIN | DUAL_STRIP | ORGANIC | AUDIO_REACTIVE
- *
- * 5-layer composition model (NOT flat lerp):
- *   Bed       - slow RMS-driven atmosphere (tau ~0.42s)
- *   Structure - superformula param morphing from harmonic + flux (tau ~0.20s)
- *   Impact    - beat-triggered glyph brightening (decay ~0.18s)
- *   Tonal     - chord-driven hue anchor
- *   Memory    - sigil persistence accumulator (decay ~0.75s)
- *
- * Composition: brightness = bed * (band_wave * glue) + impact + memory
- *
- * Superformula: r(phi) = (|cos(m*phi/4)/a|^n2 + |sin(m*phi/4)/b|^n3)^(-1/n1)
- * Distance-to-curve band rendering with exponential falloff.
+ * Direct ControlBus reads, single-stage smoothing, max follower normalisation.
+ * Superformula params (m, n1, n2, n3) still morph with audio.
  */
 
 #pragma once
@@ -25,7 +12,6 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../../config/effect_ids.h"
-#include "AudioReactiveLowRiskPackHelpers.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -48,20 +34,22 @@ public:
     float getParameter(const char* name) const override;
 
 private:
-    lowrisk_ar::Ar16Controls m_controls;
-    lowrisk_ar::ArRuntimeState m_ar;
     float m_t = 0.0f;
 
-    // 5-Layer composition state
-    float m_bed       = 0.3f;
-    float m_impact    = 0.0f;
-    float m_memory    = 0.0f;
+    float m_bass       = 0.0f;
+    float m_mid        = 0.0f;
+    float m_chromaAngle = 0.0f;
 
-    // Morphing superformula parameters (driven by Structure layer)
-    float m_param_m   = 6.0f;   // Symmetry (3-11)
-    float m_param_n1  = 1.0f;   // Overall shape (0.7-1.6)
-    float m_param_n2  = 1.5f;   // Cos exponent (0.8-2.4)
-    float m_param_n3  = 1.5f;   // Sin exponent (0.8-2.4)
+    float m_bassMax    = 0.15f;
+    float m_midMax     = 0.15f;
+
+    float m_impact     = 0.0f;
+
+    // Morphing superformula parameters
+    float m_param_m   = 6.0f;
+    float m_param_n1  = 1.0f;
+    float m_param_n2  = 1.5f;
+    float m_param_n3  = 1.5f;
 };
 
 } // namespace ieffect

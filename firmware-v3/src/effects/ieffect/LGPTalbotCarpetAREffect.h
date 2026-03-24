@@ -1,9 +1,17 @@
+/**
+ * @file LGPTalbotCarpetAREffect.h
+ * @brief Talbot Carpet (5-Layer Audio-Reactive) — REWRITTEN
+ *
+ * Effect ID: EID_LGP_TALBOT_CARPET_AR (0x1C02)
+ * Direct ControlBus reads, single-stage smoothing, max follower normalisation.
+ * Heavy harmonic inner-loop — uses LIGHTWEIGHT cinema preset.
+ */
+
 #pragma once
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../../config/effect_ids.h"
-#include "AudioReactiveLowRiskPackHelpers.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -26,15 +34,16 @@ public:
     float getParameter(const char* name) const override;
 
 private:
-    lowrisk_ar::Ar16Controls m_controls;
-    lowrisk_ar::ArRuntimeState m_ar;
     float m_t = 0.0f;
 
-    // 5-Layer composition state
-    float m_bed         = 0.3f;
-    float m_structure   = 0.5f;
-    float m_impact      = 0.0f;
-    float m_memory      = 0.0f;
+    float m_bass       = 0.0f;
+    float m_mid        = 0.0f;
+    float m_chromaAngle = 0.0f;
+
+    float m_bassMax    = 0.15f;
+    float m_midMax     = 0.15f;
+
+    float m_impact     = 0.0f;
 };
 
 } // namespace ieffect

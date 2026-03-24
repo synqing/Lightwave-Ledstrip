@@ -1,14 +1,9 @@
 /**
  * @file LGPAiryCometAREffect.h
- * @brief LGP Airy Comet (5-Layer AR) - Self-accelerating comet with 5-layer composition
+ * @brief LGP Airy Comet (5-Layer AR) — REWRITTEN
  *
  * Effect ID: EID_LGP_AIRY_COMET_AR (0x1C03)
- * Family: FIVE_LAYER_AR
- * Tags: CENTER_ORIGIN | DUAL_STRIP | SPECTRAL | PHYSICS | 5LAYER_AR
- *
- * 5-layer audio-reactive composition over the original Airy Comet
- * parabolic physics. Bed/structure/impact/memory layers drive
- * the comet trajectory and tail coefficients directly.
+ * Direct ControlBus reads, single-stage smoothing, max follower normalisation.
  */
 
 #pragma once
@@ -16,7 +11,6 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../../config/effect_ids.h"
-#include "AudioReactiveLowRiskPackHelpers.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -39,15 +33,19 @@ public:
     float getParameter(const char* name) const override;
 
 private:
-    lowrisk_ar::Ar16Controls m_controls;
-    lowrisk_ar::ArRuntimeState m_ar;
     float m_t = 0.0f;
 
-    // 5-Layer composition state
-    float m_bed         = 0.3f;
-    float m_structure   = 0.5f;
-    float m_impact      = 0.0f;
-    float m_memory      = 0.0f;
+    // Single-stage smoothed audio
+    float m_bass       = 0.0f;
+    float m_treble     = 0.0f;
+    float m_chromaAngle = 0.0f;
+
+    // Asymmetric max followers
+    float m_bassMax    = 0.15f;
+    float m_trebleMax  = 0.15f;
+
+    // Impact
+    float m_impact     = 0.0f;
 };
 
 } // namespace ieffect

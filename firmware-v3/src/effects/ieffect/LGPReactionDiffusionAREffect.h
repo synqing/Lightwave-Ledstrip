@@ -1,20 +1,11 @@
 /**
  * @file LGPReactionDiffusionAREffect.h
- * @brief Reaction Diffusion (5-Layer Audio-Reactive)
+ * @brief Reaction Diffusion (5-Layer Audio-Reactive) — REWRITTEN
  *
  * Effect ID: 0x1C06 (EID_LGP_REACTION_DIFFUSION_AR)
- * Family: FIVE_LAYER_AR
- * Category: QUANTUM
- * Tags: CENTER_ORIGIN | DUAL_STRIP | PHYSICS | AUDIO_REACTIVE
- *
- * 5-layer composition model (NOT flat lerp):
- *   Bed       - Gray-Scott reaction brightness driven by RMS (tau ~0.45s)
- *   Structure - F/K parameter modulation from bass+flux (tau ~0.15s)
- *   Impact    - beat triggers V-concentration spike at centre (decay ~0.22s)
- *   Tonal     - chord-driven hue anchor replacing ctx.gHue
- *   Memory    - accumulated glow from reaction activity (tau ~0.90s)
- *
- * Composition: brightness = bed * (v_concentration * melt_glue) + impact + memory
+ * Direct ControlBus reads, single-stage smoothing, max follower normalisation.
+ * PSRAM-allocated Gray-Scott simulation buffers preserved.
+ * Simulation generates spatial pattern; audio drives brightness directly.
  */
 
 #pragma once
@@ -22,7 +13,6 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../../config/effect_ids.h"
-#include "AudioReactiveLowRiskPackHelpers.h"
 
 #ifndef NATIVE_BUILD
 #include <esp_heap_caps.h>
@@ -49,26 +39,25 @@ public:
     float getParameter(const char* name) const override;
 
 private:
-    static constexpr uint16_t STRIP_LENGTH = 160;
+    static constexpr uint16_t kStripLen = 160;
 
-    // PSRAM-allocated buffers for Gray-Scott simulation
+    // PSRAM-allocated Gray-Scott simulation buffers
     struct PsramData {
-        float u[STRIP_LENGTH];   // U concentration
-        float v[STRIP_LENGTH];   // V concentration
-        float u2[STRIP_LENGTH];  // Next-step U
-        float v2[STRIP_LENGTH];  // Next-step V
+        float u[kStripLen];
+        float v[kStripLen];
+        float u2[kStripLen];
+        float v2[kStripLen];
     };
     PsramData* m_ps = nullptr;
 
-    lowrisk_ar::Ar16Controls m_controls;
-    lowrisk_ar::ArRuntimeState m_ar;
     float m_t = 0.0f;
 
-    // 5-Layer composition state
-    float m_bed         = 0.3f;
-    float m_structure   = 0.5f;
-    float m_impact      = 0.0f;
-    float m_memory      = 0.0f;
+    float m_bass       = 0.0f;
+    float m_chromaAngle = 0.0f;
+
+    float m_bassMax    = 0.15f;
+
+    float m_impact     = 0.0f;
 };
 
 } // namespace ieffect

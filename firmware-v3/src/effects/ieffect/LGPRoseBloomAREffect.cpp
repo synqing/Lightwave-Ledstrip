@@ -1,12 +1,14 @@
 /**
  * @file LGPRoseBloomAREffect.cpp
- * @brief Rose Bloom (5-Layer Audio-Reactive)
+ * @brief Rose Bloom (5-Layer Audio-Reactive) — REWRITTEN
  *
- * Rhodonea curve blooming petals with full 5-layer AR composition.
- * Base maths: r = |cos(kf * theta)| with kf drifting 3-7 (petal count).
- * Distance-to-curve band rendering with "opening bloom" modulation.
+ * Rhodonea curve blooming petals. Petal count driven by mid-frequency
+ * audio content. Audio drives brightness directly.
  *
- * Centre-origin compliant. Dual-strip locked.
+ * Divergence fixes: Direct ControlBus reads, single-stage smoothing,
+ * asymmetric max follower, no brightness floors, SET_CENTER_PAIR.
+ *
+ * Centre-origin compliant. Dual-strip mirrored.
  */
 
 #include "LGPRoseBloomAREffect.h"
@@ -19,211 +21,173 @@ namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
-// =========================================================================
-// Local helpers
-// =========================================================================
+static constexpr float kTwoPi = 6.28318530717958647692f;
+static constexpr float kPi    = 3.14159265358979323846f;
+static constexpr float kBassTau    = 0.050f;
+static constexpr float kMidTau     = 0.055f;
+static constexpr float kChromaTau  = 0.300f;
+static constexpr float kFollowerAttackTau = 0.058f;
+static constexpr float kFollowerDecayTau  = 0.500f;
+static constexpr float kFollowerFloor     = 0.04f;
+static constexpr float kImpactDecayTau = 0.180f;
 
-static constexpr float kTau = 6.28318530717958647692f;
-
-static inline float fract(float x) { return x - floorf(x); }
-
-static inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRGB& c) {
-    ctx.leds[i] = c;
-    int j = i + STRIP_LENGTH;
-    if (j < (int)ctx.ledCount) ctx.leds[j] = c;
+static inline float clamp01(float x) {
+    if (x < 0.0f) return 0.0f;
+    if (x > 1.0f) return 1.0f;
+    return x;
 }
-
-static inline uint8_t luminanceToBr(float wave01, float master) {
-    const float base = 0.06f;
-    float out = lowrisk_ar::clamp01f(base + (1.0f - base) * lowrisk_ar::clamp01f(wave01)) * master;
-    return static_cast<uint8_t>(255.0f * out);
+static inline float clampf(float x, float lo, float hi) {
+    if (x < lo) return lo;
+    if (x > hi) return hi;
+    return x;
 }
-
-// =========================================================================
-// Construction / init / cleanup
-// =========================================================================
 
 LGPRoseBloomAREffect::LGPRoseBloomAREffect()
-    : m_t(0.0f)
-    , m_bed(0.3f)
-    , m_structure(5.0f)
-    , m_impact(0.0f)
-    , m_memory(0.0f)
-{
-}
+    : m_t(0.0f), m_bass(0.0f), m_mid(0.0f), m_chromaAngle(0.0f),
+      m_bassMax(0.15f), m_midMax(0.15f), m_petalK(5.0f), m_impact(0.0f) {}
 
 bool LGPRoseBloomAREffect::init(plugins::EffectContext& ctx) {
-    m_controls.resetDefaults();
-    m_ar = lowrisk_ar::ArRuntimeState{};
-    m_ar.tonalHue = static_cast<float>(ctx.gHue);
-    m_ar.modeSmooth = 2.0f;
-    m_t         = 0.0f;
-    m_bed       = 0.3f;
-    m_structure = 5.0f;
-    m_impact    = 0.0f;
-    m_memory    = 0.0f;
+    m_t = 0.0f; m_bass = 0.0f; m_mid = 0.0f; m_chromaAngle = 0.0f;
+    m_bassMax = 0.15f; m_midMax = 0.15f; m_petalK = 5.0f; m_impact = 0.0f;
     lightwaveos::effects::cinema::reset();
     return true;
 }
 
-// =========================================================================
-// render() — 5-Layer composition
-// =========================================================================
-
 void LGPRoseBloomAREffect::render(plugins::EffectContext& ctx) {
-    // --- Timing ---
-    const float dtSignal = AudioReactivePolicy::signalDt(ctx);
-    const float dtVisual = AudioReactivePolicy::visualDt(ctx);
+    const float dt = ctx.getSafeRawDeltaSeconds();
+    const float dtVis = ctx.getSafeDeltaSeconds();
     const float speedNorm = ctx.speed / 50.0f;
 
-    // --- Signals (shared infrastructure handles presence gate + fallback) ---
-    const lowrisk_ar::ArSignalSnapshot sig =
-        lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);
-    const lowrisk_ar::ArModulationProfile mod =
-        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);
-    m_ar.tonalHue = mod.baseHue;
+    // STEP 1: Direct ControlBus reads
+    const float rawBass = ctx.audio.available ? ctx.audio.bass() : 0.0f;
+    const float rawMid = ctx.audio.available ? ctx.audio.mid() : 0.0f;
+    const float beatStr = ctx.audio.available ? ctx.audio.beatStrength() : 0.0f;
+    const float silScale = ctx.audio.available ? ctx.audio.silentScale() : 0.0f;
+    const float* chroma = ctx.audio.available ? ctx.audio.chroma() : nullptr;
 
-    // =================================================================
-    // LAYER UPDATES
-    // =================================================================
+    // STEP 2: Single-stage smoothing
+    m_bass += (rawBass - m_bass) * (1.0f - expf(-dt / kBassTau));
+    m_mid += (rawMid - m_mid) * (1.0f - expf(-dt / kMidTau));
 
-    // Bed: slow RMS glow (tau 0.42s)
-    m_bed = lowrisk_ar::smoothTo(m_bed,
-        0.20f + 0.80f * sig.rms, dtSignal, 0.42f);
+    // Circular chroma EMA
+    if (chroma) {
+        float sx = 0.0f, sy = 0.0f;
+        for (int i = 0; i < 12; i++) {
+            float angle = static_cast<float>(i) * (kTwoPi / 12.0f);
+            sx += chroma[i] * cosf(angle);
+            sy += chroma[i] * sinf(angle);
+        }
+        if (sx * sx + sy * sy > 0.0001f) {
+            float target = atan2f(sy, sx);
+            if (target < 0.0f) target += kTwoPi;
+            float delta = target - m_chromaAngle;
+            while (delta > kPi) delta -= kTwoPi;
+            while (delta < -kPi) delta += kTwoPi;
+            m_chromaAngle += delta * (1.0f - expf(-dt / kChromaTau));
+            if (m_chromaAngle < 0.0f) m_chromaAngle += kTwoPi;
+            if (m_chromaAngle >= kTwoPi) m_chromaAngle -= kTwoPi;
+        }
+    }
 
-    // Structure: petal count kf from harmonic + rhythmic (tau 0.25s)
-    // Range 3.0 - 7.0 (3-7 petals)
-    const float kfTarget = lowrisk_ar::clampf(
-        5.0f + 1.5f * sig.harmonic + 0.8f * sig.rhythmic,
-        3.0f, 7.0f);
-    m_structure = lowrisk_ar::smoothTo(m_structure, kfTarget, dtSignal, 0.25f);
+    // STEP 3: Max followers
+    {
+        float aA = 1.0f - expf(-dt / kFollowerAttackTau);
+        float dA = 1.0f - expf(-dt / kFollowerDecayTau);
+        if (m_bass > m_bassMax) m_bassMax += (m_bass - m_bassMax) * aA;
+        else m_bassMax += (m_bass - m_bassMax) * dA;
+        if (m_bassMax < kFollowerFloor) m_bassMax = kFollowerFloor;
 
-    // Impact: beat-triggered petal flash (decay 0.18s)
-    if (sig.beatTick) m_impact = fmaxf(m_impact, 1.0f);
-    m_impact = lowrisk_ar::decay(m_impact, dtSignal, 0.18f);
+        if (m_mid > m_midMax) m_midMax += (m_mid - m_midMax) * aA;
+        else m_midMax += (m_mid - m_midMax) * dA;
+        if (m_midMax < kFollowerFloor) m_midMax = kFollowerFloor;
+    }
+    const float normBass = clamp01(m_bass / m_bassMax);
+    const float normMid = clamp01(m_mid / m_midMax);
 
-    // Memory: bloom persistence (slow decay, fed by beat + flux)
-    m_memory = lowrisk_ar::clamp01f(
-        lowrisk_ar::decay(m_memory, dtSignal, 0.80f)
-        + 0.15f * m_impact + 0.08f * sig.flux);
-    lowrisk_ar::applyBedImpactMemoryMix(
-        m_controls,
-        static_cast<float>(ctx.rawTotalTimeMs),
-        m_bed,
-        m_impact,
-        m_memory);
+    // STEP 4: Impact
+    if (beatStr > m_impact) m_impact = beatStr;
+    m_impact *= expf(-dt / kImpactDecayTau);
 
-    // =================================================================
-    // MOTION
-    // =================================================================
+    // STEP 5: Rose visual parameters
+    const float beatMod = 0.3f + 0.7f * beatStr;
 
-    const float tRate = (0.35f + 2.0f * speedNorm) * mod.motionRate
-                        * (0.80f + 0.20f * sig.rms);
-    m_t += tRate * dtVisual;
+    // Petal count driven by mid energy (3-7 petals)
+    float kfTarget = 3.0f + 4.0f * normMid;
+    float petalAlpha = 1.0f - expf(-dt / 0.25f);
+    m_petalK += (kfTarget - m_petalK) * petalAlpha;
+    m_petalK = clampf(m_petalK, 3.0f, 7.0f);
 
-    // Opening bloom modulation: 0.55 + 0.45*sin(t*0.35)
-    const float bloomMod = 0.55f + 0.45f * sinf(m_t * 0.35f);
+    // Motion
+    float tRate = 0.3f + 1.8f * speedNorm;
+    m_t += tRate * dtVis;
 
-    // =================================================================
-    // EFFECT GEOMETRY DRIVEN BY LAYERS
-    // =================================================================
-
-    const float mid    = (STRIP_LENGTH - 1) * 0.5f;
-    const float invMid = 1.0f / mid;
+    // Bloom modulation: opening/closing
+    float bloomMod = 0.55f + 0.45f * sinf(m_t * 0.35f);
 
     // Band width: tighter with impact
-    const float bandWidth = lowrisk_ar::clampf(
-        0.15f - 0.05f * m_impact, 0.08f, 0.18f);
+    float bandWidth = clampf(0.14f - 0.04f * m_impact, 0.08f, 0.18f);
 
-    // =================================================================
-    // PER-PIXEL RENDER
-    // =================================================================
+    // Hue from chroma
+    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle * (255.0f / kTwoPi)) + ctx.gHue;
 
-    const float bedBright = 0.20f + 0.80f * m_bed;
-    const float master = (ctx.brightness / 255.0f)
-                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;
+    // Trail persistence
+    uint8_t fadeAmt = static_cast<uint8_t>(clampf(20.0f + 35.0f * (1.0f - normBass), 14.0f, 55.0f));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmt);
 
-    for (int i = 0; i < STRIP_LENGTH; i++) {
-        const float dmid  = static_cast<float>(i) - mid;
-        const float distN = fabsf(dmid) * invMid;
+    // STEP 6: Per-pixel render — centre-outward, 4-way symmetric
+    const float mid = static_cast<float>(HALF_LENGTH - 1);
 
-        // Polar coordinates from centre (LED 79/80)
-        const float x = dmid;
-        const float y = 0.0f; // 1D strip projected to x-axis
-        const float r = fabsf(x);
-        const float theta = (x >= 0.0f) ? 0.0f : 3.14159265358979323846f;
+    for (uint16_t dist = 0; dist < HALF_LENGTH; dist++) {
+        const float progress = (HALF_LENGTH <= 1) ? 0.0f
+            : (static_cast<float>(dist) / mid);
 
-        // Rhodonea curve: r_curve = |cos(kf * theta)| scaled by strip extent
-        const float kf = m_structure;
-        const float rCurve = fabsf(cosf(kf * theta)) * mid * bloomMod;
+        // 1D rhodonea: distance from LED to curve position
+        // On 1D strip, theta is either 0 or pi. Use progress as radial position.
+        float r = static_cast<float>(dist);
+        float rCurve = fabsf(cosf(m_petalK * kPi * progress)) * mid * bloomMod;
+        float distToCurve = fabsf(r - rCurve) / mid;
 
-        // Distance to curve band
-        const float distToCurve = fabsf(r - rCurve) * invMid;
-        const float band = expf(-distToCurve * distToCurve / (bandWidth * bandWidth));
+        // Gaussian band around curve
+        float band = expf(-distToCurve * distToCurve / (bandWidth * bandWidth));
 
-        // Petal breathing along curve
-        const float breathing = 0.90f + 0.10f * cosf(kTau * (distN + m_t * 0.25f));
+        // Breathing
+        float breathing = 0.90f + 0.10f * cosf(kTwoPi * (progress + m_t * 0.25f));
 
-        // Centre glue (stronger than Mach Diamonds)
-        const float glue = 0.45f + 0.55f * expf(-(dmid * dmid) * 0.0018f);
+        // Impact flash at petal edges
+        float impactAdd = m_impact * band * 0.35f;
 
-        // Bed × bloom geometry
-        float bloomGeom = band * breathing * glue;
+        // Compose brightness: audio x geometry x beat x silence
+        float brightness = (normBass * band * breathing + impactAdd) * beatMod * silScale;
 
-        // Impact: additive flash at petal edges
-        float impactShape = band * glue;
-        float impactAdd = m_impact * impactShape * 0.40f;
+        // Squared for punch
+        brightness *= brightness;
 
-        // Memory: gentle additive glow
-        float memoryAdd = m_memory * (0.6f + 0.4f * band) * 0.22f;
+        uint8_t val = static_cast<uint8_t>(clamp01(brightness) * 255.0f);
+        val = scale8(val, ctx.brightness);
 
-        // Compose: bed × structure + impact + memory
-        float brightness = bedBright * bloomGeom + impactAdd + memoryAdd;
-        brightness = lowrisk_ar::clamp01f(brightness);
+        // Hue: chroma base + band offset
+        uint8_t hue = baseHue + static_cast<uint8_t>(band * 45.0f + progress * 20.0f);
 
-        const uint8_t br = luminanceToBr(brightness, master);
-
-        // Tonal hue: chord-driven anchor + spatial offset
-        const uint8_t hue = static_cast<uint8_t>(
-            m_ar.tonalHue + band * 45.0f + sig.harmonic * 25.0f);
-
-        writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));
+        SET_CENTER_PAIR(ctx, dist, CHSV(hue, ctx.saturation, val));
     }
 
     lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }
-
-// =========================================================================
-// cleanup / metadata / parameters
-// =========================================================================
 
 void LGPRoseBloomAREffect::cleanup() {}
 
 const plugins::EffectMetadata& LGPRoseBloomAREffect::getMetadata() const {
     static plugins::EffectMetadata meta{
         "LGP Rose Bloom (5L-AR)",
-        "Rhodonea curve blooming petals with 5-layer audio-reactive composition",
-        plugins::EffectCategory::QUANTUM,
-        1
+        "Rhodonea curve blooming petals with direct audio-reactive composition",
+        plugins::EffectCategory::QUANTUM, 1
     };
     return meta;
 }
-
-uint8_t LGPRoseBloomAREffect::getParameterCount() const {
-    return lowrisk_ar::Ar16Controls::parameterCount();
-}
-
-const plugins::EffectParameter* LGPRoseBloomAREffect::getParameter(uint8_t index) const {
-    return lowrisk_ar::Ar16Controls::parameter(index);
-}
-
-bool LGPRoseBloomAREffect::setParameter(const char* name, float value) {
-    return m_controls.set(name, value);
-}
-
-float LGPRoseBloomAREffect::getParameter(const char* name) const {
-    return m_controls.get(name);
-}
+uint8_t LGPRoseBloomAREffect::getParameterCount() const { return 0; }
+const plugins::EffectParameter* LGPRoseBloomAREffect::getParameter(uint8_t) const { return nullptr; }
+bool LGPRoseBloomAREffect::setParameter(const char*, float) { return false; }
+float LGPRoseBloomAREffect::getParameter(const char*) const { return 0.0f; }
 
 } // namespace ieffect
 } // namespace effects

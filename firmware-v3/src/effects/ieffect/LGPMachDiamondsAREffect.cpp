@@ -1,12 +1,21 @@
 /**
  * @file LGPMachDiamondsAREffect.cpp
- * @brief Mach Diamonds (5-Layer Audio-Reactive)
+ * @brief Mach Diamonds (5-Layer Audio-Reactive) — REWRITTEN
  *
- * Shock-diamond standing-wave pulses with full 5-layer AR composition.
- * Base maths from the lowrisk_ar LGPMachDiamondsEffect, restructured into
- * explicit bed/structure/impact/tonal/memory layers.
+ * Shock-diamond standing-wave pulses. Audio drives brightness and colour
+ * directly via ControlBus — no helper extraction layer.
  *
- * Centre-origin compliant. Dual-strip locked.
+ * Divergence fixes applied:
+ *   1. bands[] (not heavy_bands) — no pre-smoothing on source
+ *   2. Single-stage EMA (50ms bass, 40ms treble) — one smoothing layer
+ *   3. Asymmetric max follower (58ms/500ms, floor 0.04) — dynamic gain
+ *   4. No brightness floors — silence = dark
+ *   5. Audio → brightness directly (not via simulation coefficients)
+ *   6. beatStrength() (continuous) instead of beatTick (boolean)
+ *   7. SET_CENTER_PAIR (4-way symmetry) instead of writeDualLocked (2-way)
+ *   8. Centre-outward iteration (dist 0→79) instead of linear (i 0→159)
+ *
+ * Centre-origin compliant. Dual-strip mirrored.
  */
 
 #include "LGPMachDiamondsAREffect.h"
@@ -20,28 +29,46 @@ namespace effects {
 namespace ieffect {
 
 // =========================================================================
-// Local helpers (shared with ShapeBangersPack pattern)
+// Constants
 // =========================================================================
 
-static constexpr float kTau = 6.28318530717958647692f;
+static constexpr float kTwoPi   = 6.28318530717958647692f;
+static constexpr float kPi      = 3.14159265358979323846f;
+
+// Smoothing time constants (seconds)
+static constexpr float kBassTau    = 0.050f;   // 50ms attack for bass
+static constexpr float kTrebleTau  = 0.040f;   // 40ms attack for treble
+static constexpr float kChromaTau  = 0.300f;   // 300ms for hue (slow, musical)
+
+// Max follower time constants
+static constexpr float kFollowerAttackTau = 0.058f;  // 58ms attack
+static constexpr float kFollowerDecayTau  = 0.500f;  // 500ms decay
+static constexpr float kFollowerFloor     = 0.04f;   // Minimum follower value
+
+// Beat impact decay
+static constexpr float kImpactDecayTau = 0.180f;     // 180ms decay
+
+// =========================================================================
+// Local helpers
+// =========================================================================
+
+static inline float clamp01(float x) {
+    if (x < 0.0f) return 0.0f;
+    if (x > 1.0f) return 1.0f;
+    return x;
+}
+
+static inline float clampf(float x, float lo, float hi) {
+    if (x < lo) return lo;
+    if (x > hi) return hi;
+    return x;
+}
 
 static inline float fract(float x) { return x - floorf(x); }
 
 static inline float tri01(float x) {
     float f = fract(x);
-    return lowrisk_ar::clamp01f(1.0f - fabsf(2.0f * f - 1.0f));
-}
-
-static inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRGB& c) {
-    ctx.leds[i] = c;
-    int j = i + STRIP_LENGTH;
-    if (j < (int)ctx.ledCount) ctx.leds[j] = c;
-}
-
-static inline uint8_t luminanceToBr(float wave01, float master) {
-    const float base = 0.06f;
-    float out = lowrisk_ar::clamp01f(base + (1.0f - base) * lowrisk_ar::clamp01f(wave01)) * master;
-    return static_cast<uint8_t>(255.0f * out);
+    return clamp01(1.0f - fabsf(2.0f * f - 1.0f));
 }
 
 // =========================================================================
@@ -50,152 +77,225 @@ static inline uint8_t luminanceToBr(float wave01, float master) {
 
 LGPMachDiamondsAREffect::LGPMachDiamondsAREffect()
     : m_t(0.0f)
-    , m_bed(0.3f)
-    , m_structure(0.5f)
+    , m_bass(0.0f)
+    , m_treble(0.0f)
+    , m_chromaAngle(0.0f)
+    , m_bassMax(0.15f)
+    , m_trebleMax(0.15f)
     , m_impact(0.0f)
-    , m_snareImpact(0.0f)
-    , m_memory(0.0f)
 {
 }
 
 bool LGPMachDiamondsAREffect::init(plugins::EffectContext& ctx) {
-    m_controls.resetDefaults();
-    m_ar = lowrisk_ar::ArRuntimeState{};
-    m_ar.tonalHue = static_cast<float>(ctx.gHue);
-    m_ar.modeSmooth = 2.0f;
     m_t           = 0.0f;
-    m_bed         = 0.3f;
-    m_structure   = 0.5f;
+    m_bass        = 0.0f;
+    m_treble      = 0.0f;
+    m_chromaAngle = 0.0f;
+    m_bassMax     = 0.15f;
+    m_trebleMax   = 0.15f;
     m_impact      = 0.0f;
-    m_snareImpact = 0.0f;
-    m_memory      = 0.0f;
     lightwaveos::effects::cinema::reset();
     return true;
 }
 
 // =========================================================================
-// render() — 5-Layer composition
+// render() — Direct ControlBus reads, single-stage smoothing
 // =========================================================================
 
 void LGPMachDiamondsAREffect::render(plugins::EffectContext& ctx) {
-    // --- Timing ---
-    const float dtSignal = AudioReactivePolicy::signalDt(ctx);
-    const float dtVisual = AudioReactivePolicy::visualDt(ctx);
+
+    // --- Timing (raw, not SPEED-scaled, for audio-coupled maths) ---
+    const float dt = ctx.getSafeRawDeltaSeconds();
+    const float dtVis = ctx.getSafeDeltaSeconds();
     const float speedNorm = ctx.speed / 50.0f;
 
-    // --- Signals (shared infrastructure handles presence gate + fallback) ---
-    const lowrisk_ar::ArSignalSnapshot sig =
-        lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);
-    const lowrisk_ar::ArModulationProfile mod =
-        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);
-    m_ar.tonalHue = mod.baseHue;
-
     // =================================================================
-    // LAYER UPDATES
+    // STEP 1: Read ControlBus DIRECTLY — no helper layer
     // =================================================================
 
-    // Bed: slow atmosphere from RMS (tau 0.40s)
-    m_bed = lowrisk_ar::smoothTo(m_bed,
-        0.25f + 0.75f * sig.rms, dtSignal, 0.40f);
+    // Bass: bands[0] + bands[1] (reactive, pipeline-smoothed only)
+    const float rawBass = ctx.audio.available
+        ? ctx.audio.bass()   // (bands[0] + bands[1]) * 0.5f
+        : 0.0f;
 
-    // Structure: geometry modulation from bass + flux (tau 0.15s)
-    const float structTarget = lowrisk_ar::clamp01f(
-        0.35f + 0.35f * sig.bass + 0.20f * sig.flux + 0.10f * sig.rhythmic);
-    m_structure = lowrisk_ar::smoothTo(m_structure, structTarget, dtSignal, 0.15f);
+    // Treble: bands[5] + bands[6] + bands[7] (reactive)
+    const float rawTreble = ctx.audio.available
+        ? ctx.audio.treble() // (bands[5..7]) / 3.0f
+        : 0.0f;
 
-    // Impact: beat-triggered burst (fast attack, decay 0.20s)
-    if (sig.beatTick) m_impact = fmaxf(m_impact, 0.90f);
-    m_impact = lowrisk_ar::decay(m_impact, dtSignal, 0.20f);
+    // Beat strength: continuous 0-1 float (NOT boolean tick)
+    const float beatStr = ctx.audio.available
+        ? ctx.audio.beatStrength()
+        : 0.0f;
 
-    // Snare: separate fast envelope
-    if (ctx.audio.available && ctx.audio.isSnareHit())
-        m_snareImpact = fmaxf(m_snareImpact, 0.70f);
-    m_snareImpact = lowrisk_ar::decay(m_snareImpact, dtSignal, 0.25f);
+    // Snare hit: single-frame boolean pulse
+    const bool snareHit = ctx.audio.available && ctx.audio.isSnareHit();
 
-    // Memory: accumulated glow (slow decay, fed by beat + flux)
-    m_memory = lowrisk_ar::clamp01f(
-        lowrisk_ar::decay(m_memory, dtSignal, 0.80f)
-        + 0.12f * m_impact + 0.06f * sig.flux);
-    lowrisk_ar::applyBedImpactMemoryMix(
-        m_controls,
-        static_cast<float>(ctx.rawTotalTimeMs),
-        m_bed,
-        m_impact,
-        m_memory);
+    // Silence scale: 1.0=active, 0.0=silent (from ControlBus hysteresis)
+    const float silScale = ctx.audio.available
+        ? ctx.audio.silentScale()
+        : 0.0f;
 
-    // =================================================================
-    // MOTION
-    // =================================================================
-
-    const float tRate = (1.10f + 4.20f * speedNorm) * mod.motionRate
-                        * (0.70f + 0.30f * m_structure);
-    m_t += tRate * dtVisual;
+    // Chroma: 12-bin pitch class energy (reactive, not heavy)
+    const float* chroma = ctx.audio.available
+        ? ctx.audio.chroma()
+        : nullptr;
 
     // =================================================================
-    // EFFECT GEOMETRY DRIVEN BY LAYERS
+    // STEP 2: Single-stage smoothing (one EMA per signal)
     // =================================================================
 
-    const float mid    = (STRIP_LENGTH - 1) * 0.5f;
-    const float invMid = 1.0f / mid;
+    {
+        const float bassAlpha = 1.0f - expf(-dt / kBassTau);
+        m_bass += (rawBass - m_bass) * bassAlpha;
+    }
+    {
+        const float trebleAlpha = 1.0f - expf(-dt / kTrebleTau);
+        m_treble += (rawTreble - m_treble) * trebleAlpha;
+    }
 
-    // Spacing: structure widens/narrows shock cells, impact compresses
-    const float spacing = lowrisk_ar::clampf(
-        0.13f * (1.0f - 0.25f * (m_structure - 0.5f)) - 0.08f * m_impact,
-        0.07f, 0.24f);
+    // Circular chroma EMA → hue angle
+    if (chroma) {
+        float sx = 0.0f, sy = 0.0f;
+        for (int i = 0; i < 12; i++) {
+            const float angle = static_cast<float>(i) * (kTwoPi / 12.0f);
+            sx += chroma[i] * cosf(angle);
+            sy += chroma[i] * sinf(angle);
+        }
+        const float totalEnergy = sx * sx + sy * sy;
+        if (totalEnergy > 0.0001f) {
+            float targetAngle = atan2f(sy, sx);
+            if (targetAngle < 0.0f) targetAngle += kTwoPi;
 
-    const float drift = m_t * (0.20f + 0.35f * speedNorm + 0.10f * m_structure);
+            // Circular shortest-path delta
+            float delta = targetAngle - m_chromaAngle;
+            while (delta > kPi) delta -= kTwoPi;
+            while (delta < -kPi) delta += kTwoPi;
 
-    // Contrast: sharper with structure + impact
-    const float sharpExp = lowrisk_ar::clampf(
-        2.2f + 0.8f * m_structure + 0.6f * m_impact, 1.8f, 3.8f);
+            const float chromaAlpha = 1.0f - expf(-dt / kChromaTau);
+            m_chromaAngle += delta * chromaAlpha;
+
+            // Wrap to [0, 2π)
+            if (m_chromaAngle < 0.0f) m_chromaAngle += kTwoPi;
+            if (m_chromaAngle >= kTwoPi) m_chromaAngle -= kTwoPi;
+        }
+    }
 
     // =================================================================
-    // PER-PIXEL RENDER
+    // STEP 3: Asymmetric max followers for dynamic gain normalisation
     // =================================================================
 
-    const float bedBright = 0.25f + 0.75f * m_bed;
-    const float master = (ctx.brightness / 255.0f)
-                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;
+    // Bass max follower
+    {
+        const float attackAlpha = 1.0f - expf(-dt / kFollowerAttackTau);
+        const float decayAlpha  = 1.0f - expf(-dt / kFollowerDecayTau);
 
-    for (int i = 0; i < STRIP_LENGTH; i++) {
-        const float dmid  = static_cast<float>(i) - mid;
-        const float distN = fabsf(dmid) * invMid;
+        if (m_bass > m_bassMax) {
+            m_bassMax += (m_bass - m_bassMax) * attackAlpha;   // Fast rise
+        } else {
+            m_bassMax += (m_bass - m_bassMax) * decayAlpha;    // Slow fall
+        }
+        if (m_bassMax < kFollowerFloor) m_bassMax = kFollowerFloor;
+    }
+
+    // Treble max follower
+    {
+        const float attackAlpha = 1.0f - expf(-dt / kFollowerAttackTau);
+        const float decayAlpha  = 1.0f - expf(-dt / kFollowerDecayTau);
+
+        if (m_treble > m_trebleMax) {
+            m_trebleMax += (m_treble - m_trebleMax) * attackAlpha;
+        } else {
+            m_trebleMax += (m_treble - m_trebleMax) * decayAlpha;
+        }
+        if (m_trebleMax < kFollowerFloor) m_trebleMax = kFollowerFloor;
+    }
+
+    // Normalised audio (dynamic gain: quiet content amplified, loud content capped)
+    const float normBass   = clamp01(m_bass / m_bassMax);
+    const float normTreble = clamp01(m_treble / m_trebleMax);
+
+    // =================================================================
+    // STEP 4: Beat/percussion impact (exponential decay)
+    // =================================================================
+
+    // Beat strength drives impact directly (continuous, not boolean)
+    if (beatStr > m_impact) {
+        m_impact = beatStr;  // Immediate rise to beat strength
+    }
+    // Snare accent stacks on top
+    if (snareHit) {
+        m_impact = fmaxf(m_impact, 0.80f);
+    }
+    // Exponential decay
+    m_impact *= expf(-dt / kImpactDecayTau);
+
+    // =================================================================
+    // STEP 5: Visual parameters driven by normalised audio
+    // =================================================================
+
+    // Beat brightness modulation: 0.3 floor between beats, 1.0 on beat
+    const float beatMod = 0.3f + 0.7f * beatStr;
+
+    // Diamond cell spacing: bass tightens the pattern
+    const float spacing = clampf(
+        0.16f - 0.06f * normBass, 0.08f, 0.20f);
+
+    // Diamond sharpness: treble sharpens peaks
+    const float sharpExp = clampf(
+        2.0f + 1.5f * normTreble + 0.5f * m_impact, 1.8f, 4.0f);
+
+    // Motion drift (SPEED-scaled time, not audio time)
+    const float tRate = (1.0f + 4.0f * speedNorm);
+    m_t += tRate * dtVis;
+    const float drift = m_t * (0.20f + 0.35f * speedNorm);
+
+    // Hue from chroma angle
+    const uint8_t baseHue = static_cast<uint8_t>(
+        m_chromaAngle * (255.0f / kTwoPi)) + ctx.gHue;
+
+    // Trail persistence: more energy = shorter trails (faster fade)
+    const uint8_t fadeAmount = static_cast<uint8_t>(
+        clampf(20.0f + 40.0f * (1.0f - normBass), 15.0f, 60.0f));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmount);
+
+    // =================================================================
+    // STEP 6: Per-pixel render — centre-outward, 4-way symmetric
+    // =================================================================
+
+    for (uint16_t dist = 0; dist < HALF_LENGTH; dist++) {
+        const float progress = (HALF_LENGTH <= 1) ? 0.0f
+            : (static_cast<float>(dist) / static_cast<float>(HALF_LENGTH - 1));
 
         // Shock diamond triangular wave
-        const float cellPhase = (distN / spacing) - drift;
+        const float cellPhase = (progress / spacing) - drift;
         const float tri = tri01(cellPhase);
         const float geom = powf(tri, sharpExp);
 
-        // Diamond breathing
-        const float breathing = 0.85f + 0.15f * cosf(kTau * cellPhase + m_t * 0.6f);
+        // Diamond breathing (subtle cosine wobble)
+        const float breathing = 0.90f + 0.10f * cosf(kTwoPi * cellPhase + m_t * 0.6f);
 
-        // Centre glue
-        const float glue = 0.35f + 0.65f * expf(-(dmid * dmid) * 0.0013f);
+        // Impact accent at diamond peaks
+        const float impactAdd = m_impact * powf(tri, 1.5f) * 0.4f;
 
-        // Bed x structured geometry
-        float structuredGeom = geom * breathing * glue;
+        // Compose brightness: audio magnitude × geometry × beat × silence
+        float brightness = (normBass * geom * breathing + impactAdd) * beatMod * silScale;
 
-        // Impact: additive spike at diamond peaks
-        float impactShape = powf(tri, 1.5f) * glue;
-        float impactAdd   = m_impact * impactShape * 0.35f
-                          + m_snareImpact * impactShape * 0.20f;
+        // Squared response for perceptual punch (like BloomRef v*=v)
+        brightness *= brightness;
 
-        // Memory: gentle additive glow
-        float memoryAdd = m_memory * (0.5f + 0.5f * tri) * 0.18f;
+        // Apply global brightness
+        uint8_t val = static_cast<uint8_t>(clamp01(brightness) * 255.0f);
+        val = scale8(val, ctx.brightness);
 
-        // Compose: bed x structure + impact + memory
-        float brightness = bedBright * structuredGeom + impactAdd + memoryAdd;
-        brightness = lowrisk_ar::clamp01f(brightness);
+        // Hue: chroma-anchored base + spatial gradient
+        const uint8_t hue = baseHue + static_cast<uint8_t>(progress * 48.0f);
 
-        const uint8_t br = luminanceToBr(brightness, master);
-
-        // Tonal hue: chord-driven anchor + spatial offset
-        const uint8_t hue = static_cast<uint8_t>(
-            m_ar.tonalHue + tri * 52.0f + sig.harmonic * 20.0f);
-
-        writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));
+        // 4-way symmetric write (both strips, both sides)
+        SET_CENTER_PAIR(ctx, dist, CHSV(hue, ctx.saturation, val));
     }
 
+    // Cinema post-processing (spatial softening, tone mapping, gamma)
     lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }
 
@@ -208,28 +308,17 @@ void LGPMachDiamondsAREffect::cleanup() {}
 const plugins::EffectMetadata& LGPMachDiamondsAREffect::getMetadata() const {
     static plugins::EffectMetadata meta{
         "LGP Mach Diamonds (5L-AR)",
-        "Shock-diamond jewellery with 5-layer audio-reactive composition",
+        "Shock-diamond jewellery with direct audio-reactive composition",
         plugins::EffectCategory::QUANTUM,
         1
     };
     return meta;
 }
 
-uint8_t LGPMachDiamondsAREffect::getParameterCount() const {
-    return lowrisk_ar::Ar16Controls::parameterCount();
-}
-
-const plugins::EffectParameter* LGPMachDiamondsAREffect::getParameter(uint8_t index) const {
-    return lowrisk_ar::Ar16Controls::parameter(index);
-}
-
-bool LGPMachDiamondsAREffect::setParameter(const char* name, float value) {
-    return m_controls.set(name, value);
-}
-
-float LGPMachDiamondsAREffect::getParameter(const char* name) const {
-    return m_controls.get(name);
-}
+uint8_t LGPMachDiamondsAREffect::getParameterCount() const { return 0; }
+const plugins::EffectParameter* LGPMachDiamondsAREffect::getParameter(uint8_t) const { return nullptr; }
+bool LGPMachDiamondsAREffect::setParameter(const char*, float) { return false; }
+float LGPMachDiamondsAREffect::getParameter(const char*) const { return 0.0f; }
 
 } // namespace ieffect
 } // namespace effects

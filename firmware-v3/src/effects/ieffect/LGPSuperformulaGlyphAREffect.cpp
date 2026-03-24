@@ -1,12 +1,10 @@
 /**
  * @file LGPSuperformulaGlyphAREffect.cpp
- * @brief Superformula Living Glyph (5-Layer Audio-Reactive)
+ * @brief Superformula Living Glyph (5-Layer AR) — REWRITTEN
  *
- * Morphing organic glyph using Superformula mathematics with full 5-layer AR composition.
- * Superformula creates complex organic/geometric hybrids through parametric polar equation.
- * Parameters morph with audio, creating living sigil patterns.
- *
- * Centre-origin compliant. Dual-strip locked.
+ * Morphing organic glyph using Superformula mathematics.
+ * Parameters morph with audio. Brightness driven directly.
+ * Centre-origin compliant. Dual-strip mirrored.
  */
 
 #include "LGPSuperformulaGlyphAREffect.h"
@@ -19,263 +17,170 @@ namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
-// =========================================================================
-// Local helpers
-// =========================================================================
+static constexpr float kTwoPi = 6.28318530717958647692f;
+static constexpr float kPi    = 3.14159265358979323846f;
+static constexpr float kBassTau   = 0.050f;
+static constexpr float kMidTau    = 0.055f;
+static constexpr float kChromaTau = 0.300f;
+static constexpr float kFollowerAttackTau = 0.058f;
+static constexpr float kFollowerDecayTau  = 0.500f;
+static constexpr float kFollowerFloor     = 0.04f;
+static constexpr float kImpactDecayTau    = 0.180f;
 
-static constexpr float kTau = 6.28318530717958647692f;
-static constexpr float kPi  = 3.14159265358979323846f;
-
-static inline float fract(float x) { return x - floorf(x); }
-
-static inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRGB& c) {
-    ctx.leds[i] = c;
-    int j = i + STRIP_LENGTH;
-    if (j < (int)ctx.ledCount) ctx.leds[j] = c;
+static inline float clamp01(float x) {
+    if (x < 0.0f) return 0.0f;
+    if (x > 1.0f) return 1.0f;
+    return x;
+}
+static inline float clampf(float x, float lo, float hi) {
+    if (x < lo) return lo;
+    if (x > hi) return hi;
+    return x;
 }
 
-static inline uint8_t luminanceToBr(float wave01, float master) {
-    const float base = 0.06f;
-    float out = lowrisk_ar::clamp01f(base + (1.0f - base) * lowrisk_ar::clamp01f(wave01)) * master;
-    return static_cast<uint8_t>(255.0f * out);
-}
-
-// =========================================================================
-// Superformula evaluation
-// =========================================================================
-
-/**
- * Superformula: r(phi) = (|cos(m*phi/4)/a|^n2 + |sin(m*phi/4)/b|^n3)^(-1/n1)
- * Returns normalized radius [0..1] for given angle phi.
- */
+// Superformula: r(phi) = (|cos(m*phi/4)/a|^n2 + |sin(m*phi/4)/b|^n3)^(-1/n1)
 static float evalSuperformula(float phi, float m, float n1, float n2, float n3) {
-    const float a = 1.0f;  // Keep a=b=1 for simplicity
-    const float b = 1.0f;
-
-    const float mPhi4 = m * phi * 0.25f;
-
-    // Prevent domain errors
-    const float cosT = fabsf(cosf(mPhi4));
-    const float sinT = fabsf(sinf(mPhi4));
-
-    // Handle edge cases
+    float mPhi4 = m * phi * 0.25f;
+    float cosT = fabsf(cosf(mPhi4));
+    float sinT = fabsf(sinf(mPhi4));
     if (cosT < 1e-6f && sinT < 1e-6f) return 0.5f;
-
-    const float term1 = powf(cosT / a, n2);
-    const float term2 = powf(sinT / b, n3);
-    const float sum   = term1 + term2;
-
+    float term1 = powf(cosT, n2);
+    float term2 = powf(sinT, n3);
+    float sum = term1 + term2;
     if (sum < 1e-6f) return 0.5f;
-
-    float r = powf(sum, -1.0f / n1);
-
-    // Normalize to [0..1] range (superformula can vary wildly)
-    return lowrisk_ar::clampf(r * 0.35f, 0.0f, 1.0f);
+    return clampf(powf(sum, -1.0f / n1) * 0.35f, 0.0f, 1.0f);
 }
-
-// =========================================================================
-// Construction / init / cleanup
-// =========================================================================
 
 LGPSuperformulaGlyphAREffect::LGPSuperformulaGlyphAREffect()
-    : m_t(0.0f)
-    , m_bed(0.3f)
-    , m_impact(0.0f)
-    , m_memory(0.0f)
-    , m_param_m(6.0f)
-    , m_param_n1(1.0f)
-    , m_param_n2(1.5f)
-    , m_param_n3(1.5f)
-{
-}
+    : m_t(0.0f), m_bass(0.0f), m_mid(0.0f), m_chromaAngle(0.0f),
+      m_bassMax(0.15f), m_midMax(0.15f), m_impact(0.0f),
+      m_param_m(6.0f), m_param_n1(1.0f), m_param_n2(1.5f), m_param_n3(1.5f) {}
 
 bool LGPSuperformulaGlyphAREffect::init(plugins::EffectContext& ctx) {
-    m_controls.resetDefaults();
-    m_ar = lowrisk_ar::ArRuntimeState{};
-    m_ar.tonalHue = static_cast<float>(ctx.gHue);
-    m_ar.modeSmooth = 2.0f;
-
-    m_t        = 0.0f;
-    m_bed      = 0.3f;
-    m_impact   = 0.0f;
-    m_memory   = 0.0f;
-    m_param_m  = 6.0f;
-    m_param_n1 = 1.0f;
-    m_param_n2 = 1.5f;
-    m_param_n3 = 1.5f;
-
+    m_t = 0.0f; m_bass = 0.0f; m_mid = 0.0f; m_chromaAngle = 0.0f;
+    m_bassMax = 0.15f; m_midMax = 0.15f; m_impact = 0.0f;
+    m_param_m = 6.0f; m_param_n1 = 1.0f; m_param_n2 = 1.5f; m_param_n3 = 1.5f;
     lightwaveos::effects::cinema::reset();
     return true;
 }
 
-// =========================================================================
-// render() — 5-Layer composition
-// =========================================================================
-
 void LGPSuperformulaGlyphAREffect::render(plugins::EffectContext& ctx) {
-    // --- Timing ---
-    const float dtSignal = AudioReactivePolicy::signalDt(ctx);
-    const float dtVisual = AudioReactivePolicy::visualDt(ctx);
+    const float dt = ctx.getSafeRawDeltaSeconds();
+    const float dtVis = ctx.getSafeDeltaSeconds();
     const float speedNorm = ctx.speed / 50.0f;
 
-    // --- Signals (shared infrastructure handles presence gate + fallback) ---
-    const lowrisk_ar::ArSignalSnapshot sig =
-        lowrisk_ar::updateSignals(m_ar, ctx, m_controls, dtSignal);
-    const lowrisk_ar::ArModulationProfile mod =
-        lowrisk_ar::buildModulation(m_controls, sig, m_ar, ctx);
-    m_ar.tonalHue = mod.baseHue;
+    const float rawBass = ctx.audio.available ? ctx.audio.bass() : 0.0f;
+    const float rawMid = ctx.audio.available ? ctx.audio.mid() : 0.0f;
+    const float beatStr = ctx.audio.available ? ctx.audio.beatStrength() : 0.0f;
+    const float silScale = ctx.audio.available ? ctx.audio.silentScale() : 0.0f;
+    const float* chroma = ctx.audio.available ? ctx.audio.chroma() : nullptr;
 
-    // =================================================================
-    // LAYER UPDATES
-    // =================================================================
+    m_bass += (rawBass - m_bass) * (1.0f - expf(-dt / kBassTau));
+    m_mid += (rawMid - m_mid) * (1.0f - expf(-dt / kMidTau));
 
-    // Bed: slow atmosphere from RMS (tau 0.42s)
-    m_bed = lowrisk_ar::smoothTo(m_bed,
-        0.20f + 0.80f * sig.rms, dtSignal, 0.42f);
+    if (chroma) {
+        float sx = 0.0f, sy = 0.0f;
+        for (int i = 0; i < 12; i++) {
+            float angle = static_cast<float>(i) * (kTwoPi / 12.0f);
+            sx += chroma[i] * cosf(angle);
+            sy += chroma[i] * sinf(angle);
+        }
+        if (sx * sx + sy * sy > 0.0001f) {
+            float target = atan2f(sy, sx);
+            if (target < 0.0f) target += kTwoPi;
+            float delta = target - m_chromaAngle;
+            while (delta > kPi) delta -= kTwoPi;
+            while (delta < -kPi) delta += kTwoPi;
+            m_chromaAngle += delta * (1.0f - expf(-dt / kChromaTau));
+            if (m_chromaAngle < 0.0f) m_chromaAngle += kTwoPi;
+            if (m_chromaAngle >= kTwoPi) m_chromaAngle -= kTwoPi;
+        }
+    }
 
-    // Structure: morph superformula params from harmonic + flux (tau 0.20s)
-    // m: symmetry (3-11), modulated by harmonic
-    const float target_m = lowrisk_ar::clampf(
-        6.0f + 5.0f * sig.harmonic * (0.5f + 0.5f * sinf(m_t * 0.3f)),
-        3.0f, 11.0f);
-    m_param_m = lowrisk_ar::smoothTo(m_param_m, target_m, dtSignal, 0.20f);
+    {
+        float aA = 1.0f - expf(-dt / kFollowerAttackTau);
+        float dA = 1.0f - expf(-dt / kFollowerDecayTau);
+        if (m_bass > m_bassMax) m_bassMax += (m_bass - m_bassMax) * aA;
+        else m_bassMax += (m_bass - m_bassMax) * dA;
+        if (m_bassMax < kFollowerFloor) m_bassMax = kFollowerFloor;
+        if (m_mid > m_midMax) m_midMax += (m_mid - m_midMax) * aA;
+        else m_midMax += (m_mid - m_midMax) * dA;
+        if (m_midMax < kFollowerFloor) m_midMax = kFollowerFloor;
+    }
+    const float normBass = clamp01(m_bass / m_bassMax);
+    const float normMid = clamp01(m_mid / m_midMax);
 
-    // n1: overall shape (0.7-1.6), modulated by flux
-    const float target_n1 = lowrisk_ar::clampf(
-        1.0f + 0.6f * sig.flux * cosf(m_t * 0.25f),
-        0.7f, 1.6f);
-    m_param_n1 = lowrisk_ar::smoothTo(m_param_n1, target_n1, dtSignal, 0.20f);
+    if (beatStr > m_impact) m_impact = beatStr;
+    m_impact *= expf(-dt / kImpactDecayTau);
 
-    // n2/n3: exponents (0.8-2.4), modulated by bass + rhythmic
-    const float target_n2 = lowrisk_ar::clampf(
-        1.5f + 0.9f * (sig.bass * 0.7f + sig.rhythmic * 0.3f),
-        0.8f, 2.4f);
-    m_param_n2 = lowrisk_ar::smoothTo(m_param_n2, target_n2, dtSignal, 0.20f);
+    // Morph superformula params with normalised audio
+    float paramAlpha = 1.0f - expf(-dt / 0.20f);
+    float target_m = clampf(6.0f + 5.0f * normMid * (0.5f + 0.5f * sinf(m_t * 0.3f)), 3.0f, 11.0f);
+    m_param_m += (target_m - m_param_m) * paramAlpha;
+    float target_n1 = clampf(1.0f + 0.6f * normBass * cosf(m_t * 0.25f), 0.7f, 1.6f);
+    m_param_n1 += (target_n1 - m_param_n1) * paramAlpha;
+    float target_n2 = clampf(1.5f + 0.9f * normBass, 0.8f, 2.4f);
+    m_param_n2 += (target_n2 - m_param_n2) * paramAlpha;
+    float target_n3 = clampf(1.5f + 0.9f * normMid * sinf(m_t * 0.4f), 0.8f, 2.4f);
+    m_param_n3 += (target_n3 - m_param_n3) * paramAlpha;
 
-    const float target_n3 = lowrisk_ar::clampf(
-        1.5f + 0.9f * (sig.bass * 0.3f + sig.rhythmic * 0.7f) * sinf(m_t * 0.4f),
-        0.8f, 2.4f);
-    m_param_n3 = lowrisk_ar::smoothTo(m_param_n3, target_n3, dtSignal, 0.20f);
+    const float beatMod = 0.3f + 0.7f * beatStr;
 
-    // Impact: beat-triggered burst (fast attack, decay 0.18s)
-    if (sig.beatTick) m_impact = fmaxf(m_impact, 1.00f);
-    m_impact = lowrisk_ar::decay(m_impact, dtSignal, 0.18f);
+    float tRate = 0.8f + 3.5f * speedNorm;
+    m_t += tRate * dtVis;
 
-    // Memory: sigil persistence (slow decay, fed by beat + flux)
-    m_memory = lowrisk_ar::clamp01f(
-        lowrisk_ar::decay(m_memory, dtSignal, 0.75f)
-        + 0.15f * m_impact + 0.08f * sig.flux);
-    lowrisk_ar::applyBedImpactMemoryMix(
-        m_controls,
-        static_cast<float>(ctx.rawTotalTimeMs),
-        m_bed,
-        m_impact,
-        m_memory);
+    float glyphRotation = m_t * 0.15f;
+    float bandWidth = clampf(0.12f - 0.04f * normBass, 0.06f, 0.16f);
 
-    // =================================================================
-    // MOTION
-    // =================================================================
+    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle * (255.0f / kTwoPi)) + ctx.gHue;
 
-    const float tRate = (0.80f + 3.50f * speedNorm) * mod.motionRate;
-    m_t += tRate * dtVisual;
+    uint8_t fadeAmt = static_cast<uint8_t>(clampf(20.0f + 35.0f * (1.0f - normBass), 14.0f, 55.0f));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmt);
 
-    // Glyph rotation
-    const float glyphRotation = m_t * 0.15f + sig.harmonic * 0.5f;
+    const float mid = static_cast<float>(HALF_LENGTH - 1);
 
-    // =================================================================
-    // PER-PIXEL RENDER
-    // =================================================================
+    for (uint16_t dist = 0; dist < HALF_LENGTH; dist++) {
+        const float progress = (HALF_LENGTH <= 1) ? 0.0f
+            : (static_cast<float>(dist) / mid);
+        float dmid = static_cast<float>(dist);
 
-    const float mid    = (STRIP_LENGTH - 1) * 0.5f;
-    const float invMid = 1.0f / mid;
+        float phi = atan2f(dmid, 1.0f) + glyphRotation;
+        float r_formula = evalSuperformula(phi, m_param_m, m_param_n1, m_param_n2, m_param_n3);
 
-    const float bedBright = 0.20f + 0.80f * m_bed;
-    const float master = (ctx.brightness / 255.0f)
-                         * lowrisk_ar::clamp01f(m_ar.audioPresence) * mod.brightnessScale;
+        float distToCurve = fabsf(progress - r_formula);
+        float bandWave = expf(-distToCurve / bandWidth);
 
-    // Band width for distance-to-curve rendering
-    const float bandWidth = lowrisk_ar::clampf(
-        0.12f - 0.04f * sig.flux,
-        0.06f, 0.16f);
+        float breathing = 0.90f + 0.10f * cosf(kTwoPi * progress * 2.0f + m_t * 0.8f);
+        float impactAdd = m_impact * bandWave * 0.35f;
 
-    for (int i = 0; i < STRIP_LENGTH; i++) {
-        const float dmid  = static_cast<float>(i) - mid;
-        const float distN = fabsf(dmid) * invMid;  // [0..1] from centre
+        float brightness = (normBass * bandWave * breathing + impactAdd) * beatMod * silScale;
+        brightness *= brightness;
 
-        // Convert pixel to polar coordinates (centre = origin)
-        const float phi = atan2f(dmid, 1.0f) + glyphRotation;  // Angular position
+        uint8_t val = static_cast<uint8_t>(clamp01(brightness) * 255.0f);
+        val = scale8(val, ctx.brightness);
 
-        // Evaluate superformula at this angle
-        const float r_formula = evalSuperformula(phi, m_param_m, m_param_n1, m_param_n2, m_param_n3);
+        uint8_t hue = baseHue + static_cast<uint8_t>(r_formula * 60.0f + progress * 20.0f);
 
-        // Distance from pixel to the superformula curve
-        const float distToCurve = fabsf(distN - r_formula);
-
-        // Exponential band rendering
-        const float bandWave = expf(-distToCurve / bandWidth);
-
-        // Centre glue: stronger gaussian anchor
-        const float glue = 0.30f + 0.70f * expf(-(dmid * dmid) * 0.0018f);
-
-        // Breathing pulse
-        const float breathing = 0.90f + 0.10f * cosf(kTau * distN * 2.0f + m_t * 0.8f);
-
-        // Bed x structured geometry
-        float structuredGeom = bandWave * glue * breathing;
-
-        // Impact: additive brightening across glyph
-        float impactAdd = m_impact * bandWave * glue * 0.40f;
-
-        // Memory: gentle additive sigil persistence
-        float memoryAdd = m_memory * (0.4f + 0.6f * bandWave) * 0.22f;
-
-        // Compose: bed x structure + impact + memory
-        float brightness = bedBright * structuredGeom + impactAdd + memoryAdd;
-        brightness = lowrisk_ar::clamp01f(brightness);
-
-        const uint8_t br = luminanceToBr(brightness, master);
-
-        // Tonal hue: chord-driven anchor + spatial modulation
-        const uint8_t hue = static_cast<uint8_t>(
-            m_ar.tonalHue + r_formula * 60.0f + sig.harmonic * 25.0f);
-
-        writeDualLocked(ctx, i, ctx.palette.getColor(hue, br));
+        SET_CENTER_PAIR(ctx, dist, CHSV(hue, ctx.saturation, val));
     }
 
     lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }
-
-// =========================================================================
-// cleanup / metadata / parameters
-// =========================================================================
 
 void LGPSuperformulaGlyphAREffect::cleanup() {}
 
 const plugins::EffectMetadata& LGPSuperformulaGlyphAREffect::getMetadata() const {
     static plugins::EffectMetadata meta{
         "LGP Superformula Glyph (5L-AR)",
-        "Living organic glyph with superformula morphing and 5-layer audio-reactive composition",
-        plugins::EffectCategory::QUANTUM,
-        1
+        "Living organic glyph with direct audio-reactive composition",
+        plugins::EffectCategory::QUANTUM, 1
     };
     return meta;
 }
-
-uint8_t LGPSuperformulaGlyphAREffect::getParameterCount() const {
-    return lowrisk_ar::Ar16Controls::parameterCount();
-}
-
-const plugins::EffectParameter* LGPSuperformulaGlyphAREffect::getParameter(uint8_t index) const {
-    return lowrisk_ar::Ar16Controls::parameter(index);
-}
-
-bool LGPSuperformulaGlyphAREffect::setParameter(const char* name, float value) {
-    return m_controls.set(name, value);
-}
-
-float LGPSuperformulaGlyphAREffect::getParameter(const char* name) const {
-    return m_controls.get(name);
-}
+uint8_t LGPSuperformulaGlyphAREffect::getParameterCount() const { return 0; }
+const plugins::EffectParameter* LGPSuperformulaGlyphAREffect::getParameter(uint8_t) const { return nullptr; }
+bool LGPSuperformulaGlyphAREffect::setParameter(const char*, float) { return false; }
+float LGPSuperformulaGlyphAREffect::getParameter(const char*) const { return 0.0f; }
 
 } // namespace ieffect
 } // namespace effects

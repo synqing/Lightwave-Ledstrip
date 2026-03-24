@@ -1,20 +1,15 @@
 /**
  * @file LGPMachDiamondsAREffect.h
- * @brief Mach Diamonds (5-Layer Audio-Reactive)
+ * @brief Mach Diamonds (5-Layer Audio-Reactive) — REWRITTEN
  *
  * Effect ID: 0x1C05 (EID_LGP_MACH_DIAMONDS_AR)
  * Family: FIVE_LAYER_AR
  * Category: QUANTUM
  * Tags: CENTER_ORIGIN | DUAL_STRIP | PHYSICS | AUDIO_REACTIVE
  *
- * 5-layer composition model (NOT flat lerp):
- *   Bed       - slow RMS-driven atmosphere (tau ~0.40s)
- *   Structure - spacing/contrast from bass + flux (tau ~0.15s)
- *   Impact    - beat/snare burst at diamond peaks (decay ~0.20s)
- *   Tonal     - chord-driven jewel hue anchor
- *   Memory    - post-impact glow accumulator (decay ~0.80s)
- *
- * Composition: brightness = bed * structuredGeom + impact + memory
+ * Rewrite: Direct ControlBus reads, single-stage smoothing (30-60ms),
+ * asymmetric max follower normalisation, audio drives brightness directly.
+ * No updateSignals() helper layer.
  */
 
 #pragma once
@@ -22,7 +17,6 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../../config/effect_ids.h"
-#include "AudioReactiveLowRiskPackHelpers.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -45,16 +39,19 @@ public:
     float getParameter(const char* name) const override;
 
 private:
-    lowrisk_ar::Ar16Controls m_controls;
-    lowrisk_ar::ArRuntimeState m_ar;
-    float m_t = 0.0f;
+    float m_t = 0.0f;              // Phase accumulator
 
-    // 5-Layer composition state
-    float m_bed         = 0.3f;
-    float m_structure   = 0.5f;
-    float m_impact      = 0.0f;
-    float m_snareImpact = 0.0f;
-    float m_memory      = 0.0f;
+    // Single-stage smoothed audio (one EMA per signal)
+    float m_bass       = 0.0f;     // Smoothed bass energy
+    float m_treble     = 0.0f;     // Smoothed treble energy
+    float m_chromaAngle = 0.0f;    // Circular chroma hue (radians)
+
+    // Asymmetric max followers for dynamic gain normalisation
+    float m_bassMax    = 0.15f;    // Bass max tracker
+    float m_trebleMax  = 0.15f;    // Treble max tracker
+
+    // Beat/percussion impact
+    float m_impact     = 0.0f;     // Beat-driven impulse with exponential decay
 };
 
 } // namespace ieffect

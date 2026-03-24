@@ -1,21 +1,9 @@
 /**
  * @file LGPRoseBloomAREffect.h
- * @brief Rose Bloom (5-Layer Audio-Reactive)
+ * @brief Rose Bloom (5-Layer Audio-Reactive) — REWRITTEN
  *
  * Effect ID: 0x1C0B (EID_LGP_ROSE_BLOOM_AR)
- * Family: FIVE_LAYER_AR
- * Category: QUANTUM
- * Tags: CENTER_ORIGIN | DUAL_STRIP | MATHEMATICS | AUDIO_REACTIVE
- *
- * 5-layer composition model (NOT flat lerp):
- *   Bed       - slow RMS-driven atmosphere (tau ~0.42s)
- *   Structure - petal count from harmonic + rhythmic (tau ~0.25s)
- *   Impact    - beat-triggered petal flash (decay ~0.18s)
- *   Tonal     - chord-driven hue anchor
- *   Memory    - bloom persistence accumulator (decay ~0.80s)
- *
- * Composition: brightness = bed * bloomGeom + impact + memory
- * Rhodonea curve: r = |cos(kf * theta)| with kf drifting 3-7 (petal count)
+ * Direct ControlBus reads, single-stage smoothing, max follower normalisation.
  */
 
 #pragma once
@@ -23,7 +11,6 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../../config/effect_ids.h"
-#include "AudioReactiveLowRiskPackHelpers.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -46,15 +33,22 @@ public:
     float getParameter(const char* name) const override;
 
 private:
-    lowrisk_ar::Ar16Controls m_controls;
-    lowrisk_ar::ArRuntimeState m_ar;
     float m_t = 0.0f;
 
-    // 5-Layer composition state
-    float m_bed       = 0.3f;
-    float m_structure = 5.0f;  // petal count kf (3-7 range)
-    float m_impact    = 0.0f;
-    float m_memory    = 0.0f;
+    // Single-stage smoothed audio
+    float m_bass       = 0.0f;
+    float m_mid        = 0.0f;
+    float m_chromaAngle = 0.0f;
+
+    // Asymmetric max followers
+    float m_bassMax    = 0.15f;
+    float m_midMax     = 0.15f;
+
+    // Rose petal count with smoothing
+    float m_petalK     = 5.0f;
+
+    // Impact
+    float m_impact     = 0.0f;
 };
 
 } // namespace ieffect

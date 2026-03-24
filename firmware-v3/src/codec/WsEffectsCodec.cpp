@@ -503,11 +503,11 @@ void WsEffectsCodec::encodeCategories(const char* const familyNames[], const uin
     data["total"] = total;
 }
 
-void WsEffectsCodec::encodeParametersGet(EffectId effectId, const char* name, bool hasParameters, const char* const paramNames[], const char* const paramDisplayNames[], const float paramMins[], const float paramMaxs[], const float paramDefaults[], const float paramValues[], uint8_t paramCount, JsonObject& data) {
+void WsEffectsCodec::encodeParametersGet(EffectId effectId, const char* name, bool hasParameters, const char* const paramNames[], const char* const paramDisplayNames[], const float paramMins[], const float paramMaxs[], const float paramDefaults[], const float paramValues[], const uint8_t paramTypes[], uint8_t paramCount, JsonObject& data) {
     data["effectId"] = effectId;
     data["name"] = name ? name : "";
     data["hasParameters"] = hasParameters;
-    
+
     JsonArray params = data["parameters"].to<JsonArray>();
     for (uint8_t i = 0; i < paramCount; i++) {
         JsonObject p = params.add<JsonObject>();
@@ -517,6 +517,7 @@ void WsEffectsCodec::encodeParametersGet(EffectId effectId, const char* name, bo
         p["max"] = paramMaxs[i];
         p["default"] = paramDefaults[i];
         p["value"] = paramValues[i];
+        p["type"] = paramTypes[i];
     }
 }
 

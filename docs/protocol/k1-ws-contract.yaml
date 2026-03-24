@@ -196,7 +196,8 @@ commands:
         effectId: uint16
         name: string
         hasParameters: bool
-        parameters: "array of {name, displayName, min, max, default, value}"
+        parameters: "array of {name, displayName, min, max, default, value, type}"
+        parameterType: "uint8 enum — 0=FLOAT, 1=INT, 2=BOOL, 3=ENUM"
     consumers: [tab5, ios]
 
   effects.parameters.set:

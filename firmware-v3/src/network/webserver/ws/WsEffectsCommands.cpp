@@ -324,6 +324,7 @@ static void handleEffectsParametersGet(AsyncWebSocketClient* client, JsonDocumen
     float paramMaxs[MAX_EFFECT_PARAMS];
     float paramDefaults[MAX_EFFECT_PARAMS];
     float paramValues[MAX_EFFECT_PARAMS];
+    uint8_t paramTypes[MAX_EFFECT_PARAMS];
     uint8_t paramCount = 0;
 
     if (effect) {
@@ -337,11 +338,12 @@ static void handleEffectsParametersGet(AsyncWebSocketClient* client, JsonDocumen
             paramMaxs[i] = param->maxValue;
             paramDefaults[i] = param->defaultValue;
             paramValues[i] = effect->getParameter(param->name);
+            paramTypes[i] = static_cast<uint8_t>(param->type);
         }
     }
-    
-    String response = buildWsResponse("effects.parameters", requestId, [effectId, name, hasParameters, paramNames, paramDisplayNames, paramMins, paramMaxs, paramDefaults, paramValues, paramCount](JsonObject& data) {
-        codec::WsEffectsCodec::encodeParametersGet(effectId, name, hasParameters, paramNames, paramDisplayNames, paramMins, paramMaxs, paramDefaults, paramValues, paramCount, data);
+
+    String response = buildWsResponse("effects.parameters", requestId, [effectId, name, hasParameters, paramNames, paramDisplayNames, paramMins, paramMaxs, paramDefaults, paramValues, paramTypes, paramCount](JsonObject& data) {
+        codec::WsEffectsCodec::encodeParametersGet(effectId, name, hasParameters, paramNames, paramDisplayNames, paramMins, paramMaxs, paramDefaults, paramValues, paramTypes, paramCount, data);
     });
     client->text(response);
 }

@@ -48,6 +48,13 @@ This extends the standard `esp32dev_audio` environment with:
 - `-D FEATURE_MABUTRACE=1`
 - `mabuware/mabutrace` library dependency
 
+For K1v2 onset tuning on the real 32 kHz ESV11 build, use:
+
+```bash
+pio run -e esp32dev_audio_esv11_k1v2_32khz_trace
+pio run -e esp32dev_audio_esv11_k1v2_32khz_trace -t upload --upload-port /dev/tty.usbmodem1101
+```
+
 ### Step 2 -- Flash the firmware
 
 ```bash
@@ -133,6 +140,7 @@ Source: `src/audio/AudioActor.cpp`
 | `goertzel64_fold` | `TRACE_BEGIN/END` | 64-bin Goertzel fold (conditional -- fires when 64-bin window completes) |
 | `tempo_update` | `TRACE_BEGIN/END` | Beat/tempo tracking (novelty + interleaved Goertzel tempo) |
 | `chroma_analyze` | `TRACE_BEGIN/END` | Chromagram analysis (12 pitch classes) |
+| `onset_detect` | `TRACE_BEGIN/END` | Standalone FFT onset detector (raw RMS gate, flux threshold, peak pick) |
 | `controlbus_build` | `TRACE_BEGIN/END` | ControlBus frame assembly (smoothing, silence gate, style) |
 | `snapshot_publish` | `TRACE_BEGIN/END` | Cross-core data publish via lock-free `SnapshotBuffer` |
 
@@ -165,6 +173,13 @@ Source: `src/hal/esp32s3/LedDriver_S3.cpp`
 | `fps` | `RendererActor.cpp:707` | Current frame rate (integer) |
 | `frame_us` | `RendererActor.cpp:708` | Raw frame time in microseconds (pre-throttle) |
 | `cpu_load` | `AudioActor.cpp:1552` | Audio CPU usage as integer percentage x100 (requires `FEATURE_AUDIO_BENCHMARK`) |
+| `onset_input_rms` | `AudioActor.cpp` | Raw hop RMS fed into the onset detector (`x1e6`) |
+| `onset_noise_floor` | `AudioActor.cpp` | Detector-local ambient RMS follower (`x1e6`) |
+| `onset_activity` | `AudioActor.cpp` | Detector activity gate opening (`0..1000`) |
+| `onset_gate_flags` | `AudioActor.cpp` | Bitmask: abs RMS gate, activity gate, no-prev prime, warmup |
+| `onset_flux` / `onset_env` / `onset_event_strength` | `AudioActor.cpp` | Full-band onset detector state (`x1000`) |
+| `onset_bass_flux` / `onset_mid_flux` / `onset_high_flux` | `AudioActor.cpp` | Per-band onset detector flux state (`x1000`) |
+| `onset_process_us` | `AudioActor.cpp` | Onset detector self-timed processing duration |
 
 ### Instant events
 
@@ -173,6 +188,7 @@ Source: `src/hal/esp32s3/LedDriver_S3.cpp`
 | `FALSE_TRIGGER` | `AudioActor.cpp:1131` | Activity gate says "signal present" but all bands have near-zero energy |
 | `frame_drop` | `RendererActor.cpp:1354` | Frame time exceeded 8.33 ms budget |
 | `effect_change` | `RendererActor.cpp:1438` | Effect ID changed (user or auto-cycle selection) |
+| `ONSET_EVENT` / `ONSET_KICK` / `ONSET_SNARE` / `ONSET_HIHAT` | `AudioActor.cpp` | Standalone onset detector event and percussion trigger instants |
 
 ---
 

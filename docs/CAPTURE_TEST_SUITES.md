@@ -84,6 +84,8 @@ gradient energy, long-run stability.
 Examples: BeatPulse family, beat-flash, pulse, onset-reactive triggers.
 
 Run: Reference + Stress + event-sensitive audio clip. Optional Soak.
+For dedicated detector hardening on K1 hardware, use
+`tools/led_capture/capture_onset_suite.py` with fixed fixtures.
 
 Key metrics: beat flag alignment, response latency, brightness delta around
 beat windows, onset-trigger contrast, missed-trigger rate.

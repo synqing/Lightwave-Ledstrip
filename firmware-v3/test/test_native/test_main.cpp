@@ -22,6 +22,7 @@ extern void run_integration_tests();
 extern void run_sync_tests();
 extern void run_subscription_manager_tests();
 extern void run_audio_reactive_policy_tests();
+extern void run_onset_effect_context_tests();
 extern void run_translation_engine_tests();
 extern void run_translation_integration_tests();
 
@@ -75,6 +76,11 @@ int main(int argc, char** argv) {
     printf("  Audio Reactive Policy Tests\n");
     printf("───────────────────────────────────────────────────────────────\n");
     run_audio_reactive_policy_tests();
+
+    printf("\n───────────────────────────────────────────────────────────────\n");
+    printf("  Onset EffectContext Contract Tests\n");
+    printf("───────────────────────────────────────────────────────────────\n");
+    run_onset_effect_context_tests();
 
     printf("\n───────────────────────────────────────────────────────────────\n");
     printf("  Translation Engine Unit Tests\n");

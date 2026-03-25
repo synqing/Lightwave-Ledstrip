@@ -49,11 +49,8 @@ static void test_registry_begin_failure_then_recover() {
 
     AudioMappingRegistry::setTestAllocator(alloc_ok);
     TEST_ASSERT_TRUE(registry.begin());
-
-    const EffectAudioMapping* mapping0 = registry.getMapping(0);
-    TEST_ASSERT_NOT_NULL(mapping0);
-    TEST_ASSERT_EQUAL_UINT8(EffectAudioMapping::VERSION, mapping0->version);
-    TEST_ASSERT_EQUAL_UINT8(0, mapping0->effectId);
+    TEST_ASSERT_EQUAL_UINT16(0, registry.getActiveEffectCount());
+    TEST_ASSERT_EQUAL_UINT16(0, registry.getTotalMappingCount());
 }
 
 static void test_registry_set_mapping_and_apply() {
@@ -101,4 +98,3 @@ int main(int, char**) {
     RUN_TEST(test_registry_set_mapping_and_apply);
     return UNITY_END();
 }
-

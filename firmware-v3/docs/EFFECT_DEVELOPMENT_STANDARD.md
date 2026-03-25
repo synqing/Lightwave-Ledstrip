@@ -331,7 +331,10 @@ Quick reference for all audio signals available via `ctx.audio`. Use `ctx.audio.
 | Chroma | `ctx.audio.getChroma(0..11)` | 0-1 | Pitch class energy (C=0, C#=1, ..., B=11) | Hue mapping |
 | BPM | `ctx.audio.bpm()` | float | Detected tempo (BPM) | Animation timing, phase sync |
 | Spectral Flux | `ctx.audio.fastFlux()` | 0-1 | Rate of spectral change | Onset/transient detection |
-| Onset | `controlBus.onset` | bool | Broadband onset (single-frame pulse) | Flash triggers |
+| Onset Event | `ctx.audio.onsetEvent()` | 0-1 | Broadband onset pulse strength | Flash triggers |
+| Kick Hit | `ctx.audio.isKickHit()` | bool | Semantic kick trigger | Centre resets, impact pulses |
+| Snare Hit | `ctx.audio.isSnareHit()` | bool | Semantic snare trigger | Accent bursts |
+| Hi-hat Hit | `ctx.audio.isHihatHit()` | bool | Semantic hi-hat trigger | Sparkle, shimmer |
 
 **Backend-agnostic signals** (safe on both PipelineCore and ESV11): `rms`, `beatStrength`, `bass`/`mid`/`treble`, `getBand`, `getChroma`, `liveliness`, `overallSaliency`, `bpm`.
 
@@ -347,7 +350,7 @@ From `ChevronWavesEffect`, `LGPWaveCollisionEffect`, `LGPStarBurstEffect` — th
 │ (300-1200 Hz bass)    via Spring (critically     │
 │                       damped, stiffness=50)      │
 │                                                  │
-│ onset / snare hit   → Flash / Burst trigger      │
+│ onset / percussion  → Flash / Burst trigger      │
 │                       (exponential decay from     │
 │                        center, exp(-dist*k))      │
 │                                                  │
@@ -390,14 +393,14 @@ void MyEffect::render(plugins::EffectContext& ctx) {
     #if FEATURE_AUDIO_SYNC
     if (ctx.audio.available) {
         // Bass energy for speed modulation
-        heavyEnergy = (ctx.audio.controlBus.heavy_bands[1] +
-                       ctx.audio.controlBus.heavy_bands[2]) / 2.0f;
+        heavyEnergy = (ctx.audio.getHeavyBand(1) +
+                       ctx.audio.getHeavyBand(2)) / 2.0f;
 
         // RMS for overall brightness
-        rmsEnergy = ctx.audio.controlBus.rms;
+        rmsEnergy = ctx.audio.rms();
 
         // Onset for flash triggers
-        onsetDetected = ctx.audio.controlBus.onset;
+        onsetDetected = ctx.audio.hasOnsetEvent();
 
         // Beat-strength brightness modulation (0.4 floor, +60% on beat)
         beatMod = 0.4f + 0.6f * ctx.audio.beatStrength();
@@ -769,10 +772,10 @@ void MyNewEffect::render(plugins::EffectContext& ctx) {
 
     #if FEATURE_AUDIO_SYNC
     if (ctx.audio.available) {
-        heavyEnergy = (ctx.audio.controlBus.heavy_bands[1] +
-                       ctx.audio.controlBus.heavy_bands[2]) / 2.0f;
-        rmsEnergy = ctx.audio.controlBus.rms;
-        onset = ctx.audio.controlBus.onset;
+        heavyEnergy = (ctx.audio.getHeavyBand(1) +
+                       ctx.audio.getHeavyBand(2)) / 2.0f;
+        rmsEnergy = ctx.audio.rms();
+        onset = ctx.audio.hasOnsetEvent();
 
         // Beat-strength brightness modulation (0.4 floor, +60% on beat)
         beatMod = 0.4f + 0.6f * ctx.audio.beatStrength();

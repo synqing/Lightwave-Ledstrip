@@ -1,7 +1,7 @@
 # Audio-Visual Contract Surface
 
-**Version:** 1.0.0  
-**Last Updated:** 2026-03-02  
+**Version:** 1.1.0  
+**Last Updated:** 2026-03-25  
 **Status:** Implementation source of truth
 
 This document defines the contract between the audio pipeline (producer) and the visual pipeline (consumer) for `firmware-v3`.
@@ -58,10 +58,46 @@ This document defines the contract between the audio pipeline (producer) and the
 - Contract requires accessor usage (no direct `ctx.audio.controlBus` reads in `ieffect` code).
 - Key accessors:
   - Energy/rhythm: `rms()`, `flux()`, `bass()`, `mid()`, `treble()`, `beatPhase()`, `isOnBeat()`, `beatStrength()`.
+  - Onset semantics: `ctx.audio.onset.*`, `hasOnsetEvent()`, `onsetEnv()`, `onsetEvent()`, `isKickHit()`, `isSnareHit()`, `isHihatHit()`.
   - Spectrum: `bins64()`, `bins64Adaptive()`, `bins256()`, `binHz()`, `energyInRange(...)`, named-band helpers.
   - Chroma/harmony: `chroma()`, `heavyChroma()`, `chordState()`, `musicStyle()`, `styleConfidence()`.
   - Behaviour: `shouldPulseOnBeat()`, `shouldDriftWithHarmony()`, `shouldShimmerWithMelody()`, `shouldTextureFlow()`, `recommendedBehavior()`.
   - Waveform/parity: `waveform()`, `sbWaveform()`, `sbWaveformPeakScaled()`, `preferredWaveform()`.
+
+### First-class onset semantics
+- Renderer constructs `ctx.audio.onset` every render tick from `ControlBusFrame` plus `MusicalGridSnapshot`.
+- Semantic channels:
+  - `beat`, `downbeat`, `transient`, `kick`, `snare`, `hihat`
+- Each channel exposes:
+  - `fired`, `strength01`, `level01`, `ageMs`, `intervalMs`, `sequence`, `reliable`
+- Timing metadata:
+  - `phase01`, `bpm`, `tempoConfidence`, `timingReliable`
+- Raw detector diagnostics:
+  - `raw.flux`, `raw.env`, `raw.event`, `raw.bassFlux`, `raw.midFlux`, `raw.highFlux`
+- Compatibility wrappers remain valid for one release cycle:
+  - `isOnBeat() -> onset.beat.fired`
+  - `beatStrength() -> onset.beat.level01`
+  - `isKickHit() -> onset.kick.fired`
+  - `isSnareHit() -> onset.snare.fired`
+  - `isHihatHit() -> onset.hihat.fired`
+  - `hasOnsetEvent()/onsetEnv()/onsetEvent() -> onset.transient/raw`
+
+### Onset reliability contract
+- `beat` and `downbeat` are reliable only when live audio is available and tempo confidence is meaningful.
+- `transient`, `kick`, and raw detector diagnostics are reliable only when the live detector path is active and Trinity override is not driving the frame.
+- `snare` and `hihat` may still carry fallback transport values, but must report `reliable=false` when they are not backed by the native detector path.
+- Effects should treat `reliable=false` as a hint to fall back to tempo or lower-risk behaviour.
+
+### Mapping matrix
+
+| Effect-facing onset field | Transport source |
+|---------------------------|------------------|
+| `onset.beat.*` | `MusicalGridSnapshot.beat_*` |
+| `onset.downbeat.*` | `MusicalGridSnapshot.downbeat_tick` + beat strength |
+| `onset.transient.*` | `ControlBusFrame.onsetEvent/onsetEnv` |
+| `onset.kick.*` | `ControlBusFrame.kickTrigger/onsetBassFlux` |
+| `onset.snare.*` | `ControlBusFrame.snareTrigger` + `max(snareEnergy, onsetMidFlux)` |
+| `onset.hihat.*` | `ControlBusFrame.hihatTrigger` + `max(hihatEnergy, onsetHighFlux)` |
 
 ### Audio->visual mapping hook
 - Applied in renderer before `render()`:
@@ -106,4 +142,5 @@ This document defines the contract between the audio pipeline (producer) and the
   - `python3 firmware-v3/tools/check_effect_contracts.py`
 - CI workflow:
   - `.github/workflows/effect_contract_check.yml`
-
+- Semantic ADR:
+  - [ADR_2026-03-25_FIRST_CLASS_ONSET_SURFACE.md](./ADR_2026-03-25_FIRST_CLASS_ONSET_SURFACE.md)

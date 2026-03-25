@@ -752,13 +752,13 @@ Both variants receive **identical processing** (spike detection, AGC, normalizat
 
 ```cpp
 // CORRECT: Use heavy_bands for speed modulation
-float heavyEnergy = (ctx.audio.controlBus.heavy_bands[1] +
-                     ctx.audio.controlBus.heavy_bands[2]) / 2.0f;
+float heavyEnergy = (ctx.audio.getHeavyBand(1) +
+                     ctx.audio.getHeavyBand(2)) / 2.0f;
 float targetSpeed = 0.6f + 0.8f * heavyEnergy;
 speedMult = m_speedSpring.update(targetSpeed, dt);
 
 // WRONG: Using regular bands for speed causes jitter
-float energy = (ctx.audio.controlBus.bands[1] + ctx.audio.controlBus.bands[2]) / 2.0f;
+float energy = (ctx.audio.getBand(1) + ctx.audio.getBand(2)) / 2.0f;
 // This is too responsive and creates jerky motion!
 ```
 
@@ -774,6 +774,7 @@ All audio data is accessed through `ctx.audio.*` in effect `render()` functions:
 struct AudioContext {
     audio::ControlBusFrame controlBus;      // Complete snapshot
     audio::MusicalGridSnapshot musicalGrid; // Beat tracking
+    OnsetContext onset;                     // Effect-facing onset semantics
     bool available = false;                  // True if <100ms old
 
     // ===========================================
@@ -826,11 +827,11 @@ struct AudioContext {
     // ===========================================
     // BEAT TRACKING (K1 + MusicalGrid)
     // ===========================================
-    float beatPhase() const { return musicalGrid.beat_phase01; }  // 0-1, wraps per beat
-    bool isOnBeat() const { return musicalGrid.beat_tick; }       // Single-frame pulse
-    float beatStrength() const { return musicalGrid.beat_strength; }
-    float bpm() const { return musicalGrid.bpm; }
-    float tempoConfidence() const { return musicalGrid.tempo_confidence; }
+    float beatPhase() const { return onset.phase01; }
+    bool isOnBeat() const { return onset.beat.fired || musicalGrid.beat_tick; }
+    float beatStrength() const { return onset.beat.level01; }
+    float bpm() const { return onset.bpm; }
+    float tempoConfidence() const { return onset.tempoConfidence; }
 
     // ===========================================
     // CHORD DETECTION
@@ -846,10 +847,19 @@ struct AudioContext {
     // ===========================================
     // PERCUSSION ONSET
     // ===========================================
-    float snare() const { return controlBus.snareEnergy; }
-    float hihat() const { return controlBus.hihatEnergy; }
-    bool isSnareHit() const { return controlBus.snareTrigger; }
-    bool isHihatHit() const { return controlBus.hihatTrigger; }
+    bool hasOnsetEvent() const { return onset.transient.fired; }
+    float onsetEnv() const { return onset.raw.env; }
+    float onsetEvent() const { return onset.raw.event; }
+    float onsetFlux() const { return onset.raw.flux; }   // advanced/debug
+    float kickFlux() const { return onset.raw.bassFlux; } // advanced/debug
+    float snareFlux() const { return onset.raw.midFlux; } // advanced/debug
+    float hihatFlux() const { return onset.raw.highFlux; } // advanced/debug
+    float kickLevel() const { return onset.kick.level01; }
+    float snare() const { return onset.snare.level01; }
+    float hihat() const { return onset.hihat.level01; }
+    bool isKickHit() const { return onset.kick.fired; }
+    bool isSnareHit() const { return onset.snare.fired; }
+    bool isHihatHit() const { return onset.hihat.fired; }
 
     // ===========================================
     // MUSICAL SALIENCY

@@ -214,16 +214,14 @@ void SbK1WaveformHybridEffect::renderEffect(plugins::EffectContext& ctx) {
     m_dotColorSmooth.b += (dotColor.b - m_dotColorSmooth.b) * aColor;
     dotColor = m_dotColorSmooth;
 
-    // Audio energy gate: scale dot brightness proportionally to actual RMS.
-    // Chroma AGC normalises bins to 0..1 regardless of volume, so without
-    // this the dot holds full colour even during near-silence. RMS scaling
-    // ensures the dot is invisible when quiet, dim when soft, full when loud.
-    const float rmsNow = ctx.audio.rms();
-    const float rmsScale = clampF(rmsNow * 3.0f, 0.0f, 1.0f);
-    dotColor *= rmsScale;
-
-    // ControlBus silence gate as final safety net for true silence
+    // Audio confidence gate: use the novelty-assisted confidence envelope
+    // instead of instantaneous RMS.  Confidence has hold (500ms) so it
+    // stays at 1.0 through inter-beat gaps — no visual cutting during music.
+    const float confidence = ctx.audio.controlBus.audioConfidence;
     const float silScale = ctx.audio.controlBus.silentScale;
+
+    // Scale dot brightness by confidence × silentScale.
+    dotColor *= confidence;
     dotColor *= silScale;
 
     // =====================================================================
@@ -235,12 +233,11 @@ void SbK1WaveformHybridEffect::renderEffect(plugins::EffectContext& ctx) {
     static constexpr float kDecayScale   = 3.5f;
     float decayRate = kMinDecayRate + kDecayScale * absAmp;
 
-    // Accelerate trail fade when audio is quiet or silent.
-    // rmsScale < 1.0 means quiet audio; silScale < 1.0 means silence gate active.
-    // Without this, the trail takes ~6s to fade at kMinDecayRate.
-    float quietFactor = fminf(rmsScale, silScale);  // whichever is more suppressed
+    // Accelerate trail fade only when confidence drops (actual silence),
+    // not on inter-beat RMS dips.
+    float quietFactor = fminf(confidence, silScale);
     if (quietFactor < 0.9f) {
-        decayRate += 10.0f * (1.0f - quietFactor);  // up to 10.8/s when silent
+        decayRate += 10.0f * (1.0f - quietFactor);
     }
     float fade = expf(-decayRate * m_dt);
 

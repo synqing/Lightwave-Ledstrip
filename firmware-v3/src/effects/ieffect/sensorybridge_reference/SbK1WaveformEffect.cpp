@@ -200,30 +200,27 @@ void SbK1WaveformEffect::renderEffect(plugins::EffectContext& ctx) {
     dotColor *= photons;
     dotColor.clip();
 
-    // Audio energy gate: scale dot brightness proportionally to actual RMS.
-    const float rmsNow = ctx.audio.rms();
-    const float rmsScale = clampF(rmsNow * 3.0f, 0.0f, 1.0f);
-    dotColor *= rmsScale;
-
-    // ControlBus silence gate as final safety net
+    // Audio confidence gate: use the novelty-assisted confidence envelope
+    // instead of instantaneous RMS.  Confidence has hold (500ms) so it
+    // stays at 1.0 through inter-beat gaps — no visual cutting during music.
+    const float confidence = ctx.audio.controlBus.audioConfidence;
     const float silScale = ctx.audio.controlBus.silentScale;
 
-    // Silence gate: scale dot brightness by silentScale.
+    // Scale dot brightness by confidence × silentScale.
+    // During music: confidence=1.0 → full brightness.
+    // During actual silence: confidence decays smoothly → graceful fade.
+    dotColor *= confidence;
     dotColor *= silScale;
 
     // --- DYNAMIC TRAIL FADE (dt-corrected) ---
-    // Rate-independent exponential decay. The decay rate scales with
-    // waveform amplitude: louder audio = faster fade (shorter trails).
-    // At silence the minimum rate produces ~2.5s full decay.
-    // At moderate audio (absAmp=0.5): half-life ~0.35s (visible trail ~1s).
-    // At full amplitude: half-life ~0.12s (tight, punchy trail).
     float absAmp = clampF(fabsf(m_wfPeakScaled), 0.0f, 1.0f);
-    static constexpr float kMinDecayRate = 0.8f;   // per-second (silence floor, ~3.5s full decay)
-    static constexpr float kDecayScale   = 3.5f;   // additional rate per unit amplitude
+    static constexpr float kMinDecayRate = 0.8f;
+    static constexpr float kDecayScale   = 3.5f;
     float decayRate = kMinDecayRate + kDecayScale * absAmp;
 
-    // Accelerate trail fade when audio is quiet or silent
-    float quietFactor = fminf(rmsScale, silScale);
+    // Accelerate trail fade only when confidence drops (actual silence),
+    // not on inter-beat RMS dips.
+    float quietFactor = fminf(confidence, silScale);
     if (quietFactor < 0.9f) {
         decayRate += 10.0f * (1.0f - quietFactor);
     }

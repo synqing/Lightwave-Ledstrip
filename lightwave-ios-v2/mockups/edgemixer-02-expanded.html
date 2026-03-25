@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EdgeMixer — Expandable / Collapsible Section</title>
+<style>
+  :root {
+    --lw-base:          #0F1219;
+    --lw-card:          #1E2535;
+    --lw-card-lo:       #1A2030;
+    --lw-elevated:      #252D3F;
+    --lw-gold:          #FFB84D;
+    --lw-gold-dim:      rgba(255,184,77,0.14);
+    --lw-gold-glow:     rgba(255,184,77,0.5);
+    --lw-cyan:          #00D4FF;
+    --lw-cyan-dim:      rgba(0,212,255,0.14);
+    --lw-success:       #4DFFB8;
+    --lw-text-primary:  #E6E9EF;
+    --lw-text-secondary:#9CA3B0;
+    --lw-text-tertiary: #6B7280;
+    --lw-border:        rgba(255,255,255,0.06);
+    --lw-divider:       rgba(255,255,255,0.04);
+    --r-hero:   24px;
+    --r-card:   16px;
+    --r-nested: 12px;
+    --sp-xs: 4px;
+    --sp-sm: 8px;
+    --sp-md: 12px;
+    --sp-lg: 24px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #1a1a2e;
+    padding: 40px 20px 60px;
+    font-family: -apple-system, 'SF Pro Display', sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 60px;
+  }
+
+  h1 {
+    color: var(--lw-text-primary);
+    font-size: 22px;
+    font-weight: 700;
+    text-align: center;
+  }
+  .subtitle {
+    color: var(--lw-text-secondary);
+    font-size: 13px;
+    text-align: center;
+    margin-top: 6px;
+    margin-bottom: 32px;
+  }
+
+  /* ─── Two-phone layout ─── */
+  .phones-row {
+    display: flex;
+    gap: 48px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .phone-column {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+  .phone-label {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--lw-text-primary);
+    letter-spacing: 0.3px;
+  }
+  .phone-sublabel {
+    font-size: 12px;
+    color: var(--lw-text-secondary);
+    text-align: center;
+    max-width: 280px;
+    line-height: 1.5;
+  }
+
+  /* ─── iPhone shell ─── */
+  .iphone {
+    width: 393px;
+    background: var(--lw-base);
+    border-radius: 54px;
+    overflow: hidden;
+    box-shadow:
+      0 0 0 2px #1c1c1e,
+      0 0 0 4px #3a3a3c,
+      0 40px 80px rgba(0,0,0,0.8);
+    flex-shrink: 0;
+  }
+
+  .iphone-notch {
+    height: 52px;
+    background: var(--lw-base);
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    position: relative;
+  }
+  .iphone-notch::after {
+    content: '';
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 120px;
+    height: 32px;
+    background: #000;
+    border-radius: 20px;
+  }
+  .status-time {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--lw-text-primary);
+    position: relative;
+    z-index: 1;
+  }
+  .status-icons {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ─── Scroll content ─── */
+  .scroll-area {
+    height: 780px;
+    overflow: hidden;
+    background: var(--lw-base);
+    padding: 16px;
+  }
+  .play-stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-lg);
+  }
+
+  /* ─── Cards ─── */
+  .lw-card {
+    background: linear-gradient(180deg, var(--lw-card) 0%, var(--lw-card-lo) 100%);
+    border-radius: var(--r-card);
+    padding: 12px 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+  }
+  .divider { height:1px; background:var(--lw-divider); }
+
+  /* ─── Sliders ─── */
+  .slider-wrap { display:flex; flex-direction:column; gap:var(--sp-sm); }
+  .slider-header { display:flex; justify-content:space-between; align-items:baseline; }
+  .slider-title {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.8px;
+    color: var(--lw-text-secondary); text-transform: uppercase;
+  }
+  .slider-value {
+    font-family: 'SF Mono', monospace;
+    font-size: 12px; font-weight: 500; color: var(--lw-gold);
+  }
+  .slider-track {
+    height: 10px; background: var(--lw-card); border-radius: 5px;
+    position: relative; overflow: visible;
+  }
+  .slider-fill {
+    height: 100%; border-radius: 5px;
+    position: absolute; left: 0; top: 0;
+  }
+  .slider-thumb {
+    width: 24px; height: 24px; background: var(--lw-gold);
+    border-radius: 50%; position: absolute;
+    top: 50%; transform: translate(-50%, -50%);
+  }
+
+  /* ─── Pills ─── */
+  .pill-row { display:flex; gap:var(--sp-sm); }
+  .pill {
+    flex: 1;
+    background: linear-gradient(180deg, var(--lw-card) 0%, var(--lw-card-lo) 100%);
+    border-radius: 32px; padding: 10px 14px;
+    display: flex; align-items: center; justify-content: space-between;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+  }
+  .pill-label { font-size:10px; font-weight:700; letter-spacing:1.2px; color:var(--lw-text-tertiary); text-transform:uppercase; }
+  .pill-value { font-size:13px; font-weight:600; color:var(--lw-text-primary); }
+  .pill-chevron { font-size:11px; color:var(--lw-gold); }
+
+  /* ─── Hero LED ─── */
+  .hero-led {
+    height: 140px; border-radius: var(--r-hero); overflow: hidden;
+    position: relative; box-shadow: 0 0 40px rgba(255,184,77,0.12);
+  }
+  .hero-overlay {
+    position: absolute; inset: 0;
+    display: flex; align-items: flex-end; justify-content: space-between;
+    padding: 14px 16px;
+  }
+  .hero-effect-name {
+    font-size: 15px; font-weight: 600;
+    color: var(--lw-text-primary);
+    text-shadow: 0 2px 8px rgba(0,0,0,0.9);
+  }
+  .bpm-ring { width:72px; height:72px; position:relative; }
+  .bpm-ring svg { position:absolute; inset:0; }
+  .bpm-label {
+    position:absolute; inset:0;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+  }
+  .bpm-value { font-size:22px; font-weight:800; color:var(--lw-gold); letter-spacing:1px; line-height:1; }
+  .bpm-unit { font-size:9px; font-weight:600; letter-spacing:1.5px; color:var(--lw-text-secondary); text-transform:uppercase; }
+
+  /* ─── Tab bar ─── */
+  .tab-bar {
+    height: 82px; background: rgba(15,18,25,0.95);
+    border-top: 1px solid var(--lw-border);
+    display: flex; align-items: center; justify-content: space-around;
+    padding-bottom: 16px; padding-top: 10px;
+  }
+  .tab-item { display:flex; flex-direction:column; align-items:center; gap:4px; flex:1; min-height:44px; justify-content:center; }
+  .tab-icon { font-size:20px; }
+  .tab-label { font-size:10px; font-weight:600; }
+  .tab-item.active .tab-icon, .tab-item.active .tab-label { color:var(--lw-gold); }
+  .tab-item:not(.active) .tab-icon, .tab-item:not(.active) .tab-label { color:var(--lw-text-tertiary); }
+
+  /* ══════════════════════════════════════════════ */
+  /* EDGEMIXER COLLAPSED STATE                      */
+  /* ══════════════════════════════════════════════ */
+  .em-collapsed {
+    background: linear-gradient(180deg, var(--lw-card) 0%, var(--lw-card-lo) 100%);
+    border-radius: var(--r-card);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+    overflow: hidden;
+    /* No cyan glow — not active */
+  }
+  .em-collapsed-row {
+    display: flex;
+    align-items: center;
+    padding: 14px 16px;
+    gap: var(--sp-sm);
+    min-height: 52px; /* ≥44pt touch target */
+    cursor: pointer;
+  }
+  .em-collapse-icon {
+    width: 32px;
+    height: 32px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .em-collapse-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    color: var(--lw-text-tertiary);
+    text-transform: uppercase;
+    flex: 1;
+  }
+  .em-collapse-mode-pill {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--lw-text-tertiary);
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    padding: 3px 9px;
+    letter-spacing: 0.3px;
+  }
+  .em-collapse-chevron {
+    font-size: 13px;
+    color: var(--lw-text-tertiary);
+    margin-left: 4px;
+    transition: transform 0.25s;
+  }
+
+  /* Active collapsed (mode selected, but panel closed) */
+  .em-collapsed.em-active {
+    box-shadow: 0 2px 12px rgba(0,0,0,0.4), 0 0 0 1.5px rgba(0,212,255,0.3);
+  }
+  .em-collapsed.em-active::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 24px; right: 24px; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--lw-cyan), transparent);
+    opacity: 0.5;
+  }
+  .em-collapsed.em-active .em-collapse-icon { background: rgba(0,212,255,0.12); }
+  .em-collapsed.em-active .em-collapse-mode-pill {
+    color: var(--lw-cyan);
+    background: rgba(0,212,255,0.1);
+    border-color: rgba(0,212,255,0.3);
+  }
+  .em-collapsed.em-active .em-collapse-chevron { color: var(--lw-cyan); }
+
+  /* ══════════════════════════════════════════════ */
+  /* EDGEMIXER EXPANDED STATE                       */
+  /* ══════════════════════════════════════════════ */
+  .em-expanded {
+    background: linear-gradient(180deg, var(--lw-card) 0%, var(--lw-card-lo) 100%);
+    border-radius: var(--r-card);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.4), 0 0 0 1.5px rgba(0,212,255,0.3);
+    overflow: hidden;
+    position: relative;
+  }
+  .em-expanded::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 24px; right: 24px; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--lw-cyan), transparent);
+    opacity: 0.5;
+  }
+
+  /* Header row of expanded card — still acts as collapse trigger */
+  .em-expanded-header {
+    display: flex;
+    align-items: center;
+    padding: 14px 16px 10px;
+    gap: var(--sp-sm);
+    cursor: pointer;
+    min-height: 52px;
+  }
+  .em-expanded-icon {
+    width: 32px; height: 32px;
+    background: rgba(0,212,255,0.12);
+    border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .em-expanded-title {
+    font-size: 11px; font-weight: 700; letter-spacing: 1.2px;
+    color: var(--lw-text-tertiary); text-transform: uppercase; flex: 1;
+  }
+  .em-expanded-badge {
+    font-family: 'SF Mono', monospace;
+    font-size: 10px; font-weight: 600;
+    color: var(--lw-cyan);
+    background: rgba(0,212,255,0.12);
+    border: 1px solid rgba(0,212,255,0.3);
+    border-radius: 6px; padding: 2px 7px; letter-spacing: 0.4px;
+  }
+  .em-expand-chevron {
+    font-size: 13px; color: var(--lw-cyan); margin-left: 6px;
+    transform: rotate(90deg); /* pointing up — expanded */
+  }
+
+  .em-body { padding: 0 16px 14px; }
+
+  /* Mode strip */
+  .mode-strip { display:flex; gap:var(--sp-sm); overflow:hidden; width:100%; }
+  .mode-chip {
+    display:flex; flex-direction:column; align-items:center; gap:4px;
+    padding: 8px 10px 7px; border-radius:10px; cursor:pointer;
+    flex:1; min-width:0; border:1.5px solid transparent;
+  }
+  .mode-chip.active {
+    background: rgba(0,212,255,0.12); border-color:rgba(0,212,255,0.4);
+  }
+  .mode-chip:not(.active) {
+    background: rgba(255,255,255,0.04); border-color:rgba(255,255,255,0.06);
+  }
+  .mode-chip-icon { width:28px; height:28px; display:flex; align-items:center; justify-content:center; }
+  .mode-chip-label {
+    font-size:8.5px; font-weight:600; letter-spacing:0.4px;
+    text-transform:uppercase; text-align:center; line-height:1.2; white-space:nowrap;
+  }
+  .mode-chip.active .mode-chip-label { color:var(--lw-cyan); }
+  .mode-chip:not(.active) .mode-chip-label { color:var(--lw-text-tertiary); }
+
+  /* LED preview */
+  .em-preview-label {
+    font-size:10px; font-weight:600; letter-spacing:0.8px;
+    color:var(--lw-text-tertiary); text-transform:uppercase; margin-bottom:6px; margin-top:var(--sp-md);
+  }
+  .em-preview-strip {
+    width:100%; height:24px; border-radius:8px; overflow:hidden; position:relative;
+  }
+  .led-boundary-marker {
+    position:absolute; top:0; bottom:0; left:50%;
+    transform:translateX(-50%); width:1.5px;
+    background:rgba(255,255,255,0.4); pointer-events:none;
+  }
+  .em-preview-sublabel {
+    font-family:'SF Mono', monospace;
+    font-size:9px; color:rgba(255,255,255,0.35); text-align:center; margin-top:3px;
+  }
+
+  /* Spread slider */
+  .spread-wrap { margin-top:var(--sp-md); }
+  .spread-track {
+    width:100%; height:10px; background:rgba(255,255,255,0.06);
+    border-radius:5px; position:relative; overflow:hidden;
+  }
+  .spread-fill {
+    position:absolute; top:0; bottom:0;
+    background:linear-gradient(90deg, transparent, rgba(0,212,255,0.5) 30%, rgba(0,212,255,0.5) 70%, transparent);
+    border-radius:5px;
+  }
+  .spread-thumb-wrap {
+    position:relative; height:24px; display:flex; align-items:center; margin-top:0;
+  }
+  .spread-thumb {
+    width:24px; height:24px; background:var(--lw-cyan);
+    border-radius:50%; position:absolute;
+    box-shadow: 0 0 0 4px rgba(0,212,255,0.2), 0 0 12px rgba(0,212,255,0.4);
+    top:50%; transform:translate(-50%,-50%);
+  }
+  .spread-labels {
+    display:flex; justify-content:space-between; margin-top:4px;
+  }
+  .spread-label-text { font-size:10px; color:var(--lw-text-tertiary); }
+
+  /* ─── Transition annotation ─── */
+  .annotation-box {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px;
+    padding: 20px 24px;
+    max-width: 800px;
+    width: 100%;
+  }
+  .annotation-title {
+    font-size: 14px; font-weight: 700;
+    color: var(--lw-text-primary); margin-bottom: 14px;
+    letter-spacing: 0.3px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .annotation-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--lw-cyan);
+  }
+  .annotation-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .annotation-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .annotation-key {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.8px;
+    color: var(--lw-text-tertiary); text-transform: uppercase;
+  }
+  .annotation-val {
+    font-size: 13px; color: var(--lw-text-secondary); line-height: 1.5;
+  }
+  .annotation-val strong { color: var(--lw-text-primary); }
+</style>
+</head>
+<body>
+
+<h1>EdgeMixer — Expandable Section</h1>
+<p class="subtitle">Two states: Collapsed (default on Play tab load) and Expanded (tapped)</p>
+
+<div class="phones-row">
+
+  <!-- ══ COLLAPSED — No mode selected (default) ══ -->
+  <div class="phone-column">
+    <div class="phone-label">State 1 — Collapsed · Default</div>
+    <div class="iphone">
+      <div class="iphone-notch">
+        <span class="status-time">9:41</span>
+        <div class="status-icons">
+          <svg width="17" height="12" viewBox="0 0 17 12" fill="none"><rect x="0" y="3" width="3" height="9" rx="1" fill="#E6E9EF" opacity="0.4"/><rect x="4.5" y="2" width="3" height="10" rx="1" fill="#E6E9EF" opacity="0.6"/><rect x="9" y="1" width="3" height="11" rx="1" fill="#E6E9EF" opacity="0.8"/><rect x="13.5" y="0" width="3" height="12" rx="1" fill="#E6E9EF"/></svg>
+          <svg width="16" height="12" viewBox="0 0 16 12" fill="#E6E9EF"><circle cx="8" cy="10" r="1.5"/><path d="M4.7 6.9C5.5 6 6.7 5.5 8 5.5s2.5.5 3.3 1.4L12.7 6.4C11.5 5.1 9.9 4.3 8 4.3S4.5 5.1 3.3 6.4z" opacity="0.6"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke="#E6E9EF" stroke-opacity="0.4"/><rect x="2" y="2" width="15" height="8" rx="2" fill="#E6E9EF"/></svg>
+        </div>
+      </div>
+
+      <div class="scroll-area">
+        <div class="play-stack">
+
+          <!-- Hero -->
+          <div class="hero-led">
+            <canvas id="heroA" width="361" height="140" style="width:100%;height:140px;display:block;border-radius:24px;"></canvas>
+            <div class="hero-overlay">
+              <span class="hero-effect-name">Pulse Waves</span>
+              <div class="bpm-ring">
+                <svg viewBox="0 0 72 72" fill="none" width="72" height="72">
+                  <circle cx="36" cy="36" r="30" stroke="#252D3F" stroke-width="4" stroke-opacity="0.6"/>
+                  <circle cx="36" cy="36" r="30" stroke="#FFB84D" stroke-width="4" stroke-dasharray="157" stroke-dashoffset="47" stroke-linecap="round" transform="rotate(-90 36 36)"/>
+                </svg>
+                <div class="bpm-label">
+                  <span class="bpm-value">124</span>
+                  <span class="bpm-unit">BPM</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pills -->
+          <div class="pill-row">
+            <div class="pill"><div><div class="pill-label">Effect</div><div class="pill-value">Pulse Waves</div></div><span class="pill-chevron">›</span></div>
+            <div class="pill"><div><div class="pill-label">Palette</div><div class="pill-value">Ocean</div></div><span class="pill-chevron">›</span></div>
+          </div>
+
+          <!-- Brightness + Speed -->
+          <div class="lw-card">
+            <div style="display:flex;flex-direction:column;gap:var(--sp-md);">
+              <div class="slider-wrap">
+                <div class="slider-header"><span class="slider-title">Brightness</span><span class="slider-value">178</span></div>
+                <div class="slider-track"><div class="slider-fill" style="width:70%;background:linear-gradient(90deg,rgba(255,184,77,0.5),#FFB84D);"></div><div class="slider-thumb" style="left:70%;"></div></div>
+              </div>
+              <div class="divider"></div>
+              <div class="slider-wrap">
+                <div class="slider-header"><span class="slider-title">Speed</span><span class="slider-value">42</span></div>
+                <div class="slider-track"><div class="slider-fill" style="width:42%;background:linear-gradient(90deg,#00D4FF,#FFB84D);"></div><div class="slider-thumb" style="left:42%;"></div></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- EdgeMixer COLLAPSED — no mode, no accent -->
+          <div class="em-collapsed">
+            <div class="em-collapsed-row">
+              <div class="em-collapse-icon">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <rect x="0" y="4" width="7" height="8" rx="2" fill="#6B7280" opacity="0.5"/>
+                  <rect x="9" y="4" width="7" height="8" rx="2" fill="#6B7280" opacity="0.5"/>
+                  <line x1="8" y1="3" x2="8" y2="13" stroke="#6B7280" stroke-width="1.5" stroke-dasharray="2,2"/>
+                </svg>
+              </div>
+              <span class="em-collapse-title">Edge Mixer</span>
+              <span class="em-collapse-mode-pill">Solo</span>
+              <span class="em-collapse-chevron">›</span>
+            </div>
+          </div>
+
+          <!-- Expression params (placeholder) -->
+          <div class="lw-card" style="opacity:0.6;">
+            <div style="font-size:11px;font-weight:700;letter-spacing:1.2px;color:var(--lw-text-tertiary);text-transform:uppercase;margin-bottom:8px;">Expression Parameters</div>
+            <div style="height:32px;background:rgba(255,255,255,0.03);border-radius:8px;"></div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="tab-bar">
+        <div class="tab-item active"><span class="tab-icon">▶</span><span class="tab-label">Play</span></div>
+        <div class="tab-item"><span class="tab-icon">🎵</span><span class="tab-label">Audio</span></div>
+        <div class="tab-item"><span class="tab-icon">◫</span><span class="tab-label">Zones</span></div>
+        <div class="tab-item"><span class="tab-icon">⚙</span><span class="tab-label">Device</span></div>
+      </div>
+    </div>
+    <p class="phone-sublabel">Default state — single row, 52pt tall.<br>Mode badge shows current mode. Tap anywhere to expand.</p>
+  </div>
+
+  <!-- ══ EXPANDED — Triadic mode, Spread 35 ══ -->
+  <div class="phone-column">
+    <div class="phone-label">State 2 — Expanded · Triadic + Spread 35</div>
+    <div class="iphone">
+      <div class="iphone-notch">
+        <span class="status-time">9:41</span>
+        <div class="status-icons">
+          <svg width="17" height="12" viewBox="0 0 17 12" fill="none"><rect x="0" y="3" width="3" height="9" rx="1" fill="#E6E9EF" opacity="0.4"/><rect x="4.5" y="2" width="3" height="10" rx="1" fill="#E6E9EF" opacity="0.6"/><rect x="9" y="1" width="3" height="11" rx="1" fill="#E6E9EF" opacity="0.8"/><rect x="13.5" y="0" width="3" height="12" rx="1" fill="#E6E9EF"/></svg>
+          <svg width="16" height="12" viewBox="0 0 16 12" fill="#E6E9EF"><circle cx="8" cy="10" r="1.5"/><path d="M4.7 6.9C5.5 6 6.7 5.5 8 5.5s2.5.5 3.3 1.4z" opacity="0.6"/></svg>
+          <svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke="#E6E9EF" stroke-opacity="0.4"/><rect x="2" y="2" width="15" height="8" rx="2" fill="#E6E9EF"/></svg>
+        </div>
+      </div>
+
+      <div class="scroll-area" style="padding-top:12px;">
+        <div class="play-stack">
+
+          <!-- Hero (same) -->
+          <div class="hero-led">
+            <canvas id="heroB" width="361" height="140" style="width:100%;height:140px;display:block;border-radius:24px;"></canvas>
+            <div class="hero-overlay">
+              <span class="hero-effect-name">Pulse Waves</span>
+              <div class="bpm-ring">
+                <svg viewBox="0 0 72 72" fill="none" width="72" height="72">
+                  <circle cx="36" cy="36" r="30" stroke="#252D3F" stroke-width="4" stroke-opacity="0.6"/>
+                  <circle cx="36" cy="36" r="30" stroke="#FFB84D" stroke-width="4" stroke-dasharray="157" stroke-dashoffset="47" stroke-linecap="round" transform="rotate(-90 36 36)"/>
+                </svg>
+                <div class="bpm-label">
+                  <span class="bpm-value">124</span>
+                  <span class="bpm-unit">BPM</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pills -->
+          <div class="pill-row">
+            <div class="pill"><div><div class="pill-label">Effect</div><div class="pill-value">Pulse Waves</div></div><span class="pill-chevron">›</span></div>
+            <div class="pill"><div><div class="pill-label">Palette</div><div class="pill-value">Ocean</div></div><span class="pill-chevron">›</span></div>
+          </div>
+
+          <!-- Brightness + Speed (compact — abbreviated in scroll) -->
+          <div class="lw-card" style="padding:10px 16px;">
+            <div style="display:flex;gap:16px;align-items:center;">
+              <div style="flex:1;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:5px;"><span class="slider-title">Brightness</span><span class="slider-value">178</span></div>
+                <div class="slider-track"><div class="slider-fill" style="width:70%;background:linear-gradient(90deg,rgba(255,184,77,0.5),#FFB84D);"></div><div class="slider-thumb" style="left:70%;width:20px;height:20px;"></div></div>
+              </div>
+              <div style="flex:1;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:5px;"><span class="slider-title">Speed</span><span class="slider-value">42</span></div>
+                <div class="slider-track"><div class="slider-fill" style="width:42%;background:linear-gradient(90deg,#00D4FF,#FFB84D);"></div><div class="slider-thumb" style="left:42%;width:20px;height:20px;"></div></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- EdgeMixer EXPANDED -->
+          <div class="em-expanded">
+            <div class="em-expanded-header">
+              <div class="em-expanded-icon">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <defs>
+                    <linearGradient id="emIconGrad" x1="0" y1="8" x2="16" y2="8" gradientUnits="userSpaceOnUse">
+                      <stop stop-color="#FF3333"/>
+                      <stop offset="0.5" stop-color="#9933CC"/>
+                      <stop offset="1" stop-color="#0066FF"/>
+                    </linearGradient>
+                  </defs>
+                  <rect x="0" y="4" width="7" height="8" rx="2" fill="url(#emIconGrad)" opacity="0.7"/>
+                  <rect x="9" y="4" width="7" height="8" rx="2" fill="url(#emIconGrad)" opacity="0.7"/>
+                  <rect x="6" y="3" width="4" height="10" rx="2" fill="#9933CC" opacity="0.9"/>
+                </svg>
+              </div>
+              <span class="em-expanded-title">Edge Mixer</span>
+              <span class="em-expanded-badge">Triadic</span>
+              <span class="em-expand-chevron">›</span>
+            </div>
+
+            <div class="em-body">
+
+              <!-- Mode chips — all 7 fit by scaling down -->
+              <div class="mode-strip">
+                <!-- Solo -->
+                <div class="mode-chip">
+                  <div class="mode-chip-icon" style="width:24px;height:24px;">
+                    <svg width="24" height="24" viewBox="0 0 28 28" fill="none"><rect x="2" y="10" width="11" height="8" rx="3" fill="#6B7280" opacity="0.4"/><rect x="15" y="10" width="11" height="8" rx="3" fill="#6B7280" opacity="0.4"/><line x1="14" y1="7" x2="14" y2="21" stroke="#6B7280" stroke-width="1.5" stroke-dasharray="2,2"/></svg>
+                  </div>
+                  <span class="mode-chip-label">Solo</span>
+                </div>
+                <!-- Complementary -->
+                <div class="mode-chip">
+                  <div class="mode-chip-icon" style="width:24px;height:24px;">
+                    <svg width="24" height="24" viewBox="0 0 28 28" fill="none"><rect x="2" y="10" width="11" height="8" rx="3" fill="#00D4FF" opacity="0.6"/><rect x="15" y="10" width="11" height="8" rx="3" fill="#FF6633" opacity="0.6"/></svg>
+                  </div>
+                  <span class="mode-chip-label">Comp.</span>
+                </div>
+                <!-- Analogous -->
+                <div class="mode-chip">
+                  <div class="mode-chip-icon" style="width:24px;height:24px;">
+                    <svg width="24" height="24" viewBox="0 0 28 28" fill="none"><rect x="2" y="10" width="11" height="8" rx="3" fill="#0088EE" opacity="0.6"/><rect x="15" y="10" width="11" height="8" rx="3" fill="#00CCFF" opacity="0.6"/></svg>
+                  </div>
+                  <span class="mode-chip-label">Analog.</span>
+                </div>
+                <!-- Split -->
+                <div class="mode-chip">
+                  <div class="mode-chip-icon" style="width:24px;height:24px;">
+                    <svg width="24" height="24" viewBox="0 0 28 28" fill="none"><rect x="2" y="10" width="11" height="8" rx="3" fill="#00D4FF" opacity="0.6"/><rect x="15" y="10" width="11" height="8" rx="3" fill="#FF4499" opacity="0.6"/></svg>
+                  </div>
+                  <span class="mode-chip-label">Split</span>
+                </div>
+                <!-- Triadic — ACTIVE -->
+                <div class="mode-chip active">
+                  <div class="mode-chip-icon" style="width:24px;height:24px;">
+                    <svg width="24" height="24" viewBox="0 0 28 28" fill="none">
+                      <defs>
+                        <linearGradient id="triBlend" x1="2" y1="14" x2="26" y2="14"><stop stop-color="#FF3333"/><stop offset="0.5" stop-color="#9933CC"/><stop offset="1" stop-color="#0066FF"/></linearGradient>
+                      </defs>
+                      <rect x="2" y="10" width="24" height="8" rx="3" fill="url(#triBlend)" opacity="0.85"/>
+                    </svg>
+                  </div>
+                  <span class="mode-chip-label">Triadic</span>
+                </div>
+                <!-- Tetradic -->
+                <div class="mode-chip">
+                  <div class="mode-chip-icon" style="width:24px;height:24px;">
+                    <svg width="24" height="24" viewBox="0 0 28 28" fill="none"><rect x="2" y="10" width="11" height="8" rx="3" fill="#00FF88" opacity="0.5"/><rect x="15" y="10" width="11" height="8" rx="3" fill="#9900FF" opacity="0.5"/></svg>
+                  </div>
+                  <span class="mode-chip-label">Tetra.</span>
+                </div>
+                <!-- Random -->
+                <div class="mode-chip">
+                  <div class="mode-chip-icon" style="width:24px;height:24px;">
+                    <svg width="24" height="24" viewBox="0 0 28 28" fill="none"><defs><linearGradient id="rnd2" x1="2" y1="14" x2="26" y2="14"><stop stop-color="#FF3366"/><stop offset="0.5" stop-color="#00FF88"/><stop offset="1" stop-color="#9900FF"/></linearGradient></defs><rect x="2" y="10" width="24" height="8" rx="3" fill="url(#rnd2)" opacity="0.65"/></svg>
+                  </div>
+                  <span class="mode-chip-label">Rnd</span>
+                </div>
+              </div>
+
+              <!-- LED preview -->
+              <div class="em-preview-label">Preview — Triadic blend</div>
+              <div class="em-preview-strip">
+                <canvas id="previewB" width="329" height="24" style="width:100%;height:24px;border-radius:8px;display:block;"></canvas>
+                <div class="led-boundary-marker"></div>
+              </div>
+              <div class="em-preview-sublabel">← Strip A · centre boundary · Strip B →</div>
+
+              <!-- Spread slider -->
+              <div class="spread-wrap">
+                <div class="slider-header" style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:var(--sp-sm);">
+                  <span class="slider-title" style="color:var(--lw-cyan);">Spread</span>
+                  <span class="slider-value" style="color:var(--lw-cyan);">35</span>
+                </div>
+                <div class="spread-thumb-wrap">
+                  <div class="spread-track" style="width:100%;">
+                    <div class="spread-fill" style="left:23%;right:23%;"></div>
+                  </div>
+                  <div class="spread-thumb" style="left:58.3%;top:50%;transform:translate(-50%,-50%);position:absolute;width:24px;height:24px;"></div>
+                </div>
+                <div class="spread-labels">
+                  <span class="spread-label-text">Tight  0</span>
+                  <span class="spread-label-text">Wide  60</span>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="tab-bar">
+        <div class="tab-item active"><span class="tab-icon">▶</span><span class="tab-label">Play</span></div>
+        <div class="tab-item"><span class="tab-icon">🎵</span><span class="tab-label">Audio</span></div>
+        <div class="tab-item"><span class="tab-icon">◫</span><span class="tab-label">Zones</span></div>
+        <div class="tab-item"><span class="tab-icon">⚙</span><span class="tab-label">Device</span></div>
+      </div>
+    </div>
+    <p class="phone-sublabel">Expanded state — mode chips + preview + spread slider.<br>Cyan top edge glow indicates active mixing. Tap header to collapse.</p>
+  </div>
+
+</div><!-- /phones-row -->
+
+<!-- ─── Transition annotation ─── -->
+<div class="annotation-box">
+  <div class="annotation-title">
+    <div class="annotation-dot"></div>
+    Transition Specification
+  </div>
+  <div class="annotation-grid">
+    <div class="annotation-item">
+      <span class="annotation-key">Collapse trigger</span>
+      <span class="annotation-val">Tap anywhere on the header row (full width, 52pt min height). Touch target covers entire row.</span>
+    </div>
+    <div class="annotation-item">
+      <span class="annotation-key">Expand animation</span>
+      <span class="annotation-val"><strong>spring(duration: 0.3, bounce: 0.1)</strong> height from 52pt → 220pt. Content fades in with 0.08s delay.</span>
+    </div>
+    <div class="annotation-item">
+      <span class="annotation-key">Collapse animation</span>
+      <span class="annotation-val"><strong>easeOut(duration: 0.22)</strong> height to 52pt. Content fades out immediately (no delay).</span>
+    </div>
+    <div class="annotation-item">
+      <span class="annotation-key">Chevron rotation</span>
+      <span class="annotation-val">Collapsed: › (0°) → Expanded: ˅ (90°). Rotates with spring, same timing as height.</span>
+    </div>
+    <div class="annotation-item">
+      <span class="annotation-key">Cyan glow on-activate</span>
+      <span class="annotation-val">When any non-Solo mode selected: border fades to <strong>rgba(0,212,255,0.3)</strong> + top edge gradient appears.</span>
+    </div>
+    <div class="annotation-item">
+      <span class="annotation-key">Solo → Spread disabled</span>
+      <span class="annotation-val">In Solo mode, Spread slider animates to opacity 0.3 + isUserInteractionEnabled = false.</span>
+    </div>
+    <div class="annotation-item">
+      <span class="annotation-key">Default on load</span>
+      <span class="annotation-val"><strong>Collapsed.</strong> The Play tab scrolls to fit Hero + Pills + Brightness card without EdgeMixer taking space.</span>
+    </div>
+    <div class="annotation-item">
+      <span class="annotation-key">Persistence</span>
+      <span class="annotation-val">Expanded/collapsed state saved to UserDefaults. Survives app relaunch.</span>
+    </div>
+  </div>
+</div>
+
+<script>
+function drawLEDs(canvasId, hueShift, spread) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  const cx = W / 2;
+  const spreadPx = (spread / 60) * (W * 0.45);
+  for (let x = 0; x < W; x++) {
+    const isRight = x >= cx;
+    let hue = isRight ? 30 : 200;
+    const dist = Math.abs(x - cx);
+    if (spreadPx > 0 && dist < spreadPx) {
+      const t = 1 - dist / spreadPx;
+      const target = hue + (isRight ? -hueShift : hueShift);
+      hue = hue + (target - hue) * t;
+    }
+    const light = 48 + 14 * (1 - dist / (W * 0.5));
+    ctx.fillStyle = `hsl(${hue},88%,${light}%)`;
+    ctx.fillRect(x, 0, 1, H);
+  }
+}
+
+function drawHero(id) {
+  const canvas = document.getElementById(id);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const rowH = H / 2;
+  for (let row = 0; row < 2; row++) {
+    for (let i = 0; i < 160; i++) {
+      const t = i / 159;
+      const x = (i / 160) * W;
+      const cx = W / 2;
+      const dist = Math.abs(x - cx) / cx;
+      const hue = 200 + 30 * Math.sin(t * Math.PI * 2 + row * 1.2);
+      const sat = 90 - 20 * dist;
+      const light = 48 + 24 * (1 - dist * 0.7);
+      ctx.fillStyle = `hsl(${hue},${sat}%,${light}%)`;
+      ctx.fillRect(x, row * rowH, W / 160 + 0.5, rowH);
+    }
+  }
+}
+
+drawHero('heroA');
+drawHero('heroB');
+drawLEDs('previewB', 120, 35); // Triadic = 120° shift
+</script>
+</body>
+</html>

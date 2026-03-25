@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EdgeMixer — Mode Detail Sheet</title>
+<style>
+  :root {
+    --lw-base:          #0F1219;
+    --lw-card:          #1E2535;
+    --lw-card-lo:       #1A2030;
+    --lw-elevated:      #252D3F;
+    --lw-sheet:         #161D2B;
+    --lw-gold:          #FFB84D;
+    --lw-cyan:          #00D4FF;
+    --lw-success:       #4DFFB8;
+    --lw-text-primary:  #E6E9EF;
+    --lw-text-secondary:#9CA3B0;
+    --lw-text-tertiary: #6B7280;
+    --lw-border:        rgba(255,255,255,0.06);
+    --lw-divider:       rgba(255,255,255,0.04);
+    --r-card:           16px;
+    --r-nested:         12px;
+    --sp-xs: 4px;
+    --sp-sm: 8px;
+    --sp-md: 12px;
+    --sp-lg: 24px;
+    --sp-xl: 40px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #12121f;
+    padding: 40px 20px 80px;
+    font-family: -apple-system, 'SF Pro Display', sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 48px;
+  }
+
+  /* ─── Page header ─── */
+  .page-title {
+    color: var(--lw-text-primary);
+    font-size: 24px;
+    font-weight: 800;
+    text-align: center;
+    letter-spacing: 0.2px;
+  }
+  .page-sub {
+    color: var(--lw-text-secondary);
+    font-size: 14px;
+    text-align: center;
+    margin-top: 8px;
+    line-height: 1.6;
+    max-width: 600px;
+  }
+
+  /* ─── iPhone shell ─── */
+  .iphone {
+    width: 393px;
+    background: var(--lw-base);
+    border-radius: 54px;
+    overflow: hidden;
+    box-shadow:
+      0 0 0 2px #1c1c1e,
+      0 0 0 4px #3a3a3c,
+      0 40px 80px rgba(0,0,0,0.8);
+  }
+  .iphone-notch {
+    height: 52px;
+    background: var(--lw-base);
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    display: flex; align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    position: relative;
+  }
+  .iphone-notch::after {
+    content: '';
+    position: absolute; top: 10px; left: 50%;
+    transform: translateX(-50%);
+    width: 120px; height: 32px;
+    background: #000; border-radius: 20px;
+  }
+  .status-time {
+    font-size: 15px; font-weight: 600;
+    color: var(--lw-text-primary);
+    position: relative; z-index: 1;
+  }
+  .status-icons {
+    display: flex; gap: 6px; align-items: center;
+    position: relative; z-index: 1;
+  }
+
+  /* ─── Bottom sheet ─── */
+  .sheet-wrap {
+    height: 790px;
+    overflow: hidden;
+    background: var(--lw-base);
+    position: relative;
+  }
+
+  /* Background — blurred Play tab underneath */
+  .sheet-bg {
+    position: absolute;
+    inset: 0;
+    background: var(--lw-base);
+  }
+  .sheet-bg-hero {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 140px;
+    border-radius: 0;
+    overflow: hidden;
+    filter: blur(4px);
+    opacity: 0.4;
+    transform: scale(1.05);
+  }
+
+  /* Sheet itself */
+  .bottom-sheet {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--lw-sheet);
+    border-radius: 28px 28px 0 0;
+    overflow: hidden;
+    box-shadow: 0 -8px 40px rgba(0,0,0,0.7);
+    /* shows from ~200px from bottom = ~590pt tall */
+    top: 130px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Pull handle */
+  .sheet-handle {
+    width: 36px; height: 4px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 2px;
+    margin: 10px auto 0;
+    flex-shrink: 0;
+  }
+
+  /* Sheet header */
+  .sheet-header {
+    padding: 14px 20px 0;
+    flex-shrink: 0;
+  }
+  .sheet-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+  .sheet-title-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .sheet-title-icon {
+    width: 36px; height: 36px;
+    background: rgba(0,212,255,0.12);
+    border: 1px solid rgba(0,212,255,0.25);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .sheet-title-text {
+    display: flex; flex-direction: column;
+  }
+  .sheet-title-main {
+    font-size: 18px; font-weight: 800;
+    color: var(--lw-text-primary); letter-spacing: 0.2px;
+  }
+  .sheet-title-sub {
+    font-size: 12px; color: var(--lw-text-secondary); margin-top: 1px;
+  }
+  .sheet-close {
+    width: 30px; height: 30px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; color: var(--lw-text-secondary);
+    cursor: pointer;
+  }
+
+  /* Scrollable body */
+  .sheet-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px 32px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .sheet-body::-webkit-scrollbar { display: none; }
+
+  /* ─── Mode cards ─── */
+  .mode-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .mode-card {
+    background: linear-gradient(180deg, var(--lw-card) 0%, var(--lw-card-lo) 100%);
+    border-radius: var(--r-card);
+    padding: 14px 16px;
+    border: 1.5px solid transparent;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    position: relative;
+    overflow: hidden;
+  }
+  .mode-card.is-active {
+    border-color: rgba(0,212,255,0.4);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3), 0 0 20px rgba(0,212,255,0.08);
+  }
+  .mode-card.is-active::before {
+    content: '';
+    position: absolute; top: 0; left: 20px; right: 20px; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--lw-cyan), transparent);
+    opacity: 0.6;
+  }
+
+  .mode-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .mode-card-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .mode-card-icon {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .mode-card-info {}
+  .mode-card-name {
+    font-size: 15px; font-weight: 700;
+    color: var(--lw-text-primary);
+    letter-spacing: 0.2px;
+  }
+  .mode-card-desc {
+    font-size: 12px; color: var(--lw-text-secondary);
+    margin-top: 2px; line-height: 1.4;
+    max-width: 200px;
+  }
+
+  .mode-card-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .mode-badge {
+    font-family: 'SF Mono', monospace;
+    font-size: 10px; font-weight: 700;
+    letter-spacing: 0.8px; text-transform: uppercase;
+    padding: 3px 8px; border-radius: 6px;
+  }
+  .mode-badge.active-badge {
+    color: var(--lw-cyan);
+    background: rgba(0,212,255,0.12);
+    border: 1px solid rgba(0,212,255,0.3);
+  }
+  .mode-badge.angle-badge {
+    color: var(--lw-text-tertiary);
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+
+  /* ─── LED strip preview per card ─── */
+  .mode-led-strip {
+    width: 100%;
+    height: 22px;
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+    margin-bottom: 8px;
+  }
+  .mode-led-strip canvas {
+    width: 100%; height: 100%; display: block;
+  }
+  .mode-led-centre {
+    position: absolute; top: 0; bottom: 0;
+    left: 50%; transform: translateX(-50%);
+    width: 1.5px; background: rgba(255,255,255,0.35);
+  }
+
+  /* ─── Hue wheel + angle visualisation ─── */
+  .mode-hue-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 4px;
+  }
+  .hue-wheel-wrap {
+    flex-shrink: 0;
+  }
+  .hue-angle-desc {
+    font-size: 11px;
+    color: var(--lw-text-secondary);
+    line-height: 1.5;
+  }
+  .hue-angle-desc strong {
+    color: var(--lw-text-primary);
+    font-size: 12px;
+  }
+
+  /* Divider within card */
+  .card-divider {
+    height: 1px;
+    background: rgba(255,255,255,0.05);
+    margin: 8px 0;
+  }
+
+  /* Select button */
+  .mode-select-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    background: rgba(0,212,255,0.1);
+    border: 1.5px solid rgba(0,212,255,0.3);
+    border-radius: 10px;
+    font-size: 12px; font-weight: 700;
+    color: var(--lw-cyan);
+    letter-spacing: 0.4px;
+    cursor: pointer;
+    margin-top: 6px;
+  }
+  .mode-select-btn.selected {
+    background: rgba(0,212,255,0.18);
+    border-color: rgba(0,212,255,0.6);
+  }
+  .mode-select-btn.gold-btn {
+    background: rgba(255,184,77,0.1);
+    border-color: rgba(255,184,77,0.3);
+    color: var(--lw-gold);
+  }
+
+  /* ─── Full design reference table ─── */
+  .ref-section {
+    max-width: 880px;
+    width: 100%;
+  }
+  .ref-title {
+    font-size: 18px; font-weight: 800;
+    color: var(--lw-text-primary); margin-bottom: 20px;
+    text-align: center;
+  }
+  .ref-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 20px;
+  }
+  .ref-card {
+    background: linear-gradient(180deg, var(--lw-card) 0%, var(--lw-card-lo) 100%);
+    border-radius: var(--r-card);
+    padding: 18px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .ref-card-title {
+    font-size: 14px; font-weight: 700;
+    color: var(--lw-text-primary);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .ref-card-angle {
+    font-family: 'SF Mono', monospace;
+    font-size: 11px; color: var(--lw-text-tertiary);
+    background: rgba(255,255,255,0.05);
+    border-radius: 6px; padding: 2px 7px;
+  }
+  .ref-card-desc {
+    font-size: 12px; color: var(--lw-text-secondary);
+    line-height: 1.55;
+  }
+  .ref-led-bar {
+    height: 20px; border-radius: 6px;
+    overflow: hidden; position: relative;
+  }
+  .ref-led-bar canvas {
+    width: 100%; height: 100%; display: block;
+  }
+  .ref-centre {
+    position: absolute; top: 0; bottom: 0;
+    left: 50%; transform: translateX(-50%);
+    width: 1.5px; background: rgba(255,255,255,0.3);
+  }
+
+  /* ─── Hue wheel SVG ─── */
+  .hw { display:block; }
+</style>
+</head>
+<body>
+
+<div>
+  <p class="page-title">EdgeMixer — Mode Detail Sheet</p>
+  <p class="page-sub">
+    Bottom sheet appearing on long-press of a mode chip, or via an info button.
+    Shows colour theory, hue angles, and a live LED strip preview for each of the 7 EdgeMixer modes.
+  </p>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- iPhone showing Bottom Sheet (Triadic active) -->
+<!-- ═══════════════════════════════════════════ -->
+<div style="display:flex;flex-direction:column;align-items:center;gap:16px;">
+  <div class="iphone">
+    <div class="iphone-notch">
+      <span class="status-time">9:41</span>
+      <div class="status-icons">
+        <svg width="17" height="12" viewBox="0 0 17 12" fill="none"><rect x="0" y="3" width="3" height="9" rx="1" fill="#E6E9EF" opacity="0.4"/><rect x="4.5" y="2" width="3" height="10" rx="1" fill="#E6E9EF" opacity="0.6"/><rect x="9" y="1" width="3" height="11" rx="1" fill="#E6E9EF" opacity="0.8"/><rect x="13.5" y="0" width="3" height="12" rx="1" fill="#E6E9EF"/></svg>
+        <svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke="#E6E9EF" stroke-opacity="0.4"/><rect x="2" y="2" width="15" height="8" rx="2" fill="#E6E9EF"/></svg>
+      </div>
+    </div>
+
+    <div class="sheet-wrap">
+      <!-- Background (blurred play tab) -->
+      <div class="sheet-bg">
+        <canvas id="sheetBgHero" width="393" height="140" style="width:100%;height:140px;display:block;opacity:0.35;filter:blur(3px);transform:scale(1.04);transform-origin:top;"></canvas>
+      </div>
+
+      <!-- The bottom sheet -->
+      <div class="bottom-sheet">
+        <div class="sheet-handle"></div>
+
+        <div class="sheet-header">
+          <div class="sheet-title-row">
+            <div class="sheet-title-left">
+              <div class="sheet-title-icon">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <defs>
+                    <linearGradient id="shGrad" x1="0" y1="10" x2="20" y2="10">
+                      <stop stop-color="#00D4FF"/>
+                      <stop offset="1" stop-color="#FFB84D"/>
+                    </linearGradient>
+                  </defs>
+                  <rect x="0" y="5" width="9" height="10" rx="2.5" fill="url(#shGrad)" opacity="0.7"/>
+                  <rect x="11" y="5" width="9" height="10" rx="2.5" fill="url(#shGrad)" opacity="0.7"/>
+                  <rect x="7.5" y="4" width="5" height="12" rx="2.5" fill="url(#shGrad)"/>
+                </svg>
+              </div>
+              <div class="sheet-title-text">
+                <span class="sheet-title-main">Edge Mixer Modes</span>
+                <span class="sheet-title-sub">7 colour harmony modes · 2 × 160 LEDs</span>
+              </div>
+            </div>
+            <div class="sheet-close">✕</div>
+          </div>
+        </div>
+
+        <div class="sheet-body">
+          <div class="mode-cards">
+
+            <!-- ── SOLO ── -->
+            <div class="mode-card">
+              <div class="mode-card-header">
+                <div class="mode-card-left">
+                  <div class="mode-card-icon" style="background:rgba(255,255,255,0.06);">
+                    <svg width="24" height="24" viewBox="0 0 28 28" fill="none">
+                      <rect x="2" y="10" width="11" height="8" rx="3" fill="#9CA3B0" opacity="0.5"/>
+                      <rect x="15" y="10" width="11" height="8" rx="3" fill="#9CA3B0" opacity="0.5"/>
+                      <line x1="14" y1="7" x2="14" y2="21" stroke="#6B7280" stroke-width="1.5" stroke-dasharray="2.5,2.5"/>
+                    </svg>
+                  </div>
+                  <div class="mode-card-info">
+                    <div class="mode-card-name">Solo</div>
+                    <div class="mode-card-desc">Each strip runs its own colour. No boundary mixing.</div>
+                  </div>
+                </div>
+                <div class="mode-card-right">
+                  <span class="mode-badge angle-badge">No blend</span>
+                </div>
+              </div>
+              <div class="mode-led-strip"><canvas id="ledSolo" width="329" height="22"></canvas><div class="mode-led-centre"></div></div>
+              <div class="mode-hue-row">
+                <div class="hue-wheel-wrap">
+                  <svg class="hw" width="52" height="52" viewBox="0 0 52 52">
+                    <!-- wheel -->
+                    <circle cx="26" cy="26" r="20" fill="url(#hwWheel)" opacity="0.6"/>
+                    <!-- just a dashed line through centre — no blend -->
+                    <line x1="26" y1="6" x2="26" y2="46" stroke="#6B7280" stroke-width="1.5" stroke-dasharray="3,3"/>
+                    <!-- two separate dots: A amber, B amber -->
+                    <circle cx="26" cy="8" r="4" fill="#FFB84D" stroke="#0F1219" stroke-width="1.5"/>
+                    <circle cx="26" cy="44" r="4" fill="#FFB84D" stroke="#0F1219" stroke-width="1.5"/>
+                    <text x="26" y="29" text-anchor="middle" fill="#6B7280" font-size="8" font-family="-apple-system">0°</text>
+                    <defs><radialGradient id="hwWheel" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#fff" stop-opacity="0.1"/><stop offset="100%" stop-color="#fff" stop-opacity="0"/></radialGradient></defs>
+                  </svg>
+                </div>
+                <div class="hue-angle-desc">
+                  <strong>Independent strips</strong><br>
+                  Strip A and B each display the effect's colours without modification at the boundary. Default mode — use when the effect already handles cross-strip colour intent.
+                </div>
+              </div>
+            </div>
+
+            <!-- ── COMPLEMENTARY ── -->
+            <div class="mode-card is-active">
+              <div class="mode-card-header">
+                <div class="mode-card-left">
+                  <div class="mode-card-icon" style="background:rgba(0,212,255,0.1);">
+                    <svg width="24" height="24" viewBox="0 0 28 28" fill="none">
+                      <defs>
+                        <linearGradient id="compIcon" x1="2" y1="14" x2="26" y2="14"><stop stop-color="#00D4FF"/><stop offset="1" stop-color="#FF6633"/></linearGradient>
+                      </defs>
+                      <rect x="2" y="10" width="11" height="8" rx="3" fill="#00D4FF" opacity="0.8"/>
+                      <rect x="15" y="10" width="11" height="8" rx="3" fill="#FF6633" opacity="0.8"/>
+                      <rect x="10" y="9" width="8" height="10" rx="2" fill="url(#compIcon)" opacity="0.5"/>
+                    </svg>
+                  </div>
+                  <div class="mode-card-info">
+                    <div class="mode-card-name">Complementary</div>
+                    <div class="mode-card-desc">Opposite hues at boundary. Maximum contrast harmony.</div>
+                  </div>
+                </div>
+                <div class="mode-card-right">
+                  <span class="mode-badge active-badge">Active</span>
+                  <span class="mode-badge angle-badge">180°</span>
+                </div>
+              </div>
+              <div class="mode-led-strip"><canvas id="ledComp" width="329" height="22"></canvas><div class="mode-led-centre"></div></div>
+              <div class="mode-hue-row">
+                <div class="hue-wheel-wrap">
+                  <!-- Hue wheel with complementary angles -->
+                  <svg class="hw" width="52" height="52" viewBox="0 0 52 52">
+                    <defs>
+                      <linearGradient id="hwR" x1="0" y1="26" x2="52" y2="26"><stop offset="0%" stop-color="#FF3333"/><stop offset="16.7%" stop-color="#FF9900"/><stop offset="33.3%" stop-color="#FFFF00"/><stop offset="50%" stop-color="#00FF88"/><stop offset="66.7%" stop-color="#00D4FF"/><stop offset="83.3%" stop-color="#9900FF"/><stop offset="100%" stop-color="#FF3333"/></linearGradient>
+                    </defs>
+                    <circle cx="26" cy="26" r="22" fill="none" stroke="url(#hwR)" stroke-width="6" opacity="0.7"/>
+                    <circle cx="26" cy="26" r="14" fill="none" stroke="#1E2535" stroke-width="3"/>
+                    <!-- 180° line -->
+                    <line x1="26" y1="5" x2="26" y2="47" stroke="rgba(255,255,255,0.3)" stroke-width="1" stroke-dasharray="2,2"/>
+                    <!-- Dot A: top (cyan ~200°) -->
+                    <circle cx="26" cy="7" r="4.5" fill="#00D4FF" stroke="#0F1219" stroke-width="1.5"/>
+                    <!-- Dot B: bottom (orange ~20°) -->
+                    <circle cx="26" cy="45" r="4.5" fill="#FF6633" stroke="#0F1219" stroke-width="1.5"/>
+                  </svg>
+                </div>
+                <div class="hue-angle-desc">
+                  <strong>180° hue shift</strong><br>
+                  The boundary strip's hue is rotated 180° from the source. Cyan meets orange. Creates high-energy, visually dramatic transitions.
+                </div>
+              </div>
+              <div class="card-divider"></div>
+              <button class="mode-select-btn selected">✓ Currently active</button>
+            </div>
+
+            <!-- ── ANALOGOUS ── -->
+            <div class="mode-card">
+              <div class="mode-card-header">
+                <div class="mode-card-left">
+                  <div class="mode-card-icon" style="background:rgba(0,136,238,0.1);">
+                    <svg width="24" height="24" viewBox="0 0 28 28" fill="none">
+                      <rect x="2" y="10" width="11" height="8" rx="3" fill="#0088EE" opacity="0.8"/>
+                      <rect x="15" y="10" width="11" height="8" rx="3" fill="#00CCFF" opacity="0.8"/>
+                      <rect x="10" y="9" width="8" height="10" rx="2" fill="#0099EE" opacity="0.6"/>
+                    </svg>
+                  </div>
+                  <div class="mode-card-info">
+                    <div class="mode-card-name">Analogous</div>
+                    <div class="mode-card-desc">Adjacent hues — subtle, harmonious blend. Barely noticeable at low spread.</div>
+                  </div>
+                </div>
+                <div class="mode-card-right">
+                  <span class="mode-badge angle-badge">30°</span>
+                </div>
+              </div>
+              <div class="mode-led-strip"><canvas id="ledAna" width="329" height="22"></canvas><div class="mode-led-centre"></div></div>
+              <div class="mode-hue-row">
+                <div class="hue-wheel-wrap">
+                  <svg class="hw" width="52" height="52" viewBox="0 0 52 52">
+                    <circle cx="26" cy="26" r="22" fill="none" stroke="url(#hwR)" stroke-width="6" opacity="0.7"/>
+                    <circle cx="26" cy="26" r="14" fill="none" stroke="#1E2535" stroke-width="3"/>
+                    <!-- 30° arc indicator -->
+                    <path d="M 26 7 A 19 19 0 0 1 35.5 9.4" stroke="rgba(255,255,255,0.4)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+                    <circle cx="26" cy="7" r="4" fill="#00AAFF" stroke="#0F1219" stroke-width="1.5"/>
+                    <circle cx="35.5" cy="9.4" r="4" fill="#0066EE" stroke="#0F1219" stroke-width="1.5"/>
+                  </svg>
+                </div>
+                <div class="hue-angle-desc">
+                  <strong>30° hue shift</strong><br>
+                  Nearest neighbours on the colour wheel. Produces a warm-to-slightly-warmer or cool-to-slightly-cooler feel. Ideal for subtle, non-distracting boundary definition.
+                </div>
+              </div>
+              <div class="card-divider"></div>
+              <button class="mode-select-btn">Select Analogous</button>
+            </div>
+
+            <!-- ── SPLIT COMPLEMENTARY ── -->
+            <div class="mode-card">
+              <div class="mode-card-header">
+                <div class="mode-card-left">
+                  <div class="mode-card-icon" style="background:rgba(255,68,153,0.1);">
+                    <svg width="24" height="24" viewBox="0 0 28 28" fill="none">
+                      <rect x="2" y="10" width="11" height="8" rx="3" fill="#00D4FF" opacity="0.8"/>
+                      <rect x="15" y="10" width="8" height="4" rx="2" fill="#FF4499" opacity="0.8"/>
+                      <rect x="15" y="14" width="8" height="4" rx="2" fill="#FFAA00" opacity="0.8"/>
+                    </svg>
+                  </div>
+                  <div class="mode-card-info">
+                    <div class="mode-card-name">Split Complementary</div>
+                    <div class="mode-card-desc">Two hues flank the complement: 150° and 210°. Rich but less harsh than full complementary.</div>
+                  </div>
+                </div>
+                <div class="mode-card-right">
+                  <span class="mode-badge angle-badge">150° / 210°</span>
+                </div>
+              </div>
+              <div class="mode-led-strip"><canvas id="ledSplit" width="329" height="22"></canvas><div class="mode-led-centre"></div></div>
+              <div class="mode-hue-row">
+                <div class="hue-wheel-wrap">
+                  <svg class="hw" width="52" height="52" viewBox="0 0 52 52">
+                    <circle cx="26" cy="26" r="22" fill="none" stroke="url(#hwR)" stroke-width="6" opacity="0.7"/>
+                    <circle cx="26" cy="26" r="14" fill="none" stroke="#1E2535" stroke-width="3"/>
+                    <!-- Lines to 150° and 210° -->
+                    <line x1="26" y1="26" x2="7.2" y2="42.8" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+                    <line x1="26" y1="26" x2="44.8" y2="42.8" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+                    <!-- A: top (source) -->
+                    <circle cx="26" cy="7" r="4" fill="#00D4FF" stroke="#0F1219" stroke-width="1.5"/>
+                    <!-- B1: 150° -->
+                    <circle cx="7.2" cy="42.8" r="4" fill="#FF4499" stroke="#0F1219" stroke-width="1.5"/>
+                    <!-- B2: 210° -->
+                    <circle cx="44.8" cy="42.8" r="4" fill="#FFAA00" stroke="#0F1219" stroke-width="1.5"/>
+                  </svg>
+                </div>
+                <div class="hue-angle-desc">
+                  <strong>150° + 210° shifts</strong><br>
+                  A softer contrast than complementary. Strip B boundary blends between two flanking hues, creating a naturally balanced, three-tone harmony.
+                </div>
+              </div>
+              <div class="card-divider"></div>
+              <button class="mode-select-btn">Select Split Complementary</button>
+            </div>
+
+            <!-- ── TRIADIC ── -->
+            <div class="mode-card">
+              <div class="mode-card-header">
+                <div class="mode-card-left">
+                  <div class="mode-card-icon" style="background:rgba(153,51,204,0.1);">
+                    <svg width="24" height="24" viewBox="0 0 28 28" fill="none">
+                      <defs><linearGradient id="triI" x1="2" y1="14" x2="26" y2="14"><stop stop-color="#FF3333"/><stop offset="0.5" stop-color="#9933CC"/><stop offset="1" stop-color="#0066FF"/></linearGradient></defs>
+                      <rect x="2" y="10" width="24" height="8" rx="3" fill="url(#triI)" opacity="0.8"/>
+                    </svg>
+                  </div>
+                  <div class="mode-card-info">
+                    <div class="mode-card-name">Triadic</div>
+                    <div class="mode-card-desc">Three equally spaced hues: 0°, 120°, 240°. Vibrant, balanced energy.</div>
+                  </div>
+                </div>
+                <div class="mode-card-right">
+                  <span class="mode-badge angle-badge">120°</span>
+                </div>
+              </div>
+              <div class="mode-led-strip"><canvas id="ledTri" width="329" height="22"></canvas><div class="mode-led-centre"></div></div>
+              <div class="mode-hue-row">
+                <div class="hue-wheel-wrap">
+                  <svg class="hw" width="52" height="52" viewBox="0 0 52 52">
+                    <circle cx="26" cy="26" r="22" fill="none" stroke="url(#hwR)" stroke-width="6" opacity="0.7"/>
+                    <circle cx="26" cy="26" r="14" fill="none" stroke="#1E2535" stroke-width="3"/>
+                    <!-- Triangle -->
+                    <polygon points="26,7 43.5,35.5 8.5,35.5" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+                    <circle cx="26" cy="7" r="4" fill="#FF3333" stroke="#0F1219" stroke-width="1.5"/>
+                    <circle cx="43.5" cy="35.5" r="4" fill="#9933CC" stroke="#0F1219" stroke-width="1.5"/>
+                    <circle cx="8.5" cy="35.5" r="4" fill="#0066FF" stroke="#0F1219" stroke-width="1.5"/>
+                  </svg>
+                </div>
+                <div class="hue-angle-desc">
+                  <strong>120° hue shift</strong><br>
+                  Red, purple-blue, blue — each strip rotated 120° around the colour wheel. The most visually equidistant, producing richly varied LED output.
+                </div>
+              </div>
+              <div class="card-divider"></div>
+              <button class="mode-select-btn">Select Triadic</button>
+            </div>
+
+            <!-- ── TETRADIC ── -->
+            <div class="mode-card">
+              <div class="mode-card-header">
+                <div class="mode-card-left">
+                  <div class="mode-card-icon" style="background:rgba(153,0,255,0.1);">
+                    <svg width="24" height="24" viewBox="0 0 28 28" fill="none">
+                      <rect x="2" y="10" width="11" height="8" rx="3" fill="#00FF88" opacity="0.8"/>
+                      <rect x="15" y="10" width="11" height="8" rx="3" fill="#9900FF" opacity="0.8"/>
+                      <rect x="10" y="9" width="8" height="10" rx="2" fill="#66CC88" opacity="0.5"/>
+                    </svg>
+                  </div>
+                  <div class="mode-card-info">
+                    <div class="mode-card-name">Tetradic</div>
+                    <div class="mode-card-desc">Four hues in two complementary pairs. 90° step creates a square colour scheme.</div>
+                  </div>
+                </div>
+                <div class="mode-card-right">
+                  <span class="mode-badge angle-badge">90°</span>
+                </div>
+              </div>
+              <div class="mode-led-strip"><canvas id="ledTet" width="329" height="22"></canvas><div class="mode-led-centre"></div></div>
+              <div class="mode-hue-row">
+                <div class="hue-wheel-wrap">
+                  <svg class="hw" width="52" height="52" viewBox="0 0 52 52">
+                    <circle cx="26" cy="26" r="22" fill="none" stroke="url(#hwR)" stroke-width="6" opacity="0.7"/>
+                    <circle cx="26" cy="26" r="14" fill="none" stroke="#1E2535" stroke-width="3"/>
+                    <!-- Square -->
+                    <polygon points="26,7 45,26 26,45 7,26" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+                    <circle cx="26" cy="7" r="4" fill="#00FF88" stroke="#0F1219" stroke-width="1.5"/>
+                    <circle cx="45" cy="26" r="4" fill="#FFFF00" stroke="#0F1219" stroke-width="1.5"/>
+                    <circle cx="26" cy="45" r="4" fill="#FF3366" stroke="#0F1219" stroke-width="1.5"/>
+                    <circle cx="7" cy="26" r="4" fill="#9900FF" stroke="#0F1219" stroke-width="1.5"/>
+                  </svg>
+                </div>
+                <div class="hue-angle-desc">
+                  <strong>90° hue shift</strong><br>
+                  Perpendicular pairs on the colour wheel. Green-to-purple creates maximum saturation contrast. Best with wider Spread values to smooth the transition.
+                </div>
+              </div>
+              <div class="card-divider"></div>
+              <button class="mode-select-btn">Select Tetradic</button>
+            </div>
+
+            <!-- ── RANDOM ── -->
+            <div class="mode-card">
+              <div class="mode-card-header">
+                <div class="mode-card-left">
+                  <div class="mode-card-icon" style="background:rgba(255,184,77,0.08);">
+                    <svg width="24" height="24" viewBox="0 0 28 28" fill="none">
+                      <defs><linearGradient id="rndI" x1="2" y1="14" x2="26" y2="14"><stop stop-color="#FF3366"/><stop offset="0.25" stop-color="#FFAA00"/><stop offset="0.5" stop-color="#00FF88"/><stop offset="0.75" stop-color="#00D4FF"/><stop offset="1" stop-color="#9900FF"/></linearGradient></defs>
+                      <rect x="2" y="10" width="24" height="8" rx="3" fill="url(#rndI)" opacity="0.75"/>
+                      <circle cx="8" cy="9" r="1.5" fill="#FFB84D" opacity="0.9"/>
+                      <circle cx="14" cy="19" r="1.5" fill="#00D4FF" opacity="0.9"/>
+                      <circle cx="20" cy="8" r="1.5" fill="#FF3366" opacity="0.9"/>
+                    </svg>
+                  </div>
+                  <div class="mode-card-info">
+                    <div class="mode-card-name">Random</div>
+                    <div class="mode-card-desc">Randomised hue offset regenerated on each effect change or manual refresh.</div>
+                  </div>
+                </div>
+                <div class="mode-card-right">
+                  <span class="mode-badge angle-badge">0–359°</span>
+                </div>
+              </div>
+              <div class="mode-led-strip"><canvas id="ledRnd" width="329" height="22"></canvas><div class="mode-led-centre"></div></div>
+              <div class="mode-hue-row">
+                <div class="hue-wheel-wrap">
+                  <svg class="hw" width="52" height="52" viewBox="0 0 52 52">
+                    <circle cx="26" cy="26" r="22" fill="none" stroke="url(#hwR)" stroke-width="6" opacity="0.7"/>
+                    <circle cx="26" cy="26" r="14" fill="none" stroke="#1E2535" stroke-width="3"/>
+                    <!-- Rotating arrow -->
+                    <path d="M 26 8 A 18 18 0 1 0 43.8 34" stroke="rgba(255,255,255,0.35)" fill="none" stroke-width="1.5" stroke-linecap="round"/>
+                    <polygon points="44,28 44,38 50,33" fill="rgba(255,255,255,0.5)"/>
+                    <circle cx="26" cy="8" r="3.5" fill="#FFB84D" stroke="#0F1219" stroke-width="1.5"/>
+                  </svg>
+                </div>
+                <div class="hue-angle-desc">
+                  <strong>Dynamic offset</strong><br>
+                  Each trigger picks a new random angle. Tap the refresh icon to regenerate without changing effects. Creates surprising, serendipitous colour pairings.
+                </div>
+              </div>
+              <div class="card-divider"></div>
+              <button class="mode-select-btn gold-btn">⟳  Randomise Now</button>
+            </div>
+
+          </div><!-- /mode-cards -->
+        </div><!-- /sheet-body -->
+      </div><!-- /bottom-sheet -->
+    </div><!-- /sheet-wrap -->
+  </div><!-- /iphone -->
+  <p style="color:var(--lw-text-secondary);font-size:13px;text-align:center;max-width:380px;line-height:1.5;">
+    Bottom sheet · 660pt tall · Triggered by long-press on any mode chip,<br>
+    or via info (ⓘ) button in the EdgeMixer card header
+  </p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- Full reference table (all 7 modes side by side)     -->
+<!-- ═══════════════════════════════════════════════════ -->
+<div class="ref-section">
+  <p class="ref-title">All 7 Modes — Design Reference</p>
+  <div class="ref-grid">
+    <div class="ref-card">
+      <div class="ref-card-title">Solo <span class="ref-card-angle">—</span></div>
+      <div class="ref-led-bar"><canvas id="refSolo" width="260" height="20"></canvas><div class="ref-centre"></div></div>
+      <div class="ref-card-desc">Independent strips. No blending. Use when the effect already manages cross-strip colour intent.</div>
+    </div>
+    <div class="ref-card">
+      <div class="ref-card-title">Complementary <span class="ref-card-angle">180°</span></div>
+      <div class="ref-led-bar"><canvas id="refComp" width="260" height="20"></canvas><div class="ref-centre"></div></div>
+      <div class="ref-card-desc">Maximum contrast harmony — opposite hues collide at the boundary. Dramatic and energetic.</div>
+    </div>
+    <div class="ref-card">
+      <div class="ref-card-title">Analogous <span class="ref-card-angle">30°</span></div>
+      <div class="ref-led-bar"><canvas id="refAna" width="260" height="20"></canvas><div class="ref-centre"></div></div>
+      <div class="ref-card-desc">Adjacent neighbours — the subtlest blend. Barely perceptible at low Spread. Calming and cohesive.</div>
+    </div>
+    <div class="ref-card">
+      <div class="ref-card-title">Split Complementary <span class="ref-card-angle">150° / 210°</span></div>
+      <div class="ref-led-bar"><canvas id="refSplit" width="260" height="20"></canvas><div class="ref-centre"></div></div>
+      <div class="ref-card-desc">Softer than complementary — two flanking hues create a three-way harmony without full opposition.</div>
+    </div>
+    <div class="ref-card">
+      <div class="ref-card-title">Triadic <span class="ref-card-angle">120°</span></div>
+      <div class="ref-led-bar"><canvas id="refTri" width="260" height="20"></canvas><div class="ref-centre"></div></div>
+      <div class="ref-card-desc">Equidistant triangle on the wheel. Three hues at equal visual weight — vivid and balanced.</div>
+    </div>
+    <div class="ref-card">
+      <div class="ref-card-title">Tetradic <span class="ref-card-angle">90°</span></div>
+      <div class="ref-led-bar"><canvas id="refTet" width="260" height="20"></canvas><div class="ref-centre"></div></div>
+      <div class="ref-card-desc">Square scheme — four colours at equal spacing. Rich and complex. Best at Spread 30–60.</div>
+    </div>
+    <div class="ref-card">
+      <div class="ref-card-title">Random <span class="ref-card-angle">0–359°</span></div>
+      <div class="ref-led-bar"><canvas id="refRnd" width="260" height="20"></canvas><div class="ref-centre"></div></div>
+      <div class="ref-card-desc">Spontaneous. Regenerates on effect change or manual tap. Creates unexpected pairings — each show is unique.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ─── Core LED strip drawing function ─── */
+function drawStrip(canvasId, hueShift, spread, baseHueA, baseHueB, options) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  const cx = W / 2;
+  const spreadPx = (spread / 60) * (W * 0.46);
+  const hA = baseHueA ?? 200; // default strip A = cyan-blue
+  const hB = baseHueB ?? (hA + hueShift); // strip B = shifted
+  const isSolo = options?.solo;
+
+  for (let x = 0; x < W; x++) {
+    const isRight = x >= cx;
+    const srcHue = isRight ? hB : hA;
+    const dist = Math.abs(x - cx);
+    let hue = srcHue;
+    if (!isSolo && spreadPx > 0 && dist < spreadPx) {
+      const t = 1 - dist / spreadPx;
+      const targetHue = isRight ? hA : hB;
+      hue = srcHue + (targetHue - srcHue) * t;
+    }
+    const sat = 85;
+    const light = 46 + 16 * (1 - dist / (W * 0.5));
+    ctx.fillStyle = `hsl(${hue},${sat}%,${light}%)`;
+    ctx.fillRect(x, 0, 1, H);
+  }
+}
+
+function drawHero(id) {
+  const c = document.getElementById(id);
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+  const rH = H / 2;
+  for (let row = 0; row < 2; row++) {
+    for (let i = 0; i < 160; i++) {
+      const t = i / 159;
+      const x = (i / 160) * W;
+      const cx = W / 2;
+      const d = Math.abs(x - cx) / cx;
+      const hue = 200 + 30 * Math.sin(t * Math.PI * 2 + row * 1.2);
+      const sat = 85 - 18 * d;
+      const light = 46 + 20 * (1 - d * 0.7);
+      ctx.fillStyle = `hsl(${hue},${sat}%,${light}%)`;
+      ctx.fillRect(x, row * rH, W / 160 + 0.5, rH);
+    }
+  }
+}
+
+// Sheet bg hero
+drawHero('sheetBgHero');
+
+// Mode detail previews (spread=25 for all detail cards)
+const SP = 25;
+drawStrip('ledSolo',  0,   0,  30, 210, {solo:true});
+drawStrip('ledComp',  180, SP, 30, 210);
+drawStrip('ledAna',   30,  SP, 200, 230);
+drawStrip('ledSplit', 150, SP, 200, 350);
+drawStrip('ledTri',   120, SP, 10,  130);
+drawStrip('ledTet',   90,  SP, 140, 50);
+drawStrip('ledRnd',   137, SP, 20,  157); // 137° = "golden angle" for variety
+
+// Reference grid (spread=20 for compact view)
+const SR = 20;
+drawStrip('refSolo',  0,   0,   30, 210, {solo:true});
+drawStrip('refComp',  180, SR,  30, 210);
+drawStrip('refAna',   30,  SR,  200, 230);
+drawStrip('refSplit', 150, SR,  200, 350);
+drawStrip('refTri',   120, SR,  10, 130);
+drawStrip('refTet',   90,  SR,  140, 50);
+drawStrip('refRnd',   217, SR,  20, 237);
+</script>
+</body>
+</html>

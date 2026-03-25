@@ -1,0 +1,1125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EdgeMixer — Inline Card (Play Tab)</title>
+<style>
+  /* ─── Design tokens (from DesignTokens.swift) ─── */
+  :root {
+    --lw-base:          #0F1219;
+    --lw-card:          #1E2535;
+    --lw-card-lo:       #1A2030;
+    --lw-elevated:      #252D3F;
+    --lw-gold:          #FFB84D;
+    --lw-gold-dim:      rgba(255,184,77,0.18);
+    --lw-gold-glow:     rgba(255,184,77,0.55);
+    --lw-cyan:          #00D4FF;
+    --lw-success:       #4DFFB8;
+    --lw-text-primary:  #E6E9EF;
+    --lw-text-secondary:#9CA3B0;
+    --lw-text-tertiary: #6B7280;
+    --lw-border:        rgba(255,255,255,0.06);
+    --lw-divider:       rgba(255,255,255,0.04);
+    --r-hero:   24px;
+    --r-card:   16px;
+    --r-nested: 12px;
+    --sp-xs: 4px;
+    --sp-sm: 8px;
+    --sp-md: 12px;
+    --sp-lg: 24px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #1a1a2e;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 40px 20px;
+    font-family: -apple-system, 'SF Pro Display', sans-serif;
+    gap: 48px;
+    flex-wrap: wrap;
+  }
+
+  /* ─── iPhone 15 Pro shell ─── */
+  .iphone {
+    width: 393px;
+    background: #0F1219;
+    border-radius: 54px;
+    overflow: hidden;
+    box-shadow:
+      0 0 0 2px #1c1c1e,
+      0 0 0 4px #3a3a3c,
+      0 40px 80px rgba(0,0,0,0.8);
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .iphone-notch {
+    height: 52px;
+    background: #0F1219;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    position: relative;
+  }
+  .iphone-notch::after {
+    content: '';
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 120px;
+    height: 32px;
+    background: #000;
+    border-radius: 20px;
+  }
+  .status-time {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--lw-text-primary);
+    letter-spacing: 0.2px;
+    position: relative;
+    z-index: 1;
+  }
+  .status-icons {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    position: relative;
+    z-index: 1;
+  }
+  .status-icon {
+    width: 16px;
+    height: 12px;
+    background: var(--lw-text-primary);
+    border-radius: 2px;
+    opacity: 0.85;
+  }
+
+  /* ─── Scroll area ─── */
+  .scroll-area {
+    height: 780px;
+    overflow: hidden;
+    background: var(--lw-base);
+    padding: 16px;
+  }
+  .play-stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-lg);
+  }
+
+  /* ─── LWCard base ─── */
+  .lw-card {
+    background: linear-gradient(180deg, var(--lw-card) 0%, var(--lw-card-lo) 100%);
+    border-radius: var(--r-card);
+    padding: 12px 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+    position: relative;
+    overflow: hidden;
+  }
+  .lw-card.accent-cyan { box-shadow: 0 2px 12px rgba(0,0,0,0.4), 0 0 0 1.5px var(--lw-cyan); }
+
+  .section-header {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    color: var(--lw-text-tertiary);
+    text-transform: uppercase;
+    margin-bottom: var(--sp-sm);
+  }
+
+  /* ─── Hero LED Preview ─── */
+  .hero-led {
+    height: 140px;
+    border-radius: var(--r-hero);
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 0 40px rgba(255,184,77,0.12);
+  }
+  .hero-canvas {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  .led-row {
+    flex: 1;
+    display: flex;
+  }
+  .led-px {
+    flex: 1;
+    min-width: 0;
+  }
+  .hero-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding: 14px 16px;
+  }
+  .hero-effect-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--lw-text-primary);
+    text-shadow: 0 2px 8px rgba(0,0,0,0.9);
+  }
+  .bpm-ring {
+    width: 72px;
+    height: 72px;
+    position: relative;
+  }
+  .bpm-ring svg { position: absolute; inset: 0; }
+  .bpm-label {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+  }
+  .bpm-value {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--lw-gold);
+    letter-spacing: 1px;
+    text-shadow: 0 0 12px rgba(255,184,77,0.5);
+    line-height: 1;
+  }
+  .bpm-unit {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    color: var(--lw-text-secondary);
+    text-transform: uppercase;
+  }
+
+  /* ─── Effect Pill ─── */
+  .pill-row {
+    display: flex;
+    gap: var(--sp-sm);
+  }
+  .pill {
+    flex: 1;
+    background: linear-gradient(180deg, var(--lw-card) 0%, var(--lw-card-lo) 100%);
+    border-radius: 32px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+  }
+  .pill-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    color: var(--lw-text-tertiary);
+    text-transform: uppercase;
+  }
+  .pill-value {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--lw-text-primary);
+  }
+  .pill-chevron {
+    font-size: 11px;
+    color: var(--lw-gold);
+  }
+
+  /* ─── Slider ─── */
+  .slider-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-md);
+  }
+  .slider-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-sm);
+  }
+  .slider-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .slider-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    color: var(--lw-text-secondary);
+    text-transform: uppercase;
+  }
+  .slider-value {
+    font-family: 'SF Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--lw-gold);
+  }
+  .slider-track {
+    height: 10px;
+    background: var(--lw-card);
+    border-radius: 5px;
+    position: relative;
+    overflow: visible;
+  }
+  .slider-fill {
+    height: 100%;
+    border-radius: 5px;
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+  .slider-thumb {
+    width: 24px;
+    height: 24px;
+    background: var(--lw-gold);
+    border-radius: 50%;
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 0 2px rgba(255,184,77,0.2);
+  }
+
+  /* ─── Divider ─── */
+  .divider {
+    height: 1px;
+    background: var(--lw-divider);
+    margin: 0;
+  }
+
+  /* ─── EdgeMixer Card ─── */
+  .edgemixer-card {
+    background: linear-gradient(180deg, var(--lw-card) 0%, var(--lw-card-lo) 100%);
+    border-radius: var(--r-card);
+    padding: 12px 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.4), 0 0 0 1.5px rgba(0,212,255,0.25);
+    position: relative;
+    overflow: hidden;
+  }
+  /* subtle cyan top edge accent */
+  .edgemixer-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 24px;
+    right: 24px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--lw-cyan), transparent);
+    opacity: 0.5;
+  }
+
+  .em-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--sp-md);
+  }
+  .em-header-left {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-sm);
+  }
+  .em-icon {
+    width: 28px;
+    height: 28px;
+    background: rgba(0,212,255,0.12);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+  }
+  .em-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    color: var(--lw-text-tertiary);
+    text-transform: uppercase;
+  }
+  .em-active-badge {
+    font-family: 'SF Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--lw-cyan);
+    background: rgba(0,212,255,0.12);
+    border: 1px solid rgba(0,212,255,0.25);
+    border-radius: 6px;
+    padding: 2px 7px;
+    letter-spacing: 0.4px;
+  }
+
+  /* ─── Mode selector scroll strip ─── */
+  .mode-strip-wrap {
+    margin: 0 -16px;
+    padding: 0 16px;
+    overflow-x: hidden; /* show clip in mockup */
+    margin-bottom: var(--sp-md);
+  }
+  .mode-strip {
+    display: flex;
+    gap: var(--sp-sm);
+    width: max-content;
+  }
+  .mode-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 10px 7px;
+    border-radius: 10px;
+    cursor: pointer;
+    min-width: 60px;
+    transition: all 0.15s;
+    border: 1.5px solid transparent;
+  }
+  .mode-chip.active {
+    background: rgba(0,212,255,0.12);
+    border-color: rgba(0,212,255,0.4);
+  }
+  .mode-chip:not(.active) {
+    background: rgba(255,255,255,0.04);
+    border-color: rgba(255,255,255,0.06);
+  }
+  .mode-chip-icon {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .mode-chip-label {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    text-align: center;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+  .mode-chip.active .mode-chip-label { color: var(--lw-cyan); }
+  .mode-chip:not(.active) .mode-chip-label { color: var(--lw-text-tertiary); }
+
+  /* Mode chip SVG icons */
+  .mode-svg { width: 28px; height: 28px; }
+
+  /* ─── LED strip preview ─── */
+  .led-preview-wrap {
+    margin-bottom: var(--sp-md);
+  }
+  .led-preview-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    color: var(--lw-text-tertiary);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .led-preview-strip {
+    width: 100%;
+    height: 24px;
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+  }
+  .led-preview-strip canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .led-boundary-marker {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 2px;
+    background: rgba(255,255,255,0.5);
+    pointer-events: none;
+  }
+  .led-boundary-label {
+    font-family: 'SF Mono', monospace;
+    font-size: 9px;
+    color: rgba(255,255,255,0.5);
+    text-align: center;
+    margin-top: 4px;
+    letter-spacing: 0.3px;
+  }
+
+  /* ─── Spread slider (specialised) ─── */
+  .spread-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-sm);
+  }
+  .spread-track-wrap {
+    position: relative;
+    height: 24px;
+    display: flex;
+    align-items: center;
+  }
+  .spread-track {
+    width: 100%;
+    height: 10px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 5px;
+    position: relative;
+    overflow: hidden;
+  }
+  /* the blend zone visualised on the track */
+  .spread-fill-center {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: linear-gradient(90deg,
+      transparent,
+      rgba(0,212,255,0.35) 20%,
+      rgba(0,212,255,0.6) 45%,
+      rgba(0,212,255,0.6) 55%,
+      rgba(0,212,255,0.35) 80%,
+      transparent
+    );
+    border-radius: 5px;
+    /* width controlled inline to reflect spread=20 */
+    left: 30%;
+    right: 30%;
+  }
+  .spread-thumb {
+    width: 24px;
+    height: 24px;
+    background: var(--lw-cyan);
+    border-radius: 50%;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 0 4px rgba(0,212,255,0.2), 0 0 12px rgba(0,212,255,0.4);
+    pointer-events: none;
+  }
+  .spread-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 2px;
+  }
+  .spread-label-text {
+    font-size: 10px;
+    color: var(--lw-text-tertiary);
+  }
+
+  /* ─── Tab bar ─── */
+  .tab-bar {
+    height: 82px;
+    background: rgba(15,18,25,0.95);
+    border-top: 1px solid var(--lw-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    padding-bottom: 16px;
+    padding-top: 10px;
+    position: relative;
+  }
+  .tab-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+    min-height: 44px;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .tab-icon {
+    font-size: 20px;
+    line-height: 1;
+  }
+  .tab-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+  .tab-item.active .tab-icon,
+  .tab-item.active .tab-label { color: var(--lw-gold); }
+  .tab-item:not(.active) .tab-icon,
+  .tab-item:not(.active) .tab-label { color: var(--lw-text-tertiary); }
+
+  /* ─── Page label ─── */
+  .page-label {
+    color: var(--lw-text-secondary);
+    font-size: 13px;
+    text-align: center;
+    margin-top: 16px;
+    letter-spacing: 0.3px;
+  }
+  .page-title {
+    color: var(--lw-text-primary);
+    font-size: 20px;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 8px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- Mockup 1A — Full Play Tab, EdgeMixer visible             -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<div>
+  <p class="page-title">EdgeMixer — Inline Card</p>
+  <p class="page-label">Play Tab · Scrolled to show EdgeMixer · Mode: Complementary · Spread: 20</p>
+  <br>
+  <div class="iphone">
+    <!-- Status bar -->
+    <div class="iphone-notch">
+      <span class="status-time">9:41</span>
+      <div class="status-icons">
+        <svg width="17" height="12" viewBox="0 0 17 12" fill="none"><rect x="0" y="3" width="3" height="9" rx="1" fill="#E6E9EF" opacity="0.4"/><rect x="4.5" y="2" width="3" height="10" rx="1" fill="#E6E9EF" opacity="0.6"/><rect x="9" y="1" width="3" height="11" rx="1" fill="#E6E9EF" opacity="0.8"/><rect x="13.5" y="0" width="3" height="12" rx="1" fill="#E6E9EF"/></svg>
+        <svg width="16" height="12" viewBox="0 0 16 12" fill="#E6E9EF"><path d="M8 2.5C5.8 2.5 3.8 3.4 2.4 4.9L1 3.4C2.8 1.3 5.2 0 8 0s5.2 1.3 7 3.4L13.6 4.9C12.2 3.4 10.2 2.5 8 2.5z" opacity="0.5"/><path d="M8 5.5C6.7 5.5 5.5 6 4.7 6.9L3.3 5.4C4.5 4.1 6.1 3.3 8 3.3s3.5.8 4.7 2.1L11.3 6.9C10.5 6 9.3 5.5 8 5.5z" opacity="0.75"/><circle cx="8" cy="10" r="1.5"/></svg>
+        <svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke="#E6E9EF" stroke-opacity="0.4"/><rect x="2" y="2" width="15" height="8" rx="2" fill="#E6E9EF"/><path d="M23 4v4a2 2 0 000-4z" fill="#E6E9EF" opacity="0.4"/></svg>
+      </div>
+    </div>
+
+    <!-- Scroll area — scrolled state: showing from PrimaryControlsCard down -->
+    <div class="scroll-area">
+      <div class="play-stack">
+
+        <!-- Brightness + Speed card -->
+        <div class="lw-card">
+          <div class="slider-group">
+            <!-- Brightness -->
+            <div class="slider-wrap">
+              <div class="slider-header">
+                <span class="slider-title">Brightness</span>
+                <span class="slider-value">178</span>
+              </div>
+              <div class="slider-track" style="height:10px;">
+                <div class="slider-fill" style="width:70%;background:linear-gradient(90deg,rgba(255,184,77,0.5),#FFB84D);"></div>
+                <div class="slider-thumb" style="left:70%;"></div>
+              </div>
+            </div>
+            <div class="divider"></div>
+            <!-- Speed -->
+            <div class="slider-wrap">
+              <div class="slider-header">
+                <span class="slider-title">Speed</span>
+                <span class="slider-value">42</span>
+              </div>
+              <div class="slider-track">
+                <div class="slider-fill" style="width:42%;background:linear-gradient(90deg,#00D4FF,#FFB84D);"></div>
+                <div class="slider-thumb" style="left:42%; background:#FFB84D;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ════════════════════════════════════════ -->
+        <!-- EDGEMIXER CARD                           -->
+        <!-- ════════════════════════════════════════ -->
+        <div class="edgemixer-card">
+
+          <!-- Header row -->
+          <div class="em-header">
+            <div class="em-header-left">
+              <div class="em-icon">
+                <!-- Boundary blend icon -->
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <rect x="0" y="4" width="7" height="8" rx="2" fill="#00D4FF" opacity="0.5"/>
+                  <rect x="9" y="4" width="7" height="8" rx="2" fill="#FFB84D" opacity="0.5"/>
+                  <rect x="6" y="3" width="4" height="10" rx="2" fill="url(#emGrad1)"/>
+                  <defs>
+                    <linearGradient id="emGrad1" x1="6" y1="8" x2="10" y2="8" gradientUnits="userSpaceOnUse">
+                      <stop stop-color="#00D4FF"/>
+                      <stop offset="1" stop-color="#FFB84D"/>
+                    </linearGradient>
+                  </defs>
+                </svg>
+              </div>
+              <span class="em-title">Edge Mixer</span>
+            </div>
+            <span class="em-active-badge">Complementary</span>
+          </div>
+
+          <!-- Mode selector scroll strip -->
+          <div class="mode-strip-wrap">
+            <div class="mode-strip">
+
+              <!-- Solo -->
+              <div class="mode-chip">
+                <div class="mode-chip-icon">
+                  <svg class="mode-svg" viewBox="0 0 28 28" fill="none">
+                    <rect x="2" y="10" width="11" height="8" rx="3" fill="#9CA3B0" opacity="0.5"/>
+                    <rect x="15" y="10" width="11" height="8" rx="3" fill="#9CA3B0" opacity="0.5"/>
+                    <line x1="14" y1="7" x2="14" y2="21" stroke="#6B7280" stroke-width="1.5" stroke-dasharray="2,2"/>
+                  </svg>
+                </div>
+                <span class="mode-chip-label">Solo</span>
+              </div>
+
+              <!-- Complementary (active) -->
+              <div class="mode-chip active">
+                <div class="mode-chip-icon">
+                  <svg class="mode-svg" viewBox="0 0 28 28" fill="none">
+                    <defs>
+                      <linearGradient id="compL" x1="2" y1="14" x2="13" y2="14" gradientUnits="userSpaceOnUse">
+                        <stop stop-color="#00D4FF"/>
+                        <stop offset="1" stop-color="#006680"/>
+                      </linearGradient>
+                      <linearGradient id="compR" x1="15" y1="14" x2="26" y2="14" gradientUnits="userSpaceOnUse">
+                        <stop stop-color="#FF6633"/>
+                        <stop offset="1" stop-color="#FF9900"/>
+                      </linearGradient>
+                    </defs>
+                    <rect x="2" y="10" width="11" height="8" rx="3" fill="url(#compL)"/>
+                    <rect x="15" y="10" width="11" height="8" rx="3" fill="url(#compR)"/>
+                    <!-- blend zone -->
+                    <rect x="10" y="9" width="8" height="10" rx="2" fill="url(#blendComp)" opacity="0.6"/>
+                    <defs>
+                      <linearGradient id="blendComp" x1="10" y1="14" x2="18" y2="14" gradientUnits="userSpaceOnUse">
+                        <stop stop-color="#00D4FF" stop-opacity="0"/>
+                        <stop offset="0.5" stop-color="#80AACC"/>
+                        <stop offset="1" stop-color="#FF6633" stop-opacity="0"/>
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                </div>
+                <span class="mode-chip-label">Comple-<br>mentary</span>
+              </div>
+
+              <!-- Analogous -->
+              <div class="mode-chip">
+                <div class="mode-chip-icon">
+                  <svg class="mode-svg" viewBox="0 0 28 28" fill="none">
+                    <defs>
+                      <linearGradient id="anaL" x1="2" y1="14" x2="13" y2="14">
+                        <stop stop-color="#00AAFF"/>
+                        <stop offset="1" stop-color="#0066CC"/>
+                      </linearGradient>
+                      <linearGradient id="anaR" x1="15" y1="14" x2="26" y2="14">
+                        <stop stop-color="#0088EE"/>
+                        <stop offset="1" stop-color="#00CCFF"/>
+                      </linearGradient>
+                    </defs>
+                    <rect x="2" y="10" width="11" height="8" rx="3" fill="url(#anaL)"/>
+                    <rect x="15" y="10" width="11" height="8" rx="3" fill="url(#anaR)"/>
+                    <rect x="10" y="9" width="8" height="10" rx="2" fill="url(#blendAna)" opacity="0.5"/>
+                    <defs>
+                      <linearGradient id="blendAna" x1="10" y1="14" x2="18" y2="14">
+                        <stop stop-color="#0077DD" stop-opacity="0"/>
+                        <stop offset="0.5" stop-color="#0099EE"/>
+                        <stop offset="1" stop-color="#0099EE" stop-opacity="0"/>
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                </div>
+                <span class="mode-chip-label">Analogous</span>
+              </div>
+
+              <!-- Split Complementary -->
+              <div class="mode-chip">
+                <div class="mode-chip-icon">
+                  <svg class="mode-svg" viewBox="0 0 28 28" fill="none">
+                    <defs>
+                      <linearGradient id="splL" x1="2" y1="14" x2="13" y2="14">
+                        <stop stop-color="#00D4FF"/>
+                        <stop offset="1" stop-color="#0099CC"/>
+                      </linearGradient>
+                      <linearGradient id="splR" x1="15" y1="14" x2="26" y2="14">
+                        <stop stop-color="#FF4499"/>
+                        <stop offset="1" stop-color="#FFAA00"/>
+                      </linearGradient>
+                    </defs>
+                    <rect x="2" y="10" width="11" height="8" rx="3" fill="url(#splL)"/>
+                    <rect x="15" y="10" width="11" height="8" rx="3" fill="url(#splR)"/>
+                    <rect x="10" y="9" width="8" height="10" rx="2" fill="url(#blendSpl)" opacity="0.5"/>
+                    <defs>
+                      <linearGradient id="blendSpl" x1="10" y1="14" x2="18" y2="14">
+                        <stop stop-color="#00D4FF" stop-opacity="0"/>
+                        <stop offset="0.5" stop-color="#BB66AA"/>
+                        <stop offset="1" stop-color="#FF4499" stop-opacity="0"/>
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                </div>
+                <span class="mode-chip-label">Split</span>
+              </div>
+
+              <!-- Triadic -->
+              <div class="mode-chip">
+                <div class="mode-chip-icon">
+                  <svg class="mode-svg" viewBox="0 0 28 28" fill="none">
+                    <defs>
+                      <linearGradient id="triL" x1="2" y1="14" x2="13" y2="14">
+                        <stop stop-color="#FF3333"/>
+                        <stop offset="1" stop-color="#CC2200"/>
+                      </linearGradient>
+                      <linearGradient id="triR" x1="15" y1="14" x2="26" y2="14">
+                        <stop stop-color="#0066FF"/>
+                        <stop offset="1" stop-color="#3399FF"/>
+                      </linearGradient>
+                    </defs>
+                    <rect x="2" y="10" width="11" height="8" rx="3" fill="url(#triL)"/>
+                    <rect x="15" y="10" width="11" height="8" rx="3" fill="url(#triR)"/>
+                    <rect x="10" y="9" width="8" height="10" rx="2" fill="url(#blendTri)" opacity="0.5"/>
+                    <defs>
+                      <linearGradient id="blendTri" x1="10" y1="14" x2="18" y2="14">
+                        <stop stop-color="#FF3333" stop-opacity="0"/>
+                        <stop offset="0.5" stop-color="#9933CC"/>
+                        <stop offset="1" stop-color="#0066FF" stop-opacity="0"/>
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                </div>
+                <span class="mode-chip-label">Triadic</span>
+              </div>
+
+              <!-- Tetradic -->
+              <div class="mode-chip">
+                <div class="mode-chip-icon">
+                  <svg class="mode-svg" viewBox="0 0 28 28" fill="none">
+                    <defs>
+                      <linearGradient id="tetL" x1="2" y1="14" x2="13" y2="14">
+                        <stop stop-color="#00FF88"/>
+                        <stop offset="1" stop-color="#00CC66"/>
+                      </linearGradient>
+                      <linearGradient id="tetR" x1="15" y1="14" x2="26" y2="14">
+                        <stop stop-color="#9900FF"/>
+                        <stop offset="1" stop-color="#CC44FF"/>
+                      </linearGradient>
+                    </defs>
+                    <rect x="2" y="10" width="11" height="8" rx="3" fill="url(#tetL)"/>
+                    <rect x="15" y="10" width="11" height="8" rx="3" fill="url(#tetR)"/>
+                    <rect x="10" y="9" width="8" height="10" rx="2" fill="url(#blendTet)" opacity="0.5"/>
+                    <defs>
+                      <linearGradient id="blendTet" x1="10" y1="14" x2="18" y2="14">
+                        <stop stop-color="#00FF88" stop-opacity="0"/>
+                        <stop offset="0.5" stop-color="#66CC88"/>
+                        <stop offset="1" stop-color="#9900FF" stop-opacity="0"/>
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                </div>
+                <span class="mode-chip-label">Tetradic</span>
+              </div>
+
+              <!-- Random -->
+              <div class="mode-chip">
+                <div class="mode-chip-icon">
+                  <svg class="mode-svg" viewBox="0 0 28 28" fill="none">
+                    <defs>
+                      <linearGradient id="rndFull" x1="2" y1="14" x2="26" y2="14">
+                        <stop stop-color="#FF3366"/>
+                        <stop offset="0.25" stop-color="#FFAA00"/>
+                        <stop offset="0.5" stop-color="#00FF88"/>
+                        <stop offset="0.75" stop-color="#00D4FF"/>
+                        <stop offset="1" stop-color="#9900FF"/>
+                      </linearGradient>
+                    </defs>
+                    <rect x="2" y="10" width="24" height="8" rx="3" fill="url(#rndFull)" opacity="0.7"/>
+                    <!-- sparkle dots -->
+                    <circle cx="7" cy="9" r="1.5" fill="#FFB84D" opacity="0.9"/>
+                    <circle cx="14" cy="19" r="1.5" fill="#00D4FF" opacity="0.9"/>
+                    <circle cx="21" cy="8" r="1.5" fill="#FF3366" opacity="0.9"/>
+                  </svg>
+                </div>
+                <span class="mode-chip-label">Random</span>
+              </div>
+
+            </div>
+          </div><!-- /mode-strip-wrap -->
+
+          <!-- LED strip preview -->
+          <div class="led-preview-wrap">
+            <div class="led-preview-label">Preview</div>
+            <div class="led-preview-strip" id="ledPreview" style="height:28px;">
+              <canvas id="ledCanvas" width="361" height="28" style="width:100%;height:28px;border-radius:8px;display:block;"></canvas>
+              <div class="led-boundary-marker"></div>
+            </div>
+            <div class="led-boundary-label">← Strip A (160) &nbsp;│&nbsp; Strip B (160) →</div>
+          </div>
+
+          <!-- Spread slider -->
+          <div class="spread-wrap">
+            <div class="slider-header">
+              <span class="slider-title" style="color:var(--lw-cyan);">Spread</span>
+              <span class="slider-value" style="color:var(--lw-cyan);">20</span>
+            </div>
+            <div style="position:relative;height:24px;display:flex;align-items:center;">
+              <div class="spread-track" style="width:100%;">
+                <div class="spread-fill-center"></div>
+              </div>
+              <!-- thumb at 33% (spread=20/60) -->
+              <div class="spread-thumb" style="left:33.3%;top:50%;transform:translate(-50%,-50%);position:absolute;"></div>
+            </div>
+            <div class="spread-labels">
+              <span class="spread-label-text">Tight  0</span>
+              <span class="spread-label-text">Wide  60</span>
+            </div>
+          </div>
+
+        </div><!-- /edgemixer-card -->
+
+      </div><!-- /play-stack -->
+    </div><!-- /scroll-area -->
+
+    <!-- Tab bar -->
+    <div class="tab-bar">
+      <div class="tab-item active">
+        <span class="tab-icon">▶</span>
+        <span class="tab-label">Play</span>
+      </div>
+      <div class="tab-item">
+        <span class="tab-icon">🎵</span>
+        <span class="tab-label">Audio</span>
+      </div>
+      <div class="tab-item">
+        <span class="tab-icon">◫</span>
+        <span class="tab-label">Zones</span>
+      </div>
+      <div class="tab-item">
+        <span class="tab-icon">⚙</span>
+        <span class="tab-label">Device</span>
+      </div>
+    </div>
+  </div>
+  <p class="page-label" style="margin-top:12px;">↑ Scrolled to show EdgeMixer in context</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- Mockup 1B — Full Play Tab from top (scroll context)     -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div>
+  <p class="page-title">Play Tab — Full Context</p>
+  <p class="page-label">From top · EdgeMixer below fold · Mode: Solo (default)</p>
+  <br>
+  <div class="iphone">
+    <div class="iphone-notch">
+      <span class="status-time">9:41</span>
+      <div class="status-icons">
+        <svg width="17" height="12" viewBox="0 0 17 12" fill="none"><rect x="0" y="3" width="3" height="9" rx="1" fill="#E6E9EF" opacity="0.4"/><rect x="4.5" y="2" width="3" height="10" rx="1" fill="#E6E9EF" opacity="0.6"/><rect x="9" y="1" width="3" height="11" rx="1" fill="#E6E9EF" opacity="0.8"/><rect x="13.5" y="0" width="3" height="12" rx="1" fill="#E6E9EF"/></svg>
+        <svg width="16" height="12" viewBox="0 0 16 12" fill="#E6E9EF"><circle cx="8" cy="10" r="1.5"/><path d="M4.7 6.9C5.5 6 6.7 5.5 8 5.5s2.5.5 3.3 1.4L12.7 6.4C11.5 5.1 9.9 4.3 8 4.3S4.5 5.1 3.3 6.4z" opacity="0.6"/></svg>
+        <svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke="#E6E9EF" stroke-opacity="0.4"/><rect x="2" y="2" width="15" height="8" rx="2" fill="#E6E9EF"/><path d="M23 4v4a2 2 0 000-4z" fill="#E6E9EF" opacity="0.4"/></svg>
+      </div>
+    </div>
+
+    <div class="scroll-area">
+      <div class="play-stack">
+
+        <!-- Hero LED Preview -->
+        <div class="hero-led">
+          <canvas id="heroCanvas" width="361" height="140" style="width:100%;height:140px;display:block;border-radius:24px;"></canvas>
+          <div class="hero-overlay">
+            <span class="hero-effect-name">Pulse Waves</span>
+            <!-- BPM ring -->
+            <div class="bpm-ring">
+              <svg viewBox="0 0 72 72" fill="none" width="72" height="72">
+                <circle cx="36" cy="36" r="30" stroke="#252D3F" stroke-width="4" stroke-opacity="0.6"/>
+                <circle cx="36" cy="36" r="30" stroke="#FFB84D" stroke-width="4"
+                  stroke-dasharray="157" stroke-dashoffset="47"
+                  stroke-linecap="round" transform="rotate(-90 36 36)"/>
+              </svg>
+              <div class="bpm-label">
+                <span class="bpm-value">124</span>
+                <span class="bpm-unit">BPM</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Effect + Palette pills -->
+        <div class="pill-row">
+          <div class="pill">
+            <div>
+              <div class="pill-label">Effect</div>
+              <div class="pill-value">Pulse Waves</div>
+            </div>
+            <span class="pill-chevron">›</span>
+          </div>
+          <div class="pill">
+            <div>
+              <div class="pill-label">Palette</div>
+              <div class="pill-value">Ocean</div>
+            </div>
+            <span class="pill-chevron">›</span>
+          </div>
+        </div>
+
+        <!-- Brightness + Speed -->
+        <div class="lw-card">
+          <div class="slider-group">
+            <div class="slider-wrap">
+              <div class="slider-header">
+                <span class="slider-title">Brightness</span>
+                <span class="slider-value">178</span>
+              </div>
+              <div class="slider-track">
+                <div class="slider-fill" style="width:70%;background:linear-gradient(90deg,rgba(255,184,77,0.5),#FFB84D);"></div>
+                <div class="slider-thumb" style="left:70%;"></div>
+              </div>
+            </div>
+            <div class="divider"></div>
+            <div class="slider-wrap">
+              <div class="slider-header">
+                <span class="slider-title">Speed</span>
+                <span class="slider-value">42</span>
+              </div>
+              <div class="slider-track">
+                <div class="slider-fill" style="width:42%;background:linear-gradient(90deg,#00D4FF,#FFB84D);"></div>
+                <div class="slider-thumb" style="left:42%;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- EdgeMixer — Solo/default state -->
+        <div class="edgemixer-card" style="box-shadow:0 2px 12px rgba(0,0,0,0.4),0 0 0 1px rgba(255,255,255,0.06);">
+          <!-- no cyan glow in solo mode — it's inactive/default -->
+          <div class="em-header">
+            <div class="em-header-left">
+              <div class="em-icon" style="background:rgba(255,255,255,0.06);">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <rect x="0" y="4" width="7" height="8" rx="2" fill="#6B7280" opacity="0.6"/>
+                  <rect x="9" y="4" width="7" height="8" rx="2" fill="#6B7280" opacity="0.6"/>
+                  <line x1="8" y1="3" x2="8" y2="13" stroke="#6B7280" stroke-width="1.5" stroke-dasharray="2,2"/>
+                </svg>
+              </div>
+              <span class="em-title">Edge Mixer</span>
+            </div>
+            <span class="em-active-badge" style="color:var(--lw-text-tertiary);background:rgba(255,255,255,0.04);border-color:rgba(255,255,255,0.08);">Solo</span>
+          </div>
+
+          <!-- Compact mode chips — collapsed feel, still scrollable -->
+          <div class="mode-strip-wrap">
+            <div class="mode-strip">
+              <!-- Solo active -->
+              <div class="mode-chip" style="background:rgba(255,184,77,0.1);border-color:rgba(255,184,77,0.3);">
+                <div class="mode-chip-icon">
+                  <svg class="mode-svg" viewBox="0 0 28 28" fill="none">
+                    <rect x="2" y="10" width="11" height="8" rx="3" fill="#FFB84D" opacity="0.7"/>
+                    <rect x="15" y="10" width="11" height="8" rx="3" fill="#FFB84D" opacity="0.7"/>
+                    <line x1="14" y1="7" x2="14" y2="21" stroke="#FFB84D" stroke-width="1.5"/>
+                  </svg>
+                </div>
+                <span class="mode-chip-label" style="color:var(--lw-gold);">Solo</span>
+              </div>
+              <!-- remaining chips — inactive -->
+              <div class="mode-chip"><div class="mode-chip-icon"><svg class="mode-svg" viewBox="0 0 28 28" fill="none"><rect x="2" y="10" width="11" height="8" rx="3" fill="#6B7280" opacity="0.4"/><rect x="15" y="10" width="11" height="8" rx="3" fill="#6B7280" opacity="0.4"/></svg></div><span class="mode-chip-label">Comple-<br>mentary</span></div>
+              <div class="mode-chip"><div class="mode-chip-icon"><svg class="mode-svg" viewBox="0 0 28 28" fill="none"><rect x="2" y="10" width="11" height="8" rx="3" fill="#6B7280" opacity="0.4"/><rect x="15" y="10" width="11" height="8" rx="3" fill="#6B7280" opacity="0.4"/></svg></div><span class="mode-chip-label">Analogous</span></div>
+              <div class="mode-chip"><div class="mode-chip-icon"><svg class="mode-svg" viewBox="0 0 28 28" fill="none"><rect x="2" y="10" width="11" height="8" rx="3" fill="#6B7280" opacity="0.4"/><rect x="15" y="10" width="11" height="8" rx="3" fill="#6B7280" opacity="0.4"/></svg></div><span class="mode-chip-label">Split</span></div>
+              <div class="mode-chip"><div class="mode-chip-icon"><svg class="mode-svg" viewBox="0 0 28 28" fill="none"><rect x="2" y="10" width="11" height="8" rx="3" fill="#6B7280" opacity="0.4"/><rect x="15" y="10" width="11" height="8" rx="3" fill="#6B7280" opacity="0.4"/></svg></div><span class="mode-chip-label">Triadic</span></div>
+              <div class="mode-chip"><div class="mode-chip-icon"><svg class="mode-svg" viewBox="0 0 28 28" fill="none"><rect x="2" y="10" width="11" height="8" rx="3" fill="#6B7280" opacity="0.4"/><rect x="15" y="10" width="11" height="8" rx="3" fill="#6B7280" opacity="0.4"/></svg></div><span class="mode-chip-label">Tetradic</span></div>
+              <div class="mode-chip"><div class="mode-chip-icon"><svg class="mode-svg" viewBox="0 0 28 28" fill="none"><rect x="2" y="10" width="24" height="8" rx="3" fill="#6B7280" opacity="0.4"/></svg></div><span class="mode-chip-label">Random</span></div>
+            </div>
+          </div>
+
+          <!-- Solo state: spread slider greyed out -->
+          <div class="spread-wrap" style="opacity:0.35;pointer-events:none;">
+            <div class="slider-header">
+              <span class="slider-title">Spread</span>
+              <span class="slider-value" style="color:var(--lw-text-tertiary);">—</span>
+            </div>
+            <div style="position:relative;height:24px;display:flex;align-items:center;">
+              <div class="spread-track" style="width:100%;background:rgba(255,255,255,0.04);">
+              </div>
+            </div>
+            <div class="spread-labels">
+              <span class="spread-label-text">Tight  0</span>
+              <span class="spread-label-text">Wide  60</span>
+            </div>
+          </div>
+
+        </div><!-- /edgemixer solo -->
+
+      </div>
+    </div>
+
+    <div class="tab-bar">
+      <div class="tab-item active"><span class="tab-icon">▶</span><span class="tab-label">Play</span></div>
+      <div class="tab-item"><span class="tab-icon">🎵</span><span class="tab-label">Audio</span></div>
+      <div class="tab-item"><span class="tab-icon">◫</span><span class="tab-label">Zones</span></div>
+      <div class="tab-item"><span class="tab-icon">⚙</span><span class="tab-label">Device</span></div>
+    </div>
+  </div>
+  <p class="page-label" style="margin-top:12px;">Top of Play Tab · EdgeMixer at bottom · Solo = Spread disabled</p>
+</div>
+
+<script>
+/* ─── LED strip preview canvas ─── */
+function drawLEDPreview(canvasId, modeHueShift, spread) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  ctx.clearRect(0, 0, W, H);
+
+  const cx = W / 2;
+  const spreadPx = (spread / 60) * (W * 0.4);
+
+  for (let x = 0; x < W; x++) {
+    const normDist = (x - cx) / (W / 2); // -1..1
+    const isRightStrip = x >= cx;
+
+    // base hue for each strip
+    let hue = isRightStrip ? 210 : 30; // strip A = warm amber, strip B = cyan-blue
+    const distFromCenter = Math.abs(x - cx);
+
+    // blend zone
+    if (spreadPx > 0 && distFromCenter < spreadPx) {
+      const t = 1 - (distFromCenter / spreadPx);
+      const targetHue = hue + (isRightStrip ? -modeHueShift : modeHueShift);
+      hue = hue + (targetHue - hue) * t;
+    }
+
+    const sat = 85;
+    const light = 55 + 10 * (1 - distFromCenter / (W * 0.5));
+    ctx.fillStyle = `hsl(${hue},${sat}%,${light}%)`;
+    ctx.fillRect(x, 0, 1, H);
+  }
+
+  // Boundary line
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 3]);
+  ctx.beginPath();
+  ctx.moveTo(cx, 0);
+  ctx.lineTo(cx, H);
+  ctx.stroke();
+}
+
+/* Hero LED canvas */
+function drawHeroLEDs() {
+  const canvas = document.getElementById('heroCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const rowH = H / 2;
+
+  for (let row = 0; row < 2; row++) {
+    const y = row * rowH;
+    for (let i = 0; i < 160; i++) {
+      const t = i / 159;
+      const cx = W / 2;
+      const x = (i / 160) * W;
+      const dist = Math.abs(x - cx) / cx; // 0=center, 1=edge
+      const hue = 200 + 30 * Math.sin(t * Math.PI * 2 + row * 1.2);
+      const sat = 90 - 20 * dist;
+      const light = 50 + 25 * (1 - dist * 0.7);
+      const alpha = 0.8 + 0.2 * Math.sin(t * Math.PI * 4 + row);
+      ctx.fillStyle = `hsla(${hue},${sat}%,${light}%,${alpha})`;
+      ctx.fillRect(x, y, W / 160 + 0.5, rowH);
+    }
+  }
+}
+
+drawHeroLEDs();
+drawLEDPreview('ledCanvas', 180, 20); // Complementary mode, spread=20
+</script>
+</body>
+</html>

@@ -11,6 +11,7 @@
 
 #include "BeatPulseBreatheEffect.h"
 #include "../CoreEffects.h"
+#include "AudioReactivePolicy.h"
 #include "BeatPulseRenderUtils.h"
 
 #include <cmath>
@@ -48,7 +49,13 @@ void BeatPulseBreatheEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
 
     // --- Beat source ---
-    const bool beatTick = BeatPulseTiming::computeBeatTick(ctx, m_fallbackBpm, m_lastBeatTimeMs);
+    const auto trigger = AudioReactivePolicy::audioTrigger(
+        ctx,
+        AudioReactivePolicy::TriggerMode::HybridTempoTransient,
+        m_fallbackBpm,
+        m_lastBeatTimeMs
+    );
+    const bool beatTick = trigger.fired;
 
     // --- Delta time for frame-rate independent motion ---
     const float dt = ctx.getSafeRawDeltaSeconds();

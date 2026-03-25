@@ -46,6 +46,7 @@ private:
     Ripple m_ripples[MAX_RIPPLES];
 
     uint32_t m_lastHopSeq = 0;
+    uint32_t m_lastTriggerMs = 0;
     uint8_t m_spawnCooldown = 0;
 
 #ifndef NATIVE_BUILD
@@ -69,4 +70,3 @@ private:
 };
 
 } // namespace lightwaveos::effects::ieffect
-

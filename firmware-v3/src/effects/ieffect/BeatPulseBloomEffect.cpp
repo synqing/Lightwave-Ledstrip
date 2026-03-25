@@ -89,8 +89,14 @@ void BeatPulseBloomEffect::render(plugins::EffectContext& ctx) {
     // ---------------------------------------------------------------------
     // NOTE: silentScale is NOT applied here - RendererActor handles it globally
     // to avoid double-gating which kills punch.
-    const bool beatTick = AudioReactivePolicy::audioBeatTick(ctx, 128.0f, m_lastBeatMs[zoneId]);
-    const float beatStrength = ctx.audio.available ? clamp01(ctx.audio.beatStrength()) : 1.0f;
+    const auto trigger = AudioReactivePolicy::audioTrigger(
+        ctx,
+        AudioReactivePolicy::TriggerMode::HybridTempoTransient,
+        128.0f,
+        m_lastBeatMs[zoneId]
+    );
+    const bool beatTick = trigger.fired;
+    const float beatStrength = trigger.reliable ? clamp01(trigger.level01) : 1.0f;
 
     // Beat envelope: slam to 1.0 on beat, dt-correct exponential decay.
     BeatPulseHTML::updateBeatIntensity(m_beatEnv[zoneId], beatTick, dt);
@@ -170,7 +176,9 @@ void BeatPulseBloomEffect::render(plugins::EffectContext& ctx) {
     if (ctx.audio.available) {
         // These are already normalised-ish in the control bus (0..1 in most cases).
         // NOTE: No silentScale here - renderer handles global silence gating.
-        drive = clamp01(ctx.audio.rms() * 0.35f + ctx.audio.fastFlux() * 1.25f + ctx.audio.beatStrength() * 0.25f);
+        drive = clamp01(ctx.audio.rms() * 0.35f
+                      + ctx.audio.onset.transient.level01 * 1.25f
+                      + ctx.audio.beatStrength() * 0.25f);
     }
 
     // intensity=0..100 -> injection gain 0.35..1.0 (keeps visible even at low intensity)

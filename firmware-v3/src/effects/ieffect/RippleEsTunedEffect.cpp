@@ -4,6 +4,7 @@
  */
 
 #include "RippleEsTunedEffect.h"
+#include "AudioReactivePolicy.h"
 #include "ChromaUtils.h"
 
 #include "../../config/features.h"
@@ -31,6 +32,7 @@ bool RippleEsTunedEffect::init(plugins::EffectContext& ctx) {
         m_ripples[i] = {};
     }
     m_lastHopSeq = 0;
+    m_lastTriggerMs = 0;
     m_spawnCooldown = 0;
 #ifndef NATIVE_BUILD
     if (!m_ps) {
@@ -100,7 +102,7 @@ void RippleEsTunedEffect::render(plugins::EffectContext& ctx) {
             float treble = (ctx.audio.getBand(5) + ctx.audio.getBand(6) + ctx.audio.getBand(7)) * (1.0f / 3.0f);  // Migrated from bins64Adaptive[48..63]
             m_treble = (m_treble * 0.80f) + (treble * 0.20f);
 
-            float flux = ctx.audio.fastFlux();
+            float flux = ctx.audio.onset.transient.level01;
             if (flux < 0.0f) flux = 0.0f;
             if (flux > 1.0f) flux = 1.0f;
             // Transient envelope: instant-ish attack, fast-ish decay.
@@ -147,8 +149,14 @@ void RippleEsTunedEffect::render(plugins::EffectContext& ctx) {
     // - Kick + snare can force spawns.
     // - Flux can add extra micro-spawns on sharp transients.
     if (hasAudio && m_spawnCooldown == 0) {
-        const float beatStrength = tempoOk ? ctx.audio.beatStrength() : 0.0f;
-        const bool beatTick = tempoOk && ctx.audio.isOnBeat();
+        const auto beatPulse = AudioReactivePolicy::audioTrigger(
+            ctx,
+            AudioReactivePolicy::TriggerMode::HybridTempoKick,
+            128.0f,
+            m_lastTriggerMs
+        );
+        const float beatStrength = tempoOk ? ctx.audio.beatStrength() : beatPulse.level01;
+        const bool beatTick = beatPulse.fired;
 
         // Base intensity driven by sub-bass + flux. Beat strength boosts when tempo locked.
         // Scene beat pulse lifts the floor during translator-detected beats.
@@ -161,7 +169,7 @@ void RippleEsTunedEffect::render(plugins::EffectContext& ctx) {
         uint8_t intensity = static_cast<uint8_t>(intensity01 * 255.0f);
 
         // Kick detection: lower threshold than legacy Ripple, tuned for ES adaptive bins.
-        const bool kick = (m_subBass > 0.35f);
+        const bool kick = ctx.audio.isKickHit();
         const bool snare = ctx.audio.isSnareHit();
 
         // Beat spawns: predictable pulse when locked.
@@ -182,7 +190,7 @@ void RippleEsTunedEffect::render(plugins::EffectContext& ctx) {
             uint8_t hue = static_cast<uint8_t>(m_baseHue + 64);
             spawnRipple(hue, 230, spd);
             m_spawnCooldown = 1;
-        } else if (m_fluxEnv > 0.55f && (!tempoOk || !beatTick)) {
+        } else if (ctx.audio.onset.transient.level01 > 0.55f && (!tempoOk || !beatTick)) {
             // Flux accent spawns (only when not already beat-spawning) to avoid overload.
             float spd = speedScale * (0.75f + (0.35f * m_fluxEnv));
             spawnRipple(static_cast<uint8_t>(m_baseHue + ctx.gHue), (uint8_t)(180 + (m_fluxEnv * 60.0f)), spd);
@@ -191,7 +199,7 @@ void RippleEsTunedEffect::render(plugins::EffectContext& ctx) {
     }
 
     // Update and render ripples into radial history buffer.
-    const float beatStrengthNow = (tempoOk ? ctx.audio.beatStrength() : 0.0f);
+    const float beatStrengthNow = tempoOk ? ctx.audio.beatStrength() : ctx.audio.onset.kick.level01;
     const float thickness = 2.0f + (4.0f * m_treble);  // treble = thicker, brighter edge
 
     for (uint8_t r = 0; r < MAX_RIPPLES; r++) {
@@ -266,4 +274,3 @@ const plugins::EffectMetadata& RippleEsTunedEffect::getMetadata() const {
 }
 
 } // namespace lightwaveos::effects::ieffect
-

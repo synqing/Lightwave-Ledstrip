@@ -135,13 +135,15 @@ def _has_v2_metadata(metadata: list) -> bool:
 
 def capture_with_metadata(port: str, duration: float, fps: int = 15,
                           tap: str = 'b', stop_event: threading.Event = None,
-                          fmt: str = 'v2'):
+                          fmt: str = 'v2', on_stream_started=None):
     """Capture frames + full v2+ metadata via serial streaming.
 
     Returns (frames, timestamps, metadata_list) or None.
     frames: (N, 320, 3) uint8, timestamps: (N,) float64, metadata: list[dict]
 
     fmt: 'v1', 'v2' (default), 'meta' (v3, no RGB), 'slim' (v4, half-res RGB)
+    on_stream_started: optional callback invoked immediately after the
+        capture stream command is sent to firmware.
     """
     try:
         import serial
@@ -172,6 +174,11 @@ def capture_with_metadata(port: str, duration: float, fps: int = 15,
         ser.reset_input_buffer()
 
     ser.write(f'capture stream {tap_letter} {fps}\n'.encode())
+    if on_stream_started is not None:
+        try:
+            on_stream_started()
+        except Exception as e:
+            print(f"[Capture] Stream-start callback failed: {e}", file=sys.stderr)
     # No sleep — start reading immediately. The frame parser scans for
     # magic byte 0xFD so any text ack is harmlessly skipped. A 300ms nap
     # here caused TX buffer saturation at 30+ FPS (firmware fills ~9KB
@@ -461,6 +468,12 @@ def analyze_correlation(frames: np.ndarray, timestamps: np.ndarray,
     heap = np.array([m.get('heap_free', 0) for m in metadata], dtype=np.float64)
     onset = np.array([m.get('onset', False) for m in metadata], dtype=bool)
     flux = np.array([m.get('flux', 0.0) for m in metadata], dtype=np.float64)
+    onset_env = np.array([m.get('onset_env', 0.0) for m in metadata], dtype=np.float64)
+    onset_event = np.array([m.get('onset_event', 0.0) for m in metadata], dtype=np.float64)
+    kick = np.array([m.get('kick_trigger', False) for m in metadata], dtype=bool)
+    snare = np.array([m.get('snare_trigger', False) for m in metadata], dtype=bool)
+    hihat = np.array([m.get('hihat_trigger', False) for m in metadata], dtype=bool)
+    onset_process = np.array([m.get('onset_process_us', 0) for m in metadata], dtype=np.float64)
     fw_bpm = np.array([m.get('bpm', 0.0) for m in metadata], dtype=np.float64)
     fw_conf = np.array([m.get('beat_confidence', 0.0) for m in metadata], dtype=np.float64)
 
@@ -475,7 +488,27 @@ def analyze_correlation(frames: np.ndarray, timestamps: np.ndarray,
     # --- Beat statistics ---
     n_beats = int(beats.sum())
     n_onsets = int(onset.sum())
+    n_kicks = int(kick.sum())
+    n_snares = int(snare.sum())
+    n_hihats = int(hihat.sum())
     beat_hz = n_beats / max(0.1, duration)
+    onset_hz = n_onsets / max(0.1, duration)
+    onset_active_frac = float((onset_env > 0.0).mean()) if len(onset_env) > 0 else 0.0
+    onset_env_positive = onset_env[onset_env > 0.0]
+    onset_env_mean = float(onset_env.mean()) if len(onset_env) > 0 else 0.0
+    onset_env_positive_mean = (
+        float(onset_env_positive.mean()) if len(onset_env_positive) > 0 else 0.0
+    )
+    onset_env_max = float(onset_env.max()) if len(onset_env) > 0 else 0.0
+    onset_event_mean = float(onset_event.mean()) if len(onset_event) > 0 else 0.0
+    onset_event_max = float(onset_event.max()) if len(onset_event) > 0 else 0.0
+    onset_idxs = np.where(onset)[0]
+    if len(onset_idxs) >= 3:
+        onset_seconds = onset_idxs / max(1e-6, actual_fps)
+        onset_intervals = np.diff(onset_seconds)
+        onset_interval_cv = float(np.std(onset_intervals) / max(1e-6, np.mean(onset_intervals)))
+    else:
+        onset_interval_cv = 0.0
     # Prefer firmware-reported BPM (always accurate) over counting subsampled
     # beat ticks. At 15 FPS capture / 120 FPS render, ~87% of single-frame
     # beat pulses are missed, making tick-counted BPM wildly inaccurate.
@@ -652,12 +685,23 @@ def analyze_correlation(frames: np.ndarray, timestamps: np.ndarray,
         # Beat stats
         'n_beats': n_beats,
         'n_onsets': n_onsets,
+        'n_kicks': n_kicks,
+        'n_snares': n_snares,
+        'n_hihats': n_hihats,
         'beat_hz': beat_hz,
+        'onset_hz': onset_hz,
         'bpm': bpm,
         'bpm_source': bpm_source,
         'fw_beat_confidence': fw_conf_mean,
         'tempo_stability': tempo_stability,
         'beat_warning': beat_warning,
+        'onset_active_frac': onset_active_frac,
+        'onset_env_mean': onset_env_mean,
+        'onset_env_positive_mean': onset_env_positive_mean,
+        'onset_env_max': onset_env_max,
+        'onset_event_mean': onset_event_mean,
+        'onset_event_max': onset_event_max,
+        'onset_interval_cv': onset_interval_cv,
         # Correlation
         'rms_brightness_corr': rms_corr,
         'bass_brightness_corr': bass_corr,
@@ -691,12 +735,22 @@ def analyze_correlation(frames: np.ndarray, timestamps: np.ndarray,
         'heap_trend': heap_trend,
         'show_skips_total': show_skips_total,
         'subsampling_ratio': subsampling_ratio,
+        'onset_process_median_us': (
+            float(np.median(onset_process[onset_process > 0]))
+            if np.any(onset_process > 0) else 0.0
+        ),
+        'onset_process_p99_us': (
+            float(np.percentile(onset_process[onset_process > 0], 99))
+            if np.any(onset_process > 0) else 0.0
+        ),
         # Private time-series for dashboard (not printed in text report)
         '_brightness': brightness,
         '_spatial_spread': spatial_spread,
         '_rms': rms,
         '_beats': beats,
         '_onset': onset,
+        '_onset_env': onset_env,
+        '_onset_event': onset_event,
         '_bands': bands,
         '_flux': flux,
         '_show_times': show_times,
@@ -768,7 +822,14 @@ def format_report(m: dict) -> str:
         lines.append(f"            Beat detection may be always-on or threshold too low.")
     elif m.get('beat_warning') == 'absent' and bpm_src != 'firmware':
         lines.append(f"  WARNING:  No beats detected. Audio input silent or detector offline?")
-    lines.append(f"  Onsets:   {m.get('n_onsets', 0)} (snare/hihat)")
+    lines.append(f"  Onsets:   {m.get('n_onsets', 0)} captured "
+                 f"({_safe_fmt(m.get('onset_hz', 0), '.2f')} Hz)")
+    if m.get('n_onsets', 0) > 0 or m.get('onset_env_max', 0) > 0:
+        lines.append(f"  Onset env:{_safe_fmt(m.get('onset_active_frac', 0) * 100, '5.1f')}% active, "
+                     f"max {_safe_fmt(m.get('onset_env_max', 0), '.3f')}, "
+                     f"pos mean {_safe_fmt(m.get('onset_env_positive_mean', 0), '.3f')}")
+        lines.append(f"  Percussn: {m.get('n_kicks', 0)} kick / {m.get('n_snares', 0)} snare / "
+                     f"{m.get('n_hihats', 0)} hi-hat")
     tempo_stab = m.get('tempo_stability', 0)
     if isinstance(tempo_stab, (int, float)) and tempo_stab > 0:
         lines.append(f"  Tempo:    {_safe_fmt(tempo_stab * 100, '.0f')}% stable")
@@ -838,6 +899,10 @@ def format_report(m: dict) -> str:
     if isinstance(show_med, (int, float)) and show_med > 0:
         lines.append(f"  Show time:        median {show_med / 1000:.1f}ms, "
                      f"p99 {m.get('show_time_p99_us', 0) / 1000:.1f}ms")
+    onset_proc_p99 = m.get('onset_process_p99_us', 0)
+    if isinstance(onset_proc_p99, (int, float)) and onset_proc_p99 > 0:
+        lines.append(f"  Onset CPU:        median {m.get('onset_process_median_us', 0):.0f}us, "
+                     f"p99 {onset_proc_p99:.0f}us")
 
     heap_min = m.get('heap_min', 0)
     if isinstance(heap_min, (int, float)) and heap_min > 0:

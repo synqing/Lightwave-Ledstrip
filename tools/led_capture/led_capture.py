@@ -192,6 +192,13 @@ def parse_serial_frame(data: bytes) -> Optional[tuple]:
         metadata['bpm'] = bpm_raw / 100.0 if bpm_raw > 0 else 0.0
         conf_raw = struct.unpack_from('<H', t, 24)[0]
         metadata['beat_confidence'] = conf_raw / 65535.0
+        metadata['onset_env'] = struct.unpack_from('<H', t, 26)[0] / 65535.0
+        metadata['onset_event'] = struct.unpack_from('<H', t, 28)[0] / 65535.0
+        onset_bits = t[30]
+        metadata['kick_trigger'] = bool(onset_bits & 0x01)
+        metadata['snare_trigger'] = bool(onset_bits & 0x02)
+        metadata['hihat_trigger'] = bool(onset_bits & 0x04)
+        metadata['onset_process_us'] = int(t[31]) * 16
 
     return frame.copy(), metadata
 

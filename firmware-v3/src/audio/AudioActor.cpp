@@ -704,7 +704,15 @@ void AudioActor::onTick()
         const float snareEnergy = frame.bands[2] + frame.bands[3];
         const float hihatEnergy = frame.bands[5] + frame.bands[6] + frame.bands[7];
 
-        const bool rmsEligible = (rawHopRms > m_bandRatioCfg.brRmsGate);
+        // RMS gate with hold: once RMS exceeds threshold, gate stays open
+        // for brGateHold frames after RMS drops.  Bridges inter-beat gaps
+        // (e.g. 435ms at 138 BPM) without flickering.
+        if (rawHopRms > m_bandRatioCfg.brRmsGate) {
+            m_brGateHoldCounter = m_bandRatioCfg.brGateHold;
+        } else if (m_brGateHoldCounter > 0) {
+            --m_brGateHoldCounter;
+        }
+        const bool rmsEligible = (m_brGateHoldCounter > 0);
 
         bool kickFired  = false;
         bool snareFired = false;
@@ -734,6 +742,53 @@ void AudioActor::onTick()
         if (kickFired)  TRACE_INSTANT("BR_KICK");
         if (snareFired) TRACE_INSTANT("BR_SNARE");
         if (hihatFired) TRACE_INSTANT("BR_HIHAT");
+    }
+
+    // ========================================================================
+    // Audio confidence envelope (novelty-assisted)
+    //
+    // Separate from BR triggers — answers "is music actively present?"
+    // Uses raw RMS (physical presence) + spectral novelty (spectrum changing).
+    // Quiet changing music → high novelty → confidence stays high.
+    // Static fan noise at same RMS → zero novelty → confidence decays.
+    //
+    // Envelope: instant attack, configurable hold, exponential release.
+    // ========================================================================
+    {
+        // Compute spectral novelty: sum of absolute band deltas frame-to-frame.
+        // Uses post-AGC bands (fine here — we only care about change, not level).
+        float novelty = 0.0f;
+        for (uint8_t i = 0; i < CONTROLBUS_NUM_BANDS; ++i) {
+            const float delta = frame.bands[i] - m_prevBands[i];
+            novelty += std::fabs(delta);
+            m_prevBands[i] = frame.bands[i];
+        }
+        frame.spectralNovelty = novelty;
+
+        // Determine if music is present: raw RMS above floor AND spectrum is changing.
+        const bool rmsPresent = (rawHopRms > m_confidenceCfg.rmsFloor);
+        const bool noveltyPresent = (novelty > m_confidenceCfg.noveltyFloor);
+        const bool musicPresent = rmsPresent && noveltyPresent;
+
+        if (musicPresent) {
+            // Instant attack — confidence jumps to 1.0 immediately.
+            m_audioConfidence = 1.0f;
+            m_confidenceHoldCounter = m_confidenceCfg.holdFrames;
+        } else if (m_confidenceHoldCounter > 0) {
+            // Hold phase — confidence stays at current level.
+            --m_confidenceHoldCounter;
+        } else {
+            // Release phase — exponential decay toward 0.
+            m_audioConfidence *= (1.0f - m_confidenceCfg.releaseAlpha);
+            if (m_audioConfidence < 0.001f) {
+                m_audioConfidence = 0.0f;
+            }
+        }
+
+        frame.audioConfidence = m_audioConfidence;
+
+        TRACE_COUNTER("audio_confidence", static_cast<int32_t>(m_audioConfidence * 1000.0f));
+        TRACE_COUNTER("spectral_novelty", static_cast<int32_t>(novelty * 1000.0f));
     }
 
     // ========================================================================

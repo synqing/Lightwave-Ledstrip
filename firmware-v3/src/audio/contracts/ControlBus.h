@@ -201,6 +201,13 @@ struct ControlBusFrame {
     float silentScale = 1.0f;       ///< 0.0=silent, 1.0=active (multiply with brightness)
     bool isSilent = false;          ///< True when silence threshold exceeded duration
 
+    // Audio confidence envelope (novelty-assisted, separate from onset triggers).
+    // Answers "is music actively present?" with a smooth 0..1 signal.
+    // Unlike silentScale (10s hysteresis), this responds in ~200-500ms.
+    // Effects can use this for fade behaviour without touching BR triggers.
+    float audioConfidence = 1.0f;   ///< 0.0=silence, 1.0=music active
+    float spectralNovelty = 0.0f;   ///< Frame-to-frame band delta sum [0, inf)
+
     // -----------------------------------------------------------------------
     // Stage 2: Motion-Semantic Extension Fields
     // -----------------------------------------------------------------------

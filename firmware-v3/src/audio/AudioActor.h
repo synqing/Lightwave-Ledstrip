@@ -678,10 +678,12 @@ private:
         // This separates the two jobs: raw RMS answers "any acoustic energy?",
         // band-ratio answers "which percussion event?".
         // Measured from K1v2 traces (2026-03-25):
-        //   Silence raw RMS: p50=0.003  max=0.012
-        //   Music raw RMS:   p5=0.023   p50=0.035-0.046
-        //   Gate at 0.015 gives clean separation (above silence max, below music p5).
-        float    brRmsGate     = 0.015f;   ///< Raw hop RMS below this = not eligible
+        //   Silence raw RMS: p50=0.003  p95=0.006  max=0.009
+        //   Music @ 60-65 dB-A: p5=0.015  p50=0.066
+        //   Gate at 0.007: above silence p95 (0.006), below any music.
+        //   Hold at 62 frames (~500ms) bridges 138 BPM inter-beat gaps (435ms).
+        float    brRmsGate     = 0.007f;   ///< Raw hop RMS below this starts hold countdown
+        uint16_t brGateHold    = 62;       ///< Frames to hold gate open after RMS drops (~500ms @ 125 Hz)
 
         // Per-group absolute energy floors (secondary safety net).
         // These catch residual AGC-normalised noise that passes the RMS gate.
@@ -703,6 +705,7 @@ private:
     };
 
     BandRatioConfig m_bandRatioCfg;
+    uint16_t m_brGateHoldCounter = 0;  ///< Frames remaining in BR gate hold phase
     BandRatioChannel m_kickChannel;
     BandRatioChannel m_snareChannel;
     BandRatioChannel m_hihatChannel;
@@ -752,6 +755,27 @@ private:
         }
         return false;
     }
+
+    // ========================================================================
+    // Audio confidence envelope (novelty-assisted, separate from BR triggers)
+    //
+    // Answers "is music actively present?" using raw RMS + spectral novelty.
+    // Provides a smooth 0..1 signal for visual fade behaviour.
+    // Does NOT touch the BR trigger path — that remains frozen.
+    // ========================================================================
+
+    struct AudioConfidenceConfig {
+        float    rmsFloor       = 0.004f;  ///< Raw RMS below this → confidence can only decay
+        float    noveltyFloor   = 0.01f;   ///< Minimum novelty to count as "changing"
+        uint16_t holdFrames     = 37;      ///< ~300ms @ 125 Hz — hold confidence after signal drops
+        float    releaseAlpha   = 0.005f;  ///< Exponential release (~1.6s to near-zero @ 125 Hz)
+        float    attackAlpha    = 1.0f;    ///< Instant rise (1.0 = immediate)
+    };
+
+    AudioConfidenceConfig m_confidenceCfg;
+    float m_prevBands[CONTROLBUS_NUM_BANDS] = {};  ///< Previous frame bands for novelty delta
+    float m_audioConfidence = 0.0f;                ///< Current envelope value [0,1]
+    uint16_t m_confidenceHoldCounter = 0;          ///< Frames remaining in hold phase
 
     // ControlBus for Stage B derived features (chord, saliency, silence, liveliness)
     // ES path bypasses Stage A (input conditioning) but needs Stage B.

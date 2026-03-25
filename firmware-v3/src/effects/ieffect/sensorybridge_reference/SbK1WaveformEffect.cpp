@@ -177,8 +177,10 @@ void SbK1WaveformEffect::renderEffect(plugins::EffectContext& ctx) {
         }
     }
 
-    // FAILSAFE: invisible dot prevention (K1 parity)
-    if (totalMag < 0.01f && ctx.audio.rms() > 0.02f) {
+    // FAILSAFE: invisible dot prevention (gated by silentScale to prevent
+    // firing on AGC-amplified microphone noise during true silence)
+    if (totalMag < 0.01f && ctx.audio.rms() > 0.02f
+        && ctx.audio.controlBus.silentScale > 0.5f) {
         float fbPos = m_chromaHue + m_huePosition;
         dotColor = paletteColorF(ctx.palette, fbPos, ctx.audio.rms());
         totalMag = ctx.audio.rms();
@@ -198,6 +200,17 @@ void SbK1WaveformEffect::renderEffect(plugins::EffectContext& ctx) {
     dotColor *= photons;
     dotColor.clip();
 
+    // Audio energy gate: scale dot brightness proportionally to actual RMS.
+    const float rmsNow = ctx.audio.rms();
+    const float rmsScale = clampF(rmsNow * 3.0f, 0.0f, 1.0f);
+    dotColor *= rmsScale;
+
+    // ControlBus silence gate as final safety net
+    const float silScale = ctx.audio.controlBus.silentScale;
+
+    // Silence gate: scale dot brightness by silentScale.
+    dotColor *= silScale;
+
     // --- DYNAMIC TRAIL FADE (dt-corrected) ---
     // Rate-independent exponential decay. The decay rate scales with
     // waveform amplitude: louder audio = faster fade (shorter trails).
@@ -208,6 +221,12 @@ void SbK1WaveformEffect::renderEffect(plugins::EffectContext& ctx) {
     static constexpr float kMinDecayRate = 0.8f;   // per-second (silence floor, ~3.5s full decay)
     static constexpr float kDecayScale   = 3.5f;   // additional rate per unit amplitude
     float decayRate = kMinDecayRate + kDecayScale * absAmp;
+
+    // Accelerate trail fade when audio is quiet or silent
+    float quietFactor = fminf(rmsScale, silScale);
+    if (quietFactor < 0.9f) {
+        decayRate += 10.0f * (1.0f - quietFactor);
+    }
     float fade = expf(-decayRate * m_dt);
 
     for (uint16_t i = 0; i < kStripLength; ++i) {

@@ -184,8 +184,10 @@ void SbK1WaveformHybridEffect::renderEffect(plugins::EffectContext& ctx) {
         }
     }
 
-    // FAILSAFE: invisible dot prevention
-    if (totalMag < 0.01f && ctx.audio.rms() > 0.02f) {
+    // FAILSAFE: invisible dot prevention (gated by silentScale to prevent
+    // firing on AGC-amplified microphone noise during true silence)
+    if (totalMag < 0.01f && ctx.audio.rms() > 0.02f
+        && ctx.audio.controlBus.silentScale > 0.5f) {
         float fbPos = m_chromaHue + m_huePosition;
         dotColor = paletteColorF(ctx.palette, fbPos, ctx.audio.rms());
         totalMag = ctx.audio.rms();
@@ -212,6 +214,18 @@ void SbK1WaveformHybridEffect::renderEffect(plugins::EffectContext& ctx) {
     m_dotColorSmooth.b += (dotColor.b - m_dotColorSmooth.b) * aColor;
     dotColor = m_dotColorSmooth;
 
+    // Audio energy gate: scale dot brightness proportionally to actual RMS.
+    // Chroma AGC normalises bins to 0..1 regardless of volume, so without
+    // this the dot holds full colour even during near-silence. RMS scaling
+    // ensures the dot is invisible when quiet, dim when soft, full when loud.
+    const float rmsNow = ctx.audio.rms();
+    const float rmsScale = clampF(rmsNow * 3.0f, 0.0f, 1.0f);
+    dotColor *= rmsScale;
+
+    // ControlBus silence gate as final safety net for true silence
+    const float silScale = ctx.audio.controlBus.silentScale;
+    dotColor *= silScale;
+
     // =====================================================================
     // DYNAMIC TRAIL FADE (dt-corrected) — identical to K1 Waveform
     // =====================================================================
@@ -220,6 +234,14 @@ void SbK1WaveformHybridEffect::renderEffect(plugins::EffectContext& ctx) {
     static constexpr float kMinDecayRate = 0.8f;
     static constexpr float kDecayScale   = 3.5f;
     float decayRate = kMinDecayRate + kDecayScale * absAmp;
+
+    // Accelerate trail fade when audio is quiet or silent.
+    // rmsScale < 1.0 means quiet audio; silScale < 1.0 means silence gate active.
+    // Without this, the trail takes ~6s to fade at kMinDecayRate.
+    float quietFactor = fminf(rmsScale, silScale);  // whichever is more suppressed
+    if (quietFactor < 0.9f) {
+        decayRate += 10.0f * (1.0f - quietFactor);  // up to 10.8/s when silent
+    }
     float fade = expf(-decayRate * m_dt);
 
     for (uint16_t i = 0; i < kStripLength; ++i) {

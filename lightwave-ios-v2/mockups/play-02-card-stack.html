@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Play Tab — Mockup 2: Scrollable Card Stack</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@400;500;600&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================
+   DESIGN TOKENS
+   ============================================ */
+:root {
+  --lw-base: #0F1219;
+  --lw-card: #1E2535;
+  --lw-elevated: #252D3F;
+  --lw-gold: #FFB84D;
+  --lw-cyan: #00D4FF;
+  --lw-success: #4DFFB8;
+  --lw-error: #FF4D4D;
+  --lw-text-primary: #E6E9EF;
+  --lw-text-secondary: #9CA3B0;
+  --lw-text-tertiary: #6B7280;
+
+  --font-bebas: 'Bebas Neue', Impact, sans-serif;
+  --font-rajdhani: 'Rajdhani', system-ui, sans-serif;
+  --font-jetbrains: 'JetBrains Mono', monospace;
+
+  --space-xs: 4px; --space-sm: 8px; --space-md: 12px; --space-lg: 24px;
+  --radius-hero: 24px; --radius-card: 16px; --radius-nested: 12px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0A0A0C;
+  color: var(--lw-text-primary);
+  font-family: var(--font-rajdhani);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 24px 60px;
+}
+
+/* ============================================
+   PAGE ANNOTATION
+   ============================================ */
+.mockup-annotation {
+  text-align: center;
+  margin-bottom: 28px;
+  max-width: 420px;
+}
+.mockup-number {
+  font: 700 11px/1 var(--font-bebas);
+  color: var(--lw-cyan);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.mockup-title {
+  font: 700 28px/1 var(--font-bebas);
+  color: var(--lw-text-primary);
+  letter-spacing: 2px;
+  margin-bottom: 10px;
+}
+.mockup-desc {
+  font: 500 13px/1.6 var(--font-rajdhani);
+  color: var(--lw-text-secondary);
+}
+.mockup-callouts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  margin-top: 12px;
+}
+.callout-tag {
+  padding: 3px 10px;
+  background: rgba(0,212,255,0.08);
+  border: 1px solid rgba(0,212,255,0.2);
+  border-radius: 20px;
+  font: 600 11px/1 var(--font-rajdhani);
+  color: var(--lw-cyan);
+  letter-spacing: 0.5px;
+}
+
+/* ============================================
+   PHONE FRAME
+   ============================================ */
+.phone-frame {
+  width: 393px;
+  height: 852px;
+  background: var(--lw-base);
+  border-radius: 44px;
+  border: 3px solid #2a2a2a;
+  overflow: hidden;
+  position: relative;
+  box-shadow:
+    0 0 0 1px #111,
+    0 40px 80px rgba(0,0,0,0.8),
+    0 0 100px rgba(0,212,255,0.04);
+  flex-shrink: 0;
+}
+.ios-notch {
+  position: absolute;
+  top: 0; left: 50%; transform: translateX(-50%);
+  width: 126px; height: 34px;
+  background: #000;
+  border-radius: 0 0 20px 20px;
+  z-index: 100;
+}
+.ios-notch::before {
+  content: '';
+  position: absolute;
+  top: 10px; left: 50%; transform: translateX(-50%);
+  width: 12px; height: 12px;
+  background: #1a1a1a;
+  border-radius: 50%;
+}
+.ios-status-bar {
+  height: 54px;
+  padding: 14px 28px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+  z-index: 10;
+}
+.status-time { font: 700 15px/1 system-ui; color: white; }
+.status-icons { display: flex; align-items: center; gap: 5px; font-size: 13px; color: white; }
+.home-indicator {
+  position: absolute;
+  bottom: 8px; left: 50%; transform: translateX(-50%);
+  width: 134px; height: 5px;
+  background: rgba(255,255,255,0.35);
+  border-radius: 3px;
+  z-index: 100;
+}
+
+/* ============================================
+   APP LAYOUT
+   ============================================ */
+.app-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: calc(852px - 54px);
+}
+.nav-bar {
+  padding: 6px 20px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.nav-brand { font: 700 20px/1 var(--font-bebas); color: var(--lw-text-primary); letter-spacing: 3px; }
+.nav-right { display: flex; align-items: center; gap: 10px; }
+.nav-connect-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--lw-success);
+  box-shadow: 0 0 8px var(--lw-success);
+}
+.nav-connect-label { font: 600 11px/1 var(--font-rajdhani); color: var(--lw-text-secondary); }
+.nav-settings-btn {
+  width: 32px; height: 32px; background: var(--lw-card); border-radius: 8px;
+  display: flex; align-items: center; justify-content: center; font-size: 14px;
+}
+
+/* Scroll area */
+.scroll-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 16px 16px;
+  scrollbar-width: none;
+}
+.scroll-area::-webkit-scrollbar { display: none; }
+
+/* ============================================
+   HERO LED PREVIEW — 140px with BPM ring
+   ============================================ */
+.hero-led {
+  height: 140px;
+  border-radius: var(--radius-hero);
+  overflow: hidden;
+  position: relative;
+  margin-bottom: var(--space-md);
+  box-shadow:
+    0 0 40px rgba(0,212,255,0.1),
+    0 0 40px rgba(255,184,77,0.06),
+    inset 0 0 0 1px rgba(255,255,255,0.05);
+}
+.hero-canvas { width: 100%; height: 100%; display: block; }
+.hero-centre-mark {
+  position: absolute; top: 0; bottom: 0;
+  left: calc(79.5 / 320 * 100%);
+  width: 1px; background: rgba(255,184,77,0.4);
+}
+
+/* BPM ring overlay */
+.bpm-ring-wrap {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 88px; height: 88px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+}
+.bpm-ring-wrap svg {
+  position: absolute; top: 0; left: 0;
+  width: 88px; height: 88px;
+  filter: drop-shadow(0 0 8px rgba(255,184,77,0.4));
+}
+.bpm-number {
+  font: 700 36px/1 var(--font-bebas);
+  color: var(--lw-gold);
+  text-shadow: 0 2px 8px rgba(0,0,0,0.9);
+  z-index: 1;
+  letter-spacing: 2px;
+}
+.bpm-unit {
+  font: 600 9px/1 var(--font-rajdhani);
+  color: var(--lw-text-secondary);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+  z-index: 1;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-top: 2px;
+}
+.bpm-confidence {
+  position: absolute;
+  bottom: 8px; right: 14px;
+  font: 600 9px/1 var(--font-jetbrains);
+  color: rgba(255,184,77,0.6);
+}
+.swipe-arrows {
+  position: absolute;
+  top: 50%; left: 0; right: 0;
+  transform: translateY(-50%);
+  display: flex;
+  justify-content: space-between;
+  padding: 0 10px;
+  pointer-events: none;
+}
+.swipe-arrow {
+  font: 700 18px/1 var(--font-rajdhani);
+  color: rgba(255,255,255,0.15);
+}
+
+/* ============================================
+   GLASSMORPHISM CARDS — refined hierarchy
+   ============================================ */
+.glass-card {
+  background: rgba(30, 37, 53, 0.92);
+  border-radius: var(--radius-card);
+  padding: 16px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(255,255,255,0.06);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+  backdrop-filter: blur(8px);
+}
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.card-title {
+  font: 700 11px/1 var(--font-bebas);
+  color: var(--lw-text-tertiary);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+.card-badge {
+  padding: 2px 8px;
+  background: rgba(0,212,255,0.1);
+  border: 1px solid rgba(0,212,255,0.2);
+  border-radius: 20px;
+  font: 600 9px/1 var(--font-jetbrains);
+  color: var(--lw-cyan);
+  letter-spacing: 0.5px;
+}
+
+/* Effect row */
+.effect-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.nav-btn {
+  width: 40px; height: 40px;
+  background: var(--lw-elevated);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font: 600 18px/1 var(--font-rajdhani);
+  color: var(--lw-gold);
+  cursor: pointer;
+  border: 1px solid rgba(255,184,77,0.12);
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.nav-btn:hover { background: rgba(255,184,77,0.1); }
+.effect-center { flex: 1; min-width: 0; }
+.effect-name-main {
+  font: 600 17px/1.2 var(--font-rajdhani);
+  color: var(--lw-text-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.effect-meta {
+  font: 500 10px/1 var(--font-rajdhani);
+  color: var(--lw-text-tertiary);
+  margin-top: 4px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.effect-browse-btn {
+  padding: 6px 12px;
+  background: rgba(255,184,77,0.1);
+  border: 1px solid rgba(255,184,77,0.25);
+  border-radius: 8px;
+  font: 600 11px/1 var(--font-rajdhani);
+  color: var(--lw-gold);
+  cursor: pointer;
+  flex-shrink: 0;
+  letter-spacing: 0.5px;
+}
+
+/* Palette row */
+.palette-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.palette-gradient-large {
+  flex: 1;
+  height: 28px;
+  border-radius: 8px;
+}
+.palette-name-below {
+  font: 500 10px/1 var(--font-rajdhani);
+  color: var(--lw-text-secondary);
+  margin-top: 6px;
+  letter-spacing: 0.5px;
+}
+
+/* ============================================
+   PRIMARY CONTROLS CARD — Brightness + Speed
+   ============================================ */
+.slider-row {
+  margin-bottom: 14px;
+}
+.slider-row:last-child { margin-bottom: 0; }
+.slider-row-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+.slider-label {
+  font: 700 11px/1 var(--font-bebas);
+  color: var(--lw-text-secondary);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+.slider-value {
+  font: 600 14px/1 var(--font-jetbrains);
+}
+.slider-value.gold { color: var(--lw-gold); }
+.slider-value.cyan { color: var(--lw-cyan); }
+
+input[type=range].lw-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+input[type=range].lw-slider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+}
+input[type=range].lw-slider.gold-track::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, var(--lw-gold) var(--val, 78%), rgba(255,184,77,0.12) var(--val, 78%));
+}
+input[type=range].lw-slider.cyan-track::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, var(--lw-cyan) var(--val, 55%), rgba(0,212,255,0.12) var(--val, 55%));
+}
+input[type=range].lw-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  margin-top: -8px;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  border: 2px solid rgba(255,255,255,0.2);
+}
+input[type=range].lw-slider.gold-track::-webkit-slider-thumb {
+  background: var(--lw-gold);
+  box-shadow: 0 2px 12px rgba(255,184,77,0.5);
+}
+input[type=range].lw-slider.cyan-track::-webkit-slider-thumb {
+  background: var(--lw-cyan);
+  box-shadow: 0 2px 12px rgba(0,212,255,0.5);
+}
+
+/* ============================================
+   EDGEMIXER CARD
+   ============================================ */
+.edgemixer-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.edgemixer-pill {
+  padding: 8px 12px;
+  background: var(--lw-elevated);
+  border-radius: 10px;
+  font: 600 11px/1 var(--font-rajdhani);
+  color: var(--lw-text-secondary);
+  cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.04);
+  letter-spacing: 0.3px;
+  transition: all 0.15s;
+}
+.edgemixer-pill.active {
+  background: rgba(0,212,255,0.12);
+  border-color: rgba(0,212,255,0.3);
+  color: var(--lw-cyan);
+}
+
+/* ============================================
+   EXPRESSION PARAMS CARD — collapsible
+   ============================================ */
+.collapsible-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+}
+.collapsible-chevron {
+  font: 500 16px/1 system-ui;
+  color: var(--lw-text-tertiary);
+  transition: transform 0.2s;
+}
+.collapsible-chevron.open { transform: rotate(180deg); }
+.collapsible-body {
+  overflow: hidden;
+  transition: max-height 0.25s ease;
+}
+.collapsible-body.collapsed { max-height: 0; }
+.collapsible-body.expanded { max-height: 400px; }
+
+.param-group {
+  margin-top: 14px;
+}
+.param-group-title {
+  font: 700 10px/1 var(--font-bebas);
+  color: var(--lw-text-tertiary);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+  padding-left: 2px;
+  border-left: 2px solid rgba(255,255,255,0.1);
+  padding-left: 8px;
+}
+.param-group-title.colour-group { border-color: rgba(255,184,77,0.4); }
+.param-group-title.motion-group { border-color: rgba(0,212,255,0.4); }
+
+.param-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.param-label {
+  font: 600 10px/1 var(--font-rajdhani);
+  color: var(--lw-text-secondary);
+  letter-spacing: 0.3px;
+  width: 68px;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  font-size: 9px;
+}
+.param-slider-wrap { flex: 1; }
+input[type=range].param-slider {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  background: rgba(255,255,255,0.08);
+}
+input[type=range].param-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--lw-elevated);
+  border: 2px solid rgba(255,255,255,0.25);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+.param-value {
+  font: 600 10px/1 var(--font-jetbrains);
+  color: var(--lw-text-tertiary);
+  width: 28px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* ============================================
+   TAB BAR
+   ============================================ */
+.tab-bar {
+  height: 83px;
+  background: rgba(20, 26, 40, 0.97);
+  border-top: 1px solid rgba(255,255,255,0.07);
+  display: flex;
+  align-items: flex-start;
+  padding-top: 12px;
+  flex-shrink: 0;
+}
+.tab-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.tab-icon { font-size: 22px; line-height: 1; }
+.tab-label {
+  font: 600 10px/1 var(--font-rajdhani);
+  color: var(--lw-text-tertiary);
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+.tab-item.active .tab-label { color: var(--lw-gold); }
+.tab-active-dot {
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: var(--lw-gold);
+  margin-top: 2px;
+}
+
+/* Scroll fade hint at bottom */
+.scroll-fade {
+  position: sticky;
+  bottom: 0; left: 0; right: 0;
+  height: 32px;
+  background: linear-gradient(to top, var(--lw-base), transparent);
+  pointer-events: none;
+  margin: -32px -16px 0;
+}
+</style>
+</head>
+<body>
+
+<!-- Annotation -->
+<div class="mockup-annotation">
+  <div class="mockup-number">Mockup 02 / 04</div>
+  <div class="mockup-title">Scrollable Card Stack</div>
+  <div class="mockup-desc">
+    Evolutionary refinement of the current approach. 140px LED preview with BPM ring at top.
+    Glassmorphism cards with improved hierarchy — larger touch targets, better spacing,
+    collapsible expression params. Bottom tab bar always visible.
+  </div>
+  <div class="mockup-callouts">
+    <span class="callout-tag">140px Preview</span>
+    <span class="callout-tag">BPM Ring</span>
+    <span class="callout-tag">Glassmorphism</span>
+    <span class="callout-tag">Collapsible Params</span>
+    <span class="callout-tag">Familiar Layout</span>
+  </div>
+</div>
+
+<!-- Phone Frame -->
+<div class="phone-frame">
+  <div class="ios-notch"></div>
+
+  <div class="ios-status-bar">
+    <span class="status-time">9:41</span>
+    <div class="status-icons">
+      <span>●●●</span>
+      <span>WiFi</span>
+      <span>⬛</span>
+    </div>
+  </div>
+
+  <div class="app-wrapper">
+
+    <!-- Nav -->
+    <div class="nav-bar">
+      <span class="nav-brand">LightwaveOS</span>
+      <div class="nav-right">
+        <div class="nav-connect-dot"></div>
+        <span class="nav-connect-label">K1 Connected</span>
+        <div class="nav-settings-btn">⚙</div>
+      </div>
+    </div>
+
+    <!-- Scrollable content -->
+    <div class="scroll-area" id="scrollArea">
+
+      <!-- HERO LED PREVIEW 140px -->
+      <div class="hero-led">
+        <canvas class="hero-canvas" id="ledCanvas2" width="361" height="140"></canvas>
+        <div class="hero-centre-mark"></div>
+
+        <!-- BPM Ring -->
+        <div class="bpm-ring-wrap">
+          <svg viewBox="0 0 88 88" fill="none">
+            <!-- Track -->
+            <circle cx="44" cy="44" r="38" stroke="rgba(255,184,77,0.12)" stroke-width="4"/>
+            <!-- Progress arc — 82% confidence -->
+            <circle cx="44" cy="44" r="38" stroke="#FFB84D" stroke-width="3"
+              stroke-dasharray="195 238.76" stroke-dashoffset="60"
+              stroke-linecap="round"/>
+            <!-- Beat tick marks -->
+            <circle cx="44" cy="8" r="2.5" fill="rgba(255,184,77,0.5)"/>
+            <circle cx="44" cy="80" r="2.5" fill="rgba(255,184,77,0.3)"/>
+          </svg>
+          <div class="bpm-number">128</div>
+          <div class="bpm-unit">BPM</div>
+        </div>
+
+        <div class="bpm-confidence">82%</div>
+        <div class="swipe-arrows">
+          <span class="swipe-arrow">‹</span>
+          <span class="swipe-arrow">›</span>
+        </div>
+      </div>
+
+      <!-- EFFECT CARD -->
+      <div class="glass-card">
+        <div class="card-header">
+          <span class="card-title">Effect</span>
+          <span class="card-badge">AUDIO-REACTIVE</span>
+        </div>
+        <div class="effect-row">
+          <div class="nav-btn">‹</div>
+          <div class="effect-center">
+            <div class="effect-name-main">Pulse Waves</div>
+            <div class="effect-meta">Centre-origin · 14/148 effects</div>
+          </div>
+          <div class="effect-browse-btn">Browse</div>
+          <div class="nav-btn">›</div>
+        </div>
+      </div>
+
+      <!-- PALETTE CARD -->
+      <div class="glass-card">
+        <div class="card-header">
+          <span class="card-title">Palette</span>
+          <span class="card-badge">SOLAR FLARE</span>
+        </div>
+        <div class="palette-row">
+          <div class="nav-btn">‹</div>
+          <div style="flex:1">
+            <div class="palette-gradient-large"
+              style="background: linear-gradient(to right, #1a0533, #FF4D4D, #FF6B35, #FFB84D, #FFE066, #4DFFB8, #00D4FF, #8B5CF6)">
+            </div>
+            <div class="palette-name-below">Solar Flare · 8 stops · 5 of 24</div>
+          </div>
+          <div class="nav-btn">›</div>
+        </div>
+      </div>
+
+      <!-- PRIMARY CONTROLS — Brightness + Speed -->
+      <div class="glass-card">
+        <div class="card-header">
+          <span class="card-title">Primary Controls</span>
+        </div>
+        <div class="slider-row">
+          <div class="slider-row-header">
+            <span class="slider-label">Brightness</span>
+            <span class="slider-value gold" id="brightVal">78%</span>
+          </div>
+          <input type="range" class="lw-slider gold-track" min="0" max="100" value="78"
+            oninput="document.getElementById('brightVal').textContent=this.value+'%'; this.style.setProperty('--val', this.value+'%')">
+        </div>
+        <div class="slider-row">
+          <div class="slider-row-header">
+            <span class="slider-label">Speed</span>
+            <span class="slider-value cyan" id="speedVal">55%</span>
+          </div>
+          <input type="range" class="lw-slider cyan-track" min="0" max="100" value="55"
+            oninput="document.getElementById('speedVal').textContent=this.value+'%'; this.style.setProperty('--val', this.value+'%')">
+        </div>
+      </div>
+
+      <!-- EDGEMIXER CARD -->
+      <div class="glass-card">
+        <div class="card-header">
+          <span class="card-title">EdgeMixer</span>
+          <span class="card-badge" id="mixerBadge">COMPLEMENTARY</span>
+        </div>
+        <div class="edgemixer-wrap">
+          <div class="edgemixer-pill">Solo</div>
+          <div class="edgemixer-pill active">Complementary</div>
+          <div class="edgemixer-pill">Analogous</div>
+          <div class="edgemixer-pill">Split Comp</div>
+          <div class="edgemixer-pill">Triadic</div>
+          <div class="edgemixer-pill">Tetradic</div>
+          <div class="edgemixer-pill">Random</div>
+        </div>
+      </div>
+
+      <!-- EXPRESSION PARAMETERS — collapsible -->
+      <div class="glass-card">
+        <div class="collapsible-header" onclick="toggleExpr(this)">
+          <span class="card-title">Expression Parameters</span>
+          <span class="collapsible-chevron open" id="exprChevron">⌄</span>
+        </div>
+        <div class="collapsible-body expanded" id="exprBody">
+
+          <!-- Colour group -->
+          <div class="param-group">
+            <div class="param-group-title colour-group">Colour</div>
+            <div class="param-row">
+              <span class="param-label">Hue Shift</span>
+              <div class="param-slider-wrap">
+                <input type="range" class="param-slider" min="0" max="100" value="32"
+                  oninput="this.nextElementSibling.textContent=this.value">
+              </div>
+              <span class="param-value">32</span>
+            </div>
+            <div class="param-row">
+              <span class="param-label">Saturation</span>
+              <div class="param-slider-wrap">
+                <input type="range" class="param-slider" min="0" max="100" value="75"
+                  oninput="this.nextElementSibling.textContent=this.value">
+              </div>
+              <span class="param-value">75</span>
+            </div>
+            <div class="param-row">
+              <span class="param-label">Mood</span>
+              <div class="param-slider-wrap">
+                <input type="range" class="param-slider" min="0" max="100" value="60"
+                  oninput="this.nextElementSibling.textContent=this.value">
+              </div>
+              <span class="param-value">60</span>
+            </div>
+          </div>
+
+          <!-- Motion group -->
+          <div class="param-group">
+            <div class="param-group-title motion-group">Motion</div>
+            <div class="param-row">
+              <span class="param-label">Trails</span>
+              <div class="param-slider-wrap">
+                <input type="range" class="param-slider" min="0" max="100" value="45"
+                  oninput="this.nextElementSibling.textContent=this.value">
+              </div>
+              <span class="param-value">45</span>
+            </div>
+            <div class="param-row">
+              <span class="param-label">Intensity</span>
+              <div class="param-slider-wrap">
+                <input type="range" class="param-slider" min="0" max="100" value="68"
+                  oninput="this.nextElementSibling.textContent=this.value">
+              </div>
+              <span class="param-value">68</span>
+            </div>
+            <div class="param-row">
+              <span class="param-label">Complexity</span>
+              <div class="param-slider-wrap">
+                <input type="range" class="param-slider" min="0" max="100" value="52"
+                  oninput="this.nextElementSibling.textContent=this.value">
+              </div>
+              <span class="param-value">52</span>
+            </div>
+            <div class="param-row">
+              <span class="param-label">Variation</span>
+              <div class="param-slider-wrap">
+                <input type="range" class="param-slider" min="0" max="100" value="30"
+                  oninput="this.nextElementSibling.textContent=this.value">
+              </div>
+              <span class="param-value">30</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Spacer for scroll -->
+      <div style="height: 8px"></div>
+    </div><!-- /scroll-area -->
+
+    <!-- Tab Bar -->
+    <div class="tab-bar">
+      <div class="tab-item active">
+        <div class="tab-icon">▶</div>
+        <div class="tab-label">Play</div>
+        <div class="tab-active-dot"></div>
+      </div>
+      <div class="tab-item">
+        <div class="tab-icon">✦</div>
+        <div class="tab-label">Effects</div>
+      </div>
+      <div class="tab-item">
+        <div class="tab-icon">◎</div>
+        <div class="tab-label">Audio</div>
+      </div>
+      <div class="tab-item">
+        <div class="tab-icon">⚙</div>
+        <div class="tab-label">Settings</div>
+      </div>
+    </div>
+
+  </div><!-- /app-wrapper -->
+
+  <div class="home-indicator"></div>
+</div>
+
+<script>
+function drawLEDs2(canvasId) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+
+  ctx.fillStyle = '#080910';
+  ctx.fillRect(0, 0, w, h);
+
+  const numLEDs = 320;
+  const ledW = w / numLEDs;
+  const t = Date.now() * 0.0018;
+
+  for (let i = 0; i < numLEDs; i++) {
+    const pos = i / numLEDs;
+    const centrePos = (i - 159.5) / 159.5;
+    const dist = Math.abs(centrePos);
+
+    // Neural Mesh-style: interconnected pulsing nodes
+    const node1 = Math.sin(pos * 12 - t) * 0.5 + 0.5;
+    const node2 = Math.sin(pos * 7 + t * 1.3) * 0.5 + 0.5;
+    const node3 = Math.cos(pos * 18 - t * 0.8) * 0.5 + 0.5;
+
+    const brightness = (node1 * 0.5 + node2 * 0.3 + node3 * 0.2) * (0.3 + 0.7 * (1 - dist * 0.5));
+
+    const r = Math.floor(brightness * (0.2 + node1 * 0.8) * 255);
+    const g = Math.floor(brightness * (0.5 + node2 * 0.3) * 255);
+    const b = Math.floor(brightness * (0.7 + node3 * 0.3) * 255);
+
+    const x = i * ledW;
+    const grd = ctx.createRadialGradient(x + ledW/2, h * 0.6, 0, x + ledW/2, h * 0.4, h * 0.9);
+    grd.addColorStop(0, `rgba(${r},${g},${b},1)`);
+    grd.addColorStop(1, `rgba(${r},${g},${b},0)`);
+
+    ctx.fillStyle = grd;
+    ctx.fillRect(x, 0, ledW + 0.5, h);
+  }
+
+  // Subtle vignette
+  const vig = ctx.createLinearGradient(0, 0, w, 0);
+  vig.addColorStop(0, 'rgba(0,0,0,0.4)');
+  vig.addColorStop(0.1, 'rgba(0,0,0,0)');
+  vig.addColorStop(0.9, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(0,0,0,0.4)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, w, h);
+
+  requestAnimationFrame(() => drawLEDs2(canvasId));
+}
+
+function toggleExpr(header) {
+  const body = document.getElementById('exprBody');
+  const chevron = document.getElementById('exprChevron');
+  if (body.classList.contains('expanded')) {
+    body.classList.remove('expanded');
+    body.classList.add('collapsed');
+    chevron.classList.remove('open');
+  } else {
+    body.classList.remove('collapsed');
+    body.classList.add('expanded');
+    chevron.classList.add('open');
+  }
+}
+
+// EdgeMixer pill selection
+document.querySelectorAll('.edgemixer-pill').forEach(pill => {
+  pill.addEventListener('click', () => {
+    pill.closest('.edgemixer-wrap').querySelectorAll('.edgemixer-pill').forEach(p => p.classList.remove('active'));
+    pill.classList.add('active');
+    document.getElementById('mixerBadge').textContent = pill.textContent.toUpperCase();
+  });
+});
+
+// Slider track fill
+document.querySelectorAll('.lw-slider').forEach(s => {
+  s.style.setProperty('--val', s.value + '%');
+});
+
+drawLEDs2('ledCanvas2');
+</script>
+</body>
+</html>

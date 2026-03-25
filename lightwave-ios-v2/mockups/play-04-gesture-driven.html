@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Play Tab — Mockup 4: Gesture-Driven Immersive</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@400;500;600&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================
+   DESIGN TOKENS
+   ============================================ */
+:root {
+  --lw-base: #0F1219;
+  --lw-card: #1E2535;
+  --lw-elevated: #252D3F;
+  --lw-gold: #FFB84D;
+  --lw-cyan: #00D4FF;
+  --lw-success: #4DFFB8;
+  --lw-error: #FF4D4D;
+  --lw-text-primary: #E6E9EF;
+  --lw-text-secondary: #9CA3B0;
+  --lw-text-tertiary: #6B7280;
+
+  --font-bebas: 'Bebas Neue', Impact, sans-serif;
+  --font-rajdhani: 'Rajdhani', system-ui, sans-serif;
+  --font-jetbrains: 'JetBrains Mono', monospace;
+
+  --space-xs: 4px; --space-sm: 8px; --space-md: 12px; --space-lg: 24px;
+  --radius-hero: 24px; --radius-card: 16px; --radius-nested: 12px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0A0A0C;
+  color: var(--lw-text-primary);
+  font-family: var(--font-rajdhani);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 24px 60px;
+}
+
+/* ============================================
+   PAGE ANNOTATION
+   ============================================ */
+.mockup-annotation {
+  text-align: center;
+  margin-bottom: 28px;
+  max-width: 440px;
+}
+.mockup-number {
+  font: 700 11px/1 var(--font-bebas);
+  color: #FF6B9D;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.mockup-title {
+  font: 700 28px/1 var(--font-bebas);
+  color: var(--lw-text-primary);
+  letter-spacing: 2px;
+  margin-bottom: 10px;
+}
+.mockup-desc {
+  font: 500 13px/1.6 var(--font-rajdhani);
+  color: var(--lw-text-secondary);
+}
+.mockup-callouts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  margin-top: 12px;
+}
+.callout-tag {
+  padding: 3px 10px;
+  background: rgba(255,107,157,0.08);
+  border: 1px solid rgba(255,107,157,0.2);
+  border-radius: 20px;
+  font: 600 11px/1 var(--font-rajdhani);
+  color: #FF6B9D;
+  letter-spacing: 0.5px;
+}
+
+/* Gesture legend */
+.gesture-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 14px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  padding: 12px 16px;
+  text-align: left;
+}
+.gesture-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.gesture-icon {
+  font-size: 14px;
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.gesture-desc {
+  font: 500 11px/1.4 var(--font-rajdhani);
+  color: var(--lw-text-secondary);
+}
+.gesture-key {
+  color: var(--lw-gold);
+  font-weight: 600;
+}
+
+/* ============================================
+   PHONE FRAME
+   ============================================ */
+.phone-frame {
+  width: 393px;
+  height: 852px;
+  background: #000;
+  border-radius: 44px;
+  border: 3px solid #2a2a2a;
+  overflow: hidden;
+  position: relative;
+  box-shadow:
+    0 0 0 1px #111,
+    0 40px 80px rgba(0,0,0,0.9),
+    0 0 120px rgba(255,107,157,0.03);
+  flex-shrink: 0;
+}
+.ios-notch {
+  position: absolute;
+  top: 0; left: 50%; transform: translateX(-50%);
+  width: 126px; height: 34px;
+  background: #000;
+  border-radius: 0 0 20px 20px;
+  z-index: 300;
+}
+.ios-notch::before {
+  content: '';
+  position: absolute;
+  top: 10px; left: 50%; transform: translateX(-50%);
+  width: 12px; height: 12px;
+  background: #0a0a0a;
+  border-radius: 50%;
+}
+.home-indicator {
+  position: absolute;
+  bottom: 8px; left: 50%; transform: translateX(-50%);
+  width: 134px; height: 5px;
+  background: rgba(255,255,255,0.25);
+  border-radius: 3px;
+  z-index: 300;
+}
+
+/* Status bar — transparent over fullscreen LED bg */
+.ios-status-bar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 54px;
+  padding: 14px 28px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 200;
+}
+.status-time {
+  font: 700 15px/1 system-ui;
+  color: rgba(255,255,255,0.85);
+  text-shadow: 0 1px 6px rgba(0,0,0,0.8);
+}
+.status-icons {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 13px;
+  color: rgba(255,255,255,0.7);
+}
+
+/* ============================================
+   FULLSCREEN LED BACKGROUND
+   ============================================ */
+.fullscreen-led-bg {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 0;
+}
+.fullscreen-canvas {
+  width: 100%; height: 100%;
+  display: block;
+}
+
+/* Dark gradient overlay so UI elements are readable */
+.bg-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background:
+    linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.1) 25%, rgba(0,0,0,0.05) 55%, rgba(0,0,0,0.7) 80%, rgba(0,0,0,0.95) 100%);
+  z-index: 1;
+}
+
+/* ============================================
+   MINIMAL OVERLAY — effect name + BPM
+   ============================================ */
+.minimal-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 50;
+  pointer-events: none;
+}
+
+/* Effect info — centre of screen */
+.effect-display {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+}
+.effect-display-name {
+  font: 700 40px/1 var(--font-bebas);
+  color: rgba(255,255,255,0.9);
+  letter-spacing: 4px;
+  text-shadow:
+    0 0 40px rgba(0,212,255,0.4),
+    0 2px 12px rgba(0,0,0,0.9);
+}
+.effect-display-category {
+  font: 600 10px/1 var(--font-rajdhani);
+  color: rgba(255,255,255,0.3);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-top: 8px;
+}
+
+/* Swipe indicators — left/right arrows (very subtle) */
+.swipe-indicator-left,
+.swipe-indicator-right {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.swipe-indicator-left { left: 16px; }
+.swipe-indicator-right { right: 16px; }
+.swipe-chevron {
+  font: 400 32px/1 var(--font-rajdhani);
+  color: rgba(255,255,255,0.08);
+}
+
+/* BPM ring — top-right corner, collapsed when drawer closed */
+.bpm-corner {
+  position: absolute;
+  top: 60px;
+  right: 16px;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+.bpm-corner.hidden { opacity: 0; }
+.bpm-corner-ring {
+  position: relative;
+  width: 68px; height: 68px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+}
+.bpm-corner-ring svg {
+  position: absolute; top: 0; left: 0;
+}
+.bpm-corner-number {
+  font: 700 26px/1 var(--font-bebas);
+  color: var(--lw-gold);
+  text-shadow: 0 0 12px rgba(255,184,77,0.7);
+  z-index: 1;
+  letter-spacing: 2px;
+}
+.bpm-corner-unit {
+  font: 600 7px/1 var(--font-rajdhani);
+  color: rgba(255,184,77,0.6);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  z-index: 1;
+  margin-top: 1px;
+}
+
+/* Confidence bar — subtle under BPM */
+.bpm-conf-bar {
+  position: absolute;
+  bottom: -14px;
+  left: 50%; transform: translateX(-50%);
+  width: 50px; height: 3px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.bpm-conf-fill {
+  height: 100%;
+  width: 82%;
+  background: linear-gradient(to right, rgba(255,184,77,0.4), rgba(255,184,77,0.8));
+  border-radius: 2px;
+}
+
+/* Connection indicator — top left */
+.conn-indicator {
+  position: absolute;
+  top: 62px; left: 20px;
+  display: flex; align-items: center; gap: 6px;
+  pointer-events: none;
+}
+.conn-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--lw-success);
+  box-shadow: 0 0 8px var(--lw-success);
+}
+.conn-label {
+  font: 600 9px/1 var(--font-rajdhani);
+  color: rgba(255,255,255,0.3);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* Gesture hint text (bottom, above drawer) */
+.gesture-hints {
+  position: absolute;
+  bottom: 220px;
+  left: 0; right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+  opacity: 0.5;
+  transition: opacity 0.3s;
+}
+.gesture-hints.faded { opacity: 0; }
+.hint-line {
+  font: 500 9px/1 var(--font-rajdhani);
+  color: rgba(255,255,255,0.4);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+/* ============================================
+   BOTTOM DRAWER
+   ============================================ */
+.bottom-drawer {
+  position: absolute;
+  left: 0; right: 0;
+  bottom: 0;
+  z-index: 150;
+  transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Collapsed state: only handle visible */
+.bottom-drawer.collapsed {
+  transform: translateY(calc(100% - 48px));
+}
+/* Partial state: quick controls visible */
+.bottom-drawer.partial {
+  transform: translateY(0);
+}
+/* Full state: all controls + expression params */
+.bottom-drawer.full {
+  transform: translateY(0);
+}
+
+.drawer-surface {
+  background: rgba(15, 18, 25, 0.97);
+  border-radius: 28px 28px 0 0;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  overflow: hidden;
+  backdrop-filter: blur(30px);
+  box-shadow: 0 -20px 60px rgba(0,0,0,0.7);
+}
+
+/* Drag handle */
+.drawer-handle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 0 8px;
+  cursor: pointer;
+  gap: 4px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.handle-bar {
+  width: 36px; height: 4px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 2px;
+  transition: background 0.15s;
+}
+.drawer-handle:hover .handle-bar { background: rgba(255,255,255,0.35); }
+.handle-label {
+  font: 600 8px/1 var(--font-bebas);
+  color: rgba(255,255,255,0.2);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+/* Quick controls row — always in partial view */
+.quick-controls {
+  padding: 8px 20px 16px;
+}
+.quick-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.quick-row:last-child { margin-bottom: 0; }
+.quick-icon-label {
+  font: 700 10px/1 var(--font-bebas);
+  color: var(--lw-text-tertiary);
+  letter-spacing: 1.5px;
+  width: 56px;
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+.quick-slider-wrap { flex: 1; }
+
+input[type=range].quick-slider {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+  background: rgba(255,255,255,0.07);
+}
+input[type=range].quick-slider.qs-gold::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, var(--lw-gold) var(--val, 78%), rgba(255,184,77,0.1) var(--val, 78%));
+  height: 6px; border-radius: 3px;
+}
+input[type=range].quick-slider.qs-cyan::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, var(--lw-cyan) var(--val, 55%), rgba(0,212,255,0.1) var(--val, 55%));
+  height: 6px; border-radius: 3px;
+}
+input[type=range].quick-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  margin-top: -9px;
+  background: white;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+}
+input[type=range].quick-slider.qs-gold::-webkit-slider-thumb {
+  background: var(--lw-gold);
+  box-shadow: 0 2px 14px rgba(255,184,77,0.6);
+}
+input[type=range].quick-slider.qs-cyan::-webkit-slider-thumb {
+  background: var(--lw-cyan);
+  box-shadow: 0 2px 14px rgba(0,212,255,0.6);
+}
+
+.quick-value {
+  font: 600 13px/1 var(--font-jetbrains);
+  width: 36px;
+  text-align: right;
+  flex-shrink: 0;
+}
+.quick-value.gold { color: var(--lw-gold); }
+.quick-value.cyan { color: var(--lw-cyan); }
+
+/* Effect/Palette row in quick controls */
+.quick-selector-row {
+  display: flex;
+  gap: 8px;
+  padding: 0 20px 14px;
+}
+.quick-selector {
+  flex: 1;
+  background: var(--lw-elevated);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(255,255,255,0.05);
+  cursor: pointer;
+  min-width: 0;
+}
+.quick-selector-label {
+  font: 700 9px/1 var(--font-bebas);
+  color: var(--lw-text-tertiary);
+  letter-spacing: 1.5px;
+  flex-shrink: 0;
+}
+.quick-selector-val {
+  font: 600 11px/1 var(--font-rajdhani);
+  color: var(--lw-text-primary);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quick-selector-swatch {
+  width: 24px; height: 14px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.quick-nav-arrows {
+  display: flex; gap: 3px;
+  flex-shrink: 0;
+}
+.quick-nav-arrow {
+  width: 20px; height: 20px;
+  background: var(--lw-card);
+  border-radius: 5px;
+  display: flex; align-items: center; justify-content: center;
+  font: 600 11px/1 var(--font-rajdhani);
+  color: var(--lw-gold);
+}
+
+/* Divider inside drawer */
+.drawer-divider {
+  height: 1px;
+  background: rgba(255,255,255,0.05);
+  margin: 0 20px;
+}
+
+/* EdgeMixer section */
+.drawer-section {
+  padding: 14px 20px;
+}
+.drawer-section-title {
+  font: 700 10px/1 var(--font-bebas);
+  color: var(--lw-text-tertiary);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.drawer-section-active {
+  font: 600 10px/1 var(--font-rajdhani);
+  color: var(--lw-cyan);
+}
+.em-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.em-chip {
+  padding: 7px 11px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 8px;
+  font: 600 10px/1 var(--font-rajdhani);
+  color: var(--lw-text-secondary);
+  cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.04);
+  transition: all 0.12s;
+  letter-spacing: 0.3px;
+}
+.em-chip.active {
+  background: rgba(0,212,255,0.1);
+  border-color: rgba(0,212,255,0.25);
+  color: var(--lw-cyan);
+}
+
+/* Expression params section */
+.expr-compact-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.expr-field {}
+.expr-field-label {
+  font: 600 9px/1 var(--font-rajdhani);
+  color: var(--lw-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 5px;
+}
+input[type=range].expr-drawer-slider {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.08);
+  outline: none;
+  cursor: pointer;
+}
+input[type=range].expr-drawer-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--lw-elevated);
+  border: 1.5px solid rgba(255,255,255,0.2);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+  margin-top: -6px;
+}
+
+/* Long-press hint for expression params */
+.longpress-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 0 4px;
+}
+.longpress-hint-text {
+  font: 600 9px/1 var(--font-rajdhani);
+  color: rgba(255,255,255,0.18);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* Partial view toggle label */
+.drawer-expand-hint {
+  position: absolute;
+  top: 14px;
+  right: 20px;
+  font: 600 9px/1 var(--font-rajdhani);
+  color: rgba(255,255,255,0.2);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* State: hidden expression params */
+.expr-section { transition: max-height 0.3s ease, opacity 0.2s ease; }
+.expr-section.hidden { max-height: 0; overflow: hidden; opacity: 0; }
+.expr-section.visible { max-height: 300px; opacity: 1; }
+
+/* ============================================
+   TAB BAR — sits below drawer at all times
+   ============================================ */
+/* NOT used in gesture-driven — tab bar integrated into drawer base */
+</style>
+</head>
+<body>
+
+<!-- Annotation -->
+<div class="mockup-annotation">
+  <div class="mockup-number">Mockup 04 / 04</div>
+  <div class="mockup-title">Gesture-Driven Immersive</div>
+  <div class="mockup-desc">
+    Full-screen LED canvas as background. Maximum immersion with gesture-first interaction.
+    Bottom drawer slides up to reveal controls. Expression params hidden behind long-press.
+    The LED strip IS the UI.
+  </div>
+  <div class="mockup-callouts">
+    <span class="callout-tag">Full Screen</span>
+    <span class="callout-tag">Gesture First</span>
+    <span class="callout-tag">Bottom Drawer</span>
+    <span class="callout-tag">Max Immersion</span>
+    <span class="callout-tag">Minimal Clutter</span>
+  </div>
+
+  <div class="gesture-legend">
+    <div class="gesture-item">
+      <span class="gesture-icon">←→</span>
+      <span class="gesture-desc"><span class="gesture-key">Swipe left/right</span> — change effect (anywhere on screen)</span>
+    </div>
+    <div class="gesture-item">
+      <span class="gesture-icon">↑</span>
+      <span class="gesture-desc"><span class="gesture-key">Swipe up from bottom</span> — reveal brightness, speed, EdgeMixer drawer</span>
+    </div>
+    <div class="gesture-item">
+      <span class="gesture-icon">⊙</span>
+      <span class="gesture-desc"><span class="gesture-key">Tap centre</span> — toggle BPM ring overlay</span>
+    </div>
+    <div class="gesture-item">
+      <span class="gesture-icon">⌛</span>
+      <span class="gesture-desc"><span class="gesture-key">Long-press</span> — expand expression parameters in drawer</span>
+    </div>
+    <div class="gesture-item">
+      <span class="gesture-icon">↓</span>
+      <span class="gesture-desc"><span class="gesture-key">Swipe down / tap handle</span> — collapse drawer</span>
+    </div>
+  </div>
+
+  <!-- Demo controls -->
+  <div style="margin-top:20px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap">
+    <button onclick="setDrawerState('collapsed')" style="padding:8px 14px;background:#1a1a2e;color:#9CA3B0;border:1px solid #333;border-radius:8px;font:600 11px/1 'Rajdhani',sans-serif;cursor:pointer;letter-spacing:0.5px">
+      Drawer: Collapsed
+    </button>
+    <button onclick="setDrawerState('partial')" style="padding:8px 14px;background:#1a1a2e;color:#FFB84D;border:1px solid rgba(255,184,77,0.3);border-radius:8px;font:600 11px/1 'Rajdhani',sans-serif;cursor:pointer;letter-spacing:0.5px">
+      Drawer: Open
+    </button>
+    <button onclick="setDrawerState('full')" style="padding:8px 14px;background:#1a1a2e;color:#00D4FF;border:1px solid rgba(0,212,255,0.3);border-radius:8px;font:600 11px/1 'Rajdhani',sans-serif;cursor:pointer;letter-spacing:0.5px">
+      Long-Press (Full)
+    </button>
+    <button onclick="toggleBpm()" style="padding:8px 14px;background:#1a1a2e;color:#4DFFB8;border:1px solid rgba(77,255,184,0.3);border-radius:8px;font:600 11px/1 'Rajdhani',sans-serif;cursor:pointer;letter-spacing:0.5px">
+      Tap: Toggle BPM
+    </button>
+  </div>
+</div>
+
+<!-- Phone Frame -->
+<div class="phone-frame" id="phoneFrame">
+  <div class="ios-notch"></div>
+
+  <!-- Fullscreen LED background -->
+  <div class="fullscreen-led-bg">
+    <canvas class="fullscreen-canvas" id="ledCanvas4" width="393" height="852"></canvas>
+  </div>
+
+  <!-- Dark overlay for readability -->
+  <div class="bg-overlay"></div>
+
+  <!-- Status bar (floating over bg) -->
+  <div class="ios-status-bar">
+    <span class="status-time">9:41</span>
+    <div class="status-icons">
+      <span>●●●</span>
+      <span>WiFi</span>
+      <span>⬛</span>
+    </div>
+  </div>
+
+  <!-- Minimal overlay -->
+  <div class="minimal-overlay">
+
+    <!-- Connection indicator -->
+    <div class="conn-indicator">
+      <div class="conn-dot"></div>
+      <span class="conn-label">K1</span>
+    </div>
+
+    <!-- BPM corner ring -->
+    <div class="bpm-corner" id="bpmCorner">
+      <div class="bpm-corner-ring">
+        <svg width="68" height="68" viewBox="0 0 68 68" fill="none">
+          <circle cx="34" cy="34" r="28" stroke="rgba(255,184,77,0.1)" stroke-width="2.5"/>
+          <circle cx="34" cy="34" r="28" stroke="#FFB84D" stroke-width="2"
+            stroke-dasharray="144 175.9" stroke-dashoffset="44"
+            stroke-linecap="round" opacity="0.85"/>
+        </svg>
+        <div class="bpm-corner-number">128</div>
+        <div class="bpm-corner-unit">BPM</div>
+        <div class="bpm-conf-bar">
+          <div class="bpm-conf-fill"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Effect name — centre screen -->
+    <div class="effect-display" id="effectDisplay">
+      <div class="effect-display-name">NEURAL MESH</div>
+      <div class="effect-display-category">Audio-Reactive · 23 / 148</div>
+    </div>
+
+    <!-- Swipe direction indicators -->
+    <div class="swipe-indicator-left">
+      <span class="swipe-chevron">‹</span>
+    </div>
+    <div class="swipe-indicator-right">
+      <span class="swipe-chevron">›</span>
+    </div>
+
+    <!-- Gesture hint text -->
+    <div class="gesture-hints" id="gestureHints">
+      <div class="hint-line">↑ swipe up for controls</div>
+      <div class="hint-line">← → swipe to change effect</div>
+    </div>
+
+  </div><!-- /minimal-overlay -->
+
+  <!-- Bottom Drawer -->
+  <div class="bottom-drawer collapsed" id="bottomDrawer">
+    <div class="drawer-surface">
+
+      <!-- Handle -->
+      <div class="drawer-handle" id="drawerHandle" onclick="handleTap()">
+        <div class="handle-bar"></div>
+        <div class="handle-label" id="handleLabel">Swipe Up for Controls</div>
+      </div>
+
+      <!-- Quick controls: Brightness + Speed -->
+      <div class="quick-controls">
+        <div class="quick-row">
+          <span class="quick-icon-label">Bright</span>
+          <div class="quick-slider-wrap">
+            <input type="range" class="quick-slider qs-gold" min="0" max="100" value="78"
+              style="--val:78%"
+              oninput="document.getElementById('qBright').textContent=this.value+'%';this.style.setProperty('--val',this.value+'%')">
+          </div>
+          <span class="quick-value gold" id="qBright">78%</span>
+        </div>
+        <div class="quick-row">
+          <span class="quick-icon-label">Speed</span>
+          <div class="quick-slider-wrap">
+            <input type="range" class="quick-slider qs-cyan" min="0" max="100" value="55"
+              style="--val:55%"
+              oninput="document.getElementById('qSpeed').textContent=this.value+'%';this.style.setProperty('--val',this.value+'%')">
+          </div>
+          <span class="quick-value cyan" id="qSpeed">55%</span>
+        </div>
+      </div>
+
+      <!-- Effect + Palette quick selectors -->
+      <div class="quick-selector-row">
+        <!-- Effect -->
+        <div class="quick-selector">
+          <span class="quick-selector-label">FX</span>
+          <span class="quick-selector-val">Neural Mesh</span>
+          <div class="quick-nav-arrows">
+            <div class="quick-nav-arrow">‹</div>
+            <div class="quick-nav-arrow">›</div>
+          </div>
+        </div>
+        <!-- Palette -->
+        <div class="quick-selector">
+          <span class="quick-selector-label">Pal</span>
+          <div class="quick-selector-swatch"
+            style="background:linear-gradient(to right,#4DFFB8,#00D4FF,#7C3AED,#FF4D4D)">
+          </div>
+          <div class="quick-nav-arrows">
+            <div class="quick-nav-arrow">‹</div>
+            <div class="quick-nav-arrow">›</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="drawer-divider"></div>
+
+      <!-- EdgeMixer section -->
+      <div class="drawer-section">
+        <div class="drawer-section-title">
+          EdgeMixer
+          <span class="drawer-section-active" id="em4label">Triadic</span>
+        </div>
+        <div class="em-chips">
+          <div class="em-chip">Solo</div>
+          <div class="em-chip">Complementary</div>
+          <div class="em-chip">Analogous</div>
+          <div class="em-chip">Split Comp</div>
+          <div class="em-chip active">Triadic</div>
+          <div class="em-chip">Tetradic</div>
+          <div class="em-chip">Random</div>
+        </div>
+      </div>
+
+      <div class="drawer-divider"></div>
+
+      <!-- Expression params — shown only on long-press / full state -->
+      <div class="expr-section hidden" id="exprSection">
+        <div class="drawer-section">
+          <div class="drawer-section-title">
+            Expression
+            <span class="drawer-section-active">Long-press revealed</span>
+          </div>
+          <div style="margin-bottom:10px">
+            <div style="font:600 9px/1 var(--font-rajdhani);color:rgba(255,184,77,0.4);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Colour</div>
+            <div class="expr-compact-grid">
+              <div class="expr-field">
+                <div class="expr-field-label">Hue Shift</div>
+                <input type="range" class="expr-drawer-slider" min="0" max="100" value="32">
+              </div>
+              <div class="expr-field">
+                <div class="expr-field-label">Saturation</div>
+                <input type="range" class="expr-drawer-slider" min="0" max="100" value="75">
+              </div>
+              <div class="expr-field">
+                <div class="expr-field-label">Mood</div>
+                <input type="range" class="expr-drawer-slider" min="0" max="100" value="60">
+              </div>
+            </div>
+          </div>
+          <div>
+            <div style="font:600 9px/1 var(--font-rajdhani);color:rgba(0,212,255,0.4);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Motion</div>
+            <div class="expr-compact-grid">
+              <div class="expr-field">
+                <div class="expr-field-label">Trails</div>
+                <input type="range" class="expr-drawer-slider" min="0" max="100" value="45">
+              </div>
+              <div class="expr-field">
+                <div class="expr-field-label">Intensity</div>
+                <input type="range" class="expr-drawer-slider" min="0" max="100" value="68">
+              </div>
+              <div class="expr-field">
+                <div class="expr-field-label">Complexity</div>
+                <input type="range" class="expr-drawer-slider" min="0" max="100" value="52">
+              </div>
+              <div class="expr-field">
+                <div class="expr-field-label">Variation</div>
+                <input type="range" class="expr-drawer-slider" min="0" max="100" value="30">
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="drawer-divider"></div>
+      </div><!-- /expr-section -->
+
+      <!-- Longpress hint + spacer for home indicator -->
+      <div class="longpress-hint">
+        <span class="longpress-hint-text" id="longPressHint">Hold for expression params</span>
+      </div>
+      <div style="height:28px"></div><!-- home indicator space -->
+
+    </div><!-- /drawer-surface -->
+  </div><!-- /bottom-drawer -->
+
+  <div class="home-indicator"></div>
+</div><!-- /phone-frame -->
+
+<script>
+// ============================================
+// LED CANVAS — Neural Mesh effect, fullscreen
+// ============================================
+function drawLEDs4() {
+  const canvas = document.getElementById('ledCanvas4');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+
+  ctx.clearRect(0, 0, w, h);
+
+  // Deep dark background
+  ctx.fillStyle = '#030508';
+  ctx.fillRect(0, 0, w, h);
+
+  const numLEDs = 320;
+  const t = Date.now() * 0.0015;
+
+  // LED strip runs horizontally across the CENTRE of the screen
+  // For fullscreen effect, we scatter light upward and downward from the strip line
+  const stripY = h * 0.5;
+
+  for (let i = 0; i < numLEDs; i++) {
+    const pos = i / numLEDs;
+    const centrePos = (i - 159.5) / 159.5;
+    const dist = Math.abs(centrePos);
+
+    // Neural Mesh: multiple interfering waves creating node-like patterns
+    const w1 = Math.sin(pos * 11 - t * 1.1) * Math.cos(pos * 7 + t * 0.7);
+    const w2 = Math.sin(pos * 19 + t * 0.9) * Math.sin(pos * 13 - t * 1.4);
+    const w3 = Math.cos(pos * 31 - t * 0.6) * 0.5 + 0.5;
+
+    const interference = (w1 * w2 + 1) * 0.5;
+    const brightness = (interference * 0.7 + w3 * 0.3) * (0.4 + 0.6 * (1 - dist * 0.4));
+
+    // Cyan-to-purple spectrum
+    const hue = 180 + interference * 100 + dist * 40; // 180=cyan, 280=purple
+    const sat = 80 + interference * 20;
+    const lum = brightness * 60;
+
+    if (lum > 3) {
+      const x = (i / numLEDs) * w;
+      const ledW = w / numLEDs;
+
+      // Glow spreads up and down from strip line
+      const glowH = h * 0.7 * brightness + 20;
+      const grd = ctx.createRadialGradient(x + ledW/2, stripY, 0, x + ledW/2, stripY, glowH);
+      grd.addColorStop(0, `hsla(${hue},${sat}%,${lum}%,1)`);
+      grd.addColorStop(0.3, `hsla(${hue},${sat}%,${lum * 0.5}%,0.6)`);
+      grd.addColorStop(1, `hsla(${hue},${sat}%,${lum * 0.2}%,0)`);
+
+      ctx.fillStyle = grd;
+      ctx.fillRect(x - 1, stripY - glowH, ledW + 2, glowH * 2);
+    }
+  }
+
+  // Horizontal strip line — thin bright core
+  const stripGrd = ctx.createLinearGradient(0, stripY - 2, 0, stripY + 2);
+  stripGrd.addColorStop(0, 'rgba(100,200,255,0)');
+  stripGrd.addColorStop(0.5, 'rgba(180,230,255,0.3)');
+  stripGrd.addColorStop(1, 'rgba(100,200,255,0)');
+  ctx.fillStyle = stripGrd;
+  ctx.fillRect(0, stripY - 2, w, 4);
+
+  requestAnimationFrame(drawLEDs4);
+}
+
+// ============================================
+// DRAWER STATE MACHINE
+// ============================================
+let currentState = 'collapsed';
+
+function setDrawerState(state) {
+  const drawer = document.getElementById('bottomDrawer');
+  const hints = document.getElementById('gestureHints');
+  const exprSection = document.getElementById('exprSection');
+  const handleLabel = document.getElementById('handleLabel');
+  const longPressHint = document.getElementById('longPressHint');
+  const effectDisplay = document.getElementById('effectDisplay');
+
+  // Remove all state classes
+  drawer.classList.remove('collapsed', 'partial', 'full');
+
+  currentState = state;
+
+  if (state === 'collapsed') {
+    drawer.classList.add('collapsed');
+    hints.classList.remove('faded');
+    exprSection.classList.remove('visible');
+    exprSection.classList.add('hidden');
+    handleLabel.textContent = 'Swipe Up for Controls';
+    longPressHint.textContent = 'Hold for expression params';
+    effectDisplay.style.opacity = '1';
+  } else if (state === 'partial') {
+    drawer.classList.add('partial');
+    hints.classList.add('faded');
+    exprSection.classList.remove('visible');
+    exprSection.classList.add('hidden');
+    handleLabel.textContent = 'Hold for Expression Params';
+    longPressHint.textContent = 'Hold for expression params';
+    effectDisplay.style.opacity = '0.4';
+  } else if (state === 'full') {
+    drawer.classList.add('full');
+    hints.classList.add('faded');
+    exprSection.classList.remove('hidden');
+    exprSection.classList.add('visible');
+    handleLabel.textContent = 'Swipe Down to Collapse';
+    longPressHint.textContent = 'Expression params revealed';
+    effectDisplay.style.opacity = '0.2';
+  }
+}
+
+function handleTap() {
+  if (currentState === 'collapsed') {
+    setDrawerState('partial');
+  } else if (currentState === 'partial') {
+    setDrawerState('collapsed');
+  } else {
+    setDrawerState('collapsed');
+  }
+}
+
+// Toggle BPM
+let bpmVisible = true;
+function toggleBpm() {
+  const ring = document.getElementById('bpmCorner');
+  bpmVisible = !bpmVisible;
+  ring.classList.toggle('hidden', !bpmVisible);
+}
+
+// EdgeMixer chip selection
+document.querySelectorAll('.em-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    chip.closest('.em-chips').querySelectorAll('.em-chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    document.getElementById('em4label').textContent = chip.textContent;
+  });
+});
+
+// BPM ring pulse animation
+let lastBeat = 0;
+const BPM = 128;
+const beatInterval = (60 / BPM) * 1000;
+
+function animateBPMRing() {
+  const now = Date.now();
+  const ring = document.querySelector('.bpm-corner-ring svg circle:last-child');
+  if (ring) {
+    const phase = (now % beatInterval) / beatInterval;
+    const pulse = Math.max(0, 1 - phase * 2);
+    ring.style.opacity = 0.7 + pulse * 0.3;
+    ring.style.strokeWidth = 2 + pulse * 1.5;
+  }
+  requestAnimationFrame(animateBPMRing);
+}
+
+drawLEDs4();
+animateBPMRing();
+</script>
+</body>
+</html>

@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Play Tab — Mockup 08: Theatre Mode</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ─── Reset & Base ─── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0A0A0C;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 100vh;
+    padding: 40px 20px 60px;
+    font-family: 'Rajdhani', sans-serif;
+  }
+
+  /* ─── Design Tokens ─── */
+  :root {
+    --lwBase:     #0F1219;
+    --lwCard:     #1E2535;
+    --lwElevated: #252D3F;
+    --lwGold:     #FFB84D;
+    --lwCyan:     #00D4FF;
+    --lwSuccess:  #4DFFB8;
+    --lwError:    #FF4D4D;
+    --textPrimary:   #E6E9EF;
+    --textSecondary: #9CA3B0;
+    --textTertiary:  #6B7280;
+    --r-hero:   24px;
+    --r-card:   16px;
+    --r-nested: 12px;
+    --sp-xs: 4px;
+    --sp-sm: 8px;
+    --sp-md: 12px;
+    --sp-lg: 24px;
+  }
+
+  /* ─── Page Title ─── */
+  .page-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    letter-spacing: 0.12em;
+    color: var(--textSecondary);
+    text-align: center;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+  .page-subtitle {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 13px;
+    color: var(--textTertiary);
+    text-align: center;
+    margin-bottom: 36px;
+    letter-spacing: 0.04em;
+  }
+
+  /* ─── Annotation Label ─── */
+  .annotation {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--lwCyan);
+    text-align: center;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  /* ─── iPhone 15 Pro Frame ─── */
+  .phone-wrapper {
+    position: relative;
+    width: 393px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .phone-frame {
+    position: relative;
+    width: 393px;
+    height: 852px;
+    background: #1A1A1C;
+    border-radius: 54px;
+    border: 1.5px solid #3A3A3C;
+    overflow: hidden;
+    box-shadow:
+      0 0 0 2px #0A0A0C,
+      0 0 0 3.5px #4A4A4C,
+      0 40px 80px rgba(0,0,0,0.7),
+      inset 0 0 0 1px rgba(255,255,255,0.06);
+  }
+
+  /* Physical button ridges */
+  .phone-frame::before {
+    content: '';
+    position: absolute;
+    left: -3px;
+    top: 140px;
+    width: 3px;
+    height: 36px;
+    background: #3A3A3C;
+    border-radius: 2px 0 0 2px;
+    box-shadow: 0 54px 0 #3A3A3C, 0 110px 0 #3A3A3C;
+  }
+  .phone-frame::after {
+    content: '';
+    position: absolute;
+    right: -3px;
+    top: 168px;
+    width: 3px;
+    height: 78px;
+    background: #3A3A3C;
+    border-radius: 0 2px 2px 0;
+  }
+
+  /* ─── Screen ─── */
+  .screen {
+    position: absolute;
+    inset: 0;
+    background: var(--lwBase);
+    border-radius: 54px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ─── Dynamic Island Notch ─── */
+  .dynamic-island {
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 126px;
+    height: 37px;
+    background: #000;
+    border-radius: 20px;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+  }
+  .di-camera {
+    width: 11px;
+    height: 11px;
+    background: #1A1A1C;
+    border-radius: 50%;
+    border: 1px solid #2A2A2C;
+    position: relative;
+  }
+  .di-camera::after {
+    content: '';
+    position: absolute;
+    inset: 2px;
+    background: #0D3D5C;
+    border-radius: 50%;
+  }
+
+  /* ─── Home Indicator ─── */
+  .home-indicator {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 134px;
+    height: 5px;
+    background: rgba(255,255,255,0.3);
+    border-radius: 3px;
+    z-index: 100;
+  }
+
+  /* ─── Status Bar ─── */
+  .status-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 59px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding: 0 28px 8px;
+    z-index: 50;
+  }
+  .status-time {
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 600;
+    font-size: 16px;
+    color: var(--textPrimary);
+    letter-spacing: 0.02em;
+  }
+  .status-icons {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .status-icons svg {
+    fill: var(--textPrimary);
+  }
+
+  /* ─── LED Preview Hero (60% = 511px) ─── */
+  .led-hero {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 511px;
+    background: #050608;
+    overflow: hidden;
+  }
+
+  .led-canvas {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 0 16px;
+  }
+
+  .led-strip {
+    display: flex;
+    gap: 1px;
+    width: 100%;
+  }
+
+  .led-dot {
+    flex: 1;
+    height: 6px;
+    border-radius: 3px;
+  }
+
+  /* Ambient glow behind LEDs */
+  .led-glow {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  /* ─── Effect Name Overlay (glassmorphism) ─── */
+  .effect-overlay {
+    position: absolute;
+    top: 64px;
+    left: 20px;
+    right: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: rgba(15, 18, 25, 0.55);
+    backdrop-filter: blur(18px) saturate(1.4);
+    -webkit-backdrop-filter: blur(18px) saturate(1.4);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--r-nested);
+  }
+
+  .effect-name-block {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .effect-label {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--textTertiary);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .effect-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px;
+    letter-spacing: 0.06em;
+    color: var(--textPrimary);
+    line-height: 1;
+  }
+
+  /* ─── BPM Pill Overlay ─── */
+  .bpm-overlay {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+  }
+  .bpm-value {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 36px;
+    color: var(--lwGold);
+    line-height: 1;
+  }
+  .bpm-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--lwGold);
+    opacity: 0.7;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .bpm-beat-dot {
+    width: 6px;
+    height: 6px;
+    background: var(--lwGold);
+    border-radius: 50%;
+    align-self: center;
+    animation: bpm-pulse 0.6s ease-out infinite;
+  }
+  @keyframes bpm-pulse {
+    0%   { transform: scale(1.4); opacity: 1; }
+    60%  { transform: scale(1); opacity: 0.6; }
+    100% { transform: scale(1.4); opacity: 1; }
+  }
+
+  /* ─── Palette Swatch Row Overlay ─── */
+  .palette-overlay {
+    position: absolute;
+    bottom: 16px;
+    left: 20px;
+    right: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: rgba(15, 18, 25, 0.50);
+    backdrop-filter: blur(18px) saturate(1.4);
+    -webkit-backdrop-filter: blur(18px) saturate(1.4);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: var(--r-nested);
+  }
+  .palette-label {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--textTertiary);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .palette-swatches {
+    display: flex;
+    gap: 5px;
+    flex: 1;
+  }
+  .swatch {
+    height: 16px;
+    flex: 1;
+    border-radius: 4px;
+  }
+  .palette-name-tag {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--textSecondary);
+    white-space: nowrap;
+  }
+
+  /* ─── Bottom Control Sheet (40% = 341px) ─── */
+  .control-sheet {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 341px;
+    background: rgba(15, 18, 25, 0.88);
+    backdrop-filter: blur(32px) saturate(1.6);
+    -webkit-backdrop-filter: blur(32px) saturate(1.6);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--r-hero) var(--r-hero) 0 0;
+    display: flex;
+    flex-direction: column;
+    padding: 20px 24px 40px;
+    gap: 0;
+    z-index: 20;
+  }
+
+  /* Sheet handle */
+  .sheet-handle {
+    width: 40px;
+    height: 4px;
+    background: rgba(255,255,255,0.18);
+    border-radius: 2px;
+    align-self: center;
+    margin-bottom: 20px;
+  }
+
+  /* ─── Effect Navigation Row ─── */
+  .effect-nav-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 18px;
+  }
+  .nav-btn {
+    width: 44px;
+    height: 44px;
+    background: var(--lwElevated);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: var(--r-nested);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .nav-btn svg {
+    fill: var(--textPrimary);
+    width: 20px;
+    height: 20px;
+  }
+  .effect-nav-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+  .effect-nav-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 20px;
+    letter-spacing: 0.06em;
+    color: var(--textPrimary);
+  }
+  .effect-nav-index {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--textTertiary);
+    letter-spacing: 0.08em;
+  }
+
+  /* ─── Sliders ─── */
+  .slider-group {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+
+  .slider-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .slider-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .slider-label {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--textSecondary);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .slider-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--lwCyan);
+    letter-spacing: 0.04em;
+  }
+
+  .slider-track {
+    position: relative;
+    height: 8px;
+    background: rgba(255,255,255,0.07);
+    border-radius: 4px;
+    overflow: visible;
+  }
+  .slider-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    border-radius: 4px;
+  }
+  .slider-fill.brightness {
+    width: 78%;
+    background: linear-gradient(90deg, rgba(255,184,77,0.4), var(--lwGold));
+  }
+  .slider-fill.speed {
+    width: 45%;
+    background: linear-gradient(90deg, rgba(0,212,255,0.4), var(--lwCyan));
+  }
+  .slider-thumb {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 22px;
+    height: 22px;
+    background: #fff;
+    border-radius: 50%;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  }
+  .slider-fill.brightness + .slider-thumb { left: 78%; }
+  .slider-fill.speed + .slider-thumb { left: 45%; }
+
+  /* ─── Bottom Action Row ─── */
+  .action-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: auto;
+  }
+
+  .action-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    padding: 10px 14px;
+    background: var(--lwElevated);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: var(--r-nested);
+    flex: 1;
+    cursor: pointer;
+    position: relative;
+  }
+  .action-btn-icon {
+    font-size: 18px;
+    line-height: 1;
+  }
+  .action-btn-label {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--textTertiary);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .palette-mini-row {
+    display: flex;
+    gap: 3px;
+    width: 36px;
+  }
+  .palette-mini-swatch {
+    height: 8px;
+    flex: 1;
+    border-radius: 2px;
+  }
+
+  .edge-icon {
+    width: 24px;
+    height: 24px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px;
+    opacity: 0.85;
+  }
+  .edge-cell {
+    border-radius: 2px;
+  }
+
+  .mode-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: var(--lwCyan);
+    color: #000;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    font-weight: 500;
+    padding: 1px 4px;
+    border-radius: 4px;
+    letter-spacing: 0.04em;
+  }
+
+  /* ─── LED colour helpers ─── */
+  .led-glow-bg {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 80% 60% at 50% 110%, rgba(0,100,180,0.18) 0%, transparent 70%),
+                radial-gradient(ellipse 60% 40% at 20% 80%, rgba(255,100,0,0.12) 0%, transparent 60%),
+                radial-gradient(ellipse 60% 40% at 80% 80%, rgba(120,0,200,0.12) 0%, transparent 60%);
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+<p class="page-title">Play Tab — Mockup 08</p>
+<p class="page-subtitle">Theatre Mode — Maximum Visual Impact</p>
+
+<div class="annotation">Theatre Mode</div>
+
+<div class="phone-wrapper">
+  <div class="phone-frame">
+    <div class="screen">
+
+      <!-- Dynamic Island -->
+      <div class="dynamic-island">
+        <div class="di-camera"></div>
+      </div>
+
+      <!-- Home Indicator -->
+      <div class="home-indicator"></div>
+
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span class="status-time">9:41</span>
+        <div class="status-icons">
+          <!-- Signal -->
+          <svg width="17" height="12" viewBox="0 0 17 12"><rect x="0" y="6" width="3" height="6" rx="1"/><rect x="4.5" y="4" width="3" height="8" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1" opacity="0.35"/></svg>
+          <!-- WiFi -->
+          <svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 9.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm0-3.5a6 6 0 0 1 4.24 1.76l-1.42 1.42A4 4 0 0 0 8 8a4 4 0 0 0-2.82 1.18L3.76 7.76A6 6 0 0 1 8 6zm0-4a9.98 9.98 0 0 1 7.07 2.93L13.66 6.34A8 8 0 0 0 8 4a8 8 0 0 0-5.66 2.34L.93 4.93A9.98 9.98 0 0 1 8 2z"/></svg>
+          <!-- Battery -->
+          <svg width="26" height="13" viewBox="0 0 26 13"><rect x="0" y="1" width="22" height="11" rx="3" stroke="white" stroke-width="1" fill="none" opacity="0.5"/><rect x="1" y="2" width="18" height="9" rx="2" fill="white"/><rect x="23" y="4" width="2.5" height="5" rx="1.25" fill="white" opacity="0.4"/></svg>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════ -->
+      <!-- LED HERO (60%)                     -->
+      <!-- ═══════════════════════════════════ -->
+      <div class="led-hero">
+
+        <!-- Ambient glow -->
+        <div class="led-glow-bg"></div>
+
+        <!-- LED canvas -->
+        <div class="led-canvas">
+          <!-- Strip 1 (160 LEDs, displayed as 2 rows of 80 for visual density) -->
+          <div class="led-strip" id="strip1a"></div>
+          <div class="led-strip" id="strip1b"></div>
+          <div style="height:12px"></div>
+          <!-- Strip 2 -->
+          <div class="led-strip" id="strip2a"></div>
+          <div class="led-strip" id="strip2b"></div>
+        </div>
+
+        <!-- Effect Name Overlay -->
+        <div class="effect-overlay">
+          <div class="effect-name-block">
+            <span class="effect-label">Active Effect</span>
+            <span class="effect-name">Aurora Cascade</span>
+          </div>
+          <div class="bpm-overlay">
+            <div class="bpm-beat-dot"></div>
+            <span class="bpm-value">127</span>
+            <span class="bpm-label">BPM</span>
+          </div>
+        </div>
+
+        <!-- Palette Row Overlay -->
+        <div class="palette-overlay">
+          <span class="palette-label">Palette</span>
+          <div class="palette-swatches">
+            <div class="swatch" style="background:#00D4FF;"></div>
+            <div class="swatch" style="background:#0088CC;"></div>
+            <div class="swatch" style="background:#4DFFB8;"></div>
+            <div class="swatch" style="background:#00A86B;"></div>
+            <div class="swatch" style="background:#7B2FFF;"></div>
+            <div class="swatch" style="background:#5500CC;"></div>
+          </div>
+          <span class="palette-name-tag">Ocean Mist</span>
+        </div>
+
+      </div>
+      <!-- end led-hero -->
+
+      <!-- ═══════════════════════════════════ -->
+      <!-- CONTROL SHEET (40%)                -->
+      <!-- ═══════════════════════════════════ -->
+      <div class="control-sheet">
+        <div class="sheet-handle"></div>
+
+        <!-- Effect Navigation -->
+        <div class="effect-nav-row">
+          <div class="nav-btn">
+            <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          </div>
+          <div class="effect-nav-info">
+            <span class="effect-nav-name">Aurora Cascade</span>
+            <span class="effect-nav-index">14 / 127</span>
+          </div>
+          <div class="nav-btn">
+            <svg viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+          </div>
+        </div>
+
+        <!-- Sliders -->
+        <div class="slider-group">
+          <div class="slider-row">
+            <div class="slider-header">
+              <span class="slider-label">Brightness</span>
+              <span class="slider-value">78%</span>
+            </div>
+            <div class="slider-track">
+              <div class="slider-fill brightness"></div>
+              <div class="slider-thumb" style="left:78%"></div>
+            </div>
+          </div>
+          <div class="slider-row">
+            <div class="slider-header">
+              <span class="slider-label">Speed</span>
+              <span class="slider-value">0.45×</span>
+            </div>
+            <div class="slider-track">
+              <div class="slider-fill speed"></div>
+              <div class="slider-thumb" style="left:45%"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Row -->
+        <div class="action-row">
+
+          <!-- Palette -->
+          <div class="action-btn">
+            <div class="palette-mini-row">
+              <div class="palette-mini-swatch" style="background:#00D4FF;"></div>
+              <div class="palette-mini-swatch" style="background:#4DFFB8;"></div>
+              <div class="palette-mini-swatch" style="background:#7B2FFF;"></div>
+              <div class="palette-mini-swatch" style="background:#FFB84D;"></div>
+            </div>
+            <span class="action-btn-label">Palette</span>
+          </div>
+
+          <!-- EdgeMixer -->
+          <div class="action-btn">
+            <div class="mode-badge">COMP</div>
+            <div class="edge-icon">
+              <div class="edge-cell" style="background:#00D4FF;"></div>
+              <div class="edge-cell" style="background:#FF4D4D;"></div>
+              <div class="edge-cell" style="background:#4DFFB8;"></div>
+              <div class="edge-cell" style="background:#FFB84D;"></div>
+              <div class="edge-cell" style="background:#7B2FFF;"></div>
+              <div class="edge-cell" style="background:#FF6B6B;"></div>
+              <div class="edge-cell" style="background:#00A86B;"></div>
+              <div class="edge-cell" style="background:#0088CC;"></div>
+              <div class="edge-cell" style="background:#FFB84D;"></div>
+            </div>
+            <span class="action-btn-label">EdgeMixer</span>
+          </div>
+
+          <!-- Expression -->
+          <div class="action-btn">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9CA3B0" stroke-width="1.5" stroke-linecap="round">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+            </svg>
+            <span class="action-btn-label">Expr.</span>
+          </div>
+
+          <!-- Transitions -->
+          <div class="action-btn">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9CA3B0" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="6" cy="12" r="3"/><circle cx="18" cy="12" r="3"/>
+              <path d="M9 12h6"/>
+            </svg>
+            <span class="action-btn-label">Fade</span>
+          </div>
+
+        </div>
+        <!-- end action row -->
+
+      </div>
+      <!-- end control-sheet -->
+
+    </div><!-- end screen -->
+  </div><!-- end phone-frame -->
+</div><!-- end phone-wrapper -->
+
+<script>
+  // ── LED strip painter ──
+  // Two physical strips of 160 LEDs each.
+  // Each strip rendered as 2 rows of 80 here for visual density.
+
+  const STRIP_LEN = 80;
+
+  // Aurora Cascade palette: deep blue → cyan → teal → purple
+  function auroraColor(pos, t) {
+    // Wave of hues travelling from centre outward
+    const centre = 79.5;
+    const dist   = Math.abs(pos - centre);
+    const wave   = Math.sin(dist * 0.07 - t * 2.8) * 0.5 + 0.5;
+    const wave2  = Math.sin(dist * 0.04 + t * 1.4) * 0.5 + 0.5;
+    const r = Math.round(wave2 * 80  + 20);
+    const g = Math.round(wave  * 200 + 55);
+    const b = Math.round(220);
+    const bright = 0.45 + 0.55 * Math.pow(1 - dist / 79.5, 0.6);
+    return `rgb(${Math.round(r*bright)},${Math.round(g*bright)},${Math.round(b*bright)})`;
+  }
+
+  function buildStrip(containerId, stripOffset, t) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    let html = '';
+    for (let i = 0; i < STRIP_LEN; i++) {
+      const c = auroraColor(i + stripOffset, t);
+      html += `<div class="led-dot" style="background:${c};box-shadow:0 0 4px ${c};"></div>`;
+    }
+    el.innerHTML = html;
+  }
+
+  let t = 0;
+  function animateLEDs() {
+    t += 0.016;
+    buildStrip('strip1a', 0,  t);
+    buildStrip('strip1b', 80, t);
+    buildStrip('strip2a', 0,  t + 0.4);
+    buildStrip('strip2b', 80, t + 0.4);
+    requestAnimationFrame(animateLEDs);
+  }
+  animateLEDs();
+</script>
+</body>
+</html>

@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Play Tab — Mockup 09: Dual Column</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0A0A0C;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 40px 20px 60px;
+    font-family: 'Rajdhani', sans-serif;
+  }
+
+  :root {
+    --lwBase:     #0F1219;
+    --lwCard:     #1E2535;
+    --lwElevated: #252D3F;
+    --lwGold:     #FFB84D;
+    --lwCyan:     #00D4FF;
+    --lwSuccess:  #4DFFB8;
+    --lwError:    #FF4D4D;
+    --textPrimary:   #E6E9EF;
+    --textSecondary: #9CA3B0;
+    --textTertiary:  #6B7280;
+    --r-hero:   24px;
+    --r-card:   16px;
+    --r-nested: 12px;
+  }
+
+  .page-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    letter-spacing: 0.12em;
+    color: var(--textSecondary);
+    text-align: center;
+    margin-bottom: 6px;
+  }
+  .page-subtitle {
+    font-size: 13px;
+    color: var(--textTertiary);
+    text-align: center;
+    margin-bottom: 36px;
+    letter-spacing: 0.04em;
+  }
+  .annotation {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--lwCyan);
+    text-align: center;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  /* ─── iPhone Frame ─── */
+  .phone-frame {
+    position: relative;
+    width: 393px;
+    height: 852px;
+    background: #1A1A1C;
+    border-radius: 54px;
+    border: 1.5px solid #3A3A3C;
+    overflow: hidden;
+    box-shadow:
+      0 0 0 2px #0A0A0C,
+      0 0 0 3.5px #4A4A4C,
+      0 40px 80px rgba(0,0,0,0.7),
+      inset 0 0 0 1px rgba(255,255,255,0.06);
+  }
+  .phone-frame::before {
+    content: '';
+    position: absolute;
+    left: -3px;
+    top: 140px;
+    width: 3px;
+    height: 36px;
+    background: #3A3A3C;
+    border-radius: 2px 0 0 2px;
+    box-shadow: 0 54px 0 #3A3A3C, 0 110px 0 #3A3A3C;
+  }
+  .phone-frame::after {
+    content: '';
+    position: absolute;
+    right: -3px;
+    top: 168px;
+    width: 3px;
+    height: 78px;
+    background: #3A3A3C;
+    border-radius: 0 2px 2px 0;
+  }
+
+  .screen {
+    position: absolute;
+    inset: 0;
+    background: var(--lwBase);
+    border-radius: 54px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .dynamic-island {
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 126px;
+    height: 37px;
+    background: #000;
+    border-radius: 20px;
+    z-index: 100;
+  }
+
+  .home-indicator {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 134px;
+    height: 5px;
+    background: rgba(255,255,255,0.3);
+    border-radius: 3px;
+    z-index: 100;
+  }
+
+  .status-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 59px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding: 0 28px 8px;
+    z-index: 50;
+    background: linear-gradient(180deg, var(--lwBase) 70%, transparent);
+  }
+  .status-time {
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 600;
+    font-size: 16px;
+    color: var(--textPrimary);
+  }
+  .status-icons {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .status-icons svg { fill: var(--textPrimary); }
+
+  /* ─── LED Preview Banner ─── */
+  .led-banner {
+    position: absolute;
+    top: 59px;
+    left: 0;
+    right: 0;
+    height: 156px;
+    background: #050608;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 0 12px;
+    overflow: hidden;
+  }
+
+  .led-banner-glow {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 100% 80% at 50% 120%, rgba(0,80,160,0.25) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .led-strip-banner {
+    display: flex;
+    gap: 1px;
+    width: 100%;
+  }
+  .led-dot {
+    flex: 1;
+    height: 5px;
+    border-radius: 2.5px;
+  }
+
+  .led-banner-label {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--textTertiary);
+    letter-spacing: 0.08em;
+    opacity: 0.6;
+  }
+
+  /* ─── Main Content Area (below LED banner) ─── */
+  .content-area {
+    position: absolute;
+    top: 215px;
+    left: 0;
+    right: 0;
+    bottom: 34px;
+    display: flex;
+    gap: 0;
+  }
+
+  /* ─── LEFT COLUMN (30% = ~117px) ─── */
+  .left-col {
+    width: 115px;
+    min-width: 115px;
+    display: flex;
+    flex-direction: column;
+    padding: 0 0 0 16px;
+    gap: 10px;
+    overflow: hidden;
+  }
+
+  /* BPM Header in left col */
+  .bpm-header {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 10px 12px;
+    background: var(--lwCard);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: var(--r-nested);
+    gap: 1px;
+    flex-shrink: 0;
+  }
+  .bpm-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .bpm-number {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 32px;
+    color: var(--lwGold);
+    line-height: 1;
+  }
+  .bpm-unit {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--lwGold);
+    opacity: 0.7;
+    letter-spacing: 0.06em;
+    align-self: flex-end;
+    margin-bottom: 4px;
+  }
+  .bpm-sub {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 10px;
+    color: var(--textTertiary);
+    letter-spacing: 0.05em;
+  }
+  .beat-dot {
+    width: 7px;
+    height: 7px;
+    background: var(--lwGold);
+    border-radius: 50%;
+    animation: beat 0.6s ease-out infinite;
+    flex-shrink: 0;
+  }
+  @keyframes beat {
+    0%   { transform: scale(1.5); opacity: 1; }
+    60%  { transform: scale(1); opacity: 0.5; }
+    100% { transform: scale(1.5); opacity: 1; }
+  }
+
+  /* Mini cards */
+  .mini-card {
+    padding: 10px 12px;
+    background: var(--lwCard);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: var(--r-nested);
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: border-color 0.15s;
+  }
+  .mini-card:hover { border-color: rgba(0,212,255,0.3); }
+  .mini-card-label {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--textTertiary);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .mini-card-value {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 13px;
+    color: var(--textPrimary);
+    letter-spacing: 0.04em;
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .mini-card-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--textTertiary);
+  }
+
+  /* Palette row in mini-card */
+  .mini-palette-row {
+    display: flex;
+    gap: 3px;
+  }
+  .mini-swatch {
+    flex: 1;
+    height: 6px;
+    border-radius: 2px;
+  }
+
+  /* EdgeMixer mini grid */
+  .edge-mini-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 2px;
+  }
+  .edge-mini-cell {
+    height: 7px;
+    border-radius: 1.5px;
+  }
+
+  /* RMS/audio micro-bar */
+  .audio-mini {
+    display: flex;
+    gap: 2px;
+    align-items: flex-end;
+    height: 18px;
+  }
+  .audio-bar {
+    flex: 1;
+    border-radius: 1.5px;
+    background: var(--lwCyan);
+  }
+
+  /* Bottom left filler — expression params */
+  .expr-mini-card {
+    padding: 10px 12px;
+    background: var(--lwCard);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: var(--r-nested);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+  }
+  .expr-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+  }
+  .expr-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    color: var(--textTertiary);
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+  .expr-bar-track {
+    flex: 1;
+    height: 4px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .expr-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--lwCyan);
+    opacity: 0.7;
+  }
+  .expr-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    color: var(--textSecondary);
+    width: 22px;
+    text-align: right;
+  }
+
+  /* ─── DIVIDER ─── */
+  .col-divider {
+    width: 1px;
+    background: rgba(255,255,255,0.05);
+    margin: 0 10px;
+    align-self: stretch;
+    flex-shrink: 0;
+  }
+
+  /* ─── RIGHT COLUMN (70% = ~262px) ─── */
+  .right-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 0 16px 0 0;
+    gap: 12px;
+  }
+
+  /* Big vertical sliders */
+  .v-slider-group {
+    display: flex;
+    gap: 16px;
+    flex: 1;
+  }
+
+  .v-slider-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    background: var(--lwCard);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: var(--r-card);
+    padding: 14px 0 12px;
+  }
+
+  .v-slider-label {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--textSecondary);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .v-track-wrapper {
+    flex: 1;
+    width: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 0;
+  }
+
+  .v-track {
+    position: relative;
+    width: 28px;
+    height: 100%;
+    background: rgba(255,255,255,0.06);
+    border-radius: 14px;
+  }
+
+  .v-fill {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    border-radius: 14px;
+  }
+  .v-fill.bright {
+    height: 78%;
+    background: linear-gradient(0deg, var(--lwGold), rgba(255,184,77,0.3));
+  }
+  .v-fill.speed {
+    height: 45%;
+    background: linear-gradient(0deg, var(--lwCyan), rgba(0,212,255,0.25));
+  }
+
+  .v-thumb {
+    position: absolute;
+    left: 50%;
+    transform: translate(-50%, 50%);
+    width: 36px;
+    height: 36px;
+    background: #fff;
+    border-radius: 50%;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .v-fill.bright + .v-thumb { bottom: 78%; }
+  .v-fill.speed  + .v-thumb { bottom: 45%; }
+
+  .v-thumb-icon {
+    width: 14px;
+    height: 14px;
+  }
+
+  .v-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--textPrimary);
+    letter-spacing: 0.04em;
+  }
+
+  .v-tick-row {
+    position: absolute;
+    right: -14px;
+    top: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 2px 0;
+  }
+  .v-tick {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 7px;
+    color: rgba(255,255,255,0.2);
+    text-align: right;
+  }
+
+  /* Effect nav under sliders */
+  .effect-nav-right {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    background: var(--lwCard);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: var(--r-card);
+    gap: 8px;
+  }
+  .enr-btn {
+    width: 40px;
+    height: 40px;
+    background: var(--lwElevated);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: var(--r-nested);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .enr-btn svg { fill: var(--textPrimary); }
+  .enr-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    flex: 1;
+  }
+  .enr-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 16px;
+    letter-spacing: 0.05em;
+    color: var(--textPrimary);
+    line-height: 1;
+  }
+  .enr-index {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--textTertiary);
+  }
+
+  /* Transition row */
+  .transition-row {
+    display: flex;
+    gap: 8px;
+  }
+  .trans-chip {
+    flex: 1;
+    padding: 8px 10px;
+    background: var(--lwCard);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: var(--r-nested);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+  }
+  .trans-chip-label {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--textTertiary);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .trans-chip-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--lwSuccess);
+  }
+  .trans-chip.active {
+    border-color: rgba(77,255,184,0.3);
+    background: rgba(77,255,184,0.06);
+  }
+</style>
+</head>
+<body>
+
+<p class="page-title">Play Tab — Mockup 09</p>
+<p class="page-subtitle">Dual Column — Large Thumb-Friendly Sliders</p>
+
+<div class="annotation">Dual Column</div>
+
+<div class="phone-frame">
+  <div class="screen">
+
+    <!-- Dynamic Island -->
+    <div class="dynamic-island"></div>
+
+    <!-- Home Indicator -->
+    <div class="home-indicator"></div>
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+      <span class="status-time">9:41</span>
+      <div class="status-icons">
+        <svg width="17" height="12" viewBox="0 0 17 12"><rect x="0" y="6" width="3" height="6" rx="1"/><rect x="4.5" y="4" width="3" height="8" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1" opacity="0.35"/></svg>
+        <svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 9.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm0-3.5a6 6 0 0 1 4.24 1.76l-1.42 1.42A4 4 0 0 0 8 8a4 4 0 0 0-2.82 1.18L3.76 7.76A6 6 0 0 1 8 6zm0-4a9.98 9.98 0 0 1 7.07 2.93L13.66 6.34A8 8 0 0 0 8 4a8 8 0 0 0-5.66 2.34L.93 4.93A9.98 9.98 0 0 1 8 2z"/></svg>
+        <svg width="26" height="13" viewBox="0 0 26 13"><rect x="0" y="1" width="22" height="11" rx="3" stroke="white" stroke-width="1" fill="none" opacity="0.5"/><rect x="1" y="2" width="18" height="9" rx="2" fill="white"/><rect x="23" y="4" width="2.5" height="5" rx="1.25" fill="white" opacity="0.4"/></svg>
+      </div>
+    </div>
+
+    <!-- ═══════════════ LED BANNER ═══════════════ -->
+    <div class="led-banner">
+      <div class="led-banner-glow"></div>
+      <span class="led-banner-label">320 LEDs · 2 strips</span>
+      <div class="led-strip-banner" id="bannerStrip1"></div>
+      <div class="led-strip-banner" id="bannerStrip2"></div>
+    </div>
+
+    <!-- ═══════════════ CONTENT AREA ═══════════════ -->
+    <div class="content-area">
+
+      <!-- LEFT COLUMN -->
+      <div class="left-col">
+
+        <!-- BPM -->
+        <div class="bpm-header">
+          <div class="bpm-row">
+            <div class="beat-dot"></div>
+            <span class="bpm-number">127</span>
+            <span class="bpm-unit">BPM</span>
+          </div>
+          <span class="bpm-sub">4/4 · Detected</span>
+        </div>
+
+        <!-- Effect -->
+        <div class="mini-card">
+          <span class="mini-card-label">Effect</span>
+          <span class="mini-card-value" style="font-size:11px;">Aurora Cascade</span>
+          <span class="mini-card-sub">14 / 127</span>
+        </div>
+
+        <!-- Palette -->
+        <div class="mini-card">
+          <span class="mini-card-label">Palette</span>
+          <div class="mini-palette-row">
+            <div class="mini-swatch" style="background:#00D4FF;"></div>
+            <div class="mini-swatch" style="background:#4DFFB8;"></div>
+            <div class="mini-swatch" style="background:#7B2FFF;"></div>
+            <div class="mini-swatch" style="background:#FFB84D;"></div>
+            <div class="mini-swatch" style="background:#FF4D4D;"></div>
+          </div>
+          <span class="mini-card-sub" style="font-size:8px;">Ocean Mist</span>
+        </div>
+
+        <!-- EdgeMixer -->
+        <div class="mini-card">
+          <span class="mini-card-label">EdgeMixer</span>
+          <div class="edge-mini-grid">
+            <div class="edge-mini-cell" style="background:#00D4FF;"></div>
+            <div class="edge-mini-cell" style="background:#FF4D4D;"></div>
+            <div class="edge-mini-cell" style="background:#4DFFB8;"></div>
+            <div class="edge-mini-cell" style="background:#FFB84D;"></div>
+            <div class="edge-mini-cell" style="background:#7B2FFF;"></div>
+            <div class="edge-mini-cell" style="background:#FF6B6B;"></div>
+            <div class="edge-mini-cell" style="background:#0088CC;"></div>
+            <div class="edge-mini-cell" style="background:#00A86B;"></div>
+          </div>
+          <span class="mini-card-sub" style="font-size:8px;">Complementary</span>
+        </div>
+
+        <!-- Audio mini-bars -->
+        <div class="mini-card">
+          <span class="mini-card-label">Audio</span>
+          <div class="audio-mini" id="audioBars"></div>
+          <span class="mini-card-sub" style="font-size:8px;">RMS 0.72</span>
+        </div>
+
+        <!-- Expression params -->
+        <div class="expr-mini-card">
+          <span class="mini-card-label">Expression</span>
+          <div class="expr-row">
+            <span class="expr-name">bass</span>
+            <div class="expr-bar-track"><div class="expr-bar-fill" style="width:82%;background:var(--lwGold);"></div></div>
+            <span class="expr-val">0.82</span>
+          </div>
+          <div class="expr-row">
+            <span class="expr-name">mid</span>
+            <div class="expr-bar-track"><div class="expr-bar-fill" style="width:55%;background:var(--lwCyan);"></div></div>
+            <span class="expr-val">0.55</span>
+          </div>
+          <div class="expr-row">
+            <span class="expr-name">trebl</span>
+            <div class="expr-bar-track"><div class="expr-bar-fill" style="width:34%;background:var(--lwSuccess);"></div></div>
+            <span class="expr-val">0.34</span>
+          </div>
+          <div class="expr-row">
+            <span class="expr-name">beat</span>
+            <div class="expr-bar-track"><div class="expr-bar-fill" style="width:100%;background:var(--lwError);"></div></div>
+            <span class="expr-val">1.00</span>
+          </div>
+          <div class="expr-row">
+            <span class="expr-name">onst</span>
+            <div class="expr-bar-track"><div class="expr-bar-fill" style="width:40%;background:#AA77FF;"></div></div>
+            <span class="expr-val">0.40</span>
+          </div>
+          <div class="expr-row">
+            <span class="expr-name">rms</span>
+            <div class="expr-bar-track"><div class="expr-bar-fill" style="width:72%;background:var(--lwCyan);"></div></div>
+            <span class="expr-val">0.72</span>
+          </div>
+          <div class="expr-row">
+            <span class="expr-name">sprd</span>
+            <div class="expr-bar-track"><div class="expr-bar-fill" style="width:60%;"></div></div>
+            <span class="expr-val">0.60</span>
+          </div>
+        </div>
+
+      </div>
+      <!-- end left-col -->
+
+      <!-- Divider -->
+      <div class="col-divider"></div>
+
+      <!-- RIGHT COLUMN -->
+      <div class="right-col">
+
+        <!-- Vertical Sliders -->
+        <div class="v-slider-group">
+
+          <!-- Brightness -->
+          <div class="v-slider-container">
+            <span class="v-slider-label">Bright</span>
+            <div class="v-track-wrapper">
+              <div class="v-track">
+                <div class="v-fill bright"></div>
+                <div class="v-thumb" style="bottom:78%; transform:translate(-50%,50%);">
+                  <svg class="v-thumb-icon" viewBox="0 0 24 24" fill="none" stroke="#FFB84D" stroke-width="2.5" stroke-linecap="round">
+                    <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                  </svg>
+                </div>
+                <!-- ticks -->
+                <div class="v-tick-row">
+                  <span class="v-tick">100</span>
+                  <span class="v-tick">75</span>
+                  <span class="v-tick">50</span>
+                  <span class="v-tick">25</span>
+                  <span class="v-tick">0</span>
+                </div>
+              </div>
+            </div>
+            <span class="v-value">78%</span>
+          </div>
+
+          <!-- Speed -->
+          <div class="v-slider-container">
+            <span class="v-slider-label">Speed</span>
+            <div class="v-track-wrapper">
+              <div class="v-track">
+                <div class="v-fill speed"></div>
+                <div class="v-thumb" style="bottom:45%; transform:translate(-50%,50%);">
+                  <svg class="v-thumb-icon" viewBox="0 0 24 24" fill="none" stroke="#00D4FF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="5 3 19 12 5 21 5 3"/>
+                  </svg>
+                </div>
+                <div class="v-tick-row">
+                  <span class="v-tick">2.0</span>
+                  <span class="v-tick">1.5</span>
+                  <span class="v-tick">1.0</span>
+                  <span class="v-tick">0.5</span>
+                  <span class="v-tick">0</span>
+                </div>
+              </div>
+            </div>
+            <span class="v-value">0.45×</span>
+          </div>
+
+        </div>
+        <!-- end v-slider-group -->
+
+        <!-- Effect Nav Row -->
+        <div class="effect-nav-right">
+          <div class="enr-btn">
+            <svg width="18" height="18" viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          </div>
+          <div class="enr-info">
+            <span class="enr-name">Aurora Cascade</span>
+            <span class="enr-index">14 / 127</span>
+          </div>
+          <div class="enr-btn">
+            <svg width="18" height="18" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+          </div>
+        </div>
+
+        <!-- Transition chips -->
+        <div class="transition-row">
+          <div class="trans-chip">
+            <span class="trans-chip-label">Mode</span>
+            <span class="trans-chip-value" style="color:var(--lwCyan);font-size:10px;">CROSSFADE</span>
+          </div>
+          <div class="trans-chip active">
+            <span class="trans-chip-label">Duration</span>
+            <span class="trans-chip-value">800ms</span>
+          </div>
+          <div class="trans-chip">
+            <span class="trans-chip-label">Trigger</span>
+            <span class="trans-chip-value" style="color:var(--lwGold);font-size:10px;">BEAT</span>
+          </div>
+        </div>
+
+      </div>
+      <!-- end right-col -->
+
+    </div>
+    <!-- end content-area -->
+
+  </div><!-- end screen -->
+</div><!-- end phone-frame -->
+
+<script>
+  // LED Banner animation
+  function heatColor(pos, t) {
+    const centre = 79.5;
+    const dist   = Math.abs(pos - centre);
+    const w1 = Math.sin(dist * 0.06 - t * 2.5) * 0.5 + 0.5;
+    const w2 = Math.sin(dist * 0.03 + t * 1.8) * 0.5 + 0.5;
+    const b = Math.round(220 * w1);
+    const g = Math.round(180 * w2);
+    const bright = 0.4 + 0.6 * Math.pow(Math.max(0, 1 - dist / 79.5), 0.5);
+    return `rgb(${Math.round(20*bright)},${Math.round(g*bright)},${Math.round(b*bright)})`;
+  }
+
+  function fillBannerStrip(id, offset, t) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    let html = '';
+    for (let i = 0; i < 160; i++) {
+      const c = heatColor(i, t);
+      html += `<div class="led-dot" style="background:${c};"></div>`;
+    }
+    el.innerHTML = html;
+  }
+
+  // Audio bars
+  const bands = [0.85, 0.72, 0.55, 0.40, 0.30, 0.22, 0.18, 0.25];
+  function fillAudioBars() {
+    const el = document.getElementById('audioBars');
+    if (!el) return;
+    let html = '';
+    bands.forEach((v, i) => {
+      const hue = 180 + i * 8;
+      const h = Math.round(v * 18);
+      html += `<div class="audio-bar" style="height:${h}px;background:hsl(${hue},90%,60%);"></div>`;
+    });
+    el.innerHTML = html;
+  }
+  fillAudioBars();
+
+  let t = 0;
+  function animate() {
+    t += 0.014;
+    fillBannerStrip('bannerStrip1', 0, t);
+    fillBannerStrip('bannerStrip2', 0, t + 0.3);
+    requestAnimationFrame(animate);
+  }
+  animate();
+</script>
+</body>
+</html>

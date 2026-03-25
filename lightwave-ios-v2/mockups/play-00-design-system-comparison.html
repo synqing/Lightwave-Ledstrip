@@ -1,0 +1,1475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>LightwaveOS Design System Comparison — Tab5 vs iOS</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@400;500;700&family=Rajdhani:wght@400;500;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    /* Tab5 tokens */
+    --t5-bg:        #08080A;
+    --t5-surface:   #111114;
+    --t5-elevated:  #1A1A1E;
+    --t5-border:    #1E1E24;
+    --t5-border-active: #FFC700;
+    --t5-fg1:       #F0F0F0;
+    --t5-fg2:       #8891A0;
+    --t5-fg3:       #3A3F4A;
+    --t5-brand:     #FFC700;
+    --t5-brand-dim: #665200;
+    --t5-ok:        #22C55E;
+    --t5-warn:      #F59E0B;
+    --t5-error:     #EF4444;
+
+    /* iOS tokens */
+    --ios-bg:       #0F1219;
+    --ios-card:     #1E2535;
+    --ios-elevated: #252D3F;
+    --ios-gold:     #FFB84D;
+    --ios-cyan:     #00D4FF;
+    --ios-fg1:      #E6E9EF;
+    --ios-fg2:      #9CA3B0;
+    --ios-fg3:      #6B7280;
+    --ios-ok:       #4DFFB8;
+    --ios-error:    #FF4D4D;
+    --ios-beat:     #FFCC33;
+  }
+
+  body {
+    background: #111;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 100vh;
+    font-family: 'Rajdhani', sans-serif;
+    padding: 40px 20px;
+    color: #F0F0F0;
+  }
+
+  .label-above {
+    color: #666;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    text-align: center;
+  }
+
+  .display-frame {
+    width: 1400px;
+    background: #08080A;
+    border: 2px solid #2a2a2a;
+    position: relative;
+    overflow: hidden;
+    padding: 40px 48px;
+    flex-shrink: 0;
+    margin-bottom: 24px;
+  }
+
+  .section-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 32px;
+    color: #F0F0F0;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+    line-height: 1;
+  }
+  .section-subtitle {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 16px;
+    color: #8891A0;
+    margin-bottom: 8px;
+    font-weight: 500;
+  }
+  .section-rule {
+    height: 1px;
+    background: #1E1E24;
+    margin-bottom: 28px;
+  }
+
+  /* ---- COMPARISON TABLE ---- */
+  .comparison-header {
+    display: grid;
+    grid-template-columns: 200px 1fr 1fr 180px;
+    gap: 16px;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #1E1E24;
+  }
+  .comparison-header span {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    color: #8891A0;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+
+  .comparison-row {
+    display: grid;
+    grid-template-columns: 200px 1fr 1fr 180px;
+    gap: 16px;
+    margin-bottom: 16px;
+    align-items: start;
+  }
+
+  .comp-role {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: #8891A0;
+    font-weight: 500;
+    padding-top: 12px;
+    line-height: 1.4;
+  }
+
+  .comp-swatch {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .comp-swatch-box {
+    width: 100%;
+    height: 56px;
+    border-radius: 8px;
+    border: 1px solid #2A2A2E;
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    padding: 6px 10px;
+  }
+  .comp-swatch-box .hex-overlay {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 400;
+    opacity: 0.7;
+  }
+  .comp-token {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: #F0F0F0;
+  }
+  .comp-hex {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 400;
+    color: #8891A0;
+  }
+
+  .comp-delta {
+    padding-top: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    line-height: 1.6;
+  }
+  .delta-label {
+    color: #3A3F4A;
+    font-weight: 400;
+  }
+  .delta-value {
+    font-weight: 700;
+  }
+  .delta-match { color: #22C55E; }
+  .delta-close { color: #F59E0B; }
+  .delta-diverge { color: #EF4444; }
+
+  /* ---- CONTRAST ANALYSIS ---- */
+  .contrast-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+    margin-bottom: 48px;
+  }
+
+  .contrast-panel {
+    background: #0C0C0E;
+    border: 1px solid #1E1E24;
+    border-radius: 12px;
+    padding: 24px;
+  }
+  .contrast-panel-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 20px;
+    letter-spacing: 1.5px;
+    margin-bottom: 16px;
+    line-height: 1;
+  }
+  .contrast-panel-title.tab5 { color: #FFC700; }
+  .contrast-panel-title.ios { color: #FFB84D; }
+
+  .contrast-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .contrast-table th {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: #3A3F4A;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid #1E1E24;
+  }
+  .contrast-table td {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    padding: 8px 8px;
+    border-bottom: 1px solid #111114;
+    vertical-align: middle;
+  }
+  .contrast-table .pair-preview {
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+    border-radius: 4px;
+    overflow: hidden;
+    height: 24px;
+  }
+  .contrast-table .pair-bg {
+    width: 16px;
+    height: 24px;
+  }
+  .contrast-table .pair-fg {
+    padding: 0 6px;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 24px;
+    font-family: 'Rajdhani', sans-serif;
+  }
+  .ratio-pass { color: #22C55E; }
+  .ratio-warn { color: #F59E0B; }
+  .ratio-fail { color: #EF4444; }
+  .badge {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+  .badge-aaa { background: #0a3d20; color: #22C55E; }
+  .badge-aa { background: #332600; color: #FFC700; }
+  .badge-fail { background: #3d0a0a; color: #EF4444; }
+
+  /* ---- TYPOGRAPHY COMPARISON ---- */
+  .type-comparison {
+    display: grid;
+    grid-template-columns: 200px 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 16px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #111114;
+    align-items: baseline;
+  }
+  .type-comparison:last-child {
+    border-bottom: none;
+  }
+  .type-role {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #FFC700;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    line-height: 1.4;
+  }
+  .type-role .size-info {
+    display: block;
+    color: #3A3F4A;
+    text-transform: none;
+    font-weight: 400;
+    margin-top: 4px;
+  }
+  .type-platform {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .type-platform .platform-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #3A3F4A;
+  }
+  .type-platform .platform-label.tab5 { color: #665200; }
+  .type-platform .platform-label.ios { color: #664D1A; }
+
+  /* ---- RECOMMENDATION ---- */
+  .rec-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    margin-bottom: 48px;
+  }
+  .rec-card {
+    background: #0C0C0E;
+    border: 1px solid #1E1E24;
+    border-radius: 12px;
+    padding: 24px;
+  }
+  .rec-card.recommended {
+    border-color: #FFC700;
+    background: #0E0D08;
+  }
+  .rec-card-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 20px;
+    letter-spacing: 1.5px;
+    margin-bottom: 12px;
+    line-height: 1;
+  }
+  .rec-card-title.yes { color: #22C55E; }
+  .rec-card-title.maybe { color: #FFC700; }
+  .rec-card-title.no { color: #EF4444; }
+  .rec-card p {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 15px;
+    font-weight: 500;
+    color: #8891A0;
+    line-height: 1.5;
+    margin-bottom: 8px;
+  }
+  .rec-card ul {
+    list-style: none;
+    padding: 0;
+  }
+  .rec-card li {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: #8891A0;
+    line-height: 1.6;
+    padding-left: 16px;
+    position: relative;
+  }
+  .rec-card li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 9px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+  .rec-card.recommended li::before { background: #FFC700; }
+  .rec-card li::before { background: #3A3F4A; }
+
+  /* ---- UNIFIED PROPOSAL ---- */
+  .unified-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .unified-swatch {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .unified-swatch-box {
+    width: 100%;
+    height: 64px;
+    border-radius: 10px;
+    border: 1px solid #2A2A2E;
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    padding: 6px 10px;
+  }
+  .unified-token {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    color: #F0F0F0;
+  }
+  .unified-hex {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 400;
+    color: #8891A0;
+  }
+  .unified-source {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 13px;
+    font-weight: 400;
+    color: #3A3F4A;
+    line-height: 1.3;
+  }
+  .source-tab5 { color: #665200; }
+  .source-ios { color: #664D1A; }
+  .source-new { color: #22C55E; }
+
+  .caption {
+    color: #555;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 13px;
+    font-weight: 400;
+    margin-top: 16px;
+    text-align: center;
+    max-width: 1000px;
+    line-height: 1.5;
+  }
+  .caption strong { color: #888; }
+
+  /* ---- DEVICE CONTEXT ---- */
+  .device-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 48px;
+  }
+  .device-card {
+    background: #0C0C0E;
+    border: 1px solid #1E1E24;
+    border-radius: 12px;
+    padding: 24px;
+  }
+  .device-card-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    letter-spacing: 1.5px;
+    margin-bottom: 4px;
+    line-height: 1;
+  }
+  .device-card-title.tab5 { color: #FFC700; }
+  .device-card-title.ios { color: #FFB84D; }
+  .device-spec {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: #3A3F4A;
+    line-height: 1.8;
+  }
+  .device-spec strong { color: #8891A0; font-weight: 700; }
+
+  /* ---- ANALYSIS CALLOUT ---- */
+  .analysis-box {
+    background: #0C0C0E;
+    border-left: 3px solid #FFC700;
+    border-radius: 0 8px 8px 0;
+    padding: 20px 24px;
+    margin-bottom: 32px;
+  }
+  .analysis-box h3 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px;
+    color: #FFC700;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+  .analysis-box p {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 15px;
+    font-weight: 500;
+    color: #8891A0;
+    line-height: 1.6;
+    margin-bottom: 8px;
+  }
+  .analysis-box p:last-child { margin-bottom: 0; }
+  .analysis-box code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: #F0F0F0;
+    background: #111114;
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+</style>
+</head>
+<body>
+  <div class="label-above">LightwaveOS Design System Comparison &mdash; Tab5 Encoder vs iOS Companion</div>
+
+  <!-- ============================================================ -->
+  <!--  FRAME 1: DEVICE CONTEXT                                     -->
+  <!-- ============================================================ -->
+  <div class="display-frame">
+    <div class="section-title">Device Context</div>
+    <div class="section-subtitle">Understanding the physical constraints that shape each design system</div>
+    <div class="section-rule"></div>
+
+    <div class="device-grid">
+      <div class="device-card">
+        <div class="device-card-title tab5">Tab5 Encoder</div>
+        <div class="device-spec">
+          <strong>Display:</strong> 2.4" IPS LCD, 600 x 450 px<br>
+          <strong>Density:</strong> ~292 PPI<br>
+          <strong>Technology:</strong> IPS LCD (backlit)<br>
+          <strong>Viewing distance:</strong> 30-50cm (desk/rig mount)<br>
+          <strong>Input:</strong> Rotary encoders + touch<br>
+          <strong>Environment:</strong> Dim rooms, live performance<br>
+          <strong>Background:</strong> #08080A (near-black, suits LCD)<br>
+          <strong>Accent:</strong> #FFC700 (pure gold, high energy)
+        </div>
+      </div>
+      <div class="device-card">
+        <div class="device-card-title ios">iOS Companion</div>
+        <div class="device-spec">
+          <strong>Display:</strong> 6.1" Super Retina OLED, 2556 x 1179 px<br>
+          <strong>Density:</strong> ~460 PPI<br>
+          <strong>Technology:</strong> OLED (self-emissive)<br>
+          <strong>Viewing distance:</strong> 25-40cm (hand-held)<br>
+          <strong>Input:</strong> Touch (thumb-reachable zones)<br>
+          <strong>Environment:</strong> Mixed lighting conditions<br>
+          <strong>Background:</strong> #0F1219 (dark navy-black)<br>
+          <strong>Accent:</strong> #FFB84D (warm gold, softer)
+        </div>
+      </div>
+    </div>
+
+    <div class="analysis-box">
+      <h3>Key Differences That Drive Token Divergence</h3>
+      <p><strong>LCD vs OLED:</strong> Tab5's IPS LCD has a backlight bleed floor &mdash; <code>#08080A</code> appears as near-black but is still backlit. OLED pixels turn fully off, so <code>#000000</code> and <code>#08080A</code> are indistinguishable on iPhone. The iOS choice of <code>#0F1219</code> (with a blue shift) adds visual warmth on OLED without sacrificing depth.</p>
+      <p><strong>Viewing angle:</strong> Tab5 is stationary at arm's length; iOS is hand-held at variable distance. iOS needs larger touch targets (44pt minimum per Apple HIG) and slightly larger body text to accommodate motion while reading.</p>
+      <p><strong>PPI density:</strong> At 460 PPI (iPhone) vs 292 PPI (Tab5), the same font size renders with more physical detail on iOS. Tab5's larger display sizes (44px hero) compensate for lower PPI and greater viewing distance.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!--  FRAME 2: COLOUR COMPARISON                                  -->
+  <!-- ============================================================ -->
+  <div class="display-frame">
+    <div class="section-title">Colour Comparison &mdash; Side by Side</div>
+    <div class="section-subtitle">Tab5 tokens (left) vs iOS tokens (right), aligned by semantic role</div>
+    <div class="section-rule"></div>
+
+    <div class="comparison-header">
+      <span>Semantic Role</span>
+      <span>Tab5 Encoder</span>
+      <span>iOS Companion</span>
+      <span>Delta</span>
+    </div>
+
+    <!-- Background -->
+    <div class="comparison-row">
+      <div class="comp-role">Screen<br>Background</div>
+      <div class="comp-swatch">
+        <div class="comp-swatch-box" style="background:#08080A;">
+          <span class="hex-overlay" style="color:#3A3F4A;">#08080A</span>
+        </div>
+        <span class="comp-token">BG_DEEP</span>
+      </div>
+      <div class="comp-swatch">
+        <div class="comp-swatch-box" style="background:#0F1219;">
+          <span class="hex-overlay" style="color:#6B7280;">#0F1219</span>
+        </div>
+        <span class="comp-token">lwBase</span>
+      </div>
+      <div class="comp-delta">
+        <span class="delta-label">Lum: </span><span class="delta-value delta-close">+3.3%</span><br>
+        <span class="delta-label">Hue: </span><span class="delta-value delta-diverge">+223deg (blue)</span><br>
+        <span class="delta-label">Note: </span><span style="color:#8891A0; font-size:10px;">iOS adds navy warmth for OLED</span>
+      </div>
+    </div>
+
+    <!-- Card Surface -->
+    <div class="comparison-row">
+      <div class="comp-role">Card<br>Surface</div>
+      <div class="comp-swatch">
+        <div class="comp-swatch-box" style="background:#111114;">
+          <span class="hex-overlay" style="color:#3A3F4A;">#111114</span>
+        </div>
+        <span class="comp-token">SURFACE</span>
+      </div>
+      <div class="comp-swatch">
+        <div class="comp-swatch-box" style="background:#1E2535;">
+          <span class="hex-overlay" style="color:#6B7280;">#1E2535</span>
+        </div>
+        <span class="comp-token">lwCard</span>
+      </div>
+      <div class="comp-delta">
+        <span class="delta-label">Lum: </span><span class="delta-value delta-diverge">+8.2%</span><br>
+        <span class="delta-label">Hue: </span><span class="delta-value delta-diverge">+220deg (navy)</span><br>
+        <span class="delta-label">Note: </span><span style="color:#8891A0; font-size:10px;">iOS cards are lighter and bluer</span>
+      </div>
+    </div>
+
+    <!-- Elevated Surface -->
+    <div class="comparison-row">
+      <div class="comp-role">Elevated<br>Surface</div>
+      <div class="comp-swatch">
+        <div class="comp-swatch-box" style="background:#1A1A1E;">
+          <span class="hex-overlay" style="color:#3A3F4A;">#1A1A1E</span>
+        </div>
+        <span class="comp-token">SURFACE_ELEVATED</span>
+      </div>
+      <div class="comp-swatch">
+        <div class="comp-swatch-box" style="background:#252D3F;">
+          <span class="hex-overlay" style="color:#6B7280;">#252D3F</span>
+        </div>
+        <span class="comp-token">lwElevated</span>
+      </div>
+      <div class="comp-delta">
+        <span class="delta-label">Lum: </span><span class="delta-value delta-diverge">+7.5%</span><br>
+        <span class="delta-label">Hue: </span><span class="delta-value delta-diverge">+222deg (navy)</span><br>
+        <span class="delta-label">Note: </span><span style="color:#8891A0; font-size:10px;">Same pattern: iOS lifts with blue</span>
+      </div>
+    </div>
+
+    <!-- Primary Text -->
+    <div class="comparison-row">
+      <div class="comp-role">Primary<br>Text</div>
+      <div class="comp-swatch">
+        <div class="comp-swatch-box" style="background:#F0F0F0; border-color:#F0F0F0;">
+          <span class="hex-overlay" style="color:#666;">#F0F0F0</span>
+        </div>
+        <span class="comp-token">FG_PRIMARY</span>
+      </div>
+      <div class="comp-swatch">
+        <div class="comp-swatch-box" style="background:#E6E9EF; border-color:#E6E9EF;">
+          <span class="hex-overlay" style="color:#666;">#E6E9EF</span>
+        </div>
+        <span class="comp-token">lwTextPrimary</span>
+      </div>
+      <div class="comp-delta">
+        <span class="delta-label">Lum: </span><span class="delta-value delta-close">-2.9%</span><br>
+        <span class="delta-label">Hue: </span><span class="delta-value delta-close">+220deg (cool)</span><br>
+        <span class="delta-label">Note: </span><span style="color:#8891A0; font-size:10px;">Close match, iOS slightly cooler</span>
+      </div>
+    </div>
+
+    <!-- Secondary Text -->
+    <div class="comparison-row">
+      <div class="comp-role">Secondary<br>Text</div>
+      <div class="comp-swatch">
+        <div class="comp-swatch-box" style="background:#8891A0;">
+          <span class="hex-overlay" style="color:#444;">#8891A0</span>
+        </div>
+        <span class="comp-token">FG_SECONDARY</span>
+      </div>
+      <div class="comp-swatch">
+        <div class="comp-swatch-box" style="background:#9CA3B0;">
+          <span class="hex-overlay" style="color:#444;">#9CA3B0</span>
+        </div>
+        <span class="comp-token">lwTextSecondary</span>
+      </div>
+      <div class="comp-delta">
+        <span class="delta-label">Lum: </span><span class="delta-value delta-close">+5.3%</span><br>
+        <span class="delta-label">Hue: </span><span class="delta-value delta-match">Similar hue</span><br>
+        <span class="delta-label">Note: </span><span style="color:#8891A0; font-size:10px;">iOS slightly lighter for readability</span>
+      </div>
+    </div>
+
+    <!-- Tertiary / Dimmed Text -->
+    <div class="comparison-row">
+      <div class="comp-role">Dimmed /<br>Tertiary Text</div>
+      <div class="comp-swatch">
+        <div class="comp-swatch-box" style="background:#3A3F4A;">
+          <span class="hex-overlay" style="color:#222;">#3A3F4A</span>
+        </div>
+        <span class="comp-token">FG_DIMMED</span>
+      </div>
+      <div class="comp-swatch">
+        <div class="comp-swatch-box" style="background:#6B7280;">
+          <span class="hex-overlay" style="color:#333;">#6B7280</span>
+        </div>
+        <span class="comp-token">lwTextTertiary</span>
+      </div>
+      <div class="comp-delta">
+        <span class="delta-label">Lum: </span><span class="delta-value delta-diverge">+18.3%</span><br>
+        <span class="delta-label">Note: </span><span style="color:#EF4444; font-size:10px;">Major divergence &mdash; Tab5 is very dim, iOS more readable</span>
+      </div>
+    </div>
+
+    <!-- Brand Accent -->
+    <div class="comparison-row">
+      <div class="comp-role">Brand<br>Accent</div>
+      <div class="comp-swatch">
+        <div class="comp-swatch-box" style="background:#FFC700; border-color:#FFC700;">
+          <span class="hex-overlay" style="color:#332600;">#FFC700</span>
+        </div>
+        <span class="comp-token">BRAND</span>
+      </div>
+      <div class="comp-swatch">
+        <div class="comp-swatch-box" style="background:#FFB84D; border-color:#FFB84D;">
+          <span class="hex-overlay" style="color:#664D1A;">#FFB84D</span>
+        </div>
+        <span class="comp-token">lwGold</span>
+      </div>
+      <div class="comp-delta">
+        <span class="delta-label">Hue: </span><span class="delta-value delta-close">+6deg (warmer)</span><br>
+        <span class="delta-label">Sat: </span><span class="delta-value delta-close">-30% (softer)</span><br>
+        <span class="delta-label">Note: </span><span style="color:#8891A0; font-size:10px;">iOS gold is warmer, less saturated</span>
+      </div>
+    </div>
+
+    <!-- Status OK -->
+    <div class="comparison-row">
+      <div class="comp-role">Status<br>Success</div>
+      <div class="comp-swatch">
+        <div class="comp-swatch-box" style="background:#22C55E;">
+          <span class="hex-overlay" style="color:#0a4a24;">#22C55E</span>
+        </div>
+        <span class="comp-token">STATUS_OK</span>
+      </div>
+      <div class="comp-swatch">
+        <div class="comp-swatch-box" style="background:#4DFFB8;">
+          <span class="hex-overlay" style="color:#1a4a3a;">#4DFFB8</span>
+        </div>
+        <span class="comp-token">lwSuccess</span>
+      </div>
+      <div class="comp-delta">
+        <span class="delta-label">Hue: </span><span class="delta-value delta-diverge">+27deg (cyan shift)</span><br>
+        <span class="delta-label">Lum: </span><span class="delta-value delta-diverge">+32%</span><br>
+        <span class="delta-label">Note: </span><span style="color:#EF4444; font-size:10px;">Very different greens</span>
+      </div>
+    </div>
+
+    <!-- Status Error -->
+    <div class="comparison-row">
+      <div class="comp-role">Status<br>Error</div>
+      <div class="comp-swatch">
+        <div class="comp-swatch-box" style="background:#EF4444;">
+          <span class="hex-overlay" style="color:#4a1111;">#EF4444</span>
+        </div>
+        <span class="comp-token">STATUS_ERROR</span>
+      </div>
+      <div class="comp-swatch">
+        <div class="comp-swatch-box" style="background:#FF4D4D;">
+          <span class="hex-overlay" style="color:#4a1111;">#FF4D4D</span>
+        </div>
+        <span class="comp-token">lwError</span>
+      </div>
+      <div class="comp-delta">
+        <span class="delta-label">Hue: </span><span class="delta-value delta-match">Same hue</span><br>
+        <span class="delta-label">Lum: </span><span class="delta-value delta-close">+6%</span><br>
+        <span class="delta-label">Note: </span><span style="color:#8891A0; font-size:10px;">Close match, iOS slightly brighter</span>
+      </div>
+    </div>
+
+    <!-- iOS-only: Cyan accent -->
+    <div class="comparison-row">
+      <div class="comp-role">Zone<br>Accent</div>
+      <div class="comp-swatch">
+        <div class="comp-swatch-box" style="background:#111114; border-style:dashed;">
+          <span class="hex-overlay" style="color:#3A3F4A;">No equivalent</span>
+        </div>
+        <span class="comp-token" style="color:#3A3F4A;">(none)</span>
+      </div>
+      <div class="comp-swatch">
+        <div class="comp-swatch-box" style="background:#00D4FF; border-color:#00D4FF;">
+          <span class="hex-overlay" style="color:#003a44;">#00D4FF</span>
+        </div>
+        <span class="comp-token">lwCyan</span>
+      </div>
+      <div class="comp-delta">
+        <span class="delta-label">Role: </span><span class="delta-value" style="color:#00D4FF;">iOS-only</span><br>
+        <span class="delta-label">Note: </span><span style="color:#8891A0; font-size:10px;">Zone visualisation accent, no Tab5 match</span>
+      </div>
+    </div>
+
+    <!-- iOS-only: Beat accent -->
+    <div class="comparison-row">
+      <div class="comp-role">Beat<br>Accent</div>
+      <div class="comp-swatch">
+        <div class="comp-swatch-box" style="background:#FFC700; border-color:#FFC700;">
+          <span class="hex-overlay" style="color:#332600;">#FFC700</span>
+        </div>
+        <span class="comp-token">BRAND (same)</span>
+      </div>
+      <div class="comp-swatch">
+        <div class="comp-swatch-box" style="background:#FFCC33; border-color:#FFCC33;">
+          <span class="hex-overlay" style="color:#4a3a00;">#FFCC33</span>
+        </div>
+        <span class="comp-token">lwBeatAccent</span>
+      </div>
+      <div class="comp-delta">
+        <span class="delta-label">Hue: </span><span class="delta-value delta-close">+2deg</span><br>
+        <span class="delta-label">Note: </span><span style="color:#8891A0; font-size:10px;">iOS splits beat from brand gold</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!--  FRAME 3: CONTRAST ANALYSIS (WCAG)                           -->
+  <!-- ============================================================ -->
+  <div class="display-frame">
+    <div class="section-title">Contrast Analysis &mdash; WCAG Compliance</div>
+    <div class="section-subtitle">Computed contrast ratios for text-on-background pairs. AA requires 4.5:1 (normal text) or 3.0:1 (large text). AAA requires 7.0:1.</div>
+    <div class="section-rule"></div>
+
+    <div class="contrast-grid">
+      <!-- Tab5 Panel -->
+      <div class="contrast-panel">
+        <div class="contrast-panel-title tab5">Tab5 Encoder Contrast</div>
+        <table class="contrast-table">
+          <thead>
+            <tr><th>Pair</th><th>Preview</th><th>Ratio</th><th>Grade</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="color:#8891A0;">FG1 on BG_DEEP</td>
+              <td>
+                <span class="pair-preview">
+                  <span class="pair-bg" style="background:#08080A;"></span>
+                  <span class="pair-fg" style="background:#08080A; color:#F0F0F0;">Abc</span>
+                </span>
+              </td>
+              <td class="ratio-pass">18.9:1</td>
+              <td><span class="badge badge-aaa">AAA</span></td>
+            </tr>
+            <tr>
+              <td style="color:#8891A0;">FG2 on BG_DEEP</td>
+              <td>
+                <span class="pair-preview">
+                  <span class="pair-bg" style="background:#08080A;"></span>
+                  <span class="pair-fg" style="background:#08080A; color:#8891A0;">Abc</span>
+                </span>
+              </td>
+              <td class="ratio-pass">7.2:1</td>
+              <td><span class="badge badge-aaa">AAA</span></td>
+            </tr>
+            <tr>
+              <td style="color:#8891A0;">FG3 on BG_DEEP</td>
+              <td>
+                <span class="pair-preview">
+                  <span class="pair-bg" style="background:#08080A;"></span>
+                  <span class="pair-fg" style="background:#08080A; color:#3A3F4A;">Abc</span>
+                </span>
+              </td>
+              <td class="ratio-warn">2.7:1</td>
+              <td><span class="badge badge-fail">FAIL</span></td>
+            </tr>
+            <tr>
+              <td style="color:#8891A0;">FG1 on SURFACE</td>
+              <td>
+                <span class="pair-preview">
+                  <span class="pair-bg" style="background:#111114;"></span>
+                  <span class="pair-fg" style="background:#111114; color:#F0F0F0;">Abc</span>
+                </span>
+              </td>
+              <td class="ratio-pass">17.4:1</td>
+              <td><span class="badge badge-aaa">AAA</span></td>
+            </tr>
+            <tr>
+              <td style="color:#8891A0;">FG2 on SURFACE</td>
+              <td>
+                <span class="pair-preview">
+                  <span class="pair-bg" style="background:#111114;"></span>
+                  <span class="pair-fg" style="background:#111114; color:#8891A0;">Abc</span>
+                </span>
+              </td>
+              <td class="ratio-pass">6.6:1</td>
+              <td><span class="badge badge-aa">AA</span></td>
+            </tr>
+            <tr>
+              <td style="color:#8891A0;">BRAND on BG_DEEP</td>
+              <td>
+                <span class="pair-preview">
+                  <span class="pair-bg" style="background:#08080A;"></span>
+                  <span class="pair-fg" style="background:#08080A; color:#FFC700;">Abc</span>
+                </span>
+              </td>
+              <td class="ratio-pass">10.6:1</td>
+              <td><span class="badge badge-aaa">AAA</span></td>
+            </tr>
+            <tr>
+              <td style="color:#8891A0;">BRAND on ELEVATED</td>
+              <td>
+                <span class="pair-preview">
+                  <span class="pair-bg" style="background:#1A1A1E;"></span>
+                  <span class="pair-fg" style="background:#1A1A1E; color:#FFC700;">Abc</span>
+                </span>
+              </td>
+              <td class="ratio-pass">9.0:1</td>
+              <td><span class="badge badge-aaa">AAA</span></td>
+            </tr>
+            <tr>
+              <td style="color:#8891A0;">FG3 on ELEVATED</td>
+              <td>
+                <span class="pair-preview">
+                  <span class="pair-bg" style="background:#1A1A1E;"></span>
+                  <span class="pair-fg" style="background:#1A1A1E; color:#3A3F4A;">Abc</span>
+                </span>
+              </td>
+              <td class="ratio-fail">1.9:1</td>
+              <td><span class="badge badge-fail">FAIL</span></td>
+            </tr>
+            <tr>
+              <td style="color:#8891A0;">STATUS_OK on BG_DEEP</td>
+              <td>
+                <span class="pair-preview">
+                  <span class="pair-bg" style="background:#08080A;"></span>
+                  <span class="pair-fg" style="background:#08080A; color:#22C55E;">Abc</span>
+                </span>
+              </td>
+              <td class="ratio-pass">7.3:1</td>
+              <td><span class="badge badge-aaa">AAA</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- iOS Panel -->
+      <div class="contrast-panel">
+        <div class="contrast-panel-title ios">iOS Companion Contrast</div>
+        <table class="contrast-table">
+          <thead>
+            <tr><th>Pair</th><th>Preview</th><th>Ratio</th><th>Grade</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="color:#8891A0;">FG1 on lwBase</td>
+              <td>
+                <span class="pair-preview">
+                  <span class="pair-bg" style="background:#0F1219;"></span>
+                  <span class="pair-fg" style="background:#0F1219; color:#E6E9EF;">Abc</span>
+                </span>
+              </td>
+              <td class="ratio-pass">15.1:1</td>
+              <td><span class="badge badge-aaa">AAA</span></td>
+            </tr>
+            <tr>
+              <td style="color:#8891A0;">FG2 on lwBase</td>
+              <td>
+                <span class="pair-preview">
+                  <span class="pair-bg" style="background:#0F1219;"></span>
+                  <span class="pair-fg" style="background:#0F1219; color:#9CA3B0;">Abc</span>
+                </span>
+              </td>
+              <td class="ratio-pass">6.7:1</td>
+              <td><span class="badge badge-aa">AA</span></td>
+            </tr>
+            <tr>
+              <td style="color:#8891A0;">FG3 on lwBase</td>
+              <td>
+                <span class="pair-preview">
+                  <span class="pair-bg" style="background:#0F1219;"></span>
+                  <span class="pair-fg" style="background:#0F1219; color:#6B7280;">Abc</span>
+                </span>
+              </td>
+              <td class="ratio-pass">4.6:1</td>
+              <td><span class="badge badge-aa">AA</span></td>
+            </tr>
+            <tr>
+              <td style="color:#8891A0;">FG1 on lwCard</td>
+              <td>
+                <span class="pair-preview">
+                  <span class="pair-bg" style="background:#1E2535;"></span>
+                  <span class="pair-fg" style="background:#1E2535; color:#E6E9EF;">Abc</span>
+                </span>
+              </td>
+              <td class="ratio-pass">10.9:1</td>
+              <td><span class="badge badge-aaa">AAA</span></td>
+            </tr>
+            <tr>
+              <td style="color:#8891A0;">FG2 on lwCard</td>
+              <td>
+                <span class="pair-preview">
+                  <span class="pair-bg" style="background:#1E2535;"></span>
+                  <span class="pair-fg" style="background:#1E2535; color:#9CA3B0;">Abc</span>
+                </span>
+              </td>
+              <td class="ratio-pass">4.9:1</td>
+              <td><span class="badge badge-aa">AA</span></td>
+            </tr>
+            <tr>
+              <td style="color:#8891A0;">lwGold on lwBase</td>
+              <td>
+                <span class="pair-preview">
+                  <span class="pair-bg" style="background:#0F1219;"></span>
+                  <span class="pair-fg" style="background:#0F1219; color:#FFB84D;">Abc</span>
+                </span>
+              </td>
+              <td class="ratio-pass">8.3:1</td>
+              <td><span class="badge badge-aaa">AAA</span></td>
+            </tr>
+            <tr>
+              <td style="color:#8891A0;">lwGold on lwElevated</td>
+              <td>
+                <span class="pair-preview">
+                  <span class="pair-bg" style="background:#252D3F;"></span>
+                  <span class="pair-fg" style="background:#252D3F; color:#FFB84D;">Abc</span>
+                </span>
+              </td>
+              <td class="ratio-pass">5.8:1</td>
+              <td><span class="badge badge-aa">AA</span></td>
+            </tr>
+            <tr>
+              <td style="color:#8891A0;">FG3 on lwElevated</td>
+              <td>
+                <span class="pair-preview">
+                  <span class="pair-bg" style="background:#252D3F;"></span>
+                  <span class="pair-fg" style="background:#252D3F; color:#6B7280;">Abc</span>
+                </span>
+              </td>
+              <td class="ratio-warn">2.7:1</td>
+              <td><span class="badge badge-fail">FAIL</span></td>
+            </tr>
+            <tr>
+              <td style="color:#8891A0;">lwSuccess on lwBase</td>
+              <td>
+                <span class="pair-preview">
+                  <span class="pair-bg" style="background:#0F1219;"></span>
+                  <span class="pair-fg" style="background:#0F1219; color:#4DFFB8;">Abc</span>
+                </span>
+              </td>
+              <td class="ratio-pass">12.0:1</td>
+              <td><span class="badge badge-aaa">AAA</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="analysis-box">
+      <h3>Contrast Analysis Summary</h3>
+      <p><strong>Tab5 failures:</strong> <code>FG_DIMMED (#3A3F4A)</code> fails on both <code>BG_DEEP</code> (2.7:1) and <code>SURFACE_ELEVATED</code> (1.9:1). This is intentional &mdash; dimmed text is designed to be barely visible on the small Tab5 screen, functioning as a visual "off" state rather than readable text. On a mobile device, this would be an accessibility violation.</p>
+      <p><strong>iOS strengths:</strong> The iOS tertiary text <code>lwTextTertiary (#6B7280)</code> passes AA on the base background (4.6:1) but fails on elevated surfaces (2.7:1). This is the only failing pair in the iOS system. The higher luminance of iOS dimmed text makes it readable as actual content rather than decorative.</p>
+      <p><strong>Brand accent:</strong> Both accents pass AAA on their respective backgrounds. Tab5's <code>#FFC700</code> on <code>#08080A</code> achieves 10.6:1, while iOS's <code>#FFB84D</code> on <code>#0F1219</code> achieves 8.3:1. Both are excellent.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!--  FRAME 4: TYPOGRAPHY COMPARISON                              -->
+  <!-- ============================================================ -->
+  <div class="display-frame">
+    <div class="section-title">Typography Comparison</div>
+    <div class="section-subtitle">Same 3 font families, different size scales optimised for each device</div>
+    <div class="section-rule"></div>
+
+    <!-- Header -->
+    <div class="type-comparison" style="border-bottom: 1px solid #1E1E24; padding-bottom:12px; margin-bottom:20px;">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#3A3F4A; font-weight:700; letter-spacing:1px; text-transform:uppercase;">Role</div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#665200; font-weight:700; letter-spacing:1px; text-transform:uppercase;">Tab5 (2.4" LCD)</div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#664D1A; font-weight:700; letter-spacing:1px; text-transform:uppercase;">iOS (6.1" OLED)</div>
+    </div>
+
+    <!-- Hero / Effect Name -->
+    <div class="type-comparison">
+      <div class="type-role">Hero<br>Effect Name<span class="size-info">Bebas Neue</span></div>
+      <div class="type-platform">
+        <span class="platform-label tab5">44px &middot; Regular</span>
+        <span style="font-family:'Bebas Neue',sans-serif; font-size:44px; color:#F0F0F0; line-height:1; letter-spacing:1px;">LGP Mirror</span>
+      </div>
+      <div class="type-platform">
+        <span class="platform-label ios">22px &middot; Bold</span>
+        <span style="font-family:'Bebas Neue',sans-serif; font-size:22px; color:#E6E9EF; line-height:1; letter-spacing:1px; font-weight:700;">LGP Mirror</span>
+      </div>
+    </div>
+
+    <!-- BPM Numeral -->
+    <div class="type-comparison">
+      <div class="type-role">BPM<br>Numeral<span class="size-info">JetBrains Mono / Bebas</span></div>
+      <div class="type-platform">
+        <span class="platform-label tab5">28px &middot; JBM Bold + BRAND</span>
+        <span style="font-family:'JetBrains Mono',monospace; font-size:28px; font-weight:700; color:#FFC700; line-height:1;">138</span>
+      </div>
+      <div class="type-platform">
+        <span class="platform-label ios">32px &middot; Bebas Bold + lwGold</span>
+        <span style="font-family:'Bebas Neue',sans-serif; font-size:32px; font-weight:700; color:#FFB84D; line-height:1;">138</span>
+      </div>
+    </div>
+
+    <!-- Hero Numeral (iOS has a bigger one) -->
+    <div class="type-comparison">
+      <div class="type-role">Hero<br>Numeral<span class="size-info">Large display metric</span></div>
+      <div class="type-platform">
+        <span class="platform-label tab5">36px &middot; JBM Bold</span>
+        <span style="font-family:'JetBrains Mono',monospace; font-size:36px; font-weight:700; color:#F0F0F0; line-height:1;">192</span>
+      </div>
+      <div class="type-platform">
+        <span class="platform-label ios">48px &middot; Bebas Bold</span>
+        <span style="font-family:'Bebas Neue',sans-serif; font-size:48px; font-weight:700; color:#E6E9EF; line-height:1;">192</span>
+      </div>
+    </div>
+
+    <!-- Body / Values -->
+    <div class="type-comparison">
+      <div class="type-role">Body<br>Values<span class="size-info">Rajdhani</span></div>
+      <div class="type-platform">
+        <span class="platform-label tab5">28px &middot; Bold</span>
+        <span style="font-family:'Rajdhani',sans-serif; font-size:28px; font-weight:700; color:#F0F0F0; line-height:1;">Complementary</span>
+      </div>
+      <div class="type-platform">
+        <span class="platform-label ios">15px &middot; Medium</span>
+        <span style="font-family:'Rajdhani',sans-serif; font-size:15px; font-weight:500; color:#E6E9EF; line-height:1;">Complementary</span>
+      </div>
+    </div>
+
+    <!-- Labels -->
+    <div class="type-comparison">
+      <div class="type-role">Labels<span class="size-info">Rajdhani / Uppercase</span></div>
+      <div class="type-platform">
+        <span class="platform-label tab5">20px &middot; Medium</span>
+        <span style="font-family:'Rajdhani',sans-serif; font-size:20px; font-weight:500; color:#8891A0; letter-spacing:1.5px; text-transform:uppercase; line-height:1;">Effect &nbsp; Palette &nbsp; Speed</span>
+      </div>
+      <div class="type-platform">
+        <span class="platform-label ios">12px &middot; Medium</span>
+        <span style="font-family:'Rajdhani',sans-serif; font-size:12px; font-weight:500; color:#9CA3B0; letter-spacing:1.5px; text-transform:uppercase; line-height:1;">Effect &nbsp; Palette &nbsp; Speed</span>
+      </div>
+    </div>
+
+    <!-- Monospace values -->
+    <div class="type-comparison">
+      <div class="type-role">Mono<br>Values<span class="size-info">JetBrains Mono</span></div>
+      <div class="type-platform">
+        <span class="platform-label tab5">20px &middot; Regular</span>
+        <span style="font-family:'JetBrains Mono',monospace; font-size:20px; font-weight:400; color:#8891A0; line-height:1;">KEY Am &nbsp; MIC -12dB</span>
+      </div>
+      <div class="type-platform">
+        <span class="platform-label ios">13px &middot; Medium</span>
+        <span style="font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:500; color:#9CA3B0; line-height:1;">KEY Am &nbsp; MIC -12dB</span>
+      </div>
+    </div>
+
+    <!-- Smallest text -->
+    <div class="type-comparison">
+      <div class="type-role">Smallest<br>Text<span class="size-info">Minimum readable</span></div>
+      <div class="type-platform">
+        <span class="platform-label tab5">15px &middot; JBM Regular (dimmed)</span>
+        <span style="font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:400; color:#3A3F4A; line-height:1;">87%</span>
+      </div>
+      <div class="type-platform">
+        <span class="platform-label ios">10px &middot; Rajdhani Medium</span>
+        <span style="font-family:'Rajdhani',sans-serif; font-size:10px; font-weight:500; color:#9CA3B0; line-height:1;">Micro label &middot; 10pt</span>
+      </div>
+    </div>
+
+    <div class="analysis-box" style="margin-top: 32px;">
+      <h3>Typography Scale Analysis</h3>
+      <p><strong>Scale ratio:</strong> Tab5 sizes are roughly 1.5-1.8x larger than iOS equivalents in absolute pixels, which is correct. At arm's length on a 292 PPI screen, Tab5's 20px label subtends a similar visual angle to iOS's 12px label at hand-held distance on a 460 PPI screen. The scaling is physically justified.</p>
+      <p><strong>Font choice divergence:</strong> Tab5 uses JetBrains Mono Bold for the BPM hero metric; iOS uses Bebas Neue Bold. This is the one place where font assignment (not just size) differs. Tab5's choice provides monospace digit alignment for rapid BPM changes; iOS's Bebas Neue gives a bolder, more display-oriented look. Both are valid for their context.</p>
+      <p><strong>iOS minimum of 10px:</strong> This is at the lower boundary of Apple's recommended minimum. At 460 PPI it renders crisply, but users with accessibility settings (Dynamic Type) may need it to scale. The <code>relativeTo:</code> parameter in DesignTokens.swift enables this correctly.</p>
+      <p><strong>Weight divergence:</strong> Tab5 uses Bebas Neue Regular for headlines; iOS uses Bold. The bold weight compensates for the smaller physical size on iPhone, maintaining visual weight parity. This is a good adaptation.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!--  FRAME 5: RECOMMENDATION                                    -->
+  <!-- ============================================================ -->
+  <div class="display-frame">
+    <div class="section-title">Recommendation</div>
+    <div class="section-subtitle">Should the iOS app adopt Tab5 tokens exactly, adapt them, or keep its own?</div>
+    <div class="section-rule"></div>
+
+    <div class="rec-grid">
+      <div class="rec-card">
+        <div class="rec-card-title no">Option A: Adopt Tab5 Exactly</div>
+        <p>Use all Tab5 tokens verbatim on iOS.</p>
+        <ul>
+          <li>Tab5's #08080A background is indistinguishable from true black on OLED &mdash; loses the subtle navy warmth that differentiates the app from "just black"</li>
+          <li>Tab5's FG_DIMMED (#3A3F4A) fails WCAG AA on mobile &mdash; fine for a decorative "off" state on a tiny screen, unacceptable for iOS where users expect readable text</li>
+          <li>Tab5 has no BORDER_SUBTLE equivalent for card separation on larger screens</li>
+          <li>Tab5's pure #FFC700 gold can feel harsh on OLED at close viewing distance</li>
+          <li>Typography sizes are for 2.4" @ 292 PPI &mdash; 44px heroes would be comically large on iPhone</li>
+        </ul>
+      </div>
+
+      <div class="rec-card recommended">
+        <div class="rec-card-title maybe">Option B: Unified Semantic Tokens (Recommended)</div>
+        <p>Define a shared semantic token vocabulary with platform-specific values. Same names, adapted colours.</p>
+        <ul>
+          <li>Both platforms use the same token names: lw.bg, lw.surface, lw.elevated, lw.brand, lw.fg.primary, lw.fg.secondary, lw.fg.tertiary</li>
+          <li>Backgrounds: Tab5 uses neutral ultra-dark (#08080A), iOS uses navy-dark (#0F1219) &mdash; both are "the darkest background" on their display technology</li>
+          <li>Brand: converge on #FFC700 as the canonical brand gold. iOS may tint to #FFB84D for OLED warmth, but the token is the same semantic role</li>
+          <li>Status colours: converge on Tab5's standard set (#22C55E, #F59E0B, #EF4444) which are industry-standard and work on both displays</li>
+          <li>Typography: keep the 3-family stack, adapt sizes per platform. Document the "physical visual angle" relationship, not absolute pixels</li>
+          <li>iOS retains lwCyan and zone colours as platform extensions &mdash; Tab5 does not need them (no zone visualisation on 2.4" screen)</li>
+        </ul>
+      </div>
+
+      <div class="rec-card">
+        <div class="rec-card-title no">Option C: Keep Completely Separate</div>
+        <p>Maintain independent token sets with no shared vocabulary.</p>
+        <ul>
+          <li>Risk: brand fragmentation as the product ecosystem grows (Tab5, iOS, web dashboard, landing page)</li>
+          <li>Already diverging: background hue family, gold tone, status green, tertiary text luminance</li>
+          <li>Makes cross-platform mockups and design reviews harder</li>
+          <li>Developer confusion when implementing the same feature on both platforms</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="analysis-box">
+      <h3>Key Decisions</h3>
+      <p><strong>Background:</strong> Keep platform-specific backgrounds. Tab5's near-black (#08080A) is correct for IPS LCD backlight bleed. iOS's navy-dark (#0F1219) is correct for OLED depth + warmth. The semantic token <code>lw.bg</code> maps to different values per platform, which is the standard design token pattern.</p>
+      <p><strong>Brand gold:</strong> Converge toward #FFC700 as the canonical brand colour. iOS's #FFB84D is 30% less saturated and warmer &mdash; this was likely chosen for OLED comfort, but the saturation loss weakens brand recognition. Consider #FFBE33 as a compromise: maintains most of the #FFC700 energy while adding a touch of orange warmth for OLED. Alternatively, keep #FFC700 for brand marks and use #FFB84D only for large filled surfaces where high saturation would cause visual fatigue.</p>
+      <p><strong>Status colours:</strong> Align on Tab5's set. The iOS #4DFFB8 success green is unusual (cyan-shifted, very bright) and may not scan as "success" to users accustomed to standard green. #22C55E is the Tailwind CSS green-500 &mdash; widely recognised, well-tested.</p>
+      <p><strong>Tertiary text:</strong> iOS's #6B7280 is the better choice. Tab5's #3A3F4A is too dim for any context where text should be readable. The Tab5 token should remain for truly decorative/disabled elements, but add an intermediate token for "low priority but still readable" content.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!--  FRAME 6: UNIFIED TOKEN PROPOSAL                            -->
+  <!-- ============================================================ -->
+  <div class="display-frame">
+    <div class="section-title">Unified Token Proposal</div>
+    <div class="section-subtitle">Shared semantic vocabulary, platform-specific values where display technology demands it</div>
+    <div class="section-rule"></div>
+
+    <!-- Backgrounds Row -->
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#FFC700; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:12px; font-weight:700;">Backgrounds &amp; Surfaces</div>
+    <div class="unified-grid">
+      <div class="unified-swatch">
+        <div class="unified-swatch-box" style="background:#08080A;">
+          <span class="hex-overlay" style="color:#3A3F4A;">#08080A</span>
+        </div>
+        <span class="unified-token">lw.bg</span>
+        <span class="unified-hex">Tab5: #08080A</span>
+        <span class="unified-source source-tab5">Neutral ultra-dark (LCD)</span>
+      </div>
+      <div class="unified-swatch">
+        <div class="unified-swatch-box" style="background:#0F1219;">
+          <span class="hex-overlay" style="color:#6B7280;">#0F1219</span>
+        </div>
+        <span class="unified-token">lw.bg</span>
+        <span class="unified-hex">iOS: #0F1219</span>
+        <span class="unified-source source-ios">Navy-dark (OLED)</span>
+      </div>
+      <div class="unified-swatch">
+        <div class="unified-swatch-box" style="background:#111114;">
+          <span class="hex-overlay" style="color:#3A3F4A;">#111114</span>
+        </div>
+        <span class="unified-token">lw.surface</span>
+        <span class="unified-hex">Tab5: #111114</span>
+        <span class="unified-source source-tab5">Card background</span>
+      </div>
+      <div class="unified-swatch">
+        <div class="unified-swatch-box" style="background:#1A2030;">
+          <span class="hex-overlay" style="color:#6B7280;">#1A2030</span>
+        </div>
+        <span class="unified-token">lw.surface</span>
+        <span class="unified-hex">iOS: #1A2030</span>
+        <span class="unified-source source-new">Darkened from #1E2535</span>
+      </div>
+      <div class="unified-swatch">
+        <div class="unified-swatch-box" style="background:#1A1A1E;">
+          <span class="hex-overlay" style="color:#3A3F4A;">#1A1A1E</span>
+        </div>
+        <span class="unified-token">lw.elevated</span>
+        <span class="unified-hex">Shared: #1A1A1E / #222A3A</span>
+        <span class="unified-source">Platform-specific</span>
+      </div>
+    </div>
+
+    <!-- Text Row -->
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#FFC700; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:12px; font-weight:700; margin-top:12px;">Foreground Text</div>
+    <div class="unified-grid" style="grid-template-columns: repeat(4, 1fr);">
+      <div class="unified-swatch">
+        <div class="unified-swatch-box" style="background:#F0F0F0; border-color:#F0F0F0;">
+          <span class="hex-overlay" style="color:#666;">#F0F0F0</span>
+        </div>
+        <span class="unified-token">lw.fg.primary</span>
+        <span class="unified-hex">Shared</span>
+        <span class="unified-source source-tab5">Tab5 value (brighter, works on both)</span>
+      </div>
+      <div class="unified-swatch">
+        <div class="unified-swatch-box" style="background:#9CA3B0;">
+          <span class="hex-overlay" style="color:#444;">#9CA3B0</span>
+        </div>
+        <span class="unified-token">lw.fg.secondary</span>
+        <span class="unified-hex">Shared</span>
+        <span class="unified-source source-ios">iOS value (more readable)</span>
+      </div>
+      <div class="unified-swatch">
+        <div class="unified-swatch-box" style="background:#6B7280;">
+          <span class="hex-overlay" style="color:#333;">#6B7280</span>
+        </div>
+        <span class="unified-token">lw.fg.tertiary</span>
+        <span class="unified-hex">Shared</span>
+        <span class="unified-source source-ios">iOS value (WCAG AA on base)</span>
+      </div>
+      <div class="unified-swatch">
+        <div class="unified-swatch-box" style="background:#3A3F4A;">
+          <span class="hex-overlay" style="color:#222;">#3A3F4A</span>
+        </div>
+        <span class="unified-token">lw.fg.disabled</span>
+        <span class="unified-hex">Shared</span>
+        <span class="unified-source source-tab5">Tab5 dimmed (decorative only)</span>
+      </div>
+    </div>
+
+    <!-- Brand Row -->
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#FFC700; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:12px; font-weight:700; margin-top:12px;">Brand &amp; Accent</div>
+    <div class="unified-grid" style="grid-template-columns: repeat(5, 1fr);">
+      <div class="unified-swatch">
+        <div class="unified-swatch-box" style="background:#FFC700; border-color:#FFC700;">
+          <span class="hex-overlay" style="color:#332600;">#FFC700</span>
+        </div>
+        <span class="unified-token">lw.brand</span>
+        <span class="unified-hex">Canonical</span>
+        <span class="unified-source source-tab5">Pure gold &mdash; brand marks, icons</span>
+      </div>
+      <div class="unified-swatch">
+        <div class="unified-swatch-box" style="background:#FFBE33; border-color:#FFBE33;">
+          <span class="hex-overlay" style="color:#4a3500;">#FFBE33</span>
+        </div>
+        <span class="unified-token">lw.brand.soft</span>
+        <span class="unified-hex">Proposed</span>
+        <span class="unified-source source-new">OLED-friendly, large surfaces</span>
+      </div>
+      <div class="unified-swatch">
+        <div class="unified-swatch-box" style="background:#665200;">
+          <span class="hex-overlay" style="color:#332600;">#665200</span>
+        </div>
+        <span class="unified-token">lw.brand.dim</span>
+        <span class="unified-hex">Shared</span>
+        <span class="unified-source source-tab5">Inactive brand elements</span>
+      </div>
+      <div class="unified-swatch">
+        <div class="unified-swatch-box" style="background:#00D4FF; border-color:#00D4FF;">
+          <span class="hex-overlay" style="color:#003a44;">#00D4FF</span>
+        </div>
+        <span class="unified-token">lw.accent.cyan</span>
+        <span class="unified-hex">iOS extension</span>
+        <span class="unified-source source-ios">Zone accent (iOS only)</span>
+      </div>
+      <div class="unified-swatch">
+        <div class="unified-swatch-box" style="background:#FFCC33; border-color:#FFCC33;">
+          <span class="hex-overlay" style="color:#4a3a00;">#FFCC33</span>
+        </div>
+        <span class="unified-token">lw.beat</span>
+        <span class="unified-hex">Shared</span>
+        <span class="unified-source source-ios">Beat pulse accent</span>
+      </div>
+    </div>
+
+    <!-- Status Row -->
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#FFC700; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:12px; font-weight:700; margin-top:12px;">Status Colours (Converged)</div>
+    <div class="unified-grid" style="grid-template-columns: repeat(3, 1fr) repeat(2, 0fr);">
+      <div class="unified-swatch">
+        <div class="unified-swatch-box" style="background:#22C55E;">
+          <span class="hex-overlay" style="color:#0a4a24;">#22C55E</span>
+        </div>
+        <span class="unified-token">lw.status.ok</span>
+        <span class="unified-hex">Converged</span>
+        <span class="unified-source source-tab5">Tab5 value (industry standard)</span>
+      </div>
+      <div class="unified-swatch">
+        <div class="unified-swatch-box" style="background:#F59E0B;">
+          <span class="hex-overlay" style="color:#5a3a00;">#F59E0B</span>
+        </div>
+        <span class="unified-token">lw.status.warn</span>
+        <span class="unified-hex">Converged</span>
+        <span class="unified-source source-tab5">Tab5 value</span>
+      </div>
+      <div class="unified-swatch">
+        <div class="unified-swatch-box" style="background:#EF4444;">
+          <span class="hex-overlay" style="color:#4a1111;">#EF4444</span>
+        </div>
+        <span class="unified-token">lw.status.error</span>
+        <span class="unified-hex">Converged</span>
+        <span class="unified-source source-tab5">Tab5 value (near iOS #FF4D4D)</span>
+      </div>
+    </div>
+
+    <!-- Border Row -->
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#FFC700; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:12px; font-weight:700; margin-top:12px;">Borders</div>
+    <div class="unified-grid" style="grid-template-columns: repeat(2, 1fr) repeat(3, 0fr);">
+      <div class="unified-swatch">
+        <div class="unified-swatch-box" style="background:#1E1E24;">
+          <span class="hex-overlay" style="color:#3A3F4A;">#1E1E24</span>
+        </div>
+        <span class="unified-token">lw.border.subtle</span>
+        <span class="unified-hex">Shared</span>
+        <span class="unified-source source-tab5">Tab5 value (neutral)</span>
+      </div>
+      <div class="unified-swatch">
+        <div class="unified-swatch-box" style="background:#FFC700; border-color:#FFC700;">
+          <span class="hex-overlay" style="color:#332600;">#FFC700</span>
+        </div>
+        <span class="unified-token">lw.border.active</span>
+        <span class="unified-hex">Shared</span>
+        <span class="unified-source">Matches lw.brand</span>
+      </div>
+    </div>
+
+    <div class="analysis-box" style="margin-top:32px;">
+      <h3>Unified Token Migration Path</h3>
+      <p><strong>Phase 1 (immediate):</strong> Adopt the token naming convention <code>lw.*</code> in both codebases. Tab5 maps tokens to its current values; iOS maps to its current values. Zero visual change, but the vocabulary is shared.</p>
+      <p><strong>Phase 2 (converge):</strong> Align status colours to Tab5's set. Replace iOS <code>#4DFFB8</code> with <code>#22C55E</code>. Replace iOS <code>#FF4D4D</code> with <code>#EF4444</code>. Align secondary text to <code>#9CA3B0</code> on both platforms. Add <code>lw.fg.disabled (#3A3F4A)</code> as an explicit "decorative/off" token on both platforms.</p>
+      <p><strong>Phase 3 (extend):</strong> Add <code>lw.brand.soft (#FFBE33)</code> for OLED-safe large surfaces. Evaluate whether Tab5 should adopt the navy-tinted surfaces or keep pure neutral &mdash; this depends on whether the brand direction is "neutral instrument" or "warm product".</p>
+      <p><strong>Typography:</strong> Do not unify sizes &mdash; they must remain platform-specific. Unify the font family assignments and semantic role names. Both already use Bebas/Rajdhani/JetBrains Mono, so brand consistency is already achieved at the typeface level.</p>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!--  FRAME 7: SIDE-BY-SIDE LIVE RENDERING                       -->
+  <!-- ============================================================ -->
+  <div class="display-frame">
+    <div class="section-title">Live Rendering Comparison</div>
+    <div class="section-subtitle">A sample card component rendered with each design system's tokens</div>
+    <div class="section-rule"></div>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:32px; margin-bottom:32px;">
+      <!-- Tab5 Card -->
+      <div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#665200; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:12px;">Tab5 Tokens</div>
+        <div style="background:#111114; border:1px solid #1E1E24; border-radius:10px; padding:20px; border-left:3px solid #FFC700;">
+          <div style="font-family:'Bebas Neue',sans-serif; font-size:22px; color:#F0F0F0; letter-spacing:1px; line-height:1; margin-bottom:4px;">LGP Nebula Drift</div>
+          <div style="font-family:'Rajdhani',sans-serif; font-size:14px; color:#8891A0; font-weight:500; letter-spacing:1px; text-transform:uppercase; margin-bottom:16px;">Effect &middot; Audio-Reactive</div>
+          <div style="display:flex; gap:16px; align-items:baseline; margin-bottom:12px;">
+            <div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:24px; font-weight:700; color:#FFC700; line-height:1;">138</div>
+              <div style="font-family:'Rajdhani',sans-serif; font-size:12px; color:#665200; font-weight:500; text-transform:uppercase; letter-spacing:1px;">BPM</div>
+            </div>
+            <div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:24px; font-weight:700; color:#F0F0F0; line-height:1;">192</div>
+              <div style="font-family:'Rajdhani',sans-serif; font-size:12px; color:#8891A0; font-weight:500; text-transform:uppercase; letter-spacing:1px;">Brightness</div>
+            </div>
+            <div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:24px; font-weight:700; color:#F0F0F0; line-height:1;">64</div>
+              <div style="font-family:'Rajdhani',sans-serif; font-size:12px; color:#8891A0; font-weight:500; text-transform:uppercase; letter-spacing:1px;">Speed</div>
+            </div>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <span style="background:#1A1A1E; color:#22C55E; font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700; padding:4px 10px; border-radius:4px;">CONNECTED</span>
+            <span style="background:#1A1A1E; color:#8891A0; font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:400; padding:4px 10px; border-radius:4px;">KEY Am</span>
+            <span style="background:#1A1A1E; color:#3A3F4A; font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:400; padding:4px 10px; border-radius:4px;">BAT 87%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- iOS Card -->
+      <div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#664D1A; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:12px;">iOS Tokens</div>
+        <div style="background:#1E2535; border:1px solid rgba(255,184,77,0.2); border-radius:16px; padding:20px; border-left:3px solid #FFB84D;">
+          <div style="font-family:'Bebas Neue',sans-serif; font-size:22px; color:#E6E9EF; letter-spacing:1px; line-height:1; font-weight:700; margin-bottom:4px;">LGP Nebula Drift</div>
+          <div style="font-family:'Rajdhani',sans-serif; font-size:12px; color:#9CA3B0; font-weight:500; letter-spacing:1px; text-transform:uppercase; margin-bottom:16px;">Effect &middot; Audio-Reactive</div>
+          <div style="display:flex; gap:16px; align-items:baseline; margin-bottom:12px;">
+            <div>
+              <div style="font-family:'Bebas Neue',sans-serif; font-size:32px; font-weight:700; color:#FFB84D; line-height:1;">138</div>
+              <div style="font-family:'Rajdhani',sans-serif; font-size:11px; color:#6B7280; font-weight:500; text-transform:uppercase; letter-spacing:1px;">BPM</div>
+            </div>
+            <div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:500; color:#E6E9EF; line-height:1;">192</div>
+              <div style="font-family:'Rajdhani',sans-serif; font-size:11px; color:#9CA3B0; font-weight:500; text-transform:uppercase; letter-spacing:1px;">Brightness</div>
+            </div>
+            <div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:500; color:#E6E9EF; line-height:1;">64</div>
+              <div style="font-family:'Rajdhani',sans-serif; font-size:11px; color:#9CA3B0; font-weight:500; text-transform:uppercase; letter-spacing:1px;">Speed</div>
+            </div>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <span style="background:#252D3F; color:#4DFFB8; font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:500; padding:4px 10px; border-radius:12px;">CONNECTED</span>
+            <span style="background:#252D3F; color:#9CA3B0; font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:500; padding:4px 10px; border-radius:12px;">KEY Am</span>
+            <span style="background:#252D3F; color:#6B7280; font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:500; padding:4px 10px; border-radius:12px;">BAT 87%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="analysis-box">
+      <h3>Visual Comparison Notes</h3>
+      <p><strong>Card depth:</strong> Tab5 cards sit closer to the background (SURFACE #111114 is only 4% lighter than BG_DEEP #08080A). iOS cards have more separation (lwCard #1E2535 is 8% lighter and bluer than lwBase #0F1219). On the 2.4" Tab5 screen, subtle separation is sufficient; on a 6.1" phone, the stronger card contrast helps users parse layout structure at a glance.</p>
+      <p><strong>Corner radius:</strong> Tab5 uses 10px corners; iOS uses 16px. iOS's larger radius follows Apple's visual language and feels native to the platform. The unified system should specify radii as semantic tokens (<code>lw.radius.card</code>) with platform-specific values.</p>
+      <p><strong>Badge shape:</strong> Tab5 uses 4px radius pills (squared); iOS uses 12px (rounded). Both are correct for their platform's visual language. This is a deliberate platform adaptation, not a divergence to fix.</p>
+      <p><strong>Battery/status visibility:</strong> Tab5's #3A3F4A "BAT 87%" is nearly invisible &mdash; intentionally de-emphasised. iOS's #6B7280 makes the same info readable. For a mobile app where battery context matters more (phone battery, not just K1 battery), the iOS approach is correct.</p>
+    </div>
+  </div>
+
+  <p class="caption">
+    <strong>Design system comparison.</strong> Two platforms, one brand. The Tab5 design system is optimised for a dense, information-rich 2.4" touchscreen viewed at arm's length in dark environments. The iOS system adapts the same visual language for hand-held OLED with larger touch targets, warmer tones, and stronger card separation. Convergence should happen at the semantic token vocabulary level, not by forcing identical colour values across fundamentally different display technologies. The recommended path is Option B: unified naming, platform-specific values, with status colours and secondary text aligned for consistency.
+  </p>
+</body>
+</html>

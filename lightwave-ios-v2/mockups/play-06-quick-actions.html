@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Play Tab — Mockup 6: Quick Actions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  /* ─── Reset & base ─────────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0A0A0C;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 48px 24px 64px;
+    font-family: 'Rajdhani', sans-serif;
+    gap: 16px;
+  }
+
+  /* ─── Design tokens ─────────────────────────────────────────────────── */
+  :root {
+    --base:     #0F1219;
+    --card:     #1E2535;
+    --elevated: #252D3F;
+    --gold:     #FFB84D;
+    --cyan:     #00D4FF;
+    --success:  #4DFFB8;
+    --error:    #FF4D4D;
+    --text-primary:   #E6E9EF;
+    --text-secondary: #9CA3B0;
+    --text-tertiary:  #6B7280;
+    --radius-hero:   24px;
+    --radius-card:   16px;
+    --radius-nested: 12px;
+  }
+
+  .mockup-title {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+  }
+
+  /* ─── iPhone 15 Pro frame ───────────────────────────────────────────── */
+  .phone-frame {
+    width: 393px;
+    height: 852px;
+    background: #1A1A1C;
+    border-radius: 52px;
+    border: 1.5px solid rgba(255,255,255,0.10);
+    position: relative;
+    overflow: hidden;
+    box-shadow:
+      0 0 0 1px rgba(0,0,0,0.6),
+      0 40px 80px rgba(0,0,0,0.9),
+      inset 0 1px 0 rgba(255,255,255,0.08);
+    flex-shrink: 0;
+  }
+
+  .dynamic-island {
+    position: absolute;
+    top: 12px; left: 50%;
+    transform: translateX(-50%);
+    width: 126px; height: 37px;
+    background: #000;
+    border-radius: 20px;
+    z-index: 100;
+  }
+
+  .home-indicator {
+    position: absolute;
+    bottom: 8px; left: 50%;
+    transform: translateX(-50%);
+    width: 134px; height: 5px;
+    background: rgba(255,255,255,0.30);
+    border-radius: 3px;
+    z-index: 100;
+  }
+
+  .screen {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--base);
+    border-radius: 52px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ─── Status bar ────────────────────────────────────────────────────── */
+  .status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 58px 28px 0;
+    flex-shrink: 0;
+  }
+  .status-time {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 15px; font-weight: 600;
+    color: var(--text-primary);
+  }
+  .status-icons { display: flex; align-items: center; gap: 6px; color: var(--text-primary); }
+  .status-icons svg { width: 16px; height: 16px; }
+
+  /* ─── Header ────────────────────────────────────────────────────────── */
+  .screen-header {
+    padding: 6px 24px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .screen-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px; letter-spacing: 0.06em;
+    color: var(--text-primary);
+  }
+  .connection-badge {
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(77,255,184,0.12);
+    border: 1px solid rgba(77,255,184,0.25);
+    border-radius: 20px; padding: 4px 10px;
+  }
+  .connection-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 6px var(--success);
+  }
+  .connection-label {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
+    color: var(--success);
+  }
+
+  /* ─── LED preview strip ─────────────────────────────────────────────── */
+  .led-preview-container {
+    padding: 10px 24px 0;
+    flex-shrink: 0;
+  }
+  .led-preview-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; letter-spacing: 0.12em;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    margin-bottom: 5px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .led-strip-wrap {
+    background: rgba(0,0,0,0.4);
+    border-radius: 10px;
+    padding: 7px 8px;
+    border: 1px solid rgba(255,255,255,0.05);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .led-strip {
+    height: 14px;
+    border-radius: 7px;
+    width: 100%;
+    position: relative;
+    overflow: hidden;
+  }
+  .led-strip-inner {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    border-radius: 7px;
+  }
+  /* Strip 1 — aurora from centre outward */
+  .strip1 {
+    background: linear-gradient(
+      to right,
+      #020408 0%,
+      #010510 5%,
+      #003060 10%,
+      #0088CC 18%,
+      #00D4FF 26%,
+      #4DFFB8 35%,
+      #00D4FF 50%,
+      #4DFFB8 65%,
+      #00D4FF 74%,
+      #0088CC 82%,
+      #003060 90%,
+      #010510 95%,
+      #020408 100%
+    );
+  }
+  /* Strip 2 slightly offset */
+  .strip2 {
+    background: linear-gradient(
+      to right,
+      #020408 0%,
+      #010510 8%,
+      #001F40 14%,
+      #006090 22%,
+      #00B8E0 30%,
+      #00D4FF 40%,
+      #4DFFB8 50%,
+      #00D4FF 60%,
+      #00B8E0 70%,
+      #006090 78%,
+      #001F40 86%,
+      #010510 92%,
+      #020408 100%
+    );
+  }
+
+  /* ─── Quick action grid ─────────────────────────────────────────────── */
+  .grid-wrapper {
+    flex: 1;
+    padding: 10px 16px 0;
+    overflow: hidden;
+  }
+  .grid-section-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; font-weight: 500;
+    letter-spacing: 0.14em;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    padding-left: 2px;
+  }
+
+  .tile-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  /* ─── Tile base ─────────────────────────────────────────────────────── */
+  .tile {
+    background: var(--card);
+    border-radius: var(--radius-card);
+    border: 1px solid rgba(255,255,255,0.06);
+    padding: 12px 12px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+    min-height: 90px;
+    justify-content: space-between;
+  }
+  .tile::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: rgba(255,255,255,0.06);
+  }
+
+  .tile-key {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8.5px; font-weight: 500;
+    letter-spacing: 0.12em;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+  }
+
+  .tile-value {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 32px; letter-spacing: 0.03em;
+    line-height: 1;
+  }
+
+  .tile-sub {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 10px; font-weight: 500;
+    letter-spacing: 0.06em;
+    color: var(--text-tertiary);
+    line-height: 1.2;
+  }
+
+  /* Tile-level accent colours */
+  .tile-bright .tile-value  { color: var(--gold); }
+  .tile-speed  .tile-value  { color: var(--success); }
+  .tile-effect .tile-value  { color: var(--text-primary); font-size: 16px; line-height: 1.25; letter-spacing: 0.03em; font-family: 'Bebas Neue', sans-serif; }
+  .tile-palette .tile-value { color: var(--text-primary); }
+  .tile-edge   .tile-value  { color: var(--cyan); }
+  .tile-bpm    .tile-value  { color: var(--text-primary); }
+
+  /* Accent glow underlines */
+  .tile-bright { border-bottom: 2px solid rgba(255,184,77,0.4); }
+  .tile-speed  { border-bottom: 2px solid rgba(77,255,184,0.4); }
+  .tile-edge   { border-bottom: 2px solid rgba(0,212,255,0.4); }
+
+  /* Active/expanded tile state */
+  .tile.expanded {
+    grid-column: span 3;
+    min-height: auto;
+    background: var(--elevated);
+    border-color: rgba(255,255,255,0.10);
+  }
+
+  /* Mini arc on brightness/speed tiles */
+  .tile-arc {
+    position: absolute;
+    bottom: 8px; right: 8px;
+    opacity: 0.6;
+  }
+
+  /* Palette swatch inside palette tile */
+  .palette-swatch {
+    height: 10px;
+    border-radius: 5px;
+    margin-top: 4px;
+  }
+
+  /* Drag affordance on bright/speed tiles */
+  .drag-hint {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    margin-top: 2px;
+  }
+  .drag-bar {
+    height: 3px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.15);
+    flex: 1;
+  }
+  .drag-fill {
+    height: 3px;
+    border-radius: 2px;
+    position: relative;
+    /* width set inline */
+  }
+
+  /* ─── Expanded brightness tile ──────────────────────────────────────── */
+  .expanded-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .expanded-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .expanded-key {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; font-weight: 500;
+    letter-spacing: 0.14em;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+  }
+  .expanded-value-large {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 36px; letter-spacing: 0.02em;
+    line-height: 1;
+  }
+  .expanded-close-hint {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px; letter-spacing: 0.10em;
+    color: var(--text-tertiary);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 6px;
+    padding: 3px 6px;
+  }
+
+  /* Styled range slider */
+  .slider-track {
+    position: relative;
+    height: 36px;
+    display: flex;
+    align-items: center;
+  }
+  .slider-bg {
+    position: absolute;
+    top: 50%; transform: translateY(-50%);
+    left: 0; right: 0;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255,255,255,0.08);
+    overflow: visible;
+  }
+  .slider-fill {
+    height: 100%;
+    border-radius: 3px;
+    position: relative;
+  }
+  .slider-thumb {
+    position: absolute;
+    right: -1px; top: 50%;
+    transform: translateY(-50%);
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    border: 2px solid var(--base);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  }
+  .slider-ticks {
+    display: flex;
+    justify-content: space-between;
+    padding: 0 2px;
+    margin-top: 2px;
+  }
+  .slider-tick {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 7.5px; color: var(--text-tertiary);
+    letter-spacing: 0;
+  }
+
+  /* ─── Second grid row ──────────────────────────────────────────────── */
+  /* EdgeMixer tile — mode chips inside */
+  .mode-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    margin-top: 2px;
+  }
+  .mode-chip {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 7.5px; font-weight: 500;
+    letter-spacing: 0.06em;
+    padding: 2px 5px;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.08);
+    color: var(--text-secondary);
+    text-transform: uppercase;
+  }
+  .mode-chip.active {
+    background: rgba(0,212,255,0.12);
+    border-color: rgba(0,212,255,0.30);
+    color: var(--cyan);
+  }
+
+  /* BPM tile — beat visualiser bars */
+  .beat-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 24px;
+    margin-top: 4px;
+  }
+  .beat-bar {
+    flex: 1;
+    border-radius: 1.5px;
+    background: rgba(255,255,255,0.15);
+  }
+  .beat-bar.lit {
+    background: var(--gold);
+    box-shadow: 0 0 4px rgba(255,184,77,0.5);
+  }
+
+  /* Effect tile — effect name + category */
+  .tile-effect-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px; letter-spacing: 0.04em;
+    color: var(--text-primary);
+    line-height: 1.1;
+  }
+  .tile-effect-cat {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 7.5px; letter-spacing: 0.10em;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+  }
+
+  /* ─── Tab bar ────────────────────────────────────────────────────────── */
+  .tab-bar {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 84px;
+    background: rgba(15,18,25,0.92);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-around;
+    padding-top: 12px;
+    z-index: 50;
+    border-radius: 0 0 52px 52px;
+  }
+  .tab-item { display: flex; flex-direction: column; align-items: center; gap: 4px; opacity: 0.45; }
+  .tab-item.active { opacity: 1; }
+  .tab-item svg { width: 24px; height: 24px; }
+  .tab-label { font-size: 10px; font-weight: 600; letter-spacing: 0.04em; color: var(--text-secondary); }
+  .tab-item.active .tab-label { color: var(--cyan); }
+
+  /* ─── Section label for row 2 ───────────────────────────────────────── */
+  .section-row-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; font-weight: 500;
+    letter-spacing: 0.14em;
+    color: rgba(107,114,128,0.6);
+    text-transform: uppercase;
+    padding-left: 2px;
+    margin-top: 2px;
+    margin-bottom: 5px;
+  }
+</style>
+</head>
+<body>
+
+<span class="mockup-title">Mockup 6 — Quick Actions (iOS Control Centre)</span>
+
+<div class="phone-frame">
+  <div class="dynamic-island"></div>
+  <div class="home-indicator"></div>
+  <div class="screen">
+
+    <!-- Status bar -->
+    <div class="status-bar">
+      <span class="status-time">21:47</span>
+      <div class="status-icons">
+        <svg viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="8" width="2" height="6" rx="0.5" fill="currentColor"/>
+          <rect x="4.5" y="5.5" width="2" height="8.5" rx="0.5" fill="currentColor"/>
+          <rect x="8" y="3" width="2" height="11" rx="0.5" fill="currentColor"/>
+          <rect x="11.5" y="0.5" width="2" height="13.5" rx="0.5" fill="currentColor" opacity="0.35"/>
+        </svg>
+        <svg viewBox="0 0 16 16" fill="none">
+          <path d="M8 12a1 1 0 1 1 0 2 1 1 0 0 1 0-2z" fill="currentColor"/>
+          <path d="M4.5 9.5a5 5 0 0 1 7 0" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+          <path d="M2 7a8 8 0 0 1 12 0" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity="0.5"/>
+        </svg>
+        <svg viewBox="0 0 25 12" fill="none">
+          <rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke="currentColor" stroke-opacity="0.35"/>
+          <rect x="2" y="2" width="16" height="8" rx="2" fill="currentColor"/>
+          <path d="M23 4v4a2 2 0 0 0 0-4z" fill="currentColor" opacity="0.4"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Header -->
+    <div class="screen-header">
+      <span class="screen-title">PLAY</span>
+      <div class="connection-badge">
+        <div class="connection-dot"></div>
+        <span class="connection-label">K1 — LIVE</span>
+      </div>
+    </div>
+
+    <!-- LED Preview -->
+    <div class="led-preview-container">
+      <div class="led-preview-label">
+        <span>320 LEDs · 2×160</span>
+        <span style="color:var(--cyan); font-size:8px;">AURORA DRIFT</span>
+      </div>
+      <div class="led-strip-wrap">
+        <div class="led-strip"><div class="led-strip-inner strip1"></div></div>
+        <div class="led-strip"><div class="led-strip-inner strip2"></div></div>
+      </div>
+    </div>
+
+    <!-- Grid wrapper -->
+    <div class="grid-wrapper">
+
+      <div class="grid-section-label">CONTROLS</div>
+
+      <!-- ─── Row 1: Brightness (expanded), Speed, Effect ─────────── -->
+      <div class="tile-grid">
+
+        <!-- BRIGHTNESS TILE — expanded state -->
+        <div class="tile tile-bright expanded">
+          <div class="expanded-content">
+            <div class="expanded-header">
+              <div>
+                <div class="expanded-key">BRIGHTNESS</div>
+                <span class="expanded-value-large" style="color:var(--gold)">78%</span>
+              </div>
+              <span class="expanded-close-hint">TAP TO CLOSE</span>
+            </div>
+            <!-- Slider -->
+            <div class="slider-track">
+              <div class="slider-bg">
+                <div class="slider-fill" style="width:78%; background: linear-gradient(to right, rgba(255,184,77,0.5), var(--gold));">
+                  <div class="slider-thumb" style="background:var(--gold);"></div>
+                </div>
+              </div>
+            </div>
+            <div class="slider-ticks">
+              <span class="slider-tick">0</span>
+              <span class="slider-tick">25</span>
+              <span class="slider-tick">50</span>
+              <span class="slider-tick">75</span>
+              <span class="slider-tick">100</span>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /tile-grid row 1 (expanded takes full width) -->
+
+      <!-- ─── Row 2: Speed + Effect + Palette ─────────────────────── -->
+      <div class="tile-grid">
+
+        <!-- SPEED tile -->
+        <div class="tile tile-speed">
+          <span class="tile-key">Speed</span>
+          <span class="tile-value" style="color:var(--success)">72%</span>
+          <!-- Mini progress bar -->
+          <div style="margin-top:4px">
+            <div style="height:3px; border-radius:2px; background:rgba(255,255,255,0.08); overflow:hidden;">
+              <div style="width:72%; height:100%; background:var(--success); border-radius:2px;"></div>
+            </div>
+          </div>
+          <!-- Mini arc SVG -->
+          <svg class="tile-arc" width="28" height="28" viewBox="0 0 28 28" fill="none">
+            <circle cx="14" cy="14" r="11" stroke="rgba(77,255,184,0.15)" stroke-width="3"/>
+            <circle cx="14" cy="14" r="11" stroke="rgba(77,255,184,0.7)" stroke-width="3"
+                    stroke-dasharray="49.9 69.1"
+                    stroke-dashoffset="17.3"
+                    stroke-linecap="round"
+                    transform="rotate(-90 14 14)"/>
+          </svg>
+        </div>
+
+        <!-- EFFECT tile -->
+        <div class="tile tile-effect">
+          <span class="tile-key">Effect</span>
+          <div class="tile-effect-name">AURORA DRIFT</div>
+          <div class="tile-effect-cat">PLASMA · #023</div>
+          <!-- Browse chevron -->
+          <svg style="position:absolute;bottom:10px;right:10px;opacity:0.35" width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M5 3l4 4-4 4" stroke="white" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+
+        <!-- PALETTE tile -->
+        <div class="tile tile-palette">
+          <span class="tile-key">Palette</span>
+          <span class="tile-value" style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:600;color:var(--text-primary);letter-spacing:0.03em;">OCEAN</span>
+          <div class="palette-swatch"
+               style="background: linear-gradient(to right, #001050, #0048A0, #0090D0, #00D4FF, #4DFFB8, #00D4FF, #0090D0, #0048A0, #001050);">
+          </div>
+          <!-- 5 colour dots -->
+          <div style="display:flex;gap:4px;margin-top:4px;align-items:center">
+            <div style="width:10px;height:10px;border-radius:50%;background:radial-gradient(circle,#00D4FF,#003090);border:1.5px solid rgba(0,212,255,0.6)"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:radial-gradient(circle,#4DFFB8,#0080C0)"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:radial-gradient(circle,#FF8C00,#FF2200)"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:radial-gradient(circle,#CC44FF,#4400CC)"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:radial-gradient(circle,#FFB84D,#CC6600)"></div>
+            <span style="font-size:8px;color:var(--text-tertiary);font-family:'JetBrains Mono',monospace;letter-spacing:0.04em">+12</span>
+          </div>
+        </div>
+
+      </div><!-- /tile-grid row 2 -->
+
+      <!-- ─── Row 3: EdgeMixer + BPM + (Spread) ─────────────────────── -->
+      <div class="section-row-label">AUDIO REACTIVE</div>
+
+      <div class="tile-grid">
+
+        <!-- EDGE MIXER tile -->
+        <div class="tile tile-edge" style="grid-column: span 2;">
+          <span class="tile-key">EdgeMixer</span>
+          <span class="tile-value">FIRE</span>
+          <!-- Mode chips -->
+          <div class="mode-chips">
+            <span class="mode-chip">MIRROR</span>
+            <span class="mode-chip active">FIRE</span>
+            <span class="mode-chip">RIPPLE</span>
+            <span class="mode-chip">FILL</span>
+            <span class="mode-chip">TRAIL</span>
+            <span class="mode-chip">PULSE</span>
+            <span class="mode-chip">BOUNCE</span>
+          </div>
+          <!-- Spread row -->
+          <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:0.10em;color:var(--text-tertiary);">SPREAD</span>
+            <div style="flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,0.08);overflow:hidden;">
+              <div style="width:60%;height:100%;background:rgba(0,212,255,0.6);border-radius:2px;"></div>
+            </div>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:8px;color:rgba(0,212,255,0.7);">0.60</span>
+          </div>
+        </div>
+
+        <!-- BPM tile -->
+        <div class="tile tile-bpm">
+          <span class="tile-key">Tempo</span>
+          <span class="tile-value">128</span>
+          <span class="tile-sub" style="color:var(--text-tertiary);font-size:9px;">BPM</span>
+          <!-- Beat visualiser bars -->
+          <div class="beat-bars">
+            <div class="beat-bar lit"   style="height: 80%;"></div>
+            <div class="beat-bar"       style="height: 30%;"></div>
+            <div class="beat-bar"       style="height: 55%;"></div>
+            <div class="beat-bar lit"   style="height: 90%;"></div>
+            <div class="beat-bar"       style="height: 40%;"></div>
+            <div class="beat-bar"       style="height: 65%;"></div>
+            <div class="beat-bar lit"   style="height: 75%;"></div>
+            <div class="beat-bar"       style="height: 20%;"></div>
+          </div>
+        </div>
+
+      </div><!-- /tile-grid row 3 -->
+
+    </div><!-- /grid-wrapper -->
+
+    <!-- Tab bar -->
+    <div class="tab-bar">
+      <div class="tab-item active">
+        <svg viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="9" stroke="#00D4FF" stroke-width="1.5"/>
+          <path d="M10 8.5l5 3.5-5 3.5V8.5z" fill="#00D4FF"/>
+        </svg>
+        <span class="tab-label" style="color:var(--cyan)">PLAY</span>
+      </div>
+      <div class="tab-item">
+        <svg viewBox="0 0 24 24" fill="none">
+          <path d="M12 3l2.5 5.5L20 9l-4.5 4 1.5 6-5-3-5 3 1.5-6L4 9l5.5-.5L12 3z" stroke="#9CA3B0" stroke-width="1.5" stroke-linejoin="round"/>
+        </svg>
+        <span class="tab-label">FX</span>
+      </div>
+      <div class="tab-item">
+        <svg viewBox="0 0 24 24" fill="none">
+          <rect x="3" y="3" width="8" height="8" rx="2" stroke="#9CA3B0" stroke-width="1.5"/>
+          <rect x="13" y="3" width="8" height="8" rx="2" stroke="#9CA3B0" stroke-width="1.5"/>
+          <rect x="3" y="13" width="8" height="8" rx="2" stroke="#9CA3B0" stroke-width="1.5"/>
+          <rect x="13" y="13" width="8" height="8" rx="2" stroke="#9CA3B0" stroke-width="1.5"/>
+        </svg>
+        <span class="tab-label">SCENES</span>
+      </div>
+      <div class="tab-item">
+        <svg viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="3" stroke="#9CA3B0" stroke-width="1.5"/>
+          <path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="#9CA3B0" stroke-width="1.5" stroke-linecap="round"/>
+          <path d="M4.93 4.93l2.12 2.12M16.95 16.95l2.12 2.12M4.93 19.07l2.12-2.12M16.95 7.05l2.12-2.12" stroke="#9CA3B0" stroke-width="1.2" stroke-linecap="round" opacity="0.5"/>
+        </svg>
+        <span class="tab-label">SETTINGS</span>
+      </div>
+    </div>
+
+  </div><!-- /screen -->
+</div><!-- /phone-frame -->
+
+</body>
+</html>

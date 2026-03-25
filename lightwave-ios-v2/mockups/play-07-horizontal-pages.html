@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Play Tab — Mockup 7: Horizontal Pages</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  /* ─── Reset & base ─────────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0A0A0C;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 48px 24px 64px;
+    font-family: 'Rajdhani', sans-serif;
+    gap: 16px;
+  }
+
+  :root {
+    --base:     #0F1219;
+    --card:     #1E2535;
+    --elevated: #252D3F;
+    --gold:     #FFB84D;
+    --cyan:     #00D4FF;
+    --success:  #4DFFB8;
+    --error:    #FF4D4D;
+    --text-primary:   #E6E9EF;
+    --text-secondary: #9CA3B0;
+    --text-tertiary:  #6B7280;
+  }
+
+  .mockup-title {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 13px; font-weight: 600;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--text-tertiary);
+  }
+
+  /* ─── iPhone 15 Pro frame ───────────────────────────────────────────── */
+  .phone-frame {
+    width: 393px; height: 852px;
+    background: #1A1A1C;
+    border-radius: 52px;
+    border: 1.5px solid rgba(255,255,255,0.10);
+    position: relative; overflow: hidden;
+    box-shadow:
+      0 0 0 1px rgba(0,0,0,0.6),
+      0 40px 80px rgba(0,0,0,0.9),
+      inset 0 1px 0 rgba(255,255,255,0.08);
+    flex-shrink: 0;
+  }
+  .dynamic-island {
+    position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    width: 126px; height: 37px; background: #000; border-radius: 20px; z-index: 100;
+  }
+  .home-indicator {
+    position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+    width: 134px; height: 5px; background: rgba(255,255,255,0.30);
+    border-radius: 3px; z-index: 100;
+  }
+  .screen {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--base); border-radius: 52px;
+    overflow: hidden; display: flex; flex-direction: column;
+  }
+
+  /* ─── Status bar ────────────────────────────────────────────────────── */
+  .status-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 58px 28px 0; flex-shrink: 0;
+  }
+  .status-time { font-family: 'Rajdhani', sans-serif; font-size: 15px; font-weight: 600; color: var(--text-primary); }
+  .status-icons { display: flex; align-items: center; gap: 6px; color: var(--text-primary); }
+  .status-icons svg { width: 16px; height: 16px; }
+
+  /* ─── Header ────────────────────────────────────────────────────────── */
+  .screen-header {
+    padding: 6px 24px 0;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .screen-title { font-family: 'Bebas Neue', sans-serif; font-size: 28px; letter-spacing: 0.06em; color: var(--text-primary); }
+  .connection-badge {
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(77,255,184,0.12); border: 1px solid rgba(77,255,184,0.25);
+    border-radius: 20px; padding: 4px 10px;
+  }
+  .connection-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); box-shadow: 0 0 6px var(--success); }
+  .connection-label { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: var(--success); }
+
+  /* ─── LED preview (fixed at top) ───────────────────────────────────── */
+  .led-preview-section {
+    padding: 8px 20px 0;
+    flex-shrink: 0;
+  }
+  .led-preview-meta {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 5px;
+  }
+  .led-meta-left {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; letter-spacing: 0.12em; color: var(--text-tertiary);
+    text-transform: uppercase;
+  }
+  .led-meta-right {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .rms-bar-wrap {
+    display: flex; align-items: center; gap: 4px;
+  }
+  .rms-label { font-family: 'JetBrains Mono', monospace; font-size: 8px; color: var(--text-tertiary); letter-spacing: 0.08em; }
+  .rms-bar {
+    width: 48px; height: 4px; border-radius: 2px;
+    background: rgba(255,255,255,0.06); overflow: hidden;
+  }
+  .rms-fill { height: 100%; border-radius: 2px; background: linear-gradient(to right, #00D4FF, #4DFFB8); width: 62%; }
+
+  .led-strip-wrap {
+    background: rgba(0,0,0,0.45); border-radius: 12px;
+    padding: 8px 10px; border: 1px solid rgba(255,255,255,0.05);
+    display: flex; flex-direction: column; gap: 5px;
+  }
+  .led-strip {
+    height: 16px; border-radius: 8px; width: 100%;
+    position: relative; overflow: hidden;
+  }
+  .led-strip-inner { position: absolute; top: 0; left: 0; right: 0; bottom: 0; border-radius: 8px; }
+  .strip1 {
+    background: linear-gradient(to right,
+      #020408 0%, #010510 5%, #003060 10%, #0088CC 18%, #00D4FF 26%,
+      #4DFFB8 35%, #00D4FF 50%, #4DFFB8 65%, #00D4FF 74%,
+      #0088CC 82%, #003060 90%, #010510 95%, #020408 100%);
+  }
+  .strip2 {
+    background: linear-gradient(to right,
+      #020408 0%, #010510 8%, #001F40 14%, #006090 22%, #00B8E0 30%,
+      #00D4FF 40%, #4DFFB8 50%, #00D4FF 60%, #00B8E0 70%,
+      #006090 78%, #001F40 86%, #010510 92%, #020408 100%);
+  }
+
+  /* ─── Page indicator ────────────────────────────────────────────────── */
+  .page-indicator {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 8px 0 6px;
+    flex-shrink: 0;
+  }
+  .page-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    transition: all 0.2s;
+  }
+  .page-dot.active { width: 18px; border-radius: 3px; background: var(--cyan); box-shadow: 0 0 8px rgba(0,212,255,0.5); }
+  .page-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; letter-spacing: 0.12em; color: var(--text-tertiary);
+    text-transform: uppercase;
+    margin-left: 6px;
+  }
+
+  /* ─── Paged content container ───────────────────────────────────────── */
+  .pages-container {
+    flex: 1;
+    /* Show page 2 (index 1) as active */
+    overflow: hidden;
+    position: relative;
+  }
+  /* We render all 3 pages but position them as if page 2 is active */
+  .pages-track {
+    display: flex;
+    width: 300%; /* 3 pages */
+    height: 100%;
+    /* Offset to show page 2: translate by -100% / 3 = -33.33% */
+    transform: translateX(-33.333%);
+  }
+  .page {
+    width: calc(100% / 3); /* each page = 393px wide */
+    height: 100%;
+    padding: 4px 20px 90px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  /* ─── Page section headers ──────────────────────────────────────────── */
+  .page-section-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 2px 0;
+    flex-shrink: 0;
+  }
+  .page-section-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px; letter-spacing: 0.08em;
+    color: var(--text-primary);
+  }
+  .page-section-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8.5px; letter-spacing: 0.12em;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+  }
+
+  /* ─── PAGE 1: Effect + Palette ──────────────────────────────────────── */
+  .effect-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 7px;
+    flex-shrink: 0;
+  }
+  .effect-card {
+    background: var(--card);
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.06);
+    padding: 10px;
+    display: flex; flex-direction: column; gap: 2px;
+    cursor: pointer; position: relative; overflow: hidden;
+  }
+  .effect-card.selected {
+    background: var(--elevated);
+    border-color: rgba(0,212,255,0.25);
+  }
+  .effect-card.selected::after {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: var(--cyan);
+  }
+  .effect-card-cat {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 7.5px; letter-spacing: 0.10em;
+    color: var(--text-tertiary); text-transform: uppercase;
+  }
+  .effect-card-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 15px; letter-spacing: 0.05em;
+    color: var(--text-primary); line-height: 1.1;
+  }
+  .effect-card-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 7px; color: rgba(0,212,255,0.5); letter-spacing: 0.06em;
+    margin-top: 1px;
+  }
+  .effect-card.selected .effect-card-name { color: var(--cyan); }
+
+  /* Effect preview dot */
+  .effect-dot {
+    position: absolute; top: 8px; right: 8px;
+    width: 8px; height: 8px; border-radius: 50%;
+  }
+
+  .palette-section { flex-shrink: 0; }
+  .palette-section-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; letter-spacing: 0.14em;
+    color: var(--text-tertiary); text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .palette-list { display: flex; flex-direction: column; gap: 6px; }
+  .palette-row-item {
+    background: var(--card);
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.06);
+    padding: 8px 10px;
+    display: flex; align-items: center; gap: 10px;
+    cursor: pointer;
+  }
+  .palette-row-item.selected {
+    border-color: rgba(0,212,255,0.25); background: var(--elevated);
+  }
+  .palette-gradient-strip {
+    height: 12px; border-radius: 6px; flex: 1;
+  }
+  .palette-name {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 12px; font-weight: 600; letter-spacing: 0.06em;
+    color: var(--text-primary); width: 52px; flex-shrink: 0;
+  }
+  .palette-check {
+    width: 14px; height: 14px; flex-shrink: 0;
+    border-radius: 50%; border: 1.5px solid rgba(255,255,255,0.15);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .palette-row-item.selected .palette-check {
+    background: var(--cyan); border-color: var(--cyan);
+  }
+
+  /* ─── PAGE 2: Brightness + Speed + EdgeMixer ────────────────────────── */
+  .control-slider-block {
+    background: var(--card);
+    border-radius: 16px;
+    border: 1px solid rgba(255,255,255,0.06);
+    padding: 14px 14px 12px;
+    display: flex; flex-direction: column; gap: 10px;
+    flex-shrink: 0;
+  }
+  .control-slider-row {
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .csr-header {
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .csr-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; letter-spacing: 0.12em;
+    color: var(--text-tertiary); text-transform: uppercase;
+  }
+  .csr-value {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 20px; letter-spacing: 0.03em;
+    line-height: 1;
+  }
+  .csr-divider { width: 100%; height: 1px; background: rgba(255,255,255,0.04); }
+
+  /* Custom styled slider track */
+  .slider-track-wrap {
+    position: relative;
+    height: 32px;
+    display: flex; align-items: center;
+  }
+  .slider-base {
+    position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
+    height: 5px; border-radius: 2.5px;
+    background: rgba(255,255,255,0.07);
+    overflow: visible;
+  }
+  .slider-progress {
+    height: 100%; border-radius: 2.5px;
+  }
+  .slider-knob {
+    position: absolute; right: -1px; top: 50%; transform: translateY(-50%);
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid var(--base);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06);
+  }
+
+  .edge-mixer-block {
+    background: var(--card);
+    border-radius: 16px;
+    border: 1px solid rgba(255,255,255,0.06);
+    padding: 14px;
+    display: flex; flex-direction: column; gap: 10px;
+    flex-shrink: 0;
+  }
+  .em-header {
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .em-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px; letter-spacing: 0.12em;
+    color: var(--text-tertiary); text-transform: uppercase;
+  }
+  .em-active {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px; letter-spacing: 0.04em; color: var(--cyan);
+  }
+  .em-modes {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px;
+  }
+  .em-mode-btn {
+    background: var(--elevated);
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.06);
+    padding: 6px 4px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .em-mode-btn.active {
+    background: rgba(0,212,255,0.10);
+    border-color: rgba(0,212,255,0.30);
+  }
+  .em-mode-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px; font-weight: 500;
+    letter-spacing: 0.08em; color: var(--text-secondary);
+    text-transform: uppercase; text-align: center;
+  }
+  .em-mode-btn.active .em-mode-label { color: var(--cyan); }
+
+  /* ─── PAGE 3: Expression sliders ───────────────────────────────────── */
+  .expr-list { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+  .expr-row {
+    background: var(--card);
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.05);
+    padding: 10px 12px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .expr-label-col { width: 68px; flex-shrink: 0; }
+  .expr-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8.5px; letter-spacing: 0.08em;
+    color: var(--text-secondary); text-transform: uppercase;
+    display: block;
+  }
+  .expr-val {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 15px; letter-spacing: 0.03em; line-height: 1;
+    display: block; margin-top: 1px;
+  }
+  .expr-slider-col { flex: 1; }
+  .expr-slider-bg {
+    height: 4px; border-radius: 2px;
+    background: rgba(255,255,255,0.07); overflow: hidden;
+  }
+  .expr-slider-fill { height: 100%; border-radius: 2px; }
+
+  /* ─── Tab bar ────────────────────────────────────────────────────────── */
+  .tab-bar {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 84px;
+    background: rgba(15,18,25,0.92); backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(255,255,255,0.06);
+    display: flex; align-items: flex-start; justify-content: space-around;
+    padding-top: 12px; z-index: 50; border-radius: 0 0 52px 52px;
+  }
+  .tab-item { display: flex; flex-direction: column; align-items: center; gap: 4px; opacity: 0.45; }
+  .tab-item.active { opacity: 1; }
+  .tab-item svg { width: 24px; height: 24px; }
+  .tab-label { font-size: 10px; font-weight: 600; letter-spacing: 0.04em; color: var(--text-secondary); }
+  .tab-item.active .tab-label { color: var(--cyan); }
+
+  /* Swipe hint arrows */
+  .swipe-hints {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 4px; flex-shrink: 0;
+    margin-top: -2px;
+  }
+  .swipe-hint {
+    display: flex; align-items: center; gap: 3px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px; letter-spacing: 0.10em;
+    color: rgba(107,114,128,0.5);
+    text-transform: uppercase;
+  }
+  .swipe-hint svg { width: 10px; height: 10px; opacity: 0.4; }
+</style>
+</head>
+<body>
+
+<span class="mockup-title">Mockup 7 — Horizontal Pages (iOS Weather Style)</span>
+
+<div class="phone-frame">
+  <div class="dynamic-island"></div>
+  <div class="home-indicator"></div>
+  <div class="screen">
+
+    <!-- Status bar -->
+    <div class="status-bar">
+      <span class="status-time">21:47</span>
+      <div class="status-icons">
+        <svg viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="8" width="2" height="6" rx="0.5" fill="currentColor"/>
+          <rect x="4.5" y="5.5" width="2" height="8.5" rx="0.5" fill="currentColor"/>
+          <rect x="8" y="3" width="2" height="11" rx="0.5" fill="currentColor"/>
+          <rect x="11.5" y="0.5" width="2" height="13.5" rx="0.5" fill="currentColor" opacity="0.35"/>
+        </svg>
+        <svg viewBox="0 0 16 16" fill="none">
+          <path d="M8 12a1 1 0 1 1 0 2 1 1 0 0 1 0-2z" fill="currentColor"/>
+          <path d="M4.5 9.5a5 5 0 0 1 7 0" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+          <path d="M2 7a8 8 0 0 1 12 0" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity="0.5"/>
+        </svg>
+        <svg viewBox="0 0 25 12" fill="none">
+          <rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke="currentColor" stroke-opacity="0.35"/>
+          <rect x="2" y="2" width="16" height="8" rx="2" fill="currentColor"/>
+          <path d="M23 4v4a2 2 0 0 0 0-4z" fill="currentColor" opacity="0.4"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Header -->
+    <div class="screen-header">
+      <span class="screen-title">PLAY</span>
+      <div class="connection-badge">
+        <div class="connection-dot"></div>
+        <span class="connection-label">K1 — LIVE</span>
+      </div>
+    </div>
+
+    <!-- LED Preview (fixed) -->
+    <div class="led-preview-section">
+      <div class="led-preview-meta">
+        <span class="led-meta-left">320 LEDs · 2×160</span>
+        <div class="led-meta-right">
+          <div class="rms-bar-wrap">
+            <span class="rms-label">RMS</span>
+            <div class="rms-bar"><div class="rms-fill"></div></div>
+          </div>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--gold);letter-spacing:0.10em;">128 BPM</span>
+        </div>
+      </div>
+      <div class="led-strip-wrap">
+        <div class="led-strip"><div class="led-strip-inner strip1"></div></div>
+        <div class="led-strip"><div class="led-strip-inner strip2"></div></div>
+      </div>
+    </div>
+
+    <!-- Page indicator (showing page 2 active) -->
+    <div class="page-indicator">
+      <div class="page-dot"></div>
+      <div class="page-dot active"></div>
+      <div class="page-dot"></div>
+      <span class="page-label">BRIGHTNESS · SPEED · EDGE</span>
+    </div>
+
+    <!-- Swipe hints -->
+    <div class="swipe-hints">
+      <div class="swipe-hint">
+        <svg viewBox="0 0 10 10" fill="none">
+          <path d="M6 2L3 5l3 3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        FX · PALETTE
+      </div>
+      <div class="swipe-hint">
+        EXPRESSION
+        <svg viewBox="0 0 10 10" fill="none">
+          <path d="M4 2l3 3-3 3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Pages container -->
+    <div class="pages-container">
+      <div class="pages-track">
+
+        <!-- ══════════════════════════════════════════════════
+             PAGE 1: Effect + Palette
+        ══════════════════════════════════════════════════ -->
+        <div class="page">
+          <div class="page-section-header">
+            <span class="page-section-title">EFFECT</span>
+            <span class="page-section-sub">23 of 108</span>
+          </div>
+
+          <!-- Effect grid 2×3 -->
+          <div class="effect-grid">
+
+            <div class="effect-card selected">
+              <div class="effect-dot" style="background:var(--cyan);box-shadow:0 0 6px var(--cyan);"></div>
+              <span class="effect-card-cat">Plasma</span>
+              <span class="effect-card-name">AURORA DRIFT</span>
+              <span class="effect-card-tag">AUDIO ✦</span>
+            </div>
+
+            <div class="effect-card">
+              <div class="effect-dot" style="background:#8844FF;box-shadow:0 0 6px #8844FF;"></div>
+              <span class="effect-card-cat">Wave</span>
+              <span class="effect-card-name">HOLO RIPPLE</span>
+              <span class="effect-card-tag">BEAT ✦</span>
+            </div>
+
+            <div class="effect-card">
+              <div class="effect-dot" style="background:#FF8C00;box-shadow:0 0 6px #FF8C00;"></div>
+              <span class="effect-card-cat">Fire</span>
+              <span class="effect-card-name">EMBER PULSE</span>
+              <span class="effect-card-tag">AUDIO ✦</span>
+            </div>
+
+            <div class="effect-card">
+              <div class="effect-dot" style="background:var(--success);box-shadow:0 0 6px var(--success);"></div>
+              <span class="effect-card-cat">Airy</span>
+              <span class="effect-card-name">COMET TRAIL</span>
+              <span class="effect-card-tag">STATIC</span>
+            </div>
+
+            <div class="effect-card">
+              <div class="effect-dot" style="background:#FF4DC8;box-shadow:0 0 6px #FF4DC8;"></div>
+              <span class="effect-card-cat">Spectrum</span>
+              <span class="effect-card-name">VU BRIDGE</span>
+              <span class="effect-card-tag">AUDIO ✦</span>
+            </div>
+
+            <div class="effect-card">
+              <div class="effect-dot" style="background:var(--gold);box-shadow:0 0 6px var(--gold);"></div>
+              <span class="effect-card-cat">Beat</span>
+              <span class="effect-card-name">KICK FLASH</span>
+              <span class="effect-card-tag">BEAT ✦</span>
+            </div>
+          </div>
+
+          <!-- Palette section -->
+          <div class="palette-section">
+            <div class="palette-section-title">PALETTE</div>
+            <div class="palette-list">
+
+              <div class="palette-row-item selected">
+                <span class="palette-name">OCEAN</span>
+                <div class="palette-gradient-strip"
+                     style="background:linear-gradient(to right,#001050,#004898,#0090D0,#00D4FF,#4DFFB8,#00D4FF,#0090D0,#001050)"></div>
+                <div class="palette-check">
+                  <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+                    <path d="M1.5 4l2 2 3-3" stroke="white" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </div>
+              </div>
+
+              <div class="palette-row-item">
+                <span class="palette-name">AURORA</span>
+                <div class="palette-gradient-strip"
+                     style="background:linear-gradient(to right,#001420,#0080B0,#00D4FF,#4DFFB8,#88FF44,#4DFFB8,#00D4FF,#001420)"></div>
+                <div class="palette-check"></div>
+              </div>
+
+              <div class="palette-row-item">
+                <span class="palette-name">FIRE</span>
+                <div class="palette-gradient-strip"
+                     style="background:linear-gradient(to right,#0A0000,#600000,#CC2200,#FF5500,#FF8C00,#FFB84D,#FF8C00,#600000)"></div>
+                <div class="palette-check"></div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- ══════════════════════════════════════════════════
+             PAGE 2: Brightness + Speed + EdgeMixer (ACTIVE)
+        ══════════════════════════════════════════════════ -->
+        <div class="page">
+          <div class="page-section-header">
+            <span class="page-section-title">CONTROLS</span>
+            <span class="page-section-sub">BRIGHTNESS · SPEED · EDGE</span>
+          </div>
+
+          <!-- Brightness + Speed sliders in one card -->
+          <div class="control-slider-block">
+
+            <!-- Brightness -->
+            <div class="control-slider-row">
+              <div class="csr-header">
+                <span class="csr-label">Brightness</span>
+                <span class="csr-value" style="color:var(--gold)">78%</span>
+              </div>
+              <div class="slider-track-wrap">
+                <div class="slider-base">
+                  <div class="slider-progress" style="width:78%;background:linear-gradient(to right,rgba(255,184,77,0.4),var(--gold));">
+                    <div class="slider-knob" style="background:var(--gold);"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="csr-divider"></div>
+
+            <!-- Speed -->
+            <div class="control-slider-row">
+              <div class="csr-header">
+                <span class="csr-label">Speed</span>
+                <span class="csr-value" style="color:var(--success)">72%</span>
+              </div>
+              <div class="slider-track-wrap">
+                <div class="slider-base">
+                  <div class="slider-progress" style="width:72%;background:linear-gradient(to right,rgba(77,255,184,0.35),var(--success));">
+                    <div class="slider-knob" style="background:var(--success);"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- EdgeMixer block -->
+          <div class="edge-mixer-block">
+            <div class="em-header">
+              <span class="em-title">EdgeMixer</span>
+              <span class="em-active">FIRE</span>
+            </div>
+
+            <div class="em-modes">
+              <div class="em-mode-btn"><span class="em-mode-label">MIRROR</span></div>
+              <div class="em-mode-btn active"><span class="em-mode-label">FIRE</span></div>
+              <div class="em-mode-btn"><span class="em-mode-label">RIPPLE</span></div>
+              <div class="em-mode-btn"><span class="em-mode-label">FILL</span></div>
+              <div class="em-mode-btn"><span class="em-mode-label">TRAIL</span></div>
+              <div class="em-mode-btn"><span class="em-mode-label">PULSE</span></div>
+              <div class="em-mode-btn"><span class="em-mode-label">BOUNCE</span></div>
+              <!-- Placeholder slot -->
+              <div class="em-mode-btn" style="opacity:0.3;"><span class="em-mode-label">—</span></div>
+            </div>
+
+            <!-- Spread slider -->
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <div class="csr-header">
+                <span class="csr-label">Spread</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:rgba(0,212,255,0.8);letter-spacing:0.04em;">0.60</span>
+              </div>
+              <div class="slider-track-wrap">
+                <div class="slider-base">
+                  <div class="slider-progress" style="width:60%;background:linear-gradient(to right,rgba(0,212,255,0.3),rgba(0,212,255,0.75));">
+                    <div class="slider-knob" style="background:var(--cyan);"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- BPM info row -->
+          <div style="display:flex;align-items:center;justify-content:space-between;
+                      background:var(--card);border-radius:12px;
+                      border:1px solid rgba(255,255,255,0.05);
+                      padding:10px 14px;">
+            <div style="display:flex;flex-direction:column;gap:1px">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:8.5px;
+                           letter-spacing:0.12em;color:var(--text-tertiary);text-transform:uppercase">Tempo</span>
+              <span style="font-family:'Bebas Neue',sans-serif;font-size:28px;
+                           letter-spacing:0.03em;color:var(--text-primary);line-height:1">128 <span style="font-size:14px;color:var(--text-tertiary);letter-spacing:0.10em;font-family:'JetBrains Mono',monospace;">BPM</span></span>
+            </div>
+            <!-- Beat meter bars -->
+            <div style="display:flex;align-items:flex-end;gap:2.5px;height:28px;">
+              <div style="width:5px;height:90%;border-radius:2px;background:var(--gold);box-shadow:0 0 5px rgba(255,184,77,0.5)"></div>
+              <div style="width:5px;height:30%;border-radius:2px;background:rgba(255,184,77,0.3)"></div>
+              <div style="width:5px;height:55%;border-radius:2px;background:rgba(255,184,77,0.4)"></div>
+              <div style="width:5px;height:85%;border-radius:2px;background:var(--gold);box-shadow:0 0 5px rgba(255,184,77,0.5)"></div>
+              <div style="width:5px;height:40%;border-radius:2px;background:rgba(255,184,77,0.3)"></div>
+              <div style="width:5px;height:65%;border-radius:2px;background:rgba(255,184,77,0.45)"></div>
+              <div style="width:5px;height:80%;border-radius:2px;background:var(--gold);box-shadow:0 0 5px rgba(255,184,77,0.4)"></div>
+              <div style="width:5px;height:20%;border-radius:2px;background:rgba(255,184,77,0.25)"></div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ══════════════════════════════════════════════════
+             PAGE 3: Expression Parameters
+        ══════════════════════════════════════════════════ -->
+        <div class="page">
+          <div class="page-section-header">
+            <span class="page-section-title">EXPRESSION</span>
+            <span class="page-section-sub">7 PARAMS · AURORA DRIFT</span>
+          </div>
+
+          <!-- 7 expression sliders -->
+          <div class="expr-list">
+
+            <div class="expr-row">
+              <div class="expr-label-col">
+                <span class="expr-name">DENSITY</span>
+                <span class="expr-val" style="color:var(--cyan)">0.72</span>
+              </div>
+              <div class="expr-slider-col">
+                <div class="expr-slider-bg">
+                  <div class="expr-slider-fill" style="width:72%;background:linear-gradient(to right,rgba(0,212,255,0.3),var(--cyan))"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="expr-row">
+              <div class="expr-label-col">
+                <span class="expr-name">ENERGY</span>
+                <span class="expr-val" style="color:var(--gold)">0.85</span>
+              </div>
+              <div class="expr-slider-col">
+                <div class="expr-slider-bg">
+                  <div class="expr-slider-fill" style="width:85%;background:linear-gradient(to right,rgba(255,184,77,0.3),var(--gold))"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="expr-row">
+              <div class="expr-label-col">
+                <span class="expr-name">SATURATION</span>
+                <span class="expr-val" style="color:var(--success)">0.91</span>
+              </div>
+              <div class="expr-slider-col">
+                <div class="expr-slider-bg">
+                  <div class="expr-slider-fill" style="width:91%;background:linear-gradient(to right,rgba(77,255,184,0.3),var(--success))"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="expr-row">
+              <div class="expr-label-col">
+                <span class="expr-name">FLOW RATE</span>
+                <span class="expr-val" style="color:var(--text-primary)">0.50</span>
+              </div>
+              <div class="expr-slider-col">
+                <div class="expr-slider-bg">
+                  <div class="expr-slider-fill" style="width:50%;background:linear-gradient(to right,rgba(230,233,239,0.15),rgba(230,233,239,0.6))"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="expr-row">
+              <div class="expr-label-col">
+                <span class="expr-name">SHIMMER</span>
+                <span class="expr-val" style="color:#CC88FF">0.38</span>
+              </div>
+              <div class="expr-slider-col">
+                <div class="expr-slider-bg">
+                  <div class="expr-slider-fill" style="width:38%;background:linear-gradient(to right,rgba(160,80,255,0.3),#AA66FF)"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="expr-row">
+              <div class="expr-label-col">
+                <span class="expr-name">BEAT RESP</span>
+                <span class="expr-val" style="color:var(--gold)">1.00</span>
+              </div>
+              <div class="expr-slider-col">
+                <div class="expr-slider-bg">
+                  <div class="expr-slider-fill" style="width:100%;background:linear-gradient(to right,rgba(255,184,77,0.4),var(--gold));border-radius:2px;"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="expr-row">
+              <div class="expr-label-col">
+                <span class="expr-name">TREBLE MIX</span>
+                <span class="expr-val" style="color:var(--cyan)">0.60</span>
+              </div>
+              <div class="expr-slider-col">
+                <div class="expr-slider-bg">
+                  <div class="expr-slider-fill" style="width:60%;background:linear-gradient(to right,rgba(0,212,255,0.25),rgba(0,212,255,0.7))"></div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Reset all button -->
+          <div style="display:flex;align-items:center;justify-content:center;margin-top:4px;">
+            <div style="
+              background:rgba(255,255,255,0.04);
+              border:1px solid rgba(255,255,255,0.08);
+              border-radius:10px;
+              padding:8px 20px;
+              display:flex;align-items:center;gap:6px;">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M2 6a4 4 0 1 1 1 2.8" stroke="#6B7280" stroke-width="1.2" stroke-linecap="round"/>
+                <path d="M2 9V6h3" stroke="#6B7280" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:9px;
+                           letter-spacing:0.12em;color:var(--text-tertiary);text-transform:uppercase;">RESET ALL</span>
+            </div>
+          </div>
+
+        </div>
+      </div><!-- /pages-track -->
+    </div><!-- /pages-container -->
+
+    <!-- Tab bar -->
+    <div class="tab-bar">
+      <div class="tab-item active">
+        <svg viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="9" stroke="#00D4FF" stroke-width="1.5"/>
+          <path d="M10 8.5l5 3.5-5 3.5V8.5z" fill="#00D4FF"/>
+        </svg>
+        <span class="tab-label" style="color:var(--cyan)">PLAY</span>
+      </div>
+      <div class="tab-item">
+        <svg viewBox="0 0 24 24" fill="none">
+          <path d="M12 3l2.5 5.5L20 9l-4.5 4 1.5 6-5-3-5 3 1.5-6L4 9l5.5-.5L12 3z" stroke="#9CA3B0" stroke-width="1.5" stroke-linejoin="round"/>
+        </svg>
+        <span class="tab-label">FX</span>
+      </div>
+      <div class="tab-item">
+        <svg viewBox="0 0 24 24" fill="none">
+          <rect x="3" y="3" width="8" height="8" rx="2" stroke="#9CA3B0" stroke-width="1.5"/>
+          <rect x="13" y="3" width="8" height="8" rx="2" stroke="#9CA3B0" stroke-width="1.5"/>
+          <rect x="3" y="13" width="8" height="8" rx="2" stroke="#9CA3B0" stroke-width="1.5"/>
+          <rect x="13" y="13" width="8" height="8" rx="2" stroke="#9CA3B0" stroke-width="1.5"/>
+        </svg>
+        <span class="tab-label">SCENES</span>
+      </div>
+      <div class="tab-item">
+        <svg viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="3" stroke="#9CA3B0" stroke-width="1.5"/>
+          <path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="#9CA3B0" stroke-width="1.5" stroke-linecap="round"/>
+          <path d="M4.93 4.93l2.12 2.12M16.95 16.95l2.12 2.12M4.93 19.07l2.12-2.12M16.95 7.05l2.12-2.12" stroke="#9CA3B0" stroke-width="1.2" stroke-linecap="round" opacity="0.5"/>
+        </svg>
+        <span class="tab-label">SETTINGS</span>
+      </div>
+    </div>
+
+  </div><!-- /screen -->
+</div><!-- /phone-frame -->
+
+</body>
+</html>

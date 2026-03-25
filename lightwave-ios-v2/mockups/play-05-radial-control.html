@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Play Tab — Mockup 5: Radial Control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  /* ─── Reset & base ─────────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0A0A0C;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 48px 24px 64px;
+    font-family: 'Rajdhani', sans-serif;
+    gap: 16px;
+  }
+
+  /* ─── Design tokens ─────────────────────────────────────────────────── */
+  :root {
+    --base:     #0F1219;
+    --card:     #1E2535;
+    --elevated: #252D3F;
+    --gold:     #FFB84D;
+    --cyan:     #00D4FF;
+    --success:  #4DFFB8;
+    --error:    #FF4D4D;
+    --text-primary:   #E6E9EF;
+    --text-secondary: #9CA3B0;
+    --text-tertiary:  #6B7280;
+    --radius-hero:   24px;
+    --radius-card:   16px;
+    --radius-nested: 12px;
+  }
+
+  /* ─── Annotation ────────────────────────────────────────────────────── */
+  .mockup-title {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+  }
+
+  /* ─── iPhone 15 Pro frame ───────────────────────────────────────────── */
+  .phone-frame {
+    width: 393px;
+    height: 852px;
+    background: #1A1A1C;
+    border-radius: 52px;
+    border: 1.5px solid rgba(255,255,255,0.10);
+    position: relative;
+    overflow: hidden;
+    box-shadow:
+      0 0 0 1px rgba(0,0,0,0.6),
+      0 40px 80px rgba(0,0,0,0.9),
+      inset 0 1px 0 rgba(255,255,255,0.08);
+    flex-shrink: 0;
+  }
+
+  /* Dynamic Island */
+  .dynamic-island {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 126px;
+    height: 37px;
+    background: #000;
+    border-radius: 20px;
+    z-index: 100;
+  }
+
+  /* Home indicator */
+  .home-indicator {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 134px;
+    height: 5px;
+    background: rgba(255,255,255,0.30);
+    border-radius: 3px;
+    z-index: 100;
+  }
+
+  /* ─── Screen content area ───────────────────────────────────────────── */
+  .screen {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--base);
+    border-radius: 52px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ─── Tab bar at bottom ─────────────────────────────────────────────── */
+  .tab-bar {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 84px;
+    background: rgba(15,18,25,0.92);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-around;
+    padding-top: 12px;
+    z-index: 50;
+    border-radius: 0 0 52px 52px;
+  }
+
+  .tab-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    opacity: 0.45;
+  }
+  .tab-item.active { opacity: 1; }
+  .tab-item svg { width: 24px; height: 24px; }
+  .tab-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+  }
+  .tab-item.active .tab-label { color: var(--cyan); }
+  .tab-item.active svg path,
+  .tab-item.active svg circle,
+  .tab-item.active svg rect { stroke: var(--cyan); }
+
+  /* ─── Status bar ────────────────────────────────────────────────────── */
+  .status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 58px 28px 0;
+    flex-shrink: 0;
+  }
+  .status-time {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .status-icons {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-primary);
+  }
+  .status-icons svg { width: 16px; height: 16px; }
+
+  /* ─── Screen header ─────────────────────────────────────────────────── */
+  .screen-header {
+    padding: 8px 24px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .screen-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px;
+    letter-spacing: 0.06em;
+    color: var(--text-primary);
+  }
+  .connection-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(77,255,184,0.12);
+    border: 1px solid rgba(77,255,184,0.25);
+    border-radius: 20px;
+    padding: 4px 10px;
+  }
+  .connection-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 6px var(--success);
+  }
+  .connection-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--success);
+  }
+
+  /* ─── Main content ──────────────────────────────────────────────────── */
+  .main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 4px 0 90px;
+    gap: 0;
+    overflow: hidden;
+  }
+
+  /* ─── Radial controller ─────────────────────────────────────────────── */
+  .radial-controller {
+    width: 340px;
+    height: 340px;
+    position: relative;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  /* Outer ring SVG canvas */
+  .radial-svg {
+    width: 340px;
+    height: 340px;
+    position: absolute;
+    top: 0; left: 0;
+  }
+
+  /* LED ring (outermost) */
+  .led-ring-segment {
+    /* rendered via SVG */
+  }
+
+  /* Pie segments for EdgeMixer modes */
+  .pie-label-group {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+  }
+
+  /* Speed ring (concentric inner ring) */
+  /* handled in SVG */
+
+  /* Central brightness disc */
+  .brightness-disc {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 148px;
+    height: 148px;
+    border-radius: 50%;
+    background: conic-gradient(
+      from 200deg,
+      rgba(255,184,77,0.08) 0deg,
+      rgba(255,184,77,0.60) 238deg,
+      rgba(30,37,53,0.4) 238deg
+    );
+    border: 2px solid rgba(255,184,77,0.30);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 40px rgba(255,184,77,0.15), inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+
+  .brightness-value {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 48px;
+    letter-spacing: 0.02em;
+    color: var(--gold);
+    line-height: 1;
+    text-shadow: 0 0 20px rgba(255,184,77,0.5);
+  }
+  .brightness-unit {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    color: var(--text-tertiary);
+    margin-top: 2px;
+  }
+  .brightness-hint {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 10px;
+    color: rgba(255,184,77,0.5);
+    letter-spacing: 0.08em;
+    margin-top: 4px;
+  }
+
+  /* BPM at centre (inside brightness disc) */
+  .bpm-badge {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    /* sits on top of brightness disc via z-index */
+    pointer-events: none;
+  }
+
+  /* Drag handle dot on brightness disc */
+  .drag-handle {
+    position: absolute;
+    width: 12px; height: 12px;
+    background: var(--gold);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--gold), 0 0 16px rgba(255,184,77,0.4);
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  /* Ring labels for EdgeMixer pie segments */
+  .pie-label {
+    position: absolute;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    text-align: center;
+    width: 36px;
+    line-height: 1.2;
+    transform-origin: center;
+  }
+  .pie-label.active {
+    color: var(--cyan);
+    text-shadow: 0 0 8px rgba(0,212,255,0.5);
+  }
+
+  /* Effect name strip below the radial */
+  .effect-strip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    margin-top: 6px;
+    flex-shrink: 0;
+  }
+  .effect-category {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    color: var(--cyan);
+    text-transform: uppercase;
+    opacity: 0.8;
+  }
+  .effect-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    letter-spacing: 0.08em;
+    color: var(--text-primary);
+    text-align: center;
+  }
+  .effect-nav {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-top: 2px;
+  }
+  .effect-nav-btn {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--elevated);
+    border: 1px solid rgba(255,255,255,0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .effect-nav-btn svg { width: 12px; height: 12px; }
+  .effect-index {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-tertiary);
+    letter-spacing: 0.06em;
+  }
+
+  /* Palette row */
+  .palette-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    flex-shrink: 0;
+  }
+  .palette-label {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.10em;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    width: 38px;
+    flex-shrink: 0;
+  }
+  .palette-dot {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .palette-dot.selected {
+    border-color: var(--text-primary);
+    box-shadow: 0 0 0 2px rgba(230,233,239,0.15);
+  }
+
+  /* Bottom info strip */
+  .info-strip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 28px;
+    width: 100%;
+    flex-shrink: 0;
+  }
+  .info-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+  }
+  .info-value {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px;
+    letter-spacing: 0.04em;
+    color: var(--text-primary);
+  }
+  .info-key {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.10em;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+  }
+  .info-divider {
+    width: 1px;
+    height: 28px;
+    background: rgba(255,255,255,0.06);
+  }
+
+</style>
+</head>
+<body>
+
+<span class="mockup-title">Mockup 5 — Radial Control (DJ Controller)</span>
+
+<div class="phone-frame">
+  <div class="dynamic-island"></div>
+  <div class="home-indicator"></div>
+  <div class="screen">
+
+    <!-- Status bar -->
+    <div class="status-bar">
+      <span class="status-time">21:47</span>
+      <div class="status-icons">
+        <!-- Signal -->
+        <svg viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="8" width="2" height="6" rx="0.5" fill="currentColor"/>
+          <rect x="4.5" y="5.5" width="2" height="8.5" rx="0.5" fill="currentColor"/>
+          <rect x="8" y="3" width="2" height="11" rx="0.5" fill="currentColor"/>
+          <rect x="11.5" y="0.5" width="2" height="13.5" rx="0.5" fill="currentColor" opacity="0.35"/>
+        </svg>
+        <!-- WiFi -->
+        <svg viewBox="0 0 16 16" fill="none">
+          <path d="M8 12a1 1 0 1 1 0 2 1 1 0 0 1 0-2z" fill="currentColor"/>
+          <path d="M4.5 9.5a5 5 0 0 1 7 0" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+          <path d="M2 7a8 8 0 0 1 12 0" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity="0.5"/>
+        </svg>
+        <!-- Battery -->
+        <svg viewBox="0 0 25 12" fill="none">
+          <rect x="0.5" y="0.5" width="21" height="11" rx="3.5" stroke="currentColor" stroke-opacity="0.35"/>
+          <rect x="2" y="2" width="16" height="8" rx="2" fill="currentColor"/>
+          <path d="M23 4v4a2 2 0 0 0 0-4z" fill="currentColor" opacity="0.4"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Screen header -->
+    <div class="screen-header">
+      <span class="screen-title">PLAY</span>
+      <div class="connection-badge">
+        <div class="connection-dot"></div>
+        <span class="connection-label">K1 — LIVE</span>
+      </div>
+    </div>
+
+    <!-- Main content -->
+    <div class="main-content">
+
+      <!-- ─── Radial controller ────────────────────────────────────── -->
+      <div class="radial-controller">
+        <svg class="radial-svg" viewBox="0 0 340 340" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <!-- LED gradient definitions for individual arc segments -->
+            <radialGradient id="gInner" cx="50%" cy="50%" r="50%">
+              <stop offset="60%" stop-color="#0F1219"/>
+              <stop offset="100%" stop-color="#252D3F"/>
+            </radialGradient>
+
+            <!-- Glow filters -->
+            <filter id="glow-cyan" x="-30%" y="-30%" width="160%" height="160%">
+              <feGaussianBlur stdDeviation="2" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <filter id="glow-gold" x="-40%" y="-40%" width="180%" height="180%">
+              <feGaussianBlur stdDeviation="3" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <filter id="glow-led" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="1.5" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+
+          <!-- ── Background circle ─────────────────────────────────── -->
+          <circle cx="170" cy="170" r="166" fill="url(#gInner)"/>
+          <circle cx="170" cy="170" r="166" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
+
+          <!-- ── EdgeMixer pie segments (outermost ring: r=152..166) ── -->
+          <!-- 7 modes, each ~51.4deg wide. Active = FIRE mode (~102deg offset) -->
+          <!-- Segment separators + label rings rendered as arcs -->
+
+          <!-- Inactive segment fills -->
+          <path d="M170,170 L313,144 A148,148 0 0,1 305,210 Z"
+                fill="rgba(30,37,53,0.7)" stroke="rgba(255,255,255,0.04)" stroke-width="0.5"/>
+          <path d="M170,170 L305,210 A148,148 0 0,1 261,280 Z"
+                fill="rgba(30,37,53,0.7)" stroke="rgba(255,255,255,0.04)" stroke-width="0.5"/>
+          <path d="M170,170 L261,280 A148,148 0 0,1 170,318 Z"
+                fill="rgba(30,37,53,0.7)" stroke="rgba(255,255,255,0.04)" stroke-width="0.5"/>
+          <path d="M170,170 L170,318 A148,148 0 0,1 79,280 Z"
+                fill="rgba(30,37,53,0.7)" stroke="rgba(255,255,255,0.04)" stroke-width="0.5"/>
+          <path d="M170,170 L79,280 A148,148 0 0,1 35,210 Z"
+                fill="rgba(30,37,53,0.7)" stroke="rgba(255,255,255,0.04)" stroke-width="0.5"/>
+          <path d="M170,170 L35,210 A148,148 0 0,1 27,144 Z"
+                fill="rgba(30,37,53,0.7)" stroke="rgba(255,255,255,0.04)" stroke-width="0.5"/>
+          <!-- Active segment — FIRE: top arc -->
+          <path d="M170,170 L27,144 A148,148 0 0,1 170,22 Z"
+                fill="rgba(0,212,255,0.10)" stroke="rgba(0,212,255,0.20)" stroke-width="0.5"/>
+          <path d="M170,170 L170,22 A148,148 0 0,1 313,144 Z"
+                fill="rgba(0,212,255,0.10)" stroke="rgba(0,212,255,0.20)" stroke-width="0.5"/>
+
+          <!-- Centre clip to create ring (hide pie interior) -->
+          <circle cx="170" cy="170" r="134" fill="var(--base)"/>
+
+          <!-- ── Speed ring (r=118..132) ─────────────────────────────── -->
+          <!-- Track -->
+          <circle cx="170" cy="170" r="125" fill="none"
+                  stroke="rgba(255,255,255,0.06)" stroke-width="14"/>
+          <!-- Speed fill arc — 72% speed = ~259deg of the 360 circle -->
+          <!-- Using stroke-dasharray trick: circumference = 2π×125 = 785.4 -->
+          <circle cx="170" cy="170" r="125" fill="none"
+                  stroke="rgba(77,255,184,0.25)" stroke-width="14"
+                  stroke-dasharray="565 785"
+                  stroke-dashoffset="196"
+                  stroke-linecap="round"
+                  transform="rotate(-90 170 170)"/>
+          <!-- Speed indicator dot -->
+          <circle cx="170" cy="45" r="5" fill="#4DFFB8"
+                  filter="url(#glow-cyan)"
+                  transform="rotate(248 170 170)"/>
+
+          <!-- Speed ring inner mask -->
+          <circle cx="170" cy="170" r="110" fill="var(--base)"/>
+
+          <!-- ── LED ring (outermost edge: r=134..148) ─────────────────── -->
+          <!-- 320 LEDs — rendered as 40 arc groups of 8 LEDs each for performance -->
+          <!-- Colour sequence: aurora / teal-cyan theme -->
+
+          <!-- LED arcs — group 1: deep blue (LEDs 1-40) -->
+          <circle cx="170" cy="170" r="141" fill="none"
+                  stroke="rgba(10,40,120,0.4)" stroke-width="13"
+                  stroke-dasharray="220.9 659.7"
+                  stroke-dashoffset="0"
+                  transform="rotate(-90 170 170)"/>
+          <!-- group 2: mid cyan (LEDs 41-100) -->
+          <circle cx="170" cy="170" r="141" fill="none"
+                  stroke="rgba(0,180,220,0.55)" stroke-width="12"
+                  stroke-dasharray="330 549.6"
+                  stroke-dashoffset="-220.9"
+                  transform="rotate(-90 170 170)"/>
+          <!-- group 3: bright cyan peak (LEDs 101-140) -->
+          <circle cx="170" cy="170" r="141" fill="none"
+                  stroke="rgba(0,212,255,0.80)" stroke-width="12"
+                  stroke-dasharray="220.9 659.7"
+                  stroke-dashoffset="-550.9"
+                  transform="rotate(-90 170 170)"/>
+          <!-- group 4: teal/green falloff (LEDs 141-200) -->
+          <circle cx="170" cy="170" r="141" fill="none"
+                  stroke="rgba(0,200,160,0.60)" stroke-width="12"
+                  stroke-dasharray="330 549.6"
+                  stroke-dashoffset="-330"
+                  transform="rotate(110 170 170)"/>
+          <!-- group 5: dark taper (LEDs 201-280) -->
+          <circle cx="170" cy="170" r="141" fill="none"
+                  stroke="rgba(0,80,120,0.35)" stroke-width="12"
+                  stroke-dasharray="440 440"
+                  stroke-dashoffset="-330"
+                  transform="rotate(230 170 170)"/>
+          <!-- group 6: near-off (LEDs 281-320) -->
+          <circle cx="170" cy="170" r="141" fill="none"
+                  stroke="rgba(5,15,40,0.3)" stroke-width="10"
+                  stroke-dasharray="220.9 659.7"
+                  stroke-dashoffset="-440"
+                  transform="rotate(290 170 170)"/>
+
+          <!-- LED ring outer border -->
+          <circle cx="170" cy="170" r="148" fill="none"
+                  stroke="rgba(255,255,255,0.06)" stroke-width="0.5"/>
+          <circle cx="170" cy="170" r="134" fill="none"
+                  stroke="rgba(255,255,255,0.05)" stroke-width="0.5"/>
+
+          <!-- ── Speed ring label tick marks ───────────────────────── -->
+          <g stroke="rgba(255,255,255,0.15)" stroke-width="0.8">
+            <line x1="170" y1="46" x2="170" y2="53" transform="rotate(0 170 170)"/>
+            <line x1="170" y1="46" x2="170" y2="53" transform="rotate(36 170 170)"/>
+            <line x1="170" y1="46" x2="170" y2="53" transform="rotate(72 170 170)"/>
+            <line x1="170" y1="46" x2="170" y2="53" transform="rotate(108 170 170)"/>
+            <line x1="170" y1="46" x2="170" y2="53" transform="rotate(144 170 170)"/>
+            <line x1="170" y1="46" x2="170" y2="53" transform="rotate(180 170 170)"/>
+            <line x1="170" y1="46" x2="170" y2="53" transform="rotate(216 170 170)"/>
+            <line x1="170" y1="46" x2="170" y2="53" transform="rotate(252 170 170)"/>
+            <line x1="170" y1="46" x2="170" y2="53" transform="rotate(288 170 170)"/>
+            <line x1="170" y1="46" x2="170" y2="53" transform="rotate(324 170 170)"/>
+          </g>
+
+          <!-- ── "SPEED" label for inner ring ─────────────────────── -->
+          <text x="170" y="66" text-anchor="middle"
+                font-family="'JetBrains Mono'" font-size="8" fill="rgba(77,255,184,0.5)"
+                letter-spacing="2">72%</text>
+
+          <!-- ── BPM text centred ───────────────────────────────────── -->
+          <text x="170" y="158" text-anchor="middle"
+                font-family="'Bebas Neue'" font-size="40" fill="#FFB84D"
+                filter="url(#glow-gold)">128</text>
+          <text x="170" y="175" text-anchor="middle"
+                font-family="'JetBrains Mono'" font-size="9" fill="rgba(255,184,77,0.5)"
+                letter-spacing="3">BPM</text>
+          <!-- Brightness label at very bottom of disc -->
+          <text x="170" y="196" text-anchor="middle"
+                font-family="'Rajdhani'" font-size="10" font-weight="600"
+                fill="rgba(255,184,77,0.65)" letter-spacing="1">BRIGHTNESS 78%</text>
+          <text x="170" y="210" text-anchor="middle"
+                font-family="'JetBrains Mono'" font-size="8"
+                fill="rgba(255,184,77,0.3)" letter-spacing="1">⟳ DRAG</text>
+
+          <!-- Brightness disc border -->
+          <circle cx="170" cy="170" r="74" fill="none"
+                  stroke="rgba(255,184,77,0.25)" stroke-width="1.5"/>
+
+          <!-- Brightness drag handle -->
+          <circle cx="170" cy="96" r="6" fill="#FFB84D" filter="url(#glow-gold)"/>
+          <circle cx="170" cy="96" r="3" fill="white"/>
+
+          <!-- ── EdgeMixer mode labels ───────────────────────────────── -->
+          <!-- Positioned at midpoint of each segment arc, r≈155 -->
+          <!-- 7 segments, each 51.43deg. Starting at top (270deg on unit circle) -->
+          <!-- Segment centres (degrees from top, clockwise):
+               0: 270+25.7=295.7 → MIRROR
+               1: 295.7+51.4=347.1 → CENTER (near top-right) — ACTIVE
+               2: 347.1+51.4=38.5 → RIPPLE
+               3: 38.5+51.4=89.9 → FILL
+               4: 89.9+51.4=141.3 → TRAIL
+               5: 141.3+51.4=192.7 → PULSE
+               6: 192.7+51.4=244.1 → BOUNCE -->
+
+          <!-- Helper: text at angle, r=155 from (170,170) -->
+          <!-- MIRROR: angle 295.7° → (170+155*cos(295.7°), 170+155*sin(295.7°)) = (170+66.4, 170-139.4) = (236,31) — out of ring
+               Need to recalculate with r=155 and r=141 (LED ring outer) — use r≈143 midpoint of label zone -->
+
+          <!-- Label positions at r=155 (outside LED ring for clarity): this is outside frame.
+               Use r=141 midpoint: segment labels inside the outer ring. Better to show as small text arcs inside the pie. -->
+
+          <!-- Segment text labels at ~r=153 (outside LED ring r=148 — slightly outside) -->
+          <!-- Since frame is 340px, labels outside r=148 would be near edge — use r=138 (between LED inner r=134 and speed outer r=132, ie the gap is tiny).
+               Actually: LED ring: 134..148, Speed ring: 118..132, gap between 132 and 134 is 2px — too tight.
+               Use rotated text inside each pie segment, at r=156 (just outside LED ring outer=148).
+               These will be tiny but visible. Actually for clarity label them at r≈108 (between speed inner=110 and nothing). -->
+
+          <!-- Actually the cleanest approach: put segment labels between the speed ring outer (r=132) and LED ring inner (r=134) — no room.
+               Best: labels at r=155 (just outside the LED ring) shown as very small text, clipped by frame edge on big segments.
+               For the 7 segments this will look clean on a 340px canvas at the given positions. -->
+
+          <!-- FIRE — top active segment (~333→23deg range, midpoint=358deg = 0°, top):
+               pos: (170+155*cos(-90°+(-2°)), 170+155*sin(-90°+(-2°))) ≈ (170, 15) — top edge -->
+          <text x="170" y="20" text-anchor="middle"
+                font-family="'Rajdhani'" font-size="8.5" font-weight="700"
+                fill="#00D4FF" letter-spacing="1" filter="url(#glow-cyan)">FIRE</text>
+
+          <!-- RIPPLE — ~23..75deg, midpoint 49deg:
+               x=170+155*cos(49-90°), y=170+155*sin(49-90°) = 170+155*cos(-41°), 170+155*sin(-41°)
+               cos(-41°)=0.755, sin(-41°)=-0.656 → (287, 68) -->
+          <text x="285" y="70" text-anchor="middle"
+                font-family="'Rajdhani'" font-size="8.5" font-weight="600"
+                fill="rgba(156,163,176,0.75)" letter-spacing="1">RIPPLE</text>
+
+          <!-- FILL — ~75..126deg, midpoint 100.5deg:
+               cos(100.5-90)=cos(10.5°)=0.983, sin(10.5°)=0.182 → (322, 198) — outside frame -->
+          <text x="316" y="198" text-anchor="middle"
+                font-family="'Rajdhani'" font-size="8.5" font-weight="600"
+                fill="rgba(156,163,176,0.75)" letter-spacing="1">FILL</text>
+
+          <!-- TRAIL — ~126..178deg, midpoint 152deg:
+               cos(152-90)=cos(62°)=0.469, sin(62°)=0.883 → (243, 307) -->
+          <text x="246" y="310" text-anchor="middle"
+                font-family="'Rajdhani'" font-size="8.5" font-weight="600"
+                fill="rgba(156,163,176,0.75)" letter-spacing="1">TRAIL</text>
+
+          <!-- PULSE — ~178..229deg, midpoint 203.5deg:
+               cos(203.5-90)=cos(113.5°)=-0.398, sin(113.5°)=0.917 → (108, 312) -->
+          <text x="104" y="312" text-anchor="middle"
+                font-family="'Rajdhani'" font-size="8.5" font-weight="600"
+                fill="rgba(156,163,176,0.75)" letter-spacing="1">PULSE</text>
+
+          <!-- BOUNCE — ~229..281deg, midpoint 255deg:
+               cos(255-90)=cos(165°)=-0.966, sin(165°)=0.259 → (20, 210) — near left edge -->
+          <text x="22" y="210" text-anchor="middle"
+                font-family="'Rajdhani'" font-size="8.5" font-weight="600"
+                fill="rgba(156,163,176,0.75)" letter-spacing="1">BOUNCE</text>
+
+          <!-- MIRROR — ~281..333deg, midpoint 307deg:
+               cos(307-90)=cos(217°)=-0.799, sin(217°)=-0.602 → (46, 76) -->
+          <text x="44" y="76" text-anchor="middle"
+                font-family="'Rajdhani'" font-size="8.5" font-weight="600"
+                fill="rgba(156,163,176,0.75)" letter-spacing="1">MIRROR</text>
+
+          <!-- ── Speed ring label ───────────────────────────────────── -->
+          <text x="218" y="54" text-anchor="middle"
+                font-family="'JetBrains Mono'" font-size="7.5"
+                fill="rgba(77,255,184,0.4)" letter-spacing="1.5">SPEED</text>
+
+          <!-- ── Outer ring tick marks (at r=150) for LED strip reference ── -->
+          <g stroke="rgba(0,212,255,0.2)" stroke-width="0.5">
+            <line x1="170" y1="22" x2="170" y2="27" transform="rotate(0 170 170)"/>
+            <line x1="170" y1="22" x2="170" y2="27" transform="rotate(45 170 170)"/>
+            <line x1="170" y1="22" x2="170" y2="27" transform="rotate(90 170 170)"/>
+            <line x1="170" y1="22" x2="170" y2="27" transform="rotate(135 170 170)"/>
+            <line x1="170" y1="22" x2="170" y2="27" transform="rotate(180 170 170)"/>
+            <line x1="170" y1="22" x2="170" y2="27" transform="rotate(225 170 170)"/>
+            <line x1="170" y1="22" x2="170" y2="27" transform="rotate(270 170 170)"/>
+            <line x1="170" y1="22" x2="170" y2="27" transform="rotate(315 170 170)"/>
+          </g>
+        </svg>
+      </div>
+
+      <!-- ─── Effect name strip ──────────────────────────────────────── -->
+      <div class="effect-strip">
+        <span class="effect-category">PLASMA · AUDIO-REACTIVE</span>
+        <span class="effect-name">AURORA DRIFT</span>
+        <div class="effect-nav">
+          <div class="effect-nav-btn">
+            <svg viewBox="0 0 12 12" fill="none">
+              <path d="M7.5 2.5L4.5 6l3 3.5" stroke="#9CA3B0" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <span class="effect-index">23 / 108</span>
+          <div class="effect-nav-btn">
+            <svg viewBox="0 0 12 12" fill="none">
+              <path d="M4.5 2.5L7.5 6l-3 3.5" stroke="#9CA3B0" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── Palette dots row ───────────────────────────────────────── -->
+      <div class="palette-row">
+        <span class="palette-label">PALETTE</span>
+        <!-- Ocean -->
+        <div class="palette-dot selected" style="background: radial-gradient(circle, #00D4FF, #0040A0);"></div>
+        <!-- Aurora -->
+        <div class="palette-dot" style="background: radial-gradient(circle, #4DFFB8, #0080C0);"></div>
+        <!-- Fire -->
+        <div class="palette-dot" style="background: radial-gradient(circle, #FF8C00, #FF2200);"></div>
+        <!-- Violet -->
+        <div class="palette-dot" style="background: radial-gradient(circle, #CC44FF, #4400CC);"></div>
+        <!-- Gold -->
+        <div class="palette-dot" style="background: radial-gradient(circle, #FFB84D, #CC6600);"></div>
+        <!-- Ice -->
+        <div class="palette-dot" style="background: radial-gradient(circle, #CCECFF, #4488AA);"></div>
+        <!-- Neon -->
+        <div class="palette-dot" style="background: radial-gradient(circle, #EEFF00, #00FF88);"></div>
+      </div>
+
+      <!-- ─── Bottom info strip ─────────────────────────────────────── -->
+      <div class="info-strip">
+        <div class="info-item">
+          <span class="info-value" style="color:var(--gold)">78%</span>
+          <span class="info-key">BRIGHT</span>
+        </div>
+        <div class="info-divider"></div>
+        <div class="info-item">
+          <span class="info-value" style="color:var(--success)">72%</span>
+          <span class="info-key">SPEED</span>
+        </div>
+        <div class="info-divider"></div>
+        <div class="info-item">
+          <span class="info-value" style="color:var(--cyan)">FIRE</span>
+          <span class="info-key">EDGE MIX</span>
+        </div>
+        <div class="info-divider"></div>
+        <div class="info-item">
+          <span class="info-value">128</span>
+          <span class="info-key">BPM</span>
+        </div>
+        <div class="info-divider"></div>
+        <div class="info-item">
+          <span class="info-value" style="color:var(--text-secondary)">0.62</span>
+          <span class="info-key">SPREAD</span>
+        </div>
+      </div>
+
+    </div><!-- /main-content -->
+
+    <!-- ─── Tab bar ─────────────────────────────────────────────────── -->
+    <div class="tab-bar">
+      <!-- Play -->
+      <div class="tab-item active">
+        <svg viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="9" stroke="#00D4FF" stroke-width="1.5"/>
+          <path d="M10 8.5l5 3.5-5 3.5V8.5z" fill="#00D4FF"/>
+        </svg>
+        <span class="tab-label" style="color:var(--cyan)">PLAY</span>
+      </div>
+      <!-- Effects -->
+      <div class="tab-item">
+        <svg viewBox="0 0 24 24" fill="none">
+          <path d="M12 3l2.5 5.5L20 9l-4.5 4 1.5 6-5-3-5 3 1.5-6L4 9l5.5-.5L12 3z" stroke="#9CA3B0" stroke-width="1.5" stroke-linejoin="round"/>
+        </svg>
+        <span class="tab-label">FX</span>
+      </div>
+      <!-- Scenes -->
+      <div class="tab-item">
+        <svg viewBox="0 0 24 24" fill="none">
+          <rect x="3" y="3" width="8" height="8" rx="2" stroke="#9CA3B0" stroke-width="1.5"/>
+          <rect x="13" y="3" width="8" height="8" rx="2" stroke="#9CA3B0" stroke-width="1.5"/>
+          <rect x="3" y="13" width="8" height="8" rx="2" stroke="#9CA3B0" stroke-width="1.5"/>
+          <rect x="13" y="13" width="8" height="8" rx="2" stroke="#9CA3B0" stroke-width="1.5"/>
+        </svg>
+        <span class="tab-label">SCENES</span>
+      </div>
+      <!-- Settings -->
+      <div class="tab-item">
+        <svg viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="3" stroke="#9CA3B0" stroke-width="1.5"/>
+          <path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="#9CA3B0" stroke-width="1.5" stroke-linecap="round"/>
+          <path d="M4.93 4.93l2.12 2.12M16.95 16.95l2.12 2.12M4.93 19.07l2.12-2.12M16.95 7.05l2.12-2.12" stroke="#9CA3B0" stroke-width="1.2" stroke-linecap="round" opacity="0.5"/>
+        </svg>
+        <span class="tab-label">SETTINGS</span>
+      </div>
+    </div>
+
+  </div><!-- /screen -->
+</div><!-- /phone-frame -->
+
+</body>
+</html>

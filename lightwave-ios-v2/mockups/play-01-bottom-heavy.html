@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Play Tab — Mockup 1: Bottom-Heavy Controls</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@400;500;600&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================
+   DESIGN TOKENS
+   ============================================ */
+:root {
+  --lw-base: #0F1219;
+  --lw-card: #1E2535;
+  --lw-elevated: #252D3F;
+  --lw-gold: #FFB84D;
+  --lw-cyan: #00D4FF;
+  --lw-success: #4DFFB8;
+  --lw-error: #FF4D4D;
+  --lw-text-primary: #E6E9EF;
+  --lw-text-secondary: #9CA3B0;
+  --lw-text-tertiary: #6B7280;
+
+  --font-bebas: 'Bebas Neue', Impact, sans-serif;
+  --font-rajdhani: 'Rajdhani', system-ui, sans-serif;
+  --font-jetbrains: 'JetBrains Mono', monospace;
+
+  --space-xs: 4px; --space-sm: 8px; --space-md: 12px; --space-lg: 24px;
+  --radius-hero: 24px; --radius-card: 16px; --radius-nested: 12px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0A0A0C;
+  color: var(--lw-text-primary);
+  font-family: var(--font-rajdhani);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 24px 60px;
+}
+
+/* ============================================
+   PAGE ANNOTATION
+   ============================================ */
+.mockup-annotation {
+  text-align: center;
+  margin-bottom: 28px;
+  max-width: 420px;
+}
+.mockup-number {
+  font: 700 11px/1 var(--font-bebas);
+  color: var(--lw-gold);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.mockup-title {
+  font: 700 28px/1 var(--font-bebas);
+  color: var(--lw-text-primary);
+  letter-spacing: 2px;
+  margin-bottom: 10px;
+}
+.mockup-desc {
+  font: 500 13px/1.6 var(--font-rajdhani);
+  color: var(--lw-text-secondary);
+}
+.mockup-callouts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  margin-top: 12px;
+}
+.callout-tag {
+  padding: 3px 10px;
+  background: rgba(255,184,77,0.1);
+  border: 1px solid rgba(255,184,77,0.25);
+  border-radius: 20px;
+  font: 600 11px/1 var(--font-rajdhani);
+  color: var(--lw-gold);
+  letter-spacing: 0.5px;
+}
+
+/* ============================================
+   PHONE FRAME
+   ============================================ */
+.phone-frame {
+  width: 393px;
+  height: 852px;
+  background: var(--lw-base);
+  border-radius: 44px;
+  border: 3px solid #2a2a2a;
+  overflow: hidden;
+  position: relative;
+  box-shadow:
+    0 0 0 1px #111,
+    0 40px 80px rgba(0,0,0,0.8),
+    0 0 100px rgba(255,184,77,0.04);
+  flex-shrink: 0;
+}
+
+/* Notch */
+.ios-notch {
+  position: absolute;
+  top: 0; left: 50%; transform: translateX(-50%);
+  width: 126px; height: 34px;
+  background: #000;
+  border-radius: 0 0 20px 20px;
+  z-index: 100;
+}
+.ios-notch::before {
+  content: '';
+  position: absolute;
+  top: 10px; left: 50%; transform: translateX(-50%);
+  width: 12px; height: 12px;
+  background: #1a1a1a;
+  border-radius: 50%;
+}
+
+/* Status bar */
+.ios-status-bar {
+  height: 54px;
+  padding: 14px 28px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+  z-index: 10;
+}
+.status-time {
+  font: 700 15px/1 system-ui;
+  color: white;
+}
+.status-icons {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: white;
+}
+.status-battery {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.battery-body {
+  width: 22px; height: 11px;
+  border: 1.5px solid white;
+  border-radius: 2.5px;
+  padding: 1.5px;
+  display: flex;
+}
+.battery-fill { flex: 0.85; background: white; border-radius: 1px; }
+.battery-tip { width: 2px; height: 5px; background: white; border-radius: 0 1px 1px 0; margin-left: 1px; align-self: center; }
+
+/* Home indicator */
+.home-indicator {
+  position: absolute;
+  bottom: 8px; left: 50%; transform: translateX(-50%);
+  width: 134px; height: 5px;
+  background: rgba(255,255,255,0.35);
+  border-radius: 3px;
+  z-index: 100;
+}
+
+/* ============================================
+   APP CHROME
+   ============================================ */
+.app-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: calc(852px - 54px);
+  position: relative;
+}
+
+/* Navigation bar */
+.nav-bar {
+  padding: 8px 20px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.nav-brand {
+  font: 700 20px/1 var(--font-bebas);
+  color: var(--lw-text-primary);
+  letter-spacing: 3px;
+}
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.nav-connect-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--lw-success);
+  box-shadow: 0 0 8px var(--lw-success);
+}
+.nav-connect-label {
+  font: 600 11px/1 var(--font-rajdhani);
+  color: var(--lw-text-secondary);
+  letter-spacing: 0.5px;
+}
+.nav-settings-btn {
+  width: 32px; height: 32px;
+  background: var(--lw-card);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+}
+
+/* ============================================
+   CONTENT AREA — main scrollable zone
+   ============================================ */
+.content-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0 16px;
+}
+
+/* ============================================
+   COMPACT LED PREVIEW (80px — not 140px)
+   ============================================ */
+.led-preview-compact {
+  height: 80px;
+  border-radius: var(--radius-hero);
+  overflow: hidden;
+  position: relative;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+  box-shadow: 0 0 30px rgba(0,212,255,0.08), 0 0 30px rgba(255,184,77,0.06);
+}
+.led-canvas-compact {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+/* BPM overlay — compact */
+.bpm-overlay-compact {
+  position: absolute;
+  top: 50%; right: 16px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.bpm-number-compact {
+  font: 700 28px/1 var(--font-bebas);
+  color: var(--lw-gold);
+  text-shadow: 0 0 12px rgba(255,184,77,0.6);
+  letter-spacing: 1px;
+}
+.bpm-unit-compact {
+  font: 600 10px/1 var(--font-rajdhani);
+  color: var(--lw-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+/* Effect name overlay */
+.effect-name-overlay {
+  position: absolute;
+  top: 50%; left: 16px;
+  transform: translateY(-50%);
+}
+.effect-name-text {
+  font: 700 14px/1 var(--font-bebas);
+  color: white;
+  letter-spacing: 2px;
+  text-shadow: 0 1px 8px rgba(0,0,0,0.8);
+}
+.effect-swipe-hint {
+  font: 500 9px/1 var(--font-rajdhani);
+  color: rgba(255,255,255,0.4);
+  letter-spacing: 0.5px;
+  margin-top: 3px;
+  text-transform: uppercase;
+}
+/* Centre origin marker */
+.centre-mark {
+  position: absolute;
+  top: 0; bottom: 0;
+  left: calc(79.5 / 320 * 100%);
+  width: 1px;
+  background: rgba(255,184,77,0.5);
+}
+
+/* ============================================
+   EFFECT + PALETTE ROW (horizontal pills)
+   ============================================ */
+.selector-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+.selector-pill {
+  flex: 1;
+  background: var(--lw-card);
+  border-radius: var(--radius-nested);
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid rgba(255,255,255,0.05);
+}
+.selector-pill-label {
+  font: 600 9px/1 var(--font-bebas);
+  color: var(--lw-text-tertiary);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.selector-pill-value {
+  font: 600 12px/1 var(--font-rajdhani);
+  color: var(--lw-text-primary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.selector-nav {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.selector-nav-btn {
+  width: 24px; height: 24px;
+  background: var(--lw-elevated);
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font: 500 11px/1 var(--font-rajdhani);
+  color: var(--lw-gold);
+  cursor: pointer;
+}
+/* Palette gradient swatch */
+.palette-swatch-inline {
+  width: 32px; height: 16px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.selector-chevron {
+  font: 400 14px/1 system-ui;
+  color: var(--lw-text-tertiary);
+  flex-shrink: 0;
+}
+
+/* ============================================
+   BOTTOM CONTROL ZONE — thumb-optimised
+   ============================================ */
+.bottom-controls {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+/* Large vertical sliders card */
+.sliders-card {
+  background: var(--lw-card);
+  border-radius: var(--radius-card);
+  padding: 16px;
+  display: flex;
+  gap: 16px;
+  flex-shrink: 0;
+  border: 1px solid rgba(255,255,255,0.04);
+}
+.slider-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.slider-column-label {
+  font: 700 10px/1 var(--font-bebas);
+  color: var(--lw-text-tertiary);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+.slider-column-value {
+  font: 600 22px/1 var(--font-bebas);
+  letter-spacing: 1px;
+}
+.slider-column-value.gold { color: var(--lw-gold); }
+.slider-column-value.cyan { color: var(--lw-cyan); }
+
+/* Vertical range input */
+.slider-vertical-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 120px;
+  position: relative;
+}
+input[type=range].vertical-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 48px;
+  height: 130px;
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+}
+input[type=range].vertical-slider::-webkit-slider-runnable-track {
+  width: 8px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.08);
+}
+input[type=range].vertical-slider.gold-slider::-webkit-slider-runnable-track {
+  background: linear-gradient(to bottom, var(--lw-gold), rgba(255,184,77,0.15));
+}
+input[type=range].vertical-slider.speed-slider::-webkit-slider-runnable-track {
+  background: linear-gradient(to bottom, var(--lw-cyan), rgba(0,212,255,0.15));
+}
+input[type=range].vertical-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  margin-left: -10px;
+  background: white;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.5);
+  border: 2px solid rgba(255,255,255,0.3);
+}
+input[type=range].vertical-slider.gold-slider::-webkit-slider-thumb {
+  background: var(--lw-gold);
+  box-shadow: 0 2px 16px rgba(255,184,77,0.5);
+}
+input[type=range].vertical-slider.speed-slider::-webkit-slider-thumb {
+  background: var(--lw-cyan);
+  box-shadow: 0 2px 16px rgba(0,212,255,0.5);
+}
+
+.slider-divider {
+  width: 1px;
+  background: rgba(255,255,255,0.06);
+  align-self: stretch;
+}
+
+/* EdgeMixer segmented control */
+.edgemixer-card {
+  background: var(--lw-card);
+  border-radius: var(--radius-card);
+  padding: 12px 14px;
+  flex-shrink: 0;
+  border: 1px solid rgba(255,255,255,0.04);
+}
+.edgemixer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.edgemixer-label {
+  font: 700 10px/1 var(--font-bebas);
+  color: var(--lw-text-tertiary);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+.edgemixer-active-name {
+  font: 600 11px/1 var(--font-rajdhani);
+  color: var(--lw-cyan);
+  letter-spacing: 0.5px;
+}
+.edgemixer-segments {
+  display: flex;
+  gap: 4px;
+}
+.edgemixer-seg {
+  flex: 1;
+  height: 34px;
+  background: var(--lw-elevated);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 600 8px/1 var(--font-rajdhani);
+  color: var(--lw-text-tertiary);
+  letter-spacing: 0.3px;
+  text-align: center;
+  cursor: pointer;
+  padding: 0 2px;
+  text-transform: uppercase;
+  transition: all 0.15s;
+}
+.edgemixer-seg.active {
+  background: rgba(0,212,255,0.15);
+  border: 1px solid rgba(0,212,255,0.35);
+  color: var(--lw-cyan);
+}
+
+/* ============================================
+   TAB BAR
+   ============================================ */
+.tab-bar {
+  height: 83px;
+  background: rgba(30, 37, 53, 0.96);
+  border-top: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  align-items: flex-start;
+  padding-top: 12px;
+  flex-shrink: 0;
+  backdrop-filter: blur(20px);
+}
+.tab-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.tab-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+.tab-label {
+  font: 600 10px/1 var(--font-rajdhani);
+  color: var(--lw-text-tertiary);
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+.tab-item.active .tab-icon { filter: none; }
+.tab-item.active .tab-label { color: var(--lw-gold); }
+.tab-active-dot {
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: var(--lw-gold);
+  margin-top: 2px;
+}
+
+/* ============================================
+   ZONE ANNOTATION BARS (visual guide)
+   ============================================ */
+.zone-guide {
+  position: absolute;
+  left: -3px;
+  width: 3px;
+  background: rgba(255,184,77,0.4);
+  border-radius: 2px 0 0 2px;
+  display: flex;
+  align-items: center;
+}
+.thumb-zone-indicator {
+  position: absolute;
+  right: -3px;
+  border-right: 2px dashed rgba(0,212,255,0.2);
+  pointer-events: none;
+}
+</style>
+</head>
+<body>
+
+<!-- Annotation -->
+<div class="mockup-annotation">
+  <div class="mockup-number">Mockup 01 / 04</div>
+  <div class="mockup-title">Bottom-Heavy Controls</div>
+  <div class="mockup-desc">
+    Everything thumb-critical lives in the bottom 55% of screen. Compact 80px LED preview at top,
+    horizontal selector pills mid-screen, then large vertical sliders + EdgeMixer in the thumb zone.
+    No scrolling required — all controls visible at once.
+  </div>
+  <div class="mockup-callouts">
+    <span class="callout-tag">No Scroll</span>
+    <span class="callout-tag">80px Preview</span>
+    <span class="callout-tag">Vertical Sliders</span>
+    <span class="callout-tag">Right Thumb Zone</span>
+    <span class="callout-tag">One-Handed</span>
+  </div>
+</div>
+
+<!-- Phone Frame -->
+<div class="phone-frame">
+  <div class="ios-notch"></div>
+
+  <!-- Status Bar -->
+  <div class="ios-status-bar">
+    <span class="status-time">9:41</span>
+    <div class="status-icons">
+      <span>●●●</span>
+      <span>WiFi</span>
+      <div class="status-battery">
+        <div class="battery-body"><div class="battery-fill"></div></div>
+        <div class="battery-tip"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- App Wrapper -->
+  <div class="app-wrapper">
+
+    <!-- Nav Bar -->
+    <div class="nav-bar">
+      <span class="nav-brand">LightwaveOS</span>
+      <div class="nav-right">
+        <div class="nav-connect-dot"></div>
+        <span class="nav-connect-label">K1 Connected</span>
+        <div class="nav-settings-btn">⚙</div>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div class="content-area">
+
+      <!-- COMPACT LED PREVIEW (80px) -->
+      <div class="led-preview-compact">
+        <canvas class="led-canvas-compact" id="ledCanvas1" width="361" height="80"></canvas>
+        <div class="centre-mark"></div>
+        <div class="effect-name-overlay">
+          <div class="effect-name-text">PULSE WAVES</div>
+          <div class="effect-swipe-hint">← swipe →</div>
+        </div>
+        <div class="bpm-overlay-compact">
+          <span class="bpm-number-compact">128</span>
+          <span class="bpm-unit-compact">BPM</span>
+        </div>
+      </div>
+
+      <!-- EFFECT + PALETTE HORIZONTAL PILLS -->
+      <div class="selector-row">
+        <!-- Effect pill -->
+        <div class="selector-pill">
+          <span class="selector-pill-label">FX</span>
+          <span class="selector-pill-value">Pulse Waves</span>
+          <div class="selector-nav">
+            <div class="selector-nav-btn">‹</div>
+            <div class="selector-nav-btn">›</div>
+          </div>
+          <span class="selector-chevron">⋮</span>
+        </div>
+        <!-- Palette pill -->
+        <div class="selector-pill">
+          <span class="selector-pill-label">PAL</span>
+          <div class="palette-swatch-inline" style="background: linear-gradient(to right, #FF6B35, #FFB84D, #FFE066, #4DFFB8, #00D4FF)"></div>
+          <div class="selector-nav">
+            <div class="selector-nav-btn">‹</div>
+            <div class="selector-nav-btn">›</div>
+          </div>
+          <span class="selector-chevron">⋮</span>
+        </div>
+      </div>
+
+      <!-- BOTTOM CONTROLS — thumb zone -->
+      <div class="bottom-controls">
+
+        <!-- LARGE VERTICAL SLIDERS -->
+        <div class="sliders-card">
+          <!-- Brightness -->
+          <div class="slider-column">
+            <div class="slider-column-label">Bright</div>
+            <div class="slider-vertical-wrap">
+              <input type="range" class="vertical-slider gold-slider" min="0" max="100" value="78" orient="vertical">
+            </div>
+            <div class="slider-column-value gold">78%</div>
+          </div>
+
+          <div class="slider-divider"></div>
+
+          <!-- Speed -->
+          <div class="slider-column">
+            <div class="slider-column-label">Speed</div>
+            <div class="slider-vertical-wrap">
+              <input type="range" class="vertical-slider speed-slider" min="0" max="100" value="55" orient="vertical">
+            </div>
+            <div class="slider-column-value cyan">55%</div>
+          </div>
+
+          <div class="slider-divider"></div>
+
+          <!-- Intensity -->
+          <div class="slider-column">
+            <div class="slider-column-label">Intens</div>
+            <div class="slider-vertical-wrap">
+              <input type="range" class="vertical-slider" min="0" max="100" value="40" orient="vertical"
+                style="--c: var(--lw-success)">
+            </div>
+            <div class="slider-column-value" style="color: var(--lw-success)">40%</div>
+          </div>
+        </div>
+
+        <!-- EDGEMIXER SEGMENTED CONTROL -->
+        <div class="edgemixer-card">
+          <div class="edgemixer-header">
+            <span class="edgemixer-label">EdgeMixer Mode</span>
+            <span class="edgemixer-active-name">Complementary</span>
+          </div>
+          <div class="edgemixer-segments">
+            <div class="edgemixer-seg">Solo</div>
+            <div class="edgemixer-seg active">Comp</div>
+            <div class="edgemixer-seg">Anal</div>
+            <div class="edgemixer-seg">Split</div>
+            <div class="edgemixer-seg">Triad</div>
+            <div class="edgemixer-seg">Tetra</div>
+            <div class="edgemixer-seg">Rnd</div>
+          </div>
+        </div>
+
+      </div><!-- /bottom-controls -->
+    </div><!-- /content-area -->
+
+    <!-- Tab Bar -->
+    <div class="tab-bar">
+      <div class="tab-item active">
+        <div class="tab-icon">▶</div>
+        <div class="tab-label">Play</div>
+        <div class="tab-active-dot"></div>
+      </div>
+      <div class="tab-item">
+        <div class="tab-icon">✦</div>
+        <div class="tab-label">Effects</div>
+      </div>
+      <div class="tab-item">
+        <div class="tab-icon">◎</div>
+        <div class="tab-label">Audio</div>
+      </div>
+      <div class="tab-item">
+        <div class="tab-icon">⚙</div>
+        <div class="tab-label">Settings</div>
+      </div>
+    </div>
+
+  </div><!-- /app-wrapper -->
+
+  <div class="home-indicator"></div>
+</div><!-- /phone-frame -->
+
+<script>
+// Draw LED strip simulation
+function drawLEDs(canvasId, height) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+
+  // Background
+  ctx.fillStyle = '#0a0b10';
+  ctx.fillRect(0, 0, w, h);
+
+  const numLEDs = 320;
+  const ledW = w / numLEDs;
+
+  // Generate Pulse Wave pattern: centre-origin, warm gold/cyan colours
+  for (let i = 0; i < numLEDs; i++) {
+    const centreOffset = Math.abs(i - 159.5) / 159.5; // 0=centre, 1=edge
+    const t = Date.now() * 0.002;
+
+    // Pulse wave radiating from centre
+    const wave1 = Math.sin((centreOffset * 8) - t) * 0.5 + 0.5;
+    const wave2 = Math.sin((centreOffset * 5) - t * 0.7 + 1.2) * 0.5 + 0.5;
+    const beat = Math.max(0, 1 - centreOffset * 1.2);
+
+    const brightness = (wave1 * 0.6 + wave2 * 0.3 + beat * 0.5) * (1 - centreOffset * 0.3);
+
+    const r = Math.min(255, Math.floor((0.9 * wave1 + 0.2 * wave2) * brightness * 255));
+    const g = Math.min(255, Math.floor((0.4 * wave2 + 0.1) * brightness * 200));
+    const b = Math.min(255, Math.floor((0.5 + 0.5 * wave2) * brightness * 180));
+
+    // LED glow
+    const x = i * ledW;
+    const grd = ctx.createRadialGradient(x + ledW/2, h/2, 0, x + ledW/2, h/2, h * 0.8);
+    grd.addColorStop(0, `rgba(${r},${g},${b},1)`);
+    grd.addColorStop(1, `rgba(${r},${g},${b},0)`);
+
+    ctx.fillStyle = grd;
+    ctx.fillRect(x, 0, ledW + 0.5, h);
+  }
+
+  // Centre glow overlay
+  const cGrd = ctx.createLinearGradient(w * 0.2, 0, w * 0.8, 0);
+  cGrd.addColorStop(0, 'rgba(255,184,77,0)');
+  cGrd.addColorStop(0.5, 'rgba(255,184,77,0.12)');
+  cGrd.addColorStop(1, 'rgba(255,184,77,0)');
+  ctx.fillStyle = cGrd;
+  ctx.fillRect(0, 0, w, h);
+
+  requestAnimationFrame(() => drawLEDs(canvasId, height));
+}
+
+// Slider live value update
+document.querySelectorAll('input[type=range].vertical-slider').forEach(slider => {
+  slider.addEventListener('input', e => {
+    const col = e.target.closest('.slider-column');
+    if (col) {
+      const valEl = col.querySelector('.slider-column-value');
+      if (valEl) valEl.textContent = e.target.value + '%';
+    }
+  });
+});
+
+// EdgeMixer segment selection
+document.querySelectorAll('.edgemixer-seg').forEach(seg => {
+  seg.addEventListener('click', () => {
+    seg.closest('.edgemixer-segments').querySelectorAll('.edgemixer-seg').forEach(s => s.classList.remove('active'));
+    seg.classList.add('active');
+    seg.closest('.edgemixer-card').querySelector('.edgemixer-active-name').textContent =
+      { 'Solo': 'Solo', 'Comp': 'Complementary', 'Anal': 'Analogous', 'Split': 'Split Comp', 'Triad': 'Triadic', 'Tetra': 'Tetradic', 'Rnd': 'Random' }[seg.textContent] || seg.textContent;
+  });
+});
+
+drawLEDs('ledCanvas1', 80);
+</script>
+</body>
+</html>

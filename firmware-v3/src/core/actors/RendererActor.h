@@ -622,6 +622,36 @@ private:
     void applyPendingAudioContractTuning();
     void applyPendingEffectParameterUpdates();
 
+#if FEATURE_AUDIO_SYNC
+    enum class OnsetTrackIndex : uint8_t {
+        Beat = 0,
+        Downbeat = 1,
+        Transient = 2,
+        Kick = 3,
+        Snare = 4,
+        Hihat = 5,
+        Count = 6,
+    };
+
+    struct OnsetChannelTracker {
+        uint32_t lastFireMs = 0;
+        uint32_t previousFireMs = 0;
+        uint32_t sequence = 0;
+        float heldLevel01 = 0.0f;
+    };
+
+    void resetOnsetTrackers();
+    void updateSharedOnsetContext(uint32_t nowMs, float dtSeconds);
+    static float clampUnit(float value);
+    void populateOnsetChannel(plugins::OnsetChannel& channel,
+                              OnsetTrackIndex index,
+                              bool fired,
+                              float strength01,
+                              float level01,
+                              bool reliable,
+                              uint32_t nowMs);
+#endif
+
     /**
      * @brief Push LED buffer to physical strips
      */
@@ -747,6 +777,7 @@ private:
     // single-effect mode. Keeping this as a member avoids large stack usage in
     // renderFrame() that can trigger FreeRTOS stack overflow in the Renderer task.
     plugins::AudioContext m_sharedAudioCtx;
+    OnsetChannelTracker m_onsetTrackers[static_cast<uint8_t>(OnsetTrackIndex::Count)] = {};
     audio::MotionSemanticEngine m_motionEngine;  ///< Layer 2: ControlBusFrame -> 6-axis motion-semantic frame
     audio::MotionShaper m_motionShaper;          ///< Layer 3: onset-driven temporal envelope shaping
 #endif

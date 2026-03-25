@@ -217,6 +217,7 @@ RendererActor::RendererActor()
     m_musicalGrid.setTuning(toMusicalGridTuning(m_audioContractTuning));
     m_musicalGrid.SetTimeSignature(m_audioContractTuning.beatsPerBar, m_audioContractTuning.beatUnit);
 #endif
+    resetOnsetTrackers();
 #endif
 }
 
@@ -237,6 +238,139 @@ RendererActor::~RendererActor()
     }
     // Actor base class handles task cleanup
 }
+
+#if FEATURE_AUDIO_SYNC
+
+float RendererActor::clampUnit(float value) {
+    if (value <= 0.0f) return 0.0f;
+    if (value >= 1.0f) return 1.0f;
+    return value;
+}
+
+void RendererActor::resetOnsetTrackers() {
+    for (auto& tracker : m_onsetTrackers) {
+        tracker = OnsetChannelTracker{};
+    }
+    m_sharedAudioCtx.onset = plugins::OnsetContext{};
+}
+
+void RendererActor::populateOnsetChannel(
+    plugins::OnsetChannel& channel,
+    OnsetTrackIndex index,
+    bool fired,
+    float strength01,
+    float level01,
+    bool reliable,
+    uint32_t nowMs
+) {
+    OnsetChannelTracker& tracker = m_onsetTrackers[static_cast<uint8_t>(index)];
+    channel.fired = fired;
+    channel.strength01 = clampUnit(strength01);
+    channel.level01 = clampUnit(level01);
+    channel.reliable = reliable;
+
+    if (fired) {
+        tracker.previousFireMs = tracker.lastFireMs;
+        tracker.lastFireMs = nowMs;
+        tracker.sequence++;
+    }
+
+    channel.sequence = tracker.sequence;
+    channel.intervalMs = (tracker.previousFireMs > 0 && tracker.lastFireMs >= tracker.previousFireMs)
+        ? (tracker.lastFireMs - tracker.previousFireMs)
+        : 0u;
+    channel.ageMs = (tracker.sequence > 0 && nowMs >= tracker.lastFireMs)
+        ? (nowMs - tracker.lastFireMs)
+        : 0u;
+}
+
+void RendererActor::updateSharedOnsetContext(uint32_t nowMs, float dtSeconds) {
+    plugins::OnsetContext onset{};
+    const bool audioAvailable = m_sharedAudioCtx.available;
+    const bool trinityActive = m_sharedAudioCtx.trinityActive;
+    const bool detectorReliable = audioAvailable && !trinityActive;
+    const bool timingReliable = audioAvailable && (m_sharedAudioCtx.musicalGrid.tempo_confidence >= 0.25f);
+    const float dtClamped = fmaxf(0.0f, fminf(dtSeconds, 0.05f));
+    const float heldDecay = powf(0.86f, dtClamped * 60.0f);
+
+    onset.phase01 = m_sharedAudioCtx.musicalGrid.beat_phase01;
+    onset.bpm = m_sharedAudioCtx.musicalGrid.bpm_smoothed;
+    onset.tempoConfidence = m_sharedAudioCtx.musicalGrid.tempo_confidence;
+    onset.timingReliable = timingReliable;
+
+    if (detectorReliable) {
+        onset.raw.flux = m_sharedAudioCtx.controlBus.onsetFlux;
+        onset.raw.env = m_sharedAudioCtx.controlBus.onsetEnv;
+        onset.raw.event = m_sharedAudioCtx.controlBus.onsetEvent;
+        onset.raw.bassFlux = m_sharedAudioCtx.controlBus.onsetBassFlux;
+        onset.raw.midFlux = m_sharedAudioCtx.controlBus.onsetMidFlux;
+        onset.raw.highFlux = m_sharedAudioCtx.controlBus.onsetHighFlux;
+    }
+
+    auto heldLevel = [&](OnsetTrackIndex index, float candidate01) {
+        OnsetChannelTracker& tracker = m_onsetTrackers[static_cast<uint8_t>(index)];
+        tracker.heldLevel01 *= heldDecay;
+        const float clamped = clampUnit(candidate01);
+        if (clamped > tracker.heldLevel01) {
+            tracker.heldLevel01 = clamped;
+        }
+        return tracker.heldLevel01;
+    };
+
+    const float beatLevel = timingReliable ? clampUnit(m_sharedAudioCtx.musicalGrid.beat_strength) : 0.0f;
+    const bool beatFired = timingReliable && m_sharedAudioCtx.musicalGrid.beat_tick;
+    const bool downbeatFired = timingReliable && m_sharedAudioCtx.musicalGrid.downbeat_tick;
+    const float downbeatLevel = heldLevel(OnsetTrackIndex::Downbeat,
+                                          downbeatFired ? beatLevel : 0.0f);
+
+    const bool transientFired = detectorReliable && (m_sharedAudioCtx.controlBus.onsetEvent > 0.0f);
+    const float transientLevel = detectorReliable ? clampUnit(m_sharedAudioCtx.controlBus.onsetEnv) : 0.0f;
+
+    const bool kickFired = detectorReliable && m_sharedAudioCtx.controlBus.kickTrigger;
+    const float kickLevel = heldLevel(
+        OnsetTrackIndex::Kick,
+        detectorReliable ? fmaxf(clampUnit(m_sharedAudioCtx.controlBus.onsetBassFlux),
+                                 kickFired ? clampUnit(m_sharedAudioCtx.controlBus.onsetBassFlux) : 0.0f)
+                         : 0.0f);
+
+    const bool snareFired = audioAvailable && m_sharedAudioCtx.controlBus.snareTrigger;
+    const float snareLevel = heldLevel(
+        OnsetTrackIndex::Snare,
+        audioAvailable ? fmaxf(clampUnit(m_sharedAudioCtx.controlBus.snareEnergy),
+                               detectorReliable ? clampUnit(m_sharedAudioCtx.controlBus.onsetMidFlux) : 0.0f)
+                       : 0.0f);
+
+    const bool hihatFired = audioAvailable && m_sharedAudioCtx.controlBus.hihatTrigger;
+    const float hihatLevel = heldLevel(
+        OnsetTrackIndex::Hihat,
+        audioAvailable ? fmaxf(clampUnit(m_sharedAudioCtx.controlBus.hihatEnergy),
+                               detectorReliable ? clampUnit(m_sharedAudioCtx.controlBus.onsetHighFlux) : 0.0f)
+                       : 0.0f);
+
+    m_onsetTrackers[static_cast<uint8_t>(OnsetTrackIndex::Beat)].heldLevel01 = beatLevel;
+    m_onsetTrackers[static_cast<uint8_t>(OnsetTrackIndex::Transient)].heldLevel01 = transientLevel;
+
+    populateOnsetChannel(onset.beat, OnsetTrackIndex::Beat,
+                         beatFired, beatFired ? beatLevel : 0.0f, beatLevel, timingReliable, nowMs);
+    populateOnsetChannel(onset.downbeat, OnsetTrackIndex::Downbeat,
+                         downbeatFired, downbeatFired ? beatLevel : 0.0f, downbeatLevel, timingReliable, nowMs);
+    populateOnsetChannel(onset.transient, OnsetTrackIndex::Transient,
+                         transientFired, transientFired ? clampUnit(m_sharedAudioCtx.controlBus.onsetEvent) : 0.0f,
+                         transientLevel, detectorReliable, nowMs);
+    populateOnsetChannel(onset.kick, OnsetTrackIndex::Kick,
+                         kickFired, kickFired ? clampUnit(m_sharedAudioCtx.controlBus.onsetBassFlux) : 0.0f,
+                         kickLevel, detectorReliable, nowMs);
+    populateOnsetChannel(onset.snare, OnsetTrackIndex::Snare,
+                         snareFired, snareFired ? snareLevel : 0.0f,
+                         snareLevel, audioAvailable && !trinityActive, nowMs);
+    populateOnsetChannel(onset.hihat, OnsetTrackIndex::Hihat,
+                         hihatFired, hihatFired ? hihatLevel : 0.0f,
+                         hihatLevel, audioAvailable && !trinityActive, nowMs);
+
+    m_sharedAudioCtx.onset = onset;
+}
+
+#endif
 
 // ============================================================================
 // State Accessors
@@ -1532,6 +1666,10 @@ void RendererActor::renderFrame()
     } else {
         deltaTimeMs = ((UINT32_MAX - m_lastFrameTime) + now) / 1000;
     }
+
+#if FEATURE_AUDIO_SYNC
+    updateSharedOnsetContext(now / 1000u, static_cast<float>(deltaTimeMs) * 0.001f);
+#endif
 
     // Check if zone composer is enabled
     if (m_zoneComposer != nullptr && m_zoneComposer->isEnabled()) {

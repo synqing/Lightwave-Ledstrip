@@ -51,6 +51,41 @@
 namespace lightwaveos {
 namespace plugins {
 
+struct OnsetRawSignals {
+    float flux = 0.0f;
+    float env = 0.0f;
+    float event = 0.0f;
+    float bassFlux = 0.0f;
+    float midFlux = 0.0f;
+    float highFlux = 0.0f;
+};
+
+struct OnsetChannel {
+    bool fired = false;
+    float strength01 = 0.0f;
+    float level01 = 0.0f;
+    uint32_t ageMs = 0;
+    uint32_t intervalMs = 0;
+    uint32_t sequence = 0;
+    bool reliable = false;
+};
+
+struct OnsetContext {
+    OnsetChannel beat{};
+    OnsetChannel downbeat{};
+    OnsetChannel transient{};
+    OnsetChannel kick{};
+    OnsetChannel snare{};
+    OnsetChannel hihat{};
+
+    OnsetRawSignals raw{};
+
+    float phase01 = 0.0f;
+    float bpm = 120.0f;
+    float tempoConfidence = 0.0f;
+    bool timingReliable = false;
+};
+
 // ============================================================================
 // Audio Context (Phase 2)
 // ============================================================================
@@ -73,6 +108,7 @@ struct AudioContext {
     audio::MusicalGridSnapshot musicalGrid; ///< Beat/tempo tracking
     bool available = false;                  ///< True if audio data is fresh (<100ms old)
     bool trinityActive = false;              ///< True if PRISM Trinity data is active (not microphone)
+    OnsetContext onset{};                    ///< First-class onset surface for effects
 
     // ========================================================================
     // Convenience Accessors
@@ -119,24 +155,30 @@ struct AudioContext {
     }
 
     /// Get beat phase (0.0-1.0, wraps each beat)
-    float beatPhase() const { return musicalGrid.beat_phase01; }
+    float beatPhase() const { return onset.phase01; }
 
     /// Check if currently on a beat (single-frame pulse)
-    bool isOnBeat() const { return musicalGrid.beat_tick; }
+    bool isOnBeat() const { return onset.beat.fired || musicalGrid.beat_tick; }
 
     /// Check if on a downbeat (beat 1 of measure)
-    bool isOnDownbeat() const { return musicalGrid.downbeat_tick; }
+    bool isOnDownbeat() const { return onset.downbeat.fired || musicalGrid.downbeat_tick; }
 
     /// Get current BPM estimate
-    float bpm() const { return musicalGrid.bpm_smoothed; }
+    float bpm() const {
+        return (onset.bpm != 120.0f || onset.tempoConfidence > 0.0f) ? onset.bpm : musicalGrid.bpm_smoothed;
+    }
 
     /// Get tempo tracking confidence (0.0-1.0)
-    float tempoConfidence() const { return musicalGrid.tempo_confidence; }
+    float tempoConfidence() const {
+        return (onset.tempoConfidence > 0.0f) ? onset.tempoConfidence : musicalGrid.tempo_confidence;
+    }
 
     /// Get beat strength (0.0-1.0), peaks on beat detection then decays
     /// Use this to scale visual intensity by beat confidence
     /// Example: brightness *= 0.5f + 0.5f * ctx.audio.beatStrength();
-    float beatStrength() const { return musicalGrid.beat_strength; }
+    float beatStrength() const {
+        return (onset.beat.level01 > 0.0f || onset.beat.fired) ? onset.beat.level01 : musicalGrid.beat_strength;
+    }
 
     // --------------------------------------------------------------------
     // Translation scene accessors (perceptual mapping layer)
@@ -254,20 +296,47 @@ struct AudioContext {
     bool isSilent() const { return controlBus.isSilent; }
 
     // ========================================================================
-    // Multi-band Onset Detection Accessors (Phase 1.2: Percussive elements)
+    // First-Class Onset Surface
     // ========================================================================
 
-    /// Get snare frequency band energy (150-300 Hz, 0.0-1.0)
-    float snare() const { return controlBus.snareEnergy; }
+    /// Check if any broadband onset event fired this frame.
+    bool hasOnsetEvent() const { return onset.transient.fired || controlBus.onsetEvent > 0.0f; }
 
-    /// Get hi-hat frequency band energy (6-12 kHz, 0.0-1.0)
-    float hihat() const { return controlBus.hihatEnergy; }
+    /// Get thresholded onset envelope (continuous, 0.0-1.0).
+    float onsetEnv() const { return (onset.raw.env > 0.0f) ? onset.raw.env : controlBus.onsetEnv; }
 
-    /// Check if snare onset detected this frame (single-frame pulse)
-    bool isSnareHit() const { return controlBus.snareTrigger; }
+    /// Get discrete onset event strength (single-hop pulse, 0.0-1.0).
+    float onsetEvent() const { return (onset.raw.event > 0.0f) ? onset.raw.event : controlBus.onsetEvent; }
 
-    /// Check if hi-hat onset detected this frame (single-frame pulse)
-    bool isHihatHit() const { return controlBus.hihatTrigger; }
+    /// Get raw onset flux (advanced/debug use; detector-scale sensitive).
+    float onsetFlux() const { return (onset.raw.flux > 0.0f) ? onset.raw.flux : controlBus.onsetFlux; }
+
+    /// Get low/mid/high onset band flux (advanced/debug use).
+    float kickFlux() const { return (onset.raw.bassFlux > 0.0f) ? onset.raw.bassFlux : controlBus.onsetBassFlux; }
+    float snareFlux() const { return (onset.raw.midFlux > 0.0f) ? onset.raw.midFlux : controlBus.onsetMidFlux; }
+    float hihatFlux() const { return (onset.raw.highFlux > 0.0f) ? onset.raw.highFlux : controlBus.onsetHighFlux; }
+
+    /// Get semantic kick/snare/hi-hat channel levels (0.0-1.0).
+    float kickLevel() const {
+        return (onset.kick.level01 > 0.0f || onset.kick.fired)
+            ? onset.kick.level01
+            : fmaxf(0.0f, fminf(1.0f, kickFlux()));
+    }
+    float snare() const {
+        return (onset.snare.level01 > 0.0f || onset.snare.fired)
+            ? onset.snare.level01
+            : controlBus.snareEnergy;
+    }
+    float hihat() const {
+        return (onset.hihat.level01 > 0.0f || onset.hihat.fired)
+            ? onset.hihat.level01
+            : controlBus.hihatEnergy;
+    }
+
+    /// Check semantic onset channel pulses.
+    bool isKickHit() const { return onset.kick.fired || controlBus.kickTrigger; }
+    bool isSnareHit() const { return onset.snare.fired || controlBus.snareTrigger; }
+    bool isHihatHit() const { return onset.hihat.fired || controlBus.hihatTrigger; }
 
     // ========================================================================
     // 64-bin FFT Accessors (Phase 2: Detailed frequency analysis)
@@ -505,6 +574,7 @@ struct AudioContext {
 struct AudioContext {
     bool available = false;
     bool trinityActive = false;
+    OnsetContext onset{};
 
     float rms() const { return 0.0f; }
     float fastRms() const { return 0.0f; }
@@ -520,12 +590,12 @@ struct AudioContext {
     float heavyMid() const { return 0.0f; }
     float treble() const { return 0.0f; }
     float heavyTreble() const { return 0.0f; }
-    float beatPhase() const { return 0.0f; }
-    bool isOnBeat() const { return false; }
-    bool isOnDownbeat() const { return false; }
-    float bpm() const { return 120.0f; }
-    float tempoConfidence() const { return 0.0f; }
-    float beatStrength() const { return 0.0f; }
+    float beatPhase() const { return onset.phase01; }
+    bool isOnBeat() const { return onset.beat.fired; }
+    bool isOnDownbeat() const { return onset.downbeat.fired; }
+    float bpm() const { return onset.bpm; }
+    float tempoConfidence() const { return onset.tempoConfidence; }
+    float beatStrength() const { return onset.beat.level01; }
     const audio::SceneParameters& sceneParameters() const { return audio::kDefaultSceneParameters; }
     audio::MotionPrimitive motionType() const { return audio::MotionPrimitive::DRIFT; }
     float phraseProgress() const { return 0.0f; }
@@ -561,11 +631,20 @@ struct AudioContext {
     bool isAugmented() const { return false; }
     bool hasChord() const { return false; }
 
-    // Multi-band onset stubs (always return 0/false)
-    float snare() const { return 0.0f; }
-    float hihat() const { return 0.0f; }
-    bool isSnareHit() const { return false; }
-    bool isHihatHit() const { return false; }
+    // First-class onset stubs (always return 0/false)
+    bool hasOnsetEvent() const { return false; }
+    float onsetEnv() const { return onset.raw.env; }
+    float onsetEvent() const { return onset.raw.event; }
+    float onsetFlux() const { return onset.raw.flux; }
+    float kickFlux() const { return onset.raw.bassFlux; }
+    float snareFlux() const { return onset.raw.midFlux; }
+    float hihatFlux() const { return onset.raw.highFlux; }
+    float kickLevel() const { return onset.kick.level01; }
+    float snare() const { return onset.snare.level01; }
+    float hihat() const { return onset.hihat.level01; }
+    bool isKickHit() const { return onset.kick.fired; }
+    bool isSnareHit() const { return onset.snare.fired; }
+    bool isHihatHit() const { return onset.hihat.fired; }
 
     // Hop / Chroma / State stubs
     uint32_t hopSequence() const { return 0; }

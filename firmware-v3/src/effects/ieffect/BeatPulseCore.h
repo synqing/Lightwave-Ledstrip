@@ -32,6 +32,7 @@ struct Params {
     float brightnessBase = 0.5f;
     float brightnessGain = 0.5f;
     float whiteGain = 0.3f;
+    AudioReactivePolicy::TriggerMode triggerMode = AudioReactivePolicy::TriggerMode::Tempo;
 };
 
 static inline void reset(State& s, float fallbackBpm = 128.0f) {
@@ -40,8 +41,13 @@ static inline void reset(State& s, float fallbackBpm = 128.0f) {
     s.fallbackBpm = fallbackBpm;
 }
 
-static inline bool stepEnvelope(const plugins::EffectContext& ctx, State& s) {
-    const bool beatTick = AudioReactivePolicy::audioBeatTick(ctx, s.fallbackBpm, s.lastBeatMs);
+static inline bool stepEnvelope(
+    const plugins::EffectContext& ctx,
+    State& s,
+    AudioReactivePolicy::TriggerMode triggerMode = AudioReactivePolicy::TriggerMode::Tempo
+) {
+    const auto trigger = AudioReactivePolicy::audioTrigger(ctx, triggerMode, s.fallbackBpm, s.lastBeatMs);
+    const bool beatTick = trigger.fired;
     const float dt = AudioReactivePolicy::signalDt(ctx);
     BeatPulseHTML::updateBeatIntensity(s.beatIntensity, beatTick, dt);
     return beatTick;
@@ -59,7 +65,7 @@ static inline float intensityAt(float dist01, float ringPos01, const State& s, f
 }
 
 static inline void renderSingleRing(plugins::EffectContext& ctx, State& s, const Params& p) {
-    stepEnvelope(ctx, s);
+    stepEnvelope(ctx, s, p.triggerMode);
     const float ringPos = ringPosition01(s, p.inward);
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         const float dist01 = (static_cast<float>(dist) + 0.5f) / static_cast<float>(HALF_LENGTH);
@@ -73,4 +79,3 @@ static inline void renderSingleRing(plugins::EffectContext& ctx, State& s, const
 }
 
 } // namespace lightwaveos::effects::ieffect::BeatPulseCore
-

@@ -48,7 +48,8 @@ void BeatPulseShockwaveEffect::render(plugins::EffectContext& ctx) {
         3.0f,     // profileSlope
         0.5f,     // brightnessBase
         0.5f,     // brightnessGain
-        0.3f      // whiteGain
+        0.3f,     // whiteGain
+        AudioReactivePolicy::TriggerMode::HybridTempoTransient
     };
     BeatPulseCore::renderSingleRing(ctx, m_state, p);
 }

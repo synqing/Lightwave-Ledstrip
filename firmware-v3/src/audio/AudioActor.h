@@ -45,6 +45,7 @@
 #if FEATURE_AUDIO_BACKEND_ESV11
 #include "backends/esv11/EsV11Backend.h"
 #include "backends/esv11/EsV11Adapter.h"
+#include "onset/OnsetDetector.h"
 #elif FEATURE_AUDIO_BACKEND_PIPELINECORE
 #include "AudioCapture.h"
 #include "AudioTuning.h"
@@ -643,6 +644,13 @@ private:
     uint32_t m_esHopSeq = 0;
     uint8_t m_esChunkCounter = 0;  // Publish every 4 chunks (256 samples @ 12.8kHz = 50 Hz)
 
+    // FFT onset detection (1024-point spectral flux, runs every hop)
+    OnsetDetector m_onsetDetector;
+    float m_lastOnsetInputRms = 0.0f;
+    float m_lastOnsetNoiseFloor = 0.0f;
+    float m_lastOnsetActivity = 0.0f;
+    uint8_t m_lastOnsetGateFlags = 0;
+
     // ControlBus for Stage B derived features (chord, saliency, silence, liveliness)
     // ES path bypasses Stage A (input conditioning) but needs Stage B.
     ControlBus m_controlBus;
@@ -847,6 +855,10 @@ private:
     float m_lastAgcGain = 1.0f;
     float m_lastDcEstimate = 0.0f;
     uint16_t m_lastClipCount = 0;
+    float m_lastOnsetInputRms = 0.0f;
+    float m_lastOnsetNoiseFloor = 0.0f;
+    float m_lastOnsetActivity = 0.0f;
+    uint8_t m_lastOnsetGateFlags = 0;
 
     float m_dcEstimate = 0.0f;
     float m_agcGain = 1.0f;

@@ -1442,12 +1442,19 @@ void RendererActor::renderFrame()
                     for (uint8_t i = 0; i < audio::CONTROLBUS_NUM_CHROMA; ++i) {
                         if (m_lastControlBus.es_chroma_raw[i] > maxChromaRaw) maxChromaRaw = m_lastControlBus.es_chroma_raw[i];
                     }
-                    LW_LOGI("Audio OK: seq=%u hop=%u rms=%.3f flux=%.3f es_vu=%.3f binMax=%.3f chrMax=%.3f bpm=%.1f conf=%.2f sil=%.2f silent=%d gate=%.2f actGate=%.2f",
+                    LW_LOGI("Audio OK: seq=%u hop=%u rms=%.3f flux=%.3f es_vu=%.3f binMax=%.3f chrMax=%.3f bpm=%.1f conf=%.2f sil=%.2f silent=%d gate=%.2f actGate=%.2f | onset: flux=%.3f env=%.3f evt=%.3f bass=%.3f mid=%.3f hi=%.3f kick=%d snr=%d hh=%d %uus",
                             seq, m_lastControlBus.hop_seq, m_lastControlBus.rms, m_lastControlBus.flux,
                             m_lastControlBus.es_vu_level_raw, maxBinRaw, maxChromaRaw,
                             m_lastControlBus.es_bpm, m_lastControlBus.es_tempo_confidence,
                             m_lastControlBus.silentScale, m_lastControlBus.isSilent ? 1 : 0,
-                            m_highIdReactiveSilenceGate, m_highIdReactiveActivityGate);
+                            m_highIdReactiveSilenceGate, m_highIdReactiveActivityGate,
+                            m_lastControlBus.onsetFlux, m_lastControlBus.onsetEnv,
+                            m_lastControlBus.onsetEvent, m_lastControlBus.onsetBassFlux,
+                            m_lastControlBus.onsetMidFlux, m_lastControlBus.onsetHighFlux,
+                            m_lastControlBus.kickTrigger ? 1 : 0,
+                            m_lastControlBus.snareTrigger ? 1 : 0,
+                            m_lastControlBus.hihatTrigger ? 1 : 0,
+                            m_lastControlBus.onsetProcessUs);
 #else
                     LW_LOGI("Audio OK: seq=%u hop_seq=%u rms=%.3f flux=%.3f",
                             seq, m_lastControlBus.hop_seq, m_lastControlBus.rms, m_lastControlBus.flux);

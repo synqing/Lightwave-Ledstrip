@@ -369,6 +369,16 @@ void EsV11Backend::getLatestOutputs(EsV11Outputs& out) const
     out = m_latest;
 }
 
+const float* EsV11Backend::getSampleHistory() const
+{
+    return sample_history;  // Vendor global (EsV11Buffers.h)
+}
+
+size_t EsV11Backend::getSampleHistoryLength() const
+{
+    return SAMPLE_HISTORY_LENGTH;  // Vendor define (global_defines.h / 32kHz shim)
+}
+
 } // namespace lightwaveos::audio::esv11
 
 #endif

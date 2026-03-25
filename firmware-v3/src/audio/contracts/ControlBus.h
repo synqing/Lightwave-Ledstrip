@@ -64,6 +64,15 @@ struct ControlBusRawInput {
     bool snareTrigger = false;      // True on snare onset frame
     bool hihatTrigger = false;      // True on hi-hat onset frame
 
+    // FFT onset detection (OnsetDetector — 1024-point spectral flux)
+    float onsetFlux = 0.0f;         ///< Raw log-spectral flux [0, ∞)
+    float onsetEnv = 0.0f;          ///< Thresholded onset envelope [0, ∞)
+    float onsetEvent = 0.0f;        ///< Discrete onset event (0 or strength)
+    float onsetBassFlux = 0.0f;     ///< Low-freq flux (kick detection) [0, ∞)
+    float onsetMidFlux = 0.0f;      ///< Mid-freq flux (snare detection) [0, ∞)
+    float onsetHighFlux = 0.0f;     ///< High-freq flux (hihat detection) [0, ∞)
+    bool  kickTrigger = false;      ///< FFT-based kick onset detected
+
     // Phase 2: Full 64-bin Goertzel spectrum (110 Hz - 4186 Hz)
     static constexpr uint8_t BINS_64_COUNT = 64;
     float bins64[BINS_64_COUNT] = {0};  // 0..1 normalized magnitudes
@@ -137,6 +146,16 @@ struct ControlBusFrame {
     float hihatEnergy = 0.0f;       // 0..1 hi-hat band energy (6-12 kHz)
     bool snareTrigger = false;      // True on snare onset frame
     bool hihatTrigger = false;      // True on hi-hat onset frame
+
+    // FFT onset detection (OnsetDetector — 1024-point spectral flux)
+    float onsetFlux = 0.0f;         ///< Raw log-spectral flux [0, ∞)
+    float onsetEnv = 0.0f;          ///< Thresholded onset envelope [0, ∞)
+    float onsetEvent = 0.0f;        ///< Discrete onset event (0 or strength)
+    float onsetBassFlux = 0.0f;     ///< Low-freq flux (kick detection) [0, ∞)
+    float onsetMidFlux = 0.0f;      ///< Mid-freq flux (snare detection) [0, ∞)
+    float onsetHighFlux = 0.0f;     ///< High-freq flux (hihat detection) [0, ∞)
+    bool  kickTrigger = false;      ///< FFT-based kick onset detected
+    uint16_t onsetProcessUs = 0;    ///< OnsetDetector self-timed μs (diagnostics)
 
     // Phase 2: Full 64-bin Goertzel spectrum (110 Hz - 4186 Hz)
     float bins64[BINS_64_COUNT] = {0};  // 0..1 normalized magnitudes

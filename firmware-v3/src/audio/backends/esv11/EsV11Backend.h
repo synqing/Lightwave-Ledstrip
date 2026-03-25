@@ -14,6 +14,7 @@
 
 #if FEATURE_AUDIO_SYNC && FEATURE_AUDIO_BACKEND_ESV11
 
+#include <cstddef>
 #include <cstdint>
 
 namespace lightwaveos::audio::esv11 {
@@ -83,6 +84,22 @@ public:
 public:
     TempoParams& tempoParams() { return m_tp; }
     const TempoParams& tempoParams() const { return m_tp; }
+
+    /**
+     * @brief Access the raw sample history ring buffer (float, DC-blocked, -1..1).
+     *
+     * The most recent sample is at [length - 1]. To get the last N samples:
+     *   const float* tail = getSampleHistory() + getSampleHistoryLength() - N;
+     *
+     * @return Pointer to sample_history[0]. nullptr if buffers not initialised.
+     */
+    const float* getSampleHistory() const;
+
+    /**
+     * @brief Length of the sample history buffer.
+     * @return SAMPLE_HISTORY_LENGTH (10240 @ 32kHz = 320ms).
+     */
+    size_t getSampleHistoryLength() const;
 
 private:
     uint64_t m_sampleIndex = 0;

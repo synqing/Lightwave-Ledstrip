@@ -452,6 +452,21 @@ void AudioActor::printStatus()
     Serial.printf("  RMS: %.3f  Flux: %.3f\n", latest.rms, latest.flux);
     Serial.printf("  BPM: %.1f  Conf: %.3f  BeatTick: %d\n",
                   latest.es_bpm, latest.es_tempo_confidence, latest.es_beat_tick ? 1 : 0);
+    Serial.printf("  Onset: in=%.5f floor=%.5f act=%.3f gate[abs=%u act=%u prev=%u warm=%u] flux=%.3f env=%.3f evt=%.3f k/s/h=%u/%u/%u us=%u\n",
+                  m_lastOnsetInputRms,
+                  m_lastOnsetNoiseFloor,
+                  m_lastOnsetActivity,
+                  (m_lastOnsetGateFlags & ONSET_GATE_ABS_RMS) ? 1u : 0u,
+                  (m_lastOnsetGateFlags & ONSET_GATE_ACTIVITY) ? 1u : 0u,
+                  (m_lastOnsetGateFlags & ONSET_GATE_NO_PREV) ? 1u : 0u,
+                  (m_lastOnsetGateFlags & ONSET_GATE_WARMUP) ? 1u : 0u,
+                  latest.onsetFlux,
+                  latest.onsetEnv,
+                  latest.onsetEvent,
+                  latest.kickTrigger ? 1u : 0u,
+                  latest.snareTrigger ? 1u : 0u,
+                  latest.hihatTrigger ? 1u : 0u,
+                  latest.onsetProcessUs);
 #endif
 }
 
@@ -521,10 +536,12 @@ void AudioActor::onStart()
     }
 
     // Configure Stage B derived features (silence detection).
-    // ESV11 levels are lower than legacy Goertzel RMS, so keep the silence
-    // threshold permissive and use a longer hysteresis to avoid false closures.
+    // Schmitt trigger: rmsUngated < threshold starts a hold timer.
+    // After hysteresis expires, silentScale fades to 0 (tau=0.19s, ~400ms).
+    // Total silence-to-black: ~150ms hold + ~400ms fade = ~550ms.
+    // Recovery is instant (silentScale snaps to 1.0 on first non-silent frame).
     constexpr float kEsSilenceThreshold = 0.005f;
-    constexpr float kEsSilenceHysteresisMs = 8000.0f;
+    constexpr float kEsSilenceHysteresisMs = 150.0f;
 #ifdef AUDIO_SILENCE_GATE_DISABLED
     m_controlBus.setSilenceParameters(kEsSilenceThreshold, 0.0f);  // Disabled
 #else
@@ -533,6 +550,10 @@ void AudioActor::onStart()
 
     // Retune ControlBus smoothing for current frame rate (50 Hz or 125 Hz)
     m_controlBus.setMoodSmoothing(128);  // Balanced default
+
+    // Initialise FFT onset detector (1024-point, runs every hop)
+    m_onsetDetector.init();
+    LW_LOGI("OnsetDetector: 1024-point FFT (esp-dsp), 31.25 Hz/bin, 512 bins");
 
     m_state = AudioActorState::RUNNING;
     LW_LOGI("ES v1.1 audio backend: INITIALISED (%.0f Hz hop rate)", audio::HOP_RATE_HZ);
@@ -597,6 +618,70 @@ void AudioActor::onTick()
     frame.t = AudioTime(es.sample_index, audio::SAMPLE_RATE, now_us);
 
     // ========================================================================
+    // FFT Onset Detection (1024-point spectral flux, every hop)
+    // ========================================================================
+    {
+        const float* history = m_esBackend.getSampleHistory();
+        const size_t histLen = m_esBackend.getSampleHistoryLength();
+        constexpr uint16_t ONSET_FFT_SIZE = 1024;
+
+        if (history != nullptr && histLen >= ONSET_FFT_SIZE) {
+            // Point to last 1024 contiguous samples in the history buffer
+            const float* tail = history + histLen - ONSET_FFT_SIZE;
+            // Raw PCM hop RMS for the onset detector gate.
+            float onsetRms = 0.0f;
+            if (histLen >= HOP_SIZE) {
+                const float* hopTail = history + histLen - HOP_SIZE;
+                double sumSq = 0.0;
+                for (uint16_t i = 0; i < HOP_SIZE; ++i) {
+                    const double s = static_cast<double>(hopTail[i]);
+                    sumSq += s * s;
+                }
+                onsetRms = static_cast<float>(std::sqrt(sumSq / static_cast<double>(HOP_SIZE)));
+            }
+
+            TRACE_BEGIN("onset_detect");
+            OnsetResult onset = m_onsetDetector.process(tail, onsetRms);
+            TRACE_END();
+            TRACE_COUNTER("onset_input_rms", static_cast<int32_t>(onset.input_rms * 1000000.0f));
+            TRACE_COUNTER("onset_noise_floor", static_cast<int32_t>(onset.noise_floor * 1000000.0f));
+            TRACE_COUNTER("onset_activity", static_cast<int32_t>(onset.activity * 1000.0f));
+            TRACE_COUNTER("onset_gate_flags", static_cast<int32_t>(onset.gate_flags));
+            TRACE_COUNTER("onset_flux", static_cast<int32_t>(onset.flux * 1000.0f));
+            TRACE_COUNTER("onset_env", static_cast<int32_t>(onset.onset_env * 1000.0f));
+            TRACE_COUNTER("onset_event_strength", static_cast<int32_t>(onset.onset_event * 1000.0f));
+            TRACE_COUNTER("onset_bass_flux", static_cast<int32_t>(onset.bass_flux * 1000.0f));
+            TRACE_COUNTER("onset_mid_flux", static_cast<int32_t>(onset.mid_flux * 1000.0f));
+            TRACE_COUNTER("onset_high_flux", static_cast<int32_t>(onset.high_flux * 1000.0f));
+            TRACE_COUNTER("onset_process_us", static_cast<int32_t>(onset.process_us));
+            if (onset.onset_event > 0.0f) TRACE_INSTANT("ONSET_EVENT");
+            if (onset.kick_trigger) TRACE_INSTANT("ONSET_KICK");
+            if (onset.snare_trigger) TRACE_INSTANT("ONSET_SNARE");
+            if (onset.hihat_trigger) TRACE_INSTANT("ONSET_HIHAT");
+
+            m_lastOnsetInputRms = onset.input_rms;
+            m_lastOnsetNoiseFloor = onset.noise_floor;
+            m_lastOnsetActivity = onset.activity;
+            m_lastOnsetGateFlags = onset.gate_flags;
+
+            // Merge onset results into ControlBusFrame
+            frame.onsetFlux      = onset.flux;
+            frame.onsetEnv       = onset.onset_env;
+            frame.onsetEvent     = onset.onset_event;
+            frame.onsetBassFlux  = onset.bass_flux;
+            frame.onsetMidFlux   = onset.mid_flux;
+            frame.onsetHighFlux  = onset.high_flux;
+            frame.onsetProcessUs = onset.process_us;
+
+            // FFT-based percussion triggers — independent per-band (no cross-band gating).
+            // These supplement adapter triggers via additive OR.
+            if (onset.kick_trigger)  frame.kickTrigger  = true;
+            if (onset.snare_trigger) frame.snareTrigger = true;
+            if (onset.hihat_trigger) frame.hihatTrigger = true;
+        }
+    }
+
+    // ========================================================================
     // Stage B: Backend-agnostic derived features (chord, saliency, silence, liveliness)
     //
     // ES adapter produces Stage A output (normalised rms/flux/bands/chroma).
@@ -616,13 +701,25 @@ void AudioActor::onTick()
     frame.tempoBpm = frame.es_bpm;
     frame.tempoBeatStrength = frame.es_beat_strength;
 
-    // Derive rmsUngated from band energy average (autorange max gain ~20x,
-    // far less noise amplification than VU's 40,000x AGC).
-    float bandSum = 0.0f;
-    for (uint8_t i = 0; i < CONTROLBUS_NUM_BANDS; ++i) {
-        bandSum += frame.bands[i];
+    // Use raw PCM RMS (pre-AGC) for the silence detector.
+    // The previous approach (mean of post-AGC bands) was wrong: the bins64 AGC
+    // follower (floor 0.05, max gain 20x) amplifies microphone self-noise above
+    // the 0.005 silence threshold, causing the gate to reopen during true silence.
+    // Raw PCM RMS from sample_history is ~0.001 during silence — well below 0.005.
+    float rmsUngated = 0.0f;
+    {
+        const float* history = m_esBackend.getSampleHistory();
+        const size_t histLen = m_esBackend.getSampleHistoryLength();
+        if (history != nullptr && histLen >= audio::HOP_SIZE) {
+            const float* hopTail = history + histLen - audio::HOP_SIZE;
+            double sumSq = 0.0;
+            for (uint16_t i = 0; i < audio::HOP_SIZE; ++i) {
+                const double s = static_cast<double>(hopTail[i]);
+                sumSq += s * s;
+            }
+            rmsUngated = static_cast<float>(std::sqrt(sumSq / static_cast<double>(audio::HOP_SIZE)));
+        }
     }
-    const float rmsUngated = bandSum / static_cast<float>(CONTROLBUS_NUM_BANDS);
 
     // Estimate hop dt from configured frame rate
     constexpr float ES_HOP_DT = audio::HOP_DURATION_MS / 1000.0f;
@@ -1998,6 +2095,21 @@ void AudioActor::printStatus()
     Serial.printf("  Clips: %u\n", (unsigned)m_lastClipCount);
     Serial.printf("  Captures: %lu (failed: %lu)\n", cstats.hopsCapured, m_stats.captureFailCount);
     Serial.printf("  Peak: %d (centered: %d)\n", cstats.peakSample, m_lastPeakCentered);
+    Serial.printf("  Onset: in=%.5f floor=%.5f act=%.3f gate[abs=%u act=%u prev=%u warm=%u] flux=%.3f env=%.3f evt=%.3f k/s/h=%u/%u/%u us=%u\n",
+                  m_lastOnsetInputRms,
+                  m_lastOnsetNoiseFloor,
+                  m_lastOnsetActivity,
+                  (m_lastOnsetGateFlags & ONSET_GATE_ABS_RMS) ? 1u : 0u,
+                  (m_lastOnsetGateFlags & ONSET_GATE_ACTIVITY) ? 1u : 0u,
+                  (m_lastOnsetGateFlags & ONSET_GATE_NO_PREV) ? 1u : 0u,
+                  (m_lastOnsetGateFlags & ONSET_GATE_WARMUP) ? 1u : 0u,
+                  frame.onsetFlux,
+                  frame.onsetEnv,
+                  frame.onsetEvent,
+                  frame.kickTrigger ? 1u : 0u,
+                  frame.snareTrigger ? 1u : 0u,
+                  frame.hihatTrigger ? 1u : 0u,
+                  frame.onsetProcessUs);
 
     // Spike stats
     auto spikeStats = m_controlBus.getSpikeStats();

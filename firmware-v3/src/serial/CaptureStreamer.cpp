@@ -115,6 +115,12 @@ size_t CaptureStreamer::assembleFrame(
 
     // v2+ metrics trailer (32 bytes)
     if (m_streamVersion >= 2) {
+        auto quantiseUnitFloatU16 = [](float value) -> uint16_t {
+            if (!(value > 0.0f)) return 0;
+            if (value >= 1.0f) return 65535;
+            return static_cast<uint16_t>(value * 65535.0f + 0.5f);
+        };
+
         auto& ledStats = ren->getLedDriverStats();
         BandsSnapshot bandsSnap;
         ren->getBandsDebugSnapshot(bandsSnap);
@@ -143,7 +149,7 @@ size_t CaptureStreamer::assembleFrame(
         buf[pos++] = beat ? 1 : 0;
 
         // [13] onsetTick (u8)
-        bool onset = cbf.snareTrigger || cbf.hihatTrigger;
+        bool onset = cbf.onsetEvent > 0.0f;
         buf[pos++] = onset ? 1 : 0;
 
         // [14:16] flux (u16 LE, float * 65535)
@@ -182,9 +188,27 @@ size_t CaptureStreamer::assembleFrame(
         buf[pos++] = (uint8_t)(confU16 & 0xFF);
         buf[pos++] = (uint8_t)((confU16 >> 8) & 0xFF);
 
-        // [26:32] reserved (6 bytes)
-        memset(&buf[pos], 0, 6);
-        pos += 6;
+        // [26:28] onsetEnv (u16 LE, float * 65535, clamped 0..1)
+        uint16_t onsetEnvU16 = quantiseUnitFloatU16(cbf.onsetEnv);
+        buf[pos++] = (uint8_t)(onsetEnvU16 & 0xFF);
+        buf[pos++] = (uint8_t)((onsetEnvU16 >> 8) & 0xFF);
+
+        // [28:30] onsetEvent (u16 LE, float * 65535, clamped 0..1)
+        uint16_t onsetEventU16 = quantiseUnitFloatU16(cbf.onsetEvent);
+        buf[pos++] = (uint8_t)(onsetEventU16 & 0xFF);
+        buf[pos++] = (uint8_t)((onsetEventU16 >> 8) & 0xFF);
+
+        // [30] onset trigger bits (bit0=kick, bit1=snare, bit2=hihat)
+        uint8_t onsetBits = 0;
+        if (cbf.kickTrigger)  onsetBits |= 0x01;
+        if (cbf.snareTrigger) onsetBits |= 0x02;
+        if (cbf.hihatTrigger) onsetBits |= 0x04;
+        buf[pos++] = onsetBits;
+
+        // [31] onsetProcessUs quantised to 16 us steps (0..4080 us)
+        uint16_t onsetProcessUs = cbf.onsetProcessUs;
+        if (onsetProcessUs > 4080) onsetProcessUs = 4080;
+        buf[pos++] = static_cast<uint8_t>((onsetProcessUs + 8) / 16);
     }
 
     return pos;

@@ -205,6 +205,11 @@
 #include "ieffect/LGPLorenzRibbonAREffect.h"
 #include "ieffect/LGPIFSBioRelicAREffect.h"
 #include "ieffect/GeneratedAiryCometEffect.h"
+#include "ieffect/LGPBeatPrismOnsetEffect.h"
+#include "ieffect/LGPBeatPrismOnsetDriftEffect.h"
+#include "ieffect/LGPBeatPrismOnsetAdvectEffect.h"
+#include "ieffect/LGPBeatPrismOnsetRotateEffect.h"
+#include "ieffect/LGPBeatPrismOnsetIgniteEffect.h"
 #include "utils/FastLEDOptim.h"
 #include "../core/narrative/NarrativeEngine.h"
 #include <FastLED.h>
@@ -1427,8 +1432,29 @@ uint16_t registerAllEffects(RendererActor* renderer) {
     renderer->registerEffect(EID_GENERATED_AIRY_COMET, &generatedAiryCometInstance);
     total++;
 
+    // --- Onset-Driven Effects (0x1E) ---
+    static ieffect::LGPBeatPrismOnsetEffect beatPrismOnsetInstance;
+    renderer->registerEffect(EID_LGP_BEAT_PRISM_ONSET, &beatPrismOnsetInstance);
+    total++;
+
+    static ieffect::LGPBeatPrismOnsetDriftEffect beatPrismOnsetDriftInstance;
+    renderer->registerEffect(EID_LGP_BEAT_PRISM_ONSET_DRIFT, &beatPrismOnsetDriftInstance);
+    total++;
+
+    static ieffect::LGPBeatPrismOnsetAdvectEffect beatPrismOnsetAdvectInstance;
+    renderer->registerEffect(EID_LGP_BEAT_PRISM_ONSET_ADVECT, &beatPrismOnsetAdvectInstance);
+    total++;
+
+    static ieffect::LGPBeatPrismOnsetRotateEffect beatPrismOnsetRotateInstance;
+    renderer->registerEffect(EID_LGP_BEAT_PRISM_ONSET_ROTATE, &beatPrismOnsetRotateInstance);
+    total++;
+
+    static ieffect::LGPBeatPrismOnsetIgniteEffect beatPrismOnsetIgniteInstance;
+    renderer->registerEffect(EID_LGP_BEAT_PRISM_ONSET_IGNITE, &beatPrismOnsetIgniteInstance);
+    total++;
+
     // =============== EFFECT COUNT PARITY VALIDATION ===============
-    constexpr uint16_t EXPECTED_EFFECT_COUNT = FEATURE_AR_1C_EXPERIMENTAL ? 195 : 192;
+    constexpr uint16_t EXPECTED_EFFECT_COUNT = FEATURE_AR_1C_EXPERIMENTAL ? 200 : 197;
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

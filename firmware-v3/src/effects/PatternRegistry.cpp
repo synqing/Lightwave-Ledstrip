@@ -274,7 +274,14 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
     {EID_LGP_TIME_REVERSAL_MIRROR_MOD3, PM_STR("Time-Reversal Mirror Mod3"), PatternFamily::QUANTUM, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::PHYSICS, PM_STR("Time-reversal with lossy medium (absorption on forward, gain on replay)"), PM_STR("Lossy wave equation, exponential decay forward, exponential gain reverse"), PM_STR("Time-Reversal Mirror")},
 
     // --- Node Composer Generated Effects (0x1D) ---
-    {EID_GENERATED_AIRY_COMET, PM_STR("Generated Airy Comet"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP, PM_STR("Node Composer export test — Airy Comet (Fixed) preset"), PM_STR("Gaussian centre-origin, single EMA, max follower, squared brightness"), PM_STR("")}
+    {EID_GENERATED_AIRY_COMET, PM_STR("Generated Airy Comet"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP, PM_STR("Node Composer export test — Airy Comet (Fixed) preset"), PM_STR("Gaussian centre-origin, single EMA, max follower, squared brightness"), PM_STR("")},
+
+    // --- Onset-Driven Effects (0x1E) ---
+    {EID_LGP_BEAT_PRISM_ONSET, PM_STR("LGP Beat Prism Onset"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING | PatternTags::SPECTRAL, PM_STR("Onset-driven prism — kick front, snare refraction, hihat shimmer"), PM_STR("Band-ratio onset detector drives three visual channels instead of tempo grid"), PM_STR("LGP Beat Prism")},
+    {EID_LGP_BEAT_PRISM_ONSET_DRIFT, PM_STR("LGP Beat Prism Onset Drift"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING | PatternTags::SPECTRAL, PM_STR("Outward drift — centre emits energy outward, no contraction"), PM_STR("Continuous one-way outward drift replaces spring breathing"), PM_STR("LGP Beat Prism Onset")},
+    {EID_LGP_BEAT_PRISM_ONSET_ADVECT, PM_STR("LGP Beat Prism Onset Advect"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING | PatternTags::SPECTRAL, PM_STR("Pressure advection — kick front locally displaces crystal field"), PM_STR("Stable field with local kick-pressure displacement"), PM_STR("LGP Beat Prism Onset")},
+    {EID_LGP_BEAT_PRISM_ONSET_ROTATE, PM_STR("LGP Beat Prism Onset Rotate"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING | PatternTags::SPECTRAL, PM_STR("Rotating facets — light rotates inside crystal, spokes anchored"), PM_STR("Split-rate rotation: anchored spokes, independently rotating facets and refraction"), PM_STR("LGP Beat Prism Onset")},
+    {EID_LGP_BEAT_PRISM_ONSET_IGNITE, PM_STR("LGP Beat Prism Onset Ignite"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING | PatternTags::SPECTRAL, PM_STR("Progressive ignition — energy activates outward from centre"), PM_STR("Asymmetric rise/fall activation envelope reveals spoke skeleton progressively"), PM_STR("LGP Beat Prism Onset")}
 };
 
 const uint16_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(PatternMetadata);

@@ -316,6 +316,13 @@ constexpr EffectId DISPLAY_ORDER[] = {
     EID_SB_RAW_WAVEFORM_SCOPE,              // C: time-domain + heavy processing
     EID_SB_RECONSTRUCTED_WAVEFORM,           // D: spectral → synthetic wave
     EID_SB_SPECTRAL_BEAT_PULSE,              // E: spectrum + beat expansion
+
+    // Onset-Driven Effects (0x1E)
+    EID_LGP_BEAT_PRISM_ONSET,                // 1E00: Beat Prism (onset-driven)
+    EID_LGP_BEAT_PRISM_ONSET_DRIFT,          // 1E01: Outward Drift
+    EID_LGP_BEAT_PRISM_ONSET_ADVECT,         // 1E02: Pressure Advection
+    EID_LGP_BEAT_PRISM_ONSET_ROTATE,         // 1E03: Rotating Facets
+    EID_LGP_BEAT_PRISM_ONSET_IGNITE,         // 1E04: Progressive Ignition
 };
 
 /// Number of effects in the display order (excludes retired slots)

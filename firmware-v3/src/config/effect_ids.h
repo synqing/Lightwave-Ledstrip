@@ -353,7 +353,14 @@ constexpr EffectId EID_LGP_IFS_BIO_RELIC_AR                 = 0x1C13;  // IFS Bo
 // --- Node Composer Generated Effects (0x1D) ---
 constexpr EffectId EID_GENERATED_AIRY_COMET                 = 0x1D00;  // Generated: Airy Comet (Node Composer export test)
 
-// Total: 197 IDs assigned (196 active, 1 retired)
+// --- Onset-Driven Effects (0x1E) ---
+constexpr EffectId EID_LGP_BEAT_PRISM_ONSET                 = 0x1E00;  // LGP Beat Prism (Onset-driven kick/snare/hihat)
+constexpr EffectId EID_LGP_BEAT_PRISM_ONSET_DRIFT           = 0x1E01;  // Outward Drift variant
+constexpr EffectId EID_LGP_BEAT_PRISM_ONSET_ADVECT          = 0x1E02;  // Pressure Advection variant
+constexpr EffectId EID_LGP_BEAT_PRISM_ONSET_ROTATE          = 0x1E03;  // Rotating Facets variant
+constexpr EffectId EID_LGP_BEAT_PRISM_ONSET_IGNITE          = 0x1E04;  // Progressive Ignition variant
+
+// Total: 201 IDs assigned (200 active, 1 retired)
 
 // ============================================================================
 // Migration: Old Sequential ID -> New Stable ID

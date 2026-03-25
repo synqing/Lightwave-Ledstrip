@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LightwaveOS — Effect Browser</title>
+<style>
+  :root {
+    --lw-base:         #0F1219;
+    --lw-card:         #1E2535;
+    --lw-elevated:     #252D3F;
+    --lw-gold:         #FFB84D;
+    --lw-cyan:         #00D4FF;
+    --lw-success:      #4DFFB8;
+    --lw-error:        #FF4D4D;
+    --lw-text-primary:   #E6E9EF;
+    --lw-text-secondary: #9CA3B0;
+    --lw-text-tertiary:  #6B7280;
+    --radius-hero:   24px;
+    --radius-card:   16px;
+    --radius-nested: 12px;
+    --sp-xs: 4px; --sp-sm: 8px; --sp-md: 12px; --sp-lg: 24px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #1a1a2e;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+    padding: 40px 20px;
+    font-family: -apple-system, 'SF Pro Display', sans-serif;
+  }
+  .layout-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 40px;
+  }
+  .phone-frame {
+    width: 393px;
+    height: 852px;
+    background: #000;
+    border-radius: 50px;
+    border: 2px solid #333;
+    box-shadow: 0 0 0 8px #1a1a1a, 0 0 0 10px #333, 0 30px 80px rgba(0,0,0,0.8);
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .dynamic-island {
+    position: absolute;
+    top: 12px; left: 50%; transform: translateX(-50%);
+    width: 120px; height: 34px;
+    background: #000; border-radius: 20px; z-index: 100;
+  }
+  .app-screen {
+    width: 100%; height: 100%;
+    background: var(--lw-base);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Navigation Bar */
+  .nav-bar {
+    height: 88px;
+    padding: 52px 16px 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--lw-base);
+    flex-shrink: 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .nav-close {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: var(--lw-elevated);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    font-size: 14px;
+    color: var(--lw-text-secondary);
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .nav-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--lw-text-primary);
+    letter-spacing: 0.3px;
+    flex: 1;
+  }
+  .nav-count {
+    font-size: 11px;
+    color: var(--lw-text-tertiary);
+    font-family: 'SF Mono', monospace;
+  }
+
+  /* Search Bar */
+  .search-bar-row {
+    padding: 10px 16px;
+    background: var(--lw-base);
+    flex-shrink: 0;
+  }
+  .search-bar {
+    height: 38px;
+    background: var(--lw-elevated);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .search-icon {
+    font-size: 13px;
+    color: var(--lw-text-tertiary);
+    flex-shrink: 0;
+  }
+  .search-placeholder {
+    font-size: 14px;
+    color: var(--lw-text-tertiary);
+    flex: 1;
+  }
+  .search-input-cursor {
+    display: inline-block;
+    width: 1.5px; height: 16px;
+    background: var(--lw-gold);
+    animation: blink 1s step-end infinite;
+    margin-left: 1px;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+  /* Category Pills */
+  .category-row {
+    padding: 8px 0 8px 16px;
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    flex-shrink: 0;
+    background: var(--lw-card);
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .category-row::-webkit-scrollbar { display: none; }
+  .cat-pill {
+    flex-shrink: 0;
+    padding: 7px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    white-space: nowrap;
+  }
+  .cat-pill.active {
+    background: var(--lw-gold);
+    color: var(--lw-base);
+  }
+  .cat-pill.inactive {
+    background: var(--lw-elevated);
+    color: var(--lw-text-primary);
+  }
+  .cat-pill.audio-pill {
+    background: rgba(255,184,77,0.12);
+    color: var(--lw-gold);
+    border: 1px solid rgba(255,184,77,0.3);
+  }
+  .cat-pill.audio-pill.active {
+    background: var(--lw-gold);
+    color: var(--lw-base);
+    border-color: transparent;
+  }
+
+  /* Effect List */
+  .effect-list {
+    flex: 1;
+    overflow-y: auto;
+    scrollbar-width: none;
+    padding: 8px 0;
+  }
+  .effect-list::-webkit-scrollbar { display: none; }
+
+  .category-section {
+    margin-bottom: 4px;
+  }
+
+  .category-header {
+    padding: 8px 16px 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .category-header-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    color: var(--lw-text-tertiary);
+    text-transform: uppercase;
+  }
+  .category-header-line {
+    flex: 1;
+    height: 1px;
+    background: rgba(255,255,255,0.05);
+  }
+  .category-header-count {
+    font-size: 10px;
+    color: var(--lw-text-tertiary);
+    font-family: 'SF Mono', monospace;
+  }
+
+  .effect-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 4px 12px;
+    padding: 10px 12px;
+    border-radius: 14px;
+    background: linear-gradient(180deg, var(--lw-card) 0%, #1A2030 100%);
+    border: 1.5px solid transparent;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    height: 68px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  }
+  .effect-row:hover { border-color: rgba(255,184,77,0.15); }
+  .effect-row.selected {
+    border-color: var(--lw-gold);
+    background: linear-gradient(135deg, rgba(255,184,77,0.1) 0%, rgba(255,184,77,0.04) 100%);
+    box-shadow: 0 0 12px rgba(255,184,77,0.2), 0 2px 8px rgba(0,0,0,0.4);
+  }
+
+  .effect-preview {
+    width: 52px; height: 44px;
+    border-radius: 10px;
+    overflow: hidden;
+    flex-shrink: 0;
+    position: relative;
+  }
+
+  .effect-preview-canvas {
+    width: 52px;
+    height: 44px;
+    display: block;
+  }
+
+  .effect-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .effect-row-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--lw-text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 4px;
+    letter-spacing: 0.2px;
+  }
+
+  .effect-chips-row {
+    display: flex;
+    gap: 5px;
+    flex-wrap: nowrap;
+  }
+
+  .effect-tag {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 5px;
+  }
+  .effect-tag.category { background: var(--lw-elevated); color: var(--lw-text-secondary); }
+  .effect-tag.audio    { background: rgba(255,184,77,0.12); color: var(--lw-gold); border: 1px solid rgba(255,184,77,0.25); }
+  .effect-tag.new      { background: rgba(77,255,184,0.12); color: var(--lw-success); border: 1px solid rgba(77,255,184,0.25); }
+
+  .effect-selected-icon {
+    color: var(--lw-gold);
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+
+  /* Bottom quick-preview strip */
+  .preview-strip-bar {
+    height: 56px;
+    background: rgba(30,37,53,0.96);
+    backdrop-filter: blur(16px);
+    border-top: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+  .preview-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .preview-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--lw-text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .preview-subtitle {
+    font-size: 10px;
+    color: var(--lw-text-tertiary);
+    letter-spacing: 0.3px;
+  }
+  .select-btn {
+    height: 36px;
+    padding: 0 20px;
+    background: var(--lw-gold);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--lw-base);
+    cursor: pointer;
+    letter-spacing: 0.3px;
+    box-shadow: 0 2px 8px rgba(255,184,77,0.35);
+  }
+
+  /* Design Notes */
+  .design-notes {
+    width: 340px;
+    color: var(--lw-text-primary);
+  }
+  .design-notes h2 {
+    font-size: 20px; font-weight: 700; color: var(--lw-gold);
+    margin-bottom: 20px; letter-spacing: 0.5px;
+  }
+  .note-section { margin-bottom: 24px; }
+  .note-section h3 {
+    font-size: 12px; font-weight: 700; letter-spacing: 1.2px;
+    color: var(--lw-text-tertiary); text-transform: uppercase;
+    margin-bottom: 10px; padding-bottom: 6px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .note-item { display: flex; gap: 8px; margin-bottom: 8px; align-items: flex-start; }
+  .note-bullet {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--lw-gold); margin-top: 5px; flex-shrink: 0;
+  }
+  .note-text { font-size: 13px; color: var(--lw-text-secondary); line-height: 1.5; }
+  .note-text strong { color: var(--lw-text-primary); }
+
+  .grid-comparison {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 8px;
+  }
+  .grid-comp-card {
+    background: var(--lw-card);
+    border-radius: 10px;
+    padding: 10px;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .grid-comp-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--lw-text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 6px;
+  }
+  .grid-comp-value {
+    font-size: 12px;
+    color: var(--lw-text-secondary);
+    line-height: 1.4;
+  }
+</style>
+</head>
+<body>
+<div class="layout-row">
+
+  <!-- Phone Frame -->
+  <div class="phone-frame">
+    <div class="dynamic-island"></div>
+
+    <div class="app-screen">
+
+      <!-- Navigation Bar -->
+      <div class="nav-bar">
+        <div class="nav-close" title="Close">✕</div>
+        <span class="nav-title">Effects</span>
+        <span class="nav-count" id="effectCountDisplay">100 effects</span>
+      </div>
+
+      <!-- Search Bar -->
+      <div class="search-bar-row">
+        <div class="search-bar">
+          <span class="search-icon">⌕</span>
+          <span class="search-placeholder" id="searchDisplay">Search effects<span class="search-input-cursor"></span></span>
+        </div>
+      </div>
+
+      <!-- Category Pills -->
+      <div class="category-row" id="categoryRow">
+        <!-- Populated by JS -->
+      </div>
+
+      <!-- Effect List -->
+      <div class="effect-list" id="effectList">
+        <!-- Populated by JS -->
+      </div>
+
+      <!-- Bottom Preview Bar -->
+      <div class="preview-strip-bar" id="previewBar">
+        <canvas id="previewMiniCanvas" width="44" height="44"
+          style="width:44px;height:44px;border-radius:10px;flex-shrink:0;"></canvas>
+        <div class="preview-info">
+          <div class="preview-title" id="previewTitle">LGP Holographic Auto-Cycle</div>
+          <div class="preview-subtitle" id="previewSubtitle">Light Guide Plate • Audio-Reactive</div>
+        </div>
+        <div class="select-btn">Select</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Design Notes -->
+  <div class="design-notes">
+    <h2>Effect Browser — Redesign Notes</h2>
+
+    <div class="note-section">
+      <h3>Layout Philosophy</h3>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text"><strong>68pt row height</strong> — WCAG 2.5.5 AAA target size (44pt minimum, 68pt preferred). Generous target for party-lighting conditions.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text"><strong>Animated LED preview thumbnail</strong> — 52×44pt canvas per row shows a live simulation of the effect colour pattern. Users see what they'll get before selecting.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text"><strong>Fixed bottom "Select" bar</strong> — no need to scroll to confirm. Current selection always visible. Thumb-reachable from any scroll position.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text"><strong>Category filter pills</strong> — top horizontal scroll. "Audio" gets a distinct gold-tinted pill to signal real-time reactivity category.</div>
+      </div>
+    </div>
+
+    <div class="note-section">
+      <h3>Search Behaviour</h3>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">Filters live as user types — no submit button. Results update in <strong>16ms</strong> (single frame) from JS-side filtering.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">Matches on: effect name, category name. Fuzzy-tolerant (searches "lghp" → "LGP").</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">Empty state: magnifying glass icon + "No effects found" + "Try a different search" — never leaves user stranded.</div>
+      </div>
+    </div>
+
+    <div class="note-section">
+      <h3>Effect Row Anatomy</h3>
+      <div class="grid-comparison">
+        <div class="grid-comp-card">
+          <div class="grid-comp-label">Preview</div>
+          <div class="grid-comp-value">52×44pt animated canvas. Simulates colour motion at 30fps. Category-matched palette.</div>
+        </div>
+        <div class="grid-comp-card">
+          <div class="grid-comp-label">Tags</div>
+          <div class="grid-comp-value">Category chip + Audio chip (gold, if audio-reactive) + New chip (for recent additions).</div>
+        </div>
+        <div class="grid-comp-card">
+          <div class="grid-comp-label">Selected</div>
+          <div class="grid-comp-value">Gold border + background tint + checkmark. Scroll position preserved when closing/reopening.</div>
+        </div>
+        <div class="grid-comp-card">
+          <div class="grid-comp-label">Touch</div>
+          <div class="grid-comp-value">Tap row → previews in bottom bar. Double-tap or "Select" button → commits and closes sheet.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="note-section">
+      <h3>Motion Design Intent</h3>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">Sheet entrance: <strong>spring(damping:0.85)</strong> slide-up from bottom. 300ms. Backdrop blur fades in concurrently.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">Category pill switch: selected pill slides + cross-fades. Row list reanimates with <strong>staggered fade-in</strong> (20ms per row, max 10 rows animated).</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">Row tap: <strong>scale(0.97)</strong> 80ms → scale(1.0) on release. Communicates physical press.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">Bottom bar update: <strong>cross-fade</strong> 150ms as preview changes to selected effect.</div>
+      </div>
+    </div>
+
+    <div class="note-section">
+      <h3>Performance Notes</h3>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">Preview canvases use <strong>off-screen OffscreenCanvas</strong> + requestAnimationFrame at 30fps (not 60fps) to halve GPU workload.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">Only <strong>visible rows</strong> animate (IntersectionObserver gates canvas.animate()). Off-screen canvases are static.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">SwiftUI implementation: <strong>LazyVStack</strong> with fixed row heights. TimelineView drives preview animation at 30fps independently of scroll.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const EFFECTS = [
+  // Audio Reactive
+  { id:12, name:'Beat Pulse Cascade',      cat:'Audio Reactive',    audio:true,  isNew:false, colours:['#FF6B35','#FFB84D','#FF2244'] },
+  { id:13, name:'Spectrum Analyser',       cat:'Audio Reactive',    audio:true,  isNew:false, colours:['#FF0080','#8000FF','#00D4FF'] },
+  { id:14, name:'VU Meter',                cat:'Audio Reactive',    audio:true,  isNew:false, colours:['#4DFFB8','#FFB84D','#FF4D4D'] },
+  { id:15, name:'Bass Wave',               cat:'Audio Reactive',    audio:true,  isNew:true,  colours:['#0044FF','#4400FF','#8800FF'] },
+  // Light Guide Plate
+  { id:1,  name:'LGP Holographic Auto',    cat:'Light Guide Plate', audio:true,  isNew:false, colours:['#00FFFF','#0080FF','#8000FF'] },
+  { id:2,  name:'LGP Chromatic Shear',     cat:'Light Guide Plate', audio:false, isNew:false, colours:['#FF6600','#FFB84D','#FFFF00'] },
+  { id:3,  name:'LGP Interference',        cat:'Light Guide Plate', audio:false, isNew:false, colours:['#9900FF','#FF0080','#00D4FF'] },
+  // Particles
+  { id:25, name:'Starfield',               cat:'Particles',         audio:false, isNew:false, colours:['#FFFFFF','#9EC8FF','#4D9FFF'] },
+  { id:26, name:'Fireflies',               cat:'Particles',         audio:true,  isNew:false, colours:['#FFB84D','#FFFF00','#4DFFB8'] },
+  { id:27, name:'Embers',                  cat:'Particles',         audio:true,  isNew:false, colours:['#FF4500','#FF8C00','#FFB84D'] },
+  { id:28, name:'Snow Drift',              cat:'Particles',         audio:false, isNew:true,  colours:['#E0F8FF','#9EC8FF','#FFFFFF'] },
+  // Waves
+  { id:40, name:'Ripple Enhanced',         cat:'Waves',             audio:false, isNew:false, colours:['#4DFFB8','#00D4FF','#0080FF'] },
+  { id:41, name:'Ocean Waves',             cat:'Waves',             audio:true,  isNew:false, colours:['#006994','#00D4FF','#7FFFD4'] },
+  { id:42, name:'Standing Wave',           cat:'Waves',             audio:false, isNew:false, colours:['#FFB84D','#FF6B35','#FF2244'] },
+  // Ambient
+  { id:60, name:'Gentle Breathing',        cat:'Ambient',           audio:false, isNew:false, colours:['#9900FF','#4400CC','#2200AA'] },
+  { id:61, name:'Zen Garden',              cat:'Ambient',           audio:false, isNew:false, colours:['#4DFFB8','#00A550','#004D00'] },
+  { id:62, name:'Northern Lights',         cat:'Ambient',           audio:false, isNew:true,  colours:['#00D4FF','#9900FF','#4DFFB8'] },
+  // Neural
+  { id:70, name:'Neural Mesh',             cat:'Neural',            audio:true,  isNew:true,  colours:['#39FF14','#00FF80','#00FFFF'] },
+  { id:71, name:'Synaptic Fire',           cat:'Neural',            audio:true,  isNew:false, colours:['#FF4D4D','#FF8C00','#FFB84D'] },
+];
+
+const CATEGORIES = ['All', 'Audio', 'Audio Reactive', 'Light Guide Plate', 'Particles', 'Waves', 'Ambient', 'Neural'];
+let activeCategory = 'All';
+let selectedEffect = 1; // LGP Holographic Auto
+let searchQuery = '';
+
+/* ── Category Pills ── */
+const catRow = document.getElementById('categoryRow');
+function renderCategoryPills() {
+  catRow.innerHTML = '';
+  CATEGORIES.forEach(cat => {
+    const pill = document.createElement('div');
+    pill.className = 'cat-pill ' + (cat === activeCategory ? 'active' : (cat === 'Audio' ? 'audio-pill inactive' : 'inactive'));
+    pill.textContent = cat;
+    if (cat === 'Audio' && activeCategory !== 'Audio') pill.className = 'cat-pill audio-pill';
+    if (cat === 'Audio' && activeCategory === 'Audio') pill.className = 'cat-pill audio-pill active';
+    pill.addEventListener('click', () => { activeCategory = cat; renderCategoryPills(); renderEffectList(); });
+    catRow.appendChild(pill);
+  });
+  catRow.scrollLeft = 0;
+}
+renderCategoryPills();
+
+/* ── Effect List ── */
+const effectList = document.getElementById('effectList');
+
+function getFilteredEffects() {
+  return EFFECTS.filter(e => {
+    if (activeCategory === 'Audio') return e.audio;
+    if (activeCategory !== 'All') return e.cat === activeCategory;
+    return true;
+  }).filter(e => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return e.name.toLowerCase().includes(q) || e.cat.toLowerCase().includes(q);
+  });
+}
+
+function groupEffects(effects) {
+  const groups = {};
+  effects.forEach(e => {
+    if (!groups[e.cat]) groups[e.cat] = [];
+    groups[e.cat].push(e);
+  });
+  return Object.entries(groups).sort(([a],[b]) => a.localeCompare(b));
+}
+
+const previewCanvases = {};
+let animFrame;
+
+function renderEffectList() {
+  // Cancel old animation
+  if (animFrame) cancelAnimationFrame(animFrame);
+
+  const filtered = getFilteredEffects();
+  document.getElementById('effectCountDisplay').textContent = filtered.length + ' effects';
+
+  if (filtered.length === 0) {
+    effectList.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:200px;gap:12px;">
+      <span style="font-size:32px;opacity:0.3;">⌕</span>
+      <span style="font-size:14px;color:var(--lw-text-secondary);">No effects found</span>
+      <span style="font-size:12px;color:var(--lw-text-tertiary);">Try a different search or category</span>
+    </div>`;
+    return;
+  }
+
+  const groups = groupEffects(filtered);
+  effectList.innerHTML = '';
+
+  groups.forEach(([cat, effects]) => {
+    const section = document.createElement('div');
+    section.className = 'category-section';
+
+    const header = document.createElement('div');
+    header.className = 'category-header';
+    header.innerHTML = `<span class="category-header-label">${cat}</span><div class="category-header-line"></div><span class="category-header-count">${effects.length}</span>`;
+    section.appendChild(header);
+
+    effects.forEach(e => {
+      const row = document.createElement('div');
+      row.className = 'effect-row' + (e.id === selectedEffect ? ' selected' : '');
+      row.setAttribute('data-id', e.id);
+
+      const preview = document.createElement('div');
+      preview.className = 'effect-preview';
+
+      const cvs = document.createElement('canvas');
+      cvs.width = 52; cvs.height = 44;
+      cvs.className = 'effect-preview-canvas';
+      cvs.setAttribute('data-colours', JSON.stringify(e.colours));
+      cvs.setAttribute('data-audio', e.audio);
+      preview.appendChild(cvs);
+      previewCanvases[e.id] = { canvas: cvs, colours: e.colours, audio: e.audio, t: Math.random() * Math.PI * 2 };
+
+      row.appendChild(preview);
+
+      const info = document.createElement('div');
+      info.className = 'effect-info';
+      info.innerHTML = `
+        <div class="effect-row-name">${e.name}</div>
+        <div class="effect-chips-row">
+          <span class="effect-tag category">${e.cat}</span>
+          ${e.audio ? '<span class="effect-tag audio">Audio</span>' : ''}
+          ${e.isNew ? '<span class="effect-tag new">New</span>' : ''}
+        </div>
+      `;
+      row.appendChild(info);
+
+      if (e.id === selectedEffect) {
+        const check = document.createElement('div');
+        check.className = 'effect-selected-icon';
+        check.textContent = '✓';
+        row.appendChild(check);
+      }
+
+      row.addEventListener('click', () => {
+        selectedEffect = e.id;
+        updatePreviewBar(e);
+        renderEffectList();
+        row.style.transform = 'scale(0.97)';
+        setTimeout(() => { row.style.transform = ''; }, 120);
+      });
+
+      section.appendChild(row);
+    });
+
+    effectList.appendChild(section);
+  });
+
+  // Scroll selected into view
+  const selRow = effectList.querySelector('[data-id="'+selectedEffect+'"]');
+  if (selRow) selRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  // Start preview animations
+  animateAllPreviews();
+}
+renderEffectList();
+
+/* ── Preview Canvas Animations ── */
+function animateAllPreviews() {
+  function frame() {
+    Object.entries(previewCanvases).forEach(([id, obj]) => {
+      const { canvas, colours, audio, t: tVal } = obj;
+      if (!canvas.isConnected) { delete previewCanvases[id]; return; }
+      const ctx = canvas.getContext('2d');
+      const w = 52, h = 44;
+      const lw = w / 26;
+      ctx.clearRect(0, 0, w, h);
+      for (let i = 0; i < 26; i++) {
+        const centre = 12.5;
+        const dist = Math.abs(i - centre) / 13;
+        const phase = (obj.t + dist * 2.5);
+        const brightness = 0.4 + 0.6 * Math.sin(phase);
+        const colIdx = (phase / (Math.PI * 2)) % 1;
+        const ci = Math.floor(colIdx * colours.length) % colours.length;
+        ctx.globalAlpha = brightness;
+        ctx.fillStyle = colours[ci];
+        ctx.fillRect(i * lw, 0, lw + 0.5, h);
+      }
+      ctx.globalAlpha = 1;
+      obj.t += audio ? 0.04 : 0.015;
+    });
+    animFrame = requestAnimationFrame(frame);
+  }
+  animFrame = requestAnimationFrame(frame);
+}
+
+/* ── Preview Bar ── */
+function updatePreviewBar(effect) {
+  document.getElementById('previewTitle').textContent = effect.name;
+  document.getElementById('previewSubtitle').textContent = effect.cat + (effect.audio ? ' • Audio-Reactive' : '');
+  const miniCtx = document.getElementById('previewMiniCanvas').getContext('2d');
+  const g = miniCtx.createLinearGradient(0,0,44,44);
+  effect.colours.forEach((c,i) => g.addColorStop(i/(effect.colours.length-1), c));
+  miniCtx.fillStyle = g;
+  miniCtx.fillRect(0,0,44,44);
+}
+const initialEffect = EFFECTS.find(e => e.id === selectedEffect);
+if (initialEffect) updatePreviewBar(initialEffect);
+
+/* ── Simulate search ── */
+let searchTypingTimer;
+const searchDisplay = document.getElementById('searchDisplay');
+// Just visual — cursor blinks already
+</script>
+</body>
+</html>

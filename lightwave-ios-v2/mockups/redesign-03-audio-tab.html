@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LightwaveOS — Audio Tab</title>
+<style>
+  :root {
+    --lw-base:         #0F1219;
+    --lw-card:         #1E2535;
+    --lw-elevated:     #252D3F;
+    --lw-gold:         #FFB84D;
+    --lw-beat:         #FFCC33;
+    --lw-cyan:         #00D4FF;
+    --lw-success:      #4DFFB8;
+    --lw-error:        #FF4D4D;
+    --lw-text-primary:   #E6E9EF;
+    --lw-text-secondary: #9CA3B0;
+    --lw-text-tertiary:  #6B7280;
+    --radius-card:   16px;
+    --sp-sm: 8px; --sp-md: 12px; --sp-lg: 24px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #1a1a2e;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+    padding: 40px 20px;
+    font-family: -apple-system, 'SF Pro Display', sans-serif;
+  }
+  .layout-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 40px;
+  }
+  .phone-frame {
+    width: 393px; height: 852px;
+    background: #000;
+    border-radius: 50px;
+    border: 2px solid #333;
+    box-shadow: 0 0 0 8px #1a1a1a, 0 0 0 10px #333, 0 30px 80px rgba(0,0,0,0.8);
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .dynamic-island {
+    position: absolute;
+    top: 12px; left: 50%; transform: translateX(-50%);
+    width: 120px; height: 34px;
+    background: #000; border-radius: 20px; z-index: 100;
+  }
+  .app-screen {
+    width: 100%; height: 100%;
+    background: var(--lw-base);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Status Bar */
+  .status-bar {
+    height: 59px;
+    padding: 16px 24px 0;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .status-left {
+    display: flex; align-items: center; gap: 6px;
+  }
+  .conn-dot { width:7px;height:7px;border-radius:50%;background:var(--lw-success);box-shadow:0 0 6px var(--lw-success); }
+  .status-brand { font-size:13px;font-weight:700;letter-spacing:1.5px;color:var(--lw-text-primary);text-transform:uppercase; }
+
+  /* Visualisation Area — Upper ~55% */
+  .vis-area {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 8px 0 0;
+  }
+
+  /* Waveform + Spectrum canvas */
+  .spectrum-canvas-wrap {
+    position: relative;
+    height: 140px;
+    margin: 0 12px;
+    border-radius: 16px;
+    overflow: hidden;
+    background: linear-gradient(180deg, #0d1520 0%, #0F1219 100%);
+    border: 1px solid rgba(255,255,255,0.04);
+  }
+  #spectrumCanvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  /* Spectrum Mode Toggle */
+  .vis-mode-row {
+    display: flex;
+    gap: 0;
+    margin: 8px 12px 0;
+    background: var(--lw-elevated);
+    border-radius: 10px;
+    padding: 3px;
+  }
+  .vis-mode-btn {
+    flex: 1;
+    height: 28px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    color: var(--lw-text-tertiary);
+    cursor: pointer;
+    transition: all 0.18s ease;
+  }
+  .vis-mode-btn.active {
+    background: rgba(255,184,77,0.15);
+    color: var(--lw-gold);
+    border: 1px solid rgba(255,184,77,0.3);
+  }
+
+  /* Octave bands row */
+  .bands-row {
+    display: flex;
+    gap: 5px;
+    padding: 8px 12px 0;
+    align-items: flex-end;
+    height: 60px;
+  }
+  .band-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    height: 100%;
+    justify-content: flex-end;
+  }
+  .band-bar-wrap {
+    flex: 1;
+    width: 100%;
+    background: rgba(37,45,63,0.6);
+    border-radius: 4px;
+    overflow: hidden;
+    display: flex;
+    align-items: flex-end;
+  }
+  .band-bar {
+    width: 100%;
+    border-radius: 4px;
+    transition: height 0.08s ease-out;
+  }
+  .band-label {
+    font-size: 7px;
+    font-weight: 700;
+    color: var(--lw-text-tertiary);
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    text-align: center;
+  }
+
+  /* Beat + BPM Row */
+  .beat-bpm-row {
+    display: flex;
+    gap: 8px;
+    padding: 8px 12px 0;
+  }
+
+  .beat-card {
+    flex: 1;
+    background: linear-gradient(180deg, var(--lw-card) 0%, #1A2030 100%);
+    border-radius: 14px;
+    padding: 12px;
+    border: 1.5px solid rgba(255,255,255,0.05);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .beat-card-label {
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--lw-text-tertiary);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .bpm-large {
+    font-size: 36px;
+    font-weight: 800;
+    color: var(--lw-gold);
+    line-height: 1;
+    letter-spacing: 2px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .bpm-confidence-bar {
+    height: 4px;
+    background: var(--lw-elevated);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .bpm-confidence-fill {
+    height: 100%;
+    background: linear-gradient(to right, var(--lw-gold), var(--lw-beat));
+    border-radius: 2px;
+    transition: width 0.3s ease;
+    width: 78%;
+  }
+  .bpm-conf-label {
+    font-size: 9px;
+    color: var(--lw-text-tertiary);
+    letter-spacing: 0.5px;
+  }
+
+  .beat-dot-area {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    flex: 1;
+  }
+
+  .beat-dot {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--lw-beat) 30%, rgba(255,204,51,0.3) 70%, transparent 100%);
+    box-shadow: 0 0 24px rgba(255,204,51,0.5);
+    animation: beatPulse 0.48s cubic-bezier(0.34,1.56,0.64,1) infinite;
+  }
+
+  @keyframes beatPulse {
+    0%   { transform: scale(0.75); opacity: 0.4; box-shadow: 0 0 8px rgba(255,204,51,0.3); }
+    20%  { transform: scale(1.0);  opacity: 1;   box-shadow: 0 0 28px rgba(255,204,51,0.7); }
+    100% { transform: scale(0.75); opacity: 0.4; box-shadow: 0 0 8px rgba(255,204,51,0.3); }
+  }
+
+  .beat-card-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .beat-state-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--lw-beat);
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    text-align: center;
+  }
+
+  /* Divider */
+  .section-divider {
+    height: 1px;
+    background: rgba(255,255,255,0.05);
+    margin: 8px 12px 0;
+  }
+
+  /* Scrollable controls area */
+  .controls-scroll {
+    flex: 1;
+    overflow-y: auto;
+    scrollbar-width: none;
+    padding: 8px 12px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .controls-scroll::-webkit-scrollbar { display: none; }
+
+  /* Metrics row */
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+
+  .metric-cell {
+    background: linear-gradient(180deg, var(--lw-card) 0%, #1A2030 100%);
+    border-radius: 12px;
+    padding: 10px 10px 8px;
+    border: 1px solid rgba(255,255,255,0.04);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .metric-label {
+    font-size: 8px;
+    font-weight: 700;
+    color: var(--lw-text-tertiary);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .metric-value {
+    font-size: 18px;
+    font-weight: 700;
+    font-family: 'SF Mono', monospace;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .metric-bar {
+    height: 3px;
+    background: var(--lw-elevated);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .metric-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.08s ease;
+  }
+
+  /* Onset + Percussion triggers */
+  .triggers-card {
+    background: linear-gradient(180deg, var(--lw-card) 0%, #1A2030 100%);
+    border-radius: var(--radius-card);
+    padding: 12px;
+    border: 1px solid rgba(255,255,255,0.04);
+  }
+
+  .triggers-header {
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--lw-text-tertiary);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .triggers-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .trigger-pill {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 10px;
+    border-radius: 20px;
+    border: 1px solid;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    transition: all 0.08s ease;
+  }
+
+  .trigger-pill.onset {
+    background: rgba(0,212,255,0.08);
+    border-color: rgba(0,212,255,0.25);
+    color: var(--lw-cyan);
+  }
+  .trigger-pill.onset.fired {
+    background: rgba(0,212,255,0.2);
+    border-color: var(--lw-cyan);
+    box-shadow: 0 0 8px rgba(0,212,255,0.4);
+  }
+
+  .trigger-pill.kick {
+    background: rgba(255,77,77,0.08);
+    border-color: rgba(255,77,77,0.25);
+    color: var(--lw-error);
+  }
+  .trigger-pill.kick.fired {
+    background: rgba(255,77,77,0.22);
+    border-color: var(--lw-error);
+    box-shadow: 0 0 8px rgba(255,77,77,0.4);
+  }
+
+  .trigger-pill.snare {
+    background: rgba(255,184,77,0.08);
+    border-color: rgba(255,184,77,0.25);
+    color: var(--lw-gold);
+  }
+  .trigger-pill.snare.fired {
+    background: rgba(255,184,77,0.2);
+    border-color: var(--lw-gold);
+    box-shadow: 0 0 8px rgba(255,184,77,0.4);
+  }
+
+  .trigger-pill.hihat {
+    background: rgba(77,255,184,0.08);
+    border-color: rgba(77,255,184,0.25);
+    color: var(--lw-success);
+  }
+  .trigger-pill.hihat.fired {
+    background: rgba(77,255,184,0.22);
+    border-color: var(--lw-success);
+    box-shadow: 0 0 8px rgba(77,255,184,0.4);
+  }
+
+  .trigger-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: currentColor;
+    transition: all 0.08s;
+  }
+
+  /* Onset flux chart */
+  .onset-chart-wrap {
+    height: 44px;
+    background: rgba(37,45,63,0.4);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-top: 8px;
+    position: relative;
+  }
+  #onsetCanvas { width: 100%; height: 44px; display: block; }
+  .onset-chart-label {
+    position: absolute;
+    top: 3px; left: 7px;
+    font-size: 7px;
+    font-weight: 700;
+    color: var(--lw-text-tertiary);
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+  }
+
+  /* DSP State row */
+  .dsp-state-row {
+    display: flex;
+    gap: 6px;
+  }
+
+  .dsp-state-chip {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 10px;
+    border-radius: 20px;
+    background: var(--lw-card);
+    border: 1px solid rgba(255,255,255,0.06);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--lw-text-secondary);
+  }
+
+  .dsp-state-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+  }
+
+  /* Tab Bar */
+  .tab-bar {
+    height: 82px;
+    background: rgba(15,18,25,0.96);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    align-items: flex-start;
+    padding-top: 10px;
+    flex-shrink: 0;
+  }
+  .tab-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    padding: 4px 0;
+  }
+  .tab-icon {
+    width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; opacity: 0.4;
+  }
+  .tab-item.active .tab-icon { opacity: 1; color: var(--lw-gold); }
+  .tab-label { font-size: 10px; font-weight: 600; color: var(--lw-text-tertiary); letter-spacing: 0.3px; }
+  .tab-item.active .tab-label { color: var(--lw-gold); }
+
+  /* Design Notes */
+  .design-notes { width: 340px; color: var(--lw-text-primary); }
+  .design-notes h2 { font-size: 20px; font-weight: 700; color: var(--lw-gold); margin-bottom: 20px; letter-spacing: 0.5px; }
+  .note-section { margin-bottom: 24px; }
+  .note-section h3 {
+    font-size: 12px; font-weight: 700; letter-spacing: 1.2px;
+    color: var(--lw-text-tertiary); text-transform: uppercase;
+    margin-bottom: 10px; padding-bottom: 6px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .note-item { display: flex; gap: 8px; margin-bottom: 8px; align-items: flex-start; }
+  .note-bullet { width: 6px; height: 6px; border-radius: 50%; background: var(--lw-gold); margin-top: 5px; flex-shrink: 0; }
+  .note-text { font-size: 13px; color: var(--lw-text-secondary); line-height: 1.5; }
+  .note-text strong { color: var(--lw-text-primary); }
+
+  .signal-flow {
+    background: var(--lw-card);
+    border-radius: 10px;
+    padding: 12px;
+    border: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .flow-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--lw-text-secondary);
+  }
+  .flow-step-num {
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--lw-elevated);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; font-weight: 700;
+    color: var(--lw-gold);
+    flex-shrink: 0;
+  }
+  .flow-arrow { color: var(--lw-text-tertiary); font-size: 10px; text-align: center; padding-left: 9px; }
+</style>
+</head>
+<body>
+<div class="layout-row">
+
+  <!-- Phone Frame -->
+  <div class="phone-frame">
+    <div class="dynamic-island"></div>
+
+    <div class="app-screen">
+
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <div class="status-left">
+          <div class="conn-dot"></div>
+          <span class="status-brand">Audio</span>
+        </div>
+        <span style="font-size:11px;color:var(--lw-success);font-weight:600;letter-spacing:0.5px;">ESV11 • LIVE</span>
+      </div>
+
+      <!-- Vis Area -->
+      <div class="vis-area">
+
+        <!-- Spectrum Canvas -->
+        <div class="spectrum-canvas-wrap">
+          <canvas id="spectrumCanvas"></canvas>
+        </div>
+
+        <!-- Vis Mode Toggle -->
+        <div class="vis-mode-row">
+          <div class="vis-mode-btn active" id="modeSpectrum">Spectrum</div>
+          <div class="vis-mode-btn" id="modeWaveform">Waveform</div>
+          <div class="vis-mode-btn" id="modeDotMatrix">Dot Matrix</div>
+          <div class="vis-mode-btn" id="modeWaterfall">Waterfall</div>
+        </div>
+
+        <!-- 8 Octave Bands -->
+        <div class="bands-row" id="bandsRow">
+          <!-- Populated by JS -->
+        </div>
+
+        <!-- Beat + BPM Row -->
+        <div class="beat-bpm-row">
+          <!-- BPM Card -->
+          <div class="beat-card" style="flex:1.6;">
+            <div class="beat-card-label">Tempo</div>
+            <div class="bpm-large" id="bpmDisplay">124</div>
+            <div class="bpm-confidence-bar">
+              <div class="bpm-confidence-fill" id="bpmConfFill"></div>
+            </div>
+            <div class="bpm-conf-label" id="bpmConfLabel">Confidence 78%</div>
+          </div>
+          <!-- Beat Dot Card -->
+          <div class="beat-card" style="flex:1;align-items:center;justify-content:center;">
+            <div class="beat-card-label">Beat</div>
+            <div class="beat-dot-area">
+              <div class="beat-card-inner">
+                <div class="beat-dot" id="beatDot"></div>
+                <div class="beat-state-label" id="beatStateLabel">Beating</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /vis-area -->
+
+      <div class="section-divider"></div>
+
+      <!-- Scrollable Controls -->
+      <div class="controls-scroll">
+
+        <!-- Metrics Grid: RMS, Onset, Peak -->
+        <div class="metrics-grid">
+          <div class="metric-cell">
+            <div class="metric-label">RMS</div>
+            <div class="metric-value" id="rmsVal" style="color:var(--lw-gold);">0.42</div>
+            <div class="metric-bar"><div class="metric-bar-fill" id="rmsBar" style="width:42%;background:var(--lw-gold);"></div></div>
+          </div>
+          <div class="metric-cell">
+            <div class="metric-label">Onset</div>
+            <div class="metric-value" id="onsetVal" style="color:var(--lw-cyan);">0.61</div>
+            <div class="metric-bar"><div class="metric-bar-fill" id="onsetBar" style="width:61%;background:var(--lw-cyan);"></div></div>
+          </div>
+          <div class="metric-cell">
+            <div class="metric-label">Peak</div>
+            <div class="metric-value" id="peakVal" style="color:var(--lw-success);">0.89</div>
+            <div class="metric-bar"><div class="metric-bar-fill" id="peakBar" style="width:89%;background:var(--lw-success);"></div></div>
+          </div>
+        </div>
+
+        <!-- Onset Flux Chart + Percussion Triggers -->
+        <div class="triggers-card">
+          <div class="triggers-header">Percussion Triggers</div>
+          <div class="triggers-row" id="triggersRow">
+            <div class="trigger-pill onset" id="trigOnset">
+              <div class="trigger-dot"></div>Onset
+            </div>
+            <div class="trigger-pill kick" id="trigKick">
+              <div class="trigger-dot"></div>Kick
+            </div>
+            <div class="trigger-pill snare" id="trigSnare">
+              <div class="trigger-dot"></div>Snare
+            </div>
+            <div class="trigger-pill hihat" id="trigHihat">
+              <div class="trigger-dot"></div>Hi-Hat
+            </div>
+          </div>
+          <!-- Onset flux sparkline -->
+          <div class="onset-chart-wrap">
+            <canvas id="onsetCanvas"></canvas>
+            <div class="onset-chart-label">Onset Flux</div>
+          </div>
+        </div>
+
+        <!-- DSP State -->
+        <div class="dsp-state-row">
+          <div class="dsp-state-chip">
+            <div class="dsp-state-dot" style="background:var(--lw-success);box-shadow:0 0 4px var(--lw-success);"></div>
+            ESV11
+          </div>
+          <div class="dsp-state-chip">
+            <div class="dsp-state-dot" style="background:var(--lw-cyan);box-shadow:0 0 4px var(--lw-cyan);"></div>
+            32 kHz
+          </div>
+          <div class="dsp-state-chip">
+            <div class="dsp-state-dot" style="background:var(--lw-gold);box-shadow:0 0 4px var(--lw-gold);"></div>
+            64 Bins
+          </div>
+          <div class="dsp-state-chip">
+            <div class="dsp-state-dot" style="background:var(--lw-success);"></div>
+            Silence OK
+          </div>
+        </div>
+
+      </div><!-- /controls-scroll -->
+
+      <!-- Tab Bar -->
+      <div class="tab-bar">
+        <div class="tab-item">
+          <div class="tab-icon">▶</div>
+          <span class="tab-label">Play</span>
+        </div>
+        <div class="tab-item">
+          <div class="tab-icon">◫</div>
+          <span class="tab-label">Zones</span>
+        </div>
+        <div class="tab-item active">
+          <div class="tab-icon">〜</div>
+          <span class="tab-label">Audio</span>
+        </div>
+        <div class="tab-item">
+          <div class="tab-icon">⚙</div>
+          <span class="tab-label">Device</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Design Notes -->
+  <div class="design-notes">
+    <h2>Audio Tab — Redesign Notes</h2>
+
+    <div class="note-section">
+      <h3>Layout Hierarchy</h3>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text"><strong>Upper 55%</strong>: All real-time visualisations — spectrum canvas, octave bands, BPM, beat dot. These are read-only displays, so they live at the top where the user's eyes track without thumb interaction.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text"><strong>Lower 45%</strong>: Metric readouts, percussion triggers, DSP status. Scrollable if content exceeds space. All interactive elements thumb-reachable.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text"><strong>Vis mode selector</strong> — 4 modes (Spectrum, Waveform, Dot Matrix, Waterfall) in a segmented control. Matching the 4 existing canvas implementations in the codebase.</div>
+      </div>
+    </div>
+
+    <div class="note-section">
+      <h3>Real-Time Signal Flow</h3>
+      <div class="signal-flow">
+        <div class="flow-step"><div class="flow-step-num">1</div>Microphone → I2S DMA (32 kHz)</div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-step"><div class="flow-step-num">2</div>ESV11 Goertzel → 64 frequency bins</div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-step"><div class="flow-step-num">3</div>PipelineAdapter → 8 octave bands + chroma[12]</div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-step"><div class="flow-step-num">4</div>ControlBus → BPM, RMS, onset, beat, percussion</div>
+        <div class="flow-arrow">↓</div>
+        <div class="flow-step"><div class="flow-step-num">5</div>WebSocket stream → App (15-30 FPS)</div>
+      </div>
+    </div>
+
+    <div class="note-section">
+      <h3>Visualisation Modes</h3>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text"><strong>Spectrum</strong> — 64-bin bar chart, logarithmic x-axis. Amplitude bars smoothed with exponential decay (fast rise, slow fall).</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text"><strong>Waveform</strong> — rolling waveform line. Centre-referenced, gold stroke, translucent fill.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text"><strong>Dot Matrix</strong> — existing DotMatrixCanvas.swift adapted. 8×32 dot grid, intensity-mapped colour.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text"><strong>Waterfall</strong> — scrolling time-frequency plot. Each row is one spectrum frame. Colour = amplitude intensity (dark blue → gold → white).</div>
+      </div>
+    </div>
+
+    <div class="note-section">
+      <h3>Beat Dot Design</h3>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">Dot pulses at exact BPM using <strong>esp_timer one-shot</strong> derived beat period. Animation duration matches the beat interval so it always lands "on time".</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">Colour: <strong>lwBeatAccent (#FFCC33)</strong> — slightly warmer than gold so it reads as distinct from other gold UI elements.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">Glow radius expands from 8px to 28px on each pulse. Gives "lamp flashing" feel — reinforces the LED controller context.</div>
+      </div>
+    </div>
+
+    <div class="note-section">
+      <h3>Percussion Trigger Pills</h3>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">Each pill flashes its border + background on trigger event. Onset = cyan, Kick = red, Snare = gold, Hi-Hat = green.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">Onset flux sparkline below shows the last ~3 seconds of novelty curve. Threshold line drawn as dashed gold line. Peaks above threshold trigger onset events.</div>
+      </div>
+    </div>
+
+    <div class="note-section">
+      <h3>Performance Notes</h3>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">Spectrum canvas uses <strong>TimelineView with .animation</strong> schedule — decoupled from SwiftUI redraw. Runs at 30fps max, independent of 120Hz ProMotion display refresh.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">Octave band bars use <strong>withAnimation(.linear(duration: 0.08))</strong> — fast attack, not spring, to avoid overshoot on transients.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">Metrics grid values update at WebSocket frame rate (15-30 FPS). JetBrains Mono font for monospaced numerics prevents layout jitter.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ── Spectrum Canvas ── */
+const specCanvas = document.getElementById('spectrumCanvas');
+specCanvas.width = 361; specCanvas.height = 140;
+const sc = specCanvas.getContext('2d');
+
+const NBINS = 64;
+let specBins = new Float32Array(NBINS).fill(0);
+let peakBins = new Float32Array(NBINS).fill(0);
+let specT = 0;
+let visMode = 'spectrum';
+const waveformHistory = [];
+
+document.querySelectorAll('.vis-mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.vis-mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    visMode = btn.id.replace('mode','').toLowerCase();
+  });
+});
+
+function updateSpecBins() {
+  for (let i = 0; i < NBINS; i++) {
+    const centre = NBINS * 0.3;
+    const dist = Math.abs(i - centre) / (NBINS * 0.5);
+    const base = Math.max(0, 1 - dist * 1.5) * 0.7;
+    const noise = (Math.sin(specT * 3 + i * 0.4) * 0.5 + 0.5) * 0.3;
+    const beatBoost = Math.exp(-beatPhase * 2) * 0.3;
+    const target = Math.min(1, base + noise + beatBoost);
+    specBins[i] = specBins[i] * 0.7 + target * 0.3;
+    peakBins[i] = Math.max(peakBins[i] * 0.992, specBins[i]);
+  }
+  specT += 0.022;
+}
+
+function drawSpectrum() {
+  const w = specCanvas.width, h = specCanvas.height;
+  sc.clearRect(0,0,w,h);
+  sc.fillStyle = '#0d1520';
+  sc.fillRect(0,0,w,h);
+
+  if (visMode === 'spectrum' || visMode === 'dotmatrix') {
+    const bw = w / NBINS;
+    for (let i = 0; i < NBINS; i++) {
+      const v = specBins[i];
+      const bh = v * (h - 10);
+      const hue = 30 + (1 - i/NBINS) * 180;
+      const sat = 80 + v * 20;
+      const lum = 35 + v * 30;
+      const grad = sc.createLinearGradient(0, h - bh, 0, h);
+      grad.addColorStop(0, `hsla(${hue},${sat}%,${lum}%, 0.95)`);
+      grad.addColorStop(1, `hsla(${hue},${sat}%,15%, 0.6)`);
+      sc.fillStyle = grad;
+      sc.fillRect(i * bw + 0.5, h - bh, bw - 1.5, bh);
+
+      // Peak dots
+      sc.fillStyle = `hsla(${hue},100%,75%,0.8)`;
+      sc.fillRect(i * bw + 0.5, h - peakBins[i] * (h-10) - 2, bw - 1.5, 2);
+    }
+
+    // Grid lines
+    sc.strokeStyle = 'rgba(255,255,255,0.04)';
+    sc.lineWidth = 1;
+    for (let g = 1; g <= 3; g++) {
+      const y = h - (g/4) * h;
+      sc.beginPath(); sc.moveTo(0,y); sc.lineTo(w,y); sc.stroke();
+    }
+
+  } else if (visMode === 'waveform') {
+    // Waveform
+    const amp = w / NBINS;
+    sc.strokeStyle = 'rgba(255,184,77,0.8)';
+    sc.lineWidth = 2;
+    sc.shadowColor = 'rgba(255,184,77,0.4)';
+    sc.shadowBlur = 8;
+    sc.beginPath();
+    const cy = h / 2;
+    for (let i = 0; i < NBINS; i++) {
+      const x = (i / NBINS) * w;
+      const y = cy + Math.sin(specT * 4 + i * 0.3) * specBins[i] * cy * 0.8;
+      if (i === 0) sc.moveTo(x, y); else sc.lineTo(x, y);
+    }
+    sc.stroke();
+    sc.shadowBlur = 0;
+
+    // Fill under waveform
+    sc.lineTo(w, cy); sc.lineTo(0, cy); sc.closePath();
+    const fillGrad = sc.createLinearGradient(0, 0, 0, h);
+    fillGrad.addColorStop(0, 'rgba(255,184,77,0.08)');
+    fillGrad.addColorStop(1, 'rgba(255,184,77,0.01)');
+    sc.fillStyle = fillGrad;
+    sc.fill();
+
+  } else if (visMode === 'waterfall') {
+    waveformHistory.push([...specBins]);
+    if (waveformHistory.length > h / 2) waveformHistory.shift();
+    const lh = 2;
+    waveformHistory.forEach((row, ri) => {
+      const bw2 = w / NBINS;
+      row.forEach((v, i) => {
+        const lum = 10 + v * 65;
+        const hue2 = v > 0.6 ? 40 : 200 + v * 100;
+        sc.fillStyle = `hsl(${hue2}, 90%, ${lum}%)`;
+        sc.fillRect(i * bw2, ri * lh, bw2, lh);
+      });
+    });
+  }
+}
+
+/* ── Bands ── */
+const BAND_LABELS = ['Sub', '63', '125', '250', '500', '1k', '2k', '8k'];
+const BAND_COLOURS = ['#9900FF','#6633FF','#0044FF','#00D4FF','#4DFFB8','#FFB84D','#FF6B35','#FF4D4D'];
+let bandValues = [0.8, 0.65, 0.5, 0.4, 0.55, 0.7, 0.6, 0.35];
+
+const bandsRow = document.getElementById('bandsRow');
+BAND_LABELS.forEach((label, i) => {
+  const col = document.createElement('div');
+  col.className = 'band-col';
+  col.innerHTML = `
+    <div class="band-bar-wrap">
+      <div class="band-bar" id="band${i}" style="height:${bandValues[i]*100}%;background:${BAND_COLOURS[i]};box-shadow:0 0 6px ${BAND_COLOURS[i]}44;"></div>
+    </div>
+    <div class="band-label">${label}</div>
+  `;
+  bandsRow.appendChild(col);
+});
+
+/* ── Beat & BPM ── */
+let bpm = 124;
+let bpmConf = 0.78;
+let beatPhase = 0;
+let lastBeat = Date.now();
+const BEAT_INTERVAL_MS = (60 / bpm) * 1000;
+
+function triggerBeat() {
+  beatPhase = 1;
+  document.getElementById('trigKick').classList.add('fired');
+  setTimeout(() => document.getElementById('trigKick').classList.remove('fired'), 120);
+  setTimeout(triggerBeat, BEAT_INTERVAL_MS + (Math.random() - 0.5) * 30);
+}
+setTimeout(triggerBeat, 200);
+
+/* Onset random */
+setInterval(() => {
+  if (Math.random() > 0.6) {
+    document.getElementById('trigOnset').classList.add('fired');
+    setTimeout(() => document.getElementById('trigOnset').classList.remove('fired'), 100);
+  }
+  if (Math.random() > 0.65) {
+    document.getElementById('trigSnare').classList.add('fired');
+    setTimeout(() => document.getElementById('trigSnare').classList.remove('fired'), 90);
+  }
+  if (Math.random() > 0.5) {
+    document.getElementById('trigHihat').classList.add('fired');
+    setTimeout(() => document.getElementById('trigHihat').classList.remove('fired'), 60);
+  }
+}, 240);
+
+/* ── Onset Canvas ── */
+const onsetCvs = document.getElementById('onsetCanvas');
+onsetCvs.width = onsetCvs.parentElement.offsetWidth || 300;
+onsetCvs.height = 44;
+const oc = onsetCvs.getContext('2d');
+const onsetHistory = new Float32Array(200).fill(0);
+let onsetT = 0;
+
+function updateOnset() {
+  onsetHistory.copyWithin(0, 1);
+  const base = 0.2 + Math.sin(onsetT * 2) * 0.1;
+  const spike = Math.random() > 0.85 ? 0.5 + Math.random() * 0.4 : 0;
+  onsetHistory[199] = base + spike;
+  onsetT += 0.06;
+
+  const cw = onsetCvs.width, ch = 44;
+  oc.clearRect(0,0,cw,ch);
+  oc.fillStyle = 'rgba(37,45,63,0)';
+  oc.fillRect(0,0,cw,ch);
+
+  // Threshold line
+  const thresh = 0.45;
+  oc.strokeStyle = 'rgba(255,184,77,0.25)';
+  oc.setLineDash([3,3]);
+  oc.lineWidth = 1;
+  oc.beginPath();
+  oc.moveTo(0, ch - thresh * ch);
+  oc.lineTo(cw, ch - thresh * ch);
+  oc.stroke();
+  oc.setLineDash([]);
+
+  // Flux line
+  oc.strokeStyle = 'rgba(0,212,255,0.7)';
+  oc.lineWidth = 1.5;
+  oc.shadowColor = 'rgba(0,212,255,0.3)';
+  oc.shadowBlur = 4;
+  oc.beginPath();
+  const step = cw / 200;
+  for (let i = 0; i < 200; i++) {
+    const x = i * step;
+    const y = ch - onsetHistory[i] * ch * 0.85;
+    if (i === 0) oc.moveTo(x, y); else oc.lineTo(x, y);
+  }
+  oc.stroke();
+  oc.shadowBlur = 0;
+}
+
+/* ── Main animation loop ── */
+let t2 = 0;
+function animFrame2() {
+  updateSpecBins();
+  drawSpectrum();
+  updateOnset();
+
+  // Update band bars
+  BAND_LABELS.forEach((_, i) => {
+    const el = document.getElementById('band'+i);
+    const base = [0.75,0.6,0.45,0.35,0.5,0.65,0.55,0.3][i];
+    const noise = (Math.sin(t2 * 2 + i * 0.8) * 0.5 + 0.5) * 0.3;
+    const beat = Math.exp(-beatPhase * 2) * 0.25;
+    const val = Math.min(1, base + noise + beat);
+    el.style.height = (val * 100) + '%';
+    bandValues[i] = val;
+  });
+
+  // Update metrics
+  const rmsRaw = 0.3 + Math.sin(t2 * 1.2) * 0.15 + Math.exp(-beatPhase*2) * 0.15;
+  document.getElementById('rmsVal').textContent = rmsRaw.toFixed(2);
+  document.getElementById('rmsBar').style.width = (rmsRaw * 100) + '%';
+
+  const onsetRaw = 0.4 + Math.sin(t2 * 3.1 + 1) * 0.2;
+  document.getElementById('onsetVal').textContent = onsetRaw.toFixed(2);
+  document.getElementById('onsetBar').style.width = (onsetRaw * 100) + '%';
+
+  const peakRaw = Math.min(1, Math.max(rmsRaw, 0.75));
+  document.getElementById('peakVal').textContent = peakRaw.toFixed(2);
+  document.getElementById('peakBar').style.width = (peakRaw * 100) + '%';
+
+  beatPhase = Math.max(0, beatPhase - 0.06);
+  t2 += 0.018;
+  requestAnimationFrame(animFrame2);
+}
+animFrame2();
+</script>
+</body>
+</html>

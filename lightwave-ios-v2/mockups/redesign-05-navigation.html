@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LightwaveOS — Navigation System</title>
+<style>
+  :root {
+    --lw-base:         #0F1219;
+    --lw-card:         #1E2535;
+    --lw-elevated:     #252D3F;
+    --lw-gold:         #FFB84D;
+    --lw-cyan:         #00D4FF;
+    --lw-success:      #4DFFB8;
+    --lw-error:        #FF4D4D;
+    --lw-text-primary:   #E6E9EF;
+    --lw-text-secondary: #9CA3B0;
+    --lw-text-tertiary:  #6B7280;
+    --radius-card: 16px; --sp-sm: 8px; --sp-md: 12px; --sp-lg: 24px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #1a1a2e;
+    display: flex;
+    justify-content: flex-start;
+    align-items: flex-start;
+    min-height: 100vh;
+    padding: 40px 30px;
+    font-family: -apple-system, 'SF Pro Display', sans-serif;
+    gap: 40px;
+    flex-wrap: wrap;
+  }
+
+  /* ── Page Title ── */
+  .page-title-block {
+    width: 100%;
+    margin-bottom: 10px;
+  }
+  .page-title {
+    font-size: 28px; font-weight: 800; color: var(--lw-gold); letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+  .page-subtitle {
+    font-size: 14px; color: var(--lw-text-secondary); line-height: 1.5;
+  }
+
+  /* ── Phone Frame ── */
+  .phone-frame {
+    width: 393px; height: 852px;
+    background: #000; border-radius: 50px; border: 2px solid #333;
+    box-shadow: 0 0 0 8px #1a1a1a, 0 0 0 10px #333, 0 30px 80px rgba(0,0,0,0.8);
+    position: relative; overflow: hidden; flex-shrink: 0;
+  }
+  .phone-mini {
+    width: 196px; height: 426px;
+    background: #000; border-radius: 26px; border: 1.5px solid #333;
+    box-shadow: 0 0 0 4px #1a1a1a, 0 0 0 5px #333, 0 15px 40px rgba(0,0,0,0.8);
+    position: relative; overflow: hidden; flex-shrink: 0;
+  }
+  .dynamic-island {
+    position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    width: 120px; height: 34px; background: #000; border-radius: 20px; z-index: 100;
+  }
+  .dynamic-island-mini {
+    position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
+    width: 60px; height: 17px; background: #000; border-radius: 10px; z-index: 100;
+  }
+  .app-screen {
+    width: 100%; height: 100%; background: var(--lw-base);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  /* ── Status Bar ── */
+  .status-bar {
+    height: 59px; padding: 16px 24px 0;
+    display: flex; align-items: flex-end; justify-content: space-between; flex-shrink: 0;
+  }
+  .status-bar-mini {
+    height: 30px; padding: 8px 12px 0;
+    display: flex; align-items: flex-end; justify-content: space-between; flex-shrink: 0;
+  }
+  .conn-dot { width:7px;height:7px;border-radius:50%;background:var(--lw-success);box-shadow:0 0 6px var(--lw-success); }
+  .conn-dot-sm { width:5px;height:5px;border-radius:50%;background:var(--lw-success);box-shadow:0 0 4px var(--lw-success); }
+  .status-brand { font-size:13px;font-weight:700;letter-spacing:1.5px;color:var(--lw-text-primary);text-transform:uppercase; }
+  .status-brand-sm { font-size:8px;font-weight:700;letter-spacing:1px;color:var(--lw-text-primary);text-transform:uppercase; }
+  .status-left { display:flex;align-items:center;gap:6px; }
+
+  /* ── Tab Bar (Main) ── */
+  .tab-bar-main {
+    background: rgba(15,18,25,0.97);
+    backdrop-filter: blur(24px);
+    border-top: 1px solid rgba(255,255,255,0.07);
+    position: absolute; bottom: 0; left: 0; right: 0;
+    height: 82px;
+    display: flex;
+    align-items: flex-start;
+    padding-top: 10px;
+  }
+  .tab-item {
+    flex: 1;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    cursor: pointer; padding: 4px 0;
+    position: relative;
+  }
+  .tab-icon-wrap {
+    width: 44px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 12px;
+    transition: all 0.2s ease;
+    position: relative;
+  }
+  .tab-item.active .tab-icon-wrap {
+    background: rgba(255,184,77,0.12);
+  }
+  .tab-svg { width: 22px; height: 22px; opacity: 0.4; transition: opacity 0.2s; }
+  .tab-item.active .tab-svg { opacity: 1; }
+  .tab-label-txt { font-size: 10px; font-weight: 600; color: var(--lw-text-tertiary); letter-spacing: 0.3px; transition: color 0.2s; }
+  .tab-item.active .tab-label-txt { color: var(--lw-gold); }
+
+  /* Active indicator pill */
+  .tab-active-indicator {
+    position: absolute; bottom: -6px;
+    left: 50%; transform: translateX(-50%);
+    width: 16px; height: 3px;
+    border-radius: 2px;
+    background: var(--lw-gold);
+    opacity: 0;
+    transition: opacity 0.2s, width 0.2s;
+  }
+  .tab-item.active .tab-active-indicator { opacity: 1; width: 20px; }
+
+  /* Beat Badge on Audio tab */
+  .tab-beat-badge {
+    position: absolute;
+    top: 2px; right: 3px;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--lw-gold);
+    animation: tabBeatBadge 0.48s ease infinite;
+  }
+  @keyframes tabBeatBadge {
+    0%,100% { transform: scale(0.7); opacity: 0.5; }
+    50%      { transform: scale(1.2); opacity: 1; }
+  }
+
+  /* Content placeholder */
+  .content-placeholder {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: flex-start;
+    padding: 16px 16px 100px;
+    gap: 12px;
+    overflow: hidden;
+  }
+  .placeholder-card {
+    width: 100%;
+    height: 80px;
+    background: var(--lw-card);
+    border-radius: var(--radius-card);
+    border: 1px solid rgba(255,255,255,0.04);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; color: var(--lw-text-tertiary);
+    letter-spacing: 0.5px;
+  }
+  .hero-placeholder {
+    width: 100%; height: 110px;
+    border-radius: 24px;
+    border: 1px solid rgba(255,255,255,0.04);
+    overflow: hidden;
+  }
+
+  /* ── Connection State Card ── */
+  .conn-state-section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 460px;
+    flex-shrink: 0;
+  }
+  .conn-state-title {
+    font-size: 14px; font-weight: 700;
+    color: var(--lw-text-tertiary);
+    letter-spacing: 1px; text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .conn-state-card {
+    background: var(--lw-card);
+    border-radius: var(--radius-card);
+    padding: 14px 16px;
+    border: 1px solid rgba(255,255,255,0.05);
+    display: flex; align-items: center; gap: 14px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+  }
+  .conn-state-icon {
+    width: 40px; height: 40px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; flex-shrink: 0;
+  }
+  .conn-state-info { flex: 1; }
+  .conn-state-label {
+    font-size: 12px; font-weight: 700;
+    letter-spacing: 0.5px; text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+  .conn-state-desc { font-size: 12px; color: var(--lw-text-secondary); line-height: 1.4; }
+  .conn-state-badge {
+    padding: 4px 10px; border-radius: 8px;
+    font-size: 10px; font-weight: 700;
+    letter-spacing: 0.5px; text-transform: uppercase;
+  }
+
+  /* ── Gesture Map ── */
+  .gesture-map {
+    background: var(--lw-card);
+    border-radius: var(--radius-card);
+    border: 1px solid rgba(255,255,255,0.05);
+    overflow: hidden;
+  }
+  .gesture-map-title {
+    padding: 12px 16px 8px;
+    font-size: 12px; font-weight: 700;
+    color: var(--lw-text-tertiary);
+    letter-spacing: 1px; text-transform: uppercase;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .gesture-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+  }
+  .gesture-row:last-child { border-bottom: none; }
+  .gesture-icon {
+    width: 32px; height: 32px; border-radius: 10px;
+    background: var(--lw-elevated);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; flex-shrink: 0;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .gesture-info { flex: 1; }
+  .gesture-name {
+    font-size: 12px; font-weight: 600;
+    color: var(--lw-text-primary); margin-bottom: 1px;
+  }
+  .gesture-where {
+    font-size: 10px; color: var(--lw-text-tertiary); letter-spacing: 0.3px;
+  }
+  .gesture-result {
+    font-size: 11px; color: var(--lw-gold); font-weight: 600;
+    text-align: right; max-width: 120px;
+  }
+
+  /* ── Notes ── */
+  .notes-col { width: 320px; color: var(--lw-text-primary); }
+  .note-section { margin-bottom: 20px; }
+  .note-section h3 {
+    font-size: 12px; font-weight: 700; letter-spacing: 1.2px;
+    color: var(--lw-text-tertiary); text-transform: uppercase;
+    margin-bottom: 10px; padding-bottom: 6px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .note-item { display: flex; gap: 8px; margin-bottom: 8px; align-items: flex-start; }
+  .note-bullet { width:6px;height:6px;border-radius:50%;background:var(--lw-gold);margin-top:5px;flex-shrink:0; }
+  .note-text { font-size: 12px; color: var(--lw-text-secondary); line-height: 1.5; }
+  .note-text strong { color: var(--lw-text-primary); }
+
+  /* Mini phones row */
+  .mini-phones-row {
+    display: flex;
+    gap: 20px;
+    align-items: flex-end;
+  }
+  .mini-phone-label {
+    text-align: center;
+    font-size: 10px; font-weight: 700;
+    color: var(--lw-text-tertiary);
+    letter-spacing: 0.8px; text-transform: uppercase;
+    margin-top: 8px;
+  }
+
+  /* Connection Sheet */
+  .conn-sheet-bg {
+    position: absolute; inset: 0;
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(8px);
+    z-index: 20;
+    display: flex; align-items: flex-end;
+  }
+  .conn-sheet {
+    width: 100%;
+    background: var(--lw-card);
+    border-radius: 24px 24px 0 0;
+    padding: 16px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .conn-sheet-handle {
+    width: 36px; height: 4px; border-radius: 2px;
+    background: rgba(255,255,255,0.15);
+    margin: 0 auto 14px;
+  }
+  .conn-sheet-title { font-size: 14px; font-weight: 700; color: var(--lw-text-primary); margin-bottom: 12px; }
+  .conn-option {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .conn-option:last-child { border-bottom: none; }
+  .conn-option-dot {
+    width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+  }
+  .conn-option-info { flex: 1; }
+  .conn-option-name { font-size: 13px; font-weight: 600; color: var(--lw-text-primary); }
+  .conn-option-addr { font-size: 10px; color: var(--lw-text-tertiary); font-family: 'SF Mono', monospace; }
+  .conn-option-badge { padding: 3px 8px; border-radius: 6px; font-size: 9px; font-weight: 700; text-transform: uppercase; }
+</style>
+</head>
+<body>
+
+<!-- Page Title -->
+<div class="page-title-block">
+  <div class="page-title">Navigation System — LightwaveOS Redesign</div>
+  <div class="page-subtitle" style="color:var(--lw-text-secondary);">Tab bar design, connection state management, gesture map, and navigation between screens.</div>
+</div>
+
+<!-- ── Main Phone: Tab Bar Active State ── -->
+<div style="display:flex;flex-direction:column;gap:16px;align-items:center;">
+  <div style="font-size:11px;font-weight:700;color:var(--lw-text-tertiary);letter-spacing:1px;text-transform:uppercase;">Live Tab Bar — Play Active</div>
+  <div class="phone-frame">
+    <div class="dynamic-island"></div>
+    <div class="app-screen" id="mainScreen">
+      <div class="status-bar">
+        <div class="status-left">
+          <div class="conn-dot"></div>
+          <span class="status-brand">LightwaveOS</span>
+        </div>
+        <span style="font-size:11px;color:var(--lw-text-secondary);font-family:'SF Mono',monospace;">192.168.4.1</span>
+      </div>
+
+      <div class="content-placeholder">
+        <canvas id="heroNav" width="361" height="110" style="width:100%;height:110px;border-radius:24px;"></canvas>
+        <div class="placeholder-card">Effect Strip — scroll horizontally</div>
+        <div class="placeholder-card" style="height:100px;">Brightness + Speed Sliders</div>
+        <div class="placeholder-card">EdgeMixer Mode</div>
+        <div class="placeholder-card" style="height:68px;">Palette Quick-Switch</div>
+      </div>
+
+      <!-- Tab Bar -->
+      <div class="tab-bar-main">
+        <div class="tab-item active" id="tabPlay">
+          <div class="tab-icon-wrap">
+            <svg class="tab-svg" viewBox="0 0 24 24" fill="none">
+              <polygon points="5,3 19,12 5,21" fill="#FFB84D"/>
+            </svg>
+          </div>
+          <span class="tab-label-txt">Play</span>
+          <div class="tab-active-indicator"></div>
+        </div>
+        <div class="tab-item" id="tabZones">
+          <div class="tab-icon-wrap">
+            <svg class="tab-svg" viewBox="0 0 24 24" fill="none">
+              <rect x="3" y="4" width="8" height="16" rx="2" fill="#9CA3B0"/>
+              <rect x="13" y="4" width="8" height="16" rx="2" fill="#9CA3B0"/>
+            </svg>
+          </div>
+          <span class="tab-label-txt">Zones</span>
+          <div class="tab-active-indicator"></div>
+        </div>
+        <div class="tab-item" id="tabAudio">
+          <div class="tab-icon-wrap" style="position:relative;">
+            <svg class="tab-svg" viewBox="0 0 24 24" fill="none">
+              <path d="M3 12 Q6 6 9 12 Q12 18 15 12 Q18 6 21 12" stroke="#9CA3B0" stroke-width="2" fill="none" stroke-linecap="round"/>
+            </svg>
+            <div class="tab-beat-badge"></div>
+          </div>
+          <span class="tab-label-txt">Audio</span>
+          <div class="tab-active-indicator"></div>
+        </div>
+        <div class="tab-item" id="tabDevice">
+          <div class="tab-icon-wrap">
+            <svg class="tab-svg" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="3" fill="#9CA3B0"/>
+              <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" stroke="#9CA3B0" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <span class="tab-label-txt">Device</span>
+          <div class="tab-active-indicator"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Mini Phones: All Tab States ── -->
+<div style="display:flex;flex-direction:column;gap:16px;">
+  <div style="font-size:11px;font-weight:700;color:var(--lw-text-tertiary);letter-spacing:1px;text-transform:uppercase;">All Tab States</div>
+  <div class="mini-phones-row">
+    <!-- Zones active -->
+    <div style="display:flex;flex-direction:column;align-items:center;">
+      <div class="phone-mini">
+        <div class="dynamic-island-mini"></div>
+        <div class="app-screen">
+          <div class="status-bar-mini">
+            <div style="display:flex;align-items:center;gap:4px;">
+              <div class="conn-dot-sm"></div>
+              <span class="status-brand-sm">Zones</span>
+            </div>
+          </div>
+          <div style="flex:1;overflow:hidden;padding:4px 6px 56px;display:flex;flex-direction:column;gap:4px;">
+            <div style="width:100%;height:44px;background:var(--lw-card);border-radius:8px;overflow:hidden;position:relative;">
+              <canvas id="miniStrip1" width="184" height="44" style="width:100%;height:44px;"></canvas>
+            </div>
+            <div style="height:50px;background:rgba(0,255,255,0.08);border-radius:8px;border:1px solid rgba(0,255,255,0.25);display:flex;align-items:center;padding:4px 8px;">
+              <span style="font-size:7px;font-weight:700;color:#00FFFF;letter-spacing:0.5px;text-transform:uppercase;">Zone 1 — Inner</span>
+            </div>
+            <div style="height:50px;background:rgba(0,255,153,0.08);border-radius:8px;border:1px solid rgba(0,255,153,0.25);display:flex;align-items:center;padding:4px 8px;">
+              <span style="font-size:7px;font-weight:700;color:#00FF99;letter-spacing:0.5px;text-transform:uppercase;">Zone 2 — Outer</span>
+            </div>
+          </div>
+          <div style="position:absolute;bottom:0;left:0;right:0;height:42px;background:rgba(15,18,25,0.96);backdrop-filter:blur(20px);border-top:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;padding:0 4px;">
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;opacity:0.4;">
+              <span style="font-size:10px;">▶</span><span style="font-size:5px;color:var(--lw-text-tertiary);">Play</span>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;background:rgba(255,184,77,0.08);border-radius:6px;padding:3px 0;">
+              <span style="font-size:10px;color:var(--lw-gold);">◫</span><span style="font-size:5px;color:var(--lw-gold);">Zones</span>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;opacity:0.4;">
+              <span style="font-size:10px;">〜</span><span style="font-size:5px;color:var(--lw-text-tertiary);">Audio</span>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;opacity:0.4;">
+              <span style="font-size:10px;">⚙</span><span style="font-size:5px;color:var(--lw-text-tertiary);">Device</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mini-phone-label">Zones</div>
+    </div>
+
+    <!-- Audio active -->
+    <div style="display:flex;flex-direction:column;align-items:center;">
+      <div class="phone-mini">
+        <div class="dynamic-island-mini"></div>
+        <div class="app-screen">
+          <div class="status-bar-mini">
+            <div style="display:flex;align-items:center;gap:4px;">
+              <div class="conn-dot-sm"></div>
+              <span class="status-brand-sm">Audio</span>
+            </div>
+            <span style="font-size:7px;color:var(--lw-success);font-weight:600;">LIVE</span>
+          </div>
+          <div style="padding:4px 6px 0;">
+            <canvas id="miniSpectrum" width="184" height="70" style="width:100%;height:70px;border-radius:8px;"></canvas>
+          </div>
+          <div style="display:flex;gap:4px;padding:4px 6px;">
+            <div style="flex:1.5;background:var(--lw-card);border-radius:8px;padding:6px 8px;">
+              <div style="font-size:7px;color:var(--lw-text-tertiary);letter-spacing:0.6px;text-transform:uppercase;margin-bottom:2px;">BPM</div>
+              <div style="font-size:22px;font-weight:800;color:var(--lw-gold);letter-spacing:1px;line-height:1;" id="miniiBpm">124</div>
+            </div>
+            <div style="flex:1;background:var(--lw-card);border-radius:8px;padding:6px 8px;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+              <div style="width:22px;height:22px;border-radius:50%;background:radial-gradient(circle,#FFCC33 30%,rgba(255,204,51,0.3) 70%,transparent 100%);box-shadow:0 0 10px rgba(255,204,51,0.5);animation:tabBeatBadge 0.48s ease infinite;"></div>
+              <div style="font-size:6px;font-weight:700;color:var(--lw-beat, #FFCC33);margin-top:2px;text-transform:uppercase;letter-spacing:0.5px;">Beat</div>
+            </div>
+          </div>
+          <div style="flex:1;overflow:hidden;padding:0 6px 56px;display:flex;flex-direction:column;gap:4px;">
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;">
+              <div style="background:var(--lw-card);border-radius:6px;padding:5px;"><div style="font-size:6px;color:var(--lw-text-tertiary);text-transform:uppercase;letter-spacing:0.5px;">RMS</div><div style="font-size:12px;font-weight:700;color:var(--lw-gold);">0.42</div></div>
+              <div style="background:var(--lw-card);border-radius:6px;padding:5px;"><div style="font-size:6px;color:var(--lw-text-tertiary);text-transform:uppercase;letter-spacing:0.5px;">Onset</div><div style="font-size:12px;font-weight:700;color:var(--lw-cyan);">0.61</div></div>
+              <div style="background:var(--lw-card);border-radius:6px;padding:5px;"><div style="font-size:6px;color:var(--lw-text-tertiary);text-transform:uppercase;letter-spacing:0.5px;">Peak</div><div style="font-size:12px;font-weight:700;color:var(--lw-success);">0.89</div></div>
+            </div>
+          </div>
+          <div style="position:absolute;bottom:0;left:0;right:0;height:42px;background:rgba(15,18,25,0.96);backdrop-filter:blur(20px);border-top:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;padding:0 4px;">
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;opacity:0.4;"><span style="font-size:10px;">▶</span><span style="font-size:5px;color:var(--lw-text-tertiary);">Play</span></div>
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;opacity:0.4;"><span style="font-size:10px;">◫</span><span style="font-size:5px;color:var(--lw-text-tertiary);">Zones</span></div>
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;background:rgba(255,184,77,0.08);border-radius:6px;padding:3px 0;"><span style="font-size:10px;color:var(--lw-gold);">〜</span><span style="font-size:5px;color:var(--lw-gold);">Audio</span></div>
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;opacity:0.4;"><span style="font-size:10px;">⚙</span><span style="font-size:5px;color:var(--lw-text-tertiary);">Device</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="mini-phone-label">Audio</div>
+    </div>
+
+    <!-- Connection Sheet -->
+    <div style="display:flex;flex-direction:column;align-items:center;">
+      <div class="phone-mini">
+        <div class="dynamic-island-mini"></div>
+        <div class="app-screen">
+          <div style="flex:1;background:var(--lw-base);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;padding:16px;">
+            <div style="width:48px;height:48px;border-radius:50%;background:rgba(255,77,77,0.15);border:2px solid rgba(255,77,77,0.5);display:flex;align-items:center;justify-content:center;font-size:22px;">⚠</div>
+            <div style="font-size:11px;font-weight:700;color:var(--lw-error);letter-spacing:0.5px;">Disconnected</div>
+            <div style="font-size:9px;color:var(--lw-text-tertiary);text-align:center;line-height:1.4;">Connect to K1's WiFi AP<br>LightwaveOS_K1</div>
+          </div>
+          <div class="conn-sheet-bg" style="position:absolute;">
+            <div class="conn-sheet" style="padding:10px 10px 16px;">
+              <div class="conn-sheet-handle"></div>
+              <div style="font-size:11px;font-weight:700;color:var(--lw-text-primary);margin-bottom:8px;">Connect to K1</div>
+              <div class="conn-option">
+                <div class="conn-option-dot" style="background:var(--lw-success);box-shadow:0 0 4px var(--lw-success);"></div>
+                <div class="conn-option-info">
+                  <div style="font-size:10px;font-weight:600;color:var(--lw-text-primary);">LightwaveOS_K1</div>
+                  <div style="font-size:8px;color:var(--lw-text-tertiary);font-family:'SF Mono',monospace;">192.168.4.1</div>
+                </div>
+                <div class="conn-option-badge" style="background:rgba(77,255,184,0.12);color:var(--lw-success);border:1px solid rgba(77,255,184,0.3);font-size:7px;">K1 AP</div>
+              </div>
+              <div style="margin-top:8px;width:100%;height:32px;background:var(--lw-gold);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--lw-base);">Connect</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mini-phone-label">Disconnected</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Connection States + Gesture Map ── -->
+<div style="display:flex;flex-direction:column;gap:20px;width:480px;">
+
+  <!-- Connection States -->
+  <div>
+    <div class="conn-state-title">Connection States</div>
+
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div class="conn-state-card">
+        <div class="conn-state-icon" style="background:rgba(77,255,184,0.1);">🟢</div>
+        <div class="conn-state-info">
+          <div class="conn-state-label" style="color:var(--lw-success);">Connected</div>
+          <div class="conn-state-desc">K1 reachable at 192.168.4.1. LED data streaming. Status dot green in status bar.</div>
+        </div>
+        <div class="conn-state-badge" style="background:rgba(77,255,184,0.1);color:var(--lw-success);border:1px solid rgba(77,255,184,0.3);">LIVE</div>
+      </div>
+
+      <div class="conn-state-card">
+        <div class="conn-state-icon" style="background:rgba(255,184,77,0.1);">🟡</div>
+        <div class="conn-state-info">
+          <div class="conn-state-label" style="color:var(--lw-gold);">Reconnecting</div>
+          <div class="conn-state-desc">WebSocket dropped. Auto-retry with exponential backoff. Pulsing amber dot in status bar.</div>
+        </div>
+        <div class="conn-state-badge" style="background:rgba(255,184,77,0.1);color:var(--lw-gold);border:1px solid rgba(255,184,77,0.3);">RETRY</div>
+      </div>
+
+      <div class="conn-state-card">
+        <div class="conn-state-icon" style="background:rgba(255,77,77,0.1);">🔴</div>
+        <div class="conn-state-info">
+          <div class="conn-state-label" style="color:var(--lw-error);">Disconnected</div>
+          <div class="conn-state-desc">K1 not reachable. Connection sheet auto-presents. Red dot. Play/Zones controls disabled.</div>
+        </div>
+        <div class="conn-state-badge" style="background:rgba(255,77,77,0.1);color:var(--lw-error);border:1px solid rgba(255,77,77,0.3);">OFFLINE</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Gesture Map -->
+  <div>
+    <div class="conn-state-title">Gesture Map</div>
+    <div class="gesture-map">
+      <div class="gesture-map-title">All Supported Gestures</div>
+
+      <div class="gesture-row">
+        <div class="gesture-icon">👈</div>
+        <div class="gesture-info">
+          <div class="gesture-name">Swipe Left on Hero Preview</div>
+          <div class="gesture-where">Play Tab — LED preview canvas</div>
+        </div>
+        <div class="gesture-result">Next effect</div>
+      </div>
+      <div class="gesture-row">
+        <div class="gesture-icon">👉</div>
+        <div class="gesture-info">
+          <div class="gesture-name">Swipe Right on Hero Preview</div>
+          <div class="gesture-where">Play Tab — LED preview canvas</div>
+        </div>
+        <div class="gesture-result">Previous effect</div>
+      </div>
+      <div class="gesture-row">
+        <div class="gesture-icon">⬅</div>
+        <div class="gesture-info">
+          <div class="gesture-name">Swipe Left (screen edge)</div>
+          <div class="gesture-where">Any tab — full-screen swipe</div>
+        </div>
+        <div class="gesture-result">Next tab</div>
+      </div>
+      <div class="gesture-row">
+        <div class="gesture-icon">➡</div>
+        <div class="gesture-info">
+          <div class="gesture-name">Swipe Right (screen edge)</div>
+          <div class="gesture-where">Any tab — full-screen swipe</div>
+        </div>
+        <div class="gesture-result">Previous tab</div>
+      </div>
+      <div class="gesture-row">
+        <div class="gesture-icon">👆</div>
+        <div class="gesture-info">
+          <div class="gesture-name">Long Press on Effect Chip</div>
+          <div class="gesture-where">Play Tab — effect strip</div>
+        </div>
+        <div class="gesture-result">Context menu (Info, Favourite)</div>
+      </div>
+      <div class="gesture-row">
+        <div class="gesture-icon">✌</div>
+        <div class="gesture-info">
+          <div class="gesture-name">Long Press on Palette Swatch</div>
+          <div class="gesture-where">Play Tab — palette strip</div>
+        </div>
+        <div class="gesture-result">Palette name tooltip</div>
+      </div>
+      <div class="gesture-row">
+        <div class="gesture-icon">↕</div>
+        <div class="gesture-info">
+          <div class="gesture-name">Drag Boundary Handle</div>
+          <div class="gesture-where">Zones Tab — strip diagram</div>
+        </div>
+        <div class="gesture-result">Adjust zone boundary</div>
+      </div>
+      <div class="gesture-row">
+        <div class="gesture-icon">⬇</div>
+        <div class="gesture-info">
+          <div class="gesture-name">Pull Down (overscroll)</div>
+          <div class="gesture-where">Any tab (top of scroll)</div>
+        </div>
+        <div class="gesture-result">Refresh from K1</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Notes Column ── -->
+<div class="notes-col">
+  <div style="font-size:20px;font-weight:700;color:var(--lw-gold);margin-bottom:20px;">Navigation Notes</div>
+
+  <div class="note-section">
+    <h3>Tab Bar Design Principles</h3>
+    <div class="note-item">
+      <div class="note-bullet"></div>
+      <div class="note-text"><strong>44pt icon wrap + 28pt icon</strong> — meets WCAG 2.5.5. The icon-wrap background provides visual feedback on tap without requiring precise pixel targeting.</div>
+    </div>
+    <div class="note-item">
+      <div class="note-bullet"></div>
+      <div class="note-text"><strong>Bottom indicator pill</strong> — 20×3pt gold pill below active tab. Subtle, not competing with content. Uses the same lwGold as all primary accents.</div>
+    </div>
+    <div class="note-item">
+      <div class="note-bullet"></div>
+      <div class="note-text"><strong>Audio tab beat badge</strong> — pulsing 7pt dot on the Audio tab icon when audio is actively detecting beats. Visible at a glance without needing to switch to Audio tab.</div>
+    </div>
+    <div class="note-item">
+      <div class="note-bullet"></div>
+      <div class="note-text"><strong>82pt tab bar height</strong> — respects safe area. 10pt top padding before icons so thumb lands comfortably. Bottom gap for home indicator.</div>
+    </div>
+  </div>
+
+  <div class="note-section">
+    <h3>Persistent Status Bar</h3>
+    <div class="note-item">
+      <div class="note-bullet"></div>
+      <div class="note-text">Connection dot (7pt) + brand name always top-left. Users can always identify the connected device without navigating to Device tab.</div>
+    </div>
+    <div class="note-item">
+      <div class="note-bullet"></div>
+      <div class="note-text">IP address top-right in JetBrains Mono. When disconnected, replaced by "OFFLINE" in red.</div>
+    </div>
+    <div class="note-item">
+      <div class="note-bullet"></div>
+      <div class="note-text">Status bar content is <strong>tab-contextual</strong>: Play shows "LightwaveOS", Audio shows "ESV11 • LIVE", Zones shows zone count, Device shows firmware version.</div>
+    </div>
+  </div>
+
+  <div class="note-section">
+    <h3>Connection Sheet</h3>
+    <div class="note-item">
+      <div class="note-bullet"></div>
+      <div class="note-text"><strong>Auto-presents on first launch</strong> or when connection drops for >3 seconds. Drag-to-dismiss when reconnected.</div>
+    </div>
+    <div class="note-item">
+      <div class="note-bullet"></div>
+      <div class="note-text">K1 AP (LightwaveOS_K1 at 192.168.4.1) listed prominently. One-tap connect. No SSID/password entry — K1 is open network by design.</div>
+    </div>
+    <div class="note-item">
+      <div class="note-bullet"></div>
+      <div class="note-text">Sheet is <strong>non-blocking</strong> — user can still see app content behind it. Controls are disabled with visual overlay but content is visible.</div>
+    </div>
+  </div>
+
+  <div class="note-section">
+    <h3>Tab Transition Animation</h3>
+    <div class="note-item">
+      <div class="note-bullet"></div>
+      <div class="note-text"><strong>Horizontal slide</strong> between tabs — slide direction matches visual order (left→right = Play→Zones→Audio→Device). Consistent with iOS navigation metaphor.</div>
+    </div>
+    <div class="note-item">
+      <div class="note-bullet"></div>
+      <div class="note-text">Spring: damping 0.85, stiffness 300, mass 0.8. Fast, snappy, not floaty. Duration ~200ms.</div>
+    </div>
+    <div class="note-item">
+      <div class="note-bullet"></div>
+      <div class="note-text">Tab bar icons animate: previous icon <strong>scale(1.0 → 0.85)</strong>, next icon <strong>scale(0.85 → 1.0)</strong>. Reinforces directional slide.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* Hero canvas */
+const heroNav = document.getElementById('heroNav');
+heroNav.width = heroNav.parentElement ? heroNav.parentElement.offsetWidth : 361;
+heroNav.height = 110;
+const hnc = heroNav.getContext('2d');
+let nt = 0;
+
+function drawHeroNav() {
+  const w = heroNav.width, h = 110;
+  hnc.clearRect(0,0,w,h);
+  hnc.fillStyle = '#1E2535';
+  hnc.fillRect(0,0,w,h);
+  const ledW = w / 160;
+  const rowH = h / 2;
+  for (let row = 0; row < 2; row++) {
+    for (let i = 0; i < 160; i++) {
+      const dist = Math.abs(i - 79.5) / 80;
+      const brightness = (0.5 + 0.5 * Math.sin(nt * 2.4 + dist * 3.2 + row)) * (1 - dist * 0.4);
+      const hue = (nt * 40 + dist * 180 + row * 30) % 360;
+      hnc.fillStyle = `hsla(${hue},90%,${Math.max(8, brightness * 65)}%,1)`;
+      hnc.fillRect(i * ledW, row * rowH, ledW + 0.5, rowH);
+    }
+  }
+  nt += 0.018;
+}
+
+/* Mini strip 1 */
+const ms1 = document.getElementById('miniStrip1');
+ms1.width = ms1.parentElement ? ms1.parentElement.offsetWidth : 184;
+ms1.height = 44;
+const msc1 = ms1.getContext('2d');
+let mt1 = 0;
+
+function drawMiniStrip1() {
+  const w = ms1.width, h = 44;
+  msc1.clearRect(0,0,w,h);
+  const lw = w / 80;
+  for (let i = 0; i < 80; i++) {
+    const dist = Math.abs(i - 39.5) / 40;
+    const isInner = dist < 0.5;
+    const col = isInner ? '#00FFFF' : '#00FF99';
+    const brightness = 0.4 + 0.6 * Math.sin(mt1 * 1.8 + dist * 2);
+    msc1.globalAlpha = brightness;
+    msc1.fillStyle = col;
+    msc1.fillRect(i * lw, 0, lw + 0.5, h);
+  }
+  msc1.globalAlpha = 1;
+  mt1 += 0.02;
+}
+
+/* Mini spectrum */
+const mspc = document.getElementById('miniSpectrum');
+mspc.width = mspc.parentElement ? mspc.parentElement.offsetWidth : 184;
+mspc.height = 70;
+const msctx = mspc.getContext('2d');
+let mst = 0;
+
+function drawMiniSpectrum() {
+  const w = mspc.width, h = 70;
+  msctx.clearRect(0,0,w,h);
+  msctx.fillStyle = '#0d1520';
+  msctx.fillRect(0,0,w,h);
+  const bins = 32;
+  const bw = w / bins;
+  for (let i = 0; i < bins; i++) {
+    const centre = bins * 0.3;
+    const dist = Math.abs(i - centre) / (bins * 0.5);
+    const v = Math.max(0, 1 - dist * 1.5) * (0.5 + 0.5 * Math.sin(mst * 3 + i * 0.5));
+    const hue = 30 + (1 - i/bins) * 180;
+    msctx.fillStyle = `hsl(${hue}, 80%, ${30 + v * 40}%)`;
+    msctx.fillRect(i * bw + 0.5, h - v * h * 0.9, bw - 1, v * h * 0.9);
+  }
+  mst += 0.025;
+}
+
+/* Tab interaction */
+let activeTab = 'tabPlay';
+['tabPlay','tabZones','tabAudio','tabDevice'].forEach(id => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('click', () => {
+    document.getElementById(activeTab).classList.remove('active');
+    el.classList.add('active');
+    activeTab = id;
+  });
+});
+
+function mainLoop() {
+  drawHeroNav();
+  drawMiniStrip1();
+  drawMiniSpectrum();
+  requestAnimationFrame(mainLoop);
+}
+mainLoop();
+</script>
+</body>
+</html>

@@ -1,0 +1,1230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LightwaveOS — Play Tab Redesign</title>
+<style>
+  /* ─── Design Tokens (from DesignTokens.swift) ─── */
+  :root {
+    --lw-base:         #0F1219;
+    --lw-card:         #1E2535;
+    --lw-elevated:     #252D3F;
+    --lw-gold:         #FFB84D;
+    --lw-beat-accent:  #FFCC33;
+    --lw-cyan:         #00D4FF;
+    --lw-success:      #4DFFB8;
+    --lw-error:        #FF4D4D;
+    --lw-text-primary:   #E6E9EF;
+    --lw-text-secondary: #9CA3B0;
+    --lw-text-tertiary:  #6B7280;
+    --lw-zone0: #00FFFF;
+    --lw-zone1: #00FF99;
+    --lw-zone2: #9900FF;
+    --lw-zone3: #FF6600;
+
+    --radius-hero:   24px;
+    --radius-card:   16px;
+    --radius-nested: 12px;
+    --sp-xs: 4px;
+    --sp-sm: 8px;
+    --sp-md: 12px;
+    --sp-lg: 24px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #1a1a2e;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+    padding: 40px 20px;
+    font-family: -apple-system, 'SF Pro Display', sans-serif;
+  }
+
+  /* ─── Phone Frame ─── */
+  .phone-frame {
+    width: 393px;
+    height: 852px;
+    background: #000;
+    border-radius: 50px;
+    border: 2px solid #333;
+    box-shadow:
+      0 0 0 8px #1a1a1a,
+      0 0 0 10px #333,
+      0 30px 80px rgba(0,0,0,0.8);
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  /* Dynamic Island */
+  .dynamic-island {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 120px;
+    height: 34px;
+    background: #000;
+    border-radius: 20px;
+    z-index: 100;
+  }
+
+  /* ─── App Screen ─── */
+  .app-screen {
+    width: 100%;
+    height: 100%;
+    background: var(--lw-base);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ─── Status Bar ─── */
+  .status-bar {
+    height: 59px;
+    padding: 16px 24px 0;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .status-bar-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .conn-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--lw-success);
+    box-shadow: 0 0 6px var(--lw-success);
+  }
+
+  .status-brand {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: var(--lw-text-primary);
+    text-transform: uppercase;
+  }
+
+  .status-ip {
+    font-size: 11px;
+    color: var(--lw-text-tertiary);
+    font-variant-numeric: tabular-nums;
+    font-family: 'SF Mono', monospace;
+  }
+
+  /* ─── Scrollable Content ─── */
+  .scroll-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 16px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-lg);
+    scrollbar-width: none;
+  }
+  .scroll-content::-webkit-scrollbar { display: none; }
+
+  /* ─── Hero LED Preview ─── */
+  .hero-led {
+    height: 110px;
+    border-radius: var(--radius-hero);
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+    box-shadow: 0 0 40px rgba(255,184,77,0.12), 0 4px 20px rgba(0,0,0,0.5);
+  }
+
+  .hero-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  .hero-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding: 12px 14px;
+    background: linear-gradient(to top, rgba(15,18,25,0.55) 0%, transparent 60%);
+  }
+
+  .hero-effect-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--lw-text-primary);
+    text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+    letter-spacing: 0.3px;
+  }
+
+  .hero-audio-badge {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(255,184,77,0.15);
+    border: 1px solid rgba(255,184,77,0.3);
+    border-radius: 20px;
+    padding: 4px 10px;
+    backdrop-filter: blur(8px);
+  }
+
+  .hero-audio-badge span {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--lw-gold);
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+  }
+
+  /* ─── BPM Ring ─── */
+  .bpm-ring-container {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 70px;
+    height: 70px;
+  }
+
+  .bpm-ring-svg {
+    width: 70px;
+    height: 70px;
+    transform: rotate(-90deg);
+  }
+
+  .bpm-ring-track { fill: none; stroke: rgba(37,45,63,0.7); stroke-width: 3; }
+  .bpm-ring-fill  { fill: none; stroke: var(--lw-gold); stroke-width: 3; stroke-linecap: round;
+                    stroke-dasharray: 163; stroke-dashoffset: 41; /* 75% confidence */
+                    filter: drop-shadow(0 0 4px rgba(255,184,77,0.6)); }
+
+  .bpm-text {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+  }
+
+  .bpm-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--lw-gold);
+    line-height: 1;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+    letter-spacing: 1px;
+  }
+
+  .bpm-label {
+    font-size: 8px;
+    font-weight: 600;
+    color: var(--lw-text-secondary);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+  }
+
+  /* Swipe hint */
+  .swipe-hint {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    opacity: 0.35;
+  }
+
+  .swipe-arrow {
+    font-size: 9px;
+    color: var(--lw-text-secondary);
+    letter-spacing: 1px;
+  }
+
+  /* ─── Section Label ─── */
+  .section-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    color: var(--lw-text-tertiary);
+    text-transform: uppercase;
+    margin-bottom: -16px;
+  }
+
+  /* ─── Effect Selector Strip ─── */
+  .effect-strip-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .effect-strip {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+  .effect-strip::-webkit-scrollbar { display: none; }
+
+  .effect-chip {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    padding: 10px 14px;
+    background: var(--lw-card);
+    border-radius: 14px;
+    border: 1.5px solid transparent;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    min-width: 80px;
+    position: relative;
+  }
+
+  .effect-chip.active {
+    background: linear-gradient(135deg, rgba(255,184,77,0.18), rgba(255,184,77,0.06));
+    border-color: var(--lw-gold);
+    box-shadow: 0 0 16px rgba(255,184,77,0.25), 0 2px 8px rgba(0,0,0,0.4);
+  }
+
+  .effect-chip:hover {
+    border-color: rgba(255,184,77,0.3);
+  }
+
+  .effect-chip-preview {
+    width: 52px;
+    height: 24px;
+    border-radius: 6px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .effect-chip-name {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--lw-text-secondary);
+    text-align: center;
+    line-height: 1.2;
+    max-width: 72px;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .effect-chip.active .effect-chip-name {
+    color: var(--lw-text-primary);
+  }
+
+  .effect-chip-audio-dot {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--lw-gold);
+  }
+
+  .browse-btn {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 10px 14px;
+    background: var(--lw-elevated);
+    border-radius: 14px;
+    border: 1.5px dashed rgba(255,184,77,0.25);
+    cursor: pointer;
+    min-width: 60px;
+    min-height: 68px;
+  }
+
+  .browse-btn span {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    color: var(--lw-gold);
+    text-transform: uppercase;
+    text-align: center;
+  }
+
+  /* ─── Card ─── */
+  .card {
+    background: linear-gradient(180deg, var(--lw-card) 0%, #1A2030 100%);
+    border-radius: var(--radius-card);
+    padding: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+    border: 1px solid rgba(255,255,255,0.04);
+  }
+
+  /* ─── Sliders ─── */
+  .slider-group {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .slider-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .slider-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+
+  .slider-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--lw-text-secondary);
+    text-transform: uppercase;
+  }
+
+  .slider-value {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--lw-gold);
+    font-family: 'SF Mono', monospace;
+    letter-spacing: 0.3px;
+  }
+
+  .slider-track {
+    height: 28px;
+    border-radius: 14px;
+    position: relative;
+    cursor: pointer;
+    overflow: hidden;
+    background: var(--lw-elevated);
+  }
+
+  .slider-fill-brightness {
+    height: 100%;
+    width: 75%;
+    background: linear-gradient(to right, rgba(255,184,77,0.4), var(--lw-gold));
+    border-radius: 14px;
+    transition: width 0.1s;
+  }
+
+  .slider-fill-speed {
+    height: 100%;
+    width: 42%;
+    background: linear-gradient(to right, rgba(0,212,255,0.6), var(--lw-gold));
+    border-radius: 14px;
+    transition: width 0.1s;
+  }
+
+  .slider-thumb {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--lw-gold);
+    border: 2px solid var(--lw-base);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,184,77,0.3);
+    left: calc(75% - 12px);
+    cursor: grab;
+  }
+
+  .slider-thumb-speed {
+    left: calc(42% - 12px);
+  }
+
+  /* Haptic annotation */
+  .haptic-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    background: rgba(255,184,77,0.08);
+    border: 1px solid rgba(255,184,77,0.2);
+    border-radius: 6px;
+    padding: 2px 6px;
+    font-size: 8px;
+    font-weight: 600;
+    color: var(--lw-gold);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    opacity: 0.75;
+  }
+
+  /* ─── EdgeMixer Mode Selector ─── */
+  .edgemixer-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-sm);
+  }
+
+  .edgemixer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .edgemixer-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--lw-text-secondary);
+    text-transform: uppercase;
+  }
+
+  .edgemixer-active {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--lw-gold);
+    letter-spacing: 0.4px;
+  }
+
+  .edgemixer-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+  }
+
+  .edgemixer-mode {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 4px;
+    border-radius: 10px;
+    background: var(--lw-elevated);
+    border: 1.5px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    min-height: 52px;
+    justify-content: center;
+  }
+
+  .edgemixer-mode.active {
+    background: rgba(255,184,77,0.12);
+    border-color: rgba(255,184,77,0.55);
+    box-shadow: 0 0 10px rgba(255,184,77,0.18);
+  }
+
+  .edgemixer-icon {
+    width: 22px;
+    height: 14px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  .edgemixer-mode-name {
+    font-size: 8px;
+    font-weight: 700;
+    color: var(--lw-text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    text-align: center;
+    line-height: 1.2;
+  }
+
+  .edgemixer-mode.active .edgemixer-mode-name {
+    color: var(--lw-gold);
+  }
+
+  /* ─── Palette Quick Switch ─── */
+  .palette-strip-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-bottom: 8px;
+  }
+
+  .palette-strip {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 4px;
+  }
+  .palette-strip::-webkit-scrollbar { display: none; }
+
+  .palette-swatch {
+    flex-shrink: 0;
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.18s ease;
+    overflow: hidden;
+  }
+
+  .palette-swatch.active {
+    border-color: var(--lw-gold);
+    box-shadow: 0 0 14px rgba(255,184,77,0.35);
+  }
+
+  .palette-swatch-label {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(4px);
+    padding: 3px 4px;
+    text-align: center;
+    font-size: 7px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.85);
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+  }
+
+  /* ─── Tab Bar ─── */
+  .tab-bar {
+    height: 82px;
+    background: rgba(15,18,25,0.96);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    align-items: flex-start;
+    padding-top: 10px;
+    flex-shrink: 0;
+  }
+
+  .tab-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    padding: 4px 0;
+  }
+
+  .tab-icon {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    opacity: 0.4;
+  }
+
+  .tab-item.active .tab-icon { opacity: 1; color: var(--lw-gold); }
+
+  .tab-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--lw-text-tertiary);
+    letter-spacing: 0.3px;
+  }
+
+  .tab-item.active .tab-label { color: var(--lw-gold); }
+
+  .tab-item.active .tab-icon-pill {
+    position: relative;
+  }
+
+  .tab-item.active .tab-icon-pill::after {
+    content: '';
+    position: absolute;
+    bottom: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--lw-gold);
+  }
+
+  /* ─── Annotation Callouts ─── */
+  .annotation-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 50;
+  }
+
+  /* ─── Design Notes Panel ─── */
+  .design-notes {
+    width: 340px;
+    margin-left: 40px;
+    flex-shrink: 0;
+    color: var(--lw-text-primary);
+  }
+
+  .design-notes h2 {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--lw-gold);
+    margin-bottom: 20px;
+    letter-spacing: 0.5px;
+  }
+
+  .note-section {
+    margin-bottom: 24px;
+  }
+
+  .note-section h3 {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    color: var(--lw-text-tertiary);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .note-item {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+    align-items: flex-start;
+  }
+
+  .note-bullet {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--lw-gold);
+    margin-top: 5px;
+    flex-shrink: 0;
+  }
+
+  .note-text {
+    font-size: 13px;
+    color: var(--lw-text-secondary);
+    line-height: 1.5;
+  }
+
+  .note-text strong { color: var(--lw-text-primary); }
+
+  .haptic-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .haptic-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--lw-text-secondary);
+  }
+
+  .haptic-type {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    min-width: 58px;
+    text-align: center;
+  }
+
+  .haptic-type.light   { background: rgba(255,184,77,0.12); color: var(--lw-gold); }
+  .haptic-type.medium  { background: rgba(0,212,255,0.12);  color: var(--lw-cyan); }
+  .haptic-type.heavy   { background: rgba(255,77,77,0.12);  color: var(--lw-error); }
+  .haptic-type.success { background: rgba(77,255,184,0.12); color: var(--lw-success); }
+
+  /* outer layout */
+  .layout-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 0;
+  }
+</style>
+</head>
+<body>
+
+<div class="layout-row">
+
+  <!-- ── Phone Frame ── -->
+  <div class="phone-frame">
+    <div class="dynamic-island"></div>
+
+    <div class="app-screen">
+
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <div class="status-bar-left">
+          <div class="conn-dot"></div>
+          <span class="status-brand">LightwaveOS</span>
+        </div>
+        <span class="status-ip">192.168.4.1</span>
+      </div>
+
+      <!-- Scrollable Content -->
+      <div class="scroll-content" id="scrollContent">
+
+        <!-- Hero LED Preview -->
+        <div class="hero-led">
+          <canvas class="hero-canvas" id="ledCanvas" width="361" height="110"></canvas>
+          <div class="hero-overlay">
+            <div>
+              <div class="hero-effect-name">Beat Pulse Cascade</div>
+            </div>
+            <div class="hero-audio-badge">
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                <rect x="0" y="3" width="2" height="4" rx="1" fill="#FFB84D"/>
+                <rect x="2.5" y="1.5" width="2" height="7" rx="1" fill="#FFB84D"/>
+                <rect x="5" y="0" width="2" height="10" rx="1" fill="#FFB84D"/>
+                <rect x="7.5" y="2" width="2" height="6" rx="1" fill="#FFB84D"/>
+              </svg>
+              <span>Audio</span>
+            </div>
+          </div>
+
+          <!-- BPM Ring -->
+          <div class="bpm-ring-container">
+            <svg class="bpm-ring-svg" viewBox="0 0 70 70">
+              <circle class="bpm-ring-track" cx="35" cy="35" r="26"/>
+              <circle class="bpm-ring-fill" cx="35" cy="35" r="26"/>
+            </svg>
+            <div class="bpm-text">
+              <span class="bpm-value">124</span>
+              <span class="bpm-label">BPM</span>
+            </div>
+          </div>
+
+          <!-- Swipe hint -->
+          <div class="swipe-hint">
+            <span class="swipe-arrow">← swipe to change →</span>
+          </div>
+        </div>
+
+        <!-- Effect Strip -->
+        <div class="effect-strip-wrapper">
+          <div class="section-label">Effect</div>
+          <div class="effect-strip" id="effectStrip">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <!-- Primary Controls Card -->
+        <div class="card">
+          <div class="slider-group">
+
+            <!-- Brightness -->
+            <div class="slider-row">
+              <div class="slider-header">
+                <span class="slider-label">Brightness</span>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span class="haptic-badge">Haptic on 0/Max</span>
+                  <span class="slider-value" id="brightnessVal">191</span>
+                </div>
+              </div>
+              <div class="slider-track" id="brightnessTrack">
+                <div class="slider-fill-brightness" id="brightnessFill"></div>
+                <div class="slider-thumb" id="brightnessThumb"></div>
+              </div>
+            </div>
+
+            <!-- Speed -->
+            <div class="slider-row">
+              <div class="slider-header">
+                <span class="slider-label">Speed</span>
+                <span class="slider-value" id="speedVal">42</span>
+              </div>
+              <div class="slider-track" id="speedTrack">
+                <div class="slider-fill-speed" id="speedFill"></div>
+                <div class="slider-thumb slider-thumb-speed" id="speedThumb"></div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- EdgeMixer Mode -->
+        <div class="card edgemixer-wrapper">
+          <div class="edgemixer-header">
+            <span class="edgemixer-title">EdgeMixer Mode</span>
+            <span class="edgemixer-active" id="activeModeName">Complementary</span>
+          </div>
+          <div class="edgemixer-grid" id="edgemixerGrid">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <!-- Palette Quick Switch -->
+        <div class="palette-strip-wrapper">
+          <div class="section-label">Palette</div>
+          <div class="palette-strip" id="paletteStrip">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+      </div><!-- /scroll-content -->
+
+      <!-- Tab Bar -->
+      <div class="tab-bar">
+        <div class="tab-item active">
+          <div class="tab-icon tab-icon-pill">▶</div>
+          <span class="tab-label">Play</span>
+        </div>
+        <div class="tab-item">
+          <div class="tab-icon">◫</div>
+          <span class="tab-label">Zones</span>
+        </div>
+        <div class="tab-item">
+          <div class="tab-icon">〜</div>
+          <span class="tab-label">Audio</span>
+        </div>
+        <div class="tab-item">
+          <div class="tab-icon">⚙</div>
+          <span class="tab-label">Device</span>
+        </div>
+      </div>
+
+    </div><!-- /app-screen -->
+  </div><!-- /phone-frame -->
+
+  <!-- ── Design Notes ── -->
+  <div class="design-notes">
+    <h2>Play Tab — Redesign Notes</h2>
+
+    <div class="note-section">
+      <h3>One-Handed Thumb Zone</h3>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text"><strong>Hero LED preview (110pt)</strong> — compact, top of screen. Informational, not interactive. Beat pulse animation on every beat trigger.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text"><strong>Effect strip</strong> — horizontally scrollable chips at 80pt wide × 68pt tall. Swipe gesture on hero also cycles effects. All chips within thumb reach at ~320pt from top.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text"><strong>28pt tall sliders</strong> — generous target height. Touch anywhere on track adjusts value. Thumb indicator adds visual feedback without occupying more space.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text"><strong>EdgeMixer grid</strong> — 4-column grid, each cell 52pt min-height. 7 modes visible without scroll on standard screen.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text"><strong>Palette swatches</strong> — 56×56pt each. Bottom of scroll area, thumb-reachable. Gradient preview baked into swatch.</div>
+      </div>
+    </div>
+
+    <div class="note-section">
+      <h3>Motion Design Intent</h3>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">Hero LED: <strong>scale(1.0 → 1.02)</strong> spring animation on beat, 150ms out / 200ms return.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">BPM ring: <strong>stroke-dashoffset animates</strong> smoothly as confidence changes. Ring pulses scale(1.03) on beat.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">Effect chip selection: <strong>border colour fade + glow shadow</strong> 180ms ease. Active chip scrolls into centre of strip.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">EdgeMixer mode tap: <strong>background opacity flash</strong> (opacity 0.12 → 0.25 → 0.12) 200ms, communicates selection.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">Slider drag: <strong>thumb glow shadow expands</strong> on touch-down (box-shadow 0 → 0 0 12px gold 0.6).</div>
+      </div>
+    </div>
+
+    <div class="note-section">
+      <h3>Haptic Feedback Points</h3>
+      <div class="haptic-legend">
+        <div class="haptic-item">
+          <span class="haptic-type light">Light</span>
+          Effect chip tap, palette swatch tap
+        </div>
+        <div class="haptic-item">
+          <span class="haptic-type medium">Medium</span>
+          EdgeMixer mode change, slider endpoint (0 or max)
+        </div>
+        <div class="haptic-item">
+          <span class="haptic-type heavy">Heavy</span>
+          Swipe-to-change-effect gesture commit
+        </div>
+        <div class="haptic-item">
+          <span class="haptic-type success">Success</span>
+          Beat pulse every N beats (configurable, default: every beat)
+        </div>
+      </div>
+    </div>
+
+    <div class="note-section">
+      <h3>10-Second First-Use Flow</h3>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">0s: App opens, connected, LED preview visible immediately.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">2s: User taps an effect chip — instant change, no modal required.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">5s: User drags brightness slider — large target, obvious affordance.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">8s: User swipes a palette swatch — colour change reflected in hero preview.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">10s: User is in full control without ever opening a modal.</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /layout-row -->
+
+<script>
+/* ── LED Canvas Animation ── */
+const canvas = document.getElementById('ledCanvas');
+const ctx = canvas.getContext('2d');
+let t = 0;
+let beatPhase = 0;
+
+function drawLEDs() {
+  canvas.width = canvas.offsetWidth;
+  canvas.height = canvas.offsetHeight;
+  const w = canvas.width;
+  const h = canvas.height;
+  const ledW = w / 160;
+  const rowH = h / 2;
+
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = '#1E2535';
+  ctx.fillRect(0, 0, w, h);
+
+  for (let row = 0; row < 2; row++) {
+    for (let i = 0; i < 160; i++) {
+      // Centre-origin: LED 79/80 is brightest
+      const centre = 79.5;
+      const distFromCentre = Math.abs(i - centre) / 80;
+      const phase = (t * 2.4 + distFromCentre * 3.2 + row * 1.1);
+      const beatBoost = Math.exp(-beatPhase * 3) * 0.5;
+      const brightness = (0.5 + 0.5 * Math.sin(phase)) * (1 - distFromCentre * 0.4) + beatBoost;
+      const hue = ((t * 40 + distFromCentre * 180 + row * 30) % 360);
+
+      ctx.fillStyle = `hsla(${hue}, 90%, ${Math.max(8, brightness * 65)}%, 1)`;
+      ctx.fillRect(i * ledW, row * rowH, ledW + 0.5, rowH);
+    }
+  }
+
+  t += 0.018;
+  beatPhase = Math.max(0, beatPhase - 0.04);
+  requestAnimationFrame(drawLEDs);
+}
+drawLEDs();
+
+// Simulate beat pulses
+setInterval(() => {
+  beatPhase = 1;
+  const hero = document.querySelector('.hero-led');
+  hero.style.transition = 'transform 0.15s cubic-bezier(0.34,1.56,0.64,1)';
+  hero.style.transform = 'scale(1.018)';
+  setTimeout(() => { hero.style.transform = 'scale(1)'; }, 180);
+}, 480);
+
+/* ── Effect Strip ── */
+const effects = [
+  { name: 'Beat Pulse Cascade', audio: true,  colours: ['#FF6B35','#FFB84D','#FF4444'] },
+  { name: 'LGP Holographic',    audio: true,  colours: ['#00FFFF','#0080FF','#8000FF'] },
+  { name: 'Ripple Enhanced',    audio: false, colours: ['#4DFFB8','#00D4FF','#0080FF'] },
+  { name: 'Starfield',          audio: false, colours: ['#9900FF','#6633FF','#0044FF'] },
+  { name: 'Embers',             audio: true,  colours: ['#FF4500','#FF8C00','#FFB84D'] },
+  { name: 'Spectrum Vis',       audio: true,  colours: ['#FF0080','#8000FF','#00D4FF'] },
+  { name: 'Ocean Waves',        audio: false, colours: ['#006994','#00D4FF','#7FFFD4'] },
+  { name: 'Neural Mesh',        audio: true,  colours: ['#39FF14','#00FF80','#00FFFF'] },
+];
+let activeEffect = 0;
+
+const strip = document.getElementById('effectStrip');
+function renderEffectStrip() {
+  strip.innerHTML = '';
+  effects.forEach((e, i) => {
+    const chip = document.createElement('div');
+    chip.className = 'effect-chip' + (i === activeEffect ? ' active' : '');
+
+    // Mini LED preview
+    const preview = document.createElement('canvas');
+    preview.width = 52; preview.height = 24;
+    preview.className = 'effect-chip-preview';
+    const pc = preview.getContext('2d');
+    const grad = pc.createLinearGradient(0,0,52,0);
+    e.colours.forEach((c, ci) => grad.addColorStop(ci / (e.colours.length-1), c));
+    pc.fillStyle = grad;
+    pc.fillRect(0, 0, 52, 24);
+    chip.appendChild(preview);
+
+    const name = document.createElement('div');
+    name.className = 'effect-chip-name';
+    name.textContent = e.name;
+    chip.appendChild(name);
+
+    if (e.audio) {
+      const dot = document.createElement('div');
+      dot.className = 'effect-chip-audio-dot';
+      chip.appendChild(dot);
+    }
+
+    chip.addEventListener('click', () => { activeEffect = i; renderEffectStrip(); });
+    strip.appendChild(chip);
+  });
+
+  // Browse all button
+  const btn = document.createElement('div');
+  btn.className = 'browse-btn';
+  btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="8" cy="8" r="5" stroke="#FFB84D" stroke-width="1.5"/><path d="M13 13l4 4" stroke="#FFB84D" stroke-width="1.5" stroke-linecap="round"/></svg><span>All<br>Effects</span>';
+  strip.appendChild(btn);
+
+  // Scroll active into view
+  const activeChip = strip.children[activeEffect];
+  if (activeChip) activeChip.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+}
+renderEffectStrip();
+
+/* ── Sliders ── */
+function makeSliderInteractive(trackId, fillId, thumbId, valId, min, max, init, unit='') {
+  const track = document.getElementById(trackId);
+  const fill  = document.getElementById(fillId);
+  const thumb = document.getElementById(thumbId);
+  const val   = document.getElementById(valId);
+  let value = init;
+  let dragging = false;
+
+  function update(x) {
+    const rect = track.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (x - rect.left) / rect.width));
+    value = Math.round(min + pct * (max - min));
+    const fillPct = (value - min) / (max - min) * 100;
+    fill.style.width = fillPct + '%';
+    thumb.style.left = `calc(${fillPct}% - 12px)`;
+    val.textContent = value + unit;
+  }
+
+  track.addEventListener('mousedown', (e) => { dragging = true; update(e.clientX); thumb.style.boxShadow = '0 2px 8px rgba(0,0,0,0.5), 0 0 12px rgba(255,184,77,0.6)'; });
+  track.addEventListener('touchstart', (e) => { dragging = true; update(e.touches[0].clientX); }, {passive:true});
+  document.addEventListener('mousemove', (e) => { if (dragging) update(e.clientX); });
+  document.addEventListener('touchmove', (e) => { if (dragging) update(e.touches[0].clientX); }, {passive:true});
+  document.addEventListener('mouseup', () => { dragging = false; thumb.style.boxShadow = '0 2px 8px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,184,77,0.3)'; });
+  document.addEventListener('touchend', () => { dragging = false; });
+}
+makeSliderInteractive('brightnessTrack','brightnessFill','brightnessThumb','brightnessVal', 0, 255, 191);
+makeSliderInteractive('speedTrack','speedFill','speedThumb','speedVal', 1, 100, 42);
+
+/* ── EdgeMixer Modes ── */
+const emModes = [
+  { name: 'Solo',              colours: ['#FFB84D','#FFB84D'] },
+  { name: 'Complement',        colours: ['#FFB84D','#00D4FF'] },
+  { name: 'Analogous',         colours: ['#FF6B35','#FFB84D','#FFCC33'] },
+  { name: 'Split Comp',        colours: ['#FFB84D','#00D4FF','#4DFFB8'] },
+  { name: 'Triadic',           colours: ['#FF6B35','#4DFFB8','#4D9FFF'] },
+  { name: 'Tetradic',          colours: ['#FFB84D','#4DFFB8','#9900FF','#FF4D4D'] },
+  { name: 'Random',            colours: ['#FF0080','#00FF80','#8000FF','#FFCC00'] },
+];
+let activeMode = 1; // Complementary
+
+const grid = document.getElementById('edgemixerGrid');
+const modeName = document.getElementById('activeModeName');
+
+function renderEdgeMixer() {
+  grid.innerHTML = '';
+  emModes.forEach((m, i) => {
+    const cell = document.createElement('div');
+    cell.className = 'edgemixer-mode' + (i === activeMode ? ' active' : '');
+
+    // Colour icon
+    const icon = document.createElement('canvas');
+    icon.width = 22; icon.height = 14;
+    icon.className = 'edgemixer-icon';
+    const ic = icon.getContext('2d');
+    const segW = 22 / m.colours.length;
+    m.colours.forEach((c, ci) => {
+      ic.fillStyle = c;
+      ic.fillRect(ci * segW, 0, segW, 14);
+    });
+    cell.appendChild(icon);
+
+    const label = document.createElement('div');
+    label.className = 'edgemixer-mode-name';
+    label.textContent = m.name;
+    cell.appendChild(label);
+
+    cell.addEventListener('click', () => {
+      activeMode = i;
+      modeName.textContent = m.name;
+      renderEdgeMixer();
+    });
+    grid.appendChild(cell);
+  });
+}
+renderEdgeMixer();
+
+/* ── Palette Strip ── */
+const palettes = [
+  { name: 'Sunset',     stops: ['#FF0080','#FF6B35','#FFB84D'] },
+  { name: 'Aurora',     stops: ['#00FF80','#00D4FF','#9900FF'] },
+  { name: 'Copper',     stops: ['#8B4513','#CD7F32','#FFD700'] },
+  { name: 'Neon',       stops: ['#FF0080','#FF00FF','#8000FF'] },
+  { name: 'Ice',        stops: ['#00D4FF','#E0F8FF','#9EC8FF'] },
+  { name: 'Ember',      stops: ['#8B0000','#FF4500','#FFB84D'] },
+  { name: 'Forest',     stops: ['#004D00','#00A550','#4DFFB8'] },
+  { name: 'Cosmic',     stops: ['#1A0030','#6600CC','#CC00FF','#FFB84D'] },
+];
+let activePalette = 0;
+
+const pStrip = document.getElementById('paletteStrip');
+function renderPalettes() {
+  pStrip.innerHTML = '';
+  palettes.forEach((p, i) => {
+    const swatch = document.createElement('div');
+    swatch.className = 'palette-swatch' + (i === activePalette ? ' active' : '');
+
+    const sc = document.createElement('canvas');
+    sc.width = 56; sc.height = 56;
+    const sctx = sc.getContext('2d');
+    const g = sctx.createLinearGradient(0, 0, 56, 56);
+    p.stops.forEach((c, ci) => g.addColorStop(ci / (p.stops.length - 1), c));
+    sctx.fillStyle = g;
+    sctx.fillRect(0, 0, 56, 56);
+    swatch.appendChild(sc);
+
+    const label = document.createElement('div');
+    label.className = 'palette-swatch-label';
+    label.textContent = p.name;
+    swatch.appendChild(label);
+
+    swatch.addEventListener('click', () => { activePalette = i; renderPalettes(); });
+    pStrip.appendChild(swatch);
+  });
+}
+renderPalettes();
+</script>
+</body>
+</html>

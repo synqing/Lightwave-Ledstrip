@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LightwaveOS — Zones Tab</title>
+<style>
+  :root {
+    --lw-base:         #0F1219;
+    --lw-card:         #1E2535;
+    --lw-elevated:     #252D3F;
+    --lw-gold:         #FFB84D;
+    --lw-cyan:         #00D4FF;
+    --lw-success:      #4DFFB8;
+    --lw-error:        #FF4D4D;
+    --lw-text-primary:   #E6E9EF;
+    --lw-text-secondary: #9CA3B0;
+    --lw-text-tertiary:  #6B7280;
+    --lw-zone0: #00FFFF;
+    --lw-zone1: #00FF99;
+    --lw-zone2: #9900FF;
+    --lw-zone3: #FF6600;
+    --radius-card: 16px; --sp-sm: 8px; --sp-md: 12px; --sp-lg: 24px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #1a1a2e;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+    padding: 40px 20px;
+    font-family: -apple-system, 'SF Pro Display', sans-serif;
+  }
+  .layout-row { display: flex; align-items: flex-start; justify-content: center; gap: 40px; }
+  .phone-frame {
+    width: 393px; height: 852px;
+    background: #000; border-radius: 50px; border: 2px solid #333;
+    box-shadow: 0 0 0 8px #1a1a1a, 0 0 0 10px #333, 0 30px 80px rgba(0,0,0,0.8);
+    position: relative; overflow: hidden; flex-shrink: 0;
+  }
+  .dynamic-island {
+    position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    width: 120px; height: 34px; background: #000; border-radius: 20px; z-index: 100;
+  }
+  .app-screen {
+    width: 100%; height: 100%; background: var(--lw-base);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .status-bar {
+    height: 59px; padding: 16px 24px 0;
+    display: flex; align-items: flex-end; justify-content: space-between; flex-shrink: 0;
+  }
+  .status-left { display: flex; align-items: center; gap: 6px; }
+  .conn-dot { width:7px;height:7px;border-radius:50%;background:var(--lw-success);box-shadow:0 0 6px var(--lw-success); }
+  .status-brand { font-size:13px;font-weight:700;letter-spacing:1.5px;color:var(--lw-text-primary);text-transform:uppercase; }
+
+  /* ── Zone Mode Selector ── */
+  .zone-mode-bar {
+    padding: 10px 12px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .zone-mode-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .zone-mode-label {
+    font-size: 9px; font-weight: 700;
+    color: var(--lw-text-tertiary);
+    letter-spacing: 1.2px; text-transform: uppercase;
+  }
+  .zones-enabled-toggle {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 600; color: var(--lw-success);
+  }
+  .toggle-track {
+    width: 36px; height: 20px; border-radius: 10px;
+    background: rgba(77,255,184,0.2);
+    border: 1.5px solid var(--lw-success);
+    position: relative; cursor: pointer;
+  }
+  .toggle-thumb {
+    position: absolute; top: 2px; right: 2px;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--lw-success);
+    transition: all 0.18s ease;
+  }
+  .zone-count-pills {
+    display: flex; gap: 6px;
+  }
+  .zone-count-pill {
+    flex: 1; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 10px;
+    font-size: 11px; font-weight: 700;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    border: 1.5px solid rgba(255,255,255,0.07);
+    color: var(--lw-text-secondary);
+    background: var(--lw-elevated);
+  }
+  .zone-count-pill.active {
+    background: rgba(255,184,77,0.12);
+    border-color: rgba(255,184,77,0.5);
+    color: var(--lw-gold);
+  }
+
+  /* ── LED Strip Diagram ── */
+  .strip-diagram-wrap {
+    padding: 0 12px;
+    flex-shrink: 0;
+  }
+  .strip-diagram {
+    height: 72px;
+    background: linear-gradient(180deg, #0d1520 0%, #0F1219 100%);
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.04);
+    position: relative;
+  }
+  #stripCanvas {
+    width: 100%; height: 100%; display: block;
+  }
+  .strip-centre-marker {
+    position: absolute;
+    top: 0; bottom: 0;
+    left: 50%;
+    width: 1.5px;
+    background: rgba(255,184,77,0.35);
+    pointer-events: none;
+  }
+  .strip-centre-label {
+    position: absolute;
+    top: 4px; left: 50%;
+    transform: translateX(-50%);
+    font-size: 7px; font-weight: 700;
+    color: rgba(255,184,77,0.6);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  /* Zone boundary handles */
+  .boundary-handle {
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 3px; border-radius: 2px;
+    cursor: col-resize;
+    transition: background 0.1s;
+    z-index: 10;
+  }
+  .boundary-handle::before {
+    content: '';
+    position: absolute;
+    top: -4px; bottom: -4px;
+    left: -8px; right: -8px;
+  }
+  .boundary-handle::after {
+    content: '';
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 8px; height: 20px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 4px;
+  }
+
+  /* ── Scrollable Zone Cards ── */
+  .zones-scroll {
+    flex: 1;
+    overflow-y: auto;
+    scrollbar-width: none;
+    padding: 8px 12px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .zones-scroll::-webkit-scrollbar { display: none; }
+
+  /* Zone Card */
+  .zone-card {
+    border-radius: var(--radius-card);
+    overflow: visible;
+    position: relative;
+    margin-top: 10px;
+  }
+
+  .zone-card-body {
+    background: linear-gradient(180deg, var(--lw-card) 0%, #1A2030 100%);
+    border-radius: var(--radius-card);
+    border: 1.5px solid rgba(255,255,255,0.05);
+    padding: 14px 12px 12px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+  }
+
+  .zone-pill-title {
+    position: absolute;
+    top: -11px; left: 12px;
+    padding: 3px 12px;
+    border-radius: 20px;
+    background: var(--lw-card);
+    border: 1.5px solid rgba(255,255,255,0.18);
+    font-size: 10px; font-weight: 700;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+  }
+
+  .zone-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    padding-top: 2px;
+  }
+
+  .zone-led-count {
+    font-size: 10px; color: var(--lw-text-tertiary);
+    font-family: 'SF Mono', monospace; letter-spacing: 0.3px;
+  }
+
+  .zone-enable-toggle {
+    width: 32px; height: 18px; border-radius: 9px;
+    display: flex; align-items: center;
+    padding: 2px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+  }
+  .zone-enable-toggle.on  { background: rgba(77,255,184,0.2); justify-content: flex-end; }
+  .zone-enable-toggle.off { background: rgba(107,114,128,0.2); justify-content: flex-start; }
+  .zone-enable-thumb {
+    width: 14px; height: 14px; border-radius: 50%;
+    transition: all 0.18s ease;
+  }
+  .zone-enable-toggle.on  .zone-enable-thumb { background: var(--lw-success); box-shadow: 0 0 6px var(--lw-success); }
+  .zone-enable-toggle.off .zone-enable-thumb { background: var(--lw-text-tertiary); }
+
+  /* Effect / Palette nav rows */
+  .nav-row {
+    display: flex;
+    align-items: center;
+    background: var(--lw-elevated);
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.05);
+    margin-bottom: 8px;
+    overflow: hidden;
+  }
+  .nav-row-btn {
+    width: 34px; height: 46px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; color: var(--lw-gold);
+    cursor: pointer; flex-shrink: 0;
+    background: var(--lw-elevated);
+  }
+  .nav-row-btn:hover { background: rgba(255,184,77,0.08); }
+  .nav-row-content {
+    flex: 1; padding: 6px 8px;
+    cursor: pointer;
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .nav-row-sublabel {
+    font-size: 8px; font-weight: 700;
+    color: var(--lw-text-tertiary);
+    letter-spacing: 1px; text-transform: uppercase;
+  }
+  .nav-row-value {
+    font-size: 13px; font-weight: 600;
+    color: var(--lw-text-primary);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .nav-row-counter {
+    font-size: 9px; color: var(--lw-text-tertiary);
+    font-family: 'SF Mono', monospace; align-self: flex-end;
+  }
+
+  .palette-gradient-bar {
+    height: 6px; border-radius: 3px;
+    margin-top: 2px;
+  }
+
+  /* Speed mini-slider */
+  .mini-slider-row {
+    display: flex; align-items: center; gap: 8px; margin-top: 6px;
+  }
+  .mini-slider-label {
+    font-size: 8px; font-weight: 700;
+    color: var(--lw-text-tertiary);
+    letter-spacing: 0.8px; text-transform: uppercase;
+    min-width: 52px;
+  }
+  .mini-slider-track {
+    flex: 1; height: 20px; border-radius: 10px;
+    background: var(--lw-elevated);
+    position: relative; cursor: pointer;
+    overflow: hidden;
+  }
+  .mini-slider-fill {
+    height: 100%; border-radius: 10px;
+    transition: width 0.1s ease;
+  }
+  .mini-slider-value {
+    min-width: 28px; text-align: right;
+    font-size: 11px; font-weight: 600;
+    color: var(--lw-gold);
+    font-family: 'SF Mono', monospace;
+  }
+
+  /* Tab Bar */
+  .tab-bar {
+    height: 82px; background: rgba(15,18,25,0.96);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(255,255,255,0.06);
+    display: flex; align-items: flex-start; padding-top: 10px; flex-shrink: 0;
+  }
+  .tab-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; padding: 4px 0; }
+  .tab-icon { width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:18px;opacity:0.4; }
+  .tab-item.active .tab-icon { opacity:1;color:var(--lw-gold); }
+  .tab-label { font-size:10px;font-weight:600;color:var(--lw-text-tertiary);letter-spacing:0.3px; }
+  .tab-item.active .tab-label { color:var(--lw-gold); }
+
+  /* Design Notes */
+  .design-notes { width: 340px; color: var(--lw-text-primary); }
+  .design-notes h2 { font-size: 20px; font-weight: 700; color: var(--lw-gold); margin-bottom: 20px; }
+  .note-section { margin-bottom: 24px; }
+  .note-section h3 {
+    font-size: 12px; font-weight: 700; letter-spacing: 1.2px;
+    color: var(--lw-text-tertiary); text-transform: uppercase;
+    margin-bottom: 10px; padding-bottom: 6px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .note-item { display: flex; gap: 8px; margin-bottom: 8px; align-items: flex-start; }
+  .note-bullet { width:6px;height:6px;border-radius:50%;background:var(--lw-gold);margin-top:5px;flex-shrink:0; }
+  .note-text { font-size: 13px; color: var(--lw-text-secondary); line-height: 1.5; }
+  .note-text strong { color: var(--lw-text-primary); }
+
+  .zone-colour-legend {
+    display: flex; flex-direction: column; gap: 6px; margin-top: 8px;
+  }
+  .zone-legend-row {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--lw-text-secondary);
+  }
+  .zone-legend-dot {
+    width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+  }
+</style>
+</head>
+<body>
+<div class="layout-row">
+
+  <!-- Phone Frame -->
+  <div class="phone-frame">
+    <div class="dynamic-island"></div>
+    <div class="app-screen">
+
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <div class="status-left">
+          <div class="conn-dot"></div>
+          <span class="status-brand">Zones</span>
+        </div>
+        <span style="font-size:11px;color:var(--lw-cyan);font-weight:600;letter-spacing:0.5px;">2-ZONE MODE</span>
+      </div>
+
+      <!-- Zone Mode Bar -->
+      <div class="zone-mode-bar">
+        <div class="zone-mode-header">
+          <span class="zone-mode-label">Zone Count</span>
+          <div class="zones-enabled-toggle">
+            <div class="toggle-track"><div class="toggle-thumb"></div></div>
+            Zones On
+          </div>
+        </div>
+        <div class="zone-count-pills" id="zoneCountPills">
+          <div class="zone-count-pill" data-count="1">1 Zone</div>
+          <div class="zone-count-pill active" data-count="2">2 Zones</div>
+          <div class="zone-count-pill" data-count="3">3 Zones</div>
+          <div class="zone-count-pill" data-count="4">4 Zones</div>
+        </div>
+      </div>
+
+      <!-- LED Strip Diagram -->
+      <div class="strip-diagram-wrap">
+        <div class="strip-diagram">
+          <canvas id="stripCanvas"></canvas>
+          <div class="strip-centre-marker"></div>
+          <div class="strip-centre-label">Centre 79|80</div>
+          <!-- Boundary handle for 2-zone mode -->
+          <div class="boundary-handle" id="boundaryHandle0"
+               style="left:32%;background:rgba(0,255,255,0.7);box-shadow:0 0 8px rgba(0,255,255,0.5);">
+          </div>
+        </div>
+      </div>
+
+      <!-- Zone Cards -->
+      <div class="zones-scroll" id="zonesScroll">
+        <!-- Populated by JS -->
+      </div>
+
+      <!-- Tab Bar -->
+      <div class="tab-bar">
+        <div class="tab-item">
+          <div class="tab-icon">▶</div>
+          <span class="tab-label">Play</span>
+        </div>
+        <div class="tab-item active">
+          <div class="tab-icon">◫</div>
+          <span class="tab-label">Zones</span>
+        </div>
+        <div class="tab-item">
+          <div class="tab-icon">〜</div>
+          <span class="tab-label">Audio</span>
+        </div>
+        <div class="tab-item">
+          <div class="tab-icon">⚙</div>
+          <span class="tab-label">Device</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Design Notes -->
+  <div class="design-notes">
+    <h2>Zones Tab — Redesign Notes</h2>
+
+    <div class="note-section">
+      <h3>Visual Strip Diagram</h3>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">72pt LED strip canvas shows <strong>all 320 LEDs live</strong> (two rows, 160 each). Each zone gets its own distinct colour region as defined by <code>lwZone0–3</code>.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text"><strong>Draggable boundary handles</strong> — glowing vertical lines on the strip. Drag left/right to adjust zone split points. Matches existing <code>ZoneSplitSlider</code> semantics but more visual and direct.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">Centre origin marker (79|80) always visible. Helps users understand the physical LED layout.</div>
+      </div>
+    </div>
+
+    <div class="note-section">
+      <h3>Zone Count Selector</h3>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text"><strong>1–4 zone pills</strong> — selecting instantly updates the strip diagram and zone card list. 1 = full-strip mode (no zones), 2 = inner/outer, 3 = inner/middle/outer, 4 = maximum segmentation.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text"><strong>Zones On toggle</strong> — when off, all zone configuration is preserved but the K1 runs the global effect. Clear state communication.</div>
+      </div>
+    </div>
+
+    <div class="note-section">
+      <h3>Zone Card Design</h3>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text"><strong>Pill title overlapping card top border</strong> — existing pattern from ZonePillTitle. Each zone uses its canonical colour: Zone 1 = Cyan, Zone 2 = Green, Zone 3 = Purple, Zone 4 = Orange.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">Effect/palette rows use <strong>◀/▶ nav buttons</strong> matching existing ZoneCard.swift. 46pt tall rows, well within thumb reach.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text"><strong>Speed and brightness</strong> as inline mini-sliders within each zone card. No secondary cards needed.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text"><strong>Per-zone enable toggle</strong> in card header — matches existing <code>ZoneConfig.enabled</code> field. Disabling greys out the card content.</div>
+      </div>
+    </div>
+
+    <div class="note-section">
+      <h3>Zone Colour System</h3>
+      <div class="zone-colour-legend">
+        <div class="zone-legend-row"><div class="zone-legend-dot" style="background:#00FFFF;box-shadow:0 0 6px #00FFFF88;"></div>Zone 1 — Inner (lwZone0 Cyan)</div>
+        <div class="zone-legend-row"><div class="zone-legend-dot" style="background:#00FF99;box-shadow:0 0 6px #00FF9988;"></div>Zone 2 — Middle (lwZone1 Green)</div>
+        <div class="zone-legend-row"><div class="zone-legend-dot" style="background:#9900FF;box-shadow:0 0 6px #9900FF88;"></div>Zone 3 — Outer (lwZone2 Purple)</div>
+        <div class="zone-legend-row"><div class="zone-legend-dot" style="background:#FF6600;box-shadow:0 0 6px #FF660088;"></div>Zone 4 — Outermost (lwZone3 Orange)</div>
+      </div>
+    </div>
+
+    <div class="note-section">
+      <h3>Motion Design Intent</h3>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">Boundary handle drag: <strong>haptic at each 5-LED increment</strong> (selectionChanged). Strip diagram updates at 30fps during drag.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">Zone count change: <strong>spring animation</strong> — old zone cards slide out (scale+fade), new cards slide in (staggered 40ms per card).</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">Zone enable toggle: <strong>strip canvas region dims</strong> (opacity 0.15) for disabled zone. Immediate visual feedback without modal.</div>
+      </div>
+    </div>
+
+    <div class="note-section">
+      <h3>Architecture Alignment</h3>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">Zone split maps to <code>boundary0</code> / <code>boundary1</code> in AppViewModel.zones. LED range is 1–78 per existing <code>ZoneSplitSlider</code>.</div>
+      </div>
+      <div class="note-item">
+        <div class="note-bullet"></div>
+        <div class="note-text">Strip diagram renders <code>ZoneSegment.s1LeftStart / s1LeftEnd</code> visually. Centre origin at 79/80 is always respected — no linear sweeps in visual representation.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const ZONE_COLOURS = ['#00FFFF','#00FF99','#9900FF','#FF6600'];
+const ZONE_NAMES   = ['ZONE 1 — INNER','ZONE 2 — MIDDLE','ZONE 3 — OUTER','ZONE 4 — OUTER'];
+
+let zoneCount = 2;
+let zonesEnabled = true;
+let boundary0 = 40; // LED index for first boundary (out of 80 per side)
+
+/* ── Zone Count Pills ── */
+document.querySelectorAll('.zone-count-pill').forEach(pill => {
+  pill.addEventListener('click', () => {
+    document.querySelectorAll('.zone-count-pill').forEach(p => p.classList.remove('active'));
+    pill.classList.add('active');
+    zoneCount = parseInt(pill.dataset.count);
+    updateStatusLabel();
+    drawStripDiagram();
+    renderZoneCards();
+    updateBoundaryHandles();
+  });
+});
+
+function updateStatusLabel() {
+  const el = document.querySelector('.app-screen .status-bar span:last-child');
+  if (el) el.textContent = (zoneCount === 1 ? 'GLOBAL' : zoneCount + '-ZONE') + ' MODE';
+}
+
+/* ── Strip Canvas ── */
+const stripCvs = document.getElementById('stripCanvas');
+const sc = stripCvs.getContext('2d');
+let stripT = 0;
+
+function drawStripDiagram() {
+  const w = stripCvs.parentElement.offsetWidth || 361;
+  const h = 72;
+  stripCvs.width = w;
+  stripCvs.height = h;
+
+  sc.clearRect(0,0,w,h);
+  sc.fillStyle = '#0d1520';
+  sc.fillRect(0,0,w,h);
+
+  // 160 LEDs per row, 2 rows
+  const ledW = w / 160;
+  const rowH = h / 2;
+
+  for (let row = 0; row < 2; row++) {
+    for (let i = 0; i < 160; i++) {
+      // Determine zone for this LED
+      const distFromCentre = Math.abs(i - 79.5); // 0 at centre, 79.5 at edge
+      let zoneIdx = 0;
+      if (zoneCount === 1) {
+        zoneIdx = 0;
+      } else if (zoneCount === 2) {
+        const b = boundary0;
+        zoneIdx = distFromCentre < b ? 0 : 1;
+      } else if (zoneCount === 3) {
+        const b0 = boundary0 * 0.5, b1 = boundary0;
+        zoneIdx = distFromCentre < b0 ? 0 : (distFromCentre < b1 ? 1 : 2);
+      } else {
+        const b0 = boundary0 * 0.35, b1 = boundary0 * 0.6, b2 = boundary0;
+        zoneIdx = distFromCentre < b0 ? 0 : (distFromCentre < b1 ? 1 : (distFromCentre < b2 ? 2 : 3));
+      }
+
+      const zoneColour = ZONE_COLOURS[zoneIdx];
+      const brightness = 0.5 + 0.5 * Math.sin(stripT * 1.8 + distFromCentre * 0.08 + row * 1.1);
+      const alpha = zonesEnabled ? brightness : 0.12;
+
+      sc.globalAlpha = alpha;
+      sc.fillStyle = zoneColour;
+      sc.fillRect(i * ledW, row * rowH, ledW + 0.5, rowH);
+    }
+  }
+  sc.globalAlpha = 1;
+}
+
+/* ── Boundary Handle dragging ── */
+function updateBoundaryHandles() {
+  const handle = document.getElementById('boundaryHandle0');
+  if (!handle) return;
+  if (zoneCount > 1) {
+    // boundary0 is 0–79 LEDs from centre, map to canvas %
+    const pct = (80 - boundary0) / 160 * 100; // left percentage
+    handle.style.left = pct + '%';
+    handle.style.display = 'block';
+  } else {
+    handle.style.display = 'none';
+  }
+}
+
+const handle0 = document.getElementById('boundaryHandle0');
+let isDraggingHandle = false;
+let handleStartX = 0;
+let handleStartBoundary = boundary0;
+
+handle0.addEventListener('mousedown', e => {
+  isDraggingHandle = true; handleStartX = e.clientX; handleStartBoundary = boundary0;
+  e.preventDefault();
+});
+document.addEventListener('mousemove', e => {
+  if (!isDraggingHandle) return;
+  const rect = document.querySelector('.strip-diagram').getBoundingClientRect();
+  const dx = e.clientX - handleStartX;
+  const ledDelta = Math.round(dx / (rect.width / 160));
+  boundary0 = Math.max(10, Math.min(70, handleStartBoundary - ledDelta));
+  updateBoundaryHandles();
+});
+document.addEventListener('mouseup', () => { isDraggingHandle = false; });
+
+/* ── Zone Cards ── */
+const zonesScroll = document.getElementById('zonesScroll');
+
+const ZONE_DATA = [
+  { id:0, effectName:'Beat Pulse Cascade', paletteName:'Sunset Fire', paletteStops:['#FF2244','#FF6B35','#FFB84D'], speed:42, brightness:200, enabled:true },
+  { id:1, effectName:'LGP Holographic',   paletteName:'Aurora Borealis', paletteStops:['#00D4FF','#9900FF','#4DFFB8'], speed:18, brightness:200, enabled:true },
+  { id:2, effectName:'Ripple Enhanced',   paletteName:'Ocean Deep', paletteStops:['#006994','#00D4FF','#7FFFD4'], speed:25, brightness:180, enabled:false },
+  { id:3, effectName:'Starfield',         paletteName:'Cosmic Dust', paletteStops:['#1A0030','#6600CC','#CC00FF'], speed:15, brightness:220, enabled:true },
+];
+
+function renderZoneCards() {
+  zonesScroll.innerHTML = '';
+  const count = Math.min(zoneCount, 4);
+  for (let i = 0; i < count; i++) {
+    const z = ZONE_DATA[i];
+    const colour = ZONE_COLOURS[i];
+    const zoneName = ZONE_NAMES[i];
+
+    const card = document.createElement('div');
+    card.className = 'zone-card';
+    card.style.opacity = (!zonesEnabled || !z.enabled) ? '0.45' : '1';
+    card.style.transition = 'opacity 0.2s ease';
+
+    const speedPct = z.speed;
+    const brightPct = (z.brightness / 255) * 100;
+
+    const palGrad = `linear-gradient(to right, ${z.paletteStops.join(',')})`;
+
+    card.innerHTML = `
+      <div class="zone-pill-title" style="color:${colour};border-color:${colour}44;">${zoneName}</div>
+      <div class="zone-card-body" style="border-color:${colour}18;">
+
+        <!-- Header: LED count + enable toggle -->
+        <div class="zone-card-header">
+          <span class="zone-led-count">LEDs ${i === 0 ? '40–79 | 80–119' : (i === 1 ? '0–39 | 120–159' : (i === 2 ? '20–39 | 120–139' : '0–19 | 140–159'))} • ${i === 0 ? 80 : (i === 1 ? 80 : 40)} LEDs</span>
+          <div class="zone-enable-toggle ${z.enabled ? 'on' : 'off'}" title="${z.enabled ? 'Enabled' : 'Disabled'}">
+            <div class="zone-enable-thumb"></div>
+          </div>
+        </div>
+
+        <!-- Effect row -->
+        <div class="nav-row">
+          <div class="nav-row-btn" title="Previous effect">◀</div>
+          <div class="nav-row-content">
+            <span class="nav-row-sublabel">Effect</span>
+            <span class="nav-row-value">${z.effectName}</span>
+          </div>
+          <span class="nav-row-counter">7/100</span>
+          <div class="nav-row-btn" title="Next effect">▶</div>
+        </div>
+
+        <!-- Palette row -->
+        <div class="nav-row">
+          <div class="nav-row-btn" title="Previous palette">◀</div>
+          <div class="nav-row-content">
+            <span class="nav-row-sublabel">Palette</span>
+            <div class="palette-gradient-bar" style="background:${palGrad};"></div>
+            <span class="nav-row-value">${z.paletteName}</span>
+          </div>
+          <span class="nav-row-counter">3/32</span>
+          <div class="nav-row-btn" title="Next palette">▶</div>
+        </div>
+
+        <!-- Speed slider -->
+        <div class="mini-slider-row">
+          <span class="mini-slider-label">Speed</span>
+          <div class="mini-slider-track">
+            <div class="mini-slider-fill" style="width:${speedPct}%;background:linear-gradient(to right,#00D4FF,#FFB84D);"></div>
+          </div>
+          <span class="mini-slider-value">${z.speed}</span>
+        </div>
+
+        <!-- Brightness slider -->
+        <div class="mini-slider-row">
+          <span class="mini-slider-label">Brightness</span>
+          <div class="mini-slider-track">
+            <div class="mini-slider-fill" style="width:${brightPct.toFixed(0)}%;background:linear-gradient(to right,rgba(255,184,77,0.4),#FFB84D);"></div>
+          </div>
+          <span class="mini-slider-value">${z.brightness}</span>
+        </div>
+
+      </div>
+    `;
+
+    zonesScroll.appendChild(card);
+  }
+}
+renderZoneCards();
+
+/* ── Animation loop ── */
+function animLoop() {
+  drawStripDiagram();
+  updateBoundaryHandles();
+  stripT += 0.018;
+  requestAnimationFrame(animLoop);
+}
+animLoop();
+</script>
+</body>
+</html>

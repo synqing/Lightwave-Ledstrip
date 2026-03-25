@@ -356,7 +356,7 @@ float OnsetDetector::applyAdaptiveThreshold(float flux) {
     const uint8_t windowSize = (m_fluxCount < m_cfg.thresholdFrames)
                                ? m_fluxCount : m_cfg.thresholdFrames;
     float median = computeMedian(m_fluxRing, FLUX_RING_SIZE, windowSize);
-    float threshold = median * m_cfg.thresholdMultiplier;
+    float threshold = median * m_cfg.thresholdMultiplier + m_cfg.thresholdOffset;
     if (threshold < m_cfg.thresholdFloor) {
         threshold = m_cfg.thresholdFloor;
     }

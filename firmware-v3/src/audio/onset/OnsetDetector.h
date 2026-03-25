@@ -88,9 +88,14 @@ public:
         uint16_t musicalBinHi     = 128;    ///< ~4000 Hz — musical ceiling
 
         // Full-band onset threshold: median-based adaptive (Dixon 2006).
+        // Hybrid multiplicative + additive: threshold = median * mul + offset.
+        // The multiplicative term scales with programme level.
+        // The additive term provides a non-zero minimum discrimination distance
+        // when the median is near zero (post-pause, silence-to-music transition).
         uint8_t  thresholdFrames     = 13;    ///< Median window for threshold (100ms @ 125 Hz)
-        float    thresholdMultiplier = 1.5f;  ///< Threshold = max(median * mul, floor)
-        float    thresholdFloor      = 0.01f; ///< Absolute floor after RMS gate opens
+        float    thresholdMultiplier = 1.5f;  ///< Scales with programme level
+        float    thresholdOffset     = 1.0f;  ///< Minimum discrimination distance (log-flux units)
+        float    thresholdFloor      = 0.01f; ///< Emergency backstop (should rarely engage with offset present)
 
         // Detector-local activity gate — OUTPUT PERMISSION ONLY.
         // This gate must NOT:

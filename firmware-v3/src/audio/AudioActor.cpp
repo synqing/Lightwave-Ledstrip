@@ -673,12 +673,43 @@ void AudioActor::onTick()
             frame.onsetHighFlux  = onset.high_flux;
             frame.onsetProcessUs = onset.process_us;
 
-            // FFT-based percussion triggers — independent per-band (no cross-band gating).
-            // These supplement adapter triggers via additive OR.
-            if (onset.kick_trigger)  frame.kickTrigger  = true;
-            if (onset.snare_trigger) frame.snareTrigger = true;
-            if (onset.hihat_trigger) frame.hihatTrigger = true;
+            // FFT onset triggers demoted to telemetry — NOT published to ControlBus.
+            // Band-energy ratio detector below is the live trigger source.
         }
+    }
+
+    // ========================================================================
+    // Band-energy ratio detector (Path B — live trigger source)
+    //
+    // Variance-adaptive threshold on grouped band energies from EsV11Adapter.
+    // Runs AFTER the adapter has populated frame.bands[0..7].
+    // Ref: Patin, Parallelcube, WLED Sound Reactive.
+    // ========================================================================
+    {
+        const float kickEnergy  = frame.bands[0] + frame.bands[1];
+        const float snareEnergy = frame.bands[2] + frame.bands[3];
+        const float hihatEnergy = frame.bands[5] + frame.bands[6] + frame.bands[7];
+
+        const bool kickFired  = bandRatioDetect(m_kickChannel,  kickEnergy,  m_bandRatioCfg.refractory);
+        const bool snareFired = bandRatioDetect(m_snareChannel, snareEnergy, m_bandRatioCfg.refractory);
+        const bool hihatFired = bandRatioDetect(m_hihatChannel, hihatEnergy, m_bandRatioCfg.refractory);
+        m_bandRatioFrame++;
+
+        if (kickFired)  frame.kickTrigger  = true;
+        if (snareFired) frame.snareTrigger = true;
+        if (hihatFired) frame.hihatTrigger = true;
+
+        // Derived global onset = union of any band trigger
+        if (kickFired || snareFired || hihatFired) {
+            frame.onsetEvent = 1.0f;
+        }
+
+        TRACE_COUNTER("br_kick_energy",  static_cast<int32_t>(kickEnergy * 1000.0f));
+        TRACE_COUNTER("br_snare_energy", static_cast<int32_t>(snareEnergy * 1000.0f));
+        TRACE_COUNTER("br_hihat_energy", static_cast<int32_t>(hihatEnergy * 1000.0f));
+        if (kickFired)  TRACE_INSTANT("BR_KICK");
+        if (snareFired) TRACE_INSTANT("BR_SNARE");
+        if (hihatFired) TRACE_INSTANT("BR_HIHAT");
     }
 
     // ========================================================================

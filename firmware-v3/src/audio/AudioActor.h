@@ -34,6 +34,7 @@
 #if FEATURE_AUDIO_SYNC
 
 #include <atomic>
+#include <cmath>
 
 #include "../core/actors/Actor.h"
 #include "../config/audio_config.h"
@@ -644,12 +645,89 @@ private:
     uint32_t m_esHopSeq = 0;
     uint8_t m_esChunkCounter = 0;  // Publish every 4 chunks (256 samples @ 12.8kHz = 50 Hz)
 
-    // FFT onset detection (1024-point spectral flux, runs every hop)
+    // FFT onset detection — TELEMETRY ONLY (demoted from live trigger path).
+    // Band-energy ratio detector below is the live trigger source.
     OnsetDetector m_onsetDetector;
     float m_lastOnsetInputRms = 0.0f;
     float m_lastOnsetNoiseFloor = 0.0f;
     float m_lastOnsetActivity = 0.0f;
     uint8_t m_lastOnsetGateFlags = 0;
+
+    // ========================================================================
+    // Band-energy ratio detector (Path B — live trigger source)
+    //
+    // Variance-adaptive threshold on grouped band energies.
+    // Ref: Patin "Frequency Selected Sound Energy Algorithm #1"
+    // Ref: Parallelcube beat detection (variance-adaptive multiplier)
+    // Ref: WLED Sound Reactive (energy threshold + debounce on ESP32)
+    //
+    // Uses existing controlBus.bands[0..7] — no additional FFT work.
+    // ========================================================================
+
+    struct BandRatioConfig {
+        float    varSlope      = -15.0f;   ///< Variance-to-multiplier slope
+        float    varIntercept  = 1.55f;    ///< Multiplier at zero variance
+        float    minMul        = 1.05f;    ///< Floor: prevents firing on steady-state
+        float    maxMul        = 1.55f;    ///< Ceiling: prevents over-suppression in noisy passages
+        float    absFloor      = 0.01f;    ///< Minimum grouped energy to consider
+        uint8_t  refractory    = 8;        ///< Debounce frames (~64ms @ 125 Hz)
+    };
+
+    static constexpr uint8_t BAND_HISTORY_SIZE = 125;  ///< ~1 second @ 125 Hz
+
+    struct BandRatioChannel {
+        float    history[125] = {};   ///< Ring buffer of grouped band energies
+        uint8_t  writeIdx     = 0;
+        uint8_t  count        = 0;    ///< Frames written (for warmup priming)
+        float    runSum       = 0.0f; ///< Running sum for O(1) mean
+        float    runSumSq     = 0.0f; ///< Running sum-of-squares for O(1) variance
+        uint32_t lastTrigger  = 0;    ///< Frame count of last trigger (refractory)
+    };
+
+    BandRatioConfig m_bandRatioCfg;
+    BandRatioChannel m_kickChannel;
+    BandRatioChannel m_snareChannel;
+    BandRatioChannel m_hihatChannel;
+    uint32_t m_bandRatioFrame = 0;
+
+    bool bandRatioDetect(BandRatioChannel& ch, float energy, uint8_t refractory) {
+        // Subtract oldest value from running sums before overwriting.
+        if (ch.count >= BAND_HISTORY_SIZE) {
+            const float oldest = ch.history[ch.writeIdx];
+            ch.runSum -= oldest;
+            ch.runSumSq -= oldest * oldest;
+        }
+
+        // Write new value into the ring.
+        ch.history[ch.writeIdx] = energy;
+        ch.runSum += energy;
+        ch.runSumSq += energy * energy;
+        ch.writeIdx = (ch.writeIdx + 1) % BAND_HISTORY_SIZE;
+        if (ch.count < BAND_HISTORY_SIZE) {
+            ++ch.count;
+        }
+
+        // Suppress until the history window is primed.
+        if (ch.count < BAND_HISTORY_SIZE) {
+            return false;
+        }
+
+        const float n = static_cast<float>(ch.count);
+        const float mean = ch.runSum / n;
+        const float var = std::fmax(0.0f, ch.runSumSq / n - mean * mean);
+        const float rawMul = m_bandRatioCfg.varSlope * var + m_bandRatioCfg.varIntercept;
+        const float mul = std::fmax(m_bandRatioCfg.minMul, std::fmin(m_bandRatioCfg.maxMul, rawMul));
+        const bool aboveFloor = (energy > m_bandRatioCfg.absFloor);
+        const bool aboveMean = (energy > mul * mean);
+        const bool refractoryOpen =
+            (m_bandRatioFrame - ch.lastTrigger) >= static_cast<uint32_t>(refractory);
+
+        if (aboveFloor && aboveMean && refractoryOpen) {
+            ch.lastTrigger = m_bandRatioFrame;
+            return true;
+        }
+        return false;
+    }
 
     // ControlBus for Stage B derived features (chord, saliency, silence, liveliness)
     // ES path bypasses Stage A (input conditioning) but needs Stage B.

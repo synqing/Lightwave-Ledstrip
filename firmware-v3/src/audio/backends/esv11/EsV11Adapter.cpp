@@ -67,8 +67,13 @@ void EsV11Adapter::buildFrame(lightwaveos::audio::ControlBusFrame& out,
     // LWLS effects generally expect bins64 to already be usable as a 0..1 signal
     // (e.g. sub-bass kick thresholds around 0.15..0.50). To preserve effect
     // compatibility, we apply a simple autorange follower when audio is active.
-    constexpr float ACTIVE_VU_THRESHOLD = 0.01f; // Below this, treat as near-silence.
-    const bool isActive = es.vu_level >= ACTIVE_VU_THRESHOLD;
+    // AGC enable gate: only disable normalisation during electrical silence
+    // (microphone self-noise, no acoustic input). The follower floors (0.05 bins,
+    // 0.08 chroma) cap maximum gain, so keeping AGC active at low levels is safe.
+    // Previous value of 0.01 was too high — disabled AGC during quiet musical
+    // passages, causing chroma-coloured effects to go invisible.
+    constexpr float AGC_NOISE_FLOOR = 0.001f;
+    const bool isActive = es.vu_level >= AGC_NOISE_FLOOR;
 
     // Raw ES signals (for reference show parity)
     out.es_vu_level_raw = clamp01(es.vu_level);

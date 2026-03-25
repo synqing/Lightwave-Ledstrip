@@ -794,7 +794,7 @@ void AudioHandlers::handleMappingsListSources(AsyncWebServerRequest* request) {
 
         addSource("RMS", 0, "energy", "Smoothed RMS level", 0.0f, 1.0f);
         addSource("FAST_RMS", 1, "energy", "Fast-attack RMS", 0.0f, 1.0f);
-        addSource("FLUX", 2, "energy", "Spectral flux (onset)", 0.0f, 1.0f);
+        addSource("FLUX", 2, "energy", "Legacy spectral novelty proxy", 0.0f, 1.0f);
         addSource("FAST_FLUX", 3, "energy", "Fast-attack flux", 0.0f, 1.0f);
 
         addSource("BAND_0", 4, "frequency", "60 Hz - Sub-bass", 0.0f, 1.0f);
@@ -1693,6 +1693,7 @@ void AudioHandlers::handleFftGet(AsyncWebServerRequest* request,
         for (int i = 0; i < audio::ControlBusFrame::BINS_64_COUNT; ++i) {
             bins64Adaptive.add(frame->bins64Adaptive[i]);
         }
+
     });
     freeControlBusFrameScratch(frame);
 }

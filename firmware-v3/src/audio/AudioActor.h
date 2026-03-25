@@ -669,8 +669,26 @@ private:
         float    varIntercept  = 1.55f;    ///< Multiplier at zero variance
         float    minMul        = 1.05f;    ///< Floor: prevents firing on steady-state
         float    maxMul        = 1.55f;    ///< Ceiling: prevents over-suppression in noisy passages
-        float    absFloor      = 0.01f;    ///< Minimum grouped energy to consider
         uint8_t  refractory    = 8;        ///< Debounce frames (~64ms @ 125 Hz)
+
+        // Raw PCM RMS eligibility gate.
+        // The primary front-door veto: if raw hop RMS (pre-AGC) is below
+        // this threshold, the BR detector does not emit triggers.
+        // Raw PCM is ~0.001 during silence, ~0.01+ during quiet music.
+        // This separates the two jobs: raw RMS answers "any acoustic energy?",
+        // band-ratio answers "which percussion event?".
+        // Measured from K1v2 traces (2026-03-25):
+        //   Silence raw RMS: p50=0.003  max=0.012
+        //   Music raw RMS:   p5=0.023   p50=0.035-0.046
+        //   Gate at 0.015 gives clean separation (above silence max, below music p5).
+        float    brRmsGate     = 0.015f;   ///< Raw hop RMS below this = not eligible
+
+        // Per-group absolute energy floors (secondary safety net).
+        // These catch residual AGC-normalised noise that passes the RMS gate.
+        // Set conservatively — primary rejection is the RMS gate above.
+        float    kickAbsFloor  = 0.01f;    ///< bands[0]+bands[1]
+        float    snareAbsFloor = 0.01f;    ///< bands[2]+bands[3]
+        float    hihatAbsFloor = 0.01f;    ///< bands[5]+bands[6]+bands[7]
     };
 
     static constexpr uint8_t BAND_HISTORY_SIZE = 125;  ///< ~1 second @ 125 Hz
@@ -690,7 +708,7 @@ private:
     BandRatioChannel m_hihatChannel;
     uint32_t m_bandRatioFrame = 0;
 
-    bool bandRatioDetect(BandRatioChannel& ch, float energy, uint8_t refractory) {
+    bool bandRatioDetect(BandRatioChannel& ch, float energy, uint8_t refractory, float absFloor) {
         // Subtract oldest value from running sums before overwriting.
         if (ch.count >= BAND_HISTORY_SIZE) {
             const float oldest = ch.history[ch.writeIdx];
@@ -712,17 +730,23 @@ private:
             return false;
         }
 
+        // Absolute energy eligibility: ratio is only meaningful once energy
+        // is above a credible minimum.  Post-AGC bands normalise mic noise
+        // into non-trivial energy — this floor rejects that domain.
+        if (energy <= absFloor) {
+            return false;
+        }
+
         const float n = static_cast<float>(ch.count);
         const float mean = ch.runSum / n;
         const float var = std::fmax(0.0f, ch.runSumSq / n - mean * mean);
         const float rawMul = m_bandRatioCfg.varSlope * var + m_bandRatioCfg.varIntercept;
         const float mul = std::fmax(m_bandRatioCfg.minMul, std::fmin(m_bandRatioCfg.maxMul, rawMul));
-        const bool aboveFloor = (energy > m_bandRatioCfg.absFloor);
         const bool aboveMean = (energy > mul * mean);
         const bool refractoryOpen =
             (m_bandRatioFrame - ch.lastTrigger) >= static_cast<uint32_t>(refractory);
 
-        if (aboveFloor && aboveMean && refractoryOpen) {
+        if (aboveMean && refractoryOpen) {
             ch.lastTrigger = m_bandRatioFrame;
             return true;
         }

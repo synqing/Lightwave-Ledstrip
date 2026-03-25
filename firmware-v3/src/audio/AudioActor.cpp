@@ -618,6 +618,25 @@ void AudioActor::onTick()
     frame.t = AudioTime(es.sample_index, audio::SAMPLE_RATE, now_us);
 
     // ========================================================================
+    // Raw PCM hop RMS (pre-AGC) — used by onset detector AND BR eligibility gate.
+    // Computed once, consumed by both subsystems below.
+    // ========================================================================
+    float rawHopRms = 0.0f;
+    {
+        const float* history = m_esBackend.getSampleHistory();
+        const size_t histLen = m_esBackend.getSampleHistoryLength();
+        if (history != nullptr && histLen >= HOP_SIZE) {
+            const float* hopTail = history + histLen - HOP_SIZE;
+            double sumSq = 0.0;
+            for (uint16_t i = 0; i < HOP_SIZE; ++i) {
+                const double s = static_cast<double>(hopTail[i]);
+                sumSq += s * s;
+            }
+            rawHopRms = static_cast<float>(std::sqrt(sumSq / static_cast<double>(HOP_SIZE)));
+        }
+    }
+
+    // ========================================================================
     // FFT Onset Detection (1024-point spectral flux, every hop)
     // ========================================================================
     {
@@ -628,20 +647,9 @@ void AudioActor::onTick()
         if (history != nullptr && histLen >= ONSET_FFT_SIZE) {
             // Point to last 1024 contiguous samples in the history buffer
             const float* tail = history + histLen - ONSET_FFT_SIZE;
-            // Raw PCM hop RMS for the onset detector gate.
-            float onsetRms = 0.0f;
-            if (histLen >= HOP_SIZE) {
-                const float* hopTail = history + histLen - HOP_SIZE;
-                double sumSq = 0.0;
-                for (uint16_t i = 0; i < HOP_SIZE; ++i) {
-                    const double s = static_cast<double>(hopTail[i]);
-                    sumSq += s * s;
-                }
-                onsetRms = static_cast<float>(std::sqrt(sumSq / static_cast<double>(HOP_SIZE)));
-            }
 
             TRACE_BEGIN("onset_detect");
-            OnsetResult onset = m_onsetDetector.process(tail, onsetRms);
+            OnsetResult onset = m_onsetDetector.process(tail, rawHopRms);
             TRACE_END();
             TRACE_COUNTER("onset_input_rms", static_cast<int32_t>(onset.input_rms * 1000000.0f));
             TRACE_COUNTER("onset_noise_floor", static_cast<int32_t>(onset.noise_floor * 1000000.0f));
@@ -683,6 +691,12 @@ void AudioActor::onTick()
     //
     // Variance-adaptive threshold on grouped band energies from EsV11Adapter.
     // Runs AFTER the adapter has populated frame.bands[0..7].
+    //
+    // Front-door eligibility: raw PCM RMS must exceed brRmsGate.
+    // This separates "any acoustic energy?" (raw RMS) from "which percussion
+    // event?" (band ratio).  AGC-normalised bands cannot answer the first
+    // question — silence energy overlaps music energy in that domain.
+    //
     // Ref: Patin, Parallelcube, WLED Sound Reactive.
     // ========================================================================
     {
@@ -690,9 +704,17 @@ void AudioActor::onTick()
         const float snareEnergy = frame.bands[2] + frame.bands[3];
         const float hihatEnergy = frame.bands[5] + frame.bands[6] + frame.bands[7];
 
-        const bool kickFired  = bandRatioDetect(m_kickChannel,  kickEnergy,  m_bandRatioCfg.refractory);
-        const bool snareFired = bandRatioDetect(m_snareChannel, snareEnergy, m_bandRatioCfg.refractory);
-        const bool hihatFired = bandRatioDetect(m_hihatChannel, hihatEnergy, m_bandRatioCfg.refractory);
+        const bool rmsEligible = (rawHopRms > m_bandRatioCfg.brRmsGate);
+
+        bool kickFired  = false;
+        bool snareFired = false;
+        bool hihatFired = false;
+
+        if (rmsEligible) {
+            kickFired  = bandRatioDetect(m_kickChannel,  kickEnergy,  m_bandRatioCfg.refractory, m_bandRatioCfg.kickAbsFloor);
+            snareFired = bandRatioDetect(m_snareChannel, snareEnergy, m_bandRatioCfg.refractory, m_bandRatioCfg.snareAbsFloor);
+            hihatFired = bandRatioDetect(m_hihatChannel, hihatEnergy, m_bandRatioCfg.refractory, m_bandRatioCfg.hihatAbsFloor);
+        }
         m_bandRatioFrame++;
 
         if (kickFired)  frame.kickTrigger  = true;
@@ -704,6 +726,8 @@ void AudioActor::onTick()
             frame.onsetEvent = 1.0f;
         }
 
+        TRACE_COUNTER("br_raw_rms", static_cast<int32_t>(rawHopRms * 1000000.0f));
+        TRACE_COUNTER("br_rms_eligible", rmsEligible ? 1 : 0);
         TRACE_COUNTER("br_kick_energy",  static_cast<int32_t>(kickEnergy * 1000.0f));
         TRACE_COUNTER("br_snare_energy", static_cast<int32_t>(snareEnergy * 1000.0f));
         TRACE_COUNTER("br_hihat_energy", static_cast<int32_t>(hihatEnergy * 1000.0f));

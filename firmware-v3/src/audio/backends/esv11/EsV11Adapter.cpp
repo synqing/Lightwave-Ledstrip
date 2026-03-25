@@ -274,10 +274,13 @@ void EsV11Adapter::buildFrame(lightwaveos::audio::ControlBusFrame& out,
         }
         out.hihatEnergy = clamp01(hihatSum / 11.0f);
 
-        // One-frame onset pulse: trigger when energy jumps above previous + threshold
-        constexpr float ONSET_THRESHOLD = 0.08f;
-        out.snareTrigger = (out.snareEnergy > m_prevSnareEnergy + ONSET_THRESHOLD) && (out.snareEnergy > 0.10f);
-        out.hihatTrigger = (out.hihatEnergy > m_prevHihatEnergy + ONSET_THRESHOLD) && (out.hihatEnergy > 0.05f);
+        // Old crude onset triggers DISABLED — Path B band-ratio detector in
+        // AudioActor is the sole live trigger source.  Energy values are still
+        // computed above for effects that read snareEnergy/hihatEnergy directly.
+        // Do NOT re-enable — these pollute traces with ONSET_KICK/SNARE/HIHAT
+        // alongside the authoritative BR_ events.
+        out.snareTrigger = false;
+        out.hihatTrigger = false;
 
         m_prevSnareEnergy = out.snareEnergy;
         m_prevHihatEnergy = out.hihatEnergy;

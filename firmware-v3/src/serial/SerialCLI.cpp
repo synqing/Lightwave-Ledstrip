@@ -1508,6 +1508,8 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
                     renderer->getSpeed(),
                     renderer->getPaletteIndex()
                 );
+                // Save EdgeMixer configuration alongside zone/system state
+                m_deps.actors->saveEdgeMixerToNVS();
                 if (zoneOk && sysOk) {
                     Serial.println("  All settings saved!");
                 } else {
@@ -1919,10 +1921,18 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
         // ========== EdgeMixer Commands ==========
 
         case 'e':
-            // Cycle EdgeMixer mode: mirror -> analogous -> complementary -> split_comp -> sat_veil -> triadic -> tetradic -> mirror
+            // Cycle EdgeMixer mode: mirror -> analogous -> ... -> tetradic -> mirror
+            // Use a local shadow to avoid race with async RendererActor message.
+            // Without this, rapid 'e' presses read stale getMode() and get stuck.
             {
+                static uint8_t s_edgeMixerModeShadow = 0xFF;
                 auto& mixer = lightwaveos::enhancement::EdgeMixer::getInstance();
-                uint8_t next = (static_cast<uint8_t>(mixer.getMode()) + 1) % 7;
+                if (s_edgeMixerModeShadow == 0xFF) {
+                    // First use: seed from the actual singleton
+                    s_edgeMixerModeShadow = static_cast<uint8_t>(mixer.getMode());
+                }
+                uint8_t next = (s_edgeMixerModeShadow + 1) % 7;
+                s_edgeMixerModeShadow = next;
                 actors.setEdgeMixerMode(next);
                 Serial.printf("EdgeMixer mode: " LW_CLR_CYAN "%s" LW_ANSI_RESET "\n",
                               lightwaveos::enhancement::EdgeMixer::modeName(

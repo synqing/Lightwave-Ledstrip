@@ -8,6 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - ESP32-P4 Audio Pipeline & iOS App
 
 ### Added
+- **firmware:** FFT onset detector — 1024-point spectral flux (Bello/Dixon/Boeck), activity-gated, ~400us/hop, zero heap [quarantined]
+- **firmware:** Band-energy ratio detector — variance-adaptive percussion triggers on grouped bands (Patin/WLED) [WIP]
+- **firmware:** First-class onset API surface — OnsetContext with 6 semantic channels (beat, downbeat, transient, kick, snare, hihat) [WIP]
+- **firmware:** OnsetSemantics module — extracted onset channel tracking from RendererActor into testable free functions
+- **firmware:** AudioReactivePolicy TriggerMode — 7 modes with metronome fallback for effect trigger routing
+- **firmware:** Onset capture telemetry — CaptureStreamer v2 bytes [26:32] carry onsetEnv, onsetEvent, percussion triggers
+- **firmware:** EsV11Backend sample history accessor — getSampleHistory()/getSampleHistoryLength() for raw PCM access
+- **tools:** Onset capture tooling — led_capture.py onset parsing, analyze_beats.py onset statistics, 2 capture suite scripts
+- **docs:** Onset detector spec, quarantine matrix, ADR, WLED/aubio/essentia research references
+
+### Changed
+- **firmware:** Silence gate uses raw PCM RMS instead of post-AGC band average — fixes false gate reopening during silence
+- **firmware:** Silence hysteresis reduced from 8000ms to 150ms — responsive musical drops with ~550ms silence-to-black
+- **firmware:** AGC noise floor lowered from 0.01 to 0.001 — only disables during electrical silence, not quiet passages
+- **firmware:** Waveform effects (SbK1Waveform, SbK1WaveformHybrid) — RMS brightness scaling, silentScale gating, accelerated trail decay
+- **firmware:** LittleFS.begin(true) — auto-format on blank/corrupted partition instead of silent failure
+- **firmware:** BeatPulseBloom, BeatPulseBreathe, RippleEsTuned migrated to onset API trigger routing [WIP]
+
+### Added
 - **firmware:** EdgeMixer two new colour harmony modes — Triadic (120° hue shift) and Tetradic (90° hue shift); spread controls saturation blend (0=full sat, 60=70% sat)
 - **tab5:** EdgeMixer mode button cycles through all 7 modes including Triadic and Tetradic
 - **ESP32-P4 Platform Support**: Full audio capture and LED control on Waveshare ESP32-P4-WIFI6

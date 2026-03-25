@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LightwaveOS Onboarding — SpectraSynq</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{font-size:16px;-webkit-font-smoothing:antialiased;}
+
+:root{
+  --lw-gold:#FFB84D;--lw-gold-bright:#FFCC33;--lw-gold-dim:#B8842E;
+  --lw-cyan:#00D4FF;--lw-base:#0F1219;--lw-base-deep:#08090E;
+  --lw-card:#1E2535;--lw-card-alt:#1A2030;--lw-elevated:#252D3F;--lw-elevated-hover:#2C3650;
+  --lw-text-primary:#E6E9EF;--lw-text-secondary:#9CA3B0;--lw-text-tertiary:#6B7280;
+  --lw-success:#4DFFB8;--lw-error:#FF4D4D;
+  --font-display:'Bebas Neue',sans-serif;--font-body:'Rajdhani',system-ui,sans-serif;
+  --font-mono:'JetBrains Mono',monospace;
+  --radius-md:12px;--radius-lg:16px;--radius-xl:24px;--radius-pill:999px;
+  --shadow-ambient:0 2px 12px rgba(0,0,0,0.4);--shadow-elevated:0 4px 20px rgba(0,0,0,0.5);
+  --ease-out-expo:cubic-bezier(0.16,1,0.3,1);--ease-spring:cubic-bezier(0.34,1.56,0.64,1);
+}
+
+body{
+  background:var(--lw-base-deep);color:var(--lw-text-primary);
+  font-family:var(--font-body);min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  padding:32px 24px;
+}
+
+/* ============================================================
+   LAYOUT
+   ============================================================ */
+.page-header{
+  text-align:center;margin-bottom:48px;padding-top:32px;
+}
+.brand-name{font-family:var(--font-display);font-size:14px;letter-spacing:6px;color:var(--lw-gold);opacity:0.8;}
+.page-title{font-family:var(--font-display);font-size:56px;letter-spacing:2px;color:var(--lw-text-primary);line-height:1;margin-top:4px;}
+.page-subtitle{font-family:var(--font-body);font-weight:500;font-size:18px;color:var(--lw-text-secondary);margin-top:8px;max-width:600px;}
+
+.phones-row{
+  display:flex;gap:32px;flex-wrap:wrap;justify-content:center;
+  margin-bottom:48px;
+}
+
+.phone-wrapper{
+  display:flex;flex-direction:column;align-items:center;gap:16px;
+}
+
+.phone-label{
+  font-family:var(--font-display);font-size:14px;letter-spacing:2px;
+  color:var(--lw-text-tertiary);
+}
+
+.phone-step{
+  font-family:var(--font-display);font-size:28px;color:var(--lw-gold);
+  opacity:0.4;
+}
+
+/* ============================================================
+   iPHONE FRAME
+   ============================================================ */
+.iphone{
+  width:320px;height:692px;
+  background:#000;border-radius:48px;
+  border:4px solid #2C2C2E;
+  position:relative;overflow:hidden;
+  box-shadow:0 24px 80px rgba(0,0,0,0.7),inset 0 0 0 1px rgba(255,255,255,0.05);
+}
+
+.iphone__notch{
+  width:126px;height:34px;background:#000;
+  border-radius:0 0 20px 20px;
+  margin:0 auto;position:relative;z-index:10;
+}
+
+.iphone__home{
+  position:absolute;bottom:6px;left:50%;transform:translateX(-50%);
+  width:120px;height:4px;border-radius:2px;
+  background:rgba(255,255,255,0.2);z-index:10;
+}
+
+.iphone__screen{
+  position:absolute;top:0;left:0;right:0;bottom:0;
+  border-radius:44px;overflow:hidden;
+}
+
+/* ============================================================
+   SCREEN 1 — WELCOME
+   ============================================================ */
+.screen-welcome{
+  width:100%;height:100%;
+  display:flex;flex-direction:column;
+  background:var(--lw-base);
+  position:relative;overflow:hidden;
+}
+
+.welcome-bg{
+  position:absolute;inset:0;overflow:hidden;
+}
+
+.welcome-orb{
+  position:absolute;border-radius:50%;filter:blur(80px);
+}
+.welcome-orb--gold{
+  width:250px;height:250px;background:rgba(255,184,77,0.12);
+  top:-60px;right:-60px;
+  animation:orbDrift 10s ease-in-out infinite;
+}
+.welcome-orb--cyan{
+  width:180px;height:180px;background:rgba(0,212,255,0.08);
+  bottom:60px;left:-40px;
+  animation:orbDrift 12s ease-in-out infinite reverse;
+}
+
+@keyframes orbDrift{
+  0%,100%{transform:translate(0,0);}
+  50%{transform:translate(20px,-15px);}
+}
+
+.welcome-content{
+  position:relative;z-index:1;flex:1;
+  display:flex;flex-direction:column;
+  justify-content:center;align-items:center;
+  padding:40px 28px;text-align:center;
+}
+
+.welcome-logo{
+  width:80px;height:80px;border-radius:24px;
+  background:linear-gradient(135deg,rgba(255,184,77,0.15),rgba(0,212,255,0.1));
+  border:1px solid rgba(255,184,77,0.2);
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:24px;
+  box-shadow:0 0 40px rgba(255,184,77,0.1);
+}
+
+.welcome-logo__icon{
+  font-size:36px;opacity:0.9;
+}
+
+.welcome-brand{
+  font-family:var(--font-display);font-size:12px;letter-spacing:4px;
+  color:var(--lw-gold);opacity:0.7;margin-bottom:4px;
+}
+
+.welcome-title{
+  font-family:var(--font-display);font-size:36px;
+  color:var(--lw-text-primary);line-height:1;letter-spacing:1px;
+  margin-bottom:8px;
+}
+
+.welcome-subtitle{
+  font-family:var(--font-body);font-weight:500;font-size:15px;
+  color:var(--lw-text-secondary);line-height:1.5;
+  margin-bottom:32px;max-width:240px;
+}
+
+.welcome-strip{
+  display:flex;gap:1px;height:20px;align-items:center;
+  margin-bottom:40px;
+}
+.welcome-strip__pixel{
+  width:2px;height:12px;border-radius:1px;
+  position:relative;
+}
+.welcome-strip__pixel::after{
+  content:'';position:absolute;inset:-2px -1px;
+  border-radius:2px;background:inherit;filter:blur(3px);opacity:0.3;
+}
+
+.welcome-footer{
+  position:relative;z-index:1;
+  padding:0 28px 48px;
+  display:flex;flex-direction:column;gap:10px;
+}
+
+.onboard-btn{
+  width:100%;height:52px;border-radius:var(--radius-md);
+  border:none;cursor:pointer;
+  font-family:var(--font-display);font-size:16px;letter-spacing:1px;
+  transition:all 200ms var(--ease-out-expo);
+  display:flex;align-items:center;justify-content:center;gap:8px;
+}
+
+.onboard-btn--primary{
+  background:var(--lw-gold);color:var(--lw-base);
+}
+.onboard-btn--primary:hover{
+  transform:translateY(-1px);
+  box-shadow:0 4px 20px rgba(255,184,77,0.3);
+}
+
+.onboard-btn--ghost{
+  background:transparent;color:var(--lw-text-tertiary);
+  border:1px solid rgba(255,255,255,0.06);
+}
+.onboard-btn--ghost:hover{
+  color:var(--lw-text-secondary);
+  border-color:rgba(255,255,255,0.12);
+}
+
+/* ============================================================
+   SCREEN 2 — WIFI CONNECTION
+   ============================================================ */
+.screen-wifi{
+  width:100%;height:100%;
+  display:flex;flex-direction:column;
+  background:var(--lw-base);
+  position:relative;
+}
+
+.screen-header{
+  padding:48px 24px 0;
+  display:flex;flex-direction:column;gap:12px;
+}
+
+.screen-step{
+  font-family:var(--font-display);font-size:12px;letter-spacing:3px;
+  color:var(--lw-gold);opacity:0.6;
+}
+
+.screen-title{
+  font-family:var(--font-display);font-size:28px;
+  color:var(--lw-text-primary);line-height:1.1;letter-spacing:1px;
+}
+
+.screen-body{
+  font-family:var(--font-body);font-weight:500;font-size:14px;
+  color:var(--lw-text-secondary);line-height:1.5;margin-top:4px;
+}
+
+.wifi-visual{
+  flex:1;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  padding:24px;
+}
+
+.wifi-device{
+  width:160px;height:100px;
+  background:linear-gradient(180deg,var(--lw-card),var(--lw-card-alt));
+  border-radius:var(--radius-lg);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:6px;position:relative;
+  box-shadow:var(--shadow-elevated);
+  border:1px solid rgba(255,184,77,0.15);
+}
+
+.wifi-device__label{
+  font-family:var(--font-display);font-size:14px;letter-spacing:1px;
+  color:var(--lw-gold);
+}
+
+.wifi-device__sub{
+  font-family:var(--font-mono);font-size:9px;
+  color:var(--lw-text-tertiary);
+}
+
+.wifi-device__led-strip{
+  display:flex;gap:1px;height:8px;align-items:center;
+  margin-top:4px;
+}
+.wifi-device__led{
+  width:2px;height:6px;border-radius:1px;
+}
+
+.wifi-waves{
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  margin:16px 0;
+}
+
+.wifi-wave{
+  border:2px solid;border-radius:50%;
+  animation:waveExpand 2s ease-out infinite;
+  opacity:0;
+}
+
+.wifi-wave--1{width:30px;height:30px;border-color:rgba(255,184,77,0.4);animation-delay:0s;}
+.wifi-wave--2{width:50px;height:50px;border-color:rgba(255,184,77,0.25);animation-delay:0.5s;}
+.wifi-wave--3{width:70px;height:70px;border-color:rgba(255,184,77,0.15);animation-delay:1s;}
+
+@keyframes waveExpand{
+  0%{transform:scale(0.8);opacity:0;}
+  20%{opacity:1;}
+  100%{transform:scale(1.3);opacity:0;}
+}
+
+.wifi-phone{
+  width:100px;height:60px;
+  background:linear-gradient(180deg,var(--lw-elevated),var(--lw-card));
+  border-radius:var(--radius-md);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  border:1px solid rgba(255,255,255,0.08);
+}
+
+.wifi-phone__label{
+  font-family:var(--font-body);font-size:11px;color:var(--lw-text-secondary);
+}
+.wifi-phone__icon{font-size:16px;opacity:0.7;}
+
+.wifi-instructions{
+  padding:0 24px;
+}
+
+.wifi-step{
+  display:flex;gap:12px;align-items:flex-start;
+  padding:10px 0;
+}
+
+.wifi-step__num{
+  width:24px;height:24px;border-radius:50%;flex-shrink:0;
+  background:rgba(255,184,77,0.12);border:1px solid rgba(255,184,77,0.25);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-display);font-size:12px;color:var(--lw-gold);
+}
+
+.wifi-step__text{
+  font-family:var(--font-body);font-weight:500;font-size:13px;
+  color:var(--lw-text-secondary);line-height:1.4;padding-top:2px;
+}
+
+.wifi-step__highlight{
+  color:var(--lw-gold);font-weight:600;
+}
+
+.wifi-step__mono{
+  font-family:var(--font-mono);font-size:11px;color:var(--lw-cyan);
+  background:rgba(0,212,255,0.08);padding:1px 6px;border-radius:4px;
+}
+
+.screen-footer{
+  padding:16px 24px 44px;
+  display:flex;flex-direction:column;gap:8px;
+}
+
+.progress-dots{
+  display:flex;gap:6px;justify-content:center;
+  margin-bottom:12px;
+}
+.progress-dot{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--lw-text-tertiary);opacity:0.3;
+  transition:all 300ms;
+}
+.progress-dot--active{
+  background:var(--lw-gold);opacity:1;
+  width:20px;border-radius:3px;
+}
+
+/* ============================================================
+   SCREEN 3 — TRY IT
+   ============================================================ */
+.screen-tryit{
+  width:100%;height:100%;
+  display:flex;flex-direction:column;
+  background:var(--lw-base);
+  position:relative;overflow:hidden;
+}
+
+.tryit-bg{
+  position:absolute;inset:0;
+  background:radial-gradient(ellipse at 50% 80%,rgba(255,184,77,0.06) 0%,transparent 60%);
+}
+
+.tryit-content{
+  position:relative;z-index:1;flex:1;
+  display:flex;flex-direction:column;
+  padding:48px 24px 0;
+}
+
+.tryit-hero{
+  display:flex;flex-direction:column;align-items:center;
+  text-align:center;margin-bottom:24px;
+}
+
+.tryit-led-preview{
+  width:100%;height:32px;
+  background:var(--lw-card);border-radius:var(--radius-lg);
+  padding:6px 12px;margin-bottom:16px;overflow:hidden;
+  display:flex;align-items:center;justify-content:center;
+  gap:1px;border:1px solid rgba(255,255,255,0.04);
+}
+
+.tryit-pixel{
+  width:2px;height:16px;border-radius:1px;
+  transition:background-color 200ms,height 200ms;
+  position:relative;
+}
+.tryit-pixel::after{
+  content:'';position:absolute;inset:-2px -1px;
+  border-radius:2px;background:inherit;filter:blur(2px);opacity:0.3;
+}
+
+.tryit-effect-name{
+  font-family:var(--font-display);font-size:20px;
+  color:var(--lw-text-primary);letter-spacing:1px;
+  margin-bottom:4px;
+  transition:opacity 300ms;
+}
+
+.tryit-effect-meta{
+  font-family:var(--font-body);font-size:12px;
+  color:var(--lw-text-tertiary);
+}
+
+.tryit-effects{
+  display:grid;grid-template-columns:1fr 1fr;gap:8px;
+  padding:0;margin-top:8px;
+}
+
+.tryit-card{
+  background:linear-gradient(180deg,var(--lw-card),var(--lw-card-alt));
+  border-radius:var(--radius-md);padding:12px;
+  cursor:pointer;transition:all 200ms var(--ease-out-expo);
+  border:1px solid transparent;display:flex;flex-direction:column;gap:6px;
+}
+.tryit-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-elevated);}
+.tryit-card--active{border-color:rgba(255,184,77,0.3);background:rgba(255,184,77,0.05);}
+
+.tryit-card__swatch{
+  height:20px;border-radius:6px;overflow:hidden;display:flex;
+}
+.tryit-card__swatch > div{flex:1;}
+
+.tryit-card__name{
+  font-family:var(--font-body);font-weight:600;font-size:12px;
+  color:var(--lw-text-primary);
+}
+.tryit-card__type{
+  font-family:var(--font-body);font-size:10px;color:var(--lw-text-tertiary);
+}
+
+.tryit-feedback{
+  text-align:center;margin-top:16px;
+  font-family:var(--font-body);font-size:13px;color:var(--lw-gold);
+  opacity:0;transition:opacity 300ms;height:20px;
+}
+.tryit-feedback--visible{opacity:1;}
+
+/* ============================================================
+   ANNOTATION LAYER
+   ============================================================ */
+.annotation{
+  position:relative;
+  max-width:1200px;width:100%;
+  margin-top:48px;margin-bottom:32px;
+  display:flex;flex-direction:column;gap:16px;
+}
+
+.annotation__title{
+  font-family:var(--font-display);font-size:24px;letter-spacing:1px;
+  color:var(--lw-text-primary);
+}
+
+.annotation__grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+  gap:16px;
+}
+
+.annotation__card{
+  background:linear-gradient(180deg,var(--lw-card),var(--lw-card-alt));
+  border-radius:var(--radius-lg);padding:16px;
+  box-shadow:var(--shadow-ambient);
+}
+
+.annotation__card-title{
+  font-family:var(--font-display);font-size:14px;letter-spacing:1px;
+  color:var(--lw-gold);margin-bottom:8px;
+}
+
+.annotation__card-body{
+  font-family:var(--font-body);font-weight:500;font-size:13px;
+  color:var(--lw-text-secondary);line-height:1.5;
+}
+
+.annotation__card-spec{
+  font-family:var(--font-mono);font-size:10px;color:var(--lw-text-tertiary);
+  margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.04);
+}
+
+/* ============================================================
+   FOOTER
+   ============================================================ */
+.page-footer{
+  text-align:center;padding:48px 0 32px;width:100%;max-width:1200px;
+  border-top:1px solid rgba(255,255,255,0.04);margin-top:32px;
+}
+.page-footer__brand{font-family:var(--font-display);font-size:18px;letter-spacing:4px;color:var(--lw-gold);opacity:0.6;}
+.page-footer__meta{font-family:var(--font-mono);font-size:10px;color:var(--lw-text-tertiary);margin-top:8px;}
+
+@media(max-width:1100px){
+  .phones-row{gap:24px;}
+}
+@media(max-width:768px){
+  .phones-row{flex-direction:column;align-items:center;}
+  .page-title{font-size:36px;}
+}
+</style>
+</head>
+<body>
+
+  <header class="page-header">
+    <div class="brand-name">SpectraSynq</div>
+    <h1 class="page-title">ONBOARDING</h1>
+    <p class="page-subtitle">First-time user experience &mdash; 3 screens from launch to live control</p>
+  </header>
+
+  <!-- ============================
+       THREE PHONE SCREENS
+       ============================ -->
+  <div class="phones-row">
+
+    <!-- ======== SCREEN 1 — WELCOME ======== -->
+    <div class="phone-wrapper">
+      <div class="phone-step">01</div>
+      <div class="phone-label">WELCOME</div>
+      <div class="iphone">
+        <div class="iphone__notch"></div>
+        <div class="iphone__home"></div>
+        <div class="iphone__screen">
+          <div class="screen-welcome">
+            <div class="welcome-bg">
+              <div class="welcome-orb welcome-orb--gold"></div>
+              <div class="welcome-orb welcome-orb--cyan"></div>
+            </div>
+
+            <div class="welcome-content">
+              <div class="welcome-logo">
+                <div class="welcome-logo__icon">&#9889;</div>
+              </div>
+              <div class="welcome-brand">SPECTRASYNQ</div>
+              <div class="welcome-title">LIGHTWAVEOS</div>
+              <div class="welcome-subtitle">Your music, made visible. Control 320 LEDs that react to every beat, note, and rhythm.</div>
+
+              <div class="welcome-strip" id="welcome-strip"></div>
+            </div>
+
+            <div class="welcome-footer">
+              <div class="progress-dots">
+                <div class="progress-dot progress-dot--active"></div>
+                <div class="progress-dot"></div>
+                <div class="progress-dot"></div>
+              </div>
+              <button class="onboard-btn onboard-btn--primary">GET STARTED</button>
+              <button class="onboard-btn onboard-btn--ghost">I'VE USED THIS BEFORE</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======== SCREEN 2 — WIFI ======== -->
+    <div class="phone-wrapper">
+      <div class="phone-step">02</div>
+      <div class="phone-label">CONNECT</div>
+      <div class="iphone">
+        <div class="iphone__notch"></div>
+        <div class="iphone__home"></div>
+        <div class="iphone__screen">
+          <div class="screen-wifi">
+            <div class="screen-header">
+              <div class="screen-step">STEP 2 OF 3</div>
+              <div class="screen-title">CONNECT TO YOUR K1</div>
+              <div class="screen-body">The K1 creates its own WiFi network. Connect your phone to it directly.</div>
+            </div>
+
+            <div class="wifi-visual">
+              <div class="wifi-device">
+                <div class="wifi-device__label">K1</div>
+                <div class="wifi-device__sub">192.168.4.1</div>
+                <div class="wifi-device__led-strip">
+                  <div class="wifi-device__led" style="background:var(--lw-gold);"></div>
+                  <div class="wifi-device__led" style="background:var(--lw-gold-bright);"></div>
+                  <div class="wifi-device__led" style="background:var(--lw-gold);"></div>
+                  <div class="wifi-device__led" style="background:var(--lw-cyan);"></div>
+                  <div class="wifi-device__led" style="background:var(--lw-gold);"></div>
+                  <div class="wifi-device__led" style="background:var(--lw-gold-bright);"></div>
+                  <div class="wifi-device__led" style="background:var(--lw-gold);"></div>
+                </div>
+              </div>
+              <div class="wifi-waves">
+                <div class="wifi-wave wifi-wave--1"></div>
+                <div class="wifi-wave wifi-wave--2"></div>
+                <div class="wifi-wave wifi-wave--3"></div>
+              </div>
+              <div class="wifi-phone">
+                <div class="wifi-phone__icon">&#128241;</div>
+                <div class="wifi-phone__label">Your iPhone</div>
+              </div>
+            </div>
+
+            <div class="wifi-instructions">
+              <div class="wifi-step">
+                <div class="wifi-step__num">1</div>
+                <div class="wifi-step__text">Open <span class="wifi-step__highlight">Settings &rarr; WiFi</span> on your iPhone</div>
+              </div>
+              <div class="wifi-step">
+                <div class="wifi-step__num">2</div>
+                <div class="wifi-step__text">Connect to <span class="wifi-step__mono">LightwaveOS</span> (open network, no password)</div>
+              </div>
+              <div class="wifi-step">
+                <div class="wifi-step__num">3</div>
+                <div class="wifi-step__text">Return here &mdash; connection is <span class="wifi-step__highlight">automatic</span></div>
+              </div>
+            </div>
+
+            <div class="screen-footer">
+              <div class="progress-dots">
+                <div class="progress-dot"></div>
+                <div class="progress-dot progress-dot--active"></div>
+                <div class="progress-dot"></div>
+              </div>
+              <button class="onboard-btn onboard-btn--primary">OPEN WIFI SETTINGS</button>
+              <button class="onboard-btn onboard-btn--ghost">SKIP FOR NOW</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======== SCREEN 3 — TRY IT ======== -->
+    <div class="phone-wrapper">
+      <div class="phone-step">03</div>
+      <div class="phone-label">TRY IT</div>
+      <div class="iphone">
+        <div class="iphone__notch"></div>
+        <div class="iphone__home"></div>
+        <div class="iphone__screen">
+          <div class="screen-tryit">
+            <div class="tryit-bg"></div>
+
+            <div class="tryit-content">
+              <div class="screen-step" style="margin-bottom:8px;">STEP 3 OF 3</div>
+              <div class="screen-title" style="margin-bottom:4px;">TAP TO TRY</div>
+              <div class="screen-body" style="margin-bottom:16px;">Tap any effect below. Your K1 changes instantly.</div>
+
+              <div class="tryit-hero">
+                <div class="tryit-led-preview" id="tryit-strip"></div>
+                <div class="tryit-effect-name" id="tryit-name">LGP HOLOGRAPHIC TUNED</div>
+                <div class="tryit-effect-meta">Audio &middot; Comet Trails</div>
+              </div>
+
+              <div class="tryit-effects">
+                <div class="tryit-card tryit-card--active" data-effect="0" onclick="selectEffect(this, 0)">
+                  <div class="tryit-card__swatch">
+                    <div style="background:#FFB84D;"></div>
+                    <div style="background:#FF8C00;"></div>
+                    <div style="background:#CC6600;"></div>
+                    <div style="background:#884400;"></div>
+                  </div>
+                  <div class="tryit-card__name">LGP Holographic</div>
+                  <div class="tryit-card__type">Audio &middot; Comet</div>
+                </div>
+                <div class="tryit-card" data-effect="1" onclick="selectEffect(this, 1)">
+                  <div class="tryit-card__swatch">
+                    <div style="background:#00D4FF;"></div>
+                    <div style="background:#0099FF;"></div>
+                    <div style="background:#0055CC;"></div>
+                    <div style="background:#003388;"></div>
+                  </div>
+                  <div class="tryit-card__name">Ripple Enhanced</div>
+                  <div class="tryit-card__type">Audio &middot; Waveform</div>
+                </div>
+                <div class="tryit-card" data-effect="2" onclick="selectEffect(this, 2)">
+                  <div class="tryit-card__swatch">
+                    <div style="background:#4DFFB8;"></div>
+                    <div style="background:#00D4FF;"></div>
+                    <div style="background:#9900FF;"></div>
+                    <div style="background:#FF00CC;"></div>
+                  </div>
+                  <div class="tryit-card__name">Aurora Wave</div>
+                  <div class="tryit-card__type">Audio &middot; Spectrum</div>
+                </div>
+                <div class="tryit-card" data-effect="3" onclick="selectEffect(this, 3)">
+                  <div class="tryit-card__swatch">
+                    <div style="background:#FF4D4D;"></div>
+                    <div style="background:#FF0066;"></div>
+                    <div style="background:#CC0044;"></div>
+                    <div style="background:#880022;"></div>
+                  </div>
+                  <div class="tryit-card__name">Ember Flow</div>
+                  <div class="tryit-card__type">Ambient &middot; Warm</div>
+                </div>
+              </div>
+
+              <div class="tryit-feedback" id="tryit-feedback">Effect applied to K1</div>
+            </div>
+
+            <div class="screen-footer" style="position:relative;z-index:1;">
+              <div class="progress-dots">
+                <div class="progress-dot"></div>
+                <div class="progress-dot"></div>
+                <div class="progress-dot progress-dot--active"></div>
+              </div>
+              <button class="onboard-btn onboard-btn--primary">START USING LIGHTWAVEOS</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============================
+       DESIGN ANNOTATIONS
+       ============================ -->
+  <div class="annotation">
+    <div class="annotation__title">DESIGN DECISIONS</div>
+    <div class="annotation__grid">
+      <div class="annotation__card">
+        <div class="annotation__card-title">3 SCREENS ONLY</div>
+        <div class="annotation__card-body">
+          Minimalist onboarding. Users want to control lights, not read tutorials.
+          Each screen has one clear purpose: introduce, connect, demonstrate responsiveness.
+          The "I've used this before" escape hatch on screen 1 respects returning users.
+        </div>
+        <div class="annotation__card-spec">Total flow: ~20 seconds for new users</div>
+      </div>
+
+      <div class="annotation__card">
+        <div class="annotation__card-title">WIFI GUIDANCE</div>
+        <div class="annotation__card-body">
+          K1 operates as an AP (access point), not a router. This is non-obvious.
+          Screen 2 explains the topology visually: K1 broadcasts, phone connects.
+          The "Open WiFi Settings" button uses iOS deep-link to reduce friction.
+          No password required (open network) eliminates another failure point.
+        </div>
+        <div class="annotation__card-spec">AP: LightwaveOS &middot; No password &middot; 192.168.4.1</div>
+      </div>
+
+      <div class="annotation__card">
+        <div class="annotation__card-title">IMMEDIATE FEEDBACK</div>
+        <div class="annotation__card-body">
+          Screen 3 lets users tap an effect and see it change instantly on the physical K1.
+          This demonstrates the core value proposition: the app controls real lights in real time.
+          The LED preview strip updates simultaneously, reinforcing the connection between
+          screen and hardware.
+        </div>
+        <div class="annotation__card-spec">Effect change latency: &lt;50ms (REST API)</div>
+      </div>
+
+      <div class="annotation__card">
+        <div class="annotation__card-title">VISUAL CONTINUITY</div>
+        <div class="annotation__card-body">
+          The animated LED strip on the welcome screen uses the same centre-origin rendering
+          as the physical device. Users see the lighting pattern before they even connect,
+          building anticipation. The gold-to-cyan gradient previews the brand palette.
+        </div>
+        <div class="annotation__card-spec">Animation: 60fps CSS, centre origin 40/41 (of 80)</div>
+      </div>
+
+      <div class="annotation__card">
+        <div class="annotation__card-title">ACCESSIBILITY</div>
+        <div class="annotation__card-body">
+          All text meets WCAG AA contrast (4.5:1 minimum on #0F1219 backgrounds).
+          Touch targets are 52pt (buttons) and 44pt minimum (effect cards).
+          Progress dots provide orientation for screen reader users.
+          Motion-sensitive users: animations respect prefers-reduced-motion.
+        </div>
+        <div class="annotation__card-spec">Contrast: Primary text 12.8:1 &middot; Gold 8.5:1</div>
+      </div>
+
+      <div class="annotation__card">
+        <div class="annotation__card-title">TYPOGRAPHY HIERARCHY</div>
+        <div class="annotation__card-body">
+          Welcome screen uses full brand stack: Bebas Neue for "LIGHTWAVEOS" title,
+          Rajdhani for body copy, JetBrains Mono for the WiFi address.
+          Step indicators ("STEP 2 OF 3") use uppercase Bebas at small size for
+          navigational context without visual weight.
+        </div>
+        <div class="annotation__card-spec">Title: 36pt Bebas &middot; Body: 15pt Rajdhani 500</div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="page-footer">
+    <div class="page-footer__brand">SPECTRASYNQ</div>
+    <div class="page-footer__meta">LightwaveOS Onboarding Flow &middot; 3 Screens &middot; ~20s to First Light</div>
+  </footer>
+
+<script>
+/* ============================================================
+   WELCOME SCREEN LED STRIP
+   ============================================================ */
+(function(){
+  const strip = document.getElementById('welcome-strip');
+  const N = 80, C = N / 2;
+
+  for(let i = 0; i < N; i++){
+    const p = document.createElement('div');
+    p.className = 'welcome-strip__pixel';
+    strip.appendChild(p);
+  }
+
+  const pixels = strip.querySelectorAll('.welcome-strip__pixel');
+  let t = 0;
+
+  function hsl(h,s,l){
+    h/=360;s/=100;l/=100;let r,g,b;
+    if(s===0){r=g=b=l;}else{
+      const f=(p,q,t)=>{if(t<0)t+=1;if(t>1)t-=1;if(t<1/6)return p+(q-p)*6*t;if(t<1/2)return q;if(t<2/3)return p+(q-p)*(2/3-t)*6;return p;};
+      const q=l<.5?l*(1+s):l+s-l*s;const p=2*l-q;
+      r=f(p,q,h+1/3);g=f(p,q,h);b=f(p,q,h-1/3);
+    }
+    return`rgb(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)})`;
+  }
+
+  function frame(){
+    t+=0.02;
+    pixels.forEach((px,i)=>{
+      const d=Math.abs(i-C);
+      const n=d/C;
+      const w=Math.sin(t*2.5-d*0.12)*0.5+0.5;
+      const h=35+n*155;
+      const l=(48-n*22)*Math.pow(w,1.5)+4;
+      px.style.backgroundColor=hsl(h,85,l);
+    });
+    requestAnimationFrame(frame);
+  }
+  frame();
+})();
+
+/* ============================================================
+   TRY-IT SCREEN LED STRIP + EFFECT SELECTION
+   ============================================================ */
+const tryitEffects = [
+  { name:'LGP HOLOGRAPHIC TUNED', hue:35, sat:85, meta:'Audio &middot; Comet Trails' },
+  { name:'RIPPLE ENHANCED', hue:195, sat:80, meta:'Audio &middot; Waveform' },
+  { name:'AURORA WAVE', hue:160, sat:75, meta:'Audio &middot; Spectrum' },
+  { name:'EMBER FLOW', hue:10, sat:90, meta:'Ambient &middot; Warm' },
+];
+
+(function(){
+  const strip = document.getElementById('tryit-strip');
+  const N = 100, C = N / 2;
+  for(let i = 0; i < N; i++){
+    const p = document.createElement('div');
+    p.className = 'tryit-pixel';
+    strip.appendChild(p);
+  }
+  updateTryitStrip(0);
+
+  let t = 0;
+  function animate(){
+    t += 0.025;
+    const effect = tryitEffects[currentTryitEffect];
+    const pixels = strip.querySelectorAll('.tryit-pixel');
+    pixels.forEach((px, i) => {
+      const d = Math.abs(i - C);
+      const n = d / C;
+      const w = Math.sin(t * 2 - d * 0.1) * 0.5 + 0.5;
+      const h = effect.hue + n * 50;
+      const l = (45 - n * 20) * Math.pow(w, 1.5) + 4;
+      px.style.backgroundColor = `hsl(${h},${effect.sat}%,${l}%)`;
+    });
+    requestAnimationFrame(animate);
+  }
+  animate();
+})();
+
+let currentTryitEffect = 0;
+
+function updateTryitStrip(idx){
+  currentTryitEffect = idx;
+}
+
+function selectEffect(el, idx){
+  // Update active card
+  document.querySelectorAll('.tryit-card').forEach(c => c.classList.remove('tryit-card--active'));
+  el.classList.add('tryit-card--active');
+
+  // Update name
+  const nameEl = document.getElementById('tryit-name');
+  nameEl.style.opacity = '0';
+  setTimeout(() => {
+    nameEl.textContent = tryitEffects[idx].name;
+    document.querySelector('.tryit-effect-meta').textContent = tryitEffects[idx].meta;
+    nameEl.style.opacity = '1';
+  }, 150);
+
+  // Update strip
+  updateTryitStrip(idx);
+
+  // Show feedback
+  const fb = document.getElementById('tryit-feedback');
+  fb.classList.add('tryit-feedback--visible');
+  fb.textContent = 'Effect applied to K1';
+  setTimeout(() => fb.classList.remove('tryit-feedback--visible'), 2000);
+}
+</script>
+</body>
+</html>

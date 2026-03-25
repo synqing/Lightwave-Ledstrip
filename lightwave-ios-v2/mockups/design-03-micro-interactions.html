@@ -1,0 +1,1251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LightwaveOS Micro-Interactions — SpectraSynq</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{font-size:16px;-webkit-font-smoothing:antialiased;}
+
+:root{
+  --lw-gold:#FFB84D;--lw-gold-bright:#FFCC33;--lw-gold-dim:#B8842E;
+  --lw-cyan:#00D4FF;--lw-base:#0F1219;--lw-base-deep:#08090E;
+  --lw-card:#1E2535;--lw-card-alt:#1A2030;--lw-elevated:#252D3F;--lw-elevated-hover:#2C3650;
+  --lw-text-primary:#E6E9EF;--lw-text-secondary:#9CA3B0;--lw-text-tertiary:#6B7280;
+  --lw-success:#4DFFB8;--lw-error:#FF4D4D;
+  --lw-zone-0:#00FFFF;--lw-zone-2:#9900FF;
+  --font-display:'Bebas Neue',sans-serif;--font-body:'Rajdhani',system-ui,sans-serif;
+  --font-mono:'JetBrains Mono',monospace;
+  --radius-md:12px;--radius-lg:16px;--radius-xl:24px;--radius-pill:999px;
+  --shadow-ambient:0 2px 12px rgba(0,0,0,0.4);--shadow-elevated:0 4px 20px rgba(0,0,0,0.5);
+  --ease-out-expo:cubic-bezier(0.16,1,0.3,1);--ease-spring:cubic-bezier(0.34,1.56,0.64,1);
+}
+
+body{background:var(--lw-base-deep);color:var(--lw-text-primary);font-family:var(--font-body);min-height:100vh;}
+.page-container{max-width:1200px;margin:0 auto;padding:32px 24px;}
+
+.page-header{text-align:center;margin-bottom:64px;padding-top:48px;position:relative;}
+.page-header::before{content:'';position:absolute;top:-80px;left:50%;transform:translateX(-50%);width:500px;height:300px;background:radial-gradient(ellipse,rgba(255,184,77,0.05) 0%,transparent 70%);pointer-events:none;}
+.brand-name{font-family:var(--font-display);font-size:14px;letter-spacing:6px;color:var(--lw-gold);opacity:0.8;}
+.page-title{font-family:var(--font-display);font-size:56px;letter-spacing:2px;color:var(--lw-text-primary);line-height:1;margin-top:4px;}
+.page-subtitle{font-family:var(--font-body);font-weight:500;font-size:18px;color:var(--lw-text-secondary);margin-top:8px;}
+
+.section{margin-bottom:64px;}
+.section-header{display:flex;align-items:center;gap:12px;margin-bottom:24px;padding-bottom:12px;border-bottom:1px solid rgba(255,184,77,0.15);}
+.section-number{font-family:var(--font-display);font-size:32px;color:var(--lw-gold);opacity:0.4;}
+.section-title{font-family:var(--font-display);font-size:28px;letter-spacing:1px;color:var(--lw-text-primary);}
+.section-desc{font-family:var(--font-body);font-weight:500;font-size:15px;color:var(--lw-text-secondary);margin-bottom:24px;line-height:1.5;}
+
+.demo-stage{
+  background:var(--lw-base);border-radius:var(--radius-xl);
+  padding:40px;border:1px solid rgba(255,255,255,0.04);
+  display:flex;flex-direction:column;align-items:center;gap:32px;
+  min-height:300px;position:relative;overflow:hidden;
+}
+
+.demo-stage--row{flex-direction:row;flex-wrap:wrap;justify-content:center;}
+
+.demo-label{
+  font-family:var(--font-display);font-size:12px;letter-spacing:2px;
+  color:var(--lw-text-tertiary);text-align:center;width:100%;
+}
+
+.demo-controls{
+  display:flex;gap:12px;flex-wrap:wrap;justify-content:center;
+  padding-top:16px;border-top:1px solid rgba(255,255,255,0.04);width:100%;
+}
+
+.demo-btn{
+  font-family:var(--font-display);font-size:12px;letter-spacing:1px;
+  padding:6px 16px;border-radius:var(--radius-pill);border:1px solid var(--lw-gold);
+  background:transparent;color:var(--lw-gold);cursor:pointer;
+  transition:all 200ms;min-height:32px;
+}
+.demo-btn:hover{background:rgba(255,184,77,0.1);}
+.demo-btn--active{background:rgba(255,184,77,0.15);}
+
+/* ============================================================
+   01 — BEAT-REACTIVE UI ELEMENTS
+   ============================================================ */
+.beat-hero{
+  display:flex;flex-direction:column;align-items:center;gap:12px;
+}
+
+.beat-bpm{
+  font-family:var(--font-display);font-size:64px;color:var(--lw-gold);
+  line-height:1;transition:transform 100ms,text-shadow 200ms;
+}
+.beat-bpm.pulse{
+  transform:scale(1.08);
+  text-shadow:0 0 30px rgba(255,184,77,0.5);
+}
+
+.beat-ring{
+  width:120px;height:120px;border-radius:50%;
+  border:2px solid rgba(255,184,77,0.3);
+  display:flex;align-items:center;justify-content:center;
+  position:relative;
+  transition:border-color 100ms;
+}
+.beat-ring.pulse{border-color:var(--lw-gold);}
+
+.beat-ring__glow{
+  position:absolute;inset:-8px;border-radius:50%;
+  background:radial-gradient(circle,rgba(255,184,77,0.15) 0%,transparent 70%);
+  opacity:0;transition:opacity 200ms;
+}
+.beat-ring.pulse .beat-ring__glow{opacity:1;}
+
+.beat-ring__dot{
+  width:16px;height:16px;border-radius:50%;background:var(--lw-gold-bright);
+  transition:transform 100ms var(--ease-spring),box-shadow 200ms;
+}
+.beat-ring.pulse .beat-ring__dot{
+  transform:scale(1.8);
+  box-shadow:0 0 20px rgba(255,204,51,0.6);
+}
+
+.beat-card{
+  background:linear-gradient(180deg,var(--lw-card),var(--lw-card-alt));
+  border-radius:var(--radius-lg);padding:16px;
+  box-shadow:var(--shadow-ambient);
+  transition:box-shadow 200ms,border-color 200ms;
+  border:1px solid transparent;width:240px;
+}
+.beat-card.pulse{
+  box-shadow:0 0 24px rgba(255,184,77,0.2),var(--shadow-ambient);
+  border-color:rgba(255,184,77,0.15);
+}
+.beat-card__title{font-family:var(--font-display);font-size:14px;letter-spacing:0.8px;color:var(--lw-text-tertiary);text-transform:uppercase;margin-bottom:4px;}
+.beat-card__value{font-family:var(--font-mono);font-size:13px;color:var(--lw-text-primary);}
+
+.beat-strip{
+  display:flex;gap:1px;height:28px;align-items:center;
+}
+.beat-strip__pixel{
+  width:3px;height:16px;border-radius:1px;
+  transition:height 80ms,background-color 80ms;
+}
+
+/* ============================================================
+   02 — SLIDER INTERACTION
+   ============================================================ */
+.slider-demo{width:100%;max-width:400px;}
+
+.slider-demo__track{
+  position:relative;height:44px;display:flex;align-items:center;
+  cursor:pointer;-webkit-tap-highlight-color:transparent;
+}
+
+.slider-demo__bg{
+  position:absolute;left:0;right:0;height:10px;
+  background:var(--lw-card);border-radius:5px;
+}
+
+.slider-demo__fill{
+  position:absolute;left:0;height:10px;border-radius:5px;
+  background:linear-gradient(90deg,var(--lw-gold-dim),var(--lw-gold));
+  transition:width 30ms;
+}
+
+.slider-demo__thumb{
+  position:absolute;width:28px;height:28px;border-radius:50%;
+  background:var(--lw-gold);z-index:2;
+  transition:box-shadow 200ms,transform 200ms var(--ease-spring);
+  box-shadow:0 2px 8px rgba(0,0,0,0.3);
+  transform:translateX(-14px);
+}
+
+.slider-demo__thumb--dragging{
+  transform:translateX(-14px) scale(1.15);
+  box-shadow:0 0 20px rgba(255,184,77,0.6),0 2px 8px rgba(0,0,0,0.3);
+}
+
+.slider-demo__tooltip{
+  position:absolute;bottom:100%;left:50%;transform:translateX(-50%);
+  background:var(--lw-elevated);padding:4px 10px;border-radius:var(--radius-md);
+  font-family:var(--font-mono);font-size:13px;color:var(--lw-gold);
+  white-space:nowrap;pointer-events:none;
+  opacity:0;transition:opacity 200ms,transform 200ms;
+  margin-bottom:8px;box-shadow:var(--shadow-elevated);
+}
+
+.slider-demo__tooltip--visible{opacity:1;transform:translateX(-50%) translateY(-4px);}
+
+.slider-demo__ticks{
+  display:flex;justify-content:space-between;margin-top:4px;
+  padding:0 2px;
+}
+
+.slider-demo__tick{
+  width:1px;height:6px;background:rgba(255,255,255,0.1);
+}
+
+.slider-demo__tick--major{height:10px;background:rgba(255,184,77,0.3);}
+
+.slider-demo__haptic{
+  position:absolute;top:50%;transform:translateY(-50%);
+  width:2px;height:14px;background:rgba(255,184,77,0.2);
+  border-radius:1px;
+}
+
+.slider-demo__label{
+  display:flex;justify-content:space-between;margin-bottom:4px;
+}
+
+.slider-demo__label-text{font-family:var(--font-body);font-weight:500;font-size:12px;color:var(--lw-text-secondary);text-transform:uppercase;}
+.slider-demo__label-value{font-family:var(--font-mono);font-weight:500;font-size:13px;color:var(--lw-gold);}
+
+/* ============================================================
+   03 — CARD EXPAND/COLLAPSE
+   ============================================================ */
+.expand-card{
+  background:linear-gradient(180deg,var(--lw-card),var(--lw-card-alt));
+  border-radius:var(--radius-lg);overflow:hidden;
+  box-shadow:var(--shadow-ambient);cursor:pointer;
+  width:100%;max-width:400px;
+  transition:box-shadow 300ms var(--ease-out-expo);
+}
+
+.expand-card:hover{box-shadow:var(--shadow-elevated);}
+
+.expand-card__header{
+  padding:16px;display:flex;justify-content:space-between;align-items:center;
+}
+
+.expand-card__title{font-family:var(--font-display);font-size:16px;letter-spacing:1px;color:var(--lw-text-primary);}
+
+.expand-card__chevron{
+  font-size:14px;color:var(--lw-text-tertiary);
+  transition:transform 400ms var(--ease-out-expo);
+}
+
+.expand-card__chevron--open{transform:rotate(180deg);}
+
+.expand-card__body{
+  max-height:0;overflow:hidden;
+  transition:max-height 400ms var(--ease-out-expo),padding 400ms;
+  padding:0 16px;
+}
+
+.expand-card__body--open{
+  max-height:300px;padding:0 16px 16px;
+}
+
+.expand-card__content{
+  padding-top:12px;border-top:1px solid rgba(255,255,255,0.04);
+  display:flex;flex-direction:column;gap:8px;
+}
+
+.expand-card__row{
+  display:flex;justify-content:space-between;
+  font-family:var(--font-body);font-weight:500;font-size:13px;
+}
+
+.expand-card__row-label{color:var(--lw-text-secondary);}
+.expand-card__row-value{color:var(--lw-text-primary);}
+
+/* ============================================================
+   04 — TAB SWITCHING
+   ============================================================ */
+.tab-demo{width:100%;max-width:400px;}
+
+.tab-bar{
+  display:flex;background:var(--lw-card);border-radius:var(--radius-md);
+  padding:3px;gap:2px;position:relative;
+  border:1px solid rgba(255,255,255,0.04);
+}
+
+.tab-bar__indicator{
+  position:absolute;top:3px;bottom:3px;
+  background:var(--lw-elevated);border-radius:calc(var(--radius-md) - 2px);
+  transition:left 400ms var(--ease-out-expo),width 400ms var(--ease-out-expo);
+  box-shadow:0 2px 8px rgba(0,0,0,0.2);
+  z-index:0;
+}
+
+.tab-bar__item{
+  flex:1;padding:10px 8px;text-align:center;
+  font-family:var(--font-display);font-size:13px;letter-spacing:1px;
+  color:var(--lw-text-tertiary);cursor:pointer;
+  transition:color 300ms;position:relative;z-index:1;
+  min-height:40px;display:flex;align-items:center;justify-content:center;
+}
+
+.tab-bar__item--active{color:var(--lw-gold);}
+
+.tab-content{
+  margin-top:16px;min-height:120px;position:relative;
+  overflow:hidden;border-radius:var(--radius-lg);
+}
+
+.tab-panel{
+  position:absolute;inset:0;
+  background:linear-gradient(180deg,var(--lw-card),var(--lw-card-alt));
+  border-radius:var(--radius-lg);padding:20px;
+  opacity:0;transform:translateX(20px);
+  transition:opacity 300ms,transform 400ms var(--ease-out-expo);
+  pointer-events:none;
+}
+
+.tab-panel--active{opacity:1;transform:translateX(0);pointer-events:auto;}
+.tab-panel--exit-left{transform:translateX(-20px);}
+
+.tab-panel__title{font-family:var(--font-display);font-size:18px;color:var(--lw-text-primary);margin-bottom:8px;letter-spacing:1px;}
+.tab-panel__body{font-family:var(--font-body);font-size:13px;color:var(--lw-text-secondary);line-height:1.5;}
+
+/* ============================================================
+   05 — EFFECT CHANGE TRANSITION
+   ============================================================ */
+.effect-transition{
+  width:100%;max-width:500px;position:relative;
+  height:200px;border-radius:var(--radius-xl);overflow:hidden;
+}
+
+.effect-display{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+  transition:opacity 400ms,transform 400ms var(--ease-out-expo);
+}
+
+.effect-display--exit{opacity:0;transform:scale(0.95) translateY(-10px);}
+.effect-display--enter{opacity:0;transform:scale(1.05) translateY(10px);}
+.effect-display--active{opacity:1;transform:scale(1) translateY(0);}
+
+.effect-display__strip{display:flex;gap:1px;height:28px;align-items:center;}
+.effect-display__pixel{width:4px;height:20px;border-radius:1px;position:relative;}
+.effect-display__pixel::after{content:'';position:absolute;inset:-3px -2px;border-radius:2px;background:inherit;filter:blur(4px);opacity:0.3;}
+
+.effect-display__name{font-family:var(--font-display);font-size:24px;letter-spacing:1px;color:var(--lw-text-primary);}
+.effect-display__meta{font-family:var(--font-body);font-size:12px;color:var(--lw-text-tertiary);}
+
+.effect-crossfade{
+  position:absolute;inset:0;
+  background:radial-gradient(ellipse at center,rgba(255,184,77,0.08) 0%,transparent 70%);
+  opacity:0;transition:opacity 300ms;
+}
+.effect-crossfade--active{opacity:1;}
+
+/* ============================================================
+   06 — CONNECTION STATE TRANSITIONS
+   ============================================================ */
+.conn-demo{width:100%;max-width:400px;}
+
+.conn-bar{
+  background:linear-gradient(180deg,var(--lw-card),var(--lw-card-alt));
+  border-radius:var(--radius-lg);padding:16px 20px;
+  display:flex;align-items:center;gap:12px;
+  box-shadow:var(--shadow-ambient);
+  transition:border-color 500ms;
+  border:1px solid transparent;
+}
+
+.conn-bar--connected{border-color:rgba(77,255,184,0.2);}
+.conn-bar--connecting{border-color:rgba(255,184,77,0.2);}
+.conn-bar--disconnected{border-color:rgba(255,77,77,0.2);}
+
+.conn-dot{
+  width:10px;height:10px;border-radius:50%;flex-shrink:0;
+  transition:background 500ms,box-shadow 500ms;
+}
+
+.conn-dot--connected{background:var(--lw-success);box-shadow:0 0 10px rgba(77,255,184,0.5);}
+.conn-dot--connecting{background:var(--lw-gold);animation:connPulse 1.5s ease-in-out infinite;}
+.conn-dot--disconnected{background:var(--lw-error);box-shadow:none;}
+
+@keyframes connPulse{0%,100%{opacity:1;box-shadow:0 0 0 rgba(255,184,77,0);}50%{opacity:0.4;box-shadow:0 0 12px rgba(255,184,77,0.4);}}
+
+.conn-text{
+  display:flex;flex-direction:column;gap:2px;flex:1;
+  transition:opacity 300ms;
+}
+
+.conn-text__status{font-family:var(--font-body);font-weight:600;font-size:14px;transition:color 500ms;}
+.conn-text__detail{font-family:var(--font-mono);font-size:10px;color:var(--lw-text-tertiary);}
+
+.conn-spinner{
+  width:20px;height:20px;border:2px solid rgba(255,184,77,0.2);
+  border-top-color:var(--lw-gold);border-radius:50%;
+  animation:connSpin 0.8s linear infinite;
+  opacity:0;transition:opacity 300ms;
+}
+.conn-spinner--visible{opacity:1;}
+
+@keyframes connSpin{to{transform:rotate(360deg);}}
+
+/* ============================================================
+   07 — LOADING / SKELETON
+   ============================================================ */
+.skeleton-card{
+  background:linear-gradient(180deg,var(--lw-card),var(--lw-card-alt));
+  border-radius:var(--radius-lg);padding:16px;
+  width:100%;max-width:340px;
+}
+
+.skeleton-line{
+  height:12px;border-radius:6px;
+  background:var(--lw-elevated);
+  position:relative;overflow:hidden;
+  margin-bottom:10px;
+}
+
+.skeleton-line::after{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,0.04),transparent);
+  animation:shimmer 1.5s infinite;
+}
+
+.skeleton-line--title{width:60%;height:16px;margin-bottom:14px;}
+.skeleton-line--full{width:100%;}
+.skeleton-line--med{width:75%;}
+.skeleton-line--short{width:45%;margin-bottom:0;}
+
+.skeleton-bar{
+  height:8px;border-radius:4px;background:var(--lw-elevated);
+  position:relative;overflow:hidden;margin-top:4px;
+}
+
+.skeleton-bar::after{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,0.04),transparent);
+  animation:shimmer 1.5s infinite;
+}
+
+@keyframes shimmer{0%{transform:translateX(-100%);}100%{transform:translateX(100%);}}
+
+.skeleton-circle{
+  width:40px;height:40px;border-radius:50%;
+  background:var(--lw-elevated);position:relative;overflow:hidden;
+}
+.skeleton-circle::after{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,0.04),transparent);
+  animation:shimmer 1.5s infinite;
+}
+
+/* ============================================================
+   08 — PULL TO REFRESH
+   ============================================================ */
+.ptr-demo{
+  width:100%;max-width:340px;height:250px;overflow:hidden;
+  border-radius:var(--radius-lg);position:relative;
+}
+
+.ptr-indicator{
+  position:absolute;top:0;left:0;right:0;
+  display:flex;align-items:center;justify-content:center;
+  height:60px;transform:translateY(-60px);
+  transition:transform 400ms var(--ease-out-expo);
+  z-index:2;
+}
+
+.ptr-indicator--visible{transform:translateY(0);}
+
+.ptr-spinner{
+  width:24px;height:24px;border:2px solid rgba(255,184,77,0.2);
+  border-top-color:var(--lw-gold);border-radius:50%;
+  animation:connSpin 0.8s linear infinite;
+}
+
+.ptr-text{
+  font-family:var(--font-body);font-size:12px;color:var(--lw-text-tertiary);
+  margin-left:10px;
+}
+
+.ptr-content{
+  background:linear-gradient(180deg,var(--lw-card),var(--lw-card-alt));
+  border-radius:var(--radius-lg);
+  position:absolute;inset:0;
+  transition:transform 400ms var(--ease-out-expo);
+  padding:16px;display:flex;flex-direction:column;gap:8px;
+}
+
+.ptr-content--pulled{transform:translateY(60px);}
+
+.ptr-item{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);
+}
+.ptr-item__dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.ptr-item__text{font-family:var(--font-body);font-size:13px;color:var(--lw-text-primary);flex:1;}
+.ptr-item__value{font-family:var(--font-mono);font-size:11px;color:var(--lw-text-tertiary);}
+
+/* ============================================================
+   09 — LONG PRESS CONTEXT MENU
+   ============================================================ */
+.context-demo{position:relative;display:inline-block;}
+
+.context-target{
+  background:linear-gradient(180deg,var(--lw-card),var(--lw-card-alt));
+  border-radius:var(--radius-lg);padding:16px 24px;
+  display:flex;align-items:center;gap:12px;
+  cursor:pointer;user-select:none;
+  transition:transform 300ms var(--ease-out-expo),box-shadow 300ms;
+}
+
+.context-target:active{transform:scale(0.97);}
+
+.context-target__name{font-family:var(--font-body);font-weight:600;font-size:14px;color:var(--lw-text-primary);}
+.context-target__meta{font-family:var(--font-body);font-size:11px;color:var(--lw-text-tertiary);}
+
+.context-menu{
+  position:absolute;top:100%;left:50%;transform:translateX(-50%) scale(0.9) translateY(-8px);
+  margin-top:8px;min-width:200px;z-index:100;
+  background:rgba(37,45,63,0.95);backdrop-filter:blur(40px);-webkit-backdrop-filter:blur(40px);
+  border-radius:var(--radius-md);border:1px solid rgba(255,255,255,0.08);
+  box-shadow:0 8px 40px rgba(0,0,0,0.6);
+  opacity:0;pointer-events:none;
+  transition:opacity 200ms,transform 300ms var(--ease-spring);
+  overflow:hidden;
+}
+
+.context-menu--visible{
+  opacity:1;pointer-events:auto;
+  transform:translateX(-50%) scale(1) translateY(0);
+}
+
+.context-menu__item{
+  padding:10px 16px;display:flex;align-items:center;gap:10px;
+  font-family:var(--font-body);font-weight:500;font-size:13px;color:var(--lw-text-primary);
+  cursor:pointer;transition:background 150ms;
+}
+.context-menu__item:hover{background:rgba(255,255,255,0.04);}
+.context-menu__item--danger{color:var(--lw-error);}
+.context-menu__icon{font-size:14px;width:20px;text-align:center;opacity:0.7;}
+.context-menu__divider{height:1px;background:rgba(255,255,255,0.06);margin:4px 0;}
+
+.context-backdrop{
+  position:fixed;inset:0;z-index:50;
+  display:none;
+}
+.context-backdrop--visible{display:block;}
+
+/* ============================================================
+   FOOTER
+   ============================================================ */
+.page-footer{text-align:center;padding:48px 0 32px;border-top:1px solid rgba(255,255,255,0.04);margin-top:64px;}
+.page-footer__brand{font-family:var(--font-display);font-size:18px;letter-spacing:4px;color:var(--lw-gold);opacity:0.6;}
+.page-footer__meta{font-family:var(--font-mono);font-size:10px;color:var(--lw-text-tertiary);margin-top:8px;}
+
+@media(max-width:768px){
+  .page-title{font-size:36px;}
+  .demo-stage{padding:24px 16px;}
+  .demo-stage--row{flex-direction:column;align-items:center;}
+}
+</style>
+</head>
+<body>
+<div class="page-container">
+
+  <header class="page-header">
+    <div class="brand-name">SpectraSynq</div>
+    <h1 class="page-title">MICRO-INTERACTIONS</h1>
+    <p class="page-subtitle">Animation and interaction design for a responsive, music-driven experience</p>
+  </header>
+
+  <!-- ============================
+       01 — BEAT-REACTIVE UI
+       ============================ -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">01</span>
+      <h2 class="section-title">BEAT-REACTIVE UI</h2>
+    </div>
+    <p class="section-desc">
+      UI elements pulse in sync with detected beats. The BPM numeral scales on each hit,
+      the beat ring expands with a glow halo, and cards receive a brief accent border.
+      The LED strip responds with brightness peaks radiating from the centre.
+    </p>
+
+    <div class="demo-stage" id="beat-stage">
+      <div class="beat-hero">
+        <div class="beat-ring" id="beat-ring">
+          <div class="beat-ring__glow"></div>
+          <div class="beat-ring__dot"></div>
+        </div>
+        <div class="beat-bpm" id="beat-bpm">128</div>
+        <div style="font-family:var(--font-body);font-size:12px;color:var(--lw-text-tertiary);">TEMPO LOCKED &middot; CONFIDENCE 87%</div>
+      </div>
+
+      <div style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center;">
+        <div class="beat-card" id="beat-card-1">
+          <div class="beat-card__title">RMS LEVEL</div>
+          <div class="beat-card__value" id="beat-rms">0.342</div>
+        </div>
+        <div class="beat-card" id="beat-card-2">
+          <div class="beat-card__title">SPECTRAL FLUX</div>
+          <div class="beat-card__value">0.128</div>
+        </div>
+      </div>
+
+      <div class="beat-strip" id="beat-strip"></div>
+
+      <div class="demo-controls">
+        <button class="demo-btn" id="beat-tap">TAP BEAT</button>
+        <button class="demo-btn" id="beat-auto">AUTO 128 BPM</button>
+        <button class="demo-btn" id="beat-stop">STOP</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================
+       02 — SLIDER INTERACTION
+       ============================ -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">02</span>
+      <h2 class="section-title">SLIDER INTERACTION</h2>
+    </div>
+    <p class="section-desc">
+      Large 28pt thumb with glow expansion on drag. Floating value tooltip appears above the thumb
+      during interaction. Haptic tick marks at 25%, 50%, 75% intervals create tactile feedback points.
+      Spring-physics thumb animation on release.
+    </p>
+
+    <div class="demo-stage">
+      <div class="slider-demo" id="slider-demo">
+        <div class="slider-demo__label">
+          <span class="slider-demo__label-text">Brightness</span>
+          <span class="slider-demo__label-value" id="slider-value">178</span>
+        </div>
+        <div class="slider-demo__track" id="slider-track">
+          <div class="slider-demo__bg"></div>
+          <!-- Haptic points -->
+          <div class="slider-demo__haptic" style="left:25%;"></div>
+          <div class="slider-demo__haptic" style="left:50%;"></div>
+          <div class="slider-demo__haptic" style="left:75%;"></div>
+          <div class="slider-demo__fill" id="slider-fill"></div>
+          <div class="slider-demo__thumb" id="slider-thumb">
+            <div class="slider-demo__tooltip" id="slider-tooltip">178</div>
+          </div>
+        </div>
+        <div class="slider-demo__ticks">
+          <div class="slider-demo__tick slider-demo__tick--major"></div>
+          <div class="slider-demo__tick"></div><div class="slider-demo__tick"></div><div class="slider-demo__tick"></div><div class="slider-demo__tick"></div>
+          <div class="slider-demo__tick slider-demo__tick--major"></div>
+          <div class="slider-demo__tick"></div><div class="slider-demo__tick"></div><div class="slider-demo__tick"></div><div class="slider-demo__tick"></div>
+          <div class="slider-demo__tick slider-demo__tick--major"></div>
+          <div class="slider-demo__tick"></div><div class="slider-demo__tick"></div><div class="slider-demo__tick"></div><div class="slider-demo__tick"></div>
+          <div class="slider-demo__tick slider-demo__tick--major"></div>
+          <div class="slider-demo__tick"></div><div class="slider-demo__tick"></div><div class="slider-demo__tick"></div><div class="slider-demo__tick"></div>
+          <div class="slider-demo__tick slider-demo__tick--major"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:2px;">
+          <span style="font-family:var(--font-body);font-size:10px;color:var(--lw-text-tertiary);">0</span>
+          <span style="font-family:var(--font-body);font-size:10px;color:var(--lw-text-tertiary);">255</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================
+       03 — CARD EXPAND/COLLAPSE
+       ============================ -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">03</span>
+      <h2 class="section-title">CARD EXPANSION</h2>
+    </div>
+    <p class="section-desc">
+      Cards expand with a smooth max-height transition using exponential ease-out timing.
+      Content fades in 100ms after the container begins opening, creating a staggered reveal.
+      Collapse reverses the sequence.
+    </p>
+
+    <div class="demo-stage">
+      <div class="expand-card" id="expand-card-1" onclick="toggleCard(this)">
+        <div class="expand-card__header">
+          <span class="expand-card__title">SYSTEM STATUS</span>
+          <span class="expand-card__chevron">&#9660;</span>
+        </div>
+        <div class="expand-card__body">
+          <div class="expand-card__content">
+            <div class="expand-card__row"><span class="expand-card__row-label">Uptime</span><span class="expand-card__row-value">2h 34m</span></div>
+            <div class="expand-card__row"><span class="expand-card__row-label">FPS</span><span class="expand-card__row-value" style="color:var(--lw-success);">120</span></div>
+            <div class="expand-card__row"><span class="expand-card__row-label">Free Heap</span><span class="expand-card__row-value">142 KB</span></div>
+            <div class="expand-card__row"><span class="expand-card__row-label">RMT Show</span><span class="expand-card__row-value">6.3 ms</span></div>
+            <div class="expand-card__row"><span class="expand-card__row-label">Audio Backend</span><span class="expand-card__row-value" style="color:var(--lw-cyan);">ESV11</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="expand-card" id="expand-card-2" onclick="toggleCard(this)">
+        <div class="expand-card__header">
+          <span class="expand-card__title">AUDIO DIAGNOSTICS</span>
+          <span class="expand-card__chevron">&#9660;</span>
+        </div>
+        <div class="expand-card__body">
+          <div class="expand-card__content">
+            <div class="expand-card__row"><span class="expand-card__row-label">RMS</span><span class="expand-card__row-value">0.342</span></div>
+            <div class="expand-card__row"><span class="expand-card__row-label">Spectral Flux</span><span class="expand-card__row-value">0.128</span></div>
+            <div class="expand-card__row"><span class="expand-card__row-label">BPM</span><span class="expand-card__row-value" style="color:var(--lw-gold);">128</span></div>
+            <div class="expand-card__row"><span class="expand-card__row-label">Tempo Locked</span><span class="expand-card__row-value" style="color:var(--lw-success);">YES</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================
+       04 — TAB SWITCHING
+       ============================ -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">04</span>
+      <h2 class="section-title">TAB SWITCHING</h2>
+    </div>
+    <p class="section-desc">
+      Sliding indicator background follows active tab with exponential ease-out.
+      Content panels cross-fade with directional slide based on navigation direction.
+    </p>
+
+    <div class="demo-stage">
+      <div class="tab-demo">
+        <div class="tab-bar" id="tab-bar">
+          <div class="tab-bar__indicator" id="tab-indicator"></div>
+          <div class="tab-bar__item tab-bar__item--active" data-tab="0" onclick="switchTab(0)">EFFECTS</div>
+          <div class="tab-bar__item" data-tab="1" onclick="switchTab(1)">PALETTES</div>
+          <div class="tab-bar__item" data-tab="2" onclick="switchTab(2)">ZONES</div>
+        </div>
+        <div class="tab-content">
+          <div class="tab-panel tab-panel--active" data-panel="0">
+            <div class="tab-panel__title">EFFECTS LIBRARY</div>
+            <div class="tab-panel__body">100+ audio-reactive effects organised by category. Tap to preview, long-press for details. Current: LGP Holographic Tuned.</div>
+          </div>
+          <div class="tab-panel" data-panel="1">
+            <div class="tab-panel__title">COLOUR PALETTES</div>
+            <div class="tab-panel__body">Curated colour palettes for LED effects. Warm Ember, Deep Ocean, Aurora, Gold Pulse, and custom user palettes.</div>
+          </div>
+          <div class="tab-panel" data-panel="2">
+            <div class="tab-panel__title">ZONE CONTROL</div>
+            <div class="tab-panel__body">Independent control of 4 LED zones. Each zone supports its own effect, brightness, and palette assignment.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================
+       05 — EFFECT CHANGE TRANSITION
+       ============================ -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">05</span>
+      <h2 class="section-title">EFFECT TRANSITION</h2>
+    </div>
+    <p class="section-desc">
+      When the user switches effects, the current LED preview and name scale down and fade out,
+      a brief radial glow crossfade appears, then the new effect scales up into place.
+      Total transition: 600ms. The LED strip colours change mid-crossfade.
+    </p>
+
+    <div class="demo-stage">
+      <div class="effect-transition" id="effect-stage">
+        <div class="effect-crossfade" id="effect-crossfade"></div>
+        <div class="effect-display effect-display--active" id="effect-current">
+          <div class="effect-display__strip" id="effect-strip"></div>
+          <div class="effect-display__name" id="effect-name">LGP HOLOGRAPHIC TUNED</div>
+          <div class="effect-display__meta">Audio &middot; Comet Trails &middot; Centre Origin</div>
+        </div>
+      </div>
+
+      <div class="demo-controls">
+        <button class="demo-btn" onclick="cycleEffect()">NEXT EFFECT</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================
+       06 — CONNECTION STATE
+       ============================ -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">06</span>
+      <h2 class="section-title">CONNECTION STATES</h2>
+    </div>
+    <p class="section-desc">
+      Smooth transition between disconnected, connecting, and connected states.
+      Dot colour and glow animate over 500ms. Spinner appears/disappears with opacity fade.
+      Border colour transitions to match current state.
+    </p>
+
+    <div class="demo-stage">
+      <div class="conn-demo">
+        <div class="conn-bar conn-bar--disconnected" id="conn-bar">
+          <div class="conn-dot conn-dot--disconnected" id="conn-dot"></div>
+          <div class="conn-text">
+            <span class="conn-text__status" id="conn-status" style="color:var(--lw-error);">Disconnected</span>
+            <span class="conn-text__detail" id="conn-detail">No K1 device found</span>
+          </div>
+          <div class="conn-spinner" id="conn-spinner"></div>
+        </div>
+      </div>
+
+      <div class="demo-controls">
+        <button class="demo-btn" onclick="setConn('disconnected')">DISCONNECTED</button>
+        <button class="demo-btn" onclick="setConn('connecting')">CONNECTING</button>
+        <button class="demo-btn" onclick="setConn('connected')">CONNECTED</button>
+        <button class="demo-btn" onclick="runConnSequence()">FULL SEQUENCE</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================
+       07 — LOADING / SKELETON
+       ============================ -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">07</span>
+      <h2 class="section-title">LOADING STATES</h2>
+    </div>
+    <p class="section-desc">
+      Skeleton screens maintain layout structure during loading with a subtle shimmer sweep.
+      The shimmer uses a translucent gradient that sweeps left-to-right every 1.5s.
+      Content fades in over 300ms when data arrives.
+    </p>
+
+    <div class="demo-stage demo-stage--row" style="gap:24px;">
+      <!-- Skeleton card -->
+      <div>
+        <div class="demo-label" style="margin-bottom:12px;">SKELETON STATE</div>
+        <div class="skeleton-card">
+          <div class="skeleton-line skeleton-line--title"></div>
+          <div class="skeleton-line skeleton-line--full"></div>
+          <div class="skeleton-line skeleton-line--med"></div>
+          <div class="skeleton-bar" style="width:100%;margin-top:8px;margin-bottom:16px;"></div>
+          <div class="skeleton-line skeleton-line--full"></div>
+          <div class="skeleton-line skeleton-line--short"></div>
+          <div style="display:flex;gap:8px;margin-top:14px;">
+            <div class="skeleton-circle"></div>
+            <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:6px;">
+              <div class="skeleton-line skeleton-line--med" style="margin:0;height:10px;"></div>
+              <div class="skeleton-line skeleton-line--short" style="margin:0;height:8px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Loaded card -->
+      <div>
+        <div class="demo-label" style="margin-bottom:12px;">LOADED STATE</div>
+        <div style="background:linear-gradient(180deg,var(--lw-card),var(--lw-card-alt));border-radius:var(--radius-lg);padding:16px;width:340px;box-shadow:var(--shadow-ambient);">
+          <div style="font-family:var(--font-display);font-size:14px;letter-spacing:0.8px;color:var(--lw-text-tertiary);text-transform:uppercase;margin-bottom:10px;">SYSTEM STATUS</div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="font-family:var(--font-body);font-size:13px;color:var(--lw-text-secondary);">Uptime</span><span style="font-family:var(--font-body);font-size:13px;color:var(--lw-text-primary);">2h 34m</span></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="font-family:var(--font-body);font-size:13px;color:var(--lw-text-secondary);">FPS</span><span style="font-family:var(--font-body);font-size:13px;color:var(--lw-success);">120</span></div>
+          <div style="height:8px;border-radius:4px;background:var(--lw-elevated);overflow:hidden;margin:8px 0 12px;"><div style="width:87%;height:100%;background:var(--lw-gold);border-radius:4px;"></div></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="font-family:var(--font-body);font-size:13px;color:var(--lw-text-secondary);">Free Heap</span><span style="font-family:var(--font-body);font-size:13px;color:var(--lw-text-primary);">142 KB</span></div>
+          <div style="display:flex;justify-content:space-between;"><span style="font-family:var(--font-body);font-size:13px;color:var(--lw-text-secondary);">Backend</span><span style="font-family:var(--font-body);font-size:13px;color:var(--lw-cyan);">ESV11</span></div>
+          <div style="display:flex;gap:8px;margin-top:14px;align-items:center;">
+            <div style="width:40px;height:40px;border-radius:50%;background:rgba(255,184,77,0.1);display:flex;align-items:center;justify-content:center;font-size:18px;">&#127925;</div>
+            <div><div style="font-family:var(--font-body);font-weight:600;font-size:13px;color:var(--lw-text-primary);">LGP Holographic Tuned</div>
+            <div style="font-family:var(--font-body);font-size:11px;color:var(--lw-text-tertiary);">Audio &middot; Comet Trails</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================
+       08 — PULL TO REFRESH
+       ============================ -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">08</span>
+      <h2 class="section-title">PULL TO REFRESH</h2>
+    </div>
+    <p class="section-desc">
+      Content translates downward to reveal a spinner and status text.
+      The indicator uses spring-physics return animation.
+    </p>
+
+    <div class="demo-stage">
+      <div class="ptr-demo" id="ptr-demo">
+        <div class="ptr-indicator" id="ptr-indicator">
+          <div class="ptr-spinner"></div>
+          <span class="ptr-text">Syncing with K1...</span>
+        </div>
+        <div class="ptr-content" id="ptr-content">
+          <div style="font-family:var(--font-display);font-size:14px;letter-spacing:0.8px;color:var(--lw-text-tertiary);margin-bottom:4px;">DEVICE STATUS</div>
+          <div class="ptr-item"><div class="ptr-item__dot" style="background:var(--lw-success);"></div><span class="ptr-item__text">WiFi AP Active</span><span class="ptr-item__value">192.168.4.1</span></div>
+          <div class="ptr-item"><div class="ptr-item__dot" style="background:var(--lw-gold);"></div><span class="ptr-item__text">Audio Streaming</span><span class="ptr-item__value">32 kHz</span></div>
+          <div class="ptr-item"><div class="ptr-item__dot" style="background:var(--lw-success);"></div><span class="ptr-item__text">LED Output</span><span class="ptr-item__value">120 FPS</span></div>
+          <div class="ptr-item"><div class="ptr-item__dot" style="background:var(--lw-cyan);"></div><span class="ptr-item__text">Heap</span><span class="ptr-item__value">142 KB free</span></div>
+        </div>
+      </div>
+
+      <div class="demo-controls">
+        <button class="demo-btn" onclick="triggerPTR()">SIMULATE PULL</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================
+       09 — LONG PRESS CONTEXT MENU
+       ============================ -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">09</span>
+      <h2 class="section-title">LONG-PRESS CONTEXT MENU</h2>
+    </div>
+    <p class="section-desc">
+      Context menu appears with spring-physics scale animation (0.9 to 1.0) and opacity fade.
+      The target element scales down slightly during the press to provide tactile feedback.
+      Menu items support hover highlighting and danger variants.
+    </p>
+
+    <div class="demo-stage">
+      <div class="context-demo" id="context-demo">
+        <div class="context-backdrop" id="context-backdrop"></div>
+        <div class="context-target" id="context-target">
+          <div style="width:32px;height:32px;border-radius:8px;background:rgba(255,184,77,0.1);display:flex;align-items:center;justify-content:center;font-size:16px;">&#127925;</div>
+          <div>
+            <div class="context-target__name">LGP Holographic Tuned</div>
+            <div class="context-target__meta">Audio &middot; Comet Trails &middot; #0x0A10</div>
+          </div>
+        </div>
+        <div class="context-menu" id="context-menu">
+          <div class="context-menu__item"><span class="context-menu__icon">&#9654;</span>Apply to All Zones</div>
+          <div class="context-menu__item"><span class="context-menu__icon">&#9881;</span>Edit Parameters</div>
+          <div class="context-menu__item"><span class="context-menu__icon">&#128278;</span>Copy Effect ID</div>
+          <div class="context-menu__divider"></div>
+          <div class="context-menu__item"><span class="context-menu__icon">&#11088;</span>Add to Favourites</div>
+          <div class="context-menu__item"><span class="context-menu__icon">&#128260;</span>Share Preset</div>
+          <div class="context-menu__divider"></div>
+          <div class="context-menu__item context-menu__item--danger"><span class="context-menu__icon">&#10006;</span>Reset to Default</div>
+        </div>
+      </div>
+
+      <div class="demo-controls">
+        <button class="demo-btn" onclick="toggleContextMenu()">TOGGLE MENU</button>
+      </div>
+    </div>
+  </section>
+
+  <footer class="page-footer">
+    <div class="page-footer__brand">SPECTRASYNQ</div>
+    <div class="page-footer__meta">LightwaveOS Micro-Interactions &middot; v2.0 &middot; 9 Interaction Patterns</div>
+  </footer>
+</div>
+
+<script>
+/* ============================================================
+   01 — BEAT-REACTIVE
+   ============================================================ */
+(function(){
+  // Create beat strip
+  const strip = document.getElementById('beat-strip');
+  const N = 60, C = N/2;
+  for(let i = 0; i < N; i++){
+    const p = document.createElement('div');
+    p.className = 'beat-strip__pixel';
+    p.style.backgroundColor = 'rgba(255,184,77,0.15)';
+    strip.appendChild(p);
+  }
+
+  const bpm = document.getElementById('beat-bpm');
+  const ring = document.getElementById('beat-ring');
+  const card1 = document.getElementById('beat-card-1');
+  const card2 = document.getElementById('beat-card-2');
+  const rms = document.getElementById('beat-rms');
+  const pixels = strip.querySelectorAll('.beat-strip__pixel');
+
+  function fireBeat(){
+    bpm.classList.add('pulse');
+    ring.classList.add('pulse');
+    card1.classList.add('pulse');
+    card2.classList.add('pulse');
+    rms.textContent = (0.3 + Math.random() * 0.4).toFixed(3);
+
+    // LED strip pulse from centre
+    pixels.forEach((px, i) => {
+      const d = Math.abs(i - C);
+      const delay = d * 8;
+      setTimeout(() => {
+        const brightness = Math.max(0.15, 1 - d / C);
+        px.style.backgroundColor = `rgba(255,204,51,${brightness})`;
+        px.style.height = `${10 + brightness * 10}px`;
+        setTimeout(() => {
+          px.style.backgroundColor = 'rgba(255,184,77,0.15)';
+          px.style.height = '16px';
+        }, 200);
+      }, delay);
+    });
+
+    setTimeout(() => {
+      bpm.classList.remove('pulse');
+      ring.classList.remove('pulse');
+      card1.classList.remove('pulse');
+      card2.classList.remove('pulse');
+    }, 200);
+  }
+
+  let beatInterval = null;
+
+  document.getElementById('beat-tap').addEventListener('click', fireBeat);
+  document.getElementById('beat-auto').addEventListener('click', () => {
+    if(beatInterval) clearInterval(beatInterval);
+    beatInterval = setInterval(fireBeat, 60000/128);
+    fireBeat();
+  });
+  document.getElementById('beat-stop').addEventListener('click', () => {
+    if(beatInterval){ clearInterval(beatInterval); beatInterval = null; }
+  });
+})();
+
+/* ============================================================
+   02 — SLIDER INTERACTION
+   ============================================================ */
+(function(){
+  const track = document.getElementById('slider-track');
+  const thumb = document.getElementById('slider-thumb');
+  const fill = document.getElementById('slider-fill');
+  const tooltip = document.getElementById('slider-tooltip');
+  const valueLabel = document.getElementById('slider-value');
+  let dragging = false;
+  let value = 178;
+
+  function update(pct){
+    value = Math.round(pct * 255);
+    value = Math.max(0, Math.min(255, value));
+    const p = value / 255 * 100;
+    fill.style.width = p + '%';
+    thumb.style.left = p + '%';
+    tooltip.textContent = value;
+    valueLabel.textContent = value;
+  }
+
+  function startDrag(e){
+    dragging = true;
+    thumb.classList.add('slider-demo__thumb--dragging');
+    tooltip.classList.add('slider-demo__tooltip--visible');
+    moveDrag(e);
+  }
+
+  function moveDrag(e){
+    if(!dragging) return;
+    const rect = track.getBoundingClientRect();
+    const x = (e.clientX || e.touches[0].clientX) - rect.left;
+    update(x / rect.width);
+  }
+
+  function endDrag(){
+    if(!dragging) return;
+    dragging = false;
+    thumb.classList.remove('slider-demo__thumb--dragging');
+    tooltip.classList.remove('slider-demo__tooltip--visible');
+  }
+
+  track.addEventListener('mousedown', startDrag);
+  track.addEventListener('touchstart', e => { e.preventDefault(); startDrag(e); }, {passive:false});
+  document.addEventListener('mousemove', moveDrag);
+  document.addEventListener('touchmove', moveDrag, {passive:false});
+  document.addEventListener('mouseup', endDrag);
+  document.addEventListener('touchend', endDrag);
+
+  update(178/255);
+})();
+
+/* ============================================================
+   03 — CARD EXPAND/COLLAPSE
+   ============================================================ */
+function toggleCard(card){
+  const body = card.querySelector('.expand-card__body');
+  const chevron = card.querySelector('.expand-card__chevron');
+  body.classList.toggle('expand-card__body--open');
+  chevron.classList.toggle('expand-card__chevron--open');
+}
+
+/* ============================================================
+   04 — TAB SWITCHING
+   ============================================================ */
+let currentTab = 0;
+
+function switchTab(idx){
+  if(idx === currentTab) return;
+  const items = document.querySelectorAll('.tab-bar__item');
+  const panels = document.querySelectorAll('.tab-panel');
+  const indicator = document.getElementById('tab-indicator');
+
+  // Update items
+  items.forEach((item, i) => {
+    item.classList.toggle('tab-bar__item--active', i === idx);
+  });
+
+  // Move indicator
+  const activeItem = items[idx];
+  indicator.style.left = activeItem.offsetLeft + 'px';
+  indicator.style.width = activeItem.offsetWidth + 'px';
+
+  // Animate panels
+  const direction = idx > currentTab ? 1 : -1;
+  panels[currentTab].classList.remove('tab-panel--active');
+  panels[currentTab].classList.add(direction > 0 ? 'tab-panel--exit-left' : '');
+  panels[currentTab].style.transform = `translateX(${-20 * direction}px)`;
+
+  panels[idx].style.transform = `translateX(${20 * direction}px)`;
+  panels[idx].classList.remove('tab-panel--exit-left');
+  requestAnimationFrame(() => {
+    panels[idx].classList.add('tab-panel--active');
+    panels[idx].style.transform = '';
+  });
+
+  currentTab = idx;
+}
+
+// Init indicator position
+requestAnimationFrame(() => {
+  const firstItem = document.querySelector('.tab-bar__item');
+  const indicator = document.getElementById('tab-indicator');
+  if(firstItem && indicator){
+    indicator.style.left = firstItem.offsetLeft + 'px';
+    indicator.style.width = firstItem.offsetWidth + 'px';
+  }
+});
+
+/* ============================================================
+   05 — EFFECT TRANSITION
+   ============================================================ */
+const effects = [
+  { name: 'LGP HOLOGRAPHIC TUNED', meta: 'Audio · Comet Trails · Centre Origin', hue: 35 },
+  { name: 'RIPPLE ENHANCED', meta: 'Audio · Waveform · Radial', hue: 190 },
+  { name: 'PULSE MATRIX', meta: 'Audio · Pulse · Bass-Reactive', hue: 280 },
+  { name: 'EMBER FLOW', meta: 'Ambient · Gradient · Warm', hue: 15 },
+  { name: 'AURORA WAVE', meta: 'Audio · Spectrum · Multi-Zone', hue: 150 },
+];
+let effectIdx = 0;
+
+// Create effect strip
+(function(){
+  const strip = document.getElementById('effect-strip');
+  for(let i = 0; i < 60; i++){
+    const p = document.createElement('div');
+    p.className = 'effect-display__pixel';
+    strip.appendChild(p);
+  }
+  updateEffectStrip(effects[0].hue);
+})();
+
+function updateEffectStrip(hue){
+  const pixels = document.querySelectorAll('#effect-strip .effect-display__pixel');
+  const C = pixels.length / 2;
+  pixels.forEach((px, i) => {
+    const d = Math.abs(i - C);
+    const n = d / C;
+    const h = hue + n * 60;
+    const l = 45 - n * 20;
+    px.style.backgroundColor = `hsl(${h}, 80%, ${l}%)`;
+  });
+}
+
+function cycleEffect(){
+  const display = document.getElementById('effect-current');
+  const crossfade = document.getElementById('effect-crossfade');
+  const name = document.getElementById('effect-name');
+
+  // Exit current
+  display.classList.remove('effect-display--active');
+  display.classList.add('effect-display--exit');
+  crossfade.classList.add('effect-crossfade--active');
+
+  setTimeout(() => {
+    effectIdx = (effectIdx + 1) % effects.length;
+    name.textContent = effects[effectIdx].name;
+    display.querySelector('.effect-display__meta').textContent = effects[effectIdx].meta;
+    updateEffectStrip(effects[effectIdx].hue);
+
+    display.classList.remove('effect-display--exit');
+    display.classList.add('effect-display--enter');
+    crossfade.classList.remove('effect-crossfade--active');
+
+    requestAnimationFrame(() => {
+      display.classList.remove('effect-display--enter');
+      display.classList.add('effect-display--active');
+    });
+  }, 400);
+}
+
+/* ============================================================
+   06 — CONNECTION STATES
+   ============================================================ */
+function setConn(state){
+  const bar = document.getElementById('conn-bar');
+  const dot = document.getElementById('conn-dot');
+  const status = document.getElementById('conn-status');
+  const detail = document.getElementById('conn-detail');
+  const spinner = document.getElementById('conn-spinner');
+
+  bar.className = 'conn-bar conn-bar--' + state;
+  dot.className = 'conn-dot conn-dot--' + state;
+
+  if(state === 'connected'){
+    status.textContent = 'Connected';
+    status.style.color = 'var(--lw-success)';
+    detail.textContent = '192.168.4.1 · ESV11 · 120 FPS';
+    spinner.classList.remove('conn-spinner--visible');
+  } else if(state === 'connecting'){
+    status.textContent = 'Connecting...';
+    status.style.color = 'var(--lw-gold)';
+    detail.textContent = 'Discovering K1 access point';
+    spinner.classList.add('conn-spinner--visible');
+  } else {
+    status.textContent = 'Disconnected';
+    status.style.color = 'var(--lw-error)';
+    detail.textContent = 'No K1 device found';
+    spinner.classList.remove('conn-spinner--visible');
+  }
+}
+
+function runConnSequence(){
+  setConn('disconnected');
+  setTimeout(() => setConn('connecting'), 800);
+  setTimeout(() => setConn('connected'), 3000);
+}
+
+/* ============================================================
+   08 — PULL TO REFRESH
+   ============================================================ */
+function triggerPTR(){
+  const indicator = document.getElementById('ptr-indicator');
+  const content = document.getElementById('ptr-content');
+
+  indicator.classList.add('ptr-indicator--visible');
+  content.classList.add('ptr-content--pulled');
+
+  setTimeout(() => {
+    indicator.classList.remove('ptr-indicator--visible');
+    content.classList.remove('ptr-content--pulled');
+  }, 2000);
+}
+
+/* ============================================================
+   09 — CONTEXT MENU
+   ============================================================ */
+let contextOpen = false;
+
+function toggleContextMenu(){
+  const menu = document.getElementById('context-menu');
+  const backdrop = document.getElementById('context-backdrop');
+  contextOpen = !contextOpen;
+  menu.classList.toggle('context-menu--visible', contextOpen);
+  backdrop.classList.toggle('context-backdrop--visible', contextOpen);
+}
+
+document.getElementById('context-backdrop').addEventListener('click', () => {
+  if(contextOpen) toggleContextMenu();
+});
+
+// Long press simulation on target
+let pressTimer;
+const target = document.getElementById('context-target');
+target.addEventListener('mousedown', () => {
+  pressTimer = setTimeout(() => {
+    if(!contextOpen) toggleContextMenu();
+  }, 500);
+});
+target.addEventListener('mouseup', () => clearTimeout(pressTimer));
+target.addEventListener('mouseleave', () => clearTimeout(pressTimer));
+</script>
+</body>
+</html>

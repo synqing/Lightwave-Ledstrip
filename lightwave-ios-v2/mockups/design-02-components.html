@@ -1,0 +1,1801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LightwaveOS Component Library — SpectraSynq</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+
+:root {
+  --lw-gold: #FFB84D; --lw-gold-bright: #FFCC33; --lw-gold-dim: #B8842E;
+  --lw-cyan: #00D4FF; --lw-cyan-dim: #0099B8;
+  --lw-base: #0F1219; --lw-base-deep: #08090E;
+  --lw-card: #1E2535; --lw-card-alt: #1A2030;
+  --lw-elevated: #252D3F; --lw-elevated-hover: #2C3650;
+  --lw-text-primary: #E6E9EF; --lw-text-secondary: #9CA3B0;
+  --lw-text-tertiary: #6B7280; --lw-text-disabled: #3D4350;
+  --lw-success: #4DFFB8; --lw-error: #FF4D4D; --lw-warning: #FFB84D; --lw-info: #00D4FF;
+  --lw-zone-0: #00FFFF; --lw-zone-1: #00FF99; --lw-zone-2: #9900FF; --lw-zone-3: #FF6600;
+  --font-display: 'Bebas Neue', sans-serif;
+  --font-body: 'Rajdhani', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --radius-xs: 4px; --radius-sm: 8px; --radius-md: 12px; --radius-lg: 16px; --radius-xl: 24px; --radius-pill: 999px;
+  --shadow-ambient: 0 2px 12px rgba(0,0,0,0.4);
+  --shadow-elevated: 0 4px 20px rgba(0,0,0,0.5);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+body {
+  background: var(--lw-base-deep);
+  color: var(--lw-text-primary);
+  font-family: var(--font-body);
+  min-height: 100vh;
+}
+
+/* ============================================================
+   LAYOUT
+   ============================================================ */
+.page-container { max-width: 1200px; margin: 0 auto; padding: 32px 24px; }
+
+.page-header {
+  text-align: center;
+  margin-bottom: 64px;
+  padding-top: 48px;
+  position: relative;
+}
+.page-header::before {
+  content: '';
+  position: absolute;
+  top: -100px; left: 50%; transform: translateX(-50%);
+  width: 600px; height: 400px;
+  background: radial-gradient(ellipse at center, rgba(0,212,255,0.04) 0%, transparent 70%);
+  pointer-events: none;
+}
+.brand-name { font-family: var(--font-display); font-size: 14px; letter-spacing: 6px; color: var(--lw-gold); opacity: 0.8; }
+.page-title { font-family: var(--font-display); font-size: 56px; letter-spacing: 2px; color: var(--lw-text-primary); line-height: 1; margin-top: 4px; }
+.page-subtitle { font-family: var(--font-body); font-weight: 500; font-size: 18px; color: var(--lw-text-secondary); margin-top: 8px; }
+
+.section { margin-bottom: 64px; }
+.section-header {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 32px; padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255,184,77,0.15);
+}
+.section-number { font-family: var(--font-display); font-size: 32px; color: var(--lw-gold); opacity: 0.4; }
+.section-title { font-family: var(--font-display); font-size: 28px; letter-spacing: 1px; color: var(--lw-text-primary); }
+.section-desc { font-family: var(--font-body); font-weight: 500; font-size: 15px; color: var(--lw-text-secondary); margin-bottom: 24px; line-height: 1.5; }
+
+.component-row {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 32px;
+  margin-bottom: 40px;
+  align-items: start;
+}
+
+.component-label {
+  position: sticky;
+  top: 24px;
+}
+
+.component-label__name {
+  font-family: var(--font-display);
+  font-size: 16px;
+  letter-spacing: 1px;
+  color: var(--lw-gold);
+}
+
+.component-label__desc {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--lw-text-tertiary);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.component-showcase {
+  background: var(--lw-base);
+  border-radius: var(--radius-xl);
+  padding: 32px;
+  border: 1px solid rgba(255,255,255,0.04);
+}
+
+.state-label {
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--lw-text-tertiary);
+  margin-bottom: 12px;
+  margin-top: 24px;
+}
+
+.state-label:first-child { margin-top: 0; }
+
+/* ============================================================
+   COMPONENT: BUTTONS
+   ============================================================ */
+.btn-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+
+.lw-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 14px;
+  padding: 10px 20px;
+  border-radius: var(--radius-md);
+  transition: all 200ms var(--ease-out-expo);
+  position: relative;
+  overflow: hidden;
+  min-height: 44px;
+}
+
+.lw-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 200ms;
+  background: radial-gradient(circle at center, rgba(255,255,255,0.2), transparent 70%);
+}
+
+.lw-btn:hover::before { opacity: 1; }
+
+.lw-btn--primary {
+  background: var(--lw-gold);
+  color: var(--lw-base);
+}
+.lw-btn--primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(255,184,77,0.3);
+}
+.lw-btn--primary:active {
+  transform: translateY(0);
+  background: var(--lw-gold-bright);
+}
+.lw-btn--primary.disabled {
+  background: var(--lw-text-disabled);
+  color: var(--lw-text-tertiary);
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.lw-btn--secondary {
+  background: transparent;
+  color: var(--lw-gold);
+  border: 2px solid var(--lw-gold);
+}
+.lw-btn--secondary:hover {
+  background: rgba(255,184,77,0.08);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(255,184,77,0.15);
+}
+.lw-btn--secondary:active {
+  background: rgba(255,184,77,0.15);
+  transform: translateY(0);
+}
+
+.lw-btn--ghost {
+  background: transparent;
+  color: var(--lw-text-secondary);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.lw-btn--ghost:hover {
+  background: rgba(255,255,255,0.04);
+  color: var(--lw-text-primary);
+  border-color: rgba(255,255,255,0.15);
+}
+
+.lw-btn--icon {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: var(--radius-md);
+  font-size: 18px;
+}
+
+.lw-btn--icon-sm {
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+}
+
+.lw-btn--danger {
+  background: transparent;
+  color: var(--lw-error);
+  border: 2px solid var(--lw-error);
+}
+.lw-btn--danger:hover {
+  background: rgba(255,77,77,0.08);
+}
+
+/* ============================================================
+   COMPONENT: SLIDER
+   ============================================================ */
+.lw-slider {
+  width: 100%;
+}
+
+.lw-slider__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+
+.lw-slider__label {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--lw-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.lw-slider__value {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--lw-gold);
+}
+
+.lw-slider__track {
+  position: relative;
+  height: 24px;
+  display: flex;
+  align-items: center;
+}
+
+.lw-slider__bg {
+  position: absolute;
+  left: 0; right: 0;
+  height: 10px;
+  background: var(--lw-card);
+  border-radius: 5px;
+}
+
+.lw-slider__fill {
+  position: absolute;
+  left: 0;
+  height: 10px;
+  border-radius: 5px;
+  background: linear-gradient(90deg, var(--lw-gold-dim), var(--lw-gold));
+}
+
+.lw-slider__thumb {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--lw-gold);
+  box-shadow: 0 0 0 0 rgba(255,184,77,0);
+  transition: box-shadow 200ms;
+  transform: translateX(-12px);
+  z-index: 1;
+}
+
+.lw-slider__thumb--active {
+  box-shadow: 0 0 16px rgba(255,184,77,0.6);
+}
+
+.lw-slider__endpoints {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+}
+
+.lw-slider__endpoint {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 11px;
+  color: var(--lw-text-tertiary);
+}
+
+/* Cyan variant */
+.lw-slider--cyan .lw-slider__fill {
+  background: linear-gradient(90deg, var(--lw-cyan-dim), var(--lw-cyan));
+}
+.lw-slider--cyan .lw-slider__thumb {
+  background: var(--lw-cyan);
+}
+.lw-slider--cyan .lw-slider__value {
+  color: var(--lw-cyan);
+}
+
+/* Multi-colour variant */
+.lw-slider--spectrum .lw-slider__fill {
+  background: linear-gradient(90deg, var(--lw-cyan), var(--lw-gold));
+}
+
+/* ============================================================
+   COMPONENT: CARD
+   ============================================================ */
+.lw-card {
+  background: linear-gradient(180deg, var(--lw-card), var(--lw-card-alt));
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  box-shadow: var(--shadow-ambient);
+  transition: transform 300ms var(--ease-out-expo), box-shadow 300ms var(--ease-out-expo);
+}
+
+.lw-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-elevated);
+}
+
+.lw-card__title {
+  font-family: var(--font-display);
+  font-size: 14px;
+  letter-spacing: 0.8px;
+  color: var(--lw-text-tertiary);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.lw-card--elevated {
+  box-shadow: var(--shadow-elevated);
+}
+
+.lw-card--zone {
+  border: 2px solid;
+}
+
+.lw-card--glass {
+  background: rgba(255,255,255,0.04);
+  backdrop-filter: blur(32px);
+  -webkit-backdrop-filter: blur(32px);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.card-row__label {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--lw-text-secondary);
+}
+
+.card-row__value {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--lw-text-primary);
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+/* ============================================================
+   COMPONENT: CHIPS / PILLS
+   ============================================================ */
+.chip-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.lw-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 200ms var(--ease-out-expo);
+  border: 1px solid transparent;
+  min-height: 32px;
+}
+
+.lw-chip--default {
+  background: var(--lw-elevated);
+  color: var(--lw-text-secondary);
+  border-color: rgba(255,255,255,0.06);
+}
+.lw-chip--default:hover {
+  background: var(--lw-elevated-hover);
+  color: var(--lw-text-primary);
+}
+
+.lw-chip--active {
+  background: rgba(255,184,77,0.15);
+  color: var(--lw-gold);
+  border-color: rgba(255,184,77,0.3);
+}
+
+.lw-chip--zone0 {
+  background: rgba(0,255,255,0.08);
+  color: var(--lw-zone-0);
+  border-color: rgba(0,255,255,0.25);
+}
+.lw-chip--zone1 {
+  background: rgba(0,255,153,0.08);
+  color: var(--lw-zone-1);
+  border-color: rgba(0,255,153,0.25);
+}
+.lw-chip--zone2 {
+  background: rgba(153,0,255,0.08);
+  color: var(--lw-zone-2);
+  border-color: rgba(153,0,255,0.25);
+}
+.lw-chip--zone3 {
+  background: rgba(255,102,0,0.08);
+  color: var(--lw-zone-3);
+  border-color: rgba(255,102,0,0.25);
+}
+
+.lw-chip--sm {
+  padding: 2px 10px;
+  font-size: 11px;
+  min-height: 24px;
+}
+
+/* ============================================================
+   COMPONENT: TOGGLE
+   ============================================================ */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lw-toggle {
+  position: relative;
+  width: 48px;
+  height: 28px;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: background 200ms;
+  flex-shrink: 0;
+}
+
+.lw-toggle--off {
+  background: var(--lw-elevated);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.lw-toggle--on {
+  background: var(--lw-gold);
+  border: 1px solid transparent;
+}
+
+.lw-toggle__thumb {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: white;
+  top: 2px;
+  transition: left 200ms var(--ease-spring), box-shadow 200ms;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.lw-toggle--off .lw-toggle__thumb { left: 2px; }
+.lw-toggle--on .lw-toggle__thumb {
+  left: 22px;
+  box-shadow: 0 2px 8px rgba(255,184,77,0.4);
+}
+
+.lw-toggle__label {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--lw-text-primary);
+}
+
+/* ============================================================
+   COMPONENT: SEGMENTED CONTROL
+   ============================================================ */
+.lw-segment {
+  display: inline-flex;
+  background: var(--lw-card);
+  border-radius: var(--radius-md);
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid rgba(255,255,255,0.04);
+}
+
+.lw-segment__item {
+  padding: 8px 18px;
+  border-radius: calc(var(--radius-md) - 2px);
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 1px;
+  color: var(--lw-text-tertiary);
+  cursor: pointer;
+  transition: all 200ms var(--ease-out-expo);
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+}
+
+.lw-segment__item:hover {
+  color: var(--lw-text-secondary);
+}
+
+.lw-segment__item--active {
+  background: var(--lw-elevated);
+  color: var(--lw-gold);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+/* ============================================================
+   COMPONENT: BOTTOM SHEET
+   ============================================================ */
+.sheet-demo {
+  position: relative;
+  height: 500px;
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  background: var(--lw-base);
+  border: 1px solid rgba(255,255,255,0.04);
+}
+
+.sheet-demo__bg {
+  position: absolute;
+  inset: 0;
+  background: var(--lw-base);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  opacity: 0.4;
+}
+
+.sheet-demo__bg-text {
+  font-family: var(--font-display);
+  font-size: 24px;
+  color: var(--lw-text-tertiary);
+  letter-spacing: 2px;
+}
+
+.lw-sheet {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(30, 37, 53, 0.95);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  border-top-left-radius: var(--radius-xl);
+  border-top-right-radius: var(--radius-xl);
+  border-top: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 -8px 40px rgba(0,0,0,0.5);
+}
+
+.lw-sheet__handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.2);
+  margin: 8px auto 0;
+}
+
+.lw-sheet__header {
+  padding: 16px 20px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.lw-sheet__title {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 17px;
+  color: var(--lw-text-primary);
+}
+
+.lw-sheet__close {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--lw-elevated);
+  border: none;
+  color: var(--lw-text-tertiary);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lw-sheet__body {
+  padding: 16px 20px 24px;
+}
+
+.lw-sheet--half { height: 50%; }
+.lw-sheet--full { height: 85%; }
+
+/* ============================================================
+   COMPONENT: STATUS INDICATORS
+   ============================================================ */
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.status-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot--connected { background: var(--lw-success); box-shadow: 0 0 8px rgba(77,255,184,0.4); }
+.status-dot--connecting { background: var(--lw-gold); animation: statusPulse 1.5s ease-in-out infinite; }
+.status-dot--disconnected { background: var(--lw-error); }
+
+@keyframes statusPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.status-label {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 12px;
+}
+
+.beat-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--lw-gold-bright);
+  animation: beatPulse 0.5s ease-out;
+  animation-iteration-count: infinite;
+  animation-duration: 0.5s;
+}
+
+@keyframes beatPulse {
+  0%   { transform: scale(1); opacity: 0.4; box-shadow: 0 0 0 rgba(255,204,51,0); }
+  15%  { transform: scale(1.6); opacity: 1; box-shadow: 0 0 16px rgba(255,204,51,0.6); }
+  100% { transform: scale(1); opacity: 0.4; box-shadow: 0 0 0 rgba(255,204,51,0); }
+}
+
+.audio-level {
+  display: flex;
+  gap: 2px;
+  align-items: flex-end;
+  height: 20px;
+}
+
+.audio-level__bar {
+  width: 3px;
+  border-radius: 1px;
+  background: var(--lw-gold);
+  transition: height 100ms;
+}
+
+/* ============================================================
+   COMPONENT: LED PREVIEW STRIP
+   ============================================================ */
+.led-preview {
+  background: var(--lw-card);
+  border-radius: var(--radius-xl);
+  padding: 16px;
+  overflow: hidden;
+}
+
+.led-preview__label {
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: var(--lw-text-tertiary);
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.led-preview__strip {
+  display: flex;
+  gap: 1px;
+  justify-content: center;
+  height: 28px;
+  align-items: center;
+}
+
+.led-preview__pixel {
+  width: 3px;
+  height: 16px;
+  border-radius: 1px;
+  position: relative;
+}
+
+.led-preview__pixel::after {
+  content: '';
+  position: absolute;
+  inset: -3px -2px;
+  border-radius: 2px;
+  background: inherit;
+  filter: blur(3px);
+  opacity: 0.3;
+}
+
+.led-preview__meta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.04);
+}
+
+.led-preview__meta-item {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--lw-text-tertiary);
+}
+
+.led-preview__meta-value { color: var(--lw-gold); }
+
+/* Centre marker */
+.led-preview__centre {
+  position: relative;
+}
+
+.led-preview__centre::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-top: 3px solid var(--lw-gold);
+}
+
+/* ============================================================
+   COMPONENT: COLOUR SWATCHES
+   ============================================================ */
+.palette-preview {
+  display: flex;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  height: 40px;
+  box-shadow: var(--shadow-ambient);
+}
+
+.palette-preview__swatch {
+  flex: 1;
+  transition: flex 300ms var(--ease-out-expo);
+}
+
+.palette-preview__swatch:hover {
+  flex: 2;
+}
+
+.palette-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.palette-card {
+  background: var(--lw-card);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 200ms var(--ease-out-expo), box-shadow 200ms;
+}
+
+.palette-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-elevated);
+}
+
+.palette-card__preview {
+  height: 32px;
+  display: flex;
+}
+
+.palette-card__preview > div { flex: 1; }
+
+.palette-card__name {
+  padding: 8px 12px;
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--lw-text-secondary);
+}
+
+/* ============================================================
+   COMPONENT: METRIC BAR
+   ============================================================ */
+.lw-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lw-metric__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.lw-metric__label {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 11px;
+  color: var(--lw-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.lw-metric__value {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 11px;
+  color: var(--lw-text-primary);
+}
+
+.lw-metric__track {
+  height: 8px;
+  background: var(--lw-elevated);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.lw-metric__fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 200ms;
+}
+
+/* ============================================================
+   COMPONENT: STEPPER
+   ============================================================ */
+.lw-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lw-stepper__label {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--lw-text-secondary);
+  text-transform: uppercase;
+}
+
+.lw-stepper__controls {
+  display: flex;
+  align-items: center;
+}
+
+.lw-stepper__btn {
+  width: 32px;
+  height: 28px;
+  background: var(--lw-elevated);
+  border: 1px solid rgba(255,184,77,0.2);
+  color: var(--lw-gold);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  transition: background 150ms;
+}
+
+.lw-stepper__btn:hover { background: var(--lw-elevated-hover); }
+.lw-stepper__btn:first-child { border-radius: 6px 0 0 6px; }
+.lw-stepper__btn:last-child { border-radius: 0 6px 6px 0; }
+
+.lw-stepper__value {
+  width: 56px;
+  height: 28px;
+  background: var(--lw-base);
+  border-top: 1px solid rgba(255,184,77,0.2);
+  border-bottom: 1px solid rgba(255,184,77,0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--lw-text-primary);
+}
+
+/* ============================================================
+   IPHONE FRAME
+   ============================================================ */
+.iphone-frame {
+  width: 375px;
+  height: 500px;
+  background: var(--lw-base);
+  border-radius: 40px;
+  border: 3px solid #2C2C2E;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.05);
+  margin: 0 auto;
+}
+
+.iphone-frame__notch {
+  width: 150px;
+  height: 30px;
+  background: #000;
+  border-radius: 0 0 18px 18px;
+  margin: 0 auto;
+  position: relative;
+  z-index: 10;
+}
+
+.iphone-frame__screen {
+  padding: 8px 16px 16px;
+  height: calc(100% - 30px);
+  overflow-y: auto;
+}
+
+.iphone-frame__screen::-webkit-scrollbar { display: none; }
+
+/* ============================================================
+   STATUS BAR (in phone)
+   ============================================================ */
+.lw-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0 12px;
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--lw-text-secondary);
+}
+
+.lw-status-bar__dot { margin-right: 2px; }
+
+.lw-status-bar__separator {
+  color: var(--lw-text-tertiary);
+  font-size: 8px;
+}
+
+.lw-status-bar__bpm {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--lw-gold);
+  font-size: 12px;
+}
+
+/* ============================================================
+   PAGE FOOTER
+   ============================================================ */
+.page-footer {
+  text-align: center;
+  padding: 48px 0 32px;
+  border-top: 1px solid rgba(255,255,255,0.04);
+  margin-top: 64px;
+}
+.page-footer__brand { font-family: var(--font-display); font-size: 18px; letter-spacing: 4px; color: var(--lw-gold); opacity: 0.6; }
+.page-footer__meta { font-family: var(--font-mono); font-size: 10px; color: var(--lw-text-tertiary); margin-top: 8px; }
+
+@media (max-width: 768px) {
+  .component-row { grid-template-columns: 1fr; }
+  .sheet-demo { height: 400px; }
+  .iphone-frame { width: 100%; max-width: 375px; }
+}
+</style>
+</head>
+<body>
+<div class="page-container">
+
+  <header class="page-header">
+    <div class="brand-name">SpectraSynq</div>
+    <h1 class="page-title">COMPONENT LIBRARY</h1>
+    <p class="page-subtitle">Production-ready UI components for the LightwaveOS iOS app</p>
+  </header>
+
+  <!-- ============================
+       01 — BUTTONS
+       ============================ -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">01</span>
+      <h2 class="section-title">BUTTONS</h2>
+    </div>
+
+    <div class="component-row">
+      <div class="component-label">
+        <div class="component-label__name">PRIMARY</div>
+        <div class="component-label__desc">Gold fill. Main actions: apply, save, connect. 44pt touch target.</div>
+      </div>
+      <div class="component-showcase">
+        <div class="state-label">DEFAULT</div>
+        <div class="btn-row">
+          <button class="lw-btn lw-btn--primary">Apply Effect</button>
+          <button class="lw-btn lw-btn--primary">&#x2728; Connect</button>
+          <button class="lw-btn lw-btn--primary">Save Preset</button>
+        </div>
+        <div class="state-label">DISABLED</div>
+        <div class="btn-row">
+          <button class="lw-btn lw-btn--primary disabled">Apply Effect</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="component-row">
+      <div class="component-label">
+        <div class="component-label__name">SECONDARY</div>
+        <div class="component-label__desc">Gold border, transparent fill. Secondary actions: cancel, back.</div>
+      </div>
+      <div class="component-showcase">
+        <div class="btn-row">
+          <button class="lw-btn lw-btn--secondary">Cancel</button>
+          <button class="lw-btn lw-btn--secondary">&#x21A9; Undo</button>
+          <button class="lw-btn lw-btn--secondary">Trigger Transition</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="component-row">
+      <div class="component-label">
+        <div class="component-label__name">GHOST</div>
+        <div class="component-label__desc">Minimal presence. Tertiary actions, contextual options.</div>
+      </div>
+      <div class="component-showcase">
+        <div class="btn-row">
+          <button class="lw-btn lw-btn--ghost">More Options</button>
+          <button class="lw-btn lw-btn--ghost">&#x2699; Settings</button>
+          <button class="lw-btn lw-btn--ghost">View All</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="component-row">
+      <div class="component-label">
+        <div class="component-label__name">ICON ONLY</div>
+        <div class="component-label__desc">Square touch targets for navigation and controls. 44pt and 32pt sizes.</div>
+      </div>
+      <div class="component-showcase">
+        <div class="state-label">44PT (STANDARD)</div>
+        <div class="btn-row">
+          <button class="lw-btn lw-btn--primary lw-btn--icon">&#9654;</button>
+          <button class="lw-btn lw-btn--secondary lw-btn--icon">&#9208;</button>
+          <button class="lw-btn lw-btn--ghost lw-btn--icon">&#9881;</button>
+          <button class="lw-btn lw-btn--ghost lw-btn--icon">&#10006;</button>
+        </div>
+        <div class="state-label">32PT (COMPACT)</div>
+        <div class="btn-row">
+          <button class="lw-btn lw-btn--secondary lw-btn--icon-sm">&#9664;</button>
+          <button class="lw-btn lw-btn--secondary lw-btn--icon-sm">&#9654;</button>
+          <button class="lw-btn lw-btn--ghost lw-btn--icon-sm">&#8942;</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="component-row">
+      <div class="component-label">
+        <div class="component-label__name">DANGER</div>
+        <div class="component-label__desc">Red border for destructive actions. Reset, delete, disconnect.</div>
+      </div>
+      <div class="component-showcase">
+        <div class="btn-row">
+          <button class="lw-btn lw-btn--danger">Reset Defaults</button>
+          <button class="lw-btn lw-btn--danger">Disconnect</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================
+       02 — SLIDERS
+       ============================ -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">02</span>
+      <h2 class="section-title">SLIDERS</h2>
+    </div>
+
+    <div class="component-row">
+      <div class="component-label">
+        <div class="component-label__name">STANDARD</div>
+        <div class="component-label__desc">Gold-accent with gradient fill, glow thumb on drag. 24pt thumb for easy touch.</div>
+      </div>
+      <div class="component-showcase">
+        <div class="state-label">DEFAULT (GOLD)</div>
+        <div class="lw-slider" style="margin-bottom: 24px;">
+          <div class="lw-slider__header">
+            <span class="lw-slider__label">Brightness</span>
+            <span class="lw-slider__value">178</span>
+          </div>
+          <div class="lw-slider__track">
+            <div class="lw-slider__bg"></div>
+            <div class="lw-slider__fill" style="width: 70%;"></div>
+            <div class="lw-slider__thumb" style="left: 70%;"></div>
+          </div>
+          <div class="lw-slider__endpoints">
+            <span class="lw-slider__endpoint">0</span>
+            <span class="lw-slider__endpoint">255</span>
+          </div>
+        </div>
+
+        <div class="state-label">ACTIVE (DRAGGING)</div>
+        <div class="lw-slider" style="margin-bottom: 24px;">
+          <div class="lw-slider__header">
+            <span class="lw-slider__label">Speed</span>
+            <span class="lw-slider__value">15</span>
+          </div>
+          <div class="lw-slider__track">
+            <div class="lw-slider__bg"></div>
+            <div class="lw-slider__fill" style="width: 30%;"></div>
+            <div class="lw-slider__thumb lw-slider__thumb--active" style="left: 30%;"></div>
+          </div>
+          <div class="lw-slider__endpoints">
+            <span class="lw-slider__endpoint">1</span>
+            <span class="lw-slider__endpoint">50</span>
+          </div>
+        </div>
+
+        <div class="state-label">CYAN VARIANT</div>
+        <div class="lw-slider lw-slider--cyan" style="margin-bottom: 24px;">
+          <div class="lw-slider__header">
+            <span class="lw-slider__label">Audio Reactivity</span>
+            <span class="lw-slider__value">85</span>
+          </div>
+          <div class="lw-slider__track">
+            <div class="lw-slider__bg"></div>
+            <div class="lw-slider__fill" style="width: 85%;"></div>
+            <div class="lw-slider__thumb" style="left: 85%;"></div>
+          </div>
+        </div>
+
+        <div class="state-label">SPECTRUM GRADIENT</div>
+        <div class="lw-slider lw-slider--spectrum">
+          <div class="lw-slider__header">
+            <span class="lw-slider__label">Mood</span>
+            <span class="lw-slider__value">128</span>
+          </div>
+          <div class="lw-slider__track">
+            <div class="lw-slider__bg"></div>
+            <div class="lw-slider__fill" style="width: 50%;"></div>
+            <div class="lw-slider__thumb" style="left: 50%;"></div>
+          </div>
+          <div class="lw-slider__endpoints">
+            <span class="lw-slider__endpoint">Reactive</span>
+            <span class="lw-slider__endpoint">Smooth</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================
+       03 — CARDS
+       ============================ -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">03</span>
+      <h2 class="section-title">CARDS</h2>
+    </div>
+
+    <div class="component-row">
+      <div class="component-label">
+        <div class="component-label__name">VARIANTS</div>
+        <div class="component-label__desc">Gradient background cards with ambient shadow. Zone-accent borders for zone-specific content.</div>
+      </div>
+      <div class="component-showcase">
+        <div class="card-grid">
+          <!-- Standard card -->
+          <div class="lw-card">
+            <div class="lw-card__title">SYSTEM STATUS</div>
+            <div class="card-row">
+              <span class="card-row__label">Uptime</span>
+              <span class="card-row__value">2h 34m</span>
+            </div>
+            <div class="card-row">
+              <span class="card-row__label">FPS</span>
+              <span class="card-row__value" style="color: var(--lw-success);">120</span>
+            </div>
+            <div class="card-row">
+              <span class="card-row__label">Free Heap</span>
+              <span class="card-row__value">142 KB</span>
+            </div>
+          </div>
+
+          <!-- Elevated card -->
+          <div class="lw-card lw-card--elevated">
+            <div class="lw-card__title">CURRENT EFFECT</div>
+            <div style="font-family: var(--font-display); font-size: 20px; color: var(--lw-text-primary); margin-bottom: 4px;">LGP HOLOGRAPHIC TUNED</div>
+            <div style="font-family: var(--font-body); font-size: 12px; color: var(--lw-text-tertiary);">Warm comet trails radiating from centre</div>
+            <div style="display: flex; gap: 6px; margin-top: 8px;">
+              <span class="lw-chip lw-chip--active lw-chip--sm">AUDIO</span>
+              <span class="lw-chip lw-chip--default lw-chip--sm">COMET</span>
+            </div>
+          </div>
+
+          <!-- Zone card -->
+          <div class="lw-card lw-card--zone" style="border-color: var(--lw-zone-0);">
+            <div class="lw-card__title" style="color: var(--lw-zone-0);">ZONE 0</div>
+            <div style="font-family: var(--font-body); font-size: 11px; color: var(--lw-text-tertiary); margin-bottom: 8px;">80 LEDs &middot; L[40-79] R[80-119]</div>
+            <div class="card-row">
+              <span class="card-row__label">Effect</span>
+              <span class="card-row__value">Ripple Enhanced</span>
+            </div>
+          </div>
+
+          <!-- Glass card -->
+          <div class="lw-card lw-card--glass">
+            <div class="lw-card__title">AUDIO INPUT</div>
+            <div class="card-row">
+              <span class="card-row__label">Backend</span>
+              <span class="card-row__value" style="color: var(--lw-cyan);">ESV11</span>
+            </div>
+            <div class="card-row">
+              <span class="card-row__label">Sample Rate</span>
+              <span class="card-row__value">32 kHz</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================
+       04 — CHIPS / PILLS
+       ============================ -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">04</span>
+      <h2 class="section-title">CHIPS & PILLS</h2>
+    </div>
+
+    <div class="component-row">
+      <div class="component-label">
+        <div class="component-label__name">CATEGORIES</div>
+        <div class="component-label__desc">Effect category and mode selection. Active state uses gold tint.</div>
+      </div>
+      <div class="component-showcase">
+        <div class="state-label">EFFECT CATEGORIES</div>
+        <div class="chip-row" style="margin-bottom: 24px;">
+          <span class="lw-chip lw-chip--active">ALL</span>
+          <span class="lw-chip lw-chip--default">AUDIO</span>
+          <span class="lw-chip lw-chip--default">AMBIENT</span>
+          <span class="lw-chip lw-chip--default">COMET</span>
+          <span class="lw-chip lw-chip--default">PULSE</span>
+          <span class="lw-chip lw-chip--default">WAVEFORM</span>
+          <span class="lw-chip lw-chip--default">EXPERIMENTAL</span>
+        </div>
+
+        <div class="state-label">ZONE PILLS</div>
+        <div class="chip-row" style="margin-bottom: 24px;">
+          <span class="lw-chip lw-chip--zone0">ZONE 0</span>
+          <span class="lw-chip lw-chip--zone1">ZONE 1</span>
+          <span class="lw-chip lw-chip--zone2">ZONE 2</span>
+          <span class="lw-chip lw-chip--zone3">ZONE 3</span>
+        </div>
+
+        <div class="state-label">SMALL PILLS (INLINE)</div>
+        <div class="chip-row">
+          <span class="lw-chip lw-chip--active lw-chip--sm">EFFECT</span>
+          <span class="lw-chip lw-chip--default lw-chip--sm">PALETTE</span>
+          <span class="lw-chip lw-chip--default lw-chip--sm">AUDIO</span>
+          <span class="lw-chip lw-chip--default lw-chip--sm">ZONE</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================
+       05 — TOGGLES
+       ============================ -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">05</span>
+      <h2 class="section-title">TOGGLES</h2>
+    </div>
+
+    <div class="component-row">
+      <div class="component-label">
+        <div class="component-label__name">SWITCH</div>
+        <div class="component-label__desc">iOS-native toggle style with gold active state and spring animation.</div>
+      </div>
+      <div class="component-showcase">
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+          <div class="toggle-row">
+            <div class="lw-toggle lw-toggle--on">
+              <div class="lw-toggle__thumb"></div>
+            </div>
+            <span class="lw-toggle__label">Auto-cycle effects on beat</span>
+          </div>
+          <div class="toggle-row">
+            <div class="lw-toggle lw-toggle--off">
+              <div class="lw-toggle__thumb"></div>
+            </div>
+            <span class="lw-toggle__label">Mirror strip B</span>
+          </div>
+          <div class="toggle-row">
+            <div class="lw-toggle lw-toggle--on">
+              <div class="lw-toggle__thumb"></div>
+            </div>
+            <span class="lw-toggle__label">Beat-reactive UI</span>
+          </div>
+          <div class="toggle-row">
+            <div class="lw-toggle lw-toggle--off">
+              <div class="lw-toggle__thumb"></div>
+            </div>
+            <span class="lw-toggle__label" style="color: var(--lw-text-disabled);">Advanced diagnostics (disconnected)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================
+       06 — SEGMENTED CONTROLS
+       ============================ -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">06</span>
+      <h2 class="section-title">SEGMENTED CONTROLS</h2>
+    </div>
+
+    <div class="component-row">
+      <div class="component-label">
+        <div class="component-label__name">MODES</div>
+        <div class="component-label__desc">Tab-style segment control for view switching. Active segment gets elevated background.</div>
+      </div>
+      <div class="component-showcase">
+        <div style="display: flex; flex-direction: column; gap: 24px;">
+          <div>
+            <div class="state-label">VIEW MODE</div>
+            <div class="lw-segment">
+              <div class="lw-segment__item lw-segment__item--active">EFFECTS</div>
+              <div class="lw-segment__item">PALETTES</div>
+              <div class="lw-segment__item">ZONES</div>
+            </div>
+          </div>
+          <div>
+            <div class="state-label">RENDER MODE</div>
+            <div class="lw-segment">
+              <div class="lw-segment__item">SINGLE</div>
+              <div class="lw-segment__item lw-segment__item--active">DUAL</div>
+              <div class="lw-segment__item">MIRROR</div>
+              <div class="lw-segment__item">ZONE</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================
+       07 — BOTTOM SHEETS
+       ============================ -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">07</span>
+      <h2 class="section-title">BOTTOM SHEETS</h2>
+    </div>
+
+    <div class="component-row">
+      <div class="component-label">
+        <div class="component-label__name">HALF SHEET</div>
+        <div class="component-label__desc">Glass-blur overlay for secondary content. Drag handle, close button, scrollable body.</div>
+      </div>
+      <div class="component-showcase" style="padding: 0; overflow: hidden; border-radius: var(--radius-xl);">
+        <div class="sheet-demo">
+          <div class="sheet-demo__bg">
+            <div class="sheet-demo__bg-text">MAIN CONTENT</div>
+            <div style="font-family: var(--font-body); font-size: 12px; color: var(--lw-text-tertiary);">Content dimmed behind sheet overlay</div>
+          </div>
+          <div class="lw-sheet lw-sheet--half">
+            <div class="lw-sheet__handle"></div>
+            <div class="lw-sheet__header">
+              <span class="lw-sheet__title">Select Effect Category</span>
+              <button class="lw-sheet__close">&times;</button>
+            </div>
+            <div class="lw-sheet__body">
+              <div class="chip-row" style="margin-bottom: 16px;">
+                <span class="lw-chip lw-chip--active">ALL</span>
+                <span class="lw-chip lw-chip--default">AUDIO</span>
+                <span class="lw-chip lw-chip--default">AMBIENT</span>
+                <span class="lw-chip lw-chip--default">COMET</span>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                <div class="lw-card" style="padding: 12px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                      <div style="font-family: var(--font-body); font-weight: 600; font-size: 14px; color: var(--lw-text-primary);">LGP Holographic Tuned</div>
+                      <div style="font-family: var(--font-body); font-size: 11px; color: var(--lw-text-tertiary);">Audio &middot; Comet trails</div>
+                    </div>
+                    <span class="lw-chip lw-chip--active lw-chip--sm">ACTIVE</span>
+                  </div>
+                </div>
+                <div class="lw-card" style="padding: 12px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                      <div style="font-family: var(--font-body); font-weight: 600; font-size: 14px; color: var(--lw-text-primary);">Ripple Enhanced</div>
+                      <div style="font-family: var(--font-body); font-size: 11px; color: var(--lw-text-tertiary);">Audio &middot; Waveform</div>
+                    </div>
+                    <span style="color: var(--lw-text-tertiary); font-size: 16px;">&#8250;</span>
+                  </div>
+                </div>
+                <div class="lw-card" style="padding: 12px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                      <div style="font-family: var(--font-body); font-weight: 600; font-size: 14px; color: var(--lw-text-primary);">Pulse Matrix</div>
+                      <div style="font-family: var(--font-body); font-size: 11px; color: var(--lw-text-tertiary);">Audio &middot; Pulse</div>
+                    </div>
+                    <span style="color: var(--lw-text-tertiary); font-size: 16px;">&#8250;</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================
+       08 — STATUS INDICATORS
+       ============================ -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">08</span>
+      <h2 class="section-title">STATUS INDICATORS</h2>
+    </div>
+
+    <div class="component-row">
+      <div class="component-label">
+        <div class="component-label__name">CONNECTION</div>
+        <div class="component-label__desc">Status dots with semantic colours. Connecting state pulses. Beat indicator fires on downbeat.</div>
+      </div>
+      <div class="component-showcase">
+        <div style="display: flex; flex-direction: column; gap: 20px;">
+
+          <div class="state-label">CONNECTION STATES</div>
+          <div style="display: flex; gap: 32px;">
+            <div class="status-group">
+              <div class="status-dot status-dot--connected"></div>
+              <span class="status-label" style="color: var(--lw-success);">Connected</span>
+            </div>
+            <div class="status-group">
+              <div class="status-dot status-dot--connecting"></div>
+              <span class="status-label" style="color: var(--lw-gold);">Connecting...</span>
+            </div>
+            <div class="status-group">
+              <div class="status-dot status-dot--disconnected"></div>
+              <span class="status-label" style="color: var(--lw-error);">Disconnected</span>
+            </div>
+          </div>
+
+          <div class="state-label">BEAT PULSE</div>
+          <div style="display: flex; gap: 24px; align-items: center;">
+            <div class="beat-indicator"></div>
+            <span style="font-family: var(--font-mono); font-size: 13px; color: var(--lw-gold);">128 BPM</span>
+            <span style="font-family: var(--font-body); font-size: 11px; color: var(--lw-text-tertiary);">Confidence 87%</span>
+          </div>
+
+          <div class="state-label">AUDIO LEVEL</div>
+          <div style="display: flex; gap: 24px; align-items: center;">
+            <div class="audio-level" id="audio-level">
+              <div class="audio-level__bar" style="height: 4px;"></div>
+              <div class="audio-level__bar" style="height: 8px;"></div>
+              <div class="audio-level__bar" style="height: 14px;"></div>
+              <div class="audio-level__bar" style="height: 20px;"></div>
+              <div class="audio-level__bar" style="height: 16px;"></div>
+              <div class="audio-level__bar" style="height: 10px;"></div>
+              <div class="audio-level__bar" style="height: 6px;"></div>
+            </div>
+            <span style="font-family: var(--font-mono); font-size: 11px; color: var(--lw-text-secondary);">RMS 0.342</span>
+          </div>
+
+          <div class="state-label">COMPOSITE STATUS BAR</div>
+          <div class="lw-card" style="padding: 10px 14px;">
+            <div class="lw-status-bar">
+              <div class="status-dot status-dot--connected lw-status-bar__dot"></div>
+              <span>Connected</span>
+              <span class="lw-status-bar__separator">&bull;</span>
+              <span>LGP Holographic</span>
+              <span class="lw-status-bar__separator">&bull;</span>
+              <div class="beat-indicator" style="width: 8px; height: 8px;"></div>
+              <span class="lw-status-bar__bpm">124 BPM</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================
+       09 — LED STRIP PREVIEW
+       ============================ -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">09</span>
+      <h2 class="section-title">LED STRIP PREVIEW</h2>
+    </div>
+
+    <div class="component-row">
+      <div class="component-label">
+        <div class="component-label__name">STRIP VIEW</div>
+        <div class="component-label__desc">Miniature 160-LED strip with glow halos. Centre origin marker at 79/80. Real-time colour data.</div>
+      </div>
+      <div class="component-showcase">
+        <div class="led-preview">
+          <div class="led-preview__label">STRIP A &mdash; 160 LEDs</div>
+          <div class="led-preview__strip" id="led-component-strip"></div>
+          <div class="led-preview__meta">
+            <span class="led-preview__meta-item">Centre: <span class="led-preview__meta-value">79/80</span></span>
+            <span class="led-preview__meta-item">Mode: <span class="led-preview__meta-value">Dual</span></span>
+            <span class="led-preview__meta-item">Effect: <span class="led-preview__meta-value">Holographic</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================
+       10 — COLOUR SWATCHES / PALETTES
+       ============================ -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">10</span>
+      <h2 class="section-title">COLOUR SWATCHES</h2>
+    </div>
+
+    <div class="component-row">
+      <div class="component-label">
+        <div class="component-label__name">PALETTES</div>
+        <div class="component-label__desc">LED palette previews. Hover to expand a swatch. Used in palette selection UI.</div>
+      </div>
+      <div class="component-showcase">
+        <div class="palette-row">
+          <div class="palette-card">
+            <div class="palette-card__preview">
+              <div style="background: #FFB84D;"></div>
+              <div style="background: #FF8C00;"></div>
+              <div style="background: #FF4500;"></div>
+              <div style="background: #CC3700;"></div>
+              <div style="background: #8B2500;"></div>
+            </div>
+            <div class="palette-card__name">Warm Ember</div>
+          </div>
+          <div class="palette-card">
+            <div class="palette-card__preview">
+              <div style="background: #00D4FF;"></div>
+              <div style="background: #0099FF;"></div>
+              <div style="background: #0055FF;"></div>
+              <div style="background: #3300CC;"></div>
+              <div style="background: #1A0066;"></div>
+            </div>
+            <div class="palette-card__name">Deep Ocean</div>
+          </div>
+          <div class="palette-card">
+            <div class="palette-card__preview">
+              <div style="background: #4DFFB8;"></div>
+              <div style="background: #00D4FF;"></div>
+              <div style="background: #0099FF;"></div>
+              <div style="background: #9900FF;"></div>
+              <div style="background: #FF00CC;"></div>
+            </div>
+            <div class="palette-card__name">Aurora</div>
+          </div>
+          <div class="palette-card">
+            <div class="palette-card__preview">
+              <div style="background: #FFB84D;"></div>
+              <div style="background: #FFCC33;"></div>
+              <div style="background: #FFFFFF;"></div>
+              <div style="background: #FFCC33;"></div>
+              <div style="background: #FFB84D;"></div>
+            </div>
+            <div class="palette-card__name">Gold Pulse</div>
+          </div>
+          <div class="palette-card">
+            <div class="palette-card__preview">
+              <div style="background: #FF4D4D;"></div>
+              <div style="background: #FF0066;"></div>
+              <div style="background: #CC0055;"></div>
+              <div style="background: #880033;"></div>
+              <div style="background: #440011;"></div>
+            </div>
+            <div class="palette-card__name">Crimson</div>
+          </div>
+          <div class="palette-card">
+            <div class="palette-card__preview">
+              <div style="background: #E6E9EF;"></div>
+              <div style="background: #9CA3B0;"></div>
+              <div style="background: #6B7280;"></div>
+              <div style="background: #3D4350;"></div>
+              <div style="background: #1E2535;"></div>
+            </div>
+            <div class="palette-card__name">Monochrome</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================
+       11 — METRIC BARS & STEPPERS
+       ============================ -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">11</span>
+      <h2 class="section-title">METRIC BARS & STEPPERS</h2>
+    </div>
+
+    <div class="component-row">
+      <div class="component-label">
+        <div class="component-label__name">METRICS</div>
+        <div class="component-label__desc">Real-time DSP metric display with coloured fill bars. Monospace values for alignment.</div>
+      </div>
+      <div class="component-showcase">
+        <div class="lw-card">
+          <div class="lw-card__title">AUDIO DIAGNOSTICS</div>
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <div class="lw-metric">
+              <div class="lw-metric__header">
+                <span class="lw-metric__label">RMS</span>
+                <span class="lw-metric__value">0.342</span>
+              </div>
+              <div class="lw-metric__track">
+                <div class="lw-metric__fill" style="width: 45%; background: var(--lw-cyan);"></div>
+              </div>
+            </div>
+            <div class="lw-metric">
+              <div class="lw-metric__header">
+                <span class="lw-metric__label">SPECTRAL FLUX</span>
+                <span class="lw-metric__value">0.128</span>
+              </div>
+              <div class="lw-metric__track">
+                <div class="lw-metric__fill" style="width: 25%; background: var(--lw-cyan);"></div>
+              </div>
+            </div>
+            <div class="lw-metric">
+              <div class="lw-metric__header">
+                <span class="lw-metric__label">CONFIDENCE</span>
+                <span class="lw-metric__value">87%</span>
+              </div>
+              <div class="lw-metric__track">
+                <div class="lw-metric__fill" style="width: 87%; background: var(--lw-gold);"></div>
+              </div>
+            </div>
+            <div class="lw-metric">
+              <div class="lw-metric__header">
+                <span class="lw-metric__label">NOISE FLOOR</span>
+                <span class="lw-metric__value">0.0004</span>
+              </div>
+              <div class="lw-metric__track">
+                <div class="lw-metric__fill" style="width: 4%; background: var(--lw-error);"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="component-row">
+      <div class="component-label">
+        <div class="component-label__name">STEPPERS</div>
+        <div class="component-label__desc">Precise parameter adjustment with decrement/value/increment trio. Monospace value display.</div>
+      </div>
+      <div class="component-showcase">
+        <div class="lw-card">
+          <div class="lw-card__title">TUNING PARAMETERS</div>
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <div class="lw-stepper">
+              <span class="lw-stepper__label">Alpha Fast</span>
+              <div class="lw-stepper__controls">
+                <button class="lw-stepper__btn">&#9664;</button>
+                <div class="lw-stepper__value">0.35</div>
+                <button class="lw-stepper__btn">&#9654;</button>
+              </div>
+            </div>
+            <div class="lw-stepper">
+              <span class="lw-stepper__label">Alpha Slow</span>
+              <div class="lw-stepper__controls">
+                <button class="lw-stepper__btn">&#9664;</button>
+                <div class="lw-stepper__value">0.12</div>
+                <button class="lw-stepper__btn">&#9654;</button>
+              </div>
+            </div>
+            <div class="lw-stepper">
+              <span class="lw-stepper__label">Hysteresis</span>
+              <div class="lw-stepper__controls">
+                <button class="lw-stepper__btn">&#9664;</button>
+                <div class="lw-stepper__value">5000ms</div>
+                <button class="lw-stepper__btn">&#9654;</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="page-footer">
+    <div class="page-footer__brand">SPECTRASYNQ</div>
+    <div class="page-footer__meta">LightwaveOS Component Library &middot; v2.0 &middot; 11 Component Families</div>
+  </footer>
+
+</div>
+
+<script>
+// LED strip component animation
+(function() {
+  const strip = document.getElementById('led-component-strip');
+  const NUM = 100;
+  const CENTRE = NUM / 2;
+
+  for (let i = 0; i < NUM; i++) {
+    const p = document.createElement('div');
+    p.className = 'led-preview__pixel';
+    if (i === CENTRE - 1 || i === CENTRE) p.className += ' led-preview__centre';
+    strip.appendChild(p);
+  }
+
+  const pixels = strip.querySelectorAll('.led-preview__pixel');
+  let t = 0;
+
+  function hsl(h,s,l) {
+    h/=360;s/=100;l/=100;
+    let r,g,b;
+    if(s===0){r=g=b=l;}else{
+      const f=(p,q,t)=>{if(t<0)t+=1;if(t>1)t-=1;if(t<1/6)return p+(q-p)*6*t;if(t<1/2)return q;if(t<2/3)return p+(q-p)*(2/3-t)*6;return p;};
+      const q=l<.5?l*(1+s):l+s-l*s;const p=2*l-q;
+      r=f(p,q,h+1/3);g=f(p,q,h);b=f(p,q,h-1/3);
+    }
+    return `rgb(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)})`;
+  }
+
+  function frame() {
+    t += 0.025;
+    pixels.forEach((px, i) => {
+      const d = Math.abs(i - CENTRE);
+      const n = d / CENTRE;
+      const w = Math.sin(t * 2.5 - d * 0.12) * 0.5 + 0.5;
+      const h = 35 + n * 155;
+      const s = 85;
+      const l = (50 - n * 20) * Math.pow(w, 1.5) + 4;
+      px.style.backgroundColor = hsl(h, s, l);
+    });
+    requestAnimationFrame(frame);
+  }
+  frame();
+
+  // Audio level animation
+  const bars = document.querySelectorAll('.audio-level__bar');
+  function animateBars() {
+    bars.forEach(bar => {
+      const h = 4 + Math.random() * 16;
+      bar.style.height = h + 'px';
+    });
+    setTimeout(animateBars, 120);
+  }
+  animateBars();
+})();
+</script>
+</body>
+</html>

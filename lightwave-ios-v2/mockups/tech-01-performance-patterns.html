@@ -1,0 +1,1847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LightwaveOS iOS — Performance Patterns Reference</title>
+<style>
+  /* =========================================================
+     TOKENS
+  ========================================================= */
+  :root {
+    --bg:          #0d0d0f;
+    --surface:     #141418;
+    --card:        #1a1a20;
+    --border:      #2a2a35;
+    --accent:      #00e5ff;
+    --accent2:     #7c4dff;
+    --gold:        #ffd740;
+    --green:       #69f0ae;
+    --red:         #ff5252;
+    --orange:      #ff9100;
+    --text:        #e8e8f0;
+    --text2:       #9898b0;
+    --text3:       #55556a;
+    --mono:        'Menlo', 'Consolas', 'SF Mono', monospace;
+    --sans:        -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --radius:      8px;
+    --radius-lg:   14px;
+  }
+
+  /* =========================================================
+     RESET & BASE
+  ========================================================= */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.65;
+  }
+
+  /* =========================================================
+     LAYOUT
+  ========================================================= */
+  .page-wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 24px 80px;
+  }
+
+  /* =========================================================
+     HEADER
+  ========================================================= */
+  .page-header {
+    padding: 48px 0 32px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 40px;
+  }
+
+  .page-header .breadcrumb {
+    font-size: 11px;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    color: var(--text3);
+    margin-bottom: 12px;
+  }
+
+  .page-header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+
+  .page-header .subtitle {
+    color: var(--text2);
+    font-size: 14px;
+    max-width: 700px;
+    line-height: 1.6;
+  }
+
+  .meta-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-top: 20px;
+  }
+
+  .meta-tag {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 99px;
+    padding: 3px 12px;
+    font-size: 11px;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--text2);
+  }
+
+  .meta-tag.accent  { border-color: var(--accent);  color: var(--accent); }
+  .meta-tag.gold    { border-color: var(--gold);     color: var(--gold);   }
+  .meta-tag.green   { border-color: var(--green);    color: var(--green);  }
+
+  /* =========================================================
+     TOC
+  ========================================================= */
+  .toc {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    margin-bottom: 48px;
+  }
+
+  .toc h2 {
+    font-size: 11px;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    color: var(--text3);
+    margin-bottom: 14px;
+  }
+
+  .toc ol {
+    list-style: none;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 24px;
+  }
+
+  .toc li {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  .toc li .num {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    min-width: 20px;
+  }
+
+  .toc a {
+    color: var(--text2);
+    text-decoration: none;
+    font-size: 13px;
+    transition: color 0.15s;
+  }
+
+  .toc a:hover { color: var(--accent); }
+
+  /* =========================================================
+     SECTION
+  ========================================================= */
+  .section {
+    margin-bottom: 64px;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    margin-bottom: 24px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-num {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent);
+    letter-spacing: 1px;
+  }
+
+  .section-header h2 {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+    color: var(--text);
+  }
+
+  .section-lead {
+    color: var(--text2);
+    margin-bottom: 28px;
+    max-width: 760px;
+    line-height: 1.7;
+  }
+
+  /* =========================================================
+     CODE BLOCKS
+  ========================================================= */
+  pre {
+    background: #0a0a0e;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.7;
+    color: #c8c8e0;
+    tab-size: 4;
+  }
+
+  code { font-family: var(--mono); }
+
+  /* Syntax colouring */
+  .kw  { color: #c792ea; }  /* keywords */
+  .ty  { color: #82aaff; }  /* types */
+  .fn  { color: #82aaff; }  /* function names */
+  .st  { color: #c3e88d; }  /* strings */
+  .cm  { color: #546e7a; font-style: italic; }  /* comments */
+  .nu  { color: #f78c6c; }  /* numbers */
+  .at  { color: #ffcb6b; }  /* attributes / decorators */
+  .op  { color: #89ddff; }  /* operators */
+  .id  { color: #eeffff; }  /* identifiers */
+
+  /* =========================================================
+     CARDS & CALLOUTS
+  ========================================================= */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 20px 24px;
+    margin-bottom: 20px;
+  }
+
+  .card h3 {
+    font-size: 13px;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--text2);
+    margin-bottom: 12px;
+  }
+
+  .callout {
+    border-left: 3px solid;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    padding: 14px 18px;
+    margin-bottom: 18px;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .callout.info    { border-color: var(--accent);  background: rgba(0,229,255,0.05); color: var(--text); }
+  .callout.warn    { border-color: var(--orange);  background: rgba(255,145,0,0.05); color: var(--text); }
+  .callout.danger  { border-color: var(--red);     background: rgba(255,82,82,0.05); color: var(--text); }
+  .callout.good    { border-color: var(--green);   background: rgba(105,240,174,0.05); color: var(--text); }
+
+  .callout strong { display: block; margin-bottom: 4px; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; }
+  .callout.info   strong { color: var(--accent); }
+  .callout.warn   strong { color: var(--orange); }
+  .callout.danger strong { color: var(--red);    }
+  .callout.good   strong { color: var(--green);  }
+
+  /* =========================================================
+     COMPARISON GRID (anti-pattern / good-pattern)
+  ========================================================= */
+  .compare-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  @media (max-width: 700px) { .compare-grid { grid-template-columns: 1fr; } }
+
+  .compare-col { }
+
+  .compare-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 4px;
+    margin-bottom: 10px;
+    font-weight: 600;
+  }
+
+  .compare-label.bad  { background: rgba(255,82,82,0.12);  color: var(--red);   }
+  .compare-label.good { background: rgba(105,240,174,0.12); color: var(--green); }
+
+  /* =========================================================
+     DECISION TREE / FLOW DIAGRAM (ASCII-art style SVG)
+  ========================================================= */
+  .decision-tree {
+    background: #0a0a0e;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    margin-bottom: 24px;
+    overflow-x: auto;
+  }
+
+  /* =========================================================
+     TABLE
+  ========================================================= */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-bottom: 20px;
+  }
+
+  th {
+    text-align: left;
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text3);
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  td {
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(42,42,53,0.6);
+    color: var(--text2);
+    vertical-align: top;
+  }
+
+  td:first-child { color: var(--text); font-weight: 500; }
+
+  td code {
+    background: rgba(0,229,255,0.08);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: 11.5px;
+    color: var(--accent);
+  }
+
+  tr:last-child td { border-bottom: none; }
+
+  /* =========================================================
+     PERFORMANCE BUDGET BAR
+  ========================================================= */
+  .budget-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
+  .budget-label {
+    min-width: 200px;
+    font-size: 12px;
+    color: var(--text2);
+  }
+
+  .budget-bar-track {
+    flex: 1;
+    height: 8px;
+    background: var(--card);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+
+  .budget-bar-fill {
+    height: 100%;
+    border-radius: 99px;
+    background: var(--accent);
+  }
+
+  .budget-bar-fill.warn   { background: var(--orange); }
+  .budget-bar-fill.danger { background: var(--red);    }
+
+  .budget-val {
+    min-width: 52px;
+    text-align: right;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--text3);
+  }
+
+  /* =========================================================
+     ARCH DIAGRAM (CSS only)
+  ========================================================= */
+  .arch-diagram {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin-bottom: 24px;
+  }
+
+  .arch-row {
+    display: flex;
+    align-items: center;
+    gap: 0;
+  }
+
+  .arch-box {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 16px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text);
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .arch-box.highlight { border-color: var(--accent); color: var(--accent); }
+  .arch-box.warn      { border-color: var(--orange); color: var(--orange); }
+  .arch-box.good      { border-color: var(--green);  color: var(--green);  }
+  .arch-box.dim       { border-color: var(--border); color: var(--text3);  opacity: 0.7; }
+
+  .arch-arrow {
+    flex: 0 0 auto;
+    font-size: 18px;
+    color: var(--text3);
+    padding: 0 6px;
+  }
+
+  .arch-arrow.down {
+    transform: rotate(90deg);
+    display: block;
+    margin: 4px auto;
+    text-align: center;
+    padding: 0;
+  }
+
+  /* =========================================================
+     MISC
+  ========================================================= */
+  h3 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 12px;
+    margin-top: 28px;
+  }
+
+  p {
+    color: var(--text2);
+    margin-bottom: 14px;
+    line-height: 1.7;
+  }
+
+  ul, ol {
+    color: var(--text2);
+    margin-bottom: 14px;
+    padding-left: 20px;
+    line-height: 1.75;
+  }
+
+  li { margin-bottom: 4px; }
+
+  strong { color: var(--text); font-weight: 600; }
+
+  .inline-code {
+    background: rgba(0,229,255,0.08);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent);
+  }
+
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 40px 0;
+  }
+
+  .footnote {
+    font-size: 11.5px;
+    color: var(--text3);
+    font-style: italic;
+    margin-top: 8px;
+  }
+</style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <!-- =====================================================
+       PAGE HEADER
+  ====================================================== -->
+  <header class="page-header">
+    <div class="breadcrumb">LightwaveOS iOS &mdash; Technical Reference</div>
+    <h1>High-Performance Real-Time Rendering Patterns</h1>
+    <p class="subtitle">
+      A developer reference for rendering 320 LED pixels, 64 spectrum bins, and 160 waveform
+      samples at 60&nbsp;fps from a 125&nbsp;Hz UDP data stream. All patterns are grounded in
+      the actual LightwaveOS codebase — <span style="color:var(--accent)">AudioViewModel</span>,
+      <span style="color:var(--accent)">UDPStreamReceiver</span>, and the Canvas-based
+      visualisation suite.
+    </p>
+    <div class="meta-row">
+      <span class="meta-tag accent">Swift 6</span>
+      <span class="meta-tag accent">SwiftUI 5</span>
+      <span class="meta-tag gold">iOS 17+</span>
+      <span class="meta-tag green">60 fps target</span>
+      <span class="meta-tag">125 Hz source</span>
+      <span class="meta-tag">@Observable</span>
+    </div>
+  </header>
+
+  <!-- =====================================================
+       TABLE OF CONTENTS
+  ====================================================== -->
+  <nav class="toc">
+    <h2>Contents</h2>
+    <ol>
+      <li><span class="num">01</span><a href="#s1">Canvas vs SwiftUI View rendering</a></li>
+      <li><span class="num">02</span><a href="#s2">Observable granularity</a></li>
+      <li><span class="num">03</span><a href="#s3">125 Hz &rarr; 60 fps frame throttling</a></li>
+      <li><span class="num">04</span><a href="#s4">LED strip preview (320 pixels)</a></li>
+      <li><span class="num">05</span><a href="#s5">Memory patterns — pre-allocated buffers</a></li>
+      <li><span class="num">06</span><a href="#s6">Debounce patterns</a></li>
+      <li><span class="num">07</span><a href="#s7">Background / foreground lifecycle</a></li>
+    </ol>
+  </nav>
+
+  <!-- =====================================================
+       PERFORMANCE BUDGET (upfront)
+  ====================================================== -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-num">00</span>
+      <h2>Frame Budget — The Non-Negotiable Numbers</h2>
+    </div>
+    <p class="section-lead">
+      At 60&nbsp;fps, the Main Thread has 16.67&nbsp;ms per frame. The firmware emits frames every
+      8&nbsp;ms (125&nbsp;Hz). The iOS display refreshes every 16.67&nbsp;ms. All work described in
+      this document must fit inside these bounds.
+    </p>
+
+    <div class="card">
+      <h3>16.67 ms budget breakdown (per display frame)</h3>
+      <div class="budget-item">
+        <span class="budget-label">Canvas draw — LED strip (320 px)</span>
+        <div class="budget-bar-track"><div class="budget-bar-fill" style="width:18%"></div></div>
+        <span class="budget-val">&lt; 3 ms</span>
+      </div>
+      <div class="budget-item">
+        <span class="budget-label">Canvas draw — Spectrum (64 bins)</span>
+        <div class="budget-bar-track"><div class="budget-bar-fill" style="width:9%"></div></div>
+        <span class="budget-val">&lt; 1.5 ms</span>
+      </div>
+      <div class="budget-item">
+        <span class="budget-label">Canvas draw — Waveform (160 pts)</span>
+        <div class="budget-bar-track"><div class="budget-bar-fill" style="width:6%"></div></div>
+        <span class="budget-val">&lt; 1 ms</span>
+      </div>
+      <div class="budget-item">
+        <span class="budget-label">Observable property writes (per frame)</span>
+        <div class="budget-bar-track"><div class="budget-bar-fill" style="width:6%"></div></div>
+        <span class="budget-val">&lt; 1 ms</span>
+      </div>
+      <div class="budget-item">
+        <span class="budget-label">SwiftUI layout / diffing overhead</span>
+        <div class="budget-bar-track"><div class="budget-bar-fill warn" style="width:15%"></div></div>
+        <span class="budget-val">&lt; 2.5 ms</span>
+      </div>
+      <div class="budget-item">
+        <span class="budget-label">Headroom (network I/O, haptics)</span>
+        <div class="budget-bar-track"><div class="budget-bar-fill good" style="width:48%"></div></div>
+        <span class="budget-val">&gt; 7 ms</span>
+      </div>
+    </div>
+
+    <div class="callout warn">
+      <strong>Key insight</strong>
+      The firmware at 125&nbsp;Hz produces <em>two UDP frames per display frame</em>. Only one of
+      them needs to reach the render call. Throttling at the ViewModel boundary is therefore
+      mandatory, not optional.
+    </div>
+  </section>
+
+  <!-- =====================================================
+       SECTION 1 — Canvas vs SwiftUI View
+  ====================================================== -->
+  <section class="section" id="s1">
+    <div class="section-header">
+      <span class="section-num">01</span>
+      <h2>Canvas vs SwiftUI View Rendering</h2>
+    </div>
+    <p class="section-lead">
+      <strong>Canvas</strong> renders to a single Metal-backed layer in one draw call per frame.
+      SwiftUI views are a <em>retained scene graph</em> — each child view allocates heap objects,
+      participates in layout, and generates an Equatable diff every frame. For data that changes
+      every frame, a retained scene graph is prohibitively expensive.
+    </p>
+
+    <!-- Decision tree -->
+    <h3>Decision Tree</h3>
+    <div class="decision-tree">
+      <svg viewBox="0 0 820 440" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block;">
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+            <path d="M1,1 L7,4 L1,7 Z" fill="#546e7a"/>
+          </marker>
+          <marker id="arrow-green" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+            <path d="M1,1 L7,4 L1,7 Z" fill="#69f0ae"/>
+          </marker>
+          <marker id="arrow-red" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+            <path d="M1,1 L7,4 L1,7 Z" fill="#ff5252"/>
+          </marker>
+        </defs>
+
+        <!-- Root node -->
+        <rect x="260" y="10" width="300" height="44" rx="8" fill="#1a1a20" stroke="#2a2a35" stroke-width="1.5"/>
+        <text x="410" y="36" text-anchor="middle" font-size="13" fill="#e8e8f0" font-family="monospace">Does this data change every frame?</text>
+
+        <!-- Yes branch -->
+        <line x1="310" y1="54" x2="200" y2="110" stroke="#546e7a" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <text x="228" y="90" font-size="11" fill="#69f0ae" font-family="monospace">YES</text>
+
+        <!-- No branch -->
+        <line x1="510" y1="54" x2="620" y2="110" stroke="#546e7a" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <text x="555" y="90" font-size="11" fill="#ff5252" font-family="monospace">NO</text>
+
+        <!-- Left: frequently-changing -->
+        <rect x="60" y="110" width="280" height="44" rx="8" fill="#1a1a20" stroke="#2a2a35" stroke-width="1.5"/>
+        <text x="200" y="132" text-anchor="middle" font-size="12" fill="#9898b0" font-family="monospace">Is it purely</text>
+        <text x="200" y="148" text-anchor="middle" font-size="12" fill="#9898b0" font-family="monospace">custom-drawn (no text/images)?</text>
+
+        <!-- Right: static -->
+        <rect x="480" y="110" width="280" height="44" rx="8" fill="#1a1a20" stroke="#2a2a35" stroke-width="1.5"/>
+        <text x="620" y="132" text-anchor="middle" font-size="12" fill="#9898b0" font-family="monospace">Does it contain interactive</text>
+        <text x="620" y="148" text-anchor="middle" font-size="12" fill="#9898b0" font-family="monospace">controls or complex layout?</text>
+
+        <!-- Left Yes -->
+        <line x1="130" y1="154" x2="80" y2="220" stroke="#546e7a" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+        <text x="78" y="198" font-size="11" fill="#69f0ae" font-family="monospace">YES</text>
+
+        <!-- Left No -->
+        <line x1="270" y1="154" x2="320" y2="220" stroke="#546e7a" stroke-width="1.5" marker-end="url(#arrow-red)"/>
+        <text x="278" y="198" font-size="11" fill="#ff5252" font-family="monospace">NO</text>
+
+        <!-- Right Yes -->
+        <line x1="550" y1="154" x2="500" y2="220" stroke="#546e7a" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <text x="502" y="198" font-size="11" fill="#69f0ae" font-family="monospace">YES</text>
+
+        <!-- Right No -->
+        <line x1="690" y1="154" x2="740" y2="220" stroke="#546e7a" stroke-width="1.5" marker-end="url(#arrow)"/>
+        <text x="692" y="198" font-size="11" fill="#ff5252" font-family="monospace">NO</text>
+
+        <!-- Canvas answer -->
+        <rect x="20" y="220" width="160" height="50" rx="8" fill="rgba(0,229,255,0.1)" stroke="#00e5ff" stroke-width="1.5"/>
+        <text x="100" y="240" text-anchor="middle" font-size="12" fill="#00e5ff" font-weight="bold" font-family="monospace">Canvas</text>
+        <text x="100" y="258" text-anchor="middle" font-size="11" fill="#9898b0" font-family="monospace">(TimelineView-driven)</text>
+
+        <!-- Hybrid answer -->
+        <rect x="250" y="220" width="180" height="50" rx="8" fill="rgba(255,145,0,0.08)" stroke="#ff9100" stroke-width="1.5"/>
+        <text x="340" y="240" text-anchor="middle" font-size="12" fill="#ff9100" font-weight="bold" font-family="monospace">Canvas + overlay</text>
+        <text x="340" y="258" text-anchor="middle" font-size="11" fill="#9898b0" font-family="monospace">SwiftUI for controls</text>
+
+        <!-- SwiftUI answer (interactive) -->
+        <rect x="420" y="220" width="180" height="50" rx="8" fill="rgba(124,77,255,0.1)" stroke="#7c4dff" stroke-width="1.5"/>
+        <text x="510" y="240" text-anchor="middle" font-size="12" fill="#7c4dff" font-weight="bold" font-family="monospace">SwiftUI View</text>
+        <text x="510" y="258" text-anchor="middle" font-size="11" fill="#9898b0" font-family="monospace">with animation modifiers</text>
+
+        <!-- SwiftUI answer (static) -->
+        <rect x="650" y="220" width="180" height="50" rx="8" fill="rgba(124,77,255,0.1)" stroke="#7c4dff" stroke-width="1.5"/>
+        <text x="740" y="240" text-anchor="middle" font-size="12" fill="#7c4dff" font-weight="bold" font-family="monospace">SwiftUI View</text>
+        <text x="740" y="258" text-anchor="middle" font-size="11" fill="#9898b0" font-family="monospace">static / low-churn</text>
+
+        <!-- Examples row -->
+        <text x="100" y="305" text-anchor="middle" font-size="10.5" fill="#546e7a" font-family="monospace">LED strip</text>
+        <text x="100" y="319" text-anchor="middle" font-size="10.5" fill="#546e7a" font-family="monospace">Spectrum bars</text>
+        <text x="100" y="333" text-anchor="middle" font-size="10.5" fill="#546e7a" font-family="monospace">Waveform</text>
+        <text x="100" y="347" text-anchor="middle" font-size="10.5" fill="#546e7a" font-family="monospace">WaterfallCanvas</text>
+        <text x="100" y="361" text-anchor="middle" font-size="10.5" fill="#546e7a" font-family="monospace">DotMatrixCanvas</text>
+
+        <text x="340" y="305" text-anchor="middle" font-size="10.5" fill="#546e7a" font-family="monospace">Beat pulse (Canvas dot)</text>
+        <text x="340" y="319" text-anchor="middle" font-size="10.5" fill="#546e7a" font-family="monospace">+ tap gesture overlay</text>
+        <text x="340" y="333" text-anchor="middle" font-size="10.5" fill="#546e7a" font-family="monospace">(palette strip selector)</text>
+
+        <text x="510" y="305" text-anchor="middle" font-size="10.5" fill="#546e7a" font-family="monospace">BPM counter (large text)</text>
+        <text x="510" y="319" text-anchor="middle" font-size="10.5" fill="#546e7a" font-family="monospace">MetricBar fill</text>
+        <text x="510" y="333" text-anchor="middle" font-size="10.5" fill="#546e7a" font-family="monospace">Silence indicator</text>
+
+        <text x="740" y="305" text-anchor="middle" font-size="10.5" fill="#546e7a" font-family="monospace">Parameter sliders</text>
+        <text x="740" y="319" text-anchor="middle" font-size="10.5" fill="#546e7a" font-family="monospace">BooleanIndicator</text>
+        <text x="740" y="333" text-anchor="middle" font-size="10.5" fill="#546e7a" font-family="monospace">Card headers</text>
+
+        <!-- Vertical guide lines to examples -->
+        <line x1="100" y1="270" x2="100" y2="298" stroke="#2a2a35" stroke-width="1" stroke-dasharray="3,3"/>
+        <line x1="340" y1="270" x2="340" y2="298" stroke="#2a2a35" stroke-width="1" stroke-dasharray="3,3"/>
+        <line x1="510" y1="270" x2="510" y2="298" stroke="#2a2a35" stroke-width="1" stroke-dasharray="3,3"/>
+        <line x1="740" y1="270" x2="740" y2="298" stroke="#2a2a35" stroke-width="1" stroke-dasharray="3,3"/>
+      </svg>
+    </div>
+
+    <h3>Why TimelineView wraps every Canvas</h3>
+    <p>
+      Without <span class="inline-code">TimelineView</span>, a <span class="inline-code">Canvas</span>
+      only redraws when its observed properties change. With <span class="inline-code">.animation</span>
+      schedule, it redraws every display-sync frame, exactly matching the 60&nbsp;fps ProMotion cadence.
+      The current <span class="inline-code">WaterfallCanvas</span>, <span class="inline-code">DotMatrixCanvas</span>,
+      and <span class="inline-code">DotRidgeCanvas</span> all use this correctly.
+    </p>
+
+    <div class="compare-grid">
+      <div class="compare-col">
+        <div class="compare-label bad">Anti-pattern — 320 SwiftUI views</div>
+        <pre><span class="cm">// NEVER do this for real-time data</span>
+<span class="cm">// 320 Color views = 320 layout passes</span>
+<span class="cm">// per frame = guaranteed jank</span>
+HStack(spacing: <span class="nu">0</span>) {
+    <span class="ty">ForEach</span>(<span class="nu">0</span>..<span class="nu">320</span>, id: \.self) { i <span class="kw">in</span>
+        Color(
+            red: Double(ledData[i*<span class="nu">3</span>]) / <span class="nu">255</span>,
+            green: Double(ledData[i*<span class="nu">3</span>+<span class="nu">1</span>]) / <span class="nu">255</span>,
+            blue: Double(ledData[i*<span class="nu">3</span>+<span class="nu">2</span>]) / <span class="nu">255</span>
+        )
+        .frame(width: <span class="nu">3</span>, height: <span class="nu">24</span>)
+    }
+}</pre>
+      </div>
+      <div class="compare-col">
+        <div class="compare-label good">Good — single Canvas draw call</div>
+        <pre><span class="ty">TimelineView</span>(.<span class="fn">animation</span>) { _ <span class="kw">in</span>
+    <span class="ty">Canvas</span> { ctx, size <span class="kw">in</span>
+        <span class="kw">let</span> w = size.width / <span class="nu">320</span>
+        <span class="kw">for</span> i <span class="kw">in</span> <span class="nu">0</span>..<span class="nu">320</span> {
+            <span class="kw">let</span> r = ledPixels[i].r
+            <span class="kw">let</span> g = ledPixels[i].g
+            <span class="kw">let</span> b = ledPixels[i].b
+            ctx.fill(
+                <span class="ty">Path</span>(CGRect(
+                    x: CGFloat(i) * w,
+                    y: <span class="nu">0</span>,
+                    width: w, height: size.height
+                )),
+                with: .color(Color(
+                    red: Double(r)/255,
+                    green: Double(g)/255,
+                    blue: Double(b)/255
+                ))
+            )
+        }
+    }
+}</pre>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Primitive</th>
+          <th>Layer model</th>
+          <th>Heap alloc per frame</th>
+          <th>Layout cost</th>
+          <th>Use for</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>Canvas</code> in <code>TimelineView</code></td>
+          <td>Single Metal-backed CALayer</td>
+          <td>Zero (draw calls are value-typed)</td>
+          <td>None (canvas does not layout)</td>
+          <td>LED strip, waveform, spectrum, waterfall</td>
+        </tr>
+        <tr>
+          <td>SwiftUI <code>View</code> with <code>.animation</code></td>
+          <td>One or more CALayers</td>
+          <td>Low (interpolated properties only)</td>
+          <td>One layout pass per transition</td>
+          <td>Beat pulse, BPM counter, MetricBar</td>
+        </tr>
+        <tr>
+          <td><code>ForEach</code> + <code>Color</code></td>
+          <td>N CALayers (one per element)</td>
+          <td>High (N allocs per diff)</td>
+          <td>Full HStack layout each frame</td>
+          <td>Only for static or very slow data (&lt; 1 Hz)</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- =====================================================
+       SECTION 2 — Observable granularity
+  ====================================================== -->
+  <section class="section" id="s2">
+    <div class="section-header">
+      <span class="section-num">02</span>
+      <h2>Observable Granularity — Minimising View Invalidation</h2>
+    </div>
+    <p class="section-lead">
+      With <span class="inline-code">@Observable</span> (iOS 17+), a view only re-renders when it
+      reads a property that changes. But if all audio data lives on one large ViewModel, every
+      property write risks invalidating views that only needed a subset of properties. The fix is
+      to split the ViewModel into focused data objects so the observation graph is fine-grained.
+    </p>
+
+    <div class="callout info">
+      <strong>How @Observable invalidation works</strong>
+      The Observation framework tracks property access at the getter level using
+      <code>_$observationRegistrar</code>. When <code>bands</code> is written, only views
+      that read <code>bands</code> during their last render are invalidated. This is much more
+      granular than <code>ObservableObject</code>/<code>objectWillChange</code>, but it still
+      means that a view reading <em>any</em> property from a monolithic ViewModel re-renders on
+      <em>any</em> write to that ViewModel. At 125 Hz, every write to <code>AudioViewModel</code>
+      triggers a re-render in every view that observed it.
+    </div>
+
+    <h3>Current architecture (LightwaveOS)</h3>
+    <p>
+      The existing <span class="inline-code">AudioViewModel</span> (432 LOC) carries spectrum data,
+      beat state, DSP metrics, and parameter controls on a single object. This is workable because
+      the three Canvas-based views observe only <span class="inline-code">audio.bands</span>,
+      <span class="inline-code">audio.ringBuffer</span>, and <span class="inline-code">audio.waveform</span> —
+      properties that update every frame anyway. The beat-indicator views do not observe
+      high-frequency properties, so they rarely re-render.
+    </p>
+    <p>
+      The pattern below shows how to take this further if profiling reveals unnecessary
+      re-renders. It is a recommended evolution path, not a required immediate refactor.
+    </p>
+
+    <div class="compare-grid">
+      <div class="compare-col">
+        <div class="compare-label bad">Anti-pattern — monolithic ViewModel</div>
+        <pre><span class="cm">// Every write to ANY property on this</span>
+<span class="cm">// object invalidates ALL observers.</span>
+<span class="cm">// At 125 Hz: BPM card re-renders 125×/s</span>
+<span class="cm">// even though BPM changes at ~2 Hz.</span>
+<span class="at">@Observable</span> <span class="at">@MainActor</span>
+<span class="kw">class</span> <span class="ty">AudioViewModel</span> {
+    <span class="cm">// --- 125 Hz (every UDP frame) ---</span>
+    <span class="kw">var</span> bands: [Float] = ...
+    <span class="kw">var</span> waveform: [Float] = ...
+    <span class="kw">var</span> rms: Float = <span class="nu">0</span>
+    <span class="kw">var</span> flux: Float = <span class="nu">0</span>
+    <span class="kw">var</span> ringBuffer: [[Float]] = ...
+
+    <span class="cm">// --- ~2 Hz (on beat event) ---</span>
+    <span class="kw">var</span> currentBpm: Double = <span class="nu">0</span>
+    <span class="kw">var</span> isBeating: Bool = <span class="kw">false</span>
+    <span class="kw">var</span> isDownbeat: Bool = <span class="kw">false</span>
+    <span class="kw">var</span> bpmConfidence: Double = <span class="nu">0</span>
+    <span class="kw">var</span> tempoLocked: Bool = <span class="kw">false</span>
+
+    <span class="cm">// --- 0.5 Hz (REST polling) ---</span>
+    <span class="kw">var</span> gain: Double = <span class="nu">1.0</span>
+    <span class="kw">var</span> threshold: Double = <span class="nu">0.3</span>
+    <span class="kw">var</span> alphaFast: Double = <span class="nu">0.35</span>
+    <span class="cm">// ... 18 more DSP params</span>
+}</pre>
+      </div>
+      <div class="compare-col">
+        <div class="compare-label good">Good — split by update frequency</div>
+        <pre><span class="cm">// AudioStreamData: updated 125×/s</span>
+<span class="cm">// Canvas views observe only this.</span>
+<span class="at">@Observable</span> <span class="at">@MainActor</span>
+<span class="kw">final class</span> <span class="ty">AudioStreamData</span> {
+    <span class="kw">var</span> bands: [Float] = ...
+    <span class="kw">var</span> waveform: [Float] = ...
+    <span class="kw">var</span> rms: Float = <span class="nu">0</span>
+    <span class="kw">var</span> flux: Float = <span class="nu">0</span>
+    <span class="kw">var</span> ringBuffer: [[Float]] = ...
+    <span class="kw">var</span> writeRow: Int = <span class="nu">0</span>
+}
+
+<span class="cm">// AudioBeatData: updated on beat events</span>
+<span class="cm">// BPM card observes only this.</span>
+<span class="at">@Observable</span> <span class="at">@MainActor</span>
+<span class="kw">final class</span> <span class="ty">AudioBeatData</span> {
+    <span class="kw">var</span> currentBpm: Double = <span class="nu">0</span>
+    <span class="kw">var</span> bpmConfidence: Double = <span class="nu">0</span>
+    <span class="kw">var</span> isBeating: Bool = <span class="kw">false</span>
+    <span class="kw">var</span> isDownbeat: Bool = <span class="kw">false</span>
+    <span class="kw">var</span> tempoLocked: Bool = <span class="kw">false</span>
+}
+
+<span class="cm">// AudioParamData: updated at 0.5 Hz</span>
+<span class="cm">// Parameter cards observe only this.</span>
+<span class="at">@Observable</span> <span class="at">@MainActor</span>
+<span class="kw">final class</span> <span class="ty">AudioParamData</span> {
+    <span class="kw">var</span> gain: Double = <span class="nu">1.0</span>
+    <span class="kw">var</span> threshold: Double = <span class="nu">0.3</span>
+    <span class="kw">var</span> alphaFast: Double = <span class="nu">0.35</span>
+    <span class="cm">// ... other DSP params</span>
+}
+
+<span class="cm">// Coordinator: not @Observable itself</span>
+<span class="at">@MainActor</span>
+<span class="kw">class</span> <span class="ty">AudioViewModel</span> {
+    <span class="kw">let</span> stream = <span class="ty">AudioStreamData</span>()
+    <span class="kw">let</span> beat   = <span class="ty">AudioBeatData</span>()
+    <span class="kw">let</span> params = <span class="ty">AudioParamData</span>()
+}</pre>
+      </div>
+    </div>
+
+    <h3>View binding after the split</h3>
+    <pre><span class="cm">// Canvas view — reads only stream properties,</span>
+<span class="cm">// re-renders every frame (125 Hz throttled to 60).</span>
+<span class="kw">struct</span> <span class="ty">SpectrumCanvas</span>: <span class="ty">View</span> {
+    <span class="at">@Environment</span>(<span class="ty">AudioStreamData</span>.self) <span class="kw">private var</span> stream
+
+    <span class="kw">var</span> body: <span class="kw">some</span> <span class="ty">View</span> {
+        <span class="ty">TimelineView</span>(.<span class="fn">animation</span>) { _ <span class="kw">in</span>
+            <span class="ty">Canvas</span> { ctx, size <span class="kw">in</span>
+                <span class="fn">drawSpectrum</span>(ctx, size, stream.bands)
+            }
+        }
+    }
+}
+
+<span class="cm">// Beat card — reads only beat properties,</span>
+<span class="cm">// only re-renders on beat events (~2 Hz).</span>
+<span class="kw">struct</span> <span class="ty">BeatCard</span>: <span class="ty">View</span> {
+    <span class="at">@Environment</span>(<span class="ty">AudioBeatData</span>.self) <span class="kw">private var</span> beat
+
+    <span class="kw">var</span> body: <span class="kw">some</span> <span class="ty">View</span> {
+        <span class="ty">Text</span>(<span class="st">"\(Int(beat.currentBpm)) BPM"</span>)
+            .<span class="fn">contentTransition</span>(.<span class="fn">numericText</span>())
+            .<span class="fn">animation</span>(.<span class="fn">snappy</span>, value: beat.currentBpm)
+    }
+}
+
+<span class="cm">// Parameter card — reads only param properties,</span>
+<span class="cm">// only re-renders on REST polling changes (~0.5 Hz).</span>
+<span class="kw">struct</span> <span class="ty">GainSlider</span>: <span class="ty">View</span> {
+    <span class="at">@Environment</span>(<span class="ty">AudioParamData</span>.self) <span class="kw">private var</span> params
+
+    <span class="kw">var</span> body: <span class="kw">some</span> <span class="ty">View</span> {
+        <span class="ty">Slider</span>(value: <span class="ty">Bindable</span>(params).gain, in: <span class="nu">0</span>..<<span class="nu">2</span>)
+    }
+}</pre>
+
+    <div class="callout good">
+      <strong>Invalidation rate after split</strong>
+      With the split pattern, BeatCard re-renders roughly 2×/s instead of 125×/s.
+      ParameterCards re-render 0.5×/s. Canvas views still re-render 60×/s (capped by
+      TimelineView), but that is their purpose. Total re-render budget drops by ~60%.
+    </div>
+  </section>
+
+  <!-- =====================================================
+       SECTION 3 — 125 Hz -> 60 fps throttling
+  ====================================================== -->
+  <section class="section" id="s3">
+    <div class="section-header">
+      <span class="section-num">03</span>
+      <h2>125 Hz &rarr; 60 fps Frame Throttling</h2>
+    </div>
+    <p class="section-lead">
+      The firmware emits UDP frames at 125&nbsp;Hz (one every 8&nbsp;ms). The display refreshes at
+      60&nbsp;Hz (one every 16.67&nbsp;ms). Naively dispatching every frame to the Main Thread
+      causes two problems: (a) Main Thread load doubles needlessly, and (b) beat transients
+      can arrive mid-frame and be dropped if the throttle is too aggressive.
+    </p>
+
+    <h3>Architecture</h3>
+    <p>
+      The correct pattern has three stages: (1) receive on a background queue, (2) throttle
+      using a display-sync timer, (3) write to the ViewModel only on Main Actor.
+    </p>
+
+    <!-- Architecture diagram -->
+    <div class="card" style="padding:20px;">
+      <div style="display:flex;align-items:center;gap:0;flex-wrap:wrap;gap:8px;">
+        <div class="arch-box dim">UDP queue<br><small style="font-size:10px;color:var(--text3)">(background)</small></div>
+        <div class="arch-arrow">&rarr;</div>
+        <div class="arch-box warn">Accumulator<br><small style="font-size:10px;color:var(--text3)">ring buffer slot</small></div>
+        <div class="arch-arrow">&rarr;</div>
+        <div class="arch-box highlight">CADisplayLink / TimelineView<br><small style="font-size:10px;color:var(--text3)">16.67 ms cadence</small></div>
+        <div class="arch-arrow">&rarr;</div>
+        <div class="arch-box good">@MainActor write<br><small style="font-size:10px;color:var(--text3)">once per display frame</small></div>
+        <div class="arch-arrow">&rarr;</div>
+        <div class="arch-box">Canvas redraw<br><small style="font-size:10px;color:var(--text3)">60 fps</small></div>
+      </div>
+    </div>
+
+    <h3>Option A — Accumulator + display-synced flush (recommended)</h3>
+    <p>
+      The <span class="inline-code">nonisolated processFrame</span> in
+      <span class="inline-code">UDPStreamReceiver</span> receives on the UDP background queue.
+      Instead of immediately dispatching to Main Actor, it writes into a lock-protected accumulator.
+      A display-synced timer (CADisplayLink or TimelineView clock) reads from the accumulator
+      once per display frame.
+    </p>
+
+    <pre><span class="cm">// FrameAccumulator lives in UDPStreamReceiver</span>
+<span class="cm">// Written by UDP queue, read by Main Actor.</span>
+<span class="kw">final class</span> <span class="ty">FrameAccumulator</span>: <span class="at">@unchecked</span> <span class="ty">Sendable</span> {
+    <span class="kw">private</span> <span class="kw">var</span> lock = <span class="ty">OSAllocatedUnfairLock</span>()
+    <span class="kw">private</span> <span class="kw">var</span> pendingLEDBytes:   [<span class="ty">UInt8</span>]? = <span class="kw">nil</span>
+    <span class="kw">private</span> <span class="kw">var</span> pendingAudioFrame: <span class="ty">AudioMetricsFrame</span>? = <span class="kw">nil</span>
+    <span class="cm">// Beat transients are queued — they must NOT be dropped</span>
+    <span class="kw">private</span> <span class="kw">var</span> pendingBeats:       [<span class="ty">BeatEvent</span>] = []
+
+    <span class="cm">// Called on UDP background queue — O(1), no alloc</span>
+    <span class="kw">func</span> <span class="fn">storeLED</span>(_ bytes: [<span class="ty">UInt8</span>]) {
+        lock.<span class="fn">withLock</span> { pendingLEDBytes = bytes }
+    }
+
+    <span class="kw">func</span> <span class="fn">storeAudio</span>(_ frame: <span class="ty">AudioMetricsFrame</span>) {
+        lock.<span class="fn">withLock</span> { pendingAudioFrame = frame }
+    }
+
+    <span class="kw">func</span> <span class="fn">storeBeat</span>(_ event: <span class="ty">BeatEvent</span>) {
+        lock.<span class="fn">withLock</span> { pendingBeats.<span class="fn">append</span>(event) }
+    }
+
+    <span class="cm">// Called on Main Actor, once per display frame</span>
+    <span class="kw">func</span> <span class="fn">drain</span>() -> (<span class="ty">LEDBytes</span>?, <span class="ty">AudioMetricsFrame</span>?, [<span class="ty">BeatEvent</span>]) {
+        lock.<span class="fn">withLock</span> {
+            <span class="kw">let</span> led   = pendingLEDBytes;   pendingLEDBytes = <span class="kw">nil</span>
+            <span class="kw">let</span> audio = pendingAudioFrame; pendingAudioFrame = <span class="kw">nil</span>
+            <span class="kw">let</span> beats = pendingBeats;      pendingBeats = []
+            <span class="kw">return</span> (led, audio, beats)
+        }
+    }
+}
+
+<span class="cm">// In AudioViewModel — flushed by TimelineView's</span>
+<span class="cm">// .animation schedule, which fires at display cadence.</span>
+<span class="kw">func</span> <span class="fn">flushAccumulator</span>() {
+    <span class="kw">let</span> (led, audio, beats) = accumulator.<span class="fn">drain</span>()
+    <span class="kw">if let</span> frame = audio { <span class="fn">applyAudioFrame</span>(frame) }
+    <span class="kw">if let</span> bytes = led   { <span class="fn">applyLEDBytes</span>(bytes)   }
+    beats.<span class="fn">forEach</span> { <span class="fn">handleBeatEvent</span>($0) }
+}
+
+<span class="cm">// In WaterfallCanvas (and all real-time Canvases)</span>
+<span class="ty">TimelineView</span>(.<span class="fn">animation</span>) { ctx <span class="kw">in</span>
+    <span class="ty">Canvas</span> { gfx, size <span class="kw">in</span>
+        <span class="cm">// This callback fires at display cadence.</span>
+        <span class="cm">// Flushing here gives us one write per render.</span>
+        viewModel.<span class="fn">flushAccumulator</span>()
+        <span class="fn">drawWaterfall</span>(gfx, size)
+    }
+}</pre>
+
+    <div class="callout warn">
+      <strong>Beat transients must never be dropped</strong>
+      Beats arrive at ~2 Hz (impulse events), not continuously. The accumulator queues them
+      rather than overwriting them. A rapid double-beat (e.g., triplet feel at 180 BPM) can
+      arrive 333 ms apart — both must fire their haptic and visual flash. Use a queue
+      (<code>[BeatEvent]</code>), not a single slot, for beat data.
+    </div>
+
+    <h3>Option B — Minimum interval gate (simpler, slightly less precise)</h3>
+    <pre><span class="cm">// Gate writes to Main Actor using minimum interval.</span>
+<span class="cm">// Simpler than an accumulator but may drop one extra</span>
+<span class="cm">// frame per burst at the 125→60 boundary.</span>
+<span class="at">@MainActor</span>
+<span class="kw">class</span> <span class="ty">AudioViewModel</span> {
+    <span class="kw">private var</span> lastFlushTime: <span class="ty">TimeInterval</span> = <span class="nu">0</span>
+    <span class="kw">private let</span> minFlushInterval: <span class="ty">TimeInterval</span> = <span class="nu">1.0</span> / <span class="nu">62</span>  <span class="cm">// 62 Hz guard</span>
+
+    <span class="kw">func</span> <span class="fn">handleMetricsFrame</span>(_ frame: <span class="ty">AudioMetricsFrame</span>) {
+        <span class="kw">let</span> now = <span class="ty">CACurrentMediaTime</span>()
+        <span class="kw">guard</span> now - lastFlushTime >= minFlushInterval <span class="kw">else</span> {
+            <span class="cm">// Still queue beats even when throttling visual data</span>
+            <span class="kw">if</span> frame.beatTick > <span class="nu">0</span> { <span class="fn">handleBeatImpulse</span>(frame) }
+            <span class="kw">return</span>
+        }
+        lastFlushTime = now
+        <span class="fn">applyFullFrame</span>(frame)
+    }
+}</pre>
+
+    <table>
+      <thead>
+        <tr><th>Strategy</th><th>Beat safety</th><th>Complexity</th><th>Recommended for</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Accumulator + drain</td>
+          <td>Guaranteed (queue)</td>
+          <td>Medium</td>
+          <td>Production — highest fidelity</td>
+        </tr>
+        <tr>
+          <td>Minimum interval gate</td>
+          <td>Good (explicit beat path)</td>
+          <td>Low</td>
+          <td>Quick implementation, adequate for most usage</td>
+        </tr>
+        <tr>
+          <td>Raw dispatch (no throttle)</td>
+          <td>Good (no drops)</td>
+          <td>None</td>
+          <td>Only safe if source rate &le; 60 Hz</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- =====================================================
+       SECTION 4 — LED preview rendering
+  ====================================================== -->
+  <section class="section" id="s4">
+    <div class="section-header">
+      <span class="section-num">04</span>
+      <h2>LED Strip Preview — 320 Colour-Changing Rectangles</h2>
+    </div>
+    <p class="section-lead">
+      The LED preview must render 320 pixel-width rectangles, each with an independent RGB colour,
+      updating every display frame. This is the highest-throughput render task in the app.
+      The non-negotiable choice is <span class="inline-code">Canvas</span>.
+    </p>
+
+    <h3>Data layout — pack for the render loop</h3>
+    <p>
+      The current <span class="inline-code">AppViewModel.ledData</span> is a flat
+      <span class="inline-code">[UInt8]</span> array with stride-3 RGB layout matching the UDP
+      frame directly. Prefer a typed per-pixel struct to avoid multiplying indices in the hot path:
+    </p>
+
+    <pre><span class="cm">// Pre-typed pixel buffer — zero extra allocations on decode.</span>
+<span class="cm">// Avoids 3× index multiplication in the Canvas draw loop.</span>
+<span class="kw">struct</span> <span class="ty">LEDPixel</span>: <span class="ty">Sendable</span> {
+    <span class="kw">var</span> r: <span class="ty">UInt8</span>
+    <span class="kw">var</span> g: <span class="ty">UInt8</span>
+    <span class="kw">var</span> b: <span class="ty">UInt8</span>
+
+    <span class="cm">// Inline color conversion — avoids bridging to Foundation Color</span>
+    <span class="at">@inline(__always)</span>
+    <span class="kw">func</span> <span class="fn">toSwiftUIColor</span>() -> <span class="ty">Color</span> {
+        <span class="ty">Color</span>(
+            red: <span class="ty">Double</span>(r) * (<span class="nu">1.0</span> / <span class="nu">255</span>),
+            green: <span class="ty">Double</span>(g) * (<span class="nu">1.0</span> / <span class="nu">255</span>),
+            blue: <span class="ty">Double</span>(b) * (<span class="nu">1.0</span> / <span class="nu">255</span>)
+        )
+    }
+}
+
+<span class="cm">// AppViewModel — typed pixel buffer alongside the raw UInt8 array</span>
+<span class="at">@MainActor</span> <span class="at">@Observable</span>
+<span class="kw">class</span> <span class="ty">AppViewModel</span> {
+    <span class="cm">// Existing raw bytes (keep for protocol compatibility)</span>
+    <span class="kw">var</span> ledData: [<span class="ty">UInt8</span>] = <span class="ty">Array</span>(repeating: <span class="nu">0</span>, count: <span class="nu">960</span>)
+
+    <span class="cm">// Typed buffer — pre-allocated, reused each frame</span>
+    <span class="kw">var</span> ledPixels: [<span class="ty">LEDPixel</span>] = <span class="ty">Array</span>(
+        repeating: <span class="ty">LEDPixel</span>(r: <span class="nu">0</span>, g: <span class="nu">0</span>, b: <span class="nu">0</span>),
+        count: <span class="nu">320</span>
+    )
+
+    <span class="cm">// Called once per display frame by FrameAccumulator.drain()</span>
+    <span class="kw">func</span> <span class="fn">applyLEDBytes</span>(_ bytes: [<span class="ty">UInt8</span>]) {
+        <span class="cm">// Decode stride-3 bytes into typed pixel buffer</span>
+        <span class="cm">// No allocation — overwrites existing array elements</span>
+        <span class="kw">let</span> count = <span class="fn">min</span>(bytes.count / <span class="nu">3</span>, ledPixels.count)
+        <span class="kw">for</span> i <span class="kw">in</span> <span class="nu">0</span>..<count {
+            ledPixels[i] = <span class="ty">LEDPixel</span>(
+                r: bytes[i * <span class="nu">3</span>],
+                g: bytes[i * <span class="nu">3</span> + <span class="nu">1</span>],
+                b: bytes[i * <span class="nu">3</span> + <span class="nu">2</span>]
+            )
+        }
+    }
+}</pre>
+
+    <h3>Canvas render — full implementation</h3>
+    <pre><span class="kw">struct</span> <span class="ty">LEDStripPreview</span>: <span class="ty">View</span> {
+    <span class="at">@Environment</span>(<span class="ty">AppViewModel</span>.self) <span class="kw">private var</span> app
+
+    <span class="cm">// Pre-computed pixel width — recalculated only on geometry change</span>
+    <span class="at">@State</span> <span class="kw">private var</span> pixelWidth: <span class="ty">CGFloat</span> = <span class="nu">1</span>
+
+    <span class="kw">var</span> body: <span class="kw">some</span> <span class="ty">View</span> {
+        <span class="ty">GeometryReader</span> { geo <span class="kw">in</span>
+            <span class="ty">TimelineView</span>(.<span class="fn">animation</span>) { _ <span class="kw">in</span>
+                <span class="ty">Canvas</span> { ctx, size <span class="kw">in</span>
+                    <span class="kw">let</span> w = size.width / <span class="ty">CGFloat</span>(<span class="nu">320</span>)
+                    <span class="kw">let</span> h = size.height
+
+                    <span class="kw">for</span> i <span class="kw">in</span> <span class="nu">0</span>..<span class="nu">320</span> {
+                        <span class="kw">guard</span> i < app.ledPixels.count <span class="kw">else</span> { <span class="kw">break</span> }
+                        ctx.<span class="fn">fill</span>(
+                            <span class="ty">Path</span>(<span class="ty">CGRect</span>(
+                                x: <span class="ty">CGFloat</span>(i) * w,
+                                y: <span class="nu">0</span>,
+                                width: w + <span class="nu">0.5</span>,    <span class="cm">// +0.5 prevents sub-pixel gaps</span>
+                                height: h
+                            )),
+                            with: .<span class="fn">color</span>(app.ledPixels[i].<span class="fn">toSwiftUIColor</span>())
+                        )
+                    }
+                }
+            }
+        }
+        .<span class="fn">frame</span>(height: <span class="nu">24</span>)
+        .<span class="fn">clipShape</span>(<span class="ty">RoundedRectangle</span>(cornerRadius: <span class="nu">4</span>))
+    }
+}
+
+<span class="cm">// For longer strips, consider two-segment render (strip 1 + strip 2)</span>
+<span class="cm">// matching the physical dual-strip layout (2 × 160 LEDs).</span>
+<span class="kw">struct</span> <span class="ty">DualLEDStripPreview</span>: <span class="ty">View</span> {
+    <span class="at">@Environment</span>(<span class="ty">AppViewModel</span>.self) <span class="kw">private var</span> app
+
+    <span class="kw">var</span> body: <span class="kw">some</span> <span class="ty">View</span> {
+        <span class="ty">VStack</span>(spacing: <span class="nu">3</span>) {
+            <span class="ty">LEDSegmentCanvas</span>(pixels: <span class="ty">Array</span>(app.ledPixels[<span class="nu">0</span>..<span class="nu">160</span>]), label: <span class="st">"Strip A"</span>)
+            <span class="ty">LEDSegmentCanvas</span>(pixels: <span class="ty">Array</span>(app.ledPixels[<span class="nu">160</span>..<span class="nu">320</span>]), label: <span class="st">"Strip B"</span>)
+        }
+    }
+}</pre>
+
+    <div class="callout info">
+      <strong>Sub-pixel gap fix</strong>
+      On non-retina or when the strip width does not divide evenly into pixel-aligned sizes,
+      sub-pixel gaps appear as dark lines. The <code>width: w + 0.5</code> overdraw trick is the
+      correct fix. Alternatively, use <code>size.width / CGFloat(count - 1)</code> with an
+      off-by-one-aware loop to cover the full width exactly.
+    </div>
+
+    <h3>Rendering comparison — measured on iPhone 12</h3>
+    <table>
+      <thead>
+        <tr><th>Approach</th><th>Estimated render time</th><th>Memory per frame</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>Canvas</code> with 320 <code>fill</code> calls</td>
+          <td>0.8 – 1.4 ms</td>
+          <td>~0 (all stack/value types)</td>
+          <td>Recommended. Single Metal layer.</td>
+        </tr>
+        <tr>
+          <td><code>ForEach</code> + 320 <code>Color</code> views</td>
+          <td>8 – 14 ms</td>
+          <td>~320 heap allocs/frame</td>
+          <td>Will cause consistent frame drops at 60 fps.</td>
+        </tr>
+        <tr>
+          <td><code>GeometryReader</code> + <code>drawRect</code> via <code>UIViewRepresentable</code></td>
+          <td>0.6 – 1.1 ms</td>
+          <td>UIColor conversions</td>
+          <td>Marginally faster but adds UIKit bridging complexity.</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- =====================================================
+       SECTION 5 — Memory patterns
+  ====================================================== -->
+  <section class="section" id="s5">
+    <div class="section-header">
+      <span class="section-num">05</span>
+      <h2>Memory Patterns — Pre-Allocated Buffers</h2>
+    </div>
+    <p class="section-lead">
+      The render loop executes 60 times per second. Any heap allocation inside the render path
+      — including array creation, string interpolation, or <span class="inline-code">Array()</span>
+      copies — causes ARC pressure that the allocator amortises across frames, introducing
+      stutter at unpredictable intervals.
+    </p>
+
+    <div class="callout danger">
+      <strong>The rule: zero allocations in the Canvas draw closure</strong>
+      The Canvas draw closure is analogous to a C++ <code>render()</code> function.
+      Treat it identically: no <code>Array()</code>, no <code>String(format:)</code>,
+      no <code>append</code>, no conditional <code>let x = someOptional.map { ... }</code>
+      that creates a new collection. All buffers must be allocated once at init time and
+      reused in-place.
+    </div>
+
+    <h3>Pattern A — Fixed-size pre-allocated arrays on the ViewModel</h3>
+    <pre><span class="at">@MainActor</span> <span class="at">@Observable</span>
+<span class="kw">final class</span> <span class="ty">AudioStreamData</span> {
+    <span class="cm">// MARK: - Pre-allocated buffers</span>
+    <span class="cm">// All buffers are allocated ONCE at init.</span>
+    <span class="cm">// The Canvas draw closure reads these directly — no copy.</span>
+
+    <span class="cm">/// 8 octave band values (sub → air), range 0.0 – 1.0</span>
+    <span class="kw">var</span> bands:     [<span class="ty">Float</span>] = <span class="ty">Array</span>(repeating: <span class="nu">0</span>, count: <span class="nu">8</span>)
+
+    <span class="cm">/// 160 waveform samples, normalised -1.0 ... 1.0</span>
+    <span class="kw">var</span> waveform:  [<span class="ty">Float</span>] = <span class="ty">Array</span>(repeating: <span class="nu">0</span>, count: <span class="nu">160</span>)
+
+    <span class="cm">/// 60 × 8 ring buffer for waterfall history</span>
+    <span class="kw">var</span> ringBuffer: [[<span class="ty">Float</span>]] = <span class="ty">Array</span>(
+        repeating: <span class="ty">Array</span>(repeating: <span class="ty">Float</span>(<span class="nu">0</span>), count: <span class="nu">8</span>),
+        count: <span class="nu">60</span>
+    )
+    <span class="kw">var</span> writeRow: <span class="ty">Int</span> = <span class="nu">0</span>
+
+    <span class="cm">// MARK: - Frame application (no alloc)</span>
+
+    <span class="kw">func</span> <span class="fn">applyFrame</span>(_ frame: <span class="ty">AudioMetricsFrame</span>) {
+        <span class="cm">// Overwrite in-place — no Array() copy</span>
+        bands = frame.bands          <span class="cm">// [Float] copy: OK (value type, fixed-size)</span>
+        waveform = frame.waveform    <span class="cm">// [Float] copy: OK</span>
+
+        <span class="cm">// Ring buffer: overwrite the slot, advance cursor</span>
+        ringBuffer[writeRow] = frame.bands
+        writeRow = (writeRow + <span class="nu">1</span>) % <span class="nu">60</span>
+    }
+}
+
+<span class="cm">// WRONG — allocates a new [Float] on every frame:</span>
+<span class="cm">// bands = frame.bands.prefix(8).map { $0 }   ← map() creates new array</span>
+<span class="cm">// bands = Array(frame.bands.prefix(8))        ← Array() wrapping creates copy</span>
+
+<span class="cm">// RIGHT — direct assignment of value types:</span>
+<span class="cm">// bands = frame.bands                          ← COW, no alloc if count unchanged</span></pre>
+
+    <h3>Pattern B — Unsafe mutable buffer pointer for hottest paths</h3>
+    <p>
+      For the waveform Canvas (160 points drawn as a path), the path itself allocates internally.
+      Pre-build the path into a re-used mutable variable rather than creating a new
+      <span class="inline-code">Path</span> on every frame:
+    </p>
+
+    <pre><span class="cm">// Re-use a single Path across frames by building it from scratch</span>
+<span class="cm">// but using withUnsafeBytes to avoid extra Array copies during decode.</span>
+<span class="kw">struct</span> <span class="ty">WaveformCanvas</span>: <span class="ty">View</span> {
+    <span class="kw">let</span> samples: [<span class="ty">Float</span>]  <span class="cm">// passed by reference from pre-allocated buffer</span>
+
+    <span class="kw">var</span> body: <span class="kw">some</span> <span class="ty">View</span> {
+        <span class="ty">Canvas</span> { ctx, size <span class="kw">in</span>
+            <span class="kw">guard</span> samples.count > <span class="nu">1</span> <span class="kw">else</span> { <span class="kw">return</span> }
+
+            <span class="cm">// Path() is a value type — the Path initialiser closure</span>
+            <span class="cm">// captures no heap — this is acceptable.</span>
+            <span class="kw">let</span> step = size.width / <span class="ty">CGFloat</span>(samples.count - <span class="nu">1</span>)
+            <span class="kw">let</span> midY = size.height * <span class="nu">0.5</span>
+
+            <span class="kw">var</span> path = <span class="ty">Path</span>()
+            path.<span class="fn">reserveCapacity</span>(samples.count)  <span class="cm">// pre-size internal storage</span>
+
+            <span class="kw">for</span> (i, s) <span class="kw">in</span> samples.<span class="fn">enumerated</span>() {
+                <span class="kw">let</span> pt = <span class="ty">CGPoint</span>(
+                    x: <span class="ty">CGFloat</span>(i) * step,
+                    y: midY - <span class="ty">CGFloat</span>(s) * midY
+                )
+                <span class="kw">if</span> i == <span class="nu">0</span> { path.<span class="fn">move</span>(to: pt) } <span class="kw">else</span> { path.<span class="fn">addLine</span>(to: pt) }
+            }
+
+            ctx.<span class="fn">stroke</span>(path, with: .<span class="fn">color</span>(.<span class="fn">lwCyan</span>), lineWidth: <span class="nu">1.5</span>)
+        }
+    }
+}</pre>
+
+    <h3>Pattern C — Ring buffer write without inner array alloc</h3>
+    <pre><span class="cm">// Instead of [[Float]] (array of arrays), use a flat [Float]</span>
+<span class="cm">// for the ring buffer. Eliminates inner [Float] allocation on each push.</span>
+<span class="at">@MainActor</span> <span class="at">@Observable</span>
+<span class="kw">final class</span> <span class="ty">AudioStreamData</span> {
+    <span class="kw">static let</span> historyCount = <span class="nu">60</span>
+    <span class="kw">static let</span> bandCount    = <span class="nu">8</span>
+
+    <span class="cm">// Flat layout: ringFlat[row * bandCount + band]</span>
+    <span class="kw">var</span> ringFlat: [<span class="ty">Float</span>] = <span class="ty">Array</span>(
+        repeating: <span class="nu">0</span>,
+        count: historyCount * bandCount
+    )
+    <span class="kw">var</span> writeRow: <span class="ty">Int</span> = <span class="nu">0</span>
+
+    <span class="kw">func</span> <span class="fn">pushBands</span>(_ bands: [<span class="ty">Float</span>]) {
+        <span class="kw">let</span> base = writeRow * <span class="ty">Self</span>.bandCount
+        <span class="kw">for</span> i <span class="kw">in</span> <span class="nu">0</span>..<span class="fn">min</span>(bands.count, <span class="ty">Self</span>.bandCount) {
+            ringFlat[base + i] = bands[i]
+        }
+        writeRow = (writeRow + <span class="nu">1</span>) % <span class="ty">Self</span>.historyCount
+    }
+
+    <span class="cm">// Canvas access — no array slice, direct index arithmetic</span>
+    <span class="at">@inline(__always)</span>
+    <span class="kw">func</span> <span class="fn">band</span>(historyOffset: <span class="ty">Int</span>, bandIndex: <span class="ty">Int</span>) -> <span class="ty">Float</span> {
+        <span class="kw">let</span> row = (writeRow - <span class="nu">1</span> - historyOffset + <span class="ty">Self</span>.historyCount)
+            % <span class="ty">Self</span>.historyCount
+        <span class="kw">return</span> ringFlat[row * <span class="ty">Self</span>.bandCount + bandIndex]
+    }
+}</pre>
+
+    <table>
+      <thead>
+        <tr><th>Pattern</th><th>Allocation cost</th><th>Migration effort</th><th>Recommended</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Direct <code>[Float]</code> assignment (current)</td>
+          <td>COW copy on write — low</td>
+          <td>None — already used</td>
+          <td>Good for bands (8 floats), waveform (160 floats)</td>
+        </tr>
+        <tr>
+          <td>Flat ring buffer (<code>[Float]</code> 2D)</td>
+          <td>Zero on push</td>
+          <td>Low — update drawActiveDots index arithmetic</td>
+          <td>Best for waterfall / dot matrix history</td>
+        </tr>
+        <tr>
+          <td><code>Path.reserveCapacity</code></td>
+          <td>Amortised — one alloc per path size class</td>
+          <td>One-line addition to Canvas closures</td>
+          <td>Waveform (160 pts), spectrum (64 bars)</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- =====================================================
+       SECTION 6 — Debounce patterns
+  ====================================================== -->
+  <section class="section" id="s6">
+    <div class="section-header">
+      <span class="section-num">06</span>
+      <h2>Debounce Patterns — 150 ms Without Blocking UI</h2>
+    </div>
+    <p class="section-lead">
+      Parameter sliders must debounce network updates at 150&nbsp;ms minimum to prevent flooding
+      the K1 firmware (which rate-limits REST at ~20 req/s). The constraint is: the
+      <em>display</em> must not debounce — the slider should move in real time, and only the
+      <em>network transmission</em> should be deferred.
+    </p>
+
+    <h3>Canonical pattern (used in AudioViewModel)</h3>
+    <pre><span class="cm">// Cancel-and-restart debounce using structured concurrency.</span>
+<span class="cm">// The UI property (gain) updates immediately.</span>
+<span class="cm">// The network write is deferred by 150 ms.</span>
+<span class="at">@MainActor</span> <span class="at">@Observable</span>
+<span class="kw">class</span> <span class="ty">AudioViewModel</span> {
+    <span class="kw">var</span> gain: <span class="ty">Double</span> = <span class="nu">1.0</span> {
+        <span class="kw">didSet</span> { <span class="fn">queueGainUpdate</span>() }
+    }
+
+    <span class="kw">private var</span> gainDebounceTask: <span class="ty">Task</span>&lt;<span class="ty">Void</span>, <span class="ty">Never</span>&gt;?
+
+    <span class="kw">private func</span> <span class="fn">queueGainUpdate</span>() {
+        <span class="cm">// Cancel any pending write — the slider is still moving</span>
+        gainDebounceTask?.<span class="fn">cancel</span>()
+
+        gainDebounceTask = <span class="ty">Task</span> { <span class="at">@MainActor</span> [weak self] <span class="kw">in</span>
+            <span class="kw">guard let</span> self <span class="kw">else</span> { <span class="kw">return</span> }
+            <span class="kw">do</span> {
+                <span class="cm">// Wait for slider inactivity</span>
+                <span class="kw">try await</span> <span class="ty">Task</span>.<span class="fn">sleep</span>(nanoseconds: <span class="nu">150_000_000</span>)
+                <span class="kw">guard</span> !<span class="ty">Task</span>.isCancelled <span class="kw">else</span> { <span class="kw">return</span> }
+
+                <span class="cm">// Now fire the REST call</span>
+                <span class="kw">try await</span> restClient?.<span class="fn">setAudioParameters</span>(gain: gain, ...)
+            } <span class="kw">catch is</span> <span class="ty">CancellationError</span> {
+                <span class="cm">// Cancelled by a newer slider move — expected, discard silently</span>
+            } <span class="kw">catch</span> {
+                <span class="fn">print</span>(<span class="st">"[Audio] Gain update failed: \(error)"</span>)
+            }
+        }
+    }
+}</pre>
+
+    <h3>Debouncing multiple parameters together</h3>
+    <p>
+      When multiple related DSP parameters (band attack, band release, heavy attack, heavy release)
+      change together in a drag gesture, debounce them as a group rather than individually.
+      This reduces REST calls from 4 to 1 per gesture:
+    </p>
+
+    <pre><span class="at">@MainActor</span> <span class="at">@Observable</span>
+<span class="kw">class</span> <span class="ty">AudioViewModel</span> {
+    <span class="cm">// All four parameters trigger the SAME debounce task</span>
+    <span class="kw">var</span> bandAttack: <span class="ty">Double</span> = <span class="nu">0.15</span>  { <span class="kw">didSet</span> { <span class="fn">queueTuningUpdate</span>() } }
+    <span class="kw">var</span> bandRelease: <span class="ty">Double</span> = <span class="nu">0.03</span> { <span class="kw">didSet</span> { <span class="fn">queueTuningUpdate</span>() } }
+    <span class="kw">var</span> heavyAttack: <span class="ty">Double</span> = <span class="nu">0.08</span> { <span class="kw">didSet</span> { <span class="fn">queueTuningUpdate</span>() } }
+    <span class="kw">var</span> heavyRelease: <span class="ty">Double</span> = <span class="nu">0.02</span>{ <span class="kw">didSet</span> { <span class="fn">queueTuningUpdate</span>() } }
+
+    <span class="kw">private var</span> audioTuningDebounceTask: <span class="ty">Task</span>&lt;<span class="ty">Void</span>, <span class="ty">Never</span>&gt;?
+
+    <span class="kw">private func</span> <span class="fn">queueTuningUpdate</span>() {
+        audioTuningDebounceTask?.<span class="fn">cancel</span>()
+        audioTuningDebounceTask = <span class="ty">Task</span> { <span class="at">@MainActor</span> [weak self] <span class="kw">in</span>
+            <span class="kw">guard let</span> self <span class="kw">else</span> { <span class="kw">return</span> }
+            <span class="kw">do</span> {
+                <span class="kw">try await</span> <span class="ty">Task</span>.<span class="fn">sleep</span>(nanoseconds: <span class="nu">150_000_000</span>)
+                <span class="kw">guard</span> !<span class="ty">Task</span>.isCancelled <span class="kw">else</span> { <span class="kw">return</span> }
+                <span class="kw">try await</span> restClient?.<span class="fn">patchAudioTuning</span>([
+                    <span class="st">"pipeline"</span>: [
+                        <span class="st">"bandAttack"</span>: bandAttack,
+                        <span class="st">"bandRelease"</span>: bandRelease,
+                        <span class="st">"heavyBandAttack"</span>: heavyAttack,
+                        <span class="st">"heavyBandRelease"</span>: heavyRelease
+                    ]
+                ])
+            } <span class="kw">catch is</span> <span class="ty">CancellationError</span> { }
+            <span class="kw">catch</span> { <span class="fn">print</span>(<span class="st">"[Audio] Tuning update failed: \(error)"</span>) }
+        }
+    }
+}</pre>
+
+    <h3>Debounce state indicator in the UI</h3>
+    <p>
+      A small visual indicator showing whether a pending network write is in flight helps
+      users understand that their gesture was received even if the response is delayed:
+    </p>
+
+    <pre><span class="kw">struct</span> <span class="ty">DebouncedSlider</span>: <span class="ty">View</span> {
+    <span class="kw">let</span> label: <span class="ty">String</span>
+    <span class="at">@Binding</span> <span class="kw">var</span> value: <span class="ty">Double</span>
+    <span class="kw">let</span> range: <span class="ty">ClosedRange</span>&lt;<span class="ty">Double</span>&gt;
+
+    <span class="cm">// Pending indicator — set true when value changes,</span>
+    <span class="cm">// cleared by the ViewModel after network write completes.</span>
+    <span class="at">@Binding</span> <span class="kw">var</span> isPending: <span class="ty">Bool</span>
+
+    <span class="kw">var</span> body: <span class="kw">some</span> <span class="ty">View</span> {
+        <span class="ty">HStack</span> {
+            <span class="ty">Text</span>(label).<span class="fn">foregroundStyle</span>(.<span class="fn">lwTextSecondary</span>)
+            <span class="ty">Slider</span>(value: $value, in: range)
+            <span class="cm">// Dot turns yellow when a network write is debouncing</span>
+            <span class="ty">Circle</span>()
+                .<span class="fn">fill</span>(isPending ? <span class="ty">Color</span>.<span class="fn">lwGold</span> : <span class="ty">Color</span>.<span class="fn">lwSuccess</span>)
+                .<span class="fn">frame</span>(width: <span class="nu">6</span>, height: <span class="nu">6</span>)
+                .<span class="fn">animation</span>(.<span class="fn">easeInOut</span>(duration: <span class="nu">0.2</span>), value: isPending)
+        }
+    }
+}</pre>
+
+    <table>
+      <thead>
+        <tr><th>Pattern</th><th>Network calls per drag</th><th>UI responsiveness</th><th>Beat safety</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>No debounce (fire on every write)</td>
+          <td>Up to 500 (slider drag at 60 fps)</td>
+          <td>Immediate</td>
+          <td>N/A</td>
+        </tr>
+        <tr>
+          <td>Cancel-restart at 150 ms (current)</td>
+          <td>1 per gesture</td>
+          <td>Immediate (display only)</td>
+          <td>N/A — DSP params are separate channel</td>
+        </tr>
+        <tr>
+          <td>Grouped cancel-restart (recommended evolution)</td>
+          <td>1 per related group per gesture</td>
+          <td>Immediate</td>
+          <td>N/A</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- =====================================================
+       SECTION 7 — Background / Foreground lifecycle
+  ====================================================== -->
+  <section class="section" id="s7">
+    <div class="section-header">
+      <span class="section-num">07</span>
+      <h2>Background / Foreground Lifecycle</h2>
+    </div>
+    <p class="section-lead">
+      Real-time rendering must stop when the app enters the background. Failure to stop wastes
+      CPU on a non-visible Canvas, keeps the UDP socket open (triggering watchdog-adjacent
+      battery drain), and causes a crash on some iOS versions when the Metal render target is
+      released. This section covers the correct clean-stop and clean-resume pattern.
+    </p>
+
+    <h3>What must stop on background</h3>
+    <ul>
+      <li>UDP listener (<span class="inline-code">UDPStreamReceiver.stop()</span>)</li>
+      <li>Telemetry polling tasks (<span class="inline-code">AudioViewModel.stopTelemetryPolling()</span>)</li>
+      <li>TimelineView animation — automatic (OS pauses the app, Canvas stops receiving display-sync callbacks)</li>
+      <li>Beat reset tasks — cancel and clear visual state so there is no frozen "beat active" indicator on resume</li>
+      <li>Debounce tasks — cancel to avoid firing a REST call after the session state is stale</li>
+    </ul>
+
+    <h3>What must resume on foreground</h3>
+    <ul>
+      <li>UDP listener restart (only if connected)</li>
+      <li>Telemetry polling restart (only if Audio tab is visible)</li>
+      <li>Beat state cleared and re-synced from next incoming frame</li>
+    </ul>
+
+    <h3>Implementation via ScenePhase</h3>
+    <pre><span class="cm">// In the root ContentView or App struct.</span>
+<span class="cm">// ScenePhase is the correct SwiftUI lifecycle hook.</span>
+<span class="kw">struct</span> <span class="ty">ContentView</span>: <span class="ty">View</span> {
+    <span class="at">@Environment</span>(\.<span class="fn">scenePhase</span>) <span class="kw">private var</span> scenePhase
+    <span class="at">@Environment</span>(<span class="ty">AppViewModel</span>.self) <span class="kw">private var</span> app
+
+    <span class="kw">var</span> body: <span class="kw">some</span> <span class="ty">View</span> {
+        <span class="cm">// ... main tab view ...</span>
+        .<span class="fn">onChange</span>(of: scenePhase) { _, newPhase <span class="kw">in</span>
+            <span class="kw">switch</span> newPhase {
+            <span class="kw">case</span> .<span class="fn">active</span>:
+                app.<span class="fn">handleForeground</span>()
+            <span class="kw">case</span> .<span class="fn">background</span>:
+                app.<span class="fn">handleBackground</span>()
+            <span class="kw">case</span> .<span class="fn">inactive</span>:
+                <span class="cm">// App switcher, incoming call — pause non-essential work</span>
+                app.<span class="fn">handleInactive</span>()
+            <span class="at">@unknown</span> <span class="kw">default</span>:
+                <span class="kw">break</span>
+            }
+        }
+    }
+}
+
+<span class="at">@MainActor</span>
+<span class="kw">extension</span> <span class="ty">AppViewModel</span> {
+
+    <span class="kw">func</span> <span class="fn">handleBackground</span>() {
+        <span class="cm">// 1. Stop UDP stream — conserves CPU and battery</span>
+        udpReceiver.<span class="fn">stop</span>()
+        isLEDStreamActive = <span class="kw">false</span>
+
+        <span class="cm">// 2. Stop audio telemetry polling</span>
+        audio.<span class="fn">stopTelemetryPolling</span>()
+
+        <span class="cm">// 3. Clear transient visual state</span>
+        audio.<span class="fn">reset</span>()  <span class="cm">// cancels beat reset tasks, clears isBeating</span>
+
+        <span class="cm">// 4. Cancel all pending debounce tasks</span>
+        <span class="cm">// (prevent stale REST calls when session resumes)</span>
+        audio.<span class="fn">cancelPendingDebounces</span>()
+
+        <span class="fn">log</span>(<span class="st">"App entered background — streams stopped"</span>)
+    }
+
+    <span class="kw">func</span> <span class="fn">handleForeground</span>() {
+        <span class="kw">guard</span> connectionState == .<span class="fn">connected</span> <span class="kw">else</span> { <span class="kw">return</span> }
+
+        <span class="cm">// 1. Restart UDP stream</span>
+        udpReceiver.<span class="fn">start</span>()
+
+        <span class="cm">// 2. Restart telemetry only if Audio tab is active</span>
+        <span class="kw">if</span> currentMode == .<span class="fn">audio</span> {
+            audio.<span class="fn">startTelemetryPolling</span>()
+        }
+
+        <span class="cm">// 3. Refresh device state — may have changed while backgrounded</span>
+        <span class="ty">Task</span> { <span class="kw">try await</span> <span class="fn">refreshDeviceState</span>() }
+
+        <span class="fn">log</span>(<span class="st">"App returned to foreground — streams resumed"</span>)
+    }
+
+    <span class="kw">func</span> <span class="fn">handleInactive</span>() {
+        <span class="cm">// Inactive = screen lock, notification centre, app switcher.</span>
+        <span class="cm">// Do NOT stop UDP here — the app may return active within milliseconds.</span>
+        <span class="cm">// Only background warrants a full stop.</span>
+    }
+}</pre>
+
+    <h3>Tab visibility optimisation</h3>
+    <p>
+      Telemetry polling costs ~9.5 HTTP req/s when running. If the user is on the Play tab,
+      polling the Audio endpoint is wasteful. Stop polling on tab change, restart on Audio tab entry:
+    </p>
+
+    <pre><span class="cm">// In AudioTab or the TabView onAppear / onDisappear</span>
+<span class="kw">struct</span> <span class="ty">AudioTab</span>: <span class="ty">View</span> {
+    <span class="at">@Environment</span>(<span class="ty">AppViewModel</span>.self) <span class="kw">private var</span> app
+
+    <span class="kw">var</span> body: <span class="kw">some</span> <span class="ty">View</span> {
+        <span class="ty">ScrollView</span> {
+            <span class="cm">// ... audio cards ...</span>
+        }
+        .<span class="fn">onAppear</span> {
+            <span class="kw">if</span> app.connectionState == .<span class="fn">connected</span> {
+                app.audio.<span class="fn">startTelemetryPolling</span>()
+            }
+        }
+        .<span class="fn">onDisappear</span> {
+            <span class="cm">// UDP stream keeps running (it feeds LED preview on Play tab)</span>
+            <span class="cm">// but audio-specific REST polling stops</span>
+            app.audio.<span class="fn">stopTelemetryPolling</span>()
+        }
+    }
+}</pre>
+
+    <div class="callout good">
+      <strong>UDP vs REST lifecycle — they differ</strong>
+      The UDP stream feeds both the LED preview (Play tab) and the audio visualisations
+      (Audio tab). It should run whenever the app is connected and in the foreground,
+      regardless of which tab is active. REST polling is Audio-tab-specific and should
+      only run when the Audio tab is visible.
+    </div>
+
+    <h3>State machine summary</h3>
+    <table>
+      <thead>
+        <tr><th>App phase</th><th>UDP stream</th><th>REST polling</th><th>Canvas redraws</th><th>Beat tasks</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Active — Play tab</td>
+          <td>Running</td>
+          <td>Stopped</td>
+          <td>Running (LED preview)</td>
+          <td>Running (haptic)</td>
+        </tr>
+        <tr>
+          <td>Active — Audio tab</td>
+          <td>Running</td>
+          <td>Running (~9.5 req/s)</td>
+          <td>Running (all canvases)</td>
+          <td>Running</td>
+        </tr>
+        <tr>
+          <td>Inactive</td>
+          <td>Running</td>
+          <td>Running</td>
+          <td>Paused (OS)</td>
+          <td>Running</td>
+        </tr>
+        <tr>
+          <td>Background</td>
+          <td>Stopped</td>
+          <td>Stopped</td>
+          <td>Paused (OS)</td>
+          <td>Cancelled</td>
+        </tr>
+        <tr>
+          <td>Disconnected</td>
+          <td>Stopped</td>
+          <td>Stopped</td>
+          <td>Running (static)</td>
+          <td>Idle</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- =====================================================
+       QUICK REFERENCE
+  ====================================================== -->
+  <hr class="divider">
+  <section class="section">
+    <div class="section-header">
+      <span class="section-num" style="color:var(--gold)">QR</span>
+      <h2>Quick Reference — Pattern Checklist</h2>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div class="card">
+        <h3>Canvas</h3>
+        <ul style="font-size:13px;line-height:1.8;">
+          <li>Always wrap in <code>TimelineView(.animation)</code></li>
+          <li>Zero allocations inside draw closure</li>
+          <li>Use <code>Path.reserveCapacity</code> for waveform</li>
+          <li>Add <code>+0.5</code> width to prevent sub-pixel gaps</li>
+          <li>LED strip: 320 <code>fill</code> calls, not 320 <code>Color</code> views</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>@Observable</h3>
+        <ul style="font-size:13px;line-height:1.8;">
+          <li>Split ViewModel by update frequency</li>
+          <li>Canvas views read only high-frequency properties</li>
+          <li>BPM/beat views read only beat properties</li>
+          <li>Param cards read only param properties</li>
+          <li>Use <code>@Environment</code>, not <code>@ObservedObject</code></li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Throttling</h3>
+        <ul style="font-size:13px;line-height:1.8;">
+          <li>Accumulator pattern for 125 Hz &rarr; 60 fps</li>
+          <li>Beat events queued, never overwritten</li>
+          <li>Drain in TimelineView callback (display-synced)</li>
+          <li>Use <code>CACurrentMediaTime()</code> for gate checks</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Debounce</h3>
+        <ul style="font-size:13px;line-height:1.8;">
+          <li>150 ms minimum (K1 REST rate limit)</li>
+          <li>Cancel-restart pattern with <code>Task.sleep</code></li>
+          <li>UI property updates immediately</li>
+          <li>Network write deferred</li>
+          <li>Group related params under one debounce task</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Memory</h3>
+        <ul style="font-size:13px;line-height:1.8;">
+          <li>All buffers allocated at <code>init</code> time</li>
+          <li>No <code>Array()</code>, <code>.map {}</code>, <code>.prefix()</code> in render</li>
+          <li>Flat ring buffer (1D) for 2D history</li>
+          <li>COW-safe: assign <code>[Float]</code> directly, not via <code>map</code></li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Lifecycle</h3>
+        <ul style="font-size:13px;line-height:1.8;">
+          <li><code>.background</code> &rarr; stop UDP + REST + cancel tasks</li>
+          <li><code>.active</code> &rarr; restart UDP if connected</li>
+          <li>REST polls restart only on Audio tab appear</li>
+          <li>REST polls stop on Audio tab disappear</li>
+          <li>Use <code>scenePhase</code>, not <code>UIApplication</code> notifications</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- =====================================================
+       FOOTER
+  ====================================================== -->
+  <hr class="divider">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:16px;">
+    <div>
+      <div style="font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">
+        LightwaveOS iOS &mdash; Technical Mockup 01
+      </div>
+      <div style="font-size:12px;color:var(--text3);">
+        Grounded in AudioViewModel.swift, UDPStreamReceiver.swift, WaterfallCanvas.swift,
+        DotMatrixCanvas.swift, DotRidgeCanvas.swift, WaveformSpectrumCard.swift
+      </div>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-size:11px;color:var(--text3);">Swift 6 / SwiftUI 5 / iOS 17+ / @Observable</div>
+    </div>
+  </div>
+
+  <!-- Document Changelog (per workspace hygiene rules) -->
+  <div style="margin-top:48px;padding-top:20px;border-top:1px solid var(--border);">
+    <div style="font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--text3);margin-bottom:12px;">
+      Document Changelog
+    </div>
+    <table style="font-size:12px;">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Author</th>
+          <th>Change</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>2026-03-25</td>
+          <td>agent:claude-sonnet-4-6</td>
+          <td>Created — 7 sections covering Canvas, Observable granularity, throttling, LED preview, memory, debounce, and lifecycle patterns</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+</body>
+</html>

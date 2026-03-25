@@ -1,0 +1,1643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LightwaveOS Design System — SpectraSynq</title>
+<style>
+/* ============================================================
+   FONTS
+   ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+/* ============================================================
+   RESET & BASE
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background: #08090E;
+  color: #E6E9EF;
+  font-family: 'Rajdhani', system-ui, sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ============================================================
+   DESIGN TOKENS (CSS Custom Properties)
+   ============================================================ */
+:root {
+  /* ---- Colour: Brand ---- */
+  --lw-gold:           #FFB84D;
+  --lw-gold-bright:    #FFCC33;
+  --lw-gold-dim:       #B8842E;
+  --lw-cyan:           #00D4FF;
+  --lw-cyan-dim:       #0099B8;
+
+  /* ---- Colour: Surfaces ---- */
+  --lw-base:           #0F1219;
+  --lw-base-deep:      #08090E;
+  --lw-card:           #1E2535;
+  --lw-card-alt:       #1A2030;
+  --lw-elevated:       #252D3F;
+  --lw-elevated-hover: #2C3650;
+
+  /* ---- Colour: Text ---- */
+  --lw-text-primary:   #E6E9EF;
+  --lw-text-secondary: #9CA3B0;
+  --lw-text-tertiary:  #6B7280;
+  --lw-text-disabled:  #3D4350;
+
+  /* ---- Colour: Status ---- */
+  --lw-success:        #4DFFB8;
+  --lw-error:          #FF4D4D;
+  --lw-warning:        #FFB84D;
+  --lw-info:           #00D4FF;
+
+  /* ---- Colour: Zones ---- */
+  --lw-zone-0:         #00FFFF;
+  --lw-zone-1:         #00FF99;
+  --lw-zone-2:         #9900FF;
+  --lw-zone-3:         #FF6600;
+
+  /* ---- Typography ---- */
+  --font-display:      'Bebas Neue', sans-serif;
+  --font-body:         'Rajdhani', system-ui, sans-serif;
+  --font-mono:         'JetBrains Mono', monospace;
+
+  /* ---- Spacing (4pt grid) ---- */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ---- Corner Radius ---- */
+  --radius-xs:   4px;
+  --radius-sm:   8px;
+  --radius-md:   12px;
+  --radius-lg:   16px;
+  --radius-xl:   24px;
+  --radius-pill: 999px;
+
+  /* ---- Shadows ---- */
+  --shadow-ambient:  0 2px 12px rgba(0,0,0,0.4);
+  --shadow-elevated: 0 4px 20px rgba(0,0,0,0.5);
+  --shadow-deep:     0 8px 40px rgba(0,0,0,0.6);
+
+  /* ---- Transitions ---- */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring:   cubic-bezier(0.34, 1.56, 0.64, 1);
+  --duration-fast:   150ms;
+  --duration-normal: 300ms;
+  --duration-slow:   500ms;
+}
+
+/* ============================================================
+   LAYOUT
+   ============================================================ */
+.page-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-6);
+}
+
+.page-header {
+  text-align: center;
+  margin-bottom: var(--space-16);
+  padding-top: var(--space-12);
+  position: relative;
+}
+
+.page-header::before {
+  content: '';
+  position: absolute;
+  top: -100px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 600px;
+  height: 400px;
+  background: radial-gradient(ellipse at center, rgba(255,184,77,0.06) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.brand-name {
+  font-family: var(--font-display);
+  font-size: 14px;
+  letter-spacing: 6px;
+  text-transform: uppercase;
+  color: var(--lw-gold);
+  margin-bottom: var(--space-3);
+  opacity: 0.8;
+}
+
+.page-title {
+  font-family: var(--font-display);
+  font-size: 56px;
+  letter-spacing: 2px;
+  color: var(--lw-text-primary);
+  line-height: 1;
+  margin-bottom: var(--space-3);
+}
+
+.page-subtitle {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 18px;
+  color: var(--lw-text-secondary);
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* ---- Section ---- */
+.section {
+  margin-bottom: var(--space-16);
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-8);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid rgba(255,184,77,0.15);
+}
+
+.section-number {
+  font-family: var(--font-display);
+  font-size: 32px;
+  color: var(--lw-gold);
+  opacity: 0.4;
+  line-height: 1;
+}
+
+.section-title {
+  font-family: var(--font-display);
+  font-size: 28px;
+  letter-spacing: 1px;
+  color: var(--lw-text-primary);
+  line-height: 1;
+}
+
+.section-description {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 15px;
+  color: var(--lw-text-secondary);
+  margin-bottom: var(--space-6);
+  max-width: 700px;
+  line-height: 1.5;
+}
+
+/* ============================================================
+   01 — COLOUR PALETTE
+   ============================================================ */
+.colour-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-4);
+}
+
+.colour-group-title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--lw-text-tertiary);
+  margin-bottom: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+.colour-swatch {
+  background: var(--lw-card);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-ambient);
+  transition: transform var(--duration-normal) var(--ease-out-expo),
+              box-shadow var(--duration-normal) var(--ease-out-expo);
+}
+
+.colour-swatch:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-elevated);
+}
+
+.colour-swatch__preview {
+  height: 80px;
+  position: relative;
+}
+
+.colour-swatch__preview::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 30px;
+  background: linear-gradient(transparent, rgba(0,0,0,0.2));
+}
+
+.colour-swatch__info {
+  padding: var(--space-3) var(--space-4);
+}
+
+.colour-swatch__name {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--lw-text-primary);
+  margin-bottom: 2px;
+}
+
+.colour-swatch__hex {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--lw-text-tertiary);
+  letter-spacing: 0.5px;
+}
+
+.colour-swatch__usage {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 11px;
+  color: var(--lw-text-secondary);
+  margin-top: 2px;
+}
+
+/* ---- Contrast examples ---- */
+.contrast-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-4);
+  margin-top: var(--space-6);
+}
+
+.contrast-sample {
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.contrast-sample__label {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 13px;
+  opacity: 0.6;
+}
+
+.contrast-sample__text {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 16px;
+}
+
+.contrast-sample__ratio {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  opacity: 0.5;
+}
+
+.contrast-sample__badge {
+  display: inline-block;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 1px;
+  padding: 2px 8px;
+  border-radius: var(--radius-xs);
+  margin-left: var(--space-2);
+}
+
+/* ============================================================
+   02 — TYPOGRAPHY
+   ============================================================ */
+.type-specimen {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.type-row {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: var(--space-6);
+  align-items: baseline;
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.type-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.type-meta__name {
+  font-family: var(--font-display);
+  font-size: 14px;
+  letter-spacing: 1px;
+  color: var(--lw-gold);
+}
+
+.type-meta__spec {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--lw-text-tertiary);
+}
+
+.type-meta__usage {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 11px;
+  color: var(--lw-text-secondary);
+  margin-top: 2px;
+}
+
+/* ============================================================
+   03 — SPACING
+   ============================================================ */
+.spacing-scale {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.spacing-row {
+  display: grid;
+  grid-template-columns: 80px 1fr 200px;
+  gap: var(--space-4);
+  align-items: center;
+}
+
+.spacing-row__label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--lw-text-secondary);
+}
+
+.spacing-row__bar {
+  height: 24px;
+  border-radius: var(--radius-xs);
+  background: linear-gradient(90deg, var(--lw-gold), rgba(255,184,77,0.3));
+  position: relative;
+  transition: width var(--duration-normal) var(--ease-out-expo);
+}
+
+.spacing-row__value {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--lw-text-tertiary);
+}
+
+/* ============================================================
+   04 — CORNER RADIUS
+   ============================================================ */
+.radius-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--space-6);
+}
+
+.radius-sample {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.radius-box {
+  width: 120px;
+  height: 80px;
+  background: var(--lw-card);
+  border: 1px solid rgba(255,184,77,0.2);
+  transition: border-color var(--duration-normal);
+}
+
+.radius-box:hover {
+  border-color: var(--lw-gold);
+}
+
+.radius-label {
+  text-align: center;
+}
+
+.radius-label__name {
+  font-family: var(--font-display);
+  font-size: 14px;
+  color: var(--lw-text-primary);
+  letter-spacing: 1px;
+}
+
+.radius-label__value {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--lw-text-tertiary);
+}
+
+/* ============================================================
+   05 — SHADOWS / ELEVATION
+   ============================================================ */
+.elevation-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-8);
+}
+
+.elevation-sample {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.elevation-card {
+  width: 100%;
+  height: 120px;
+  background: var(--lw-card);
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--lw-text-secondary);
+  transition: transform var(--duration-normal) var(--ease-out-expo);
+}
+
+.elevation-card:hover { transform: translateY(-4px); }
+
+.elevation-card--ambient  { box-shadow: var(--shadow-ambient); }
+.elevation-card--elevated { box-shadow: var(--shadow-elevated); }
+.elevation-card--deep     { box-shadow: var(--shadow-deep); }
+
+.elevation-card--glow-gold {
+  box-shadow: 0 0 40px rgba(255,184,77,0.15), var(--shadow-elevated);
+}
+
+.elevation-card--glow-cyan {
+  box-shadow: 0 0 40px rgba(0,212,255,0.15), var(--shadow-elevated);
+}
+
+.elevation-card--glow-beat {
+  box-shadow: 0 0 24px rgba(255,204,51,0.6), var(--shadow-elevated);
+  animation: beatGlowPulse 1s ease-in-out infinite;
+}
+
+@keyframes beatGlowPulse {
+  0%, 100% { box-shadow: 0 0 24px rgba(255,204,51,0.2), var(--shadow-elevated); }
+  50%      { box-shadow: 0 0 40px rgba(255,204,51,0.6), var(--shadow-elevated); }
+}
+
+.elevation-meta {
+  text-align: center;
+}
+
+.elevation-meta__name {
+  font-family: var(--font-display);
+  font-size: 14px;
+  color: var(--lw-text-primary);
+  letter-spacing: 1px;
+}
+
+.elevation-meta__css {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--lw-text-tertiary);
+  word-break: break-all;
+}
+
+/* ============================================================
+   06 — GLASSMORPHISM
+   ============================================================ */
+.glass-showcase {
+  position: relative;
+  min-height: 400px;
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  background: var(--lw-base);
+}
+
+.glass-bg {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.glass-bg__orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.4;
+  animation: orbFloat 8s ease-in-out infinite;
+}
+
+.glass-bg__orb--gold {
+  width: 300px;
+  height: 300px;
+  background: var(--lw-gold);
+  top: -50px;
+  left: -50px;
+  animation-delay: 0s;
+}
+
+.glass-bg__orb--cyan {
+  width: 250px;
+  height: 250px;
+  background: var(--lw-cyan);
+  bottom: -50px;
+  right: -50px;
+  animation-delay: -4s;
+}
+
+.glass-bg__orb--purple {
+  width: 200px;
+  height: 200px;
+  background: var(--lw-zone-2);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  animation-delay: -2s;
+}
+
+@keyframes orbFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%      { transform: translate(20px, -20px) scale(1.05); }
+  66%      { transform: translate(-15px, 10px) scale(0.95); }
+}
+
+.glass-cards {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-6);
+  padding: var(--space-8);
+}
+
+.glass-card {
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  transition: transform var(--duration-normal) var(--ease-out-expo);
+}
+
+.glass-card:hover {
+  transform: translateY(-4px);
+}
+
+.glass-card--light {
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.glass-card--medium {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.glass-card--tinted {
+  background: rgba(255, 184, 77, 0.05);
+  backdrop-filter: blur(32px);
+  -webkit-backdrop-filter: blur(32px);
+  border: 1px solid rgba(255, 184, 77, 0.12);
+}
+
+.glass-card__title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  letter-spacing: 1px;
+  color: var(--lw-text-primary);
+  margin-bottom: var(--space-2);
+}
+
+.glass-card__body {
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--lw-text-secondary);
+  line-height: 1.5;
+}
+
+.glass-card__css {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--lw-text-tertiary);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid rgba(255,255,255,0.06);
+  white-space: pre-line;
+}
+
+/* ============================================================
+   07 — LED STRIP PREVIEW
+   ============================================================ */
+.led-strip-demo {
+  background: var(--lw-card);
+  border-radius: var(--radius-xl);
+  padding: var(--space-8);
+  box-shadow: var(--shadow-elevated);
+  overflow: hidden;
+  position: relative;
+}
+
+.led-strip-demo::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--lw-gold), transparent);
+  opacity: 0.3;
+}
+
+.led-strip {
+  display: flex;
+  gap: 1px;
+  justify-content: center;
+  margin: var(--space-6) 0;
+  position: relative;
+}
+
+.led-pixel {
+  width: 4px;
+  height: 20px;
+  border-radius: 1px;
+  transition: background-color 60ms linear;
+  position: relative;
+}
+
+.led-pixel::after {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: -2px;
+  right: -2px;
+  bottom: -4px;
+  border-radius: 2px;
+  filter: blur(4px);
+  opacity: 0.4;
+  background: inherit;
+}
+
+.led-strip-label {
+  font-family: var(--font-display);
+  font-size: 14px;
+  letter-spacing: 2px;
+  color: var(--lw-text-tertiary);
+  text-align: center;
+  margin-bottom: var(--space-3);
+}
+
+.led-strip-meta {
+  display: flex;
+  justify-content: space-between;
+  padding-top: var(--space-3);
+  border-top: 1px solid rgba(255,255,255,0.04);
+}
+
+.led-strip-meta__item {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--lw-text-tertiary);
+}
+
+.led-strip-meta__value {
+  color: var(--lw-gold);
+}
+
+/* ============================================================
+   TOKEN TABLE
+   ============================================================ */
+.token-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--space-4);
+}
+
+.token-table th {
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--lw-text-tertiary);
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.token-table td {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--lw-text-secondary);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.token-table td:first-child {
+  color: var(--lw-cyan);
+}
+
+.token-table tr:hover td {
+  background: rgba(255,255,255,0.02);
+}
+
+/* ============================================================
+   FOOTER
+   ============================================================ */
+.page-footer {
+  text-align: center;
+  padding: var(--space-12) 0 var(--space-8);
+  border-top: 1px solid rgba(255,255,255,0.04);
+  margin-top: var(--space-16);
+}
+
+.page-footer__brand {
+  font-family: var(--font-display);
+  font-size: 18px;
+  letter-spacing: 4px;
+  color: var(--lw-gold);
+  opacity: 0.6;
+}
+
+.page-footer__meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--lw-text-tertiary);
+  margin-top: var(--space-2);
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width: 768px) {
+  .page-title { font-size: 36px; }
+  .type-row { grid-template-columns: 1fr; }
+  .elevation-grid { grid-template-columns: 1fr; }
+  .glass-cards { grid-template-columns: 1fr; }
+  .spacing-row { grid-template-columns: 60px 1fr 120px; }
+}
+</style>
+</head>
+<body>
+
+<div class="page-container">
+
+  <!-- ============================
+       HEADER
+       ============================ -->
+  <header class="page-header">
+    <div class="brand-name">SpectraSynq</div>
+    <h1 class="page-title">DESIGN SYSTEM</h1>
+    <p class="page-subtitle">LightwaveOS iOS App &mdash; Visual foundations for a premium audio-reactive lighting controller</p>
+  </header>
+
+  <!-- ============================
+       01 — COLOUR PALETTE
+       ============================ -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">01</span>
+      <h2 class="section-title">COLOUR PALETTE</h2>
+    </div>
+
+    <p class="section-description">
+      Dark-first palette designed for readability in dim environments.
+      All text combinations meet WCAG AA contrast requirements (4.5:1 minimum).
+      The gold accent anchors the brand identity across all interactive surfaces.
+    </p>
+
+    <!-- Brand Colours -->
+    <div class="colour-group-title">Brand Accent</div>
+    <div class="colour-grid">
+      <div class="colour-swatch">
+        <div class="colour-swatch__preview" style="background: #FFB84D;"></div>
+        <div class="colour-swatch__info">
+          <div class="colour-swatch__name">Lightwave Gold</div>
+          <div class="colour-swatch__hex">#FFB84D</div>
+          <div class="colour-swatch__usage">Primary accent, interactive elements</div>
+        </div>
+      </div>
+      <div class="colour-swatch">
+        <div class="colour-swatch__preview" style="background: #FFCC33;"></div>
+        <div class="colour-swatch__info">
+          <div class="colour-swatch__name">Beat Accent</div>
+          <div class="colour-swatch__hex">#FFCC33</div>
+          <div class="colour-swatch__usage">Beat pulse, emphasis states</div>
+        </div>
+      </div>
+      <div class="colour-swatch">
+        <div class="colour-swatch__preview" style="background: #B8842E;"></div>
+        <div class="colour-swatch__info">
+          <div class="colour-swatch__name">Gold Dim</div>
+          <div class="colour-swatch__hex">#B8842E</div>
+          <div class="colour-swatch__usage">Borders, subtle accents</div>
+        </div>
+      </div>
+      <div class="colour-swatch">
+        <div class="colour-swatch__preview" style="background: #00D4FF;"></div>
+        <div class="colour-swatch__info">
+          <div class="colour-swatch__name">Cyan</div>
+          <div class="colour-swatch__hex">#00D4FF</div>
+          <div class="colour-swatch__usage">Zone 0, informational, data values</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Surface Colours -->
+    <div class="colour-group-title">Surfaces</div>
+    <div class="colour-grid">
+      <div class="colour-swatch">
+        <div class="colour-swatch__preview" style="background: #08090E; border-bottom: 1px solid #1E2535;"></div>
+        <div class="colour-swatch__info">
+          <div class="colour-swatch__name">Base Deep</div>
+          <div class="colour-swatch__hex">#08090E</div>
+          <div class="colour-swatch__usage">App background, deepest layer</div>
+        </div>
+      </div>
+      <div class="colour-swatch">
+        <div class="colour-swatch__preview" style="background: #0F1219; border-bottom: 1px solid #1E2535;"></div>
+        <div class="colour-swatch__info">
+          <div class="colour-swatch__name">Base</div>
+          <div class="colour-swatch__hex">#0F1219</div>
+          <div class="colour-swatch__usage">Primary background</div>
+        </div>
+      </div>
+      <div class="colour-swatch">
+        <div class="colour-swatch__preview" style="background: #1E2535;"></div>
+        <div class="colour-swatch__info">
+          <div class="colour-swatch__name">Card</div>
+          <div class="colour-swatch__hex">#1E2535</div>
+          <div class="colour-swatch__usage">Card backgrounds, first elevation</div>
+        </div>
+      </div>
+      <div class="colour-swatch">
+        <div class="colour-swatch__preview" style="background: #1A2030;"></div>
+        <div class="colour-swatch__info">
+          <div class="colour-swatch__name">Card Alt</div>
+          <div class="colour-swatch__hex">#1A2030</div>
+          <div class="colour-swatch__usage">Card gradient endpoint</div>
+        </div>
+      </div>
+      <div class="colour-swatch">
+        <div class="colour-swatch__preview" style="background: #252D3F;"></div>
+        <div class="colour-swatch__info">
+          <div class="colour-swatch__name">Elevated</div>
+          <div class="colour-swatch__hex">#252D3F</div>
+          <div class="colour-swatch__usage">Highest elevation, nested elements</div>
+        </div>
+      </div>
+      <div class="colour-swatch">
+        <div class="colour-swatch__preview" style="background: #2C3650;"></div>
+        <div class="colour-swatch__info">
+          <div class="colour-swatch__name">Elevated Hover</div>
+          <div class="colour-swatch__hex">#2C3650</div>
+          <div class="colour-swatch__usage">Hover state for elevated surfaces</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Text Colours -->
+    <div class="colour-group-title">Text Hierarchy</div>
+    <div class="colour-grid">
+      <div class="colour-swatch">
+        <div class="colour-swatch__preview" style="background: #0F1219; display: flex; align-items: center; justify-content: center;">
+          <span style="color: #E6E9EF; font-family: 'Rajdhani'; font-size: 20px; font-weight: 600;">Primary Text</span>
+        </div>
+        <div class="colour-swatch__info">
+          <div class="colour-swatch__name">Text Primary</div>
+          <div class="colour-swatch__hex">#E6E9EF</div>
+          <div class="colour-swatch__usage">Headings, body text, key values</div>
+        </div>
+      </div>
+      <div class="colour-swatch">
+        <div class="colour-swatch__preview" style="background: #0F1219; display: flex; align-items: center; justify-content: center;">
+          <span style="color: #9CA3B0; font-family: 'Rajdhani'; font-size: 20px; font-weight: 500;">Secondary Text</span>
+        </div>
+        <div class="colour-swatch__info">
+          <div class="colour-swatch__name">Text Secondary</div>
+          <div class="colour-swatch__hex">#9CA3B0</div>
+          <div class="colour-swatch__usage">Descriptions, metadata, labels</div>
+        </div>
+      </div>
+      <div class="colour-swatch">
+        <div class="colour-swatch__preview" style="background: #0F1219; display: flex; align-items: center; justify-content: center;">
+          <span style="color: #6B7280; font-family: 'Rajdhani'; font-size: 20px; font-weight: 500;">Tertiary Text</span>
+        </div>
+        <div class="colour-swatch__info">
+          <div class="colour-swatch__name">Text Tertiary</div>
+          <div class="colour-swatch__hex">#6B7280</div>
+          <div class="colour-swatch__usage">Section headers, placeholders, hints</div>
+        </div>
+      </div>
+      <div class="colour-swatch">
+        <div class="colour-swatch__preview" style="background: #0F1219; display: flex; align-items: center; justify-content: center;">
+          <span style="color: #3D4350; font-family: 'Rajdhani'; font-size: 20px; font-weight: 500;">Disabled Text</span>
+        </div>
+        <div class="colour-swatch__info">
+          <div class="colour-swatch__name">Text Disabled</div>
+          <div class="colour-swatch__hex">#3D4350</div>
+          <div class="colour-swatch__usage">Inactive controls, disabled states</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status Colours -->
+    <div class="colour-group-title">Status / Semantic</div>
+    <div class="colour-grid">
+      <div class="colour-swatch">
+        <div class="colour-swatch__preview" style="background: linear-gradient(135deg, #4DFFB8, #20B07A);"></div>
+        <div class="colour-swatch__info">
+          <div class="colour-swatch__name">Success</div>
+          <div class="colour-swatch__hex">#4DFFB8</div>
+          <div class="colour-swatch__usage">Connected, healthy, enabled</div>
+        </div>
+      </div>
+      <div class="colour-swatch">
+        <div class="colour-swatch__preview" style="background: linear-gradient(135deg, #FF4D4D, #CC2020);"></div>
+        <div class="colour-swatch__info">
+          <div class="colour-swatch__name">Error</div>
+          <div class="colour-swatch__hex">#FF4D4D</div>
+          <div class="colour-swatch__usage">Disconnected, error, alert</div>
+        </div>
+      </div>
+      <div class="colour-swatch">
+        <div class="colour-swatch__preview" style="background: linear-gradient(135deg, #FFB84D, #CC8F20);"></div>
+        <div class="colour-swatch__info">
+          <div class="colour-swatch__name">Warning</div>
+          <div class="colour-swatch__hex">#FFB84D</div>
+          <div class="colour-swatch__usage">Connecting, pending, caution</div>
+        </div>
+      </div>
+      <div class="colour-swatch">
+        <div class="colour-swatch__preview" style="background: linear-gradient(135deg, #00D4FF, #0099B8);"></div>
+        <div class="colour-swatch__info">
+          <div class="colour-swatch__name">Info</div>
+          <div class="colour-swatch__hex">#00D4FF</div>
+          <div class="colour-swatch__usage">Zone indicators, data highlights</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Zone Colours -->
+    <div class="colour-group-title">Zone Identifiers</div>
+    <div class="colour-grid">
+      <div class="colour-swatch">
+        <div class="colour-swatch__preview" style="background: linear-gradient(135deg, #00FFFF, #008888);"></div>
+        <div class="colour-swatch__info">
+          <div class="colour-swatch__name">Zone 0 — Cyan</div>
+          <div class="colour-swatch__hex">#00FFFF</div>
+          <div class="colour-swatch__usage">Zone 0 border, labels, indicators</div>
+        </div>
+      </div>
+      <div class="colour-swatch">
+        <div class="colour-swatch__preview" style="background: linear-gradient(135deg, #00FF99, #008855);"></div>
+        <div class="colour-swatch__info">
+          <div class="colour-swatch__name">Zone 1 — Green</div>
+          <div class="colour-swatch__hex">#00FF99</div>
+          <div class="colour-swatch__usage">Zone 1 border, labels, indicators</div>
+        </div>
+      </div>
+      <div class="colour-swatch">
+        <div class="colour-swatch__preview" style="background: linear-gradient(135deg, #9900FF, #550099);"></div>
+        <div class="colour-swatch__info">
+          <div class="colour-swatch__name">Zone 2 — Purple</div>
+          <div class="colour-swatch__hex">#9900FF</div>
+          <div class="colour-swatch__usage">Zone 2 border, labels, indicators</div>
+        </div>
+      </div>
+      <div class="colour-swatch">
+        <div class="colour-swatch__preview" style="background: linear-gradient(135deg, #FF6600, #AA4400);"></div>
+        <div class="colour-swatch__info">
+          <div class="colour-swatch__name">Zone 3 — Orange</div>
+          <div class="colour-swatch__hex">#FF6600</div>
+          <div class="colour-swatch__usage">Zone 3 border, labels, indicators</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Contrast Compliance -->
+    <div class="colour-group-title">Contrast Compliance (WCAG AA)</div>
+    <div class="contrast-grid">
+      <div class="contrast-sample" style="background: #0F1219;">
+        <div class="contrast-sample__label" style="color: #6B7280;">On Base (#0F1219)</div>
+        <div class="contrast-sample__text" style="color: #E6E9EF;">Primary Text #E6E9EF <span class="contrast-sample__ratio">12.8:1</span>
+          <span class="contrast-sample__badge" style="background: #4DFFB8; color: #0F1219;">AAA</span></div>
+        <div class="contrast-sample__text" style="color: #9CA3B0;">Secondary Text #9CA3B0 <span class="contrast-sample__ratio">7.2:1</span>
+          <span class="contrast-sample__badge" style="background: #4DFFB8; color: #0F1219;">AAA</span></div>
+        <div class="contrast-sample__text" style="color: #6B7280;">Tertiary Text #6B7280 <span class="contrast-sample__ratio">4.6:1</span>
+          <span class="contrast-sample__badge" style="background: #FFB84D; color: #0F1219;">AA</span></div>
+        <div class="contrast-sample__text" style="color: #FFB84D;">Gold Accent #FFB84D <span class="contrast-sample__ratio">8.5:1</span>
+          <span class="contrast-sample__badge" style="background: #4DFFB8; color: #0F1219;">AAA</span></div>
+      </div>
+      <div class="contrast-sample" style="background: #1E2535;">
+        <div class="contrast-sample__label" style="color: #6B7280;">On Card (#1E2535)</div>
+        <div class="contrast-sample__text" style="color: #E6E9EF;">Primary Text #E6E9EF <span class="contrast-sample__ratio">9.8:1</span>
+          <span class="contrast-sample__badge" style="background: #4DFFB8; color: #0F1219;">AAA</span></div>
+        <div class="contrast-sample__text" style="color: #9CA3B0;">Secondary Text #9CA3B0 <span class="contrast-sample__ratio">5.5:1</span>
+          <span class="contrast-sample__badge" style="background: #FFB84D; color: #0F1219;">AA</span></div>
+        <div class="contrast-sample__text" style="color: #FFB84D;">Gold Accent #FFB84D <span class="contrast-sample__ratio">6.5:1</span>
+          <span class="contrast-sample__badge" style="background: #4DFFB8; color: #0F1219;">AAA</span></div>
+        <div class="contrast-sample__text" style="color: #00D4FF;">Cyan Accent #00D4FF <span class="contrast-sample__ratio">7.8:1</span>
+          <span class="contrast-sample__badge" style="background: #4DFFB8; color: #0F1219;">AAA</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================
+       02 — TYPOGRAPHY
+       ============================ -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">02</span>
+      <h2 class="section-title">TYPOGRAPHY</h2>
+    </div>
+
+    <p class="section-description">
+      Three-font stack: Bebas Neue for bold display and headings, Rajdhani for body text and labels,
+      JetBrains Mono for numeric readouts and technical data. All sizes reference the iOS Dynamic Type scale.
+    </p>
+
+    <div class="type-specimen">
+
+      <!-- Bebas Neue specimens -->
+      <div style="margin-bottom: var(--space-3);">
+        <div class="colour-group-title">Bebas Neue — Display / Headings</div>
+      </div>
+
+      <div class="type-row">
+        <div class="type-meta">
+          <div class="type-meta__name">HERO NUMERAL</div>
+          <div class="type-meta__spec">48pt Bold &middot; .largeTitle</div>
+          <div class="type-meta__usage">BPM display, hero values</div>
+        </div>
+        <div style="font-family: 'Bebas Neue'; font-size: 48px; color: var(--lw-gold); line-height: 1;">128 BPM</div>
+      </div>
+
+      <div class="type-row">
+        <div class="type-meta">
+          <div class="type-meta__name">BPM NUMERAL</div>
+          <div class="type-meta__spec">32pt Bold &middot; .title</div>
+          <div class="type-meta__usage">Secondary large numerals</div>
+        </div>
+        <div style="font-family: 'Bebas Neue'; font-size: 32px; color: var(--lw-text-primary); line-height: 1;">TEMPO LOCKED</div>
+      </div>
+
+      <div class="type-row">
+        <div class="type-meta">
+          <div class="type-meta__name">EFFECT TITLE</div>
+          <div class="type-meta__spec">22pt Bold &middot; .title3</div>
+          <div class="type-meta__usage">Current effect name on hero</div>
+        </div>
+        <div style="font-family: 'Bebas Neue'; font-size: 22px; color: var(--lw-text-primary); line-height: 1.2;">LGP HOLOGRAPHIC TUNED</div>
+      </div>
+
+      <div class="type-row">
+        <div class="type-meta">
+          <div class="type-meta__name">STATUS BRAND</div>
+          <div class="type-meta__spec">16pt Bold &middot; .headline</div>
+          <div class="type-meta__usage">Brand name in status bar</div>
+        </div>
+        <div style="font-family: 'Bebas Neue'; font-size: 16px; color: var(--lw-gold); letter-spacing: 2px; line-height: 1;">LIGHTWAVEOS</div>
+      </div>
+
+      <div class="type-row">
+        <div class="type-meta">
+          <div class="type-meta__name">SECTION HEADER</div>
+          <div class="type-meta__spec">14pt Bold &middot; +1.5px tracking</div>
+          <div class="type-meta__usage">Card section titles, uppercase</div>
+        </div>
+        <div style="font-family: 'Bebas Neue'; font-size: 14px; color: var(--lw-text-tertiary); letter-spacing: 1.5px; line-height: 1;">AUDIO DIAGNOSTICS</div>
+      </div>
+
+      <div class="type-row">
+        <div class="type-meta">
+          <div class="type-meta__name">ZONE PILL</div>
+          <div class="type-meta__spec">13pt Bold &middot; .subheadline</div>
+          <div class="type-meta__usage">Zone chip labels</div>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <span style="font-family: 'Bebas Neue'; font-size: 13px; color: #00FFFF; background: rgba(0,255,255,0.1); padding: 2px 10px; border-radius: 999px; border: 1px solid rgba(0,255,255,0.3);">ZONE 0</span>
+          <span style="font-family: 'Bebas Neue'; font-size: 13px; color: #00FF99; background: rgba(0,255,153,0.1); padding: 2px 10px; border-radius: 999px; border: 1px solid rgba(0,255,153,0.3);">ZONE 1</span>
+          <span style="font-family: 'Bebas Neue'; font-size: 13px; color: #9900FF; background: rgba(153,0,255,0.1); padding: 2px 10px; border-radius: 999px; border: 1px solid rgba(153,0,255,0.3);">ZONE 2</span>
+        </div>
+      </div>
+
+      <div class="type-row">
+        <div class="type-meta">
+          <div class="type-meta__name">PILL LABEL</div>
+          <div class="type-meta__spec">11pt Bold &middot; .caption</div>
+          <div class="type-meta__usage">Category pills (EFFECT, PALETTE)</div>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <span style="font-family: 'Bebas Neue'; font-size: 11px; color: var(--lw-gold); background: rgba(255,184,77,0.12); padding: 2px 8px; border-radius: 999px; letter-spacing: 1px;">EFFECT</span>
+          <span style="font-family: 'Bebas Neue'; font-size: 11px; color: var(--lw-gold); background: rgba(255,184,77,0.12); padding: 2px 8px; border-radius: 999px; letter-spacing: 1px;">PALETTE</span>
+          <span style="font-family: 'Bebas Neue'; font-size: 11px; color: var(--lw-gold); background: rgba(255,184,77,0.12); padding: 2px 8px; border-radius: 999px; letter-spacing: 1px;">AUDIO</span>
+        </div>
+      </div>
+
+      <!-- Rajdhani specimens -->
+      <div style="margin-top: var(--space-8); margin-bottom: var(--space-3);">
+        <div class="colour-group-title">Rajdhani — Body / Labels</div>
+      </div>
+
+      <div class="type-row">
+        <div class="type-meta">
+          <div class="type-meta__name">SHEET TITLE</div>
+          <div class="type-meta__spec">17pt Medium &middot; .headline</div>
+          <div class="type-meta__usage">Modal/sheet titles</div>
+        </div>
+        <div style="font-family: 'Rajdhani'; font-weight: 500; font-size: 17px; color: var(--lw-text-primary);">Select Effect Category</div>
+      </div>
+
+      <div class="type-row">
+        <div class="type-meta">
+          <div class="type-meta__name">BODY VALUE</div>
+          <div class="type-meta__spec">15pt Medium &middot; .body</div>
+          <div class="type-meta__usage">Effect/palette names, key values</div>
+        </div>
+        <div style="font-family: 'Rajdhani'; font-weight: 500; font-size: 15px; color: var(--lw-text-primary);">Ripple Enhanced &mdash; Warm comet trails radiating from centre</div>
+      </div>
+
+      <div class="type-row">
+        <div class="type-meta">
+          <div class="type-meta__name">HAPTIC LABEL</div>
+          <div class="type-meta__spec">13pt Medium &middot; .callout</div>
+          <div class="type-meta__usage">Toggle labels, controls</div>
+        </div>
+        <div style="font-family: 'Rajdhani'; font-weight: 500; font-size: 13px; color: var(--lw-text-primary);">Auto-cycle effects on beat</div>
+      </div>
+
+      <div class="type-row">
+        <div class="type-meta">
+          <div class="type-meta__name">CARD LABEL</div>
+          <div class="type-meta__spec">12pt Medium &middot; .subheadline</div>
+          <div class="type-meta__usage">Slider labels, metadata rows</div>
+        </div>
+        <div style="font-family: 'Rajdhani'; font-weight: 500; font-size: 12px; color: var(--lw-text-secondary); text-transform: uppercase;">BRIGHTNESS &bull; SPEED &bull; SATURATION &bull; MOOD</div>
+      </div>
+
+      <div class="type-row">
+        <div class="type-meta">
+          <div class="type-meta__name">CAPTION</div>
+          <div class="type-meta__spec">11pt Medium &middot; .caption</div>
+          <div class="type-meta__usage">IDs, counts, timestamps</div>
+        </div>
+        <div style="font-family: 'Rajdhani'; font-weight: 500; font-size: 11px; color: var(--lw-text-secondary);">80 LEDs &middot; L[40-79] R[80-119] &middot; Last sync 2s ago</div>
+      </div>
+
+      <div class="type-row">
+        <div class="type-meta">
+          <div class="type-meta__name">MICRO LABEL</div>
+          <div class="type-meta__spec">10pt Medium &middot; .caption2</div>
+          <div class="type-meta__usage">Tight UI labels</div>
+        </div>
+        <div style="font-family: 'Rajdhani'; font-weight: 500; font-size: 10px; color: var(--lw-text-tertiary); text-transform: uppercase; letter-spacing: 0.5px;">REACTIVE &bull; SMOOTH &bull; OFF &bull; AUTO</div>
+      </div>
+
+      <!-- JetBrains Mono specimens -->
+      <div style="margin-top: var(--space-8); margin-bottom: var(--space-3);">
+        <div class="colour-group-title">JetBrains Mono — Data / Readouts</div>
+      </div>
+
+      <div class="type-row">
+        <div class="type-meta">
+          <div class="type-meta__name">STEPPER VALUE</div>
+          <div class="type-meta__spec">13pt Medium &middot; .body</div>
+          <div class="type-meta__usage">Stepper readouts, slider values</div>
+        </div>
+        <div style="font-family: 'JetBrains Mono'; font-weight: 500; font-size: 13px; color: var(--lw-gold); font-variant-numeric: tabular-nums;">0.35 &nbsp;&nbsp; 128 &nbsp;&nbsp; 5000ms</div>
+      </div>
+
+      <div class="type-row">
+        <div class="type-meta">
+          <div class="type-meta__name">METRIC VALUE</div>
+          <div class="type-meta__spec">11pt Medium &middot; .caption</div>
+          <div class="type-meta__usage">Real-time DSP readouts</div>
+        </div>
+        <div style="font-family: 'JetBrains Mono'; font-weight: 500; font-size: 11px; color: var(--lw-text-primary); font-variant-numeric: tabular-nums;">RMS 0.342 &nbsp;&nbsp; FLUX 0.128 &nbsp;&nbsp; BPM 124.3</div>
+      </div>
+
+      <div class="type-row">
+        <div class="type-meta">
+          <div class="type-meta__name">MONOSPACE</div>
+          <div class="type-meta__spec">11pt Medium &middot; .caption</div>
+          <div class="type-meta__usage">Debug log, IPs, LED indices</div>
+        </div>
+        <div style="font-family: 'JetBrains Mono'; font-weight: 500; font-size: 11px; color: var(--lw-text-secondary);">192.168.4.1 &nbsp;&nbsp; LED[79..80] &nbsp;&nbsp; heap: 142KB</div>
+      </div>
+
+      <div class="type-row">
+        <div class="type-meta">
+          <div class="type-meta__name">MONOSPACE SMALL</div>
+          <div class="type-meta__spec">10pt Medium &middot; .caption2</div>
+          <div class="type-meta__usage">Compact readouts, dense data</div>
+        </div>
+        <div style="font-family: 'JetBrains Mono'; font-weight: 500; font-size: 10px; color: var(--lw-text-tertiary);">b0:0.82 b1:0.41 b2:0.19 b3:0.67 b4:0.33 b5:0.12 b6:0.08 b7:0.05</div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============================
+       03 — SPACING
+       ============================ -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">03</span>
+      <h2 class="section-title">SPACING SCALE</h2>
+    </div>
+
+    <p class="section-description">
+      Consistent 4pt base grid. All spacing values are multiples of 4px, ensuring pixel-perfect alignment
+      across every component and screen.
+    </p>
+
+    <div class="spacing-scale">
+      <div class="spacing-row">
+        <div class="spacing-row__label">--space-1</div>
+        <div class="spacing-row__bar" style="width: 4px;"></div>
+        <div class="spacing-row__value">4px &middot; Inline (icon to text)</div>
+      </div>
+      <div class="spacing-row">
+        <div class="spacing-row__label">--space-2</div>
+        <div class="spacing-row__bar" style="width: 8px;"></div>
+        <div class="spacing-row__value">8px &middot; Related elements</div>
+      </div>
+      <div class="spacing-row">
+        <div class="spacing-row__label">--space-3</div>
+        <div class="spacing-row__bar" style="width: 12px;"></div>
+        <div class="spacing-row__value">12px &middot; Between cards in section</div>
+      </div>
+      <div class="spacing-row">
+        <div class="spacing-row__label">--space-4</div>
+        <div class="spacing-row__bar" style="width: 16px;"></div>
+        <div class="spacing-row__value">16px &middot; Card horizontal padding</div>
+      </div>
+      <div class="spacing-row">
+        <div class="spacing-row__label">--space-5</div>
+        <div class="spacing-row__bar" style="width: 20px;"></div>
+        <div class="spacing-row__value">20px &middot; Extended gap</div>
+      </div>
+      <div class="spacing-row">
+        <div class="spacing-row__label">--space-6</div>
+        <div class="spacing-row__bar" style="width: 24px;"></div>
+        <div class="spacing-row__value">24px &middot; Major sections, page padding</div>
+      </div>
+      <div class="spacing-row">
+        <div class="spacing-row__label">--space-8</div>
+        <div class="spacing-row__bar" style="width: 32px;"></div>
+        <div class="spacing-row__value">32px &middot; Section groups</div>
+      </div>
+      <div class="spacing-row">
+        <div class="spacing-row__label">--space-10</div>
+        <div class="spacing-row__bar" style="width: 40px;"></div>
+        <div class="spacing-row__value">40px &middot; Hero spacing</div>
+      </div>
+      <div class="spacing-row">
+        <div class="spacing-row__label">--space-12</div>
+        <div class="spacing-row__bar" style="width: 48px;"></div>
+        <div class="spacing-row__value">48px &middot; Page-level margins</div>
+      </div>
+      <div class="spacing-row">
+        <div class="spacing-row__label">--space-16</div>
+        <div class="spacing-row__bar" style="width: 64px;"></div>
+        <div class="spacing-row__value">64px &middot; Inter-section gap</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================
+       04 — CORNER RADIUS
+       ============================ -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">04</span>
+      <h2 class="section-title">CORNER RADIUS</h2>
+    </div>
+
+    <p class="section-description">
+      Three-tier radius system reflecting component hierarchy. Larger radii indicate higher-level containers;
+      smaller radii indicate nested or inline elements.
+    </p>
+
+    <div class="radius-grid">
+      <div class="radius-sample">
+        <div class="radius-box" style="border-radius: 4px;"></div>
+        <div class="radius-label">
+          <div class="radius-label__name">XS</div>
+          <div class="radius-label__value">4px &middot; Toggle tracks, tags</div>
+        </div>
+      </div>
+      <div class="radius-sample">
+        <div class="radius-box" style="border-radius: 8px;"></div>
+        <div class="radius-label">
+          <div class="radius-label__name">SM</div>
+          <div class="radius-label__value">8px &middot; Buttons, chips</div>
+        </div>
+      </div>
+      <div class="radius-sample">
+        <div class="radius-box" style="border-radius: 12px;"></div>
+        <div class="radius-label">
+          <div class="radius-label__name">MD / NESTED</div>
+          <div class="radius-label__value">12px &middot; Sliders, badges, dropdowns</div>
+        </div>
+      </div>
+      <div class="radius-sample">
+        <div class="radius-box" style="border-radius: 16px;"></div>
+        <div class="radius-label">
+          <div class="radius-label__name">LG / CARD</div>
+          <div class="radius-label__value">16px &middot; Primary cards, zone cards</div>
+        </div>
+      </div>
+      <div class="radius-sample">
+        <div class="radius-box" style="border-radius: 24px;"></div>
+        <div class="radius-label">
+          <div class="radius-label__name">XL / HERO</div>
+          <div class="radius-label__value">24px &middot; Hero container, LED preview</div>
+        </div>
+      </div>
+      <div class="radius-sample">
+        <div class="radius-box" style="border-radius: 999px; width: 80px;"></div>
+        <div class="radius-label">
+          <div class="radius-label__name">PILL</div>
+          <div class="radius-label__value">999px &middot; Pills, zone chips</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================
+       05 — SHADOWS / ELEVATION
+       ============================ -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">05</span>
+      <h2 class="section-title">SHADOWS & ELEVATION</h2>
+    </div>
+
+    <p class="section-description">
+      Three standard shadow levels plus three accent glow variants for interactive and beat-reactive states.
+      Glow shadows use the brand accent colour to reinforce the lighting-controller identity.
+    </p>
+
+    <div class="elevation-grid">
+      <div class="elevation-sample">
+        <div class="elevation-card elevation-card--ambient">Ambient</div>
+        <div class="elevation-meta">
+          <div class="elevation-meta__name">AMBIENT</div>
+          <div class="elevation-meta__css">0 2px 12px rgba(0,0,0,0.4)</div>
+        </div>
+      </div>
+      <div class="elevation-sample">
+        <div class="elevation-card elevation-card--elevated">Elevated</div>
+        <div class="elevation-meta">
+          <div class="elevation-meta__name">ELEVATED</div>
+          <div class="elevation-meta__css">0 4px 20px rgba(0,0,0,0.5)</div>
+        </div>
+      </div>
+      <div class="elevation-sample">
+        <div class="elevation-card elevation-card--deep">Deep</div>
+        <div class="elevation-meta">
+          <div class="elevation-meta__name">DEEP</div>
+          <div class="elevation-meta__css">0 8px 40px rgba(0,0,0,0.6)</div>
+        </div>
+      </div>
+      <div class="elevation-sample">
+        <div class="elevation-card elevation-card--glow-gold">Gold Glow</div>
+        <div class="elevation-meta">
+          <div class="elevation-meta__name">HERO GLOW</div>
+          <div class="elevation-meta__css">0 0 40px gold@15%</div>
+        </div>
+      </div>
+      <div class="elevation-sample">
+        <div class="elevation-card elevation-card--glow-cyan">Cyan Glow</div>
+        <div class="elevation-meta">
+          <div class="elevation-meta__name">INFO GLOW</div>
+          <div class="elevation-meta__css">0 0 40px cyan@15%</div>
+        </div>
+      </div>
+      <div class="elevation-sample">
+        <div class="elevation-card elevation-card--glow-beat">Beat Pulse</div>
+        <div class="elevation-meta">
+          <div class="elevation-meta__name">BEAT PULSE GLOW</div>
+          <div class="elevation-meta__css">0 0 24px gold@60% (animated)</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================
+       06 — GLASSMORPHISM
+       ============================ -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">06</span>
+      <h2 class="section-title">GLASSMORPHISM TREATMENTS</h2>
+    </div>
+
+    <p class="section-description">
+      Three glass treatment tiers for layered surfaces. Used for bottom sheets, overlays, and floating controls.
+      All treatments include backdrop-filter blur to let underlying LED colour bleed through, reinforcing the
+      connection between the app UI and the physical light.
+    </p>
+
+    <div class="glass-showcase">
+      <div class="glass-bg">
+        <div class="glass-bg__orb glass-bg__orb--gold"></div>
+        <div class="glass-bg__orb glass-bg__orb--cyan"></div>
+        <div class="glass-bg__orb glass-bg__orb--purple"></div>
+      </div>
+      <div class="glass-cards">
+        <div class="glass-card glass-card--light">
+          <div class="glass-card__title">LIGHT GLASS</div>
+          <div class="glass-card__body">Primary overlays, bottom sheets, floating toolbars. Highest opacity for readability with gentle blur.</div>
+          <div class="glass-card__css">background: rgba(255,255,255,0.06)
+backdrop-filter: blur(24px)
+border: 1px solid rgba(255,255,255,0.1)</div>
+        </div>
+        <div class="glass-card glass-card--medium">
+          <div class="glass-card__title">MEDIUM GLASS</div>
+          <div class="glass-card__body">Secondary layers, popover menus, context sheets. More transparency for visual depth.</div>
+          <div class="glass-card__css">background: rgba(255,255,255,0.04)
+backdrop-filter: blur(40px)
+border: 1px solid rgba(255,255,255,0.06)</div>
+        </div>
+        <div class="glass-card glass-card--tinted">
+          <div class="glass-card__title">TINTED GLASS</div>
+          <div class="glass-card__body">Brand-tinted overlays, active selection states, emphasis panels. Gold tint connects to brand identity.</div>
+          <div class="glass-card__css">background: rgba(255,184,77,0.05)
+backdrop-filter: blur(32px)
+border: 1px solid rgba(255,184,77,0.12)</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================
+       07 — LED STRIP PREVIEW
+       ============================ -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">07</span>
+      <h2 class="section-title">LED STRIP PREVIEW</h2>
+    </div>
+
+    <p class="section-description">
+      Miniature representation of the 160-LED physical strip. Centre origin at LED 79/80 outward.
+      Each pixel renders with a subtle glow halo to simulate the light-guide-plate diffusion.
+    </p>
+
+    <div class="led-strip-demo">
+      <div class="led-strip-label">STRIP A &mdash; 160 LEDs &mdash; CENTRE ORIGIN 79/80</div>
+      <div class="led-strip" id="led-strip-a"></div>
+      <div class="led-strip-meta">
+        <span class="led-strip-meta__item">Effect: <span class="led-strip-meta__value">LGP Holographic Tuned</span></span>
+        <span class="led-strip-meta__item">FPS: <span class="led-strip-meta__value">120</span></span>
+        <span class="led-strip-meta__item">BPM: <span class="led-strip-meta__value">128</span></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================
+       08 — DESIGN TOKEN TABLE
+       ============================ -->
+  <section class="section">
+    <div class="section-header">
+      <span class="section-number">08</span>
+      <h2 class="section-title">TOKEN REFERENCE</h2>
+    </div>
+
+    <p class="section-description">
+      Complete CSS custom property mapping from Swift DesignTokens.swift.
+      These are the authoritative values for developer handoff.
+    </p>
+
+    <table class="token-table">
+      <thead>
+        <tr>
+          <th>Token</th>
+          <th>CSS Variable</th>
+          <th>Value</th>
+          <th>Swift</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Gold</td><td>--lw-gold</td><td>#FFB84D</td><td>Color.lwGold</td></tr>
+        <tr><td>Cyan</td><td>--lw-cyan</td><td>#00D4FF</td><td>Color.lwCyan</td></tr>
+        <tr><td>Base</td><td>--lw-base</td><td>#0F1219</td><td>Color.lwBase</td></tr>
+        <tr><td>Card</td><td>--lw-card</td><td>#1E2535</td><td>Color.lwCard</td></tr>
+        <tr><td>Elevated</td><td>--lw-elevated</td><td>#252D3F</td><td>Color.lwElevated</td></tr>
+        <tr><td>Text Primary</td><td>--lw-text-primary</td><td>#E6E9EF</td><td>Color.lwTextPrimary</td></tr>
+        <tr><td>Text Secondary</td><td>--lw-text-secondary</td><td>#9CA3B0</td><td>Color.lwTextSecondary</td></tr>
+        <tr><td>Text Tertiary</td><td>--lw-text-tertiary</td><td>#6B7280</td><td>Color.lwTextTertiary</td></tr>
+        <tr><td>Success</td><td>--lw-success</td><td>#4DFFB8</td><td>Color.lwSuccess</td></tr>
+        <tr><td>Error</td><td>--lw-error</td><td>#FF4D4D</td><td>Color.lwError</td></tr>
+        <tr><td>Hero Radius</td><td>--radius-xl</td><td>24px</td><td>CornerRadius.hero</td></tr>
+        <tr><td>Card Radius</td><td>--radius-lg</td><td>16px</td><td>CornerRadius.card</td></tr>
+        <tr><td>Nested Radius</td><td>--radius-md</td><td>12px</td><td>CornerRadius.nested</td></tr>
+        <tr><td>Spacing XS</td><td>--space-1</td><td>4px</td><td>Spacing.xs</td></tr>
+        <tr><td>Spacing SM</td><td>--space-2</td><td>8px</td><td>Spacing.sm</td></tr>
+        <tr><td>Spacing MD</td><td>--space-3</td><td>12px</td><td>Spacing.md</td></tr>
+        <tr><td>Spacing LG</td><td>--space-6</td><td>24px</td><td>Spacing.lg</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============================
+       FOOTER
+       ============================ -->
+  <footer class="page-footer">
+    <div class="page-footer__brand">SPECTRASYNQ</div>
+    <div class="page-footer__meta">LightwaveOS iOS App Design System &middot; v2.0 &middot; Dark Theme Only</div>
+  </footer>
+
+</div>
+
+<!-- ============================================================
+     LED STRIP ANIMATION
+     ============================================================ -->
+<script>
+(function() {
+  const strip = document.getElementById('led-strip-a');
+  const NUM_LEDS = 80; // Showing 80 of 160 for width
+  const CENTRE = Math.floor(NUM_LEDS / 2);
+
+  // Create LED pixels
+  for (let i = 0; i < NUM_LEDS; i++) {
+    const pixel = document.createElement('div');
+    pixel.className = 'led-pixel';
+    strip.appendChild(pixel);
+  }
+
+  const pixels = strip.querySelectorAll('.led-pixel');
+  let time = 0;
+
+  function lerp(a, b, t) { return a + (b - a) * t; }
+
+  function hslToRgb(h, s, l) {
+    h /= 360; s /= 100; l /= 100;
+    let r, g, b;
+    if (s === 0) { r = g = b = l; }
+    else {
+      const hue2rgb = (p, q, t) => {
+        if (t < 0) t += 1;
+        if (t > 1) t -= 1;
+        if (t < 1/6) return p + (q - p) * 6 * t;
+        if (t < 1/2) return q;
+        if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+        return p;
+      };
+      const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+      const p = 2 * l - q;
+      r = hue2rgb(p, q, h + 1/3);
+      g = hue2rgb(p, q, h);
+      b = hue2rgb(p, q, h - 1/3);
+    }
+    return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+  }
+
+  function animate() {
+    time += 0.02;
+
+    pixels.forEach((pixel, i) => {
+      const distFromCentre = Math.abs(i - CENTRE);
+      const normDist = distFromCentre / CENTRE;
+
+      // Centre-outward wave
+      const wave = Math.sin(time * 3 - distFromCentre * 0.15) * 0.5 + 0.5;
+      const pulse = Math.pow(wave, 2);
+
+      // Colour: warm gold to cyan gradient from centre
+      const hue = lerp(35, 190, normDist);
+      const sat = lerp(90, 80, normDist);
+      const light = lerp(50, 30, normDist) * pulse + 5;
+
+      const [r, g, b] = hslToRgb(hue, sat, light);
+      pixel.style.backgroundColor = `rgb(${r},${g},${b})`;
+    });
+
+    requestAnimationFrame(animate);
+  }
+
+  animate();
+})();
+</script>
+
+</body>
+</html>

@@ -106,11 +106,12 @@ public:
         // Rise tracks changing room/self-noise.
         // Release is intentionally slower than rise (prevents threshold collapse after programme stops).
         // Hold prevents immediate collapse.
-        float    noiseFloorRise     = 0.020f; ///< Ambient floor attack (~0.4 s @ 125 Hz)
+        float    noiseFloorRise     = 0.003f; ///< Ambient floor attack (~2.7 s @ 125 Hz)
+                                              ///< Slow enough to track room noise, too slow to chase music dynamics
         float    noiseFloorFall     = 0.005f; ///< Ambient floor release (~1.6 s @ 125 Hz)
         uint16_t activityHoldFrames = 32;     ///< Hold floor for ~256 ms after activity
 
-        float    noiseAdaptK        = 3.0f;   ///< Ignore large transients above ambient floor * K
+        float    noiseAdaptK        = 2.0f;   ///< Only track signals within 2x ambient floor (prevents music from inflating floor)
         float    activityGateK      = 1.5f;   ///< Activity begins above noiseFloor * K
         float    activityRangeK     = 1.5f;   ///< Additional multiple needed to reach full activity
         float    activityRangeMin   = 0.002f; ///< Minimum RMS range for activity ramp

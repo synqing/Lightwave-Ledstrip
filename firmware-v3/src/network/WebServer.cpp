@@ -278,8 +278,8 @@ bool WebServer::begin() {
     
     LW_LOGI("Starting v2 WebServer...");
 
-    // Initialize LittleFS for static file serving
-    m_littleFSMounted = LittleFS.begin(false);
+    // Initialize LittleFS for static file serving (formatOnFail=true: auto-format if blank/corrupted)
+    m_littleFSMounted = LittleFS.begin(true);
     if (!m_littleFSMounted) {
         LW_LOGW("LittleFS mount failed - preset saves will not be available");
     } else {
@@ -493,7 +493,7 @@ bool WebServer::mountLittleFS() {
         return true;
     }
     
-    m_littleFSMounted = LittleFS.begin(false);
+    m_littleFSMounted = LittleFS.begin(true);
     if (m_littleFSMounted) {
         LW_LOGI("LittleFS mounted successfully");
     } else {

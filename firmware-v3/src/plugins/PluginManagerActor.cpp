@@ -149,8 +149,8 @@ void PluginManagerActor::loadPluginsFromLittleFS() {
 #ifndef NATIVE_BUILD
     LW_LOGI("Loading plugins from LittleFS...");
 
-    // Mount LittleFS
-    if (!LittleFS.begin(false)) {
+    // Mount LittleFS (formatOnFail=true: auto-format if partition is blank/corrupted)
+    if (!LittleFS.begin(true)) {
         LW_LOGW("LittleFS mount failed - plugin loading skipped");
         snprintf(m_stats.lastErrorSummary, sizeof(m_stats.lastErrorSummary),
                  "LittleFS mount failed");
@@ -191,8 +191,8 @@ bool PluginManagerActor::reloadFromLittleFS() {
 #ifndef NATIVE_BUILD
     LW_LOGI("Reloading plugins from LittleFS (atomic)...");
 
-    // Mount LittleFS
-    if (!LittleFS.begin(false)) {
+    // Mount LittleFS (formatOnFail=true: auto-format if partition is blank/corrupted)
+    if (!LittleFS.begin(true)) {
         LW_LOGW("LittleFS mount failed during reload");
         snprintf(m_stats.lastErrorSummary, sizeof(m_stats.lastErrorSummary),
                  "LittleFS mount failed");

@@ -31,6 +31,9 @@ enum WebSocketMessageType: String {
     case audioSubscribed = "audio.subscribed"
     case audioUnsubscribed = "audio.unsubscribed"
     case ledStreamSubscribed = "ledStream.subscribed"
+    case edgeMixerGet = "edge_mixer.get"
+    case edgeMixerSet = "edge_mixer.set"
+    case edgeMixerSave = "edge_mixer.save"
     case unknown
 }
 
@@ -48,6 +51,7 @@ actor WebSocketService {
         case parameterUpdate(WebSocketPayload)
         case ledData(Data)
         case audioMetrics(AudioMetricsFrame)
+        case edgeMixerUpdate(WebSocketPayload)
         case connected
         case disconnected(Error?)
     }
@@ -278,6 +282,14 @@ actor WebSocketService {
 
         case .parametersChanged:
             eventContinuation?.yield(.parameterUpdate(payload))
+
+        case .edgeMixerGet, .edgeMixerSet:
+            eventContinuation?.yield(.edgeMixerUpdate(payload))
+
+        case .edgeMixerSave:
+            #if DEBUG
+            print("[WS] EdgeMixer save ack")
+            #endif
 
         case .deviceStatus, .effectsChanged, .effectsList, .palettesList, .colourCorrectionConfig:
             // These are handled via REST API, not event stream

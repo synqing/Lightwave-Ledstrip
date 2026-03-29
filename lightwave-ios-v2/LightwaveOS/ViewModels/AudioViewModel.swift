@@ -366,21 +366,23 @@ class AudioViewModel {
     // MARK: - Audio Parameters
 
     func setAudioParams() {
-        guard let client = restClient else { return }
+        guard restClient != nil else { return }
 
         // Cancel previous debounce task
         audioParamsDebounceTask?.cancel()
 
         // Debounce the network update (150ms)
-        audioParamsDebounceTask = Task {
+        audioParamsDebounceTask = Task { [weak self] in
             do {
                 try await Task.sleep(nanoseconds: 150_000_000) // 150ms
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled,
+                      let self,
+                      let client = self.restClient else { return }
 
                 try await client.setAudioParameters(
-                    gain: gain,
-                    threshold: threshold,
-                    micType: micType.firmwareValue
+                    gain: self.gain,
+                    threshold: self.threshold,
+                    micType: self.micType.firmwareValue
                 )
 
             } catch is CancellationError {
@@ -422,7 +424,7 @@ class AudioViewModel {
     }
 
     func queueAudioTuningUpdate() {
-        guard let client = restClient else { return }
+        guard restClient != nil else { return }
 
         audioTuningDebounceTask?.cancel()
 
@@ -445,10 +447,12 @@ class AudioViewModel {
             ]
         ]
 
-        audioTuningDebounceTask = Task {
+        audioTuningDebounceTask = Task { [weak self] in
             do {
                 try await Task.sleep(nanoseconds: 150_000_000) // 150ms
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled,
+                      let self,
+                      let client = self.restClient else { return }
 
                 try await client.patchAudioTuning(payload)
 
@@ -473,10 +477,10 @@ class AudioViewModel {
 
         // Reset visual after 150ms
         beatResetTask?.cancel()
-        beatResetTask = Task { @MainActor in
+        beatResetTask = Task { @MainActor [weak self] in
             do {
                 try await Task.sleep(nanoseconds: 150_000_000) // 150ms
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, let self else { return }
 
                 self.isBeating = false
                 if self.hapticsEnabled { hapticMedium.prepare() }
@@ -498,10 +502,10 @@ class AudioViewModel {
 
         // Reset downbeat visual after 200ms
         downbeatResetTask?.cancel()
-        downbeatResetTask = Task { @MainActor in
+        downbeatResetTask = Task { @MainActor [weak self] in
             do {
                 try await Task.sleep(nanoseconds: 200_000_000) // 200ms
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, let self else { return }
 
                 self.isDownbeat = false
 

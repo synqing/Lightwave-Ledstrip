@@ -53,6 +53,7 @@ class AppViewModel {
     var audio: AudioViewModel
     var transition: TransitionViewModel
     var colourCorrection: ColourCorrectionViewModel
+    var edgeMixer: EdgeMixerViewModel
     var deviceStatus: DeviceStatusResponse.DeviceStatus?
     var deviceInfo: DeviceInfoResponse.DeviceInfo?
     var wsConnected: Bool = false
@@ -93,6 +94,7 @@ class AppViewModel {
         self.audio = AudioViewModel()
         self.transition = TransitionViewModel()
         self.colourCorrection = ColourCorrectionViewModel()
+        self.edgeMixer = EdgeMixerViewModel()
         self.ws = WebSocketService()
         self.udpReceiver = UDPStreamReceiver()
         self.discovery = DeviceDiscoveryService()
@@ -182,6 +184,7 @@ class AppViewModel {
             audio.restClient = client
             transition.restClient = client
             colourCorrection.restClient = client
+            edgeMixer.ws = ws
 
             // Load initial state
             log("Loading effects list...", category: "INIT")
@@ -201,6 +204,9 @@ class AppViewModel {
 
             log("Loading audio tuning...", category: "INIT")
             await audio.loadAudioTuning()
+
+            log("Loading edge mixer config...", category: "INIT")
+            edgeMixer.loadConfig()
 
             startDeviceStatusPolling()
 
@@ -235,6 +241,7 @@ class AppViewModel {
         effects.currentEffectName = ""
         palettes.currentPaletteId = 0
         audio.reset()
+        edgeMixer.reset()
         ledData = Array(repeating: 0, count: 960)
         isLEDStreamActive = false
     }
@@ -331,7 +338,13 @@ class AppViewModel {
                         self.audio.updateFromStatus(bpm: bpm, confidence: confidence)
                     }
 
+                    // Update EdgeMixer from status broadcast
+                    self.edgeMixer.updateFromStatus(payload.data)
+
                     self.log("Status update received", category: "WS")
+
+                case .edgeMixerUpdate(let payload):
+                    self.edgeMixer.handleResponse(payload.data)
 
                 case .beat(let payload):
                     self.audio.handleBeatEvent(payload.data)

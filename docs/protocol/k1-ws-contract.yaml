@@ -72,9 +72,9 @@ commands:
 
   setSpeed:
     direction: "client -> K1"
-    description: "Set global speed (legacy, range 1-50)"
+    description: "Set global speed (legacy, range 1-100)"
     request:
-      value: { type: uint8, required: true, min: 1, max: 50 }
+      value: { type: uint8, required: true, min: 1, max: 100 }
     response: "none (triggers broadcastStatus)"
     consumers: [tab5]
 
@@ -240,7 +240,7 @@ commands:
     description: "Set one or more global parameters (partial update)"
     request:
       brightness: { type: uint8, optional: true }
-      speed: { type: uint8, optional: true, range: "1-50" }
+      speed: { type: uint8, optional: true, range: "1-100" }
       paletteId: { type: uint8, optional: true }
       intensity: { type: uint8, optional: true }
       saturation: { type: uint8, optional: true }

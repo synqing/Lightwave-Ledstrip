@@ -24,6 +24,9 @@ struct PlayTab: View {
                 // Primary controls (brightness + speed)
                 PrimaryControlsCard()
 
+                // EdgeMixer post-processor (colour transform for Strip 2)
+                EdgeMixerCard()
+
                 // Expression parameters (collapsible, 7 params)
                 ExpressionParametersCard()
 

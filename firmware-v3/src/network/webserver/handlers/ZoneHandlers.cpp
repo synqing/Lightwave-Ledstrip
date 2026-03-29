@@ -296,7 +296,7 @@ void ZoneHandlers::handleSetSpeed(AsyncWebServerRequest* request, uint8_t* data,
     JsonDocument doc;
     VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::ZoneSpeed, request);
 
-    // Schema validates speed is 1-50
+    // Schema validates speed is 1-100
     uint8_t speed = doc["speed"];
     composer->setZoneSpeed(zoneId, speed);
 

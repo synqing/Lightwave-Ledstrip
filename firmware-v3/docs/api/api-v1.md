@@ -174,9 +174,9 @@ Get device runtime status.
     "cpuFreq": 240,
     "network": {
       "connected": true,
-      "apMode": false,
-      "ip": "192.168.1.100",
-      "rssi": -45
+      "apMode": true,
+      "ip": "192.168.4.1",
+      "rssi": 0
     },
     "wsClients": 2
   }
@@ -185,7 +185,7 @@ Get device runtime status.
 
 **cURL Example:**
 ```bash
-curl http://lightwaveos.local/api/v1/device/status
+curl http://192.168.4.1/api/v1/device/status
 ```
 
 ---
@@ -226,8 +226,10 @@ List all available effects with optional pagination and metadata.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `start` | int | 0 | Starting effect ID |
-| `count` | int | 20 | Number of effects to return |
+| `page` | int | 1 | Page number (1-based) |
+| `limit` | int | 20 | Effects per page (max 150) |
+| `offset` | int | - | Alternative to `page`: skip this many effects (converted to page internally) |
+| `category` | int | - | Filter by category ID |
 | `details` | bool | false | Include full metadata (description, feature flags) |
 
 **Response:**
@@ -236,8 +238,9 @@ List all available effects with optional pagination and metadata.
   "success": true,
   "data": {
     "total": 47,
-    "start": 0,
-    "count": 5,
+    "page": 1,
+    "limit": 20,
+    "pages": 3,
     "effects": [
       {
         "id": 0,
@@ -245,7 +248,7 @@ List all available effects with optional pagination and metadata.
         "category": "Classic",
         "categoryId": 0,
         "centerOrigin": true,
-        "description": "Realistic fire simulation radiating from center",
+        "description": "Realistic fire simulation radiating from centre",
         "usesSpeed": true,
         "usesPalette": true,
         "zoneAware": true,
@@ -265,10 +268,10 @@ List all available effects with optional pagination and metadata.
 **cURL Examples:**
 ```bash
 # Get first 20 effects (basic info)
-curl http://lightwaveos.local/api/v1/effects
+curl http://192.168.4.1/api/v1/effects
 
-# Get effects 10-15 with full details
-curl "http://lightwaveos.local/api/v1/effects?start=10&count=5&details=true"
+# Get page 2 with 5 per page, full details
+curl "http://192.168.4.1/api/v1/effects?page=2&limit=5&details=true"
 ```
 
 ---
@@ -384,10 +387,13 @@ Get all current parameter values.
     "brightness": 200,
     "speed": 20,
     "paletteId": 5,
+    "hue": 0,
     "intensity": 128,
     "saturation": 255,
     "complexity": 64,
-    "variation": 32
+    "variation": 32,
+    "mood": 160,
+    "fadeAmount": 128
   }
 }
 ```
@@ -417,12 +423,15 @@ Set one or more parameters. Only include fields you want to update.
 | Parameter | Type | Range | Description |
 |-----------|------|-------|-------------|
 | `brightness` | uint8 | 0-255 | Global brightness |
-| `speed` | uint8 | 1-50 | Animation speed |
-| `paletteId` | uint8 | 0-N | Color palette (see `/api/palettes`) |
+| `speed` | uint8 | 1-100 | Animation speed |
+| `paletteId` | uint8 | 0-N | Colour palette (see `/api/v1/palettes`) |
+| `hue` | uint8 | 0-255 | Hue offset |
 | `intensity` | uint8 | 0-255 | Effect intensity |
-| `saturation` | uint8 | 0-255 | Color saturation |
+| `saturation` | uint8 | 0-255 | Colour saturation |
 | `complexity` | uint8 | 0-255 | Pattern complexity |
 | `variation` | uint8 | 0-255 | Effect variation |
+| `mood` | uint8 | 0-255 | Mood (0=reactive, 255=smooth). REST only. |
+| `fadeAmount` | uint8 | 0-255 | Fade amount. REST only. |
 
 **Response:**
 ```json
@@ -576,7 +585,7 @@ Manually trigger a transition to a new effect.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `toEffect` | uint8 | Yes | Target effect ID (0-46) |
+| `toEffect` | uint16 | Yes | Target effect ID |
 | `type` | uint8 | No | Transition type (0-11), default 0 |
 | `duration` | uint32 | No | Duration in ms, default 1000 |
 
@@ -1626,7 +1635,7 @@ curl http://lightwaveos.local/api/v1/audio/fft
 
 ### Presets Endpoints
 
-Zone-layout presets let you save and restore complete multi-zone configurations (effect assignments, per-zone parameters, blend modes, and zone layout). All preset handlers are currently implemented as stubs and return `NOT_IMPLEMENTED`; the routes are reserved for a forthcoming release.
+Zone-layout presets let you save and restore complete multi-zone configurations (effect assignments, per-zone parameters, blend modes, and zone layout).
 
 #### `GET /api/v1/presets`
 
@@ -1809,7 +1818,7 @@ curl http://lightwaveos.local/api/v1/debug/udp
 
 ### Edge Mixer
 
-Composable 3-stage post-processor for Light Guide Plate colour differentiation. Applies hue/saturation transforms to Strip 2 via three independent stages: Colour (5 transform modes), Spatial (positional mask), and Temporal (audio-reactive modulation).
+Composable 3-stage post-processor for Light Guide Plate colour differentiation. Applies hue/saturation transforms to Strip 2 via three independent stages: Colour (7 transform modes), Spatial (positional mask), and Temporal (audio-reactive modulation).
 
 Effective pixel strength = `scale8(scale8(globalStrength, temporalAmount), spatialAmount)`.
 
@@ -1817,11 +1826,12 @@ Effective pixel strength = `scale8(scale8(globalStrength, temporalAmount), spati
 
 | Field | Type | Range | Description |
 |-------|------|-------|-------------|
-| `mode` | uint8 | 0-4 | Colour transform: 0=mirror, 1=analogous, 2=complementary, 3=split_complementary, 4=saturation_veil |
-| `spread` | uint8 | 0-60 | Hue spread in degrees (affects modes 1, 4) |
+| `mode` | uint8 | 0-6 | Colour transform: 0=mirror, 1=analogous, 2=complementary, 3=split_complementary, 4=saturation_veil, 5=triadic, 6=tetradic |
+| `spread` | uint8 | 0-60 | Hue spread in degrees (affects modes 1, 4, 5, 6) |
 | `strength` | uint8 | 0-255 | Global mix strength: 0=no effect, 255=full shift |
 | `spatial` | uint8 | 0-1 | Spatial mask: 0=uniform, 1=centre_gradient (0 at LED 79, 255 at edges) |
 | `temporal` | uint8 | 0-1 | Temporal modulation: 0=static, 1=rms_gate (strength tracks audio RMS) |
+| `save` | bool | - | Optional. If `true`, persist current settings to NVS after applying changes (REST only) |
 
 **Mode details:**
 
@@ -1832,6 +1842,8 @@ Effective pixel strength = `scale8(scale8(globalStrength, temporalAmount), spati
 | 2 | complementary | +180° hue shift with ~15% desaturation |
 | 3 | split_complementary | +150° hue shift with ~10% desaturation |
 | 4 | saturation_veil | Desaturate by spread amount (spread 0 = no change, spread 60 = near-greyscale) |
+| 5 | triadic | +120° hue shift (colour triad) |
+| 6 | tetradic | +90° hue shift (colour tetrad) |
 
 #### REST: `GET /api/v1/edgeMixer`
 
@@ -1903,7 +1915,7 @@ The periodic WebSocket status broadcast includes:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `edgeMixerMode` | uint8 | Current mode (0-4) |
+| `edgeMixerMode` | uint8 | Current mode (0-6) |
 | `edgeMixerModeName` | string | Human-readable mode name |
 | `edgeMixerSpread` | uint8 | Current spread (0-60) |
 | `edgeMixerStrength` | uint8 | Current strength (0-255) |

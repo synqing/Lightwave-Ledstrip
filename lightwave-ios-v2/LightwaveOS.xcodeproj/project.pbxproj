@@ -59,10 +59,12 @@
 		800432784DA7C15F40CA4A21 /* DeviceDiscoveryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A06B1F5D1B76135389E8A37 /* DeviceDiscoveryService.swift */; };
 		8F8A144428E389596FDF1A0E /* BooleanIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21FB60C98C375E8F04A95D75 /* BooleanIndicator.swift */; };
 		91C002843B54FEC54EA87C4C /* APIResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = E448948AAFAA0CD844A14110 /* APIResponse.swift */; };
+		962523CADA512C209A83944B /* EdgeMixerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74EE53B09DA8CC1900CA0503 /* EdgeMixerViewModel.swift */; };
 		964260B8CD010BFD9E4B6328 /* AudioViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6653D1E80D92C64FAC24AD3 /* AudioViewModel.swift */; };
 		96C9D4D2DCE98659FD34D56F /* PaletteSelectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E24D590F91011F14E7284A3 /* PaletteSelectorView.swift */; };
 		97F87D839542891BE69184EC /* BeatHapticsCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A1727B0FD097BC45F09E2AE /* BeatHapticsCard.swift */; };
 		98512C417EA442B34802EB83 /* PlayTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 456CA5276801070F23B37070 /* PlayTab.swift */; };
+		996F8B4A556DD26E46FEA6E1 /* EdgeMixerCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A4F926F474F08DCBBB7D500 /* EdgeMixerCard.swift */; };
 		9E2095C181E3E4C63D8EE18F /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87205249A100EE9FB99CC9D8 /* DesignTokens.swift */; };
 		A45A187071BDDB0F4F7136DF /* RiveRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 014757B5CB91C8603A1DF679 /* RiveRuntime.swift */; };
 		A6D3AE786BE1C665F29E1387 /* EnergyCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1A074509DE203CBD3BD0AB /* EnergyCard.swift */; };
@@ -103,6 +105,7 @@
 		F0E737F62762F2F3CBD94E41 /* DebugLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3312C970BE3E5BC4D373D9AA /* DebugLogView.swift */; };
 		F201C9ADFB5282D9B2FDC3BD /* Palettes_Master.json in Resources */ = {isa = PBXBuildFile; fileRef = 6A5074FF917C2B57C4CE67E0 /* Palettes_Master.json */; };
 		F2115B1183C10DA720A36477 /* ZoneCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = E806390A509CCD91CCE62C34 /* ZoneCard.swift */; };
+		F41BB791EA6936F3AC3FA695 /* EdgeMixerConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67DF593AAC8E4A84C773C01E /* EdgeMixerConfig.swift */; };
 		F9B02ED4E22BECB3EFD01829 /* RESTClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DABC7E4FD7AB390A7413924 /* RESTClient.swift */; };
 		F9F00E9852A03ABB2DC113AD /* SpectrumVisualisationCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70BC4E2523308275C0B38ECC /* SpectrumVisualisationCard.swift */; };
 		F9F86388A7F4ACC8530A4B99 /* PresetsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F546C8A2C99339CAF146E5B8 /* PresetsView.swift */; };
@@ -165,12 +168,14 @@
 		4EE7EA23FBC59A906EFEB025 /* ColourCorrectionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColourCorrectionCard.swift; sourceTree = "<group>"; };
 		52D73EF3D7C1E288AC6782DF /* RESTClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RESTClientTests.swift; sourceTree = "<group>"; };
 		58FF25A0E1C1057E09C88FD6 /* AudioMetricsFrame.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMetricsFrame.swift; sourceTree = "<group>"; };
+		5A4F926F474F08DCBBB7D500 /* EdgeMixerCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EdgeMixerCard.swift; sourceTree = "<group>"; };
 		5A666FDABA22F3869FE52E0A /* UDPStreamReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UDPStreamReceiver.swift; sourceTree = "<group>"; };
 		5E90C94F5CB5CFECA0207056 /* DotRidgeCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DotRidgeCanvas.swift; sourceTree = "<group>"; };
 		5EB40BA8FF3F11929580852A /* LightwaveOSTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = LightwaveOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5EE339DCEDEE943BE3437346 /* ControlBusSmoothingCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlBusSmoothingCard.swift; sourceTree = "<group>"; };
 		5FE0B2000D2C4873FDC10DF5 /* SystemState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemState.swift; sourceTree = "<group>"; };
 		61D83CFB65D318279505DBE1 /* LWSlider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LWSlider.swift; sourceTree = "<group>"; };
+		67DF593AAC8E4A84C773C01E /* EdgeMixerConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EdgeMixerConfig.swift; sourceTree = "<group>"; };
 		6835286C5F9C9CFBB0342C18 /* StateCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StateCard.swift; sourceTree = "<group>"; };
 		6A5074FF917C2B57C4CE67E0 /* Palettes_Master.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Palettes_Master.json; sourceTree = "<group>"; };
 		6B7CC4054A122FC375E195C9 /* BandEnvelopeCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BandEnvelopeCard.swift; sourceTree = "<group>"; };
@@ -181,6 +186,7 @@
 		6FF496F8DA6AC2228F21B80C /* CatmullRom.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatmullRom.swift; sourceTree = "<group>"; };
 		70567498B0EBA5C80F60D128 /* AudioTuningParameters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioTuningParameters.swift; sourceTree = "<group>"; };
 		70BC4E2523308275C0B38ECC /* SpectrumVisualisationCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpectrumVisualisationCard.swift; sourceTree = "<group>"; };
+		74EE53B09DA8CC1900CA0503 /* EdgeMixerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EdgeMixerViewModel.swift; sourceTree = "<group>"; };
 		7A1A074509DE203CBD3BD0AB /* EnergyCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnergyCard.swift; sourceTree = "<group>"; };
 		7DABC7E4FD7AB390A7413924 /* RESTClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RESTClient.swift; sourceTree = "<group>"; };
 		7E185DC09E48C5BAB0DA19E5 /* LEDStripView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LEDStripView.swift; sourceTree = "<group>"; };
@@ -432,6 +438,7 @@
 				F30172340FDF0956E377E609 /* AppViewModel.swift */,
 				D6653D1E80D92C64FAC24AD3 /* AudioViewModel.swift */,
 				F510F083B57F41382CDE442A /* ColourCorrectionViewModel.swift */,
+				74EE53B09DA8CC1900CA0503 /* EdgeMixerViewModel.swift */,
 				25808F2C76C005D96028C674 /* EffectViewModel.swift */,
 				224698FD7FB174C316FBE60D /* PaletteViewModel.swift */,
 				4C2DEC421D3DDA638E3C0A64 /* ParametersViewModel.swift */,
@@ -483,6 +490,7 @@
 			isa = PBXGroup;
 			children = (
 				4EE7EA23FBC59A906EFEB025 /* ColourCorrectionCard.swift */,
+				5A4F926F474F08DCBBB7D500 /* EdgeMixerCard.swift */,
 				7EFBB5EBE67DC3FDB66CE5BF /* EffectPill.swift */,
 				DF78CFCA2FCF79A5CDB755D9 /* ExpressionParametersCard.swift */,
 				E4CB0B4835A9BACD84EF9FB5 /* HeroLEDPreview.swift */,
@@ -512,6 +520,7 @@
 				8CE2A301EC4BB1F6157369C3 /* BeatEvent.swift */,
 				9C193AB587158FAE17B70076 /* ColourCorrectionConfig.swift */,
 				24F263BD5B2BE3B042FD6500 /* DeviceInfo.swift */,
+				67DF593AAC8E4A84C773C01E /* EdgeMixerConfig.swift */,
 				455F2E537DDB7B2763EC9AD0 /* EffectMetadata.swift */,
 				9E098D8F3CD5BB4C24E6F3BE /* PaletteMetadata.swift */,
 				5FE0B2000D2C4873FDC10DF5 /* SystemState.swift */,
@@ -715,6 +724,9 @@
 				17EFD59BD34954993885E7CB /* DeviceTab.swift in Sources */,
 				A9750C3CA3D06B429608AF83 /* DotMatrixCanvas.swift in Sources */,
 				139C02DFEF7D538F1AAD62DA /* DotRidgeCanvas.swift in Sources */,
+				996F8B4A556DD26E46FEA6E1 /* EdgeMixerCard.swift in Sources */,
+				F41BB791EA6936F3AC3FA695 /* EdgeMixerConfig.swift in Sources */,
+				962523CADA512C209A83944B /* EdgeMixerViewModel.swift in Sources */,
 				DD9590BF303220F7E3701DD7 /* EffectMetadata.swift in Sources */,
 				7251C2FE4CDF352B477B1E99 /* EffectPill.swift in Sources */,
 				5570105A1AFE44E78C87C12F /* EffectSelectorView.swift in Sources */,

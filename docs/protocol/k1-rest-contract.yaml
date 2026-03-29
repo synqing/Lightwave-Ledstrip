@@ -125,14 +125,16 @@ endpoints:
     method: [POST, PATCH]
     description: "Set global parameters (partial update)"
     body:
-      brightness: { type: uint8, optional: true }
-      speed: { type: uint8, optional: true }
+      brightness: { type: uint8, optional: true, range: "0-255" }
+      speed: { type: uint8, optional: true, range: "1-100" }
       paletteId: { type: uint8, optional: true }
-      intensity: { type: uint8, optional: true }
-      saturation: { type: uint8, optional: true }
-      complexity: { type: uint8, optional: true }
-      variation: { type: uint8, optional: true }
-      hue: { type: uint8, optional: true }
+      hue: { type: uint8, optional: true, range: "0-255" }
+      intensity: { type: uint8, optional: true, range: "0-255" }
+      saturation: { type: uint8, optional: true, range: "0-255" }
+      complexity: { type: uint8, optional: true, range: "0-255" }
+      variation: { type: uint8, optional: true, range: "0-255" }
+      mood: { type: uint8, optional: true, range: "0-255", description: "REST only" }
+      fadeAmount: { type: uint8, optional: true, description: "REST only" }
     consumers: [ios]
 
   # ── Factory Presets ────────────────────────────────────────────────────
@@ -652,11 +654,18 @@ endpoints:
   # ── EdgeMixer ──────────────────────────────────────────────────────────
   /api/v1/edgeMixer:
     method: GET
-    description: "Get EdgeMixer state"
+    description: "Get EdgeMixer state (mode, spread, strength, spatial, temporal with human-readable names)"
 
   /api/v1/edgeMixer:
     method: POST
-    description: "Set EdgeMixer properties"
+    description: "Set EdgeMixer properties. All fields optional."
+    params:
+      mode: { type: uint8, range: "0-6", description: "0=mirror, 1=analogous, 2=complementary, 3=split_complementary, 4=saturation_veil, 5=triadic, 6=tetradic" }
+      spread: { type: uint8, range: "0-60", description: "Hue spread in degrees" }
+      strength: { type: uint8, range: "0-255", description: "Global mix strength" }
+      spatial: { type: uint8, range: "0-1", description: "0=uniform, 1=centre_gradient" }
+      temporal: { type: uint8, range: "0-1", description: "0=static, 1=rms_gate" }
+      save: { type: bool, optional: true, description: "If true, persist to NVS after applying" }
 
   # ── Auth ───────────────────────────────────────────────────────────────
   /api/v1/auth/status:

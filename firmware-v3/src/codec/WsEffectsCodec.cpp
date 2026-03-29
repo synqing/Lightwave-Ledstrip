@@ -127,14 +127,14 @@ EffectsSetSpeedDecodeResult WsEffectsCodec::decodeSetSpeed(JsonObjectConst root)
     EffectsSetSpeedDecodeResult result;
     result.request = EffectsSetSpeedRequest();
 
-    // Extract value (required, 1-50)
+    // Extract value (required, 1-100)
     if (!root["value"].is<int>()) {
         snprintf(result.errorMsg, MAX_ERROR_MSG, "Missing required field 'value'");
         return result;
     }
     int value = root["value"].as<int>();
-    if (value < 1 || value > 50) {
-        snprintf(result.errorMsg, MAX_ERROR_MSG, "value out of range (1-50): %d", value);
+    if (value < 1 || value > 100) {
+        snprintf(result.errorMsg, MAX_ERROR_MSG, "value out of range (1-100): %d", value);
         return result;
     }
     result.request.value = static_cast<uint8_t>(value);
@@ -324,8 +324,8 @@ ParametersSetDecodeResult WsEffectsCodec::decodeParametersSet(JsonObjectConst ro
 
     if (root.containsKey("speed") && root["speed"].is<int>()) {
         int value = root["speed"].as<int>();
-        if (value < 1 || value > 50) {
-            snprintf(result.errorMsg, MAX_ERROR_MSG, "speed out of range (1-50): %d", value);
+        if (value < 1 || value > 100) {
+            snprintf(result.errorMsg, MAX_ERROR_MSG, "speed out of range (1-100): %d", value);
             return result;
         }
         result.request.speed = static_cast<uint8_t>(value);

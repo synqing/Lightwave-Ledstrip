@@ -156,30 +156,30 @@ class ZoneViewModel {
         speedDebounceTasks[zoneId]?.cancel()
 
         // Debounce the network update (150ms)
-        speedDebounceTasks[zoneId] = Task {
+        speedDebounceTasks[zoneId] = Task { [weak self] in
             do {
                 try await Task.sleep(nanoseconds: 150_000_000)
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, let self else { return }
 
-                if let ws = ws {
+                if let ws = self.ws {
                     await ws.send("zones.update", params: [
                         "zoneId": zoneId,
                         "speed": speed
                     ])
                 }
-                if let client = restClient {
+                if let client = self.restClient {
                     try await client.setZoneSpeed(zoneId: zoneId, speed: speed)
                 }
                 print("Updated zone \(zoneId) speed to \(speed)")
 
                 // Clear pending flag after 1 second
-                clearSpeedPendingTasks[zoneId]?.cancel()
-                clearSpeedPendingTasks[zoneId] = Task {
+                self.clearSpeedPendingTasks[zoneId]?.cancel()
+                self.clearSpeedPendingTasks[zoneId] = Task { [weak self] in
                     try? await Task.sleep(nanoseconds: 1_000_000_000)
-                    guard !Task.isCancelled else { return }
-                    pendingZoneSpeeds.remove(zoneId)
-                    clearSpeedPendingTasks.removeValue(forKey: zoneId)
-                    speedDebounceTasks.removeValue(forKey: zoneId)
+                    guard !Task.isCancelled, let self else { return }
+                    self.pendingZoneSpeeds.remove(zoneId)
+                    self.clearSpeedPendingTasks.removeValue(forKey: zoneId)
+                    self.speedDebounceTasks.removeValue(forKey: zoneId)
                 }
 
             } catch is CancellationError {
@@ -205,30 +205,30 @@ class ZoneViewModel {
         brightnessDebounceTasks[zoneId]?.cancel()
 
         // Debounce the network update (150ms)
-        brightnessDebounceTasks[zoneId] = Task {
+        brightnessDebounceTasks[zoneId] = Task { [weak self] in
             do {
                 try await Task.sleep(nanoseconds: 150_000_000)
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, let self else { return }
 
-                if let ws = ws {
+                if let ws = self.ws {
                     await ws.send("zones.update", params: [
                         "zoneId": zoneId,
                         "brightness": brightness
                     ])
                 }
-                if let client = restClient {
+                if let client = self.restClient {
                     try await client.setZoneBrightness(zoneId: zoneId, brightness: brightness)
                 }
                 print("Updated zone \(zoneId) brightness to \(brightness)")
 
                 // Clear pending flag after 1 second
-                clearBrightnessPendingTasks[zoneId]?.cancel()
-                clearBrightnessPendingTasks[zoneId] = Task {
+                self.clearBrightnessPendingTasks[zoneId]?.cancel()
+                self.clearBrightnessPendingTasks[zoneId] = Task { [weak self] in
                     try? await Task.sleep(nanoseconds: 1_000_000_000)
-                    guard !Task.isCancelled else { return }
-                    pendingZoneBrightness.remove(zoneId)
-                    clearBrightnessPendingTasks.removeValue(forKey: zoneId)
-                    brightnessDebounceTasks.removeValue(forKey: zoneId)
+                    guard !Task.isCancelled, let self else { return }
+                    self.pendingZoneBrightness.remove(zoneId)
+                    self.clearBrightnessPendingTasks.removeValue(forKey: zoneId)
+                    self.brightnessDebounceTasks.removeValue(forKey: zoneId)
                 }
 
             } catch is CancellationError {
@@ -354,8 +354,9 @@ class ZoneViewModel {
         segments = segmentsFromBoundaries()
 
         // Send to firmware immediately (no debounce for tap reset)
-        Task {
-            let layoutZones: [[String: Int]] = segments.map { seg in
+        Task { [weak self] in
+            guard let self else { return }
+            let layoutZones: [[String: Int]] = self.segments.map { seg in
                 [
                     "zoneId": seg.zoneId,
                     "s1LeftStart": seg.s1LeftStart,
@@ -364,7 +365,7 @@ class ZoneViewModel {
                     "s1RightEnd": seg.s1RightEnd
                 ]
             }
-            try? await restClient?.setZoneLayout(zones: layoutZones)
+            try? await self.restClient?.setZoneLayout(zones: layoutZones)
         }
     }
 

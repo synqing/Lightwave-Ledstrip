@@ -1220,11 +1220,11 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
                 int parsedSpeed = rest.toInt();
 
                 if (parsedZone >= 0 && parsedZone < zoneComposer.getZoneCount() &&
-                    parsedSpeed >= 1 && parsedSpeed <= 50) {
+                    parsedSpeed >= 1 && parsedSpeed <= 100) {
                     zoneComposer.setZoneSpeed(parsedZone, parsedSpeed);
                     Serial.printf("Zone %d speed set to %d\n", parsedZone, parsedSpeed);
                 } else {
-                    Serial.println("ERROR: Usage: zs <zoneId> <speed> (zoneId: 0-2, speed: 1-50)");
+                    Serial.println("ERROR: Usage: zs <zoneId> <speed> (zoneId: 0-2, speed: 1-100)");
                 }
             } else {
                 // Try parsing as "zs <speed0> <speed1> <speed2>"
@@ -1243,9 +1243,9 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
                         int speed1 = s1.toInt();
                         int speed2 = s2.toInt();
 
-                        if (speed0 >= 1 && speed0 <= 50 &&
-                            speed1 >= 1 && speed1 <= 50 &&
-                            speed2 >= 1 && speed2 <= 50 &&
+                        if (speed0 >= 1 && speed0 <= 100 &&
+                            speed1 >= 1 && speed1 <= 100 &&
+                            speed2 >= 1 && speed2 <= 100 &&
                             zoneComposer.getZoneCount() >= 3) {
                             zoneComposer.setZoneSpeed(0, speed0);
                             zoneComposer.setZoneSpeed(1, speed1);
@@ -1253,7 +1253,7 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
                             Serial.printf("Zone speeds set: Zone 0=%d, Zone 1=%d, Zone 2=%d\n",
                                         speed0, speed1, speed2);
                         } else {
-                            Serial.println("ERROR: Usage: zs <speed0> <speed1> <speed2> (speeds: 1-50)");
+                            Serial.println("ERROR: Usage: zs <speed0> <speed1> <speed2> (speeds: 1-100)");
                         }
                     } else {
                         Serial.println("ERROR: Usage: zs <zoneId> <speed> OR zs <speed0> <speed1> <speed2>");

@@ -7,7 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - ESP32-P4 Audio Pipeline & iOS App
 
+### Fixed
+- **firmware:** REST EdgeMixer mode validation rejected Triadic (5) and Tetradic (6) — `V1ApiRoutes.cpp` validated `mode > 4` instead of `mode > 6`
+- **firmware:** WS speed validation capped at 50 instead of 100 — `WsEffectsCodec.cpp` `decodeSetSpeed` and `parameters.set` used stale range (1-50) while REST and RendererActor use extended range (1-100)
+- **firmware:** `ZoneConfigManager.h` `MAX_SPEED` was 50, misaligned with `RendererActor.h` and `ZonePresetManager.h` (both 100)
+- **firmware:** SerialCLI `zs` command validated speed 1-50 instead of 1-100
+- **docs:** `api-v1.md` EdgeMixer section documented 5 modes (0-4); now documents all 7 modes (0-6) including Triadic and Tetradic
+- **docs:** `api-v1.md` effects pagination documented `start`/`count` params; actual implementation uses `page`/`limit`/`offset`
+- **docs:** `api-v1.md` transition `toEffect` documented as uint8 (0-46); corrected to uint16
+- **docs:** `api-v1.md` parameters section missing `hue`, `mood`, `fadeAmount` fields; added with correct ranges
+- **docs:** `api-v1.md` device status example showed STA mode (`apMode: false`, `192.168.1.100`); corrected to AP-only reality
+- **docs:** `api-v1.md` presets section falsely claimed handlers are stubs returning NOT_IMPLEMENTED; disclaimer removed
+- **docs:** `api-v1.md` speed range documented as 1-50; corrected to 1-100
+- **docs:** `k1-ws-contract.yaml` speed ranges updated from 1-50 to 1-100 for `setSpeed` and `parameters.set`
+- **docs:** `k1-rest-contract.yaml` EdgeMixer section expanded with parameter ranges and all 7 mode descriptions
+
 ### Added
+- **ios:** EdgeMixer card on Play tab — 7 colour harmony modes, spread/strength sliders, spatial mask and temporal modulation pickers
+- **ios:** EdgeMixer WebSocket integration — `edge_mixer.get/set/save` commands with 150ms debounce and echo prevention
+- **ios:** EdgeMixer status broadcast sync — passive multi-client state updates from periodic device status
 - **firmware:** FFT onset detector — 1024-point spectral flux (Bello/Dixon/Boeck), activity-gated, ~400us/hop, zero heap [quarantined]
 - **firmware:** Band-energy ratio detector — variance-adaptive percussion triggers on grouped bands (Patin/WLED) [WIP]
 - **firmware:** First-class onset API surface — OnsetContext with 6 semantic channels (beat, downbeat, transient, kick, snare, hihat) [WIP]

@@ -22,7 +22,7 @@ using namespace lightwaveos::enhancement;
 /**
  * @brief Handle edge_mixer.set command
  *
- * Accepts any combination of: mode (0-4), spread (0-60), strength (0-255),
+ * Accepts any combination of: mode (0-6), spread (0-60), strength (0-255),
  * spatial (0-1), temporal (0-1).
  * Only provided fields are applied; omitted fields remain unchanged.
  */

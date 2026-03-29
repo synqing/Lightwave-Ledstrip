@@ -1842,8 +1842,8 @@ void V1ApiRoutes::registerRoutes(
 
             if (doc.containsKey("mode")) {
                 mode = doc["mode"] | 0;
-                if (mode > 4) {
-                    sendErrorResponse(request, 400, ErrorCodes::OUT_OF_RANGE, "mode must be 0-4", "mode");
+                if (mode > 6) {
+                    sendErrorResponse(request, 400, ErrorCodes::OUT_OF_RANGE, "mode must be 0-6", "mode");
                     return;
                 }
                 hasMode = true;

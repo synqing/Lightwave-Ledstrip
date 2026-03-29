@@ -265,7 +265,7 @@ private:
     // Effect limits - reference centralised limits (upper bound for NVS validation)
     static constexpr EffectId MAX_EFFECT_ID = 0x1FFF;  // Covers all family blocks (0x0100-0x1Axx)
     static constexpr uint8_t MIN_SPEED = 1;
-    static constexpr uint8_t MAX_SPEED = 50;
+    static constexpr uint8_t MAX_SPEED = 100;  // Extended range (aligned with RendererActor)
     static constexpr uint8_t MAX_PALETTE_ID = limits::MAX_PALETTES - 1;
 };
 

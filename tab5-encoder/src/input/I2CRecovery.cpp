@@ -30,6 +30,7 @@ int I2CRecovery::s_sda = -1;
 int I2CRecovery::s_scl = -1;
 uint32_t I2CRecovery::s_freq = 100000;
 bool I2CRecovery::s_initialized = false;
+uint16_t I2CRecovery::s_timeout = 50;
 
 uint8_t I2CRecovery::s_errorCount = 0;
 uint32_t I2CRecovery::s_lastErrorTime = 0;
@@ -46,15 +47,19 @@ bool I2CRecovery::s_recoverySucceeded = false;
 uint16_t I2CRecovery::s_recoveryAttempts = 0;
 uint16_t I2CRecovery::s_recoverySuccesses = 0;
 
+uint8_t I2CRecovery::s_hwAttempts = 0;
+void (*I2CRecovery::s_powerCycleCb)(bool enable) = nullptr;
+
 // ============================================================================
 // Initialization
 // ============================================================================
 
-void I2CRecovery::init(TwoWire* wire, int sda, int scl, uint32_t freq) {
+void I2CRecovery::init(TwoWire* wire, int sda, int scl, uint32_t freq, uint16_t timeout) {
     s_wire = wire;
     s_sda = sda;
     s_scl = scl;
     s_freq = freq;
+    s_timeout = timeout;
     s_initialized = true;
 
     // Reset all state
@@ -65,6 +70,7 @@ void I2CRecovery::init(TwoWire* wire, int sda, int scl, uint32_t freq) {
     s_sclToggleCount = 0;
     s_stopAttempt = 0;
     s_softwareAttempts = 0;
+    s_hwAttempts = 0;
     s_lastRecoveryTime = 0;
     s_recoverySucceeded = false;
     s_recoveryAttempts = 0;
@@ -202,6 +208,89 @@ void I2CRecovery::resetStats() {
     s_recoveryAttempts = 0;
     s_recoverySuccesses = 0;
     s_lastRecoveryTime = 0;
+}
+
+void I2CRecovery::hardwareResetI2C0() {
+    PERIPH_RCC_ATOMIC() {
+        i2c_ll_reset_register(0);
+    }
+    Serial.println("[I2C_RECOVERY] I2C0 hardware peripheral reset (boot)");
+}
+
+void I2CRecovery::setPowerCycleCallback(void (*cb)(bool enable)) {
+    s_powerCycleCb = cb;
+    Serial.printf("[I2C_RECOVERY] Power-cycle callback %s\n",
+                  cb ? "registered" : "cleared");
+}
+
+// ============================================================================
+// Pre-Init Bus Clear (call BEFORE Wire.begin)
+// ============================================================================
+
+bool I2CRecovery::bootBusClear(int sda, int scl) {
+    // Check if bus is already healthy
+    pinMode(sda, INPUT_PULLUP);
+    pinMode(scl, INPUT_PULLUP);
+    delay(1);  // Allow lines to settle with pull-ups
+
+    bool sdaOk = (digitalRead(sda) == HIGH);
+    bool sclOk = (digitalRead(scl) == HIGH);
+
+    if (sdaOk && sclOk) {
+        Serial.println("[I2C_BOOT] Bus healthy — SDA and SCL both HIGH");
+        return true;
+    }
+
+    Serial.printf("[I2C_BOOT] Bus stuck — SDA:%s SCL:%s — attempting recovery\n",
+                  sdaOk ? "HIGH" : "LOW", sclOk ? "HIGH" : "LOW");
+
+    // Use push-pull OUTPUT to actively drive SCL HIGH — open-drain is too weak
+    // when the slave is actively holding lines low. This breaks I2C spec but
+    // during recovery we're not doing I2C, we're forcing the slave to release.
+    pinMode(scl, OUTPUT);
+    digitalWrite(scl, HIGH);
+    delayMicroseconds(10);
+
+    for (uint8_t i = 0; i < 18; i++) {
+        digitalWrite(scl, LOW);
+        delayMicroseconds(5);
+        digitalWrite(scl, HIGH);
+        delayMicroseconds(5);
+
+        // Check if SDA released
+        pinMode(sda, INPUT_PULLUP);
+        delayMicroseconds(5);
+        if (digitalRead(sda) == HIGH) {
+            Serial.printf("[I2C_BOOT] SDA released after %d SCL pulses\n", i + 1);
+            break;
+        }
+    }
+
+    // Generate STOP condition (SDA LOW->HIGH while SCL HIGH) — repeat 3 times
+    // Use push-pull for SCL to guarantee it's HIGH
+    for (uint8_t s = 0; s < 3; s++) {
+        pinMode(sda, OUTPUT);
+        pinMode(scl, OUTPUT);
+        digitalWrite(scl, HIGH);
+        delayMicroseconds(2);
+        digitalWrite(sda, LOW);
+        delayMicroseconds(5);
+        digitalWrite(sda, HIGH);  // SDA LOW->HIGH = STOP
+        delayMicroseconds(5);
+    }
+
+    // Release both lines
+    pinMode(sda, INPUT_PULLUP);
+    pinMode(scl, INPUT_PULLUP);
+    delay(1);
+
+    // Verify
+    sdaOk = (digitalRead(sda) == HIGH);
+    sclOk = (digitalRead(scl) == HIGH);
+    Serial.printf("[I2C_BOOT] After recovery — SDA:%s SCL:%s\n",
+                  sdaOk ? "HIGH" : "LOW", sclOk ? "HIGH" : "LOW");
+
+    return sdaOk && sclOk;
 }
 
 // ============================================================================
@@ -348,18 +437,65 @@ void I2CRecovery::update() {
             break;
 
         case RecoveryStage::HwWaitAfterReset:
-            // Wait for hardware to stabilize after peripheral reset
-            Serial.println("[I2C_RECOVERY] Hardware reset complete, reinitializing Wire");
+            // Check if we should escalate to Level 3 (power-cycle)
+            s_hwAttempts++;
+            if (s_hwAttempts >= HW_ATTEMPTS_BEFORE_POWER_CYCLE && s_powerCycleCb) {
+                Serial.println("[I2C_RECOVERY] Escalating to Level 3: Port.A power cycle");
+                advanceTo(RecoveryStage::PowerCycleOff, STEP_DELAY_SHORT_MS);
+            } else {
+                Serial.println("[I2C_RECOVERY] Hardware reset complete, reinitializing Wire");
+                advanceTo(RecoveryStage::WireBegin, STEP_DELAY_SHORT_MS);
+            }
+            break;
+
+        case RecoveryStage::PowerCycleOff:
+            Serial.println("[I2C_RECOVERY] Level 3: Port.A power OFF");
+            if (s_powerCycleCb) s_powerCycleCb(false);
+            advanceTo(RecoveryStage::PowerCycleWait, 200);  // 200ms discharge
+            break;
+
+        case RecoveryStage::PowerCycleWait:
+            advanceTo(RecoveryStage::PowerCycleOn, 0);
+            break;
+
+        case RecoveryStage::PowerCycleOn:
+            Serial.println("[I2C_RECOVERY] Level 3: Port.A power ON");
+            if (s_powerCycleCb) s_powerCycleCb(true);
+            advanceTo(RecoveryStage::PowerCycleSettle, 150);  // 150ms STM32 boot
+            break;
+
+        case RecoveryStage::PowerCycleSettle:
+            Serial.println("[I2C_RECOVERY] Level 3: Power cycle complete, reinitializing Wire");
             advanceTo(RecoveryStage::WireBegin, STEP_DELAY_SHORT_MS);
             break;
 
         case RecoveryStage::WireBegin:
-            // Reinitialize Wire
+            // Reinitialize Wire — handle zombie state where Wire.end() failed
+            // to fully deinit (initialized flag stuck true after hardware reset).
             if (s_wire) {
-                s_wire->begin(s_sda, s_scl, s_freq);
-                s_wire->setTimeOut(200);  // 200ms timeout
-                Serial.printf("[I2C_RECOVERY] Wire reinitialized at %luHz\n",
-                              (unsigned long)s_freq);
+                // Force Wire.end() again — if previous end() failed silently
+                // after i2c_ll_reset_register(), the bus may still be marked
+                // initialized, causing Wire.begin() to no-op.
+                s_wire->end();
+                delay(10);
+
+                // Now begin fresh
+                bool wireOk = s_wire->begin(s_sda, s_scl, s_freq);
+                s_wire->setTimeOut(s_timeout);
+
+                if (!wireOk) {
+                    // Wire.begin() failed — try hardware reset + begin once more
+                    Serial.println("[I2C_RECOVERY] Wire.begin() failed — forcing hardware reset");
+                    executeHardwareReset(0);
+                    delay(50);
+                    s_wire->end();
+                    delay(10);
+                    wireOk = s_wire->begin(s_sda, s_scl, s_freq);
+                    s_wire->setTimeOut(s_timeout);
+                }
+
+                Serial.printf("[I2C_RECOVERY] Wire reinitialized at %luHz (ok=%d)\n",
+                              (unsigned long)s_freq, wireOk);
             }
             advanceTo(RecoveryStage::WaitAfterInit, STEP_DELAY_LONG_MS);
             break;
@@ -370,14 +506,29 @@ void I2CRecovery::update() {
             break;
 
         case RecoveryStage::Verify:
-            // Verify bus is healthy
+            // Verify bus is healthy by probing a known encoder address.
+            // Do NOT call isBusHealthy() here — it sets pins to INPUT_PULLUP
+            // which steals them from the I2C peripheral that Wire.begin() just
+            // configured, causing "bus is not initialized" on the next transaction.
             {
-                bool healthy = isBusHealthy();
-                if (healthy) {
-                    Serial.println("[I2C_RECOVERY] Bus appears healthy");
-                    completeRecovery(true);
+                if (s_wire) {
+                    s_wire->beginTransmission(0x41);  // Probe factory default addr
+                    uint8_t probeErr = s_wire->endTransmission();
+                    if (probeErr == 0) {
+                        Serial.println("[I2C_RECOVERY] Bus appears healthy (probe ACK)");
+                        completeRecovery(true);
+                    } else {
+                        s_wire->beginTransmission(0x42);  // Try reprogrammed addr
+                        probeErr = s_wire->endTransmission();
+                        if (probeErr == 0) {
+                            Serial.println("[I2C_RECOVERY] Bus appears healthy (probe ACK)");
+                            completeRecovery(true);
+                        } else {
+                            Serial.println("[I2C_RECOVERY] Bus still unhealthy after recovery");
+                            completeRecovery(false);
+                        }
+                    }
                 } else {
-                    Serial.println("[I2C_RECOVERY] Bus still unhealthy after recovery");
                     completeRecovery(false);
                 }
             }
@@ -468,6 +619,7 @@ void I2CRecovery::completeRecovery(bool success) {
         s_recoverySuccesses++;
         s_errorCount = 0;  // Reset error count on success
         s_softwareAttempts = 0;  // Reset escalation counter
+        s_hwAttempts = 0;  // Reset Level 3 escalation counter
         Serial.printf("[I2C_RECOVERY] Recovery SUCCESSFUL (%d/%d total)\n",
                       s_recoverySuccesses, s_recoveryAttempts);
     } else {

@@ -31,6 +31,7 @@
 
 #include <Arduino.h>
 #include <Wire.h>
+#include <esp_task_wdt.h>
 #include "Rotate8Transport.h"
 #include "EncoderProcessing.h"
 #include "../config/Config.h"
@@ -251,6 +252,16 @@ private:
     // Coarse mode manager for ENC-A acceleration (encoders 0-7)
     CoarseModeManager* _coarseModeManager = nullptr;
 
+    // Dead-bus detection: if all reads return zero for consecutive polls,
+    // the I2C bus is likely stuck and we should trigger recovery early
+    // rather than burning 34+ timeouts per loop.
+    uint16_t _consecutiveAllZeroA = 0;
+    uint16_t _consecutiveAllZeroB = 0;
+    // 200 consecutive all-zero polls ≈ 10 seconds at 20Hz.
+    // Normal idle encoders always return zero — only a genuinely dead bus
+    // stays at zero for this long without ANY encoder/button activity.
+    static constexpr uint16_t DEAD_BUS_THRESHOLD = 200;
+
     // ========================================================================
     // Internal Methods
     // ========================================================================
@@ -397,18 +408,37 @@ inline void DualEncoderService::update() {
     // Poll Unit A encoders (indices 0-7)
     if (_transportA.isAvailable()) {
         _switchStateA = _transportA.getInputSwitch();
+        bool anyNonZeroA = false;
         const uint32_t _dbg_t0 = millis();
         for (uint8_t localIdx = 0; localIdx < ENCODERS_PER_UNIT; localIdx++) {
             uint8_t globalIdx = localIdx;  // 0-7
 
             // Read raw encoder delta
             int32_t rawDelta = _transportA.getRelCounter(localIdx);
+            if (rawDelta != 0) anyNonZeroA = true;
             processEncoderDelta(globalIdx, rawDelta, now);
 
             // Check button state
             bool isPressed = _transportA.getKeyPressed(localIdx);
+            if (isPressed) anyNonZeroA = true;
             _buttonStates[globalIdx] = isPressed;
             processButton(globalIdx, isPressed, now);
+
+            // Feed WDT every 4 encoders to prevent timeout cascade
+            // (each encoder = 2-5 I2C txns × up to 10ms timeout = 20-50ms)
+            if ((localIdx & 3) == 3) esp_task_wdt_reset();
+        }
+        // Dead-bus detection: if ALL reads returned zero for a long time,
+        // verify the bus is actually alive with a live ACK probe
+        if (anyNonZeroA) {
+            _consecutiveAllZeroA = 0;
+        } else if (++_consecutiveAllZeroA >= DEAD_BUS_THRESHOLD) {
+            _consecutiveAllZeroA = 0;
+            // Probe the device — isConnected() does a real I2C ACK check
+            // and calls I2CRecovery::recordError() on failure
+            if (!_transportA.isConnected()) {
+                Serial.println("[ENC] Unit A dead-bus confirmed — isConnected() failed");
+            }
         }
         const uint32_t _dbg_dt = millis() - _dbg_t0;
         // #region agent log (DISABLED)
@@ -428,21 +458,39 @@ inline void DualEncoderService::update() {
         // #endregion
     }
 
+    // WDT reset between units — Unit A polling may have taken up to 800ms
+    esp_task_wdt_reset();
+
     // Poll Unit B encoders (indices 8-15)
     if (_transportB.isAvailable()) {
         _switchStateB = _transportB.getInputSwitch();
+        bool anyNonZeroB = false;
         const uint32_t _dbg_t0 = millis();
         for (uint8_t localIdx = 0; localIdx < ENCODERS_PER_UNIT; localIdx++) {
             uint8_t globalIdx = localIdx + ENCODERS_PER_UNIT;  // 8-15
 
             // Read raw encoder delta
             int32_t rawDelta = _transportB.getRelCounter(localIdx);
+            if (rawDelta != 0) anyNonZeroB = true;
             processEncoderDelta(globalIdx, rawDelta, now);
 
             // Check button state
             bool isPressed = _transportB.getKeyPressed(localIdx);
+            if (isPressed) anyNonZeroB = true;
             _buttonStates[globalIdx] = isPressed;
             processButton(globalIdx, isPressed, now);
+
+            // Feed WDT every 4 encoders
+            if ((localIdx & 3) == 3) esp_task_wdt_reset();
+        }
+        // Dead-bus detection for Unit B
+        if (anyNonZeroB) {
+            _consecutiveAllZeroB = 0;
+        } else if (++_consecutiveAllZeroB >= DEAD_BUS_THRESHOLD) {
+            _consecutiveAllZeroB = 0;
+            if (!_transportB.isConnected()) {
+                Serial.println("[ENC] Unit B dead-bus confirmed — isConnected() failed");
+            }
         }
         const uint32_t _dbg_dt = millis() - _dbg_t0;
         // #region agent log (DISABLED)

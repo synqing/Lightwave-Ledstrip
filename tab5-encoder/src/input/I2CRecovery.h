@@ -77,7 +77,7 @@ public:
      * @param scl SCL GPIO pin number
      * @param freq I2C clock frequency in Hz (for reinit)
      */
-    static void init(TwoWire* wire, int sda, int scl, uint32_t freq);
+    static void init(TwoWire* wire, int sda, int scl, uint32_t freq, uint16_t timeout = 50);
 
     // ========================================================================
     // Error Tracking
@@ -156,6 +156,30 @@ public:
      */
     static void forceRecovery();
 
+    /**
+     * Pre-init bus clear — call BEFORE Wire.begin()
+     * Performs GPIO-level SCL toggling if SDA is stuck low.
+     * Does not require init() to have been called.
+     * @param sda SDA GPIO pin
+     * @param scl SCL GPIO pin
+     * @return true if bus is healthy after clear (or was already healthy)
+     */
+    static bool bootBusClear(int sda, int scl);
+
+    /**
+     * Force hardware reset of I2C0 peripheral.
+     * Call at very start of setup() to clear stale peripheral state
+     * from previous boot (e.g., after CDC serial reset).
+     */
+    static void hardwareResetI2C0();
+
+    /**
+     * Register the power-cycle callback for Level 3 recovery.
+     * Called from main.cpp setup() to provide Port.A power control.
+     * @param cb Function that toggles Port.A power: cb(false)=off, cb(true)=on
+     */
+    static void setPowerCycleCallback(void (*cb)(bool enable));
+
     // ========================================================================
     // Recovery Statistics
     // ========================================================================
@@ -192,6 +216,11 @@ private:
         // Hardware reset stages (ESP32-P4 native)
         HwPeriphReset,      // Call i2c_ll_reset_register() inside PERIPH_RCC_ATOMIC()
         HwWaitAfterReset,   // Wait after hardware peripheral reset
+        // Level 3: Power-cycle Port.A (resets slave MCU)
+        PowerCycleOff,      // Disable Port.A 5V via callback
+        PowerCycleWait,     // Wait for capacitor discharge + STM32 POR
+        PowerCycleOn,       // Re-enable Port.A 5V
+        PowerCycleSettle,   // Wait for STM32 boot + bus settle
         // Reinitialize
         WireBegin,          // Reinitialize Wire
         WaitAfterInit,      // Wait for Wire to stabilize
@@ -205,6 +234,7 @@ private:
     static int s_scl;
     static uint32_t s_freq;
     static bool s_initialized;
+    static uint16_t s_timeout;
 
     // Error tracking
     static uint8_t s_errorCount;
@@ -216,6 +246,11 @@ private:
     static uint8_t s_sclToggleCount;
     static uint8_t s_stopAttempt;
     static uint8_t s_softwareAttempts;  // Escalation counter for hardware reset
+    static uint8_t s_hwAttempts;        // Escalation counter for power-cycle
+    static void (*s_powerCycleCb)(bool enable);
+
+    // Level 3 escalation: power-cycle after N failed hardware resets
+    static constexpr uint8_t HW_ATTEMPTS_BEFORE_POWER_CYCLE = 2;
 
     // Cooldown tracking
     static uint32_t s_lastRecoveryTime;

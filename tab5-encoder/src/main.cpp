@@ -1428,6 +1428,93 @@ void setup() {
 
     Serial.println("\n[INIT] M5Stack Tab5 initialized");
 
+    // Restore the explicit external-I2C init added in f7e78fc2.
+    // The Tab5 bring-up has previously depended on this before reading Ex_I2C pins.
+    M5.Ex_I2C.begin();
+    Serial.println("[INIT] M5.Ex_I2C.begin() called - external I2C bus enabled");
+
+    // =========================================================================
+    // STEP 1: Reset the I2C0 hardware peripheral FIRST
+    // =========================================================================
+    // After a soft reset (CDC serial open), the I2C peripheral may retain its
+    // state from the previous boot and actively drive SDA/SCL LOW.
+    // Force-reset it before we touch any GPIO.
+    {
+        Serial.println("[INIT] Resetting I2C0 hardware peripheral...");
+        I2CRecovery::hardwareResetI2C0();
+        // Release GPIO 53/54 from I2C peripheral control
+        pinMode(I2C::EXT_SDA_PIN, INPUT_PULLUP);
+        pinMode(I2C::EXT_SCL_PIN, INPUT_PULLUP);
+        delay(5);
+        bool sdaPre = digitalRead(I2C::EXT_SDA_PIN);
+        bool sclPre = digitalRead(I2C::EXT_SCL_PIN);
+        Serial.printf("[INIT] After I2C0 reset — SDA:%s SCL:%s\n",
+                      sdaPre ? "HIGH" : "LOW", sclPre ? "HIGH" : "LOW");
+    }
+
+    // =========================================================================
+    // STEP 2: Power-cycle Grove Port.A to reset M5ROTATE8 STM32 MCUs
+    // =========================================================================
+    // The M5ROTATE8 contains an STM32F030 I2C slave whose I2C peripheral can
+    // lock up after idle periods (SDA held low). There is no software reset
+    // register — only a power cycle resets the STM32. This is the programmatic
+    // equivalent of physically unplugging/replugging the Grove connector.
+    // EXT5V_EN is IO Expander(0) pin 2 — controls Port.A 5V supply.
+    {
+        Serial.println("[INIT] Power-cycling Grove Port.A to reset encoder MCUs...");
+
+        // Explicitly set IO Expander(0) pin 2 (EXT5V_EN) as OUTPUT first.
+        // M5Unified's setExtOutput() only calls setPullMode+digitalWrite but
+        // never calls setDirection — the pin may still be in INPUT mode.
+        auto& ioe = M5.getIOExpander(0);
+        ioe.setDirection(2, true);   // true = output on PI4IOE5V6408
+
+        // Tri-state I2C pins and toggle EXT5V_EN. NOTE: EXT5V_EN may not
+        // control the M5ROTATE8 power rail (encoders appear to be on always-on
+        // 3.3V). This power cycle helps when it does reach the encoders but
+        // cannot fix a fully stuck STM32 on the wrong rail.
+        pinMode(I2C::EXT_SDA_PIN, INPUT);   // Hi-Z — prevent ESD diode current
+        pinMode(I2C::EXT_SCL_PIN, INPUT);   // Hi-Z
+
+        ioe.digitalWrite(2, false);  // Drive LOW = Port.A 5V OFF
+        Serial.println("[INIT] Port.A 5V OFF (pins tri-stated, EXT5V_EN LOW)");
+
+        delay(500);
+        esp_task_wdt_reset();
+
+        ioe.digitalWrite(2, true);   // Drive HIGH = Port.A 5V ON
+        Serial.println("[INIT] Port.A 5V ON (EXT5V_EN driven HIGH)");
+
+        delay(250);
+        esp_task_wdt_reset();
+
+        // Verify: read SDA/SCL state after power cycle
+        pinMode(I2C::EXT_SDA_PIN, INPUT_PULLUP);
+        pinMode(I2C::EXT_SCL_PIN, INPUT_PULLUP);
+        delay(5);
+        bool sdaState = digitalRead(I2C::EXT_SDA_PIN);
+        bool sclState = digitalRead(I2C::EXT_SCL_PIN);
+        Serial.printf("[INIT] Port.A power cycle complete — SDA:%s SCL:%s\n",
+                      sdaState ? "HIGH" : "LOW", sclState ? "HIGH" : "LOW");
+
+        // If still stuck, try actively driving SCL HIGH to check if it's
+        // the ESP32 or the encoder holding the lines
+        if (!sdaState || !sclState) {
+            Serial.println("[INIT] Bus still stuck — driving SCL HIGH with push-pull");
+            pinMode(I2C::EXT_SCL_PIN, OUTPUT);
+            digitalWrite(I2C::EXT_SCL_PIN, HIGH);
+            delay(1);
+            pinMode(I2C::EXT_SDA_PIN, INPUT_PULLUP);
+            delay(1);
+            sdaState = digitalRead(I2C::EXT_SDA_PIN);
+            sclState = digitalRead(I2C::EXT_SCL_PIN);
+            Serial.printf("[INIT] With SCL forced HIGH — SDA:%s SCL:%s\n",
+                          sdaState ? "HIGH" : "LOW", sclState ? "HIGH" : "LOW");
+            // Release back
+            pinMode(I2C::EXT_SCL_PIN, INPUT_PULLUP);
+        }
+    }
+
     // Get external I2C pin configuration from M5Unified
     // Tab5 Grove Port.A: SDA=GPIO53, SCL=GPIO54
     int8_t extSDA = M5.Ex_I2C.getSDA();
@@ -1440,6 +1527,14 @@ void setup() {
         Serial.println("[WARN] External I2C pins differ from expected!");
         Serial.printf("[WARN] Expected SDA:%d SCL:%d, got SDA:%d SCL:%d\n",
                       I2C::EXT_SDA_PIN, I2C::EXT_SCL_PIN, extSDA, extScl);
+    }
+
+    // GPIO-level bus clear BEFORE Wire.begin() to prevent ESP-IDF driver lockup.
+    // If SDA is stuck low from a previous incomplete transaction, Wire.begin()
+    // triggers the hardware clear bus FSM which has a 50ms timeout and enters
+    // ESP_ERR_INVALID_STATE on failure — making all subsequent transactions fail.
+    if (!I2CRecovery::bootBusClear(extSDA, extScl)) {
+        Serial.println("[WARN] I2C bus clear failed — Wire.begin() may encounter errors");
     }
 
     // Initialize Wire on external I2C bus (Grove Port.A)
@@ -1455,7 +1550,12 @@ void setup() {
     // =========================================================================
     // Software-level bus recovery for external I2C (Grove Port.A)
     // Uses SCL toggling and Wire reinit - NO hardware peripheral resets
-    I2CRecovery::init(&Wire, extSDA, extScl, I2C::FREQ_HZ);
+    I2CRecovery::init(&Wire, extSDA, extScl, I2C::FREQ_HZ, I2C::TIMEOUT_MS);
+    I2CRecovery::setPowerCycleCallback([](bool enable) {
+        auto& ioe = M5.getIOExpander(0);
+        ioe.setDirection(2, true);   // true = output
+        ioe.digitalWrite(2, enable);
+    });
     Serial.println("[I2C_RECOVERY] Recovery module initialized for external bus");
 
     // Allow I2C bus to stabilize
@@ -1493,7 +1593,34 @@ void setup() {
     LoadingScreen::update(M5.Display, "INITIALISING ENCODERS...", false, false);
     g_encoders = new DualEncoderService(&Wire, ADDR_UNIT_A, ADDR_UNIT_B);
     g_encoders->setChangeCallback(onEncoderChange);
-    bool encoderOk = g_encoders->begin();
+
+    // Retry loop: up to 3 attempts with bus recovery between failures.
+    // Single-shot init with no retry was the primary cause of permanent
+    // encoder mark-down after transient I2C bus issues at boot.
+    bool encoderOk = false;
+    for (uint8_t initAttempt = 0; initAttempt < 3; initAttempt++) {
+        esp_task_wdt_reset();
+        encoderOk = g_encoders->begin();
+        if (encoderOk) {
+            if (initAttempt > 0) {
+                Serial.printf("[INIT] Encoders initialised on attempt %d\n", initAttempt + 1);
+            }
+            break;
+        }
+        Serial.printf("[INIT] Encoder init attempt %d/3 failed — recovering bus\n", initAttempt + 1);
+
+        // Bus recovery between attempts
+        I2CRecovery::bootBusClear(extSDA, extScl);
+
+        // Full Wire reinit
+        Wire.end();
+        delay(50);
+        esp_task_wdt_reset();
+        Wire.begin(extSDA, extScl, I2C::FREQ_HZ);
+        Wire.setTimeOut(I2C::TIMEOUT_MS);
+        delay(100);
+        esp_task_wdt_reset();
+    }
     esp_task_wdt_reset();
 
     // Initialize ButtonHandler (handles Unit-A button resets)
@@ -1565,19 +1692,10 @@ void setup() {
         Serial.println("\n[OK] Both units detected - 16 encoders available!");
         Serial.println("[OK] Milestone E: Dual encoder service active");
 
-        // Flash all LEDs green briefly to indicate success
-        // #region agent log (DISABLED)
-        // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"boot\",\"hypothesisId\":\"H2\",\"location\":\"main.cpp:flash\",\"message\":\"flashGreen.start\",\"data\":{\"unitA\":true,\"unitB\":true},\"timestamp\":%lu}\n",
-                      // static_cast<unsigned long>(millis()));
-                // #endregion
-        g_encoders->transportA().setAllLEDs(0, 64, 0);
-        g_encoders->transportB().setAllLEDs(0, 64, 0);
-        delay(200);
-        g_encoders->allLedsOff();
-        // #region agent log (DISABLED)
-        // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"boot\",\"hypothesisId\":\"H2\",\"location\":\"main.cpp:flash\",\"message\":\"flashGreen.cleared\",\"data\":{},\"timestamp\":%lu}\n",
-                      // static_cast<unsigned long>(millis()));
-                // #endregion
+        // NOTE: Success flash REMOVED — 18 rapid LED writes immediately after
+        // begin() triggers STM32 NACK which poisons the ESP-IDF I2C FSM.
+        // The M5ROTATE8 STM32F030 needs breathing room after init.
+        delay(50);  // Let STM32 settle after begin()
 
         // Set status LEDs (both green for connected)
         updateConnectionLeds();
@@ -2109,7 +2227,11 @@ void setup() {
         // #endregion
     
     // Begin WiFi - connect to home WiFi (same network as v2)
+    // WiFi.begin() internally calls esp_hosted_init() which hardware-resets the
+    // C6 via GPIO 15. This reset can glitch the RF path. Re-assert antenna
+    // selection AFTER the C6 boots to ensure external MMCX is active.
     g_wifiManager.begin(WIFI_SSID, WIFI_PASSWORD);
+    setWiFiAntenna(true);  // Re-assert external MMCX after C6 hardware reset
     
     // #region agent log (DISABLED)
     // Serial.printf("[DEBUG] After WiFiManager::begin() - Heap: free=%u minFree=%u largest=%u\n",
@@ -2772,9 +2894,72 @@ void loop() {
     // ENCODERS: Skip processing if service not available
     // =========================================================================
     if (!g_encoders || !g_encoders->isAnyAvailable()) {
-        esp_task_wdt_reset();  // CRITICAL: Prevent watchdog timeout during encoder unavailability
-        delay(100);
-        return;
+        esp_task_wdt_reset();
+
+        // Periodic re-probe: every 5 seconds, attempt to rediscover encoders.
+        // Without this, failed init → _available=false → no I2C ops → no errors
+        // → recovery never triggers → system stuck forever (the deadlock).
+        static uint32_t s_lastReprobeMs = 0;
+        static uint8_t s_reprobeCount = 0;
+        uint32_t reprobeNow = millis();
+
+        if (s_lastReprobeMs == 0 || (reprobeNow - s_lastReprobeMs) >= 5000) {
+            s_lastReprobeMs = reprobeNow;
+            s_reprobeCount++;
+            Serial.printf("[REPROBE] Attempt %d — probing encoder addresses...\n", s_reprobeCount);
+
+            // Every 3rd attempt, power-cycle Port.A (Level 3 escalation)
+            if (s_reprobeCount % 3 == 0) {
+                Serial.println("[REPROBE] Escalating: power-cycling Port.A");
+                auto& ioe = M5.getIOExpander(0);
+                ioe.setDirection(2, false);  // Ensure pin is output
+                ioe.digitalWrite(2, false);  // Port.A 5V OFF
+                delay(500);
+                esp_task_wdt_reset();
+                ioe.digitalWrite(2, true);   // Port.A 5V ON
+                delay(250);
+                esp_task_wdt_reset();
+
+                // Full bus reinit after power cycle
+                Wire.end();
+                delay(50);
+                esp_task_wdt_reset();
+                I2CRecovery::bootBusClear(I2C::EXT_SDA_PIN, I2C::EXT_SCL_PIN);
+                Wire.begin(I2C::EXT_SDA_PIN, I2C::EXT_SCL_PIN, I2C::FREQ_HZ);
+                Wire.setTimeOut(I2C::TIMEOUT_MS);
+                delay(100);
+                esp_task_wdt_reset();
+            } else {
+                // Software bus clear
+                I2CRecovery::forceRecovery();
+                // Spin recovery state machine to completion (blocking OK — no encoders to poll)
+                uint32_t recoveryStart = millis();
+                while (I2CRecovery::isRecovering() && (millis() - recoveryStart) < 2000) {
+                    I2CRecovery::update();
+                    esp_task_wdt_reset();
+                    delay(10);
+                }
+            }
+
+            // Attempt reinit on both transports
+            bool unitAOk = g_encoders->transportA().reinit();
+            bool unitBOk = g_encoders->transportB().reinit();
+
+            if (unitAOk || unitBOk) {
+                Serial.printf("[REPROBE] SUCCESS — Unit A:%s Unit B:%s\n",
+                              unitAOk ? "OK" : "FAIL", unitBOk ? "OK" : "FAIL");
+                updateConnectionLeds();
+                s_reprobeCount = 0;
+                // Fall through to normal loop processing
+            } else {
+                Serial.println("[REPROBE] Failed — will retry in 5s");
+                delay(100);
+                return;
+            }
+        } else {
+            delay(100);
+            return;
+        }
     }
 
     // =========================================================================

@@ -44,10 +44,10 @@ public:
         _available = _encoder.begin() && _encoder.isConnected();
 
         if (_available) {
-            // Clear all LEDs on successful init
-            // M5ROTATE8 has 9 LEDs: 0-7 for encoders, 8 for status
+            // Clear all LEDs on successful init — uses setLED() for proper
+            // error detection (M5ROTATE8::writeRGB discards write24 errors)
             for (uint8_t i = 0; i < 9; i++) {
-                _encoder.writeRGB(i, 0, 0, 0);
+                setLED(i, 0, 0, 0);
             }
         }
 
@@ -98,6 +98,10 @@ public:
     int32_t getRelCounter(uint8_t channel) {
         if (!_available || channel > 7) return 0;
 
+        // Brief inter-transaction delay — the M5ROTATE8's STM32F030 has
+        // 16-cycle interrupt latency and NACKs if polled faster than ~500µs.
+        delayMicroseconds(100);
+
         // Read with error tracking
         int32_t value = _encoder.getRelCounter(channel);
 
@@ -133,6 +137,7 @@ public:
      */
     bool getKeyPressed(uint8_t channel) {
         if (!_available || channel > 7) return false;
+        delayMicroseconds(100);  // STM32F030 inter-transaction breathing room
         return _encoder.getKeyPressed(channel);
     }
 
@@ -165,25 +170,19 @@ public:
      * @param b Blue component (0-255)
      */
     void setLED(uint8_t channel, uint8_t r, uint8_t g, uint8_t b) {
-        // #region agent log - DISABLED by default (enable with ENABLE_VERBOSE_DEBUG) (DISABLED)
-        // #ifdef ENABLE_VERBOSE_DEBUG
-        // static uint32_t s_lastLogTime = 0;
-        // static uint32_t s_writeCount = 0;
-        // s_writeCount++;
-        // uint32_t now = millis();
-        // if (now - s_lastLogTime >= 100) {  // Log every 100ms
-            // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"C,F\",\"location\":\"Rotate8Transport.h:165\",\"message\":\"setLED.write\",\"data\":{\"channel\":%u,\"writesSinceLastLog\":%lu,\"timestamp\":%lu}\n",
-                // channel, static_cast<unsigned long>(s_writeCount), static_cast<unsigned long>(now));
-            // s_writeCount = 0;
-            // s_lastLogTime = now;
-        // }
-        // #endif // ENABLE_VERBOSE_DEBUG
-                // #endregion
-        
-        if (!_available || channel > 8) {
-            return;
-        }
-        if (!_encoder.writeRGB(channel, r, g, b)) {
+        if (!_available || channel > 8) return;
+
+        // Bypass M5ROTATE8::writeRGB() which discards write24() error returns
+        // (returns true unconditionally for valid channels). Write directly via
+        // Wire: register = 0x70 + channel*3, then R, G, B.
+        static constexpr uint8_t REG_RGB = 0x70;
+        Wire.beginTransmission(_address);
+        Wire.write(static_cast<uint8_t>(REG_RGB + (channel * 3)));
+        Wire.write(r);
+        Wire.write(g);
+        Wire.write(b);
+        uint8_t err = Wire.endTransmission();
+        if (err != 0) {
             I2CRecovery::recordError();
         }
     }
@@ -245,6 +244,7 @@ public:
      */
     uint8_t getInputSwitch() {
         if (!_available) return 0;
+        delayMicroseconds(100);
         return _encoder.inputSwitch();
     }
 
@@ -280,9 +280,9 @@ public:
     bool reinit() {
         _available = _encoder.begin() && _encoder.isConnected();
         if (_available) {
-            // Clear all LEDs on successful reinit
+            // Clear all LEDs — uses setLED() for proper error detection
             for (uint8_t i = 0; i < 9; i++) {
-                _encoder.writeRGB(i, 0, 0, 0);
+                setLED(i, 0, 0, 0);
             }
             Serial.printf("[Rotate8Transport] Reinit successful at 0x%02X\n", _address);
         }

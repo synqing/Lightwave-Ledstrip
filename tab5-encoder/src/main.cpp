@@ -179,6 +179,8 @@ static uint8_t s_paletteNextPage = 1;
 
 static bool s_requestedLists = false;
 static bool s_uiInitialized = false;  // Track if DisplayUI::begin() has been called
+static uint32_t s_uiInitEarliestMs = 0;  // Keep loading splash briefly before dashboard
+static constexpr uint32_t UI_BOOT_SPLASH_MS = 2000;
 
 // ============================================================================
 // Dynamic effect-parameter slots (Row-2A + Row-2B)
@@ -211,6 +213,46 @@ static float clampFxParamValue(float value, float minValue, float maxValue) {
     if (value > maxValue) return maxValue;
     return value;
 }
+
+static bool isUiInitWindowReached() {
+    return s_uiInitEarliestMs == 0 ||
+           static_cast<int32_t>(millis() - s_uiInitEarliestMs) >= 0;
+}
+
+#if ENABLE_WIFI
+static void ensureOtaServerStarted() {
+    if (g_otaServer || !g_wifiManager.isConnected()) {
+        return;
+    }
+
+    g_otaServer = new AsyncWebServer(80);
+
+    g_otaServer->on("/api/v1/firmware/version", HTTP_GET,
+                    OtaHandler::handleVersion);
+    g_otaServer->on("/api/v1/firmware/update", HTTP_POST,
+                    [](AsyncWebServerRequest* request) {
+                        OtaHandler::handleV1Update(request);
+                    },
+                    [](AsyncWebServerRequest* request, const String& filename,
+                       size_t index, uint8_t* data, size_t len, bool final) {
+                        OtaHandler::handleUpload(request, filename, index, data, len, final);
+                    });
+    g_otaServer->on("/update", HTTP_POST,
+                    [](AsyncWebServerRequest* request) {
+                        OtaHandler::handleLegacyUpdate(request);
+                    },
+                    [](AsyncWebServerRequest* request, const String& filename,
+                       size_t index, uint8_t* data, size_t len, bool final) {
+                        OtaHandler::handleUpload(request, filename, index, data, len, final);
+                    });
+
+    g_otaServer->begin();
+    Serial.println("[OTA] HTTP server started on port 80");
+    Serial.println("[OTA] Endpoints: GET /api/v1/firmware/version, POST /api/v1/firmware/update, POST /update");
+}
+#else
+static void ensureOtaServerStarted() {}
+#endif
 
 static uint8_t encodeFxParamValue(const FxParamSlot& slot, float value) {
     const float range = slot.maxValue - slot.minValue;
@@ -2295,6 +2337,10 @@ void setup() {
     Serial.println("  WiFi connecting in background...");
     Serial.println("  Touch screen: long press to reset params");
     Serial.println("============================================\n");
+
+    // Do not block the dashboard on host connectivity. Keep the splash briefly,
+    // then bring up the full UI while WiFi/WS continue in the background.
+    s_uiInitEarliestMs = millis() + UI_BOOT_SPLASH_MS;
 }
 
 // ============================================================================
@@ -2436,132 +2482,98 @@ void loop() {
     g_ledFeedback.update();  // Non-blocking breathing animation
 
     // =========================================================================
-    // UI: Initialize full UI after WiFi connects (deferred from setup)
+    // UI: Initialize full UI after a short boot splash.
+    // WiFi and WebSocket continue in the background and update the dashboard live.
     // =========================================================================
     // s_uiInitialized is declared at file scope (line ~124)
-    if (g_ui && !s_uiInitialized) {
-#if ENABLE_WIFI
-        if (g_wifiManager.isConnected()) {
-#else
-        // If WiFi disabled, initialize UI immediately
-        {
-#endif
-            // WiFi is connected (or WiFi disabled) - safe to initialize UI now
-            // #region agent log (DISABLED)
-            // Serial.printf("[DEBUG] WiFi connected, initialising UI - Heap: free=%u minFree=%u largest=%u\n",
-                          // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-                        // #endregion
-            
-            // Show UI initialization message before hiding loading screen
-            bool unitA = g_encoders ? g_encoders->isUnitAAvailable() : false;
-            bool unitB = g_encoders ? g_encoders->isUnitBAvailable() : false;
-            LoadingScreen::update(M5.Display, "INITIALISING UI", unitA, unitB);
-            delay(500); // Brief display of UI initialization message
-            
-            // Hide loading screen
-            LoadingScreen::hide(M5.Display);
-            
-            // Initialize full UI
-            // Serial.printf("[MAIN_TRACE] Before g_ui->begin() @ %lu ms\n", millis());
-            esp_task_wdt_reset();
-            g_ui->begin();
-            // Serial.printf("[MAIN_TRACE] After g_ui->begin() @ %lu ms\n", millis());
-            esp_task_wdt_reset();
-            // #region agent log (DISABLED)
-            // Serial.printf("[DEBUG] After DisplayUI::begin() - Heap: free=%u minFree=%u largest=%u\n",
-                          // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-                        // #endregion
+    if (g_ui && !s_uiInitialized && isUiInitWindowReached()) {
+        // Network services are optional for local control - initialize the
+        // dashboard once the boot splash window has elapsed.
+        // #region agent log (DISABLED)
+        // Serial.printf("[DEBUG] Initialising UI after boot splash - Heap: free=%u minFree=%u largest=%u\n",
+                      // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+                    // #endregion
+        
+        // Show UI initialization message before hiding loading screen
+        bool unitA = g_encoders ? g_encoders->isUnitAAvailable() : false;
+        bool unitB = g_encoders ? g_encoders->isUnitBAvailable() : false;
+        LoadingScreen::update(M5.Display, "INITIALISING UI", unitA, unitB);
+        delay(500); // Brief display of UI initialization message
+        
+        // Hide loading screen
+        LoadingScreen::hide(M5.Display);
+        
+        // Initialize full UI
+        // Serial.printf("[MAIN_TRACE] Before g_ui->begin() @ %lu ms\n", millis());
+        esp_task_wdt_reset();
+        g_ui->begin();
+        // Serial.printf("[MAIN_TRACE] After g_ui->begin() @ %lu ms\n", millis());
+        esp_task_wdt_reset();
+        // #region agent log (DISABLED)
+        // Serial.printf("[DEBUG] After DisplayUI::begin() - Heap: free=%u minFree=%u largest=%u\n",
+                      // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+                    // #endregion
 
-            // Re-wire ZoneComposerUI now that begin() has created it
-            #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
-            if (ZoneComposerUI* zoneUI = g_ui->getZoneComposerUI()) {
-                zoneUI->setWebSocketClient(&g_wsClient);
-                if (g_buttonHandler) g_buttonHandler->setZoneComposerUI(zoneUI);
-                if (g_presetManager) g_presetManager->setZoneComposerUI(zoneUI);
-                Serial.println("[MAIN] ZoneComposerUI wired after begin()");
-            }
-            #endif
-
-            // Wire up action button callback for LVGL
-            #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
-            g_ui->setActionButtonCallback(handleActionButton);
-            g_ui->setRetryButtonCallback([]() {
-                #if ENABLE_WIFI
-                g_wifiManager.triggerRetry();
-                #endif
-            });
-            
-            // Initialize WebSocket status in footer
-            #if ENABLE_WIFI
-            g_ui->updateWebSocketStatus(g_wsClient.getStatus());
-            if (g_wsClient.isConnected()) {
-                g_ui->setWebSocketConnected(true, millis());
-            }
-            #endif
-            #endif
-            
-            // Initialize OTA HTTP server (once, after WiFi connects)
-            #if ENABLE_WIFI
-            if (!g_otaServer && g_wifiManager.isConnected()) {
-                g_otaServer = new AsyncWebServer(80);
-                
-                // Register OTA endpoints
-                g_otaServer->on("/api/v1/firmware/version", HTTP_GET, 
-                                OtaHandler::handleVersion);
-                g_otaServer->on("/api/v1/firmware/update", HTTP_POST,
-                                [](AsyncWebServerRequest* request) {
-                                    OtaHandler::handleV1Update(request);
-                                },
-                                [](AsyncWebServerRequest* request, const String& filename,
-                                   size_t index, uint8_t* data, size_t len, bool final) {
-                                    OtaHandler::handleUpload(request, filename, index, data, len, final);
-                                });
-                g_otaServer->on("/update", HTTP_POST,
-                                [](AsyncWebServerRequest* request) {
-                                    OtaHandler::handleLegacyUpdate(request);
-                                },
-                                [](AsyncWebServerRequest* request, const String& filename,
-                                   size_t index, uint8_t* data, size_t len, bool final) {
-                                    OtaHandler::handleUpload(request, filename, index, data, len, final);
-                                });
-                
-                g_otaServer->begin();
-                Serial.println("[OTA] HTTP server started on port 80");
-                Serial.printf("[OTA] Endpoints: GET /api/v1/firmware/version, POST /api/v1/firmware/update, POST /update\n");
-            }
-            #endif
-            
-            // Update connection state (reuse unitA and unitB from above)
-            g_ui->setConnectionState(
-#if ENABLE_WIFI
-                g_wifiManager.isConnected(),
-#else
-                false,
-#endif
-                false, unitA, unitB);
-            
-            // Show initial values on radial gauges
-            if (g_encoders) {
-                for (uint8_t i = 0; i < 16; i++) {
-                    g_ui->updateValue(i, g_encoders->getValue(i), false);
-                }
-            }
-            
-            // Initialize preset slot UI from NVS (now that UI is ready)
-            if (g_presetManager) {
-                g_ui->refreshAllPresetSlots(g_presetManager);
-                Serial.println("[PRESET] UI slots refreshed from NVS");
-            }
-            
-            s_uiInitialized = true;
-            syncFxParamSlotsToUi();
-            Serial.println("[UI] Full UI initialized after WiFi connection");
-            
-            // DISABLED - PaletteLedDisplay
-            // Enable palette LED display now that dashboard is loaded
-            // g_paletteLedDisplay.setEnabled(true);
-            // Serial.println("[LED] Palette LED display enabled (dashboard ready)");
+        // Re-wire ZoneComposerUI now that begin() has created it
+        #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
+        if (ZoneComposerUI* zoneUI = g_ui->getZoneComposerUI()) {
+            zoneUI->setWebSocketClient(&g_wsClient);
+            if (g_buttonHandler) g_buttonHandler->setZoneComposerUI(zoneUI);
+            if (g_presetManager) g_presetManager->setZoneComposerUI(zoneUI);
+            Serial.println("[MAIN] ZoneComposerUI wired after begin()");
         }
+        #endif
+
+        // Wire up action button callback for LVGL
+        #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
+        g_ui->setActionButtonCallback(handleActionButton);
+        g_ui->setRetryButtonCallback([]() {
+            #if ENABLE_WIFI
+            g_wifiManager.triggerRetry();
+            #endif
+        });
+        
+        // Initialize WebSocket status in footer
+        #if ENABLE_WIFI
+        g_ui->updateWebSocketStatus(g_wsClient.getStatus());
+        if (g_wsClient.isConnected()) {
+            g_ui->setWebSocketConnected(true, millis());
+        }
+        #endif
+        #endif
+        
+        // Update connection state (reuse unitA and unitB from above)
+        bool wifiConnected = false;
+        bool wsConnected = false;
+#if ENABLE_WIFI
+        wifiConnected = g_wifiManager.isConnected();
+#endif
+        wsConnected = g_wsClient.isConnected();
+        g_ui->setConnectionState(
+            wifiConnected,
+            wsConnected, unitA, unitB);
+
+        // Show initial values on radial gauges
+        if (g_encoders) {
+            for (uint8_t i = 0; i < 16; i++) {
+                g_ui->updateValue(i, g_encoders->getValue(i), false);
+            }
+        }
+        
+        // Initialize preset slot UI from NVS (now that UI is ready)
+        if (g_presetManager) {
+            g_ui->refreshAllPresetSlots(g_presetManager);
+            Serial.println("[PRESET] UI slots refreshed from NVS");
+        }
+        
+        s_uiInitialized = true;
+        syncFxParamSlotsToUi();
+        Serial.println("[UI] Full UI initialized - host connectivity continues in background");
+        
+        // DISABLED - PaletteLedDisplay
+        // Enable palette LED display now that dashboard is loaded
+        // g_paletteLedDisplay.setEnabled(true);
+        // Serial.println("[LED] Palette LED display enabled (dashboard ready)");
     }
     
     // =========================================================================
@@ -2658,6 +2670,8 @@ void loop() {
     }
 
     if (g_wifiManager.isConnected()) {
+        ensureOtaServerStarted();
+
         // Log WiFi connection once
         if (!s_wifiWasConnected) {
             s_wifiWasConnected = true;

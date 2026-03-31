@@ -381,6 +381,31 @@ When running parallel subagents that modify or build firmware code, **each agent
 
 **Worktrunk vs cp -r:** Use Worktrunk (`wt create <name>`) when you need git history in the sandbox (e.g., diffing, cherry-picking). Use `cp -r` when you only need to build and test (faster, no git overhead). Default to `cp -r` unless git operations are required. The `.worktreeinclude` file at the project root shares `.pio/build/` and `node_modules/` between worktrees to avoid redundant builds.
 
+## RTK Token Compression
+
+RTK (Rust Token Killer) v0.34.2 is a CLI proxy that compresses Bash command output before it reaches the context window, saving 60-90% of tokens on routine dev operations.
+
+**Telemetry:** Disabled via `RTK_TELEMETRY_DISABLED=1` environment variable and `[telemetry] enabled = false` in `~/.config/rtk/config.toml`. No data leaves the machine.
+
+**How it works:** A PreToolUse hook rewrites Bash commands (e.g. `git status` becomes `rtk git status`). RTK executes the command, filters and compresses the output, and returns a condensed result. This is transparent — agents do not need to invoke `rtk` directly.
+
+**What it compresses:** `git` (status, diff, log, show), `ls`, `pio run` / `pio test` build output, `xcodebuild`, `grep`, `find`, `cat`, `npm`, `cargo`, and other CLI tools that produce verbose output.
+
+**What it does NOT affect:**
+- Built-in tools: Read, Grep, Glob (these bypass Bash entirely)
+- MCP tools: clangd, QMD, Context7, autocontext, devkg, episodic memory
+- Serial monitor: `pio device monitor` (excluded — needs raw stream)
+
+**Configuration:** `~/.config/rtk/config.toml`. To exclude a command from rewriting, add it to the `[hooks] exclude_commands` list.
+
+**Excluded commands** (pass through unmodified): `esptool.py`, `pio device monitor`, `capture` (LED capture tool). These need raw, unfiltered output.
+
+**Useful meta commands** (invoke directly, not through the hook):
+- `rtk gain` — show cumulative token savings report
+- `rtk gain --history` — per-command usage history with savings
+- `rtk verify` — check hook integrity and configuration
+- `rtk discover` — analyse recent Claude Code history for missed compression opportunities
+
 ### Cross-Session Handoff Protocol
 
 When a session ends with incomplete work, or when context compaction is imminent, ask:

@@ -5,7 +5,7 @@ abstract: "Mandatory session-start routing table: maps tasks to specific MCP too
 # Workflow Routing — Tool & Skill Dispatch Guide
 
 > **This document is loaded via CLAUDE.md. Every CC session must follow these routing rules.**
-> Last updated: 14 Mar 2026
+> Last updated: 31 Mar 2026
 
 ---
 
@@ -160,6 +160,10 @@ IDEA → BRAINSTORM → DESIGN → PLAN → TEST-FIRST → IMPLEMENT → REVIEW 
 | Work with PDFs | `/pdf` | Extract, create, merge, split, fill forms |
 | Supabase anything | `/supabase-expert` **[REMOVED -- skill deleted]** | 2,616 official docs. Auth, realtime, storage, edge functions, pgvector. |
 
+### CLI Output Compression
+
+**RTK v0.34.2** operates at the Bash output compression layer (PreToolUse hook). It rewrites Bash commands before execution and compresses output — it does NOT replace or affect MCP tools (clangd, QMD, Context7), built-in tools (Read, Grep, Glob), or any skill. Configuration: `~/.config/rtk/config.toml`. Analytics: `rtk gain`. Hook integrity: `rtk verify`.
+
 ### Formatting & Output
 
 | I need to... | Skill | Notes |
@@ -248,3 +252,4 @@ Am I finishing a branch?
 | 5 Mar 2026 | Initial creation. Full inventory: 29 skills, 13 MCP groups, 47 tools. Routing table, lifecycle phases, anti-patterns, decision tree. |
 | 7 Mar 2026 | Added operational status blocks for clangd (510 entries) and QMD (330 files, 2,421 vectors). Updated QMD anti-pattern to reference `scripts/setup-qmd.sh` and `qmd_status` check. |
 | 14 Mar 2026 | Dead reference cleanup. Marked 3 deleted skills (`supabase-expert`, `toon-formatter`, `theme-factory`) as REMOVED. Marked 4 unconfigured MCP servers (`auggie`, `nimbalyst-mcp`, `taskmaster-ai`, `figma`) as NOT CONFIGURED. Fixed `claude-mem` tool prefix (`mem-search` -> `mcp-search`). Replaced static status assertions with live-check instructions. Marked Ralph as NOT ACTIVE. |
+| 31 Mar 2026 | Added RTK v0.34.2 entry under Infrastructure & Tooling (CLI Output Compression subsection). |

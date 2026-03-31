@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **firmware:** EsV11Backend sample history accessor — getSampleHistory()/getSampleHistoryLength() for raw PCM access
 - **tools:** Onset capture tooling — led_capture.py onset parsing, analyze_beats.py onset statistics, 2 capture suite scripts
 - **docs:** Onset detector spec, quarantine matrix, ADR, WLED/aubio/essentia research references
+- **tools:** Integrated RTK v0.34.2 token compression proxy — compresses Bash command output (git, builds, file listings) before reaching LLM context, reducing token consumption by 50-80% on CLI operations
 
 ### Changed
 - **firmware:** Silence gate uses raw PCM RMS instead of post-AGC band average — fixes false gate reopening during silence

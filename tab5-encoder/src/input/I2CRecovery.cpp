@@ -47,9 +47,6 @@ bool I2CRecovery::s_recoverySucceeded = false;
 uint16_t I2CRecovery::s_recoveryAttempts = 0;
 uint16_t I2CRecovery::s_recoverySuccesses = 0;
 
-uint8_t I2CRecovery::s_hwAttempts = 0;
-void (*I2CRecovery::s_powerCycleCb)(bool enable) = nullptr;
-
 // ============================================================================
 // Initialization
 // ============================================================================
@@ -70,7 +67,6 @@ void I2CRecovery::init(TwoWire* wire, int sda, int scl, uint32_t freq, uint16_t 
     s_sclToggleCount = 0;
     s_stopAttempt = 0;
     s_softwareAttempts = 0;
-    s_hwAttempts = 0;
     s_lastRecoveryTime = 0;
     s_recoverySucceeded = false;
     s_recoveryAttempts = 0;
@@ -215,12 +211,6 @@ void I2CRecovery::hardwareResetI2C0() {
         i2c_ll_reset_register(0);
     }
     Serial.println("[I2C_RECOVERY] I2C0 hardware peripheral reset (boot)");
-}
-
-void I2CRecovery::setPowerCycleCallback(void (*cb)(bool enable)) {
-    s_powerCycleCb = cb;
-    Serial.printf("[I2C_RECOVERY] Power-cycle callback %s\n",
-                  cb ? "registered" : "cleared");
 }
 
 // ============================================================================
@@ -437,35 +427,7 @@ void I2CRecovery::update() {
             break;
 
         case RecoveryStage::HwWaitAfterReset:
-            // Check if we should escalate to Level 3 (power-cycle)
-            s_hwAttempts++;
-            if (s_hwAttempts >= HW_ATTEMPTS_BEFORE_POWER_CYCLE && s_powerCycleCb) {
-                Serial.println("[I2C_RECOVERY] Escalating to Level 3: Port.A power cycle");
-                advanceTo(RecoveryStage::PowerCycleOff, STEP_DELAY_SHORT_MS);
-            } else {
-                Serial.println("[I2C_RECOVERY] Hardware reset complete, reinitializing Wire");
-                advanceTo(RecoveryStage::WireBegin, STEP_DELAY_SHORT_MS);
-            }
-            break;
-
-        case RecoveryStage::PowerCycleOff:
-            Serial.println("[I2C_RECOVERY] Level 3: Port.A power OFF");
-            if (s_powerCycleCb) s_powerCycleCb(false);
-            advanceTo(RecoveryStage::PowerCycleWait, 200);  // 200ms discharge
-            break;
-
-        case RecoveryStage::PowerCycleWait:
-            advanceTo(RecoveryStage::PowerCycleOn, 0);
-            break;
-
-        case RecoveryStage::PowerCycleOn:
-            Serial.println("[I2C_RECOVERY] Level 3: Port.A power ON");
-            if (s_powerCycleCb) s_powerCycleCb(true);
-            advanceTo(RecoveryStage::PowerCycleSettle, 150);  // 150ms STM32 boot
-            break;
-
-        case RecoveryStage::PowerCycleSettle:
-            Serial.println("[I2C_RECOVERY] Level 3: Power cycle complete, reinitializing Wire");
+            Serial.println("[I2C_RECOVERY] Hardware reset complete, reinitializing Wire");
             advanceTo(RecoveryStage::WireBegin, STEP_DELAY_SHORT_MS);
             break;
 
@@ -619,7 +581,6 @@ void I2CRecovery::completeRecovery(bool success) {
         s_recoverySuccesses++;
         s_errorCount = 0;  // Reset error count on success
         s_softwareAttempts = 0;  // Reset escalation counter
-        s_hwAttempts = 0;  // Reset Level 3 escalation counter
         Serial.printf("[I2C_RECOVERY] Recovery SUCCESSFUL (%d/%d total)\n",
                       s_recoverySuccesses, s_recoveryAttempts);
     } else {

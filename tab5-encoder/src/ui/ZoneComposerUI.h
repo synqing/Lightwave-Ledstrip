@@ -4,7 +4,7 @@
 // ============================================================================
 // ZoneComposerUI - Zone Composer Dashboard Screen
 // ============================================================================
-// Visual mixer for 4 zones, inspired by LightwaveOS Dashboard V2
+// Visual mixer for 3 zones, inspired by LightwaveOS Dashboard V2
 // Shows per-zone effect, speed/palette, and LED ranges
 // ============================================================================
 
@@ -52,7 +52,7 @@ enum class ZoneParameterMode : uint8_t {
  */
 enum class SelectionType : uint8_t {
     NONE = 0,
-    ZONE_PARAMETER = 1,  // One of 4 zone rows (effect/palette/speed/brightness)
+    ZONE_PARAMETER = 1,  // One of 3 zone rows (effect/palette/speed/brightness)
     ZONE_COUNT = 2,      // Zone count selector
     PRESET = 3           // Preset selector
 };
@@ -129,7 +129,7 @@ public:
      */
     const ZoneState& getZoneState(uint8_t zoneId) const {
         static ZoneState empty;
-        if (zoneId >= 4) return empty;
+        if (zoneId >= 3) return empty;
         return _zones[zoneId];
     }
 
@@ -261,11 +261,11 @@ private:
     ZoneSelection _currentSelection;
     ZoneParameterMode _activeMode = ZoneParameterMode::EFFECT;
 
-    // Zone parameter values (cached local state)
-    uint8_t _zoneEffects[4] = {0, 0, 0, 0};
-    uint8_t _zonePalettes[4] = {0, 0, 0, 0};
-    uint8_t _zoneSpeeds[4] = {25, 25, 25, 25};
-    uint8_t _zoneBrightness[4] = {128, 128, 128, 128};
+    // Zone parameter values (cached local state, 3 zones max)
+    uint8_t _zoneEffects[3] = {0, 0, 0};
+    uint8_t _zonePalettes[3] = {0, 0, 0};
+    uint8_t _zoneSpeeds[3] = {25, 25, 25};
+    uint8_t _zoneBrightness[3] = {128, 128, 128};
 
     // Preset state
     // Pivot: default to 2-zone layout
@@ -276,12 +276,12 @@ private:
     // LVGL Widget References (Phase 1)
     // ========================================================================
 
-    // Zone parameter widgets (one per zone, per mode)
-    lv_obj_t* _zoneParamContainers[4] = {nullptr};
-    lv_obj_t* _zoneEffectLabels[4] = {nullptr};
-    lv_obj_t* _zonePaletteLabels[4] = {nullptr};
-    lv_obj_t* _zoneSpeedLabels[4] = {nullptr};
-    lv_obj_t* _zoneBrightnessLabels[4] = {nullptr};
+    // Zone parameter widgets (one per zone, per mode — 3 zones max)
+    lv_obj_t* _zoneParamContainers[3] = {nullptr};
+    lv_obj_t* _zoneEffectLabels[3] = {nullptr};
+    lv_obj_t* _zonePaletteLabels[3] = {nullptr};
+    lv_obj_t* _zoneSpeedLabels[3] = {nullptr};
+    lv_obj_t* _zoneBrightnessLabels[3] = {nullptr};
 
     // Mode selector buttons
     lv_obj_t* _modeButtons[4] = {nullptr};  // Effect, Palette, Speed, Brightness
@@ -310,8 +310,8 @@ private:
     // Legacy State (M5GFX rendering)
     // ========================================================================
 
-    // Zone states
-    ZoneState _zones[4];
+    // Zone states (3 zones max)
+    ZoneState _zones[3];
 
     // Zone segments (layout)
     zones::ZoneSegment _segments[zones::MAX_ZONES];
@@ -335,12 +335,12 @@ private:
     static constexpr int ZONE_LIST_Y = 180 + Theme::STATUS_BAR_H;  // Was 180, now below header
     static constexpr int CONTROLS_Y = 520 + Theme::STATUS_BAR_H;   // Was 520, now below header
 
-    // Zone colors (matching dashboard template)
-    static constexpr uint32_t ZONE_COLORS[4] = {
-        0x6EE7F3,  // Zone 0: Cyan
-        0x22DD88,  // Zone 1: Green
-        0xFFB84D,  // Zone 2: Orange
-        0x9D4EDD   // Zone 3: Purple
+    // Zone colours (matching dashboard template)
+    // Note: Zone numbering is 1-indexed user-facing
+    static constexpr uint32_t ZONE_COLORS[3] = {
+        0x6EE7F3,  // Zone 1: Cyan
+        0x22DD88,  // Zone 2: Green
+        0xFFB84D   // Zone 3: Orange
     };
 
     // ========================================================================

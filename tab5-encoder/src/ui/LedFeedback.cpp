@@ -137,11 +137,6 @@ void LedFeedback::update() {
         return;
     }
 
-    // Rate limit: max 20 LED writes/sec during breathing to reduce I2C load
-    uint32_t now = millis();
-    if ((now - m_lastWriteTime) < LED_WRITE_INTERVAL_MS) return;
-    m_lastWriteTime = now;
-
     // Calculate breathing factor (0.30 to 1.0)
     float factor = calculateBreathingFactor();
 

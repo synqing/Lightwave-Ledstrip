@@ -252,16 +252,6 @@ private:
     // Coarse mode manager for ENC-A acceleration (encoders 0-7)
     CoarseModeManager* _coarseModeManager = nullptr;
 
-    // Dead-bus detection: if all reads return zero for consecutive polls,
-    // the I2C bus is likely stuck and we should trigger recovery early
-    // rather than burning 34+ timeouts per loop.
-    uint16_t _consecutiveAllZeroA = 0;
-    uint16_t _consecutiveAllZeroB = 0;
-    // 200 consecutive all-zero polls ≈ 10 seconds at 20Hz.
-    // Normal idle encoders always return zero — only a genuinely dead bus
-    // stays at zero for this long without ANY encoder/button activity.
-    static constexpr uint16_t DEAD_BUS_THRESHOLD = 200;
-
     // ========================================================================
     // Internal Methods
     // ========================================================================
@@ -365,15 +355,13 @@ inline DualEncoderService::DualEncoderService(TwoWire* wire, uint8_t addressA, u
     _values[6] = ParamDefault::VARIATION;    // Index 6 = Variation (0)
     _values[7] = ParamDefault::BRIGHTNESS;   // Index 7 = Brightness (128)
 
-    // Unit B (indices 8-15): Zone parameters
-    _values[8] = ParamDefault::ZONE0_EFFECT;
-    _values[9] = ParamDefault::ZONE0_SPEED;
-    _values[10] = ParamDefault::ZONE1_EFFECT;
-    _values[11] = ParamDefault::ZONE1_SPEED;
-    _values[12] = ParamDefault::ZONE2_EFFECT;
-    _values[13] = ParamDefault::ZONE2_SPEED;
-    _values[14] = ParamDefault::ZONE3_EFFECT;
-    _values[15] = ParamDefault::ZONE3_SPEED;
+    // Unit B (indices 8-13): Zone parameters (3 zones, 1-indexed user-facing)
+    _values[8] = ParamDefault::ZONE1_EFFECT;
+    _values[9] = ParamDefault::ZONE1_SPEED;
+    _values[10] = ParamDefault::ZONE2_EFFECT;
+    _values[11] = ParamDefault::ZONE2_SPEED;
+    _values[12] = ParamDefault::ZONE3_EFFECT;
+    _values[13] = ParamDefault::ZONE3_SPEED;
 }
 
 inline bool DualEncoderService::begin() {
@@ -408,37 +396,22 @@ inline void DualEncoderService::update() {
     // Poll Unit A encoders (indices 0-7)
     if (_transportA.isAvailable()) {
         _switchStateA = _transportA.getInputSwitch();
-        bool anyNonZeroA = false;
         const uint32_t _dbg_t0 = millis();
         for (uint8_t localIdx = 0; localIdx < ENCODERS_PER_UNIT; localIdx++) {
             uint8_t globalIdx = localIdx;  // 0-7
 
             // Read raw encoder delta
             int32_t rawDelta = _transportA.getRelCounter(localIdx);
-            if (rawDelta != 0) anyNonZeroA = true;
             processEncoderDelta(globalIdx, rawDelta, now);
 
             // Check button state
             bool isPressed = _transportA.getKeyPressed(localIdx);
-            if (isPressed) anyNonZeroA = true;
             _buttonStates[globalIdx] = isPressed;
             processButton(globalIdx, isPressed, now);
 
             // Feed WDT every 4 encoders to prevent timeout cascade
             // (each encoder = 2-5 I2C txns × up to 10ms timeout = 20-50ms)
             if ((localIdx & 3) == 3) esp_task_wdt_reset();
-        }
-        // Dead-bus detection: if ALL reads returned zero for a long time,
-        // verify the bus is actually alive with a live ACK probe
-        if (anyNonZeroA) {
-            _consecutiveAllZeroA = 0;
-        } else if (++_consecutiveAllZeroA >= DEAD_BUS_THRESHOLD) {
-            _consecutiveAllZeroA = 0;
-            // Probe the device — isConnected() does a real I2C ACK check
-            // and calls I2CRecovery::recordError() on failure
-            if (!_transportA.isConnected()) {
-                Serial.println("[ENC] Unit A dead-bus confirmed — isConnected() failed");
-            }
         }
         const uint32_t _dbg_dt = millis() - _dbg_t0;
         // #region agent log (DISABLED)
@@ -464,33 +437,21 @@ inline void DualEncoderService::update() {
     // Poll Unit B encoders (indices 8-15)
     if (_transportB.isAvailable()) {
         _switchStateB = _transportB.getInputSwitch();
-        bool anyNonZeroB = false;
         const uint32_t _dbg_t0 = millis();
         for (uint8_t localIdx = 0; localIdx < ENCODERS_PER_UNIT; localIdx++) {
             uint8_t globalIdx = localIdx + ENCODERS_PER_UNIT;  // 8-15
 
             // Read raw encoder delta
             int32_t rawDelta = _transportB.getRelCounter(localIdx);
-            if (rawDelta != 0) anyNonZeroB = true;
             processEncoderDelta(globalIdx, rawDelta, now);
 
             // Check button state
             bool isPressed = _transportB.getKeyPressed(localIdx);
-            if (isPressed) anyNonZeroB = true;
             _buttonStates[globalIdx] = isPressed;
             processButton(globalIdx, isPressed, now);
 
             // Feed WDT every 4 encoders
             if ((localIdx & 3) == 3) esp_task_wdt_reset();
-        }
-        // Dead-bus detection for Unit B
-        if (anyNonZeroB) {
-            _consecutiveAllZeroB = 0;
-        } else if (++_consecutiveAllZeroB >= DEAD_BUS_THRESHOLD) {
-            _consecutiveAllZeroB = 0;
-            if (!_transportB.isConnected()) {
-                Serial.println("[ENC] Unit B dead-bus confirmed — isConnected() failed");
-            }
         }
         const uint32_t _dbg_dt = millis() - _dbg_t0;
         // #region agent log (DISABLED)
@@ -554,15 +515,13 @@ inline void DualEncoderService::resetToDefaults(bool triggerCallbacks) {
     _values[6] = ParamDefault::VARIATION;    // Index 6 = Variation (0)
     _values[7] = ParamDefault::BRIGHTNESS;   // Index 7 = Brightness (128)
 
-    // Reset Unit B parameters (8-15) to zone defaults
-    _values[8] = ParamDefault::ZONE0_EFFECT;
-    _values[9] = ParamDefault::ZONE0_SPEED;
-    _values[10] = ParamDefault::ZONE1_EFFECT;
-    _values[11] = ParamDefault::ZONE1_SPEED;
-    _values[12] = ParamDefault::ZONE2_EFFECT;
-    _values[13] = ParamDefault::ZONE2_SPEED;
-    _values[14] = ParamDefault::ZONE3_EFFECT;
-    _values[15] = ParamDefault::ZONE3_SPEED;
+    // Reset Unit B parameters (8-13) to zone defaults (3 zones, 1-indexed user-facing)
+    _values[8] = ParamDefault::ZONE1_EFFECT;
+    _values[9] = ParamDefault::ZONE1_SPEED;
+    _values[10] = ParamDefault::ZONE2_EFFECT;
+    _values[11] = ParamDefault::ZONE2_SPEED;
+    _values[12] = ParamDefault::ZONE3_EFFECT;
+    _values[13] = ParamDefault::ZONE3_SPEED;
 
     // Reset all processing states
     for (uint8_t i = 0; i < TOTAL_ENCODERS; i++) {

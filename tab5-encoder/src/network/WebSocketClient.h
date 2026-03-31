@@ -134,7 +134,7 @@ public:
     void sendVariationChange(uint8_t variation);
 
     // ========================================================================
-    // Zone Commands (Tab5 extension for Unit B, encoders 8-15)
+    // Zone Commands (Tab5 extension for Unit B, encoders 8-13, 3 zones)
     // ========================================================================
 
     void sendZoneEnable(bool enable);
@@ -256,9 +256,9 @@ private:
     uint16_t _currentEffectId = 0;
     bool _currentEffectKnown = false;
 
-    // Rate limiting state (16 parameters for dual encoder units)
+    // Rate limiting state (14 parameters: 8 global + 6 zone)
     struct RateLimiter {
-        unsigned long lastSend[16];
+        unsigned long lastSend[14];
     };
     RateLimiter _rateLimiter;
 
@@ -266,7 +266,7 @@ private:
     struct PendingMessage {
         uint8_t paramIndex;
         uint8_t value;
-        uint8_t zoneId;  // For zone parameters (0-3), unused for global params
+        uint8_t zoneId;  // For zone parameters (0-2), unused for global params
         uint32_t timestamp;
         const char* type;
         bool valid;
@@ -291,15 +291,14 @@ private:
     static constexpr uint32_t SEND_TIMEOUT_MS = 50;  // 50ms max send time
     uint32_t _sendAttemptStartTime;
 
-    // Parameter indices for rate limiting
-    // Note: Unit B (8-15) encoders are disabled, but zone functions may still be called from UI
+    // Parameter indices for rate limiting (3 zones, 1-indexed user-facing)
+    // Note: Zone functions called from UI use 0-based zoneId internally
     enum ParamIndex : uint8_t {
         EFFECT = 0, BRIGHTNESS = 1, PALETTE = 2, SPEED = 3,
         MOOD = 4, FADEAMOUNT = 5, COMPLEXITY = 6, VARIATION = 7,
-        ZONE0_EFFECT = 8, ZONE0_SPEED = 9,
-        ZONE1_EFFECT = 10, ZONE1_SPEED = 11,
-        ZONE2_EFFECT = 12, ZONE2_SPEED = 13,
-        ZONE3_EFFECT = 14, ZONE3_SPEED = 15
+        ZONE1_EFFECT = 8, ZONE1_SPEED = 9,
+        ZONE2_EFFECT = 10, ZONE2_SPEED = 11,
+        ZONE3_EFFECT = 12, ZONE3_SPEED = 13
     };
 
     // Fixed buffer for JSON serialization

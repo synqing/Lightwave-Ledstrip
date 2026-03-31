@@ -11,7 +11,7 @@
 
 ButtonHandler::ButtonHandler() {
     _zoneModeEnabled = false;
-    for (uint8_t i = 0; i < 4; i++) {
+    for (uint8_t i = 0; i < 3; i++) {
         _zoneEncoderMode[i] = SpeedPaletteMode::SPEED;
     }
 }
@@ -49,7 +49,7 @@ void ButtonHandler::toggleZoneMode() {
 }
 
 void ButtonHandler::toggleSpeedPaletteMode(uint8_t zoneId) {
-    if (zoneId >= 4) return;
+    if (zoneId >= 3) return;
 
     // Toggle between SPEED and PALETTE
     _zoneEncoderMode[zoneId] = (_zoneEncoderMode[zoneId] == SpeedPaletteMode::SPEED)

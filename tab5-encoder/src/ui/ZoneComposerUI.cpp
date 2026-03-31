@@ -19,7 +19,7 @@ ZoneComposerUI::ZoneComposerUI(M5GFX& display)
     : _display(display)
 {
     // Initialize zone states with defaults
-    for (uint8_t i = 0; i < 4; i++) {
+    for (uint8_t i = 0; i < 3; i++) {
         _zones[i] = ZoneState();
         _zones[i].ledStart = i * 40;  // Placeholder LED ranges
         _zones[i].ledEnd = (i + 1) * 40 - 1;
@@ -28,8 +28,8 @@ ZoneComposerUI::ZoneComposerUI(M5GFX& display)
 
 ZoneComposerUI::~ZoneComposerUI() {
     // CRITICAL FIX: Free ParameterMetadata allocations to prevent memory leak
-    // Each zone (4) has 4 parameters = 16 total allocations
-    for (uint8_t z = 0; z < 4; z++) {
+    // Each zone (3) has 4 parameters = 12 total allocations
+    for (uint8_t z = 0; z < 3; z++) {
         // Free Effect parameter metadata
         if (_zoneEffectLabels[z]) {
             ParameterMetadata* meta = (ParameterMetadata*)lv_obj_get_user_data(_zoneEffectLabels[z]);
@@ -56,7 +56,7 @@ ZoneComposerUI::~ZoneComposerUI() {
     }
 
     // LVGL widgets are automatically cleaned up by LVGL when parent screen is deleted
-    Serial.println("[ZoneComposer] Destructor - cleaned up 16 ParameterMetadata allocations");
+    Serial.println("[ZoneComposer] Destructor - cleaned up 12 ParameterMetadata allocations");
 }
 
 void ZoneComposerUI::begin(lv_obj_t* parent) {
@@ -152,7 +152,7 @@ void ZoneComposerUI::loop() {
 }
 
 void ZoneComposerUI::updateZone(uint8_t zoneId, const ZoneState& state) {
-    if (zoneId >= 4) return;
+    if (zoneId >= 3) return;
     
     _zones[zoneId] = state;
     
@@ -409,7 +409,7 @@ void ZoneComposerUI::drawZoneInfo(int x, int y, int w, int h) {
 }
 
 uint32_t ZoneComposerUI::getZoneColor(uint8_t zoneId) const {
-    if (zoneId >= 4) return ZONE_COLORS[0];
+    if (zoneId >= 3) return ZONE_COLORS[0];
     return ZONE_COLORS[zoneId];
 }
 
@@ -474,7 +474,7 @@ void ZoneComposerUI::generateZoneSegments(uint8_t zoneCount) {
         rightStart = rightEnd + 1;
     }
     
-    // Reverse to get centre-out order (zone 0 = innermost)
+    // Reverse to get centre-out order (zone index 0 = innermost = Zone 1 user-facing)
     // Actually, we built them outer-in, so reverse
     for (uint8_t i = 0; i < zoneCount / 2; i++) {
         zones::ZoneSegment temp = _editingSegments[i];
@@ -506,9 +506,9 @@ void ZoneComposerUI::loadPreset(int8_t presetId) {
     };
 
     static const zones::ZoneSegment PRESET_1[2] = {  // Dual Split (2 zones)
-        // Zone 0: INNER (40 LEDs per side)
+        // Zone 1 (index 0): INNER (40 LEDs per side)
         {0, 40, 79, 80, 119, 80},
-        // Zone 1: OUTER (40 LEDs per side)
+        // Zone 2 (index 1): OUTER (40 LEDs per side)
         {1, 0, 39, 120, 159, 80}
     };
 
@@ -719,7 +719,7 @@ void ZoneComposerUI::setActiveMode(ZoneParameterMode mode) {
 
 void ZoneComposerUI::clearSelection() {
     // Remove all highlighting from zone parameter widgets
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 3; i++) {
         if (_zoneEffectLabels[i]) {
             lv_obj_remove_style(_zoneEffectLabels[i], &_styleSelected, 0);
             lv_obj_invalidate(_zoneEffectLabels[i]);
@@ -1150,7 +1150,7 @@ void ZoneComposerUI::createInteractiveUI(lv_obj_t* parent) {
     // Serial.printf("[ZC_TRACE] before createZoneParameterGrid @ %lu ms (delta=%lu)\n", t3, t3-t2);
 
     // ═══════════════════════════════════════════════════════════════════════
-    // ZONE GRID: 4 zones with their parameters
+    // ZONE GRID: 3 zones with their parameters
     // ═══════════════════════════════════════════════════════════════════════
     createZoneParameterGrid(parent);
 
@@ -1206,14 +1206,14 @@ void ZoneComposerUI::createZoneParameterGrid(lv_obj_t* parent) {
     lv_obj_set_layout(zoneGrid, LV_LAYOUT_GRID);
     lv_obj_clear_flag(zoneGrid, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Grid: 4 columns for 4 zones
-    static lv_coord_t col_dsc[5] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
+    // Grid: 3 columns for 3 zones
+    static lv_coord_t col_dsc[4] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
     static lv_coord_t row_dsc[2] = {280, LV_GRID_TEMPLATE_LAST};
     lv_obj_set_grid_dsc_array(zoneGrid, col_dsc, row_dsc);
     lv_obj_set_style_pad_column(zoneGrid, ZC_GRID_GAP, LV_PART_MAIN);
 
     uint32_t t1 = millis();
-    for (uint8_t i = 0; i < 4; i++) {
+    for (uint8_t i = 0; i < 3; i++) {
         // Serial.printf("[ZC_TRACE] creating zone %d @ %lu ms (delta=%lu)\n", i, millis(), millis()-t1);
         createZoneParamRow(zoneGrid, i);
         t1 = millis();

@@ -187,9 +187,9 @@ void PresetManager::captureCurrentState(PresetData& preset) {
         // Encoder values are uint8_t — store as low byte with zero high byte.
         // The parallel fix-effect-id-chain agent is responsible for promoting
         // ZoneState.effectId to uint16_t; once that lands, update this path.
-        for (int z = 0; z < 4; z++) {
-            uint8_t effectIdx = 8 + (z * 2);   // Zone effect indices: 8, 10, 12, 14
-            uint8_t speedIdx = 9 + (z * 2);    // Zone speed indices: 9, 11, 13, 15
+        for (int z = 0; z < 3; z++) {
+            uint8_t effectIdx = 8 + (z * 2);   // Zone effect indices: 8, 10, 12
+            uint8_t speedIdx = 9 + (z * 2);    // Zone speed indices: 9, 11, 13
 
             preset.setZoneEffectId(static_cast<uint8_t>(z), values[effectIdx]);
             preset.zones[z].speed = values[speedIdx];

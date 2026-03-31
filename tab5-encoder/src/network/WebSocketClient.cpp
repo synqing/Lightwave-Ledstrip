@@ -38,7 +38,7 @@ WebSocketClient::WebSocketClient()
     , _sendAttemptStartTime(0)
 {
     // Initialize rate limiter (all parameters start at 0)
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < 14; i++) {
         _rateLimiter.lastSend[i] = 0;
     }
 
@@ -680,7 +680,7 @@ void WebSocketClient::sendVariationChange(uint8_t variation) {
 }
 
 // ============================================================================
-// Zone Commands (Tab5 extension for Unit B, encoders 8-15)
+// Zone Commands (Tab5 extension for Unit B, encoders 8-13, 3 zones)
 // ============================================================================
 
 void WebSocketClient::sendZoneEnable(bool enable) {
@@ -698,9 +698,9 @@ void WebSocketClient::sendZoneEffect(uint8_t zoneId, uint16_t effectId) {
         return;
     }
 
-    // Map zoneId to rate limiter index
-    uint8_t paramIndex = ParamIndex::ZONE0_EFFECT + (zoneId * 2);
-    if (zoneId > 3) {
+    // Map zoneId to rate limiter index (zoneId is 0-based internal)
+    uint8_t paramIndex = ParamIndex::ZONE1_EFFECT + (zoneId * 2);
+    if (zoneId > 2) {
         return;
     }
 
@@ -723,8 +723,8 @@ void WebSocketClient::sendZoneBrightness(uint8_t zoneId, uint8_t value) {
 
     // Zone brightness uses rate limiter slot for zone effect (same encoder pair)
     // Note: Brightness is no longer a parameter in new layout, but API still supports it
-    uint8_t paramIndex = ParamIndex::ZONE0_EFFECT + (zoneId * 2);
-    if (zoneId > 3) {
+    uint8_t paramIndex = ParamIndex::ZONE1_EFFECT + (zoneId * 2);
+    if (zoneId > 2) {
         return;
     }
 
@@ -744,9 +744,9 @@ void WebSocketClient::sendZoneSpeed(uint8_t zoneId, uint8_t value) {
         return;
     }
 
-    // Zone speed uses rate limiter slots (indices 9, 11, 13, 15)
-    uint8_t paramIndex = ParamIndex::ZONE0_SPEED + (zoneId * 2);
-    if (zoneId > 3) {
+    // Zone speed uses rate limiter slots (indices 9, 11, 13)
+    uint8_t paramIndex = ParamIndex::ZONE1_SPEED + (zoneId * 2);
+    if (zoneId > 2) {
         return;
     }
 
@@ -767,8 +767,8 @@ void WebSocketClient::sendZonePalette(uint8_t zoneId, uint8_t paletteId) {
     }
 
     // Zone palette shares rate limit with zone effect (same encoder)
-    uint8_t paramIndex = ParamIndex::ZONE0_EFFECT + (zoneId * 2);
-    if (zoneId > 3) {
+    uint8_t paramIndex = ParamIndex::ZONE1_EFFECT + (zoneId * 2);
+    if (zoneId > 2) {
         return;
     }
 
@@ -789,8 +789,8 @@ void WebSocketClient::sendZoneBlend(uint8_t zoneId, uint8_t blendMode) {
     }
 
     // Zone blend uses rate limiter slot for zone effect (same encoder pair)
-    uint8_t paramIndex = ParamIndex::ZONE0_EFFECT + (zoneId * 2);
-    if (zoneId > 3 || blendMode > 7) {
+    uint8_t paramIndex = ParamIndex::ZONE1_EFFECT + (zoneId * 2);
+    if (zoneId > 2 || blendMode > 7) {
         return;
     }
 

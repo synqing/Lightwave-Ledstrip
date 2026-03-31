@@ -24,19 +24,9 @@ void initWiFiAntennaPin() {
     ioe.setHighImpedance(0, false);  // P0 = push-pull (not floating)
     ioe.digitalWrite(0, 1);          // Default: external MMCX
 
-    // Verify the write took effect — silent I2C failure leaves P0 = LOW (internal)
-    bool actual = ioe.getWriteValue(0);
-    if (!actual) {
-        Serial.println("[Antenna] ERROR: P0 readback LOW after setting HIGH — retrying");
-        ioe.digitalWrite(0, 1);
-        delay(5);
-        actual = ioe.getWriteValue(0);
-    }
-
     s_useExternal = true;
     s_pinConfigured = true;
-    Serial.printf("[Antenna] Pin P0 configured as OUTPUT, set to external MMCX (readback: %s)\n",
-                  actual ? "HIGH" : "LOW — FAILED");
+    Serial.println("[Antenna] Pin P0 configured as OUTPUT, set to external MMCX");
 }
 
 void setWiFiAntenna(bool useExternal) {

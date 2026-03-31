@@ -83,10 +83,10 @@ struct PresetData {
     // Zone State (18 bytes)
     // ========================================================================
     uint8_t zoneModeEnabled : 1;  // Zone Composer active
-    uint8_t zoneCount : 3;        // Number of active zones (1-4)
+    uint8_t zoneCount : 3;        // Number of active zones (1-3)
     uint8_t reserved1 : 4;        // Reserved for future use
 
-    ZonePresetConfig zones[4];    // 4 zones × 4 bytes = 16 bytes
+    ZonePresetConfig zones[4];    // 3 active zones + 1 reserved (4 × 4 bytes = 16 bytes for binary compat)
 
     uint8_t reserved2;            // Padding for alignment
 

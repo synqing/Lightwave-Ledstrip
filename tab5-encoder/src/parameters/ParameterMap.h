@@ -8,17 +8,17 @@
 // Maps encoder indices to parameter IDs, field names, and validation ranges.
 // Eliminates duplicated mapping logic across encoder and WebSocket handlers.
 //
-// Supports 16 parameters across dual M5ROTATE8 units:
+// Supports 14 parameters across dual M5ROTATE8 units:
 // - Unit A (indices 0-7): Core LightwaveOS parameters
-// - Unit B (indices 8-15): Placeholder parameters (TBD)
+// - Unit B (indices 8-13): Zone parameters (3 zones, 1-indexed user-facing)
 //
 // Ported from K1.8encoderS3, extended for dual-unit support.
 // ============================================================================
 
 #include <cstdint>
 
-// Total number of parameters (dual M5ROTATE8 = 16 encoders)
-constexpr uint8_t PARAMETER_COUNT = 16;
+// Total number of parameters (Unit A: 8 global + Unit B: 6 zone = 14)
+constexpr uint8_t PARAMETER_COUNT = 14;
 
 /**
  * Parameter identifiers matching encoder indices
@@ -34,17 +34,16 @@ enum class ParameterId : uint8_t {
     Complexity = 5,   // Encoder 5
     Variation = 6,    // Encoder 6
     Brightness = 7,   // Encoder 7
-    // Unit B (8-15) - Zone parameters
+    // Unit B (8-13) - Zone parameters (3 zones, 1-indexed user-facing)
     // Pattern: [Zone N Effect, Zone N Speed/Palette] pairs
-    // Note: Encoders 9, 11, 13, 15 toggle between Speed and Palette via button
-    Zone0Effect = 8,
-    Zone0Speed = 9,      // Also Zone0Palette when button toggled
-    Zone1Effect = 10,
-    Zone1Speed = 11,     // Also Zone1Palette when button toggled
-    Zone2Effect = 12,
-    Zone2Speed = 13,     // Also Zone2Palette when button toggled
-    Zone3Effect = 14,
-    Zone3Speed = 15     // Also Zone3Palette when button toggled
+    // Note: Encoders 9, 11, 13 toggle between Speed and Palette via button
+    // Internal array index is 0-based; zoneId=0 means Zone 1 (user-facing)
+    Zone1Effect = 8,
+    Zone1Speed = 9,      // Also Zone1Palette when button toggled
+    Zone2Effect = 10,
+    Zone2Speed = 11,     // Also Zone2Palette when button toggled
+    Zone3Effect = 12,
+    Zone3Speed = 13      // Also Zone3Palette when button toggled
 };
 
 /**
@@ -83,7 +82,7 @@ const ParameterDef* getParameterByField(const char* fieldName);
 
 /**
  * Get total number of parameters
- * @return Number of parameters (16)
+ * @return Number of parameters (14)
  */
 constexpr uint8_t getParameterCount() { return PARAMETER_COUNT; }
 

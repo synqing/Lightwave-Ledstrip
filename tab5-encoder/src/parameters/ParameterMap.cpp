@@ -3,7 +3,7 @@
 // ============================================================================
 // ParameterMap - Parameter Definition Table for Tab5.encoder
 // ============================================================================
-// Extended for 16 parameters across dual M5ROTATE8 units.
+// Extended for 14 parameters across dual M5ROTATE8 units.
 // Ported from K1.8encoderS3.
 // ============================================================================
 
@@ -17,7 +17,7 @@ static bool s_metadataInitialized = false;
 
 // Parameter definitions table - single source of truth
 // Indices 0-7: Unit A (Global LightwaveOS parameters)
-// Indices 8-15: Unit B (Zone parameters)
+// Indices 8-13: Unit B (Zone parameters, 3 zones, 1-indexed user-facing)
 static const ParameterDef PARAMETER_TABLE[] = {
     // id, encoderIndex, statusField, wsCommandType, min, max, defaultValue
 
@@ -32,18 +32,17 @@ static const ParameterDef PARAMETER_TABLE[] = {
     {ParameterId::Variation,  6, "variation",  "parameters.set",     0,   255, 0},  // Encoder 6: Variation
     {ParameterId::Brightness, 7, "brightness", "parameters.set",     0,   255, 128}, // Encoder 7: Brightness
 
-    // Unit B (8-15) - Zone parameters
+    // Unit B (8-13) - Zone parameters (3 zones, 1-indexed user-facing)
     // Pattern: [Zone N Effect, Zone N Speed/Palette] pairs
-    // Note: Encoders 9, 11, 13, 15 can toggle between Speed and Palette via button
+    // Note: Encoders 9, 11, 13 can toggle between Speed and Palette via button
     // Default mode is Speed; when toggled, encoder controls Palette instead
-    {ParameterId::Zone0Effect, 8,  "zone0Effect", "zone.setEffect",   0,  187,  0},  // 188 effects (0-187)
-    {ParameterId::Zone0Speed,  9,  "zone0Speed",  "zone.setSpeed",    1,  100, 25},  // Also zone0Palette when toggled
-    {ParameterId::Zone1Effect, 10, "zone1Effect", "zone.setEffect",   0,  187,  0},  // 188 effects (0-187)
-    {ParameterId::Zone1Speed,  11, "zone1Speed",  "zone.setSpeed",    1,  100, 25},  // Also zone1Palette when toggled
-    {ParameterId::Zone2Effect, 12, "zone2Effect", "zone.setEffect",   0,  187,  0},  // 188 effects (0-187)
-    {ParameterId::Zone2Speed,  13, "zone2Speed",  "zone.setSpeed",    1,  100, 25},  // Also zone2Palette when toggled
-    {ParameterId::Zone3Effect, 14, "zone3Effect", "zone.setEffect",   0,  187,  0},  // 188 effects (0-187)
-    {ParameterId::Zone3Speed,  15, "zone3Speed",  "zone.setSpeed",    1,  100, 25}   // Also zone3Palette when toggled
+    // String identifiers use 1-indexed naming (zone1Effect, zone2Effect, zone3Effect)
+    {ParameterId::Zone1Effect, 8,  "zone1Effect", "zone.setEffect",   0,  187,  0},  // 188 effects (0-187)
+    {ParameterId::Zone1Speed,  9,  "zone1Speed",  "zone.setSpeed",    1,  100, 25},  // Also zone1Palette when toggled
+    {ParameterId::Zone2Effect, 10, "zone2Effect", "zone.setEffect",   0,  187,  0},  // 188 effects (0-187)
+    {ParameterId::Zone2Speed,  11, "zone2Speed",  "zone.setSpeed",    1,  100, 25},  // Also zone2Palette when toggled
+    {ParameterId::Zone3Effect, 12, "zone3Effect", "zone.setEffect",   0,  187,  0},  // 188 effects (0-187)
+    {ParameterId::Zone3Speed,  13, "zone3Speed",  "zone.setSpeed",    1,  100, 25}   // Also zone3Palette when toggled
 };
 
 const ParameterDef* getParameterByIndex(uint8_t index) {

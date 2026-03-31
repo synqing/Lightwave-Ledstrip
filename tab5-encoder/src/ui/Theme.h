@@ -53,7 +53,7 @@ constexpr uint16_t PARAM_COLORS[8] = {
 // Parameter Names
 // ============================================================================
 
-constexpr const char* PARAM_NAMES[16] = {
+constexpr const char* PARAM_NAMES[14] = {
     "EFFECT",      // 0
     "BRIGHTNESS",  // 1
     "PALETTE",     // 2
@@ -62,14 +62,12 @@ constexpr const char* PARAM_NAMES[16] = {
     "FADE",        // 5
     "COMPLEXITY",  // 6
     "VARIATION",   // 7
-    "Z0 EFFECT",   // 8
-    "Z0 SPD",      // 9 - Zone 0 Speed/Palette
-    "Z1 EFFECT",   // 10
-    "Z1 SPD",      // 11 - Zone 1 Speed/Palette
-    "Z2 EFFECT",   // 12
-    "Z2 SPD",      // 13 - Zone 2 Speed/Palette
-    "Z3 EFFECT",   // 14
-    "Z3 SPD"       // 15 - Zone 3 Speed/Palette
+    "Z1 EFFECT",   // 8  - Zone 1 Effect (1-indexed user-facing)
+    "Z1 SPD",      // 9  - Zone 1 Speed/Palette
+    "Z2 EFFECT",   // 10 - Zone 2 Effect
+    "Z2 SPD",      // 11 - Zone 2 Speed/Palette
+    "Z3 EFFECT",   // 12 - Zone 3 Effect
+    "Z3 SPD"       // 13 - Zone 3 Speed/Palette
 };
 
 // ============================================================================

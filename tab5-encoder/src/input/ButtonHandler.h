@@ -48,11 +48,11 @@ public:
 
     /**
      * Get speed/palette mode for a zone encoder
-     * @param zoneId Zone ID (0-3)
+     * @param zoneId Zone ID (0-2, internal 0-based)
      * @return Current mode (SPEED or PALETTE)
      */
     SpeedPaletteMode getZoneEncoderMode(uint8_t zoneId) const {
-        if (zoneId >= 4) return SpeedPaletteMode::SPEED;
+        if (zoneId >= 3) return SpeedPaletteMode::SPEED;
         return _zoneEncoderMode[zoneId];
     }
 
@@ -90,8 +90,7 @@ public:
 
 private:
     bool _zoneModeEnabled = false;
-    SpeedPaletteMode _zoneEncoderMode[4] = {
-        SpeedPaletteMode::SPEED,
+    SpeedPaletteMode _zoneEncoderMode[3] = {
         SpeedPaletteMode::SPEED,
         SpeedPaletteMode::SPEED,
         SpeedPaletteMode::SPEED

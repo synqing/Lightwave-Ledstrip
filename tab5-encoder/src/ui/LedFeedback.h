@@ -86,11 +86,7 @@ private:
 
     // Animation state
     uint32_t m_animationStartTime;
-    uint32_t m_lastWriteTime = 0;
     bool m_isBreathing;
-
-    // Rate limit: max 20 LED writes/sec during breathing to reduce I2C load
-    static constexpr uint32_t LED_WRITE_INTERVAL_MS = 50;
 
     // Cached base color for current state
     StatusLedColor m_baseColor;

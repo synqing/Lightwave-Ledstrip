@@ -173,13 +173,6 @@ public:
      */
     static void hardwareResetI2C0();
 
-    /**
-     * Register the power-cycle callback for Level 3 recovery.
-     * Called from main.cpp setup() to provide Port.A power control.
-     * @param cb Function that toggles Port.A power: cb(false)=off, cb(true)=on
-     */
-    static void setPowerCycleCallback(void (*cb)(bool enable));
-
     // ========================================================================
     // Recovery Statistics
     // ========================================================================
@@ -216,11 +209,6 @@ private:
         // Hardware reset stages (ESP32-P4 native)
         HwPeriphReset,      // Call i2c_ll_reset_register() inside PERIPH_RCC_ATOMIC()
         HwWaitAfterReset,   // Wait after hardware peripheral reset
-        // Level 3: Power-cycle Port.A (resets slave MCU)
-        PowerCycleOff,      // Disable Port.A 5V via callback
-        PowerCycleWait,     // Wait for capacitor discharge + STM32 POR
-        PowerCycleOn,       // Re-enable Port.A 5V
-        PowerCycleSettle,   // Wait for STM32 boot + bus settle
         // Reinitialize
         WireBegin,          // Reinitialize Wire
         WaitAfterInit,      // Wait for Wire to stabilize
@@ -246,11 +234,6 @@ private:
     static uint8_t s_sclToggleCount;
     static uint8_t s_stopAttempt;
     static uint8_t s_softwareAttempts;  // Escalation counter for hardware reset
-    static uint8_t s_hwAttempts;        // Escalation counter for power-cycle
-    static void (*s_powerCycleCb)(bool enable);
-
-    // Level 3 escalation: power-cycle after N failed hardware resets
-    static constexpr uint8_t HW_ATTEMPTS_BEFORE_POWER_CYCLE = 2;
 
     // Cooldown tracking
     static uint32_t s_lastRecoveryTime;

@@ -296,7 +296,7 @@ private:
      * @brief Handle "zone.status" message (NEW for Tab5)
      *
      * Zone-specific parameter sync for multi-zone LED configurations.
-     * Supports up to 4 zones, each with independent effect/brightness.
+     * Supports up to 3 zones, each with independent effect/brightness.
      */
     static void handleZoneStatus(JsonDocument& doc) {
         if (!s_paramHandler) {
@@ -324,12 +324,12 @@ private:
 
             uint8_t zoneId = zone["id"].as<uint8_t>();
 
-            // Map zone parameters to Unit B encoders (indices 8-15)
-            // Zone 0 -> Zone0Effect (8), Zone0Speed (9)
-            // Zone 1 -> Zone1Effect (10), Zone1Speed (11)
-            // etc.
-            if (zoneId > 3) {
-                TAB5_WS_PRINTF("[WsRouter] Zone %d out of range (max 3)\n", zoneId);
+            // Map zone parameters to Unit B encoders (indices 8-13)
+            // zoneId 0 -> Zone1Effect (8), Zone1Speed (9)  [Zone 1 user-facing]
+            // zoneId 1 -> Zone2Effect (10), Zone2Speed (11) [Zone 2 user-facing]
+            // zoneId 2 -> Zone3Effect (12), Zone3Speed (13) [Zone 3 user-facing]
+            if (zoneId > 2) {
+                TAB5_WS_PRINTF("[WsRouter] Zone %d out of range (max 2)\n", zoneId);
                 continue;
             }
 
@@ -337,18 +337,14 @@ private:
             ParameterId effectParam, speedParam;
             switch (zoneId) {
                 case 0:
-                    effectParam = ParameterId::Zone0Effect;
-                    speedParam = ParameterId::Zone0Speed;
-                    break;
-                case 1:
                     effectParam = ParameterId::Zone1Effect;
                     speedParam = ParameterId::Zone1Speed;
                     break;
-                case 2:
+                case 1:
                     effectParam = ParameterId::Zone2Effect;
                     speedParam = ParameterId::Zone2Speed;
                     break;
-                case 3:
+                case 2:
                     effectParam = ParameterId::Zone3Effect;
                     speedParam = ParameterId::Zone3Speed;
                     break;

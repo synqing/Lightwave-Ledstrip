@@ -209,3 +209,4 @@ media/
 
 # Brand assets (HTML prototypes, not source code)
 brand/
+.DS_Store

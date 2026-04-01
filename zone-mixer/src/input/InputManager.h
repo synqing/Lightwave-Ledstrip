@@ -86,13 +86,15 @@ public:
         uint32_t t0 = micros();
 
         // --- 8Encoder A (CH0) ---
-        pahub::selectChannel(hw::CH_ENC_A);
-        _encA.poll(ID_ENC_A_BASE, now);
+        if (pahub::selectChannel(hw::CH_ENC_A)) {
+            _encA.poll(ID_ENC_A_BASE, now);
+        }
         esp_task_wdt_reset();
 
         // --- 8Encoder B (CH1) ---
-        pahub::selectChannel(hw::CH_ENC_B);
-        _encB.poll(ID_ENC_B_BASE, now);
+        if (pahub::selectChannel(hw::CH_ENC_B)) {
+            _encB.poll(ID_ENC_B_BASE, now);
+        }
         esp_task_wdt_reset();
 
         // --- 4 Scroll units (CH2-CH5) ---
@@ -104,8 +106,9 @@ public:
         };
 
         for (uint8_t i = 0; i < 4; i++) {
-            pahub::selectChannel(scrollChannels[i]);
-            _scroll[i].poll(scrollIds[i], now);
+            if (pahub::selectChannel(scrollChannels[i])) {
+                _scroll[i].poll(scrollIds[i], now);
+            }
         }
         esp_task_wdt_reset();
 

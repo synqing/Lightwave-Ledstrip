@@ -63,16 +63,16 @@ static void onWsMessage(JsonDocument& doc) {
     }
     else if (strcmp(type, "edge_mixer.get") == 0 || strcmp(type, "edge_mixer.set") == 0) {
         // Sync EdgeMixer state
-        if (doc.containsKey("mode")) {
+        if (!doc["mode"].isNull()) {
             if (!echoGuard.isHeld(8, now)) paramMapper.emMode = doc["mode"];
         }
-        if (doc.containsKey("spread")) {
+        if (!doc["spread"].isNull()) {
             if (!echoGuard.isHeld(9, now)) paramMapper.emSpread = doc["spread"];
         }
-        if (doc.containsKey("strength")) {
+        if (!doc["strength"].isNull()) {
             if (!echoGuard.isHeld(10, now)) paramMapper.emStrength = doc["strength"];
         }
-        if (doc.containsKey("spatial") && doc.containsKey("temporal")) {
+        if (!doc["spatial"].isNull() && !doc["temporal"].isNull()) {
             if (!echoGuard.isHeld(11, now)) {
                 uint8_t s = doc["spatial"] | 0;
                 uint8_t t = doc["temporal"] | 0;
@@ -85,7 +85,7 @@ static void onWsMessage(JsonDocument& doc) {
         ledFeedback.setParamValue(10, paramMapper.emStrength);
     }
     else if (strcmp(type, "cameraMode.get") == 0 || strcmp(type, "cameraMode.set") == 0) {
-        if (doc.containsKey("enabled")) {
+        if (!doc["enabled"].isNull()) {
             paramMapper.cameraModeOn = doc["enabled"];
             ledFeedback.setCameraMode(paramMapper.cameraModeOn);
         }
@@ -180,9 +180,16 @@ void setup() {
     Wire.begin(hw::I2C_SDA, hw::I2C_SCL);
     Wire.setClock(hw::I2C_FREQ);
 
+    // Configure I2C timeout (prevents indefinite blocking on device hang)
+    Wire.setTimeOut(50);  // 50ms per transaction (proven on Tab5)
+
     // Init input devices
     inputMgr.setCallback(onInputChange);
-    inputMgr.begin();
+    if (!inputMgr.begin()) {
+        Serial.println("[FATAL] No input devices found!");
+        M5.Display.setTextColor(TFT_RED);
+        M5.Display.println("NO INPUT DEVICES");
+    }
 
     // Init LED feedback
     ledFeedback.begin(&inputMgr);
@@ -226,9 +233,10 @@ void loop() {
         ledFeedback.setConnectionState(LedFeedback::ConnState::DISCONNECTED);
     }
 
-    // WS state machine
+    // WS state machine (CRITICAL: WDT reset after potentially-blocking WS loop)
     if (wsStarted) {
         wsClient.update();
+        esp_task_wdt_reset();
         // Track connection state changes for LED
         static bool wasConnected = false;
         bool isConn = wsClient.isConnected();

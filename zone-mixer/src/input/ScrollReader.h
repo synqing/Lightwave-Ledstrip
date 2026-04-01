@@ -73,9 +73,9 @@ private:
     int32_t readInt32(uint8_t reg) {
         _wire->beginTransmission(hw::SCROLL_ADDR);
         _wire->write(reg);
-        _wire->endTransmission(false);  // Repeated start
-        _wire->requestFrom(hw::SCROLL_ADDR, (uint8_t)4);
-        if (_wire->available() < 4) return 0;
+        if (_wire->endTransmission(false) != 0) return 0;  // NACK check
+        uint8_t got = _wire->requestFrom(hw::SCROLL_ADDR, (uint8_t)4);
+        if (got != 4) return 0;  // Strict: must receive exactly 4 bytes
 
         // Little-endian
         int32_t val = 0;
@@ -89,9 +89,9 @@ private:
     uint8_t readByte(uint8_t reg) {
         _wire->beginTransmission(hw::SCROLL_ADDR);
         _wire->write(reg);
-        _wire->endTransmission(false);
-        _wire->requestFrom(hw::SCROLL_ADDR, (uint8_t)1);
-        return _wire->available() ? _wire->read() : 0xFF;
+        if (_wire->endTransmission(false) != 0) return 0xFF;  // NACK check
+        uint8_t got = _wire->requestFrom(hw::SCROLL_ADDR, (uint8_t)1);
+        return (got == 1) ? _wire->read() : 0xFF;
     }
 
     TwoWire* _wire = nullptr;

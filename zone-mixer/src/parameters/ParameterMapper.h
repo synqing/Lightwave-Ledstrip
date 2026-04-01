@@ -36,13 +36,13 @@ public:
         bool force = !_echo->initialSyncDone;
 
         // Global parameters from "status" message
-        if (doc.containsKey("brightness")) {
+        if (!doc["brightness"].isNull()) {
             if (force || !_echo->isHeld(19, now)) {
                 masterBrightness = doc["brightness"];
                 if (_leds) _leds->setParamValue(19, masterBrightness);
             }
         }
-        if (doc.containsKey("speed")) {
+        if (!doc["speed"].isNull()) {
             if (force || !_echo->isHeld(3, now)) {
                 masterSpeed = doc["speed"];
                 if (_leds) _leds->setParamValue(3, masterSpeed);
@@ -50,19 +50,19 @@ public:
         }
 
         // EdgeMixer fields from broadcastStatus
-        if (doc.containsKey("edgeMixerMode")) {
+        if (!doc["edgeMixerMode"].isNull()) {
             if (force || !_echo->isHeld(8, now)) {
                 emMode = doc["edgeMixerMode"];
                 if (_leds) _leds->setEdgeMixerMode(emMode);
             }
         }
-        if (doc.containsKey("edgeMixerSpread")) {
+        if (!doc["edgeMixerSpread"].isNull()) {
             if (force || !_echo->isHeld(9, now)) {
                 emSpread = doc["edgeMixerSpread"];
                 if (_leds) _leds->setParamValue(9, emSpread);
             }
         }
-        if (doc.containsKey("edgeMixerStrength")) {
+        if (!doc["edgeMixerStrength"].isNull()) {
             if (force || !_echo->isHeld(10, now)) {
                 emStrength = doc["edgeMixerStrength"];
                 if (_leds) _leds->setParamValue(10, emStrength);
@@ -83,30 +83,30 @@ public:
             uint8_t zid = zone["zoneId"] | 0xFF;
             if (zid > 2) continue;
 
-            if (zone.containsKey("brightness")) {
+            if (!zone["brightness"].isNull()) {
                 uint8_t id = 16 + zid;
                 if (force || !_echo->isHeld(id, now)) {
                     zoneBrightness[zid] = zone["brightness"];
                     if (_leds) _leds->setParamValue(id, zoneBrightness[zid]);
                 }
             }
-            if (zone.containsKey("speed")) {
+            if (!zone["speed"].isNull()) {
                 uint8_t id = 4 + zid;
                 if (force || !_echo->isHeld(id, now)) {
                     zoneSpeed[zid] = zone["speed"];
                 }
             }
-            if (zone.containsKey("enabled")) {
+            if (!zone["enabled"].isNull()) {
                 zoneEnabled[zid] = zone["enabled"];
                 if (_leds) _leds->setZoneEnabled(zid, zoneEnabled[zid]);
             }
         }
 
-        if (doc.containsKey("enabled")) {
+        if (!doc["enabled"].isNull()) {
             zoneSystemOn = doc["enabled"];
             if (_leds) _leds->setZoneSystemOn(zoneSystemOn);
         }
-        if (doc.containsKey("zoneCount")) {
+        if (!doc["zoneCount"].isNull()) {
             zoneCount = doc["zoneCount"];
         }
     }

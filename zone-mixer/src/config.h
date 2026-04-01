@@ -70,7 +70,7 @@ namespace net {
     // WebSocket timeouts
     constexpr uint32_t WS_INITIAL_RECONNECT_MS  = 1000;
     constexpr uint32_t WS_MAX_RECONNECT_MS      = 30000;
-    constexpr uint32_t WS_CONNECTION_TIMEOUT_MS  = 20000;
+    constexpr uint32_t WS_CONNECTION_TIMEOUT_MS  = 5000;   // Reduced from 20s — must stay under WDT (5s)
 
     // Rate limiting
     constexpr uint32_t PARAM_THROTTLE_MS         = 50;

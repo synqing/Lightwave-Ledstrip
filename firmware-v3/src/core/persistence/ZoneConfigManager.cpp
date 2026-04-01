@@ -17,34 +17,38 @@ namespace lightwaveos {
 namespace persistence {
 
 // ==================== Version 1 Migration Structure ====================
+// Hardcoded array size 4 to match NVS blobs written when MAX_ZONES was 4.
+
+static constexpr uint8_t LEGACY_MAX_ZONES = 4;
 
 struct ZoneConfigDataV1 {
     uint8_t version;
     ZoneLayout layout;
     bool systemEnabled;
-    uint8_t zoneEffects[MAX_ZONES];
-    bool zoneEnabled[MAX_ZONES];
-    uint8_t zoneBrightness[MAX_ZONES];
-    uint8_t zoneSpeed[MAX_ZONES];
-    uint8_t zonePalette[MAX_ZONES];
-    uint8_t zoneBlendMode[MAX_ZONES];
+    uint8_t zoneEffects[LEGACY_MAX_ZONES];
+    bool zoneEnabled[LEGACY_MAX_ZONES];
+    uint8_t zoneBrightness[LEGACY_MAX_ZONES];
+    uint8_t zoneSpeed[LEGACY_MAX_ZONES];
+    uint8_t zonePalette[LEGACY_MAX_ZONES];
+    uint8_t zoneBlendMode[LEGACY_MAX_ZONES];
     uint32_t checksum;
 };
 
 // ==================== Version 2 Migration Structure ====================
 // V2 used segments[] but still had uint8_t zoneEffects
+// Hardcoded array size 4 to match NVS blobs written when MAX_ZONES was 4.
 
 struct ZoneConfigDataV2 {
     uint8_t version;
-    ZoneSegment segments[MAX_ZONES];
+    ZoneSegment segments[LEGACY_MAX_ZONES];
     uint8_t zoneCount;
     bool systemEnabled;
-    uint8_t zoneEffects[MAX_ZONES];     // Old: uint8_t sequential IDs
-    bool zoneEnabled[MAX_ZONES];
-    uint8_t zoneBrightness[MAX_ZONES];
-    uint8_t zoneSpeed[MAX_ZONES];
-    uint8_t zonePalette[MAX_ZONES];
-    uint8_t zoneBlendMode[MAX_ZONES];
+    uint8_t zoneEffects[LEGACY_MAX_ZONES];     // Old: uint8_t sequential IDs
+    bool zoneEnabled[LEGACY_MAX_ZONES];
+    uint8_t zoneBrightness[LEGACY_MAX_ZONES];
+    uint8_t zoneSpeed[LEGACY_MAX_ZONES];
+    uint8_t zonePalette[LEGACY_MAX_ZONES];
+    uint8_t zoneBlendMode[LEGACY_MAX_ZONES];
     uint32_t checksum;
 };
 
@@ -87,12 +91,12 @@ const ZonePreset ZONE_PRESETS[ZONE_PRESET_COUNT] = {
             .segments = {},  // Will be set in loadPreset
             .zoneCount = 1,
             .systemEnabled = false,  // User must enable manually
-            .zoneEffects = {EID_FIRE, EID_FIRE, EID_FIRE, EID_FIRE},
-            .zoneEnabled = {true, false, false, false},
-            .zoneBrightness = {255, 255, 255, 255},
-            .zoneSpeed = {25, 25, 25, 25},
-            .zonePalette = {0, 0, 0, 0},
-            .zoneBlendMode = {0, 0, 0, 0},
+            .zoneEffects = {EID_FIRE, EID_FIRE, EID_FIRE},
+            .zoneEnabled = {true, false, false},
+            .zoneBrightness = {255, 255, 255},
+            .zoneSpeed = {25, 25, 25},
+            .zonePalette = {0, 0, 0},
+            .zoneBlendMode = {0, 0, 0},
             .checksum = 0
         }
     },
@@ -105,13 +109,13 @@ const ZonePreset ZONE_PRESETS[ZONE_PRESET_COUNT] = {
             .segments = {},
             .zoneCount = 2,
             .systemEnabled = false,
-            .zoneEffects = {EID_FIRE, EID_JUGGLE, EID_FIRE, EID_FIRE},  // Inner: Fire, Outer: Juggle
-            .zoneEnabled = {true, true, false, false},
-            .zoneBrightness = {255, 200, 255, 255},
-            .zoneSpeed = {25, 30, 25, 25},
-            .zonePalette = {0, 0, 0, 0},
+            .zoneEffects = {EID_FIRE, EID_JUGGLE, EID_FIRE},  // Inner: Fire, Outer: Juggle
+            .zoneEnabled = {true, true, false},
+            .zoneBrightness = {255, 200, 255},
+            .zoneSpeed = {25, 30, 25},
+            .zonePalette = {0, 0, 0},
             // Start with a softer blend on the outer zone
-            .zoneBlendMode = {0, 1, 0, 0},
+            .zoneBlendMode = {0, 1, 0},
             .checksum = 0
         }
     },
@@ -124,12 +128,12 @@ const ZonePreset ZONE_PRESETS[ZONE_PRESET_COUNT] = {
             .segments = {},
             .zoneCount = 2,
             .systemEnabled = false,
-            .zoneEffects = {EID_FIRE, EID_FIRE, EID_FIRE, EID_FIRE},
-            .zoneEnabled = {true, true, false, false},
-            .zoneBrightness = {255, 140, 255, 255},
-            .zoneSpeed = {20, 12, 25, 25},
-            .zonePalette = {0, 0, 0, 0},
-            .zoneBlendMode = {0, 1, 0, 0},
+            .zoneEffects = {EID_FIRE, EID_FIRE, EID_FIRE},
+            .zoneEnabled = {true, true, false},
+            .zoneBrightness = {255, 140, 255},
+            .zoneSpeed = {20, 12, 25},
+            .zonePalette = {0, 0, 0},
+            .zoneBlendMode = {0, 1, 0},
             .checksum = 0
         }
     },
@@ -142,12 +146,12 @@ const ZonePreset ZONE_PRESETS[ZONE_PRESET_COUNT] = {
             .segments = {},
             .zoneCount = 2,
             .systemEnabled = false,
-            .zoneEffects = {EID_PULSE, EID_SINELON, EID_FIRE, EID_FIRE},
-            .zoneEnabled = {true, true, false, false},
-            .zoneBrightness = {255, 180, 255, 255},
-            .zoneSpeed = {18, 28, 25, 25},
-            .zonePalette = {0, 0, 0, 0},
-            .zoneBlendMode = {0, 1, 0, 0},
+            .zoneEffects = {EID_PULSE, EID_SINELON, EID_FIRE},
+            .zoneEnabled = {true, true, false},
+            .zoneBrightness = {255, 180, 255},
+            .zoneSpeed = {18, 28, 25},
+            .zonePalette = {0, 0, 0},
+            .zoneBlendMode = {0, 1, 0},
             .checksum = 0
         }
     },
@@ -160,12 +164,12 @@ const ZonePreset ZONE_PRESETS[ZONE_PRESET_COUNT] = {
             .segments = {},
             .zoneCount = 2,
             .systemEnabled = false,
-            .zoneEffects = {EID_INTERFERENCE, EID_PLASMA, EID_FIRE, EID_FIRE},
-            .zoneEnabled = {true, true, false, false},
-            .zoneBrightness = {255, 220, 255, 255},
-            .zoneSpeed = {20, 24, 25, 25},
-            .zonePalette = {0, 0, 0, 0},
-            .zoneBlendMode = {0, 1, 0, 0},
+            .zoneEffects = {EID_INTERFERENCE, EID_PLASMA, EID_FIRE},
+            .zoneEnabled = {true, true, false},
+            .zoneBrightness = {255, 220, 255},
+            .zoneSpeed = {20, 24, 25},
+            .zonePalette = {0, 0, 0},
+            .zoneBlendMode = {0, 1, 0},
             .checksum = 0
         }
     }
@@ -275,9 +279,10 @@ bool ZoneConfigManager::loadFromNVS() {
         if (v1Config.layout == ZoneLayout::SINGLE) {
             v3Config.zoneCount = 1;
             memcpy(v3Config.segments, ZONE_1_CONFIG, sizeof(ZONE_1_CONFIG));
-        } else if (v1Config.layout == ZoneLayout::QUAD) {
-            v3Config.zoneCount = 4;
-            memcpy(v3Config.segments, ZONE_4_CONFIG, sizeof(ZONE_4_CONFIG));
+        } else if (v1Config.layout == static_cast<ZoneLayout>(4)) {
+            // Legacy QUAD layout from v1 NVS — downgrade to TRIPLE
+            v3Config.zoneCount = 3;
+            memcpy(v3Config.segments, ZONE_3_CONFIG, sizeof(ZONE_3_CONFIG));
         } else if (v1Config.layout == ZoneLayout::DUAL) {
             v3Config.zoneCount = 2;
             memcpy(v3Config.segments, ZONE_2_CONFIG, sizeof(ZONE_2_CONFIG));
@@ -287,17 +292,18 @@ bool ZoneConfigManager::loadFromNVS() {
         }
 
         // Migrate zone effects: uint8_t sequential → EffectId namespaced
+        // Only copy MAX_ZONES elements (legacy structs have LEGACY_MAX_ZONES=4)
         for (uint8_t i = 0; i < MAX_ZONES; i++) {
             v3Config.zoneEffects[i] = oldIdToNew(v1Config.zoneEffects[i]);
             if (v3Config.zoneEffects[i] == INVALID_EFFECT_ID) {
                 v3Config.zoneEffects[i] = EID_FIRE;
             }
+            v3Config.zoneEnabled[i] = v1Config.zoneEnabled[i];
+            v3Config.zoneBrightness[i] = v1Config.zoneBrightness[i];
+            v3Config.zoneSpeed[i] = v1Config.zoneSpeed[i];
+            v3Config.zonePalette[i] = v1Config.zonePalette[i];
+            v3Config.zoneBlendMode[i] = v1Config.zoneBlendMode[i];
         }
-        memcpy(v3Config.zoneEnabled, v1Config.zoneEnabled, sizeof(v1Config.zoneEnabled));
-        memcpy(v3Config.zoneBrightness, v1Config.zoneBrightness, sizeof(v1Config.zoneBrightness));
-        memcpy(v3Config.zoneSpeed, v1Config.zoneSpeed, sizeof(v1Config.zoneSpeed));
-        memcpy(v3Config.zonePalette, v1Config.zonePalette, sizeof(v1Config.zonePalette));
-        memcpy(v3Config.zoneBlendMode, v1Config.zoneBlendMode, sizeof(v1Config.zoneBlendMode));
 
         // Apply migrated configuration
         importConfig(v3Config);
@@ -311,22 +317,23 @@ bool ZoneConfigManager::loadFromNVS() {
         ZoneConfigData v3Config;
         memset(&v3Config, 0, sizeof(v3Config));
         v3Config.version = CONFIG_VERSION;
-        v3Config.zoneCount = v2Config.zoneCount;
+        v3Config.zoneCount = (v2Config.zoneCount <= MAX_ZONES) ? v2Config.zoneCount : MAX_ZONES;
         v3Config.systemEnabled = v2Config.systemEnabled;
-        memcpy(v3Config.segments, v2Config.segments, sizeof(v2Config.segments));
+        memcpy(v3Config.segments, v2Config.segments, sizeof(v3Config.segments));
 
         // Migrate zone effects: uint8_t sequential → EffectId namespaced
+        // Only copy MAX_ZONES elements (legacy structs have LEGACY_MAX_ZONES=4)
         for (uint8_t i = 0; i < MAX_ZONES; i++) {
             v3Config.zoneEffects[i] = oldIdToNew(v2Config.zoneEffects[i]);
             if (v3Config.zoneEffects[i] == INVALID_EFFECT_ID) {
                 v3Config.zoneEffects[i] = EID_FIRE;
             }
+            v3Config.zoneEnabled[i] = v2Config.zoneEnabled[i];
+            v3Config.zoneBrightness[i] = v2Config.zoneBrightness[i];
+            v3Config.zoneSpeed[i] = v2Config.zoneSpeed[i];
+            v3Config.zonePalette[i] = v2Config.zonePalette[i];
+            v3Config.zoneBlendMode[i] = v2Config.zoneBlendMode[i];
         }
-        memcpy(v3Config.zoneEnabled, v2Config.zoneEnabled, sizeof(v2Config.zoneEnabled));
-        memcpy(v3Config.zoneBrightness, v2Config.zoneBrightness, sizeof(v2Config.zoneBrightness));
-        memcpy(v3Config.zoneSpeed, v2Config.zoneSpeed, sizeof(v2Config.zoneSpeed));
-        memcpy(v3Config.zonePalette, v2Config.zonePalette, sizeof(v2Config.zonePalette));
-        memcpy(v3Config.zoneBlendMode, v2Config.zoneBlendMode, sizeof(v2Config.zoneBlendMode));
 
         importConfig(v3Config);
     } else if (config.version == CONFIG_VERSION) {
@@ -600,8 +607,6 @@ bool ZoneConfigManager::loadPreset(uint8_t presetId) {
         memcpy(config.segments, ZONE_1_CONFIG, sizeof(ZONE_1_CONFIG));
     } else if (config.zoneCount == 2) {
         memcpy(config.segments, ZONE_2_CONFIG, sizeof(ZONE_2_CONFIG));
-    } else if (config.zoneCount == 4) {
-        memcpy(config.segments, ZONE_4_CONFIG, sizeof(ZONE_4_CONFIG));
     } else {
         // Default/fallback
         memcpy(config.segments, ZONE_3_CONFIG, sizeof(ZONE_3_CONFIG));

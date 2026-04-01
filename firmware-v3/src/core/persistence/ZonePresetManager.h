@@ -40,7 +40,7 @@ namespace persistence {
 // ==================== Constants ====================
 
 constexpr uint8_t ZONE_PRESET_MAX_SLOTS = 16;
-constexpr uint8_t ZONE_PRESET_MAX_ZONES = 4;
+constexpr uint8_t ZONE_PRESET_MAX_ZONES = 3;
 constexpr uint8_t ZONE_PRESET_NAME_LENGTH = 32;
 
 // ==================== Zone Preset Entry ====================
@@ -76,7 +76,7 @@ struct ZonePresetEntry {
  */
 struct ZonePreset {
     uint8_t version;                            // Format version (current: 1)
-    uint8_t zoneCount;                          // Number of active zones (1-4)
+    uint8_t zoneCount;                          // Number of active zones (1-3)
     char name[ZONE_PRESET_NAME_LENGTH];         // User-friendly name (null-terminated)
     ZonePresetEntry zones[ZONE_PRESET_MAX_ZONES]; // Fixed array for all zones
     uint32_t timestamp;                         // Creation timestamp (Unix epoch seconds)

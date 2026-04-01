@@ -1250,7 +1250,7 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
                             zoneComposer.setZoneSpeed(0, speed0);
                             zoneComposer.setZoneSpeed(1, speed1);
                             zoneComposer.setZoneSpeed(2, speed2);
-                            Serial.printf("Zone speeds set: Zone 0=%d, Zone 1=%d, Zone 2=%d\n",
+                            Serial.printf("Zone speeds set: Zone 1=%d, Zone 2=%d, Zone 3=%d\n",
                                         speed0, speed1, speed2);
                         } else {
                             Serial.println("ERROR: Usage: zs <speed0> <speed1> <speed2> (speeds: 1-100)");

@@ -57,7 +57,7 @@ struct ZonePreset {
     ZoneState zones[MAX_ZONES];
 };
 
-// 5 Built-in presets
+// 4 Built-in presets
 static const ZonePreset PRESETS[] = {
     // Preset 0: Single Zone (unified)
     {
@@ -67,8 +67,6 @@ static const ZonePreset PRESETS[] = {
         .zones = {
             { .effectId = 0, .brightness = 255, .speed = 15, .paletteId = 0,
               .blendMode = BlendMode::OVERWRITE, .enabled = true },
-            { .effectId = 0, .brightness = 255, .speed = 15, .paletteId = 0,
-              .blendMode = BlendMode::OVERWRITE, .enabled = false },
             { .effectId = 0, .brightness = 255, .speed = 15, .paletteId = 0,
               .blendMode = BlendMode::OVERWRITE, .enabled = false },
             { .effectId = 0, .brightness = 255, .speed = 15, .paletteId = 0,
@@ -87,8 +85,6 @@ static const ZonePreset PRESETS[] = {
             { .effectId = 14, .brightness = 255, .speed = 35, .paletteId = 68,
               .blendMode = BlendMode::ADDITIVE, .enabled = true },    // LGP Holographic / Copper
             { .effectId = 0, .brightness = 255, .speed = 15, .paletteId = 0,
-              .blendMode = BlendMode::OVERWRITE, .enabled = false },
-            { .effectId = 0, .brightness = 255, .speed = 15, .paletteId = 0,
               .blendMode = BlendMode::OVERWRITE, .enabled = false }
         }
     },
@@ -104,30 +100,11 @@ static const ZonePreset PRESETS[] = {
             { .effectId = 16, .brightness = 220, .speed = 25, .paletteId = 0,
               .blendMode = BlendMode::ADDITIVE, .enabled = true },    // LGP Interference Scanner middle (audio: heavyMid)
             { .effectId = 24, .brightness = 180, .speed = 30, .paletteId = 0,
-              .blendMode = BlendMode::ADDITIVE, .enabled = true },    // LGP Star Burst outer (audio: full pipeline)
-            { .effectId = 0, .brightness = 255, .speed = 15, .paletteId = 0,
-              .blendMode = BlendMode::OVERWRITE, .enabled = false }
+              .blendMode = BlendMode::ADDITIVE, .enabled = true }     // LGP Star Burst outer (audio: full pipeline)
         }
     },
 
-    // Preset 3: Quad Active
-    {
-        .name = "Quad Active",
-        .segments = ZONE_4_CONFIG,
-        .zoneCount = 4,
-        .zones = {
-            { .effectId = 0, .brightness = 255, .speed = 15, .paletteId = 0,
-              .blendMode = BlendMode::OVERWRITE, .enabled = true },   // Fire innermost
-            { .effectId = 2, .brightness = 230, .speed = 20, .paletteId = 0,
-              .blendMode = BlendMode::ADDITIVE, .enabled = true },    // Plasma ring 2
-            { .effectId = 7, .brightness = 200, .speed = 25, .paletteId = 0,
-              .blendMode = BlendMode::ADDITIVE, .enabled = true },    // Wave ring 3
-            { .effectId = 1, .brightness = 170, .speed = 30, .paletteId = 0,
-              .blendMode = BlendMode::ADDITIVE, .enabled = true }     // Ocean outermost
-        }
-    },
-
-    // Preset 4: Heartbeat Focus
+    // Preset 3: Heartbeat Focus
     {
         .name = "Heartbeat Focus",
         .segments = ZONE_3_CONFIG,
@@ -138,9 +115,7 @@ static const ZonePreset PRESETS[] = {
             { .effectId = 11, .brightness = 150, .speed = 10, .paletteId = 0,
               .blendMode = BlendMode::ALPHA, .enabled = true },       // Breathing middle
             { .effectId = 11, .brightness = 100, .speed = 8, .paletteId = 0,
-              .blendMode = BlendMode::ALPHA, .enabled = true },       // Breathing outer
-            { .effectId = 0, .brightness = 255, .speed = 15, .paletteId = 0,
-              .blendMode = BlendMode::OVERWRITE, .enabled = false }
+              .blendMode = BlendMode::ALPHA, .enabled = true }        // Breathing outer
         }
     }
 };
@@ -494,7 +469,7 @@ bool ZoneComposer::validateLayout(const ZoneSegment* segments, uint8_t count) co
         // 4. Centre Pair Check (at least one zone must include 79 or 80)
         bool includesCentre = (seg.s1LeftEnd >= 79) || (seg.s1RightStart <= 80);
         if (i == 0 && !includesCentre) {
-            Serial.printf("[ZoneComposer] Validation failed: Zone 0 (innermost) must include centre pair\n");
+            Serial.printf("[ZoneComposer] Validation failed: Zone 1 (innermost, index 0) must include centre pair\n");
             return false;
         }
         
@@ -719,7 +694,7 @@ const char* ZoneComposer::getPresetName(uint8_t presetId) {
  * DEFENSIVE CHECK: Prevents LoadProhibited crashes from corrupted zone ID.
  * 
  * ZoneComposer uses arrays m_zones[MAX_ZONES] and m_zoneConfig[MAX_ZONES] where
- * MAX_ZONES = 4. If zoneId is corrupted (e.g., by memory corruption, invalid
+ * MAX_ZONES = 3. If zoneId is corrupted (e.g., by memory corruption, invalid
  * input, or uninitialized state), accessing these arrays would cause out-of-bounds
  * access and crash.
  * 

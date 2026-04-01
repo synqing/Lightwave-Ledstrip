@@ -48,7 +48,7 @@ This document provides comprehensive technical specifications for all audio outp
 │  ├─────────────────────────────────────────────────────────────────────────┤│
 │  │ Stage 2: Spike Detection        → 3-frame lookahead, 32ms delay         ││
 │  ├─────────────────────────────────────────────────────────────────────────┤│
-│  │ Stage 3: Zone AGC               → 4 zones, asymmetric attack/release    ││
+│  │ Stage 3: Zone AGC               → 3 zones, asymmetric attack/release    ││
 │  ├─────────────────────────────────────────────────────────────────────────┤│
 │  │ Stage 4: Band Smoothing         → Normal (15%/3%) vs Heavy (8%/1.5%)    ││
 │  ├─────────────────────────────────────────────────────────────────────────┤│
@@ -100,7 +100,7 @@ static constexpr uint8_t CONTROLBUS_NUM_BANDS  = 8;      // Legacy 8-band spectr
 static constexpr uint8_t CONTROLBUS_NUM_CHROMA = 12;     // 12 pitch classes (C through B)
 static constexpr uint8_t CONTROLBUS_WAVEFORM_N = 128;    // Sensory Bridge native resolution
 static constexpr size_t LOOKAHEAD_FRAMES = 3;            // Ring buffer for spike detection
-static constexpr uint8_t CONTROLBUS_NUM_ZONES = 4;       // 4 frequency zones for AGC
+static constexpr uint8_t CONTROLBUS_NUM_ZONES = 3;       // 3 frequency zones for AGC
 static constexpr uint8_t BINS_64_COUNT = 64;             // Full 64-bin Goertzel spectrum
 ```
 
@@ -308,13 +308,12 @@ struct ZoneAGC {
 };
 
 // Zone boundaries for 8-band system:
-// Zone 0: bands 0-1  (20-120 Hz)   - Sub-bass/Bass
-// Zone 1: bands 2-3  (120-500 Hz)  - Low-mid/Mid
-// Zone 2: bands 4-5  (500-2000 Hz) - Upper-mid/Presence
-// Zone 3: bands 6-7  (2-8 kHz)     - Brilliance/Air
+// Zone 1: bands 0-1  (20-120 Hz)   - Sub-bass/Bass
+// Zone 2: bands 2-3  (120-500 Hz)  - Low-mid/Mid
+// Zone 3: bands 4-7  (500-8 kHz)   - Upper-mid/Presence/Brilliance/Air
 
 void applyZoneAGC(float* bands_out, const float* bands_in) {
-    for (uint8_t z = 0; z < 4; ++z) {
+    for (uint8_t z = 0; z < 3; ++z) {
         // Find maximum magnitude in zone
         float zone_max = 0.0f;
         for (uint8_t b = z * 2; b < (z + 1) * 2; ++b) {
@@ -350,7 +349,7 @@ void applyZoneAGC(float* bands_out, const float* bands_in) {
 - Default attack: 0.05 (5% per hop)
 - Default release: 0.05 (5% per hop)
 - Minimum floor: 0.01f (maximum gain = 100x)
-- Zones: 4 (2 bands each)
+- Zones: 3 (2 bands for zones 1-2, 4 bands for zone 3)
 
 ### Stage 4: Band Smoothing (Normal vs Heavy)
 
@@ -958,7 +957,7 @@ void setMoodSmoothing(uint8_t mood) {
 | `BINS_64_COUNT` | 64 | ControlBus.h | Full Goertzel spectrum |
 | `CONTROLBUS_WAVEFORM_N` | 128 | ControlBus.h | Time-domain samples |
 | `LOOKAHEAD_FRAMES` | 3 | ControlBus.h | Spike detection buffer |
-| `CONTROLBUS_NUM_ZONES` | 4 | ControlBus.h | AGC frequency zones |
+| `CONTROLBUS_NUM_ZONES` | 3 | ControlBus.h | AGC frequency zones |
 | `GOERTZEL_MAX_BLOCK` | 2000 | AudioActor.h | Max analysis window |
 | `GOERTZEL_MIN_BLOCK` | 64 | AudioActor.h | Min analysis window |
 | `AGC_MIN_FLOOR` | 0.01f | ControlBus.cpp | Max 100x gain limit |

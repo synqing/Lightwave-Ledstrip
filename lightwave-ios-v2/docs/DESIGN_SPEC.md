@@ -65,11 +65,10 @@ static let lwGoldRadial = RadialGradient(
 // Beat accent (brighter than lwGold)
 static let lwBeatAccent = Color(hex: "FFCC33")
 
-// Zone colours (explicit)
-static let lwZone0 = Color(hex: "00FFFF")  // Cyan
-static let lwZone1 = Color(hex: "00FF99")  // Green
-static let lwZone2 = Color(hex: "9900FF")  // Purple
-static let lwZone3 = Color(hex: "FF6600")  // Orange
+// Zone colours (explicit) — 3 zones max, 1-indexed user-facing
+static let lwZone0 = Color(hex: "00FFFF")  // Cyan  (Zone 1)
+static let lwZone1 = Color(hex: "00FF99")  // Green (Zone 2)
+static let lwZone2 = Color(hex: "9900FF")  // Purple (Zone 3)
 
 // Tab bar
 static let lwTabBarBackground = Color(hex: "0F1219").opacity(0.95)
@@ -227,7 +226,7 @@ Each row: full-width gradient swatch (12pt tall, capsule radius) + name. Selecte
 +--------------------------------------------------+
 |  ZoneHeaderCard                                    |
 |  ZONE MODE                              [ON/OFF]   |
-|  Zones: [1] [2] [3] [4]  Preset: [Dual Split v]  |
+|  Zones: [1] [2] [3]  Preset: [Dual Split v]       |
 +--------------------------------------------------+
 |                                                    |
 |  LEDStripView (60pt tall, full-width)              |
@@ -237,7 +236,7 @@ Each row: full-width gradient swatch (12pt tall, capsule radius) + name. Selecte
 |                                                    |
 +--------------------------------------------------+
 |                                                    |
-|  Zone 0 (cyan border)                              |
+|  Zone 1 (cyan border)                              |
 |  80 LEDs · L[40-79] R[80-119]                      |
 |  Effect:  [Ripple Enhanced        v]               |
 |  Palette: [Copper                 v]               |
@@ -247,7 +246,7 @@ Each row: full-width gradient swatch (12pt tall, capsule radius) + name. Selecte
 |                                                    |
 +--------------------------------------------------+
 |                                                    |
-|  Zone 1 (green border)                             |
+|  Zone 2 (green border)                             |
 |  80 LEDs · L[0-39] R[120-159]                      |
 |  Effect:  [LGP Holographic       v]               |
 |  Palette: [Sunset Real           v]               |

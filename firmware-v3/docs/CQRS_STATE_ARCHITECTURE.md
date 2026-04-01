@@ -285,11 +285,11 @@ void setup() {
 ### Zone Management
 
 ```cpp
-// Enable zone mode with 4 zones
-SetZoneModeCommand enableZones(true, 4);
+// Enable zone mode with 3 zones
+SetZoneModeCommand enableZones(true, 3);
 stateStore.dispatch(enableZones);
 
-// Configure zone 0
+// Configure zone 1 (zoneId: 0)
 ZoneEnableCommand enableZone(0, true);
 stateStore.dispatch(enableZone);
 

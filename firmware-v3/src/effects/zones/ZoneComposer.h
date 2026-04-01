@@ -4,7 +4,7 @@
  *
  * LightwaveOS v2 - Zone System
  *
- * The ZoneComposer manages independent effect rendering across 1-4 concentric
+ * The ZoneComposer manages independent effect rendering across 1-3 concentric
  * zones with per-zone control of effect, brightness, speed, palette, and blend mode.
  *
  * Architecture:
@@ -150,14 +150,14 @@ public:
 
     /**
      * @brief Get audio configuration for a zone
-     * @param zone Zone ID (0-3)
+     * @param zone Zone ID (0-2)
      * @return ZoneAudioConfig for the zone (default config if zone invalid)
      */
     ZoneAudioConfig getZoneAudioConfig(uint8_t zone) const;
 
     /**
      * @brief Set audio configuration for a zone
-     * @param zone Zone ID (0-3)
+     * @param zone Zone ID (0-2)
      * @param config Audio configuration to apply
      */
     void setZoneAudioConfig(uint8_t zone, const ZoneAudioConfig& config);
@@ -174,7 +174,7 @@ public:
 
     /**
      * @brief Load a built-in preset
-     * @param presetId Preset number (0-4)
+     * @param presetId Preset number (0-3)
      */
     void loadPreset(uint8_t presetId);
 

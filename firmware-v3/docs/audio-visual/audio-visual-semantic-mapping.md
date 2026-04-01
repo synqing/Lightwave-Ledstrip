@@ -462,9 +462,65 @@ Verify NONE of these:
 
 ---
 
+---
+
+## GEMS Emotion Framework
+
+> Added 2026-04-01 via War Room pipeline (SRC · VIS · Emotions Evoked by the Sound of Music — GEMS Taxonomy)
+
+### Overview
+
+The Geneva Emotional Music Scale (GEMS, Zentner et al. 2008) provides a validated 9-factor taxonomy of music-induced emotions that serves as the intermediate layer between audio feature extraction and visual output design. Standard emotion models (basic/discrete, dimensional/circumplex) are empirically inadequate for music.
+
+### The 9 GEMS Factors
+
+| Factor | Second-Order Cluster | Audio Detectability | Primary Audio Features |
+|--------|---------------------|--------------------|-----------------------|
+| Wonder | Sublimity | LOW | harmonic surprise, spectral richness |
+| Transcendence | Sublimity | LOW | harmonic complexity, sustained texture |
+| Tenderness | Sublimity | LOW | slow tempo, low spectral centroid, legato |
+| Nostalgia | Sublimity (bridge) | LOW | minor mode, medium tempo |
+| Peacefulness | Sublimity (bridge) | MEDIUM | low RMS, slow tempo, low onset density |
+| Power | Vitality | HIGH | RMS, onset density, spectral centroid |
+| Joyful Activation | Vitality | HIGH | tempo, beat regularity, onset density |
+| Tension | Unease | HIGH | spectral flux, onset density, spectral centroid |
+| Sadness | Unease | MEDIUM | minor mode, slow tempo, low spectral centroid |
+
+### Architecture Implication
+
+The K1 audio-visual mapping now follows a three-layer chain:
+
+```
+Audio Features (ControlBus) → GEMS Factor Estimation → Visual Parameter Output
+```
+
+- **Vitality and Unease factors** (Power, Joyful Activation, Tension, Sadness) are reliably estimable from existing ControlBus fields (RMS, tempo, onset, spectral centroid, chroma)
+- **Sublimity factors** (Wonder, Transcendence, Tenderness) require heuristic/contextual approaches — genre classification, mode detection, or user-selected profiles
+- **15-second warm-up rule:** Emotion signals are unreliable for the first ~15 seconds of any track (DEAM research). Use neutral/exploratory visual mode during warm-up
+
+### Colour Mapping Foundation
+
+Colour selection should target the emotional state, not the audio feature directly (Palmer et al. 2013):
+- **Tempo → Hue:** Fast = warm (yellow-orange), Slow = cool (blue-green)
+- **Mode → Saturation + Warmth:** Major = +saturation, +warmth; Minor = −saturation, +coolness
+- **Loudness → Lightness:** Peak RMS = bright (75-85%); Low RMS = dark (40-55%)
+- **Onset density → Saturation:** Percussive = saturated (80%+); Legato = muted (30-50%)
+
+Effects are ADDITIVE — tempo and mode can be implemented as independent multipliers.
+
+### Authoritative References
+
+- War Room: `KNW · VIS · Audio Feature to GEMS Factor Mapping`
+- War Room: `REF · VIS · Audio Feature to GEMS Factor Confidence Table`
+- War Room: `KNW · VIS · Music Emotion Colour Mediation Model`
+- War Room: `REF · VIS · Tempo-Mode to HSL Colour Parameter Table`
+
+---
+
 ## Revision History
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-04-01 | 2.1.0 | Added GEMS Emotion Framework section — 9-factor taxonomy as intermediate layer between audio features and visuals |
 | 2025-12-28 | 2.0.0 | Complete rewrite - removed rigid bindings, added adaptive architecture |
 | 2025-12-28 | 1.0.0 | Initial (REJECTED - contained rigid binding trap) |

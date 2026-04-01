@@ -19,7 +19,7 @@
 #include <algorithm>
 
 // Zone constants (matching ZoneDefinition.h)
-constexpr uint8_t MAX_ZONES = 4;
+constexpr uint8_t MAX_ZONES = 3;
 constexpr uint16_t STRIP_LENGTH = 160;
 constexpr uint16_t TOTAL_LEDS = 320;
 constexpr uint16_t CENTER_LEFT = 79;
@@ -45,18 +45,6 @@ constexpr ZoneSegment ZONE_3_CONFIG[3] = {
     { .zoneId = 1, .s1LeftStart = 20, .s1LeftEnd = 64,
       .s1RightStart = 95, .s1RightEnd = 139, .totalLeds = 90 },
     { .zoneId = 2, .s1LeftStart = 0, .s1LeftEnd = 19,
-      .s1RightStart = 140, .s1RightEnd = 159, .totalLeds = 40 }
-};
-
-// 4-Zone Layout
-constexpr ZoneSegment ZONE_4_CONFIG[4] = {
-    { .zoneId = 0, .s1LeftStart = 60, .s1LeftEnd = 79,
-      .s1RightStart = 80, .s1RightEnd = 99, .totalLeds = 40 },
-    { .zoneId = 1, .s1LeftStart = 40, .s1LeftEnd = 59,
-      .s1RightStart = 100, .s1RightEnd = 119, .totalLeds = 40 },
-    { .zoneId = 2, .s1LeftStart = 20, .s1LeftEnd = 39,
-      .s1RightStart = 120, .s1RightEnd = 139, .totalLeds = 40 },
-    { .zoneId = 3, .s1LeftStart = 0, .s1LeftEnd = 19,
       .s1RightStart = 140, .s1RightEnd = 159, .totalLeds = 40 }
 };
 
@@ -179,24 +167,10 @@ void test_zone_3_center_contains_center_pair() {
     TEST_ASSERT_TRUE(isInZone(CENTER_RIGHT, zone0));
 }
 
-void test_zone_4_center_contains_center_pair() {
-    const ZoneSegment& zone0 = ZONE_4_CONFIG[0];
-    TEST_ASSERT_TRUE(isInZone(CENTER_LEFT, zone0));
-    TEST_ASSERT_TRUE(isInZone(CENTER_RIGHT, zone0));
-}
-
 void test_zone_3_full_coverage() {
     // All 160 LEDs should be in exactly one zone
     for (uint16_t led = 0; led < STRIP_LENGTH; led++) {
         int zoneId = getZoneForLed(led, ZONE_3_CONFIG, 3);
-        TEST_ASSERT_TRUE_MESSAGE(zoneId >= 0,
-            "LED not covered by any zone");
-    }
-}
-
-void test_zone_4_full_coverage() {
-    for (uint16_t led = 0; led < STRIP_LENGTH; led++) {
-        int zoneId = getZoneForLed(led, ZONE_4_CONFIG, 4);
         TEST_ASSERT_TRUE_MESSAGE(zoneId >= 0,
             "LED not covered by any zone");
     }
@@ -214,29 +188,10 @@ void test_zone_3_no_overlap() {
     }
 }
 
-void test_zone_4_no_overlap() {
-    for (uint16_t led = 0; led < STRIP_LENGTH; led++) {
-        int count = 0;
-        for (int z = 0; z < 4; z++) {
-            if (isInZone(led, ZONE_4_CONFIG[z])) count++;
-        }
-        TEST_ASSERT_EQUAL_MESSAGE(1, count,
-            "LED is in multiple zones or no zone");
-    }
-}
-
 void test_zone_3_total_led_count() {
     uint16_t total = 0;
     for (int z = 0; z < 3; z++) {
         total += countZoneLeds(ZONE_3_CONFIG[z]);
-    }
-    TEST_ASSERT_EQUAL(STRIP_LENGTH, total);
-}
-
-void test_zone_4_total_led_count() {
-    uint16_t total = 0;
-    for (int z = 0; z < 4; z++) {
-        total += countZoneLeds(ZONE_4_CONFIG[z]);
     }
     TEST_ASSERT_EQUAL(STRIP_LENGTH, total);
 }
@@ -246,19 +201,6 @@ void test_zone_3_symmetric_around_center() {
     const ZoneSegment& zone0 = ZONE_3_CONFIG[0];
     TEST_ASSERT_EQUAL(CENTER_LEFT, zone0.s1LeftEnd);
     TEST_ASSERT_EQUAL(CENTER_RIGHT, zone0.s1RightStart);
-}
-
-void test_zone_4_symmetric_around_center() {
-    const ZoneSegment& zone0 = ZONE_4_CONFIG[0];
-    TEST_ASSERT_EQUAL(CENTER_LEFT, zone0.s1LeftEnd);
-    TEST_ASSERT_EQUAL(CENTER_RIGHT, zone0.s1RightStart);
-}
-
-void test_zone_4_equal_distribution() {
-    // All 4 zones should have 40 LEDs
-    for (int z = 0; z < 4; z++) {
-        TEST_ASSERT_EQUAL(40, ZONE_4_CONFIG[z].totalLeds);
-    }
 }
 
 //==============================================================================
@@ -455,18 +397,12 @@ void test_zones_are_concentric() {
 //==============================================================================
 
 void run_zone_composer_tests() {
-    // Zone definitions
+    // Zone definitions (max 3 zones)
     RUN_TEST(test_zone_3_center_contains_center_pair);
-    RUN_TEST(test_zone_4_center_contains_center_pair);
     RUN_TEST(test_zone_3_full_coverage);
-    RUN_TEST(test_zone_4_full_coverage);
     RUN_TEST(test_zone_3_no_overlap);
-    RUN_TEST(test_zone_4_no_overlap);
     RUN_TEST(test_zone_3_total_led_count);
-    RUN_TEST(test_zone_4_total_led_count);
     RUN_TEST(test_zone_3_symmetric_around_center);
-    RUN_TEST(test_zone_4_symmetric_around_center);
-    RUN_TEST(test_zone_4_equal_distribution);
 
     // Blend modes
     RUN_TEST(test_blend_overwrite);

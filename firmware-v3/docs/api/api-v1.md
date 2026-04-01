@@ -38,7 +38,7 @@ The LightwaveOS API v1 provides programmatic control over an ESP32-S3 LED contro
 
 - **320 LEDs** across dual 160-LED WS2812 strips
 - **47 visual effects** organized into 11 categories
-- **Multi-zone composition** (up to 4 independent zones)
+- **Multi-zone composition** (up to 3 independent zones)
 - **12 transition types** with 15 easing curves
 - **CENTER ORIGIN constraint** - all effects originate from LED 79/80
 
@@ -133,7 +133,7 @@ Get API metadata and HATEOAS links.
       "ledsTotal": 320,
       "strips": 2,
       "centerPoint": 79,
-      "maxZones": 4
+      "maxZones": 3
     },
     "_links": {
       "self": "/api/v1/",
@@ -667,8 +667,7 @@ Get all zone configurations.
       {"id": 0, "name": "Unified"},
       {"id": 1, "name": "Dual Split"},
       {"id": 2, "name": "Triple Rings"},
-      {"id": 3, "name": "Quad Active"},
-      {"id": 4, "name": "Heartbeat Focus"}
+      {"id": 3, "name": "Heartbeat Focus"}
     ]
   },
   "timestamp": 123456789,
@@ -720,7 +719,7 @@ Set zone layout using custom segment definitions. This allows full runtime contr
 
 | Field | Type | Range | Description |
 |-------|------|-------|-------------|
-| `zoneId` | uint8 | 0-3 | Zone identifier (must be sequential, starting from 0) |
+| `zoneId` | uint8 | 0-2 | Zone identifier (must be sequential, starting from 0) |
 | `s1LeftStart` | uint8 | 0-79 | Left segment start LED (toward LED 0) |
 | `s1LeftEnd` | uint8 | 0-79 | Left segment end LED (inclusive, must be ≥ start) |
 | `s1RightStart` | uint8 | 80-159 | Right segment start LED (toward LED 159) |
@@ -737,8 +736,8 @@ Set zone layout using custom segment definitions. This allows full runtime contr
 3. **Complete Coverage**: All LEDs from 0-159 (per strip) must be assigned to exactly one zone.
 
 4. **Centre-Outward Ordering**: Zones must be ordered from centre outward:
-   - Zone 0 = innermost (closest to centre pair)
-   - Zone N-1 = outermost (at edges)
+   - Zone 1 = innermost (zoneId: 0, closest to centre pair)
+   - Zone N = outermost (at edges)
 
 5. **Minimum Zone Size**: At least 1 LED per segment (left and right), minimum 2 LEDs total per zone.
 
@@ -792,7 +791,7 @@ Get configuration for a specific zone.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `id` | uint8 | Zone ID (0-3) |
+| `id` | uint8 | Zone ID (0-2) |
 
 **Response:**
 ```json
@@ -829,7 +828,7 @@ Set the effect for a specific zone.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `id` | uint8 | Zone ID (0-3) |
+| `id` | uint8 | Zone ID (0-2) |
 
 **Request Body:**
 ```json

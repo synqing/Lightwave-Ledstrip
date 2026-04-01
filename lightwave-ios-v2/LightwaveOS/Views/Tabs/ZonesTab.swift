@@ -90,7 +90,7 @@ struct ZonesTab: View {
                 ZonePreset(id: 0, name: "Unified"),
                 ZonePreset(id: 1, name: "Dual Split"),
                 ZonePreset(id: 2, name: "Triple Rings"),
-                ZonePreset(id: 3, name: "Quad Active")
+                ZonePreset(id: 3, name: "Heartbeat Focus")
             ]
             return vm
         }())

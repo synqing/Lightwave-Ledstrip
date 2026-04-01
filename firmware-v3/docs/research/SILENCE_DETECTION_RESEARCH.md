@@ -485,7 +485,7 @@ if (rms < silenceThreshold) {
 **Implement:**
 1. **Full spectral flatness** computed from existing Goertzel bins
 2. **Temporal confidence filtering** (moving average of music score)
-3. **Per-zone silence gates** (zone 0xFF global, zones 0-5 individual)
+3. **Per-zone silence gates** (zone 0xFF global, zones 0-2 individual)
 
 **Cost:** ~5ms per 20 frames
 **Result:** Handles all music genres; environment-adaptive

@@ -24,7 +24,7 @@ Effect Rendering Pipeline:
 │  └── transition buffer management                       │
 ├─────────────────────────────────────────────────────────┤
 │  ZoneComposer (optional)                                │
-│  ├── 1-4 zones per strip                                │
+│  ├── 1-3 zones per strip                                │
 │  ├── Per-zone effect/brightness/speed/palette           │
 │  └── render() → composites zones to output              │
 ├─────────────────────────────────────────────────────────┤
@@ -100,8 +100,8 @@ Zone Composer enables **multi-zone rendering** where different effects run on di
 
 ```cpp
 // From hardware_config.h
-constexpr uint8_t MAX_ZONES = 4;     // Maximum zones per strip
-constexpr uint8_t ZONE_SIZE = 40;    // LEDs per zone (160 / 4 = 40)
+constexpr uint8_t MAX_ZONES = 3;     // Maximum zones per strip
+constexpr uint8_t ZONE_SIZE = 53;    // LEDs per zone (approximate, varies by layout)
 constexpr uint8_t ZONE_SEGMENT_SIZE = 20;  // LEDs per zone half
 ```
 
@@ -116,27 +116,12 @@ Strip 1 (160 LEDs):
 ┌────────┬─────────────────────────────────────┬─────────┐
 │ Zone 2 │              Zone 1                 │ Zone 2  │
 │ 0-19   │     20-64          95-139           │ 140-159 │
-│(20 LEDs)│    (45 LEDs) Zone 0 (45 LEDs)      │(20 LEDs)│
+│(20 LEDs)│    (45 LEDs) Zone 1 (45 LEDs)      │(20 LEDs)│
 │        │            65-94 (30 LEDs)          │         │
 └────────┴─────────────────────────────────────┴─────────┘
-Zone 0 = 30 LEDs (center)
-Zone 1 = 90 LEDs (middle ring)
-Zone 2 = 40 LEDs (outer ring)
-```
-
-**4-Zone Mode (Preset 3: Quad Active)**
-```
-Strip 1 (160 LEDs) - Equal 40 LEDs per zone:
-←──────────────────── CENTER (79/80) ────────────────────→
-┌───────┬─────────┬───────────────────┬─────────┬────────┐
-│Zone 3 │ Zone 2  │      Zone 1       │ Zone 2  │ Zone 3 │
-│ 0-19  │ 20-39   │ 40-59   100-119   │ 120-139 │140-159 │
-│       │         │ Zone 0 (60-99)    │         │        │
-└───────┴─────────┴───────────────────┴─────────┴────────┘
-Zone 0 = 40 LEDs (innermost - 60-79 + 80-99)
-Zone 1 = 40 LEDs (40-59 + 100-119)
-Zone 2 = 40 LEDs (20-39 + 120-139)
-Zone 3 = 40 LEDs (outermost - 0-19 + 140-159)
+Zone 1 = 30 LEDs (centre, innermost)
+Zone 2 = 90 LEDs (middle ring)
+Zone 3 = 40 LEDs (outer ring)
 ```
 
 Strip 2 mirrors the same layout (LEDs 160-319).
@@ -148,7 +133,7 @@ class ZoneComposer {
     // Zone management
     void setZoneEffect(uint8_t zoneId, uint8_t effectId);
     void enableZone(uint8_t zoneId, bool enabled);
-    void setZoneCount(uint8_t count);  // 1-4 zones
+    void setZoneCount(uint8_t count);  // 1-3 zones
 
     // Per-zone parameters
     void setZoneBrightness(uint8_t zoneId, uint8_t brightness);  // 0-255

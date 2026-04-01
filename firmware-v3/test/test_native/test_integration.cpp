@@ -24,7 +24,7 @@ constexpr uint16_t CENTER_RIGHT = 80;
 constexpr uint16_t HALF_LENGTH = 80;
 constexpr uint16_t STRIP_LENGTH = 160;
 constexpr uint16_t TOTAL_LEDS = 320;
-constexpr uint8_t MAX_ZONES = 4;
+constexpr uint8_t MAX_ZONES = 3;
 constexpr uint8_t MAX_EFFECTS = 65;
 
 //==============================================================================

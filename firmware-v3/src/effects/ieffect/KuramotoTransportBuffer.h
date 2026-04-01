@@ -51,7 +51,7 @@ struct RGB16 {
  */
 class KuramotoTransportBuffer {
 public:
-    static constexpr uint8_t  MAX_ZONES      = 4;
+    static constexpr uint8_t  MAX_ZONES      = 3;
     static constexpr uint16_t MAX_RADIAL_LEN = 80; // centre->edge (for 160 LED strip)
 
     // PSRAM-ALLOCATED -- large buffers MUST NOT live in DRAM (see MEMORY_ALLOCATION.md)

@@ -190,7 +190,7 @@ private:
     NarrativeCycle m_cycle;
 
     // Per-zone phase offsets (0-1)
-    static constexpr uint8_t MAX_ZONES = 4;
+    static constexpr uint8_t MAX_ZONES = 3;
     float m_zoneOffsets[MAX_ZONES] = {0};
 
     // Edge detection

@@ -264,11 +264,10 @@ firmware/v2/src/audio/
 │    • bands: attack=0.15, release=0.03                                  │
 │    • heavy_bands: attack=0.08, release=0.015                           │
 │    ↓                                                                    │
-│ Zone AGC (4 frequency zones)                                           │
-│    • Zone 0: bands[0-1] (60-120 Hz)                                    │
-│    • Zone 1: bands[2-3] (250-500 Hz)                                   │
-│    • Zone 2: bands[4-5] (1-2 kHz)                                      │
-│    • Zone 3: bands[6-7] (4-7.8 kHz)                                    │
+│ Zone AGC (3 frequency zones)                                           │
+│    • Zone 1: bands[0-1] (60-120 Hz)                                    │
+│    • Zone 2: bands[2-3] (250-500 Hz)                                   │
+│    • Zone 3: bands[4-7] (1-7.8 kHz)                                    │
 │    • Prevents bass from drowning treble                                │
 │    ↓                                                                    │
 │ Musical Saliency Computation (if FEATURE_MUSICAL_SALIENCY)             │

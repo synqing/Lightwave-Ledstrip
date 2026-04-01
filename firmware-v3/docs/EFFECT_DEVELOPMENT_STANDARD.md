@@ -927,3 +927,39 @@ An AR change is not complete until all are true:
 | 2026-03-02 | Initial creation from episodic memory research (7200+ observations, 30+ source files) | Claude / Captain directive |
 | 2026-03-05 | Added AR control-liveness contract, beat-forward anti-chaos bounds, and lightweight post-processing guidance | Codex |
 | 2026-03-08 | Added audio-visual coupling best practices (beatStrength, liveliness, overallSaliency), signals quick-reference table, beatStrength in effect template | Claude |
+
+---
+
+## GEMS Factor Tagging
+
+> Added 2026-04-01 via War Room pipeline
+
+### Requirement
+
+Each effect SHOULD declare which GEMS emotion factor(s) it primarily expresses. This enables future emotion-aware preset selection and provides a consistent vocabulary for effect categorisation.
+
+### Format
+
+In the effect's metadata comment block or registration, include:
+
+```cpp
+// gems_factors: joyful_activation, power
+```
+
+### Valid GEMS Factor Tags
+
+`wonder`, `transcendence`, `tenderness`, `nostalgia`, `peacefulness`, `power`, `joyful_activation`, `tension`, `sadness`
+
+### Colour Guidance
+
+When selecting colour palettes for effects, consult the War Room reference table:
+- `REF · VIS · Tempo-Mode to HSL Colour Parameter Table` — empirically validated colour mappings
+- Key principle: design for the emotional state the music induces, not the raw audio feature
+
+### Tagging Guidelines
+
+- Most effects will map to 1-2 primary GEMS factors
+- Effects that respond to beat/rhythm → `joyful_activation` or `power`
+- Effects with slow, ambient movement → `peacefulness` or `nostalgia`
+- Effects with sharp, reactive dynamics → `tension` or `power`
+- Effects with warm, gentle colour palettes → `tenderness` or `wonder`

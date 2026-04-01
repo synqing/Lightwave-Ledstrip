@@ -462,7 +462,7 @@ All messages use JSON with a `type` field:
 { "type": "zone.enable", "enable": true }
 
 // Set zone count
-{ "type": "zone.setCount", "count": 4 }
+{ "type": "zone.setCount", "count": 3 }
 
 // Set zone effect
 { "type": "zone.setEffect", "zoneId": 0, "effectId": 5 }
@@ -505,7 +505,7 @@ The server broadcasts status updates over WebSocket when parameters change:
   "brightness": 128,
   "palette": 3,
   "zoneEnabled": true,
-  "zoneCount": 4
+  "zoneCount": 3
 }
 ```
 

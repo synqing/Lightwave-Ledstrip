@@ -67,7 +67,7 @@ private:
  */
 class KuramotoOscillatorField {
 public:
-    static constexpr uint8_t  MAX_ZONES = 4;
+    static constexpr uint8_t  MAX_ZONES = 3;
     static constexpr uint16_t N         = 80;      // Oscillators (centre->edge samples)
     static constexpr uint16_t MAX_R     = 24;      // Max nonlocal radius (for kernel)
     static constexpr float    PI_F      = 3.14159265f;

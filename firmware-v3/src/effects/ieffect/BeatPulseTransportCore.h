@@ -37,8 +37,8 @@ namespace lightwaveos::effects::ieffect {
 
 class BeatPulseTransportCore final {
 public:
-    // LightwaveOS currently uses max 4 zones (see ZoneComposer.cpp)
-    static constexpr uint8_t  MAX_ZONES      = 4;
+    // LightwaveOS currently uses max 3 zones (see ZoneComposer.cpp)
+    static constexpr uint8_t  MAX_ZONES      = 3;
 
     // We allocate conservatively: enough for a 160-LED strip's radial half (80),
     // but keep 160 to remain safe if centrePoint semantics ever change.
@@ -410,7 +410,7 @@ private:
         return CRGB(static_cast<uint8_t>(r8), static_cast<uint8_t>(g8), static_cast<uint8_t>(b8));
     }
 
-    uint32_t m_lastRenderMs[MAX_ZONES] = {0,0,0,0};
+    uint32_t m_lastRenderMs[MAX_ZONES] = {0,0,0};
     uint32_t m_nowMs = 0;
 };
 

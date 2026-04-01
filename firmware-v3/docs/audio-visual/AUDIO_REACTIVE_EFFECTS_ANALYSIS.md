@@ -59,7 +59,7 @@ I2S Microphone (16 kHz)
 |       AudioActor                 |
 |  - Hop-based processing (256)    |
 |  - Lookahead spike smoothing     |
-|  - Zone AGC (4 zones)            |
+|  - Zone AGC (3 zones)            |
 |  - Attack/release smoothing      |
 +----------------------------------+
          |

@@ -104,7 +104,7 @@ private struct ShadowModifier: ViewModifier {
                     .font(.bodyValue)
             }
 
-            LWCard(title: "Zone 0", accentBorder: .lwZone0) {
+            LWCard(title: "Zone 1", accentBorder: .lwZone0) {
                 VStack(alignment: .leading, spacing: Spacing.sm) {
                     Text("80 LEDs · L[40-79] R[80-119]")
                         .font(.caption)
@@ -121,7 +121,7 @@ private struct ShadowModifier: ViewModifier {
                 .font(.bodyValue)
             }
 
-            LWCard(title: "Zone 2", elevated: true, accentBorder: .lwZone2) {
+            LWCard(title: "Zone 3", elevated: true, accentBorder: .lwZone2) {
                 Text("Accent border with elevated shadow")
                     .foregroundStyle(Color.lwTextPrimary)
                     .font(.bodyValue)

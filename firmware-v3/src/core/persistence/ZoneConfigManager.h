@@ -8,7 +8,7 @@
  * Includes checksum validation, preset management, and system state persistence.
  *
  * Features:
- * - Zone configuration persistence (all 4 zones)
+ * - Zone configuration persistence (all 3 zones)
  * - System state persistence (effect, brightness, speed, palette)
  * - 5 built-in presets
  * - CRC32 checksum validation
@@ -48,7 +48,7 @@ struct ZoneConfigData {
     uint8_t zoneCount;                   // Number of active zones
     bool systemEnabled;                  // Global zone system enable
 
-    // Per-zone settings (4 zones max)
+    // Per-zone settings (3 zones max)
     EffectId zoneEffects[MAX_ZONES];    // Effect ID per zone (stable namespaced)
     bool zoneEnabled[MAX_ZONES];        // Enable flag per zone
     uint8_t zoneBrightness[MAX_ZONES];  // Brightness per zone (0-255)

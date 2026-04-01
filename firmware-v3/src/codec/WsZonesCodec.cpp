@@ -96,7 +96,7 @@ ZoneSetEffectDecodeResult WsZonesCodec::decodeZoneSetEffect(JsonObjectConst root
         return result;
     }
     
-    // Extract zoneId (required, 0-3)
+    // Extract zoneId (required, 0-2)
     if (!root["zoneId"].is<int>()) {
         snprintf(result.errorMsg, MAX_ERROR_MSG, "Missing required field 'zoneId'");
         return result;
@@ -107,7 +107,7 @@ ZoneSetEffectDecodeResult WsZonesCodec::decodeZoneSetEffect(JsonObjectConst root
         return result;
     }
     result.request.zoneId = static_cast<uint8_t>(zoneId);
-    
+
     // Extract effectId (required, stable namespaced EffectId)
     if (!root["effectId"].is<int>()) {
         snprintf(result.errorMsg, MAX_ERROR_MSG, "Missing required field 'effectId'");
@@ -147,7 +147,7 @@ ZoneSetBrightnessDecodeResult WsZonesCodec::decodeZoneSetBrightness(JsonObjectCo
         return result;
     }
     
-    // Extract zoneId (required, 0-3)
+    // Extract zoneId (required, 0-2)
     if (!root["zoneId"].is<int>()) {
         snprintf(result.errorMsg, MAX_ERROR_MSG, "Missing required field 'zoneId'");
         return result;
@@ -158,7 +158,7 @@ ZoneSetBrightnessDecodeResult WsZonesCodec::decodeZoneSetBrightness(JsonObjectCo
         return result;
     }
     result.request.zoneId = static_cast<uint8_t>(zoneId);
-    
+
     // Extract brightness (optional, 0-255, default: 128)
     int brightness = root["brightness"] | 128;
     if (brightness < 0 || brightness > 255) {
@@ -194,7 +194,7 @@ ZoneSetSpeedDecodeResult WsZonesCodec::decodeZoneSetSpeed(JsonObjectConst root) 
         return result;
     }
     
-    // Extract zoneId (required, 0-3)
+    // Extract zoneId (required, 0-2)
     if (!root["zoneId"].is<int>()) {
         snprintf(result.errorMsg, MAX_ERROR_MSG, "Missing required field 'zoneId'");
         return result;
@@ -205,7 +205,7 @@ ZoneSetSpeedDecodeResult WsZonesCodec::decodeZoneSetSpeed(JsonObjectConst root) 
         return result;
     }
     result.request.zoneId = static_cast<uint8_t>(zoneId);
-    
+
     // Extract speed (optional, 1-100, default: 15)
     int speed = root["speed"] | 15;
     if (speed < 1 || speed > 100) {
@@ -241,7 +241,7 @@ ZoneSetPaletteDecodeResult WsZonesCodec::decodeZoneSetPalette(JsonObjectConst ro
         return result;
     }
     
-    // Extract zoneId (required, 0-3)
+    // Extract zoneId (required, 0-2)
     if (!root["zoneId"].is<int>()) {
         snprintf(result.errorMsg, MAX_ERROR_MSG, "Missing required field 'zoneId'");
         return result;
@@ -252,7 +252,7 @@ ZoneSetPaletteDecodeResult WsZonesCodec::decodeZoneSetPalette(JsonObjectConst ro
         return result;
     }
     result.request.zoneId = static_cast<uint8_t>(zoneId);
-    
+
     // Extract paletteId (required, 0-255)
     if (!root["paletteId"].is<int>()) {
         snprintf(result.errorMsg, MAX_ERROR_MSG, "Missing required field 'paletteId'");
@@ -292,7 +292,7 @@ ZoneSetBlendDecodeResult WsZonesCodec::decodeZoneSetBlend(JsonObjectConst root) 
         return result;
     }
     
-    // Extract zoneId (required, 0-3)
+    // Extract zoneId (required, 0-2)
     if (!root["zoneId"].is<int>()) {
         snprintf(result.errorMsg, MAX_ERROR_MSG, "Missing required field 'zoneId'");
         return result;
@@ -303,7 +303,7 @@ ZoneSetBlendDecodeResult WsZonesCodec::decodeZoneSetBlend(JsonObjectConst root) 
         return result;
     }
     result.request.zoneId = static_cast<uint8_t>(zoneId);
-    
+
     // Extract blendMode (required, 0-7)
     if (!root["blendMode"].is<int>()) {
         snprintf(result.errorMsg, MAX_ERROR_MSG, "Missing required field 'blendMode'");

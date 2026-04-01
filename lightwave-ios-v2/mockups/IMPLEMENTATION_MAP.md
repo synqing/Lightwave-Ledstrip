@@ -72,11 +72,11 @@ This document maps mockup sections to SwiftUI components and specifies the chang
 
 ## 6. Zone Mode (ZoneModeView + LEDStripView)
 
-**Mockup section:** Toggle, **Zones count selector** (1/2/3/4), **Preset selector** (Unified, Dual Split, Triple Rings, Quad Active, Heartbeat Focus, Custom), LED strip, per-zone cards with effect/palette/blend + speed.
+**Mockup section:** Toggle, **Zones count selector** (1/2/3), **Preset selector** (Unified, Dual Split, Triple Rings, Heartbeat Focus, Custom), LED strip, per-zone cards with effect/palette/blend + speed.
 
 **Zone count and preset (from dashboard/firmware):**
-- **Zones** dropdown: 1 Zone, 2 Zones, 3 Zones, 4 Zones — drives layout and how many zone cards render
-- **Preset** dropdown: Custom | Unified (0) | Dual Split (1) | Triple Rings (2) | Quad Active (3) | Heartbeat Focus (4) — loads firmware presets via `zones.loadPreset` or equivalent REST
+- **Zones** dropdown: 1 Zone, 2 Zones, 3 Zones — drives layout and how many zone cards render
+- **Preset** dropdown: Custom | Unified (0) | Dual Split (1) | Triple Rings (2) | Heartbeat Focus (3) — loads firmware presets via `zones.loadPreset` or equivalent REST
 - Firmware GET /api/v1/zones returns `presets: [{id, name}, ...]`; use for Preset dropdown options
 
 **Current:**
@@ -100,7 +100,7 @@ This document maps mockup sections to SwiftUI components and specifies the chang
    - Add `effectName: String?`, `blendModeName: String?` for display
 
 4. **ZoneControlView (individual zone parameter layout):**
-   - Each zone in its own card with distinct coloured border (zone 0 = cyan, 1 = green, etc.)
+   - Each zone in its own card with distinct coloured border (zone 1 = cyan, zone 2 = green, zone 3 = purple)
    - Zone header: zone index + LED count and range (e.g. "80 LEDs · L[40-79] R[80-119]")
    - Three stacked parameter rows per zone:
      - **Effect**: dropdown/sheet with current effect name

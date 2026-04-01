@@ -67,7 +67,7 @@ struct ZoneEnableDecodeResult {
 // ============================================================================
 
 struct ZoneSetEffectRequest {
-    uint8_t zoneId;      // Required (0-3)
+    uint8_t zoneId;      // Required (0-2)
     EffectId effectId;   // Effect ID (stable namespaced)
     const char* requestId;
 
@@ -259,7 +259,7 @@ struct ZoneSegmentRequest {
 };
 
 struct ZonesSetLayoutRequest {
-    static constexpr uint8_t MAX_ZONES = 4;
+    static constexpr uint8_t MAX_ZONES = 3;
     ZoneSegmentRequest zones[MAX_ZONES];
     uint8_t zoneCount;
     const char* requestId;

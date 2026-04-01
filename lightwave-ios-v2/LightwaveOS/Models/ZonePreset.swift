@@ -7,9 +7,9 @@
 
 import Foundation
 
-/// Built-in zone preset (0-4)
+/// Built-in zone preset (0-3)
 struct ZonePreset: Codable, Sendable, Identifiable, Hashable {
-    /// Preset ID (0-4)
+    /// Preset ID (0-3)
     let id: Int
 
     /// Display name
@@ -29,8 +29,7 @@ struct ZonePreset: Codable, Sendable, Identifiable, Hashable {
         ZonePreset(id: 0, name: "Unified"),
         ZonePreset(id: 1, name: "Dual Split"),
         ZonePreset(id: 2, name: "Triple Rings"),
-        ZonePreset(id: 3, name: "Quad Active"),
-        ZonePreset(id: 4, name: "Heartbeat Focus")
+        ZonePreset(id: 3, name: "Heartbeat Focus")
     ]
 
     /// Get preset by ID with fallback

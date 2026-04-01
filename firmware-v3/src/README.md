@@ -66,7 +66,7 @@ The `src/` directory contains the complete firmware implementation for Lightwave
                             │  │                  │                  │  │
                             │  │  ┌───────────────┴───────────────┐  │  │
                             │  │  ▼                               ▼  │  │
-                            │  │ Zone 0          ...           Zone 3│  │
+                            │  │ Zone 1          ...           Zone 3│  │
                             │  │ (IEffect)                   (IEffect)│  │
                             │  └──────────────────────────────────────┘  │
                             │                     │                      │

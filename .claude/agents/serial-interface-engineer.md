@@ -191,8 +191,8 @@ The Zone Composer enables multi-zone rendering with independent effects per zone
 - **0:** Unified - Single zone, all LEDs one effect
 - **1:** Dual Split - Two concentric zones (inner/outer)
 - **2:** Triple Rings - **DEFAULT** 3-zone (30+90+40 LEDs, AURA spec)
-- **3:** Quad Active - Four equal 40-LED concentric zones
-- **4:** LGP Showcase - LGP physics effects across all 4 zones
+- **3:** Heartbeat Focus - Pulsing centre-focused composition
+
 
 ### Zone Persistence
 
@@ -267,12 +267,12 @@ Enabled: YES
 Zone Count: 3
 Total LEDs: 160
 
-Zone 0: LEDs 0-29 (30 LEDs)
+Zone 1: LEDs 65-94 (30 LEDs)
   Effect: 0 - Gradient
   Brightness: 255
   Enabled: YES
 
-Zone 1: LEDs 30-119 (90 LEDs)
+Zone 2: LEDs 20-64, 95-139 (90 LEDs)
   Effect: 3 - Kaleidoscope
   Brightness: 255
   Enabled: YES

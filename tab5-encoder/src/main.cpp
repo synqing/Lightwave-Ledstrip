@@ -2687,10 +2687,13 @@ void loop() {
         // fighting the library's backoff and creating a reconnect storm.
         // See: claude-mem #34928 (Feb 16, 2026)
         bool isWsConnected = g_wsClient.isConnected();
-        if (s_wasWsConnected && !isWsConnected) {
+        static bool s_wsDisconnectLogged = false;
+        if (s_wasWsConnected && !isWsConnected && !s_wsDisconnectLogged) {
             Serial.println("[NETWORK] WebSocket disconnected — library will auto-reconnect with backoff");
             s_requestedLists = false;  // Re-fetch lists after reconnect
+            s_wsDisconnectLogged = true;
         }
+        if (isWsConnected) s_wsDisconnectLogged = false;
         // Note: s_wasWsConnected is updated in updateConnectionLeds() which is called later in the loop
 
         // Once WebSocket is connected, request effect/palette name lists (paged, non-blocking)

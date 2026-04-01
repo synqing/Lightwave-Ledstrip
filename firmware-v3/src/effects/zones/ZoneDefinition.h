@@ -5,7 +5,7 @@
  * LightwaveOS v2 - Zone System
  *
  * All zones are symmetric around CENTER PAIR (LEDs 79/80), radiating outward.
- * Supports 1-zone, 2-zone, 3-zone and 4-zone configurations.
+ * Supports 1-zone, 2-zone, and 3-zone configurations.
  */
 
 #pragma once
@@ -17,7 +17,7 @@ namespace zones {
 
 // ==================== Constants ====================
 
-constexpr uint8_t MAX_ZONES = 4;
+constexpr uint8_t MAX_ZONES = 3;
 constexpr uint16_t STRIP_LENGTH = 160;
 constexpr uint16_t TOTAL_LEDS = 320;
 
@@ -114,20 +114,14 @@ constexpr ZoneSegment ZONE_3_CONFIG[3] = {
       .totalLeds = 40 }
 };
 
-// ==================== 4-Zone Configuration ====================
-// Equal 40 LEDs per zone, concentric rings from center
+// ==================== Legacy 4-Zone Configuration ====================
+// Preserved for NVS migration from v1 configs that stored QUAD layout. Do not use directly.
+
+#define LEGACY_NVS_MIGRATION 1
+#ifdef LEGACY_NVS_MIGRATION
 
 /**
- * 4-Zone Layout (Equal Distribution):
- *
- * Zone 0 (INNERMOST):  LEDs 60-79 + 80-99  (40 LEDs)
- * Zone 1 (RING 2):     LEDs 40-59 + 100-119 (40 LEDs)
- * Zone 2 (RING 3):     LEDs 20-39 + 120-139 (40 LEDs)
- * Zone 3 (OUTERMOST):  LEDs 0-19 + 140-159 (40 LEDs)
- *
- *   Z3    |  Z2   |  Z1   |  Z0  |  Z0  |  Z1   |  Z2   |   Z3
- * [0--19] [20-39] [40-59] [60-79|80-99] [100-119] [120-139] [140-159]
- *                         CENTER PAIR
+ * 4-Zone Layout (Equal Distribution) — LEGACY, preserved for NVS migration only.
  */
 constexpr ZoneSegment ZONE_4_CONFIG[4] = {
     // Zone 0: INNERMOST (40 LEDs)
@@ -155,13 +149,14 @@ constexpr ZoneSegment ZONE_4_CONFIG[4] = {
       .totalLeds = 40 }
 };
 
+#endif // LEGACY_NVS_MIGRATION
+
 // ==================== Zone Configuration Type ====================
 
 enum class ZoneLayout : uint8_t {
     SINGLE = 1,     // All LEDs as one zone
     DUAL   = 2,     // 2 zones (inner/outer) (default)
-    TRIPLE = 3,     // 3 concentric zones
-    QUAD   = 4      // 4 equal zones
+    TRIPLE = 3      // 3 concentric zones
 };
 
 /**
@@ -174,7 +169,6 @@ inline const ZoneSegment* getZoneConfig(ZoneLayout layout) {
         case ZoneLayout::SINGLE: return ZONE_1_CONFIG;
         case ZoneLayout::DUAL:   return ZONE_2_CONFIG;
         case ZoneLayout::TRIPLE: return ZONE_3_CONFIG;
-        case ZoneLayout::QUAD:   return ZONE_4_CONFIG;
         default:                 return ZONE_2_CONFIG;
     }
 }
@@ -182,7 +176,7 @@ inline const ZoneSegment* getZoneConfig(ZoneLayout layout) {
 /**
  * @brief Get zone count for a layout
  * @param layout The zone layout type
- * @return Number of zones (1, 2, 3, or 4)
+ * @return Number of zones (1, 2, or 3)
  */
 inline uint8_t getZoneCount(ZoneLayout layout) {
     return static_cast<uint8_t>(layout);

@@ -72,7 +72,7 @@ struct SystemState {
     // ==================== Zone Mode ====================
 
     bool zoneModeEnabled;        // Whether zone mode is active
-    uint8_t activeZoneCount;     // Number of active zones (1-4)
+    uint8_t activeZoneCount;     // Number of active zones (1-3)
     std::array<ZoneState, MAX_ZONES> zones;  // Zone configurations
 
     // ==================== Transition State ====================
@@ -132,7 +132,7 @@ struct SystemState {
 
     /**
      * Create modified copy with zone enabled/disabled
-     * @param zoneId Zone index (0-3)
+     * @param zoneId Zone index (0-2)
      * @param enabled Whether zone is enabled
      * @return New state with updated zone
      */
@@ -140,7 +140,7 @@ struct SystemState {
 
     /**
      * Create modified copy with zone effect changed
-     * @param zoneId Zone index (0-3)
+     * @param zoneId Zone index (0-2)
      * @param effectId New effect ID for zone
      * @return New state with updated zone effect
      */
@@ -148,7 +148,7 @@ struct SystemState {
 
     /**
      * Create modified copy with zone palette changed
-     * @param zoneId Zone index (0-3)
+     * @param zoneId Zone index (0-2)
      * @param paletteId New palette ID for zone
      * @return New state with updated zone palette
      */
@@ -156,7 +156,7 @@ struct SystemState {
 
     /**
      * Create modified copy with zone brightness changed
-     * @param zoneId Zone index (0-3)
+     * @param zoneId Zone index (0-2)
      * @param brightness New brightness for zone (0-255)
      * @return New state with updated zone brightness
      */
@@ -164,7 +164,7 @@ struct SystemState {
 
     /**
      * Create modified copy with zone speed changed
-     * @param zoneId Zone index (0-3)
+     * @param zoneId Zone index (0-2)
      * @param speed New speed for zone (1-100)
      * @return New state with updated zone speed
      */
@@ -173,7 +173,7 @@ struct SystemState {
     /**
      * Create modified copy with zone mode toggled
      * @param enabled Whether zone mode is enabled
-     * @param zoneCount Number of active zones (1-4)
+     * @param zoneCount Number of active zones (1-3)
      * @return New state with updated zone mode
      */
     SystemState withZoneMode(bool enabled, uint8_t zoneCount) const;

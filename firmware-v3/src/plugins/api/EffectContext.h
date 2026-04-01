@@ -798,7 +798,7 @@ struct EffectContext {
     // Zone Information (when rendering a zone)
     //--------------------------------------------------------------------------
 
-    uint8_t zoneId;             ///< Current zone ID (0-3, or 0xFF if global)
+    uint8_t zoneId;             ///< Current zone ID (0-2, or 0xFF if global)
     uint16_t zoneStart;         ///< Zone start index in global buffer
     uint16_t zoneLength;        ///< Zone length
 

@@ -154,7 +154,7 @@ void LedDriver_S3::show() {
     // FastLED on some S3 paths can return before wire transmission fully drains.
     // Hold the buffer for at least one WS2812 frame time to avoid visible tearing.
     constexpr uint32_t kWs2812UsPerLed = 30;  // 24 bits * 1.25us
-    constexpr uint32_t kLatchUs = 80;         // >50us reset/latch margin
+    constexpr uint32_t kLatchUs = 300;        // WS2812 spec requires >280us latch
     const uint16_t longestStrip =
         (m_stripCounts[0] > m_stripCounts[1]) ? m_stripCounts[0] : m_stripCounts[1];
     const uint32_t minWireTimeUs = static_cast<uint32_t>(longestStrip) * kWs2812UsPerLed + kLatchUs;

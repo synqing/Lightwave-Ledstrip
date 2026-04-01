@@ -47,12 +47,12 @@ uint8_t validateEffectId(uint8_t effectId) const {
 ### ZoneComposer Render
 
 **Validations per frame**:
-- `validateZoneId()` per zone - 1-4 calls (one per zone)
+- `validateZoneId()` per zone - 1-3 calls (one per zone)
 - LED index validations - 0 calls (handled by macros)
-- **Total**: ~1-4 validations per frame
+- **Total**: ~1-3 validations per frame
 
-**CPU Cost**: ~3-12 cycles per frame
-**Overhead**: **0.00007%**
+**CPU Cost**: ~3-9 cycles per frame
+**Overhead**: **0.00005%**
 
 ### Audio Processing (AudioActor)
 
@@ -82,14 +82,14 @@ uint8_t validateEffectId(uint8_t effectId) const {
 
 Assuming maximum validations in a single frame:
 - RendererActor: 3 validations
-- ZoneComposer: 4 validations (4 zones)
+- ZoneComposer: 3 validations (3 zones)
 - Audio processing: 2 validations
-- **Total**: 9 validations per frame
+- **Total**: 8 validations per frame
 
-**CPU Cost**: ~27 cycles per frame
+**CPU Cost**: ~24 cycles per frame
 **Frame Time**: 8.33ms @ 120 FPS
 **CPU Capacity**: 2,000,000 cycles/ms × 8.33ms = 16,660,000 cycles/frame
-**Overhead**: 27 / 16,660,000 = **0.00016%**
+**Overhead**: 24 / 16,660,000 = **0.00014%**
 
 ### Typical Case
 

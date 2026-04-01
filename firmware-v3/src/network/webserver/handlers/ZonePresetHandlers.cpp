@@ -260,8 +260,6 @@ void ZonePresetHandlers::handleGet(AsyncWebServerRequest* request, uint8_t id) {
             memcpy(config.segments, zones::ZONE_1_CONFIG, sizeof(zones::ZONE_1_CONFIG));
         } else if (config.zoneCount == 2) {
             memcpy(config.segments, zones::ZONE_2_CONFIG, sizeof(zones::ZONE_2_CONFIG));
-        } else if (config.zoneCount == 4) {
-            memcpy(config.segments, zones::ZONE_4_CONFIG, sizeof(zones::ZONE_4_CONFIG));
         } else {
             memcpy(config.segments, zones::ZONE_3_CONFIG, sizeof(zones::ZONE_3_CONFIG));
             config.zoneCount = 3;

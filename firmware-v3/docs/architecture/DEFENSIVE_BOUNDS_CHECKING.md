@@ -91,7 +91,7 @@ void RendererActor::handleSetEffect(uint8_t effectId) {
  * DEFENSIVE CHECK: Prevents LoadProhibited crashes from corrupted zone ID.
  * 
  * ZoneComposer uses arrays m_zones[MAX_ZONES] and m_zoneConfig[MAX_ZONES] where
- * MAX_ZONES = 4. If zoneId is corrupted (e.g., by memory corruption, invalid
+ * MAX_ZONES = 3. If zoneId is corrupted (e.g., by memory corruption, invalid
  * input, or uninitialized state), accessing these arrays would cause out-of-bounds
  * access and crash.
  * 
@@ -100,7 +100,7 @@ void RendererActor::handleSetEffect(uint8_t effectId) {
  */
 uint8_t ZoneComposer::validateZoneId(uint8_t zoneId) const {
     if (zoneId >= MAX_ZONES) {
-        return 0;  // Return safe default (zone 0)
+        return 0;  // Return safe default (zone 1, index 0)
     }
     return zoneId;
 }

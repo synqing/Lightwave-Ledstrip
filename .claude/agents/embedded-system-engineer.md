@@ -52,8 +52,8 @@ namespace HardwareConfig {
     constexpr uint8_t SEGMENT_SIZE = LEDS_PER_STRIP / STRIP_SEGMENT_COUNT;  // 20 LEDs
 
     // Zone Composer Configuration
-    constexpr uint8_t MAX_ZONES = 4;
-    constexpr uint8_t ZONE_SIZE = 40;              // LEDs per zone (4-zone mode)
+    constexpr uint8_t MAX_ZONES = 3;
+    constexpr uint8_t ZONE_SIZE = 53;              // LEDs per zone (approximate, varies by layout)
     constexpr uint8_t ZONE_SEGMENT_SIZE = 20;      // LEDs per zone half
 
     // I2C Configuration

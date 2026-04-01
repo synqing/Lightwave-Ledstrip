@@ -613,7 +613,7 @@ inline uint8_t validatePaletteIdInRequest(uint8_t paletteId) {
  * @return Valid zone ID, defaults to 0 if out of bounds
  */
 inline uint8_t validateZoneIdInRequest(uint8_t zoneId) {
-    constexpr uint8_t MAX_ZONES = 4;  // From ZoneDefinition.h
+    constexpr uint8_t MAX_ZONES = 3;  // From ZoneDefinition.h
     if (zoneId >= MAX_ZONES) {
         return 0;  // Return safe default (zone 0)
     }

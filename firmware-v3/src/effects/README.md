@@ -227,14 +227,14 @@ All zones are concentric rings centered around LEDs 79/80:
 Strip 1 (160 LEDs):
 <--------------- CENTER (79/80) --------------->
 +--------+-------------------+-----------------+--------+
-| Zone 2 |      Zone 1       |     Zone 0      | Zone 1 |  Zone 2
+| Zone 3 |      Zone 2       |     Zone 1      | Zone 2 |  Zone 3
 | 0-19   |     20-64         |     65-94       | 95-139 | 140-159
 | 20 LED |     45 LED        |     30 LED      | 45 LED |  20 LED
 +--------+-------------------+-----------------+--------+
 
-Zone 0 = 30 LEDs (innermost, center)
-Zone 1 = 90 LEDs (middle ring)
-Zone 2 = 40 LEDs (outermost, edges)
+Zone 1 = 30 LEDs (innermost, centre)
+Zone 2 = 90 LEDs (middle ring)
+Zone 3 = 40 LEDs (outermost, edges)
 ```
 
 **4-Zone Configuration:**

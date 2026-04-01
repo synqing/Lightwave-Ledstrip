@@ -49,6 +49,7 @@ using namespace lightwaveos::network::webserver;
 static int g_handlerCallCount = 0;
 static const char* g_lastHandlerName = nullptr;
 static bool g_typeFieldPresent = true;
+static bool g_cmdFieldPresent = true;
 
 // Dummy context globals
 static lightwaveos::actors::ActorSystem s_dummyActorSystem;
@@ -63,6 +64,12 @@ static WebServerContext makeDummyContext() {
         s_dummyRateLimiter,
         nullptr,            // ledBroadcaster
         nullptr,            // logBroadcaster
+#if FEATURE_AUDIO_SYNC
+        nullptr,            // audioBroadcaster
+#endif
+#if FEATURE_AUDIO_BENCHMARK
+        nullptr,            // benchmarkBroadcaster
+#endif
         0,                  // startTime
         false               // apMode
     );
@@ -96,6 +103,12 @@ static void handler_check_type_stripped(AsyncWebSocketClient* client, JsonDocume
     g_handlerCallCount++;
 }
 
+static void handler_check_cmd_stripped(AsyncWebSocketClient* client, JsonDocument& doc,
+                                       const WebServerContext& ctx) {
+    g_cmdFieldPresent = doc.containsKey("cmd");
+    g_handlerCallCount++;
+}
+
 // ---------------------------------------------------------------------------
 // setUp / tearDown
 // ---------------------------------------------------------------------------
@@ -105,6 +118,7 @@ void setUp() {
     g_handlerCallCount = 0;
     g_lastHandlerName = nullptr;
     g_typeFieldPresent = true;
+    g_cmdFieldPresent = true;
 }
 
 void tearDown() {}
@@ -213,6 +227,23 @@ void test_route_strips_type_before_handler() {
     TEST_ASSERT_FALSE(g_typeFieldPresent);
 }
 
+void test_route_accepts_legacy_cmd_and_strips_it_before_handler() {
+    g_cmdFieldPresent = true;
+    WsCommandRouter::registerCommand("test.legacy", handler_check_cmd_stripped);
+
+    AsyncWebSocketClient client;
+    JsonDocument doc;
+    doc["cmd"] = "test.legacy";
+    doc["payload"] = "data";
+
+    auto ctx = makeDummyContext();
+    bool result = WsCommandRouter::route(&client, doc, ctx);
+
+    TEST_ASSERT_TRUE(result);
+    TEST_ASSERT_EQUAL_INT(1, g_handlerCallCount);
+    TEST_ASSERT_FALSE(g_cmdFieldPresent);
+}
+
 // ===========================================================================
 // Pre-filter optimisation tests
 // ===========================================================================
@@ -313,6 +344,7 @@ int main(void) {
     RUN_TEST(test_route_first_registered_handler);
     RUN_TEST(test_route_last_registered_handler);
     RUN_TEST(test_route_strips_type_before_handler);
+    RUN_TEST(test_route_accepts_legacy_cmd_and_strips_it_before_handler);
 
     // Pre-filter
     RUN_TEST(test_route_similar_prefix_different_length);

@@ -11,6 +11,7 @@
 #include "../../../core/actors/ActorSystem.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
+#include <cstring>
 
 namespace lightwaveos {
 namespace network {
@@ -19,10 +20,25 @@ namespace ws {
 
 using namespace lightwaveos::enhancement;
 
+static bool tryParseEdgeMixerModeName(const char* modeName, uint8_t& modeOut) {
+    if (!modeName || modeName[0] == '\0') {
+        return false;
+    }
+
+    for (uint8_t mode = 0; mode <= static_cast<uint8_t>(EdgeMixerMode::STM_DUAL); ++mode) {
+        if (strcmp(modeName, EdgeMixer::modeName(static_cast<EdgeMixerMode>(mode))) == 0) {
+            modeOut = mode;
+            return true;
+        }
+    }
+
+    return false;
+}
+
 /**
  * @brief Handle edge_mixer.set command
  *
- * Accepts any combination of: mode (0-6), spread (0-60), strength (0-255),
+ * Accepts any combination of: mode (0-7), spread (0-60), strength (0-255),
  * spatial (0-1), temporal (0-1).
  * Only provided fields are applied; omitted fields remain unchanged.
  */
@@ -38,8 +54,8 @@ static void handleEdgeMixerSet(AsyncWebSocketClient* client, JsonDocument& doc, 
 
     if (doc.containsKey("mode")) {
         mode = doc["mode"] | 0;
-        if (mode > 6) {
-            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "mode must be 0-6", requestId));
+        if (mode > static_cast<uint8_t>(EdgeMixerMode::STM_DUAL)) {
+            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "mode must be 0-7", requestId));
             return;
         }
         hasMode = true;
@@ -98,6 +114,7 @@ static void handleEdgeMixerSet(AsyncWebSocketClient* client, JsonDocument& doc, 
     if (hasStrength) ctx.actorSystem.setEdgeMixerStrength(strength);
     if (hasSpatial) ctx.actorSystem.setEdgeMixerSpatial(spatial);
     if (hasTemporal) ctx.actorSystem.setEdgeMixerTemporal(temporal);
+    if (ctx.broadcastStatus) ctx.broadcastStatus();
 
     // Respond with requested values (not stale singleton).
     String response = buildWsResponse("edge_mixer.set", requestId,
@@ -115,11 +132,38 @@ static void handleEdgeMixerSet(AsyncWebSocketClient* client, JsonDocument& doc, 
 }
 
 /**
+ * @brief Handle edgemixer_mode command.
+ *
+ * Accepts a mode name string for lightweight toggling from clients that only
+ * need the mirror/stm_dual switch but may also send any other registered name.
+ */
+static void handleEdgeMixerMode(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    const char* requestId = doc["requestId"] | "";
+    const char* modeName = doc["mode"] | "";
+    uint8_t mode = 0;
+
+    if (!tryParseEdgeMixerModeName(modeName, mode)) {
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE, "mode must be a valid edge mixer mode name", requestId));
+        return;
+    }
+
+    ctx.actorSystem.setEdgeMixerMode(mode);
+    if (ctx.broadcastStatus) ctx.broadcastStatus();
+
+    String response = buildWsResponse("edgemixer_mode", requestId, [mode](JsonObject& data) {
+        data["mode"] = mode;
+        data["modeName"] = EdgeMixer::modeName(static_cast<EdgeMixerMode>(mode));
+    });
+    client->text(response);
+}
+
+/**
  * @brief Handle edge_mixer.get command
  *
  * Returns current mode, spread, strength, spatial, and temporal.
  */
 static void handleEdgeMixerGet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    (void)ctx;
     const char* requestId = doc["requestId"] | "";
     auto& mixer = EdgeMixer::getInstance();
 
@@ -152,9 +196,11 @@ static void handleEdgeMixerSave(AsyncWebSocketClient* client, JsonDocument& doc,
 }
 
 void registerWsEdgeMixerCommands(const WebServerContext& ctx) {
+    (void)ctx;
     WsCommandRouter::registerCommand("edge_mixer.set", handleEdgeMixerSet);
     WsCommandRouter::registerCommand("edge_mixer.get", handleEdgeMixerGet);
     WsCommandRouter::registerCommand("edge_mixer.save", handleEdgeMixerSave);
+    WsCommandRouter::registerCommand("edgemixer_mode", handleEdgeMixerMode);
 }
 
 } // namespace ws

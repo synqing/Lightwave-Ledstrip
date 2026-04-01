@@ -33,6 +33,7 @@
 // MabuTrace integration for Perfetto timeline visualization
 // No-ops when FEATURE_MABUTRACE is disabled
 #include "AudioBenchmarkTrace.h"
+#include "pipeline/FFT.h"
 
 // Unified logging system (preserves colored output conventions)
 #define LW_LOG_TAG "Audio"
@@ -511,6 +512,13 @@ void AudioActor::onStart()
     m_state = AudioActorState::INITIALIZING;
     m_diag.reset();
     m_diag.diagStartTimeUs = esp_timer_get_time();
+#if FEATURE_AUDIO_BACKEND_ESV11 || FEATURE_AUDIO_BACKEND_PIPELINECORE
+    m_stmExtractor.reset();
+#endif
+#if FEATURE_AUDIO_BACKEND_ESV11
+    std::memset(m_stmFftBuffer, 0, sizeof(m_stmFftBuffer));
+    std::memset(m_stmBins256, 0, sizeof(m_stmBins256));
+#endif
 #if FEATURE_TRANSLATION_ENGINE
     translation_init(&m_translationState);
     m_translationLastAudioTime = AudioTime{};
@@ -616,6 +624,58 @@ void AudioActor::onTick()
     // CLOCK SPINE FIX (ES backend): Ensure frame.t uses END-OF-HOP semantics
     // es.sample_index from EsV11Backend represents the post-hop sample index
     frame.t = AudioTime(es.sample_index, audio::SAMPLE_RATE, now_us);
+
+    // Build a local 256-bin FFT magnitude view for STM on the production ES path.
+    {
+        const float* history = m_esBackend.getSampleHistory();
+        const size_t histLen = m_esBackend.getSampleHistoryLength();
+        constexpr uint16_t kStmFftSize = ControlBusRawInput::BINS_256_COUNT * 2U;
+        frame.binHz = static_cast<float>(audio::SAMPLE_RATE) / static_cast<float>(kStmFftSize);
+
+        if (history != nullptr && histLen >= kStmFftSize) {
+            const float* tail = history + histLen - kStmFftSize;
+            std::memcpy(m_stmFftBuffer, tail, sizeof(m_stmFftBuffer));
+            fft::rfft(m_stmFftBuffer, kStmFftSize);
+            fft::magnitudes(m_stmFftBuffer, m_stmBins256, kStmFftSize);
+
+            float peak = 0.0f;
+            m_stmBins256[0] = 0.0f;
+            for (uint16_t i = 1; i < ControlBusRawInput::BINS_256_COUNT; ++i) {
+                if (m_stmBins256[i] > peak) {
+                    peak = m_stmBins256[i];
+                }
+            }
+
+            if (peak > 1e-6f) {
+                const float invPeak = 1.0f / peak;
+                for (uint16_t i = 1; i < ControlBusRawInput::BINS_256_COUNT; ++i) {
+                    m_stmBins256[i] *= invPeak;
+                }
+            } else {
+                std::memset(m_stmBins256, 0, sizeof(m_stmBins256));
+            }
+
+            std::memcpy(frame.bins256, m_stmBins256, sizeof(frame.bins256));
+            frame.stmReady = m_stmExtractor.process(frame.bins256, frame.stmTemporal, frame.stmSpectral);
+            float temporalEnergy = 0.0f;
+            float spectralEnergy = 0.0f;
+            for (uint8_t i = 0; i < STMExtractor::MEL_BANDS; ++i) {
+                temporalEnergy += frame.stmTemporal[i];
+            }
+            for (uint8_t i = 0; i < STMExtractor::SPECTRAL_BINS; ++i) {
+                spectralEnergy += frame.stmSpectral[i];
+            }
+            frame.stmTemporalEnergy = temporalEnergy / static_cast<float>(STMExtractor::MEL_BANDS);
+            frame.stmSpectralEnergy = spectralEnergy / static_cast<float>(STMExtractor::SPECTRAL_BINS);
+        } else {
+            std::memset(frame.bins256, 0, sizeof(frame.bins256));
+            std::memset(frame.stmTemporal, 0, sizeof(frame.stmTemporal));
+            std::memset(frame.stmSpectral, 0, sizeof(frame.stmSpectral));
+            frame.stmTemporalEnergy = 0.0f;
+            frame.stmSpectralEnergy = 0.0f;
+            frame.stmReady = false;
+        }
+    }
 
     // ========================================================================
     // Raw PCM hop RMS (pre-AGC) — used by onset detector AND BR eligibility gate.
@@ -834,6 +894,7 @@ void AudioActor::onTick()
     // Estimate hop dt from configured frame rate
     constexpr float ES_HOP_DT = audio::HOP_DURATION_MS / 1000.0f;
 
+    m_controlBus.applyStmSmoothing(frame);
     m_controlBus.applyDerivedFeatures(frame, ES_HOP_DT, rmsUngated);
 #if FEATURE_TRANSLATION_ENGINE
     {
@@ -1245,6 +1306,9 @@ void AudioActor::onStart()
     m_diag.diagStartTimeUs = esp_timer_get_time();
     m_consecutiveZeroHops = 0;
     m_lastRecoveryAttemptHop = 0;
+#if FEATURE_AUDIO_BACKEND_ESV11 || FEATURE_AUDIO_BACKEND_PIPELINECORE
+    m_stmExtractor.reset();
+#endif
 #if FEATURE_TRANSLATION_ENGINE
     translation_init(&m_translationState);
     m_translationLastAudioTime = AudioTime{};
@@ -1509,6 +1573,9 @@ void AudioActor::processHop()
         adapterCfg.sampleRate = static_cast<float>(SAMPLE_RATE);
         adapterCfg.fftSize = FFT_SIZE;
         m_adapter.init(adapterCfg);
+#if FEATURE_AUDIO_BACKEND_ESV11 || FEATURE_AUDIO_BACKEND_PIPELINECORE
+        m_stmExtractor.reset();
+#endif
 #if FEATURE_STYLE_DETECTION
         m_styleDetector.reset();
 #endif
@@ -1579,6 +1646,17 @@ void AudioActor::processHop()
         m_pipeline.getHopBuffer(),
         raw
     );
+    raw.stmReady = m_stmExtractor.process(raw.bins256, raw.stmTemporal, raw.stmSpectral);
+    float stmTemporalEnergy = 0.0f;
+    float stmSpectralEnergy = 0.0f;
+    for (uint8_t i = 0; i < STMExtractor::MEL_BANDS; ++i) {
+        stmTemporalEnergy += raw.stmTemporal[i];
+    }
+    for (uint8_t i = 0; i < STMExtractor::SPECTRAL_BINS; ++i) {
+        stmSpectralEnergy += raw.stmSpectral[i];
+    }
+    raw.stmTemporalEnergy = stmTemporalEnergy / static_cast<float>(STMExtractor::MEL_BANDS);
+    raw.stmSpectralEnergy = stmSpectralEnergy / static_cast<float>(STMExtractor::SPECTRAL_BINS);
     raw.tempoDownbeatTick = false;
     if (raw.tempoBeatTick) {
         raw.tempoDownbeatTick = (m_standardBeatInBar == 0u);
@@ -2435,6 +2513,9 @@ void AudioActor::onStart()
     // Initialize diagnostics
     m_diag.reset();
     m_diag.diagStartTimeUs = esp_timer_get_time();
+#if FEATURE_AUDIO_BACKEND_ESV11 || FEATURE_AUDIO_BACKEND_PIPELINECORE
+    m_stmExtractor.reset();
+#endif
 #if FEATURE_TRANSLATION_ENGINE
     translation_init(&m_translationState);
     m_translationLastAudioTime = AudioTime{};

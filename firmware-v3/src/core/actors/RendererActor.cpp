@@ -1819,7 +1819,7 @@ void RendererActor::showLeds()
 #endif
 
     // Edge mixer: apply hue splitting to Strip 2 for LGP depth differentiation
-    enhancement::EdgeMixer::getInstance().process(m_strip2, LedConfig::LEDS_PER_STRIP, m_lastControlBus);
+    enhancement::EdgeMixer::getInstance().process(m_strip1, m_strip2, LedConfig::LEDS_PER_STRIP, m_lastControlBus);
 
     // TAP C: Capture pre-WS2812 (after strip split, before show)
     if (m_captureEnabled && (m_captureTapMask & 0x04) && m_captureTapC != nullptr) {

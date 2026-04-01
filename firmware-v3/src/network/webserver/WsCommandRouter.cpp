@@ -30,19 +30,22 @@ void WsCommandRouter::registerCommand(const char* type, WsCommandHandler handler
 }
 
 bool WsCommandRouter::route(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    if (!doc.containsKey("type")) {
-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "Missing 'type' field"));
+    const bool hasType = doc.containsKey("type");
+    const bool hasCmd = doc.containsKey("cmd");
+    if (!hasType && !hasCmd) {
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "Missing 'type' or legacy 'cmd' field"));
         return false;
     }
-    
-    String typeStr = doc["type"].as<String>();
+
+    const char* envelopeKey = hasType ? "type" : "cmd";
+    String typeStr = doc[envelopeKey].as<String>();
     const char* type = typeStr.c_str();
     uint8_t typeLen = typeStr.length();
     char firstChar = type[0];
 
     // Strip message envelope field before passing to handlers
-    // Codecs validate payload fields only - 'type' is protocol envelope
-    doc.remove("type");
+    // Codecs validate payload fields only - the command envelope is not payload.
+    doc.remove(envelopeKey);
     
     // DEFENSIVE CHECK: Validate handler count before array access
     size_t safe_handler_count = s_handlerCount;
@@ -92,4 +95,3 @@ size_t WsCommandRouter::getMaxHandlers() {
 } // namespace webserver
 } // namespace network
 } // namespace lightwaveos
-

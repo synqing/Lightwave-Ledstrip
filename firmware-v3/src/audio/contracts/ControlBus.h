@@ -83,6 +83,15 @@ struct ControlBusRawInput {
     float bins256[BINS_256_COUNT] = {0};  ///< 0..1 normalised magnitudes (62.5 Hz spacing @ 32kHz/512-pt)
     float binHz = 0.0f;                   ///< Frequency resolution (sampleRate / fftSize)
 
+    // STM dual-edge decomposition
+    static constexpr uint8_t STM_MEL_BANDS = 16;
+    static constexpr uint8_t STM_SPECTRAL_BINS = 7;
+    float stmTemporal[STM_MEL_BANDS] = {0};      ///< Temporal modulation per mel band [0,1]
+    float stmSpectral[STM_SPECTRAL_BINS] = {0};  ///< Spectral modulation magnitudes [0,1]
+    float stmTemporalEnergy = 0.0f;              ///< Mean temporal modulation energy [0,1]
+    float stmSpectralEnergy = 0.0f;              ///< Mean spectral modulation energy [0,1]
+    bool stmReady = false;                       ///< True once STM history is warm
+
     // Tempo tracker output (saliency computation ONLY - effects read MusicalGrid)
     bool tempoLocked = false;       ///< TempoTracker lock state (saliency; effects read MusicalGrid)
     float tempoConfidence = 0.0f;   ///< TempoTracker confidence (saliency; effects read MusicalGrid.confidence)
@@ -165,6 +174,13 @@ struct ControlBusFrame {
     static constexpr uint16_t BINS_256_COUNT = ControlBusRawInput::BINS_256_COUNT;
     float bins256[BINS_256_COUNT] = {0};  ///< 0..1 normalised magnitudes
     float binHz = 0.0f;                   ///< Frequency resolution (Hz per bin)
+    static constexpr uint8_t STM_MEL_BANDS = ControlBusRawInput::STM_MEL_BANDS;
+    static constexpr uint8_t STM_SPECTRAL_BINS = ControlBusRawInput::STM_SPECTRAL_BINS;
+    float stmTemporal[STM_MEL_BANDS] = {0};      ///< Smoothed temporal modulation [0,1]
+    float stmSpectral[STM_SPECTRAL_BINS] = {0};  ///< Smoothed spectral modulation [0,1]
+    float stmTemporalEnergy = 0.0f;              ///< Smoothed temporal modulation energy [0,1]
+    float stmSpectralEnergy = 0.0f;              ///< Smoothed spectral modulation energy [0,1]
+    bool stmReady = false;                       ///< True once STM outputs are valid
 
     // Tempo tracker output (saliency computation ONLY - effects read MusicalGrid)
     bool tempoLocked = false;       ///< TempoTracker lock state (saliency; effects read MusicalGrid)
@@ -219,6 +235,9 @@ struct ControlBusFrame {
     float syncopation_level = 0.0f;   ///< Onset deviation from metric grid [0.0=on-beat, 1.0=off-beat]
     float pitch_contour_dir = 0.0f;   ///< Spectral centroid movement [-1.0=descending, 0.0=flat, +1.0=ascending]
 };
+
+static_assert(sizeof(ControlBusRawInput) <= 4096, "ControlBusRawInput must remain within 4 KB");
+static_assert(sizeof(ControlBusFrame) <= 4096, "ControlBusFrame must remain within 4 KB");
 
 /**
  * @brief Lookahead buffer for spike detection (Sensory Bridge pattern).
@@ -419,6 +438,14 @@ public:
      */
     void applyDerivedFeatures(ControlBusFrame& frame, float dt, float rmsUngated);
 
+    /**
+     * @brief Apply STM smoothing in place on a frame.
+     *
+     * LWLS calls this via UpdateFromHop() after copying raw STM fields.
+     * The ES adapter path calls it directly before Stage B derived features.
+     */
+    void applyStmSmoothing(ControlBusFrame& frame);
+
 private:
     ControlBusFrame m_frame{};
 
@@ -435,6 +462,10 @@ private:
     // LGP_SMOOTH: Separate state for heavy (extra-smoothed) bands
     float m_heavy_bands_s[CONTROLBUS_NUM_BANDS] = {0};
     float m_heavy_chroma_s[CONTROLBUS_NUM_CHROMA] = {0};
+    float m_stm_temporal_s[ControlBusFrame::STM_MEL_BANDS] = {0};
+    float m_stm_spectral_s[ControlBusFrame::STM_SPECTRAL_BINS] = {0};
+    float m_stm_temporal_energy_s = 0.0f;
+    float m_stm_spectral_energy_s = 0.0f;
 
     // Lookahead spike smoothing buffers (Sensory Bridge pattern)
     LookaheadBuffer m_lookahead_bands;

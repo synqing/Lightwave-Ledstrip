@@ -433,7 +433,10 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
         bool anySet = false;
         if (doc.containsKey("mode")) {
             uint8_t mode = doc["mode"] | 0;
-            if (mode > 4) { serialJsonError(reqId, "mode must be 0-4"); return; }
+            if (mode > static_cast<uint8_t>(lightwaveos::enhancement::EdgeMixerMode::STM_DUAL)) {
+                serialJsonError(reqId, "mode must be 0-7");
+                return;
+            }
             actors.setEdgeMixerMode(mode);
             rMode = mode;
             anySet = true;

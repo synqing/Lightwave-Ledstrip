@@ -1921,7 +1921,7 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
         // ========== EdgeMixer Commands ==========
 
         case 'e':
-            // Cycle EdgeMixer mode: mirror -> analogous -> ... -> tetradic -> mirror
+            // Cycle EdgeMixer mode: mirror -> analogous -> ... -> stm_dual -> mirror
             // Use a local shadow to avoid race with async RendererActor message.
             // Without this, rapid 'e' presses read stale getMode() and get stuck.
             {
@@ -1931,7 +1931,7 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
                     // First use: seed from the actual singleton
                     s_edgeMixerModeShadow = static_cast<uint8_t>(mixer.getMode());
                 }
-                uint8_t next = (s_edgeMixerModeShadow + 1) % 7;
+                uint8_t next = (s_edgeMixerModeShadow + 1) % 8;
                 s_edgeMixerModeShadow = next;
                 actors.setEdgeMixerMode(next);
                 Serial.printf("EdgeMixer mode: " LW_CLR_CYAN "%s" LW_ANSI_RESET "\n",

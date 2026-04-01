@@ -1842,8 +1842,8 @@ void V1ApiRoutes::registerRoutes(
 
             if (doc.containsKey("mode")) {
                 mode = doc["mode"] | 0;
-                if (mode > 6) {
-                    sendErrorResponse(request, 400, ErrorCodes::OUT_OF_RANGE, "mode must be 0-6", "mode");
+                if (mode > static_cast<uint8_t>(lightwaveos::enhancement::EdgeMixerMode::STM_DUAL)) {
+                    sendErrorResponse(request, 400, ErrorCodes::OUT_OF_RANGE, "mode must be 0-7", "mode");
                     return;
                 }
                 hasMode = true;

@@ -42,6 +42,9 @@
 #include "contracts/ControlBus.h"
 #include "contracts/SnapshotBuffer.h"
 #include "TranslationEngine.h"
+#if FEATURE_AUDIO_BACKEND_ESV11 || FEATURE_AUDIO_BACKEND_PIPELINECORE
+#include "pipeline/STMExtractor.h"
+#endif
 
 #if FEATURE_AUDIO_BACKEND_ESV11
 #include "backends/esv11/EsV11Backend.h"
@@ -603,6 +606,10 @@ private:
     // Internal State
     // ========================================================================
 
+#if FEATURE_AUDIO_BACKEND_ESV11 || FEATURE_AUDIO_BACKEND_PIPELINECORE
+    STMExtractor m_stmExtractor;
+#endif
+
 #if FEATURE_TRANSLATION_ENGINE
     // Perceptual translation state (persistent across hops, reset on hard DSP reset).
     TranslationState m_translationState{};
@@ -642,6 +649,8 @@ private:
     // ES backend + adapter
     esv11::EsV11Backend m_esBackend;
     esv11::EsV11Adapter m_esAdapter;
+    float m_stmFftBuffer[ControlBusRawInput::BINS_256_COUNT * 2U] = {0.0f};
+    float m_stmBins256[ControlBusRawInput::BINS_256_COUNT] = {0.0f};
     uint32_t m_esHopSeq = 0;
     uint8_t m_esChunkCounter = 0;  // Publish every 4 chunks (256 samples @ 12.8kHz = 50 Hz)
 

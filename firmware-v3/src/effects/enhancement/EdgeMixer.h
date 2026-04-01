@@ -44,7 +44,8 @@ enum class EdgeMixerMode : uint8_t {
     SPLIT_COMPLEMENTARY = 3,  ///< +150deg near-complement with lighter saturation
     SATURATION_VEIL     = 4,  ///< Desaturate Strip 2 by spread amount
     TRIADIC             = 5,  ///< 120deg hue shift; spread controls saturation (0=full, 60=70%)
-    TETRADIC            = 6   ///< 90deg hue shift; spread controls saturation (0=full, 60=70%)
+    TETRADIC            = 6,  ///< 90deg hue shift; spread controls saturation (0=full, 60=70%)
+    STM_DUAL            = 7   ///< Edge A follows temporal STM, Edge B follows spectral STM
 };
 
 /**
@@ -80,14 +81,24 @@ public:
     /**
      * @brief Apply 3-stage composable pipeline to strip buffer in-place
      *
-     * Only strip2 is modified. MIRROR mode or zero strength returns immediately.
+     * All legacy modes only modify strip2. STM_DUAL modulates both strips.
      *
+     * @param strip1 Pointer to LEDS_PER_STRIP (160) CRGB pixels for Edge A
      * @param strip2 Pointer to LEDS_PER_STRIP (160) CRGB pixels
      * @param count Number of pixels
      * @param audio Current audio state for temporal modulation
      */
-    void process(CRGB* strip2, uint16_t count, const audio::ControlBusFrame& audio) {
-        if (m_mode == EdgeMixerMode::MIRROR || !strip2 || count == 0) {
+    void process(CRGB* strip1, CRGB* strip2, uint16_t count, const audio::ControlBusFrame& audio) {
+        if (m_mode == EdgeMixerMode::MIRROR || count == 0) {
+            return;
+        }
+
+        if (m_mode == EdgeMixerMode::STM_DUAL) {
+            processStmDual(strip1, strip2, count, audio);
+            return;
+        }
+
+        if (!strip2) {
             return;
         }
 
@@ -121,7 +132,7 @@ public:
             if (pixelStrength >= 255) {
                 strip2[i] = target;
             } else if (pixelStrength > 0) {
-                strip2[i] = blend(strip2[i], target, pixelStrength);
+                strip2[i] = blendPixel(strip2[i], target, pixelStrength);
             }
         }
     }
@@ -147,10 +158,10 @@ public:
         static const char* const names[] = {
             "mirror", "analogous", "complementary",
             "split_complementary", "saturation_veil",
-            "triadic", "tetradic"
+            "triadic", "tetradic", "stm_dual"
         };
         const uint8_t idx = static_cast<uint8_t>(mode);
-        return (idx <= 6) ? names[idx] : "unknown";
+        return (idx <= 7) ? names[idx] : "unknown";
     }
     const char* modeName() const { return modeName(m_mode); }
 
@@ -222,7 +233,7 @@ public:
         Preferences prefs;
         if (prefs.begin("edgemixer", true)) {
             uint8_t mode = prefs.getUChar("mode", 0);
-            if (mode <= 6) {
+            if (mode <= 7) {
                 m_mode = static_cast<EdgeMixerMode>(mode);
             }
             setSpread(prefs.getUChar("spread", 30));
@@ -322,12 +333,68 @@ private:
     };
 
     uint8_t computeSpatial(uint16_t i, uint16_t count) const {
+        (void)count;
         switch (m_spatial) {
             case EdgeMixerSpatial::CENTRE_GRADIENT:
                 return (i < 160) ? kCentreGradient[i] : 255;
             case EdgeMixerSpatial::UNIFORM:
             default:
                 return 255;
+        }
+    }
+
+    static uint8_t energyToScale(float energy) {
+        if (energy <= 0.0f) return 0;
+        if (energy >= 1.0f) return 255;
+        return static_cast<uint8_t>(lroundf(energy * 255.0f));
+    }
+
+    uint8_t mixScaleWithStrength(uint8_t baseScale) const {
+        if (m_strength == 255) return baseScale;
+        if (m_strength == 0) return 255;
+        const uint16_t attenuation = static_cast<uint16_t>(255U - baseScale) * static_cast<uint16_t>(m_strength);
+        return static_cast<uint8_t>(255U - ((attenuation + 127U) / 255U));
+    }
+
+    static void scalePixelInPlace(CRGB& pixel, uint8_t scale) {
+        pixel.r = scale8(pixel.r, scale);
+        pixel.g = scale8(pixel.g, scale);
+        pixel.b = scale8(pixel.b, scale);
+    }
+
+    static CRGB blendPixel(const CRGB& from, const CRGB& to, uint8_t amount) {
+        if (amount == 0) return from;
+        if (amount >= 255) return to;
+
+        CRGB result;
+        const uint16_t inverse = static_cast<uint16_t>(255U - amount);
+        result.r = static_cast<uint8_t>(
+            (static_cast<uint16_t>(from.r) * inverse + static_cast<uint16_t>(to.r) * amount + 127U) / 255U);
+        result.g = static_cast<uint8_t>(
+            (static_cast<uint16_t>(from.g) * inverse + static_cast<uint16_t>(to.g) * amount + 127U) / 255U);
+        result.b = static_cast<uint8_t>(
+            (static_cast<uint16_t>(from.b) * inverse + static_cast<uint16_t>(to.b) * amount + 127U) / 255U);
+        return result;
+    }
+
+    void processStmDual(CRGB* strip1, CRGB* strip2, uint16_t count, const audio::ControlBusFrame& audio) {
+        if (!audio.stmReady) {
+            return;
+        }
+
+        const uint8_t temporalScale = mixScaleWithStrength(energyToScale(audio.stmTemporalEnergy));
+        const uint8_t spectralScale = mixScaleWithStrength(energyToScale(audio.stmSpectralEnergy));
+
+        if (strip1) {
+            for (uint16_t i = 0; i < count; ++i) {
+                scalePixelInPlace(strip1[i], temporalScale);
+            }
+        }
+
+        if (strip2) {
+            for (uint16_t i = 0; i < count; ++i) {
+                scalePixelInPlace(strip2[i], spectralScale);
+            }
         }
     }
 

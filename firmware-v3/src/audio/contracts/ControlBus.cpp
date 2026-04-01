@@ -42,6 +42,14 @@ void ControlBus::Reset() {
         m_heavy_chroma_s[i] = 0.0f;
         m_chroma_despiked[i] = 0.0f;
     }
+    for (uint8_t i = 0; i < ControlBusFrame::STM_MEL_BANDS; ++i) {
+        m_stm_temporal_s[i] = 0.0f;
+    }
+    for (uint8_t i = 0; i < ControlBusFrame::STM_SPECTRAL_BINS; ++i) {
+        m_stm_spectral_s[i] = 0.0f;
+    }
+    m_stm_temporal_energy_s = 0.0f;
+    m_stm_spectral_energy_s = 0.0f;
     // Reset lookahead buffers
     m_lookahead_bands.init(CONTROLBUS_NUM_BANDS);
     m_lookahead_chroma.init(CONTROLBUS_NUM_CHROMA);
@@ -507,11 +515,56 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
     memcpy(m_frame.bins256, raw.bins256, sizeof(float) * ControlBusRawInput::BINS_256_COUNT);
     m_frame.binHz = raw.binHz;
 
+    std::memcpy(m_frame.stmTemporal, raw.stmTemporal, sizeof(m_frame.stmTemporal));
+    std::memcpy(m_frame.stmSpectral, raw.stmSpectral, sizeof(m_frame.stmSpectral));
+    m_frame.stmTemporalEnergy = raw.stmTemporalEnergy;
+    m_frame.stmSpectralEnergy = raw.stmSpectralEnergy;
+    m_frame.stmReady = raw.stmReady;
+    applyStmSmoothing(m_frame);
+
     // Update spike detection telemetry frame counter
     m_spikeStats.totalFrames++;
 
     // Apply derived features (Stage B)
     applyDerivedFeatures(m_frame, dt, raw.rmsUngated);
+}
+
+void ControlBus::applyStmSmoothing(ControlBusFrame& frame) {
+    if (!frame.stmReady) {
+        std::memset(frame.stmTemporal, 0, sizeof(frame.stmTemporal));
+        std::memset(frame.stmSpectral, 0, sizeof(frame.stmSpectral));
+        std::memset(m_stm_temporal_s, 0, sizeof(m_stm_temporal_s));
+        std::memset(m_stm_spectral_s, 0, sizeof(m_stm_spectral_s));
+        m_stm_temporal_energy_s = 0.0f;
+        m_stm_spectral_energy_s = 0.0f;
+        frame.stmTemporalEnergy = 0.0f;
+        frame.stmSpectralEnergy = 0.0f;
+        return;
+    }
+
+    for (uint8_t i = 0; i < ControlBusFrame::STM_MEL_BANDS; ++i) {
+        const float target = clamp01(frame.stmTemporal[i]);
+        const float alpha = (target > m_stm_temporal_s[i]) ? m_band_attack : m_band_release;
+        m_stm_temporal_s[i] = lerp(m_stm_temporal_s[i], target, alpha);
+        frame.stmTemporal[i] = m_stm_temporal_s[i];
+    }
+
+    for (uint8_t i = 0; i < ControlBusFrame::STM_SPECTRAL_BINS; ++i) {
+        const float target = clamp01(frame.stmSpectral[i]);
+        const float alpha = (target > m_stm_spectral_s[i]) ? m_band_attack : m_band_release;
+        m_stm_spectral_s[i] = lerp(m_stm_spectral_s[i], target, alpha);
+        frame.stmSpectral[i] = m_stm_spectral_s[i];
+    }
+
+    const float temporalTarget = clamp01(frame.stmTemporalEnergy);
+    const float temporalAlpha = (temporalTarget > m_stm_temporal_energy_s) ? m_band_attack : m_band_release;
+    m_stm_temporal_energy_s = lerp(m_stm_temporal_energy_s, temporalTarget, temporalAlpha);
+    frame.stmTemporalEnergy = m_stm_temporal_energy_s;
+
+    const float spectralTarget = clamp01(frame.stmSpectralEnergy);
+    const float spectralAlpha = (spectralTarget > m_stm_spectral_energy_s) ? m_band_attack : m_band_release;
+    m_stm_spectral_energy_s = lerp(m_stm_spectral_energy_s, spectralTarget, spectralAlpha);
+    frame.stmSpectralEnergy = m_stm_spectral_energy_s;
 }
 
 // ==========================================================================

@@ -17,7 +17,7 @@ k1_ap_ip: "192.168.4.1"
 # ===========================================================================
 envelope:
   request:
-    type: "string (command name, REQUIRED)"
+    type: "string (command name, REQUIRED; legacy clients may send cmd instead)"
     requestId: "string (optional correlation ID for request/response matching)"
   response:
     type: "string (echoes command name or response-specific type)"
@@ -981,7 +981,7 @@ commands:
     direction: "client -> K1"
     description: "Set EdgeMixer properties (partial update)"
     request:
-      mode: { type: uint8, optional: true, range: "0-6" }
+      mode: { type: uint8, optional: true, range: "0-7" }
       spread: { type: uint8, optional: true, range: "0-60" }
       strength: { type: uint8, optional: true }
       spatial: { type: uint8, optional: true, range: "0-1" }
@@ -998,6 +998,19 @@ commands:
         spatialName: string
         temporal: uint8
         temporalName: string
+    consumers: [tab5, ios]
+
+  edgemixer_mode:
+    direction: "client -> K1"
+    description: "Set EdgeMixer mode by name for lightweight mode toggles"
+    request:
+      mode: { type: string, required: true, values: "mirror, analogous, complementary, split_complementary, saturation_veil, triadic, tetradic, stm_dual" }
+      requestId: { type: string, optional: true }
+    response:
+      type: "edgemixer_mode"
+      data:
+        mode: uint8
+        modeName: string
     consumers: [tab5, ios]
 
   edge_mixer.get:

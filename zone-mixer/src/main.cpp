@@ -6,7 +6,7 @@
  *
  * PaHub Channel Map (from hardware scan):
  *   CH0: 8Encoder (0x42)  — Zone selection bank A
- *   CH1: 8Encoder (0x41)  — Zone selection bank B / Mix & config
+ *   CH1: 8Encoder (0x41)  — Mix & config bank B
  *   CH2: Scroll (0x40)    — Zone 1 brightness
  *   CH3: Scroll (0x40)    — Zone 2 brightness
  *   CH4: Scroll (0x40)    — Zone 3 brightness
@@ -22,6 +22,9 @@
 #include "network/WiFiManager.h"
 #include "network/WebSocketClient.h"
 #include "input/InputManager.h"
+#include "parameters/ParameterMapper.h"
+#include "sync/EchoGuard.h"
+#include "led/LedFeedback.h"
 
 // ============================================================================
 // Globals
@@ -30,6 +33,9 @@
 static ZMWiFiManager wifiMgr;
 static ZMWebSocketClient wsClient;
 static InputManager inputMgr;
+static ParameterMapper paramMapper;
+static EchoGuard echoGuard;
+static LedFeedback ledFeedback;
 static bool wsStarted = false;
 
 // ============================================================================
@@ -38,55 +44,74 @@ static bool wsStarted = false;
 
 static void onWsMessage(JsonDocument& doc) {
     const char* type = doc["type"] | "";
+    uint32_t now = millis();
 
     if (strcmp(type, "status") == 0) {
-        // Status broadcast from K1 (every 5s or on change)
-        uint8_t brightness = doc["brightness"] | 0;
-        uint8_t speed = doc["speed"] | 0;
-        const char* effectName = doc["effectName"] | "?";
-        uint16_t effectId = doc["effectId"] | 0;
-        Serial.printf("[Status] effect=%s(0x%04X) bri=%d spd=%d\n",
-                      effectName, effectId, brightness, speed);
+        paramMapper.applyStatus(doc, now);
+        // Log summary
+        uint8_t bri = doc["brightness"] | 0;
+        const char* name = doc["effectName"] | "?";
+        Serial.printf("[Status] %s bri=%d spd=%d\n", name, bri, doc["speed"] | 0);
     }
-    else if (strcmp(type, "zones.list") == 0) {
-        // Zone state response
-        bool enabled = doc["enabled"] | false;
-        uint8_t count = doc["zoneCount"] | 0;
-        Serial.printf("[Zones] enabled=%s count=%d\n",
-                      enabled ? "YES" : "NO", count);
+    else if (strcmp(type, "zones.list") == 0 || strcmp(type, "zones") == 0) {
+        paramMapper.applyZoneState(doc, now);
+        Serial.printf("[Zones] count=%d enabled=%s\n",
+                      doc["zoneCount"] | 0, (doc["enabled"] | false) ? "YES" : "NO");
     }
-    else if (strcmp(type, "zones.changed") == 0) {
-        // Zone config changed — request fresh state
-        Serial.println("[Zones] Changed — requesting update");
+    else if (strcmp(type, "zones.changed") == 0 || strcmp(type, "zones.stateChanged") == 0) {
         wsClient.sendSimple("zones.get");
+    }
+    else if (strcmp(type, "edge_mixer.get") == 0 || strcmp(type, "edge_mixer.set") == 0) {
+        // Sync EdgeMixer state
+        if (doc.containsKey("mode")) {
+            if (!echoGuard.isHeld(8, now)) paramMapper.emMode = doc["mode"];
+        }
+        if (doc.containsKey("spread")) {
+            if (!echoGuard.isHeld(9, now)) paramMapper.emSpread = doc["spread"];
+        }
+        if (doc.containsKey("strength")) {
+            if (!echoGuard.isHeld(10, now)) paramMapper.emStrength = doc["strength"];
+        }
+        if (doc.containsKey("spatial") && doc.containsKey("temporal")) {
+            if (!echoGuard.isHeld(11, now)) {
+                uint8_t s = doc["spatial"] | 0;
+                uint8_t t = doc["temporal"] | 0;
+                paramMapper.stState = (s ? 1 : 0) + (t ? 2 : 0);
+                ledFeedback.setSpatialTemporal(paramMapper.stState);
+            }
+        }
+        ledFeedback.setEdgeMixerMode(paramMapper.emMode);
+        ledFeedback.setParamValue(9, paramMapper.emSpread);
+        ledFeedback.setParamValue(10, paramMapper.emStrength);
+    }
+    else if (strcmp(type, "cameraMode.get") == 0 || strcmp(type, "cameraMode.set") == 0) {
+        if (doc.containsKey("enabled")) {
+            paramMapper.cameraModeOn = doc["enabled"];
+            ledFeedback.setCameraMode(paramMapper.cameraModeOn);
+        }
     }
     else if (strcmp(type, "effects.changed") == 0) {
         const char* name = doc["data"]["effectName"] | doc["effectName"] | "?";
-        Serial.printf("[Effect] Changed to: %s\n", name);
+        Serial.printf("[Effect] Changed: %s\n", name);
     }
     else {
-        // Log unhandled message types during development
-        Serial.printf("[WS] Unhandled: %s\n", type);
+        Serial.printf("[WS] %s\n", type);
     }
 }
 
 // ============================================================================
-// Input Change Callback
+// Input Change Callback (from InputManager)
 // ============================================================================
 
 static void onInputChange(uint8_t inputId, int32_t delta, bool button) {
-    const char* name = "?";
-    if (inputId < 8)        name = "EncA";
-    else if (inputId < 16)  name = "EncB";
-    else if (inputId == 16) name = "Z1-Scroll";
-    else if (inputId == 17) name = "Z2-Scroll";
-    else if (inputId == 18) name = "Z3-Scroll";
-    else if (inputId == 19) name = "Master";
+    // Route through ParameterMapper
+    paramMapper.onInput(inputId, delta, button);
 
+    // Debug log
     if (button) {
-        Serial.printf("[Input] %s id=%d BUTTON\n", name, inputId);
+        Serial.printf("[In] id=%d BTN\n", inputId);
     } else {
-        Serial.printf("[Input] %s id=%d delta=%+d\n", name, inputId, delta);
+        Serial.printf("[In] id=%d d=%+d\n", inputId, delta);
     }
 }
 
@@ -96,19 +121,18 @@ static void onInputChange(uint8_t inputId, int32_t delta, bool button) {
 
 static void updateDisplay() {
     M5.Display.setTextSize(1);
-    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
 
-    // WiFi status (top line)
+    // WiFi (line 1)
     M5.Display.setCursor(4, 4);
     if (wifiMgr.isConnected()) {
         M5.Display.setTextColor(TFT_GREEN, TFT_BLACK);
         M5.Display.printf("WiFi: %s    ", wifiMgr.getLocalIP().toString().c_str());
     } else {
         M5.Display.setTextColor(TFT_RED, TFT_BLACK);
-        M5.Display.print("WiFi: connecting...   ");
+        M5.Display.print("WiFi: ---             ");
     }
 
-    // WebSocket status (second line)
+    // WS (line 2)
     M5.Display.setCursor(4, 20);
     if (wsClient.isConnected()) {
         M5.Display.setTextColor(TFT_GREEN, TFT_BLACK);
@@ -121,10 +145,17 @@ static void updateDisplay() {
         M5.Display.print("WS: waiting       ");
     }
 
-    // Title
+    // Info (line 3)
     M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
-    M5.Display.setCursor(4, 44);
-    M5.Display.print("Zone Mixer v0.2");
+    M5.Display.setCursor(4, 40);
+    M5.Display.printf("Bri:%3d Spd:%3d Z:%d ",
+                      paramMapper.masterBrightness, paramMapper.masterSpeed,
+                      paramMapper.zoneCount);
+
+    // Title
+    M5.Display.setCursor(4, 56);
+    M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    M5.Display.print("Zone Mixer v0.4");
 }
 
 // ============================================================================
@@ -136,29 +167,37 @@ void setup() {
     M5.begin(cfg);
 
     Serial.begin(115200);
-    Serial.println("\n[ZoneMixer] Phase 2 — WiFi + WebSocket");
+    Serial.println("\n[ZoneMixer] v0.4 — Phases 1-6");
 
     // Display init
     M5.Display.fillScreen(TFT_BLACK);
     M5.Display.setTextSize(1);
     M5.Display.setCursor(4, 4);
     M5.Display.setTextColor(TFT_WHITE);
-    M5.Display.print("Zone Mixer v0.2");
+    M5.Display.print("Zone Mixer v0.4");
 
     // I2C init
     Wire.begin(hw::I2C_SDA, hw::I2C_SCL);
     Wire.setClock(hw::I2C_FREQ);
-    Serial.printf("[I2C] SDA=%d SCL=%d freq=%lu\n", hw::I2C_SDA, hw::I2C_SCL, hw::I2C_FREQ);
 
-    // Init input devices via PaHub
+    // Init input devices
     inputMgr.setCallback(onInputChange);
     inputMgr.begin();
+
+    // Init LED feedback
+    ledFeedback.begin(&inputMgr);
+
+    // Init parameter mapper
+    paramMapper.begin(&wsClient, &echoGuard, &ledFeedback);
 
     // Register WS message callback
     wsClient.onMessage(onWsMessage);
 
-    // Start WiFi connection to K1
+    // Start WiFi
     wifiMgr.begin(net::K1_SSID, net::K1_PASSWORD);
+
+    // Set initial connection LED state
+    ledFeedback.setConnectionState(LedFeedback::ConnState::DISCONNECTED);
 }
 
 // ============================================================================
@@ -168,31 +207,46 @@ void setup() {
 void loop() {
     M5.update();
 
-    // WiFi state machine (non-blocking)
+    // WiFi state machine
     wifiMgr.update();
 
-    // Start WebSocket when WiFi connects (once)
+    // Start WS when WiFi connects
     if (wifiMgr.isConnected() && !wsStarted) {
         IPAddress k1ip;
         k1ip.fromString(net::K1_IP);
         wsClient.begin(k1ip, net::K1_PORT, net::K1_WS_PATH);
         wsStarted = true;
+        echoGuard.resetSync();
+        ledFeedback.setConnectionState(LedFeedback::ConnState::CONNECTING);
     }
 
     // Reset WS state if WiFi drops
     if (!wifiMgr.isConnected() && wsStarted) {
         wsStarted = false;
+        ledFeedback.setConnectionState(LedFeedback::ConnState::DISCONNECTED);
     }
 
-    // WebSocket state machine (non-blocking)
+    // WS state machine
     if (wsStarted) {
         wsClient.update();
+        // Track connection state changes for LED
+        static bool wasConnected = false;
+        bool isConn = wsClient.isConnected();
+        if (isConn != wasConnected) {
+            wasConnected = isConn;
+            ledFeedback.setConnectionState(isConn
+                ? LedFeedback::ConnState::CONNECTED
+                : LedFeedback::ConnState::CONNECTING);
+        }
     }
 
-    // Poll all input devices through PaHub (100Hz target)
+    // Poll inputs (100Hz target)
     inputMgr.poll();
 
-    // Update display every 500ms
+    // Update LED feedback (10Hz dirty flush)
+    ledFeedback.update(millis());
+
+    // Update display (2Hz)
     static uint32_t lastDisplay = 0;
     if (millis() - lastDisplay > 500) {
         lastDisplay = millis();

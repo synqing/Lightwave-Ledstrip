@@ -136,6 +136,17 @@ public:
         }
     }
 
+    /// Set status LED (LED 8) on an 8Encoder unit. unit: 0=EncA, 1=EncB.
+    void setStatusLED(uint8_t unit, uint8_t r, uint8_t g, uint8_t b) {
+        if (unit == 0) {
+            pahub::selectChannel(hw::CH_ENC_A);
+            _encA.setLED(8, r, g, b);
+        } else if (unit == 1) {
+            pahub::selectChannel(hw::CH_ENC_B);
+            _encB.setLED(8, r, g, b);
+        }
+    }
+
     uint32_t lastPollUs() const { return _lastPollUs; }
 
 private:

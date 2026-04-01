@@ -180,9 +180,11 @@ private:
     }
 
     void sendHello() {
-        Serial.println("[WS] Sending hello (getStatus + zones.get)");
+        Serial.println("[WS] Sending hello (getStatus + zones.get + edge_mixer.get + cameraMode.get)");
         sendSimple("getStatus");
         sendSimple("zones.get");
+        sendSimple("edge_mixer.get");
+        sendSimple("cameraMode.get");
     }
 
     void processSendQueue() {

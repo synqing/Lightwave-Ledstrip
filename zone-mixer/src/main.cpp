@@ -90,6 +90,20 @@ static void onWsMessage(JsonDocument& doc) {
             ledFeedback.setCameraMode(paramMapper.cameraModeOn);
         }
     }
+    else if (strcmp(type, "effects.list") == 0) {
+        // Cache the ordered effect list for per-zone effect selection
+        JsonArray effects = doc["effects"];
+        if (!effects.isNull()) {
+            static uint16_t effectIds[ParameterMapper::kMaxEffects];
+            uint8_t count = 0;
+            for (JsonObject eff : effects) {
+                if (count >= ParameterMapper::kMaxEffects) break;
+                effectIds[count++] = eff["effectId"] | (uint16_t)0;
+            }
+            paramMapper.setEffectList(effectIds, count);
+            Serial.printf("[Effects] Cached %d effects\n", count);
+        }
+    }
     else if (strcmp(type, "effects.changed") == 0) {
         const char* name = doc["data"]["effectName"] | doc["effectName"] | "?";
         Serial.printf("[Effect] Changed: %s\n", name);

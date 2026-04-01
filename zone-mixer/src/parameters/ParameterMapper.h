@@ -96,6 +96,10 @@ public:
                     zoneSpeed[zid] = zone["speed"];
                 }
             }
+            if (!zone["effectId"].isNull()) {
+                zoneEffectId[zid] = zone["effectId"];
+                syncEffectIndex(zid);
+            }
             if (!zone["enabled"].isNull()) {
                 zoneEnabled[zid] = zone["enabled"];
                 if (_leds) _leds->setZoneEnabled(zid, zoneEnabled[zid]);
@@ -111,12 +115,29 @@ public:
         }
     }
 
+    // --- Effect list cache (populated from K1 effects.list response) ---
+    static constexpr uint8_t kMaxEffects = 128;
+    uint16_t effectList[kMaxEffects] = {};
+    uint8_t effectCount = 0;
+
+    /// Called when K1 responds to effects.list — caches the ordered effectId array.
+    void setEffectList(const uint16_t* list, uint8_t count) {
+        effectCount = (count > kMaxEffects) ? kMaxEffects : count;
+        memcpy(effectList, list, effectCount * sizeof(uint16_t));
+        // Sync per-zone indices to match current effectIds
+        for (uint8_t zi = 0; zi < 3; zi++) {
+            syncEffectIndex(zi);
+        }
+    }
+
     // --- State (public for display access) ---
     uint8_t zoneBrightness[3] = {128, 128, 128};
     uint8_t masterBrightness = 128;
     uint8_t masterSpeed = 25;
     uint8_t zoneSpeed[3] = {25, 25, 25};
     uint8_t zonePalette[3] = {0, 0, 0};
+    uint16_t zoneEffectId[3] = {0, 0, 0};
+    uint8_t zoneEffectIdx[3] = {0, 0, 0};
     uint8_t emMode = 0, emSpread = 0, emStrength = 0;
     uint8_t stState = 0;  // spatial/temporal 0-3
     uint8_t zoneCount = 1;
@@ -149,14 +170,17 @@ private:
                 if (_leds) _leds->setParamValue(19, masterBrightness);
                 break;
             }
-            // --- EncA E0-E2: zone effect select ---
+            // --- EncA E0-E2: per-zone effect select ---
             case 0: case 1: case 2: {
                 uint8_t zi = id;
-                // Use nextEffect/prevEffect pattern per zone
-                // K1 has no zone.nextEffect, so send absolute effectId
-                // For now, just send the delta as a relative change
-                if (delta > 0) sendZoneNextEffect(zi);
-                else sendZonePrevEffect(zi);
+                if (effectCount == 0) break;  // No effect list yet — ignore
+                int16_t idx = (int16_t)zoneEffectIdx[zi] + ((delta > 0) ? 1 : -1);
+                // Wrap around at boundaries
+                if (idx < 0) idx = effectCount - 1;
+                if (idx >= effectCount) idx = 0;
+                zoneEffectIdx[zi] = (uint8_t)idx;
+                zoneEffectId[zi] = effectList[idx];
+                sendZoneEffect(zi, zoneEffectId[zi]);
                 break;
             }
             // --- EncA E3: master speed ---
@@ -202,12 +226,13 @@ private:
             // --- EncB E4: zone count ---
             case 12: {
                 zoneCount = clamp8(zoneCount + delta, 1, 3);
-                // TODO: send zones.setLayout with precomputed layout
+                sendZonesLayout(zoneCount);
                 break;
             }
             // --- EncB E5: transition type ---
             case 13: {
                 transitionType = clamp8(transitionType + delta, 0, 11);
+                sendTransitionConfig(transitionType);
                 break;
             }
             // --- EncB E7: preset slot ---
@@ -278,6 +303,12 @@ private:
                 }
                 break;
             }
+            // --- EncB E5: trigger transition with current type ---
+            case 13: {
+                _ws->sendSimple("nextEffect");
+                if (_leds) _leds->flashButton(id);
+                break;
+            }
             // --- EncB E6: camera mode toggle ---
             case 14: {
                 cameraModeOn = !cameraModeOn;
@@ -327,14 +358,24 @@ private:
         _ws->sendJSON("zone.setPalette", doc);
     }
 
-    void sendZoneNextEffect(uint8_t zi) {
-        // K1 doesn't have zone.nextEffect — use zone.setEffect with delta
-        // For now, use global nextEffect (will be improved in Phase 4b)
-        _ws->sendSimple("nextEffect");
+    void sendZoneEffect(uint8_t zi, uint16_t effectId) {
+        JsonDocument doc;
+        doc["zoneId"] = zi;
+        doc["effectId"] = effectId;
+        _ws->sendJSON("zone.setEffect", doc);
     }
 
-    void sendZonePrevEffect(uint8_t zi) {
-        _ws->sendSimple("prevEffect");
+    /// Find effectId in effectList and set zoneEffectIdx for the given zone.
+    void syncEffectIndex(uint8_t zi) {
+        if (zi > 2) return;
+        for (uint8_t i = 0; i < effectCount; i++) {
+            if (effectList[i] == zoneEffectId[zi]) {
+                zoneEffectIdx[zi] = i;
+                return;
+            }
+        }
+        // If not found, default to index 0
+        zoneEffectIdx[zi] = 0;
     }
 
     void sendGlobalParam(const char* field, uint8_t val) {
@@ -347,6 +388,46 @@ private:
         JsonDocument doc;
         doc[field] = val;
         _ws->sendJSON("edge_mixer.set", doc);
+    }
+
+    void sendZonesLayout(uint8_t count) {
+        JsonDocument doc;
+        JsonArray zones = doc["zones"].to<JsonArray>();
+        if (count == 1) {
+            JsonObject z = zones.add<JsonObject>();
+            z["zoneId"] = 0;
+            z["s1LeftStart"] = 0;   z["s1LeftEnd"] = 79;
+            z["s1RightStart"] = 80; z["s1RightEnd"] = 159;
+        } else if (count == 2) {
+            JsonObject z0 = zones.add<JsonObject>();
+            z0["zoneId"] = 0;
+            z0["s1LeftStart"] = 60; z0["s1LeftEnd"] = 79;
+            z0["s1RightStart"] = 80; z0["s1RightEnd"] = 99;
+            JsonObject z1 = zones.add<JsonObject>();
+            z1["zoneId"] = 1;
+            z1["s1LeftStart"] = 0;  z1["s1LeftEnd"] = 59;
+            z1["s1RightStart"] = 100; z1["s1RightEnd"] = 159;
+        } else {
+            JsonObject z0 = zones.add<JsonObject>();
+            z0["zoneId"] = 0;
+            z0["s1LeftStart"] = 65; z0["s1LeftEnd"] = 79;
+            z0["s1RightStart"] = 80; z0["s1RightEnd"] = 94;
+            JsonObject z1 = zones.add<JsonObject>();
+            z1["zoneId"] = 1;
+            z1["s1LeftStart"] = 20; z1["s1LeftEnd"] = 64;
+            z1["s1RightStart"] = 95; z1["s1RightEnd"] = 139;
+            JsonObject z2 = zones.add<JsonObject>();
+            z2["zoneId"] = 2;
+            z2["s1LeftStart"] = 0;  z2["s1LeftEnd"] = 19;
+            z2["s1RightStart"] = 140; z2["s1RightEnd"] = 159;
+        }
+        _ws->sendJSON("zones.setLayout", doc);
+    }
+
+    void sendTransitionConfig(uint8_t type) {
+        JsonDocument doc;
+        doc["defaultType"] = type;
+        _ws->sendJSON("transition.config", doc);
     }
 
     static uint8_t clamp8(int32_t val, int32_t lo, int32_t hi) {

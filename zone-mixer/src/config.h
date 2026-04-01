@@ -72,13 +72,8 @@ namespace net {
     constexpr uint32_t WS_MAX_RECONNECT_MS      = 30000;
     constexpr uint32_t WS_CONNECTION_TIMEOUT_MS  = 5000;   // Reduced from 20s — must stay under WDT (5s)
 
-    // Rate limiting
-    constexpr uint32_t PARAM_THROTTLE_MS         = 50;
-    constexpr uint32_t SEND_QUEUE_STALE_MS       = 500;
+    // Send mutex
     constexpr uint32_t SEND_MUTEX_TIMEOUT_MS     = 10;
-    constexpr uint32_t SEND_WARN_THRESHOLD_MS    = 50;
-    constexpr uint8_t  MAX_CONSECUTIVE_FAILURES  = 3;
-    constexpr uint8_t  SEND_QUEUE_SIZE           = 14;
 
     // JSON buffer
     constexpr size_t JSON_BUFFER_SIZE = 512;

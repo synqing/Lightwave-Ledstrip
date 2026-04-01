@@ -17,12 +17,6 @@ public:
 
     ZMWebSocketClient() {
         _sendMutex = xSemaphoreCreateMutex();
-        for (uint8_t i = 0; i < net::SEND_QUEUE_SIZE; i++) {
-            _queue[i].valid = false;
-        }
-        for (uint8_t i = 0; i < net::SEND_QUEUE_SIZE; i++) {
-            _rateLimiter[i] = 0;
-        }
         _ws.onEvent([this](WStype_t type, uint8_t* payload, size_t length) {
             handleEvent(type, payload, length);
         });
@@ -113,21 +107,6 @@ public:
         releaseLock();
     }
 
-    bool canSend(uint8_t paramIdx) {
-        if (paramIdx >= net::SEND_QUEUE_SIZE) return false;
-        uint32_t now = millis();
-        if (now - _rateLimiter[paramIdx] >= net::PARAM_THROTTLE_MS) {
-            _rateLimiter[paramIdx] = now;
-            return true;
-        }
-        return false;
-    }
-
-    void queueParam(uint8_t paramIdx, int32_t value, const char* type, uint8_t zoneId = 0xFF) {
-        if (paramIdx >= net::SEND_QUEUE_SIZE) return;
-        _queue[paramIdx] = { paramIdx, value, zoneId, millis(), type, true };
-    }
-
     enum class Status : uint8_t {
         DISCONNECTED,
         CONNECTING,
@@ -180,55 +159,16 @@ private:
     }
 
     void sendHello() {
-        Serial.println("[WS] Sending hello (getStatus + zones.get + edge_mixer.get + cameraMode.get)");
+        Serial.println("[WS] Sending hello (getStatus + zones.get + edge_mixer.get + cameraMode.get + effects.list)");
         sendSimple("getStatus");
         sendSimple("zones.get");
         sendSimple("edge_mixer.get");
         sendSimple("cameraMode.get");
+        sendSimple("effects.list");
     }
 
     void processSendQueue() {
-        if (!isConnected()) return;
-        uint32_t now = millis();
-        for (uint8_t i = 0; i < net::SEND_QUEUE_SIZE; i++) {
-            if (!_queue[i].valid) continue;
-            if (now - _queue[i].timestamp > net::SEND_QUEUE_STALE_MS) {
-                _queue[i].valid = false;
-                continue;
-            }
-            if (!canSend(_queue[i].paramIdx)) continue;
-            if (!takeLock()) break;
-
-            JsonDocument doc;
-            if (_queue[i].zoneId != 0xFF) {
-                doc["zoneId"] = _queue[i].zoneId;
-            }
-            // Determine field name from type
-            const char* t = _queue[i].type;
-            if (strcmp(t, "parameters.set") == 0) {
-                doc["brightness"] = _queue[i].value;  // TODO: map paramIdx→field name
-            } else if (strcmp(t, "zone.setSpeed") == 0) {
-                doc["speed"] = _queue[i].value;
-            } else if (strcmp(t, "zone.setBrightness") == 0) {
-                doc["brightness"] = _queue[i].value;
-            }
-
-            size_t len = serializeJson(doc, _jsonBuf, net::JSON_BUFFER_SIZE - 1);
-            if (len > 0) {
-                // Wrap in message envelope
-                JsonDocument msg;
-                msg["type"] = t;
-                JsonObject src = doc.as<JsonObject>();
-                for (JsonPair kv : src) msg[kv.key()] = kv.value();
-                len = serializeJson(msg, _jsonBuf, net::JSON_BUFFER_SIZE - 1);
-                _jsonBuf[len] = '\0';
-                _ws.sendTXT(_jsonBuf);
-            }
-
-            _queue[i].valid = false;
-            releaseLock();
-            break;  // One message per update() cycle
-        }
+        // Reserved for future rate-limited send queue if needed.
     }
 
     void resetBackoff() { _reconnectDelay = net::WS_INITIAL_RECONNECT_MS; }
@@ -255,20 +195,6 @@ private:
     uint32_t _lastReconnect = 0;
     uint32_t _reconnectDelay = net::WS_INITIAL_RECONNECT_MS;
     uint32_t _connectingStart = 0;
-
-    // Rate limiter: last send time per parameter
-    uint32_t _rateLimiter[net::SEND_QUEUE_SIZE];
-
-    // Send queue
-    struct QueueEntry {
-        uint8_t paramIdx;
-        int32_t value;
-        uint8_t zoneId;
-        uint32_t timestamp;
-        const char* type;
-        bool valid;
-    };
-    QueueEntry _queue[net::SEND_QUEUE_SIZE];
 
     char _jsonBuf[net::JSON_BUFFER_SIZE];
     SemaphoreHandle_t _sendMutex = nullptr;

@@ -591,7 +591,7 @@ void WebServer::update() {
     }
     const uint32_t nowMs = millis();
     const bool shedProbeDue = (nowMs - m_lastHeapShedProbeMs) >= INTERNAL_HEAP_SHED_PROBE_INTERVAL_MS;
-    if (m_lowHeapShed || shedProbeDue) {
+    if (shedProbeDue) {
         updateLowHeapShedState(nowMs);
         m_lastHeapShedProbeMs = nowMs;
     }

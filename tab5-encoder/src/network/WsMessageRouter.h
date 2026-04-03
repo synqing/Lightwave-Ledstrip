@@ -562,9 +562,11 @@ private:
                     state.blendModeName[sizeof(state.blendModeName) - 1] = '\0';
                 }
                 state.enabled = zone["enabled"].as<bool>();
+                state.brightness = zone["brightness"].is<uint8_t>()
+                    ? zone["brightness"].as<uint8_t>() : 128;
 
                 // Calculate LED range from segments (if available)
-                // For now, use placeholder - will be updated from segments
+                // For now, use placeholder — will be updated from segments
                 state.ledStart = 0;
                 state.ledEnd = 0;
 

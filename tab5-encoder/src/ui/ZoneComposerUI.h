@@ -2,26 +2,26 @@
 // Copyright 2025-2026 SpectraSynq
 #pragma once
 // ============================================================================
-// ZoneComposerUI - Zone Composer Dashboard Screen
+// ZoneComposerUI v2 — LED-Centric Zone Composer
 // ============================================================================
-// Visual mixer for 3 zones, inspired by LightwaveOS Dashboard V2
-// Shows per-zone effect, speed/palette, and LED ranges
+// Hero LED strip visualiser + 5-column param grid + 3-column zone overview.
+// Centre-origin topology: LEDs 79/80 outward. Max 3 zones (1-indexed UI).
+// Spec: tab5-encoder/docs/ZONE_COMPOSER_V2_SPEC.md
 // ============================================================================
 
 #include <M5GFX.h>
 #include <lvgl.h>
 #include <cstdint>
-#include "Theme.h"
 #include "../zones/ZoneDefinition.h"
 
-    // Forward declarations
-    class ButtonHandler;
-    class WebSocketClient;
-    class UIHeader;
+// Forward declarations
+class ButtonHandler;
+class WebSocketClient;
+class UIHeader;
 
-/**
- * Zone state for display
- */
+// ============================================================================
+// Zone state for display (populated from WS zones.list response)
+// ============================================================================
 struct ZoneState {
     uint16_t effectId = 0;
     char effectName[48] = {0};
@@ -36,210 +36,76 @@ struct ZoneState {
     uint8_t brightness = 128;
 };
 
-/**
- * Zone parameter modes (Effect, Palette, Speed, Brightness)
- */
-enum class ZoneParameterMode : uint8_t {
-    EFFECT = 0,
-    PALETTE = 1,
-    SPEED = 2,
-    BRIGHTNESS = 3,
-    COUNT = 4  // For array bounds
-};
+// ============================================================================
+// Zone colour constants (aligned to iOS canonical — cyan/green/purple)
+// ============================================================================
+namespace ZoneColours {
+    static constexpr uint32_t ZONE_1 = 0x00FFFF;  // Cyan — INNER
+    static constexpr uint32_t ZONE_2 = 0x00FF99;  // Green — MIDDLE
+    static constexpr uint32_t ZONE_3 = 0x9900FF;  // Purple — OUTER
+    static constexpr uint32_t ALL[3] = { ZONE_1, ZONE_2, ZONE_3 };
+}
 
-/**
- * Selection type (which UI element is selected)
- */
-enum class SelectionType : uint8_t {
-    NONE = 0,
-    ZONE_PARAMETER = 1,  // One of 3 zone rows (effect/palette/speed/brightness)
-    ZONE_COUNT = 2,      // Zone count selector
-    PRESET = 3           // Preset selector
-};
-
-/**
- * Current selection state
- */
-struct ZoneSelection {
-    SelectionType type = SelectionType::NONE;
-    uint8_t zoneIndex = 0;  // 0-3 for zone parameters
-    ZoneParameterMode mode = ZoneParameterMode::EFFECT;  // Which parameter is active
-
-    bool operator==(const ZoneSelection& other) const {
-        return type == other.type &&
-               zoneIndex == other.zoneIndex &&
-               mode == other.mode;
-    }
-
-    bool operator!=(const ZoneSelection& other) const {
-        return !(*this == other);
-    }
-};
+// Zone role names (2-zone and 3-zone modes)
+namespace ZoneRoles {
+    static constexpr const char* ROLES_3[3] = { "INNER", "MIDDLE", "OUTER" };
+    static constexpr const char* ROLES_2[2] = { "INNER", "OUTER" };
+}
 
 class ZoneComposerUI {
 public:
     ZoneComposerUI(M5GFX& display);
     ~ZoneComposerUI();
 
+    // Lifecycle
     void begin(lv_obj_t* parent = nullptr);
     void loop();
 
-    /**
-     * Update zone state
-     * @param zoneId Zone ID (0-3)
-     * @param state Zone state
-     */
+    // State updates (from WsMessageRouter)
     void updateZone(uint8_t zoneId, const ZoneState& state);
-
-    /**
-     * Update zone segments (layout)
-     * @param segments Array of zone segments
-     * @param count Number of segments
-     */
     void updateSegments(const zones::ZoneSegment* segments, uint8_t count);
+    void updateZoneModeButton(bool enabled);
 
-    /**
-     * Check if zone mode is enabled
-     * @return true if zones are active
-     */
+    // Accessors
     bool isZoneModeEnabled() const { return _zonesEnabled; }
-
-    /**
-     * Get number of active zones
-     * @return Zone count (1-4)
-     */
     uint8_t getZoneCount() const { return _zoneCount; }
-
-    /**
-     * Get current editing segments (for sending layout to K1 on zone mode enable)
-     * @return Pointer to editing segments array (zones::MAX_ZONES entries)
-     */
+    uint8_t getSelectedZone() const { return _selectedZone; }
     const zones::ZoneSegment* getEditingSegments() const { return _editingSegments; }
-
-    /**
-     * Get current editing zone count
-     * @return Number of zones in the editing buffer
-     */
     uint8_t getEditingZoneCount() const { return _editingZoneCount; }
 
-    /**
-     * Get zone state
-     * @param zoneId Zone ID (0-3)
-     * @return Const reference to ZoneState
-     */
     const ZoneState& getZoneState(uint8_t zoneId) const {
         static ZoneState empty;
         if (zoneId >= 3) return empty;
         return _zones[zoneId];
     }
 
-    /**
-     * Set button handler for checking speed/palette mode
-     * @param handler ButtonHandler instance
-     */
+    // Dependency injection
     void setButtonHandler(ButtonHandler* handler) { _buttonHandler = handler; }
-    
-    /**
-     * Set WebSocket client for sending commands
-     * @param wsClient WebSocketClient instance
-     */
     void setWebSocketClient(WebSocketClient* wsClient) { _wsClient = wsClient; }
-
-    /**
-     * Set callback for Back button (returns to GLOBAL screen)
-     * @param callback Function to call when Back button pressed
-     */
-    typedef void (*BackButtonCallback)();
-    void setBackButtonCallback(BackButtonCallback callback) { _backButtonCallback = callback; }
-    
-    /**
-     * Set header instance (shared across screens)
-     * @param header UIHeader instance
-     */
     void setHeader(UIHeader* header) { _header = header; }
 
-    /**
-     * Update zone mode button visual state from incoming WS messages.
-     * Called when K1 confirms zone enabled/disabled state.
-     * @param enabled true if zones are active on K1
-     */
-    void updateZoneModeButton(bool enabled);
+    // Back button callback
+    typedef void (*BackButtonCallback)();
+    void setBackButtonCallback(BackButtonCallback callback) { _backButtonCallback = callback; }
 
-    /**
-     * Mark UI as dirty (needs redraw) - queued for next frame
-     */
-    void markDirty() { _pendingDirty = true; }
-    
-    /**
-     * Force immediate dirty state (bypasses pending mechanism)
-     * Use this for screen transitions that require immediate redraw
-     * Also resets frame timer to ensure immediate render
-     */
-    void forceDirty() { 
-        _dirty = true; 
-        _pendingDirty = false; 
-        _lastRenderTime = 0;  // Reset frame timer to force immediate render
-    }
-    
-    /**
-     * Handle touch event (called from DisplayUI)
-     * @param x Touch X coordinate
-     * @param y Touch Y coordinate
-     */
-    void handleTouch(int16_t x, int16_t y);
-
-    // ========================================================================
-    // Phase 1: State Management Methods
-    // ========================================================================
-
-    /**
-     * Handle encoder change event (called from DisplayUI)
-     * @param encoderIndex Encoder index (0-15)
-     * @param delta Encoder change delta
-     */
+    // Encoder input (called from main.cpp onEncoderChange)
+    // index: global encoder index (8-15 for Unit-B)
+    // delta: rotation delta (+/-)
     void handleEncoderChange(uint8_t encoderIndex, int32_t delta);
 
-    /**
-     * Select a zone parameter for editing
-     * @param zoneIndex Zone index (0-3)
-     * @param mode Parameter mode
-     */
-    void selectParameter(uint8_t zoneIndex, ZoneParameterMode mode);
+    // Encoder button press (called from main.cpp)
+    void handleEncoderClick(uint8_t encoderIndex);
 
-    /**
-     * Select zone count row
-     */
-    void selectZoneCount();
+    // Touch handling
+    void handleTouch(int16_t x, int16_t y);
 
-    /**
-     * Select preset row
-     */
-    void selectPreset();
-
-    /**
-     * Set active parameter mode (Effect, Palette, Speed, Brightness)
-     * @param mode New parameter mode
-     */
-    void setActiveMode(ZoneParameterMode mode);
-
-    /**
-     * Clear current selection (deselect all)
-     */
-    void clearSelection();
-
-    /**
-     * Get current selection
-     * @return Current selection state
-     */
-    const ZoneSelection& getCurrentSelection() const { return _currentSelection; }
-
-    /**
-     * Get active parameter mode
-     * @return Active mode
-     */
-    ZoneParameterMode getActiveMode() const { return _activeMode; }
-
-    // Zone State Accessors moved to public section
+    // Dirty flag management
+    void markDirty() { _pendingDirty = true; }
+    void forceDirty() {
+        _dirty = true;
+        _pendingDirty = false;
+        _lastRenderTime = 0;
+    }
 
 private:
     M5GFX& _display;
@@ -249,350 +115,147 @@ private:
     BackButtonCallback _backButtonCallback = nullptr;
 
     // ========================================================================
-    // Phase 2: LVGL Widget Metadata
+    // Zone State
     // ========================================================================
-
-    /**
-     * Parameter metadata stored in LVGL user_data
-     */
-    struct ParameterMetadata {
-        uint8_t zoneIndex;
-        ZoneParameterMode mode;
-    };
-
-    // ========================================================================
-    // State Management (Phase 1)
-    // ========================================================================
-
-    // Current selection state
-    ZoneSelection _currentSelection;
-    ZoneParameterMode _activeMode = ZoneParameterMode::EFFECT;
-
-    // Zone parameter values (cached local state, 3 zones max)
-    uint8_t _zoneEffects[3] = {0, 0, 0};
-    uint8_t _zonePalettes[3] = {0, 0, 0};
-    uint8_t _zoneSpeeds[3] = {25, 25, 25};
-    uint8_t _zoneBrightness[3] = {128, 128, 128};
-
-    // Preset state
-    // Pivot: default to 2-zone layout
-    uint8_t _currentPresetIndex = 1;
-    const char* _presetName = "Dual Split";
-
-    // ========================================================================
-    // LVGL Widget References (Phase 1)
-    // ========================================================================
-
-    // Zone parameter widgets (one per zone, per mode — 3 zones max)
-    lv_obj_t* _zoneParamContainers[3] = {nullptr};
-    lv_obj_t* _zoneEffectLabels[3] = {nullptr};
-    lv_obj_t* _zonePaletteLabels[3] = {nullptr};
-    lv_obj_t* _zoneSpeedLabels[3] = {nullptr};
-    lv_obj_t* _zoneBrightnessLabels[3] = {nullptr};
-
-    // Mode selector buttons
-    lv_obj_t* _modeButtons[4] = {nullptr};  // Effect, Palette, Speed, Brightness
-    lv_obj_t* _backButton = nullptr;
-    lv_obj_t* _zoneEnableButton = nullptr;  // Zone enable toggle button
-    lv_obj_t* _zoneEnableLabel = nullptr;   // "ZONES: ON/OFF" label
-
-    // Zone count and preset rows
-    lv_obj_t* _zoneCountRow = nullptr;
-    lv_obj_t* _zoneCountValueLabel = nullptr;
-    lv_obj_t* _presetRow = nullptr;
-    lv_obj_t* _presetValueLabel = nullptr;
-
-    // LED strip visualization (existing M5GFX rendering)
-    lv_obj_t* _ledStripCanvas = nullptr;
-
-    // ========================================================================
-    // LVGL Styles (Phase 1)
-    // ========================================================================
-
-    lv_style_t _styleSelected;      // Blue accent border + bg tint
-    lv_style_t _styleHighlighted;   // Lighter border for hover/focus
-    lv_style_t _styleNormal;        // Default style
-
-    // ========================================================================
-    // Legacy State (M5GFX rendering)
-    // ========================================================================
-
-    // Zone states (3 zones max)
     ZoneState _zones[3];
-
-    // Zone segments (layout)
     zones::ZoneSegment _segments[zones::MAX_ZONES];
-    uint8_t _zoneCount = 0;
-    bool _zonesEnabled = false;
-
-    // Editing segments (working copy for visualization)
     zones::ZoneSegment _editingSegments[zones::MAX_ZONES];
     uint8_t _editingZoneCount = 0;
 
+    uint8_t _zoneCount = 3;          // 2 or 3 active zones
+    uint8_t _selectedZone = 0;       // Currently selected zone (0-2)
+    bool _zonesEnabled = true;       // Zone mode on/off
+
     // Rendering state
     bool _dirty = true;
-    bool _pendingDirty = false;  // Accumulates dirty requests
+    bool _pendingDirty = false;
     uint32_t _lastRenderTime = 0;
-    static constexpr uint32_t FRAME_INTERVAL_MS = 33;  // ~30 FPS (was 16ms/60FPS)
-    
-    // Layout constants (optimized for 1280x720)
-    // Note: All Y positions are relative to header (STATUS_BAR_H = 80)
-    static constexpr int LED_STRIP_Y = 60 + Theme::STATUS_BAR_H;  // Was 60, now below header
-    static constexpr int LED_STRIP_H = 80;
-    static constexpr int ZONE_LIST_Y = 180 + Theme::STATUS_BAR_H;  // Was 180, now below header
-    static constexpr int CONTROLS_Y = 520 + Theme::STATUS_BAR_H;   // Was 520, now below header
-
-    // Zone colours (matching dashboard template)
-    // Note: Zone numbering is 1-indexed user-facing
-    static constexpr uint32_t ZONE_COLORS[3] = {
-        0x6EE7F3,  // Zone 1: Cyan
-        0x22DD88,  // Zone 2: Green
-        0xFFB84D   // Zone 3: Orange
-    };
+    static constexpr uint32_t FRAME_INTERVAL_MS = 33;  // ~30 FPS
 
     // ========================================================================
-    // Phase 1: Private Helper Methods
+    // LVGL Widget References — Header
     // ========================================================================
-
-    /**
-     * Initialize LVGL styles for selection feedback
-     */
-    void initStyles();
-
-    // ========================================================================
-    // Phase 2: Widget Creation Methods
-    // ========================================================================
-
-    /**
-     * Create interactive LVGL UI (called once during initialization)
-     * @param parent Parent LVGL object
-     */
-    void createInteractiveUI(lv_obj_t* parent);
-
-    /**
-     * Create zone count selection row
-     * @param parent Parent LVGL object
-     * @return Zone count row object
-     */
-    lv_obj_t* createZoneCountRow(lv_obj_t* parent);
-
-    /**
-     * Create preset selection row
-     * @param parent Parent LVGL object
-     * @return Preset row object
-     */
-    lv_obj_t* createPresetRow(lv_obj_t* parent);
-
-    /**
-     * Create LED strip visualization bar (4 colored segments)
-     * @param parent Parent LVGL object
-     */
-    void createLedStripBar(lv_obj_t* parent);
-
-    /**
-     * Create zone cards grid (4 HORIZONTAL columns)
-     * @param parent Parent LVGL object
-     */
-    void createZoneCardsGrid(lv_obj_t* parent);
-
-    /**
-     * Create individual zone card
-     * @param parent Parent LVGL object
-     * @param zoneIndex Zone index (0-3)
-     * @return Zone card object
-     */
-    lv_obj_t* createZoneCard(lv_obj_t* parent, uint8_t zoneIndex);
-
-    /**
-     * Create parameter section (EFFECT or PALETTE)
-     * @param parent Parent LVGL object
-     * @param zoneIndex Zone index (0-3)
-     * @param label Section label ("EFFECT" or "PALETTE")
-     * @param value Current value text
-     */
-    void createParameterSection(lv_obj_t* parent, uint8_t zoneIndex,
-                                const char* label, const char* value);
-
-    /**
-     * Create SPD/BRI circular buttons row
-     * @param parent Parent LVGL object
-     * @param zoneIndex Zone index (0-3)
-     */
-    void createSpeedBrightnessButtons(lv_obj_t* parent, uint8_t zoneIndex);
-
-    /**
-     * Create circular button with ring outline
-     * @param parent Parent LVGL object
-     * @param text Button text ("SPD" or "BRI")
-     * @param ringColor Ring border color
-     * @param zoneIndex Zone index (0-3)
-     */
-    void createCircularButton(lv_obj_t* parent, const char* text,
-                              uint32_t ringColor, uint8_t zoneIndex);
-
-    /**
-     * Create zone parameter grid (4 rows × 4 parameters) - LEGACY
-     * @param parent Parent LVGL object
-     */
-    void createZoneParameterGrid(lv_obj_t* parent);
-
-    /**
-     * Create single zone parameter row - LEGACY
-     * @param parent Parent LVGL object
-     * @param zoneIndex Zone index (0-3)
-     * @return Zone parameter row object
-     */
-    lv_obj_t* createZoneParamRow(lv_obj_t* parent, uint8_t zoneIndex);
-
-    /**
-     * Create clickable parameter widget (Effect/Palette/Speed/Brightness) - LEGACY
-     * @param parent Parent LVGL object
-     * @param label Parameter label text
-     * @param value Initial value text
-     * @param zoneIndex Zone index (0-3)
-     * @param mode Parameter mode
-     * @return Parameter widget container
-     */
-    lv_obj_t* createClickableParameter(lv_obj_t* parent, const char* label,
-                                        const char* value, uint8_t zoneIndex,
-                                        ZoneParameterMode mode);
-
-    /**
-     * Create 5-button mode selector row
-     * @param parent Parent LVGL object
-     */
-    void createModeSelector(lv_obj_t* parent);
-
-    /**
-     * Create back button
-     * @param parent Parent LVGL object
-     * @return Back button object
-     */
-    lv_obj_t* createBackButton(lv_obj_t* parent);
+    lv_obj_t* _backButton = nullptr;
+    lv_obj_t* _titleLabel = nullptr;
+    lv_obj_t* _zoneCountCard = nullptr;
+    lv_obj_t* _zoneCountValue = nullptr;
+    lv_obj_t* _zoneEnableBtn = nullptr;
+    lv_obj_t* _zoneEnableLabel = nullptr;
 
     // ========================================================================
-    // Phase 2: LVGL Event Callbacks (static)
+    // LVGL Widget References — Mode Row (zone selector buttons)
     // ========================================================================
+    lv_obj_t* _zoneSelectorBtns[3] = {nullptr};
+    lv_obj_t* _zoneSelectorLabels[3] = {nullptr};
 
-    /**
-     * Zone parameter touch callback
-     * @param e LVGL event
-     */
-    static void parameterTouchCb(lv_event_t* e);
+    // ========================================================================
+    // LVGL Widget References — LED Strip Visualiser
+    // ========================================================================
+    lv_obj_t* _stripContainer = nullptr;
+    lv_obj_t* _stripBar = nullptr;
+    lv_obj_t* _stripZoneLabels[3] = {nullptr};    // Labels above strip
+    lv_obj_t* _zoneSegs[5] = {nullptr};           // Z1 centre, Z2L, Z2R, Z3L, Z3R
+    lv_obj_t* _centreMarker = nullptr;            // Gold 79/80 divider
+    lv_obj_t* _stripTickLabels[7] = {nullptr};    // LED number ticks
 
-    /**
-     * Zone count touch callback
-     * @param e LVGL event
-     */
-    static void zoneCountTouchCb(lv_event_t* e);
+    // Selected zone indicator
+    lv_obj_t* _selectedZoneDot = nullptr;
+    lv_obj_t* _selectedZoneTitle = nullptr;
 
-    /**
-     * Preset touch callback
-     * @param e LVGL event
-     */
-    static void presetTouchCb(lv_event_t* e);
+    // ========================================================================
+    // LVGL Widget References — 5-Column Parameter Grid
+    // ========================================================================
+    lv_obj_t* _paramGrid = nullptr;
+    lv_obj_t* _paramCards[5] = {nullptr};
+    lv_obj_t* _paramLabels[5] = {nullptr};     // "EFFECT", "PALETTE", etc.
+    lv_obj_t* _paramValues[5] = {nullptr};     // "042", "012", "50", etc.
+    lv_obj_t* _paramNames[5] = {nullptr};      // "Chroma Wave", "Ocean Breeze", etc.
+    lv_obj_t* _paramBars[5] = {nullptr};       // Progress bars
 
-    /**
-     * Mode button press callback
-     * @param e LVGL event
-     */
-    static void modeButtonCb(lv_event_t* e);
+    // ========================================================================
+    // LVGL Widget References — 3-Column Zone Overview
+    // ========================================================================
+    lv_obj_t* _overviewGrid = nullptr;
+    lv_obj_t* _overviewCards[3] = {nullptr};
+    lv_obj_t* _ovHeaders[3] = {nullptr};       // "ZONE N — ROLE"
+    lv_obj_t* _ovDots[3] = {nullptr};          // Zone colour dots
+    lv_obj_t* _ovRangeLabels[3] = {nullptr};   // "40-79 | 80-119"
+    lv_obj_t* _ovEffectVals[3] = {nullptr};    // "042 Chroma Wave"
+    lv_obj_t* _ovPaletteVals[3] = {nullptr};   // "012 Ocean Breeze"
+    lv_obj_t* _ovStatsLabels[3] = {nullptr};   // "SPD 50  BRI 200  Overwrite"
+    lv_obj_t* _ovLedCounts[3] = {nullptr};     // "80 LEDs"
 
-    /**
-     * Back button press callback
-     * @param e LVGL event
-     */
+    // ========================================================================
+    // LVGL Widget References — Footer
+    // ========================================================================
+    lv_obj_t* _footer = nullptr;
+
+    // ========================================================================
+    // Widget Creation Methods (called once in begin())
+    // ========================================================================
+    void createHeader(lv_obj_t* parent);
+    void createModeRow(lv_obj_t* parent);
+    void createStripVisualiser(lv_obj_t* parent);
+    void createSelectedZoneIndicator(lv_obj_t* parent);
+    void createParamGrid(lv_obj_t* parent);
+    void createOverviewGrid(lv_obj_t* parent);
+    void createFooter(lv_obj_t* parent);
+
+    // ========================================================================
+    // Update Methods (called on state change)
+    // ========================================================================
+    void updateStripSegments();           // Recalculate strip segment positions/sizes
+    void updateParamCards();              // Refresh all 5 param cards from selected zone
+    void updateOverviewCards();           // Refresh all 3 overview cards
+    void updateSelectedZoneIndicator();   // Update "ZONE N PARAMETERS" text
+    void updateZoneSelectorButtons();     // Highlight selected, show/hide Zone 3
+    void updateZoneEnableVisuals();       // ON/OFF button state
+    void updateZoneCountVisuals();        // Zone count badge
+
+    // ========================================================================
+    // Interaction Handlers
+    // ========================================================================
+    void selectZone(uint8_t zoneIndex);       // Select zone for editing
+    void adjustZoneCount(int32_t delta);      // Change zone count 2↔3
+    void adjustEffect(int32_t delta);         // ENC 0
+    void adjustPalette(int32_t delta);        // ENC 1
+    void adjustSpeed(int32_t delta);          // ENC 2
+    void adjustBrightness(int32_t delta);     // ENC 3
+    void adjustBlendMode(int32_t delta);      // ENC 4
+    void toggleZoneMode();                    // ENC 7 click
+
+    // ========================================================================
+    // WebSocket Command Senders
+    // ========================================================================
+    void sendZoneEffect(uint8_t zoneId, uint16_t effectId);
+    void sendZonePalette(uint8_t zoneId, uint8_t paletteId);
+    void sendZoneSpeed(uint8_t zoneId, uint8_t speed);
+    void sendZoneBrightness(uint8_t zoneId, uint8_t brightness);
+    void sendZoneBlendMode(uint8_t zoneId, uint8_t blendMode);
+    void sendZoneEnable(bool enable);
+    void sendZoneLoadPreset(uint8_t presetId);
+    void sendRequestZonesState();
+
+    // ========================================================================
+    // LVGL Static Callbacks
+    // ========================================================================
     static void backButtonCb(lv_event_t* e);
-
-    /**
-     * Zone enable toggle button callback
-     * @param e LVGL event
-     */
-    static void zoneEnableButtonCb(lv_event_t* e);
-
-    /**
-     * Apply selection highlighting to current selection
-     */
-    void applySelectionHighlight();
-
-    /**
-     * Get parameter widget for zone and mode
-     * @param zoneIndex Zone index (0-3)
-     * @param mode Parameter mode
-     * @return Widget pointer or nullptr
-     */
-    lv_obj_t* getParameterWidget(uint8_t zoneIndex, ZoneParameterMode mode);
-
-    /**
-     * Adjust zone parameter based on active mode
-     * @param zoneIndex Zone index (0-3)
-     * @param delta Encoder delta
-     */
-    void adjustZoneParameter(uint8_t zoneIndex, int32_t delta);
-
-    /**
-     * Adjust zone count
-     * @param delta Encoder delta
-     */
-    void adjustZoneCount(int32_t delta);
-
-    /**
-     * Adjust preset selection
-     * @param delta Encoder delta
-     */
-    void adjustPreset(int32_t delta);
-
-    /**
-     * Update effect label for zone
-     * @param zoneIndex Zone index (0-3)
-     */
-    void updateEffectLabel(uint8_t zoneIndex);
-
-    /**
-     * Update palette label for zone
-     * @param zoneIndex Zone index (0-3)
-     */
-    void updatePaletteLabel(uint8_t zoneIndex);
-
-    /**
-     * Update speed label for zone
-     * @param zoneIndex Zone index (0-3)
-     */
-    void updateSpeedLabel(uint8_t zoneIndex);
-
-    /**
-     * Update brightness label for zone
-     * @param zoneIndex Zone index (0-3)
-     */
-    void updateBrightnessLabel(uint8_t zoneIndex);
-
-    /**
-     * Update zone count label
-     */
-    void updateZoneCountLabel();
-
-    /**
-     * Update preset label
-     */
-    void updatePresetLabel();
+    static void zoneEnableCb(lv_event_t* e);
+    static void zoneCountCb(lv_event_t* e);
+    static void zoneSelectorCb(lv_event_t* e);
+    static void stripSegmentCb(lv_event_t* e);
+    static void overviewCardCb(lv_event_t* e);
 
     // ========================================================================
-    // Legacy M5GFX Rendering Methods
+    // Helpers
     // ========================================================================
+    uint32_t getZoneColour(uint8_t zoneId) const;
+    const char* getZoneRole(uint8_t zoneId) const;
+    int calcSegmentX(uint8_t ledIndex) const;     // LED index → pixel X in strip
+    int calcSegmentWidth(uint8_t ledStart, uint8_t ledEnd) const;
 
-    void render();
-    void drawLedStripVisualiser(int x, int y, int w, int h);
-    void drawZoneList(int x, int y, int w, int h);
-    void drawZoneRow(uint8_t zoneId, int x, int y, int w, int h);
-    void drawZoneInfo(int x, int y, int w, int h);
-    uint32_t getZoneColor(uint8_t zoneId) const;
-    
-    // Zone layout generation (for visualization)
-    void generateZoneSegments(uint8_t zoneCount);
-    void loadPreset(int8_t presetId);
-    bool validateLayout(const zones::ZoneSegment* segments, uint8_t count) const;
-    void validatePresets();  // Boot-time preset validation
-    
-    // Convert RGB888 to RGB565
-    static uint16_t rgb888To565(uint32_t rgb888);
+    // Strip geometry constants
+    static constexpr int STRIP_BAR_X = 60;
+    static constexpr int STRIP_BAR_WIDTH = 1160;
+    static constexpr int LEDS_PER_STRIP = 160;
 };

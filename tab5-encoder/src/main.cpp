@@ -1101,9 +1101,17 @@ void onEncoderChange(uint8_t index, uint16_t value, bool wasReset) {
     if (g_ui && s_uiInitialized && g_ui->getCurrentScreen() == UIScreen::ZONE_COMPOSER) {
         ZoneComposerUI* zoneUI = g_ui->getZoneComposerUI();
         if (zoneUI) {
+            // Encoder button press → route to handleEncoderClick
+            if (wasReset) {
+                zoneUI->handleEncoderClick(index);
+                s_prevEncoderValues[index] = value;
+                s_encodersInitialized[index] = true;
+                return;
+            }
+
             // Calculate delta for Zone Composer
             if (!s_encodersInitialized[index]) {
-                // First time - just store the value, don't send delta
+                // First time — just store the value, don't send delta
                 s_prevEncoderValues[index] = value;
                 s_encodersInitialized[index] = true;
                 return;
@@ -1119,7 +1127,7 @@ void onEncoderChange(uint8_t index, uint16_t value, bool wasReset) {
                 delta += 256;  // Wrapped backward, treat as forward
             }
 
-            // Send delta to Zone Composer
+            // Send rotation delta to Zone Composer
             zoneUI->handleEncoderChange(index, delta);
 
             // Update previous value

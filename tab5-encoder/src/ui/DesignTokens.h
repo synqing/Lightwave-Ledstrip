@@ -45,6 +45,12 @@ static constexpr uint32_t DIM_BORDER_TEAL      = 0x001A14;
 // --- Subtle border (standard for param cards) ---
 static constexpr uint32_t BORDER_SUBTLE        = 0x1E1E24;
 
+// --- Zone Composer (aligned to iOS canonical) ---
+static constexpr uint32_t ZONE_1_COLOUR       = 0x00FFFF;  // Cyan — INNER
+static constexpr uint32_t ZONE_2_COLOUR       = 0x00FF99;  // Green — MIDDLE
+static constexpr uint32_t ZONE_3_COLOUR       = 0x9900FF;  // Purple — OUTER
+static constexpr uint32_t ZONE_COLOURS[3]     = { ZONE_1_COLOUR, ZONE_2_COLOUR, ZONE_3_COLOUR };
+
 // --- ControlSurface-specific ---
 static constexpr uint32_t CAMERA_ACTIVE        = 0xEF4444;
 static constexpr uint32_t CAMERA_STANDBY       = 0x6B7280;

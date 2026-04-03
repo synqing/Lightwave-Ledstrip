@@ -381,9 +381,10 @@ void DisplayUI::begin() {
                 lv_obj_add_flag(self->_presets_panel, LV_OBJ_FLAG_HIDDEN);
         }
 
-        // Request fresh data from K1 when switching to zones or presets
-        if (tab == SidebarTab::ZONES && self->_wsClient) {
-            self->_wsClient->requestZonesState();
+        // Zones tab → launch full Zone Composer screen
+        if (tab == SidebarTab::ZONES) {
+            self->setScreen(UIScreen::ZONE_COMPOSER);
+            return;
         }
         if (tab == SidebarTab::PRESETS && self->_wsClient) {
             self->_wsClient->requestEffectPresetsList();

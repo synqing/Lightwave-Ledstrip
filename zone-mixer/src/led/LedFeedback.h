@@ -79,6 +79,13 @@ public:
         recomputeLED(14);
     }
 
+    /// Set active display page — recomputes all EncB LEDs to match.
+    void setActivePage(uint8_t page) {
+        if (_activePage == page) return;
+        _activePage = page;
+        for (uint8_t i = 8; i <= 15; i++) recomputeLED(i);
+    }
+
     // --- Connection state ---
 
     enum class ConnState : uint8_t { DISCONNECTED, CONNECTING, CONNECTED };
@@ -114,6 +121,7 @@ private:
     static constexpr uint8_t LED_ENCB_STATUS = 17;
 
     InputManager* _mgr = nullptr;
+    uint8_t _activePage = 0;
 
     uint8_t _r[LED_COUNT] = {};
     uint8_t _g[LED_COUNT] = {};
@@ -190,57 +198,117 @@ private:
             uint8_t v = _paramValue[19] / 4;  // 0-63 range
             r = g = b = v;
         }
-        // Zone effect encoders (0-2): zone colour fixed
+        // ============================================================
+        // EncA (IDs 0-7) — ZONE BANK — bright zone colours (R/G/B)
+        // Visually distinct from EncB: warm, zone-identified
+        // ============================================================
+
+        // E0-E2: Zone effect select — vivid zone colour
         else if (inputId < 3) {
             uint32_t c = hw::ZONE_COLOUR[inputId];
-            r = ((c >> 16) & 0xFF) >> 2;  // 25% brightness
-            g = ((c >> 8) & 0xFF) >> 2;
-            b = (c & 0xFF) >> 2;
+            r = ((c >> 16) & 0xFF) >> 1;  // 50% — vivid, clearly R/G/B
+            g = ((c >> 8) & 0xFF) >> 1;
+            b = (c & 0xFF) >> 1;
         }
-        // Master speed (3): blue
+        // E3: Master speed — bright warm white
         else if (inputId == 3) {
-            b = 64;
+            r = 48; g = 48; b = 32;
         }
-        // Speed/palette toggle (4-6)
+        // E4-E6: Speed/palette — zone colour (speed) or amber (palette)
         else if (inputId >= 4 && inputId <= 6) {
-            if (_isPalette[inputId - 4]) { g = 64; } else { b = 64; }
+            uint8_t zi = inputId - 4;
+            if (_isPalette[zi]) {
+                r = 64; g = 32; b = 0;   // Amber = palette mode
+            } else {
+                uint32_t c = hw::ZONE_COLOUR[zi];
+                r = ((c >> 16) & 0xFF) >> 2;  // Dim zone colour = speed
+                g = ((c >> 8) & 0xFF) >> 2;
+                b = (c & 0xFF) >> 2;
+            }
         }
-        // EdgeMixer mode (8)
-        else if (inputId == 8) {
-            static constexpr uint8_t emColours[7][3] = {
-                {32,32,32}, {64,32,0}, {0,0,64}, {0,48,48},
-                {32,32,32}, {48,0,48}, {48,48,0}
-            };
-            uint8_t m = min(_emMode, (uint8_t)6);
-            r = emColours[m][0]; g = emColours[m][1]; b = emColours[m][2];
+
+        // ============================================================
+        // EncB (IDs 8-15) — page-aware colours
+        // Colour scheme changes with active display page
+        // ============================================================
+
+        else if (inputId >= 8 && inputId <= 15) {
+            uint8_t enc = inputId - 8;  // 0-7 within EncB
+            switch (_activePage) {
+                // --------------------------------------------------
+                // Page 0 (CONNECTION): all EncB LEDs dim — inactive
+                // --------------------------------------------------
+                case 0:
+                    r = 4; g = 4; b = 4;
+                    break;
+
+                // --------------------------------------------------
+                // Page 1 (ZONES): zone colours + utility
+                // E0-E2: vivid zone R/G/B
+                // E3: white   E4: green
+                // E5-E7: vivid zone R/G/B
+                // --------------------------------------------------
+                case 1:
+                    if (enc <= 2) {
+                        uint32_t c = hw::ZONE_COLOUR[enc];
+                        r = ((c >> 16) & 0xFF) >> 1;
+                        g = ((c >> 8)  & 0xFF) >> 1;
+                        b = (c         & 0xFF) >> 1;
+                    } else if (enc == 3) {
+                        r = 48; g = 48; b = 48;  // White
+                    } else if (enc == 4) {
+                        g = 64;                    // Green
+                    } else {  // enc 5-7
+                        uint32_t c = hw::ZONE_COLOUR[enc - 5];
+                        r = ((c >> 16) & 0xFF) >> 1;
+                        g = ((c >> 8)  & 0xFF) >> 1;
+                        b = (c         & 0xFF) >> 1;
+                    }
+                    break;
+
+                // --------------------------------------------------
+                // Page 2 (EFFECT): dim zones + function colours
+                // E0-E2: dim zone R/G/B   E3: dim white
+                // E4: green   E5: purple   E6: orange   E7: amber
+                // --------------------------------------------------
+                case 2:
+                    if (enc <= 2) {
+                        uint32_t c = hw::ZONE_COLOUR[enc];
+                        r = ((c >> 16) & 0xFF) >> 2;
+                        g = ((c >> 8)  & 0xFF) >> 2;
+                        b = (c         & 0xFF) >> 2;
+                    } else if (enc == 3) {
+                        r = 24; g = 24; b = 24;  // Dim white
+                    } else if (enc == 4) {
+                        g = 64;                    // Green
+                    } else if (enc == 5) {
+                        r = 48; b = 64;            // Purple
+                    } else if (enc == 6) {
+                        r = 80; g = 32;            // Orange
+                    } else {  // enc 7
+                        r = 64; g = 40; b = 0;    // Amber
+                    }
+                    break;
+
+                // --------------------------------------------------
+                // Page 3 (EDGEMIXER): violet core + utility
+                // E0-E3: violet   E4: green
+                // E5: orange   E6-E7: cool blue-white
+                // --------------------------------------------------
+                case 3:
+                default:
+                    if (enc <= 3) {
+                        r = 48; g = 0; b = 80;    // Violet
+                    } else if (enc == 4) {
+                        g = 64;                    // Green
+                    } else if (enc == 5) {
+                        r = 80; g = 32;            // Orange
+                    } else {  // enc 6-7
+                        r = 20; g = 20; b = 40;   // Cool blue-white
+                    }
+                    break;
+            }
         }
-        // EdgeMixer spread (9): warm amber proportional
-        else if (inputId == 9) {
-            r = _paramValue[9] * 64 / 60;  // 0-60 → 0-64
-            g = _paramValue[9] * 32 / 60;
-        }
-        // EdgeMixer strength (10): cool blue proportional
-        else if (inputId == 10) {
-            b = _paramValue[10] / 4;
-        }
-        // Spatial/temporal (11): 4-state colour
-        else if (inputId == 11) {
-            static constexpr uint8_t stColours[4][3] = {
-                {0,0,0}, {0,0,64}, {0,64,0}, {64,64,64}
-            };
-            uint8_t s = min(_stState, (uint8_t)3);
-            r = stColours[s][0]; g = stColours[s][1]; b = stColours[s][2];
-        }
-        // Zone count (12): green
-        else if (inputId == 12) { g = 48; }
-        // Transition (13): dim purple
-        else if (inputId == 13) { r = 32; b = 32; }
-        // Camera mode (14): orange when on
-        else if (inputId == 14) {
-            if (_cameraOn) { r = 64; g = 32; }
-        }
-        // Preset (15): white dim
-        else if (inputId == 15) { r = g = b = 32; }
 
         setRaw(li, r, g, b);
     }

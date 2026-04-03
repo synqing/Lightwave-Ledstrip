@@ -1,0 +1,24 @@
+{
+  "name": "M5UnitScroll",
+  "description": "Library for M5Stack M5Unit Scroll",
+  "keywords": "M5GFX,M5Stack,M5UnitScroll",
+  "authors": {
+    "name": "M5Stack",
+    "url": "http://www.m5stack.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/m5stack/M5Unit-Scroll.git"
+  },
+  "version": "1.0.0",
+  "frameworks": "arduino",
+  "platforms": [
+    "espressif32",
+    "native"
+  ],
+  "headers": "M5UnitScroll.h",
+  "dependencies": {
+      "M5Unified": "*",
+      "M5GFX": "*"
+  }  
+}

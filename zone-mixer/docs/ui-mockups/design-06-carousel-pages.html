@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zone Mixer — Design 06: Carousel Pages (128x128 AtomS3)</title>
+<style>
+  /* ----------------------------------------------------------------
+     Design 06: Carousel Pages
+     Target: AtomS3 0.85" LCD, 128x128 pixels
+     Rendered at 4x scale (512x512 CSS pixels per page)
+     ---------------------------------------------------------------- */
+
+  :root {
+    --scale: 4;
+    --page-size: 128;
+    --page-px: calc(var(--page-size) * var(--scale) * 1px);
+
+    /* Colour palette — high contrast for tiny OLED/LCD */
+    --bg: #000000;
+    --fg: #FFFFFF;
+    --fg-dim: #888888;
+    --fg-muted: #555555;
+    --dot-inactive: #333333;
+    --dot-active: #FFFFFF;
+
+    /* Zone colours — saturated for 128px legibility */
+    --zone1: #FF3366;
+    --zone2: #33CCFF;
+    --zone3: #66FF66;
+
+    /* Semantic accents */
+    --accent-wifi: #33CCFF;
+    --accent-ws: #66FF66;
+    --accent-effect: #FFB833;
+    --accent-mixer: #CC66FF;
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  body {
+    background: #111111;
+    color: var(--fg);
+    font-family: 'SF Mono', 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+    padding: 40px;
+    min-height: 100vh;
+  }
+
+  /* --- Layout --- */
+
+  .header {
+    max-width: 2200px;
+    margin: 0 auto 32px auto;
+  }
+
+  .header h1 {
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--fg);
+    letter-spacing: -0.5px;
+  }
+
+  .header .subtitle {
+    font-size: 14px;
+    color: var(--fg-dim);
+    margin-top: 6px;
+  }
+
+  .pages-strip {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 48px;
+  }
+
+  .page-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .page-label {
+    font-size: 12px;
+    color: var(--fg-muted);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
+
+  /* --- Page frame (128x128 at 4x) --- */
+
+  .page {
+    width: var(--page-px);
+    height: var(--page-px);
+    background: var(--bg);
+    border: 1px solid #222222;
+    border-radius: 8px;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    /* Font sizes are in "real" pixels, scaled 4x */
+    font-size: calc(10 * var(--scale) * 1px);
+    line-height: 1.3;
+  }
+
+  /* --- Page dot indicators (bottom of each page) --- */
+
+  .page-dots {
+    position: absolute;
+    bottom: calc(4 * var(--scale) * 1px);
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    gap: calc(4 * var(--scale) * 1px);
+    z-index: 10;
+  }
+
+  .page-dots .dot {
+    width: calc(4 * var(--scale) * 1px);
+    height: calc(4 * var(--scale) * 1px);
+    border-radius: 50%;
+    background: var(--dot-inactive);
+  }
+
+  .page-dots .dot.active {
+    background: var(--dot-active);
+  }
+
+  /* ================================================================
+     PAGE 1: CONNECTION
+     ================================================================ */
+
+  .page-connection {
+    padding: calc(8 * var(--scale) * 1px) calc(6 * var(--scale) * 1px);
+    padding-bottom: calc(14 * var(--scale) * 1px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: calc(4 * var(--scale) * 1px);
+  }
+
+  .wifi-icon {
+    font-size: calc(32 * var(--scale) * 1px);
+    line-height: 1;
+    color: var(--accent-wifi);
+    margin-bottom: calc(2 * var(--scale) * 1px);
+  }
+
+  .conn-ip {
+    font-size: calc(11 * var(--scale) * 1px);
+    font-weight: 600;
+    color: var(--fg);
+    letter-spacing: calc(0.5 * var(--scale) * 1px);
+  }
+
+  .conn-signal {
+    font-size: calc(8 * var(--scale) * 1px);
+    color: var(--fg-dim);
+  }
+
+  .conn-signal .signal-bars {
+    display: inline-flex;
+    gap: calc(1 * var(--scale) * 1px);
+    vertical-align: middle;
+    margin-left: calc(2 * var(--scale) * 1px);
+  }
+
+  .conn-signal .bar {
+    display: inline-block;
+    width: calc(3 * var(--scale) * 1px);
+    background: var(--fg-muted);
+    border-radius: calc(0.5 * var(--scale) * 1px);
+  }
+
+  .conn-signal .bar.lit {
+    background: var(--accent-wifi);
+  }
+
+  .conn-signal .bar:nth-child(1) { height: calc(4 * var(--scale) * 1px); }
+  .conn-signal .bar:nth-child(2) { height: calc(6 * var(--scale) * 1px); }
+  .conn-signal .bar:nth-child(3) { height: calc(8 * var(--scale) * 1px); }
+  .conn-signal .bar:nth-child(4) { height: calc(10 * var(--scale) * 1px); }
+
+  .conn-ws {
+    font-size: calc(8 * var(--scale) * 1px);
+    display: flex;
+    align-items: center;
+    gap: calc(3 * var(--scale) * 1px);
+  }
+
+  .ws-dot {
+    width: calc(4 * var(--scale) * 1px);
+    height: calc(4 * var(--scale) * 1px);
+    border-radius: 50%;
+    background: var(--accent-ws);
+  }
+
+  .ws-label {
+    color: var(--accent-ws);
+    font-weight: 600;
+  }
+
+  /* ================================================================
+     PAGE 2: ZONES
+     ================================================================ */
+
+  .page-zones {
+    padding: calc(8 * var(--scale) * 1px) calc(6 * var(--scale) * 1px);
+    padding-bottom: calc(14 * var(--scale) * 1px);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: calc(6 * var(--scale) * 1px);
+  }
+
+  .zones-title {
+    font-size: calc(8 * var(--scale) * 1px);
+    color: var(--fg-muted);
+    text-transform: uppercase;
+    letter-spacing: calc(1 * var(--scale) * 1px);
+    text-align: center;
+  }
+
+  .zone-row {
+    display: flex;
+    align-items: center;
+    gap: calc(4 * var(--scale) * 1px);
+  }
+
+  .zone-colour-bar {
+    width: calc(4 * var(--scale) * 1px);
+    height: calc(22 * var(--scale) * 1px);
+    border-radius: calc(2 * var(--scale) * 1px);
+    flex-shrink: 0;
+  }
+
+  .zone-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: calc(1 * var(--scale) * 1px);
+  }
+
+  .zone-name {
+    font-size: calc(10 * var(--scale) * 1px);
+    font-weight: 600;
+    color: var(--fg);
+  }
+
+  .zone-brightness {
+    font-size: calc(8 * var(--scale) * 1px);
+    color: var(--fg-dim);
+  }
+
+  .zone-state {
+    font-size: calc(9 * var(--scale) * 1px);
+    font-weight: 600;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  .zone-state.on { color: var(--accent-ws); }
+  .zone-state.off { color: #663333; }
+
+  /* ================================================================
+     PAGE 3: EFFECT
+     ================================================================ */
+
+  .page-effect {
+    padding: calc(8 * var(--scale) * 1px) calc(6 * var(--scale) * 1px);
+    padding-bottom: calc(14 * var(--scale) * 1px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: calc(6 * var(--scale) * 1px);
+  }
+
+  .effect-label {
+    font-size: calc(7 * var(--scale) * 1px);
+    color: var(--fg-muted);
+    text-transform: uppercase;
+    letter-spacing: calc(1.5 * var(--scale) * 1px);
+  }
+
+  .effect-name {
+    font-size: calc(13 * var(--scale) * 1px);
+    font-weight: 700;
+    color: var(--accent-effect);
+    text-align: center;
+    line-height: 1.2;
+    max-width: calc(110 * var(--scale) * 1px);
+    word-wrap: break-word;
+  }
+
+  .effect-meta {
+    display: flex;
+    gap: calc(10 * var(--scale) * 1px);
+    font-size: calc(8 * var(--scale) * 1px);
+    color: var(--fg-dim);
+  }
+
+  .effect-meta-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: calc(1 * var(--scale) * 1px);
+  }
+
+  .effect-meta-value {
+    font-size: calc(11 * var(--scale) * 1px);
+    font-weight: 600;
+    color: var(--fg);
+  }
+
+  .effect-meta-label {
+    font-size: calc(6 * var(--scale) * 1px);
+    color: var(--fg-muted);
+    text-transform: uppercase;
+    letter-spacing: calc(0.5 * var(--scale) * 1px);
+  }
+
+  /* ================================================================
+     PAGE 4: MIXER
+     ================================================================ */
+
+  .page-mixer {
+    padding: calc(8 * var(--scale) * 1px) calc(6 * var(--scale) * 1px);
+    padding-bottom: calc(14 * var(--scale) * 1px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: calc(5 * var(--scale) * 1px);
+  }
+
+  .mixer-label {
+    font-size: calc(7 * var(--scale) * 1px);
+    color: var(--fg-muted);
+    text-transform: uppercase;
+    letter-spacing: calc(1.5 * var(--scale) * 1px);
+  }
+
+  .mixer-mode {
+    font-size: calc(12 * var(--scale) * 1px);
+    font-weight: 700;
+    color: var(--accent-mixer);
+    text-align: center;
+    line-height: 1.2;
+  }
+
+  .mixer-params {
+    display: flex;
+    gap: calc(6 * var(--scale) * 1px);
+    margin-top: calc(2 * var(--scale) * 1px);
+  }
+
+  .mixer-param {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: calc(2 * var(--scale) * 1px);
+  }
+
+  .mixer-param-value {
+    font-size: calc(14 * var(--scale) * 1px);
+    font-weight: 700;
+    color: var(--fg);
+  }
+
+  .mixer-param-label {
+    font-size: calc(6 * var(--scale) * 1px);
+    color: var(--fg-muted);
+    text-transform: uppercase;
+    letter-spacing: calc(0.5 * var(--scale) * 1px);
+  }
+
+  .mixer-divider {
+    width: calc(1 * var(--scale) * 1px);
+    height: calc(24 * var(--scale) * 1px);
+    background: var(--fg-muted);
+    opacity: 0.3;
+    align-self: center;
+  }
+
+  .mixer-state {
+    display: flex;
+    gap: calc(6 * var(--scale) * 1px);
+    font-size: calc(7 * var(--scale) * 1px);
+  }
+
+  .mixer-state-tag {
+    padding: calc(2 * var(--scale) * 1px) calc(4 * var(--scale) * 1px);
+    border-radius: calc(3 * var(--scale) * 1px);
+    font-weight: 600;
+    letter-spacing: calc(0.3 * var(--scale) * 1px);
+  }
+
+  .mixer-state-tag.active {
+    background: rgba(204, 102, 255, 0.2);
+    color: var(--accent-mixer);
+  }
+
+  .mixer-state-tag.inactive {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--fg-muted);
+  }
+
+  /* ================================================================
+     RATIONALE SECTION
+     ================================================================ */
+
+  .rationale {
+    max-width: 2200px;
+    margin: 0 auto;
+    padding: 32px 0;
+    border-top: 1px solid #222222;
+  }
+
+  .rationale h2 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--fg);
+    margin-bottom: 16px;
+  }
+
+  .rationale h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--fg-dim);
+    margin-top: 20px;
+    margin-bottom: 8px;
+  }
+
+  .rationale p, .rationale li {
+    font-size: 13px;
+    color: var(--fg-dim);
+    line-height: 1.7;
+    max-width: 720px;
+  }
+
+  .rationale ul {
+    list-style: none;
+    padding-left: 0;
+  }
+
+  .rationale li {
+    padding-left: 16px;
+    position: relative;
+    margin-bottom: 4px;
+  }
+
+  .rationale li::before {
+    content: "\2022";
+    position: absolute;
+    left: 0;
+    color: var(--fg-muted);
+  }
+
+  .spec-table {
+    border-collapse: collapse;
+    margin-top: 12px;
+    font-size: 12px;
+  }
+
+  .spec-table th,
+  .spec-table td {
+    padding: 6px 16px 6px 0;
+    text-align: left;
+    color: var(--fg-dim);
+    border-bottom: 1px solid #1a1a1a;
+  }
+
+  .spec-table th {
+    color: var(--fg-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 11px;
+  }
+
+  .spec-table td:first-child {
+    color: var(--fg);
+    font-weight: 500;
+  }
+</style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>Design 06: Carousel Pages</h1>
+    <div class="subtitle">Zone Mixer &mdash; AtomS3 0.85" LCD (128x128) &mdash; Shown at 4x scale</div>
+  </div>
+
+  <!-- ============================================================
+       PAGE STRIP: 4 pages shown side-by-side
+       ============================================================ -->
+
+  <div class="pages-strip">
+
+    <!-- PAGE 1: CONNECTION -->
+    <div class="page-wrapper">
+      <div class="page-label">Page 1</div>
+      <div class="page">
+        <div class="page-connection">
+          <!-- Text-based WiFi icon using Unicode arc characters -->
+          <div class="wifi-icon">&#x1F4F6;</div>
+          <div class="conn-ip">192.168.4.1</div>
+          <div class="conn-signal">
+            RSSI -42dBm
+            <span class="signal-bars">
+              <span class="bar lit"></span>
+              <span class="bar lit"></span>
+              <span class="bar lit"></span>
+              <span class="bar"></span>
+            </span>
+          </div>
+          <div class="conn-ws">
+            <span class="ws-dot"></span>
+            <span class="ws-label">WS CONNECTED</span>
+          </div>
+        </div>
+        <div class="page-dots">
+          <span class="dot active"></span>
+          <span class="dot"></span>
+          <span class="dot"></span>
+          <span class="dot"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAGE 2: ZONES -->
+    <div class="page-wrapper">
+      <div class="page-label">Page 2</div>
+      <div class="page">
+        <div class="page-zones">
+          <div class="zones-title">Zones</div>
+
+          <!-- Zone 1 -->
+          <div class="zone-row">
+            <div class="zone-colour-bar" style="background: var(--zone1);"></div>
+            <div class="zone-info">
+              <div class="zone-name">Zone 1</div>
+              <div class="zone-brightness">BRI 85%</div>
+            </div>
+            <div class="zone-state on">ON</div>
+          </div>
+
+          <!-- Zone 2 -->
+          <div class="zone-row">
+            <div class="zone-colour-bar" style="background: var(--zone2);"></div>
+            <div class="zone-info">
+              <div class="zone-name">Zone 2</div>
+              <div class="zone-brightness">BRI 60%</div>
+            </div>
+            <div class="zone-state on">ON</div>
+          </div>
+
+          <!-- Zone 3 -->
+          <div class="zone-row">
+            <div class="zone-colour-bar" style="background: var(--zone3);"></div>
+            <div class="zone-info">
+              <div class="zone-name">Zone 3</div>
+              <div class="zone-brightness">BRI 0%</div>
+            </div>
+            <div class="zone-state off">OFF</div>
+          </div>
+        </div>
+        <div class="page-dots">
+          <span class="dot"></span>
+          <span class="dot active"></span>
+          <span class="dot"></span>
+          <span class="dot"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAGE 3: EFFECT -->
+    <div class="page-wrapper">
+      <div class="page-label">Page 3</div>
+      <div class="page">
+        <div class="page-effect">
+          <div class="effect-label">Effect</div>
+          <div class="effect-name">Spectral Bloom</div>
+          <div class="effect-meta">
+            <div class="effect-meta-item">
+              <div class="effect-meta-value">1.2x</div>
+              <div class="effect-meta-label">Speed</div>
+            </div>
+            <div class="effect-meta-item">
+              <div class="effect-meta-value">3</div>
+              <div class="effect-meta-label">Zones</div>
+            </div>
+          </div>
+        </div>
+        <div class="page-dots">
+          <span class="dot"></span>
+          <span class="dot"></span>
+          <span class="dot active"></span>
+          <span class="dot"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAGE 4: MIXER -->
+    <div class="page-wrapper">
+      <div class="page-label">Page 4</div>
+      <div class="page">
+        <div class="page-mixer">
+          <div class="mixer-label">EdgeMixer</div>
+          <div class="mixer-mode">Crossfade</div>
+          <div class="mixer-params">
+            <div class="mixer-param">
+              <div class="mixer-param-value">72</div>
+              <div class="mixer-param-label">Spread</div>
+            </div>
+            <div class="mixer-divider"></div>
+            <div class="mixer-param">
+              <div class="mixer-param-value">45</div>
+              <div class="mixer-param-label">Strength</div>
+            </div>
+          </div>
+          <div class="mixer-state">
+            <span class="mixer-state-tag active">SPATIAL</span>
+            <span class="mixer-state-tag inactive">TEMPORAL</span>
+          </div>
+        </div>
+        <div class="page-dots">
+          <span class="dot"></span>
+          <span class="dot"></span>
+          <span class="dot"></span>
+          <span class="dot active"></span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============================================================
+       DESIGN RATIONALE
+       ============================================================ -->
+
+  <div class="rationale">
+    <h2>Design Rationale</h2>
+
+    <h3>Why Carousel Pages</h3>
+    <p>
+      At 128x128 pixels, every pixel is precious. Previous designs attempted to show
+      connection status, zone states, effect info, and mixer parameters simultaneously,
+      requiring text as small as 6px -- below the legibility threshold for a 0.85" panel
+      viewed at arm's length. The carousel pattern trades density for clarity: each page
+      shows one concern with text large enough to read at a glance.
+    </p>
+
+    <h3>Page Navigation</h3>
+    <ul>
+      <li>AtomS3 has a single built-in button (the screen itself is a button).</li>
+      <li>Short press cycles to the next page (1 &rarr; 2 &rarr; 3 &rarr; 4 &rarr; 1).</li>
+      <li>The 4-dot indicator at the bottom provides position awareness without consuming significant vertical space (8px total height including padding).</li>
+      <li>Auto-return to Page 1 (CONNECTION) after 30 seconds of inactivity -- connection status is the most operationally important page during live performance.</li>
+    </ul>
+
+    <h3>Typography Sizing</h3>
+    <table class="spec-table">
+      <thead>
+        <tr>
+          <th>Element</th>
+          <th>Size (real px)</th>
+          <th>Purpose</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Primary values</td>
+          <td>13-14px</td>
+          <td>Effect name, mixer params -- must be readable at 50cm</td>
+        </tr>
+        <tr>
+          <td>IP address, zone names</td>
+          <td>10-11px</td>
+          <td>Key identifiers -- readable at 40cm</td>
+        </tr>
+        <tr>
+          <td>Secondary info</td>
+          <td>8px</td>
+          <td>Brightness, RSSI, speed -- glanceable context</td>
+        </tr>
+        <tr>
+          <td>Labels, tags</td>
+          <td>6-7px</td>
+          <td>Category headers -- orientation, not primary reading</td>
+        </tr>
+        <tr>
+          <td>Page dots</td>
+          <td>4px diameter</td>
+          <td>Position indicator -- pattern recognition, not text</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Colour Strategy</h3>
+    <ul>
+      <li>Black background maximises contrast ratio on LCD (effectively infinite for OLED).</li>
+      <li>Each page has a distinct accent colour to build muscle memory: cyan (connection), zone-specific RGB (zones), amber (effect), violet (mixer).</li>
+      <li>Zone colour bars use the same saturated hues across all UI mockups for cross-design consistency.</li>
+      <li>ON/OFF states use green/dark-red for immediate status recognition without reading text.</li>
+    </ul>
+
+    <h3>Information Architecture</h3>
+    <ul>
+      <li><strong>Page 1 (Connection)</strong>: The most critical operational page. WiFi icon provides instant status recognition. IP address is the primary data (needed for manual WebSocket debugging). Signal bars and WS state are secondary confirmation.</li>
+      <li><strong>Page 2 (Zones)</strong>: Three rows, one per zone. Colour bars on the left provide zone identity. Brightness percentage is the most-adjusted parameter. ON/OFF state on the right edge for quick scanning.</li>
+      <li><strong>Page 3 (Effect)</strong>: Centres the effect name as the dominant element. Effect names can be long (up to ~16 characters), so the 13px size with word-wrap accommodates names like "Spectral Bloom" or "Chromatic Pulse".</li>
+      <li><strong>Page 4 (Mixer)</strong>: EdgeMixer mode name dominates. Spread and strength are the two primary tunable parameters, shown as large numerals. Spatial/temporal tags show which processing stage is active.</li>
+    </ul>
+
+    <h3>Implementation Notes for LVGL</h3>
+    <ul>
+      <li>Use <code>lv_tabview</code> or manual page index with <code>lv_obj_set_hidden()</code> toggling.</li>
+      <li>Page dots: 4x <code>lv_obj</code> circles in an <code>lv_obj</code> row container, update <code>bg_color</code> on page change.</li>
+      <li>Button ISR increments page index modulo 4, posts event to LVGL task.</li>
+      <li>Auto-return timer: <code>lv_timer_create()</code> with 30s period, reset on button press.</li>
+      <li>Font recommendation: <code>lv_font_montserrat_14</code> for primary, <code>lv_font_montserrat_10</code> for secondary. Compile both into the binary (total ~12KB flash).</li>
+      <li>Zone colour bars: <code>lv_obj</code> with <code>bg_color</code> set from zone config, <code>border_width: 0</code>, <code>radius: 2</code>.</li>
+    </ul>
+
+    <h3>Accessibility Considerations</h3>
+    <ul>
+      <li>All text-on-black exceeds WCAG AAA contrast (7:1+). White on black = 21:1. Dim grey (#888) on black = 5.3:1 (AA compliant).</li>
+      <li>Accent colours chosen for distinguishability under common colour vision deficiencies (protanopia, deuteranopia): cyan/amber/violet remain distinct.</li>
+      <li>Signal bars use height progression (not colour alone) to convey strength.</li>
+      <li>ON/OFF uses both colour and text label -- never colour alone.</li>
+    </ul>
+  </div>
+
+</body>
+</html>

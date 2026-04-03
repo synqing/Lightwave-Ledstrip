@@ -1,0 +1,1440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zone Mixer UI — Design 18: Animated Transitions</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0a0a0a;
+    color: #ccc;
+    font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 40px 20px;
+  }
+
+  h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #e0e0e0;
+    margin-bottom: 4px;
+    letter-spacing: 0.5px;
+  }
+
+  .subtitle {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 32px;
+  }
+
+  /* --- Frame strip (6 static frames) --- */
+  .frame-strip {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 48px;
+  }
+
+  .frame-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .frame-label {
+    font-size: 10px;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    max-width: 140px;
+    text-align: center;
+  }
+
+  .frame-sublabel {
+    font-size: 9px;
+    color: #3a3a3a;
+    text-align: center;
+  }
+
+  /* --- Bezel wrapper --- */
+  .bezel {
+    border: 2px solid #333;
+    border-radius: 6px;
+    background: #111;
+    padding: 2px;
+    box-shadow:
+      0 0 0 1px #222,
+      0 4px 16px rgba(0,0,0,0.6),
+      inset 0 0 8px rgba(0,0,0,0.4);
+  }
+
+  .bezel-large {
+    border-radius: 10px;
+    padding: 4px;
+  }
+
+  canvas {
+    display: block;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+
+  /* --- Interactive section --- */
+  .interactive-section {
+    margin-top: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+    max-width: 700px;
+  }
+
+  .interactive-header {
+    font-size: 14px;
+    font-weight: 600;
+    color: #aaa;
+    letter-spacing: 0.5px;
+  }
+
+  .interactive-row {
+    display: flex;
+    gap: 32px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .interactive-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .panel-label {
+    font-size: 11px;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .panel-dims {
+    font-size: 10px;
+    color: #444;
+  }
+
+  /* --- Controls --- */
+  .controls {
+    margin-top: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+    max-width: 700px;
+  }
+
+  .control-row {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .btn-group {
+    display: flex;
+    gap: 8px;
+  }
+
+  .btn {
+    font-size: 10px;
+    font-family: inherit;
+    padding: 5px 14px;
+    border: 1px solid #333;
+    border-radius: 3px;
+    background: #1a1a1a;
+    color: #666;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .btn:hover { border-color: #555; color: #999; }
+  .btn.active { border-color: #4a4; color: #4a4; background: #1a2a1a; }
+
+  .slider-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .slider-group label {
+    font-size: 11px;
+    color: #888;
+  }
+
+  .slider-group .value {
+    font-size: 10px;
+    color: #555;
+    min-width: 28px;
+    text-align: center;
+  }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    width: 120px;
+    height: 4px;
+    background: #333;
+    border-radius: 2px;
+    outline: none;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #888;
+    cursor: pointer;
+  }
+
+  .status-row {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+  }
+
+  .toggle-btn {
+    font-size: 10px;
+    font-family: inherit;
+    padding: 4px 10px;
+    border: 1px solid #333;
+    border-radius: 3px;
+    background: #1a1a1a;
+    color: #666;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .toggle-btn:hover { border-color: #555; color: #999; }
+  .toggle-btn.active { border-color: #4a4; color: #4a4; background: #1a2a1a; }
+  .toggle-btn.active.warn { border-color: #a44; color: #a44; background: #2a1a1a; }
+
+  .transition-info {
+    font-size: 10px;
+    color: #444;
+    text-align: center;
+    max-width: 500px;
+    line-height: 1.6;
+  }
+
+  /* --- Design rationale --- */
+  .rationale {
+    margin-top: 56px;
+    max-width: 700px;
+    width: 100%;
+    padding: 24px;
+    background: #111;
+    border: 1px solid #222;
+    border-radius: 8px;
+  }
+
+  .rationale h2 {
+    font-size: 14px;
+    color: #aaa;
+    margin-bottom: 16px;
+    font-weight: 600;
+  }
+
+  .rationale h3 {
+    font-size: 12px;
+    color: #888;
+    margin: 14px 0 6px 0;
+    font-weight: 600;
+  }
+
+  .rationale p, .rationale li {
+    font-size: 11px;
+    color: #777;
+    line-height: 1.6;
+  }
+
+  .rationale ul {
+    padding-left: 16px;
+  }
+
+  .rationale li { margin-bottom: 4px; }
+
+  .rationale code {
+    background: #1a1a1a;
+    padding: 1px 4px;
+    border-radius: 2px;
+    font-size: 10px;
+    color: #999;
+  }
+
+  .colour-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    vertical-align: middle;
+    margin-right: 4px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Zone Mixer UI / Design 18: Animated Transitions</h1>
+<p class="subtitle">AtomS3 0.85" LCD (128x128) &mdash; Carousel with smooth slide transitions, live parameter overlay</p>
+
+<!-- ============================================================
+     FRAME STRIP: 6 static frames showing each transition state
+     ============================================================ -->
+<div class="frame-strip">
+
+  <div class="frame-panel">
+    <span class="frame-label">Frame 1: MIX page</span>
+    <span class="frame-sublabel">DJ fader bars</span>
+    <div class="bezel">
+      <canvas id="frame1" width="128" height="128"></canvas>
+    </div>
+  </div>
+
+  <div class="frame-panel">
+    <span class="frame-label">Frame 2: Transition 50%</span>
+    <span class="frame-sublabel">MIX &rarr; FX mid-slide</span>
+    <div class="bezel">
+      <canvas id="frame2" width="128" height="128"></canvas>
+    </div>
+  </div>
+
+  <div class="frame-panel">
+    <span class="frame-label">Frame 3: FX page</span>
+    <span class="frame-sublabel">Effect + speed arc</span>
+    <div class="bezel">
+      <canvas id="frame3" width="128" height="128"></canvas>
+    </div>
+  </div>
+
+  <div class="frame-panel">
+    <span class="frame-label">Frame 4: NET page</span>
+    <span class="frame-sublabel">Signal strength</span>
+    <div class="bezel">
+      <canvas id="frame4" width="128" height="128"></canvas>
+    </div>
+  </div>
+
+  <div class="frame-panel">
+    <span class="frame-label">Frame 5: Overlay rising</span>
+    <span class="frame-sublabel">Parameter slides up</span>
+    <div class="bezel">
+      <canvas id="frame5" width="128" height="128"></canvas>
+    </div>
+  </div>
+
+  <div class="frame-panel">
+    <span class="frame-label">Frame 6: Overlay full</span>
+    <span class="frame-sublabel">Value visible + auto-hide</span>
+    <div class="bezel">
+      <canvas id="frame6" width="128" height="128"></canvas>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============================================================
+     INTERACTIVE SECTION: 4x + 1:1 canvases with live animation
+     ============================================================ -->
+<div class="interactive-section">
+  <span class="interactive-header">Interactive Preview</span>
+  <div class="interactive-row">
+    <div class="interactive-panel">
+      <span class="panel-label">4x Scale (512 x 512)</span>
+      <div class="bezel bezel-large">
+        <canvas id="canvas4x" width="512" height="512"></canvas>
+      </div>
+    </div>
+    <div class="interactive-panel">
+      <span class="panel-label">1:1 Native (128 x 128)</span>
+      <span class="panel-dims">Actual pixel size on 0.85" display</span>
+      <div class="bezel">
+        <canvas id="canvas1x" width="128" height="128"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Controls -->
+<div class="controls">
+  <div class="control-row">
+    <span class="panel-label">Pages</span>
+    <div class="btn-group">
+      <button class="btn active" id="btnMix" onclick="goToPage(0)">MIX</button>
+      <button class="btn" id="btnFx" onclick="goToPage(1)">FX</button>
+      <button class="btn" id="btnNet" onclick="goToPage(2)">NET</button>
+    </div>
+    <button class="btn" id="btnOverlay" onclick="triggerOverlay()">Show Overlay</button>
+    <button class="btn" id="btnDisconnect" onclick="triggerDisconnect()">Disconnect Flash</button>
+  </div>
+
+  <div class="control-row">
+    <div class="slider-group">
+      <label>Zone 1</label>
+      <input type="range" id="slZ1" min="0" max="255" value="190">
+      <span class="value" id="valZ1">190</span>
+    </div>
+    <div class="slider-group">
+      <label>Zone 2</label>
+      <input type="range" id="slZ2" min="0" max="255" value="140">
+      <span class="value" id="valZ2">140</span>
+    </div>
+    <div class="slider-group">
+      <label>Zone 3</label>
+      <input type="range" id="slZ3" min="0" max="255" value="80">
+      <span class="value" id="valZ3">80</span>
+    </div>
+    <div class="slider-group">
+      <label>Master</label>
+      <input type="range" id="slM" min="0" max="255" value="220">
+      <span class="value" id="valM">220</span>
+    </div>
+  </div>
+
+  <div class="control-row">
+    <div class="slider-group">
+      <label>Speed</label>
+      <input type="range" id="slSpeed" min="1" max="100" value="42">
+      <span class="value" id="valSpeed">42</span>
+    </div>
+    <div class="slider-group">
+      <label>Signal</label>
+      <input type="range" id="slSignal" min="0" max="4" value="3">
+      <span class="value" id="valSignal">3/4</span>
+    </div>
+  </div>
+
+  <div class="status-row">
+    <button class="toggle-btn active" id="btnWifi" onclick="toggleWifi()">WiFi</button>
+    <button class="toggle-btn active" id="btnWs" onclick="toggleWs()">WebSocket</button>
+  </div>
+
+  <p class="transition-info">
+    Click page buttons to trigger slide transitions. Use scroll wheel or left/right arrow keys
+    to navigate. Changing a slider auto-triggers the live overlay. Press D for disconnect flash.
+  </p>
+</div>
+
+<!-- Design rationale -->
+<div class="rationale">
+  <h2>Design Rationale</h2>
+
+  <h3>Concept</h3>
+  <p>
+    A three-page carousel with smooth horizontal slide transitions between pages.
+    Each page serves a distinct function: <strong>MIX</strong> (DJ fader bars for
+    zone brightness), <strong>FX</strong> (current effect name with speed arc gauge),
+    and <strong>NET</strong> (connection status with animated signal strength).
+    Transitions provide spatial context &mdash; the user understands pages exist
+    "next to" each other, not as disconnected states.
+  </p>
+
+  <h3>Transition System</h3>
+  <ul>
+    <li>
+      <strong>Page slide</strong>: Old page slides left, new page slides in from right.
+      Duration: ~200ms (6 frames at 30fps). At 50% both pages are visible side-by-side,
+      each occupying half the 128px width. On M5GFX this is two <code>fillRect</code>
+      redraws per frame with X-offset animation.
+    </li>
+    <li>
+      <strong>Live overlay</strong>: A parameter value panel slides up from the bottom
+      (32px tall). Appears when any encoder changes a value. Auto-hides after 2 seconds
+      by sliding back down. On M5GFX: single <code>fillRect</code> with Y-offset.
+    </li>
+    <li>
+      <strong>Disconnect flash</strong>: Red 2px border pulses 3 times (1 frame red,
+      1 frame normal) when WebSocket connection drops. Visual alarm without disrupting
+      page content. On M5GFX: <code>drawRect</code> in red, then black, 3 cycles.
+    </li>
+  </ul>
+
+  <h3>Visual Language</h3>
+  <ul>
+    <li>
+      <span class="colour-swatch" style="background:#00e5ff"></span>
+      <strong>Zone 1 &mdash; Cyan (#00E5FF)</strong>
+    </li>
+    <li>
+      <span class="colour-swatch" style="background:#00e676"></span>
+      <strong>Zone 2 &mdash; Green (#00E676)</strong>
+    </li>
+    <li>
+      <span class="colour-swatch" style="background:#ff9100"></span>
+      <strong>Zone 3 &mdash; Orange (#FF9100)</strong>
+    </li>
+    <li>
+      <span class="colour-swatch" style="background:#e0e0e0"></span>
+      <strong>Master &mdash; White (#E0E0E0)</strong>
+    </li>
+    <li>
+      <span class="colour-swatch" style="background:#ffb833"></span>
+      <strong>FX Accent &mdash; Amber (#FFB833)</strong>
+    </li>
+    <li>
+      <span class="colour-swatch" style="background:#33ccff"></span>
+      <strong>NET Accent &mdash; Sky (#33CCFF)</strong>
+    </li>
+  </ul>
+
+  <h3>Page 1: MIX (DJ Fader Bars)</h3>
+  <ul>
+    <li>Four vertical fader tracks: Z1, Z2, Z3, Master (same layout as Design 05).</li>
+    <li>Gradient fills, 2px cap lines, numeric values inside tracks.</li>
+    <li>Master track is 30px wide (vs 24px zone tracks) for hierarchy.</li>
+    <li>Status icons (WiFi/WS) at top-left, speed readout at bottom-centre.</li>
+  </ul>
+
+  <h3>Page 2: FX (Effect Display)</h3>
+  <ul>
+    <li>Effect name centred in large text (13px), amber accent colour.</li>
+    <li>Speed arc gauge: 180-degree arc (bottom half), filled proportionally to speed value.</li>
+    <li>Zone count shown below the arc: "3 ZONES" with dim indicator dots.</li>
+    <li>Page dot indicators at bottom (3 dots, second active).</li>
+  </ul>
+
+  <h3>Page 3: NET (Connection Status)</h3>
+  <ul>
+    <li>Animated signal strength: 4 bars that pulse upward when connected.</li>
+    <li>IP address centred, WebSocket status with live/dead dot indicator.</li>
+    <li>Latency readout if connected, "OFFLINE" in red if disconnected.</li>
+    <li>Signal bars animate with a subtle rising effect (1px per frame, cycling).</li>
+  </ul>
+
+  <h3>Live Overlay</h3>
+  <ul>
+    <li>32px tall dark panel with slight transparency, slides up from bottom edge.</li>
+    <li>Shows parameter name and new value in large centred text.</li>
+    <li>Background: semi-transparent dark (#000000CC) to maintain page context.</li>
+    <li>Auto-dismisses after 2 seconds with reverse slide-down animation.</li>
+  </ul>
+
+  <h3>M5GFX Implementation Notes</h3>
+  <ul>
+    <li>Page slide: render both pages to offscreen sprites, <code>pushSprite()</code> with
+      X-offset. At 30fps, 6 frames = 200ms transition. Each frame moves X by ~21px.</li>
+    <li>Overlay: single sprite, <code>pushSprite(0, 128-overlayY)</code> with overlayY
+      animating from 0 to 32 over 4 frames.</li>
+    <li>Disconnect flash: <code>M5.Lcd.drawRect(0, 0, 128, 128, RED)</code> alternating
+      with BLACK for 6 frames (3 cycles).</li>
+    <li>Total RAM: two 128x128x2 page sprites (32KB) + one 128x32x2 overlay sprite (8KB)
+      = 40KB. Well within AtomS3 PSRAM.</li>
+  </ul>
+</div>
+
+<script>
+// ============================================================
+// STATE
+// ============================================================
+const state = {
+  z1: 190,
+  z2: 140,
+  z3: 80,
+  master: 220,
+  speed: 42,
+  wifi: true,
+  ws: true,
+  signal: 3,       // 0-4 bars
+  currentPage: 0,  // 0=MIX, 1=FX, 2=NET
+  effectName: 'AURORA',
+  zoneCount: 3
+};
+
+// Transition state
+const transition = {
+  active: false,
+  fromPage: 0,
+  toPage: 1,
+  progress: 0,    // 0..1
+  direction: 1    // 1=forward (left), -1=backward (right)
+};
+
+// Overlay state
+const overlay = {
+  active: false,
+  progress: 0,    // 0..1 (0=hidden, 1=fully visible)
+  rising: true,
+  timer: null,
+  paramName: 'Z1',
+  paramValue: '190'
+};
+
+// Disconnect flash state
+const disconnectFlash = {
+  active: false,
+  frame: 0,        // counts 0..5 (3 on/off cycles)
+  timer: null
+};
+
+// Colours
+const ZONE_COLOURS = {
+  z1:     { r: 0x00, g: 0xE5, b: 0xFF },
+  z2:     { r: 0x00, g: 0xE6, b: 0x76 },
+  z3:     { r: 0xFF, g: 0x91, b: 0x00 },
+  master: { r: 0xE0, g: 0xE0, b: 0xE0 },
+};
+
+const COL_FX_ACCENT = '#FFB833';
+const COL_NET_ACCENT = '#33CCFF';
+const COL_NET_GREEN = '#00E676';
+const COL_NET_RED = '#FF1744';
+
+function dimColour(c, f) {
+  return { r: Math.round(c.r * f), g: Math.round(c.g * f), b: Math.round(c.b * f) };
+}
+function colStr(c) { return `rgb(${c.r},${c.g},${c.b})`; }
+
+// ============================================================
+// LAYOUT CONSTANTS (128px native space)
+// ============================================================
+const W = 128, H = 128;
+
+// MIX page layout (same as Design 05)
+const MARGIN_L = 4;
+const TRACK_W = 24;
+const MASTER_W = 30;
+const GAP = 6;
+const TRACK_TOP = 16;
+const TRACK_BOTTOM = 106;
+const TRACK_H = TRACK_BOTTOM - TRACK_TOP;
+const LABEL_Y = 112;
+const SPEED_Y = 124;
+
+const TRACK_X = [
+  MARGIN_L,
+  MARGIN_L + TRACK_W + GAP,
+  MARGIN_L + (TRACK_W + GAP) * 2,
+  MARGIN_L + (TRACK_W + GAP) * 3,
+];
+const TRACK_WIDTHS = [TRACK_W, TRACK_W, TRACK_W, MASTER_W];
+const TRACK_KEYS = ['z1', 'z2', 'z3', 'master'];
+const TRACK_LABELS = ['Z1', 'Z2', 'Z3', 'M'];
+
+// Overlay layout
+const OVERLAY_H = 32;
+
+// ============================================================
+// OFFSCREEN BUFFERS
+// ============================================================
+function makeBuffer(w, h) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  return c;
+}
+
+const pageBuffers = [makeBuffer(W, H), makeBuffer(W, H), makeBuffer(W, H)];
+const compositeBuffer = makeBuffer(W, H);
+
+// ============================================================
+// PAGE RENDERERS
+// ============================================================
+
+// --- Page 0: MIX (DJ Fader Bars) ---
+function renderMixPage(ctx) {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+
+  // Status icons
+  drawStatusIcons(ctx);
+
+  // Page title
+  ctx.fillStyle = '#444';
+  ctx.font = '7px monospace';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'top';
+  ctx.fillText('MIX', 125, 2);
+
+  // Fader tracks
+  for (let i = 0; i < 4; i++) {
+    const key = TRACK_KEYS[i];
+    const x = TRACK_X[i];
+    const w = TRACK_WIDTHS[i];
+    const value = state[key];
+    const colour = ZONE_COLOURS[key];
+    drawTrack(ctx, x, TRACK_TOP, w, TRACK_H, value, colour);
+  }
+
+  // Track labels
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.font = '7px monospace';
+  for (let i = 0; i < 4; i++) {
+    const cx = TRACK_X[i] + TRACK_WIDTHS[i] / 2;
+    const c = ZONE_COLOURS[TRACK_KEYS[i]];
+    ctx.fillStyle = colStr(dimColour(c, 0.6));
+    ctx.fillText(TRACK_LABELS[i], cx, LABEL_Y);
+  }
+
+  // Speed readout
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.font = '7px monospace';
+  ctx.fillStyle = '#555';
+  ctx.fillText('SPD ' + state.speed, W / 2, SPEED_Y);
+
+  // Page dots
+  drawPageDots(ctx, 0);
+}
+
+// --- Page 1: FX (Effect Display) ---
+function renderFxPage(ctx) {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+
+  // Page title
+  ctx.fillStyle = '#444';
+  ctx.font = '7px monospace';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'top';
+  ctx.fillText('FX', 125, 2);
+
+  // Status icons
+  drawStatusIcons(ctx);
+
+  // "EFFECT" label
+  ctx.fillStyle = '#555';
+  ctx.font = '7px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillText('EFFECT', W / 2, 14);
+
+  // Effect name
+  ctx.fillStyle = COL_FX_ACCENT;
+  ctx.font = 'bold 13px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(state.effectName, W / 2, 36);
+
+  // Speed arc gauge
+  const arcCx = W / 2;
+  const arcCy = 72;
+  const arcR = 28;
+  const arcStart = Math.PI;        // left (180 degrees)
+  const arcEnd = Math.PI * 2;      // right (360 degrees)
+  const speedFrac = state.speed / 100;
+
+  // Arc background
+  ctx.beginPath();
+  ctx.arc(arcCx, arcCy, arcR, arcStart, arcEnd);
+  ctx.strokeStyle = '#1a1a1a';
+  ctx.lineWidth = 5;
+  ctx.stroke();
+
+  // Arc track border
+  ctx.beginPath();
+  ctx.arc(arcCx, arcCy, arcR, arcStart, arcEnd);
+  ctx.strokeStyle = '#2a2a2a';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Arc fill
+  const fillEnd = arcStart + (arcEnd - arcStart) * speedFrac;
+  ctx.beginPath();
+  ctx.arc(arcCx, arcCy, arcR, arcStart, fillEnd);
+  ctx.strokeStyle = COL_FX_ACCENT;
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+  ctx.lineCap = 'butt';
+
+  // Speed value inside arc
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 11px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(state.speed.toString(), arcCx, arcCy - 4);
+
+  // "SPEED" label below arc value
+  ctx.fillStyle = '#555';
+  ctx.font = '6px monospace';
+  ctx.fillText('SPEED', arcCx, arcCy + 6);
+
+  // Zone count
+  ctx.fillStyle = '#666';
+  ctx.font = '8px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillText(state.zoneCount + ' ZONES', W / 2, 104);
+
+  // Zone dots
+  const dotStartX = W / 2 - ((state.zoneCount - 1) * 8) / 2;
+  const zoneColours = ['#00e5ff', '#00e676', '#ff9100'];
+  for (let i = 0; i < state.zoneCount; i++) {
+    ctx.fillStyle = zoneColours[i] || '#555';
+    ctx.beginPath();
+    ctx.arc(dotStartX + i * 8, 116, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Page dots
+  drawPageDots(ctx, 1);
+}
+
+// --- Page 2: NET (Connection Status) ---
+function renderNetPage(ctx) {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+
+  // Page title
+  ctx.fillStyle = '#444';
+  ctx.font = '7px monospace';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'top';
+  ctx.fillText('NET', 125, 2);
+
+  // Status icons
+  drawStatusIcons(ctx);
+
+  if (!state.wifi) {
+    // Disconnected state
+    ctx.fillStyle = COL_NET_RED;
+    ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('OFFLINE', W / 2, 40);
+
+    // Red X icon
+    ctx.strokeStyle = COL_NET_RED;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(54, 56);
+    ctx.lineTo(74, 76);
+    ctx.moveTo(74, 56);
+    ctx.lineTo(54, 76);
+    ctx.stroke();
+
+    ctx.fillStyle = '#553333';
+    ctx.font = '7px monospace';
+    ctx.fillText('NO SIGNAL', W / 2, 94);
+  } else {
+    // Connected state
+
+    // Signal strength bars (animated)
+    const barW = 8;
+    const barGap = 4;
+    const barsTotal = 4;
+    const barsStartX = W / 2 - ((barsTotal * barW + (barsTotal - 1) * barGap) / 2);
+    const barBaseY = 50;
+    const barHeights = [10, 18, 26, 34];
+
+    for (let i = 0; i < barsTotal; i++) {
+      const x = barsStartX + i * (barW + barGap);
+      const h = barHeights[i];
+      const y = barBaseY - h;
+
+      // Bar background
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillRect(x, barBaseY - barHeights[3], barW, barHeights[3]);
+
+      // Active bar
+      if (i < state.signal) {
+        const grad = ctx.createLinearGradient(0, y, 0, barBaseY);
+        grad.addColorStop(0, COL_NET_ACCENT);
+        grad.addColorStop(1, '#1a6688');
+        ctx.fillStyle = grad;
+        ctx.fillRect(x, y, barW, h);
+
+        // Bright cap
+        ctx.fillStyle = '#66ddff';
+        ctx.fillRect(x, y, barW, 1);
+      } else {
+        ctx.fillStyle = '#222';
+        ctx.fillRect(x, barBaseY - h, barW, h);
+      }
+    }
+
+    // Signal label
+    ctx.fillStyle = COL_NET_ACCENT;
+    ctx.font = '8px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText('SIGNAL ' + state.signal + '/4', W / 2, 56);
+
+    // IP address
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 9px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText('192.168.4.1', W / 2, 72);
+
+    // WebSocket status
+    const wsCol = state.ws ? COL_NET_GREEN : COL_NET_RED;
+    const wsText = state.ws ? 'WS LIVE' : 'WS DOWN';
+
+    // Status dot
+    ctx.fillStyle = wsCol;
+    ctx.beginPath();
+    ctx.arc(W / 2 - 20, 90, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Status text
+    ctx.fillStyle = wsCol;
+    ctx.font = '8px monospace';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(wsText, W / 2 - 14, 90);
+
+    // Latency
+    if (state.ws) {
+      ctx.fillStyle = '#555';
+      ctx.font = '7px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText('12ms RTT', W / 2, 102);
+    }
+  }
+
+  // Page dots
+  drawPageDots(ctx, 2);
+}
+
+// ============================================================
+// SHARED DRAWING HELPERS
+// ============================================================
+
+function drawStatusIcons(ctx) {
+  const wifiCol = state.wifi ? '#00e676' : '#ff1744';
+  const wsCol = state.ws ? '#00e676' : '#ff1744';
+
+  ctx.fillStyle = wifiCol;
+  ctx.fillRect(6, 8, 2, 2);
+  drawArc(ctx, 7, 8, 3, wifiCol);
+  drawArc(ctx, 7, 8, 5, wifiCol);
+
+  ctx.fillStyle = wsCol;
+  ctx.font = '7px monospace';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillText('WS', 16, 2);
+}
+
+function drawArc(ctx, cx, cy, radius, colour) {
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, -Math.PI * 0.75, -Math.PI * 0.25);
+  ctx.strokeStyle = colour;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+
+function drawTrack(ctx, x, y, w, h, value, colour) {
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(x, y, w, h);
+
+  ctx.strokeStyle = '#2a2a2a';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+
+  ctx.strokeStyle = '#161616';
+  ctx.lineWidth = 1;
+  for (let gy = y + 10; gy < y + h; gy += 10) {
+    ctx.beginPath();
+    ctx.moveTo(x + 2, gy + 0.5);
+    ctx.lineTo(x + w - 2, gy + 0.5);
+    ctx.stroke();
+  }
+
+  const fillH = Math.round((value / 255) * (h - 4));
+  if (fillH <= 0) return;
+
+  const fillX = x + 2;
+  const fillW = w - 4;
+  const fillY = y + h - 2 - fillH;
+
+  const grad = ctx.createLinearGradient(0, fillY, 0, fillY + fillH);
+  grad.addColorStop(0, colStr(colour));
+  grad.addColorStop(0.3, colStr(dimColour(colour, 0.85)));
+  grad.addColorStop(1, colStr(dimColour(colour, 0.45)));
+  ctx.fillStyle = grad;
+  ctx.fillRect(fillX, fillY, fillW, fillH);
+
+  const capColour = colStr({
+    r: Math.min(255, colour.r + 60),
+    g: Math.min(255, colour.g + 60),
+    b: Math.min(255, colour.b + 60)
+  });
+  ctx.fillStyle = capColour;
+  ctx.fillRect(fillX, fillY, fillW, 2);
+
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.fillRect(fillX + 2, fillY, fillW - 4, 1);
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '7px monospace';
+  const textY = fillH > 20 ? fillY + 12 : fillY - 8;
+  const textInFill = fillH > 20;
+  ctx.fillStyle = textInFill ? 'rgba(0,0,0,0.6)' : colStr(dimColour(colour, 0.5));
+  ctx.fillText(value.toString(), x + w / 2, textY);
+}
+
+function drawPageDots(ctx, activePage) {
+  const dotY = H - 5;
+  const dotR = 2;
+  const dotGap = 8;
+  const totalW = 3 * dotGap;
+  const startX = W / 2 - totalW / 2;
+
+  for (let i = 0; i < 3; i++) {
+    ctx.fillStyle = (i === activePage) ? '#fff' : '#333';
+    ctx.beginPath();
+    ctx.arc(startX + i * dotGap, dotY, dotR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// ============================================================
+// OVERLAY RENDERER
+// ============================================================
+function drawOverlay(ctx, yOffset) {
+  // yOffset: 0 = fully visible at bottom, OVERLAY_H = fully hidden below
+  const drawY = H - OVERLAY_H + yOffset;
+
+  // Background
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+  ctx.fillRect(0, drawY, W, OVERLAY_H);
+
+  // Top border line
+  ctx.fillStyle = '#333';
+  ctx.fillRect(0, drawY, W, 1);
+
+  // Accent line
+  ctx.fillStyle = COL_FX_ACCENT;
+  ctx.fillRect(0, drawY + 1, W, 1);
+
+  // Parameter name
+  ctx.fillStyle = '#888';
+  ctx.font = '7px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillText(overlay.paramName, W / 2, drawY + 6);
+
+  // Parameter value
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 14px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillText(overlay.paramValue, W / 2, drawY + 15);
+}
+
+// ============================================================
+// DISCONNECT FLASH RENDERER
+// ============================================================
+function drawDisconnectBorder(ctx) {
+  if (!disconnectFlash.active) return;
+
+  // Even frames = red border, odd frames = no border
+  const isRed = (disconnectFlash.frame % 2) === 0;
+  if (isRed) {
+    ctx.strokeStyle = '#ff1744';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, W - 2, H - 2);
+  }
+}
+
+// ============================================================
+// COMPOSITE RENDERER
+// ============================================================
+function renderPageToBuffer(pageIndex) {
+  const ctx = pageBuffers[pageIndex].getContext('2d');
+  switch (pageIndex) {
+    case 0: renderMixPage(ctx); break;
+    case 1: renderFxPage(ctx); break;
+    case 2: renderNetPage(ctx); break;
+  }
+}
+
+function compositeFrame() {
+  const ctx = compositeBuffer.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+
+  if (transition.active) {
+    // Slide transition: draw both pages offset
+    const p = transition.progress;
+    const dir = transition.direction;
+
+    // Ease function (ease-in-out quad)
+    const eased = p < 0.5
+      ? 2 * p * p
+      : 1 - Math.pow(-2 * p + 2, 2) / 2;
+
+    const offset = Math.round(eased * W * dir);
+
+    // Save and clip for clean edges
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, W, H);
+    ctx.clip();
+
+    // From page (slides away)
+    ctx.drawImage(pageBuffers[transition.fromPage], -offset, 0);
+    // To page (slides in)
+    ctx.drawImage(pageBuffers[transition.toPage], W * dir - offset, 0);
+
+    ctx.restore();
+  } else {
+    // Static page
+    ctx.drawImage(pageBuffers[state.currentPage], 0, 0);
+  }
+
+  // Overlay
+  if (overlay.active || overlay.progress > 0) {
+    const yOff = Math.round((1 - overlay.progress) * OVERLAY_H);
+    drawOverlay(ctx, yOff);
+  }
+
+  // Disconnect flash
+  drawDisconnectBorder(ctx);
+
+  return compositeBuffer;
+}
+
+// ============================================================
+// BLIT TO DISPLAY CANVASES
+// ============================================================
+function blitInteractive() {
+  const comp = compositeFrame();
+
+  const c4 = document.getElementById('canvas4x');
+  const ctx4 = c4.getContext('2d');
+  ctx4.imageSmoothingEnabled = false;
+  ctx4.drawImage(comp, 0, 0, 512, 512);
+
+  const c1 = document.getElementById('canvas1x');
+  const ctx1 = c1.getContext('2d');
+  ctx1.imageSmoothingEnabled = false;
+  ctx1.drawImage(comp, 0, 0);
+}
+
+// ============================================================
+// STATIC FRAME STRIP RENDERERS
+// ============================================================
+function renderStaticFrames() {
+  // Frame 1: MIX page (static)
+  renderAllPageBuffers();
+
+  const f1 = document.getElementById('frame1').getContext('2d');
+  f1.imageSmoothingEnabled = false;
+  f1.drawImage(pageBuffers[0], 0, 0);
+
+  // Frame 2: Transition 50% (MIX -> FX)
+  const f2 = document.getElementById('frame2').getContext('2d');
+  f2.imageSmoothingEnabled = false;
+  f2.fillStyle = '#000';
+  f2.fillRect(0, 0, W, H);
+  f2.save();
+  f2.beginPath();
+  f2.rect(0, 0, W, H);
+  f2.clip();
+  f2.drawImage(pageBuffers[0], -64, 0);  // MIX slides left 50%
+  f2.drawImage(pageBuffers[1], 64, 0);   // FX slides in from right 50%
+  f2.restore();
+
+  // Frame 3: FX page (static)
+  const f3 = document.getElementById('frame3').getContext('2d');
+  f3.imageSmoothingEnabled = false;
+  f3.drawImage(pageBuffers[1], 0, 0);
+
+  // Frame 4: NET page (static)
+  const f4 = document.getElementById('frame4').getContext('2d');
+  f4.imageSmoothingEnabled = false;
+  f4.drawImage(pageBuffers[2], 0, 0);
+
+  // Frame 5: Overlay rising (50% up on MIX page)
+  const f5 = document.getElementById('frame5').getContext('2d');
+  f5.imageSmoothingEnabled = false;
+  f5.drawImage(pageBuffers[0], 0, 0);
+  // Overlay at 50% rise
+  const overlayCtx5 = f5;
+  const yOff5 = Math.round(0.5 * OVERLAY_H); // half hidden
+  overlayCtx5.fillStyle = 'rgba(0, 0, 0, 0.85)';
+  overlayCtx5.fillRect(0, H - OVERLAY_H + yOff5, W, OVERLAY_H);
+  overlayCtx5.fillStyle = '#333';
+  overlayCtx5.fillRect(0, H - OVERLAY_H + yOff5, W, 1);
+  overlayCtx5.fillStyle = COL_FX_ACCENT;
+  overlayCtx5.fillRect(0, H - OVERLAY_H + yOff5 + 1, W, 1);
+  overlayCtx5.fillStyle = '#888';
+  overlayCtx5.font = '7px monospace';
+  overlayCtx5.textAlign = 'center';
+  overlayCtx5.textBaseline = 'top';
+  overlayCtx5.fillText('ZONE 1', W / 2, H - OVERLAY_H + yOff5 + 6);
+  overlayCtx5.fillStyle = '#fff';
+  overlayCtx5.font = 'bold 14px monospace';
+  overlayCtx5.fillText('190', W / 2, H - OVERLAY_H + yOff5 + 15);
+
+  // Frame 6: Overlay fully visible on MIX page
+  const f6 = document.getElementById('frame6').getContext('2d');
+  f6.imageSmoothingEnabled = false;
+  f6.drawImage(pageBuffers[0], 0, 0);
+  // Overlay fully up
+  f6.fillStyle = 'rgba(0, 0, 0, 0.85)';
+  f6.fillRect(0, H - OVERLAY_H, W, OVERLAY_H);
+  f6.fillStyle = '#333';
+  f6.fillRect(0, H - OVERLAY_H, W, 1);
+  f6.fillStyle = COL_FX_ACCENT;
+  f6.fillRect(0, H - OVERLAY_H + 1, W, 1);
+  f6.fillStyle = '#888';
+  f6.font = '7px monospace';
+  f6.textAlign = 'center';
+  f6.textBaseline = 'top';
+  f6.fillText('ZONE 1', W / 2, H - OVERLAY_H + 6);
+  f6.fillStyle = '#fff';
+  f6.font = 'bold 14px monospace';
+  f6.fillText('190', W / 2, H - OVERLAY_H + 15);
+
+  // Auto-hide timer indicator
+  f6.fillStyle = '#FFB833';
+  f6.fillRect(0, H - 1, W * 0.7, 1); // progress bar for auto-hide
+}
+
+// ============================================================
+// ANIMATION LOOP
+// ============================================================
+let animationId = null;
+let lastTime = 0;
+
+// Signal bar animation state
+let signalAnimPhase = 0;
+
+function renderAllPageBuffers() {
+  renderPageToBuffer(0);
+  renderPageToBuffer(1);
+  renderPageToBuffer(2);
+}
+
+function animate(timestamp) {
+  const dt = timestamp - lastTime;
+  lastTime = timestamp;
+
+  // Signal bar animation (subtle pulse on NET page)
+  signalAnimPhase += dt * 0.002;
+
+  // Update transition
+  if (transition.active) {
+    transition.progress += dt / 200; // 200ms transition
+    if (transition.progress >= 1) {
+      transition.progress = 1;
+      transition.active = false;
+      state.currentPage = transition.toPage;
+      updatePageButtons();
+    }
+  }
+
+  // Update overlay animation
+  if (overlay.active) {
+    if (overlay.rising) {
+      overlay.progress += dt / 150; // 150ms rise
+      if (overlay.progress >= 1) {
+        overlay.progress = 1;
+        overlay.rising = false;
+      }
+    }
+  } else if (overlay.progress > 0) {
+    // Sliding down
+    overlay.progress -= dt / 150;
+    if (overlay.progress <= 0) {
+      overlay.progress = 0;
+    }
+  }
+
+  // Update disconnect flash
+  if (disconnectFlash.active) {
+    // Flash is driven by timer, not by animation loop dt
+  }
+
+  // Render all page buffers
+  renderAllPageBuffers();
+
+  // Composite and blit
+  blitInteractive();
+
+  animationId = requestAnimationFrame(animate);
+}
+
+// ============================================================
+// INTERACTION HANDLERS
+// ============================================================
+function goToPage(targetPage) {
+  if (transition.active) return;
+  if (targetPage === state.currentPage) return;
+
+  transition.active = true;
+  transition.fromPage = state.currentPage;
+  transition.toPage = targetPage;
+  transition.progress = 0;
+  transition.direction = targetPage > state.currentPage ? 1 : -1;
+
+  // Ensure both pages are fresh
+  renderPageToBuffer(transition.fromPage);
+  renderPageToBuffer(transition.toPage);
+}
+
+function updatePageButtons() {
+  const btns = ['btnMix', 'btnFx', 'btnNet'];
+  btns.forEach((id, i) => {
+    const el = document.getElementById(id);
+    if (i === state.currentPage) el.classList.add('active');
+    else el.classList.remove('active');
+  });
+}
+
+function triggerOverlay() {
+  overlay.paramName = 'ZONE 1';
+  overlay.paramValue = state.z1.toString();
+  overlay.active = true;
+  overlay.rising = true;
+  if (overlay.progress <= 0) overlay.progress = 0.01;
+
+  clearTimeout(overlay.timer);
+  overlay.timer = setTimeout(() => {
+    overlay.active = false;
+  }, 2000);
+}
+
+function showOverlayForParam(name, value) {
+  overlay.paramName = name;
+  overlay.paramValue = value;
+  overlay.active = true;
+  overlay.rising = true;
+  if (overlay.progress <= 0) overlay.progress = 0.01;
+
+  clearTimeout(overlay.timer);
+  overlay.timer = setTimeout(() => {
+    overlay.active = false;
+  }, 2000);
+}
+
+function triggerDisconnect() {
+  if (disconnectFlash.active) return;
+
+  disconnectFlash.active = true;
+  disconnectFlash.frame = 0;
+
+  // 6 frames: 0=red, 1=off, 2=red, 3=off, 4=red, 5=off
+  const flashInterval = setInterval(() => {
+    disconnectFlash.frame++;
+    if (disconnectFlash.frame >= 6) {
+      disconnectFlash.active = false;
+      disconnectFlash.frame = 0;
+      clearInterval(flashInterval);
+    }
+  }, 66); // ~2 frames at 30fps each
+}
+
+function toggleWifi() {
+  state.wifi = !state.wifi;
+  const el = document.getElementById('btnWifi');
+  el.classList.toggle('active');
+  if (!state.wifi) {
+    el.classList.add('warn');
+    triggerDisconnect();
+  } else {
+    el.classList.remove('warn');
+  }
+}
+
+function toggleWs() {
+  state.ws = !state.ws;
+  const el = document.getElementById('btnWs');
+  el.classList.toggle('active');
+  if (!state.ws) {
+    el.classList.add('warn');
+    triggerDisconnect();
+  } else {
+    el.classList.remove('warn');
+  }
+}
+
+// ============================================================
+// SLIDER BINDINGS
+// ============================================================
+function bindSlider(id, key, valId, overlayName) {
+  const sl = document.getElementById(id);
+  const vl = document.getElementById(valId);
+  sl.addEventListener('input', () => {
+    state[key] = parseInt(sl.value, 10);
+    vl.textContent = sl.value;
+    showOverlayForParam(overlayName, sl.value);
+  });
+}
+
+bindSlider('slZ1', 'z1', 'valZ1', 'ZONE 1');
+bindSlider('slZ2', 'z2', 'valZ2', 'ZONE 2');
+bindSlider('slZ3', 'z3', 'valZ3', 'ZONE 3');
+bindSlider('slM', 'master', 'valM', 'MASTER');
+bindSlider('slSpeed', 'speed', 'valSpeed', 'SPEED');
+
+// Signal slider
+const slSignal = document.getElementById('slSignal');
+const valSignal = document.getElementById('valSignal');
+slSignal.addEventListener('input', () => {
+  state.signal = parseInt(slSignal.value, 10);
+  valSignal.textContent = state.signal + '/4';
+  showOverlayForParam('SIGNAL', state.signal + '/4');
+});
+
+// ============================================================
+// KEYBOARD NAVIGATION
+// ============================================================
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+    e.preventDefault();
+    const next = Math.min(2, state.currentPage + 1);
+    if (next !== state.currentPage) goToPage(next);
+  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    const prev = Math.max(0, state.currentPage - 1);
+    if (prev !== state.currentPage) goToPage(prev);
+  } else if (e.key === 'd' || e.key === 'D') {
+    triggerDisconnect();
+  }
+});
+
+// Scroll wheel on interactive canvas
+const canvas4x = document.getElementById('canvas4x');
+const canvas1x = document.getElementById('canvas1x');
+
+function handleWheel(e) {
+  e.preventDefault();
+  if (transition.active) return;
+  if (e.deltaY > 0 || e.deltaX > 0) {
+    const next = Math.min(2, state.currentPage + 1);
+    if (next !== state.currentPage) goToPage(next);
+  } else if (e.deltaY < 0 || e.deltaX < 0) {
+    const prev = Math.max(0, state.currentPage - 1);
+    if (prev !== state.currentPage) goToPage(prev);
+  }
+}
+
+canvas4x.addEventListener('wheel', handleWheel, { passive: false });
+canvas1x.addEventListener('wheel', handleWheel, { passive: false });
+
+// ============================================================
+// INIT
+// ============================================================
+renderAllPageBuffers();
+renderStaticFrames();
+lastTime = performance.now();
+animationId = requestAnimationFrame(animate);
+</script>
+
+</body>
+</html>

@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zone Mixer UI Mockup — Design 02: Zone Focus</title>
+<style>
+  /* ================================================================
+     DESIGN RATIONALE — Zone Focus
+     ================================================================
+
+     Purpose:
+     This design dedicates the entire 128x128 screen to showing the
+     three zone brightness levels as large, colour-coded horizontal
+     bars. The DJ-mixer metaphor is literal — the bars behave like
+     horizontal channel faders, with width proportional to brightness.
+
+     Why this layout:
+     - At 0.85", the screen is viewed from arm's length while hands
+       are on the scroll wheels and encoders. The user needs to
+       glance down and instantly read zone state — no squinting.
+     - Three thick bars (30px each on 128px) are visible from 50cm+.
+     - Zone colour coding (cyan/green/orange) matches the LED
+       feedback on the physical scroll wheels, creating a consistent
+       visual language between the screen and the hardware.
+     - Brightness values (0-255) are overlaid directly on the bars
+       in high-contrast white text, eliminating the need for a
+       separate value display area.
+
+     Status line:
+     - A thin 14px status bar at the top shows WiFi and WebSocket
+       connection state. This is secondary information — small but
+       always present. Uses green/red dots for instant recognition.
+
+     Trade-offs:
+     - No master brightness shown — the master scroll wheel has its
+       own LED feedback, and the 3-zone bars already communicate the
+       primary information the user needs.
+     - No effect names — those are displayed on the K1 itself or the
+       iOS app. The Zone Mixer screen shows what only it can show:
+       the per-zone brightness state that maps to the physical faders.
+     - No mode indicators — the encoders have their own LED rings
+       for mode feedback. Duplicating that here wastes pixels.
+
+     Accessibility:
+     - Minimum 4.5:1 contrast ratio on all text against its
+       background. White (#FFFFFF) on dark bars achieves 10:1+.
+     - Zone labels use both colour AND text ("Z1", "Z2", "Z3") so
+       the design does not rely on colour alone.
+     - Bar width is a spatial encoding reinforcing the numerical
+       value — two independent channels for the same data.
+
+     Pixel budget (128px vertical):
+       Status bar:  14px (top)
+       Gap:          4px
+       Zone 1 bar:  30px
+       Gap:          4px
+       Zone 2 bar:  30px
+       Gap:          4px
+       Zone 3 bar:  30px
+       Gap:          4px
+       Footer:       8px (remaining)
+       Total:       128px
+
+     ================================================================ */
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  body {
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+    min-height: 100vh;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #ffffff;
+    margin-bottom: 8px;
+    letter-spacing: -0.02em;
+  }
+
+  .subtitle {
+    font-size: 0.875rem;
+    color: #8888aa;
+    margin-bottom: 32px;
+  }
+
+  .mockup-container {
+    display: flex;
+    gap: 48px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .display-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .display-label {
+    font-size: 0.75rem;
+    color: #8888aa;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  /* 4x scale display (512x512) */
+  .display-4x {
+    width: 512px;
+    height: 512px;
+    background: #000000;
+    border: 2px solid #333355;
+    border-radius: 8px;
+    position: relative;
+    overflow: hidden;
+    image-rendering: pixelated;
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.05),
+      0 8px 32px rgba(0, 0, 0, 0.5);
+  }
+
+  /* 1x inset display (128x128) */
+  .display-1x {
+    width: 128px;
+    height: 128px;
+    background: #000000;
+    border: 2px solid #333355;
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+    image-rendering: pixelated;
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.05),
+      0 4px 16px rgba(0, 0, 0, 0.5);
+  }
+
+  /* ================================================================
+     STATUS BAR — 14px tall (56px at 4x)
+     Shows WiFi and WebSocket connection state
+     ================================================================ */
+
+  .status-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 4px;
+    background: #111111;
+  }
+
+  .display-4x .status-bar {
+    height: 56px; /* 14px * 4 */
+    padding: 0 16px;
+    border-bottom: 4px solid #222222;
+  }
+
+  .display-1x .status-bar {
+    height: 14px;
+    padding: 0 4px;
+    border-bottom: 1px solid #222222;
+  }
+
+  .status-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .display-4x .status-item {
+    gap: 12px;
+  }
+
+  .status-dot {
+    border-radius: 50%;
+  }
+
+  .display-4x .status-dot {
+    width: 16px;
+    height: 16px;
+  }
+
+  .display-1x .status-dot {
+    width: 4px;
+    height: 4px;
+  }
+
+  .dot-green { background: #00cc66; }
+  .dot-red   { background: #cc3333; }
+  .dot-blue  { background: #3388ff; }
+
+  .status-text {
+    color: #888899;
+    line-height: 1;
+  }
+
+  .display-4x .status-text {
+    font-size: 28px; /* 7px * 4 */
+  }
+
+  .display-1x .status-text {
+    font-size: 7px;
+  }
+
+  /* ================================================================
+     ZONE BARS — 30px tall each (120px at 4x)
+     Three horizontal bars representing zone brightness.
+     Bar width = (brightness / 255) * 120px (leaving 4px margins)
+     ================================================================ */
+
+  .zone-bars-container {
+    position: absolute;
+    left: 0;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .display-4x .zone-bars-container {
+    top: 72px;  /* (14 + 4) * 4 = 72px */
+    gap: 16px;  /* 4px * 4 */
+    padding: 0 8px; /* 2px * 4 */
+  }
+
+  .display-1x .zone-bars-container {
+    top: 18px;  /* 14 + 4 */
+    gap: 4px;
+    padding: 0 2px;
+  }
+
+  .zone-row {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .display-4x .zone-row {
+    height: 120px; /* 30px * 4 */
+    border-radius: 8px;
+  }
+
+  .display-1x .zone-row {
+    height: 30px;
+    border-radius: 2px;
+  }
+
+  /* Bar background (dark tinted version of zone colour) */
+  .zone-row .bar-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
+
+  .zone-1 .bar-bg { background: #002222; }
+  .zone-2 .bar-bg { background: #001a0f; }
+  .zone-3 .bar-bg { background: #1a0a00; }
+
+  /* Filled portion of bar */
+  .zone-row .bar-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    transition: width 0.15s ease;
+  }
+
+  .zone-1 .bar-fill { background: #00FFFF; }
+  .zone-2 .bar-fill { background: #00FF99; }
+  .zone-3 .bar-fill { background: #FF6600; }
+
+  /* Zone label (left-aligned inside bar) */
+  .zone-label {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    font-weight: 700;
+    color: #ffffff;
+    z-index: 2;
+    text-shadow: 0 0 4px rgba(0, 0, 0, 0.9), 0 0 8px rgba(0, 0, 0, 0.7);
+    line-height: 1;
+  }
+
+  .display-4x .zone-label {
+    left: 16px;
+    font-size: 44px; /* 11px * 4 */
+  }
+
+  .display-1x .zone-label {
+    left: 4px;
+    font-size: 11px;
+  }
+
+  /* Brightness value (right-aligned inside bar) */
+  .zone-value {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    font-weight: 600;
+    color: #ffffff;
+    z-index: 2;
+    text-shadow: 0 0 4px rgba(0, 0, 0, 0.9), 0 0 8px rgba(0, 0, 0, 0.7);
+    line-height: 1;
+  }
+
+  .display-4x .zone-value {
+    right: 16px;
+    font-size: 48px; /* 12px * 4 */
+  }
+
+  .display-1x .zone-value {
+    right: 4px;
+    font-size: 12px;
+  }
+
+  /* ================================================================
+     FOOTER — Master brightness in bottom 8px
+     ================================================================ */
+
+  .footer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #0a0a0a;
+  }
+
+  .display-4x .footer {
+    height: 32px; /* 8px * 4 */
+    border-top: 4px solid #222222;
+  }
+
+  .display-1x .footer {
+    height: 8px;
+    border-top: 1px solid #222222;
+  }
+
+  .footer-text {
+    color: #aaaaaa;
+    line-height: 1;
+  }
+
+  .display-4x .footer-text {
+    font-size: 20px; /* 5px * 4 */
+    letter-spacing: 2px;
+  }
+
+  .display-1x .footer-text {
+    font-size: 5px;
+    letter-spacing: 0.5px;
+  }
+
+  .footer-text .master-val {
+    color: #ffffff;
+    font-weight: 700;
+  }
+
+  /* ================================================================
+     NOTES / ANNOTATIONS
+     ================================================================ */
+
+  .notes {
+    max-width: 640px;
+    margin-top: 48px;
+    padding: 24px;
+    background: #12122a;
+    border: 1px solid #333355;
+    border-radius: 8px;
+    line-height: 1.7;
+  }
+
+  .notes h2 {
+    font-size: 1rem;
+    color: #ffffff;
+    margin-bottom: 16px;
+    font-weight: 600;
+  }
+
+  .notes h3 {
+    font-size: 0.875rem;
+    color: #aaaacc;
+    margin-top: 16px;
+    margin-bottom: 8px;
+  }
+
+  .notes p, .notes li {
+    font-size: 0.8125rem;
+    color: #9999bb;
+  }
+
+  .notes ul {
+    padding-left: 20px;
+    margin-bottom: 8px;
+  }
+
+  .notes li {
+    margin-bottom: 4px;
+  }
+
+  .notes code {
+    background: #1e1e3a;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    color: #ddddff;
+  }
+
+  .colour-swatch {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    vertical-align: middle;
+    margin-right: 4px;
+    border: 1px solid rgba(255,255,255,0.15);
+  }
+
+  .pixel-grid {
+    margin-top: 16px;
+    font-size: 0.75rem;
+    color: #7777aa;
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  .pixel-grid th {
+    text-align: left;
+    font-weight: 500;
+    color: #aaaacc;
+    padding: 4px 8px;
+    border-bottom: 1px solid #333355;
+  }
+
+  .pixel-grid td {
+    padding: 4px 8px;
+    border-bottom: 1px solid #222244;
+  }
+
+  .pixel-grid td:last-child {
+    text-align: right;
+    font-family: 'SF Mono', monospace;
+  }
+</style>
+</head>
+<body>
+
+<h1>Design 02: Zone Focus</h1>
+<p class="subtitle">Zone Mixer / AtomS3 0.85" LCD (128 x 128) -- Three colour-coded brightness bars</p>
+
+<div class="mockup-container">
+
+  <!-- 4x SCALE DISPLAY (512x512) -->
+  <div class="display-wrapper">
+    <div class="display-label">4x Scale (512 x 512)</div>
+    <div class="display-4x">
+
+      <!-- Status bar: 14px * 4 = 56px -->
+      <div class="status-bar">
+        <div class="status-item">
+          <div class="status-dot dot-green"></div>
+          <span class="status-text">WiFi</span>
+        </div>
+        <div class="status-item">
+          <div class="status-dot dot-green"></div>
+          <span class="status-text">WS</span>
+        </div>
+      </div>
+
+      <!-- Zone bars -->
+      <div class="zone-bars-container">
+        <!-- Zone 1: Cyan, brightness 204 (80%) -->
+        <div class="zone-row zone-1">
+          <div class="bar-bg"></div>
+          <div class="bar-fill" style="width: 80%;"></div>
+          <span class="zone-label">Z1</span>
+          <span class="zone-value">204</span>
+        </div>
+
+        <!-- Zone 2: Green, brightness 140 (55%) -->
+        <div class="zone-row zone-2">
+          <div class="bar-bg"></div>
+          <div class="bar-fill" style="width: 55%;"></div>
+          <span class="zone-label">Z2</span>
+          <span class="zone-value">140</span>
+        </div>
+
+        <!-- Zone 3: Orange, brightness 51 (20%) -->
+        <div class="zone-row zone-3">
+          <div class="bar-bg"></div>
+          <div class="bar-fill" style="width: 20%;"></div>
+          <span class="zone-label">Z3</span>
+          <span class="zone-value">51</span>
+        </div>
+      </div>
+
+      <!-- Footer: master brightness -->
+      <div class="footer">
+        <span class="footer-text">MST <span class="master-val">220</span></span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 1x INSET DISPLAY (128x128) -->
+  <div class="display-wrapper">
+    <div class="display-label">1:1 Actual Size (128 x 128)</div>
+    <div class="display-1x">
+
+      <!-- Status bar: 14px -->
+      <div class="status-bar">
+        <div class="status-item">
+          <div class="status-dot dot-green"></div>
+          <span class="status-text">WiFi</span>
+        </div>
+        <div class="status-item">
+          <div class="status-dot dot-green"></div>
+          <span class="status-text">WS</span>
+        </div>
+      </div>
+
+      <!-- Zone bars -->
+      <div class="zone-bars-container">
+        <!-- Zone 1: Cyan, brightness 204 (80%) -->
+        <div class="zone-row zone-1">
+          <div class="bar-bg"></div>
+          <div class="bar-fill" style="width: 80%;"></div>
+          <span class="zone-label">Z1</span>
+          <span class="zone-value">204</span>
+        </div>
+
+        <!-- Zone 2: Green, brightness 140 (55%) -->
+        <div class="zone-row zone-2">
+          <div class="bar-bg"></div>
+          <div class="bar-fill" style="width: 55%;"></div>
+          <span class="zone-label">Z2</span>
+          <span class="zone-value">140</span>
+        </div>
+
+        <!-- Zone 3: Orange, brightness 51 (20%) -->
+        <div class="zone-row zone-3">
+          <div class="bar-bg"></div>
+          <div class="bar-fill" style="width: 20%;"></div>
+          <span class="zone-label">Z3</span>
+          <span class="zone-value">51</span>
+        </div>
+      </div>
+
+      <!-- Footer: master brightness -->
+      <div class="footer">
+        <span class="footer-text">MST <span class="master-val">220</span></span>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- DESIGN NOTES -->
+<div class="notes">
+  <h2>Design Rationale</h2>
+
+  <h3>Concept</h3>
+  <p>
+    Zone Focus dedicates the entire 128x128 screen to the three zone brightness levels.
+    The bars are the primary visual element -- thick, colour-coded, and readable at arm's
+    length while hands are on the scroll wheels. This is a "glanceable instrument" design:
+    the user looks down, sees three bars at different widths, and knows exactly where each
+    zone sits without reading numbers.
+  </p>
+
+  <h3>Colour System</h3>
+  <ul>
+    <li><span class="colour-swatch" style="background:#00FFFF"></span><code>#00FFFF</code> Zone 1 (cyan) -- matches Scroll CH0 LED</li>
+    <li><span class="colour-swatch" style="background:#00FF99"></span><code>#00FF99</code> Zone 2 (green) -- matches Scroll CH1 LED</li>
+    <li><span class="colour-swatch" style="background:#FF6600"></span><code>#FF6600</code> Zone 3 (orange) -- matches Scroll CH2 LED</li>
+    <li><span class="colour-swatch" style="background:#FFFFFF"></span><code>#FFFFFF</code> Master (white) -- in footer only</li>
+    <li>Bar backgrounds use a dark-tinted version of each zone colour for depth contrast</li>
+  </ul>
+
+  <h3>Pixel Budget</h3>
+  <table class="pixel-grid">
+    <tr><th>Element</th><th>Height (px)</th></tr>
+    <tr><td>Status bar (WiFi + WS indicators)</td><td>14</td></tr>
+    <tr><td>Gap</td><td>4</td></tr>
+    <tr><td>Zone 1 bar</td><td>30</td></tr>
+    <tr><td>Gap</td><td>4</td></tr>
+    <tr><td>Zone 2 bar</td><td>30</td></tr>
+    <tr><td>Gap</td><td>4</td></tr>
+    <tr><td>Zone 3 bar</td><td>30</td></tr>
+    <tr><td>Gap</td><td>4</td></tr>
+    <tr><td>Footer (master brightness)</td><td>8</td></tr>
+    <tr><th>Total</th><th>128</th></tr>
+  </table>
+
+  <h3>M5GFX Implementation Notes</h3>
+  <ul>
+    <li>All rendering uses <code>fillRect()</code> and <code>drawString()</code> -- no images, no sprites</li>
+    <li>Bar width = <code>(brightness * 124) / 255</code> (124px usable width with 2px margins each side)</li>
+    <li>Font: use M5GFX built-in font at size 1 (8px) for status/footer, size 2 (16px) for zone labels and values</li>
+    <li>Redraw only changed bars on each frame -- clear and refill the specific zone row</li>
+    <li>Text shadow effect: draw black text at +1,+1 offset, then white text on top</li>
+    <li>Status dots: <code>fillCircle()</code> with 2px radius</li>
+  </ul>
+
+  <h3>Readability at 0.85"</h3>
+  <ul>
+    <li>30px bars at 0.85" physical size are approximately 5mm tall -- large enough for peripheral vision</li>
+    <li>Zone labels ("Z1", "Z2", "Z3") are 11px -- legible at 40cm viewing distance</li>
+    <li>Brightness values (12px) are the largest text on screen after the bars themselves</li>
+    <li>The bar width itself is the primary information channel -- numbers are secondary confirmation</li>
+    <li>High contrast: white text on saturated colour bars with dark text shadow for readability on both filled and unfilled regions</li>
+  </ul>
+
+  <h3>State Variations</h3>
+  <ul>
+    <li><strong>Disconnected:</strong> Status dots turn red, bars dim to 30% opacity</li>
+    <li><strong>Connecting:</strong> WS dot turns blue, pulses</li>
+    <li><strong>Zone disabled:</strong> Bar fill turns grey (<code>#333333</code>), value shows "--"</li>
+    <li><strong>Zero brightness:</strong> Bar fill width = 0, value shows "0", bar background still visible</li>
+    <li><strong>Max brightness:</strong> Bar fills entire row, value shows "255"</li>
+  </ul>
+
+  <h3>Design Trade-offs</h3>
+  <ul>
+    <li>No effect names: these are available on the K1 display and iOS app. Screen space is better used for what only the mixer can show -- per-zone fader state</li>
+    <li>No master bar: master brightness is shown as a small number in the footer. The master scroll wheel has its own LED for feedback; duplicating it as a fourth bar would shrink the zone bars</li>
+    <li>No encoder mode indicators: the 8Encoder units have their own LED rings that show mode state in colour. Duplicating that information here wastes the screen's limited real estate</li>
+  </ul>
+</div>
+
+</body>
+</html>

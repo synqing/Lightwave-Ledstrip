@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zone Mixer — Design 03: Radial Meter</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 2rem 1rem;
+  }
+
+  h1 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    color: #f0f0f0;
+    margin-bottom: 0.25rem;
+  }
+
+  .subtitle {
+    font-size: 0.75rem;
+    color: #888;
+    margin-bottom: 2rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .display-row {
+    display: flex;
+    gap: 3rem;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 2.5rem;
+  }
+
+  .display-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .display-label {
+    font-size: 0.7rem;
+    color: #666;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .canvas-4x {
+    border: 1px solid #333;
+    border-radius: 8px;
+    image-rendering: pixelated;
+  }
+
+  .canvas-1x {
+    border: 1px solid #444;
+    border-radius: 2px;
+    image-rendering: pixelated;
+  }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    width: 100%;
+    max-width: 520px;
+    margin-bottom: 2.5rem;
+    background: #12122a;
+    border: 1px solid #2a2a4a;
+    border-radius: 8px;
+    padding: 1.25rem;
+  }
+
+  .control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .control-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .control-row label {
+    font-size: 0.7rem;
+    color: #999;
+    width: 110px;
+    flex-shrink: 0;
+    letter-spacing: 0.04em;
+  }
+
+  .control-row input[type="range"] {
+    flex: 1;
+    accent-color: var(--accent, #888);
+    height: 4px;
+  }
+
+  .control-row .value {
+    font-size: 0.7rem;
+    color: #aaa;
+    width: 36px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .control-row input[type="checkbox"] {
+    accent-color: var(--accent, #888);
+  }
+
+  .control-row select {
+    background: #1a1a3a;
+    color: #ccc;
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 0.2rem 0.4rem;
+    font-size: 0.7rem;
+    font-family: inherit;
+  }
+
+  .divider {
+    height: 1px;
+    background: #2a2a4a;
+    margin: 0.25rem 0;
+  }
+
+  /* Rationale */
+  .rationale {
+    max-width: 640px;
+    background: #12122a;
+    border: 1px solid #2a2a4a;
+    border-radius: 8px;
+    padding: 1.5rem;
+    font-size: 0.78rem;
+    line-height: 1.6;
+    color: #aaa;
+  }
+
+  .rationale h2 {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #e0e0e0;
+    margin-bottom: 0.75rem;
+    letter-spacing: 0.06em;
+  }
+
+  .rationale h3 {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #ccc;
+    margin-top: 1rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .rationale ul {
+    padding-left: 1.2rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .rationale li {
+    margin-bottom: 0.25rem;
+  }
+
+  .rationale code {
+    background: #1e1e3e;
+    padding: 0.1rem 0.35rem;
+    border-radius: 3px;
+    font-size: 0.72rem;
+    color: #ddd;
+  }
+
+  .colour-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    vertical-align: middle;
+    margin-right: 3px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Design 03 — Radial Meter</h1>
+<p class="subtitle">Zone Mixer &middot; AtomS3 0.85" LCD &middot; 128x128</p>
+
+<div class="display-row">
+  <div class="display-wrapper">
+    <canvas id="canvas4x" class="canvas-4x" width="512" height="512"></canvas>
+    <span class="display-label">4x scale (512 x 512)</span>
+  </div>
+  <div class="display-wrapper">
+    <canvas id="canvas1x" class="canvas-1x" width="128" height="128"></canvas>
+    <span class="display-label">1:1 actual (128 x 128)</span>
+  </div>
+</div>
+
+<!-- Interactive controls -->
+<div class="controls">
+  <div class="control-group">
+    <div class="control-row" style="--accent: #00FFFF;">
+      <label><span class="colour-swatch" style="background:#00FFFF;"></span>Zone 1 brightness</label>
+      <input type="range" id="zone1" min="0" max="255" value="200">
+      <span class="value" id="zone1Val">200</span>
+    </div>
+    <div class="control-row" style="--accent: #00FF99;">
+      <label><span class="colour-swatch" style="background:#00FF99;"></span>Zone 2 brightness</label>
+      <input type="range" id="zone2" min="0" max="255" value="140">
+      <span class="value" id="zone2Val">140</span>
+    </div>
+    <div class="control-row" style="--accent: #FF6600;">
+      <label><span class="colour-swatch" style="background:#FF6600;"></span>Zone 3 brightness</label>
+      <input type="range" id="zone3" min="0" max="255" value="80">
+      <span class="value" id="zone3Val">80</span>
+    </div>
+    <div class="control-row" style="--accent: #FFFFFF;">
+      <label><span class="colour-swatch" style="background:#FFFFFF;"></span>Master brightness</label>
+      <input type="range" id="master" min="0" max="255" value="220">
+      <span class="value" id="masterVal">220</span>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="control-group">
+    <div class="control-row">
+      <label>Connection</label>
+      <select id="connStatus">
+        <option value="connected">Connected</option>
+        <option value="disconnected">Disconnected</option>
+      </select>
+    </div>
+    <div class="control-row">
+      <label>Effect name</label>
+      <select id="effectName">
+        <option value="Pulse Drift">Pulse Drift</option>
+        <option value="Nova Bloom">Nova Bloom</option>
+        <option value="Chroma Wave">Chroma Wave</option>
+        <option value="Spectral Haze">Spectral Haze</option>
+        <option value="Ember Glow">Ember Glow</option>
+        <option value="3 Zones">3 Zones</option>
+      </select>
+    </div>
+    <div class="control-row">
+      <label>Animate</label>
+      <input type="checkbox" id="animate">
+      <span style="font-size:0.65rem; color:#666;">Gently oscillate values</span>
+    </div>
+  </div>
+</div>
+
+<!-- Design rationale -->
+<div class="rationale">
+  <h2>Design Rationale</h2>
+
+  <h3>Concept</h3>
+  <p>
+    The Radial Meter uses concentric arc gauges radiating outward from a central
+    connection indicator. Each arc represents a brightness level, with sweep angle
+    proportional to the 0-255 value. The layout maps naturally to the Zone Mixer's
+    hierarchy: zones nested inside the master, the whole system's health at the centre.
+  </p>
+
+  <h3>Why arcs on a tiny screen</h3>
+  <ul>
+    <li><strong>Peripheral readability.</strong> Arc length is easier to judge at a glance
+      than bar height, particularly at 128px where bars become indistinguishable slivers.
+      A 270-degree sweep gives a 100-pixel-long visual range even on a 40px-radius ring.</li>
+    <li><strong>Information density.</strong> Four independent channels occupy concentric
+      bands without overlapping. No axis labels needed &mdash; colour IS identity.</li>
+    <li><strong>Orientation agnostic.</strong> The display reads correctly from any viewing
+      angle on a desk, unlike vertical bars that assume a fixed up direction.</li>
+  </ul>
+
+  <h3>Visual hierarchy</h3>
+  <ul>
+    <li><strong>Centre dot</strong> &mdash; connection status. Most critical info, most
+      prominent position. Green <span class="colour-swatch" style="background:#00FF44;"></span>
+      or red <span class="colour-swatch" style="background:#FF2222;"></span>, pulsing when
+      disconnected to draw attention.</li>
+    <li><strong>Inner arcs</strong> (zones 1-3) &mdash; the primary operational values.
+      Ordered inside-out matching the zone numbering convention. Each uses its assigned
+      colour: cyan <span class="colour-swatch" style="background:#00FFFF;"></span>,
+      green <span class="colour-swatch" style="background:#00FF99;"></span>,
+      orange <span class="colour-swatch" style="background:#FF6600;"></span>.</li>
+    <li><strong>Outermost ring</strong> (master) &mdash; white arc that frames everything.
+      Master is the envelope &mdash; it wraps the zones, which is exactly what it does
+      functionally.</li>
+    <li><strong>Bottom text</strong> &mdash; effect name or zone count. Secondary info
+      that does not compete with the arcs.</li>
+  </ul>
+
+  <h3>Arc geometry</h3>
+  <ul>
+    <li>Arcs sweep 270 degrees (from 135 deg to 405 deg, i.e. bottom-left to bottom-right,
+      passing through top). The 90-degree gap at the bottom leaves space for the text label
+      and creates a natural "gauge" feel.</li>
+    <li>Track width is 8px at 128px scale (scaled to 32px at 4x). Gaps between rings
+      are 3px. This gives clear separation without wasting the limited radial space.</li>
+    <li>Dim track backgrounds (<code>rgba(colour, 0.12)</code>) show the full sweep range
+      so the user can judge how far each value is from maximum.</li>
+  </ul>
+
+  <h3>Colour system</h3>
+  <ul>
+    <li>Zone colours match the hardware LED assignments from the design doc:
+      CH0 cyan, CH1 green, CH2 orange, CH3 white.</li>
+    <li>Arc brightness is constant (full saturation) regardless of the value &mdash; the
+      sweep angle communicates magnitude. Dimming the arc colour would make it unreadable
+      on the tiny screen.</li>
+    <li>Background track uses 12% opacity of the arc colour so the full ring is subtly
+      visible without competing with the active sweep.</li>
+  </ul>
+
+  <h3>LVGL implementation notes</h3>
+  <ul>
+    <li>LVGL has <code>lv_arc</code> widget natively. Four arcs + one circle + one label
+      fits comfortably in the render pipeline.</li>
+    <li>Arc anti-aliasing is built in. On the real AtomS3 ST7789 display at 128x128,
+      the pixel density (213 PPI effective) makes the arcs look smooth.</li>
+    <li>The connection dot can be an <code>lv_obj</code> with <code>lv_obj_set_style_radius(LV_RADIUS_CIRCLE)</code>
+      and a simple colour toggle. Pulsing via <code>lv_anim_t</code> on opacity.</li>
+    <li>Text label uses <code>lv_label</code> with <code>LV_LABEL_LONG_SCROLL_CIRCULAR</code>
+      for effect names that exceed the available width.</li>
+  </ul>
+
+  <h3>Constraints met</h3>
+  <ul>
+    <li>128x128 pixel canvas, black background</li>
+    <li>All four brightness channels visible simultaneously</li>
+    <li>Connection status immediately visible</li>
+    <li>Zone numbering: 1-indexed (Zone 1, Zone 2, Zone 3) &mdash; no Zone 0</li>
+    <li>Colour assignments match hardware: cyan, green, orange, white</li>
+  </ul>
+</div>
+
+<script>
+// ============================================================
+// Zone Mixer — Design 03: Radial Meter
+// Canvas-rendered concentric arc gauges for AtomS3 128x128
+// ============================================================
+
+const SIZE = 128;
+const SCALE = 4;
+
+const canvas4x = document.getElementById('canvas4x');
+const canvas1x = document.getElementById('canvas1x');
+const ctx4 = canvas4x.getContext('2d');
+const ctx1 = canvas1x.getContext('2d');
+
+// --- Colour definitions ---
+const COLOURS = {
+  zone1:    '#00FFFF',  // cyan
+  zone2:    '#00FF99',  // green
+  zone3:    '#FF6600',  // orange
+  master:   '#FFFFFF',  // white
+  connOk:   '#00FF44',  // bright green
+  connFail: '#FF2222',  // red
+  bg:       '#000000',
+  trackDim: 0.12,       // alpha for background track
+  textDim:  '#666666',
+};
+
+// --- Arc geometry (all values at 128px native scale) ---
+const CX = 64;           // centre X
+const CY = 60;           // centre Y — shifted up slightly to make room for text
+const ARC_WIDTH = 8;     // ring thickness
+const ARC_GAP = 3;       // gap between rings
+const DOT_RADIUS = 7;    // connection indicator radius
+
+// Radii (inner edge of each arc, from inside out)
+const R_ZONE1  = 19;
+const R_ZONE2  = R_ZONE1 + ARC_WIDTH + ARC_GAP;   // 30
+const R_ZONE3  = R_ZONE2 + ARC_WIDTH + ARC_GAP;   // 41
+const R_MASTER = R_ZONE3 + ARC_WIDTH + ARC_GAP;   // 52
+
+// Sweep angles — 270 degree range, gap at the bottom
+const ARC_START = (135 * Math.PI) / 180;   // bottom-left
+const ARC_END   = (405 * Math.PI) / 180;   // bottom-right (wrap past 360)
+const ARC_RANGE = ARC_END - ARC_START;     // 270 degrees in radians
+
+// --- State ---
+let state = {
+  zone1: 200,
+  zone2: 140,
+  zone3: 80,
+  master: 220,
+  connected: true,
+  effectName: 'Pulse Drift',
+  animating: false,
+  animTime: 0,
+};
+
+// --- Helpers ---
+
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return { r, g, b };
+}
+
+function rgbaStr(hex, alpha) {
+  const { r, g, b } = hexToRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function valueToAngle(value) {
+  // Map 0-255 to ARC_START..ARC_END
+  return ARC_START + (value / 255) * ARC_RANGE;
+}
+
+// --- Drawing (operates on an offscreen 128x128, then scales) ---
+
+const offscreen = document.createElement('canvas');
+offscreen.width = SIZE;
+offscreen.height = SIZE;
+const ctxOff = offscreen.getContext('2d');
+
+function drawArc(ctx, cx, cy, innerR, width, startAngle, endAngle, colour, alpha) {
+  const midR = innerR + width / 2;
+  ctx.beginPath();
+  ctx.arc(cx, cy, midR, startAngle, endAngle, false);
+  ctx.strokeStyle = alpha < 1 ? rgbaStr(colour, alpha) : colour;
+  ctx.lineWidth = width;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+}
+
+function drawGlowArc(ctx, cx, cy, innerR, width, startAngle, endAngle, colour) {
+  // Outer glow layer
+  const midR = innerR + width / 2;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, midR, startAngle, endAngle, false);
+  ctx.strokeStyle = rgbaStr(colour, 0.25);
+  ctx.lineWidth = width + 4;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+  ctx.restore();
+
+  // Main arc
+  drawArc(ctx, cx, cy, innerR, width, startAngle, endAngle, colour, 1.0);
+}
+
+function drawConnectionDot(ctx, cx, cy, connected, time) {
+  const colour = connected ? COLOURS.connOk : COLOURS.connFail;
+
+  // Pulse effect when disconnected
+  let dotR = DOT_RADIUS;
+  let alpha = 1.0;
+  if (!connected) {
+    const pulse = 0.5 + 0.5 * Math.sin(time * 4);
+    alpha = 0.4 + 0.6 * pulse;
+    dotR = DOT_RADIUS * (0.85 + 0.15 * pulse);
+  }
+
+  // Glow
+  const gradient = ctx.createRadialGradient(cx, cy, dotR * 0.2, cx, cy, dotR + 4);
+  gradient.addColorStop(0, rgbaStr(colour, 0.6 * alpha));
+  gradient.addColorStop(0.6, rgbaStr(colour, 0.2 * alpha));
+  gradient.addColorStop(1, rgbaStr(colour, 0));
+  ctx.beginPath();
+  ctx.arc(cx, cy, dotR + 4, 0, Math.PI * 2);
+  ctx.fillStyle = gradient;
+  ctx.fill();
+
+  // Solid dot
+  ctx.beginPath();
+  ctx.arc(cx, cy, dotR, 0, Math.PI * 2);
+  ctx.fillStyle = rgbaStr(colour, alpha);
+  ctx.fill();
+}
+
+function drawBottomText(ctx, text) {
+  ctx.font = '9px monospace';
+  ctx.fillStyle = COLOURS.textDim;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(text, CX, SIZE - 4);
+}
+
+function drawTickMarks(ctx, cx, cy, innerR, width) {
+  // Small tick marks at 0%, 50%, 100% positions on the outermost arc
+  const outerR = innerR + width + 2;
+  const ticks = [0, 0.5, 1.0];
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+
+  for (const t of ticks) {
+    const angle = ARC_START + t * ARC_RANGE;
+    const x = cx + Math.cos(angle) * outerR;
+    const y = cy + Math.sin(angle) * outerR;
+    ctx.beginPath();
+    ctx.arc(x, y, 1, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function render(time) {
+  const ctx = ctxOff;
+
+  // Clear to black
+  ctx.fillStyle = COLOURS.bg;
+  ctx.fillRect(0, 0, SIZE, SIZE);
+
+  // --- Background tracks (dim full arcs) ---
+  drawArc(ctx, CX, CY, R_ZONE1,  ARC_WIDTH, ARC_START, ARC_END, COLOURS.zone1,  COLOURS.trackDim);
+  drawArc(ctx, CX, CY, R_ZONE2,  ARC_WIDTH, ARC_START, ARC_END, COLOURS.zone2,  COLOURS.trackDim);
+  drawArc(ctx, CX, CY, R_ZONE3,  ARC_WIDTH, ARC_START, ARC_END, COLOURS.zone3,  COLOURS.trackDim);
+  drawArc(ctx, CX, CY, R_MASTER, ARC_WIDTH, ARC_START, ARC_END, COLOURS.master, COLOURS.trackDim);
+
+  // --- Tick marks on master ring ---
+  drawTickMarks(ctx, CX, CY, R_MASTER, ARC_WIDTH);
+
+  // --- Active value arcs (with glow) ---
+  if (state.zone1 > 2) {
+    drawGlowArc(ctx, CX, CY, R_ZONE1, ARC_WIDTH,
+      ARC_START, valueToAngle(state.zone1), COLOURS.zone1);
+  }
+  if (state.zone2 > 2) {
+    drawGlowArc(ctx, CX, CY, R_ZONE2, ARC_WIDTH,
+      ARC_START, valueToAngle(state.zone2), COLOURS.zone2);
+  }
+  if (state.zone3 > 2) {
+    drawGlowArc(ctx, CX, CY, R_ZONE3, ARC_WIDTH,
+      ARC_START, valueToAngle(state.zone3), COLOURS.zone3);
+  }
+  if (state.master > 2) {
+    drawGlowArc(ctx, CX, CY, R_MASTER, ARC_WIDTH,
+      ARC_START, valueToAngle(state.master), COLOURS.master);
+  }
+
+  // --- Connection indicator dot ---
+  drawConnectionDot(ctx, CX, CY, state.connected, time);
+
+  // --- Bottom text ---
+  drawBottomText(ctx, state.effectName);
+
+  // --- Blit to display canvases ---
+
+  // 4x scale
+  ctx4.imageSmoothingEnabled = false;
+  ctx4.clearRect(0, 0, 512, 512);
+  ctx4.drawImage(offscreen, 0, 0, 512, 512);
+
+  // 1:1
+  ctx1.imageSmoothingEnabled = false;
+  ctx1.clearRect(0, 0, 128, 128);
+  ctx1.drawImage(offscreen, 0, 0);
+}
+
+// --- Animation loop ---
+
+let animFrame = null;
+
+function loop(timestamp) {
+  const time = timestamp / 1000;
+  state.animTime = time;
+
+  if (state.animating) {
+    // Gentle sine oscillation on each channel
+    state.zone1  = Math.round(140 + 80 * Math.sin(time * 0.7));
+    state.zone2  = Math.round(120 + 100 * Math.sin(time * 0.5 + 1.2));
+    state.zone3  = Math.round(100 + 90 * Math.sin(time * 0.9 + 2.5));
+    state.master = Math.round(180 + 60 * Math.sin(time * 0.3 + 0.8));
+
+    // Sync sliders
+    document.getElementById('zone1').value = state.zone1;
+    document.getElementById('zone2').value = state.zone2;
+    document.getElementById('zone3').value = state.zone3;
+    document.getElementById('master').value = state.master;
+    document.getElementById('zone1Val').textContent = state.zone1;
+    document.getElementById('zone2Val').textContent = state.zone2;
+    document.getElementById('zone3Val').textContent = state.zone3;
+    document.getElementById('masterVal').textContent = state.master;
+  }
+
+  render(time);
+  animFrame = requestAnimationFrame(loop);
+}
+
+// --- Control bindings ---
+
+function bindSlider(id, key) {
+  const slider = document.getElementById(id);
+  const valSpan = document.getElementById(id + 'Val');
+  slider.addEventListener('input', () => {
+    state[key] = parseInt(slider.value, 10);
+    valSpan.textContent = slider.value;
+  });
+}
+
+bindSlider('zone1', 'zone1');
+bindSlider('zone2', 'zone2');
+bindSlider('zone3', 'zone3');
+bindSlider('master', 'master');
+
+document.getElementById('connStatus').addEventListener('change', (e) => {
+  state.connected = e.target.value === 'connected';
+});
+
+document.getElementById('effectName').addEventListener('change', (e) => {
+  state.effectName = e.target.value;
+});
+
+document.getElementById('animate').addEventListener('change', (e) => {
+  state.animating = e.target.checked;
+  if (!state.animating) {
+    // Restore slider values when animation stops
+    document.getElementById('zone1').value = state.zone1;
+    document.getElementById('zone2').value = state.zone2;
+    document.getElementById('zone3').value = state.zone3;
+    document.getElementById('master').value = state.master;
+  }
+});
+
+// --- Start ---
+animFrame = requestAnimationFrame(loop);
+</script>
+</body>
+</html>

@@ -27,21 +27,16 @@ namespace hw {
     constexpr uint8_t CH_SCROLL_M = 5;  // Master brightness
 
     // Device I2C addresses
-    constexpr uint8_t ENCODER_A_ADDR = 0x42;  // Non-default (was Tab5 Unit A)
-    constexpr uint8_t ENCODER_B_ADDR = 0x41;  // Default
-    constexpr uint8_t SCROLL_ADDR    = 0x40;  // Default (all Scroll units)
-
-    // Unit-Scroll registers
-    constexpr uint8_t SCROLL_REG_ENCODER = 0x10;
-    constexpr uint8_t SCROLL_REG_BUTTON  = 0x20;
-    constexpr uint8_t SCROLL_REG_LED     = 0x30;
-    constexpr uint8_t SCROLL_REG_INC     = 0x50;
+    constexpr uint8_t ENCODER_A_ADDR   = 0x42;  // Non-default (was Tab5 Unit A)
+    constexpr uint8_t ENCODER_B_ADDR   = 0x41;  // Default
+    constexpr uint8_t SCROLL_I2C_ADDR  = 0x40;  // Default (all Scroll units)
+    // NOTE: "SCROLL_ADDR" collides with #define in M5UnitScroll.h — use SCROLL_I2C_ADDR
 
     // Zone colours (1-indexed: Zone 1, Zone 2, Zone 3)
     constexpr uint32_t ZONE_COLOUR[3] = {
-        0x00FFFF,  // Zone 1: Cyan (innermost)
-        0x00FF99,  // Zone 2: Green (middle)
-        0xFF6600,  // Zone 3: Orange (outermost)
+        0xFF4444,  // Zone 1: Red (innermost)
+        0x44FF44,  // Zone 2: Green (middle)
+        0x4488FF,  // Zone 3: Blue (outermost)
     };
     constexpr uint32_t MASTER_COLOUR = 0xFFFFFF;
 

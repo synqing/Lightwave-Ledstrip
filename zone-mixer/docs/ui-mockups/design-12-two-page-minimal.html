@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zone Mixer — Design 12: Two-Page Minimal</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #111;
+    color: #ccc;
+    font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+    min-height: 100vh;
+  }
+  h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #FFB000;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+  .subtitle {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 32px;
+    letter-spacing: 0.5px;
+  }
+  .states-row {
+    display: flex;
+    gap: 48px;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+  }
+  .state-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .state-label {
+    font-size: 11px;
+    color: #888;
+    margin-bottom: 8px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    text-align: center;
+  }
+  .state-label span {
+    color: #555;
+    text-transform: none;
+  }
+  canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    border: 1px solid #222;
+    cursor: pointer;
+  }
+  .controls {
+    margin-top: 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    max-width: 720px;
+    width: 100%;
+  }
+  .controls h2 {
+    font-size: 13px;
+    color: #FFB000;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .control-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+    width: 100%;
+  }
+  .control-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .control-group label {
+    font-size: 10px;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  button {
+    background: #1a1a1a;
+    color: #aaa;
+    border: 1px solid #333;
+    padding: 6px 14px;
+    font-family: inherit;
+    font-size: 11px;
+    cursor: pointer;
+    border-radius: 3px;
+    transition: all 0.15s ease;
+  }
+  button:hover {
+    background: #252525;
+    color: #ccc;
+    border-color: #444;
+  }
+  button.active {
+    background: #2a2215;
+    color: #FFB000;
+    border-color: #4a3a1a;
+  }
+  input[type="range"] {
+    width: 100px;
+    accent-color: #FFB000;
+  }
+  .rationale {
+    max-width: 680px;
+    margin-top: 48px;
+    padding: 24px;
+    background: #0d0d0d;
+    border: 1px solid #1a1a1a;
+    border-radius: 6px;
+    line-height: 1.7;
+  }
+  .rationale h2 {
+    font-size: 13px;
+    color: #FFB000;
+    margin-bottom: 12px;
+    letter-spacing: 0.5px;
+  }
+  .rationale h3 {
+    font-size: 11px;
+    color: #888;
+    margin: 16px 0 6px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .rationale p, .rationale li {
+    font-size: 12px;
+    color: #777;
+  }
+  .rationale ul {
+    padding-left: 16px;
+  }
+  .rationale li {
+    margin-bottom: 4px;
+  }
+  .rationale code {
+    background: #1a1a1a;
+    padding: 1px 5px;
+    border-radius: 2px;
+    color: #999;
+    font-size: 11px;
+  }
+  .colour-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    vertical-align: middle;
+    margin-right: 3px;
+    border: 1px solid #333;
+  }
+  .transition-diagram {
+    margin-top: 48px;
+    padding: 24px;
+    background: #0d0d0d;
+    border: 1px solid #1a1a1a;
+    border-radius: 6px;
+    max-width: 680px;
+    width: 100%;
+  }
+  .transition-diagram h2 {
+    font-size: 13px;
+    color: #FFB000;
+    margin-bottom: 8px;
+    letter-spacing: 0.5px;
+  }
+  .transition-diagram p {
+    font-size: 12px;
+    color: #666;
+    line-height: 1.6;
+    margin-bottom: 16px;
+  }
+  .flow-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+  .flow-box {
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .flow-box.state {
+    background: #1a2332;
+    border: 1px solid #2a3a4a;
+    color: #6ba3d6;
+  }
+  .flow-box.event {
+    background: #2a2215;
+    border: 1px solid #4a3a1a;
+    color: #d4a84a;
+    font-style: italic;
+    font-weight: 400;
+  }
+  .flow-box.timeout {
+    background: #1a1a22;
+    border: 1px solid #2a2a3a;
+    color: #8888bb;
+    font-style: italic;
+    font-weight: 400;
+  }
+  .flow-arrow {
+    color: #444;
+    font-size: 16px;
+  }
+</style>
+</head>
+<body>
+
+<h1>ZONE MIXER &mdash; DESIGN 12</h1>
+<p class="subtitle">Two-Page Minimal &middot; 128&times;128 AtomS3 LCD &middot; 4&times; scale</p>
+
+<div class="states-row">
+  <div class="state-block">
+    <span class="state-label">Page 1: MIX <span>— performance page</span></span>
+    <canvas id="c_mix" width="512" height="512"></canvas>
+  </div>
+  <div class="state-block">
+    <span class="state-label">Page 2: INFO <span>— status check</span></span>
+    <canvas id="c_info" width="512" height="512"></canvas>
+  </div>
+  <div class="state-block">
+    <span class="state-label">Overlay <span>— encoder turn</span></span>
+    <canvas id="c_overlay" width="512" height="512"></canvas>
+  </div>
+</div>
+
+<!-- Interactive Controls -->
+<div class="controls">
+  <h2>Interactive Controls</h2>
+  <div class="control-row">
+    <div class="control-group">
+      <label>Zone 1 Brightness</label>
+      <input type="range" id="sl_z1" min="0" max="100" value="85">
+    </div>
+    <div class="control-group">
+      <label>Zone 2 Brightness</label>
+      <input type="range" id="sl_z2" min="0" max="100" value="62">
+    </div>
+    <div class="control-group">
+      <label>Zone 3 Brightness</label>
+      <input type="range" id="sl_z3" min="0" max="100" value="41">
+    </div>
+  </div>
+  <div class="control-row">
+    <div class="control-group">
+      <label>Master</label>
+      <input type="range" id="sl_master" min="0" max="100" value="72">
+    </div>
+    <div class="control-group">
+      <label>Speed</label>
+      <input type="range" id="sl_speed" min="0" max="100" value="55">
+    </div>
+  </div>
+  <div class="control-row">
+    <div class="control-group">
+      <label>WiFi</label>
+      <button id="btn_wifi" class="active">Connected</button>
+    </div>
+    <div class="control-group">
+      <label>WebSocket</label>
+      <button id="btn_ws" class="active">Connected</button>
+    </div>
+    <div class="control-group">
+      <label>Zones</label>
+      <button id="btn_zones" class="active">Enabled</button>
+    </div>
+    <div class="control-group">
+      <label>EdgeMixer</label>
+      <button id="btn_edge">Toggle</button>
+    </div>
+  </div>
+  <div class="control-row">
+    <div class="control-group">
+      <label>Overlay Parameter</label>
+      <button id="btn_ov_z1">Z1 Bright</button>
+      <button id="btn_ov_z2">Z2 Bright</button>
+      <button id="btn_ov_z3">Z3 Bright</button>
+      <button id="btn_ov_master">Master</button>
+      <button id="btn_ov_speed" class="active">Speed</button>
+    </div>
+  </div>
+</div>
+
+<!-- Transition Diagram -->
+<div class="transition-diagram">
+  <h2>Page Navigation</h2>
+  <p>Two pages only. Button press cycles between them. Overlay appears on any encoder turn regardless of active page.</p>
+
+  <div class="flow-row">
+    <div class="flow-box state">MIX page</div>
+    <span class="flow-arrow">&rarr;</span>
+    <div class="flow-box event">button press</div>
+    <span class="flow-arrow">&rarr;</span>
+    <div class="flow-box state">INFO page</div>
+    <span class="flow-arrow">&rarr;</span>
+    <div class="flow-box event">button press</div>
+    <span class="flow-arrow">&rarr;</span>
+    <div class="flow-box state">MIX page</div>
+  </div>
+
+  <div class="flow-row">
+    <div class="flow-box state">Any page</div>
+    <span class="flow-arrow">&rarr;</span>
+    <div class="flow-box event">encoder turn</div>
+    <span class="flow-arrow">&rarr;</span>
+    <div class="flow-box state">Overlay shown</div>
+    <span class="flow-arrow">&rarr;</span>
+    <div class="flow-box timeout">2s no input</div>
+    <span class="flow-arrow">&rarr;</span>
+    <div class="flow-box state">Previous page</div>
+  </div>
+</div>
+
+<!-- Design Rationale -->
+<div class="rationale">
+  <h2>Design Rationale</h2>
+
+  <h3>Philosophy</h3>
+  <p>
+    Two pages cover 95% of live performance needs. The MIX page is a complete
+    cockpit &mdash; zone brightness, master, and speed are all visible at once.
+    The INFO page is a diagnostic glance checked between sets. Fewer pages means
+    less button fumbling in dark venues where every mispress costs attention.
+  </p>
+
+  <h3>Colour System</h3>
+  <ul>
+    <li><span class="colour-swatch" style="background:#FFB000"></span><code>#FFB000</code> &mdash; Amber accent. Page titles, effect name, active indicators.</li>
+    <li><span class="colour-swatch" style="background:#FF4444"></span><code>#FF4444</code> &mdash; Zone 1. Warm red, strongest visual weight.</li>
+    <li><span class="colour-swatch" style="background:#44FF44"></span><code>#44FF44</code> &mdash; Zone 2. Green, maximum contrast against Zone 1.</li>
+    <li><span class="colour-swatch" style="background:#4488FF"></span><code>#4488FF</code> &mdash; Zone 3 / Speed. Cool blue, completes the RGB triad.</li>
+    <li><span class="colour-swatch" style="background:#FFFFFF"></span><code>#FFFFFF</code> &mdash; Master bar. White distinguishes global from per-zone.</li>
+    <li><span class="colour-swatch" style="background:#333333"></span><code>#333</code> &mdash; Bar track backgrounds. Visible without competing with fills.</li>
+    <li><span class="colour-swatch" style="background:#22CC44"></span><code>#22CC44</code> &mdash; Connected / enabled status. Muted green to avoid distraction.</li>
+    <li><span class="colour-swatch" style="background:#CC2222"></span><code>#CC2222</code> &mdash; Disconnected / disabled status.</li>
+  </ul>
+
+  <h3>MIX Page Layout</h3>
+  <ul>
+    <li><strong>y=0-12 Header:</strong> Page title "MIX" in amber with speed value in top-right corner. Dual purpose: header + always-visible speed readout.</li>
+    <li><strong>y=14-15 Separator:</strong> 1px line divides header from content.</li>
+    <li><strong>y=18-95 Zone Bars:</strong> Three zone rows at 26px each. Zone number, full-width bar, and numeric value. Generous vertical spacing improves glanceability under stage lighting.</li>
+    <li><strong>y=97 Separator:</strong> Divides zones from master.</li>
+    <li><strong>y=100-118 Master:</strong> White bar spans full width with "M" label. Visually distinct from coloured zone bars. Larger than per-zone bars to reflect hierarchical importance.</li>
+    <li><strong>y=122-127 Page Dots:</strong> Two dots centred at bottom. Active page = white, inactive = <code>#333</code>. Minimal navigation affordance.</li>
+  </ul>
+
+  <h3>INFO Page Layout</h3>
+  <ul>
+    <li><strong>y=0-12 Header:</strong> Page title "INFO" in amber. Immediately identifies the diagnostic page.</li>
+    <li><strong>y=18-34 Connection:</strong> WiFi and WS status with coloured dots and text labels. Binary state is instantly readable.</li>
+    <li><strong>y=42-58 Effect:</strong> Current effect name in amber on two rows if needed. This is the primary diagnostic: "what is playing?"</li>
+    <li><strong>y=66-82 EdgeMixer:</strong> Mode label with current state. Shows whether EdgeMixer is BLEND, EDGE, or OFF.</li>
+    <li><strong>y=90-106 Zones:</strong> Zone count and enabled/disabled state. A quick confirmation that the correct zone configuration is active.</li>
+    <li><strong>y=122-127 Page Dots:</strong> Same two-dot indicator, second dot active.</li>
+  </ul>
+
+  <h3>Overlay Behaviour</h3>
+  <p>
+    When any encoder is turned, the overlay appears immediately on top of whatever
+    page is showing. It displays: the parameter name (e.g. "ZONE 1 BRIGHT"), the
+    new value at 48px height for visibility across the stage, and a zone-coloured
+    accent bar at the bottom. After 2 seconds of no input, the overlay fades and
+    the previous page resumes. The overlay uses a semi-transparent dark background
+    (<code>#0a0a0a</code> at ~90% opacity simulated) so the operator retains a
+    faint sense of the underlying page.
+  </p>
+
+  <h3>Accessibility on Hardware</h3>
+  <p>
+    All text exceeds 7:1 contrast ratio against <code>#0a0a0a</code>. Zone colours
+    use the red/green/blue triad which remains distinguishable under common colour
+    vision deficiencies. Numeric values alongside bars provide redundant encoding.
+    The two-page design itself is an accessibility feature: fewer pages means fewer
+    chances to get lost in the interface under pressure.
+  </p>
+</div>
+
+<script>
+// ============================================================
+//  Zone Mixer — Design 12: Two-Page Minimal
+//  128x128 pixel canvas for AtomS3 0.85" LCD
+// ============================================================
+
+const W = 128;
+const H = 128;
+
+// ── Colour palette ──────────────────────────────────────────
+const C = {
+  bg:       '#0a0a0a',
+  barBg:    '#333333',
+  barBdr:   '#222222',
+  sep:      '#1a1a1a',
+  sepFaint: '#141414',
+  amber:    '#FFB000',
+  amberDim: '#7A5500',
+  white:    '#FFFFFF',
+  dimWhite: '#999999',
+  dimGrey:  '#555555',
+  darkGrey: '#2a2a2a',
+  zone1:    '#FF4444',
+  zone2:    '#44FF44',
+  zone3:    '#4488FF',
+  green:    '#22CC44',
+  red:      '#CC2222',
+  redDim:   '#661111',
+  blue:     '#4488FF',
+  dotActive:'#FFFFFF',
+  dotInact: '#333333',
+  overlayBg:'#0a0a0a',
+};
+
+// ── State ───────────────────────────────────────────────────
+const state = {
+  effectName: 'Chromatic Pulse',
+  wifiConnected: true,
+  wsConnected: true,
+  zones: [
+    { brightness: 85, colour: C.zone1, label: 'ZONE 1' },
+    { brightness: 62, colour: C.zone2, label: 'ZONE 2' },
+    { brightness: 41, colour: C.zone3, label: 'ZONE 3' },
+  ],
+  masterBrightness: 72,
+  speed: 55,
+  zonesEnabled: true,
+  edgeMixerMode: 'EDGE',
+  zoneCount: 3,
+  // Overlay state
+  overlay: {
+    param: 'SPEED',
+    value: 55,
+    colour: C.blue,
+  },
+};
+
+// ── 5x7 Bitmap Font ────────────────────────────────────────
+const FONT = {
+  ' ': [0b00000,0b00000,0b00000,0b00000,0b00000,0b00000,0b00000],
+  '0': [0b01110,0b10001,0b10011,0b10101,0b11001,0b10001,0b01110],
+  '1': [0b00100,0b01100,0b00100,0b00100,0b00100,0b00100,0b01110],
+  '2': [0b01110,0b10001,0b00001,0b00110,0b01000,0b10000,0b11111],
+  '3': [0b01110,0b10001,0b00001,0b00110,0b00001,0b10001,0b01110],
+  '4': [0b00010,0b00110,0b01010,0b10010,0b11111,0b00010,0b00010],
+  '5': [0b11111,0b10000,0b11110,0b00001,0b00001,0b10001,0b01110],
+  '6': [0b00110,0b01000,0b10000,0b11110,0b10001,0b10001,0b01110],
+  '7': [0b11111,0b00001,0b00010,0b00100,0b01000,0b01000,0b01000],
+  '8': [0b01110,0b10001,0b10001,0b01110,0b10001,0b10001,0b01110],
+  '9': [0b01110,0b10001,0b10001,0b01111,0b00001,0b00010,0b01100],
+  'A': [0b01110,0b10001,0b10001,0b11111,0b10001,0b10001,0b10001],
+  'B': [0b11110,0b10001,0b10001,0b11110,0b10001,0b10001,0b11110],
+  'C': [0b01110,0b10001,0b10000,0b10000,0b10000,0b10001,0b01110],
+  'D': [0b11110,0b10001,0b10001,0b10001,0b10001,0b10001,0b11110],
+  'E': [0b11111,0b10000,0b10000,0b11110,0b10000,0b10000,0b11111],
+  'F': [0b11111,0b10000,0b10000,0b11110,0b10000,0b10000,0b10000],
+  'G': [0b01110,0b10001,0b10000,0b10111,0b10001,0b10001,0b01110],
+  'H': [0b10001,0b10001,0b10001,0b11111,0b10001,0b10001,0b10001],
+  'I': [0b01110,0b00100,0b00100,0b00100,0b00100,0b00100,0b01110],
+  'J': [0b00111,0b00010,0b00010,0b00010,0b00010,0b10010,0b01100],
+  'K': [0b10001,0b10010,0b10100,0b11000,0b10100,0b10010,0b10001],
+  'L': [0b10000,0b10000,0b10000,0b10000,0b10000,0b10000,0b11111],
+  'M': [0b10001,0b11011,0b10101,0b10101,0b10001,0b10001,0b10001],
+  'N': [0b10001,0b11001,0b10101,0b10011,0b10001,0b10001,0b10001],
+  'O': [0b01110,0b10001,0b10001,0b10001,0b10001,0b10001,0b01110],
+  'P': [0b11110,0b10001,0b10001,0b11110,0b10000,0b10000,0b10000],
+  'Q': [0b01110,0b10001,0b10001,0b10001,0b10101,0b10010,0b01101],
+  'R': [0b11110,0b10001,0b10001,0b11110,0b10100,0b10010,0b10001],
+  'S': [0b01110,0b10001,0b10000,0b01110,0b00001,0b10001,0b01110],
+  'T': [0b11111,0b00100,0b00100,0b00100,0b00100,0b00100,0b00100],
+  'U': [0b10001,0b10001,0b10001,0b10001,0b10001,0b10001,0b01110],
+  'V': [0b10001,0b10001,0b10001,0b10001,0b10001,0b01010,0b00100],
+  'W': [0b10001,0b10001,0b10001,0b10101,0b10101,0b11011,0b10001],
+  'X': [0b10001,0b10001,0b01010,0b00100,0b01010,0b10001,0b10001],
+  'Y': [0b10001,0b10001,0b01010,0b00100,0b00100,0b00100,0b00100],
+  'Z': [0b11111,0b00001,0b00010,0b00100,0b01000,0b10000,0b11111],
+  '.': [0b00000,0b00000,0b00000,0b00000,0b00000,0b00000,0b00100],
+  ':': [0b00000,0b00100,0b00000,0b00000,0b00000,0b00100,0b00000],
+  '-': [0b00000,0b00000,0b00000,0b11111,0b00000,0b00000,0b00000],
+  '/': [0b00001,0b00010,0b00010,0b00100,0b01000,0b01000,0b10000],
+  '%': [0b11001,0b11010,0b00010,0b00100,0b01000,0b01011,0b10011],
+  '#': [0b01010,0b11111,0b01010,0b01010,0b11111,0b01010,0b00000],
+};
+FONT['\u2026'] = [0b00000,0b00000,0b00000,0b00000,0b00000,0b00000,0b10101];
+
+// ── 7x10 Large Digit Font (for overlay) ────────────────────
+// Each digit is 7 columns wide, 10 rows tall
+const FONT_LARGE = {
+  '0': [
+    0b0111110,
+    0b1100011,
+    0b1100011,
+    0b1100111,
+    0b1101011,
+    0b1110011,
+    0b1100011,
+    0b1100011,
+    0b1100011,
+    0b0111110,
+  ],
+  '1': [
+    0b0001100,
+    0b0011100,
+    0b0111100,
+    0b0001100,
+    0b0001100,
+    0b0001100,
+    0b0001100,
+    0b0001100,
+    0b0001100,
+    0b0111111,
+  ],
+  '2': [
+    0b0111110,
+    0b1100011,
+    0b0000011,
+    0b0000110,
+    0b0001100,
+    0b0011000,
+    0b0110000,
+    0b1100000,
+    0b1100011,
+    0b1111111,
+  ],
+  '3': [
+    0b0111110,
+    0b1100011,
+    0b0000011,
+    0b0000011,
+    0b0011110,
+    0b0000011,
+    0b0000011,
+    0b0000011,
+    0b1100011,
+    0b0111110,
+  ],
+  '4': [
+    0b0000110,
+    0b0001110,
+    0b0011110,
+    0b0110110,
+    0b1100110,
+    0b1111111,
+    0b0000110,
+    0b0000110,
+    0b0000110,
+    0b0000110,
+  ],
+  '5': [
+    0b1111111,
+    0b1100000,
+    0b1100000,
+    0b1111110,
+    0b0000011,
+    0b0000011,
+    0b0000011,
+    0b0000011,
+    0b1100011,
+    0b0111110,
+  ],
+  '6': [
+    0b0011110,
+    0b0110000,
+    0b1100000,
+    0b1100000,
+    0b1111110,
+    0b1100011,
+    0b1100011,
+    0b1100011,
+    0b1100011,
+    0b0111110,
+  ],
+  '7': [
+    0b1111111,
+    0b1100011,
+    0b0000011,
+    0b0000110,
+    0b0001100,
+    0b0011000,
+    0b0011000,
+    0b0011000,
+    0b0011000,
+    0b0011000,
+  ],
+  '8': [
+    0b0111110,
+    0b1100011,
+    0b1100011,
+    0b1100011,
+    0b0111110,
+    0b1100011,
+    0b1100011,
+    0b1100011,
+    0b1100011,
+    0b0111110,
+  ],
+  '9': [
+    0b0111110,
+    0b1100011,
+    0b1100011,
+    0b1100011,
+    0b0111111,
+    0b0000011,
+    0b0000011,
+    0b0000011,
+    0b0000110,
+    0b0111100,
+  ],
+};
+
+// ── Drawing Primitives ──────────────────────────────────────
+
+function px(ctx, x, y, col) {
+  ctx.fillStyle = col;
+  ctx.fillRect(x, y, 1, 1);
+}
+
+function rect(ctx, x, y, w, h, col) {
+  ctx.fillStyle = col;
+  ctx.fillRect(x, y, w, h);
+}
+
+function borderedRect(ctx, x, y, w, h, fill, border) {
+  ctx.fillStyle = border;
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = fill;
+  ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
+}
+
+function circle(ctx, cx, cy, r, col) {
+  ctx.fillStyle = col;
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      if (dx * dx + dy * dy <= r * r) {
+        ctx.fillRect(cx + dx, cy + dy, 1, 1);
+      }
+    }
+  }
+}
+
+function drawChar(ctx, ch, x, y, col) {
+  const g = FONT[ch];
+  if (!g) return;
+  for (let row = 0; row < 7; row++) {
+    for (let bit = 0; bit < 5; bit++) {
+      if (g[row] & (1 << (4 - bit))) {
+        px(ctx, x + bit, y + row, col);
+      }
+    }
+  }
+}
+
+function drawText(ctx, text, x, y, col, sp) {
+  sp = sp || 6;
+  for (let i = 0; i < text.length; i++) {
+    drawChar(ctx, text[i], x + i * sp, y, col);
+  }
+}
+
+function measureText(text, sp) {
+  sp = sp || 6;
+  return text.length * sp - (sp - 5);
+}
+
+function drawTextTrunc(ctx, text, x, y, col, maxW, sp) {
+  sp = sp || 6;
+  if (measureText(text, sp) <= maxW) {
+    drawText(ctx, text, x, y, col, sp);
+    return;
+  }
+  const avail = maxW - sp;
+  let chars = Math.floor(avail / sp);
+  if (chars < 1) chars = 1;
+  drawText(ctx, text.substring(0, chars), x, y, col, sp);
+  drawChar(ctx, '\u2026', x + chars * sp, y, col);
+}
+
+function drawTextRight(ctx, text, rightX, y, col, sp) {
+  sp = sp || 6;
+  const w = measureText(text, sp);
+  drawText(ctx, text, rightX - w, y, col, sp);
+}
+
+function drawTextCentre(ctx, text, cx, y, col, sp) {
+  sp = sp || 6;
+  const w = measureText(text, sp);
+  drawText(ctx, text, Math.floor(cx - w / 2), y, col, sp);
+}
+
+// Draw large digit (7 wide, 10 tall)
+function drawLargeChar(ctx, ch, x, y, col) {
+  const g = FONT_LARGE[ch];
+  if (!g) return;
+  for (let row = 0; row < 10; row++) {
+    for (let bit = 0; bit < 7; bit++) {
+      if (g[row] & (1 << (6 - bit))) {
+        px(ctx, x + bit, y + row, col);
+      }
+    }
+  }
+}
+
+// Draw large number string, centred at cx
+function drawLargeNum(ctx, numStr, cx, y, col) {
+  const charW = 9; // 7px char + 2px gap
+  const totalW = numStr.length * charW - 2;
+  let sx = Math.floor(cx - totalW / 2);
+  for (let i = 0; i < numStr.length; i++) {
+    drawLargeChar(ctx, numStr[i], sx + i * charW, y, col);
+  }
+}
+
+// Page indicator dots
+function drawPageDots(ctx, activePage, totalPages) {
+  const dotR = 2;
+  const gap = 10;
+  const totalW = totalPages * (dotR * 2) + (totalPages - 1) * (gap - dotR * 2);
+  const startX = Math.floor(W / 2 - (totalPages * gap) / 2 + gap / 2);
+  const y = H - 4;
+  for (let i = 0; i < totalPages; i++) {
+    const col = i === activePage ? C.dotActive : C.dotInact;
+    circle(ctx, startX + i * gap, y, dotR, col);
+  }
+}
+
+// Horizontal bar with label, value, and colour
+function drawBar(ctx, x, y, barX, barW, barH, label, value, colour) {
+  // Label
+  drawText(ctx, label, x, y + Math.floor((barH - 7) / 2), colour);
+
+  // Bar track
+  borderedRect(ctx, barX, y, barW, barH, C.barBg, C.barBdr);
+
+  // Filled portion
+  const fillW = Math.round((barW - 2) * (value / 100));
+  if (fillW > 0) {
+    rect(ctx, barX + 1, y + 1, fillW, barH - 2, colour);
+  }
+
+  // Numeric value right-aligned
+  const valStr = String(value).padStart(3, ' ');
+  drawText(ctx, valStr, barX + barW + 4, y + Math.floor((barH - 7) / 2), C.dimWhite);
+}
+
+
+// ============================================================
+//  PAGE 1: MIX — The Performance Page
+// ============================================================
+
+function renderMix(ctx) {
+  rect(ctx, 0, 0, W, H, C.bg);
+
+  // ── Header row (y=0-12) ─────────────────────────────────
+  drawText(ctx, 'MIX', 4, 3, C.amber, 6);
+
+  // Speed value in top-right corner
+  const speedStr = 'S' + String(state.speed).padStart(3, ' ');
+  drawTextRight(ctx, speedStr, 124, 3, C.blue, 6);
+
+  // Separator
+  rect(ctx, 2, 14, 124, 1, C.sep);
+
+  // ── Zone bars (y=18-95) — 3 zones, 26px each ───────────
+  const zoneStart = 18;
+  const rowH = 26;
+  const barX = 14;
+  const barW = 88;
+  const barH = 10;
+
+  for (let i = 0; i < 3; i++) {
+    const z = state.zones[i];
+    const y = zoneStart + i * rowH;
+
+    // Zone number
+    drawChar(ctx, String(i + 1), 4, y + 2, z.colour);
+
+    // Bar
+    borderedRect(ctx, barX, y + 1, barW, barH, C.barBg, C.barBdr);
+    const fillW = Math.round((barW - 2) * (z.brightness / 100));
+    if (fillW > 0) {
+      rect(ctx, barX + 1, y + 2, fillW, barH - 2, z.colour);
+    }
+
+    // Value
+    const valStr = String(z.brightness).padStart(3, ' ');
+    drawText(ctx, valStr, barX + barW + 4, y + 2, C.dimWhite);
+
+    // Faint zone label below bar
+    drawText(ctx, z.label, barX, y + 14, C.dimGrey, 5);
+
+    // Separator between zones
+    if (i < 2) {
+      rect(ctx, barX, y + rowH - 2, barW + 24, 1, C.sepFaint);
+    }
+  }
+
+  // ── Separator before master ─────────────────────────────
+  rect(ctx, 2, 97, 124, 1, C.sep);
+
+  // ── Master bar (y=100-118) ──────────────────────────────
+  drawChar(ctx, 'M', 4, 104, C.white);
+
+  const mBarX = 14;
+  const mBarW = 88;
+  const mBarH = 12;
+  const mBarY = 102;
+
+  borderedRect(ctx, mBarX, mBarY, mBarW, mBarH, C.barBg, C.barBdr);
+  const mFill = Math.round((mBarW - 2) * (state.masterBrightness / 100));
+  if (mFill > 0) {
+    rect(ctx, mBarX + 1, mBarY + 1, mFill, mBarH - 2, C.white);
+  }
+
+  const mVal = String(state.masterBrightness).padStart(3, ' ');
+  drawText(ctx, mVal, mBarX + mBarW + 4, 104, C.dimWhite);
+
+  // "MASTER" label below
+  drawText(ctx, 'MASTER', mBarX, 116, C.dimGrey, 5);
+
+  // ── Page dots (y=122-127) ───────────────────────────────
+  drawPageDots(ctx, 0, 2);
+}
+
+
+// ============================================================
+//  PAGE 2: INFO — The Diagnostic Page
+// ============================================================
+
+function renderInfo(ctx) {
+  rect(ctx, 0, 0, W, H, C.bg);
+
+  // ── Header (y=0-12) ─────────────────────────────────────
+  drawText(ctx, 'INFO', 4, 3, C.amber, 6);
+
+  // Separator
+  rect(ctx, 2, 14, 124, 1, C.sep);
+
+  // ── Connection Status (y=18-36) ─────────────────────────
+  drawText(ctx, 'CONNECTION', 4, 19, C.dimGrey, 5);
+
+  // WiFi row
+  const wifiCol = state.wifiConnected ? C.green : C.red;
+  const wifiTxt = state.wifiConnected ? 'CONNECTED' : 'DISCONNECTED';
+  circle(ctx, 10, 32, 2, wifiCol);
+  drawText(ctx, 'WIFI', 16, 29, C.dimWhite, 5);
+  drawTextRight(ctx, wifiTxt, 124, 29, wifiCol, 5);
+
+  // WebSocket row
+  const wsCol = state.wsConnected ? C.green : C.red;
+  const wsTxt = state.wsConnected ? 'CONNECTED' : 'DISCONNECTED';
+  circle(ctx, 10, 42, 2, wsCol);
+  drawText(ctx, 'WS', 16, 39, C.dimWhite, 5);
+  drawTextRight(ctx, wsTxt, 124, 39, wsCol, 5);
+
+  // Separator
+  rect(ctx, 4, 50, 120, 1, C.sep);
+
+  // ── Effect Name (y=54-70) ───────────────────────────────
+  drawText(ctx, 'EFFECT', 4, 55, C.dimGrey, 5);
+  const effectUp = state.effectName.toUpperCase();
+  drawTextTrunc(ctx, effectUp, 4, 66, C.amber, 120, 6);
+
+  // Separator
+  rect(ctx, 4, 78, 120, 1, C.sep);
+
+  // ── EdgeMixer (y=82-96) ─────────────────────────────────
+  drawText(ctx, 'EDGEMIXER', 4, 83, C.dimGrey, 5);
+  drawText(ctx, state.edgeMixerMode, 4, 93, C.dimWhite, 6);
+
+  // Separator
+  rect(ctx, 4, 103, 120, 1, C.sep);
+
+  // ── Zones (y=107-118) ───────────────────────────────────
+  drawText(ctx, 'ZONES', 4, 108, C.dimGrey, 5);
+
+  // Zone count
+  const zCountStr = String(state.zoneCount) + ' ZONES';
+  drawText(ctx, zCountStr, 4, 117, C.dimWhite, 5);
+
+  // Status
+  if (state.zonesEnabled) {
+    drawTextRight(ctx, 'ENABLED', 124, 117, C.green, 5);
+  } else {
+    drawTextRight(ctx, 'DISABLED', 124, 117, C.red, 5);
+  }
+
+  // ── Page dots ───────────────────────────────────────────
+  drawPageDots(ctx, 1, 2);
+}
+
+
+// ============================================================
+//  OVERLAY — Live Parameter Display
+// ============================================================
+
+function renderOverlay(ctx) {
+  rect(ctx, 0, 0, W, H, C.bg);
+
+  const ov = state.overlay;
+
+  // Semi-dark scrim with faint hint of content underneath
+  // (simulated by drawing a slightly lighter bg)
+  rect(ctx, 0, 0, W, H, '#0c0c0c');
+
+  // ── Parameter name (top area) ───────────────────────────
+  drawTextCentre(ctx, ov.param, 64, 18, C.dimWhite, 6);
+
+  // ── Large value (centre) ────────────────────────────────
+  const valStr = String(ov.value);
+  // Draw at ~48px equivalent using the 10px tall large font
+  // Stack 4 rows of the large font at 2x vertical (simulating 48px)
+  // Actually: use the large font at native 10px, scale happens at 4x canvas
+  // For true 48px on the 4x canvas, we need the digits to be ~12px tall on 128px canvas
+  // Use the 10px large font centred
+  drawLargeNum(ctx, valStr, 64, 40, C.white);
+
+  // Percentage sign below value
+  drawTextCentre(ctx, '%', 64, 56, C.dimGrey, 6);
+
+  // ── Accent bar at bottom ────────────────────────────────
+  // Full-width coloured accent bar (3px tall)
+  rect(ctx, 0, H - 18, W, 3, ov.colour);
+
+  // Parameter context below accent
+  // Show which zone or parameter type
+  const contextMap = {
+    'ZONE 1 BRIGHT': 'ZONE 1',
+    'ZONE 2 BRIGHT': 'ZONE 2',
+    'ZONE 3 BRIGHT': 'ZONE 3',
+    'MASTER': 'MASTER',
+    'SPEED': 'SPEED',
+  };
+  const contextLabel = contextMap[ov.param] || ov.param;
+  drawTextCentre(ctx, contextLabel, 64, H - 10, ov.colour, 5);
+
+  // ── Thin timeout indicator ──────────────────────────────
+  // A faint progress bar showing the 2s countdown
+  // Show at ~60% remaining for the static mockup
+  const timeoutW = Math.floor(W * 0.6);
+  const timeoutX = Math.floor((W - timeoutW) / 2);
+  rect(ctx, timeoutX, 73, timeoutW, 1, '#2a2a2a');
+
+  // ── No page dots on overlay (it's transient) ────────────
+}
+
+
+// ============================================================
+//  Canvas Management & Rendering
+// ============================================================
+
+function mkOffscreen() {
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  return c;
+}
+
+function blitTo4x(offscreen, canvasId) {
+  const c = document.getElementById(canvasId);
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, 512, 512);
+  ctx.drawImage(offscreen, 0, 0, 512, 512);
+}
+
+function renderAll() {
+  // MIX page
+  const oMix = mkOffscreen();
+  const cMix = oMix.getContext('2d');
+  cMix.imageSmoothingEnabled = false;
+  renderMix(cMix);
+  blitTo4x(oMix, 'c_mix');
+
+  // INFO page
+  const oInfo = mkOffscreen();
+  const cInfo = oInfo.getContext('2d');
+  cInfo.imageSmoothingEnabled = false;
+  renderInfo(cInfo);
+  blitTo4x(oInfo, 'c_info');
+
+  // OVERLAY
+  const oOv = mkOffscreen();
+  const cOv = oOv.getContext('2d');
+  cOv.imageSmoothingEnabled = false;
+  renderOverlay(cOv);
+  blitTo4x(oOv, 'c_overlay');
+}
+
+// Initial render
+renderAll();
+
+
+// ============================================================
+//  Interactive Controls
+// ============================================================
+
+// ── Overlay config (defined first so slider handlers can reference it) ──
+const overlayConfigs = {
+  'btn_ov_z1':     { param: 'ZONE 1 BRIGHT', getValue: () => state.zones[0].brightness, colour: C.zone1 },
+  'btn_ov_z2':     { param: 'ZONE 2 BRIGHT', getValue: () => state.zones[1].brightness, colour: C.zone2 },
+  'btn_ov_z3':     { param: 'ZONE 3 BRIGHT', getValue: () => state.zones[2].brightness, colour: C.zone3 },
+  'btn_ov_master': { param: 'MASTER',         getValue: () => state.masterBrightness,    colour: C.white },
+  'btn_ov_speed':  { param: 'SPEED',           getValue: () => state.speed,               colour: C.blue },
+};
+
+function updateOverlayValue() {
+  const activeBtn = document.querySelector('[id^="btn_ov_"].active');
+  if (activeBtn && overlayConfigs[activeBtn.id]) {
+    state.overlay.value = overlayConfigs[activeBtn.id].getValue();
+  }
+}
+
+// ── Sliders ─────────────────────────────────────────────────
+document.getElementById('sl_z1').addEventListener('input', function(e) {
+  state.zones[0].brightness = parseInt(e.target.value);
+  updateOverlayValue();
+  renderAll();
+});
+document.getElementById('sl_z2').addEventListener('input', function(e) {
+  state.zones[1].brightness = parseInt(e.target.value);
+  updateOverlayValue();
+  renderAll();
+});
+document.getElementById('sl_z3').addEventListener('input', function(e) {
+  state.zones[2].brightness = parseInt(e.target.value);
+  updateOverlayValue();
+  renderAll();
+});
+document.getElementById('sl_master').addEventListener('input', function(e) {
+  state.masterBrightness = parseInt(e.target.value);
+  updateOverlayValue();
+  renderAll();
+});
+document.getElementById('sl_speed').addEventListener('input', function(e) {
+  state.speed = parseInt(e.target.value);
+  updateOverlayValue();
+  renderAll();
+});
+
+// ── Toggle buttons ──────────────────────────────────────────
+document.getElementById('btn_wifi').addEventListener('click', function() {
+  state.wifiConnected = !state.wifiConnected;
+  this.textContent = state.wifiConnected ? 'Connected' : 'Disconnected';
+  this.classList.toggle('active', state.wifiConnected);
+  renderAll();
+});
+
+document.getElementById('btn_ws').addEventListener('click', function() {
+  state.wsConnected = !state.wsConnected;
+  this.textContent = state.wsConnected ? 'Connected' : 'Disconnected';
+  this.classList.toggle('active', state.wsConnected);
+  renderAll();
+});
+
+document.getElementById('btn_zones').addEventListener('click', function() {
+  state.zonesEnabled = !state.zonesEnabled;
+  this.textContent = state.zonesEnabled ? 'Enabled' : 'Disabled';
+  this.classList.toggle('active', state.zonesEnabled);
+  renderAll();
+});
+
+const edgeModes = ['EDGE', 'BLEND', 'OFF'];
+let edgeModeIdx = 0;
+document.getElementById('btn_edge').addEventListener('click', function() {
+  edgeModeIdx = (edgeModeIdx + 1) % edgeModes.length;
+  state.edgeMixerMode = edgeModes[edgeModeIdx];
+  this.textContent = state.edgeMixerMode;
+  renderAll();
+});
+
+// ── Overlay parameter selectors ─────────────────────────────
+Object.keys(overlayConfigs).forEach(function(btnId) {
+  document.getElementById(btnId).addEventListener('click', function() {
+    // Deactivate all overlay buttons
+    Object.keys(overlayConfigs).forEach(function(id) {
+      document.getElementById(id).classList.remove('active');
+    });
+    this.classList.add('active');
+
+    const cfg = overlayConfigs[btnId];
+    state.overlay.param = cfg.param;
+    state.overlay.value = cfg.getValue();
+    state.overlay.colour = cfg.colour;
+    renderAll();
+  });
+});
+
+</script>
+</body>
+</html>

@@ -17,7 +17,6 @@
  */
 
 #include <M5Unified.h>
-#include <Wire.h>
 #include "config.h"
 #include "network/WiFiManager.h"
 #include "network/WebSocketClient.h"
@@ -25,6 +24,7 @@
 #include "parameters/ParameterMapper.h"
 #include "sync/EchoGuard.h"
 #include "led/LedFeedback.h"
+#include "display/Display.h"
 
 // ============================================================================
 // Globals
@@ -36,6 +36,7 @@ static InputManager inputMgr;
 static ParameterMapper paramMapper;
 static EchoGuard echoGuard;
 static LedFeedback ledFeedback;
+static ZMDisplay display;
 static bool wsStarted = false;
 
 // ============================================================================
@@ -48,6 +49,10 @@ static void onWsMessage(JsonDocument& doc) {
 
     if (strcmp(type, "status") == 0) {
         paramMapper.applyStatus(doc, now);
+        // Sync display with K1 status
+        display.setMasterBrightness(paramMapper.masterBrightness);
+        display.setSpeed(paramMapper.masterSpeed);
+        if (doc["effectName"]) display.setEffectName(doc["effectName"]);
         // Log summary
         uint8_t bri = doc["brightness"] | 0;
         const char* name = doc["effectName"] | "?";
@@ -55,6 +60,12 @@ static void onWsMessage(JsonDocument& doc) {
     }
     else if (strcmp(type, "zones.list") == 0 || strcmp(type, "zones") == 0) {
         paramMapper.applyZoneState(doc, now);
+        // Sync display with zone state
+        display.setZoneCount(paramMapper.zoneCount);
+        display.setZonesEnabled(paramMapper.zoneSystemOn);
+        for (uint8_t i = 0; i < 3; i++) {
+            display.setZoneBrightness(i, paramMapper.zoneBrightness[i]);
+        }
         Serial.printf("[Zones] count=%d enabled=%s\n",
                       doc["zoneCount"] | 0, (doc["enabled"] | false) ? "YES" : "NO");
     }
@@ -83,6 +94,10 @@ static void onWsMessage(JsonDocument& doc) {
         ledFeedback.setEdgeMixerMode(paramMapper.emMode);
         ledFeedback.setParamValue(9, paramMapper.emSpread);
         ledFeedback.setParamValue(10, paramMapper.emStrength);
+        // Sync display with EdgeMixer state
+        display.setEdgeMixer(paramMapper.emMode, paramMapper.emSpread,
+                             paramMapper.emStrength,
+                             paramMapper.stState & 1, paramMapper.stState & 2);
     }
     else if (strcmp(type, "cameraMode.get") == 0 || strcmp(type, "cameraMode.set") == 0) {
         if (!doc["enabled"].isNull()) {
@@ -118,8 +133,69 @@ static void onWsMessage(JsonDocument& doc) {
 // ============================================================================
 
 static void onInputChange(uint8_t inputId, int32_t delta, bool button) {
-    // Route through ParameterMapper
     paramMapper.onInput(inputId, delta, button);
+
+    // Trigger live parameter overlay on the display
+    if (!button) {
+        // Map inputId to parameter name and page hint
+        const char* paramName = nullptr;
+        uint8_t pageHint = 0;
+        uint16_t value = 0;
+
+        // Page order: 0=Connection, 1=Zones, 2=Effect, 3=EdgeMixer
+        if (inputId >= 16 && inputId <= 18) {
+            static const char* zNames[] = {"Z1 BRI", "Z2 BRI", "Z3 BRI"};
+            paramName = zNames[inputId - 16];
+            value = paramMapper.zoneBrightness[inputId - 16];
+            pageHint = 1;  // Zones page
+        } else if (inputId == 19) {
+            paramName = "MASTER";
+            value = paramMapper.masterBrightness;
+            pageHint = 1;  // Zones page
+        } else if (inputId == 3) {
+            paramName = "SPEED";
+            value = paramMapper.masterSpeed;
+            pageHint = 2;  // Effect page
+        } else if (inputId >= 8 && inputId <= 15) {
+            // EncB overlay is page-aware — labels change per active page
+            uint8_t page = display.getCurrentPage();
+            pageHint = page;  // Accent colour matches active page
+
+            if (page == 1) {
+                // ZONES page
+                switch (inputId) {
+                    case 8:  paramName = "Z1 BRI"; value = paramMapper.zoneBrightness[0]; break;
+                    case 9:  paramName = "Z2 BRI"; value = paramMapper.zoneBrightness[1]; break;
+                    case 10: paramName = "Z3 BRI"; value = paramMapper.zoneBrightness[2]; break;
+                    case 11: paramName = "MASTER"; value = paramMapper.masterBrightness;  break;
+                    case 12: paramName = "ZONES";  value = paramMapper.zoneCount;         break;
+                }
+            } else if (page == 2) {
+                // EFFECT page
+                switch (inputId) {
+                    case 8:  paramName = "Z1 SPD"; value = paramMapper.zoneSpeed[0];      break;
+                    case 9:  paramName = "Z2 SPD"; value = paramMapper.zoneSpeed[1];      break;
+                    case 10: paramName = "Z3 SPD"; value = paramMapper.zoneSpeed[2];      break;
+                    case 11: paramName = "SPEED";  value = paramMapper.masterSpeed;       break;
+                    case 12: paramName = "ZONES";  value = paramMapper.zoneCount;         break;
+                    case 13: paramName = "TRANS";  value = paramMapper.transitionType;    break;
+                }
+            } else if (page == 3) {
+                // EDGEMIXER page
+                switch (inputId) {
+                    case 8:  paramName = "EM MODE";  value = paramMapper.emMode;          break;
+                    case 9:  paramName = "SPREAD";   value = paramMapper.emSpread;        break;
+                    case 10: paramName = "STRENGTH"; value = paramMapper.emStrength;      break;
+                    case 14: paramName = "PRESET";   value = paramMapper.presetSlot;      break;
+                }
+            }
+            // Page 0 (Connection): EncB inactive — no overlay
+        }
+        // Only trigger overlay for known parameters
+        if (paramName) {
+            display.triggerOverlay(paramName, value, pageHint);
+        }
+    }
 
     // Debug log
     if (button) {
@@ -130,58 +206,19 @@ static void onInputChange(uint8_t inputId, int32_t delta, bool button) {
 }
 
 // ============================================================================
-// Display — Connection Status on AtomS3 0.85" Screen
-// ============================================================================
-
-static void updateDisplay() {
-    M5.Display.setTextSize(1);
-
-    // WiFi (line 1)
-    M5.Display.setCursor(4, 4);
-    if (wifiMgr.isConnected()) {
-        M5.Display.setTextColor(TFT_GREEN, TFT_BLACK);
-        M5.Display.printf("WiFi: %s    ", wifiMgr.getLocalIP().toString().c_str());
-    } else {
-        M5.Display.setTextColor(TFT_RED, TFT_BLACK);
-        M5.Display.print("WiFi: ---             ");
-    }
-
-    // WS (line 2)
-    M5.Display.setCursor(4, 20);
-    if (wsClient.isConnected()) {
-        M5.Display.setTextColor(TFT_GREEN, TFT_BLACK);
-        M5.Display.print("WS: connected     ");
-    } else if (wsStarted) {
-        M5.Display.setTextColor(TFT_YELLOW, TFT_BLACK);
-        M5.Display.print("WS: connecting... ");
-    } else {
-        M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
-        M5.Display.print("WS: waiting       ");
-    }
-
-    // Info (line 3)
-    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
-    M5.Display.setCursor(4, 40);
-    M5.Display.printf("Bri:%3d Spd:%3d Z:%d ",
-                      paramMapper.masterBrightness, paramMapper.masterSpeed,
-                      paramMapper.zoneCount);
-
-    // Title
-    M5.Display.setCursor(4, 56);
-    M5.Display.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    M5.Display.print("Zone Mixer v0.4");
-}
-
-// ============================================================================
 // Setup
 // ============================================================================
 
 void setup() {
     auto cfg = M5.config();
+    cfg.internal_imu = false;   // Don't probe IMU — we don't use it, and
+    cfg.internal_rtc = false;   // deferred Wire.begin() corrupts i2c-ng driver
     M5.begin(cfg);
 
     Serial.begin(115200);
     Serial.println("\n[ZoneMixer] v0.4 — Phases 1-6");
+    Serial.printf("[Init] Board detected: %d (AtomS3=0x%X)\n",
+                  (int)M5.getBoard(), (int)m5::board_t::board_M5AtomS3);
 
     // Display init
     M5.Display.fillScreen(TFT_BLACK);
@@ -190,14 +227,7 @@ void setup() {
     M5.Display.setTextColor(TFT_WHITE);
     M5.Display.print("Zone Mixer v0.4");
 
-    // I2C init
-    Wire.begin(hw::I2C_SDA, hw::I2C_SCL);
-    Wire.setClock(hw::I2C_FREQ);
-
-    // Configure I2C timeout (prevents indefinite blocking on device hang)
-    Wire.setTimeOut(50);  // 50ms per transaction (proven on Tab5)
-
-    // Init input devices
+    // I2C + input devices (Wire.begin() is called inside InputManager::begin())
     inputMgr.setCallback(onInputChange);
     if (!inputMgr.begin()) {
         Serial.println("[FATAL] No input devices found!");
@@ -210,6 +240,11 @@ void setup() {
 
     // Init parameter mapper
     paramMapper.begin(&wsClient, &echoGuard, &ledFeedback);
+
+    // Init colour-coded tab display
+    display.begin();
+    paramMapper.setActivePage(display.getCurrentPage());
+    ledFeedback.setActivePage(display.getCurrentPage());
 
     // Register WS message callback
     wsClient.onMessage(onWsMessage);
@@ -227,6 +262,27 @@ void setup() {
 
 void loop() {
     M5.update();
+
+    // AtomS3 screen touch (GPIO41 capacitive button = BtnA)
+    // Single tap: cycle display page. Double tap: toggle zone system.
+    if (M5.BtnA.wasPressed()) {
+        Serial.println("[BTN] Pressed");
+    }
+    if (M5.BtnA.wasReleased()) {
+        Serial.println("[BTN] Released");
+    }
+    if (M5.BtnA.wasDecideClickCount()) {
+        uint8_t clicks = M5.BtnA.getClickCount();
+        Serial.printf("[BTN] Clicks: %d\n", clicks);
+        if (clicks == 1) {
+            display.nextPage();
+            uint8_t page = display.getCurrentPage();
+            paramMapper.setActivePage(page);
+            ledFeedback.setActivePage(page);
+        } else if (clicks >= 2) {
+            paramMapper.toggleZoneSystem();
+        }
+    }
 
     // WiFi state machine
     wifiMgr.update();
@@ -247,10 +303,9 @@ void loop() {
         ledFeedback.setConnectionState(LedFeedback::ConnState::DISCONNECTED);
     }
 
-    // WS state machine (CRITICAL: WDT reset after potentially-blocking WS loop)
+    // WS state machine
     if (wsStarted) {
         wsClient.update();
-        esp_task_wdt_reset();
         // Track connection state changes for LED
         static bool wasConnected = false;
         bool isConn = wsClient.isConnected();
@@ -268,10 +323,27 @@ void loop() {
     // Update LED feedback (10Hz dirty flush)
     ledFeedback.update(millis());
 
-    // Update display (2Hz)
-    static uint32_t lastDisplay = 0;
-    if (millis() - lastDisplay > 500) {
-        lastDisplay = millis();
-        updateDisplay();
+    // Update WiFi/WS state on display (only on change)
+    static bool lastWifi = false, lastWs = false;
+    bool nowWifi = wifiMgr.isConnected();
+    bool nowWs = wsClient.isConnected();
+    if (nowWifi != lastWifi || nowWs != lastWs) {
+        lastWifi = nowWifi;
+        lastWs = nowWs;
+        display.setWifiState(nowWifi, wifiMgr.getRSSI(),
+                             nowWifi ? wifiMgr.getLocalIP().toString().c_str() : "---");
+        display.setWsState(nowWs);
     }
+
+    // Sync page state if display page changed (e.g. overlay auto-return)
+    static uint8_t lastSyncedPage = 0;
+    uint8_t curPage = display.getCurrentPage();
+    if (curPage != lastSyncedPage) {
+        lastSyncedPage = curPage;
+        paramMapper.setActivePage(curPage);
+        ledFeedback.setActivePage(curPage);
+    }
+
+    // Update display (internally rate-limited to 5 Hz)
+    display.update(millis());
 }

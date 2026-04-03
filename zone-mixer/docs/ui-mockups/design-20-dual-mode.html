@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zone Mixer — Design 20: Dual-Mode Display</title>
+<style>
+  /* ----------------------------------------------------------------
+     Design 20: Dual-Mode Display
+     Target: AtomS3 0.85" LCD, 128x128 pixels
+     Concept: Two display modes toggled by LONG PRESS.
+       Mode A "OPERATOR" — live performance (bold, visual)
+       Mode B "TECH" — setup/debugging (dense, text)
+     Short press cycles pages within the current mode.
+     ---------------------------------------------------------------- */
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #111;
+    color: #ccc;
+    font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+    min-height: 100vh;
+  }
+
+  h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #FFB000;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+
+  .subtitle {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 24px;
+    letter-spacing: 0.5px;
+  }
+
+  .mode-header {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin: 32px 0 16px;
+    padding: 6px 16px;
+    border-radius: 3px;
+  }
+
+  .mode-header.mode-a {
+    color: #FFB000;
+    border: 1px solid #FFB00044;
+    background: #FFB00010;
+  }
+
+  .mode-header.mode-b {
+    color: #33CCFF;
+    border: 1px solid #33CCFF44;
+    background: #33CCFF10;
+  }
+
+  .display-row {
+    display: flex;
+    gap: 40px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 16px;
+  }
+
+  .display-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .panel-label {
+    font-size: 11px;
+    color: #555;
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    border: 1px solid #222;
+  }
+
+  /* Interactive controls */
+  .controls {
+    margin: 24px 0 8px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .controls button {
+    font-family: inherit;
+    font-size: 11px;
+    padding: 6px 14px;
+    border: 1px solid #333;
+    border-radius: 3px;
+    background: #1a1a1a;
+    color: #aaa;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    transition: all 0.15s ease;
+  }
+
+  .controls button:hover {
+    border-color: #555;
+    color: #ddd;
+    background: #222;
+  }
+
+  .controls button.active {
+    border-color: #FFB000;
+    color: #FFB000;
+    background: #FFB00018;
+  }
+
+  .controls button.active-b {
+    border-color: #33CCFF;
+    color: #33CCFF;
+    background: #33CCFF18;
+  }
+
+  .mode-indicator {
+    font-size: 11px;
+    color: #555;
+    margin: 8px 0;
+    letter-spacing: 0.5px;
+  }
+
+  .mode-indicator span {
+    color: #FFB000;
+    font-weight: 600;
+  }
+
+  .mode-indicator span.tech {
+    color: #33CCFF;
+  }
+
+  .long-press-hint {
+    font-size: 10px;
+    color: #444;
+    margin-top: 12px;
+    text-align: center;
+    line-height: 1.5;
+  }
+
+  .long-press-hint kbd {
+    display: inline-block;
+    padding: 1px 5px;
+    border: 1px solid #333;
+    border-radius: 2px;
+    background: #1a1a1a;
+    color: #777;
+    font-family: inherit;
+    font-size: 10px;
+  }
+
+  .rationale {
+    max-width: 760px;
+    margin-top: 48px;
+    padding: 24px;
+    background: #0d0d0d;
+    border: 1px solid #1a1a1a;
+    border-radius: 6px;
+    line-height: 1.7;
+  }
+
+  .rationale h2 {
+    font-size: 13px;
+    color: #FFB000;
+    margin-bottom: 12px;
+    letter-spacing: 0.5px;
+  }
+
+  .rationale h3 {
+    font-size: 11px;
+    color: #888;
+    margin: 16px 0 6px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .rationale p, .rationale li {
+    font-size: 12px;
+    color: #777;
+  }
+
+  .rationale ul {
+    padding-left: 16px;
+  }
+
+  .rationale li {
+    margin-bottom: 4px;
+  }
+
+  .rationale code {
+    background: #1a1a1a;
+    padding: 1px 5px;
+    border-radius: 2px;
+    color: #999;
+    font-size: 11px;
+  }
+
+  .colour-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    vertical-align: middle;
+    margin-right: 3px;
+    border: 1px solid #333;
+  }
+</style>
+</head>
+<body>
+
+<h1>ZONE MIXER &mdash; DESIGN 20</h1>
+<p class="subtitle">Dual-Mode Display &middot; 128&times;128 AtomS3 LCD &middot; LONG PRESS to toggle mode</p>
+
+<!-- Interactive controls -->
+<div class="controls">
+  <button id="btnA1" class="active" onclick="showFrame('A1')">A1: Zone Faders</button>
+  <button id="btnA2" onclick="showFrame('A2')">A2: Effect + Speed</button>
+  <button id="btnAO" onclick="showFrame('AO')">A: Overlay</button>
+  <button id="btnB1" onclick="showFrame('B1')">B1: Parameters</button>
+  <button id="btnB2" onclick="showFrame('B2')">B2: Diagnostics</button>
+  <button id="btnB3" onclick="showFrame('B3')">B3: Input Log</button>
+</div>
+<div class="mode-indicator">
+  Current: <span id="modeLabel">MODE A &mdash; OPERATOR</span>
+</div>
+
+<div class="display-row" style="margin-top: 16px;">
+  <div class="display-panel">
+    <span class="panel-label" id="frameLabel">A1: Zone Faders &middot; 4&times; Scale</span>
+    <canvas id="canvas4x" width="512" height="512"></canvas>
+  </div>
+  <div class="display-panel">
+    <span class="panel-label">1:1 Native</span>
+    <canvas id="canvas1x" width="128" height="128"></canvas>
+  </div>
+</div>
+
+<p class="long-press-hint">
+  <kbd>LONG PRESS</kbd> AtomS3 button = toggle Mode A/B &nbsp;&bull;&nbsp;
+  <kbd>SHORT PRESS</kbd> = cycle pages within mode
+</p>
+
+<!-- All 6 frames static grid -->
+<h2 class="mode-header mode-a">Mode A &mdash; Operator (Live Performance)</h2>
+<div class="display-row">
+  <div class="display-panel">
+    <span class="panel-label">A1: Zone Faders</span>
+    <canvas id="staticA1" width="512" height="512"></canvas>
+  </div>
+  <div class="display-panel">
+    <span class="panel-label">A2: Effect + Speed</span>
+    <canvas id="staticA2" width="512" height="512"></canvas>
+  </div>
+  <div class="display-panel">
+    <span class="panel-label">A: Live Overlay (2s timeout)</span>
+    <canvas id="staticAO" width="512" height="512"></canvas>
+  </div>
+</div>
+
+<h2 class="mode-header mode-b">Mode B &mdash; Tech (Setup / Debug)</h2>
+<div class="display-row">
+  <div class="display-panel">
+    <span class="panel-label">B1: All Parameters</span>
+    <canvas id="staticB1" width="512" height="512"></canvas>
+  </div>
+  <div class="display-panel">
+    <span class="panel-label">B2: Connection Diagnostics</span>
+    <canvas id="staticB2" width="512" height="512"></canvas>
+  </div>
+  <div class="display-panel">
+    <span class="panel-label">B3: Input Monitor</span>
+    <canvas id="staticB3" width="512" height="512"></canvas>
+  </div>
+</div>
+
+<div class="rationale">
+  <h2>Design Rationale</h2>
+
+  <h3>Dual-Mode Philosophy</h3>
+  <p>
+    A DJ mixer controller serves two fundamentally different use cases: live performance
+    (where the operator needs instant visual feedback from a distance) and technical setup
+    (where dense diagnostic data helps debug I2C buses, connection drops, or parameter tuning).
+    Rather than compromise both into one mediocre layout, Design 20 gives each its own
+    optimised display mode, toggled by a deliberate long-press to prevent accidental switching
+    during performance.
+  </p>
+
+  <h3>Mode A: Operator</h3>
+  <ul>
+    <li><strong>A1 &mdash; Zone Faders:</strong> Bold vertical bars fill most of the screen. Zone colours
+      (<span class="colour-swatch" style="background:#FF4444"></span><code>#FF4444</code>,
+      <span class="colour-swatch" style="background:#44FF44"></span><code>#44FF44</code>,
+      <span class="colour-swatch" style="background:#4488FF"></span><code>#4488FF</code>)
+      are saturated for instant zone identification. The master bar is white and wider, visually
+      anchoring the fader bank. Numeric values are rendered below each bar in 5x7 pixel font.
+      Readable from 1m distance under stage lighting.</li>
+    <li><strong>A2 &mdash; Effect + Speed:</strong> Large centred effect name (up to 10 chars) with speed
+      as a horizontal bar beneath. The effect name dominates the screen &mdash; this is the most-glanced
+      data point during live mixing. Connection dots in the header provide ambient status awareness.</li>
+    <li><strong>Overlay:</strong> When any encoder changes a value, a 48px numeric overlay appears
+      centre-screen for 2 seconds, then fades. This provides immediate haptic-to-visual feedback
+      without leaving the current page. The overlay uses a semi-transparent dark background to
+      remain readable over any page content.</li>
+  </ul>
+
+  <h3>Mode B: Tech</h3>
+  <ul>
+    <li><strong>B1 &mdash; All Parameters:</strong> Dense 8-row text list showing every parameter value.
+      Brightness per zone, speed, effect ID, zone enable states, EdgeMixer state &mdash; everything on
+      one screen. Uses dim <code>#888</code> labels with bright <code>#FFF</code> values for
+      scanability. No graphics, maximum information density.</li>
+    <li><strong>B2 &mdash; Connection Diagnostics:</strong> IP address, RSSI dBm, WebSocket state,
+      reconnect count, poll cycle time, I2C error count. All numeric with units. This is the
+      screen you stare at when troubleshooting why the controller is not responding.</li>
+    <li><strong>B3 &mdash; Input Monitor:</strong> Scrolling event log showing the last 5 input events
+      with timestamps. Format: <code>E3 +1</code> (encoder 3, clockwise), <code>S2 BTN</code>
+      (scroll unit 2 button press). Every input is logged here &mdash; no overlay in tech mode,
+      because the log IS the feedback mechanism.</li>
+  </ul>
+
+  <h3>Mode Indicator</h3>
+  <p>
+    A small mode letter (<code>A</code> or <code>B</code>) is always rendered in the top-right corner
+    at <code>(122, 2)</code>. In Mode A it is amber <code>#FFB000</code>; in Mode B it is cyan
+    <code>#33CCFF</code>. This is subtle enough not to distract during performance but always visible
+    for orientation.
+  </p>
+
+  <h3>Colour System</h3>
+  <ul>
+    <li><span class="colour-swatch" style="background:#FFB000"></span><code>#FFB000</code> &mdash; Amber accent, Mode A indicator. High visibility, "active" semantic.</li>
+    <li><span class="colour-swatch" style="background:#33CCFF"></span><code>#33CCFF</code> &mdash; Cyan accent, Mode B indicator. Cool tone signals "diagnostic/technical".</li>
+    <li><span class="colour-swatch" style="background:#FF4444"></span><code>#FF4444</code> &mdash; Zone 1 (warm red).</li>
+    <li><span class="colour-swatch" style="background:#44FF44"></span><code>#44FF44</code> &mdash; Zone 2 (green).</li>
+    <li><span class="colour-swatch" style="background:#4488FF"></span><code>#4488FF</code> &mdash; Zone 3 (blue).</li>
+    <li><span class="colour-swatch" style="background:#FFFFFF"></span><code>#FFFFFF</code> &mdash; Master fader. White signals authority over all zones.</li>
+    <li><span class="colour-swatch" style="background:#0a0a0a"></span><code>#0a0a0a</code> &mdash; Background. Near-black with slight warmth to reduce eye fatigue.</li>
+  </ul>
+
+  <h3>Interaction Model</h3>
+  <ul>
+    <li><strong>Long press (&gt;800ms):</strong> Toggle between Mode A and B. The deliberate gesture
+      prevents accidental mode switches during live performance. A brief flash animation confirms
+      the switch.</li>
+    <li><strong>Short press (&lt;400ms):</strong> Cycle to next page within current mode.
+      Mode A: A1 &rarr; A2 &rarr; A1. Mode B: B1 &rarr; B2 &rarr; B3 &rarr; B1.</li>
+    <li><strong>No overlay in Mode B:</strong> Tech mode logs every input event to the B3 scrolling
+      list instead. This gives persistent history rather than a transient 2-second popup &mdash;
+      more useful for debugging input issues.</li>
+  </ul>
+
+  <h3>Implementation Notes</h3>
+  <ul>
+    <li>Mode state is a single boolean (<code>isOperatorMode</code>) persisted in NVS so it
+      survives power cycles. Operators boot into their preferred mode.</li>
+    <li>All rendering uses the existing 5x7 pixel font. Mode A uses 2x scaled characters for
+      the overlay (10x14 effective). No additional font assets required.</li>
+    <li>The overlay timer uses <code>millis()</code> comparison, not a FreeRTOS timer &mdash;
+      simpler and sufficient for a 2-second timeout at 30+ FPS display refresh.</li>
+    <li>B3 input log is a 5-entry circular buffer of structs: <code>{timestamp, source, value}</code>.
+      Memory cost: ~60 bytes. No heap allocation on input events.</li>
+  </ul>
+
+  <h3>Accessibility</h3>
+  <p>
+    Zone colours are chosen for deuteranopia safety: red/blue are distinguishable, and green
+    has high luminance contrast against both. All text meets minimum 4.5:1 contrast ratio
+    against <code>#0a0a0a</code> background. Mode B text uses <code>#888</code> labels (5.3:1)
+    and <code>#FFF</code> values (19.6:1).
+  </p>
+</div>
+
+<script>
+// ================================================================
+// Design 20: Dual-Mode Display Renderer
+// 128x128 pixel-perfect rendering at 4x scale
+// ================================================================
+
+const SCALE = 4;
+const W = 128;
+const H = 128;
+const BG = '#0a0a0a';
+
+// Zone colours
+const Z1 = '#FF4444';
+const Z2 = '#44FF44';
+const Z3 = '#4488FF';
+const MASTER = '#FFFFFF';
+const AMBER = '#FFB000';
+const CYAN = '#33CCFF';
+const DIM = '#888888';
+const MUTED = '#555555';
+const BAR_BG = '#1a1a1a';
+const BORDER = '#333333';
+
+// Sample data
+const STATE = {
+  zones: [
+    { brightness: 85, enabled: true },
+    { brightness: 62, enabled: true },
+    { brightness: 40, enabled: false },
+  ],
+  master: 78,
+  speed: 65,
+  effect: 'PulseWave',
+  effectId: '0x2A',
+  edgeMixer: 'ON',
+  wifi: true,
+  ws: true,
+  ip: '192.168.4.1',
+  rssi: -42,
+  wsState: 'CONNECTED',
+  reconnects: 0,
+  pollMs: 12,
+  i2cErrors: 0,
+  inputLog: [
+    { t: '14:32:01', src: 'E1', val: '+3' },
+    { t: '14:32:00', src: 'S2', val: 'BTN' },
+    { t: '14:31:58', src: 'E4', val: '-1' },
+    { t: '14:31:55', src: 'E2', val: '+1' },
+    { t: '14:31:52', src: 'S1', val: '+2' },
+  ],
+};
+
+// ----------------------------------------------------------------
+// 5x7 Pixel Font (uppercase + digits + basic punctuation)
+// ----------------------------------------------------------------
+const FONT_5x7 = {
+  'A': [0x7C,0x12,0x11,0x12,0x7C],
+  'B': [0x7F,0x49,0x49,0x49,0x36],
+  'C': [0x3E,0x41,0x41,0x41,0x22],
+  'D': [0x7F,0x41,0x41,0x22,0x1C],
+  'E': [0x7F,0x49,0x49,0x49,0x41],
+  'F': [0x7F,0x09,0x09,0x09,0x01],
+  'G': [0x3E,0x41,0x49,0x49,0x7A],
+  'H': [0x7F,0x08,0x08,0x08,0x7F],
+  'I': [0x00,0x41,0x7F,0x41,0x00],
+  'J': [0x20,0x40,0x41,0x3F,0x01],
+  'K': [0x7F,0x08,0x14,0x22,0x41],
+  'L': [0x7F,0x40,0x40,0x40,0x40],
+  'M': [0x7F,0x02,0x0C,0x02,0x7F],
+  'N': [0x7F,0x04,0x08,0x10,0x7F],
+  'O': [0x3E,0x41,0x41,0x41,0x3E],
+  'P': [0x7F,0x09,0x09,0x09,0x06],
+  'Q': [0x3E,0x41,0x51,0x21,0x5E],
+  'R': [0x7F,0x09,0x19,0x29,0x46],
+  'S': [0x46,0x49,0x49,0x49,0x31],
+  'T': [0x01,0x01,0x7F,0x01,0x01],
+  'U': [0x3F,0x40,0x40,0x40,0x3F],
+  'V': [0x1F,0x20,0x40,0x20,0x1F],
+  'W': [0x3F,0x40,0x38,0x40,0x3F],
+  'X': [0x63,0x14,0x08,0x14,0x63],
+  'Y': [0x07,0x08,0x70,0x08,0x07],
+  'Z': [0x61,0x51,0x49,0x45,0x43],
+  '0': [0x3E,0x51,0x49,0x45,0x3E],
+  '1': [0x00,0x42,0x7F,0x40,0x00],
+  '2': [0x42,0x61,0x51,0x49,0x46],
+  '3': [0x21,0x41,0x45,0x4B,0x31],
+  '4': [0x18,0x14,0x12,0x7F,0x10],
+  '5': [0x27,0x45,0x45,0x45,0x39],
+  '6': [0x3C,0x4A,0x49,0x49,0x30],
+  '7': [0x01,0x71,0x09,0x05,0x03],
+  '8': [0x36,0x49,0x49,0x49,0x36],
+  '9': [0x06,0x49,0x49,0x29,0x1E],
+  ' ': [0x00,0x00,0x00,0x00,0x00],
+  ':': [0x00,0x36,0x36,0x00,0x00],
+  '.': [0x00,0x60,0x60,0x00,0x00],
+  '-': [0x08,0x08,0x08,0x08,0x08],
+  '+': [0x08,0x08,0x3E,0x08,0x08],
+  '/': [0x20,0x10,0x08,0x04,0x02],
+  '%': [0x23,0x13,0x08,0x64,0x62],
+  '#': [0x14,0x7F,0x14,0x7F,0x14],
+  'x': [0x00,0x44,0x28,0x10,0x28],  // lowercase x for hex
+  '(': [0x00,0x1C,0x22,0x41,0x00],
+  ')': [0x00,0x41,0x22,0x1C,0x00],
+  ',': [0x00,0x80,0x60,0x00,0x00],
+  '>': [0x41,0x22,0x14,0x08,0x00],
+  '<': [0x00,0x08,0x14,0x22,0x41],
+  '=': [0x14,0x14,0x14,0x14,0x14],
+  '_': [0x40,0x40,0x40,0x40,0x40],
+  'd': [0x38,0x44,0x44,0x48,0x7F],  // lowercase for dBm
+  'm': [0x7C,0x04,0x18,0x04,0x78],  // lowercase
+  's': [0x48,0x54,0x54,0x54,0x24],  // lowercase
+};
+
+// Parse hex colour to {r,g,b}
+function parseCol(hex) {
+  const h = hex.replace('#', '');
+  return {
+    r: parseInt(h.substring(0, 2), 16),
+    g: parseInt(h.substring(2, 4), 16),
+    b: parseInt(h.substring(4, 6), 16),
+  };
+}
+
+// ----------------------------------------------------------------
+// Pixel buffer: 128x128 RGBA
+// ----------------------------------------------------------------
+function createBuffer() {
+  return new Uint8ClampedArray(W * H * 4);
+}
+
+function clearBuffer(buf, colour) {
+  const c = parseCol(colour);
+  for (let i = 0; i < W * H; i++) {
+    buf[i * 4]     = c.r;
+    buf[i * 4 + 1] = c.g;
+    buf[i * 4 + 2] = c.b;
+    buf[i * 4 + 3] = 255;
+  }
+}
+
+function setPixel(buf, x, y, colour) {
+  if (x < 0 || x >= W || y < 0 || y >= H) return;
+  const c = parseCol(colour);
+  const i = (y * W + x) * 4;
+  buf[i]     = c.r;
+  buf[i + 1] = c.g;
+  buf[i + 2] = c.b;
+  buf[i + 3] = 255;
+}
+
+function setPixelAlpha(buf, x, y, colour, alpha) {
+  if (x < 0 || x >= W || y < 0 || y >= H) return;
+  const c = parseCol(colour);
+  const i = (y * W + x) * 4;
+  const a = alpha / 255;
+  const ia = 1 - a;
+  buf[i]     = Math.round(c.r * a + buf[i] * ia);
+  buf[i + 1] = Math.round(c.g * a + buf[i + 1] * ia);
+  buf[i + 2] = Math.round(c.b * a + buf[i + 2] * ia);
+  buf[i + 3] = 255;
+}
+
+function drawChar(buf, ch, x, y, colour) {
+  const glyph = FONT_5x7[ch];
+  if (!glyph) return 6;
+  for (let col = 0; col < 5; col++) {
+    for (let row = 0; row < 7; row++) {
+      if (glyph[col] & (1 << row)) {
+        setPixel(buf, x + col, y + row, colour);
+      }
+    }
+  }
+  return 6; // advance 5px + 1px gap
+}
+
+function drawText(buf, text, x, y, colour) {
+  let cx = x;
+  for (let i = 0; i < text.length; i++) {
+    cx += drawChar(buf, text[i], cx, y, colour);
+  }
+  return cx;
+}
+
+// Draw text scaled 2x (for overlay big numbers)
+function drawChar2x(buf, ch, x, y, colour) {
+  const glyph = FONT_5x7[ch];
+  if (!glyph) return 12;
+  for (let col = 0; col < 5; col++) {
+    for (let row = 0; row < 7; row++) {
+      if (glyph[col] & (1 << row)) {
+        setPixel(buf, x + col * 2,     y + row * 2,     colour);
+        setPixel(buf, x + col * 2 + 1, y + row * 2,     colour);
+        setPixel(buf, x + col * 2,     y + row * 2 + 1, colour);
+        setPixel(buf, x + col * 2 + 1, y + row * 2 + 1, colour);
+      }
+    }
+  }
+  return 12;
+}
+
+function drawText2x(buf, text, x, y, colour) {
+  let cx = x;
+  for (let i = 0; i < text.length; i++) {
+    cx += drawChar2x(buf, text[i], cx, y, colour);
+  }
+  return cx;
+}
+
+// Draw text scaled 3x (for overlay huge numbers)
+function drawChar3x(buf, ch, x, y, colour) {
+  const glyph = FONT_5x7[ch];
+  if (!glyph) return 18;
+  for (let col = 0; col < 5; col++) {
+    for (let row = 0; row < 7; row++) {
+      if (glyph[col] & (1 << row)) {
+        for (let dx = 0; dx < 3; dx++) {
+          for (let dy = 0; dy < 3; dy++) {
+            setPixel(buf, x + col * 3 + dx, y + row * 3 + dy, colour);
+          }
+        }
+      }
+    }
+  }
+  return 18;
+}
+
+function drawText3x(buf, text, x, y, colour) {
+  let cx = x;
+  for (let i = 0; i < text.length; i++) {
+    cx += drawChar3x(buf, text[i], cx, y, colour);
+  }
+  return cx;
+}
+
+// Filled rectangle
+function fillRect(buf, x, y, w, h, colour) {
+  for (let dy = 0; dy < h; dy++) {
+    for (let dx = 0; dx < w; dx++) {
+      setPixel(buf, x + dx, y + dy, colour);
+    }
+  }
+}
+
+// Semi-transparent filled rectangle
+function fillRectAlpha(buf, x, y, w, h, colour, alpha) {
+  for (let dy = 0; dy < h; dy++) {
+    for (let dx = 0; dx < w; dx++) {
+      setPixelAlpha(buf, x + dx, y + dy, colour, alpha);
+    }
+  }
+}
+
+// Horizontal line
+function hLine(buf, x, y, w, colour) {
+  for (let i = 0; i < w; i++) setPixel(buf, x + i, y, colour);
+}
+
+// Vertical line
+function vLine(buf, x, y, h, colour) {
+  for (let i = 0; i < h; i++) setPixel(buf, x, y + i, colour);
+}
+
+// Connection dots (WiFi + WS)
+function drawConnDots(buf, x, y, wifi, ws) {
+  // WiFi dot 4x4
+  const wifiCol = wifi ? '#44FF44' : '#FF4444';
+  fillRect(buf, x, y, 4, 4, wifiCol);
+  // WS dot 4x4
+  const wsCol = ws ? '#44FF44' : '#FF4444';
+  fillRect(buf, x + 6, y, 4, 4, wsCol);
+}
+
+// Mode indicator letter in top-right
+function drawModeIndicator(buf, mode) {
+  const col = mode === 'A' ? AMBER : CYAN;
+  drawChar(buf, mode, 122, 2, col);
+}
+
+// ----------------------------------------------------------------
+// Page A1: Zone Faders (OPERATOR)
+// Bold vertical bars, zone colours, big and readable
+// ----------------------------------------------------------------
+function renderA1(buf) {
+  clearBuffer(buf, BG);
+
+  // Header: "ZM" + connection dots
+  drawText(buf, 'ZM', 2, 2, AMBER);
+  drawConnDots(buf, 16, 3, STATE.wifi, STATE.ws);
+
+  // Mode indicator
+  drawModeIndicator(buf, 'A');
+
+  // Page dots: 2 pages, page 1 active
+  fillRect(buf, 58, 4, 4, 4, '#FFFFFF');
+  fillRect(buf, 64, 4, 4, 4, MUTED);
+
+  // Separator
+  hLine(buf, 0, 12, 128, '#222222');
+
+  // Zone faders — 3 zones + master
+  // Layout: each bar is 24px wide, centred with gaps
+  // Total: 4 bars * 24px + 3 gaps * 6px = 114px. Start at x=7
+  const barW = 24;
+  const gap = 6;
+  const barTop = 18;
+  const barH = 80;
+  const barBottom = barTop + barH;
+  const startX = 7;
+
+  const faders = [
+    { label: '1', value: STATE.zones[0].brightness, colour: Z1, enabled: STATE.zones[0].enabled },
+    { label: '2', value: STATE.zones[1].brightness, colour: Z2, enabled: STATE.zones[1].enabled },
+    { label: '3', value: STATE.zones[2].brightness, colour: Z3, enabled: STATE.zones[2].enabled },
+    { label: 'M', value: STATE.master, colour: MASTER, enabled: true },
+  ];
+
+  faders.forEach((f, i) => {
+    const x = startX + i * (barW + gap);
+
+    // Bar background (track)
+    fillRect(buf, x, barTop, barW, barH, BAR_BG);
+
+    // Filled portion (bottom-up)
+    const fillH = Math.round(barH * f.value / 100);
+    const fillY = barBottom - fillH;
+    const barCol = f.enabled ? f.colour : MUTED;
+    fillRect(buf, x, fillY, barW, fillH, barCol);
+
+    // 1px border
+    for (let dy = 0; dy < barH; dy++) {
+      setPixel(buf, x, barTop + dy, '#222222');
+      setPixel(buf, x + barW - 1, barTop + dy, '#222222');
+    }
+    hLine(buf, x, barTop, barW, '#222222');
+    hLine(buf, x, barBottom - 1, barW, '#222222');
+
+    // Label above bar
+    const labelX = x + Math.round((barW - 5) / 2);
+    drawChar(buf, f.label, labelX, barTop - 9, f.enabled ? f.colour : MUTED);
+
+    // Value below bar
+    const valStr = String(f.value);
+    const valW = valStr.length * 6;
+    const valX = x + Math.round((barW - valW) / 2);
+    drawText(buf, valStr, valX, barBottom + 4, f.enabled ? '#FFFFFF' : MUTED);
+
+    // Disabled indicator
+    if (!f.enabled) {
+      // Draw X through the bar
+      for (let d = 0; d < Math.min(barW, barH); d++) {
+        const px = x + Math.round(d * barW / barH);
+        setPixel(buf, px, barTop + d, '#FF444488');
+      }
+    }
+  });
+
+  // Bottom status: effect name
+  const effText = STATE.effect.toUpperCase();
+  const effW = effText.length * 6;
+  const effX = Math.round((128 - effW) / 2);
+  drawText(buf, effText, effX, 118, AMBER);
+}
+
+// ----------------------------------------------------------------
+// Page A2: Effect + Speed (OPERATOR)
+// Large, readable from 1m. Centred effect name, speed bar.
+// ----------------------------------------------------------------
+function renderA2(buf) {
+  clearBuffer(buf, BG);
+
+  // Header: "ZM" + connection dots
+  drawText(buf, 'ZM', 2, 2, AMBER);
+  drawConnDots(buf, 16, 3, STATE.wifi, STATE.ws);
+  drawModeIndicator(buf, 'A');
+
+  // Page dots: 2 pages, page 2 active
+  fillRect(buf, 58, 4, 4, 4, MUTED);
+  fillRect(buf, 64, 4, 4, 4, '#FFFFFF');
+
+  hLine(buf, 0, 12, 128, '#222222');
+
+  // "EFFECT" label
+  const labelText = 'EFFECT';
+  const labelW = labelText.length * 6;
+  drawText(buf, labelText, Math.round((128 - labelW) / 2), 18, MUTED);
+
+  // Effect name — 2x scale, centred
+  const effText = STATE.effect.toUpperCase();
+  const effW = effText.length * 12;
+  const effX = Math.round((128 - effW) / 2);
+  drawText2x(buf, effText, effX, 30, AMBER);
+
+  // Effect ID below
+  const idText = STATE.effectId.toUpperCase();
+  const idW = idText.length * 6;
+  drawText(buf, idText, Math.round((128 - idW) / 2), 48, DIM);
+
+  // Separator
+  hLine(buf, 8, 58, 112, '#222222');
+
+  // "SPEED" label
+  drawText(buf, 'SPEED', Math.round((128 - 30) / 2), 64, MUTED);
+
+  // Speed bar — full width with padding
+  const barX = 8;
+  const barY = 76;
+  const barW = 112;
+  const barH = 14;
+
+  fillRect(buf, barX, barY, barW, barH, BAR_BG);
+  const fillW = Math.round(barW * STATE.speed / 100);
+  fillRect(buf, barX, barY, fillW, barH, '#4488FF');
+
+  // Border
+  hLine(buf, barX, barY, barW, '#222222');
+  hLine(buf, barX, barY + barH - 1, barW, '#222222');
+  vLine(buf, barX, barY, barH, '#222222');
+  vLine(buf, barX + barW - 1, barY, barH, '#222222');
+
+  // Speed value centred in bar
+  const speedStr = String(STATE.speed) + '%';
+  const speedW = speedStr.length * 6;
+  drawText(buf, speedStr, Math.round((128 - speedW) / 2), barY + 4, '#FFFFFF');
+
+  // Master brightness at bottom
+  hLine(buf, 8, 96, 112, '#222222');
+
+  drawText(buf, 'MASTER', 8, 102, MUTED);
+  const masterStr = String(STATE.master) + '%';
+  const masterW = masterStr.length * 6;
+  drawText(buf, masterStr, 128 - 8 - masterW, 102, '#FFFFFF');
+
+  // Zone enable indicators at bottom
+  const zoneLabels = ['Z1', 'Z2', 'Z3'];
+  const zoneCols = [Z1, Z2, Z3];
+  const zoneX = 8;
+  zoneLabels.forEach((lbl, i) => {
+    const enabled = STATE.zones[i].enabled;
+    const col = enabled ? zoneCols[i] : MUTED;
+    drawText(buf, lbl, zoneX + i * 24, 114, col);
+    // Enable dot
+    fillRect(buf, zoneX + 14 + i * 24, 117, 4, 4, enabled ? '#44FF44' : '#FF4444');
+  });
+
+  // EdgeMixer state
+  drawText(buf, 'EM', 100, 114, MUTED);
+  drawText(buf, STATE.edgeMixer, 114, 114, STATE.edgeMixer === 'ON' ? '#44FF44' : '#FF4444');
+}
+
+// ----------------------------------------------------------------
+// Page A: Live Overlay (shown over any page on encoder change)
+// 48px value, 2s timeout, semi-transparent background
+// ----------------------------------------------------------------
+function renderAOverlay(buf) {
+  // Render A1 as the base page
+  renderA1(buf);
+
+  // Semi-transparent overlay background
+  const overlayX = 14;
+  const overlayY = 28;
+  const overlayW = 100;
+  const overlayH = 72;
+
+  fillRectAlpha(buf, overlayX, overlayY, overlayW, overlayH, '#000000', 210);
+
+  // Border
+  for (let i = 0; i < overlayW; i++) {
+    setPixel(buf, overlayX + i, overlayY, AMBER);
+    setPixel(buf, overlayX + i, overlayY + overlayH - 1, AMBER);
+  }
+  for (let i = 0; i < overlayH; i++) {
+    setPixel(buf, overlayX, overlayY + i, AMBER);
+    setPixel(buf, overlayX + overlayW - 1, overlayY + i, AMBER);
+  }
+
+  // Parameter label
+  const paramLabel = 'Z1 BRIGHT';
+  const labelW = paramLabel.length * 6;
+  drawText(buf, paramLabel, Math.round((128 - labelW) / 2), overlayY + 8, DIM);
+
+  // Big value — 3x scale
+  const bigVal = '85';
+  const bigW = bigVal.length * 18;
+  const bigX = Math.round((128 - bigW) / 2);
+  drawText3x(buf, bigVal, bigX, overlayY + 22, '#FFFFFF');
+
+  // Unit
+  drawText(buf, '%', bigX + bigW + 2, overlayY + 36, MUTED);
+
+  // Source indicator
+  const srcText = 'E1 +3';
+  const srcW = srcText.length * 6;
+  drawText(buf, srcText, Math.round((128 - srcW) / 2), overlayY + overlayH - 14, AMBER);
+}
+
+// ----------------------------------------------------------------
+// Page B1: All Parameters (TECH)
+// Dense text list — everything on one screen
+// ----------------------------------------------------------------
+function renderB1(buf) {
+  clearBuffer(buf, BG);
+
+  // Header
+  drawText(buf, 'PARAMETERS', 2, 2, CYAN);
+  drawModeIndicator(buf, 'B');
+
+  // Page dots: 3 pages, page 1 active
+  fillRect(buf, 52, 4, 4, 4, '#FFFFFF');
+  fillRect(buf, 58, 4, 4, 4, MUTED);
+  fillRect(buf, 64, 4, 4, 4, MUTED);
+
+  hLine(buf, 0, 12, 128, '#222222');
+
+  // Parameter rows
+  const rows = [
+    { label: 'Z1 BRI', value: String(STATE.zones[0].brightness) + '%', colour: Z1 },
+    { label: 'Z2 BRI', value: String(STATE.zones[1].brightness) + '%', colour: Z2 },
+    { label: 'Z3 BRI', value: String(STATE.zones[2].brightness) + '%', colour: Z3 },
+    { label: 'MASTER', value: String(STATE.master) + '%', colour: '#FFFFFF' },
+    { label: 'SPEED', value: String(STATE.speed) + '%', colour: '#4488FF' },
+    { label: 'EFFECT', value: STATE.effectId.toUpperCase(), colour: AMBER },
+    { label: 'ZONES', value: (STATE.zones[0].enabled ? '1' : '-') + (STATE.zones[1].enabled ? '2' : '-') + (STATE.zones[2].enabled ? '3' : '-'), colour: '#FFFFFF' },
+    { label: 'EDGE', value: STATE.edgeMixer, colour: STATE.edgeMixer === 'ON' ? '#44FF44' : '#FF4444' },
+    { label: 'WIFI', value: STATE.wifi ? 'OK' : 'NO', colour: STATE.wifi ? '#44FF44' : '#FF4444' },
+    { label: 'WS', value: STATE.ws ? 'OK' : 'NO', colour: STATE.ws ? '#44FF44' : '#FF4444' },
+  ];
+
+  const rowH = 11;
+  const startY = 16;
+
+  rows.forEach((row, i) => {
+    const y = startY + i * rowH;
+
+    // Alternate row background
+    if (i % 2 === 0) {
+      fillRect(buf, 0, y, 128, rowH, '#0f0f0f');
+    }
+
+    // Label
+    drawText(buf, row.label, 3, y + 2, DIM);
+
+    // Value — right-aligned
+    const valW = row.value.length * 6;
+    drawText(buf, row.value, 125 - valW, y + 2, row.colour);
+
+    // Separator
+    hLine(buf, 0, y + rowH - 1, 128, '#151515');
+  });
+}
+
+// ----------------------------------------------------------------
+// Page B2: Connection Diagnostics (TECH)
+// IP, RSSI, WS state, reconnect count, poll cycle, I2C errors
+// ----------------------------------------------------------------
+function renderB2(buf) {
+  clearBuffer(buf, BG);
+
+  // Header
+  drawText(buf, 'DIAGNOSTICS', 2, 2, CYAN);
+  drawModeIndicator(buf, 'B');
+
+  // Page dots: 3 pages, page 2 active
+  fillRect(buf, 52, 4, 4, 4, MUTED);
+  fillRect(buf, 58, 4, 4, 4, '#FFFFFF');
+  fillRect(buf, 64, 4, 4, 4, MUTED);
+
+  hLine(buf, 0, 12, 128, '#222222');
+
+  // Connection status block
+  const statusCol = (STATE.wifi && STATE.ws) ? '#44FF44' : '#FF4444';
+  const statusText = (STATE.wifi && STATE.ws) ? 'CONNECTED' : 'OFFLINE';
+  const statusW = statusText.length * 6;
+  drawText(buf, statusText, Math.round((128 - statusW) / 2), 16, statusCol);
+
+  hLine(buf, 8, 26, 112, '#222222');
+
+  // Diagnostic rows
+  const diag = [
+    { label: 'IP', value: STATE.ip },
+    { label: 'RSSI', value: String(STATE.rssi) + 'dBm' },
+    { label: 'WS', value: STATE.wsState },
+    { label: 'RECONN', value: String(STATE.reconnects) },
+    { label: 'POLL', value: String(STATE.pollMs) + 'ms' },
+    { label: 'I2C ERR', value: String(STATE.i2cErrors) },
+  ];
+
+  const rowH = 14;
+  const startY = 32;
+
+  diag.forEach((row, i) => {
+    const y = startY + i * rowH;
+
+    if (i % 2 === 0) {
+      fillRect(buf, 0, y, 128, rowH, '#0f0f0f');
+    }
+
+    // Label
+    drawText(buf, row.label, 3, y + 3, DIM);
+
+    // Value — right-aligned
+    const valW = row.value.length * 6;
+    const valCol = (row.label === 'I2C ERR' && parseInt(row.value) > 0) ? '#FF4444' :
+                   (row.label === 'RSSI' && parseInt(row.value) > -50) ? '#44FF44' :
+                   (row.label === 'RSSI') ? '#FFAA00' : '#FFFFFF';
+    drawText(buf, row.value, 125 - valW, y + 3, valCol);
+  });
+
+  // Uptime at bottom
+  hLine(buf, 8, 118, 112, '#222222');
+  drawText(buf, 'UP', 3, 121, MUTED);
+  const uptime = '02:14:37';
+  const upW = uptime.length * 6;
+  drawText(buf, uptime, 125 - upW, 121, DIM);
+}
+
+// ----------------------------------------------------------------
+// Page B3: Input Monitor (TECH)
+// Scrolling log of last 5 input events
+// ----------------------------------------------------------------
+function renderB3(buf) {
+  clearBuffer(buf, BG);
+
+  // Header
+  drawText(buf, 'INPUT LOG', 2, 2, CYAN);
+  drawModeIndicator(buf, 'B');
+
+  // Page dots: 3 pages, page 3 active
+  fillRect(buf, 52, 4, 4, 4, MUTED);
+  fillRect(buf, 58, 4, 4, 4, MUTED);
+  fillRect(buf, 64, 4, 4, 4, '#FFFFFF');
+
+  hLine(buf, 0, 12, 128, '#222222');
+
+  // Column headers
+  drawText(buf, 'TIME', 3, 16, MUTED);
+  drawText(buf, 'SRC', 56, 16, MUTED);
+  drawText(buf, 'VAL', 90, 16, MUTED);
+  hLine(buf, 0, 24, 128, '#222222');
+
+  // Log entries
+  const rowH = 18;
+  const startY = 28;
+
+  STATE.inputLog.forEach((entry, i) => {
+    const y = startY + i * rowH;
+
+    // Alternate background
+    if (i % 2 === 0) {
+      fillRect(buf, 0, y, 128, rowH, '#0f0f0f');
+    }
+
+    // Most recent entry is brighter
+    const timCol = i === 0 ? '#AAAAAA' : '#555555';
+    const srcCol = i === 0 ? '#FFFFFF' : '#888888';
+    const valCol = i === 0 ? CYAN : '#666666';
+
+    // Time (HH:MM:SS)
+    drawText(buf, entry.t, 3, y + 5, timCol);
+
+    // Source (E1, S2, etc.)
+    const srcColour = entry.src.startsWith('E') ? AMBER : '#CC66FF';
+    drawText(buf, entry.src, 56, y + 5, i === 0 ? srcColour : '#666666');
+
+    // Value (+1, BTN, etc.)
+    drawText(buf, entry.val, 90, y + 5, valCol);
+
+    // Separator
+    hLine(buf, 0, y + rowH - 1, 128, '#151515');
+  });
+
+  // Live indicator — pulsing dot at bottom
+  fillRect(buf, 3, 121, 4, 4, '#44FF44');
+  drawText(buf, 'LIVE', 10, 121, '#44FF44');
+  drawText(buf, '5/5', 108, 121, MUTED);
+}
+
+// ----------------------------------------------------------------
+// Render to canvas (1x and 4x)
+// ----------------------------------------------------------------
+function renderToCanvas(canvasId, buf, scale) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const imgData = new ImageData(new Uint8ClampedArray(buf), W, H);
+
+  if (scale === 1) {
+    ctx.putImageData(imgData, 0, 0);
+  } else {
+    // Render to offscreen 1x, then scale up
+    const offscreen = document.createElement('canvas');
+    offscreen.width = W;
+    offscreen.height = H;
+    offscreen.getContext('2d').putImageData(imgData, 0, 0);
+
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(offscreen, 0, 0, W * scale, H * scale);
+  }
+}
+
+// ----------------------------------------------------------------
+// Frame renderers map
+// ----------------------------------------------------------------
+const renderers = {
+  A1: renderA1,
+  A2: renderA2,
+  AO: renderAOverlay,
+  B1: renderB1,
+  B2: renderB2,
+  B3: renderB3,
+};
+
+let currentFrame = 'A1';
+
+function showFrame(frameId) {
+  currentFrame = frameId;
+
+  // Update button states
+  document.querySelectorAll('.controls button').forEach(btn => {
+    btn.classList.remove('active', 'active-b');
+  });
+  const activeBtn = document.getElementById('btn' + frameId);
+  if (activeBtn) {
+    const isB = frameId.startsWith('B');
+    activeBtn.classList.add(isB ? 'active-b' : 'active');
+  }
+
+  // Update mode label
+  const modeLabel = document.getElementById('modeLabel');
+  if (frameId.startsWith('A')) {
+    modeLabel.innerHTML = 'MODE A &mdash; OPERATOR';
+    modeLabel.className = '';
+  } else {
+    modeLabel.innerHTML = 'MODE B &mdash; TECH';
+    modeLabel.className = 'tech';
+  }
+
+  // Update frame label
+  const labels = {
+    A1: 'A1: Zone Faders',
+    A2: 'A2: Effect + Speed',
+    AO: 'A: Live Overlay (2s timeout)',
+    B1: 'B1: All Parameters',
+    B2: 'B2: Connection Diagnostics',
+    B3: 'B3: Input Monitor',
+  };
+  document.getElementById('frameLabel').textContent = labels[frameId] + ' \u00b7 4\u00d7 Scale';
+
+  // Render
+  const buf = createBuffer();
+  renderers[frameId](buf);
+  renderToCanvas('canvas4x', buf, SCALE);
+  renderToCanvas('canvas1x', buf, 1);
+}
+
+// ----------------------------------------------------------------
+// Render all 6 static frames
+// ----------------------------------------------------------------
+function renderAllStatic() {
+  Object.keys(renderers).forEach(frameId => {
+    const buf = createBuffer();
+    renderers[frameId](buf);
+    renderToCanvas('static' + frameId, buf, SCALE);
+  });
+}
+
+// ----------------------------------------------------------------
+// Keyboard navigation
+// ----------------------------------------------------------------
+document.addEventListener('keydown', (e) => {
+  const modeAPages = ['A1', 'A2', 'AO'];
+  const modeBPages = ['B1', 'B2', 'B3'];
+
+  if (e.key === 'ArrowRight' || e.key === ' ') {
+    // Short press: cycle within mode
+    e.preventDefault();
+    const isA = currentFrame.startsWith('A');
+    const pages = isA ? modeAPages : modeBPages;
+    const idx = pages.indexOf(currentFrame);
+    const next = pages[(idx + 1) % pages.length];
+    showFrame(next);
+  } else if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    const isA = currentFrame.startsWith('A');
+    const pages = isA ? modeAPages : modeBPages;
+    const idx = pages.indexOf(currentFrame);
+    const prev = pages[(idx - 1 + pages.length) % pages.length];
+    showFrame(prev);
+  } else if (e.key === 'Enter') {
+    // Long press: toggle mode
+    e.preventDefault();
+    const isA = currentFrame.startsWith('A');
+    showFrame(isA ? 'B1' : 'A1');
+  }
+});
+
+// ----------------------------------------------------------------
+// Init
+// ----------------------------------------------------------------
+showFrame('A1');
+renderAllStatic();
+</script>
+
+</body>
+</html>

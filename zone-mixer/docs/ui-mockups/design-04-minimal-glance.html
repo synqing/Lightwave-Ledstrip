@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zone Mixer - Design 04: Minimal Glance</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #1a1a2e;
+    color: #ccc;
+    font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+    min-height: 100vh;
+  }
+
+  h1 {
+    font-size: 20px;
+    font-weight: 600;
+    color: #e0e0e0;
+    margin-bottom: 6px;
+    letter-spacing: 0.5px;
+  }
+
+  .subtitle {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 32px;
+  }
+
+  /* ── Layout ─────────────────────────────────── */
+
+  .mockup-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 48px;
+    margin-bottom: 48px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .mockup-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .mockup-label {
+    font-size: 11px;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
+
+  /* ── Canvas wrapper ─────────────────────────── */
+
+  .canvas-wrap {
+    position: relative;
+    background: #000;
+    image-rendering: pixelated;
+    border: 1px solid #333;
+  }
+
+  .canvas-wrap.scaled {
+    width: 512px;
+    height: 512px;
+  }
+
+  .canvas-wrap.actual {
+    width: 128px;
+    height: 128px;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+
+  /* ── Rationale panel ────────────────────────── */
+
+  .rationale {
+    max-width: 680px;
+    background: #0d0d1a;
+    border: 1px solid #262640;
+    border-radius: 6px;
+    padding: 28px 32px;
+    margin-top: 16px;
+    line-height: 1.7;
+    font-size: 13px;
+    color: #999;
+  }
+
+  .rationale h2 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #bbb;
+    margin-bottom: 14px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .rationale h3 {
+    font-size: 12px;
+    font-weight: 600;
+    color: #888;
+    margin-top: 18px;
+    margin-bottom: 6px;
+  }
+
+  .rationale ul {
+    padding-left: 18px;
+    margin-bottom: 8px;
+  }
+
+  .rationale li {
+    margin-bottom: 4px;
+  }
+
+  .rationale code {
+    background: #1a1a30;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 12px;
+    color: #8af;
+  }
+
+  .rationale .metric {
+    display: inline-block;
+    background: #1a2a1a;
+    color: #6c6;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 4px;
+  }
+
+  /* ── Annotations ────────────────────────────── */
+
+  .annotations {
+    max-width: 680px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 24px;
+  }
+
+  .annotation {
+    background: #0d0d1a;
+    border: 1px solid #262640;
+    border-radius: 4px;
+    padding: 12px 16px;
+    font-size: 11px;
+    color: #777;
+    line-height: 1.5;
+  }
+
+  .annotation strong {
+    color: #aaa;
+    display: block;
+    margin-bottom: 4px;
+    font-size: 12px;
+  }
+
+  .dot-legend {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+</style>
+</head>
+<body>
+
+<h1>Design 04 -- Minimal Glance</h1>
+<p class="subtitle">Zone Mixer UI for AtomS3 (128x128 LCD) -- ultra-minimal, change-focused</p>
+
+<div class="mockup-row">
+  <div class="mockup-group">
+    <div class="canvas-wrap scaled">
+      <canvas id="scaled" width="128" height="128"></canvas>
+    </div>
+    <span class="mockup-label">4x Scale (512 x 512)</span>
+  </div>
+
+  <div class="mockup-group">
+    <div class="canvas-wrap actual">
+      <canvas id="actual" width="128" height="128"></canvas>
+    </div>
+    <span class="mockup-label">1:1 Actual (128 x 128)</span>
+  </div>
+</div>
+
+<!-- Design rationale -->
+<div class="rationale">
+  <h2>Design Rationale</h2>
+
+  <h3>Philosophy</h3>
+  <p>
+    The Minimal Glance design treats the 0.85" screen as a <strong>peripheral indicator</strong>,
+    not a primary interface. The user's hands are on the encoders; the screen confirms what
+    changed. One glance -- one number -- done.
+  </p>
+
+  <h3>Why This Works at 128x128</h3>
+  <ul>
+    <li><strong>5 elements maximum</strong> -- WiFi dot, WS dot, master brightness, effect name, zone dots. Nothing else competes for attention.</li>
+    <li><strong>48px master number</strong> fills ~37% of vertical space. Readable at arm's length even on a 0.85" panel.</li>
+    <li><strong>Corner indicators</strong> use 6px dots -- small enough to ignore, visible enough to notice a red flash.</li>
+    <li><strong>Zone dots</strong> use proportional diameter (4--10px) to encode brightness without needing numbers. Three dots for three zones, colour-coded to match physical encoder rings.</li>
+  </ul>
+
+  <h3>Colour Choices</h3>
+  <ul>
+    <li><strong>Master brightness:</strong> pure white <code>#FFFFFF</code> -- maximum contrast on black, no colour association.</li>
+    <li><strong>WiFi dot:</strong> <span class="dot-legend" style="background:#22c55e"></span>green (connected) / <span class="dot-legend" style="background:#ef4444"></span>red (disconnected).</li>
+    <li><strong>WS dot:</strong> <span class="dot-legend" style="background:#22c55e"></span>green (open) / <span class="dot-legend" style="background:#eab308"></span>yellow (connecting) / <span class="dot-legend" style="background:#ef4444"></span>red (closed).</li>
+    <li><strong>Zone 1:</strong> cyan <code>#22d3ee</code> -- cool, distinct from green status dots.</li>
+    <li><strong>Zone 2:</strong> green <code>#4ade80</code> -- natural, mid-spectrum.</li>
+    <li><strong>Zone 3:</strong> orange <code>#fb923c</code> -- warm, high contrast against black.</li>
+    <li><strong>Effect name:</strong> dim grey <code>#666666</code> -- readable when sought, invisible when not.</li>
+  </ul>
+
+  <h3>Performance Considerations</h3>
+  <ul>
+    <li>Only 5 draw calls per frame -- trivial for the AtomS3 ST7789 driver.<span class="metric">~0.3ms</span></li>
+    <li>No gradients, no anti-aliasing, no alpha blending needed. Pure filled primitives.</li>
+    <li>Full-screen clear is black -- can use hardware fill if available.</li>
+    <li>Partial updates viable: only redraw the master number on encoder turn, dots on state change.</li>
+  </ul>
+
+  <h3>Accessibility at Scale</h3>
+  <ul>
+    <li>Master number contrast ratio on black: <strong>21:1</strong> (exceeds WCAG AAA).</li>
+    <li>Status dots use position (top-left vs top-right) as secondary encoding -- not colour alone.</li>
+    <li>Zone dots use both colour and size -- dual encoding for colour-vision deficiency.</li>
+  </ul>
+</div>
+
+<!-- Element annotations -->
+<div class="annotations">
+  <div class="annotation">
+    <strong>WiFi Indicator (top-left)</strong>
+    Position: (4, 4). Radius: 3px. Green when AP connected, red when disconnected.
+    Stays peripheral -- users rarely need this after initial setup.
+  </div>
+  <div class="annotation">
+    <strong>WebSocket Indicator (top-right)</strong>
+    Position: (123, 4). Radius: 3px. Green/yellow/red tri-state.
+    Yellow (connecting) is critical -- tells user to wait, not retry.
+  </div>
+  <div class="annotation">
+    <strong>Master Brightness (centre)</strong>
+    Font: 48px, bold, white. Vertically centred at y=52 (baseline).
+    Horizontally centred via text width calculation. Displays 0--100.
+  </div>
+  <div class="annotation">
+    <strong>Zone Brightness Dots (bottom)</strong>
+    Y: 114. Spaced at x=42, x=64, x=86 (22px gap). Diameter scales
+    4--10px proportional to zone brightness (0--100%). Colour-coded per zone.
+  </div>
+</div>
+
+<script>
+// ── Configuration ───────────────────────────────────────────────────
+// Simulated device state
+const state = {
+  masterBrightness: 78,
+  effectName: 'Chromatic Pulse',
+  wifiConnected: true,
+  wsState: 'open',           // 'open' | 'connecting' | 'closed'
+  zones: [
+    { brightness: 92 },     // Zone 1 (cyan)
+    { brightness: 65 },     // Zone 2 (green)
+    { brightness: 40 },     // Zone 3 (orange)
+  ],
+};
+
+// ── Colours ─────────────────────────────────────────────────────────
+const C = {
+  bg:         '#000000',
+  master:     '#ffffff',
+  effectText: '#666666',
+  wifi:       { on: '#22c55e', off: '#ef4444' },
+  ws:         { open: '#22c55e', connecting: '#eab308', closed: '#ef4444' },
+  zone:       ['#22d3ee', '#4ade80', '#fb923c'],
+};
+
+// ── Render to a 128x128 canvas ──────────────────────────────────────
+function render(ctx) {
+  const W = 128;
+  const H = 128;
+
+  // 1. Black background
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // 2. WiFi indicator -- top-left corner
+  ctx.beginPath();
+  ctx.arc(7, 7, 3, 0, Math.PI * 2);
+  ctx.fillStyle = state.wifiConnected ? C.wifi.on : C.wifi.off;
+  ctx.fill();
+
+  // 3. WebSocket indicator -- top-right corner
+  ctx.beginPath();
+  ctx.arc(W - 7, 7, 3, 0, Math.PI * 2);
+  ctx.fillStyle = C.ws[state.wsState];
+  ctx.fill();
+
+  // 4. Master brightness -- large centred number
+  ctx.fillStyle = C.master;
+  ctx.font = 'bold 48px "SF Mono", "JetBrains Mono", "Courier New", monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(String(state.masterBrightness), W / 2, H / 2 - 8);
+
+  // 5. Effect name -- small text below centre
+  ctx.fillStyle = C.effectText;
+  ctx.font = '9px "SF Mono", "JetBrains Mono", "Courier New", monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillText(state.effectName, W / 2, H / 2 + 22);
+
+  // 6. Zone brightness dots -- bottom, proportionally sized
+  const dotY = 114;
+  const dotSpacing = 22;
+  const dotStartX = W / 2 - dotSpacing;  // centres 3 dots
+
+  for (let i = 0; i < 3; i++) {
+    const brightness = state.zones[i].brightness / 100;
+    // Radius scales from 2px (0%) to 5px (100%)
+    const radius = 2 + brightness * 3;
+    const x = dotStartX + i * dotSpacing;
+
+    ctx.beginPath();
+    ctx.arc(x, dotY, radius, 0, Math.PI * 2);
+    ctx.fillStyle = C.zone[i];
+    ctx.fill();
+  }
+}
+
+// ── Draw both canvases ──────────────────────────────────────────────
+function draw() {
+  const scaled = document.getElementById('scaled');
+  const actual = document.getElementById('actual');
+
+  // Both canvases are 128x128 logical pixels.
+  // The CSS scales the 'scaled' canvas to 512x512 with image-rendering: pixelated.
+  render(scaled.getContext('2d'));
+  render(actual.getContext('2d'));
+}
+
+draw();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,1496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zone Mixer — Design 14: Context-Aware Pages</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #111;
+    color: #ccc;
+    font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+    min-height: 100vh;
+  }
+
+  h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #FFB000;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+
+  .subtitle {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 32px;
+    letter-spacing: 0.5px;
+  }
+
+  /* ── Display Grid ── */
+  .display-grid {
+    display: flex;
+    gap: 40px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 24px;
+  }
+
+  .display-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .panel-label {
+    font-size: 11px;
+    color: #555;
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .panel-label .active-indicator {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #22CC44;
+    margin-right: 4px;
+    vertical-align: middle;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .panel-label .active-indicator.on {
+    opacity: 1;
+  }
+
+  canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    border: 1px solid #222;
+  }
+
+  .panel-hint {
+    font-size: 10px;
+    color: #444;
+    margin-top: 6px;
+    font-style: italic;
+  }
+
+  /* ── Overlay Preview ── */
+  .overlay-section {
+    margin-top: 16px;
+    margin-bottom: 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .overlay-section .panel-label {
+    margin-bottom: 12px;
+  }
+
+  .overlay-row {
+    display: flex;
+    gap: 32px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .overlay-example {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .overlay-example .panel-hint {
+    margin-top: 4px;
+  }
+
+  /* ── Interactive Controls ── */
+  .controls-section {
+    max-width: 800px;
+    width: 100%;
+    margin-bottom: 40px;
+    padding: 20px;
+    background: #0d0d0d;
+    border: 1px solid #1a1a1a;
+    border-radius: 6px;
+  }
+
+  .controls-section h2 {
+    font-size: 13px;
+    color: #FFB000;
+    margin-bottom: 16px;
+    letter-spacing: 0.5px;
+  }
+
+  .control-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+
+  .control-row:last-child {
+    margin-bottom: 0;
+  }
+
+  .control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .control-group label {
+    font-size: 10px;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  button {
+    background: #1a1a1a;
+    color: #999;
+    border: 1px solid #333;
+    padding: 6px 14px;
+    font-family: inherit;
+    font-size: 11px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    letter-spacing: 0.5px;
+  }
+
+  button:hover {
+    background: #252525;
+    color: #ccc;
+    border-color: #555;
+  }
+
+  button.active {
+    background: #FFB000;
+    color: #000;
+    border-color: #FFB000;
+    font-weight: 600;
+  }
+
+  button.zone-btn-1 { border-color: #FF4444; }
+  button.zone-btn-1.active { background: #FF4444; color: #fff; border-color: #FF4444; }
+  button.zone-btn-2 { border-color: #44FF44; }
+  button.zone-btn-2.active { background: #44FF44; color: #000; border-color: #44FF44; }
+  button.zone-btn-3 { border-color: #4488FF; }
+  button.zone-btn-3.active { background: #4488FF; color: #fff; border-color: #4488FF; }
+
+  .status-bar {
+    font-size: 10px;
+    color: #444;
+    margin-top: 12px;
+    padding: 8px;
+    background: #0a0a0a;
+    border: 1px solid #1a1a1a;
+    border-radius: 3px;
+    text-align: center;
+  }
+
+  .status-bar .state-name {
+    color: #FFB000;
+    font-weight: 600;
+  }
+
+  .status-bar .timer {
+    color: #555;
+  }
+
+  /* ── Transition Diagram ── */
+  .transition-section {
+    max-width: 800px;
+    width: 100%;
+    margin-bottom: 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .transition-section .panel-label {
+    margin-bottom: 12px;
+  }
+
+  /* ── Rationale ── */
+  .rationale {
+    max-width: 800px;
+    width: 100%;
+    margin-top: 16px;
+    padding: 24px;
+    background: #0d0d0d;
+    border: 1px solid #1a1a1a;
+    border-radius: 6px;
+    line-height: 1.7;
+  }
+
+  .rationale h2 {
+    font-size: 13px;
+    color: #FFB000;
+    margin-bottom: 12px;
+    letter-spacing: 0.5px;
+  }
+
+  .rationale h3 {
+    font-size: 11px;
+    color: #888;
+    margin: 16px 0 6px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .rationale p, .rationale li {
+    font-size: 12px;
+    color: #777;
+  }
+
+  .rationale ul {
+    padding-left: 16px;
+  }
+
+  .rationale li {
+    margin-bottom: 4px;
+  }
+
+  .rationale code {
+    background: #1a1a1a;
+    padding: 1px 5px;
+    border-radius: 2px;
+    color: #999;
+    font-size: 11px;
+  }
+
+  .colour-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    vertical-align: middle;
+    margin-right: 3px;
+    border: 1px solid #333;
+  }
+
+  .rationale .state-flow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0;
+    font-size: 11px;
+    color: #666;
+  }
+
+  .rationale .state-flow .node {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    padding: 3px 8px;
+    border-radius: 3px;
+    color: #aaa;
+    font-size: 10px;
+  }
+
+  .rationale .state-flow .arrow {
+    color: #444;
+  }
+</style>
+</head>
+<body>
+
+<h1>ZONE MIXER &mdash; DESIGN 14</h1>
+<p class="subtitle">Context-Aware Pages &middot; 128&times;128 AtomS3 LCD &middot; Auto-switching UI</p>
+
+<!-- ── 4 Context States ── -->
+<div class="display-grid">
+  <div class="display-panel">
+    <span class="panel-label">
+      <span class="active-indicator on" id="idle-dot"></span>
+      IDLE (Connection)
+    </span>
+    <canvas id="cvIdle" width="512" height="512"></canvas>
+    <span class="panel-hint">&gt;5s no input</span>
+  </div>
+
+  <div class="display-panel">
+    <span class="panel-label">
+      <span class="active-indicator" id="zone-dot"></span>
+      ZONE (Brightness)
+    </span>
+    <canvas id="cvZone" width="512" height="512"></canvas>
+    <span class="panel-hint">Scroll wheel turned</span>
+  </div>
+
+  <div class="display-panel">
+    <span class="panel-label">
+      <span class="active-indicator" id="enc-dot"></span>
+      ENCODER (Parameter)
+    </span>
+    <canvas id="cvEncoder" width="512" height="512"></canvas>
+    <span class="panel-hint">8Encoder rotated</span>
+  </div>
+
+  <div class="display-panel">
+    <span class="panel-label">
+      <span class="active-indicator" id="conf-dot"></span>
+      CONFIRM (Action)
+    </span>
+    <canvas id="cvConfirm" width="512" height="512"></canvas>
+    <span class="panel-hint">Button pressed</span>
+  </div>
+</div>
+
+<!-- ── Overlay Examples ── -->
+<div class="overlay-section">
+  <span class="panel-label">Live Overlay (2s, fires on any value change)</span>
+  <div class="overlay-row">
+    <div class="overlay-example">
+      <canvas id="cvOverlay1" width="512" height="512"></canvas>
+      <span class="panel-hint">Zone 1 brightness</span>
+    </div>
+    <div class="overlay-example">
+      <canvas id="cvOverlay2" width="512" height="512"></canvas>
+      <span class="panel-hint">Effect parameter</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── Interactive Controls ── -->
+<div class="controls-section">
+  <h2>Interactive Simulation</h2>
+
+  <div class="control-row">
+    <div class="control-group">
+      <label>Context State</label>
+      <div style="display:flex; gap:6px;">
+        <button class="active" onclick="setContext('idle')">Idle</button>
+        <button onclick="setContext('zone')">Zone</button>
+        <button onclick="setContext('encoder')">Encoder</button>
+        <button onclick="setContext('confirm')">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="control-row">
+    <div class="control-group">
+      <label>Simulate Zone Activity</label>
+      <div style="display:flex; gap:6px;">
+        <button class="zone-btn-1" onclick="simulateZone(1)">Zone 1 Scroll</button>
+        <button class="zone-btn-2" onclick="simulateZone(2)">Zone 2 Scroll</button>
+        <button class="zone-btn-3" onclick="simulateZone(3)">Zone 3 Scroll</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="control-row">
+    <div class="control-group">
+      <label>Simulate Encoder Activity</label>
+      <div style="display:flex; gap:6px;">
+        <button onclick="simulateEncoder('effect')">Effect Enc</button>
+        <button onclick="simulateEncoder('speed')">Speed Enc</button>
+        <button onclick="simulateEncoder('edge')">EdgeMixer Enc</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="control-row">
+    <div class="control-group">
+      <label>Simulate Button Press</label>
+      <div style="display:flex; gap:6px;">
+        <button onclick="simulateConfirm('Zone 2 ON')">Zone ON</button>
+        <button onclick="simulateConfirm('Preset Saved')">Preset Save</button>
+        <button onclick="simulateConfirm('All Zones OFF')">All OFF</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    Current: <span class="state-name" id="currentState">IDLE</span>
+    &nbsp;&middot;&nbsp;
+    <span class="timer" id="timerDisplay">Idle timeout: --</span>
+    &nbsp;&middot;&nbsp;
+    <span class="timer" id="overlayStatus">Overlay: hidden</span>
+  </div>
+</div>
+
+<!-- ── Live Preview Canvas ── -->
+<div class="display-grid">
+  <div class="display-panel">
+    <span class="panel-label">Live Preview (4&times;)</span>
+    <canvas id="cvLive" width="512" height="512"></canvas>
+  </div>
+  <div class="display-panel">
+    <span class="panel-label">1:1 Native (128&times;128)</span>
+    <canvas id="cvLive1x" width="128" height="128"></canvas>
+  </div>
+</div>
+
+<!-- ── State Transition Diagram ── -->
+<div class="transition-section">
+  <span class="panel-label">State Transition Diagram</span>
+  <canvas id="cvTransition" width="800" height="220"></canvas>
+</div>
+
+<!-- ── Design Rationale ── -->
+<div class="rationale">
+  <h2>Design Rationale &mdash; Context-Aware Pages</h2>
+
+  <h3>Core Philosophy</h3>
+  <p>
+    The operator should never need to think about page navigation. Traditional multi-page
+    UIs impose a cognitive tax: the operator must remember which page they are on, how to
+    get to the one they need, and navigate there before adjusting anything. Context-Aware
+    Pages eliminate this entirely. The display shows what the operator needs,
+    precisely when they need it, driven by their physical actions on the hardware.
+  </p>
+
+  <h3>Auto-Switching Logic</h3>
+  <p>Four context states govern the display, with deterministic transition rules:</p>
+  <div class="state-flow">
+    <span class="node">IDLE</span>
+    <span class="arrow">&rarr;</span>
+    <span class="node">ZONE</span>
+    <span class="arrow">&rarr;</span>
+    <span class="node">IDLE</span>
+    <span class="arrow">&nbsp;|&nbsp;</span>
+    <span class="node">IDLE</span>
+    <span class="arrow">&rarr;</span>
+    <span class="node">ENCODER</span>
+    <span class="arrow">&rarr;</span>
+    <span class="node">IDLE</span>
+  </div>
+  <ul>
+    <li><strong>IDLE</strong> (&gt;5s no input): Connection page. Shows WiFi status, WebSocket
+      state, IP address, and device ID. This is the information most useful when the operator
+      is not actively mixing &mdash; confirming connectivity before a performance, or diagnosing
+      a dropped link.</li>
+    <li><strong>ZONE</strong> (scroll wheel): Auto-switches when any of the 4 scroll wheels
+      are turned (Zone 1/2/3 + Master). Shows all 3 zone brightness bars plus master in a
+      single view. The operator gets immediate spatial awareness of the full brightness
+      landscape.</li>
+    <li><strong>ENCODER</strong> (8encoder rotation): Shows the specific parameter page
+      relevant to the encoder being turned &mdash; effect selection, speed, or EdgeMixer
+      depth. Only the active parameter is featured, preventing information overload.</li>
+    <li><strong>CONFIRM</strong> (button press): 1.5s flash showing the action result.
+      High-contrast text on a coloured background &mdash; unmissable confirmation that the
+      command was received. Returns to previous context after the flash.</li>
+  </ul>
+
+  <h3>Live Overlay System</h3>
+  <p>
+    Orthogonal to the page system, the live overlay fires for 2 seconds whenever any
+    value changes. It appears as a translucent bar across the bottom third of the display,
+    showing the parameter name and its new value with a proportional fill bar. This means
+    the operator always sees immediate feedback even if the page context does not change.
+    The overlay is non-modal &mdash; it layers on top of whatever page is active and
+    disappears automatically.
+  </p>
+
+  <h3>Why Not Manual Page Cycling?</h3>
+  <ul>
+    <li><strong>Fewer controls needed.</strong> No page-up/page-down button required. The
+      AtomS3 button can be used for more valuable functions (preset save, zone toggle).</li>
+    <li><strong>Zero navigation latency.</strong> The display is always in the right context.
+      No &ldquo;scroll to page 3&rdquo; delay before adjusting a parameter.</li>
+    <li><strong>Reduces mode errors.</strong> The operator cannot accidentally adjust a
+      parameter while looking at the wrong page. The display and the physical input are
+      always in sync.</li>
+    <li><strong>Graceful degradation.</strong> If no input arrives, the display falls back to
+      the most useful passive information (connection status). The display is never blank or
+      stale.</li>
+  </ul>
+
+  <h3>Idle Timeout Calibration</h3>
+  <p>
+    5 seconds is the threshold for returning to IDLE. This was chosen because:
+    typical mixing gestures (adjusting a zone, tweaking an encoder) complete in 1&ndash;3
+    seconds. A 5s timeout gives comfortable margin for &ldquo;adjust, pause, re-adjust&rdquo;
+    workflows without snapping back to connection page mid-thought. Too short (&lt;3s) causes
+    jarring context switches during natural pauses. Too long (&gt;10s) makes the connection
+    page feel unresponsive when the operator actually wants to check connectivity.
+  </p>
+
+  <h3>Colour System</h3>
+  <ul>
+    <li><span class="colour-swatch" style="background:#FFB000"></span><code>#FFB000</code> &mdash; Amber accent. Headers, active state indicators.</li>
+    <li><span class="colour-swatch" style="background:#FF4444"></span><code>#FF4444</code> &mdash; Zone 1 (warm red). Strongest visual weight.</li>
+    <li><span class="colour-swatch" style="background:#44FF44"></span><code>#44FF44</code> &mdash; Zone 2 (green). Maximum contrast against Zone 1.</li>
+    <li><span class="colour-swatch" style="background:#4488FF"></span><code>#4488FF</code> &mdash; Zone 3 (blue). Completes the triad.</li>
+    <li><span class="colour-swatch" style="background:#FFFFFF"></span><code>#FFFFFF</code> &mdash; Master brightness. White distinguishes it from zone-specific controls.</li>
+    <li><span class="colour-swatch" style="background:#22CC44"></span><code>#22CC44</code> &mdash; Connected / success states.</li>
+    <li><span class="colour-swatch" style="background:#CC2222"></span><code>#CC2222</code> &mdash; Disconnected / error states.</li>
+    <li><span class="colour-swatch" style="background:#0a0a0a"></span><code>#0a0a0a</code> &mdash; Background. Slight warmth prevents eye fatigue in dark environments.</li>
+  </ul>
+
+  <h3>Implementation Notes</h3>
+  <ul>
+    <li><strong>State machine</strong>: 4 states. Transitions driven by input events from
+      <code>InputManager</code>. No circular references &mdash; CONFIRM always returns to
+      the previous non-CONFIRM state.</li>
+    <li><strong>Overlay independence</strong>: The overlay has its own 2s timer and renders
+      last (on top). It does not affect state transitions.</li>
+    <li><strong>Memory</strong>: Only one page rendered at a time. No off-screen buffers for
+      inactive pages. Rendering cost is constant regardless of how many pages exist.</li>
+    <li><strong>Debounce</strong>: Encoder/scroll events reset the idle timer. Rapid input
+      does not cause flickering between states &mdash; each event extends the activity
+      window.</li>
+  </ul>
+
+  <h3>Hardware Mapping</h3>
+  <ul>
+    <li><strong>4 Scroll Wheels</strong> (via PaHub+M5Scroll): Zone 1, Zone 2, Zone 3, Master &rarr; triggers ZONE context</li>
+    <li><strong>2 M5Rotate8 Encoders</strong> (8 knobs each): Effect, Speed, EdgeMixer, etc. &rarr; triggers ENCODER context</li>
+    <li><strong>AtomS3 Button</strong>: Zone toggle, preset save &rarr; triggers CONFIRM context</li>
+    <li><strong>AtomS3 LCD</strong>: 128&times;128 ST7789, 0.85&Prime; &rarr; renders current context page</li>
+  </ul>
+</div>
+
+<script>
+// ============================================================
+//  Zone Mixer — Design 14: Context-Aware Pages
+//  128x128 pixel canvas for AtomS3 0.85" LCD
+// ============================================================
+
+const W = 128;
+const H = 128;
+const SCALE = 4;
+
+// ── Colour Palette ──
+const C = {
+  bg:        '#0a0a0a',
+  barBg:     '#333333',
+  barBorder: '#222222',
+  amber:     '#FFB000',
+  amberDim:  '#7A5500',
+  amberDark: '#3D2B00',
+  white:     '#FFFFFF',
+  dimWhite:  '#999999',
+  dimGrey:   '#555555',
+  darkGrey:  '#2a2a2a',
+  zone1:     '#FF4444',
+  zone1dim:  '#661818',
+  zone2:     '#44FF44',
+  zone2dim:  '#186618',
+  zone3:     '#4488FF',
+  zone3dim:  '#183366',
+  green:     '#22CC44',
+  greenDim:  '#114422',
+  red:       '#CC2222',
+  redDim:    '#441111',
+  blue:      '#4488FF',
+  blueDim:   '#183366',
+  master:    '#FFFFFF',
+  masterDim: '#444444',
+  overlayBg: 'rgba(10,10,10,0.88)',
+};
+
+const ZONE_COLS = [null, C.zone1, C.zone2, C.zone3];
+const ZONE_DIMS = [null, C.zone1dim, C.zone2dim, C.zone3dim];
+
+// ── Pixel Font (5x7 uppercase + digits) ──
+const FONT = {};
+const FONT_DEF = {
+  'A': [0x7C,0x12,0x12,0x7C,0x00], 'B': [0x7E,0x4A,0x4A,0x34,0x00],
+  'C': [0x3C,0x42,0x42,0x24,0x00], 'D': [0x7E,0x42,0x42,0x3C,0x00],
+  'E': [0x7E,0x4A,0x4A,0x42,0x00], 'F': [0x7E,0x0A,0x0A,0x02,0x00],
+  'G': [0x3C,0x42,0x52,0x34,0x00], 'H': [0x7E,0x08,0x08,0x7E,0x00],
+  'I': [0x42,0x7E,0x42,0x00,0x00], 'J': [0x20,0x40,0x42,0x3E,0x00],
+  'K': [0x7E,0x08,0x14,0x62,0x00], 'L': [0x7E,0x40,0x40,0x40,0x00],
+  'M': [0x7E,0x04,0x08,0x04,0x7E], 'N': [0x7E,0x04,0x08,0x7E,0x00],
+  'O': [0x3C,0x42,0x42,0x3C,0x00], 'P': [0x7E,0x12,0x12,0x0C,0x00],
+  'Q': [0x3C,0x42,0x62,0x3C,0x00], 'R': [0x7E,0x12,0x32,0x4C,0x00],
+  'S': [0x44,0x4A,0x4A,0x32,0x00], 'T': [0x02,0x7E,0x02,0x00,0x00],
+  'U': [0x3E,0x40,0x40,0x3E,0x00], 'V': [0x1E,0x20,0x40,0x20,0x1E],
+  'W': [0x3E,0x40,0x30,0x40,0x3E], 'X': [0x62,0x14,0x14,0x62,0x00],
+  'Y': [0x06,0x08,0x70,0x08,0x06], 'Z': [0x62,0x52,0x4A,0x46,0x00],
+  '0': [0x3C,0x52,0x4A,0x3C,0x00], '1': [0x44,0x7E,0x40,0x00,0x00],
+  '2': [0x64,0x52,0x4A,0x44,0x00], '3': [0x24,0x4A,0x4A,0x34,0x00],
+  '4': [0x1E,0x10,0x78,0x10,0x00], '5': [0x4E,0x4A,0x4A,0x32,0x00],
+  '6': [0x3C,0x4A,0x4A,0x30,0x00], '7': [0x02,0x72,0x0A,0x06,0x00],
+  '8': [0x34,0x4A,0x4A,0x34,0x00], '9': [0x0C,0x52,0x52,0x3C,0x00],
+  '%': [0x42,0x20,0x10,0x08,0x84], '.': [0x40,0x00,0x00,0x00,0x00],
+  ':': [0x28,0x00,0x00,0x00,0x00], '/': [0x40,0x20,0x10,0x08,0x04],
+  '-': [0x08,0x08,0x08,0x00,0x00], ' ': [0x00,0x00,0x00,0x00,0x00],
+  '+': [0x08,0x1C,0x08,0x00,0x00], '#': [0x14,0x7F,0x14,0x7F,0x14],
+  '>': [0x22,0x14,0x08,0x00,0x00], '<': [0x08,0x14,0x22,0x00,0x00],
+  '(': [0x3C,0x42,0x00,0x00,0x00], ')': [0x00,0x00,0x42,0x3C,0x00],
+  '!': [0x5E,0x00,0x00,0x00,0x00], '?': [0x04,0x52,0x0A,0x04,0x00],
+  'x': [0x48,0x30,0x30,0x48,0x00],
+};
+
+// Process font bitmaps
+for (const [ch, cols] of Object.entries(FONT_DEF)) {
+  const w = cols.length;
+  const rows = [];
+  for (let y = 0; y < 7; y++) {
+    const row = [];
+    for (let x = 0; x < w; x++) {
+      row.push((cols[x] >> y) & 1);
+    }
+    rows.push(row);
+  }
+  FONT[ch] = { w, rows };
+}
+
+// ── Drawing Helpers ──
+
+function createBuf() {
+  const buf = new Uint8Array(W * H * 4);
+  // Fill with background
+  const r = parseInt(C.bg.slice(1, 3), 16);
+  const g = parseInt(C.bg.slice(3, 5), 16);
+  const b = parseInt(C.bg.slice(5, 7), 16);
+  for (let i = 0; i < W * H; i++) {
+    buf[i * 4 + 0] = r;
+    buf[i * 4 + 1] = g;
+    buf[i * 4 + 2] = b;
+    buf[i * 4 + 3] = 255;
+  }
+  return buf;
+}
+
+function hex2rgb(hex) {
+  const h = hex.replace('#', '');
+  return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)];
+}
+
+function setPixel(buf, x, y, col) {
+  if (x < 0 || x >= W || y < 0 || y >= H) return;
+  const [r, g, b] = hex2rgb(col);
+  const i = (y * W + x) * 4;
+  buf[i] = r; buf[i+1] = g; buf[i+2] = b; buf[i+3] = 255;
+}
+
+function fillRect(buf, x0, y0, w, h, col) {
+  for (let y = y0; y < y0 + h; y++)
+    for (let x = x0; x < x0 + w; x++)
+      setPixel(buf, x, y, col);
+}
+
+function drawText(buf, text, x0, y0, col, spacing) {
+  spacing = spacing || 1;
+  let cx = x0;
+  for (const ch of text.toUpperCase()) {
+    const glyph = FONT[ch] || FONT[' '];
+    for (let y = 0; y < 7; y++) {
+      for (let x = 0; x < glyph.w; x++) {
+        if (glyph.rows[y][x]) setPixel(buf, cx + x, y0 + y, col);
+      }
+    }
+    cx += glyph.w + spacing;
+  }
+  return cx;
+}
+
+function textWidth(text, spacing) {
+  spacing = spacing || 1;
+  let w = 0;
+  for (const ch of text.toUpperCase()) {
+    const glyph = FONT[ch] || FONT[' '];
+    w += glyph.w + spacing;
+  }
+  return w - spacing;
+}
+
+function drawHBar(buf, x, y, w, h, fill, bgCol, fgCol, borderCol) {
+  // Background track
+  fillRect(buf, x, y, w, h, bgCol);
+  // Fill
+  const fw = Math.round(w * Math.max(0, Math.min(1, fill)));
+  if (fw > 0) fillRect(buf, x, y, fw, h, fgCol);
+  // Border
+  if (borderCol) {
+    for (let i = x; i < x + w; i++) {
+      setPixel(buf, i, y, borderCol);
+      setPixel(buf, i, y + h - 1, borderCol);
+    }
+    for (let j = y; j < y + h; j++) {
+      setPixel(buf, x, j, borderCol);
+      setPixel(buf, x + w - 1, j, borderCol);
+    }
+  }
+}
+
+function drawDot(buf, cx, cy, r, col) {
+  for (let y = cy - r; y <= cy + r; y++) {
+    for (let x = cx - r; x <= cx + r; x++) {
+      const dx = x - cx, dy = y - cy;
+      if (dx * dx + dy * dy <= r * r) setPixel(buf, x, y, col);
+    }
+  }
+}
+
+function renderToCanvas(buf, canvasId) {
+  const cv = document.getElementById(canvasId);
+  const ctx = cv.getContext('2d');
+  const w = cv.width;
+  const h = cv.height;
+  const scale = w / W;
+
+  const imgData = new ImageData(W, H);
+  imgData.data.set(buf);
+
+  if (scale === 1) {
+    ctx.putImageData(imgData, 0, 0);
+  } else {
+    const tmp = document.createElement('canvas');
+    tmp.width = W; tmp.height = H;
+    tmp.getContext('2d').putImageData(imgData, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(tmp, 0, 0, w, h);
+  }
+}
+
+
+// ============================================================
+//  PAGE RENDERERS
+// ============================================================
+
+// ── Simulated State ──
+const state = {
+  wifi: true,
+  ws: true,
+  ip: '192.168.4.1',
+  zones: [null, 85, 60, 40],
+  zoneOn: [null, true, true, true],
+  master: 75,
+  effect: 'AURORA WAVE',
+  effectId: '0x1100',
+  speed: 65,
+  edgeMix: 42,
+  confirmMsg: 'Zone 2 ON',
+  confirmCol: '#22CC44',
+  activeEncoder: 'effect', // effect | speed | edge
+  activeZone: 0,
+};
+
+
+// ── IDLE PAGE: Connection Status ──
+function renderIdle() {
+  const buf = createBuf();
+
+  // Header bar
+  fillRect(buf, 0, 0, W, 13, '#111111');
+  drawText(buf, 'ZM', 3, 3, C.amber);
+  drawText(buf, 'CONTEXT', 76, 3, C.dimGrey);
+
+  // Separator
+  fillRect(buf, 0, 13, W, 1, C.darkGrey);
+
+  // WiFi status block
+  const wifiY = 20;
+  drawText(buf, 'WIFI', 8, wifiY, C.dimWhite);
+  drawDot(buf, 52, wifiY + 3, 3, state.wifi ? C.green : C.red);
+  drawText(buf, state.wifi ? 'CONNECTED' : 'OFFLINE', 58, wifiY, state.wifi ? C.green : C.red);
+
+  // WS status
+  const wsY = 32;
+  drawText(buf, 'WS', 8, wsY, C.dimWhite);
+  drawDot(buf, 52, wsY + 3, 3, state.ws ? C.green : C.red);
+  drawText(buf, state.ws ? 'CONNECTED' : 'OFFLINE', 58, wsY, state.ws ? C.green : C.red);
+
+  // IP Address
+  const ipY = 47;
+  fillRect(buf, 4, ipY - 2, 120, 13, '#111111');
+  drawText(buf, 'IP', 8, ipY, C.dimGrey);
+  drawText(buf, state.ip, 22, ipY, C.amber);
+
+  // Device info
+  const devY = 64;
+  drawText(buf, 'DEVICE', 8, devY, C.dimGrey);
+  drawText(buf, 'K1 V2', 50, devY, C.dimWhite);
+
+  // Separator
+  fillRect(buf, 4, 78, 120, 1, '#1a1a1a');
+
+  // Uptime / signal strength visual
+  const sigY = 84;
+  drawText(buf, 'SIGNAL', 8, sigY, C.dimGrey);
+  // Signal bars
+  for (let i = 0; i < 5; i++) {
+    const bh = 2 + i * 2;
+    const by = sigY + 8 - bh;
+    const col = i < 4 ? C.green : C.greenDim;
+    fillRect(buf, 52 + i * 5, by, 3, bh, col);
+  }
+
+  // Zones summary at bottom
+  const sumY = 98;
+  fillRect(buf, 0, sumY - 2, W, 1, '#1a1a1a');
+  drawText(buf, 'ZONES', 8, sumY + 2, C.dimGrey);
+  // Zone indicator dots
+  for (let z = 1; z <= 3; z++) {
+    const dotX = 48 + (z - 1) * 16;
+    drawDot(buf, dotX, sumY + 5, 3, state.zoneOn[z] ? ZONE_COLS[z] : ZONE_DIMS[z]);
+    drawText(buf, '' + z, dotX + 6, sumY + 2, C.dimGrey);
+  }
+
+  // Footer
+  fillRect(buf, 0, 115, W, 1, '#1a1a1a');
+  drawText(buf, 'IDLE', 4, 119, C.amberDim);
+  drawText(buf, '>5S', 100, 119, C.dimGrey);
+
+  return buf;
+}
+
+
+// ── ZONE PAGE: Brightness Overview ──
+function renderZone() {
+  const buf = createBuf();
+
+  // Header
+  fillRect(buf, 0, 0, W, 13, '#111111');
+  drawText(buf, 'ZM', 3, 3, C.amber);
+  drawText(buf, 'BRIGHTNESS', 56, 3, C.dimWhite);
+  fillRect(buf, 0, 13, W, 1, C.darkGrey);
+
+  // Zone 1
+  const z1y = 18;
+  drawText(buf, 'Z1', 4, z1y, C.zone1);
+  drawHBar(buf, 18, z1y, 86, 7, state.zones[1] / 100, C.barBg, C.zone1, C.barBorder);
+  drawText(buf, ('' + state.zones[1]).padStart(3), 108, z1y, C.zone1);
+
+  // Zone 2
+  const z2y = 32;
+  drawText(buf, 'Z2', 4, z2y, C.zone2);
+  drawHBar(buf, 18, z2y, 86, 7, state.zones[2] / 100, C.barBg, C.zone2, C.barBorder);
+  drawText(buf, ('' + state.zones[2]).padStart(3), 108, z2y, C.zone2);
+
+  // Zone 3
+  const z3y = 46;
+  drawText(buf, 'Z3', 4, z3y, C.zone3);
+  drawHBar(buf, 18, z3y, 86, 7, state.zones[3] / 100, C.barBg, C.zone3, C.barBorder);
+  drawText(buf, ('' + state.zones[3]).padStart(3), 108, z3y, C.zone3);
+
+  // Separator
+  fillRect(buf, 4, 58, 120, 1, '#1a1a1a');
+
+  // Master
+  const my = 64;
+  drawText(buf, 'M', 4, my, C.master);
+  drawHBar(buf, 18, my, 86, 7, state.master / 100, C.barBg, C.master, C.barBorder);
+  drawText(buf, ('' + state.master).padStart(3), 108, my, C.master);
+
+  // Visual mix preview — proportional zone contribution
+  const previewY = 80;
+  fillRect(buf, 4, previewY - 2, 120, 1, '#1a1a1a');
+  drawText(buf, 'MIX', 4, previewY + 2, C.dimGrey);
+  const total = state.zones[1] + state.zones[2] + state.zones[3];
+  if (total > 0) {
+    const bw = 98;
+    const bx = 24;
+    let cx = bx;
+    for (let z = 1; z <= 3; z++) {
+      const zw = Math.round(bw * state.zones[z] / total);
+      if (zw > 0) {
+        fillRect(buf, cx, previewY + 2, zw, 5, ZONE_COLS[z]);
+        cx += zw;
+      }
+    }
+    // Border
+    for (let x = bx; x < bx + bw; x++) {
+      setPixel(buf, x, previewY + 1, C.barBorder);
+      setPixel(buf, x, previewY + 8, C.barBorder);
+    }
+  }
+
+  // Zone on/off indicators
+  const indY = 96;
+  for (let z = 1; z <= 3; z++) {
+    const ix = 4 + (z - 1) * 42;
+    drawText(buf, 'Z' + z, ix, indY, ZONE_COLS[z]);
+    drawText(buf, state.zoneOn[z] ? 'ON' : 'OFF', ix + 16, indY,
+             state.zoneOn[z] ? C.green : C.red);
+  }
+
+  // Active zone highlight
+  if (state.activeZone >= 1 && state.activeZone <= 3) {
+    const hlY = [0, z1y, z2y, z3y][state.activeZone];
+    // Small left-edge indicator
+    fillRect(buf, 0, hlY - 1, 2, 9, ZONE_COLS[state.activeZone]);
+  }
+
+  // Footer
+  fillRect(buf, 0, 115, W, 1, '#1a1a1a');
+  drawText(buf, 'ZONE', 4, 119, C.amberDim);
+  drawText(buf, 'SCROLL', 92, 119, C.dimGrey);
+
+  return buf;
+}
+
+
+// ── ENCODER PAGE: Parameter Detail ──
+function renderEncoder() {
+  const buf = createBuf();
+
+  // Header
+  fillRect(buf, 0, 0, W, 13, '#111111');
+  drawText(buf, 'ZM', 3, 3, C.amber);
+
+  const paramLabels = {
+    effect: 'EFFECT',
+    speed: 'SPEED',
+    edge: 'EDGEMIX',
+  };
+  const paramLabel = paramLabels[state.activeEncoder] || 'PARAM';
+  drawText(buf, paramLabel, W - textWidth(paramLabel) - 4, 3, C.dimWhite);
+  fillRect(buf, 0, 13, W, 1, C.darkGrey);
+
+  if (state.activeEncoder === 'effect') {
+    // Effect name, large and centred
+    const nameY = 22;
+    drawText(buf, 'CURRENT', 4, nameY, C.dimGrey);
+
+    // Effect name (possibly truncated)
+    const nameStr = state.effect;
+    const nw = textWidth(nameStr);
+    const nx = Math.max(4, Math.floor((W - nw) / 2));
+    drawText(buf, nameStr, nx, 36, C.amber);
+
+    // Effect ID
+    drawText(buf, state.effectId, 4, 50, C.dimGrey);
+
+    // Separator
+    fillRect(buf, 4, 60, 120, 1, '#1a1a1a');
+
+    // Navigation hint
+    drawText(buf, '<  PREV', 4, 68, C.dimGrey);
+    drawText(buf, 'NEXT  >', 80, 68, C.dimGrey);
+
+    // Zones using this effect
+    drawText(buf, 'APPLIED TO', 4, 82, C.dimGrey);
+    let ax = 4;
+    for (let z = 1; z <= 3; z++) {
+      drawText(buf, 'Z' + z, ax, 93, ZONE_COLS[z]);
+      ax += 22;
+    }
+
+  } else if (state.activeEncoder === 'speed') {
+    // Speed display
+    drawText(buf, 'SPEED', 4, 22, C.dimGrey);
+
+    // Large number
+    const speedStr = '' + state.speed;
+    const sw = textWidth(speedStr);
+    drawText(buf, speedStr, Math.floor((W - sw) / 2), 38, C.blue);
+
+    drawText(buf, '%', Math.floor((W + sw) / 2) + 4, 38, C.dimGrey);
+
+    // Full-width bar
+    drawHBar(buf, 4, 54, 120, 9, state.speed / 100, C.barBg, C.blue, C.barBorder);
+
+    // Speed labels
+    fillRect(buf, 4, 70, 120, 1, '#1a1a1a');
+    drawText(buf, 'SLOW', 4, 76, C.dimGrey);
+    drawText(buf, 'FAST', 102, 76, C.dimGrey);
+
+    // Tick marks
+    for (let i = 0; i <= 4; i++) {
+      const tx = 4 + Math.round(i * 30);
+      setPixel(buf, tx, 73, C.dimGrey);
+    }
+
+  } else if (state.activeEncoder === 'edge') {
+    // EdgeMixer display
+    drawText(buf, 'EDGEMIXER', 4, 22, C.dimGrey);
+
+    // Value
+    const edgeStr = '' + state.edgeMix;
+    const ew = textWidth(edgeStr);
+    drawText(buf, edgeStr, Math.floor((W - ew) / 2), 38, C.amber);
+    drawText(buf, '%', Math.floor((W + ew) / 2) + 4, 38, C.dimGrey);
+
+    // Bar
+    drawHBar(buf, 4, 54, 120, 9, state.edgeMix / 100, C.barBg, C.amber, C.barBorder);
+
+    // Labels
+    fillRect(buf, 4, 70, 120, 1, '#1a1a1a');
+    drawText(buf, 'CENTRE', 4, 76, C.dimGrey);
+    drawText(buf, 'EDGE', 98, 76, C.dimGrey);
+  }
+
+  // Current effect name at bottom for reference
+  fillRect(buf, 0, 106, W, 1, '#1a1a1a');
+  drawText(buf, state.effect, 4, 110, C.amberDim);
+
+  // Footer
+  fillRect(buf, 0, 115, W, 1, '#1a1a1a');
+  drawText(buf, 'ENC', 4, 119, C.amberDim);
+  drawText(buf, '8ENC', 100, 119, C.dimGrey);
+
+  return buf;
+}
+
+
+// ── CONFIRM PAGE: Action Flash ──
+function renderConfirm() {
+  const buf = createBuf();
+
+  // Determine colours based on message
+  let bgCol = C.green;
+  let textCol = '#000000';
+  const msg = state.confirmMsg.toUpperCase();
+
+  if (msg.includes('OFF') || msg.includes('ERROR') || msg.includes('FAIL')) {
+    bgCol = C.red;
+    textCol = '#FFFFFF';
+  } else if (msg.includes('SAVE') || msg.includes('PRESET')) {
+    bgCol = C.amber;
+    textCol = '#000000';
+  }
+
+  // Full-screen flash background
+  fillRect(buf, 0, 0, W, H, bgCol);
+
+  // Centre icon area
+  const iconY = 30;
+  if (msg.includes('ON')) {
+    // Checkmark
+    for (let i = 0; i < 5; i++) {
+      setPixel(buf, 56 + i, 36 + i, textCol);
+      setPixel(buf, 57 + i, 36 + i, textCol);
+    }
+    for (let i = 0; i < 10; i++) {
+      setPixel(buf, 61 + i, 41 - i, textCol);
+      setPixel(buf, 62 + i, 41 - i, textCol);
+    }
+  } else if (msg.includes('OFF')) {
+    // X mark
+    for (let i = 0; i < 10; i++) {
+      setPixel(buf, 54 + i, 32 + i, textCol);
+      setPixel(buf, 55 + i, 32 + i, textCol);
+      setPixel(buf, 73 - i, 32 + i, textCol);
+      setPixel(buf, 72 - i, 32 + i, textCol);
+    }
+  } else if (msg.includes('SAVE')) {
+    // Disc/save icon (simplified)
+    fillRect(buf, 56, 32, 16, 14, textCol);
+    fillRect(buf, 58, 34, 12, 4, bgCol);
+    fillRect(buf, 60, 40, 8, 4, bgCol);
+  }
+
+  // Message text - centred
+  const words = msg.split(' ');
+  if (words.length <= 2) {
+    // Single line
+    const mw = textWidth(msg);
+    drawText(buf, msg, Math.floor((W - mw) / 2), 60, textCol);
+  } else {
+    // Two lines
+    const line1 = words.slice(0, Math.ceil(words.length / 2)).join(' ');
+    const line2 = words.slice(Math.ceil(words.length / 2)).join(' ');
+    const w1 = textWidth(line1);
+    const w2 = textWidth(line2);
+    drawText(buf, line1, Math.floor((W - w1) / 2), 56, textCol);
+    drawText(buf, line2, Math.floor((W - w2) / 2), 68, textCol);
+  }
+
+  // Thin border for definition
+  for (let x = 0; x < W; x++) {
+    setPixel(buf, x, 0, textCol);
+    setPixel(buf, x, H - 1, textCol);
+  }
+  for (let y = 0; y < H; y++) {
+    setPixel(buf, 0, y, textCol);
+    setPixel(buf, W - 1, y, textCol);
+  }
+
+  // Timer hint
+  drawText(buf, '1.5S', Math.floor((W - textWidth('1.5S')) / 2), 90, textCol);
+
+  return buf;
+}
+
+
+// ── OVERLAY: Value Change Popup ──
+function renderOverlay(baseBuf, label, value, pct, col) {
+  // Clone the base buffer
+  const buf = new Uint8Array(baseBuf);
+
+  // Semi-transparent overlay area (bottom third)
+  const oy = 84;
+  const oh = H - oy;
+
+  // Darken the overlay region
+  for (let y = oy; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      buf[i] = Math.floor(buf[i] * 0.15);
+      buf[i+1] = Math.floor(buf[i+1] * 0.15);
+      buf[i+2] = Math.floor(buf[i+2] * 0.15);
+    }
+  }
+
+  // Top edge highlight
+  for (let x = 0; x < W; x++) {
+    const [r, g, b] = hex2rgb(col);
+    const i = (oy * W + x) * 4;
+    buf[i] = r; buf[i+1] = g; buf[i+2] = b;
+  }
+
+  // Label
+  const lx = 4;
+  const ly = oy + 4;
+  for (const ch of label.toUpperCase()) {
+    // Render directly into the darkened region
+  }
+  // Need to draw text into pre-darkened buf — draw onto it using direct pixel writes
+  drawTextDirect(buf, label.toUpperCase(), 6, oy + 5, col);
+
+  // Value
+  const valStr = '' + value;
+  drawTextDirect(buf, valStr, 6, oy + 16, '#FFFFFF');
+
+  // Percentage bar
+  const bx = 6;
+  const by = oy + 28;
+  const bw = 116;
+  const bh = 7;
+  // Bar background
+  for (let y = by; y < by + bh; y++)
+    for (let x = bx; x < bx + bw; x++) {
+      const i = (y * W + x) * 4;
+      buf[i] = 0x22; buf[i+1] = 0x22; buf[i+2] = 0x22;
+    }
+  // Bar fill
+  const fw = Math.round(bw * Math.max(0, Math.min(1, pct)));
+  const [fr, fg, fb] = hex2rgb(col);
+  for (let y = by; y < by + bh; y++)
+    for (let x = bx; x < bx + fw; x++) {
+      const i = (y * W + x) * 4;
+      buf[i] = fr; buf[i+1] = fg; buf[i+2] = fb;
+    }
+
+  // Percentage text
+  const pctStr = Math.round(pct * 100) + '%';
+  drawTextDirect(buf, pctStr, bx + bw - textWidth(pctStr) - 1, oy + 37, C.dimWhite);
+
+  return buf;
+}
+
+// Draw text directly into a Uint8Array buffer (for overlay compositing)
+function drawTextDirect(buf, text, x0, y0, col) {
+  const [cr, cg, cb] = hex2rgb(col);
+  let cx = x0;
+  for (const ch of text.toUpperCase()) {
+    const glyph = FONT[ch] || FONT[' '];
+    for (let y = 0; y < 7; y++) {
+      for (let x = 0; x < glyph.w; x++) {
+        if (glyph.rows[y][x]) {
+          const px = cx + x;
+          const py = y0 + y;
+          if (px >= 0 && px < W && py >= 0 && py < H) {
+            const i = (py * W + px) * 4;
+            buf[i] = cr; buf[i+1] = cg; buf[i+2] = cb;
+          }
+        }
+      }
+    }
+    cx += glyph.w + 1;
+  }
+}
+
+
+// ============================================================
+//  RENDER ALL STATIC PANELS
+// ============================================================
+
+function renderAllPanels() {
+  // Static panels (always show all 4 context states)
+  renderToCanvas(renderIdle(), 'cvIdle');
+  renderToCanvas(renderZone(), 'cvZone');
+  renderToCanvas(renderEncoder(), 'cvEncoder');
+  renderToCanvas(renderConfirm(), 'cvConfirm');
+
+  // Overlay examples
+  const zoneBuf = renderZone();
+  renderToCanvas(renderOverlay(zoneBuf, 'Z1 BRIGHT', 85, 0.85, C.zone1), 'cvOverlay1');
+
+  const encBuf = renderEncoder();
+  renderToCanvas(renderOverlay(encBuf, 'SPEED', 65, 0.65, C.blue), 'cvOverlay2');
+}
+
+
+// ============================================================
+//  INTERACTIVE STATE MACHINE
+// ============================================================
+
+let currentContext = 'idle';
+let idleTimer = null;
+let confirmTimer = null;
+let overlayTimer = null;
+let overlayActive = false;
+let previousContext = 'idle';
+let idleCountdown = 0;
+let idleInterval = null;
+
+function setContext(ctx) {
+  // Update button states
+  document.querySelectorAll('.controls-section .control-row:first-child button').forEach(b => {
+    b.classList.toggle('active', b.textContent.toLowerCase() === ctx);
+  });
+
+  // Update dot indicators
+  ['idle', 'zone', 'enc', 'conf'].forEach(d => {
+    document.getElementById(d + '-dot').classList.remove('on');
+  });
+  const dotMap = { idle: 'idle', zone: 'zone', encoder: 'enc', confirm: 'conf' };
+  document.getElementById(dotMap[ctx] + '-dot').classList.add('on');
+
+  if (ctx !== 'confirm') previousContext = ctx;
+  currentContext = ctx;
+
+  // Reset idle timer
+  clearTimeout(idleTimer);
+  clearInterval(idleInterval);
+  if (ctx !== 'idle') {
+    idleCountdown = 5;
+    idleInterval = setInterval(() => {
+      idleCountdown--;
+      updateStatusBar();
+      if (idleCountdown <= 0) {
+        clearInterval(idleInterval);
+      }
+    }, 1000);
+    idleTimer = setTimeout(() => {
+      setContext('idle');
+    }, 5000);
+  } else {
+    idleCountdown = 0;
+  }
+
+  renderLive();
+  updateStatusBar();
+}
+
+function simulateZone(z) {
+  state.activeZone = z;
+  // Slightly adjust value for visual feedback
+  state.zones[z] = Math.min(100, Math.max(0, state.zones[z] + (Math.random() > 0.5 ? 5 : -5)));
+  setContext('zone');
+  showOverlay('Z' + z + ' BRIGHT', state.zones[z], state.zones[z] / 100, ZONE_COLS[z]);
+  renderAllPanels();
+}
+
+function simulateEncoder(enc) {
+  state.activeEncoder = enc;
+  if (enc === 'effect') {
+    setContext('encoder');
+    showOverlay('EFFECT', state.effect, 0.5, C.amber);
+  } else if (enc === 'speed') {
+    state.speed = Math.min(100, Math.max(0, state.speed + (Math.random() > 0.5 ? 5 : -5)));
+    setContext('encoder');
+    showOverlay('SPEED', state.speed, state.speed / 100, C.blue);
+  } else if (enc === 'edge') {
+    state.edgeMix = Math.min(100, Math.max(0, state.edgeMix + (Math.random() > 0.5 ? 5 : -5)));
+    setContext('encoder');
+    showOverlay('EDGEMIX', state.edgeMix, state.edgeMix / 100, C.amber);
+  }
+  renderAllPanels();
+}
+
+function simulateConfirm(msg) {
+  state.confirmMsg = msg;
+  setContext('confirm');
+
+  clearTimeout(confirmTimer);
+  confirmTimer = setTimeout(() => {
+    setContext(previousContext);
+  }, 1500);
+}
+
+function showOverlay(label, value, pct, col) {
+  overlayActive = true;
+  clearTimeout(overlayTimer);
+
+  // Store overlay data for live render
+  state._overlay = { label, value, pct, col };
+
+  overlayTimer = setTimeout(() => {
+    overlayActive = false;
+    delete state._overlay;
+    renderLive();
+    updateStatusBar();
+  }, 2000);
+
+  renderLive();
+  updateStatusBar();
+}
+
+function renderLive() {
+  let buf;
+  switch (currentContext) {
+    case 'idle':    buf = renderIdle(); break;
+    case 'zone':    buf = renderZone(); break;
+    case 'encoder': buf = renderEncoder(); break;
+    case 'confirm': buf = renderConfirm(); break;
+    default:        buf = renderIdle(); break;
+  }
+
+  // Apply overlay if active
+  if (overlayActive && state._overlay && currentContext !== 'confirm') {
+    const ov = state._overlay;
+    buf = renderOverlay(buf, ov.label, ov.value, ov.pct, ov.col);
+  }
+
+  renderToCanvas(buf, 'cvLive');
+  renderToCanvas(buf, 'cvLive1x');
+}
+
+function updateStatusBar() {
+  const stateEl = document.getElementById('currentState');
+  const timerEl = document.getElementById('timerDisplay');
+  const overlayEl = document.getElementById('overlayStatus');
+
+  stateEl.textContent = currentContext.toUpperCase();
+
+  if (currentContext === 'idle') {
+    timerEl.textContent = 'Idle (stable)';
+  } else {
+    timerEl.textContent = 'Return to idle: ' + Math.max(0, idleCountdown) + 's';
+  }
+
+  overlayEl.textContent = overlayActive ? 'Overlay: visible (2s)' : 'Overlay: hidden';
+}
+
+
+// ============================================================
+//  STATE TRANSITION DIAGRAM
+// ============================================================
+
+function drawTransitionDiagram() {
+  const cv = document.getElementById('cvTransition');
+  const ctx = cv.getContext('2d');
+  const dw = cv.width;
+  const dh = cv.height;
+
+  ctx.fillStyle = '#0d0d0d';
+  ctx.fillRect(0, 0, dw, dh);
+
+  // Nodes
+  const nodes = [
+    { id: 'idle',    x: 120, y: 110, w: 120, h: 44, col: '#FFB000', label: 'IDLE', sub: 'Connection Page' },
+    { id: 'zone',    x: 340, y: 40,  w: 120, h: 44, col: '#44FF44', label: 'ZONE', sub: 'Brightness Bars' },
+    { id: 'encoder', x: 340, y: 160, w: 120, h: 44, col: '#4488FF', label: 'ENCODER', sub: 'Parameter Page' },
+    { id: 'confirm', x: 580, y: 110, w: 120, h: 44, col: '#CC2222', label: 'CONFIRM', sub: '1.5s Flash' },
+  ];
+
+  // Draw nodes
+  for (const n of nodes) {
+    ctx.strokeStyle = n.col;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(n.x, n.y, n.w, n.h);
+
+    ctx.fillStyle = n.col;
+    ctx.font = 'bold 12px "SF Mono", "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(n.label, n.x + n.w / 2, n.y + 18);
+
+    ctx.fillStyle = '#666';
+    ctx.font = '10px "SF Mono", "JetBrains Mono", monospace';
+    ctx.fillText(n.sub, n.x + n.w / 2, n.y + 34);
+  }
+
+  // Arrows
+  ctx.lineWidth = 1.5;
+  ctx.font = '9px "SF Mono", "JetBrains Mono", monospace';
+  ctx.textAlign = 'center';
+
+  // IDLE -> ZONE (scroll wheel)
+  drawArrow(ctx, 180, 110, 340, 62, '#44FF44');
+  ctx.fillStyle = '#44FF44';
+  ctx.fillText('scroll wheel', 255, 72);
+
+  // ZONE -> IDLE (5s timeout)
+  drawArrow(ctx, 340, 72, 180, 120, '#555');
+  ctx.fillStyle = '#555';
+  ctx.fillText('>5s timeout', 255, 108);
+
+  // IDLE -> ENCODER (8encoder)
+  drawArrow(ctx, 180, 132, 340, 182, '#4488FF');
+  ctx.fillStyle = '#4488FF';
+  ctx.fillText('8encoder turn', 255, 170);
+
+  // ENCODER -> IDLE (5s timeout)
+  drawArrow(ctx, 340, 192, 180, 142, '#555');
+  ctx.fillStyle = '#555';
+  ctx.fillText('>5s timeout', 255, 206);
+
+  // ANY -> CONFIRM (button press)
+  drawArrow(ctx, 460, 62, 580, 120, '#CC2222');
+  ctx.fillStyle = '#CC2222';
+  ctx.fillText('button', 515, 82);
+
+  drawArrow(ctx, 460, 192, 580, 142, '#CC2222');
+  ctx.fillStyle = '#CC2222';
+  ctx.fillText('button', 515, 178);
+
+  // CONFIRM -> previous (1.5s)
+  drawArrow(ctx, 700, 110, 740, 30, '#555');
+  ctx.fillStyle = '#555';
+  ctx.font = '9px "SF Mono", "JetBrains Mono", monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText('1.5s -> prev', 720, 26);
+
+  // Return arrow curving back
+  ctx.beginPath();
+  ctx.strokeStyle = '#333';
+  ctx.setLineDash([4, 3]);
+  ctx.moveTo(740, 30);
+  ctx.quadraticCurveTo(760, -10, 130, 90);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Overlay note (independent)
+  ctx.fillStyle = '#333';
+  ctx.fillRect(560, 180, 200, 30);
+  ctx.strokeStyle = '#FFB000';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(560, 180, 200, 30);
+  ctx.fillStyle = '#FFB000';
+  ctx.font = '10px "SF Mono", "JetBrains Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('OVERLAY: independent 2s timer', 660, 200);
+}
+
+function drawArrow(ctx, x1, y1, x2, y2, col) {
+  ctx.strokeStyle = col;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+
+  // Arrowhead
+  const angle = Math.atan2(y2 - y1, x2 - x1);
+  const headLen = 8;
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - headLen * Math.cos(angle - 0.4), y2 - headLen * Math.sin(angle - 0.4));
+  ctx.lineTo(x2 - headLen * Math.cos(angle + 0.4), y2 - headLen * Math.sin(angle + 0.4));
+  ctx.closePath();
+  ctx.fill();
+}
+
+
+// ============================================================
+//  INIT
+// ============================================================
+
+renderAllPanels();
+renderLive();
+updateStatusBar();
+drawTransitionDiagram();
+
+</script>
+</body>
+</html>

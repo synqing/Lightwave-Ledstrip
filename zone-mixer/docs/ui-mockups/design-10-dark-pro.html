@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zone Mixer — Design 10: Dark Pro</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #111;
+    color: #ccc;
+    font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+    min-height: 100vh;
+  }
+  h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #FFB000;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+  .subtitle {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 32px;
+    letter-spacing: 0.5px;
+  }
+  .display-row {
+    display: flex;
+    gap: 48px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .display-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .panel-label {
+    font-size: 11px;
+    color: #555;
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    border: 1px solid #222;
+  }
+  .rationale {
+    max-width: 680px;
+    margin-top: 48px;
+    padding: 24px;
+    background: #0d0d0d;
+    border: 1px solid #1a1a1a;
+    border-radius: 6px;
+    line-height: 1.7;
+  }
+  .rationale h2 {
+    font-size: 13px;
+    color: #FFB000;
+    margin-bottom: 12px;
+    letter-spacing: 0.5px;
+  }
+  .rationale h3 {
+    font-size: 11px;
+    color: #888;
+    margin: 16px 0 6px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .rationale p, .rationale li {
+    font-size: 12px;
+    color: #777;
+  }
+  .rationale ul {
+    padding-left: 16px;
+  }
+  .rationale li {
+    margin-bottom: 4px;
+  }
+  .rationale code {
+    background: #1a1a1a;
+    padding: 1px 5px;
+    border-radius: 2px;
+    color: #999;
+    font-size: 11px;
+  }
+  .colour-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    vertical-align: middle;
+    margin-right: 3px;
+    border: 1px solid #333;
+  }
+</style>
+</head>
+<body>
+
+<h1>ZONE MIXER &mdash; DESIGN 10</h1>
+<p class="subtitle">Dark Pro &middot; 128&times;128 AtomS3 LCD</p>
+
+<div class="display-row">
+  <div class="display-panel">
+    <span class="panel-label">4&times; Scale (512&times;512)</span>
+    <canvas id="canvas4x" width="512" height="512"></canvas>
+  </div>
+  <div class="display-panel">
+    <span class="panel-label">1:1 Native (128&times;128)</span>
+    <canvas id="canvas1x" width="128" height="128"></canvas>
+  </div>
+</div>
+
+<div class="rationale">
+  <h2>Design Rationale</h2>
+
+  <h3>Philosophy</h3>
+  <p>
+    Inspired by pro audio rack equipment — information density without clutter.
+    Every pixel earns its place. The dark background (<code>#0a0a0a</code>) is not
+    pure black: the slight warmth prevents the harsh contrast that fatigues eyes in
+    dark environments where LED art is typically used.
+  </p>
+
+  <h3>Colour System</h3>
+  <ul>
+    <li><span class="colour-swatch" style="background:#FFB000"></span><code>#FFB000</code> — Amber accent. High visibility on dark backgrounds, reads as "active/important" without the alarm connotation of red. Used for effect name and logo.</li>
+    <li><span class="colour-swatch" style="background:#FF4444"></span><code>#FF4444</code> Zone 1 — warm red, strongest visual weight for the primary zone.</li>
+    <li><span class="colour-swatch" style="background:#44FF44"></span><code>#44FF44</code> Zone 2 — green, maximum contrast against Zone 1.</li>
+    <li><span class="colour-swatch" style="background:#4488FF"></span><code>#4488FF</code> Zone 3 / Speed — cool blue, completes the RGB triad. Reused for speed bar to reduce colour count.</li>
+    <li><span class="colour-swatch" style="background:#333333"></span><code>#333</code> — Bar backgrounds. Visible enough to show the "empty" portion of bars without competing with filled portions.</li>
+    <li><span class="colour-swatch" style="background:#222222"></span><code>#222</code> — 1px borders on bars. Subtle separation without visual noise.</li>
+  </ul>
+
+  <h3>Layout Rationale</h3>
+  <ul>
+    <li><strong>Row 1 (y=0-15) Header:</strong> "ZM" logo provides instant product identity. Connection dots (WiFi + WS) are 4px circles — small enough to not distract, large enough to spot at a glance. Green = connected, red = disconnected.</li>
+    <li><strong>Row 2 (y=16-31) Effect:</strong> Amber text maximises readability. Truncation with ellipsis handles long effect names gracefully. This is the most-glanced row during performance.</li>
+    <li><strong>Rows 3-5 (y=32-79) Zones:</strong> Each zone gets 16px — enough for a zone number, brightness bar, and numeric value. Zone colours match the physical LED zones for immediate spatial mapping. Bars use proportional width (0-100%) against a dark background track.</li>
+    <li><strong>Row 6 (y=80-95) Master:</strong> White bar distinguishes master from zone-specific controls. Full-width bar emphasises its authority over all zones.</li>
+    <li><strong>Row 7 (y=96-111) Speed:</strong> Blue bar with "S" label. Speed is secondary to brightness but always visible.</li>
+    <li><strong>Row 8 (y=112-127) Status:</strong> "ZONES ON/OFF" is the most important mode indicator — green/red binary state is instantly readable. EdgeMixer mode shown in dim text for reference.</li>
+  </ul>
+
+  <h3>Typography</h3>
+  <p>
+    At 128px wide, font choices are constrained. This mockup uses pixel-aligned
+    rendering at native resolution: 5px wide characters for values, 6px for labels.
+    All text is rendered with integer coordinates to prevent sub-pixel blurring on
+    the AtomS3 LCD.
+  </p>
+
+  <h3>Accessibility on Hardware</h3>
+  <p>
+    Contrast ratios exceed 7:1 for all active information against <code>#0a0a0a</code>.
+    Zone colours are distinguishable even with common colour vision deficiencies
+    (red/green/blue triad rather than similar hues). Numeric values alongside bars
+    provide redundant encoding — brightness is communicated by both bar length and digits.
+  </p>
+</div>
+
+<script>
+// ============================================================
+//  Zone Mixer — Design 10: Dark Pro
+//  128x128 pixel canvas for AtomS3 0.85" LCD
+// ============================================================
+
+const SCREEN_W = 128;
+const SCREEN_H = 128;
+
+// Colour palette
+const COL = {
+  bg:         '#0a0a0a',
+  barBg:      '#333333',
+  barBorder:  '#222222',
+  amber:      '#FFB000',
+  amberDim:   '#7A5500',
+  white:      '#FFFFFF',
+  dimWhite:   '#999999',
+  dimGrey:    '#555555',
+  darkGrey:   '#2a2a2a',
+  zone1:      '#FF4444',
+  zone2:      '#44FF44',
+  zone3:      '#4488FF',
+  green:      '#22CC44',
+  red:        '#CC2222',
+  redDim:     '#661111',
+  blue:       '#4488FF',
+  wifiOn:     '#22CC44',
+  wsOn:       '#22CC44',
+};
+
+// Mock data — typical performance state
+const state = {
+  effectName: 'Chromatic Pulse',
+  wifiConnected: true,
+  wsConnected: true,
+  zones: [
+    { brightness: 85, colour: COL.zone1 },
+    { brightness: 62, colour: COL.zone2 },
+    { brightness: 41, colour: COL.zone3 },
+  ],
+  masterBrightness: 72,
+  speed: 55,
+  zonesEnabled: true,
+  edgeMixerMode: 'EDGE',
+};
+
+// ============================================================
+//  Pixel font — 5x7 bitmap characters
+//  Each char is an array of 7 rows, each row is a 5-bit mask
+// ============================================================
+const FONT_5x7 = {
+  ' ': [0b00000,0b00000,0b00000,0b00000,0b00000,0b00000,0b00000],
+  '0': [0b01110,0b10001,0b10011,0b10101,0b11001,0b10001,0b01110],
+  '1': [0b00100,0b01100,0b00100,0b00100,0b00100,0b00100,0b01110],
+  '2': [0b01110,0b10001,0b00001,0b00110,0b01000,0b10000,0b11111],
+  '3': [0b01110,0b10001,0b00001,0b00110,0b00001,0b10001,0b01110],
+  '4': [0b00010,0b00110,0b01010,0b10010,0b11111,0b00010,0b00010],
+  '5': [0b11111,0b10000,0b11110,0b00001,0b00001,0b10001,0b01110],
+  '6': [0b00110,0b01000,0b10000,0b11110,0b10001,0b10001,0b01110],
+  '7': [0b11111,0b00001,0b00010,0b00100,0b01000,0b01000,0b01000],
+  '8': [0b01110,0b10001,0b10001,0b01110,0b10001,0b10001,0b01110],
+  '9': [0b01110,0b10001,0b10001,0b01111,0b00001,0b00010,0b01100],
+  'A': [0b01110,0b10001,0b10001,0b11111,0b10001,0b10001,0b10001],
+  'B': [0b11110,0b10001,0b10001,0b11110,0b10001,0b10001,0b11110],
+  'C': [0b01110,0b10001,0b10000,0b10000,0b10000,0b10001,0b01110],
+  'D': [0b11110,0b10001,0b10001,0b10001,0b10001,0b10001,0b11110],
+  'E': [0b11111,0b10000,0b10000,0b11110,0b10000,0b10000,0b11111],
+  'F': [0b11111,0b10000,0b10000,0b11110,0b10000,0b10000,0b10000],
+  'G': [0b01110,0b10001,0b10000,0b10111,0b10001,0b10001,0b01110],
+  'H': [0b10001,0b10001,0b10001,0b11111,0b10001,0b10001,0b10001],
+  'I': [0b01110,0b00100,0b00100,0b00100,0b00100,0b00100,0b01110],
+  'J': [0b00111,0b00010,0b00010,0b00010,0b00010,0b10010,0b01100],
+  'K': [0b10001,0b10010,0b10100,0b11000,0b10100,0b10010,0b10001],
+  'L': [0b10000,0b10000,0b10000,0b10000,0b10000,0b10000,0b11111],
+  'M': [0b10001,0b11011,0b10101,0b10101,0b10001,0b10001,0b10001],
+  'N': [0b10001,0b11001,0b10101,0b10011,0b10001,0b10001,0b10001],
+  'O': [0b01110,0b10001,0b10001,0b10001,0b10001,0b10001,0b01110],
+  'P': [0b11110,0b10001,0b10001,0b11110,0b10000,0b10000,0b10000],
+  'Q': [0b01110,0b10001,0b10001,0b10001,0b10101,0b10010,0b01101],
+  'R': [0b11110,0b10001,0b10001,0b11110,0b10100,0b10010,0b10001],
+  'S': [0b01110,0b10001,0b10000,0b01110,0b00001,0b10001,0b01110],
+  'T': [0b11111,0b00100,0b00100,0b00100,0b00100,0b00100,0b00100],
+  'U': [0b10001,0b10001,0b10001,0b10001,0b10001,0b10001,0b01110],
+  'V': [0b10001,0b10001,0b10001,0b10001,0b10001,0b01010,0b00100],
+  'W': [0b10001,0b10001,0b10001,0b10101,0b10101,0b11011,0b10001],
+  'X': [0b10001,0b10001,0b01010,0b00100,0b01010,0b10001,0b10001],
+  'Y': [0b10001,0b10001,0b01010,0b00100,0b00100,0b00100,0b00100],
+  'Z': [0b11111,0b00001,0b00010,0b00100,0b01000,0b10000,0b11111],
+  '.': [0b00000,0b00000,0b00000,0b00000,0b00000,0b00000,0b00100],
+  ':': [0b00000,0b00100,0b00000,0b00000,0b00000,0b00100,0b00000],
+  '-': [0b00000,0b00000,0b00000,0b11111,0b00000,0b00000,0b00000],
+  '/': [0b00001,0b00010,0b00010,0b00100,0b01000,0b01000,0b10000],
+  '%': [0b11001,0b11010,0b00010,0b00100,0b01000,0b01011,0b10011],
+};
+
+// Ellipsis character
+FONT_5x7['\u2026'] = [0b00000,0b00000,0b00000,0b00000,0b00000,0b00000,0b10101];
+
+// ============================================================
+//  Drawing helpers — all operate on the 128x128 offscreen
+// ============================================================
+
+function createOffscreen() {
+  const c = document.createElement('canvas');
+  c.width = SCREEN_W;
+  c.height = SCREEN_H;
+  return c;
+}
+
+function drawPixel(ctx, x, y, colour) {
+  ctx.fillStyle = colour;
+  ctx.fillRect(x, y, 1, 1);
+}
+
+function drawRect(ctx, x, y, w, h, colour) {
+  ctx.fillStyle = colour;
+  ctx.fillRect(x, y, w, h);
+}
+
+function drawBorderedRect(ctx, x, y, w, h, fillColour, borderColour) {
+  ctx.fillStyle = borderColour;
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = fillColour;
+  ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
+}
+
+function drawChar(ctx, ch, x, y, colour) {
+  const glyph = FONT_5x7[ch];
+  if (!glyph) return;
+  for (let row = 0; row < 7; row++) {
+    for (let col = 0; col < 5; col++) {
+      if (glyph[row] & (1 << (4 - col))) {
+        drawPixel(ctx, x + col, y + row, colour);
+      }
+    }
+  }
+}
+
+function drawText(ctx, text, x, y, colour, spacing = 6) {
+  for (let i = 0; i < text.length; i++) {
+    drawChar(ctx, text[i], x + i * spacing, y, colour);
+  }
+}
+
+function measureText(text, spacing = 6) {
+  return text.length * spacing - (spacing - 5);
+}
+
+// Draw text that fits within maxWidth, truncating with ellipsis if needed
+function drawTextTruncated(ctx, text, x, y, colour, maxWidth, spacing = 6) {
+  const fullWidth = measureText(text, spacing);
+  if (fullWidth <= maxWidth) {
+    drawText(ctx, text, x, y, colour, spacing);
+    return;
+  }
+  // Find how many chars fit with ellipsis
+  const ellipsisWidth = spacing; // one char width for ellipsis
+  const availWidth = maxWidth - ellipsisWidth;
+  let chars = Math.floor(availWidth / spacing);
+  if (chars < 1) chars = 1;
+  const truncated = text.substring(0, chars);
+  drawText(ctx, truncated, x, y, colour, spacing);
+  drawChar(ctx, '\u2026', x + chars * spacing, y, colour);
+}
+
+function drawCircle(ctx, cx, cy, r, colour) {
+  // Filled circle via midpoint algorithm
+  ctx.fillStyle = colour;
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      if (dx * dx + dy * dy <= r * r) {
+        ctx.fillRect(cx + dx, cy + dy, 1, 1);
+      }
+    }
+  }
+}
+
+// ============================================================
+//  Render the complete UI to a 128x128 canvas context
+// ============================================================
+
+function renderUI(ctx) {
+  // Background
+  drawRect(ctx, 0, 0, SCREEN_W, SCREEN_H, COL.bg);
+
+  // ── Row 1: Header (y=0-15) ──────────────────────────────
+  // "ZM" logo — left side, amber, bold feel
+  drawText(ctx, 'ZM', 3, 4, COL.amber, 7);
+
+  // Thin separator dot after logo
+  drawPixel(ctx, 19, 7, COL.darkGrey);
+
+  // "ZONE MIXER" in dim text
+  drawText(ctx, 'ZONE MIXER', 23, 5, COL.dimGrey, 5);
+
+  // Connection indicators — right side
+  // WiFi dot
+  const wifiColour = state.wifiConnected ? COL.wifiOn : COL.red;
+  drawCircle(ctx, 115, 7, 2, wifiColour);
+
+  // WS dot
+  const wsColour = state.wsConnected ? COL.wsOn : COL.red;
+  drawCircle(ctx, 123, 7, 2, wsColour);
+
+  // Thin horizontal separator
+  drawRect(ctx, 2, 15, 124, 1, '#1a1a1a');
+
+  // ── Row 2: Effect Name (y=16-31) ────────────────────────
+  const effectUpper = state.effectName.toUpperCase();
+  drawTextTruncated(ctx, effectUpper, 4, 20, COL.amber, 120, 6);
+
+  // Thin separator
+  drawRect(ctx, 2, 31, 124, 1, '#1a1a1a');
+
+  // ── Row 3: Zone Bars (y=32-79) ──────────────────────────
+  const zoneStartY = 32;
+  const zoneRowH = 16;
+
+  for (let i = 0; i < 3; i++) {
+    const zone = state.zones[i];
+    const y = zoneStartY + i * zoneRowH;
+
+    // Zone number
+    drawChar(ctx, String(i + 1), 4, y + 4, zone.colour);
+
+    // Bar background with border
+    const barX = 14;
+    const barW = 86;
+    const barH = 8;
+    const barY = y + 4;
+
+    drawBorderedRect(ctx, barX, barY, barW, barH, COL.barBg, COL.barBorder);
+
+    // Filled portion
+    const fillW = Math.round((barW - 2) * (zone.brightness / 100));
+    if (fillW > 0) {
+      drawRect(ctx, barX + 1, barY + 1, fillW, barH - 2, zone.colour);
+    }
+
+    // Brightness value — right aligned, 3 digits
+    const valStr = String(zone.brightness).padStart(3, ' ');
+    drawText(ctx, valStr, 105, y + 4, COL.dimWhite, 6);
+
+    // Thin separator between zones (not after last)
+    if (i < 2) {
+      drawRect(ctx, 14, y + zoneRowH - 1, 110, 1, '#151515');
+    }
+  }
+
+  // Separator before master
+  drawRect(ctx, 2, 79, 124, 1, '#1a1a1a');
+
+  // ── Row 4: Master Brightness (y=80-95) ──────────────────
+  // "M" label
+  drawChar(ctx, 'M', 4, 84, COL.white);
+
+  // Master bar
+  const mBarX = 14;
+  const mBarW = 86;
+  const mBarH = 8;
+  const mBarY = 84;
+
+  drawBorderedRect(ctx, mBarX, mBarY, mBarW, mBarH, COL.barBg, COL.barBorder);
+
+  const mFillW = Math.round((mBarW - 2) * (state.masterBrightness / 100));
+  if (mFillW > 0) {
+    drawRect(ctx, mBarX + 1, mBarY + 1, mFillW, mBarH - 2, COL.white);
+  }
+
+  // Master value
+  const mValStr = String(state.masterBrightness).padStart(3, ' ');
+  drawText(ctx, mValStr, 105, 84, COL.dimWhite, 6);
+
+  // Separator
+  drawRect(ctx, 2, 95, 124, 1, '#1a1a1a');
+
+  // ── Row 5: Speed (y=96-111) ─────────────────────────────
+  // "S" label
+  drawChar(ctx, 'S', 4, 100, COL.blue);
+
+  // Speed bar
+  const sBarX = 14;
+  const sBarW = 86;
+  const sBarH = 8;
+  const sBarY = 100;
+
+  drawBorderedRect(ctx, sBarX, sBarY, sBarW, sBarH, COL.barBg, COL.barBorder);
+
+  const sFillW = Math.round((sBarW - 2) * (state.speed / 100));
+  if (sFillW > 0) {
+    drawRect(ctx, sBarX + 1, sBarY + 1, sFillW, sBarH - 2, COL.blue);
+  }
+
+  // Speed value
+  const sValStr = String(state.speed).padStart(3, ' ');
+  drawText(ctx, sValStr, 105, 100, COL.dimWhite, 6);
+
+  // Separator
+  drawRect(ctx, 2, 111, 124, 1, '#1a1a1a');
+
+  // ── Row 6: Status (y=112-127) ───────────────────────────
+  if (state.zonesEnabled) {
+    drawText(ctx, 'ZONES ON', 4, 117, COL.green, 6);
+  } else {
+    drawText(ctx, 'ZONES OFF', 4, 117, COL.redDim, 6);
+  }
+
+  // EdgeMixer mode — right side, dim
+  drawText(ctx, state.edgeMixerMode, 96, 117, COL.dimGrey, 6);
+}
+
+// ============================================================
+//  Main: render to offscreen, then blit to both canvases
+// ============================================================
+
+const offscreen = createOffscreen();
+const offCtx = offscreen.getContext('2d');
+
+// Disable any smoothing on offscreen
+offCtx.imageSmoothingEnabled = false;
+
+renderUI(offCtx);
+
+// 4x canvas
+const canvas4x = document.getElementById('canvas4x');
+const ctx4x = canvas4x.getContext('2d');
+ctx4x.imageSmoothingEnabled = false;
+ctx4x.drawImage(offscreen, 0, 0, 512, 512);
+
+// 1:1 canvas
+const canvas1x = document.getElementById('canvas1x');
+const ctx1x = canvas1x.getContext('2d');
+ctx1x.imageSmoothingEnabled = false;
+ctx1x.drawImage(offscreen, 0, 0);
+</script>
+
+</body>
+</html>

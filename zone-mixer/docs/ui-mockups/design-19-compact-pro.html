@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zone Mixer — Design 19: Compact Pro</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #111;
+    color: #ccc;
+    font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+    min-height: 100vh;
+  }
+  h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #FFB000;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+  .subtitle {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 32px;
+    letter-spacing: 0.5px;
+  }
+  .display-grid {
+    display: grid;
+    grid-template-columns: repeat(2, auto);
+    gap: 48px 48px;
+    align-items: start;
+    justify-content: center;
+    margin-bottom: 48px;
+  }
+  .display-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .panel-label {
+    font-size: 11px;
+    color: #555;
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    border: 1px solid #222;
+  }
+  .controls {
+    display: flex;
+    gap: 16px;
+    margin: 24px 0;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .controls button {
+    background: #1a1a1a;
+    color: #888;
+    border: 1px solid #333;
+    padding: 6px 14px;
+    font-family: inherit;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    border-radius: 3px;
+    transition: all 0.15s ease;
+  }
+  .controls button:hover {
+    background: #252525;
+    color: #ccc;
+    border-color: #555;
+  }
+  .controls button.active {
+    background: #FFB000;
+    color: #000;
+    border-color: #FFB000;
+    font-weight: 600;
+  }
+  .rationale {
+    max-width: 780px;
+    margin-top: 24px;
+    padding: 24px;
+    background: #0d0d0d;
+    border: 1px solid #1a1a1a;
+    border-radius: 6px;
+    line-height: 1.7;
+  }
+  .rationale h2 {
+    font-size: 13px;
+    color: #FFB000;
+    margin-bottom: 12px;
+    letter-spacing: 0.5px;
+  }
+  .rationale h3 {
+    font-size: 11px;
+    color: #888;
+    margin: 16px 0 6px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .rationale p, .rationale li {
+    font-size: 12px;
+    color: #777;
+  }
+  .rationale ul {
+    padding-left: 16px;
+  }
+  .rationale li {
+    margin-bottom: 4px;
+  }
+  .rationale code {
+    background: #1a1a1a;
+    padding: 1px 5px;
+    border-radius: 2px;
+    color: #999;
+    font-size: 11px;
+  }
+  .colour-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    vertical-align: middle;
+    margin-right: 3px;
+    border: 1px solid #333;
+  }
+</style>
+</head>
+<body>
+
+<h1>ZONE MIXER &mdash; DESIGN 19</h1>
+<p class="subtitle">Compact Pro &middot; 128&times;128 AtomS3 LCD &middot; Carousel + Persistent Header + Live Overlay</p>
+
+<div class="controls">
+  <button id="btn-page1" class="active" onclick="showPage(1)">Page 1: Zones</button>
+  <button id="btn-page2" onclick="showPage(2)">Page 2: Effects</button>
+  <button id="btn-page3" onclick="showPage(3)">Page 3: Connection</button>
+  <button id="btn-overlay" onclick="showOverlay()">Live Overlay</button>
+</div>
+
+<div class="display-grid">
+  <div class="display-panel">
+    <span class="panel-label">4&times; Scale (512&times;512)</span>
+    <canvas id="canvas4x" width="512" height="512"></canvas>
+  </div>
+  <div class="display-panel">
+    <span class="panel-label">1:1 Native (128&times;128)</span>
+    <canvas id="canvas1x" width="128" height="128"></canvas>
+  </div>
+</div>
+
+<div class="rationale">
+  <h2>Design Rationale &mdash; Compact Pro</h2>
+
+  <h3>Philosophy</h3>
+  <p>
+    Combines the best of three paradigms: carousel navigation for information density,
+    live parameter overlay for immediate feedback during encoder adjustments, and
+    an always-visible persistent header for critical system state. The operator never
+    loses awareness of connection status or zone system state, regardless of which
+    page or overlay is active.
+  </p>
+
+  <h3>Persistent Header (16px &mdash; Never Changes)</h3>
+  <p>
+    The top 16 pixels are sacred &mdash; they remain constant across all pages and overlays.
+    This is the "instrument panel" strip that an operator glances at without thinking.
+  </p>
+  <ul>
+    <li><strong>Left:</strong> WiFi dot (4px, <span class="colour-swatch" style="background:#22CC44"></span>green / <span class="colour-swatch" style="background:#CC2222"></span>red) + WebSocket dot (4px, <span class="colour-swatch" style="background:#22CC44"></span>green / <span class="colour-swatch" style="background:#CCAA00"></span>yellow / <span class="colour-swatch" style="background:#CC2222"></span>red). Two-dot status covers all connection failure modes at a glance.</li>
+    <li><strong>Centre:</strong> <code>Z:3</code> &mdash; zone count. Confirms the current zone topology without navigating to a settings page.</li>
+    <li><strong>Right:</strong> <code>ON</code> in green or <code>OFF</code> in dark red &mdash; zone system power state. The most critical operational binary (are zones active?) is always visible.</li>
+  </ul>
+
+  <h3>Page Dots</h3>
+  <p>
+    Three dots at y=18, between header and content. The active page dot is <code>#FFB000</code> amber,
+    inactive dots are <code>#333</code>. Provides spatial orientation within the carousel without
+    consuming significant vertical space (3px dots + 1px gaps = minimal).
+  </p>
+
+  <h3>Page 1: Zone Brightness (Amber Accent)</h3>
+  <ul>
+    <li>Three zone rows at 22px each: zone label, horizontal brightness bar (proportional fill), numeric percentage value. Each zone uses its assigned colour (<span class="colour-swatch" style="background:#FF4444"></span>Z1 red, <span class="colour-swatch" style="background:#44FF44"></span>Z2 green, <span class="colour-swatch" style="background:#4488FF"></span>Z3 blue).</li>
+    <li>Master row below zones: white bar with <code>M</code> label, full-width authority. The master controls overall output &mdash; visual weight reflects hierarchical importance.</li>
+    <li><span class="colour-swatch" style="background:#FFB000"></span>Amber accent line (2px wide) on the left edge identifies this as the "zones" page even in peripheral vision.</li>
+  </ul>
+
+  <h3>Page 2: Effect Parameters (Violet Accent)</h3>
+  <ul>
+    <li>Effect name in amber at the top of the content area (12px font). Truncated with ellipsis for long names.</li>
+    <li>Speed parameter: blue bar with percentage. Speed is the most-adjusted effect parameter during performance.</li>
+    <li>EdgeMixer mode display: <code>MODE: EDGE</code> and <code>SPREAD: 50%</code>. These are reference-only values &mdash; EdgeMixer is configured via the K1 API, shown here for awareness.</li>
+    <li><span class="colour-swatch" style="background:#9944FF"></span>Violet accent line distinguishes this page from zones. Violet reads as "creative/effects" in the DJ-mixer mental model.</li>
+  </ul>
+
+  <h3>Page 3: Connection Detail (Green Accent)</h3>
+  <ul>
+    <li>Full connection diagnostics: IP address, RSSI signal strength bars, WebSocket reconnect count.</li>
+    <li>RSSI rendered as a 5-segment bar (like a phone signal indicator). Each segment represents ~20dBm range. This is the "deep dive" for troubleshooting &mdash; the header dots tell you IF connected, this page tells you HOW WELL.</li>
+    <li>Reconnect count (<code>RC:0</code>) surfaces WebSocket instability before it becomes a visible problem. If this number is climbing, something is wrong even if the WS dot is green.</li>
+    <li><span class="colour-swatch" style="background:#22CC44"></span>Green accent line &mdash; "network/health" semantic.</li>
+  </ul>
+
+  <h3>Live Overlay (Header Persists)</h3>
+  <p>
+    When an encoder is turned, the overlay appears over the carousel content but the
+    header remains visible. This is the critical innovation: during a parameter change,
+    the operator sees both the new value (large, central, unmissable) and the connection
+    state (header, peripheral vision).
+  </p>
+  <ul>
+    <li><strong>Parameter name</strong> in 10px at the top of the overlay area &mdash; identifies what is being changed.</li>
+    <li><strong>Value</strong> rendered at 40px height, centred. Slightly smaller than the typical 48px to fit within the 108px content area while leaving room for the name and position bar. 40px is still legible from 2+ metres in a performance environment.</li>
+    <li><strong>Position bar</strong> at the bottom of the overlay &mdash; horizontal fill bar showing the parameter's position within its full range. Provides spatial context that the number alone cannot.</li>
+    <li><strong>Timeout</strong>: overlay disappears 1.5 seconds after the last encoder movement, returning to the current carousel page. The timeout is generous enough to read but short enough to not obscure the page during a show.</li>
+  </ul>
+
+  <h3>Colour System</h3>
+  <ul>
+    <li><span class="colour-swatch" style="background:#FFB000"></span><code>#FFB000</code> &mdash; Amber. Active accent, effect names, active page dot. High visibility without alarm connotation.</li>
+    <li><span class="colour-swatch" style="background:#FF4444"></span><code>#FF4444</code> &mdash; Zone 1 (red). Strongest visual weight for the primary zone.</li>
+    <li><span class="colour-swatch" style="background:#44FF44"></span><code>#44FF44</code> &mdash; Zone 2 (green). Maximum contrast against Zone 1.</li>
+    <li><span class="colour-swatch" style="background:#4488FF"></span><code>#4488FF</code> &mdash; Zone 3 / Speed (blue). Cool complement, reused for speed to reduce colour count.</li>
+    <li><span class="colour-swatch" style="background:#9944FF"></span><code>#9944FF</code> &mdash; Violet. Effects/creative page accent. Not used for data, only for page identity.</li>
+    <li><span class="colour-swatch" style="background:#22CC44"></span><code>#22CC44</code> &mdash; System green. Connection healthy, zones ON.</li>
+    <li><span class="colour-swatch" style="background:#CC2222"></span><code>#CC2222</code> &mdash; System red. Connection failed, zones OFF.</li>
+    <li><span class="colour-swatch" style="background:#CCAA00"></span><code>#CCAA00</code> &mdash; System yellow. WebSocket reconnecting (not failed, not healthy).</li>
+  </ul>
+
+  <h3>Layout Budget</h3>
+  <ul>
+    <li><strong>Header:</strong> y=0&ndash;15 (16px) &mdash; persistent, never scrolls or changes.</li>
+    <li><strong>Page dots:</strong> y=17&ndash;19 (3px) &mdash; carousel position indicator.</li>
+    <li><strong>Content area:</strong> y=22&ndash;127 (106px) &mdash; carousel pages or live overlay.</li>
+    <li><strong>Accent line:</strong> x=0&ndash;1 (2px wide), y=22&ndash;127 &mdash; page identity colour on left edge.</li>
+    <li>Total: 16 + 3 + 2 (gap) + 106 = 127px (1px bottom margin for visual breathing room).</li>
+  </ul>
+
+  <h3>Accessibility on Hardware</h3>
+  <p>
+    All active text exceeds 7:1 contrast against <code>#0a0a0a</code> background. Zone colours
+    form an RGB triad distinguishable with common colour vision deficiencies. Numeric
+    values alongside all bars provide redundant encoding. Page accent colours use
+    position (left edge) as a secondary cue alongside colour. The persistent header
+    means connection failure is visible within 0.5 seconds of any glance, regardless
+    of which page the operator was viewing.
+  </p>
+
+  <h3>Why "Compact Pro" Wins</h3>
+  <p>
+    Previous designs forced a choice: show everything (cluttered) or show one thing
+    (blind to the rest). Compact Pro resolves this by separating <em>critical</em>
+    (header &mdash; always visible) from <em>contextual</em> (carousel &mdash; swipeable)
+    from <em>transient</em> (overlay &mdash; auto-dismiss). The 16px header investment
+    pays for itself by eliminating the need to navigate back to check connection state.
+    The overlay preserves the header because losing connection awareness during a
+    parameter change is the exact moment you most need it.
+  </p>
+</div>
+
+<script>
+// ============================================================
+//  Zone Mixer — Design 19: Compact Pro
+//  128x128 pixel canvas for AtomS3 0.85" LCD
+//  Carousel + Persistent Header + Live Overlay
+// ============================================================
+
+const SCREEN_W = 128;
+const SCREEN_H = 128;
+
+// Colour palette
+const COL = {
+  bg:         '#0a0a0a',
+  barBg:      '#333333',
+  barBorder:  '#222222',
+  amber:      '#FFB000',
+  amberDim:   '#7A5500',
+  white:      '#FFFFFF',
+  dimWhite:   '#999999',
+  dimGrey:    '#555555',
+  veryDimGrey:'#333333',
+  darkGrey:   '#2a2a2a',
+  separator:  '#1a1a1a',
+  zone1:      '#FF4444',
+  zone2:      '#44FF44',
+  zone3:      '#4488FF',
+  green:      '#22CC44',
+  red:        '#CC2222',
+  redDim:     '#661111',
+  blue:       '#4488FF',
+  violet:     '#9944FF',
+  violetDim:  '#4D2280',
+  yellow:     '#CCAA00',
+  wifiOn:     '#22CC44',
+  wsOn:       '#22CC44',
+  wsReconn:   '#CCAA00',
+};
+
+// Mock data
+const state = {
+  wifiConnected: true,
+  wsConnected: true,
+  wsReconnecting: false,
+  zoneCount: 3,
+  zonesEnabled: true,
+
+  // Page 1 — zone brightness
+  zones: [
+    { brightness: 85, colour: COL.zone1 },
+    { brightness: 62, colour: COL.zone2 },
+    { brightness: 41, colour: COL.zone3 },
+  ],
+  masterBrightness: 72,
+
+  // Page 2 — effect params
+  effectName: 'Chromatic Pulse',
+  speed: 55,
+  edgeMixerMode: 'EDGE',
+  edgeMixerSpread: 50,
+
+  // Page 3 — connection detail
+  ipAddress: '192.168.4.1',
+  rssi: -52, // dBm
+  wsReconnectCount: 0,
+
+  // Live overlay
+  overlayParam: 'Z1 BRIGHT',
+  overlayValue: 85,
+  overlayMax: 100,
+};
+
+let currentView = 'page1'; // page1, page2, page3, overlay
+
+// ============================================================
+//  Pixel font — 5x7 bitmap characters
+// ============================================================
+const FONT_5x7 = {
+  ' ': [0b00000,0b00000,0b00000,0b00000,0b00000,0b00000,0b00000],
+  '0': [0b01110,0b10001,0b10011,0b10101,0b11001,0b10001,0b01110],
+  '1': [0b00100,0b01100,0b00100,0b00100,0b00100,0b00100,0b01110],
+  '2': [0b01110,0b10001,0b00001,0b00110,0b01000,0b10000,0b11111],
+  '3': [0b01110,0b10001,0b00001,0b00110,0b00001,0b10001,0b01110],
+  '4': [0b00010,0b00110,0b01010,0b10010,0b11111,0b00010,0b00010],
+  '5': [0b11111,0b10000,0b11110,0b00001,0b00001,0b10001,0b01110],
+  '6': [0b00110,0b01000,0b10000,0b11110,0b10001,0b10001,0b01110],
+  '7': [0b11111,0b00001,0b00010,0b00100,0b01000,0b01000,0b01000],
+  '8': [0b01110,0b10001,0b10001,0b01110,0b10001,0b10001,0b01110],
+  '9': [0b01110,0b10001,0b10001,0b01111,0b00001,0b00010,0b01100],
+  'A': [0b01110,0b10001,0b10001,0b11111,0b10001,0b10001,0b10001],
+  'B': [0b11110,0b10001,0b10001,0b11110,0b10001,0b10001,0b11110],
+  'C': [0b01110,0b10001,0b10000,0b10000,0b10000,0b10001,0b01110],
+  'D': [0b11110,0b10001,0b10001,0b10001,0b10001,0b10001,0b11110],
+  'E': [0b11111,0b10000,0b10000,0b11110,0b10000,0b10000,0b11111],
+  'F': [0b11111,0b10000,0b10000,0b11110,0b10000,0b10000,0b10000],
+  'G': [0b01110,0b10001,0b10000,0b10111,0b10001,0b10001,0b01110],
+  'H': [0b10001,0b10001,0b10001,0b11111,0b10001,0b10001,0b10001],
+  'I': [0b01110,0b00100,0b00100,0b00100,0b00100,0b00100,0b01110],
+  'J': [0b00111,0b00010,0b00010,0b00010,0b00010,0b10010,0b01100],
+  'K': [0b10001,0b10010,0b10100,0b11000,0b10100,0b10010,0b10001],
+  'L': [0b10000,0b10000,0b10000,0b10000,0b10000,0b10000,0b11111],
+  'M': [0b10001,0b11011,0b10101,0b10101,0b10001,0b10001,0b10001],
+  'N': [0b10001,0b11001,0b10101,0b10011,0b10001,0b10001,0b10001],
+  'O': [0b01110,0b10001,0b10001,0b10001,0b10001,0b10001,0b01110],
+  'P': [0b11110,0b10001,0b10001,0b11110,0b10000,0b10000,0b10000],
+  'Q': [0b01110,0b10001,0b10001,0b10001,0b10101,0b10010,0b01101],
+  'R': [0b11110,0b10001,0b10001,0b11110,0b10100,0b10010,0b10001],
+  'S': [0b01110,0b10001,0b10000,0b01110,0b00001,0b10001,0b01110],
+  'T': [0b11111,0b00100,0b00100,0b00100,0b00100,0b00100,0b00100],
+  'U': [0b10001,0b10001,0b10001,0b10001,0b10001,0b10001,0b01110],
+  'V': [0b10001,0b10001,0b10001,0b10001,0b10001,0b01010,0b00100],
+  'W': [0b10001,0b10001,0b10001,0b10101,0b10101,0b11011,0b10001],
+  'X': [0b10001,0b10001,0b01010,0b00100,0b01010,0b10001,0b10001],
+  'Y': [0b10001,0b10001,0b01010,0b00100,0b00100,0b00100,0b00100],
+  'Z': [0b11111,0b00001,0b00010,0b00100,0b01000,0b10000,0b11111],
+  '.': [0b00000,0b00000,0b00000,0b00000,0b00000,0b00000,0b00100],
+  ':': [0b00000,0b00100,0b00000,0b00000,0b00000,0b00100,0b00000],
+  '-': [0b00000,0b00000,0b00000,0b11111,0b00000,0b00000,0b00000],
+  '/': [0b00001,0b00010,0b00010,0b00100,0b01000,0b01000,0b10000],
+  '%': [0b11001,0b11010,0b00010,0b00100,0b01000,0b01011,0b10011],
+  '(': [0b00010,0b00100,0b01000,0b01000,0b01000,0b00100,0b00010],
+  ')': [0b01000,0b00100,0b00010,0b00010,0b00010,0b00100,0b01000],
+};
+
+// Ellipsis
+FONT_5x7['\u2026'] = [0b00000,0b00000,0b00000,0b00000,0b00000,0b00000,0b10101];
+
+// ============================================================
+//  Large digit font — 10x16 bitmap digits (rendered at 2x scale = 20x32px)
+//  Each char: 16 rows, each row a 10-bit mask (MSB = leftmost pixel)
+// ============================================================
+const FONT_10x16 = {
+  '0': [
+    0b0011111100,0b0111111110,0b1110000111,0b1100000011,
+    0b1100000011,0b1100000011,0b1100000011,0b1100000011,
+    0b1100000011,0b1100000011,0b1100000011,0b1100000011,
+    0b1100000011,0b1110000111,0b0111111110,0b0011111100,
+  ],
+  '1': [
+    0b0000110000,0b0001110000,0b0011110000,0b0111110000,
+    0b0000110000,0b0000110000,0b0000110000,0b0000110000,
+    0b0000110000,0b0000110000,0b0000110000,0b0000110000,
+    0b0000110000,0b0000110000,0b0111111110,0b0111111110,
+  ],
+  '2': [
+    0b0011111100,0b0111111110,0b1110000111,0b1100000011,
+    0b0000000011,0b0000000110,0b0000001100,0b0000011000,
+    0b0000110000,0b0001100000,0b0011000000,0b0110000000,
+    0b1100000000,0b1100000000,0b1111111111,0b1111111111,
+  ],
+  '3': [
+    0b0011111100,0b0111111110,0b1110000111,0b0000000011,
+    0b0000000011,0b0000000110,0b0001111100,0b0001111100,
+    0b0000000110,0b0000000011,0b0000000011,0b0000000011,
+    0b0000000011,0b1110000111,0b0111111110,0b0011111100,
+  ],
+  '4': [
+    0b0000001100,0b0000011100,0b0000111100,0b0001101100,
+    0b0011001100,0b0110001100,0b1100001100,0b1100001100,
+    0b1111111111,0b1111111111,0b0000001100,0b0000001100,
+    0b0000001100,0b0000001100,0b0000001100,0b0000001100,
+  ],
+  '5': [
+    0b1111111111,0b1111111111,0b1100000000,0b1100000000,
+    0b1100000000,0b1111111100,0b1111111110,0b0000000111,
+    0b0000000011,0b0000000011,0b0000000011,0b0000000011,
+    0b0000000011,0b1110000111,0b0111111110,0b0011111100,
+  ],
+  '6': [
+    0b0011111100,0b0111111110,0b1110000111,0b1100000000,
+    0b1100000000,0b1100000000,0b1111111100,0b1111111110,
+    0b1110000111,0b1100000011,0b1100000011,0b1100000011,
+    0b1100000011,0b1110000111,0b0111111110,0b0011111100,
+  ],
+  '7': [
+    0b1111111111,0b1111111111,0b0000000011,0b0000000110,
+    0b0000001100,0b0000011000,0b0000110000,0b0000110000,
+    0b0001100000,0b0001100000,0b0001100000,0b0001100000,
+    0b0001100000,0b0001100000,0b0001100000,0b0001100000,
+  ],
+  '8': [
+    0b0011111100,0b0111111110,0b1110000111,0b1100000011,
+    0b1100000011,0b1110000111,0b0111111110,0b0011111100,
+    0b0111111110,0b1110000111,0b1100000011,0b1100000011,
+    0b1100000011,0b1110000111,0b0111111110,0b0011111100,
+  ],
+  '9': [
+    0b0011111100,0b0111111110,0b1110000111,0b1100000011,
+    0b1100000011,0b1100000011,0b1110000111,0b0111111111,
+    0b0011111111,0b0000000011,0b0000000011,0b0000000011,
+    0b0000000011,0b1110000111,0b0111111110,0b0011111100,
+  ],
+  '%': [
+    0b1110000011,0b1110000110,0b1110001100,0b0000001100,
+    0b0000011000,0b0000011000,0b0000110000,0b0000110000,
+    0b0001100000,0b0001100000,0b0011000000,0b0011000000,
+    0b0110000111,0b0110000111,0b1100000111,0b0000000000,
+  ],
+};
+
+// ============================================================
+//  Drawing helpers — all operate on 128x128 offscreen
+// ============================================================
+
+function createOffscreen() {
+  const c = document.createElement('canvas');
+  c.width = SCREEN_W;
+  c.height = SCREEN_H;
+  return c;
+}
+
+function drawPixel(ctx, x, y, colour) {
+  ctx.fillStyle = colour;
+  ctx.fillRect(x, y, 1, 1);
+}
+
+function drawRect(ctx, x, y, w, h, colour) {
+  ctx.fillStyle = colour;
+  ctx.fillRect(x, y, w, h);
+}
+
+function drawChar(ctx, ch, x, y, colour) {
+  const glyph = FONT_5x7[ch];
+  if (!glyph) return;
+  for (let row = 0; row < 7; row++) {
+    for (let col = 0; col < 5; col++) {
+      if (glyph[row] & (1 << (4 - col))) {
+        drawPixel(ctx, x + col, y + row, colour);
+      }
+    }
+  }
+}
+
+function drawText(ctx, text, x, y, colour, spacing) {
+  spacing = spacing || 6;
+  for (let i = 0; i < text.length; i++) {
+    drawChar(ctx, text[i], x + i * spacing, y, colour);
+  }
+}
+
+function measureText(text, spacing) {
+  spacing = spacing || 6;
+  return text.length * spacing - (spacing - 5);
+}
+
+function drawTextTruncated(ctx, text, x, y, colour, maxWidth, spacing) {
+  spacing = spacing || 6;
+  const fullWidth = measureText(text, spacing);
+  if (fullWidth <= maxWidth) {
+    drawText(ctx, text, x, y, colour, spacing);
+    return;
+  }
+  const ellipsisWidth = spacing;
+  const availWidth = maxWidth - ellipsisWidth;
+  let chars = Math.floor(availWidth / spacing);
+  if (chars < 1) chars = 1;
+  const truncated = text.substring(0, chars);
+  drawText(ctx, truncated, x, y, colour, spacing);
+  drawChar(ctx, '\u2026', x + chars * spacing, y, colour);
+}
+
+function drawTextCentred(ctx, text, y, colour, spacing) {
+  spacing = spacing || 6;
+  const w = measureText(text, spacing);
+  const x = Math.floor((SCREEN_W - w) / 2);
+  drawText(ctx, text, x, y, colour, spacing);
+}
+
+function drawCircle(ctx, cx, cy, r, colour) {
+  ctx.fillStyle = colour;
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      if (dx * dx + dy * dy <= r * r) {
+        ctx.fillRect(cx + dx, cy + dy, 1, 1);
+      }
+    }
+  }
+}
+
+function drawLargeChar(ctx, ch, x, y, colour) {
+  const glyph = FONT_10x16[ch];
+  if (!glyph) return;
+  for (let row = 0; row < 16; row++) {
+    for (let col = 0; col < 10; col++) {
+      if (glyph[row] & (1 << (9 - col))) {
+        drawPixel(ctx, x + col, y + row, colour);
+      }
+    }
+  }
+}
+
+function drawLargeText(ctx, text, x, y, colour, spacing) {
+  spacing = spacing || 12;
+  for (let i = 0; i < text.length; i++) {
+    drawLargeChar(ctx, text[i], x + i * spacing, y, colour);
+  }
+}
+
+function measureLargeText(text, spacing) {
+  spacing = spacing || 12;
+  return text.length * spacing - (spacing - 10);
+}
+
+function drawLargeTextCentred(ctx, text, y, colour, spacing) {
+  spacing = spacing || 12;
+  const w = measureLargeText(text, spacing);
+  const x = Math.floor((SCREEN_W - w) / 2);
+  drawLargeText(ctx, text, x, y, colour, spacing);
+}
+
+// Draw a horizontal bar with optional border
+function drawBar(ctx, x, y, w, h, fillRatio, fillColour, bgColour, borderColour) {
+  // Border
+  if (borderColour) {
+    drawRect(ctx, x, y, w, h, borderColour);
+    drawRect(ctx, x + 1, y + 1, w - 2, h - 2, bgColour);
+    const innerW = w - 2;
+    const fillW = Math.round(innerW * Math.max(0, Math.min(1, fillRatio)));
+    if (fillW > 0) {
+      drawRect(ctx, x + 1, y + 1, fillW, h - 2, fillColour);
+    }
+  } else {
+    drawRect(ctx, x, y, w, h, bgColour);
+    const fillW = Math.round(w * Math.max(0, Math.min(1, fillRatio)));
+    if (fillW > 0) {
+      drawRect(ctx, x, y, fillW, h, fillColour);
+    }
+  }
+}
+
+// ============================================================
+//  Persistent Header — y=0..15, ALWAYS rendered
+// ============================================================
+
+function renderHeader(ctx) {
+  // Header background (slightly lighter than main bg for subtle separation)
+  drawRect(ctx, 0, 0, SCREEN_W, 16, '#0e0e0e');
+
+  // WiFi dot — left side, y=5, 4px diameter (radius 2)
+  const wifiColour = state.wifiConnected ? COL.wifiOn : COL.red;
+  drawCircle(ctx, 5, 7, 2, wifiColour);
+
+  // WS dot — next to WiFi
+  let wsColour = COL.red;
+  if (state.wsConnected) wsColour = COL.wsOn;
+  else if (state.wsReconnecting) wsColour = COL.wsReconn;
+  drawCircle(ctx, 14, 7, 2, wsColour);
+
+  // Centre: "Z:3" zone count
+  const zoneText = 'Z:' + state.zoneCount;
+  drawTextCentred(ctx, zoneText, 4, COL.dimWhite, 6);
+
+  // Right: "ON" or "OFF"
+  if (state.zonesEnabled) {
+    drawText(ctx, 'ON', 112, 4, COL.green, 6);
+  } else {
+    drawText(ctx, 'OFF', 106, 4, COL.redDim, 6);
+  }
+
+  // Bottom separator
+  drawRect(ctx, 0, 15, SCREEN_W, 1, COL.separator);
+}
+
+// ============================================================
+//  Page Dots — y=17..19
+// ============================================================
+
+function renderPageDots(ctx, activePage) {
+  // 3 dots, centred horizontally, 3px diameter, 6px apart
+  const dotR = 1;
+  const dotSpacing = 8;
+  const totalW = 3 * (dotR * 2 + 1) + 2 * dotSpacing - 2 * dotSpacing + 2 * 8;
+  const startX = 56; // roughly centred
+  const dotY = 18;
+
+  for (let i = 0; i < 3; i++) {
+    const dotX = startX + i * dotSpacing;
+    const colour = (i === activePage) ? COL.amber : COL.veryDimGrey;
+    drawCircle(ctx, dotX, dotY, dotR, colour);
+  }
+}
+
+// ============================================================
+//  Page 1: Zone Brightness
+// ============================================================
+
+function renderPage1(ctx) {
+  const contentY = 22;
+
+  // Amber accent line — left edge
+  drawRect(ctx, 0, contentY, 2, SCREEN_H - contentY, COL.amber);
+
+  // Zone rows — 3 zones, each 22px tall
+  for (let i = 0; i < 3; i++) {
+    const zone = state.zones[i];
+    const y = contentY + i * 22;
+
+    // Zone label
+    drawText(ctx, 'Z' + (i + 1), 6, y + 3, zone.colour, 6);
+
+    // Brightness bar
+    const barX = 22;
+    const barW = 78;
+    const barH = 8;
+    const barY = y + 4;
+    drawBar(ctx, barX, barY, barW, barH, zone.brightness / 100, zone.colour, COL.barBg, COL.barBorder);
+
+    // Value
+    const valStr = String(zone.brightness) + '%';
+    const valX = 104;
+    drawText(ctx, valStr, valX, y + 3, zone.colour, 5);
+
+    // Subtle separator after each zone
+    if (i < 2) {
+      drawRect(ctx, 6, y + 20, 118, 1, '#141414');
+    }
+  }
+
+  // Master row
+  const masterY = contentY + 3 * 22 + 2;
+  drawRect(ctx, 6, masterY - 2, 118, 1, COL.separator);
+
+  drawText(ctx, 'M', 6, masterY + 3, COL.white, 6);
+
+  const mBarX = 22;
+  const mBarW = 78;
+  const mBarH = 8;
+  const mBarY = masterY + 4;
+  drawBar(ctx, mBarX, mBarY, mBarW, mBarH, state.masterBrightness / 100, COL.white, COL.barBg, COL.barBorder);
+
+  const mValStr = String(state.masterBrightness) + '%';
+  drawText(ctx, mValStr, 104, masterY + 3, COL.white, 5);
+
+  // "MASTER" label below the bar
+  drawText(ctx, 'MASTER', 22, masterY + 16, COL.dimGrey, 5);
+}
+
+// ============================================================
+//  Page 2: Effect Parameters
+// ============================================================
+
+function renderPage2(ctx) {
+  const contentY = 22;
+
+  // Violet accent line
+  drawRect(ctx, 0, contentY, 2, SCREEN_H - contentY, COL.violet);
+
+  // Effect name — amber, prominent
+  const effectUpper = state.effectName.toUpperCase();
+  drawTextTruncated(ctx, effectUpper, 6, contentY + 4, COL.amber, 118, 6);
+
+  // Thin separator
+  drawRect(ctx, 6, contentY + 16, 118, 1, COL.separator);
+
+  // Speed section
+  const speedY = contentY + 22;
+  drawText(ctx, 'SPEED', 6, speedY, COL.dimWhite, 5);
+
+  const sBarX = 6;
+  const sBarW = 96;
+  const sBarH = 10;
+  const sBarY = speedY + 12;
+  drawBar(ctx, sBarX, sBarY, sBarW, sBarH, state.speed / 100, COL.blue, COL.barBg, COL.barBorder);
+
+  const sValStr = String(state.speed) + '%';
+  drawText(ctx, sValStr, 106, speedY + 14, COL.blue, 5);
+
+  // Separator
+  drawRect(ctx, 6, speedY + 28, 118, 1, COL.separator);
+
+  // EdgeMixer section
+  const emY = speedY + 34;
+  drawText(ctx, 'EDGEMIXER', 6, emY, COL.dimGrey, 5);
+
+  drawText(ctx, 'MODE:', 6, emY + 14, COL.dimWhite, 5);
+  drawText(ctx, state.edgeMixerMode, 36, emY + 14, COL.violet, 5);
+
+  drawText(ctx, 'SPREAD:', 6, emY + 26, COL.dimWhite, 5);
+  drawText(ctx, String(state.edgeMixerSpread) + '%', 46, emY + 26, COL.violet, 5);
+}
+
+// ============================================================
+//  Page 3: Connection Detail
+// ============================================================
+
+function renderPage3(ctx) {
+  const contentY = 22;
+
+  // Green accent line
+  drawRect(ctx, 0, contentY, 2, SCREEN_H - contentY, COL.green);
+
+  // CONNECTION header
+  drawText(ctx, 'CONNECTION', 6, contentY + 4, COL.dimWhite, 5);
+  drawRect(ctx, 6, contentY + 16, 118, 1, COL.separator);
+
+  // WiFi status
+  const wifiY = contentY + 22;
+  drawText(ctx, 'WIFI', 6, wifiY, COL.dimGrey, 5);
+  const wifiStatus = state.wifiConnected ? 'CONNECTED' : 'DISCONNECTED';
+  const wifiColour = state.wifiConnected ? COL.green : COL.red;
+  drawText(ctx, wifiStatus, 30, wifiY, wifiColour, 5);
+
+  // IP address
+  const ipY = wifiY + 12;
+  drawText(ctx, 'IP', 6, ipY, COL.dimGrey, 5);
+  drawText(ctx, state.ipAddress, 20, ipY, COL.dimWhite, 5);
+
+  // RSSI
+  const rssiY = ipY + 16;
+  drawText(ctx, 'RSSI', 6, rssiY, COL.dimGrey, 5);
+
+  // RSSI value text
+  const rssiStr = String(state.rssi) + 'DBM';
+  drawText(ctx, rssiStr, 34, rssiY, COL.dimWhite, 5);
+
+  // RSSI bar — 5 segments
+  const rssiBarY = rssiY + 12;
+  const segW = 16;
+  const segH = 8;
+  const segGap = 3;
+  // Map RSSI: -90 = 0 bars, -30 = 5 bars
+  const rssiNorm = Math.max(0, Math.min(5, Math.round((state.rssi + 90) / 12)));
+
+  for (let s = 0; s < 5; s++) {
+    const sx = 6 + s * (segW + segGap);
+    const segColour = s < rssiNorm ?
+      (rssiNorm >= 4 ? COL.green : rssiNorm >= 2 ? COL.yellow : COL.red) :
+      '#1a1a1a';
+    drawRect(ctx, sx, rssiBarY, segW, segH, segColour);
+  }
+
+  // WebSocket section
+  const wsY = rssiBarY + 16;
+  drawRect(ctx, 6, wsY - 4, 118, 1, COL.separator);
+
+  drawText(ctx, 'WS', 6, wsY, COL.dimGrey, 5);
+  let wsStatusText = 'CLOSED';
+  let wsStatusColour = COL.red;
+  if (state.wsConnected) { wsStatusText = 'OPEN'; wsStatusColour = COL.green; }
+  else if (state.wsReconnecting) { wsStatusText = 'RECONNECTING'; wsStatusColour = COL.yellow; }
+  drawText(ctx, wsStatusText, 20, wsY, wsStatusColour, 5);
+
+  // Reconnect count
+  const rcY = wsY + 12;
+  drawText(ctx, 'RC:', 6, rcY, COL.dimGrey, 5);
+  const rcColour = state.wsReconnectCount > 3 ? COL.red :
+                   state.wsReconnectCount > 0 ? COL.yellow : COL.green;
+  drawText(ctx, String(state.wsReconnectCount), 24, rcY, rcColour, 5);
+}
+
+// ============================================================
+//  Live Overlay — header stays, content replaced
+// ============================================================
+
+function renderOverlay(ctx) {
+  const contentY = 22;
+  const contentH = SCREEN_H - contentY;
+
+  // Dark overlay background
+  drawRect(ctx, 0, contentY, SCREEN_W, contentH, '#0a0a0a');
+
+  // No accent line for overlay — clean, focused
+
+  // Parameter name at top of content area (10px = using 5x7 font)
+  drawTextCentred(ctx, state.overlayParam, contentY + 4, COL.dimWhite, 6);
+
+  // Thin separator below name
+  drawRect(ctx, 20, contentY + 14, SCREEN_W - 40, 1, COL.separator);
+
+  // Large value — 40px tall (using 10x16 font, 2.5x scale → approximate with 10x16 doubled partially)
+  // We will use the 10x16 font to render the value centred
+  const valStr = String(state.overlayValue) + '%';
+  // Position: centre in the ~70px space between name (14px from top) and bar (20px from bottom)
+  // Available: 106 - 14 (name+sep) - 20 (bar area) = ~72px. Centre the 16px tall digits.
+  const valY = contentY + 18 + Math.floor((contentH - 18 - 24 - 16) / 2);
+
+  // Render each character with 2x vertical and 2x horizontal scaling for ~40px height
+  // Using manual 2x scaling of the 10x16 font for a 20x32 effective size
+  const scaledCharW = 20;
+  const scaledCharH = 32;
+  const scaledSpacing = 24;
+  const scaledTotalW = valStr.length * scaledSpacing - (scaledSpacing - scaledCharW);
+  const scaledStartX = Math.floor((SCREEN_W - scaledTotalW) / 2);
+  const scaledStartY = contentY + 20 + Math.floor((contentH - 20 - 24 - scaledCharH) / 2);
+
+  // Determine colour based on parameter
+  let valColour = COL.amber;
+  if (state.overlayParam.startsWith('Z1')) valColour = COL.zone1;
+  else if (state.overlayParam.startsWith('Z2')) valColour = COL.zone2;
+  else if (state.overlayParam.startsWith('Z3')) valColour = COL.zone3;
+  else if (state.overlayParam.startsWith('MASTER')) valColour = COL.white;
+  else if (state.overlayParam.startsWith('SPEED')) valColour = COL.blue;
+
+  for (let ci = 0; ci < valStr.length; ci++) {
+    const ch = valStr[ci];
+    const glyph = FONT_10x16[ch];
+    if (!glyph) continue;
+    const cx = scaledStartX + ci * scaledSpacing;
+    for (let row = 0; row < 16; row++) {
+      for (let col = 0; col < 10; col++) {
+        if (glyph[row] & (1 << (9 - col))) {
+          // 2x scale
+          ctx.fillStyle = valColour;
+          ctx.fillRect(cx + col * 2, scaledStartY + row * 2, 2, 2);
+        }
+      }
+    }
+  }
+
+  // Position bar at bottom
+  const barY = SCREEN_H - 16;
+  const barX = 10;
+  const barW = SCREEN_W - 20;
+  const barH = 6;
+  drawBar(ctx, barX, barY, barW, barH, state.overlayValue / state.overlayMax, valColour, COL.barBg, COL.barBorder);
+
+  // Min/max labels
+  drawText(ctx, '0', barX, barY - 9, COL.dimGrey, 5);
+  const maxStr = String(state.overlayMax);
+  const maxW = measureText(maxStr, 5);
+  drawText(ctx, maxStr, barX + barW - maxW, barY - 9, COL.dimGrey, 5);
+}
+
+// ============================================================
+//  Composite render — header + dots + content
+// ============================================================
+
+function renderFrame(view) {
+  const offscreen = createOffscreen();
+  const ctx = offscreen.getContext('2d');
+
+  // Clear
+  drawRect(ctx, 0, 0, SCREEN_W, SCREEN_H, COL.bg);
+
+  // Always render header
+  renderHeader(ctx);
+
+  // Page dots (not shown during overlay — overlay replaces entire content)
+  let activeDot = 0;
+  if (view === 'page1') activeDot = 0;
+  else if (view === 'page2') activeDot = 1;
+  else if (view === 'page3') activeDot = 2;
+
+  if (view !== 'overlay') {
+    renderPageDots(ctx, activeDot);
+  }
+
+  // Content
+  switch (view) {
+    case 'page1': renderPage1(ctx); break;
+    case 'page2': renderPage2(ctx); break;
+    case 'page3': renderPage3(ctx); break;
+    case 'overlay': renderOverlay(ctx); break;
+  }
+
+  return offscreen;
+}
+
+// ============================================================
+//  Display to visible canvases
+// ============================================================
+
+function display(view) {
+  const offscreen = renderFrame(view);
+
+  // 4x canvas
+  const c4 = document.getElementById('canvas4x');
+  const ctx4 = c4.getContext('2d');
+  ctx4.imageSmoothingEnabled = false;
+  ctx4.clearRect(0, 0, 512, 512);
+  ctx4.drawImage(offscreen, 0, 0, 512, 512);
+
+  // 1:1 canvas
+  const c1 = document.getElementById('canvas1x');
+  const ctx1 = c1.getContext('2d');
+  ctx1.imageSmoothingEnabled = false;
+  ctx1.clearRect(0, 0, 128, 128);
+  ctx1.drawImage(offscreen, 0, 0);
+}
+
+// ============================================================
+//  Interactive controls
+// ============================================================
+
+function setActiveButton(id) {
+  document.querySelectorAll('.controls button').forEach(function(btn) {
+    btn.classList.remove('active');
+  });
+  document.getElementById(id).classList.add('active');
+}
+
+function showPage(num) {
+  currentView = 'page' + num;
+  setActiveButton('btn-page' + num);
+  display(currentView);
+}
+
+function showOverlay() {
+  currentView = 'overlay';
+  setActiveButton('btn-overlay');
+  display(currentView);
+}
+
+// Keyboard navigation
+document.addEventListener('keydown', function(e) {
+  if (e.key === '1') showPage(1);
+  else if (e.key === '2') showPage(2);
+  else if (e.key === '3') showPage(3);
+  else if (e.key === '4' || e.key === 'o' || e.key === 'O') showOverlay();
+  else if (e.key === 'ArrowLeft') {
+    if (currentView === 'page2') showPage(1);
+    else if (currentView === 'page3') showPage(2);
+    else if (currentView === 'overlay') showPage(1);
+  }
+  else if (e.key === 'ArrowRight') {
+    if (currentView === 'page1') showPage(2);
+    else if (currentView === 'page2') showPage(3);
+  }
+});
+
+// Initial render
+display('page1');
+</script>
+
+</body>
+</html>

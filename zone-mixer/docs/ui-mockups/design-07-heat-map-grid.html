@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Design 07 — Heat Map Grid | Zone Mixer UI</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1a1a2e;
+    color: #ccc;
+    font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 40px 20px;
+  }
+  h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #e0e0e0;
+    margin-bottom: 4px;
+    letter-spacing: 0.5px;
+  }
+  .subtitle {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 32px;
+  }
+  .display-row {
+    display: flex;
+    gap: 48px;
+    align-items: flex-start;
+    margin-bottom: 40px;
+  }
+  .display-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .panel-label {
+    font-size: 11px;
+    color: #555;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
+  canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+  .canvas-4x {
+    border: 1px solid #333;
+  }
+  .canvas-1x {
+    border: 1px solid #444;
+    box-shadow: 0 0 12px rgba(0, 0, 0, 0.5);
+  }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+    margin-bottom: 32px;
+    max-width: 720px;
+  }
+  .control-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .control-group label {
+    font-size: 10px;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .control-group input[type="range"] {
+    width: 100px;
+    accent-color: #3b82f6;
+    cursor: pointer;
+  }
+  .control-group .value {
+    font-size: 11px;
+    color: #888;
+    min-width: 28px;
+    text-align: center;
+  }
+  .control-group select {
+    background: #222;
+    color: #aaa;
+    border: 1px solid #444;
+    padding: 2px 6px;
+    font-size: 11px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .toggle-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .toggle-btn {
+    background: #222;
+    color: #888;
+    border: 1px solid #444;
+    padding: 3px 10px;
+    font-size: 10px;
+    font-family: inherit;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: all 0.15s ease;
+  }
+  .toggle-btn.active {
+    background: #1a3a1a;
+    color: #4ade80;
+    border-color: #4ade80;
+  }
+
+  /* Rationale */
+  .rationale {
+    max-width: 720px;
+    margin-top: 24px;
+    padding: 24px;
+    background: #111;
+    border: 1px solid #2a2a2a;
+    border-radius: 4px;
+  }
+  .rationale h2 {
+    font-size: 13px;
+    color: #888;
+    margin-bottom: 16px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .rationale h3 {
+    font-size: 12px;
+    color: #7aa;
+    margin: 14px 0 6px;
+  }
+  .rationale p, .rationale li {
+    font-size: 12px;
+    color: #666;
+    line-height: 1.6;
+  }
+  .rationale ul {
+    padding-left: 16px;
+  }
+  .rationale code {
+    background: #1a1a1a;
+    padding: 1px 4px;
+    color: #8ab;
+    font-size: 11px;
+  }
+  .colour-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    vertical-align: middle;
+    margin-right: 3px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Design 07 — Heat Map Grid</h1>
+<p class="subtitle">Zone Mixer / AtomS3 / 128x128 px / 0.85" LCD</p>
+
+<!-- Controls -->
+<div class="controls">
+  <div class="control-group">
+    <label>Zone 1 Bright</label>
+    <input type="range" id="z1bright" min="0" max="255" value="200">
+    <span class="value" id="z1bright-val">200</span>
+  </div>
+  <div class="control-group">
+    <label>Zone 2 Bright</label>
+    <input type="range" id="z2bright" min="0" max="255" value="140">
+    <span class="value" id="z2bright-val">140</span>
+  </div>
+  <div class="control-group">
+    <label>Zone 3 Bright</label>
+    <input type="range" id="z3bright" min="0" max="255" value="60">
+    <span class="value" id="z3bright-val">60</span>
+  </div>
+  <div class="control-group">
+    <label>Master</label>
+    <input type="range" id="master" min="0" max="255" value="220">
+    <span class="value" id="master-val">220</span>
+  </div>
+  <div class="control-group">
+    <label>Speed</label>
+    <input type="range" id="speed" min="0" max="255" value="128">
+    <span class="value" id="speed-val">128</span>
+  </div>
+  <div class="control-group">
+    <label>WiFi</label>
+    <select id="wifi-status">
+      <option value="connected">Connected</option>
+      <option value="disconnected">Disconnected</option>
+    </select>
+  </div>
+  <div class="control-group">
+    <label>WebSocket</label>
+    <select id="ws-status">
+      <option value="open">Open</option>
+      <option value="connecting">Connecting</option>
+      <option value="closed">Closed</option>
+    </select>
+  </div>
+  <div class="control-group">
+    <label>Zones Enabled</label>
+    <div class="toggle-row">
+      <button class="toggle-btn active" id="z1en" onclick="toggleZone(1)">1</button>
+      <button class="toggle-btn active" id="z2en" onclick="toggleZone(2)">2</button>
+      <button class="toggle-btn" id="z3en" onclick="toggleZone(3)">3</button>
+    </div>
+  </div>
+</div>
+
+<!-- Canvases -->
+<div class="display-row">
+  <div class="display-panel">
+    <span class="panel-label">4x Scale (512 x 512)</span>
+    <canvas id="canvas4x" class="canvas-4x" width="512" height="512"></canvas>
+  </div>
+  <div class="display-panel">
+    <span class="panel-label">1:1 Actual (128 x 128)</span>
+    <canvas id="canvas1x" class="canvas-1x" width="128" height="128"></canvas>
+  </div>
+</div>
+
+<!-- Design Rationale -->
+<div class="rationale">
+  <h2>Design Rationale</h2>
+
+  <h3>Concept</h3>
+  <p>
+    The Heat Map Grid eliminates text entirely. Every parameter is a coloured
+    cell whose brightness and saturation encode its current value. At a glance
+    from 1 metre away, the operator reads the full system state as a colour
+    pattern — no parsing, no squinting at 6pt labels on a 0.85" screen.
+  </p>
+
+  <h3>Why This Works at 128x128</h3>
+  <ul>
+    <li>Text is illegible below ~8pt on a 0.85" LCD at arm's length. This design
+        uses zero text — only colour fields.</li>
+    <li>Large cells (38x38 px for zones, full-width bars for master/speed) are
+        visible in peripheral vision during performance.</li>
+    <li>The 2px gap grid creates a clean separation without wasting space on
+        borders or dividers.</li>
+  </ul>
+
+  <h3>Colour Mapping</h3>
+  <ul>
+    <li><span class="colour-swatch" style="background:#00FFFF"></span>
+        <strong>Zone 1 — Cyan</strong>: <code>#001a1a</code> (off) to <code>#00FFFF</code> (full)</li>
+    <li><span class="colour-swatch" style="background:#00FF66"></span>
+        <strong>Zone 2 — Green</strong>: <code>#001a0d</code> (off) to <code>#00FF66</code> (full)</li>
+    <li><span class="colour-swatch" style="background:#FF8800"></span>
+        <strong>Zone 3 — Orange</strong>: <code>#1a0e00</code> (off) to <code>#FF8800</code> (full)</li>
+    <li><span class="colour-swatch" style="background:#FFFFFF"></span>
+        <strong>Master — White</strong>: <code>#1a1a1a</code> (off) to <code>#FFFFFF</code> (full)</li>
+    <li><span class="colour-swatch" style="background:#4488FF"></span>
+        <strong>Speed — Blue</strong>: <code>#000d1a</code> (off) to <code>#4488FF</code> (full)</li>
+  </ul>
+
+  <h3>Status Indicators</h3>
+  <ul>
+    <li><strong>WiFi</strong>: bright green = connected, red = disconnected.
+        Binary state, no ambiguity.</li>
+    <li><strong>WebSocket</strong>: green = open, amber = connecting/retrying,
+        red = closed. Three-state traffic light.</li>
+    <li><strong>Zone enabled</strong>: green = active, near-black = disabled.
+        Mirrors the top row — disabled zones are dark above AND below,
+        reinforcing the visual pattern.</li>
+  </ul>
+
+  <h3>Grid Layout (128x128 px)</h3>
+  <p>All coordinates in native pixels. Gap = 2px throughout.</p>
+  <ul>
+    <li><strong>Row 1 (y: 2..40)</strong>: Three 38x38 zone brightness squares,
+        left-to-right, 2px gaps</li>
+    <li><strong>Row 2 (y: 42..72)</strong>: Master brightness bar (80x30) +
+        speed bar (38x30), 2px gap</li>
+    <li><strong>Row 3 (y: 74..96)</strong>: Three 38x22 status cells —
+        WiFi, WebSocket, zone-enabled indicator</li>
+  </ul>
+
+  <h3>Implementation Notes for LVGL / Direct Framebuffer</h3>
+  <ul>
+    <li>Zero font rendering — pure <code>lv_canvas_set_px</code> or
+        <code>fillRect()</code> calls. No font ROM needed.</li>
+    <li>Colour interpolation: <code>lerp(dark, vivid, value/255.0)</code>
+        per channel. One multiply per channel per cell.</li>
+    <li>Update only changed cells — dirty-flag each parameter, redraw
+        only modified rectangles. Worst case: 8 cells = 8 fillRect calls.</li>
+    <li>Entire render fits in &lt;0.5ms on ESP32-S3 at 240 MHz.</li>
+  </ul>
+
+  <h3>Limitations</h3>
+  <ul>
+    <li>No numeric readout — operator cannot tell "brightness = 147" vs "153".
+        Acceptable: zone mixing is feel-based, not precision.</li>
+    <li>Colour-blind accessibility: cyan/green/orange chosen for deuteranopia
+        separation, but full accessibility requires user testing.</li>
+    <li>Three zones maximum — adding a fourth zone would require smaller cells
+        or a second row, breaking the at-a-glance scan.</li>
+  </ul>
+</div>
+
+<script>
+// ---------------------------------------------------------------
+// State
+// ---------------------------------------------------------------
+const state = {
+  z1bright: 200,
+  z2bright: 140,
+  z3bright: 60,
+  master:   220,
+  speed:    128,
+  wifi:     'connected',     // connected | disconnected
+  ws:       'open',          // open | connecting | closed
+  z1en:     true,
+  z2en:     true,
+  z3en:     false,
+};
+
+// ---------------------------------------------------------------
+// Colour definitions
+// ---------------------------------------------------------------
+// Each zone/parameter has a dark floor and a vivid ceiling.
+// Interpolation: channel = floor + (ceil - floor) * (value / 255)
+const COLOURS = {
+  z1: { dark: [0, 26, 26],  vivid: [0, 255, 255] },   // cyan
+  z2: { dark: [0, 26, 13],  vivid: [0, 255, 102] },    // green
+  z3: { dark: [26, 14, 0],  vivid: [255, 136, 0] },    // orange
+  master: { dark: [26, 26, 26], vivid: [255, 255, 255] }, // white
+  speed:  { dark: [0, 13, 26],  vivid: [68, 136, 255] },  // blue
+};
+
+const STATUS_COLOURS = {
+  wifi: {
+    connected:    [0, 220, 80],
+    disconnected: [220, 30, 30],
+  },
+  ws: {
+    open:       [0, 220, 80],
+    connecting: [220, 180, 30],
+    closed:     [220, 30, 30],
+  },
+  zoneOn:  [0, 200, 70],
+  zoneOff: [20, 20, 20],
+};
+
+// ---------------------------------------------------------------
+// Colour interpolation
+// ---------------------------------------------------------------
+function lerpColour(dark, vivid, t) {
+  // t is 0..1
+  return [
+    Math.round(dark[0] + (vivid[0] - dark[0]) * t),
+    Math.round(dark[1] + (vivid[1] - dark[1]) * t),
+    Math.round(dark[2] + (vivid[2] - dark[2]) * t),
+  ];
+}
+
+function rgbStr(rgb) {
+  return `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+}
+
+// ---------------------------------------------------------------
+// Grid layout — all in native 128x128 coordinates
+// ---------------------------------------------------------------
+const GAP = 2;
+const CELL_W = 38;   // (128 - 4 * GAP) / 3 ≈ 40, using 38 for symmetry
+const ZONE_H = 38;
+const BAR_H  = 30;
+const STATUS_H = 22;
+
+// Row 1: Zone brightness squares
+const ROW1_Y = GAP;
+const z1Rect = { x: GAP,                  y: ROW1_Y, w: CELL_W, h: ZONE_H };
+const z2Rect = { x: GAP + CELL_W + GAP,   y: ROW1_Y, w: CELL_W, h: ZONE_H };
+const z3Rect = { x: GAP + (CELL_W + GAP) * 2, y: ROW1_Y, w: CELL_W, h: ZONE_H };
+
+// Row 2: Master (wide) + Speed
+const ROW2_Y = ROW1_Y + ZONE_H + GAP;
+const MASTER_W = CELL_W * 2 + GAP; // 78px
+const masterRect = { x: GAP, y: ROW2_Y, w: MASTER_W, h: BAR_H };
+const speedRect  = { x: GAP + MASTER_W + GAP, y: ROW2_Y, w: CELL_W, h: BAR_H };
+
+// Row 3: Status indicators
+const ROW3_Y = ROW2_Y + BAR_H + GAP;
+const wifiRect   = { x: GAP,                  y: ROW3_Y, w: CELL_W, h: STATUS_H };
+const wsRect     = { x: GAP + CELL_W + GAP,   y: ROW3_Y, w: CELL_W, h: STATUS_H };
+const zoneEnRect = { x: GAP + (CELL_W + GAP) * 2, y: ROW3_Y, w: CELL_W, h: STATUS_H };
+
+// ---------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------
+const canvas4x = document.getElementById('canvas4x');
+const ctx4x    = canvas4x.getContext('2d');
+const canvas1x = document.getElementById('canvas1x');
+const ctx1x    = canvas1x.getContext('2d');
+
+// Offscreen 128x128 buffer — we draw here, then scale up
+const offscreen = document.createElement('canvas');
+offscreen.width = 128;
+offscreen.height = 128;
+const ctxOff = offscreen.getContext('2d');
+
+function fillCell(ctx, rect, rgb) {
+  ctx.fillStyle = rgbStr(rgb);
+  ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+}
+
+function render() {
+  // Clear to black
+  ctxOff.fillStyle = '#000000';
+  ctxOff.fillRect(0, 0, 128, 128);
+
+  // Row 1: Zone brightness
+  const z1c = lerpColour(COLOURS.z1.dark, COLOURS.z1.vivid, state.z1bright / 255);
+  const z2c = lerpColour(COLOURS.z2.dark, COLOURS.z2.vivid, state.z2bright / 255);
+  const z3c = lerpColour(COLOURS.z3.dark, COLOURS.z3.vivid, state.z3bright / 255);
+  fillCell(ctxOff, z1Rect, z1c);
+  fillCell(ctxOff, z2Rect, z2c);
+  fillCell(ctxOff, z3Rect, z3c);
+
+  // Row 2: Master + Speed
+  const mc = lerpColour(COLOURS.master.dark, COLOURS.master.vivid, state.master / 255);
+  const sc = lerpColour(COLOURS.speed.dark, COLOURS.speed.vivid, state.speed / 255);
+  fillCell(ctxOff, masterRect, mc);
+  fillCell(ctxOff, speedRect, sc);
+
+  // Row 3: Status
+  // WiFi
+  const wifiCol = state.wifi === 'connected'
+    ? STATUS_COLOURS.wifi.connected
+    : STATUS_COLOURS.wifi.disconnected;
+  fillCell(ctxOff, wifiRect, wifiCol);
+
+  // WebSocket
+  const wsCol = STATUS_COLOURS.ws[state.ws] || STATUS_COLOURS.ws.closed;
+  fillCell(ctxOff, wsRect, wsCol);
+
+  // Zone enabled — composite: show a mini 3-segment bar within the cell
+  // Each third of the cell represents a zone
+  const segW = Math.floor((zoneEnRect.w - 2 * 1) / 3); // 1px internal gaps
+  const zones = [state.z1en, state.z2en, state.z3en];
+  const zoneVividCols = [
+    COLOURS.z1.vivid,
+    COLOURS.z2.vivid,
+    COLOURS.z3.vivid,
+  ];
+  for (let i = 0; i < 3; i++) {
+    const sx = zoneEnRect.x + i * (segW + 1);
+    const col = zones[i]
+      ? zoneVividCols[i].map(c => Math.round(c * 0.7))  // slightly dimmer than full
+      : STATUS_COLOURS.zoneOff;
+    ctxOff.fillStyle = rgbStr(col);
+    ctxOff.fillRect(sx, zoneEnRect.y, segW, zoneEnRect.h);
+  }
+
+  // Blit to 1:1 canvas
+  ctx1x.drawImage(offscreen, 0, 0);
+
+  // Blit to 4x canvas — scale up with nearest-neighbour
+  ctx4x.imageSmoothingEnabled = false;
+  ctx4x.drawImage(offscreen, 0, 0, 512, 512);
+}
+
+// ---------------------------------------------------------------
+// Control wiring
+// ---------------------------------------------------------------
+const sliders = ['z1bright', 'z2bright', 'z3bright', 'master', 'speed'];
+sliders.forEach(id => {
+  const el = document.getElementById(id);
+  const valEl = document.getElementById(id + '-val');
+  el.addEventListener('input', () => {
+    state[id] = parseInt(el.value);
+    valEl.textContent = el.value;
+    render();
+  });
+});
+
+document.getElementById('wifi-status').addEventListener('change', (e) => {
+  state.wifi = e.target.value;
+  render();
+});
+
+document.getElementById('ws-status').addEventListener('change', (e) => {
+  state.ws = e.target.value;
+  render();
+});
+
+function toggleZone(n) {
+  const key = `z${n}en`;
+  state[key] = !state[key];
+  const btn = document.getElementById(`z${n}en`);
+  btn.classList.toggle('active', state[key]);
+  render();
+}
+
+// ---------------------------------------------------------------
+// Initial render
+// ---------------------------------------------------------------
+render();
+</script>
+
+</body>
+</html>

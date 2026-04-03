@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zone Mixer — Design 16: Big Icons</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #111;
+    color: #ccc;
+    font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+    min-height: 100vh;
+  }
+  h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #FFB000;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+  .subtitle {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 32px;
+    letter-spacing: 0.5px;
+  }
+  .display-row {
+    display: flex;
+    gap: 48px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 24px;
+  }
+  .display-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .panel-label {
+    font-size: 11px;
+    color: #555;
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    border: 1px solid #222;
+    cursor: pointer;
+  }
+  .controls {
+    display: flex;
+    gap: 12px;
+    margin-top: 16px;
+    margin-bottom: 32px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .controls button {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    color: #ccc;
+    font-family: inherit;
+    font-size: 11px;
+    padding: 6px 14px;
+    border-radius: 3px;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    transition: all 0.15s ease;
+  }
+  .controls button:hover {
+    background: #222;
+    border-color: #555;
+  }
+  .controls button.active {
+    background: #FFB000;
+    color: #000;
+    border-color: #FFB000;
+  }
+  .rationale {
+    max-width: 720px;
+    margin-top: 24px;
+    padding: 24px;
+    background: #0d0d0d;
+    border: 1px solid #1a1a1a;
+    border-radius: 6px;
+    line-height: 1.7;
+  }
+  .rationale h2 {
+    font-size: 13px;
+    color: #FFB000;
+    margin-bottom: 12px;
+    letter-spacing: 0.5px;
+  }
+  .rationale h3 {
+    font-size: 11px;
+    color: #888;
+    margin: 16px 0 6px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .rationale p, .rationale li {
+    font-size: 12px;
+    color: #777;
+  }
+  .rationale ul {
+    padding-left: 16px;
+  }
+  .rationale li {
+    margin-bottom: 4px;
+  }
+  .rationale code {
+    background: #1a1a1a;
+    padding: 1px 5px;
+    border-radius: 2px;
+    color: #999;
+    font-size: 11px;
+  }
+  .colour-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    vertical-align: middle;
+    margin-right: 3px;
+    border: 1px solid #333;
+  }
+</style>
+</head>
+<body>
+
+<h1>ZONE MIXER &mdash; DESIGN 16</h1>
+<p class="subtitle">Big Icons &middot; 128&times;128 AtomS3 LCD &middot; Pixel Art, No Text Labels</p>
+
+<div class="controls">
+  <button class="active" onclick="setPage(0)">Page 1: MIXER</button>
+  <button onclick="setPage(1)">Page 2: WAVE</button>
+  <button onclick="setPage(2)">Page 3: LINK</button>
+  <button onclick="toggleOverlay()">Toggle Overlay</button>
+</div>
+
+<div class="display-row">
+  <div class="display-panel">
+    <span class="panel-label">4&times; Scale (512&times;512)</span>
+    <canvas id="canvas4x" width="512" height="512"></canvas>
+  </div>
+  <div class="display-panel">
+    <span class="panel-label">1:1 Native (128&times;128)</span>
+    <canvas id="canvas1x" width="128" height="128"></canvas>
+  </div>
+</div>
+
+<div class="rationale">
+  <h2>Design Rationale</h2>
+
+  <h3>Philosophy</h3>
+  <p>
+    Text is slow to parse in dark, noisy venues. Large pixel-art icons communicate
+    meaning instantly through shape and colour rather than language. Each icon is
+    hand-drawn with <code>fillRect</code> calls &mdash; no image assets, no font
+    rendering latency. The 32&times;32px icon size is optimised for the 0.85" LCD:
+    large enough to read at arm's length, small enough to fit three per row.
+  </p>
+
+  <h3>Colour System</h3>
+  <ul>
+    <li><span class="colour-swatch" style="background:#FF4444"></span><code>#FF4444</code> Zone 1 &mdash; warm red, highest visual weight.</li>
+    <li><span class="colour-swatch" style="background:#44FF44"></span><code>#44FF44</code> Zone 2 &mdash; green, maximum contrast against Zone 1.</li>
+    <li><span class="colour-swatch" style="background:#4488FF"></span><code>#4488FF</code> Zone 3 &mdash; cool blue, completes the triad.</li>
+    <li><span class="colour-swatch" style="background:#FFB000"></span><code>#FFB000</code> Amber accent &mdash; master bar, page dots, effect name.</li>
+    <li><span class="colour-swatch" style="background:#22CC44"></span><code>#22CC44</code> / <span class="colour-swatch" style="background:#CC2222"></span><code>#CC2222</code> Status green/red &mdash; WiFi and WS connection state.</li>
+  </ul>
+
+  <h3>Page 1 &mdash; MIXER</h3>
+  <p>
+    Three 32&times;32px "LED block" icons represent zones. Each icon is a square outline
+    in the zone colour, filled from the bottom proportionally to brightness &mdash; like a
+    liquid level gauge. No numbers needed; the fill level IS the brightness. Below the
+    three icons, a wide master bar spans the full width in amber.
+  </p>
+
+  <h3>Page 2 &mdash; WAVE</h3>
+  <p>
+    A large pixel-art waveform icon occupies the centre, representing the current
+    effect visually. The effect name appears in small 10px text below &mdash; the only
+    text on this page. Speed is shown as a directional arrow icon: slow (single
+    arrow) to fast (triple arrow), with the arrow count reflecting speed range.
+  </p>
+
+  <h3>Page 3 &mdash; LINK</h3>
+  <p>
+    WiFi is shown as concentric pixel-art arcs (the universal WiFi symbol).
+    WebSocket is shown as two opposing arrows. Both icons are green when connected,
+    red when disconnected. The IP address appears in small text at the bottom &mdash;
+    the only text on this page.
+  </p>
+
+  <h3>Live Overlay</h3>
+  <p>
+    When a parameter is being adjusted, a full-screen overlay appears showing:
+    a contextual icon (sun for brightness, wave for speed), the value in large
+    48px pixel numerals, and a horizontal colour bar at the bottom. The overlay
+    auto-dismisses after the user stops turning the encoder.
+  </p>
+
+  <h3>Accessibility</h3>
+  <p>
+    All icons use shape + colour redundancy &mdash; each zone icon has a distinct
+    shape detail (single dot, double dot, triple dot) in addition to colour
+    differentiation. Contrast ratios exceed 7:1 for all active elements against
+    the <code>#0a0a0a</code> background.
+  </p>
+</div>
+
+<script>
+// ============================================================
+//  Zone Mixer — Design 16: Big Icons
+//  128x128 pixel canvas for AtomS3 0.85" LCD
+// ============================================================
+
+const SCREEN_W = 128;
+const SCREEN_H = 128;
+
+// Colour palette
+const COL = {
+  bg:         '#0a0a0a',
+  barBg:      '#1a1a1a',
+  barBorder:  '#222222',
+  amber:      '#FFB000',
+  amberDim:   '#7A5500',
+  amberDark:  '#3D2A00',
+  white:      '#FFFFFF',
+  dimWhite:   '#999999',
+  dimGrey:    '#555555',
+  darkGrey:   '#2a2a2a',
+  zone1:      '#FF4444',
+  zone1Dim:   '#661818',
+  zone2:      '#44FF44',
+  zone2Dim:   '#186618',
+  zone3:      '#4488FF',
+  zone3Dim:   '#183466',
+  green:      '#22CC44',
+  greenDim:   '#0D4D1A',
+  red:        '#CC2222',
+  redDim:     '#4D0D0D',
+  pageDotActive: '#FFB000',
+  pageDotInactive: '#333333',
+};
+
+// Mock state
+const state = {
+  currentPage: 0,
+  showOverlay: false,
+  overlayType: 'brightness', // 'brightness' | 'speed'
+  overlayZone: 0, // 0=zone1, 1=zone2, 2=zone3, 3=master
+  overlayValue: 85,
+  effectName: 'CHROMATIC PULSE',
+  wifiConnected: true,
+  wsConnected: true,
+  zones: [
+    { brightness: 85 },
+    { brightness: 62 },
+    { brightness: 41 },
+  ],
+  masterBrightness: 72,
+  speed: 55,
+  ipAddress: '192.168.4.1',
+};
+
+const zoneColours = [COL.zone1, COL.zone2, COL.zone3];
+const zoneColoursDim = [COL.zone1Dim, COL.zone2Dim, COL.zone3Dim];
+
+// ============================================================
+//  Pixel font — 5x7 bitmap characters
+// ============================================================
+const FONT_5x7 = {
+  ' ': [0b00000,0b00000,0b00000,0b00000,0b00000,0b00000,0b00000],
+  '0': [0b01110,0b10001,0b10011,0b10101,0b11001,0b10001,0b01110],
+  '1': [0b00100,0b01100,0b00100,0b00100,0b00100,0b00100,0b01110],
+  '2': [0b01110,0b10001,0b00001,0b00110,0b01000,0b10000,0b11111],
+  '3': [0b01110,0b10001,0b00001,0b00110,0b00001,0b10001,0b01110],
+  '4': [0b00010,0b00110,0b01010,0b10010,0b11111,0b00010,0b00010],
+  '5': [0b11111,0b10000,0b11110,0b00001,0b00001,0b10001,0b01110],
+  '6': [0b00110,0b01000,0b10000,0b11110,0b10001,0b10001,0b01110],
+  '7': [0b11111,0b00001,0b00010,0b00100,0b01000,0b01000,0b01000],
+  '8': [0b01110,0b10001,0b10001,0b01110,0b10001,0b10001,0b01110],
+  '9': [0b01110,0b10001,0b10001,0b01111,0b00001,0b00010,0b01100],
+  'A': [0b01110,0b10001,0b10001,0b11111,0b10001,0b10001,0b10001],
+  'B': [0b11110,0b10001,0b10001,0b11110,0b10001,0b10001,0b11110],
+  'C': [0b01110,0b10001,0b10000,0b10000,0b10000,0b10001,0b01110],
+  'D': [0b11110,0b10001,0b10001,0b10001,0b10001,0b10001,0b11110],
+  'E': [0b11111,0b10000,0b10000,0b11110,0b10000,0b10000,0b11111],
+  'F': [0b11111,0b10000,0b10000,0b11110,0b10000,0b10000,0b10000],
+  'G': [0b01110,0b10001,0b10000,0b10111,0b10001,0b10001,0b01110],
+  'H': [0b10001,0b10001,0b10001,0b11111,0b10001,0b10001,0b10001],
+  'I': [0b01110,0b00100,0b00100,0b00100,0b00100,0b00100,0b01110],
+  'J': [0b00111,0b00010,0b00010,0b00010,0b00010,0b10010,0b01100],
+  'K': [0b10001,0b10010,0b10100,0b11000,0b10100,0b10010,0b10001],
+  'L': [0b10000,0b10000,0b10000,0b10000,0b10000,0b10000,0b11111],
+  'M': [0b10001,0b11011,0b10101,0b10101,0b10001,0b10001,0b10001],
+  'N': [0b10001,0b11001,0b10101,0b10011,0b10001,0b10001,0b10001],
+  'O': [0b01110,0b10001,0b10001,0b10001,0b10001,0b10001,0b01110],
+  'P': [0b11110,0b10001,0b10001,0b11110,0b10000,0b10000,0b10000],
+  'Q': [0b01110,0b10001,0b10001,0b10001,0b10101,0b10010,0b01101],
+  'R': [0b11110,0b10001,0b10001,0b11110,0b10100,0b10010,0b10001],
+  'S': [0b01110,0b10001,0b10000,0b01110,0b00001,0b10001,0b01110],
+  'T': [0b11111,0b00100,0b00100,0b00100,0b00100,0b00100,0b00100],
+  'U': [0b10001,0b10001,0b10001,0b10001,0b10001,0b10001,0b01110],
+  'V': [0b10001,0b10001,0b10001,0b10001,0b10001,0b01010,0b00100],
+  'W': [0b10001,0b10001,0b10001,0b10101,0b10101,0b11011,0b10001],
+  'X': [0b10001,0b10001,0b01010,0b00100,0b01010,0b10001,0b10001],
+  'Y': [0b10001,0b10001,0b01010,0b00100,0b00100,0b00100,0b00100],
+  'Z': [0b11111,0b00001,0b00010,0b00100,0b01000,0b10000,0b11111],
+  '.': [0b00000,0b00000,0b00000,0b00000,0b00000,0b00000,0b00100],
+  ':': [0b00000,0b00100,0b00000,0b00000,0b00000,0b00100,0b00000],
+  '-': [0b00000,0b00000,0b00000,0b11111,0b00000,0b00000,0b00000],
+  '/': [0b00001,0b00010,0b00010,0b00100,0b01000,0b01000,0b10000],
+  '%': [0b11001,0b11010,0b00010,0b00100,0b01000,0b01011,0b10011],
+  '\u2026': [0b00000,0b00000,0b00000,0b00000,0b00000,0b00000,0b10101],
+};
+
+// Large font — 8x12 for big numerals in overlay
+// Each char: 12 rows, each row is an 8-bit mask
+const FONT_8x12 = {
+  '0': [0b00111100,0b01100110,0b11000011,0b11000011,0b11000011,0b11000011,0b11000011,0b11000011,0b11000011,0b11000011,0b01100110,0b00111100],
+  '1': [0b00011000,0b00111000,0b01111000,0b00011000,0b00011000,0b00011000,0b00011000,0b00011000,0b00011000,0b00011000,0b00011000,0b01111110],
+  '2': [0b00111100,0b01100110,0b11000011,0b00000011,0b00000110,0b00001100,0b00011000,0b00110000,0b01100000,0b11000000,0b11000000,0b11111111],
+  '3': [0b00111100,0b01100110,0b11000011,0b00000011,0b00000110,0b00011100,0b00000110,0b00000011,0b11000011,0b11000011,0b01100110,0b00111100],
+  '4': [0b00000110,0b00001110,0b00010110,0b00100110,0b01000110,0b10000110,0b11111111,0b00000110,0b00000110,0b00000110,0b00000110,0b00000110],
+  '5': [0b11111111,0b11000000,0b11000000,0b11000000,0b11111100,0b00000110,0b00000011,0b00000011,0b00000011,0b11000011,0b01100110,0b00111100],
+  '6': [0b00111100,0b01100110,0b11000000,0b11000000,0b11111100,0b11000110,0b11000011,0b11000011,0b11000011,0b11000011,0b01100110,0b00111100],
+  '7': [0b11111111,0b00000011,0b00000110,0b00001100,0b00001100,0b00011000,0b00011000,0b00110000,0b00110000,0b00110000,0b00110000,0b00110000],
+  '8': [0b00111100,0b01100110,0b11000011,0b11000011,0b01100110,0b00111100,0b01100110,0b11000011,0b11000011,0b11000011,0b01100110,0b00111100],
+  '9': [0b00111100,0b01100110,0b11000011,0b11000011,0b11000011,0b01100111,0b00111111,0b00000011,0b00000011,0b11000011,0b01100110,0b00111100],
+  ' ': [0b00000000,0b00000000,0b00000000,0b00000000,0b00000000,0b00000000,0b00000000,0b00000000,0b00000000,0b00000000,0b00000000,0b00000000],
+};
+
+// ============================================================
+//  Drawing helpers
+// ============================================================
+
+function drawPixel(ctx, x, y, colour) {
+  ctx.fillStyle = colour;
+  ctx.fillRect(x, y, 1, 1);
+}
+
+function drawRect(ctx, x, y, w, h, colour) {
+  ctx.fillStyle = colour;
+  ctx.fillRect(x, y, w, h);
+}
+
+function drawRectOutline(ctx, x, y, w, h, colour, thickness) {
+  const t = thickness || 1;
+  drawRect(ctx, x, y, w, t, colour);           // top
+  drawRect(ctx, x, y + h - t, w, t, colour);   // bottom
+  drawRect(ctx, x, y, t, h, colour);           // left
+  drawRect(ctx, x + w - t, y, t, h, colour);   // right
+}
+
+function drawChar(ctx, ch, x, y, colour) {
+  const glyph = FONT_5x7[ch];
+  if (!glyph) return;
+  for (let row = 0; row < 7; row++) {
+    for (let col = 0; col < 5; col++) {
+      if (glyph[row] & (1 << (4 - col))) {
+        drawPixel(ctx, x + col, y + row, colour);
+      }
+    }
+  }
+}
+
+function drawText(ctx, text, x, y, colour, spacing) {
+  spacing = spacing || 6;
+  for (let i = 0; i < text.length; i++) {
+    drawChar(ctx, text[i], x + i * spacing, y, colour);
+  }
+}
+
+function drawTextTruncated(ctx, text, x, y, colour, maxWidth, spacing) {
+  spacing = spacing || 6;
+  const fullWidth = text.length * spacing - 1;
+  if (fullWidth <= maxWidth) {
+    drawText(ctx, text, x, y, colour, spacing);
+    return;
+  }
+  const availWidth = maxWidth - spacing;
+  let chars = Math.floor(availWidth / spacing);
+  if (chars < 1) chars = 1;
+  drawText(ctx, text.substring(0, chars), x, y, colour, spacing);
+  drawChar(ctx, '\u2026', x + chars * spacing, y, colour);
+}
+
+function drawTextCentred(ctx, text, cx, y, colour, spacing) {
+  spacing = spacing || 6;
+  const w = text.length * spacing - 1;
+  drawText(ctx, text, cx - Math.floor(w / 2), y, colour, spacing);
+}
+
+function drawBigChar(ctx, ch, x, y, colour) {
+  const glyph = FONT_8x12[ch];
+  if (!glyph) return;
+  for (let row = 0; row < 12; row++) {
+    for (let col = 0; col < 8; col++) {
+      if (glyph[row] & (1 << (7 - col))) {
+        drawPixel(ctx, x + col, y + row, colour);
+      }
+    }
+  }
+}
+
+function drawBigText(ctx, text, x, y, colour, spacing) {
+  spacing = spacing || 10;
+  for (let i = 0; i < text.length; i++) {
+    drawBigChar(ctx, text[i], x + i * spacing, y, colour);
+  }
+}
+
+function drawBigTextCentred(ctx, text, cx, y, colour, spacing) {
+  spacing = spacing || 10;
+  const w = text.length * spacing - (spacing - 8);
+  drawBigText(ctx, text, cx - Math.floor(w / 2), y, colour, spacing);
+}
+
+// ============================================================
+//  Pixel-art icon primitives (all drawn with fillRect)
+// ============================================================
+
+// Zone LED block — a square with fill-level from bottom
+function drawZoneLedIcon(ctx, x, y, size, fillPercent, colour, colourDim, dotCount) {
+  // Outer border
+  drawRectOutline(ctx, x, y, size, size, colour, 2);
+
+  // Inner background (dim version of colour)
+  drawRect(ctx, x + 2, y + 2, size - 4, size - 4, colourDim);
+
+  // Fill from bottom based on brightness
+  const innerH = size - 4;
+  const fillH = Math.round(innerH * (fillPercent / 100));
+  if (fillH > 0) {
+    drawRect(ctx, x + 2, y + 2 + (innerH - fillH), size - 4, fillH, colour);
+  }
+
+  // Zone identification dots at top (1, 2, or 3 dots)
+  const dotY = y + 5;
+  const dotCx = x + Math.floor(size / 2);
+  const dotColour = '#0a0a0a';
+  if (dotCount === 1) {
+    drawRect(ctx, dotCx - 1, dotY, 3, 3, dotColour);
+  } else if (dotCount === 2) {
+    drawRect(ctx, dotCx - 4, dotY, 3, 3, dotColour);
+    drawRect(ctx, dotCx + 2, dotY, 3, 3, dotColour);
+  } else if (dotCount === 3) {
+    drawRect(ctx, dotCx - 7, dotY, 3, 3, dotColour);
+    drawRect(ctx, dotCx - 1, dotY, 3, 3, dotColour);
+    drawRect(ctx, dotCx + 5, dotY, 3, 3, dotColour);
+  }
+}
+
+// Sun icon for brightness overlay (16x16 centred at cx,cy)
+function drawSunIcon(ctx, cx, cy, colour) {
+  // Centre circle 6px diameter
+  for (let dy = -3; dy <= 3; dy++) {
+    for (let dx = -3; dx <= 3; dx++) {
+      if (dx * dx + dy * dy <= 9) {
+        drawPixel(ctx, cx + dx, cy + dy, colour);
+      }
+    }
+  }
+  // Rays — 4 cardinal + 4 diagonal
+  // top
+  drawRect(ctx, cx, cy - 7, 1, 2, colour);
+  // bottom
+  drawRect(ctx, cx, cy + 6, 1, 2, colour);
+  // left
+  drawRect(ctx, cx - 7, cy, 2, 1, colour);
+  // right
+  drawRect(ctx, cx + 6, cy, 2, 1, colour);
+  // top-left
+  drawPixel(ctx, cx - 5, cy - 5, colour);
+  drawPixel(ctx, cx - 4, cy - 4, colour);
+  // top-right
+  drawPixel(ctx, cx + 5, cy - 5, colour);
+  drawPixel(ctx, cx + 4, cy - 4, colour);
+  // bottom-left
+  drawPixel(ctx, cx - 5, cy + 5, colour);
+  drawPixel(ctx, cx - 4, cy + 4, colour);
+  // bottom-right
+  drawPixel(ctx, cx + 5, cy + 5, colour);
+  drawPixel(ctx, cx + 4, cy + 4, colour);
+}
+
+// Waveform icon — pixel-art sine wave (fits in ~40x20 area)
+function drawWaveformIcon(ctx, x, y, w, h, colour) {
+  const midY = y + Math.floor(h / 2);
+  const amp = Math.floor(h / 2) - 2;
+  for (let px = 0; px < w; px++) {
+    const t = (px / w) * Math.PI * 3; // 1.5 full waves
+    const sy = Math.round(Math.sin(t) * amp);
+    // Draw 2px wide for visibility
+    drawRect(ctx, x + px, midY - sy, 1, 2, colour);
+  }
+}
+
+// Speed arrow icon — more arrows = faster
+function drawSpeedArrow(ctx, x, y, count, colour, dimColour) {
+  // Draw up to 3 chevron arrows pointing right
+  for (let i = 0; i < 3; i++) {
+    const ax = x + i * 10;
+    const c = (i < count) ? colour : dimColour;
+    // Each arrow: > shape, 7px tall
+    drawPixel(ctx, ax, y, c);
+    drawPixel(ctx, ax + 1, y + 1, c);
+    drawPixel(ctx, ax + 2, y + 2, c);
+    drawPixel(ctx, ax + 3, y + 3, c);
+    drawPixel(ctx, ax + 2, y + 4, c);
+    drawPixel(ctx, ax + 1, y + 5, c);
+    drawPixel(ctx, ax, y + 6, c);
+    // Thicken
+    drawPixel(ctx, ax + 1, y, c);
+    drawPixel(ctx, ax + 2, y + 1, c);
+    drawPixel(ctx, ax + 3, y + 2, c);
+    drawPixel(ctx, ax + 4, y + 3, c);
+    drawPixel(ctx, ax + 3, y + 4, c);
+    drawPixel(ctx, ax + 2, y + 5, c);
+    drawPixel(ctx, ax + 1, y + 6, c);
+  }
+}
+
+// WiFi icon — concentric arcs as pixel art
+function drawWifiIcon(ctx, cx, cy, colour, dimColour, connected) {
+  const c = connected ? colour : dimColour;
+  const activeC = connected ? colour : '#CC2222';
+
+  // Bottom dot (always the active colour to show state)
+  drawRect(ctx, cx - 1, cy + 8, 3, 3, activeC);
+
+  // Arc 1 (innermost) — 6px radius partial arc
+  const arc1Points = [
+    [-3, 4], [-2, 3], [-1, 2], [0, 2], [1, 2], [2, 3], [3, 4],
+    [-4, 5], [4, 5],
+  ];
+  for (const [dx, dy] of arc1Points) {
+    drawPixel(ctx, cx + dx, cy + dy, connected ? colour : '#CC2222');
+  }
+
+  // Arc 2 (middle) — 10px radius
+  const arc2Points = [
+    [-6, 2], [-5, 1], [-4, 0], [-3, -1], [-2, -1], [-1, -2], [0, -2], [1, -2], [2, -1], [3, -1], [4, 0], [5, 1], [6, 2],
+    [-7, 3], [7, 3],
+  ];
+  for (const [dx, dy] of arc2Points) {
+    drawPixel(ctx, cx + dx, cy + dy, connected ? colour : dimColour);
+  }
+
+  // Arc 3 (outermost) — 14px radius
+  const arc3Points = [
+    [-9, 0], [-8, -1], [-7, -2], [-6, -3], [-5, -4], [-4, -5], [-3, -5], [-2, -6], [-1, -6], [0, -6],
+    [1, -6], [2, -6], [3, -5], [4, -5], [5, -4], [6, -3], [7, -2], [8, -1], [9, 0],
+    [-10, 1], [10, 1],
+  ];
+  for (const [dx, dy] of arc3Points) {
+    drawPixel(ctx, cx + dx, cy + dy, connected ? colour : dimColour);
+  }
+}
+
+// WebSocket icon — two opposing arrows
+function drawWsIcon(ctx, cx, cy, colour, dimColour, connected) {
+  const c = connected ? colour : '#CC2222';
+
+  // Arrow pointing right (top) →
+  const arrowY = cy - 6;
+  drawRect(ctx, cx - 8, arrowY, 16, 2, c);
+  // Arrowhead
+  drawPixel(ctx, cx + 8, arrowY - 1, c);
+  drawPixel(ctx, cx + 9, arrowY, c);
+  drawPixel(ctx, cx + 9, arrowY + 1, c);
+  drawPixel(ctx, cx + 8, arrowY + 2, c);
+  drawPixel(ctx, cx + 10, arrowY, c);
+  drawPixel(ctx, cx + 10, arrowY + 1, c);
+  // Extra arrowhead pixels
+  drawPixel(ctx, cx + 7, arrowY - 2, c);
+  drawPixel(ctx, cx + 7, arrowY + 3, c);
+
+  // Arrow pointing left (bottom) ←
+  const arrowY2 = cy + 5;
+  drawRect(ctx, cx - 7, arrowY2, 16, 2, c);
+  // Arrowhead
+  drawPixel(ctx, cx - 8, arrowY2 - 1, c);
+  drawPixel(ctx, cx - 9, arrowY2, c);
+  drawPixel(ctx, cx - 9, arrowY2 + 1, c);
+  drawPixel(ctx, cx - 8, arrowY2 + 2, c);
+  drawPixel(ctx, cx - 10, arrowY2, c);
+  drawPixel(ctx, cx - 10, arrowY2 + 1, c);
+  // Extra arrowhead pixels
+  drawPixel(ctx, cx - 7, arrowY2 - 2, c);
+  drawPixel(ctx, cx - 7, arrowY2 + 3, c);
+}
+
+// Speed wave icon for overlay
+function drawSpeedWaveIcon(ctx, cx, cy, colour) {
+  // 3 vertical lines with wave displacement
+  for (let i = 0; i < 3; i++) {
+    const baseX = cx - 8 + i * 8;
+    for (let py = -6; py <= 6; py++) {
+      const dx = Math.round(Math.sin(py * 0.5 + i * 1.2) * 2);
+      drawRect(ctx, baseX + dx, cy + py, 2, 1, colour);
+    }
+  }
+}
+
+// Page indicator dots
+function drawPageDots(ctx, cx, y, currentPage, totalPages) {
+  const dotSize = 3;
+  const gap = 6;
+  const totalW = totalPages * dotSize + (totalPages - 1) * (gap - dotSize);
+  const startX = cx - Math.floor(totalW / 2);
+  for (let i = 0; i < totalPages; i++) {
+    const dx = startX + i * gap;
+    const c = (i === currentPage) ? COL.pageDotActive : COL.pageDotInactive;
+    drawRect(ctx, dx, y, dotSize, dotSize, c);
+  }
+}
+
+// ============================================================
+//  Page renderers
+// ============================================================
+
+function renderPageMixer(ctx) {
+  // Background
+  drawRect(ctx, 0, 0, SCREEN_W, SCREEN_H, COL.bg);
+
+  // ── Page dots at top ──
+  drawPageDots(ctx, 64, 3, 0, 3);
+
+  // ── Three zone LED icons ──
+  const iconSize = 32;
+  const iconGap = 8;
+  const totalIconW = iconSize * 3 + iconGap * 2;
+  const startX = Math.floor((SCREEN_W - totalIconW) / 2);
+  const iconY = 14;
+
+  for (let i = 0; i < 3; i++) {
+    const x = startX + i * (iconSize + iconGap);
+    drawZoneLedIcon(
+      ctx, x, iconY, iconSize,
+      state.zones[i].brightness,
+      zoneColours[i], zoneColoursDim[i],
+      i + 1
+    );
+  }
+
+  // ── Brightness percentage text under each icon (small, optional) ──
+  for (let i = 0; i < 3; i++) {
+    const x = startX + i * (iconSize + iconGap);
+    const valStr = String(state.zones[i].brightness);
+    const textW = valStr.length * 5 - 1;
+    drawText(ctx, valStr, x + Math.floor((iconSize - textW) / 2), iconY + iconSize + 3, zoneColours[i], 5);
+  }
+
+  // ── Separator ──
+  drawRect(ctx, 8, 58, 112, 1, '#1a1a1a');
+
+  // ── Master brightness bar (wide, amber) ──
+  const mY = 64;
+  const mBarX = 8;
+  const mBarW = 112;
+  const mBarH = 12;
+
+  // "M" label icon — a small crown/diamond shape
+  // Actually, draw a small master icon: a horizontal line with a peak
+  drawRect(ctx, 10, mY - 8, 3, 1, COL.amber);
+  drawRect(ctx, 11, mY - 9, 1, 1, COL.amber);
+  drawRect(ctx, 14, mY - 8, 3, 1, COL.amber);
+  drawRect(ctx, 15, mY - 9, 1, 1, COL.amber);
+  drawRect(ctx, 18, mY - 8, 3, 1, COL.amber);
+  drawRect(ctx, 19, mY - 9, 1, 1, COL.amber);
+  drawRect(ctx, 10, mY - 7, 12, 1, COL.amber); // base
+
+  // Bar background
+  drawRect(ctx, mBarX, mY, mBarW, mBarH, COL.barBg);
+  drawRectOutline(ctx, mBarX, mY, mBarW, mBarH, COL.barBorder, 1);
+
+  // Filled portion
+  const mFillW = Math.round((mBarW - 2) * (state.masterBrightness / 100));
+  if (mFillW > 0) {
+    drawRect(ctx, mBarX + 1, mY + 1, mFillW, mBarH - 2, COL.amber);
+  }
+
+  // Master value to right
+  const mStr = String(state.masterBrightness);
+  drawText(ctx, mStr, mBarX + mBarW - mStr.length * 6, mY + mBarH + 3, COL.amberDim, 6);
+
+  // ── Zone on/off indicators — small squares at bottom ──
+  const indY = 88;
+  for (let i = 0; i < 3; i++) {
+    const indX = startX + i * (iconSize + iconGap) + Math.floor(iconSize / 2) - 3;
+    // Small filled square = on, outline = off
+    drawRect(ctx, indX, indY, 7, 7, zoneColours[i]);
+  }
+
+  // ── Small effect name hint at bottom ──
+  drawTextTruncated(ctx, state.effectName, 4, 100, COL.dimGrey, 120, 5);
+
+  // ── Connection status dots bottom-right ──
+  const dotY = 118;
+  drawRect(ctx, 112, dotY, 4, 4, state.wifiConnected ? COL.green : COL.red);
+  drawRect(ctx, 120, dotY, 4, 4, state.wsConnected ? COL.green : COL.red);
+
+  // ── Page label at very bottom ──
+  drawTextCentred(ctx, 'MIXER', 64, 110, '#2a2a2a', 6);
+}
+
+function renderPageWave(ctx) {
+  drawRect(ctx, 0, 0, SCREEN_W, SCREEN_H, COL.bg);
+
+  // Page dots
+  drawPageDots(ctx, 64, 3, 1, 3);
+
+  // ── Large waveform icon centred ──
+  const waveX = 14;
+  const waveY = 16;
+  const waveW = 100;
+  const waveH = 40;
+
+  // Waveform bounding box (subtle)
+  drawRectOutline(ctx, waveX - 2, waveY - 2, waveW + 4, waveH + 4, '#1a1a1a', 1);
+
+  // Draw the waveform
+  drawWaveformIcon(ctx, waveX, waveY, waveW, waveH, COL.amber);
+
+  // ── Effect name below waveform in 10px (using 5x7 font, appears ~10px with spacing) ──
+  drawTextTruncated(ctx, state.effectName, 4, 62, COL.amber, 120, 5);
+
+  // ── Separator ──
+  drawRect(ctx, 8, 72, 112, 1, '#1a1a1a');
+
+  // ── Speed section ──
+  // Label in dim
+  drawText(ctx, 'SPEED', 8, 78, COL.dimGrey, 5);
+
+  // Speed arrow icons — determine arrow count from speed
+  let arrowCount = 1;
+  if (state.speed > 33) arrowCount = 2;
+  if (state.speed > 66) arrowCount = 3;
+
+  drawSpeedArrow(ctx, 14, 90, arrowCount, COL.zone3, COL.zone3Dim);
+
+  // Speed value
+  const sStr = String(state.speed);
+  drawText(ctx, sStr, 50, 91, COL.zone3, 6);
+
+  // Speed bar below arrows
+  const sBarX = 8;
+  const sBarY = 102;
+  const sBarW = 112;
+  const sBarH = 6;
+  drawRect(ctx, sBarX, sBarY, sBarW, sBarH, COL.barBg);
+  drawRectOutline(ctx, sBarX, sBarY, sBarW, sBarH, COL.barBorder, 1);
+  const sFillW = Math.round((sBarW - 2) * (state.speed / 100));
+  if (sFillW > 0) {
+    drawRect(ctx, sBarX + 1, sBarY + 1, sFillW, sBarH - 2, COL.zone3);
+  }
+
+  // ── Connection dots ──
+  drawRect(ctx, 112, 118, 4, 4, state.wifiConnected ? COL.green : COL.red);
+  drawRect(ctx, 120, 118, 4, 4, state.wsConnected ? COL.green : COL.red);
+
+  // Page label
+  drawTextCentred(ctx, 'WAVE', 64, 116, '#2a2a2a', 6);
+}
+
+function renderPageLink(ctx) {
+  drawRect(ctx, 0, 0, SCREEN_W, SCREEN_H, COL.bg);
+
+  // Page dots
+  drawPageDots(ctx, 64, 3, 2, 3);
+
+  // ── WiFi icon — left half ──
+  const wifiCx = 34;
+  const wifiCy = 44;
+
+  drawWifiIcon(ctx, wifiCx, wifiCy, COL.green, COL.dimGrey, state.wifiConnected);
+
+  // Status label below
+  const wifiLabel = state.wifiConnected ? 'ON' : 'OFF';
+  const wifiLabelC = state.wifiConnected ? COL.green : COL.red;
+  drawTextCentred(ctx, wifiLabel, wifiCx, 60, wifiLabelC, 6);
+
+  // Tiny "W" label above
+  drawTextCentred(ctx, 'WIFI', wifiCx, 14, COL.dimGrey, 5);
+
+  // ── WS icon — right half ──
+  const wsCx = 94;
+  const wsCy = 44;
+
+  drawWsIcon(ctx, wsCx, wsCy, COL.green, COL.dimGrey, state.wsConnected);
+
+  // Status label below
+  const wsLabel = state.wsConnected ? 'ON' : 'OFF';
+  const wsLabelC = state.wsConnected ? COL.green : COL.red;
+  drawTextCentred(ctx, wsLabel, wsCx, 60, wsLabelC, 6);
+
+  // Tiny "WS" label above
+  drawTextCentred(ctx, 'WS', wsCx, 14, COL.dimGrey, 5);
+
+  // ── Separator ──
+  drawRect(ctx, 8, 72, 112, 1, '#1a1a1a');
+
+  // Vertical divider between WiFi and WS
+  drawRect(ctx, 63, 12, 1, 60, '#1a1a1a');
+
+  // ── IP address at bottom ──
+  drawTextCentred(ctx, state.ipAddress, 64, 80, COL.dimWhite, 5);
+
+  // ── Connection quality bar ──
+  const qBarX = 24;
+  const qBarY = 92;
+  const qBarW = 80;
+  const qBarH = 6;
+  const connQuality = (state.wifiConnected && state.wsConnected) ? 100 :
+                      (state.wifiConnected ? 50 : 0);
+  drawRect(ctx, qBarX, qBarY, qBarW, qBarH, COL.barBg);
+  drawRectOutline(ctx, qBarX, qBarY, qBarW, qBarH, COL.barBorder, 1);
+  const qFillW = Math.round((qBarW - 2) * (connQuality / 100));
+  const qColour = connQuality === 100 ? COL.green : (connQuality > 0 ? COL.amber : COL.red);
+  if (qFillW > 0) {
+    drawRect(ctx, qBarX + 1, qBarY + 1, qFillW, qBarH - 2, qColour);
+  }
+
+  // Page label
+  drawTextCentred(ctx, 'LINK', 64, 116, '#2a2a2a', 6);
+
+  // Connection status summary at very bottom
+  const summaryText = (state.wifiConnected && state.wsConnected) ? 'CONNECTED' :
+                      (state.wifiConnected ? 'WIFI ONLY' : 'OFFLINE');
+  const summaryC = (state.wifiConnected && state.wsConnected) ? COL.green :
+                   (state.wifiConnected ? COL.amber : COL.red);
+  drawTextCentred(ctx, summaryText, 64, 104, summaryC, 5);
+}
+
+// ============================================================
+//  Overlay renderer
+// ============================================================
+
+function renderOverlay(ctx) {
+  // Semi-transparent dark background (simulated — just a very dark fill)
+  drawRect(ctx, 0, 0, SCREEN_W, SCREEN_H, '#050505');
+
+  // Determine colours and icon based on overlay type
+  let overlayColour, iconType;
+  if (state.overlayType === 'brightness') {
+    if (state.overlayZone < 3) {
+      overlayColour = zoneColours[state.overlayZone];
+    } else {
+      overlayColour = COL.amber;
+    }
+    iconType = 'sun';
+  } else {
+    overlayColour = COL.zone3;
+    iconType = 'wave';
+  }
+
+  // ── Icon at top ──
+  if (iconType === 'sun') {
+    drawSunIcon(ctx, 64, 24, overlayColour);
+  } else {
+    drawSpeedWaveIcon(ctx, 64, 24, overlayColour);
+  }
+
+  // ── Zone indicator (small dots showing which zone) ──
+  if (state.overlayType === 'brightness') {
+    if (state.overlayZone < 3) {
+      // Draw small zone marker
+      const zStr = String(state.overlayZone + 1);
+      drawTextCentred(ctx, 'Z' + zStr, 64, 40, overlayColour, 6);
+    } else {
+      drawTextCentred(ctx, 'MST', 64, 40, COL.amber, 5);
+    }
+  } else {
+    drawTextCentred(ctx, 'SPD', 64, 40, COL.zone3, 5);
+  }
+
+  // ── Large value number — 48px area using big font, scaled 2x ──
+  const valStr = String(state.overlayValue).padStart(3, ' ');
+  // Draw each character 2x scaled for maximum visibility
+  const bigCharW = 16; // 8px * 2
+  const bigCharH = 24; // 12px * 2
+  const totalW = valStr.length * (bigCharW + 4) - 4;
+  const startX = Math.floor((SCREEN_W - totalW) / 2);
+  const startY = 52;
+
+  for (let ci = 0; ci < valStr.length; ci++) {
+    const ch = valStr[ci];
+    const glyph = FONT_8x12[ch];
+    if (!glyph) continue;
+    const cx = startX + ci * (bigCharW + 4);
+    for (let row = 0; row < 12; row++) {
+      for (let col = 0; col < 8; col++) {
+        if (glyph[row] & (1 << (7 - col))) {
+          // Draw 2x2 pixel
+          drawRect(ctx, cx + col * 2, startY + row * 2, 2, 2, overlayColour);
+        }
+      }
+    }
+  }
+
+  // ── Colour bar at bottom ──
+  const barX = 8;
+  const barY = 104;
+  const barW = 112;
+  const barH = 10;
+
+  drawRect(ctx, barX, barY, barW, barH, COL.barBg);
+  drawRectOutline(ctx, barX, barY, barW, barH, COL.barBorder, 1);
+
+  const fillW = Math.round((barW - 2) * (state.overlayValue / 100));
+  if (fillW > 0) {
+    drawRect(ctx, barX + 1, barY + 1, fillW, barH - 2, overlayColour);
+  }
+
+  // Value percent text below bar
+  drawTextCentred(ctx, String(state.overlayValue) + '%', 64, 118, overlayColour, 6);
+}
+
+// ============================================================
+//  Main render + blit to both canvases
+// ============================================================
+
+const offscreen = document.createElement('canvas');
+offscreen.width = SCREEN_W;
+offscreen.height = SCREEN_H;
+
+function render() {
+  const ctx = offscreen.getContext('2d');
+
+  // Render current page
+  if (state.showOverlay) {
+    // First render the page underneath (for context), then overlay
+    switch (state.currentPage) {
+      case 0: renderPageMixer(ctx); break;
+      case 1: renderPageWave(ctx); break;
+      case 2: renderPageLink(ctx); break;
+    }
+    renderOverlay(ctx);
+  } else {
+    switch (state.currentPage) {
+      case 0: renderPageMixer(ctx); break;
+      case 1: renderPageWave(ctx); break;
+      case 2: renderPageLink(ctx); break;
+    }
+  }
+
+  // Blit to 4x canvas
+  const c4 = document.getElementById('canvas4x');
+  const ctx4 = c4.getContext('2d');
+  ctx4.imageSmoothingEnabled = false;
+  ctx4.drawImage(offscreen, 0, 0, 512, 512);
+
+  // Blit to 1x canvas
+  const c1 = document.getElementById('canvas1x');
+  const ctx1 = c1.getContext('2d');
+  ctx1.imageSmoothingEnabled = false;
+  ctx1.drawImage(offscreen, 0, 0);
+}
+
+// ============================================================
+//  Interactivity
+// ============================================================
+
+let currentPage = 0;
+
+function setPage(page) {
+  state.currentPage = page;
+  state.showOverlay = false;
+  // Update button states
+  document.querySelectorAll('.controls button').forEach((btn, i) => {
+    if (i < 3) {
+      btn.classList.toggle('active', i === page);
+    }
+  });
+  render();
+}
+
+function toggleOverlay() {
+  state.showOverlay = !state.showOverlay;
+  if (state.showOverlay) {
+    // Cycle through overlay types on repeated presses
+    if (!toggleOverlay._cycle) toggleOverlay._cycle = 0;
+    const overlayStates = [
+      { type: 'brightness', zone: 0, value: state.zones[0].brightness },
+      { type: 'brightness', zone: 1, value: state.zones[1].brightness },
+      { type: 'brightness', zone: 2, value: state.zones[2].brightness },
+      { type: 'brightness', zone: 3, value: state.masterBrightness },
+      { type: 'speed', zone: 0, value: state.speed },
+    ];
+    const os = overlayStates[toggleOverlay._cycle % overlayStates.length];
+    state.overlayType = os.type;
+    state.overlayZone = os.zone;
+    state.overlayValue = os.value;
+    toggleOverlay._cycle++;
+  } else {
+    toggleOverlay._cycle = 0;
+  }
+  render();
+}
+
+// Click on 4x canvas to cycle pages
+document.getElementById('canvas4x').addEventListener('click', function(e) {
+  if (state.showOverlay) {
+    state.showOverlay = false;
+    render();
+    return;
+  }
+  setPage((state.currentPage + 1) % 3);
+});
+
+// Keyboard navigation
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+    setPage((state.currentPage + 2) % 3); // previous
+  } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+    setPage((state.currentPage + 1) % 3); // next
+  } else if (e.key === ' ' || e.key === 'Enter') {
+    toggleOverlay();
+  } else if (e.key === '1') {
+    setPage(0);
+  } else if (e.key === '2') {
+    setPage(1);
+  } else if (e.key === '3') {
+    setPage(2);
+  }
+});
+
+// Mouse wheel on canvas to adjust values
+document.getElementById('canvas4x').addEventListener('wheel', function(e) {
+  e.preventDefault();
+  const delta = e.deltaY > 0 ? -5 : 5;
+
+  if (state.showOverlay) {
+    state.overlayValue = Math.max(0, Math.min(100, state.overlayValue + delta));
+    // Sync back to state
+    if (state.overlayType === 'brightness') {
+      if (state.overlayZone < 3) {
+        state.zones[state.overlayZone].brightness = state.overlayValue;
+      } else {
+        state.masterBrightness = state.overlayValue;
+      }
+    } else {
+      state.speed = state.overlayValue;
+    }
+  } else {
+    // On mixer page, adjust zone 1 brightness
+    if (state.currentPage === 0) {
+      state.zones[0].brightness = Math.max(0, Math.min(100, state.zones[0].brightness + delta));
+    } else if (state.currentPage === 1) {
+      state.speed = Math.max(0, Math.min(100, state.speed + delta));
+    }
+  }
+  render();
+}, { passive: false });
+
+// Initial render
+render();
+</script>
+
+</body>
+</html>

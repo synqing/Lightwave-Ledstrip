@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zone Mixer - Design 01: Status Dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    padding: 32px;
+    min-height: 100vh;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #ffffff;
+    margin-bottom: 8px;
+  }
+
+  h2 {
+    font-size: 1rem;
+    font-weight: 400;
+    color: #8888aa;
+    margin-bottom: 24px;
+  }
+
+  .description {
+    max-width: 720px;
+    margin-bottom: 32px;
+    line-height: 1.6;
+    color: #b0b0c8;
+    font-size: 0.9rem;
+  }
+
+  .description h3 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #ccccdd;
+    margin-top: 16px;
+    margin-bottom: 6px;
+  }
+
+  .description ul {
+    margin-left: 20px;
+    margin-bottom: 8px;
+  }
+
+  .description li {
+    margin-bottom: 3px;
+  }
+
+  .mockup-container {
+    display: flex;
+    align-items: flex-start;
+    gap: 48px;
+    flex-wrap: wrap;
+  }
+
+  .mockup-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .mockup-label {
+    font-size: 0.8rem;
+    color: #666688;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .screen-frame {
+    border: 2px solid #333355;
+    border-radius: 8px;
+    padding: 4px;
+    background: #0a0a14;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.5), inset 0 0 12px rgba(0,0,0,0.3);
+  }
+
+  .screen-frame.large {
+    border-radius: 12px;
+    padding: 6px;
+  }
+
+  canvas {
+    display: block;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+
+  .controls {
+    margin-top: 24px;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .controls button {
+    padding: 6px 14px;
+    border: 1px solid #444466;
+    border-radius: 4px;
+    background: #222244;
+    color: #ccccdd;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .controls button:hover {
+    background: #333366;
+  }
+
+  .controls button.active {
+    background: #3b5998;
+    border-color: #5577bb;
+    color: #ffffff;
+  }
+
+  .state-label {
+    margin-top: 12px;
+    font-size: 0.75rem;
+    color: #666688;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<h1>Zone Mixer -- Design 01: Status Dashboard</h1>
+<h2>AtomS3 0.85" LCD (128x128) UI Mockup</h2>
+
+<div class="description">
+  <h3>Design Rationale</h3>
+  <p>
+    The Status Dashboard prioritises information density over aesthetics. On a 0.85" 128x128
+    screen, every pixel matters. The layout uses a strict vertical stack with horizontal
+    key-value pairs, maximising the number of state indicators visible at a glance.
+  </p>
+
+  <h3>Layout Strategy</h3>
+  <ul>
+    <li><strong>Top bar (12px):</strong> WiFi and WebSocket connection indicators -- the two
+        things most likely to need immediate attention. Colour-coded icons (filled/hollow
+        circles) give instant status without reading text.</li>
+    <li><strong>Master section (22px):</strong> Brightness and speed as horizontal bars with
+        numeric readout. Bars use the full width for maximum resolution on a tiny screen.</li>
+    <li><strong>Zone section (54px):</strong> Three zone rows, each showing zone number, enabled
+        state, brightness bar, and brightness value. Zone colours match the physical LED
+        colours on the Scroll wheels and 8Encoder units (cyan/green/orange).</li>
+    <li><strong>Effect name (14px):</strong> Current effect name, truncated with ellipsis if
+        too long. This is the most variable-length field, so it sits at the bottom where
+        truncation is least disruptive.</li>
+    <li><strong>Bottom status (10px):</strong> Zone count and zone system enabled/disabled.</li>
+  </ul>
+
+  <h3>M5GFX Implementation Notes</h3>
+  <ul>
+    <li>All rendering uses <code>fillRect()</code>, <code>drawRect()</code>, and
+        <code>drawString()</code> -- no images or sprites needed.</li>
+    <li>Font: M5GFX built-in monospace fonts at size 1 (8px height) with
+        <code>setFont(&fonts::Font0)</code> or <code>setFont(&fonts::TomThumb)</code>
+        for the smallest text.</li>
+    <li>Colour constants map directly to M5GFX 16-bit colour values.</li>
+    <li>Full redraw at 2-4 Hz is sufficient -- state changes are infrequent.</li>
+  </ul>
+</div>
+
+<div class="mockup-container">
+  <div class="mockup-panel">
+    <div class="mockup-label">4x Scale (512 x 512)</div>
+    <div class="screen-frame large">
+      <canvas id="canvas4x" width="512" height="512"></canvas>
+    </div>
+    <div class="controls">
+      <button id="btn-connected" class="active">Connected</button>
+      <button id="btn-connecting">Connecting</button>
+      <button id="btn-disconnected">Disconnected</button>
+    </div>
+    <div class="state-label" id="state-info">WiFi: connected | WS: connected</div>
+  </div>
+
+  <div class="mockup-panel">
+    <div class="mockup-label">1:1 Actual Size (128 x 128)</div>
+    <div class="screen-frame">
+      <canvas id="canvas1x" width="128" height="128"></canvas>
+    </div>
+    <div class="state-label">0.85" physical screen</div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// Zone Mixer Status Dashboard Renderer
+// Renders to a 128x128 pixel buffer, then scales to canvases
+// ============================================================
+
+const SCREEN_W = 128;
+const SCREEN_H = 128;
+
+// Colour palette (matching physical hardware LED colours)
+const COL = {
+  black:      '#000000',
+  darkGrey:   '#1a1a1a',
+  midGrey:    '#333333',
+  lightGrey:  '#666666',
+  white:      '#ffffff',
+  dimWhite:   '#aaaaaa',
+  green:      '#00cc44',
+  darkGreen:  '#004400',
+  red:        '#ee2222',
+  darkRed:    '#440000',
+  cyan:       '#00cccc',
+  darkCyan:   '#003333',
+  orange:     '#ee8800',
+  darkOrange: '#332200',
+  blue:       '#2266ee',
+  darkBlue:   '#001144',
+  yellow:     '#cccc00',
+  amber:      '#cc8800',
+};
+
+// Zone colours (1-indexed: Zone 1=cyan, Zone 2=green, Zone 3=orange)
+const ZONE_COLOURS = [null, COL.cyan, COL.green, COL.orange];
+const ZONE_DARK    = [null, COL.darkCyan, COL.darkGreen, COL.darkOrange];
+
+// Application state (mutable for interactive demo)
+const state = {
+  wifiState: 'connected',     // 'connected' | 'connecting' | 'disconnected'
+  wifiRSSI: -52,               // dBm
+  wsState: 'connected',        // 'connected' | 'connecting' | 'disconnected'
+  masterBrightness: 180,       // 0-255
+  masterSpeed: 120,            // 0-255
+  zoneCount: 3,                // 1-3
+  zoneSystemEnabled: true,
+  zones: [
+    null, // index 0 unused (1-indexed)
+    { enabled: true,  brightness: 200 },
+    { enabled: true,  brightness: 140 },
+    { enabled: false, brightness: 80  },
+  ],
+  effectName: 'LGP Holographic Tuned',
+};
+
+// ============================================================
+// Offscreen buffer (128x128)
+// ============================================================
+const offCanvas = document.createElement('canvas');
+offCanvas.width = SCREEN_W;
+offCanvas.height = SCREEN_H;
+const buf = offCanvas.getContext('2d');
+
+// Output canvases
+const canvas4x = document.getElementById('canvas4x');
+const ctx4x = canvas4x.getContext('2d');
+ctx4x.imageSmoothingEnabled = false;
+
+const canvas1x = document.getElementById('canvas1x');
+const ctx1x = canvas1x.getContext('2d');
+ctx1x.imageSmoothingEnabled = false;
+
+// ============================================================
+// Primitive drawing helpers (simulating M5GFX API)
+// ============================================================
+
+function fillScreen(colour) {
+  buf.fillStyle = colour;
+  buf.fillRect(0, 0, SCREEN_W, SCREEN_H);
+}
+
+function fillRect(x, y, w, h, colour) {
+  buf.fillStyle = colour;
+  buf.fillRect(x, y, w, h);
+}
+
+function drawRect(x, y, w, h, colour) {
+  buf.strokeStyle = colour;
+  buf.lineWidth = 1;
+  buf.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+}
+
+function drawHLine(x, y, w, colour) {
+  buf.fillStyle = colour;
+  buf.fillRect(x, y, w, 1);
+}
+
+// Tiny monospace text (simulates 5x7 or 4x6 bitmap font)
+function drawText(x, y, text, colour, size) {
+  buf.fillStyle = colour;
+  const fontSize = size || 8;
+  buf.font = `${fontSize}px monospace`;
+  buf.textBaseline = 'top';
+  buf.textAlign = 'left';
+  buf.fillText(text, x, y);
+}
+
+function drawTextRight(x, y, text, colour, size) {
+  buf.fillStyle = colour;
+  const fontSize = size || 8;
+  buf.font = `${fontSize}px monospace`;
+  buf.textBaseline = 'top';
+  buf.textAlign = 'right';
+  buf.fillText(text, x, y);
+}
+
+function drawTextCentre(x, y, text, colour, size) {
+  buf.fillStyle = colour;
+  const fontSize = size || 8;
+  buf.font = `${fontSize}px monospace`;
+  buf.textBaseline = 'top';
+  buf.textAlign = 'center';
+  buf.fillText(text, x, y);
+}
+
+// Filled circle (for status indicators)
+function fillCircle(cx, cy, r, colour) {
+  buf.fillStyle = colour;
+  buf.beginPath();
+  buf.arc(cx, cy, r, 0, Math.PI * 2);
+  buf.fill();
+}
+
+// Hollow circle
+function drawCircle(cx, cy, r, colour) {
+  buf.strokeStyle = colour;
+  buf.lineWidth = 1;
+  buf.beginPath();
+  buf.arc(cx, cy, r, 0, Math.PI * 2);
+  buf.stroke();
+}
+
+// ============================================================
+// Layout constants
+// ============================================================
+const MARGIN = 3;
+const BAR_H = 6;
+const ROW_H = 16;
+const SECTION_GAP = 2;
+
+// ============================================================
+// Render functions (one per section)
+// ============================================================
+
+function renderTopBar(y) {
+  // WiFi indicator: filled circle = connected, hollow = not
+  const wifiCol = state.wifiState === 'connected' ? COL.green
+                : state.wifiState === 'connecting' ? COL.yellow
+                : COL.red;
+
+  // WiFi icon area
+  if (state.wifiState === 'connected') {
+    fillCircle(MARGIN + 4, y + 5, 3, wifiCol);
+  } else if (state.wifiState === 'connecting') {
+    // Pulsing hollow circle for connecting
+    drawCircle(MARGIN + 4, y + 5, 3, wifiCol);
+  } else {
+    fillCircle(MARGIN + 4, y + 5, 3, wifiCol);
+  }
+
+  // WiFi label
+  const wifiLabel = state.wifiState === 'connected' ? 'WiFi'
+                  : state.wifiState === 'connecting' ? 'WiFi...'
+                  : 'WiFi X';
+  drawText(MARGIN + 10, y, wifiLabel, wifiCol, 8);
+
+  // RSSI (only when connected)
+  if (state.wifiState === 'connected') {
+    // Signal strength bars (4 bars max)
+    const bars = state.wifiRSSI > -50 ? 4
+               : state.wifiRSSI > -60 ? 3
+               : state.wifiRSSI > -70 ? 2
+               : 1;
+    const barX = 46;
+    for (let i = 0; i < 4; i++) {
+      const barHeight = 2 + i * 2;
+      const barY = y + 10 - barHeight;
+      const barCol = i < bars ? COL.green : COL.midGrey;
+      fillRect(barX + i * 4, barY, 3, barHeight, barCol);
+    }
+  }
+
+  // WebSocket indicator
+  const wsCol = state.wsState === 'connected' ? COL.green
+              : state.wsState === 'connecting' ? COL.blue
+              : COL.red;
+
+  const wsX = 68;
+  if (state.wsState === 'connected') {
+    fillCircle(wsX + 4, y + 5, 3, wsCol);
+  } else if (state.wsState === 'connecting') {
+    drawCircle(wsX + 4, y + 5, 3, wsCol);
+  } else {
+    fillCircle(wsX + 4, y + 5, 3, wsCol);
+  }
+
+  const wsLabel = state.wsState === 'connected' ? 'WS'
+               : state.wsState === 'connecting' ? 'WS..'
+               : 'WS X';
+  drawText(wsX + 10, y, wsLabel, wsCol, 8);
+
+  // Separator line
+  drawHLine(MARGIN, y + 12, SCREEN_W - MARGIN * 2, COL.midGrey);
+
+  return y + 14;
+}
+
+function renderMasterSection(y) {
+  // Section header
+  drawText(MARGIN, y, 'MASTER', COL.lightGrey, 7);
+  y += 9;
+
+  // Brightness bar
+  const brtLabel = 'B';
+  drawText(MARGIN, y, brtLabel, COL.dimWhite, 8);
+
+  const barX = MARGIN + 10;
+  const barW = SCREEN_W - barX - MARGIN - 24;
+  const fillW = Math.round((state.masterBrightness / 255) * barW);
+
+  fillRect(barX, y + 1, barW, BAR_H, COL.darkGrey);
+  fillRect(barX, y + 1, fillW, BAR_H, COL.white);
+  drawRect(barX, y + 1, barW, BAR_H, COL.midGrey);
+
+  drawTextRight(SCREEN_W - MARGIN, y, String(state.masterBrightness), COL.white, 8);
+  y += BAR_H + 4;
+
+  // Speed bar
+  drawText(MARGIN, y, 'S', COL.dimWhite, 8);
+
+  const spdFillW = Math.round((state.masterSpeed / 255) * barW);
+  fillRect(barX, y + 1, barW, BAR_H, COL.darkGrey);
+  fillRect(barX, y + 1, spdFillW, BAR_H, COL.blue);
+  drawRect(barX, y + 1, barW, BAR_H, COL.midGrey);
+
+  drawTextRight(SCREEN_W - MARGIN, y, String(state.masterSpeed), COL.blue, 8);
+  y += BAR_H + 3;
+
+  // Separator
+  drawHLine(MARGIN, y, SCREEN_W - MARGIN * 2, COL.midGrey);
+
+  return y + 2;
+}
+
+function renderZoneSection(y) {
+  // Section header
+  drawText(MARGIN, y, 'ZONES', COL.lightGrey, 7);
+
+  // Zone system state indicator
+  if (state.zoneSystemEnabled) {
+    drawTextRight(SCREEN_W - MARGIN, y, String(state.zoneCount) + 'Z ON', COL.green, 7);
+  } else {
+    drawTextRight(SCREEN_W - MARGIN, y, 'OFF', COL.red, 7);
+  }
+  y += 10;
+
+  // Per-zone rows
+  for (let z = 1; z <= 3; z++) {
+    const zone = state.zones[z];
+    const zCol = ZONE_COLOURS[z];
+    const zDark = ZONE_DARK[z];
+
+    // Zone number
+    drawText(MARGIN, y, String(z), zCol, 8);
+
+    // Enabled/disabled indicator
+    if (zone.enabled && state.zoneSystemEnabled) {
+      fillRect(MARGIN + 8, y + 2, 5, 5, zCol);
+    } else {
+      drawRect(MARGIN + 8, y + 2, 5, 5, COL.midGrey);
+    }
+
+    // Brightness bar
+    const barX = MARGIN + 16;
+    const barW = SCREEN_W - barX - MARGIN - 24;
+    const fillW = Math.round((zone.brightness / 255) * barW);
+
+    fillRect(barX, y + 1, barW, BAR_H, COL.darkGrey);
+
+    if (zone.enabled && state.zoneSystemEnabled) {
+      fillRect(barX, y + 1, fillW, BAR_H, zCol);
+    } else {
+      fillRect(barX, y + 1, fillW, BAR_H, COL.midGrey);
+    }
+    drawRect(barX, y + 1, barW, BAR_H, zone.enabled && state.zoneSystemEnabled ? zCol : COL.midGrey);
+
+    // Brightness value
+    const valCol = zone.enabled && state.zoneSystemEnabled ? zCol : COL.lightGrey;
+    drawTextRight(SCREEN_W - MARGIN, y, String(zone.brightness), valCol, 8);
+
+    y += BAR_H + 6;
+  }
+
+  // Separator
+  drawHLine(MARGIN, y, SCREEN_W - MARGIN * 2, COL.midGrey);
+
+  return y + 2;
+}
+
+function renderEffectName(y) {
+  drawText(MARGIN, y, 'EFFECT', COL.lightGrey, 7);
+  y += 9;
+
+  // Truncate effect name to fit screen width
+  // At ~5px per char in 8px monospace, 128px fits roughly 22 chars
+  let name = state.effectName;
+  const maxChars = 22;
+  if (name.length > maxChars) {
+    name = name.substring(0, maxChars - 1) + '\u2026';
+  }
+
+  drawText(MARGIN, y, name, COL.amber, 8);
+
+  return y + 10;
+}
+
+// ============================================================
+// Main render pipeline
+// ============================================================
+
+function render() {
+  fillScreen(COL.black);
+
+  let y = MARGIN;
+
+  y = renderTopBar(y);
+  y += SECTION_GAP;
+
+  y = renderMasterSection(y);
+  y += SECTION_GAP;
+
+  y = renderZoneSection(y);
+  y += SECTION_GAP;
+
+  y = renderEffectName(y);
+
+  // Blit to both canvases
+  // 4x scale
+  ctx4x.clearRect(0, 0, 512, 512);
+  ctx4x.drawImage(offCanvas, 0, 0, 512, 512);
+
+  // 1:1
+  ctx1x.clearRect(0, 0, 128, 128);
+  ctx1x.drawImage(offCanvas, 0, 0);
+}
+
+// ============================================================
+// Interactive state switching
+// ============================================================
+
+const btnConnected    = document.getElementById('btn-connected');
+const btnConnecting   = document.getElementById('btn-connecting');
+const btnDisconnected = document.getElementById('btn-disconnected');
+const stateInfo       = document.getElementById('state-info');
+
+function setPreset(preset) {
+  btnConnected.classList.remove('active');
+  btnConnecting.classList.remove('active');
+  btnDisconnected.classList.remove('active');
+
+  switch (preset) {
+    case 'connected':
+      state.wifiState = 'connected';
+      state.wsState = 'connected';
+      state.wifiRSSI = -52;
+      btnConnected.classList.add('active');
+      stateInfo.textContent = 'WiFi: connected (-52 dBm) | WS: connected';
+      break;
+
+    case 'connecting':
+      state.wifiState = 'connecting';
+      state.wsState = 'connecting';
+      state.wifiRSSI = -75;
+      btnConnecting.classList.add('active');
+      stateInfo.textContent = 'WiFi: connecting | WS: connecting';
+      break;
+
+    case 'disconnected':
+      state.wifiState = 'disconnected';
+      state.wsState = 'disconnected';
+      state.wifiRSSI = -90;
+      btnDisconnected.classList.add('active');
+      stateInfo.textContent = 'WiFi: disconnected | WS: disconnected';
+      break;
+  }
+
+  render();
+}
+
+btnConnected.addEventListener('click',    () => setPreset('connected'));
+btnConnecting.addEventListener('click',   () => setPreset('connecting'));
+btnDisconnected.addEventListener('click', () => setPreset('disconnected'));
+
+// Initial render
+render();
+</script>
+
+</body>
+</html>

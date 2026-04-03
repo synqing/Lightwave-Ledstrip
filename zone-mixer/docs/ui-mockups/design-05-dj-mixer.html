@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zone Mixer UI — Design 05: DJ Mixer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0a0a0a;
+    color: #ccc;
+    font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 40px 20px;
+  }
+
+  h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #e0e0e0;
+    margin-bottom: 4px;
+    letter-spacing: 0.5px;
+  }
+
+  .subtitle {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 32px;
+  }
+
+  .display-container {
+    display: flex;
+    gap: 48px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .display-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .panel-label {
+    font-size: 11px;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .panel-dims {
+    font-size: 10px;
+    color: #444;
+  }
+
+  /* Canvas wrapper for the bezel effect */
+  .bezel {
+    border: 2px solid #333;
+    border-radius: 6px;
+    background: #111;
+    padding: 2px;
+    box-shadow:
+      0 0 0 1px #222,
+      0 4px 16px rgba(0,0,0,0.6),
+      inset 0 0 8px rgba(0,0,0,0.4);
+  }
+
+  .bezel-4x {
+    border-radius: 10px;
+    padding: 4px;
+  }
+
+  canvas {
+    display: block;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+
+  /* Interactive controls */
+  .controls {
+    margin-top: 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+    max-width: 600px;
+  }
+
+  .control-row {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .slider-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .slider-group label {
+    font-size: 11px;
+    color: #888;
+  }
+
+  .slider-group .value {
+    font-size: 10px;
+    color: #555;
+    min-width: 28px;
+    text-align: center;
+  }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    width: 120px;
+    height: 4px;
+    background: #333;
+    border-radius: 2px;
+    outline: none;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #888;
+    cursor: pointer;
+  }
+
+  input[type="range"].z1::-webkit-slider-thumb { background: #00e5ff; }
+  input[type="range"].z2::-webkit-slider-thumb { background: #00e676; }
+  input[type="range"].z3::-webkit-slider-thumb { background: #ff9100; }
+  input[type="range"].master::-webkit-slider-thumb { background: #e0e0e0; }
+
+  .status-toggles {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+  }
+
+  .toggle-btn {
+    font-size: 10px;
+    font-family: inherit;
+    padding: 4px 10px;
+    border: 1px solid #333;
+    border-radius: 3px;
+    background: #1a1a1a;
+    color: #666;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .toggle-btn:hover { border-color: #555; color: #999; }
+  .toggle-btn.active { border-color: #4a4; color: #4a4; background: #1a2a1a; }
+  .toggle-btn.active.warn { border-color: #a44; color: #a44; background: #2a1a1a; }
+
+  /* Design rationale section */
+  .rationale {
+    margin-top: 56px;
+    max-width: 680px;
+    width: 100%;
+    padding: 24px;
+    background: #111;
+    border: 1px solid #222;
+    border-radius: 8px;
+  }
+
+  .rationale h2 {
+    font-size: 14px;
+    color: #aaa;
+    margin-bottom: 16px;
+    font-weight: 600;
+  }
+
+  .rationale h3 {
+    font-size: 12px;
+    color: #888;
+    margin: 14px 0 6px 0;
+    font-weight: 600;
+  }
+
+  .rationale p, .rationale li {
+    font-size: 11px;
+    color: #777;
+    line-height: 1.6;
+  }
+
+  .rationale ul {
+    padding-left: 16px;
+  }
+
+  .rationale li { margin-bottom: 4px; }
+
+  .colour-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    vertical-align: middle;
+    margin-right: 4px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Zone Mixer UI / Design 05: DJ Mixer</h1>
+<p class="subtitle">AtomS3 0.85" LCD (128x128) &mdash; DJ console fader paradigm for 3-zone LED control</p>
+
+<div class="display-container">
+  <!-- 4x scaled view -->
+  <div class="display-panel">
+    <span class="panel-label">4x Scale (512 x 512)</span>
+    <div class="bezel bezel-4x">
+      <canvas id="canvas4x" width="512" height="512"></canvas>
+    </div>
+  </div>
+
+  <!-- 1:1 native view -->
+  <div class="display-panel">
+    <span class="panel-label">1:1 Native (128 x 128)</span>
+    <span class="panel-dims">Actual pixel size on 0.85" display</span>
+    <div class="bezel">
+      <canvas id="canvas1x" width="128" height="128"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Interactive controls -->
+<div class="controls">
+  <div class="control-row">
+    <div class="slider-group">
+      <label>Zone 1</label>
+      <input type="range" class="z1" id="slZ1" min="0" max="255" value="190">
+      <span class="value" id="valZ1">190</span>
+    </div>
+    <div class="slider-group">
+      <label>Zone 2</label>
+      <input type="range" class="z2" id="slZ2" min="0" max="255" value="140">
+      <span class="value" id="valZ2">140</span>
+    </div>
+    <div class="slider-group">
+      <label>Zone 3</label>
+      <input type="range" class="z3" id="slZ3" min="0" max="255" value="80">
+      <span class="value" id="valZ3">80</span>
+    </div>
+    <div class="slider-group">
+      <label>Master</label>
+      <input type="range" class="master" id="slM" min="0" max="255" value="220">
+      <span class="value" id="valM">220</span>
+    </div>
+  </div>
+  <div class="control-row">
+    <div class="slider-group">
+      <label>Speed</label>
+      <input type="range" id="slSpeed" min="1" max="100" value="42">
+      <span class="value" id="valSpeed">42</span>
+    </div>
+  </div>
+  <div class="status-toggles">
+    <button class="toggle-btn active" id="btnWifi" onclick="toggleWifi()">WiFi</button>
+    <button class="toggle-btn active" id="btnWs" onclick="toggleWs()">WebSocket</button>
+  </div>
+</div>
+
+<!-- Design rationale -->
+<div class="rationale">
+  <h2>Design Rationale</h2>
+
+  <h3>Concept</h3>
+  <p>
+    Modelled after a miniature DJ mixer console. Four vertical fader tracks sit side by side
+    exactly as they would on physical hardware &mdash; Zone 1, Zone 2, Zone 3, and Master.
+    Each track is a filled bar whose height represents the current brightness
+    value (0&ndash;255). The metaphor is immediately legible to anyone who has
+    touched audio mixing equipment: higher bar = more brightness.
+  </p>
+
+  <h3>Visual Language</h3>
+  <ul>
+    <li>
+      <span class="colour-swatch" style="background:#00e5ff"></span>
+      <strong>Zone 1 &mdash; Cyan (#00E5FF)</strong>: Cool, forward-facing energy.
+    </li>
+    <li>
+      <span class="colour-swatch" style="background:#00e676"></span>
+      <strong>Zone 2 &mdash; Green (#00E676)</strong>: Organic, ambient warmth.
+    </li>
+    <li>
+      <span class="colour-swatch" style="background:#ff9100"></span>
+      <strong>Zone 3 &mdash; Orange (#FF9100)</strong>: Warm, accent punch.
+    </li>
+    <li>
+      <span class="colour-swatch" style="background:#e0e0e0"></span>
+      <strong>Master &mdash; White (#E0E0E0)</strong>: Neutral authority, slightly wider track.
+    </li>
+  </ul>
+
+  <h3>Layout Arithmetic (128px wide)</h3>
+  <ul>
+    <li>Left margin: 4px. Right margin: 4px. Usable width: 120px.</li>
+    <li>Zone tracks: 24px wide each (x3 = 72px).</li>
+    <li>Master track: 30px wide (25% wider, signals hierarchy).</li>
+    <li>Gaps between tracks: 6px (x3 = 18px).</li>
+    <li>Total: 4 + 24 + 6 + 24 + 6 + 24 + 6 + 30 + 4 = 128px. Exact fit.</li>
+    <li>Fader track top: y=16 (below status bar). Bottom: y=106 (above labels). Track height: 90px.</li>
+    <li>Bottom labels at y=112. Speed readout at y=124.</li>
+  </ul>
+
+  <h3>Status Bar (top 10px)</h3>
+  <p>
+    WiFi and WebSocket indicators use 7px glyphs at the top-left. Green dot =
+    connected, red dot = disconnected. Minimal footprint &mdash; status should not
+    compete with the faders for attention.
+  </p>
+
+  <h3>Fader Track Design</h3>
+  <ul>
+    <li>Dark grey track background (#1A1A1A) with 1px border (#2A2A2A) &mdash; looks recessed.</li>
+    <li>Filled portion rises from the bottom, colour-matched to the zone.</li>
+    <li>A brighter 2px "cap" line at the top of the fill simulates the physical fader knob.</li>
+    <li>Fill uses a subtle vertical gradient &mdash; brighter at the cap, slightly darker at the base
+      &mdash; adding depth without complexity.</li>
+    <li>Numeric value rendered inside each track (centred, 7px font) so the user can read
+      exact brightness without switching screens.</li>
+  </ul>
+
+  <h3>Why This Design Works on 0.85"</h3>
+  <ul>
+    <li><strong>Glanceable:</strong> Four bars at different heights instantly communicate system state.</li>
+    <li><strong>No text overload:</strong> "Z1", "Z2", "Z3", "M" are the only labels. The bars ARE the data.</li>
+    <li><strong>Colour redundancy:</strong> Even without reading labels, zone identity is encoded in colour.</li>
+    <li><strong>Proportional feedback:</strong> Fader height is linear with brightness (0&ndash;255 mapped to 0&ndash;90px).
+      A 50% brightness reads as a half-height bar. No ambiguity.</li>
+    <li><strong>Master differentiation:</strong> The wider master track breaks the visual rhythm just enough
+      to signal its hierarchical role without needing extra labels.</li>
+  </ul>
+
+  <h3>LVGL Implementation Notes</h3>
+  <ul>
+    <li>Each track is an <code>lv_bar</code> (vertical orientation) inside an <code>lv_obj</code> container.</li>
+    <li>Track backgrounds: <code>lv_style_set_bg_color(&amp;style_track, lv_color_hex(0x1A1A1A))</code>.</li>
+    <li>Fill indicator uses <code>lv_style_set_bg_grad_dir(&amp;style_ind, LV_GRAD_DIR_VER)</code> for the gradient.</li>
+    <li>Cap line: a 2px-tall <code>lv_obj</code> positioned at the indicator top, or drawn in the bar's draw event.</li>
+    <li>Status icons: <code>lv_canvas</code> or pre-rendered 7x7 bitmaps.</li>
+    <li>Labels: <code>lv_label</code> with <code>lv_font_montserrat_10</code> or a custom 7px bitmap font.</li>
+    <li>Refresh rate: update bars on scroll-wheel input events only (not continuous polling).</li>
+  </ul>
+</div>
+
+<script>
+// ---- State ----
+const state = {
+  z1: 190,
+  z2: 140,
+  z3: 80,
+  master: 220,
+  speed: 42,
+  wifi: true,
+  ws: true
+};
+
+// ---- Colours ----
+const ZONE_COLOURS = {
+  z1:     { r: 0x00, g: 0xE5, b: 0xFF },  // cyan
+  z2:     { r: 0x00, g: 0xE6, b: 0x76 },  // green
+  z3:     { r: 0xFF, g: 0x91, b: 0x00 },  // orange
+  master: { r: 0xE0, g: 0xE0, b: 0xE0 },  // white
+};
+
+// Dimmed versions for gradient base
+function dimColour(c, factor) {
+  return {
+    r: Math.round(c.r * factor),
+    g: Math.round(c.g * factor),
+    b: Math.round(c.b * factor)
+  };
+}
+
+function colStr(c) {
+  return `rgb(${c.r},${c.g},${c.b})`;
+}
+
+// ---- Layout constants (in native 128px space) ----
+const W = 128;
+const H = 128;
+
+const MARGIN_L = 4;
+const TRACK_W  = 24;
+const MASTER_W = 30;
+const GAP      = 6;
+const TRACK_TOP    = 16;
+const TRACK_BOTTOM = 106;
+const TRACK_H      = TRACK_BOTTOM - TRACK_TOP; // 90px
+const LABEL_Y  = 112;
+const SPEED_Y  = 124;
+
+// Track X positions
+const TRACK_X = [
+  MARGIN_L,                              // Z1: 4
+  MARGIN_L + TRACK_W + GAP,             // Z2: 34
+  MARGIN_L + (TRACK_W + GAP) * 2,       // Z3: 64
+  MARGIN_L + (TRACK_W + GAP) * 3,       // M:  94
+];
+
+const TRACK_WIDTHS = [TRACK_W, TRACK_W, TRACK_W, MASTER_W];
+const TRACK_KEYS = ['z1', 'z2', 'z3', 'master'];
+const TRACK_LABELS = ['Z1', 'Z2', 'Z3', 'M'];
+
+// ---- Offscreen 128x128 buffer ----
+const offscreen = document.createElement('canvas');
+offscreen.width = W;
+offscreen.height = H;
+const ctx = offscreen.getContext('2d');
+
+// ---- Drawing ----
+function drawFrame() {
+  // Black background
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+
+  // --- Status bar (top row) ---
+  drawStatusIcons();
+
+  // --- Fader tracks ---
+  for (let i = 0; i < 4; i++) {
+    const key = TRACK_KEYS[i];
+    const x = TRACK_X[i];
+    const w = TRACK_WIDTHS[i];
+    const value = state[key];
+    const colour = ZONE_COLOURS[key];
+
+    drawTrack(x, TRACK_TOP, w, TRACK_H, value, colour);
+  }
+
+  // --- Track labels ---
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.font = '7px monospace';
+  for (let i = 0; i < 4; i++) {
+    const cx = TRACK_X[i] + TRACK_WIDTHS[i] / 2;
+    const c = ZONE_COLOURS[TRACK_KEYS[i]];
+    ctx.fillStyle = colStr(dimColour(c, 0.6));
+    ctx.fillText(TRACK_LABELS[i], cx, LABEL_Y);
+  }
+
+  // --- Speed readout (bottom centre) ---
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.font = '7px monospace';
+  ctx.fillStyle = '#555';
+  ctx.fillText('SPD ' + state.speed, W / 2, SPEED_Y);
+
+  // --- Blit to both canvases ---
+  blit();
+}
+
+function drawStatusIcons() {
+  // WiFi icon: small antenna shape at (3, 2)
+  const wifiCol = state.wifi ? '#00e676' : '#ff1744';
+  const wsCol   = state.ws   ? '#00e676' : '#ff1744';
+
+  // WiFi: three concentric arcs
+  ctx.strokeStyle = wifiCol;
+  ctx.lineWidth = 1;
+  // Dot at bottom
+  ctx.fillStyle = wifiCol;
+  ctx.fillRect(6, 8, 2, 2);
+  // Arc 1 (small)
+  drawArc(7, 8, 3, wifiCol);
+  // Arc 2 (medium)
+  drawArc(7, 8, 5, wifiCol);
+
+  // WebSocket icon: a "WS" or link icon at (18, 2)
+  // Simple: two interlocking brackets
+  ctx.fillStyle = wsCol;
+  ctx.font = '7px monospace';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillText('WS', 16, 2);
+}
+
+function drawArc(cx, cy, radius, colour) {
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, -Math.PI * 0.75, -Math.PI * 0.25);
+  ctx.strokeStyle = colour;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+
+function drawTrack(x, y, w, h, value, colour) {
+  // Track background (recessed look)
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(x, y, w, h);
+
+  // Track border
+  ctx.strokeStyle = '#2a2a2a';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+
+  // Inner groove lines for texture (every 10px)
+  ctx.strokeStyle = '#161616';
+  ctx.lineWidth = 1;
+  for (let gy = y + 10; gy < y + h; gy += 10) {
+    ctx.beginPath();
+    ctx.moveTo(x + 2, gy + 0.5);
+    ctx.lineTo(x + w - 2, gy + 0.5);
+    ctx.stroke();
+  }
+
+  // Fill height
+  const fillH = Math.round((value / 255) * (h - 4)); // -4 for inner padding
+  if (fillH <= 0) return;
+
+  const fillX = x + 2;
+  const fillW = w - 4;
+  const fillY = y + h - 2 - fillH;
+
+  // Gradient fill (brighter at top, dimmer at base)
+  const grad = ctx.createLinearGradient(0, fillY, 0, fillY + fillH);
+  grad.addColorStop(0, colStr(colour));
+  grad.addColorStop(0.3, colStr(dimColour(colour, 0.85)));
+  grad.addColorStop(1, colStr(dimColour(colour, 0.45)));
+  ctx.fillStyle = grad;
+  ctx.fillRect(fillX, fillY, fillW, fillH);
+
+  // Fader cap (bright line, 2px tall)
+  const capColour = colStr({
+    r: Math.min(255, colour.r + 60),
+    g: Math.min(255, colour.g + 60),
+    b: Math.min(255, colour.b + 60)
+  });
+  ctx.fillStyle = capColour;
+  ctx.fillRect(fillX, fillY, fillW, 2);
+
+  // Cap highlight (1px bright centre line)
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.fillRect(fillX + 2, fillY, fillW - 4, 1);
+
+  // Value text inside the track
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '7px monospace';
+
+  // Position text: if fill is tall enough, put it inside the fill near top.
+  // Otherwise put it above the fill in the empty region.
+  const textY = fillH > 20 ? fillY + 12 : fillY - 8;
+  const textInFill = fillH > 20;
+
+  if (textInFill) {
+    // Dark text on coloured fill
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  } else {
+    // Light text in empty area
+    ctx.fillStyle = colStr(dimColour(colour, 0.5));
+  }
+  ctx.fillText(value.toString(), x + w / 2, textY);
+}
+
+function blit() {
+  // 4x canvas
+  const c4 = document.getElementById('canvas4x');
+  const ctx4 = c4.getContext('2d');
+  ctx4.imageSmoothingEnabled = false;
+  ctx4.drawImage(offscreen, 0, 0, 512, 512);
+
+  // 1:1 canvas
+  const c1 = document.getElementById('canvas1x');
+  const ctx1 = c1.getContext('2d');
+  ctx1.imageSmoothingEnabled = false;
+  ctx1.drawImage(offscreen, 0, 0);
+}
+
+// ---- Interactive controls ----
+function bindSlider(id, key, valId) {
+  const sl = document.getElementById(id);
+  const vl = document.getElementById(valId);
+  sl.addEventListener('input', () => {
+    state[key] = parseInt(sl.value, 10);
+    vl.textContent = sl.value;
+    drawFrame();
+  });
+}
+
+bindSlider('slZ1', 'z1', 'valZ1');
+bindSlider('slZ2', 'z2', 'valZ2');
+bindSlider('slZ3', 'z3', 'valZ3');
+bindSlider('slM', 'master', 'valM');
+bindSlider('slSpeed', 'speed', 'valSpeed');
+
+function toggleWifi() {
+  state.wifi = !state.wifi;
+  document.getElementById('btnWifi').classList.toggle('active');
+  if (!state.wifi) document.getElementById('btnWifi').classList.add('warn');
+  else document.getElementById('btnWifi').classList.remove('warn');
+  drawFrame();
+}
+
+function toggleWs() {
+  state.ws = !state.ws;
+  document.getElementById('btnWs').classList.toggle('active');
+  if (!state.ws) document.getElementById('btnWs').classList.add('warn');
+  else document.getElementById('btnWs').classList.remove('warn');
+  drawFrame();
+}
+
+// ---- Initial draw ----
+drawFrame();
+</script>
+
+</body>
+</html>

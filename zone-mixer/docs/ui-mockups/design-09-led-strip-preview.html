@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zone Mixer - Design 09: LED Strip Preview</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #1a1a2e;
+    color: #ccc;
+    font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+    min-height: 100vh;
+  }
+
+  h1 {
+    font-size: 20px;
+    font-weight: 600;
+    color: #e0e0e0;
+    margin-bottom: 6px;
+    letter-spacing: 0.5px;
+  }
+
+  .subtitle {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 32px;
+  }
+
+  /* -- Layout ------------------------------------------ */
+
+  .mockup-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 48px;
+    margin-bottom: 48px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .mockup-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .mockup-label {
+    font-size: 11px;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
+
+  /* -- Canvas wrapper ---------------------------------- */
+
+  .canvas-wrap {
+    position: relative;
+    background: #000;
+    image-rendering: pixelated;
+    border: 1px solid #333;
+  }
+
+  .canvas-wrap.scaled {
+    width: 512px;
+    height: 512px;
+  }
+
+  .canvas-wrap.actual {
+    width: 128px;
+    height: 128px;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+
+  /* -- Rationale panel --------------------------------- */
+
+  .rationale {
+    max-width: 680px;
+    background: #0d0d1a;
+    border: 1px solid #262640;
+    border-radius: 6px;
+    padding: 28px 32px;
+    margin-top: 16px;
+    line-height: 1.7;
+    font-size: 13px;
+    color: #999;
+  }
+
+  .rationale h2 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #bbb;
+    margin-bottom: 14px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .rationale h3 {
+    font-size: 12px;
+    font-weight: 600;
+    color: #888;
+    margin-top: 18px;
+    margin-bottom: 6px;
+  }
+
+  .rationale ul {
+    padding-left: 18px;
+    margin-bottom: 8px;
+  }
+
+  .rationale li {
+    margin-bottom: 4px;
+  }
+
+  .rationale p {
+    margin-bottom: 8px;
+  }
+
+  .rationale code {
+    background: #1a1a30;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 12px;
+    color: #8af;
+  }
+
+  .rationale .metric {
+    display: inline-block;
+    background: #1a2a1a;
+    color: #6c6;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 4px;
+  }
+
+  /* -- Annotations ------------------------------------- */
+
+  .annotations {
+    max-width: 680px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 24px;
+  }
+
+  .annotation {
+    background: #0d0d1a;
+    border: 1px solid #262640;
+    border-radius: 4px;
+    padding: 12px 16px;
+    font-size: 11px;
+    color: #777;
+    line-height: 1.5;
+  }
+
+  .annotation strong {
+    color: #aaa;
+    display: block;
+    margin-bottom: 4px;
+    font-size: 12px;
+  }
+
+  .dot-legend {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+
+  .strip-legend {
+    display: inline-block;
+    width: 20px;
+    height: 6px;
+    margin-right: 4px;
+    vertical-align: middle;
+    border-radius: 1px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Design 09 -- LED Strip Preview</h1>
+<p class="subtitle">Zone Mixer UI for AtomS3 (128x128 LCD) -- miniature LED strip representation with zone boundaries</p>
+
+<div class="mockup-row">
+  <div class="mockup-group">
+    <div class="canvas-wrap scaled">
+      <canvas id="scaled" width="128" height="128"></canvas>
+    </div>
+    <span class="mockup-label">4x Scale (512 x 512)</span>
+  </div>
+
+  <div class="mockup-group">
+    <div class="canvas-wrap actual">
+      <canvas id="actual" width="128" height="128"></canvas>
+    </div>
+    <span class="mockup-label">1:1 Actual (128 x 128)</span>
+  </div>
+</div>
+
+<!-- Design rationale -->
+<div class="rationale">
+  <h2>Design Rationale</h2>
+
+  <h3>Philosophy</h3>
+  <p>
+    The LED Strip Preview design gives the operator a <strong>miniature physical twin</strong>
+    of the actual 160-LED strip. Instead of abstract numbers or dots, you see a horizontal
+    line of coloured pixels that mirrors the real hardware layout. The centre divider makes
+    the centre-origin architecture immediately visible -- effects emanate from LED 79/80
+    outward. This is the only screen design that directly communicates spatial topology.
+  </p>
+
+  <h3>Why a Strip Preview at 128x128</h3>
+  <ul>
+    <li><strong>128 pixels for 160 LEDs</strong> -- 0.8px per LED, mapped via nearest-neighbour. Slight compression is imperceptible on a 0.85" panel but preserves zone proportions faithfully.</li>
+    <li><strong>Centre divider line</strong> makes the centre-origin architecture immediately legible. The user can see symmetry (or deliberate asymmetry) at a glance.</li>
+    <li><strong>Zone boundaries</strong> shown as subtle 1px vertical markers -- visible when sought, invisible when not. Same principle as Design 04's peripheral indicators.</li>
+    <li><strong>Brightness-dimmed zones</strong> -- each zone section's pixel brightness scales with its brightness value. A zone at 40% appears physically dimmer than one at 92%. No numbers needed to read relative intensity.</li>
+    <li><strong>Two-row strip</strong> mirrors the dual-strip Light Guide Plate (top row = strip A, bottom row = strip B, identical in zone mode).</li>
+  </ul>
+
+  <h3>Layout Map</h3>
+  <ul>
+    <li><strong>Row 0--5</strong> (6px): Status row -- WiFi dot at (4,3), WS dot at (123,3).</li>
+    <li><strong>Row 8--13</strong> (6px): Upper label -- "160 LED" left-aligned, zone count right-aligned.</li>
+    <li><strong>Row 16--55</strong> (40px): LED strip preview -- two rows of 128 coloured pixels, zone-shaded, with centre marker and zone boundary lines.</li>
+    <li><strong>Row 58--59</strong> (2px): Centre origin marker -- white 1px line at pixel column 63/64 (maps to LED 79/80).</li>
+    <li><strong>Row 64--103</strong> (40px): Zone info panel -- three zone rows with colour dot, label, and brightness percentage.</li>
+    <li><strong>Row 108--127</strong> (20px): Footer -- effect name and speed value.</li>
+  </ul>
+
+  <h3>Colour Choices</h3>
+  <ul>
+    <li><strong>Zone 1 (inner):</strong> cyan <code>#22d3ee</code> -- the centre zones, closest to the LED strip centre origin (LEDs 54--105).</li>
+    <li><strong>Zone 2 (middle):</strong> green <code>#4ade80</code> -- mid-range zone (LEDs 27--53, 106--132).</li>
+    <li><strong>Zone 3 (outer):</strong> orange <code>#fb923c</code> -- edge zone (LEDs 0--26, 133--159).</li>
+    <li><strong>Centre marker:</strong> white <code>#ffffff</code> -- 1px vertical line at the strip's physical centre. Maximum contrast.</li>
+    <li><strong>Zone boundaries:</strong> dimmed white <code>#555555</code> -- visible but non-distracting 1px vertical lines.</li>
+    <li><strong>Status dots:</strong> same as Design 04 -- <span class="dot-legend" style="background:#22c55e"></span>green / <span class="dot-legend" style="background:#ef4444"></span>red for WiFi, tri-state for WS.</li>
+  </ul>
+
+  <h3>Centre-Origin Visualisation</h3>
+  <p>
+    The K1 architecture mandates that all effects originate from LEDs 79/80 outward.
+    This design makes that constraint visible: the white centre divider sits at the exact
+    midpoint of the strip preview. Zone 1 (cyan) straddles the centre, Zone 2 (green) flanks it,
+    and Zone 3 (orange) occupies the outermost edges. The operator can see that the light
+    guide plate's centre is the origin, not an arbitrary point.
+  </p>
+
+  <h3>Performance Considerations</h3>
+  <ul>
+    <li>Strip rendering: 128 filled rectangles per row, 2 rows = 256 rect calls.<span class="metric">~1.2ms</span></li>
+    <li>Alternatively, write to an offscreen buffer and blit once -- reduces to 1 draw call + 3 text draws.<span class="metric">~0.5ms</span></li>
+    <li>Zone boundary lines: 4 vertical line draws.<span class="metric">negligible</span></li>
+    <li>Text elements (6 total): zone labels, effect name, speed -- all static geometry, only redraw on change.</li>
+    <li>Partial update viable: only re-render strip rows on brightness change, footer on effect change.</li>
+  </ul>
+
+  <h3>Comparison with Other Designs</h3>
+  <ul>
+    <li><strong>vs Design 04 (Minimal Glance):</strong> Design 04 uses abstract dots for zone brightness. This design shows the actual spatial layout. Trade-off: more draw calls, but communicates topology that numbers cannot.</li>
+    <li><strong>vs numeric displays:</strong> Numbers tell you "Zone 1 = 92%". This tells you "Zone 1 is the bright cyan section around the centre, and it's brighter than the green section next to it." Spatial context is embedded in the visual.</li>
+    <li><strong>Best for:</strong> operators who think in terms of "where on the strip" rather than "which zone number". Particularly useful during zone boundary adjustment or when running effects that interact across zone boundaries.</li>
+  </ul>
+</div>
+
+<!-- Element annotations -->
+<div class="annotations">
+  <div class="annotation">
+    <strong>LED Strip Preview (upper half)</strong>
+    Two rows of 128 coloured pixels at y=18..55. Each pixel maps to ~1.25 LEDs
+    via nearest-neighbour. Zone colour is applied at full saturation, then
+    multiplied by zone brightness (0--100%). Black gaps between zones would
+    indicate disabled zones.
+  </div>
+  <div class="annotation">
+    <strong>Centre Origin Marker</strong>
+    White 1px vertical line at x=63 (and continuation at x=64), spanning the
+    full height of the strip preview region. Maps to physical LEDs 79/80 --
+    the centre of the Light Guide Plate where all effects originate.
+  </div>
+  <div class="annotation">
+    <strong>Zone Boundary Lines</strong>
+    Dim grey (<code>#555555</code>) 1px vertical lines at the LED positions where
+    zones transition. With default 3-zone symmetrical layout: at LED 27/54/105/132,
+    mapping to pixel columns 21/43/84/105.
+  </div>
+  <div class="annotation">
+    <strong>Zone Info Rows (lower half)</strong>
+    Three rows, one per zone. Each contains: colour-coded 4px dot, zone label
+    ("Z1"/"Z2"/"Z3"), and brightness percentage right-aligned. Font: 8px
+    monospace. Spacing: 12px vertical pitch.
+  </div>
+  <div class="annotation">
+    <strong>Status Indicators (top row)</strong>
+    WiFi dot at (4,3), WS dot at (123,3). Both 3px radius. Identical to
+    Design 04 -- consistency across screen designs means the operator
+    never needs to relearn status positions.
+  </div>
+  <div class="annotation">
+    <strong>Footer (effect + speed)</strong>
+    Effect name centred at y=114, speed value at y=124. Both in dim grey
+    (<code>#666666</code>) 8px monospace. Effect name truncated to 18 characters
+    maximum. Speed shown as percentage.
+  </div>
+</div>
+
+<script>
+// -- Configuration --------------------------------------------------------
+// Simulated device state
+const state = {
+  masterBrightness: 78,
+  effectName: 'Chromatic Pulse',
+  speed: 65,
+  wifiConnected: true,
+  wsState: 'open',           // 'open' | 'connecting' | 'closed'
+  zoneCount: 3,
+  zones: [
+    { brightness: 92, enabled: true },   // Zone 1 -- inner (cyan)
+    { brightness: 65, enabled: true },   // Zone 2 -- middle (green)
+    { brightness: 40, enabled: true },   // Zone 3 -- outer (orange)
+  ],
+};
+
+// -- Colours --------------------------------------------------------------
+const C = {
+  bg:            '#000000',
+  textDim:       '#666666',
+  textMid:       '#888888',
+  textLabel:     '#999999',
+  white:         '#ffffff',
+  centre:        '#ffffff',
+  zoneBoundary:  '#555555',
+  wifi:          { on: '#22c55e', off: '#ef4444' },
+  ws:            { open: '#22c55e', connecting: '#eab308', closed: '#ef4444' },
+  // Zone colours -- consistent with Design 04 and DESIGN.md
+  zone:          ['#22d3ee', '#4ade80', '#fb923c'],
+  zoneLabel:     ['Z1', 'Z2', 'Z3'],
+};
+
+// -- LED-to-zone mapping -------------------------------------------------
+// 160 LEDs, centre origin at 79/80.
+// Zone 1 (inner): LEDs 54--105 (52 LEDs, 26 each side of centre)
+// Zone 2 (middle): LEDs 27--53, 106--132 (27 LEDs each side)
+// Zone 3 (outer): LEDs 0--26, 133--159 (27 LEDs each side)
+//
+// These boundaries are symmetrical about the centre, reflecting the
+// centre-origin architecture.
+
+const TOTAL_LEDS = 160;
+const CENTRE_LED = 79.5;  // Between LED 79 and 80
+
+// Zone boundaries (LED indices, inclusive)
+const zoneBounds = [
+  { start: 54, end: 105 },   // Zone 1 -- inner
+  { start: 27, end: 53 },    // Zone 2 -- middle (left half)
+  { start: 106, end: 132 },  // Zone 2 -- middle (right half) -- merged with above in rendering
+  { start: 0, end: 26 },     // Zone 3 -- outer (left half)
+  { start: 133, end: 159 },  // Zone 3 -- outer (right half) -- merged with above in rendering
+];
+
+// Returns zone index (0, 1, 2) for a given LED position
+function ledToZone(ledIndex) {
+  if (ledIndex >= 54 && ledIndex <= 105) return 0;  // Zone 1
+  if ((ledIndex >= 27 && ledIndex <= 53) || (ledIndex >= 106 && ledIndex <= 132)) return 1;  // Zone 2
+  return 2;  // Zone 3
+}
+
+// Maps a LED index (0--159) to a pixel column (0--127)
+function ledToPixel(ledIndex) {
+  return Math.floor(ledIndex * 128 / TOTAL_LEDS);
+}
+
+// Zone boundary pixel positions (for vertical markers)
+// Boundaries at LED transitions: 26/27, 53/54, 105/106, 132/133
+const boundaryPixels = [
+  ledToPixel(27),    // Zone 3/2 left boundary
+  ledToPixel(54),    // Zone 2/1 left boundary
+  ledToPixel(106),   // Zone 1/2 right boundary
+  ledToPixel(133),   // Zone 2/3 right boundary
+];
+
+// Centre pixel position (LED 79.5 maps to pixel ~63.5)
+const centrePixel = Math.floor(CENTRE_LED * 128 / TOTAL_LEDS);
+
+// -- Parse hex colour to RGB components -----------------------------------
+function hexToRGB(hex) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return { r, g, b };
+}
+
+// -- Apply brightness to a colour ----------------------------------------
+function dimColour(hex, brightness01) {
+  const { r, g, b } = hexToRGB(hex);
+  const dr = Math.round(r * brightness01);
+  const dg = Math.round(g * brightness01);
+  const db = Math.round(b * brightness01);
+  return `rgb(${dr},${dg},${db})`;
+}
+
+// -- Render to a 128x128 canvas ------------------------------------------
+function render(ctx) {
+  const W = 128;
+  const H = 128;
+
+  // 1. Black background
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // ---- STATUS ROW (y: 0--6) ----
+
+  // 2. WiFi indicator -- top-left
+  ctx.beginPath();
+  ctx.arc(7, 4, 3, 0, Math.PI * 2);
+  ctx.fillStyle = state.wifiConnected ? C.wifi.on : C.wifi.off;
+  ctx.fill();
+
+  // 3. WebSocket indicator -- top-right
+  ctx.beginPath();
+  ctx.arc(W - 7, 4, 3, 0, Math.PI * 2);
+  ctx.fillStyle = C.ws[state.wsState];
+  ctx.fill();
+
+  // ---- STRIP LABEL ROW (y: 9--15) ----
+
+  ctx.fillStyle = C.textDim;
+  ctx.font = '7px "SF Mono", "JetBrains Mono", "Courier New", monospace';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillText('160 LED', 2, 10);
+
+  ctx.textAlign = 'right';
+  ctx.fillText(state.zoneCount + ' ZONE', W - 2, 10);
+
+  // ---- LED STRIP PREVIEW (y: 18--55) ----
+
+  const stripTop = 20;
+  const stripHeight = 16;    // Each of the two strip rows
+  const stripGap = 2;        // Gap between the two rows
+  const strip2Top = stripTop + stripHeight + stripGap;
+
+  // Draw two rows of LEDs (mirroring dual-strip LGP)
+  for (let row = 0; row < 2; row++) {
+    const rowY = row === 0 ? stripTop : strip2Top;
+
+    for (let px = 0; px < W; px++) {
+      // Map pixel column back to LED index
+      const ledIndex = Math.floor(px * TOTAL_LEDS / W);
+      const zoneIdx = ledToZone(ledIndex);
+      const zone = state.zones[zoneIdx];
+
+      if (!zone.enabled) {
+        // Disabled zone: show very dim, almost black
+        ctx.fillStyle = '#0a0a0a';
+      } else {
+        // Zone colour dimmed by zone brightness
+        const brightness = zone.brightness / 100;
+        // Apply master brightness on top
+        const effective = brightness * (state.masterBrightness / 100);
+        ctx.fillStyle = dimColour(C.zone[zoneIdx], effective);
+      }
+
+      ctx.fillRect(px, rowY, 1, stripHeight);
+    }
+  }
+
+  // ---- ZONE BOUNDARY LINES ----
+  // Subtle vertical lines at zone transitions, spanning both strip rows
+  ctx.fillStyle = C.zoneBoundary;
+  for (const bx of boundaryPixels) {
+    ctx.fillRect(bx, stripTop, 1, stripHeight * 2 + stripGap);
+  }
+
+  // ---- CENTRE ORIGIN MARKER ----
+  // White 1px line at the centre of the strip (LED 79/80)
+  // Spans from above strip to below strip for emphasis
+  ctx.fillStyle = C.centre;
+  ctx.fillRect(centrePixel, stripTop - 2, 1, stripHeight * 2 + stripGap + 4);
+
+  // Small triangle/arrow above centre marker
+  ctx.beginPath();
+  ctx.moveTo(centrePixel, stripTop - 4);
+  ctx.lineTo(centrePixel - 2, stripTop - 7);
+  ctx.lineTo(centrePixel + 3, stripTop - 7);
+  ctx.closePath();
+  ctx.fill();
+
+  // ---- ZONE INFO PANEL (y: 62--100) ----
+
+  const infoTop = 62;
+  const rowPitch = 13;
+
+  ctx.font = '8px "SF Mono", "JetBrains Mono", "Courier New", monospace';
+
+  for (let i = 0; i < 3; i++) {
+    const ry = infoTop + i * rowPitch;
+    const zone = state.zones[i];
+    const brightness = zone.brightness;
+
+    // Zone colour dot
+    ctx.beginPath();
+    ctx.arc(6, ry + 4, 3, 0, Math.PI * 2);
+    ctx.fillStyle = zone.enabled
+      ? dimColour(C.zone[i], brightness / 100)
+      : '#333333';
+    ctx.fill();
+
+    // Outer ring at full colour for identification even when dim
+    ctx.beginPath();
+    ctx.arc(6, ry + 4, 3, 0, Math.PI * 2);
+    ctx.strokeStyle = C.zone[i];
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+
+    // Zone label
+    ctx.fillStyle = zone.enabled ? C.textLabel : '#444444';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(C.zoneLabel[i], 14, ry);
+
+    // Brightness percentage -- right-aligned
+    ctx.textAlign = 'right';
+    ctx.fillStyle = zone.enabled ? C.textMid : '#444444';
+    const pctText = zone.enabled ? (brightness + '%') : 'OFF';
+    ctx.fillText(pctText, W - 4, ry);
+
+    // Mini brightness bar
+    if (zone.enabled) {
+      const barX = 32;
+      const barW = W - 42 - barX;
+      const barH = 4;
+      const barY = ry + 2;
+
+      // Track
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillRect(barX, barY, barW, barH);
+
+      // Fill
+      ctx.fillStyle = dimColour(C.zone[i], 0.7);
+      ctx.fillRect(barX, barY, Math.round(barW * brightness / 100), barH);
+    }
+  }
+
+  // ---- FOOTER: EFFECT + SPEED (y: 106--127) ----
+
+  // Separator line
+  ctx.fillStyle = '#222222';
+  ctx.fillRect(4, 104, W - 8, 1);
+
+  // Effect name (centred, truncated)
+  ctx.fillStyle = C.textDim;
+  ctx.font = '8px "SF Mono", "JetBrains Mono", "Courier New", monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  const effectDisplay = state.effectName.length > 18
+    ? state.effectName.substring(0, 17) + '\u2026'
+    : state.effectName;
+  ctx.fillText(effectDisplay, W / 2, 108);
+
+  // Speed value
+  ctx.fillStyle = '#555555';
+  ctx.font = '7px "SF Mono", "JetBrains Mono", "Courier New", monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText('SPD', 4, 120);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = C.textDim;
+  ctx.fillText(state.speed + '%', W - 4, 120);
+
+  // Speed bar
+  const spdBarX = 22;
+  const spdBarW = W - 42 - spdBarX + 10;
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(spdBarX, 122, spdBarW, 3);
+  ctx.fillStyle = '#3366aa';
+  ctx.fillRect(spdBarX, 122, Math.round(spdBarW * state.speed / 100), 3);
+}
+
+// -- Draw both canvases ---------------------------------------------------
+function draw() {
+  const scaled = document.getElementById('scaled');
+  const actual = document.getElementById('actual');
+
+  // Both canvases are 128x128 logical pixels.
+  // The CSS scales the 'scaled' canvas to 512x512 with image-rendering: pixelated.
+  render(scaled.getContext('2d'));
+  render(actual.getContext('2d'));
+}
+
+draw();
+</script>
+
+</body>
+</html>

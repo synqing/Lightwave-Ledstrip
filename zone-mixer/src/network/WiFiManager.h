@@ -53,8 +53,11 @@ private:
         _status = Status::CONNECTING;
         _connectStart = millis();
 
+        // Clean disconnect before retry — clears stale driver state
+        WiFi.disconnect(true);
+        delay(100);
         WiFi.mode(WIFI_STA);
-        WiFi.setAutoReconnect(false);  // We handle reconnection ourselves
+        WiFi.setAutoReconnect(false);
         WiFi.begin(_ssid, _password);
 
         Serial.println("[WiFi] Connecting...");
@@ -67,15 +70,19 @@ private:
         if (ws == WL_CONNECTED) {
             _status = Status::CONNECTED;
             _reconnectDelay = net::WIFI_RECONNECT_DELAY_MS;  // Reset backoff
+            _retryCount = 0;
             Serial.printf("[WiFi] Connected! IP: %s, RSSI: %d dBm\n",
                           WiFi.localIP().toString().c_str(), WiFi.RSSI());
         } else if (ws == WL_CONNECT_FAILED || ws == WL_NO_SSID_AVAIL) {
-            Serial.printf("[WiFi] Failed (status: %d)\n", ws);
+            _retryCount++;
+            Serial.printf("[WiFi] Failed (status: %d, retry %d)\n", ws, _retryCount);
+            WiFi.disconnect(true);
             _status = Status::DISCONNECTED;
             _lastReconnect = millis();
         } else if (elapsed >= net::WIFI_CONNECT_TIMEOUT_MS) {
-            Serial.printf("[WiFi] Timeout after %lu ms\n", elapsed);
-            WiFi.disconnect();
+            _retryCount++;
+            Serial.printf("[WiFi] Timeout after %lu ms (retry %d)\n", elapsed, _retryCount);
+            WiFi.disconnect(true);
             _status = Status::DISCONNECTED;
             _lastReconnect = millis();
         }
@@ -83,12 +90,16 @@ private:
 
     void handleDisconnected() {
         uint32_t now = millis();
-        if (now - _lastReconnect >= _reconnectDelay) {
+        // Fast retry for first 5 attempts (2s), then backoff (5s→10s→30s cap)
+        uint32_t delay = (_retryCount < 5) ? 2000 : _reconnectDelay;
+        if (now - _lastReconnect >= delay) {
             _lastReconnect = now;
-            Serial.printf("[WiFi] Reconnecting (backoff: %lu ms)...\n", _reconnectDelay);
+            Serial.printf("[WiFi] Reconnecting (attempt %d, delay %lu ms)...\n",
+                          _retryCount + 1, delay);
             startConnection();
-            // Exponential backoff, capped
-            _reconnectDelay = min(_reconnectDelay * 2, net::WIFI_MAX_RECONNECT_MS);
+            if (_retryCount >= 5) {
+                _reconnectDelay = min(_reconnectDelay * 2, net::WIFI_MAX_RECONNECT_MS);
+            }
         }
     }
 
@@ -98,4 +109,5 @@ private:
     uint32_t _connectStart = 0;
     uint32_t _lastReconnect = 0;
     uint32_t _reconnectDelay = net::WIFI_RECONNECT_DELAY_MS;
+    uint8_t _retryCount = 0;
 };

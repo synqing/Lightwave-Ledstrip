@@ -1,0 +1,1264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zone Mixer — Design 11: Performance Mode (128x128 AtomS3)</title>
+<style>
+  /* ----------------------------------------------------------------
+     Design 11: Performance Mode
+     Target: AtomS3 0.85" LCD, 128x128 pixels
+     Rendered at 4x scale (512x512 CSS pixels per page)
+     Optimised for live shows in dark venues.
+     ---------------------------------------------------------------- */
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0c0c0c;
+    color: #ccc;
+    font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+    padding: 40px;
+    min-height: 100vh;
+  }
+
+  .header {
+    max-width: 2400px;
+    margin: 0 auto 12px auto;
+  }
+
+  .header h1 {
+    font-size: 22px;
+    font-weight: 600;
+    color: #e0e0e0;
+    letter-spacing: -0.3px;
+  }
+
+  .header .subtitle {
+    font-size: 13px;
+    color: #666;
+    margin-top: 4px;
+  }
+
+  /* --- Controls --- */
+  .controls {
+    max-width: 2400px;
+    margin: 0 auto 32px auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: center;
+  }
+
+  .control-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: #161616;
+    border: 1px solid #252525;
+    border-radius: 6px;
+  }
+
+  .control-group label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #666;
+    white-space: nowrap;
+  }
+
+  .control-group input[type="range"] {
+    width: 100px;
+    accent-color: #FFB000;
+  }
+
+  .control-group .value-readout {
+    font-size: 11px;
+    color: #999;
+    min-width: 28px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .control-group select {
+    background: #1a1a1a;
+    color: #ccc;
+    border: 1px solid #333;
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 11px;
+    padding: 3px 6px;
+  }
+
+  .control-group button {
+    background: #222;
+    color: #aaa;
+    border: 1px solid #333;
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 10px;
+    padding: 4px 10px;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: all 0.15s;
+  }
+
+  .control-group button:hover {
+    background: #333;
+    color: #fff;
+  }
+
+  .control-group button.active {
+    background: #FFB000;
+    color: #000;
+    border-color: #FFB000;
+  }
+
+  /* --- Pages strip --- */
+  .pages-strip {
+    display: flex;
+    gap: 32px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 48px;
+  }
+
+  .page-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .page-label {
+    font-size: 11px;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
+
+  .page-label .page-tag {
+    color: #888;
+    font-weight: 400;
+  }
+
+  canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    border: 1px solid #1e1e1e;
+    border-radius: 4px;
+  }
+
+  /* --- Rationale --- */
+  .rationale {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 28px;
+    background: #0d0d0d;
+    border: 1px solid #1a1a1a;
+    border-radius: 6px;
+    line-height: 1.7;
+  }
+
+  .rationale h2 {
+    font-size: 14px;
+    color: #FFB000;
+    margin-bottom: 14px;
+    letter-spacing: 0.3px;
+  }
+
+  .rationale h3 {
+    font-size: 11px;
+    color: #888;
+    margin: 18px 0 6px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .rationale p, .rationale li {
+    font-size: 12px;
+    color: #777;
+  }
+
+  .rationale ul {
+    padding-left: 16px;
+  }
+
+  .rationale li {
+    margin-bottom: 4px;
+  }
+
+  .rationale code {
+    background: #1a1a1a;
+    padding: 1px 5px;
+    border-radius: 2px;
+    color: #999;
+    font-size: 11px;
+  }
+
+  .colour-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    vertical-align: middle;
+    margin-right: 3px;
+    border: 1px solid #333;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>ZONE MIXER &mdash; DESIGN 11: PERFORMANCE MODE</h1>
+  <p class="subtitle">Dark venue optimised &middot; Carousel + Live Parameter Overlay &middot; 128&times;128 AtomS3 LCD at 4&times;</p>
+</div>
+
+<!-- Interactive controls -->
+<div class="controls">
+  <div class="control-group">
+    <label>Z1 Bright</label>
+    <input type="range" id="ctrl-z1" min="0" max="255" value="220">
+    <span class="value-readout" id="val-z1">220</span>
+  </div>
+  <div class="control-group">
+    <label>Z2 Bright</label>
+    <input type="range" id="ctrl-z2" min="0" max="255" value="160">
+    <span class="value-readout" id="val-z2">160</span>
+  </div>
+  <div class="control-group">
+    <label>Z3 Bright</label>
+    <input type="range" id="ctrl-z3" min="0" max="255" value="90">
+    <span class="value-readout" id="val-z3">90</span>
+  </div>
+  <div class="control-group">
+    <label>Master</label>
+    <input type="range" id="ctrl-master" min="0" max="255" value="200">
+    <span class="value-readout" id="val-master">200</span>
+  </div>
+  <div class="control-group">
+    <label>Speed</label>
+    <input type="range" id="ctrl-speed" min="0" max="255" value="128">
+    <span class="value-readout" id="val-speed">128</span>
+  </div>
+  <div class="control-group">
+    <label>Effect</label>
+    <select id="ctrl-effect">
+      <option>Chromatic Pulse</option>
+      <option>Spectral Wash</option>
+      <option>Ember Drift</option>
+      <option>Bass Reactor</option>
+      <option selected>Tidal Swell</option>
+      <option>Aurora Weave</option>
+    </select>
+  </div>
+  <div class="control-group">
+    <label>EdgeMixer</label>
+    <select id="ctrl-edgemixer">
+      <option selected>EDGE</option>
+      <option>BLEND</option>
+      <option>CROSS</option>
+      <option>HARD</option>
+    </select>
+  </div>
+  <div class="control-group">
+    <label>WiFi</label>
+    <button id="btn-wifi" class="active">ON</button>
+  </div>
+  <div class="control-group">
+    <label>WS</label>
+    <button id="btn-ws" class="active">ON</button>
+  </div>
+  <div class="control-group">
+    <label>RSSI</label>
+    <input type="range" id="ctrl-rssi" min="-90" max="-30" value="-55">
+    <span class="value-readout" id="val-rssi">-55</span>
+  </div>
+  <div class="control-group">
+    <label>Overlay</label>
+    <button id="btn-overlay">TRIGGER</button>
+  </div>
+</div>
+
+<!-- 4 pages in horizontal strip -->
+<div class="pages-strip">
+  <div class="page-wrapper">
+    <span class="page-label">Page 1 <span class="page-tag">&mdash; LIVE</span></span>
+    <canvas id="page1" width="512" height="512"></canvas>
+  </div>
+  <div class="page-wrapper">
+    <span class="page-label">Page 2 <span class="page-tag">&mdash; EFFECT</span></span>
+    <canvas id="page2" width="512" height="512"></canvas>
+  </div>
+  <div class="page-wrapper">
+    <span class="page-label">Page 3 <span class="page-tag">&mdash; STATUS</span></span>
+    <canvas id="page3" width="512" height="512"></canvas>
+  </div>
+  <div class="page-wrapper">
+    <span class="page-label">Overlay <span class="page-tag">&mdash; PARAMETER</span></span>
+    <canvas id="overlay" width="512" height="512"></canvas>
+  </div>
+</div>
+
+<!-- Design rationale -->
+<div class="rationale">
+  <h2>Design Rationale &mdash; Performance Mode</h2>
+
+  <h3>Philosophy</h3>
+  <p>
+    Designed for performers operating in near-darkness. Every design choice
+    prioritises instant readability at arm's length on a 0.85" screen.
+    Minimal brightness output to avoid polluting the light show with screen glare.
+    The display should be a tool, not a light source.
+  </p>
+
+  <h3>Page 1: LIVE &mdash; DJ Fader Bars</h3>
+  <ul>
+    <li>Three vertical bars arranged like DJ channel faders &mdash; the most instinctive
+        physical metaphor for the encoders the user is turning.</li>
+    <li>Bar fill is proportional (0-255 range). Zone colours are chosen for maximum
+        mutual contrast even under colour vision deficiency:
+        <span class="colour-swatch" style="background:#00E5FF"></span><code>#00E5FF</code> cyan (Z1),
+        <span class="colour-swatch" style="background:#00FF88"></span><code>#00FF88</code> green (Z2),
+        <span class="colour-swatch" style="background:#FF8800"></span><code>#FF8800</code> orange (Z3).</li>
+    <li>Master brightness as a thin 4px white bar at right edge &mdash; always visible
+        but subordinate to per-zone bars. Provides global context without
+        consuming valuable horizontal space.</li>
+    <li>Only text: single-digit zone IDs ("1" "2" "3" "M") at the bottom.
+        No numeric values &mdash; the bar height IS the information.</li>
+    <li>A small page indicator dot row at bottom-centre shows which carousel page is active.</li>
+  </ul>
+
+  <h3>Page 2: EFFECT &mdash; Current Effect Info</h3>
+  <ul>
+    <li>Effect name rendered at 14px equivalent in amber (<code>#FFB000</code>) &mdash;
+        amber has highest visibility on pure black in dark-adapted vision.</li>
+    <li>Speed bar below: thin horizontal bar with <code>#4488FF</code> fill
+        against dark track. Fills proportionally (0-255).</li>
+    <li>EdgeMixer mode at bottom in dim grey &mdash; reference information, not
+        primary. Performers rarely change mode mid-show.</li>
+  </ul>
+
+  <h3>Page 3: STATUS &mdash; Connection Health</h3>
+  <ul>
+    <li>WiFi RSSI shown as 4 signal strength bars &mdash; universally understood
+        without text. Bars light up green proportionally to signal strength.</li>
+    <li>WebSocket state: green dot = connected, red dot = disconnected.
+        Binary state needs only binary encoding.</li>
+    <li>IP address in dim monospace &mdash; only needed for troubleshooting,
+        kept small to not dominate.</li>
+    <li>Zone count and enabled/disabled state: green "3 ZONES ON" or
+        red "ZONES OFF" &mdash; immediately communicates operational status.</li>
+  </ul>
+
+  <h3>Live Parameter Overlay</h3>
+  <ul>
+    <li><strong>Full-screen takeover</strong> on any encoder turn. Black background
+        with zero visual noise. The parameter becomes the ONLY thing on screen.</li>
+    <li>Parameter name at top in zone-coloured 10px text &mdash; identifies which
+        zone or parameter was changed.</li>
+    <li>48px value centre-screen in white &mdash; readable at 3m distance on the
+        0.85" display. This is the reason the overlay exists: large enough to read
+        without bringing the device close during a live performance.</li>
+    <li>Thin colour bar at bottom shows position within the 0-255 range as a
+        proportional fill. Provides spatial context ("am I near the top?") without
+        requiring the performer to interpret numbers.</li>
+    <li>Auto-fades back to current page after 2 seconds. No button press needed.</li>
+  </ul>
+
+  <h3>Colour System &mdash; Dark Venue Optimised</h3>
+  <ul>
+    <li><span class="colour-swatch" style="background:#000000;border-color:#444"></span><code>#000000</code> &mdash; True black background. On LCD, this is the lowest emission. Prevents screen glow in dark venues.</li>
+    <li><span class="colour-swatch" style="background:#00E5FF"></span><code>#00E5FF</code> &mdash; Zone 1 cyan. High blue content reads well in scotopic (dark-adapted) vision.</li>
+    <li><span class="colour-swatch" style="background:#00FF88"></span><code>#00FF88</code> &mdash; Zone 2 green. Peak human spectral sensitivity. Maximum visibility at minimal brightness.</li>
+    <li><span class="colour-swatch" style="background:#FF8800"></span><code>#FF8800</code> &mdash; Zone 3 orange. Warm contrast against cyan/green. Distinguishable even with deuteranopia.</li>
+    <li><span class="colour-swatch" style="background:#FFB000"></span><code>#FFB000</code> &mdash; Amber accent for effect names. High visibility, low cognitive alarm (unlike red).</li>
+    <li><span class="colour-swatch" style="background:#FFFFFF"></span><code>#FFFFFF</code> &mdash; Master/value text. Reserved for the most important numeric readout.</li>
+  </ul>
+
+  <h3>Typography Constraints</h3>
+  <p>
+    At 128px width, all text is rendered via a 5&times;7 bitmap pixel font at integer
+    coordinates. No sub-pixel rendering, no anti-aliasing &mdash; this matches the
+    AtomS3 LCD's native pixel grid. The "48px" overlay value uses an 8&times;12 large
+    bitmap font for maximum readability. At 4&times; scale, each logical pixel becomes
+    a 4&times;4 CSS pixel block.
+  </p>
+
+  <h3>Accessibility</h3>
+  <ul>
+    <li>All active colours exceed 7:1 contrast ratio against <code>#000</code>.</li>
+    <li>Zone colours form a cyan/green/orange triad &mdash; distinguishable under
+        protanopia, deuteranopia, and tritanopia.</li>
+    <li>Bars provide spatial encoding redundant with numeric values (on overlay).</li>
+    <li>Page indicators use size + brightness to indicate active state.</li>
+  </ul>
+
+  <h3>LVGL Implementation Notes</h3>
+  <p>
+    Page 1 bars map to <code>lv_bar</code> objects oriented vertically. The overlay
+    triggers via <code>lv_timer_create</code> with 2000ms single-shot. The carousel
+    uses <code>lv_obj_set_scroll_snap_x</code> on a parent container with button-press
+    advancing <code>lv_obj_scroll_to_x</code>. The large overlay font would be a custom
+    <code>lv_font_t</code> bitmap at 48px or nearest available.
+  </p>
+</div>
+
+<script>
+// ============================================================
+//  Zone Mixer — Design 11: Performance Mode
+//  128x128 pixel canvas for AtomS3 0.85" LCD
+//  4 views: Page 1 LIVE, Page 2 EFFECT, Page 3 STATUS, Overlay
+// ============================================================
+
+const SCREEN_W = 128;
+const SCREEN_H = 128;
+const SCALE = 4;
+
+// ── Colour palette ──────────────────────────────────────────
+const COL = {
+  bg:         '#000000',
+  barTrack:   '#1a1a1a',
+  barBorder:  '#111111',
+  separator:  '#181818',
+
+  // Zone colours — dark-venue optimised (cyan/green/orange triad)
+  zone1:      '#00E5FF',
+  zone1dim:   '#003844',
+  zone2:      '#00FF88',
+  zone2dim:   '#003822',
+  zone3:      '#FF8800',
+  zone3dim:   '#442200',
+
+  // Accents
+  amber:      '#FFB000',
+  amberDim:   '#7A5500',
+  blue:       '#4488FF',
+  blueDim:    '#112244',
+
+  // State
+  green:      '#22CC44',
+  greenDim:   '#0A3310',
+  red:        '#CC2222',
+  redDim:     '#330A0A',
+
+  // Neutrals
+  white:      '#FFFFFF',
+  dimWhite:   '#888888',
+  dimGrey:    '#444444',
+  darkGrey:   '#222222',
+  veryDim:    '#333333',
+
+  // Master
+  masterFill: '#CCCCCC',
+  masterDim:  '#333333',
+
+  // Page dots
+  dotActive:  '#888888',
+  dotInactive:'#222222',
+};
+
+const ZONE_COLOURS = [COL.zone1, COL.zone2, COL.zone3];
+const ZONE_DIM_COLOURS = [COL.zone1dim, COL.zone2dim, COL.zone3dim];
+
+// ── State ───────────────────────────────────────────────────
+const state = {
+  zones: [
+    { brightness: 220, name: 'Z1 BRIGHT' },
+    { brightness: 160, name: 'Z2 BRIGHT' },
+    { brightness: 90,  name: 'Z3 BRIGHT' },
+  ],
+  masterBrightness: 200,
+  speed: 128,
+  effectName: 'Tidal Swell',
+  edgeMixerMode: 'EDGE',
+  wifiConnected: true,
+  wsConnected: true,
+  rssi: -55,
+  ip: '192.168.4.1',
+  zoneCount: 3,
+  zonesEnabled: true,
+  // Overlay state
+  overlayParam: 'Z1 BRIGHT',
+  overlayValue: 220,
+  overlayMax: 255,
+  overlayColour: COL.zone1,
+};
+
+// ============================================================
+//  Pixel font — 5x7 bitmap characters
+// ============================================================
+const FONT_5x7 = {
+  ' ': [0b00000,0b00000,0b00000,0b00000,0b00000,0b00000,0b00000],
+  '0': [0b01110,0b10001,0b10011,0b10101,0b11001,0b10001,0b01110],
+  '1': [0b00100,0b01100,0b00100,0b00100,0b00100,0b00100,0b01110],
+  '2': [0b01110,0b10001,0b00001,0b00110,0b01000,0b10000,0b11111],
+  '3': [0b01110,0b10001,0b00001,0b00110,0b00001,0b10001,0b01110],
+  '4': [0b00010,0b00110,0b01010,0b10010,0b11111,0b00010,0b00010],
+  '5': [0b11111,0b10000,0b11110,0b00001,0b00001,0b10001,0b01110],
+  '6': [0b00110,0b01000,0b10000,0b11110,0b10001,0b10001,0b01110],
+  '7': [0b11111,0b00001,0b00010,0b00100,0b01000,0b01000,0b01000],
+  '8': [0b01110,0b10001,0b10001,0b01110,0b10001,0b10001,0b01110],
+  '9': [0b01110,0b10001,0b10001,0b01111,0b00001,0b00010,0b01100],
+  'A': [0b01110,0b10001,0b10001,0b11111,0b10001,0b10001,0b10001],
+  'B': [0b11110,0b10001,0b10001,0b11110,0b10001,0b10001,0b11110],
+  'C': [0b01110,0b10001,0b10000,0b10000,0b10000,0b10001,0b01110],
+  'D': [0b11110,0b10001,0b10001,0b10001,0b10001,0b10001,0b11110],
+  'E': [0b11111,0b10000,0b10000,0b11110,0b10000,0b10000,0b11111],
+  'F': [0b11111,0b10000,0b10000,0b11110,0b10000,0b10000,0b10000],
+  'G': [0b01110,0b10001,0b10000,0b10111,0b10001,0b10001,0b01110],
+  'H': [0b10001,0b10001,0b10001,0b11111,0b10001,0b10001,0b10001],
+  'I': [0b01110,0b00100,0b00100,0b00100,0b00100,0b00100,0b01110],
+  'J': [0b00111,0b00010,0b00010,0b00010,0b00010,0b10010,0b01100],
+  'K': [0b10001,0b10010,0b10100,0b11000,0b10100,0b10010,0b10001],
+  'L': [0b10000,0b10000,0b10000,0b10000,0b10000,0b10000,0b11111],
+  'M': [0b10001,0b11011,0b10101,0b10101,0b10001,0b10001,0b10001],
+  'N': [0b10001,0b11001,0b10101,0b10011,0b10001,0b10001,0b10001],
+  'O': [0b01110,0b10001,0b10001,0b10001,0b10001,0b10001,0b01110],
+  'P': [0b11110,0b10001,0b10001,0b11110,0b10000,0b10000,0b10000],
+  'Q': [0b01110,0b10001,0b10001,0b10001,0b10101,0b10010,0b01101],
+  'R': [0b11110,0b10001,0b10001,0b11110,0b10100,0b10010,0b10001],
+  'S': [0b01110,0b10001,0b10000,0b01110,0b00001,0b10001,0b01110],
+  'T': [0b11111,0b00100,0b00100,0b00100,0b00100,0b00100,0b00100],
+  'U': [0b10001,0b10001,0b10001,0b10001,0b10001,0b10001,0b01110],
+  'V': [0b10001,0b10001,0b10001,0b10001,0b10001,0b01010,0b00100],
+  'W': [0b10001,0b10001,0b10001,0b10101,0b10101,0b11011,0b10001],
+  'X': [0b10001,0b10001,0b01010,0b00100,0b01010,0b10001,0b10001],
+  'Y': [0b10001,0b10001,0b01010,0b00100,0b00100,0b00100,0b00100],
+  'Z': [0b11111,0b00001,0b00010,0b00100,0b01000,0b10000,0b11111],
+  '.': [0b00000,0b00000,0b00000,0b00000,0b00000,0b00000,0b00100],
+  ':': [0b00000,0b00100,0b00000,0b00000,0b00000,0b00100,0b00000],
+  '-': [0b00000,0b00000,0b00000,0b11111,0b00000,0b00000,0b00000],
+  '/': [0b00001,0b00010,0b00010,0b00100,0b01000,0b01000,0b10000],
+  '%': [0b11001,0b11010,0b00010,0b00100,0b01000,0b01011,0b10011],
+  '+': [0b00000,0b00100,0b00100,0b11111,0b00100,0b00100,0b00000],
+  '(': [0b00010,0b00100,0b01000,0b01000,0b01000,0b00100,0b00010],
+  ')': [0b01000,0b00100,0b00010,0b00010,0b00010,0b00100,0b01000],
+};
+FONT_5x7['\u2026'] = [0b00000,0b00000,0b00000,0b00000,0b00000,0b00000,0b10101];
+
+// ── Large font — 8x12 bitmap for overlay values ─────────────
+// Each character is 12 rows of 8-bit masks (MSB-left)
+const FONT_8x12 = {
+  ' ': [0,0,0,0,0,0,0,0,0,0,0,0],
+  '0': [
+    0b00111100,
+    0b01100110,
+    0b01000010,
+    0b01000110,
+    0b01001010,
+    0b01010010,
+    0b01100010,
+    0b01000010,
+    0b01100110,
+    0b00111100,
+    0b00000000,
+    0b00000000,
+  ],
+  '1': [
+    0b00011000,
+    0b00111000,
+    0b01011000,
+    0b00011000,
+    0b00011000,
+    0b00011000,
+    0b00011000,
+    0b00011000,
+    0b00011000,
+    0b01111110,
+    0b00000000,
+    0b00000000,
+  ],
+  '2': [
+    0b00111100,
+    0b01100110,
+    0b01000010,
+    0b00000110,
+    0b00001100,
+    0b00011000,
+    0b00110000,
+    0b01100000,
+    0b01000010,
+    0b01111110,
+    0b00000000,
+    0b00000000,
+  ],
+  '3': [
+    0b00111100,
+    0b01100110,
+    0b01000010,
+    0b00000010,
+    0b00011100,
+    0b00000110,
+    0b00000010,
+    0b01000010,
+    0b01100110,
+    0b00111100,
+    0b00000000,
+    0b00000000,
+  ],
+  '4': [
+    0b00000110,
+    0b00001110,
+    0b00010110,
+    0b00100110,
+    0b01000110,
+    0b01000110,
+    0b01111111,
+    0b00000110,
+    0b00000110,
+    0b00000110,
+    0b00000000,
+    0b00000000,
+  ],
+  '5': [
+    0b01111110,
+    0b01100000,
+    0b01000000,
+    0b01111100,
+    0b01100110,
+    0b00000010,
+    0b00000010,
+    0b01000010,
+    0b01100110,
+    0b00111100,
+    0b00000000,
+    0b00000000,
+  ],
+  '6': [
+    0b00011100,
+    0b00110000,
+    0b01100000,
+    0b01000000,
+    0b01111100,
+    0b01100110,
+    0b01000010,
+    0b01000010,
+    0b01100110,
+    0b00111100,
+    0b00000000,
+    0b00000000,
+  ],
+  '7': [
+    0b01111110,
+    0b01000010,
+    0b00000110,
+    0b00000100,
+    0b00001100,
+    0b00001000,
+    0b00011000,
+    0b00010000,
+    0b00010000,
+    0b00010000,
+    0b00000000,
+    0b00000000,
+  ],
+  '8': [
+    0b00111100,
+    0b01100110,
+    0b01000010,
+    0b01100110,
+    0b00111100,
+    0b01100110,
+    0b01000010,
+    0b01000010,
+    0b01100110,
+    0b00111100,
+    0b00000000,
+    0b00000000,
+  ],
+  '9': [
+    0b00111100,
+    0b01100110,
+    0b01000010,
+    0b01000010,
+    0b01100110,
+    0b00111110,
+    0b00000010,
+    0b00000110,
+    0b00001100,
+    0b00111000,
+    0b00000000,
+    0b00000000,
+  ],
+};
+
+// ============================================================
+//  Drawing helpers — operate on 128x128 offscreen contexts
+// ============================================================
+
+function drawPixel(ctx, x, y, colour) {
+  ctx.fillStyle = colour;
+  ctx.fillRect(x, y, 1, 1);
+}
+
+function drawRect(ctx, x, y, w, h, colour) {
+  ctx.fillStyle = colour;
+  ctx.fillRect(x, y, w, h);
+}
+
+function drawChar5x7(ctx, ch, x, y, colour) {
+  const glyph = FONT_5x7[ch];
+  if (!glyph) return;
+  for (let row = 0; row < 7; row++) {
+    for (let col = 0; col < 5; col++) {
+      if (glyph[row] & (1 << (4 - col))) {
+        drawPixel(ctx, x + col, y + row, colour);
+      }
+    }
+  }
+}
+
+function drawText(ctx, text, x, y, colour, spacing) {
+  if (spacing === undefined) spacing = 6;
+  for (let i = 0; i < text.length; i++) {
+    drawChar5x7(ctx, text[i], x + i * spacing, y, colour);
+  }
+}
+
+function measureText(text, spacing) {
+  if (spacing === undefined) spacing = 6;
+  if (text.length === 0) return 0;
+  return text.length * spacing - (spacing - 5);
+}
+
+function drawTextCentred(ctx, text, cy, colour, spacing) {
+  if (spacing === undefined) spacing = 6;
+  const w = measureText(text, spacing);
+  const x = Math.floor((SCREEN_W - w) / 2);
+  drawText(ctx, text, x, cy, colour, spacing);
+}
+
+function drawTextTruncated(ctx, text, x, y, colour, maxWidth, spacing) {
+  if (spacing === undefined) spacing = 6;
+  const fullWidth = measureText(text, spacing);
+  if (fullWidth <= maxWidth) {
+    drawText(ctx, text, x, y, colour, spacing);
+    return;
+  }
+  const ellipsisWidth = spacing;
+  const availWidth = maxWidth - ellipsisWidth;
+  let chars = Math.floor(availWidth / spacing);
+  if (chars < 1) chars = 1;
+  drawText(ctx, text.substring(0, chars), x, y, colour, spacing);
+  drawChar5x7(ctx, '\u2026', x + chars * spacing, y, colour);
+}
+
+function drawChar8x12(ctx, ch, x, y, colour) {
+  const glyph = FONT_8x12[ch];
+  if (!glyph) return;
+  for (let row = 0; row < 12; row++) {
+    for (let col = 0; col < 8; col++) {
+      if (glyph[row] & (1 << (7 - col))) {
+        drawPixel(ctx, x + col, y + row, colour);
+      }
+    }
+  }
+}
+
+function drawTextLarge(ctx, text, x, y, colour, spacing) {
+  if (spacing === undefined) spacing = 10;
+  for (let i = 0; i < text.length; i++) {
+    drawChar8x12(ctx, text[i], x + i * spacing, y, colour);
+  }
+}
+
+function measureTextLarge(text, spacing) {
+  if (spacing === undefined) spacing = 10;
+  if (text.length === 0) return 0;
+  return text.length * spacing - (spacing - 8);
+}
+
+function drawTextLargeCentred(ctx, text, cy, colour, spacing) {
+  if (spacing === undefined) spacing = 10;
+  const w = measureTextLarge(text, spacing);
+  const x = Math.floor((SCREEN_W - w) / 2);
+  drawTextLarge(ctx, text, x, cy, colour, spacing);
+}
+
+function drawCircle(ctx, cx, cy, r, colour) {
+  ctx.fillStyle = colour;
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      if (dx * dx + dy * dy <= r * r) {
+        ctx.fillRect(cx + dx, cy + dy, 1, 1);
+      }
+    }
+  }
+}
+
+function drawPageDots(ctx, activePage, totalPages, y) {
+  const dotR = 2;
+  const gap = 8;
+  const totalW = totalPages * (dotR * 2 + 1) + (totalPages - 1) * (gap - dotR * 2 - 1);
+  const startX = Math.floor((SCREEN_W - totalPages * gap + gap) / 2);
+  for (let i = 0; i < totalPages; i++) {
+    const cx = startX + i * gap + dotR;
+    const colour = (i === activePage) ? COL.dotActive : COL.dotInactive;
+    const r = (i === activePage) ? 2 : 1;
+    drawCircle(ctx, cx, y, r, colour);
+  }
+}
+
+// ============================================================
+//  PAGE 1: LIVE — Three vertical fader bars + master
+// ============================================================
+
+function renderPage1(ctx) {
+  drawRect(ctx, 0, 0, SCREEN_W, SCREEN_H, COL.bg);
+
+  // Layout: 3 zone bars + 1 master bar
+  // Zone bars: x positions centred in left 120px
+  // Each bar: 28px wide, spaced evenly
+  // Bar region: y = 4 to y = 108 (104px tall)
+  // Labels at y = 112
+
+  const barTop = 4;
+  const barBottom = 108;
+  const barHeight = barBottom - barTop;
+
+  // Three zone bars
+  const barWidth = 28;
+  const barGap = 6;
+  const totalBarsW = 3 * barWidth + 2 * barGap;
+  const barsStartX = Math.floor((SCREEN_W - totalBarsW - 10) / 2); // shift left for master
+
+  for (let i = 0; i < 3; i++) {
+    const bx = barsStartX + i * (barWidth + barGap);
+    const brightness = state.zones[i].brightness;
+    const fillFrac = brightness / 255;
+    const fillH = Math.round(barHeight * fillFrac);
+
+    // Bar track (dim background)
+    drawRect(ctx, bx, barTop, barWidth, barHeight, ZONE_DIM_COLOURS[i]);
+
+    // 1px border around track
+    // Top
+    drawRect(ctx, bx, barTop, barWidth, 1, COL.barBorder);
+    // Bottom
+    drawRect(ctx, bx, barBottom - 1, barWidth, 1, COL.barBorder);
+    // Left
+    drawRect(ctx, bx, barTop, 1, barHeight, COL.barBorder);
+    // Right
+    drawRect(ctx, bx + barWidth - 1, barTop, 1, barHeight, COL.barBorder);
+
+    // Filled portion (from bottom up)
+    if (fillH > 0) {
+      const fy = barBottom - fillH;
+      drawRect(ctx, bx + 1, fy, barWidth - 2, fillH - 1, ZONE_COLOURS[i]);
+    }
+
+    // Zone number at bottom
+    const numStr = String(i + 1);
+    const numX = bx + Math.floor((barWidth - 5) / 2);
+    drawChar5x7(ctx, numStr, numX, 114, ZONE_COLOURS[i]);
+  }
+
+  // Master bar — thin 4px bar at right edge
+  const masterX = SCREEN_W - 8;
+  const masterW = 4;
+  const masterFillFrac = state.masterBrightness / 255;
+  const masterFillH = Math.round(barHeight * masterFillFrac);
+
+  // Master track
+  drawRect(ctx, masterX, barTop, masterW, barHeight, COL.masterDim);
+
+  // Master fill
+  if (masterFillH > 0) {
+    const mfy = barBottom - masterFillH;
+    drawRect(ctx, masterX, mfy, masterW, masterFillH, COL.masterFill);
+  }
+
+  // "M" label
+  drawChar5x7(ctx, 'M', masterX - 1, 114, COL.dimWhite);
+
+  // Page dots
+  drawPageDots(ctx, 0, 3, 125);
+}
+
+// ============================================================
+//  PAGE 2: EFFECT — Name, speed bar, EdgeMixer mode
+// ============================================================
+
+function renderPage2(ctx) {
+  drawRect(ctx, 0, 0, SCREEN_W, SCREEN_H, COL.bg);
+
+  // "EFFECT" header — very dim, small
+  drawTextCentred(ctx, 'EFFECT', 8, COL.darkGrey, 6);
+
+  // Effect name — large, amber, centred
+  // Use two lines of 5x7 font at doubled spacing for "14px feel"
+  // We render at 5x7 but with wider char spacing for readability
+  const effectUpper = state.effectName.toUpperCase();
+
+  // For long names, try to fit on one line first
+  const nameWidth = measureText(effectUpper, 7);
+  if (nameWidth <= 120) {
+    // Single line, centred vertically around y=46
+    const nx = Math.floor((SCREEN_W - nameWidth) / 2);
+    drawText(ctx, effectUpper, nx, 46, COL.amber, 7);
+  } else {
+    // Split into two lines
+    const words = effectUpper.split(' ');
+    let line1 = '';
+    let line2 = '';
+    for (const w of words) {
+      const test = line1 ? line1 + ' ' + w : w;
+      if (measureText(test, 7) <= 120) {
+        line1 = test;
+      } else {
+        line2 = line2 ? line2 + ' ' + w : w;
+      }
+    }
+    const w1 = measureText(line1, 7);
+    const w2 = measureText(line2, 7);
+    drawText(ctx, line1, Math.floor((SCREEN_W - w1) / 2), 40, COL.amber, 7);
+    drawText(ctx, line2, Math.floor((SCREEN_W - w2) / 2), 52, COL.amber, 7);
+  }
+
+  // Speed section
+  // "SPEED" label
+  drawText(ctx, 'SPEED', 8, 72, COL.dimGrey, 6);
+
+  // Speed value on right
+  const speedPct = Math.round(state.speed / 255 * 100);
+  const speedStr = String(speedPct) + '%';
+  const speedW = measureText(speedStr, 6);
+  drawText(ctx, speedStr, SCREEN_W - 8 - speedW, 72, COL.dimWhite, 6);
+
+  // Speed bar
+  const sBarX = 8;
+  const sBarY = 82;
+  const sBarW = 112;
+  const sBarH = 6;
+
+  drawRect(ctx, sBarX, sBarY, sBarW, sBarH, COL.barTrack);
+
+  const sFillW = Math.round(sBarW * (state.speed / 255));
+  if (sFillW > 0) {
+    drawRect(ctx, sBarX, sBarY, sFillW, sBarH, COL.blue);
+  }
+
+  // EdgeMixer mode at bottom
+  const modeStr = state.edgeMixerMode;
+  const modeW = measureText(modeStr, 6);
+  drawText(ctx, modeStr, Math.floor((SCREEN_W - modeW) / 2), 100, COL.dimGrey, 6);
+
+  // Page dots
+  drawPageDots(ctx, 1, 3, 125);
+}
+
+// ============================================================
+//  PAGE 3: STATUS — WiFi, WS, IP, zones
+// ============================================================
+
+function renderPage3(ctx) {
+  drawRect(ctx, 0, 0, SCREEN_W, SCREEN_H, COL.bg);
+
+  // "STATUS" header
+  drawTextCentred(ctx, 'STATUS', 6, COL.darkGrey, 6);
+
+  // WiFi signal bars — 4 bars, proportional to RSSI
+  // RSSI range: -90 (worst) to -30 (best)
+  const rssiNorm = Math.max(0, Math.min(1, (state.rssi + 90) / 60));
+  const barsLit = Math.round(rssiNorm * 4);
+
+  drawText(ctx, 'WIFI', 8, 20, COL.dimGrey, 6);
+
+  // Signal bars (right of label)
+  const sbX = 40;
+  const sbY = 28;
+  const sbBarW = 5;
+  const sbGap = 3;
+  for (let i = 0; i < 4; i++) {
+    const barH = 4 + i * 3;  // 4, 7, 10, 13
+    const bx = sbX + i * (sbBarW + sbGap);
+    const by = sbY + (13 - barH); // align to bottom
+    const lit = i < barsLit;
+    drawRect(ctx, bx, by, sbBarW, barH, lit ? COL.green : COL.darkGrey);
+  }
+
+  // RSSI value
+  const rssiStr = String(state.rssi) + 'DB';
+  const rssiW = measureText(rssiStr, 5);
+  drawText(ctx, rssiStr, SCREEN_W - 8 - rssiW, 24, COL.dimGrey, 5);
+
+  // Separator
+  drawRect(ctx, 8, 44, 112, 1, COL.separator);
+
+  // WebSocket state
+  drawText(ctx, 'WS', 8, 50, COL.dimGrey, 6);
+  const wsColour = state.wsConnected ? COL.green : COL.red;
+  const wsLabel = state.wsConnected ? 'CONNECTED' : 'DISCONNECTED';
+  drawCircle(ctx, 26, 53, 2, wsColour);
+  drawText(ctx, wsLabel, 32, 50, state.wsConnected ? COL.green : COL.redDim, 5);
+
+  // Separator
+  drawRect(ctx, 8, 62, 112, 1, COL.separator);
+
+  // IP address
+  drawText(ctx, 'IP', 8, 68, COL.dimGrey, 6);
+  drawText(ctx, state.ip, 24, 68, COL.dimWhite, 5);
+
+  // Separator
+  drawRect(ctx, 8, 80, 112, 1, COL.separator);
+
+  // Zones state
+  const zoneCountStr = String(state.zoneCount);
+  drawText(ctx, zoneCountStr, 8, 86, COL.white, 6);
+  drawText(ctx, 'ZONES', 18, 86, COL.dimGrey, 6);
+
+  if (state.zonesEnabled) {
+    drawText(ctx, 'ON', 54, 86, COL.green, 6);
+
+    // Zone enabled indicators — small coloured dots
+    for (let i = 0; i < 3; i++) {
+      drawCircle(ctx, 76 + i * 10, 89, 2, ZONE_COLOURS[i]);
+    }
+  } else {
+    drawText(ctx, 'OFF', 54, 86, COL.redDim, 6);
+
+    // Dim dots
+    for (let i = 0; i < 3; i++) {
+      drawCircle(ctx, 76 + i * 10, 89, 2, COL.darkGrey);
+    }
+  }
+
+  // WiFi connection state
+  drawText(ctx, 'WIFI', 8, 100, COL.dimGrey, 6);
+  const wifiColour = state.wifiConnected ? COL.green : COL.red;
+  const wifiLabel = state.wifiConnected ? 'OK' : 'OFF';
+  drawCircle(ctx, 40, 103, 2, wifiColour);
+  drawText(ctx, wifiLabel, 46, 100, state.wifiConnected ? COL.green : COL.redDim, 6);
+
+  // Page dots
+  drawPageDots(ctx, 2, 3, 125);
+}
+
+// ============================================================
+//  OVERLAY — Live Parameter Takeover
+// ============================================================
+
+function renderOverlay(ctx) {
+  drawRect(ctx, 0, 0, SCREEN_W, SCREEN_H, COL.bg);
+
+  const paramName = state.overlayParam;
+  const value = state.overlayValue;
+  const maxVal = state.overlayMax;
+  const colour = state.overlayColour;
+
+  // Parameter name at top — 10px equivalent, zone-coloured
+  const nameW = measureText(paramName, 6);
+  const nameX = Math.floor((SCREEN_W - nameW) / 2);
+  drawText(ctx, paramName, nameX, 10, colour, 6);
+
+  // Thin coloured line under name
+  drawRect(ctx, nameX, 19, nameW, 1, colour);
+
+  // HUGE value centre — 48px equivalent using 8x12 font
+  // We scale the 8x12 font by rendering each pixel as a 4x4 block
+  // to approximate 32x48 pixel characters
+  const valueStr = String(value);
+  renderHugeValue(ctx, valueStr, COL.white);
+
+  // Thin colour bar at bottom showing relative position
+  const barY = 108;
+  const barH = 6;
+  const barX = 8;
+  const barW = 112;
+
+  // Track
+  drawRect(ctx, barX, barY, barW, barH, COL.barTrack);
+
+  // Fill
+  const fillFrac = value / maxVal;
+  const fillW = Math.round(barW * fillFrac);
+  if (fillW > 0) {
+    drawRect(ctx, barX, barY, fillW, barH, colour);
+  }
+
+  // Small tick marks at 0%, 50%, 100%
+  drawPixel(ctx, barX, barY + barH + 1, COL.dimGrey);
+  drawPixel(ctx, barX + Math.floor(barW / 2), barY + barH + 1, COL.dimGrey);
+  drawPixel(ctx, barX + barW - 1, barY + barH + 1, COL.dimGrey);
+
+  // "0" and "255" at bar edges
+  drawText(ctx, '0', barX, barY + barH + 3, COL.dimGrey, 5);
+  drawText(ctx, '255', barX + barW - 14, barY + barH + 3, COL.dimGrey, 5);
+}
+
+// Render large value by scaling 8x12 font glyphs 4x
+function renderHugeValue(ctx, text, colour) {
+  const pxScale = 4; // each font pixel becomes 4x4
+  const charW = 8 * pxScale; // 32px per char
+  const charH = 12 * pxScale; // 48px per char
+  const spacing = charW + 4; // 36px char pitch
+  const totalW = text.length * spacing - 4;
+  const startX = Math.floor((SCREEN_W - totalW) / 2);
+  const startY = Math.floor((SCREEN_H - charH) / 2) - 6; // slightly above centre
+
+  for (let ci = 0; ci < text.length; ci++) {
+    const glyph = FONT_8x12[text[ci]];
+    if (!glyph) continue;
+    const cx = startX + ci * spacing;
+    for (let row = 0; row < 12; row++) {
+      for (let col = 0; col < 8; col++) {
+        if (glyph[row] & (1 << (7 - col))) {
+          drawRect(ctx, cx + col * pxScale, startY + row * pxScale, pxScale, pxScale, colour);
+        }
+      }
+    }
+  }
+}
+
+// ============================================================
+//  Canvas blitting — render 128x128, scale to 512x512
+// ============================================================
+
+function createOffscreen() {
+  const c = document.createElement('canvas');
+  c.width = SCREEN_W;
+  c.height = SCREEN_H;
+  return c;
+}
+
+function blitToCanvas(offscreen, targetId) {
+  const target = document.getElementById(targetId);
+  const tctx = target.getContext('2d');
+  tctx.imageSmoothingEnabled = false;
+  tctx.clearRect(0, 0, target.width, target.height);
+  tctx.drawImage(offscreen, 0, 0, SCREEN_W, SCREEN_H, 0, 0, SCREEN_W * SCALE, SCREEN_H * SCALE);
+}
+
+// ============================================================
+//  Full render cycle
+// ============================================================
+
+function renderAll() {
+  // Page 1: LIVE
+  const off1 = createOffscreen();
+  const ctx1 = off1.getContext('2d');
+  ctx1.imageSmoothingEnabled = false;
+  renderPage1(ctx1);
+  blitToCanvas(off1, 'page1');
+
+  // Page 2: EFFECT
+  const off2 = createOffscreen();
+  const ctx2 = off2.getContext('2d');
+  ctx2.imageSmoothingEnabled = false;
+  renderPage2(ctx2);
+  blitToCanvas(off2, 'page2');
+
+  // Page 3: STATUS
+  const off3 = createOffscreen();
+  const ctx3 = off3.getContext('2d');
+  ctx3.imageSmoothingEnabled = false;
+  renderPage3(ctx3);
+  blitToCanvas(off3, 'page3');
+
+  // Overlay
+  const off4 = createOffscreen();
+  const ctx4 = off4.getContext('2d');
+  ctx4.imageSmoothingEnabled = false;
+  renderOverlay(ctx4);
+  blitToCanvas(off4, 'overlay');
+}
+
+// ============================================================
+//  Interactive controls
+// ============================================================
+
+function bindSlider(id, valueId, setter) {
+  const slider = document.getElementById(id);
+  const readout = document.getElementById(valueId);
+  slider.addEventListener('input', () => {
+    const v = parseInt(slider.value, 10);
+    readout.textContent = v;
+    setter(v);
+    renderAll();
+  });
+}
+
+function bindOverlayForParam(sliderId, paramName, colour, valueGetter) {
+  const slider = document.getElementById(sliderId);
+  slider.addEventListener('input', () => {
+    state.overlayParam = paramName;
+    state.overlayValue = valueGetter();
+    state.overlayMax = 255;
+    state.overlayColour = colour;
+  });
+}
+
+// Zone brightness sliders
+bindSlider('ctrl-z1', 'val-z1', v => { state.zones[0].brightness = v; });
+bindSlider('ctrl-z2', 'val-z2', v => { state.zones[1].brightness = v; });
+bindSlider('ctrl-z3', 'val-z3', v => { state.zones[2].brightness = v; });
+bindSlider('ctrl-master', 'val-master', v => { state.masterBrightness = v; });
+bindSlider('ctrl-speed', 'val-speed', v => { state.speed = v; });
+bindSlider('ctrl-rssi', 'val-rssi', v => { state.rssi = v; });
+
+// Overlay tracking: update overlay params when sliders change
+bindOverlayForParam('ctrl-z1', 'Z1 BRIGHT', COL.zone1, () => state.zones[0].brightness);
+bindOverlayForParam('ctrl-z2', 'Z2 BRIGHT', COL.zone2, () => state.zones[1].brightness);
+bindOverlayForParam('ctrl-z3', 'Z3 BRIGHT', COL.zone3, () => state.zones[2].brightness);
+bindOverlayForParam('ctrl-master', 'MASTER', COL.white, () => state.masterBrightness);
+bindOverlayForParam('ctrl-speed', 'SPEED', COL.blue, () => state.speed);
+
+// Effect selector
+document.getElementById('ctrl-effect').addEventListener('change', function() {
+  state.effectName = this.value;
+  renderAll();
+});
+
+// EdgeMixer selector
+document.getElementById('ctrl-edgemixer').addEventListener('change', function() {
+  state.edgeMixerMode = this.value.toUpperCase();
+  renderAll();
+});
+
+// WiFi toggle
+document.getElementById('btn-wifi').addEventListener('click', function() {
+  state.wifiConnected = !state.wifiConnected;
+  this.textContent = state.wifiConnected ? 'ON' : 'OFF';
+  this.classList.toggle('active', state.wifiConnected);
+  renderAll();
+});
+
+// WS toggle
+document.getElementById('btn-ws').addEventListener('click', function() {
+  state.wsConnected = !state.wsConnected;
+  this.textContent = state.wsConnected ? 'ON' : 'OFF';
+  this.classList.toggle('active', state.wsConnected);
+  renderAll();
+});
+
+// Overlay trigger button — shows a specific parameter overlay
+document.getElementById('btn-overlay').addEventListener('click', function() {
+  // Cycle through overlay examples
+  const overlayPresets = [
+    { param: 'Z1 BRIGHT', value: state.zones[0].brightness, colour: COL.zone1 },
+    { param: 'Z2 BRIGHT', value: state.zones[1].brightness, colour: COL.zone2 },
+    { param: 'Z3 BRIGHT', value: state.zones[2].brightness, colour: COL.zone3 },
+    { param: 'MASTER',    value: state.masterBrightness,     colour: COL.white },
+    { param: 'SPEED',     value: state.speed,                colour: COL.blue },
+  ];
+  // Find current and advance
+  let idx = overlayPresets.findIndex(p => p.param === state.overlayParam);
+  idx = (idx + 1) % overlayPresets.length;
+  state.overlayParam = overlayPresets[idx].param;
+  state.overlayValue = overlayPresets[idx].value;
+  state.overlayColour = overlayPresets[idx].colour;
+  state.overlayMax = 255;
+  renderAll();
+});
+
+// ============================================================
+//  Initial render
+// ============================================================
+renderAll();
+</script>
+
+</body>
+</html>

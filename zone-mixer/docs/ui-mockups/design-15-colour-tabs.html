@@ -1,0 +1,1279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zone Mixer — Design 15: Colour-Coded Tabs</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #111;
+    color: #ccc;
+    font-family: 'Inter', 'SF Pro Display', -apple-system, system-ui, sans-serif;
+    padding: 48px;
+    min-height: 100vh;
+  }
+
+  h1 {
+    font-size: 24px;
+    font-weight: 600;
+    color: #ffffff;
+    margin-bottom: 4px;
+    letter-spacing: -0.02em;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: #888;
+    margin-bottom: 40px;
+    font-weight: 400;
+  }
+
+  .pages-strip {
+    display: flex;
+    gap: 32px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 48px;
+  }
+
+  .page-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .page-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: #666;
+  }
+
+  .page-label .accent-name {
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    margin-left: 6px;
+  }
+
+  canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    border-radius: 12px;
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.06),
+      0 8px 32px rgba(0,0,0,0.6);
+    cursor: pointer;
+  }
+
+  .click-hint {
+    font-size: 10px;
+    color: #444;
+    text-align: center;
+    margin-top: 4px;
+  }
+
+  /* Interactive demo section */
+  .interactive-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 48px;
+    padding-top: 48px;
+    border-top: 1px solid #222;
+  }
+
+  .interactive-section h2 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #ccc;
+    margin-bottom: 6px;
+  }
+
+  .interactive-subtitle {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 24px;
+  }
+
+  .interactive-wrap {
+    display: flex;
+    gap: 48px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .interactive-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .interactive-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 200px;
+  }
+
+  .control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .control-group label {
+    font-size: 11px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 600;
+  }
+
+  .control-group button {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    color: #ccc;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .control-group button:hover {
+    background: #222;
+    border-color: #444;
+  }
+
+  .control-group button.active {
+    border-color: #666;
+    color: #fff;
+    background: #252525;
+  }
+
+  .btn-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .btn-row button {
+    flex: 1;
+    min-width: 0;
+    text-align: center;
+  }
+
+  .btn-row button.cyan { border-color: #00BCD4; color: #00BCD4; }
+  .btn-row button.amber { border-color: #FFB300; color: #FFB300; }
+  .btn-row button.violet { border-color: #AB47BC; color: #AB47BC; }
+  .btn-row button.green { border-color: #4CAF50; color: #4CAF50; }
+
+  /* Rationale */
+  .rationale {
+    max-width: 720px;
+    margin: 48px auto 0;
+    padding-top: 48px;
+    border-top: 1px solid #222;
+  }
+
+  .rationale h2 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #ccc;
+    margin-bottom: 16px;
+  }
+
+  .rationale section {
+    margin-bottom: 24px;
+  }
+
+  .rationale h3 {
+    font-size: 12px;
+    font-weight: 600;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+  }
+
+  .rationale p {
+    font-size: 13px;
+    color: #777;
+    line-height: 1.7;
+  }
+
+  .rationale p + p {
+    margin-top: 8px;
+  }
+
+  .rationale ul {
+    list-style: none;
+    padding: 0;
+  }
+
+  .rationale li {
+    font-size: 13px;
+    color: #777;
+    line-height: 1.7;
+    padding-left: 16px;
+    position: relative;
+    margin-bottom: 4px;
+  }
+
+  .rationale li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 8px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: #444;
+  }
+
+  .rationale code {
+    font-family: 'JetBrains Mono', 'SF Mono', monospace;
+    font-size: 11px;
+    color: #6ba3d6;
+    background: #1a2332;
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  .colour-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    vertical-align: middle;
+    margin-right: 3px;
+    border: 1px solid #333;
+  }
+
+  .spec-table {
+    margin-top: 12px;
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .spec-table th {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #555;
+    text-align: left;
+    padding: 6px 12px 6px 0;
+    border-bottom: 1px solid #222;
+    font-weight: 600;
+  }
+
+  .spec-table td {
+    font-size: 12px;
+    color: #888;
+    padding: 5px 12px 5px 0;
+    border-bottom: 1px solid #1a1a1a;
+  }
+
+  .spec-table td:first-child {
+    color: #aaa;
+    font-weight: 500;
+  }
+</style>
+</head>
+<body>
+
+<h1>Design 15 — Colour-Coded Tabs</h1>
+<p class="subtitle">Zone Mixer &middot; AtomS3 0.85" LCD &middot; 128 &times; 128px &middot; 4&times; scale &middot; Click any page to navigate</p>
+
+<!-- Static 4-page strip -->
+<div class="pages-strip" id="pagesStrip"></div>
+
+<!-- Interactive demo -->
+<div class="interactive-section">
+  <h2>Interactive Demo</h2>
+  <p class="interactive-subtitle">Click the screen or use the buttons to navigate. Trigger the overlay to see parameter feedback.</p>
+
+  <div class="interactive-wrap">
+    <div class="interactive-display">
+      <canvas id="interactiveCanvas" width="512" height="512"></canvas>
+      <div class="click-hint">Click screen to cycle pages</div>
+    </div>
+
+    <div class="interactive-controls">
+      <div class="control-group">
+        <label>Page</label>
+        <div class="btn-row">
+          <button class="cyan" onclick="setPage(0)">1</button>
+          <button class="amber" onclick="setPage(1)">2</button>
+          <button class="violet" onclick="setPage(2)">3</button>
+          <button class="green" onclick="setPage(3)">4</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Trigger Overlay</label>
+        <div class="btn-row">
+          <button onclick="triggerOverlay('Z1 BRI', 85)">Z1 Bri</button>
+          <button onclick="triggerOverlay('Z2 BRI', 62)">Z2 Bri</button>
+          <button onclick="triggerOverlay('SPEED', 55)">Speed</button>
+        </div>
+        <div class="btn-row">
+          <button onclick="triggerOverlay('MASTER', 72)">Master</button>
+          <button onclick="triggerOverlay('SPREAD', 64)">Spread</button>
+          <button onclick="triggerOverlay('STRENGTH', 45)">Strength</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Connection</label>
+        <div class="btn-row">
+          <button onclick="toggleWifi()">Toggle WiFi</button>
+          <button onclick="toggleWs()">Toggle WS</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Design rationale -->
+<div class="rationale">
+  <h2>Design Rationale</h2>
+
+  <section>
+    <h3>Why Colour-Coded Tabs</h3>
+    <p>
+      On a 0.85" screen, text labels for page identity are too small to read at performance
+      distance. A 4px colour bar at the top is visible from over a metre away and builds
+      instant muscle memory: cyan means zones, amber means effects, violet means EdgeMixer,
+      green means connection. The operator stops reading and starts recognising.
+    </p>
+    <p>
+      This pattern is borrowed from pro audio mixers and DAW channel strips where colour
+      coding is the primary identification mechanism, with text serving only as confirmation.
+    </p>
+  </section>
+
+  <section>
+    <h3>Accent Colour Selection</h3>
+    <ul>
+      <li><span class="colour-swatch" style="background:#00BCD4"></span><code>#00BCD4</code> Cyan — Page 1 (Zone Overview). Cool, neutral, dashboard feel. Distinct from zone colours.</li>
+      <li><span class="colour-swatch" style="background:#FFB300"></span><code>#FFB300</code> Amber — Page 2 (Effect & Speed). Warm attention colour, matches existing effect name styling.</li>
+      <li><span class="colour-swatch" style="background:#AB47BC"></span><code>#AB47BC</code> Violet — Page 3 (EdgeMixer). Unique hue not used elsewhere, immediately distinguishable.</li>
+      <li><span class="colour-swatch" style="background:#4CAF50"></span><code>#4CAF50</code> Green — Page 4 (Connection). Green = healthy connection, semantic match to page content.</li>
+    </ul>
+    <p>
+      These four hues are maximally separated on the colour wheel and remain distinguishable
+      under protanopia, deuteranopia, and tritanopia. No two accents share a confusion pair.
+    </p>
+  </section>
+
+  <section>
+    <h3>Page Layout Architecture</h3>
+    <p>
+      Each 128x128 page is divided into three vertical zones: the 4px accent bar (identity),
+      120px content area (information), and 4px dot row (navigation). The content area is
+      further structured per page type, but all pages share the same vertical rhythm with
+      consistent margins (4px sides, 2px internal gaps).
+    </p>
+    <table class="spec-table">
+      <thead>
+        <tr>
+          <th>Region</th>
+          <th>Height</th>
+          <th>Purpose</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Accent bar</td>
+          <td>4px</td>
+          <td>Page identity — colour alone, no text needed</td>
+        </tr>
+        <tr>
+          <td>Content area</td>
+          <td>120px</td>
+          <td>Page-specific information</td>
+        </tr>
+        <tr>
+          <td>Navigation dots</td>
+          <td>4px</td>
+          <td>Page position — active dot matches accent colour</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h3>Live Parameter Overlay</h3>
+    <p>
+      When an encoder is turned, the overlay takes over the full screen with the parameter
+      name, a 48px value (readable at 60cm), and a progress bar in the current page's accent
+      colour. After 2 seconds of inactivity, the overlay fades and the current page returns.
+      The overlay does not change which page is active — it layers on top temporarily.
+    </p>
+    <p>
+      The accent-coloured bar in the overlay reinforces which page context the parameter
+      belongs to, maintaining the colour-coded identity system even during transient feedback.
+    </p>
+  </section>
+
+  <section>
+    <h3>Zone Colour System</h3>
+    <ul>
+      <li><span class="colour-swatch" style="background:#FF4444"></span><code>#FF4444</code> Zone 1 — warm red, highest visual priority</li>
+      <li><span class="colour-swatch" style="background:#44FF44"></span><code>#44FF44</code> Zone 2 — green, maximum separation from Zone 1</li>
+      <li><span class="colour-swatch" style="background:#4488FF"></span><code>#4488FF</code> Zone 3 — blue, completes the RGB triad</li>
+      <li><span class="colour-swatch" style="background:#FFFFFF"></span><code>#FFFFFF</code> Master — white, distinct authority over all zones</li>
+    </ul>
+  </section>
+
+  <section>
+    <h3>Implementation Notes for AtomS3</h3>
+    <ul>
+      <li>ST7789 driver, 128x128, SPI interface. Full-screen redraws are fast (&lt;10ms).</li>
+      <li>Two font sizes needed: 5x7 bitmap (labels, values) and a large ~48px numeral set (overlay value).</li>
+      <li>Page state is a single <code>uint8_t pageIndex</code> with modulo-4 cycling on button press.</li>
+      <li>Overlay is a boolean flag + <code>millis()</code> timestamp. If <code>millis() - overlayStart &lt; 2000</code>, render overlay instead of page.</li>
+      <li>Accent colours stored as a 4-element <code>uint16_t[]</code> in RGB565 format.</li>
+      <li>Navigation dots: four 3px filled circles at y=124, spaced evenly, active dot uses accent colour.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h3>Accessibility</h3>
+    <p>
+      All text exceeds WCAG AA contrast on the <code>#0a0a0a</code> background. Zone
+      identification uses both colour and position/label — never colour alone. The 4px
+      accent bar is supplemented by page dots at the bottom (positional encoding) and
+      distinct content layouts (structural encoding). Signal strength uses bar height
+      progression alongside colour.
+    </p>
+  </section>
+</div>
+
+<script>
+// ============================================================
+//  Zone Mixer — Design 15: Colour-Coded Tabs
+//  128x128 pixel canvas for AtomS3 0.85" LCD
+// ============================================================
+
+const W = 128;
+const H = 128;
+const SCALE = 4;
+
+// ── Colour palette ──────────────────────────────────────────
+
+const C = {
+  bg:         '#0a0a0a',
+  barBg:      '#2a2a2a',
+  barBorder:  '#1a1a1a',
+  white:      '#FFFFFF',
+  dimWhite:   '#BBBBBB',
+  dimGrey:    '#666666',
+  darkGrey:   '#333333',
+  separator:  '#1a1a1a',
+  dotInactive:'#2a2a2a',
+
+  // Page accents
+  cyan:       '#00BCD4',
+  amber:      '#FFB300',
+  violet:     '#AB47BC',
+  green:      '#4CAF50',
+
+  // Zone colours
+  zone1:      '#FF4444',
+  zone2:      '#44FF44',
+  zone3:      '#4488FF',
+
+  // Status
+  connGreen:  '#22CC44',
+  connRed:    '#882222',
+
+  // Overlay
+  overlayBg:  '#0a0a0a',
+};
+
+const PAGE_ACCENTS = [C.cyan, C.amber, C.violet, C.green];
+const PAGE_NAMES = ['ZONES', 'EFFECT', 'EDGEMIXER', 'CONNECTION'];
+
+// ── Mock state ──────────────────────────────────────────────
+
+const state = {
+  currentPage: 0,
+  effectName: 'SPECTRAL BLOOM',
+  zones: [
+    { brightness: 85, colour: C.zone1 },
+    { brightness: 62, colour: C.zone2 },
+    { brightness: 41, colour: C.zone3 },
+  ],
+  masterBrightness: 72,
+  speed: 55,
+  edgeMixerMode: 'CROSSFADE',
+  edgeSpread: 64,
+  edgeStrength: 45,
+  spatialActive: true,
+  temporalActive: false,
+  wifiConnected: true,
+  wsConnected: true,
+  ip: '192.168.4.1',
+  rssi: -42,
+
+  // Overlay state
+  overlayActive: false,
+  overlayParam: '',
+  overlayValue: 0,
+  overlayTimeout: null,
+};
+
+// ── 5x7 Bitmap Font ─────────────────────────────────────────
+
+const FONT = {
+  ' ': [0b00000,0b00000,0b00000,0b00000,0b00000,0b00000,0b00000],
+  '0': [0b01110,0b10001,0b10011,0b10101,0b11001,0b10001,0b01110],
+  '1': [0b00100,0b01100,0b00100,0b00100,0b00100,0b00100,0b01110],
+  '2': [0b01110,0b10001,0b00001,0b00110,0b01000,0b10000,0b11111],
+  '3': [0b01110,0b10001,0b00001,0b00110,0b00001,0b10001,0b01110],
+  '4': [0b00010,0b00110,0b01010,0b10010,0b11111,0b00010,0b00010],
+  '5': [0b11111,0b10000,0b11110,0b00001,0b00001,0b10001,0b01110],
+  '6': [0b00110,0b01000,0b10000,0b11110,0b10001,0b10001,0b01110],
+  '7': [0b11111,0b00001,0b00010,0b00100,0b01000,0b01000,0b01000],
+  '8': [0b01110,0b10001,0b10001,0b01110,0b10001,0b10001,0b01110],
+  '9': [0b01110,0b10001,0b10001,0b01111,0b00001,0b00010,0b01100],
+  'A': [0b01110,0b10001,0b10001,0b11111,0b10001,0b10001,0b10001],
+  'B': [0b11110,0b10001,0b10001,0b11110,0b10001,0b10001,0b11110],
+  'C': [0b01110,0b10001,0b10000,0b10000,0b10000,0b10001,0b01110],
+  'D': [0b11110,0b10001,0b10001,0b10001,0b10001,0b10001,0b11110],
+  'E': [0b11111,0b10000,0b10000,0b11110,0b10000,0b10000,0b11111],
+  'F': [0b11111,0b10000,0b10000,0b11110,0b10000,0b10000,0b10000],
+  'G': [0b01110,0b10001,0b10000,0b10111,0b10001,0b10001,0b01110],
+  'H': [0b10001,0b10001,0b10001,0b11111,0b10001,0b10001,0b10001],
+  'I': [0b01110,0b00100,0b00100,0b00100,0b00100,0b00100,0b01110],
+  'J': [0b00111,0b00010,0b00010,0b00010,0b00010,0b10010,0b01100],
+  'K': [0b10001,0b10010,0b10100,0b11000,0b10100,0b10010,0b10001],
+  'L': [0b10000,0b10000,0b10000,0b10000,0b10000,0b10000,0b11111],
+  'M': [0b10001,0b11011,0b10101,0b10101,0b10001,0b10001,0b10001],
+  'N': [0b10001,0b11001,0b10101,0b10011,0b10001,0b10001,0b10001],
+  'O': [0b01110,0b10001,0b10001,0b10001,0b10001,0b10001,0b01110],
+  'P': [0b11110,0b10001,0b10001,0b11110,0b10000,0b10000,0b10000],
+  'Q': [0b01110,0b10001,0b10001,0b10001,0b10101,0b10010,0b01101],
+  'R': [0b11110,0b10001,0b10001,0b11110,0b10100,0b10010,0b10001],
+  'S': [0b01110,0b10001,0b10000,0b01110,0b00001,0b10001,0b01110],
+  'T': [0b11111,0b00100,0b00100,0b00100,0b00100,0b00100,0b00100],
+  'U': [0b10001,0b10001,0b10001,0b10001,0b10001,0b10001,0b01110],
+  'V': [0b10001,0b10001,0b10001,0b10001,0b10001,0b01010,0b00100],
+  'W': [0b10001,0b10001,0b10001,0b10101,0b10101,0b11011,0b10001],
+  'X': [0b10001,0b10001,0b01010,0b00100,0b01010,0b10001,0b10001],
+  'Y': [0b10001,0b10001,0b01010,0b00100,0b00100,0b00100,0b00100],
+  'Z': [0b11111,0b00001,0b00010,0b00100,0b01000,0b10000,0b11111],
+  '.': [0b00000,0b00000,0b00000,0b00000,0b00000,0b00000,0b00100],
+  ':': [0b00000,0b00100,0b00000,0b00000,0b00000,0b00100,0b00000],
+  '-': [0b00000,0b00000,0b00000,0b11111,0b00000,0b00000,0b00000],
+  '/': [0b00001,0b00010,0b00010,0b00100,0b01000,0b01000,0b10000],
+  '%': [0b11001,0b11010,0b00010,0b00100,0b01000,0b01011,0b10011],
+  '+': [0b00000,0b00100,0b00100,0b11111,0b00100,0b00100,0b00000],
+  '&': [0b01100,0b10010,0b10100,0b01000,0b10101,0b10010,0b01101],
+  '*': [0b00000,0b10101,0b01110,0b11111,0b01110,0b10101,0b00000],
+};
+FONT['\u2026'] = [0b00000,0b00000,0b00000,0b00000,0b00000,0b00000,0b10101];
+
+// ── Large numeral font (7x10) for overlay value ─────────────
+
+const FONT_LARGE = {
+  '0': [
+    0b0111110,
+    0b1100011,
+    0b1100011,
+    0b1100111,
+    0b1101011,
+    0b1110011,
+    0b1100011,
+    0b1100011,
+    0b1100011,
+    0b0111110,
+  ],
+  '1': [
+    0b0001100,
+    0b0011100,
+    0b0111100,
+    0b0001100,
+    0b0001100,
+    0b0001100,
+    0b0001100,
+    0b0001100,
+    0b0001100,
+    0b0111111,
+  ],
+  '2': [
+    0b0111110,
+    0b1100011,
+    0b0000011,
+    0b0000110,
+    0b0001100,
+    0b0011000,
+    0b0110000,
+    0b1100000,
+    0b1100011,
+    0b1111111,
+  ],
+  '3': [
+    0b0111110,
+    0b1100011,
+    0b0000011,
+    0b0000011,
+    0b0011110,
+    0b0000011,
+    0b0000011,
+    0b0000011,
+    0b1100011,
+    0b0111110,
+  ],
+  '4': [
+    0b0000110,
+    0b0001110,
+    0b0011110,
+    0b0110110,
+    0b1100110,
+    0b1111111,
+    0b0000110,
+    0b0000110,
+    0b0000110,
+    0b0000110,
+  ],
+  '5': [
+    0b1111111,
+    0b1100000,
+    0b1100000,
+    0b1111110,
+    0b1100011,
+    0b0000011,
+    0b0000011,
+    0b0000011,
+    0b1100011,
+    0b0111110,
+  ],
+  '6': [
+    0b0011110,
+    0b0110000,
+    0b1100000,
+    0b1100000,
+    0b1111110,
+    0b1100011,
+    0b1100011,
+    0b1100011,
+    0b1100011,
+    0b0111110,
+  ],
+  '7': [
+    0b1111111,
+    0b1100011,
+    0b0000011,
+    0b0000110,
+    0b0001100,
+    0b0011000,
+    0b0011000,
+    0b0011000,
+    0b0011000,
+    0b0011000,
+  ],
+  '8': [
+    0b0111110,
+    0b1100011,
+    0b1100011,
+    0b1100011,
+    0b0111110,
+    0b1100011,
+    0b1100011,
+    0b1100011,
+    0b1100011,
+    0b0111110,
+  ],
+  '9': [
+    0b0111110,
+    0b1100011,
+    0b1100011,
+    0b1100011,
+    0b0111111,
+    0b0000011,
+    0b0000011,
+    0b0000011,
+    0b0000110,
+    0b0111100,
+  ],
+};
+
+// ── Drawing primitives ──────────────────────────────────────
+
+function px(ctx, x, y, col) {
+  ctx.fillStyle = col;
+  ctx.fillRect(x, y, 1, 1);
+}
+
+function rect(ctx, x, y, w, h, col) {
+  ctx.fillStyle = col;
+  ctx.fillRect(x, y, w, h);
+}
+
+function circle(ctx, cx, cy, r, col) {
+  ctx.fillStyle = col;
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      if (dx * dx + dy * dy <= r * r) {
+        ctx.fillRect(cx + dx, cy + dy, 1, 1);
+      }
+    }
+  }
+}
+
+function drawChar5x7(ctx, ch, x, y, col) {
+  const g = FONT[ch];
+  if (!g) return;
+  for (let r = 0; r < 7; r++) {
+    for (let c = 0; c < 5; c++) {
+      if (g[r] & (1 << (4 - c))) {
+        px(ctx, x + c, y + r, col);
+      }
+    }
+  }
+}
+
+function drawText(ctx, str, x, y, col, sp) {
+  sp = sp || 6;
+  for (let i = 0; i < str.length; i++) {
+    drawChar5x7(ctx, str[i], x + i * sp, y, col);
+  }
+}
+
+function textWidth(str, sp) {
+  sp = sp || 6;
+  return str.length * sp - (sp - 5);
+}
+
+function drawTextCentered(ctx, str, cx, y, col, sp) {
+  sp = sp || 6;
+  const w = textWidth(str, sp);
+  drawText(ctx, str, cx - Math.floor(w / 2), y, col, sp);
+}
+
+function drawTextRight(ctx, str, rx, y, col, sp) {
+  sp = sp || 6;
+  const w = textWidth(str, sp);
+  drawText(ctx, str, rx - w, y, col, sp);
+}
+
+function drawTextTrunc(ctx, str, x, y, col, maxW, sp) {
+  sp = sp || 6;
+  const full = textWidth(str, sp);
+  if (full <= maxW) {
+    drawText(ctx, str, x, y, col, sp);
+    return;
+  }
+  const avail = maxW - sp;
+  let n = Math.floor(avail / sp);
+  if (n < 1) n = 1;
+  drawText(ctx, str.substring(0, n), x, y, col, sp);
+  drawChar5x7(ctx, '\u2026', x + n * sp, y, col);
+}
+
+function drawLargeChar(ctx, ch, x, y, col) {
+  const g = FONT_LARGE[ch];
+  if (!g) return;
+  for (let r = 0; r < 10; r++) {
+    for (let c = 0; c < 7; c++) {
+      if (g[r] & (1 << (6 - c))) {
+        px(ctx, x + c, y + r, col);
+      }
+    }
+  }
+}
+
+function drawLargeNum(ctx, str, x, y, col) {
+  const sp = 9;
+  for (let i = 0; i < str.length; i++) {
+    drawLargeChar(ctx, str[i], x + i * sp, y, col);
+  }
+}
+
+function largeNumWidth(str) {
+  return str.length * 9 - 2;
+}
+
+function drawLargeNumCentered(ctx, str, cx, y, col) {
+  const w = largeNumWidth(str);
+  drawLargeNum(ctx, str, cx - Math.floor(w / 2), y, col);
+}
+
+// ── Bar drawing ─────────────────────────────────────────────
+
+function drawBar(ctx, x, y, w, h, pct, fillCol) {
+  rect(ctx, x, y, w, h, C.barBg);
+  const fw = Math.round((w - 2) * Math.max(0, Math.min(1, pct)));
+  if (fw > 0) {
+    rect(ctx, x + 1, y + 1, fw, h - 2, fillCol);
+  }
+}
+
+// ── Page dot indicators ─────────────────────────────────────
+
+function drawDots(ctx, activePage, accentCol) {
+  const dotR = 1;
+  const dotSpacing = 8;
+  const totalW = 4 * dotSpacing - dotSpacing + (dotR * 2 + 1);
+  // 4 dots centred at y=125, from x = centre - half
+  const startX = 64 - Math.floor((3 * dotSpacing) / 2);
+  const y = 125;
+
+  for (let i = 0; i < 4; i++) {
+    const dx = startX + i * dotSpacing;
+    const col = (i === activePage) ? accentCol : C.dotInactive;
+    circle(ctx, dx, y, dotR, col);
+  }
+}
+
+// ── Accent bar ──────────────────────────────────────────────
+
+function drawAccentBar(ctx, pageIdx) {
+  rect(ctx, 0, 0, W, 4, PAGE_ACCENTS[pageIdx]);
+}
+
+// ============================================================
+//  PAGE RENDERERS
+// ============================================================
+
+// ── Page 1: Zone Overview (CYAN) ────────────────────────────
+
+function renderPage1(ctx) {
+  rect(ctx, 0, 0, W, H, C.bg);
+  drawAccentBar(ctx, 0);
+
+  // Title
+  drawText(ctx, 'ZONES', 4, 8, C.cyan, 6);
+
+  // Master brightness — right side
+  drawText(ctx, 'M', 100, 8, C.dimGrey, 6);
+  const mStr = String(state.masterBrightness);
+  drawTextRight(ctx, mStr, 124, 8, C.dimWhite, 6);
+
+  // Separator
+  rect(ctx, 4, 17, 120, 1, C.separator);
+
+  // Zone bars — three zones, each gets ~30px vertical
+  const zoneNames = ['Z1', 'Z2', 'Z3'];
+  for (let i = 0; i < 3; i++) {
+    const z = state.zones[i];
+    const yBase = 21 + i * 28;
+
+    // Zone label
+    drawText(ctx, zoneNames[i], 4, yBase, z.colour, 6);
+
+    // Brightness value — right aligned
+    const bStr = String(z.brightness) + '%';
+    drawTextRight(ctx, bStr, 124, yBase, C.dimWhite, 6);
+
+    // Bar
+    drawBar(ctx, 4, yBase + 10, 120, 6, z.brightness / 100, z.colour);
+
+    // Separator
+    if (i < 2) {
+      rect(ctx, 4, yBase + 19, 120, 1, C.separator);
+    }
+  }
+
+  // Master bar at bottom
+  rect(ctx, 4, 105, 120, 1, C.separator);
+  drawText(ctx, 'MASTER', 4, 109, C.dimGrey, 6);
+  const masterStr = String(state.masterBrightness) + '%';
+  drawTextRight(ctx, masterStr, 124, 109, C.white, 6);
+  drawBar(ctx, 4, 117, 120, 5, state.masterBrightness / 100, C.white);
+
+  drawDots(ctx, 0, C.cyan);
+}
+
+// ── Page 2: Effect & Speed (AMBER) ──────────────────────────
+
+function renderPage2(ctx) {
+  rect(ctx, 0, 0, W, H, C.bg);
+  drawAccentBar(ctx, 1);
+
+  // Small label
+  drawText(ctx, 'EFFECT', 4, 8, C.dimGrey, 6);
+
+  // Effect name — large, amber, centred
+  const effectUpper = state.effectName;
+  // Use two lines if needed
+  const maxChars = Math.floor(120 / 7);
+  if (effectUpper.length <= maxChars) {
+    drawTextCentered(ctx, effectUpper, 64, 24, C.amber, 7);
+  } else {
+    // Split at space
+    const words = effectUpper.split(' ');
+    let line1 = '';
+    let line2 = '';
+    for (const w of words) {
+      if (textWidth(line1 + (line1 ? ' ' : '') + w, 7) <= 120) {
+        line1 += (line1 ? ' ' : '') + w;
+      } else {
+        line2 += (line2 ? ' ' : '') + w;
+      }
+    }
+    drawTextCentered(ctx, line1, 64, 20, C.amber, 7);
+    if (line2) drawTextCentered(ctx, line2, 64, 30, C.amber, 7);
+  }
+
+  // Separator
+  rect(ctx, 4, 42, 120, 1, C.separator);
+
+  // Speed section
+  drawText(ctx, 'SPEED', 4, 48, C.dimGrey, 6);
+  const spdStr = String(state.speed) + '%';
+  drawTextRight(ctx, spdStr, 124, 48, C.dimWhite, 6);
+  drawBar(ctx, 4, 58, 120, 8, state.speed / 100, C.amber);
+
+  // Separator
+  rect(ctx, 4, 72, 120, 1, C.separator);
+
+  // Zone count
+  drawText(ctx, 'ZONES ACTIVE', 4, 78, C.dimGrey, 6);
+
+  // Zone indicator chips
+  for (let i = 0; i < 3; i++) {
+    const chipX = 4 + i * 14;
+    const chipCol = state.zones[i].colour;
+    rect(ctx, chipX, 88, 10, 6, chipCol);
+  }
+
+  // Zone count number
+  drawText(ctx, '3', 52, 88, C.dimWhite, 6);
+
+  // Separator
+  rect(ctx, 4, 100, 120, 1, C.separator);
+
+  // Brightness summary
+  drawText(ctx, 'BRI', 4, 106, C.dimGrey, 6);
+  for (let i = 0; i < 3; i++) {
+    const bStr = String(state.zones[i].brightness);
+    const bx = 28 + i * 30;
+    drawText(ctx, bStr, bx, 106, state.zones[i].colour, 6);
+  }
+
+  drawDots(ctx, 1, C.amber);
+}
+
+// ── Page 3: EdgeMixer (VIOLET) ──────────────────────────────
+
+function renderPage3(ctx) {
+  rect(ctx, 0, 0, W, H, C.bg);
+  drawAccentBar(ctx, 2);
+
+  // Label
+  drawText(ctx, 'EDGEMIXER', 4, 8, C.dimGrey, 6);
+
+  // Mode name — large, violet
+  drawTextCentered(ctx, state.edgeMixerMode, 64, 22, C.violet, 7);
+
+  // Separator
+  rect(ctx, 4, 34, 120, 1, C.separator);
+
+  // Spread
+  drawText(ctx, 'SPREAD', 4, 40, C.dimGrey, 6);
+  const sprStr = String(state.edgeSpread);
+  drawTextRight(ctx, sprStr, 124, 40, C.dimWhite, 6);
+  drawBar(ctx, 4, 50, 120, 7, state.edgeSpread / 100, C.violet);
+
+  // Separator
+  rect(ctx, 4, 62, 120, 1, C.separator);
+
+  // Strength
+  drawText(ctx, 'STRENGTH', 4, 68, C.dimGrey, 6);
+  const strStr = String(state.edgeStrength);
+  drawTextRight(ctx, strStr, 124, 68, C.dimWhite, 6);
+  drawBar(ctx, 4, 78, 120, 7, state.edgeStrength / 100, C.violet);
+
+  // Separator
+  rect(ctx, 4, 90, 120, 1, C.separator);
+
+  // Spatial / Temporal state
+  drawText(ctx, 'MODE', 4, 96, C.dimGrey, 6);
+
+  // Spatial tag
+  const spatCol = state.spatialActive ? C.violet : C.darkGrey;
+  drawText(ctx, 'SPT', 4, 107, spatCol, 6);
+
+  // Vertical separator between tags
+  rect(ctx, 27, 105, 1, 10, C.separator);
+
+  // Temporal tag
+  const tempCol = state.temporalActive ? C.violet : C.darkGrey;
+  drawText(ctx, 'TMP', 32, 107, tempCol, 6);
+
+  // Active indicator dots
+  if (state.spatialActive) {
+    circle(ctx, 22, 114, 1, C.violet);
+  }
+  if (state.temporalActive) {
+    circle(ctx, 50, 114, 1, C.violet);
+  }
+
+  drawDots(ctx, 2, C.violet);
+}
+
+// ── Page 4: Connection (GREEN) ──────────────────────────────
+
+function renderPage4(ctx) {
+  rect(ctx, 0, 0, W, H, C.bg);
+  drawAccentBar(ctx, 3);
+
+  // Label
+  drawText(ctx, 'CONNECTION', 4, 8, C.green, 6);
+
+  // Separator
+  rect(ctx, 4, 17, 120, 1, C.separator);
+
+  // WiFi status
+  drawText(ctx, 'WIFI', 4, 22, C.dimGrey, 6);
+  const wifiStr = state.wifiConnected ? 'CONNECTED' : 'OFFLINE';
+  const wifiCol = state.wifiConnected ? C.connGreen : C.connRed;
+  drawTextRight(ctx, wifiStr, 124, 22, wifiCol, 6);
+
+  // WiFi status dot
+  circle(ctx, 30, 25, 2, wifiCol);
+
+  // Separator
+  rect(ctx, 4, 33, 120, 1, C.separator);
+
+  // WebSocket status
+  drawText(ctx, 'WS', 4, 38, C.dimGrey, 6);
+  const wsStr = state.wsConnected ? 'CONNECTED' : 'OFFLINE';
+  const wsCol = state.wsConnected ? C.connGreen : C.connRed;
+  drawTextRight(ctx, wsStr, 124, 38, wsCol, 6);
+
+  // WS status dot
+  circle(ctx, 18, 41, 2, wsCol);
+
+  // Separator
+  rect(ctx, 4, 49, 120, 1, C.separator);
+
+  // IP Address — large and centred
+  drawText(ctx, 'IP', 4, 56, C.dimGrey, 6);
+  drawTextCentered(ctx, state.ip, 64, 67, C.white, 6);
+
+  // Separator
+  rect(ctx, 4, 79, 120, 1, C.separator);
+
+  // Signal strength
+  drawText(ctx, 'SIGNAL', 4, 85, C.dimGrey, 6);
+  const rssiStr = String(state.rssi) + 'DBM';
+  drawTextRight(ctx, rssiStr, 124, 85, C.dimWhite, 6);
+
+  // Signal strength bars (4 bars, height-progressive)
+  const signalLevel = Math.min(4, Math.max(0, Math.floor((state.rssi + 80) / 10) + 1));
+  const barHeights = [3, 5, 7, 9];
+  const barStartX = 4;
+  const barBaseY = 104;
+  for (let i = 0; i < 4; i++) {
+    const bh = barHeights[i];
+    const bx = barStartX + i * 6;
+    const by = barBaseY - bh;
+    const lit = i < signalLevel;
+    rect(ctx, bx, by, 4, bh, lit ? C.green : C.darkGrey);
+  }
+
+  // RSSI quality label
+  let qualStr = 'POOR';
+  if (signalLevel >= 4) qualStr = 'EXCELLENT';
+  else if (signalLevel >= 3) qualStr = 'GOOD';
+  else if (signalLevel >= 2) qualStr = 'FAIR';
+  drawText(ctx, qualStr, 30, 97, C.dimGrey, 6);
+
+  drawDots(ctx, 3, C.green);
+}
+
+// ── Overlay renderer ────────────────────────────────────────
+
+function renderOverlay(ctx, pageIdx) {
+  rect(ctx, 0, 0, W, H, C.overlayBg);
+
+  const accent = PAGE_ACCENTS[pageIdx];
+
+  // Accent bar at top
+  rect(ctx, 0, 0, W, 4, accent);
+
+  // Parameter name
+  drawTextCentered(ctx, state.overlayParam, 64, 12, C.dimGrey, 6);
+
+  // Large value — centred vertically
+  const valStr = String(state.overlayValue);
+  drawLargeNumCentered(ctx, valStr, 64, 30, C.white);
+
+  // Accent-coloured progress bar
+  const pct = state.overlayValue / 255;
+  drawBar(ctx, 8, 50, 112, 8, pct, accent);
+
+  // Percentage text below bar
+  const pctStr = Math.round(pct * 100) + '%';
+  drawTextCentered(ctx, pctStr, 64, 64, C.dimWhite, 6);
+
+  // Thin accent line
+  rect(ctx, 4, 76, 120, 1, accent);
+
+  // Current page name at bottom
+  drawTextCentered(ctx, PAGE_NAMES[pageIdx], 64, 82, accent, 6);
+
+  // Hint text
+  drawTextCentered(ctx, 'RETURNS IN 2S', 64, 100, C.darkGrey, 5);
+
+  // Page dots
+  drawDots(ctx, pageIdx, accent);
+}
+
+// ── Page router ─────────────────────────────────────────────
+
+function renderPage(ctx, pageIdx, showOverlay) {
+  if (showOverlay) {
+    renderOverlay(ctx, pageIdx);
+    return;
+  }
+  switch (pageIdx) {
+    case 0: renderPage1(ctx); break;
+    case 1: renderPage2(ctx); break;
+    case 2: renderPage3(ctx); break;
+    case 3: renderPage4(ctx); break;
+  }
+}
+
+// ============================================================
+//  Static page strip (all 4 pages + overlay)
+// ============================================================
+
+function buildStaticStrip() {
+  const strip = document.getElementById('pagesStrip');
+  strip.innerHTML = '';
+
+  const labels = [
+    'Page 1 <span class="accent-name" style="color:#00BCD4">Cyan / Zones</span>',
+    'Page 2 <span class="accent-name" style="color:#FFB300">Amber / Effect</span>',
+    'Page 3 <span class="accent-name" style="color:#AB47BC">Violet / EdgeMixer</span>',
+    'Page 4 <span class="accent-name" style="color:#4CAF50">Green / Connection</span>',
+    'Overlay <span class="accent-name" style="color:#FFB300">Parameter Feedback</span>',
+  ];
+
+  for (let i = 0; i < 5; i++) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'page-wrapper';
+
+    const label = document.createElement('div');
+    label.className = 'page-label';
+    label.innerHTML = labels[i];
+    wrapper.appendChild(label);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = W * SCALE;
+    canvas.height = H * SCALE;
+
+    // Create offscreen
+    const off = document.createElement('canvas');
+    off.width = W;
+    off.height = H;
+    const offCtx = off.getContext('2d');
+    offCtx.imageSmoothingEnabled = false;
+
+    if (i < 4) {
+      renderPage(offCtx, i, false);
+    } else {
+      // Overlay demo — show amber overlay (page 2 context)
+      state.overlayParam = 'Z2 BRI';
+      state.overlayValue = 62;
+      renderOverlay(offCtx, 1);
+    }
+
+    const cCtx = canvas.getContext('2d');
+    cCtx.imageSmoothingEnabled = false;
+    cCtx.drawImage(off, 0, 0, W * SCALE, H * SCALE);
+
+    wrapper.appendChild(canvas);
+    strip.appendChild(wrapper);
+  }
+}
+
+// ============================================================
+//  Interactive demo
+// ============================================================
+
+const interactiveCanvas = document.getElementById('interactiveCanvas');
+const interactiveCtx = interactiveCanvas.getContext('2d');
+interactiveCtx.imageSmoothingEnabled = false;
+
+const interactiveOff = document.createElement('canvas');
+interactiveOff.width = W;
+interactiveOff.height = H;
+const interactiveOffCtx = interactiveOff.getContext('2d');
+interactiveOffCtx.imageSmoothingEnabled = false;
+
+function redrawInteractive() {
+  renderPage(interactiveOffCtx, state.currentPage, state.overlayActive);
+  interactiveCtx.imageSmoothingEnabled = false;
+  interactiveCtx.drawImage(interactiveOff, 0, 0, W * SCALE, H * SCALE);
+}
+
+// Click to cycle pages
+interactiveCanvas.addEventListener('click', () => {
+  if (state.overlayActive) {
+    // Dismiss overlay
+    state.overlayActive = false;
+    if (state.overlayTimeout) clearTimeout(state.overlayTimeout);
+  } else {
+    state.currentPage = (state.currentPage + 1) % 4;
+  }
+  redrawInteractive();
+});
+
+// API for buttons
+function setPage(idx) {
+  state.currentPage = idx;
+  state.overlayActive = false;
+  if (state.overlayTimeout) clearTimeout(state.overlayTimeout);
+  redrawInteractive();
+}
+
+function triggerOverlay(paramName, value) {
+  state.overlayParam = paramName;
+  state.overlayValue = value;
+  state.overlayActive = true;
+
+  if (state.overlayTimeout) clearTimeout(state.overlayTimeout);
+  state.overlayTimeout = setTimeout(() => {
+    state.overlayActive = false;
+    redrawInteractive();
+  }, 2000);
+
+  redrawInteractive();
+}
+
+function toggleWifi() {
+  state.wifiConnected = !state.wifiConnected;
+  redrawInteractive();
+  // Also rebuild static strip to show updated state
+  buildStaticStrip();
+}
+
+function toggleWs() {
+  state.wsConnected = !state.wsConnected;
+  redrawInteractive();
+  buildStaticStrip();
+}
+
+// ── Initial render ──────────────────────────────────────────
+
+buildStaticStrip();
+redrawInteractive();
+
+</script>
+</body>
+</html>

@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Design 08 — Live Parameter | Zone Mixer UI</title>
+<style>
+  /* ── Reset & Page ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #1a1a1a;
+    color: #e0e0e0;
+    font-family: 'Inter', 'SF Pro Display', -apple-system, system-ui, sans-serif;
+    padding: 48px;
+    min-height: 100vh;
+  }
+
+  h1 {
+    font-size: 24px;
+    font-weight: 600;
+    color: #ffffff;
+    margin-bottom: 4px;
+    letter-spacing: -0.02em;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: #888;
+    margin-bottom: 40px;
+    font-weight: 400;
+  }
+
+  /* ── Layout ── */
+  .states-row {
+    display: flex;
+    gap: 64px;
+    align-items: flex-start;
+    margin-bottom: 48px;
+  }
+
+  .state-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .state-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: #666;
+    margin-bottom: 12px;
+  }
+
+  .state-label span {
+    color: #999;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    margin-left: 6px;
+  }
+
+  /* ── Screen Container (4x scale: 128 * 4 = 512px) ── */
+  .screen {
+    width: 512px;
+    height: 512px;
+    background: #000000;
+    border-radius: 16px;
+    overflow: hidden;
+    position: relative;
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.06),
+      0 8px 32px rgba(0,0,0,0.6);
+    /* Pixel grid at 4x: each "pixel" = 4css-px */
+    image-rendering: pixelated;
+  }
+
+  /* ──────────────────────────────────────────
+     STATE 1: IDLE — Compact Summary
+     At 1x: fits 128x128. Rendered at 4x.
+     ────────────────────────────────────────── */
+
+  .idle-screen {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 100%;
+    padding: 24px 24px 20px; /* 6px * 4 top/sides, 5px * 4 bottom */
+  }
+
+  .idle-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .idle-zone-label {
+    font-size: 32px; /* 8px * 4 */
+    font-weight: 600;
+    color: #888;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .idle-connection {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .conn-dot {
+    width: 12px; /* 3px * 4 */
+    height: 12px;
+    border-radius: 50%;
+  }
+
+  .conn-dot.active { background: #22c55e; }
+  .conn-dot.inactive { background: #333; }
+
+  .idle-effect-name {
+    font-size: 44px; /* 11px * 4 */
+    font-weight: 600;
+    color: #ffffff;
+    line-height: 1.2;
+    margin-top: 16px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .idle-params {
+    display: flex;
+    flex-direction: column;
+    gap: 12px; /* 3px * 4 */
+    margin-top: 20px;
+  }
+
+  .idle-param-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .idle-param-label {
+    font-size: 28px; /* 7px * 4 */
+    color: #666;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .idle-param-value {
+    font-size: 28px; /* 7px * 4 */
+    color: #ccc;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .idle-bar-track {
+    width: 100%;
+    height: 8px; /* 2px * 4 */
+    background: #1a1a1a;
+    border-radius: 4px;
+    margin-top: 4px;
+    overflow: hidden;
+  }
+
+  .idle-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+  }
+
+  .idle-zone-strip {
+    display: flex;
+    gap: 8px; /* 2px * 4 */
+    margin-top: 24px;
+  }
+
+  .zone-chip {
+    flex: 1;
+    height: 16px; /* 4px * 4 */
+    border-radius: 4px;
+    opacity: 0.7;
+  }
+
+  .zone-chip.z1 { background: #3b82f6; }
+  .zone-chip.z2 { background: #f59e0b; }
+  .zone-chip.z3 { background: #ef4444; }
+
+  .idle-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+
+  .idle-zone-count {
+    font-size: 24px; /* 6px * 4 */
+    color: #555;
+    font-weight: 500;
+  }
+
+  .idle-wifi-icon {
+    width: 20px; /* 5px * 4 */
+    height: 16px; /* 4px * 4 */
+    position: relative;
+  }
+
+  .wifi-arc {
+    position: absolute;
+    border: 3px solid;
+    border-color: transparent transparent #22c55e #22c55e;
+    border-radius: 50%;
+  }
+
+  .wifi-arc.a1 { width: 8px; height: 8px; bottom: 0; left: 6px; }
+  .wifi-arc.a2 { width: 14px; height: 14px; bottom: 0; left: 3px; }
+  .wifi-arc.a3 { width: 20px; height: 20px; bottom: 0; left: 0; }
+
+  /* ──────────────────────────────────────────
+     STATE 2: ACTIVE — Live Parameter
+     At 1x: fits 128x128. Rendered at 4x.
+     ────────────────────────────────────────── */
+
+  .active-screen {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    position: relative;
+  }
+
+  /* Zone colour strip — 8px at 1x = 32px at 4x */
+  .zone-colour-strip {
+    width: 100%;
+    height: 32px;
+    flex-shrink: 0;
+  }
+
+  .zone-colour-strip.z2 {
+    background: #f59e0b;
+  }
+
+  /* Parameter name region */
+  .active-param-name-area {
+    padding: 16px 24px 0; /* 4px 6px 0 at 1x */
+    flex-shrink: 0;
+  }
+
+  .active-param-name {
+    font-size: 40px; /* 10px * 4 */
+    font-weight: 600;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    line-height: 1.1;
+  }
+
+  .active-param-name .zone-highlight {
+    color: #f59e0b;
+  }
+
+  /* Giant value region */
+  .active-value-area {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 24px;
+    position: relative;
+  }
+
+  .active-value {
+    font-size: 192px; /* 48px * 4 */
+    font-weight: 700;
+    color: #ffffff;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.03em;
+    text-shadow: 0 0 40px rgba(245, 158, 11, 0.15);
+  }
+
+  /* Previous -> New indicator */
+  .active-delta {
+    position: absolute;
+    bottom: 20px;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 0 24px;
+  }
+
+  .delta-prev {
+    font-size: 28px; /* 7px * 4 */
+    color: #555;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    text-decoration: line-through;
+    text-decoration-color: #444;
+  }
+
+  .delta-arrow {
+    font-size: 24px; /* 6px * 4 */
+    color: #555;
+  }
+
+  .delta-arrow svg {
+    width: 24px;
+    height: 16px;
+    fill: #555;
+  }
+
+  .delta-new {
+    font-size: 28px; /* 7px * 4 */
+    color: #f59e0b;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Bottom zone indicator (subtle) */
+  .active-zone-indicator {
+    height: 12px; /* 3px * 4 */
+    display: flex;
+    gap: 4px;
+    padding: 0 24px;
+    margin-bottom: 12px;
+    flex-shrink: 0;
+  }
+
+  .active-zone-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #222;
+  }
+
+  .active-zone-dot.current { background: #f59e0b; }
+
+  /* ── Annotations ── */
+  .annotations {
+    margin-top: 20px;
+    padding: 20px 24px;
+    background: #111;
+    border-radius: 10px;
+    border: 1px solid #222;
+    max-width: 512px;
+  }
+
+  .annotations h3 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #666;
+    margin-bottom: 10px;
+    font-weight: 600;
+  }
+
+  .annotations ul {
+    list-style: none;
+    padding: 0;
+  }
+
+  .annotations li {
+    font-size: 12px;
+    color: #888;
+    line-height: 1.6;
+    padding-left: 14px;
+    position: relative;
+  }
+
+  .annotations li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 7px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: #444;
+  }
+
+  .annotations li strong {
+    color: #bbb;
+    font-weight: 500;
+  }
+
+  /* ── Transition Diagram ── */
+  .transition-diagram {
+    margin-top: 48px;
+    padding: 32px;
+    background: #111;
+    border-radius: 12px;
+    border: 1px solid #222;
+    max-width: 1088px; /* 512 + 64 + 512 */
+  }
+
+  .transition-diagram h2 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #ccc;
+    margin-bottom: 6px;
+  }
+
+  .transition-diagram p {
+    font-size: 12px;
+    color: #666;
+    line-height: 1.6;
+    margin-bottom: 20px;
+  }
+
+  .flow-row {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  .flow-box {
+    padding: 10px 16px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .flow-box.state {
+    background: #1a2332;
+    border: 1px solid #2a3a4a;
+    color: #6ba3d6;
+  }
+
+  .flow-box.event {
+    background: #2a2215;
+    border: 1px solid #4a3a1a;
+    color: #d4a84a;
+    font-style: italic;
+    font-weight: 400;
+  }
+
+  .flow-arrow {
+    color: #444;
+    font-size: 18px;
+  }
+
+  .flow-box.timeout {
+    background: #1a1a22;
+    border: 1px solid #2a2a3a;
+    color: #8888bb;
+    font-style: italic;
+    font-weight: 400;
+  }
+
+  /* ── Design Rationale ── */
+  .rationale {
+    margin-top: 48px;
+    max-width: 680px;
+  }
+
+  .rationale h2 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #ccc;
+    margin-bottom: 16px;
+    letter-spacing: -0.01em;
+  }
+
+  .rationale section {
+    margin-bottom: 24px;
+  }
+
+  .rationale h3 {
+    font-size: 12px;
+    font-weight: 600;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+  }
+
+  .rationale p {
+    font-size: 13px;
+    color: #777;
+    line-height: 1.7;
+  }
+
+  .rationale p + p {
+    margin-top: 8px;
+  }
+
+  .spec-table {
+    margin-top: 24px;
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .spec-table th {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #555;
+    text-align: left;
+    padding: 6px 12px 6px 0;
+    border-bottom: 1px solid #222;
+    font-weight: 600;
+  }
+
+  .spec-table td {
+    font-size: 12px;
+    color: #888;
+    padding: 5px 12px 5px 0;
+    border-bottom: 1px solid #1a1a1a;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .spec-table td:first-child {
+    color: #aaa;
+    font-weight: 500;
+  }
+
+  .spec-table code {
+    font-family: 'JetBrains Mono', 'SF Mono', monospace;
+    font-size: 11px;
+    color: #6ba3d6;
+    background: #1a2332;
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Design 08 — Live Parameter</h1>
+<p class="subtitle">Zone Mixer UI &middot; AtomS3 0.85" LCD &middot; 128 &times; 128px &middot; Shown at 4&times; scale</p>
+
+<div class="states-row">
+
+  <!-- ════════════════════════════════════════
+       STATE 1: IDLE
+       ════════════════════════════════════════ -->
+  <div class="state-block">
+    <div class="state-label">State 1: Idle <span>— no encoder activity</span></div>
+    <div class="screen">
+      <div class="idle-screen">
+        <div>
+          <div class="idle-header">
+            <div class="idle-zone-label">3 Zones</div>
+            <div class="idle-connection">
+              <div class="conn-dot active"></div>
+            </div>
+          </div>
+
+          <div class="idle-effect-name">Chromatic</div>
+
+          <div class="idle-params">
+            <div>
+              <div class="idle-param-row">
+                <span class="idle-param-label">Brt</span>
+                <span class="idle-param-value">178</span>
+              </div>
+              <div class="idle-bar-track">
+                <div class="idle-bar-fill" style="width: 69.8%; background: #3b82f6;"></div>
+              </div>
+            </div>
+            <div>
+              <div class="idle-param-row">
+                <span class="idle-param-label">Spd</span>
+                <span class="idle-param-value">112</span>
+              </div>
+              <div class="idle-bar-track">
+                <div class="idle-bar-fill" style="width: 43.9%; background: #8b5cf6;"></div>
+              </div>
+            </div>
+            <div>
+              <div class="idle-param-row">
+                <span class="idle-param-label">Int</span>
+                <span class="idle-param-value">200</span>
+              </div>
+              <div class="idle-bar-track">
+                <div class="idle-bar-fill" style="width: 78.4%; background: #22c55e;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="idle-zone-strip">
+            <div class="zone-chip z1"></div>
+            <div class="zone-chip z2"></div>
+            <div class="zone-chip z3"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="annotations">
+      <h3>Idle State Specification</h3>
+      <ul>
+        <li><strong>Effect name:</strong> 11px, white, bold — primary information</li>
+        <li><strong>Parameter rows:</strong> 7px label + value, 2px bar fill</li>
+        <li><strong>Zone strip:</strong> 3 colour chips at bottom — blue/amber/red</li>
+        <li><strong>Connection dot:</strong> green = K1 connected, grey = disconnected</li>
+        <li><strong>Zone count:</strong> top-left, 8px, subdued</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════
+       STATE 2: ACTIVE (encoder just turned)
+       ════════════════════════════════════════ -->
+  <div class="state-block">
+    <div class="state-label">State 2: Active <span>— encoder turned, 2s timeout</span></div>
+    <div class="screen">
+      <div class="active-screen">
+        <!-- Zone colour strip: 8px at 1x = 32px at 4x -->
+        <div class="zone-colour-strip z2"></div>
+
+        <!-- Parameter name -->
+        <div class="active-param-name-area">
+          <div class="active-param-name">
+            <span class="zone-highlight">Z2</span> Brightness
+          </div>
+        </div>
+
+        <!-- Giant value -->
+        <div class="active-value-area">
+          <div class="active-value">178</div>
+
+          <!-- Previous -> New -->
+          <div class="active-delta">
+            <span class="delta-prev">165</span>
+            <span class="delta-arrow">
+              <svg viewBox="0 0 24 16">
+                <path d="M14 1l8 7-8 7M0 8h21" stroke="#555" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span class="delta-new">178</span>
+          </div>
+        </div>
+
+        <!-- Bottom zone dots -->
+        <div class="active-zone-indicator">
+          <div class="active-zone-dot"></div>
+          <div class="active-zone-dot current"></div>
+          <div class="active-zone-dot"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="annotations">
+      <h3>Active State Specification</h3>
+      <ul>
+        <li><strong>Colour strip:</strong> 8px tall, zone colour (amber = Zone 2)</li>
+        <li><strong>Parameter name:</strong> 10px, zone prefix colour-coded</li>
+        <li><strong>Value:</strong> 48px, white, bold — dominates the screen</li>
+        <li><strong>Delta:</strong> 7px, previous (struck) &rarr; new (zone colour)</li>
+        <li><strong>Zone dots:</strong> 3px bottom row, current zone highlighted</li>
+        <li><strong>Timeout:</strong> returns to idle after 2s of no encoder input</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+
+<!-- ════════════════════════════════════════
+     TRANSITION DIAGRAM
+     ════════════════════════════════════════ -->
+<div class="transition-diagram">
+  <h2>State Machine</h2>
+  <p>Two states, one event trigger. No complex navigation. The screen is either resting or reacting.</p>
+
+  <div class="flow-row">
+    <div class="flow-box state">IDLE</div>
+    <div class="flow-arrow">&xrarr;</div>
+    <div class="flow-box event">encoder_change(zone, param, value)</div>
+    <div class="flow-arrow">&xrarr;</div>
+    <div class="flow-box state">ACTIVE</div>
+    <div class="flow-arrow">&xrarr;</div>
+    <div class="flow-box timeout">2000ms no input</div>
+    <div class="flow-arrow">&xrarr;</div>
+    <div class="flow-box state">IDLE</div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     DESIGN RATIONALE
+     ════════════════════════════════════════ -->
+<div class="rationale">
+  <h2>Design Rationale</h2>
+
+  <section>
+    <h3>Why "Live Parameter"</h3>
+    <p>
+      The operator's primary interaction with the Zone Mixer is turning encoders.
+      On a 0.85" screen, trying to show all parameters at all times forces
+      everything to be unreadably small. The Live Parameter pattern solves this
+      by making the screen <em>reactive to the operator's hands</em> — the last
+      thing you touched is the thing you want to see.
+    </p>
+    <p>
+      This mirrors DJ hardware (Pioneer CDJ, Allen &amp; Heath Xone) where turning
+      a knob temporarily displays its value on the nearest screen. The operator
+      never needs to search for the right readout — it appears automatically where
+      their attention already is.
+    </p>
+  </section>
+
+  <section>
+    <h3>48px Value — Readability at Arm's Length</h3>
+    <p>
+      At 128px screen height, a 48px value occupies 37.5% of the vertical space.
+      On the physical 0.85" (21.6mm) screen, that renders each digit at roughly
+      8mm tall — legible from 60cm away in dim lighting. This is critical: the
+      operator is looking at the LED art, not at the controller. A quick glance
+      downward must be sufficient.
+    </p>
+  </section>
+
+  <section>
+    <h3>Zone Colour Coding</h3>
+    <p>
+      The 8px colour strip at the top of the Active state provides instant zone
+      identification through colour alone — no reading required. Blue (Zone 1),
+      amber (Zone 2), red (Zone 3). These colours are consistent across the
+      entire Zone Mixer system: encoder LEDs, screen UI, and the K1 dashboard.
+    </p>
+  </section>
+
+  <section>
+    <h3>Previous-to-New Delta</h3>
+    <p>
+      The struck-through previous value alongside the new value answers "how much
+      did I just change it?" without requiring the operator to remember the
+      starting value. This is especially useful during performance where small
+      adjustments matter and the operator needs confirmation that the change
+      registered.
+    </p>
+  </section>
+
+  <section>
+    <h3>2-Second Timeout</h3>
+    <p>
+      Two seconds is the sweet spot: long enough to read the value after releasing
+      the encoder, short enough to avoid stale information. If the operator
+      continues turning, the timeout resets continuously — the Active state
+      persists as long as there is input. After 2 seconds of stillness, the
+      screen gently returns to the Idle summary.
+    </p>
+  </section>
+
+  <section>
+    <h3>Pixel Budget</h3>
+    <table class="spec-table">
+      <thead>
+        <tr>
+          <th>Element</th>
+          <th>1x Size</th>
+          <th>Vertical Budget</th>
+          <th>Purpose</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Zone colour strip</td>
+          <td><code>128 x 8px</code></td>
+          <td>6.3%</td>
+          <td>Zone identification by colour</td>
+        </tr>
+        <tr>
+          <td>Parameter name</td>
+          <td><code>10px</code></td>
+          <td>7.8%</td>
+          <td>What parameter is being adjusted</td>
+        </tr>
+        <tr>
+          <td>Value</td>
+          <td><code>48px</code></td>
+          <td>37.5%</td>
+          <td>The number — primary information</td>
+        </tr>
+        <tr>
+          <td>Delta row</td>
+          <td><code>7px</code></td>
+          <td>5.5%</td>
+          <td>Previous-to-new change indicator</td>
+        </tr>
+        <tr>
+          <td>Zone dots</td>
+          <td><code>3px</code></td>
+          <td>2.3%</td>
+          <td>Which zone (positional)</td>
+        </tr>
+        <tr>
+          <td>Padding/gaps</td>
+          <td>various</td>
+          <td>40.6%</td>
+          <td>Breathing room — critical for legibility</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h3>Accessibility on Embedded Hardware</h3>
+    <p>
+      WCAG contrast ratios are not directly applicable to emissive OLED/LCD at
+      these sizes, but the design follows the principle: white (#FFF) on black
+      (#000) for the value gives maximum contrast. Colour is never the sole
+      information carrier — the parameter name text always accompanies the zone
+      colour strip. The zone dots provide positional redundancy for the colour
+      coding.
+    </p>
+  </section>
+
+  <section>
+    <h3>Implementation Notes</h3>
+    <p>
+      On the AtomS3 (ST7789 driver, 128x128, SPI), this design requires only
+      two font sizes (10px and 48px), three zone colours, and simple rectangle
+      fills. No alpha blending, no gradients, no anti-aliasing needed. The
+      transition from Idle to Active is a full-screen redraw — no animation
+      required on the embedded side. The 2-second timeout is a simple
+      <code>millis()</code> check in the display update loop.
+    </p>
+  </section>
+</div>
+
+</body>
+</html>

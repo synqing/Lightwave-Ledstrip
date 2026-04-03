@@ -23,7 +23,7 @@
  * Zone state for display
  */
 struct ZoneState {
-    uint8_t effectId = 0;
+    uint16_t effectId = 0;
     char effectName[48] = {0};
     uint8_t speed = 25;
     uint8_t paletteId = 0;

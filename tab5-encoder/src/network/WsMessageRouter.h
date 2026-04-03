@@ -537,7 +537,12 @@ private:
 
                 // Update ZoneState for UI
                 ZoneState state;
-                state.effectId = zone["effectId"].as<uint8_t>();
+                if (zone["effectId"].is<int>()) {
+                    int v = zone["effectId"].as<int>();
+                    state.effectId = (v >= 0 && v <= 0xFFFF) ? static_cast<uint16_t>(v) : 0;
+                } else {
+                    state.effectId = 0;
+                }
                 if (zone["effectName"].is<const char*>()) {
                     const char* name = zone["effectName"].as<const char*>();
                     strncpy(state.effectName, name, sizeof(state.effectName) - 1);

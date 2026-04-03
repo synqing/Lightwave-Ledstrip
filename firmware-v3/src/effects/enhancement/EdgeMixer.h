@@ -45,7 +45,8 @@ enum class EdgeMixerMode : uint8_t {
     SATURATION_VEIL     = 4,  ///< Desaturate Strip 2 by spread amount
     TRIADIC             = 5,  ///< 120deg hue shift; spread controls saturation (0=full, 60=70%)
     TETRADIC            = 6,  ///< 90deg hue shift; spread controls saturation (0=full, 60=70%)
-    STM_DUAL            = 7   ///< Edge A follows temporal STM, Edge B follows spectral STM
+    STM_DUAL            = 7,  ///< Edge A follows temporal STM, Edge B follows spectral STM
+    STM_SPECTRAL_MAP    = 8   ///< Per-LED brightness from spectral modulation bin mapping
 };
 
 /**
@@ -95,6 +96,11 @@ public:
 
         if (m_mode == EdgeMixerMode::STM_DUAL) {
             processStmDual(strip1, strip2, count, audio);
+            return;
+        }
+
+        if (m_mode == EdgeMixerMode::STM_SPECTRAL_MAP) {
+            processStmSpectralMap(strip1, strip2, count, audio);
             return;
         }
 
@@ -158,10 +164,11 @@ public:
         static const char* const names[] = {
             "mirror", "analogous", "complementary",
             "split_complementary", "saturation_veil",
-            "triadic", "tetradic", "stm_dual"
+            "triadic", "tetradic", "stm_dual",
+            "stm_spectral_map"
         };
         const uint8_t idx = static_cast<uint8_t>(mode);
-        return (idx <= 7) ? names[idx] : "unknown";
+        return (idx <= 8) ? names[idx] : "unknown";
     }
     const char* modeName() const { return modeName(m_mode); }
 
@@ -233,7 +240,7 @@ public:
         Preferences prefs;
         if (prefs.begin("edgemixer", true)) {
             uint8_t mode = prefs.getUChar("mode", 0);
-            if (mode <= 7) {
+            if (mode <= static_cast<uint8_t>(EdgeMixerMode::STM_SPECTRAL_MAP)) {
                 m_mode = static_cast<EdgeMixerMode>(mode);
             }
             setSpread(prefs.getUChar("spread", 30));
@@ -332,6 +339,37 @@ private:
         244, 248, 251, 254, 255, 255, 255, 255, 255, 255   //150-159
     };
 
+    /**
+     * @brief Maps each LED position (0-159) to an STM spectral bin (0-41).
+     *
+     * Log-frequency distribution: lower bins (slow modulation) map to more LEDs
+     * near the centre, higher bins (fast modulation) map to fewer LEDs at edges.
+     * Centre-origin: LED 79/80 maps to bin 1 (slowest visible modulation),
+     * edges map to bin 41 (fastest modulation). Symmetric layout.
+     *
+     * Generated from: bin = floor(41 * (|i - 79.5| / 79.5)^0.7)
+     * The 0.7 exponent compresses the high bins slightly, giving more visual
+     * real estate to perceptually important mid-range modulation frequencies.
+     */
+    static constexpr uint8_t kLedToStmBin[160] = {
+        41, 40, 40, 39, 39, 39, 38, 38, 38, 37,  //   0-  9
+        37, 36, 36, 36, 35, 35, 35, 34, 34, 33,  //  10- 19
+        33, 33, 32, 32, 31, 31, 31, 30, 30, 29,  //  20- 29
+        29, 29, 28, 28, 27, 27, 26, 26, 26, 25,  //  30- 39
+        25, 24, 24, 23, 23, 22, 22, 21, 21, 20,  //  40- 49
+        20, 19, 19, 19, 18, 17, 17, 16, 16, 15,  //  50- 59
+        15, 14, 14, 13, 13, 12, 11, 11, 10,  9,  //  60- 69
+         9,  8,  7,  7,  6,  5,  4,  3,  2,  1,  //  70- 79
+         1,  2,  3,  4,  5,  6,  7,  7,  8,  9,  //  80- 89
+         9, 10, 11, 11, 12, 13, 13, 14, 14, 15,  //  90- 99
+        15, 16, 16, 17, 17, 18, 19, 19, 19, 20,  // 100-109
+        20, 21, 21, 22, 22, 23, 23, 24, 24, 25,  // 110-119
+        25, 26, 26, 26, 27, 27, 28, 28, 29, 29,  // 120-129
+        29, 30, 30, 31, 31, 31, 32, 32, 33, 33,  // 130-139
+        33, 34, 34, 35, 35, 35, 36, 36, 36, 37,  // 140-149
+        37, 38, 38, 38, 39, 39, 39, 40, 40, 41   // 150-159
+    };
+
     uint8_t computeSpatial(uint16_t i, uint16_t count) const {
         (void)count;
         switch (m_spatial) {
@@ -394,6 +432,39 @@ private:
         if (strip2) {
             for (uint16_t i = 0; i < count; ++i) {
                 scalePixelInPlace(strip2[i], spectralScale);
+            }
+        }
+    }
+
+    /**
+     * @brief Per-LED spectral modulation visualiser
+     *
+     * Maps each of the 160 LED positions to one of 42 spectral modulation bins
+     * via the kLedToStmBin LUT. Centre LEDs track slow modulation, edge LEDs
+     * track fast modulation — symmetric around the physical centre (79/80).
+     * Both strips receive the same mapping so the LGP shows the modulation
+     * pattern from both edges simultaneously.
+     */
+    void processStmSpectralMap(CRGB* strip1, CRGB* strip2, uint16_t count, const audio::ControlBusFrame& audio) {
+        if (!audio.stmReady) {
+            return;
+        }
+
+        const uint16_t maxIdx = (count < 160) ? count : 160;
+
+        if (strip1) {
+            for (uint16_t i = 0; i < maxIdx; ++i) {
+                const uint8_t bin = kLedToStmBin[i];
+                const uint8_t sc = mixScaleWithStrength(energyToScale(audio.stmSpectral[bin]));
+                scalePixelInPlace(strip1[i], sc);
+            }
+        }
+
+        if (strip2) {
+            for (uint16_t i = 0; i < maxIdx; ++i) {
+                const uint8_t bin = kLedToStmBin[i];
+                const uint8_t sc = mixScaleWithStrength(energyToScale(audio.stmSpectral[bin]));
+                scalePixelInPlace(strip2[i], sc);
             }
         }
     }

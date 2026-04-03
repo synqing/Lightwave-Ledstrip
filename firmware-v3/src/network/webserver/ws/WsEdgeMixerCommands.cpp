@@ -25,7 +25,7 @@ static bool tryParseEdgeMixerModeName(const char* modeName, uint8_t& modeOut) {
         return false;
     }
 
-    for (uint8_t mode = 0; mode <= static_cast<uint8_t>(EdgeMixerMode::STM_DUAL); ++mode) {
+    for (uint8_t mode = 0; mode <= static_cast<uint8_t>(EdgeMixerMode::STM_SPECTRAL_MAP); ++mode) {
         if (strcmp(modeName, EdgeMixer::modeName(static_cast<EdgeMixerMode>(mode))) == 0) {
             modeOut = mode;
             return true;
@@ -38,7 +38,7 @@ static bool tryParseEdgeMixerModeName(const char* modeName, uint8_t& modeOut) {
 /**
  * @brief Handle edge_mixer.set command
  *
- * Accepts any combination of: mode (0-7), spread (0-60), strength (0-255),
+ * Accepts any combination of: mode (0-8), spread (0-60), strength (0-255),
  * spatial (0-1), temporal (0-1).
  * Only provided fields are applied; omitted fields remain unchanged.
  */
@@ -54,8 +54,8 @@ static void handleEdgeMixerSet(AsyncWebSocketClient* client, JsonDocument& doc, 
 
     if (doc.containsKey("mode")) {
         mode = doc["mode"] | 0;
-        if (mode > static_cast<uint8_t>(EdgeMixerMode::STM_DUAL)) {
-            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "mode must be 0-7", requestId));
+        if (mode > static_cast<uint8_t>(EdgeMixerMode::STM_SPECTRAL_MAP)) {
+            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "mode must be 0-8", requestId));
             return;
         }
         hasMode = true;

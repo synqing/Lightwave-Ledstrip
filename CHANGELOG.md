@@ -7,7 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - ESP32-P4 Audio Pipeline & iOS App
 
+### Added
+- **firmware:** STM (Spectral-Temporal Modulation) dual-edge mode — per-LED spectral modulation for EdgeMixer
+- **firmware:** STM 128-band spectral upgrade — mel filterbank + FFT pipeline
+- **firmware:** STM snapshot REST endpoint with derived metrics
+- **firmware:** STM real-time WebSocket binary stream + heap threshold fix
+- **firmware:** STM_SPECTRAL_MAP EdgeMixer mode — per-LED spectral modulation bin mapping
+- **tab5:** Zone Mode enable/disable button on ZONES sidebar panel with layout-before-enable sequence
+- **tab5:** Zone count selector (1/2/3 zones) on grid slot 5, encoder-only (ENC-B 5)
+- **tab5:** LED count display per zone on grid slot 6 (ENC-B 6)
+- **tab5:** 3-zone centre-origin layout support (was limited to 2)
+- **tab5:** Preset save/restore for EdgeMixer state (mode/spread/strength/spatial/temporal)
+- **tab5:** Preset save/restore for colour correction mode (OFF/HSV/RGB/BOTH)
+- **tab5:** Preset save/restore for auto-exposure target value
+- **tab5:** Preset save/restore for per-zone blend modes
+- **tab5:** Zone layout sent before zone.enable on preset recall (prevents K1 no-op)
+- **tab5:** Current global effect auto-assigned to all zones on zone mode enable
+- **tab5:** I2C recovery rewrite, PSRAM migration, UI and network hardening
+- **tab5:** EdgeMixer mode cycling expanded to 9 modes (added STM DUAL, STM SPECTRAL)
+- **zone-mixer:** AtomS3+PaHub physical controller — Phases 1-6 (input layer, display, I2C recovery, parameter mapping, LED feedback, echo suppression)
+- **harness:** STM feasibility test harness for spectral-temporal modulation
+- **scripts:** STM system test suite — zero-dependency offline tooling
+- **docs:** STM 128-band spectral upgrade specification
+- **docs:** STM endpoint, stream commands, and mode range updates
+- **docs:** Tab5 I2C recovery research, memory audit, and implementation guides
+
 ### Fixed
+- **tab5:** Zone effectId truncated from uint16_t to uint8_t — ZoneState.effectId and WsMessageRouter parsing both used uint8_t, losing high byte of K1's hex effect IDs (0x0100+)
+- **tab5:** Zone effect encoder sent raw 0,1,2,3 — clamped to valid K1 range 0x0100-0x1F00 with cached name display
+- **tab5:** Zone palette encoder had no upper bound — now wraps 0-74 (75 palettes)
+- **tab5:** Zone blend encoder had no upper bound — now wraps 0-7 (8 modes)
+- **tab5:** Zone encoder zoneId not clamped to zone count — caused "Invalid zoneId" flood when zone count reduced
+- **tab5:** Zone param cards 5-6 accepted touch events and bubbled to mode row — LV_OBJ_FLAG_CLICKABLE and LV_OBJ_FLAG_EVENT_BUBBLE cleared
+- **tab5:** Preset zone brightness hardcoded to 255 on save — now reads actual ZoneState.brightness
+- **tab5:** Preset CC mode used live server state on recall instead of saved value
+- **tab5:** Preset AE target hardcoded to 110 on recall instead of saved value
+- **tab5:** Preset zone blend mode captured but never restored (missing sendZoneBlend call)
+- **tab5:** EdgeMixer mode display showed "???" for modes 7-8 — added STM DUAL and STM SPECTRAL names
+- **firmware:** Cross-core race conditions in ZoneComposer and WebSocket broadcast
+- **firmware:** Lower heap-shed thresholds and fix probe condition
+- **zone-mixer:** Phase 4 bug fixes — per-zone effects, zone layout, layout-before-enable
+- **zone-mixer:** Safety audit fixes — WDT, I2C error handling, Arduino compatibility
+
+### Changed
+- **tab5:** Zone purge 4→3 — 1-indexed (Zone 1/2/3), max 3 zones, no Zone 0
+- **tab5:** I2CRecovery stripped to error counter only (-835 lines)
+- **tab5:** Purged 22 unused font assets — 79K LOC removed
+- **tab5:** Encoder bring-up hardened, external I2C init restored
+- **tab5:** Dashboard initialised before host connection
+- **tab5:** Pinned validated display and encoder dependencies
+- **firmware:** Zone purge — 1-indexed (Zone 1/2/3), max 3, no Zone 0
+
+### Fixed (previous)
 - **firmware:** REST EdgeMixer mode validation rejected Triadic (5) and Tetradic (6) — `V1ApiRoutes.cpp` validated `mode > 4` instead of `mode > 6`
 - **firmware:** WS speed validation capped at 50 instead of 100 — `WsEffectsCodec.cpp` `decodeSetSpeed` and `parameters.set` used stale range (1-50) while REST and RendererActor use extended range (1-100)
 - **firmware:** `ZoneConfigManager.h` `MAX_SPEED` was 50, misaligned with `RendererActor.h` and `ZonePresetManager.h` (both 100)

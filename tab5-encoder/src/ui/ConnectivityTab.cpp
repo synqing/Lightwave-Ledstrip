@@ -727,7 +727,7 @@ void ConnectivityTab::loop() {
                 _savedNetworkCount = static_cast<uint8_t>(savedCount);
                 Serial.printf("[ConnectivityTab] Loaded %d saved networks:\n", savedCount);
                 for (int i = 0; i < savedCount; i++) {
-                    Serial.printf("  [%d] SSID: %s\n", i, _savedNetworks[i].ssid.c_str());
+                    Serial.printf("  [%d] SSID: %s\n", i, _savedNetworks[i].ssid);
                 }
                 forceDirty();
                 Serial.println("[ConnectivityTab] Auto-scanning for available networks...");
@@ -929,10 +929,11 @@ lv_obj_t* ConnectivityTab::createNetworkItem(
 
 void ConnectivityTab::refreshNetworkLists() {
     // Get current connected SSID for highlighting
-    String connectedSSID = "";
+    char connectedSSID[33] = {'\0'};
     #if ENABLE_WIFI
     if (_wifiManager && _wifiManager->isConnected()) {
-        connectedSSID = _wifiManager->getSSID();
+        strncpy(connectedSSID, _wifiManager->getSSID().c_str(), sizeof(connectedSSID) - 1);
+        connectedSSID[sizeof(connectedSSID) - 1] = '\0';
     }
     #endif
 
@@ -953,12 +954,12 @@ void ConnectivityTab::refreshNetworkLists() {
             lv_obj_center(emptyLabel);
         } else {
             for (uint8_t i = 0; i < _scannedNetworkCount; i++) {
-                bool isConnected = (_scannedNetworks[i].ssid == connectedSSID);
+                bool isConnected = (strcmp(_scannedNetworks[i].ssid, connectedSSID) == 0);
                 bool isSelected = (!_isSavedNetworkSelected && _selectedNetworkIndex == i);
 
                 createNetworkItem(
                     _scannedNetworksList,
-                    _scannedNetworks[i].ssid.c_str(),
+                    _scannedNetworks[i].ssid,
                     _scannedNetworks[i].rssi,
                     isConnected,
                     isSelected,
@@ -993,12 +994,12 @@ void ConnectivityTab::refreshNetworkLists() {
             lv_obj_center(emptyLabel);
         } else {
             for (uint8_t i = 0; i < _savedNetworkCount; i++) {
-                bool isConnected = (_savedNetworks[i].ssid == connectedSSID);
+                bool isConnected = (strcmp(_savedNetworks[i].ssid, connectedSSID) == 0);
                 bool isSelected = (_isSavedNetworkSelected && _selectedNetworkIndex == i);
 
                 createNetworkItem(
                     _savedNetworksList,
-                    _savedNetworks[i].ssid.c_str(),
+                    _savedNetworks[i].ssid,
                     -1,  // No RSSI for saved networks
                     isConnected,
                     isSelected,
@@ -1066,7 +1067,8 @@ void ConnectivityTab::performScanRequest() {
         forceDirty();
         refreshNetworkLists();
     } else {
-        _errorMessage = "Failed to scan networks";
+        strncpy(_errorMessage, "Failed to scan networks", sizeof(_errorMessage) - 1);
+        _errorMessage[sizeof(_errorMessage) - 1] = '\0';
         _state = ConnectivityState::ERROR;
         _scanInProgress = false;
 
@@ -1088,7 +1090,8 @@ void ConnectivityTab::checkScanStatus() {
     const uint32_t now = millis();
     if (_scanStartMs != 0 && (now - _scanStartMs) > SCAN_TIMEOUT_MS) {
         Serial.println("[SCAN] Async scan timed out");
-        _errorMessage = "WiFi scan timed out";
+        strncpy(_errorMessage, "WiFi scan timed out", sizeof(_errorMessage) - 1);
+        _errorMessage[sizeof(_errorMessage) - 1] = '\0';
         _state = ConnectivityState::ERROR;
         _scanInProgress = false;
         WiFi.scanDelete();
@@ -1108,7 +1111,8 @@ void ConnectivityTab::checkScanStatus() {
 
     if (found < 0) {
         Serial.printf("[SCAN] Async scan failed (code=%d)\n", found);
-        _errorMessage = "WiFi scan failed";
+        strncpy(_errorMessage, "WiFi scan failed", sizeof(_errorMessage) - 1);
+        _errorMessage[sizeof(_errorMessage) - 1] = '\0';
         _state = ConnectivityState::ERROR;
         _scanInProgress = false;
         WiFi.scanDelete();
@@ -1122,7 +1126,8 @@ void ConnectivityTab::checkScanStatus() {
 
     _scannedNetworkCount = found > 20 ? 20 : static_cast<uint8_t>(found);
     for (uint8_t i = 0; i < _scannedNetworkCount; i++) {
-        _scannedNetworks[i].ssid = WiFi.SSID(i);
+        strncpy(_scannedNetworks[i].ssid, WiFi.SSID(i).c_str(), sizeof(_scannedNetworks[i].ssid) - 1);
+        _scannedNetworks[i].ssid[sizeof(_scannedNetworks[i].ssid) - 1] = '\0';
         _scannedNetworks[i].rssi = WiFi.RSSI(i);
         _scannedNetworks[i].channel = WiFi.channel(i);
 
@@ -1130,38 +1135,21 @@ void ConnectivityTab::checkScanStatus() {
         bool isOpen = (enc == WIFI_AUTH_OPEN);
         _scannedNetworks[i].encrypted = !isOpen;
 
+        const char* encLabel = "UNKNOWN";
         switch (enc) {
-            case WIFI_AUTH_OPEN:
-                _scannedNetworks[i].encryptionType = "OPEN";
-                break;
-            case WIFI_AUTH_WEP:
-                _scannedNetworks[i].encryptionType = "WEP";
-                break;
-            case WIFI_AUTH_WPA_PSK:
-                _scannedNetworks[i].encryptionType = "WPA";
-                break;
-            case WIFI_AUTH_WPA2_PSK:
-                _scannedNetworks[i].encryptionType = "WPA2";
-                break;
-            case WIFI_AUTH_WPA_WPA2_PSK:
-                _scannedNetworks[i].encryptionType = "WPA/WPA2";
-                break;
-            case WIFI_AUTH_WPA2_ENTERPRISE:
-                _scannedNetworks[i].encryptionType = "WPA2-ENT";
-                break;
-            case WIFI_AUTH_WPA3_PSK:
-                _scannedNetworks[i].encryptionType = "WPA3";
-                break;
-            case WIFI_AUTH_WPA2_WPA3_PSK:
-                _scannedNetworks[i].encryptionType = "WPA2/WPA3";
-                break;
-            case WIFI_AUTH_WAPI_PSK:
-                _scannedNetworks[i].encryptionType = "WAPI";
-                break;
-            default:
-                _scannedNetworks[i].encryptionType = "UNKNOWN";
-                break;
+            case WIFI_AUTH_OPEN:           encLabel = "OPEN";      break;
+            case WIFI_AUTH_WEP:            encLabel = "WEP";       break;
+            case WIFI_AUTH_WPA_PSK:        encLabel = "WPA";       break;
+            case WIFI_AUTH_WPA2_PSK:       encLabel = "WPA2";      break;
+            case WIFI_AUTH_WPA_WPA2_PSK:   encLabel = "WPA/WPA2";  break;
+            case WIFI_AUTH_WPA2_ENTERPRISE:encLabel = "WPA2-ENT";  break;
+            case WIFI_AUTH_WPA3_PSK:       encLabel = "WPA3";      break;
+            case WIFI_AUTH_WPA2_WPA3_PSK:  encLabel = "WPA2/WPA3"; break;
+            case WIFI_AUTH_WAPI_PSK:       encLabel = "WAPI";      break;
+            default: break;
         }
+        strncpy(_scannedNetworks[i].encryptionType, encLabel, sizeof(_scannedNetworks[i].encryptionType) - 1);
+        _scannedNetworks[i].encryptionType[sizeof(_scannedNetworks[i].encryptionType) - 1] = '\0';
     }
 
     WiFi.scanDelete();
@@ -1183,8 +1171,8 @@ void ConnectivityTab::connectToSelectedNetwork() {
         _httpClient = new HttpClient();
     }
 
-    String ssid;
-    String password;
+    const char* ssid = nullptr;
+    const char* password = nullptr;
 
     if (_isSavedNetworkSelected) {
         if (_selectedNetworkIndex >= _savedNetworkCount) return;
@@ -1198,10 +1186,11 @@ void ConnectivityTab::connectToSelectedNetwork() {
 
     if (_httpClient->connectToNetwork(ssid, password)) {
         _state = ConnectivityState::CONNECTING;
-        Serial.printf("[ConnectivityTab] Connecting to %s\n", ssid.c_str());
+        Serial.printf("[ConnectivityTab] Connecting to %s\n", ssid);
         markDirty();
     } else {
-        _errorMessage = "Failed to initiate connection";
+        strncpy(_errorMessage, "Failed to initiate connection", sizeof(_errorMessage) - 1);
+        _errorMessage[sizeof(_errorMessage) - 1] = '\0';
         _state = ConnectivityState::ERROR;
         markDirty();
     }
@@ -1210,15 +1199,15 @@ void ConnectivityTab::connectToSelectedNetwork() {
 
 void ConnectivityTab::addNewNetwork() {
     #if ENABLE_WIFI
-    if (_newNetworkSsid.isEmpty()) return;
+    if (_newNetworkSsid[0] == '\0') return;
     if (!_httpClient) {
         _httpClient = new HttpClient();
     }
 
     if (_httpClient->addNetwork(_newNetworkSsid, _newNetworkPassword)) {
-        Serial.printf("[ConnectivityTab] Network %s added\n", _newNetworkSsid.c_str());
-        _newNetworkSsid = "";
-        _newNetworkPassword = "";
+        Serial.printf("[ConnectivityTab] Network %s added\n", _newNetworkSsid);
+        _newNetworkSsid[0] = '\0';
+        _newNetworkPassword[0] = '\0';
         lv_obj_add_flag(_addDialog, LV_OBJ_FLAG_HIDDEN);
         _showAddDialog = false;
 
@@ -1232,7 +1221,8 @@ void ConnectivityTab::addNewNetwork() {
         forceDirty();
         refreshNetworkLists();
     } else {
-        _errorMessage = "Failed to add network";
+        strncpy(_errorMessage, "Failed to add network", sizeof(_errorMessage) - 1);
+        _errorMessage[sizeof(_errorMessage) - 1] = '\0';
         _state = ConnectivityState::ERROR;
         markDirty();
     }
@@ -1247,9 +1237,9 @@ void ConnectivityTab::deleteSelectedNetwork() {
         _httpClient = new HttpClient();
     }
 
-    String ssid = _savedNetworks[_selectedNetworkIndex].ssid;
+    const char* ssid = _savedNetworks[_selectedNetworkIndex].ssid;
     if (_httpClient->deleteNetwork(ssid)) {
-        Serial.printf("[ConnectivityTab] Network %s deleted\n", ssid.c_str());
+        Serial.printf("[ConnectivityTab] Network %s deleted\n", ssid);
         _selectedNetworkIndex = -1;
 
         // Re-fetch saved networks to reflect the deletion
@@ -1261,7 +1251,8 @@ void ConnectivityTab::deleteSelectedNetwork() {
         forceDirty();
         refreshNetworkLists();
     } else {
-        _errorMessage = "Failed to delete network";
+        strncpy(_errorMessage, "Failed to delete network", sizeof(_errorMessage) - 1);
+        _errorMessage[sizeof(_errorMessage) - 1] = '\0';
         _state = ConnectivityState::ERROR;
         markDirty();
     }
@@ -1277,7 +1268,8 @@ void ConnectivityTab::disconnectFromNetwork() {
         Serial.println("[ConnectivityTab] Disconnected from network");
         markDirty();
     } else {
-        _errorMessage = "Failed to disconnect";
+        strncpy(_errorMessage, "Failed to disconnect", sizeof(_errorMessage) - 1);
+        _errorMessage[sizeof(_errorMessage) - 1] = '\0';
         _state = ConnectivityState::ERROR;
         markDirty();
     }
@@ -1316,25 +1308,26 @@ void ConnectivityTab::addNetworkButtonCb(lv_event_t* e) {
 
     // Get the selected network
     ScanResult& network = tab->_scannedNetworks[tab->_selectedNetworkIndex];
-    tab->_newNetworkSsid = network.ssid;
+    strncpy(tab->_newNetworkSsid, network.ssid, sizeof(tab->_newNetworkSsid) - 1);
+    tab->_newNetworkSsid[sizeof(tab->_newNetworkSsid) - 1] = '\0';
 
     if (network.encrypted) {
         // Encrypted network: show password dialog
         tab->_showAddDialog = true;
         if (tab->_ssidInput) {
-            lv_textarea_set_text(tab->_ssidInput, network.ssid.c_str());
+            lv_textarea_set_text(tab->_ssidInput, network.ssid);
             lv_obj_add_state(tab->_ssidInput, LV_STATE_DISABLED);  // Can't edit SSID
         }
         if (tab->_passwordInput) {
             lv_textarea_set_text(tab->_passwordInput, "");
         }
         lv_obj_clear_flag(tab->_addDialog, LV_OBJ_FLAG_HIDDEN);
-        Serial.printf("[ConnectivityTab] ADD: Showing password dialog for '%s'\n", network.ssid.c_str());
+        Serial.printf("[ConnectivityTab] ADD: Showing password dialog for '%s'\n", network.ssid);
     } else {
         // Open network: add directly
-        tab->_newNetworkPassword = "";
+        tab->_newNetworkPassword[0] = '\0';
         tab->addNewNetwork();
-        Serial.printf("[ConnectivityTab] ADD: Added open network '%s'\n", network.ssid.c_str());
+        Serial.printf("[ConnectivityTab] ADD: Added open network '%s'\n", network.ssid);
     }
     #endif
 }
@@ -1386,9 +1379,13 @@ void ConnectivityTab::addDialogSaveCb(lv_event_t* e) {
         // Only get SSID from field if it's not disabled (manual entry mode)
         // When adding scanned network, _newNetworkSsid is already set
         if (tab->_ssidInput && !lv_obj_has_state(tab->_ssidInput, LV_STATE_DISABLED)) {
-            tab->_newNetworkSsid = lv_textarea_get_text(tab->_ssidInput);
+            const char* ssidText = lv_textarea_get_text(tab->_ssidInput);
+            strncpy(tab->_newNetworkSsid, ssidText ? ssidText : "", sizeof(tab->_newNetworkSsid) - 1);
+            tab->_newNetworkSsid[sizeof(tab->_newNetworkSsid) - 1] = '\0';
         }
-        tab->_newNetworkPassword = lv_textarea_get_text(tab->_passwordInput);
+        const char* pwText = lv_textarea_get_text(tab->_passwordInput);
+        strncpy(tab->_newNetworkPassword, pwText ? pwText : "", sizeof(tab->_newNetworkPassword) - 1);
+        tab->_newNetworkPassword[sizeof(tab->_newNetworkPassword) - 1] = '\0';
 
         // Hide keyboard before processing
         if (tab->_keyboard) {

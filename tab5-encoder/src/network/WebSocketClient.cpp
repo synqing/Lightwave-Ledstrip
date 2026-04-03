@@ -59,6 +59,13 @@ WebSocketClient::WebSocketClient()
     });
 }
 
+WebSocketClient::~WebSocketClient() {
+    if (_sendMutex) {
+        vSemaphoreDelete(_sendMutex);
+        _sendMutex = nullptr;
+    }
+}
+
 void WebSocketClient::begin(const char* host, uint16_t port, const char* path) {
     // Prevent overlapping connect attempts
     if (_status == WebSocketStatus::CONNECTING || _status == WebSocketStatus::CONNECTED) {
@@ -839,6 +846,16 @@ void WebSocketClient::sendZonesSetLayout(const struct zones::ZoneSegment* segmen
     }
 
     sendJSON("zones.setLayout", doc);
+}
+
+void WebSocketClient::sendZoneLoadPreset(uint8_t presetId) {
+    if (!isConnected()) {
+        return;
+    }
+
+    JsonDocument doc;
+    doc["presetId"] = presetId;
+    sendJSON("zone.loadPreset", doc);
 }
 
 // ============================================================================

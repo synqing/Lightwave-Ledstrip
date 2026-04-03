@@ -92,6 +92,7 @@ struct EdgeMixerState {
 class WebSocketClient {
 public:
     WebSocketClient();
+    ~WebSocketClient();
 
     // Initialize WebSocket connection to host (by hostname)
     // @param host Hostname (e.g., "lightwaveos.local")
@@ -144,6 +145,7 @@ public:
     void sendZonePalette(uint8_t zoneId, uint8_t paletteId);
     void sendZoneBlend(uint8_t zoneId, uint8_t blendMode);
     void sendZonesSetLayout(const struct zones::ZoneSegment* segments, uint8_t zoneCount);
+    void sendZoneLoadPreset(uint8_t presetId);
 
     // ========================================================================
     // Color Correction Commands

@@ -25,8 +25,11 @@
 #include "ControlSurfaceUI.h"
 #include "DesignTokens.h"
 
-// Forward declaration - WiFiManager instance is in main.cpp
+// Forward declarations - instances in main.cpp
 extern WiFiManager g_wifiManager;
+
+#include "../input/ButtonHandler.h"
+extern ButtonHandler* g_buttonHandler;
 
 
 // Forward declaration
@@ -418,10 +421,10 @@ void DisplayUI::begin() {
     lv_obj_clear_flag(_gauges_container, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_layout(_gauges_container, LV_LAYOUT_GRID);
 
-    static lv_coord_t col_dsc[9] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
+    static const lv_coord_t col_dsc[9] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
                                     LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
                                     LV_GRID_TEMPLATE_LAST};
-    static lv_coord_t row_dsc[2] = {kGaugeRowHeight, LV_GRID_TEMPLATE_LAST};
+    static const lv_coord_t row_dsc[2] = {kGaugeRowHeight, LV_GRID_TEMPLATE_LAST};
     lv_obj_set_grid_dsc_array(_gauges_container, col_dsc, row_dsc);
     lv_obj_set_style_pad_column(_gauges_container, DesignTokens::GRID_GAP, LV_PART_MAIN);
 
@@ -487,11 +490,11 @@ void DisplayUI::begin() {
     lv_obj_clear_flag(_fx_panel, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_layout(_fx_panel, LV_LAYOUT_GRID);
 
-    static lv_coord_t fx_col_dsc[9] = {
+    static const lv_coord_t fx_col_dsc[9] = {
         LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
         LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
         LV_GRID_TEMPLATE_LAST};
-    static lv_coord_t fx_row_dsc[2] = {150, LV_GRID_TEMPLATE_LAST};
+    static const lv_coord_t fx_row_dsc[2] = {150, LV_GRID_TEMPLATE_LAST};
     lv_obj_set_grid_dsc_array(_fx_panel, fx_col_dsc, fx_row_dsc);
     lv_obj_set_style_pad_column(_fx_panel, DesignTokens::GRID_GAP, LV_PART_MAIN);
 
@@ -554,6 +557,51 @@ void DisplayUI::begin() {
     lv_obj_set_flex_flow(zone_selector, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(zone_selector, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(zone_selector, DesignTokens::GRID_GAP, LV_PART_MAIN);
+
+    // Zone Mode toggle button (first in row — enables/disables zone rendering on K1)
+    _zone_mode_btn = lv_obj_create(zone_selector);
+    lv_obj_set_size(_zone_mode_btn, 140, 44);
+    lv_obj_set_style_bg_color(_zone_mode_btn,
+                              lv_color_hex(_zonesEnabled ? 0x22CC44 : 0x882222),
+                              LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(_zone_mode_btn, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(_zone_mode_btn, 2, LV_PART_MAIN);
+    lv_obj_set_style_border_color(_zone_mode_btn,
+                                  lv_color_hex(_zonesEnabled ? 0x22CC44 : 0x882222),
+                                  LV_PART_MAIN);
+    lv_obj_set_style_radius(_zone_mode_btn, DesignTokens::CARD_RADIUS, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(_zone_mode_btn, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(_zone_mode_btn, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(_zone_mode_btn, LV_OBJ_FLAG_CLICKABLE);
+
+    _zone_mode_label = lv_label_create(_zone_mode_btn);
+    lv_label_set_text(_zone_mode_label, "ZONES");
+    lv_obj_set_style_text_font(_zone_mode_label, RAJDHANI_BOLD_24, LV_PART_MAIN);
+    lv_obj_set_style_text_color(_zone_mode_label, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    lv_obj_center(_zone_mode_label);
+
+    lv_obj_add_event_cb(_zone_mode_btn, [](lv_event_t* e) {
+        // Delegate to ButtonHandler::toggleZoneMode() — the PROVEN working code
+        if (!g_buttonHandler) return;
+        g_buttonHandler->toggleZoneMode();
+
+        DisplayUI* ui = static_cast<DisplayUI*>(lv_event_get_user_data(e));
+        if (!ui) return;
+        bool enabled = g_buttonHandler->isZoneModeEnabled();
+        ui->updateZoneModeButton(enabled);
+
+        // After enabling: assign the current global effect to all zones
+        // so they render something instead of black (effectId=0 = no effect)
+        if (enabled && ui->_wsClient && ui->_wsClient->isConnected()) {
+            uint16_t currentEffect = ui->_wsClient->getCurrentEffectId();
+            if (currentEffect == 0) currentEffect = 0x0100;  // Fallback: first real effect
+            uint8_t zoneCount = ui->_zoneCount;
+            for (uint8_t z = 0; z < zoneCount; z++) {
+                ui->_wsClient->sendZoneEffect(z, currentEffect);
+                Serial.printf("[DisplayUI] zone.setEffect z=%u eid=0x%04X\n", z, currentEffect);
+            }
+        }
+    }, LV_EVENT_CLICKED, reinterpret_cast<void*>(this));
 
     const char* zoneLabels[] = {"ZONE 1", "ZONE 2", "ZONE 3"};
     for (int i = 0; i < 3; i++) {
@@ -623,21 +671,21 @@ void DisplayUI::begin() {
     lv_obj_clear_flag(zone_grid, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_layout(zone_grid, LV_LAYOUT_GRID);
 
-    static lv_coord_t zone_col_dsc[9] = {
+    static const lv_coord_t zone_col_dsc[9] = {
         LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
         LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
         LV_GRID_TEMPLATE_LAST};
-    static lv_coord_t zone_row_dsc[2] = {125, LV_GRID_TEMPLATE_LAST};
+    static const lv_coord_t zone_row_dsc[2] = {125, LV_GRID_TEMPLATE_LAST};
     lv_obj_set_grid_dsc_array(zone_grid, zone_col_dsc, zone_row_dsc);
     lv_obj_set_style_pad_column(zone_grid, DesignTokens::GRID_GAP, LV_PART_MAIN);
 
-    const char* zoneParamNames[] = {"EFFECT", "SPEED", "PALETTE", "BLEND", "BRI", "", "", ""};
+    const char* zoneParamNames[] = {"EFFECT", "SPEED", "PALETTE", "BLEND", "BRIGHTNESS", "ZONES", "LED COUNT", ""};
     for (int i = 0; i < 8; i++) {
         _zone_param_cards[i] = make_card(zone_grid, false);
         lv_obj_set_grid_cell(_zone_param_cards[i], LV_GRID_ALIGN_STRETCH, i, 1,
                              LV_GRID_ALIGN_STRETCH, 0, 1);
-        // Dim empty placeholder cards (indices 5-7)
-        if (i >= 5) {
+        // Dim empty placeholder card (index 7 only)
+        if (i >= 7) {
             lv_obj_set_style_bg_opa(_zone_param_cards[i], LV_OPA_40, LV_PART_MAIN);
             lv_obj_set_style_border_color(_zone_param_cards[i],
                 lv_color_hex(DesignTokens::BORDER_SUBTLE), LV_PART_MAIN);
@@ -647,7 +695,7 @@ void DisplayUI::begin() {
         lv_label_set_text(_zone_param_labels[i], zoneParamNames[i]);
         lv_obj_set_style_text_font(_zone_param_labels[i], RAJDHANI_MED_24, LV_PART_MAIN);
         lv_obj_set_style_text_color(_zone_param_labels[i],
-            lv_color_hex(i < 5 ? DesignTokens::FG_SECONDARY : DesignTokens::FG_DIMMED),
+            lv_color_hex(i < 5 ? DesignTokens::FG_SECONDARY : (i < 7 ? DesignTokens::NEON_PURPLE : DesignTokens::FG_DIMMED)),
             LV_PART_MAIN);
         lv_obj_align(_zone_param_labels[i], LV_ALIGN_TOP_MID, 0, 0);
 
@@ -655,10 +703,24 @@ void DisplayUI::begin() {
         lv_label_set_text(_zone_param_values[i], "");
         lv_obj_set_style_text_font(_zone_param_values[i], JETBRAINS_MONO_REG_24, LV_PART_MAIN);
         lv_obj_set_style_text_color(_zone_param_values[i],
-            lv_color_hex(i < 5 ? DesignTokens::FG_PRIMARY : DesignTokens::FG_DIMMED),
+            lv_color_hex(i < 5 ? DesignTokens::FG_PRIMARY : (i < 7 ? DesignTokens::NEON_PURPLE : DesignTokens::FG_DIMMED)),
             LV_PART_MAIN);
         lv_obj_align(_zone_param_values[i], LV_ALIGN_CENTER, 0, 8);
     }
+
+    // Style zone count card (slot 5) — purple accent, encoder-only (no touch)
+    if (_zone_param_cards[5]) {
+        lv_obj_set_style_border_color(_zone_param_cards[5], lv_color_hex(DesignTokens::NEON_PURPLE), LV_PART_MAIN);
+    }
+
+    // Style preset card (slot 6) — purple accent, encoder-only (no touch)
+    if (_zone_param_cards[6]) {
+        lv_obj_set_style_border_color(_zone_param_cards[6], lv_color_hex(DesignTokens::NEON_PURPLE), LV_PART_MAIN);
+    }
+
+    // Set initial values for zone count and preset cards
+    if (_zone_param_values[5]) lv_label_set_text(_zone_param_values[5], "2");
+    if (_zone_param_values[6]) lv_label_set_text(_zone_param_values[6], "DUAL SPLIT");
 
     esp_task_wdt_reset();
 
@@ -672,11 +734,11 @@ void DisplayUI::begin() {
     lv_obj_set_layout(_presets_panel, LV_LAYOUT_GRID);
     lv_obj_add_flag(_presets_panel, LV_OBJ_FLAG_HIDDEN);  // Hidden initially
 
-    static lv_coord_t preset_col_dsc[9] = {
+    static const lv_coord_t preset_col_dsc[9] = {
         LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
         LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
         LV_GRID_TEMPLATE_LAST};
-    static lv_coord_t preset_row_dsc[2] = {125, LV_GRID_TEMPLATE_LAST};
+    static const lv_coord_t preset_row_dsc[2] = {125, LV_GRID_TEMPLATE_LAST};
     lv_obj_set_grid_dsc_array(_presets_panel, preset_col_dsc, preset_row_dsc);
     lv_obj_set_style_pad_column(_presets_panel, DesignTokens::GRID_GAP, LV_PART_MAIN);
 
@@ -729,10 +791,10 @@ void DisplayUI::begin() {
     lv_obj_set_style_pad_all(_mode_container, 0, LV_PART_MAIN);
     lv_obj_clear_flag(_mode_container, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_layout(_mode_container, LV_LAYOUT_GRID);
-    static lv_coord_t mode_col_dsc[7] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
+    static const lv_coord_t mode_col_dsc[7] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
                                           LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
                                           LV_GRID_TEMPLATE_LAST};
-    static lv_coord_t mode_row_dsc[2] = {kModeRowHeight, LV_GRID_TEMPLATE_LAST};
+    static const lv_coord_t mode_row_dsc[2] = {kModeRowHeight, LV_GRID_TEMPLATE_LAST};
     lv_obj_set_grid_dsc_array(_mode_container, mode_col_dsc, mode_row_dsc);
     lv_obj_set_style_pad_column(_mode_container, DesignTokens::GRID_GAP, LV_PART_MAIN);
 
@@ -1094,6 +1156,43 @@ void DisplayUI::begin() {
 // =========================================================================
 // Zone / Preset sidebar state binding
 // =========================================================================
+
+void DisplayUI::updateZoneModeButton(bool enabled) {
+    _zonesEnabled = enabled;
+    if (_zone_mode_btn) {
+        lv_obj_set_style_bg_color(_zone_mode_btn,
+                                  lv_color_hex(enabled ? 0x22CC44 : 0x882222),
+                                  LV_PART_MAIN);
+        lv_obj_set_style_border_color(_zone_mode_btn,
+                                      lv_color_hex(enabled ? 0x22CC44 : 0x882222),
+                                      LV_PART_MAIN);
+    }
+}
+
+void DisplayUI::adjustZoneCount(int32_t delta) {
+    int newCount = static_cast<int>(_zoneCount) + delta;
+    if (newCount < 1) newCount = 3;  // Wrap: 1→2→3→1
+    if (newCount > 3) newCount = 1;
+    _zoneCount = static_cast<uint8_t>(newCount);
+
+    // Update zone count label
+    char buf[4];
+    snprintf(buf, sizeof(buf), "%u", _zoneCount);
+    if (_zone_param_values[5]) lv_label_set_text(_zone_param_values[5], buf);
+
+    // Update LED count per zone label
+    uint8_t ledsPerZone = 160 / _zoneCount;
+    char ledBuf[16];
+    snprintf(ledBuf, sizeof(ledBuf), "%u LEDS", ledsPerZone);
+    if (_zone_param_values[6]) lv_label_set_text(_zone_param_values[6], ledBuf);
+
+    Serial.printf("[DisplayUI] Zone count → %u (%u LEDs/zone)\n", _zoneCount, ledsPerZone);
+}
+
+void DisplayUI::adjustPreset(int32_t delta) {
+    // Slot 6 encoder adjusts LED count — same as zone count for now
+    adjustZoneCount(delta);
+}
 
 void DisplayUI::updateZoneSidebarState(uint8_t zoneId, uint16_t effectId, const char* effectName,
                                         uint8_t speed, uint8_t paletteId, const char* paletteName,
@@ -1635,8 +1734,8 @@ void DisplayUI::setEdgeMixerState(const EdgeMixerState& state) {
     if (!_mode_buttons[2] || !_mode_values[2]) return;
 
     // EDGEMIXER button (index 2) — mode cycle
-    static const char* kModeNames[] = {"MIRROR", "ANALOGOUS", "COMPLEMENTARY", "SPLIT-COMP", "SATURATION VEIL", "TRIADIC", "TETRADIC"};
-    const char* modeName = (state.mode < 7) ? kModeNames[state.mode] : "???";
+    static const char* kModeNames[] = {"MIRROR", "ANALOGOUS", "COMPLEMENTARY", "SPLIT-COMP", "SATURATION VEIL", "TRIADIC", "TETRADIC", "STM DUAL", "STM SPECTRAL"};
+    const char* modeName = (state.mode < 9) ? kModeNames[state.mode] : "???";
     lv_label_set_text(_mode_values[2], modeName);
     lv_obj_set_style_border_color(_mode_buttons[2],
                                    lv_color_hex(state.mode != 0 ? DesignTokens::BRAND_PRIMARY : 0xFFFFFF),

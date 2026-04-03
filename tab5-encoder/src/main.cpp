@@ -48,6 +48,7 @@
 #endif
 #include "config/network_config.h"
 #include "input/DualEncoderService.h"
+#include "input/I2CBusClear.h"
 #include "input/I2CRecovery.h"
 #include "input/TouchHandler.h"
 #include "input/ButtonHandler.h"
@@ -60,6 +61,7 @@
 #include <ESPAsyncWebServer.h>
 #include <cstring>
 #include <cstdio>
+#include <esp_attr.h>
 #include <cmath>
 #include "parameters/ParameterHandler.h"
 #include "parameters/ParameterMap.h"
@@ -151,8 +153,8 @@ static constexpr uint16_t PALETTE_NAME_MAX = 48;
 static constexpr uint16_t MAX_EFFECTS = 256;
 static constexpr uint8_t MAX_PALETTES = 80;  // v2 has 75 palettes, allow headroom
 
-static char s_effectNames[MAX_EFFECTS][EFFECT_NAME_MAX] = {{0}};
-static bool s_effectKnown[MAX_EFFECTS] = {false};
+EXT_RAM_BSS_ATTR static char s_effectNames[MAX_EFFECTS][EFFECT_NAME_MAX];
+EXT_RAM_BSS_ATTR static bool s_effectKnown[MAX_EFFECTS];
 static uint8_t s_effectPages = 0;
 static uint8_t s_effectNextPage = 1;
 
@@ -171,8 +173,8 @@ static uint32_t s_effectNameRefreshMs = 0;
 static uint32_t s_effectNameHoldoffMs = 0;
 static constexpr uint32_t EFFECT_NAME_HOLDOFF_MS = 2000;
 
-static char s_paletteNames[MAX_PALETTES][PALETTE_NAME_MAX] = {{0}};
-static bool s_paletteKnown[MAX_PALETTES] = {false};
+EXT_RAM_BSS_ATTR static char s_paletteNames[MAX_PALETTES][PALETTE_NAME_MAX];
+EXT_RAM_BSS_ATTR static bool s_paletteKnown[MAX_PALETTES];
 
 static uint8_t s_palettePages = 0;
 static uint8_t s_paletteNextPage = 1;
@@ -374,7 +376,10 @@ static bool handleZoneEncoderChange(uint8_t encoderIndex, int32_t delta, bool ha
             int32_t newId = static_cast<int32_t>(state.effectId) + delta;
             if (newId < 0) newId = 0;
             state.effectId = static_cast<uint16_t>(newId);
-            g_ui->updateZoneSidebarState(zoneId, state.effectId, "",
+            // Show hex effect ID when name isn't known locally
+            char effectBuf[16];
+            snprintf(effectBuf, sizeof(effectBuf), "#0x%04X", state.effectId);
+            g_ui->updateZoneSidebarState(zoneId, state.effectId, effectBuf,
                 state.speed, state.paletteId, state.paletteName,
                 state.blendMode, state.brightness);
             if (g_wsClient.isConnected()) g_wsClient.sendZoneEffect(zoneId, state.effectId);
@@ -393,8 +398,11 @@ static bool handleZoneEncoderChange(uint8_t encoderIndex, int32_t delta, bool ha
             int32_t newPal = static_cast<int32_t>(state.paletteId) + delta;
             if (newPal < 0) newPal = 0;
             state.paletteId = static_cast<uint8_t>(newPal);
+            // Show numeric palette ID when name isn't known locally
+            char palBuf[16];
+            snprintf(palBuf, sizeof(palBuf), "Palette #%u", state.paletteId);
             g_ui->updateZoneSidebarState(zoneId, state.effectId, state.effectName,
-                state.speed, state.paletteId, "",
+                state.speed, state.paletteId, palBuf,
                 state.blendMode, state.brightness);
             if (g_wsClient.isConnected()) g_wsClient.sendZonePalette(zoneId, state.paletteId);
             break;
@@ -418,8 +426,26 @@ static bool handleZoneEncoderChange(uint8_t encoderIndex, int32_t delta, bool ha
             if (g_wsClient.isConnected()) g_wsClient.sendZoneBrightness(zoneId, state.brightness);
             break;
         }
+        case 5: { // ZONE COUNT — accumulate ±3 detents before toggling
+            static int16_t s_zoneCountAccum = 0;
+            s_zoneCountAccum += delta;
+            if (abs(s_zoneCountAccum) >= 3) {
+                if (g_ui) g_ui->adjustZoneCount(s_zoneCountAccum > 0 ? 1 : -1);
+                s_zoneCountAccum = 0;
+            }
+            break;
+        }
+        case 6: { // PRESET — accumulate ±3 detents before toggling
+            static int16_t s_presetAccum = 0;
+            s_presetAccum += delta;
+            if (abs(s_presetAccum) >= 3) {
+                if (g_ui) g_ui->adjustPreset(s_presetAccum > 0 ? 1 : -1);
+                s_presetAccum = 0;
+            }
+            break;
+        }
         default:
-            break;  // Slots 5-7 unused, swallow
+            break;  // Slot 7 unused, swallow
     }
     return true;
 }
@@ -560,7 +586,7 @@ static void handleActionButton(uint8_t buttonIndex) {
         EdgeMixerState em = g_wsClient.getEdgeMixerState();
         if (!em.valid) { em = EdgeMixerState{}; em.valid = true; }
         if (buttonIndex == 2) {
-            em.mode = (em.mode + 1) % 7;
+            em.mode = (em.mode + 1) % 9;
             Serial.printf("[TOUCH] EdgeMixer mode: %d\n", em.mode);
         } else {
             uint8_t combo = em.spatial | (em.temporal << 1);
@@ -1402,47 +1428,34 @@ void setup() {
     // This MUST be called before M5.begin() or WiFi.begin().
     // See: https://github.com/nikthefix/M5stack_Tab5_Arduino_Wifi_Example
 #if ENABLE_WIFI
-    // #region agent log (DISABLED)
-    // Serial.printf("[DEBUG] Before WiFi.setPins - Heap: free=%u minFree=%u largest=%u\n",
-                  // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-    // Serial.printf("[DEBUG] WiFi pins: CLK=%d CMD=%d D0=%d D1=%d D2=%d D3=%d RST=%d\n",
-                  // TAB5_WIFI_SDIO_CLK, TAB5_WIFI_SDIO_CMD, TAB5_WIFI_SDIO_D0,
-                  // TAB5_WIFI_SDIO_D1, TAB5_WIFI_SDIO_D2, TAB5_WIFI_SDIO_D3, TAB5_WIFI_SDIO_RST);
-        // #endregion
+#if CORE_DEBUG_LEVEL >= 3
+    Serial.printf("[HEAP] Before WiFi.setPins: free=%u minFree=%u largest=%u\n",
+                  ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+#endif
     Serial.println("[WIFI] Configuring Tab5 SDIO pins for ESP32-C6 co-processor...");
     WiFi.setPins(TAB5_WIFI_SDIO_CLK, TAB5_WIFI_SDIO_CMD,
                  TAB5_WIFI_SDIO_D0, TAB5_WIFI_SDIO_D1,
                  TAB5_WIFI_SDIO_D2, TAB5_WIFI_SDIO_D3,
                  TAB5_WIFI_SDIO_RST);
-    // #region agent log (DISABLED)
-    // Serial.printf("[DEBUG] After WiFi.setPins - Heap: free=%u minFree=%u largest=%u\n",
-                  // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-    // delay(50);  // Allow SDIO pin configuration to stabilize
-    // Serial.printf("[DEBUG] After 50ms delay - Heap: free=%u minFree=%u\n",
-                  // ESP.getFreeHeap(), ESP.getMinFreeHeap());
-        // #endregion
+#if CORE_DEBUG_LEVEL >= 3
+    Serial.printf("[HEAP] After WiFi.setPins: free=%u minFree=%u largest=%u\n",
+                  ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+#endif
     Serial.println("[WIFI] SDIO pins configured");
 #endif
 
     // Initialize M5Stack Tab5
-    // #region agent log (DISABLED)
-// #if ENABLE_WIFI
-    // Serial.printf("[DEBUG] Before M5.begin - Heap: free=%u minFree=%u largest=%u\n",
-                  // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-// #endif
-        // #endregion
+#if CORE_DEBUG_LEVEL >= 3
+    Serial.printf("[HEAP] Before M5.begin: free=%u minFree=%u largest=%u\n",
+                  ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+#endif
     auto cfg = M5.config();
     cfg.external_spk = true;
     M5.begin(cfg);
-    // #region agent log (DISABLED)
-// #if ENABLE_WIFI
-    // Serial.printf("[DEBUG] After M5.begin - Heap: free=%u minFree=%u largest=%u\n",
-                  // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-    // delay(100);  // Allow M5 initialization to complete
-    // Serial.printf("[DEBUG] After 100ms delay - Heap: free=%u minFree=%u\n",
-                  // ESP.getFreeHeap(), ESP.getMinFreeHeap());
-// #endif
-        // #endregion
+#if CORE_DEBUG_LEVEL >= 3
+    Serial.printf("[HEAP] After M5.begin: free=%u minFree=%u largest=%u\n",
+                  ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+#endif
 
     // Set display orientation (landscape, USB on left)
     M5.Display.setRotation(3);
@@ -1489,6 +1502,55 @@ void setup() {
                       I2C::EXT_SDA_PIN, I2C::EXT_SCL_PIN, extSDA, extScl);
     }
 
+    // =========================================================================
+    // Pre-boot I2C bus clear (ported from Zone Mixer)
+    // =========================================================================
+    // If the ESP32 reset mid-transaction, an M5ROTATE8 may hold SDA low.
+    // Bit-bang up to 18 SCL clocks to release it BEFORE Wire.begin() claims
+    // the pins. This detaches GPIO 53/54 from any I2C peripheral that
+    // M5.Ex_I2C.begin() may have started, but Wire.begin() reclaims them below.
+    i2cBusClear(I2C::EXT_SDA_PIN, I2C::EXT_SCL_PIN);
+
+    // Check if SDA is still stuck after bus clear — if so, the STM32F030
+    // is latched and only a full power cycle will release it. This commonly
+    // happens when USB serial port closure triggers DTR reset mid-transaction.
+    pinMode(I2C::EXT_SDA_PIN, INPUT_PULLUP);
+    delayMicroseconds(50);
+    if (digitalRead(I2C::EXT_SDA_PIN) == LOW) {
+        Serial.println("[I2C] SDA stuck LOW after boot bus clear — proactive Grove power cycle");
+        // Power cycle Grove port via PI4IOE5V6408 on Wire1 (internal bus,
+        // already initialised by M5.begin())
+        // EXT5V_EN is bit 2 (0x04) of output register 0x01 at address 0x43
+
+        // Tri-state GPIO 53/54 to prevent back-powering slave via pull-ups
+        pinMode(I2C::EXT_SDA_PIN, INPUT);  // No pull-up — prevent back-power
+        pinMode(I2C::EXT_SCL_PIN, INPUT);
+
+        // Cut Grove 5V power
+        Wire1.beginTransmission(0x43);
+        Wire1.write(0x01);  // Output register
+        Wire1.write(0x00);  // All pins LOW (EXT5V off)
+        Wire1.endTransmission();
+
+        Serial.println("[I2C] EXT5V OFF — waiting 800ms for full discharge");
+        delay(800);  // Longer than runtime recovery — ensure full capacitor discharge
+        esp_task_wdt_reset();
+
+        // Restore Grove 5V power
+        Wire1.beginTransmission(0x43);
+        Wire1.write(0x01);
+        Wire1.write(0x04);  // EXT5V_EN = bit 2
+        Wire1.endTransmission();
+
+        Serial.println("[I2C] EXT5V ON — waiting 500ms for STM32F030 boot");
+        delay(500);  // STM32F030 boot time (40-100ms) + generous margin
+        esp_task_wdt_reset();
+
+        // Re-run bus clear after power cycle
+        i2cBusClear(I2C::EXT_SDA_PIN, I2C::EXT_SCL_PIN);
+        delay(50);
+    }
+
     // Initialize Wire on external I2C bus (Grove Port.A)
     // This is ISOLATED from Tab5's internal I2C (display, touch, audio)
     Wire.begin(extSDA, extScl, I2C::FREQ_HZ);
@@ -1505,8 +1567,11 @@ void setup() {
     I2CRecovery::init(&Wire, extSDA, extScl, I2C::FREQ_HZ, I2C::TIMEOUT_MS);
     Serial.println("[I2C_RECOVERY] Recovery module initialized for external bus");
 
-    // Allow I2C bus to stabilize
-    delay(100);
+    // Allow M5ROTATE8 STM32F030 to boot — needs 40-100ms from 3V3 stable.
+    // Grove port power may not be enabled until M5.begin(), so the STM32 boot
+    // clock starts AFTER M5.begin(), not at ESP32 power-on. 500ms gives margin
+    // for STM32 boot + I2C slave peripheral init + power rail settling.
+    delay(500);
 
     // =========================================================================
     // Initialize NVS Storage (Phase G.1)
@@ -1515,13 +1580,16 @@ void setup() {
     // Create DisplayUI early for loading screen (but don't initialize full UI yet)
     g_ui = new DisplayUI(M5.Display);
     LoadingScreen::show(M5.Display, "INITIALISING NVS", false, false);
-    
+
     if (!NvsStorage::init()) {
         Serial.println("[NVS] WARNING: NVS init failed - parameters will not persist");
     }
 
     // Probe only known encoder addresses (0x41, 0x42) — a full 1-126 scan
     // takes 126 × 50ms = 6.3s when nothing is connected, triggering the WDT.
+    // CRITICAL: If the first probe times out, it corrupts the ESP32-P4 I2C
+    // peripheral permanently. Wire.end()/Wire.begin() between probes prevents
+    // a single timeout from killing the entire bus.
     {
         Serial.println("\n=== Probing encoder addresses ===");
         const uint8_t targets[] = {ADDR_UNIT_A, ADDR_UNIT_B};
@@ -1531,6 +1599,14 @@ void setup() {
             uint8_t err = Wire.endTransmission();
             Serial.printf("  0x%02X: %s\n", targets[i],
                           (err == 0) ? "FOUND" : "not responding");
+            if (err != 0) {
+                // Reset I2C peripheral after timeout — prevents cascade failure
+                Wire.end();
+                delay(10);
+                i2cBusClear(I2C::EXT_SDA_PIN, I2C::EXT_SCL_PIN);
+                Wire.begin(extSDA, extScl, I2C::FREQ_HZ);
+                Wire.setTimeOut(I2C::TIMEOUT_MS);
+            }
         }
     }
 
@@ -1902,10 +1978,10 @@ void setup() {
                         Serial.printf("[ParamMap] Updated Palette max from palettes.list: %u (total=%d)\n", paletteMax, totalInt);
                     }
                 }
-                // #region agent log (DISABLED)
-                // Serial.printf("[DEBUG] After palette metadata update - Heap: free=%u minFree=%u largest=%u\n",
-                              // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-                                // #endregion
+#if CORE_DEBUG_LEVEL >= 3
+                Serial.printf("[HEAP] After palette metadata update: free=%u minFree=%u largest=%u\n",
+                              ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+#endif
 
                 updateUiEffectPaletteLabels();
                 return;
@@ -2144,21 +2220,21 @@ void setup() {
     });
 
     // Start WiFi connection
-    // #region agent log (DISABLED)
-    // Serial.printf("[DEBUG] Before WiFiManager::begin() - Heap: free=%u minFree=%u largest=%u\n",
-                  // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-        // #endregion
-    
+#if CORE_DEBUG_LEVEL >= 3
+    Serial.printf("[HEAP] Before WiFiManager::begin(): free=%u minFree=%u largest=%u\n",
+                  ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+#endif
+
     // Begin WiFi - connect to home WiFi (same network as v2)
     // WiFi.begin() internally calls esp_hosted_init() which hardware-resets the
     // C6 via GPIO 15. This reset can glitch the RF path. Re-assert antenna
     // selection AFTER the C6 boots to ensure external MMCX is active.
     g_wifiManager.begin(WIFI_SSID, WIFI_PASSWORD);
     
-    // #region agent log (DISABLED)
-    // Serial.printf("[DEBUG] After WiFiManager::begin() - Heap: free=%u minFree=%u largest=%u\n",
-                  // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-        // #endregion
+#if CORE_DEBUG_LEVEL >= 3
+    Serial.printf("[HEAP] After WiFiManager::begin(): free=%u minFree=%u largest=%u\n",
+                  ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+#endif
     // Note: WiFiManager::begin() starts a scan first - connection happens after scan completes
 #else
     // WiFi disabled on ESP32-P4 due to SDIO pin configuration issues
@@ -2221,6 +2297,11 @@ void setup() {
     // Do not block the dashboard on host connectivity. Keep the splash briefly,
     // then bring up the full UI while WiFi/WS continue in the background.
     s_uiInitEarliestMs = millis() + UI_BOOT_SPLASH_MS;
+
+#if CORE_DEBUG_LEVEL >= 3
+    Serial.printf("[MEM] PSRAM: free=%u total=%u\n",
+                  (unsigned)ESP.getFreePsram(), (unsigned)ESP.getPsramSize());
+#endif
 }
 
 // ============================================================================
@@ -2261,6 +2342,12 @@ void cleanup() {
         Serial.println("[CLEANUP] DualEncoderService deleted");
     }
     
+    if (g_otaServer) {
+        delete g_otaServer;
+        g_otaServer = nullptr;
+        Serial.println("[CLEANUP] OTA server deleted");
+    }
+
     Serial.println("[CLEANUP] Cleanup complete");
 }
 
@@ -2285,6 +2372,17 @@ void loop() {
     esp_task_wdt_reset();  // Reset after LVGL (can block on SPI I/O)
 #endif
 
+#if CORE_DEBUG_LEVEL >= 3
+    {
+        static uint32_t s_lastWatermarkMs = 0;
+        if ((uint32_t)(millis() - s_lastWatermarkMs) > 30000) {
+            Serial.printf("[MEM] loopTask watermark: %u words free\n",
+                          (unsigned)uxTaskGetStackHighWaterMark(NULL));
+            s_lastWatermarkMs = millis();
+        }
+    }
+#endif
+
     // =========================================================================
     // SERIAL: Process simple command input
     // =========================================================================
@@ -2293,26 +2391,8 @@ void loop() {
     // =========================================================================
     // NETWORK: Service WebSocket EARLY to prevent TCP timeouts (K1 pattern)
     // =========================================================================
-    // #region agent log (DISABLED)
-// #if ENABLE_WS_DIAGNOSTICS
-    // static uint32_t s_lastWsUpdateLog = 0;
-    // if ((uint32_t)(millis() - s_lastWsUpdateLog) >= 1000) {  // Log every 1s
-        // Serial.printf("[DEBUG] Before wsClient.update() - Heap: free=%u minFree=%u largest=%u\n",
-                      // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-        // s_lastWsUpdateLog = millis();
-    // }
-// #endif
-        // #endregion
     g_wsClient.update();
     esp_task_wdt_reset();  // Reset after WebSocket (can block on network I/O)
-    // #region agent log (DISABLED)
-// #if ENABLE_WS_DIAGNOSTICS
-    // if ((uint32_t)(millis() - s_lastWsUpdateLog) >= 1000) {
-        // Serial.printf("[DEBUG] After wsClient.update() - Heap: free=%u minFree=%u largest=%u\n",
-                      // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-    // }
-// #endif
-        // #endregion
 
     // =========================================================================
     // NETWORK: Update WiFi state machine
@@ -2369,10 +2449,10 @@ void loop() {
     if (g_ui && !s_uiInitialized && isUiInitWindowReached()) {
         // Network services are optional for local control - initialize the
         // dashboard once the boot splash window has elapsed.
-        // #region agent log (DISABLED)
-        // Serial.printf("[DEBUG] Initialising UI after boot splash - Heap: free=%u minFree=%u largest=%u\n",
-                      // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-                    // #endregion
+#if CORE_DEBUG_LEVEL >= 3
+        Serial.printf("[HEAP] Initialising UI after boot splash: free=%u minFree=%u largest=%u\n",
+                      ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+#endif
         
         // Show UI initialization message before hiding loading screen
         bool unitA = g_encoders ? g_encoders->isUnitAAvailable() : false;
@@ -2389,10 +2469,10 @@ void loop() {
         g_ui->begin();
         // Serial.printf("[MAIN_TRACE] After g_ui->begin() @ %lu ms\n", millis());
         esp_task_wdt_reset();
-        // #region agent log (DISABLED)
-        // Serial.printf("[DEBUG] After DisplayUI::begin() - Heap: free=%u minFree=%u largest=%u\n",
-                      // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-                    // #endregion
+#if CORE_DEBUG_LEVEL >= 3
+        Serial.printf("[HEAP] After DisplayUI::begin(): free=%u minFree=%u largest=%u\n",
+                      ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+#endif
 
         // Re-wire ZoneComposerUI now that begin() has created it
         #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
@@ -2746,33 +2826,89 @@ void loop() {
         esp_task_wdt_reset();
 
         // Periodic re-probe: every 5 seconds, attempt to rediscover encoders.
-        // Without this, failed init → _available=false → no I2C ops → no errors
-        // → recovery never triggers → system stuck forever (the deadlock).
+        // Without this, failed init -> _available=false -> no I2C ops -> no errors
+        // -> recovery never triggers -> system stuck forever (the deadlock).
+        //
+        // Escalation strategy (3 levels):
+        //   Attempts 1-2: simple reprobe (transport reinit only)
+        //   Attempts 3-4: Level 1 — I2CRecovery::resetBus()
+        //                 (Wire.end + GPIO bus clear + Wire.begin)
+        //   Attempts 5+:  Level 2 — I2CRecovery::powerCycleGrove()
+        //                 (EXT5V power cycle via PI4IOE5V6408 + full reinit)
         static uint32_t s_lastReprobeMs = 0;
         static uint8_t s_reprobeCount = 0;
+        static constexpr uint8_t REPROBE_MAX_ATTEMPTS = 10;
+        static constexpr uint32_t REPROBE_BACKOFF_MS = 30000;  // 30s after max attempts
         uint32_t reprobeNow = millis();
 
-        if (s_lastReprobeMs == 0 || (reprobeNow - s_lastReprobeMs) >= 5000) {
+        // After REPROBE_MAX_ATTEMPTS failed attempts, back off for 30s instead
+        // of 5s to reduce bus churn and allow hardware to settle.
+        uint32_t reprobeInterval = (s_reprobeCount >= REPROBE_MAX_ATTEMPTS) ? REPROBE_BACKOFF_MS : 5000;
+
+        if (s_lastReprobeMs == 0 || (reprobeNow - s_lastReprobeMs) >= reprobeInterval) {
             s_lastReprobeMs = reprobeNow;
             s_reprobeCount++;
-            Serial.printf("[REPROBE] Attempt %d — probing encoder addresses...\n", s_reprobeCount);
 
-            // Simple reinit: just retry transport discovery without bus surgery.
-            // All boot-time recovery (power cycle, bus clear, hardware reset)
-            // has been proven unnecessary on healthy hardware.
+            // Max retry limit: after 10 failed attempts, reset counter and
+            // back off. Prevents infinite escalation burning WDT budget.
+            if (s_reprobeCount > REPROBE_MAX_ATTEMPTS) {
+                Serial.printf("[REPROBE] WARNING: %d consecutive failures — "
+                              "backing off 30s (bus may require manual intervention)\n",
+                              REPROBE_MAX_ATTEMPTS);
+                s_reprobeCount = 1;  // Reset to restart escalation from Level 1
+                delay(100);
+                return;
+            }
 
-            // Attempt reinit on both transports
+            if (s_reprobeCount <= 2) {
+                // Simple reprobe — no bus surgery, just retry transport init.
+                Serial.printf("[REPROBE] Attempt %d/L1 — simple reprobe\n",
+                              s_reprobeCount);
+            } else if (s_reprobeCount <= 4) {
+                // Level 1: tear down I2C driver, clear bus, reinit.
+                // Clears ESP_ERR_INVALID_STATE that makes all probes fail.
+                Serial.printf("[REPROBE] Attempt %d/L2 — bus reset (Wire.end + clear)\n",
+                              s_reprobeCount);
+                if (!I2CRecovery::resetBus()) {
+                    Serial.println("[REPROBE] Bus reset failed — will retry in 5s");
+                    delay(100);
+                    return;
+                }
+            } else {
+                // Level 2: power cycle the Grove port to reset M5ROTATE8 hardware.
+                // The PI4IOE5V6408 expander on Wire1 controls EXT5V_EN.
+                Serial.printf("[REPROBE] Attempt %d/L3 — Grove power cycle\n",
+                              s_reprobeCount);
+                if (!I2CRecovery::powerCycleGrove()) {
+                    Serial.println("[REPROBE] Power cycle failed — will retry in 5s");
+                    delay(100);
+                    return;
+                }
+            }
+
+            esp_task_wdt_reset();
+
+            // Probe encoder addresses on the (possibly reset/power-cycled) bus
             bool unitAOk = g_encoders->transportA().reinit();
             bool unitBOk = g_encoders->transportB().reinit();
 
             if (unitAOk || unitBOk) {
-                Serial.printf("[REPROBE] SUCCESS — Unit A:%s Unit B:%s\n",
-                              unitAOk ? "OK" : "FAIL", unitBOk ? "OK" : "FAIL");
+                Serial.printf("[REPROBE] SUCCESS — Unit A:%s Unit B:%s (attempt %d)\n",
+                              unitAOk ? "OK" : "FAIL",
+                              unitBOk ? "OK" : "FAIL",
+                              s_reprobeCount);
+                // Track recovery if bus reset or power cycle was used
+                if (s_reprobeCount > 2) {
+                    I2CRecovery::recordRecoverySuccess();
+                }
                 updateConnectionLeds();
                 s_reprobeCount = 0;
                 // Fall through to normal loop processing
             } else {
-                Serial.println("[REPROBE] Failed — will retry in 5s");
+                Serial.printf("[REPROBE] Failed (level %d, attempt %d/%d) — will retry in %lus\n",
+                              s_reprobeCount <= 2 ? 1 : s_reprobeCount <= 4 ? 2 : 3,
+                              s_reprobeCount, REPROBE_MAX_ATTEMPTS,
+                              (unsigned long)(reprobeInterval / 1000));
                 delay(100);
                 return;
             }

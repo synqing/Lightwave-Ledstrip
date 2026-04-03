@@ -26,32 +26,51 @@
 
 /**
  * HTTP response structure
+ * Fixed-size buffers to eliminate heap fragmentation from Arduino String.
  */
 struct HttpResponse {
     int statusCode = 0;
-    String body;
+    char body[2048];
+    uint16_t bodyLen = 0;
     bool success = false;
-    String errorMessage;
+    char errorMessage[128];
+
+    HttpResponse() : statusCode(0), bodyLen(0), success(false) {
+        body[0] = '\0';
+        errorMessage[0] = '\0';
+    }
 };
 
 /**
  * Network entry structure (from v2 REST API)
+ * Fixed-size buffers: SSID max 32 chars, WPA2-PSK password max 63 chars.
  */
 struct NetworkEntry {
-    String ssid;
-    String password;  // Empty if not available (for saved networks)
+    char ssid[33];       // Max SSID 32 + null terminator
+    char password[65];   // Max WPA2-PSK 63 + null terminator
     bool isSaved = false;
+
+    NetworkEntry() : isSaved(false) {
+        ssid[0] = '\0';
+        password[0] = '\0';
+    }
 };
 
 /**
  * Scan result structure (from v2 REST API)
+ * Fixed-size buffers to avoid heap churn during WiFi scans.
  */
 struct ScanResult {
-    String ssid;
+    char ssid[33];              // Max SSID 32 + null terminator
     int32_t rssi = 0;
     uint8_t channel = 0;
     bool encrypted = false;
-    String encryptionType;  // "WPA2", "WPA", "WEP", "Open"
+    char encryptionType[12];    // "WPA2/WPA3" is longest at 9 chars + null
+
+    ScanResult() : rssi(0), channel(0), encrypted(false) {
+        ssid[0] = '\0';
+        encryptionType[0] = '\0';
+    }
 };
 
 /**
@@ -123,7 +142,10 @@ public:
      * Set optional API key for authentication
      * @param apiKey API key string (empty to disable)
      */
-    void setApiKey(const String& apiKey) { _apiKey = apiKey; }
+    void setApiKey(const String& apiKey) {
+        strncpy(_apiKey, apiKey.c_str(), sizeof(_apiKey) - 1);
+        _apiKey[sizeof(_apiKey) - 1] = '\0';
+    }
 
     /**
      * List saved networks
@@ -180,7 +202,7 @@ private:
     IPAddress _serverIP;
     const char* _serverHostname = "lightwaveos.local";
     WiFiClient _client;
-    String _apiKey;  // Optional API key (empty = disabled)
+    char _apiKey[64] = {'\0'};  // Optional API key (empty = disabled)
     static constexpr uint16_t HTTP_TIMEOUT_MS = 5000;
     static constexpr uint16_t HTTP_PORT = 80;
 

@@ -88,6 +88,11 @@ public:
         _zoneUI = zoneUI;
     }
 
+    /**
+     * Toggle zone mode ON/OFF (public — called from DisplayUI zone button)
+     */
+    void toggleZoneMode();
+
 private:
     bool _zoneModeEnabled = false;
     SpeedPaletteMode _zoneEncoderMode[3] = {
@@ -100,11 +105,6 @@ private:
     std::function<void(uint8_t, SpeedPaletteMode)> _speedPaletteToggleCallback;
     WebSocketClient* _wsClient = nullptr;
     ZoneComposerUI* _zoneUI = nullptr;
-
-    /**
-     * Toggle zone mode ON/OFF
-     */
-    void toggleZoneMode();
 
     /**
      * Toggle speed/palette mode for a zone

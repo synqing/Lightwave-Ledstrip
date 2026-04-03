@@ -159,6 +159,13 @@ public:
     void setHeader(UIHeader* header) { _header = header; }
 
     /**
+     * Update zone mode button visual state from incoming WS messages.
+     * Called when K1 confirms zone enabled/disabled state.
+     * @param enabled true if zones are active on K1
+     */
+    void updateZoneModeButton(bool enabled);
+
+    /**
      * Mark UI as dirty (needs redraw) - queued for next frame
      */
     void markDirty() { _pendingDirty = true; }

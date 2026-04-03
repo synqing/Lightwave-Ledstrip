@@ -1076,23 +1076,12 @@ void ZoneComposerUI::createInteractiveUI(lv_obj_t* parent) {
     lv_obj_set_style_text_font(title, BEBAS_BOLD_40, LV_PART_MAIN);
     lv_obj_set_style_text_color(title, lv_color_hex(DesignTokens::FG_PRIMARY), LV_PART_MAIN);
 
-    // Zone Enable Toggle Button (right side)
-    _zoneEnableButton = make_card(header, true);
-    lv_obj_set_size(_zoneEnableButton, 160, 44);
-    lv_obj_set_style_border_width(_zoneEnableButton, 2, LV_PART_MAIN);
-    lv_obj_set_style_border_color(_zoneEnableButton,
-                                  lv_color_hex(_zonesEnabled ? 0x00FF00 : 0xFF0000),
-                                  LV_PART_MAIN);
-    lv_obj_add_flag(_zoneEnableButton, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(_zoneEnableButton, zoneEnableButtonCb, LV_EVENT_CLICKED, this);
-
-    _zoneEnableLabel = lv_label_create(_zoneEnableButton);
-    lv_label_set_text(_zoneEnableLabel, _zonesEnabled ? "ZONES: ON" : "ZONES: OFF");
-    lv_obj_set_style_text_font(_zoneEnableLabel, RAJDHANI_BOLD_24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(_zoneEnableLabel,
-                                lv_color_hex(_zonesEnabled ? 0x00FF00 : 0xFFFFFF),
-                                LV_PART_MAIN);
-    lv_obj_center(_zoneEnableLabel);
+    // Spacer to balance header layout (zone mode button moved to controls row)
+    lv_obj_t* headerSpacer = lv_obj_create(header);
+    lv_obj_set_size(headerSpacer, 160, 44);
+    lv_obj_set_style_bg_opa(headerSpacer, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(headerSpacer, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(headerSpacer, LV_OBJ_FLAG_SCROLLABLE);
 
     uint32_t t2 = millis();
     // Serial.printf("[ZC_TRACE] before controls row @ %lu ms (delta=%lu)\n", t2, t2-t1);
@@ -1109,6 +1098,26 @@ void ZoneComposerUI::createInteractiveUI(lv_obj_t* parent) {
     lv_obj_set_flex_align(controlsRow, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(controlsRow, ZC_GRID_GAP * 2, LV_PART_MAIN);
     lv_obj_clear_flag(controlsRow, LV_OBJ_FLAG_SCROLLABLE);
+
+    // Zone Mode Toggle Button (first in row — enables/disables zone rendering on K1)
+    _zoneEnableButton = make_card(controlsRow, true);
+    lv_obj_set_size(_zoneEnableButton, 200, 70);
+    lv_obj_set_style_bg_color(_zoneEnableButton,
+                              lv_color_hex(_zonesEnabled ? 0x22CC44 : 0x882222),
+                              LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(_zoneEnableButton, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(_zoneEnableButton, 2, LV_PART_MAIN);
+    lv_obj_set_style_border_color(_zoneEnableButton,
+                                  lv_color_hex(_zonesEnabled ? 0x22CC44 : 0x882222),
+                                  LV_PART_MAIN);
+    lv_obj_add_flag(_zoneEnableButton, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(_zoneEnableButton, zoneEnableButtonCb, LV_EVENT_CLICKED, this);
+
+    _zoneEnableLabel = lv_label_create(_zoneEnableButton);
+    lv_label_set_text(_zoneEnableLabel, "ZONE MODE");
+    lv_obj_set_style_text_font(_zoneEnableLabel, RAJDHANI_BOLD_24, LV_PART_MAIN);
+    lv_obj_set_style_text_color(_zoneEnableLabel, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    lv_obj_center(_zoneEnableLabel);
 
     // Zone Count Card
     _zoneCountRow = make_card(controlsRow, false);
@@ -1402,27 +1411,60 @@ void ZoneComposerUI::zoneEnableButtonCb(lv_event_t* e) {
     Serial.printf("[ZoneComposer] Zones %s\n", ui->_zonesEnabled ? "ENABLED" : "DISABLED");
 
     // Update visual state
-    if (ui->_zoneEnableButton) {
-        lv_obj_set_style_border_color(ui->_zoneEnableButton,
-                                      lv_color_hex(ui->_zonesEnabled ? 0x00FF00 : 0xFF0000),
-                                      LV_PART_MAIN);
-    }
+    ui->updateZoneModeButton(ui->_zonesEnabled);
 
-    if (ui->_zoneEnableLabel) {
-        lv_label_set_text(ui->_zoneEnableLabel, ui->_zonesEnabled ? "ZONES: ON" : "ZONES: OFF");
-        lv_obj_set_style_text_color(ui->_zoneEnableLabel,
-                                    lv_color_hex(ui->_zonesEnabled ? 0x00FF00 : 0xFFFFFF),
-                                    LV_PART_MAIN);
-        lv_obj_invalidate(ui->_zoneEnableLabel);
-    }
-
-    // Send WebSocket command to LightwaveOS v2 firmware
+    // Send WebSocket commands to LightwaveOS v2 firmware
     if (ui->_wsClient && ui->_wsClient->isConnected()) {
-        Serial.printf("[ZoneComposer] Sending WS: zone.enable=%s\n", ui->_zonesEnabled ? "true" : "false");
-        ui->_wsClient->sendZoneEnable(ui->_zonesEnabled);
+        if (ui->_zonesEnabled) {
+            // ENABLING: layout-before-enable rule (K1 ignores enable without layout)
+            // 1. Send layout first
+            const uint8_t zoneCount = ui->_editingZoneCount > 0
+                ? ui->_editingZoneCount : ui->_zoneCount;
+            const zones::ZoneSegment* segments = ui->_editingZoneCount > 0
+                ? ui->_editingSegments : ui->_segments;
+            if (zoneCount > 0) {
+                Serial.printf("[ZoneComposer] Sending WS: zones.setLayout (count=%d)\n", zoneCount);
+                ui->_wsClient->sendZonesSetLayout(segments, zoneCount);
+            }
+
+            // 2. Then enable
+            Serial.println("[ZoneComposer] Sending WS: zone.enable=true");
+            ui->_wsClient->sendZoneEnable(true);
+
+            // 3. Then load preset (assigns effects to zones)
+            // Map zone count to preset: 1->0(Unified), 2->1(Dual Split), 3->2(Triple Rings)
+            const uint8_t presetId = (zoneCount >= 3) ? 2 : (zoneCount >= 2) ? 1 : 0;
+            Serial.printf("[ZoneComposer] Sending WS: zone.loadPreset (presetId=%d)\n", presetId);
+            ui->_wsClient->sendZoneLoadPreset(presetId);
+        } else {
+            // DISABLING: send disable only
+            Serial.println("[ZoneComposer] Sending WS: zone.enable=false");
+            ui->_wsClient->sendZoneEnable(false);
+        }
     } else {
         Serial.printf("[ZoneComposer] WS not connected - cannot send zone.enable (wsClient=%d connected=%d)\n",
                       ui->_wsClient ? 1 : 0,
                       (ui->_wsClient && ui->_wsClient->isConnected()) ? 1 : 0);
+    }
+}
+
+void ZoneComposerUI::updateZoneModeButton(bool enabled) {
+    _zonesEnabled = enabled;
+
+    if (_zoneEnableButton) {
+        lv_obj_set_style_bg_color(_zoneEnableButton,
+                                  lv_color_hex(enabled ? 0x22CC44 : 0x882222),
+                                  LV_PART_MAIN);
+        lv_obj_set_style_border_color(_zoneEnableButton,
+                                      lv_color_hex(enabled ? 0x22CC44 : 0x882222),
+                                      LV_PART_MAIN);
+    }
+
+    if (_zoneEnableLabel) {
+        // Label text stays "ZONE MODE" — colour conveys state
+        lv_obj_set_style_text_color(_zoneEnableLabel,
+                                    lv_color_hex(0xFFFFFF),
+                                    LV_PART_MAIN);
+        lv_obj_invalidate(_zoneEnableLabel);
     }
 }

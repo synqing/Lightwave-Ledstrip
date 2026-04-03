@@ -596,6 +596,14 @@ private:
             }
         }
 
+        // Sync zone mode button state from K1 (enabled flag)
+        if (s_zoneComposerUI) {
+            s_zoneComposerUI->updateZoneModeButton(enabled);
+        }
+        if (s_displayUI) {
+            s_displayUI->updateZoneModeButton(enabled);
+        }
+
         TAB5_WS_PRINTF("[WsRouter] Zones list: enabled=%d, count=%d\n", enabled, zoneCount);
     }
 

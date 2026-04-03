@@ -112,6 +112,11 @@ public:
                                  uint8_t blendMode, uint8_t brightness);
     uint8_t getSelectedZone() const { return _selectedZone; }
     const ZoneSidebarParam& getZoneSidebarState(uint8_t zone) const;
+    void updateZoneModeButton(bool enabled);
+    void adjustZoneCount(int32_t delta);
+    void adjustPreset(int32_t delta);
+    uint8_t getZoneCount() const { return _zoneCount; }
+    uint8_t getCurrentPreset() const { return _currentPreset; }
 
     // Preset sidebar data binding
     void updatePresetSidebarSlots(const PresetSidebarSlot* slots, uint8_t count);
@@ -237,10 +242,15 @@ private:
     lv_obj_t* _presets_panel = nullptr;
     lv_obj_t* _zone_selector_buttons[3] = {nullptr};
     lv_obj_t* _zone_selector_labels[3] = {nullptr};
+    lv_obj_t* _zone_mode_btn = nullptr;
+    lv_obj_t* _zone_mode_label = nullptr;
+    bool _zonesEnabled = false;
     lv_obj_t* _zone_param_cards[8] = {nullptr};
     lv_obj_t* _zone_param_labels[8] = {nullptr};
     lv_obj_t* _zone_param_values[8] = {nullptr};
     uint8_t _selectedZone = 0;
+    uint8_t _zoneCount = 2;        // 1 or 2 (zone count for layout)
+    uint8_t _currentPreset = 1;    // 0=Unified, 1=Dual Split
 
     // Zone sidebar state cache (populated from WsMessageRouter zone data)
     ZoneSidebarParam _zoneSidebarState[3];

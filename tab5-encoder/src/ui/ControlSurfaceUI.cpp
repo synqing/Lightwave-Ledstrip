@@ -61,7 +61,7 @@ void ControlSurfaceUI::begin(lv_obj_t* parent) {
     int32_t nextRowY = contentTop;
 
     // Grid column template (8 equal columns)
-    static lv_coord_t col_dsc[9] = {
+    static const lv_coord_t col_dsc[9] = {
         LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
         LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
         LV_GRID_TEMPLATE_LAST
@@ -118,12 +118,12 @@ void ControlSurfaceUI::createParamRow(lv_obj_t* parent,
                                        lv_obj_t** values, lv_obj_t** bars,
                                        lv_obj_t*& container,
                                        int32_t yPos, const char* rowLabel) {
-    static lv_coord_t col_dsc[9] = {
+    static const lv_coord_t col_dsc[9] = {
         LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
         LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
         LV_GRID_TEMPLATE_LAST
     };
-    static lv_coord_t row_dsc[2] = {CS_PARAM_ROW_HEIGHT, LV_GRID_TEMPLATE_LAST};
+    static const lv_coord_t row_dsc[2] = {CS_PARAM_ROW_HEIGHT, LV_GRID_TEMPLATE_LAST};
 
     container = lv_obj_create(parent);
     lv_obj_set_size(container, 1280 - 2 * DesignTokens::GRID_MARGIN, CS_PARAM_ROW_HEIGHT);
@@ -176,12 +176,12 @@ void ControlSurfaceUI::createParamRow(lv_obj_t* parent,
 // ============================================================================
 
 void ControlSurfaceUI::createGlobalRow(lv_obj_t* parent) {
-    static lv_coord_t col_dsc[9] = {
+    static const lv_coord_t col_dsc[9] = {
         LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
         LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1),
         LV_GRID_TEMPLATE_LAST
     };
-    static lv_coord_t row_dsc[2] = {CS_GLOBAL_ROW_HEIGHT, LV_GRID_TEMPLATE_LAST};
+    static const lv_coord_t row_dsc[2] = {CS_GLOBAL_ROW_HEIGHT, LV_GRID_TEMPLATE_LAST};
 
     int32_t yPos = DesignTokens::STATUSBAR_HEIGHT + DesignTokens::GRID_GAP + 7 +
                    2 * (CS_PARAM_ROW_HEIGHT + DesignTokens::GRID_GAP);

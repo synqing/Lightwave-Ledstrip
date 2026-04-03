@@ -381,15 +381,16 @@ bool HttpClient::get(const String& path, HttpResponse& response) {
     response = HttpResponse();
 
     if (!connectToServer()) {
-        response.errorMessage = "Connection failed";
+        strncpy(response.errorMessage, "Connection failed", sizeof(response.errorMessage) - 1);
+        response.errorMessage[sizeof(response.errorMessage) - 1] = '\0';
         return false;
     }
 
     // Send HTTP GET request
     _client.printf("GET %s HTTP/1.1\r\n", path.c_str());
     _client.printf("Host: %s\r\n", _serverHostname);
-    if (!_apiKey.isEmpty()) {
-        _client.printf("X-API-Key: %s\r\n", _apiKey.c_str());
+    if (_apiKey[0] != '\0') {
+        _client.printf("X-API-Key: %s\r\n", _apiKey);
     }
     _client.printf("Connection: close\r\n\r\n");
 
@@ -401,7 +402,8 @@ bool HttpClient::get(const String& path, HttpResponse& response) {
     }
 
     if (!_client.available()) {
-        response.errorMessage = "Timeout waiting for response";
+        strncpy(response.errorMessage, "Timeout waiting for response", sizeof(response.errorMessage) - 1);
+        response.errorMessage[sizeof(response.errorMessage) - 1] = '\0';
         _client.stop();
         return false;
     }
@@ -432,16 +434,21 @@ bool HttpClient::get(const String& path, HttpResponse& response) {
 
     esp_task_wdt_reset();  // Feed watchdog before reading body
 
-    // Read body
+    // Read body into fixed buffer with bounds check
     while (_client.available()) {
-        response.body += (char)_client.read();
+        if (response.bodyLen < sizeof(response.body) - 1) {
+            response.body[response.bodyLen++] = (char)_client.read();
+        } else {
+            _client.read();  // Discard overflow bytes
+        }
     }
+    response.body[response.bodyLen] = '\0';
 
     _client.stop();
 
     response.success = (response.statusCode >= 200 && response.statusCode < 300);
     if (!response.success) {
-        response.errorMessage = "HTTP " + String(response.statusCode);
+        snprintf(response.errorMessage, sizeof(response.errorMessage), "HTTP %d", response.statusCode);
     }
 
     return response.success;
@@ -451,7 +458,8 @@ bool HttpClient::post(const String& path, const String& body, HttpResponse& resp
     response = HttpResponse();
 
     if (!connectToServer()) {
-        response.errorMessage = "Connection failed";
+        strncpy(response.errorMessage, "Connection failed", sizeof(response.errorMessage) - 1);
+        response.errorMessage[sizeof(response.errorMessage) - 1] = '\0';
         return false;
     }
 
@@ -460,8 +468,8 @@ bool HttpClient::post(const String& path, const String& body, HttpResponse& resp
     _client.printf("Host: %s\r\n", _serverHostname);
     _client.printf("Content-Type: application/json\r\n");
     _client.printf("Content-Length: %d\r\n", body.length());
-    if (!_apiKey.isEmpty()) {
-        _client.printf("X-API-Key: %s\r\n", _apiKey.c_str());
+    if (_apiKey[0] != '\0') {
+        _client.printf("X-API-Key: %s\r\n", _apiKey);
     }
     _client.printf("Connection: close\r\n\r\n");
     _client.print(body);
@@ -474,7 +482,8 @@ bool HttpClient::post(const String& path, const String& body, HttpResponse& resp
     }
 
     if (!_client.available()) {
-        response.errorMessage = "Timeout waiting for response";
+        strncpy(response.errorMessage, "Timeout waiting for response", sizeof(response.errorMessage) - 1);
+        response.errorMessage[sizeof(response.errorMessage) - 1] = '\0';
         _client.stop();
         return false;
     }
@@ -505,16 +514,21 @@ bool HttpClient::post(const String& path, const String& body, HttpResponse& resp
 
     esp_task_wdt_reset();  // Feed watchdog before reading body
 
-    // Read body
+    // Read body into fixed buffer with bounds check
     while (_client.available()) {
-        response.body += (char)_client.read();
+        if (response.bodyLen < sizeof(response.body) - 1) {
+            response.body[response.bodyLen++] = (char)_client.read();
+        } else {
+            _client.read();  // Discard overflow bytes
+        }
     }
+    response.body[response.bodyLen] = '\0';
 
     _client.stop();
 
     response.success = (response.statusCode >= 200 && response.statusCode < 300);
     if (!response.success) {
-        response.errorMessage = "HTTP " + String(response.statusCode);
+        snprintf(response.errorMessage, sizeof(response.errorMessage), "HTTP %d", response.statusCode);
     }
 
     return response.success;
@@ -524,15 +538,16 @@ bool HttpClient::del(const String& path, HttpResponse& response) {
     response = HttpResponse();
 
     if (!connectToServer()) {
-        response.errorMessage = "Connection failed";
+        strncpy(response.errorMessage, "Connection failed", sizeof(response.errorMessage) - 1);
+        response.errorMessage[sizeof(response.errorMessage) - 1] = '\0';
         return false;
     }
 
     // Send HTTP DELETE request
     _client.printf("DELETE %s HTTP/1.1\r\n", path.c_str());
     _client.printf("Host: %s\r\n", _serverHostname);
-    if (!_apiKey.isEmpty()) {
-        _client.printf("X-API-Key: %s\r\n", _apiKey.c_str());
+    if (_apiKey[0] != '\0') {
+        _client.printf("X-API-Key: %s\r\n", _apiKey);
     }
     _client.printf("Connection: close\r\n\r\n");
 
@@ -544,7 +559,8 @@ bool HttpClient::del(const String& path, HttpResponse& response) {
     }
 
     if (!_client.available()) {
-        response.errorMessage = "Timeout waiting for response";
+        strncpy(response.errorMessage, "Timeout waiting for response", sizeof(response.errorMessage) - 1);
+        response.errorMessage[sizeof(response.errorMessage) - 1] = '\0';
         _client.stop();
         return false;
     }
@@ -575,16 +591,21 @@ bool HttpClient::del(const String& path, HttpResponse& response) {
 
     esp_task_wdt_reset();  // Feed watchdog before reading body
 
-    // Read body
+    // Read body into fixed buffer with bounds check
     while (_client.available()) {
-        response.body += (char)_client.read();
+        if (response.bodyLen < sizeof(response.body) - 1) {
+            response.body[response.bodyLen++] = (char)_client.read();
+        } else {
+            _client.read();  // Discard overflow bytes
+        }
     }
+    response.body[response.bodyLen] = '\0';
 
     _client.stop();
 
     response.success = (response.statusCode >= 200 && response.statusCode < 300);
     if (!response.success) {
-        response.errorMessage = "HTTP " + String(response.statusCode);
+        snprintf(response.errorMessage, sizeof(response.errorMessage), "HTTP %d", response.statusCode);
     }
 
     return response.success;
@@ -594,7 +615,7 @@ bool HttpClient::parseJsonResponse(const HttpResponse& response, JsonDocument& d
     DeserializationError error = deserializeJson(doc, response.body);
     if (error) {
         Serial.printf("[HTTP] JSON parse error: %s\n", error.c_str());
-        Serial.printf("[HTTP] Response body: %s\n", response.body.c_str());
+        Serial.printf("[HTTP] Response body: %s\n", response.body);
         return false;
     }
     return true;
@@ -629,8 +650,9 @@ int HttpClient::listNetworks(NetworkEntry* networks, uint8_t maxNetworks) {
 
         if (network.is<const char*>()) {
             // v2 API returns saved networks as array of SSID strings
-            networks[count].ssid = network.as<const char*>();
-            networks[count].password = "";
+            strncpy(networks[count].ssid, network.as<const char*>(), sizeof(networks[count].ssid) - 1);
+            networks[count].ssid[sizeof(networks[count].ssid) - 1] = '\0';
+            networks[count].password[0] = '\0';
             networks[count].isSaved = true;
             count++;
             continue;
@@ -642,10 +664,18 @@ int HttpClient::listNetworks(NetworkEntry* networks, uint8_t maxNetworks) {
 
         JsonObject networkObj = network.as<JsonObject>();
         if (networkObj.containsKey("ssid")) {
-            networks[count].ssid = networkObj["ssid"].as<String>();
+            const char* s = networkObj["ssid"].as<const char*>();
+            if (s) {
+                strncpy(networks[count].ssid, s, sizeof(networks[count].ssid) - 1);
+                networks[count].ssid[sizeof(networks[count].ssid) - 1] = '\0';
+            }
         }
         if (networkObj.containsKey("password")) {
-            networks[count].password = networkObj["password"].as<String>();
+            const char* p = networkObj["password"].as<const char*>();
+            if (p) {
+                strncpy(networks[count].password, p, sizeof(networks[count].password) - 1);
+                networks[count].password[sizeof(networks[count].password) - 1] = '\0';
+            }
         }
         if (networkObj.containsKey("isSaved")) {
             networks[count].isSaved = networkObj["isSaved"].as<bool>();
@@ -738,7 +768,11 @@ bool HttpClient::startScan(ScanStatus& status) {
             if (status.networkCount >= 20) break;
 
             if (network.containsKey("ssid")) {
-                status.networks[status.networkCount].ssid = network["ssid"].as<String>();
+                const char* s = network["ssid"].as<const char*>();
+                if (s) {
+                    strncpy(status.networks[status.networkCount].ssid, s, sizeof(status.networks[status.networkCount].ssid) - 1);
+                    status.networks[status.networkCount].ssid[sizeof(status.networks[status.networkCount].ssid) - 1] = '\0';
+                }
             }
             if (network.containsKey("rssi")) {
                 status.networks[status.networkCount].rssi = network["rssi"].as<int32_t>();
@@ -749,9 +783,12 @@ bool HttpClient::startScan(ScanStatus& status) {
 
             // v2 returns "encryption" as STRING (e.g., "WPA2", "OPEN")
             if (network.containsKey("encryption")) {
-                String encStr = network["encryption"].as<String>();
-                status.networks[status.networkCount].encrypted = (encStr != "OPEN");
-                status.networks[status.networkCount].encryptionType = encStr;
+                const char* encStr = network["encryption"].as<const char*>();
+                if (encStr) {
+                    status.networks[status.networkCount].encrypted = (strcmp(encStr, "OPEN") != 0);
+                    strncpy(status.networks[status.networkCount].encryptionType, encStr, sizeof(status.networks[status.networkCount].encryptionType) - 1);
+                    status.networks[status.networkCount].encryptionType[sizeof(status.networks[status.networkCount].encryptionType) - 1] = '\0';
+                }
             }
 
             status.networkCount++;

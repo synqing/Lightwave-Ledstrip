@@ -127,7 +127,7 @@ private:
 
     // State management
     ConnectivityState _state = ConnectivityState::IDLE;
-    String _errorMessage;
+    char _errorMessage[128] = {'\0'};
     uint32_t _lastStatusUpdate = 0;
     static constexpr uint32_t STATUS_UPDATE_INTERVAL_MS = 2000;  // 2 seconds
 
@@ -154,8 +154,8 @@ private:
 
     // Add network dialog state
     bool _showAddDialog = false;
-    String _newNetworkSsid;
-    String _newNetworkPassword;
+    char _newNetworkSsid[33] = {'\0'};
+    char _newNetworkPassword[65] = {'\0'};
 
     // LVGL widgets
     lv_obj_t* _screen = nullptr;

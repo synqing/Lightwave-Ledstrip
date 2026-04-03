@@ -574,6 +574,15 @@ void update(M5GFX& display, const char* message, bool unitA, bool unitB) {
 void hide(M5GFX& display) {
     // Simply clear the screen - UI will draw over it
     display.fillScreen(Theme::BG_DARK);
+
+#if ENABLE_PPA_UI && !defined(SIMULATOR_BUILD)
+    // Free PPA sprite — only used during loading screen, never needed again
+    if (s_ppaSrm) {
+        delete s_ppaSrm;
+        s_ppaSrm = nullptr;
+        s_ppaLogoReady = false;
+    }
+#endif
 }
 
 #endif  // TAB5_ENCODER_USE_LVGL && !SIMULATOR_BUILD

@@ -109,9 +109,19 @@ struct PresetData {
     // ========================================================================
     // Reserved / overflow space (22 bytes)
     // Layout (v2+):
-    //   [0]    Global effectId high byte (bits [15:8])
-    //   [1..4] Zone[0..3] effectId high bytes (bits [15:8] per zone)
-    //   [5..21] Available for future expansion
+    //   [0]     Global effectId high byte (bits [15:8])
+    //   [1..4]  Zone[0..3] effectId high bytes (bits [15:8] per zone)
+    //   [5]     EdgeMixer mode (0-8)
+    //   [6]     EdgeMixer spread (0-60)
+    //   [7]     EdgeMixer strength (0-255)
+    //   [8]     EdgeMixer spatial (0-1)
+    //   [9]     EdgeMixer temporal (0-1)
+    //   [10]    Colour correction mode (0-3: OFF/HSV/RGB/BOTH)
+    //   [11]    Auto-exposure target (0-255, default 110)
+    //   [12]    Zone 0 blend mode
+    //   [13]    Zone 1 blend mode
+    //   [14]    Zone 2 blend mode
+    //   [15..21] Unused
     // ========================================================================
     uint8_t reservedFuture[22];
 

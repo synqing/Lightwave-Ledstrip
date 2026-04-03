@@ -193,7 +193,7 @@ void PresetManager::captureCurrentState(PresetData& preset) {
 
             preset.setZoneEffectId(static_cast<uint8_t>(z), values[effectIdx]);
             preset.zones[z].speed = values[speedIdx];
-            preset.zones[z].brightness = 255;  // Default
+            preset.zones[z].brightness = 128;  // Default fallback (overridden by ZoneComposerUI below)
             preset.zones[z].enabled = true;
             preset.zones[z].paletteId = 0;
         }
@@ -226,8 +226,12 @@ void PresetManager::captureCurrentState(PresetData& preset) {
             preset.zones[z].speed = zs.speed;
             preset.zones[z].paletteId = zs.paletteId;
             preset.zones[z].enabled = zs.enabled;
-            // Note: ZoneState doesn't have brightness, use LED count as proxy or default
-            preset.zones[z].brightness = 255;
+            preset.zones[z].brightness = zs.brightness;
+
+            // Capture zone blend mode into reservedFuture[12..14]
+            if (z < 3) {
+                preset.reservedFuture[12 + z] = zs.blendMode;
+            }
         }
     } else {
         // Fallback if ZoneComposerUI not set
@@ -243,6 +247,8 @@ void PresetManager::captureCurrentState(PresetData& preset) {
             preset.gamma = cc.gammaEnabled ? static_cast<uint8_t>(cc.gammaValue * 10.0f) : 0;
             preset.brownGuardrail = cc.brownGuardrailEnabled;
             preset.autoExposure = cc.autoExposureEnabled;
+            preset.reservedFuture[10] = cc.mode;                // CC mode (0=OFF, 1=HSV, 2=RGB, 3=BOTH)
+            preset.reservedFuture[11] = cc.autoExposureTarget;  // AE target (default 110)
         } else {
             // Fallback defaults if not yet synced
             preset.gamma = 22;
@@ -256,13 +262,35 @@ void PresetManager::captureCurrentState(PresetData& preset) {
         preset.autoExposure = false;
     }
 
+    // Capture EdgeMixer state
+    if (_wsClient) {
+        const EdgeMixerState& em = _wsClient->getEdgeMixerState();
+        if (em.valid) {
+            preset.reservedFuture[5] = em.mode;
+            preset.reservedFuture[6] = em.spread;
+            preset.reservedFuture[7] = em.strength;
+            preset.reservedFuture[8] = em.spatial;
+            preset.reservedFuture[9] = em.temporal;
+        } else {
+            preset.reservedFuture[5] = 0;   // MIRROR default
+            preset.reservedFuture[6] = 30;  // Default spread
+            preset.reservedFuture[7] = 255; // Full strength
+            preset.reservedFuture[8] = 0;   // UNIFORM
+            preset.reservedFuture[9] = 0;   // STATIC
+        }
+    }
+
     // Log complete captured state
     Serial.printf("[PresetManager] Captured: E=%u B=%d P=%d S=%d M=%d F=%d C=%d V=%d\n",
                   static_cast<unsigned>(preset.getEffectId16()), preset.brightness, preset.paletteId, preset.speed,
                   preset.mood, preset.fade, preset.complexity, preset.variation);
-    Serial.printf("[PresetManager]   Zones: enabled=%d count=%d gamma=%d ae=%d brown=%d\n",
+    Serial.printf("[PresetManager]   Zones: enabled=%d count=%d gamma=%d ae=%d brown=%d ccMode=%u aeTarget=%u\n",
                   preset.zoneModeEnabled, preset.zoneCount, preset.gamma,
-                  preset.autoExposure, preset.brownGuardrail);
+                  preset.autoExposure, preset.brownGuardrail,
+                  preset.reservedFuture[10], preset.reservedFuture[11]);
+    Serial.printf("[PresetManager]   EdgeMixer: mode=%u spread=%u strength=%u spatial=%u temporal=%u\n",
+                  preset.reservedFuture[5], preset.reservedFuture[6], preset.reservedFuture[7],
+                  preset.reservedFuture[8], preset.reservedFuture[9]);
     if (preset.zoneModeEnabled && preset.zoneCount > 0) {
         for (uint8_t z = 0; z < preset.zoneCount && z < 4; z++) {
             Serial.printf("[PresetManager]   Zone%d: E=%u S=%d P=%d en=%d\n",
@@ -302,6 +330,15 @@ bool PresetManager::applyPresetState(const PresetData& preset) {
 
     // Apply zone state if zone mode enabled
     if (preset.zoneModeEnabled) {
+        // Send zone layout before enable — K1 ignores zone.enable without a valid layout
+        if (preset.zoneCount > 0 && _zoneUI) {
+            uint8_t editingCount = _zoneUI->getEditingZoneCount();
+            if (editingCount > 0) {
+                _wsClient->sendZonesSetLayout(_zoneUI->getEditingSegments(), editingCount);
+                Serial.printf("[Preset] Sent zone layout (%u zones) before enable\n", editingCount);
+            }
+        }
+
         _wsClient->sendZoneEnable(true);
 
         for (uint8_t z = 0; z < preset.zoneCount && z < 4; z++) {
@@ -310,32 +347,56 @@ bool PresetManager::applyPresetState(const PresetData& preset) {
                 _wsClient->sendZoneSpeed(z, preset.zones[z].speed);
                 _wsClient->sendZoneBrightness(z, preset.zones[z].brightness);
                 _wsClient->sendZonePalette(z, preset.zones[z].paletteId);
+
+                // Restore zone blend mode from reservedFuture[12..14]
+                if (z < 3) {
+                    _wsClient->sendZoneBlend(z, preset.reservedFuture[12 + z]);
+                }
             }
         }
     } else {
         _wsClient->sendZoneEnable(false);
     }
 
-    // Apply color correction settings
+    // Apply colour correction settings (mode and AE target from reservedFuture)
     bool gammaEnabled = (preset.gamma > 0);
     float gammaValue = gammaEnabled ? (preset.gamma / 10.0f) : 2.2f;
-    
-    // Get current mode from WebSocket client state (presets don't store mode)
-    uint8_t currentMode = _wsClient->getColorCorrectionState().mode;
+
+    // Restore saved CC mode — fall back to RGB (2) if unset or invalid
+    uint8_t savedMode = preset.reservedFuture[10];
+    if (savedMode > 3) savedMode = 2;
+
+    // Restore saved AE target — fall back to 110 if unset (zero means old preset)
+    uint8_t savedAeTarget = preset.reservedFuture[11];
+    if (savedAeTarget == 0) savedAeTarget = 110;
 
     _wsClient->sendColorCorrectionConfig(
         gammaEnabled,
         gammaValue,
         preset.autoExposure,
-        110,  // Default auto-exposure target
+        savedAeTarget,
         preset.brownGuardrail,
-        currentMode  // Include current mode - server requires all fields in setConfig
+        savedMode
     );
 
-    Serial.printf("[PresetManager] Applied color correction: gamma=%s (%.1f), ae=%s, brown=%s\n",
+    Serial.printf("[PresetManager] Applied colour correction: gamma=%s (%.1f), ae=%s target=%u, brown=%s, mode=%u\n",
                   gammaEnabled ? "ON" : "OFF", gammaValue,
-                  preset.autoExposure ? "ON" : "OFF",
-                  preset.brownGuardrail ? "ON" : "OFF");
+                  preset.autoExposure ? "ON" : "OFF", savedAeTarget,
+                  preset.brownGuardrail ? "ON" : "OFF", savedMode);
+
+    // Restore EdgeMixer state
+    if (_wsClient->isConnected()) {
+        _wsClient->sendEdgeMixerSet(
+            preset.reservedFuture[5],   // mode
+            preset.reservedFuture[6],   // spread
+            preset.reservedFuture[7],   // strength
+            preset.reservedFuture[8],   // spatial
+            preset.reservedFuture[9]    // temporal
+        );
+        Serial.printf("[Preset] Restored EdgeMixer: mode=%u spread=%u strength=%u spatial=%u temporal=%u\n",
+                      preset.reservedFuture[5], preset.reservedFuture[6], preset.reservedFuture[7],
+                      preset.reservedFuture[8], preset.reservedFuture[9]);
+    }
 
     // Update local ParameterHandler state to match
     if (_paramHandler) {

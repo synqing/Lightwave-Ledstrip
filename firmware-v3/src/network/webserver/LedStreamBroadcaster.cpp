@@ -89,7 +89,7 @@ size_t LedStreamBroadcaster::broadcast(const CRGB* leds) {
     uint32_t toRemove[8];
     uint8_t removeCount = 0;
     size_t sentCount = 0;
-    
+
     for (size_t i = 0; i < count; i++) {
         uint32_t clientId = ids[i];
         AsyncWebSocketClient* c = m_ws->client(clientId);
@@ -107,7 +107,12 @@ size_t LedStreamBroadcaster::broadcast(const CRGB* leds) {
             continue;
         }
         if (!c->canSend()) continue;
-        c->binary(m_frameBuffer, LedStreamConfig::FRAME_SIZE);
+        // Use m_ws->binary(id, ...) instead of c->binary(...) to avoid a race
+        // condition: AsyncTCP on Core 0 can disconnect the client between the
+        // status check above and the send below, leaving `c` pointing at a
+        // client mid-teardown. m_ws->binary() resolves the client atomically
+        // inside AsyncWebSocket, eliminating the dangling-pointer window.
+        m_ws->binary(clientId, m_frameBuffer, LedStreamConfig::FRAME_SIZE);
         sentCount++;
     }
     

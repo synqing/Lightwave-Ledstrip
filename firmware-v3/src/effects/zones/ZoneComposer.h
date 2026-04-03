@@ -214,7 +214,7 @@ private:
 
     // ==================== Member Variables ====================
 
-    bool m_enabled;                     // Zone system enabled
+    volatile bool m_enabled;             // Zone system enabled (volatile: written Core 0, read Core 1)
     bool m_initialized;                 // Init complete flag
     uint8_t m_zoneCount;                // Active zone count
     ZoneSegment m_zoneConfig[MAX_ZONES]; // Runtime storage for zone segment definitions

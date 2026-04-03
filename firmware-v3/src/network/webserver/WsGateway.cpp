@@ -356,8 +356,24 @@ uint32_t WsGateway::getOrIncrementEpoch(uint32_t clientId) {
 }
 
 void WsGateway::handleDisconnect(AsyncWebSocketClient* client) {
-    m_stats.disconnects++;
     uint32_t clientId = client->id();
+
+    // Idempotency guard: if no IP mapping exists, this disconnect was
+    // already processed (duplicate WS_EVT_DISCONNECT from server close
+    // racing with TCP teardown). Skip to prevent double-free.
+    bool found = false;
+    for (uint8_t i = 0; i < CLIENT_IP_MAP_SLOTS; i++) {
+        if (m_clientIpMap[i].clientId == clientId) {
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        LW_LOGD("WS: Client %u disconnect already handled (duplicate ignored)", clientId);
+        return;
+    }
+
+    m_stats.disconnects++;
     LW_LOGI("WS: Client %u disconnected", clientId);
 
     const uint32_t nowMs = millis();

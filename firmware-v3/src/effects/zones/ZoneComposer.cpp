@@ -398,23 +398,30 @@ bool ZoneComposer::setLayout(const ZoneSegment* segments, uint8_t count) {
         Serial.printf("[ZoneComposer] ERROR: Invalid layout parameters (count=%d)\n", count);
         return false;
     }
-    
+
     // Validate the layout before applying
     if (!validateLayout(segments, count)) {
         Serial.println("[ZoneComposer] ERROR: Layout validation failed");
         return false;
     }
-    
+
+    // Temporarily disable rendering to prevent Core 1 render() from reading
+    // partially-modified zone config, count, and buffers.
+    const bool wasEnabled = m_enabled;
+    m_enabled = false;
+
     // Copy segments to runtime storage
     memcpy(m_zoneConfig, segments, count * sizeof(ZoneSegment));
     m_zoneCount = count;
-    
+
     // Clear zone buffers when layout changes to prevent residue
     if (m_zoneBuffers) {
         memset(m_zoneBuffers, 0,
                static_cast<size_t>(MAX_ZONES) * static_cast<size_t>(TOTAL_LEDS) * sizeof(CRGB));
     }
-    
+
+    m_enabled = wasEnabled;
+
     Serial.printf("[ZoneComposer] Layout set to %d zones\n", m_zoneCount);
     return true;
 }
@@ -667,9 +674,15 @@ void ZoneComposer::loadPreset(uint8_t presetId) {
 
     const ZonePreset& preset = PRESETS[presetId];
 
+    // Temporarily disable rendering to prevent Core 1 render() from reading
+    // partially-modified state during the layout + zone update.
+    const bool wasEnabled = m_enabled;
+    m_enabled = false;
+
     // Set layout using segment array
     if (!setLayout(preset.segments, preset.zoneCount)) {
         Serial.printf("[ZoneComposer] ERROR: Failed to set layout for preset %d\n", presetId);
+        m_enabled = wasEnabled;
         return;
     }
 
@@ -677,6 +690,8 @@ void ZoneComposer::loadPreset(uint8_t presetId) {
     for (uint8_t i = 0; i < MAX_ZONES; i++) {
         m_zones[i] = preset.zones[i];
     }
+
+    m_enabled = wasEnabled;
 
     Serial.printf("[ZoneComposer] Loaded preset: %s\n", preset.name);
 }

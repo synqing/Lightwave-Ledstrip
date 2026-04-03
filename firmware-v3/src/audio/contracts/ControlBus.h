@@ -85,7 +85,7 @@ struct ControlBusRawInput {
 
     // STM dual-edge decomposition
     static constexpr uint8_t STM_MEL_BANDS = 16;
-    static constexpr uint8_t STM_SPECTRAL_BINS = 7;
+    static constexpr uint8_t STM_SPECTRAL_BINS = 42;
     float stmTemporal[STM_MEL_BANDS] = {0};      ///< Temporal modulation per mel band [0,1]
     float stmSpectral[STM_SPECTRAL_BINS] = {0};  ///< Spectral modulation magnitudes [0,1]
     float stmTemporalEnergy = 0.0f;              ///< Mean temporal modulation energy [0,1]
@@ -236,8 +236,8 @@ struct ControlBusFrame {
     float pitch_contour_dir = 0.0f;   ///< Spectral centroid movement [-1.0=descending, 0.0=flat, +1.0=ascending]
 };
 
-static_assert(sizeof(ControlBusRawInput) <= 4096, "ControlBusRawInput must remain within 4 KB");
-static_assert(sizeof(ControlBusFrame) <= 4096, "ControlBusFrame must remain within 4 KB");
+static_assert(sizeof(ControlBusRawInput) <= 5120, "ControlBusRawInput must remain within 5 KB");
+static_assert(sizeof(ControlBusFrame) <= 5120, "ControlBusFrame must remain within 5 KB");
 
 /**
  * @brief Lookahead buffer for spike detection (Sensory Bridge pattern).

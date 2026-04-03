@@ -19,7 +19,9 @@ namespace lightwaveos::audio {
 class STMExtractor {
 public:
     static constexpr uint8_t MEL_BANDS = 16;
-    static constexpr uint8_t SPECTRAL_BINS = 7;
+    static constexpr uint8_t SPECTRAL_MEL_BANDS = 128;
+    static constexpr uint8_t SPECTRAL_FFT_BINS = 42;
+    static constexpr uint8_t SPECTRAL_BINS = 42;
     static constexpr uint8_t TEMPORAL_FRAMES = 16;
     static constexpr uint16_t INPUT_BINS = 256;
 
@@ -66,23 +68,25 @@ private:
     static void normaliseVector(float* values, uint8_t count);
 
     void initialiseMelBands();
+    void initialiseSpectralMelBands();
     void applyMelFilterbank(const float* bins256, float* melOut) const;
+    void applySpectralMelFilterbank(const float* bins256, float* melOut128) const;
     void updateHistory(const float* melFrame);
     void updateTemporalModulation(float* temporalOut);
-    void computeSpectralModulation(const float* melFrame, float* spectralOut);
+    void computeSpectralModulation(const float* bins256, float* spectralOut);
 
     MelBand m_melBands[MEL_BANDS];
     float m_melHistory[TEMPORAL_FRAMES][MEL_BANDS] = {{0.0f}};
     float m_goertzelState[MEL_BANDS][2] = {{0.0f}};
     float m_melFrame[MEL_BANDS] = {0.0f};
-    float m_fftBuffer[TEMPORAL_FRAMES] = {0.0f};
-    float m_fftMagnitudes[TEMPORAL_FRAMES / 2] = {0.0f};
+    float m_spectralFftBuffer[SPECTRAL_MEL_BANDS] = {0.0f};
+    float m_spectralMagnitudes[SPECTRAL_MEL_BANDS / 2] = {0.0f};
     uint8_t m_writeIndex = 0;
     uint8_t m_framesFilled = 0;
     float m_goertzelCoeff = 0.0f;
 };
 
-static_assert(sizeof(STMExtractor) <= 4096, "STMExtractor must remain within 4 KB");
+static_assert(sizeof(STMExtractor) <= 8192, "STMExtractor must remain within 8 KB");
 
 }  // namespace lightwaveos::audio
 

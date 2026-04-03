@@ -23,6 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **docs:** `k1-rest-contract.yaml` EdgeMixer section expanded with parameter ranges and all 7 mode descriptions
 
 ### Added
+- **firmware:** Shared gradient rendering kernel — GradientRamp, GradientCoord, GradientTypes under `effects/gradient/`. Centre-origin, dual-edge, 8-stop ramps with clamp/repeat/mirror modes, linear/eased/hard-stop interpolation, stack-allocated (~35 bytes)
+- **firmware:** Retrofitted LGPPerceptualBlendEffect with 3-stop eased gradient ramp — proves multi-stop palette composition
+- **firmware:** LGPGradientField effect (0x1F00) — operator-surfaced gradient proof with 6 parameters: basis, repeatMode, interpolation, spread, phaseOffset, edgeAsymmetry. Dirty-flag ramp rebuild.
+- **firmware:** Colour correction skip for LGP_GRADIENT_FIELD (gradient ramps require uncorrected output)
+- **firmware:** K1 coordinate helpers — uCenter(), uSigned(), uLocal(), edgeId(), halfIndex(), writeCentrePairDual() with correct 79.5 midpoint
+- **firmware:** Colour correction skip for gradient-sensitive effects (EID_LGP_PERCEPTUAL_BLEND)
+- **docs:** Gradient system design doc — coordinate model, API reference, validation scenes, forbidden patterns
 - **ios:** EdgeMixer card on Play tab — 7 colour harmony modes, spread/strength sliders, spatial mask and temporal modulation pickers
 - **ios:** EdgeMixer WebSocket integration — `edge_mixer.get/set/save` commands with 150ms debounce and echo prevention
 - **ios:** EdgeMixer status broadcast sync — passive multi-client state updates from periodic device status
@@ -36,6 +43,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **tools:** Onset capture tooling — led_capture.py onset parsing, analyze_beats.py onset statistics, 2 capture suite scripts
 - **docs:** Onset detector spec, quarantine matrix, ADR, WLED/aubio/essentia research references
 - **tools:** Integrated RTK v0.34.2 token compression proxy — compresses Bash command output (git, builds, file listings) before reaching LLM context, reducing token consumption by 50-80% on CLI operations
+
+### Reverted
+- **firmware:** LGPRadialRippleEffect restored to original — gradient retrofit replaced sin16() brightness with triangular ramp and collapsed hue range from 64 to 4 steps
+- **firmware:** LGPChromaticShearEffect restored to original — gradient retrofit reduced centre dimming from 50% to 30% with different curve shape
 
 ### Changed
 - **firmware:** Silence gate uses raw PCM RMS instead of post-AGC band average — fixes false gate reopening during silence

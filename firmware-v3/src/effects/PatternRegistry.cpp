@@ -437,6 +437,12 @@ bool shouldSkipColorCorrection(EffectId effectId) {
         return true;
     }
 
+    // Gradient kernel effects — correction distorts carefully constructed ramps
+    if (effectId == EID_LGP_PERCEPTUAL_BLEND ||
+        effectId == EID_LGP_GRADIENT_FIELD) {
+        return true;
+    }
+
     // Check family-based skip logic
     const PatternMetadata* meta = getPatternMetadata(effectId);
     if (meta) {

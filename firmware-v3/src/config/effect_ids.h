@@ -360,7 +360,10 @@ constexpr EffectId EID_LGP_BEAT_PRISM_ONSET_ADVECT          = 0x1E02;  // Pressu
 constexpr EffectId EID_LGP_BEAT_PRISM_ONSET_ROTATE          = 0x1E03;  // Rotating Facets variant
 constexpr EffectId EID_LGP_BEAT_PRISM_ONSET_IGNITE          = 0x1E04;  // Progressive Ignition variant
 
-// Total: 201 IDs assigned (200 active, 1 retired)
+// --- Gradient Field (0x1Fxx) ---
+constexpr EffectId EID_LGP_GRADIENT_FIELD                   = 0x1F00;  // LGP Gradient Field (operator-surfaced gradient proof)
+
+// Total: 202 IDs assigned (201 active, 1 retired)
 
 // ============================================================================
 // Migration: Old Sequential ID -> New Stable ID

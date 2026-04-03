@@ -1,10 +1,17 @@
 /**
  * @file LGPPerceptualBlendEffect.cpp
- * @brief LGP Perceptual Blend effect implementation
+ * @brief LGP Perceptual Blend — gradient kernel multi-stop palette ramp
+ *
+ * Proves the gradient kernel with:
+ * - 3-stop ramps with eased interpolation (centre→mid→edge)
+ * - Dual-edge differentiation (strip 1 and strip 2 use different ramps)
+ * - Centre-origin sampling via gradient::uCenter()
+ * - Phase-animated colour rotation
  */
 
 #include "LGPPerceptualBlendEffect.h"
 #include "../CoreEffects.h"
+#include "../gradient/GradientCoord.h"
 #include <FastLED.h>
 #include <cmath>
 
@@ -24,9 +31,10 @@ bool LGPPerceptualBlendEffect::init(plugins::EffectContext& ctx) {
 }
 
 void LGPPerceptualBlendEffect::render(plugins::EffectContext& ctx) {
-    // Palette-driven perceptual blend — 3 palette colors interpolated with
-    // Lab-inspired smooth weighting across radial distance.
-    // Strip 1 blends hue1→hue2, Strip 2 blends hue2→hue3 (complementary pair).
+    // 3-stop gradient ramp sampled across centre-distance.
+    // Strip 1: hue1 (centre) → hue2 (mid) → hue3 (edge)
+    // Strip 2: hue2 (centre) → hue3 (mid) → hue1 (edge) — rotated complement
+
     float dt = ctx.getSafeDeltaSeconds();
     float speed = ctx.speed / 255.0f;
 
@@ -35,42 +43,52 @@ void LGPPerceptualBlendEffect::render(plugins::EffectContext& ctx) {
 
     m_phase += speed * 0.01f * 60.0f * dt;
 
-    // Three palette anchor points spaced 120° apart
+    // Three palette anchors spaced 120° apart
     uint8_t hue1 = ctx.gHue;
     uint8_t hue2 = (uint8_t)(ctx.gHue + 85);
     uint8_t hue3 = (uint8_t)(ctx.gHue + 170);
 
+    // Phase-animated shimmer on brightness
+    float shimmerBase = 0.85f + 0.15f * sinf(m_phase * 1.7f);
+    uint8_t bright = scale8((uint8_t)(shimmerBase * 255.0f), ctx.brightness);
+
+    // Resolve palette colours once per frame (not per LED)
+    CRGB col1 = ctx.palette.getColor(hue1, bright);
+    CRGB col2 = ctx.palette.getColor(hue2, bright);
+    CRGB col3 = ctx.palette.getColor(hue3, bright);
+
+    // Build 3-stop ramps — once per frame, not per LED
+    // Strip 1: hue1 at centre, hue2 at midpoint, hue3 at edge
+    m_rampA.clear();
+    m_rampA.addStop(0,   col1);
+    m_rampA.addStop(128, col2);
+    m_rampA.addStop(255, col3);
+    m_rampA.setInterpolationMode(gradient::InterpolationMode::EASED);
+
+    // Strip 2: rotated complement — hue2 at centre, hue3 at midpoint, hue1 at edge
+    m_rampB.clear();
+    m_rampB.addStop(0,   col2);
+    m_rampB.addStop(128, col3);
+    m_rampB.addStop(255, col1);
+    m_rampB.setInterpolationMode(gradient::InterpolationMode::EASED);
+
+    // Sample ramps across the half-strip using centre-distance coordinates
     for (uint16_t dist = 0; dist < HALF_LENGTH; dist++) {
-        float normalizedDist = (float)dist / (float)HALF_LENGTH;
+        // Animated position with phase offset per distance
+        float uBase = (float)dist / (float)HALF_LENGTH;
+        float phaseOffset = 0.15f * sinf(m_phase + dist * 0.1f);
+        float u = uBase + phaseOffset;
 
-        // Perceptual blend weights — sinusoidal crossfade with phase animation
-        // This creates smooth, Lab-inspired transitions between palette anchors
-        float crossfade = 0.5f + 0.5f * sinf(m_phase + normalizedDist * 3.14159f);
-        float shimmer = 0.85f + 0.15f * sinf(m_phase * 1.7f + dist * 0.15f);
+        // Clamp to [0, 1] — ramp handles clamping internally too
+        if (u < 0.0f) u = 0.0f;
+        if (u > 1.0f) u = 1.0f;
 
-        uint8_t bright = scale8((uint8_t)(shimmer * 255.0f), ctx.brightness);
+        CRGB strip1Colour = m_rampA.samplef(u);
+        CRGB strip2Colour = m_rampB.samplef(u);
 
-        // Strip 1: blend between hue1 and hue2
-        CRGB colorA = ctx.palette.getColor(hue1, bright);
-        CRGB colorB = ctx.palette.getColor(hue2, bright);
-        CRGB strip1Color = colorA.lerp8(colorB, (uint8_t)(crossfade * 255.0f));
-
-        // Strip 2: blend between hue2 and hue3 (complementary pair)
-        CRGB colorC = ctx.palette.getColor(hue2, bright);
-        CRGB colorD = ctx.palette.getColor(hue3, bright);
-        CRGB strip2Color = colorC.lerp8(colorD, (uint8_t)(crossfade * 255.0f));
-
-        // Write symmetric center pair — Strip 1
-        uint16_t left1 = CENTER_LEFT - dist;
-        uint16_t right1 = CENTER_RIGHT + dist;
-        if (left1 < STRIP_LENGTH) ctx.leds[left1] = strip1Color;
-        if (right1 < STRIP_LENGTH) ctx.leds[right1] = strip1Color;
-
-        // Write symmetric center pair — Strip 2
-        uint16_t left2 = STRIP_LENGTH + CENTER_LEFT - dist;
-        uint16_t right2 = STRIP_LENGTH + CENTER_RIGHT + dist;
-        if (left2 < ctx.ledCount) ctx.leds[left2] = strip2Color;
-        if (right2 < ctx.ledCount) ctx.leds[right2] = strip2Color;
+        // Write symmetric centre pair — both strips
+        gradient::writeCentrePairDual(ctx.leds, (uint8_t)dist,
+                                      strip1Colour, strip2Colour, ctx.ledCount);
     }
 }
 
@@ -81,7 +99,7 @@ void LGPPerceptualBlendEffect::cleanup() {
 const plugins::EffectMetadata& LGPPerceptualBlendEffect::getMetadata() const {
     static plugins::EffectMetadata meta{
         "LGP Perceptual Blend",
-        "Lab color space mixing",
+        "Lab colour space mixing",
         plugins::EffectCategory::UNCATEGORIZED,
         1
     };

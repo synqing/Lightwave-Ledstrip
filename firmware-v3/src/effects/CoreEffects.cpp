@@ -100,6 +100,7 @@
 #include "ieffect/LGPPhaseTransitionEffect.h"
 #include "ieffect/LGPChromaticAberrationEffect.h"
 #include "ieffect/LGPPerceptualBlendEffect.h"
+#include "ieffect/LGPGradientFieldEffect.h"
 #include "ieffect/LGPChladniHarmonicsEffect.h"
 #include "ieffect/LGPGravitationalWaveChirpEffect.h"
 #include "ieffect/LGPQuantumEntanglementEffect.h"
@@ -1453,8 +1454,13 @@ uint16_t registerAllEffects(RendererActor* renderer) {
     renderer->registerEffect(EID_LGP_BEAT_PRISM_ONSET_IGNITE, &beatPrismOnsetIgniteInstance);
     total++;
 
+    // --- Gradient Field (0x1Fxx) ---
+    static ieffect::LGPGradientFieldEffect gradientFieldInstance;
+    renderer->registerEffect(EID_LGP_GRADIENT_FIELD, &gradientFieldInstance);
+    total++;
+
     // =============== EFFECT COUNT PARITY VALIDATION ===============
-    constexpr uint16_t EXPECTED_EFFECT_COUNT = FEATURE_AR_1C_EXPERIMENTAL ? 200 : 197;
+    constexpr uint16_t EXPECTED_EFFECT_COUNT = FEATURE_AR_1C_EXPERIMENTAL ? 201 : 198;
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

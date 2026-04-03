@@ -9,6 +9,7 @@
 #include "../../../core/actors/ActorSystem.h"
 #include "../../../core/actors/RendererActor.h"
 #include "../../../config/features.h"
+#include <cmath>
 #include <cstring>
 #include <cstdlib>
 
@@ -1698,6 +1699,71 @@ void AudioHandlers::handleFftGet(AsyncWebServerRequest* request,
     freeControlBusFrameScratch(frame);
 }
 
+void AudioHandlers::handleStmGet(AsyncWebServerRequest* request,
+                                   ActorSystem& actorSystem) {
+    auto* audio = actorSystem.getAudio();
+    if (!audio) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
+        return;
+    }
+
+    audio::ControlBusFrame* frame = allocControlBusFrameScratch();
+    if (frame == nullptr) {
+        sendErrorResponse(request, HttpStatus::INTERNAL_ERROR,
+                          ErrorCodes::INTERNAL_ERROR, "Audio frame scratch allocation failed");
+        return;
+    }
+    uint32_t seq = audio->getControlBusBuffer().ReadLatest(*frame);
+
+    sendSuccessResponse(request, [frame, seq](JsonObject& data) {
+        data["ready"] = frame->stmReady;
+        data["seq"] = seq;
+
+        // Spectral modulation (42 bins from 128-band mel → 128-point FFT)
+        JsonObject spectral = data["spectral"].to<JsonObject>();
+        spectral["bins"] = audio::ControlBusFrame::STM_SPECTRAL_BINS;
+        JsonArray spectralValues = spectral["values"].to<JsonArray>();
+        float spectralMax = 0.0f;
+        float spectralSumSq = 0.0f;
+        float centroidNum = 0.0f;
+        float centroidDen = 0.0f;
+        uint8_t dominantBin = 0;
+        for (uint8_t i = 0; i < audio::ControlBusFrame::STM_SPECTRAL_BINS; ++i) {
+            const float v = frame->stmSpectral[i];
+            spectralValues.add(v);
+            if (v > spectralMax) {
+                spectralMax = v;
+                dominantBin = i;
+            }
+            spectralSumSq += v * v;
+            centroidNum += v * static_cast<float>(i);
+            centroidDen += v;
+        }
+        spectral["energy"] = frame->stmSpectralEnergy;
+
+        // Temporal modulation (16 mel bands via Goertzel)
+        JsonObject temporal = data["temporal"].to<JsonObject>();
+        temporal["bands"] = audio::ControlBusFrame::STM_MEL_BANDS;
+        JsonArray temporalValues = temporal["values"].to<JsonArray>();
+        for (uint8_t i = 0; i < audio::ControlBusFrame::STM_MEL_BANDS; ++i) {
+            temporalValues.add(frame->stmTemporal[i]);
+        }
+        temporal["energy"] = frame->stmTemporalEnergy;
+
+        // Derived metrics (computed on-the-fly — diagnostic endpoint, not per-frame)
+        JsonObject derived = data["derived"].to<JsonObject>();
+        derived["spectralCentroidBin"] = (centroidDen > 1e-6f)
+            ? centroidNum / centroidDen : 0.0f;
+        derived["spectralDominantBin"] = dominantBin;
+        derived["spectralEnergyMax"] = spectralMax;
+        const float binCount = static_cast<float>(audio::ControlBusFrame::STM_SPECTRAL_BINS);
+        derived["spectralEnergyRms"] = (binCount > 0.0f)
+            ? sqrtf(spectralSumSq / binCount) : 0.0f;
+    });
+    freeControlBusFrameScratch(frame);
+}
+
 #else // !FEATURE_AUDIO_SYNC
 
 // Stub implementations when audio sync is disabled
@@ -1852,6 +1918,11 @@ void AudioHandlers::handleAGCToggle(AsyncWebServerRequest* request,
 }
 
 void AudioHandlers::handleFftGet(AsyncWebServerRequest* request, ActorSystem&) {
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void AudioHandlers::handleStmGet(AsyncWebServerRequest* request, ActorSystem&) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }

@@ -111,6 +111,10 @@ public:
     static void handleFftGet(AsyncWebServerRequest* request,
                               lightwaveos::actors::ActorSystem& actorSystem);
 
+    // STM Snapshot
+    static void handleStmGet(AsyncWebServerRequest* request,
+                              lightwaveos::actors::ActorSystem& actorSystem);
+
     // Spike Detection
     static void handleSpikeDetectionGet(AsyncWebServerRequest* request,
                                          lightwaveos::actors::ActorSystem& actorSystem);

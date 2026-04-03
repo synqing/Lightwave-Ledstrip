@@ -55,6 +55,7 @@
 #include "../config/network_config.h"
 #if FEATURE_AUDIO_SYNC
 #include "webserver/AudioStreamBroadcaster.h"
+#include "webserver/StmStreamBroadcaster.h"
 #endif
 #if FEATURE_AUDIO_BENCHMARK
 #include "webserver/BenchmarkStreamBroadcaster.h"
@@ -102,7 +103,7 @@ namespace network {
 
 // Low-heap shedding thresholds may be overridden per PlatformIO environment.
 #ifndef LW_INTERNAL_HEAP_SHED_BELOW_BYTES
-#define LW_INTERNAL_HEAP_SHED_BELOW_BYTES (30U * 1024U)
+#define LW_INTERNAL_HEAP_SHED_BELOW_BYTES (28U * 1024U)
 #endif
 #ifndef LW_INTERNAL_HEAP_RESUME_ABOVE_BYTES
 #define LW_INTERNAL_HEAP_RESUME_ABOVE_BYTES (45U * 1024U)
@@ -461,6 +462,27 @@ public:
      * Internally manages subscriber table and frame throttling.
      */
     void broadcastFftFrame();
+
+    /**
+     * @brief Broadcast STM frame data to subscribed clients
+     *
+     * Sends binary WebSocket frame containing spectral-temporal modulation data.
+     * Throttled to 30 FPS.
+     */
+    void broadcastStmFrame();
+
+    /**
+     * @brief Subscribe/unsubscribe a WebSocket client to STM stream
+     * @param client WebSocket client pointer
+     * @param subscribe true to subscribe, false to unsubscribe
+     * @return true if the subscription was updated
+     */
+    bool setStmStreamSubscription(AsyncWebSocketClient* client, bool subscribe);
+
+    /**
+     * @brief Check if any clients are subscribed to STM streaming
+     */
+    bool hasStmStreamSubscribers() const;
 #endif
 
 #if FEATURE_AUDIO_BENCHMARK
@@ -609,6 +631,9 @@ private:
 #if FEATURE_AUDIO_SYNC
     // Audio frame streaming
     webserver::AudioStreamBroadcaster* m_audioBroadcaster;
+
+    // STM (spectral-temporal modulation) frame streaming
+    webserver::StmStreamBroadcaster* m_stmBroadcaster;
 
     // Reused buffers for audio snapshot pulls from RendererActor.
     // Allocated in begin() (PSRAM-preferred) to keep loopTask stack lean.

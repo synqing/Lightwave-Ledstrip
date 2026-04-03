@@ -61,6 +61,7 @@
 #include "webserver/ws/WsAudioCommands.h"
 #include "webserver/ws/WsStimulusCommands.h"
 #include "webserver/ws/WsDebugCommands.h"
+#include "webserver/ws/WsStmCommands.h"
 #endif
 #include "webserver/ws/WsStreamCommands.h"
 #include "webserver/ws/WsModifierCommands.h"
@@ -206,6 +207,7 @@ WebServer::WebServer(NodeOrchestrator& orchestrator, RendererNode* renderer)
     , m_logBroadcaster(nullptr)
 #if FEATURE_AUDIO_SYNC
     , m_audioBroadcaster(nullptr)
+    , m_stmBroadcaster(nullptr)
     , m_audioFrameScratch(nullptr)
     , m_audioGridScratch(nullptr)
 #endif
@@ -230,6 +232,7 @@ WebServer::~WebServer() {
     delete m_benchmarkBroadcaster;
 #endif
 #if FEATURE_AUDIO_SYNC
+    delete m_stmBroadcaster;
     delete m_audioBroadcaster;
     if (m_audioGridScratch) {
         heap_caps_free(m_audioGridScratch);
@@ -337,6 +340,8 @@ bool WebServer::begin() {
 #if FEATURE_AUDIO_SYNC && defined(BOARD_HAS_PSRAM)
     // Create audio stream broadcaster (skip on no-PSRAM to save RAM)
     m_audioBroadcaster = new webserver::AudioStreamBroadcaster(m_ws);
+    // Create STM stream broadcaster
+    m_stmBroadcaster = new webserver::StmStreamBroadcaster(m_ws, WebServerConfig::MAX_WS_CLIENTS);
 #endif
 
 #if FEATURE_AUDIO_SYNC
@@ -761,6 +766,9 @@ void WebServer::update() {
 
         // FFT frame streaming to subscribed clients (31 Hz)
         broadcastFftFrame();
+
+        // STM frame streaming to subscribed clients (30 FPS)
+        broadcastStmFrame();
     }
 
     // Beat event streaming (fires on beat_tick/downbeat_tick)
@@ -1035,6 +1043,7 @@ void WebServer::setupRoutes() {
         m_logBroadcaster
 #if FEATURE_AUDIO_SYNC
         , m_audioBroadcaster
+        , m_stmBroadcaster
 #endif
 #if FEATURE_AUDIO_BENCHMARK
         , m_benchmarkBroadcaster
@@ -1070,6 +1079,7 @@ void WebServer::setupWebSocket() {
         m_logBroadcaster
 #if FEATURE_AUDIO_SYNC
         , m_audioBroadcaster
+        , m_stmBroadcaster
 #endif
 #if FEATURE_AUDIO_BENCHMARK
         , m_benchmarkBroadcaster
@@ -1083,6 +1093,7 @@ void WebServer::setupWebSocket() {
         , [this](AsyncWebSocketClient* client, bool subscribe) { return setLogStreamSubscription(client, subscribe); }
 #if FEATURE_AUDIO_SYNC
         , [this](AsyncWebSocketClient* client, bool subscribe) { return setAudioStreamSubscription(client, subscribe); }
+        , [this](AsyncWebSocketClient* client, bool subscribe) { return setStmStreamSubscription(client, subscribe); }
 #endif
 #if FEATURE_EFFECT_VALIDATION
         , [this](AsyncWebSocketClient* client, bool subscribe) { return setValidationStreamSubscription(client, subscribe); }
@@ -1188,6 +1199,9 @@ void WebServer::setupWebSocket() {
     webserver::ws::registerWsStimulusCommands(ctx);
     webserver::ws::registerWsDebugCommands(ctx);
     webserver::ws::registerWsStreamCommands(ctx);
+#if FEATURE_AUDIO_SYNC
+    webserver::ws::registerWsStmCommands(ctx);
+#endif
     webserver::ws::registerWsModifierCommands(ctx);
 #if FEATURE_API_AUTH
     webserver::ws::registerWsAuthCommands(ctx);
@@ -1354,6 +1368,13 @@ void WebServer::handleWsDisconnect(AsyncWebSocketClient* client) {
 
     // Cleanup LED stream subscription
     setLEDStreamSubscription(client, false);
+
+#if FEATURE_AUDIO_SYNC
+    // Cleanup STM stream subscription
+    if (m_stmBroadcaster) {
+        m_stmBroadcaster->setSubscription(clientId, false);
+    }
+#endif
 
     // Cleanup beat event subscription
     webserver::ws::removeBeatSubscriber(clientId);

@@ -34,6 +34,7 @@ namespace lightwaveos {
             class LogStreamBroadcaster;
 #if FEATURE_AUDIO_SYNC
             class AudioStreamBroadcaster;
+            class StmStreamBroadcaster;
 #endif
 #if FEATURE_AUDIO_BENCHMARK
             class BenchmarkStreamBroadcaster;
@@ -75,6 +76,7 @@ struct WebServerContext {
     LogStreamBroadcaster* logBroadcaster;
 #if FEATURE_AUDIO_SYNC
     AudioStreamBroadcaster* audioBroadcaster;
+    StmStreamBroadcaster* stmBroadcaster;
 #endif
 #if FEATURE_AUDIO_BENCHMARK
     BenchmarkStreamBroadcaster* benchmarkBroadcaster;
@@ -95,6 +97,7 @@ struct WebServerContext {
     std::function<bool(AsyncWebSocketClient*, bool)> setLogStreamSubscription;
 #if FEATURE_AUDIO_SYNC
     std::function<bool(AsyncWebSocketClient*, bool)> setAudioStreamSubscription;
+    std::function<bool(AsyncWebSocketClient*, bool)> setStmStreamSubscription;
 #endif
 #if FEATURE_EFFECT_VALIDATION
     std::function<bool(AsyncWebSocketClient*, bool)> setValidationStreamSubscription;
@@ -117,6 +120,7 @@ struct WebServerContext {
         LogStreamBroadcaster* logBroadcast,
 #if FEATURE_AUDIO_SYNC
         AudioStreamBroadcaster* audioBroadcast,
+        StmStreamBroadcaster* stmBroadcast,
 #endif
 #if FEATURE_AUDIO_BENCHMARK
         BenchmarkStreamBroadcaster* benchmarkBroadcast,
@@ -130,6 +134,7 @@ struct WebServerContext {
         std::function<bool(AsyncWebSocketClient*, bool)> setLogStreamFn = nullptr,
 #if FEATURE_AUDIO_SYNC
         std::function<bool(AsyncWebSocketClient*, bool)> setAudioStreamFn = nullptr,
+        std::function<bool(AsyncWebSocketClient*, bool)> setStmStreamFn = nullptr,
 #endif
 #if FEATURE_EFFECT_VALIDATION
         std::function<bool(AsyncWebSocketClient*, bool)> setValidationStreamFn = nullptr,
@@ -152,6 +157,7 @@ struct WebServerContext {
         , logBroadcaster(logBroadcast)
 #if FEATURE_AUDIO_SYNC
         , audioBroadcaster(audioBroadcast)
+        , stmBroadcaster(stmBroadcast)
 #endif
 #if FEATURE_AUDIO_BENCHMARK
         , benchmarkBroadcaster(benchmarkBroadcast)
@@ -165,6 +171,7 @@ struct WebServerContext {
         , setLogStreamSubscription(setLogStreamFn)
 #if FEATURE_AUDIO_SYNC
         , setAudioStreamSubscription(setAudioStreamFn)
+        , setStmStreamSubscription(setStmStreamFn)
 #endif
 #if FEATURE_EFFECT_VALIDATION
         , setValidationStreamSubscription(setValidationStreamFn)

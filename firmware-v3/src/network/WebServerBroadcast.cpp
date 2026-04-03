@@ -34,6 +34,7 @@
 
 #if FEATURE_AUDIO_SYNC
 #include "webserver/AudioStreamBroadcaster.h"
+#include "webserver/StmStreamBroadcaster.h"
 #include "webserver/ws/WsStreamCommands.h"
 #include "../audio/AudioNode.h"
 #include "../audio/contracts/ControlBus.h"
@@ -591,6 +592,45 @@ bool WebServer::setAudioStreamSubscription(AsyncWebSocketClient* client, bool su
 
 bool WebServer::hasAudioStreamSubscribers() const {
     return m_audioBroadcaster && m_audioBroadcaster->hasSubscribers();
+}
+
+// ============================================================================
+// STM Frame Streaming
+// ============================================================================
+
+void WebServer::broadcastStmFrame() {
+    if (!m_stmBroadcaster || !m_renderer || !m_audioFrameScratch) return;
+    if (m_lowHeapShed) return;
+    if (!m_stmBroadcaster->hasSubscribers()) return;
+
+    // Reuse the audio frame scratch buffer (already allocated in begin())
+    m_renderer->copyCachedAudioFrame(*m_audioFrameScratch);
+    m_stmBroadcaster->broadcast(*m_audioFrameScratch);
+}
+
+bool WebServer::setStmStreamSubscription(AsyncWebSocketClient* client, bool subscribe) {
+    if (!client || !m_stmBroadcaster) return false;
+    if (subscribe) {
+        const uint32_t freeInternal = static_cast<uint32_t>(getFreeInternalHeap());
+        if (m_lowHeapShed || freeInternal < INTERNAL_HEAP_SHED_BELOW_BYTES) {
+            LW_LOGW("STM stream subscribe rejected (low internal heap=%lu)", (unsigned long)freeInternal);
+            return false;
+        }
+    }
+    uint32_t clientId = client->id();
+    bool success = m_stmBroadcaster->setSubscription(clientId, subscribe);
+
+    if (subscribe && success) {
+        LW_LOGD("Client %u subscribed to STM stream", clientId);
+    } else if (!subscribe) {
+        LW_LOGD("Client %u unsubscribed from STM stream", clientId);
+    }
+
+    return success;
+}
+
+bool WebServer::hasStmStreamSubscribers() const {
+    return m_stmBroadcaster && m_stmBroadcaster->hasSubscribers();
 }
 #endif
 

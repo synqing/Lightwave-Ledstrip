@@ -197,6 +197,26 @@ endpoints:
     method: GET
     description: "Get FFT/spectrum data"
 
+  /api/v1/audio/stm:
+    method: GET
+    description: "Get STM (spectral-temporal modulation) snapshot — 42 spectral bins, 16 temporal bands, scalar energies, derived metrics"
+    response:
+      ready: bool
+      seq: uint32
+      spectral:
+        bins: uint8
+        values: "float[42] normalised spectral modulation magnitudes [0,1]"
+        energy: float
+      temporal:
+        bands: uint8
+        values: "float[16] normalised temporal modulation per mel band [0,1]"
+        energy: float
+      derived:
+        spectralCentroidBin: "float weighted centre of spectral modulation [0,41]"
+        spectralDominantBin: "uint8 bin index with peak spectral modulation [0,41]"
+        spectralEnergyMax: "float max of spectral bins [0,1]"
+        spectralEnergyRms: "float RMS of spectral bins [0,1]"
+
   /api/v1/audio/presets:
     method: GET
     description: "List audio presets"
@@ -660,7 +680,7 @@ endpoints:
     method: POST
     description: "Set EdgeMixer properties. All fields optional."
     params:
-      mode: { type: uint8, range: "0-6", description: "0=mirror, 1=analogous, 2=complementary, 3=split_complementary, 4=saturation_veil, 5=triadic, 6=tetradic" }
+      mode: { type: uint8, range: "0-8", description: "0=mirror, 1=analogous, 2=complementary, 3=split_complementary, 4=saturation_veil, 5=triadic, 6=tetradic, 7=stm_dual, 8=stm_spectral_map" }
       spread: { type: uint8, range: "0-60", description: "Hue spread in degrees" }
       strength: { type: uint8, range: "0-255", description: "Global mix strength" }
       spatial: { type: uint8, range: "0-1", description: "0=uniform, 1=centre_gradient" }

@@ -981,7 +981,7 @@ commands:
     direction: "client -> K1"
     description: "Set EdgeMixer properties (partial update)"
     request:
-      mode: { type: uint8, optional: true, range: "0-7" }
+      mode: { type: uint8, optional: true, range: "0-8" }
       spread: { type: uint8, optional: true, range: "0-60" }
       strength: { type: uint8, optional: true }
       spatial: { type: uint8, optional: true, range: "0-1" }
@@ -1004,7 +1004,7 @@ commands:
     direction: "client -> K1"
     description: "Set EdgeMixer mode by name for lightweight mode toggles"
     request:
-      mode: { type: string, required: true, values: "mirror, analogous, complementary, split_complementary, saturation_veil, triadic, tetradic, stm_dual" }
+      mode: { type: string, required: true, values: "mirror, analogous, complementary, split_complementary, saturation_veil, triadic, tetradic, stm_dual, stm_spectral_map" }
       requestId: { type: string, optional: true }
     response:
       type: "edgemixer_mode"
@@ -1041,6 +1041,31 @@ commands:
       data:
         saved: bool
     consumers: [tab5]
+
+  # ── STM Stream ──────────────────────────────────────────────────────────
+  stm.subscribe:
+    direction: "client -> K1"
+    description: "Subscribe to STM real-time binary stream (42 spectral + 16 temporal + derived metrics at 30 FPS)"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "stm.subscribed"
+      data:
+        clientId: uint32
+        frameSize: uint16
+        targetFps: uint8
+    consumers: [ios, tab5]
+
+  stm.unsubscribe:
+    direction: "client -> K1"
+    description: "Unsubscribe from STM stream"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "stm.unsubscribed"
+      data:
+        clientId: uint32
+    consumers: [ios, tab5]
 
   # ── Motion Engine ──────────────────────────────────────────────────────
   motion.getStatus:

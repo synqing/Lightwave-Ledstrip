@@ -345,12 +345,13 @@ void ZoneComposerUI::createModeRow(lv_obj_t* parent) {
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(modeRow, DesignTokens::GRID_GAP, LV_PART_MAIN);
 
-    // Button widths: 130, 150, 140 per spec
-    static constexpr int32_t kBtnWidths[3] = { 130, 150, 140 };
-
+    // Auto-width buttons — LV_SIZE_CONTENT ensures text is never clipped
     for (uint8_t i = 0; i < 3; ++i) {
         _zoneSelectorBtns[i] = make_card(modeRow, false);
-        lv_obj_set_size(_zoneSelectorBtns[i], kBtnWidths[i], MODE_ROW_H);
+        lv_obj_set_height(_zoneSelectorBtns[i], MODE_ROW_H);
+        lv_obj_set_width(_zoneSelectorBtns[i], LV_SIZE_CONTENT);
+        lv_obj_set_style_pad_left(_zoneSelectorBtns[i], 16, LV_PART_MAIN);
+        lv_obj_set_style_pad_right(_zoneSelectorBtns[i], 16, LV_PART_MAIN);
         lv_obj_add_flag(_zoneSelectorBtns[i], LV_OBJ_FLAG_CLICKABLE);
 
         // Extend touch area for 36px-high buttons (need 48px effective)
@@ -371,9 +372,9 @@ void ZoneComposerUI::createModeRow(lv_obj_t* parent) {
     }
 
     // Set initial text (3-zone mode)
-    lv_label_set_text(_zoneSelectorLabels[0], "ZONE 1 \xC2\xB7 INNER");
-    lv_label_set_text(_zoneSelectorLabels[1], "ZONE 2 \xC2\xB7 MIDDLE");
-    lv_label_set_text(_zoneSelectorLabels[2], "ZONE 3 \xC2\xB7 OUTER");
+    lv_label_set_text(_zoneSelectorLabels[0], "ZONE 1 - INNER");
+    lv_label_set_text(_zoneSelectorLabels[1], "ZONE 2 - MIDDLE");
+    lv_label_set_text(_zoneSelectorLabels[2], "ZONE 3 - OUTER");
 }
 
 // ============================================================================
@@ -406,9 +407,9 @@ void ZoneComposerUI::createStripVisualiser(lv_obj_t* parent) {
                                      lv_color_hex(getZoneColour(i)), LV_PART_MAIN);
         // Positioned by updateStripSegments()
     }
-    lv_label_set_text(_stripZoneLabels[0], "ZONE 1 \xC2\xB7 INNER");
-    lv_label_set_text(_stripZoneLabels[1], "ZONE 2 \xC2\xB7 MIDDLE");
-    lv_label_set_text(_stripZoneLabels[2], "ZONE 3 \xC2\xB7 OUTER");
+    lv_label_set_text(_stripZoneLabels[0], "ZONE 1 - INNER");
+    lv_label_set_text(_stripZoneLabels[1], "ZONE 2 - MIDDLE");
+    lv_label_set_text(_stripZoneLabels[2], "ZONE 3 - OUTER");
 
     // --- Strip bar (dark background for segments) ---
     _stripBar = lv_obj_create(_stripContainer);
@@ -685,7 +686,7 @@ void ZoneComposerUI::createOverviewGrid(lv_obj_t* parent) {
         // Zone title in header
         lv_obj_t* hdrTitle = lv_label_create(headerLeft);
         char hdrBuf[32];
-        snprintf(hdrBuf, sizeof(hdrBuf), "ZONE %d \xE2\x80\x94 %s", i + 1, getZoneRole(i));
+        snprintf(hdrBuf, sizeof(hdrBuf), "ZONE %d - %s", i + 1, getZoneRole(i));
         lv_label_set_text(hdrTitle, hdrBuf);
         lv_obj_set_style_text_font(hdrTitle, RAJDHANI_BOLD_24, LV_PART_MAIN);
         lv_obj_set_style_text_color(hdrTitle, lv_color_hex(zColour), LV_PART_MAIN);
@@ -907,7 +908,7 @@ void ZoneComposerUI::updateStripSegments() {
 
         // Update role text
         char buf[32];
-        snprintf(buf, sizeof(buf), "ZONE %d \xC2\xB7 %s", z + 1, getZoneRole(z));
+        snprintf(buf, sizeof(buf), "ZONE %d - %s", z + 1, getZoneRole(z));
         lv_label_set_text(_stripZoneLabels[z], buf);
     }
 
@@ -1117,7 +1118,7 @@ void ZoneComposerUI::updateZoneSelectorButtons() {
 
         // Update label text
         char buf[32];
-        snprintf(buf, sizeof(buf), "ZONE %d \xC2\xB7 %s", i + 1, getZoneRole(i));
+        snprintf(buf, sizeof(buf), "ZONE %d - %s", i + 1, getZoneRole(i));
         lv_label_set_text(_zoneSelectorLabels[i], buf);
         lv_obj_set_style_text_color(_zoneSelectorLabels[i],
                                      lv_color_hex(zColour), LV_PART_MAIN);

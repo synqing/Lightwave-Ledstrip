@@ -736,11 +736,17 @@ void DisplayUI::begin() {
     // Style zone count card (slot 5) — purple accent, encoder-only (no touch)
     if (_zone_param_cards[5]) {
         lv_obj_set_style_border_color(_zone_param_cards[5], lv_color_hex(DesignTokens::NEON_PURPLE), LV_PART_MAIN);
+        lv_obj_clear_flag(_zone_param_cards[5], LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_flag(_zone_param_cards[5], LV_OBJ_FLAG_CLICK_FOCUSABLE);
+        lv_obj_clear_flag(_zone_param_cards[5], LV_OBJ_FLAG_EVENT_BUBBLE);
     }
 
-    // Style preset card (slot 6) — purple accent, encoder-only (no touch)
+    // Style LED count card (slot 6) — purple accent, encoder-only (no touch)
     if (_zone_param_cards[6]) {
         lv_obj_set_style_border_color(_zone_param_cards[6], lv_color_hex(DesignTokens::NEON_PURPLE), LV_PART_MAIN);
+        lv_obj_clear_flag(_zone_param_cards[6], LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_flag(_zone_param_cards[6], LV_OBJ_FLAG_CLICK_FOCUSABLE);
+        lv_obj_clear_flag(_zone_param_cards[6], LV_OBJ_FLAG_EVENT_BUBBLE);
     }
 
     // Set initial values for zone count and preset cards

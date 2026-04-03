@@ -359,6 +359,10 @@ static bool handleFxParamEncoderChange(uint8_t encoderIndex, int32_t delta, bool
     return true;
 }
 
+// Forward declarations for name lookup (defined below cache functions)
+const char* lookupEffectName(uint16_t id);
+const char* lookupPaletteName(uint8_t id);
+
 /**
  * Handle Unit-B encoder changes when ZONES sidebar tab is active.
  * Maps local index 0-4 to zone parameters, sends WS commands to K1.
@@ -368,20 +372,32 @@ static bool handleZoneEncoderChange(uint8_t encoderIndex, int32_t delta, bool ha
     const uint8_t localIdx = static_cast<uint8_t>(encoderIndex - 8);
     if (!g_ui) return true;
 
-    const uint8_t zoneId = g_ui->getSelectedZone();
+    uint8_t zoneId = g_ui->getSelectedZone();
+    // Clamp zoneId to current zone count (prevents "Invalid zoneId" when
+    // zone count is reduced but a higher zone is still selected)
+    const uint8_t maxZone = g_ui->getZoneCount();
+    if (maxZone > 0 && zoneId >= maxZone) zoneId = maxZone - 1;
     auto state = g_ui->getZoneSidebarState(zoneId);
 
     switch (localIdx) {
-        case 0: { // EFFECT — scroll effect IDs
+        case 0: { // EFFECT — scroll effect IDs (clamped to valid K1 range)
             int32_t newId = static_cast<int32_t>(state.effectId) + delta;
-            if (newId < 0) newId = 0;
+            if (newId < 0x0100) newId = 0x0100;  // Min valid effect ID
+            if (newId > 0x1F00) newId = 0x1F00;  // Max valid effect ID
             state.effectId = static_cast<uint16_t>(newId);
-            // Show hex effect ID when name isn't known locally
-            char effectBuf[16];
-            snprintf(effectBuf, sizeof(effectBuf), "#0x%04X", state.effectId);
-            g_ui->updateZoneSidebarState(zoneId, state.effectId, effectBuf,
-                state.speed, state.paletteId, state.paletteName,
-                state.blendMode, state.brightness);
+            // Use cached name if available, otherwise show hex ID
+            const char* name = lookupEffectName(state.effectId);
+            if (name && name[0]) {
+                g_ui->updateZoneSidebarState(zoneId, state.effectId, name,
+                    state.speed, state.paletteId, state.paletteName,
+                    state.blendMode, state.brightness);
+            } else {
+                char effectBuf[16];
+                snprintf(effectBuf, sizeof(effectBuf), "#0x%04X", state.effectId);
+                g_ui->updateZoneSidebarState(zoneId, state.effectId, effectBuf,
+                    state.speed, state.paletteId, state.paletteName,
+                    state.blendMode, state.brightness);
+            }
             if (g_wsClient.isConnected()) g_wsClient.sendZoneEffect(zoneId, state.effectId);
             break;
         }
@@ -394,22 +410,31 @@ static bool handleZoneEncoderChange(uint8_t encoderIndex, int32_t delta, bool ha
             if (g_wsClient.isConnected()) g_wsClient.sendZoneSpeed(zoneId, state.speed);
             break;
         }
-        case 2: { // PALETTE
+        case 2: { // PALETTE (wraps 0-74, 75 palettes)
             int32_t newPal = static_cast<int32_t>(state.paletteId) + delta;
-            if (newPal < 0) newPal = 0;
+            if (newPal < 0) newPal = 74;   // Wrap to end
+            if (newPal > 74) newPal = 0;   // Wrap to start
             state.paletteId = static_cast<uint8_t>(newPal);
-            // Show numeric palette ID when name isn't known locally
-            char palBuf[16];
-            snprintf(palBuf, sizeof(palBuf), "Palette #%u", state.paletteId);
-            g_ui->updateZoneSidebarState(zoneId, state.effectId, state.effectName,
-                state.speed, state.paletteId, palBuf,
-                state.blendMode, state.brightness);
+            // Use cached name if available, otherwise show numeric ID
+            const char* palName = lookupPaletteName(state.paletteId);
+            if (palName && palName[0]) {
+                g_ui->updateZoneSidebarState(zoneId, state.effectId, state.effectName,
+                    state.speed, state.paletteId, palName,
+                    state.blendMode, state.brightness);
+            } else {
+                char palBuf[16];
+                snprintf(palBuf, sizeof(palBuf), "Palette #%u", state.paletteId);
+                g_ui->updateZoneSidebarState(zoneId, state.effectId, state.effectName,
+                    state.speed, state.paletteId, palBuf,
+                    state.blendMode, state.brightness);
+            }
             if (g_wsClient.isConnected()) g_wsClient.sendZonePalette(zoneId, state.paletteId);
             break;
         }
-        case 3: { // BLEND
+        case 3: { // BLEND (wraps 0-7, 8 blend modes)
             int32_t newBlend = static_cast<int32_t>(state.blendMode) + delta;
-            if (newBlend < 0) newBlend = 0;
+            if (newBlend < 0) newBlend = 7;   // Wrap to last
+            if (newBlend > 7) newBlend = 0;   // Wrap to first
             state.blendMode = static_cast<uint8_t>(newBlend);
             g_ui->updateZoneSidebarState(zoneId, state.effectId, state.effectName,
                 state.speed, state.paletteId, state.paletteName,

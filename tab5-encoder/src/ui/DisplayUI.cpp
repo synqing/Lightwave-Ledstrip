@@ -581,25 +581,50 @@ void DisplayUI::begin() {
     lv_obj_center(_zone_mode_label);
 
     lv_obj_add_event_cb(_zone_mode_btn, [](lv_event_t* e) {
-        // Delegate to ButtonHandler::toggleZoneMode() — the PROVEN working code
-        if (!g_buttonHandler) return;
-        g_buttonHandler->toggleZoneMode();
-
         DisplayUI* ui = static_cast<DisplayUI*>(lv_event_get_user_data(e));
-        if (!ui) return;
-        bool enabled = g_buttonHandler->isZoneModeEnabled();
-        ui->updateZoneModeButton(enabled);
+        if (!ui || !ui->_wsClient || !ui->_wsClient->isConnected()) return;
 
-        // After enabling: assign the current global effect to all zones
-        // so they render something instead of black (effectId=0 = no effect)
-        if (enabled && ui->_wsClient && ui->_wsClient->isConnected()) {
-            uint16_t currentEffect = ui->_wsClient->getCurrentEffectId();
-            if (currentEffect == 0) currentEffect = 0x0100;  // Fallback: first real effect
-            uint8_t zoneCount = ui->_zoneCount;
-            for (uint8_t z = 0; z < zoneCount; z++) {
-                ui->_wsClient->sendZoneEffect(z, currentEffect);
-                Serial.printf("[DisplayUI] zone.setEffect z=%u eid=0x%04X\n", z, currentEffect);
+        ui->_zonesEnabled = !ui->_zonesEnabled;
+        ui->updateZoneModeButton(ui->_zonesEnabled);
+
+        if (ui->_zonesEnabled) {
+            // Centre-origin layouts for 1, 2, and 3 zones
+            static const zones::ZoneSegment LAYOUT_1[1] = {
+                {0, 0, 79, 80, 159, 160}
+            };
+            static const zones::ZoneSegment LAYOUT_2[2] = {
+                {0, 40, 79, 80, 119, 80},
+                {1, 0, 39, 120, 159, 80}
+            };
+            static const zones::ZoneSegment LAYOUT_3[3] = {
+                {0, 53, 79, 80, 106, 54},   // Zone 0: inner (27 LEDs/side)
+                {1, 26, 52, 107, 133, 54},   // Zone 1: middle (27 LEDs/side)
+                {2, 0, 25, 134, 159, 52}     // Zone 2: outer (26 LEDs/side)
+            };
+
+            const zones::ZoneSegment* layout = LAYOUT_2;
+            uint8_t count = ui->_zoneCount;
+            if (count == 1) layout = LAYOUT_1;
+            else if (count == 3) layout = LAYOUT_3;
+
+            // 1: Send layout
+            ui->_wsClient->sendZonesSetLayout(layout, count);
+            Serial.printf("[DisplayUI] zones.setLayout (%u zones)\n", count);
+
+            // 2: Enable
+            ui->_wsClient->sendZoneEnable(true);
+            Serial.println("[DisplayUI] zone.enable=true");
+
+            // 3: Assign current effect to all zones so they render
+            uint16_t eid = ui->_wsClient->getCurrentEffectId();
+            if (eid == 0) eid = 0x0100;
+            for (uint8_t z = 0; z < count; z++) {
+                ui->_wsClient->sendZoneEffect(z, eid);
+                Serial.printf("[DisplayUI] zone.setEffect z=%u eid=0x%04X\n", z, eid);
             }
+        } else {
+            ui->_wsClient->sendZoneEnable(false);
+            Serial.println("[DisplayUI] zone.enable=false");
         }
     }, LV_EVENT_CLICKED, reinterpret_cast<void*>(this));
 
@@ -720,7 +745,7 @@ void DisplayUI::begin() {
 
     // Set initial values for zone count and preset cards
     if (_zone_param_values[5]) lv_label_set_text(_zone_param_values[5], "2");
-    if (_zone_param_values[6]) lv_label_set_text(_zone_param_values[6], "DUAL SPLIT");
+    if (_zone_param_values[6]) lv_label_set_text(_zone_param_values[6], "80 LEDS");
 
     esp_task_wdt_reset();
 

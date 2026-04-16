@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SpectraSynq K1 — Play your favourite song. Then watch.</title>
+  <meta name="description" content="K1 translates music into living light. 86 audio-reactive effects, 106 ambient programmes, 320 LEDs, 120 FPS. Founders' Edition — 100 units.">
+
+  <!-- Fonts: Bebas Neue (display), Figtree (body), JetBrains Mono (specs) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Figtree:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    /* ═══════════════════════════════════════════════════════════════
+       DESIGN TOKENS — SpectraSynq K1
+       Source: theme/tokens.ts
+       Gold on void. Dark-only. No light mode.
+       ═══════════════════════════════════════════════════════════════ */
+
+    :root {
+      /* Brand */
+      --gold: #FFB84D;
+      --gold-dim: rgba(255, 184, 77, 0.3);
+      --gold-highlight: #FFE5B4;
+
+      /* Backgrounds */
+      --bg-base: #000000;
+      --bg-surface: #111111;
+      --bg-overlay: #1A1A1A;
+
+      /* Text */
+      --text-primary: #F2F2F2;
+      --text-secondary: #888888;
+      --text-muted: #444444;
+
+      /* Fonts */
+      --font-display: 'Bebas Neue', sans-serif;
+      --font-body: 'Figtree', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+
+      /* Animation */
+      --ease-k1: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       RESET & BASE
+       ═══════════════════════════════════════════════════════════════ */
+
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      background: var(--bg-base);
+      color: var(--text-primary);
+      font-family: var(--font-body);
+      font-weight: 300;
+      line-height: 1.7;
+      overflow-x: hidden;
+    }
+
+    ::selection {
+      background: var(--gold-dim);
+      color: var(--bg-base);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       TYPOGRAPHY
+       ═══════════════════════════════════════════════════════════════ */
+
+    .heading-display {
+      font-family: var(--font-display);
+      font-weight: 400;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      line-height: 1.0;
+    }
+
+    .heading-section {
+      font-family: var(--font-display);
+      font-weight: 400;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      line-height: 1.1;
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      color: var(--text-primary);
+    }
+
+    .body-large {
+      font-size: clamp(1.05rem, 1.8vw, 1.25rem);
+      line-height: 1.8;
+      color: var(--text-secondary);
+    }
+
+    .body-small {
+      font-size: 0.875rem;
+      line-height: 1.6;
+      color: var(--text-muted);
+    }
+
+    .mono {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       LAYOUT
+       ═══════════════════════════════════════════════════════════════ */
+
+    .section {
+      padding: clamp(4rem, 10vw, 8rem) clamp(1.5rem, 5vw, 4rem);
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .section-narrow {
+      max-width: 800px;
+    }
+
+    .divider {
+      width: 48px;
+      height: 1px;
+      background: var(--text-muted);
+      margin: 2rem 0;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       SECTION 1 — HERO (cinematic)
+       No nav. No logo. Just the words on black.
+       ═══════════════════════════════════════════════════════════════ */
+
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      padding: 0 clamp(1.5rem, 5vw, 4rem);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-line {
+      font-family: var(--font-display);
+      font-weight: 400;
+      font-size: clamp(2.8rem, 8vw, 7rem);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      line-height: 1.05;
+      color: var(--text-primary);
+      opacity: 0;
+      animation: hero-breathe 1.8s var(--ease-k1) 0.4s forwards;
+    }
+
+    @keyframes hero-breathe {
+      0% {
+        opacity: 0;
+        transform: translateY(12px);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .hero-descriptor {
+      position: absolute;
+      bottom: clamp(2rem, 4vw, 3.5rem);
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      opacity: 0;
+      animation: hero-breathe 1.2s var(--ease-k1) 1.6s forwards;
+      white-space: nowrap;
+    }
+
+    .hero-scroll-hint {
+      position: absolute;
+      bottom: clamp(5rem, 8vw, 7rem);
+      left: 50%;
+      transform: translateX(-50%);
+      opacity: 0;
+      animation: scroll-fade 1.2s var(--ease-k1) 2.8s forwards;
+    }
+
+    .hero-scroll-hint span {
+      display: block;
+      width: 1px;
+      height: 32px;
+      background: linear-gradient(to bottom, var(--text-muted), transparent);
+      animation: scroll-pulse 2.4s ease-in-out infinite;
+    }
+
+    @keyframes scroll-fade {
+      to { opacity: 0.4; }
+    }
+
+    @keyframes scroll-pulse {
+      0%, 100% { opacity: 0.3; transform: scaleY(1); }
+      50% { opacity: 0.6; transform: scaleY(1.2); }
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       SECTION 2 — THE FEELING
+       ═══════════════════════════════════════════════════════════════ */
+
+    .feeling {
+      border-top: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .feeling h2 {
+      margin-bottom: 2.5rem;
+    }
+
+    .feeling-body p {
+      max-width: 640px;
+      margin-bottom: 1.5rem;
+    }
+
+    .feeling-body p:last-child {
+      margin-bottom: 0;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       SECTION 3 — THE DUAL TRUTH
+       ═══════════════════════════════════════════════════════════════ */
+
+    .dual-truth {
+      border-top: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .dual-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: clamp(2rem, 5vw, 4rem);
+    }
+
+    @media (max-width: 720px) {
+      .dual-grid {
+        grid-template-columns: 1fr;
+        gap: 3rem;
+      }
+    }
+
+    .dual-card {
+      padding: clamp(1.5rem, 3vw, 2.5rem);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 4px;
+      background: var(--bg-surface);
+    }
+
+    .dual-card-label {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 1rem;
+    }
+
+    .dual-card h3 {
+      font-family: var(--font-display);
+      font-size: clamp(1.6rem, 3.5vw, 2.2rem);
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      line-height: 1.1;
+      color: var(--text-primary);
+      margin-bottom: 1.2rem;
+    }
+
+    .dual-card p {
+      color: var(--text-secondary);
+      font-size: clamp(0.95rem, 1.4vw, 1.05rem);
+      line-height: 1.75;
+    }
+
+    .dual-stat {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-top: 1.2rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      padding-top: 1rem;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       SECTION 4 — HOW IT WORKS
+       ═══════════════════════════════════════════════════════════════ */
+
+    .how-it-works {
+      border-top: 1px solid rgba(255, 255, 255, 0.04);
+      background: var(--bg-surface);
+    }
+
+    .how-it-works .section {
+      max-width: 800px;
+    }
+
+    .how-it-works h2 {
+      margin-bottom: 2rem;
+    }
+
+    .how-it-works .body-large {
+      margin-bottom: 2rem;
+    }
+
+    .pipeline {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 1px;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 2.5rem;
+    }
+
+    .pipeline-step {
+      background: var(--bg-overlay);
+      padding: 1.25rem 1rem;
+      text-align: centre;
+      text-align: center;
+    }
+
+    .pipeline-step-number {
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      letter-spacing: 0.12em;
+      color: var(--gold);
+      margin-bottom: 0.5rem;
+    }
+
+    .pipeline-step-label {
+      font-family: var(--font-body);
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-primary);
+      margin-bottom: 0.25rem;
+    }
+
+    .pipeline-step-detail {
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      letter-spacing: 0.04em;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       SECTION 5 — THE SURFACE (LGP)
+       ═══════════════════════════════════════════════════════════════ */
+
+    .surface {
+      border-top: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .surface h2 {
+      margin-bottom: 2rem;
+    }
+
+    .surface .body-large {
+      max-width: 640px;
+    }
+
+    .lgp-specs {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1.5rem;
+      margin-top: 2.5rem;
+    }
+
+    .lgp-spec {
+      padding: 1.25rem;
+      border-left: 1px solid rgba(255, 184, 77, 0.2);
+    }
+
+    .lgp-spec-value {
+      font-family: var(--font-display);
+      font-size: 1.8rem;
+      color: var(--text-primary);
+      letter-spacing: 0.02em;
+      line-height: 1;
+      margin-bottom: 0.4rem;
+    }
+
+    .lgp-spec-label {
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       SECTION 6 — COMPARISON TABLE
+       ═══════════════════════════════════════════════════════════════ */
+
+    .comparison {
+      border-top: 1px solid rgba(255, 255, 255, 0.04);
+      background: var(--bg-surface);
+    }
+
+    .comparison h2 {
+      margin-bottom: 2.5rem;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .comparison-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+      min-width: 600px;
+    }
+
+    .comparison-table thead th {
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      text-align: left;
+      padding: 0 1rem 1rem 1rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      font-weight: 500;
+    }
+
+    .comparison-table thead th:last-child {
+      color: var(--gold);
+    }
+
+    .comparison-table tbody td {
+      padding: 0.9rem 1rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      color: var(--text-secondary);
+      vertical-align: top;
+    }
+
+    .comparison-table tbody td:first-child {
+      font-family: var(--font-body);
+      font-weight: 500;
+      color: var(--text-primary);
+      font-size: 0.85rem;
+    }
+
+    .comparison-table tbody td:last-child {
+      color: var(--text-primary);
+    }
+
+    .comparison-table tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       SECTION 7 — CTA
+       ═══════════════════════════════════════════════════════════════ */
+
+    .cta-section {
+      border-top: 1px solid rgba(255, 255, 255, 0.04);
+      text-align: center;
+      padding: clamp(5rem, 12vw, 10rem) clamp(1.5rem, 5vw, 4rem);
+    }
+
+    .cta-section h2 {
+      margin-bottom: 1.5rem;
+    }
+
+    .cta-edition {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin-bottom: 2.5rem;
+    }
+
+    .cta-button {
+      display: inline-block;
+      font-family: var(--font-display);
+      font-size: clamp(1.1rem, 2vw, 1.3rem);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--bg-base);
+      background: var(--gold);
+      padding: 1rem 3rem;
+      border: none;
+      border-radius: 2px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 400ms var(--ease-k1), transform 400ms var(--ease-k1);
+      position: relative;
+    }
+
+    .cta-button:hover {
+      background: var(--gold-highlight);
+      transform: translateY(-1px);
+    }
+
+    .cta-button:active {
+      transform: translateY(0);
+    }
+
+    .cta-button::after {
+      content: '';
+      position: absolute;
+      inset: -4px;
+      border: 1px solid var(--gold-dim);
+      border-radius: 4px;
+      opacity: 0;
+      transition: opacity 400ms var(--ease-k1);
+    }
+
+    .cta-button:hover::after {
+      opacity: 1;
+    }
+
+    .cta-footnote {
+      margin-top: 1.5rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       FOOTER
+       ═══════════════════════════════════════════════════════════════ */
+
+    .footer {
+      border-top: 1px solid rgba(255, 255, 255, 0.04);
+      padding: 2rem clamp(1.5rem, 5vw, 4rem);
+      text-align: center;
+    }
+
+    .footer-logo {
+      font-family: var(--font-display);
+      font-size: 1rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+    }
+
+    .footer-legal {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       SCROLL ANIMATIONS
+       ═══════════════════════════════════════════════════════════════ */
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity 0.8s var(--ease-k1), transform 0.8s var(--ease-k1);
+    }
+
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .reveal-delay-1 { transition-delay: 0.1s; }
+    .reveal-delay-2 { transition-delay: 0.2s; }
+    .reveal-delay-3 { transition-delay: 0.3s; }
+    .reveal-delay-4 { transition-delay: 0.4s; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       GOLD GLOW — subtle ambient effect behind hero
+       ═══════════════════════════════════════════════════════════════ */
+
+    .hero-glow {
+      position: absolute;
+      width: 600px;
+      height: 600px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255, 184, 77, 0.03) 0%, transparent 70%);
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      animation: glow-breathe 8s ease-in-out infinite;
+    }
+
+    @keyframes glow-breathe {
+      0%, 100% { opacity: 0.4; transform: translate(-50%, -50%) scale(1); }
+      50% { opacity: 0.8; transform: translate(-50%, -50%) scale(1.15); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       SECTION 1 — HERO
+       Pure cinema. One line. Nothing else.
+       ═══════════════════════════════════════════════════════════════ -->
+
+  <section class="hero" aria-label="Hero">
+    <div class="hero-glow" aria-hidden="true"></div>
+
+    <h1 class="hero-line">
+      Play your favourite song.<br>Then watch.
+    </h1>
+
+    <div class="hero-scroll-hint" aria-hidden="true">
+      <span></span>
+    </div>
+
+    <p class="hero-descriptor">Music Visualiser&ensp;/&ensp;Liquid Light</p>
+  </section>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       SECTION 2 — THE FEELING
+       Emotional expansion. No specs. Just the experience.
+       ═══════════════════════════════════════════════════════════════ -->
+
+  <section class="feeling section section-narrow" aria-label="The Feeling">
+    <h2 class="heading-section reveal">Sound you can see.<br>Light you can feel.</h2>
+
+    <div class="feeling-body">
+      <p class="body-large reveal reveal-delay-1">
+        There is a moment in every great song where the chorus breaks and the room changes. With K1, that change is visible. The light swells with the vocal, tightens on the snare, and breathes between the phrases. It is not a gimmick. It is the song, rendered as colour.
+      </p>
+      <p class="body-large reveal reveal-delay-2">
+        At two in the morning, when the playlist winds down to ambient, K1 shifts with it. Slow thermal drifts. Deep, warm tones that pulse so gently they feel like breathing. You stop noticing it is there. You start noticing when it is off.
+      </p>
+      <p class="body-large reveal reveal-delay-3">
+        And then someone visits. They walk in, glance at the wall, and ask the question every K1 owner knows by heart: <em>"What is that?"</em>
+      </p>
+    </div>
+  </section>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       SECTION 3 — THE DUAL TRUTH
+       Two states. Both real. Both beautiful.
+       ═══════════════════════════════════════════════════════════════ -->
+
+  <section class="dual-truth section" aria-label="The Dual Truth">
+    <div class="dual-grid">
+      <div class="dual-card reveal">
+        <p class="dual-card-label">When music plays</p>
+        <h3>Every beat, every note, every transient — rendered as living colour</h3>
+        <p>
+          K1 translates the full spectral detail of your music into light that moves with genuine musical intelligence. Not random flashing. Not simple volume metering. Real harmonic tracking, real onset detection, real tempo following.
+        </p>
+        <span class="dual-stat">86 audio-reactive effects&ensp;/&ensp;120 FPS</span>
+      </div>
+
+      <div class="dual-card reveal reveal-delay-2">
+        <p class="dual-card-label">When music stops</p>
+        <h3>Liquid light. The room never goes dark.</h3>
+        <p>
+          K1 becomes a continuous light surface. Slow generative programmes flow across 330 mm of Light Guide Plate — thermal drifts, colour washes, breathing gradients. Art that happens to illuminate your room.
+        </p>
+        <span class="dual-stat">106 ambient programmes&ensp;/&ensp;Light Guide Plate</span>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       SECTION 4 — HOW IT WORKS
+       Technical descent begins. Show the engine.
+       ═══════════════════════════════════════════════════════════════ -->
+
+  <div class="how-it-works" aria-label="How it works">
+    <section class="section section-narrow">
+      <h2 class="heading-section reveal">What happens in<br>8 milliseconds.</h2>
+
+      <p class="body-large reveal reveal-delay-1">
+        125 times per second, K1 performs a full 64-bin spectral decomposition, extracts 8 octave energy bands, identifies 12 chromatic pitches, tracks the beat, detects onsets, and renders the result across 320 LEDs. That is more musical intelligence per frame than most studio visualisers manage per second.
+      </p>
+
+      <p class="body-large reveal reveal-delay-2" style="color: var(--text-muted); font-size: 0.95rem;">
+        The entire pipeline — from microphone to photon — completes in under 8.33 ms. Every frame. No dropped beats. No visual latency you can perceive.
+      </p>
+
+      <div class="pipeline reveal reveal-delay-3">
+        <div class="pipeline-step">
+          <p class="pipeline-step-number">01</p>
+          <p class="pipeline-step-label">Capture</p>
+          <p class="pipeline-step-detail">I2S DMA @ 32 kHz</p>
+        </div>
+        <div class="pipeline-step">
+          <p class="pipeline-step-number">02</p>
+          <p class="pipeline-step-label">Analyse</p>
+          <p class="pipeline-step-detail">64-bin Goertzel</p>
+        </div>
+        <div class="pipeline-step">
+          <p class="pipeline-step-number">03</p>
+          <p class="pipeline-step-label">Extract</p>
+          <p class="pipeline-step-detail">8 octaves + 12 chroma</p>
+        </div>
+        <div class="pipeline-step">
+          <p class="pipeline-step-number">04</p>
+          <p class="pipeline-step-label">Track</p>
+          <p class="pipeline-step-detail">Beat + onset detection</p>
+        </div>
+        <div class="pipeline-step">
+          <p class="pipeline-step-number">05</p>
+          <p class="pipeline-step-label">Render</p>
+          <p class="pipeline-step-detail">320 LEDs @ 120 FPS</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       SECTION 5 — THE SURFACE (LGP)
+       ═══════════════════════════════════════════════════════════════ -->
+
+  <section class="surface section section-narrow" aria-label="The Surface">
+    <h2 class="heading-section reveal">Light, without pixels.</h2>
+
+    <p class="body-large reveal reveal-delay-1">
+      K1 does not use a screen. Its Light Guide Plate transforms 320 discrete LEDs into a continuous, pixel-free luminous surface. Light enters the edge of the acrylic panel and scatters uniformly through precision-etched microstructures. The result is not dots. It is not a grid. It is liquid colour — diffused, seamless, and impossibly smooth.
+    </p>
+
+    <p class="body-large reveal reveal-delay-2" style="max-width: 640px;">
+      This is the technology used in premium edge-lit displays and architectural lighting panels, miniaturised into a 330 mm form factor designed for your desk, shelf, or wall.
+    </p>
+
+    <div class="lgp-specs reveal reveal-delay-3">
+      <div class="lgp-spec">
+        <p class="lgp-spec-value">330 mm</p>
+        <p class="lgp-spec-label">Light Guide Plate</p>
+      </div>
+      <div class="lgp-spec">
+        <p class="lgp-spec-value">320</p>
+        <p class="lgp-spec-label">WS2812 LEDs (2 x 160)</p>
+      </div>
+      <div class="lgp-spec">
+        <p class="lgp-spec-value">0 px</p>
+        <p class="lgp-spec-label">Visible Pixels</p>
+      </div>
+      <div class="lgp-spec">
+        <p class="lgp-spec-value">16.7M</p>
+        <p class="lgp-spec-label">Colour Depth</p>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       SECTION 6 — COMPARISON TABLE
+       Now they trust the engineering. Show the receipts.
+       ═══════════════════════════════════════════════════════════════ -->
+
+  <div class="comparison" aria-label="Comparison">
+    <section class="section">
+      <h2 class="heading-section reveal">Why it looks different.</h2>
+
+      <div class="table-wrapper reveal reveal-delay-1">
+        <table class="comparison-table">
+          <thead>
+            <tr>
+              <th>Capability</th>
+              <th>Typical LED Strip</th>
+              <th>Smart Light Bar</th>
+              <th>SpectraSynq K1</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Audio Analysis</td>
+              <td>Volume level only</td>
+              <td>Basic FFT (8&ndash;16 bands)</td>
+              <td>64-bin Goertzel, 8 octaves, 12 chroma, beat + onset</td>
+            </tr>
+            <tr>
+              <td>Frame Rate</td>
+              <td>30 FPS</td>
+              <td>30&ndash;60 FPS</td>
+              <td>120 FPS</td>
+            </tr>
+            <tr>
+              <td>LED Count</td>
+              <td>30&ndash;60 per metre</td>
+              <td>12&ndash;48</td>
+              <td>320 (dual 160-LED strips)</td>
+            </tr>
+            <tr>
+              <td>Light Surface</td>
+              <td>Visible dots</td>
+              <td>Diffused dots</td>
+              <td>Continuous Light Guide Plate — zero visible pixels</td>
+            </tr>
+            <tr>
+              <td>Audio-Reactive Effects</td>
+              <td>3&ndash;8</td>
+              <td>5&ndash;15</td>
+              <td>86</td>
+            </tr>
+            <tr>
+              <td>Ambient Programmes</td>
+              <td>Solid colours</td>
+              <td>10&ndash;30 presets</td>
+              <td>106 generative programmes</td>
+            </tr>
+            <tr>
+              <td>Latency</td>
+              <td>50&ndash;200 ms</td>
+              <td>30&ndash;80 ms</td>
+              <td>&lt; 8.33 ms (microphone to photon)</td>
+            </tr>
+            <tr>
+              <td>Control</td>
+              <td>Phone app</td>
+              <td>Phone app</td>
+              <td>iOS app + physical controller + web interface</td>
+            </tr>
+            <tr>
+              <td>Processor</td>
+              <td>Generic MCU</td>
+              <td>Bluetooth SoC</td>
+              <td>ESP32-S3 dual-core, dedicated audio + render cores</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       SECTION 7 — CTA
+       ═══════════════════════════════════════════════════════════════ -->
+
+  <section class="cta-section" aria-label="Reserve">
+    <h2 class="heading-section reveal">Reserve Your K1</h2>
+    <p class="cta-edition reveal reveal-delay-1">
+      Founders' Edition&ensp;&middot;&ensp;100 units&ensp;&middot;&ensp;$369&ensp;&middot;&ensp;Ships Q2 2026
+    </p>
+    <div class="reveal reveal-delay-2">
+      <a href="#reserve" class="cta-button">Reserve Now</a>
+    </div>
+    <p class="cta-footnote reveal reveal-delay-3">
+      Fully refundable deposit. No charge until shipment.
+    </p>
+  </section>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       FOOTER
+       ═══════════════════════════════════════════════════════════════ -->
+
+  <footer class="footer">
+    <p class="footer-logo">SpectraSynq</p>
+    <p class="footer-legal">&copy; 2026 SpectraSynq Pty Ltd. All rights reserved.</p>
+  </footer>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       SCROLL REVEAL
+       ═══════════════════════════════════════════════════════════════ -->
+
+  <script>
+    (function () {
+      'use strict';
+
+      var reveals = document.querySelectorAll('.reveal');
+
+      if ('IntersectionObserver' in window) {
+        var observer = new IntersectionObserver(function (entries) {
+          entries.forEach(function (entry) {
+            if (entry.isIntersecting) {
+              entry.target.classList.add('visible');
+              observer.unobserve(entry.target);
+            }
+          });
+        }, {
+          threshold: 0.15,
+          rootMargin: '0px 0px -40px 0px'
+        });
+
+        reveals.forEach(function (el) {
+          observer.observe(el);
+        });
+      } else {
+        /* Fallback: show everything immediately */
+        reveals.forEach(function (el) {
+          el.classList.add('visible');
+        });
+      }
+    })();
+  </script>
+
+</body>
+</html>

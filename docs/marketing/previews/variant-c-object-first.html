@@ -1,0 +1,1578 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SpectraSynq K1 — Liquid Light</title>
+  <meta name="description" content="A 330 mm Light Guide Plate that renders seamless, breathing colour — whether it's following a song or holding the room on its own.">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    /* ===========================
+       DESIGN SYSTEM — Variant A
+       =========================== */
+
+    :root {
+      /* Colour palette */
+      --bg-primary: #0a0a0b;
+      --bg-secondary: #111113;
+      --bg-card: #161618;
+      --bg-card-hover: #1c1c1f;
+      --bg-accent: #1a1a2e;
+
+      --text-primary: #f0f0f2;
+      --text-secondary: #a0a0a8;
+      --text-tertiary: #6a6a74;
+      --text-accent: #c8b8ff;
+
+      --accent-primary: #8b5cf6;
+      --accent-secondary: #6d28d9;
+      --accent-glow: rgba(139, 92, 246, 0.15);
+      --accent-border: rgba(139, 92, 246, 0.25);
+
+      --border-subtle: rgba(255, 255, 255, 0.06);
+      --border-medium: rgba(255, 255, 255, 0.10);
+
+      /* Ambient colour accents — used for LGP glow effects */
+      --amber-soft: #f59e0b;
+      --amber-glow: rgba(245, 158, 11, 0.08);
+      --rose-soft: #e11d48;
+      --teal-soft: #14b8a6;
+
+      /* Typography */
+      --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+
+      /* Spacing scale */
+      --space-xs: 0.5rem;
+      --space-sm: 1rem;
+      --space-md: 1.5rem;
+      --space-lg: 2.5rem;
+      --space-xl: 4rem;
+      --space-2xl: 6rem;
+      --space-3xl: 8rem;
+      --space-4xl: 12rem;
+
+      /* Radius */
+      --radius-sm: 6px;
+      --radius-md: 12px;
+      --radius-lg: 20px;
+
+      /* Transitions */
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+      --transition-fast: 150ms var(--ease-out);
+      --transition-medium: 300ms var(--ease-out);
+      --transition-slow: 600ms var(--ease-out);
+    }
+
+    /* ===========================
+       RESET & BASE
+       =========================== */
+
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      font-size: 16px;
+      scroll-behavior: smooth;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      font-family: var(--font-body);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    ::selection {
+      background: rgba(139, 92, 246, 0.3);
+      color: var(--text-primary);
+    }
+
+    img {
+      max-width: 100%;
+      display: block;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    /* ===========================
+       TYPOGRAPHY
+       =========================== */
+
+    .heading-xl {
+      font-size: clamp(2.5rem, 6vw, 5rem);
+      font-weight: 700;
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+    }
+
+    .heading-lg {
+      font-size: clamp(2rem, 4vw, 3.5rem);
+      font-weight: 600;
+      line-height: 1.1;
+      letter-spacing: -0.025em;
+    }
+
+    .heading-md {
+      font-size: clamp(1.5rem, 3vw, 2.25rem);
+      font-weight: 600;
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+    }
+
+    .heading-sm {
+      font-size: clamp(1.125rem, 2vw, 1.5rem);
+      font-weight: 600;
+      line-height: 1.3;
+      letter-spacing: -0.015em;
+    }
+
+    .body-lg {
+      font-size: clamp(1.0625rem, 1.5vw, 1.25rem);
+      line-height: 1.7;
+      color: var(--text-secondary);
+    }
+
+    .body-md {
+      font-size: 1rem;
+      line-height: 1.7;
+      color: var(--text-secondary);
+    }
+
+    .body-sm {
+      font-size: 0.875rem;
+      line-height: 1.6;
+      color: var(--text-tertiary);
+    }
+
+    .mono {
+      font-family: var(--font-mono);
+      font-size: 0.8125rem;
+      letter-spacing: 0.02em;
+    }
+
+    .label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-tertiary);
+    }
+
+    /* ===========================
+       LAYOUT
+       =========================== */
+
+    .container {
+      width: 100%;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 var(--space-md);
+    }
+
+    .container--narrow {
+      max-width: 800px;
+    }
+
+    .container--wide {
+      max-width: 1400px;
+    }
+
+    section {
+      padding: var(--space-3xl) 0;
+      position: relative;
+    }
+
+    /* ===========================
+       NAVIGATION
+       =========================== */
+
+    .nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding: var(--space-sm) 0;
+      background: rgba(10, 10, 11, 0.8);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border-subtle);
+      transition: background var(--transition-medium);
+    }
+
+    .nav__inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .nav__brand {
+      display: flex;
+      align-items: center;
+      gap: var(--space-xs);
+    }
+
+    .nav__logo {
+      width: 28px;
+      height: 28px;
+      background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .nav__logo svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .nav__wordmark {
+      font-weight: 600;
+      font-size: 1rem;
+      letter-spacing: -0.02em;
+    }
+
+    .nav__wordmark span {
+      color: var(--text-tertiary);
+      font-weight: 400;
+    }
+
+    .nav__cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1.25rem;
+      background: var(--accent-primary);
+      color: white;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+    }
+
+    .nav__cta:hover {
+      background: var(--accent-secondary);
+      transform: translateY(-1px);
+    }
+
+    /* ===========================
+       HERO — Section 1
+       =========================== */
+
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: var(--space-4xl) var(--space-md) var(--space-2xl);
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Ambient LGP glow — simulating the resting state of the product */
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: 30%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 700px;
+      height: 400px;
+      background: radial-gradient(
+        ellipse at center,
+        rgba(245, 158, 11, 0.06) 0%,
+        rgba(139, 92, 246, 0.03) 40%,
+        transparent 70%
+      );
+      filter: blur(80px);
+      pointer-events: none;
+      animation: hero-glow 12s ease-in-out infinite alternate;
+    }
+
+    @keyframes hero-glow {
+      0% {
+        opacity: 0.6;
+        transform: translate(-50%, -50%) scale(1);
+      }
+      50% {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1.05);
+      }
+      100% {
+        opacity: 0.7;
+        transform: translate(-50%, -50%) scale(0.98);
+      }
+    }
+
+    .hero__descriptor {
+      margin-bottom: var(--space-lg);
+      opacity: 0;
+      animation: fade-up 0.8s var(--ease-out) 0.2s forwards;
+    }
+
+    .hero__headline {
+      margin-bottom: var(--space-md);
+      opacity: 0;
+      animation: fade-up 0.8s var(--ease-out) 0.4s forwards;
+    }
+
+    .hero__headline em {
+      font-style: normal;
+      background: linear-gradient(135deg, var(--amber-soft), var(--accent-primary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero__subhead {
+      max-width: 640px;
+      margin: 0 auto var(--space-xl);
+      opacity: 0;
+      animation: fade-up 0.8s var(--ease-out) 0.6s forwards;
+    }
+
+    .hero__cta-group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--space-sm);
+      opacity: 0;
+      animation: fade-up 0.8s var(--ease-out) 0.8s forwards;
+    }
+
+    .hero__price {
+      color: var(--text-tertiary);
+      font-size: 0.875rem;
+    }
+
+    @keyframes fade-up {
+      from {
+        opacity: 0;
+        transform: translateY(24px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* ===========================
+       BUTTONS
+       =========================== */
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.875rem 2rem;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-family: var(--font-body);
+      font-size: 1rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+      text-decoration: none;
+    }
+
+    .btn--primary {
+      background: var(--accent-primary);
+      color: white;
+      box-shadow: 0 0 30px rgba(139, 92, 246, 0.2);
+    }
+
+    .btn--primary:hover {
+      background: var(--accent-secondary);
+      transform: translateY(-2px);
+      box-shadow: 0 0 40px rgba(139, 92, 246, 0.3);
+    }
+
+    .btn--secondary {
+      background: transparent;
+      color: var(--text-secondary);
+      border: 1px solid var(--border-medium);
+    }
+
+    .btn--secondary:hover {
+      color: var(--text-primary);
+      border-color: var(--accent-border);
+      background: var(--accent-glow);
+    }
+
+    .btn--large {
+      padding: 1rem 2.5rem;
+      font-size: 1.0625rem;
+    }
+
+    /* Arrow icon in buttons */
+    .btn__arrow {
+      transition: transform var(--transition-fast);
+    }
+
+    .btn:hover .btn__arrow {
+      transform: translateX(3px);
+    }
+
+    /* ===========================
+       LGP VISUAL PLACEHOLDER
+       =========================== */
+
+    .lgp-visual {
+      position: relative;
+      width: 100%;
+      max-width: 680px;
+      margin: 0 auto;
+      aspect-ratio: 330 / 90;
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+
+    .lgp-visual__surface {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(
+        90deg,
+        rgba(245, 158, 11, 0.0) 0%,
+        rgba(245, 158, 11, 0.12) 15%,
+        rgba(251, 191, 36, 0.18) 30%,
+        rgba(245, 158, 11, 0.22) 45%,
+        rgba(217, 119, 6, 0.18) 55%,
+        rgba(180, 83, 9, 0.12) 70%,
+        rgba(139, 92, 246, 0.08) 85%,
+        rgba(139, 92, 246, 0.0) 100%
+      );
+      border-radius: var(--radius-lg);
+      animation: lgp-breathe 8s ease-in-out infinite;
+    }
+
+    .lgp-visual__edge {
+      position: absolute;
+      inset: 0;
+      border: 1px solid rgba(245, 158, 11, 0.15);
+      border-radius: var(--radius-lg);
+      pointer-events: none;
+    }
+
+    .lgp-visual__glow {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 60%;
+      height: 200%;
+      background: radial-gradient(
+        ellipse at center,
+        rgba(245, 158, 11, 0.08) 0%,
+        transparent 70%
+      );
+      filter: blur(40px);
+      animation: lgp-glow-shift 10s ease-in-out infinite alternate;
+    }
+
+    @keyframes lgp-breathe {
+      0%, 100% { opacity: 0.85; }
+      50% { opacity: 1; }
+    }
+
+    @keyframes lgp-glow-shift {
+      0% { transform: translate(-55%, -50%); }
+      100% { transform: translate(-45%, -50%); }
+    }
+
+    /* ===========================
+       SECTION 2 — THE SURFACE
+       =========================== */
+
+    .surface {
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--border-subtle);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .surface__grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: var(--space-xl);
+      align-items: center;
+    }
+
+    @media (min-width: 768px) {
+      .surface__grid {
+        grid-template-columns: 1fr 1fr;
+        gap: var(--space-3xl);
+      }
+    }
+
+    .surface__text {
+      max-width: 520px;
+    }
+
+    .surface__label {
+      margin-bottom: var(--space-sm);
+    }
+
+    .surface__headline {
+      margin-bottom: var(--space-md);
+    }
+
+    .surface__body p {
+      margin-bottom: var(--space-sm);
+    }
+
+    .surface__body p:last-child {
+      margin-bottom: 0;
+    }
+
+    /* LGP detail visual for the surface section */
+    .surface__visual {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      background: var(--bg-primary);
+    }
+
+    .surface__visual-inner {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse at 30% 50%, rgba(245, 158, 11, 0.10) 0%, transparent 50%),
+        radial-gradient(ellipse at 70% 40%, rgba(251, 191, 36, 0.08) 0%, transparent 40%),
+        radial-gradient(ellipse at 50% 60%, rgba(180, 83, 9, 0.06) 0%, transparent 60%);
+      animation: surface-drift 16s ease-in-out infinite alternate;
+    }
+
+    .surface__visual-label {
+      position: absolute;
+      bottom: var(--space-md);
+      left: var(--space-md);
+      padding: 0.375rem 0.75rem;
+      background: rgba(10, 10, 11, 0.7);
+      backdrop-filter: blur(10px);
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-subtle);
+    }
+
+    @keyframes surface-drift {
+      0% { transform: scale(1) translateX(0); }
+      100% { transform: scale(1.02) translateX(-2%); }
+    }
+
+    /* Programme cards */
+    .surface__programmes {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--space-sm);
+      margin-top: var(--space-lg);
+    }
+
+    .programme-card {
+      padding: var(--space-md);
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      transition: all var(--transition-medium);
+    }
+
+    .programme-card:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--accent-border);
+    }
+
+    .programme-card__icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      margin-bottom: var(--space-xs);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .programme-card__title {
+      font-weight: 600;
+      font-size: 0.9375rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .programme-card__desc {
+      font-size: 0.8125rem;
+      color: var(--text-tertiary);
+      line-height: 1.5;
+    }
+
+    /* ===========================
+       SECTION 3 — THE REVEAL
+       =========================== */
+
+    .reveal {
+      text-align: center;
+      padding: var(--space-4xl) 0;
+      position: relative;
+    }
+
+    /* Transition from ambient to reactive — the visual shift */
+    .reveal::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(
+        90deg,
+        transparent 0%,
+        var(--accent-primary) 30%,
+        var(--accent-primary) 70%,
+        transparent 100%
+      );
+      opacity: 0.4;
+    }
+
+    .reveal__transition {
+      margin-bottom: var(--space-3xl);
+      position: relative;
+    }
+
+    .reveal__transition-text {
+      font-size: clamp(1.25rem, 2.5vw, 1.75rem);
+      font-weight: 500;
+      font-style: italic;
+      color: var(--text-tertiary);
+      letter-spacing: -0.01em;
+      transition: color 0.6s ease;
+    }
+
+    .reveal__transition-line {
+      display: block;
+      width: 40px;
+      height: 1px;
+      background: var(--accent-primary);
+      margin: var(--space-md) auto;
+      opacity: 0.4;
+    }
+
+    .reveal__headline {
+      margin-bottom: var(--space-md);
+    }
+
+    .reveal__headline em {
+      font-style: normal;
+      color: var(--accent-primary);
+    }
+
+    .reveal__body {
+      max-width: 600px;
+      margin: 0 auto var(--space-xl);
+    }
+
+    /* Spec proof strip */
+    .reveal__specs {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: var(--space-sm);
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    .spec-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      padding: 0.5rem 1rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 100px;
+      font-family: var(--font-mono);
+      font-size: 0.8125rem;
+      color: var(--text-secondary);
+      transition: all var(--transition-fast);
+    }
+
+    .spec-chip:hover {
+      border-color: var(--accent-border);
+      background: var(--bg-card-hover);
+    }
+
+    .spec-chip__dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent-primary);
+    }
+
+    /* ===========================
+       SECTION 4 — THE PROOF
+       =========================== */
+
+    .proof {
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--border-subtle);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .proof__header {
+      text-align: center;
+      margin-bottom: var(--space-xl);
+    }
+
+    .proof__label {
+      margin-bottom: var(--space-sm);
+    }
+
+    .proof__headline {
+      margin-bottom: var(--space-md);
+    }
+
+    .proof__subhead {
+      max-width: 560px;
+      margin: 0 auto;
+    }
+
+    .proof__cards {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: var(--space-md);
+    }
+
+    @media (min-width: 768px) {
+      .proof__cards {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+
+    .proof-card {
+      padding: var(--space-lg);
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      transition: all var(--transition-medium);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .proof-card:hover {
+      border-color: var(--accent-border);
+      background: var(--bg-card-hover);
+      transform: translateY(-2px);
+    }
+
+    .proof-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent-primary), transparent);
+      opacity: 0;
+      transition: opacity var(--transition-medium);
+    }
+
+    .proof-card:hover::before {
+      opacity: 1;
+    }
+
+    .proof-card__icon {
+      width: 48px;
+      height: 48px;
+      border-radius: var(--radius-md);
+      background: var(--accent-glow);
+      border: 1px solid var(--accent-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: var(--space-md);
+    }
+
+    .proof-card__icon svg {
+      width: 24px;
+      height: 24px;
+      color: var(--accent-primary);
+    }
+
+    .proof-card__title {
+      font-weight: 600;
+      font-size: 1.125rem;
+      margin-bottom: var(--space-xs);
+    }
+
+    .proof-card__body {
+      color: var(--text-secondary);
+      font-size: 0.9375rem;
+      line-height: 1.65;
+      margin-bottom: var(--space-sm);
+    }
+
+    .proof-card__spec {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      padding: 0.25rem 0.625rem;
+      background: rgba(139, 92, 246, 0.08);
+      border: 1px solid rgba(139, 92, 246, 0.15);
+      border-radius: 100px;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text-accent);
+    }
+
+    /* Connecting body text below cards */
+    .proof__connector {
+      max-width: 600px;
+      margin: var(--space-xl) auto 0;
+      text-align: center;
+    }
+
+    /* ===========================
+       SECTION 5 — COMPARISON
+       =========================== */
+
+    .comparison {
+      padding: var(--space-3xl) 0;
+    }
+
+    .comparison__header {
+      text-align: center;
+      margin-bottom: var(--space-xl);
+    }
+
+    .comparison__label {
+      margin-bottom: var(--space-sm);
+    }
+
+    .comparison__headline {
+      margin-bottom: var(--space-md);
+    }
+
+    .comparison__table-wrap {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .comparison__table {
+      width: 100%;
+      min-width: 640px;
+      border-collapse: collapse;
+      font-size: 0.9375rem;
+    }
+
+    .comparison__table thead {
+      background: var(--bg-card);
+    }
+
+    .comparison__table th {
+      padding: var(--space-sm) var(--space-md);
+      text-align: left;
+      font-weight: 600;
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border-subtle);
+      white-space: nowrap;
+    }
+
+    .comparison__table th:first-child {
+      color: var(--text-tertiary);
+      font-weight: 500;
+    }
+
+    /* K1 column highlight */
+    .comparison__table th:nth-child(2) {
+      color: var(--accent-primary);
+    }
+
+    .comparison__table td {
+      padding: var(--space-sm) var(--space-md);
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      vertical-align: top;
+    }
+
+    .comparison__table tr:last-child td {
+      border-bottom: none;
+    }
+
+    /* K1 column emphasis */
+    .comparison__table td:nth-child(2) {
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+
+    .comparison__table tbody tr {
+      transition: background var(--transition-fast);
+    }
+
+    .comparison__table tbody tr:hover {
+      background: rgba(139, 92, 246, 0.03);
+    }
+
+    /* "When music stops" highlight row */
+    .comparison__table .row--highlight td {
+      background: rgba(139, 92, 246, 0.04);
+    }
+
+    .comparison__table .row--highlight td:nth-child(2) {
+      color: var(--text-accent);
+    }
+
+    .comparison__footnote {
+      text-align: centre;
+      margin-top: var(--space-sm);
+      text-align: center;
+    }
+
+    /* ===========================
+       SECTION 6 — CTA
+       =========================== */
+
+    .cta-section {
+      text-align: center;
+      padding: var(--space-4xl) 0;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .cta-section::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 600px;
+      height: 400px;
+      background: radial-gradient(
+        ellipse at center,
+        var(--accent-glow) 0%,
+        transparent 70%
+      );
+      filter: blur(60px);
+      pointer-events: none;
+    }
+
+    .cta-section__headline {
+      margin-bottom: var(--space-md);
+      position: relative;
+    }
+
+    .cta-section__body {
+      max-width: 520px;
+      margin: 0 auto var(--space-lg);
+      position: relative;
+    }
+
+    .cta-section__actions {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--space-sm);
+      position: relative;
+    }
+
+    .cta-section__details {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: var(--space-md);
+      margin-top: var(--space-lg);
+      position: relative;
+    }
+
+    .cta-detail {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--text-tertiary);
+      font-size: 0.875rem;
+    }
+
+    .cta-detail__icon {
+      width: 18px;
+      height: 18px;
+      color: var(--accent-primary);
+    }
+
+    /* ===========================
+       FOOTER
+       =========================== */
+
+    .footer {
+      padding: var(--space-xl) 0;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .footer__inner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--space-sm);
+      text-align: center;
+    }
+
+    .footer__brand {
+      font-weight: 600;
+      font-size: 0.9375rem;
+    }
+
+    .footer__brand span {
+      color: var(--text-tertiary);
+      font-weight: 400;
+    }
+
+    .footer__copy {
+      color: var(--text-tertiary);
+      font-size: 0.8125rem;
+    }
+
+    .footer__links {
+      display: flex;
+      gap: var(--space-md);
+    }
+
+    .footer__link {
+      color: var(--text-tertiary);
+      font-size: 0.8125rem;
+      transition: color var(--transition-fast);
+    }
+
+    .footer__link:hover {
+      color: var(--text-primary);
+    }
+
+    /* ===========================
+       DIVIDER
+       =========================== */
+
+    .divider {
+      width: 100%;
+      max-width: 200px;
+      height: 1px;
+      margin: 0 auto;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        var(--border-medium),
+        transparent
+      );
+    }
+
+    /* ===========================
+       SCROLL FADE-IN
+       =========================== */
+
+    .fade-in {
+      opacity: 0;
+      transform: translateY(30px);
+      transition: opacity 0.7s var(--ease-out), transform 0.7s var(--ease-out);
+    }
+
+    .fade-in.is-visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Stagger children */
+    .stagger > .fade-in:nth-child(1) { transition-delay: 0ms; }
+    .stagger > .fade-in:nth-child(2) { transition-delay: 100ms; }
+    .stagger > .fade-in:nth-child(3) { transition-delay: 200ms; }
+    .stagger > .fade-in:nth-child(4) { transition-delay: 300ms; }
+    .stagger > .fade-in:nth-child(5) { transition-delay: 400ms; }
+
+    /* ===========================
+       RESPONSIVE
+       =========================== */
+
+    @media (max-width: 767px) {
+      section {
+        padding: var(--space-2xl) 0;
+      }
+
+      .hero {
+        min-height: 90vh;
+        padding: var(--space-3xl) var(--space-md) var(--space-xl);
+      }
+
+      .surface__programmes {
+        grid-template-columns: 1fr;
+      }
+
+      .reveal__specs {
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .cta-section__details {
+        flex-direction: column;
+        align-items: center;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- ========================
+       NAVIGATION
+       ======================== -->
+  <nav class="nav">
+    <div class="container nav__inner">
+      <div class="nav__brand">
+        <div class="nav__logo">
+          <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8 2L2 8l6 6 6-6-6-6z" fill="white" opacity="0.9"/>
+          </svg>
+        </div>
+        <div class="nav__wordmark">SpectraSynq <span>K1</span></div>
+      </div>
+      <button class="nav__cta" onclick="document.getElementById('reserve').scrollIntoView({behavior:'smooth'})">
+        Reserve
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+  </nav>
+
+
+  <!-- ========================
+       SECTION 1 — HERO
+       "Liquid Light."
+       ======================== -->
+  <section class="hero">
+    <div class="container" style="position: relative; z-index: 1;">
+
+      <div class="hero__descriptor">
+        <span class="label">Music Visualiser. Liquid Light.</span>
+      </div>
+
+      <h1 class="heading-xl hero__headline">
+        <em>Liquid Light.</em>
+      </h1>
+
+      <p class="body-lg hero__subhead">
+        A 330&nbsp;mm Light Guide Plate that renders seamless, breathing colour — whether it's following a song or holding the room on its own.
+      </p>
+
+      <!-- LGP visual — resting ambient state -->
+      <div class="lgp-visual" style="margin-bottom: var(--space-xl); opacity: 0; animation: fade-up 0.8s var(--ease-out) 0.7s forwards;">
+        <div class="lgp-visual__surface"></div>
+        <div class="lgp-visual__glow"></div>
+        <div class="lgp-visual__edge"></div>
+      </div>
+
+      <div class="hero__cta-group">
+        <a href="#reserve" class="btn btn--primary btn--large">
+          Reserve Your K1
+          <svg class="btn__arrow" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8h10m-4-4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <span class="hero__price">Founders' Edition — limited run</span>
+      </div>
+
+    </div>
+  </section>
+
+
+  <!-- ========================
+       SECTION 2 — THE SURFACE
+       LGP beauty. Pure ambient. No mention of audio.
+       ======================== -->
+  <section class="surface">
+    <div class="container">
+
+      <div class="surface__grid fade-in">
+        <div class="surface__text">
+          <p class="label surface__label">The Surface</p>
+          <h2 class="heading-lg surface__headline">Light, without pixels.</h2>
+          <div class="body-lg surface__body">
+            <p>
+              320 LEDs diffused through a precision Light Guide Plate into a single, continuous luminous surface. No visible dots. No harsh points. No pixel grid.
+            </p>
+            <p>
+              Light flows across the acrylic like pigment through water — breathing, shifting, settling into patterns that feel found rather than manufactured. The surface renders seamless colour that occupies a room the way candlelight does: present without demanding attention.
+            </p>
+            <p>
+              106 ambient programmes give K1 a visual vocabulary that runs on its own. Slow weather. Breathing pulses. Gradient flows that drift and evolve so the surface never repeats the same moment twice.
+            </p>
+          </div>
+        </div>
+
+        <div class="surface__visual">
+          <div class="surface__visual-inner"></div>
+          <div class="surface__visual-label">
+            <span class="mono" style="color: var(--text-tertiary);">330 mm LGP — ambient programme</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Programme category cards -->
+      <div class="surface__programmes stagger">
+        <div class="programme-card fade-in">
+          <div class="programme-card__icon" style="background: rgba(245, 158, 11, 0.1);">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+            </svg>
+          </div>
+          <div class="programme-card__title">Slow Weather</div>
+          <p class="programme-card__desc">Warm gradients that drift like late-afternoon light moving across a wall. Minutes between transitions.</p>
+        </div>
+
+        <div class="programme-card fade-in">
+          <div class="programme-card__icon" style="background: rgba(139, 92, 246, 0.1);">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 2a14 14 0 0 1 0 20"/>
+            </svg>
+          </div>
+          <div class="programme-card__title">Breathing Pulses</div>
+          <p class="programme-card__desc">Luminance rises and falls with the cadence of a resting breath. Present enough to notice, restrained enough to forget.</p>
+        </div>
+
+        <div class="programme-card fade-in">
+          <div class="programme-card__icon" style="background: rgba(20, 184, 166, 0.1);">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#14b8a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 12c2-4 6-7 10-7s8 3 10 7c-2 4-6 7-10 7s-8-3-10-7z"/><circle cx="12" cy="12" r="3"/>
+            </svg>
+          </div>
+          <div class="programme-card__title">Gradient Flows</div>
+          <p class="programme-card__desc">Colour moves from centre to edge and back — continuous, generative compositions that never repeat the same moment twice.</p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+
+  <!-- ========================
+       SECTION 3 — THE REVEAL
+       "...and it listens."
+       ======================== -->
+  <section class="reveal">
+    <div class="container">
+
+      <!-- The transition moment -->
+      <div class="reveal__transition fade-in">
+        <span class="reveal__transition-line"></span>
+        <p class="reveal__transition-text">Play a song.</p>
+        <span class="reveal__transition-line"></span>
+      </div>
+
+      <h2 class="heading-lg reveal__headline fade-in">
+        <em>...and it listens.</em>
+      </h2>
+
+      <p class="body-lg reveal__body fade-in">
+        K1 hears every beat, every note, every transient — and renders them in real time at 120 frames per second. The same surface that held the room in silence now translates music into living colour with frame-perfect precision.
+      </p>
+
+      <!-- Spec proof chips -->
+      <div class="reveal__specs fade-in">
+        <span class="spec-chip">
+          <span class="spec-chip__dot"></span>
+          125 Hz analysis
+        </span>
+        <span class="spec-chip">
+          <span class="spec-chip__dot"></span>
+          64-bin spectral
+        </span>
+        <span class="spec-chip">
+          <span class="spec-chip__dot"></span>
+          12-note chromagram
+        </span>
+        <span class="spec-chip">
+          <span class="spec-chip__dot"></span>
+          Beat tracking
+        </span>
+        <span class="spec-chip">
+          <span class="spec-chip__dot"></span>
+          Onset detection
+        </span>
+        <span class="spec-chip">
+          <span class="spec-chip__dot"></span>
+          120 FPS render
+        </span>
+      </div>
+
+    </div>
+  </section>
+
+
+  <!-- ========================
+       SECTION 4 — THE PROOF
+       "It knows the kick from the keys."
+       ======================== -->
+  <section class="proof">
+    <div class="container">
+
+      <div class="proof__header fade-in">
+        <p class="label proof__label">How It Hears</p>
+        <h2 class="heading-lg proof__headline">It knows the kick from the keys.</h2>
+        <p class="body-lg proof__subhead">
+          Three systems work together 125 times per second to understand what you're listening to — not just how loud it is.
+        </p>
+      </div>
+
+      <div class="proof__cards stagger">
+
+        <!-- Card 1 — Spectral Analysis -->
+        <div class="proof-card fade-in">
+          <div class="proof-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="14" width="2" height="6" rx="1"/>
+              <rect x="7" y="8" width="2" height="12" rx="1"/>
+              <rect x="11" y="4" width="2" height="16" rx="1"/>
+              <rect x="15" y="10" width="2" height="10" rx="1"/>
+              <rect x="19" y="6" width="2" height="14" rx="1"/>
+            </svg>
+          </div>
+          <h3 class="proof-card__title">Spectral Analysis</h3>
+          <p class="proof-card__body">
+            64 Goertzel bins decompose the audio spectrum into discrete frequency bands. K1 sees the sub-bass, the midrange, the treble shimmer — each mapped independently to colour, brightness, and motion.
+          </p>
+          <span class="proof-card__spec">64-bin Goertzel + 8 octave bands</span>
+        </div>
+
+        <!-- Card 2 — Beat Tracking -->
+        <div class="proof-card fade-in">
+          <div class="proof-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+          </div>
+          <h3 class="proof-card__title">Beat Tracking</h3>
+          <p class="proof-card__body">
+            Real-time BPM estimation with phase-locked bar tracking. K1 doesn't chase the beat — it anticipates it. Effects are synchronised to the groove, not to volume spikes.
+          </p>
+          <span class="proof-card__spec">BPM + phase + bar position</span>
+        </div>
+
+        <!-- Card 3 — Onset Detection -->
+        <div class="proof-card fade-in">
+          <div class="proof-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+            </svg>
+          </div>
+          <h3 class="proof-card__title">Onset Detection</h3>
+          <p class="proof-card__body">
+            Transient detection under 2&nbsp;ms. The snare crack, the pluck of a string, the first consonant of a vocal — K1 catches the instant a new sound begins and triggers a visual response before you've consciously registered it.
+          </p>
+          <span class="proof-card__spec">&lt; 2 ms onset response</span>
+        </div>
+
+      </div>
+
+      <div class="proof__connector fade-in">
+        <p class="body-lg">
+          Together, these systems are why K1 effects look <em>musical</em> — not reactive, not random, but genuinely connected to what the artist intended. 86 audio-reactive effects, each composed around the full spectral picture.
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+
+  <!-- ========================
+       SECTION 5 — COMPARISON
+       "When music stops" row FIRST
+       ======================== -->
+  <section class="comparison">
+    <div class="container">
+
+      <div class="comparison__header fade-in">
+        <p class="label comparison__label">Side by Side</p>
+        <h2 class="heading-md comparison__headline">Everything else is a mood lamp.</h2>
+      </div>
+
+      <div class="comparison__table-wrap fade-in">
+        <table class="comparison__table">
+          <thead>
+            <tr>
+              <th>Feature</th>
+              <th>SpectraSynq K1</th>
+              <th>Govee</th>
+              <th>Nanoleaf</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="row--highlight">
+              <td>When music stops</td>
+              <td>106 programmes — liquid light that holds the room</td>
+              <td>Off or static glow</td>
+              <td>Static colour / basic animation</td>
+            </tr>
+            <tr>
+              <td>Audio analysis</td>
+              <td>64-bin spectral, chromagram, beat tracking, onset</td>
+              <td>Volume threshold</td>
+              <td>Volume threshold</td>
+            </tr>
+            <tr>
+              <td>Frame rate</td>
+              <td>120 FPS sustained</td>
+              <td>~30 FPS</td>
+              <td>~30 FPS</td>
+            </tr>
+            <tr>
+              <td>Analysis rate</td>
+              <td>125 Hz (8 ms)</td>
+              <td>Not disclosed</td>
+              <td>Not disclosed</td>
+            </tr>
+            <tr>
+              <td>Effect library</td>
+              <td>204 total (86 reactive + 106 ambient + 12 diagnostic)</td>
+              <td>~30 colour modes</td>
+              <td>~20 + community scenes</td>
+            </tr>
+            <tr>
+              <td>Surface</td>
+              <td>330 mm LGP — seamless, diffused</td>
+              <td>Visible LED segments</td>
+              <td>Modular panels, visible grid</td>
+            </tr>
+            <tr>
+              <td>Cloud dependency</td>
+              <td>None. Built-in WiFi AP.</td>
+              <td>Cloud required for most features</td>
+              <td>Cloud required for scenes</td>
+            </tr>
+            <tr>
+              <td>Aesthetic</td>
+              <td>Premium in both states</td>
+              <td>Dead when off</td>
+              <td>Wallpaper when idle</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="body-sm comparison__footnote fade-in">
+        All K1 specifications are hardware-verified. Competitor data from published product pages, April 2026.
+      </p>
+
+    </div>
+  </section>
+
+
+  <!-- ========================
+       SECTION 6 — CTA
+       ======================== -->
+  <section class="cta-section" id="reserve">
+    <div class="container">
+
+      <h2 class="heading-lg cta-section__headline fade-in">Reserve Your K1</h2>
+
+      <p class="body-lg cta-section__body fade-in">
+        Founders' Edition is a limited production run with a numbered unit, exclusive launch-day effects, and a calibration certificate. No subscription. No cloud. Yours forever.
+      </p>
+
+      <div class="cta-section__actions fade-in">
+        <a href="#" class="btn btn--primary btn--large">
+          Reserve Now
+          <svg class="btn__arrow" width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8h10m-4-4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="#" class="btn btn--secondary">
+          See Full Specifications
+        </a>
+      </div>
+
+      <div class="cta-section__details fade-in">
+        <div class="cta-detail">
+          <svg class="cta-detail__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+          Numbered unit
+        </div>
+        <div class="cta-detail">
+          <svg class="cta-detail__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+          Exclusive effects
+        </div>
+        <div class="cta-detail">
+          <svg class="cta-detail__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+          Calibration certificate
+        </div>
+        <div class="cta-detail">
+          <svg class="cta-detail__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+            <polyline points="22 4 12 14.01 9 11.01"/>
+          </svg>
+          No subscription, no cloud
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+
+  <!-- ========================
+       FOOTER
+       ======================== -->
+  <footer class="footer">
+    <div class="container footer__inner">
+      <div class="footer__brand">SpectraSynq <span>K1</span></div>
+      <div class="footer__links">
+        <a href="#" class="footer__link">Specifications</a>
+        <a href="#" class="footer__link">Technology</a>
+        <a href="#" class="footer__link">Contact</a>
+      </div>
+      <p class="footer__copy">&copy; 2026 SpectraSynq. All rights reserved. Music Visualiser. Liquid Light.</p>
+    </div>
+  </footer>
+
+
+  <!-- ========================
+       SCROLL ANIMATION OBSERVER
+       ======================== -->
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add('is-visible');
+            }
+          });
+        },
+        {
+          threshold: 0.1,
+          rootMargin: '0px 0px -60px 0px',
+        }
+      );
+
+      document.querySelectorAll('.fade-in').forEach((el) => {
+        observer.observe(el);
+      });
+    });
+  </script>
+
+</body>
+</html>

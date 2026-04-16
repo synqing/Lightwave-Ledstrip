@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SpectraSynq K1 — Music. Made Visible.</title>
+  <meta name="description" content="K1 turns music into living colour in real time — then remains as liquid light, holding the room long after the song ends.">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&family=Figtree:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'k1-gold': '#FFB84D',
+            'k1-gold-dim': 'rgba(255, 184, 77, 0.3)',
+            'k1-surface': '#111111',
+            'k1-text': '#F2F2F2',
+            'k1-text-secondary': '#888888',
+            'k1-bg': '#000000',
+          },
+          fontFamily: {
+            'display': ['Figtree', 'system-ui', 'sans-serif'],
+            'body': ['Figtree', 'system-ui', 'sans-serif'],
+            'ui': ['"Barlow Semi Condensed"', 'system-ui', 'sans-serif'],
+          },
+          borderRadius: {
+            'card': '8px',
+            'btn': '4px',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      background: #000000;
+      color: #F2F2F2;
+      font-family: 'Figtree', system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Fade-in animation */
+    .fade-in {
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity 0.7s ease-out, transform 0.7s ease-out;
+    }
+
+    .fade-in.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Stagger children */
+    .fade-in-delay-1 { transition-delay: 0.1s; }
+    .fade-in-delay-2 { transition-delay: 0.2s; }
+    .fade-in-delay-3 { transition-delay: 0.3s; }
+    .fade-in-delay-4 { transition-delay: 0.4s; }
+
+    /* Hero gradient glow */
+    .hero-glow {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 600px;
+      height: 400px;
+      background: radial-gradient(ellipse at center, rgba(255, 184, 77, 0.08) 0%, rgba(255, 184, 77, 0.02) 40%, transparent 70%);
+      pointer-events: none;
+    }
+
+    /* Gold shimmer line */
+    .gold-line {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255, 184, 77, 0.4), transparent);
+    }
+
+    /* Comparison table */
+    .comparison-table th,
+    .comparison-table td {
+      padding: 16px 20px;
+      text-align: left;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .comparison-table thead th {
+      border-bottom: 1px solid rgba(255, 184, 77, 0.3);
+    }
+
+    .comparison-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    /* CTA button hover */
+    .btn-gold {
+      border: 1.5px solid #FFB84D;
+      color: #FFB84D;
+      background: transparent;
+      transition: background 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .btn-gold:hover {
+      background: rgba(255, 184, 77, 0.1);
+      box-shadow: 0 0 24px rgba(255, 184, 77, 0.15);
+    }
+
+    /* Card border */
+    .spec-card {
+      background: #111111;
+      border: 1px solid rgba(255, 184, 77, 0.15);
+      border-radius: 8px;
+    }
+
+    /* Transition line dramatic pause */
+    .transition-line {
+      letter-spacing: 0.02em;
+    }
+  </style>
+</head>
+<body class="bg-k1-bg text-k1-text overflow-x-hidden">
+
+  <!-- ===== SECTION 1: HERO ===== -->
+  <section id="hero" class="relative min-h-screen flex flex-col items-center justify-center px-6 py-24">
+    <div class="hero-glow"></div>
+
+    <div class="relative z-10 max-w-3xl mx-auto text-center">
+      <h1 class="fade-in font-display font-900 text-5xl sm:text-6xl md:text-7xl lg:text-8xl tracking-tight leading-[1.05] mb-8">
+        Music. Made visible.
+      </h1>
+
+      <p class="fade-in fade-in-delay-1 font-body text-lg sm:text-xl md:text-2xl text-k1-text-secondary leading-relaxed max-w-2xl mx-auto mb-12">
+        K1 turns music into living colour in real time — then remains as liquid light, holding the room long after the song ends.
+      </p>
+
+      <a href="#reserve" class="fade-in fade-in-delay-2 btn-gold inline-block font-ui font-semibold text-sm sm:text-base uppercase tracking-widest px-10 py-4 rounded-btn">
+        Reserve Your K1
+      </a>
+
+      <p class="fade-in fade-in-delay-3 mt-20 font-ui text-xs sm:text-sm uppercase tracking-[0.2em] text-k1-text-secondary">
+        Music Visualiser&ensp;·&ensp;Liquid Light
+      </p>
+    </div>
+
+    <!-- Scroll indicator -->
+    <div class="absolute bottom-8 left-1/2 -translate-x-1/2 fade-in fade-in-delay-4">
+      <div class="w-px h-10 bg-gradient-to-b from-transparent via-k1-gold/40 to-transparent"></div>
+    </div>
+  </section>
+
+
+  <!-- ===== SECTION 2: THE SYNC ===== -->
+  <section id="sync" class="relative py-24 px-6">
+    <div class="gold-line max-w-xs mx-auto mb-24"></div>
+
+    <div class="max-w-5xl mx-auto">
+      <div class="text-center mb-16">
+        <h2 class="fade-in font-display font-800 text-3xl sm:text-4xl md:text-5xl tracking-tight mb-6">
+          Timing is the whole game.
+        </h2>
+        <p class="fade-in fade-in-delay-1 font-body text-base sm:text-lg text-k1-text-secondary max-w-2xl mx-auto leading-relaxed">
+          Most LED devices react to volume. K1 listens to music the way a musician does — decomposing every frequency, tracking every beat, anticipating the next bar. The result is light that feels locked to the performance, not chasing it.
+        </p>
+      </div>
+
+      <!-- Spec cards -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Card 1 -->
+        <div class="fade-in spec-card p-8">
+          <p class="font-display font-800 text-3xl sm:text-4xl text-k1-gold mb-3">125</p>
+          <p class="font-ui font-semibold text-sm uppercase tracking-wider text-k1-text mb-4">
+            Audio analyses per second
+          </p>
+          <p class="font-body text-sm text-k1-text-secondary leading-relaxed">
+            Every 8 milliseconds, K1 re-analyses the full audible spectrum. Transients, swells, and micro-dynamics are captured before they fade — not approximated after.
+          </p>
+        </div>
+
+        <!-- Card 2 -->
+        <div class="fade-in fade-in-delay-1 spec-card p-8">
+          <p class="font-display font-800 text-2xl sm:text-3xl text-k1-gold mb-3">64-bin + 12-note</p>
+          <p class="font-ui font-semibold text-sm uppercase tracking-wider text-k1-text mb-4">
+            Spectral decomposition &amp; chromagram
+          </p>
+          <p class="font-body text-sm text-k1-text-secondary leading-relaxed">
+            A 64-bin Goertzel transform isolates individual frequencies. A 12-note chromagram identifies the musical pitch class of every moment. Effects respond to melody, not just energy.
+          </p>
+        </div>
+
+        <!-- Card 3 -->
+        <div class="fade-in fade-in-delay-2 spec-card p-8">
+          <p class="font-display font-800 text-2xl sm:text-3xl text-k1-gold mb-3">Phase-locked</p>
+          <p class="font-ui font-semibold text-sm uppercase tracking-wider text-k1-text mb-4">
+            Beat tracking with bar awareness
+          </p>
+          <p class="font-body text-sm text-k1-text-secondary leading-relaxed">
+            K1 does not merely detect beats — it predicts them. Phase-locked tempo tracking and bar-position awareness let effects anticipate musical structure, creating motion that feels choreographed.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ===== SECTION 3: THE REVEAL ===== -->
+  <section id="reveal" class="relative py-24 px-6">
+    <div class="gold-line max-w-xs mx-auto mb-24"></div>
+
+    <!-- Transition line — dramatic pause -->
+    <div class="max-w-3xl mx-auto text-center mb-24">
+      <p class="fade-in transition-line font-body font-300 text-xl sm:text-2xl md:text-3xl text-k1-text-secondary italic leading-relaxed">
+        And then the music ends.&ensp;K1 doesn't.
+      </p>
+    </div>
+
+    <div class="max-w-5xl mx-auto">
+      <div class="text-center mb-16">
+        <h2 class="fade-in font-display font-800 text-3xl sm:text-4xl md:text-5xl tracking-tight mb-6">
+          Light that lives in the room.
+        </h2>
+        <p class="fade-in fade-in-delay-1 font-body text-base sm:text-lg text-k1-text-secondary max-w-2xl mx-auto leading-relaxed">
+          When silence returns, K1 shifts into 106 ambient visual programmes — seamless, organic luminance that transforms your space without demanding attention.
+        </p>
+      </div>
+
+      <!-- Ambient callout cards -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Card 1: Liquid Light -->
+        <div class="fade-in spec-card p-8 text-center">
+          <div class="w-16 h-16 mx-auto mb-6 rounded-full" style="background: radial-gradient(circle at 40% 40%, rgba(255,184,77,0.5), rgba(255,184,77,0.05) 70%);"></div>
+          <p class="font-display font-700 text-lg text-k1-text mb-3">Liquid Light</p>
+          <p class="font-body text-sm text-k1-text-secondary leading-relaxed">
+            320 LEDs refract through a precision Light Guide Plate, producing smooth, diffused luminance — not point sources. The light feels volumetric, like it occupies the surface rather than sitting on it.
+          </p>
+        </div>
+
+        <!-- Card 2: 106 Visual Programmes -->
+        <div class="fade-in fade-in-delay-1 spec-card p-8 text-center">
+          <div class="w-16 h-16 mx-auto mb-6 rounded-full" style="background: radial-gradient(circle at 40% 40%, rgba(255,184,77,0.35), rgba(255,184,77,0.03) 70%);"></div>
+          <p class="font-display font-700 text-lg text-k1-text mb-3">106 Visual Programmes</p>
+          <p class="font-body text-sm text-k1-text-secondary leading-relaxed">
+            From barely-there candlelight to slow geometric drift to deep colour fields — every programme is designed to complement a room, not compete with it. No screensavers. No gimmicks.
+          </p>
+        </div>
+
+        <!-- Card 3: Always Present -->
+        <div class="fade-in fade-in-delay-2 spec-card p-8 text-center">
+          <div class="w-16 h-16 mx-auto mb-6 rounded-full" style="background: radial-gradient(circle at 40% 40%, rgba(255,184,77,0.2), rgba(255,184,77,0.02) 70%);"></div>
+          <p class="font-display font-700 text-lg text-k1-text mb-3">Always Present, Never Performing</p>
+          <p class="font-body text-sm text-k1-text-secondary leading-relaxed">
+            K1 does not wait for music to justify its existence. In silence, it becomes architectural lighting — quiet, beautiful, and always on. You notice it when you look. You forget it when you don't.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ===== SECTION 4: COMPARISON ===== -->
+  <section id="comparison" class="relative py-24 px-6">
+    <div class="gold-line max-w-xs mx-auto mb-24"></div>
+
+    <div class="max-w-4xl mx-auto">
+      <div class="text-center mb-16">
+        <h2 class="fade-in font-display font-800 text-3xl sm:text-4xl md:text-5xl tracking-tight">
+          Why it looks different.
+        </h2>
+      </div>
+
+      <div class="fade-in overflow-x-auto">
+        <table class="comparison-table w-full text-sm sm:text-base">
+          <thead>
+            <tr>
+              <th class="font-ui font-semibold text-k1-text-secondary uppercase tracking-wider text-xs sm:text-sm min-w-[140px]"></th>
+              <th class="font-ui font-semibold text-k1-gold uppercase tracking-wider text-xs sm:text-sm min-w-[200px]">SpectraSynq K1</th>
+              <th class="font-ui font-semibold text-k1-text-secondary uppercase tracking-wider text-xs sm:text-sm min-w-[200px]">Typical LED Visualiser</th>
+            </tr>
+          </thead>
+          <tbody class="font-body text-sm sm:text-base">
+            <tr>
+              <td class="font-ui font-medium text-k1-text-secondary text-sm">Light source</td>
+              <td class="text-k1-text">Light Guide Plate — diffused, volumetric surface</td>
+              <td class="text-k1-text-secondary">Exposed LED strips — visible point sources</td>
+            </tr>
+            <tr>
+              <td class="font-ui font-medium text-k1-text-secondary text-sm">Audio processing</td>
+              <td class="text-k1-text">64-bin spectral + 12-note chromagram + beat tracking — 125 Hz</td>
+              <td class="text-k1-text-secondary">Microphone volume level — amplitude only</td>
+            </tr>
+            <tr>
+              <td class="font-ui font-medium text-k1-text-secondary text-sm">When music stops</td>
+              <td class="text-k1-text">Seamless transition to ambient — 106 programmes</td>
+              <td class="text-k1-text-secondary">Goes dark or loops a static colour</td>
+            </tr>
+            <tr>
+              <td class="font-ui font-medium text-k1-text-secondary text-sm">Effect library</td>
+              <td class="text-k1-text">100+ effects — audio-reactive and ambient</td>
+              <td class="text-k1-text-secondary">10-20 preset patterns</td>
+            </tr>
+            <tr>
+              <td class="font-ui font-medium text-k1-text-secondary text-sm">Cloud dependency</td>
+              <td class="text-k1-text">None — fully local, no account, no internet required</td>
+              <td class="text-k1-text-secondary">Cloud required for setup, updates, or both</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ===== SECTION 5: RESERVE CTA ===== -->
+  <section id="reserve" class="relative py-24 px-6">
+    <div class="gold-line max-w-xs mx-auto mb-24"></div>
+
+    <div class="max-w-2xl mx-auto text-center">
+      <h2 class="fade-in font-display font-800 text-3xl sm:text-4xl md:text-5xl tracking-tight mb-6">
+        Reserve Your K1
+      </h2>
+
+      <p class="fade-in fade-in-delay-1 font-display font-700 text-4xl sm:text-5xl text-k1-gold mb-4">
+        $369 <span class="text-lg sm:text-xl font-400 text-k1-text-secondary">USD</span>
+      </p>
+
+      <p class="fade-in fade-in-delay-2 font-ui text-sm sm:text-base text-k1-text-secondary mb-10 tracking-wide">
+        Founders' Edition&ensp;·&ensp;100 units&ensp;·&ensp;Ships Q2 2026
+      </p>
+
+      <a href="#" class="fade-in fade-in-delay-3 btn-gold inline-block font-ui font-semibold text-sm sm:text-base uppercase tracking-widest px-12 py-5 rounded-btn">
+        Reserve Your K1
+      </a>
+
+      <p class="fade-in fade-in-delay-4 mt-8 font-body text-xs text-k1-text-secondary">
+        No payment required to reserve. You'll be first to know when orders open.
+      </p>
+    </div>
+  </section>
+
+
+  <!-- ===== FOOTER ===== -->
+  <footer class="py-12 px-6 text-center">
+    <div class="gold-line max-w-xs mx-auto mb-12"></div>
+    <p class="font-ui text-xs text-k1-text-secondary tracking-wider uppercase">
+      &copy; 2026 SpectraSynq&ensp;·&ensp;Melbourne, Australia
+    </p>
+  </footer>
+
+
+  <!-- ===== SCROLL FADE-IN OBSERVER ===== -->
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+          }
+        });
+      }, {
+        threshold: 0.1,
+        rootMargin: '0px 0px -40px 0px'
+      });
+
+      document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+    });
+  </script>
+
+</body>
+</html>

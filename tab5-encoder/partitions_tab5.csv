@@ -1,0 +1,10 @@
+# Tab5 Custom Partition Table (16MB Flash)
+# Based on default_16MB.csv with NVS enlarged from 20KB to 64KB.
+# The 44KB increase is taken from SPIFFS (3.375MB → 3.332MB).
+# Name,    Type, SubType, Offset,   Size,     Flags
+nvs,       data, nvs,     0x9000,   0x10000,
+otadata,   data, ota,     0x19000,  0x2000,
+app0,      app,  ota_0,   0x20000,  0x640000,
+app1,      app,  ota_1,   0x660000, 0x640000,
+spiffs,    data, spiffs,  0xca0000, 0x350000,
+coredump,  data, coredump,0xFF0000, 0x10000,

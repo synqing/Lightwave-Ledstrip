@@ -33,15 +33,18 @@ bool NvsStorage::init() {
     // Initialize NVS flash partition
     esp_err_t err = nvs_flash_init();
 
-    // Handle corrupt or version-mismatch NVS
+    // Handle corrupt or version-mismatch NVS.
+    // NEVER call nvs_flash_erase() — that destroys ALL user data including presets.
+    // If NVS is in a bad state, log the error and operate in degraded mode.
+    // Presets are safe in PSRAM regardless.
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        Serial.println("[NVS] NVS partition needs erase - performing first-boot init");
-        err = nvs_flash_erase();
-        if (err != ESP_OK) {
-            Serial.printf("[NVS] ERROR: nvs_flash_erase failed: %s\n", esp_err_to_name(err));
-            return false;
-        }
-        err = nvs_flash_init();
+        Serial.println("[NVS] WARNING: NVS partition corrupt or version mismatch");
+        Serial.printf("[NVS] WARNING: nvs_flash_init returned: %s\n", esp_err_to_name(err));
+        Serial.println("[NVS] Operating in degraded mode — presets safe in PSRAM");
+        Serial.println("[NVS] To recover NVS: reflash with 'Erase Flash' option in PlatformIO");
+        // Do NOT erase. Do NOT init again. Mark as failed and continue.
+        s_initialized = false;
+        return false;
     }
 
     if (err != ESP_OK) {

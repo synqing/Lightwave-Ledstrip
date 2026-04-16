@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - ESP32-P4 Audio Pipeline & iOS App
 
 ### Added
+- **tab5:** PSRAM-primary preset storage — NVS demoted to write-behind backup; no code path can silently erase user presets
+- **tab5:** Custom partition table — NVS enlarged from 20KB to 64KB (SPIFFS reduced by 44KB)
+- **tab5:** NVS health tracking (`isNvsHealthy()`) for storage diagnostics
+- **docs:** K1 landing page production pipeline — taglines, strategy, dual-state positioning, build spec, launch video spec, 5 HTML variants
 - **firmware:** Vendored FastLED 3.10.0 RMT4 `idf4_rmt_impl.cpp` overlay (non-blocking `showPixels`) with PlatformIO pre-script — `firmware-v3/patches/vendor/FastLED-3.10.0-rmt4/` and `firmware-v3/scripts/apply_fastled_rmt4_patch.py`
 - **scripts:** K1 loaded soak harness — serial stress (effect rotation, hotkeys, periodic `s` status) plus optional REST when the host can reach the K1 AP — `firmware-v3/scripts/k1_loaded_soak.py`
 - **docs:** Inference task decision brief with evidence tags (latency, memory, execution targets; Orin downstream of open spec) — `firmware-v3/docs/design/INFERENCE_TASK_DECISION_BRIEF.md`
@@ -39,6 +43,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **docs:** Tab5 I2C recovery research, memory audit, and implementation guides
 
 ### Fixed
+- **firmware:** NVS debounced-save deferred when internal heap < 8KB — prevents flash corruption under memory pressure
+- **firmware:** WebSocket reconnect storm during heap shedding — `handleWsConnect()` rejects with 1013 while `m_lowHeapShed` is active
+- **tab5:** `nvs_flash_erase()` removed from NvsStorage and PresetStorage — was silently destroying user presets on NVS version mismatch
 - **firmware:** Removed temporary overlap/JSON serial debug and invalid host-path logging from `LedDriver_S3` and `RendererActor` (ESP32 cannot append to macOS paths).
 - **tab5:** Zone effectId truncated from uint16_t to uint8_t — ZoneState.effectId and WsMessageRouter parsing both used uint8_t, losing high byte of K1's hex effect IDs (0x0100+)
 - **tab5:** Zone effect encoder sent raw 0,1,2,3 — clamped to valid K1 range 0x0100-0x1F00 with cached name display

@@ -374,24 +374,34 @@ void loop() {
     }
 
     // ── Debounced NVS save (DEC-011/E2: 500ms coalesced writes) ──────────
+    // Heap guard: refuse NVS writes when internal heap is critically low.
+    // NVS commit can fail or corrupt data under memory pressure.
+    static constexpr size_t NVS_SAVE_MIN_HEAP = 8192;
     if (g_nvsSavePending && (now - g_nvsSaveRequestMs) >= NVS_SAVE_DEBOUNCE_MS) {
-        g_nvsSavePending = false;
-        if (zoneConfigMgr && renderer) {
-            lightwaveos::persistence::SystemExpressionParams expr;
-            expr.hue        = renderer->getHue();
-            expr.saturation = renderer->getSaturation();
-            expr.mood       = renderer->getMood();
-            expr.trails     = renderer->getFadeAmount();
-            expr.intensity  = renderer->getIntensity();
-            expr.complexity = renderer->getComplexity();
-            expr.variation  = renderer->getVariation();
-            zoneConfigMgr->saveSystemState(
-                renderer->getCurrentEffect(),
-                renderer->getBrightness(),
-                renderer->getSpeed(),
-                renderer->getPaletteIndex(),
-                g_factoryPresetIndex,
-                &expr);
+        const size_t freeHeap = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        if (freeHeap < NVS_SAVE_MIN_HEAP) {
+            // Defer — do NOT clear g_nvsSavePending, retry next loop when heap recovers
+            LW_LOGW("NVS save deferred: internal heap %u < %u minimum",
+                    (unsigned)freeHeap, (unsigned)NVS_SAVE_MIN_HEAP);
+        } else {
+            g_nvsSavePending = false;
+            if (zoneConfigMgr && renderer) {
+                lightwaveos::persistence::SystemExpressionParams expr;
+                expr.hue        = renderer->getHue();
+                expr.saturation = renderer->getSaturation();
+                expr.mood       = renderer->getMood();
+                expr.trails     = renderer->getFadeAmount();
+                expr.intensity  = renderer->getIntensity();
+                expr.complexity = renderer->getComplexity();
+                expr.variation  = renderer->getVariation();
+                zoneConfigMgr->saveSystemState(
+                    renderer->getCurrentEffect(),
+                    renderer->getBrightness(),
+                    renderer->getSpeed(),
+                    renderer->getPaletteIndex(),
+                    g_factoryPresetIndex,
+                    &expr);
+            }
         }
     }
 

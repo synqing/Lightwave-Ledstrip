@@ -1317,7 +1317,16 @@ void WebServer::handleWsConnect(AsyncWebSocketClient* client) {
         LW_LOGW("handleWsConnect: m_ws is null");
         return;
     }
-    
+
+    // Reject connections during active heap shedding.
+    // Without this guard, clients reconnect immediately after receiving close
+    // code 1013, K1 accepts and closes again, creating a reconnect storm that
+    // prevents heap recovery and can crash the client device.
+    if (m_lowHeapShed) {
+        client->close(1013, "Shedding active");
+        return;
+    }
+
     // Ensure stale client entries are purged before applying connection limits.
     m_ws->cleanupClients();
     if (m_ws->count() > WebServerConfig::MAX_WS_CLIENTS) {

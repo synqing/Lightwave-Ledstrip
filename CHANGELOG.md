@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - ESP32-P4 Audio Pipeline & iOS App
 
 ### Added
+- **firmware:** Vendored FastLED 3.10.0 RMT4 `idf4_rmt_impl.cpp` overlay (non-blocking `showPixels`) with PlatformIO pre-script — `firmware-v3/patches/vendor/FastLED-3.10.0-rmt4/` and `firmware-v3/scripts/apply_fastled_rmt4_patch.py`
+- **scripts:** K1 loaded soak harness — serial stress (effect rotation, hotkeys, periodic `s` status) plus optional REST when the host can reach the K1 AP — `firmware-v3/scripts/k1_loaded_soak.py`
+- **docs:** Inference task decision brief with evidence tags (latency, memory, execution targets; Orin downstream of open spec) — `firmware-v3/docs/design/INFERENCE_TASK_DECISION_BRIEF.md`
+- **docs:** Seeded inference task-placement matrix (DSP / heuristic / ML classes, wire vs contract drift, mapping buckets) — `firmware-v3/docs/design/INFERENCE_TASK_PLACEMENT_MATRIX.md`
+- **docs:** Inference placement matrix rev 0.2 — split tempo vs phase rows, vocal inject vs native, mandatory Yes/No/Research-only defaults, explicit failure semantics
+- **docs:** Inference placement matrix rev 0.3 — parallel SSA corrections (ESV11 EsBeatClock path, merge m_merged hold, translation LOCK/silence, saliency/style grep vs features.h, wire REST/WS nuance)
 - **firmware:** STM (Spectral-Temporal Modulation) dual-edge mode — per-LED spectral modulation for EdgeMixer
 - **firmware:** STM 128-band spectral upgrade — mel filterbank + FFT pipeline
 - **firmware:** STM snapshot REST endpoint with derived metrics
@@ -33,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **docs:** Tab5 I2C recovery research, memory audit, and implementation guides
 
 ### Fixed
+- **firmware:** Removed temporary overlap/JSON serial debug and invalid host-path logging from `LedDriver_S3` and `RendererActor` (ESP32 cannot append to macOS paths).
 - **tab5:** Zone effectId truncated from uint16_t to uint8_t — ZoneState.effectId and WsMessageRouter parsing both used uint8_t, losing high byte of K1's hex effect IDs (0x0100+)
 - **tab5:** Zone effect encoder sent raw 0,1,2,3 — clamped to valid K1 range 0x0100-0x1F00 with cached name display
 - **tab5:** Zone palette encoder had no upper bound — now wraps 0-74 (75 palettes)
@@ -50,6 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **zone-mixer:** Safety audit fixes — WDT, I2C error handling, Arduino compatibility
 
 ### Changed
+- **firmware:** `ILedDriver::isShowInProgress()` documentation clarified for async RMT (wire time may continue after the flag clears).
 - **tab5:** Zone purge 4→3 — 1-indexed (Zone 1/2/3), max 3 zones, no Zone 0
 - **tab5:** I2CRecovery stripped to error counter only (-835 lines)
 - **tab5:** Purged 22 unused font assets — 79K LOC removed

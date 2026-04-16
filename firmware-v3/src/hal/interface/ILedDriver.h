@@ -156,10 +156,10 @@ public:
     virtual void resetStats() = 0;
 
     /**
-     * @brief Check whether a timing-critical LED transmit is in progress
+     * @brief Rough indicator that show() is between mutex take and return
      *
      * Default is false for implementations that do not expose this state.
-     * S3 FastLED/RMT path overrides this so callers can defer non-critical work.
+     * On S3 with the patched RMT4 driver, wire time may continue after this reads false.
      */
     virtual bool isShowInProgress() const { return false; }
 };

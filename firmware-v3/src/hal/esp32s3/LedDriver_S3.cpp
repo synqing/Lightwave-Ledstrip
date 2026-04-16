@@ -147,26 +147,17 @@ void LedDriver_S3::show() {
     m_showInProgress.store(true, std::memory_order_relaxed);
 
     TRACE_SCOPE("fastled_rmt_show");
+    // Patched FastLED RMT4 (see patches/vendor/FastLED-3.10.0-rmt4): returns after
+    // starting TX; previous frame completion is serialised on the next show()
+    // via FastLED's internal gTX_sem. Wire time therefore overlaps pacing/render.
     FastLED.show();
 
-    uint32_t end = static_cast<uint32_t>(esp_timer_get_time());
-
-    // FastLED on some S3 paths can return before wire transmission fully drains.
-    // Hold the buffer for at least one WS2812 frame time to avoid visible tearing.
-    constexpr uint32_t kWs2812UsPerLed = 30;  // 24 bits * 1.25us
-    constexpr uint32_t kLatchUs = 300;        // WS2812 spec requires >280us latch
-    const uint16_t longestStrip =
-        (m_stripCounts[0] > m_stripCounts[1]) ? m_stripCounts[0] : m_stripCounts[1];
-    const uint32_t minWireTimeUs = static_cast<uint32_t>(longestStrip) * kWs2812UsPerLed + kLatchUs;
-    uint32_t showUs = end - now;
-    if (showUs < minWireTimeUs) {
-        esp_rom_delay_us(minWireTimeUs - showUs);
-        end = static_cast<uint32_t>(esp_timer_get_time());
-        showUs = end - now;
-    }
+    const uint32_t end = static_cast<uint32_t>(esp_timer_get_time());
+    const uint32_t showUs = (end >= now) ? (end - now) : 0U;
 
     updateShowStats(showUs);
-    m_lastShowEndUs = end;
+    m_lastShowEndUs = static_cast<uint32_t>(esp_timer_get_time());
+    // Cleared after FastLED.show() returns; RMT may still be shifting out the frame.
     m_showInProgress.store(false, std::memory_order_relaxed);
 
     if (m_showMutex) xSemaphoreGive(m_showMutex);

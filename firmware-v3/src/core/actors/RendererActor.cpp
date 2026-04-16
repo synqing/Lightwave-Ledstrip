@@ -98,6 +98,7 @@ float computeSpeedTimeFactor(uint8_t speed) {
     float curved = sqrtf(norm);
     return kMinSpeedTimeFactor + (1.0f - kMinSpeedTimeFactor) * curved;
 }
+
 }  // namespace
 
 // Stub for legacy effect ID tracking - no-op when legacy effects are disabled
@@ -107,7 +108,6 @@ namespace lightwaveos { namespace actors {
 }}
 
 #include <cstring>
-#include <cstdio>
 
 #ifndef NATIVE_BUILD
 #include <Arduino.h>
@@ -870,12 +870,7 @@ void RendererActor::onTick()
         captureFrame(CaptureTap::TAP_B_POST_CORRECTION, m_leds);
     }
 
-    // Push to strips
-    // NOTE: showLeds() blocks for ~4.8ms (WS2812 wire time for 160 LEDs).
-    // All 3 RMT channels (strip1, strip2, status) transmit in parallel,
-    // so blocking time = max strip length (160 LEDs), not total (350 LEDs).
-    // During this blocking I/O, FreeRTOS can schedule other tasks on Core 1,
-    // including IDLE1 which feeds the watchdog. No explicit yield needed before.
+    // Push to strips (patched FastLED RMT4: CPU returns quickly; wire time runs in parallel).
     { TRACE_SCOPE("show_leds"); showLeds(); }
 
     // Calculate frame time (pre-throttle)
@@ -895,7 +890,9 @@ void RendererActor::onTick()
     // Self-clocked pacing to 120 FPS target (8.33ms budget).
     // Uses esp_timer one-shot + task notification for zero-overhead wait,
     // yielding Core 1 CPU to IDLE1 (watchdog) instead of busy-spinning.
+    uint32_t pacingWaitUs = 0;
     if (frameTimeUs < LedConfig::FRAME_TIME_US) {
+        pacingWaitUs = LedConfig::FRAME_TIME_US - frameTimeUs;
         const uint32_t waitUs = LedConfig::FRAME_TIME_US - frameTimeUs;
 #ifndef NATIVE_BUILD
         if (s_framePacerTimer && waitUs > 100) {
@@ -947,8 +944,8 @@ void RendererActor::onTick()
 
 #ifndef NATIVE_BUILD
     // Cooperative yield at end of frame - use vTaskDelay(0) to yield without
-    // adding ~10ms latency. The ~4.8ms showLeds() blocking already provides
-    // ample time for IDLE1 to run and feed the watchdog.
+    // adding ~10ms latency. Frame pacing and RMT ISR activity still allow IDLE1
+    // to run; this yield is a cheap extra hook for watchdog headroom.
     { TRACE_SCOPE("pre_show_yield"); vTaskDelay(0); }
 #endif
 }
@@ -1891,6 +1888,17 @@ void RendererActor::handleSetEffect(EffectId effectId)
     }
 
     if (m_currentEffect != effectId) {
+        // Heap floor check: refuse to load effects when internal heap is critically low.
+        // Effect init() may allocate PSRAM (fine) but the transition itself uses internal
+        // heap for stack frames, NVS triggers, and WebSocket state updates.
+        static constexpr size_t EFFECT_INIT_MIN_HEAP = 12288;  // 12 KB floor
+        const size_t freeInternal = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        if (freeInternal < EFFECT_INIT_MIN_HEAP) {
+            LW_LOGW("Effect 0x%04X (%s) REJECTED: internal heap %u < %u floor",
+                     effectId, newReg->name, (unsigned)freeInternal, (unsigned)EFFECT_INIT_MIN_HEAP);
+            return;
+        }
+
         EffectId oldEffectId = m_currentEffect;
 
         // Cleanup old effect (only if valid and active)

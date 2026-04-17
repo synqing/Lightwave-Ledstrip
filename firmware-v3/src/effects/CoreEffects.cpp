@@ -1080,12 +1080,16 @@ uint16_t registerAllEffects(RendererActor* renderer) {
     renderer->registerEffect(EID_BLOOM_PARITY, &bloomParityInstance);
     total++;
 
-    // Kuramoto Transport - Invisible oscillators -> event injection -> transported light
-    // Architecture: Kuramoto field generates phase dynamics, feature extractor finds events,
-    // transport buffer advects visible "light substance". Audio steers only engine params.
-    static ieffect::KuramotoTransportEffect kuramotoTransportInstance;
-    renderer->registerEffect(EID_KURAMOTO_TRANSPORT, &kuramotoTransportInstance);
-    total++;
+    // QUARANTINED 2026-04-17: KuramotoTransportEffect (EID 0x1501) wedges loopTask
+    // on CPU 1 — 80-oscillator RK2 integration + nonlocal coupling per-frame busts
+    // the 2.0 ms budget, and its init() holds CPU 1 for long enough to starve the
+    // loopTask WDT feed. Reproduced 7× in /tmp/k1v2_pressure.py 300 s sweep (every
+    // panic landed immediately after the cycle reached Kuramoto Transport). Source
+    // retained in KuramotoTransportEffect.{h,cpp}; re-register once integration is
+    // broken into chunks or the oscillator count is reduced.
+    // static ieffect::KuramotoTransportEffect kuramotoTransportInstance;
+    // renderer->registerEffect(EID_KURAMOTO_TRANSPORT, &kuramotoTransportInstance);
+    // total++;
 
     // =============== HOLOGRAPHIC VARIANTS ===============
 
@@ -1153,10 +1157,13 @@ uint16_t registerAllEffects(RendererActor* renderer) {
 
     // --- Shape Bangers Pack ---
 
-    // LGP Talbot Carpet - Self-imaging lattice rug
-    static ieffect::LGPTalbotCarpetEffect talbotCarpetInstance;
-    renderer->registerEffect(EID_LGP_TALBOT_CARPET, &talbotCarpetInstance);
-    total++;
+    // QUARANTINED 2026-04-17: LGPTalbotCarpetEffect (EID 0x1800) — Fresnel harmonic
+    // sum render busts the 2.0 ms budget and init/render blocks loopTask WDT feed.
+    // Reproduced 8× in /tmp/k1v2_pressure.py (every panic after Talbot Carpet load).
+    // Source retained in LGPTalbotCarpetEffect.{h,cpp}.
+    // static ieffect::LGPTalbotCarpetEffect talbotCarpetInstance;
+    // renderer->registerEffect(EID_LGP_TALBOT_CARPET, &talbotCarpetInstance);
+    // total++;
 
     // LGP Airy Comet - Self-accelerating comet with trailing lobes
     static ieffect::LGPAiryCometEffect airyCometInstance;
@@ -1210,9 +1217,18 @@ uint16_t registerAllEffects(RendererActor* renderer) {
 
     // --- Holy Shit Bangers Pack ---
 
-    static ieffect::LGPChimeraCrownEffect chimeraCrownInstance;
-    renderer->registerEffect(EID_LGP_CHIMERA_CROWN, &chimeraCrownInstance);
-    total++;
+    // QUARANTINED 2026-04-17: LGPChimeraCrownEffect (EID 0x1900) has a persistent
+    // wedge pattern — RendererActor on CPU 1 hogs the core during its heavy
+    // Kuramoto-nonlocal coupling render/init, starving loopTask's WDT feed for
+    // 5 s+ and triggering a task-WDT reset. Confirmed with /tmp/k1v2_pressure.py
+    // (8 × TWDT panics in 300 s of sustained 20 Hz effect cycling, every one
+    // immediately after a cycle landed on Chimera Crown). The effect source is
+    // retained in LGPHolyShitBangersPack.{h,cpp} and can be re-registered once
+    // the render path is rewritten to stay under the 2.0 ms budget and yield
+    // during init. See CHANGELOG [Unreleased] → Removed for context.
+    // static ieffect::LGPChimeraCrownEffect chimeraCrownInstance;
+    // renderer->registerEffect(EID_LGP_CHIMERA_CROWN, &chimeraCrownInstance);
+    // total++;
 
     static ieffect::LGPCatastropheCausticsEffect catastropheCausticsInstance;
     renderer->registerEffect(EID_LGP_CATASTROPHE_CAUSTICS, &catastropheCausticsInstance);
@@ -1222,9 +1238,13 @@ uint16_t registerAllEffects(RendererActor* renderer) {
     renderer->registerEffect(EID_LGP_HYPERBOLIC_PORTAL, &hyperbolicPortalInstance);
     total++;
 
-    static ieffect::LGPLorenzRibbonEffect lorenzRibbonInstance;
-    renderer->registerEffect(EID_LGP_LORENZ_RIBBON, &lorenzRibbonInstance);
-    total++;
+    // QUARANTINED 2026-04-17: LGPLorenzRibbonEffect (EID 0x1903) — Lorenz ODE
+    // integration trail + radial projection on CPU 1 blocks loopTask WDT feed.
+    // Reproduced 1× in /tmp/k1v2_pressure.py run. Same class of render-overrun as
+    // Chimera Crown / Kuramoto Transport. Source retained in LGPHolyShitBangersPack.
+    // static ieffect::LGPLorenzRibbonEffect lorenzRibbonInstance;
+    // renderer->registerEffect(EID_LGP_LORENZ_RIBBON, &lorenzRibbonInstance);
+    // total++;
 
     static ieffect::LGPIFSBioRelicEffect ifsBioRelicInstance;
     renderer->registerEffect(EID_LGP_IFS_BIO_RELIC, &ifsBioRelicInstance);

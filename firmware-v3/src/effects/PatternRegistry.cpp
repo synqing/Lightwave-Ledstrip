@@ -192,7 +192,7 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
 
     // --- Transport / Parity (old 122-123) ---
     {EID_BLOOM_PARITY, PM_STR("Bloom (Parity)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP, PM_STR("Bloom-style subpixel transport (liquid trails)"), PM_STR("Stateful HDR-ish history buffer advected outward by fractional offsets (subpixel), with beat+flux centre injection."), PM_STR("Transport/Advection/Trails")},
-    {EID_KURAMOTO_TRANSPORT, PM_STR("Kuramoto Transport"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Invisible oscillator field -> event-driven light transport"), PM_STR("80-oscillator Kuramoto with nonlocal coupling, RK2 integration, phase-slip/coherence-edge injection into Bloom-style transport buffer. Audio steers regime, not pixels."), PM_STR("Dynamical System/Emergence/Transport")},
+    // Kuramoto Transport (0x1501) QUARANTINED 2026-04-17 — task-WDT wedge (CoreEffects.cpp retains source for future re-enable)
 
     // --- Holographic Variants Pack (old 124-133) ---
     {EID_LGP_OPAL_FILM, PM_STR("LGP Opal Film"), PatternFamily::ADVANCED_OPTICAL, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::SPECTRAL | PatternTags::DEPTH | PatternTags::PHYSICS, PM_STR("Iridescent thin-film bands drifting from centre"), PM_STR("Thin-film interference, thickness waves, pearlescent lift"), PM_STR("LGP Holographic, LGP Chromatic Interference")},
@@ -211,7 +211,7 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
     {EID_LGP_REACTION_DIFFUSION_TRIANGLE, PM_STR("LGP RD Triangle"), PatternFamily::NOVEL_PHYSICS, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::PHYSICS, PM_STR("Front wedge isolation from reaction-diffusion field"), PM_STR("Thresholded fronts, triangle envelope, edge pins"), PM_STR("LGP Reaction Diffusion")},
 
     // --- Shape Bangers Pack (old 136-146) ---
-    {EID_LGP_TALBOT_CARPET, PM_STR("LGP Talbot Carpet"), PatternFamily::INTERFERENCE, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::STANDING | PatternTags::PHYSICS, PM_STR("Self-imaging lattice rug (near-field diffraction vibe)"), PM_STR("Fresnel harmonic sum, Talbot self-imaging, grating pitch"), PM_STR("LGP Holographic")},
+    // Talbot Carpet (0x1800) QUARANTINED 2026-04-17 — task-WDT wedge (CoreEffects.cpp retains source)
     {EID_LGP_AIRY_COMET, PM_STR("LGP Airy Comet"), PatternFamily::INTERFERENCE, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::TRAVELING | PatternTags::PHYSICS, PM_STR("Self-accelerating comet with trailing lobes"), PM_STR("Airy beam parabolic motion, oscillatory tail lobes"), PM_STR("LGP Evanescent Drift")},
     {EID_LGP_MOIRE_CATHEDRAL, PM_STR("LGP Moire Cathedral"), PatternFamily::INTERFERENCE, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::MOIRE | PatternTags::STANDING, PM_STR("Interference arches from close gratings (giant beats)"), PM_STR("Two-grating moire, beat envelopes, cathedral ribs"), PM_STR("LGP Moire Silk, LGP Moire Curtains")},
     {EID_LGP_SUPERFORMULA_GLYPH, PM_STR("LGP Living Glyph"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::PHYSICS, PM_STR("Superformula sigils (morphing supershapes)"), PM_STR("Superformula r(phi,m,n1,n2,n3), slow morph, distance-to-curve band"), PM_STR("LGP Diamond Lattice")},
@@ -224,10 +224,10 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
     {EID_LGP_MACH_DIAMONDS, PM_STR("LGP Mach Diamonds"), PatternFamily::INTERFERENCE, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::STANDING | PatternTags::PHYSICS, PM_STR("Shock-diamond jewellery (standing shock-cell pulses)"), PM_STR("Triangle-wave shock cells, diamond breathing, jewel tones"), PM_STR("LGP Cymatic Ladder")},
 
     // --- LGP Holy Shit Bangers Pack (old 147-151) ---
-    {EID_LGP_CHIMERA_CROWN, PM_STR("Chimera Crown"), PatternFamily::MATHEMATICAL, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::PHYSICS, PM_STR("Coherent and incoherent domains (sync fracture line)"), PM_STR("Kuramoto-Sakaguchi nonlocal coupling, local order parameter"), PM_STR("")},
+    // Chimera Crown (0x1900) QUARANTINED 2026-04-17 — task-WDT wedge (CoreEffects.cpp retains source for future re-enable)
     {EID_LGP_CATASTROPHE_CAUSTICS, PM_STR("Catastrophe Caustics"), PatternFamily::QUANTUM, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::PHYSICS, PM_STR("Ray-envelope filaments (focus pull + cusp spark)"), PM_STR("1D ray histogram, lens thickness field, caustic concentration"), PM_STR("LGP Caustic Fan, LGP Water Caustics")},
     {EID_LGP_HYPERBOLIC_PORTAL, PM_STR("Hyperbolic Portal"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP, PM_STR("Edge densification via atanh(r) (Poincare vibe)"), PM_STR("Hyperbolic stretch, multi-band ribs, centre calm"), PM_STR("")},
-    {EID_LGP_LORENZ_RIBBON, PM_STR("Lorenz Ribbon"), PatternFamily::MATHEMATICAL, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::PHYSICS, PM_STR("Chaotic attractor ribbon (never repeats the same way twice)"), PM_STR("Lorenz ODE trail, radial projection, age fade"), PM_STR("")},
+    // Lorenz Ribbon (0x1903) QUARANTINED 2026-04-17 — task-WDT wedge (CoreEffects.cpp retains source)
     {EID_LGP_IFS_BIO_RELIC, PM_STR("IFS Botanical Relic"), PatternFamily::ORGANIC, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP, PM_STR("Mirrored IFS growth (fractal botany in glass)"), PM_STR("Barnsley fern IFS, radial histogram, vein specular"), PM_STR("LGP Crystalline Growth")},
 
     // --- Experimental Audio Pack (old 152-161) ---

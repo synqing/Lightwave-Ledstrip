@@ -101,6 +101,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **tab5:** Pinned validated display and encoder dependencies
 - **firmware:** Zone purge — 1-indexed (Zone 1/2/3), max 3, no Zone 0
 
+### Removed
+- **firmware:** Quarantined four heavy-compute effects from the registry and cycle order pending a render-budget rewrite — each was reproducibly triggering task-WDT resets on `loopTask (CPU 1)` under sustained 20 Hz effect cycling before the root-cause yield discipline landed. Source files are retained so the effects can be re-registered once their render/init paths fit the 2.0 ms budget:
+  - `LGPChimeraCrownEffect` (EID 0x1900) — Kuramoto-Sakaguchi nonlocal coupling render busts the budget; 8 × TWDT resets in a 300 s burst
+  - `KuramotoTransportEffect` (EID 0x1501) — 80-oscillator RK2 integration + nonlocal coupling per-frame; 7 × TWDT resets in one round
+  - `LGPLorenzRibbonEffect` (EID 0x1903) — Lorenz ODE trail + radial projection
+  - `LGPTalbotCarpetEffect` (EID 0x1800) — Fresnel harmonic sum render overruns; 8 × TWDT resets in one round
+- Post-root-cause-fix (RendererActor yield discipline + 10 s loopTask TWDT), these effects no longer crash the system. They can be re-enabled individually by uncommenting the `renderer->registerEffect` call in `CoreEffects.cpp` and restoring their entries in `display_order.h` + `PatternRegistry.cpp` once their render paths are profiled and brought under 2.0 ms/frame.
+
 ### Fixed (previous)
 - **firmware:** REST EdgeMixer mode validation rejected Triadic (5) and Tetradic (6) — `V1ApiRoutes.cpp` validated `mode > 4` instead of `mode > 6`
 - **firmware:** WS speed validation capped at 50 instead of 100 — `WsEffectsCodec.cpp` `decodeSetSpeed` and `parameters.set` used stale range (1-50) while REST and RendererActor use extended range (1-100)

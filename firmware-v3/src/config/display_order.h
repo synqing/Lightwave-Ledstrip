@@ -197,7 +197,7 @@ constexpr EffectId DISPLAY_ORDER[] = {
 
     // Transport / Parity
     EID_BLOOM_PARITY,                        // 122
-    EID_KURAMOTO_TRANSPORT,                  // 123
+    // EID_KURAMOTO_TRANSPORT — QUARANTINED 2026-04-17 (task-WDT wedge, see CoreEffects.cpp)
 
     // Holographic Variants
     EID_LGP_OPAL_FILM,                      // 124
@@ -216,7 +216,7 @@ constexpr EffectId DISPLAY_ORDER[] = {
     EID_LGP_REACTION_DIFFUSION_TRIANGLE,     // 135
 
     // Shape Bangers Pack
-    EID_LGP_TALBOT_CARPET,                   // 136
+    // EID_LGP_TALBOT_CARPET — QUARANTINED 2026-04-17 (task-WDT wedge, see CoreEffects.cpp)
     EID_LGP_AIRY_COMET,                      // 137
     EID_LGP_MOIRE_CATHEDRAL,                 // 138
     EID_LGP_SUPERFORMULA_GLYPH,              // 139
@@ -229,10 +229,10 @@ constexpr EffectId DISPLAY_ORDER[] = {
     EID_LGP_MACH_DIAMONDS,                   // 146
 
     // Holy Shit Bangers Pack
-    EID_LGP_CHIMERA_CROWN,                   // 147
+    // EID_LGP_CHIMERA_CROWN — QUARANTINED 2026-04-17 (task-WDT wedge, see CoreEffects.cpp)
     EID_LGP_CATASTROPHE_CAUSTICS,            // 148
     EID_LGP_HYPERBOLIC_PORTAL,               // 149
-    EID_LGP_LORENZ_RIBBON,                   // 150
+    // EID_LGP_LORENZ_RIBBON — QUARANTINED 2026-04-17 (task-WDT wedge, see CoreEffects.cpp)
     EID_LGP_IFS_BIO_RELIC,                   // 151
 
     // Experimental Audio Pack

@@ -241,7 +241,11 @@ inline void update_novelty() {
         static uint32_t next_update = t_now_us;
 
         const uint32_t update_interval_us = 1000000 / NOVELTY_LOG_HZ;
-        if (t_now_us >= next_update) {
+        /* Wrap-safe comparison: uint32_t microsecond counter rolls over every ~71.6 min.
+         * Casting the delta to int32_t gives the correct signed result across the
+         * wrap boundary — positive when t_now_us has reached or passed next_update,
+         * negative when it has not yet caught up. */
+        if ((int32_t)(t_now_us - next_update) >= 0) {
             next_update += update_interval_us;
 
             float current_novelty = 0.0f;

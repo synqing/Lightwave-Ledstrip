@@ -799,6 +799,16 @@ public:
     // Frame capture system (for testbed)
     bool m_captureEnabled;
     uint8_t m_captureTapMask;  // Bitmask: bit 0=Tap A, bit 1=Tap B, bit 2=Tap C
+    // Last time (millis) a consumer successfully drained a tap. If no drain occurs
+    // for longer than CAPTURE_DRAIN_TIMEOUT_MS while capture is enabled, onTick()
+    // auto-disables capture to prevent the producer latch from persisting forever
+    // after a serial / consumer session drops without issuing "capture stop".
+    // Written by getCapturedFrame() (consumer task) and setCaptureMode(); read by
+    // onTick() (renderer). Single-word uint32_t — naturally atomic on ESP32; a
+    // torn read only shifts the timeout by at most one tick, which is irrelevant
+    // at a 10 s timeout.
+    mutable volatile uint32_t m_captureLastDrainMs;
+    static constexpr uint32_t CAPTURE_DRAIN_TIMEOUT_MS = 10000;
     
     // Performance metrics for color correction
     uint32_t m_correctionSkipCount;   // Number of frames where correction was skipped

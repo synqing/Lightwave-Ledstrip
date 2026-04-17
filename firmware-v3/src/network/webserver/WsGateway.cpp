@@ -132,9 +132,44 @@ void WsGateway::onEvent(AsyncWebSocket* server, AsyncWebSocketClient* client,
             s_instance->handleDisconnect(client);
             break;
 
-        case WS_EVT_DATA:
+        case WS_EVT_DATA: {
+            // Frame-fragmentation gate (P1-16 hardening).
+            // Only complete, single-frame text/binary messages are routed to
+            // handleMessage(). Fragmented frames would otherwise cause
+            // deserializeJson() to fail per chunk and emit one error reply per
+            // fragment, which an attacker can exploit to amplify outbound
+            // traffic. We reject any non-single-frame message here with AT
+            // MOST ONE error reply (on the opening fragment only), so a
+            // fragmented attack produces one response regardless of chunk
+            // count. Continuation chunks are silently dropped.
+            AwsFrameInfo* info = static_cast<AwsFrameInfo*>(arg);
+            const bool singleFrame =
+                (info != nullptr) &&
+                info->final &&
+                info->index == 0 &&
+                info->len == static_cast<uint64_t>(len);
+            if (!singleFrame) {
+                // Emit at most one terse rejection, on the opening fragment.
+                // info == nullptr is treated as the opening-fragment case so
+                // the client still gets feedback (defensive: ESPAsyncWebServer
+                // is documented to always provide arg for WS_EVT_DATA, but we
+                // do not assume).
+                const bool isOpeningFragment =
+                    (info == nullptr) || (info->index == 0);
+                if (isOpeningFragment && client != nullptr) {
+                    LW_LOGD("WS: rejecting fragmented frame from client %u (final=%u index=%llu len=%llu data_len=%u)",
+                            client->id(),
+                            info ? static_cast<unsigned>(info->final) : 0u,
+                            info ? static_cast<unsigned long long>(info->index) : 0ull,
+                            info ? static_cast<unsigned long long>(info->len) : 0ull,
+                            static_cast<unsigned>(len));
+                    client->text(buildWsError(ErrorCodes::INVALID_VALUE, "Fragmented frames not supported"));
+                }
+                break;
+            }
             s_instance->handleMessage(client, data, len);
             break;
+        }
 
         case WS_EVT_ERROR:
             LW_LOGW("WS: Error from client %u", client->id());

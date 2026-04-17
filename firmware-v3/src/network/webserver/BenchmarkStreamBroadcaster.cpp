@@ -37,6 +37,7 @@ BenchmarkStreamBroadcaster::~BenchmarkStreamBroadcaster() {
 
 bool BenchmarkStreamBroadcaster::setSubscription(uint32_t clientId, bool subscribe) {
     bool success = false;
+    size_t remaining = 0;
 
 #if defined(ESP32)
     portENTER_CRITICAL(&m_mux);
@@ -47,9 +48,23 @@ bool BenchmarkStreamBroadcaster::setSubscription(uint32_t clientId, bool subscri
         m_subscribers.remove(clientId);
         success = true;
     }
+    remaining = m_subscribers.count();
 #if defined(ESP32)
     portEXIT_CRITICAL(&m_mux);
 #endif
+
+    // Auto-clear the streaming-active latch when the last subscriber leaves.
+    // Without this, a client that called benchmark.start and then vanished
+    // (WS disconnect without benchmark.stop) would keep m_streamingActive
+    // asserted forever — the producer side only checks hasSubscribers() for
+    // broadcast work, but the flag itself propagates to clients via getFlags()
+    // and is observable via isStreamingActive(). We only clear on unsubscribe
+    // (not on a failed subscribe) because the caller of benchmark.start sets
+    // the flag explicitly after subscribing, and we do not want a failed
+    // add to race-clear it.
+    if (!subscribe && remaining == 0) {
+        m_streamingActive = false;
+    }
 
     return success;
 }

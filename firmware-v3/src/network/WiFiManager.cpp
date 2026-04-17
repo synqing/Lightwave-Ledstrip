@@ -18,6 +18,7 @@
 #if FEATURE_WEB_SERVER
 
 #include <esp_wifi.h>
+#include <esp_task_wdt.h>
 #include "../config/network_config.h"
 #include "../core/system/OtaSessionLock.h"
 
@@ -74,11 +75,31 @@ bool WiFiManager::begin() {
 #endif
     // Minimal AP startup — matches restructure commit (5ee8aa84) proven working path.
     // Uses bare 3-param softAP call identical to the original startSoftAP().
+    // AP-ONLY INVARIANT: K1 never enters STA mode. softAP() retry is for AP bring-up only.
+    // On persistent failure we reboot — a dark device with no radio is unrecoverable in
+    // the field, whereas a clean restart often clears transient radio/driver state.
     {
         WiFi.mode(WIFI_MODE_AP);
-        if (WiFi.softAP(m_apSSID.c_str(), m_apPassword.c_str(), m_apChannel)) {
-            LW_LOGI("AP started: '%s' at %s",
-                    m_apSSID.c_str(), WiFi.softAPIP().toString().c_str());
+
+        constexpr int kSoftApMaxAttempts = 3;
+        constexpr TickType_t kSoftApRetryDelay = pdMS_TO_TICKS(500);
+        bool apStarted = false;
+
+        for (int attempt = 1; attempt <= kSoftApMaxAttempts; ++attempt) {
+            if (WiFi.softAP(m_apSSID.c_str(), m_apPassword.c_str(), m_apChannel)) {
+                LW_LOGI("AP started on attempt %d/%d: '%s' at %s",
+                        attempt, kSoftApMaxAttempts,
+                        m_apSSID.c_str(), WiFi.softAPIP().toString().c_str());
+                apStarted = true;
+                break;
+            }
+            LW_LOGE("softAP() failed on attempt %d/%d", attempt, kSoftApMaxAttempts);
+            if (attempt < kSoftApMaxAttempts) {
+                vTaskDelay(kSoftApRetryDelay);
+            }
+        }
+
+        if (apStarted) {
             xEventGroupSetBits(m_wifiEventGroup, EVENT_AP_START);
             // DIAGNOSTIC: dump IDF-level AP config to verify radio state
             wifi_config_t apConf;
@@ -94,8 +115,16 @@ bool WiFiManager::begin() {
             esp_wifi_get_max_tx_power(&txPow);
             LW_LOGW("AP DIAG: tx_power=%d (max=84 ~21dBm)", txPow);
         } else {
-            LW_LOGE("Failed to start Soft-AP!");
+            // All retries exhausted — the device has no radio. Rebooting is safer
+            // than running as a phantom AP that clients cannot reach and that has
+            // no event-driven recovery path (AP_STADISCONNECTED never fires).
+            LW_LOGE("softAP() failed after %d attempts — restarting to recover",
+                    kSoftApMaxAttempts);
+            vTaskDelay(pdMS_TO_TICKS(100));  // flush log UART before reset
+            ESP.restart();
+            // Unreachable, but keep state coherent in case restart is deferred.
         }
+
         m_forceApOnly = true;
         setState(STATE_WIFI_AP_MODE);
     }
@@ -157,12 +186,27 @@ void WiFiManager::wifiTask(void* parameter) {
 
     LW_LOGI("Task started");
 
+    // Subscribe to the Task Watchdog so that a hang in any WiFi state handler
+    // (e.g. blocked on esp_wifi_* call, scan callback, or event-group wait)
+    // is caught and forces a panic-reset instead of silently stalling the AP.
+    // The 100ms bottom-of-loop vTaskDelay is well inside the default TWDT
+    // timeout (5s), so the reset below cannot out-pace the watchdog period.
+    esp_err_t wdtAddErr = esp_task_wdt_add(nullptr);
+    if (wdtAddErr != ESP_OK) {
+        LW_LOGW("esp_task_wdt_add failed (err=0x%x) — task will run unmonitored",
+                wdtAddErr);
+    }
+
     // NOTE: In Portable Mode, AP is started immediately in begin() via AP+STA.
     // The task handles STA connection attempts in parallel.
     // AP stays up permanently regardless of STA state.
 
     // Main state machine loop
     while (true) {
+        // Feed TWDT at the top of every iteration. Safe to call even if
+        // esp_task_wdt_add failed — it will just return ESP_ERR_NOT_FOUND.
+        esp_task_wdt_reset();
+
         switch (manager->m_currentState) {
             case STATE_WIFI_INIT:
                 manager->handleStateInit();

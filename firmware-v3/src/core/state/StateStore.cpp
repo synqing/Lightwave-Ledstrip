@@ -99,6 +99,14 @@ bool StateStore::dispatch(const ICommand& command) {
 
     bool success = false;
 
+    // Snapshot of the newly published state, captured under the lock so the
+    // subscriber notification below can be issued WITHOUT holding the mutex.
+    // Using a stack-local copy avoids a concurrent dispatcher racing us and
+    // overwriting the buffer we are reading from after release. SystemState
+    // is ~100 bytes — trivially copyable and safe on the stack.
+    SystemState publishedState;
+    bool shouldNotify = false;
+
     // Get current active state (validate index to prevent corruption issues)
     uint8_t safeIndex = validateActiveIndex();
     const SystemState& currentState = m_states[safeIndex];
@@ -112,23 +120,35 @@ bool StateStore::dispatch(const ICommand& command) {
         m_states[writeIndex] = command.apply(currentState);
 
         // Atomically swap active index
-        // This makes the new state visible to readers
+        // This makes the new state visible to readers (release ordering).
         swapActiveIndex();
 
-        // Notify subscribers with new state (use validated index)
+        // Snapshot the freshly-published state while still holding the write
+        // lock so concurrent dispatchers cannot mutate it out from under us
+        // once the mutex is released.
         uint8_t activeIdx = validateActiveIndex();
-        notifySubscribers(m_states[activeIdx]);
+        publishedState = m_states[activeIdx];
+        shouldNotify = true;
 
         // Update statistics
         m_commandCount++;
         success = true;
     }
 
-    // Release write lock
+    // Update command duration BEFORE releasing so m_lastCommandDuration
+    // remains consistent with m_commandCount under the lock.
+    m_lastCommandDuration = static_cast<uint32_t>(esp_timer_get_time() - startTime);
+
+    // Release write lock BEFORE notifying subscribers. Holding a non-recursive
+    // mutex across arbitrary callback code is a deadlock waiting to happen:
+    // any subscriber that re-enters dispatch()/dispatchBatch() on the same
+    // task would self-deadlock on the second xSemaphoreTake. Subscribers are
+    // now notified lock-free from a stack-local snapshot.
     xSemaphoreGive(m_writeMutex);
 
-    // Update command duration
-    m_lastCommandDuration = static_cast<uint32_t>(esp_timer_get_time() - startTime);
+    if (shouldNotify) {
+        notifySubscribers(publishedState);
+    }
 
     return success;
 }
@@ -148,6 +168,11 @@ bool StateStore::dispatchBatch(const ICommand* const* commands, uint8_t count) {
     }
 
     bool success = true;
+
+    // Snapshot of the newly published state, captured under the lock so the
+    // subscriber notification below can be issued WITHOUT holding the mutex.
+    SystemState publishedState;
+    bool shouldNotify = false;
 
     // Get current active state (validate index to prevent corruption issues)
     uint8_t safeIndex = validateActiveIndex();
@@ -174,22 +199,31 @@ bool StateStore::dispatchBatch(const ICommand* const* commands, uint8_t count) {
             m_states[writeIndex] = commands[i]->apply(m_states[writeIndex]);
         }
 
-        // Atomically swap active index
+        // Atomically swap active index (release ordering).
         swapActiveIndex();
 
-        // Notify subscribers with new state (use validated index)
+        // Snapshot the freshly-published state while still holding the write
+        // lock so concurrent dispatchers cannot mutate it out from under us
+        // once the mutex is released.
         uint8_t activeIdx = validateActiveIndex();
-        notifySubscribers(m_states[activeIdx]);
+        publishedState = m_states[activeIdx];
+        shouldNotify = true;
 
         // Update statistics
         m_commandCount += count;
     }
 
-    // Release write lock
+    // Update command duration BEFORE releasing so m_lastCommandDuration
+    // remains consistent with m_commandCount under the lock.
+    m_lastCommandDuration = static_cast<uint32_t>(esp_timer_get_time() - startTime);
+
+    // Release write lock BEFORE notifying subscribers to avoid the
+    // callback-under-lock deadlock class (see dispatch() for rationale).
     xSemaphoreGive(m_writeMutex);
 
-    // Update command duration
-    m_lastCommandDuration = static_cast<uint32_t>(esp_timer_get_time() - startTime);
+    if (shouldNotify) {
+        notifySubscribers(publishedState);
+    }
 
     return success;
 }
@@ -279,8 +313,13 @@ void StateStore::getStats(uint32_t& outCommandCount, uint32_t& outLastCommandDur
 // ==================== Private Methods ====================
 
 void StateStore::notifySubscribers(const SystemState& newState) {
-    // Call all subscribers
-    // This is called within the write lock, so subscribers should be FAST
+    // Call all subscribers.
+    //
+    // This is invoked AFTER the write mutex has been released, with a
+    // stack-local snapshot of the newly published state. Subscribers are
+    // therefore free to re-enter dispatch()/dispatchBatch() without
+    // deadlocking on the non-recursive write mutex. Subscribers should
+    // still be fast to keep overall command latency bounded.
     for (uint8_t i = 0; i < m_subscriberCount; i++) {
         if (m_subscribers[i] != nullptr) {
             m_subscribers[i](newState);
@@ -301,15 +340,19 @@ uint8_t StateStore::getInactiveIndex() const {
 }
 
 void StateStore::swapActiveIndex() {
-    // Atomic swap using volatile member
-    // DEFENSIVE CHECK: Validate before swap to ensure we're swapping to a valid index
-    // This prevents corrupted m_activeIndex from causing out-of-bounds access to m_states[2]
+    // Publish the newly-written buffer via a release-ordered atomic store.
+    // memory_order_release pairs with the acquire-ordered load in
+    // validateActiveIndex() (and therefore every reader) to guarantee that
+    // writes to m_states[newIndex] are visible to other cores before they
+    // observe the updated index. This replaces the previous volatile +
+    // compiler-only __asm__ barrier, which was not sufficient for cross-core
+    // ordering on the ESP32-S3's two Xtensa LX7 cores.
+    //
+    // DEFENSIVE CHECK: Validate before swap to ensure we're swapping to a
+    // valid index. This prevents a corrupted m_activeIndex from causing
+    // out-of-bounds access to m_states[2].
     uint8_t newIndex = getInactiveIndex();
-    m_activeIndex = newIndex;
-
-    // Memory barrier to ensure writes complete before readers see new index
-    // On ESP32, this is handled by the volatile keyword, but we can be explicit
-    __asm__ __volatile__ ("" ::: "memory");
+    m_activeIndex.store(newIndex, std::memory_order_release);
 }
 
 /**
@@ -328,15 +371,22 @@ void StateStore::swapActiveIndex() {
  * @return Valid index (0 or 1), defaults to 0 if corrupted
  */
 uint8_t StateStore::validateActiveIndex() const {
-    // Validate m_activeIndex is 0 or 1 (only valid values for double buffer)
-    if (m_activeIndex > 1) {
-        // Corrupted - return safe default (0)
-        // Note: We can't modify m_activeIndex here (const method), but we can
-        // return a safe value for reading. The corruption should be fixed at
-        // the source (swapActiveIndex, constructor, etc.)
+    // Acquire-ordered load pairs with the release-ordered store in
+    // swapActiveIndex(), ensuring that once we observe the new index, all
+    // writes to m_states[index] made before the swap are visible to us on
+    // either core. A single load also prevents torn/split reads between the
+    // validity check and the return value.
+    uint8_t idx = m_activeIndex.load(std::memory_order_acquire);
+
+    // Validate m_activeIndex is 0 or 1 (only valid values for double buffer).
+    if (idx > 1) {
+        // Corrupted - return safe default (0).
+        // Note: We cannot modify m_activeIndex here (const method), but we
+        // can return a safe value for reading. The corruption should be
+        // fixed at the source (swapActiveIndex, constructor, etc.).
         return 0;
     }
-    return m_activeIndex;
+    return idx;
 }
 
 } // namespace state

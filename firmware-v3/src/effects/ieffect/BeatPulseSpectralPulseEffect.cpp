@@ -137,7 +137,9 @@ void BeatPulseSpectralPulseEffect::render(plugins::EffectContext& ctx) {
 
         // === BASS ZONE: Warm saturated ===
         const float bassPos = clamp01((dist01 - MID_END) / (1.0f - MID_END));
-        const uint8_t bassIdx = 50 - floatToByte(bassPos * 0.2f);
+        // Clamp to avoid uint8 underflow when floatToByte result exceeds 50
+        const uint8_t bassSub = floatToByte(bassPos * 0.2f);
+        const uint8_t bassIdx = (bassSub < 50) ? (50 - bassSub) : 0;
         CRGB bassColor = ctx.palette.getColor(bassIdx, scaleBrightness(ctx.brightness, brightnessFactor));
 
         // Blend colours by zone weights

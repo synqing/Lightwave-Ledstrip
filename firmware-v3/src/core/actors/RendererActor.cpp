@@ -168,6 +168,7 @@ RendererActor::RendererActor()
 #endif
     , m_captureEnabled(false)
     , m_captureTapMask(0)
+    , m_captureLastDrainMs(0)
     , m_correctionSkipCount(0)
     , m_correctionApplyCount(0)
     , m_captureBlock(nullptr)
@@ -843,6 +844,27 @@ void RendererActor::onTick()
     uint32_t frameStartUs = micros();
     static uint16_t s_wdtResetFrames = 0;
 
+    // Capture auto-stop watchdog. If capture is enabled but no consumer has drained
+    // a tap for CAPTURE_DRAIN_TIMEOUT_MS, assume the consumer session is gone
+    // (serial port dropped without issuing "capture stop", WS producer died, etc.)
+    // and clear the latch so the producer stops memcpying frames every tick.
+    // Cheap: one conditional + one millis() call only when capture is active.
+    if (m_captureEnabled) {
+        const uint32_t captureNowMs = millis();
+        const uint32_t lastDrain = m_captureLastDrainMs;
+        if (lastDrain != 0 && (captureNowMs - lastDrain) > CAPTURE_DRAIN_TIMEOUT_MS) {
+            LW_LOGW("Capture auto-stop: no consumer drain for %lu ms (timeout=%lu ms)",
+                    static_cast<unsigned long>(captureNowMs - lastDrain),
+                    static_cast<unsigned long>(CAPTURE_DRAIN_TIMEOUT_MS));
+            m_captureEnabled = false;
+            m_captureTapMask = 0;
+            m_captureTapAValid = false;
+            m_captureTapBValid = false;
+            m_captureTapCValid = false;
+            m_captureLastDrainMs = 0;
+        }
+    }
+
     // Render the current effect
     renderFrame();
 
@@ -943,10 +965,23 @@ void RendererActor::onTick()
     m_frameCount++;
 
 #ifndef NATIVE_BUILD
-    // Cooperative yield at end of frame - use vTaskDelay(0) to yield without
-    // adding ~10ms latency. Frame pacing and RMT ISR activity still allow IDLE1
-    // to run; this yield is a cheap extra hook for watchdog headroom.
-    { TRACE_SCOPE("pre_show_yield"); vTaskDelay(0); }
+    // Cooperative yield at end of frame. Two-tier policy:
+    //   * Frame stayed within 8.33 ms budget → vTaskDelay(0) (same-priority yield only,
+    //     zero added latency; frame pacing and RMT ISR already gave IDLE1 time).
+    //   * Frame overran budget (pacingWaitUs == 0 → no pacing sleep happened) →
+    //     vTaskDelay(1) so lower-priority loopTask (priority 1) can run and feed
+    //     its 10 s task-WDT. This is the root-cause fix for effects like Chimera
+    //     Crown / Kuramoto Transport / Talbot Carpet that regularly bust the budget
+    //     — previously every frame was pure compute with no scheduler opening, so
+    //     loopTask starved for 5 s+ and tripped TWDT.
+    {
+        TRACE_SCOPE("pre_show_yield");
+        if (pacingWaitUs == 0) {
+            vTaskDelay(1);  // ~1 ms at 1 kHz tick — guarantees loopTask gets CPU 1
+        } else {
+            vTaskDelay(0);
+        }
+    }
 #endif
 }
 
@@ -1023,11 +1058,17 @@ void RendererActor::setCaptureMode(bool enabled, uint8_t tapMask) {
 
     m_captureEnabled = enabled;
     m_captureTapMask = masked;
-    
-    if (!enabled) {
+
+    if (enabled) {
+        // Prime the drain-inactivity timer so the auto-stop watchdog in onTick()
+        // does not immediately trip before the consumer has a chance to drain
+        // its first frame.
+        m_captureLastDrainMs = millis();
+    } else {
         m_captureTapAValid = false;
         m_captureTapBValid = false;
         m_captureTapCValid = false;
+        m_captureLastDrainMs = 0;
     }
     
     LW_LOGI("Capture mode %s (tapMask=0x%02X)",
@@ -1061,9 +1102,13 @@ bool RendererActor::getCapturedFrame(CaptureTap tap, CRGB* outBuffer) const {
     
     if (valid && source != nullptr) {
         memcpy(outBuffer, source, sizeof(CRGB) * LedConfig::TOTAL_LEDS);
+        // Record drain activity so onTick()'s inactivity watchdog keeps capture alive.
+        // m_captureLastDrainMs is `mutable volatile` — it is watchdog state, not part
+        // of the logical const-ness of the captured payload.
+        m_captureLastDrainMs = millis();
         return true;
     }
-    
+
     return false;
 }
 
@@ -1904,7 +1949,10 @@ void RendererActor::handleSetEffect(EffectId effectId)
         // Cleanup old effect (only if valid and active)
         const EffectRegistration* oldReg = findById(oldEffectId);
         if (oldReg && oldReg->effect != nullptr) {
-            LW_LOGI("IEffect cleanup: %s (ID 0x%04X)", oldReg->name, oldEffectId);
+            // Demoted to LW_LOGD: per-step chatter costs ~180B per line and, at
+            // burst rates, backs up the HWCDC TX ring — a contributor to the
+            // N-th-effect silent lock-up.
+            LW_LOGD("IEffect cleanup: %s (ID 0x%04X)", oldReg->name, oldEffectId);
             oldReg->effect->cleanup();
         }
 
@@ -1912,7 +1960,7 @@ void RendererActor::handleSetEffect(EffectId effectId)
 
         // Initialize new effect
         if (newReg->effect != nullptr) {
-            LW_LOGI("IEffect init: %s (ID 0x%04X)", newReg->name, effectId);
+            LW_LOGD("IEffect init: %s (ID 0x%04X)", newReg->name, effectId);
             plugins::EffectContext initCtx;
             initCtx.leds = m_leds;
             initCtx.ledCount = LedConfig::TOTAL_LEDS;
@@ -1935,14 +1983,31 @@ void RendererActor::handleSetEffect(EffectId effectId)
             initCtx.zoneStart = 0;
             initCtx.zoneLength = 0;
 
-            if (!newReg->effect->init(initCtx)) {
-                // Initialization failed - revert to previous effect
+            // Pre-init yield: heavy effect init (PSRAM alloc, lookup tables,
+            // oscillator fields) can block CPU 1 for hundreds of ms with no
+            // internal scheduling point. Release CPU 1 first so loopTask gets
+            // a window before we start, and again after, so the task-WDT does
+            // not trip even if init itself is slow.
+#ifndef NATIVE_BUILD
+            vTaskDelay(1);
+#endif
+            const bool initOk = newReg->effect->init(initCtx);
+#ifndef NATIVE_BUILD
+            vTaskDelay(1);
+#endif
+            if (!initOk) {
+                // Initialization failed - revert to previous effect.
+                // Call cleanup() on the effect that just failed to release any
+                // partial allocations it may have made (e.g. multi-stage PSRAM
+                // chains like KuramotoTransport). Without this, strand-and-leak
+                // compounds under rapid cycling.
+                newReg->effect->cleanup();
                 m_currentEffect = oldEffectId;
                 m_currentEffectValid = false;  // Invalidate cache on revert
                 LW_LOGW("IEffect 0x%04X init failed, reverting to 0x%04X", effectId, oldEffectId);
                 return;
             }
-            LW_LOGI("IEffect init: SUCCESS");
+            LW_LOGD("IEffect init: SUCCESS");
         }
 
         // Cache validated effect ID — avoids 3x linear registry scan per frame
@@ -1974,13 +2039,9 @@ void RendererActor::handleSetEffect(EffectId effectId)
             }
         }
 
-        // Publish EFFECT_CHANGED event: new EffectId in param1+param2, old in param3+param4
-        Message evt(MessageType::EFFECT_CHANGED);
-        evt.param1 = static_cast<uint8_t>(effectId & 0xFF);
-        evt.param2 = static_cast<uint8_t>((effectId >> 8) & 0xFF);
-        evt.param3 = static_cast<uint8_t>(oldEffectId & 0xFF);
-        evt.param4 = static_cast<uint8_t>((oldEffectId >> 8) & 0xFF);
-        bus::MessageBus::instance().publish(evt);
+        // EFFECT_CHANGED MessageBus publish removed: zero subscribers across
+        // the firmware (verified via symbol search). It was pure per-change
+        // overhead — a 32-entry table scan that always returned "no delivery".
     }
 }
 
@@ -2109,6 +2170,100 @@ void RendererActor::handleStartTransition(EffectId newEffectId, uint8_t transiti
     if (!m_transitionEngine) return;
     if (transitionType >= static_cast<uint8_t>(TransitionType::TYPE_COUNT)) {
         transitionType = 0;  // Default to FADE
+    }
+
+    // ---------------------------------------------------------------------
+    // P1-08: Concurrent START_TRANSITION guard.
+    //
+    // If a second transition request arrives while the engine is still
+    // blending (A -> B in progress, now C arrives), the naive path would:
+    //   1. memcpy the partially-blended m_leds as the new source (stale mush)
+    //   2. Skip cleanup() on the mid-flight effect B (state carries over)
+    //   3. Skip init() on the incoming effect C (uninitialised state)
+    //   4. Bypass the internal-heap floor check applied by handleSetEffect
+    //
+    // Correct behaviour: complete the previous transition cleanly (so the
+    // new source buffer reflects effect B fully rendered, not a mid-blend),
+    // then bracket the B -> C switch with cleanup(B) + init(C), honouring
+    // the same heap floor used for direct effect switches.
+    // ---------------------------------------------------------------------
+    if (m_transitionEngine->isActive()) {
+        // Heap floor check — mirror handleSetEffect. An in-flight transition
+        // plus a fresh init() can drive internal SRAM below safe thresholds
+        // for WiFi/AsyncTCP; refuse the new transition if we are already
+        // running on fumes rather than risk a partial init.
+        static constexpr size_t TRANSITION_INIT_MIN_HEAP = 12288;  // 12 KB
+        const size_t freeInternal = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        if (freeInternal < TRANSITION_INIT_MIN_HEAP) {
+            LW_LOGW("Transition to 0x%04X REJECTED: internal heap %u < %u floor (in-flight transition preserved)",
+                     safeEffectId, (unsigned)freeInternal, (unsigned)TRANSITION_INIT_MIN_HEAP);
+            return;
+        }
+
+        // Step 1: Abort the previous transition cleanly. cancel() memcpys
+        // the engine's internal target buffer into the output buffer
+        // (m_leds), so m_leds now reflects the fully-rendered end of the
+        // prior transition rather than a partially blended frame.
+        m_transitionEngine->cancel();
+
+        // Step 2: Cleanup the mid-flight effect (which was the prior
+        // transition's target, i.e. m_currentEffect) and init the new
+        // effect, keeping bracketing symmetry with handleSetEffect.
+        const EffectRegistration* inFlightReg = findById(m_currentEffect);
+        if (inFlightReg && inFlightReg->effect != nullptr) {
+            LW_LOGD("IEffect cleanup (concurrent-transition): %s (ID 0x%04X)",
+                     inFlightReg->name, m_currentEffect);
+            inFlightReg->effect->cleanup();
+        }
+
+        const EffectRegistration* incomingReg = findById(safeEffectId);
+        if (incomingReg && incomingReg->effect != nullptr) {
+            LW_LOGD("IEffect init (concurrent-transition): %s (ID 0x%04X)",
+                     incomingReg->name, safeEffectId);
+            plugins::EffectContext initCtx;
+            initCtx.leds = m_leds;
+            initCtx.ledCount = LedConfig::TOTAL_LEDS;
+            initCtx.centerPoint = LedConfig::CENTER_LED_INDEX;
+            initCtx.palette = plugins::PaletteRef(&m_currentPalette);
+            initCtx.brightness = m_brightness;
+            initCtx.speed = m_speed;
+            initCtx.gHue = m_hue;
+            initCtx.intensity = m_intensity;
+            initCtx.saturation = m_saturation;
+            initCtx.complexity = m_complexity;
+            initCtx.variation = m_variation;
+            initCtx.frameNumber = m_frameCount;
+            initCtx.totalTimeMs = m_frameCount * 8;  // Approximate
+            initCtx.deltaTimeMs = 8;  // Default
+            initCtx.rawTotalTimeMs = initCtx.totalTimeMs;
+            initCtx.rawDeltaTimeMs = initCtx.deltaTimeMs;
+            initCtx.rawDeltaTimeSeconds = initCtx.deltaTimeMs * 0.001f;
+            initCtx.zoneId = 0xFF;
+            initCtx.zoneStart = 0;
+            initCtx.zoneLength = 0;
+
+            // Pre-init yield (see handleSetEffect for rationale) — release
+            // CPU 1 so loopTask can feed its task-WDT before we potentially
+            // spend hundreds of ms inside the incoming effect's init().
+#ifndef NATIVE_BUILD
+            vTaskDelay(1);
+#endif
+            const bool concurrentInitOk = incomingReg->effect->init(initCtx);
+#ifndef NATIVE_BUILD
+            vTaskDelay(1);
+#endif
+            if (!concurrentInitOk) {
+                // init() failed: release any partial allocations and bail.
+                // m_currentEffect has NOT yet been rewritten to safeEffectId,
+                // so we simply abort the new transition. m_leds already
+                // contains the prior transition's final frame (from cancel()),
+                // so visual output stays on the prior target effect.
+                incomingReg->effect->cleanup();
+                LW_LOGW("IEffect 0x%04X init failed during concurrent transition, staying on 0x%04X",
+                         safeEffectId, m_currentEffect);
+                return;
+            }
+        }
     }
 
     EffectId oldEffectId = m_currentEffect;

@@ -141,6 +141,7 @@ bool LGPTimeReversalMirrorEffect_Mod1::init(plugins::EffectContext& ctx) {
     (void)ctx;
 
 #ifndef NATIVE_BUILD
+    const bool wasFirstAlloc = (m_ps == nullptr);
     if (!m_ps) {
         m_ps = static_cast<PsramData*>(
             heap_caps_malloc(sizeof(PsramData), MALLOC_CAP_SPIRAM));
@@ -150,7 +151,17 @@ bool LGPTimeReversalMirrorEffect_Mod1::init(plugins::EffectContext& ctx) {
             return false;
         }
     }
-    memset(m_ps, 0, sizeof(PsramData));
+    // Only zero the live field arrays (~960 B) on re-init. The 320 KB history
+    // buffer is gated by m_historyCount=0 below — stale data in it is never
+    // read. Zeroing the full struct costs ~64 ms over PSRAM SPI and was the
+    // dominant stall driver under rapid effect cycling.
+    if (wasFirstAlloc) {
+        memset(m_ps, 0, sizeof(PsramData));  // first-time init: fully zero
+    } else {
+        memset(m_ps->u_prev, 0, sizeof(m_ps->u_prev));
+        memset(m_ps->u_curr, 0, sizeof(m_ps->u_curr));
+        memset(m_ps->u_next, 0, sizeof(m_ps->u_next));
+    }
 #else
     m_ps = nullptr;
 #endif

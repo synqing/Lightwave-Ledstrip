@@ -25,6 +25,7 @@
 #pragma once
 
 #include "../actors/Actor.h"
+#include <atomic>
 #include <cstdint>
 #include <cstring>
 
@@ -186,17 +187,17 @@ public:
     /**
      * @brief Get total messages published since startup
      */
-    uint32_t getTotalPublished() const { return m_totalPublished; }
+    uint32_t getTotalPublished() const { return m_totalPublished.load(std::memory_order_relaxed); }
 
     /**
      * @brief Get total messages delivered (sum across all subscribers)
      */
-    uint32_t getTotalDelivered() const { return m_totalDelivered; }
+    uint32_t getTotalDelivered() const { return m_totalDelivered.load(std::memory_order_relaxed); }
 
     /**
      * @brief Get number of failed deliveries (queue full)
      */
-    uint32_t getFailedDeliveries() const { return m_failedDeliveries; }
+    uint32_t getFailedDeliveries() const { return m_failedDeliveries.load(std::memory_order_relaxed); }
 
     /**
      * @brief Reset statistics counters
@@ -231,10 +232,13 @@ private:
     // Mutex for subscribe/unsubscribe operations
     SemaphoreHandle_t m_mutex;
 
-    // Statistics
-    volatile uint32_t m_totalPublished;
-    volatile uint32_t m_totalDelivered;
-    volatile uint32_t m_failedDeliveries;
+    // Diagnostic counters — written from multiple cores (publish/publishFromISR).
+    // Relaxed ordering is correct: these are monotonic counters with no
+    // happens-before dependency between the increment and any other operation.
+    // std::atomic<uint32_t> is always lock-free on Xtensa LX7.
+    std::atomic<uint32_t> m_totalPublished;
+    std::atomic<uint32_t> m_totalDelivered;
+    std::atomic<uint32_t> m_failedDeliveries;
 };
 
 // ============================================================================

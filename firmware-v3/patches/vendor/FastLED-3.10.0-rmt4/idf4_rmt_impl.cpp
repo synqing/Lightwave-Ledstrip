@@ -468,7 +468,11 @@ void ESP32RMTController::showPixels()
 // -- Start up the next controller
 //    This method is static so that it can dispatch to the
 //    appropriate startOnChannel method of the given controller.
-void ESP32RMTController::startNext(int channel)
+// IRAM_ATTR: reached from doneOnChannel() in ISR context when
+// gNumControllers > usable RMT channels (e.g. K1v2 runs 3 strips on
+// 2 parallel channels). Without IRAM the ISR would fault on cache-disabled
+// fetch during NVS/WiFi flash ops. See fastled_delay.h for the sibling fix.
+void IRAM_ATTR ESP32RMTController::startNext(int channel)
 {
     if (gNext < gNumControllers)
     {
@@ -481,7 +485,14 @@ void ESP32RMTController::startNext(int channel)
 // -- Start this controller on the given channel
 //    This function just initiates the RMT write; it does not wait
 //    for it to finish.
-void ESP32RMTController::startOnChannel(int channel)
+// IRAM_ATTR: called from ISR via startNext(). Note: the ESP-IDF rmt
+// driver calls inside (rmt_set_gpio, rmt_register_tx_end_callback,
+// rmt_write_items, rmt_set_tx_intr_en) remain flash-resident — FLASH_LOCK=0
+// plus cache-disabled windows could still fault inside those. Mitigated in
+// practice by fillNext()/tx_start() being IRAM-resident and the ISR-start
+// window being narrow; full hardening would require bypassing those IDF
+// wrappers with ll-layer equivalents.
+void IRAM_ATTR ESP32RMTController::startOnChannel(int channel)
 {
     esp_err_t espErr = ESP_OK;
     // -- Assign this channel and configure the RMT
@@ -536,7 +547,8 @@ void ESP32RMTController::startOnChannel(int channel)
 
 // -- Start RMT transmission
 //    Setting this RMT flag is what actually kicks off the peripheral
-void ESP32RMTController::tx_start()
+// IRAM_ATTR: pure RMT register writes, reachable from ISR via startOnChannel.
+void IRAM_ATTR ESP32RMTController::tx_start()
 {
     // rmt_tx_start(mRMT_channel, true);
     // Inline the code for rmt_tx_start, so it can be placed in IRAM

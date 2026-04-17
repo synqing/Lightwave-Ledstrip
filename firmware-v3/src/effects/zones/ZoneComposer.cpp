@@ -189,13 +189,13 @@ bool ZoneComposer::init(RendererActor* renderer) {
             free(m_outputBuffer);
             m_outputBuffer = nullptr;
         }
-        m_enabled = false;
+        m_enabled.store(false, std::memory_order_release);
         m_initialized = false;
         return false;
     }
 
     m_initialized = true;
-    Serial.println("[ZoneComposer] Initialized");
+    Serial.println("[ZoneComposer] Initialised");
     return true;
 }
 
@@ -204,7 +204,7 @@ bool ZoneComposer::init(RendererActor* renderer) {
 void ZoneComposer::render(CRGB* leds, uint16_t numLeds, CRGBPalette16* palette,
                           uint8_t hue, uint32_t frameCount, uint32_t deltaTimeMs,
                           const plugins::AudioContext* audioCtx) {
-    if (!m_initialized || !m_enabled || m_zoneBuffers == nullptr || m_outputBuffer == nullptr) {
+    if (!m_initialized || !m_enabled.load(std::memory_order_acquire) || m_zoneBuffers == nullptr || m_outputBuffer == nullptr) {
         return;
     }
 
@@ -407,8 +407,9 @@ bool ZoneComposer::setLayout(const ZoneSegment* segments, uint8_t count) {
 
     // Temporarily disable rendering to prevent Core 1 render() from reading
     // partially-modified zone config, count, and buffers.
-    const bool wasEnabled = m_enabled;
-    m_enabled = false;
+    // Release store ensures Core 1 sees m_enabled=false before we touch the arrays.
+    const bool wasEnabled = m_enabled.load(std::memory_order_relaxed);
+    m_enabled.store(false, std::memory_order_release);
 
     // Copy segments to runtime storage
     memcpy(m_zoneConfig, segments, count * sizeof(ZoneSegment));
@@ -420,7 +421,9 @@ bool ZoneComposer::setLayout(const ZoneSegment* segments, uint8_t count) {
                static_cast<size_t>(MAX_ZONES) * static_cast<size_t>(TOTAL_LEDS) * sizeof(CRGB));
     }
 
-    m_enabled = wasEnabled;
+    // Release store re-enables rendering; ensures all array writes above are
+    // visible to Core 1 before it can see m_enabled=true again.
+    m_enabled.store(wasEnabled, std::memory_order_release);
 
     Serial.printf("[ZoneComposer] Layout set to %d zones\n", m_zoneCount);
     return true;
@@ -676,13 +679,13 @@ void ZoneComposer::loadPreset(uint8_t presetId) {
 
     // Temporarily disable rendering to prevent Core 1 render() from reading
     // partially-modified state during the layout + zone update.
-    const bool wasEnabled = m_enabled;
-    m_enabled = false;
+    const bool wasEnabled = m_enabled.load(std::memory_order_relaxed);
+    m_enabled.store(false, std::memory_order_release);
 
     // Set layout using segment array
     if (!setLayout(preset.segments, preset.zoneCount)) {
         Serial.printf("[ZoneComposer] ERROR: Failed to set layout for preset %d\n", presetId);
-        m_enabled = wasEnabled;
+        m_enabled.store(wasEnabled, std::memory_order_release);
         return;
     }
 
@@ -691,7 +694,8 @@ void ZoneComposer::loadPreset(uint8_t presetId) {
         m_zones[i] = preset.zones[i];
     }
 
-    m_enabled = wasEnabled;
+    // Release store re-enables rendering after all state is consistent
+    m_enabled.store(wasEnabled, std::memory_order_release);
 
     Serial.printf("[ZoneComposer] Loaded preset: %s\n", preset.name);
 }
@@ -752,7 +756,7 @@ uint8_t ZoneComposer::validateZoneId(uint8_t zoneId) const {
 
 void ZoneComposer::printStatus() const {
     Serial.println("\n=== Zone Composer Status ===");
-    Serial.printf("Enabled: %s\n", m_enabled ? "YES" : "NO");
+    Serial.printf("Enabled: %s\n", m_enabled.load(std::memory_order_relaxed) ? "YES" : "NO");
     Serial.printf("Zones: %d\n", m_zoneCount);
 
     for (uint8_t z = 0; z < m_zoneCount; z++) {

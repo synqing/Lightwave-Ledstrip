@@ -512,6 +512,12 @@ void WebServer::broadcastAudioFrame() {
     if (m_lowHeapShed) {
         return;
     }
+    // Subscriber gate: skip the ControlBus snapshot copy entirely when no WS
+    // client is listening. Previously this path ran the snapshot copy + broadcast
+    // setup unconditionally, adding per-tick load during sustained activity.
+    if (!m_audioBroadcaster->hasSubscribers()) {
+        return;
+    }
 
     m_renderer->copyCachedAudioSnapshot(*m_audioFrameScratch, *m_audioGridScratch);
     m_audioBroadcaster->broadcast(*m_audioFrameScratch, *m_audioGridScratch);

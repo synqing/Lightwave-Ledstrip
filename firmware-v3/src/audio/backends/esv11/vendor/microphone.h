@@ -168,17 +168,31 @@ inline void acquire_sample_chunk() {
 #if defined(NATIVE_BUILD)
         memset(new_samples_raw, 0, sizeof(new_samples_raw));
 #else
+        // P0-06 fix: bounded I2S DMA wait (was portMAX_DELAY). At 32kHz with a
+        // 372-sample hop the nominal period is ~11.6ms; 25ms gives two hops of
+        // headroom while ensuring a stuck DMA cannot wedge AudioActor and stall
+        // the ControlBus snapshot. On timeout we zero-fill the buffer to emit
+        // silence (never uninitialised memory); the Actor's onTick loop
+        // re-enters on the next scheduling tick.
         size_t bytes_read = 0;
+        const TickType_t kI2sTimeoutTicks = pdMS_TO_TICKS(25);
 #if ESV11_HAS_I2S_STD
-        i2s_channel_read(rx_handle, new_samples_raw, CHUNK_SIZE * sizeof(uint32_t), &bytes_read, portMAX_DELAY);
+        if (i2s_channel_read(rx_handle, new_samples_raw, CHUNK_SIZE * sizeof(uint32_t), &bytes_read, kI2sTimeoutTicks) != ESP_OK
+            || bytes_read != CHUNK_SIZE * sizeof(uint32_t)) {
+            memset(new_samples_raw, 0, sizeof(new_samples_raw));
+        }
 #else
         // Legacy driver returns interleaved stereo frames when configured with
         // I2S_CHANNEL_FMT_RIGHT_LEFT. SPH0645 (SEL=3.3V) outputs on RIGHT channel,
         // which corresponds to offset 1 in the interleaved stream.
         int32_t stereo_raw[CHUNK_SIZE * 2];
-        i2s_read(es_i2s_port, stereo_raw, CHUNK_SIZE * 2 * sizeof(int32_t), &bytes_read, portMAX_DELAY);
-        for (uint16_t i = 0; i < CHUNK_SIZE; ++i) {
-            new_samples_raw[i] = static_cast<uint32_t>(stereo_raw[i * 2 + 1]);
+        if (i2s_read(es_i2s_port, stereo_raw, CHUNK_SIZE * 2 * sizeof(int32_t), &bytes_read, kI2sTimeoutTicks) != ESP_OK
+            || bytes_read != CHUNK_SIZE * 2 * sizeof(int32_t)) {
+            memset(new_samples_raw, 0, sizeof(new_samples_raw));
+        } else {
+            for (uint16_t i = 0; i < CHUNK_SIZE; ++i) {
+                new_samples_raw[i] = static_cast<uint32_t>(stereo_raw[i * 2 + 1]);
+            }
         }
 #endif
 #endif

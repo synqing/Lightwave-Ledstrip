@@ -82,7 +82,8 @@ void EsOctaveRefEffect::render(plugins::EffectContext& ctx) {
 }
 
 void EsOctaveRefEffect::cleanup() {
-    if (m_ps) { heap_caps_free(m_ps); m_ps = nullptr; }
+    // Retain PSRAM across effect lifetime; freeing on cleanup() fragments PSRAM under rapid cycling
+    // and forces a fresh malloc on next init(). init() already guards with if (!m_ps).
 }
 
 const plugins::EffectMetadata& EsOctaveRefEffect::getMetadata() const {

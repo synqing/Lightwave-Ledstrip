@@ -419,9 +419,19 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
                             msg.param2 = static_cast<uint8_t>(paramIdx);
                             msg.param3 = value;
                             msg.timestamp = millis();
-                            ren->send(msg);
-                            Serial.printf("[MERGE] src=%d %s=%d (idx=%d)\n",
-                                srcId, paramName.c_str(), value, paramIdx);
+                            // P0-06 fix: bounded enqueue (was default 0, effectively
+                            // drop-on-contention but previously portMAX_DELAY-prone
+                            // in the forensic audit). A 10ms budget absorbs normal
+                            // renderer drain cycles without wedging the serial task.
+                            if (!ren->send(msg, pdMS_TO_TICKS(10))) {
+                                LW_LOGW("MERGE_SUBMIT dropped: renderer queue full (src=%d idx=%d)",
+                                        srcId, paramIdx);
+                                Serial.printf("[MERGE] dropped (queue full) src=%d %s=%d\n",
+                                    srcId, paramName.c_str(), value);
+                            } else {
+                                Serial.printf("[MERGE] src=%d %s=%d (idx=%d)\n",
+                                    srcId, paramName.c_str(), value, paramIdx);
+                            }
                         }
                     }
                 }
@@ -1400,6 +1410,25 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
 
     // Check if in zone mode for special handling
     bool inZoneMode = zoneComposer.isEnabled();
+
+    // Auto-repeat coalescing for effect-cycle keys (space / n / N).
+    // The outer tick() drains the entire UART RX buffer in one pass, so a held
+    // key (which the host sends at ~30 chars/sec) can post 30+ setEffect()
+    // messages to the RendererActor in a single loopTask slice — that's what
+    // pushes the renderer queue above DRAIN_THRESHOLD and triggers the drain
+    // starvation path. Capping cycle calls to ~50 Hz keeps the queue well
+    // below the threshold while still feeling fluid under human auto-repeat.
+#ifndef NATIVE_BUILD
+    static uint32_t s_lastCycleMs = 0;
+    const bool isCycleKey = (cmd == ' ' || cmd == 'n' || cmd == 'N');
+    if (isCycleKey) {
+        const uint32_t nowMs = millis();
+        if (nowMs - s_lastCycleMs < 20) {
+            return;  // Silently drop — user's next keystroke within the window.
+        }
+        s_lastCycleMs = nowMs;
+    }
+#endif
 
     // Zone mode: 1-5 selects presets
     if (inZoneMode && cmd >= '1' && cmd <= '5') {

@@ -25,7 +25,11 @@
 #include <Arduino.h>  // For Serial in one-shot debug methods
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <esp_task_wdt.h>  // Task Watchdog subscription/feed for audio tick liveness
 #endif
+
+// AudioMath::retunedAlpha for hop-rate-aware AGC/noise-floor alphas
+#include "AudioMath.h"
 
 // Always include macros - they define no-ops when FEATURE_AUDIO_BENCHMARK is disabled
 #include "AudioBenchmarkMacros.h"
@@ -1707,9 +1711,16 @@ void AudioActor::processHop()
     TRACE_BEGIN("controlbus_build");
 
     const AudioPipelineTuning tuning = getPipelineTuning();
-#ifndef NATIVE_BUILD
-    portENTER_CRITICAL(&m_controlBusApiMux);
-#endif
+    // P1-02: Shrink critical section. UpdateFromHop performs DSP work (hundreds
+    // of µs) and previously ran with IRQs disabled — every audio hop (~200 Hz)
+    // blocked interrupts on Core 0. The internal m_controlBus state it mutates
+    // is not concurrently read: cross-core readers consume the lock-free
+    // m_controlBusBuffer (SnapshotBuffer) populated later in this function, and
+    // getControlBusFrameSnapshot() is only invoked from this task. Concurrent
+    // external API setters (setZoneAgcRates / setLookaheadEnabled / etc.) only
+    // write scalar config fields — a stray interleave delays the config change
+    // by at most one hop, no torn frame results. The critical section is
+    // therefore only needed around the publish-adjacent snapshot copy below.
     m_controlBus.setSmoothing(tuning.controlBusAlphaFast, tuning.controlBusAlphaSlow);
 #ifdef AUDIO_SILENCE_GATE_DISABLED
     m_controlBus.setSilenceParameters(tuning.silenceThreshold, 0.0f);
@@ -1717,17 +1728,18 @@ void AudioActor::processHop()
     m_controlBus.setSilenceParameters(tuning.silenceThreshold, tuning.silenceHysteresisMs);
 #endif
     m_controlBus.UpdateFromHop(now, raw);
-#ifndef NATIVE_BUILD
-    portEXIT_CRITICAL(&m_controlBusApiMux);
-#endif
 
     TRACE_END();  // controlbus_build
     BENCH_END_PHASE(controlBusUs);
 
     // === Phase: Style Detection ===
+    // Snapshot once and reuse for both chord tracking and publish seed. No
+    // UpdateFromHop call sits between these sites, so the frames are logically
+    // identical — deduping saves one ~5 KB memcpy and one mutex round-trip per
+    // hop (P1-02 dedupe).
+    const ControlBusFrame frameRef = getControlBusFrameSnapshot();
 #if FEATURE_STYLE_DETECTION
     {
-        const ControlBusFrame frameRef = getControlBusFrameSnapshot();
         bool chordChanged = (frameRef.chordState.rootNote != m_prevChordRoot);
         m_prevChordRoot = frameRef.chordState.rootNote;
         float beatConfidence = raw.tempoLocked ? raw.tempoConfidence : 0.0f;
@@ -1747,7 +1759,7 @@ void AudioActor::processHop()
 
     // 5. Publish frame to renderer via lock-free SnapshotBuffer
     {
-        ControlBusFrame frameToPublish = getControlBusFrameSnapshot();
+        ControlBusFrame frameToPublish = frameRef;
 #if FEATURE_STYLE_DETECTION
         frameToPublish.currentStyle = m_styleDetector.getStyle();
         frameToPublish.styleConfidence = m_styleDetector.getConfidence();
@@ -2550,6 +2562,20 @@ void AudioActor::onStart()
     m_lastTempoOutput = m_tempo.getOutput();
     LW_LOGI("TempoTracker initialized");
 
+#ifndef NATIVE_BUILD
+    // P0-07: Subscribe this task to the Task Watchdog. The feed in onTick() is
+    // liveness-correlated (only fed when captureSuccessCount has advanced), so a
+    // soft hang where the tick is still running but capture has stalled (e.g.
+    // blocked on a pipeline semaphore) will now be caught by TWDT rather than
+    // relying on the hardware TG1WDT boot-loop path (memory #37629).
+    esp_err_t wdt_err = esp_task_wdt_add(nullptr);
+    if (wdt_err != ESP_OK) {
+        LW_LOGW("esp_task_wdt_add failed (err=0x%x) - TWDT may not be initialised yet", wdt_err);
+    } else {
+        LW_LOGI("AudioActor subscribed to Task Watchdog (liveness-correlated feed)");
+    }
+#endif
+
     LW_LOGI("AudioActor started (tick=%dms, hop=%d, rate=%.1fHz)",
              AUDIO_ACTOR_TICK_MS, HOP_SIZE, HOP_RATE_HZ);
     LW_LOGI("Pipeline diagnostics enabled - will log every 10 seconds");
@@ -2656,6 +2682,25 @@ void AudioActor::onTick()
     if ((m_stats.tickCount % 1250) == 0 && m_stats.tickCount > 0) {
         printDiagnostics();
     }
+
+#ifndef NATIVE_BUILD
+    // P0-07: Liveness-correlated Task Watchdog feed.
+    //
+    // Only reset the TWDT when captureSuccessCount has advanced since the last
+    // tick. This means the watchdog will trip if the tick runs but the capture
+    // path has stalled (e.g. blocked on a backend semaphore, I2S DMA starvation,
+    // or pipeline deadlock), not only when the tick stops running entirely.
+    //
+    // Feed rate is bounded by the tick interval (~125 Hz at 32 kHz / HOP=256),
+    // so there is no risk of over-feeding or drowning out true hangs.
+    static uint32_t s_lastCaptureCountForWdt = 0;
+    if (m_stats.captureSuccessCount != s_lastCaptureCountForWdt) {
+        s_lastCaptureCountForWdt = m_stats.captureSuccessCount;
+        esp_task_wdt_reset();
+    }
+    // Intentionally NOT feeding on an unchanged counter: if captures have
+    // stalled, we want TWDT to trip and surface the hang.
+#endif
 }
 
 void AudioActor::onStop()
@@ -2873,12 +2918,20 @@ void AudioActor::processHop()
     const float agcTargetRms = tuning.agcTargetRms;
     const float agcMinGain = tuning.agcMinGain;    // Don't attenuate below min
     const float agcMaxGain = tuning.agcMaxGain;
-    const float agcAttack = tuning.agcAttack;
-    const float agcRelease = tuning.agcRelease;
+
+    // P1-13: AGC and noise-floor alphas are tuned at a 200 Hz baseline hop rate
+    // (matching vendor ES code in tempo.h / vu.h / goertzel.h). At other hop
+    // rates - notably K1v2 32 kHz / HOP=256 = 125 Hz - a hardcoded alpha produces
+    // a time constant that is wrong by HOP_RATE_HZ / 200. retunedAlpha() rescales
+    // each alpha so its perceptual time constant is preserved at any frame rate.
+    // At 200 Hz this is an identity; at 125 Hz each alpha is ~0.625x.
+    constexpr float kAlphaBaselineHz = 200.0f;
+    const float agcAttack = retunedAlpha(tuning.agcAttack, kAlphaBaselineHz, HOP_RATE_HZ);
+    const float agcRelease = retunedAlpha(tuning.agcRelease, kAlphaBaselineHz, HOP_RATE_HZ);
 
     const float noiseFloorMin = tuning.noiseFloorMin;
-    const float noiseFloorRise = tuning.noiseFloorRise;
-    const float noiseFloorFall = tuning.noiseFloorFall;
+    const float noiseFloorRise = retunedAlpha(tuning.noiseFloorRise, kAlphaBaselineHz, HOP_RATE_HZ);
+    const float noiseFloorFall = retunedAlpha(tuning.noiseFloorFall, kAlphaBaselineHz, HOP_RATE_HZ);
     const float gateStartFactor = tuning.gateStartFactor;
     const float gateRangeFactor = tuning.gateRangeFactor;
     const float gateRangeMin = tuning.gateRangeMin;
@@ -3413,9 +3466,11 @@ void AudioActor::processHop()
     }
 
     // 7. Update ControlBus with attack/release smoothing
-#ifndef NATIVE_BUILD
-    portENTER_CRITICAL(&m_controlBusApiMux);
-#endif
+    // P1-02: Shrink critical section — UpdateFromHop (DSP smoothing + spike
+    // detection + saliency + STM + chord + silence) runs IRQ-enabled. See the
+    // matching comment in the PipelineCore hop processor for the full rationale
+    // (no cross-core reader touches m_controlBus internals; only the lock-free
+    // SnapshotBuffer below is observed externally).
     m_controlBus.setSmoothing(tuning.controlBusAlphaFast, tuning.controlBusAlphaSlow);
 #ifdef AUDIO_SILENCE_GATE_DISABLED
     m_controlBus.setSilenceParameters(tuning.silenceThreshold, 0.0f);
@@ -3423,18 +3478,17 @@ void AudioActor::processHop()
     m_controlBus.setSilenceParameters(tuning.silenceThreshold, tuning.silenceHysteresisMs);
 #endif
     m_controlBus.UpdateFromHop(now, raw);
-#ifndef NATIVE_BUILD
-    portEXIT_CRITICAL(&m_controlBusApiMux);
-#endif
 
     TRACE_END();  // controlbus_build
     BENCH_END_PHASE(controlBusUs);
 
     // === Phase: Style Detection ===
-    // Update style detector with current hop features (after ControlBus has chord state)
+    // Update style detector with current hop features (after ControlBus has chord state).
+    // Single snapshot shared with the publish step below — no UpdateFromHop
+    // intervenes, so dedupe is safe and saves a 5 KB memcpy + mutex round-trip.
+    const ControlBusFrame frameRef = getControlBusFrameSnapshot();
 #if FEATURE_STYLE_DETECTION
     {
-        const ControlBusFrame frameRef = getControlBusFrameSnapshot();
         bool chordChanged = (frameRef.chordState.rootNote != m_prevChordRoot);
         m_prevChordRoot = frameRef.chordState.rootNote;
         // Use TempoTracker beat tracker confidence for style detection
@@ -3456,7 +3510,7 @@ void AudioActor::processHop()
     // 8. Publish frame to renderer via lock-free SnapshotBuffer
     // Copy style detection results to frame before publishing
     {
-        ControlBusFrame frameToPublish = getControlBusFrameSnapshot();
+        ControlBusFrame frameToPublish = frameRef;
 #if FEATURE_STYLE_DETECTION
         frameToPublish.currentStyle = m_styleDetector.getStyle();
         frameToPublish.styleConfidence = m_styleDetector.getConfidence();

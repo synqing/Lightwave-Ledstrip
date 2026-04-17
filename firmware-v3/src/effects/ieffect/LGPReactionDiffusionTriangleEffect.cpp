@@ -135,7 +135,8 @@ void LGPReactionDiffusionTriangleEffect::render(plugins::EffectContext& ctx) {
 }
 
 void LGPReactionDiffusionTriangleEffect::cleanup() {
-    if (m_ps) { heap_caps_free(m_ps); m_ps = nullptr; }
+    // Retain PSRAM across effect lifetime; freeing on cleanup() fragments PSRAM under rapid cycling
+    // and forces a fresh malloc on next init(). init() already guards with if (!m_ps).
 }
 
 const plugins::EffectMetadata& LGPReactionDiffusionTriangleEffect::getMetadata() const {

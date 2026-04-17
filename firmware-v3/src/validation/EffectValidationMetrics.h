@@ -17,9 +17,10 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <atomic>
 #include "../config/effect_ids.h"
 
-// ESP32 atomic operations
+// ESP32 platform headers
 #ifdef ESP_PLATFORM
 #include <esp_attr.h>
 #include <freertos/FreeRTOS.h>
@@ -134,11 +135,11 @@ public:
     static_assert(N >= 8 && N <= 1024, "Ring size must be between 8 and 1024");
 
     /**
-     * @brief Default constructor - initialize empty ring
+     * @brief Default constructor - initialise empty ring
      * Uses memset for zero-init to avoid loop overhead during static init
      */
     EffectValidationRing() : m_write_idx(0), m_read_idx(0), m_buffer{} {
-        // Brace initialization zeros the buffer (no loop overhead)
+        // Brace initialisation zeros the buffer (no loop overhead)
     }
 
     /**
@@ -151,22 +152,18 @@ public:
      * @return true if sample was written, false if buffer is full (overwrites)
      */
     IRAM_ATTR bool push(const EffectValidationSample& sample) {
-        uint32_t write_pos = m_write_idx;
+        // Relaxed load: producer owns write_idx, no cross-core ordering needed here
+        uint32_t write_pos = m_write_idx.load(std::memory_order_relaxed);
         uint32_t next_pos = (write_pos + 1) & (N - 1);
 
-        // Write the sample to the current position
+        // Write the sample to the current position before publishing the index
         m_buffer[write_pos] = sample;
 
-        // Memory barrier: ensure data is written before index update
-#ifdef ESP_PLATFORM
-        __asm__ __volatile__("" ::: "memory");
-#endif
+        // Release store: ensures sample data is visible to consumer before index advances
+        m_write_idx.store(next_pos, std::memory_order_release);
 
-        // Update write index atomically
-        m_write_idx = next_pos;
-
-        // Check if we overwrote unread data
-        return (next_pos != m_read_idx);
+        // Acquire load of read_idx: observe consumer's progress with correct ordering
+        return (next_pos != m_read_idx.load(std::memory_order_acquire));
     }
 
     /**
@@ -184,50 +181,46 @@ public:
             return 0;
         }
 
-        // Read write index (atomic on ESP32 for uint32_t)
-        uint32_t write_pos = m_write_idx;
-        uint32_t read_pos = m_read_idx;
+        // Acquire load of write_idx: ensures sample data written by producer
+        // before its release-store is visible to us after this load
+        uint32_t write_pos = m_write_idx.load(std::memory_order_acquire);
+        // Relaxed load: consumer owns read_idx, no cross-core ordering needed here
+        uint32_t read_pos = m_read_idx.load(std::memory_order_relaxed);
 
         // Calculate available samples
-        size_t available = (write_pos - read_pos) & (N - 1);
-        size_t to_drain = (available < max_count) ? available : max_count;
+        size_t avail = (write_pos - read_pos) & (N - 1);
+        size_t to_drain = (avail < max_count) ? avail : max_count;
 
-        // Memory barrier: ensure we read index before data
-#ifdef ESP_PLATFORM
-        __asm__ __volatile__("" ::: "memory");
-#endif
-
-        // Copy samples to output buffer
+        // Copy samples to output buffer (ordering guaranteed by acquire above)
         for (size_t i = 0; i < to_drain; ++i) {
             uint32_t idx = (read_pos + i) & (N - 1);
             out[i] = m_buffer[idx];
         }
 
-        // Memory barrier: ensure data is read before index update
-#ifdef ESP_PLATFORM
-        __asm__ __volatile__("" ::: "memory");
-#endif
-
-        // Update read index
-        m_read_idx = (read_pos + to_drain) & (N - 1);
+        // Release store: publish updated read index to producer so it can see
+        // that slots have been freed
+        m_read_idx.store((read_pos + to_drain) & (N - 1), std::memory_order_release);
 
         return to_drain;
     }
 
     /**
-     * @brief Get the number of samples currently in the buffer
+     * @brief Get the number of samples currently in the buffer (approximate)
      * @return Number of unread samples
      */
     size_t available() const {
-        return (m_write_idx - m_read_idx) & (N - 1);
+        uint32_t w = m_write_idx.load(std::memory_order_relaxed);
+        uint32_t r = m_read_idx.load(std::memory_order_relaxed);
+        return (w - r) & (N - 1);
     }
 
     /**
-     * @brief Check if the buffer is empty
+     * @brief Check if the buffer is empty (approximate)
      * @return true if no samples available
      */
     bool empty() const {
-        return m_write_idx == m_read_idx;
+        return m_write_idx.load(std::memory_order_relaxed) ==
+               m_read_idx.load(std::memory_order_relaxed);
     }
 
     /**
@@ -244,16 +237,20 @@ public:
      * Should only be called when both producer and consumer are idle.
      */
     void clear() {
-        m_read_idx = m_write_idx;
+        m_read_idx.store(m_write_idx.load(std::memory_order_relaxed),
+                         std::memory_order_relaxed);
     }
 
 private:
     // Ring buffer storage
     EffectValidationSample m_buffer[N];
 
-    // Indices (volatile for cross-thread visibility)
-    volatile uint32_t m_write_idx;
-    volatile uint32_t m_read_idx;
+    // Indices — std::atomic for correct acquire/release ordering across cores.
+    // std::atomic<uint32_t> is always lock-free on Xtensa LX7 (single instruction).
+    static_assert(std::atomic<uint32_t>::is_always_lock_free,
+                  "std::atomic<uint32_t> must be lock-free on this platform");
+    std::atomic<uint32_t> m_write_idx;  // Written by render thread (producer)
+    std::atomic<uint32_t> m_read_idx;   // Written by WebSocket thread (consumer)
 };
 
 /**

@@ -609,11 +609,21 @@ private:
     uint32_t m_lastHeapShedLogMs;
     uint32_t m_lastHeapShedProbeMs;
     uint32_t m_lastLargestInternalHeap;
+    // Wall-clock ms when shed first latched. Enables a max-latch-time force-clear
+    // so the flag cannot stay ON forever when heap oscillates in the hysteresis
+    // band (20-26 KB) without reaching the clear threshold. Without this escape
+    // hatch the WS reconnect storm triggered by closeAll(1013) perpetuates the
+    // latch — see CHANGELOG "progressive cascade lockup" fix.
+    uint32_t m_shedActivatedAtMs;
     static constexpr uint32_t INTERNAL_HEAP_SHED_BELOW_BYTES = LW_INTERNAL_HEAP_SHED_BELOW_BYTES;
     static constexpr uint32_t INTERNAL_HEAP_RESUME_ABOVE_BYTES = LW_INTERNAL_HEAP_RESUME_ABOVE_BYTES;
     static constexpr uint32_t INTERNAL_HEAP_SHED_LOG_INTERVAL_MS = LW_INTERNAL_HEAP_SHED_LOG_INTERVAL_MS;
     static constexpr uint32_t INTERNAL_HEAP_SHED_PROBE_INTERVAL_MS = LW_INTERNAL_HEAP_SHED_PROBE_INTERVAL_MS;
     static constexpr uint32_t INTERNAL_HEAP_LARGEST_BLOCK_NEAR_THRESHOLD_MARGIN = LW_INTERNAL_HEAP_LARGEST_BLOCK_NEAR_THRESHOLD_MARGIN;
+    // Force-clear shed after this many ms of continuous activation, regardless of
+    // free-heap state. Paired with a brief cooldown so the next probe tick can
+    // re-latch if the condition genuinely persists.
+    static constexpr uint32_t INTERNAL_HEAP_SHED_MAX_LATCH_MS = 10000U;
     static_assert(INTERNAL_HEAP_RESUME_ABOVE_BYTES > INTERNAL_HEAP_SHED_BELOW_BYTES,
                   "Low-heap resume threshold must be greater than shed threshold");
 

@@ -78,6 +78,7 @@
 #include "../effects/zones/ZoneDefinition.h"
 #include <Update.h>
 #include "../core/actors/RendererNode.h"
+#include "../core/system/OtaSessionLock.h"
 #include "../core/persistence/ZoneConfigManager.h"
 #include "../effects/zones/ZoneComposer.h"
 #include "../effects/transitions/TransitionTypes.h"
@@ -199,6 +200,7 @@ WebServer::WebServer(NodeOrchestrator& orchestrator, RendererNode* renderer)
     , m_lastHeapShedLogMs(0)
     , m_lastHeapShedProbeMs(0)
     , m_lastLargestInternalHeap(0)
+    , m_shedActivatedAtMs(0)
     , m_zoneComposer(nullptr)
     , m_lastStateCacheUpdate(0)
     , m_ledBroadcaster(nullptr)
@@ -545,6 +547,7 @@ void WebServer::updateLowHeapShedState(uint32_t nowMs) {
         if (freeInternal < INTERNAL_HEAP_SHED_BELOW_BYTES) {
             m_lowHeapShed = true;
             m_lastHeapShedLogMs = nowMs;
+            m_shedActivatedAtMs = nowMs;
             LW_LOGW("Low-heap shedding ENABLED (internal=%lu, largest=%lu, shed<%lu,resume>%lu)",
                     (unsigned long)freeInternal,
                     (unsigned long)largestInternal,
@@ -558,20 +561,36 @@ void WebServer::updateLowHeapShedState(uint32_t nowMs) {
             }
         }
     } else {
-        if (freeInternal > INTERNAL_HEAP_RESUME_ABOVE_BYTES) {
+        const uint32_t shedDurationMs = nowMs - m_shedActivatedAtMs;
+        const bool heapRecovered = freeInternal > INTERNAL_HEAP_RESUME_ABOVE_BYTES;
+        const bool maxLatchExceeded = shedDurationMs > INTERNAL_HEAP_SHED_MAX_LATCH_MS;
+        if (heapRecovered || maxLatchExceeded) {
             m_lowHeapShed = false;
             m_lastHeapShedLogMs = nowMs;
-            LW_LOGI("Low-heap shedding DISABLED (internal=%lu, largest=%lu)",
-                    (unsigned long)freeInternal,
-                    (unsigned long)largestInternal);
+            if (maxLatchExceeded && !heapRecovered) {
+                // Force-clear after max-latch: prevents the WS reconnect storm
+                // from perpetuating the latch indefinitely. If heap is still
+                // genuinely low, the next probe (300 ms) will re-latch; but
+                // the intervening window lets broadcasters + connects work,
+                // giving clients a chance to drain buffers and heap to recover.
+                LW_LOGW("Low-heap shedding FORCE-CLEARED after %lu ms (internal=%lu, largest=%lu) — heap stuck in hysteresis band",
+                        (unsigned long)shedDurationMs,
+                        (unsigned long)freeInternal,
+                        (unsigned long)largestInternal);
+            } else {
+                LW_LOGI("Low-heap shedding DISABLED (internal=%lu, largest=%lu)",
+                        (unsigned long)freeInternal,
+                        (unsigned long)largestInternal);
+            }
             // Force a one-shot status broadcast after recovery to resynchronise dashboards.
             m_broadcastPending = true;
         } else if ((nowMs - m_lastHeapShedLogMs) > INTERNAL_HEAP_SHED_LOG_INTERVAL_MS) {
             m_lastHeapShedLogMs = nowMs;
-            LW_LOGW("Low-heap shedding active (internal=%lu, largest=%lu, resume>%lu)",
+            LW_LOGW("Low-heap shedding active (internal=%lu, largest=%lu, resume>%lu, latched_ms=%lu)",
                     (unsigned long)freeInternal,
                     (unsigned long)largestInternal,
-                    (unsigned long)INTERNAL_HEAP_RESUME_ABOVE_BYTES);
+                    (unsigned long)INTERNAL_HEAP_RESUME_ABOVE_BYTES,
+                    (unsigned long)shedDurationMs);
         }
     }
 }
@@ -590,6 +609,82 @@ void WebServer::update() {
         }
     }
     const uint32_t nowMs = millis();
+
+    // ========================================================================
+    // 1 Hz broadcaster subscriber reclaim (forensic-audit P1-15)
+    //
+    // Each broadcaster owns a subscriber table that is only reclaimed inside
+    // its own broadcast() method. For low-frequency streams (log, benchmark)
+    // broadcast() fires rarely, so zombie entries for clients whose sockets
+    // closed without a clean handleWsDisconnect round-trip can sit in the
+    // table indefinitely, occupying slots and burning send attempts on dead
+    // handles. Calling cleanupDisconnected() once per second on every
+    // broadcaster prunes those entries cheaply — each implementation is a
+    // small linear scan under a spinlock.
+    //
+    // LedStream and Stm also reclaim during their own broadcast() paths, so
+    // this is redundant for them, but we include all five broadcasters for
+    // uniformity and to keep the cron simple.
+    // ========================================================================
+    {
+        static uint32_t s_lastBroadcasterCleanupMs = 0;
+        if ((nowMs - s_lastBroadcasterCleanupMs) >= 1000) {
+            s_lastBroadcasterCleanupMs = nowMs;
+            if (m_ledBroadcaster) m_ledBroadcaster->cleanupDisconnected();
+            if (m_logBroadcaster) m_logBroadcaster->cleanupDisconnected();
+#if FEATURE_AUDIO_SYNC
+            if (m_audioBroadcaster) m_audioBroadcaster->cleanupDisconnected();
+            if (m_stmBroadcaster) m_stmBroadcaster->cleanupDisconnected();
+#endif
+#if FEATURE_AUDIO_BENCHMARK
+            if (m_benchmarkBroadcaster) m_benchmarkBroadcaster->cleanupDisconnected();
+#endif
+        }
+    }
+
+    // ========================================================================
+    // OTA session stale-lock watchdog (forensic-audit P0-02)
+    //
+    // OtaSessionLock captures the acquisition timestamp on tryAcquire. If a
+    // WebSocket OTA owner drops a half-open TCP socket without clean
+    // ota.abort, handleOtaClientDisconnect never fires and the session flag
+    // + OtaSessionLock stay held forever — every subsequent OTA returns
+    // BUSY and the Update partition stays half-written. This sweep detects
+    // sessions older than OTA_SESSION_MAX_MS (5 min) and force-aborts them.
+    //
+    // Mirrors the m_lowHeapShed max-latch pattern: an independent watchdog
+    // timer in update() forces release when the primary clear path cannot
+    // reach it. Checked once per second (cheap — a single spinlock read +
+    // unsigned compare) to avoid piling up timeout work on a single tick.
+    // ========================================================================
+    {
+        static uint32_t s_lastOtaSweepMs = 0;
+        if ((nowMs - s_lastOtaSweepMs) >= 1000) {
+            s_lastOtaSweepMs = nowMs;
+            using OtaLock = lightwaveos::core::system::OtaSessionLock;
+            using OtaTransport = lightwaveos::core::system::OtaTransport;
+            if (OtaLock::isStale(nowMs)) {
+                const OtaTransport transport = OtaLock::activeTransport();
+                const uint32_t startMs = OtaLock::sessionStartMs();
+                const uint32_t elapsedMs = (startMs != 0) ? (nowMs - startMs) : 0;
+                LW_LOGE("ota.timeout after %lu ms (transport=%d) — force-aborting stale session",
+                        static_cast<unsigned long>(elapsedMs),
+                        static_cast<int>(transport));
+                if (transport == OtaTransport::WebSocket) {
+                    // Runs full WS cleanup path: telemetry (ota.ws.failed),
+                    // Update.abort(), LED failure feedback, state clear,
+                    // and OtaLock::release() — matching handleOtaClientDisconnect.
+                    webserver::ws::forceAbortStaleOtaSession("timeout");
+                } else {
+                    // REST path has no persistent session state outside the
+                    // lock itself — abort the Update partition and drop the
+                    // lock so new OTAs can start.
+                    Update.abort();
+                    OtaLock::release();
+                }
+            }
+        }
+    }
     const bool shedProbeDue = (nowMs - m_lastHeapShedProbeMs) >= INTERNAL_HEAP_SHED_PROBE_INTERVAL_MS;
     if (shedProbeDue) {
         updateLowHeapShedState(nowMs);
@@ -1378,10 +1473,31 @@ void WebServer::handleWsDisconnect(AsyncWebSocketClient* client) {
     // Cleanup LED stream subscription
     setLEDStreamSubscription(client, false);
 
+    // Cleanup log stream subscription (forensic-audit P1-15)
+    // Without this, the LogStream subscriber table keeps a dead handle until
+    // the next 1 Hz cleanupDisconnected() sweep reclaims it — and prior to
+    // the cron being added, indefinitely. Unsubscribing here closes the
+    // window even if this disconnect path fires cleanly.
+    setLogStreamSubscription(client, false);
+
 #if FEATURE_AUDIO_SYNC
+    // Cleanup audio stream subscription (forensic-audit P1-15)
+    setAudioStreamSubscription(client, false);
+
     // Cleanup STM stream subscription
     if (m_stmBroadcaster) {
         m_stmBroadcaster->setSubscription(clientId, false);
+    }
+#endif
+
+#if FEATURE_AUDIO_BENCHMARK
+    // Cleanup benchmark stream subscription. Mirrors the pattern used for STM/LED/UDP
+    // subscribers: the broadcaster's subscription manager is idempotent for unknown
+    // client IDs, and its setSubscription() auto-clears the m_streamingActive latch
+    // when the last subscriber drops — preventing the "client vanishes without
+    // benchmark.stop" latch from self-sustaining forever (forensic-audit P1-04 + P1-15).
+    if (m_benchmarkBroadcaster) {
+        m_benchmarkBroadcaster->setSubscription(clientId, false);
     }
 #endif
 

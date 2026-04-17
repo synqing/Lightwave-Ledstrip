@@ -161,6 +161,13 @@ private:
     uint32_t m_socketResets = 0;
     uint32_t m_lastSocketResetMs = 0;
     bool m_needsSocketReset = false;
+    // Timestamp (ms) recorded when m_needsSocketReset was last raised.
+    // Used by maybeResetSocket() to cap how long the reset request can latch
+    // while heap remains below MIN_HEAP_FOR_SOCKET_RESET — without this cap,
+    // persistent low-heap keeps the flag asserted forever (self-sustaining
+    // latch identical in class to the m_lowHeapShed issue resolved in
+    // WebServer.cpp). 0 = not pending. Mirrors the m_lowHeapShed pattern.
+    uint32_t m_needsSocketResetAtMs = 0;
 
     // Round-robin pointers for fair delivery
     uint8_t m_rrLedIndex = 0;
@@ -182,6 +189,12 @@ private:
     static constexpr uint8_t FAILURE_STREAK_SOCKET_RESET = 6;
     static constexpr uint8_t FAILURE_STREAK_DROP_ALL = 10;
     static constexpr uint32_t SOCKET_RESET_MIN_INTERVAL_MS = 15000;
+    // Cap the m_needsSocketReset latch. If free internal heap stays below
+    // MIN_HEAP_FOR_SOCKET_RESET for longer than this, we force a reset
+    // anyway and drop all subscribers as an escalation — matches the
+    // hard-breaker FAILURE_STREAK_DROP_ALL behaviour and prevents the
+    // flag from self-sustaining under chronic heap pressure.
+    static constexpr uint32_t SOCKET_RESET_MAX_LATCH_MS = 30000;
 
     /// Find subscriber slot by IP, or first inactive slot if not found.
     /// Must be called under lock.

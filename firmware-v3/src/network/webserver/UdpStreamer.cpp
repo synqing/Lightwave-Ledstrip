@@ -528,6 +528,7 @@ void UdpStreamer::resetStats() {
     m_socketResets = 0;
     m_lastSocketResetMs = 0;
     m_needsSocketReset = false;
+    m_needsSocketResetAtMs = 0;
 
 #if defined(ESP32)
     portENTER_CRITICAL(&m_mux);
@@ -572,6 +573,9 @@ void UdpStreamer::updateCooldown(uint32_t nowMs, bool anyFailure, bool anySucces
 
         // Circuit breaker: schedule a socket reset after a short streak of failures.
         if (m_consecutiveFailures >= FAILURE_STREAK_SOCKET_RESET) {
+            if (!m_needsSocketReset) {
+                m_needsSocketResetAtMs = nowMs;
+            }
             m_needsSocketReset = true;
         }
 
@@ -581,6 +585,9 @@ void UdpStreamer::updateCooldown(uint32_t nowMs, bool anyFailure, bool anySucces
             LW_LOGW("UDP: dropping all subscribers after %u consecutive failures",
                     static_cast<unsigned>(m_consecutiveFailures));
             removeAll();
+            if (!m_needsSocketReset) {
+                m_needsSocketResetAtMs = nowMs;
+            }
             m_needsSocketReset = true;
             m_cooldownUntilMs = nowMs + SUBSCRIBER_SUPPRESS_LONG_MS;
         }
@@ -591,6 +598,7 @@ void UdpStreamer::updateCooldown(uint32_t nowMs, bool anyFailure, bool anySucces
         m_consecutiveFailures = 0;
         m_cooldownUntilMs = 0;
         m_needsSocketReset = false;
+        m_needsSocketResetAtMs = 0;
     }
 }
 
@@ -600,11 +608,32 @@ void UdpStreamer::maybeResetSocket(uint32_t nowMs) {
     // Avoid doing socket churn while heap is low; it tends to make the situation worse.
     static constexpr size_t MIN_HEAP_FOR_SOCKET_RESET = 30000;
     const size_t freeInternalHeap = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
-    if (freeInternalHeap < MIN_HEAP_FOR_SOCKET_RESET) {
+
+    // Max-latch escape hatch: if the reset request has been pending for longer than
+    // SOCKET_RESET_MAX_LATCH_MS we proceed regardless of free-heap state. Without this,
+    // a chronic low-heap condition (the same condition that caused the UDP send failures
+    // in the first place) keeps m_needsSocketReset asserted forever — a self-sustaining
+    // latch in the same class as the m_lowHeapShed latch addressed in WebServer.cpp.
+    // On force-clear we also drop subscribers: if we have been unable to recover for
+    // 30 s there is no reasonable expectation that the current subscribers are still
+    // listening, and forcing them to re-subscribe re-establishes a clean pipeline.
+    const bool latchPending = (m_needsSocketResetAtMs != 0);
+    const uint32_t latchAgeMs = latchPending ? (nowMs - m_needsSocketResetAtMs) : 0;
+    const bool latchExceeded = latchPending && (latchAgeMs > SOCKET_RESET_MAX_LATCH_MS);
+
+    if (freeInternalHeap < MIN_HEAP_FOR_SOCKET_RESET && !latchExceeded) {
         return;
     }
     if (m_lastSocketResetMs != 0 && (nowMs - m_lastSocketResetMs) < SOCKET_RESET_MIN_INTERVAL_MS) {
         return;
+    }
+
+    if (latchExceeded) {
+        LW_LOGW("UDP: socket-reset latch force-clearing after %lu ms (heap=%lu < %lu) — dropping subscribers",
+                static_cast<unsigned long>(latchAgeMs),
+                static_cast<unsigned long>(freeInternalHeap),
+                static_cast<unsigned long>(MIN_HEAP_FOR_SOCKET_RESET));
+        removeAll();
     }
 
     // Reset the UDP socket in-place. This clears out stuck lwIP state and is significantly cheaper
@@ -614,12 +643,16 @@ void UdpStreamer::maybeResetSocket(uint32_t nowMs) {
         LW_LOGW("UDP: socket reset failed (begin failed)");
         m_lastSocketResetMs = nowMs;
         m_socketResets++;
+        // Keep the latch pending so the next cycle retries; but refresh the timestamp so
+        // we do not repeatedly hit the "latch exceeded" branch every tick.
+        m_needsSocketResetAtMs = nowMs;
         return;
     }
 
     m_lastSocketResetMs = nowMs;
     m_socketResets++;
     m_needsSocketReset = false;
+    m_needsSocketResetAtMs = 0;
     // Give lwIP a moment to breathe after reset.
     m_cooldownUntilMs = nowMs + COOLDOWN_SHORT_MS;
     LW_LOGW("UDP: socket reset performed (count=%lu)", static_cast<unsigned long>(m_socketResets));

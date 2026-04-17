@@ -42,19 +42,24 @@ KuramotoTransportEffect::KuramotoTransportEffect() {
 }
 
 bool KuramotoTransportEffect::init(lightwaveos::plugins::EffectContext& ctx) {
-    // Allocate PSRAM for sub-components
+    // Allocate PSRAM for sub-components. Each failure path must roll back any
+    // already-allocated buffers — otherwise rapid effect cycling under PSRAM
+    // pressure would strand hundreds of bytes per failed init cycle.
     if (!m_field.allocatePsram()) {
         LW_LOGE("KuramotoTransport: field PSRAM alloc failed");
         return false;
     }
     if (!m_transport.allocatePsram()) {
         LW_LOGE("KuramotoTransport: transport PSRAM alloc failed");
+        m_field.freePsram();  // roll back prior alloc
         return false;
     }
     if (!m_scratch) {
         m_scratch = static_cast<PsramScratch*>(heap_caps_malloc(sizeof(PsramScratch), MALLOC_CAP_SPIRAM));
         if (!m_scratch) {
             LW_LOGE("KuramotoTransport: scratch PSRAM alloc failed");
+            m_transport.freePsram();  // roll back
+            m_field.freePsram();
             return false;
         }
     }

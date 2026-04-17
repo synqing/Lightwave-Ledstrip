@@ -86,6 +86,7 @@ bool LGPTimeReversalMirrorEffect_AR::init(plugins::EffectContext& ctx) {
 
     // Allocate large field + history buffers in PSRAM
 #ifndef NATIVE_BUILD
+    const bool wasFirstAlloc = (m_ps == nullptr);
     if (!m_ps) {
         m_ps = static_cast<PsramData*>(
             heap_caps_malloc(sizeof(PsramData), MALLOC_CAP_SPIRAM));
@@ -95,7 +96,14 @@ bool LGPTimeReversalMirrorEffect_AR::init(plugins::EffectContext& ctx) {
             return false;
         }
     }
-    memset(m_ps, 0, sizeof(PsramData));
+    // Only zero live field arrays on re-init; history gated by m_historyCount.
+    if (wasFirstAlloc) {
+        memset(m_ps, 0, sizeof(PsramData));
+    } else {
+        memset(m_ps->u_prev, 0, sizeof(m_ps->u_prev));
+        memset(m_ps->u_curr, 0, sizeof(m_ps->u_curr));
+        memset(m_ps->u_next, 0, sizeof(m_ps->u_next));
+    }
 #else
     // Native build stub -- no PSRAM
     m_ps = nullptr;

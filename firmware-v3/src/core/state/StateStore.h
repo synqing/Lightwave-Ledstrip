@@ -3,6 +3,8 @@
 #include "SystemState.h"
 #include "ICommand.h"
 
+#include <atomic>
+
 #ifdef NATIVE_BUILD
 #include "mocks/freertos_mock.h"
 #else
@@ -221,9 +223,15 @@ private:
     // Two state copies for lock-free reads
     SystemState m_states[2];
 
-    // Index of active state (0 or 1)
-    // Marked volatile for atomic access
-    volatile uint8_t m_activeIndex;
+    // Index of active state (0 or 1).
+    //
+    // std::atomic provides true cross-core ordering on ESP32-S3. Writers publish
+    // with memory_order_release (ensuring prior writes to m_states[newIdx] are
+    // visible first). Readers consume with memory_order_acquire (ensuring they
+    // observe those writes when they see the new index). This replaces the
+    // previous volatile + compiler-only asm barrier, which did not provide
+    // cross-core ordering.
+    std::atomic<uint8_t> m_activeIndex{0};
 
     // ==================== Thread Safety ====================
 

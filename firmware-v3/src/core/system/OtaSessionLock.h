@@ -61,11 +61,27 @@ enum class OtaTransport : uint8_t {
 class OtaSessionLock {
 public:
     /**
+     * @brief Hard ceiling on an OTA session duration, in milliseconds.
+     *
+     * If a session is still held after this long, the watchdog sweep in
+     * WebServer::update() considers it stale and force-releases the lock
+     * (plus, for WebSocket transport, clears the WS-local session state
+     * and calls Update.abort()). Guards against half-open TCP sockets
+     * dropping without a clean ota.abort — without this, the session flag
+     * plus OtaLock stay held forever and every future OTA is rejected
+     * with BUSY.
+     */
+    static constexpr uint32_t OTA_SESSION_MAX_MS = 5U * 60U * 1000U;  // 5 minutes
+
+    /**
      * @brief Attempt to acquire the OTA session lock.
      *
      * If no OTA session is active, marks the session as active for the
      * given transport and returns true. If another OTA session is already
      * active (same or different transport), returns false.
+     *
+     * Captures the acquisition timestamp (millis()) so that a stale-session
+     * sweep can detect wedged locks — see isStale() / checkTimeout().
      *
      * @param transport Which transport is requesting the lock
      * @return true if the lock was acquired, false if another OTA is active
@@ -75,6 +91,7 @@ public:
         taskENTER_CRITICAL(&s_mux);
         if (s_transport == OtaTransport::None) {
             s_transport = transport;
+            s_sessionStartMs = millis();
             acquired = true;
         }
         taskEXIT_CRITICAL(&s_mux);
@@ -89,6 +106,7 @@ public:
     static void release() {
         taskENTER_CRITICAL(&s_mux);
         s_transport = OtaTransport::None;
+        s_sessionStartMs = 0;
         taskEXIT_CRITICAL(&s_mux);
     }
 
@@ -122,9 +140,50 @@ public:
         return t;
     }
 
+    /**
+     * @brief Timestamp (millis()) when the current session was acquired.
+     *
+     * Thread-safe. Returns 0 when no session is active.
+     */
+    static uint32_t sessionStartMs() {
+        uint32_t t;
+        taskENTER_CRITICAL(&s_mux);
+        t = s_sessionStartMs;
+        taskEXIT_CRITICAL(&s_mux);
+        return t;
+    }
+
+    /**
+     * @brief Check whether the active session has exceeded OTA_SESSION_MAX_MS.
+     *
+     * Returns false if no session is active OR if the session is still
+     * within the time budget. Handles millis() wrap by comparing the
+     * unsigned difference.
+     *
+     * This method does NOT release the lock — callers (WebServer::update())
+     * are responsible for performing the cleanup sequence (telemetry,
+     * Update.abort(), WS-local state clear, release()). Keeping release
+     * outside this check lets the caller match the abort path to the
+     * transport that owns the session.
+     *
+     * @param nowMs Current millis() timestamp
+     * @return true if session is active AND older than OTA_SESSION_MAX_MS
+     */
+    static bool isStale(uint32_t nowMs) {
+        bool stale = false;
+        taskENTER_CRITICAL(&s_mux);
+        if (s_transport != OtaTransport::None && s_sessionStartMs != 0) {
+            const uint32_t elapsed = nowMs - s_sessionStartMs;  // unsigned wrap-safe
+            stale = (elapsed > OTA_SESSION_MAX_MS);
+        }
+        taskEXIT_CRITICAL(&s_mux);
+        return stale;
+    }
+
 private:
     static inline portMUX_TYPE s_mux = portMUX_INITIALIZER_UNLOCKED;
     static inline OtaTransport s_transport = OtaTransport::None;
+    static inline uint32_t s_sessionStartMs = 0;  // millis() at tryAcquire; 0 when idle
 };
 
 } // namespace system

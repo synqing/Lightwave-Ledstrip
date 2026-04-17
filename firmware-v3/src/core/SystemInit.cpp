@@ -83,6 +83,13 @@ void initSerial() {
                                      // so Serial.write(1009) enqueues non-blocking instead
                                      // of blocking through ~4 refill cycles.
     Serial.begin(115200);
+    // Short TX timeout: any Serial write that can't complete within 20 ms
+    // returns instead of blocking the caller. Stops a heavy effect's render
+    // cycle from wedging Core 1 on a full HWCDC ring and then cascading to
+    // every other task that calls Serial.*. Paired with LW_LOG_PRINTF's
+    // availableForWrite() guard for INFO/WARN paths; this catches the
+    // direct Serial.printf calls in SerialCLI and anywhere else.
+    Serial.setTxTimeoutMs(20);
     delay(1000);
 
     // Telemetry boot heartbeat (for trace capture verification)
@@ -91,6 +98,7 @@ void initSerial() {
 #if FEATURE_MABUTRACE
     TRACE_INIT(64);  // 64 KB ring buffer for Perfetto trace
 #endif
+    LW_LOGI("Phase 1: Serial initialised complete");
 }
 
 // ─── Phase 2: PSRAM scratch + capture streamer ──────────────────────────
@@ -98,6 +106,7 @@ void initSerial() {
 void initPSRAMScratch(lightwaveos::serial::CaptureStreamer& captureStreamer) {
     // Allocate capture streamer PSRAM buffers (Phase 2 extraction).
     captureStreamer.init();
+    LW_LOGI("Phase 2: PSRAM scratch + capture streamer initialised complete");
 }
 
 // ─── Phase 3: OTA + WiFi deinit ─────────────────────────────────────────
@@ -116,6 +125,7 @@ void initOtaAndWiFiReset() {
         LW_LOGW("esp_wifi_deinit() returned %d", deinit);
     }
 #endif
+    LW_LOGI("Phase 3: OTA boot verifier + WiFi deinit complete");
 }
 
 // ─── Phase 4: WDT safe-mode check ──────────────────────────────────────
@@ -132,6 +142,7 @@ void checkWdtSafeMode(BootFlags& flags) {
 #else
     (void)flags;
 #endif
+    LW_LOGI("Phase 4: WDT safe-mode check complete");
 }
 
 // ─── Phase 5: System monitoring ─────────────────────────────────────────
@@ -165,6 +176,7 @@ void initSystemMonitoring() {
     delay(1000);  // Wait for system to stabilise
     lightwaveos::core::system::MemoryLeakDetector::resetBaseline();
 #endif
+    LW_LOGI("Phase 5: System monitoring initialised complete");
 }
 
 // ─── Phase 6: Actor system + effects ────────────────────────────────────
@@ -195,6 +207,7 @@ void initActorSystem(
     bool mappingOk = lightwaveos::audio::AudioMappingRegistry::instance().begin();
     LW_LOGI("Audio Mapping Registry: %s", mappingOk ? "READY" : "DISABLED");
 #endif
+    LW_LOGI("Phase 6: Actor system + effects initialised complete");
 }
 
 // ─── Phase 7: NVS + zones ──────────────────────────────────────────────
@@ -242,6 +255,7 @@ void initNvsAndZones(
             LW_LOGI("Preset: Dual Split (default)");
         }
     }
+    LW_LOGI("Phase 7: NVS + zones initialised complete");
 }
 
 // ─── Phase 8: Status strip + TTP223 button ──────────────────────────────
@@ -258,6 +272,7 @@ void initStatusStripAndButton() {
     pinMode(K1_TTP223_PIN, INPUT);
     LW_LOGI("TTP223 button: GPIO %d", K1_TTP223_PIN);
 #endif
+    LW_LOGI("Phase 8: Status strip + TTP223 button initialised complete");
 }
 
 // ─── Phase 9a: Start actors + plugin manager ────────────────────────────
@@ -294,6 +309,7 @@ void startActorsAndPlugins(
     // Start plugin manager (loads manifests from LittleFS)
     pluginManager->onStart();
     LW_LOGI("Plugin Manager: INITIALIZED");
+    LW_LOGI("Phase 9a: Actor system + plugin manager started complete");
 }
 
 // ─── Phase 10: WiFi AP ──────────────────────────────────────────────────
@@ -322,6 +338,7 @@ void initWiFiAP() {
         }
     }
 #endif
+    LW_LOGI("Phase 10: WiFi AP initialised complete");
 }
 
 // ─── Phase 11: WebServer ────────────────────────────────────────────────
@@ -365,6 +382,7 @@ void initWebServer(
     (void)renderer;
     (void)pluginManager;
 #endif
+    LW_LOGI("Phase 11: WebServer initialised complete");
 }
 
 // ─── Phase 12: Post-boot validation ─────────────────────────────────────
@@ -399,6 +417,7 @@ void postBootValidation(const BootFlags& flags) {
 #else
     (void)flags;
 #endif
+    LW_LOGI("Phase 12: Post-boot validation complete");
 }
 
 // ─── Phase 13: Help banner ──────────────────────────────────────────────
@@ -510,6 +529,7 @@ void printHelpBanner() {
     Serial.println("  WS   /ws - Real-time control");
 #endif
     Serial.println();
+    LW_LOGI("Phase 13: Help banner printed complete");
 }
 
 }  // namespace lightwaveos::core

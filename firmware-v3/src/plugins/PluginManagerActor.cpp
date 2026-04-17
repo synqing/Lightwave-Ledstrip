@@ -390,7 +390,7 @@ bool PluginManagerActor::parseManifest(const char* path, ParsedManifest& manifes
     manifest.overrideMode = decodeResult.config.overrideMode;
     manifest.effectCount = decodeResult.config.effectCount;
     memcpy(manifest.effectIds, decodeResult.config.effectIds,
-           decodeResult.config.effectCount * sizeof(uint8_t));
+           decodeResult.config.effectCount * sizeof(EffectId));
 
     manifest.valid = true;
     return true;

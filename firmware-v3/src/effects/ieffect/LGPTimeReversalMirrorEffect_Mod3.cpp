@@ -167,6 +167,7 @@ bool LGPTimeReversalMirrorEffect_Mod3::init(plugins::EffectContext& ctx) {
     (void)ctx;
 
 #ifndef NATIVE_BUILD
+    const bool wasFirstAlloc = (m_ps == nullptr);
     if (!m_ps) {
         m_ps = static_cast<PsramData*>(
             heap_caps_malloc(sizeof(PsramData), MALLOC_CAP_SPIRAM));
@@ -176,7 +177,14 @@ bool LGPTimeReversalMirrorEffect_Mod3::init(plugins::EffectContext& ctx) {
             return false;
         }
     }
-    memset(m_ps, 0, sizeof(PsramData));
+    // Zero only the active fields on re-init; history buffer gated by m_historyCount.
+    if (wasFirstAlloc) {
+        memset(m_ps, 0, sizeof(PsramData));
+    } else {
+        memset(m_ps->u_prev, 0, sizeof(m_ps->u_prev));
+        memset(m_ps->u_curr, 0, sizeof(m_ps->u_curr));
+        memset(m_ps->u_next, 0, sizeof(m_ps->u_next));
+    }
 #else
     m_ps = nullptr;
 #endif

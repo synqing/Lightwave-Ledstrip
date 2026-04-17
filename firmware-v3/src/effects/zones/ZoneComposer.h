@@ -17,6 +17,7 @@
 #pragma once
 
 #include <FastLED.h>
+#include <atomic>
 #include <functional>
 #include "ZoneDefinition.h"
 #include "BlendMode.h"
@@ -109,9 +110,13 @@ public:
     /**
      * @brief Enable/disable the zone system
      * @param enabled true to enable multi-zone mode
+     *
+     * Caller is Core 0 (command/network path). Release ordering ensures
+     * all preceding writes to m_zoneBuffers/m_zoneConfig are visible to
+     * Core 1 render() after it acquires the flag.
      */
-    void setEnabled(bool enabled) { m_enabled = enabled; }
-    bool isEnabled() const { return m_enabled; }
+    void setEnabled(bool enabled) { m_enabled.store(enabled, std::memory_order_release); }
+    bool isEnabled() const { return m_enabled.load(std::memory_order_acquire); }
 
     /**
      * @brief Set the zone layout from segment definitions
@@ -214,7 +219,10 @@ private:
 
     // ==================== Member Variables ====================
 
-    volatile bool m_enabled;             // Zone system enabled (volatile: written Core 0, read Core 1)
+    // Zone system enabled flag. Written by Core 0 (command/network path) with
+    // release ordering; read by Core 1 render() with acquire ordering.
+    // std::atomic<bool> is always lock-free on Xtensa LX7 — zero render overhead.
+    std::atomic<bool> m_enabled;
     bool m_initialized;                 // Init complete flag
     uint8_t m_zoneCount;                // Active zone count
     ZoneSegment m_zoneConfig[MAX_ZONES]; // Runtime storage for zone segment definitions

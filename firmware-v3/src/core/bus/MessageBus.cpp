@@ -208,7 +208,7 @@ void MessageBus::unsubscribeAll(Actor* actor)
 
 uint8_t MessageBus::publish(const Message& msg, TickType_t timeout)
 {
-    m_totalPublished++;
+    m_totalPublished.fetch_add(1, std::memory_order_relaxed);
 
     // Find subscribers for this message type
     // Note: We read the subscription table without locking for performance.
@@ -238,9 +238,9 @@ uint8_t MessageBus::publish(const Message& msg, TickType_t timeout)
         if (actor != nullptr && actor->isRunning()) {
             if (actor->send(msg, timeout)) {
                 delivered++;
-                m_totalDelivered++;
+                m_totalDelivered.fetch_add(1, std::memory_order_relaxed);
             } else {
-                m_failedDeliveries++;
+                m_failedDeliveries.fetch_add(1, std::memory_order_relaxed);
 #ifndef NATIVE_BUILD
                 ESP_LOGD(TAG, "Failed to deliver to '%s' (queue full)",
                          actor->getName());
@@ -254,7 +254,7 @@ uint8_t MessageBus::publish(const Message& msg, TickType_t timeout)
 
 uint8_t MessageBus::publishFromISR(const Message& msg)
 {
-    m_totalPublished++;
+    m_totalPublished.fetch_add(1, std::memory_order_relaxed);
 
     // Same logic as publish(), but use sendFromISR()
 
@@ -278,9 +278,9 @@ uint8_t MessageBus::publishFromISR(const Message& msg)
         if (actor != nullptr && actor->isRunning()) {
             if (actor->sendFromISR(msg)) {
                 delivered++;
-                m_totalDelivered++;
+                m_totalDelivered.fetch_add(1, std::memory_order_relaxed);
             } else {
-                m_failedDeliveries++;
+                m_failedDeliveries.fetch_add(1, std::memory_order_relaxed);
             }
         }
     }
@@ -315,9 +315,9 @@ uint8_t MessageBus::getActiveEntryCount() const
 
 void MessageBus::resetStats()
 {
-    m_totalPublished = 0;
-    m_totalDelivered = 0;
-    m_failedDeliveries = 0;
+    m_totalPublished.store(0, std::memory_order_relaxed);
+    m_totalDelivered.store(0, std::memory_order_relaxed);
+    m_failedDeliveries.store(0, std::memory_order_relaxed);
 }
 
 void MessageBus::dumpSubscriptions()
@@ -326,7 +326,9 @@ void MessageBus::dumpSubscriptions()
     Serial.println(F("\n=== MessageBus Subscriptions ==="));
     Serial.printf("Active entries: %d/%d\n", getActiveEntryCount(), MAX_TRACKED_TYPES);
     Serial.printf("Published: %lu, Delivered: %lu, Failed: %lu\n",
-                  m_totalPublished, m_totalDelivered, m_failedDeliveries);
+                  static_cast<unsigned long>(m_totalPublished.load(std::memory_order_relaxed)),
+                  static_cast<unsigned long>(m_totalDelivered.load(std::memory_order_relaxed)),
+                  static_cast<unsigned long>(m_failedDeliveries.load(std::memory_order_relaxed)));
     Serial.println();
 
     for (uint8_t i = 0; i < MAX_TRACKED_TYPES; i++) {

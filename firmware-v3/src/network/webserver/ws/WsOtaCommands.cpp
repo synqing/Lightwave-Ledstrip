@@ -249,6 +249,16 @@ void handleOtaClientDisconnect(uint32_t clientId) {
     }
 }
 
+// Public API: called from WebServer::update() when OtaSessionLock detects a
+// stale session. Unlike handleOtaClientDisconnect this does NOT require a
+// client id — the watchdog simply declares the session dead and runs the
+// same cleanup path (telemetry, Update.abort, LED feedback, state clear,
+// OtaLock release). Safe no-op if the WS session flag is already cleared
+// (e.g. if the REST transport owned the lock).
+void forceAbortStaleOtaSession(const char* reason) {
+    abortOtaSession(reason ? reason : "timeout");
+}
+
 // Helper to emit telemetry for WS OTA events
 static void emitOtaTelemetry(const char* eventType, const char* status,
                              uint32_t offset = 0, uint32_t total = 0,

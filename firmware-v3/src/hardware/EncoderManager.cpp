@@ -326,7 +326,11 @@ bool EncoderManager::initializeM5Rotate8() {
 
     m_encoder = new M5ROTATE8(EncoderConfig::M5ROTATE8_ADDRESS);
 
-    if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
+    // P0-06 fix: bounded wait for I2C mutex (was portMAX_DELAY). A stuck bus
+    // or mis-behaving peer must not wedge initialisation indefinitely; the
+    // hot-plug retry loop will re-enter via attemptReconnection() after the
+    // usual exponential backoff.
+    if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
         bool success = m_encoder->begin();
         if (success && m_encoder->isConnected()) {
             LW_LOGI("M5ROTATE8 connected, firmware V%d", m_encoder->getVersion());
@@ -343,6 +347,10 @@ bool EncoderManager::initializeM5Rotate8() {
         delete m_encoder;
         m_encoder = nullptr;
         LW_LOGW("M5ROTATE8 not found");
+    } else {
+        LW_LOGE("I2C mutex timeout after 1000ms during M5ROTATE8 init - bus contention or deadlock; will retry");
+        delete m_encoder;
+        m_encoder = nullptr;
     }
 
     return false;

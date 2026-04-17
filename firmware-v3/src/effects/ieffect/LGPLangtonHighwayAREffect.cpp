@@ -114,14 +114,9 @@ bool LGPLangtonHighwayAREffect::init(plugins::EffectContext& ctx) {
 }
 
 void LGPLangtonHighwayAREffect::cleanup() {
-    if (m_grid) {
-        #ifndef NATIVE_BUILD
-        heap_caps_free(m_grid);
-        #else
-        delete[] m_grid;
-        #endif
-        m_grid = nullptr;
-    }
+    // Retain PSRAM across effect lifetime; freeing on cleanup() fragments PSRAM under rapid cycling
+    // and forces a fresh malloc on next init(). init() already guards with if (!m_grid).
+    // Note: NATIVE_BUILD path (delete[] m_grid) also removed — native tests use static pool instances.
 }
 
 // =========================================================================

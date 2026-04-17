@@ -19,6 +19,7 @@
 #ifndef NATIVE_BUILD
 #include <Arduino.h>
 #include <esp_log.h>
+#include <esp_task_wdt.h>
 
 static const char* TAG = "Actor";
 #endif
@@ -296,11 +297,17 @@ void Actor::run()
         // exceed the single-message-per-tick processing rate.
         uint8_t queueUtil = getQueueUtilization();
         const uint8_t DRAIN_THRESHOLD = 50;  // Start draining at 50% full
-        const uint8_t MAX_MESSAGES_PER_TICK = 8;  // Process up to 8 messages per tick
+        const uint8_t MAX_MESSAGES_PER_TICK = 4;  // Tightened from 8 to shorten each drain cycle
 
         if (queueUtil > DRAIN_THRESHOLD) {
-            // Queue is getting full - drain multiple messages with non-blocking receives
-            // BUT: Still respect tick timing - if tick is due, process one message then tick
+            // Queue is getting full - drain a bounded number of messages with
+            // non-blocking receives. After each dispatch we feed the task
+            // watchdog and yield so lower-priority tasks on the same core
+            // (notably loopTask running SerialCLI) can still run. Without
+            // these two calls a sustained burst of SET_EFFECT messages would
+            // wedge the core for the entire drain — serial polling, WiFi
+            // heartbeat and loop-level work all stop, producing a silent
+            // lock-up with LEDs frozen on the last rendered frame.
             uint8_t messagesProcessed = 0;
             while (messagesProcessed < MAX_MESSAGES_PER_TICK && !m_shutdownRequested) {
                 BaseType_t received = xQueueReceive(m_queue, &msg, 0);  // Non-blocking
@@ -318,8 +325,22 @@ void Actor::run()
                 m_messageCount++;
                 onMessage(msg);
                 messagesProcessed++;
+
+#ifndef NATIVE_BUILD
+                // Feed wdt if this task is subscribed (silent no-op otherwise)
+                // and yield so equal/lower-priority tasks on this core can run.
+                esp_task_wdt_reset();
+                taskYIELD();
+#endif
             }
-            // After draining, continue loop to check tick timing
+
+            // Force one onTick() after a drain cycle: for the Renderer this
+            // pushes a frame and feeds its own wdt from inside onTick; for
+            // self-clocked actors it preserves their periodic work. Without
+            // this, a queue that stays above DRAIN_THRESHOLD would starve
+            // onTick() indefinitely — LEDs freeze even though messages are
+            // being consumed.
+            onTick();
             continue;
         }
 

@@ -79,7 +79,9 @@ public:
         uint32_t windowStart;   // Start of current window (millis)
         uint16_t httpCount;     // HTTP requests in current window
         uint16_t wsCount;       // WebSocket messages in current window
-        uint32_t blockedUntil;  // Time when block expires (0 = not blocked)
+        uint32_t blockStart;    // millis() when block began (0 = not blocked).
+                                // Elapsed check: (now - blockStart) < BLOCK_DURATION_MS.
+                                // uint32_t subtraction wraps safely across the 49.7-day rollover.
     };
 
     /**
@@ -103,10 +105,14 @@ public:
 
         uint32_t now = m_timeSource->millis();
 
-        // Check if currently blocked
-        if (entry->blockedUntil > now) {
+        // Check if currently blocked (wrap-safe elapsed check).
+        if (entry->blockStart != 0 &&
+            (now - entry->blockStart) < RateLimitConfig::BLOCK_DURATION_MS) {
             return false;
         }
+
+        // Clear any expired block so the sentinel is reset.
+        entry->blockStart = 0;
 
         // Reset window if expired
         if (now - entry->windowStart > RateLimitConfig::WINDOW_SIZE_MS) {
@@ -117,7 +123,7 @@ public:
 
         // Check limit
         if (entry->httpCount >= RateLimitConfig::HTTP_LIMIT) {
-            entry->blockedUntil = now + RateLimitConfig::BLOCK_DURATION_MS;
+            entry->blockStart = now;  // Record when block began; check via elapsed time.
             return false;
         }
 
@@ -136,10 +142,14 @@ public:
 
         uint32_t now = m_timeSource->millis();
 
-        // Check if currently blocked
-        if (entry->blockedUntil > now) {
+        // Check if currently blocked (wrap-safe elapsed check).
+        if (entry->blockStart != 0 &&
+            (now - entry->blockStart) < RateLimitConfig::BLOCK_DURATION_MS) {
             return false;
         }
+
+        // Clear any expired block so the sentinel is reset.
+        entry->blockStart = 0;
 
         // Reset window if expired
         if (now - entry->windowStart > RateLimitConfig::WINDOW_SIZE_MS) {
@@ -150,7 +160,7 @@ public:
 
         // Check limit
         if (entry->wsCount >= RateLimitConfig::WS_LIMIT) {
-            entry->blockedUntil = now + RateLimitConfig::BLOCK_DURATION_MS;
+            entry->blockStart = now;  // Record when block began; check via elapsed time.
             return false;
         }
 
@@ -167,7 +177,9 @@ public:
         uint32_t now = m_timeSource->millis();
         for (uint8_t i = 0; i < RateLimitConfig::MAX_TRACKED_IPS; i++) {
             if (m_entries[i].ip == ip) {
-                return m_entries[i].blockedUntil > now;
+                // Wrap-safe: uint32_t subtraction is correct across the 49.7-day rollover.
+                return m_entries[i].blockStart != 0 &&
+                       (now - m_entries[i].blockStart) < RateLimitConfig::BLOCK_DURATION_MS;
             }
         }
         return false;
@@ -181,8 +193,12 @@ public:
     uint32_t getRetryAfterSeconds(IPAddress ip) const {
         uint32_t now = m_timeSource->millis();
         for (uint8_t i = 0; i < RateLimitConfig::MAX_TRACKED_IPS; i++) {
-            if (m_entries[i].ip == ip && m_entries[i].blockedUntil > now) {
-                return (m_entries[i].blockedUntil - now + 999) / 1000; // Round up to seconds
+            if (m_entries[i].ip == ip && m_entries[i].blockStart != 0) {
+                uint32_t elapsed = now - m_entries[i].blockStart;
+                if (elapsed < RateLimitConfig::BLOCK_DURATION_MS) {
+                    uint32_t remainingMs = RateLimitConfig::BLOCK_DURATION_MS - elapsed;
+                    return (remainingMs + 999) / 1000; // Round up to seconds
+                }
             }
         }
         return RateLimitConfig::RETRY_AFTER_SECONDS; // Default retry time
@@ -248,27 +264,46 @@ private:
                 m_entries[i].windowStart = m_timeSource->millis();
                 m_entries[i].httpCount = 0;
                 m_entries[i].wsCount = 0;
-                m_entries[i].blockedUntil = 0;
+                m_entries[i].blockStart = 0;
                 return &m_entries[i];
             }
         }
 
-        // Table full - evict oldest (LRU) entry
-        uint32_t oldest = 0xFFFFFFFF;
+        // Table full — two-pass eviction.
+        // Pass 1: prefer a slot whose block has expired (or was never blocked),
+        //         so that actively-blocked IPs are not displaced by new arrivals.
+        uint32_t now2 = m_timeSource->millis();
+        for (uint8_t i = 0; i < RateLimitConfig::MAX_TRACKED_IPS; i++) {
+            bool blockExpired = (m_entries[i].blockStart == 0) ||
+                                ((now2 - m_entries[i].blockStart) >= RateLimitConfig::BLOCK_DURATION_MS);
+            if (blockExpired) {
+                m_entries[i].ip = ip;
+                m_entries[i].windowStart = now2;
+                m_entries[i].httpCount = 0;
+                m_entries[i].wsCount = 0;
+                m_entries[i].blockStart = 0;
+                return &m_entries[i];
+            }
+        }
+
+        // Pass 2: all slots are actively blocked — evict the one blocked longest
+        //         (oldest blockStart) as it is closest to natural expiry anyway.
+        uint32_t oldestBlock = 0;  // largest elapsed = blocked longest
         uint8_t oldestIdx = 0;
         for (uint8_t i = 0; i < RateLimitConfig::MAX_TRACKED_IPS; i++) {
-            if (m_entries[i].windowStart < oldest) {
-                oldest = m_entries[i].windowStart;
+            uint32_t elapsed = now2 - m_entries[i].blockStart;
+            if (elapsed > oldestBlock) {
+                oldestBlock = elapsed;
                 oldestIdx = i;
             }
         }
 
-        // Reset the oldest entry for new IP
+        // Reset the evicted entry for the new IP
         m_entries[oldestIdx].ip = ip;
-        m_entries[oldestIdx].windowStart = m_timeSource->millis();
+        m_entries[oldestIdx].windowStart = now2;
         m_entries[oldestIdx].httpCount = 0;
         m_entries[oldestIdx].wsCount = 0;
-        m_entries[oldestIdx].blockedUntil = 0;
+        m_entries[oldestIdx].blockStart = 0;
         return &m_entries[oldestIdx];
     }
 };

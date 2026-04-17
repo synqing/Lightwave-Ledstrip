@@ -17,6 +17,10 @@
 #include <esp_task_wdt.h>
 #include <esp_heap_caps.h>
 #include <esp_timer.h>
+
+// Forward declaration for Arduino-ESP32's loopTask WDT subscribe helper
+// (defined in esp32-hal-misc.c, C linkage).
+extern "C" void enableLoopWDT(void);
 #endif
 
 #define LW_LOG_TAG "Main"
@@ -308,6 +312,23 @@ void setup() {
 
     // Phase 13: Help banner
     printHelpBanner();
+
+    // Phase 14: Subscribe the Arduino loopTask to the task watchdog so the
+    // existing esp_task_wdt_reset() in loop() becomes effective. Any loop-level
+    // hang (serial CLI, NVS, WebServer update, encoder poll) will now trigger
+    // a task-WDT reset with a backtrace, enabling automatic recovery.
+    //
+    // Raise the TWDT timeout from the 5 s Arduino default to 10 s. RendererActor
+    // on CPU 1 can hog the core during heavy effect init (PSRAM lookup tables,
+    // oscillator fields, Fresnel harmonic sums) for multiple hundreds of ms;
+    // paired with the vTaskDelay(1) yield discipline added inside RendererActor
+    // (pre-/post-init + over-budget frame yield), 10 s gives loopTask enough
+    // scheduler headroom to feed its own WDT even when every effect in a rapid
+    // cycle is expensive. Genuine hangs (>10 s wedged) still panic.
+#ifndef NATIVE_BUILD
+    esp_task_wdt_init(10, true);  // 10 s timeout, panic on trip
+    enableLoopWDT();
+#endif
 }
 
 // ==================== Loop ====================
@@ -380,9 +401,15 @@ void loop() {
     if (g_nvsSavePending && (now - g_nvsSaveRequestMs) >= NVS_SAVE_DEBOUNCE_MS) {
         const size_t freeHeap = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
         if (freeHeap < NVS_SAVE_MIN_HEAP) {
-            // Defer — do NOT clear g_nvsSavePending, retry next loop when heap recovers
-            LW_LOGW("NVS save deferred: internal heap %u < %u minimum",
-                    (unsigned)freeHeap, (unsigned)NVS_SAVE_MIN_HEAP);
+            // Defer — do NOT clear g_nvsSavePending, retry next loop when heap recovers.
+            // Rate-limit the warning to 1 Hz — loop runs at ~100 Hz and would otherwise
+            // flood the serial log whilst heap remains below the minimum threshold.
+            static uint32_t lastNvsDeferLogMs = 0;
+            if (now - lastNvsDeferLogMs >= 1000) {
+                lastNvsDeferLogMs = now;
+                LW_LOGW("NVS save deferred: internal heap %u < %u minimum",
+                        (unsigned)freeHeap, (unsigned)NVS_SAVE_MIN_HEAP);
+            }
         } else {
             g_nvsSavePending = false;
             if (zoneConfigMgr && renderer) {

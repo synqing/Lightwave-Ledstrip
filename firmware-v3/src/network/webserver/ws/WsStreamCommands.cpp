@@ -498,6 +498,7 @@ static void handleMergeSubmit(AsyncWebSocketClient* client, JsonDocument& doc, c
     }
 
     uint8_t count = 0;
+    uint8_t dropped = 0;
     for (JsonPair kv : params) {
         int8_t idx = mergeParamIndex(kv.key().c_str());
         if (idx < 0) continue;
@@ -509,13 +510,28 @@ static void handleMergeSubmit(AsyncWebSocketClient* client, JsonDocument& doc, c
         msg.param2 = static_cast<uint8_t>(idx);
         msg.param3 = val;
         msg.timestamp = millis();
-        renderer->send(msg);
+        // P0-06 fix: bounded enqueue with explicit timeout. A wedged or
+        // saturated renderer queue must not block the WebSocket callback,
+        // which runs on the AsyncTCP core and is shared across all clients.
+        if (!renderer->send(msg, pdMS_TO_TICKS(10))) {
+            LW_LOGW("merge.submit dropped: renderer queue full (src=%u idx=%d)",
+                    static_cast<unsigned>(sourceId), idx);
+            dropped++;
+            continue;
+        }
         count++;
     }
 
+    if (dropped > 0 && count == 0) {
+        client->text(buildWsError(ErrorCodes::BUSY,
+            "Renderer queue saturated; no parameters applied", requestId));
+        return;
+    }
+
     String response = buildWsResponse("merge.accepted", requestId,
-        [count, sourceId](JsonObject& data) {
+        [count, dropped, sourceId](JsonObject& data) {
             data["paramsApplied"] = count;
+            data["paramsDropped"] = dropped;
             data["source"] = sourceId;
         });
     client->text(response);

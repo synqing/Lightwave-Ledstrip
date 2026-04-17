@@ -86,7 +86,18 @@
 #ifdef ARDUINO
     #include <Arduino.h>
     #define LW_LOG_MILLIS()    millis()
-    #define LW_LOG_PRINTF(...) Serial.printf(__VA_ARGS__)
+    // Drop-on-full: if the HWCDC TX ring doesn't have headroom for a typical
+    // log line (~256B), skip the print rather than block the caller. Without
+    // this guard a heavy render (e.g. LGPGravitationalLensing ~15-25 ms/frame)
+    // can slowly fill the ring until every Serial.print caller — Renderer,
+    // loopTask, WiFi heartbeat — blocks behind it, producing a progressive
+    // cascade lockup that leaves LEDs frozen and no serial output.
+    #define LW_LOG_PRINTF(...) \
+        do { \
+            if (Serial.availableForWrite() >= 256) { \
+                Serial.printf(__VA_ARGS__); \
+            } \
+        } while(0)
 #else
     // Native build support (unit tests, simulation)
     #include <cstdio>

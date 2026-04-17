@@ -51,13 +51,18 @@ void LGPGravitationalLensingEffect::render(plugins::EffectContext& ctx) {
 
     fadeToBlackBy(ctx.leds, ctx.ledCount, 20);
 
-    // Generate light rays from center
-    for (int16_t ray = -40; ray <= 40; ray += 2) {
+    // Generate light rays from center.
+    // Halved the outer ray density (step 4 instead of 2) and the per-ray
+    // propagation length (40 instead of 80) to bring the render cost into
+    // the 2 ms frame budget. Previous 41*2*80 = 6,560 inner iterations per
+    // frame with cosf each was ~15-25 ms — enough to back up the HWCDC TX
+    // ring and trigger a cascade Serial.print lockup after ~90 s of runtime.
+    for (int16_t ray = -40; ray <= 40; ray += 4) {
         for (int8_t direction = -1; direction <= 1; direction += 2) {
             float rayPos = (float)CENTER_LEFT;
             float rayAngle = ray * 0.02f * direction;
 
-            for (uint8_t step = 0; step < 80; step++) {
+            for (uint8_t step = 0; step < 40; step++) {
                 float totalDeflection = 0.0f;
 
                 for (uint8_t m = 0; m < massCount; m++) {

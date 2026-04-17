@@ -84,15 +84,26 @@ bool NVSManager::init() {
 
     esp_err_t err = nvs_flash_init();
 
-    // Handle NVS partition issues by erasing and reinitializing
+    // Handle NVS partition issues by erasing and reinitialising.
+    // NOTE: a wipe here destroys ALL user data — presets, OTA tokens, WiFi creds,
+    // zone config, EdgeMixer, ColorCorrection. Log at ERROR level so the event
+    // is obvious in field telemetry (a future ESP-IDF upgrade that bumps the NVS
+    // format would silently wipe the fleet otherwise).
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        Serial.println("[NVS] NVS partition needs repair, erasing...");
+        const char* errReason = (err == ESP_ERR_NVS_NO_FREE_PAGES)
+                                    ? "NO_FREE_PAGES"
+                                    : "NEW_VERSION_FOUND";
+        Serial.printf("[NVS] ERROR: NVS WIPE IMMINENT: reason=%s — all user data will be destroyed\n",
+                      errReason);
         err = nvs_flash_erase();
         if (err != ESP_OK) {
             Serial.printf("[NVS] ERROR: Failed to erase NVS: %s\n", esp_err_to_name(err));
             return false;
         }
         err = nvs_flash_init();
+        if (err == ESP_OK) {
+            Serial.println("[NVS] ERROR: NVS WIPE COMPLETE: partition erased and re-initialised. User must reconfigure.");
+        }
     }
 
     if (err != ESP_OK) {

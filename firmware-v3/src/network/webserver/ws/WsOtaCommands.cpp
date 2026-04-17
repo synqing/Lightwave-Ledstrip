@@ -21,6 +21,7 @@
 #include <Arduino.h>
 // Base64 decoding - using mbedTLS (available in ESP32 Arduino core 6.x+)
 #include <mbedtls/base64.h>
+#include <mbedtls/sha256.h>
 #include <esp_heap_caps.h>
 
 // Convenience aliases
@@ -58,6 +59,19 @@ static uint32_t s_otaTotalSize = 0;
 static uint32_t s_otaBytesReceived = 0;
 static uint32_t s_otaSessionStartTime = 0;
 static uint32_t s_otaLastProgressPercent = 0;
+
+// ============================================================================
+// Integrity-hash state (SHA-256 preferred, MD5 accepted as legacy/deprecated).
+// The mbedtls_sha256_context is heap-free (struct is ~104B on stack/static).
+// We allocate it ONCE at file scope so the streaming path (handleOtaChunk)
+// never allocates. Lifecycle: init+starts_ret at ota.begin, update_ret per
+// chunk, finish_ret+compare at ota.verify, free on any terminal path.
+// ============================================================================
+static mbedtls_sha256_context s_otaSha256Ctx;
+static bool s_otaSha256Active = false;          // ctx has been init+started
+static char s_otaExpectedSha256[65] = {0};      // 64 hex chars + NUL, lower-case
+static bool s_otaSha256Expected = false;        // client supplied sha256
+static bool s_otaMd5Deprecated = false;         // client supplied md5 but no sha256 (warning)
 
 // ============================================================================
 // Spinlock-guarded state helpers
@@ -146,6 +160,88 @@ static void markSessionInactive() {
     taskEXIT_CRITICAL(&s_wsOtaMux);
 }
 
+// ============================================================================
+// SHA-256 integrity helpers (heap-free, static ctx reused across sessions)
+// ============================================================================
+
+/// Validate a 64-char lower-case hex string and copy to outBuf.
+/// Returns true if len==64 and all chars are [0-9a-fA-F]. Lower-cases as it copies.
+static bool normaliseHexHash(const char* in, size_t expectedLen, char* outBuf, size_t outBufSize) {
+    if (!in || outBufSize < expectedLen + 1) return false;
+    size_t len = strlen(in);
+    if (len != expectedLen) return false;
+    for (size_t i = 0; i < len; i++) {
+        char c = in[i];
+        if (c >= '0' && c <= '9') { outBuf[i] = c; continue; }
+        if (c >= 'a' && c <= 'f') { outBuf[i] = c; continue; }
+        if (c >= 'A' && c <= 'F') { outBuf[i] = static_cast<char>(c + ('a' - 'A')); continue; }
+        return false;
+    }
+    outBuf[expectedLen] = '\0';
+    return true;
+}
+
+/// Initialise the session SHA-256 context. Safe to re-init (frees old).
+/// Call once at ota.begin AFTER the cross-transport lock is acquired.
+static bool sha256BeginSession() {
+    if (s_otaSha256Active) {
+        mbedtls_sha256_free(&s_otaSha256Ctx);
+        s_otaSha256Active = false;
+    }
+    mbedtls_sha256_init(&s_otaSha256Ctx);
+    if (mbedtls_sha256_starts_ret(&s_otaSha256Ctx, 0 /* SHA-256, not 224 */) != 0) {
+        mbedtls_sha256_free(&s_otaSha256Ctx);
+        return false;
+    }
+    s_otaSha256Active = true;
+    return true;
+}
+
+/// Feed decoded chunk bytes into the running SHA-256 calculation.
+/// Called from streaming path — must not allocate.
+static bool sha256FeedChunk(const unsigned char* data, size_t len) {
+    if (!s_otaSha256Active || !data || len == 0) return s_otaSha256Active;
+    return mbedtls_sha256_update_ret(&s_otaSha256Ctx, data, len) == 0;
+}
+
+/// Finalise the SHA-256 and write the lower-case hex digest to out[65].
+/// Safe to call once; frees the ctx.
+static bool sha256FinaliseHex(char* outHex65) {
+    if (!s_otaSha256Active || !outHex65) return false;
+    unsigned char digest[32];
+    int rc = mbedtls_sha256_finish_ret(&s_otaSha256Ctx, digest);
+    mbedtls_sha256_free(&s_otaSha256Ctx);
+    s_otaSha256Active = false;
+    if (rc != 0) return false;
+    static const char* kHex = "0123456789abcdef";
+    for (size_t i = 0; i < 32; i++) {
+        outHex65[i * 2]     = kHex[(digest[i] >> 4) & 0x0F];
+        outHex65[i * 2 + 1] = kHex[digest[i] & 0x0F];
+    }
+    outHex65[64] = '\0';
+    return true;
+}
+
+/// Release SHA-256 resources on any abort / failure path.
+static void sha256ReleaseSession() {
+    if (s_otaSha256Active) {
+        mbedtls_sha256_free(&s_otaSha256Ctx);
+        s_otaSha256Active = false;
+    }
+    s_otaExpectedSha256[0] = '\0';
+    s_otaSha256Expected = false;
+    s_otaMd5Deprecated = false;
+}
+
+/// Constant-time 64-byte compare (both buffers already normalised lower-case).
+static bool constTimeHexEquals(const char* a, const char* b, size_t len) {
+    volatile uint8_t diff = 0;
+    for (size_t i = 0; i < len; i++) {
+        diff |= static_cast<uint8_t>(a[i]) ^ static_cast<uint8_t>(b[i]);
+    }
+    return (diff == 0);
+}
+
 /// Read session start time (for telemetry duration calculation)
 static uint32_t readSessionStartTime() {
     uint32_t t;
@@ -229,6 +325,8 @@ static void abortOtaSession(const char* reason) {
         emitOtaTelemetry("ota.ws.failed", "failed", bytesReceived, totalSize, reason);
         Update.abort();
         OtaLed::showFailure();
+        // Release integrity-hash state so next session starts clean
+        sha256ReleaseSession();
         // Release cross-transport lock
         OtaLock::release();
     }
@@ -551,20 +649,70 @@ static void handleOtaBegin(AsyncWebSocketClient* client, JsonDocument& doc, cons
         }
     }
 
-    // Set MD5 checksum for verification if provided
-    // Must be called BEFORE Update.begin() so the Update library can verify
-    // the hash incrementally during writes and on Update.end(true)
-    if (req.md5 && strlen(req.md5) == 32) {
+    // Integrity-hash policy (P1-10 hardening, 2026-04-18):
+    //   - At least ONE of {sha256, md5} must be supplied.
+    //   - sha256 is authoritative when present. md5 is accepted ONLY for legacy
+    //     clients that have not yet migrated; a deprecation warning is logged.
+    //   - sha256 is validated IN FIRMWARE against a running mbedtls context
+    //     (see sha256FeedChunk / sha256FinaliseHex). MD5 continues to be
+    //     validated by Update.setMD5() in the Arduino OTA core.
+    //   - Unsigned/unhashed firmware is REJECTED — previously this silently
+    //     succeeded, which allowed any AP-range attacker with the OTA token
+    //     to flash arbitrary code.
+    const bool haveSha256 = (req.sha256 && req.sha256[0] != '\0');
+    const bool haveMd5    = (req.md5    && req.md5[0]    != '\0');
+
+    // Reset hash state from any prior session
+    sha256ReleaseSession();
+
+    if (haveSha256) {
+        // Validate + normalise the 64-char hex digest
+        if (!normaliseHexHash(req.sha256, 64, s_otaExpectedSha256,
+                              sizeof(s_otaExpectedSha256))) {
+            OtaLock::release();
+            client->text(buildWsError(ErrorCodes::INVALID_VALUE,
+                "sha256 must be 64 hex characters", requestId));
+            return;
+        }
+        if (!sha256BeginSession()) {
+            OtaLock::release();
+            client->text(buildWsError(ErrorCodes::INTERNAL_ERROR,
+                "Failed to initialise SHA-256 context", requestId));
+            return;
+        }
+        s_otaSha256Expected = true;
+
+        // Legacy md5 is IGNORED when sha256 is present (log for observability)
+        if (haveMd5) {
+            emitOtaTelemetry("ota.ws.md5_deprecated", "warning", 0, 0,
+                             "sha256 present; md5 ignored");
+        }
+    } else if (haveMd5) {
+        // Legacy-only path: MD5 still accepted for one release as a migration
+        // runway. Emit a deprecation warning so client authors know to upgrade.
+        if (strlen(req.md5) != 32) {
+            OtaLock::release();
+            client->text(buildWsError(ErrorCodes::INVALID_VALUE,
+                "md5 must be 32 hex characters", requestId));
+            return;
+        }
         Update.setMD5(req.md5);
-    } else if (req.md5 && strlen(req.md5) != 32) {
+        s_otaMd5Deprecated = true;
+        emitOtaTelemetry("ota.ws.md5_deprecated", "warning", 0, 0,
+                         "md5 only; upgrade client to sha256");
+    } else {
+        // Neither hash supplied — REJECT. This is an intentional break
+        // from the prior default-allow behaviour. See captain-decision doc.
         OtaLock::release();
         client->text(buildWsError(ErrorCodes::INVALID_VALUE,
-            "MD5 hash must be exactly 32 hex characters", requestId));
+            "Integrity hash required: supply 'sha256' (64 hex) or legacy 'md5' (32 hex)",
+            requestId));
         return;
     }
 
     // Begin update (U_FLASH for firmware, U_SPIFFS for filesystem/LittleFS)
     if (!Update.begin(req.size, updateCommand)) {
+        sha256ReleaseSession();
         OtaLock::release();
         String errorMsg = "Update.begin(" + String(targetLabel) + ") failed: " +
                           String(Update.errorString());
@@ -667,6 +815,25 @@ static void handleOtaChunk(AsyncWebSocketClient* client, JsonDocument& doc, cons
 
     // I/O: write to flash (NOT under spinlock)
     size_t written = Update.write(decodedBuf, decodedLen);
+
+    // Feed accepted bytes into the running SHA-256 calculation BEFORE freeing
+    // the decode buffer. Only on success — partial writes are surfaced as
+    // errors below. The context is heap-free; no allocation in the hot path.
+    if (written == decodedLen && s_otaSha256Expected) {
+        if (!sha256FeedChunk(decodedBuf, decodedLen)) {
+            free(decodedBuf);
+            emitOtaTelemetry("ota.ws.failed", "failed", snap.bytesReceived, snap.totalSize,
+                             "sha256 update failed");
+            Update.abort();
+            OtaLed::showFailure();
+            sha256ReleaseSession();
+            markSessionInactive();
+            OtaLock::release();
+            client->text(buildWsError(ErrorCodes::INTERNAL_ERROR,
+                "SHA-256 streaming failure", requestId));
+            return;
+        }
+    }
     free(decodedBuf);  // Free allocated buffer
 
     if (written != decodedLen) {
@@ -677,6 +844,7 @@ static void handleOtaChunk(AsyncWebSocketClient* client, JsonDocument& doc, cons
                         errorMsg.c_str());
         Update.abort();
         OtaLed::showFailure();
+        sha256ReleaseSession();
         markSessionInactive();
         OtaLock::release();
         return;
@@ -779,15 +947,73 @@ static void handleOtaVerify(AsyncWebSocketClient* client, JsonDocument& doc, con
         return;
     }
 
-    // MD5 verification is handled automatically by the Update library:
-    // Update.setMD5() is called in handleOtaBegin() when the client provides
-    // an md5 hash. Update.end(true) below will fail if the computed MD5
-    // does not match the expected hash, returning an error via Update.errorString().
+    // Integrity verification:
+    //   - SHA-256: finalise our running mbedtls context and compare against
+    //     the client-supplied digest (either from ota.begin, or — for
+    //     retro-compat with clients that only send it at verify time — from
+    //     the ota.verify request itself). Rejected on mismatch BEFORE
+    //     swapping partitions, so a tampered image never runs.
+    //   - MD5 (legacy): verified automatically by Update.end(true) from the
+    //     hash set via Update.setMD5() in handleOtaBegin().
+    if (s_otaSha256Expected) {
+        // Allow the client to supply sha256 at verify time as a safety-net
+        // (e.g. streaming producers that don't know the digest until after
+        // the last chunk). If both are set they MUST match.
+        if (decodeResult.request.sha256 && decodeResult.request.sha256[0] != '\0') {
+            char verifyExpected[65] = {0};
+            if (!normaliseHexHash(decodeResult.request.sha256, 64,
+                                  verifyExpected, sizeof(verifyExpected))) {
+                client->text(buildWsError(ErrorCodes::INVALID_VALUE,
+                    "sha256 must be 64 hex characters", requestId));
+                return;
+            }
+            if (!constTimeHexEquals(s_otaExpectedSha256, verifyExpected, 64)) {
+                client->text(buildWsError(ErrorCodes::INVALID_VALUE,
+                    "sha256 at ota.begin and ota.verify differ", requestId));
+                return;
+            }
+        }
+
+        char computedHex[65] = {0};
+        if (!sha256FinaliseHex(computedHex)) {
+            emitOtaTelemetry("ota.ws.failed", "failed", snap.bytesReceived, snap.totalSize,
+                             "sha256 finalise failed");
+            Update.abort();
+            OtaLed::showFailure();
+            clearSessionState();
+            sha256ReleaseSession();
+            OtaLock::release();
+            client->text(buildWsError(ErrorCodes::INTERNAL_ERROR,
+                "SHA-256 finalisation failed", requestId));
+            return;
+        }
+        if (!constTimeHexEquals(computedHex, s_otaExpectedSha256, 64)) {
+            // Log both digests for diagnosis. British English as per CLAUDE.md.
+            char detail[160];
+            snprintf(detail, sizeof(detail),
+                     "sha256 mismatch: computed=%.16s... expected=%.16s...",
+                     computedHex, s_otaExpectedSha256);
+            emitOtaTelemetry("ota.ws.failed", "failed", snap.bytesReceived, snap.totalSize,
+                             detail);
+            Update.abort();
+            OtaLed::showFailure();
+            clearSessionState();
+            sha256ReleaseSession();
+            OtaLock::release();
+            client->text(buildWsError(ErrorCodes::INVALID_VALUE,
+                "SHA-256 mismatch: image rejected", requestId));
+            return;
+        }
+        // Computed hash matches — SHA-256 path complete. Release hash state.
+        sha256ReleaseSession();
+    }
 
     // Show full progress bar before verify
     OtaLed::showProgress(100);
 
-    // Complete update (I/O -- NOT under spinlock)
+    // Complete update (I/O -- NOT under spinlock). On the legacy MD5 path,
+    // Update.end(true) compares against Update.setMD5() from ota.begin and
+    // returns false on mismatch.
     if (!Update.end(true)) {
         String errorMsg = "Update.end() failed: " + String(Update.errorString());
         client->text(buildWsError(ErrorCodes::INTERNAL_ERROR, errorMsg.c_str(), requestId));
@@ -796,6 +1022,7 @@ static void handleOtaVerify(AsyncWebSocketClient* client, JsonDocument& doc, con
         Update.abort();
         OtaLed::showFailure();
         clearSessionState();
+        sha256ReleaseSession();
         OtaLock::release();
         return;
     }

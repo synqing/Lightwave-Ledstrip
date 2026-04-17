@@ -67,16 +67,7 @@ static inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRG
 // Construction / destruction / init / cleanup
 // =========================================================================
 
-LGPCatastropheCausticsAREffect::LGPCatastropheCausticsAREffect()
-    : m_t(0.0f)
-    , m_bass(0.0f), m_treble(0.0f), m_chromaAngle(0.0f)
-    , m_bassMax(0.15f), m_trebleMax(0.15f)
-    , m_impact(0.0f)
-#ifdef NATIVE_BUILD
-    , m_I{}
-#endif
-{
-}
+LGPCatastropheCausticsAREffect::LGPCatastropheCausticsAREffect() = default;
 
 LGPCatastropheCausticsAREffect::~LGPCatastropheCausticsAREffect() {
 #ifndef NATIVE_BUILD
@@ -94,15 +85,27 @@ bool LGPCatastropheCausticsAREffect::init(plugins::EffectContext& ctx) {
             heap_caps_malloc(sizeof(CausticsPsram), MALLOC_CAP_SPIRAM));
         if (!m_ps) return false;
     }
-    for (int i = 0; i < 160; i++) m_ps->I[i] = 0.0f;
+    // Clear ALL zones' intensity accumulators — stale data must not leak
+    // across effect reassignments.
+    for (uint8_t zi = 0; zi < kMaxZones; ++zi) {
+        for (int i = 0; i < 160; i++) m_ps->I[zi][i] = 0.0f;
+    }
 #else
-    for (int i = 0; i < 160; i++) m_I[i] = 0.0f;
+    for (uint8_t zi = 0; zi < kMaxZones; ++zi) {
+        for (int i = 0; i < 160; i++) m_I[zi][i] = 0.0f;
+    }
 #endif
 
-    m_t = 0.0f;
-    m_bass = 0.0f; m_treble = 0.0f; m_chromaAngle = 0.0f;
-    m_bassMax = 0.15f; m_trebleMax = 0.15f;
-    m_impact = 0.0f;
+    // Reset per-zone scalars
+    for (uint8_t zi = 0; zi < kMaxZones; ++zi) {
+        m_t[zi] = 0.0f;
+        m_bass[zi] = 0.0f;
+        m_treble[zi] = 0.0f;
+        m_chromaAngle[zi] = 0.0f;
+        m_bassMax[zi] = 0.15f;
+        m_trebleMax[zi] = 0.15f;
+        m_impact[zi] = 0.0f;
+    }
     lightwaveos::effects::cinema::reset();
     return true;
 }
@@ -117,11 +120,14 @@ void LGPCatastropheCausticsAREffect::cleanup() {
 // =========================================================================
 
 void LGPCatastropheCausticsAREffect::render(plugins::EffectContext& ctx) {
+    // Per-zone state selector. ctx.zoneId == 0xFF (global render) falls back to 0.
+    const int z = (ctx.zoneId < kMaxZones) ? ctx.zoneId : 0;
+
 #ifndef NATIVE_BUILD
     if (!m_ps) return;
-    float* I = m_ps->I;
+    float* I = m_ps->I[z];
 #else
-    float* I = m_I;
+    float* I = m_I[z];
 #endif
 
     const float dt = ctx.getSafeRawDeltaSeconds();
@@ -135,11 +141,11 @@ void LGPCatastropheCausticsAREffect::render(plugins::EffectContext& ctx) {
     const float silScale = ctx.audio.available ? ctx.audio.silentScale() : 0.0f;
     const float* chroma = ctx.audio.available ? ctx.audio.chroma() : nullptr;
 
-    // STEP 2: Single-stage smoothing
-    m_bass += (rawBass - m_bass) * (1.0f - expf(-dt / kBassTau));
-    m_treble += (rawTreble - m_treble) * (1.0f - expf(-dt / kTrebleTau));
+    // STEP 2: Single-stage smoothing (per-zone)
+    m_bass[z] += (rawBass - m_bass[z]) * (1.0f - expf(-dt / kBassTau));
+    m_treble[z] += (rawTreble - m_treble[z]) * (1.0f - expf(-dt / kTrebleTau));
 
-    // Circular chroma EMA
+    // Circular chroma EMA (per-zone)
     if (chroma) {
         float sx = 0.0f, sy = 0.0f;
         for (int i = 0; i < 12; i++) {
@@ -150,44 +156,44 @@ void LGPCatastropheCausticsAREffect::render(plugins::EffectContext& ctx) {
         if (sx * sx + sy * sy > 0.0001f) {
             float target = atan2f(sy, sx);
             if (target < 0.0f) target += kTwoPi;
-            float delta = target - m_chromaAngle;
+            float delta = target - m_chromaAngle[z];
             while (delta > kPi) delta -= kTwoPi;
             while (delta < -kPi) delta += kTwoPi;
-            m_chromaAngle += delta * (1.0f - expf(-dt / kChromaTau));
-            if (m_chromaAngle < 0.0f) m_chromaAngle += kTwoPi;
-            if (m_chromaAngle >= kTwoPi) m_chromaAngle -= kTwoPi;
+            m_chromaAngle[z] += delta * (1.0f - expf(-dt / kChromaTau));
+            if (m_chromaAngle[z] < 0.0f) m_chromaAngle[z] += kTwoPi;
+            if (m_chromaAngle[z] >= kTwoPi) m_chromaAngle[z] -= kTwoPi;
         }
     }
 
-    // STEP 3: Max followers
+    // STEP 3: Max followers (per-zone)
     {
         float aA = 1.0f - expf(-dt / kFollowerAttackTau);
         float dA = 1.0f - expf(-dt / kFollowerDecayTau);
-        if (m_bass > m_bassMax) m_bassMax += (m_bass - m_bassMax) * aA;
-        else m_bassMax += (m_bass - m_bassMax) * dA;
-        if (m_bassMax < kFollowerFloor) m_bassMax = kFollowerFloor;
+        if (m_bass[z] > m_bassMax[z]) m_bassMax[z] += (m_bass[z] - m_bassMax[z]) * aA;
+        else m_bassMax[z] += (m_bass[z] - m_bassMax[z]) * dA;
+        if (m_bassMax[z] < kFollowerFloor) m_bassMax[z] = kFollowerFloor;
 
-        if (m_treble > m_trebleMax) m_trebleMax += (m_treble - m_trebleMax) * aA;
-        else m_trebleMax += (m_treble - m_trebleMax) * dA;
-        if (m_trebleMax < kFollowerFloor) m_trebleMax = kFollowerFloor;
+        if (m_treble[z] > m_trebleMax[z]) m_trebleMax[z] += (m_treble[z] - m_trebleMax[z]) * aA;
+        else m_trebleMax[z] += (m_treble[z] - m_trebleMax[z]) * dA;
+        if (m_trebleMax[z] < kFollowerFloor) m_trebleMax[z] = kFollowerFloor;
     }
-    const float normBass = clamp01(m_bass / m_bassMax);
-    const float normTreble = clamp01(m_treble / m_trebleMax);
+    const float normBass = clamp01(m_bass[z] / m_bassMax[z]);
+    const float normTreble = clamp01(m_treble[z] / m_trebleMax[z]);
 
-    // STEP 4: Impact (continuous beatStrength rise, exponential decay)
-    if (beatStr > m_impact) m_impact = beatStr;
-    m_impact *= expf(-dt / kImpactDecayTau);
+    // STEP 4: Impact — continuous beatStrength rise, exponential decay (per-zone)
+    if (beatStr > m_impact[z]) m_impact[z] = beatStr;
+    m_impact[z] *= expf(-dt / kImpactDecayTau);
 
     // Beat modulation
     const float beatMod = 0.3f + 0.7f * beatStr;
 
     // =================================================================
-    // MOTION
+    // MOTION (per-zone)
     // =================================================================
 
     const float tRate = (0.80f + 3.50f * speedNorm) * (0.7f + 0.6f * normBass)
                         * (0.60f + 0.40f * normTreble);
-    m_t += tRate * dtVis;
+    m_t[z] += tRate * dtVis;
 
     // =================================================================
     // CAUSTIC PHYSICS LAYER PARAMS
@@ -195,9 +201,12 @@ void LGPCatastropheCausticsAREffect::render(plugins::EffectContext& ctx) {
 
     const float mid = (STRIP_LENGTH - 1) * 0.5f;
 
-    // Focus depth z: treble modulates convergence, impact defocuses
+    // Focus depth z: treble modulates convergence, impact defocuses (per-zone)
     const float focusZ = clampf(
-        1.8f + 0.8f * normTreble - 0.4f * m_impact, 1.2f, 3.0f);
+        1.8f + 0.8f * normTreble - 0.4f * m_impact[z], 1.2f, 3.0f);
+
+    // Cache per-zone time once — used in 9 sinf() arguments below.
+    const float tNow = m_t[z];
 
     // Lens wave amplitudes (3 sinusoidal terms)
     const float A1 = 0.18f * (0.80f + 0.20f * normTreble);
@@ -223,10 +232,10 @@ void LGPCatastropheCausticsAREffect::render(plugins::EffectContext& ctx) {
         const float x = static_cast<float>(i) - mid;
         const float xN = x * kInv160;  // Normalised position [-0.5, 0.5]
 
-        // Lens thickness: 3 travelling waves + centre bias
-        const float h = A1 * sinf(kTwoPi * (xN * 2.5f - m_t * 0.30f))
-                      + A2 * sinf(kTwoPi * (xN * 4.0f + m_t * 0.18f))
-                      + A3 * sinf(kTwoPi * (xN * 6.5f - m_t * 0.25f))
+        // Lens thickness: 3 travelling waves + centre bias (uses per-zone time)
+        const float h = A1 * sinf(kTwoPi * (xN * 2.5f - tNow * 0.30f))
+                      + A2 * sinf(kTwoPi * (xN * 4.0f + tNow * 0.18f))
+                      + A3 * sinf(kTwoPi * (xN * 6.5f - tNow * 0.25f))
                       - centreBias * (xN * xN);
 
         // Lens thickness at offset position for gradient (central difference)
@@ -234,14 +243,14 @@ void LGPCatastropheCausticsAREffect::render(plugins::EffectContext& ctx) {
         const float xN_left  = (x - dx) * kInv160;
         const float xN_right = (x + dx) * kInv160;
 
-        const float h_left = A1 * sinf(kTwoPi * (xN_left * 2.5f - m_t * 0.30f))
-                           + A2 * sinf(kTwoPi * (xN_left * 4.0f + m_t * 0.18f))
-                           + A3 * sinf(kTwoPi * (xN_left * 6.5f - m_t * 0.25f))
+        const float h_left = A1 * sinf(kTwoPi * (xN_left * 2.5f - tNow * 0.30f))
+                           + A2 * sinf(kTwoPi * (xN_left * 4.0f + tNow * 0.18f))
+                           + A3 * sinf(kTwoPi * (xN_left * 6.5f - tNow * 0.25f))
                            - centreBias * (xN_left * xN_left);
 
-        const float h_right = A1 * sinf(kTwoPi * (xN_right * 2.5f - m_t * 0.30f))
-                            + A2 * sinf(kTwoPi * (xN_right * 4.0f + m_t * 0.18f))
-                            + A3 * sinf(kTwoPi * (xN_right * 6.5f - m_t * 0.25f))
+        const float h_right = A1 * sinf(kTwoPi * (xN_right * 2.5f - tNow * 0.30f))
+                            + A2 * sinf(kTwoPi * (xN_right * 4.0f + tNow * 0.18f))
+                            + A3 * sinf(kTwoPi * (xN_right * 6.5f - tNow * 0.25f))
                             - centreBias * (xN_right * xN_right);
 
         // Gradient: dh/dx = (h_right - h_left) / (2*dx)
@@ -282,8 +291,8 @@ void LGPCatastropheCausticsAREffect::render(plugins::EffectContext& ctx) {
     // PER-PIXEL RENDER
     // =================================================================
 
-    // Hue from chroma
-    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle * (255.0f / kTwoPi)) + ctx.gHue;
+    // Hue from chroma (per-zone)
+    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle[z] * (255.0f / kTwoPi)) + ctx.gHue;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         // Caustic intensity (clamped, normalised)
@@ -299,8 +308,8 @@ void LGPCatastropheCausticsAREffect::render(plugins::EffectContext& ctx) {
         // Geometry: (caustic + cusps) x glue
         float structuredCaustic = (caustic + 0.5f * cusp) * glue;
 
-        // Impact: additive spike at cusps
-        float impactAdd = m_impact * cusp * 0.40f;
+        // Impact: additive spike at cusps (per-zone)
+        float impactAdd = m_impact[z] * cusp * 0.40f;
 
         // Compose: geometry * normBass * silScale * beatMod
         float brightness = (structuredCaustic * normBass + impactAdd) * beatMod * silScale;

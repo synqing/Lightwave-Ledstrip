@@ -69,12 +69,8 @@ static inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRG
 
 LGPLangtonHighwayAREffect::LGPLangtonHighwayAREffect()
     : m_grid(nullptr)
-    , m_antX(32), m_antY(32), m_antDir(0)
-    , m_antStepAccum(0.0f), m_sliceOffset(0.0f)
-    , m_bass(0.0f), m_treble(0.0f), m_chromaAngle(0.0f)
-    , m_bassMax(0.15f), m_trebleMax(0.15f)
-    , m_impact(0.0f)
 {
+    // Per-zone arrays are default-initialised inline in the header.
 }
 
 LGPLangtonHighwayAREffect::~LGPLangtonHighwayAREffect() {
@@ -86,26 +82,37 @@ LGPLangtonHighwayAREffect::~LGPLangtonHighwayAREffect() {
 // =========================================================================
 
 bool LGPLangtonHighwayAREffect::init(plugins::EffectContext& ctx) {
-    m_bass = 0.0f; m_treble = 0.0f; m_chromaAngle = 0.0f;
-    m_bassMax = 0.15f; m_trebleMax = 0.15f;
-    m_impact = 0.0f;
+    // Reset ALL zone slots
+    for (uint8_t zi = 0; zi < kMaxZones; ++zi) {
+        m_bass[zi] = 0.0f;
+        m_treble[zi] = 0.0f;
+        m_chromaAngle[zi] = 0.0f;
+        m_bassMax[zi] = 0.15f;
+        m_trebleMax[zi] = 0.15f;
+        m_impact[zi] = 0.0f;
 
-    m_antX = 32;
-    m_antY = 32;
-    m_antDir = 0;
-    m_antStepAccum = 0.0f;
-    m_sliceOffset = 0.0f;
+        m_antX[zi] = 32;
+        m_antY[zi] = 32;
+        m_antDir[zi] = 0;
+        m_antStepAccum[zi] = 0.0f;
+        m_sliceOffset[zi] = 0.0f;
+    }
 
-    // Allocate PSRAM grid (64*64 = 4096 bytes)
+    // Allocate per-zone PSRAM grid pool (kMaxZones * W * H bytes = 16 KB).
     #ifndef NATIVE_BUILD
-    m_grid = (uint8_t*)heap_caps_malloc(W * H, MALLOC_CAP_SPIRAM);
-    if (!m_grid) return false;
+    if (!m_grid) {
+        m_grid = (uint8_t*)heap_caps_malloc(static_cast<size_t>(kMaxZones) * kGridBytes,
+                                            MALLOC_CAP_SPIRAM);
+        if (!m_grid) return false;
+    }
     #else
-    m_grid = new uint8_t[W * H];
+    if (!m_grid) {
+        m_grid = new uint8_t[static_cast<size_t>(kMaxZones) * kGridBytes];
+    }
     #endif
 
-    // Clear grid (all white)
-    for (uint16_t i = 0; i < W * H; i++) {
+    // Clear all zones' grids (all white)
+    for (size_t i = 0; i < static_cast<size_t>(kMaxZones) * kGridBytes; i++) {
         m_grid[i] = 255;
     }
 
@@ -120,61 +127,65 @@ void LGPLangtonHighwayAREffect::cleanup() {
 }
 
 // =========================================================================
-// Langton's ant step (PRESERVED EXACTLY)
+// Langton's ant step (per-zone — operates on zone z's grid slice)
 // =========================================================================
 
-void LGPLangtonHighwayAREffect::stepAnt() {
+void LGPLangtonHighwayAREffect::stepAnt(int z) {
     if (!m_grid) return;
 
-    // Bounds check
-    if (m_antX < 0 || m_antX >= W || m_antY < 0 || m_antY >= H) {
+    uint8_t* grid = m_grid + static_cast<size_t>(z) * kGridBytes;
+
+    // Bounds check (per-zone ant coords)
+    if (m_antX[z] < 0 || m_antX[z] >= W || m_antY[z] < 0 || m_antY[z] >= H) {
         // Wrap or reset
-        m_antX = (m_antX + W) % W;
-        m_antY = (m_antY + H) % H;
+        m_antX[z] = (m_antX[z] + W) % W;
+        m_antY[z] = (m_antY[z] + H) % H;
         return;
     }
 
-    const uint16_t idx = m_antY * W + m_antX;
-    const uint8_t cell = m_grid[idx];
+    const uint16_t idx = static_cast<uint16_t>(m_antY[z]) * W + m_antX[z];
+    const uint8_t cell = grid[idx];
 
     // White -> turn right, flip to black, move
     // Black -> turn left, flip to white, move
     if (cell > 127) {
-        m_antDir = (m_antDir + 1) & 3; // turn right
-        m_grid[idx] = 0; // flip to black
+        m_antDir[z] = (m_antDir[z] + 1) & 3; // turn right
+        grid[idx] = 0; // flip to black
     } else {
-        m_antDir = (m_antDir + 3) & 3; // turn left (same as -1 mod 4)
-        m_grid[idx] = 255; // flip to white
+        m_antDir[z] = (m_antDir[z] + 3) & 3; // turn left (same as -1 mod 4)
+        grid[idx] = 255; // flip to white
     }
 
     // Move forward
-    switch (m_antDir) {
-        case 0: m_antY--; break; // N
-        case 1: m_antX++; break; // E
-        case 2: m_antY++; break; // S
-        case 3: m_antX--; break; // W
+    switch (m_antDir[z]) {
+        case 0: m_antY[z]--; break; // N
+        case 1: m_antX[z]++; break; // E
+        case 2: m_antY[z]++; break; // S
+        case 3: m_antX[z]--; break; // W
     }
 }
 
 // =========================================================================
-// Drifting diagonal slice projection (PRESERVED EXACTLY)
+// Drifting diagonal slice projection (per-zone)
 // =========================================================================
 
-float LGPLangtonHighwayAREffect::sampleProjection(float offset) {
+float LGPLangtonHighwayAREffect::sampleProjection(int z, float offset) {
     if (!m_grid) return 0.0f;
+
+    const uint8_t* grid = m_grid + static_cast<size_t>(z) * kGridBytes;
 
     // Diagonal slice: y = x + offset (wrapped)
     float x = offset;
     x = x - floorf(x / static_cast<float>(W)) * static_cast<float>(W); // wrap to [0, W)
 
     int xi = static_cast<int>(x);
-    int yi = (xi + static_cast<int>(m_sliceOffset)) % H;
+    int yi = (xi + static_cast<int>(m_sliceOffset[z])) % H;
 
     if (xi < 0 || xi >= W) return 0.0f;
     if (yi < 0 || yi >= H) yi = (yi + H) % H;
 
-    const uint16_t idx = yi * W + xi;
-    return m_grid[idx] / 255.0f;
+    const uint16_t idx = static_cast<uint16_t>(yi) * W + xi;
+    return grid[idx] / 255.0f;
 }
 
 // =========================================================================
@@ -183,6 +194,9 @@ float LGPLangtonHighwayAREffect::sampleProjection(float offset) {
 
 void LGPLangtonHighwayAREffect::render(plugins::EffectContext& ctx) {
     if (!m_grid) return;
+
+    // Per-zone state selector. 0xFF (global render) falls back to slot 0.
+    const int z = (ctx.zoneId < kMaxZones) ? ctx.zoneId : 0;
 
     const float dt = ctx.getSafeRawDeltaSeconds();
     const float dtVis = ctx.getSafeDeltaSeconds();
@@ -195,11 +209,11 @@ void LGPLangtonHighwayAREffect::render(plugins::EffectContext& ctx) {
     const float silScale = ctx.audio.available ? ctx.audio.silentScale() : 0.0f;
     const float* chroma = ctx.audio.available ? ctx.audio.chroma() : nullptr;
 
-    // STEP 2: Single-stage smoothing
-    m_bass += (rawBass - m_bass) * (1.0f - expf(-dt / kBassTau));
-    m_treble += (rawTreble - m_treble) * (1.0f - expf(-dt / kTrebleTau));
+    // STEP 2: Single-stage smoothing (per-zone)
+    m_bass[z] += (rawBass - m_bass[z]) * (1.0f - expf(-dt / kBassTau));
+    m_treble[z] += (rawTreble - m_treble[z]) * (1.0f - expf(-dt / kTrebleTau));
 
-    // Circular chroma EMA
+    // Circular chroma EMA (per-zone)
     if (chroma) {
         float sx = 0.0f, sy = 0.0f;
         for (int i = 0; i < 12; i++) {
@@ -210,55 +224,55 @@ void LGPLangtonHighwayAREffect::render(plugins::EffectContext& ctx) {
         if (sx * sx + sy * sy > 0.0001f) {
             float target = atan2f(sy, sx);
             if (target < 0.0f) target += kTwoPi;
-            float delta = target - m_chromaAngle;
+            float delta = target - m_chromaAngle[z];
             while (delta > kPi) delta -= kTwoPi;
             while (delta < -kPi) delta += kTwoPi;
-            m_chromaAngle += delta * (1.0f - expf(-dt / kChromaTau));
-            if (m_chromaAngle < 0.0f) m_chromaAngle += kTwoPi;
-            if (m_chromaAngle >= kTwoPi) m_chromaAngle -= kTwoPi;
+            m_chromaAngle[z] += delta * (1.0f - expf(-dt / kChromaTau));
+            if (m_chromaAngle[z] < 0.0f) m_chromaAngle[z] += kTwoPi;
+            if (m_chromaAngle[z] >= kTwoPi) m_chromaAngle[z] -= kTwoPi;
         }
     }
 
-    // STEP 3: Max followers
+    // STEP 3: Max followers (per-zone)
     {
         float aA = 1.0f - expf(-dt / kFollowerAttackTau);
         float dA = 1.0f - expf(-dt / kFollowerDecayTau);
-        if (m_bass > m_bassMax) m_bassMax += (m_bass - m_bassMax) * aA;
-        else m_bassMax += (m_bass - m_bassMax) * dA;
-        if (m_bassMax < kFollowerFloor) m_bassMax = kFollowerFloor;
+        if (m_bass[z] > m_bassMax[z]) m_bassMax[z] += (m_bass[z] - m_bassMax[z]) * aA;
+        else m_bassMax[z] += (m_bass[z] - m_bassMax[z]) * dA;
+        if (m_bassMax[z] < kFollowerFloor) m_bassMax[z] = kFollowerFloor;
 
-        if (m_treble > m_trebleMax) m_trebleMax += (m_treble - m_trebleMax) * aA;
-        else m_trebleMax += (m_treble - m_trebleMax) * dA;
-        if (m_trebleMax < kFollowerFloor) m_trebleMax = kFollowerFloor;
+        if (m_treble[z] > m_trebleMax[z]) m_trebleMax[z] += (m_treble[z] - m_trebleMax[z]) * aA;
+        else m_trebleMax[z] += (m_treble[z] - m_trebleMax[z]) * dA;
+        if (m_trebleMax[z] < kFollowerFloor) m_trebleMax[z] = kFollowerFloor;
     }
-    const float normBass = clamp01(m_bass / m_bassMax);
-    const float normTreble = clamp01(m_treble / m_trebleMax);
+    const float normBass = clamp01(m_bass[z] / m_bassMax[z]);
+    const float normTreble = clamp01(m_treble[z] / m_trebleMax[z]);
 
-    // STEP 4: Impact (continuous beatStrength rise, exponential decay)
-    if (beatStr > m_impact) m_impact = beatStr;
-    m_impact *= expf(-dt / kImpactDecayTau);
+    // STEP 4: Impact — continuous beatStrength rise, exponential decay (per-zone)
+    if (beatStr > m_impact[z]) m_impact[z] = beatStr;
+    m_impact[z] *= expf(-dt / kImpactDecayTau);
 
     const float beatMod = 0.3f + 0.7f * beatStr;
 
     // =================================================================
-    // ANT STEPPING (PRESERVED EXACTLY)
+    // ANT STEPPING (per-zone — each zone has its own ant and grid)
     // =================================================================
 
     // Step count controlled by normalised audio (rhythmic drive from bass + treble)
     const float rhythmicDrive = clamp01(0.30f + 0.45f * normBass + 0.25f * normTreble);
     const float stepsPerSec = (0.5f + 7.5f * rhythmicDrive) * speedNorm;
-    m_antStepAccum += stepsPerSec * dtVis;
+    m_antStepAccum[z] += stepsPerSec * dtVis;
 
-    while (m_antStepAccum >= 1.0f) {
-        stepAnt();
-        m_antStepAccum -= 1.0f;
+    while (m_antStepAccum[z] >= 1.0f) {
+        stepAnt(z);
+        m_antStepAccum[z] -= 1.0f;
     }
 
-    // Slice drift — motionRate replaced with bass-driven rate
-    const float motionRate = 0.6f + 0.8f * normBass + 0.3f * m_impact;
+    // Slice drift — bass-driven rate (per-zone)
+    const float motionRate = 0.6f + 0.8f * normBass + 0.3f * m_impact[z];
     const float driftRate = (0.15f + 0.35f * speedNorm) * motionRate;
-    m_sliceOffset += driftRate * dtVis;
-    m_sliceOffset = fract(m_sliceOffset / static_cast<float>(H)) * static_cast<float>(H);
+    m_sliceOffset[z] += driftRate * dtVis;
+    m_sliceOffset[z] = fract(m_sliceOffset[z] / static_cast<float>(H)) * static_cast<float>(H);
 
     // =================================================================
     // PER-PIXEL RENDER
@@ -267,12 +281,13 @@ void LGPLangtonHighwayAREffect::render(plugins::EffectContext& ctx) {
     const float mid    = (STRIP_LENGTH - 1) * 0.5f;
     const float invMid = 1.0f / mid;
 
-    // Hue from chroma
-    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle * (255.0f / kTwoPi)) + ctx.gHue;
+    // Hue from chroma (per-zone)
+    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle[z] * (255.0f / kTwoPi)) + ctx.gHue;
 
-    // Ant position in grid space
-    const float antXf = static_cast<float>(m_antX);
-    const float antYf = static_cast<float>(m_antY);
+    // Ant position in grid space (per-zone)
+    const float antXf = static_cast<float>(m_antX[z]);
+    const float antYf = static_cast<float>(m_antY[z]);
+    const float sliceOffsetZ = m_sliceOffset[z];
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         const float dmid  = static_cast<float>(i) - mid;
@@ -281,28 +296,28 @@ void LGPLangtonHighwayAREffect::render(plugins::EffectContext& ctx) {
         // Map strip position to grid diagonal
         const float gridPos = distN * static_cast<float>(W);
 
-        // Sample grid at this position (with neighbourhood blur)
+        // Sample grid at this position (with neighbourhood blur, per-zone)
         float highway = 0.0f;
         for (int blur = -1; blur <= 1; blur++) {
             float samplePos = gridPos + static_cast<float>(blur) * 1.5f;
-            highway += sampleProjection(samplePos) * (blur == 0 ? 0.5f : 0.25f);
+            highway += sampleProjection(z, samplePos) * (blur == 0 ? 0.5f : 0.25f);
         }
         highway = clamp01(highway);
 
         // Centre glue (stronger adhesion near origin)
         const float glue = 0.40f + 0.60f * expf(-(dmid * dmid) * 0.0018f);
 
-        // Ant spark (proximity to ant position in grid)
+        // Ant spark (proximity to ant position in grid, per-zone)
         const float antDist = sqrtf(
             (gridPos - antXf) * (gridPos - antXf) +
-            (m_sliceOffset - antYf) * (m_sliceOffset - antYf));
+            (sliceOffsetZ - antYf) * (sliceOffsetZ - antYf));
         const float antSpark = expf(-antDist * 0.12f);
 
         // Geometry: highway field modulated by glue
         float geometry = highway * glue;
 
-        // Impact x ant spark (additive burst)
-        float impactAdd = m_impact * antSpark * 0.45f;
+        // Impact x ant spark (additive burst, per-zone)
+        float impactAdd = m_impact[z] * antSpark * 0.45f;
 
         // Compose brightness: geometry x normBass x silScale x beatMod
         float brightness = (geometry * normBass + impactAdd) * beatMod * silScale;

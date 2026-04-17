@@ -12,10 +12,10 @@ namespace codec {
 
 // Allowed keys for each command type
 static const char* OTA_CHECK_ALLOWED[] = {"type", "requestId"};
-static const char* OTA_BEGIN_ALLOWED[] = {"type", "size", "md5", "token", "version", "force", "target", "requestId"};
+static const char* OTA_BEGIN_ALLOWED[] = {"type", "size", "md5", "sha256", "token", "version", "force", "target", "requestId"};
 static const char* OTA_CHUNK_ALLOWED[] = {"type", "offset", "data", "requestId"};
 static const char* OTA_ABORT_ALLOWED[] = {"type", "requestId"};
-static const char* OTA_VERIFY_ALLOWED[] = {"type", "md5", "requestId"};
+static const char* OTA_VERIFY_ALLOWED[] = {"type", "md5", "sha256", "requestId"};
 
 bool WsOtaCodec::hasUnknownKeys(JsonObjectConst root, const char* const* allowedKeys, size_t keyCount) {
     for (JsonPairConst pair : root) {
@@ -69,9 +69,14 @@ OtaBeginDecodeResult WsOtaCodec::decodeOtaBegin(JsonObjectConst root) {
     
     result.request.size = root["size"].as<uint32_t>();
 
-    // Extract md5 (optional)
+    // Extract md5 (DEPRECATED, legacy)
     if (root.containsKey("md5") && root["md5"].is<const char*>()) {
         result.request.md5 = root["md5"].as<const char*>();
+    }
+
+    // Extract sha256 (preferred integrity hash — 64 lowercase hex chars)
+    if (root.containsKey("sha256") && root["sha256"].is<const char*>()) {
+        result.request.sha256 = root["sha256"].as<const char*>();
     }
 
     // Extract token (optional at codec level; command handler enforces requirement)
@@ -169,16 +174,21 @@ OtaVerifyDecodeResult WsOtaCodec::decodeOtaVerify(JsonObjectConst root) {
         return result;
     }
     
-    // Extract md5 (optional)
+    // Extract md5 (DEPRECATED)
     if (root.containsKey("md5") && root["md5"].is<const char*>()) {
         result.request.md5 = root["md5"].as<const char*>();
     }
-    
+
+    // Extract sha256 (preferred)
+    if (root.containsKey("sha256") && root["sha256"].is<const char*>()) {
+        result.request.sha256 = root["sha256"].as<const char*>();
+    }
+
     // Extract requestId (optional)
     if (root.containsKey("requestId") && root["requestId"].is<const char*>()) {
         result.request.requestId = root["requestId"].as<const char*>();
     }
-    
+
     result.success = true;
     return result;
 }

@@ -11,6 +11,10 @@
 #include "../../../config/persistence_trigger.h"
 #include "../../../core/actors/RendererActor.h"
 
+#undef LW_LOG_TAG
+#define LW_LOG_TAG "ParamH"
+#include "../../../utils/Log.h"
+
 using namespace lightwaveos::actors;
 using namespace lightwaveos::network;
 
@@ -51,66 +55,78 @@ void ParameterHandlers::handleSet(AsyncWebServerRequest* request,
 
     bool updated = false;
 
+#define DISPATCH_OR_503(call) \
+    do { \
+        if (!(call)) { \
+            LW_LOGW("REST setParameters rejected - queue saturated"); \
+            sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE, \
+                              ErrorCodes::RATE_LIMITED, "Queue saturated"); \
+            return; \
+        } \
+    } while (0)
+
     if (doc.containsKey("brightness")) {
         uint8_t val = doc["brightness"];
-        actorSystem.setBrightness(val);
+        DISPATCH_OR_503(actorSystem.setBrightness(val));
         updated = true;
     }
 
     if (doc.containsKey("speed")) {
         uint8_t val = doc["speed"];
         // Range already validated by schema (1-100)
-        actorSystem.setSpeed(val);
+        DISPATCH_OR_503(actorSystem.setSpeed(val));
         updated = true;
     }
 
     if (doc.containsKey("paletteId")) {
         uint8_t val = doc["paletteId"];
-        actorSystem.setPalette(val);
+        DISPATCH_OR_503(actorSystem.setPalette(val));
         updated = true;
     }
 
     if (doc.containsKey("intensity")) {
         uint8_t val = doc["intensity"];
-        actorSystem.setIntensity(val);
+        DISPATCH_OR_503(actorSystem.setIntensity(val));
         updated = true;
     }
 
     if (doc.containsKey("saturation")) {
         uint8_t val = doc["saturation"];
-        actorSystem.setSaturation(val);
+        DISPATCH_OR_503(actorSystem.setSaturation(val));
         updated = true;
     }
 
     if (doc.containsKey("complexity")) {
         uint8_t val = doc["complexity"];
-        actorSystem.setComplexity(val);
+        DISPATCH_OR_503(actorSystem.setComplexity(val));
         updated = true;
     }
 
     if (doc.containsKey("variation")) {
         uint8_t val = doc["variation"];
-        actorSystem.setVariation(val);
+        DISPATCH_OR_503(actorSystem.setVariation(val));
         updated = true;
     }
 
     if (doc.containsKey("hue")) {
         uint8_t val = doc["hue"];
-        actorSystem.setHue(val);
+        DISPATCH_OR_503(actorSystem.setHue(val));
         updated = true;
     }
 
     if (doc.containsKey("mood")) {
         uint8_t val = doc["mood"];
-        actorSystem.setMood(val);  // Sensory Bridge: 0=reactive, 255=smooth
+        DISPATCH_OR_503(actorSystem.setMood(val));  // Sensory Bridge: 0=reactive, 255=smooth
         updated = true;
     }
 
     if (doc.containsKey("fadeAmount")) {
         uint8_t val = doc["fadeAmount"];
-        actorSystem.setFadeAmount(val);
+        DISPATCH_OR_503(actorSystem.setFadeAmount(val));
         updated = true;
     }
+
+#undef DISPATCH_OR_503
 
     if (updated) {
         g_externalNvsSaveRequest.store(true, std::memory_order_release);

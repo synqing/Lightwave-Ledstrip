@@ -10,6 +10,10 @@
 #include "../../../core/actors/RendererActor.h"
 #include "../../../palettes/Palettes_Master.h"
 
+#undef LW_LOG_TAG
+#define LW_LOG_TAG "PaletteH"
+#include "../../../utils/Log.h"
+
 using namespace lightwaveos::actors;
 using namespace lightwaveos::network;
 using namespace lightwaveos::palettes;
@@ -209,7 +213,12 @@ void PaletteHandlers::handleSet(AsyncWebServerRequest* request,
         return;
     }
 
-    actorSystem.setPalette(paletteId);
+    if (!actorSystem.setPalette(paletteId)) {
+        LW_LOGW("REST setPalette rejected - queue saturated");
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::RATE_LIMITED, "Queue saturated");
+        return;
+    }
 
     sendSuccessResponse(request, [paletteId](JsonObject& respData) {
         respData["paletteId"] = paletteId;

@@ -1623,10 +1623,13 @@ commands:
 
   ota.begin:
     direction: "client -> K1"
-    description: "Begin OTA session"
+    description: "Begin OTA session. As of 2026-04-18 (P1-10 hardening) at least
+      one of 'sha256' (preferred) or 'md5' (deprecated, legacy only) MUST be
+      supplied — unsigned uploads are rejected."
     request:
       size: { type: uint32, required: true }
-      md5: { type: string, optional: true }
+      sha256: { type: string, optional: true, note: "SHA-256 hex digest of the firmware image, 64 lower-case chars. Required if 'md5' is not supplied." }
+      md5: { type: string, optional: true, deprecated: true, note: "DEPRECATED — MD5 hex digest, 32 chars. Accepted for legacy clients only; will be removed in the next firmware release. Ignored when 'sha256' is present." }
       requestId: { type: string, optional: true }
     response:
       type: "ota.begin"
@@ -1654,8 +1657,12 @@ commands:
 
   ota.verify:
     direction: "client -> K1"
-    description: "Verify and finalise OTA"
+    description: "Verify and finalise OTA. SHA-256 digest is computed on the
+      device and compared against the value supplied in ota.begin. Clients MAY
+      re-supply 'sha256' here as a safety-net; if both are set they must match."
     request:
+      sha256: { type: string, optional: true, note: "Optional re-assert of the hash supplied in ota.begin." }
+      md5: { type: string, optional: true, deprecated: true }
       requestId: { type: string, optional: true }
     response:
       type: "ota.verify"

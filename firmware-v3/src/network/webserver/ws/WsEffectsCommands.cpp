@@ -27,6 +27,10 @@
 #include <ArduinoJson.h>
 #include <cstring>
 
+#undef LW_LOG_TAG
+#define LW_LOG_TAG "WsEffects"
+#include "../../../utils/Log.h"
+
 namespace lightwaveos {
 namespace network {
 namespace webserver {
@@ -187,7 +191,11 @@ static void handleSetEffect(AsyncWebSocketClient* client, JsonDocument& doc, con
     // DEFENSIVE CHECK: Validate effectId against registry
     EffectId effectId = lightwaveos::network::validateEffectIdInRequest(decodeResult.request.effectId);
     if (ctx.renderer->isEffectRegistered(effectId)) {
-        ctx.actorSystem.setEffect(effectId);
+        if (!ctx.actorSystem.setEffect(effectId)) {
+            LW_LOGW("setEffect rejected - queue saturated");
+            client->text(buildWsError(ErrorCodes::RATE_LIMITED, "Queue saturated", ""));
+            return;
+        }
         if (ctx.broadcastStatus) ctx.broadcastStatus();
     }
 }
@@ -195,14 +203,22 @@ static void handleSetEffect(AsyncWebSocketClient* client, JsonDocument& doc, con
 static void handleNextEffect(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     EffectId current = ctx.renderer->getCurrentEffect();
     EffectId next = lightwaveos::getNextDisplay(current);
-    ctx.actorSystem.setEffect(next);
+    if (!ctx.actorSystem.setEffect(next)) {
+        LW_LOGW("nextEffect rejected - queue saturated");
+        client->text(buildWsError(ErrorCodes::RATE_LIMITED, "Queue saturated", ""));
+        return;
+    }
     if (ctx.broadcastStatus) ctx.broadcastStatus();
 }
 
 static void handlePrevEffect(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     EffectId current = ctx.renderer->getCurrentEffect();
     EffectId prev = lightwaveos::getPrevDisplay(current);
-    ctx.actorSystem.setEffect(prev);
+    if (!ctx.actorSystem.setEffect(prev)) {
+        LW_LOGW("prevEffect rejected - queue saturated");
+        client->text(buildWsError(ErrorCodes::RATE_LIMITED, "Queue saturated", ""));
+        return;
+    }
     if (ctx.broadcastStatus) ctx.broadcastStatus();
 }
 
@@ -216,7 +232,11 @@ static void handleSetBrightness(AsyncWebSocketClient* client, JsonDocument& doc,
         return;
     }
 
-    ctx.actorSystem.setBrightness(decodeResult.request.value);
+    if (!ctx.actorSystem.setBrightness(decodeResult.request.value)) {
+        LW_LOGW("setBrightness rejected - queue saturated");
+        client->text(buildWsError(ErrorCodes::RATE_LIMITED, "Queue saturated", ""));
+        return;
+    }
     if (ctx.broadcastStatus) ctx.broadcastStatus();
 }
 
@@ -231,7 +251,11 @@ static void handleSetSpeed(AsyncWebSocketClient* client, JsonDocument& doc, cons
     }
 
     // Range already validated by codec (1-50)
-    ctx.actorSystem.setSpeed(decodeResult.request.value);
+    if (!ctx.actorSystem.setSpeed(decodeResult.request.value)) {
+        LW_LOGW("setSpeed rejected - queue saturated");
+        client->text(buildWsError(ErrorCodes::RATE_LIMITED, "Queue saturated", ""));
+        return;
+    }
     if (ctx.broadcastStatus) ctx.broadcastStatus();
 }
 
@@ -247,7 +271,11 @@ static void handleSetPalette(AsyncWebSocketClient* client, JsonDocument& doc, co
 
     // DEFENSIVE CHECK: Validate paletteId before array access
     uint8_t paletteId = lightwaveos::network::validatePaletteIdInRequest(decodeResult.request.paletteId);
-    ctx.actorSystem.setPalette(paletteId);
+    if (!ctx.actorSystem.setPalette(paletteId)) {
+        LW_LOGW("setPalette rejected - queue saturated");
+        client->text(buildWsError(ErrorCodes::RATE_LIMITED, "Queue saturated", ""));
+        return;
+    }
     if (ctx.broadcastStatus) ctx.broadcastStatus();
 }
 
@@ -274,11 +302,18 @@ static void handleEffectsSetCurrent(AsyncWebSocketClient* client, JsonDocument& 
     }
 
     // Apply effect change (with or without transition)
+    bool dispatched = false;
     if (req.hasTransition && req.transitionType < static_cast<uint8_t>(lightwaveos::transitions::TransitionType::TYPE_COUNT)) {
         // Route through ActorSystem message queue for thread safety (Core 0 -> Core 1)
-        ctx.actorSystem.startTransition(effectId, req.transitionType);
+        dispatched = ctx.actorSystem.startTransition(effectId, req.transitionType);
     } else {
-        ctx.actorSystem.setEffect(effectId);
+        dispatched = ctx.actorSystem.setEffect(effectId);
+    }
+
+    if (!dispatched) {
+        LW_LOGW("effects.setCurrent rejected - queue saturated");
+        client->text(buildWsError(ErrorCodes::RATE_LIMITED, "Queue saturated", requestId));
+        return;
     }
 
     g_externalNvsSaveRequest.store(true, std::memory_order_release);
@@ -524,42 +559,74 @@ static void handleParametersSet(AsyncWebSocketClient* client, JsonDocument& doc,
     bool updatedHue = false;
 
     if (req.hasBrightness) {
-        ctx.actorSystem.setBrightness(req.brightness);
+        if (!ctx.actorSystem.setBrightness(req.brightness)) {
+            LW_LOGW("parameters.set setBrightness rejected - queue saturated");
+            client->text(buildWsError(ErrorCodes::RATE_LIMITED, "Queue saturated", requestId));
+            return;
+        }
         updatedBrightness = true;
     }
 
     if (req.hasSpeed) {
-        ctx.actorSystem.setSpeed(req.speed);
+        if (!ctx.actorSystem.setSpeed(req.speed)) {
+            LW_LOGW("parameters.set setSpeed rejected - queue saturated");
+            client->text(buildWsError(ErrorCodes::RATE_LIMITED, "Queue saturated", requestId));
+            return;
+        }
         updatedSpeed = true;
     }
 
     if (req.hasPaletteId) {
-        ctx.actorSystem.setPalette(req.paletteId);
+        if (!ctx.actorSystem.setPalette(req.paletteId)) {
+            LW_LOGW("parameters.set setPalette rejected - queue saturated");
+            client->text(buildWsError(ErrorCodes::RATE_LIMITED, "Queue saturated", requestId));
+            return;
+        }
         updatedPalette = true;
     }
 
     if (req.hasIntensity) {
-        ctx.actorSystem.setIntensity(req.intensity);
+        if (!ctx.actorSystem.setIntensity(req.intensity)) {
+            LW_LOGW("parameters.set setIntensity rejected - queue saturated");
+            client->text(buildWsError(ErrorCodes::RATE_LIMITED, "Queue saturated", requestId));
+            return;
+        }
         updatedIntensity = true;
     }
 
     if (req.hasSaturation) {
-        ctx.actorSystem.setSaturation(req.saturation);
+        if (!ctx.actorSystem.setSaturation(req.saturation)) {
+            LW_LOGW("parameters.set setSaturation rejected - queue saturated");
+            client->text(buildWsError(ErrorCodes::RATE_LIMITED, "Queue saturated", requestId));
+            return;
+        }
         updatedSaturation = true;
     }
 
     if (req.hasComplexity) {
-        ctx.actorSystem.setComplexity(req.complexity);
+        if (!ctx.actorSystem.setComplexity(req.complexity)) {
+            LW_LOGW("parameters.set setComplexity rejected - queue saturated");
+            client->text(buildWsError(ErrorCodes::RATE_LIMITED, "Queue saturated", requestId));
+            return;
+        }
         updatedComplexity = true;
     }
 
     if (req.hasVariation) {
-        ctx.actorSystem.setVariation(req.variation);
+        if (!ctx.actorSystem.setVariation(req.variation)) {
+            LW_LOGW("parameters.set setVariation rejected - queue saturated");
+            client->text(buildWsError(ErrorCodes::RATE_LIMITED, "Queue saturated", requestId));
+            return;
+        }
         updatedVariation = true;
     }
 
     if (req.hasHue) {
-        ctx.actorSystem.setHue(req.hue);
+        if (!ctx.actorSystem.setHue(req.hue)) {
+            LW_LOGW("parameters.set setHue rejected - queue saturated");
+            client->text(buildWsError(ErrorCodes::RATE_LIMITED, "Queue saturated", requestId));
+            return;
+        }
         updatedHue = true;
     }
 
@@ -641,13 +708,25 @@ static void handleCameraModeSet(AsyncWebSocketClient* client, JsonDocument& doc,
         // Apply camera-friendly values
         uint8_t cappedBrightness = (cached.brightness > CAMERA_BRIGHTNESS_CAP)
             ? CAMERA_BRIGHTNESS_CAP : cached.brightness;
-        ctx.actorSystem.setBrightness(cappedBrightness);
+        if (!ctx.actorSystem.setBrightness(cappedBrightness)) {
+            LW_LOGW("cameraMode.set enter setBrightness rejected - queue saturated");
+            client->text(buildWsError(ErrorCodes::RATE_LIMITED, "Queue saturated", requestId));
+            return;
+        }
 
         uint8_t reducedSpeed = static_cast<uint8_t>(cached.speed * CAMERA_SPEED_FACTOR);
         if (reducedSpeed < 1) reducedSpeed = 1;
-        ctx.actorSystem.setSpeed(reducedSpeed);
+        if (!ctx.actorSystem.setSpeed(reducedSpeed)) {
+            LW_LOGW("cameraMode.set enter setSpeed rejected - queue saturated");
+            client->text(buildWsError(ErrorCodes::RATE_LIMITED, "Queue saturated", requestId));
+            return;
+        }
 
-        ctx.actorSystem.setFadeAmount(CAMERA_FADE_BUMP);
+        if (!ctx.actorSystem.setFadeAmount(CAMERA_FADE_BUMP)) {
+            LW_LOGW("cameraMode.set enter setFadeAmount rejected - queue saturated");
+            client->text(buildWsError(ErrorCodes::RATE_LIMITED, "Queue saturated", requestId));
+            return;
+        }
 
         // Enable gamma correction
         enhancement::ColorCorrectionConfig newCfg = ccCfg;
@@ -658,9 +737,21 @@ static void handleCameraModeSet(AsyncWebSocketClient* client, JsonDocument& doc,
         s_cameraMode.active = true;
     } else if (!enabled && s_cameraMode.active) {
         // Restore previous values
-        ctx.actorSystem.setBrightness(s_cameraMode.prevBrightness);
-        ctx.actorSystem.setSpeed(s_cameraMode.prevSpeed);
-        ctx.actorSystem.setFadeAmount(s_cameraMode.prevFadeAmount);
+        if (!ctx.actorSystem.setBrightness(s_cameraMode.prevBrightness)) {
+            LW_LOGW("cameraMode.set exit setBrightness rejected - queue saturated");
+            client->text(buildWsError(ErrorCodes::RATE_LIMITED, "Queue saturated", requestId));
+            return;
+        }
+        if (!ctx.actorSystem.setSpeed(s_cameraMode.prevSpeed)) {
+            LW_LOGW("cameraMode.set exit setSpeed rejected - queue saturated");
+            client->text(buildWsError(ErrorCodes::RATE_LIMITED, "Queue saturated", requestId));
+            return;
+        }
+        if (!ctx.actorSystem.setFadeAmount(s_cameraMode.prevFadeAmount)) {
+            LW_LOGW("cameraMode.set exit setFadeAmount rejected - queue saturated");
+            client->text(buildWsError(ErrorCodes::RATE_LIMITED, "Queue saturated", requestId));
+            return;
+        }
 
         auto& ccEngine = enhancement::ColorCorrectionEngine::getInstance();
         auto& ccCfg = ccEngine.getConfig();
@@ -728,15 +819,19 @@ static void handleFactoryPresetsLoad(AsyncWebSocketClient* client, JsonDocument&
     }
 
     const auto& p = FACTORY_PRESETS[idx];
-    ctx.actorSystem.setEffect(p.effectId);
-    ctx.actorSystem.setPalette(p.paletteIndex);
-    ctx.actorSystem.setHue(p.hue);
-    ctx.actorSystem.setSaturation(p.saturation);
-    ctx.actorSystem.setMood(p.mood);
-    ctx.actorSystem.setIntensity(p.intensity);
-    ctx.actorSystem.setComplexity(p.complexity);
-    ctx.actorSystem.setVariation(p.variation);
-    ctx.actorSystem.setFadeAmount(p.trails);
+    if (!ctx.actorSystem.setEffect(p.effectId) ||
+        !ctx.actorSystem.setPalette(p.paletteIndex) ||
+        !ctx.actorSystem.setHue(p.hue) ||
+        !ctx.actorSystem.setSaturation(p.saturation) ||
+        !ctx.actorSystem.setMood(p.mood) ||
+        !ctx.actorSystem.setIntensity(p.intensity) ||
+        !ctx.actorSystem.setComplexity(p.complexity) ||
+        !ctx.actorSystem.setVariation(p.variation) ||
+        !ctx.actorSystem.setFadeAmount(p.trails)) {
+        LW_LOGW("factoryPresets.load rejected - queue saturated at preset %u", idx);
+        client->text(buildWsError(ErrorCodes::RATE_LIMITED, "Queue saturated", requestId));
+        return;
+    }
     g_factoryPresetIndex = idx;
     g_externalNvsSaveRequest.store(true, std::memory_order_release);
 

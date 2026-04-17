@@ -6,7 +6,14 @@
  * Direct ControlBus reads, single-stage smoothing, max follower normalisation.
  *
  * Langton's ant on 64x64 grid, projected to 1D via drifting diagonal slice.
- * PSRAM-allocated grid.
+ * PSRAM-allocated per-zone grid.
+ *
+ * Per-zone state: ZoneComposer reuses one instance across up to kMaxZones
+ * zones. The ant grid itself, ant state, scalars and followers are ALL
+ * dimensioned [kMaxZones]. Each zone runs an independent Langton's ant so
+ * assigning the same effect to multiple zones produces independent CA
+ * evolutions, not a single shared grid whose ant advances N times per frame.
+ * See forensic audit P1-09.
  */
 
 #pragma once
@@ -36,32 +43,43 @@ public:
     float getParameter(const char* name) const override;
 
 private:
-    // Langton's ant state
+    // Per-zone state dimensioning. kMaxZones=4 matches existing exemplars
+    // and leaves headroom for 0xFF fallback to slot 0.
+    static constexpr uint8_t kMaxZones = 4;
+
+    // Langton's ant grid dimensions
     static constexpr uint8_t W = 64;
     static constexpr uint8_t H = 64;
-    uint8_t* m_grid = nullptr; // PSRAM allocation (W*H bytes)
+    static constexpr uint16_t kGridBytes = static_cast<uint16_t>(W) * H; // 4096 B
 
-    int8_t m_antX = 32;
-    int8_t m_antY = 32;
-    int8_t m_antDir = 0; // 0=N, 1=E, 2=S, 3=W
+    // Per-zone PSRAM grid (contiguous block of kMaxZones * W * H bytes).
+    // Access zone z's grid as  m_grid + z * kGridBytes.
+    // Total: 4 * 4096 = 16 KB in SPIRAM (was 4 KB single-zone).
+    uint8_t* m_grid = nullptr;
 
-    float m_antStepAccum = 0.0f;
-    float m_sliceOffset = 0.0f;
+    // Per-zone ant state
+    int8_t m_antX[kMaxZones]   = {32, 32, 32, 32};
+    int8_t m_antY[kMaxZones]   = {32, 32, 32, 32};
+    int8_t m_antDir[kMaxZones] = {0, 0, 0, 0};
 
-    // Single-stage smoothed audio
-    float m_bass       = 0.0f;
-    float m_treble     = 0.0f;
-    float m_chromaAngle = 0.0f;
+    float m_antStepAccum[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float m_sliceOffset[kMaxZones]  = {0.0f, 0.0f, 0.0f, 0.0f};
 
-    // Asymmetric max followers
-    float m_bassMax    = 0.15f;
-    float m_trebleMax  = 0.15f;
+    // Per-zone smoothed audio
+    float m_bass[kMaxZones]        = {0.0f, 0.0f, 0.0f, 0.0f};
+    float m_treble[kMaxZones]      = {0.0f, 0.0f, 0.0f, 0.0f};
+    float m_chromaAngle[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
 
-    // Impact
-    float m_impact     = 0.0f;
+    // Per-zone asymmetric max followers
+    float m_bassMax[kMaxZones]     = {0.15f, 0.15f, 0.15f, 0.15f};
+    float m_trebleMax[kMaxZones]   = {0.15f, 0.15f, 0.15f, 0.15f};
 
-    void stepAnt();
-    float sampleProjection(float offset);
+    // Per-zone impact
+    float m_impact[kMaxZones]      = {0.0f, 0.0f, 0.0f, 0.0f};
+
+    // Zone-aware helpers (operate on zone z's grid slice)
+    void stepAnt(int z);
+    float sampleProjection(int z, float offset);
 };
 
 } // namespace ieffect

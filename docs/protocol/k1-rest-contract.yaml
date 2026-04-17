@@ -553,16 +553,26 @@ endpoints:
 
   /api/v1/firmware/update:
     method: POST
-    description: "Upload firmware binary (OTA)"
+    description: "Upload firmware binary (OTA). Requires X-OTA-SHA256 (64 hex,
+      preferred) or X-OTA-MD5 (32 hex, DEPRECATED). Unsigned uploads are
+      rejected as of 2026-04-18 (P1-10 hardening)."
+    headers:
+      X-OTA-Token: { required: true }
+      X-OTA-SHA256: { required: true, note: "64 hex chars; required unless X-OTA-MD5 given" }
+      X-OTA-MD5: { optional: true, deprecated: true, note: "32 hex chars; legacy clients only" }
+      X-OTA-Version: { optional: true }
+      X-OTA-Force: { optional: true, default: "true" }
 
   /api/v1/firmware/filesystem:
     method: POST
-    description: "Upload filesystem image"
+    description: "Upload filesystem image. Same integrity-hash rules as
+      /api/v1/firmware/update — X-OTA-SHA256 required unless legacy X-OTA-MD5
+      is supplied."
 
   /update:
     method: POST
     auth: false
-    description: "Legacy OTA update endpoint"
+    description: "Legacy OTA update endpoint. Same integrity-hash rules apply."
 
   # ── Network ────────────────────────────────────────────────────────────
   /api/v1/network/status:

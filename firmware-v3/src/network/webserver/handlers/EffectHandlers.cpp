@@ -9,6 +9,10 @@
 #include "../../../config/persistence_trigger.h"
 #include <cstring>
 
+#undef LW_LOG_TAG
+#define LW_LOG_TAG "EffectH"
+#include "../../../utils/Log.h"
+
 using namespace lightwaveos::actors;
 using namespace lightwaveos::effects;
 using lightwaveos::network::WebServer;
@@ -376,10 +380,18 @@ void EffectHandlers::handleSet(AsyncWebServerRequest* request, uint8_t* data, si
     uint8_t transitionType = doc["transitionType"] | 0;
 
     // SAFE: All state changes go through ActorSystem message queue (thread-safe)
+    bool dispatched = false;
     if (useTransition) {
-        actors.startTransition(effectId, transitionType);
+        dispatched = actors.startTransition(effectId, transitionType);
     } else {
-        actors.setEffect(effectId);
+        dispatched = actors.setEffect(effectId);
+    }
+
+    if (!dispatched) {
+        LW_LOGW("REST setEffect rejected - queue saturated");
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::RATE_LIMITED, "Queue saturated");
+        return;
     }
 
     g_externalNvsSaveRequest.store(true, std::memory_order_release);

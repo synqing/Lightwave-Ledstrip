@@ -17,6 +17,10 @@
 #include <Arduino.h>
 #endif
 
+#undef LW_LOG_TAG
+#define LW_LOG_TAG "WsPalette"
+#include "../../../utils/Log.h"
+
 namespace lightwaveos {
 namespace network {
 namespace webserver {
@@ -144,8 +148,12 @@ static void handlePalettesSet(AsyncWebSocketClient* client, JsonDocument& doc, c
     // #endregion
 
     // Set palette via ActorSystem
-    ctx.actorSystem.setPalette(paletteId);
-    
+    if (!ctx.actorSystem.setPalette(paletteId)) {
+        LW_LOGW("palettes.set rejected - queue saturated");
+        client->text(buildWsError(ErrorCodes::RATE_LIMITED, "Queue saturated", requestId ? requestId : ""));
+        return;
+    }
+
     String response = buildWsResponse("palettes.set", requestId, [paletteId](JsonObject& data) {
         data["paletteId"] = paletteId;
         data["name"] = MasterPaletteNames[paletteId];

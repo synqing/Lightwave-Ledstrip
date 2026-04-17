@@ -304,15 +304,20 @@ void V1ApiRoutes::registerRoutes(
                 return;
             }
             const auto& p = lightwaveos::FACTORY_PRESETS[idx];
-            ctx.orchestrator.setEffect(p.effectId);
-            ctx.orchestrator.setPalette(p.paletteIndex);
-            ctx.orchestrator.setHue(p.hue);
-            ctx.orchestrator.setSaturation(p.saturation);
-            ctx.orchestrator.setMood(p.mood);
-            ctx.orchestrator.setIntensity(p.intensity);
-            ctx.orchestrator.setComplexity(p.complexity);
-            ctx.orchestrator.setVariation(p.variation);
-            ctx.orchestrator.setFadeAmount(p.trails);
+            if (!ctx.orchestrator.setEffect(p.effectId) ||
+                !ctx.orchestrator.setPalette(p.paletteIndex) ||
+                !ctx.orchestrator.setHue(p.hue) ||
+                !ctx.orchestrator.setSaturation(p.saturation) ||
+                !ctx.orchestrator.setMood(p.mood) ||
+                !ctx.orchestrator.setIntensity(p.intensity) ||
+                !ctx.orchestrator.setComplexity(p.complexity) ||
+                !ctx.orchestrator.setVariation(p.variation) ||
+                !ctx.orchestrator.setFadeAmount(p.trails)) {
+                LW_LOGW("REST factoryPreset load rejected - queue saturated at idx %u", idx);
+                sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                                  ErrorCodes::RATE_LIMITED, "Queue saturated");
+                return;
+            }
             g_factoryPresetIndex = idx;
             g_externalNvsSaveRequest.store(true, std::memory_order_release);
             sendSuccessResponse(request, [idx, &p](JsonObject& respData) {
@@ -1895,12 +1900,42 @@ void V1ApiRoutes::registerRoutes(
             uint8_t rTemporal = hasTemporal ? temporal : static_cast<uint8_t>(mixer.getTemporal());
 
             // Apply all after all validated — route through ActorSystem
-            if (hasMode) ctx.actorSystem.setEdgeMixerMode(mode);
-            if (hasSpread) ctx.actorSystem.setEdgeMixerSpread(spread);
-            if (hasStrength) ctx.actorSystem.setEdgeMixerStrength(strength);
-            if (hasSpatial) ctx.actorSystem.setEdgeMixerSpatial(spatial);
-            if (hasTemporal) ctx.actorSystem.setEdgeMixerTemporal(temporal);
-            if (save) ctx.actorSystem.saveEdgeMixerToNVS();
+            if (hasMode     && !ctx.actorSystem.setEdgeMixerMode(mode)) {
+                LW_LOGW("REST edgeMixer setMode rejected - queue saturated");
+                sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                                  ErrorCodes::RATE_LIMITED, "Queue saturated");
+                return;
+            }
+            if (hasSpread   && !ctx.actorSystem.setEdgeMixerSpread(spread)) {
+                LW_LOGW("REST edgeMixer setSpread rejected - queue saturated");
+                sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                                  ErrorCodes::RATE_LIMITED, "Queue saturated");
+                return;
+            }
+            if (hasStrength && !ctx.actorSystem.setEdgeMixerStrength(strength)) {
+                LW_LOGW("REST edgeMixer setStrength rejected - queue saturated");
+                sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                                  ErrorCodes::RATE_LIMITED, "Queue saturated");
+                return;
+            }
+            if (hasSpatial  && !ctx.actorSystem.setEdgeMixerSpatial(spatial)) {
+                LW_LOGW("REST edgeMixer setSpatial rejected - queue saturated");
+                sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                                  ErrorCodes::RATE_LIMITED, "Queue saturated");
+                return;
+            }
+            if (hasTemporal && !ctx.actorSystem.setEdgeMixerTemporal(temporal)) {
+                LW_LOGW("REST edgeMixer setTemporal rejected - queue saturated");
+                sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                                  ErrorCodes::RATE_LIMITED, "Queue saturated");
+                return;
+            }
+            if (save        && !ctx.actorSystem.saveEdgeMixerToNVS()) {
+                LW_LOGW("REST edgeMixer saveToNVS rejected - queue saturated");
+                sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                                  ErrorCodes::RATE_LIMITED, "Queue saturated");
+                return;
+            }
 
             // Respond with requested values (not stale singleton).
             sendSuccessResponse(request, [rMode, rSpread, rStrength, rSpatial, rTemporal](JsonObject& respData) {

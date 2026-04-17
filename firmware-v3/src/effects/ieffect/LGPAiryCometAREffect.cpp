@@ -57,19 +57,32 @@ static inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRG
     if (j < static_cast<int>(ctx.ledCount)) ctx.leds[j] = c;
 }
 
-// Constructor
-LGPAiryCometAREffect::LGPAiryCometAREffect()
-    : m_t(0.0f), m_bass(0.0f), m_treble(0.0f), m_chromaAngle(0.0f),
-      m_bassMax(0.15f), m_trebleMax(0.15f), m_impact(0.0f) {}
+// Constructor (per-zone arrays are initialised inline in the header)
+LGPAiryCometAREffect::LGPAiryCometAREffect() = default;
 
 bool LGPAiryCometAREffect::init(plugins::EffectContext& ctx) {
-    m_t = 0.0f; m_bass = 0.0f; m_treble = 0.0f; m_chromaAngle = 0.0f;
-    m_bassMax = 0.15f; m_trebleMax = 0.15f; m_impact = 0.0f;
+    // Reset ALL zone slots on init — ZoneComposer may reassign this effect to
+    // a different zone at any time; stale state from a prior binding must not
+    // carry across.
+    for (uint8_t zi = 0; zi < kMaxZones; ++zi) {
+        m_t[zi] = 0.0f;
+        m_bass[zi] = 0.0f;
+        m_treble[zi] = 0.0f;
+        m_chromaAngle[zi] = 0.0f;
+        m_bassMax[zi] = 0.15f;
+        m_trebleMax[zi] = 0.15f;
+        m_impact[zi] = 0.0f;
+    }
     lightwaveos::effects::cinema::reset();
     return true;
 }
 
 void LGPAiryCometAREffect::render(plugins::EffectContext& ctx) {
+    // Per-zone state selector. ctx.zoneId == 0xFF means global render (no zone)
+    // — fall back to slot 0. This matches the bounds-check pattern used by
+    // EsBloomRefEffect, SnapwaveLinearEffect and all other per-zone AR effects.
+    const int z = (ctx.zoneId < kMaxZones) ? ctx.zoneId : 0;
+
     const float dt = ctx.getSafeRawDeltaSeconds();
     const float dtVis = ctx.getSafeDeltaSeconds();
     const float speedNorm = ctx.speed / 50.0f;
@@ -81,11 +94,11 @@ void LGPAiryCometAREffect::render(plugins::EffectContext& ctx) {
     const float silScale = ctx.audio.available ? ctx.audio.silentScale() : 0.0f;
     const float* chroma = ctx.audio.available ? ctx.audio.chroma() : nullptr;
 
-    // STEP 2: Single-stage smoothing
-    m_bass += (rawBass - m_bass) * (1.0f - expf(-dt / kBassTau));
-    m_treble += (rawTreble - m_treble) * (1.0f - expf(-dt / kTrebleTau));
+    // STEP 2: Single-stage smoothing (per-zone)
+    m_bass[z] += (rawBass - m_bass[z]) * (1.0f - expf(-dt / kBassTau));
+    m_treble[z] += (rawTreble - m_treble[z]) * (1.0f - expf(-dt / kTrebleTau));
 
-    // Circular chroma EMA
+    // Circular chroma EMA (per-zone)
     if (chroma) {
         float sx = 0.0f, sy = 0.0f;
         for (int i = 0; i < 12; i++) {
@@ -96,45 +109,45 @@ void LGPAiryCometAREffect::render(plugins::EffectContext& ctx) {
         if (sx * sx + sy * sy > 0.0001f) {
             float target = atan2f(sy, sx);
             if (target < 0.0f) target += kTwoPi;
-            float delta = target - m_chromaAngle;
+            float delta = target - m_chromaAngle[z];
             while (delta > kPi) delta -= kTwoPi;
             while (delta < -kPi) delta += kTwoPi;
-            m_chromaAngle += delta * (1.0f - expf(-dt / kChromaTau));
-            if (m_chromaAngle < 0.0f) m_chromaAngle += kTwoPi;
-            if (m_chromaAngle >= kTwoPi) m_chromaAngle -= kTwoPi;
+            m_chromaAngle[z] += delta * (1.0f - expf(-dt / kChromaTau));
+            if (m_chromaAngle[z] < 0.0f) m_chromaAngle[z] += kTwoPi;
+            if (m_chromaAngle[z] >= kTwoPi) m_chromaAngle[z] -= kTwoPi;
         }
     }
 
-    // STEP 3: Max followers
+    // STEP 3: Max followers (per-zone)
     {
         float aA = 1.0f - expf(-dt / kFollowerAttackTau);
         float dA = 1.0f - expf(-dt / kFollowerDecayTau);
-        if (m_bass > m_bassMax) m_bassMax += (m_bass - m_bassMax) * aA;
-        else m_bassMax += (m_bass - m_bassMax) * dA;
-        if (m_bassMax < kFollowerFloor) m_bassMax = kFollowerFloor;
+        if (m_bass[z] > m_bassMax[z]) m_bassMax[z] += (m_bass[z] - m_bassMax[z]) * aA;
+        else m_bassMax[z] += (m_bass[z] - m_bassMax[z]) * dA;
+        if (m_bassMax[z] < kFollowerFloor) m_bassMax[z] = kFollowerFloor;
 
-        if (m_treble > m_trebleMax) m_trebleMax += (m_treble - m_trebleMax) * aA;
-        else m_trebleMax += (m_treble - m_trebleMax) * dA;
-        if (m_trebleMax < kFollowerFloor) m_trebleMax = kFollowerFloor;
+        if (m_treble[z] > m_trebleMax[z]) m_trebleMax[z] += (m_treble[z] - m_trebleMax[z]) * aA;
+        else m_trebleMax[z] += (m_treble[z] - m_trebleMax[z]) * dA;
+        if (m_trebleMax[z] < kFollowerFloor) m_trebleMax[z] = kFollowerFloor;
     }
-    const float normBass = clamp01(m_bass / m_bassMax);
-    const float normTreble = clamp01(m_treble / m_trebleMax);
+    const float normBass = clamp01(m_bass[z] / m_bassMax[z]);
+    const float normTreble = clamp01(m_treble[z] / m_trebleMax[z]);
 
-    // STEP 4: Impact (continuous beatStrength rise, exponential decay)
-    if (beatStr > m_impact) m_impact = beatStr;
-    m_impact *= expf(-dt / kImpactDecayTau);
+    // STEP 4: Impact — continuous beatStrength rise, exponential decay (per-zone)
+    if (beatStr > m_impact[z]) m_impact[z] = beatStr;
+    m_impact[z] *= expf(-dt / kImpactDecayTau);
 
     // STEP 5: Comet visual parameters
     const float beatMod = 0.3f + 0.7f * beatStr;
     const float mid = (STRIP_LENGTH - 1) * 0.5f;
 
     // Comet position: parabolic self-acceleration, bass drives speed
-    float s = fract(m_t * (0.08f + 0.08f * normBass + 0.04f * m_impact));
+    float s = fract(m_t[z] * (0.08f + 0.08f * normBass + 0.04f * m_impact[z]));
     float parab = s * s;
     float x0 = -mid * 0.90f + 2.0f * mid * 0.90f * parab;
 
     // Direction flip (rhythmic via treble variation)
-    bool flip = (fract(m_t * 0.06f) > 0.5f);
+    bool flip = (fract(m_t[z] * 0.06f) > 0.5f);
     float dir = flip ? -1.0f : 1.0f;
 
     // Tail parameters driven by normalised treble
@@ -144,12 +157,12 @@ void LGPAiryCometAREffect::render(plugins::EffectContext& ctx) {
     // Head width driven by bass
     float sigma = 3.0f + 1.5f * normBass;
 
-    // Motion accumulation
+    // Motion accumulation (per-zone)
     float tRate = 1.0f + 4.5f * speedNorm;
-    m_t += tRate * dtVis;
+    m_t[z] += tRate * dtVis;
 
-    // Hue from chroma
-    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle * (255.0f / kTwoPi)) + ctx.gHue;
+    // Hue from chroma (per-zone)
+    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle[z] * (255.0f / kTwoPi)) + ctx.gHue;
 
     // Trail persistence: more energy = shorter trails
     uint8_t fadeAmt = static_cast<uint8_t>(clampf(18.0f + 35.0f * (1.0f - normBass), 12.0f, 55.0f));
@@ -166,11 +179,11 @@ void LGPAiryCometAREffect::render(plugins::EffectContext& ctx) {
         // Airy tail: oscillatory lobes behind the head, decaying
         float behind = (dx * dir > 0.0f) ? (dx * dir) : 0.0f;
         float tail = expf(-behind * tailDecay) *
-                     (0.55f + 0.45f * cosf(behind * lobeFreq - m_t * 0.9f));
+                     (0.55f + 0.45f * cosf(behind * lobeFreq - m_t[z] * 0.9f));
         tail = clamp01(tail);
 
-        // Impact thrust at head
-        float impactAdd = gaussian(dx, sigma * 1.5f) * m_impact * 0.4f;
+        // Impact thrust at head (per-zone)
+        float impactAdd = gaussian(dx, sigma * 1.5f) * m_impact[z] * 0.4f;
 
         // Compose brightness: audio magnitude x geometry x beat x silence
         float wave = clamp01(head + 0.70f * tail * normBass);

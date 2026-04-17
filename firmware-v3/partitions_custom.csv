@@ -1,12 +1,21 @@
 # Dual-OTA Partition Table for K1 Production (16MB Flash, N16R8)
-# Enables OtaBootVerifier rollback protection
-# WARNING: Layout change requires full erase + reflash (not OTA-upgradeable from single-slot layout)
+# Enables OtaBootVerifier rollback protection.
+#
+# 2026-04-18 — NVS grown 20KB -> 64KB (matches tab5). App partitions shifted
+# forward 64KB to keep 64KB alignment (app0 now at 0x20000, not 0x10000).
+# Space reclaimed from `userdata` (1MB -> 896KB, never read by any code path).
+#
+# WARNING: This layout is NOT compatible with pre-existing K1 flash images.
+# Deploy requires `esptool erase_flash` + full reflash on every field device.
+# Installed WiFi creds, presets, OTA tokens, zone configs, EdgeMixer and
+# ColourCorrection settings are destroyed. Captain sign-off required before
+# shipping.
 #
 # Name,    Type, SubType,  Offset,    Size,     Flags
-nvs,       data, nvs,      0x9000,    0x5000,
-otadata,   data, ota,      0xe000,    0x2000,
-app0,      app,  ota_0,    0x10000,   0x700000,
-app1,      app,  ota_1,    0x710000,  0x700000,
-spiffs,    data, spiffs,   0xE10000,  0x80000,
-userdata,  data, 0x40,     0xE90000,  0x100000,
-coredump,  data, coredump, 0xF90000,  0x10000,
+nvs,       data, nvs,      0x9000,    0x10000,
+otadata,   data, ota,      0x19000,   0x2000,
+app0,      app,  ota_0,    0x20000,   0x700000,
+app1,      app,  ota_1,    0x720000,  0x700000,
+spiffs,    data, spiffs,   0xE20000,  0x80000,
+userdata,  data, 0x40,     0xEA0000,  0xE0000,
+coredump,  data, coredump, 0xF80000,  0x10000,

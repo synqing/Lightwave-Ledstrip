@@ -28,6 +28,10 @@
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 
+#undef LW_LOG_TAG
+#define LW_LOG_TAG "WsPresets"
+#include "../../../utils/Log.h"
+
 namespace lightwaveos {
 namespace network {
 namespace webserver {
@@ -352,16 +356,21 @@ static void handleEffectPresetsLoad(AsyncWebSocketClient* client,
         return;
     }
 
-    // Apply preset to renderer via ActorSystem
-    ctx.actorSystem.setEffect(preset.effectId);
-    ctx.actorSystem.setPalette(preset.paletteId);
-    ctx.actorSystem.setBrightness(preset.brightness);
-    ctx.actorSystem.setSpeed(preset.speed);
-    ctx.actorSystem.setHue(preset.hue);
-    ctx.actorSystem.setSaturation(preset.saturation);
-    ctx.actorSystem.setIntensity(preset.intensity);
-    ctx.actorSystem.setComplexity(preset.complexity);
-    ctx.actorSystem.setVariation(preset.variation);
+    // Apply preset to renderer via ActorSystem — bail on first queue failure to
+    // prevent partial application, which leaves the device in an inconsistent state.
+    if (!ctx.actorSystem.setEffect(preset.effectId) ||
+        !ctx.actorSystem.setPalette(preset.paletteId) ||
+        !ctx.actorSystem.setBrightness(preset.brightness) ||
+        !ctx.actorSystem.setSpeed(preset.speed) ||
+        !ctx.actorSystem.setHue(preset.hue) ||
+        !ctx.actorSystem.setSaturation(preset.saturation) ||
+        !ctx.actorSystem.setIntensity(preset.intensity) ||
+        !ctx.actorSystem.setComplexity(preset.complexity) ||
+        !ctx.actorSystem.setVariation(preset.variation)) {
+        LW_LOGW("effectPresets.load rejected - queue saturated at slot %u", slot);
+        client->text(buildWsError(ErrorCodes::RATE_LIMITED, "Queue saturated", requestId));
+        return;
+    }
 
     // Broadcast status update
     if (ctx.broadcastStatus) {

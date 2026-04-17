@@ -24,6 +24,7 @@
 #include "../../../core/system/OtaTokenManager.h"
 #include <Update.h>
 #include <Arduino.h>
+#include <mbedtls/sha256.h>
 
 // Convenience aliases
 using OtaLed = lightwaveos::core::system::OtaLedFeedback;
@@ -78,6 +79,22 @@ static uint32_t s_fsTotalReceived = 0;
 static uint32_t s_fsContentLength = 0;
 static uint32_t s_fsUploadStartTime = 0;
 static uint32_t s_fsLastProgressPercent = 0;
+
+// ============================================================================
+// Integrity-hash state (P1-10 hardening, 2026-04-18)
+//
+// Mirrors the SHA-256 streaming pattern used in WsOtaCommands.cpp. The context
+// is a static struct (~104 B) — no heap allocation in the upload hot path.
+// Lifecycle: init+starts_ret on first chunk, update_ret per chunk, finish_ret
+// on final chunk, free on any abort. Firmware and filesystem paths share the
+// hash state because the cross-transport OtaSessionLock prevents concurrent
+// REST uploads (only one Update target is open at a time).
+// ============================================================================
+static mbedtls_sha256_context s_restSha256Ctx;
+static bool s_restSha256Active = false;        // ctx has been init+started
+static char s_restExpectedSha256[65] = {0};    // 64 hex + NUL, lower-case
+static bool s_restSha256Expected = false;      // client supplied X-OTA-SHA256
+static bool s_restMd5Deprecated = false;       // only X-OTA-MD5 present
 
 // ============================================================================
 // Telemetry helpers
@@ -188,6 +205,141 @@ static void emitRestVersionTelemetry(const char* eventType, uint32_t currentVer,
     if (n > 0 && n < static_cast<int>(sizeof(buf))) {
         Serial.println(buf);
     }
+}
+
+// ============================================================================
+// SHA-256 integrity helpers (shared by firmware + filesystem upload paths).
+// ============================================================================
+
+static bool restNormaliseHexHash(const char* in, size_t expectedLen,
+                                 char* outBuf, size_t outBufSize) {
+    if (!in || outBufSize < expectedLen + 1) return false;
+    size_t len = strlen(in);
+    if (len != expectedLen) return false;
+    for (size_t i = 0; i < len; i++) {
+        char c = in[i];
+        if (c >= '0' && c <= '9') { outBuf[i] = c; continue; }
+        if (c >= 'a' && c <= 'f') { outBuf[i] = c; continue; }
+        if (c >= 'A' && c <= 'F') { outBuf[i] = static_cast<char>(c + ('a' - 'A')); continue; }
+        return false;
+    }
+    outBuf[expectedLen] = '\0';
+    return true;
+}
+
+static bool restSha256BeginSession() {
+    if (s_restSha256Active) {
+        mbedtls_sha256_free(&s_restSha256Ctx);
+        s_restSha256Active = false;
+    }
+    mbedtls_sha256_init(&s_restSha256Ctx);
+    if (mbedtls_sha256_starts_ret(&s_restSha256Ctx, 0) != 0) {
+        mbedtls_sha256_free(&s_restSha256Ctx);
+        return false;
+    }
+    s_restSha256Active = true;
+    return true;
+}
+
+static bool restSha256FeedChunk(const unsigned char* data, size_t len) {
+    if (!s_restSha256Active || !data || len == 0) return s_restSha256Active;
+    return mbedtls_sha256_update_ret(&s_restSha256Ctx, data, len) == 0;
+}
+
+static bool restSha256FinaliseHex(char* outHex65) {
+    if (!s_restSha256Active || !outHex65) return false;
+    unsigned char digest[32];
+    int rc = mbedtls_sha256_finish_ret(&s_restSha256Ctx, digest);
+    mbedtls_sha256_free(&s_restSha256Ctx);
+    s_restSha256Active = false;
+    if (rc != 0) return false;
+    static const char* kHex = "0123456789abcdef";
+    for (size_t i = 0; i < 32; i++) {
+        outHex65[i * 2]     = kHex[(digest[i] >> 4) & 0x0F];
+        outHex65[i * 2 + 1] = kHex[digest[i] & 0x0F];
+    }
+    outHex65[64] = '\0';
+    return true;
+}
+
+static void restSha256ReleaseSession() {
+    if (s_restSha256Active) {
+        mbedtls_sha256_free(&s_restSha256Ctx);
+        s_restSha256Active = false;
+    }
+    s_restExpectedSha256[0] = '\0';
+    s_restSha256Expected = false;
+    s_restMd5Deprecated = false;
+}
+
+static bool restConstTimeHexEquals(const char* a, const char* b, size_t len) {
+    volatile uint8_t diff = 0;
+    for (size_t i = 0; i < len; i++) {
+        diff |= static_cast<uint8_t>(a[i]) ^ static_cast<uint8_t>(b[i]);
+    }
+    return (diff == 0);
+}
+
+/**
+ * @brief Apply the REST integrity-hash policy on the first chunk.
+ *
+ * Enforces that at least one of X-OTA-SHA256 (preferred) or X-OTA-MD5
+ * (legacy, deprecated) is supplied. Returns true on success (hash state
+ * initialised), false on rejection (caller should set error state + release
+ * OtaLock and bail). On success, the caller owns the responsibility of
+ * calling restSha256ReleaseSession() on the terminal path.
+ */
+static bool restApplyHashPolicy(AsyncWebServerRequest* request,
+                                String& errorMessageOut,
+                                const char*& rejectReasonOut) {
+    const bool haveSha256 = request->hasHeader("X-OTA-SHA256");
+    const bool haveMd5    = request->hasHeader("X-OTA-MD5");
+
+    restSha256ReleaseSession();
+
+    if (haveSha256) {
+        const String& sha = request->header("X-OTA-SHA256");
+        if (!restNormaliseHexHash(sha.c_str(), 64, s_restExpectedSha256,
+                                  sizeof(s_restExpectedSha256))) {
+            errorMessageOut = "X-OTA-SHA256 must be 64 hex characters";
+            rejectReasonOut = "invalid_sha256_format";
+            return false;
+        }
+        if (!restSha256BeginSession()) {
+            errorMessageOut = "Failed to initialise SHA-256 context";
+            rejectReasonOut = "sha256_init_failed";
+            return false;
+        }
+        s_restSha256Expected = true;
+        // Legacy MD5 is IGNORED when SHA-256 present; log for observability.
+        if (haveMd5) {
+            Serial.println("{\"event\":\"ota.rest.md5_deprecated\","
+                           "\"detail\":\"sha256 present; md5 ignored\","
+                           "\"schemaVersion\":\"1.0.0\"}");
+        }
+        return true;
+    }
+
+    if (haveMd5) {
+        const String& md5Header = request->header("X-OTA-MD5");
+        if (md5Header.length() != 32) {
+            errorMessageOut = "X-OTA-MD5 header must be exactly 32 hex characters";
+            rejectReasonOut = "invalid_md5_format";
+            return false;
+        }
+        Update.setMD5(md5Header.c_str());
+        s_restMd5Deprecated = true;
+        Serial.println("{\"event\":\"ota.rest.md5_deprecated\","
+                       "\"detail\":\"md5 only; upgrade client to sha256\","
+                       "\"schemaVersion\":\"1.0.0\"}");
+        return true;
+    }
+
+    // Neither supplied — REJECT. Intentional break from prior default-allow.
+    errorMessageOut = "Integrity hash required: supply X-OTA-SHA256 (64 hex) "
+                      "or legacy X-OTA-MD5 (32 hex)";
+    rejectReasonOut = "missing_integrity_hash";
+    return false;
 }
 
 /**
@@ -385,20 +537,21 @@ void FirmwareHandlers::handleUpload(AsyncWebServerRequest* request,
 
         size_t updateSize = (s_contentLength > 0) ? s_contentLength : UPDATE_SIZE_UNKNOWN;
 
-        // Set MD5 checksum for verification if provided via X-OTA-MD5 header.
-        // Must be called BEFORE Update.begin() so the Update library can verify
-        // the hash incrementally during writes and on Update.end(true).
-        if (request->hasHeader("X-OTA-MD5")) {
-            const String& md5Header = request->header("X-OTA-MD5");
-            if (md5Header.length() == 32) {
-                Update.setMD5(md5Header.c_str());
-            } else if (md5Header.length() > 0) {
+        // P1-10 hardening: integrity-hash policy.
+        //   - X-OTA-SHA256 (preferred, 64 hex) or X-OTA-MD5 (legacy, 32 hex)
+        //     must be supplied. Unsigned uploads are REJECTED.
+        //   - SHA-256 is validated in-firmware by a streaming mbedtls context;
+        //     MD5 remains delegated to Update.setMD5() / Update.end(true).
+        {
+            String hashErr;
+            const char* hashReason = nullptr;
+            if (!restApplyHashPolicy(request, hashErr, hashReason)) {
                 taskENTER_CRITICAL(&s_restOtaMux);
                 s_updateError = true;
                 taskEXIT_CRITICAL(&s_restOtaMux);
-                s_errorMessage = "X-OTA-MD5 header must be exactly 32 hex characters";
+                s_errorMessage = hashErr;
                 emitRestOtaTelemetry("ota.rest.failed", 0, s_contentLength,
-                                     "invalid_md5_format");
+                                     hashReason ? hashReason : "integrity_hash_rejected");
                 OtaLock::release();
                 return;
             }
@@ -426,6 +579,7 @@ void FirmwareHandlers::handleUpload(AsyncWebServerRequest* request,
             s_errorMessage = "Update.begin() failed: " + String(Update.errorString());
             emitRestOtaTelemetry("ota.rest.failed", 0, s_contentLength,
                                  Update.errorString());
+            restSha256ReleaseSession();
             OtaLock::release();
             return;
         }
@@ -460,6 +614,24 @@ void FirmwareHandlers::handleUpload(AsyncWebServerRequest* request,
                                  "write_failed");
             Update.abort();
             OtaLed::showFailure();
+            restSha256ReleaseSession();
+            OtaLock::release();
+            return;
+        }
+
+        // Feed the accepted bytes into the running SHA-256 calculation.
+        // Heap-free; static ctx reused across sessions.
+        if (s_restSha256Expected && !restSha256FeedChunk(data, written)) {
+            taskENTER_CRITICAL(&s_restOtaMux);
+            s_updateError = true;
+            s_updateStarted = false;
+            taskEXIT_CRITICAL(&s_restOtaMux);
+            s_errorMessage = "SHA-256 streaming failure";
+            emitRestOtaTelemetry("ota.rest.failed", s_totalReceived, s_contentLength,
+                                 "sha256_update_failed");
+            Update.abort();
+            OtaLed::showFailure();
+            restSha256ReleaseSession();
             OtaLock::release();
             return;
         }
@@ -485,6 +657,43 @@ void FirmwareHandlers::handleUpload(AsyncWebServerRequest* request,
             // Show full progress bar before finalization
             OtaLed::showProgress(100);
 
+            // SHA-256 verification (preferred path). Compare computed hash to
+            // the expected hash BEFORE swapping partitions — a tampered image
+            // must never be committed. MD5 path stays delegated to Update.end().
+            bool sha256ok = true;
+            if (s_restSha256Expected) {
+                char computedHex[65] = {0};
+                if (!restSha256FinaliseHex(computedHex)) {
+                    taskENTER_CRITICAL(&s_restOtaMux);
+                    s_updateError = true;
+                    taskEXIT_CRITICAL(&s_restOtaMux);
+                    s_errorMessage = "SHA-256 finalisation failed";
+                    emitRestOtaTelemetry("ota.rest.failed", s_totalReceived, s_contentLength,
+                                         "sha256_finalise_failed");
+                    sha256ok = false;
+                } else if (!restConstTimeHexEquals(computedHex, s_restExpectedSha256, 64)) {
+                    char detail[160];
+                    snprintf(detail, sizeof(detail),
+                             "sha256 mismatch: computed=%.16s... expected=%.16s...",
+                             computedHex, s_restExpectedSha256);
+                    taskENTER_CRITICAL(&s_restOtaMux);
+                    s_updateError = true;
+                    taskEXIT_CRITICAL(&s_restOtaMux);
+                    s_errorMessage = "SHA-256 mismatch: image rejected";
+                    emitRestOtaTelemetry("ota.rest.failed", s_totalReceived, s_contentLength,
+                                         detail);
+                    sha256ok = false;
+                }
+            }
+
+            if (!sha256ok) {
+                Update.abort();
+                OtaLed::showFailure();
+                restSha256ReleaseSession();
+                OtaLock::release();
+                return;
+            }
+
             if (Update.end(true)) {
                 taskENTER_CRITICAL(&s_restOtaMux);
                 s_updateSuccess = true;
@@ -504,6 +713,8 @@ void FirmwareHandlers::handleUpload(AsyncWebServerRequest* request,
                 // Show failure LED feedback (red flashes)
                 OtaLed::showFailure();
             }
+            // Release integrity-hash state (paired with any remaining begin-session)
+            restSha256ReleaseSession();
             // Release cross-transport lock (session is complete or failed)
             OtaLock::release();
         }
@@ -738,18 +949,17 @@ void FirmwareHandlers::handleFsUpload(AsyncWebServerRequest* request,
         s_fsContentLength = request->contentLength();
         size_t updateSize = (s_fsContentLength > 0) ? s_fsContentLength : UPDATE_SIZE_UNKNOWN;
 
-        // Set MD5 checksum for verification if provided via X-OTA-MD5 header.
-        if (request->hasHeader("X-OTA-MD5")) {
-            const String& md5Header = request->header("X-OTA-MD5");
-            if (md5Header.length() == 32) {
-                Update.setMD5(md5Header.c_str());
-            } else if (md5Header.length() > 0) {
+        // P1-10 hardening: integrity-hash policy (see restApplyHashPolicy).
+        {
+            String hashErr;
+            const char* hashReason = nullptr;
+            if (!restApplyHashPolicy(request, hashErr, hashReason)) {
                 taskENTER_CRITICAL(&s_restOtaMux);
                 s_fsUpdateError = true;
                 taskEXIT_CRITICAL(&s_restOtaMux);
-                s_fsErrorMessage = "X-OTA-MD5 header must be exactly 32 hex characters";
+                s_fsErrorMessage = hashErr;
                 emitFsOtaTelemetry("ota.fs.failed", 0, s_fsContentLength,
-                                    "invalid_md5_format");
+                                    hashReason ? hashReason : "integrity_hash_rejected");
                 OtaLock::release();
                 return;
             }
@@ -763,6 +973,7 @@ void FirmwareHandlers::handleFsUpload(AsyncWebServerRequest* request,
             s_fsErrorMessage = "Update.begin(U_SPIFFS) failed: " + String(Update.errorString());
             emitFsOtaTelemetry("ota.fs.failed", 0, s_fsContentLength,
                                 Update.errorString());
+            restSha256ReleaseSession();
             OtaLock::release();
             return;
         }
@@ -797,6 +1008,23 @@ void FirmwareHandlers::handleFsUpload(AsyncWebServerRequest* request,
                                 "write_failed");
             Update.abort();
             OtaLed::showFailure();
+            restSha256ReleaseSession();
+            OtaLock::release();
+            return;
+        }
+
+        // Feed accepted bytes into the running SHA-256 calculation.
+        if (s_restSha256Expected && !restSha256FeedChunk(data, written)) {
+            taskENTER_CRITICAL(&s_restOtaMux);
+            s_fsUpdateError = true;
+            s_fsUpdateStarted = false;
+            taskEXIT_CRITICAL(&s_restOtaMux);
+            s_fsErrorMessage = "SHA-256 streaming failure";
+            emitFsOtaTelemetry("ota.fs.failed", s_fsTotalReceived, s_fsContentLength,
+                                "sha256_update_failed");
+            Update.abort();
+            OtaLed::showFailure();
+            restSha256ReleaseSession();
             OtaLock::release();
             return;
         }
@@ -819,6 +1047,41 @@ void FirmwareHandlers::handleFsUpload(AsyncWebServerRequest* request,
         if (s_fsUpdateStarted) {
             OtaLed::showProgress(100);
 
+            // SHA-256 verification before partition swap.
+            bool sha256ok = true;
+            if (s_restSha256Expected) {
+                char computedHex[65] = {0};
+                if (!restSha256FinaliseHex(computedHex)) {
+                    taskENTER_CRITICAL(&s_restOtaMux);
+                    s_fsUpdateError = true;
+                    taskEXIT_CRITICAL(&s_restOtaMux);
+                    s_fsErrorMessage = "SHA-256 finalisation failed";
+                    emitFsOtaTelemetry("ota.fs.failed", s_fsTotalReceived, s_fsContentLength,
+                                        "sha256_finalise_failed");
+                    sha256ok = false;
+                } else if (!restConstTimeHexEquals(computedHex, s_restExpectedSha256, 64)) {
+                    char detail[160];
+                    snprintf(detail, sizeof(detail),
+                             "sha256 mismatch: computed=%.16s... expected=%.16s...",
+                             computedHex, s_restExpectedSha256);
+                    taskENTER_CRITICAL(&s_restOtaMux);
+                    s_fsUpdateError = true;
+                    taskEXIT_CRITICAL(&s_restOtaMux);
+                    s_fsErrorMessage = "SHA-256 mismatch: filesystem image rejected";
+                    emitFsOtaTelemetry("ota.fs.failed", s_fsTotalReceived, s_fsContentLength,
+                                        detail);
+                    sha256ok = false;
+                }
+            }
+
+            if (!sha256ok) {
+                Update.abort();
+                OtaLed::showFailure();
+                restSha256ReleaseSession();
+                OtaLock::release();
+                return;
+            }
+
             if (Update.end(true)) {
                 taskENTER_CRITICAL(&s_restOtaMux);
                 s_fsUpdateSuccess = true;
@@ -834,6 +1097,7 @@ void FirmwareHandlers::handleFsUpload(AsyncWebServerRequest* request,
                                     Update.errorString());
                 OtaLed::showFailure();
             }
+            restSha256ReleaseSession();
             // Release cross-transport lock (session is complete or failed)
             OtaLock::release();
         }

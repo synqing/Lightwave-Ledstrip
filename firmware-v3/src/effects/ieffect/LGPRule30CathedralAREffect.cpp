@@ -66,13 +66,8 @@ static inline void writeDualLocked(plugins::EffectContext& ctx, int i, const CRG
 // =========================================================================
 
 LGPRule30CathedralAREffect::LGPRule30CathedralAREffect()
-    : m_t(0.0f)
-    , m_stepAccum(0.0f)
-    , m_bass(0.0f), m_treble(0.0f), m_chromaAngle(0.0f)
-    , m_bassMax(0.15f), m_trebleMax(0.15f)
-    , m_impact(0.0f)
 #ifndef NATIVE_BUILD
-    , m_ps(nullptr)
+    : m_ps(nullptr)
 #endif
 {
 }
@@ -85,40 +80,50 @@ LGPRule30CathedralAREffect::~LGPRule30CathedralAREffect() {
 // CA helpers
 // =========================================================================
 
-void LGPRule30CathedralAREffect::seedCA() {
+void LGPRule30CathedralAREffect::seedCA(int z) {
 #ifndef NATIVE_BUILD
     if (!m_ps) return;
+    uint8_t* cells = m_ps->cells[z];
+    uint8_t* next = m_ps->next[z];
+#else
+    uint8_t* cells = m_cells[z];
+    uint8_t* next = m_next[z];
+#endif
 
     // Clear field
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        m_ps->cells[i] = 0;
-        m_ps->next[i] = 0;
+        cells[i] = 0;
+        next[i] = 0;
     }
 
     // Centre seed
     const int mid = (STRIP_LENGTH - 1) / 2;
-    m_ps->cells[mid] = 1;
-#endif
+    cells[mid] = 1;
 }
 
-void LGPRule30CathedralAREffect::stepCA() {
+void LGPRule30CathedralAREffect::stepCA(int z) {
 #ifndef NATIVE_BUILD
     if (!m_ps) return;
+    uint8_t* cells = m_ps->cells[z];
+    uint8_t* next = m_ps->next[z];
+#else
+    uint8_t* cells = m_cells[z];
+    uint8_t* next = m_next[z];
+#endif
 
     // Rule 30: new = l ^ (c | r)
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        const uint8_t l = (i > 0) ? m_ps->cells[i - 1] : 0;
-        const uint8_t c = m_ps->cells[i];
-        const uint8_t r = (i < STRIP_LENGTH - 1) ? m_ps->cells[i + 1] : 0;
+        const uint8_t l = (i > 0) ? cells[i - 1] : 0;
+        const uint8_t c = cells[i];
+        const uint8_t r = (i < STRIP_LENGTH - 1) ? cells[i + 1] : 0;
 
-        m_ps->next[i] = l ^ (c | r);
+        next[i] = l ^ (c | r);
     }
 
     // Swap buffers
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        m_ps->cells[i] = m_ps->next[i];
+        cells[i] = next[i];
     }
-#endif
 }
 
 // =========================================================================
@@ -126,11 +131,16 @@ void LGPRule30CathedralAREffect::stepCA() {
 // =========================================================================
 
 bool LGPRule30CathedralAREffect::init(plugins::EffectContext& ctx) {
-    m_t           = 0.0f;
-    m_stepAccum   = 0.0f;
-    m_bass = 0.0f; m_treble = 0.0f; m_chromaAngle = 0.0f;
-    m_bassMax = 0.15f; m_trebleMax = 0.15f;
-    m_impact = 0.0f;
+    for (uint8_t zi = 0; zi < kMaxZones; ++zi) {
+        m_t[zi] = 0.0f;
+        m_stepAccum[zi] = 0.0f;
+        m_bass[zi] = 0.0f;
+        m_treble[zi] = 0.0f;
+        m_chromaAngle[zi] = 0.0f;
+        m_bassMax[zi] = 0.15f;
+        m_trebleMax[zi] = 0.15f;
+        m_impact[zi] = 0.0f;
+    }
 
 #ifndef NATIVE_BUILD
     // Allocate PSRAM CA buffers
@@ -139,10 +149,10 @@ bool LGPRule30CathedralAREffect::init(plugins::EffectContext& ctx) {
             heap_caps_malloc(sizeof(Rule30Psram), MALLOC_CAP_SPIRAM)
         );
     }
-    if (m_ps) {
-        seedCA();
-    }
 #endif
+    for (uint8_t zi = 0; zi < kMaxZones; ++zi) {
+        seedCA(zi);
+    }
 
     lightwaveos::effects::cinema::reset();
     return true;
@@ -162,8 +172,11 @@ void LGPRule30CathedralAREffect::cleanup() {
 // =========================================================================
 
 void LGPRule30CathedralAREffect::render(plugins::EffectContext& ctx) {
+    const int z = (ctx.zoneId < kMaxZones) ? ctx.zoneId : 0;
+
 #ifndef NATIVE_BUILD
     if (!m_ps) return;
+    uint8_t* cells = m_ps->cells[z];
 #endif
 
     const float dt = ctx.getSafeRawDeltaSeconds();
@@ -178,8 +191,8 @@ void LGPRule30CathedralAREffect::render(plugins::EffectContext& ctx) {
     const float* chroma = ctx.audio.available ? ctx.audio.chroma() : nullptr;
 
     // STEP 2: Single-stage smoothing
-    m_bass += (rawBass - m_bass) * (1.0f - expf(-dt / kBassTau));
-    m_treble += (rawTreble - m_treble) * (1.0f - expf(-dt / kTrebleTau));
+    m_bass[z] += (rawBass - m_bass[z]) * (1.0f - expf(-dt / kBassTau));
+    m_treble[z] += (rawTreble - m_treble[z]) * (1.0f - expf(-dt / kTrebleTau));
 
     // Circular chroma EMA
     if (chroma) {
@@ -192,12 +205,12 @@ void LGPRule30CathedralAREffect::render(plugins::EffectContext& ctx) {
         if (sx * sx + sy * sy > 0.0001f) {
             float target = atan2f(sy, sx);
             if (target < 0.0f) target += kTwoPi;
-            float delta = target - m_chromaAngle;
+            float delta = target - m_chromaAngle[z];
             while (delta > kPi) delta -= kTwoPi;
             while (delta < -kPi) delta += kTwoPi;
-            m_chromaAngle += delta * (1.0f - expf(-dt / kChromaTau));
-            if (m_chromaAngle < 0.0f) m_chromaAngle += kTwoPi;
-            if (m_chromaAngle >= kTwoPi) m_chromaAngle -= kTwoPi;
+            m_chromaAngle[z] += delta * (1.0f - expf(-dt / kChromaTau));
+            if (m_chromaAngle[z] < 0.0f) m_chromaAngle[z] += kTwoPi;
+            if (m_chromaAngle[z] >= kTwoPi) m_chromaAngle[z] -= kTwoPi;
         }
     }
 
@@ -205,20 +218,20 @@ void LGPRule30CathedralAREffect::render(plugins::EffectContext& ctx) {
     {
         float aA = 1.0f - expf(-dt / kFollowerAttackTau);
         float dA = 1.0f - expf(-dt / kFollowerDecayTau);
-        if (m_bass > m_bassMax) m_bassMax += (m_bass - m_bassMax) * aA;
-        else m_bassMax += (m_bass - m_bassMax) * dA;
-        if (m_bassMax < kFollowerFloor) m_bassMax = kFollowerFloor;
+        if (m_bass[z] > m_bassMax[z]) m_bassMax[z] += (m_bass[z] - m_bassMax[z]) * aA;
+        else m_bassMax[z] += (m_bass[z] - m_bassMax[z]) * dA;
+        if (m_bassMax[z] < kFollowerFloor) m_bassMax[z] = kFollowerFloor;
 
-        if (m_treble > m_trebleMax) m_trebleMax += (m_treble - m_trebleMax) * aA;
-        else m_trebleMax += (m_treble - m_trebleMax) * dA;
-        if (m_trebleMax < kFollowerFloor) m_trebleMax = kFollowerFloor;
+        if (m_treble[z] > m_trebleMax[z]) m_trebleMax[z] += (m_treble[z] - m_trebleMax[z]) * aA;
+        else m_trebleMax[z] += (m_treble[z] - m_trebleMax[z]) * dA;
+        if (m_trebleMax[z] < kFollowerFloor) m_trebleMax[z] = kFollowerFloor;
     }
-    const float normBass = clamp01(m_bass / m_bassMax);
-    const float normTreble = clamp01(m_treble / m_trebleMax);
+    const float normBass = clamp01(m_bass[z] / m_bassMax[z]);
+    const float normTreble = clamp01(m_treble[z] / m_trebleMax[z]);
 
     // STEP 4: Impact (continuous beatStrength rise, exponential decay)
-    if (beatStr > m_impact) m_impact = beatStr;
-    m_impact *= expf(-dt / kImpactDecayTau);
+    if (beatStr > m_impact[z]) m_impact[z] = beatStr;
+    m_impact[z] *= expf(-dt / kImpactDecayTau);
 
     // Beat modulation
     const float beatMod = 0.3f + 0.7f * beatStr;
@@ -228,10 +241,8 @@ void LGPRule30CathedralAREffect::render(plugins::EffectContext& ctx) {
     // =================================================================
 
     // Impact reseeds the CA on strong beats
-    if (m_impact > 0.8f && beatStr > 0.7f) {
-#ifndef NATIVE_BUILD
-        seedCA();
-#endif
+    if (m_impact[z] > 0.8f && beatStr > 0.7f) {
+        seedCA(z);
     }
 
     // Step rate: bass + speed drive CA stepping
@@ -239,14 +250,14 @@ void LGPRule30CathedralAREffect::render(plugins::EffectContext& ctx) {
     const float structureMod = (0.60f + 0.40f * normTreble);
     const float stepsPerFrame = baseStepsPerFrame * structureMod;
 
-    m_stepAccum += stepsPerFrame * dtVis;
+    m_stepAccum[z] += stepsPerFrame * dtVis;
 
-    while (m_stepAccum >= 1.0f) {
-        stepCA();
-        m_stepAccum -= 1.0f;
+    while (m_stepAccum[z] >= 1.0f) {
+        stepCA(z);
+        m_stepAccum[z] -= 1.0f;
     }
 
-    m_t += dtVis;
+    m_t[z] += dtVis;
 
     // =================================================================
     // PER-PIXEL RENDER
@@ -255,14 +266,14 @@ void LGPRule30CathedralAREffect::render(plugins::EffectContext& ctx) {
     const float mid = (STRIP_LENGTH - 1) * 0.5f;
 
     // Hue from chroma
-    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle * (255.0f / kTwoPi)) + ctx.gHue;
+    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle[z] * (255.0f / kTwoPi)) + ctx.gHue;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
 #ifndef NATIVE_BUILD
         // 3-tap neighbourhood blur for smooth arches
-        const float l = (i > 0) ? static_cast<float>(m_ps->cells[i - 1]) : 0.0f;
-        const float c = static_cast<float>(m_ps->cells[i]);
-        const float r = (i < STRIP_LENGTH - 1) ? static_cast<float>(m_ps->cells[i + 1]) : 0.0f;
+        const float l = (i > 0) ? static_cast<float>(cells[i - 1]) : 0.0f;
+        const float c = static_cast<float>(cells[i]);
+        const float r = (i < STRIP_LENGTH - 1) ? static_cast<float>(cells[i + 1]) : 0.0f;
 
         const float caValue = (0.25f * l + 0.50f * c + 0.25f * r);
 #else
@@ -277,7 +288,7 @@ void LGPRule30CathedralAREffect::render(plugins::EffectContext& ctx) {
         // Neighbourhood-based hue shift
         const float neighbourhoodSum = (i > 0 && i < STRIP_LENGTH - 1) ?
 #ifndef NATIVE_BUILD
-            static_cast<float>(m_ps->cells[i-1]) + static_cast<float>(m_ps->cells[i]) + static_cast<float>(m_ps->cells[i+1])
+            static_cast<float>(cells[i - 1]) + static_cast<float>(cells[i]) + static_cast<float>(cells[i + 1])
 #else
             1.5f
 #endif
@@ -288,7 +299,7 @@ void LGPRule30CathedralAREffect::render(plugins::EffectContext& ctx) {
         float structuredGeom = caValue * glue;
 
         // Impact: additive burst at CA cells
-        float impactAdd = m_impact * caValue * 0.40f;
+        float impactAdd = m_impact[z] * caValue * 0.40f;
 
         // Compose: geometry * normBass * silScale * beatMod
         float brightness = (structuredGeom * normBass + impactAdd) * beatMod * silScale;

@@ -60,80 +60,64 @@ static inline float smooth01(float x) {
     return x * x * (3.0f - 2.0f * x);
 }
 
-LGPTimeReversalMirrorEffect_Mod1::LGPTimeReversalMirrorEffect_Mod1()
-    : m_ps(nullptr)
-    , m_phaseTimer(0.0f)
-    , m_isReverse(false)
-    , m_frameInPhase(0)
-    , m_historyWrite(0)
-    , m_historyCount(0)
-    , m_reverseCursor(0.0f)
-    , m_frameSinceImpulse(0)
-    , m_framesSinceBeatImpulse(0)
-    , m_storyTime(0.0f)
-    , m_introPhase(0.0f)
-    , m_normMin(0.45f)
-    , m_normMax(0.55f)
-    , m_fallbackPhase(0.0f)
-{
-}
+LGPTimeReversalMirrorEffect_Mod1::LGPTimeReversalMirrorEffect_Mod1() = default;
 
-void LGPTimeReversalMirrorEffect_Mod1::seedField() {
+void LGPTimeReversalMirrorEffect_Mod1::seedField(int z) {
     if (!m_ps) return;
     for (uint16_t i = 0; i < kFieldSize; i++) {
         float distNorm = static_cast<float>(i) / static_cast<float>(kFieldSize - 1);
         float bump = expf(-distNorm * distNorm * 18.0f) * 0.3f;
-        m_ps->u_curr[i] = 0.5f + bump;
-        m_ps->u_prev[i] = 0.5f;
-        m_ps->u_next[i] = 0.5f;
+        m_ps->u_curr[z][i] = 0.5f + bump;
+        m_ps->u_prev[z][i] = 0.5f;
+        m_ps->u_next[z][i] = 0.5f;
     }
-    m_normMin = 0.45f;
-    m_normMax = 0.55f;
+    m_normMin[z] = 0.45f;
+    m_normMax[z] = 0.55f;
 }
 
-void LGPTimeReversalMirrorEffect_Mod1::beginForwardPhase(bool reseedField) {
-    m_isReverse = false;
-    m_phaseTimer = 0.0f;
-    m_frameInPhase = 0;
-    m_historyWrite = 0;
-    m_historyCount = 0;
-    m_reverseCursor = 0.0f;
-    m_frameSinceImpulse = 0;
-    m_framesSinceBeatImpulse = 0;
+void LGPTimeReversalMirrorEffect_Mod1::beginForwardPhase(int z, bool reseedField) {
+    m_isReverse[z] = false;
+    m_phaseTimer[z] = 0.0f;
+    m_frameInPhase[z] = 0;
+    m_historyWrite[z] = 0;
+    m_historyCount[z] = 0;
+    m_reverseCursor[z] = 0.0f;
+    m_frameSinceImpulse[z] = 0;
+    m_framesSinceBeatImpulse[z] = 0;
 
     if (reseedField) {
-        seedField();
-        m_introPhase = 0.0f;
+        seedField(z);
+        m_introPhase[z] = 0.0f;
         return;
     }
 
     // Preserve continuity between cycles while gently re-centering the field.
     for (uint16_t i = 0; i < kFieldSize; i++) {
-        float carry = clampf(m_ps->u_curr[i], 0.0f, 1.0f);
+        float carry = clampf(m_ps->u_curr[z][i], 0.0f, 1.0f);
         float centred = 0.92f * carry + 0.08f * 0.5f;
-        m_ps->u_curr[i] = centred;
-        m_ps->u_prev[i] = centred;
-        m_ps->u_next[i] = centred;
+        m_ps->u_curr[z][i] = centred;
+        m_ps->u_prev[z][i] = centred;
+        m_ps->u_next[z][i] = centred;
     }
     for (uint16_t k = 0; k < 12; k++) {
         float g = expf(-(float)(k * k) * 0.22f) * 0.035f;
-        m_ps->u_curr[k] = clampf(m_ps->u_curr[k] + g, 0.0f, 1.0f);
+        m_ps->u_curr[z][k] = clampf(m_ps->u_curr[z][k] + g, 0.0f, 1.0f);
     }
 }
 
-void LGPTimeReversalMirrorEffect_Mod1::beginReversePhase() {
-    m_isReverse = true;
-    m_phaseTimer = 0.0f;
-    m_frameInPhase = 0;
-    m_reverseCursor = (m_historyCount > 0) ? static_cast<float>(m_historyCount - 1) : 0.0f;
+void LGPTimeReversalMirrorEffect_Mod1::beginReversePhase(int z) {
+    m_isReverse[z] = true;
+    m_phaseTimer[z] = 0.0f;
+    m_frameInPhase[z] = 0;
+    m_reverseCursor[z] = (m_historyCount[z] > 0) ? static_cast<float>(m_historyCount[z] - 1) : 0.0f;
 }
 
-uint16_t LGPTimeReversalMirrorEffect_Mod1::historySlotFromChrono(uint16_t chronoIndex) const {
+uint16_t LGPTimeReversalMirrorEffect_Mod1::historySlotFromChrono(int z, uint16_t chronoIndex) const {
     // chronoIndex is oldest->newest over [0 .. m_historyCount-1].
-    if (m_historyCount < kHistoryDepth) {
+    if (m_historyCount[z] < kHistoryDepth) {
         return chronoIndex;
     }
-    uint16_t oldest = m_historyWrite;  // Next write slot is oldest frame in a full ring.
+    uint16_t oldest = m_historyWrite[z];  // Next write slot is oldest frame in a full ring.
     return static_cast<uint16_t>((oldest + chronoIndex) % kHistoryDepth);
 }
 
@@ -166,32 +150,35 @@ bool LGPTimeReversalMirrorEffect_Mod1::init(plugins::EffectContext& ctx) {
     m_ps = nullptr;
 #endif
 
-    m_phaseTimer = 0.0f;
-    m_isReverse = false;
-    m_frameInPhase = 0;
-    m_historyWrite = 0;
-    m_historyCount = 0;
-    m_reverseCursor = 0.0f;
-    m_frameSinceImpulse = 0;
-    m_framesSinceBeatImpulse = 0;
-    m_storyTime = 0.0f;
-    m_introPhase = 0.0f;
-    m_normMin = 0.45f;
-    m_normMax = 0.55f;
-    m_fallbackPhase = 0.0f;
-
-    beginForwardPhase(true);
+    for (uint8_t zi = 0; zi < kMaxZones; ++zi) {
+        m_phaseTimer[zi] = 0.0f;
+        m_isReverse[zi] = false;
+        m_frameInPhase[zi] = 0;
+        m_historyWrite[zi] = 0;
+        m_historyCount[zi] = 0;
+        m_reverseCursor[zi] = 0.0f;
+        m_frameSinceImpulse[zi] = 0;
+        m_framesSinceBeatImpulse[zi] = 0;
+        m_storyTime[zi] = 0.0f;
+        m_introPhase[zi] = 0.0f;
+        m_normMin[zi] = 0.45f;
+        m_normMax[zi] = 0.55f;
+        m_fallbackPhase[zi] = 0.0f;
+        beginForwardPhase(zi, true);
+    }
 
 #if FEATURE_AUDIO_SYNC
-    for (uint8_t i = 0; i < 12; i++) {
-        m_chromaFollowers[i].reset(0.0f);
-        m_chromaSmoothed[i] = 0.0f;
-        m_chromaTargets[i] = 0.0f;
+    for (uint8_t zi = 0; zi < kMaxZones; ++zi) {
+        for (uint8_t i = 0; i < 12; i++) {
+            m_chromaFollowers[zi][i].reset(0.0f);
+            m_chromaSmoothed[zi][i] = 0.0f;
+            m_chromaTargets[zi][i] = 0.0f;
+        }
+        m_chromaAngle[zi] = 0.0f;
+        m_rmsFollower[zi].reset(0.0f);
+        m_targetRms[zi] = 0.0f;
+        m_lastHopSeq[zi] = 0;
     }
-    m_chromaAngle = 0.0f;
-    m_rmsFollower.reset(0.0f);
-    m_targetRms = 0.0f;
-    m_lastHopSeq = 0;
 #endif
 
     return true;
@@ -199,15 +186,35 @@ bool LGPTimeReversalMirrorEffect_Mod1::init(plugins::EffectContext& ctx) {
 
 void LGPTimeReversalMirrorEffect_Mod1::render(plugins::EffectContext& ctx) {
     if (!m_ps) return;
+    const int z = (ctx.zoneId < kMaxZones) ? ctx.zoneId : 0;
+
+    float* u_prev = m_ps->u_prev[z];
+    float* u_curr = m_ps->u_curr[z];
+    float* u_next = m_ps->u_next[z];
+    float (*history)[kFieldSize] = m_ps->history[z];
+
+    float& phaseTimer = m_phaseTimer[z];
+    bool& isReverse = m_isReverse[z];
+    uint16_t& frameInPhase = m_frameInPhase[z];
+    uint16_t& historyWrite = m_historyWrite[z];
+    uint16_t& historyCount = m_historyCount[z];
+    float& reverseCursor = m_reverseCursor[z];
+    uint16_t& frameSinceImpulse = m_frameSinceImpulse[z];
+    uint16_t& framesSinceBeatImpulse = m_framesSinceBeatImpulse[z];
+    float& storyTime = m_storyTime[z];
+    float& introPhase = m_introPhase[z];
+    float& normMin = m_normMin[z];
+    float& normMax = m_normMax[z];
+    float& fallbackPhase = m_fallbackPhase[z];
 
     float rawDt = ctx.getSafeRawDeltaSeconds();
     float speedNorm = ctx.speed / 50.0f;
     float moodNorm = ctx.getMoodNormalized();
-    m_storyTime += rawDt;
+    storyTime += rawDt;
 
     // Slow modulators (irrationally related rates) for long-form non-repeating evolution.
-    float storyA = 0.5f + 0.5f * sinf(m_storyTime * 0.071f);
-    float storyB = 0.5f + 0.5f * sinf(m_storyTime * 0.113f + 1.7f);
+    float storyA = 0.5f + 0.5f * sinf(storyTime * 0.071f);
+    float storyB = 0.5f + 0.5f * sinf(storyTime * 0.113f + 1.7f);
 
     float forwardDur = (m_forwardSec * (0.88f + 0.24f * storyB)) / fmaxf(speedNorm, 0.2f);
     float reverseDur = (m_reverseSec * (0.90f + 0.20f * (1.0f - storyA))) / fmaxf(speedNorm, 0.2f);
@@ -222,81 +229,89 @@ void LGPTimeReversalMirrorEffect_Mod1::render(plugins::EffectContext& ctx) {
 
 #if FEATURE_AUDIO_SYNC
     bool beatTriggered = false;
+    float* chromaSmoothed = m_chromaSmoothed[z];
+    float* chromaTargets = m_chromaTargets[z];
+    enhancement::AsymmetricFollower* chromaFollowers = m_chromaFollowers[z];
+    float& chromaAngle = m_chromaAngle[z];
+    enhancement::AsymmetricFollower& rmsFollower = m_rmsFollower[z];
+    float& targetRms = m_targetRms[z];
+    uint32_t& lastHopSeq = m_lastHopSeq[z];
+
     if (ctx.audio.available) {
-        bool newHop = (ctx.audio.hopSequence() != m_lastHopSeq);
+        bool newHop = (ctx.audio.hopSequence() != lastHopSeq);
         if (newHop) {
-            m_lastHopSeq = ctx.audio.hopSequence();
-            m_targetRms = ctx.audio.rms();
+            lastHopSeq = ctx.audio.hopSequence();
+            targetRms = ctx.audio.rms();
             for (uint8_t i = 0; i < 12; i++) {
-                m_chromaTargets[i] = ctx.audio.getHeavyChroma(i);
+                chromaTargets[i] = ctx.audio.getHeavyChroma(i);
             }
         }
 
-        float smoothedRms = m_rmsFollower.updateWithMood(m_targetRms, rawDt, moodNorm);
+        float smoothedRms = rmsFollower.updateWithMood(targetRms, rawDt, moodNorm);
         for (uint8_t i = 0; i < 12; i++) {
-            m_chromaSmoothed[i] = m_chromaFollowers[i].updateWithMood(
-                m_chromaTargets[i], rawDt, moodNorm);
+            chromaSmoothed[i] = chromaFollowers[i].updateWithMood(
+                chromaTargets[i], rawDt, moodNorm);
         }
 
         chromaHue = effects::chroma::circularChromaHueSmoothed(
-            m_chromaSmoothed, m_chromaAngle, rawDt, 0.20f);
+            chromaSmoothed, chromaAngle, rawDt, 0.20f);
 
         // Narrower range than base effect to keep wave launches coherent.
         impulseStrength = 0.42f + 0.46f * clampf(smoothedRms * 1.8f, 0.0f, 1.0f);
         beatTriggered = ctx.audio.isOnBeat();
     } else {
-        m_fallbackPhase += speedNorm * 0.35f * rawDt;
-        if (m_fallbackPhase > 6.2831853f) m_fallbackPhase -= 6.2831853f;
-        chromaHue = static_cast<uint8_t>(m_fallbackPhase * (255.0f / 6.2831853f));
+        fallbackPhase += speedNorm * 0.35f * rawDt;
+        if (fallbackPhase > 6.2831853f) fallbackPhase -= 6.2831853f;
+        chromaHue = static_cast<uint8_t>(fallbackPhase * (255.0f / 6.2831853f));
     }
 #else
-    m_fallbackPhase += speedNorm * 0.35f * rawDt;
-    if (m_fallbackPhase > 6.2831853f) m_fallbackPhase -= 6.2831853f;
-    chromaHue = static_cast<uint8_t>(m_fallbackPhase * (255.0f / 6.2831853f));
+    fallbackPhase += speedNorm * 0.35f * rawDt;
+    if (fallbackPhase > 6.2831853f) fallbackPhase -= 6.2831853f;
+    chromaHue = static_cast<uint8_t>(fallbackPhase * (255.0f / 6.2831853f));
 #endif
 
-    m_phaseTimer += rawDt;
-    m_frameInPhase++;
+    phaseTimer += rawDt;
+    frameInPhase++;
 
-    if (!m_isReverse) {
-        if (m_phaseTimer >= forwardDur && m_historyCount > 8) {
-            beginReversePhase();
+    if (!isReverse) {
+        if (phaseTimer >= forwardDur && historyCount > 8) {
+            beginReversePhase(z);
         } else {
             // Fluid opening: continuous centre drive envelope to avoid staccato starts.
-            float introProgress = clampf(m_phaseTimer / m_introSec, 0.0f, 1.0f);
+            float introProgress = clampf(phaseTimer / m_introSec, 0.0f, 1.0f);
             float introEnv = 1.0f - smooth01(introProgress);
-            m_introPhase += rawDt * 6.2831853f * (0.95f + 0.45f * storyB);
-            if (m_introPhase > 6.2831853f) m_introPhase -= 6.2831853f;
-            float introCarrier = 0.5f + 0.5f * sinf(m_introPhase);
+            introPhase += rawDt * 6.2831853f * (0.95f + 0.45f * storyB);
+            if (introPhase > 6.2831853f) introPhase -= 6.2831853f;
+            float introCarrier = 0.5f + 0.5f * sinf(introPhase);
             float introGain = introEnv * (m_introDrive + 0.03f * storyA) * (0.65f + 0.35f * introCarrier);
             if (introGain > 0.0001f) {
                 for (uint16_t k = 0; k < 16; k++) {
                     float g = expf(-(float)(k * k) * 0.18f) * introGain;
-                    m_ps->u_curr[k] = clampf(m_ps->u_curr[k] + g, 0.0f, 1.0f);
+                    u_curr[k] = clampf(u_curr[k] + g, 0.0f, 1.0f);
                 }
             }
 
-            m_frameSinceImpulse++;
-            m_framesSinceBeatImpulse++;
-            bool doImpulse = (m_frameSinceImpulse >= impulseEveryLocal);
+            frameSinceImpulse++;
+            framesSinceBeatImpulse++;
+            bool doImpulse = (frameSinceImpulse >= impulseEveryLocal);
 
 #if FEATURE_AUDIO_SYNC
             uint16_t beatCooldown = (introEnv > 0.05f)
                                   ? static_cast<uint16_t>(kBeatImpulseCooldownFrames * 2)
                                   : kBeatImpulseCooldownFrames;
-            if (beatTriggered && m_framesSinceBeatImpulse >= beatCooldown) {
+            if (beatTriggered && framesSinceBeatImpulse >= beatCooldown) {
                 doImpulse = true;
             }
 #endif
 
             if (doImpulse) {
-                m_frameSinceImpulse = 0;
-                m_framesSinceBeatImpulse = 0;
+                frameSinceImpulse = 0;
+                framesSinceBeatImpulse = 0;
                 float pulseStrength = impulseStrength * (0.68f + 0.32f * smooth01(introProgress));
                 for (uint16_t k = 0; k < 10; k++) {
                     float g = expf(-(float)(k * k) * 0.35f) * pulseStrength * 0.19f;
-                    m_ps->u_curr[k] += g;
-                    m_ps->u_curr[k] = clampf(m_ps->u_curr[k], 0.0f, 1.0f);
+                    u_curr[k] += g;
+                    u_curr[k] = clampf(u_curr[k], 0.0f, 1.0f);
                 }
             }
 
@@ -307,97 +322,97 @@ void LGPTimeReversalMirrorEffect_Mod1::render(plugins::EffectContext& ctx) {
                 float left;
                 float right;
                 if (i == 0) {
-                    left = m_ps->u_curr[1];
-                    right = m_ps->u_curr[1];
+                    left = u_curr[1];
+                    right = u_curr[1];
                 } else if (i < kFieldSize - 1) {
-                    left = m_ps->u_curr[i - 1];
-                    right = m_ps->u_curr[i + 1];
+                    left = u_curr[i - 1];
+                    right = u_curr[i + 1];
                 } else {
-                    left = m_ps->u_curr[i - 1];
-                    right = m_ps->u_curr[i];
+                    left = u_curr[i - 1];
+                    right = u_curr[i];
                 }
 
-                float laplacian = left - 2.0f * m_ps->u_curr[i] + right;
+                float laplacian = left - 2.0f * u_curr[i] + right;
 
                 float edgeNorm = static_cast<float>(i) / static_cast<float>(kFieldSize - 1);
                 float edgeFactor = clampf((edgeNorm - 0.75f) / 0.25f, 0.0f, 1.0f);
                 float localDamping = moodDamping + edgeFactor * m_edgeAbsorb;
 
-                m_ps->u_next[i] = 2.0f * m_ps->u_curr[i]
-                                - m_ps->u_prev[i]
+                u_next[i] = 2.0f * u_curr[i]
+                                - u_prev[i]
                                 + cSqLocal * laplacian
-                                - localDamping * m_ps->u_curr[i];
+                                - localDamping * u_curr[i];
 
-                m_ps->u_next[i] = clampf(m_ps->u_next[i], -0.35f, 1.35f);
+                u_next[i] = clampf(u_next[i], -0.35f, 1.35f);
             }
 
-            memcpy(m_ps->u_prev, m_ps->u_curr, sizeof(float) * kFieldSize);
-            memcpy(m_ps->u_curr, m_ps->u_next, sizeof(float) * kFieldSize);
+            memcpy(u_prev, u_curr, sizeof(float) * kFieldSize);
+            memcpy(u_curr, u_next, sizeof(float) * kFieldSize);
 
             // True ring-buffer write.
-            memcpy(m_ps->history[m_historyWrite], m_ps->u_curr, sizeof(float) * kFieldSize);
-            m_historyWrite = static_cast<uint16_t>((m_historyWrite + 1) % kHistoryDepth);
-            if (m_historyCount < kHistoryDepth) {
-                m_historyCount++;
+            memcpy(history[historyWrite], u_curr, sizeof(float) * kFieldSize);
+            historyWrite = static_cast<uint16_t>((historyWrite + 1) % kHistoryDepth);
+            if (historyCount < kHistoryDepth) {
+                historyCount++;
             }
         }
     } else {
-        if (m_historyCount < 2) {
-            beginForwardPhase(true);
+        if (historyCount < 2) {
+            beginForwardPhase(z, true);
         } else {
-            float maxCursor = static_cast<float>(m_historyCount - 1);
-            float cursor = clampf(m_reverseCursor, 0.0f, maxCursor);
+            float maxCursor = static_cast<float>(historyCount - 1);
+            float cursor = clampf(reverseCursor, 0.0f, maxCursor);
 
             uint16_t c0 = static_cast<uint16_t>(floorf(cursor));
-            uint16_t c1 = (c0 + 1 < m_historyCount) ? static_cast<uint16_t>(c0 + 1) : c0;
+            uint16_t c1 = (c0 + 1 < historyCount) ? static_cast<uint16_t>(c0 + 1) : c0;
             float t = cursor - static_cast<float>(c0);
 
-            uint16_t slot0 = historySlotFromChrono(c0);
-            uint16_t slot1 = historySlotFromChrono(c1);
-            const float* snap0 = m_ps->history[slot0];
-            const float* snap1 = m_ps->history[slot1];
+            uint16_t slot0 = historySlotFromChrono(z, c0);
+            uint16_t slot1 = historySlotFromChrono(z, c1);
+            const float* snap0 = history[slot0];
+            const float* snap1 = history[slot1];
 
             for (uint16_t i = 0; i < kFieldSize; i++) {
                 float v = snap0[i] + (snap1[i] - snap0[i]) * t;
-                m_ps->u_curr[i] = 1.0f - v;  // Phase flip around 0.5
+                u_curr[i] = 1.0f - v;  // Phase flip around 0.5
             }
 
             float reverseRate = maxCursor / fmaxf(reverseDur, 0.1f);
-            m_reverseCursor -= reverseRate * rawDt;
+            reverseCursor -= reverseRate * rawDt;
 
             // Exit immediately after reaching frame 0 to avoid a held "stuck" tail.
-            if (m_phaseTimer >= reverseDur || m_reverseCursor <= 0.0f) {
-                beginForwardPhase(false);
+            if (phaseTimer >= reverseDur || reverseCursor <= 0.0f) {
+                beginForwardPhase(z, false);
             }
         }
     }
 
-    float fieldMin = m_ps->u_curr[0];
-    float fieldMax = m_ps->u_curr[0];
+    float fieldMin = u_curr[0];
+    float fieldMax = u_curr[0];
     for (uint16_t i = 1; i < kFieldSize; i++) {
-        if (m_ps->u_curr[i] < fieldMin) fieldMin = m_ps->u_curr[i];
-        if (m_ps->u_curr[i] > fieldMax) fieldMax = m_ps->u_curr[i];
+        if (u_curr[i] < fieldMin) fieldMin = u_curr[i];
+        if (u_curr[i] > fieldMax) fieldMax = u_curr[i];
     }
 
     float followAlpha = clampf(rawDt * m_normaliseFollowHz, 0.02f, 1.0f);
-    m_normMin += (fieldMin - m_normMin) * followAlpha;
-    m_normMax += (fieldMax - m_normMax) * followAlpha;
+    normMin += (fieldMin - normMin) * followAlpha;
+    normMax += (fieldMax - normMax) * followAlpha;
 
-    float range = m_normMax - m_normMin;
+    float range = normMax - normMin;
     if (range < 0.05f) {
-        float mid = 0.5f * (m_normMin + m_normMax);
-        m_normMin = mid - 0.025f;
-        m_normMax = mid + 0.025f;
+        float mid = 0.5f * (normMin + normMax);
+        normMin = mid - 0.025f;
+        normMax = mid + 0.025f;
         range = 0.05f;
     }
 
-    uint8_t reverseHueShift = m_isReverse ? 16 : 0;
+    uint8_t reverseHueShift = isReverse ? 16 : 0;
 
     for (uint16_t i = 0; i < STRIP_LENGTH; i++) {
         uint16_t dist = centerPairDistance(i);
         uint16_t fi = (dist < kFieldSize) ? dist : static_cast<uint16_t>(kFieldSize - 1);
 
-        float fieldVal = (m_ps->u_curr[fi] - m_normMin) / range;
+        float fieldVal = (u_curr[fi] - normMin) / range;
         fieldVal = clampf(fieldVal, 0.0f, 1.0f);
         float sculpted = powf(fieldVal, m_peakGamma);  // Preserve sharp "fang" peaks.
         uint8_t brightness = static_cast<uint8_t>(sculpted * static_cast<float>(ctx.brightness));
@@ -410,7 +425,7 @@ void LGPTimeReversalMirrorEffect_Mod1::render(plugins::EffectContext& ctx) {
 
         // Strip 2: reduced offset for stronger coherence, still visually separated.
         uint16_t fi2 = (fi + 8 < kFieldSize) ? static_cast<uint16_t>(fi + 8) : static_cast<uint16_t>(kFieldSize - 1);
-        float fieldVal2 = (m_ps->u_curr[fi2] - m_normMin) / range;
+        float fieldVal2 = (u_curr[fi2] - normMin) / range;
         fieldVal2 = clampf(fieldVal2, 0.0f, 1.0f);
         float sculpted2 = powf(fieldVal2, m_peakGamma);
         uint8_t brightness2 = static_cast<uint8_t>(sculpted2 * static_cast<float>(ctx.brightness));

@@ -75,25 +75,18 @@ static inline float tri01(float x) {
 // Construction / init / cleanup
 // =========================================================================
 
-LGPMachDiamondsAREffect::LGPMachDiamondsAREffect()
-    : m_t(0.0f)
-    , m_bass(0.0f)
-    , m_treble(0.0f)
-    , m_chromaAngle(0.0f)
-    , m_bassMax(0.15f)
-    , m_trebleMax(0.15f)
-    , m_impact(0.0f)
-{
-}
+LGPMachDiamondsAREffect::LGPMachDiamondsAREffect() = default;
 
 bool LGPMachDiamondsAREffect::init(plugins::EffectContext& ctx) {
-    m_t           = 0.0f;
-    m_bass        = 0.0f;
-    m_treble      = 0.0f;
-    m_chromaAngle = 0.0f;
-    m_bassMax     = 0.15f;
-    m_trebleMax   = 0.15f;
-    m_impact      = 0.0f;
+    for (uint8_t zi = 0; zi < kMaxZones; ++zi) {
+        m_t[zi] = 0.0f;
+        m_bass[zi] = 0.0f;
+        m_treble[zi] = 0.0f;
+        m_chromaAngle[zi] = 0.0f;
+        m_bassMax[zi] = 0.15f;
+        m_trebleMax[zi] = 0.15f;
+        m_impact[zi] = 0.0f;
+    }
     lightwaveos::effects::cinema::reset();
     return true;
 }
@@ -103,6 +96,7 @@ bool LGPMachDiamondsAREffect::init(plugins::EffectContext& ctx) {
 // =========================================================================
 
 void LGPMachDiamondsAREffect::render(plugins::EffectContext& ctx) {
+    const int z = (ctx.zoneId < kMaxZones) ? ctx.zoneId : 0;
 
     // --- Timing (raw, not SPEED-scaled, for audio-coupled maths) ---
     const float dt = ctx.getSafeRawDeltaSeconds();
@@ -147,11 +141,11 @@ void LGPMachDiamondsAREffect::render(plugins::EffectContext& ctx) {
 
     {
         const float bassAlpha = 1.0f - expf(-dt / kBassTau);
-        m_bass += (rawBass - m_bass) * bassAlpha;
+        m_bass[z] += (rawBass - m_bass[z]) * bassAlpha;
     }
     {
         const float trebleAlpha = 1.0f - expf(-dt / kTrebleTau);
-        m_treble += (rawTreble - m_treble) * trebleAlpha;
+        m_treble[z] += (rawTreble - m_treble[z]) * trebleAlpha;
     }
 
     // Circular chroma EMA → hue angle
@@ -168,16 +162,16 @@ void LGPMachDiamondsAREffect::render(plugins::EffectContext& ctx) {
             if (targetAngle < 0.0f) targetAngle += kTwoPi;
 
             // Circular shortest-path delta
-            float delta = targetAngle - m_chromaAngle;
+            float delta = targetAngle - m_chromaAngle[z];
             while (delta > kPi) delta -= kTwoPi;
             while (delta < -kPi) delta += kTwoPi;
 
             const float chromaAlpha = 1.0f - expf(-dt / kChromaTau);
-            m_chromaAngle += delta * chromaAlpha;
+            m_chromaAngle[z] += delta * chromaAlpha;
 
             // Wrap to [0, 2π)
-            if (m_chromaAngle < 0.0f) m_chromaAngle += kTwoPi;
-            if (m_chromaAngle >= kTwoPi) m_chromaAngle -= kTwoPi;
+            if (m_chromaAngle[z] < 0.0f) m_chromaAngle[z] += kTwoPi;
+            if (m_chromaAngle[z] >= kTwoPi) m_chromaAngle[z] -= kTwoPi;
         }
     }
 
@@ -190,12 +184,12 @@ void LGPMachDiamondsAREffect::render(plugins::EffectContext& ctx) {
         const float attackAlpha = 1.0f - expf(-dt / kFollowerAttackTau);
         const float decayAlpha  = 1.0f - expf(-dt / kFollowerDecayTau);
 
-        if (m_bass > m_bassMax) {
-            m_bassMax += (m_bass - m_bassMax) * attackAlpha;   // Fast rise
+        if (m_bass[z] > m_bassMax[z]) {
+            m_bassMax[z] += (m_bass[z] - m_bassMax[z]) * attackAlpha;   // Fast rise
         } else {
-            m_bassMax += (m_bass - m_bassMax) * decayAlpha;    // Slow fall
+            m_bassMax[z] += (m_bass[z] - m_bassMax[z]) * decayAlpha;    // Slow fall
         }
-        if (m_bassMax < kFollowerFloor) m_bassMax = kFollowerFloor;
+        if (m_bassMax[z] < kFollowerFloor) m_bassMax[z] = kFollowerFloor;
     }
 
     // Treble max follower
@@ -203,32 +197,32 @@ void LGPMachDiamondsAREffect::render(plugins::EffectContext& ctx) {
         const float attackAlpha = 1.0f - expf(-dt / kFollowerAttackTau);
         const float decayAlpha  = 1.0f - expf(-dt / kFollowerDecayTau);
 
-        if (m_treble > m_trebleMax) {
-            m_trebleMax += (m_treble - m_trebleMax) * attackAlpha;
+        if (m_treble[z] > m_trebleMax[z]) {
+            m_trebleMax[z] += (m_treble[z] - m_trebleMax[z]) * attackAlpha;
         } else {
-            m_trebleMax += (m_treble - m_trebleMax) * decayAlpha;
+            m_trebleMax[z] += (m_treble[z] - m_trebleMax[z]) * decayAlpha;
         }
-        if (m_trebleMax < kFollowerFloor) m_trebleMax = kFollowerFloor;
+        if (m_trebleMax[z] < kFollowerFloor) m_trebleMax[z] = kFollowerFloor;
     }
 
     // Normalised audio (dynamic gain: quiet content amplified, loud content capped)
-    const float normBass   = clamp01(m_bass / m_bassMax);
-    const float normTreble = clamp01(m_treble / m_trebleMax);
+    const float normBass   = clamp01(m_bass[z] / m_bassMax[z]);
+    const float normTreble = clamp01(m_treble[z] / m_trebleMax[z]);
 
     // =================================================================
     // STEP 4: Beat/percussion impact (exponential decay)
     // =================================================================
 
     // Beat strength drives impact directly (continuous, not boolean)
-    if (beatStr > m_impact) {
-        m_impact = beatStr;  // Immediate rise to beat strength
+    if (beatStr > m_impact[z]) {
+        m_impact[z] = beatStr;  // Immediate rise to beat strength
     }
     // Snare accent stacks on top
     if (snareHit) {
-        m_impact = fmaxf(m_impact, 0.80f);
+        m_impact[z] = fmaxf(m_impact[z], 0.80f);
     }
     // Exponential decay
-    m_impact *= expf(-dt / kImpactDecayTau);
+    m_impact[z] *= expf(-dt / kImpactDecayTau);
 
     // =================================================================
     // STEP 5: Visual parameters driven by normalised audio
@@ -243,16 +237,16 @@ void LGPMachDiamondsAREffect::render(plugins::EffectContext& ctx) {
 
     // Diamond sharpness: treble sharpens peaks
     const float sharpExp = clampf(
-        2.0f + 1.5f * normTreble + 0.5f * m_impact, 1.8f, 4.0f);
+        2.0f + 1.5f * normTreble + 0.5f * m_impact[z], 1.8f, 4.0f);
 
     // Motion drift (SPEED-scaled time, not audio time)
     const float tRate = (1.0f + 4.0f * speedNorm);
-    m_t += tRate * dtVis;
-    const float drift = m_t * (0.20f + 0.35f * speedNorm);
+    m_t[z] += tRate * dtVis;
+    const float drift = m_t[z] * (0.20f + 0.35f * speedNorm);
 
     // Hue from chroma angle
     const uint8_t baseHue = static_cast<uint8_t>(
-        m_chromaAngle * (255.0f / kTwoPi)) + ctx.gHue;
+        m_chromaAngle[z] * (255.0f / kTwoPi)) + ctx.gHue;
 
     // Trail persistence: more energy = shorter trails (faster fade)
     const uint8_t fadeAmount = static_cast<uint8_t>(
@@ -273,10 +267,10 @@ void LGPMachDiamondsAREffect::render(plugins::EffectContext& ctx) {
         const float geom = powf(tri, sharpExp);
 
         // Diamond breathing (subtle cosine wobble)
-        const float breathing = 0.90f + 0.10f * cosf(kTwoPi * cellPhase + m_t * 0.6f);
+        const float breathing = 0.90f + 0.10f * cosf(kTwoPi * cellPhase + m_t[z] * 0.6f);
 
         // Impact accent at diamond peaks
-        const float impactAdd = m_impact * powf(tri, 1.5f) * 0.4f;
+        const float impactAdd = m_impact[z] * powf(tri, 1.5f) * 0.4f;
 
         // Compose brightness: audio magnitude × geometry × beat × silence
         float brightness = (normBass * geom * breathing + impactAdd) * beatMod * silScale;

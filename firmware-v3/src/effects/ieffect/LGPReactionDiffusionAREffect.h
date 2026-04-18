@@ -39,25 +39,33 @@ public:
     float getParameter(const char* name) const override;
 
 private:
+    static constexpr uint8_t kMaxZones = 4;
     static constexpr uint16_t kStripLen = 160;
 
     // PSRAM-allocated Gray-Scott simulation buffers
+#ifndef NATIVE_BUILD
     struct PsramData {
-        float u[kStripLen];
-        float v[kStripLen];
-        float u2[kStripLen];
-        float v2[kStripLen];
+        float u[kMaxZones][kStripLen];
+        float v[kMaxZones][kStripLen];
+        float u2[kMaxZones][kStripLen];
+        float v2[kMaxZones][kStripLen];
     };
     PsramData* m_ps = nullptr;
+#else
+    float m_u[kMaxZones][kStripLen];
+    float m_v[kMaxZones][kStripLen];
+    float m_u2[kMaxZones][kStripLen];
+    float m_v2[kMaxZones][kStripLen];
+#endif
 
-    float m_t = 0.0f;
+    float m_t[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
 
-    float m_bass       = 0.0f;
-    float m_chromaAngle = 0.0f;
+    float m_bass[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float m_chromaAngle[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
 
-    float m_bassMax    = 0.15f;
+    float m_bassMax[kMaxZones] = {0.15f, 0.15f, 0.15f, 0.15f};
 
-    float m_impact     = 0.0f;
+    float m_impact[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
 };
 
 } // namespace ieffect

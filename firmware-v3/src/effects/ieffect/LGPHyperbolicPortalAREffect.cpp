@@ -65,18 +65,24 @@ static inline float smoothstep(float edge0, float edge1, float x) {
 }
 
 // Constructor
-LGPHyperbolicPortalAREffect::LGPHyperbolicPortalAREffect()
-    : m_phi(0.0f), m_bass(0.0f), m_treble(0.0f), m_chromaAngle(0.0f),
-      m_bassMax(0.15f), m_trebleMax(0.15f), m_impact(0.0f) {}
+LGPHyperbolicPortalAREffect::LGPHyperbolicPortalAREffect() = default;
 
 bool LGPHyperbolicPortalAREffect::init(plugins::EffectContext& ctx) {
-    m_phi = 0.0f; m_bass = 0.0f; m_treble = 0.0f; m_chromaAngle = 0.0f;
-    m_bassMax = 0.15f; m_trebleMax = 0.15f; m_impact = 0.0f;
+    for (uint8_t zi = 0; zi < kMaxZones; ++zi) {
+        m_phi[zi] = 0.0f;
+        m_bass[zi] = 0.0f;
+        m_treble[zi] = 0.0f;
+        m_chromaAngle[zi] = 0.0f;
+        m_bassMax[zi] = 0.15f;
+        m_trebleMax[zi] = 0.15f;
+        m_impact[zi] = 0.0f;
+    }
     lightwaveos::effects::cinema::reset();
     return true;
 }
 
 void LGPHyperbolicPortalAREffect::render(plugins::EffectContext& ctx) {
+    const int z = (ctx.zoneId < kMaxZones) ? ctx.zoneId : 0;
     const float dt = ctx.getSafeRawDeltaSeconds();
     const float dtVis = ctx.getSafeDeltaSeconds();
     const float speedNorm = ctx.speed / 50.0f;
@@ -89,8 +95,8 @@ void LGPHyperbolicPortalAREffect::render(plugins::EffectContext& ctx) {
     const float* chroma = ctx.audio.available ? ctx.audio.chroma() : nullptr;
 
     // STEP 2: Single-stage smoothing
-    m_bass += (rawBass - m_bass) * (1.0f - expf(-dt / kBassTau));
-    m_treble += (rawTreble - m_treble) * (1.0f - expf(-dt / kTrebleTau));
+    m_bass[z] += (rawBass - m_bass[z]) * (1.0f - expf(-dt / kBassTau));
+    m_treble[z] += (rawTreble - m_treble[z]) * (1.0f - expf(-dt / kTrebleTau));
 
     // Circular chroma EMA
     if (chroma) {
@@ -103,12 +109,12 @@ void LGPHyperbolicPortalAREffect::render(plugins::EffectContext& ctx) {
         if (sx * sx + sy * sy > 0.0001f) {
             float target = atan2f(sy, sx);
             if (target < 0.0f) target += kTwoPi;
-            float delta = target - m_chromaAngle;
+            float delta = target - m_chromaAngle[z];
             while (delta > kPi) delta -= kTwoPi;
             while (delta < -kPi) delta += kTwoPi;
-            m_chromaAngle += delta * (1.0f - expf(-dt / kChromaTau));
-            if (m_chromaAngle < 0.0f) m_chromaAngle += kTwoPi;
-            if (m_chromaAngle >= kTwoPi) m_chromaAngle -= kTwoPi;
+            m_chromaAngle[z] += delta * (1.0f - expf(-dt / kChromaTau));
+            if (m_chromaAngle[z] < 0.0f) m_chromaAngle[z] += kTwoPi;
+            if (m_chromaAngle[z] >= kTwoPi) m_chromaAngle[z] -= kTwoPi;
         }
     }
 
@@ -116,20 +122,20 @@ void LGPHyperbolicPortalAREffect::render(plugins::EffectContext& ctx) {
     {
         float aA = 1.0f - expf(-dt / kFollowerAttackTau);
         float dA = 1.0f - expf(-dt / kFollowerDecayTau);
-        if (m_bass > m_bassMax) m_bassMax += (m_bass - m_bassMax) * aA;
-        else m_bassMax += (m_bass - m_bassMax) * dA;
-        if (m_bassMax < kFollowerFloor) m_bassMax = kFollowerFloor;
+        if (m_bass[z] > m_bassMax[z]) m_bassMax[z] += (m_bass[z] - m_bassMax[z]) * aA;
+        else m_bassMax[z] += (m_bass[z] - m_bassMax[z]) * dA;
+        if (m_bassMax[z] < kFollowerFloor) m_bassMax[z] = kFollowerFloor;
 
-        if (m_treble > m_trebleMax) m_trebleMax += (m_treble - m_trebleMax) * aA;
-        else m_trebleMax += (m_treble - m_trebleMax) * dA;
-        if (m_trebleMax < kFollowerFloor) m_trebleMax = kFollowerFloor;
+        if (m_treble[z] > m_trebleMax[z]) m_trebleMax[z] += (m_treble[z] - m_trebleMax[z]) * aA;
+        else m_trebleMax[z] += (m_treble[z] - m_trebleMax[z]) * dA;
+        if (m_trebleMax[z] < kFollowerFloor) m_trebleMax[z] = kFollowerFloor;
     }
-    const float normBass = clamp01(m_bass / m_bassMax);
-    const float normTreble = clamp01(m_treble / m_trebleMax);
+    const float normBass = clamp01(m_bass[z] / m_bassMax[z]);
+    const float normTreble = clamp01(m_treble[z] / m_trebleMax[z]);
 
     // STEP 4: Impact (continuous beatStrength rise, exponential decay)
-    if (beatStr > m_impact) m_impact = beatStr;
-    m_impact *= expf(-dt / kImpactDecayTau);
+    if (beatStr > m_impact[z]) m_impact[z] = beatStr;
+    m_impact[z] *= expf(-dt / kImpactDecayTau);
 
     // STEP 5: Portal visual parameters
     const float beatMod = 0.3f + 0.7f * beatStr;
@@ -140,10 +146,10 @@ void LGPHyperbolicPortalAREffect::render(plugins::EffectContext& ctx) {
 
     // Phase rotation accumulation
     float phiRate = 0.80f + 3.50f * speedNorm;
-    m_phi += phiRate * dtVis;
+    m_phi[z] += phiRate * dtVis;
 
     // Hue from chroma
-    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle * (255.0f / kTwoPi)) + ctx.gHue;
+    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle[z] * (255.0f / kTwoPi)) + ctx.gHue;
 
     // Trail persistence: more energy = shorter trails
     uint8_t fadeAmt = static_cast<uint8_t>(clampf(20.0f + 30.0f * (1.0f - normBass), 14.0f, 52.0f));
@@ -162,8 +168,8 @@ void LGPHyperbolicPortalAREffect::render(plugins::EffectContext& ctx) {
         const float u = artanh_safe(r);
 
         // Multi-band ribs
-        const float rib1 = sinf(w1 * u + m_phi);
-        const float rib2 = sinf(w2 * u - 0.7f * m_phi);
+        const float rib1 = sinf(w1 * u + m_phi[z]);
+        const float rib2 = sinf(w2 * u - 0.7f * m_phi[z]);
         const float ribRaw = rib1 + 0.62f * rib2;
 
         // Sharp bands via smoothstep + pow
@@ -180,7 +186,7 @@ void LGPHyperbolicPortalAREffect::render(plugins::EffectContext& ctx) {
         const float portalShape = ribSharp * edgeBoost * glue;
 
         // Impact: brightens ribs
-        const float impactAdd = m_impact * ribSharp * 0.4f;
+        const float impactAdd = m_impact[z] * ribSharp * 0.4f;
 
         // Compose brightness: audio magnitude x geometry x beat x silence
         float brightness = (portalShape * normBass + impactAdd) * beatMod * silScale;

@@ -42,18 +42,25 @@ static inline float clampf(float x, float lo, float hi) {
     return x;
 }
 
-LGPRoseBloomAREffect::LGPRoseBloomAREffect()
-    : m_t(0.0f), m_bass(0.0f), m_mid(0.0f), m_chromaAngle(0.0f),
-      m_bassMax(0.15f), m_midMax(0.15f), m_petalK(5.0f), m_impact(0.0f) {}
+LGPRoseBloomAREffect::LGPRoseBloomAREffect() = default;
 
 bool LGPRoseBloomAREffect::init(plugins::EffectContext& ctx) {
-    m_t = 0.0f; m_bass = 0.0f; m_mid = 0.0f; m_chromaAngle = 0.0f;
-    m_bassMax = 0.15f; m_midMax = 0.15f; m_petalK = 5.0f; m_impact = 0.0f;
+    for (uint8_t zi = 0; zi < kMaxZones; ++zi) {
+        m_t[zi] = 0.0f;
+        m_bass[zi] = 0.0f;
+        m_mid[zi] = 0.0f;
+        m_chromaAngle[zi] = 0.0f;
+        m_bassMax[zi] = 0.15f;
+        m_midMax[zi] = 0.15f;
+        m_petalK[zi] = 5.0f;
+        m_impact[zi] = 0.0f;
+    }
     lightwaveos::effects::cinema::reset();
     return true;
 }
 
 void LGPRoseBloomAREffect::render(plugins::EffectContext& ctx) {
+    const int z = (ctx.zoneId < kMaxZones) ? ctx.zoneId : 0;
     const float dt = ctx.getSafeRawDeltaSeconds();
     const float dtVis = ctx.getSafeDeltaSeconds();
     const float speedNorm = ctx.speed / 50.0f;
@@ -66,8 +73,8 @@ void LGPRoseBloomAREffect::render(plugins::EffectContext& ctx) {
     const float* chroma = ctx.audio.available ? ctx.audio.chroma() : nullptr;
 
     // STEP 2: Single-stage smoothing
-    m_bass += (rawBass - m_bass) * (1.0f - expf(-dt / kBassTau));
-    m_mid += (rawMid - m_mid) * (1.0f - expf(-dt / kMidTau));
+    m_bass[z] += (rawBass - m_bass[z]) * (1.0f - expf(-dt / kBassTau));
+    m_mid[z] += (rawMid - m_mid[z]) * (1.0f - expf(-dt / kMidTau));
 
     // Circular chroma EMA
     if (chroma) {
@@ -80,12 +87,12 @@ void LGPRoseBloomAREffect::render(plugins::EffectContext& ctx) {
         if (sx * sx + sy * sy > 0.0001f) {
             float target = atan2f(sy, sx);
             if (target < 0.0f) target += kTwoPi;
-            float delta = target - m_chromaAngle;
+            float delta = target - m_chromaAngle[z];
             while (delta > kPi) delta -= kTwoPi;
             while (delta < -kPi) delta += kTwoPi;
-            m_chromaAngle += delta * (1.0f - expf(-dt / kChromaTau));
-            if (m_chromaAngle < 0.0f) m_chromaAngle += kTwoPi;
-            if (m_chromaAngle >= kTwoPi) m_chromaAngle -= kTwoPi;
+            m_chromaAngle[z] += delta * (1.0f - expf(-dt / kChromaTau));
+            if (m_chromaAngle[z] < 0.0f) m_chromaAngle[z] += kTwoPi;
+            if (m_chromaAngle[z] >= kTwoPi) m_chromaAngle[z] -= kTwoPi;
         }
     }
 
@@ -93,20 +100,20 @@ void LGPRoseBloomAREffect::render(plugins::EffectContext& ctx) {
     {
         float aA = 1.0f - expf(-dt / kFollowerAttackTau);
         float dA = 1.0f - expf(-dt / kFollowerDecayTau);
-        if (m_bass > m_bassMax) m_bassMax += (m_bass - m_bassMax) * aA;
-        else m_bassMax += (m_bass - m_bassMax) * dA;
-        if (m_bassMax < kFollowerFloor) m_bassMax = kFollowerFloor;
+        if (m_bass[z] > m_bassMax[z]) m_bassMax[z] += (m_bass[z] - m_bassMax[z]) * aA;
+        else m_bassMax[z] += (m_bass[z] - m_bassMax[z]) * dA;
+        if (m_bassMax[z] < kFollowerFloor) m_bassMax[z] = kFollowerFloor;
 
-        if (m_mid > m_midMax) m_midMax += (m_mid - m_midMax) * aA;
-        else m_midMax += (m_mid - m_midMax) * dA;
-        if (m_midMax < kFollowerFloor) m_midMax = kFollowerFloor;
+        if (m_mid[z] > m_midMax[z]) m_midMax[z] += (m_mid[z] - m_midMax[z]) * aA;
+        else m_midMax[z] += (m_mid[z] - m_midMax[z]) * dA;
+        if (m_midMax[z] < kFollowerFloor) m_midMax[z] = kFollowerFloor;
     }
-    const float normBass = clamp01(m_bass / m_bassMax);
-    const float normMid = clamp01(m_mid / m_midMax);
+    const float normBass = clamp01(m_bass[z] / m_bassMax[z]);
+    const float normMid = clamp01(m_mid[z] / m_midMax[z]);
 
     // STEP 4: Impact
-    if (beatStr > m_impact) m_impact = beatStr;
-    m_impact *= expf(-dt / kImpactDecayTau);
+    if (beatStr > m_impact[z]) m_impact[z] = beatStr;
+    m_impact[z] *= expf(-dt / kImpactDecayTau);
 
     // STEP 5: Rose visual parameters
     const float beatMod = 0.3f + 0.7f * beatStr;
@@ -114,21 +121,21 @@ void LGPRoseBloomAREffect::render(plugins::EffectContext& ctx) {
     // Petal count driven by mid energy (3-7 petals)
     float kfTarget = 3.0f + 4.0f * normMid;
     float petalAlpha = 1.0f - expf(-dt / 0.25f);
-    m_petalK += (kfTarget - m_petalK) * petalAlpha;
-    m_petalK = clampf(m_petalK, 3.0f, 7.0f);
+    m_petalK[z] += (kfTarget - m_petalK[z]) * petalAlpha;
+    m_petalK[z] = clampf(m_petalK[z], 3.0f, 7.0f);
 
     // Motion
     float tRate = 0.3f + 1.8f * speedNorm;
-    m_t += tRate * dtVis;
+    m_t[z] += tRate * dtVis;
 
     // Bloom modulation: opening/closing
-    float bloomMod = 0.55f + 0.45f * sinf(m_t * 0.35f);
+    float bloomMod = 0.55f + 0.45f * sinf(m_t[z] * 0.35f);
 
     // Band width: tighter with impact
-    float bandWidth = clampf(0.14f - 0.04f * m_impact, 0.08f, 0.18f);
+    float bandWidth = clampf(0.14f - 0.04f * m_impact[z], 0.08f, 0.18f);
 
     // Hue from chroma
-    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle * (255.0f / kTwoPi)) + ctx.gHue;
+    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle[z] * (255.0f / kTwoPi)) + ctx.gHue;
 
     // Trail persistence
     uint8_t fadeAmt = static_cast<uint8_t>(clampf(20.0f + 35.0f * (1.0f - normBass), 14.0f, 55.0f));
@@ -144,17 +151,17 @@ void LGPRoseBloomAREffect::render(plugins::EffectContext& ctx) {
         // 1D rhodonea: distance from LED to curve position
         // On 1D strip, theta is either 0 or pi. Use progress as radial position.
         float r = static_cast<float>(dist);
-        float rCurve = fabsf(cosf(m_petalK * kPi * progress)) * mid * bloomMod;
+        float rCurve = fabsf(cosf(m_petalK[z] * kPi * progress)) * mid * bloomMod;
         float distToCurve = fabsf(r - rCurve) / mid;
 
         // Gaussian band around curve
         float band = expf(-distToCurve * distToCurve / (bandWidth * bandWidth));
 
         // Breathing
-        float breathing = 0.90f + 0.10f * cosf(kTwoPi * (progress + m_t * 0.25f));
+        float breathing = 0.90f + 0.10f * cosf(kTwoPi * (progress + m_t[z] * 0.25f));
 
         // Impact flash at petal edges
-        float impactAdd = m_impact * band * 0.35f;
+        float impactAdd = m_impact[z] * band * 0.35f;
 
         // Compose brightness: audio x geometry x beat x silence
         float brightness = (normBass * band * breathing + impactAdd) * beatMod * silScale;

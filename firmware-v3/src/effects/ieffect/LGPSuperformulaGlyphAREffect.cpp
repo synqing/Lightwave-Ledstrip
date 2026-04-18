@@ -51,20 +51,28 @@ static float evalSuperformula(float phi, float m, float n1, float n2, float n3) 
     return clampf(powf(sum, -1.0f / n1) * 0.35f, 0.0f, 1.0f);
 }
 
-LGPSuperformulaGlyphAREffect::LGPSuperformulaGlyphAREffect()
-    : m_t(0.0f), m_bass(0.0f), m_mid(0.0f), m_chromaAngle(0.0f),
-      m_bassMax(0.15f), m_midMax(0.15f), m_impact(0.0f),
-      m_param_m(6.0f), m_param_n1(1.0f), m_param_n2(1.5f), m_param_n3(1.5f) {}
+LGPSuperformulaGlyphAREffect::LGPSuperformulaGlyphAREffect() = default;
 
 bool LGPSuperformulaGlyphAREffect::init(plugins::EffectContext& ctx) {
-    m_t = 0.0f; m_bass = 0.0f; m_mid = 0.0f; m_chromaAngle = 0.0f;
-    m_bassMax = 0.15f; m_midMax = 0.15f; m_impact = 0.0f;
-    m_param_m = 6.0f; m_param_n1 = 1.0f; m_param_n2 = 1.5f; m_param_n3 = 1.5f;
+    for (uint8_t zi = 0; zi < kMaxZones; ++zi) {
+        m_t[zi] = 0.0f;
+        m_bass[zi] = 0.0f;
+        m_mid[zi] = 0.0f;
+        m_chromaAngle[zi] = 0.0f;
+        m_bassMax[zi] = 0.15f;
+        m_midMax[zi] = 0.15f;
+        m_impact[zi] = 0.0f;
+        m_param_m[zi] = 6.0f;
+        m_param_n1[zi] = 1.0f;
+        m_param_n2[zi] = 1.5f;
+        m_param_n3[zi] = 1.5f;
+    }
     lightwaveos::effects::cinema::reset();
     return true;
 }
 
 void LGPSuperformulaGlyphAREffect::render(plugins::EffectContext& ctx) {
+    const int z = (ctx.zoneId < kMaxZones) ? ctx.zoneId : 0;
     const float dt = ctx.getSafeRawDeltaSeconds();
     const float dtVis = ctx.getSafeDeltaSeconds();
     const float speedNorm = ctx.speed / 50.0f;
@@ -75,8 +83,8 @@ void LGPSuperformulaGlyphAREffect::render(plugins::EffectContext& ctx) {
     const float silScale = ctx.audio.available ? ctx.audio.silentScale() : 0.0f;
     const float* chroma = ctx.audio.available ? ctx.audio.chroma() : nullptr;
 
-    m_bass += (rawBass - m_bass) * (1.0f - expf(-dt / kBassTau));
-    m_mid += (rawMid - m_mid) * (1.0f - expf(-dt / kMidTau));
+    m_bass[z] += (rawBass - m_bass[z]) * (1.0f - expf(-dt / kBassTau));
+    m_mid[z] += (rawMid - m_mid[z]) * (1.0f - expf(-dt / kMidTau));
 
     if (chroma) {
         float sx = 0.0f, sy = 0.0f;
@@ -88,51 +96,51 @@ void LGPSuperformulaGlyphAREffect::render(plugins::EffectContext& ctx) {
         if (sx * sx + sy * sy > 0.0001f) {
             float target = atan2f(sy, sx);
             if (target < 0.0f) target += kTwoPi;
-            float delta = target - m_chromaAngle;
+            float delta = target - m_chromaAngle[z];
             while (delta > kPi) delta -= kTwoPi;
             while (delta < -kPi) delta += kTwoPi;
-            m_chromaAngle += delta * (1.0f - expf(-dt / kChromaTau));
-            if (m_chromaAngle < 0.0f) m_chromaAngle += kTwoPi;
-            if (m_chromaAngle >= kTwoPi) m_chromaAngle -= kTwoPi;
+            m_chromaAngle[z] += delta * (1.0f - expf(-dt / kChromaTau));
+            if (m_chromaAngle[z] < 0.0f) m_chromaAngle[z] += kTwoPi;
+            if (m_chromaAngle[z] >= kTwoPi) m_chromaAngle[z] -= kTwoPi;
         }
     }
 
     {
         float aA = 1.0f - expf(-dt / kFollowerAttackTau);
         float dA = 1.0f - expf(-dt / kFollowerDecayTau);
-        if (m_bass > m_bassMax) m_bassMax += (m_bass - m_bassMax) * aA;
-        else m_bassMax += (m_bass - m_bassMax) * dA;
-        if (m_bassMax < kFollowerFloor) m_bassMax = kFollowerFloor;
-        if (m_mid > m_midMax) m_midMax += (m_mid - m_midMax) * aA;
-        else m_midMax += (m_mid - m_midMax) * dA;
-        if (m_midMax < kFollowerFloor) m_midMax = kFollowerFloor;
+        if (m_bass[z] > m_bassMax[z]) m_bassMax[z] += (m_bass[z] - m_bassMax[z]) * aA;
+        else m_bassMax[z] += (m_bass[z] - m_bassMax[z]) * dA;
+        if (m_bassMax[z] < kFollowerFloor) m_bassMax[z] = kFollowerFloor;
+        if (m_mid[z] > m_midMax[z]) m_midMax[z] += (m_mid[z] - m_midMax[z]) * aA;
+        else m_midMax[z] += (m_mid[z] - m_midMax[z]) * dA;
+        if (m_midMax[z] < kFollowerFloor) m_midMax[z] = kFollowerFloor;
     }
-    const float normBass = clamp01(m_bass / m_bassMax);
-    const float normMid = clamp01(m_mid / m_midMax);
+    const float normBass = clamp01(m_bass[z] / m_bassMax[z]);
+    const float normMid = clamp01(m_mid[z] / m_midMax[z]);
 
-    if (beatStr > m_impact) m_impact = beatStr;
-    m_impact *= expf(-dt / kImpactDecayTau);
+    if (beatStr > m_impact[z]) m_impact[z] = beatStr;
+    m_impact[z] *= expf(-dt / kImpactDecayTau);
 
     // Morph superformula params with normalised audio
     float paramAlpha = 1.0f - expf(-dt / 0.20f);
-    float target_m = clampf(6.0f + 5.0f * normMid * (0.5f + 0.5f * sinf(m_t * 0.3f)), 3.0f, 11.0f);
-    m_param_m += (target_m - m_param_m) * paramAlpha;
-    float target_n1 = clampf(1.0f + 0.6f * normBass * cosf(m_t * 0.25f), 0.7f, 1.6f);
-    m_param_n1 += (target_n1 - m_param_n1) * paramAlpha;
+    float target_m = clampf(6.0f + 5.0f * normMid * (0.5f + 0.5f * sinf(m_t[z] * 0.3f)), 3.0f, 11.0f);
+    m_param_m[z] += (target_m - m_param_m[z]) * paramAlpha;
+    float target_n1 = clampf(1.0f + 0.6f * normBass * cosf(m_t[z] * 0.25f), 0.7f, 1.6f);
+    m_param_n1[z] += (target_n1 - m_param_n1[z]) * paramAlpha;
     float target_n2 = clampf(1.5f + 0.9f * normBass, 0.8f, 2.4f);
-    m_param_n2 += (target_n2 - m_param_n2) * paramAlpha;
-    float target_n3 = clampf(1.5f + 0.9f * normMid * sinf(m_t * 0.4f), 0.8f, 2.4f);
-    m_param_n3 += (target_n3 - m_param_n3) * paramAlpha;
+    m_param_n2[z] += (target_n2 - m_param_n2[z]) * paramAlpha;
+    float target_n3 = clampf(1.5f + 0.9f * normMid * sinf(m_t[z] * 0.4f), 0.8f, 2.4f);
+    m_param_n3[z] += (target_n3 - m_param_n3[z]) * paramAlpha;
 
     const float beatMod = 0.3f + 0.7f * beatStr;
 
     float tRate = 0.8f + 3.5f * speedNorm;
-    m_t += tRate * dtVis;
+    m_t[z] += tRate * dtVis;
 
-    float glyphRotation = m_t * 0.15f;
+    float glyphRotation = m_t[z] * 0.15f;
     float bandWidth = clampf(0.12f - 0.04f * normBass, 0.06f, 0.16f);
 
-    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle * (255.0f / kTwoPi)) + ctx.gHue;
+    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle[z] * (255.0f / kTwoPi)) + ctx.gHue;
 
     uint8_t fadeAmt = static_cast<uint8_t>(clampf(20.0f + 35.0f * (1.0f - normBass), 14.0f, 55.0f));
     fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmt);
@@ -145,13 +153,13 @@ void LGPSuperformulaGlyphAREffect::render(plugins::EffectContext& ctx) {
         float dmid = static_cast<float>(dist);
 
         float phi = atan2f(dmid, 1.0f) + glyphRotation;
-        float r_formula = evalSuperformula(phi, m_param_m, m_param_n1, m_param_n2, m_param_n3);
+        float r_formula = evalSuperformula(phi, m_param_m[z], m_param_n1[z], m_param_n2[z], m_param_n3[z]);
 
         float distToCurve = fabsf(progress - r_formula);
         float bandWave = expf(-distToCurve / bandWidth);
 
-        float breathing = 0.90f + 0.10f * cosf(kTwoPi * progress * 2.0f + m_t * 0.8f);
-        float impactAdd = m_impact * bandWave * 0.35f;
+        float breathing = 0.90f + 0.10f * cosf(kTwoPi * progress * 2.0f + m_t[z] * 0.8f);
+        float impactAdd = m_impact[z] * bandWave * 0.35f;
 
         float brightness = (normBass * bandWave * breathing + impactAdd) * beatMod * silScale;
         brightness *= brightness;

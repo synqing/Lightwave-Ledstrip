@@ -101,18 +101,24 @@ static float distToCurve(float r, float theta, float r_param) {
 }
 
 // Constructor
-LGPSpirographCrownAREffect::LGPSpirographCrownAREffect()
-    : m_t(0.0f), m_bass(0.0f), m_treble(0.0f), m_chromaAngle(0.0f),
-      m_bassMax(0.15f), m_trebleMax(0.15f), m_impact(0.0f) {}
+LGPSpirographCrownAREffect::LGPSpirographCrownAREffect() = default;
 
 bool LGPSpirographCrownAREffect::init(plugins::EffectContext& ctx) {
-    m_t = 0.0f; m_bass = 0.0f; m_treble = 0.0f; m_chromaAngle = 0.0f;
-    m_bassMax = 0.15f; m_trebleMax = 0.15f; m_impact = 0.0f;
+    for (uint8_t zi = 0; zi < kMaxZones; ++zi) {
+        m_t[zi] = 0.0f;
+        m_bass[zi] = 0.0f;
+        m_treble[zi] = 0.0f;
+        m_chromaAngle[zi] = 0.0f;
+        m_bassMax[zi] = 0.15f;
+        m_trebleMax[zi] = 0.15f;
+        m_impact[zi] = 0.0f;
+    }
     lightwaveos::effects::cinema::reset();
     return true;
 }
 
 void LGPSpirographCrownAREffect::render(plugins::EffectContext& ctx) {
+    const int z = (ctx.zoneId < kMaxZones) ? ctx.zoneId : 0;
     const float dt = ctx.getSafeRawDeltaSeconds();
     const float dtVis = ctx.getSafeDeltaSeconds();
     const float speedNorm = ctx.speed / 50.0f;
@@ -125,8 +131,8 @@ void LGPSpirographCrownAREffect::render(plugins::EffectContext& ctx) {
     const float* chroma = ctx.audio.available ? ctx.audio.chroma() : nullptr;
 
     // STEP 2: Single-stage smoothing
-    m_bass += (rawBass - m_bass) * (1.0f - expf(-dt / kBassTau));
-    m_treble += (rawTreble - m_treble) * (1.0f - expf(-dt / kTrebleTau));
+    m_bass[z] += (rawBass - m_bass[z]) * (1.0f - expf(-dt / kBassTau));
+    m_treble[z] += (rawTreble - m_treble[z]) * (1.0f - expf(-dt / kTrebleTau));
 
     // Circular chroma EMA
     if (chroma) {
@@ -139,12 +145,12 @@ void LGPSpirographCrownAREffect::render(plugins::EffectContext& ctx) {
         if (sx * sx + sy * sy > 0.0001f) {
             float target = atan2f(sy, sx);
             if (target < 0.0f) target += kTwoPi;
-            float delta = target - m_chromaAngle;
+            float delta = target - m_chromaAngle[z];
             while (delta > kPi) delta -= kTwoPi;
             while (delta < -kPi) delta += kTwoPi;
-            m_chromaAngle += delta * (1.0f - expf(-dt / kChromaTau));
-            if (m_chromaAngle < 0.0f) m_chromaAngle += kTwoPi;
-            if (m_chromaAngle >= kTwoPi) m_chromaAngle -= kTwoPi;
+            m_chromaAngle[z] += delta * (1.0f - expf(-dt / kChromaTau));
+            if (m_chromaAngle[z] < 0.0f) m_chromaAngle[z] += kTwoPi;
+            if (m_chromaAngle[z] >= kTwoPi) m_chromaAngle[z] -= kTwoPi;
         }
     }
 
@@ -152,20 +158,20 @@ void LGPSpirographCrownAREffect::render(plugins::EffectContext& ctx) {
     {
         float aA = 1.0f - expf(-dt / kFollowerAttackTau);
         float dA = 1.0f - expf(-dt / kFollowerDecayTau);
-        if (m_bass > m_bassMax) m_bassMax += (m_bass - m_bassMax) * aA;
-        else m_bassMax += (m_bass - m_bassMax) * dA;
-        if (m_bassMax < kFollowerFloor) m_bassMax = kFollowerFloor;
+        if (m_bass[z] > m_bassMax[z]) m_bassMax[z] += (m_bass[z] - m_bassMax[z]) * aA;
+        else m_bassMax[z] += (m_bass[z] - m_bassMax[z]) * dA;
+        if (m_bassMax[z] < kFollowerFloor) m_bassMax[z] = kFollowerFloor;
 
-        if (m_treble > m_trebleMax) m_trebleMax += (m_treble - m_trebleMax) * aA;
-        else m_trebleMax += (m_treble - m_trebleMax) * dA;
-        if (m_trebleMax < kFollowerFloor) m_trebleMax = kFollowerFloor;
+        if (m_treble[z] > m_trebleMax[z]) m_trebleMax[z] += (m_treble[z] - m_trebleMax[z]) * aA;
+        else m_trebleMax[z] += (m_treble[z] - m_trebleMax[z]) * dA;
+        if (m_trebleMax[z] < kFollowerFloor) m_trebleMax[z] = kFollowerFloor;
     }
-    const float normBass = clamp01(m_bass / m_bassMax);
-    const float normTreble = clamp01(m_treble / m_trebleMax);
+    const float normBass = clamp01(m_bass[z] / m_bassMax[z]);
+    const float normTreble = clamp01(m_treble[z] / m_trebleMax[z]);
 
     // STEP 4: Impact (continuous beatStrength rise, exponential decay)
-    if (beatStr > m_impact) m_impact = beatStr;
-    m_impact *= expf(-dt / kImpactDecayTau);
+    if (beatStr > m_impact[z]) m_impact[z] = beatStr;
+    m_impact[z] *= expf(-dt / kImpactDecayTau);
 
     // STEP 5: Crown visual parameters
     const float beatMod = 0.3f + 0.7f * beatStr;
@@ -174,14 +180,14 @@ void LGPSpirographCrownAREffect::render(plugins::EffectContext& ctx) {
     const float r_drift = 0.30f + 0.12f * (normTreble - 0.5f);
 
     // Band width: impact narrows the crown band
-    const float bandWidth = clampf(0.08f - 0.03f * m_impact, 0.03f, 0.10f);
+    const float bandWidth = clampf(0.08f - 0.03f * m_impact[z], 0.03f, 0.10f);
 
     // Time accumulation
     float tRate = 0.80f + 3.50f * speedNorm;
-    m_t += tRate * dtVis;
+    m_t[z] += tRate * dtVis;
 
     // Hue from chroma
-    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle * (255.0f / kTwoPi)) + ctx.gHue;
+    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle[z] * (255.0f / kTwoPi)) + ctx.gHue;
 
     // Trail persistence: more energy = shorter trails
     uint8_t fadeAmt = static_cast<uint8_t>(clampf(20.0f + 30.0f * (1.0f - normBass), 14.0f, 52.0f));
@@ -197,7 +203,7 @@ void LGPSpirographCrownAREffect::render(plugins::EffectContext& ctx) {
 
         // Convert to polar coordinates (centre origin at LED 79/80)
         const float r = distN;
-        const float theta = (m_t * 0.35f) + static_cast<float>(i) * 0.042f;
+        const float theta = (m_t[z] * 0.35f) + static_cast<float>(i) * 0.042f;
 
         // Distance to hypotrochoid curve
         const float dist = distToCurve(r, theta, r_drift);
@@ -217,7 +223,7 @@ void LGPSpirographCrownAREffect::render(plugins::EffectContext& ctx) {
         const float crownShape = bandSharp * facet * glue;
 
         // Impact: additive flash at crown band
-        const float impactAdd = m_impact * bandSharp * glue * 0.4f;
+        const float impactAdd = m_impact[z] * bandSharp * glue * 0.4f;
 
         // Compose brightness: audio magnitude x geometry x beat x silence
         float brightness = (crownShape * normBass + impactAdd) * beatMod * silScale;

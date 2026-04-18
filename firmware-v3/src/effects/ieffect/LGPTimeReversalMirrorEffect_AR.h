@@ -57,6 +57,8 @@ public:
     float getParameter(const char* name) const override;
 
 private:
+    static constexpr uint8_t kMaxZones = 4;
+
     // -------------------------------------------------------------------
     // Domain constants (match original for visual fidelity)
     // -------------------------------------------------------------------
@@ -81,53 +83,60 @@ private:
     // PSRAM-allocated data (~45,760 bytes -- MUST NOT live in DRAM)
     // -------------------------------------------------------------------
     struct PsramData {
-        float u_prev[kFieldSize];                      //    320 B
-        float u_curr[kFieldSize];                      //    320 B
-        float u_next[kFieldSize];                      //    320 B
-        float history[kHistoryDepth][kFieldSize];      // 44,800 B
-    };  // Total: ~45,760 B in SPIRAM
+        float u_prev[kMaxZones][kFieldSize];
+        float u_curr[kMaxZones][kFieldSize];
+        float u_next[kMaxZones][kFieldSize];
+        float history[kMaxZones][kHistoryDepth][kFieldSize];
+    };
 
     PsramData* m_ps = nullptr;
 
     // -------------------------------------------------------------------
-    // Phase tracking (timer-based, matching original architecture)
+    // Per-zone temporal state. ZoneComposer reuses one effect instance across
+    // multiple zones, so timers, cursors, and envelopes must be indexed by
+    // zone to avoid accelerated playback and cross-zone contamination.
     // -------------------------------------------------------------------
-    float    m_phaseTimer       = 0.0f;   // Seconds elapsed in current phase
-    bool     m_isReverse        = false;  // true = reverse playback phase
-    uint16_t m_frameInPhase     = 0;      // Frame counter within current phase
+    float    m_phaseTimer[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
+    bool     m_isReverse[kMaxZones] = {false, false, false, false};
+    uint16_t m_frameInPhase[kMaxZones] = {0, 0, 0, 0};
 
     // History cursors
-    uint16_t m_historyWrite     = 0;      // Next slot to write in ring buffer
-    uint16_t m_historyCount     = 0;      // Snapshots stored (up to kHistoryDepth)
-    int16_t  m_historyRead      = 0;      // Current read position (counts down)
+    uint16_t m_historyWrite[kMaxZones] = {0, 0, 0, 0};
+    uint16_t m_historyCount[kMaxZones] = {0, 0, 0, 0};
+    int16_t  m_historyRead[kMaxZones] = {0, 0, 0, 0};
 
     // Impulse timing
-    uint16_t m_frameSinceImpulse = 0;
+    uint16_t m_frameSinceImpulse[kMaxZones] = {0, 0, 0, 0};
 
     // Fallback time-based animation (when no audio)
-    float m_fallbackPhase       = 0.0f;
+    float m_fallbackPhase[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
 
     // -------------------------------------------------------------------
     // AR additions: kick/snare envelopes
     // -------------------------------------------------------------------
-    float    m_kickEnv          = 0.0f;   // Kick envelope (0-1), fast attack / exp release
-    float    m_snareEnv         = 0.0f;   // Snare envelope (0-1)
-    uint32_t m_lastReverseMs    = 0;      // Timestamp of last reverse trigger (cooldown)
+    float    m_kickEnv[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float    m_snareEnv[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
+    uint32_t m_lastReverseMs[kMaxZones] = {0, 0, 0, 0};
 
     // -------------------------------------------------------------------
     // Audio smoothing (only used when FEATURE_AUDIO_SYNC)
     // -------------------------------------------------------------------
 #if FEATURE_AUDIO_SYNC
     // Chromagram smoothing for circular hue
-    float m_chromaSmoothed[12]  = {};
-    float m_chromaTargets[12]   = {};
-    enhancement::AsymmetricFollower m_chromaFollowers[12];
-    float m_chromaAngle         = 0.0f;
+    float m_chromaSmoothed[kMaxZones][12] = {};
+    float m_chromaTargets[kMaxZones][12] = {};
+    enhancement::AsymmetricFollower m_chromaFollowers[kMaxZones][12];
+    float m_chromaAngle[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
 
     // Energy followers
-    enhancement::AsymmetricFollower m_rmsFollower{0.0f, 0.08f, 0.25f};
-    float m_targetRms           = 0.0f;
-    uint32_t m_lastHopSeq       = 0;
+    enhancement::AsymmetricFollower m_rmsFollower[kMaxZones] = {
+        {0.0f, 0.08f, 0.25f},
+        {0.0f, 0.08f, 0.25f},
+        {0.0f, 0.08f, 0.25f},
+        {0.0f, 0.08f, 0.25f}
+    };
+    float m_targetRms[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
+    uint32_t m_lastHopSeq[kMaxZones] = {0, 0, 0, 0};
 #endif
 };
 

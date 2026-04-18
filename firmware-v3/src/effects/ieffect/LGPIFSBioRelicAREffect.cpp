@@ -88,21 +88,22 @@ static inline float centreGlue(int i) {
 
 LGPIFSBioRelicAREffect::LGPIFSBioRelicAREffect()
     : m_ps(nullptr)
-    , m_px(0.0f), m_py(0.0f), m_t(0.0f), m_rng(0xBADC0DEu)
-    , m_bass(0.0f), m_treble(0.0f), m_chromaAngle(0.0f)
-    , m_bassMax(0.15f), m_trebleMax(0.15f)
-    , m_impact(0.0f)
 {
 }
 
 bool LGPIFSBioRelicAREffect::init(plugins::EffectContext& ctx) {
-    m_px   = 0.0f;
-    m_py   = 0.0f;
-    m_t    = 0.0f;
-    m_rng  = 0xBADC0DEu;
-    m_bass = 0.0f; m_treble = 0.0f; m_chromaAngle = 0.0f;
-    m_bassMax = 0.15f; m_trebleMax = 0.15f;
-    m_impact = 0.0f;
+    for (uint8_t zi = 0; zi < kMaxZones; ++zi) {
+        m_px[zi] = 0.0f;
+        m_py[zi] = 0.0f;
+        m_t[zi] = 0.0f;
+        m_rng[zi] = 0xBADC0DEu;
+        m_bass[zi] = 0.0f;
+        m_treble[zi] = 0.0f;
+        m_chromaAngle[zi] = 0.0f;
+        m_bassMax[zi] = 0.15f;
+        m_trebleMax[zi] = 0.15f;
+        m_impact[zi] = 0.0f;
+    }
 
     lightwaveos::effects::cinema::reset();
 
@@ -115,6 +116,8 @@ bool LGPIFSBioRelicAREffect::init(plugins::EffectContext& ctx) {
         }
     }
     memset(m_ps, 0, sizeof(IFSPsram));
+#else
+    memset(m_hist, 0, sizeof(m_hist));
 #endif
 
     return true;
@@ -125,8 +128,13 @@ bool LGPIFSBioRelicAREffect::init(plugins::EffectContext& ctx) {
 // =========================================================================
 
 void LGPIFSBioRelicAREffect::render(plugins::EffectContext& ctx) {
+    const int z = (ctx.zoneId < kMaxZones) ? ctx.zoneId : 0;
+
 #ifndef NATIVE_BUILD
     if (!m_ps) return;
+    float* hist = m_ps->hist[z];
+#else
+    float* hist = m_hist[z];
 #endif
 
     const float dt = ctx.getSafeRawDeltaSeconds();
@@ -142,8 +150,8 @@ void LGPIFSBioRelicAREffect::render(plugins::EffectContext& ctx) {
     const float* chroma = ctx.audio.available ? ctx.audio.chroma() : nullptr;
 
     // STEP 2: Single-stage smoothing
-    m_bass += (rawBass - m_bass) * (1.0f - expf(-dt / kBassTau));
-    m_treble += (rawTreble - m_treble) * (1.0f - expf(-dt / kTrebleTau));
+    m_bass[z] += (rawBass - m_bass[z]) * (1.0f - expf(-dt / kBassTau));
+    m_treble[z] += (rawTreble - m_treble[z]) * (1.0f - expf(-dt / kTrebleTau));
 
     // Circular chroma EMA
     if (chroma) {
@@ -156,12 +164,12 @@ void LGPIFSBioRelicAREffect::render(plugins::EffectContext& ctx) {
         if (sx * sx + sy * sy > 0.0001f) {
             float target = atan2f(sy, sx);
             if (target < 0.0f) target += kTwoPi;
-            float delta = target - m_chromaAngle;
+            float delta = target - m_chromaAngle[z];
             while (delta > kPi) delta -= kTwoPi;
             while (delta < -kPi) delta += kTwoPi;
-            m_chromaAngle += delta * (1.0f - expf(-dt / kChromaTau));
-            if (m_chromaAngle < 0.0f) m_chromaAngle += kTwoPi;
-            if (m_chromaAngle >= kTwoPi) m_chromaAngle -= kTwoPi;
+            m_chromaAngle[z] += delta * (1.0f - expf(-dt / kChromaTau));
+            if (m_chromaAngle[z] < 0.0f) m_chromaAngle[z] += kTwoPi;
+            if (m_chromaAngle[z] >= kTwoPi) m_chromaAngle[z] -= kTwoPi;
         }
     }
 
@@ -169,20 +177,20 @@ void LGPIFSBioRelicAREffect::render(plugins::EffectContext& ctx) {
     {
         float aA = 1.0f - expf(-dt / kFollowerAttackTau);
         float dA = 1.0f - expf(-dt / kFollowerDecayTau);
-        if (m_bass > m_bassMax) m_bassMax += (m_bass - m_bassMax) * aA;
-        else m_bassMax += (m_bass - m_bassMax) * dA;
-        if (m_bassMax < kFollowerFloor) m_bassMax = kFollowerFloor;
+        if (m_bass[z] > m_bassMax[z]) m_bassMax[z] += (m_bass[z] - m_bassMax[z]) * aA;
+        else m_bassMax[z] += (m_bass[z] - m_bassMax[z]) * dA;
+        if (m_bassMax[z] < kFollowerFloor) m_bassMax[z] = kFollowerFloor;
 
-        if (m_treble > m_trebleMax) m_trebleMax += (m_treble - m_trebleMax) * aA;
-        else m_trebleMax += (m_treble - m_trebleMax) * dA;
-        if (m_trebleMax < kFollowerFloor) m_trebleMax = kFollowerFloor;
+        if (m_treble[z] > m_trebleMax[z]) m_trebleMax[z] += (m_treble[z] - m_trebleMax[z]) * aA;
+        else m_trebleMax[z] += (m_treble[z] - m_trebleMax[z]) * dA;
+        if (m_trebleMax[z] < kFollowerFloor) m_trebleMax[z] = kFollowerFloor;
     }
-    const float normBass = clamp01(m_bass / m_bassMax);
-    const float normTreble = clamp01(m_treble / m_trebleMax);
+    const float normBass = clamp01(m_bass[z] / m_bassMax[z]);
+    const float normTreble = clamp01(m_treble[z] / m_trebleMax[z]);
 
     // STEP 4: Impact (continuous beatStrength rise, exponential decay)
-    if (beatStr > m_impact) m_impact = beatStr;
-    m_impact *= expf(-dt / kImpactDecayTau);
+    if (beatStr > m_impact[z]) m_impact[z] = beatStr;
+    m_impact[z] *= expf(-dt / kImpactDecayTau);
 
     // Beat modulation
     const float beatMod = 0.3f + 0.7f * beatStr;
@@ -191,24 +199,23 @@ void LGPIFSBioRelicAREffect::render(plugins::EffectContext& ctx) {
     // IFS BARNSLEY FERN PHYSICS
     // =================================================================
 
-    m_t += (0.010f + 0.020f * speedNorm) * (0.7f + 0.6f * normBass);
+    m_t[z] += (0.010f + 0.020f * speedNorm) * (0.7f + 0.6f * normBass);
 
     // Histogram decay rate: normTreble modulates persistence
     float decay = (0.92f + 0.06f * (1.0f - speedNorm))
                   * (0.90f + 0.10f * (1.0f - normTreble));
 
-#ifndef NATIVE_BUILD
-    for (int i = 0; i < STRIP_LENGTH; i++) m_ps->hist[i] *= decay;
-
     // Points per frame: bass + speed drive iteration count
     int P = 220 + (int)(520.0f * speedNorm * (0.6f + 0.6f * normBass));
 
+    for (int i = 0; i < STRIP_LENGTH; i++) hist[i] *= decay;
+
     // Barnsley-style IFS (classic fern family), mirrored for centre-origin
     for (int k = 0; k < P; k++) {
-        uint32_t r = lcg_next(m_rng);
+        uint32_t r = lcg_next(m_rng[z]);
         float u = (float)(r & 0xFFFFu) / 65535.0f;
 
-        float x = m_px, y = m_py;
+        float x = m_px[z], y = m_py[z];
         float nx, ny;
 
         if (u < 0.01f) {
@@ -225,8 +232,8 @@ void LGPIFSBioRelicAREffect::render(plugins::EffectContext& ctx) {
             ny = 0.26f * x + 0.24f * y + 0.44f;
         }
 
-        m_px = nx;
-        m_py = ny;
+        m_px[z] = nx;
+        m_py[z] = ny;
 
         // Mirror x for centre-origin symmetry
         float ax = fabsf(nx);
@@ -239,10 +246,10 @@ void LGPIFSBioRelicAREffect::render(plugins::EffectContext& ctx) {
 
         int bin = (int)lroundf(radial * (STRIP_LENGTH - 1));
         if (bin >= 0 && bin < STRIP_LENGTH) {
-            float pulse = 0.85f + 0.15f * sinf(m_t * 0.7f + radial * 6.0f);
+            float pulse = 0.85f + 0.15f * sinf(m_t[z] * 0.7f + radial * 6.0f);
             // Impact adds a brightness burst to the IFS scatter
-            float impactBoost = 1.0f + 0.5f * m_impact;
-            m_ps->hist[bin] += 0.80f * pulse * impactBoost;
+            float impactBoost = 1.0f + 0.5f * m_impact[z];
+            hist[bin] += 0.80f * pulse * impactBoost;
         }
     }
 
@@ -251,11 +258,11 @@ void LGPIFSBioRelicAREffect::render(plugins::EffectContext& ctx) {
     // =================================================================
 
     float maxH = 1e-6f;
-    for (int i = 0; i < STRIP_LENGTH; i++) maxH = fmaxf(maxH, m_ps->hist[i]);
+    for (int i = 0; i < STRIP_LENGTH; i++) maxH = fmaxf(maxH, hist[i]);
     float inv = 1.0f / maxH;
 
-    // Hue from chroma
-    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle * (255.0f / kTwoPi)) + ctx.gHue;
+    // Hue from chroma (per-zone)
+    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle[z] * (255.0f / kTwoPi)) + ctx.gHue;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         float dn = distN_from_index(i);
@@ -264,7 +271,7 @@ void LGPIFSBioRelicAREffect::render(plugins::EffectContext& ctx) {
         int bin = (int)lroundf(dn * (STRIP_LENGTH - 1));
         bin = (bin < 0) ? 0 : (bin >= STRIP_LENGTH) ? STRIP_LENGTH - 1 : bin;
 
-        float v = clamp01(m_ps->hist[bin] * inv);
+        float v = clamp01(hist[bin] * inv);
         float veins = powf(v, 1.65f);
         float spec  = powf(veins, 2.2f) * 0.45f;
 
@@ -272,7 +279,7 @@ void LGPIFSBioRelicAREffect::render(plugins::EffectContext& ctx) {
         float veinGeom = clamp01((0.18f + 0.82f * veins + spec) * glue);
 
         // Impact: additive vein pulse
-        float impactAdd = m_impact * veins * glue * 0.25f;
+        float impactAdd = m_impact[z] * veins * glue * 0.25f;
 
         // Compose: geometry * normBass * silScale * beatMod
         float brightness = (veinGeom * normBass + impactAdd) * beatMod * silScale;
@@ -289,7 +296,6 @@ void LGPIFSBioRelicAREffect::render(plugins::EffectContext& ctx) {
 
         writeDualLocked(ctx, i, ctx.palette.getColor(hue, val));
     }
-#endif
 
     lightwaveos::effects::cinema::apply(ctx, speedNorm);
 }

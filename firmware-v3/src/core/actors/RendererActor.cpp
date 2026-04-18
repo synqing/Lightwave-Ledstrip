@@ -611,7 +611,12 @@ void RendererActor::onMessage(const Message& msg)
             break;
 
         case MessageType::SET_EDGE_MIXER_MODE:
-            if (msg.param1 <= 4) {
+            // Bound must cover the full EdgeMixerMode enum (MIRROR..STM_SPECTRAL_MAP = 0..8).
+            // Previous clamp of <= 4 silently dropped TRIADIC (5), TETRADIC (6),
+            // STM_DUAL (7) and STM_SPECTRAL_MAP (8) — upstream WS/REST handlers validated
+            // 0-8 and returned success while this handler discarded the Message, so
+            // clients could never actually reach the dual-strip STM modes.
+            if (msg.param1 <= static_cast<uint8_t>(enhancement::EdgeMixerMode::STM_SPECTRAL_MAP)) {
                 enhancement::EdgeMixer::getInstance().setMode(
                     static_cast<enhancement::EdgeMixerMode>(msg.param1));
             }

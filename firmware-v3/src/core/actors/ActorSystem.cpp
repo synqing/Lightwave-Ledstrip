@@ -812,6 +812,7 @@ SystemStats ActorSystem::getStats() const
     // Get heap stats
     stats.heapFreeBytes = esp_get_free_heap_size();
     stats.heapMinFreeBytes = esp_get_minimum_free_heap_size();
+    stats.spiramFreeBytes = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
 #endif
 
     // Count active actors
@@ -841,6 +842,7 @@ void ActorSystem::printStatus()
     Serial.printf("Total messages: %lu\n", stats.totalMessages);
     Serial.printf("Heap: %lu / min %lu bytes\n",
                   stats.heapFreeBytes, stats.heapMinFreeBytes);
+    Serial.printf("SPIRAM free: %lu bytes\n", static_cast<unsigned long>(stats.spiramFreeBytes));
 
     // Renderer stats
     if (m_renderer && m_renderer->isRunning()) {

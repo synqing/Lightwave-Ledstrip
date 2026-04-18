@@ -39,19 +39,21 @@ public:
     float getParameter(const char* name) const override;
 
 private:
-    float m_t = 0.0f;              // Phase accumulator
+    static constexpr uint8_t kMaxZones = 4;
+
+    float m_t[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
 
     // Single-stage smoothed audio (one EMA per signal)
-    float m_bass       = 0.0f;     // Smoothed bass energy
-    float m_treble     = 0.0f;     // Smoothed treble energy
-    float m_chromaAngle = 0.0f;    // Circular chroma hue (radians)
+    float m_bass[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float m_treble[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float m_chromaAngle[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
 
     // Asymmetric max followers for dynamic gain normalisation
-    float m_bassMax    = 0.15f;    // Bass max tracker
-    float m_trebleMax  = 0.15f;    // Treble max tracker
+    float m_bassMax[kMaxZones] = {0.15f, 0.15f, 0.15f, 0.15f};
+    float m_trebleMax[kMaxZones] = {0.15f, 0.15f, 0.15f, 0.15f};
 
     // Beat/percussion impact
-    float m_impact     = 0.0f;     // Beat-driven impulse with exponential decay
+    float m_impact[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
 };
 
 } // namespace ieffect

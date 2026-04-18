@@ -38,15 +38,19 @@ static inline float clampf(float x, float lo, float hi) {
     return x;
 }
 
-LGPReactionDiffusionAREffect::LGPReactionDiffusionAREffect()
-    : m_t(0.0f), m_bass(0.0f), m_chromaAngle(0.0f),
-      m_bassMax(0.15f), m_impact(0.0f) {}
+LGPReactionDiffusionAREffect::LGPReactionDiffusionAREffect() = default;
 
 bool LGPReactionDiffusionAREffect::init(plugins::EffectContext& ctx) {
-    m_t = 0.0f; m_bass = 0.0f; m_chromaAngle = 0.0f;
-    m_bassMax = 0.15f; m_impact = 0.0f;
+    for (uint8_t zi = 0; zi < kMaxZones; ++zi) {
+        m_t[zi] = 0.0f;
+        m_bass[zi] = 0.0f;
+        m_chromaAngle[zi] = 0.0f;
+        m_bassMax[zi] = 0.15f;
+        m_impact[zi] = 0.0f;
+    }
     lightwaveos::effects::cinema::reset();
 
+#ifndef NATIVE_BUILD
     if (!m_ps) {
         m_ps = static_cast<PsramData*>(heap_caps_malloc(sizeof(PsramData), MALLOC_CAP_SPIRAM));
         if (!m_ps) {
@@ -55,24 +59,55 @@ bool LGPReactionDiffusionAREffect::init(plugins::EffectContext& ctx) {
             return false;
         }
     }
+#endif
 
-    // Gray-Scott init: U=1 everywhere, V=0; seed centre with V
-    for (int i = 0; i < kStripLen; i++) {
-        m_ps->u[i] = 1.0f;
-        m_ps->v[i] = 0.0f;
-    }
     const int mid = kStripLen / 2;
-    for (int i = mid - 6; i <= mid + 6; i++) {
-        if (i >= 0 && i < kStripLen) {
-            m_ps->v[i] = 1.0f;
-            m_ps->u[i] = 0.0f;
+    for (uint8_t zi = 0; zi < kMaxZones; ++zi) {
+#ifndef NATIVE_BUILD
+        float* u = m_ps->u[zi];
+        float* v = m_ps->v[zi];
+        float* u2 = m_ps->u2[zi];
+        float* v2 = m_ps->v2[zi];
+#else
+        float* u = m_u[zi];
+        float* v = m_v[zi];
+        float* u2 = m_u2[zi];
+        float* v2 = m_v2[zi];
+#endif
+        // Gray-Scott init: U=1 everywhere, V=0; seed centre with V.
+        for (int i = 0; i < kStripLen; i++) {
+            u[i] = 1.0f;
+            v[i] = 0.0f;
+            u2[i] = 1.0f;
+            v2[i] = 0.0f;
+        }
+        for (int i = mid - 6; i <= mid + 6; i++) {
+            if (i >= 0 && i < kStripLen) {
+                v[i] = 1.0f;
+                u[i] = 0.0f;
+                v2[i] = 1.0f;
+                u2[i] = 0.0f;
+            }
         }
     }
     return true;
 }
 
 void LGPReactionDiffusionAREffect::render(plugins::EffectContext& ctx) {
+    const int z = (ctx.zoneId < kMaxZones) ? ctx.zoneId : 0;
+
+#ifndef NATIVE_BUILD
     if (!m_ps) return;
+    float* u = m_ps->u[z];
+    float* v = m_ps->v[z];
+    float* u2 = m_ps->u2[z];
+    float* v2 = m_ps->v2[z];
+#else
+    float* u = m_u[z];
+    float* v = m_v[z];
+    float* u2 = m_u2[z];
+    float* v2 = m_v2[z];
+#endif
 
     const float dt = ctx.getSafeRawDeltaSeconds();
     const float dtVis = ctx.getSafeDeltaSeconds();
@@ -85,7 +120,7 @@ void LGPReactionDiffusionAREffect::render(plugins::EffectContext& ctx) {
     const float* chroma = ctx.audio.available ? ctx.audio.chroma() : nullptr;
 
     // STEP 2: Single-stage smoothing
-    m_bass += (rawBass - m_bass) * (1.0f - expf(-dt / kBassTau));
+    m_bass[z] += (rawBass - m_bass[z]) * (1.0f - expf(-dt / kBassTau));
 
     if (chroma) {
         float sx = 0.0f, sy = 0.0f;
@@ -97,12 +132,12 @@ void LGPReactionDiffusionAREffect::render(plugins::EffectContext& ctx) {
         if (sx * sx + sy * sy > 0.0001f) {
             float target = atan2f(sy, sx);
             if (target < 0.0f) target += kTwoPi;
-            float delta = target - m_chromaAngle;
+            float delta = target - m_chromaAngle[z];
             while (delta > kPi) delta -= kTwoPi;
             while (delta < -kPi) delta += kTwoPi;
-            m_chromaAngle += delta * (1.0f - expf(-dt / kChromaTau));
-            if (m_chromaAngle < 0.0f) m_chromaAngle += kTwoPi;
-            if (m_chromaAngle >= kTwoPi) m_chromaAngle -= kTwoPi;
+            m_chromaAngle[z] += delta * (1.0f - expf(-dt / kChromaTau));
+            if (m_chromaAngle[z] < 0.0f) m_chromaAngle[z] += kTwoPi;
+            if (m_chromaAngle[z] >= kTwoPi) m_chromaAngle[z] -= kTwoPi;
         }
     }
 
@@ -110,15 +145,15 @@ void LGPReactionDiffusionAREffect::render(plugins::EffectContext& ctx) {
     {
         float aA = 1.0f - expf(-dt / kFollowerAttackTau);
         float dA = 1.0f - expf(-dt / kFollowerDecayTau);
-        if (m_bass > m_bassMax) m_bassMax += (m_bass - m_bassMax) * aA;
-        else m_bassMax += (m_bass - m_bassMax) * dA;
-        if (m_bassMax < kFollowerFloor) m_bassMax = kFollowerFloor;
+        if (m_bass[z] > m_bassMax[z]) m_bassMax[z] += (m_bass[z] - m_bassMax[z]) * aA;
+        else m_bassMax[z] += (m_bass[z] - m_bassMax[z]) * dA;
+        if (m_bassMax[z] < kFollowerFloor) m_bassMax[z] = kFollowerFloor;
     }
-    const float normBass = clamp01(m_bass / m_bassMax);
+    const float normBass = clamp01(m_bass[z] / m_bassMax[z]);
 
     // STEP 4: Impact
-    if (beatStr > m_impact) m_impact = beatStr;
-    m_impact *= expf(-dt / kImpactDecayTau);
+    if (beatStr > m_impact[z]) m_impact[z] = beatStr;
+    m_impact[z] *= expf(-dt / kImpactDecayTau);
 
     // STEP 5: Gray-Scott simulation (pattern generator)
     // F/K modulated by bass for visual variety — but brightness is direct
@@ -128,12 +163,12 @@ void LGPReactionDiffusionAREffect::render(plugins::EffectContext& ctx) {
     const float simDt = clampf(0.9f + 0.6f * speedNorm, 0.7f, 2.2f);
 
     // Beat injects V at centre
-    if (m_impact > 0.05f) {
+    if (m_impact[z] > 0.05f) {
         const int mid = kStripLen / 2;
-        float injectAmt = m_impact * 0.15f;
+        float injectAmt = m_impact[z] * 0.15f;
         for (int i = mid - 5; i <= mid + 5; i++) {
             if (i >= 0 && i < kStripLen)
-                m_ps->v[i] = clamp01(m_ps->v[i] + injectAmt);
+                v[i] = clamp01(v[i] + injectAmt);
         }
     }
 
@@ -143,23 +178,24 @@ void LGPReactionDiffusionAREffect::render(plugins::EffectContext& ctx) {
         for (int i = 0; i < kStripLen; i++) {
             int im1 = (i == 0) ? 0 : (i - 1);
             int ip1 = (i == kStripLen - 1) ? (kStripLen - 1) : (i + 1);
-            float lapU = m_ps->u[im1] - 2.0f * m_ps->u[i] + m_ps->u[ip1];
-            float lapV = m_ps->v[im1] - 2.0f * m_ps->v[i] + m_ps->v[ip1];
-            float u = m_ps->u[i], v = m_ps->v[i];
-            float uvv = u * v * v;
-            m_ps->u2[i] = clamp01(u + (Du * lapU - uvv + F * (1.0f - u)) * simDt);
-            m_ps->v2[i] = clamp01(v + (Dv * lapV + uvv - (K + F) * v) * simDt);
+            float lapU = u[im1] - 2.0f * u[i] + u[ip1];
+            float lapV = v[im1] - 2.0f * v[i] + v[ip1];
+            float uVal = u[i];
+            float vVal = v[i];
+            float uvv = uVal * vVal * vVal;
+            u2[i] = clamp01(uVal + (Du * lapU - uvv + F * (1.0f - uVal)) * simDt);
+            v2[i] = clamp01(vVal + (Dv * lapV + uvv - (K + F) * vVal) * simDt);
         }
         for (int i = 0; i < kStripLen; i++) {
-            m_ps->u[i] = m_ps->u2[i];
-            m_ps->v[i] = m_ps->v2[i];
+            u[i] = u2[i];
+            v[i] = v2[i];
         }
     }
 
     // STEP 6: Per-pixel render
     const float beatMod = 0.3f + 0.7f * beatStr;
     const float midF = (kStripLen - 1) * 0.5f;
-    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle * (255.0f / kTwoPi)) + ctx.gHue;
+    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle[z] * (255.0f / kTwoPi)) + ctx.gHue;
 
     uint8_t fadeAmt = static_cast<uint8_t>(clampf(18.0f + 35.0f * (1.0f - normBass), 12.0f, 55.0f));
     fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmt);
@@ -170,30 +206,30 @@ void LGPReactionDiffusionAREffect::render(plugins::EffectContext& ctx) {
 
         // Map centre-outward dist to strip index for V lookup
         int idxR = CENTER_RIGHT + dist;
-        float v = (idxR < kStripLen) ? m_ps->v[idxR] : 0.0f;
+        float vSample = (idxR < kStripLen) ? v[idxR] : 0.0f;
 
         // Centre melt
         float dmid = static_cast<float>(dist);
         float melt = expf(-(dmid * dmid) * 0.0018f);
 
         // Impact at centre
-        float impactAdd = m_impact * melt * 0.35f;
+        float impactAdd = m_impact[z] * melt * 0.35f;
 
         // Compose: audio x V-pattern x beat x silence
-        float brightness = (normBass * (v * melt + 0.25f * v) + impactAdd) * beatMod * silScale;
+        float brightness = (normBass * (vSample * melt + 0.25f * vSample) + impactAdd) * beatMod * silScale;
         brightness *= brightness;  // Squared for punch
 
         uint8_t val = static_cast<uint8_t>(clamp01(brightness) * 255.0f);
         val = scale8(val, ctx.brightness);
 
         // Hue: chroma base + V-driven tonal range + spatial offset
-        uint8_t hue = baseHue + static_cast<uint8_t>(v * 120.0f + progress * 15.0f);
+        uint8_t hue = baseHue + static_cast<uint8_t>(vSample * 120.0f + progress * 15.0f);
 
         SET_CENTER_PAIR(ctx, dist, CHSV(hue, ctx.saturation, val));
     }
 
     lightwaveos::effects::cinema::apply(ctx, speedNorm);
-    m_t += 1.0f;
+    m_t[z] += 1.0f;
 }
 
 void LGPReactionDiffusionAREffect::cleanup() {

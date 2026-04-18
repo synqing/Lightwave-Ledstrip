@@ -37,18 +37,24 @@ static inline float clampf(float x, float lo, float hi) {
     return x;
 }
 
-LGPMoireCathedralAREffect::LGPMoireCathedralAREffect()
-    : m_t(0.0f), m_bass(0.0f), m_mid(0.0f), m_chromaAngle(0.0f),
-      m_bassMax(0.15f), m_midMax(0.15f), m_impact(0.0f) {}
+LGPMoireCathedralAREffect::LGPMoireCathedralAREffect() = default;
 
 bool LGPMoireCathedralAREffect::init(plugins::EffectContext& ctx) {
-    m_t = 0.0f; m_bass = 0.0f; m_mid = 0.0f; m_chromaAngle = 0.0f;
-    m_bassMax = 0.15f; m_midMax = 0.15f; m_impact = 0.0f;
+    for (uint8_t zi = 0; zi < kMaxZones; ++zi) {
+        m_t[zi] = 0.0f;
+        m_bass[zi] = 0.0f;
+        m_mid[zi] = 0.0f;
+        m_chromaAngle[zi] = 0.0f;
+        m_bassMax[zi] = 0.15f;
+        m_midMax[zi] = 0.15f;
+        m_impact[zi] = 0.0f;
+    }
     lightwaveos::effects::cinema::reset();
     return true;
 }
 
 void LGPMoireCathedralAREffect::render(plugins::EffectContext& ctx) {
+    const int z = (ctx.zoneId < kMaxZones) ? ctx.zoneId : 0;
     const float dt = ctx.getSafeRawDeltaSeconds();
     const float dtVis = ctx.getSafeDeltaSeconds();
     const float speedNorm = ctx.speed / 50.0f;
@@ -59,8 +65,8 @@ void LGPMoireCathedralAREffect::render(plugins::EffectContext& ctx) {
     const float silScale = ctx.audio.available ? ctx.audio.silentScale() : 0.0f;
     const float* chroma = ctx.audio.available ? ctx.audio.chroma() : nullptr;
 
-    m_bass += (rawBass - m_bass) * (1.0f - expf(-dt / kBassTau));
-    m_mid += (rawMid - m_mid) * (1.0f - expf(-dt / kMidTau));
+    m_bass[z] += (rawBass - m_bass[z]) * (1.0f - expf(-dt / kBassTau));
+    m_mid[z] += (rawMid - m_mid[z]) * (1.0f - expf(-dt / kMidTau));
 
     if (chroma) {
         float sx = 0.0f, sy = 0.0f;
@@ -72,30 +78,30 @@ void LGPMoireCathedralAREffect::render(plugins::EffectContext& ctx) {
         if (sx * sx + sy * sy > 0.0001f) {
             float target = atan2f(sy, sx);
             if (target < 0.0f) target += kTwoPi;
-            float delta = target - m_chromaAngle;
+            float delta = target - m_chromaAngle[z];
             while (delta > kPi) delta -= kTwoPi;
             while (delta < -kPi) delta += kTwoPi;
-            m_chromaAngle += delta * (1.0f - expf(-dt / kChromaTau));
-            if (m_chromaAngle < 0.0f) m_chromaAngle += kTwoPi;
-            if (m_chromaAngle >= kTwoPi) m_chromaAngle -= kTwoPi;
+            m_chromaAngle[z] += delta * (1.0f - expf(-dt / kChromaTau));
+            if (m_chromaAngle[z] < 0.0f) m_chromaAngle[z] += kTwoPi;
+            if (m_chromaAngle[z] >= kTwoPi) m_chromaAngle[z] -= kTwoPi;
         }
     }
 
     {
         float aA = 1.0f - expf(-dt / kFollowerAttackTau);
         float dA = 1.0f - expf(-dt / kFollowerDecayTau);
-        if (m_bass > m_bassMax) m_bassMax += (m_bass - m_bassMax) * aA;
-        else m_bassMax += (m_bass - m_bassMax) * dA;
-        if (m_bassMax < kFollowerFloor) m_bassMax = kFollowerFloor;
-        if (m_mid > m_midMax) m_midMax += (m_mid - m_midMax) * aA;
-        else m_midMax += (m_mid - m_midMax) * dA;
-        if (m_midMax < kFollowerFloor) m_midMax = kFollowerFloor;
+        if (m_bass[z] > m_bassMax[z]) m_bassMax[z] += (m_bass[z] - m_bassMax[z]) * aA;
+        else m_bassMax[z] += (m_bass[z] - m_bassMax[z]) * dA;
+        if (m_bassMax[z] < kFollowerFloor) m_bassMax[z] = kFollowerFloor;
+        if (m_mid[z] > m_midMax[z]) m_midMax[z] += (m_mid[z] - m_midMax[z]) * aA;
+        else m_midMax[z] += (m_mid[z] - m_midMax[z]) * dA;
+        if (m_midMax[z] < kFollowerFloor) m_midMax[z] = kFollowerFloor;
     }
-    const float normBass = clamp01(m_bass / m_bassMax);
-    const float normMid = clamp01(m_mid / m_midMax);
+    const float normBass = clamp01(m_bass[z] / m_bassMax[z]);
+    const float normMid = clamp01(m_mid[z] / m_midMax[z]);
 
-    if (beatStr > m_impact) m_impact = beatStr;
-    m_impact *= expf(-dt / kImpactDecayTau);
+    if (beatStr > m_impact[z]) m_impact[z] = beatStr;
+    m_impact[z] *= expf(-dt / kImpactDecayTau);
 
     const float beatMod = 0.3f + 0.7f * beatStr;
 
@@ -107,12 +113,12 @@ void LGPMoireCathedralAREffect::render(plugins::EffectContext& ctx) {
     float w2 = 0.58f + 0.35f * speedNorm;
 
     float tRate = 0.85f + 3.5f * speedNorm;
-    m_t += tRate * dtVis;
+    m_t[z] += tRate * dtVis;
 
     // Rib sharpening: bass sharpens, impact boosts
-    float ribPow = clampf(1.35f + 0.45f * normBass + 0.3f * m_impact, 1.30f, 2.50f);
+    float ribPow = clampf(1.35f + 0.45f * normBass + 0.3f * m_impact[z], 1.30f, 2.50f);
 
-    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle * (255.0f / kTwoPi)) + ctx.gHue;
+    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle[z] * (255.0f / kTwoPi)) + ctx.gHue;
 
     uint8_t fadeAmt = static_cast<uint8_t>(clampf(18.0f + 35.0f * (1.0f - normBass), 12.0f, 55.0f));
     fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmt);
@@ -124,8 +130,8 @@ void LGPMoireCathedralAREffect::render(plugins::EffectContext& ctx) {
         const float x = static_cast<float>(dist);
 
         // Two grating waves
-        float g1 = sinf(kTwoPi * (x / p1) + m_t * w1);
-        float g2 = sinf(kTwoPi * (x / p2) - m_t * w2);
+        float g1 = sinf(kTwoPi * (x / p1) + m_t[z] * w1);
+        float g2 = sinf(kTwoPi * (x / p2) - m_t[z] * w2);
 
         // Moire interference
         float moire = fabsf(g1 - g2);
@@ -133,7 +139,7 @@ void LGPMoireCathedralAREffect::render(plugins::EffectContext& ctx) {
         wave = powf(wave, ribPow);
 
         // Impact at arch peaks
-        float impactAdd = m_impact * wave * 0.35f;
+        float impactAdd = m_impact[z] * wave * 0.35f;
 
         // Compose: audio x geometry x beat x silence
         float brightness = (normBass * wave + impactAdd) * beatMod * silScale;

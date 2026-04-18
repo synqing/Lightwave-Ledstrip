@@ -4,7 +4,7 @@
  *
  * Effect ID: 0x1C13 (EID_LGP_IFS_BIO_RELIC_AR)
  * Direct ControlBus reads, single-stage smoothing, max follower normalisation.
- * PSRAM-backed histogram buffer (160 floats).
+ * PSRAM-backed per-zone histogram buffer (160 floats x kMaxZones).
  * Barnsley fern IFS with 4-transform probabilities (0.01, 0.85, 0.07, 0.07).
  */
 
@@ -36,29 +36,33 @@ public:
 
 private:
     static constexpr uint16_t STRIP_LENGTH = 160;
+    static constexpr uint8_t kMaxZones = 4;
 
+#ifndef NATIVE_BUILD
     struct IFSPsram {
-        float hist[STRIP_LENGTH];
+        float hist[kMaxZones][STRIP_LENGTH];
     };
-
     IFSPsram* m_ps = nullptr;
+#else
+    float m_hist[kMaxZones][STRIP_LENGTH];
+#endif
 
-    float m_px  = 0.0f;
-    float m_py  = 0.0f;
-    float m_t   = 0.0f;
-    uint32_t m_rng = 0xBADC0DEu;
+    float m_px[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float m_py[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float m_t[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
+    uint32_t m_rng[kMaxZones] = {0xBADC0DEu, 0xBADC0DEu, 0xBADC0DEu, 0xBADC0DEu};
 
     // Single-stage smoothed audio
-    float m_bass       = 0.0f;
-    float m_treble     = 0.0f;
-    float m_chromaAngle = 0.0f;
+    float m_bass[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float m_treble[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float m_chromaAngle[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
 
     // Asymmetric max followers
-    float m_bassMax    = 0.15f;
-    float m_trebleMax  = 0.15f;
+    float m_bassMax[kMaxZones] = {0.15f, 0.15f, 0.15f, 0.15f};
+    float m_trebleMax[kMaxZones] = {0.15f, 0.15f, 0.15f, 0.15f};
 
     // Impact
-    float m_impact     = 0.0f;
+    float m_impact[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
 };
 
 } // namespace ieffect

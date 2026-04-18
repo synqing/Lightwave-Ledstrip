@@ -49,6 +49,8 @@ public:
     float getParameter(const char* name) const override;
 
 private:
+    static constexpr uint8_t kMaxZones = 4;
+
     // -------------------------------------------------------------------
     // Domain constants
     // -------------------------------------------------------------------
@@ -82,49 +84,55 @@ private:
     // PSRAM storage (must not live in internal DRAM)
     // -------------------------------------------------------------------
     struct PsramData {
-        float u_prev[kFieldSize];
-        float u_curr[kFieldSize];
-        float u_next[kFieldSize];
-        float history[kHistoryDepth][kFieldSize];
+        float u_prev[kMaxZones][kFieldSize];
+        float u_curr[kMaxZones][kFieldSize];
+        float u_next[kMaxZones][kFieldSize];
+        float history[kMaxZones][kHistoryDepth][kFieldSize];
     };
 
     PsramData* m_ps = nullptr;
 
-    // Phase and history state
-    float    m_phaseTimer       = 0.0f;
-    bool     m_isReverse        = false;
-    uint16_t m_frameInPhase     = 0;
-    uint16_t m_historyWrite     = 0;    // Next slot to write in ring
-    uint16_t m_historyCount     = 0;    // Stored frames (<= kHistoryDepth)
-    float    m_reverseCursor    = 0.0f; // Chronological index for reverse playback
-    uint16_t m_frameSinceImpulse = 0;
-    uint16_t m_framesSinceBeatImpulse = 0;
-    float    m_storyTime        = 0.0f;
-    float    m_introPhase       = 0.0f;
+    // Per-zone temporal state. ZoneComposer reuses one effect instance across
+    // zones, so all timers, cursors, and smoothing state must be indexed.
+    float    m_phaseTimer[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
+    bool     m_isReverse[kMaxZones] = {false, false, false, false};
+    uint16_t m_frameInPhase[kMaxZones] = {0, 0, 0, 0};
+    uint16_t m_historyWrite[kMaxZones] = {0, 0, 0, 0};    // Next slot to write in ring
+    uint16_t m_historyCount[kMaxZones] = {0, 0, 0, 0};    // Stored frames (<= kHistoryDepth)
+    float    m_reverseCursor[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f}; // Chronological index for reverse playback
+    uint16_t m_frameSinceImpulse[kMaxZones] = {0, 0, 0, 0};
+    uint16_t m_framesSinceBeatImpulse[kMaxZones] = {0, 0, 0, 0};
+    float    m_storyTime[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float    m_introPhase[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
 
     // Visual normalisation smoothing
-    float m_normMin = 0.45f;
-    float m_normMax = 0.55f;
+    float m_normMin[kMaxZones] = {0.45f, 0.45f, 0.45f, 0.45f};
+    float m_normMax[kMaxZones] = {0.55f, 0.55f, 0.55f, 0.55f};
 
     // Fallback time-based animation
-    float m_fallbackPhase = 0.0f;
+    float m_fallbackPhase[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
 
     // Helpers
-    void seedField();
-    void beginForwardPhase(bool reseedField);
-    void beginReversePhase();
-    uint16_t historySlotFromChrono(uint16_t chronoIndex) const;
+    void seedField(int z);
+    void beginForwardPhase(int z, bool reseedField);
+    void beginReversePhase(int z);
+    uint16_t historySlotFromChrono(int z, uint16_t chronoIndex) const;
 
     // Audio smoothing (when FEATURE_AUDIO_SYNC)
 #if FEATURE_AUDIO_SYNC
-    float m_chromaSmoothed[12] = {};
-    float m_chromaTargets[12]  = {};
-    enhancement::AsymmetricFollower m_chromaFollowers[12];
-    float m_chromaAngle        = 0.0f;
+    float m_chromaSmoothed[kMaxZones][12] = {};
+    float m_chromaTargets[kMaxZones][12]  = {};
+    enhancement::AsymmetricFollower m_chromaFollowers[kMaxZones][12];
+    float m_chromaAngle[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
 
-    enhancement::AsymmetricFollower m_rmsFollower{0.0f, 0.08f, 0.25f};
-    float m_targetRms          = 0.0f;
-    uint32_t m_lastHopSeq      = 0;
+    enhancement::AsymmetricFollower m_rmsFollower[kMaxZones] = {
+        {0.0f, 0.08f, 0.25f},
+        {0.0f, 0.08f, 0.25f},
+        {0.0f, 0.08f, 0.25f},
+        {0.0f, 0.08f, 0.25f}
+    };
+    float m_targetRms[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
+    uint32_t m_lastHopSeq[kMaxZones] = {0, 0, 0, 0};
 #endif
 };
 

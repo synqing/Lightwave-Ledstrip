@@ -12,6 +12,26 @@ Forensic audit 2026-04-17 §P1-09 identified that `ZoneComposer::renderZone` reu
 
 Constants: `kMaxZones = 4` (defensive oversize versus `MAX_ZONES = 3` for 0xFF fallback — matches existing exemplars).
 
+## Execution Update — 2026-04-18
+
+This follow-up is now implemented in the real tree for the default-build AR scope.
+
+### Completed migrations
+
+- **PR 2 equivalent complete:** `LGPCymaticLadderAREffect`, `LGPHarmonographHaloAREffect`, `LGPHyperbolicPortalAREffect`, `LGPMachDiamondsAREffect`, `LGPMoireCathedralAREffect`, `LGPRoseBloomAREffect`
+- **PR 3 equivalent complete:** `LGPSchlierenFlowAREffect`, `LGPSpirographCrownAREffect`, `LGPSuperformulaGlyphAREffect`, `LGPWaterCausticsAREffect`
+- **PR 4 equivalent complete:** `LGPReactionDiffusionAREffect`, `LGPRDTriangleAREffect`, `LGPRule30CathedralAREffect`
+- **PR 5 equivalent complete:** `LGPIFSBioRelicAREffect`
+- **PR 6 equivalent complete:** `LGPTimeReversalMirrorEffect_AR`, `LGPTimeReversalMirrorEffect_Mod1`, `LGPTimeReversalMirrorEffect_Mod2`, `LGPTimeReversalMirrorEffect_Mod3`
+
+### Hardware evidence
+
+- Serial status now exposes `SPIRAM free`.
+- Measured TRM lifecycle is **active-only**, not persistent: `B0=8,058,167`, `B3=7,875,111`, `B4=8,058,303`, `B5=6,743,727`, `B9=8,058,167`.
+- Phase 6 gate therefore **passes** on the 4 MiB reserve rule with >2.5 MiB free margin while a Mod variant is active.
+- Same-effect multi-zone command path was exercised on hardware using `zone.enable`, `zone.setEffect`, and per-zone `zone.setSpeed`.
+- Full 450 s pressure battery executed. Workload checks passed (`T1/T2/T3` all PASS, no stalls, device stayed alive, final FPS 119/120), but the bundled script's final drop-rate verdict is inflated by lifetime frame/drop counters rather than per-run deltas, so that final line should not be read as a P1-09-specific regression.
+
 ## Prototype Status — COMPLETE
 
 Three effects migrated in sandbox at `/tmp/k1_p1deferred_20260418_011913/p109_effects/firmware-v3/`:
@@ -85,21 +105,23 @@ Each PR MUST include a clean build verification line and a screenshot-style visu
 - `LGPAiryCometAREffect`, `LGPCatastropheCausticsAREffect`, `LGPLangtonHighwayAREffect`
 - **Already validated.** Apply to real tree as first merge.
 
-### PR 2 — Scalar-only batch A (6 effects, ~300 LOC total)
+### PR 2 — Scalar-only batch A (6 effects, ~300 LOC total) — COMPLETE
 - Cymatic, Harmonograph, Hyperbolic, Mach, Moire, Rose
 
-### PR 3 — Scalar-only batch B (5 effects, ~250 LOC total)
-- Schlieren, Spirograph, Superformula, WaterCaustics, Talbot (if confirmed in registry)
+### PR 3 — Scalar-only batch B (4 effects, ~250 LOC total) — COMPLETE
+- Schlieren, Spirograph, Superformula, WaterCaustics
+- Talbot remains deferred behind `FEATURE_AR_1C_EXPERIMENTAL`
 
-### PR 4 — Scalars + LED-domain PSRAM (3 effects, ~240 LOC total)
+### PR 4 — Scalars + LED-domain PSRAM (3 effects, ~240 LOC total) — COMPLETE
 - ReactionDiffusion, RDTriangle, Rule30Cathedral
 
-### PR 5 — Scalars + grid/CA PSRAM (2 effects, ~300 LOC)
-- IFSBioRelic, LorenzRibbon (if confirmed in registry)
+### PR 5 — Scalars + grid/CA PSRAM (1 effect, ~300 LOC) — COMPLETE
+- IFSBioRelic
+- LorenzRibbon remains deferred behind `FEATURE_AR_1C_EXPERIMENTAL`
 
-### PR 6 — TRM family (4 effects, ~800 LOC, high PSRAM impact)
+### PR 6 — TRM family (4 effects, ~800 LOC, high PSRAM impact) — COMPLETE
 - `LGPTimeReversalMirrorEffect_AR` + `_Mod1` + `_Mod2` + `_Mod3`
-- **MUST verify PSRAM budget** before merge: 4 effects x 4 zones x 45.76 KB = 732 KB. If unacceptable, promote to approach B for this family only (instantiate distinct effect per zone at registration).
+- **PSRAM budget verified on hardware:** active-only lifecycle, reserve gate passes.
 
 ### PR 7 — ChimeraCrown (if confirmed in registry)
 - Solo PR due to uncertain scope + quarantine status

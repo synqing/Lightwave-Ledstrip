@@ -1857,8 +1857,8 @@ void V1ApiRoutes::registerRoutes(
 
             if (doc.containsKey("mode")) {
                 mode = doc["mode"] | 0;
-                if (mode > static_cast<uint8_t>(lightwaveos::enhancement::EdgeMixerMode::STM_DUAL)) {
-                    sendErrorResponse(request, 400, ErrorCodes::OUT_OF_RANGE, "mode must be 0-7", "mode");
+                if (mode > static_cast<uint8_t>(lightwaveos::enhancement::EdgeMixerMode::STM_SPECTRAL_MAP)) {
+                    sendErrorResponse(request, 400, ErrorCodes::OUT_OF_RANGE, "mode must be 0-8", "mode");
                     return;
                 }
                 hasMode = true;

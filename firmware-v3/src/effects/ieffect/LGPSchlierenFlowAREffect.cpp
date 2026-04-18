@@ -44,19 +44,25 @@ static inline float clampf(float x, float lo, float hi) {
     return x;
 }
 
-LGPSchlierenFlowAREffect::LGPSchlierenFlowAREffect()
-    : m_t(0.0f), m_bass(0.0f), m_treble(0.0f), m_chromaAngle(0.0f),
-      m_bassMax(0.15f), m_trebleMax(0.15f),
-      m_impact(0.0f), m_snareImpact(0.0f), m_hihatImpact(0.0f) {}
+LGPSchlierenFlowAREffect::LGPSchlierenFlowAREffect() = default;
 
 bool LGPSchlierenFlowAREffect::init(plugins::EffectContext& ctx) {
-    m_t = 0.0f; m_bass = 0.0f; m_treble = 0.0f; m_chromaAngle = 0.0f;
-    m_bassMax = 0.15f; m_trebleMax = 0.15f;
-    m_impact = 0.0f; m_snareImpact = 0.0f; m_hihatImpact = 0.0f;
+    for (uint8_t zi = 0; zi < kMaxZones; ++zi) {
+        m_t[zi] = 0.0f;
+        m_bass[zi] = 0.0f;
+        m_treble[zi] = 0.0f;
+        m_chromaAngle[zi] = 0.0f;
+        m_bassMax[zi] = 0.15f;
+        m_trebleMax[zi] = 0.15f;
+        m_impact[zi] = 0.0f;
+        m_snareImpact[zi] = 0.0f;
+        m_hihatImpact[zi] = 0.0f;
+    }
     return true;
 }
 
 void LGPSchlierenFlowAREffect::render(plugins::EffectContext& ctx) {
+    const int z = (ctx.zoneId < kMaxZones) ? ctx.zoneId : 0;
     const float dt = ctx.getSafeRawDeltaSeconds();
     const float dtVis = ctx.getSafeDeltaSeconds();
     const float speedNorm = ctx.speed / 50.0f;
@@ -71,8 +77,8 @@ void LGPSchlierenFlowAREffect::render(plugins::EffectContext& ctx) {
     const float* chroma = ctx.audio.available ? ctx.audio.chroma() : nullptr;
 
     // STEP 2: Single-stage smoothing
-    m_bass += (rawBass - m_bass) * (1.0f - expf(-dt / kBassTau));
-    m_treble += (rawTreble - m_treble) * (1.0f - expf(-dt / kTrebleTau));
+    m_bass[z] += (rawBass - m_bass[z]) * (1.0f - expf(-dt / kBassTau));
+    m_treble[z] += (rawTreble - m_treble[z]) * (1.0f - expf(-dt / kTrebleTau));
 
     // Circular chroma EMA
     if (chroma) {
@@ -85,12 +91,12 @@ void LGPSchlierenFlowAREffect::render(plugins::EffectContext& ctx) {
         if (sx * sx + sy * sy > 0.0001f) {
             float target = atan2f(sy, sx);
             if (target < 0.0f) target += kTwoPi;
-            float delta = target - m_chromaAngle;
+            float delta = target - m_chromaAngle[z];
             while (delta > kPi) delta -= kTwoPi;
             while (delta < -kPi) delta += kTwoPi;
-            m_chromaAngle += delta * (1.0f - expf(-dt / kChromaTau));
-            if (m_chromaAngle < 0.0f) m_chromaAngle += kTwoPi;
-            if (m_chromaAngle >= kTwoPi) m_chromaAngle -= kTwoPi;
+            m_chromaAngle[z] += delta * (1.0f - expf(-dt / kChromaTau));
+            if (m_chromaAngle[z] < 0.0f) m_chromaAngle[z] += kTwoPi;
+            if (m_chromaAngle[z] >= kTwoPi) m_chromaAngle[z] -= kTwoPi;
         }
     }
 
@@ -98,33 +104,33 @@ void LGPSchlierenFlowAREffect::render(plugins::EffectContext& ctx) {
     {
         float aA = 1.0f - expf(-dt / kFollowerAttackTau);
         float dA = 1.0f - expf(-dt / kFollowerDecayTau);
-        if (m_bass > m_bassMax) m_bassMax += (m_bass - m_bassMax) * aA;
-        else m_bassMax += (m_bass - m_bassMax) * dA;
-        if (m_bassMax < kFollowerFloor) m_bassMax = kFollowerFloor;
+        if (m_bass[z] > m_bassMax[z]) m_bassMax[z] += (m_bass[z] - m_bassMax[z]) * aA;
+        else m_bassMax[z] += (m_bass[z] - m_bassMax[z]) * dA;
+        if (m_bassMax[z] < kFollowerFloor) m_bassMax[z] = kFollowerFloor;
 
-        if (m_treble > m_trebleMax) m_trebleMax += (m_treble - m_trebleMax) * aA;
-        else m_trebleMax += (m_treble - m_trebleMax) * dA;
-        if (m_trebleMax < kFollowerFloor) m_trebleMax = kFollowerFloor;
+        if (m_treble[z] > m_trebleMax[z]) m_trebleMax[z] += (m_treble[z] - m_trebleMax[z]) * aA;
+        else m_trebleMax[z] += (m_treble[z] - m_trebleMax[z]) * dA;
+        if (m_trebleMax[z] < kFollowerFloor) m_trebleMax[z] = kFollowerFloor;
     }
-    const float normBass = clamp01(m_bass / m_bassMax);
-    const float normTreble = clamp01(m_treble / m_trebleMax);
+    const float normBass = clamp01(m_bass[z] / m_bassMax[z]);
+    const float normTreble = clamp01(m_treble[z] / m_trebleMax[z]);
 
     // STEP 4: 3 percussion impact layers
-    if (beatStr > m_impact) m_impact = beatStr;
-    m_impact *= expf(-dt / kImpactDecayTau);
+    if (beatStr > m_impact[z]) m_impact[z] = beatStr;
+    m_impact[z] *= expf(-dt / kImpactDecayTau);
 
-    if (snareHit) m_snareImpact = fmaxf(m_snareImpact, 0.75f);
-    m_snareImpact *= expf(-dt / kSnareDecayTau);
+    if (snareHit) m_snareImpact[z] = fmaxf(m_snareImpact[z], 0.75f);
+    m_snareImpact[z] *= expf(-dt / kSnareDecayTau);
 
-    if (hihatHit) m_hihatImpact = fmaxf(m_hihatImpact, 0.70f);
-    m_hihatImpact *= expf(-dt / kHihatDecayTau);
+    if (hihatHit) m_hihatImpact[z] = fmaxf(m_hihatImpact[z], 0.70f);
+    m_hihatImpact[z] *= expf(-dt / kHihatDecayTau);
 
     // STEP 5: Schlieren visual parameters
     const float beatMod = 0.3f + 0.7f * beatStr;
 
     // Flow rate: bass drives speed
     float flowRate = (1.4f + 8.0f * speedNorm) * (0.7f + 0.5f * normBass);
-    m_t += flowRate * dtVis;
+    m_t[z] += flowRate * dtVis;
 
     // Spatial frequencies: bass modulates low freq, treble modulates high
     float f1 = 0.060f * (1.0f + 0.20f * normBass);
@@ -132,10 +138,10 @@ void LGPSchlierenFlowAREffect::render(plugins::EffectContext& ctx) {
     float f3 = 0.310f * (1.0f + 0.20f * normTreble);
 
     // Edge sharpness: treble sharpens, hihat pops
-    float edgeGain = 5.0f + 4.0f * normTreble + 3.0f * m_hihatImpact;
+    float edgeGain = 5.0f + 4.0f * normTreble + 3.0f * m_hihatImpact[z];
 
     // Hue from chroma
-    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle * (255.0f / kTwoPi)) + ctx.gHue;
+    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle[z] * (255.0f / kTwoPi)) + ctx.gHue;
 
     float midPos = (STRIP_LENGTH - 1) * 0.5f;
 
@@ -149,13 +155,13 @@ void LGPSchlierenFlowAREffect::render(plugins::EffectContext& ctx) {
         float dmid = x - midPos;
 
         // Knife-edge gradient flow (3 sine layers)
-        float rho = sinf(x * f1 + m_t)
-                  + 0.7f * sinf(x * f2 - m_t * 1.2f)
-                  + 0.3f * sinf(x * f3 + m_t * 2.1f);
+        float rho = sinf(x * f1 + m_t[z])
+                  + 0.7f * sinf(x * f2 - m_t[z] * 1.2f)
+                  + 0.3f * sinf(x * f3 + m_t[z] * 2.1f);
 
-        float grad = f1 * cosf(x * f1 + m_t)
-                   + 0.7f * f2 * cosf(x * f2 - m_t * 1.2f)
-                   + 0.3f * f3 * cosf(x * f3 + m_t * 2.1f);
+        float grad = f1 * cosf(x * f1 + m_t[z])
+                   + 0.7f * f2 * cosf(x * f2 - m_t[z] * 1.2f)
+                   + 0.3f * f3 * cosf(x * f3 + m_t[z] * 2.1f);
 
         // Edge detection via tanh
         float edge = 0.5f + 0.5f * tanhf(grad * edgeGain);
@@ -168,9 +174,9 @@ void LGPSchlierenFlowAREffect::render(plugins::EffectContext& ctx) {
                              + 0.35f * (0.5f + 0.5f * sinf(rho));
 
         // 3 percussion layers at edge positions
-        float impactAdd = m_impact * edge * 0.30f
-                        + m_snareImpact * edge * 0.25f
-                        + m_hihatImpact * edge * 0.20f;
+        float impactAdd = m_impact[z] * edge * 0.30f
+                        + m_snareImpact[z] * edge * 0.25f
+                        + m_hihatImpact[z] * edge * 0.20f;
 
         // Compose brightness: audio x geometry x beat x silence
         float brightness = (normBass * structuredEdge + impactAdd) * beatMod * silScale;

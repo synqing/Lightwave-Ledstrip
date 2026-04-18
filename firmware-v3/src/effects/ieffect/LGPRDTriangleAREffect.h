@@ -38,33 +38,41 @@ public:
     float getParameter(const char* name) const override;
 
 private:
+    static constexpr uint8_t kMaxZones = 4;
     static constexpr uint16_t STRIP_LENGTH = 160;
 
     // PSRAM-ALLOCATED -- large buffers MUST NOT live in DRAM
+#ifndef NATIVE_BUILD
     struct PsramData {
-        float u[STRIP_LENGTH];
-        float v[STRIP_LENGTH];
-        float u2[STRIP_LENGTH];
-        float v2[STRIP_LENGTH];
+        float u[kMaxZones][STRIP_LENGTH];
+        float v[kMaxZones][STRIP_LENGTH];
+        float u2[kMaxZones][STRIP_LENGTH];
+        float v2[kMaxZones][STRIP_LENGTH];
     };
     PsramData* m_ps = nullptr;
+#else
+    float m_u[kMaxZones][STRIP_LENGTH];
+    float m_v[kMaxZones][STRIP_LENGTH];
+    float m_u2[kMaxZones][STRIP_LENGTH];
+    float m_v2[kMaxZones][STRIP_LENGTH];
+#endif
 
     // Single-stage smoothed audio
-    float m_bass       = 0.0f;
-    float m_treble     = 0.0f;
-    float m_chromaAngle = 0.0f;
+    float m_bass[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float m_treble[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float m_chromaAngle[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
 
     // Asymmetric max followers
-    float m_bassMax    = 0.15f;
-    float m_trebleMax  = 0.15f;
+    float m_bassMax[kMaxZones] = {0.15f, 0.15f, 0.15f, 0.15f};
+    float m_trebleMax[kMaxZones] = {0.15f, 0.15f, 0.15f, 0.15f};
 
     // Impact
-    float m_impact     = 0.0f;
+    float m_impact[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
 
     // Gray-Scott parameters (modulated by audio)
-    float m_F     = 0.0380f;
-    float m_K     = 0.0630f;
-    float m_meltK = 0.0018f;
+    float m_F[kMaxZones] = {0.0380f, 0.0380f, 0.0380f, 0.0380f};
+    float m_K[kMaxZones] = {0.0630f, 0.0630f, 0.0630f, 0.0630f};
+    float m_meltK[kMaxZones] = {0.0018f, 0.0018f, 0.0018f, 0.0018f};
 };
 
 } // namespace ieffect

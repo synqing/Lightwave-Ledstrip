@@ -35,32 +35,36 @@ public:
     float getParameter(const char* name) const override;
 
 private:
+    static constexpr uint8_t kMaxZones = 4;
 #ifndef NATIVE_BUILD
     // PSRAM storage for CA state
     struct Rule30Psram {
-        uint8_t cells[160];
-        uint8_t next[160];
+        uint8_t cells[kMaxZones][160];
+        uint8_t next[kMaxZones][160];
     };
     Rule30Psram* m_ps = nullptr;
+#else
+    uint8_t m_cells[kMaxZones][160];
+    uint8_t m_next[kMaxZones][160];
 #endif
 
-    float m_t = 0.0f;
-    float m_stepAccum = 0.0f;
+    float m_t[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float m_stepAccum[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
 
     // Single-stage smoothed audio
-    float m_bass       = 0.0f;
-    float m_treble     = 0.0f;
-    float m_chromaAngle = 0.0f;
+    float m_bass[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float m_treble[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float m_chromaAngle[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
 
     // Asymmetric max followers
-    float m_bassMax    = 0.15f;
-    float m_trebleMax  = 0.15f;
+    float m_bassMax[kMaxZones] = {0.15f, 0.15f, 0.15f, 0.15f};
+    float m_trebleMax[kMaxZones] = {0.15f, 0.15f, 0.15f, 0.15f};
 
     // Impact
-    float m_impact     = 0.0f;
+    float m_impact[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
 
-    void seedCA();
-    void stepCA();
+    void seedCA(int z);
+    void stepCA(int z);
 };
 
 } // namespace ieffect

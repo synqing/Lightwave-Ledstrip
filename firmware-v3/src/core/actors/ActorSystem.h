@@ -70,11 +70,13 @@ struct SystemStats {
     uint32_t totalMessages;         // Total messages processed
     uint32_t heapFreeBytes;         // Current free heap
     uint32_t heapMinFreeBytes;      // Minimum free heap ever
+    uint32_t spiramFreeBytes;       // Current free SPIRAM
     uint8_t activeActors;           // Number of running actors
 
     SystemStats()
         : uptimeMs(0), totalMessages(0)
         , heapFreeBytes(0), heapMinFreeBytes(0)
+        , spiramFreeBytes(0)
         , activeActors(0) {}
 };
 

@@ -61,21 +61,7 @@ static inline float clampf(float x, float lo, float hi) {
 // Construction
 // =========================================================================
 
-LGPTimeReversalMirrorEffect_AR::LGPTimeReversalMirrorEffect_AR()
-    : m_ps(nullptr)
-    , m_phaseTimer(0.0f)
-    , m_isReverse(false)
-    , m_frameInPhase(0)
-    , m_historyWrite(0)
-    , m_historyCount(0)
-    , m_historyRead(0)
-    , m_frameSinceImpulse(0)
-    , m_fallbackPhase(0.0f)
-    , m_kickEnv(0.0f)
-    , m_snareEnv(0.0f)
-    , m_lastReverseMs(0)
-{
-}
+LGPTimeReversalMirrorEffect_AR::LGPTimeReversalMirrorEffect_AR() = default;
 
 // =========================================================================
 // init()
@@ -96,7 +82,8 @@ bool LGPTimeReversalMirrorEffect_AR::init(plugins::EffectContext& ctx) {
             return false;
         }
     }
-    // Only zero live field arrays on re-init; history gated by m_historyCount.
+    // Only zero live field arrays on re-init; history remains gated by the
+    // per-zone history counts so we preserve the existing lifecycle policy.
     if (wasFirstAlloc) {
         memset(m_ps, 0, sizeof(PsramData));
     } else {
@@ -109,41 +96,44 @@ bool LGPTimeReversalMirrorEffect_AR::init(plugins::EffectContext& ctx) {
     m_ps = nullptr;
 #endif
 
-    // Reset phase state
-    m_phaseTimer        = 0.0f;
-    m_isReverse         = false;
-    m_frameInPhase      = 0;
-    m_historyWrite      = 0;
-    m_historyCount      = 0;
-    m_historyRead       = 0;
-    m_frameSinceImpulse = 0;
-    m_fallbackPhase     = 0.0f;
+    for (uint8_t zi = 0; zi < kMaxZones; ++zi) {
+        m_phaseTimer[zi] = 0.0f;
+        m_isReverse[zi] = false;
+        m_frameInPhase[zi] = 0;
+        m_historyWrite[zi] = 0;
+        m_historyCount[zi] = 0;
+        m_historyRead[zi] = 0;
+        m_frameSinceImpulse[zi] = 0;
+        m_fallbackPhase[zi] = 0.0f;
+        m_kickEnv[zi] = 0.0f;
+        m_snareEnv[zi] = 0.0f;
+        m_lastReverseMs[zi] = 0;
 
-    // Reset AR envelopes
-    m_kickEnv       = 0.0f;
-    m_snareEnv      = 0.0f;
-    m_lastReverseMs = 0;
-
-    // Seed the field with a gentle centre bump to avoid a dead start
-    if (m_ps) {
-        for (uint16_t i = 0; i < kFieldSize; i++) {
-            float distNorm = (float)i / (float)(kFieldSize - 1);
-            float bump = expf(-distNorm * distNorm * 20.0f) * 0.3f;
-            m_ps->u_curr[i] = 0.5f + bump;
-            m_ps->u_prev[i] = 0.5f;
+        // Seed every zone slot with the same gentle centre bump so zone
+        // reassignments do not inherit another zone's recorded field.
+        if (m_ps) {
+            for (uint16_t i = 0; i < kFieldSize; i++) {
+                float distNorm = (float)i / (float)(kFieldSize - 1);
+                float bump = expf(-distNorm * distNorm * 20.0f) * 0.3f;
+                m_ps->u_curr[zi][i] = 0.5f + bump;
+                m_ps->u_prev[zi][i] = 0.5f;
+                m_ps->u_next[zi][i] = 0.0f;
+            }
         }
     }
 
 #if FEATURE_AUDIO_SYNC
-    for (uint8_t i = 0; i < 12; i++) {
-        m_chromaFollowers[i].reset(0.0f);
-        m_chromaSmoothed[i] = 0.0f;
-        m_chromaTargets[i]  = 0.0f;
+    for (uint8_t zi = 0; zi < kMaxZones; ++zi) {
+        for (uint8_t i = 0; i < 12; i++) {
+            m_chromaFollowers[zi][i].reset(0.0f);
+            m_chromaSmoothed[zi][i] = 0.0f;
+            m_chromaTargets[zi][i] = 0.0f;
+        }
+        m_chromaAngle[zi] = 0.0f;
+        m_rmsFollower[zi].reset(0.0f);
+        m_targetRms[zi] = 0.0f;
+        m_lastHopSeq[zi] = 0;
     }
-    m_chromaAngle = 0.0f;
-    m_rmsFollower.reset(0.0f);
-    m_targetRms   = 0.0f;
-    m_lastHopSeq  = 0;
 #endif
 
     return true;
@@ -155,6 +145,24 @@ bool LGPTimeReversalMirrorEffect_AR::init(plugins::EffectContext& ctx) {
 
 void LGPTimeReversalMirrorEffect_AR::render(plugins::EffectContext& ctx) {
     if (!m_ps) return;  // PSRAM guard
+    const int z = (ctx.zoneId < kMaxZones) ? ctx.zoneId : 0;
+
+    float* u_prev = m_ps->u_prev[z];
+    float* u_curr = m_ps->u_curr[z];
+    float* u_next = m_ps->u_next[z];
+    float (*history)[kFieldSize] = m_ps->history[z];
+
+    float& phaseTimer = m_phaseTimer[z];
+    bool& isReverse = m_isReverse[z];
+    uint16_t& frameInPhase = m_frameInPhase[z];
+    uint16_t& historyWrite = m_historyWrite[z];
+    uint16_t& historyCount = m_historyCount[z];
+    int16_t& historyRead = m_historyRead[z];
+    uint16_t& frameSinceImpulse = m_frameSinceImpulse[z];
+    float& fallbackPhase = m_fallbackPhase[z];
+    float& kickEnv = m_kickEnv[z];
+    float& snareEnv = m_snareEnv[z];
+    uint32_t& lastReverseMs = m_lastReverseMs[z];
 
     // -----------------------------------------------------------------
     // Timing and normalised controls
@@ -180,8 +188,8 @@ void LGPTimeReversalMirrorEffect_AR::render(plugins::EffectContext& ctx) {
     // -----------------------------------------------------------------
     // AR: Envelope decay (every frame, regardless of audio)
     // -----------------------------------------------------------------
-    m_kickEnv  *= expf(-rawDt / 0.15f);
-    m_snareEnv *= expf(-rawDt / 0.20f);
+    kickEnv *= expf(-rawDt / 0.15f);
+    snareEnv *= expf(-rawDt / 0.20f);
 
     // -----------------------------------------------------------------
     // Audio processing
@@ -193,28 +201,36 @@ void LGPTimeReversalMirrorEffect_AR::render(plugins::EffectContext& ctx) {
     bool beatTriggered = false;
     bool snareHit      = false;
 
+    float* chromaSmoothed = m_chromaSmoothed[z];
+    float* chromaTargets = m_chromaTargets[z];
+    enhancement::AsymmetricFollower* chromaFollowers = m_chromaFollowers[z];
+    float& chromaAngle = m_chromaAngle[z];
+    enhancement::AsymmetricFollower& rmsFollower = m_rmsFollower[z];
+    float& targetRms = m_targetRms[z];
+    uint32_t& lastHopSeq = m_lastHopSeq[z];
+
     if (ctx.audio.available) {
         // Hop-gated target updates
-        bool newHop = (ctx.audio.hopSequence() != m_lastHopSeq);
+        bool newHop = (ctx.audio.hopSequence() != lastHopSeq);
         if (newHop) {
-            m_lastHopSeq = ctx.audio.hopSequence();
-            m_targetRms  = ctx.audio.rms();
+            lastHopSeq = ctx.audio.hopSequence();
+            targetRms = ctx.audio.rms();
 
             for (uint8_t i = 0; i < 12; i++) {
-                m_chromaTargets[i] = ctx.audio.getHeavyChroma(i);
+                chromaTargets[i] = ctx.audio.getHeavyChroma(i);
             }
         }
 
         // Smooth toward targets every frame
-        float smoothedRms = m_rmsFollower.updateWithMood(m_targetRms, rawDt, moodNorm);
+        float smoothedRms = rmsFollower.updateWithMood(targetRms, rawDt, moodNorm);
 
         for (uint8_t i = 0; i < 12; i++) {
-            m_chromaSmoothed[i] = m_chromaFollowers[i].updateWithMood(
-                m_chromaTargets[i], rawDt, moodNorm);
+            chromaSmoothed[i] = chromaFollowers[i].updateWithMood(
+                chromaTargets[i], rawDt, moodNorm);
         }
 
         chromaHue = effects::chroma::circularChromaHueSmoothed(
-            m_chromaSmoothed, m_chromaAngle, rawDt, 0.20f);
+            chromaSmoothed, chromaAngle, rawDt, 0.20f);
 
         // RMS modulates impulse strength (0.3 .. 1.0)
         impulseStrength = 0.3f + 0.7f * clampf(smoothedRms * 2.0f, 0.0f, 1.0f);
@@ -225,37 +241,37 @@ void LGPTimeReversalMirrorEffect_AR::render(plugins::EffectContext& ctx) {
 
         // AR: Kick envelope -- fast attack from beat
         if (beatTriggered) {
-            m_kickEnv = fmaxf(m_kickEnv, 0.85f);
+            kickEnv = fmaxf(kickEnv, 0.85f);
         }
 
         // AR: Snare envelope -- fast attack from snare hit
         if (snareHit) {
-            m_snareEnv = fmaxf(m_snareEnv, 0.7f);
+            snareEnv = fmaxf(snareEnv, 0.7f);
         }
 
         // AR: Kick envelope modulates impulse strength
-        impulseStrength *= (0.7f + 0.3f * m_kickEnv);
+        impulseStrength *= (0.7f + 0.3f * kickEnv);
 
     } else {
         // No audio available -- gentle fallback hue rotation
-        m_fallbackPhase += speedNorm * 0.4f * rawDt;
-        if (m_fallbackPhase > 6.2831853f) m_fallbackPhase -= 6.2831853f;
-        chromaHue = (uint8_t)(m_fallbackPhase * (255.0f / 6.2831853f));
+        fallbackPhase += speedNorm * 0.4f * rawDt;
+        if (fallbackPhase > 6.2831853f) fallbackPhase -= 6.2831853f;
+        chromaHue = (uint8_t)(fallbackPhase * (255.0f / 6.2831853f));
     }
 #else
     // Audio feature disabled -- fallback animation
-    m_fallbackPhase += speedNorm * 0.4f * rawDt;
-    if (m_fallbackPhase > 6.2831853f) m_fallbackPhase -= 6.2831853f;
-    chromaHue = (uint8_t)(m_fallbackPhase * (255.0f / 6.2831853f));
+    fallbackPhase += speedNorm * 0.4f * rawDt;
+    if (fallbackPhase > 6.2831853f) fallbackPhase -= 6.2831853f;
+    chromaHue = (uint8_t)(fallbackPhase * (255.0f / 6.2831853f));
 #endif
 
     // -----------------------------------------------------------------
     // Phase machine: forward vs reverse
     // -----------------------------------------------------------------
-    m_phaseTimer += rawDt;
-    m_frameInPhase++;
+    phaseTimer += rawDt;
+    frameInPhase++;
 
-    if (!m_isReverse) {
+    if (!isReverse) {
         // === FORWARD PHASE ===
         float forwardDur = m_forwardSec / fmaxf(speedNorm, 0.2f);
 
@@ -265,13 +281,13 @@ void LGPTimeReversalMirrorEffect_AR::render(plugins::EffectContext& ctx) {
         if (snareHit && ctx.audio.available) {
             uint32_t nowMs = (uint32_t)(millis());
             uint32_t cooldownMs = (uint32_t)(kMinReverseCooldownSec * 1000.0f);
-            if ((nowMs - m_lastReverseMs) > cooldownMs && m_historyCount > 0) {
+            if ((nowMs - lastReverseMs) > cooldownMs && historyCount > 0) {
                 snareTriggeredReverse = true;
             }
         }
 #endif
 
-        bool phaseExpired = (m_phaseTimer >= forwardDur);
+        bool phaseExpired = (phaseTimer >= forwardDur);
 
 #if FEATURE_AUDIO_SYNC
         if (phaseExpired || snareTriggeredReverse) {
@@ -279,20 +295,20 @@ void LGPTimeReversalMirrorEffect_AR::render(plugins::EffectContext& ctx) {
         if (phaseExpired) {
 #endif
             // Transition to reverse
-            m_isReverse    = true;
-            m_phaseTimer   = 0.0f;
-            m_frameInPhase = 0;
+            isReverse = true;
+            phaseTimer = 0.0f;
+            frameInPhase = 0;
             // Set read cursor to last written snapshot
-            m_historyRead  = (int16_t)m_historyCount - 1;
-            m_lastReverseMs = (uint32_t)(millis());
+            historyRead = (int16_t)historyCount - 1;
+            lastReverseMs = (uint32_t)(millis());
         } else {
             // -------------------------------------------------------
             // Wave equation step (1D damped wave, Neumann boundaries)
             // -------------------------------------------------------
 
             // Inject centre impulse periodically (and on beat/kick)
-            m_frameSinceImpulse++;
-            bool doImpulse = (m_frameSinceImpulse >= impulseEvery);
+            frameSinceImpulse++;
+            bool doImpulse = (frameSinceImpulse >= impulseEvery);
 
 #if FEATURE_AUDIO_SYNC
             // Beat triggers extra impulse during forward phase
@@ -300,79 +316,80 @@ void LGPTimeReversalMirrorEffect_AR::render(plugins::EffectContext& ctx) {
 #endif
 
             if (doImpulse) {
-                m_frameSinceImpulse = 0;
+                frameSinceImpulse = 0;
                 // Gaussian impulse centred at field[0] (= strip centre)
                 for (uint16_t k = 0; k < 8; k++) {
                     float g = expf(-(float)(k * k) * 0.5f) * impulseStrength * 0.25f;
-                    m_ps->u_curr[k] += g;
-                    m_ps->u_curr[k] = clampf(m_ps->u_curr[k], 0.0f, 1.0f);
+                    u_curr[k] += g;
+                    u_curr[k] = clampf(u_curr[k], 0.0f, 1.0f);
                 }
             }
 
             // Compute u_next from wave equation
             for (uint16_t i = 0; i < kFieldSize; i++) {
                 // Laplacian with Neumann (reflecting) boundary conditions
-                float left  = (i > 0)              ? m_ps->u_curr[i - 1] : m_ps->u_curr[0];
-                float right = (i < kFieldSize - 1) ? m_ps->u_curr[i + 1] : m_ps->u_curr[kFieldSize - 1];
-                float laplacian = left - 2.0f * m_ps->u_curr[i] + right;
+                float left  = (i > 0) ? u_curr[i - 1] : u_curr[0];
+                float right = (i < kFieldSize - 1) ? u_curr[i + 1] : u_curr[kFieldSize - 1];
+                float laplacian = left - 2.0f * u_curr[i] + right;
 
-                m_ps->u_next[i] = 2.0f * m_ps->u_curr[i]
-                                 - m_ps->u_prev[i]
+                u_next[i] = 2.0f * u_curr[i]
+                                 - u_prev[i]
                                  + m_csq * laplacian
-                                 - damping * m_ps->u_curr[i];
+                                 - damping * u_curr[i];
 
                 // Clamp to prevent divergence
-                m_ps->u_next[i] = clampf(m_ps->u_next[i], -0.5f, 1.5f);
+                u_next[i] = clampf(u_next[i], -0.5f, 1.5f);
             }
 
             // Rotate buffers
-            memcpy(m_ps->u_prev, m_ps->u_curr, sizeof(float) * kFieldSize);
-            memcpy(m_ps->u_curr, m_ps->u_next, sizeof(float) * kFieldSize);
+            memcpy(u_prev, u_curr, sizeof(float) * kFieldSize);
+            memcpy(u_curr, u_next, sizeof(float) * kFieldSize);
 
             // Record snapshot into history buffer
-            if (m_historyWrite < kHistoryDepth) {
-                memcpy(m_ps->history[m_historyWrite], m_ps->u_curr,
+            if (historyWrite < kHistoryDepth) {
+                memcpy(history[historyWrite], u_curr,
                        sizeof(float) * kFieldSize);
-                m_historyWrite++;
-                if (m_historyCount < m_historyWrite) {
-                    m_historyCount = m_historyWrite;
+                historyWrite++;
+                if (historyCount < historyWrite) {
+                    historyCount = historyWrite;
                 }
             }
         }
     } else {
         // === REVERSE PHASE ===
         float reverseDur = m_reverseSec / fmaxf(speedNorm, 0.2f);
-        if (m_phaseTimer >= reverseDur || m_historyRead < 0) {
+        if (phaseTimer >= reverseDur || historyRead < 0) {
             // Transition back to forward
-            m_isReverse         = false;
-            m_phaseTimer        = 0.0f;
-            m_frameInPhase      = 0;
-            m_historyWrite      = 0;
-            m_historyCount      = 0;
-            m_frameSinceImpulse = 0;
+            isReverse = false;
+            phaseTimer = 0.0f;
+            frameInPhase = 0;
+            historyWrite = 0;
+            historyCount = 0;
+            frameSinceImpulse = 0;
 
             // Re-seed field for next forward pass
             for (uint16_t i = 0; i < kFieldSize; i++) {
                 float distNorm = (float)i / (float)(kFieldSize - 1);
                 float bump = expf(-distNorm * distNorm * 20.0f) * 0.3f;
-                m_ps->u_curr[i] = 0.5f + bump;
-                m_ps->u_prev[i] = 0.5f;
+                u_curr[i] = 0.5f + bump;
+                u_prev[i] = 0.5f;
+                u_next[i] = 0.0f;
             }
         } else {
             // Read history backwards; step read cursor by speed
             // (skip frames at high speed to fill the time window)
             uint16_t step = 1;
-            if (m_historyCount > 0) {
-                float idealSteps = (float)m_historyCount / (reverseDur / fmaxf(rawDt, 0.001f));
+            if (historyCount > 0) {
+                float idealSteps = (float)historyCount / (reverseDur / fmaxf(rawDt, 0.001f));
                 step = (uint16_t)fmaxf(1.0f, idealSteps);
             }
-            m_historyRead -= (int16_t)step;
-            if (m_historyRead < 0) m_historyRead = 0;
+            historyRead -= (int16_t)step;
+            if (historyRead < 0) historyRead = 0;
 
             // Load reversed snapshot into u_curr with phase flip (invert around 0.5)
-            const float* snap = m_ps->history[m_historyRead];
+            const float* snap = history[historyRead];
             for (uint16_t i = 0; i < kFieldSize; i++) {
-                m_ps->u_curr[i] = 1.0f - snap[i];  // Phase flip
+                u_curr[i] = 1.0f - snap[i];  // Phase flip
             }
         }
     }
@@ -382,17 +399,17 @@ void LGPTimeReversalMirrorEffect_AR::render(plugins::EffectContext& ctx) {
     // -----------------------------------------------------------------
 
     // Compute normalisation range of the current field
-    float fieldMin = m_ps->u_curr[0];
-    float fieldMax = m_ps->u_curr[0];
+    float fieldMin = u_curr[0];
+    float fieldMax = u_curr[0];
     for (uint16_t i = 1; i < kFieldSize; i++) {
-        if (m_ps->u_curr[i] < fieldMin) fieldMin = m_ps->u_curr[i];
-        if (m_ps->u_curr[i] > fieldMax) fieldMax = m_ps->u_curr[i];
+        if (u_curr[i] < fieldMin) fieldMin = u_curr[i];
+        if (u_curr[i] > fieldMax) fieldMax = u_curr[i];
     }
     float fieldRange = fieldMax - fieldMin;
     if (fieldRange < 0.01f) fieldRange = 0.01f;  // Avoid division by zero
 
     // Reverse-phase visual indicator: slight hue shift
-    uint8_t reverseHueShift = m_isReverse ? 20 : 0;
+    uint8_t reverseHueShift = isReverse ? 20 : 0;
 
     for (uint16_t i = 0; i < STRIP_LENGTH; i++) {
         uint16_t dist = centerPairDistance(i);
@@ -400,12 +417,12 @@ void LGPTimeReversalMirrorEffect_AR::render(plugins::EffectContext& ctx) {
         uint16_t fi = (dist < kFieldSize) ? dist : (kFieldSize - 1);
 
         // Normalise field value to 0..1
-        float fieldVal = (m_ps->u_curr[fi] - fieldMin) / fieldRange;
+        float fieldVal = (u_curr[fi] - fieldMin) / fieldRange;
         fieldVal = clampf(fieldVal, 0.0f, 1.0f);
 
         // AR: During reverse phase, snare envelope provides a subtle brightness boost
-        if (m_isReverse) {
-            fieldVal *= (1.0f + 0.15f * m_snareEnv);
+        if (isReverse) {
+            fieldVal *= (1.0f + 0.15f * snareEnv);
             fieldVal = clampf(fieldVal, 0.0f, 1.0f);
         }
 
@@ -423,12 +440,12 @@ void LGPTimeReversalMirrorEffect_AR::render(plugins::EffectContext& ctx) {
 
         // Strip B: slight phase offset (+10 field index, clamped) and hue +30
         uint16_t fi2 = (fi + 10 < kFieldSize) ? (fi + 10) : (kFieldSize - 1);
-        float fieldVal2 = (m_ps->u_curr[fi2] - fieldMin) / fieldRange;
+        float fieldVal2 = (u_curr[fi2] - fieldMin) / fieldRange;
         fieldVal2 = clampf(fieldVal2, 0.0f, 1.0f);
 
         // AR: Same snare brightness boost for Strip B
-        if (m_isReverse) {
-            fieldVal2 *= (1.0f + 0.15f * m_snareEnv);
+        if (isReverse) {
+            fieldVal2 *= (1.0f + 0.15f * snareEnv);
             fieldVal2 = clampf(fieldVal2, 0.0f, 1.0f);
         }
 

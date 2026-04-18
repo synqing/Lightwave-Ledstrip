@@ -34,18 +34,20 @@ public:
     float getParameter(const char* name) const override;
 
 private:
-    float m_t1 = 0.0f;
-    float m_t2 = 0.0f;
+    static constexpr uint8_t kMaxZones = 4;
 
-    float m_bass       = 0.0f;
-    float m_mid        = 0.0f;
-    float m_chromaAngle = 0.0f;
+    float m_t1[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float m_t2[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
 
-    float m_bassMax    = 0.15f;
-    float m_midMax     = 0.15f;
+    float m_bass[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float m_mid[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float m_chromaAngle[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
 
-    float m_impact      = 0.0f;
-    float m_snareImpact = 0.0f;
+    float m_bassMax[kMaxZones] = {0.15f, 0.15f, 0.15f, 0.15f};
+    float m_midMax[kMaxZones] = {0.15f, 0.15f, 0.15f, 0.15f};
+
+    float m_impact[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float m_snareImpact[kMaxZones] = {0.0f, 0.0f, 0.0f, 0.0f};
 };
 
 } // namespace ieffect

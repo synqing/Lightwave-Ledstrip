@@ -42,18 +42,25 @@ static inline float clampf(float x, float lo, float hi) {
     return x;
 }
 
-LGPCymaticLadderAREffect::LGPCymaticLadderAREffect()
-    : m_t(0.0f), m_bass(0.0f), m_mid(0.0f), m_chromaAngle(0.0f),
-      m_bassMax(0.15f), m_midMax(0.15f), m_modeSmooth(3.0f), m_impact(0.0f) {}
+LGPCymaticLadderAREffect::LGPCymaticLadderAREffect() = default;
 
 bool LGPCymaticLadderAREffect::init(plugins::EffectContext& ctx) {
-    m_t = 0.0f; m_bass = 0.0f; m_mid = 0.0f; m_chromaAngle = 0.0f;
-    m_bassMax = 0.15f; m_midMax = 0.15f; m_modeSmooth = 3.0f; m_impact = 0.0f;
+    for (uint8_t zi = 0; zi < kMaxZones; ++zi) {
+        m_t[zi] = 0.0f;
+        m_bass[zi] = 0.0f;
+        m_mid[zi] = 0.0f;
+        m_chromaAngle[zi] = 0.0f;
+        m_bassMax[zi] = 0.15f;
+        m_midMax[zi] = 0.15f;
+        m_modeSmooth[zi] = 3.0f;
+        m_impact[zi] = 0.0f;
+    }
     lightwaveos::effects::cinema::reset();
     return true;
 }
 
 void LGPCymaticLadderAREffect::render(plugins::EffectContext& ctx) {
+    const int z = (ctx.zoneId < kMaxZones) ? ctx.zoneId : 0;
     const float dt = ctx.getSafeRawDeltaSeconds();
     const float dtVis = ctx.getSafeDeltaSeconds();
     const float speedNorm = ctx.speed / 50.0f;
@@ -66,8 +73,8 @@ void LGPCymaticLadderAREffect::render(plugins::EffectContext& ctx) {
     const float* chroma = ctx.audio.available ? ctx.audio.chroma() : nullptr;
 
     // STEP 2: Single-stage smoothing
-    m_bass += (rawBass - m_bass) * (1.0f - expf(-dt / kBassTau));
-    m_mid += (rawMid - m_mid) * (1.0f - expf(-dt / kMidTau));
+    m_bass[z] += (rawBass - m_bass[z]) * (1.0f - expf(-dt / kBassTau));
+    m_mid[z] += (rawMid - m_mid[z]) * (1.0f - expf(-dt / kMidTau));
 
     // Circular chroma EMA
     if (chroma) {
@@ -80,12 +87,12 @@ void LGPCymaticLadderAREffect::render(plugins::EffectContext& ctx) {
         if (sx * sx + sy * sy > 0.0001f) {
             float target = atan2f(sy, sx);
             if (target < 0.0f) target += kTwoPi;
-            float delta = target - m_chromaAngle;
+            float delta = target - m_chromaAngle[z];
             while (delta > kPi) delta -= kTwoPi;
             while (delta < -kPi) delta += kTwoPi;
-            m_chromaAngle += delta * (1.0f - expf(-dt / kChromaTau));
-            if (m_chromaAngle < 0.0f) m_chromaAngle += kTwoPi;
-            if (m_chromaAngle >= kTwoPi) m_chromaAngle -= kTwoPi;
+            m_chromaAngle[z] += delta * (1.0f - expf(-dt / kChromaTau));
+            if (m_chromaAngle[z] < 0.0f) m_chromaAngle[z] += kTwoPi;
+            if (m_chromaAngle[z] >= kTwoPi) m_chromaAngle[z] -= kTwoPi;
         }
     }
 
@@ -93,43 +100,43 @@ void LGPCymaticLadderAREffect::render(plugins::EffectContext& ctx) {
     {
         float aA = 1.0f - expf(-dt / kFollowerAttackTau);
         float dA = 1.0f - expf(-dt / kFollowerDecayTau);
-        if (m_bass > m_bassMax) m_bassMax += (m_bass - m_bassMax) * aA;
-        else m_bassMax += (m_bass - m_bassMax) * dA;
-        if (m_bassMax < kFollowerFloor) m_bassMax = kFollowerFloor;
+        if (m_bass[z] > m_bassMax[z]) m_bassMax[z] += (m_bass[z] - m_bassMax[z]) * aA;
+        else m_bassMax[z] += (m_bass[z] - m_bassMax[z]) * dA;
+        if (m_bassMax[z] < kFollowerFloor) m_bassMax[z] = kFollowerFloor;
 
-        if (m_mid > m_midMax) m_midMax += (m_mid - m_midMax) * aA;
-        else m_midMax += (m_mid - m_midMax) * dA;
-        if (m_midMax < kFollowerFloor) m_midMax = kFollowerFloor;
+        if (m_mid[z] > m_midMax[z]) m_midMax[z] += (m_mid[z] - m_midMax[z]) * aA;
+        else m_midMax[z] += (m_mid[z] - m_midMax[z]) * dA;
+        if (m_midMax[z] < kFollowerFloor) m_midMax[z] = kFollowerFloor;
     }
-    const float normBass = clamp01(m_bass / m_bassMax);
-    const float normMid = clamp01(m_mid / m_midMax);
+    const float normBass = clamp01(m_bass[z] / m_bassMax[z]);
+    const float normMid = clamp01(m_mid[z] / m_midMax[z]);
 
     // STEP 4: Impact
-    if (beatStr > m_impact) m_impact = beatStr;
-    m_impact *= expf(-dt / kImpactDecayTau);
+    if (beatStr > m_impact[z]) m_impact[z] = beatStr;
+    m_impact[z] *= expf(-dt / kImpactDecayTau);
 
     // STEP 5: Standing wave mode selection with hysteresis
     // Mid energy drives mode number: more energy = higher harmonics
     float modeTarget = 2.0f + 6.0f * normMid;  // Range 2-8
-    if (fabsf(modeTarget - m_modeSmooth) > 0.3f) {
+    if (fabsf(modeTarget - m_modeSmooth[z]) > 0.3f) {
         float modeAlpha = 1.0f - expf(-dt / 0.20f);
-        m_modeSmooth += (modeTarget - m_modeSmooth) * modeAlpha;
+        m_modeSmooth[z] += (modeTarget - m_modeSmooth[z]) * modeAlpha;
     }
-    const int n = static_cast<int>(clampf(floorf(m_modeSmooth + 0.5f), 2.0f, 8.0f));
+    const int n = static_cast<int>(clampf(floorf(m_modeSmooth[z] + 0.5f), 2.0f, 8.0f));
 
     // Beat modulation
     const float beatMod = 0.3f + 0.7f * beatStr;
 
     // Standing wave phase
     float tRate = 1.0f + 4.0f * speedNorm;
-    m_t += tRate * dtVis;
-    const float phase = m_t * (0.8f + 0.5f * speedNorm);
+    m_t[z] += tRate * dtVis;
+    const float phase = m_t[z] * (0.8f + 0.5f * speedNorm);
 
     // Wave contrast: more bass = sharper peaks
-    const float contrastExp = clampf(2.0f + 1.2f * normBass + 0.5f * m_impact, 1.5f, 3.8f);
+    const float contrastExp = clampf(2.0f + 1.2f * normBass + 0.5f * m_impact[z], 1.5f, 3.8f);
 
     // Hue from chroma
-    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle * (255.0f / kTwoPi)) + ctx.gHue;
+    uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle[z] * (255.0f / kTwoPi)) + ctx.gHue;
 
     // Trail persistence
     uint8_t fadeAmt = static_cast<uint8_t>(clampf(18.0f + 35.0f * (1.0f - normBass), 12.0f, 55.0f));
@@ -146,7 +153,7 @@ void LGPCymaticLadderAREffect::render(plugins::EffectContext& ctx) {
 
         // Antinode bloom on beat
         float antinodeStr = powf(s, 1.2f);
-        float impactAdd = m_impact * antinodeStr * 0.35f;
+        float impactAdd = m_impact[z] * antinodeStr * 0.35f;
 
         // Compose: audio magnitude x wave geometry x beat x silence
         float brightness = (normBass * wave + impactAdd) * beatMod * silScale;

@@ -1950,22 +1950,27 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
         // ========== EdgeMixer Commands ==========
 
         case 'e':
-            // Cycle EdgeMixer mode: mirror -> analogous -> ... -> stm_dual -> mirror
+            // Cycle EdgeMixer mode: mirror -> analogous -> ... -> stm_dual -> stm_spectral_map -> mirror.
             // Use a local shadow to avoid race with async RendererActor message.
             // Without this, rapid 'e' presses read stale getMode() and get stuck.
             {
+                using EM = lightwaveos::enhancement::EdgeMixerMode;
+                // Mode count is derived from the enum maximum so adding a new
+                // EdgeMixerMode never silently skips it in the serial cycle again.
+                static constexpr uint8_t kEdgeMixerModeCount =
+                    static_cast<uint8_t>(EM::STM_SPECTRAL_MAP) + 1;
                 static uint8_t s_edgeMixerModeShadow = 0xFF;
                 auto& mixer = lightwaveos::enhancement::EdgeMixer::getInstance();
                 if (s_edgeMixerModeShadow == 0xFF) {
                     // First use: seed from the actual singleton
                     s_edgeMixerModeShadow = static_cast<uint8_t>(mixer.getMode());
                 }
-                uint8_t next = (s_edgeMixerModeShadow + 1) % 8;
+                uint8_t next = (s_edgeMixerModeShadow + 1) % kEdgeMixerModeCount;
                 s_edgeMixerModeShadow = next;
                 actors.setEdgeMixerMode(next);
                 Serial.printf("EdgeMixer mode: " LW_CLR_CYAN "%s" LW_ANSI_RESET "\n",
                               lightwaveos::enhancement::EdgeMixer::modeName(
-                                  static_cast<lightwaveos::enhancement::EdgeMixerMode>(next)));
+                                  static_cast<EM>(next)));
             }
             break;
 

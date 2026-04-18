@@ -89,6 +89,17 @@ public:
      */
     static bool isUpdating();
 
+    /**
+     * @brief Periodic session watchdog.
+     *
+     * Call from the main loop. If an OTA upload session is active and no
+     * chunk has arrived for more than 30 s (time-since-last-data), abort
+     * the session, release the SHA-256 context, and reset all state so
+     * the next upload attempt can proceed. Closes the wedge-on-disconnect
+     * class of bug (forensic-audit-2026-04-18 P0-04).
+     */
+    static void loop();
+
 private:
     // Track update state (static for use across handler calls)
     static bool s_updateStarted;

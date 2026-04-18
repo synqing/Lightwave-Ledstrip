@@ -59,6 +59,7 @@
 #include "network/WsMessageRouter.h"
 #include "network/OtaHandler.h"
 #include <ESPAsyncWebServer.h>
+#include <esp_ota_ops.h>  // P0-02: mark image valid to cancel pending rollback
 #include <cstring>
 #include <cstdio>
 #include <esp_attr.h>
@@ -1440,6 +1441,36 @@ void updateConnectionLeds() {
 }
 
 // ============================================================================
+// OTA rollback mark-valid (P0-02)
+// ============================================================================
+// The ESP-IDF bootloader marks a freshly-flashed app as ESP_OTA_IMG_PENDING_VERIFY
+// on its first boot. If the app does NOT call esp_ota_mark_app_valid_cancel_rollback()
+// before the next reset, the bootloader rolls back to the previous slot on the
+// next boot. Without this soak-check, a bad image that survives setup() but
+// crashes later would be permanently wedged. Here we wait 30 s of clean uptime
+// after loop() starts running, then mark the running image valid.
+//
+// Idempotent via static bool s_marked — O(1) after first invocation.
+// ============================================================================
+static void markOtaValidIfStable() {
+    static bool s_marked = false;
+    static uint32_t s_bootMs = 0;
+    if (s_marked) return;
+    if (s_bootMs == 0) { s_bootMs = millis(); return; }
+    if ((millis() - s_bootMs) < 30000) return;  // 30 s soak window
+    const esp_partition_t* running = esp_ota_get_running_partition();
+    if (running != nullptr) {
+        esp_ota_img_states_t state;
+        if (esp_ota_get_state_partition(running, &state) == ESP_OK &&
+            state == ESP_OTA_IMG_PENDING_VERIFY) {
+            esp_ota_mark_app_valid_cancel_rollback();
+            Serial.println("[OTA] Current image marked valid — rollback cancelled");
+        }
+    }
+    s_marked = true;
+}
+
+// ============================================================================
 // Setup
 // ============================================================================
 
@@ -2425,6 +2456,14 @@ void cleanup() {
 void loop() {
     // CRITICAL: Reset watchdog at START of every loop iteration
     esp_task_wdt_reset();
+
+    // P0-02: After 30 s of clean uptime, cancel the pending-verify rollback
+    // on this image. One-shot helper, O(1) after first mark.
+    markOtaValidIfStable();
+
+    // P0-04: Drive the OTA session watchdog — aborts wedged uploads after
+    // 30 s of no fresh data so the next upload can proceed.
+    OtaHandler::loop();
 
     // Update M5Stack (handles button events, touch, etc.)
     M5.update();

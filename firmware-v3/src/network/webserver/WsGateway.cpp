@@ -251,6 +251,25 @@ void WsGateway::handleConnect(AsyncWebSocketClient* client) {
                 return;
             }
 
+            // SSA-E Round 2 (2026-04-18): recover from an orphaned active
+            // counter before applying the overlap reject. If the previous WS
+            // session for this IP was torn down at the TCP layer without
+            // emitting WS_EVT_DISCONNECT (heap-shed closeAll pre-Round 1,
+            // AsyncTCP abort, client power-cycle), the active counter remains
+            // >=1 forever and blocks every future connect with 1008. Treat a
+            // slot with no message activity within STALE_ACTIVE_RECOVERY_MS as
+            // stale and reset it. Guarded by lastActivityMs != 0 so a slot
+            // that was never populated by a live session is not trusted.
+            if (m_connectGuard[slot].active >= 1 &&
+                m_connectGuard[slot].lastActivityMs != 0 &&
+                (nowMs - m_connectGuard[slot].lastActivityMs) >= STALE_ACTIVE_RECOVERY_MS) {
+                LW_LOGW("WS: Clearing stale active counter for slot %u (ip=%s, idle %lu ms) before overlap check",
+                        slot,
+                        ip.toString().c_str(),
+                        static_cast<unsigned long>(nowMs - m_connectGuard[slot].lastActivityMs));
+                m_connectGuard[slot].active = 0;
+            }
+
             // Reject overlapping WS sessions from the same IP.
             // This protects the device from clients that repeatedly call connect() without
             // closing the previous connection or without servicing the socket.
@@ -330,6 +349,27 @@ void WsGateway::handleConnect(AsyncWebSocketClient* client) {
             // we always have a mapping for disconnect cleanup. Without this, the active
             // counter can become permanently stuck.
             LW_LOGW("WS: IP mapping table full, evicting slot 0 for client %u", clientId);
+            // SSA-E Round 2 (2026-04-18): decrement the victim's guard counter
+            // before overwriting — otherwise the evicted client's future
+            // disconnect finds no mapping and silently skips the `active--`
+            // step in handleDisconnect, leaving that IP's guard counter
+            // permanently elevated. Guarded to only decrement when evicting a
+            // DIFFERENT IP (same-IP eviction is a legitimate update).
+            const uint32_t victimIpKey = m_clientIpMap[0].ipKey;
+            const uint32_t victimClientId = m_clientIpMap[0].clientId;
+            if (victimIpKey != 0 && victimIpKey != ipKey) {
+                for (uint8_t i = 0; i < CONNECT_GUARD_SLOTS; i++) {
+                    if (m_connectGuard[i].ipKey == victimIpKey) {
+                        if (m_connectGuard[i].active > 0) {
+                            m_connectGuard[i].active--;
+                            LW_LOGW("WS: Evicted client %u: decremented guard slot %u active->%u",
+                                    static_cast<unsigned>(victimClientId),
+                                    i, m_connectGuard[i].active);
+                        }
+                        break;
+                    }
+                }
+            }
             m_clientIpMap[0].clientId = clientId;
             m_clientIpMap[0].ipKey = ipKey;
         }

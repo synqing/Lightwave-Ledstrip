@@ -117,15 +117,13 @@ void WebServer::doBroadcastStatus() {
 
     if (m_ws->count() == 0) return;
 
-    const uint32_t now = millis();
-    if (m_lastClientConnectMs != 0 && (now - m_lastClientConnectMs) < CONNECT_STABILISE_MS) {
-        return;
-    }
+    if (shouldDeferTextAll()) return;  // SSA-D Round 2 (2026-04-18)
 
     m_ws->cleanupClients();
     if (m_ws->count() == 0) return;
 
     // QUEUE PROTECTION: Throttle broadcast frequency to prevent queue saturation
+    const uint32_t now = millis();
     static uint32_t lastBroadcastAttempt = 0;
     if (now - lastBroadcastAttempt < 50) {
         return;
@@ -267,12 +265,10 @@ void WebServer::broadcastZoneState() {
 
     if (m_ws->count() == 0 || !m_zoneComposer) return;
 
-    const uint32_t now = millis();
-    if (m_lastClientConnectMs != 0 && (now - m_lastClientConnectMs) < CONNECT_STABILISE_MS) {
-        return;
-    }
+    if (shouldDeferTextAll()) return;  // SSA-D Round 2 (2026-04-18)
 
     // QUEUE PROTECTION: Throttle zone broadcasts (4 Hz max)
+    const uint32_t now = millis();
     static uint32_t lastZoneBroadcastAttempt = 0;
     if (now - lastZoneBroadcastAttempt < 250) {
         return;
@@ -351,12 +347,10 @@ void WebServer::broadcastSingleZoneState(uint8_t zoneId) {
 
     if (m_ws->count() == 0 || !m_zoneComposer) return;
 
-    const uint32_t now = millis();
-    if (m_lastClientConnectMs != 0 && (now - m_lastClientConnectMs) < CONNECT_STABILISE_MS) {
-        return;
-    }
+    if (shouldDeferTextAll()) return;  // SSA-D Round 2 (2026-04-18)
 
     // QUEUE PROTECTION: Throttle rapid per-zone updates (20 Hz max)
+    const uint32_t now = millis();
     static uint32_t lastSingleZoneBroadcastAttempt = 0;
     if (now - lastSingleZoneBroadcastAttempt < 50) {
         return;
@@ -416,6 +410,11 @@ void WebServer::notifyEffectChange(EffectId effectId, const char* name) {
     }
 
     if (m_ws->count() == 0) return;
+
+    // SSA-D Round 2 (2026-04-18): defer textAll during post-connect stabilise
+    // window. One missed effectChanged is acceptable — the periodic
+    // doBroadcastStatus (5 s) resynchronises.
+    if (shouldDeferTextAll()) return;
 
     // QUEUE PROTECTION: Throttle notifications (50ms minimum)
     static uint32_t lastEffectNotifyAttempt = 0;
@@ -530,6 +529,11 @@ void WebServer::broadcastBeatEvent() {
     if (!webserver::ws::hasBeatEventSubscribers()) return;
 
     if (!m_ws || m_ws->count() == 0) return;
+
+    // SSA-D Round 2 (2026-04-18): defer textAll during post-connect stabilise
+    // window. Losing 1-2 beats in the 600 ms gate is acceptable; overwhelming
+    // a fresh SoftAP client's socket is not.
+    if (shouldDeferTextAll()) return;
 
     // Throttle beat events (20 Hz max)
     static uint32_t lastBeatBroadcastAttempt = 0;

@@ -1058,7 +1058,11 @@ void V1ApiRoutes::registerRoutes(
             eventDoc["enabled"] = enabled;
             String eventOutput;
             serializeJson(eventDoc, eventOutput);
-            if (server->getWebSocket()) {
+            // SSA-D Round 2 (2026-04-18): skip textAll during 600 ms
+            // post-connect window. REST requester still gets its success
+            // response below; other clients re-sync via broadcastZoneState()
+            // which is itself gated.
+            if (server->getWebSocket() && !server->shouldDeferTextAll()) {
                 server->getWebSocket()->textAll(eventOutput);
             }
 

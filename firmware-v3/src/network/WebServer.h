@@ -352,6 +352,24 @@ public:
      */
     const CachedRendererState& getCachedRendererState() const { return m_cachedRendererState; }
 
+    /**
+     * @brief Should heavy textAll broadcasts be deferred right now?
+     *
+     * Returns true while a new WS client is still inside the connect-stabilise
+     * window (CONNECT_STABILISE_MS after the last client connect). Callers
+     * that wrap a whole JSON payload in m_ws->textAll(...) should early-exit
+     * when this returns true — heavy textAll during the stabilise window
+     * starves the new client's SoftAP TCP buffers and triggers close(1013)
+     * storms. Cheap: a millis() read and one compare; safe from any core.
+     *
+     * SSA-D Round 2 (2026-04-18) — extracted helper to replace open-coded
+     * stabilise gate at three sites and extend to every textAll caller.
+     */
+    bool shouldDeferTextAll() const {
+        return (m_lastClientConnectMs != 0) &&
+               ((millis() - m_lastClientConnectMs) < CONNECT_STABILISE_MS);
+    }
+
     // ========================================================================
     // Broadcasting
     // ========================================================================

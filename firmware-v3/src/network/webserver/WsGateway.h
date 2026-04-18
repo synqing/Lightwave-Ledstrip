@@ -131,6 +131,17 @@ private:
     static constexpr uint8_t CONNECT_GUARD_SLOTS = 8;
     static constexpr uint32_t CONNECT_COOLDOWN_MS = 2000;
     static constexpr uint32_t IDLE_TIMEOUT_MS = 15000;  // Clear stale entries after 15s of inactivity
+    // SSA-E Round 2 (2026-04-18): recover from orphaned guard entries at
+    // connect time. If active>=1 but the slot has seen no activity for this
+    // long, assume the previous connection was destroyed without a
+    // WS_EVT_DISCONNECT (AsyncTCP teardown racing server close, or the
+    // heap-shed closeAll that was removed in SSA-A Round 1) and reset the
+    // counter rather than rejecting the new session with 1008. Shorter than
+    // IDLE_TIMEOUT_MS so a reconnect does not have to wait a full janitor
+    // cycle. 5000 ms is above observed legitimate client silence windows
+    // (iOS slider debounce plus network jitter ~2-3 s) and above
+    // CONNECT_COOLDOWN_MS (2 s) so it never interferes with the cooldown.
+    static constexpr uint32_t STALE_ACTIVE_RECOVERY_MS = 5000;
     struct ConnectGuardEntry {
         uint32_t ipKey;          // Packed IPv4 (0 = empty)
         uint32_t lastMs;         // Last connect attempt time (millis)

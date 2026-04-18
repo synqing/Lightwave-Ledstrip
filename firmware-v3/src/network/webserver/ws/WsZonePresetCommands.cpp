@@ -13,6 +13,7 @@
 #include "WsZonePresetCommands.h"
 #include "../WsCommandRouter.h"
 #include "../WebServerContext.h"
+#include "../../WebServer.h"
 #include "../../ApiResponse.h"
 #include "../../../core/persistence/ZonePresetManager.h"
 #include "../../../effects/zones/ZoneComposer.h"
@@ -229,8 +230,12 @@ static void handleZonePresetsSaveCurrent(AsyncWebSocketClient* client, JsonDocum
             preset["zoneCount"] = zoneCount;
         });
 
-    // Broadcast to all connected clients (including requester)
-    if (ctx.ws) {
+    // Broadcast to all connected clients (including requester).
+    // SSA-D Round 2 (2026-04-18): during the 600 ms post-connect window,
+    // fall back to the requester-only path so a fresh SoftAP client is not
+    // overwhelmed by textAll on top of its hello traffic. Other clients
+    // re-sync via their next zonePresets.list poll.
+    if (ctx.ws && !(ctx.webServer && ctx.webServer->shouldDeferTextAll())) {
         ctx.ws->textAll(response);
     } else {
         client->text(response);
@@ -382,8 +387,11 @@ static void handleZonePresetsDelete(AsyncWebSocketClient* client, JsonDocument& 
             data["id"] = slotId;
         });
 
-    // Broadcast to all connected clients
-    if (ctx.ws) {
+    // Broadcast to all connected clients.
+    // SSA-D Round 2 (2026-04-18): during the 600 ms post-connect window,
+    // fall back to the requester-only path. Other clients re-sync on their
+    // next zonePresets.list poll.
+    if (ctx.ws && !(ctx.webServer && ctx.webServer->shouldDeferTextAll())) {
         ctx.ws->textAll(response);
     } else {
         client->text(response);

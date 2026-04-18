@@ -772,8 +772,11 @@ static void handleCameraModeSet(AsyncWebSocketClient* client, JsonDocument& doc,
     });
     client->text(response);
 
-    // Broadcast camera mode change to all clients
-    if (ctx.ws) {
+    // Broadcast camera mode change to all clients.
+    // SSA-D Round 2 (2026-04-18): skip textAll during 600 ms post-connect
+    // window. Requester already has its response above; other clients
+    // re-sync via the periodic doBroadcastStatus (5 s).
+    if (ctx.ws && !(ctx.webServer && ctx.webServer->shouldDeferTextAll())) {
         JsonDocument broadcast;
         broadcast["type"] = "cameraMode.changed";
         JsonObject bData = broadcast["data"].to<JsonObject>();
@@ -841,8 +844,11 @@ static void handleFactoryPresetsLoad(AsyncWebSocketClient* client, JsonDocument&
     });
     client->text(response);
 
-    // Broadcast preset change to all connected clients
-    if (ctx.ws) {
+    // Broadcast preset change to all connected clients.
+    // SSA-D Round 2 (2026-04-18): skip textAll during 600 ms post-connect
+    // window. Requester already has its response; other clients resolve the
+    // new preset via the periodic doBroadcastStatus.
+    if (ctx.ws && !(ctx.webServer && ctx.webServer->shouldDeferTextAll())) {
         JsonDocument broadcast;
         broadcast["type"] = "factoryPresets.changed";
         JsonObject bData = broadcast["data"].to<JsonObject>();

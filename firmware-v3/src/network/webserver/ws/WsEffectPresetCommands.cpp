@@ -21,6 +21,7 @@
 #include "WsEffectPresetCommands.h"
 #include "../WsCommandRouter.h"
 #include "../WebServerContext.h"
+#include "../../WebServer.h"
 #include "../../ApiResponse.h"
 #include "../../../core/persistence/EffectPresetManager.h"
 #include "../../../core/actors/ActorSystem.h"
@@ -283,8 +284,11 @@ static void handleEffectPresetsSaveCurrent(AsyncWebSocketClient* client,
         });
     client->text(response);
 
-    // Broadcast to all clients
-    if (ctx.ws) {
+    // Broadcast to all clients.
+    // SSA-D Round 2 (2026-04-18): skip textAll during 600 ms post-connect
+    // window. Requester already has its response; others refresh on next
+    // effectPresets.list poll.
+    if (ctx.ws && !(ctx.webServer && ctx.webServer->shouldDeferTextAll())) {
         JsonDocument broadcastDoc;
         broadcastDoc["type"] = "effectPresets.saved";
         broadcastDoc["slot"] = slot;
@@ -445,8 +449,10 @@ static void handleEffectPresetsDelete(AsyncWebSocketClient* client,
         });
     client->text(response);
 
-    // Broadcast to all clients
-    if (ctx.ws) {
+    // Broadcast to all clients.
+    // SSA-D Round 2 (2026-04-18): skip textAll during 600 ms post-connect
+    // window. Requester already has its response above.
+    if (ctx.ws && !(ctx.webServer && ctx.webServer->shouldDeferTextAll())) {
         JsonDocument broadcastDoc;
         broadcastDoc["type"] = "effectPresets.deleted";
         broadcastDoc["id"] = slot;

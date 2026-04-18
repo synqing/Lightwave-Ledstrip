@@ -6,6 +6,7 @@
 #include "WsZonesCommands.h"
 #include "../WsCommandRouter.h"
 #include "../WebServerContext.h"
+#include "../../WebServer.h"
 #include "../../ApiResponse.h"
 #include "../../RequestValidator.h"
 #include "../../../codec/WsZonesCodec.h"
@@ -41,14 +42,17 @@ static void handleZoneEnable(AsyncWebSocketClient* client, JsonDocument& doc, co
     const codec::ZoneEnableRequest& req = decodeResult.request;
     ctx.zoneComposer->setEnabled(req.enable);
     
-    // Send immediate zone.enabledChanged event
-    if (ctx.ws) {
+    // Send immediate zone.enabledChanged event.
+    // SSA-D Round 2 (2026-04-18): skip textAll during 600 ms post-connect
+    // window. Other clients re-sync via broadcastZoneState() which is itself
+    // gated.
+    if (ctx.ws && !(ctx.webServer && ctx.webServer->shouldDeferTextAll())) {
         String eventOutput = buildWsResponse("zone.enabledChanged", "", [&req](JsonObject& data) {
             codec::WsZonesCodec::encodeZoneEnabledChanged(req.enable, data);
         });
         ctx.ws->textAll(eventOutput);
     }
-    
+
     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
 }
 
@@ -92,8 +96,11 @@ static void handleZoneEnableZone(AsyncWebSocketClient* client, JsonDocument& doc
 
     ctx.zoneComposer->setZoneEnabled(zoneId, enabled);
 
-    // Broadcast to all clients
-    if (ctx.ws) {
+    // Broadcast to all clients.
+    // SSA-D Round 2 (2026-04-18): skip textAll during 600 ms post-connect
+    // window. Other clients re-sync via broadcastZoneState() below which is
+    // itself gated.
+    if (ctx.ws && !(ctx.webServer && ctx.webServer->shouldDeferTextAll())) {
         String eventOutput = buildWsResponse("zone.zoneEnabledChanged", requestId, [zoneId, enabled](JsonObject& data) {
             data["zoneId"] = zoneId;
             data["enabled"] = enabled;

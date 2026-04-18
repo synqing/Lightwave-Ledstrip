@@ -201,6 +201,7 @@ WebServer::WebServer(NodeOrchestrator& orchestrator, RendererNode* renderer)
     , m_lastHeapShedProbeMs(0)
     , m_lastLargestInternalHeap(0)
     , m_shedActivatedAtMs(0)
+    , m_shedClearedAtMs(0)
     , m_zoneComposer(nullptr)
     , m_lastStateCacheUpdate(0)
     , m_ledBroadcaster(nullptr)
@@ -555,10 +556,16 @@ void WebServer::updateLowHeapShedState(uint32_t nowMs) {
                     (unsigned long)INTERNAL_HEAP_RESUME_ABOVE_BYTES);
             // Cancel any pending broadcasts; when shedding we avoid creating/queuing WS payloads.
             m_broadcastPending = false;
-            // Free queued WS frames immediately — internal heap starvation crashes WiFi/esp_timer.
-            if (m_ws && m_ws->count() > 0) {
-                m_ws->closeAll(1013 /* Try Again Later */);
-            }
+            // 2026-04-18 — DO NOT closeAll() existing clients on latch edge.
+            // Existing sockets do not allocate new heap; only outbound
+            // broadcasts and new connects do, both of which are already
+            // gated by m_lowHeapShed in the broadcasters and in
+            // handleWsConnect. The previous closeAll(1013) triggered a
+            // tab5/iOS reconnect storm that perpetuated the latch and was
+            // the direct cause of the "empty-reason WS close after full
+            // status response" symptom observed during Track B remediation.
+            // The max-latch watchdog below is the safety net if heap truly
+            // cannot recover; broadcast suppression is the active valve.
         }
     } else {
         const uint32_t shedDurationMs = nowMs - m_shedActivatedAtMs;
@@ -567,6 +574,7 @@ void WebServer::updateLowHeapShedState(uint32_t nowMs) {
         if (heapRecovered || maxLatchExceeded) {
             m_lowHeapShed = false;
             m_lastHeapShedLogMs = nowMs;
+            m_shedClearedAtMs = nowMs;  // Open post-clear grace window.
             if (maxLatchExceeded && !heapRecovered) {
                 // Force-clear after max-latch: prevents the WS reconnect storm
                 // from perpetuating the latch indefinitely. If heap is still
@@ -1413,13 +1421,23 @@ void WebServer::handleWsConnect(AsyncWebSocketClient* client) {
         return;
     }
 
-    // Reject connections during active heap shedding.
-    // Without this guard, clients reconnect immediately after receiving close
-    // code 1013, K1 accepts and closes again, creating a reconnect storm that
-    // prevents heap recovery and can crash the client device.
-    if (m_lowHeapShed) {
-        client->close(1013, "Shedding active");
-        return;
+    // Reject NEW connections during active heap shedding, EXCEPT within a
+    // brief post-clear grace window. A connect whose SYN arrived while the
+    // latch was still set may only be handed to AsyncWebSocket tens of ms
+    // after the flag drops; refusing it needlessly would surface as a
+    // confusing disconnect on the client. Without this guard (or with a
+    // stale latch), clients reconnect immediately after receiving close
+    // code 1013, K1 accepts and closes again, creating a reconnect storm
+    // that prevents heap recovery and can crash the client device.
+    {
+        const uint32_t nowMs = millis();
+        const bool inPostClearGrace =
+            (m_shedClearedAtMs != 0) &&
+            ((nowMs - m_shedClearedAtMs) < INTERNAL_HEAP_SHED_POST_CLEAR_GRACE_MS);
+        if (m_lowHeapShed && !inPostClearGrace) {
+            client->close(1013, "Shedding active");
+            return;
+        }
     }
 
     // Ensure stale client entries are purged before applying connection limits.

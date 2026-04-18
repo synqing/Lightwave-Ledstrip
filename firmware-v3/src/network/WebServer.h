@@ -102,11 +102,19 @@ namespace network {
 // ============================================================================
 
 // Low-heap shedding thresholds may be overridden per PlatformIO environment.
+// 2026-04-18 — raised from 20/26 to 22/32 KB. The prior 20/26 hysteresis band
+// was only 6 KB wide and caused tab5 / iOS clients to see WS close(1013)
+// storms when K1 hovered near the threshold under normal WS activity. The
+// audit (2026-04-17) recommended 28/36 long-term; we take a conservative
+// step (22/32) first because commit 43030039 previously reverted 28 KB for
+// being "too aggressive during normal WebSocket activity". 22/32 widens the
+// hysteresis to 10 KB and keeps shed only marginally higher than the known-
+// good 20 KB floor. Revisit once soak telemetry confirms idle free-heap.
 #ifndef LW_INTERNAL_HEAP_SHED_BELOW_BYTES
-#define LW_INTERNAL_HEAP_SHED_BELOW_BYTES (20U * 1024U)
+#define LW_INTERNAL_HEAP_SHED_BELOW_BYTES (22U * 1024U)
 #endif
 #ifndef LW_INTERNAL_HEAP_RESUME_ABOVE_BYTES
-#define LW_INTERNAL_HEAP_RESUME_ABOVE_BYTES (26U * 1024U)
+#define LW_INTERNAL_HEAP_RESUME_ABOVE_BYTES (32U * 1024U)
 #endif
 #ifndef LW_INTERNAL_HEAP_SHED_LOG_INTERVAL_MS
 #define LW_INTERNAL_HEAP_SHED_LOG_INTERVAL_MS 15000U
@@ -615,6 +623,10 @@ private:
     // hatch the WS reconnect storm triggered by closeAll(1013) perpetuates the
     // latch — see CHANGELOG "progressive cascade lockup" fix.
     uint32_t m_shedActivatedAtMs;
+    // Wall-clock ms when shed last cleared. Used to apply a brief grace window
+    // so connects whose SYN arrived during the latch are not refused moments
+    // after the clear. 0 = never cleared.
+    uint32_t m_shedClearedAtMs;
     static constexpr uint32_t INTERNAL_HEAP_SHED_BELOW_BYTES = LW_INTERNAL_HEAP_SHED_BELOW_BYTES;
     static constexpr uint32_t INTERNAL_HEAP_RESUME_ABOVE_BYTES = LW_INTERNAL_HEAP_RESUME_ABOVE_BYTES;
     static constexpr uint32_t INTERNAL_HEAP_SHED_LOG_INTERVAL_MS = LW_INTERNAL_HEAP_SHED_LOG_INTERVAL_MS;
@@ -624,6 +636,12 @@ private:
     // free-heap state. Paired with a brief cooldown so the next probe tick can
     // re-latch if the condition genuinely persists.
     static constexpr uint32_t INTERNAL_HEAP_SHED_MAX_LATCH_MS = 10000U;
+    // Post-clear grace: accept new WS connects for this window after the
+    // shed latch drops, even if the next probe has not confirmed recovery
+    // yet. A SYN whose TCP handshake was in flight during the latch may
+    // only be handed to AsyncWebSocket tens of ms after the flag clears;
+    // refusing it would surface as a confusing close on the client.
+    static constexpr uint32_t INTERNAL_HEAP_SHED_POST_CLEAR_GRACE_MS = 500U;
     static_assert(INTERNAL_HEAP_RESUME_ABOVE_BYTES > INTERNAL_HEAP_SHED_BELOW_BYTES,
                   "Low-heap resume threshold must be greater than shed threshold");
 

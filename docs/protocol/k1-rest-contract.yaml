@@ -715,6 +715,50 @@ endpoints:
     gate: "FEATURE_API_AUTH"
 
 # ===========================================================================
+# Tab5 Firmware (inbound on tab5)
+# ===========================================================================
+# These endpoints live on the TAB5 device (M5Stack Tab5 controller), NOT on K1.
+# Tab5 runs its own HTTP server on port 80 for firmware updates and version
+# queries. The host for every route in this section is the tab5 device's IP,
+# not 192.168.4.1 (K1 AP).
+#
+# Wave 2 hardening (2026-04-18): X-OTA-SHA256 is now REQUIRED on all tab5 OTA
+# upload endpoints. Uploads without the header are rejected before Update.end()
+# is called. The digest is computed over the received bytes and compared to the
+# supplied value to guarantee image integrity.
+#
+# Tab5 OTA is a direct HTTP upload (multipart/form-data or
+# application/octet-stream) — it is NOT framed over WebSocket.
+# ---------------------------------------------------------------------------
+tab5_endpoints:
+
+  # ── Firmware (tab5) ────────────────────────────────────────────────────
+  /api/v1/firmware/version:
+    method: GET
+    auth: false
+    host: "tab5 (not K1)"
+    description: "Get Tab5 firmware version and build info"
+
+  /api/v1/firmware/update:
+    method: POST
+    host: "tab5 (not K1)"
+    description: "Upload Tab5 firmware binary (OTA). As of Wave 2 (2026-04-18)
+      X-OTA-SHA256 is REQUIRED — uploads without the header are rejected.
+      SHA-256 is computed over received bytes and compared to the supplied
+      digest before Update.end() is called."
+    content_types: [ "multipart/form-data", "application/octet-stream" ]
+    headers:
+      X-OTA-Token: { required: true, note: "Matches OTA_UPDATE_TOKEN build constant (legacy pre-shared secret, P1-24 hardening deferred)" }
+      X-OTA-SHA256: { required: true, note: "64 lower-case hex chars; SHA-256 digest of the firmware image" }
+      X-OTA-Version: { optional: true }
+
+  /update:
+    method: POST
+    host: "tab5 (not K1)"
+    description: "Legacy OTA endpoint (curl compatibility). Same integrity-hash
+      rules as /api/v1/firmware/update."
+
+# ===========================================================================
 # Endpoint Count Summary
 # ===========================================================================
 # Total distinct routes: ~110

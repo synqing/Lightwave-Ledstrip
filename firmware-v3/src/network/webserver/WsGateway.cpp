@@ -230,7 +230,12 @@ void WsGateway::handleConnect(AsyncWebSocketClient* client) {
             const uint32_t last = m_connectGuard[slot].lastMs;
             const bool tooSoon = (last != 0) && (nowMs - last < CONNECT_COOLDOWN_MS);
             m_connectGuard[slot].ipKey = ipKey;
-            m_connectGuard[slot].lastMs = nowMs;
+            // Refresh cooldown timestamp ONLY on accepted connects.
+            // Previous behaviour updated lastMs unconditionally, so a fast retry
+            // that tripped the cooldown would refresh the window — perpetually
+            // locking out the client until the retry interval grew past
+            // CONNECT_COOLDOWN_MS. Identified 2026-04-18 during Wave 2 WS-churn
+            // investigation (SSA-A finding #2).
             if (tooSoon) {
                 // #region agent log (DISABLED)
                 // {
@@ -250,6 +255,7 @@ void WsGateway::handleConnect(AsyncWebSocketClient* client) {
                 client->close(1013, "Reconnect too fast");
                 return;
             }
+            m_connectGuard[slot].lastMs = nowMs;
 
             // SSA-E Round 2 (2026-04-18): recover from an orphaned active
             // counter before applying the overlap reject. If the previous WS

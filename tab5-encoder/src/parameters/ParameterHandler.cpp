@@ -81,8 +81,17 @@ void ParameterHandler::onEncoderChanged(uint8_t index, uint16_t value, bool wasR
             scheduleEffectNameRefresh();
         }
 
-        Serial.printf("[Param] Effect: next/prev (delta=%d)%s\n",
-                      delta, wasReset ? " (reset)" : "");
+        // Rate-limit diagnostic print to <=10 Hz. Encoder deltas can fire at
+        // ~800 Hz under fast spins; leaving this unthrottled fills the USB-CDC
+        // TX ring and blocks loopTask inside the CDC driver. The parameter
+        // update itself is not gated — only the log is throttled.
+        static uint32_t s_lastEffectLogMs = 0;
+        const uint32_t nowMs = millis();
+        if (nowMs - s_lastEffectLogMs >= 100) {
+            s_lastEffectLogMs = nowMs;
+            Serial.printf("[Param] Effect: next/prev (delta=%d)%s\n",
+                          delta, wasReset ? " (reset)" : "");
+        }
         return;
     }
 
@@ -97,11 +106,18 @@ void ParameterHandler::onEncoderChanged(uint8_t index, uint16_t value, bool wasR
         sendParameterChange(param, clampedValue);
     }
 
-    // Debug output
-    Serial.printf("[Param] %s: %d%s\n",
-                  param->statusField,
-                  clampedValue,
-                  wasReset ? " (reset)" : "");
+    // Debug output — rate-limited to <=10 Hz so rapid encoder spins do not
+    // saturate the USB-CDC TX ring. The parameter update above always runs;
+    // only this diagnostic line is throttled.
+    static uint32_t s_lastParamLogMs = 0;
+    const uint32_t nowMs = millis();
+    if (nowMs - s_lastParamLogMs >= 100) {
+        s_lastParamLogMs = nowMs;
+        Serial.printf("[Param] %s: %d%s\n",
+                      param->statusField,
+                      clampedValue,
+                      wasReset ? " (reset)" : "");
+    }
 }
 
 bool ParameterHandler::applyStatus(JsonDocument& doc) {

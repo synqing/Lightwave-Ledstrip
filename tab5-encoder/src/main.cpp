@@ -867,15 +867,27 @@ static void updateUiEffectPaletteLabels() {
         strncpy(paletteBuf, pn, sizeof(paletteBuf) - 1);
         paletteBuf[sizeof(paletteBuf) - 1] = '\0';
     } else {
-        snprintf(paletteBuf, sizeof(paletteBuf), "#%u", (unsigned)paletteId);
+        // Fallback while palettes.list cache is still warming. "Palette <id>"
+        // is more legible than the raw "#id" form and signals to the user
+        // that the name will resolve shortly rather than being an error.
+        snprintf(paletteBuf, sizeof(paletteBuf), "Palette %u", (unsigned)paletteId);
     }
 
-    // Effect name: use last-known name from K1 status (16-bit EffectIds don't
-    // fit in uint8_t encoder values, so we can't look up by encoder index)
+    // Effect name: prefer the live K1 status name (s_k1EffectName, populated
+    // by cacheEffectName from status / effects.current / effects.changed).
+    // 16-bit EffectIds (0x1100+) overflow the uint8_t encoder value, so we
+    // cannot look up by encoder index. If the cache is cold (reconnect,
+    // holdoff window active, or K1's own name cache was cold when the
+    // status broadcast was formed), fall back to the hex effect ID so the
+    // header always shows SOMETHING rather than blanking out. The live ID
+    // is tracked in s_k1EffectId by cacheEffectName.
     if (s_k1EffectName[0]) {
         g_ui->setCurrentEffect(0, s_k1EffectName);
     } else {
-        g_ui->setCurrentEffect(0, "");
+        char effectBuf[16];
+        snprintf(effectBuf, sizeof(effectBuf), "#0x%04X",
+                 (unsigned)s_k1EffectId);
+        g_ui->setCurrentEffect(0, effectBuf);
     }
     g_ui->setCurrentPalette(paletteId, paletteBuf);
 }
@@ -1441,6 +1453,15 @@ void setup() {
     };
     esp_task_wdt_init(&wdt_config);
     esp_task_wdt_add(NULL);  // Add current task (main loop)
+    // Enlarge the USB-CDC TX ring and cap the blocking timeout so Serial
+    // writes cannot stall loopTask when no host terminal is draining the CDC
+    // pipe. Without this, Serial.printf blocks indefinitely inside the CDC
+    // driver once the default ring fills, injecting multi-millisecond delays
+    // into the encoder polling loop and starving the task watchdog feed.
+    // Must be called before Serial.begin() so the driver initialises with the
+    // configured ring size.
+    Serial.setTxBufferSize(4096);
+    Serial.setTxTimeoutMs(20);
     Serial.begin(115200);
     delay(100);
     Serial.println("[WDT] Watchdog initialized (5s timeout)");
@@ -1518,6 +1539,19 @@ void setup() {
 
     // Restore the explicit external-I2C init added in f7e78fc2.
     // The Tab5 bring-up has previously depended on this before reading Ex_I2C pins.
+    //
+    // KNOWN ISSUE (2026-04-18): this call plus `Wire.begin(extSDA, extScl, ...)`
+    // below is a dual-init on port 0 that leaves ESP-IDF 5.4's new `i2c_master`
+    // driver in `ESP_ERR_INVALID_STATE`, producing a sustained
+    // `i2c.master: clear bus failed` storm at ~83 ms cadence under polling
+    // load. Removing this line eliminated the error storm AND broke encoder
+    // functionality entirely (runtime poll returns no data) — M5.Ex_I2C.begin()
+    // is load-bearing for something beyond just the raw driver handle,
+    // possibly via M5Unified's internal IO-expander / Grove-power state
+    // tracking. A proper fix is required but NOT YET IDENTIFIED. For now
+    // the dual init is restored; the error storm is preferable to dead
+    // encoders. See tab5-encoder/docs/forensic-audit-2026-04-18.md and
+    // pending follow-up audit for the correct remediation path.
     M5.Ex_I2C.begin();
     Serial.println("[INIT] M5.Ex_I2C.begin() called - external I2C bus enabled");
 

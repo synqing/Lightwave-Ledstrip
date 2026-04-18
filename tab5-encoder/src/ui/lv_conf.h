@@ -12,7 +12,11 @@
 #define LV_COLOR_DEPTH 16
 #define LV_COLOR_16_SWAP 0  // Don't swap bytes - M5GFX will handle BGR565 format
 
-#define LV_DISP_DEF_REFR_PERIOD 16
+// LVGL 9 renamed LV_DISP_DEF_REFR_PERIOD to LV_DEF_REFR_PERIOD. The old
+// identifier is silently ignored by lvgl/lvgl@^9.3.0, which then falls back
+// to the internal default of 33 ms (~30 Hz). We keep the intended 16 ms
+// (~60 Hz) refresh period by using the correct LVGL 9 macro name.
+#define LV_DEF_REFR_PERIOD 16
 #define LV_USE_PERF_MONITOR 0
 #define LV_USE_MEM_MONITOR 0
 #define LV_USE_REFR_DEBUG 0

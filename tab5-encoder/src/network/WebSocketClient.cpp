@@ -442,6 +442,15 @@ void WebSocketClient::sendHelloMessage() {
 
     // Request color correction state (for presets)
     requestColorCorrectionConfig();
+
+    // DO NOT add effects.list / palettes.list / effects.getCurrent here
+    // as a hello-time burst. Empirically (2026-04-18) K1 drops the TCP
+    // connection with "Connection reset by peer" when hello fires 6 WS
+    // frames back-to-back — either AsyncTCP/lwIP buffers exhaust on K1,
+    // or K1's WS handler rate-limits. The main-loop background poller
+    // at main.cpp already walks these lists at 250 ms/page starting
+    // immediately after WS connects. Cache cold-start is a UI hiccup,
+    // not a network crisis.
 }
 
 void WebSocketClient::requestEffectsList(uint8_t page, uint8_t limit, const char* requestId) {

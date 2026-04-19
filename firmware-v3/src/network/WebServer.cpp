@@ -1429,14 +1429,25 @@ void WebServer::handleWsConnect(AsyncWebSocketClient* client) {
     // stale latch), clients reconnect immediately after receiving close
     // code 1013, K1 accepts and closes again, creating a reconnect storm
     // that prevents heap recovery and can crash the client device.
+    // 2026-04-18: connect-reject gate removed. Previously this closed any
+    // new WS connect with 1013 "Shedding active" whenever m_lowHeapShed was
+    // latched. With the 22 KB shed threshold higher than K1v2's observed
+    // ~21 KB idle baseline, shed stayed latched permanently and every tab5
+    // reconnect attempt was rejected here — producing the churn that the
+    // shed logic was meant to prevent. A new WS session costs ~500 B
+    // transient (SSA-C finding) and is cheap to accept; the downstream
+    // shed protections (shouldDeferTextAll gating, cleanupClients, message
+    // queue caps) still defend heap during the session lifetime. The
+    // latch-edge closeAll(1013) was already removed in 5bf12d91; removing
+    // this per-connect gate completes the "don't kick clients on shed"
+    // intent of that fix.
     {
         const uint32_t nowMs = millis();
         const bool inPostClearGrace =
             (m_shedClearedAtMs != 0) &&
             ((nowMs - m_shedClearedAtMs) < INTERNAL_HEAP_SHED_POST_CLEAR_GRACE_MS);
         if (m_lowHeapShed && !inPostClearGrace) {
-            client->close(1013, "Shedding active");
-            return;
+            LW_LOGW("WS: Accepting client %u during heap-shed (shed gating retained for broadcasts)", client->id());
         }
     }
 

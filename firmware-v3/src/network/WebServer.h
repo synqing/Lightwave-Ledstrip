@@ -110,11 +110,18 @@ namespace network {
 // being "too aggressive during normal WebSocket activity". 22/32 widens the
 // hysteresis to 10 KB and keeps shed only marginally higher than the known-
 // good 20 KB floor. Revisit once soak telemetry confirms idle free-heap.
+// 2026-04-18: lowered from 22/32 after observing K1v2 steady-state idle free
+// internal heap of ~21.2 KB (hardware capture, 0 clients). 22 KB shed threshold
+// kept heap-shed latched permanently at idle, flapping every 10 s via the
+// force-clear hysteresis escape. Dropping shed to 18 KB puts the threshold
+// below the observed idle baseline so shed only activates on genuine pressure
+// events (WS message queue growth, broadcaster backlog). Hysteresis width
+// preserved at 10 KB (shed 18, resume 28).
 #ifndef LW_INTERNAL_HEAP_SHED_BELOW_BYTES
-#define LW_INTERNAL_HEAP_SHED_BELOW_BYTES (22U * 1024U)
+#define LW_INTERNAL_HEAP_SHED_BELOW_BYTES (18U * 1024U)
 #endif
 #ifndef LW_INTERNAL_HEAP_RESUME_ABOVE_BYTES
-#define LW_INTERNAL_HEAP_RESUME_ABOVE_BYTES (32U * 1024U)
+#define LW_INTERNAL_HEAP_RESUME_ABOVE_BYTES (28U * 1024U)
 #endif
 #ifndef LW_INTERNAL_HEAP_SHED_LOG_INTERVAL_MS
 #define LW_INTERNAL_HEAP_SHED_LOG_INTERVAL_MS 15000U

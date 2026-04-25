@@ -47,6 +47,32 @@ public:
 
     const plugins::EffectMetadata& getMetadata() const override;
 
+    // ------------------------------------------------------------------------
+    // Runtime test-mode selector — Captain hardware A/B framework.
+    // Baseline preserves shipped behaviour. A-I exercise distinct hypotheses
+    // about the second-motion-layer artefact (observation #28405 + F4 audit).
+    // Non-destructive: render() reads s_prismMode and applies LOCAL overrides;
+    // s_prismOpacity / s_bulbOpacity / s_alpha statics are never mutated.
+    // Cycle via SerialCLI key 'M'.
+    // ------------------------------------------------------------------------
+    enum class PrismMode : uint8_t {
+        Baseline = 0,   // current shipped behaviour (prism 0.20, mirror, edge floor 0.60, bulb 0.40, alpha 0.99)
+        A        = 1,   // prism disabled (opacity = 0)
+        B        = 2,   // prism halved (opacity = 0.10)
+        C        = 3,   // prism standard but skip mirrorImageDownwards
+        D        = 4,   // prism additive cap (proportional to existing buf brightness)
+        E        = 5,   // prism multiplicative blend (highlights existing content only)
+        F        = 6,   // prism at SB 4.1 parity opacity (0.25)
+        G        = 7,   // edge fade to zero (matches SB 4.1 hard-kill on edges)
+        H        = 8,   // bulb cover disabled (matches SB 4.1 default BULB_OPACITY = 0)
+        I        = 9,   // transport alpha sweep (0.97 instead of 0.99)
+    };
+    static constexpr uint8_t kPrismModeCount = 10;
+
+    static PrismMode   getPrismMode()              { return s_prismMode; }
+    static void        setPrismMode(PrismMode m)   { s_prismMode = (static_cast<uint8_t>(m) < kPrismModeCount) ? m : PrismMode::Baseline; }
+    static const char* getPrismModeName(PrismMode m);
+
     // Runtime-tunable parameters (static: one instance shared across zones)
     static float   getPrismOpacity()       { return s_prismOpacity; }
     static float   getBulbOpacity()        { return s_bulbOpacity; }
@@ -148,20 +174,29 @@ private:
     // ------------------------------------------------------------------------
     // m_fx and m_tmp now live inside PsramData (m_ps->fx, m_ps->tmp)
 
-    static float   s_prismOpacity;      // Runtime-tunable (default 0.20)
-    static float   s_bulbOpacity;       // Runtime-tunable (default 0.40)
-    static float   s_alpha;             // Transport persistence (default 0.99)
-    static uint8_t s_squareIter;        // Contrast shaping passes (default 1)
-    static uint8_t s_prismIterations;   // Prism ghost layer count (default 1)
-    static float   s_gHueSpeed;         // Palette sweep speed multiplier (default 1.0)
-    static float   s_spatialSpread;     // Palette spread centre→edge (default 128.0)
-    static float   s_intensityCoupling; // Blend: 0=spatial, 1=intensity (default 0.0)
+    static float    s_prismOpacity;      // Runtime-tunable (default 0.20)
+    static float    s_bulbOpacity;       // Runtime-tunable (default 0.40)
+    static float    s_alpha;             // Transport persistence (default 0.99)
+    static uint8_t  s_squareIter;        // Contrast shaping passes (default 1)
+    static uint8_t  s_prismIterations;   // Prism ghost layer count (default 1)
+    static float    s_gHueSpeed;         // Palette sweep speed multiplier (default 1.0)
+    static float    s_spatialSpread;     // Palette spread centre→edge (default 128.0)
+    static float    s_intensityCoupling; // Blend: 0=spatial, 1=intensity (default 0.0)
+    static PrismMode s_prismMode;        // Runtime test-mode selector (default Baseline)
+
+    enum class PrismBlendStyle : uint8_t {
+        Standard       = 0,   // additive: buf += fx*opacity
+        AdditiveCapped = 1,   // additive but capped proportional to buf brightness (mode D)
+        Multiplicative = 2,   // buf *= (1 + fx*opacity) — highlight only (mode E)
+    };
 
     static void scaleImageToHalf(RGBf* buf, uint16_t len, RGBf* temp);
     static void shiftLedsUp(RGBf* buf, uint16_t len, uint16_t offset, RGBf* temp);
     static void mirrorImageDownwards(RGBf* buf, uint16_t len, RGBf* temp);
     static void applyPrismEffect(RGBf* buf, uint16_t len, uint8_t iterations,
-                                 float opacity, RGBf* fx, RGBf* temp);
+                                 float opacity, RGBf* fx, RGBf* temp,
+                                 bool useMirror = true,
+                                 PrismBlendStyle blendStyle = PrismBlendStyle::Standard);
     static void renderBulbCover(RGBf* buf, uint16_t len, float bulbOpacity);
 };
 

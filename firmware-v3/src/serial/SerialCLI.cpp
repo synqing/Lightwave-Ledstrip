@@ -1829,6 +1829,17 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
             }
             break;
 
+        case 'M':
+            // Bloom Parity — cycle runtime test mode (Baseline + 9 hypotheses for second-motion-layer artefact)
+            {
+                using BP = lightwaveos::effects::ieffect::BloomParityEffect;
+                const uint8_t next = (static_cast<uint8_t>(BP::getPrismMode()) + 1) % BP::kPrismModeCount;
+                const auto mode = static_cast<BP::PrismMode>(next);
+                BP::setPrismMode(mode);
+                Serial.printf("Bloom Parity Mode: %u — %s\n", next, BP::getPrismModeName(mode));
+            }
+            break;
+
         case 'a':
             // Toggle audio debug logging
             {

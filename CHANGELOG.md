@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - ESP32-P4 Audio Pipeline & iOS App
 
 ### Added
+- **firmware:** Bloom Parity (0x1500) runtime test-mode selector — `Baseline` + 9 hypotheses (A–I) for the second-motion-layer artefact (observation #28405). Modes exercise prism-axis variations (off, halved, no-mirror, additive cap, multiplicative, SB-parity 0.25), edge-fade-to-zero, bulb cover off, and transport-alpha sweep. Non-destructive local overlays (statics never mutated). Cycle live via SerialCLI `'M'` key — Captain hardware A/B framework for the 2-year Bloom Parity tightening question.
 - **tab5:** PSRAM-primary preset storage — NVS demoted to write-behind backup; no code path can silently erase user presets
 - **tab5:** Custom partition table — NVS enlarged from 20KB to 64KB (SPIFFS reduced by 44KB)
 - **tab5:** NVS health tracking (`isNvsHealthy()`) for storage diagnostics

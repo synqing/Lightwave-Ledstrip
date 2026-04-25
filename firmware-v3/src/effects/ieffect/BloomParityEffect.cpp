@@ -37,6 +37,26 @@ uint8_t BloomParityEffect::s_prismIterations = 1;       // Prism passes (Sensory
 float   BloomParityEffect::s_gHueSpeed       = 1.0f;    // Palette sweep multiplier (0=frozen, -1=reverse)
 float   BloomParityEffect::s_spatialSpread   = 128.0f;  // Palette spread centre→edge (0=mono, 255=full)
 float   BloomParityEffect::s_intensityCoupling = 0.0f;  // 0=spatial colour, 1=intensity colour (heat map)
+BloomParityEffect::PrismMode BloomParityEffect::s_prismMode = BloomParityEffect::PrismMode::Baseline;
+
+// -----------------------------------------------------------------------------
+// Runtime test-mode name lookup for SerialCLI display
+// -----------------------------------------------------------------------------
+const char* BloomParityEffect::getPrismModeName(PrismMode m) {
+    switch (m) {
+        case PrismMode::Baseline: return "Baseline (shipped)";
+        case PrismMode::A:        return "A: prism off";
+        case PrismMode::B:        return "B: prism 0.10";
+        case PrismMode::C:        return "C: prism no-mirror";
+        case PrismMode::D:        return "D: prism additive cap";
+        case PrismMode::E:        return "E: prism multiplicative";
+        case PrismMode::F:        return "F: SB parity 0.25";
+        case PrismMode::G:        return "G: edge fade 0";
+        case PrismMode::H:        return "H: bulb off";
+        case PrismMode::I:        return "I: alpha 0.97";
+        default:                  return "?";
+    }
+}
 
 // -----------------------------------------------------------------------------
 // Metadata
@@ -321,7 +341,8 @@ void BloomParityEffect::mirrorImageDownwards(RGBf* buf, uint16_t len, RGBf* temp
 }
 
 void BloomParityEffect::applyPrismEffect(RGBf* buf, uint16_t len, uint8_t iterations,
-                                          float opacity, RGBf* fx, RGBf* temp) {
+                                          float opacity, RGBf* fx, RGBf* temp,
+                                          bool useMirror, PrismBlendStyle blendStyle) {
     if (!buf || !fx || !temp || len < 4) return;
     if ((len & 1u) != 0u) return;   // must be even
     if (iterations == 0 || opacity <= 0.0f) return;
@@ -333,13 +354,45 @@ void BloomParityEffect::applyPrismEffect(RGBf* buf, uint16_t len, uint8_t iterat
 
         scaleImageToHalf(fx, len, temp);
         shiftLedsUp(fx, len, half, temp);
-        mirrorImageDownwards(fx, len, temp);
+        if (useMirror) {
+            mirrorImageDownwards(fx, len, temp);
+        }
 
-        // Additive blend into buf
-        for (uint16_t i = 0; i < len; i++) {
-            buf[i].r = clamp01(buf[i].r + fx[i].r * opacity);
-            buf[i].g = clamp01(buf[i].g + fx[i].g * opacity);
-            buf[i].b = clamp01(buf[i].b + fx[i].b * opacity);
+        // Blend prism contribution back into buf — three styles for runtime A/B.
+        switch (blendStyle) {
+            case PrismBlendStyle::Multiplicative:
+                // Mode E: highlight existing content only — dark regions stay dark.
+                for (uint16_t i = 0; i < len; i++) {
+                    buf[i].r = clamp01(buf[i].r * (1.0f + fx[i].r * opacity));
+                    buf[i].g = clamp01(buf[i].g * (1.0f + fx[i].g * opacity));
+                    buf[i].b = clamp01(buf[i].b * (1.0f + fx[i].b * opacity));
+                }
+                break;
+            case PrismBlendStyle::AdditiveCapped: {
+                // Mode D: additive but cap each channel's contribution at 50% of
+                // existing brightness (floor 0.01 to keep dim regions reachable).
+                for (uint16_t i = 0; i < len; i++) {
+                    const float capR = 0.5f * (buf[i].r > 0.01f ? buf[i].r : 0.01f);
+                    const float capG = 0.5f * (buf[i].g > 0.01f ? buf[i].g : 0.01f);
+                    const float capB = 0.5f * (buf[i].b > 0.01f ? buf[i].b : 0.01f);
+                    const float addR = fx[i].r * opacity;
+                    const float addG = fx[i].g * opacity;
+                    const float addB = fx[i].b * opacity;
+                    buf[i].r = clamp01(buf[i].r + (addR < capR ? addR : capR));
+                    buf[i].g = clamp01(buf[i].g + (addG < capG ? addG : capG));
+                    buf[i].b = clamp01(buf[i].b + (addB < capB ? addB : capB));
+                }
+                break;
+            }
+            case PrismBlendStyle::Standard:
+            default:
+                // Baseline: original additive blend (current shipped behaviour).
+                for (uint16_t i = 0; i < len; i++) {
+                    buf[i].r = clamp01(buf[i].r + fx[i].r * opacity);
+                    buf[i].g = clamp01(buf[i].g + fx[i].g * opacity);
+                    buf[i].b = clamp01(buf[i].b + fx[i].b * opacity);
+                }
+                break;
         }
     }
 }
@@ -396,6 +449,30 @@ void BloomParityEffect::render(plugins::EffectContext& ctx) {
     }
 #endif
 
+    // -----------------------------------------------------------------------
+    // Runtime test-mode local overrides — non-destructive (statics untouched).
+    // Captain hardware A/B framework: cycle modes via SerialCLI 'M' key.
+    // -----------------------------------------------------------------------
+    float modePrismOpacity = s_prismOpacity;
+    float modeBulbOpacity  = s_bulbOpacity;
+    float modeAlpha        = s_alpha;
+    float modeEdgeMin      = 0.60f;   // baseline tail-taper floor
+    bool  modePrismMirror  = true;
+    PrismBlendStyle modePrismBlend = PrismBlendStyle::Standard;
+    switch (s_prismMode) {
+        case PrismMode::A: modePrismOpacity = 0.0f;  break;
+        case PrismMode::B: modePrismOpacity = 0.10f; break;
+        case PrismMode::C: modePrismMirror  = false; break;
+        case PrismMode::D: modePrismBlend   = PrismBlendStyle::AdditiveCapped; break;
+        case PrismMode::E: modePrismBlend   = PrismBlendStyle::Multiplicative; break;
+        case PrismMode::F: modePrismOpacity = 0.25f; break;
+        case PrismMode::G: modeEdgeMin      = 0.0f;  break;
+        case PrismMode::H: modeBulbOpacity  = 0.0f;  break;
+        case PrismMode::I: modeAlpha        = 0.97f; break;
+        case PrismMode::Baseline:
+        default: break;
+    }
+
     // ----- (1) Clear output
     clearBuffer(curr, len);
 
@@ -405,7 +482,7 @@ void BloomParityEffect::render(plugins::EffectContext& ctx) {
     const float mood = clamp01(static_cast<float>(ctx.mood) / 255.0f);
     // Scene motion rate modulates transport velocity
     const float position = (0.250f + 1.750f * mood) * sceneSpeedMul;
-    const float dtAlpha = powf(s_alpha, dtVis * 60.0f);
+    const float dtAlpha = powf(modeAlpha, dtVis * 60.0f);
     drawSprite(curr, prev, len, len, position, dtAlpha);
 
     // ----- (Parity) Update hue shift state (kept invisible unless chromatic mode off)
@@ -433,13 +510,12 @@ void BloomParityEffect::render(plugins::EffectContext& ctx) {
     std::memcpy(prev, curr, sizeof(RGBf) * len);
 
     // ----- (6) Tail quadratic taper (presentation only, last 25% of strip)
-    // Edges dim to 60% min (was 0%) to avoid ~10–15 unused LEDs at strip ends.
-    constexpr float kEdgeMinBrightness = 0.60f;
+    // Baseline edges dim to 60% min (mode G overrides to 0% for SB 4.1 parity).
     const uint16_t tailLen = len / 4;
     if (tailLen >= 2) {
         for (uint16_t i = 0; i < tailLen; i++) {
             const float prog = static_cast<float>(i) / static_cast<float>(tailLen - 1);
-            const float k = kEdgeMinBrightness + (1.0f - kEdgeMinBrightness) * (prog * prog);
+            const float k = modeEdgeMin + (1.0f - modeEdgeMin) * (prog * prog);
 
             const uint16_t idx = (len - 1) - i;
             curr[idx].r *= k;
@@ -454,10 +530,11 @@ void BloomParityEffect::render(plugins::EffectContext& ctx) {
     }
 
     // ----- PostFX A: Prism (glassy layered glow — Sensory: apply_prism_effect)
-    applyPrismEffect(curr, len, s_prismIterations, s_prismOpacity, m_ps->fx, m_ps->tmp);
+    applyPrismEffect(curr, len, s_prismIterations, modePrismOpacity,
+                     m_ps->fx, m_ps->tmp, modePrismMirror, modePrismBlend);
 
     // ----- PostFX B: Bulb cover (micro-occlusion mask — Sensory: render_bulb_cover)
-    renderBulbCover(curr, len, s_bulbOpacity);
+    renderBulbCover(curr, len, modeBulbOpacity);
 
     // ----- Clamp accumulation to [0,1] per channel before lum extraction
     // Preserves r:g:b ratio and restores dynamic range in hot spots (splat sum > 1).

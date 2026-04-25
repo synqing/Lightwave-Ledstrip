@@ -326,9 +326,24 @@ void SbK1BloomV2Effect::renderEffect(plugins::EffectContext& ctx) {
 
     // =====================================================================
     // POST-PROCESSING (applied every frame, after bloom returns)
-    // K1 main.cpp lines 558-564: prism + bulb after effect function
+    // Extracted into shared helper 2026-04-24 (previously duplicated 6×).
     // =====================================================================
+    applyBloomV2PostProcessing(workBuf, ctx);
 
+#endif // FEATURE_AUDIO_SYNC
+#endif // NATIVE_BUILD
+}
+
+#ifndef NATIVE_BUILD
+// =========================================================================
+// Shared post-processing — extracted from every SbK1BloomV2*Effect variant.
+// Previously duplicated 6× byte-identically; refactored 2026-04-24.
+// Applies: prism (K1 apply_prism_effect with hue shift per iteration) ->
+//          bulb cover (4-LED [0.25,1.0,0.25,0.0] mask with opacity blend) ->
+//          incandescent warm-white filter ->
+//          output conversion to ctx.leds and mirror to strip 2.
+// =========================================================================
+void SbK1BloomV2Effect::applyBloomV2PostProcessing(CRGB_F* workBuf, plugins::EffectContext& ctx) {
     // -----------------------------------------------------------------
     // Prism effect: K1's apply_prism_effect(PRISM_COUNT, 0.25)
     // For each iteration: copy -> scale_to_half -> shift_up(half) ->
@@ -347,7 +362,6 @@ void SbK1BloomV2Effect::renderEffect(plugins::EffectContext& ctx) {
 
             // K1: hue_shift = i * 0.05 per iteration
             const float hueShift = it * 0.05f;
-#ifndef NATIVE_BUILD
             if (hueShift > 0.001f) {
                 const uint8_t hShift8 = (uint8_t)(hueShift * 255.0f);
                 for (uint16_t j = 0; j < kStripLen; ++j) {
@@ -360,7 +374,6 @@ void SbK1BloomV2Effect::renderEffect(plugins::EffectContext& ctx) {
                     }
                 }
             }
-#endif
             // Additive blend at 0.25 opacity (K1 parity)
             for (uint16_t j = 0; j < kStripLen; ++j) {
                 workBuf[j].r += prismFx[j].r * 0.25f;
@@ -376,7 +389,6 @@ void SbK1BloomV2Effect::renderEffect(plugins::EffectContext& ctx) {
 
             // K1: hue shift for fractional = wholeIter * 0.05
             const float hueShift = wholeIter * 0.05f;
-#ifndef NATIVE_BUILD
             if (hueShift > 0.001f) {
                 const uint8_t hShift8 = (uint8_t)(hueShift * 255.0f);
                 for (uint16_t j = 0; j < kStripLen; ++j) {
@@ -389,7 +401,6 @@ void SbK1BloomV2Effect::renderEffect(plugins::EffectContext& ctx) {
                     }
                 }
             }
-#endif
             const float fractOpacity = 0.25f * fractIter;
             for (uint16_t j = 0; j < kStripLen; ++j) {
                 workBuf[j].r += prismFx[j].r * fractOpacity;
@@ -443,10 +454,8 @@ void SbK1BloomV2Effect::renderEffect(plugins::EffectContext& ctx) {
     for (uint16_t i = 0; i < kStripLen && (kStripLen + i) < ledCount; ++i) {
         ctx.leds[kStripLen + i] = ctx.leds[i];
     }
-
-#endif // FEATURE_AUDIO_SYNC
-#endif // NATIVE_BUILD
 }
+#endif // NATIVE_BUILD
 
 // =========================================================================
 // Metadata
@@ -766,107 +775,9 @@ void SbK1BloomV2BeatPulseEffect::renderEffect(plugins::EffectContext& ctx) {
     }
 
     // =====================================================================
-    // POST-PROCESSING (prism, bulb, incandescent) — identical to base
+    // POST-PROCESSING — delegated to shared helper (refactored 2026-04-24)
     // =====================================================================
-
-    // Prism effect
-    if (m_prismCount > 0.01f) {
-        CRGB_F* prismFx  = m_ps2->fxBuffer;
-        CRGB_F* prismTmp = m_ps2->tmpBuffer;
-
-        const uint8_t wholeIter = (uint8_t)m_prismCount;
-        const float fractIter = m_prismCount - floorf(m_prismCount);
-
-        for (uint8_t it = 0; it < wholeIter; ++it) {
-            std::memcpy(prismFx, workBuf, kStripLen * sizeof(CRGB_F));
-            prismTransform(prismFx, prismTmp);
-
-            const float hueShift = it * 0.05f;
-#ifndef NATIVE_BUILD
-            if (hueShift > 0.001f) {
-                const uint8_t hShift8 = (uint8_t)(hueShift * 255.0f);
-                for (uint16_t j = 0; j < kStripLen; ++j) {
-                    if (prismFx[j].r > 0.002f || prismFx[j].g > 0.002f || prismFx[j].b > 0.002f) {
-                        CRGB rgb = prismFx[j].toCRGB();
-                        CHSV hsv = rgb2hsv_approximate(rgb);
-                        hsv.h += hShift8;
-                        hsv2rgb_rainbow(hsv, rgb);
-                        prismFx[j] = CRGB_F::fromCRGB(rgb);
-                    }
-                }
-            }
-#endif
-            for (uint16_t j = 0; j < kStripLen; ++j) {
-                workBuf[j].r += prismFx[j].r * 0.25f;
-                workBuf[j].g += prismFx[j].g * 0.25f;
-                workBuf[j].b += prismFx[j].b * 0.25f;
-            }
-        }
-
-        if (fractIter > 0.01f) {
-            std::memcpy(prismFx, workBuf, kStripLen * sizeof(CRGB_F));
-            prismTransform(prismFx, prismTmp);
-
-            const float hueShift = wholeIter * 0.05f;
-#ifndef NATIVE_BUILD
-            if (hueShift > 0.001f) {
-                const uint8_t hShift8 = (uint8_t)(hueShift * 255.0f);
-                for (uint16_t j = 0; j < kStripLen; ++j) {
-                    if (prismFx[j].r > 0.002f || prismFx[j].g > 0.002f || prismFx[j].b > 0.002f) {
-                        CRGB rgb = prismFx[j].toCRGB();
-                        CHSV hsv = rgb2hsv_approximate(rgb);
-                        hsv.h += hShift8;
-                        hsv2rgb_rainbow(hsv, rgb);
-                        prismFx[j] = CRGB_F::fromCRGB(rgb);
-                    }
-                }
-            }
-#endif
-            const float fractOpacity = 0.25f * fractIter;
-            for (uint16_t j = 0; j < kStripLen; ++j) {
-                workBuf[j].r += prismFx[j].r * fractOpacity;
-                workBuf[j].g += prismFx[j].g * fractOpacity;
-                workBuf[j].b += prismFx[j].b * fractOpacity;
-            }
-        }
-    }
-
-    // Bulb cover
-    if (m_bulbOpacity > 0.001f) {
-        static constexpr float kBulbPattern[4] = {0.25f, 1.0f, 0.25f, 0.0f};
-        const float opInv = 1.0f - m_bulbOpacity;
-
-        for (uint16_t i = 0; i < kStripLen; ++i) {
-            const float cover = kBulbPattern[i & 3];
-            workBuf[i].r = workBuf[i].r * opInv + workBuf[i].r * cover * m_bulbOpacity;
-            workBuf[i].g = workBuf[i].g * opInv + workBuf[i].g * cover * m_bulbOpacity;
-            workBuf[i].b = workBuf[i].b * opInv + workBuf[i].b * cover * m_bulbOpacity;
-        }
-    }
-
-    // Incandescent warm-white filter
-    if (m_incandescent > 0.001f) {
-        const float inv = 1.0f - m_incandescent;
-        const float rScale = inv + m_incandescent * kIncanR;
-        const float gScale = inv + m_incandescent * kIncanG;
-        const float bScale = inv + m_incandescent * kIncanB;
-
-        for (uint16_t i = 0; i < kStripLen; ++i) {
-            workBuf[i].r *= rScale;
-            workBuf[i].g *= gScale;
-            workBuf[i].b *= bScale;
-        }
-    }
-
-    // Output: convert to ctx.leds and mirror to strip 2
-    const uint16_t ledCount = ctx.ledCount;
-    for (uint16_t i = 0; i < kStripLen && i < ledCount; ++i) {
-        workBuf[i].clip();
-        ctx.leds[i] = workBuf[i].toCRGB();
-    }
-    for (uint16_t i = 0; i < kStripLen && (kStripLen + i) < ledCount; ++i) {
-        ctx.leds[kStripLen + i] = ctx.leds[i];
-    }
+    applyBloomV2PostProcessing(workBuf, ctx);
 
 #endif // FEATURE_AUDIO_SYNC
 #endif // NATIVE_BUILD
@@ -1035,107 +946,9 @@ void SbK1BloomV2ColorHistoryEffect::renderEffect(plugins::EffectContext& ctx) {
     }
 
     // =====================================================================
-    // POST-PROCESSING (prism, bulb, incandescent) — identical to base
+    // POST-PROCESSING — delegated to shared helper (refactored 2026-04-24)
     // =====================================================================
-
-    // Prism effect
-    if (m_prismCount > 0.01f) {
-        CRGB_F* prismFx  = m_ps2->fxBuffer;
-        CRGB_F* prismTmp = m_ps2->tmpBuffer;
-
-        const uint8_t wholeIter = (uint8_t)m_prismCount;
-        const float fractIter = m_prismCount - floorf(m_prismCount);
-
-        for (uint8_t it = 0; it < wholeIter; ++it) {
-            std::memcpy(prismFx, workBuf, kStripLen * sizeof(CRGB_F));
-            prismTransform(prismFx, prismTmp);
-
-            const float hueShift = it * 0.05f;
-#ifndef NATIVE_BUILD
-            if (hueShift > 0.001f) {
-                const uint8_t hShift8 = (uint8_t)(hueShift * 255.0f);
-                for (uint16_t j = 0; j < kStripLen; ++j) {
-                    if (prismFx[j].r > 0.002f || prismFx[j].g > 0.002f || prismFx[j].b > 0.002f) {
-                        CRGB rgb = prismFx[j].toCRGB();
-                        CHSV hsv = rgb2hsv_approximate(rgb);
-                        hsv.h += hShift8;
-                        hsv2rgb_rainbow(hsv, rgb);
-                        prismFx[j] = CRGB_F::fromCRGB(rgb);
-                    }
-                }
-            }
-#endif
-            for (uint16_t j = 0; j < kStripLen; ++j) {
-                workBuf[j].r += prismFx[j].r * 0.25f;
-                workBuf[j].g += prismFx[j].g * 0.25f;
-                workBuf[j].b += prismFx[j].b * 0.25f;
-            }
-        }
-
-        if (fractIter > 0.01f) {
-            std::memcpy(prismFx, workBuf, kStripLen * sizeof(CRGB_F));
-            prismTransform(prismFx, prismTmp);
-
-            const float hueShift = wholeIter * 0.05f;
-#ifndef NATIVE_BUILD
-            if (hueShift > 0.001f) {
-                const uint8_t hShift8 = (uint8_t)(hueShift * 255.0f);
-                for (uint16_t j = 0; j < kStripLen; ++j) {
-                    if (prismFx[j].r > 0.002f || prismFx[j].g > 0.002f || prismFx[j].b > 0.002f) {
-                        CRGB rgb = prismFx[j].toCRGB();
-                        CHSV hsv = rgb2hsv_approximate(rgb);
-                        hsv.h += hShift8;
-                        hsv2rgb_rainbow(hsv, rgb);
-                        prismFx[j] = CRGB_F::fromCRGB(rgb);
-                    }
-                }
-            }
-#endif
-            const float fractOpacity = 0.25f * fractIter;
-            for (uint16_t j = 0; j < kStripLen; ++j) {
-                workBuf[j].r += prismFx[j].r * fractOpacity;
-                workBuf[j].g += prismFx[j].g * fractOpacity;
-                workBuf[j].b += prismFx[j].b * fractOpacity;
-            }
-        }
-    }
-
-    // Bulb cover
-    if (m_bulbOpacity > 0.001f) {
-        static constexpr float kBulbPattern[4] = {0.25f, 1.0f, 0.25f, 0.0f};
-        const float opInv = 1.0f - m_bulbOpacity;
-
-        for (uint16_t i = 0; i < kStripLen; ++i) {
-            const float cover = kBulbPattern[i & 3];
-            workBuf[i].r = workBuf[i].r * opInv + workBuf[i].r * cover * m_bulbOpacity;
-            workBuf[i].g = workBuf[i].g * opInv + workBuf[i].g * cover * m_bulbOpacity;
-            workBuf[i].b = workBuf[i].b * opInv + workBuf[i].b * cover * m_bulbOpacity;
-        }
-    }
-
-    // Incandescent warm-white filter
-    if (m_incandescent > 0.001f) {
-        const float inv = 1.0f - m_incandescent;
-        const float rScale = inv + m_incandescent * kIncanR;
-        const float gScale = inv + m_incandescent * kIncanG;
-        const float bScale = inv + m_incandescent * kIncanB;
-
-        for (uint16_t i = 0; i < kStripLen; ++i) {
-            workBuf[i].r *= rScale;
-            workBuf[i].g *= gScale;
-            workBuf[i].b *= bScale;
-        }
-    }
-
-    // Output: convert to ctx.leds and mirror to strip 2
-    const uint16_t ledCount = ctx.ledCount;
-    for (uint16_t i = 0; i < kStripLen && i < ledCount; ++i) {
-        workBuf[i].clip();
-        ctx.leds[i] = workBuf[i].toCRGB();
-    }
-    for (uint16_t i = 0; i < kStripLen && (kStripLen + i) < ledCount; ++i) {
-        ctx.leds[kStripLen + i] = ctx.leds[i];
-    }
+    applyBloomV2PostProcessing(workBuf, ctx);
 
 #endif // FEATURE_AUDIO_SYNC
 #endif // NATIVE_BUILD
@@ -1322,107 +1135,9 @@ void SbK1BloomV2SpectralDeltaEffect::renderEffect(plugins::EffectContext& ctx) {
     }
 
     // =====================================================================
-    // POST-PROCESSING (prism, bulb, incandescent) — identical to base
+    // POST-PROCESSING — delegated to shared helper (refactored 2026-04-24)
     // =====================================================================
-
-    // Prism effect
-    if (m_prismCount > 0.01f) {
-        CRGB_F* prismFx  = m_ps2->fxBuffer;
-        CRGB_F* prismTmp = m_ps2->tmpBuffer;
-
-        const uint8_t wholeIter = (uint8_t)m_prismCount;
-        const float fractIter = m_prismCount - floorf(m_prismCount);
-
-        for (uint8_t it = 0; it < wholeIter; ++it) {
-            std::memcpy(prismFx, workBuf, kStripLen * sizeof(CRGB_F));
-            prismTransform(prismFx, prismTmp);
-
-            const float hueShift = it * 0.05f;
-#ifndef NATIVE_BUILD
-            if (hueShift > 0.001f) {
-                const uint8_t hShift8 = (uint8_t)(hueShift * 255.0f);
-                for (uint16_t j = 0; j < kStripLen; ++j) {
-                    if (prismFx[j].r > 0.002f || prismFx[j].g > 0.002f || prismFx[j].b > 0.002f) {
-                        CRGB rgb = prismFx[j].toCRGB();
-                        CHSV hsv = rgb2hsv_approximate(rgb);
-                        hsv.h += hShift8;
-                        hsv2rgb_rainbow(hsv, rgb);
-                        prismFx[j] = CRGB_F::fromCRGB(rgb);
-                    }
-                }
-            }
-#endif
-            for (uint16_t j = 0; j < kStripLen; ++j) {
-                workBuf[j].r += prismFx[j].r * 0.25f;
-                workBuf[j].g += prismFx[j].g * 0.25f;
-                workBuf[j].b += prismFx[j].b * 0.25f;
-            }
-        }
-
-        if (fractIter > 0.01f) {
-            std::memcpy(prismFx, workBuf, kStripLen * sizeof(CRGB_F));
-            prismTransform(prismFx, prismTmp);
-
-            const float hueShift = wholeIter * 0.05f;
-#ifndef NATIVE_BUILD
-            if (hueShift > 0.001f) {
-                const uint8_t hShift8 = (uint8_t)(hueShift * 255.0f);
-                for (uint16_t j = 0; j < kStripLen; ++j) {
-                    if (prismFx[j].r > 0.002f || prismFx[j].g > 0.002f || prismFx[j].b > 0.002f) {
-                        CRGB rgb = prismFx[j].toCRGB();
-                        CHSV hsv = rgb2hsv_approximate(rgb);
-                        hsv.h += hShift8;
-                        hsv2rgb_rainbow(hsv, rgb);
-                        prismFx[j] = CRGB_F::fromCRGB(rgb);
-                    }
-                }
-            }
-#endif
-            const float fractOpacity = 0.25f * fractIter;
-            for (uint16_t j = 0; j < kStripLen; ++j) {
-                workBuf[j].r += prismFx[j].r * fractOpacity;
-                workBuf[j].g += prismFx[j].g * fractOpacity;
-                workBuf[j].b += prismFx[j].b * fractOpacity;
-            }
-        }
-    }
-
-    // Bulb cover
-    if (m_bulbOpacity > 0.001f) {
-        static constexpr float kBulbPattern[4] = {0.25f, 1.0f, 0.25f, 0.0f};
-        const float opInv = 1.0f - m_bulbOpacity;
-
-        for (uint16_t i = 0; i < kStripLen; ++i) {
-            const float cover = kBulbPattern[i & 3];
-            workBuf[i].r = workBuf[i].r * opInv + workBuf[i].r * cover * m_bulbOpacity;
-            workBuf[i].g = workBuf[i].g * opInv + workBuf[i].g * cover * m_bulbOpacity;
-            workBuf[i].b = workBuf[i].b * opInv + workBuf[i].b * cover * m_bulbOpacity;
-        }
-    }
-
-    // Incandescent warm-white filter
-    if (m_incandescent > 0.001f) {
-        const float inv = 1.0f - m_incandescent;
-        const float rScale = inv + m_incandescent * kIncanR;
-        const float gScale = inv + m_incandescent * kIncanG;
-        const float bScale = inv + m_incandescent * kIncanB;
-
-        for (uint16_t i = 0; i < kStripLen; ++i) {
-            workBuf[i].r *= rScale;
-            workBuf[i].g *= gScale;
-            workBuf[i].b *= bScale;
-        }
-    }
-
-    // Output: convert to ctx.leds and mirror to strip 2
-    const uint16_t ledCount = ctx.ledCount;
-    for (uint16_t i = 0; i < kStripLen && i < ledCount; ++i) {
-        workBuf[i].clip();
-        ctx.leds[i] = workBuf[i].toCRGB();
-    }
-    for (uint16_t i = 0; i < kStripLen && (kStripLen + i) < ledCount; ++i) {
-        ctx.leds[kStripLen + i] = ctx.leds[i];
-    }
+    applyBloomV2PostProcessing(workBuf, ctx);
 
 #endif // FEATURE_AUDIO_SYNC
 #endif // NATIVE_BUILD
@@ -1599,107 +1314,9 @@ void SbK1BloomV2ExponentialEffect::renderEffect(plugins::EffectContext& ctx) {
     }
 
     // =====================================================================
-    // POST-PROCESSING (prism, bulb, incandescent) — identical to base
+    // POST-PROCESSING — delegated to shared helper (refactored 2026-04-24)
     // =====================================================================
-
-    // Prism effect
-    if (m_prismCount > 0.01f) {
-        CRGB_F* prismFx  = m_ps2->fxBuffer;
-        CRGB_F* prismTmp = m_ps2->tmpBuffer;
-
-        const uint8_t wholeIter = (uint8_t)m_prismCount;
-        const float fractIter = m_prismCount - floorf(m_prismCount);
-
-        for (uint8_t it = 0; it < wholeIter; ++it) {
-            std::memcpy(prismFx, workBuf, kStripLen * sizeof(CRGB_F));
-            prismTransform(prismFx, prismTmp);
-
-            const float hueShift = it * 0.05f;
-#ifndef NATIVE_BUILD
-            if (hueShift > 0.001f) {
-                const uint8_t hShift8 = (uint8_t)(hueShift * 255.0f);
-                for (uint16_t j = 0; j < kStripLen; ++j) {
-                    if (prismFx[j].r > 0.002f || prismFx[j].g > 0.002f || prismFx[j].b > 0.002f) {
-                        CRGB rgb = prismFx[j].toCRGB();
-                        CHSV hsv = rgb2hsv_approximate(rgb);
-                        hsv.h += hShift8;
-                        hsv2rgb_rainbow(hsv, rgb);
-                        prismFx[j] = CRGB_F::fromCRGB(rgb);
-                    }
-                }
-            }
-#endif
-            for (uint16_t j = 0; j < kStripLen; ++j) {
-                workBuf[j].r += prismFx[j].r * 0.25f;
-                workBuf[j].g += prismFx[j].g * 0.25f;
-                workBuf[j].b += prismFx[j].b * 0.25f;
-            }
-        }
-
-        if (fractIter > 0.01f) {
-            std::memcpy(prismFx, workBuf, kStripLen * sizeof(CRGB_F));
-            prismTransform(prismFx, prismTmp);
-
-            const float hueShift = wholeIter * 0.05f;
-#ifndef NATIVE_BUILD
-            if (hueShift > 0.001f) {
-                const uint8_t hShift8 = (uint8_t)(hueShift * 255.0f);
-                for (uint16_t j = 0; j < kStripLen; ++j) {
-                    if (prismFx[j].r > 0.002f || prismFx[j].g > 0.002f || prismFx[j].b > 0.002f) {
-                        CRGB rgb = prismFx[j].toCRGB();
-                        CHSV hsv = rgb2hsv_approximate(rgb);
-                        hsv.h += hShift8;
-                        hsv2rgb_rainbow(hsv, rgb);
-                        prismFx[j] = CRGB_F::fromCRGB(rgb);
-                    }
-                }
-            }
-#endif
-            const float fractOpacity = 0.25f * fractIter;
-            for (uint16_t j = 0; j < kStripLen; ++j) {
-                workBuf[j].r += prismFx[j].r * fractOpacity;
-                workBuf[j].g += prismFx[j].g * fractOpacity;
-                workBuf[j].b += prismFx[j].b * fractOpacity;
-            }
-        }
-    }
-
-    // Bulb cover
-    if (m_bulbOpacity > 0.001f) {
-        static constexpr float kBulbPattern[4] = {0.25f, 1.0f, 0.25f, 0.0f};
-        const float opInv = 1.0f - m_bulbOpacity;
-
-        for (uint16_t i = 0; i < kStripLen; ++i) {
-            const float cover = kBulbPattern[i & 3];
-            workBuf[i].r = workBuf[i].r * opInv + workBuf[i].r * cover * m_bulbOpacity;
-            workBuf[i].g = workBuf[i].g * opInv + workBuf[i].g * cover * m_bulbOpacity;
-            workBuf[i].b = workBuf[i].b * opInv + workBuf[i].b * cover * m_bulbOpacity;
-        }
-    }
-
-    // Incandescent warm-white filter
-    if (m_incandescent > 0.001f) {
-        const float inv = 1.0f - m_incandescent;
-        const float rScale = inv + m_incandescent * kIncanR;
-        const float gScale = inv + m_incandescent * kIncanG;
-        const float bScale = inv + m_incandescent * kIncanB;
-
-        for (uint16_t i = 0; i < kStripLen; ++i) {
-            workBuf[i].r *= rScale;
-            workBuf[i].g *= gScale;
-            workBuf[i].b *= bScale;
-        }
-    }
-
-    // Output: convert to ctx.leds and mirror to strip 2
-    const uint16_t ledCount = ctx.ledCount;
-    for (uint16_t i = 0; i < kStripLen && i < ledCount; ++i) {
-        workBuf[i].clip();
-        ctx.leds[i] = workBuf[i].toCRGB();
-    }
-    for (uint16_t i = 0; i < kStripLen && (kStripLen + i) < ledCount; ++i) {
-        ctx.leds[kStripLen + i] = ctx.leds[i];
-    }
+    applyBloomV2PostProcessing(workBuf, ctx);
 
 #endif // FEATURE_AUDIO_SYNC
 #endif // NATIVE_BUILD
@@ -1905,107 +1522,9 @@ void SbK1BloomV2SpectralSpreadEffect::renderEffect(plugins::EffectContext& ctx) 
     }
 
     // =====================================================================
-    // POST-PROCESSING (prism, bulb, incandescent) — identical to base
+    // POST-PROCESSING — delegated to shared helper (refactored 2026-04-24)
     // =====================================================================
-
-    // Prism effect
-    if (m_prismCount > 0.01f) {
-        CRGB_F* prismFx  = m_ps2->fxBuffer;
-        CRGB_F* prismTmp = m_ps2->tmpBuffer;
-
-        const uint8_t wholeIter = (uint8_t)m_prismCount;
-        const float fractIter = m_prismCount - floorf(m_prismCount);
-
-        for (uint8_t it = 0; it < wholeIter; ++it) {
-            std::memcpy(prismFx, workBuf, kStripLen * sizeof(CRGB_F));
-            prismTransform(prismFx, prismTmp);
-
-            const float hueShift = it * 0.05f;
-#ifndef NATIVE_BUILD
-            if (hueShift > 0.001f) {
-                const uint8_t hShift8 = (uint8_t)(hueShift * 255.0f);
-                for (uint16_t j = 0; j < kStripLen; ++j) {
-                    if (prismFx[j].r > 0.002f || prismFx[j].g > 0.002f || prismFx[j].b > 0.002f) {
-                        CRGB rgb = prismFx[j].toCRGB();
-                        CHSV hsv = rgb2hsv_approximate(rgb);
-                        hsv.h += hShift8;
-                        hsv2rgb_rainbow(hsv, rgb);
-                        prismFx[j] = CRGB_F::fromCRGB(rgb);
-                    }
-                }
-            }
-#endif
-            for (uint16_t j = 0; j < kStripLen; ++j) {
-                workBuf[j].r += prismFx[j].r * 0.25f;
-                workBuf[j].g += prismFx[j].g * 0.25f;
-                workBuf[j].b += prismFx[j].b * 0.25f;
-            }
-        }
-
-        if (fractIter > 0.01f) {
-            std::memcpy(prismFx, workBuf, kStripLen * sizeof(CRGB_F));
-            prismTransform(prismFx, prismTmp);
-
-            const float hueShift = wholeIter * 0.05f;
-#ifndef NATIVE_BUILD
-            if (hueShift > 0.001f) {
-                const uint8_t hShift8 = (uint8_t)(hueShift * 255.0f);
-                for (uint16_t j = 0; j < kStripLen; ++j) {
-                    if (prismFx[j].r > 0.002f || prismFx[j].g > 0.002f || prismFx[j].b > 0.002f) {
-                        CRGB rgb = prismFx[j].toCRGB();
-                        CHSV hsv = rgb2hsv_approximate(rgb);
-                        hsv.h += hShift8;
-                        hsv2rgb_rainbow(hsv, rgb);
-                        prismFx[j] = CRGB_F::fromCRGB(rgb);
-                    }
-                }
-            }
-#endif
-            const float fractOpacity = 0.25f * fractIter;
-            for (uint16_t j = 0; j < kStripLen; ++j) {
-                workBuf[j].r += prismFx[j].r * fractOpacity;
-                workBuf[j].g += prismFx[j].g * fractOpacity;
-                workBuf[j].b += prismFx[j].b * fractOpacity;
-            }
-        }
-    }
-
-    // Bulb cover
-    if (m_bulbOpacity > 0.001f) {
-        static constexpr float kBulbPattern[4] = {0.25f, 1.0f, 0.25f, 0.0f};
-        const float opInv = 1.0f - m_bulbOpacity;
-
-        for (uint16_t i = 0; i < kStripLen; ++i) {
-            const float cover = kBulbPattern[i & 3];
-            workBuf[i].r = workBuf[i].r * opInv + workBuf[i].r * cover * m_bulbOpacity;
-            workBuf[i].g = workBuf[i].g * opInv + workBuf[i].g * cover * m_bulbOpacity;
-            workBuf[i].b = workBuf[i].b * opInv + workBuf[i].b * cover * m_bulbOpacity;
-        }
-    }
-
-    // Incandescent warm-white filter
-    if (m_incandescent > 0.001f) {
-        const float inv = 1.0f - m_incandescent;
-        const float rScale = inv + m_incandescent * kIncanR;
-        const float gScale = inv + m_incandescent * kIncanG;
-        const float bScale = inv + m_incandescent * kIncanB;
-
-        for (uint16_t i = 0; i < kStripLen; ++i) {
-            workBuf[i].r *= rScale;
-            workBuf[i].g *= gScale;
-            workBuf[i].b *= bScale;
-        }
-    }
-
-    // Output: convert to ctx.leds and mirror to strip 2
-    const uint16_t ledCount = ctx.ledCount;
-    for (uint16_t i = 0; i < kStripLen && i < ledCount; ++i) {
-        workBuf[i].clip();
-        ctx.leds[i] = workBuf[i].toCRGB();
-    }
-    for (uint16_t i = 0; i < kStripLen && (kStripLen + i) < ledCount; ++i) {
-        ctx.leds[kStripLen + i] = ctx.leds[i];
-    }
+    applyBloomV2PostProcessing(workBuf, ctx);
 
 #endif // FEATURE_AUDIO_SYNC
 #endif // NATIVE_BUILD
@@ -2200,107 +1719,9 @@ void SbK1BloomV2BassTrebleEffect::renderEffect(plugins::EffectContext& ctx) {
     }
 
     // =====================================================================
-    // POST-PROCESSING (prism, bulb, incandescent) — identical to base
+    // POST-PROCESSING — delegated to shared helper (refactored 2026-04-24)
     // =====================================================================
-
-    // Prism effect
-    if (m_prismCount > 0.01f) {
-        CRGB_F* prismFx  = m_ps2->fxBuffer;
-        CRGB_F* prismTmp = m_ps2->tmpBuffer;
-
-        const uint8_t wholeIter = (uint8_t)m_prismCount;
-        const float fractIter = m_prismCount - floorf(m_prismCount);
-
-        for (uint8_t it = 0; it < wholeIter; ++it) {
-            std::memcpy(prismFx, workBuf, kStripLen * sizeof(CRGB_F));
-            prismTransform(prismFx, prismTmp);
-
-            const float hueShift = it * 0.05f;
-#ifndef NATIVE_BUILD
-            if (hueShift > 0.001f) {
-                const uint8_t hShift8 = (uint8_t)(hueShift * 255.0f);
-                for (uint16_t j = 0; j < kStripLen; ++j) {
-                    if (prismFx[j].r > 0.002f || prismFx[j].g > 0.002f || prismFx[j].b > 0.002f) {
-                        CRGB rgb = prismFx[j].toCRGB();
-                        CHSV hsv = rgb2hsv_approximate(rgb);
-                        hsv.h += hShift8;
-                        hsv2rgb_rainbow(hsv, rgb);
-                        prismFx[j] = CRGB_F::fromCRGB(rgb);
-                    }
-                }
-            }
-#endif
-            for (uint16_t j = 0; j < kStripLen; ++j) {
-                workBuf[j].r += prismFx[j].r * 0.25f;
-                workBuf[j].g += prismFx[j].g * 0.25f;
-                workBuf[j].b += prismFx[j].b * 0.25f;
-            }
-        }
-
-        if (fractIter > 0.01f) {
-            std::memcpy(prismFx, workBuf, kStripLen * sizeof(CRGB_F));
-            prismTransform(prismFx, prismTmp);
-
-            const float hueShift = wholeIter * 0.05f;
-#ifndef NATIVE_BUILD
-            if (hueShift > 0.001f) {
-                const uint8_t hShift8 = (uint8_t)(hueShift * 255.0f);
-                for (uint16_t j = 0; j < kStripLen; ++j) {
-                    if (prismFx[j].r > 0.002f || prismFx[j].g > 0.002f || prismFx[j].b > 0.002f) {
-                        CRGB rgb = prismFx[j].toCRGB();
-                        CHSV hsv = rgb2hsv_approximate(rgb);
-                        hsv.h += hShift8;
-                        hsv2rgb_rainbow(hsv, rgb);
-                        prismFx[j] = CRGB_F::fromCRGB(rgb);
-                    }
-                }
-            }
-#endif
-            const float fractOpacity = 0.25f * fractIter;
-            for (uint16_t j = 0; j < kStripLen; ++j) {
-                workBuf[j].r += prismFx[j].r * fractOpacity;
-                workBuf[j].g += prismFx[j].g * fractOpacity;
-                workBuf[j].b += prismFx[j].b * fractOpacity;
-            }
-        }
-    }
-
-    // Bulb cover
-    if (m_bulbOpacity > 0.001f) {
-        static constexpr float kBulbPattern[4] = {0.25f, 1.0f, 0.25f, 0.0f};
-        const float opInv = 1.0f - m_bulbOpacity;
-
-        for (uint16_t i = 0; i < kStripLen; ++i) {
-            const float cover = kBulbPattern[i & 3];
-            workBuf[i].r = workBuf[i].r * opInv + workBuf[i].r * cover * m_bulbOpacity;
-            workBuf[i].g = workBuf[i].g * opInv + workBuf[i].g * cover * m_bulbOpacity;
-            workBuf[i].b = workBuf[i].b * opInv + workBuf[i].b * cover * m_bulbOpacity;
-        }
-    }
-
-    // Incandescent warm-white filter
-    if (m_incandescent > 0.001f) {
-        const float inv = 1.0f - m_incandescent;
-        const float rScale = inv + m_incandescent * kIncanR;
-        const float gScale = inv + m_incandescent * kIncanG;
-        const float bScale = inv + m_incandescent * kIncanB;
-
-        for (uint16_t i = 0; i < kStripLen; ++i) {
-            workBuf[i].r *= rScale;
-            workBuf[i].g *= gScale;
-            workBuf[i].b *= bScale;
-        }
-    }
-
-    // Output: convert to ctx.leds and mirror to strip 2
-    const uint16_t ledCount = ctx.ledCount;
-    for (uint16_t i = 0; i < kStripLen && i < ledCount; ++i) {
-        workBuf[i].clip();
-        ctx.leds[i] = workBuf[i].toCRGB();
-    }
-    for (uint16_t i = 0; i < kStripLen && (kStripLen + i) < ledCount; ++i) {
-        ctx.leds[kStripLen + i] = ctx.leds[i];
-    }
+    applyBloomV2PostProcessing(workBuf, ctx);
 
 #endif // FEATURE_AUDIO_SYNC
 #endif // NATIVE_BUILD

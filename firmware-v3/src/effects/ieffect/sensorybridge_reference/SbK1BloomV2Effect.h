@@ -116,6 +116,12 @@ protected:
     // Private methods
     // ---------------------------------------------------------------
     static void prismTransform(CRGB_F* buf, CRGB_F* tmp);
+
+#ifndef NATIVE_BUILD
+    // Shared post-processing: prism + bulb cover + incandescent + output mirror.
+    // Extracted from every SbK1BloomV2*Effect renderEffect body (previously duplicated 6× byte-identically).
+    void applyBloomV2PostProcessing(CRGB_F* workBuf, plugins::EffectContext& ctx);
+#endif
 };
 
 // =========================================================================

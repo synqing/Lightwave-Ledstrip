@@ -14,6 +14,23 @@ Checks:
 7. [INVERTED] ALL effect .cpp files scanned for rainbow/hue-wheel patterns.
    Non-allowlisted files FAIL.
 8. K1 AP-only: no STA-mode WiFi usage outside allowlisted infrastructure files.
+
+Brand-voice extensions (Block 2 items 19, 20, 15 — Phase 0A first enforcement primitive):
+9. [BRAND-VOICE §3.5 / Block 2 item 19] Per-bin tempo-bank read inside render() —
+   FAIL.  `tempi[*]` / `tempoBank[*]` indexed access from the render call path
+   contradicts BRAND_VOICE_POSTURE.md §3.5 (literal ES tempo-bank swarm rendering
+   banned) and §4.5 (tempo-bank as engine plumbing only).  Single-tempo `tempoPhase`
+   scalar reads remain compliant.
+10. [BRAND-VOICE §3.6 / Block 2 item 20] GEO-06 CircularRing / GEO-10
+    AsymmetricDriftOrigin name patterns — FAIL.  These effect families violate
+    HW-03 Centre-Origin strict invariant per §6 item 10 / §3 C-8.  No allowlist.
+11. [BRAND-VOICE §3.3 / Block 2 item 15] Multi-element fragmentation patterns
+    (PendulumChain / PendulumArray / PendulumSwarm / BoidSwarm / BoidFlock /
+    KuramotoSwarm / KuramotoOscillators / OscillatorChain / OscillatorArray) —
+    WARN (boundary-flag, not hard FAIL).  These name patterns are likely-but-not-
+    certain indicators of multi-element fragmentation per §3.3.  Continuum-class
+    alternatives (heat-eq, spring-mass-lattice as ≥80 coupled cells reading as
+    continuum) are §4.3 boundary cases and remain allowed.
 """
 
 from __future__ import annotations
@@ -275,6 +292,49 @@ HEAP_IN_RENDER_PATTERN = re.compile(
     r"\b(new|malloc|calloc|realloc|heap_caps_malloc)\b|(?:^|[^A-Za-z0-9_])String\s*\("
 )
 
+# ---------------------------------------------------------------------------
+# Brand-voice extensions (Phase 0A first enforcement primitive)
+# ---------------------------------------------------------------------------
+
+# §3.5 / item 19 — per-bin tempo-bank read in render() path.
+# Matches `tempi[<expr>]` and `tempoBank[<expr>]` where the index is NOT the
+# literal `0`.  Single-element access at index 0 is permitted as the engine-
+# plumbing escape (a single-tempo bank-of-1 is semantically equivalent to a
+# scalar `tempoPhase`).
+TEMPO_BANK_INDEXED_PATTERN = re.compile(
+    r"\b(tempi|tempoBank)\s*\[\s*(?!0\s*\])([^\]]+)\]"
+)
+
+# Empty allowlist — any new tempo-bank-indexed render-path access must be
+# explicitly justified by adding the filename here.
+TEMPO_BANK_ALLOWLIST: set[str] = set()
+
+# §3.6 / item 20 — GEO-06 / GEO-10 kill: filename or class-name match against
+# CircularRing / AsymmetricDriftOrigin / DriftOrigin patterns.
+# No allowlist (HW-03 strict per §3 C-8).
+GEO_KILL_NAME_PATTERNS = (
+    re.compile(r"CircularRing", re.IGNORECASE),
+    re.compile(r"AsymmetricDriftOrigin", re.IGNORECASE),
+    re.compile(r"AsymmetricDrift", re.IGNORECASE),
+    re.compile(r"\bDriftOrigin\b", re.IGNORECASE),
+)
+
+# §3.3 / item 15 — multi-element fragmentation: filename or class-name match.
+# Conservative pattern set — only flags exact fragmentation indicators.
+# Continuum-class names (KuramotoTransport, ModalResonance, SpringMassLattice
+# etc.) are NOT matched.
+FRAGMENTATION_NAME_PATTERNS = (
+    re.compile(r"PendulumChain", re.IGNORECASE),
+    re.compile(r"PendulumArray", re.IGNORECASE),
+    re.compile(r"PendulumSwarm", re.IGNORECASE),
+    re.compile(r"BoidSwarm", re.IGNORECASE),
+    re.compile(r"BoidFlock", re.IGNORECASE),
+    re.compile(r"KuramotoSwarm", re.IGNORECASE),
+    re.compile(r"KuramotoOscillators", re.IGNORECASE),
+    re.compile(r"OscillatorChain", re.IGNORECASE),
+    re.compile(r"OscillatorArray", re.IGNORECASE),
+)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -466,6 +526,170 @@ def check_rainbow_inverted(violations: list[str], stats: dict) -> None:
     stats["rainbow_scan_flagged"] = flagged
 
 
+def check_tempo_bank_in_render(violations: list[str], stats: dict,
+                                effect_dir: Path = IEFFECT_DIR) -> None:
+    """
+    [BRAND-VOICE §3.5 / Block 2 item 19] FAIL on per-bin tempo-bank reads
+    inside render() blocks.
+
+    Walks each .cpp file's render() lexical block (same scheme as
+    check_heap_alloc_in_render).  Flags any `tempi[expr]` or `tempoBank[expr]`
+    indexed access where the index is NOT the literal `0`.
+
+    False-positive risk: low.  The pattern only matches genuine indexed access;
+    scalar reads like `controlBus.tempoPhase` are not affected.  Single-element
+    bank-of-1 access at literal index 0 is exempt (engine-plumbing escape).
+    """
+    scanned = 0
+    flagged = 0
+    for path in sorted(effect_dir.rglob("*.cpp")):
+        if _is_reference_path(path):
+            continue
+        if path.name in TEMPO_BANK_ALLOWLIST:
+            continue
+        scanned += 1
+        lines = read_text(path).splitlines()
+        in_render = False
+        brace_depth = 0
+
+        for idx, line in enumerate(lines, start=1):
+            code_part = line.split("//", 1)[0]
+            if not in_render:
+                if RENDER_START_PATTERN.search(line):
+                    in_render = True
+                    brace_depth = line.count("{") - line.count("}")
+                    if TEMPO_BANK_INDEXED_PATTERN.search(code_part):
+                        violations.append(
+                            f"[tempo-bank-in-render] Per-bin tempo-bank read in render() at {path.name}:{idx}"
+                        )
+                        flagged += 1
+                continue
+
+            if TEMPO_BANK_INDEXED_PATTERN.search(code_part):
+                violations.append(
+                    f"[tempo-bank-in-render] Per-bin tempo-bank read in render() at {path.name}:{idx}"
+                )
+                flagged += 1
+
+            brace_depth += line.count("{") - line.count("}")
+            if brace_depth <= 0:
+                in_render = False
+
+    stats["tempo_bank_scan_total"] = scanned
+    stats["tempo_bank_scan_flagged"] = flagged
+
+
+def check_geo_kill_patterns(violations: list[str], stats: dict,
+                             effect_dir: Path = IEFFECT_DIR) -> None:
+    """
+    [BRAND-VOICE §3.6 / Block 2 item 20] FAIL on GEO-06 CircularRing /
+    GEO-10 AsymmetricDriftOrigin name patterns.
+
+    Scans filenames AND class-name declarations.  No allowlist (HW-03 strict
+    per §3 C-8 + §6 item 10).
+
+    False-positive risk: low.  Names are specific.  ConcentricRings (existing
+    allowlisted family) does NOT match `CircularRing` because the pattern
+    requires the literal token "CircularRing" not "ConcentricRings".
+    """
+    scanned = 0
+    flagged = 0
+    class_decl_pattern = re.compile(r"\bclass\s+(\w+)")
+
+    for path in sorted(effect_dir.rglob("*")):
+        if not path.is_file():
+            continue
+        if path.suffix not in {".cpp", ".h"}:
+            continue
+        if _is_reference_path(path):
+            continue
+        scanned += 1
+
+        # Filename check
+        for pat in GEO_KILL_NAME_PATTERNS:
+            if pat.search(path.name):
+                violations.append(
+                    f"[geo-kill] HW-03 violation — name pattern matches "
+                    f"GEO-06/GEO-10 kill in filename: {path.name} (matched: {pat.pattern})"
+                )
+                flagged += 1
+                break  # one violation per file from filename check
+
+        # Class-name check
+        text = read_text(path)
+        for class_match in class_decl_pattern.finditer(text):
+            class_name = class_match.group(1)
+            for pat in GEO_KILL_NAME_PATTERNS:
+                if pat.search(class_name):
+                    violations.append(
+                        f"[geo-kill] HW-03 violation — class name matches "
+                        f"GEO-06/GEO-10 kill: {class_name} in {path.name} "
+                        f"(matched: {pat.pattern})"
+                    )
+                    flagged += 1
+
+    stats["geo_kill_scan_total"] = scanned
+    stats["geo_kill_scan_flagged"] = flagged
+
+
+def check_fragmentation_patterns(warnings: list[str], stats: dict,
+                                  effect_dir: Path = IEFFECT_DIR) -> None:
+    """
+    [BRAND-VOICE §3.3 / Block 2 item 15] WARN (boundary-flag, not hard FAIL)
+    on multi-element fragmentation name patterns.
+
+    Captain decision: emit as warning rather than violation because pattern
+    detection is naming-convention-dependent and false-positive risk is medium.
+    Continuum-class alternatives (KuramotoTransport, ModalResonance,
+    SpringMassLattice, heat-eq) are §4.3 boundary cases and intentionally NOT
+    matched by these patterns.
+
+    False-positive risk: medium.  An effect with a fragmentation-style name
+    that is actually a continuum-class implementation would WARN; reviewer
+    decides PASS / KILL.  Add to a future allowlist or rename if it survives
+    review.
+    """
+    scanned = 0
+    flagged = 0
+    class_decl_pattern = re.compile(r"\bclass\s+(\w+)")
+
+    for path in sorted(effect_dir.rglob("*")):
+        if not path.is_file():
+            continue
+        if path.suffix not in {".cpp", ".h"}:
+            continue
+        if _is_reference_path(path):
+            continue
+        scanned += 1
+
+        # Filename check
+        for pat in FRAGMENTATION_NAME_PATTERNS:
+            if pat.search(path.name):
+                warnings.append(
+                    f"[fragmentation-warn] §3.3 multi-element fragmentation "
+                    f"pattern in filename: {path.name} (matched: {pat.pattern}) "
+                    f"— reviewer must classify PASS / KILL"
+                )
+                flagged += 1
+                break
+
+        # Class-name check
+        text = read_text(path)
+        for class_match in class_decl_pattern.finditer(text):
+            class_name = class_match.group(1)
+            for pat in FRAGMENTATION_NAME_PATTERNS:
+                if pat.search(class_name):
+                    warnings.append(
+                        f"[fragmentation-warn] §3.3 multi-element fragmentation "
+                        f"pattern in class name: {class_name} in {path.name} "
+                        f"(matched: {pat.pattern}) — reviewer must classify PASS / KILL"
+                    )
+                    flagged += 1
+
+    stats["fragmentation_scan_total"] = scanned
+    stats["fragmentation_scan_flagged"] = flagged
+
+
 def check_k1_ap_only(violations: list[str], stats: dict) -> None:
     """
     Scan ALL .cpp and .h files under src/ for WiFi STA-mode references.
@@ -505,6 +729,7 @@ def check_k1_ap_only(violations: list[str], stats: dict) -> None:
 
 def main() -> int:
     violations: list[str] = []
+    warnings: list[str] = []
     stats: dict = {}
 
     # Original checks (unchanged)
@@ -514,10 +739,15 @@ def main() -> int:
     check_heap_alloc_in_render(violations)
     check_ar_control_liveness(violations)
 
-    # New inverted checks
+    # Inverted checks
     check_centre_origin_inverted(violations, stats)
     check_rainbow_inverted(violations, stats)
     check_k1_ap_only(violations, stats)
+
+    # Brand-voice extensions (Phase 0A first enforcement primitive)
+    check_tempo_bank_in_render(violations, stats)
+    check_geo_kill_patterns(violations, stats)
+    check_fragmentation_patterns(warnings, stats)
 
     # Count total effect files
     effect_file_count = len(list(effect_files()))
@@ -526,6 +756,12 @@ def main() -> int:
         print("FAIL: effect contract checks found issues:")
         for issue in violations:
             print(f"  - {issue}")
+        print()
+
+    if warnings:
+        print("WARN: brand-voice boundary flags (review required, not blocking):")
+        for warn in warnings:
+            print(f"  - {warn}")
         print()
 
     # Always print scan summary
@@ -540,9 +776,20 @@ def main() -> int:
     print(f"  K1 AP-only scan:    {stats.get('k1_sta_scan_total', 0)} .cpp/.h files checked"
           f" | allowlist: {len(K1_STA_ALLOWLIST)} files"
           f" | flagged: {stats.get('k1_sta_scan_flagged', 0)}")
+    print(f"  Tempo-bank scan:    {stats.get('tempo_bank_scan_total', 0)} .cpp files checked"
+          f" | allowlist: {len(TEMPO_BANK_ALLOWLIST)} files"
+          f" | flagged: {stats.get('tempo_bank_scan_flagged', 0)}")
+    print(f"  GEO-kill scan:      {stats.get('geo_kill_scan_total', 0)} .cpp/.h files checked"
+          f" | flagged: {stats.get('geo_kill_scan_flagged', 0)}")
+    print(f"  Fragmentation warn: {stats.get('fragmentation_scan_total', 0)} .cpp/.h files checked"
+          f" | flagged: {stats.get('fragmentation_scan_flagged', 0)}")
 
     if violations:
         return 1
+
+    if warnings:
+        print("\nPASS: all effect contract checks passed (with brand-voice warnings — see above).")
+        return 0
 
     print("\nPASS: all effect contract checks passed.")
     return 0

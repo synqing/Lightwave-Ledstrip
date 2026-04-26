@@ -26,6 +26,8 @@ extern void run_onset_effect_context_tests();
 extern void run_translation_engine_tests();
 extern void run_translation_integration_tests();
 extern void run_effect_role_flags_tests();
+extern void run_persistence_helpers_tests();
+extern void run_math_substrate_tests();
 
 // Unity setUp/tearDown (required but can be empty)
 void setUp(void) {
@@ -77,6 +79,16 @@ int main(int argc, char** argv) {
     printf("  EffectRoleFlags Tests (INF-06 substrate)\n");
     printf("───────────────────────────────────────────────────────────────\n");
     run_effect_role_flags_tests();
+
+    printf("\n───────────────────────────────────────────────────────────────\n");
+    printf("  PersistenceHelpers Tests (Phase 1 Move 1.1 substrate)\n");
+    printf("───────────────────────────────────────────────────────────────\n");
+    run_persistence_helpers_tests();
+
+    printf("\n───────────────────────────────────────────────────────────────\n");
+    printf("  Math Substrate Tests (Phase 1 Move 1.6 — sinLUT256 + CFL)\n");
+    printf("───────────────────────────────────────────────────────────────\n");
+    run_math_substrate_tests();
 
     printf("\n───────────────────────────────────────────────────────────────\n");
     printf("  Audio Reactive Policy Tests\n");

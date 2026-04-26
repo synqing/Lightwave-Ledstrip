@@ -32,6 +32,7 @@
 #include "effects/PatternRegistry.h"
 #include "effects/ieffect/BeatPulseBloomEffect.h"  // g_bloomDebugEnabled
 #include "effects/ieffect/BloomParityEffect.h"     // Runtime PostFX tuning
+#include "effects/ieffect/LGPRoseBloomAREffect.h"  // Rose Bloom runtime mode selector ('R' key)
 #include "effects/ieffect/LGPFilmPost.h"           // Cinema post toggle
 
 #include "plugins/api/IEffect.h"
@@ -1837,6 +1838,17 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
                 const auto mode = static_cast<BP::PrismMode>(next);
                 BP::setPrismMode(mode);
                 Serial.printf("Bloom Parity Mode: %u — %s\n", next, BP::getPrismModeName(mode));
+            }
+            break;
+
+        case 'R':
+            // Rose Bloom — cycle runtime test mode (Baseline + 9 hypotheses for carry-through)
+            {
+                using RB = lightwaveos::effects::ieffect::LGPRoseBloomAREffect;
+                const uint8_t next = (static_cast<uint8_t>(RB::getRoseBloomMode()) + 1) % RB::kRoseBloomModeCount;
+                const auto mode = static_cast<RB::RoseBloomMode>(next);
+                RB::setRoseBloomMode(mode);
+                Serial.printf("Rose Bloom Mode: %u — %s\n", next, RB::getRoseBloomModeName(mode));
             }
             break;
 

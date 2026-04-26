@@ -144,8 +144,9 @@ void SbRawWaveformScopeEffect::renderEffect(plugins::EffectContext& ctx) {
     const float alphaAttack = 1.0f - expf(-dt / kAttackTau);
     const float alphaDecay  = 1.0f - expf(-dt / kDecayTau);
 
+    const float* bins64Adaptive = ctx.audio.bins64Adaptive();
     for (uint8_t i = 0; i < kBinCount; ++i) {
-        float target = ctx.audio.controlBus.bins64[i];
+        float target = bins64Adaptive ? bins64Adaptive[i] : 0.0f;
         float alpha = (target > m_ps->smoothedBins[i]) ? alphaAttack : alphaDecay;
         m_ps->smoothedBins[i] += (target - m_ps->smoothedBins[i]) * alpha;
     }

@@ -16,7 +16,9 @@
  * Design constraints:
  *  - Large buffers allocated in PSRAM (heap_caps_malloc/MALLOC_CAP_SPIRAM).
  *  - Per-zone state (ZoneComposer uses a shared effect instance).
- *  - Works even if init() is never called (lazy safety via ensurePsramAllocated).
+ *  - allocatePsram() MUST be called from the effect's init() before any render call.
+ *    Transport methods silently no-op when m_ps is null — they do NOT allocate.
+ *    This upholds the hard constraint: no heap allocation inside render().
  */
 
 #pragma once
@@ -44,11 +46,26 @@ public:
     // but keep 160 to remain safe if centrePoint semantics ever change.
     static constexpr uint16_t MAX_RADIAL_LEN = 160;
 
-    BeatPulseTransportCore() { resetAll(); }
+    BeatPulseTransportCore() = default;
     ~BeatPulseTransportCore() { freePsram(); }
 
+    /**
+     * @brief Explicitly allocate PSRAM backing store.
+     *
+     * Must be called once from BeatPulseBloomEffect::init() before any render call.
+     * Safe to call more than once — subsequent calls are no-ops when already allocated.
+     * MUST NOT be called from render() or any render-path function.
+     *
+     * @return true if the buffer is ready (either freshly allocated or was already allocated).
+     */
+    bool allocatePsram() {
+        return ensurePsramAllocated();
+    }
+
     void resetAll() {
-        if (!ensurePsramAllocated()) return;
+        // If PSRAM was never allocated (init() not called), silently no-op.
+        // This preserves the hard constraint: no heap allocation inside render().
+        if (!m_ps) return;
         std::memset(m_ps->hist, 0, sizeof(m_ps->hist));
         std::memset(m_ps->work, 0, sizeof(m_ps->work));
         std::memset(m_lastRenderMs, 0, sizeof(m_lastRenderMs));
@@ -81,7 +98,8 @@ public:
         float dtSeconds
     ) {
         if (zoneId >= MAX_ZONES) return;
-        if (!ensurePsramAllocated()) return;
+        // Guard: no allocation inside render path — init() is responsible for allocatePsram().
+        if (!m_ps) return;
         radialLen = (radialLen > MAX_RADIAL_LEN) ? MAX_RADIAL_LEN : radialLen;
         if (radialLen < 2) return;
 

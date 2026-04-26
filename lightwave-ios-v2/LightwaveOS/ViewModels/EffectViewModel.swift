@@ -38,9 +38,14 @@ class EffectViewModel {
         allEffects.filter { $0.isAudioReactive }
     }
 
-    /// Filtered effects by category, search text, and audio-only flag
+    /// Filtered effects by category, search text, and audio-only flag.
+    /// Experimental effects are excluded by default; they are hidden from the
+    /// production rotation until Captain adds a developer toggle.
     func filteredEffects(category: String? = nil, searchText: String? = nil, audioOnly: Bool = false) -> [EffectMetadata] {
         var effects = allEffects
+
+        // Exclude experimental effects from default production view
+        effects = effects.filter { !$0.isExperimental }
 
         // Filter by audio-reactive if requested
         if audioOnly {

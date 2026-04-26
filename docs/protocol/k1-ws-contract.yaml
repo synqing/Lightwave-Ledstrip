@@ -138,7 +138,10 @@ commands:
         total: uint16
         page: uint8
         limit: uint8
-        effects: "array of {effectId, name, category?}"
+        effects: "array of {effectId, name, category?, isAudioReactive: bool, isExperimental: bool}"
+        # isExperimental: true means the effect is tagged for exclusion from default
+        # production rotation. iOS hides these in default views.
+        # Backward-compat: old K1 firmware omits the field; treat absence as false.
     consumers: [tab5, ios]
 
   effects.getMetadata:
@@ -157,6 +160,7 @@ commands:
         story: "string or null"
         opticalIntent: "string or null"
         tags: uint8
+        isExperimental: { type: bool, note: "absent on old firmware = false" }
     consumers: [ios]
 
   effects.getCategories:

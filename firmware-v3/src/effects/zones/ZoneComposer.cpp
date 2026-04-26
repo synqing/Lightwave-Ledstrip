@@ -58,64 +58,77 @@ struct ZonePreset {
 };
 
 // 4 Built-in presets
+//
+// Track C-1 fix (2026-04-26): effectId values are namespaced EID_* constants
+// (uint16_t). The pre-2026-02-27 sequential uint8 indices (0, 9, 11, 14, 16,
+// 17, 24, 97) became invalid after the hex-namespacing refactor (commit
+// d943101a) and rendered every preset zone BLACK because RendererActor's
+// registry lookup returned nullptr. Captain decisions 2026-04-26:
+//   - Preset 0: EID_FIRE → EID_LGP_HOLOGRAPHIC_AUTO_CYCLE (Fire is now
+//     isExperimental; Holographic Auto-Cycle is the system-default effect
+//     since Jan 2026 and pairs better with the "safe baseline" intent)
+//   - Preset 1 zone[1]: keep base EID_LGP_HOLOGRAPHIC (NOT ES_TUNED)
+//   - Preset 2: upgrade to ENHANCED variants (richer audio responsiveness;
+//     these were authored specifically for audio-reactive zone use)
+//   - Preset 3: original Heartbeat/Breathing intent preserved verbatim
 static const ZonePreset PRESETS[] = {
-    // Preset 0: Single Zone (unified)
+    // Preset 0: Single Zone (unified) — system-default Holographic Auto-Cycle
     {
         .name = "Unified",
         .segments = ZONE_1_CONFIG,
         .zoneCount = 1,
         .zones = {
-            { .effectId = 0, .brightness = 255, .speed = 15, .paletteId = 0,
-              .blendMode = BlendMode::OVERWRITE, .enabled = true },
-            { .effectId = 0, .brightness = 255, .speed = 15, .paletteId = 0,
+            { .effectId = lightwaveos::EID_LGP_HOLOGRAPHIC_AUTO_CYCLE, .brightness = 255, .speed = 15, .paletteId = 0,
+              .blendMode = BlendMode::OVERWRITE, .enabled = true },   // LGP Holographic Auto-Cycle (system default)
+            { .effectId = lightwaveos::EID_LGP_HOLOGRAPHIC_AUTO_CYCLE, .brightness = 255, .speed = 15, .paletteId = 0,
               .blendMode = BlendMode::OVERWRITE, .enabled = false },
-            { .effectId = 0, .brightness = 255, .speed = 15, .paletteId = 0,
+            { .effectId = lightwaveos::EID_LGP_HOLOGRAPHIC_AUTO_CYCLE, .brightness = 255, .speed = 15, .paletteId = 0,
               .blendMode = BlendMode::OVERWRITE, .enabled = false }
         }
     },
 
-    // Preset 1: Dual Split (center vs outer)
+    // Preset 1: Dual Split (center vs outer) — Copper-palette holographic showcase
     {
         .name = "Dual Split",
         .segments = ZONE_2_CONFIG,
         .zoneCount = 2,
         .zones = {
-            { .effectId = 97, .brightness = 255, .speed = 5, .paletteId = 68,
-              .blendMode = BlendMode::ADDITIVE, .enabled = true },    // Ripple Enhanced / Copper
-            { .effectId = 14, .brightness = 255, .speed = 35, .paletteId = 68,
-              .blendMode = BlendMode::ADDITIVE, .enabled = true },    // LGP Holographic / Copper
-            { .effectId = 0, .brightness = 255, .speed = 15, .paletteId = 0,
+            { .effectId = lightwaveos::EID_RIPPLE_ENHANCED, .brightness = 255, .speed = 5, .paletteId = 68,
+              .blendMode = BlendMode::ADDITIVE, .enabled = true },    // Ripple Enhanced / Copper (slow audio-reactive ripple)
+            { .effectId = lightwaveos::EID_LGP_HOLOGRAPHIC, .brightness = 255, .speed = 35, .paletteId = 68,
+              .blendMode = BlendMode::ADDITIVE, .enabled = true },    // LGP Holographic / Copper (fast holographic shimmer)
+            { .effectId = lightwaveos::EID_LGP_HOLOGRAPHIC_AUTO_CYCLE, .brightness = 255, .speed = 15, .paletteId = 0,
               .blendMode = BlendMode::OVERWRITE, .enabled = false }
         }
     },
 
-    // Preset 2: Triple Rings (audio-reactive LGP effects)
+    // Preset 2: Triple Rings (audio-reactive LGP effects, ENHANCED variants)
     {
         .name = "Triple Rings",
         .segments = ZONE_3_CONFIG,
         .zoneCount = 3,
         .zones = {
-            { .effectId = 17, .brightness = 255, .speed = 20, .paletteId = 0,
-              .blendMode = BlendMode::OVERWRITE, .enabled = true },   // LGP Wave Collision center (audio: heavyBass)
-            { .effectId = 16, .brightness = 220, .speed = 25, .paletteId = 0,
-              .blendMode = BlendMode::ADDITIVE, .enabled = true },    // LGP Interference Scanner middle (audio: heavyMid)
-            { .effectId = 24, .brightness = 180, .speed = 30, .paletteId = 0,
-              .blendMode = BlendMode::ADDITIVE, .enabled = true }     // LGP Star Burst outer (audio: full pipeline)
+            { .effectId = lightwaveos::EID_LGP_WAVE_COLLISION_ENHANCED, .brightness = 255, .speed = 20, .paletteId = 0,
+              .blendMode = BlendMode::OVERWRITE, .enabled = true },   // LGP Wave Collision Enhanced — heavy bass
+            { .effectId = lightwaveos::EID_LGP_INTERFERENCE_SCANNER_ENHANCED, .brightness = 220, .speed = 25, .paletteId = 0,
+              .blendMode = BlendMode::ADDITIVE, .enabled = true },    // LGP Interference Scanner Enhanced — heavy mid
+            { .effectId = lightwaveos::EID_LGP_STAR_BURST_ENHANCED, .brightness = 180, .speed = 30, .paletteId = 0,
+              .blendMode = BlendMode::ADDITIVE, .enabled = true }     // LGP Star Burst Enhanced — full spectrum
         }
     },
 
-    // Preset 3: Heartbeat Focus
+    // Preset 3: Heartbeat Focus — calm biometric, heartbeat radiating outward
     {
         .name = "Heartbeat Focus",
         .segments = ZONE_3_CONFIG,
         .zoneCount = 3,
         .zones = {
-            { .effectId = 9, .brightness = 255, .speed = 15, .paletteId = 0,
+            { .effectId = lightwaveos::EID_HEARTBEAT, .brightness = 255, .speed = 15, .paletteId = 0,
               .blendMode = BlendMode::OVERWRITE, .enabled = true },   // Heartbeat center
-            { .effectId = 11, .brightness = 150, .speed = 10, .paletteId = 0,
-              .blendMode = BlendMode::ALPHA, .enabled = true },       // Breathing middle
-            { .effectId = 11, .brightness = 100, .speed = 8, .paletteId = 0,
-              .blendMode = BlendMode::ALPHA, .enabled = true }        // Breathing outer
+            { .effectId = lightwaveos::EID_BREATHING, .brightness = 150, .speed = 10, .paletteId = 0,
+              .blendMode = BlendMode::ALPHA, .enabled = true },       // Breathing middle (soft halo)
+            { .effectId = lightwaveos::EID_BREATHING, .brightness = 100, .speed = 8, .paletteId = 0,
+              .blendMode = BlendMode::ALPHA, .enabled = true }        // Breathing outer (fade to calm)
         }
     }
 };

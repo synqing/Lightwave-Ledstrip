@@ -65,6 +65,15 @@ endpoints:
     query_params:
       page: { type: uint8, optional: true, default: 1 }
       limit: { type: uint8, optional: true, default: 20 }
+    response_item_fields:
+      id: uint16
+      name: string
+      category: "string or null"
+      categoryId: "uint8 or null"
+      isAudioReactive: bool
+      isExperimental: { type: bool, note: "absent on old firmware = false" }
+      # isExperimental=true: effect tagged for exclusion from default production
+      # rotation; iOS filters these out in filteredEffects() by default.
     consumers: [ios]
 
   /api/v1/effects/current:
@@ -90,7 +99,9 @@ endpoints:
 
   /api/v1/effects/metadata:
     method: GET
-    description: "Effect metadata (family, story, optical intent)"
+    description: "Effect metadata (family, story, optical intent, isExperimental)"
+    response_fields:
+      isExperimental: { type: bool, note: "absent on old firmware = false" }
     query_params:
       id: { type: uint16, required: true }
     consumers: [ios]

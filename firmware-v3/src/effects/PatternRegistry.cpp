@@ -570,6 +570,58 @@ static const EffectId REACTIVE_EFFECT_IDS[] PROGMEM = {
 };
 static constexpr uint8_t REACTIVE_EFFECT_COUNT = sizeof(REACTIVE_EFFECT_IDS) / sizeof(EffectId);
 
+// ============================================================================
+// Experimental effect set — hidden from default iOS production rotation
+// ============================================================================
+// These effects are registered in the catalogue but tagged isExperimental=true
+// in the /api/v1/effects list and effects.getMetadata responses. iOS filters
+// them out of the default view; they remain accessible via direct ID.
+//
+// Tagging grounds (per 2026-04-25 centre-origin compliance audit + Captain decision):
+//   - FireEffect: linear write over symmetric heat physics — borderline,
+//     Captain confirmed inclusion
+//   - LGP Caustic Fan: rainbow + linear write (HIGH centre-origin violation)
+//   - ShapeBangersPack pack-internal effects: cellular-automaton (asymmetric
+//     by mathematical definition for Rule 30) and rotation-offset parametric
+//     maths that diverge from the outward-radial aesthetic
+//   - Rule 30 Cathedral AR variant: shares the same asymmetric CA flaw
+//
+// NOT tagged (compliance verified or out of scope):
+//   - LGPRoseBloomAREffect (EID_LGP_ROSE_BLOOM_AR 0x1C0B): centre-origin compliant,
+//     uses SET_CENTER_PAIR — this is the standalone Track α-2 effect, NOT the pack
+//     internal Rose Bloom (EID_LGP_ROSE_BLOOM 0x1805 — naming collision)
+//   - Other 5-Layer AR variants of pack effects (Airy/Superformula/Spirograph/
+//     Langton AR): not individually audited for compliance; conservative —
+//     only tag what was explicitly flagged by the audit
+// ============================================================================
+static const EffectId EXPERIMENTAL_EFFECT_IDS[] PROGMEM = {
+    EID_FIRE,                        // 0x0100 — borderline, Captain confirmed
+    EID_LGP_CAUSTIC_FAN,             // 0x0606 — fails centre-origin audit (HIGH)
+    EID_LGP_AIRY_COMET,              // 0x1801 — Shape Bangers internal
+    EID_LGP_SUPERFORMULA_GLYPH,      // 0x1803 — Shape Bangers internal
+    EID_LGP_SPIROGRAPH_CROWN,        // 0x1804 — Shape Bangers internal
+    EID_LGP_ROSE_BLOOM,              // 0x1805 — Shape Bangers internal (NOT α-2's effect)
+    EID_LGP_RULE30_CATHEDRAL,        // 0x1807 — Shape Bangers internal
+    EID_LGP_LANGTON_HIGHWAY,         // 0x1808 — Shape Bangers internal
+
+    // --- 5-Layer AR variants (0x1Cxx) — Captain verdicts 2026-04-26 ---
+    EID_LGP_SCHLIEREN_FLOW_AR,       // 0x1C01 — Captain verdict: NOT CO compliant
+    EID_LGP_AIRY_COMET_AR,           // 0x1C03 — Captain verdict: NOT CO compliant
+    EID_LGP_SPIROGRAPH_CROWN_AR,     // 0x1C0A — Captain verdict: NOT CO compliant
+    EID_LGP_RULE30_CATHEDRAL_AR,     // 0x1C0D — shares asymmetric CA flaw with base 0x1807
+    EID_LGP_LANGTON_HIGHWAY_AR,      // 0x1C0E — same asymmetric-CA family (orchestrator call by analogy)
+    // NOT tagged: EID_LGP_SUPERFORMULA_GLYPH_AR (0x1C09) — Captain verdict: CO compliant
+    // NOT tagged: EID_LGP_ROSE_BLOOM_AR (0x1C0B) — Track α-2 effect, centre-origin compliant
+};
+static constexpr uint8_t EXPERIMENTAL_EFFECT_COUNT = sizeof(EXPERIMENTAL_EFFECT_IDS) / sizeof(EffectId);
+
+bool isExperimental(EffectId effectId) {
+    for (uint8_t i = 0; i < EXPERIMENTAL_EFFECT_COUNT; i++) {
+        if (pgm_read_word(&EXPERIMENTAL_EFFECT_IDS[i]) == effectId) return true;
+    }
+    return false;
+}
+
 bool isAudioReactive(EffectId effectId) {
     for (uint8_t i = 0; i < REACTIVE_EFFECT_COUNT; i++) {
         if (pgm_read_word(&REACTIVE_EFFECT_IDS[i]) == effectId) {

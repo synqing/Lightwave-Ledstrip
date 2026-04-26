@@ -24,6 +24,11 @@ struct EffectMetadata: Codable, Sendable, Identifiable, Hashable {
     /// Whether effect responds to audio input
     let isAudioReactive: Bool
 
+    /// Whether effect is tagged experimental and should be excluded from the
+    /// default production rotation. Absent in old K1 firmware responses — defaults
+    /// to false for backward compatibility.
+    let isExperimental: Bool
+
     /// Human-readable category name for display grouping
     let categoryName: String?
 
@@ -38,6 +43,7 @@ struct EffectMetadata: Codable, Sendable, Identifiable, Hashable {
         case category
         case categoryId
         case isAudioReactive
+        case isExperimental
         case categoryName
         case description
     }
@@ -50,6 +56,7 @@ struct EffectMetadata: Codable, Sendable, Identifiable, Hashable {
         category: String? = nil,
         categoryId: Int? = nil,
         isAudioReactive: Bool = false,
+        isExperimental: Bool = false,
         categoryName: String? = nil,
         description: String? = nil
     ) {
@@ -58,8 +65,25 @@ struct EffectMetadata: Codable, Sendable, Identifiable, Hashable {
         self.category = category
         self.categoryId = categoryId
         self.isAudioReactive = isAudioReactive
+        self.isExperimental = isExperimental
         self.categoryName = categoryName
         self.description = description
+    }
+
+    // MARK: - Decodable
+
+    /// Custom decoder to handle old K1 firmware responses that omit isExperimental.
+    /// Absent field decodes as false (backward-compatible default).
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(Int.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        category = try container.decodeIfPresent(String.self, forKey: .category)
+        categoryId = try container.decodeIfPresent(Int.self, forKey: .categoryId)
+        isAudioReactive = try container.decodeIfPresent(Bool.self, forKey: .isAudioReactive) ?? false
+        isExperimental = try container.decodeIfPresent(Bool.self, forKey: .isExperimental) ?? false
+        categoryName = try container.decodeIfPresent(String.self, forKey: .categoryName)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
     }
 
     // MARK: - Computed Properties

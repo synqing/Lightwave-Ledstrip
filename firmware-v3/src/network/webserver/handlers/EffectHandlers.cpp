@@ -170,6 +170,7 @@ void EffectHandlers::handleList(AsyncWebServerRequest* request, RendererActor* r
                 effect["category"] = getCategoryName(categoryId);
                 effect["categoryId"] = categoryId;
                 effect["isAudioReactive"] = PatternRegistry::isAudioReactive(eid);
+                effect["isExperimental"] = PatternRegistry::isExperimental(eid);
 
                 // Query IEffect metadata if available
                 plugins::IEffect* ieffect = renderer->getEffectInstance(eid);
@@ -486,6 +487,8 @@ void EffectHandlers::handleMetadata(AsyncWebServerRequest* request, RendererActo
             data["family"] = "Unknown";
             data["familyId"] = 255;
         }
+
+        data["isExperimental"] = PatternRegistry::isExperimental(effectId);
 
         JsonObject properties = data["properties"].to<JsonObject>();
         properties["centerOrigin"] = true;

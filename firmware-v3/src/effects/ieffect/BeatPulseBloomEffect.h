@@ -43,9 +43,6 @@ private:
     // Per-zone envelope (ZoneComposer shares a single effect instance)
     float    m_beatEnv[4] = {0,0,0,0};     // 0..1 "beat slam" envelope
     uint32_t m_lastBeatMs[4] = {0,0,0,0};  // for fallback metronome per-zone
-
-    // Lazy init guard (ZoneComposer might never call init on non-selected effects)
-    bool m_hasEverRendered = false;
 };
 
 } // namespace lightwaveos::effects::ieffect

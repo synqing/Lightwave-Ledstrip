@@ -43,8 +43,10 @@ bool BeatPulseBloomEffect::init(plugins::EffectContext& ctx) {
         m_beatEnv[i] = 0.0f;
         m_lastBeatMs[i] = 0;
     }
+    // Explicit PSRAM allocation — must happen here, not inside render().
+    // allocatePsram() is idempotent; subsequent calls are no-ops.
+    g_transport.allocatePsram();
     g_transport.resetAll();
-    m_hasEverRendered = false;
     return true;
 }
 
@@ -67,15 +69,9 @@ static inline CRGB applySaturation(CRGB c, uint8_t sat) {
 }
 
 void BeatPulseBloomEffect::render(plugins::EffectContext& ctx) {
-    // Lazy safety: if init() was never called (zone system), ensure sane defaults.
-    if (!m_hasEverRendered) {
-        for (int i = 0; i < 4; i++) {
-            m_beatEnv[i] = 0.0f;
-            m_lastBeatMs[i] = 0;
-        }
-        g_transport.resetAll();
-        m_hasEverRendered = true;
-    }
+    // NOTE: No lazy init here. PSRAM allocation belongs in init() only.
+    // If init() was never called, transport methods silently no-op via their
+    // m_ps null-guard. This upholds the hard constraint: no heap alloc in render().
 
     // zoneId: 0xFF means global (non-zone mode) → treat as zone 0
     const uint8_t zoneId = (ctx.zoneId == 0xFF) ? 0 : (ctx.zoneId & 0x03);

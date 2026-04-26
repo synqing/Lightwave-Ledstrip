@@ -229,6 +229,19 @@ bool shouldSkipColorCorrection(EffectId effectId);
 bool isAudioReactive(EffectId effectId);
 
 /**
+ * @brief Check if an effect is tagged experimental (hidden from default production rotation)
+ *
+ * Experimental effects are registered in the catalogue but excluded from the
+ * default iOS view. They remain accessible via direct ID selection. Effects
+ * are tagged experimental when they fail the centre-origin audit or are
+ * otherwise not ready for production rotation.
+ *
+ * @param effectId Stable effect ID to check
+ * @return true if effect should be hidden from default rotation
+ */
+bool isExperimental(EffectId effectId);
+
+/**
  * @brief Get the number of audio-reactive effects
  * @return Count of effects in REACTIVE_EFFECT_IDS array
  */

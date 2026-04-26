@@ -22,7 +22,10 @@ public:
     uint8_t getZoneCount() const { return zoneCount; }
     const ZoneSegment* getZoneConfig() const { return zoneConfig; }
     bool isZoneEnabled(uint8_t) const { return true; }
-    uint8_t getZoneEffect(uint8_t) const { return zoneEffect; }
+    // Track C-1 fix (2026-04-26): match real ZoneComposer::getZoneEffect
+    // signature (uint16_t namespaced EffectId). Was uint8_t — silently
+    // truncated 16-bit IDs in native codec tests, producing false positives.
+    uint16_t getZoneEffect(uint8_t) const { return zoneEffect; }
     uint8_t getZoneBrightness(uint8_t) const { return zoneBrightness; }
     uint8_t getZoneSpeed(uint8_t) const { return zoneSpeed; }
     uint8_t getZonePalette(uint8_t) const { return zonePalette; }
@@ -37,7 +40,7 @@ public:
         {0, 0, 0, 0, 0, 0},
         {0, 0, 0, 0, 0, 0}
     };
-    uint8_t zoneEffect = 7;
+    uint16_t zoneEffect = 0x0100;  // EID_FIRE — valid namespaced default for native tests
     uint8_t zoneBrightness = 140;
     uint8_t zoneSpeed = 33;
     uint8_t zonePalette = 4;

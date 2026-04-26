@@ -120,7 +120,7 @@ void LGPHolographicAutoCycleEffect::render(plugins::EffectContext& ctx) {
         layerSum = layerSum / (float)numLayers;
         layerSum = tanhf(layerSum);
 
-        uint8_t brightness = (uint8_t)(128.0f + 127.0f * layerSum * intensityNorm);
+        uint8_t brightness = (uint8_t)((128.0f + 127.0f * layerSum) * intensityNorm);
 
         // Chromatic dispersion effect
         uint8_t paletteIndex1 = (uint8_t)((dist * 0.5f) + (layerSum * 20.0f));

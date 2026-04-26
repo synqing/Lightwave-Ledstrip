@@ -162,7 +162,10 @@ class ZoneViewModel {
                 guard !Task.isCancelled, let self else { return }
 
                 if let ws = self.ws {
-                    await ws.send("zones.update", params: [
+                    // Track C-2 fix (2026-04-26): use per-property zone.setSpeed
+                    // (matches Tab5 + REST) instead of legacy multi-field zones.update.
+                    // Firmware still handles both, but legacy path is deprecation risk.
+                    await ws.send("zone.setSpeed", params: [
                         "zoneId": zoneId,
                         "speed": speed
                     ])
@@ -211,7 +214,9 @@ class ZoneViewModel {
                 guard !Task.isCancelled, let self else { return }
 
                 if let ws = self.ws {
-                    await ws.send("zones.update", params: [
+                    // Track C-2 fix (2026-04-26): use per-property zone.setBrightness
+                    // (matches Tab5 + REST) instead of legacy multi-field zones.update.
+                    await ws.send("zone.setBrightness", params: [
                         "zoneId": zoneId,
                         "brightness": brightness
                     ])

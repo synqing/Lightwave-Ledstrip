@@ -224,10 +224,29 @@ CENTRE_LINEAR_ALLOWLIST: set[str] = {
 # or refactored to use palette-based colouring.
 # ---------------------------------------------------------------------------
 
-RAINBOW_ALLOWLIST: set[str] = set()
-# Currently empty: no effect files legitimately use rainbow patterns.
-# Add filenames here if a new effect genuinely requires fill_rainbow,
-# CHSV(hue...) with full-range hue cycling, or hue++ in a loop.
+RAINBOW_ALLOWLIST: set[str] = {
+    # LGP AR-family effects whose CHSV(hue, ...) pattern is *deliberate*
+    # palette-locked colouring (the hue argument is a static palette index,
+    # not a full hue-wheel sweep) per Move 0.2 audit §3.5. Allowlisted to
+    # silence the rainbow-scan rule without weakening the rule itself.
+    # LGPReactionDiffusionAREffect.cpp deliberately excluded — pending
+    # Captain hardware A/B per audit §3.2 I2 INVESTIGATE.
+    "LGPAiryCometAREffect.cpp",
+    "LGPChimeraCrownAREffect.cpp",
+    "LGPCymaticLadderAREffect.cpp",
+    "LGPHarmonographHaloAREffect.cpp",
+    "LGPHyperbolicPortalAREffect.cpp",
+    "LGPLangtonHighwayAREffect.cpp",
+    "LGPLorenzRibbonAREffect.cpp",
+    "LGPMachDiamondsAREffect.cpp",
+    "LGPMoireCathedralAREffect.cpp",
+    "LGPRoseBloomAREffect.cpp",
+    "LGPSchlierenFlowAREffect.cpp",
+    "LGPSpirographCrownAREffect.cpp",
+    "LGPSuperformulaGlyphAREffect.cpp",
+    "LGPTalbotCarpetAREffect.cpp",
+    "LGPWaterCausticsAREffect.cpp",
+}
 
 # ---------------------------------------------------------------------------
 # K1 AP-only allowlist
@@ -242,6 +261,9 @@ K1_STA_ALLOWLIST: set[str] = {
     "network/WiFiManager.cpp",
     "network/WebServer.cpp",
     "main.cpp",
+    # serial/SerialCLI.cpp uses a read-only diagnostic ternary against
+    # WIFI_MODE_STA to print the current mode — no STA activation. Audit §2.4.
+    "serial/SerialCLI.cpp",
 }
 
 # ---------------------------------------------------------------------------
@@ -273,6 +295,7 @@ LINEAR_SWEEP_PATTERN = re.compile(
 
 CENTRE_ORIGIN_PATTERN = re.compile(
     r"SET_CENTER_PAIR|CENTER_LEFT"
+    r"|writeCentrePair"
     r"|79\s*-\s*\w"
     r"|80\s*\+\s*\w"
     r"|NUM_LEDS\s*/\s*2"

@@ -31,6 +31,7 @@ extern void run_math_substrate_tests();
 extern void run_framebuffer_lpf_tests();
 extern void run_layer_stack_tests();
 extern void run_psram_scalar_ring_tests();
+extern void run_voice_music_classifier_tests();
 
 // Unity setUp/tearDown (required but can be empty)
 void setUp(void) {
@@ -107,6 +108,11 @@ int main(int argc, char** argv) {
     printf("  PSRAMScalarRing Tests (Phase 2 Move 2.1 — INF-12 substrate)\n");
     printf("───────────────────────────────────────────────────────────────\n");
     run_psram_scalar_ring_tests();
+
+    printf("\n───────────────────────────────────────────────────────────────\n");
+    printf("  VoiceMusicClassifier Tests (Phase 4 Move 4.1 — AUD-21 substrate)\n");
+    printf("───────────────────────────────────────────────────────────────\n");
+    run_voice_music_classifier_tests();
 
     printf("\n───────────────────────────────────────────────────────────────\n");
     printf("  Audio Reactive Policy Tests\n");

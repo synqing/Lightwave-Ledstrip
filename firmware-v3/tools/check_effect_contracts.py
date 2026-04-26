@@ -438,9 +438,9 @@ def check_heap_alloc_in_render(violations: list[str]) -> None:
             if HEAP_IN_RENDER_PATTERN.search(code_part):
                 violations.append(f"[heap] Heap allocation in render at {path}:{idx}")
 
-                brace_depth += line.count("{") - line.count("}")
-                if brace_depth <= 0:
-                    in_render = False
+            brace_depth += line.count("{") - line.count("}")
+            if brace_depth <= 0:
+                in_render = False
 
 
 def check_ar_control_liveness(violations: list[str]) -> None:

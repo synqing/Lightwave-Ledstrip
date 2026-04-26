@@ -77,6 +77,32 @@ enum class EffectCategory : uint8_t {
 };
 
 /**
+ * @brief Per-effect role hints for downstream composition / persistence passes
+ *
+ * INF-06 (Topology Reconciliation §6 item 9, Phase 1 Move 1.2). A bitmask of
+ * declarative tags that describes what an effect *does* to the framebuffer, so
+ * cross-cutting passes — INF-02 mandatory framebuffer LPF, COM-12 invert-input
+ * negative space, COM-16 colour/geometry orthogonal split, COM-04 background /
+ * foreground composition, PER-09/11/13/14 persistence opt-out hooks — can
+ * decide per-effect whether their pass applies without scanning render
+ * bodies.
+ *
+ * Default `roleFlags = NONE` preserves pre-INF-06 behaviour for the existing
+ * effect catalogue; effects opt in by ORing flags into their EffectMetadata.
+ *
+ * Held in a single byte; two bits reserved for future role hints.
+ */
+enum class EffectRoleFlags : uint8_t {
+    NONE                    = 0,
+    SELF_TRAILING           = 1u << 0,  // bakes its own trail (fadeToBlackBy / decay) — skip INF-02 LPF to avoid double-trail
+    RENDERS_COLOUR_ONLY     = 1u << 1,  // writes hue/sat only — geometry pass may run alongside (COM-16)
+    RENDERS_GEOMETRY_ONLY   = 1u << 2,  // writes value/position only — colour pass may run alongside (COM-16)
+    INVERT_INPUT_OK         = 1u << 3,  // safe to feed inverted input for AntiMode negative space (COM-12)
+    BACKGROUND              = 1u << 4,  // composes as background layer; absence = foreground (COM-04)
+    OPTS_OUT_OF_PERSISTENCE = 1u << 5   // skip PER-09/11/13/14/X persistence wrappers
+};
+
+/**
  * @brief Effect metadata for registration and UI display
  */
 struct EffectMetadata {
@@ -85,6 +111,7 @@ struct EffectMetadata {
     EffectCategory category;    // Category for filtering
     uint8_t version;            // Effect version (for updates)
     const char* author;         // Creator name (optional)
+    EffectRoleFlags roleFlags;  // INF-06 role hints (default NONE = legacy)
     EffectId id = INVALID_EFFECT_ID;  // Stable namespaced ID (set during registration)
 
     // Default constructor
@@ -92,8 +119,9 @@ struct EffectMetadata {
                    const char* d = "",
                    EffectCategory c = EffectCategory::UNCATEGORIZED,
                    uint8_t v = 1,
-                   const char* a = nullptr)
-        : name(n), description(d), category(c), version(v), author(a) {}
+                   const char* a = nullptr,
+                   EffectRoleFlags r = EffectRoleFlags::NONE)
+        : name(n), description(d), category(c), version(v), author(a), roleFlags(r) {}
 };
 
 /**

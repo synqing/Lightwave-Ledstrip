@@ -25,6 +25,7 @@ extern void run_audio_reactive_policy_tests();
 extern void run_onset_effect_context_tests();
 extern void run_translation_engine_tests();
 extern void run_translation_integration_tests();
+extern void run_effect_role_flags_tests();
 
 // Unity setUp/tearDown (required but can be empty)
 void setUp(void) {
@@ -71,6 +72,11 @@ int main(int argc, char** argv) {
     printf("  Effect Rendering Tests (CENTER ORIGIN)\n");
     printf("───────────────────────────────────────────────────────────────\n");
     run_effect_tests();
+
+    printf("\n───────────────────────────────────────────────────────────────\n");
+    printf("  EffectRoleFlags Tests (INF-06 substrate)\n");
+    printf("───────────────────────────────────────────────────────────────\n");
+    run_effect_role_flags_tests();
 
     printf("\n───────────────────────────────────────────────────────────────\n");
     printf("  Audio Reactive Policy Tests\n");

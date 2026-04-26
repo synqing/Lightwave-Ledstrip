@@ -39,8 +39,8 @@
 
 #pragma once
 
+#include <cfloat>
 #include <cmath>
-#include <algorithm>
 
 namespace lightwaveos {
 namespace math {
@@ -85,9 +85,12 @@ inline int cflSubstepCount(float v_max,
     // once; a caller passing 0 or negative gets one substep regardless.
     if (max_steps < 1) max_steps = 1;
 
-    // Track the tightest active constraint. Initialise to +inf so any
-    // active component immediately tightens it.
-    float needed_dt = INFINITY;
+    // Track the tightest active constraint. Initialise to FLT_MAX so any
+    // active component immediately tightens it. Using FLT_MAX rather than
+    // INFINITY avoids -Wnan-infinity-disabled under the project's
+    // -ffast-math flag (platformio.ini common.build_flags), which makes
+    // the INFINITY macro's value undefined.
+    float needed_dt = FLT_MAX;
     bool any_active = false;
 
     // Advection: dt_v = dx / |v_max|. Skip when v_max == 0 (no advection).

@@ -28,6 +28,8 @@ extern void run_translation_integration_tests();
 extern void run_effect_role_flags_tests();
 extern void run_persistence_helpers_tests();
 extern void run_math_substrate_tests();
+extern void run_framebuffer_lpf_tests();
+extern void run_layer_stack_tests();
 
 // Unity setUp/tearDown (required but can be empty)
 void setUp(void) {
@@ -89,6 +91,16 @@ int main(int argc, char** argv) {
     printf("  Math Substrate Tests (Phase 1 Move 1.6 — sinLUT256 + CFL)\n");
     printf("───────────────────────────────────────────────────────────────\n");
     run_math_substrate_tests();
+
+    printf("\n───────────────────────────────────────────────────────────────\n");
+    printf("  FramebufferLPF Tests (Phase 1 Move 1.3 — INF-02 image LPF)\n");
+    printf("───────────────────────────────────────────────────────────────\n");
+    run_framebuffer_lpf_tests();
+
+    printf("\n───────────────────────────────────────────────────────────────\n");
+    printf("  LayerStack Tests (Phase 1 Move 1.4 — INF-01 N-buffer overlap)\n");
+    printf("───────────────────────────────────────────────────────────────\n");
+    run_layer_stack_tests();
 
     printf("\n───────────────────────────────────────────────────────────────\n");
     printf("  Audio Reactive Policy Tests\n");

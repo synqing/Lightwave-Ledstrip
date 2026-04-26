@@ -65,7 +65,8 @@ constexpr uint8_t FAMILY_SHOWPIECE_PACK3 = 0x1B;  // Showpiece Pack 3
 // ============================================================================
 
 constexpr uint8_t FAMILY_FIVE_LAYER_AR  = 0x1C;  // 5-Layer Audio-Reactive Variants
-constexpr uint8_t FAMILY_RESERVED_START = 0x1D;  // 0x1D-0xEF reserved for expansion
+constexpr uint8_t FAMILY_RESERVED_START = 0x1D;  // 0x1D-0x1F currently allocated; remainder reserved for expansion
+constexpr uint8_t FAMILY_SYSTEM         = 0x20;  // System / lifecycle one-shot effects (boot ignition, etc.)
 constexpr uint8_t FAMILY_OTA_USER       = 0xF0;  // OTA-provisioned / user-uploaded effects
 
 // ============================================================================
@@ -363,7 +364,12 @@ constexpr EffectId EID_LGP_BEAT_PRISM_ONSET_IGNITE          = 0x1E04;  // Progre
 // --- Gradient Field (0x1Fxx) ---
 constexpr EffectId EID_LGP_GRADIENT_FIELD                   = 0x1F00;  // LGP Gradient Field (operator-surfaced gradient proof)
 
-// Total: 202 IDs assigned (201 active, 1 retired)
+// --- System / Lifecycle (0x20xx) ---
+// Phase 4 Move 4.4 (Topology_Reconciliation §5 + Divergence 7) — F6 First-Light Ignition.
+// One-shot boot animation; runs once on power-on then yields to ambient/active mode.
+constexpr EffectId EID_FIRST_LIGHT_IGNITION                 = 0x2000;  // First-Light Ignition (cinematic boot)
+
+// Total: 203 IDs assigned (202 active, 1 retired)
 
 // ============================================================================
 // Migration: Old Sequential ID -> New Stable ID

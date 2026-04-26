@@ -33,6 +33,7 @@ extern void run_layer_stack_tests();
 extern void run_psram_scalar_ring_tests();
 extern void run_voice_music_classifier_tests();
 extern void run_audio_gated_decay_tests();
+extern void run_first_light_ignition_tests();
 
 // Unity setUp/tearDown (required but can be empty)
 void setUp(void) {
@@ -119,6 +120,11 @@ int main(int argc, char** argv) {
     printf("  AudioGatedDecay Tests (Phase 4 Move 4.2 — PER-18 silence-aware decay)\n");
     printf("───────────────────────────────────────────────────────────────\n");
     run_audio_gated_decay_tests();
+
+    printf("\n───────────────────────────────────────────────────────────────\n");
+    printf("  First-Light Ignition Tests (Phase 4 Move 4.4 — F6 boot ritual)\n");
+    printf("───────────────────────────────────────────────────────────────\n");
+    run_first_light_ignition_tests();
 
     printf("\n───────────────────────────────────────────────────────────────\n");
     printf("  Audio Reactive Policy Tests\n");

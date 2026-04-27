@@ -130,6 +130,7 @@ void LedDriver_S3::show() {
     // Layer 2: Mutex with timeout — skip frame on contention rather than crash
     if (m_showMutex && xSemaphoreTake(m_showMutex, pdMS_TO_TICKS(2)) != pdTRUE) {
         m_stats.showSkips++;
+        m_stats.ledShowFailures++;
         return;
     }
 

@@ -558,6 +558,13 @@ void RendererActor::onStart()
     // Record start time
     m_lastFrameTime = micros();
 
+    // Surface 2 Tier 1 row #6: emit ControlBusFrame size at boot so traces
+    // always show the contract size we're operating against. sizeof is
+    // compile-time, but emitting a counter records it in the trace stream
+    // alongside p50/p99 measurements of audio_snapshot_read.
+    TRACE_COUNTER("audio_snapshot_size_bytes",
+                  static_cast<int>(sizeof(audio::ControlBusFrame)));
+
     LW_LOGI("Ready - %d effects, brightness=%d, target=%d FPS",
              m_registryCount, m_brightness, LedConfig::TARGET_FPS);
 }
@@ -951,8 +958,15 @@ void RendererActor::onTick()
     }
 #endif
 
-    // Update statistics (use raw time for drops, throttled time for FPS)
-    TRACE_COUNTER("frame_us", frameTimeUs);
+    // Update statistics (use raw time for drops, throttled time for FPS).
+    // Surface 1 Tier 1: log RAW pre-pacing work time so we measure actual
+    // CPU time spent in render rather than the post-throttle 8.33 ms cadence.
+    TRACE_COUNTER("render_frame_work_us", static_cast<int>(rawFrameTimeUs));
+    // Surface 1 Tier 1: deadline-miss instant when raw work exceeds the
+    // 2.0 ms render contract ceiling (CLAUDE.md hard constraints).
+    if (rawFrameTimeUs > 2000U) {
+        TRACE_INSTANT("render_frame_deadline_miss");
+    }
     updateStats(frameTimeUs, rawFrameTimeUs);
 
     // Publish FRAME_RENDERED event (every 10 frames to reduce overhead)
@@ -965,6 +979,11 @@ void RendererActor::onTick()
         evt.param4 = m_frameCount;
         bus::MessageBus::instance().publish(evt);
     }
+
+    // Surface 1 Tier 1: sample active effect ID every frame so post-trace
+    // analysis can segment render_frame_work_us histograms by effect family.
+    // Sole writer of this counter — Surface 6 reads only (TRACE_INSTRUMENTATION_SPEC).
+    TRACE_COUNTER("effect_id_active", static_cast<int>(m_currentEffect));
 
     m_lastFrameTime = frameStartUs;
     m_frameCount++;
@@ -1385,7 +1404,23 @@ void RendererActor::renderFrame()
     }
     if (activeBuffer != nullptr) {
         TRACE_SCOPE("audio_snapshot_read");
+        const uint64_t snapshotCopyStartUs =
+#ifndef NATIVE_BUILD
+            static_cast<uint64_t>(esp_timer_get_time());
+#else
+            micros();
+#endif
         uint32_t seq = activeBuffer->ReadLatest(m_lastControlBus);
+        const uint64_t snapshotCopyEndUs =
+#ifndef NATIVE_BUILD
+            static_cast<uint64_t>(esp_timer_get_time());
+#else
+            micros();
+#endif
+        TRACE_COUNTER("audio_snapshot_copy_us",
+                      static_cast<int>((snapshotCopyEndUs - snapshotCopyStartUs) & 0x7FFFFFFFULL));
+        TRACE_COUNTER("snapshot_read_retries_total",
+                      static_cast<int>(activeBuffer->RetryCount() & 0x7FFFFFFFu));
 
         uint32_t prevSeq = m_lastControlBusSeq;
 
@@ -1394,6 +1429,15 @@ void RendererActor::renderFrame()
 #else
         uint64_t now_us = micros();
 #endif
+
+        // Surface 2 Tier 1 row #5: hop sequence lag (renderer vs audio thread).
+        // Wrap-safe unsigned subtraction; small stable value = renderer in step,
+        // growing value = renderer outpacing publisher. Mask to 31 bits to fit
+        // MabuTrace's signed counter API; only collides at >2^31 hops (months).
+        const uint32_t hopSeqLag = seq - prevSeq;  // unsigned wrap is well-defined
+        TRACE_COUNTER("audio_snapshot_hop_seq_lag",
+                      static_cast<int>(hopSeqLag & 0x7FFFFFFFu));
+
         if (seq != m_lastControlBusSeq) {
             // New audio frame arrived - resync extrapolation base
             m_lastAudioTime = m_lastControlBus.t;
@@ -1402,6 +1446,12 @@ void RendererActor::renderFrame()
         }
 
         uint64_t dt_us = (now_us >= m_lastAudioMicros) ? (now_us - m_lastAudioMicros) : 0;
+
+        // Surface 2 Tier 1 row #4: audio snapshot age in microseconds.
+        // Histogram peak should sit in 0..8000 us; >8000 us = audio thread stalled.
+        // Cast to int (signed 31-bit) to satisfy MabuTrace's signed counter API.
+        TRACE_COUNTER("audio_snapshot_age_us",
+                      static_cast<int>(dt_us & 0x7FFFFFFFULL));
         uint64_t extrapolated_samples = m_lastAudioTime.sample_index +
             (dt_us * m_lastAudioTime.sample_rate_hz / 1000000);
         audio::AudioTime render_now(

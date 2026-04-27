@@ -588,17 +588,42 @@ void AudioActor::onTick()
     const uint64_t now_us = esp_timer_get_time();
     m_stats.tickCount++;
 
-    // Chunk processing blocks on I2S read (~5ms at 12.8kHz, 64 samples)
+    // Surface 3 Tier 1: capture wall-clock at the FIRST chunk of an
+    // accumulating hop (not every chunk). End is recorded after Publish; delta
+    // emits as audio_hop_us. Cost: one 64-bit assignment per hop.
+    if (m_esChunkCounter == 0) {
+        m_hopStartUs = now_us;
+    }
+
+    // Chunk processing blocks on I2S read (~4ms at 32kHz, 128 samples).
+    const uint64_t chunkStartUs = esp_timer_get_time();
+    constexpr uint32_t kAudioChunkBudgetUs =
+        static_cast<uint32_t>((static_cast<uint64_t>(audio::ESV11_CHUNK_SIZE) * 1000000ULL) /
+                              static_cast<uint64_t>(audio::SAMPLE_RATE));
     m_diag.captureAttempts++;
     TRACE_BEGIN("i2s_dma_read");
     if (!m_esBackend.readAndProcessChunk(now_us)) {
         TRACE_END();
+        const uint32_t chunkUs = static_cast<uint32_t>(esp_timer_get_time() - chunkStartUs);
+        TRACE_COUNTER("audio_chunk_work_us", static_cast<int32_t>(chunkUs));
+        if (chunkUs > kAudioChunkBudgetUs) {
+            ++m_audioChunkDeadlineMissTotal;
+            TRACE_COUNTER("audio_chunk_deadline_miss_total",
+                          static_cast<int32_t>(m_audioChunkDeadlineMissTotal));
+        }
         m_stats.captureFailCount++;
         m_diag.captureReadErrors++;
         vTaskDelay(1);  // Block to let IDLE0 feed watchdog (taskYIELD insufficient - only yields to equal/higher priority)
         return;
     }
     TRACE_END();  // i2s_dma_read
+    const uint32_t chunkUs = static_cast<uint32_t>(esp_timer_get_time() - chunkStartUs);
+    TRACE_COUNTER("audio_chunk_work_us", static_cast<int32_t>(chunkUs));
+    if (chunkUs > kAudioChunkBudgetUs) {
+        ++m_audioChunkDeadlineMissTotal;
+        TRACE_COUNTER("audio_chunk_deadline_miss_total",
+                      static_cast<int32_t>(m_audioChunkDeadlineMissTotal));
+    }
     m_stats.captureSuccessCount++;
 
     // CRITICAL: vTaskDelay(1) blocks for one tick, letting IDLE0 feed the watchdog.
@@ -712,9 +737,8 @@ void AudioActor::onTick()
             // Point to last 1024 contiguous samples in the history buffer
             const float* tail = history + histLen - ONSET_FFT_SIZE;
 
-            TRACE_BEGIN("onset_detect");
+            TRACE_SCOPE("onset_detect");
             OnsetResult onset = m_onsetDetector.process(tail, rawHopRms);
-            TRACE_END();
             TRACE_COUNTER("onset_input_rms", static_cast<int32_t>(onset.input_rms * 1000000.0f));
             TRACE_COUNTER("onset_noise_floor", static_cast<int32_t>(onset.noise_floor * 1000000.0f));
             TRACE_COUNTER("onset_activity", static_cast<int32_t>(onset.activity * 1000.0f));
@@ -726,6 +750,9 @@ void AudioActor::onTick()
             TRACE_COUNTER("onset_mid_flux", static_cast<int32_t>(onset.mid_flux * 1000.0f));
             TRACE_COUNTER("onset_high_flux", static_cast<int32_t>(onset.high_flux * 1000.0f));
             TRACE_COUNTER("onset_process_us", static_cast<int32_t>(onset.process_us));
+            TRACE_COUNTER("onset_fft_frontend_us", static_cast<int32_t>(onset.fft_frontend_us));
+            TRACE_COUNTER("onset_decision_us", static_cast<int32_t>(onset.decision_us));
+            TRACE_COUNTER("onset_flux_us", static_cast<int32_t>(onset.flux_us));
             if (onset.onset_event > 0.0f) TRACE_INSTANT("ONSET_EVENT");
             if (onset.kick_trigger) TRACE_INSTANT("ONSET_KICK");
             if (onset.snare_trigger) TRACE_INSTANT("ONSET_SNARE");
@@ -764,6 +791,8 @@ void AudioActor::onTick()
     // Ref: Patin, Parallelcube, WLED Sound Reactive.
     // ========================================================================
     {
+        const uint64_t brStartUs = esp_timer_get_time();
+        TRACE_SCOPE("band_ratio_detect");
         const float kickEnergy  = frame.bands[0] + frame.bands[1];
         const float snareEnergy = frame.bands[2] + frame.bands[3];
         const float hihatEnergy = frame.bands[5] + frame.bands[6] + frame.bands[7];
@@ -803,6 +832,7 @@ void AudioActor::onTick()
         TRACE_COUNTER("br_kick_energy",  static_cast<int32_t>(kickEnergy * 1000.0f));
         TRACE_COUNTER("br_snare_energy", static_cast<int32_t>(snareEnergy * 1000.0f));
         TRACE_COUNTER("br_hihat_energy", static_cast<int32_t>(hihatEnergy * 1000.0f));
+        TRACE_COUNTER("band_ratio_us", static_cast<int32_t>(esp_timer_get_time() - brStartUs));
         if (kickFired)  TRACE_INSTANT("BR_KICK");
         if (snareFired) TRACE_INSTANT("BR_SNARE");
         if (hihatFired) TRACE_INSTANT("BR_HIHAT");
@@ -975,7 +1005,10 @@ void AudioActor::onTick()
     TRACE_COUNTER("audio_rms", static_cast<int32_t>(frame.rms * 10000));
 
     TRACE_BEGIN("snapshot_publish");
+    const uint64_t publishCopyStartUs = esp_timer_get_time();
     m_controlBusBuffer.Publish(frame);
+    TRACE_COUNTER("controlbus_publish_copy_us",
+                  static_cast<int32_t>(esp_timer_get_time() - publishCopyStartUs));
 
     m_hopCount++;
     m_diag.publishCount++;
@@ -988,6 +1021,42 @@ void AudioActor::onTick()
     }
     m_diag.lastPublishSeq = frame.hop_seq;
     TRACE_END();  // snapshot_publish
+
+    // ====================================================================
+    // Surface 3 Tier 1 always-on counters (TRACE_INSTRUMENTATION_SPEC §3).
+    // ~6 events per hop @ 125 Hz = 750 events/sec; ~3.6 s ring fill.
+    // No heap touches; integer maths only. Hop-budget impact: < 1 µs.
+    // Compiles to no-ops in canonical (non-_trace) envs via Trace.h stubs.
+    // ====================================================================
+    {
+        const uint64_t hop_end_us = esp_timer_get_time();
+        const uint32_t hop_us = static_cast<uint32_t>(hop_end_us - m_hopStartUs);
+        constexpr uint32_t kAudioHopBudgetUs =
+            static_cast<uint32_t>((static_cast<uint64_t>(audio::HOP_SIZE) * 1000000ULL) /
+                                  static_cast<uint64_t>(audio::SAMPLE_RATE));
+        TRACE_COUNTER("audio_hop_us", static_cast<int32_t>(hop_us));
+        if (hop_us > kAudioHopBudgetUs) {
+            ++m_audioHopDeadlineMissTotal;
+            TRACE_COUNTER("audio_hop_deadline_miss_total",
+                          static_cast<int32_t>(m_audioHopDeadlineMissTotal));
+        }
+        if (m_lastHopEndUs != 0) {
+            const uint64_t period_us = hop_end_us - m_lastHopEndUs;
+            if (period_us > 0) {
+                // Hz × 100 — 32 kHz / 256-sample hop expected ~12500
+                TRACE_COUNTER("audio_hop_freq",
+                              static_cast<int32_t>(100000000ULL / period_us));
+            }
+        }
+        m_lastHopEndUs = hop_end_us;
+        TRACE_COUNTER("audio_silence_scale",
+                      static_cast<int32_t>(frame.silentScale * 1000.0f));
+        TRACE_COUNTER("audio_rms_x1000",
+                      static_cast<int32_t>(frame.rms * 1000.0f));
+        TRACE_COUNTER("audio_hop_count",
+                      static_cast<int32_t>(m_hopCount));
+        // (onset_process_us already emitted at line 728 in onset block.)
+    }
 
     // GROUND-TRUTH DIAGNOSTIC: 2-second periodic translator field dump.
     // Shows raw vs smoothed confidence + translator state.

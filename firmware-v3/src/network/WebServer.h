@@ -249,6 +249,8 @@ public:
     bool isAPMode() const { return m_apMode; }
     size_t getClientCount() const { return m_ws->count(); }
     AsyncWebSocket* getWebSocket() const { return m_ws; }
+    /// Surface 4 Tier 1: gateway accessor for 1 Hz health telemetry.
+    webserver::WsGateway* getWsGateway() const { return m_wsGateway; }
     
     /**
      * @brief Check if LittleFS is mounted

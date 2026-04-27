@@ -271,6 +271,15 @@
 #define FEATURE_MABUTRACE 0
 #endif
 
+// Surface 5 (memory/thermal): die-temp sensor available on ESP32-S3 variants.
+// Uses legacy ESP-IDF 4.x driver/temp_sensor.h API (arduino-esp32 v3.x ships
+// the legacy header on espressif32@6.9.0). One-time init at boot via
+// temp_sensor_set_config + temp_sensor_start; then temp_sensor_read_celsius
+// from the 1 Hz health task.
+#ifndef HAS_TEMP_SENSOR
+#define HAS_TEMP_SENSOR 1
+#endif
+
 // AMOLED Display - Test rig diagnostic display (Waveshare 2.41" RM690B0)
 // Enables DisplayActor with strip preview, spacetime heatmap, metrics, status
 #ifndef FEATURE_AMOLED_DISPLAY

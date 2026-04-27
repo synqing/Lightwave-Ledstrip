@@ -10,6 +10,7 @@
 #include "../../RequestValidator.h"
 #include "../../../codec/WsOtaCodec.h"
 #include "../../../config/network_config.h"
+#include "../../../config/Trace.h"
 #include "../../../config/version.h"
 #include "../../../core/system/OtaLedFeedback.h"
 #include "../../../core/system/OtaSessionLock.h"
@@ -323,6 +324,11 @@ static void abortOtaSession(const char* reason) {
 
     if (wasActive) {
         emitOtaTelemetry("ota.ws.failed", "failed", bytesReceived, totalSize, reason);
+        // Surface 4 Tier 4: centralised ota_failed instant — every abort
+        // route transits abortOtaSession (Update.end failure → Update.abort,
+        // disconnect-during-OTA, watchdog stale-session, auth/session errors).
+        TRACE_INSTANT("ota_failed");
+        TRACE_COUNTER("ota_bytes_received", static_cast<int32_t>(bytesReceived));
         Update.abort();
         OtaLed::showFailure();
         // Release integrity-hash state so next session starts clean

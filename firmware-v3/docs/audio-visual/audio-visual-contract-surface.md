@@ -1,7 +1,7 @@
 # Audio-Visual Contract Surface
 
-**Version:** 1.1.0  
-**Last Updated:** 2026-03-25  
+**Version:** 1.2.0
+**Last Updated:** 2026-04-27
 **Status:** Implementation source of truth
 
 This document defines the contract between the audio pipeline (producer) and the visual pipeline (consumer) for `firmware-v3`.
@@ -57,9 +57,10 @@ This document defines the contract between the audio pipeline (producer) and the
 ### Audio access in effects (`EffectContext::AudioContext`)
 - Contract requires accessor usage (no direct `ctx.audio.controlBus` reads in `ieffect` code).
 - Key accessors:
-  - Energy/rhythm: `rms()`, `flux()`, `bass()`, `mid()`, `treble()`, `beatPhase()`, `isOnBeat()`, `beatStrength()`.
+  - Energy/rhythm: `rms()`, `flux()`, `bass()`, `mid()`, `treble()`, `audioConfidence()`, `silentScale()`, `beatPhase()`, `isOnBeat()`, `tempoBeatTick()`, `tempoBeatConfidence()`, `beatInBar()`, `beatStrength()`.
   - Onset semantics: `ctx.audio.onset.*`, `hasOnsetEvent()`, `onsetEnv()`, `onsetEvent()`, `isKickHit()`, `isSnareHit()`, `isHihatHit()`.
-  - Spectrum: `bins64()`, `bins64Adaptive()`, `bins256()`, `binHz()`, `energyInRange(...)`, named-band helpers.
+  - Musical spectrum: `musicalBin(i)`, `musicalRange(lo, hi)`, named `MusicalRange`, `bins64()`, `bins64Adaptive()`, backend-neutral bands, and future Audio Feature Surface v2 helpers.
+  - Raw FFT substrate: `bins256()`, `binHz()`, `energyInRange(...)`, and named-band helpers are legacy/debug/research access. New production effects must not treat these as the normal authoring API.
   - Chroma/harmony: `chroma()`, `heavyChroma()`, `chordState()`, `musicStyle()`, `styleConfidence()`.
   - Behaviour: `shouldPulseOnBeat()`, `shouldDriftWithHarmony()`, `shouldShimmerWithMelody()`, `shouldTextureFlow()`, `recommendedBehavior()`.
   - Waveform/parity: `waveform()`, `sbWaveform()`, `sbWaveformPeakScaled()`, `preferredWaveform()`.
@@ -133,8 +134,30 @@ This document defines the contract between the audio pipeline (producer) and the
 - No rainbow cycling or full hue-wheel sweeps.
 - No heap allocs in `render()`.
 - Access audio via `AudioContext` accessors only.
-- Prefer `bins256` (`binHz`) for frequency-accurate spectrum effects; use `bins64` as fallback.
+- Prefer named musical/semantic helpers. `bins256` is physically present for legacy, STM, diagnostics, and research, but it is not normal effect-authoring API.
 - Use behaviour/style context when adaptive response is needed.
+
+### Audio Feature Surface v2 containment rule
+
+The v2 policy is:
+
+```text
+internal substrates -> projection / normalisation / events -> one effect-facing surface
+```
+
+`bins256` may remain in `ControlBusFrame` for compatibility and internal
+analysis, but new production effect code must not directly scan it. Allowed
+uses are audio internals, projection/STM code, diagnostic visualisers, research
+builds, and explicitly whitelisted legacy effects during migration.
+
+`musicalRange(...)` is deliberately defined over the canonical 64-bin musical
+surface. It is not a frequency-Hz query and must not be used to recreate
+private render-path feature extraction from `bins256`.
+
+Any remaining checker exception must be file-level explicit with a reason:
+fixed, allowlisted legacy/debug/research, or tagged for a future gated rewrite.
+
+See [AUDIO_FEATURE_SURFACE_V2_CONTRACT.md](./AUDIO_FEATURE_SURFACE_V2_CONTRACT.md).
 
 ## 7) Regression Gate
 

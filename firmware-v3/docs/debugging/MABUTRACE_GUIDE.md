@@ -141,6 +141,10 @@ Source: `src/audio/AudioActor.cpp`
 | `tempo_update` | `TRACE_BEGIN/END` | Beat/tempo tracking (novelty + interleaved Goertzel tempo) |
 | `chroma_analyze` | `TRACE_BEGIN/END` | Chromagram analysis (12 pitch classes) |
 | `onset_detect` | `TRACE_BEGIN/END` | Standalone FFT onset detector (raw RMS gate, flux threshold, peak pick) |
+| `onset_fft_frontend` | `TRACE_SCOPE` | Onset Hann window, FFT, and magnitude extraction subspan |
+| `onset_decision` | `TRACE_SCOPE` | Onset threshold, warmup/gate, and event decision subspan |
+| `onset_flux` | `TRACE_SCOPE` | Onset full/bass/mid/high band-flux scan subspan |
+| `band_ratio_detect` | `TRACE_SCOPE` | Live kick/snare/hi-hat band-ratio detector timing |
 | `controlbus_build` | `TRACE_BEGIN/END` | ControlBus frame assembly (smoothing, silence gate, style) |
 | `snapshot_publish` | `TRACE_BEGIN/END` | Cross-core data publish via lock-free `SnapshotBuffer` |
 
@@ -180,6 +184,18 @@ Source: `src/hal/esp32s3/LedDriver_S3.cpp`
 | `onset_flux` / `onset_env` / `onset_event_strength` | `AudioActor.cpp` | Full-band onset detector state (`x1000`) |
 | `onset_bass_flux` / `onset_mid_flux` / `onset_high_flux` | `AudioActor.cpp` | Per-band onset detector flux state (`x1000`) |
 | `onset_process_us` | `AudioActor.cpp` | Onset detector self-timed processing duration |
+| `onset_fft_frontend_us` / `onset_decision_us` / `onset_flux_us` | `AudioActor.cpp` | Subcomponent timings for `onset_detect` |
+| `band_ratio_us` | `AudioActor.cpp` | Live band-ratio detector duration, measured separately from FFT onset |
+| `audio_chunk_work_us` / `audio_chunk_deadline_miss_total` | `AudioActor.cpp` | 4 ms ESV11 chunk work and cumulative chunk deadline misses |
+| `audio_hop_us` / `audio_hop_deadline_miss_total` | `AudioActor.cpp` | 8 ms publish-hop work and cumulative hop deadline misses |
+| `controlbus_publish_copy_us` | `AudioActor.cpp` | `ControlBusFrame` publish-copy duration |
+| `audio_snapshot_copy_us` / `snapshot_read_retries_total` | `RendererActor.cpp` | Render-side snapshot copy cost and cumulative lock-free read retries |
+| `audio_snapshot_age_us` / `audio_snapshot_hop_seq_lag` | `RendererActor.cpp` | Render-side audio age and hop lag after snapshot read |
+| `heap_free_internal_kb` / `heap_largest_internal_kb` / `heap_free_psram_kb` / `heap_largest_psram_kb` | `main.cpp` | 1 Hz background heap/largest-block gauges, never sampled in audio/render hot paths |
+| `task_stack_hwm_loop` / `task_stack_hwm_audio` / `task_stack_hwm_renderer` / `task_stack_hwm_show_director` | `main.cpp` | 1 Hz stack high-water gauges |
+| `led_show_skips_total` / `led_show_avg_us` / `led_show_max_us` / `led_show_failures_total` | `main.cpp` | LED output health gauges |
+| `rmt_errors_total` / `rmt_underruns_total` | `main.cpp` | Hardware RMT error gauges if exposed by backend. Current ESP32-S3 FastLED path does not expose a separate RMT error source, so these remain zero unless the backend starts reporting them. |
+| `ws_client_count` / `wifi_ap_mode` / `trace_mode_enabled` | `main.cpp` | AP/client state and trace-mode evidence for Phase 1B reports |
 
 ### Instant events
 

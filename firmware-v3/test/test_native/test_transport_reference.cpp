@@ -23,7 +23,16 @@
  */
 
 #include "unity.h"
+
+// Expose private members of BeatPulseTransportCore (RGB16, m_ps, m_nowMs) so
+// the harness can write reference snapshots directly. This MUST appear before
+// the first include of BeatPulseTransportCore.h — once the header is processed
+// (it uses `#pragma once`) the access specifiers are baked in. The companion
+// gen_reference_standalone.cpp uses the same pattern.
+#define private public
 #include "effects/ieffect/BeatPulseTransportCore.h"
+#undef private
+
 #include "effects/ieffect/BeatPulseRenderUtils.h"
 #include "plugins/api/EffectContext.h"
 #include <cstdio>
@@ -32,11 +41,6 @@
 
 using namespace lightwaveos::effects::ieffect;
 using namespace lightwaveos::plugins;
-
-// Forward declare the private RGB16 struct by making it accessible
-#define private public
-#include "effects/ieffect/BeatPulseTransportCore.h"
-#undef private
 
 // Constants
 static constexpr uint16_t RADIAL_LEN = 80;
@@ -164,7 +168,8 @@ void convertToToneMapped(
  * @brief Main test: generate all reference pairs
  */
 void test_generate_transport_reference_pairs() {
-    UnityPrintf("Generating %lu transport reference pairs...\n", TOTAL_PAIRS);
+    printf("Generating %lu transport reference pairs...\n",
+           static_cast<unsigned long>(TOTAL_PAIRS));
 
     // Open output file
     FILE* f = fopen(OUTPUT_FILE, "wb");
@@ -220,10 +225,13 @@ void test_generate_transport_reference_pairs() {
                             // Convert to tone-mapped 8-bit
                             convertToToneMapped(final_state, tone_mapped_state);
 
-                            // Verify state is not all-zero (injection should produce something)
+                            // Verify state is not all-zero (injection should produce something).
+                            // RGB16 has named members r/g/b — sum across all bins.
                             uint32_t total_energy = 0;
-                            for (uint16_t i = 0; i < RADIAL_LEN * 3; i++) {
-                                total_energy += final_state[i / 3].raw[i % 3];
+                            for (uint16_t i = 0; i < RADIAL_LEN; i++) {
+                                total_energy += final_state[i].r;
+                                total_energy += final_state[i].g;
+                                total_energy += final_state[i].b;
                             }
                             TEST_ASSERT_GREATER_THAN_UINT32(0, total_energy);
 
@@ -234,7 +242,9 @@ void test_generate_transport_reference_pairs() {
                             pair_count++;
 
                             if (pair_count % 100 == 0) {
-                                UnityPrintf("  Wrote %lu / %lu pairs\n", pair_count, TOTAL_PAIRS);
+                                printf("  Wrote %lu / %lu pairs\n",
+                                       static_cast<unsigned long>(pair_count),
+                                       static_cast<unsigned long>(TOTAL_PAIRS));
                             }
                         }
                     }
@@ -246,7 +256,8 @@ void test_generate_transport_reference_pairs() {
     fclose(f);
 
     TEST_ASSERT_EQUAL_UINT32(TOTAL_PAIRS, pair_count);
-    UnityPrintf("Successfully wrote %lu reference pairs to %s\n", pair_count, OUTPUT_FILE);
+    printf("Successfully wrote %lu reference pairs to %s\n",
+           static_cast<unsigned long>(pair_count), OUTPUT_FILE);
 }
 
 /**
@@ -300,7 +311,7 @@ void test_verify_reference_file_structure() {
     long expected_size = 20 + TOTAL_PAIRS * pair_size;
 
     TEST_ASSERT_EQUAL_INT(expected_size, file_size);
-    UnityPrintf("Reference file structure verified: %ld bytes\n", file_size);
+    printf("Reference file structure verified: %ld bytes\n", file_size);
 }
 
 /**

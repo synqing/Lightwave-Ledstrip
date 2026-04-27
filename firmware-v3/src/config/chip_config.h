@@ -54,7 +54,10 @@
     #define CHIP_ESP32_S3 1
     #define CHIP_ESP32_P4 0
     #define CHIP_NAME "ESP32-S3"
-    #warning "No chip target detected, defaulting to ESP32-S3"
+    #ifndef NATIVE_BUILD
+        // Native unit tests have no chip target — defaults are intentional, suppress noise.
+        #warning "No chip target detected, defaulting to ESP32-S3"
+    #endif
 #endif
 
 // ============================================================================

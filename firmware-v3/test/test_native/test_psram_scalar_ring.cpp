@@ -44,7 +44,12 @@ struct Point2 {
 void test_scalarring_default_state_is_empty() {
     ScalarRing<int, 4> ring;
     TEST_ASSERT_EQUAL_size_t(0, ring.count());
-    TEST_ASSERT_EQUAL_size_t(4, ScalarRing<int, 4>::capacity());
+    // Note: a bare `ScalarRing<int, 4>::capacity()` cannot be passed directly to
+    // the Unity macro — the preprocessor treats the comma in `<int, 4>` as an
+    // argument separator, producing a "too many arguments" error. Bind the
+    // template instantiation to a local first so the macro sees two args.
+    const std::size_t capacity = ScalarRing<int, 4>::capacity();
+    TEST_ASSERT_EQUAL_size_t(4, capacity);
     TEST_ASSERT_EQUAL_INT(0, ring.atOffset(0));
     TEST_ASSERT_EQUAL_INT(0, ring.atOffset(1));
     TEST_ASSERT_EQUAL_INT(0, ring.atOffset(3));

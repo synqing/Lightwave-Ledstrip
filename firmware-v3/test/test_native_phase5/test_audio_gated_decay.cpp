@@ -1,0 +1,1 @@
+../test_native/test_audio_gated_decay.cpp

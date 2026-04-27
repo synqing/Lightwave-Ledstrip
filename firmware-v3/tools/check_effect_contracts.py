@@ -14,17 +14,20 @@ Checks:
 7. [INVERTED] ALL effect .cpp files scanned for rainbow/hue-wheel patterns.
    Non-allowlisted files FAIL.
 8. K1 AP-only: no STA-mode WiFi usage outside allowlisted infrastructure files.
+9. Audio Feature Surface v2: new production effects do not directly consume
+   raw `bins256` / `binHz` / frequency-range helpers. Existing legacy consumers
+   are explicit allowlist entries while they are migrated.
 
 Brand-voice extensions (Block 2 items 19, 20, 15 — Phase 0A first enforcement primitive):
-9. [BRAND-VOICE §3.5 / Block 2 item 19] Per-bin tempo-bank read inside render() —
+10. [BRAND-VOICE §3.5 / Block 2 item 19] Per-bin tempo-bank read inside render() —
    FAIL.  `tempi[*]` / `tempoBank[*]` indexed access from the render call path
    contradicts BRAND_VOICE_POSTURE.md §3.5 (literal ES tempo-bank swarm rendering
    banned) and §4.5 (tempo-bank as engine plumbing only).  Single-tempo `tempoPhase`
    scalar reads remain compliant.
-10. [BRAND-VOICE §3.6 / Block 2 item 20] GEO-06 CircularRing / GEO-10
+11. [BRAND-VOICE §3.6 / Block 2 item 20] GEO-06 CircularRing / GEO-10
     AsymmetricDriftOrigin name patterns — FAIL.  These effect families violate
     HW-03 Centre-Origin strict invariant per §6 item 10 / §3 C-8.  No allowlist.
-11. [BRAND-VOICE §3.3 / Block 2 item 15] Multi-element fragmentation patterns
+12. [BRAND-VOICE §3.3 / Block 2 item 15] Multi-element fragmentation patterns
     (PendulumChain / PendulumArray / PendulumSwarm / BoidSwarm / BoidFlock /
     KuramotoSwarm / KuramotoOscillators / OscillatorChain / OscillatorArray) —
     WARN (boundary-flag, not hard FAIL).  These name patterns are likely-but-not-
@@ -214,6 +217,10 @@ CENTRE_LINEAR_ALLOWLIST: set[str] = {
     "SnapwaveLinearEffect.cpp",
     "RippleEnhancedEffect.cpp",
     "PlasmaEffect.cpp",
+    # Operator/debug gradient proof effect: linear iteration samples a
+    # configurable gradient field rather than presenting an edge-origin sweep.
+    # Kept explicit for AFS v2 Phase 1B contract-lock reporting.
+    "LGPGradientFieldEffect.cpp",
 }
 
 # ---------------------------------------------------------------------------
@@ -229,8 +236,8 @@ RAINBOW_ALLOWLIST: set[str] = {
     # palette-locked colouring (the hue argument is a static palette index,
     # not a full hue-wheel sweep) per Move 0.2 audit §3.5. Allowlisted to
     # silence the rainbow-scan rule without weakening the rule itself.
-    # LGPReactionDiffusionAREffect.cpp deliberately excluded — pending
-    # Captain hardware A/B per audit §3.2 I2 INVESTIGATE.
+    # Explicit Phase 1B exceptions retain file-level accountability; they are
+    # not permission for new production hue-wheel effects.
     "LGPAiryCometAREffect.cpp",
     "LGPChimeraCrownAREffect.cpp",
     "LGPCymaticLadderAREffect.cpp",
@@ -246,6 +253,12 @@ RAINBOW_ALLOWLIST: set[str] = {
     "LGPSuperformulaGlyphAREffect.cpp",
     "LGPTalbotCarpetAREffect.cpp",
     "LGPWaterCausticsAREffect.cpp",
+    # Existing AR reaction-diffusion effect; explicitly retained as a legacy
+    # hardware-A/B exception pending a palette rewrite.
+    "LGPReactionDiffusionAREffect.cpp",
+    # Native-test deterministic helper only. The production render path uses
+    # ctx.palette.getColor(); the CHSV helper is compiled for test determinism.
+    "RadialTimeScopeEffect.cpp",
 }
 
 # ---------------------------------------------------------------------------
@@ -264,6 +277,20 @@ K1_STA_ALLOWLIST: set[str] = {
     # serial/SerialCLI.cpp uses a read-only diagnostic ternary against
     # WIFI_MODE_STA to print the current mode — no STA activation. Audit §2.4.
     "serial/SerialCLI.cpp",
+}
+
+# ---------------------------------------------------------------------------
+# Audio Feature Surface v2 raw-substrate containment allowlist
+#
+# Raw `bins256` is physically present in ControlBusFrame for legacy, STM,
+# diagnostic, and research reasons.  New production effect code must not
+# directly consume it; effects should use named musical/semantic helpers.
+# Existing consumers stay explicit here until migrated.
+# ---------------------------------------------------------------------------
+
+RAW_BINS256_EFFECT_ALLOWLIST: set[str] = {
+    # Legacy detailed spectrum visualiser. Whitelisted during AFS v2 migration.
+    "LGPSpectrumDetailEffect.cpp",
 }
 
 # ---------------------------------------------------------------------------
@@ -307,6 +334,15 @@ K1_STA_PATTERNS = (
     re.compile(r"\bWiFi\.begin\s*\("),
     re.compile(r"\besp_wifi_set_mode\s*\(\s*WIFI_MODE_STA"),
     re.compile(r"\bWIFI_STA\b"),
+)
+
+RAW_BINS256_EFFECT_PATTERNS = (
+    re.compile(r"\bctx\.audio\.bins256\s*\("),
+    re.compile(r"\bctx\.audio\.binHz\s*\("),
+    re.compile(r"\bctx\.audio\.energyInRange\s*\("),
+    re.compile(r"\bctx\.audio\.namedBandEnergy\s*\("),
+    re.compile(r"\bcontrolBus\.bins256\b"),
+    re.compile(r"\bcb\.bins256\b"),
 )
 
 RAW_CONTROL_BUS_PATTERN = re.compile(r"ctx\.audio\.controlBus")
@@ -746,6 +782,34 @@ def check_k1_ap_only(violations: list[str], stats: dict) -> None:
     stats["k1_sta_scan_flagged"] = flagged
 
 
+def check_raw_bins256_effect_access(violations: list[str], stats: dict) -> None:
+    """
+    Audio Feature Surface v2 containment gate.
+
+    New production effects must not directly consume raw `bins256`, `binHz`, or
+    helper paths that scan linear FFT bins.  Existing legacy consumers are
+    explicit allowlist entries while they are migrated to named semantic helpers.
+    Reference effects are excluded by _is_reference_path().
+    """
+    scanned = 0
+    flagged = 0
+    for path in effect_files():
+        scanned += 1
+        if path.name in RAW_BINS256_EFFECT_ALLOWLIST:
+            continue
+        for idx, line in enumerate(read_text(path).splitlines(), start=1):
+            code_part = line.split("//", 1)[0]
+            matched = [pat.pattern for pat in RAW_BINS256_EFFECT_PATTERNS if pat.search(code_part)]
+            if matched:
+                violations.append(
+                    f"[audio-surface-v2] Raw bins256/binHz access in non-allowlisted effect: "
+                    f"{path.name}:{idx} (matched: {', '.join(matched)})"
+                )
+                flagged += 1
+    stats["raw_bins256_scan_total"] = scanned
+    stats["raw_bins256_scan_flagged"] = flagged
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -766,6 +830,7 @@ def main() -> int:
     check_centre_origin_inverted(violations, stats)
     check_rainbow_inverted(violations, stats)
     check_k1_ap_only(violations, stats)
+    check_raw_bins256_effect_access(violations, stats)
 
     # Brand-voice extensions (Phase 0A first enforcement primitive)
     check_tempo_bank_in_render(violations, stats)
@@ -799,6 +864,9 @@ def main() -> int:
     print(f"  K1 AP-only scan:    {stats.get('k1_sta_scan_total', 0)} .cpp/.h files checked"
           f" | allowlist: {len(K1_STA_ALLOWLIST)} files"
           f" | flagged: {stats.get('k1_sta_scan_flagged', 0)}")
+    print(f"  Raw bins256 scan:   {stats.get('raw_bins256_scan_total', 0)} .cpp/.h files checked"
+          f" | allowlist: {len(RAW_BINS256_EFFECT_ALLOWLIST)} files"
+          f" | flagged: {stats.get('raw_bins256_scan_flagged', 0)}")
     print(f"  Tempo-bank scan:    {stats.get('tempo_bank_scan_total', 0)} .cpp files checked"
           f" | allowlist: {len(TEMPO_BANK_ALLOWLIST)} files"
           f" | flagged: {stats.get('tempo_bank_scan_flagged', 0)}")

@@ -158,23 +158,21 @@ void LGPBeatPrismOnsetDriftEffect::render(plugins::EffectContext& ctx) {
         fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
         return;
     }
-    const float confidence = ctx.audio.controlBus.audioConfidence;
+    const float confidence = ctx.audio.audioConfidence();
     const float master = (ctx.brightness / 255.0f) * m_audioPresence * confidence;
 
     // --- Onset-driven pulse channels (PRESERVED) ---
-    const auto& cb = ctx.audio.controlBus;
-
-    if (cb.kickTrigger) {
+    if (ctx.audio.isKickHit()) {
         m_kickPulse = 1.0f;
     }
     m_kickPulse = decay(m_kickPulse, dtSignal, 0.24f);
 
-    if (cb.snareTrigger) {
+    if (ctx.audio.isSnareHit()) {
         m_snareBurst = 1.0f;
     }
     m_snareBurst = decay(m_snareBurst, dtSignal, 0.15f);
 
-    if (cb.hihatTrigger) {
+    if (ctx.audio.isHihatHit()) {
         m_hihatShimmer = 1.0f;
     }
     m_hihatShimmer = decay(m_hihatShimmer, dtSignal, 0.08f);

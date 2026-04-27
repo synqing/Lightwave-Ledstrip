@@ -57,6 +57,16 @@ namespace plugins {
 // Audio Context (Phase 2)
 // ============================================================================
 
+enum class MusicalRange : uint8_t {
+    SUB_BASS,
+    BASS,
+    LOW_MID,
+    MID,
+    PRESENCE,
+    TREBLE,
+    FULL
+};
+
 #if FEATURE_AUDIO_SYNC
 /**
  * @brief Audio context passed to effects (by-value copies for thread safety)
@@ -138,6 +148,27 @@ struct AudioContext {
     /// Get tempo tracking confidence (0.0-1.0)
     float tempoConfidence() const {
         return (onset.tempoConfidence > 0.0f) ? onset.tempoConfidence : musicalGrid.tempo_confidence;
+    }
+
+    /// Get effect-facing audio confidence (0.0=silence/invalid, 1.0=usable music)
+    float audioConfidence() const { return controlBus.audioConfidence; }
+
+    /// True on the current tempo beat tick, using the available locked/grid source.
+    bool tempoBeatTick() const {
+        return controlBus.tempoBeatTick || controlBus.es_beat_tick || musicalGrid.beat_tick;
+    }
+
+    /// Effect-facing tempo confidence (0.0-1.0), preserving the strongest source.
+    float tempoBeatConfidence() const {
+        float c = tempoConfidence();
+        if (controlBus.tempoConfidence > c) c = controlBus.tempoConfidence;
+        if (controlBus.es_tempo_confidence > c) c = controlBus.es_tempo_confidence;
+        return c;
+    }
+
+    /// Beat position in the current bar (0-based; normally 0..3 for 4/4).
+    uint8_t beatInBar() const {
+        return (controlBus.es_beat_in_bar != 0U) ? controlBus.es_beat_in_bar : musicalGrid.beat_in_bar;
     }
 
     /// Get beat strength (0.0-1.0), peaks on beat detection then decays
@@ -333,6 +364,37 @@ struct AudioContext {
 
     /// Get pointer to adaptive 64-bin array (Sensory Bridge normalisation)
     const float* bins64Adaptive() const { return controlBus.bins64Adaptive; }
+
+    /// Canonical effect-facing musical bin, backed by the 64-bin surface.
+    float musicalBin(uint8_t index) const { return binAdaptive(index); }
+
+    /// Mean energy over canonical 64-bin musical bins [lo, hi).
+    float musicalRange(uint8_t loInclusive, uint8_t hiExclusive) const {
+        if (loInclusive >= audio::ControlBusFrame::BINS_64_COUNT) return 0.0f;
+        if (hiExclusive > audio::ControlBusFrame::BINS_64_COUNT) {
+            hiExclusive = audio::ControlBusFrame::BINS_64_COUNT;
+        }
+        if (loInclusive >= hiExclusive) return 0.0f;
+        float sum = 0.0f;
+        for (uint8_t i = loInclusive; i < hiExclusive; ++i) {
+            sum += musicalBin(i);
+        }
+        return sum / static_cast<float>(hiExclusive - loInclusive);
+    }
+
+    /// Mean energy over a named canonical 64-bin musical range.
+    float musicalRange(MusicalRange range) const {
+        switch (range) {
+            case MusicalRange::SUB_BASS:  return musicalRange(0, 4);
+            case MusicalRange::BASS:      return musicalRange(4, 12);
+            case MusicalRange::LOW_MID:   return musicalRange(12, 24);
+            case MusicalRange::MID:       return musicalRange(24, 38);
+            case MusicalRange::PRESENCE:  return musicalRange(38, 52);
+            case MusicalRange::TREBLE:    return musicalRange(52, 64);
+            case MusicalRange::FULL:
+            default:                      return musicalRange(0, 64);
+        }
+    }
 
     // ========================================================================
     // 256-bin FFT / Frequency-Semantic Accessors (PipelineCore backend)
@@ -562,6 +624,10 @@ struct AudioContext {
     bool isOnDownbeat() const { return onset.downbeat.fired; }
     float bpm() const { return onset.bpm; }
     float tempoConfidence() const { return onset.tempoConfidence; }
+    float audioConfidence() const { return 0.0f; }
+    bool tempoBeatTick() const { return false; }
+    float tempoBeatConfidence() const { return onset.tempoConfidence; }
+    uint8_t beatInBar() const { return 0; }
     float beatStrength() const { return onset.beat.level01; }
     const audio::SceneParameters& sceneParameters() const { return audio::kDefaultSceneParameters; }
     audio::MotionPrimitive motionType() const { return audio::MotionPrimitive::DRIFT; }
@@ -629,6 +695,9 @@ struct AudioContext {
     const float* bins64() const { return nullptr; }
     float binAdaptive(uint8_t) const { return 0.0f; }
     const float* bins64Adaptive() const { return nullptr; }
+    float musicalBin(uint8_t) const { return 0.0f; }
+    float musicalRange(uint8_t, uint8_t) const { return 0.0f; }
+    float musicalRange(MusicalRange) const { return 0.0f; }
 
     // Musical saliency stubs (always return "not salient")
     struct StubSaliencyFrame {

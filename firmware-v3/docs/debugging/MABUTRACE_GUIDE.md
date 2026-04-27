@@ -8,6 +8,42 @@ in the Perfetto UI.
 
 ---
 
+## TL;DR -- 30-second deploy
+
+1. **Pick the trace-enabled env** matching your hardware target:
+
+   | Canonical build env | Trace-enabled counterpart |
+   |---|---|
+   | `esp32dev_audio_esv11_k1v2_32khz` (K1 V2 production) | `esp32dev_audio_esv11_k1v2_32khz_trace` |
+   | `esp32dev_audio_esv11_32khz` (V1 dev boards) | `esp32dev_audio_esv11_32khz_trace` |
+   | `esp32dev_audio_pipelinecore` | `esp32dev_audio_pipelinecore_trace` |
+   | `esp32dev_audio_base` | `esp32dev_audio_trace` |
+
+2. **Build + flash** (verify MAC first per `feedback_verify_mac_before_flash.md`):
+
+   ```bash
+   pio run -e esp32dev_audio_esv11_k1v2_32khz_trace -t upload --upload-port /dev/tty.usbmodem<port>
+   ```
+
+3. **Capture + view in one command** (close any open serial monitor first — the script needs exclusive port access):
+
+   ```bash
+   ~/.platformio/penv/bin/python3 firmware-v3/tools/capture_trace.py \
+       --port /dev/tty.usbmodem2101 \
+       --effect 0x2102 --soak 10 \
+       --output /tmp/k1_trace.json --open
+   ```
+
+   The script switches effect, lets it soak so the on-chip 64 KB ring fills with relevant activity, sends `trace`, strips the wrapper markers, validates the JSON, and opens `https://ui.perfetto.dev` — drag the saved file onto the page. The firmware emits `[TRACE] Flushing trace buffer...` (start) and `[TRACE] Done.` (end) markers around the JSON body; older guide versions documented `=== MabuTrace Dump ===` markers which are obsolete.
+
+4. **Manual fallback** (if you need to debug the protocol or interactively poke): type `trace` in the serial monitor and copy the JSON body between the two `[TRACE]` markers. See section 2 step 5 for full protocol details.
+
+5. **Perfetto UI** (`https://ui.perfetto.dev`) is Google's open-source Chrome Trace viewer. JSON is parsed entirely in your browser — nothing uploads to a server. **There is no project portal.**
+
+**Critical reminder:** `TRACE_SCOPE` / `TRACE_COUNTER` / `TRACE_INSTANT` are gated by `FEATURE_MABUTRACE`. In the canonical (non-`_trace`) build envs, every `TRACE_*` macro compiles to `do {} while(0)` with zero runtime cost. **Telemetry is invisible until you build with a `_trace` env.**
+
+---
+
 ## 1. Overview
 
 MabuTrace records timestamped trace events (spans, counters, instants) into a
@@ -37,29 +73,47 @@ for interactive exploration.
 
 ## 2. Quick Start
 
+> ### Update -- 2026-04-27
+>
+> The canonical K1 build path is the `_32khz` envs (see project CLAUDE.md). For K1 V2 production work, use `esp32dev_audio_esv11_k1v2_32khz_trace` as the default trace env, NOT `esp32dev_audio_trace`. The `esp32dev_audio_trace` env extends `esp32dev_audio_base` and is suitable for non-K1 dev boards or audio-base smoke tests only. See the TL;DR table at the top of this document for the full mapping.
+
 ### Step 1 -- Build with tracing enabled
+
+For K1 V2 production hardware (default for onset tuning, render profiling, audio-pipeline analysis on real K1 boards):
 
 ```bash
 cd firmware-v3
-pio run -e esp32dev_audio_trace
-```
-
-This extends the standard `esp32dev_audio` environment with:
-- `-D FEATURE_MABUTRACE=1`
-- `mabuware/mabutrace` library dependency
-
-For K1v2 onset tuning on the real 32 kHz ESV11 build, use:
-
-```bash
 pio run -e esp32dev_audio_esv11_k1v2_32khz_trace
 pio run -e esp32dev_audio_esv11_k1v2_32khz_trace -t upload --upload-port /dev/tty.usbmodem1101
 ```
 
-### Step 2 -- Flash the firmware
+For V1 dev boards on the calibrated 32 kHz ESV11 path:
 
 ```bash
-pio run -e esp32dev_audio_trace -t upload
+pio run -e esp32dev_audio_esv11_32khz_trace
 ```
+
+For the audio-base smoke-test path (non-K1 dev work):
+
+```bash
+pio run -e esp32dev_audio_trace
+```
+
+Each `_trace` env extends its canonical counterpart with:
+- `-D FEATURE_MABUTRACE=1`
+- `mabuware/mabutrace` library dependency
+
+See the decision matrix in the TL;DR for canonical-to-trace env mappings.
+
+### Step 2 -- Flash the firmware
+
+Use the same `_trace` env you built with. For K1 V2:
+
+```bash
+pio run -e esp32dev_audio_esv11_k1v2_32khz_trace -t upload --upload-port /dev/tty.usbmodem<port>
+```
+
+**Always verify the device MAC before flashing** -- see `feedback_verify_mac_before_flash.md`. K1 V2 MAC is `b4:3a:45:a5:87:f8`, V1 is `b4:3a:45:a5:89:b4`.
 
 ### Step 3 -- Open the serial monitor
 
@@ -74,35 +128,55 @@ You should see `MabuTrace: INITIALISED (64 KB buffer)` in the boot log.
 The 64 KB buffer holds approximately 2,700-4,000 events, which covers roughly
 2.5 seconds of dual-core activity. Let the firmware stabilise before capturing.
 
-### Step 5 -- Type `trace` in the serial monitor
+### Step 5 -- Capture the trace
+
+**Recommended: use the automation tool** (zero copy-paste, JSON saved + validated):
+
+```bash
+# Close any open serial monitor on the port first (Cursor / pio device monitor / screen).
+# Tool requires exclusive port access.
+~/.platformio/penv/bin/python3 firmware-v3/tools/capture_trace.py \
+    --port /dev/tty.usbmodem2101 \
+    --effect 0x2102 \
+    --soak 5 \
+    --output /tmp/k1_trace.json \
+    --open
+```
+
+The script switches to the named effect, lets it soak for `--soak` seconds so
+the on-chip 64 KB ring buffer fills with meaningful activity, sends `trace`,
+strips the wrapper markers, validates the JSON, and saves a clean Chrome Trace
+Format file. With `--open` it also opens `https://ui.perfetto.dev` so you can
+drag the file straight in.
+
+**Manual capture** (if you need to debug the protocol or run interactively):
+
+Type `trace` in the serial monitor. The firmware emits exactly:
 
 ```
-trace
+[TRACE] Flushing trace buffer...
+{"traceEvents":[{"name":"...","ph":"X","pid":1,"tid":"Renderer", ...}, ...],
+ "displayTimeUnit":"ms",
+ "otherData":{"version":"MabuTrace Profiler v1.0"}}
+[TRACE] Done.
 ```
 
-The firmware flushes the buffer and streams the JSON between markers:
+The wire protocol is implemented in `src/serial/SerialCLI.cpp:1174-1183`
+(`get_json_trace_chunked` from the mabutrace library). Markers are
+`[TRACE] Flushing trace buffer...` (start) and `[TRACE] Done.` (end) —
+**not** `=== MabuTrace Dump ===` (an older format that no longer matches the
+shipped firmware).
 
-```
-=== MabuTrace Dump ===
-Flushing trace buffer...
-{"traceEvents":[{"ph":"X","name":"render_frame","ts":12345678,...}, ...]}
-=== End Trace ===
-Copy the JSON between markers and open at https://ui.perfetto.dev
-```
+### Step 6 -- View in Perfetto
 
-### Step 6 -- Copy the JSON
+1. Open [https://ui.perfetto.dev](https://ui.perfetto.dev) — Google's
+   open-source Chrome Trace viewer. The JSON is parsed entirely in your
+   browser; nothing uploads to a server. **There is no project portal.**
+2. Drag the saved `.json` onto the page (or click **Open trace file**).
 
-Select everything between `=== MabuTrace Dump ===` and `=== End Trace ===`
-(excluding those marker lines). Copy it to your clipboard.
-
-### Step 7 -- View in Perfetto
-
-1. Open [https://ui.perfetto.dev](https://ui.perfetto.dev)
-2. Click **Open trace file** (or drag-drop)
-3. Paste the JSON into a `.json` file and open it, or use **Open with copy-paste**
-
-You should see a dual-track timeline with audio spans on one track and render
-spans on another.
+You should see a dual-track timeline with audio spans (Core 0) and render
+spans (Core 1), counter graphs for the TRACE_COUNTER values, and instant
+markers for TRACE_INSTANT events.
 
 ### Alternative: WiFi capture (optional)
 
@@ -435,12 +509,18 @@ build_flags =
 
 ### Perfetto cannot parse the JSON
 
-- Ensure you copied **only** the JSON between the `=== MabuTrace Dump ===` and
-  `=== End Trace ===` markers. Do not include the marker lines or the
-  instruction text.
-- If the JSON appears truncated (missing closing `]}`), the serial buffer may
-  have overflowed. Try reducing the trace buffer size (`TRACE_INIT(32)`) for a
-  smaller dump, or increase the serial TX buffer.
+- If using `tools/capture_trace.py`, marker stripping and JSON validation are
+  automatic — a parse failure means the firmware emitted truncated output.
+  Re-run with a longer `--timeout` (default 10 s).
+- For manual capture, copy **only** the JSON body between
+  `[TRACE] Flushing trace buffer...` and `[TRACE] Done.` (exclude both
+  marker lines). Older guide versions referenced `=== MabuTrace Dump ===` /
+  `=== End Trace ===` — those are obsolete; the shipped firmware emits the
+  `[TRACE]` form.
+- If the JSON appears truncated (missing closing `]}`), the serial TX buffer
+  may have overflowed. Try a longer `--timeout` first; if still truncated,
+  reduce the on-chip ring via `TRACE_INIT(32)` (the macro currently ignores
+  this argument and pins to 64 KB — see `src/config/Trace.h:57`).
 
 ---
 
@@ -498,6 +578,14 @@ All macros are zero-cost no-ops when `FEATURE_MABUTRACE=0`.
 
 ### External resources
 
-- [Perfetto UI](https://ui.perfetto.dev) -- trace viewer
+- [Perfetto UI](https://ui.perfetto.dev) -- trace viewer (Google's public open-source viewer; JSON parsed in-browser, nothing uploaded; not a project portal)
 - [Chrome Trace Format specification](https://docs.google.com/document/d/1CvAClvFfyA5R-PhYUmn5OOQtYMH4h6I0nSsKchNAySU/preview)
 - [MabuTrace repository](https://github.com/mabuware/MabuTrace) (GPL-3.0)
+
+---
+
+**Document Changelog**
+
+| Date | Author | Change |
+|------|--------|--------|
+| 2026-04-27 | claude-opus-4-7 | Added 30-second TL;DR at top: trace-env decision matrix, viewer-is-Google-not-a-project-portal clarification, FEATURE_MABUTRACE no-op note. Reconciled section 2 Quick Start to make K1 V2 trace env the default recipe (was previously `esp32dev_audio_trace`, which extends `esp32dev_audio_base` not the K1 production path). Triggered by Captain time-loss diagnosing why TRACE_* counters were invisible in a canonical build. |

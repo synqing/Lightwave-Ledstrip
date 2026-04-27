@@ -38,6 +38,7 @@
 #include "plugins/api/IEffect.h"
 
 #include "utils/Log.h"
+#include "utils/BenchRegistry.h"
 
 #if FEATURE_TRANSITIONS
 #include "effects/transitions/TransitionEngine.h"
@@ -1182,6 +1183,111 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
         Serial.println(F("[TRACE] Done."));
     }
 #endif
+
+    // -----------------------------------------------------------------
+    // Bench Commands: runtime A/B toggle framework (Surface 7, Tier 3).
+    // Toggles are ALWAYS live (no FEATURE_MABUTRACE guard on mutation paths);
+    // only the trace-marker instants are gated, since TRACE_INSTANT is a
+    // no-op without MabuTrace.
+    // -----------------------------------------------------------------
+    else if (inputLower.startsWith("bench")) {
+        handledMulti = true;
+
+        String args = input.substring(5);
+        args.trim();
+        String argsLower = args;
+        argsLower.toLowerCase();
+
+        if (args.length() == 0 || argsLower == "list") {
+            const size_t n = ::lightwaveos::bench::BenchRegistry::count();
+            Serial.println();
+            Serial.println(F("=== Registered Bench Toggles ==="));
+            if (n == 0) {
+                Serial.println(F("  (none registered)"));
+            }
+            for (size_t i = 0; i < n; ++i) {
+                const auto& desc = ::lightwaveos::bench::BenchRegistry::at(i);
+                const bool current = (desc.value != nullptr) ? *desc.value : false;
+                Serial.printf("  %-30s [%-3s]  (default: %-3s)  %s\n",
+                              desc.name ? desc.name : "<null>",
+                              current ? "ON" : "OFF",
+                              desc.default_value ? "ON" : "OFF",
+                              desc.description ? desc.description : "");
+            }
+            Serial.println();
+        } else if (argsLower.startsWith("begin ")) {
+            String testName = args.substring(6);
+            testName.trim();
+            if (testName.length() == 0) {
+                Serial.println(F("ERROR: usage: bench begin <test_name>"));
+            } else {
+                TRACE_INSTANT("bench_begin");
+                Serial.printf("[bench] Starting run: %s (timestamp: %llu us)\n",
+                              testName.c_str(),
+                              static_cast<unsigned long long>(esp_timer_get_time()));
+            }
+        } else if (argsLower.startsWith("split ")) {
+            String variantName = args.substring(6);
+            variantName.trim();
+            if (variantName.length() == 0) {
+                Serial.println(F("ERROR: usage: bench split <variant_name>"));
+            } else {
+                TRACE_INSTANT("bench_split");
+                Serial.printf("[bench] Variant marker: %s (timestamp: %llu us)\n",
+                              variantName.c_str(),
+                              static_cast<unsigned long long>(esp_timer_get_time()));
+            }
+        } else if (argsLower == "end") {
+            TRACE_INSTANT("bench_end");
+            Serial.println(F("[bench] Run ended; markers flushed to trace."));
+        } else if (argsLower.startsWith("toggle ")) {
+            String toggleArgs = args.substring(7);
+            toggleArgs.trim();
+            int sp = toggleArgs.indexOf(' ');
+            if (sp <= 0) {
+                Serial.println(F("ERROR: usage: bench toggle <name> <on|off>"));
+            } else {
+                String toggleName = toggleArgs.substring(0, sp);
+                String valStr = toggleArgs.substring(sp + 1);
+                valStr.trim();
+                String valLower = valStr;
+                valLower.toLowerCase();
+                bool newVal = false;
+                bool parsed = true;
+                if (valLower == "on" || valLower == "true" || valLower == "1") {
+                    newVal = true;
+                } else if (valLower == "off" || valLower == "false" || valLower == "0") {
+                    newVal = false;
+                } else {
+                    parsed = false;
+                }
+                if (!parsed) {
+                    Serial.printf("ERROR: cannot parse value '%s' (expected on|off|true|false|1|0)\n",
+                                  valStr.c_str());
+                } else {
+                    const auto* desc =
+                        ::lightwaveos::bench::BenchRegistry::findByName(toggleName.c_str());
+                    if (desc == nullptr || desc->value == nullptr) {
+                        Serial.printf("ERROR: toggle not found: %s\n", toggleName.c_str());
+                    } else {
+                        const bool oldVal = *desc->value;
+                        *desc->value = newVal;
+                        TRACE_INSTANT("bench_toggle_set");
+                        Serial.printf("[bench] Toggle %s -> %s (was %s)\n",
+                                      desc->name,
+                                      newVal ? "ON" : "OFF",
+                                      oldVal ? "ON" : "OFF");
+                    }
+                }
+            }
+        } else if (argsLower == "reset") {
+            ::lightwaveos::bench::BenchRegistry::resetAll();
+            TRACE_INSTANT("bench_reset");
+            Serial.println(F("[bench] All toggles reset to defaults."));
+        } else {
+            Serial.println(F("ERROR: bench {list|begin <name>|split <variant>|end|toggle <name> <on|off>|reset}"));
+        }
+    }
 
     // -----------------------------------------------------------------
     // Tempo Debug Commands: tempo (non-ESV11 backend)

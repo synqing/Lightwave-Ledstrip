@@ -117,6 +117,7 @@ namespace lightwaveos { namespace actors {
 #define LW_LOG_TAG "Renderer"
 #include "utils/Log.h"
 #include "../../audio/AudioBenchmarkTrace.h"
+#include "utils/BenchRegistry.h"
 
 namespace lightwaveos {
 namespace actors {
@@ -885,18 +886,29 @@ void RendererActor::onTick()
         captureFrame(CaptureTap::TAP_A_PRE_CORRECTION, m_leds);
     }
 
-    // Post-render color correction pipeline (skip for sensitive effects)
-    // Includes: LGP-sensitive, stateful, PHYSICS_BASED, MATHEMATICAL families
-    // See PatternRegistry::shouldSkipColorCorrection() for full list
+    // Post-render colour correction pipeline (skip for sensitive effects).
+    // Includes: LGP-sensitive, stateful, PHYSICS_BASED, MATHEMATICAL families.
+    // See PatternRegistry::shouldSkipColorCorrection() for full list.
+    //
+    // Bench toggle `render.color_correction` (Surface 7) lets the operator
+    // skip the entire pipeline at runtime for A/B comparison. Snapshot the
+    // toggle once per frame so a mid-frame flip never half-applies.
     {
         TRACE_SCOPE("color_correction");
+        const uint32_t _cc_start_us = micros();
+        const bool benchColourCorrectionEnabled =
+            ::lightwaveos::bench::isToggleEnabled(&::lightwaveos::bench::g_bench_render_color_correction);
         const EffectId safeEffectTick = m_currentEffectValid ? m_validatedEffectId : validateEffectId(m_currentEffect);
-        if (!::PatternRegistry::shouldSkipColorCorrection(safeEffectTick)) {
+        if (benchColourCorrectionEnabled &&
+            !::PatternRegistry::shouldSkipColorCorrection(safeEffectTick)) {
             enhancement::ColorCorrectionEngine::getInstance().processBuffer(m_leds, LedConfig::TOTAL_LEDS);
             m_correctionApplyCount++;
         } else {
             m_correctionSkipCount++;
         }
+        const uint32_t _cc_end_us = micros();
+        // Surface 1 Tier 1 (folded per Master OQ #2 — always-on, ~80 events/sec).
+        TRACE_COUNTER("color_correction_us", static_cast<int>(_cc_end_us - _cc_start_us));
     }
 
     // TAP B: Capture post-correction (after processBuffer, before showLeds)

@@ -27,6 +27,20 @@ pio device monitor -b 115200
 - **120 FPS target**: Keep per-frame effect code under ~2 ms.
 - **British English** in comments and docs (centre, colour, initialise).
 
+## Workflow Discipline (Agents)
+
+These rules were codified after the 2026-04-27/28 orchestration drift (see `~/.claude/plans/shit-got-fucked-but-groovy-neumann.md`). Follow them strictly.
+
+1. **Single source of truth for forward work is `BACKLOG.md`** (root). Do NOT write `.claude/handoff*.md` files containing forward TODO lists. Postmortems describing what shipped (with commit hashes) are fine; forward TODOs in `.claude/` are forbidden because they create re-prescription loops where the next session "applies patches" that already landed in commits the handoff didn't see.
+
+2. **`feat(...)` commits MUST anchor to a Phase Move per the Synergy-Topology programme taxonomy in `BACKLOG.md`**, or be tagged `chore` / `fix` / `docs` / `ci` / `test` / `refactor`. A bare `feat(firmware): add X` body without a Phase Move reference (or without a `Captain visual sign-off:` line for Phase 5+ effect commits) is reviewable. The Phase 5 commit `39406e6b` violated this rule and bypassed the visual sign-off gate; do not repeat.
+
+3. **Anti-redundancy gate before applying any patch**: `grep` the target lines for the proposed change. If the substantive content is already there, ABORT — surface to the operator instead of writing a no-op edit. The 2026-04-27 drift was driven by multiple sessions reading a stale handoff and "applying patches" that were already in HEAD. The Edit tool's `old_string` exact-match discipline is not a sufficient guard; explicit grep before edit is.
+
+4. **Sandbox-to-integration return-receipt**: when dispatching parallel SSAs that return diffs (per `parallel-agent-sandboxing` skill), the orchestrator MUST verify the integrated state against the SSA's claimed deliverables before declaring the SSA complete. Commit `6b1a222f` is a verbatim record of the cost of skipping this step (lost edits, rework session needed). The plan that produced this rule cites the failure pattern.
+
+5. **For every commit, the body cites its plan or BACKLOG row**: `Refs: plan <name>.md Tier X.Y` or `Refs: BACKLOG.md §<section>`. This makes the chain from intention → commit auditable in `git log` alone, no extra tooling needed.
+
 ## Visual Pipeline Guardrails (Agents)
 
 - **Treat `FastLED.show()` wire time as a safety invariant** on dual 160-LED strips. Expected average is ~4.8-5.5 ms. If telemetry shows ~1 ms, assume premature return/tearing risk and stop.

@@ -10,6 +10,8 @@ in the Perfetto UI.
 
 ## TL;DR -- 30-second deploy
 
+> **Audio playback safety:** Capturing traces does not authorise playing arbitrary audio. Use only the exact audio files or live sources Captain has explicitly approved. For AFS/runtime audio capture, use the reference corpus at `/Users/spectrasynq/Workspace_Management/Software/hybrid-beat-tracker/tests/benchmark` unless Captain explicitly names a different source. Do not generate or play white noise, pink noise, synthetic hats, cymbals, speech, tones, or any other agent-chosen fixture without a separate explicit approval. Before playback, state the exact source, expected duration, output route if known, and stop command.
+
 1. **Pick the trace-enabled env** matching your hardware target:
 
    | Canonical build env | Trace-enabled counterpart |

@@ -2,7 +2,7 @@
 <!-- Copyright 2025-2026 SpectraSynq -->
 
 ---
-abstract: "Definitive specification for adding tracing to firmware-v3. Covers 9 surfaces (render budget, audio handoff, audio DSP, network perturbation, memory/thermal, effect lifecycle, bench framework, analyser tool, causal markers). Any agent can pick this up and execute end-to-end without judgment calls. Companion: MABUTRACE_GUIDE.md (capture+view), capture_trace.py (capture tool), analyse_trace.py (analyser tool — to be implemented per §8). Detailed source sections live in trace_spec_sections/01..09."
+abstract: "Canonical specification for the firmware-v3 mabutrace surface. Covers 9 surfaces (render budget, audio handoff, audio DSP, network perturbation, memory/thermal, effect lifecycle, bench framework, analyser tool, causal markers). Status as of 2026-04-28: Surfaces 1/2 Tier 1, 3 Tier 1, 4, 5, 7 SHIPPED — Tier 1 counters present in committed code (per BACKLOG.md MabuTrace Phase 0/1/2 DONE 2026-02-27 + commits 19007888 fc122a25 016853b7). Surfaces 6 (effect lifecycle) and 9 (causal markers) are forward roadmap, not in tree. Companions: MABUTRACE_GUIDE.md (capture+view), capture_trace.py (capture tool, 367 LOC), analyse_trace.py (1,597 LOC stdlib-only post-process tool, IMPLEMENTED). Detail sections: trace_spec_sections/01..09."
 ---
 
 # TRACE_INSTRUMENTATION_SPEC.md
@@ -10,6 +10,38 @@ abstract: "Definitive specification for adding tracing to firmware-v3. Covers 9 
 This document is the canonical, executable specification for instrumenting firmware-v3 with mabutrace events. It synthesises 9 surface-level investigations (`trace_spec_sections/01..09`) into a single roadmap. An implementing agent who reads ONLY this file should be able to land the entire instrumentation set, capture meaningful traces, and validate against contracts. The 9 sibling files contain the deep evidence; this file contains the decisions.
 
 Scope: ESP32-S3 K1 firmware (`esp32dev_audio_esv11_k1v2_32khz`). All file:line references are relative to `firmware-v3/`. British English throughout (colour, behaviour, optimised, initialise).
+
+---
+
+## Status snapshot — as of 2026-04-28
+
+This document was originally written as if greenfield. It is not. Read this snapshot before treating any §1–9 description as a TODO.
+
+**SHIPPED (Tier 1 always-on counters present in committed code):**
+
+| Surface | Status | Source of truth |
+|---|---|---|
+| 1 — Render path budget | Tier 1 5/5 names shipped | RendererActor.cpp lines 893/955/970 + 1404 (per audit 2026-04-27) |
+| 2 — Audio→Render handoff | Tier 1 5/5 names shipped (Tier 2 spans deferred per Captain Q3) | RendererActor.cpp 1418/1434/1450/1465 + onStart 566 |
+| 3 — Audio DSP (Core 0) | Tier 1 6/6 names shipped | AudioActor.cpp 728 + post-Publish block @ ~1052+ |
+| 4 — WiFi/WebServer | 15/15 canonical names shipped (4 OTA names landed in commit 016853b7) | WiFiManager.cpp dual-branch + WsGateway.cpp 316/464 + WsOtaCommands.cpp 330/733/876/1037 |
+| 5 — Memory/thermal | 12/12 names shipped (1 Hz health task) | main.cpp ~478–545 |
+| 7 — Bench framework | 8/8 toggles registered, all CLI commands wired | utils/BenchRegistry.{h,cpp} + serial/SerialCLI.cpp 1186+ |
+| 8 — analyse_trace.py | IMPLEMENTED (1,597 LOC stdlib-only) | tools/analyse_trace.py + tools/baselines/ seeded |
+
+**FORWARD ROADMAP (not in tree):**
+
+| Surface | Status |
+|---|---|
+| 6 — Effect lifecycle (Tier 1) | not started; effect_init/cleanup/switch instants TBD |
+| 9 — Causal markers (Tier 4) | not started; boot phase + audio regime hysteresis TBD |
+| Surface 2/3 Tier 2 spans | gated on `FEATURE_TRACE_AUDIO_HANDOFF` / `FEATURE_TRACE_AUDIO_DSP`; deferred per Captain — implement only when investigating a specific overrun |
+
+**Captain decisions encoded into the spec body that have NOT yet been implemented:**
+
+- Q3 — `ControlBusFrame` → internal DRAM relocation. The Tier 1 measurement contract is shipped; the architectural relocation is pending. Use the seeded baselines in `tools/baselines/` for before/after comparison once the relocation is authorised.
+
+**For agents picking this up:** the §1–9 descriptions below tell you what each surface SHOULD look like, not what's missing. If a counter name appears in the table above as SHIPPED, do not "add" it — it's already there. Use `grep -nE 'TRACE_(INSTANT|COUNTER|SCOPE)\("<name>"' firmware-v3/src/` to locate any specific name. Re-prescription of shipped work caused the 2026-04-27 orchestration drift — see plan `shit-got-fucked-but-groovy-neumann.md`.
 
 ---
 
@@ -356,7 +388,7 @@ For each surface: deep detail lives in the corresponding `trace_spec_sections/0N
 
 **Owner section file:** `trace_spec_sections/08_analyser_tool.md`
 **Tier:** n/a (host-side Python tool)
-**Status:** TO BE IMPLEMENTED. File path: `firmware-v3/tools/analyse_trace.py`.
+**Status:** IMPLEMENTED. File: `firmware-v3/tools/analyse_trace.py` (1,597 LOC, stdlib only — `json`, `statistics`, `argparse`, `pathlib`, `dataclasses`, `math`, `re`, `sys`, `csv`, `html`, `bisect`, `collections`, `typing`). Test fixture: `firmware-v3/test/test_native/test_analyse_trace.py` (12-test matrix). Baselines: `firmware-v3/tools/baselines/k1v2_0x210{0,1,2}_2026-04-27.json` seeded 2026-04-27 from K1 V2 hardware. CI invocation: `python3 firmware-v3/tools/analyse_trace.py <trace> --baseline <baseline> --strict` (exit 7 = contract regression).
 
 **Contract invariants:**
 1. **Pure stdlib.** No `numpy`, `scipy`, `matplotlib`. Imports limited to `json`, `statistics`, `argparse`, `pathlib`, `dataclasses`, `math`, `re`, `sys`, `csv`, `html`, `bisect`, `collections`, `typing`.
@@ -496,9 +528,9 @@ A single ordered list of every file:line touchpoint across all 9 surfaces. An ag
 39. **[7]** Modify `src/serial/SerialCLI.cpp:~1184` — add `bench {list|begin|split|end|toggle|reset}` parser. Fire `bench_*` instants on commands.
 40. **[7]** Wire 8 initial toggles in their consumer files: `RendererActor.cpp` (×3), `AudioActor.cpp` / `AudioBeatTracker.cpp` (×3), `EffectBase.cpp` (`fade_to_black`). `effect.subpixel` deferred until SubpixelRenderer integrates.
 41. **[7]** Update `platformio.ini` — add `esp32dev_audio_esv11_k1v2_32khz_trace` and `_trace_full` envs with the corresponding `build_flags`.
-42. **[8]** Create `firmware-v3/tools/analyse_trace.py` per Surface 8 spec. Stdlib only.
-43. **[8]** Create `firmware-v3/test/test_native/test_analyse_trace.py` with the 12-test matrix.
-44. **[8]** Create `firmware-v3/tools/baselines/esp32dev_audio_esv11_k1v2_32khz_0x2102.json` from a known-good 30 s soak; commit `contracts` block by hand.
+42. **[8]** ~~Create `firmware-v3/tools/analyse_trace.py` per Surface 8 spec. Stdlib only.~~ — **DONE** (committed in fc122a25; 1,597 LOC stdlib-only).
+43. **[8]** ~~Create `firmware-v3/test/test_native/test_analyse_trace.py` with the 12-test matrix.~~ — **DONE** (committed in fc122a25).
+44. **[8]** ~~Create `firmware-v3/tools/baselines/esp32dev_audio_esv11_k1v2_32khz_0x2102.json` from a known-good 30 s soak; commit `contracts` block by hand.~~ — **PARTIAL**: `firmware-v3/tools/baselines/k1v2_0x210{0,1,2}_2026-04-27.json` seeded in commit 929e6817 from K1 V2 hardware (5,470–5,484 events each). The `contracts` block is NOT yet hand-curated — adding it is the only remaining Surface 8 work item, blocked on Captain decision over which p99 thresholds graduate from "today's measured value" to "contract".
 
 ---
 

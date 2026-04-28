@@ -112,13 +112,13 @@ The active feature branch is `feature/synergy-topology-phase-0-1`. Phase moves l
 - Move 4.4 F6 First-Light Ignition (cinematic boot effect) — commit 4d12edc5 (Captain hardware visual confirmed in commit body)
 - Move 4.3: not yet planned
 
-### Phase 5 — Synergy-Topology effect exemplars (3 of 7+ moves)
-- Move 5.4 RadialTimeScopeEffect (EID 0x2100) — committed in 39406e6b; sign-off pending
-- Move 5.6 AttackOnlyPitchVelocityFieldEffect (EID 0x2101) — committed in 39406e6b; sign-off pending
-- Move 5.7 BeatParitySpriteEffect (EID 0x2102) — committed in 39406e6b; sign-off pending
+### Phase 5 — Synergy-Topology effect exemplars (3 of 7+ moves) — DONE-DEGRADED
+- Move 5.4 RadialTimeScopeEffect (EID 0x2100) — committed in 39406e6b; **DEGRADED-MODE attested 2026-04-28**
+- Move 5.6 AttackOnlyPitchVelocityFieldEffect (EID 0x2101) — committed in 39406e6b; **DEGRADED-MODE attested 2026-04-28**
+- Move 5.7 BeatParitySpriteEffect (EID 0x2102) — committed in 39406e6b; **DEGRADED-MODE attested 2026-04-28**
 - **Native test harness:** 130/130 PASS in 1.97 s — commit f49b4d6a; gated by `pio test -e native_test_phase5` in `firmware-v3_build_check.yml` since 632132e4
 - **Hardware traces:** 8 captures committed in `firmware-v3/tools/baselines/` totalling ~21,000 events; `bps_kick_fired` → `bps_sprite_spawn` 1:1 ratio confirmed
-- **B.4 BLOCKED:** Previous instruction to flash K1 V2, play chord/EDM/silence sweep, tick Y/N, and write B.4 attestation is invalid. B.4 is blocked until C-1 through C-5 are resolved or explicitly accepted under DEGRADED-MODE. The 3 effect implementations themselves remain shipped at 39406e6b — the codebase is sound; what's blocked is the **sign-off process**, not the effects.
+- **B.4 DONE-DEGRADED:** Phase 5 sign-off attested under DEGRADED-MODE per Captain authorisation 2026-04-28. Attestation: `firmware-v3/docs/audit/phase_5_visual_sign_off_2026-04-28.md`. Diagnostic-baseline only — does NOT claim hardware visual sign-off, does NOT promote to ship-quality. Cycle 2 sign-off (calibrated, hardware-validated, ship-gate purpose) requires C-1/C-2/C-5 resolution first.
 
 ### Pathmode programmes — IntentSpecs feeding device + Pathmode product manifest
 

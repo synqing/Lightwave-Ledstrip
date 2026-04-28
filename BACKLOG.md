@@ -4,6 +4,44 @@ Prioritised engineering backlog. Items are tagged by category and roughly ordere
 
 ---
 
+## Critical — Upstream Calibration Debt
+
+Per the RBDO Gate (`CLAUDE.md` top), these upstream facts are unresolved. Until each is resolved or explicitly accepted under DEGRADED-MODE with disclosed risk, every tactical output that depends on them must be labelled DEGRADED-MODE or REFUSED. New tactical outputs MUST NOT add a fourth dependent to any URGENT row without resolving it first.
+
+### C-1 — Microphone-domain operating envelope (URGENT)
+What mic-domain RMS / peak / silentScale-trip range was the firmware tuned against?
+- **Blocks:** LUFS target for any audio test sweep; AFS v2 silentScale validation; any "tuned-regime sign-off" claim.
+- **Affected outputs:** ≥ 3.
+- **Priority:** URGENT.
+- **Revisit trigger:** Captain-allocated 30–60 min hardware envelope characterisation pass, OR audit of `firmware-v3/docs/research/audio_feature_surface_v2_baseline_2026-04-27.md` confirms it is already documented there.
+
+### C-2 — Feature × effect × dwell coverage matrix (HIGH)
+Which AFS v2 features × which Phase 5 effects × what minimum dwell each phenomenon needs to manifest visually.
+- **Blocks:** sign-off sweep duration; per-clip dwell minimums; rubric anchor points.
+- **Priority:** HIGH.
+- **Revisit trigger:** Phase 5 sign-off authorisation moment, or any new audio-reactive effect requiring fixture validation.
+
+### C-3 — Clip licence status + K1 repo public-status (HIGH)
+Are the hybrid-beat-tracker corpus clips licensed for inclusion or path-reference in K1 firmware artefacts? What is the K1 repo's public-status at launch (open-source, public-on-release, private)?
+- **Blocks:** clip pool composition for sign-off sweep; calibrated WAV storage policy; any third-party music reference in this repo.
+- **Priority:** HIGH (legal exposure if assumed wrong).
+- **Revisit trigger:** Captain answers (a) repo public-status at launch, (b) hybrid-beat-tracker licence applicability for commercial-product testing, (c) presence/absence of a Captain-licensed audiophile reference library.
+
+### C-4 — First sign-off purpose (MEDIUM — DECIDED)
+**Decision (current):** First Phase 5 sign-off is a **diagnostic baseline**, not a ship gate, not a regression detector.
+- **Reason:** no calibrated baseline or timestamped observables exist yet (C-5 unresolved; C-1 unresolved).
+- **Priority:** MEDIUM (decided; pending re-audit when C-5 lands).
+- **Revisit trigger:** When C-5 produces ratifiable observables, the next sign-off cycle can be promoted to ship-gate (cycle 2) or regression-detector (cycle 3+).
+
+### C-5 — Per-effect timestamped observables (MEDIUM)
+What exactly does the operator look for, anchored to (clip, timestamp, measurable phenomenon), per Phase 5 effect (RTS / PVF / BPS)?
+- **Blocks:** final rubric contents regardless of rubric shape (Y/N, 1–5, freeform).
+- **Depends on:** C-2.
+- **Priority:** MEDIUM.
+- **Revisit trigger:** After C-2 lands; pre-flight to any sign-off harness build.
+
+---
+
 ## Performance
 
 ### [DONE] ~~RendererActor vTaskDelay(1) costs 10 ms per frame~~ — resolved in d943101a
@@ -80,7 +118,7 @@ The active feature branch is `feature/synergy-topology-phase-0-1`. Phase moves l
 - Move 5.7 BeatParitySpriteEffect (EID 0x2102) — committed in 39406e6b; sign-off pending
 - **Native test harness:** 130/130 PASS in 1.97 s — commit f49b4d6a; gated by `pio test -e native_test_phase5` in `firmware-v3_build_check.yml` since 632132e4
 - **Hardware traces:** 8 captures committed in `firmware-v3/tools/baselines/` totalling ~21,000 events; `bps_kick_fired` → `bps_sprite_spawn` 1:1 ratio confirmed
-- **REMAINING:** Captain visual A/B sign-off on K1 V2 hardware (MAC `b4:3a:45:a5:87:f8`, port `/dev/cu.usbmodem2101`), then `firmware-v3/docs/audit/phase_5_visual_sign_off_2026-04-27.md` attestation commit. Per-effect checklists drafted (centre-origin renders, no off-centre flashes, 1:1 kick→sprite, no rainbow drift).
+- **B.4 BLOCKED:** Previous instruction to flash K1 V2, play chord/EDM/silence sweep, tick Y/N, and write B.4 attestation is invalid. B.4 is blocked until C-1 through C-5 are resolved or explicitly accepted under DEGRADED-MODE. The 3 effect implementations themselves remain shipped at 39406e6b — the codebase is sound; what's blocked is the **sign-off process**, not the effects.
 
 ### Pathmode programmes — IntentSpecs feeding device + Pathmode product manifest
 

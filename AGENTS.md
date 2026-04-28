@@ -1,5 +1,9 @@
 # LightwaveOS
 
+## RBDO Gate — Mandatory (canonical text in `CLAUDE.md` top)
+
+The Risk-Bounded Degraded Operation gate at the top of `CLAUDE.md` applies to **every agent on this repository** — Codex CLI, Claude Code, sub-agents, any tooling that emits tactical output. Honour the labelling discipline (GROUNDED / DEGRADED-MODE / REFUSED), the five hard stops, and the Captain-decision-menu rule. The live calibration-debt ledger is `BACKLOG.md` § Critical — Upstream Calibration Debt. Do not emit a tactical output without reading the gate.
+
 ESP32-S3 LED controller for a dual-strip Light Guide Plate. 320 WS2812 LEDs, 100+ effects, audio-reactive, web-controlled.
 
 ## Build (PlatformIO)

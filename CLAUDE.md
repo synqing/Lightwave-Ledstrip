@@ -1,5 +1,45 @@
 # LightwaveOS
 
+## RBDO Gate — Mandatory Before Tactical Output
+
+**Applies to every agent on this repository (Claude Code, Codex CLI, any sub-agent or tooling that emits tactical output). No exceptions. Silent omission of the label below is itself a violation of this gate.**
+
+Every tactical output (recommendation, decision, code change, plan, edit, commit, response to Captain) MUST be labelled with one of three states.
+
+### Labels
+
+**GROUNDED** — every premise traced to an upstream fact, evidence cited (file:line, commit hash, measurement, documented decision). Defensible without further qualification.
+
+**DEGRADED-MODE** — operating under explicit calibration debt. The output MUST disclose all five fields:
+
+- **Unresolved assumption** — the upstream fact that has not been calibrated.
+- **Risk if wrong** — what happens to downstream behaviour if the assumption is incorrect.
+- **Fallback** — what the output reverts to / becomes if the risk materialises.
+- **Revisit trigger** — the concrete event that obligates re-auditing this output.
+- **Debt count / affected outputs** — how many other tactical outputs depend on this same unresolved fact.
+
+**REFUSED** — the output cannot be emitted under either GROUNDED or DEGRADED-MODE without violating a hard stop. Withhold the output; surface the blocker.
+
+### Hard stops (REFUSE if any are true)
+
+1. Emitting would violate a protected invariant (K1 hard constraints, R1–R5 governance in `AGENTS.md`, hardware-test-before-commit, audio-playback safety, audit-chain integrity).
+2. The unresolved upstream fact already affects more than 3 tactical outputs without resolution. Resolve before adding a fourth dependent.
+3. The output proposes a firmware behaviour change without Captain hardware sign-off attestation.
+4. Sandbox-to-integration loss has been detected in the current session (the `6b1a222f` pattern). Surface and ask; do not continue.
+5. The output cannot be independently audited by Captain — i.e. the calibration debt is so large that disclosure becomes hand-waving rather than risk-bounding.
+
+### Captain-decision-menu rule
+
+**No Captain decision menu is allowed until the agent first lists the upstream facts that make the options decidable.** Presenting tactical-preference options (a/b/c/d/e) without first surfacing the upstream facts that gate the choice is the face-value pattern that produced the 2026-04-27 drift. The right output when upstream is uncalibrated is "this question depends on facts F1, F2, F3 — added to `BACKLOG.md` § Critical — Upstream Calibration Debt", not a multiple-choice form.
+
+### Reference
+
+- The live calibration-debt ledger: `BACKLOG.md` § Critical — Upstream Calibration Debt.
+- Full doctrine + anti-pattern catalogue + degradation ladder: `~/.claude/plans/shit-got-fucked-but-groovy-neumann.md` and the post-doctrine session transcript that authored this gate.
+- Governance rules R1–R5: `AGENTS.md` § Workflow Discipline.
+
+---
+
 ## Context Management
 
 This CLAUDE.md is loaded into every conversation. Keep main context for decisions and outcomes only.

@@ -25,6 +25,10 @@ static inline float clamp01(float x) {
     return x;
 }
 
+static inline uint16_t q15(float x) {
+    return static_cast<uint16_t>(clamp01(x) * 65535.0f + 0.5f);
+}
+
 void EsV11Adapter::reset()
 {
     m_binsMaxFollower = 0.1f;
@@ -41,6 +45,14 @@ void EsV11Adapter::reset()
     m_sbWaveformPeakScaledLast = 0.0f;
     std::memset(m_sbNoteChroma, 0, sizeof(m_sbNoteChroma));
     m_sbChromaMaxVal = 0.0001f;
+#if FEATURE_AUDIO_HF_SEMANTICS
+    m_hfEnergy = 0.0f;
+    m_airEnergy = 0.0f;
+    m_cymbalSustain = 0.0f;
+    m_prevHfRaw = 0.0f;
+    m_prevBrightness = 0.0f;
+    m_hatEventAgeMs = 65535;
+#endif
 }
 
 void EsV11Adapter::buildFrame(lightwaveos::audio::ControlBusFrame& out,
@@ -285,6 +297,80 @@ void EsV11Adapter::buildFrame(lightwaveos::audio::ControlBusFrame& out,
         m_prevSnareEnergy = out.snareEnergy;
         m_prevHihatEnergy = out.hihatEnergy;
     }
+
+#if FEATURE_AUDIO_HF_SEMANTICS
+    // Tier 1 HF semantic fields. This uses the existing 64-bin substrate only:
+    // no wider projections, no bins256 dependency, and no render-side work.
+    {
+        float hfSum = 0.0f;
+        for (uint8_t i = 50; i < lightwaveos::audio::ControlBusFrame::BINS_64_COUNT; ++i) {
+            hfSum += out.bins64Adaptive[i];
+        }
+        const float hfRaw = clamp01(hfSum / 14.0f);
+
+        float airSum = 0.0f;
+        for (uint8_t i = 58; i < lightwaveos::audio::ControlBusFrame::BINS_64_COUNT; ++i) {
+            airSum += out.bins64Adaptive[i];
+        }
+        const float airRaw = clamp01(airSum / 6.0f);
+
+        float weighted = 0.0f;
+        float energy = 0.0f;
+        for (uint8_t i = 0; i < lightwaveos::audio::ControlBusFrame::BINS_64_COUNT; ++i) {
+            const float v = out.bins64Adaptive[i];
+            weighted += v * static_cast<float>(i);
+            energy += v;
+        }
+        const float brightness = (energy > 0.001f) ? clamp01(weighted / (energy * 63.0f)) : 0.0f;
+        const float brightnessDelta = brightness - m_prevBrightness;
+        const float hfFlux = clamp01((hfRaw - m_prevHfRaw) * 4.0f);
+
+        static const float hfAttack = audio::retunedAlpha(0.35f, 50.0f, audio::HOP_RATE_HZ);
+        static const float hfRelease = audio::retunedAlpha(0.08f, 50.0f, audio::HOP_RATE_HZ);
+        m_hfEnergy += (hfRaw - m_hfEnergy) * ((hfRaw > m_hfEnergy) ? hfAttack : hfRelease);
+
+        static const float airAttack = audio::retunedAlpha(0.12f, 50.0f, audio::HOP_RATE_HZ);
+        static const float airRelease = audio::retunedAlpha(0.025f, 50.0f, audio::HOP_RATE_HZ);
+        m_airEnergy += (airRaw - m_airEnergy) * ((airRaw > m_airEnergy) ? airAttack : airRelease);
+
+        const float sustainTarget = clamp01((hfRaw * 0.65f) + (airRaw * 0.35f));
+        static const float sustainAttack = audio::retunedAlpha(0.20f, 50.0f, audio::HOP_RATE_HZ);
+        static const float sustainRelease = audio::retunedAlpha(0.015f, 50.0f, audio::HOP_RATE_HZ);
+        m_cymbalSustain += (sustainTarget - m_cymbalSustain) *
+                           ((sustainTarget > m_cymbalSustain) ? sustainAttack : sustainRelease);
+
+        const float lowMid = clamp01((out.bands[0] + out.bands[1] + out.bands[2] +
+                                      out.bands[3] + out.bands[4]) / 5.0f);
+        const float hfRatio = clamp01(hfRaw / (lowMid + 0.08f));
+        const bool refractoryDone = m_hatEventAgeMs >= 70;
+        const bool hatLike = refractoryDone && hfFlux > 0.16f && hfRatio > 0.85f && hfRaw > 0.08f;
+        const float hatStrength = hatLike ? clamp01((hfFlux - 0.16f) * 4.0f * hfRatio) : 0.0f;
+
+        const uint32_t stepMs = static_cast<uint32_t>(1000.0f / audio::HOP_RATE_HZ + 0.5f);
+        m_hatEventAgeMs = static_cast<uint16_t>(
+            (static_cast<uint32_t>(m_hatEventAgeMs) + stepMs > 65535U)
+                ? 65535U
+                : (static_cast<uint32_t>(m_hatEventAgeMs) + stepMs));
+        if (hatStrength > 0.0f) {
+            m_hatEventAgeMs = 0;
+        }
+
+        out.hfEnergy = clamp01(m_hfEnergy);
+        out.hfFlux = hfFlux;
+        out.hatEvent.strength = q15(hatStrength);
+        out.hatEvent.confidence = q15(hatStrength > 0.0f ? hfRatio : 0.0f);
+        out.hatEvent.ageMs = m_hatEventAgeMs;
+        out.hatEvent.flags = 0x02U | ((hatStrength > 0.0f) ? 0x01U : 0x00U);
+        out.cymbalSustain = clamp01(m_cymbalSustain);
+        out.airEnergy = clamp01(m_airEnergy);
+        out.spectralBrightness = brightness;
+        out.spectralBrightnessDelta = (brightnessDelta < -1.0f) ? -1.0f :
+                                      ((brightnessDelta > 1.0f) ? 1.0f : brightnessDelta);
+
+        m_prevHfRaw = hfRaw;
+        m_prevBrightness = brightness;
+    }
+#endif
 
     // ES tempo extras (consumed by renderer beat clock)
     out.es_bpm = es.top_bpm;

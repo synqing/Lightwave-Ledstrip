@@ -1,8 +1,10 @@
 # Audio Feature Surface v2 Baseline Measurement Report
 
 **Date:** 2026-04-27
-**Status:** Foundation baseline; hardware p99/p999 capture still required
-**Scope:** Phases 0-3 only. No Tier 1 semantic fields, no `96`, no `128`.
+**Status:** Foundation baseline; Phase 1B runtime gate failed and was explicitly waived by Captain on 2026-04-28
+**Scope:** Phases 0-3 plus waived Tier 1 HF semantic implementation behind `FEATURE_AUDIO_HF_SEMANTICS`. No `96`, no `128`.
+
+> 2026-04-28 deviation: Tier 1 HF semantic implementation is proceeding by explicit Captain override after the runtime evidence loop was stopped. This must not be recorded as Phase 1B passing. The `96`/`128` bin deferral and raw `bins256` containment remain locked.
 
 ## 1. Purpose
 
@@ -46,8 +48,10 @@ Phase 1 is not complete until a hardware-backed report captures:
 
 ## 4. Hard Gates
 
-No production semantic fields may be added until the following gates are
-measured on target hardware:
+Original gate: no production semantic fields may be added until the following
+gates are measured on target hardware. On 2026-04-28 Captain explicitly waived
+this gate for Tier 1 HF semantics only; the waiver does not apply to `96`, `128`,
+new broad arrays, or new raw production `bins256` consumers.
 
 | Gate | Pass condition |
 |------|----------------|
@@ -81,6 +85,8 @@ Capture a trace:
 ```
 
 Minimum capture matrix:
+
+> **Playback safety gate:** These scenarios describe required evidence, not permission to generate or play arbitrary sound. For AFS/runtime capture, use the reference corpus at `/Users/spectrasynq/Workspace_Management/Software/hybrid-beat-tracker/tests/benchmark` unless Captain explicitly names a different source. Approval for one provided file does not authorise synthetic fixtures, white/pink noise, generated hats/cymbals, speech, tones, or any other agent-chosen playback. If a missing fixture is required, stop and request approval for the exact source before playing it.
 
 | Scenario | Purpose |
 |----------|---------|
@@ -289,3 +295,53 @@ Preliminary read:
 AP-client-connected stress testing is intentionally deferred until further
 notice. Do not treat Phase 1 as complete without eventually restoring an AP
 load scenario or explicitly changing the gate.
+
+## 13. Runtime Capture -- Approved Benchmark Corpus
+
+**Evidence directory:** `firmware-v3/docs/research/phase1b_runtime_evidence_2026-04-27/`
+**Reference audio source:** `/Users/spectrasynq/Workspace_Management/Software/hybrid-beat-tracker/tests/benchmark`
+**Build:** `esp32dev_audio_esv11_k1v2_32khz_trace`
+**Hardware:** K1v2, MAC `b4:3a:45:a5:87:f8`
+**Status:** Phase 1B runtime gate failed. Do not implement Tier 1 HF semantic fields, `96`, or `128`.
+
+Captures were taken for silence and approved benchmark-corpus music only:
+Satie, Portishead, Dave Brubeck, Meshuggah, James Brown, Snoop Dogg, and Tool.
+Raw traces and per-capture `analyse_trace.py` reports are in the evidence
+directory.
+
+Worst observed timing:
+
+| Metric | Worst scenario | p99 us | p999 us | Gate result |
+|---|---|---:|---:|---|
+| `audio_chunk_work_us` | `satie_sparse_slow` | 9627 | 9838 | FAIL |
+| `audio_hop_us` | `portishead_trip_hop_sparse` | 25230 | 25230 | FAIL |
+| `render_frame_work_us` | `silence_idle` | 4179 | 4257 | FAIL |
+| `effect_render` | `silence_idle` | 506 | 515 | PASS |
+| `controlbus_publish_copy_us` | `james_brown_funk` | 283 | 283 | PASS |
+| `audio_snapshot_read` | `satie_sparse_slow` | 870 | 879 | watch |
+| `onset_detect` | `take_five_jazz_swing` | 3038 | 3038 | marginal |
+| `band_ratio_detect` | `portishead_trip_hop_sparse` | 371 | 371 | PASS |
+
+Deadline miss counters increased in every trace window: chunk miss deltas were
+`99-104`, hop miss deltas were `49-51`, and `silence_idle` had one
+render-frame deadline miss. The chunk/hop counters appear to include blocking
+capture/cadence time, so the next engineering step is to split DSP work from
+blocking wait time rather than waive the gate.
+
+Post-run health showed `showSkips=0` and renderer stack watermark `10256`
+words, but internal heap remained critically low (`Free heap: 17824 bytes`,
+`Min free heap: 16304 bytes`, `Max alloc heap: 8180 bytes`). A clean reboot
+reproduced the memory fault before playback (`internal=18248` then `17980`,
+`largest=8180`, `shed<18432,resume>28672`). This was not merely an active
+low-heap shed state: the old WebServer hysteresis controller force-cleared
+while heap was still below the hard shed threshold, then re-enabled on the next
+probe. That invalid relatch loop has been fixed in source, and MabuTrace trace
+builds now define `USE_PSRAM_IF_AVAILABLE` so the 64 KB trace ring buffer is
+allocated from PSRAM first. Runtime heap acceptance remains failed until those
+fixes are flashed and remeasured on hardware. AP mode was active but the
+snapshots showed `Clients: 0`, so AP idle/client-connected Gate A and AP
+telemetry Gate B remain unproven.
+
+Decision: Phase 1B implementation is still not cleared for Tier 1 semantic HF
+fields. Fix/re-scope timing instrumentation and prove the corrected heap
+behaviour on hardware before any semantic expansion.

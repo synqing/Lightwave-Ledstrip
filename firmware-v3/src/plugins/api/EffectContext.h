@@ -331,6 +331,36 @@ struct AudioContext {
             : controlBus.hihatEnergy;
     }
 
+#if FEATURE_AUDIO_HF_SEMANTICS
+    /// High-frequency content exists; not a hi-hat trigger by itself.
+    float hfEnergy() const { return controlBus.hfEnergy; }
+    /// Positive high-frequency change; not a confirmed hat event by itself.
+    float hfFlux() const { return controlBus.hfFlux; }
+    /// Short hat-like event strength [0,1], derived from the compact Q15 event.
+    float hatEvent() const { return static_cast<float>(controlBus.hatEvent.strength) / 65535.0f; }
+    /// Full compact hat event for effects that need confidence or age.
+    const audio::AudioEventQ15& hatEventInfo() const { return controlBus.hatEvent; }
+    /// Sustained cymbal/noisy HF envelope.
+    float cymbalSustain() const { return controlBus.cymbalSustain; }
+    /// Smooth upper-air shimmer bed.
+    float airEnergy() const { return controlBus.airEnergy; }
+    /// Spectral tilt / upper-balance proxy.
+    float spectralBrightness() const { return controlBus.spectralBrightness; }
+    /// Alias requested by the AFS v2 helper direction; not LED output brightness.
+    float brightness() const { return spectralBrightness(); }
+    /// Signed spectral brightness movement [-1,1].
+    float spectralBrightnessDelta() const { return controlBus.spectralBrightnessDelta; }
+#else
+    float hfEnergy() const { return treble(); }
+    float hfFlux() const { return hihatFlux(); }
+    float hatEvent() const { return isHihatHit() ? hihat() : 0.0f; }
+    float cymbalSustain() const { return heavyTreble(); }
+    float airEnergy() const { return air(); }
+    float spectralBrightness() const { return treble(); }
+    float brightness() const { return spectralBrightness(); }
+    float spectralBrightnessDelta() const { return 0.0f; }
+#endif
+
     /// Check semantic onset channel pulses.
     bool isKickHit() const { return onset.kick.fired || controlBus.kickTrigger; }
     bool isSnareHit() const { return onset.snare.fired || controlBus.snareTrigger; }
@@ -675,6 +705,14 @@ struct AudioContext {
     float kickLevel() const { return onset.kick.level01; }
     float snare() const { return onset.snare.level01; }
     float hihat() const { return onset.hihat.level01; }
+    float hfEnergy() const { return 0.0f; }
+    float hfFlux() const { return 0.0f; }
+    float hatEvent() const { return 0.0f; }
+    float cymbalSustain() const { return 0.0f; }
+    float airEnergy() const { return 0.0f; }
+    float spectralBrightness() const { return 0.0f; }
+    float brightness() const { return 0.0f; }
+    float spectralBrightnessDelta() const { return 0.0f; }
     bool isKickHit() const { return onset.kick.fired; }
     bool isSnareHit() const { return onset.snare.fired; }
     bool isHihatHit() const { return onset.hihat.fired; }

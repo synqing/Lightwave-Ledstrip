@@ -593,6 +593,7 @@ void AudioActor::onTick()
     // emits as audio_hop_us. Cost: one 64-bit assignment per hop.
     if (m_esChunkCounter == 0) {
         m_hopStartUs = now_us;
+        m_hopAccumWorkUs = 0;
     }
 
     // Chunk processing blocks on I2S read (~4ms at 32kHz, 128 samples).
@@ -604,9 +605,10 @@ void AudioActor::onTick()
     TRACE_BEGIN("i2s_dma_read");
     if (!m_esBackend.readAndProcessChunk(now_us)) {
         TRACE_END();
-        const uint32_t chunkUs = static_cast<uint32_t>(esp_timer_get_time() - chunkStartUs);
-        TRACE_COUNTER("audio_chunk_work_us", static_cast<int32_t>(chunkUs));
-        if (chunkUs > kAudioChunkBudgetUs) {
+        const uint32_t chunkWallUs = static_cast<uint32_t>(esp_timer_get_time() - chunkStartUs);
+        TRACE_COUNTER("audio_chunk_wall_us", static_cast<int32_t>(chunkWallUs));
+        TRACE_COUNTER("audio_chunk_work_us", static_cast<int32_t>(chunkWallUs));
+        if (chunkWallUs > kAudioChunkBudgetUs) {
             ++m_audioChunkDeadlineMissTotal;
             TRACE_COUNTER("audio_chunk_deadline_miss_total",
                           static_cast<int32_t>(m_audioChunkDeadlineMissTotal));
@@ -617,9 +619,14 @@ void AudioActor::onTick()
         return;
     }
     TRACE_END();  // i2s_dma_read
-    const uint32_t chunkUs = static_cast<uint32_t>(esp_timer_get_time() - chunkStartUs);
-    TRACE_COUNTER("audio_chunk_work_us", static_cast<int32_t>(chunkUs));
-    if (chunkUs > kAudioChunkBudgetUs) {
+    const uint32_t chunkWallUs = static_cast<uint32_t>(esp_timer_get_time() - chunkStartUs);
+    const auto chunkTiming = m_esBackend.lastChunkTiming();
+    const uint32_t chunkWorkUs = chunkTiming.dsp_us;
+    m_hopAccumWorkUs += chunkWorkUs;
+    TRACE_COUNTER("audio_chunk_wall_us", static_cast<int32_t>(chunkWallUs));
+    TRACE_COUNTER("audio_chunk_capture_us", static_cast<int32_t>(chunkTiming.capture_us));
+    TRACE_COUNTER("audio_chunk_work_us", static_cast<int32_t>(chunkWorkUs));
+    if (chunkWorkUs > kAudioChunkBudgetUs) {
         ++m_audioChunkDeadlineMissTotal;
         TRACE_COUNTER("audio_chunk_deadline_miss_total",
                       static_cast<int32_t>(m_audioChunkDeadlineMissTotal));
@@ -641,6 +648,7 @@ void AudioActor::onTick()
     }
     m_esChunkCounter = 0;
 
+    const uint64_t controlBuildStartUs = esp_timer_get_time();
     TRACE_BEGIN("controlbus_build");
     esv11::EsV11Outputs es{};
     m_esBackend.getLatestOutputs(es);
@@ -1002,8 +1010,11 @@ void AudioActor::onTick()
     frame.scene = kDefaultSceneParameters;
 #endif
     TRACE_END();  // controlbus_build
+    const uint32_t controlBuildUs = static_cast<uint32_t>(esp_timer_get_time() - controlBuildStartUs);
+    m_hopAccumWorkUs += controlBuildUs;
     TRACE_COUNTER("audio_rms", static_cast<int32_t>(frame.rms * 10000));
 
+    const uint64_t snapshotPublishStartUs = esp_timer_get_time();
     TRACE_BEGIN("snapshot_publish");
     const uint64_t publishCopyStartUs = esp_timer_get_time();
     m_controlBusBuffer.Publish(frame);
@@ -1021,6 +1032,8 @@ void AudioActor::onTick()
     }
     m_diag.lastPublishSeq = frame.hop_seq;
     TRACE_END();  // snapshot_publish
+    const uint32_t snapshotPublishUs = static_cast<uint32_t>(esp_timer_get_time() - snapshotPublishStartUs);
+    m_hopAccumWorkUs += snapshotPublishUs;
 
     // ====================================================================
     // Surface 3 Tier 1 always-on counters (TRACE_INSTRUMENTATION_SPEC §3).
@@ -1030,10 +1043,12 @@ void AudioActor::onTick()
     // ====================================================================
     {
         const uint64_t hop_end_us = esp_timer_get_time();
-        const uint32_t hop_us = static_cast<uint32_t>(hop_end_us - m_hopStartUs);
+        const uint32_t hop_wall_us = static_cast<uint32_t>(hop_end_us - m_hopStartUs);
+        const uint32_t hop_us = m_hopAccumWorkUs;
         constexpr uint32_t kAudioHopBudgetUs =
             static_cast<uint32_t>((static_cast<uint64_t>(audio::HOP_SIZE) * 1000000ULL) /
                                   static_cast<uint64_t>(audio::SAMPLE_RATE));
+        TRACE_COUNTER("audio_hop_wall_us", static_cast<int32_t>(hop_wall_us));
         TRACE_COUNTER("audio_hop_us", static_cast<int32_t>(hop_us));
         if (hop_us > kAudioHopBudgetUs) {
             ++m_audioHopDeadlineMissTotal;

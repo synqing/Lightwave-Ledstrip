@@ -23,6 +23,10 @@ static inline float lerp(float a, float b, float t) {
     return a + (b - a) * t;
 }
 
+static inline uint16_t q15(float x) {
+    return static_cast<uint16_t>(clamp01(x) * 65535.0f + 0.5f);
+}
+
 ControlBus::ControlBus() { Reset(); }
 
 void ControlBus::Reset() {
@@ -61,6 +65,14 @@ void ControlBus::Reset() {
     // Reset spike detection telemetry
     m_spikeStats.reset();
     // Waveform array is zero-initialized by ControlBusFrame{} constructor
+#if FEATURE_AUDIO_HF_SEMANTICS
+    m_hf_energy_s = 0.0f;
+    m_air_energy_s = 0.0f;
+    m_cymbal_sustain_s = 0.0f;
+    m_prev_hf_energy = 0.0f;
+    m_prev_spectral_brightness = 0.0f;
+    m_hat_event_age_ms = 65535;
+#endif
 }
 
 void ControlBus::setSmoothing(float alphaFast, float alphaSlow) {
@@ -571,6 +583,86 @@ void ControlBus::applyStmSmoothing(ControlBusFrame& frame) {
 // Stage B: Backend-agnostic derived features
 // ==========================================================================
 void ControlBus::applyDerivedFeatures(ControlBusFrame& frame, float dt, float rmsUngated) {
+#if FEATURE_AUDIO_HF_SEMANTICS
+    // Tier 1 HF semantics: backend-neutral fallback. ES may pre-populate these
+    // with a richer source; this keeps legacy/alternate paths coherent.
+    {
+        const bool alreadyPopulated = frame.hfEnergy > 0.0f || frame.airEnergy > 0.0f ||
+                                      frame.spectralBrightness > 0.0f || frame.hatEvent.flags != 0;
+        if (!alreadyPopulated) {
+            float hfSum = 0.0f;
+            for (uint8_t i = 50; i < ControlBusFrame::BINS_64_COUNT; ++i) {
+                hfSum += frame.bins64Adaptive[i];
+            }
+            const float hfRaw = clamp01(hfSum / 14.0f);
+
+            float airSum = 0.0f;
+            for (uint8_t i = 58; i < ControlBusFrame::BINS_64_COUNT; ++i) {
+                airSum += frame.bins64Adaptive[i];
+            }
+            const float airRaw = clamp01(airSum / 6.0f);
+
+            float centroidWeighted = 0.0f;
+            float centroidEnergy = 0.0f;
+            for (uint8_t i = 0; i < ControlBusFrame::BINS_64_COUNT; ++i) {
+                const float v = frame.bins64Adaptive[i];
+                centroidWeighted += v * static_cast<float>(i);
+                centroidEnergy += v;
+            }
+            const float brightness = (centroidEnergy > 0.001f)
+                ? clamp01(centroidWeighted / (centroidEnergy * 63.0f))
+                : 0.0f;
+
+            const float attack = 1.0f - expf(-dt / 0.035f);
+            const float release = 1.0f - expf(-dt / 0.180f);
+            m_hf_energy_s = lerp(m_hf_energy_s, hfRaw, (hfRaw > m_hf_energy_s) ? attack : release);
+
+            const float airAttack = 1.0f - expf(-dt / 0.100f);
+            const float airRelease = 1.0f - expf(-dt / 0.450f);
+            m_air_energy_s = lerp(m_air_energy_s, airRaw, (airRaw > m_air_energy_s) ? airAttack : airRelease);
+
+            const float hfFlux = clamp01((hfRaw - m_prev_hf_energy) * 4.0f);
+            const float brightnessDelta = brightness - m_prev_spectral_brightness;
+
+            const float sustainTarget = clamp01((hfRaw * 0.65f) + (airRaw * 0.35f));
+            const float sustainAttack = 1.0f - expf(-dt / 0.080f);
+            const float sustainRelease = 1.0f - expf(-dt / 0.700f);
+            m_cymbal_sustain_s = lerp(m_cymbal_sustain_s, sustainTarget,
+                                      (sustainTarget > m_cymbal_sustain_s) ? sustainAttack : sustainRelease);
+
+            const float lowMid = clamp01((frame.bands[0] + frame.bands[1] + frame.bands[2] +
+                                          frame.bands[3] + frame.bands[4]) / 5.0f);
+            const float hfRatio = clamp01(hfRaw / (lowMid + 0.08f));
+            const bool refractoryDone = m_hat_event_age_ms >= 70;
+            const bool hatLike = refractoryDone && hfFlux > 0.16f && hfRatio > 0.85f && hfRaw > 0.08f;
+            const float hatStrength = hatLike ? clamp01((hfFlux - 0.16f) * 4.0f * hfRatio) : 0.0f;
+            const uint32_t stepMs = static_cast<uint32_t>(dt * 1000.0f + 0.5f);
+            m_hat_event_age_ms = static_cast<uint16_t>(
+                (static_cast<uint32_t>(m_hat_event_age_ms) + stepMs > 65535U)
+                    ? 65535U
+                    : (static_cast<uint32_t>(m_hat_event_age_ms) + stepMs));
+            if (hatStrength > 0.0f) {
+                m_hat_event_age_ms = 0;
+            }
+
+            frame.hfEnergy = clamp01(m_hf_energy_s);
+            frame.hfFlux = hfFlux;
+            frame.hatEvent.strength = q15(hatStrength);
+            frame.hatEvent.confidence = q15(hatStrength > 0.0f ? hfRatio : 0.0f);
+            frame.hatEvent.ageMs = m_hat_event_age_ms;
+            frame.hatEvent.flags = 0x02U | ((hatStrength > 0.0f) ? 0x01U : 0x00U);
+            frame.cymbalSustain = clamp01(m_cymbal_sustain_s);
+            frame.airEnergy = clamp01(m_air_energy_s);
+            frame.spectralBrightness = brightness;
+            frame.spectralBrightnessDelta = (brightnessDelta < -1.0f) ? -1.0f :
+                                            ((brightnessDelta > 1.0f) ? 1.0f : brightnessDelta);
+
+            m_prev_hf_energy = hfRaw;
+            m_prev_spectral_brightness = brightness;
+        }
+    }
+#endif
+
     // ========================================================================
     // Stage 4b: Chord detection from chromagram (Priority 6)
     // Detects Major/Minor/Diminished/Augmented triads from pitch-class energy

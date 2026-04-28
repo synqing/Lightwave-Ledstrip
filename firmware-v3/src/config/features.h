@@ -68,6 +68,12 @@
 #define FEATURE_TRANSLATION_ENGINE FEATURE_AUDIO_SYNC
 #endif
 
+// Tier 1 high-frequency semantic fields for the effect-facing audio surface.
+// Compile-gated so the Phase 1B waiver can be reversed without changing call sites.
+#ifndef FEATURE_AUDIO_HF_SEMANTICS
+#define FEATURE_AUDIO_HF_SEMANTICS FEATURE_AUDIO_SYNC
+#endif
+
 // Debug logging for translation engine (verbose, OFF by default).
 #ifndef FEATURE_TRANSLATION_DEBUG
 #define FEATURE_TRANSLATION_DEBUG 0
@@ -170,6 +176,12 @@
 // Default ON. Network endpoints require FEATURE_WEB_SERVER.
 #ifndef FEATURE_VRMS_METRICS
 #define FEATURE_VRMS_METRICS 1
+#endif
+
+// WebSocket/UDP frame streaming surfaces for LED/audio/STM/log/benchmark data.
+// REST and ordinary WebSocket control remain available when disabled.
+#ifndef FEATURE_WEB_STREAMING
+#define FEATURE_WEB_STREAMING 1
 #endif
 
 // Input Merge Layer - Arbitrates multiple input sources (manual, audio, AI, gesture)

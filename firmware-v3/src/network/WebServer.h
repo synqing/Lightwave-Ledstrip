@@ -645,10 +645,8 @@ private:
     uint32_t m_lastHeapShedProbeMs;
     uint32_t m_lastLargestInternalHeap;
     // Wall-clock ms when shed first latched. Enables a max-latch-time force-clear
-    // so the flag cannot stay ON forever when heap oscillates in the hysteresis
-    // band (20-26 KB) without reaching the clear threshold. Without this escape
-    // hatch the WS reconnect storm triggered by closeAll(1013) perpetuates the
-    // latch — see CHANGELOG "progressive cascade lockup" fix.
+    // only after heap has climbed back into the hysteresis band. While heap is
+    // still below the hard shed floor, shedding must remain latched.
     uint32_t m_shedActivatedAtMs;
     // Wall-clock ms when shed last cleared. Used to apply a brief grace window
     // so connects whose SYN arrived during the latch are not refused moments
@@ -659,9 +657,8 @@ private:
     static constexpr uint32_t INTERNAL_HEAP_SHED_LOG_INTERVAL_MS = LW_INTERNAL_HEAP_SHED_LOG_INTERVAL_MS;
     static constexpr uint32_t INTERNAL_HEAP_SHED_PROBE_INTERVAL_MS = LW_INTERNAL_HEAP_SHED_PROBE_INTERVAL_MS;
     static constexpr uint32_t INTERNAL_HEAP_LARGEST_BLOCK_NEAR_THRESHOLD_MARGIN = LW_INTERNAL_HEAP_LARGEST_BLOCK_NEAR_THRESHOLD_MARGIN;
-    // Force-clear shed after this many ms of continuous activation, regardless of
-    // free-heap state. Paired with a brief cooldown so the next probe tick can
-    // re-latch if the condition genuinely persists.
+    // Force-clear shed after this many ms of continuous activation, but only
+    // when free heap is between shed and resume thresholds.
     static constexpr uint32_t INTERNAL_HEAP_SHED_MAX_LATCH_MS = 10000U;
     // Post-clear grace: accept new WS connects for this window after the
     // shed latch drops, even if the next probe has not confirmed recovery

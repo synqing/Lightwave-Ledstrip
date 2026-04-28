@@ -190,6 +190,7 @@ Only after satisfying all four checks: proceed with commit.
 ## Hard Constraints
 
 - **K1 is AP-ONLY. NEVER enable STA mode.** K1 runs as a WiFi Access Point. Tab5 and iOS connect TO it. STA has never worked (driver-level auth failures, 6+ failed mitigations). See MEMORY.md `firmware_wifi_architecture.md` for full history. **Do not modify WiFi mode, add STA connection logic, or change AP configuration without explicit user approval.**
+- **Audio playback safety**: Never generate, select, or play audio through speakers/headphones unless Captain has explicitly approved that exact source. Approval for one audio file does not authorise other files, synthetic fixtures, white/pink noise, hats, cymbals, speech, generated tones, or any agent-chosen sound. For AFS/runtime audio capture, the approved reference corpus is `/Users/spectrasynq/Workspace_Management/Software/hybrid-beat-tracker/tests/benchmark` unless Captain explicitly names a different source. Before any playback, state the exact file/source, output path/device if known, volume assumption, duration, and stop command. If a capture matrix needs noise or synthetic fixtures, ask first and wait.
 - **Centre origin**: All effects originate from LED 79/80 outward (or inward to 79/80). No linear sweeps. Applies to all render modes including zone-specific renders. Exception: zone ID `0xFF` (global render) where the physical centre is still 79/80.
 - **No rainbows**: No rainbow cycling or full hue-wheel sweeps.
 - **No heap alloc in render**: No `new`/`malloc`/`String` in `render()` or any function transitively called from `render()`. Use static buffers. Includes helper functions, utility calls, and String concatenation.
@@ -268,6 +269,28 @@ pio device monitor -b 115200
 ```
 
 These two `_32khz` envs are the canonical K1 build path — pinned to ESV11 at 32 kHz / 125 Hz frame rate with the calibrated tempo/beat-tracking shim. Other envs in `platformio.ini` exist for benchmarks, native tests, and unrelated boards; do not build them for K1 work without explicit reason.
+
+### Tracing / Profiling — MabuTrace
+
+`TRACE_SCOPE` / `TRACE_COUNTER` / `TRACE_INSTANT` macros across the codebase are no-op stubs unless `FEATURE_MABUTRACE=1` is set. **The canonical K1 build envs do NOT enable tracing.** To capture telemetry:
+
+| Trace target | Env |
+|---|---|
+| K1 V2 (production hardware) | `esp32dev_audio_esv11_k1v2_32khz_trace` |
+| V1 dev boards | `esp32dev_audio_esv11_32khz_trace` |
+| PipelineCore | `esp32dev_audio_pipelinecore_trace` |
+| Bare ESV11 base | `esp32dev_audio_trace` |
+
+**Build + flash:** `pio run -e <env_trace> -t upload --upload-port /dev/tty.usbmodem<port>`
+
+**Capture (automated, one command):**
+```bash
+~/.platformio/penv/bin/python3 firmware-v3/tools/capture_trace.py \
+    --port /dev/tty.usbmodem2101 --effect 0xNNNN --soak 8 \
+    --output /tmp/trace.json --open
+```
+
+`capture_trace.py` switches effect, soaks, sends `trace`, strips `[TRACE]` markers, validates JSON, opens `https://ui.perfetto.dev`. Requires exclusive port access — close any other serial monitor first. Events record to a 64 KB on-chip ring buffer; Perfetto UI is Google's open-source viewer (JSON parsed in-browser, no uploads, no project portal). Full workflow + serial protocol: `firmware-v3/docs/debugging/MABUTRACE_GUIDE.md`. Spec for adding NEW TRACE_* points across the system: `firmware-v3/docs/debugging/TRACE_INSTRUMENTATION_SPEC.md`.
 
 ## Build (iOS)
 
@@ -400,6 +423,7 @@ Read **only** when the task requires it — do not load eagerly. Exception: WORK
 | Effect development standard | [firmware-v3/docs/EFFECT_DEVELOPMENT_STANDARD.md](firmware-v3/docs/EFFECT_DEVELOPMENT_STANDARD.md) | 500 | Creating or modifying effects |
 | Full REST API reference | [firmware-v3/docs/api/api-v1.md](firmware-v3/docs/api/api-v1.md) | 2,124 | API endpoint work — use QMD to search, do NOT read in full |
 | CQRS state architecture | [firmware-v3/docs/CQRS_STATE_ARCHITECTURE.md](firmware-v3/docs/CQRS_STATE_ARCHITECTURE.md) | 652 | State management, command dispatch |
+| MabuTrace tracing & Perfetto | [firmware-v3/docs/debugging/MABUTRACE_GUIDE.md](firmware-v3/docs/debugging/MABUTRACE_GUIDE.md) | ~200 | Capturing on-chip timeline traces; only when telemetry is needed |
 | Harness worker mode | [.claude/harness/HARNESS_RULES.md](.claude/harness/HARNESS_RULES.md) | 364 | Harness/test infrastructure |
 
 ## autocontext — Evolved Strategy Scenarios

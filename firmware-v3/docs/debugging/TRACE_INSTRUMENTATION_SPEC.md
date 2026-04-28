@@ -566,9 +566,9 @@ These rules must be respected by every implementing agent.
 ## Sibling docs
 
 - `firmware-v3/docs/debugging/MABUTRACE_GUIDE.md` — capture & view workflow (existing, last updated 2026-04-27). Implementing agent must update it with `_trace` env names, `bench` CLI grammar, and `analyse_trace.py --strict` CI invocation.
-- `firmware-v3/tools/capture_trace.py` — capture script (existing).
-- `firmware-v3/tools/analyse_trace.py` — analyser (per §8 of this doc, **TO BE IMPLEMENTED**).
-- `firmware-v3/tools/baselines/<env>_<effect>.json` — canonical baselines (per Open Question 9).
+- `firmware-v3/tools/capture_trace.py` — capture script (existing, 367 LOC).
+- `firmware-v3/tools/analyse_trace.py` — analyser (per §8 of this doc, **IMPLEMENTED** — 1,597 LOC stdlib-only, committed in fc122a25).
+- `firmware-v3/tools/baselines/k1v2_0xNNNN_YYYY-MM-DD.json` — canonical baselines (per Open Question 9). Seeded 2026-04-27 with `k1v2_0x210{0,1,2}_2026-04-27.json` from K1 V2 hardware (commit 929e6817). See `firmware-v3/tools/baselines/README.md`.
 - `firmware-v3/docs/debugging/trace_spec_sections/01..09_*.md` — full source detail per surface. Subordinate to this master spec.
 
 ---

@@ -102,6 +102,33 @@ static inline void emaArrayDt(float* arr,
 }
 
 /**
+ * @brief Dt-correct fade-to-black over an LED strip segment.
+ *
+ * Applies `dtDecay3` to each pixel in `leds[0..n-1]`, producing a
+ * frame-rate-independent trailing-glow / persistence decay.  Drop-in
+ * replacement for the frame-coupled `fadeToBlackBy(leds, n, ctx.fadeAmount)`
+ * pattern which decays 2× faster at 119 FPS than at 60 FPS.
+ *
+ * `rate60fps` is the per-channel survival fraction at the 60 fps reference:
+ *   - 0.95  → slow fade  (~3 s to black at 60 fps)
+ *   - 0.80  → fast fade  (~0.6 s to black at 60 fps)
+ *   - 0.0   → instant black each frame
+ *
+ * For the canonical SB-lineage fade rate, use `kDefaultFadeRate60fps = 0.84f`.
+ *
+ * @param leds        Pointer to the first CRGB element.
+ * @param n           Number of LEDs to process.
+ * @param rate60fps   Per-frame survival factor at 60 fps reference.
+ * @param dt          Actual frame interval in seconds (from ctx.dt).
+ */
+static inline void fadeToBlackByDt(CRGB* leds, size_t n,
+                                    float rate60fps, float dt) {
+    for (size_t i = 0; i < n; ++i) {
+        dtDecay3(leds[i], rate60fps, dt);
+    }
+}
+
+/**
  * @brief Elementwise linear interpolation between two float arrays.
  *
  * Writes `dest[i] = a[i] * (1 - alpha) + b[i] * alpha`. `dest` may alias `a`

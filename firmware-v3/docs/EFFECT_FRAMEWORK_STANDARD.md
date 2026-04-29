@@ -121,9 +121,9 @@ All temporal smoothing uses `α = 1 - exp(-dt/τ)` with explicit tau constants. 
 
 | # | Property | Disposition | Helper |
 |---|---|---|---|
-| I-1 | SQUARE_ITER count + 0.65/0.35 mix-back | **provide-reference-helper** (Captain Q6) | Hoist `applyContrast()` from `SbK1BaseEffect` to `effects/math/Contrast.h`. ~10 LOC. 5 effects open-coded `bin*bin` divergently — see ratification doc Q6 for list. |
+| I-1 | SQUARE_ITER count + 0.65/0.35 mix-back | **provide-reference-helper** ✓ DELIVERED | `effects/math/Contrast.h` — free function `applyContrast(bin, squareIter)` with `kSbK1SquareIter = 0.65f`. Identical to `SbK1BaseEffect::applyContrast`. 4 open-coders (`ChevronWaves`, `SnapwaveLinear`, `LGPWaveCollision`, `BloomParity`) may adopt; migration is optional, existing code unchanged. |
 | I-2 | Brightness→hue shift | **stay-free** | — |
-| I-3 | Trail persistence mechanism | **provide-reference-helper** (Captain Q7) | Add `fadeToBlackByDt()` to `PersistenceHelpers.h` wrapping `dtDecay3`. ~20 LOC. 20+ effects use frame-coupled `fadeToBlackBy(…, ctx.fadeAmount)`; 17 use dt-correct `dtDecay`. |
+| I-3 | Trail persistence mechanism | **provide-reference-helper** ✓ DELIVERED | `PersistenceHelpers.h::fadeToBlackByDt(leds, n, rate60fps, dt)` — wraps `dtDecay3`. Replaces frame-coupled `fadeToBlackBy(…, ctx.fadeAmount)` with dt-correct decay. 20+ callers may migrate; migration optional, existing code unchanged. |
 | I-4 | Geometry within mode | **stay-free** | Per-effect aesthetic IS its identity. |
 | I-5 | PRISM_COUNT / BULB_OPACITY | **stay-free** | Bloom V2 only consumer. |
 | I-6 | BASE_COAT baseline glow | **archive-as-deprecated** | ZERO references in K1; never ported from SB. |
@@ -173,8 +173,8 @@ After this standard lands, the following deliverables follow:
 |---|---|---|
 | **B** | This document | **DONE 2026-04-30** |
 | **D** | Lint detectors `check_stacked_smoothing`, `check_chromagram_positive`, `check_hard_set_brightness`, `check_local_silence_gate`, `check_frame_coupled_decay` | Skeletons in `tools/check_effect_contracts.py` (this commit); full implementation deferred |
-| **D** | I-1 helper hoist (`effects/math/Contrast.h`) | Pending Captain Q6 |
-| **D** | I-3 helper add (`PersistenceHelpers::fadeToBlackByDt`) | Pending Captain Q7 |
+| **D** | I-1 helper hoist (`effects/math/Contrast.h`) | **DONE 2026-04-30** |
+| **D** | I-3 helper add (`PersistenceHelpers::fadeToBlackByDt`) | **DONE 2026-04-30** |
 | **E** | Catalogue audit fleet (~7-10 SSAs) | Blocked on D detectors completing |
 | **F** | Per-effect remediation backlog | Blocked on E |
 | — | Golden-frame harness G5 (extend factory to ~106 effects) | Blocked on SbK1Base stub additions |
@@ -186,3 +186,4 @@ After this standard lands, the following deliverables follow:
 | Date | Author | Change |
 |------|--------|--------|
 | 2026-04-30 | agent:opus-4.7-1M | Created. Codifies SSA-3-CORE / SSA-3-INCIDENTAL / SSA-3-META recommendations as defaults: 9 MUST + 3 SHOULD across 12 LOAD-BEARING; 2 helper-hoist + 5 stay-free + 1 archive-deprecated across 8 INCIDENTAL; 96-bin path declared INCIDENTAL to SbK1Base family (M-RES); audit-all-with-lint-first (M-AUDIT); per-effect tests SHOULD-not-MUST (M-TEST). Captain has not formally ratified Q1–Q8 from `EFFECT_FRAMEWORK_RATIFICATION_2026-04-29.md`; this document records the agent-recommended defaults, Captain may override per protocol above. |
+| 2026-04-30 | agent:sonnet-4.6 | I-1 and I-3 helpers delivered: `effects/math/Contrast.h` (applyContrast + kSbK1SquareIter) and `PersistenceHelpers::fadeToBlackByDt`. Updated INCIDENTAL table and Outputs table to DONE. |

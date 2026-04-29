@@ -129,6 +129,23 @@ static inline void fadeToBlackByDt(CRGB* leds, size_t n,
 }
 
 /**
+ * @brief Convenience overload — uint8_t fadeBy matching FastLED convention.
+ *
+ * `fadeBy` is on the same 0–255 scale as FastLED's `fadeToBlackBy`.
+ * Internally converts to a frame-rate-independent rate:
+ *   rate60fps = (256 - fadeBy) / 256
+ *
+ * Migration: s/fadeToBlackBy(p, n, X)/fadeToBlackByDt(p, n, X, ctx.dt)/g
+ */
+static inline void fadeToBlackByDt(CRGB* leds, size_t n,
+                                    uint8_t fadeBy, float dt) {
+    const float rate60fps = (256.0f - static_cast<float>(fadeBy)) / 256.0f;
+    for (size_t i = 0; i < n; ++i) {
+        dtDecay3(leds[i], rate60fps, dt);
+    }
+}
+
+/**
  * @brief Elementwise linear interpolation between two float arrays.
  *
  * Writes `dest[i] = a[i] * (1 - alpha) + b[i] * alpha`. `dest` may alias `a`

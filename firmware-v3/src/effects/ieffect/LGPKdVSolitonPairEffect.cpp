@@ -18,6 +18,8 @@
 #include <FastLED.h>
 #include <cmath>
 #include <cstring>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -220,7 +222,7 @@ void LGPKdVSolitonPairEffect::render(plugins::EffectContext& ctx) {
     // =====================================================================
     // Fade for trail persistence
     // =====================================================================
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     // =====================================================================
     // Render loop: per-LED in strip 1 (mirrored via centerPairDistance)

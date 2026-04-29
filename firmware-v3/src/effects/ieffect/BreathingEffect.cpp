@@ -27,6 +27,8 @@
 // Unified logging system
 #define LW_LOG_TAG "Breathing"
 #include "../../utils/Log.h"
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -182,7 +184,7 @@ void BreathingEffect::renderBreathing(plugins::EffectContext& ctx) {
     // Audio → Color/Brightness (AUDIO-REACTIVE)
     // Time → Motion Speed (TIME-BASED, USER-CONTROLLED)
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 15);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, 15, ctx.getSafeDeltaSeconds());
 
     // ========================================================================
     // PHASE 1: TIME-BASED MOTION (User-controlled speed, NOT audio-reactive)
@@ -354,7 +356,7 @@ void BreathingEffect::renderPulsing(plugins::EffectContext& ctx) {
     // BLOOM_PULSE: Sharp radial expansion on beat with BPM-adaptive decay
     // Falls back to flux-driven transients when beat tracking unreliable
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);  // Faster fade for snappy feel
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, 30, ctx.getSafeDeltaSeconds());  // Faster fade for snappy feel
 
     float decayRate = 0.92f;  // Default: ~200ms decay
 
@@ -452,7 +454,7 @@ void BreathingEffect::renderTexture(plugins::EffectContext& ctx) {
     // BLOOM_TEXTURE: Slow organic drift with audio-modulated amplitude
     // Motion is TIME-BASED (Sensory Bridge pattern), audio→amplitude only
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 8);  // Slow fade for dreamy feel
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, 8, ctx.getSafeDeltaSeconds());  // Slow fade for dreamy feel
 
     // Audio-modulated wave AMPLITUDE parameters (not speed!)
     float timbralMod = 0.5f;   // Default if no audio

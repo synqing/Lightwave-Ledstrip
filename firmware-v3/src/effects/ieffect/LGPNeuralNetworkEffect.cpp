@@ -7,6 +7,8 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cstring>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -35,7 +37,7 @@ bool LGPNeuralNetworkEffect::init(plugins::EffectContext& ctx) {
 
 void LGPNeuralNetworkEffect::render(plugins::EffectContext& ctx) {
     // Fade to prevent color accumulation from additive blending
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     // Synaptic firing patterns with radial signal propagation
     m_time = (uint16_t)(m_time + (ctx.speed >> 2));

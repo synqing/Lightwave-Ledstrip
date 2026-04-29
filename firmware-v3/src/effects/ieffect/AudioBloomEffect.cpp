@@ -20,6 +20,8 @@
 
 #include <cmath>
 #include <cstring>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -134,7 +136,7 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
     if (!m_ps) return;
     const float rawDt = ctx.getSafeRawDeltaSeconds();
     // Clear output buffer
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 25);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, 25, ctx.getSafeDeltaSeconds());
 
 #if !FEATURE_AUDIO_SYNC
     (void)ctx;

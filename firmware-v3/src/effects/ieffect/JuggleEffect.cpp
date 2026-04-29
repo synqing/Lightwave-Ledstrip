@@ -8,6 +8,8 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <math.h>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -28,7 +30,7 @@ void JuggleEffect::render(plugins::EffectContext& ctx) {
     //
     // NOTE: dothue += 32 per dot (8 dots × 32 = 256 wrap) creates different colors per dot,
     // not rainbow cycling. Each dot uses a fixed hue per frame, not cycling through the wheel.
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     const bool audioOk = ctx.audio.available;
     const bool tempoOk = audioOk && (ctx.audio.tempoConfidence() >= 0.25f);

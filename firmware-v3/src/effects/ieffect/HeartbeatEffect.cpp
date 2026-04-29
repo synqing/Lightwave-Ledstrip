@@ -7,6 +7,8 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <Arduino.h>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -52,7 +54,7 @@ void HeartbeatEffect::render(plugins::EffectContext& ctx) {
     }
 
     // Fade existing
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     // Expand pulse from center
     if (m_beatState > 0 && m_pulseRadius < HALF_LENGTH) {

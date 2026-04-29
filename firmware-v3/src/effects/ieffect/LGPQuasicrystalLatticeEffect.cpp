@@ -16,6 +16,8 @@
 #include <FastLED.h>
 #include <cmath>
 #include <cstring>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 
 // AUTO_TUNABLES_BULK_BEGIN:LGPQuasicrystalLatticeEffect
@@ -134,7 +136,7 @@ void LGPQuasicrystalLatticeEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
     // FADE FOR TRAILS
     // =========================================================================
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     // =========================================================================
     // RENDER LOOP (per strip-local LED, mirrored to strip 2)

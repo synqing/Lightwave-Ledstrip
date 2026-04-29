@@ -9,6 +9,8 @@
 #include "../utils/FastLEDOptim.h"
 #include "../../config/features.h"
 #include <math.h>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 #ifndef PI
 #define PI 3.14159265358979323846f
@@ -131,7 +133,7 @@ void ChevronWavesEffect::render(plugins::EffectContext& ctx) {
     if (smoothedSpeed < 0.3f) smoothedSpeed = 0.3f;  // Prevent stalling
     m_chevronPos += speedNorm * 240.0f * smoothedSpeed * dt;  // dt-corrected: 240/sec at speedNorm=1
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, FADE_AMOUNT);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, FADE_AMOUNT, ctx.getSafeDeltaSeconds());
 
     for (uint16_t i = 0; i < ctx.ledCount && i < STRIP_LENGTH; i++) {
         // CRITICAL FIX: Use centerPairDistance() like working effects

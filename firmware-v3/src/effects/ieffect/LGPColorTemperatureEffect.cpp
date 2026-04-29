@@ -6,6 +6,8 @@
 #include "LGPColorTemperatureEffect.h"
 #include "../CoreEffects.h"
 #include <FastLED.h>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -29,7 +31,7 @@ void LGPColorTemperatureEffect::render(plugins::EffectContext& ctx) {
     float speed = ctx.speed / 255.0f;
 
     // Trail persistence — long fade for smooth ambient colour blending
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 8);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, 8, ctx.getSafeDeltaSeconds());
 
     m_phase += speed * 0.015f * 60.0f * dt;
 

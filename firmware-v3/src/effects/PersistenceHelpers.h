@@ -104,42 +104,35 @@ static inline void emaArrayDt(float* arr,
 /**
  * @brief Dt-correct fade-to-black over an LED strip segment.
  *
- * Applies `dtDecay3` to each pixel in `leds[0..n-1]`, producing a
- * frame-rate-independent trailing-glow / persistence decay.  Drop-in
- * replacement for the frame-coupled `fadeToBlackBy(leds, n, ctx.fadeAmount)`
- * pattern which decays 2× faster at 119 FPS than at 60 FPS.
+ * Drop-in replacement for FastLED's frame-coupled `fadeToBlackBy(leds, n, X)`.
+ * `fadeBy` is on the same 0–255 scale; internally converts to a dt-correct
+ * per-channel survival rate: rate = (256 - fadeBy) / 256.
  *
- * `rate60fps` is the per-channel survival fraction at the 60 fps reference:
- *   - 0.95  → slow fade  (~3 s to black at 60 fps)
- *   - 0.80  → fast fade  (~0.6 s to black at 60 fps)
- *   - 0.0   → instant black each frame
+ * Migration: s/fadeToBlackBy(p, n, X)/fadeToBlackByDt(p, n, X, ctx.getSafeDeltaSeconds())/g
  *
- * For the canonical SB-lineage fade rate, use `kDefaultFadeRate60fps = 0.84f`.
- *
- * @param leds        Pointer to the first CRGB element.
- * @param n           Number of LEDs to process.
- * @param rate60fps   Per-frame survival factor at 60 fps reference.
- * @param dt          Actual frame interval in seconds (from ctx.dt).
+ * @param leds    Pointer to the first CRGB element.
+ * @param n       Number of LEDs to process.
+ * @param fadeBy  Fade amount 0–255 (FastLED convention). 0 = no fade, 255 = instant black.
+ * @param dt      Actual frame interval in seconds (use ctx.getSafeDeltaSeconds()).
  */
 static inline void fadeToBlackByDt(CRGB* leds, size_t n,
-                                    float rate60fps, float dt) {
+                                    uint8_t fadeBy, float dt) {
+    const float rate60fps = (256.0f - static_cast<float>(fadeBy)) / 256.0f;
     for (size_t i = 0; i < n; ++i) {
         dtDecay3(leds[i], rate60fps, dt);
     }
 }
 
 /**
- * @brief Convenience overload — uint8_t fadeBy matching FastLED convention.
+ * @brief Dt-correct fade-to-black with explicit float survival rate.
  *
- * `fadeBy` is on the same 0–255 scale as FastLED's `fadeToBlackBy`.
- * Internally converts to a frame-rate-independent rate:
- *   rate60fps = (256 - fadeBy) / 256
+ * Use when you need a specific rate rather than a FastLED-integer fadeBy.
+ * Named distinctly from the uint8_t overload to avoid int-literal ambiguity.
  *
- * Migration: s/fadeToBlackBy(p, n, X)/fadeToBlackByDt(p, n, X, ctx.dt)/g
+ * @param rate60fps  Per-channel survival fraction at 60 fps reference [0, 1].
  */
-static inline void fadeToBlackByDt(CRGB* leds, size_t n,
-                                    uint8_t fadeBy, float dt) {
-    const float rate60fps = (256.0f - static_cast<float>(fadeBy)) / 256.0f;
+static inline void fadeToBlackByDtRate(CRGB* leds, size_t n,
+                                        float rate60fps, float dt) {
     for (size_t i = 0; i < n; ++i) {
         dtDecay3(leds[i], rate60fps, dt);
     }

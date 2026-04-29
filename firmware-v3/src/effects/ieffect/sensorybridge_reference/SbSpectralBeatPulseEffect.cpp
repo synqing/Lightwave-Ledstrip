@@ -26,6 +26,8 @@
 
 #include <cmath>
 #include <cstring>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos::effects::ieffect::sensorybridge_reference {
 
@@ -118,7 +120,7 @@ void SbSpectralBeatPulseEffect::renderEffect(plugins::EffectContext& ctx) {
 
     if (!ctx.audio.available) {
         // No audio: decay trail buffer toward black
-        fadeToBlackBy(m_ps->trailBuffer, kStripLength, 16);
+        fadeToBlackByDt(m_ps->trailBuffer, kStripLength, 16, ctx.getSafeDeltaSeconds());
         for (uint16_t i = 0; i < kStripLength && i < ctx.ledCount; ++i) {
             ctx.leds[i] = m_ps->trailBuffer[i];
         }
@@ -137,7 +139,7 @@ void SbSpectralBeatPulseEffect::renderEffect(plugins::EffectContext& ctx) {
         float decayRate = 5.0f + 18.0f * rmsNow;
         uint8_t fadeAmt = static_cast<uint8_t>(fminf(decayRate * dt * 255.0f, 220.0f));
         if (fadeAmt < 1) fadeAmt = 1;
-        fadeToBlackBy(m_ps->trailBuffer, kStripLength, fadeAmt);
+        fadeToBlackByDt(m_ps->trailBuffer, kStripLength, fadeAmt, ctx.getSafeDeltaSeconds());
     }
 
     // =====================================================================

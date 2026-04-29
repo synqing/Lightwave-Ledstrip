@@ -24,6 +24,8 @@
 
 #include <cmath>
 #include <cstdint>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -142,7 +144,7 @@ void LGPBeatPrismOnsetEffect::render(plugins::EffectContext& ctx) {
     const float dtVisual = AudioReactivePolicy::visualDt(ctx);
     m_audioPresence = trackAudioPresence(m_audioPresence, ctx.audio.available, dtSignal);
     if (m_audioPresence <= 0.001f) {
-        fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
+        fadeToBlackByDt(ctx.leds, ctx.ledCount, 30, ctx.getSafeDeltaSeconds());
         return;
     }
     const float confidence = ctx.audio.audioConfidence();
@@ -192,7 +194,7 @@ void LGPBeatPrismOnsetEffect::render(plugins::EffectContext& ctx) {
     const uint8_t baseHue = static_cast<uint8_t>(m_hue);
 
     // --- Render ---
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, 30, ctx.getSafeDeltaSeconds());
 
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         const float d = static_cast<float>(dist) / static_cast<float>(HALF_LENGTH);

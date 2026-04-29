@@ -17,6 +17,8 @@
 #include <FastLED.h>
 #include <cmath>
 #include <cstring>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 
 // AUTO_TUNABLES_BULK_BEGIN:LGPGoldCodeSpeckleEffect
@@ -194,7 +196,7 @@ void LGPGoldCodeSpeckleEffect::render(plugins::EffectContext& ctx) {
     // =====================================================================
     // Fade for persistence / trails
     // =====================================================================
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     // =====================================================================
     // Snapshot LFSR state (read-only in pixel loop)

@@ -16,6 +16,8 @@
 
 #ifndef NATIVE_BUILD
 #include <esp_heap_caps.h>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 #endif
 
 namespace lightwaveos {
@@ -57,7 +59,7 @@ void LGPPerlinShocklinesAmbientEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
     // Trail persistence: fade previous frame (long ambient trails)
     // =========================================================================
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 12);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, 12, ctx.getSafeDeltaSeconds());
 
     // =========================================================================
     // Periodic Shockwave Injection (time-based, no audio)

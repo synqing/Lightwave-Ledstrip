@@ -23,6 +23,8 @@
 
 #include <cmath>
 #include <cstring>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos::effects::ieffect {
 
@@ -61,7 +63,7 @@ void WaveformParityEffect::render(plugins::EffectContext& ctx) {
     if (!m_ps) return;
 
     if (!ctx.audio.available) {
-        fadeToBlackBy(ctx.leds, ctx.ledCount, 32);
+        fadeToBlackByDt(ctx.leds, ctx.ledCount, 32, ctx.getSafeDeltaSeconds());
         return;
     }
 

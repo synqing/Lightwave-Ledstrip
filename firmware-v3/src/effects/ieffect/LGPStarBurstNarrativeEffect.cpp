@@ -10,6 +10,8 @@
 
 #include <FastLED.h>
 #include <cmath>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -254,7 +256,7 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
         m_burst *= expf(-dtAudio / 0.10f);
     }
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     const uint8_t binStep = static_cast<uint8_t>(255.0f / 12.0f);
     // Derive integer root bin from circular angle (avoids wrap-around artefacts)

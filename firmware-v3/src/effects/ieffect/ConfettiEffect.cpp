@@ -6,6 +6,8 @@
 #include "ConfettiEffect.h"
 #include "../CoreEffects.h"
 #include <FastLED.h>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -17,7 +19,7 @@ ConfettiEffect::ConfettiEffect()
 
 bool ConfettiEffect::init(plugins::EffectContext& ctx) {
     // Clear buffer for stateful effect
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 20);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, 20, ctx.getSafeDeltaSeconds());
     return true;
 }
 
@@ -29,7 +31,7 @@ void ConfettiEffect::render(plugins::EffectContext& ctx) {
     // LED buffer state, making it a stateful effect. Identified in PatternRegistry::isStatefulEffect().
 
     // Fade all LEDs
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     // Spawn new confetti at CENTER PAIR
     if (random8() < 80) {

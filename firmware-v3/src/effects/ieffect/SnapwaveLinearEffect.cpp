@@ -28,6 +28,8 @@
 
 #include <cmath>
 #include <cstring>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -219,7 +221,7 @@ void SnapwaveLinearEffect::render(plugins::EffectContext& ctx) {
     // Dynamic: loud = short punchy trails, quiet = long ambient trails
     // =========================================
     uint8_t fadeAmount = (uint8_t)(20 + 40 * (1.0f - smoothRms));
-    fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, fadeAmount, ctx.getSafeDeltaSeconds());
 
     // =========================================
     // STEP 1: Smooth the peak (AsymmetricFollower: 20ms attack, 200ms release)

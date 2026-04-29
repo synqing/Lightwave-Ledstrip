@@ -12,6 +12,8 @@
 #endif
 
 #include <cmath>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos::effects::ieffect {
 
@@ -57,7 +59,7 @@ bool HeartbeatEsTunedEffect::init(plugins::EffectContext& ctx) {
 
 void HeartbeatEsTunedEffect::render(plugins::EffectContext& ctx) {
     // Trails: keep the original aesthetic, but all motion/trigger logic becomes audio-aware.
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     const float rawDt = ctx.getSafeRawDeltaSeconds();
     const float dt = ctx.getSafeDeltaSeconds();

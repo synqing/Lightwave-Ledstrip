@@ -7,6 +7,8 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -103,7 +105,7 @@ bool BreathingEnhancedEffect::init(plugins::EffectContext& ctx) {
 void BreathingEnhancedEffect::render(plugins::EffectContext& ctx) {
     // Enhanced Breathing: Audio → Color/Brightness, Time → Motion Speed
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     // ========================================================================
     // PHASE 1: TIME-BASED MOTION (User-controlled speed, NOT audio-reactive)

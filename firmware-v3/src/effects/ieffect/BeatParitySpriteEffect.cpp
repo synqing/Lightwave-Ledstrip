@@ -20,6 +20,8 @@
 
 #ifndef NATIVE_BUILD
 #include <esp_heap_caps.h>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 #endif
 
 namespace lightwaveos {
@@ -170,7 +172,7 @@ void BeatParitySpriteEffect::render(plugins::EffectContext& ctx) {
     {
         const float rmsCl = clamp01(rmsLevel);
         const uint8_t fadeAmount = (uint8_t)(18.0f + 12.0f * (1.0f - rmsCl));
-        fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmount);
+        fadeToBlackByDt(ctx.leds, ctx.ledCount, fadeAmount, ctx.getSafeDeltaSeconds());
     }
 
     // ─── Hard silence gate ────────────────────────────────────────────────

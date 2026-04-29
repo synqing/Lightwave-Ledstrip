@@ -27,6 +27,8 @@
 #include <cmath>
 #include <cstring>
 #include <cstdio>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -94,10 +96,10 @@ void LGPSpectrumDetailEnhancedEffect::render(plugins::EffectContext& ctx) {
 
     // Dynamic fade: loud = short punchy trails (40), quiet = long ambient trails (20)
     uint8_t fadeAmount = (uint8_t)(20 + 40 * (1.0f - smoothRms));
-    fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, fadeAmount, ctx.getSafeDeltaSeconds());
 
     // Fade reverse trail buffer - proportional to main fade
-    fadeToBlackBy(m_ps->radialTrail, HALF_LENGTH, (uint8_t)(fadeAmount * 3 / 4));
+    fadeToBlackByDt(m_ps->radialTrail, HALF_LENGTH, (uint8_t)(fadeAmount * 3 / 4), ctx.getSafeDeltaSeconds());
 
     // Compute per-frame alpha values from actual dt (truly frame-rate independent)
     const float smoothingAlpha = 1.0f - expf(-dt / SMOOTHING_TAU);

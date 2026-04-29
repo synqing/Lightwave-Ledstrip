@@ -11,6 +11,8 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -39,7 +41,7 @@ void LGPSolitonWavesRadialEffect::render(plugins::EffectContext& ctx) {
     const uint8_t solitonCount = 4;
     const float damping = 0.996f;
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     for (uint8_t s = 0; s < solitonCount; s++) {
         m_pos[s] += m_vel[s] * speedNorm;

@@ -19,6 +19,8 @@
 
 #include <cmath>
 #include <cstring>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos::effects::ieffect::sensorybridge_reference {
 
@@ -148,7 +150,7 @@ void SbK1BloomEffect::renderEffect(plugins::EffectContext& ctx) {
     return;
 #else
     if (!ctx.audio.available) {
-        fadeToBlackBy(ctx.leds, ctx.ledCount, 32);
+        fadeToBlackByDt(ctx.leds, ctx.ledCount, 32, ctx.getSafeDeltaSeconds());
         return;
     }
 

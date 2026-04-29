@@ -7,6 +7,8 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cstring>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -32,7 +34,7 @@ void LGPAuroraBorealisEffect::render(plugins::EffectContext& ctx) {
 
     const uint8_t curtainCount = 4;
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     for (uint8_t c = 0; c < curtainCount; c++) {
         m_curtainPhase[c] = (uint8_t)(m_curtainPhase[c] + (c + 1));

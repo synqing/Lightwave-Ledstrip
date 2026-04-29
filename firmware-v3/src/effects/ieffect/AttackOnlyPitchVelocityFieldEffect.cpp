@@ -39,6 +39,8 @@
 
 #include <cmath>
 #include <cstring>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -215,7 +217,7 @@ void AttackOnlyPitchVelocityFieldEffect::render(plugins::EffectContext& ctx) {
     // (1A0x effects). Creates trail persistence so subsequent `+=` writes
     // compose over a decaying residue rather than overwriting fresh black.
     // ------------------------------------------------------------------
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, 30, ctx.getSafeDeltaSeconds());
 
     // ------------------------------------------------------------------ S9 + S3
     // Hop-gated chroma → follower target capture.

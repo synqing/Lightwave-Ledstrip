@@ -14,6 +14,8 @@
 #include "../../config/features.h"
 #include <FastLED.h>
 #include <cmath>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -121,7 +123,7 @@ void LGPPerlinShocklinesEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
     // Rendering (centre-origin pattern)
     // =========================================================================
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     // Get treble for ridge sharpness
     float trebleNorm = 0.0f;

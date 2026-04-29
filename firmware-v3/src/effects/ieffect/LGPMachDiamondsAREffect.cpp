@@ -23,6 +23,8 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -251,7 +253,7 @@ void LGPMachDiamondsAREffect::render(plugins::EffectContext& ctx) {
     // Trail persistence: more energy = shorter trails (faster fade)
     const uint8_t fadeAmount = static_cast<uint8_t>(
         clampf(20.0f + 40.0f * (1.0f - normBass), 15.0f, 60.0f));
-    fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, fadeAmount, ctx.getSafeDeltaSeconds());
 
     // =================================================================
     // STEP 6: Per-pixel render — centre-outward, 4-way symmetric

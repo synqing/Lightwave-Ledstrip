@@ -24,34 +24,68 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 IEFFECT_DIR = ROOT / "src" / "effects" / "ieffect"
 
-FADE_PATTERN = re.compile(
-    r'\bfadeToBlackBy\s*\(([^)]+)\)'
-)
+# Matches the function name only; argument capture done with paren counting below.
+FADE_NAME_PATTERN = re.compile(r'(?<!\.)(?<!\w)\bfadeToBlackBy\s*\(')
 INCLUDE_LINE = '#include "effects/PersistenceHelpers.h"'
+USING_LINE = 'using lightwaveos::effects::persistence::fadeToBlackByDt;'
+
+# CRGB member call pattern — ctx.leds[i].fadeToBlackBy(X) — NOT migrated
+# (it's a FastLED CRGB method, not the free function).
+MEMBER_CALL_PATTERN = re.compile(r'\.\s*fadeToBlackBy\b')
+
+
+def _extract_call(text: str, name_end: int) -> tuple[str, int]:
+    """Starting at the '(' at name_end, find the matching ')'.
+    Returns (full_arg_string_without_outer_parens, index_after_closing_paren).
+    """
+    depth = 1
+    i = name_end + 1  # skip the opening '('
+    while i < len(text) and depth > 0:
+        if text[i] == '(':
+            depth += 1
+        elif text[i] == ')':
+            depth -= 1
+        i += 1
+    args = text[name_end + 1: i - 1]  # between outer parens
+    return args, i
 
 
 def migrate_text(text: str, filename: str) -> tuple[str, int]:
     """Returns (new_text, replacement_count)."""
     count = 0
+    result: list[str] = []
+    pos = 0
 
-    def replacer(m: re.Match) -> str:
-        nonlocal count
-        args = m.group(1)
-        # Skip if this is already fadeToBlackByDt (shouldn't match but be safe)
+    for m in FADE_NAME_PATTERN.finditer(text):
+        # m.end() points to just after the opening '('
+        open_paren = m.end() - 1  # index of '('
+        args, after = _extract_call(text, open_paren)
+        result.append(text[pos:m.start()])
+        result.append(f'fadeToBlackByDt({args}, ctx.getSafeDeltaSeconds())')
+        pos = after
         count += 1
-        return f'fadeToBlackByDt({args}, ctx.dt)'
 
-    new_text = FADE_PATTERN.sub(replacer, text)
+    result.append(text[pos:])
+    new_text = ''.join(result)
 
-    if count > 0 and INCLUDE_LINE not in new_text:
-        # Insert after the first #include line
+    if count > 0:
         lines = new_text.splitlines(keepends=True)
-        insert_at = 0
-        for i, line in enumerate(lines):
-            if line.startswith('#include'):
-                insert_at = i + 1
-        lines.insert(insert_at, INCLUDE_LINE + '\n')
-        new_text = ''.join(lines)
+        has_include = any(INCLUDE_LINE in line for line in lines)
+        has_using   = any(USING_LINE   in line for line in lines)
+        if not has_include or not has_using:
+            # Find insertion point: after last existing #include block
+            insert_at = 0
+            for i, line in enumerate(lines):
+                if line.startswith('#include'):
+                    insert_at = i + 1
+            inject = []
+            if not has_include:
+                inject.append(INCLUDE_LINE + '\n')
+            if not has_using:
+                inject.append(USING_LINE + '\n')
+            for j, extra in enumerate(inject):
+                lines.insert(insert_at + j, extra)
+            new_text = ''.join(lines)
 
     return new_text, count
 

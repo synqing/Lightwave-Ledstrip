@@ -14,6 +14,8 @@
 
 #ifndef NATIVE_BUILD
 #include <esp_heap_caps.h>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 #endif
 
 namespace lightwaveos {
@@ -72,7 +74,7 @@ bool RippleEnhancedEffect::init(plugins::EffectContext& ctx) {
 
 void RippleEnhancedEffect::render(plugins::EffectContext& ctx) {
     if (!m_ps) return;
-    fadeToBlackBy(m_ps->radial, HALF_LENGTH, ctx.fadeAmount);
+    fadeToBlackByDt(m_ps->radial, HALF_LENGTH, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     const bool hasAudio = ctx.audio.available;
     bool newHop = false;

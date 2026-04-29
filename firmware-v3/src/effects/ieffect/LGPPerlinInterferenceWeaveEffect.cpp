@@ -15,6 +15,8 @@
 #include "../../config/features.h"
 #include <FastLED.h>
 #include <cmath>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -93,7 +95,7 @@ void LGPPerlinInterferenceWeaveEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
     // Rendering (centre-origin pattern with dual-strip interference)
     // =========================================================================
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     // Weave intensity (flux-modulated)
     float weaveIntensity = 0.5f + fluxNorm * 0.5f; // 0.5-1.0

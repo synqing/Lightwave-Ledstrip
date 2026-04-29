@@ -18,6 +18,8 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -105,7 +107,7 @@ void WaveEffect::render(plugins::EffectContext& ctx) {
     if (m_fluxBoost < 0.01f) m_fluxBoost = 0.0f;
 
     // Gentle fade
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 12);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, 12, ctx.getSafeDeltaSeconds());
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         float distFromCenter = (float)centerPairDistance((uint16_t)i);

@@ -14,6 +14,8 @@
 
 #ifndef NATIVE_BUILD
 #include <esp_heap_caps.h>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 #endif
 
 namespace lightwaveos::effects::ieffect {
@@ -80,7 +82,7 @@ void RippleEsTunedEffect::render(plugins::EffectContext& ctx) {
         if (f > 58.0f) f = 58.0f;
         fade = static_cast<uint8_t>(f);
     }
-    fadeToBlackBy(m_ps->radial, HALF_LENGTH, fade);
+    fadeToBlackByDt(m_ps->radial, HALF_LENGTH, fade, ctx.getSafeDeltaSeconds());
 
     bool newHop = false;
 #if FEATURE_AUDIO_SYNC

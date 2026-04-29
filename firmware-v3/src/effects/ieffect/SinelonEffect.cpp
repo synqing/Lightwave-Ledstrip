@@ -7,6 +7,8 @@
 #include "../CoreEffects.h"
 #include "../utils/FastLEDOptim.h"
 #include <FastLED.h>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -23,7 +25,7 @@ bool SinelonEffect::init(plugins::EffectContext& ctx) {
 void SinelonEffect::render(plugins::EffectContext& ctx) {
     // CENTER ORIGIN SINELON - Oscillates outward from center
     using namespace utils;
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     // Oscillate from center outward using utility function
     int distFromCenter = fastled_beatsin16(13, 0, HALF_LENGTH);

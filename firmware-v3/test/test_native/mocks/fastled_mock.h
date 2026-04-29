@@ -44,8 +44,8 @@ struct CRGB {
     };
 
     // Constructors
-    inline CRGB() : r(0), g(0), b(0) {}
-    inline CRGB(uint8_t red, uint8_t green, uint8_t blue) : r(red), g(green), b(blue) {}
+    constexpr CRGB() : r(0), g(0), b(0) {}
+    constexpr CRGB(uint8_t red, uint8_t green, uint8_t blue) : r(red), g(green), b(blue) {}
     inline CRGB(uint32_t colorcode) :
         r((colorcode >> 16) & 0xFF),
         g((colorcode >> 8) & 0xFF),

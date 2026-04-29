@@ -430,17 +430,10 @@ SILENCE_GATE_COND_PATTERNS = (
     re.compile(r"\bavailable\s*(?:==\s*false|!=\s*true)\b"),
 )
 
-# Known pre-rule-#9 legacy exceptions — Phase E remediation targets.
-# These predate the global silent_scale; removal requires verifying the
-# global pipeline is consistently applied before the local gate is removed.
-SILENCE_GATE_ALLOWLIST: set[str] = {
-    "LGPSpectrumDetailEnhancedEffect.cpp",
-    "LGPSpectrumDetailEffect.cpp",
-    "AudioBloomEffect.cpp",
-    "WaveformParityEffect.cpp",
-    "TrinityTestEffect.cpp",
-    "AudioWaveformEffect.cpp",
-}
+# All Rule #9 silence gates have been removed from production effects.
+# This allowlist is intentionally empty — any new silence gate added to an
+# effect file will now be caught immediately by the lint check.
+SILENCE_GATE_ALLOWLIST: set[str] = set()
 
 # Rule #12 — frame-coupled decay: bare `*= 0.Xf;` with no dt on the line.
 # Restrict to [0.80–0.99]: temporal-decay coefficients live here at 60-120 FPS.

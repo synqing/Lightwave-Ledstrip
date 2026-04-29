@@ -153,10 +153,14 @@ def main():
                    help="Output JSON report path (default: stdout summary only)")
     p.add_argument("--markdown", type=Path, default=None,
                    help="Output markdown report path")
-    p.add_argument("--threshold-pass", type=float, default=0.5,
-                   help="Mean L2 threshold for pass (default 0.5; identical = 0)")
-    p.add_argument("--threshold-warn", type=float, default=5.0,
-                   help="Mean L2 threshold for warn (default 5.0)")
+    # Calibrated 2026-04-30 against the 12-capture matrix:
+    # self-compare L2 = 0.0 (deterministic), cross-scenario L2 ≈ 27, cross-effect L2 ≈ 27.
+    # Pass <= 0.1 means "essentially bit-identical with rounding tolerance".
+    # Warn <= 2.0 catches small palette / timing drift before they hit 27+ regression scale.
+    p.add_argument("--threshold-pass", type=float, default=0.1,
+                   help="Mean L2 threshold for pass (default 0.1; identical = 0)")
+    p.add_argument("--threshold-warn", type=float, default=2.0,
+                   help="Mean L2 threshold for warn (default 2.0)")
     p.add_argument("--quiet", action="store_true", help="Suppress stdout summary")
     args = p.parse_args()
 

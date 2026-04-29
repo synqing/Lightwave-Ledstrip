@@ -811,6 +811,61 @@ def check_raw_bins256_effect_access(violations: list[str], stats: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# EFFECT_FRAMEWORK_STANDARD detector skeletons (Phase D continuation surface).
+# Each is currently a no-op stub that records "not yet implemented" in stats.
+# Phase D: replace each body with the real AST/regex scan. Standard rule
+# numbers reference firmware-v3/docs/EFFECT_FRAMEWORK_STANDARD.md sections.
+# ---------------------------------------------------------------------------
+
+def check_stacked_smoothing(violations: list[str], stats: dict) -> None:
+    """Standard rule #2 — single-stage post-mode smoothing.
+    Phase D: scan effect class member declarations for >1
+    AsymmetricFollower / ExpDecay / Spring primitive operating on the same
+    audio scalar. Violations: stacked-smoothing chains (5L-AR pattern).
+    """
+    stats["stacked_smoothing_phaseD_status"] = "not_yet_implemented"
+
+
+def check_chromagram_positive(violations: list[str], stats: dict) -> None:
+    """Standard rule #6 — palette/hue from chromagram (positive pattern).
+    Phase D: regex strictness gated on Captain Q2.
+      strict — require explicit getChroma() / chromaSmooth / note_colors[i%12]
+      loose  — palette.getColor(gHue+offset) satisfies (no fill_rainbow)
+    Existing check_rainbow_inverted handles the negative side.
+    """
+    stats["chromagram_positive_phaseD_status"] = "not_yet_implemented"
+
+
+def check_hard_set_brightness(violations: list[str], stats: dict) -> None:
+    """Standard rule #8 — global brightness pipeline post-mode.
+    Phase D: grep render bodies for hard-set brightness literals:
+      CRGB(255, 255, 255), CRGB::White, CHSV(_, _, 255).
+    Violations: effects that bypass scale8(value, ctx.brightness).
+    """
+    stats["hard_set_brightness_phaseD_status"] = "not_yet_implemented"
+
+
+def check_local_silence_gate(violations: list[str], stats: dict) -> None:
+    """Standard rule #9 — silence gating is a global post-process.
+    Phase D: detect per-effect silence early-return patterns:
+      if (ctx.audio.rms() < threshold) return;
+      if (!ctx.audio.available) return;  // when used as gate
+    Violations: duplicate the global silent_scale → double-fading.
+    """
+    stats["local_silence_gate_phaseD_status"] = "not_yet_implemented"
+
+
+def check_frame_coupled_decay(violations: list[str], stats: dict) -> None:
+    """Standard rule #12 — rate-independent smoothing via tau constants.
+    Phase D: regex effect render bodies for bare `*= 0.\\d+f;` patterns
+    where the operand is not dt-derived (i.e. not via dtDecay / emaArrayDt /
+    1 - exp(-dt/tau)). 2026-02-21 partial audit covered 19 files; full
+    catalogue sweep awaits Captain Q5 verdict.
+    """
+    stats["frame_coupled_decay_phaseD_status"] = "not_yet_implemented"
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -836,6 +891,14 @@ def main() -> int:
     check_tempo_bank_in_render(violations, stats)
     check_geo_kill_patterns(violations, stats)
     check_fragmentation_patterns(warnings, stats)
+
+    # EFFECT_FRAMEWORK_STANDARD detector skeletons (Phase D — currently no-op).
+    # See firmware-v3/docs/EFFECT_FRAMEWORK_STANDARD.md for the rule numbers.
+    check_stacked_smoothing(violations, stats)        # rule #2
+    check_chromagram_positive(violations, stats)      # rule #6
+    check_hard_set_brightness(violations, stats)      # rule #8
+    check_local_silence_gate(violations, stats)       # rule #9
+    check_frame_coupled_decay(violations, stats)      # rule #12
 
     # Count total effect files
     effect_file_count = len(list(effect_files()))

@@ -29,7 +29,7 @@ Audio analysis (loop()) and LED rendering (led_thread()) run on separate cores/t
 
 **Source:** `SENSORY_BRIDGE_FIRMWARE.ino:107, 186-188`
 
-### 2. Single-stage post-mode smoothing on the spectrogram (asymmetric EMA)
+### 2. Single-stage post-mode smoothing on the spectrogram (symmetric EMA)
 
 `get_smooth_spectrogram()` applies one smoothing pass with a single alpha per bin: attack `distance * 0.75` when rising, decay `distance * 0.75` when falling. This is a symmetric 75% EMA on the distance, applied ONCE before every mode call, to `spectrogram_smooth[]`. Mode functions read `spectrogram_smooth[]`, NOT raw `spectrogram[]`. Any mode that applies additional smoothing layers on top of this adds a second stage and violates the pattern.
 

@@ -142,10 +142,6 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
     (void)ctx;
     return;
 #else
-    if (!ctx.audio.available) {
-        return;
-    }
-
     // Check if we have a new hop (update on hop sequence change)
     bool newHop = (ctx.audio.hopSequence() != m_lastHopSeq);
     if (newHop) {

@@ -134,11 +134,6 @@ void AudioWaveformEffect::render(plugins::EffectContext& ctx) {
     (void)ctx;
     return;
 #else
-    if (!ctx.audio.available) {
-        // No audio: just fade existing trails
-        applyDynamicFade(ctx, 0.0f);
-        return;
-    }
 
     // =========================================
     // STEP 1: Get current audio amplitude

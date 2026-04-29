@@ -113,10 +113,6 @@ void LGPSpectrumDetailEnhancedEffect::render(plugins::EffectContext& ctx) {
     (void)ctx;
     return;
 #else
-    if (!ctx.audio.available) {
-        return;
-    }
-
     // TODO: Migrate to bins256 + FrequencyMap for accurate frequency-to-LED mapping.
     // The bins64 shim path works but uses Goertzel log-spaced indexing which is not
     // frequency-accurate under the PipelineCore FFT backend. The correct long-term fix

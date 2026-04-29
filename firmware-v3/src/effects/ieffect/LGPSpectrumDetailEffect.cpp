@@ -68,10 +68,6 @@ void LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {
     (void)ctx;
     return;
 #else
-    if (!ctx.audio.available) {
-        return;
-    }
-
     // Primary source: full-resolution 256-bin FFT from PipelineCore.
     // Fallback source: 64-bin adaptive Goertzel spectrum.
     const float* bins64 = ctx.audio.bins64Adaptive();

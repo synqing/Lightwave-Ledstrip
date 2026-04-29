@@ -29,6 +29,9 @@
 #include <cmath>
 #include <cstring>
 #include "effects/PersistenceHelpers.h"
+#include "effects/math/Contrast.h"
+using lightwaveos::effects::math::applyContrast;
+using lightwaveos::effects::math::kSbK1SquareIter;
 using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
@@ -149,8 +152,8 @@ CRGB SnapwaveLinearEffect::computeChromaColor(const plugins::EffectContext& ctx)
             float prog = c / 12.0f;
             float bin = ctx.audio.getChroma(c);
 
-            // Square for contrast (SQUARE_ITER = 1)
-            float bright = bin * bin;
+            // Canonical contrast curve: 0.65/0.35 mix-back (brighter peaks, deeper lows)
+            float bright = applyContrast(bin, kSbK1SquareIter);
 
             if (bright > COLOR_THRESHOLD) {
                 uint8_t hue = (uint8_t)(prog * 255.0f + ctx.gHue);

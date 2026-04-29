@@ -10,6 +10,9 @@
 #include "../../config/features.h"
 #include <math.h>
 #include "effects/PersistenceHelpers.h"
+#include "effects/math/Contrast.h"
+using lightwaveos::effects::math::applyContrast;
+using lightwaveos::effects::math::kSbK1SquareIter;
 using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 #ifndef PI
@@ -69,7 +72,7 @@ void ChevronWavesEffect::render(plugins::EffectContext& ctx) {
             uint8_t dominantBin = 0;
             for (uint8_t i = 0; i < 12; ++i) {
                 float bin = ctx.audio.getChroma(i);
-                float bright = bin * bin;
+                float bright = applyContrast(bin, kSbK1SquareIter);
                 bright *= 1.5f;
                 if (bright > 1.0f) bright = 1.0f;
                 if (bright > maxBinVal) {

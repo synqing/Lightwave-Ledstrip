@@ -10,6 +10,9 @@
 #include "../../config/features.h"
 #include <math.h>
 #include "effects/PersistenceHelpers.h"
+#include "effects/math/Contrast.h"
+using lightwaveos::effects::math::applyContrast;
+using lightwaveos::effects::math::kSbK1SquareIter;
 using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 #ifndef PI
@@ -87,7 +90,7 @@ void ChevronWavesEnhancedEffect::render(plugins::EffectContext& ctx) {
             for (uint8_t i = 0; i < 12; ++i) {
                 // Use smoothed chromagram for energy calculation
                 float bin = m_chromaSmoothed[i];
-                float bright = bin * bin;
+                float bright = applyContrast(bin, kSbK1SquareIter);
                 bright *= 1.5f;
                 if (bright > 1.0f) bright = 1.0f;
                 if (bright > maxBinVal) {

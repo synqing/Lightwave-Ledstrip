@@ -394,6 +394,65 @@ FRAGMENTATION_NAME_PATTERNS = (
     re.compile(r"OscillatorArray", re.IGNORECASE),
 )
 
+# ---------------------------------------------------------------------------
+# Phase D — EFFECT_FRAMEWORK_STANDARD detector patterns
+# (Standard rules #2, #8, #9, #12 — LINT-DEFERRED now implemented)
+# ---------------------------------------------------------------------------
+
+# Rule #2 — stacked smoothing.  Maps smoother-type name to its detection regex.
+# Threshold: 3+ distinct types in one file = likely stacking chain.
+SMOOTHING_TYPE_PATTERNS: dict = {
+    "AsymmetricFollower": re.compile(r"\bAsymmetricFollower\b"),
+    "ExpDecay": re.compile(r"\bExpDecay\b"),
+    "Spring": re.compile(r"\bSpring\s*<"),  # Spring<T> template — avoids "spring" prose hits
+    "LowpassFilter": re.compile(r"\bLowpassFilter\b"),
+    "OneEuroFilter": re.compile(r"\bOneEuroFilter\b"),
+}
+SMOOTHING_STACKING_THRESHOLD = 3
+
+# Rule #8 — hard-set absolute brightness inside render().
+HARD_BRIGHTNESS_PATTERNS = (
+    re.compile(r"\bCRGB\s*\(\s*255\s*,\s*255\s*,\s*255\s*\)"),
+    re.compile(r"\bCRGB\s*::\s*White\b"),
+    re.compile(r"\bCHSV\s*\([^,)]+,[^,)]+,\s*255\s*\)"),
+)
+
+# Known pre-rule-#8 exceptions — Phase E remediation targets.
+# TestRig effects use absolute brightness deliberately for visual calibration.
+HARD_BRIGHTNESS_ALLOWLIST: set[str] = {
+    "LGPReactionDiffusionTestRigEffect.cpp",  # edge markers; test-rig diagnostic
+}
+
+# Rule #9 — per-effect silence early-return inside render().
+SILENCE_GATE_COND_PATTERNS = (
+    re.compile(r"\brms\b.*<"),                              # rms() < threshold
+    re.compile(r"!\s*(?:ctx\.audio\.)?available\b"),        # !audio.available
+    re.compile(r"\bavailable\s*(?:==\s*false|!=\s*true)\b"),
+)
+
+# Known pre-rule-#9 legacy exceptions — Phase E remediation targets.
+# These predate the global silent_scale; removal requires verifying the
+# global pipeline is consistently applied before the local gate is removed.
+SILENCE_GATE_ALLOWLIST: set[str] = {
+    "LGPSpectrumDetailEnhancedEffect.cpp",
+    "LGPSpectrumDetailEffect.cpp",
+    "AudioBloomEffect.cpp",
+    "WaveformParityEffect.cpp",
+    "TrinityTestEffect.cpp",
+    "AudioWaveformEffect.cpp",
+}
+
+# Rule #12 — frame-coupled decay: bare `*= 0.Xf;` with no dt on the line.
+# Restrict to [0.80–0.99]: temporal-decay coefficients live here at 60-120 FPS.
+# Static scale factors (0.125, 0.2, 0.5 etc.) are excluded; they are not
+# frame-rate-dependent and do not need the dtDecay fix.
+FRAME_COUPLED_DECAY_PATTERN = re.compile(
+    r"\*=\s*0\.(?:8[0-9]|9[0-9])\d*f?\s*;"
+)
+DT_DERIVED_INDICATORS = re.compile(
+    r"\bdt\b|\bdelta(?:Time|Ms)?\b|\belapsedMs\b|\bdtDecay\b|\bexpf?\s*\("
+)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -819,11 +878,29 @@ def check_raw_bins256_effect_access(violations: list[str], stats: dict) -> None:
 
 def check_stacked_smoothing(violations: list[str], stats: dict) -> None:
     """Standard rule #2 — single-stage post-mode smoothing.
-    Phase D: scan effect class member declarations for >1
-    AsymmetricFollower / ExpDecay / Spring primitive operating on the same
-    audio scalar. Violations: stacked-smoothing chains (5L-AR pattern).
+    Scans .cpp files for SMOOTHING_STACKING_THRESHOLD+ distinct smoother types
+    (AsymmetricFollower, ExpDecay, Spring<T>, LowpassFilter, OneEuroFilter).
+    Three or more distinct types in one file is the 5L-AR triple-smoothing
+    signature.  False-positive rate: medium-high (distinct types on *different*
+    audio scalars do not constitute stacking — reviewer must confirm).
     """
-    stats["stacked_smoothing_phaseD_status"] = "not_yet_implemented"
+    scanned = 0
+    flagged = 0
+    for path in effect_cpp_files():
+        scanned += 1
+        text = read_text(path)
+        types_present = [
+            name for name, pat in SMOOTHING_TYPE_PATTERNS.items() if pat.search(text)
+        ]
+        if len(types_present) >= SMOOTHING_STACKING_THRESHOLD:
+            violations.append(
+                f"[stacked-smoothing] {len(types_present)} distinct smoothing types in "
+                f"{path.name} ({', '.join(types_present)}) — "
+                f"verify these are NOT applied sequentially to the same audio scalar"
+            )
+            flagged += 1
+    stats["stacked_smoothing_scan_total"] = scanned
+    stats["stacked_smoothing_scan_flagged"] = flagged
 
 
 def check_chromagram_positive(violations: list[str], stats: dict) -> None:
@@ -838,31 +915,143 @@ def check_chromagram_positive(violations: list[str], stats: dict) -> None:
 
 def check_hard_set_brightness(violations: list[str], stats: dict) -> None:
     """Standard rule #8 — global brightness pipeline post-mode.
-    Phase D: grep render bodies for hard-set brightness literals:
+    Scans render() bodies for hard-set absolute brightness:
       CRGB(255, 255, 255), CRGB::White, CHSV(_, _, 255).
-    Violations: effects that bypass scale8(value, ctx.brightness).
+    Effects must write normalised values; the global brightness scale is
+    applied once by RendererActor::showLeds() + ColorCorrectionEngine.
+    False-positive rate: low.  Patterns are specific.
     """
-    stats["hard_set_brightness_phaseD_status"] = "not_yet_implemented"
+    scanned = 0
+    flagged = 0
+    for path in IEFFECT_DIR.rglob("*.cpp"):
+        if _is_reference_path(path):
+            continue
+        scanned += 1
+        if path.name in HARD_BRIGHTNESS_ALLOWLIST:
+            continue
+        lines = read_text(path).splitlines()
+        in_render = False
+        brace_depth = 0
+
+        for idx, line in enumerate(lines, start=1):
+            if not in_render:
+                if RENDER_START_PATTERN.search(line):
+                    in_render = True
+                    brace_depth = line.count("{") - line.count("}")
+                continue
+
+            code_part = line.split("//", 1)[0]
+            for pat in HARD_BRIGHTNESS_PATTERNS:
+                if pat.search(code_part):
+                    violations.append(
+                        f"[hard-set-brightness] Hard absolute brightness in render() "
+                        f"at {path.name}:{idx}"
+                    )
+                    flagged += 1
+                    break
+
+            brace_depth += line.count("{") - line.count("}")
+            if brace_depth <= 0:
+                in_render = False
+
+    stats["hard_set_brightness_scan_total"] = scanned
+    stats["hard_set_brightness_scan_flagged"] = flagged
 
 
 def check_local_silence_gate(violations: list[str], stats: dict) -> None:
     """Standard rule #9 — silence gating is a global post-process.
-    Phase D: detect per-effect silence early-return patterns:
-      if (ctx.audio.rms() < threshold) return;
-      if (!ctx.audio.available) return;  // when used as gate
-    Violations: duplicate the global silent_scale → double-fading.
+    Detects per-effect early-return patterns gated on audio availability or
+    RMS threshold inside render() bodies.  Duplicating the global silent_scale
+    produces double-fading artefacts.
+    False-positive rate: medium.  Legitimate non-gate `if (rms < x)` branches
+    without `return` are excluded; reviewer confirms flagged instances are gates.
     """
-    stats["local_silence_gate_phaseD_status"] = "not_yet_implemented"
+    scanned = 0
+    flagged = 0
+    for path in IEFFECT_DIR.rglob("*.cpp"):
+        if _is_reference_path(path):
+            continue
+        scanned += 1
+        if path.name in SILENCE_GATE_ALLOWLIST:
+            continue
+        lines = read_text(path).splitlines()
+        in_render = False
+        brace_depth = 0
+
+        for idx, line in enumerate(lines, start=1):
+            if not in_render:
+                if RENDER_START_PATTERN.search(line):
+                    in_render = True
+                    brace_depth = line.count("{") - line.count("}")
+                continue
+
+            code_part = line.split("//", 1)[0]
+            # Only flag when the if contains a silence-related condition
+            if re.search(r"\bif\s*\(", code_part):
+                for pat in SILENCE_GATE_COND_PATTERNS:
+                    if pat.search(code_part):
+                        # Check this line + next 3 lines for an early return
+                        window = "\n".join(
+                            l.split("//", 1)[0]
+                            for l in lines[idx - 1 : min(idx + 4, len(lines))]
+                        )
+                        if re.search(r"\breturn\b", window):
+                            violations.append(
+                                f"[local-silence-gate] Per-effect silence/availability "
+                                f"gate with early return in render() at {path.name}:{idx}"
+                            )
+                            flagged += 1
+                            break
+
+            brace_depth += line.count("{") - line.count("}")
+            if brace_depth <= 0:
+                in_render = False
+
+    stats["local_silence_gate_scan_total"] = scanned
+    stats["local_silence_gate_scan_flagged"] = flagged
 
 
 def check_frame_coupled_decay(violations: list[str], stats: dict) -> None:
     """Standard rule #12 — rate-independent smoothing via tau constants.
-    Phase D: regex effect render bodies for bare `*= 0.\\d+f;` patterns
-    where the operand is not dt-derived (i.e. not via dtDecay / emaArrayDt /
-    1 - exp(-dt/tau)). 2026-02-21 partial audit covered 19 files; full
-    catalogue sweep awaits Captain Q5 verdict.
+    Scans render() bodies for bare `*= 0.Xf;` patterns where the line
+    contains no dt / dtDecay / exp reference.  At 60-120 FPS variation,
+    these break predictably: use dtDecay() / 1-exp(-dt/tau) instead.
+    False-positive rate: high.  Static scale factors (colour mixing,
+    geometry) trigger the same pattern.  Per move_0_2 doctrine: expect
+    80-90% FP on first run; tighten regex after manual review.
     """
-    stats["frame_coupled_decay_phaseD_status"] = "not_yet_implemented"
+    scanned = 0
+    flagged = 0
+    for path in IEFFECT_DIR.rglob("*.cpp"):
+        if _is_reference_path(path):
+            continue
+        scanned += 1
+        lines = read_text(path).splitlines()
+        in_render = False
+        brace_depth = 0
+
+        for idx, line in enumerate(lines, start=1):
+            if not in_render:
+                if RENDER_START_PATTERN.search(line):
+                    in_render = True
+                    brace_depth = line.count("{") - line.count("}")
+                continue
+
+            code_part = line.split("//", 1)[0]
+            if (FRAME_COUPLED_DECAY_PATTERN.search(code_part)
+                    and not DT_DERIVED_INDICATORS.search(code_part)):
+                violations.append(
+                    f"[frame-coupled-decay] Frame-coupled alpha in render() at "
+                    f"{path.name}:{idx} — use dtDecay() / 1-expf(-dt/tau)"
+                )
+                flagged += 1
+
+            brace_depth += line.count("{") - line.count("}")
+            if brace_depth <= 0:
+                in_render = False
+
+    stats["frame_coupled_decay_scan_total"] = scanned
+    stats["frame_coupled_decay_scan_flagged"] = flagged
 
 
 # ---------------------------------------------------------------------------
@@ -937,6 +1126,17 @@ def main() -> int:
           f" | flagged: {stats.get('geo_kill_scan_flagged', 0)}")
     print(f"  Fragmentation warn: {stats.get('fragmentation_scan_total', 0)} .cpp/.h files checked"
           f" | flagged: {stats.get('fragmentation_scan_flagged', 0)}")
+    print(f"  Stacked-smoothing:  {stats.get('stacked_smoothing_scan_total', 0)} .cpp files checked"
+          f" | flagged: {stats.get('stacked_smoothing_scan_flagged', 0)}")
+    print(f"  Hard-set-bright:    {stats.get('hard_set_brightness_scan_total', 0)} .cpp files checked"
+          f" | allowlist: {len(HARD_BRIGHTNESS_ALLOWLIST)} files"
+          f" | flagged: {stats.get('hard_set_brightness_scan_flagged', 0)}")
+    print(f"  Silence-gate:       {stats.get('local_silence_gate_scan_total', 0)} .cpp files checked"
+          f" | allowlist: {len(SILENCE_GATE_ALLOWLIST)} files"
+          f" | flagged: {stats.get('local_silence_gate_scan_flagged', 0)}")
+    print(f"  Frame-coupled-α:    {stats.get('frame_coupled_decay_scan_total', 0)} .cpp files checked"
+          f" | flagged: {stats.get('frame_coupled_decay_scan_flagged', 0)} [high FP expected — iterate regex]")
+    print(f"  Chromagram-pos:     [PHASE-D DEFERRED — gated on Captain Q2 verdict]")
 
     if violations:
         return 1

@@ -910,6 +910,28 @@ struct EffectContext {
     uint16_t zoneLength;        ///< Zone length
 
     //--------------------------------------------------------------------------
+    // Dual-Strip Channel API (opt-in independent rendering)
+    //--------------------------------------------------------------------------
+    // K1 hardware is dual edge-lit LGP: two physical strips of 160 LEDs each,
+    // wired to separate FastLED controllers / GPIOs. Legacy effects render to
+    // ctx.leds[0..319] as a single virtual strip and RendererActor splits the
+    // unified buffer into m_strip1/m_strip2 via mirror memcpy.
+    //
+    // Effects that want truly independent strips (Cross-Strip Wave Interference,
+    // Phase Parallax, Frequency-Spatial Stereo, Onset-Rupture Mirror, etc.)
+    // write directly to stripLeds[0]/stripLeds[1] and set dualChannelMode=true
+    // in render(). RendererActor then SKIPS the unified->strip memcpy so the
+    // asymmetric content reaches the LEDs intact. Centre origin is per-strip
+    // (LED 79 of each strip is its centre); use getDistanceFromStripCenter()
+    // for the per-strip equivalent of getDistanceFromCenter().
+
+    CRGB* stripLeds[2];         ///< Direct per-strip pointers (strip 0 + strip 1)
+    uint16_t stripLength;       ///< LEDs per strip (160 for K1 v2)
+    uint8_t stripCount;         ///< Number of physical strips (2 for K1 v2)
+    uint16_t stripCenter;       ///< Centre LED index per strip (79 for K1 v2)
+    bool dualChannelMode;       ///< Effect set true => wrote stripLeds[] directly; skip mirror memcpy
+
+    //--------------------------------------------------------------------------
     // Audio Context (Phase 2 - Audio Sync)
     //--------------------------------------------------------------------------
 
@@ -981,6 +1003,22 @@ struct EffectContext {
             // Right side -> left side
             return centerPoint - 1 - (index - centerPoint);
         }
+    }
+
+    /**
+     * @brief Per-strip centre-origin distance (for DUAL_CHANNEL effects)
+     * @param ledIdx LED index within a single strip (0..stripLength-1)
+     * @return Distance from that strip's centre: 0.0 at stripCenter, 1.0 at strip edge
+     *
+     * Use this when writing to ctx.stripLeds[stripIdx][ledIdx] in a dual-channel
+     * effect — the regular getDistanceFromCenter() assumes the unified 320-LED
+     * virtual buffer with centre at LED 79 of that buffer, which is wrong when
+     * each physical strip has its own independent centre at index 79.
+     */
+    float getDistanceFromStripCenter(uint16_t ledIdx) const {
+        if (stripLength == 0 || stripCenter == 0) return 0.0f;
+        int16_t off = abs((int16_t)ledIdx - (int16_t)stripCenter);
+        return (float)off / (float)stripCenter;
     }
 
     /**

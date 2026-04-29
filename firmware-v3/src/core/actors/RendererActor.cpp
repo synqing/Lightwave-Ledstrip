@@ -1665,6 +1665,19 @@ void RendererActor::renderFrame()
     updateSharedOnsetContext(now / 1000u, static_cast<float>(deltaTimeMs) * 0.001f);
 #endif
 
+    // Phase 1B — Independent dispatch. Top and bottom strips render different
+    // effects to their own 160-LED buffers; ZoneComposer is bypassed in this
+    // mode (scope decision per Captain). showLeds() sees dualChannelMode=true
+    // and skips the unified->strip memcpy + applies tone-map per strip.
+    if (m_rendererMode == RendererMode::Independent) {
+        TRACE_SCOPE("render_independent");
+        renderStripIndependent(0, m_stripEffectId[0], deltaTimeMs);
+        renderStripIndependent(1, m_stripEffectId[1], deltaTimeMs);
+        m_effectContext.dualChannelMode = true;
+        m_hue += 1;
+        return;
+    }
+
     // Check if zone composer is enabled
     if (m_zoneComposer != nullptr && m_zoneComposer->isEnabled()) {
         TRACE_SCOPE("zone_compose");
@@ -1718,6 +1731,17 @@ void RendererActor::renderFrame()
         ctx.zoneId = 0xFF;  // Global render
         ctx.zoneStart = 0;
         ctx.zoneLength = 0;
+
+        // Dual-strip channel API — populate per-strip pointers + defaults.
+        // Effects opting into DUAL_CHANNEL set ctx.dualChannelMode = true in
+        // their render() body; legacy effects leave it false and the unified
+        // -> strip mirror memcpy below proceeds unchanged.
+        ctx.stripLeds[0] = m_strip1;
+        ctx.stripLeds[1] = m_strip2;
+        ctx.stripLength = LedConfig::LEDS_PER_STRIP;
+        ctx.stripCount = 2;
+        ctx.stripCenter = LedConfig::CENTER_LED_INDEX;
+        ctx.dualChannelMode = false;
 
         // =====================================================================
         // Phase 2: Audio Context Integration
@@ -1837,6 +1861,90 @@ void RendererActor::renderFrame()
     m_hue += 1;  // Slow rotation
 }
 
+// =============================================================================
+// Phase 1B — Independent strip dispatch helper
+// =============================================================================
+void RendererActor::renderStripIndependent(uint8_t stripIdx, EffectId eid, uint32_t deltaTimeMs)
+{
+    if (stripIdx > 1) return;
+    CRGB* dest = (stripIdx == 0) ? m_strip1 : m_strip2;
+    if (dest == nullptr) return;
+
+    EffectId safe = validateEffectId(eid);
+    const auto* reg = findById(safe);
+    if (!reg || !reg->active || !reg->effect) {
+        // Unregistered or inactive — clear the strip
+        memset(dest, 0, sizeof(CRGB) * LedConfig::LEDS_PER_STRIP);
+        return;
+    }
+
+    plugins::EffectContext& ctx = m_effectContext;
+
+    // Strip-local buffer + per-strip centre origin
+    ctx.leds = dest;
+    ctx.ledCount = LedConfig::LEDS_PER_STRIP;       // 160
+    ctx.centerPoint = LedConfig::CENTER_LED_INDEX;  // 79
+
+    // Frame-shared parameters (same on both strips this frame)
+    ctx.palette = plugins::PaletteRef(&m_currentPalette);
+    ctx.brightness = m_brightness;
+    ctx.speed = m_speed;
+    ctx.gHue = m_hue;
+    ctx.intensity = m_intensity;
+    ctx.saturation = m_saturation;
+    ctx.complexity = m_complexity;
+    ctx.variation = m_variation;
+    ctx.mood = m_mood;
+    ctx.fadeAmount = m_fadeAmount;
+    ctx.frameNumber = m_effectFrameCount;
+
+    float rawDeltaSeconds = static_cast<float>(deltaTimeMs) * 0.001f;
+    ctx.deltaTimeMs = deltaTimeMs;
+    ctx.deltaTimeSeconds = rawDeltaSeconds;
+    ctx.rawDeltaTimeMs = deltaTimeMs;
+    ctx.rawDeltaTimeSeconds = rawDeltaSeconds;
+    ctx.totalTimeMs = static_cast<uint32_t>(m_effectTimeSecondsRaw * 1000.0f + 0.5f);
+    ctx.rawTotalTimeMs = ctx.totalTimeMs;
+
+    ctx.zoneId = 0xFF;  // Independent mode is "global per strip" — no zone partitioning
+    ctx.zoneStart = 0;
+    ctx.zoneLength = 0;
+
+    // Per-strip pointers stay populated for any DUAL_CHANNEL-aware effect that
+    // wants to peek at the OTHER strip while it's rendering its own.
+    ctx.stripLeds[0] = m_strip1;
+    ctx.stripLeds[1] = m_strip2;
+    ctx.stripLength = LedConfig::LEDS_PER_STRIP;
+    ctx.stripCount = 2;
+    ctx.stripCenter = LedConfig::CENTER_LED_INDEX;
+    ctx.dualChannelMode = false;  // Outer code sets true once after both strips render
+
+#if FEATURE_AUDIO_SYNC
+    ctx.audio = m_sharedAudioCtx;
+    if (ctx.audio.available) {
+        ctx.audio.behaviorContext = plugins::selectBehavior(
+            ctx.audio.musicStyle(),
+            ctx.audio.saliencyFrame(),
+            ctx.audio.styleConfidence()
+        );
+    } else {
+        ctx.audio.behaviorContext = plugins::BehaviorContext{};
+    }
+#else
+    ctx.audio.available = false;
+#endif
+
+    // Phase 1B limitation: per-strip audio→visual parameter mapping is NOT
+    // applied here. Adding it requires a registry lookup per strip per frame
+    // and writing-back of mapped values; deferred until effect mappings prove
+    // to be needed in Independent mode.
+
+    {
+        TRACE_SCOPE("effect_render_strip");
+        reg->effect->render(ctx);
+    }
+}
+
 void RendererActor::showLeds()
 {
     if (m_strip1 == nullptr || m_strip2 == nullptr) {
@@ -1845,21 +1953,42 @@ void RendererActor::showLeds()
     // Conditional tone map: only additive-blending effects need washout control.
     // Non-additive effects skip entirely for sharper colour and ~3 ms savings.
     // LUT Reinhard (knee = 1.0): scale = 255 / (avg + 255), applied via nscale8.
+    // Tone map runs on whichever buffer holds the rendered content.
+    // - dualChannelMode false (legacy): unified m_leds[0..319] holds the frame
+    // - dualChannelMode true: effect wrote m_strip1/m_strip2 directly; tone-map per strip
     if (needsToneMap(m_currentEffect)) {
-        for (uint16_t i = 0; i < LedConfig::TOTAL_LEDS; ++i) {
-            const uint8_t r = m_leds[i].r;
-            const uint8_t g = m_leds[i].g;
-            const uint8_t b = m_leds[i].b;
-            if ((r | g | b) == 0) continue;  // Skip black pixels
-            const uint8_t avg = (uint16_t(r) + g + b) / 3;
-            m_leds[i].nscale8(kToneMapLUT[avg]);
+        if (m_effectContext.dualChannelMode) {
+            for (uint16_t i = 0; i < LedConfig::LEDS_PER_STRIP; ++i) {
+                CRGB& a = m_strip1[i];
+                if ((a.r | a.g | a.b) != 0) {
+                    const uint8_t avg = (uint16_t(a.r) + a.g + a.b) / 3;
+                    a.nscale8(kToneMapLUT[avg]);
+                }
+                CRGB& b = m_strip2[i];
+                if ((b.r | b.g | b.b) != 0) {
+                    const uint8_t avg2 = (uint16_t(b.r) + b.g + b.b) / 3;
+                    b.nscale8(kToneMapLUT[avg2]);
+                }
+            }
+        } else {
+            for (uint16_t i = 0; i < LedConfig::TOTAL_LEDS; ++i) {
+                const uint8_t r = m_leds[i].r;
+                const uint8_t g = m_leds[i].g;
+                const uint8_t b = m_leds[i].b;
+                if ((r | g | b) == 0) continue;  // Skip black pixels
+                const uint8_t avg = (uint16_t(r) + g + b) / 3;
+                m_leds[i].nscale8(kToneMapLUT[avg]);
+            }
         }
     }
 
-    // Copy from unified buffer to strip buffers
-    memcpy(m_strip1, &m_leds[0], sizeof(CRGB) * LedConfig::LEDS_PER_STRIP);
-    memcpy(m_strip2, &m_leds[LedConfig::LEDS_PER_STRIP],
-           sizeof(CRGB) * LedConfig::LEDS_PER_STRIP);
+    // Unified->strip mirror memcpy is skipped when the effect already wrote
+    // m_strip1/m_strip2 directly via ctx.stripLeds[] (DUAL_CHANNEL mode).
+    if (!m_effectContext.dualChannelMode) {
+        memcpy(m_strip1, &m_leds[0], sizeof(CRGB) * LedConfig::LEDS_PER_STRIP);
+        memcpy(m_strip2, &m_leds[LedConfig::LEDS_PER_STRIP],
+               sizeof(CRGB) * LedConfig::LEDS_PER_STRIP);
+    }
 
     // =========================================================================
     // Combined silence gate — merges the global silent_scale gate and the

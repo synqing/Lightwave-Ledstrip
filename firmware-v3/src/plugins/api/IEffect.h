@@ -99,7 +99,8 @@ enum class EffectRoleFlags : uint8_t {
     RENDERS_GEOMETRY_ONLY   = 1u << 2,  // writes value/position only — colour pass may run alongside (COM-16)
     INVERT_INPUT_OK         = 1u << 3,  // safe to feed inverted input for AntiMode negative space (COM-12)
     BACKGROUND              = 1u << 4,  // composes as background layer; absence = foreground (COM-04)
-    OPTS_OUT_OF_PERSISTENCE = 1u << 5   // skip PER-09/11/13/14/X persistence wrappers
+    OPTS_OUT_OF_PERSISTENCE = 1u << 5,  // skip PER-09/11/13/14/X persistence wrappers
+    DUAL_CHANNEL            = 1u << 6   // effect renders strips independently via ctx.stripLeds[]; tells RendererActor to skip the unified->strip mirror memcpy and run tone-map per strip
 };
 
 /**

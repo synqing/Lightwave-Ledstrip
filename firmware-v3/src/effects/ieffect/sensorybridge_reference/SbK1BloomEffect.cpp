@@ -1,9 +1,21 @@
 /**
  * @file SbK1BloomEffect.cpp
- * @brief K1.Lightwave Bloom mode — parity port of lightshow_modes.h:502-647
+ * @brief Canonical SB 4.1.1 light_mode_bloom port — Phase 5B PoC.
  *
- * Algorithm: centre-origin scrolling trail with chromagram colour synthesis.
- * See SbK1BloomEffect.h for full algorithm description.
+ * Algorithm: see SbK1BloomEffect.h for the full canonical step list.
+ *
+ * Phase 5B uses V1's existing drawSprite() static method (CRGB_F port of
+ * SB led_utilities.h:1247-1290) for the scroll. CRGB_F precision preserves
+ * sub-byte trail propagation — the Phase 5 PoC failed because the CRGB
+ * uint8 substrate truncated sub-1.0 values to zero after ~4 LEDs.
+ *
+ * Single PoC modification vs verbatim canonical SB: chroma input peak
+ * normalisation before colour synthesis. K1 ESV11 m_chromaSmooth is RAW
+ * (no max_peak tracker like SB's make_smooth_chromagram). Without input
+ * scale repair, K1 chroma values 0.05–0.3 produce bin² × 1/6 ≈ 0.015
+ * contributions and visibly dim bloom. The normalisation scales the
+ * strongest bin to 1.0, matching SB's input scale. This is INPUT scale
+ * repair — NOT post-sum totalMag normalisation (K1-team drift now removed).
  */
 
 #include "SbK1BloomEffect.h"
@@ -157,83 +169,76 @@ void SbK1BloomEffect::renderEffect(plugins::EffectContext& ctx) {
     CRGB_F* workBuf = m_bloom->workBuffer;
     CRGB_F* prevBuf = m_bloom->prevBuffer;
 
-    // -----------------------------------------------------------------
-    // Step 1: Clear working buffer
-    // -----------------------------------------------------------------
+    // ─────────────────────────────────────────────────────────────────
+    // Canonical SB 4.1.1 light_mode_bloom port (lightshow_modes.h:398-499).
+    // CRGB_F throughout. Frame-coupled timing (matches SB's fixed-rate
+    // semantics; not dt-corrected for this PoC).
+    // ─────────────────────────────────────────────────────────────────
+
+    // Step 1: Clear working buffer (SB: memset leds_16, 0, 128 × CRGB16).
     std::memset(workBuf, 0, kStripLen * sizeof(CRGB_F));
 
-    // -----------------------------------------------------------------
-    // Step 2: Fractional-pixel scroll — right half outward
-    //   Sub-pixel accumulator makes scroll speed continuous instead of
-    //   binary 1px/2px step. MOOD controls base speed (0.5–2.0 px/frame).
-    // -----------------------------------------------------------------
+    // Step 2: Sub-pixel additive scroll prevBuf → workBuf rightward.
+    //   SB: draw_sprite(leds, leds_prev, 128, 128, 0.25 + 1.75*MOOD, 0.99)
+    //   Uses V1's drawSprite() — CRGB_F port of SB led_utilities.h:1247-1290.
+    //   Unidirectional rightward shift; left half is overwritten by mirror
+    //   at step 11. Scroll position is fixed per frame (NOT audio-modulated).
     {
-        float baseSpeed = 0.5f + m_mood * 1.5f;
-        // Audio-reactive modulation: novelty boosts scroll 1.0x–1.5x
-        float energyMod = 1.0f + m_noveltyCurve[0] * 0.5f;
-        float scrollSpeed = fminf(baseSpeed * energyMod, 3.0f);
-        m_scrollAccum += scrollSpeed;
-        int pixelsToScroll = static_cast<int>(m_scrollAccum);
-        m_scrollAccum -= static_cast<float>(pixelsToScroll);
-        if (pixelsToScroll > 3) pixelsToScroll = 3;  // Prevent buffer overrun
-
-        if (pixelsToScroll > 0) {
-            for (int j = kStripLen - 1; j >= (int)(kHalf + pixelsToScroll); --j) {
-                workBuf[j] = prevBuf[j - pixelsToScroll];
-            }
-        }
+        const float scrollPosition = 0.25f + 1.75f * m_mood;
+        drawSprite(workBuf, prevBuf, kStripLen, kStripLen,
+                   scrollPosition, 0.99f);
     }
 
-    // -----------------------------------------------------------------
-    // Step 3: K1-parity colour synthesis from 12-bin chromagram
-    //   Additive accumulation of palette colours (one per active bin),
-    //   then normalize by total_magnitude. K1's normalization acts as
-    //   automatic brightness control — pushes output toward full brightness
-    //   regardless of absolute bin values. This is critical for trail
-    //   propagation distance.
-    // -----------------------------------------------------------------
+    // Step 3a: Chroma input peak normalisation (PoC modification).
+    //   K1 ESV11 m_chromaSmooth is RAW chroma (NO max_peak tracker like
+    //   SB's make_smooth_chromagram). K1 typical values 0.05–0.3 produce
+    //   visibly dim bloom under SB's verbatim formula. Local peak-normalise
+    //   to scale the strongest bin to 1.0, matching SB's input scale.
+    //   Floor at 0.05 prevents amplifying noise during silence.
+    float peakChroma = 0.0f;
+    for (uint8_t c = 0; c < 12; ++c) {
+        if (m_chromaSmooth[c] > peakChroma) peakChroma = m_chromaSmooth[c];
+    }
+    if (peakChroma < 0.05f) peakChroma = 0.05f;  // silence floor
+    const float invPeak = 1.0f / peakChroma;
+
+    // Step 3b: Chromagram colour synthesis (canonical SB).
+    //   SB: sum_color += hsv(i/12, SAT, chroma[i]² × 1/6) for each of 12 bins
+    //   NO threshold gate. NO totalMag normalisation. NO fallback colour.
+    //   bin uses peak-normalised value from step 3a.
+    constexpr float kBloomShare = 1.0f / 6.0f;
     const bool chromaticMode = (ctx.saturation >= 128);
 
     CRGB_F bloomColor = {0.0f, 0.0f, 0.0f};
-    float totalMag = 0.0f;
-
     for (uint8_t c = 0; c < 12; ++c) {
-        float bin = m_chromaSmooth[c];
-        bin = applyContrast(bin, m_contrast);
+        const float bin = m_chromaSmooth[c] * invPeak;     // peak-normalised
+        const float val = bin * bin * kBloomShare;          // SB: bin² × 1/6
+        if (val <= 0.0f) continue;
 
-        if (bin > 0.05f) {
-            float prog = c / 12.0f;
-            // BLOOM-SPECIFIC: start at cyan (0.5 offset), not red
-            float palPos = prog + 0.5f;
+        const float prog = c / 12.0f;
+        // BLOOM-SPECIFIC: cyan offset (0.5)
+        float palPos = prog + 0.5f;
+        if (chromaticMode) palPos += m_huePosition;
 
-            // K1 parity: only apply auto colour shift in chromatic mode
-            if (chromaticMode) {
-                palPos += m_huePosition;
-            }
+        const CRGB_F noteColor = paletteColorF(ctx.palette, palPos, val);
+        bloomColor += noteColor;
+    }
 
-            // K1 parity: palette lookup at bin brightness, then accumulate
-            // (matches K1's hsv(note_hue, SATURATION, bin) + additive sum)
-            CRGB_F noteColor = paletteColorF(ctx.palette, palPos, bin);
-            bloomColor += noteColor;
-            totalMag += bin;
+    // Step 4: Clip per channel at 1.0 (SB canonical).
+    bloomColor.clip();
+
+    // Step 5: SQUARE_ITER post-sum squarings (SB iterative gain).
+    //   m_contrast (0.0–3.0, default 1.0) reinterpreted as integer iter count.
+    {
+        const int squareIter = static_cast<int>(m_contrast);
+        for (int s = 0; s < squareIter; ++s) {
+            bloomColor.r *= bloomColor.r;
+            bloomColor.g *= bloomColor.g;
+            bloomColor.b *= bloomColor.b;
         }
     }
 
-    // K1 parity: normalize by total_magnitude (lines 572-576)
-    // This is the key to K1's brightness — dividing by totalMag pushes
-    // the max channel toward 1.0, ensuring bright centre inserts for
-    // trail propagation.
-    if (totalMag > 0.01f) {
-        bloomColor.r /= totalMag;
-        bloomColor.g /= totalMag;
-        bloomColor.b /= totalMag;
-    }
-
-    // Clip to [0,1]
-    bloomColor.clip();
-
-    // K1 parity: force_saturation — ensure vivid colours from palette
-#ifndef NATIVE_BUILD
+    // Step 6: force_saturation via HSV roundtrip (SB canonical).
     {
         CRGB tempRgb = bloomColor.toCRGB();
         CHSV tempHsv = rgb2hsv_approximate(tempRgb);
@@ -241,90 +246,48 @@ void SbK1BloomEffect::renderEffect(plugins::EffectContext& ctx) {
         hsv2rgb_rainbow(tempHsv, tempRgb);
         bloomColor = CRGB_F::fromCRGB(tempRgb);
     }
-#endif
 
-    // FAILSAFE: if chromagram produced no colour but audio is present,
-    // generate a fallback colour from hue position + RMS brightness
-    if (totalMag < 0.01f && ctx.audio.rms() > 0.02f) {
-        float fbPos = m_chromaHue + m_huePosition + 0.5f;
-        bloomColor = paletteColorF(ctx.palette, fbPos, ctx.audio.rms());
-        totalMag = ctx.audio.rms();
-    }
-
-    // -----------------------------------------------------------------
-    // Step 4: Non-chromatic mode — force palette position from CHROMA knob
-    //   K1 parity: force_hue() preserves brightness, replaces hue.
-    //   Palette equivalent: lookup at forced position using mixed brightness.
-    // -----------------------------------------------------------------
+    // Step 7: force_hue in non-chromatic mode (SB canonical).
     if (!chromaticMode) {
         float maxComp = fmaxf(bloomColor.r, fmaxf(bloomColor.g, bloomColor.b));
         if (maxComp < 0.001f) maxComp = 0.001f;
-        float forcedPos = m_chromaHue + m_huePosition;
+        const float forcedPos = m_chromaHue + m_huePosition;
         bloomColor = paletteColorF(ctx.palette, forcedPos, fminf(maxComp, 1.0f));
     }
 
-    // -----------------------------------------------------------------
-    // Step 6: Apply PHOTONS brightness
-    //   Scale by master brightness
-    // -----------------------------------------------------------------
-    const float photons = (float)ctx.brightness / 255.0f;
+    // PHOTONS — master brightness scale.
+    const float photons = static_cast<float>(ctx.brightness) / 255.0f;
     bloomColor *= photons;
     bloomColor.clip();
 
-    // -----------------------------------------------------------------
-    // Step 7: Insert colour at centre (K1 algo 0 parity)
-    // -----------------------------------------------------------------
-    // Smooth centre colour transitions (tau ~30ms — responsive but not jarring)
+    // Step 8: Direct centre injection at LEDs 79+80 (SB canonical, NO EMA).
+    workBuf[kCenterLeft]  = bloomColor;
+    workBuf[kCenterRight] = bloomColor;
+
+    // Step 9: Snapshot FULL workBuf → prevBuf BEFORE edge fade.
+    //   SB: memcpy(leds_16_prev, leds_16, sizeof) — full snapshot.
+    //   Critical: edge fade and mirror are OUTPUT-ONLY transforms; the
+    //   scroll state must remain un-faded so the next frame's drawSprite
+    //   reads from a clean source.
+    std::memcpy(prevBuf, workBuf, kStripLen * sizeof(CRGB_F));
+
+    // Step 10: Quadratic edge fade on outer 40 LEDs of right half.
+    //   SB: for (i=0..31) leds_16[127-i] *= (i/31)²  — 32 of 64 right-half LEDs.
+    //   K1 geometric scale: 50% of right half = kHalf/2 = 40 LEDs (120..159).
+    //   LED 159 (i=0)  → fade=0  (zeroed)
+    //   LED 120 (i=39) → fade=1  (unchanged)
     {
-        float blendAlpha = 1.0f - expf(-m_dt / 0.030f);
-        workBuf[kHalf].r = prevBuf[kHalf].r + (bloomColor.r - prevBuf[kHalf].r) * blendAlpha;
-        workBuf[kHalf].g = prevBuf[kHalf].g + (bloomColor.g - prevBuf[kHalf].g) * blendAlpha;
-        workBuf[kHalf].b = prevBuf[kHalf].b + (bloomColor.b - prevBuf[kHalf].b) * blendAlpha;
-    }
-
-    // -----------------------------------------------------------------
-    // Step 8: Save undistorted right half to scroll state
-    //   Only save BEFORE distortion so sqrt remap doesn't accumulate.
-    //   Only the right half matters — left half is always mirrored.
-    // -----------------------------------------------------------------
-    std::memcpy(&prevBuf[kHalf], &workBuf[kHalf], kHalf * sizeof(CRGB_F));
-
-    // -----------------------------------------------------------------
-    // Step 8.5: Sqrt spatial distortion on right half (K1 parity)
-    //   Remaps pixel positions: sqrt(prog) stretches near center,
-    //   compresses at edges. Creates visible ripple/band separation.
-    // -----------------------------------------------------------------
-    {
-        CRGB_F* distBuf = m_bloom->prismFxBuf;  // Reuse as scratch
-        for (uint16_t i = 0; i < kHalf; ++i) {
-            float prog = (float)i / (float)(kHalf - 1);
-            float prog_d = sqrtf(prog);
-            float srcF = (float)kHalf + prog_d * (float)(kHalf - 1);
-            if (srcF > (float)(kStripLen - 2)) srcF = (float)(kStripLen - 2);
-
-            // Sub-pixel linear interpolation
-            int srcLow = (int)srcF;
-            float frac = srcF - (float)srcLow;
-            int srcHigh = srcLow + 1;
-
-            distBuf[kHalf + i].r = workBuf[srcLow].r * (1.0f - frac) + workBuf[srcHigh].r * frac;
-            distBuf[kHalf + i].g = workBuf[srcLow].g * (1.0f - frac) + workBuf[srcHigh].g * frac;
-            distBuf[kHalf + i].b = workBuf[srcLow].b * (1.0f - frac) + workBuf[srcHigh].b * frac;
+        constexpr uint16_t kEdgeFadeCount = kHalf / 2;  // 40
+        for (uint16_t i = 0; i < kEdgeFadeCount; ++i) {
+            const float prog = static_cast<float>(i)
+                             / static_cast<float>(kEdgeFadeCount - 1);
+            const float fade = prog * prog;  // quadratic
+            workBuf[kStripLen - 1 - i] *= fade;
         }
-        std::memcpy(&workBuf[kHalf], &distBuf[kHalf], kHalf * sizeof(CRGB_F));
     }
 
-    // -----------------------------------------------------------------
-    // Step 9: Edge fade (linear, center=bright edge=dark — K1 parity)
-    // -----------------------------------------------------------------
-    for (uint16_t i = 0; i < kHalf; ++i) {
-        float fade = (float)(kHalf - 1 - i) / (float)(kHalf - 1);
-        workBuf[kHalf + i] *= fade;
-    }
-
-    // -----------------------------------------------------------------
-    // Step 10: Mirror right half to left half
-    // -----------------------------------------------------------------
+    // Step 11: Mirror right half (80..159) to left half (79..0).
+    //   SB: for (i=0..63) leds_16[i] = leds_16[127-i].
     for (uint16_t i = 0; i < kHalf; ++i) {
         workBuf[kCenterLeft - i] = workBuf[kCenterRight + i];
     }

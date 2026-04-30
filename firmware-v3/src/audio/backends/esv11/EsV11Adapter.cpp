@@ -181,23 +181,65 @@ void EsV11Adapter::buildFrame(lightwaveos::audio::ControlBusFrame& out,
     std::memcpy(out.waveform, es.waveform, sizeof(out.waveform));
 
     // --------------------------------------------------------------------
-    // Sensory Bridge parity side-car (3.1.0 waveform)
+    // Sensory Bridge parity side-car (3.1.0 waveform) — Phase 5C resampler
+    //
+    // K1 captures audio at 32 kHz; OG SB 3.1.0 captured at 12.2 kHz, giving
+    // 128 samples per chunk = 10.5 ms time span. K1's native 4 ms / 128
+    // sample window is sub-period for any musical content < 250 Hz —
+    // bass-frequency oscillations don't fit in one chunk, killing SB-style
+    // waveform motion (see audit 2026-04-30).
+    //
+    // Resample sb_waveform[128] from a 3-chunk raw history window at
+    // stride 3 → 12 ms total span (vs SB's 10.5 ms; close enough for PoC).
+    // Each output position represents an audio sample at a different time
+    // offset from "now", restoring the bass-cycle phase oscillations that
+    // drive SB-style waveform motion across the LEDs.
+    //
+    // out.waveform[128] is preserved unchanged as the native 32 kHz / 4 ms
+    // capture for any K1-native effect that needs raw fast audio.
     // --------------------------------------------------------------------
-    // Store waveform into history ring buffer (4-frame history).
-    for (uint8_t i = 0; i < lightwaveos::audio::CONTROLBUS_WAVEFORM_N; ++i) {
-        int16_t sample = es.waveform[i];
-        out.sb_waveform[i] = sample;
-        m_sbWaveformHistory[m_sbWaveformHistoryIndex][i] = sample;
+
+    // 1. Append current K1-native chunk into the raw 4-chunk history ring.
+    constexpr uint8_t kSbN = lightwaveos::audio::CONTROLBUS_WAVEFORM_N;  // 128
+    for (uint8_t i = 0; i < kSbN; ++i) {
+        m_sbWaveformHistory[m_sbWaveformHistoryIndex][i] = es.waveform[i];
     }
+    const uint8_t newestChunkIdx = m_sbWaveformHistoryIndex;
     m_sbWaveformHistoryIndex++;
     if (m_sbWaveformHistoryIndex >= SB_WAVEFORM_HISTORY) {
         m_sbWaveformHistoryIndex = 0;
     }
 
+    // 2. Resample sb_waveform[128] from the last 382 raw samples (≈ 12 ms
+    //    at 32 kHz, vs SB's 10.5 ms) using stride 3.
+    //
+    //    Concat ordering of the 4-slot history ring, oldest→newest:
+    //      chunkLocalIdx 0..3  ↔  age 3..0 (chunks back from newest)
+    //
+    //    Output index i reads concat position p = 130 + i*3.
+    //    p ∈ [130..511]; i=0 → oldest visible sample; i=127 → newest sample.
+    //    chunkLocalIdx = p / 128 (∈ [1..3] over this range; the oldest
+    //    chunk at age 3 is unread by stride-3 from start 130).
+    constexpr int kSbStride = 3;
+    constexpr int kSbStartConcatPos = 130;  // 511 - 127*3 (ends at newest)
+
+    for (uint8_t i = 0; i < kSbN; ++i) {
+        const int concatPos = kSbStartConcatPos + static_cast<int>(i) * kSbStride;
+        const int chunkLocalIdx = concatPos / kSbN;     // 1..3 in this stride
+        const int sampleInChunk = concatPos % kSbN;
+        const int age = (SB_WAVEFORM_HISTORY - 1) - chunkLocalIdx;  // 0..2
+        const int ringIdx =
+            (static_cast<int>(newestChunkIdx) - age + SB_WAVEFORM_HISTORY) %
+            SB_WAVEFORM_HISTORY;
+        out.sb_waveform[i] = m_sbWaveformHistory[ringIdx][sampleInChunk];
+    }
+
     // Peak follower (sweet spot scaling; matches Sensory Bridge 3.1.0).
+    // Compute peak from the SB-compatible window we just produced — keeps
+    // sb_waveform[] shape and sb_waveform_peak_scaled internally consistent.
     float maxWaveformValRaw = 0.0f;
-    for (uint8_t i = 0; i < lightwaveos::audio::CONTROLBUS_WAVEFORM_N; ++i) {
-        int16_t sample = es.waveform[i];
+    for (uint8_t i = 0; i < kSbN; ++i) {
+        int16_t sample = out.sb_waveform[i];
         int16_t absSample = (sample < 0) ? -sample : sample;
         if ((float)absSample > maxWaveformValRaw) {
             maxWaveformValRaw = (float)absSample;

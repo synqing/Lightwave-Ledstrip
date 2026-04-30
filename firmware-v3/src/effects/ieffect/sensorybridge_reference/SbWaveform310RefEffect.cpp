@@ -193,13 +193,11 @@ void SbWaveform310RefEffect::render(plugins::EffectContext& ctx) {
     }
 
     // ---------------------------------------------------------------------
-    // No fadeToBlackByDt — canonical SB 3.1.0 light_mode_waveform writes
-    // each LED directly every frame as a function of its per-LED EMA
-    // (waveformLast[]). The per-LED EMA IS the persistence mechanism;
-    // adding a frame-buffer fade muddies the independent-oscillator visual
-    // that creates SB's signature organic fluidity.
+    // Fade previous frame (trail persistence for waveform motion)
+    // Dynamic: loud = short punchy trails, quiet = long ambient trails
     // ---------------------------------------------------------------------
-    (void)smoothRms;  // smoothRms / m_rmsFollower retained for future tuning
+    uint8_t fadeAmount = (uint8_t)(25 + 35 * (1.0f - smoothRms));
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, fadeAmount, ctx.getSafeDeltaSeconds());
 
     // ---------------------------------------------------------------------
     // Waveform render (centre-origin resample of SB NATIVE_RESOLUTION=128)
@@ -245,20 +243,17 @@ void SbWaveform310RefEffect::render(plugins::EffectContext& ctx) {
 
         CRGB c((uint8_t)fminf(r, 255.0f), (uint8_t)fminf(g, 255.0f), (uint8_t)fminf(b, 255.0f));
 
-        // Direct LED write (canonical SB 3.1.0: leds[i] = colour * brightness).
-        // SB writes each LED FRESH every frame; the per-LED EMA above is the
-        // single persistence source. Replacing this with nblend(...,200) was
-        // K1-team drift that created a second persistence layer fighting the
-        // EMA, killing the organic per-LED fluidity. Direct write restores it.
+        // Blend new waveform with faded previous frame for temporal smoothing.
+        // nblend keeps ~80% new + ~20% residual from fadeToBlackBy.
         uint16_t left1 = CENTER_LEFT - dist;
         uint16_t right1 = CENTER_RIGHT + dist;
         uint16_t left2 = STRIP_LENGTH + CENTER_LEFT - dist;
         uint16_t right2 = STRIP_LENGTH + CENTER_RIGHT + dist;
 
-        if (left1 < ctx.ledCount)  ctx.leds[left1]  = c;
-        if (right1 < ctx.ledCount) ctx.leds[right1] = c;
-        if (left2 < ctx.ledCount)  ctx.leds[left2]  = c;
-        if (right2 < ctx.ledCount) ctx.leds[right2] = c;
+        if (left1 < ctx.ledCount)  nblend(ctx.leds[left1], c, 200);
+        if (right1 < ctx.ledCount) nblend(ctx.leds[right1], c, 200);
+        if (left2 < ctx.ledCount)  nblend(ctx.leds[left2], c, 200);
+        if (right2 < ctx.ledCount) nblend(ctx.leds[right2], c, 200);
     }
 #endif
 }

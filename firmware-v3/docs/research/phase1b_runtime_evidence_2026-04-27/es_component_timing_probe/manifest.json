@@ -1,0 +1,41 @@
+[
+  {
+    "id": "silence_idle",
+    "audio": null,
+    "effect": "0x2100",
+    "trace": "firmware-v3/docs/research/phase1b_runtime_evidence_2026-04-27/es_component_timing_probe/traces/silence_idle.json",
+    "report": "firmware-v3/docs/research/phase1b_runtime_evidence_2026-04-27/es_component_timing_probe/reports/silence_idle.report.md",
+    "summary_json": "firmware-v3/docs/research/phase1b_runtime_evidence_2026-04-27/es_component_timing_probe/reports/silence_idle.report.json",
+    "capture_returncode": 0,
+    "capture_stderr": "-- Opening /dev/tty.usbmodem2101 @ 115200 baud\n-- effect 0x2100\n-- Soaking 8.0s before trace dump...\n-- Sending `trace`...\n-- Saved 5484 trace events to /Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/firmware-v3/docs/research/phase1b_runtime_evidence_2026-04-27/es_component_timing_probe/traces/silence_idle.json (521.8 KB)\n",
+    "analyse_returncode": 0,
+    "analyse_stderr": "",
+    "analysed": true
+  },
+  {
+    "id": "snoop_vocal_gfunk",
+    "audio": "/Users/spectrasynq/Workspace_Management/Software/hybrid-beat-tracker/tests/benchmark/clips/Snoop_Dogg_-_Gin_and_Juice.wav",
+    "effect": "0x2100",
+    "trace": "firmware-v3/docs/research/phase1b_runtime_evidence_2026-04-27/es_component_timing_probe/traces/snoop_vocal_gfunk.json",
+    "report": "firmware-v3/docs/research/phase1b_runtime_evidence_2026-04-27/es_component_timing_probe/reports/snoop_vocal_gfunk.report.md",
+    "summary_json": "firmware-v3/docs/research/phase1b_runtime_evidence_2026-04-27/es_component_timing_probe/reports/snoop_vocal_gfunk.report.json",
+    "capture_returncode": 0,
+    "capture_stderr": "-- Opening /dev/tty.usbmodem2101 @ 115200 baud\n-- effect 0x2100\n-- Soaking 8.0s before trace dump...\n-- Sending `trace`...\n-- Saved 5487 trace events to /Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/firmware-v3/docs/research/phase1b_runtime_evidence_2026-04-27/es_component_timing_probe/traces/snoop_vocal_gfunk.json (522.4 KB)\n",
+    "analyse_returncode": 0,
+    "analyse_stderr": "",
+    "analysed": true
+  },
+  {
+    "id": "tool_heavy_effect",
+    "audio": "/Users/spectrasynq/Workspace_Management/Software/hybrid-beat-tracker/tests/benchmark/clips/TOOL_-_Lateralus.wav",
+    "effect": "0x2102",
+    "trace": "firmware-v3/docs/research/phase1b_runtime_evidence_2026-04-27/es_component_timing_probe/traces/tool_heavy_effect.json",
+    "report": "firmware-v3/docs/research/phase1b_runtime_evidence_2026-04-27/es_component_timing_probe/reports/tool_heavy_effect.report.md",
+    "summary_json": "firmware-v3/docs/research/phase1b_runtime_evidence_2026-04-27/es_component_timing_probe/reports/tool_heavy_effect.report.json",
+    "capture_returncode": 0,
+    "capture_stderr": "-- Opening /dev/tty.usbmodem2101 @ 115200 baud\n-- effect 0x2102\n-- Soaking 8.0s before trace dump...\n-- Sending `trace`...\n-- Saved 5501 trace events to /Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/firmware-v3/docs/research/phase1b_runtime_evidence_2026-04-27/es_component_timing_probe/traces/tool_heavy_effect.json (525.6 KB)\n",
+    "analyse_returncode": 0,
+    "analyse_stderr": "",
+    "analysed": true
+  }
+]

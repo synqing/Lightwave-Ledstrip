@@ -1,0 +1,59 @@
+>>> s
+
+=== LightwaveOS v2 Actor System ===
+State: 2
+Uptime: 2261490 ms
+Active actors: 3
+Total messages: 25378
+Heap: 8017671 / min 8015887 bytes
+SPIRAM free: 7999847 bytes
+
+--- Renderer ---
+Effect: 8450 (Beat Parity Sprite)
+Brightness: 239
+Speed: 25
+FPS: 119 (target: 120)
+CPU: 100%
+Frames: 253764, Drops: 1
+Frame time: avg=8378, min=8360, max=27431 us
+LED show: avg=535, max=2091 us, skips=0
+Stack watermark: 10256 words
+
+--- ShowDirector ---
+Has show: NO
+
+--- MessageBus ---
+
+=== MessageBus Subscriptions ===
+Active entries: 2/32
+Published: 25378, Delivered: 1, Failed: 0
+
+Type 0x83: 1 subscribers [ Renderer ]
+Type 0xD3: 1 subscribers [ ShowDirector ]
+================================
+
+===================================
+
+  Current effect type: IEffect (native)
+  Metadata: Beat Parity Sprite - Sprites radiate from LEDs 79/80 outward on kick onsets; soft bed between hits.
+
+>>> adbg status
+=== Audio Status (ES v1.1 backend) ===
+  RMS: 0.437  Flux: 0.283
+  BPM: 81.0  Conf: 0.227  BeatTick: 0
+  Onset: in=0.00418 floor=0.00538 act=0.000 gate[abs=0 act=1 prev=0 warm=0] flux=27.816 env=0.000 evt=0.000 k/s/h=0/0/0 us=1675
+[2269443][1;35m[WARN][0m[WebServer] Low-heap shedding FORCE-CLEARED after 10072 ms (internal=17824, largest=8180) — heap stuck in hysteresis band
+[2269748][1;35m[WARN][0m[WebServer] Low-heap shedding ENABLED (internal=17824, largest=8180, shed<18432,resume>28672)
+
+>>> dbg memory
+
+=== Memory Status ===
+  Free heap: 17824 bytes
+  Min free heap: 16304 bytes
+  Max alloc heap: 8180 bytes
+
+
+>>> stack_usage
+[2279850][1;35m[WARN][0m[WebServer] Low-heap shedding FORCE-CLEARED after 10102 ms (internal=17824, largest=8180) — heap stuck in hysteresis band
+[2280149][1;35m[WARN][0m[WebServer] Low-heap shedding ENABLED (internal=17824, largest=8180, shed<18432,resume>28672)
+

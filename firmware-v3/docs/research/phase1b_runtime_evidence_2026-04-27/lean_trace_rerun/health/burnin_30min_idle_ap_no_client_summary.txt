@@ -1,0 +1,12 @@
+raw=firmware-v3/docs/research/phase1b_runtime_evidence_2026-04-27/lean_trace_rerun/health/burnin_30min_idle_ap_no_client.txt
+duration_s=1805
+low_heap_shedding_lines=0
+panic_watchdog_lines=0
+free_heap_min_max=30520..30520
+min_free_heap_min_max=25280..25280
+max_alloc_heap_min_max=20468..20468
+fps_min_max=119..119
+led_avg_us_min_max=530..574
+led_max_us_min_max=1916..1916
+showSkips_min_max=0..0
+clients_min_max=0..0

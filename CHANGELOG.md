@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **tab5:** PSRAM-primary preset storage — NVS demoted to write-behind backup; no code path can silently erase user presets
 - **tab5:** Custom partition table — NVS enlarged from 20KB to 64KB (SPIFFS reduced by 44KB)
 - **tab5:** NVS health tracking (`isNvsHealthy()`) for storage diagnostics
+- **docs:** Synergy-topology research drop (audio lattice investigation, Nyquist LUT spec, musical logic audit §6.3 errata, canonical musical model, Phase 5 checkpoints, spazz redesign SSA packet, Phase 1B MabuTrace evidence bundle incl. reports + pipeline logs, AFSv2 draft, pathmode prompts, session notes under `docs/research/`). Root `.gitignore` / `firmware-v3/.gitignore` exceptions allow `phase1b_runtime_evidence_2026-04-27/**/reports/**` and `*.log` only under that tree.
 - **docs:** K1 landing page production pipeline — taglines, strategy, dual-state positioning, build spec, launch video spec, 5 HTML variants
 - **firmware:** Vendored FastLED 3.10.0 RMT4 `idf4_rmt_impl.cpp` overlay (non-blocking `showPixels`) with PlatformIO pre-script — `firmware-v3/patches/vendor/FastLED-3.10.0-rmt4/` and `firmware-v3/scripts/apply_fastled_rmt4_patch.py`
 - **scripts:** K1 loaded soak harness — serial stress (effect rotation, hotkeys, periodic `s` status) plus optional REST when the host can reach the K1 AP — `firmware-v3/scripts/k1_loaded_soak.py`

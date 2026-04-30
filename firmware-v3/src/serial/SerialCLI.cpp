@@ -38,6 +38,7 @@
 #include "plugins/api/IEffect.h"
 
 #include "utils/Log.h"
+#include "utils/BenchRegistry.h"
 
 #if FEATURE_TRANSITIONS
 #include "effects/transitions/TransitionEngine.h"
@@ -639,6 +640,84 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
         }
 #endif
     }
+    // -----------------------------------------------------------------
+    // Phase 1B — dual-strip channel mode + per-strip effect assignment
+    //   mode                  show current renderer mode + per-strip EIDs
+    //   mode 0 / mode u       Unified (legacy mirror; ZoneComposer applies)
+    //   mode 1 / mode i       Independent (different effect per strip)
+    //   s0 <eid> / s1 <eid>   set strip 0 / strip 1 effect (Independent only)
+    // -----------------------------------------------------------------
+    else if (peekChar == 'm' && input.length() > 1) {
+        if (inputLower.startsWith("mode")) {
+            handledMulti = true;
+            String arg = input.substring(4);
+            arg.trim();
+            String argLower = arg; argLower.toLowerCase();
+            if (arg.length() == 0) {
+                lightwaveos::actors::RendererMode m = renderer->getRendererMode();
+                EffectId s0 = renderer->getStripEffectId(0);
+                EffectId s1 = renderer->getStripEffectId(1);
+                Serial.printf("Renderer mode: %s\n",
+                              m == lightwaveos::actors::RendererMode::Unified ? "Unified" : "Independent");
+                Serial.printf("  Current effect (Unified): 0x%04X\n", renderer->getCurrentEffect());
+                Serial.printf("  Strip 0 effect: 0x%04X%s\n", s0,
+                              renderer->isEffectRegistered(s0) ? "" : " (unregistered, will fall back)");
+                Serial.printf("  Strip 1 effect: 0x%04X%s\n", s1,
+                              renderer->isEffectRegistered(s1) ? "" : " (unregistered, will fall back)");
+            } else if (argLower == "0" || argLower == "u" || argLower == "unified") {
+                renderer->setRendererMode(lightwaveos::actors::RendererMode::Unified);
+                Serial.printf("Renderer mode: " LW_CLR_GREEN "Unified" LW_ANSI_RESET " (mirror; ZoneComposer applies)\n");
+            } else if (argLower == "1" || argLower == "i" || argLower == "independent") {
+                // On entry to Independent, default both strips to current effect if not yet set
+                EffectId cur = renderer->getCurrentEffect();
+                if (renderer->getStripEffectId(0) == 0xFFFF) renderer->setStripEffectId(0, cur);
+                if (renderer->getStripEffectId(1) == 0xFFFF) renderer->setStripEffectId(1, cur);
+                renderer->setRendererMode(lightwaveos::actors::RendererMode::Independent);
+                Serial.printf("Renderer mode: " LW_CLR_GREEN "Independent" LW_ANSI_RESET
+                              " (s0=0x%04X, s1=0x%04X)\n",
+                              renderer->getStripEffectId(0), renderer->getStripEffectId(1));
+            } else {
+                Serial.printf("ERROR: unknown mode '%s' — use 0/u/unified or 1/i/independent\n", arg.c_str());
+            }
+        }
+    }
+    else if (peekChar == 's' && input.length() >= 2 &&
+             (inputLower[1] == '0' || inputLower[1] == '1') &&
+             (input.length() == 2 || input.charAt(2) == ' ')) {
+        // s0 or s1 — per-strip effect assignment (Independent only)
+        handledMulti = true;
+        uint8_t stripIdx = (inputLower[1] == '0') ? 0 : 1;
+        String idStr = (input.length() > 2) ? input.substring(3) : String();
+        idStr.trim();
+        if (idStr.length() == 0) {
+            EffectId cur = renderer->getStripEffectId(stripIdx);
+            Serial.printf("Strip %u effect: 0x%04X%s\n", stripIdx, cur,
+                          renderer->isEffectRegistered(cur) ? "" : " (unregistered)");
+        } else {
+            long rawId;
+            if (idStr.startsWith("0x") || idStr.startsWith("0X")) {
+                rawId = strtol(idStr.c_str(), nullptr, 16);
+            } else {
+                rawId = idStr.toInt();
+            }
+            EffectId effectId;
+            uint16_t effectCount = renderer->getEffectCount();
+            if (rawId >= 0 && rawId < effectCount) {
+                effectId = renderer->getEffectIdAt(rawId);
+            } else {
+                effectId = static_cast<EffectId>(rawId);
+            }
+            if (!renderer->isEffectRegistered(effectId)) {
+                Serial.printf("ERROR: Effect 0x%04X not registered\n", effectId);
+            } else {
+                renderer->setStripEffectId(stripIdx, effectId);
+                Serial.printf("Strip %u effect: 0x%04X " LW_CLR_GREEN "%s" LW_ANSI_RESET "%s\n",
+                              stripIdx, effectId, renderer->getEffectName(effectId),
+                              renderer->getRendererMode() == lightwaveos::actors::RendererMode::Independent
+                                  ? "" : " (Independent mode not active — use 'mode 1')");
+            }
+        }
+    }
 #if FEATURE_AUDIO_SYNC && FEATURE_AUDIO_BACKEND_ESV11
     // Runtime tempo parameter tuning: "tempo" shows current, "tempo <param> <value>" sets.
     else if (peekChar == 't' && inputLower.startsWith("tempo")) {
@@ -1184,6 +1263,111 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
 #endif
 
     // -----------------------------------------------------------------
+    // Bench Commands: runtime A/B toggle framework (Surface 7, Tier 3).
+    // Toggles are ALWAYS live (no FEATURE_MABUTRACE guard on mutation paths);
+    // only the trace-marker instants are gated, since TRACE_INSTANT is a
+    // no-op without MabuTrace.
+    // -----------------------------------------------------------------
+    else if (inputLower.startsWith("bench")) {
+        handledMulti = true;
+
+        String args = input.substring(5);
+        args.trim();
+        String argsLower = args;
+        argsLower.toLowerCase();
+
+        if (args.length() == 0 || argsLower == "list") {
+            const size_t n = ::lightwaveos::bench::BenchRegistry::count();
+            Serial.println();
+            Serial.println(F("=== Registered Bench Toggles ==="));
+            if (n == 0) {
+                Serial.println(F("  (none registered)"));
+            }
+            for (size_t i = 0; i < n; ++i) {
+                const auto& desc = ::lightwaveos::bench::BenchRegistry::at(i);
+                const bool current = (desc.value != nullptr) ? *desc.value : false;
+                Serial.printf("  %-30s [%-3s]  (default: %-3s)  %s\n",
+                              desc.name ? desc.name : "<null>",
+                              current ? "ON" : "OFF",
+                              desc.default_value ? "ON" : "OFF",
+                              desc.description ? desc.description : "");
+            }
+            Serial.println();
+        } else if (argsLower.startsWith("begin ")) {
+            String testName = args.substring(6);
+            testName.trim();
+            if (testName.length() == 0) {
+                Serial.println(F("ERROR: usage: bench begin <test_name>"));
+            } else {
+                TRACE_INSTANT("bench_begin");
+                Serial.printf("[bench] Starting run: %s (timestamp: %llu us)\n",
+                              testName.c_str(),
+                              static_cast<unsigned long long>(esp_timer_get_time()));
+            }
+        } else if (argsLower.startsWith("split ")) {
+            String variantName = args.substring(6);
+            variantName.trim();
+            if (variantName.length() == 0) {
+                Serial.println(F("ERROR: usage: bench split <variant_name>"));
+            } else {
+                TRACE_INSTANT("bench_split");
+                Serial.printf("[bench] Variant marker: %s (timestamp: %llu us)\n",
+                              variantName.c_str(),
+                              static_cast<unsigned long long>(esp_timer_get_time()));
+            }
+        } else if (argsLower == "end") {
+            TRACE_INSTANT("bench_end");
+            Serial.println(F("[bench] Run ended; markers flushed to trace."));
+        } else if (argsLower.startsWith("toggle ")) {
+            String toggleArgs = args.substring(7);
+            toggleArgs.trim();
+            int sp = toggleArgs.indexOf(' ');
+            if (sp <= 0) {
+                Serial.println(F("ERROR: usage: bench toggle <name> <on|off>"));
+            } else {
+                String toggleName = toggleArgs.substring(0, sp);
+                String valStr = toggleArgs.substring(sp + 1);
+                valStr.trim();
+                String valLower = valStr;
+                valLower.toLowerCase();
+                bool newVal = false;
+                bool parsed = true;
+                if (valLower == "on" || valLower == "true" || valLower == "1") {
+                    newVal = true;
+                } else if (valLower == "off" || valLower == "false" || valLower == "0") {
+                    newVal = false;
+                } else {
+                    parsed = false;
+                }
+                if (!parsed) {
+                    Serial.printf("ERROR: cannot parse value '%s' (expected on|off|true|false|1|0)\n",
+                                  valStr.c_str());
+                } else {
+                    const auto* desc =
+                        ::lightwaveos::bench::BenchRegistry::findByName(toggleName.c_str());
+                    if (desc == nullptr || desc->value == nullptr) {
+                        Serial.printf("ERROR: toggle not found: %s\n", toggleName.c_str());
+                    } else {
+                        const bool oldVal = *desc->value;
+                        *desc->value = newVal;
+                        TRACE_INSTANT("bench_toggle_set");
+                        Serial.printf("[bench] Toggle %s -> %s (was %s)\n",
+                                      desc->name,
+                                      newVal ? "ON" : "OFF",
+                                      oldVal ? "ON" : "OFF");
+                    }
+                }
+            }
+        } else if (argsLower == "reset") {
+            ::lightwaveos::bench::BenchRegistry::resetAll();
+            TRACE_INSTANT("bench_reset");
+            Serial.println(F("[bench] All toggles reset to defaults."));
+        } else {
+            Serial.println(F("ERROR: bench {list|begin <name>|split <variant>|end|toggle <name> <on|off>|reset}"));
+        }
+    }
+
+    // -----------------------------------------------------------------
     // Tempo Debug Commands: tempo (non-ESV11 backend)
     // -----------------------------------------------------------------
 #if FEATURE_AUDIO_SYNC && !FEATURE_AUDIO_BACKEND_ESV11 && !FEATURE_AUDIO_BACKEND_PIPELINECORE
@@ -1401,6 +1585,27 @@ void SerialCLI::handleMultiCharCommand(const String& input, const String& inputL
 }
 
 // ============================================================================
+// Phase 1C — Effect-cycle dispatch fork (Unified vs Independent)
+// ============================================================================
+//
+// Replaces direct actors.setEffect() calls from the four effect-cycle
+// keystrokes (space, n, N, L). In Unified mode, behaviour is identical to
+// the legacy path: the global m_currentEffect updates and the renderer
+// cleans up / initialises the new effect via the message-bus path. In
+// Independent mode, the chosen EID lands on m_stripEffectId[m_activeStripEditing]
+// only; the other strip is unchanged. m_currentEffect (SerialCLI's internal
+// display-order cursor) keeps tracking traversal regardless of mode.
+void SerialCLI::dispatchEffect(EffectId eid) {
+    auto* renderer = m_deps.renderer;
+    if (renderer != nullptr &&
+        renderer->getRendererMode() == lightwaveos::actors::RendererMode::Independent) {
+        renderer->setStripEffectId(m_activeStripEditing, eid);
+    } else if (m_deps.actors != nullptr) {
+        m_deps.actors->setEffect(eid);
+    }
+}
+
+// ============================================================================
 // Single-char hotkey handler
 // ============================================================================
 
@@ -1586,11 +1791,14 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
 
                 if (newEffectId != lightwaveos::INVALID_EFFECT_ID) {
                     m_currentEffect = newEffectId;
-                    actors.setEffect(m_currentEffect);
+                    dispatchEffect(m_currentEffect);
                     const char* suffix = (m_currentRegister == EffectRegister::REACTIVE) ? "[R]" :
                                          (m_currentRegister == EffectRegister::AMBIENT) ? "[M]" : "";
-                    Serial.printf("Effect 0x%04X%s: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n",
-                                  m_currentEffect, suffix, renderer->getEffectName(m_currentEffect));
+                    bool isIndep = (renderer != nullptr) &&
+                                   (renderer->getRendererMode() == lightwaveos::actors::RendererMode::Independent);
+                    Serial.printf("Effect 0x%04X%s: " LW_CLR_GREEN "%s" LW_ANSI_RESET "%s\n",
+                                  m_currentEffect, suffix, renderer->getEffectName(m_currentEffect),
+                                  isIndep ? (m_activeStripEditing == 0 ? " -> s0" : " -> s1") : "");
                 }
             }
             break;
@@ -1624,11 +1832,14 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
 
                 if (newEffectId != lightwaveos::INVALID_EFFECT_ID) {
                     m_currentEffect = newEffectId;
-                    actors.setEffect(m_currentEffect);
+                    dispatchEffect(m_currentEffect);
                     const char* suffix = (m_currentRegister == EffectRegister::REACTIVE) ? "[R]" :
                                          (m_currentRegister == EffectRegister::AMBIENT) ? "[M]" : "";
-                    Serial.printf("Effect 0x%04X%s: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n",
-                                  m_currentEffect, suffix, renderer->getEffectName(m_currentEffect));
+                    bool isIndep = (renderer != nullptr) &&
+                                   (renderer->getRendererMode() == lightwaveos::actors::RendererMode::Independent);
+                    Serial.printf("Effect 0x%04X%s: " LW_CLR_GREEN "%s" LW_ANSI_RESET "%s\n",
+                                  m_currentEffect, suffix, renderer->getEffectName(m_currentEffect),
+                                  isIndep ? (m_activeStripEditing == 0 ? " -> s0" : " -> s1") : "");
                 }
             }
             break;
@@ -1706,12 +1917,63 @@ void SerialCLI::handleSingleCharCommand(char cmd) {
 
             if (newEffectId != lightwaveos::INVALID_EFFECT_ID) {
                 m_currentEffect = newEffectId;
-                actors.setEffect(m_currentEffect);
+                dispatchEffect(m_currentEffect);
                 const char* suffix = (m_currentRegister == EffectRegister::REACTIVE) ? "[R]" :
                                      (m_currentRegister == EffectRegister::AMBIENT) ? "[M]" : "";
-                Serial.printf("Last effect 0x%04X%s: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n",
-                              m_currentEffect, suffix, renderer->getEffectName(m_currentEffect));
+                bool isIndep = (renderer != nullptr) &&
+                               (renderer->getRendererMode() == lightwaveos::actors::RendererMode::Independent);
+                Serial.printf("Last effect 0x%04X%s: " LW_CLR_GREEN "%s" LW_ANSI_RESET "%s\n",
+                              m_currentEffect, suffix, renderer->getEffectName(m_currentEffect),
+                              isIndep ? (m_activeStripEditing == 0 ? " -> s0" : " -> s1") : "");
             }
+            break;
+        }
+
+        case '?': {
+            // Phase 1C — cycle renderer mode (Unified <-> Independent).
+            // On entry to Independent, seed any unset strip with m_currentEffect
+            // so both strips show something rather than a black 0xFFFF fall-through.
+            if (renderer == nullptr) break;
+            using lightwaveos::actors::RendererMode;
+            RendererMode current = renderer->getRendererMode();
+            if (current == RendererMode::Unified) {
+                if (renderer->getStripEffectId(0) == lightwaveos::INVALID_EFFECT_ID) {
+                    renderer->setStripEffectId(0, m_currentEffect);
+                }
+                if (renderer->getStripEffectId(1) == lightwaveos::INVALID_EFFECT_ID) {
+                    renderer->setStripEffectId(1, m_currentEffect);
+                }
+                renderer->setRendererMode(RendererMode::Independent);
+                Serial.printf("Renderer mode: " LW_CLR_GREEN "Independent" LW_ANSI_RESET
+                              " (s0=0x%04X, s1=0x%04X) | active=s%u\n",
+                              renderer->getStripEffectId(0),
+                              renderer->getStripEffectId(1),
+                              m_activeStripEditing);
+            } else {
+                renderer->setRendererMode(RendererMode::Unified);
+                Serial.println("Renderer mode: " LW_CLR_GREEN "Unified" LW_ANSI_RESET
+                               " (mirror; ZoneComposer applies)");
+            }
+            break;
+        }
+
+        case '|': {
+            // Phase 1C — toggle active strip for effect-cycle keys.
+            // Always flips the variable; messaging differs per mode so the
+            // user is not confused when the toggle has no visual effect.
+            m_activeStripEditing = (m_activeStripEditing == 0) ? 1 : 0;
+            EffectId stripEid = (renderer != nullptr)
+                ? renderer->getStripEffectId(m_activeStripEditing)
+                : lightwaveos::INVALID_EFFECT_ID;
+            const char* name = (renderer != nullptr && renderer->isEffectRegistered(stripEid))
+                ? renderer->getEffectName(stripEid)
+                : "(unset)";
+            bool isIndep = (renderer != nullptr) &&
+                           (renderer->getRendererMode() ==
+                            lightwaveos::actors::RendererMode::Independent);
+            Serial.printf("Active strip: s%u (effect 0x%04X " LW_CLR_GREEN "%s" LW_ANSI_RESET ")%s\n",
+                          m_activeStripEditing, stripEid, name,
+                          isIndep ? "" : "  (no visual effect — Unified mode)");
             break;
         }
 

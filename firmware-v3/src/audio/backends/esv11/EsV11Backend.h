@@ -55,6 +55,20 @@ public:
      */
     bool readAndProcessChunk(uint64_t now_us);
 
+    struct ChunkTiming {
+        uint32_t capture_us = 0;
+        uint32_t magnitudes_us = 0;
+        uint32_t chroma_us = 0;
+        uint32_t vu_us = 0;
+        uint32_t tempo_us = 0;
+        uint32_t gpu_tick_us = 0;
+        uint32_t refresh_us = 0;
+        uint32_t dsp_us = 0;
+        uint32_t total_us = 0;
+    };
+
+    ChunkTiming lastChunkTiming() const { return m_lastChunkTiming; }
+
     /**
      * @brief Get the latest derived outputs for contract publishing.
      * @param out Output struct filled by value.
@@ -116,6 +130,7 @@ private:
     float m_beatPhase = 0.0f;          // 0..1, wraps at 1.0 → beat_tick
     uint64_t m_lastRefreshUs = 0;      // Delta timing for phase accumulator
     uint8_t m_beatInBar = 0;
+    ChunkTiming m_lastChunkTiming{};
 
     // Cached outputs
     EsV11Outputs m_latest{};

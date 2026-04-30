@@ -12,6 +12,8 @@
 #endif
 
 #include <cmath>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -195,7 +197,7 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
     if (m_hihatShimmer < 0.01f) m_hihatShimmer = 0.0f;
 
     // Clear buffer
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 35);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, 35, ctx.getSafeDeltaSeconds());
 
     // === RENDER CENTER PAIR OUTWARD ===
     uint8_t baseHue = chromaHueOffset;

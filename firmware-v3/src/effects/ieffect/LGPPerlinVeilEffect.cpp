@@ -14,6 +14,8 @@
 #include "../../config/features.h"
 #include <FastLED.h>
 #include <cmath>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -156,7 +158,7 @@ void LGPPerlinVeilEffect::render(plugins::EffectContext& ctx) {
     float smoothedRms = m_smoothRms.value;
     uint8_t fadeAmt = (uint8_t)(20 + 40 * (1.0f - fminf(smoothedRms, 1.0f)));
     if (fadeAmt < 20) fadeAmt = 20;   // Minimum fade for trail persistence
-    fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmt);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, fadeAmt, ctx.getSafeDeltaSeconds());
 
     for (uint16_t i = 0; i < STRIP_LENGTH; i++) {
         // Calculate distance from centre pair (0 at centre, 79 at edges)

@@ -1,21 +1,30 @@
 /**
  * @file SbK1BloomEffect.h
- * @brief K1.Lightwave Bloom mode ported to Ledstrip firmware-v3 IEffect
+ * @brief Canonical SB 4.1.1 light_mode_bloom port — Phase 5B PoC.
  *
- * This is a parity port of K1's `light_mode_bloom()` (lightshow_modes.h:502-647).
- * It produces a centre-origin scrolling trail driven by chromagram colour synthesis
- * with sub-pixel interpolation sprite blitting.
+ * Verbatim port of canonical Sensory Bridge 4.1.1 `light_mode_bloom()`
+ * (lightshow_modes.h:398-499). Operates entirely in CRGB_F for sub-byte
+ * trail precision (uint8 CRGB truncates sub-1.0 propagation values to
+ * zero, killing trails after ~4 LEDs — proven by failed Phase 5 PoC).
  *
- * Key algorithm steps:
- * 1. Clear working buffer
- * 2. Blit previous frame shifted outward (sub-pixel interpolation) with decay
- * 3. Synthesize colour from 12-bin chromagram (cyan-offset hue, Bloom-specific)
- * 4. Force saturation, apply photons brightness
- * 5. Insert colour at centre pair (LEDs 79/80)
- * 6. Save frame for next iteration
- * 7. Edge fade (quadratic, outer quarter)
- * 8. Mirror right half to left half
- * 9. Output to ctx.leds (both strips)
+ * Per-frame algorithm (canonical SB):
+ *   1. Clear working buffer (CRGB_F, float precision)
+ *   2. Sub-pixel scroll prevBuf → workBuf rightward via drawSprite()
+ *      (V1's existing CRGB_F port of SB led_utilities.h:1247-1290)
+ *   3a. Chroma input peak normalisation (PoC modification — input scale
+ *       repair for K1 ESV11 raw chroma vs SB's max_peak-normalised input)
+ *   3b. Synthesize colour: Σ palette[i/12 + 0.5] × bin² × 1/6 (canonical SB)
+ *   4. Clip per channel at 1.0 (canonical SB; NOT totalMag normalisation)
+ *   5. SQUARE_ITER post-sum squarings (canonical SB iterative gain)
+ *   6. force_saturation via HSV roundtrip
+ *   7. force_hue if non-chromatic mode
+ *   8. Direct injection at centre pair LEDs 79+80 (canonical SB; NO EMA)
+ *   9. Snapshot full workBuf → prevBuf BEFORE edge fade (canonical SB)
+ *   10. Quadratic edge fade outer 40 LEDs of right half (canonical SB,
+ *       50% of right half scaled to K1 geometry)
+ *   11. Mirror right half (80..159) → left half (79..0)
+ *   12. K1 post-processing: prism, bulb cover, incandescent filter
+ *   13. Output to ctx.leds + mirror to strip 2
  *
  * Derives from SbK1BaseEffect for shared chromagram/colour-shift pipeline.
  */
@@ -81,7 +90,6 @@ private:
     float m_incandescent = 0.0f;   // Warm-white filter blend
     float m_prismCount  = 1.42f;   // Prism layers (scale→mirror→additive blend)
     float m_bulbOpacity = 0.0f;    // Discrete bulb cover pattern opacity
-    float m_scrollAccum = 0.0f;  // Sub-pixel scroll accumulator
 
     // Parameter descriptors (defined in .cpp)
     static const plugins::EffectParameter s_params[kParamCount];

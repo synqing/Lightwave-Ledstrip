@@ -11,6 +11,7 @@
 #include "../../codec/WsCommonCodec.h"
 #include "../../utils/Log.h"
 #include "../../config/network_config.h"
+#include "../../config/Trace.h"
 #include "ws/WsOtaCommands.h"
 #include <cstring>
 #include <Arduino.h>
@@ -311,6 +312,9 @@ void WsGateway::handleConnect(AsyncWebSocketClient* client) {
 
     LW_LOGI("WS: Client %u connected from %s", client->id(), client->remoteIP().toString().c_str());
     m_stats.connectAccepted++;
+    // Surface 4 Tier 4: WS connect instant + client-id counter.
+    TRACE_INSTANT("ws_client_connected");
+    TRACE_COUNTER("ws_client_id", static_cast<int32_t>(client->id()));
 
     // When a slow client's outgoing queue fills, silently drop new frames instead of
     // closing the connection.  A missed status update is harmless (next one arrives 50 ms
@@ -456,6 +460,9 @@ void WsGateway::handleDisconnect(AsyncWebSocketClient* client) {
 
     m_stats.disconnects++;
     LW_LOGI("WS: Client %u disconnected", clientId);
+    // Surface 4 Tier 4: WS disconnect instant + client-id counter.
+    TRACE_INSTANT("ws_client_disconnected");
+    TRACE_COUNTER("ws_client_id", static_cast<int32_t>(clientId));
 
     const uint32_t nowMs = millis();
     const IPAddress ip = client->remoteIP();
@@ -646,6 +653,10 @@ bool WsGateway::validateOrigin(AsyncWebServerRequest* request) {
 }
 
 void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_t len) {
+    // Surface 4 Tier 1: count every dispatch attempt — captures the actual
+    // load on the WS path (rate-limited frames included; the perturbation
+    // metric is "frames seen", not "frames routed").
+    m_stats.dispatchCount++;
     // Rate limit check
     if (!m_checkRateLimit(client)) {
         // Structured telemetry: msg.recv with result="rejected", reason="rate_limit"

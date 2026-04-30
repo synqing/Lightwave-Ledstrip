@@ -29,6 +29,8 @@
 
 #include <cmath>
 #include <cstring>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos::effects::ieffect::sensorybridge_reference {
 
@@ -119,7 +121,7 @@ void SbSpectralEnvelopeEffect::renderEffect(plugins::EffectContext& ctx) {
 #else
     if (!ctx.audio.available) {
         // No audio: gentle decay and output
-        fadeToBlackBy(m_ps->trailBuffer, kStripLength, 16);
+        fadeToBlackByDt(m_ps->trailBuffer, kStripLength, 16, ctx.getSafeDeltaSeconds());
         memcpy(ctx.leds, m_ps->trailBuffer,
                sizeof(CRGB) * (kStripLength < ctx.ledCount ? kStripLength : ctx.ledCount));
         for (uint16_t i = 0; i < kStripLength && (kStripLength + i) < ctx.ledCount; ++i) {
@@ -140,7 +142,7 @@ void SbSpectralEnvelopeEffect::renderEffect(plugins::EffectContext& ctx) {
         float decayRate = 3.0f + 12.0f * rms;
         uint8_t fadeAmt = static_cast<uint8_t>(fminf(decayRate * dt * 255.0f, 200.0f));
         if (fadeAmt < 1) fadeAmt = 1;
-        fadeToBlackBy(m_ps->trailBuffer, kStripLength, fadeAmt);
+        fadeToBlackByDt(m_ps->trailBuffer, kStripLength, fadeAmt, ctx.getSafeDeltaSeconds());
     }
 
     // =================================================================

@@ -27,6 +27,10 @@ extern "C" void enableLoopWDT(void);
 #include "utils/Log.h"
 
 #include "config/features.h"
+#include "config/Trace.h"
+#if HAS_TEMP_SENSOR && !defined(NATIVE_BUILD)
+#include <driver/temp_sensor.h>  // Surface 5: legacy ESP-IDF 4.x API (arduino-esp32 v3.x)
+#endif
 #include "core/actors/ActorSystem.h"
 #include "hardware/EncoderManager.h"
 #include "core/actors/RendererActor.h"
@@ -58,6 +62,7 @@ extern "C" void enableLoopWDT(void);
 
 #if FEATURE_WEB_SERVER
 #include "network/WebServer.h"
+#include "network/webserver/WsGateway.h"
 using namespace lightwaveos::network;
 #endif
 
@@ -214,6 +219,22 @@ void setup() {
 
     // Phase 5: System monitoring (must be before actors start)
     initSystemMonitoring();
+
+#if HAS_TEMP_SENSOR && !defined(NATIVE_BUILD)
+    // Surface 5: arm ESP32-S3 die temperature sensor (legacy IDF 4.x API).
+    // L2 range covers -10..80 °C with ±1 °C accuracy — adequate for thermal
+    // throttle detection. Sensor stays running; reads cost ~50–100 µs.
+    {
+        temp_sensor_config_t tsCfg = TSENS_CONFIG_DEFAULT();
+        tsCfg.dac_offset = TSENS_DAC_L2;  // -10..80 °C, error <1 °C
+        if (temp_sensor_set_config(tsCfg) != ESP_OK ||
+            temp_sensor_start() != ESP_OK) {
+            LW_LOGW("Die temp sensor init failed; thermal counter disabled");
+        } else {
+            LW_LOGI("Die temp sensor armed (range -10..80 C, L2 DAC offset)");
+        }
+    }
+#endif
 
     // Phase 6: Actor system + effects + audio mapping
     initActorSystem(actors, renderer, captureStreamer);
@@ -466,6 +487,110 @@ void loop() {
 #endif
 
         lastStatus = now;
+    }
+
+    // Phase 1B trace health gauges. These deliberately run from loopTask at
+    // 1 Hz, never from audio/render hot paths.
+    static uint32_t lastTraceHealthMs = 0;
+    if (now - lastTraceHealthMs >= 1000) {
+        lastTraceHealthMs = now;
+#ifndef NATIVE_BUILD
+        const uint32_t heapFreeIntKb =
+            heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024U;
+        const uint32_t heapLargestIntKb =
+            heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024U;
+        const uint32_t heapFreePsKb =
+            heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) / 1024U;
+        const uint32_t heapLargestPsKb =
+            heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) / 1024U;
+        TRACE_COUNTER("heap_free_internal_kb",    static_cast<int32_t>(heapFreeIntKb));
+        TRACE_COUNTER("heap_largest_internal_kb", static_cast<int32_t>(heapLargestIntKb));
+        TRACE_COUNTER("heap_free_psram_kb",       static_cast<int32_t>(heapFreePsKb));
+        TRACE_COUNTER("heap_largest_psram_kb",    static_cast<int32_t>(heapLargestPsKb));
+        TRACE_COUNTER("task_stack_hwm_loop",
+                      static_cast<int32_t>(uxTaskGetStackHighWaterMark(nullptr)));
+
+        // Surface 5 Tier 4: heap-pressure thresholds with hysteresis.
+        // OOM warn: trip <20 KB free internal; rearm only after recovery >30 KB.
+        static bool oomWarnLatched = false;
+        if (!oomWarnLatched && heapFreeIntKb < 20U) {
+            TRACE_INSTANT("oom_warning");
+            oomWarnLatched = true;
+        } else if (oomWarnLatched && heapFreeIntKb >= 30U) {
+            oomWarnLatched = false;
+        }
+        // PSRAM pressure: trip <256 KB free; rearm above 320 KB.
+        static bool psramWarnLatched = false;
+        if (!psramWarnLatched && heapFreePsKb < 256U) {
+            TRACE_INSTANT("psram_pressure_warn");
+            psramWarnLatched = true;
+        } else if (psramWarnLatched && heapFreePsKb >= 320U) {
+            psramWarnLatched = false;
+        }
+
+#if HAS_TEMP_SENSOR
+        // Surface 5: die temperature in 0.1 °C fixed-point (e.g. 75.3 °C → 753).
+        // Skips emission silently on read failure — no garbage values.
+        float dieTempC = 0.0f;
+        if (temp_sensor_read_celsius(&dieTempC) == ESP_OK) {
+            TRACE_COUNTER("temp_celsius_x10",
+                          static_cast<int32_t>(dieTempC * 10.0f));
+            // Tier 4: thermal-throttle warn — trip ≥80 °C; rearm below 75 °C.
+            static bool thermalWarnLatched = false;
+            if (!thermalWarnLatched && dieTempC >= 80.0f) {
+                TRACE_INSTANT("thermal_throttle_warn");
+                thermalWarnLatched = true;
+            } else if (thermalWarnLatched && dieTempC < 75.0f) {
+                thermalWarnLatched = false;
+            }
+        }
+#endif
+#endif
+        if (renderer) {
+            const auto& led = renderer->getLedDriverStats();
+#ifndef NATIVE_BUILD
+            TRACE_COUNTER("task_stack_hwm_renderer",
+                          static_cast<int32_t>(renderer->getStackHighWaterMark()));
+#endif
+            TRACE_COUNTER("led_show_skips_total", static_cast<int32_t>(led.showSkips));
+            TRACE_COUNTER("led_show_avg_us", static_cast<int32_t>(led.avgShowUs));
+            TRACE_COUNTER("led_show_max_us", static_cast<int32_t>(led.maxShowUs));
+            TRACE_COUNTER("led_show_failures_total", static_cast<int32_t>(led.ledShowFailures));
+            TRACE_COUNTER("rmt_errors_total", static_cast<int32_t>(led.rmtErrors));
+            TRACE_COUNTER("rmt_underruns_total", static_cast<int32_t>(led.rmtUnderruns));
+        }
+#ifndef NATIVE_BUILD
+#if FEATURE_AUDIO_SYNC
+        if (auto* audioActor = ::actors.getAudio()) {
+            TRACE_COUNTER("task_stack_hwm_audio",
+                          static_cast<int32_t>(audioActor->getStackHighWaterMark()));
+        }
+#endif
+        if (auto* showDirector = ::actors.getShowDirector()) {
+            TRACE_COUNTER("task_stack_hwm_show_director",
+                          static_cast<int32_t>(showDirector->getStackHighWaterMark()));
+        }
+#endif
+#if FEATURE_WEB_SERVER
+        if (webServerInstance) {
+            TRACE_COUNTER("ws_client_count",
+                          static_cast<int32_t>(webServerInstance->getClientCount()));
+            TRACE_COUNTER("wifi_ap_mode", webServerInstance->isAPMode() ? 1 : 0);
+            // Surface 4 Tier 1: AP-only baseline + WS gateway counters.
+            TRACE_COUNTER("wifi_clients",
+                          static_cast<int32_t>(WiFi.softAPgetStationNum()));
+            if (auto* gw = webServerInstance->getWsGateway()) {
+                const auto stats = gw->getStats();  // by-value copy
+                TRACE_COUNTER("ws_clients",
+                              static_cast<int32_t>(stats.connectAccepted));
+                TRACE_COUNTER("ws_dispatch_count",
+                              static_cast<int32_t>(stats.dispatchCount));
+                TRACE_COUNTER("ws_errors",
+                              static_cast<int32_t>(stats.parseErrors + stats.unknownCommands));
+            }
+        }
+#endif
+        TRACE_COUNTER("trace_mode_enabled", TRACE_IS_ENABLED() ? 1 : 0);
     }
 
     // Update WebServer (if enabled)

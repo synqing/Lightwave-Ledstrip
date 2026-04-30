@@ -77,6 +77,7 @@ public:
 
         if (s1 != s0) {
             // One retry for consistency.
+            m_retryCount.fetch_add(1U, std::memory_order_relaxed);
             idx = m_active.load(std::memory_order_acquire);
             // Validate idx again after reload
             if (idx > 1) {
@@ -93,11 +94,17 @@ public:
      */
     uint32_t Sequence() const { return m_seq.load(std::memory_order_acquire); }
 
+    /**
+     * @brief Cumulative read retry count for cross-core copy diagnostics.
+     */
+    uint32_t RetryCount() const { return m_retryCount.load(std::memory_order_relaxed); }
+
 private:
     // Align to T to satisfy platforms with stricter alignment than 4 bytes.
     alignas(T) T m_buf[2]{};
     mutable std::atomic<uint32_t> m_active{0};
     mutable std::atomic<uint32_t> m_seq{0};
+    mutable std::atomic<uint32_t> m_retryCount{0};
 };
 
 } // namespace lightwaveos::audio

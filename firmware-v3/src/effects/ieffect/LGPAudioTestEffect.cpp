@@ -16,6 +16,8 @@
 #endif
 
 #include <cmath>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -112,7 +114,7 @@ void LGPAudioTestEffect::render(plugins::EffectContext& ctx) {
     // Dynamic: loud = short punchy trails, quiet = longer smooth trails
     // ========================================================================
     uint8_t fadeAmount = (uint8_t)(25 + 35 * (1.0f - rms));
-    fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, fadeAmount, ctx.getSafeDeltaSeconds());
 
     // ========================================================================
     // CENTER PAIR rendering: bands map from center (bass) to edges (treble)

@@ -12,6 +12,8 @@
 #endif
 
 #include <cmath>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos::effects::ieffect {
 
@@ -192,7 +194,7 @@ void LGPHolographicEsTunedEffect::render(plugins::EffectContext& ctx) {
     // Dynamic: more energy = shorter trails (punchier), less energy = longer trails
     // ---------------------------------------------------------------------
     uint8_t fadeAmount = (uint8_t)(15 + 35 * (1.0f - clamp01(smoothEnergy)));
-    fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, fadeAmount, ctx.getSafeDeltaSeconds());
 
     // ---------------------------------------------------------------------
     // Layer gains (instrument voicing)

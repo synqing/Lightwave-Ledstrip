@@ -1,0 +1,66 @@
+name: golden_frame_check
+
+# Triggers on PRs that touch effect source or harness infra.
+on:
+  pull_request:
+    paths:
+      - 'firmware-v3/src/effects/**'
+      - 'firmware-v3/src/plugins/api/EffectContext.h'
+      - 'firmware-v3/src/plugins/api/IEffect.h'
+      - 'firmware-v3/test/test_golden/**'
+      - 'firmware-v3/test/test_native/mocks/**'
+      - '.github/workflows/golden_frame_check.yml'
+
+jobs:
+  golden-frame:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++
+
+      - name: Build golden_runner
+        working-directory: firmware-v3/test/test_golden
+        run: bash build.sh
+
+      - name: Run capture matrix (3 effects × 4 scenarios)
+        working-directory: firmware-v3/test/test_golden
+        run: |
+          mkdir -p out
+          for E in BeatPulseShockwaveEffect BeatPulseStackEffect BeatPulseShockwaveCascadeEffect; do
+            for S in silence beat_pulse rms_ramp chroma_sweep; do
+              ./golden_runner "$E" "$S" "out/${E}_${S}.gfrm"
+            done
+          done
+
+      - name: Compare against committed golden references
+        working-directory: firmware-v3/test/test_golden
+        run: |
+          STATUS=0
+          mkdir -p reports
+          for f in out/*.gfrm; do
+            name=$(basename "$f" .gfrm)
+            ref="golden/${name}.gfrm"
+            if [ ! -f "$ref" ]; then
+              echo "::warning::No reference for $name (golden missing — first run?)"
+              continue
+            fi
+            python3 golden_compare.py "$ref" "$f" \
+              --report "reports/${name}.json" \
+              --markdown "reports/${name}.md" \
+              --threshold-pass 0.5 \
+              --threshold-warn 5.0
+            rc=$?
+            if [ $rc -gt $STATUS ]; then STATUS=$rc; fi
+          done
+          exit $STATUS
+
+      - name: Upload comparison reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-frame-reports
+          path: firmware-v3/test/test_golden/reports/

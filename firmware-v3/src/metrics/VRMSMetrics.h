@@ -67,7 +67,7 @@ struct VRMSTimings {
  */
 class VRMSMetricsEngine {
 public:
-    static constexpr uint16_t NUM_LEDS = 320;
+    static constexpr uint16_t kNumLeds = 320;
     static constexpr uint16_t HALF_LEDS = 160;
     static constexpr uint8_t CORR_WINDOW = 32;
 
@@ -105,7 +105,7 @@ public:
         uint32_t brtSum = 0, brtSumSq = 0;
         uint32_t tempDiffSum = 0;
 
-        for (uint16_t i = 0; i < NUM_LEDS; i++) {
+        for (uint16_t i = 0; i < kNumLeds; i++) {
             uint8_t val = leds[i].r;
             if (leds[i].g > val) val = leds[i].g;
             if (leds[i].b > val) val = leds[i].b;
@@ -158,9 +158,9 @@ public:
             : 159.5f;
 
         // Metric 5: Brightness Distribution
-        float mean = (float)brtSum / NUM_LEDS;
+        float mean = (float)brtSum / kNumLeds;
         v.brightnessMean = mean;
-        v.brightnessVariance = (float)brtSumSq / NUM_LEDS - mean * mean;
+        v.brightnessVariance = (float)brtSumSq / kNumLeds - mean * mean;
 
         // Metric 6: Temporal Frequency
         v.temporalFreq = (float)tempDiffSum / 81600.0f;
@@ -179,7 +179,7 @@ public:
                 if (leds[i].g > vL) vL = leds[i].g;
                 if (leds[i].b > vL) vL = leds[i].b;
 
-                uint16_t mirrorIdx = NUM_LEDS - 1 - i;
+                uint16_t mirrorIdx = kNumLeds - 1 - i;
                 uint8_t vR = leds[mirrorIdx].r;
                 if (leds[mirrorIdx].g > vR) vR = leds[mirrorIdx].g;
                 if (leds[mirrorIdx].b > vR) vR = leds[mirrorIdx].b;
@@ -248,7 +248,7 @@ private:
     VRMSVector m_buffer[2] = {};
     std::atomic<uint8_t> m_writeIdx{0};
 
-    uint8_t m_prevBrightness[NUM_LEDS] = {};
+    uint8_t m_prevBrightness[kNumLeds] = {};
     float m_audioRmsHistory[CORR_WINDOW] = {};
     float m_frameBrightnessHistory[CORR_WINDOW] = {};
     uint8_t m_historyIndex = 0;

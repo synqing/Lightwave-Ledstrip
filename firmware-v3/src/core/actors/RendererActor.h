@@ -149,6 +149,21 @@ struct RenderStats {
 };
 
 /**
+ * @brief Renderer compositing mode (Phase 1B — dual-strip independence)
+ *
+ * Unified — current behaviour. ZoneComposer applies. One effect renders
+ *           to a unified 320-LED virtual buffer; RendererActor splits the
+ *           buffer to m_strip1 / m_strip2 via mirror memcpy at showLeds().
+ * Independent — top and bottom strips render different effects. Each effect
+ *           sees a 160-LED buffer with centre at LED 79. ZoneComposer is
+ *           BYPASSED in this mode (Phase 1B scope decision).
+ */
+enum class RendererMode : uint8_t {
+    Unified = 0,
+    Independent = 1
+};
+
+/**
  * @brief Effect render function signature
  *
  * Effects are stateless functions that modify the LED buffer.
@@ -217,6 +232,19 @@ public:
     uint8_t getVariation() const { return m_variation; }
     uint8_t getMood() const { return m_mood; }
     uint8_t getFadeAmount() const { return m_fadeAmount; }
+
+    // Phase 1B — dual-strip independence accessors.
+    // Unified is the legacy default (one effect, mirror copy).
+    // Independent renders m_stripEffectId[0] on strip 0 and [1] on strip 1.
+    RendererMode getRendererMode() const { return m_rendererMode; }
+    void setRendererMode(RendererMode mode) { m_rendererMode = mode; }
+    EffectId getStripEffectId(uint8_t stripIdx) const {
+        return (stripIdx < 2) ? m_stripEffectId[stripIdx] : INVALID_EFFECT_ID;
+    }
+    void setStripEffectId(uint8_t stripIdx, EffectId eid) {
+        if (stripIdx < 2) m_stripEffectId[stripIdx] = eid;
+    }
+
     const RenderStats& getStats() const { return m_stats; }
     bool isLedOutputBusy() const { return m_ledDriver.isShowInProgress(); }
     const hal::LedDriverStats& getLedDriverStats() const { return m_ledDriver.getStats(); }
@@ -620,6 +648,16 @@ private:
      * @brief Render current effect to LED buffer
      */
     void renderFrame();
+
+    /**
+     * @brief Render one effect to one strip (Phase 1B Independent mode)
+     *
+     * Configures m_effectContext to point at the requested strip's 160-LED
+     * buffer with centre at LED 79, then dispatches the effect's render().
+     * Falls back to clearing the strip buffer if the effect is unregistered.
+     */
+    void renderStripIndependent(uint8_t stripIdx, EffectId eid, uint32_t deltaTimeMs);
+
     void applyPendingAudioContractTuning();
     void applyPendingEffectParameterUpdates();
 
@@ -693,6 +731,12 @@ private:
     uint8_t m_variation;
     uint8_t m_mood;
     uint8_t m_fadeAmount;
+
+    // Phase 1B — dual-strip independence state.
+    // m_rendererMode == Unified: legacy mirror path.
+    // m_rendererMode == Independent: per-strip dispatch using m_stripEffectId[].
+    RendererMode m_rendererMode = RendererMode::Unified;
+    EffectId m_stripEffectId[2] = { INVALID_EFFECT_ID, INVALID_EFFECT_ID };
 
     // Palette
     CRGBPalette16 m_currentPalette;

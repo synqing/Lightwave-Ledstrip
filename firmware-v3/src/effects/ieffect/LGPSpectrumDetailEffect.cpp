@@ -18,6 +18,8 @@
 
 #include <cmath>
 #include <cstring>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -54,22 +56,18 @@ void LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {
         uint8_t trailFade = static_cast<uint8_t>(decayRate * trailDt * 255.0f);
         if (trailFade < 1) trailFade = 1;
         if (trailFade > 200) trailFade = 200;
-        fadeToBlackBy(m_ps->trailBuffer, 160, trailFade);
+        fadeToBlackByDt(m_ps->trailBuffer, 160, trailFade, ctx.getSafeDeltaSeconds());
     }
     uint16_t strip1Len = ctx.ledCount < 160u ? ctx.ledCount : 160u;
     memset(ctx.leds, 0, strip1Len * sizeof(CRGB));
     if (ctx.ledCount > 160u) {
-        fadeToBlackBy(ctx.leds + 160, ctx.ledCount - 160u, 30);
+        fadeToBlackByDt(ctx.leds + 160, ctx.ledCount - 160u, 30, ctx.getSafeDeltaSeconds());
     }
 
 #if !FEATURE_AUDIO_SYNC
     (void)ctx;
     return;
 #else
-    if (!ctx.audio.available) {
-        return;
-    }
-
     // Primary source: full-resolution 256-bin FFT from PipelineCore.
     // Fallback source: 64-bin adaptive Goertzel spectrum.
     const float* bins64 = ctx.audio.bins64Adaptive();

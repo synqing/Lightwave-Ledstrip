@@ -25,6 +25,10 @@ static inline float clamp01(float x) {
     return x;
 }
 
+static inline uint16_t q15(float x) {
+    return static_cast<uint16_t>(clamp01(x) * 65535.0f + 0.5f);
+}
+
 void EsV11Adapter::reset()
 {
     m_binsMaxFollower = 0.1f;
@@ -41,6 +45,14 @@ void EsV11Adapter::reset()
     m_sbWaveformPeakScaledLast = 0.0f;
     std::memset(m_sbNoteChroma, 0, sizeof(m_sbNoteChroma));
     m_sbChromaMaxVal = 0.0001f;
+#if FEATURE_AUDIO_HF_SEMANTICS
+    m_hfEnergy = 0.0f;
+    m_airEnergy = 0.0f;
+    m_cymbalSustain = 0.0f;
+    m_prevHfRaw = 0.0f;
+    m_prevBrightness = 0.0f;
+    m_hatEventAgeMs = 65535;
+#endif
 }
 
 void EsV11Adapter::buildFrame(lightwaveos::audio::ControlBusFrame& out,
@@ -169,23 +181,65 @@ void EsV11Adapter::buildFrame(lightwaveos::audio::ControlBusFrame& out,
     std::memcpy(out.waveform, es.waveform, sizeof(out.waveform));
 
     // --------------------------------------------------------------------
-    // Sensory Bridge parity side-car (3.1.0 waveform)
+    // Sensory Bridge parity side-car (3.1.0 waveform) — Phase 5C resampler
+    //
+    // K1 captures audio at 32 kHz; OG SB 3.1.0 captured at 12.2 kHz, giving
+    // 128 samples per chunk = 10.5 ms time span. K1's native 4 ms / 128
+    // sample window is sub-period for any musical content < 250 Hz —
+    // bass-frequency oscillations don't fit in one chunk, killing SB-style
+    // waveform motion (see audit 2026-04-30).
+    //
+    // Resample sb_waveform[128] from a 3-chunk raw history window at
+    // stride 3 → 12 ms total span (vs SB's 10.5 ms; close enough for PoC).
+    // Each output position represents an audio sample at a different time
+    // offset from "now", restoring the bass-cycle phase oscillations that
+    // drive SB-style waveform motion across the LEDs.
+    //
+    // out.waveform[128] is preserved unchanged as the native 32 kHz / 4 ms
+    // capture for any K1-native effect that needs raw fast audio.
     // --------------------------------------------------------------------
-    // Store waveform into history ring buffer (4-frame history).
-    for (uint8_t i = 0; i < lightwaveos::audio::CONTROLBUS_WAVEFORM_N; ++i) {
-        int16_t sample = es.waveform[i];
-        out.sb_waveform[i] = sample;
-        m_sbWaveformHistory[m_sbWaveformHistoryIndex][i] = sample;
+
+    // 1. Append current K1-native chunk into the raw 4-chunk history ring.
+    constexpr uint8_t kSbN = lightwaveos::audio::CONTROLBUS_WAVEFORM_N;  // 128
+    for (uint8_t i = 0; i < kSbN; ++i) {
+        m_sbWaveformHistory[m_sbWaveformHistoryIndex][i] = es.waveform[i];
     }
+    const uint8_t newestChunkIdx = m_sbWaveformHistoryIndex;
     m_sbWaveformHistoryIndex++;
     if (m_sbWaveformHistoryIndex >= SB_WAVEFORM_HISTORY) {
         m_sbWaveformHistoryIndex = 0;
     }
 
+    // 2. Resample sb_waveform[128] from the last 382 raw samples (≈ 12 ms
+    //    at 32 kHz, vs SB's 10.5 ms) using stride 3.
+    //
+    //    Concat ordering of the 4-slot history ring, oldest→newest:
+    //      chunkLocalIdx 0..3  ↔  age 3..0 (chunks back from newest)
+    //
+    //    Output index i reads concat position p = 130 + i*3.
+    //    p ∈ [130..511]; i=0 → oldest visible sample; i=127 → newest sample.
+    //    chunkLocalIdx = p / 128 (∈ [1..3] over this range; the oldest
+    //    chunk at age 3 is unread by stride-3 from start 130).
+    constexpr int kSbStride = 3;
+    constexpr int kSbStartConcatPos = 130;  // 511 - 127*3 (ends at newest)
+
+    for (uint8_t i = 0; i < kSbN; ++i) {
+        const int concatPos = kSbStartConcatPos + static_cast<int>(i) * kSbStride;
+        const int chunkLocalIdx = concatPos / kSbN;     // 1..3 in this stride
+        const int sampleInChunk = concatPos % kSbN;
+        const int age = (SB_WAVEFORM_HISTORY - 1) - chunkLocalIdx;  // 0..2
+        const int ringIdx =
+            (static_cast<int>(newestChunkIdx) - age + SB_WAVEFORM_HISTORY) %
+            SB_WAVEFORM_HISTORY;
+        out.sb_waveform[i] = m_sbWaveformHistory[ringIdx][sampleInChunk];
+    }
+
     // Peak follower (sweet spot scaling; matches Sensory Bridge 3.1.0).
+    // Compute peak from the SB-compatible window we just produced — keeps
+    // sb_waveform[] shape and sb_waveform_peak_scaled internally consistent.
     float maxWaveformValRaw = 0.0f;
-    for (uint8_t i = 0; i < lightwaveos::audio::CONTROLBUS_WAVEFORM_N; ++i) {
-        int16_t sample = es.waveform[i];
+    for (uint8_t i = 0; i < kSbN; ++i) {
+        int16_t sample = out.sb_waveform[i];
         int16_t absSample = (sample < 0) ? -sample : sample;
         if ((float)absSample > maxWaveformValRaw) {
             maxWaveformValRaw = (float)absSample;
@@ -285,6 +339,80 @@ void EsV11Adapter::buildFrame(lightwaveos::audio::ControlBusFrame& out,
         m_prevSnareEnergy = out.snareEnergy;
         m_prevHihatEnergy = out.hihatEnergy;
     }
+
+#if FEATURE_AUDIO_HF_SEMANTICS
+    // Tier 1 HF semantic fields. This uses the existing 64-bin substrate only:
+    // no wider projections, no bins256 dependency, and no render-side work.
+    {
+        float hfSum = 0.0f;
+        for (uint8_t i = 50; i < lightwaveos::audio::ControlBusFrame::BINS_64_COUNT; ++i) {
+            hfSum += out.bins64Adaptive[i];
+        }
+        const float hfRaw = clamp01(hfSum / 14.0f);
+
+        float airSum = 0.0f;
+        for (uint8_t i = 58; i < lightwaveos::audio::ControlBusFrame::BINS_64_COUNT; ++i) {
+            airSum += out.bins64Adaptive[i];
+        }
+        const float airRaw = clamp01(airSum / 6.0f);
+
+        float weighted = 0.0f;
+        float energy = 0.0f;
+        for (uint8_t i = 0; i < lightwaveos::audio::ControlBusFrame::BINS_64_COUNT; ++i) {
+            const float v = out.bins64Adaptive[i];
+            weighted += v * static_cast<float>(i);
+            energy += v;
+        }
+        const float brightness = (energy > 0.001f) ? clamp01(weighted / (energy * 63.0f)) : 0.0f;
+        const float brightnessDelta = brightness - m_prevBrightness;
+        const float hfFlux = clamp01((hfRaw - m_prevHfRaw) * 4.0f);
+
+        static const float hfAttack = audio::retunedAlpha(0.35f, 50.0f, audio::HOP_RATE_HZ);
+        static const float hfRelease = audio::retunedAlpha(0.08f, 50.0f, audio::HOP_RATE_HZ);
+        m_hfEnergy += (hfRaw - m_hfEnergy) * ((hfRaw > m_hfEnergy) ? hfAttack : hfRelease);
+
+        static const float airAttack = audio::retunedAlpha(0.12f, 50.0f, audio::HOP_RATE_HZ);
+        static const float airRelease = audio::retunedAlpha(0.025f, 50.0f, audio::HOP_RATE_HZ);
+        m_airEnergy += (airRaw - m_airEnergy) * ((airRaw > m_airEnergy) ? airAttack : airRelease);
+
+        const float sustainTarget = clamp01((hfRaw * 0.65f) + (airRaw * 0.35f));
+        static const float sustainAttack = audio::retunedAlpha(0.20f, 50.0f, audio::HOP_RATE_HZ);
+        static const float sustainRelease = audio::retunedAlpha(0.015f, 50.0f, audio::HOP_RATE_HZ);
+        m_cymbalSustain += (sustainTarget - m_cymbalSustain) *
+                           ((sustainTarget > m_cymbalSustain) ? sustainAttack : sustainRelease);
+
+        const float lowMid = clamp01((out.bands[0] + out.bands[1] + out.bands[2] +
+                                      out.bands[3] + out.bands[4]) / 5.0f);
+        const float hfRatio = clamp01(hfRaw / (lowMid + 0.08f));
+        const bool refractoryDone = m_hatEventAgeMs >= 70;
+        const bool hatLike = refractoryDone && hfFlux > 0.16f && hfRatio > 0.85f && hfRaw > 0.08f;
+        const float hatStrength = hatLike ? clamp01((hfFlux - 0.16f) * 4.0f * hfRatio) : 0.0f;
+
+        const uint32_t stepMs = static_cast<uint32_t>(1000.0f / audio::HOP_RATE_HZ + 0.5f);
+        m_hatEventAgeMs = static_cast<uint16_t>(
+            (static_cast<uint32_t>(m_hatEventAgeMs) + stepMs > 65535U)
+                ? 65535U
+                : (static_cast<uint32_t>(m_hatEventAgeMs) + stepMs));
+        if (hatStrength > 0.0f) {
+            m_hatEventAgeMs = 0;
+        }
+
+        out.hfEnergy = clamp01(m_hfEnergy);
+        out.hfFlux = hfFlux;
+        out.hatEvent.strength = q15(hatStrength);
+        out.hatEvent.confidence = q15(hatStrength > 0.0f ? hfRatio : 0.0f);
+        out.hatEvent.ageMs = m_hatEventAgeMs;
+        out.hatEvent.flags = 0x02U | ((hatStrength > 0.0f) ? 0x01U : 0x00U);
+        out.cymbalSustain = clamp01(m_cymbalSustain);
+        out.airEnergy = clamp01(m_airEnergy);
+        out.spectralBrightness = brightness;
+        out.spectralBrightnessDelta = (brightnessDelta < -1.0f) ? -1.0f :
+                                      ((brightnessDelta > 1.0f) ? 1.0f : brightnessDelta);
+
+        m_prevHfRaw = hfRaw;
+        m_prevBrightness = brightness;
+    }
+#endif
 
     // ES tempo extras (consumed by renderer beat clock)
     out.es_bpm = es.top_bpm;

@@ -16,6 +16,8 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -298,7 +300,7 @@ void LGPRoseBloomAREffect::render(plugins::EffectContext& ctx) {
     float fadeF = 20.0f + 35.0f * (1.0f - normBass);
     if (modeIsI) fadeF *= (1.0f - 0.4f * m_iBeatLift[z]);
     uint8_t fadeAmt = static_cast<uint8_t>(clampf(fadeF, modeIsI ? 7.0f : 14.0f, 55.0f));
-    fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmt);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, fadeAmt, ctx.getSafeDeltaSeconds());
 
     // STEP 6: Per-pixel render — centre-outward, 4-way symmetric
     const float mid = static_cast<float>(HALF_LENGTH - 1);

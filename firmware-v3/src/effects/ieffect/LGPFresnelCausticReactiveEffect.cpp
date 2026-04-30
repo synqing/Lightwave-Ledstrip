@@ -35,6 +35,8 @@
 #include <FastLED.h>
 #include <cmath>
 #include <cstring>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace {
 
@@ -323,7 +325,7 @@ void LGPFresnelCausticReactiveEffect::render(plugins::EffectContext& ctx) {
     // =====================================================================
     // FADE (audio-coupled persistence)
     // =====================================================================
-    fadeToBlackBy(ctx.leds, ctx.ledCount, (uint8_t)fadeLevel);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, (uint8_t)fadeLevel, ctx.getSafeDeltaSeconds());
 
     // =====================================================================
     // RENDER LOOP -- Strip 1

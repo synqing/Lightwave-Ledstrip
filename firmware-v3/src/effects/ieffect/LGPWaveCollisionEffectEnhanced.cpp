@@ -9,6 +9,8 @@
 #include "../../validation/EffectValidationMacros.h"
 #include <FastLED.h>
 #include <cmath>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -229,7 +231,7 @@ void LGPWaveCollisionEnhancedEffect::render(plugins::EffectContext& ctx) {
     VALIDATION_SUBMIT(::lightwaveos::validation::g_validationRing);
     m_prevPhaseDelta = phaseDelta;
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     // Anti-aliased collision core at true center (79.5) using SubpixelRenderer
     if (m_collisionBoost > 0.05f) {

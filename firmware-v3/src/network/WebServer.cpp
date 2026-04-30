@@ -296,7 +296,9 @@ bool WebServer::begin() {
     m_server = new AsyncWebServer(WebServerConfig::HTTP_PORT);
     m_ws = new AsyncWebSocket("/ws");
 
-    // Create log stream broadcaster (wireless serial monitoring) - always created
+#if FEATURE_WEB_STREAMING
+    // Create optional WebSocket/UDP streaming surfaces. Trace builds can
+    // disable these to preserve internal DRAM for WiFi/lwIP and audio timing.
     m_logBroadcaster = new webserver::LogStreamBroadcaster(m_ws);
 
 #ifdef BOARD_HAS_PSRAM
@@ -387,6 +389,7 @@ bool WebServer::begin() {
     // Create benchmark metrics broadcaster
     m_benchmarkBroadcaster = new webserver::BenchmarkStreamBroadcaster(m_ws);
 #endif
+#endif // FEATURE_WEB_STREAMING
 
 #if FEATURE_EFFECT_VALIDATION
     // Initialize effect validation encoder (lazy init to avoid stack overflow)
@@ -570,17 +573,21 @@ void WebServer::updateLowHeapShedState(uint32_t nowMs) {
     } else {
         const uint32_t shedDurationMs = nowMs - m_shedActivatedAtMs;
         const bool heapRecovered = freeInternal > INTERNAL_HEAP_RESUME_ABOVE_BYTES;
-        const bool maxLatchExceeded = shedDurationMs > INTERNAL_HEAP_SHED_MAX_LATCH_MS;
+        const bool inHysteresisBand =
+            freeInternal >= INTERNAL_HEAP_SHED_BELOW_BYTES &&
+            freeInternal <= INTERNAL_HEAP_RESUME_ABOVE_BYTES;
+        const bool maxLatchExceeded =
+            inHysteresisBand && shedDurationMs > INTERNAL_HEAP_SHED_MAX_LATCH_MS;
         if (heapRecovered || maxLatchExceeded) {
             m_lowHeapShed = false;
             m_lastHeapShedLogMs = nowMs;
             m_shedClearedAtMs = nowMs;  // Open post-clear grace window.
             if (maxLatchExceeded && !heapRecovered) {
                 // Force-clear after max-latch: prevents the WS reconnect storm
-                // from perpetuating the latch indefinitely. If heap is still
-                // genuinely low, the next probe (300 ms) will re-latch; but
-                // the intervening window lets broadcasters + connects work,
-                // giving clients a chance to drain buffers and heap to recover.
+                // from perpetuating the latch indefinitely once heap has at
+                // least climbed out of the hard shed floor. Do not force-clear
+                // while still below shed<; that just creates a 10 s relatch
+                // loop and briefly reopens allocations under genuine pressure.
                 LW_LOGW("Low-heap shedding FORCE-CLEARED after %lu ms (internal=%lu, largest=%lu) — heap stuck in hysteresis band",
                         (unsigned long)shedDurationMs,
                         (unsigned long)freeInternal,

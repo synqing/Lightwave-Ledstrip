@@ -15,6 +15,8 @@
 #include <FastLED.h>
 #include <cmath>
 #include <cstring>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 
 // AUTO_TUNABLES_BULK_BEGIN:LGPFresnelCausticSweepEffect
@@ -201,7 +203,7 @@ void LGPFresnelCausticSweepEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
     // FADE (persistence trails)
     // =========================================================================
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     // =========================================================================
     // RENDER LOOP -- Strip 1 (i = 0..159)

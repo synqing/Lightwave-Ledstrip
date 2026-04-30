@@ -19,6 +19,8 @@
 
 #include <cmath>
 #include <cstring>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos::effects::ieffect::sensorybridge_reference {
 
@@ -126,7 +128,7 @@ void SbK1BloomV2Effect::renderEffect(plugins::EffectContext& ctx) {
     return;
 #else
     if (!ctx.audio.available) {
-        fadeToBlackBy(ctx.leds, ctx.ledCount, 32);
+        fadeToBlackByDt(ctx.leds, ctx.ledCount, 32, ctx.getSafeDeltaSeconds());
         return;
     }
 
@@ -632,7 +634,7 @@ void SbK1BloomV2BeatPulseEffect::renderEffect(plugins::EffectContext& ctx) {
     return;
 #else
     if (!ctx.audio.available) {
-        fadeToBlackBy(ctx.leds, ctx.ledCount, 32);
+        fadeToBlackByDt(ctx.leds, ctx.ledCount, 32, ctx.getSafeDeltaSeconds());
         return;
     }
 
@@ -817,7 +819,7 @@ void SbK1BloomV2ColorHistoryEffect::renderEffect(plugins::EffectContext& ctx) {
     return;
 #else
     if (!ctx.audio.available) {
-        fadeToBlackBy(ctx.leds, ctx.ledCount, 32);
+        fadeToBlackByDt(ctx.leds, ctx.ledCount, 32, ctx.getSafeDeltaSeconds());
         return;
     }
 
@@ -994,7 +996,7 @@ void SbK1BloomV2SpectralDeltaEffect::renderEffect(plugins::EffectContext& ctx) {
     return;
 #else
     if (!ctx.audio.available) {
-        fadeToBlackBy(ctx.leds, ctx.ledCount, 32);
+        fadeToBlackByDt(ctx.leds, ctx.ledCount, 32, ctx.getSafeDeltaSeconds());
         return;
     }
 
@@ -1177,7 +1179,7 @@ void SbK1BloomV2ExponentialEffect::renderEffect(plugins::EffectContext& ctx) {
     return;
 #else
     if (!ctx.audio.available) {
-        fadeToBlackBy(ctx.leds, ctx.ledCount, 32);
+        fadeToBlackByDt(ctx.leds, ctx.ledCount, 32, ctx.getSafeDeltaSeconds());
         return;
     }
 
@@ -1357,7 +1359,7 @@ void SbK1BloomV2SpectralSpreadEffect::renderEffect(plugins::EffectContext& ctx) 
     return;
 #else
     if (!ctx.audio.available) {
-        fadeToBlackBy(ctx.leds, ctx.ledCount, 32);
+        fadeToBlackByDt(ctx.leds, ctx.ledCount, 32, ctx.getSafeDeltaSeconds());
         return;
     }
 
@@ -1565,7 +1567,7 @@ void SbK1BloomV2BassTrebleEffect::renderEffect(plugins::EffectContext& ctx) {
     return;
 #else
     if (!ctx.audio.available) {
-        fadeToBlackBy(ctx.leds, ctx.ledCount, 32);
+        fadeToBlackByDt(ctx.leds, ctx.ledCount, 32, ctx.getSafeDeltaSeconds());
         return;
     }
 

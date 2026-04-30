@@ -11,6 +11,8 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cstring>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -39,7 +41,7 @@ bool LGPNeuralNetworkRadialEffect::init(plugins::EffectContext& ctx) {
 
 void LGPNeuralNetworkRadialEffect::render(plugins::EffectContext& ctx) {
     // Fade background
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     m_time = (uint16_t)(m_time + (ctx.speed >> 2));
 

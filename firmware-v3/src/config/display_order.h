@@ -323,6 +323,11 @@ constexpr EffectId DISPLAY_ORDER[] = {
     EID_LGP_BEAT_PRISM_ONSET_ADVECT,         // 1E02: Pressure Advection
     EID_LGP_BEAT_PRISM_ONSET_ROTATE,         // 1E03: Rotating Facets
     EID_LGP_BEAT_PRISM_ONSET_IGNITE,         // 1E04: Progressive Ignition
+
+    // ─── Phase 5 Synergy-Topology — pinned at the back so Shift+L hits them first ───
+    EID_RADIAL_TIME_SCOPE,                   // 0x2100: Move 5.4 — onset history time-scope
+    EID_ATTACK_ONLY_PITCH_VELOCITY,          // 0x2101: Move 5.6 — pitch-class velocity field
+    EID_BEAT_PARITY_SPRITE,                  // 0x2102: Move 5.7 — beat-parity sprite radiation
 };
 
 /// Number of effects in the display order (excludes retired slots)

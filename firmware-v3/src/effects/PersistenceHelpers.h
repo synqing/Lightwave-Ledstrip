@@ -105,10 +105,14 @@ static inline void emaArrayDt(float* arr,
  * @brief Dt-correct fade-to-black over an LED strip segment.
  *
  * Drop-in replacement for FastLED's frame-coupled `fadeToBlackBy(leds, n, X)`.
- * `fadeBy` is on the same 0–255 scale; internally converts to a dt-correct
- * per-channel survival rate: rate = (256 - fadeBy) / 256.
+ * `fadeBy` is on the same 0–255 scale (FastLED convention).
  *
- * Migration: s/fadeToBlackBy(p, n, X)/fadeToBlackByDt(p, n, X, ctx.getSafeDeltaSeconds())/g
+ * The K values across the codebase were calibrated at K1's native 120 FPS
+ * with frame-coupled `fadeToBlackBy`, where `fadeBy=32` produced a per-frame
+ * survival of `(256-32)/256 = 0.875`. To preserve that visual behaviour
+ * under dt-correction (which uses a 60 FPS reference internally), the
+ * per-frame survival is squared: `rate60fps = rate120fps²`. This ensures
+ * `powf(rate60fps, dt*60)` evaluates to `rate120fps` when dt = 1/120 s.
  *
  * @param leds    Pointer to the first CRGB element.
  * @param n       Number of LEDs to process.
@@ -117,7 +121,14 @@ static inline void emaArrayDt(float* arr,
  */
 static inline void fadeToBlackByDt(CRGB* leds, size_t n,
                                     uint8_t fadeBy, float dt) {
-    const float rate60fps = (256.0f - static_cast<float>(fadeBy)) / 256.0f;
+    // K values (fadeBy 0–255) were calibrated at K1's native 120 FPS with
+    // frame-coupled fadeToBlackBy. dtDecay3 uses a 60 FPS reference
+    // (powf(rate, dt * 60)). To preserve the visual time-constant that
+    // effects were tuned at, convert the 120 FPS per-frame survival to a
+    // 60 FPS equivalent: rate60 = rate120² (one 60 FPS frame = two 120 FPS
+    // frames). Verified: at 120 FPS, powf(rate120², dt*60) = rate120.
+    const float rate120 = (256.0f - static_cast<float>(fadeBy)) / 256.0f;
+    const float rate60fps = rate120 * rate120;
     for (size_t i = 0; i < n; ++i) {
         dtDecay3(leds[i], rate60fps, dt);
     }

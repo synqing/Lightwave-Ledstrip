@@ -44,6 +44,7 @@ const plugins::EffectParameter SbSpectralEnvelopeEffect::s_params[kParamCount] =
     {"silenceGate", "Silence Gate", 0.001f, 0.05f, 0.005f, plugins::EffectParameterType::FLOAT, 0.001f, "audio",  "",  false},
     {"decayBase",   "Decay Base",   0.0f,   5.0f,  0.5f,   plugins::EffectParameterType::FLOAT, 0.1f,   "decay",  "",  false},
     {"decaySlope",  "Decay Slope",  0.0f,   20.0f, 3.0f,   plugins::EffectParameterType::FLOAT, 0.5f,   "decay",  "",  false},
+    {"onsetBoost",  "Onset Boost",  0.0f,   2.0f,  0.25f,  plugins::EffectParameterType::FLOAT, 0.05f,  "audio",  "",  false},
 };
 
 // ---------------------------------------------------------------------------
@@ -96,6 +97,7 @@ bool SbSpectralEnvelopeEffect::init(plugins::EffectContext& ctx) {
     m_silenceGate = 0.005f;
     m_decayBase   = 0.5f;
     m_decaySlope  = 3.0f;
+    m_onsetBoost  = 0.25f;
 
     (void)ctx;
     return true;
@@ -176,7 +178,32 @@ void SbSpectralEnvelopeEffect::renderEffect(plugins::EffectContext& ctx) {
     // =================================================================
     for (uint8_t i = 0; i < kBandCount; ++i) {
         float energy = ctx.audio.controlBus.bands[i];
-        if (energy < m_silenceGate) continue;  // Skip silent bands
+
+        if (energy < m_silenceGate) {
+            continue;  // Skip silent bands -- gate filters BEFORE onset boost
+        }
+
+        // Onset-flux ignition: bands[] alone has ~1 s AGC rise, so transients
+        // arrive late. The OnsetDetector primitives (~50-100 ms lock) are
+        // already on ControlBus; add a per-group flux contribution as a body
+        // modulator on bands that already have energy (gate is upstream).
+        // This is transient reinforcement, NOT a gate bypass. m_onsetBoost =
+        // 0.0f reverts to pure B' behaviour.
+        float flux = 0.0f;
+        switch (kOnsetBandMap[i]) {
+            case 0:
+                flux = ctx.audio.controlBus.onsetBassFlux;
+                break;
+            case 1:
+                flux = ctx.audio.controlBus.onsetMidFlux;
+                break;
+            default:
+                flux = ctx.audio.controlBus.onsetHighFlux;
+                break;
+        }
+        flux = clampF(flux, 0.0f, 1.0f);  // OnsetDetector publishes [0, inf)
+        energy += m_onsetBoost * flux;
+        energy = clampF(energy, 0.0f, 1.0f);  // re-establish [0,1] contract before contrast curve
 
         // Apply contrast curve for perceptual shaping
         energy = applyContrast(energy, m_contrast);
@@ -270,6 +297,10 @@ bool SbSpectralEnvelopeEffect::setParameter(const char* name, float value) {
         m_decaySlope = clampF(value, 0.0f, 20.0f);
         return true;
     }
+    if (strcmp(name, "onsetBoost") == 0) {
+        m_onsetBoost = clampF(value, 0.0f, 2.0f);
+        return true;
+    }
     return false;
 }
 
@@ -281,6 +312,7 @@ float SbSpectralEnvelopeEffect::getParameter(const char* name) const {
     if (strcmp(name, "silenceGate") == 0) return m_silenceGate;
     if (strcmp(name, "decayBase") == 0)   return m_decayBase;
     if (strcmp(name, "decaySlope") == 0)  return m_decaySlope;
+    if (strcmp(name, "onsetBoost") == 0)  return m_onsetBoost;
     return 0.0f;
 }
 

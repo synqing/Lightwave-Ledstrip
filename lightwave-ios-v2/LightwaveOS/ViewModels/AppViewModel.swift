@@ -58,6 +58,11 @@ class AppViewModel {
     var deviceInfo: DeviceInfoResponse.DeviceInfo?
     var wsConnected: Bool = false
 
+    /// Phase 1 — capability discovery. Populated after a successful connect via
+    /// `RESTClient.getCapabilities()`. `nil` indicates either pre-connect or that
+    /// capability discovery degraded gracefully (firmware did not expose either probe).
+    var capabilities: DeviceCapabilities?
+
     // MARK: - Network
 
     private(set) var rest: RESTClient?
@@ -214,10 +219,42 @@ class AppViewModel {
             connectionState = .connected
             log("Connected successfully", category: "CONN")
 
+            // MARK: Phase 1 — capability discovery
+            // Fire capability discovery off the connect path. This is best-effort:
+            // RESTClient.getCapabilities() never throws, so on firmware builds that
+            // do not expose openapi.json or firmware/version we silently degrade.
+            startCapabilityDiscovery(client: client)
+
         } catch {
             log("Connection failed: \(error.localizedDescription)", category: "ERROR")
             connectionState = .error(error.localizedDescription)
             rest = nil
+        }
+    }
+
+    // MARK: Phase 1 — capability discovery
+
+    /// Probe the connected device for advertised capabilities and store the result.
+    /// Fully best-effort: a `nil` result is logged as a single-line degradation
+    /// notice and does not affect the connection state. Uses `[weak self]` to
+    /// avoid retain cycles per the iOS hard constraints.
+    private func startCapabilityDiscovery(client: RESTClient) {
+        Task { [weak self] in
+            let result = await client.getCapabilities()
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.capabilities = result
+                if let result {
+                    let version = result.firmwareVersion ?? "unknown"
+                    let pathCount = result.availablePaths?.count ?? 0
+                    self.log(
+                        "Capability discovery: firmware=\(version), advertised paths=\(pathCount)",
+                        category: "CAPS"
+                    )
+                } else {
+                    self.log("Capability discovery degraded — proceeding without", category: "CAPS")
+                }
+            }
         }
     }
 
@@ -392,6 +429,31 @@ class AppViewModel {
                     self.udpReceiver.reset()
                     self.udpFallbackActive = false
                     self.udpSubscribeStart = nil
+
+                // MARK: Phase 1 — broadcast handlers
+                // Stubbed for Phase 1: the cases exist so Swift's exhaustiveness check
+                // catches future drift. Phase 2 will wire each broadcast to the
+                // appropriate child ViewModel update path.
+                case .cameraModeChanged:
+                    self.log("Phase 1: received cameraMode.changed — handler stubbed", category: "WS")
+
+                case .factoryPresetsChanged:
+                    self.log("Phase 1: received factoryPresets.changed — handler stubbed", category: "WS")
+
+                case .effectPresetsSaved:
+                    self.log("Phase 1: received effectPresets.saved — handler stubbed", category: "WS")
+
+                case .effectPresetsDeleted:
+                    self.log("Phase 1: received effectPresets.deleted — handler stubbed", category: "WS")
+
+                case .colourCorrectionSetGamma:
+                    self.log("Phase 1: received colorCorrection.setGamma — handler stubbed", category: "WS")
+
+                case .colourCorrectionSetAutoExposure:
+                    self.log("Phase 1: received colorCorrection.setAutoExposure — handler stubbed", category: "WS")
+
+                case .colourCorrectionSetBrownGuardrail:
+                    self.log("Phase 1: received colorCorrection.setBrownGuardrail — handler stubbed", category: "WS")
                 }
             }
         }

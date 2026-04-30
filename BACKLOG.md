@@ -4,6 +4,70 @@ Prioritised engineering backlog. Items are tagged by category and roughly ordere
 
 ---
 
+## Critical — Upstream Calibration Debt
+
+Per the RBDO Gate (`CLAUDE.md` top), these upstream facts are unresolved. Until each is resolved or explicitly accepted under DEGRADED-MODE with disclosed risk, every tactical output that depends on them must be labelled DEGRADED-MODE or REFUSED. New tactical outputs MUST NOT add a fourth dependent to any URGENT row without resolving it first.
+
+### C-1 — Microphone-domain operating envelope (URGENT)
+What mic-domain RMS / peak / silentScale-trip range was the firmware tuned against?
+- **Blocks:** LUFS target for any audio test sweep; AFS v2 silentScale validation; any "tuned-regime sign-off" claim.
+- **Affected outputs:** ≥ 3.
+- **Priority:** URGENT.
+- **Revisit trigger:** Captain-allocated 30–60 min hardware envelope characterisation pass, OR audit of `firmware-v3/docs/research/audio_feature_surface_v2_baseline_2026-04-27.md` confirms it is already documented there.
+
+### C-2 — Feature × effect × dwell coverage matrix (HIGH)
+Which AFS v2 features × which Phase 5 effects × what minimum dwell each phenomenon needs to manifest visually.
+- **Blocks:** sign-off sweep duration; per-clip dwell minimums; rubric anchor points.
+- **Priority:** HIGH.
+- **Revisit trigger:** Phase 5 sign-off authorisation moment, or any new audio-reactive effect requiring fixture validation.
+
+### C-3 — Clip licence status + K1 repo public-status (HIGH)
+Are the hybrid-beat-tracker corpus clips licensed for inclusion or path-reference in K1 firmware artefacts? What is the K1 repo's public-status at launch (open-source, public-on-release, private)?
+- **Blocks:** clip pool composition for sign-off sweep; calibrated WAV storage policy; any third-party music reference in this repo.
+- **Priority:** HIGH (legal exposure if assumed wrong).
+- **Revisit trigger:** Captain answers (a) repo public-status at launch, (b) hybrid-beat-tracker licence applicability for commercial-product testing, (c) presence/absence of a Captain-licensed audiophile reference library.
+
+### C-4 — First sign-off purpose (MEDIUM — DECIDED)
+**Decision (current):** First Phase 5 sign-off is a **diagnostic baseline**, not a ship gate, not a regression detector.
+- **Reason:** no calibrated baseline or timestamped observables exist yet (C-5 unresolved; C-1 unresolved).
+- **Priority:** MEDIUM (decided; pending re-audit when C-5 lands).
+- **Revisit trigger:** When C-5 produces ratifiable observables, the next sign-off cycle can be promoted to ship-gate (cycle 2) or regression-detector (cycle 3+).
+
+### C-5 — Per-effect timestamped observables (MEDIUM)
+What exactly does the operator look for, anchored to (clip, timestamp, measurable phenomenon), per Phase 5 effect (RTS / PVF / BPS)?
+- **Blocks:** final rubric contents regardless of rubric shape (Y/N, 1–5, freeform).
+- **Depends on:** C-2.
+- **Priority:** MEDIUM.
+- **Revisit trigger:** After C-2 lands; pre-flight to any sign-off harness build.
+
+### F-1 — Contract authority (HIGH)
+Is the YAML at `docs/protocol/k1-{rest,ws}-contract.yaml` source-of-truth, or has it drifted past usability? Audit found ~50 REST routes + ~40 WS commands in firmware are absent from the contract; 5 WS commands in YAML have firmware handlers commented out (`WsFilesystemCommands.cpp:21-25`).
+- **Blocks:** every iOS catch-up task (do we align iOS to contract or to firmware reality).
+- **Affected outputs:** ≥ 3.
+- **Priority:** HIGH.
+- **Revisit trigger:** Captain decision on contract reconciliation strategy (regenerate from firmware vs lock contract and bring firmware/iOS into line).
+
+### F-2 — Effect production cohort (HIGH)
+Of the 25+ new effects landed since iOS anchor `569d3e4b` (commits `f91619bf` 20 LGP AR variants, `99ca01a2` 11 K1 parity / Bloom V2, `9d068612`+`7a9ebd1a` 7 SB Waveform/Spectral incl. 0x130E, `4dfadc7b` 5 Beat Prism Onset, `39406e6b` Phase 5 exemplars), which are PRODUCTION (user-facing) vs EXPERIMENTAL (A/B research, dev-only)?
+- **Blocks:** effect-picker UX, palette/parameter wiring per effect, whether iOS hides experimental effect IDs.
+- **Affected outputs:** ≥ 3.
+- **Priority:** HIGH.
+- **Revisit trigger:** Captain effect-cohort declaration before iOS effect picker rebuild.
+
+### F-3 — Path canonicalisation (MEDIUM)
+Firmware accepts both modern (`/effects/current`, `/palettes/current`) and legacy (`/effects/set`, `/palettes/set`) paths. iOS currently uses legacy. Standardise on which?
+- **Blocks:** RESTClient refactor scope.
+- **Priority:** MEDIUM.
+- **Revisit trigger:** Captain decision before any RESTClient path refactor.
+
+### F-4 — Runtime parameter UX scope (HIGH)
+Is `effects.parameters.set` an end-user surface (sliders in effect detail view) or developer-only (debug overlay)? Effect 0x130E exposes `silenceGate`, `decayBase`, `decaySlope`, `onsetBoost` and similar — not consumer-friendly knobs.
+- **Blocks:** depth of effect detail view rebuild in Phase 2.
+- **Priority:** HIGH.
+- **Revisit trigger:** Captain decision on user-vs-developer UX for runtime tuning.
+
+---
+
 ## Performance
 
 ### [DONE] ~~RendererActor vTaskDelay(1) costs 10 ms per frame~~ — resolved in d943101a

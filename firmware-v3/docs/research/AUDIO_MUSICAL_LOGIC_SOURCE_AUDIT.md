@@ -321,6 +321,10 @@ Stage B (`ControlBus::applyDerivedFeatures`) provides identical-source fallback 
 
 ### 6.3 6–12 kHz energy on canonical path
 
+> **⚠ Superseded** — see `### Update — 2026-04-28b` below and [`AUDIO_LATTICE_CONFIGURATION_INVESTIGATION.md` §3.4](AUDIO_LATTICE_CONFIGURATION_INVESTIGATION.md). The conclusion below is WRONG. A 512-point Cooley-Tukey FFT IS running on canonical ESV11 at `AudioActor.cpp:~965–1000`, populating `bins256[]`, with the STMExtractor mel-filterbank (16-band temporal + 128-band spectral) running on top — including 6–12 kHz mel bands. This audit confused "EsV11Adapter doesn't write bins256" (true) with "no canonical writer to bins256" (false — the writer lives in AudioActor, not in EsV11Adapter). The HF semantic field mislabel still stands (those fields read `bins64[50..63]` = 1.4–3 kHz, not the available STM mel HF bands), but the gap is a wiring problem, not an absence of HF data.
+
+**Original (now-superseded) text:**
+
 **Verified absent.** Evidence:
 
 - All HF semantic writers source from `bins64Adaptive[]`, which covers 77.78 Hz – 2960 Hz only (§3).
@@ -462,8 +466,32 @@ Items NOT resolved by this fix (still open per audit):
 - §10 Q3 Sensory Bridge upstream pitch-class origin question — K1 lattice now diverges from upstream ES `BOTTOM_NOTE = 12`; SB-parity sidecar visual behaviour against the original SB reference is informational follow-up, not a defect.
 - §8 Test coverage gap — 0 chord-detector contract fixtures still in place. New lattice tests cover frequency map only.
 
+### Update — 2026-04-28b: Configuration deep-dive + §6.3 supersession
+
+A subsequent 10-SSA investigation answered three Captain questions beyond this audit's original scope: (1) is the canonical 32 kHz / 64-bin / 16 kHz Nyquist configuration properly configured, (2) is 12-TET right for K1, (3) can 96 bins run at 32 kHz without destroying AP performance. The full investigation is documented at [`AUDIO_LATTICE_CONFIGURATION_INVESTIGATION.md`](AUDIO_LATTICE_CONFIGURATION_INVESTIGATION.md).
+
+**Three load-bearing findings affecting this audit:**
+
+1. **§6.3 of this audit is WRONG and is now superseded.** A custom 512-point Cooley-Tukey FFT IS running on canonical ESV11 at `AudioActor.cpp:~965–1000`, populating `bins256[]`. STMExtractor mel-filterbank pipeline (16-band temporal + 128-band spectral) runs on top, including 6–12 kHz mel bands. The HF semantic fields (`hfEnergy`, `hatEvent`, `cymbalSustain`, `airEnergy`) still read `bins64[50..63]` (1.4–3 kHz) — that finding stands — but the prior audit conclusion that "no true 6–12 kHz signal information enters ControlBus" is FALSE. The supersession marker is on §6.3 itself.
+
+2. **The hop budget is in HARD CRISIS, not the lattice.** Phase 1B runtime evidence (committed at `firmware-v3/docs/research/phase1b_runtime_evidence_2026-04-27/`) shows audio_hop_us p99 = 18230 µs vs 8000 µs budget — 127% over. Captain explicitly waived Phase 1B 2026-04-28 for Tier 1 HF semantics ONLY (no 96-bin, no 128-bin, no raw bins256 expansion). The bottleneck is `ControlBus::UpdateFromHop` running 400+ lines of DSP under `portENTER_CRITICAL` on Core 0 — visible as 1/10 expected WiFi heartbeats under WS load. This is the load-bearing engineering target, not lattice expansion.
+
+3. **12-TET is load-bearing for 9% of chroma consumers, irrelevant for 91%.** Of 44 chroma() call-sites: 4 (9%) are MUSICAL_TONAL (need pitch-class semantics), 8 (18%) are ROTATION_INVARIANT (work with any 12-bin spacing), 28 (64%) are SPECTRAL_SHAPE (treat chroma as generic 12-bin shape), 4 (9%) are PALETTE_SELECTOR (spacing-indifferent). 12-TET stays because K1's brand positioning ("music visualizer") + chord detection require it, but most consumers would survive any 12-bin rebinning. The architecturally-clean direction is parallel surfaces (12-TET for chroma/chord, mel for HF) rather than replacement.
+
+**Recommended priority order (Captain decision surface only — no execution):**
+
+1. ✓ Done in this update: §6.3 supersession + pointer to the new deep-dive doc.
+2. **P1-02 spinlock extraction.** Load-bearing fix; everything else is downstream of it.
+3. **THEN** wire existing STM mel outputs to HF semantic fields (Option A — zero new DSP, fixes the comment-vs-code mislabel).
+4. **DEFER** 96-bin Goertzel extension. AFS v2 already deferred this; the bins256/STM finding above strengthens the deferral.
+5. **DO NOT** attempt 128-bin: invalid at 32 kHz (above Nyquist + LUT exhausted at notes[197]).
+6. **OPEN** for separate Captain investigation: SPH0645 actual response above 8 kHz (mic-vs-rate mismatch flagged in companion doc §1.2).
+
+For the full evidence, cross-SSA discrepancy reconciliations, per-bin block-size table, RAM/PSRAM scaling table, Core 0 task scheduling map, and architecture commentary, read [`AUDIO_LATTICE_CONFIGURATION_INVESTIGATION.md`](AUDIO_LATTICE_CONFIGURATION_INVESTIGATION.md).
+
 **Document Changelog**
 | Date | Author | Change |
 |------|--------|--------|
 | 2026-04-28 | orchestrator-claude (synthesised from 6 read-only SSAs) | Created. Audit synthesised from SSA-1 (build path), SSA-2 (Goertzel bank), SSA-3 (chroma fold), SSA-4 (consumers), SSA-5 (HF semantics; numeric values corrected against SSA-2's verified frequency table), SSA-6 (60/64/72 + fixtures). All claims traced to file:line; arithmetic independently verified by orchestrator. No source modified. |
 | 2026-04-28 | orchestrator-claude (engineering pass) | Lattice fix applied: vendor/goertzel.h:28 `BOTTOM_NOTE 12 → 6`. C-origin restored. New `test_esv11_lattice` env passes 11/11; parity test goldens re-baselined. K1 V2 hardware-verified by Captain. See `### Update — 2026-04-28` above. |
+| 2026-04-28b | orchestrator-claude (synthesised from 10 read-only SSAs) | Configuration deep-dive + §6.3 supersession. Discovered the AudioActor FFT writer for `bins256[]` and STM mel-filterbank pipeline running on canonical (contradicting original §6.3). Surfaced the hop-budget crisis (p99 18.2 ms vs 8 ms) and the P1-02 spinlock root cause. Categorised 44 chroma consumers (9% MUSICAL_TONAL, 18% ROTATION_INVARIANT, 64% SPECTRAL_SHAPE, 9% PALETTE_SELECTOR). Full evidence in companion file `AUDIO_LATTICE_CONFIGURATION_INVESTIGATION.md`. No source modified. |

@@ -70,8 +70,11 @@ private:
     // Effect parameters
     float m_contrast    = 1.0f;
     float m_chromaHue   = 0.0f;
+    float m_silenceGate = 0.005f;   ///< Min band energy to draw an anchor dot
+    float m_decayBase   = 0.5f;     ///< Trail decay rate at silence (60 fps reference)
+    float m_decaySlope  = 3.0f;     ///< Additional decay per unit of rms (60 fps reference)
 
-    static constexpr uint8_t kParamCount = 2;
+    static constexpr uint8_t kParamCount = 5;
     static const plugins::EffectParameter s_params[kParamCount];
 
     // PSRAM-allocated trail buffer for frame-to-frame persistence

@@ -39,8 +39,11 @@ namespace lightwaveos::effects::ieffect::sensorybridge_reference {
 // ---------------------------------------------------------------------------
 
 const plugins::EffectParameter SbSpectralEnvelopeEffect::s_params[kParamCount] = {
-    {"contrast", "Contrast", 0.0f, 3.0f, 1.0f, plugins::EffectParameterType::FLOAT, 0.25f, "visual", "x", false},
-    {"chromaHue", "Hue Offset", 0.0f, 1.0f, 0.0f, plugins::EffectParameterType::FLOAT, 0.01f, "colour", "", false},
+    {"contrast",    "Contrast",     0.0f,   3.0f,  1.0f,   plugins::EffectParameterType::FLOAT, 0.25f,  "visual", "x", false},
+    {"chromaHue",   "Hue Offset",   0.0f,   1.0f,  0.0f,   plugins::EffectParameterType::FLOAT, 0.01f,  "colour", "",  false},
+    {"silenceGate", "Silence Gate", 0.001f, 0.05f, 0.005f, plugins::EffectParameterType::FLOAT, 0.001f, "audio",  "",  false},
+    {"decayBase",   "Decay Base",   0.0f,   5.0f,  0.5f,   plugins::EffectParameterType::FLOAT, 0.1f,   "decay",  "",  false},
+    {"decaySlope",  "Decay Slope",  0.0f,   20.0f, 3.0f,   plugins::EffectParameterType::FLOAT, 0.5f,   "decay",  "",  false},
 };
 
 // ---------------------------------------------------------------------------
@@ -88,8 +91,11 @@ bool SbSpectralEnvelopeEffect::init(plugins::EffectContext& ctx) {
     memset(m_ps, 0, sizeof(SbSpecEnvPsram));
 
     // Reset parameters to defaults
-    m_contrast  = 1.0f;
-    m_chromaHue = 0.0f;
+    m_contrast    = 1.0f;
+    m_chromaHue   = 0.0f;
+    m_silenceGate = 0.005f;
+    m_decayBase   = 0.5f;
+    m_decaySlope  = 3.0f;
 
     (void)ctx;
     return true;
@@ -139,8 +145,8 @@ void SbSpectralEnvelopeEffect::renderEffect(plugins::EffectContext& ctx) {
     // =================================================================
     {
         float rms = ctx.audio.rms();
-        float decayRate = 3.0f + 12.0f * rms;
-        uint8_t fadeAmt = static_cast<uint8_t>(fminf(decayRate * dt * 255.0f, 200.0f));
+        float decayRate = m_decayBase + m_decaySlope * rms;
+        uint8_t fadeAmt = static_cast<uint8_t>(fminf(decayRate * 255.0f / 60.0f, 200.0f));
         if (fadeAmt < 1) fadeAmt = 1;
         fadeToBlackByDt(m_ps->trailBuffer, kStripLength, fadeAmt, ctx.getSafeDeltaSeconds());
     }
@@ -170,7 +176,7 @@ void SbSpectralEnvelopeEffect::renderEffect(plugins::EffectContext& ctx) {
     // =================================================================
     for (uint8_t i = 0; i < kBandCount; ++i) {
         float energy = ctx.audio.controlBus.bands[i];
-        if (energy < 0.02f) continue;  // Skip silent bands
+        if (energy < m_silenceGate) continue;  // Skip silent bands
 
         // Apply contrast curve for perceptual shaping
         energy = applyContrast(energy, m_contrast);
@@ -252,6 +258,18 @@ bool SbSpectralEnvelopeEffect::setParameter(const char* name, float value) {
         m_chromaHue = clampF(value, 0.0f, 1.0f);
         return true;
     }
+    if (strcmp(name, "silenceGate") == 0) {
+        m_silenceGate = clampF(value, 0.001f, 0.05f);
+        return true;
+    }
+    if (strcmp(name, "decayBase") == 0) {
+        m_decayBase = clampF(value, 0.0f, 5.0f);
+        return true;
+    }
+    if (strcmp(name, "decaySlope") == 0) {
+        m_decaySlope = clampF(value, 0.0f, 20.0f);
+        return true;
+    }
     return false;
 }
 
@@ -260,6 +278,9 @@ float SbSpectralEnvelopeEffect::getParameter(const char* name) const {
 
     if (strcmp(name, "contrast") == 0)    return m_contrast;
     if (strcmp(name, "chromaHue") == 0)   return m_chromaHue;
+    if (strcmp(name, "silenceGate") == 0) return m_silenceGate;
+    if (strcmp(name, "decayBase") == 0)   return m_decayBase;
+    if (strcmp(name, "decaySlope") == 0)  return m_decaySlope;
     return 0.0f;
 }
 

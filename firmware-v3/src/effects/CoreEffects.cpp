@@ -24,6 +24,10 @@
 #include "ieffect/ModalResonanceEffect.h"
 #include "ieffect/ChromaticInterferenceEffect.h"
 #include "ieffect/FireEffect.h"
+#include "ieffect/FirstLightIgnitionEffect.h"
+#include "ieffect/RadialTimeScopeEffect.h"
+#include "ieffect/AttackOnlyPitchVelocityFieldEffect.h"
+#include "ieffect/BeatParitySpriteEffect.h"
 #include "ieffect/OceanEffect.h"
 #include "ieffect/PlasmaEffect.h"
 #include "ieffect/ConfettiEffect.h"
@@ -1479,8 +1483,32 @@ uint16_t registerAllEffects(RendererActor* renderer) {
     renderer->registerEffect(EID_LGP_GRADIENT_FIELD, &gradientFieldInstance);
     total++;
 
+    // --- System / Lifecycle (0x20xx) ---
+    // Phase 4 Move 4.4 — F6 First-Light Ignition. One-shot boot ritual; the
+    // dispatch path polls isDone() and swaps to the configured normal mode
+    // once the 5.5 s ritual has completed.
+    static ieffect::FirstLightIgnitionEffect firstLightIgnitionInstance;
+    renderer->registerEffect(EID_FIRST_LIGHT_IGNITION, &firstLightIgnitionInstance);
+    total++;
+
+    // --- K1-Native Synergy-Topology (0x21xx) ---
+    // Phase 5 Move 5.4 — Radial Time-Scope. Onset-history scope, centre-anchored.
+    static ieffect::RadialTimeScopeEffect radialTimeScopeInstance;
+    renderer->registerEffect(EID_RADIAL_TIME_SCOPE, &radialTimeScopeInstance);
+    total++;
+
+    // Phase 5 Move 5.6 — Pitch-Class Velocity Field (continuous EMA variant).
+    static ieffect::AttackOnlyPitchVelocityFieldEffect attackOnlyPitchVelocityInstance;
+    renderer->registerEffect(EID_ATTACK_ONLY_PITCH_VELOCITY, &attackOnlyPitchVelocityInstance);
+    total++;
+
+    // Phase 5 Move 5.7 — Beat Parity Sprite (standalone radiation effect).
+    static ieffect::BeatParitySpriteEffect beatParitySpriteInstance;
+    renderer->registerEffect(EID_BEAT_PARITY_SPRITE, &beatParitySpriteInstance);
+    total++;
+
     // =============== EFFECT COUNT PARITY VALIDATION ===============
-    constexpr uint16_t EXPECTED_EFFECT_COUNT = FEATURE_AR_1C_EXPERIMENTAL ? 201 : 198;
+    constexpr uint16_t EXPECTED_EFFECT_COUNT = FEATURE_AR_1C_EXPERIMENTAL ? 205 : 202;
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

@@ -80,6 +80,17 @@ Master_Archive/
 archives/
 baseline_*
 reports/
+# Exception: Phase 1B MabuTrace research bundle (capture/analyse artefacts live under */reports/)
+!firmware-v3/docs/research/phase1b_runtime_evidence_2026-04-27/reports/
+!firmware-v3/docs/research/phase1b_runtime_evidence_2026-04-27/reports/**
+!firmware-v3/docs/research/phase1b_runtime_evidence_2026-04-27/lean_trace_rerun/reports/
+!firmware-v3/docs/research/phase1b_runtime_evidence_2026-04-27/lean_trace_rerun/reports/**
+!firmware-v3/docs/research/phase1b_runtime_evidence_2026-04-27/corrected_timing_rerun/reports/
+!firmware-v3/docs/research/phase1b_runtime_evidence_2026-04-27/corrected_timing_rerun/reports/**
+!firmware-v3/docs/research/phase1b_runtime_evidence_2026-04-27/reboot_clean_rerun/reports/
+!firmware-v3/docs/research/phase1b_runtime_evidence_2026-04-27/reboot_clean_rerun/reports/**
+!firmware-v3/docs/research/phase1b_runtime_evidence_2026-04-27/es_component_timing_probe/reports/
+!firmware-v3/docs/research/phase1b_runtime_evidence_2026-04-27/es_component_timing_probe/reports/**
 
 # ==========================================
 # GENERATED/TEMPORARY CONTENT

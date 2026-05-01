@@ -1,0 +1,4 @@
+# Working captures + reports — only golden/ references are committed
+out/
+reports/
+golden_runner

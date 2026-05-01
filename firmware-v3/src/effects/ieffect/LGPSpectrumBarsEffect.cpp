@@ -14,6 +14,8 @@
 
 #include <cmath>
 #include <cstring>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -79,7 +81,7 @@ void LGPSpectrumBarsEffect::render(plugins::EffectContext& ctx) {
         uint8_t trailFade = static_cast<uint8_t>(decayRate * dt * 255.0f);
         if (trailFade < 1) trailFade = 1;
         if (trailFade > 200) trailFade = 200;
-        fadeToBlackBy(m_ps->trailBuffer, 160, trailFade);
+        fadeToBlackByDt(m_ps->trailBuffer, 160, trailFade, ctx.getSafeDeltaSeconds());
     }
 #endif
 

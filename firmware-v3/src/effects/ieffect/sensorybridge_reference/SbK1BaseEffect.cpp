@@ -19,6 +19,8 @@
 #include <cmath>
 #include <cstring>
 #include <cstdlib>  // rand
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos::effects::ieffect::sensorybridge_reference {
 
@@ -54,7 +56,7 @@ void SbK1BaseEffect::render(plugins::EffectContext& ctx) {
     return;
 #else
     if (!ctx.audio.available) {
-        fadeToBlackBy(ctx.leds, ctx.ledCount, 32);
+        fadeToBlackByDt(ctx.leds, ctx.ledCount, 32, ctx.getSafeDeltaSeconds());
         return;
     }
     baseProcessAudio(ctx);
@@ -137,25 +139,16 @@ void SbK1BaseEffect::baseProcessAudio(plugins::EffectContext& ctx) {
     // ESV11: no bins256 → use ControlBus chroma/waveform directly.
     //
     // The SB parity shortcut (sb_chromagram_smooth, sb_hue_position) is
-    // only used when BOTH fields are populated AND stable. On ESV11 the
-    // sidecar hue position often stays at zero, creating a flaky gate
-    // that can intermittently switch paths between boots and cause the
-    // effect to produce zero output. Require sb_chromagram_smooth to
-    // have actual energy (not just a non-zero hue) before trusting it.
+    // only reliable when PipelineCore populates the sidecar. On ESV11 the
+    // adapter does not write sidecar fields; PSRAM may retain non-zero values
+    // from previous boots, making any energy/hue gate unreliable. ESV11 path
+    // forces hasSbParity = false unconditionally — effects derive all state
+    // from chroma[], flux(), and waveform[] directly.
     // -----------------------------------------------------------------
     bool hasSbParity = false;
 #if FEATURE_AUDIO_BACKEND_PIPELINECORE
     // PipelineCore always populates the sidecar reliably
     hasSbParity = ctx.audio.hasSbWaveform() && (cb.sb_hue_position > 0.0001f);
-#else
-    // ESV11: require BOTH hue position AND chromagram energy to be non-trivial.
-    // This prevents the flaky gate where sbHue=0 on most boots but briefly
-    // drifts above the threshold on others, activating an unreliable path.
-    if (ctx.audio.hasSbWaveform() && cb.sb_hue_position > 0.01f) {
-        float sbChrEnergy = 0.0f;
-        for (int i = 0; i < kChromaBins; ++i) sbChrEnergy += cb.sb_chromagram_smooth[i];
-        hasSbParity = (sbChrEnergy > 0.5f);
-    }
 #endif
 
     if (hasSbParity) {

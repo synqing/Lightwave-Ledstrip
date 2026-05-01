@@ -14,6 +14,8 @@
 #include "../../config/features.h"
 #include <FastLED.h>
 #include <cmath>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -122,7 +124,7 @@ void LGPPerlinCausticsEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
     // Rendering (centre-origin pattern with caustic lobes)
     // =========================================================================
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     // Audio-modulated parameters (kept conservative to avoid strobing)
     float sparkleDensity = 0.8f + trebleNorm * 0.9f; // 0.8-1.7

@@ -18,7 +18,12 @@
 
 #if FEATURE_AUDIO_SYNC
 
+#ifdef NATIVE_BUILD
+// Native unit tests have no ESP-IDF; stub the type used in I2S pin casts below.
+typedef int gpio_num_t;
+#else
 #include <driver/gpio.h>
+#endif
 
 namespace lightwaveos {
 namespace audio {

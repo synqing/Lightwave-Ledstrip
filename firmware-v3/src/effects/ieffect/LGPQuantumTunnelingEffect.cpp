@@ -8,6 +8,8 @@
 #include <FastLED.h>
 #include <cmath>
 #include <cstring>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -38,7 +40,7 @@ void LGPQuantumTunnelingEffect::render(plugins::EffectContext& ctx) {
     const uint8_t barrierWidth = 20;
     const uint8_t tunnelProbability = 64;
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     // Draw energy barriers
     for (uint8_t b = 0; b < barrierCount; b++) {

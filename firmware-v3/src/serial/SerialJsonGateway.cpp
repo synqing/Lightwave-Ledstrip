@@ -16,6 +16,7 @@
 #include "../config/features.h"
 #include "../core/actors/ActorSystem.h"
 #include "../core/actors/RendererActor.h"
+#include "../plugins/api/IEffect.h"
 #include "../effects/zones/ZoneComposer.h"
 #include "../effects/zones/BlendMode.h"
 #include "../effects/PatternRegistry.h"
@@ -198,6 +199,69 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
             (unsigned)renderer->getHue(),
             (unsigned)renderer->getFadeAmount());
         serialJsonResponse(type, reqId, buf);
+    }
+    // ------------------------------------------------------------------
+    // effects.parameters.set -- queue per-effect parameter updates.
+    // Mirrors POST /api/v1/effects/parameters; uses the same renderer
+    // lock-free queue path. Payload: {effectId, parameters: {name: value, ...}}
+    // Response: {effectId, name, queued: [...], failed: [...]}.
+    // ------------------------------------------------------------------
+    else if (strcmp(type, "effects.parameters.set") == 0) {
+        if (!renderer) { serialJsonError(reqId, "renderer unavailable"); return; }
+        if (!doc["effectId"].is<int>()) {
+            serialJsonError(reqId, "missing effectId");
+            return;
+        }
+        EffectId effectId = static_cast<EffectId>(doc["effectId"].as<int>());
+        plugins::IEffect* effect = renderer->getEffectInstance(effectId);
+        if (!effect) {
+            serialJsonError(reqId, "effect not found");
+            return;
+        }
+        if (!doc["parameters"].is<JsonObject>()) {
+            serialJsonError(reqId, "missing parameters object");
+            return;
+        }
+        JsonObject params = doc["parameters"].as<JsonObject>();
+
+        // Emit response inline -- queued/failed arrays match REST shape.
+        Serial.printf("{\"type\":\"effects.parameters.set\",\"requestId\":\"%s\","
+                      "\"success\":true,\"data\":{\"effectId\":%u,\"name\":\"%s\","
+                      "\"queued\":[",
+                      reqId, (unsigned)effectId, renderer->getEffectName(effectId));
+        bool firstQ = true;
+        for (JsonPair kv : params) {
+            const char* key = kv.key().c_str();
+            float value = kv.value().as<float>();
+            bool known = false;
+            uint8_t count = effect->getParameterCount();
+            for (uint8_t i = 0; i < count; ++i) {
+                const plugins::EffectParameter* p = effect->getParameter(i);
+                if (p && strcmp(p->name, key) == 0) { known = true; break; }
+            }
+            if (known && renderer->enqueueEffectParameterUpdate(effectId, key, value)) {
+                if (!firstQ) Serial.print(",");
+                Serial.printf("\"%s\"", key);
+                firstQ = false;
+            }
+        }
+        Serial.print("],\"failed\":[");
+        bool firstF = true;
+        for (JsonPair kv : params) {
+            const char* key = kv.key().c_str();
+            bool known = false;
+            uint8_t count = effect->getParameterCount();
+            for (uint8_t i = 0; i < count; ++i) {
+                const plugins::EffectParameter* p = effect->getParameter(i);
+                if (p && strcmp(p->name, key) == 0) { known = true; break; }
+            }
+            if (!known) {
+                if (!firstF) Serial.print(",");
+                Serial.printf("\"%s\"", key);
+                firstF = false;
+            }
+        }
+        Serial.println("]}}");
     }
     // ------------------------------------------------------------------
     // setEffect

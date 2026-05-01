@@ -16,8 +16,16 @@
 #ifdef NATIVE_BUILD
 
 #include <cstdint>
+#include <cstdlib>
 #include <array>
 #include <algorithm>
+
+// PROGMEM is an Arduino macro for placing constants in flash; the native
+// host build has no such concept — define it as a no-op so any PROGMEM
+// declarations in production headers compile cleanly under NATIVE_BUILD.
+#ifndef PROGMEM
+#define PROGMEM
+#endif
 
 //==============================================================================
 // CRGB Color Type
@@ -36,8 +44,8 @@ struct CRGB {
     };
 
     // Constructors
-    inline CRGB() : r(0), g(0), b(0) {}
-    inline CRGB(uint8_t red, uint8_t green, uint8_t blue) : r(red), g(green), b(blue) {}
+    constexpr CRGB() : r(0), g(0), b(0) {}
+    constexpr CRGB(uint8_t red, uint8_t green, uint8_t blue) : r(red), g(green), b(blue) {}
     inline CRGB(uint32_t colorcode) :
         r((colorcode >> 16) & 0xFF),
         g((colorcode >> 8) & 0xFF),
@@ -89,6 +97,14 @@ struct CRGB {
         return *this;
     }
 
+    // FastLED CRGB::nscale8 — non-destructive in-place per-channel scale.
+    inline CRGB& nscale8(uint8_t scale) {
+        r = (r * scale) / 255;
+        g = (g * scale) / 255;
+        b = (b * scale) / 255;
+        return *this;
+    }
+
     inline CRGB& operator/=(uint8_t scale) {
         if (scale != 0) {
             r = (r * 255) / scale;
@@ -130,13 +146,21 @@ struct CRGB {
 };
 
 // CHSV color type (simplified)
+//
+// FastLED's real CHSV exposes BOTH .h/.s/.v and .hue/.sat/.val via a union.
+// The mock mirrors that so production code reading either name compiles.
 struct CHSV {
-    uint8_t h;
-    uint8_t s;
-    uint8_t v;
+    union {
+        struct {
+            union { uint8_t h; uint8_t hue; };
+            union { uint8_t s; uint8_t sat; uint8_t saturation; };
+            union { uint8_t v; uint8_t val; uint8_t value; };
+        };
+        uint8_t raw[3];
+    };
 
     inline CHSV() : h(0), s(0), v(0) {}
-    inline CHSV(uint8_t hue, uint8_t sat, uint8_t val) : h(hue), s(sat), v(val) {}
+    inline CHSV(uint8_t hue_, uint8_t sat_, uint8_t val_) : h(hue_), s(sat_), v(val_) {}
 };
 
 //==============================================================================
@@ -191,6 +215,11 @@ extern const CRGB TypicalLEDStrip;
 // CRGBPalette16 - 16-color palette
 //==============================================================================
 
+// FastLED PROGMEM-resident gradient palette typedef (ESP-IDF builds keep
+// this in flash; native test build treats it as a plain byte pointer).
+typedef uint8_t TProgmemRGBGradientPalette_byte;
+typedef const TProgmemRGBGradientPalette_byte* TProgmemRGBGradientPaletteRef;
+
 class CRGBPalette16 {
 public:
     CRGB entries[16];
@@ -198,6 +227,20 @@ public:
     CRGBPalette16() {
         for (int i = 0; i < 16; i++) {
             entries[i] = CRGB::Black;
+        }
+    }
+
+    // Construct from a PROGMEM gradient palette table. The native build
+    // doesn't decode the gradient — tests only need a populated array, so
+    // we deterministically derive 16 entries from the byte stream.
+    CRGBPalette16(TProgmemRGBGradientPaletteRef table) {
+        if (table == nullptr) {
+            for (int i = 0; i < 16; i++) entries[i] = CRGB::Black;
+            return;
+        }
+        // Copy first 48 bytes as 16 RGB triples.
+        for (int i = 0; i < 16; i++) {
+            entries[i] = CRGB(table[i * 3 + 0], table[i * 3 + 1], table[i * 3 + 2]);
         }
     }
 
@@ -289,6 +332,92 @@ inline CRGB ColorFromPalette(const CRGBPalette16& palette, uint8_t index,
                              uint8_t brightness = 255,
                              TBlendType blendType = LINEARBLEND) {
     return ColorFromPalette(palette.entries, index, brightness, static_cast<uint8_t>(blendType));
+}
+
+//==============================================================================
+// Arduino-style random() — int-arg overloads
+//
+// The host C library exposes random(void); we deliberately introduce overloads
+// that take an int/long argument so production code calling random(N) and
+// random(min, max) resolves to these here, not to the 0-arg POSIX symbol.
+//==============================================================================
+
+inline long random(long max) {
+    if (max <= 0) return 0;
+    return static_cast<long>(std::rand()) % max;
+}
+
+inline long random(long min, long max) {
+    if (max <= min) return min;
+    return min + static_cast<long>(std::rand()) % (max - min);
+}
+
+//==============================================================================
+// Perlin-noise placeholder — deterministic uint8_t output
+//
+// Real FastLED inoise8() returns smoothed Perlin noise in [0,255]. The mock
+// only needs a defined uint8 value derived deterministically from the input
+// coordinates so unit tests have stable behaviour.
+//==============================================================================
+
+inline uint8_t inoise8(uint16_t x) {
+    return static_cast<uint8_t>((x * 73u) ^ (x >> 3));
+}
+
+inline uint8_t inoise8(uint16_t x, uint16_t y) {
+    return static_cast<uint8_t>((x * 73u + y * 31u) ^ ((x >> 3) ^ (y >> 5)));
+}
+
+inline uint8_t inoise8(uint16_t x, uint16_t y, uint16_t z) {
+    return static_cast<uint8_t>((x * 73u + y * 31u + z * 17u)
+                                ^ ((x >> 3) ^ (y >> 5) ^ (z >> 7)));
+}
+
+//==============================================================================
+// rgb2hsv_approximate — RGB → HSV conversion
+//
+// FastLED ships a fast approximation; the mock uses the standard float-based
+// algorithm. Tests only need correct hue ordering + saturation/value bytes,
+// not bitwise parity with FastLED's lookup tables.
+//==============================================================================
+
+inline CHSV rgb2hsv_approximate(const CRGB& rgb) {
+    const uint8_t r = rgb.r;
+    const uint8_t g = rgb.g;
+    const uint8_t b = rgb.b;
+
+    const uint8_t maxC = std::max({r, g, b});
+    const uint8_t minC = std::min({r, g, b});
+    const uint8_t delta = static_cast<uint8_t>(maxC - minC);
+
+    CHSV out;
+    out.v = maxC;
+
+    if (maxC == 0 || delta == 0) {
+        out.h = 0;
+        out.s = 0;
+        return out;
+    }
+
+    out.s = static_cast<uint8_t>((static_cast<uint16_t>(delta) * 255u) / maxC);
+
+    // Hue in [0, 255] (FastLED-style 8-bit wheel, not 360°).
+    float hueF;
+    if (maxC == r) {
+        hueF = static_cast<float>(static_cast<int>(g) - static_cast<int>(b)) /
+               static_cast<float>(delta);
+    } else if (maxC == g) {
+        hueF = 2.0f + static_cast<float>(static_cast<int>(b) - static_cast<int>(r)) /
+                       static_cast<float>(delta);
+    } else {
+        hueF = 4.0f + static_cast<float>(static_cast<int>(r) - static_cast<int>(g)) /
+                       static_cast<float>(delta);
+    }
+    hueF *= (256.0f / 6.0f);
+    if (hueF < 0.0f) hueF += 256.0f;
+    if (hueF >= 256.0f) hueF -= 256.0f;
+    out.h = static_cast<uint8_t>(hueF);
+    return out;
 }
 
 #endif // NATIVE_BUILD

@@ -1,0 +1,14 @@
+# Built binary
+scripts/m2_harness
+
+# Per-run trajectory dumps + summaries (regeneratable)
+results/
+
+# Python caches
+__pycache__/
+*.pyc
+
+# WAVs are committed (small, deterministic) so the corpus is reproducible.
+# Comment the following line in if you instead want to regenerate them on
+# every run.
+# signals/*.wav

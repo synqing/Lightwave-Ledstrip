@@ -1,0 +1,1 @@
+../../test_native/mocks/Arduino.h

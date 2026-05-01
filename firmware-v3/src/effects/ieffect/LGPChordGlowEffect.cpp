@@ -22,6 +22,8 @@
 
 #include <cmath>
 #include <cstring>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -86,7 +88,7 @@ void LGPChordGlowEffect::render(plugins::EffectContext& ctx) {
     const float rawDt = ctx.getSafeRawDeltaSeconds();
     const float dt = ctx.getSafeDeltaSeconds();
     const int fadeAmt = (int)roundf(25.0f * (dt * 60.0f));
-    fadeToBlackBy(ctx.leds, ctx.ledCount, clampU8(fadeAmt));
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, clampU8(fadeAmt), ctx.getSafeDeltaSeconds());
 
 #if !FEATURE_AUDIO_SYNC
     (void)ctx;

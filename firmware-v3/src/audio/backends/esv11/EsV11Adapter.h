@@ -71,6 +71,15 @@ private:
     // --------------------------------------------------------------------
     float m_prevSnareEnergy = 0.0f;
     float m_prevHihatEnergy = 0.0f;
+
+#if FEATURE_AUDIO_HF_SEMANTICS
+    float m_hfEnergy = 0.0f;
+    float m_airEnergy = 0.0f;
+    float m_cymbalSustain = 0.0f;
+    float m_prevHfRaw = 0.0f;
+    float m_prevBrightness = 0.0f;
+    uint16_t m_hatEventAgeMs = 65535;
+#endif
 };
 
 } // namespace lightwaveos::audio::esv11

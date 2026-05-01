@@ -66,6 +66,7 @@ static WebServerContext makeDummyContext() {
         nullptr,            // logBroadcaster
 #if FEATURE_AUDIO_SYNC
         nullptr,            // audioBroadcaster
+        nullptr,            // stmBroadcaster
 #endif
 #if FEATURE_AUDIO_BENCHMARK
         nullptr,            // benchmarkBroadcaster

@@ -34,6 +34,12 @@ public:
         uint32_t parseErrors = 0;
         uint32_t oversizedFrames = 0;
         uint32_t unknownCommands = 0;
+        // Surface 4 Tier 1: cumulative dispatch attempts (counts every inbound
+        // frame that reaches handleMessage, including rate-limited ones).
+        // Producer: AsyncTCP task on Core 0. Consumer: 1 Hz health task on
+        // Core 1 via getStats() by-value copy (torn read tolerated for 1 Hz
+        // monotonic gauge — atomic upgrade is a separate hardening pass).
+        uint32_t dispatchCount = 0;
     };
 
     /**

@@ -13,6 +13,8 @@
 
 #include <cmath>
 #include <cstring>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -114,7 +116,7 @@ void LGPBassBreathEffect::render(plugins::EffectContext& ctx) {
 
     // Fade previous frame for trail persistence (dynamic: loud = shorter trails)
     uint8_t fadeAmt = (uint8_t)(15 + 35 * (1.0f - breathLevel));
-    fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmt);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, fadeAmt, ctx.getSafeDeltaSeconds());
 
     // Render CENTER PAIR breathing
     for (int dist = 0; dist < HALF_LENGTH; ++dist) {

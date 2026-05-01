@@ -7,6 +7,8 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cstring>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -29,7 +31,7 @@ bool LGPBioluminescentWavesEffect::init(plugins::EffectContext& ctx) {
 
 void LGPBioluminescentWavesEffect::render(plugins::EffectContext& ctx) {
     // Fade to prevent color accumulation from additive blending
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     // Ocean waves with glowing plankton effect — centre-origin addressing
     m_wavePhase = (uint16_t)(m_wavePhase + ctx.speed);

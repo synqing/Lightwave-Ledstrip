@@ -1,0 +1,1 @@
+../test_native/test_effect_role_flags.cpp

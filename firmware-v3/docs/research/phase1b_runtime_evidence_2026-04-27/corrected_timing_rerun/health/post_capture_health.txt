@@ -1,0 +1,43 @@
+
+=== Memory Status ===
+  Free heap: 30704 bytes
+  Min free heap: 28920 bytes
+  Max alloc heap: 20468 bytes
+
+
+=== LightwaveOS v2 Actor System ===
+State: 2
+Uptime: 164187 ms
+Active actors: 3
+Total messages: 1840
+Heap: 8064599 / min 8062575 bytes
+SPIRAM free: 8033895 bytes
+
+--- Renderer ---
+Effect: 8450 (Beat Parity Sprite)
+Brightness: 239
+Speed: 25
+FPS: 119 (target: 120)
+CPU: 100%
+Frames: 18386, Drops: 1
+Frame time: avg=8382, min=8360, max=27429 us
+LED show: avg=537, max=1911 us, skips=0
+Stack watermark: 10488 words
+
+--- ShowDirector ---
+Has show: NO
+
+--- MessageBus ---
+
+=== MessageBus Subscriptions ===
+Active entries: 2/32
+Published: 1840, Delivered: 1, Failed: 0
+
+Type 0x83: 1 subscribers [ Renderer ]
+Type 0xD3: 1 subscribers [ ShowDirector ]
+================================
+
+===================================
+
+  Current effect type: IEffect (native)
+  Metadata: Beat Parity Sprite - Sprites radiate from LEDs 79/80 outward on kick onsets; soft bed between hits.

@@ -1,0 +1,135 @@
+  g       - Toggle/cycle gamma (off→2.2→2.5→2.8→off)
+  b/B     - RD Triangle K +/- (auto-selects RD Triangle)
+  cc      - Show correction mode (0=OFF,1=HSV,2=RGB,3=BOTH)
+  cc N    - Set correction mode (0-3, accepts 'cc1' or 'cc 1')
+  ae      - Show auto-exposure status
+  ae 0/1  - Disable/enable auto-exposure (accepts 'ae0' or 'ae 0')
+  gamma   - Show gamma status
+  gamma N - Set gamma (0=off, 1.0-3.0, accepts 'gamma1.5' or 'gamma 1.5')
+  brown   - Show brown guardrail status
+  brown 0/1 - Disable/enable brown guardrail (accepts 'brown0' or 'brown 0')
+  Csave   - Save color settings to NVS
+
+TempoTracker Debug:
+  tempo   - Show BPM, confidence, phase, lock state
+
+Audio Debug Verbosity:
+  x              - Print 8-band + bass/mid/treble/rms/flux (one-shot; alias: bands)
+  adbg           - Show current level
+  adbg <0-5>     - Set level (0=off, 2=warnings, 5=trace)
+  adbg status    - Print health summary (one-shot)
+  adbg spectrum  - Print 8-band + 64-bin spectrum (one-shot)
+  adbg beat      - Print BPM, phase, confidence (one-shot)
+  adbg interval <N> - Set base interval in frames
+
+Debug Commands (unified):
+  d             - Toggle Bloom effect debug (spd/vel/mood/beat)
+  dbg           - Show debug config
+  dbg <0-5>     - Set global level (0=off,2=warn,3=info,4=debug,5=trace)
+  dbg audio <0-5>   - Set audio domain level
+  dbg render <0-5>  - Set render domain level
+  dbg network <0-5> - Set network domain level
+  dbg actor <0-5>   - Set actor domain level
+  dbg status    - Print audio health NOW
+  dbg spectrum  - Print 64-bin spectrum NOW
+  dbg beat      - Print beat tracking NOW
+  dbg memory    - Print heap/stack NOW
+  dbg interval status <N>  - Auto status every N sec (0=off)
+  dbg interval spectrum <N>- Auto spectrum every N sec (0=off)
+
+Trace Commands:
+  trace         - Flush + dump Perfetto trace JSON to serial
+
+WiFi Commands:
+  wifi              - Show status (mode, SSID, IP, RSSI, saved networks)
+  wifi ap           - Switch to AP-only mode (no STA)
+  wifi connect SSID PASS - Connect to network + save to NVS
+  wifi connect SSID - Connect using saved NVS creds
+  wifi connect      - Reconnect to last/first saved
+  wifi scan         - Trigger network scan
+
+Web API:
+  POST /api/v1/effects/set - Set effect
+  WS   /ws - Real-time control
+
+
+=== LightwaveOS v2 Actor System ===
+State: 2
+Uptime: 14890 ms
+Active actors: 3
+Total messages: 168
+Heap: 8018207 / min 8016243 bytes
+SPIRAM free: 7999991 bytes
+
+--- Renderer ---
+Effect: 6660 (LGP Treble Net)
+Brightness: 239
+Speed: 25
+FPS: 119 (target: 120)
+CPU: 100%
+Frames: 1667, Drops: 1
+Frame time: avg=8377, min=8360, max=27435 us
+LED show: avg=539, max=2098 us, skips=0
+Stack watermark: 11404 words
+
+--- ShowDirector ---
+Has show: NO
+
+--- MessageBus ---
+
+=== MessageBus Subscriptions ===
+Active entries: 2/32
+Published: 168, Delivered: 1, Failed: 0
+
+Type 0x83: 1 subscribers [ Renderer ]
+Type 0xD3: 1 subscribers [ ShowDirector ]
+================================
+
+===================================
+
+  Current effect type: IEffect (native)
+  Metadata: LGP Treble Net - Timbral shimmer lattice with edge-biased spectral filaments
+[18260][1;35m[WARN][0m[WebServer] Low-heap shedding active (internal=18216, largest=8180, resume>28672, latched_ms=15245)
+
+=== Memory Status ===
+  Free heap: 18216 bytes
+  Min free heap: 16292 bytes
+  Max alloc heap: 8180 bytes
+
+
+=== LightwaveOS v2 Actor System ===
+State: 2
+Uptime: 17896 ms
+Active actors: 3
+Total messages: 202
+Heap: 8018207 / min 8016243 bytes
+SPIRAM free: 7999991 bytes
+
+--- Renderer ---
+Effect: 6660 (LGP Treble Net)
+Brightness: 239
+Speed: 25
+FPS: 119 (target: 120)
+CPU: 100%
+Frames: 2003, Drops: 1
+Frame time: avg=8379, min=8360, max=27435 us
+LED show: avg=555, max=2098 us, skips=0
+Stack watermark: 11404 words
+
+--- ShowDirector ---
+Has show: NO
+
+--- MessageBus ---
+
+=== MessageBus Subscriptions ===
+Active entries: 2/32
+Published: 202, Delivered: 1, Failed: 0
+
+Type 0x83: 1 subscribers [ Renderer ]
+Type 0xD3: 1 subscribers [ ShowDirector ]
+================================
+
+===================================
+
+  Current effect type: IEffect (native)
+  Metadata: LGP Treble Net - Timbral shimmer lattice with edge-biased spectral filaments

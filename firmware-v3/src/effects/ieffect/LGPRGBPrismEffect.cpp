@@ -7,6 +7,8 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -30,7 +32,7 @@ void LGPRGBPrismEffect::render(plugins::EffectContext& ctx) {
     const float dispersion = 1.5f;
 
     // Trail persistence — long fade for smooth ambient colour blending
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 10);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, 10, ctx.getSafeDeltaSeconds());
 
     m_prismAngle += speed * 0.02f * 60.0f * dt;
 

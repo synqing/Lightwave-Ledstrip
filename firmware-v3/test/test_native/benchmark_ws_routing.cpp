@@ -19,7 +19,8 @@
 #include <cstring>
 #include <cstdlib>
 
-// Stub types for WebServerContext construction
+// Stub types for WebServerContext construction (must precede WebServerContext.h).
+// These complete the forward declarations — never dereferenced in the benchmark.
 namespace lightwaveos {
 namespace actors {
     class ActorSystem { public: char _pad = 0; };
@@ -41,6 +42,22 @@ namespace network {
 }
 }
 
+// Pull features.h directly so the FEATURE_AUDIO_SYNC / FEATURE_AUDIO_BENCHMARK
+// macros are visible BEFORE we conditionally stub the audio/benchmark broadcasters.
+#include "config/features.h"
+
+#if FEATURE_AUDIO_SYNC
+namespace lightwaveos { namespace network { namespace webserver {
+    class AudioStreamBroadcaster {};
+    class StmStreamBroadcaster {};
+}}}
+#endif
+#if FEATURE_AUDIO_BENCHMARK
+namespace lightwaveos { namespace network { namespace webserver {
+    class BenchmarkStreamBroadcaster {};
+}}}
+#endif
+
 #include "network/webserver/WsCommandRouter.h"
 #include "network/webserver/WebServerContext.h"
 
@@ -53,9 +70,27 @@ static lightwaveos::actors::ActorSystem s_dummyActorSystem;
 static RateLimiter s_dummyRateLimiter;
 
 static WebServerContext makeDummyContext() {
+    // Constructor argument list matches the conditional layout in
+    // src/network/webserver/WebServerContext.h (lines 113–148). Keep these
+    // #if guards aligned with that header — they MUST mirror the declared
+    // signature for the active build feature set.
     return WebServerContext(
-        s_dummyActorSystem, nullptr, nullptr, nullptr,
-        s_dummyRateLimiter, nullptr, nullptr, 0, false
+        s_dummyActorSystem,   // actors (ref)
+        nullptr,              // renderer
+        nullptr,              // zoneComposer
+        nullptr,              // webServer
+        s_dummyRateLimiter,   // rateLimiter (ref)
+        nullptr,              // ledBroadcaster
+        nullptr,              // logBroadcaster
+#if FEATURE_AUDIO_SYNC
+        nullptr,              // audioBroadcaster
+        nullptr,              // stmBroadcaster
+#endif
+#if FEATURE_AUDIO_BENCHMARK
+        nullptr,              // benchmarkBroadcaster
+#endif
+        0u,                   // startTimeMs
+        false                 // apMode
     );
 }
 

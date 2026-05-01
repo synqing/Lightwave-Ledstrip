@@ -14,6 +14,26 @@ Checks:
 7. [INVERTED] ALL effect .cpp files scanned for rainbow/hue-wheel patterns.
    Non-allowlisted files FAIL.
 8. K1 AP-only: no STA-mode WiFi usage outside allowlisted infrastructure files.
+9. Audio Feature Surface v2: new production effects do not directly consume
+   raw `bins256` / `binHz` / frequency-range helpers. Existing legacy consumers
+   are explicit allowlist entries while they are migrated.
+
+Brand-voice extensions (Block 2 items 19, 20, 15 — Phase 0A first enforcement primitive):
+10. [BRAND-VOICE §3.5 / Block 2 item 19] Per-bin tempo-bank read inside render() —
+   FAIL.  `tempi[*]` / `tempoBank[*]` indexed access from the render call path
+   contradicts BRAND_VOICE_POSTURE.md §3.5 (literal ES tempo-bank swarm rendering
+   banned) and §4.5 (tempo-bank as engine plumbing only).  Single-tempo `tempoPhase`
+   scalar reads remain compliant.
+11. [BRAND-VOICE §3.6 / Block 2 item 20] GEO-06 CircularRing / GEO-10
+    AsymmetricDriftOrigin name patterns — FAIL.  These effect families violate
+    HW-03 Centre-Origin strict invariant per §6 item 10 / §3 C-8.  No allowlist.
+12. [BRAND-VOICE §3.3 / Block 2 item 15] Multi-element fragmentation patterns
+    (PendulumChain / PendulumArray / PendulumSwarm / BoidSwarm / BoidFlock /
+    KuramotoSwarm / KuramotoOscillators / OscillatorChain / OscillatorArray) —
+    WARN (boundary-flag, not hard FAIL).  These name patterns are likely-but-not-
+    certain indicators of multi-element fragmentation per §3.3.  Continuum-class
+    alternatives (heat-eq, spring-mass-lattice as ≥80 coupled cells reading as
+    continuum) are §4.3 boundary cases and remain allowed.
 """
 
 from __future__ import annotations
@@ -197,6 +217,10 @@ CENTRE_LINEAR_ALLOWLIST: set[str] = {
     "SnapwaveLinearEffect.cpp",
     "RippleEnhancedEffect.cpp",
     "PlasmaEffect.cpp",
+    # Operator/debug gradient proof effect: linear iteration samples a
+    # configurable gradient field rather than presenting an edge-origin sweep.
+    # Kept explicit for AFS v2 Phase 1B contract-lock reporting.
+    "LGPGradientFieldEffect.cpp",
 }
 
 # ---------------------------------------------------------------------------
@@ -207,10 +231,35 @@ CENTRE_LINEAR_ALLOWLIST: set[str] = {
 # or refactored to use palette-based colouring.
 # ---------------------------------------------------------------------------
 
-RAINBOW_ALLOWLIST: set[str] = set()
-# Currently empty: no effect files legitimately use rainbow patterns.
-# Add filenames here if a new effect genuinely requires fill_rainbow,
-# CHSV(hue...) with full-range hue cycling, or hue++ in a loop.
+RAINBOW_ALLOWLIST: set[str] = {
+    # LGP AR-family effects whose CHSV(hue, ...) pattern is *deliberate*
+    # palette-locked colouring (the hue argument is a static palette index,
+    # not a full hue-wheel sweep) per Move 0.2 audit §3.5. Allowlisted to
+    # silence the rainbow-scan rule without weakening the rule itself.
+    # Explicit Phase 1B exceptions retain file-level accountability; they are
+    # not permission for new production hue-wheel effects.
+    "LGPAiryCometAREffect.cpp",
+    "LGPChimeraCrownAREffect.cpp",
+    "LGPCymaticLadderAREffect.cpp",
+    "LGPHarmonographHaloAREffect.cpp",
+    "LGPHyperbolicPortalAREffect.cpp",
+    "LGPLangtonHighwayAREffect.cpp",
+    "LGPLorenzRibbonAREffect.cpp",
+    "LGPMachDiamondsAREffect.cpp",
+    "LGPMoireCathedralAREffect.cpp",
+    "LGPRoseBloomAREffect.cpp",
+    "LGPSchlierenFlowAREffect.cpp",
+    "LGPSpirographCrownAREffect.cpp",
+    "LGPSuperformulaGlyphAREffect.cpp",
+    "LGPTalbotCarpetAREffect.cpp",
+    "LGPWaterCausticsAREffect.cpp",
+    # Existing AR reaction-diffusion effect; explicitly retained as a legacy
+    # hardware-A/B exception pending a palette rewrite.
+    "LGPReactionDiffusionAREffect.cpp",
+    # Native-test deterministic helper only. The production render path uses
+    # ctx.palette.getColor(); the CHSV helper is compiled for test determinism.
+    "RadialTimeScopeEffect.cpp",
+}
 
 # ---------------------------------------------------------------------------
 # K1 AP-only allowlist
@@ -225,6 +274,23 @@ K1_STA_ALLOWLIST: set[str] = {
     "network/WiFiManager.cpp",
     "network/WebServer.cpp",
     "main.cpp",
+    # serial/SerialCLI.cpp uses a read-only diagnostic ternary against
+    # WIFI_MODE_STA to print the current mode — no STA activation. Audit §2.4.
+    "serial/SerialCLI.cpp",
+}
+
+# ---------------------------------------------------------------------------
+# Audio Feature Surface v2 raw-substrate containment allowlist
+#
+# Raw `bins256` is physically present in ControlBusFrame for legacy, STM,
+# diagnostic, and research reasons.  New production effect code must not
+# directly consume it; effects should use named musical/semantic helpers.
+# Existing consumers stay explicit here until migrated.
+# ---------------------------------------------------------------------------
+
+RAW_BINS256_EFFECT_ALLOWLIST: set[str] = {
+    # Legacy detailed spectrum visualiser. Whitelisted during AFS v2 migration.
+    "LGPSpectrumDetailEffect.cpp",
 }
 
 # ---------------------------------------------------------------------------
@@ -256,6 +322,7 @@ LINEAR_SWEEP_PATTERN = re.compile(
 
 CENTRE_ORIGIN_PATTERN = re.compile(
     r"SET_CENTER_PAIR|CENTER_LEFT"
+    r"|writeCentrePair"
     r"|79\s*-\s*\w"
     r"|80\s*\+\s*\w"
     r"|NUM_LEDS\s*/\s*2"
@@ -269,10 +336,114 @@ K1_STA_PATTERNS = (
     re.compile(r"\bWIFI_STA\b"),
 )
 
+RAW_BINS256_EFFECT_PATTERNS = (
+    re.compile(r"\bctx\.audio\.bins256\s*\("),
+    re.compile(r"\bctx\.audio\.binHz\s*\("),
+    re.compile(r"\bctx\.audio\.energyInRange\s*\("),
+    re.compile(r"\bctx\.audio\.namedBandEnergy\s*\("),
+    re.compile(r"\bcontrolBus\.bins256\b"),
+    re.compile(r"\bcb\.bins256\b"),
+)
+
 RAW_CONTROL_BUS_PATTERN = re.compile(r"ctx\.audio\.controlBus")
 RENDER_START_PATTERN = re.compile(r"^\s*void\s+[\w:]+::render\s*\([^)]*\)\s*\{")
 HEAP_IN_RENDER_PATTERN = re.compile(
     r"\b(new|malloc|calloc|realloc|heap_caps_malloc)\b|(?:^|[^A-Za-z0-9_])String\s*\("
+)
+
+# ---------------------------------------------------------------------------
+# Brand-voice extensions (Phase 0A first enforcement primitive)
+# ---------------------------------------------------------------------------
+
+# §3.5 / item 19 — per-bin tempo-bank read in render() path.
+# Matches `tempi[<expr>]` and `tempoBank[<expr>]` where the index is NOT the
+# literal `0`.  Single-element access at index 0 is permitted as the engine-
+# plumbing escape (a single-tempo bank-of-1 is semantically equivalent to a
+# scalar `tempoPhase`).
+TEMPO_BANK_INDEXED_PATTERN = re.compile(
+    r"\b(tempi|tempoBank)\s*\[\s*(?!0\s*\])([^\]]+)\]"
+)
+
+# Empty allowlist — any new tempo-bank-indexed render-path access must be
+# explicitly justified by adding the filename here.
+TEMPO_BANK_ALLOWLIST: set[str] = set()
+
+# §3.6 / item 20 — GEO-06 / GEO-10 kill: filename or class-name match against
+# CircularRing / AsymmetricDriftOrigin / DriftOrigin patterns.
+# No allowlist (HW-03 strict per §3 C-8).
+GEO_KILL_NAME_PATTERNS = (
+    re.compile(r"CircularRing", re.IGNORECASE),
+    re.compile(r"AsymmetricDriftOrigin", re.IGNORECASE),
+    re.compile(r"AsymmetricDrift", re.IGNORECASE),
+    re.compile(r"\bDriftOrigin\b", re.IGNORECASE),
+)
+
+# §3.3 / item 15 — multi-element fragmentation: filename or class-name match.
+# Conservative pattern set — only flags exact fragmentation indicators.
+# Continuum-class names (KuramotoTransport, ModalResonance, SpringMassLattice
+# etc.) are NOT matched.
+FRAGMENTATION_NAME_PATTERNS = (
+    re.compile(r"PendulumChain", re.IGNORECASE),
+    re.compile(r"PendulumArray", re.IGNORECASE),
+    re.compile(r"PendulumSwarm", re.IGNORECASE),
+    re.compile(r"BoidSwarm", re.IGNORECASE),
+    re.compile(r"BoidFlock", re.IGNORECASE),
+    re.compile(r"KuramotoSwarm", re.IGNORECASE),
+    re.compile(r"KuramotoOscillators", re.IGNORECASE),
+    re.compile(r"OscillatorChain", re.IGNORECASE),
+    re.compile(r"OscillatorArray", re.IGNORECASE),
+)
+
+# ---------------------------------------------------------------------------
+# Phase D — EFFECT_FRAMEWORK_STANDARD detector patterns
+# (Standard rules #2, #8, #9, #12 — LINT-DEFERRED now implemented)
+# ---------------------------------------------------------------------------
+
+# Rule #2 — stacked smoothing.  Maps smoother-type name to its detection regex.
+# Threshold: 3+ distinct types in one file = likely stacking chain.
+SMOOTHING_TYPE_PATTERNS: dict = {
+    "AsymmetricFollower": re.compile(r"\bAsymmetricFollower\b"),
+    "ExpDecay": re.compile(r"\bExpDecay\b"),
+    "Spring": re.compile(r"\bSpring\s*<"),  # Spring<T> template — avoids "spring" prose hits
+    "LowpassFilter": re.compile(r"\bLowpassFilter\b"),
+    "OneEuroFilter": re.compile(r"\bOneEuroFilter\b"),
+}
+SMOOTHING_STACKING_THRESHOLD = 3
+
+# Rule #8 — hard-set absolute brightness inside render().
+HARD_BRIGHTNESS_PATTERNS = (
+    re.compile(r"\bCRGB\s*\(\s*255\s*,\s*255\s*,\s*255\s*\)"),
+    re.compile(r"\bCRGB\s*::\s*White\b"),
+    re.compile(r"\bCHSV\s*\([^,)]+,[^,)]+,\s*255\s*\)"),
+)
+
+# Known pre-rule-#8 exceptions — Phase E remediation targets.
+# TestRig effects use absolute brightness deliberately for visual calibration.
+HARD_BRIGHTNESS_ALLOWLIST: set[str] = {
+    "LGPReactionDiffusionTestRigEffect.cpp",  # edge markers; test-rig diagnostic
+}
+
+# Rule #9 — per-effect silence early-return inside render().
+SILENCE_GATE_COND_PATTERNS = (
+    re.compile(r"\brms\b.*<"),                              # rms() < threshold
+    re.compile(r"!\s*(?:ctx\.audio\.)?available\b"),        # !audio.available
+    re.compile(r"\bavailable\s*(?:==\s*false|!=\s*true)\b"),
+)
+
+# All Rule #9 silence gates have been removed from production effects.
+# This allowlist is intentionally empty — any new silence gate added to an
+# effect file will now be caught immediately by the lint check.
+SILENCE_GATE_ALLOWLIST: set[str] = set()
+
+# Rule #12 — frame-coupled decay: bare `*= 0.Xf;` with no dt on the line.
+# Restrict to [0.80–0.99]: temporal-decay coefficients live here at 60-120 FPS.
+# Static scale factors (0.125, 0.2, 0.5 etc.) are excluded; they are not
+# frame-rate-dependent and do not need the dtDecay fix.
+FRAME_COUPLED_DECAY_PATTERN = re.compile(
+    r"\*=\s*0\.(?:8[0-9]|9[0-9])\d*f?\s*;"
+)
+DT_DERIVED_INDICATORS = re.compile(
+    r"\bdt\b|\bdelta(?:Time|Ms)?\b|\belapsedMs\b|\bdtDecay\b|\bexpf?\s*\("
 )
 
 
@@ -378,9 +549,9 @@ def check_heap_alloc_in_render(violations: list[str]) -> None:
             if HEAP_IN_RENDER_PATTERN.search(code_part):
                 violations.append(f"[heap] Heap allocation in render at {path}:{idx}")
 
-                brace_depth += line.count("{") - line.count("}")
-                if brace_depth <= 0:
-                    in_render = False
+            brace_depth += line.count("{") - line.count("}")
+            if brace_depth <= 0:
+                in_render = False
 
 
 def check_ar_control_liveness(violations: list[str]) -> None:
@@ -466,6 +637,170 @@ def check_rainbow_inverted(violations: list[str], stats: dict) -> None:
     stats["rainbow_scan_flagged"] = flagged
 
 
+def check_tempo_bank_in_render(violations: list[str], stats: dict,
+                                effect_dir: Path = IEFFECT_DIR) -> None:
+    """
+    [BRAND-VOICE §3.5 / Block 2 item 19] FAIL on per-bin tempo-bank reads
+    inside render() blocks.
+
+    Walks each .cpp file's render() lexical block (same scheme as
+    check_heap_alloc_in_render).  Flags any `tempi[expr]` or `tempoBank[expr]`
+    indexed access where the index is NOT the literal `0`.
+
+    False-positive risk: low.  The pattern only matches genuine indexed access;
+    scalar reads like `controlBus.tempoPhase` are not affected.  Single-element
+    bank-of-1 access at literal index 0 is exempt (engine-plumbing escape).
+    """
+    scanned = 0
+    flagged = 0
+    for path in sorted(effect_dir.rglob("*.cpp")):
+        if _is_reference_path(path):
+            continue
+        if path.name in TEMPO_BANK_ALLOWLIST:
+            continue
+        scanned += 1
+        lines = read_text(path).splitlines()
+        in_render = False
+        brace_depth = 0
+
+        for idx, line in enumerate(lines, start=1):
+            code_part = line.split("//", 1)[0]
+            if not in_render:
+                if RENDER_START_PATTERN.search(line):
+                    in_render = True
+                    brace_depth = line.count("{") - line.count("}")
+                    if TEMPO_BANK_INDEXED_PATTERN.search(code_part):
+                        violations.append(
+                            f"[tempo-bank-in-render] Per-bin tempo-bank read in render() at {path.name}:{idx}"
+                        )
+                        flagged += 1
+                continue
+
+            if TEMPO_BANK_INDEXED_PATTERN.search(code_part):
+                violations.append(
+                    f"[tempo-bank-in-render] Per-bin tempo-bank read in render() at {path.name}:{idx}"
+                )
+                flagged += 1
+
+            brace_depth += line.count("{") - line.count("}")
+            if brace_depth <= 0:
+                in_render = False
+
+    stats["tempo_bank_scan_total"] = scanned
+    stats["tempo_bank_scan_flagged"] = flagged
+
+
+def check_geo_kill_patterns(violations: list[str], stats: dict,
+                             effect_dir: Path = IEFFECT_DIR) -> None:
+    """
+    [BRAND-VOICE §3.6 / Block 2 item 20] FAIL on GEO-06 CircularRing /
+    GEO-10 AsymmetricDriftOrigin name patterns.
+
+    Scans filenames AND class-name declarations.  No allowlist (HW-03 strict
+    per §3 C-8 + §6 item 10).
+
+    False-positive risk: low.  Names are specific.  ConcentricRings (existing
+    allowlisted family) does NOT match `CircularRing` because the pattern
+    requires the literal token "CircularRing" not "ConcentricRings".
+    """
+    scanned = 0
+    flagged = 0
+    class_decl_pattern = re.compile(r"\bclass\s+(\w+)")
+
+    for path in sorted(effect_dir.rglob("*")):
+        if not path.is_file():
+            continue
+        if path.suffix not in {".cpp", ".h"}:
+            continue
+        if _is_reference_path(path):
+            continue
+        scanned += 1
+
+        # Filename check
+        for pat in GEO_KILL_NAME_PATTERNS:
+            if pat.search(path.name):
+                violations.append(
+                    f"[geo-kill] HW-03 violation — name pattern matches "
+                    f"GEO-06/GEO-10 kill in filename: {path.name} (matched: {pat.pattern})"
+                )
+                flagged += 1
+                break  # one violation per file from filename check
+
+        # Class-name check
+        text = read_text(path)
+        for class_match in class_decl_pattern.finditer(text):
+            class_name = class_match.group(1)
+            for pat in GEO_KILL_NAME_PATTERNS:
+                if pat.search(class_name):
+                    violations.append(
+                        f"[geo-kill] HW-03 violation — class name matches "
+                        f"GEO-06/GEO-10 kill: {class_name} in {path.name} "
+                        f"(matched: {pat.pattern})"
+                    )
+                    flagged += 1
+
+    stats["geo_kill_scan_total"] = scanned
+    stats["geo_kill_scan_flagged"] = flagged
+
+
+def check_fragmentation_patterns(warnings: list[str], stats: dict,
+                                  effect_dir: Path = IEFFECT_DIR) -> None:
+    """
+    [BRAND-VOICE §3.3 / Block 2 item 15] WARN (boundary-flag, not hard FAIL)
+    on multi-element fragmentation name patterns.
+
+    Captain decision: emit as warning rather than violation because pattern
+    detection is naming-convention-dependent and false-positive risk is medium.
+    Continuum-class alternatives (KuramotoTransport, ModalResonance,
+    SpringMassLattice, heat-eq) are §4.3 boundary cases and intentionally NOT
+    matched by these patterns.
+
+    False-positive risk: medium.  An effect with a fragmentation-style name
+    that is actually a continuum-class implementation would WARN; reviewer
+    decides PASS / KILL.  Add to a future allowlist or rename if it survives
+    review.
+    """
+    scanned = 0
+    flagged = 0
+    class_decl_pattern = re.compile(r"\bclass\s+(\w+)")
+
+    for path in sorted(effect_dir.rglob("*")):
+        if not path.is_file():
+            continue
+        if path.suffix not in {".cpp", ".h"}:
+            continue
+        if _is_reference_path(path):
+            continue
+        scanned += 1
+
+        # Filename check
+        for pat in FRAGMENTATION_NAME_PATTERNS:
+            if pat.search(path.name):
+                warnings.append(
+                    f"[fragmentation-warn] §3.3 multi-element fragmentation "
+                    f"pattern in filename: {path.name} (matched: {pat.pattern}) "
+                    f"— reviewer must classify PASS / KILL"
+                )
+                flagged += 1
+                break
+
+        # Class-name check
+        text = read_text(path)
+        for class_match in class_decl_pattern.finditer(text):
+            class_name = class_match.group(1)
+            for pat in FRAGMENTATION_NAME_PATTERNS:
+                if pat.search(class_name):
+                    warnings.append(
+                        f"[fragmentation-warn] §3.3 multi-element fragmentation "
+                        f"pattern in class name: {class_name} in {path.name} "
+                        f"(matched: {pat.pattern}) — reviewer must classify PASS / KILL"
+                    )
+                    flagged += 1
+
+    stats["fragmentation_scan_total"] = scanned
+    stats["fragmentation_scan_flagged"] = flagged
+
+
 def check_k1_ap_only(violations: list[str], stats: dict) -> None:
     """
     Scan ALL .cpp and .h files under src/ for WiFi STA-mode references.
@@ -499,12 +834,226 @@ def check_k1_ap_only(violations: list[str], stats: dict) -> None:
     stats["k1_sta_scan_flagged"] = flagged
 
 
+def check_raw_bins256_effect_access(violations: list[str], stats: dict) -> None:
+    """
+    Audio Feature Surface v2 containment gate.
+
+    New production effects must not directly consume raw `bins256`, `binHz`, or
+    helper paths that scan linear FFT bins.  Existing legacy consumers are
+    explicit allowlist entries while they are migrated to named semantic helpers.
+    Reference effects are excluded by _is_reference_path().
+    """
+    scanned = 0
+    flagged = 0
+    for path in effect_files():
+        scanned += 1
+        if path.name in RAW_BINS256_EFFECT_ALLOWLIST:
+            continue
+        for idx, line in enumerate(read_text(path).splitlines(), start=1):
+            code_part = line.split("//", 1)[0]
+            matched = [pat.pattern for pat in RAW_BINS256_EFFECT_PATTERNS if pat.search(code_part)]
+            if matched:
+                violations.append(
+                    f"[audio-surface-v2] Raw bins256/binHz access in non-allowlisted effect: "
+                    f"{path.name}:{idx} (matched: {', '.join(matched)})"
+                )
+                flagged += 1
+    stats["raw_bins256_scan_total"] = scanned
+    stats["raw_bins256_scan_flagged"] = flagged
+
+
+# ---------------------------------------------------------------------------
+# EFFECT_FRAMEWORK_STANDARD detector skeletons (Phase D continuation surface).
+# Each is currently a no-op stub that records "not yet implemented" in stats.
+# Phase D: replace each body with the real AST/regex scan. Standard rule
+# numbers reference firmware-v3/docs/EFFECT_FRAMEWORK_STANDARD.md sections.
+# ---------------------------------------------------------------------------
+
+def check_stacked_smoothing(violations: list[str], stats: dict) -> None:
+    """Standard rule #2 — single-stage post-mode smoothing.
+    Scans .cpp files for SMOOTHING_STACKING_THRESHOLD+ distinct smoother types
+    (AsymmetricFollower, ExpDecay, Spring<T>, LowpassFilter, OneEuroFilter).
+    Three or more distinct types in one file is the 5L-AR triple-smoothing
+    signature.  False-positive rate: medium-high (distinct types on *different*
+    audio scalars do not constitute stacking — reviewer must confirm).
+    """
+    scanned = 0
+    flagged = 0
+    for path in effect_cpp_files():
+        scanned += 1
+        text = read_text(path)
+        types_present = [
+            name for name, pat in SMOOTHING_TYPE_PATTERNS.items() if pat.search(text)
+        ]
+        if len(types_present) >= SMOOTHING_STACKING_THRESHOLD:
+            violations.append(
+                f"[stacked-smoothing] {len(types_present)} distinct smoothing types in "
+                f"{path.name} ({', '.join(types_present)}) — "
+                f"verify these are NOT applied sequentially to the same audio scalar"
+            )
+            flagged += 1
+    stats["stacked_smoothing_scan_total"] = scanned
+    stats["stacked_smoothing_scan_flagged"] = flagged
+
+
+def check_chromagram_positive(violations: list[str], stats: dict) -> None:
+    """Standard rule #6 — palette/hue from chromagram (positive pattern).
+    Phase D: regex strictness gated on Captain Q2.
+      strict — require explicit getChroma() / chromaSmooth / note_colors[i%12]
+      loose  — palette.getColor(gHue+offset) satisfies (no fill_rainbow)
+    Existing check_rainbow_inverted handles the negative side.
+    """
+    stats["chromagram_positive_phaseD_status"] = "not_yet_implemented"
+
+
+def check_hard_set_brightness(violations: list[str], stats: dict) -> None:
+    """Standard rule #8 — global brightness pipeline post-mode.
+    Scans render() bodies for hard-set absolute brightness:
+      CRGB(255, 255, 255), CRGB::White, CHSV(_, _, 255).
+    Effects must write normalised values; the global brightness scale is
+    applied once by RendererActor::showLeds() + ColorCorrectionEngine.
+    False-positive rate: low.  Patterns are specific.
+    """
+    scanned = 0
+    flagged = 0
+    for path in IEFFECT_DIR.rglob("*.cpp"):
+        if _is_reference_path(path):
+            continue
+        scanned += 1
+        if path.name in HARD_BRIGHTNESS_ALLOWLIST:
+            continue
+        lines = read_text(path).splitlines()
+        in_render = False
+        brace_depth = 0
+
+        for idx, line in enumerate(lines, start=1):
+            if not in_render:
+                if RENDER_START_PATTERN.search(line):
+                    in_render = True
+                    brace_depth = line.count("{") - line.count("}")
+                continue
+
+            code_part = line.split("//", 1)[0]
+            for pat in HARD_BRIGHTNESS_PATTERNS:
+                if pat.search(code_part):
+                    violations.append(
+                        f"[hard-set-brightness] Hard absolute brightness in render() "
+                        f"at {path.name}:{idx}"
+                    )
+                    flagged += 1
+                    break
+
+            brace_depth += line.count("{") - line.count("}")
+            if brace_depth <= 0:
+                in_render = False
+
+    stats["hard_set_brightness_scan_total"] = scanned
+    stats["hard_set_brightness_scan_flagged"] = flagged
+
+
+def check_local_silence_gate(violations: list[str], stats: dict) -> None:
+    """Standard rule #9 — silence gating is a global post-process.
+    Detects per-effect early-return patterns gated on audio availability or
+    RMS threshold inside render() bodies.  Duplicating the global silent_scale
+    produces double-fading artefacts.
+    False-positive rate: medium.  Legitimate non-gate `if (rms < x)` branches
+    without `return` are excluded; reviewer confirms flagged instances are gates.
+    """
+    scanned = 0
+    flagged = 0
+    for path in IEFFECT_DIR.rglob("*.cpp"):
+        if _is_reference_path(path):
+            continue
+        scanned += 1
+        if path.name in SILENCE_GATE_ALLOWLIST:
+            continue
+        lines = read_text(path).splitlines()
+        in_render = False
+        brace_depth = 0
+
+        for idx, line in enumerate(lines, start=1):
+            if not in_render:
+                if RENDER_START_PATTERN.search(line):
+                    in_render = True
+                    brace_depth = line.count("{") - line.count("}")
+                continue
+
+            code_part = line.split("//", 1)[0]
+            # Only flag when the if contains a silence-related condition
+            if re.search(r"\bif\s*\(", code_part):
+                for pat in SILENCE_GATE_COND_PATTERNS:
+                    if pat.search(code_part):
+                        # Check this line + next 3 lines for an early return
+                        window = "\n".join(
+                            l.split("//", 1)[0]
+                            for l in lines[idx - 1 : min(idx + 4, len(lines))]
+                        )
+                        if re.search(r"\breturn\b", window):
+                            violations.append(
+                                f"[local-silence-gate] Per-effect silence/availability "
+                                f"gate with early return in render() at {path.name}:{idx}"
+                            )
+                            flagged += 1
+                            break
+
+            brace_depth += line.count("{") - line.count("}")
+            if brace_depth <= 0:
+                in_render = False
+
+    stats["local_silence_gate_scan_total"] = scanned
+    stats["local_silence_gate_scan_flagged"] = flagged
+
+
+def check_frame_coupled_decay(violations: list[str], stats: dict) -> None:
+    """Standard rule #12 — rate-independent smoothing via tau constants.
+    Scans render() bodies for bare `*= 0.Xf;` patterns where the line
+    contains no dt / dtDecay / exp reference.  At 60-120 FPS variation,
+    these break predictably: use dtDecay() / 1-exp(-dt/tau) instead.
+    False-positive rate: high.  Static scale factors (colour mixing,
+    geometry) trigger the same pattern.  Per move_0_2 doctrine: expect
+    80-90% FP on first run; tighten regex after manual review.
+    """
+    scanned = 0
+    flagged = 0
+    for path in IEFFECT_DIR.rglob("*.cpp"):
+        if _is_reference_path(path):
+            continue
+        scanned += 1
+        lines = read_text(path).splitlines()
+        in_render = False
+        brace_depth = 0
+
+        for idx, line in enumerate(lines, start=1):
+            if not in_render:
+                if RENDER_START_PATTERN.search(line):
+                    in_render = True
+                    brace_depth = line.count("{") - line.count("}")
+                continue
+
+            code_part = line.split("//", 1)[0]
+            if (FRAME_COUPLED_DECAY_PATTERN.search(code_part)
+                    and not DT_DERIVED_INDICATORS.search(code_part)):
+                violations.append(
+                    f"[frame-coupled-decay] Frame-coupled alpha in render() at "
+                    f"{path.name}:{idx} — use dtDecay() / 1-expf(-dt/tau)"
+                )
+                flagged += 1
+
+            brace_depth += line.count("{") - line.count("}")
+            if brace_depth <= 0:
+                in_render = False
+
+    stats["frame_coupled_decay_scan_total"] = scanned
+    stats["frame_coupled_decay_scan_flagged"] = flagged
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
 def main() -> int:
     violations: list[str] = []
+    warnings: list[str] = []
     stats: dict = {}
 
     # Original checks (unchanged)
@@ -514,10 +1063,24 @@ def main() -> int:
     check_heap_alloc_in_render(violations)
     check_ar_control_liveness(violations)
 
-    # New inverted checks
+    # Inverted checks
     check_centre_origin_inverted(violations, stats)
     check_rainbow_inverted(violations, stats)
     check_k1_ap_only(violations, stats)
+    check_raw_bins256_effect_access(violations, stats)
+
+    # Brand-voice extensions (Phase 0A first enforcement primitive)
+    check_tempo_bank_in_render(violations, stats)
+    check_geo_kill_patterns(violations, stats)
+    check_fragmentation_patterns(warnings, stats)
+
+    # EFFECT_FRAMEWORK_STANDARD detector skeletons (Phase D — currently no-op).
+    # See firmware-v3/docs/EFFECT_FRAMEWORK_STANDARD.md for the rule numbers.
+    check_stacked_smoothing(violations, stats)        # rule #2
+    check_chromagram_positive(violations, stats)      # rule #6
+    check_hard_set_brightness(violations, stats)      # rule #8
+    check_local_silence_gate(violations, stats)       # rule #9
+    check_frame_coupled_decay(violations, stats)      # rule #12
 
     # Count total effect files
     effect_file_count = len(list(effect_files()))
@@ -526,6 +1089,12 @@ def main() -> int:
         print("FAIL: effect contract checks found issues:")
         for issue in violations:
             print(f"  - {issue}")
+        print()
+
+    if warnings:
+        print("WARN: brand-voice boundary flags (review required, not blocking):")
+        for warn in warnings:
+            print(f"  - {warn}")
         print()
 
     # Always print scan summary
@@ -540,9 +1109,34 @@ def main() -> int:
     print(f"  K1 AP-only scan:    {stats.get('k1_sta_scan_total', 0)} .cpp/.h files checked"
           f" | allowlist: {len(K1_STA_ALLOWLIST)} files"
           f" | flagged: {stats.get('k1_sta_scan_flagged', 0)}")
+    print(f"  Raw bins256 scan:   {stats.get('raw_bins256_scan_total', 0)} .cpp/.h files checked"
+          f" | allowlist: {len(RAW_BINS256_EFFECT_ALLOWLIST)} files"
+          f" | flagged: {stats.get('raw_bins256_scan_flagged', 0)}")
+    print(f"  Tempo-bank scan:    {stats.get('tempo_bank_scan_total', 0)} .cpp files checked"
+          f" | allowlist: {len(TEMPO_BANK_ALLOWLIST)} files"
+          f" | flagged: {stats.get('tempo_bank_scan_flagged', 0)}")
+    print(f"  GEO-kill scan:      {stats.get('geo_kill_scan_total', 0)} .cpp/.h files checked"
+          f" | flagged: {stats.get('geo_kill_scan_flagged', 0)}")
+    print(f"  Fragmentation warn: {stats.get('fragmentation_scan_total', 0)} .cpp/.h files checked"
+          f" | flagged: {stats.get('fragmentation_scan_flagged', 0)}")
+    print(f"  Stacked-smoothing:  {stats.get('stacked_smoothing_scan_total', 0)} .cpp files checked"
+          f" | flagged: {stats.get('stacked_smoothing_scan_flagged', 0)}")
+    print(f"  Hard-set-bright:    {stats.get('hard_set_brightness_scan_total', 0)} .cpp files checked"
+          f" | allowlist: {len(HARD_BRIGHTNESS_ALLOWLIST)} files"
+          f" | flagged: {stats.get('hard_set_brightness_scan_flagged', 0)}")
+    print(f"  Silence-gate:       {stats.get('local_silence_gate_scan_total', 0)} .cpp files checked"
+          f" | allowlist: {len(SILENCE_GATE_ALLOWLIST)} files"
+          f" | flagged: {stats.get('local_silence_gate_scan_flagged', 0)}")
+    print(f"  Frame-coupled-α:    {stats.get('frame_coupled_decay_scan_total', 0)} .cpp files checked"
+          f" | flagged: {stats.get('frame_coupled_decay_scan_flagged', 0)} [high FP expected — iterate regex]")
+    print(f"  Chromagram-pos:     [PHASE-D DEFERRED — gated on Captain Q2 verdict]")
 
     if violations:
         return 1
+
+    if warnings:
+        print("\nPASS: all effect contract checks passed (with brand-voice warnings — see above).")
+        return 0
 
     print("\nPASS: all effect contract checks passed.")
     return 0

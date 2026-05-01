@@ -86,11 +86,23 @@ private:
     uint16_t       m_ambientEffectCount    = 0;
     bool           m_registersInitialised  = false;
 
+    // ── Phase 1C dual-strip Independent mode — keystroke editing target ──
+    // Which strip (0 or 1) is targeted when effect-cycle keys (space/n/N/L)
+    // fire while RendererMode::Independent is active. Toggled by '|'.
+    // Ephemeral: resets to 0 each boot. Serial-only — iOS/Tab5/web do not
+    // share this field; future cross-stack independence uses separate state.
+    uint8_t        m_activeStripEditing    = 0;
+
     // ── Internal dispatch ──
     void initRegisters();
     void processCommand(const String& input, char firstChar);
     void handleMultiCharCommand(const String& input, const String& inputLower, bool& handled);
     void handleSingleCharCommand(char cmd);
+
+    // Phase 1C — fork point for effect-cycle keystrokes. In Unified mode
+    // routes to actors.setEffect (legacy); in Independent mode routes to
+    // renderer->setStripEffectId(m_activeStripEditing, ...).
+    void dispatchEffect(EffectId eid);
 };
 
 } // namespace serial

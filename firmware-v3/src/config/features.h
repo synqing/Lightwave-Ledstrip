@@ -68,6 +68,12 @@
 #define FEATURE_TRANSLATION_ENGINE FEATURE_AUDIO_SYNC
 #endif
 
+// Tier 1 high-frequency semantic fields for the effect-facing audio surface.
+// Compile-gated so the Phase 1B waiver can be reversed without changing call sites.
+#ifndef FEATURE_AUDIO_HF_SEMANTICS
+#define FEATURE_AUDIO_HF_SEMANTICS FEATURE_AUDIO_SYNC
+#endif
+
 // Debug logging for translation engine (verbose, OFF by default).
 #ifndef FEATURE_TRANSLATION_DEBUG
 #define FEATURE_TRANSLATION_DEBUG 0
@@ -172,6 +178,12 @@
 #define FEATURE_VRMS_METRICS 1
 #endif
 
+// WebSocket/UDP frame streaming surfaces for LED/audio/STM/log/benchmark data.
+// REST and ordinary WebSocket control remain available when disabled.
+#ifndef FEATURE_WEB_STREAMING
+#define FEATURE_WEB_STREAMING 1
+#endif
+
 // Input Merge Layer - Arbitrates multiple input sources (manual, audio, AI, gesture)
 // onto shared effect parameters with per-source IIR smoothing and staleness detection.
 // Default ON. Enable: -D FEATURE_INPUT_MERGE_LAYER=1
@@ -269,6 +281,15 @@
 // See: docs/debugging/MABUTRACE_GUIDE.md
 #ifndef FEATURE_MABUTRACE
 #define FEATURE_MABUTRACE 0
+#endif
+
+// Surface 5 (memory/thermal): die-temp sensor available on ESP32-S3 variants.
+// Uses legacy ESP-IDF 4.x driver/temp_sensor.h API (arduino-esp32 v3.x ships
+// the legacy header on espressif32@6.9.0). One-time init at boot via
+// temp_sensor_set_config + temp_sensor_start; then temp_sensor_read_celsius
+// from the 1 Hz health task.
+#ifndef HAS_TEMP_SENSOR
+#define HAS_TEMP_SENSOR 1
 #endif
 
 // AMOLED Display - Test rig diagnostic display (Waveshare 2.41" RM690B0)

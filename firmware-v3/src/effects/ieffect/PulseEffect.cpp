@@ -7,6 +7,8 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -22,7 +24,7 @@ void PulseEffect::render(plugins::EffectContext& ctx) {
     float phase = (ctx.frameNumber * ctx.speed / 60.0f);
     float pulsePos = fmodf(phase, (float)HALF_LENGTH);
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, 30, ctx.getSafeDeltaSeconds());
 
     for (int dist = 0; dist < HALF_LENGTH; dist++) {
         float delta = fabsf((float)dist - pulsePos);

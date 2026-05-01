@@ -10,6 +10,7 @@
 #include "../../RequestValidator.h"
 #include "../../../codec/WsOtaCodec.h"
 #include "../../../config/network_config.h"
+#include "../../../config/Trace.h"
 #include "../../../config/version.h"
 #include "../../../core/system/OtaLedFeedback.h"
 #include "../../../core/system/OtaSessionLock.h"
@@ -323,6 +324,11 @@ static void abortOtaSession(const char* reason) {
 
     if (wasActive) {
         emitOtaTelemetry("ota.ws.failed", "failed", bytesReceived, totalSize, reason);
+        // Surface 4 Tier 4: centralised ota_failed instant — every abort
+        // route transits abortOtaSession (Update.end failure → Update.abort,
+        // disconnect-during-OTA, watchdog stale-session, auth/session errors).
+        TRACE_INSTANT("ota_failed");
+        TRACE_COUNTER("ota_bytes_received", static_cast<int32_t>(bytesReceived));
         Update.abort();
         OtaLed::showFailure();
         // Release integrity-hash state so next session starts clean
@@ -722,9 +728,12 @@ static void handleOtaBegin(AsyncWebSocketClient* client, JsonDocument& doc, cons
 
     // Initialize session state under spinlock (epoch-scoped: bound to this client)
     activateSession(client->id(), req.size);
-    
+
     // Emit telemetry
     emitOtaTelemetry("ota.ws.begin", "begin", 0, req.size);
+    // Surface 4 Tier 4: canonical OTA-start instant + size counter.
+    TRACE_INSTANT("ota_started");
+    TRACE_COUNTER("ota_size_bytes", static_cast<int32_t>(req.size));
 
     // Show initial LED progress (0% - center LEDs only)
     OtaLed::showProgress(0);
@@ -868,6 +877,10 @@ static void handleOtaChunk(AsyncWebSocketClient* client, JsonDocument& doc, cons
     // Emit progress telemetry every 10% (outside spinlock)
     if (shouldEmitProgress) {
         emitOtaTelemetry("ota.ws.chunk", "chunk", newBytesReceived, snap.totalSize);
+        // Surface 4 Tier 4: canonical OTA-chunk instant gated by the same
+        // 10% emit cadence so the trace ring isn't flooded.
+        TRACE_INSTANT("ota_chunk");
+        TRACE_COUNTER("ota_progress_pct", static_cast<int32_t>(percent));
 
         // Update LED progress bar (every 10% to avoid slowing transfer)
         OtaLed::showProgress(percent);
@@ -1029,6 +1042,9 @@ static void handleOtaVerify(AsyncWebSocketClient* client, JsonDocument& doc, con
 
     // Emit complete telemetry
     emitOtaTelemetry("ota.ws.complete", "complete", snap.bytesReceived, snap.totalSize);
+    // Surface 4 Tier 4: canonical OTA-complete instant + total-bytes counter.
+    TRACE_INSTANT("ota_completed");
+    TRACE_COUNTER("ota_total_bytes", static_cast<int32_t>(snap.totalSize));
 
     // Show success LED feedback (green flashes)
     OtaLed::showSuccess();

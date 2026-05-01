@@ -117,6 +117,7 @@ namespace lightwaveos { namespace actors {
 #define LW_LOG_TAG "Renderer"
 #include "utils/Log.h"
 #include "../../audio/AudioBenchmarkTrace.h"
+#include "utils/BenchRegistry.h"
 
 namespace lightwaveos {
 namespace actors {
@@ -558,6 +559,13 @@ void RendererActor::onStart()
     // Record start time
     m_lastFrameTime = micros();
 
+    // Surface 2 Tier 1 row #6: emit ControlBusFrame size at boot so traces
+    // always show the contract size we're operating against. sizeof is
+    // compile-time, but emitting a counter records it in the trace stream
+    // alongside p50/p99 measurements of audio_snapshot_read.
+    TRACE_COUNTER("audio_snapshot_size_bytes",
+                  static_cast<int>(sizeof(audio::ControlBusFrame)));
+
     LW_LOGI("Ready - %d effects, brightness=%d, target=%d FPS",
              m_registryCount, m_brightness, LedConfig::TARGET_FPS);
 }
@@ -878,18 +886,29 @@ void RendererActor::onTick()
         captureFrame(CaptureTap::TAP_A_PRE_CORRECTION, m_leds);
     }
 
-    // Post-render color correction pipeline (skip for sensitive effects)
-    // Includes: LGP-sensitive, stateful, PHYSICS_BASED, MATHEMATICAL families
-    // See PatternRegistry::shouldSkipColorCorrection() for full list
+    // Post-render colour correction pipeline (skip for sensitive effects).
+    // Includes: LGP-sensitive, stateful, PHYSICS_BASED, MATHEMATICAL families.
+    // See PatternRegistry::shouldSkipColorCorrection() for full list.
+    //
+    // Bench toggle `render.color_correction` (Surface 7) lets the operator
+    // skip the entire pipeline at runtime for A/B comparison. Snapshot the
+    // toggle once per frame so a mid-frame flip never half-applies.
     {
         TRACE_SCOPE("color_correction");
+        const uint32_t _cc_start_us = micros();
+        const bool benchColourCorrectionEnabled =
+            ::lightwaveos::bench::isToggleEnabled(&::lightwaveos::bench::g_bench_render_color_correction);
         const EffectId safeEffectTick = m_currentEffectValid ? m_validatedEffectId : validateEffectId(m_currentEffect);
-        if (!::PatternRegistry::shouldSkipColorCorrection(safeEffectTick)) {
+        if (benchColourCorrectionEnabled &&
+            !::PatternRegistry::shouldSkipColorCorrection(safeEffectTick)) {
             enhancement::ColorCorrectionEngine::getInstance().processBuffer(m_leds, LedConfig::TOTAL_LEDS);
             m_correctionApplyCount++;
         } else {
             m_correctionSkipCount++;
         }
+        const uint32_t _cc_end_us = micros();
+        // Surface 1 Tier 1 (folded per Master OQ #2 — always-on, ~80 events/sec).
+        TRACE_COUNTER("color_correction_us", static_cast<int>(_cc_end_us - _cc_start_us));
     }
 
     // TAP B: Capture post-correction (after processBuffer, before showLeds)
@@ -951,8 +970,15 @@ void RendererActor::onTick()
     }
 #endif
 
-    // Update statistics (use raw time for drops, throttled time for FPS)
-    TRACE_COUNTER("frame_us", frameTimeUs);
+    // Update statistics (use raw time for drops, throttled time for FPS).
+    // Surface 1 Tier 1: log RAW pre-pacing work time so we measure actual
+    // CPU time spent in render rather than the post-throttle 8.33 ms cadence.
+    TRACE_COUNTER("render_frame_work_us", static_cast<int>(rawFrameTimeUs));
+    // Surface 1 Tier 1: deadline-miss instant when raw work exceeds the
+    // 2.0 ms render contract ceiling (CLAUDE.md hard constraints).
+    if (rawFrameTimeUs > 2000U) {
+        TRACE_INSTANT("render_frame_deadline_miss");
+    }
     updateStats(frameTimeUs, rawFrameTimeUs);
 
     // Publish FRAME_RENDERED event (every 10 frames to reduce overhead)
@@ -965,6 +991,11 @@ void RendererActor::onTick()
         evt.param4 = m_frameCount;
         bus::MessageBus::instance().publish(evt);
     }
+
+    // Surface 1 Tier 1: sample active effect ID every frame so post-trace
+    // analysis can segment render_frame_work_us histograms by effect family.
+    // Sole writer of this counter — Surface 6 reads only (TRACE_INSTRUMENTATION_SPEC).
+    TRACE_COUNTER("effect_id_active", static_cast<int>(m_currentEffect));
 
     m_lastFrameTime = frameStartUs;
     m_frameCount++;
@@ -1385,7 +1416,23 @@ void RendererActor::renderFrame()
     }
     if (activeBuffer != nullptr) {
         TRACE_SCOPE("audio_snapshot_read");
+        const uint64_t snapshotCopyStartUs =
+#ifndef NATIVE_BUILD
+            static_cast<uint64_t>(esp_timer_get_time());
+#else
+            micros();
+#endif
         uint32_t seq = activeBuffer->ReadLatest(m_lastControlBus);
+        const uint64_t snapshotCopyEndUs =
+#ifndef NATIVE_BUILD
+            static_cast<uint64_t>(esp_timer_get_time());
+#else
+            micros();
+#endif
+        TRACE_COUNTER("audio_snapshot_copy_us",
+                      static_cast<int>((snapshotCopyEndUs - snapshotCopyStartUs) & 0x7FFFFFFFULL));
+        TRACE_COUNTER("snapshot_read_retries_total",
+                      static_cast<int>(activeBuffer->RetryCount() & 0x7FFFFFFFu));
 
         uint32_t prevSeq = m_lastControlBusSeq;
 
@@ -1394,6 +1441,15 @@ void RendererActor::renderFrame()
 #else
         uint64_t now_us = micros();
 #endif
+
+        // Surface 2 Tier 1 row #5: hop sequence lag (renderer vs audio thread).
+        // Wrap-safe unsigned subtraction; small stable value = renderer in step,
+        // growing value = renderer outpacing publisher. Mask to 31 bits to fit
+        // MabuTrace's signed counter API; only collides at >2^31 hops (months).
+        const uint32_t hopSeqLag = seq - prevSeq;  // unsigned wrap is well-defined
+        TRACE_COUNTER("audio_snapshot_hop_seq_lag",
+                      static_cast<int>(hopSeqLag & 0x7FFFFFFFu));
+
         if (seq != m_lastControlBusSeq) {
             // New audio frame arrived - resync extrapolation base
             m_lastAudioTime = m_lastControlBus.t;
@@ -1402,6 +1458,12 @@ void RendererActor::renderFrame()
         }
 
         uint64_t dt_us = (now_us >= m_lastAudioMicros) ? (now_us - m_lastAudioMicros) : 0;
+
+        // Surface 2 Tier 1 row #4: audio snapshot age in microseconds.
+        // Histogram peak should sit in 0..8000 us; >8000 us = audio thread stalled.
+        // Cast to int (signed 31-bit) to satisfy MabuTrace's signed counter API.
+        TRACE_COUNTER("audio_snapshot_age_us",
+                      static_cast<int>(dt_us & 0x7FFFFFFFULL));
         uint64_t extrapolated_samples = m_lastAudioTime.sample_index +
             (dt_us * m_lastAudioTime.sample_rate_hz / 1000000);
         audio::AudioTime render_now(
@@ -1603,6 +1665,19 @@ void RendererActor::renderFrame()
     updateSharedOnsetContext(now / 1000u, static_cast<float>(deltaTimeMs) * 0.001f);
 #endif
 
+    // Phase 1B — Independent dispatch. Top and bottom strips render different
+    // effects to their own 160-LED buffers; ZoneComposer is bypassed in this
+    // mode (scope decision per Captain). showLeds() sees dualChannelMode=true
+    // and skips the unified->strip memcpy + applies tone-map per strip.
+    if (m_rendererMode == RendererMode::Independent) {
+        TRACE_SCOPE("render_independent");
+        renderStripIndependent(0, m_stripEffectId[0], deltaTimeMs);
+        renderStripIndependent(1, m_stripEffectId[1], deltaTimeMs);
+        m_effectContext.dualChannelMode = true;
+        m_hue += 1;
+        return;
+    }
+
     // Check if zone composer is enabled
     if (m_zoneComposer != nullptr && m_zoneComposer->isEnabled()) {
         TRACE_SCOPE("zone_compose");
@@ -1656,6 +1731,17 @@ void RendererActor::renderFrame()
         ctx.zoneId = 0xFF;  // Global render
         ctx.zoneStart = 0;
         ctx.zoneLength = 0;
+
+        // Dual-strip channel API — populate per-strip pointers + defaults.
+        // Effects opting into DUAL_CHANNEL set ctx.dualChannelMode = true in
+        // their render() body; legacy effects leave it false and the unified
+        // -> strip mirror memcpy below proceeds unchanged.
+        ctx.stripLeds[0] = m_strip1;
+        ctx.stripLeds[1] = m_strip2;
+        ctx.stripLength = LedConfig::LEDS_PER_STRIP;
+        ctx.stripCount = 2;
+        ctx.stripCenter = LedConfig::CENTER_LED_INDEX;
+        ctx.dualChannelMode = false;
 
         // =====================================================================
         // Phase 2: Audio Context Integration
@@ -1775,6 +1861,90 @@ void RendererActor::renderFrame()
     m_hue += 1;  // Slow rotation
 }
 
+// =============================================================================
+// Phase 1B — Independent strip dispatch helper
+// =============================================================================
+void RendererActor::renderStripIndependent(uint8_t stripIdx, EffectId eid, uint32_t deltaTimeMs)
+{
+    if (stripIdx > 1) return;
+    CRGB* dest = (stripIdx == 0) ? m_strip1 : m_strip2;
+    if (dest == nullptr) return;
+
+    EffectId safe = validateEffectId(eid);
+    const auto* reg = findById(safe);
+    if (!reg || !reg->active || !reg->effect) {
+        // Unregistered or inactive — clear the strip
+        memset(dest, 0, sizeof(CRGB) * LedConfig::LEDS_PER_STRIP);
+        return;
+    }
+
+    plugins::EffectContext& ctx = m_effectContext;
+
+    // Strip-local buffer + per-strip centre origin
+    ctx.leds = dest;
+    ctx.ledCount = LedConfig::LEDS_PER_STRIP;       // 160
+    ctx.centerPoint = LedConfig::CENTER_LED_INDEX;  // 79
+
+    // Frame-shared parameters (same on both strips this frame)
+    ctx.palette = plugins::PaletteRef(&m_currentPalette);
+    ctx.brightness = m_brightness;
+    ctx.speed = m_speed;
+    ctx.gHue = m_hue;
+    ctx.intensity = m_intensity;
+    ctx.saturation = m_saturation;
+    ctx.complexity = m_complexity;
+    ctx.variation = m_variation;
+    ctx.mood = m_mood;
+    ctx.fadeAmount = m_fadeAmount;
+    ctx.frameNumber = m_effectFrameCount;
+
+    float rawDeltaSeconds = static_cast<float>(deltaTimeMs) * 0.001f;
+    ctx.deltaTimeMs = deltaTimeMs;
+    ctx.deltaTimeSeconds = rawDeltaSeconds;
+    ctx.rawDeltaTimeMs = deltaTimeMs;
+    ctx.rawDeltaTimeSeconds = rawDeltaSeconds;
+    ctx.totalTimeMs = static_cast<uint32_t>(m_effectTimeSecondsRaw * 1000.0f + 0.5f);
+    ctx.rawTotalTimeMs = ctx.totalTimeMs;
+
+    ctx.zoneId = 0xFF;  // Independent mode is "global per strip" — no zone partitioning
+    ctx.zoneStart = 0;
+    ctx.zoneLength = 0;
+
+    // Per-strip pointers stay populated for any DUAL_CHANNEL-aware effect that
+    // wants to peek at the OTHER strip while it's rendering its own.
+    ctx.stripLeds[0] = m_strip1;
+    ctx.stripLeds[1] = m_strip2;
+    ctx.stripLength = LedConfig::LEDS_PER_STRIP;
+    ctx.stripCount = 2;
+    ctx.stripCenter = LedConfig::CENTER_LED_INDEX;
+    ctx.dualChannelMode = false;  // Outer code sets true once after both strips render
+
+#if FEATURE_AUDIO_SYNC
+    ctx.audio = m_sharedAudioCtx;
+    if (ctx.audio.available) {
+        ctx.audio.behaviorContext = plugins::selectBehavior(
+            ctx.audio.musicStyle(),
+            ctx.audio.saliencyFrame(),
+            ctx.audio.styleConfidence()
+        );
+    } else {
+        ctx.audio.behaviorContext = plugins::BehaviorContext{};
+    }
+#else
+    ctx.audio.available = false;
+#endif
+
+    // Phase 1B limitation: per-strip audio→visual parameter mapping is NOT
+    // applied here. Adding it requires a registry lookup per strip per frame
+    // and writing-back of mapped values; deferred until effect mappings prove
+    // to be needed in Independent mode.
+
+    {
+        TRACE_SCOPE("effect_render_strip");
+        reg->effect->render(ctx);
+    }
+}
+
 void RendererActor::showLeds()
 {
     if (m_strip1 == nullptr || m_strip2 == nullptr) {
@@ -1783,21 +1953,42 @@ void RendererActor::showLeds()
     // Conditional tone map: only additive-blending effects need washout control.
     // Non-additive effects skip entirely for sharper colour and ~3 ms savings.
     // LUT Reinhard (knee = 1.0): scale = 255 / (avg + 255), applied via nscale8.
+    // Tone map runs on whichever buffer holds the rendered content.
+    // - dualChannelMode false (legacy): unified m_leds[0..319] holds the frame
+    // - dualChannelMode true: effect wrote m_strip1/m_strip2 directly; tone-map per strip
     if (needsToneMap(m_currentEffect)) {
-        for (uint16_t i = 0; i < LedConfig::TOTAL_LEDS; ++i) {
-            const uint8_t r = m_leds[i].r;
-            const uint8_t g = m_leds[i].g;
-            const uint8_t b = m_leds[i].b;
-            if ((r | g | b) == 0) continue;  // Skip black pixels
-            const uint8_t avg = (uint16_t(r) + g + b) / 3;
-            m_leds[i].nscale8(kToneMapLUT[avg]);
+        if (m_effectContext.dualChannelMode) {
+            for (uint16_t i = 0; i < LedConfig::LEDS_PER_STRIP; ++i) {
+                CRGB& a = m_strip1[i];
+                if ((a.r | a.g | a.b) != 0) {
+                    const uint8_t avg = (uint16_t(a.r) + a.g + a.b) / 3;
+                    a.nscale8(kToneMapLUT[avg]);
+                }
+                CRGB& b = m_strip2[i];
+                if ((b.r | b.g | b.b) != 0) {
+                    const uint8_t avg2 = (uint16_t(b.r) + b.g + b.b) / 3;
+                    b.nscale8(kToneMapLUT[avg2]);
+                }
+            }
+        } else {
+            for (uint16_t i = 0; i < LedConfig::TOTAL_LEDS; ++i) {
+                const uint8_t r = m_leds[i].r;
+                const uint8_t g = m_leds[i].g;
+                const uint8_t b = m_leds[i].b;
+                if ((r | g | b) == 0) continue;  // Skip black pixels
+                const uint8_t avg = (uint16_t(r) + g + b) / 3;
+                m_leds[i].nscale8(kToneMapLUT[avg]);
+            }
         }
     }
 
-    // Copy from unified buffer to strip buffers
-    memcpy(m_strip1, &m_leds[0], sizeof(CRGB) * LedConfig::LEDS_PER_STRIP);
-    memcpy(m_strip2, &m_leds[LedConfig::LEDS_PER_STRIP],
-           sizeof(CRGB) * LedConfig::LEDS_PER_STRIP);
+    // Unified->strip mirror memcpy is skipped when the effect already wrote
+    // m_strip1/m_strip2 directly via ctx.stripLeds[] (DUAL_CHANNEL mode).
+    if (!m_effectContext.dualChannelMode) {
+        memcpy(m_strip1, &m_leds[0], sizeof(CRGB) * LedConfig::LEDS_PER_STRIP);
+        memcpy(m_strip2, &m_leds[LedConfig::LEDS_PER_STRIP],
+               sizeof(CRGB) * LedConfig::LEDS_PER_STRIP);
+    }
 
     // =========================================================================
     // Combined silence gate — merges the global silent_scale gate and the

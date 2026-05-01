@@ -18,6 +18,8 @@
 #include "../../config/features.h"
 #include <FastLED.h>
 #include <cmath>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -118,7 +120,7 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
     // Rendering
     // =========================================================================
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     // Anti-aliased burst core at true center (79.5) using SubpixelRenderer
     if (m_burst > 0.05f) {

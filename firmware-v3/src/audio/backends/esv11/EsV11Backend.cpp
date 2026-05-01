@@ -9,8 +9,15 @@
 #include <cmath>
 #include <cstring>
 
+#if !defined(NATIVE_BUILD)
+#include <esp_timer.h>
+#else
+static inline int64_t esp_timer_get_time() { return 0; }
+#endif
+
 #define LW_LOG_TAG "AudioESV11"
 #include "utils/Log.h"
+#include "config/Trace.h"
 
 #include "vendor/EsV11Shim.h"
 #include "vendor/EsV11Buffers.h"
@@ -88,19 +95,32 @@ void EsV11Backend::tickEsGpu(float delta)
 
 bool EsV11Backend::readAndProcessChunk(uint64_t now_us)
 {
+    const uint64_t totalStartUs = esp_timer_get_time();
     const uint32_t now_ms = static_cast<uint32_t>(now_us / 1000);
     esv11_set_time(now_us, now_ms);
 
+    const uint64_t captureStartUs = esp_timer_get_time();
     acquire_sample_chunk();   // reads CHUNK_SIZE=64 and updates sample_history
+    const uint64_t captureEndUs = esp_timer_get_time();
     m_sampleIndex += CHUNK_SIZE;
 
     // ES CPU-side DSP stages (mirrors cpu_core.h ordering)
+    const uint64_t dspStartUs = esp_timer_get_time();
+    const uint64_t magStartUs = esp_timer_get_time();
     calculate_magnitudes();
+    const uint64_t magEndUs = esp_timer_get_time();
+    const uint64_t chromaStartUs = magEndUs;
     get_chromagram();
+    const uint64_t chromaEndUs = esp_timer_get_time();
+    const uint64_t vuStartUs = chromaEndUs;
     run_vu();
+    const uint64_t vuEndUs = esp_timer_get_time();
+    const uint64_t tempoStartUs = vuEndUs;
     update_tempo();
+    const uint64_t tempoEndUs = esp_timer_get_time();
 
     // ES GPU-side tick with ES-style delta scaling (REFERENCE_FPS, 100)
+    const uint64_t gpuStartUs = tempoEndUs;
     if (m_lastGpuTickUs == 0) {
         m_lastGpuTickUs = now_us;
     }
@@ -109,8 +129,26 @@ bool EsV11Backend::readAndProcessChunk(uint64_t now_us)
     const float delta = static_cast<float>(elapsed_us) / ideal_us_interval;
     m_lastGpuTickUs = now_us;
     tickEsGpu(delta);
+    const uint64_t gpuEndUs = esp_timer_get_time();
 
+    const uint64_t refreshStartUs = gpuEndUs;
     refreshOutputs(now_us);
+    const uint64_t totalEndUs = esp_timer_get_time();
+    m_lastChunkTiming.capture_us = static_cast<uint32_t>(captureEndUs - captureStartUs);
+    m_lastChunkTiming.magnitudes_us = static_cast<uint32_t>(magEndUs - magStartUs);
+    m_lastChunkTiming.chroma_us = static_cast<uint32_t>(chromaEndUs - chromaStartUs);
+    m_lastChunkTiming.vu_us = static_cast<uint32_t>(vuEndUs - vuStartUs);
+    m_lastChunkTiming.tempo_us = static_cast<uint32_t>(tempoEndUs - tempoStartUs);
+    m_lastChunkTiming.gpu_tick_us = static_cast<uint32_t>(gpuEndUs - gpuStartUs);
+    m_lastChunkTiming.refresh_us = static_cast<uint32_t>(totalEndUs - refreshStartUs);
+    m_lastChunkTiming.dsp_us = static_cast<uint32_t>(totalEndUs - dspStartUs);
+    m_lastChunkTiming.total_us = static_cast<uint32_t>(totalEndUs - totalStartUs);
+    TRACE_COUNTER("es_magnitudes_us", static_cast<int32_t>(m_lastChunkTiming.magnitudes_us));
+    TRACE_COUNTER("es_chroma_us", static_cast<int32_t>(m_lastChunkTiming.chroma_us));
+    TRACE_COUNTER("es_vu_us", static_cast<int32_t>(m_lastChunkTiming.vu_us));
+    TRACE_COUNTER("es_tempo_us", static_cast<int32_t>(m_lastChunkTiming.tempo_us));
+    TRACE_COUNTER("es_gpu_tick_us", static_cast<int32_t>(m_lastChunkTiming.gpu_tick_us));
+    TRACE_COUNTER("es_refresh_us", static_cast<int32_t>(m_lastChunkTiming.refresh_us));
     return true;
 }
 

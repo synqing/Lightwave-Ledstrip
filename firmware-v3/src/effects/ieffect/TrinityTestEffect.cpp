@@ -73,7 +73,7 @@ void TrinityTestEffect::render(plugins::EffectContext& ctx) {
 #if FEATURE_AUDIO_SYNC
     // TRINITY-ONLY: Only visualize PRISM data, ignore microphone fallback
     // This makes the effect a true diagnostic for Trinity data flow
-    if (!ctx.audio.available || !ctx.audio.trinityActive) {
+    if (!ctx.audio.trinityActive) {
         renderNoDataWarning(ctx);
         return;
     }

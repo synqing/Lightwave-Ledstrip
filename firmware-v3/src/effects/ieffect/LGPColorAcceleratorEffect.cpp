@@ -7,6 +7,8 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -34,7 +36,7 @@ void LGPColorAcceleratorEffect::render(plugins::EffectContext& ctx) {
     float speed = ctx.speed / 255.0f;
     float intensity = ctx.brightness / 255.0f;
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     if (!m_collision) {
         m_redParticle += speed * 10.0f * (1.0f + (m_redParticle / STRIP_LENGTH));

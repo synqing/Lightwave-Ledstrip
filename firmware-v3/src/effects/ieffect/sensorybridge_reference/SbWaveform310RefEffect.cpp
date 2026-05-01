@@ -16,6 +16,8 @@
 
 #include <cmath>
 #include <cstring>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos::effects::ieffect::sensorybridge_reference {
 
@@ -81,7 +83,7 @@ void SbWaveform310RefEffect::render(plugins::EffectContext& ctx) {
 #else
     if (!ctx.audio.available) {
         // No audio: fade out to black.
-        fadeToBlackBy(ctx.leds, ctx.ledCount, 32);
+        fadeToBlackByDt(ctx.leds, ctx.ledCount, 32, ctx.getSafeDeltaSeconds());
         return;
     }
 
@@ -195,7 +197,7 @@ void SbWaveform310RefEffect::render(plugins::EffectContext& ctx) {
     // Dynamic: loud = short punchy trails, quiet = long ambient trails
     // ---------------------------------------------------------------------
     uint8_t fadeAmount = (uint8_t)(25 + 35 * (1.0f - smoothRms));
-    fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, fadeAmount, ctx.getSafeDeltaSeconds());
 
     // ---------------------------------------------------------------------
     // Waveform render (centre-origin resample of SB NATIVE_RESOLUTION=128)

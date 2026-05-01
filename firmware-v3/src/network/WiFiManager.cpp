@@ -20,6 +20,7 @@
 #include <esp_wifi.h>
 #include <esp_task_wdt.h>
 #include "../config/network_config.h"
+#include "../config/Trace.h"
 #include "../core/system/OtaSessionLock.h"
 
 #define LW_LOG_TAG "WiFi"
@@ -1067,16 +1068,26 @@ void WiFiManager::onWiFiEvent(WiFiEvent_t event) {
         LW_LOGD("Event: Auth mode changed");
     } else if (event == WIFI_EVENT_AP_START) {
         LW_LOGI("Event: AP started");
+        TRACE_INSTANT("wifi_ap_started");
         if (manager.m_wifiEventGroup) {
             xEventGroupSetBits(manager.m_wifiEventGroup, EVENT_AP_START);
         }
+    } else if (event == WIFI_EVENT_AP_STOP) {
+        LW_LOGW("Event: AP stopped");
+        TRACE_INSTANT("wifi_ap_stopped");
     } else if (event == WIFI_EVENT_AP_STACONNECTED) {
-        LW_LOGI("Event: Station connected to AP");
+        const uint8_t apClients = WiFi.softAPgetStationNum();
+        LW_LOGI("Event: Station connected to AP (count=%u)", apClients);
+        TRACE_INSTANT("wifi_client_connected");
+        TRACE_COUNTER("wifi_clients", static_cast<int32_t>(apClients));
         if (manager.m_wifiEventGroup) {
             xEventGroupSetBits(manager.m_wifiEventGroup, EVENT_AP_STACONNECTED);
         }
     } else if (event == WIFI_EVENT_AP_STADISCONNECTED) {
-        LW_LOGD("Event: Station disconnected from AP");
+        const uint8_t apClients = WiFi.softAPgetStationNum();
+        LW_LOGD("Event: Station disconnected from AP (count=%u)", apClients);
+        TRACE_INSTANT("wifi_client_disconnected");
+        TRACE_COUNTER("wifi_clients", static_cast<int32_t>(apClients));
     }
 #else
     // Arduino-ESP32 2.x (ARDUINO_EVENT_*) or older (SYSTEM_EVENT_*)
@@ -1143,27 +1154,46 @@ void WiFiManager::onWiFiEvent(WiFiEvent_t event) {
         case SYSTEM_EVENT_AP_START:
 #endif
             LW_LOGI("Event: AP started");
+            TRACE_INSTANT("wifi_ap_started");
             if (manager.m_wifiEventGroup) {
                 xEventGroupSetBits(manager.m_wifiEventGroup, EVENT_AP_START);
             }
+            break;
+#ifdef ARDUINO_EVENT_WIFI_AP_STOP
+        case ARDUINO_EVENT_WIFI_AP_STOP:
+#else
+        case SYSTEM_EVENT_AP_STOP:
+#endif
+            LW_LOGW("Event: AP stopped");
+            TRACE_INSTANT("wifi_ap_stopped");
             break;
 #ifdef ARDUINO_EVENT_WIFI_AP_STACONNECTED
         case ARDUINO_EVENT_WIFI_AP_STACONNECTED:
 #else
         case SYSTEM_EVENT_AP_STACONNECTED:
 #endif
-            LW_LOGI("Event: Station connected to AP");
+        {
+            const uint8_t apClients = WiFi.softAPgetStationNum();
+            LW_LOGI("Event: Station connected to AP (count=%u)", apClients);
+            TRACE_INSTANT("wifi_client_connected");
+            TRACE_COUNTER("wifi_clients", static_cast<int32_t>(apClients));
             if (manager.m_wifiEventGroup) {
                 xEventGroupSetBits(manager.m_wifiEventGroup, EVENT_AP_STACONNECTED);
             }
             break;
+        }
 #ifdef ARDUINO_EVENT_WIFI_AP_STADISCONNECTED
         case ARDUINO_EVENT_WIFI_AP_STADISCONNECTED:
 #else
         case SYSTEM_EVENT_AP_STADISCONNECTED:
 #endif
-            LW_LOGD("Event: Station disconnected from AP");
+        {
+            const uint8_t apClients = WiFi.softAPgetStationNum();
+            LW_LOGD("Event: Station disconnected from AP (count=%u)", apClients);
+            TRACE_INSTANT("wifi_client_disconnected");
+            TRACE_COUNTER("wifi_clients", static_cast<int32_t>(apClients));
             break;
+        }
         default:
             break;
     }

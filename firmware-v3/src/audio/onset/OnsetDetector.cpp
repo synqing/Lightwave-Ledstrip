@@ -25,6 +25,7 @@
  */
 
 #include "OnsetDetector.h"
+#include "../../config/Trace.h"
 
 #ifndef NATIVE_BUILD
 #include <esp_timer.h>
@@ -451,16 +452,21 @@ OnsetResult OnsetDetector::process(const float* samples, float currentRms) {
         return result;
     }
 
-    // Step 1: Hann window
-    for (uint16_t i = 0; i < fftSize; ++i) {
-        m_fftBuf[i] = samples[i] * m_hannLut[i];
+    const uint32_t fftStartUs = getTimeUs();
+    {
+        TRACE_SCOPE("onset_fft_frontend");
+        // Step 1: Hann window
+        for (uint16_t i = 0; i < fftSize; ++i) {
+            m_fftBuf[i] = samples[i] * m_hannLut[i];
+        }
+
+        // Step 2: FFT
+        computeFFT();
+
+        // Step 3: Magnitude spectrum
+        computeMagnitudes();
     }
-
-    // Step 2: FFT
-    computeFFT();
-
-    // Step 3: Magnitude spectrum
-    computeMagnitudes();
+    result.fft_frontend_us = static_cast<uint16_t>(getTimeUs() - fftStartUs);
 
     // First frame: prime the spectral reference, no flux comparison possible.
     if (!m_hasPrevMag) {
@@ -468,9 +474,13 @@ OnsetResult OnsetDetector::process(const float* samples, float currentRms) {
         std::memcpy(m_prevMagnitude, m_magnitude, halfN * sizeof(float));
         m_hasPrevMag = true;
         m_frameCount++;
+        result.decision_us = static_cast<uint16_t>(getTimeUs() - fftStartUs - result.fft_frontend_us);
         result.process_us = static_cast<uint16_t>(getTimeUs() - startUs);
         return result;
     }
+
+    const uint32_t decisionStartUs = getTimeUs();
+    TRACE_SCOPE("onset_decision");
 
     // Determine emission permission: warmup and activity are output gates only.
     const bool warmupActive = (m_frameCount < m_warmupFrames);
@@ -482,11 +492,16 @@ OnsetResult OnsetDetector::process(const float* samples, float currentRms) {
 
     // Step 4: Log-spectral flux (Bello 2005 / Dixon 2006)
     // NO activity weighting — gate is permission only, not ODF gain control.
-    result.flux = computeBandFlux(m_cfg.musicalBinLo, m_cfg.musicalBinHi);
+    const uint32_t fluxStartUs = getTimeUs();
+    {
+        TRACE_SCOPE("onset_flux");
+        result.flux = computeBandFlux(m_cfg.musicalBinLo, m_cfg.musicalBinHi);
 
-    result.bass_flux = computeBandFlux(m_cfg.bassBinLo, m_cfg.bassBinHi);
-    result.mid_flux  = computeBandFlux(m_cfg.snareBinLo, m_cfg.snareBinHi);
-    result.high_flux = computeBandFlux(m_cfg.hihatBinLo, m_cfg.hihatBinHi);
+        result.bass_flux = computeBandFlux(m_cfg.bassBinLo, m_cfg.bassBinHi);
+        result.mid_flux  = computeBandFlux(m_cfg.snareBinLo, m_cfg.snareBinHi);
+        result.high_flux = computeBandFlux(m_cfg.hihatBinLo, m_cfg.hihatBinHi);
+    }
+    result.flux_us = static_cast<uint16_t>(getTimeUs() - fluxStartUs);
 
     // Step 5: Adaptive threshold always tracks REAL flux.
     result.onset_env = applyAdaptiveThreshold(result.flux);
@@ -518,6 +533,7 @@ OnsetResult OnsetDetector::process(const float* samples, float currentRms) {
     m_hasPrevMag = true;
 
     m_frameCount++;
+    result.decision_us = static_cast<uint16_t>(getTimeUs() - decisionStartUs);
     result.process_us = static_cast<uint16_t>(getTimeUs() - startUs);
     return result;
 }

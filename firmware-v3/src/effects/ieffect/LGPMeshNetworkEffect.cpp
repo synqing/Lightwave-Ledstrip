@@ -7,6 +7,8 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -33,7 +35,7 @@ void LGPMeshNetworkEffect::render(plugins::EffectContext& ctx) {
 
     const int nodeCount = 12;
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     for (int n = 0; n < nodeCount; n++) {
         float nodePos = (float)n / (float)nodeCount * (float)HALF_LENGTH;

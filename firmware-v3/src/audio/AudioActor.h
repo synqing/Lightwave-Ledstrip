@@ -654,6 +654,16 @@ private:
     uint32_t m_esHopSeq = 0;
     uint8_t m_esChunkCounter = 0;  // Publish every 4 chunks (256 samples @ 12.8kHz = 50 Hz)
 
+    // Surface 3 Tier 1 trace state. Wall time is retained separately so
+    // work-budget counters do not confuse blocking I2S cadence with CPU work.
+    uint64_t m_hopStartUs = 0;
+    uint32_t m_hopAccumWorkUs = 0;
+    // Surface 3 Tier 1 — previous hop-end timestamp for instantaneous hop
+    // rate calculation (audio_hop_freq). Sentinel 0 = first hop, skip emission.
+    uint64_t m_lastHopEndUs = 0;
+    uint32_t m_audioChunkDeadlineMissTotal = 0;
+    uint32_t m_audioHopDeadlineMissTotal = 0;
+
     // FFT onset detection — TELEMETRY ONLY (demoted from live trigger path).
     // Band-energy ratio detector below is the live trigger source.
     OnsetDetector m_onsetDetector;

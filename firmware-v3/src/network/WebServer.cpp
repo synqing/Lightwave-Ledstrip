@@ -572,7 +572,19 @@ void WebServer::updateLowHeapShedState(uint32_t nowMs) {
         }
     } else {
         const uint32_t shedDurationMs = nowMs - m_shedActivatedAtMs;
-        const bool heapRecovered = freeInternal > INTERNAL_HEAP_RESUME_ABOVE_BYTES;
+        // Recovery gate (2026-05-01 — fragmentation latch fix). The pure
+        // total-free-heap test cannot release the latch when the heap is
+        // fragmented: largest contiguous block stays pinned at ~3-4 KB while
+        // total free recovers to 10-12 KB, which is below the 28 KB resume
+        // ceiling. Add a secondary gate: if the largest contiguous block has
+        // recovered above the typical WS allocation envelope AND total free
+        // heap is at least back above the shed floor, allocations will succeed
+        // and we should release. This restores the latch's ability to clear
+        // under realistic fragmented-but-not-exhausted conditions.
+        const bool heapRecovered =
+            (freeInternal > INTERNAL_HEAP_RESUME_ABOVE_BYTES) ||
+            (largestInternal > INTERNAL_HEAP_LARGEST_BLOCK_RECOVERY_BYTES &&
+             freeInternal > INTERNAL_HEAP_SHED_BELOW_BYTES);
         const bool inHysteresisBand =
             freeInternal >= INTERNAL_HEAP_SHED_BELOW_BYTES &&
             freeInternal <= INTERNAL_HEAP_RESUME_ABOVE_BYTES;

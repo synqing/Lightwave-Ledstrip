@@ -132,6 +132,16 @@ namespace network {
 #ifndef LW_INTERNAL_HEAP_LARGEST_BLOCK_NEAR_THRESHOLD_MARGIN
 #define LW_INTERNAL_HEAP_LARGEST_BLOCK_NEAR_THRESHOLD_MARGIN (8U * 1024U)
 #endif
+// Largest-contiguous-block recovery gate. If the total free heap cannot climb
+// above the resume ceiling because of fragmentation, but the largest free block
+// is big enough to satisfy a typical WS allocation envelope (status JSON, LED
+// frame, audio frame are all <4 KB), the latch should release. Without this,
+// fragmentation can pin shedding indefinitely — see 2026-05-01 incident: heap
+// total recovered to 12 KB but largest stuck at 3828 bytes for 3+ minutes,
+// with iOS unable to maintain a WS connection.
+#ifndef LW_INTERNAL_HEAP_LARGEST_BLOCK_RECOVERY_BYTES
+#define LW_INTERNAL_HEAP_LARGEST_BLOCK_RECOVERY_BYTES (8U * 1024U)
+#endif
 
 namespace WebServerConfig {
     constexpr uint16_t HTTP_PORT = config::NetworkConfig::WEB_SERVER_PORT;
@@ -657,6 +667,7 @@ private:
     static constexpr uint32_t INTERNAL_HEAP_SHED_LOG_INTERVAL_MS = LW_INTERNAL_HEAP_SHED_LOG_INTERVAL_MS;
     static constexpr uint32_t INTERNAL_HEAP_SHED_PROBE_INTERVAL_MS = LW_INTERNAL_HEAP_SHED_PROBE_INTERVAL_MS;
     static constexpr uint32_t INTERNAL_HEAP_LARGEST_BLOCK_NEAR_THRESHOLD_MARGIN = LW_INTERNAL_HEAP_LARGEST_BLOCK_NEAR_THRESHOLD_MARGIN;
+    static constexpr uint32_t INTERNAL_HEAP_LARGEST_BLOCK_RECOVERY_BYTES = LW_INTERNAL_HEAP_LARGEST_BLOCK_RECOVERY_BYTES;
     // Force-clear shed after this many ms of continuous activation, but only
     // when free heap is between shed and resume thresholds.
     static constexpr uint32_t INTERNAL_HEAP_SHED_MAX_LATCH_MS = 10000U;

@@ -34,6 +34,19 @@ enum WebSocketMessageType: String {
     case edgeMixerGet = "edge_mixer.get"
     case edgeMixerSet = "edge_mixer.set"
     case edgeMixerSave = "edge_mixer.save"
+
+    // MARK: Phase 1 — broadcast cases
+    // Added 2026-04-30 to cover broadcasts emitted by firmware that iOS previously
+    // dropped silently. Phase 2 will wire UI handlers; for now these exist so the
+    // decode path produces a typed Event rather than falling through to .unknown.
+    case cameraModeChanged = "cameraMode.changed"
+    case factoryPresetsChanged = "factoryPresets.changed"
+    case effectPresetsSaved = "effectPresets.saved"
+    case effectPresetsDeleted = "effectPresets.deleted"
+    case colourCorrectionSetGamma = "colorCorrection.setGamma"
+    case colourCorrectionSetAutoExposure = "colorCorrection.setAutoExposure"
+    case colourCorrectionSetBrownGuardrail = "colorCorrection.setBrownGuardrail"
+
     case unknown
 }
 
@@ -54,6 +67,17 @@ actor WebSocketService {
         case edgeMixerUpdate(WebSocketPayload)
         case connected
         case disconnected(Error?)
+
+        // MARK: Phase 1 — broadcast cases
+        // Added 2026-04-30. Each case carries the raw payload as a `WebSocketPayload`
+        // so consumers can inspect `data` ad-hoc until Phase 2 introduces typed DTOs.
+        case cameraModeChanged(WebSocketPayload)
+        case factoryPresetsChanged(WebSocketPayload)
+        case effectPresetsSaved(WebSocketPayload)
+        case effectPresetsDeleted(WebSocketPayload)
+        case colourCorrectionSetGamma(WebSocketPayload)
+        case colourCorrectionSetAutoExposure(WebSocketPayload)
+        case colourCorrectionSetBrownGuardrail(WebSocketPayload)
     }
 
     /// Sendable wrapper for [String: Any] JSON payloads
@@ -301,6 +325,31 @@ actor WebSocketService {
             let errorCode = (json["error"] as? [String: Any])?["code"] as? String
             print("[WS] Subscription response: \(messageType.rawValue) success=\(success) error=\(errorCode ?? "none")")
             #endif
+
+        // MARK: Phase 1 — broadcast decoding
+        // Each branch yields a typed Event with the raw JSON payload attached so
+        // downstream consumers can introspect fields as needed. Phase 2 will
+        // tighten payload modelling; for now `WebSocketPayload` is sufficient.
+        case .cameraModeChanged:
+            eventContinuation?.yield(.cameraModeChanged(payload))
+
+        case .factoryPresetsChanged:
+            eventContinuation?.yield(.factoryPresetsChanged(payload))
+
+        case .effectPresetsSaved:
+            eventContinuation?.yield(.effectPresetsSaved(payload))
+
+        case .effectPresetsDeleted:
+            eventContinuation?.yield(.effectPresetsDeleted(payload))
+
+        case .colourCorrectionSetGamma:
+            eventContinuation?.yield(.colourCorrectionSetGamma(payload))
+
+        case .colourCorrectionSetAutoExposure:
+            eventContinuation?.yield(.colourCorrectionSetAutoExposure(payload))
+
+        case .colourCorrectionSetBrownGuardrail:
+            eventContinuation?.yield(.colourCorrectionSetBrownGuardrail(payload))
 
         case .unknown:
             break

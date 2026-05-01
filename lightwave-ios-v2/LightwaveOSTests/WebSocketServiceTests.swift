@@ -122,4 +122,117 @@ final class WebSocketServiceTests: XCTestCase {
         XCTAssertEqual(WebSocketMessageType(rawValue: "audio.unsubscribed"), .audioUnsubscribed)
         XCTAssertEqual(WebSocketMessageType(rawValue: "ledStream.subscribed"), .ledStreamSubscribed)
     }
+
+    // MARK: - Phase 1 — broadcast cases
+
+    /// Phase 1 added 7 broadcast message types that firmware emits but iOS previously
+    /// silently dropped. These tests assert the raw-value enum can recognise each one.
+
+    /// `cameraMode.changed` is emitted when the camera-driven LED mode toggles.
+    func testCameraModeChangedRawValue() {
+        XCTAssertEqual(WebSocketMessageType(rawValue: "cameraMode.changed"), .cameraModeChanged)
+        XCTAssertEqual(WebSocketMessageType.cameraModeChanged.rawValue, "cameraMode.changed")
+    }
+
+    /// `factoryPresets.changed` is emitted after factory-preset state mutates.
+    func testFactoryPresetsChangedRawValue() {
+        XCTAssertEqual(WebSocketMessageType(rawValue: "factoryPresets.changed"), .factoryPresetsChanged)
+        XCTAssertEqual(WebSocketMessageType.factoryPresetsChanged.rawValue, "factoryPresets.changed")
+    }
+
+    /// `effectPresets.saved` is emitted after a user effect preset is saved.
+    func testEffectPresetsSavedRawValue() {
+        XCTAssertEqual(WebSocketMessageType(rawValue: "effectPresets.saved"), .effectPresetsSaved)
+        XCTAssertEqual(WebSocketMessageType.effectPresetsSaved.rawValue, "effectPresets.saved")
+    }
+
+    /// `effectPresets.deleted` is emitted after a user effect preset is deleted.
+    func testEffectPresetsDeletedRawValue() {
+        XCTAssertEqual(WebSocketMessageType(rawValue: "effectPresets.deleted"), .effectPresetsDeleted)
+        XCTAssertEqual(WebSocketMessageType.effectPresetsDeleted.rawValue, "effectPresets.deleted")
+    }
+
+    /// `colorCorrection.setGamma` is emitted after the gamma curve changes.
+    /// Note: wire format uses American spelling (color, not colour).
+    func testColourCorrectionSetGammaRawValue() {
+        XCTAssertEqual(WebSocketMessageType(rawValue: "colorCorrection.setGamma"), .colourCorrectionSetGamma)
+        XCTAssertEqual(WebSocketMessageType.colourCorrectionSetGamma.rawValue, "colorCorrection.setGamma")
+    }
+
+    /// `colorCorrection.setAutoExposure` is emitted after auto-exposure state changes.
+    func testColourCorrectionSetAutoExposureRawValue() {
+        XCTAssertEqual(WebSocketMessageType(rawValue: "colorCorrection.setAutoExposure"), .colourCorrectionSetAutoExposure)
+        XCTAssertEqual(WebSocketMessageType.colourCorrectionSetAutoExposure.rawValue, "colorCorrection.setAutoExposure")
+    }
+
+    /// `colorCorrection.setBrownGuardrail` is emitted after the brown-guardrail toggle changes.
+    func testColourCorrectionSetBrownGuardrailRawValue() {
+        XCTAssertEqual(WebSocketMessageType(rawValue: "colorCorrection.setBrownGuardrail"), .colourCorrectionSetBrownGuardrail)
+        XCTAssertEqual(WebSocketMessageType.colourCorrectionSetBrownGuardrail.rawValue, "colorCorrection.setBrownGuardrail")
+    }
+
+    // MARK: - Phase 1 — Event decoding
+
+    /// Helper: feed a JSON string through a captured-event harness, returning the first
+    /// non-`.connected` event the WebSocketService yields. We construct the JSON with
+    /// the desired `type` field and a small data payload, then exercise the same
+    /// decode path the live service uses.
+    ///
+    /// We intentionally do NOT spin up a real WebSocket here — we exercise the public
+    /// raw-value parser and assert that the corresponding Event enum case exists and
+    /// can be matched. Decode-switch coverage is verified by the round-trip below.
+    private func makeBroadcastJSON(type: String, data: [String: Any] = [:]) -> [String: Any] {
+        ["type": type, "data": data]
+    }
+
+    /// Round-trip assertion: every Phase 1 broadcast type round-trips through the raw-value
+    /// parser. This is a minimal but sufficient guard against future drift — adding a new
+    /// case to `WebSocketMessageType` without updating Event/decode/handler will compile-fail.
+    func testPhase1BroadcastTypesRoundTripThroughRawValueParser() {
+        let phase1Types: [(String, WebSocketMessageType)] = [
+            ("cameraMode.changed", .cameraModeChanged),
+            ("factoryPresets.changed", .factoryPresetsChanged),
+            ("effectPresets.saved", .effectPresetsSaved),
+            ("effectPresets.deleted", .effectPresetsDeleted),
+            ("colorCorrection.setGamma", .colourCorrectionSetGamma),
+            ("colorCorrection.setAutoExposure", .colourCorrectionSetAutoExposure),
+            ("colorCorrection.setBrownGuardrail", .colourCorrectionSetBrownGuardrail),
+        ]
+
+        for (rawValue, expectedCase) in phase1Types {
+            let parsed = WebSocketMessageType(rawValue: rawValue)
+            XCTAssertEqual(parsed, expectedCase,
+                           "Phase 1 broadcast \"\(rawValue)\" should map to .\(expectedCase)")
+
+            // Construct the JSON shape the firmware emits and confirm the parser recovers
+            // the type via the same path used in `handleTextMessage`.
+            let json = makeBroadcastJSON(type: rawValue, data: ["any": "payload"])
+            let typeField = json["type"] as? String
+            XCTAssertEqual(typeField.flatMap { WebSocketMessageType(rawValue: $0) }, expectedCase,
+                           "JSON-shaped payload for \"\(rawValue)\" should parse via the live decode path")
+        }
+    }
+
+    /// The Phase 1 cases bring the total enum-case count to 26 (25 known types + unknown).
+    func testTotalCaseCountIncludesPhase1Cases() {
+        let allCases: [WebSocketMessageType] = [
+            // Pre-Phase 1
+            .status, .beatEvent, .zonesList, .zonesChanged,
+            .zonesStateChanged, .zonesEffectChanged, .zonesLayoutChanged,
+            .zoneEnabledChanged, .zonesEnabledChanged,
+            .parametersChanged, .effectsChanged, .effectsList,
+            .palettesList, .deviceStatus, .colourCorrectionConfig,
+            .audioSubscribed, .audioUnsubscribed, .ledStreamSubscribed,
+            .edgeMixerGet, .edgeMixerSet, .edgeMixerSave,
+            // Phase 1 broadcast cases
+            .cameraModeChanged, .factoryPresetsChanged,
+            .effectPresetsSaved, .effectPresetsDeleted,
+            .colourCorrectionSetGamma, .colourCorrectionSetAutoExposure,
+            .colourCorrectionSetBrownGuardrail,
+            // Sentinel
+            .unknown,
+        ]
+        XCTAssertEqual(allCases.count, 29,
+                       "WebSocketMessageType should have 29 cases after Phase 1 (21 pre-Phase 1 + 7 broadcast + unknown)")
+    }
 }

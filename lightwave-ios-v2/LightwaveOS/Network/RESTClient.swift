@@ -188,6 +188,99 @@ struct ParametersResponse: Codable, Sendable {
     }
 }
 
+// MARK: Phase 1 — parameterType field
+//
+// Per-effect parameter descriptor returned by `effects.parameters` (REST and
+// WebSocket). Firmware commit 4398af3b (2026-03-24) added a numeric `type`
+// field to each parameter object so clients can render type-appropriate
+// controls (toggles for BOOL, steppers for INT, dropdowns for ENUM, sliders
+// for FLOAT) instead of treating every value as a float.
+//
+// Wire shape (per `docs/protocol/k1-ws-contract.yaml`):
+//
+//     {
+//         "name": "contrast",
+//         "displayName": "Contrast",
+//         "min": 0.0, "max": 3.0,
+//         "default": 1.0, "value": 1.0,
+//         "type": 0     // uint8: 0=FLOAT, 1=INT, 2=BOOL, 3=ENUM
+//     }
+//
+// Forward-compatibility rules enforced by the custom decoder:
+//   - Legacy payloads (no `type` field) decode with `parameterType == nil`.
+//   - Numeric codes 0-3 decode to their corresponding `ParameterType` case.
+//   - Unknown numeric codes (firmware may grow new types) decode to
+//     `.unknown` — the decoder MUST NOT throw on unrecognised codes.
+
+/// The runtime classification of an effect parameter, used to drive
+/// type-appropriate UI controls.
+enum ParameterType: Int, Codable, Sendable, Equatable {
+    /// Continuous value; render as a slider.
+    case float = 0
+    /// Discrete integer; render as a stepper.
+    case int = 1
+    /// Boolean flag; render as a toggle.
+    case bool = 2
+    /// Enumerated choice; render as a dropdown / picker.
+    case enumerated = 3
+    /// Code emitted by firmware that this client does not understand.
+    /// Treated as untyped — UI should fall back to a slider over [min, max].
+    case unknown = -1
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(Int.self)
+        // Map any unrecognised code to .unknown rather than throwing — this
+        // keeps iOS forward-compatible with future firmware revisions.
+        self = ParameterType(rawValue: raw) ?? .unknown
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+}
+
+/// A single effect parameter descriptor, including its current value, range,
+/// default, and (post-`4398af3b`) its runtime type.
+struct EffectParameter: Codable, Sendable, Equatable {
+    /// Programmatic key (e.g. `"contrast"`).
+    let name: String
+    /// Human-readable label (e.g. `"Contrast"`). Optional for tolerance against
+    /// older firmware revisions that may not have populated it.
+    let displayName: String?
+    /// Inclusive lower bound of the value range.
+    let min: Float
+    /// Inclusive upper bound of the value range.
+    let max: Float
+    /// Default value used when the parameter is reset.
+    /// Decoded from the `default` JSON key (renamed to avoid the Swift keyword).
+    let defaultValue: Float
+    /// Current live value as known to firmware.
+    let value: Float
+    /// Runtime classification — `nil` for legacy responses that pre-date the
+    /// `type` field on commit 4398af3b. New responses always populate this.
+    let parameterType: ParameterType?
+
+    private enum CodingKeys: String, CodingKey {
+        case name
+        case displayName
+        case min
+        case max
+        case defaultValue = "default"
+        case value
+        case parameterType = "type"
+    }
+}
+
+/// The full envelope returned by the `effects.parameters` request — a single
+/// effect's identifier, name, and the list of its tunable parameters.
+struct EffectParametersGet: Codable, Sendable, Equatable {
+    let effectId: Int
+    let name: String
+    let hasParameters: Bool
+    let parameters: [EffectParameter]
+}
+
 struct ZonesResponse: Codable, Sendable {
     let success: Bool
     let data: ZonesData
@@ -537,6 +630,15 @@ actor RESTClient {
         self.session = URLSession(configuration: config)
     }
 
+    /// Test-only initialiser allowing injection of a pre-configured `URLSession`.
+    /// Production code uses `init(host:port:)`. Tests use this to wire a session
+    /// whose `protocolClasses` route through a `URLProtocol` mock.
+    init(host: String, port: Int = 80, session: URLSession) {
+        self.baseURL = "http://\(host)"
+        self.port = port
+        self.session = session
+    }
+
     // MARK: - Generic Request Method
 
     private func request<T: Decodable>(
@@ -830,5 +932,61 @@ actor RESTClient {
 
     func disconnectFromNetwork() async throws {
         let _: GenericResponse = try await request("POST", path: "network/disconnect", body: [:])
+    }
+
+    // MARK: Phase 1 — capability discovery
+
+    /// Probe the connected device for its advertised capabilities.
+    ///
+    /// Probe order:
+    ///   1. `GET /api/v1/openapi.json`        — richest, contract-aware
+    ///   2. `GET /api/v1/firmware/version`    — fallback, version-only
+    ///   3. `nil`                              — degrade gracefully
+    ///
+    /// This call is BEST-EFFORT: it never throws. Any transport, status, or decode
+    /// failure collapses to `nil` so that capability discovery cannot break the
+    /// connect flow. AppViewModel logs a single line on `nil` and proceeds.
+    func getCapabilities() async -> DeviceCapabilities? {
+        if let viaOpenAPI = await fetchOpenAPICapabilities() {
+            return viaOpenAPI
+        }
+        if let viaVersion = await fetchFirmwareVersionCapabilities() {
+            return viaVersion
+        }
+        return nil
+    }
+
+    /// Fetch and decode `/api/v1/openapi.json`. Returns `nil` on any failure.
+    private func fetchOpenAPICapabilities() async -> DeviceCapabilities? {
+        guard let data = await rawGet(path: "openapi.json") else { return nil }
+        return DeviceCapabilities.decodeOpenAPI(from: data)
+    }
+
+    /// Fetch and decode `/api/v1/firmware/version`. Returns `nil` on any failure.
+    private func fetchFirmwareVersionCapabilities() async -> DeviceCapabilities? {
+        guard let data = await rawGet(path: "firmware/version") else { return nil }
+        return DeviceCapabilities.decodeFirmwareVersion(from: data)
+    }
+
+    /// Best-effort raw GET against `/api/v1/<path>`. Returns the response body on
+    /// 2xx, `nil` for any non-2xx status or transport error. Never throws.
+    private func rawGet(path: String) async -> Data? {
+        let urlString = "\(baseURL):\(port)/api/v1/\(path)"
+        guard let url = URL(string: urlString) else { return nil }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse,
+                  (200...299).contains(http.statusCode) else {
+                return nil
+            }
+            return data
+        } catch {
+            return nil
+        }
     }
 }

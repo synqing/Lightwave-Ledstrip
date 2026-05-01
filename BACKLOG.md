@@ -40,6 +40,32 @@ What exactly does the operator look for, anchored to (clip, timestamp, measurabl
 - **Priority:** MEDIUM.
 - **Revisit trigger:** After C-2 lands; pre-flight to any sign-off harness build.
 
+### F-1 — Contract authority (HIGH)
+Is the YAML at `docs/protocol/k1-{rest,ws}-contract.yaml` source-of-truth, or has it drifted past usability? Audit found ~50 REST routes + ~40 WS commands in firmware are absent from the contract; 5 WS commands in YAML have firmware handlers commented out (`WsFilesystemCommands.cpp:21-25`).
+- **Blocks:** every iOS catch-up task (do we align iOS to contract or to firmware reality).
+- **Affected outputs:** ≥ 3.
+- **Priority:** HIGH.
+- **Revisit trigger:** Captain decision on contract reconciliation strategy (regenerate from firmware vs lock contract and bring firmware/iOS into line).
+
+### F-2 — Effect production cohort (HIGH)
+Of the 25+ new effects landed since iOS anchor `569d3e4b` (commits `f91619bf` 20 LGP AR variants, `99ca01a2` 11 K1 parity / Bloom V2, `9d068612`+`7a9ebd1a` 7 SB Waveform/Spectral incl. 0x130E, `4dfadc7b` 5 Beat Prism Onset, `39406e6b` Phase 5 exemplars), which are PRODUCTION (user-facing) vs EXPERIMENTAL (A/B research, dev-only)?
+- **Blocks:** effect-picker UX, palette/parameter wiring per effect, whether iOS hides experimental effect IDs.
+- **Affected outputs:** ≥ 3.
+- **Priority:** HIGH.
+- **Revisit trigger:** Captain effect-cohort declaration before iOS effect picker rebuild.
+
+### F-3 — Path canonicalisation (MEDIUM)
+Firmware accepts both modern (`/effects/current`, `/palettes/current`) and legacy (`/effects/set`, `/palettes/set`) paths. iOS currently uses legacy. Standardise on which?
+- **Blocks:** RESTClient refactor scope.
+- **Priority:** MEDIUM.
+- **Revisit trigger:** Captain decision before any RESTClient path refactor.
+
+### F-4 — Runtime parameter UX scope (HIGH)
+Is `effects.parameters.set` an end-user surface (sliders in effect detail view) or developer-only (debug overlay)? Effect 0x130E exposes `silenceGate`, `decayBase`, `decaySlope`, `onsetBoost` and similar — not consumer-friendly knobs.
+- **Blocks:** depth of effect detail view rebuild in Phase 2.
+- **Priority:** HIGH.
+- **Revisit trigger:** Captain decision on user-vs-developer UX for runtime tuning.
+
 ---
 
 ## Performance

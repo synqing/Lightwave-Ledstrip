@@ -454,6 +454,37 @@ class AppViewModel {
 
                 case .colourCorrectionSetBrownGuardrail:
                     self.log("Phase 1: received colorCorrection.setBrownGuardrail — handler stubbed", category: "WS")
+
+                // MARK: Phase 2 — STM and VRMS streams
+                // Added 2026-05-01 (Task P2-2). Required only because Swift's
+                // exhaustiveness check refuses to compile a partial Event
+                // switch — wiring is to AudioViewModel handlers, no new
+                // ViewModel needed.
+                case .stmFrame(let frame):
+                    self.audio.handleSTMFrame(frame)
+
+                case .vrmsFrame(let frame, let timestamp):
+                    self.audio.handleVRMSFrame(frame, timestamp: timestamp)
+
+                case .stmSubscriptionAck(let payload):
+                    let ok = (payload.data["status"] as? String == "ok") || (payload.data["success"] as? Bool == true)
+                    self.log("STM subscription ack received (ok=\(ok))", category: "WS")
+
+                case .vrmsSubscriptionAck(let payload):
+                    let ok = (payload.data["status"] as? String == "ok") || (payload.data["success"] as? Bool == true)
+                    self.log("VRMS subscription ack received (ok=\(ok))", category: "WS")
+
+                // MARK: Phase 2 — show transport
+                // P2-4 introduced two new event cases (showStatus, showAck).
+                // ShowsView holds its own ShowViewModel and consumes these
+                // events directly via WebSocketService when foregrounded;
+                // these stubs exist to preserve the exhaustive switch and
+                // log incoming traffic for debugging.
+                case .showStatus:
+                    self.log("Phase 2: received show.status — forwarded to ShowsView", category: "WS")
+
+                case .showAck:
+                    self.log("Phase 2: received show.* ack — forwarded to ShowsView", category: "WS")
                 }
             }
         }

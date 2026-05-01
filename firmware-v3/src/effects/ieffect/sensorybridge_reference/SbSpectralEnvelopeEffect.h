@@ -64,14 +64,25 @@ private:
         0, 10, 20, 30, 40, 50, 60, 79
     };
 
+    /// Maps each band to an onset-flux group for transient ignition.
+    /// 0 = onsetBassFlux (kick), 1 = onsetMidFlux (snare), 2 = onsetHighFlux (hihat).
+    /// Bands 0-1 -> bass, 2-4 -> mid, 5-7 -> high.
+    static constexpr uint8_t kOnsetBandMap[kBandCount] = {
+        0, 0, 1, 1, 1, 2, 2, 2
+    };
+
     /// Outward scroll rate in pixels per second
     static constexpr float kScrollRate = 200.0f;
 
     // Effect parameters
     float m_contrast    = 1.0f;
     float m_chromaHue   = 0.0f;
+    float m_silenceGate = 0.005f;   ///< Min band energy to draw an anchor dot
+    float m_decayBase   = 0.5f;     ///< Trail decay rate at silence (60 fps reference)
+    float m_decaySlope  = 3.0f;     ///< Additional decay per unit of rms (60 fps reference)
+    float m_onsetBoost  = 0.25f;    ///< Onset-flux ignition gain; 0.0 = B' rollback, 2.0 = max
 
-    static constexpr uint8_t kParamCount = 2;
+    static constexpr uint8_t kParamCount = 6;
     static const plugins::EffectParameter s_params[kParamCount];
 
     // PSRAM-allocated trail buffer for frame-to-frame persistence

@@ -39,13 +39,16 @@ class EffectViewModel {
     }
 
     /// Filtered effects by category, search text, and audio-only flag.
-    /// Experimental effects are excluded by default; they are hidden from the
-    /// production rotation until Captain adds a developer toggle.
+    /// Experimental effects are excluded by default; the power-user toggle
+    /// `showExperimental` (see Phase 2 — picker enhancements MARK block at
+    /// the end of this file) reveals them with a visual cue in the picker.
     func filteredEffects(category: String? = nil, searchText: String? = nil, audioOnly: Bool = false) -> [EffectMetadata] {
         var effects = allEffects
 
-        // Exclude experimental effects from default production view
-        effects = effects.filter { !$0.isExperimental }
+        // Hide experimental effects unless the power-user toggle is on.
+        if !showExperimental {
+            effects = effects.filter { !$0.isExperimental }
+        }
 
         // Filter by audio-reactive if requested
         if audioOnly {
@@ -86,7 +89,10 @@ class EffectViewModel {
         do {
             let response = try await client.getEffects(page: 1, limit: 200)
 
-            // Decode with categoryId and isAudioReactive (API_AUDIT fix)
+            // Decode with categoryId, isAudioReactive (API_AUDIT fix), and
+            // isExperimental (Phase 2 — picker enhancements). Legacy firmware
+            // omits `isExperimental` — Optional decode treats absent as nil →
+            // non-experimental, preserving backward compatibility.
             self.allEffects = response.data.effects.map { effect in
                 EffectMetadata(
                     id: effect.id,
@@ -94,6 +100,7 @@ class EffectViewModel {
                     category: effect.category,
                     categoryId: effect.categoryId,
                     isAudioReactive: effect.isAudioReactive ?? false,
+                    isExperimental: effect.isExperimental ?? false,
                     categoryName: effect.categoryName
                 )
             }
@@ -140,5 +147,138 @@ class EffectViewModel {
         let prevEffect = allEffects[prevIndex]
 
         await setEffect(id: prevEffect.id)
+    }
+
+    // MARK: Phase 2 — runtime parameters
+    //
+    // End-user runtime tuning surface for the currently selected effect. The
+    // sheet view (`EffectParameterSheet`) reads `currentParameters` and writes
+    // back through `setRuntimeParameter`. Slider drags are debounced 150 ms so
+    // a continuous gesture produces at most one REST POST every 150 ms — well
+    // under the firmware's 20 req/s rate limit.
+
+    /// The list of runtime parameters for the most recently loaded effect.
+    /// Empty until `loadEffectParameters(effectId:client:)` populates it.
+    var currentParameters: [EffectParameter] = []
+
+    /// Pending values keyed by parameter name — held until the 150 ms debounce
+    /// window elapses, then flushed to the network in a single round-trip.
+    /// Observation excludes this so SwiftUI does not re-render on every keystroke.
+    @ObservationIgnored
+    private var pendingParameterValues: [String: Double] = [:]
+
+    /// Per-parameter debounce timers. One in-flight task per parameter so a
+    /// drag on `contrast` does not cancel a separate drag on `intensity`.
+    @ObservationIgnored
+    private var debounceTasks: [String: Task<Void, Never>] = [:]
+
+    /// The minimum interval between consecutive POSTs for the same parameter.
+    /// 150 ms is the project-wide slider debounce floor (see CLAUDE.md).
+    private static let parameterDebounceInterval: Duration = .milliseconds(150)
+
+    /// Fetch the tunable runtime parameters for `effectId` and store them in
+    /// `currentParameters`. Replaces any previously loaded list.
+    func loadEffectParameters(effectId: Int, client: RESTClient) async {
+        do {
+            let envelope = try await client.getEffectParameters(effectId: effectId)
+            self.currentParameters = envelope.parameters
+            print("Loaded \(envelope.parameters.count) parameters for effect \(effectId)")
+        } catch {
+            print("Error loading effect parameters for \(effectId): \(error)")
+            self.currentParameters = []
+        }
+    }
+
+    /// Queue a runtime parameter update. Coalesces rapid changes via a 150 ms
+    /// debounce window; only the latest pending value for `name` is sent.
+    /// - Parameters:
+    ///   - name: The programmatic parameter key.
+    ///   - value: The new value.
+    ///   - client: The active REST client. `nil` is tolerated — the call
+    ///     becomes a no-op so callers do not need a guard at every call site.
+    func setRuntimeParameter(name: String, value: Double, client: RESTClient?) {
+        guard let client = client else { return }
+
+        // Optimistic local update — keeps the UI in sync with the dragged value
+        // without waiting for the round-trip. The next reload will reconcile
+        // against firmware truth.
+        if let idx = currentParameters.firstIndex(where: { $0.name == name }) {
+            let p = currentParameters[idx]
+            currentParameters[idx] = EffectParameter.replacingValue(of: p, with: Float(value))
+        }
+
+        // Capture the latest desired value for this name and (re)start a
+        // debounce task. Cancelling any previous task means callers can drag
+        // freely; only the trailing value reaches the network.
+        pendingParameterValues[name] = value
+
+        debounceTasks[name]?.cancel()
+
+        let effectId = self.currentEffectId
+        debounceTasks[name] = Task { [weak self] in
+            try? await Task.sleep(for: Self.parameterDebounceInterval)
+            guard !Task.isCancelled else { return }
+            guard let self = self else { return }
+
+            // Read back the latest pending value at flush time — newer drags
+            // may have overwritten it during the sleep.
+            guard let latest = self.pendingParameterValues.removeValue(forKey: name) else {
+                return
+            }
+
+            do {
+                try await client.setRuntimeParameter(
+                    effectId: effectId,
+                    name: name,
+                    value: latest
+                )
+            } catch {
+                print("Error setting runtime parameter \(name): \(error)")
+            }
+        }
+    }
+
+    // MARK: Phase 2 — picker enhancements
+    //
+    // F-2 power-user toggle. By default the picker hides effects tagged
+    // `isExperimental` by firmware (see PatternRegistry::isExperimental). The
+    // `showExperimental` flag flips the picker into a power-user mode where
+    // experimentals are visible and visually flagged. Off by default for safety
+    // — Captain's intent is that experimental effects do not appear in the
+    // production rotation without explicit opt-in.
+    //
+    // Wired up by `EffectSelectorView` via a toolbar toggle button; observable
+    // through @Observable so the picker re-renders when the flag flips.
+
+    /// Power-user toggle. When true, `filteredEffects()` includes effects
+    /// tagged `isExperimental` by firmware. Defaults to false.
+    var showExperimental: Bool = false
+
+    /// Flip the power-user toggle. Used by the picker's toolbar control.
+    func toggleShowExperimental() {
+        showExperimental.toggle()
+    }
+}
+
+// MARK: - EffectParameter mutation helper (file-private)
+
+private extension EffectParameter {
+    /// Build a copy of `original` with a new live `value`. `EffectParameter`
+    /// has `let` properties (it is decoded from the wire), so we round-trip
+    /// through the encoder rather than introducing a memberwise initialiser
+    /// that would widen the public API.
+    static func replacingValue(of original: EffectParameter, with newValue: Float) -> EffectParameter {
+        // Encode → mutate the dictionary → decode. Cheap (one parameter at
+        // a time) and keeps `EffectParameter`'s definition untouched.
+        guard let data = try? JSONEncoder().encode(original),
+              var dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return original
+        }
+        dict["value"] = newValue
+        guard let mutated = try? JSONSerialization.data(withJSONObject: dict),
+              let decoded = try? JSONDecoder().decode(EffectParameter.self, from: mutated) else {
+            return original
+        }
+        return decoded
     }
 }

@@ -1,0 +1,26 @@
+/**
+ * Screenshot mask styles for visual regression testing
+ * These hide dynamic content that would cause false positives
+ */
+
+/* Hide telemetry values that change every frame */
+.telemetry-value {
+  visibility: hidden;
+}
+
+/* Mask FPS counter */
+[data-testid="fps-counter"] {
+  visibility: hidden;
+}
+
+/* Hide connection status dot animations */
+.status-pulse-connected,
+.status-pulse-disconnected {
+  animation: none !important;
+}
+
+/* Hide any live timestamps */
+[data-testid="timestamp"],
+time {
+  visibility: hidden;
+}

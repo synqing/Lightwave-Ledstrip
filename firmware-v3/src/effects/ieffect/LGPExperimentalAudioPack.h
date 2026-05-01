@@ -90,6 +90,9 @@ private:
     float m_hue = 24.0f;
     float m_audioPresence = 0.0f;
     bool m_chordGateOpen = false;
+    // One-way outward shockwave state. Centre (0) → past-edge sink (1.20). Never reverses.
+    float m_shockPos = 1.20f;        // parked off-strip at init
+    float m_shockIntensity = 0.0f;   // monotonic decay; re-armed by event seed
 };
 
 class LGPTrebleNetEffect final : public plugins::IEffect {

@@ -25,6 +25,19 @@ extern void run_audio_reactive_policy_tests();
 extern void run_onset_effect_context_tests();
 extern void run_translation_engine_tests();
 extern void run_translation_integration_tests();
+extern void run_effect_role_flags_tests();
+extern void run_persistence_helpers_tests();
+extern void run_math_substrate_tests();
+extern void run_framebuffer_lpf_tests();
+extern void run_layer_stack_tests();
+extern void run_psram_scalar_ring_tests();
+extern void run_psram_frame_ring_tests();
+extern void run_control_bus_reuse_helpers_tests();
+extern void run_voice_music_classifier_tests();
+extern void run_audio_gated_decay_tests();
+extern void run_first_light_ignition_tests();
+extern void run_radial_time_scope_tests();
+extern void run_attack_only_pitch_velocity_tests();
 
 // Unity setUp/tearDown (required but can be empty)
 void setUp(void) {
@@ -71,6 +84,71 @@ int main(int argc, char** argv) {
     printf("  Effect Rendering Tests (CENTER ORIGIN)\n");
     printf("───────────────────────────────────────────────────────────────\n");
     run_effect_tests();
+
+    printf("\n───────────────────────────────────────────────────────────────\n");
+    printf("  EffectRoleFlags Tests (INF-06 substrate)\n");
+    printf("───────────────────────────────────────────────────────────────\n");
+    run_effect_role_flags_tests();
+
+    printf("\n───────────────────────────────────────────────────────────────\n");
+    printf("  PersistenceHelpers Tests (Phase 1 Move 1.1 substrate)\n");
+    printf("───────────────────────────────────────────────────────────────\n");
+    run_persistence_helpers_tests();
+
+    printf("\n───────────────────────────────────────────────────────────────\n");
+    printf("  Math Substrate Tests (Phase 1 Move 1.6 — sinLUT256 + CFL)\n");
+    printf("───────────────────────────────────────────────────────────────\n");
+    run_math_substrate_tests();
+
+    printf("\n───────────────────────────────────────────────────────────────\n");
+    printf("  FramebufferLPF Tests (Phase 1 Move 1.3 — INF-02 image LPF)\n");
+    printf("───────────────────────────────────────────────────────────────\n");
+    run_framebuffer_lpf_tests();
+
+    printf("\n───────────────────────────────────────────────────────────────\n");
+    printf("  LayerStack Tests (Phase 1 Move 1.4 — INF-01 N-buffer overlap)\n");
+    printf("───────────────────────────────────────────────────────────────\n");
+    run_layer_stack_tests();
+
+    printf("\n───────────────────────────────────────────────────────────────\n");
+    printf("  PSRAMScalarRing Tests (Phase 2 Move 2.1 — INF-12 substrate)\n");
+    printf("───────────────────────────────────────────────────────────────\n");
+    run_psram_scalar_ring_tests();
+
+    printf("\n───────────────────────────────────────────────────────────────\n");
+    printf("  PSRAMFrameRing Tests (Phase 5 Move 5.1 — INF-03 substrate)\n");
+    printf("───────────────────────────────────────────────────────────────\n");
+    run_psram_frame_ring_tests();
+
+    printf("\n───────────────────────────────────────────────────────────────\n");
+    printf("  ControlBusReuseHelpers Tests (Phase 1 Move 1.5 — reuse substrate)\n");
+    printf("───────────────────────────────────────────────────────────────\n");
+    run_control_bus_reuse_helpers_tests();
+
+    printf("\n───────────────────────────────────────────────────────────────\n");
+    printf("  VoiceMusicClassifier Tests (Phase 4 Move 4.1 — AUD-21 substrate)\n");
+    printf("───────────────────────────────────────────────────────────────\n");
+    run_voice_music_classifier_tests();
+
+    printf("\n───────────────────────────────────────────────────────────────\n");
+    printf("  AudioGatedDecay Tests (Phase 4 Move 4.2 — PER-18 silence-aware decay)\n");
+    printf("───────────────────────────────────────────────────────────────\n");
+    run_audio_gated_decay_tests();
+
+    printf("\n───────────────────────────────────────────────────────────────\n");
+    printf("  First-Light Ignition Tests (Phase 4 Move 4.4 — F6 boot ritual)\n");
+    printf("───────────────────────────────────────────────────────────────\n");
+    run_first_light_ignition_tests();
+
+    printf("\n───────────────────────────────────────────────────────────────\n");
+    printf("  Radial Time-Scope Tests (Phase 5 Move 5.4 — LIN-06 K1-native)\n");
+    printf("───────────────────────────────────────────────────────────────\n");
+    run_radial_time_scope_tests();
+
+    printf("\n───────────────────────────────────────────────────────────────\n");
+    printf("  Pitch-Class Velocity Field Tests (Phase 5 Move 5.6 — LIN-08)\n");
+    printf("───────────────────────────────────────────────────────────────\n");
+    run_attack_only_pitch_velocity_tests();
 
     printf("\n───────────────────────────────────────────────────────────────\n");
     printf("  Audio Reactive Policy Tests\n");

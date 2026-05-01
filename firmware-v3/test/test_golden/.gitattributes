@@ -1,0 +1,4 @@
+# GFRM v2 binary captures — must not be LF/CRLF-mangled by git.
+*.gfrm binary
+golden/*.gfrm binary
+out/*.gfrm binary

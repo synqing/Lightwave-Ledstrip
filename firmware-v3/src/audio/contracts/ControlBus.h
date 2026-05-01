@@ -1,6 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include <math.h>
+#include "config/features.h"
 #include "AudioTime.h"
 #include "MusicalSaliency.h"
 #include "StyleDetector.h"
@@ -44,6 +45,16 @@ struct ChordState {
     float rootStrength = 0.0f;      ///< Energy at root pitch class
     float thirdStrength = 0.0f;     ///< Energy at third interval
     float fifthStrength = 0.0f;     ///< Energy at fifth interval
+};
+
+/**
+ * @brief Compact Q15 event field for semantic transient channels.
+ */
+struct AudioEventQ15 {
+    uint16_t strength = 0;     ///< 0..65535 event strength
+    uint16_t confidence = 0;   ///< 0..65535 event confidence
+    uint16_t ageMs = 65535;    ///< Milliseconds since last trigger, saturated
+    uint16_t flags = 0;        ///< Bit 0 active, bit 1 valid, bit 2 degraded, bit 3 clipped-source
 };
 
 /**
@@ -165,6 +176,17 @@ struct ControlBusFrame {
     float onsetHighFlux = 0.0f;     ///< High-freq flux (hihat detection) [0, ∞)
     bool  kickTrigger = false;      ///< FFT-based kick onset detected
     uint16_t onsetProcessUs = 0;    ///< OnsetDetector self-timed μs (diagnostics)
+
+#if FEATURE_AUDIO_HF_SEMANTICS
+    // Tier 1 high-frequency semantic surface, derived from existing 64-bin/band data.
+    float hfEnergy = 0.0f;                ///< Smooth high-frequency content [0,1]
+    float hfFlux = 0.0f;                  ///< Positive high-frequency change [0,1]
+    AudioEventQ15 hatEvent;               ///< Short hat-like event, not continuous HF energy
+    float cymbalSustain = 0.0f;           ///< Sustained noisy HF envelope [0,1]
+    float airEnergy = 0.0f;               ///< Smooth upper-air shimmer [0,1]
+    float spectralBrightness = 0.0f;      ///< Spectral centroid / upper-balance proxy [0,1]
+    float spectralBrightnessDelta = 0.0f; ///< Signed brightness movement [-1,1]
+#endif
 
     // Phase 2: Full 64-bin Goertzel spectrum (110 Hz - 4186 Hz)
     float bins64[BINS_64_COUNT] = {0};  // 0..1 normalized magnitudes
@@ -546,6 +568,15 @@ private:
     /// Pitch contour: previous centroid for direction computation
     float m_prev_centroid = 0.0f;
     float m_pitch_contour_smooth = 0.0f;  ///< Smoothed output
+
+#if FEATURE_AUDIO_HF_SEMANTICS
+    float m_hf_energy_s = 0.0f;
+    float m_air_energy_s = 0.0f;
+    float m_cymbal_sustain_s = 0.0f;
+    float m_prev_hf_energy = 0.0f;
+    float m_prev_spectral_brightness = 0.0f;
+    uint16_t m_hat_event_age_ms = 65535;
+#endif
 
     /// Compute timing jitter from onset event (call when onset detected)
     void updateTimingJitter(uint32_t now_ms, bool onsetDetected) {

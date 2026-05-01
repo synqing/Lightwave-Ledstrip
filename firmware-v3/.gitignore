@@ -47,6 +47,7 @@ Thumbs.db
 # Temporary / Generated
 # =============================================================================
 *.log
+!docs/research/phase1b_runtime_evidence_2026-04-27/**/*.log
 *.tmp
 .commit_message.txt
 compile_commands.json

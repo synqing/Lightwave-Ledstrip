@@ -65,7 +65,9 @@ constexpr uint8_t FAMILY_SHOWPIECE_PACK3 = 0x1B;  // Showpiece Pack 3
 // ============================================================================
 
 constexpr uint8_t FAMILY_FIVE_LAYER_AR  = 0x1C;  // 5-Layer Audio-Reactive Variants
-constexpr uint8_t FAMILY_RESERVED_START = 0x1D;  // 0x1D-0xEF reserved for expansion
+constexpr uint8_t FAMILY_RESERVED_START = 0x1D;  // 0x1D-0x1F currently allocated; remainder reserved for expansion
+constexpr uint8_t FAMILY_SYSTEM         = 0x20;  // System / lifecycle one-shot effects (boot ignition, etc.)
+constexpr uint8_t FAMILY_K1_NATIVE      = 0x21;  // K1-native synergy-topology exemplars (Phase 5)
 constexpr uint8_t FAMILY_OTA_USER       = 0xF0;  // OTA-provisioned / user-uploaded effects
 
 // ============================================================================
@@ -363,7 +365,23 @@ constexpr EffectId EID_LGP_BEAT_PRISM_ONSET_IGNITE          = 0x1E04;  // Progre
 // --- Gradient Field (0x1Fxx) ---
 constexpr EffectId EID_LGP_GRADIENT_FIELD                   = 0x1F00;  // LGP Gradient Field (operator-surfaced gradient proof)
 
-// Total: 202 IDs assigned (201 active, 1 retired)
+// --- System / Lifecycle (0x20xx) ---
+// Phase 4 Move 4.4 (Topology_Reconciliation §5 + Divergence 7) — F6 First-Light Ignition.
+// One-shot boot animation; runs once on power-on then yields to ambient/active mode.
+constexpr EffectId EID_FIRST_LIGHT_IGNITION                 = 0x2000;  // First-Light Ignition (cinematic boot)
+
+// --- K1-Native Synergy-Topology (0x21xx) ---
+// Phase 5 Pass 2 §3 Pillar D — geometry-from-time exemplars that exploit the
+// dual-strip centre-pair topology rather than treating it as an obstacle.
+// Specs were initially research-derived; these constants represent the
+// hardware-iterated final designs (5.4 with rms+onsetFlux source, 5.6 with
+// continuous chroma EMA + dominant-class hysteresis, 5.7 redesigned as a
+// standalone effect rather than a hero modification).
+constexpr EffectId EID_RADIAL_TIME_SCOPE                    = 0x2100;  // Move 5.4 — onset history time-scope
+constexpr EffectId EID_ATTACK_ONLY_PITCH_VELOCITY           = 0x2101;  // Move 5.6 — pitch-class radial ribbons
+constexpr EffectId EID_BEAT_PARITY_SPRITE                   = 0x2102;  // Move 5.7 — beat-parity sprite radiation
+
+// Total: 206 IDs assigned (205 active, 1 retired)
 
 // ============================================================================
 // Migration: Old Sequential ID -> New Stable ID

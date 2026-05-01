@@ -1,5 +1,45 @@
 # LightwaveOS
 
+## RBDO Gate — Mandatory Before Tactical Output
+
+**Applies to every agent on this repository (Claude Code, Codex CLI, any sub-agent or tooling that emits tactical output). No exceptions. Silent omission of the label below is itself a violation of this gate.**
+
+Every tactical output (recommendation, decision, code change, plan, edit, commit, response to Captain) MUST be labelled with one of three states.
+
+### Labels
+
+**GROUNDED** — every premise traced to an upstream fact, evidence cited (file:line, commit hash, measurement, documented decision). Defensible without further qualification.
+
+**DEGRADED-MODE** — operating under explicit calibration debt. The output MUST disclose all five fields:
+
+- **Unresolved assumption** — the upstream fact that has not been calibrated.
+- **Risk if wrong** — what happens to downstream behaviour if the assumption is incorrect.
+- **Fallback** — what the output reverts to / becomes if the risk materialises.
+- **Revisit trigger** — the concrete event that obligates re-auditing this output.
+- **Debt count / affected outputs** — how many other tactical outputs depend on this same unresolved fact.
+
+**REFUSED** — the output cannot be emitted under either GROUNDED or DEGRADED-MODE without violating a hard stop. Withhold the output; surface the blocker.
+
+### Hard stops (REFUSE if any are true)
+
+1. Emitting would violate a protected invariant (K1 hard constraints, R1–R5 governance in `AGENTS.md`, hardware-test-before-commit, audio-playback safety, audit-chain integrity).
+2. The unresolved upstream fact already affects more than 3 tactical outputs without resolution. Resolve before adding a fourth dependent.
+3. The output proposes a firmware behaviour change without Captain hardware sign-off attestation.
+4. Sandbox-to-integration loss has been detected in the current session (the `6b1a222f` pattern). Surface and ask; do not continue.
+5. The output cannot be independently audited by Captain — i.e. the calibration debt is so large that disclosure becomes hand-waving rather than risk-bounding.
+
+### Captain-decision-menu rule
+
+**No Captain decision menu is allowed until the agent first lists the upstream facts that make the options decidable.** Presenting tactical-preference options (a/b/c/d/e) without first surfacing the upstream facts that gate the choice is the face-value pattern that produced the 2026-04-27 drift. The right output when upstream is uncalibrated is "this question depends on facts F1, F2, F3 — added to `BACKLOG.md` § Critical — Upstream Calibration Debt", not a multiple-choice form.
+
+### Reference
+
+- The live calibration-debt ledger: `BACKLOG.md` § Critical — Upstream Calibration Debt.
+- Full doctrine + anti-pattern catalogue + degradation ladder: `~/.claude/plans/shit-got-fucked-but-groovy-neumann.md` and the post-doctrine session transcript that authored this gate.
+- Governance rules R1–R5: `AGENTS.md` § Workflow Discipline.
+
+---
+
 ## Context Management
 
 This CLAUDE.md is loaded into every conversation. Keep main context for decisions and outcomes only.
@@ -190,6 +230,7 @@ Only after satisfying all four checks: proceed with commit.
 ## Hard Constraints
 
 - **K1 is AP-ONLY. NEVER enable STA mode.** K1 runs as a WiFi Access Point. Tab5 and iOS connect TO it. STA has never worked (driver-level auth failures, 6+ failed mitigations). See MEMORY.md `firmware_wifi_architecture.md` for full history. **Do not modify WiFi mode, add STA connection logic, or change AP configuration without explicit user approval.**
+- **Audio playback safety**: Never generate, select, or play audio through speakers/headphones unless Captain has explicitly approved that exact source. Approval for one audio file does not authorise other files, synthetic fixtures, white/pink noise, hats, cymbals, speech, generated tones, or any agent-chosen sound. For AFS/runtime audio capture, the approved reference corpus is `/Users/spectrasynq/Workspace_Management/Software/hybrid-beat-tracker/tests/benchmark` unless Captain explicitly names a different source. Before any playback, state the exact file/source, output path/device if known, volume assumption, duration, and stop command. If a capture matrix needs noise or synthetic fixtures, ask first and wait.
 - **Centre origin**: All effects originate from LED 79/80 outward (or inward to 79/80). No linear sweeps. Applies to all render modes including zone-specific renders. Exception: zone ID `0xFF` (global render) where the physical centre is still 79/80.
 - **No rainbows**: No rainbow cycling or full hue-wheel sweeps.
 - **No heap alloc in render**: No `new`/`malloc`/`String` in `render()` or any function transitively called from `render()`. Use static buffers. Includes helper functions, utility calls, and String concatenation.
@@ -268,6 +309,28 @@ pio device monitor -b 115200
 ```
 
 These two `_32khz` envs are the canonical K1 build path — pinned to ESV11 at 32 kHz / 125 Hz frame rate with the calibrated tempo/beat-tracking shim. Other envs in `platformio.ini` exist for benchmarks, native tests, and unrelated boards; do not build them for K1 work without explicit reason.
+
+### Tracing / Profiling — MabuTrace
+
+`TRACE_SCOPE` / `TRACE_COUNTER` / `TRACE_INSTANT` macros across the codebase are no-op stubs unless `FEATURE_MABUTRACE=1` is set. **The canonical K1 build envs do NOT enable tracing.** To capture telemetry:
+
+| Trace target | Env |
+|---|---|
+| K1 V2 (production hardware) | `esp32dev_audio_esv11_k1v2_32khz_trace` |
+| V1 dev boards | `esp32dev_audio_esv11_32khz_trace` |
+| PipelineCore | `esp32dev_audio_pipelinecore_trace` |
+| Bare ESV11 base | `esp32dev_audio_trace` |
+
+**Build + flash:** `pio run -e <env_trace> -t upload --upload-port /dev/tty.usbmodem<port>`
+
+**Capture (automated, one command):**
+```bash
+~/.platformio/penv/bin/python3 firmware-v3/tools/capture_trace.py \
+    --port /dev/tty.usbmodem2101 --effect 0xNNNN --soak 8 \
+    --output /tmp/trace.json --open
+```
+
+`capture_trace.py` switches effect, soaks, sends `trace`, strips `[TRACE]` markers, validates JSON, opens `https://ui.perfetto.dev`. Requires exclusive port access — close any other serial monitor first. Events record to a 64 KB on-chip ring buffer; Perfetto UI is Google's open-source viewer (JSON parsed in-browser, no uploads, no project portal). Full workflow + serial protocol: `firmware-v3/docs/debugging/MABUTRACE_GUIDE.md`. Spec for adding NEW TRACE_* points across the system: `firmware-v3/docs/debugging/TRACE_INSTRUMENTATION_SPEC.md`.
 
 ## Build (iOS)
 
@@ -400,6 +463,7 @@ Read **only** when the task requires it — do not load eagerly. Exception: WORK
 | Effect development standard | [firmware-v3/docs/EFFECT_DEVELOPMENT_STANDARD.md](firmware-v3/docs/EFFECT_DEVELOPMENT_STANDARD.md) | 500 | Creating or modifying effects |
 | Full REST API reference | [firmware-v3/docs/api/api-v1.md](firmware-v3/docs/api/api-v1.md) | 2,124 | API endpoint work — use QMD to search, do NOT read in full |
 | CQRS state architecture | [firmware-v3/docs/CQRS_STATE_ARCHITECTURE.md](firmware-v3/docs/CQRS_STATE_ARCHITECTURE.md) | 652 | State management, command dispatch |
+| MabuTrace tracing & Perfetto | [firmware-v3/docs/debugging/MABUTRACE_GUIDE.md](firmware-v3/docs/debugging/MABUTRACE_GUIDE.md) | ~200 | Capturing on-chip timeline traces; only when telemetry is needed |
 | Harness worker mode | [.claude/harness/HARNESS_RULES.md](.claude/harness/HARNESS_RULES.md) | 364 | Harness/test infrastructure |
 
 ## autocontext — Evolved Strategy Scenarios

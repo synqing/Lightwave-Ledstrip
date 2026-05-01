@@ -7,6 +7,8 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -35,7 +37,7 @@ void LGPChladniHarmonicsEffect::render(plugins::EffectContext& ctx) {
     m_vibrationPhase += speed * 0.08f;
     m_mixPhase += speed * 0.05f;
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         float distFromCenter = (float)centerPairDistance(i);

@@ -7,6 +7,8 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 #ifndef PI
 #define PI 3.14159265358979323846f
@@ -74,7 +76,7 @@ void LGPQuantumEntanglementEffect::render(plugins::EffectContext& ctx) {
         }
     }
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         float distFromCenter = (float)centerPairDistance((uint16_t)i);

@@ -10,6 +10,8 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -130,7 +132,7 @@ void LGPWaterCausticsAREffect::render(plugins::EffectContext& ctx) {
 
     // Trail persistence
     uint8_t fadeAmt = static_cast<uint8_t>(clampf(16.0f + 30.0f * (1.0f - normBass), 10.0f, 50.0f));
-    fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmt);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, fadeAmt, ctx.getSafeDeltaSeconds());
 
     // STEP 6: Per-pixel render (linear — independent strip colours)
     for (int i = 0; i < STRIP_LENGTH; i++) {

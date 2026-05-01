@@ -11,6 +11,8 @@
 
 #ifndef NATIVE_BUILD
 #include <esp_heap_caps.h>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 #endif
 
 namespace lightwaveos {
@@ -101,7 +103,7 @@ void LGPMycelialNetworkEffect::render(plugins::EffectContext& ctx) {
         }
     }
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         float distFromCenter = (float)centerPairDistance((uint16_t)i);

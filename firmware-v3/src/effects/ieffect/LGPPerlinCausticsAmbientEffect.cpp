@@ -11,6 +11,8 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -41,7 +43,7 @@ void LGPPerlinCausticsAmbientEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
     // Trail persistence: fade previous frame (long ambient trails)
     // =========================================================================
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 10);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, 10, ctx.getSafeDeltaSeconds());
 
     // =========================================================================
     // Time-driven Parameter Modulation

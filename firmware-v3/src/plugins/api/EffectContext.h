@@ -57,6 +57,16 @@ namespace plugins {
 // Audio Context (Phase 2)
 // ============================================================================
 
+enum class MusicalRange : uint8_t {
+    SUB_BASS,
+    BASS,
+    LOW_MID,
+    MID,
+    PRESENCE,
+    TREBLE,
+    FULL
+};
+
 #if FEATURE_AUDIO_SYNC
 /**
  * @brief Audio context passed to effects (by-value copies for thread safety)
@@ -138,6 +148,27 @@ struct AudioContext {
     /// Get tempo tracking confidence (0.0-1.0)
     float tempoConfidence() const {
         return (onset.tempoConfidence > 0.0f) ? onset.tempoConfidence : musicalGrid.tempo_confidence;
+    }
+
+    /// Get effect-facing audio confidence (0.0=silence/invalid, 1.0=usable music)
+    float audioConfidence() const { return controlBus.audioConfidence; }
+
+    /// True on the current tempo beat tick, using the available locked/grid source.
+    bool tempoBeatTick() const {
+        return controlBus.tempoBeatTick || controlBus.es_beat_tick || musicalGrid.beat_tick;
+    }
+
+    /// Effect-facing tempo confidence (0.0-1.0), preserving the strongest source.
+    float tempoBeatConfidence() const {
+        float c = tempoConfidence();
+        if (controlBus.tempoConfidence > c) c = controlBus.tempoConfidence;
+        if (controlBus.es_tempo_confidence > c) c = controlBus.es_tempo_confidence;
+        return c;
+    }
+
+    /// Beat position in the current bar (0-based; normally 0..3 for 4/4).
+    uint8_t beatInBar() const {
+        return (controlBus.es_beat_in_bar != 0U) ? controlBus.es_beat_in_bar : musicalGrid.beat_in_bar;
     }
 
     /// Get beat strength (0.0-1.0), peaks on beat detection then decays
@@ -300,6 +331,36 @@ struct AudioContext {
             : controlBus.hihatEnergy;
     }
 
+#if FEATURE_AUDIO_HF_SEMANTICS
+    /// High-frequency content exists; not a hi-hat trigger by itself.
+    float hfEnergy() const { return controlBus.hfEnergy; }
+    /// Positive high-frequency change; not a confirmed hat event by itself.
+    float hfFlux() const { return controlBus.hfFlux; }
+    /// Short hat-like event strength [0,1], derived from the compact Q15 event.
+    float hatEvent() const { return static_cast<float>(controlBus.hatEvent.strength) / 65535.0f; }
+    /// Full compact hat event for effects that need confidence or age.
+    const audio::AudioEventQ15& hatEventInfo() const { return controlBus.hatEvent; }
+    /// Sustained cymbal/noisy HF envelope.
+    float cymbalSustain() const { return controlBus.cymbalSustain; }
+    /// Smooth upper-air shimmer bed.
+    float airEnergy() const { return controlBus.airEnergy; }
+    /// Spectral tilt / upper-balance proxy.
+    float spectralBrightness() const { return controlBus.spectralBrightness; }
+    /// Alias requested by the AFS v2 helper direction; not LED output brightness.
+    float brightness() const { return spectralBrightness(); }
+    /// Signed spectral brightness movement [-1,1].
+    float spectralBrightnessDelta() const { return controlBus.spectralBrightnessDelta; }
+#else
+    float hfEnergy() const { return treble(); }
+    float hfFlux() const { return hihatFlux(); }
+    float hatEvent() const { return isHihatHit() ? hihat() : 0.0f; }
+    float cymbalSustain() const { return heavyTreble(); }
+    float airEnergy() const { return air(); }
+    float spectralBrightness() const { return treble(); }
+    float brightness() const { return spectralBrightness(); }
+    float spectralBrightnessDelta() const { return 0.0f; }
+#endif
+
     /// Check semantic onset channel pulses.
     bool isKickHit() const { return onset.kick.fired || controlBus.kickTrigger; }
     bool isSnareHit() const { return onset.snare.fired || controlBus.snareTrigger; }
@@ -333,6 +394,37 @@ struct AudioContext {
 
     /// Get pointer to adaptive 64-bin array (Sensory Bridge normalisation)
     const float* bins64Adaptive() const { return controlBus.bins64Adaptive; }
+
+    /// Canonical effect-facing musical bin, backed by the 64-bin surface.
+    float musicalBin(uint8_t index) const { return binAdaptive(index); }
+
+    /// Mean energy over canonical 64-bin musical bins [lo, hi).
+    float musicalRange(uint8_t loInclusive, uint8_t hiExclusive) const {
+        if (loInclusive >= audio::ControlBusFrame::BINS_64_COUNT) return 0.0f;
+        if (hiExclusive > audio::ControlBusFrame::BINS_64_COUNT) {
+            hiExclusive = audio::ControlBusFrame::BINS_64_COUNT;
+        }
+        if (loInclusive >= hiExclusive) return 0.0f;
+        float sum = 0.0f;
+        for (uint8_t i = loInclusive; i < hiExclusive; ++i) {
+            sum += musicalBin(i);
+        }
+        return sum / static_cast<float>(hiExclusive - loInclusive);
+    }
+
+    /// Mean energy over a named canonical 64-bin musical range.
+    float musicalRange(MusicalRange range) const {
+        switch (range) {
+            case MusicalRange::SUB_BASS:  return musicalRange(0, 4);
+            case MusicalRange::BASS:      return musicalRange(4, 12);
+            case MusicalRange::LOW_MID:   return musicalRange(12, 24);
+            case MusicalRange::MID:       return musicalRange(24, 38);
+            case MusicalRange::PRESENCE:  return musicalRange(38, 52);
+            case MusicalRange::TREBLE:    return musicalRange(52, 64);
+            case MusicalRange::FULL:
+            default:                      return musicalRange(0, 64);
+        }
+    }
 
     // ========================================================================
     // 256-bin FFT / Frequency-Semantic Accessors (PipelineCore backend)
@@ -562,6 +654,10 @@ struct AudioContext {
     bool isOnDownbeat() const { return onset.downbeat.fired; }
     float bpm() const { return onset.bpm; }
     float tempoConfidence() const { return onset.tempoConfidence; }
+    float audioConfidence() const { return 0.0f; }
+    bool tempoBeatTick() const { return false; }
+    float tempoBeatConfidence() const { return onset.tempoConfidence; }
+    uint8_t beatInBar() const { return 0; }
     float beatStrength() const { return onset.beat.level01; }
     const audio::SceneParameters& sceneParameters() const { return audio::kDefaultSceneParameters; }
     audio::MotionPrimitive motionType() const { return audio::MotionPrimitive::DRIFT; }
@@ -609,6 +705,14 @@ struct AudioContext {
     float kickLevel() const { return onset.kick.level01; }
     float snare() const { return onset.snare.level01; }
     float hihat() const { return onset.hihat.level01; }
+    float hfEnergy() const { return 0.0f; }
+    float hfFlux() const { return 0.0f; }
+    float hatEvent() const { return 0.0f; }
+    float cymbalSustain() const { return 0.0f; }
+    float airEnergy() const { return 0.0f; }
+    float spectralBrightness() const { return 0.0f; }
+    float brightness() const { return 0.0f; }
+    float spectralBrightnessDelta() const { return 0.0f; }
     bool isKickHit() const { return onset.kick.fired; }
     bool isSnareHit() const { return onset.snare.fired; }
     bool isHihatHit() const { return onset.hihat.fired; }
@@ -629,6 +733,9 @@ struct AudioContext {
     const float* bins64() const { return nullptr; }
     float binAdaptive(uint8_t) const { return 0.0f; }
     const float* bins64Adaptive() const { return nullptr; }
+    float musicalBin(uint8_t) const { return 0.0f; }
+    float musicalRange(uint8_t, uint8_t) const { return 0.0f; }
+    float musicalRange(MusicalRange) const { return 0.0f; }
 
     // Musical saliency stubs (always return "not salient")
     struct StubSaliencyFrame {
@@ -803,6 +910,28 @@ struct EffectContext {
     uint16_t zoneLength;        ///< Zone length
 
     //--------------------------------------------------------------------------
+    // Dual-Strip Channel API (opt-in independent rendering)
+    //--------------------------------------------------------------------------
+    // K1 hardware is dual edge-lit LGP: two physical strips of 160 LEDs each,
+    // wired to separate FastLED controllers / GPIOs. Legacy effects render to
+    // ctx.leds[0..319] as a single virtual strip and RendererActor splits the
+    // unified buffer into m_strip1/m_strip2 via mirror memcpy.
+    //
+    // Effects that want truly independent strips (Cross-Strip Wave Interference,
+    // Phase Parallax, Frequency-Spatial Stereo, Onset-Rupture Mirror, etc.)
+    // write directly to stripLeds[0]/stripLeds[1] and set dualChannelMode=true
+    // in render(). RendererActor then SKIPS the unified->strip memcpy so the
+    // asymmetric content reaches the LEDs intact. Centre origin is per-strip
+    // (LED 79 of each strip is its centre); use getDistanceFromStripCenter()
+    // for the per-strip equivalent of getDistanceFromCenter().
+
+    CRGB* stripLeds[2];         ///< Direct per-strip pointers (strip 0 + strip 1)
+    uint16_t stripLength;       ///< LEDs per strip (160 for K1 v2)
+    uint8_t stripCount;         ///< Number of physical strips (2 for K1 v2)
+    uint16_t stripCenter;       ///< Centre LED index per strip (79 for K1 v2)
+    bool dualChannelMode;       ///< Effect set true => wrote stripLeds[] directly; skip mirror memcpy
+
+    //--------------------------------------------------------------------------
     // Audio Context (Phase 2 - Audio Sync)
     //--------------------------------------------------------------------------
 
@@ -874,6 +1003,22 @@ struct EffectContext {
             // Right side -> left side
             return centerPoint - 1 - (index - centerPoint);
         }
+    }
+
+    /**
+     * @brief Per-strip centre-origin distance (for DUAL_CHANNEL effects)
+     * @param ledIdx LED index within a single strip (0..stripLength-1)
+     * @return Distance from that strip's centre: 0.0 at stripCenter, 1.0 at strip edge
+     *
+     * Use this when writing to ctx.stripLeds[stripIdx][ledIdx] in a dual-channel
+     * effect — the regular getDistanceFromCenter() assumes the unified 320-LED
+     * virtual buffer with centre at LED 79 of that buffer, which is wrong when
+     * each physical strip has its own independent centre at index 79.
+     */
+    float getDistanceFromStripCenter(uint16_t ledIdx) const {
+        if (stripLength == 0 || stripCenter == 0) return 0.0f;
+        int16_t off = abs((int16_t)ledIdx - (int16_t)stripCenter);
+        return (float)off / (float)stripCenter;
     }
 
     /**

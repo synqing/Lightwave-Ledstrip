@@ -25,8 +25,25 @@
 #define FOURPI 12.56637061f
 #define SIXPI  18.84955593f
 
-#define BOTTOM_NOTE 12  // Quarter-step index in ES table
-#define NOTE_STEP 2     // Half-step spacing
+// Lattice anchor — C-origin (LightwaveOS public ControlBus contract).
+//
+// `notes[]` below is quarter-tone spaced from notes[0] = A1 = 55 Hz.
+// BOTTOM_NOTE selects the table index of bin 0; NOTE_STEP = 2 then advances
+// by one semitone per detector bin.
+//
+// BOTTOM_NOTE = 6 places bin 0 at notes[6] = 65.40639 Hz = C2. With NUM_FREQS
+// = 64 and NOTE_STEP = 2, bins 0..59 cover 5 full octaves C2..B6, which fold
+// cleanly under the unchanged `i % 12` chromagram into chroma[0]=C, [1]=C#,
+// ..., [11]=B per ControlBus.h:42 / EffectContext.h:248,276. Bins 60..63 are
+// spectrum-only extras (C7, C#7, D7, D#7) excluded from the chroma fold.
+//
+// (Upstream Emotiscope v1.1_320 used BOTTOM_NOTE = 12 = D#2; that placed D#
+// at chroma[0] and produced a +3-semitone label shift in detectChord roots
+// and the `key` field broadcast over WebSocket. See
+// firmware-v3/docs/research/AUDIO_MUSICAL_LOGIC_SOURCE_AUDIT.md and
+// CHORD_ROOT_ORIGIN_TRACE.md.)
+#define BOTTOM_NOTE 6   // Selects notes[6] = C2 = 65.40639 Hz at bin 0
+#define NOTE_STEP 2     // Half-step spacing (2 quarter-tones per bin)
 
 #define NOISE_CALIBRATION_WAIT_FRAMES   256
 #define NOISE_CALIBRATION_ACTIVE_FRAMES 512

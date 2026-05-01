@@ -11,6 +11,8 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -121,7 +123,7 @@ void LGPMoireCathedralAREffect::render(plugins::EffectContext& ctx) {
     uint8_t baseHue = static_cast<uint8_t>(m_chromaAngle[z] * (255.0f / kTwoPi)) + ctx.gHue;
 
     uint8_t fadeAmt = static_cast<uint8_t>(clampf(18.0f + 35.0f * (1.0f - normBass), 12.0f, 55.0f));
-    fadeToBlackBy(ctx.leds, ctx.ledCount, fadeAmt);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, fadeAmt, ctx.getSafeDeltaSeconds());
 
     // Per-pixel render — centre-outward, 4-way symmetric
     for (uint16_t dist = 0; dist < HALF_LENGTH; dist++) {

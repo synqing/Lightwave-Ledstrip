@@ -38,6 +38,8 @@
 
 #include <cmath>
 #include <cstdint>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -157,26 +159,24 @@ void LGPBeatPrismOnsetIgniteEffect::render(plugins::EffectContext& ctx) {
     const float dtVisual = AudioReactivePolicy::visualDt(ctx);
     m_audioPresence = trackAudioPresence(m_audioPresence, ctx.audio.available, dtSignal);
     if (m_audioPresence <= 0.001f) {
-        fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
+        fadeToBlackByDt(ctx.leds, ctx.ledCount, 30, ctx.getSafeDeltaSeconds());
         return;
     }
-    const float confidence = ctx.audio.controlBus.audioConfidence;
+    const float confidence = ctx.audio.audioConfidence();
     const float master = (ctx.brightness / 255.0f) * m_audioPresence * confidence;
 
     // --- Onset-driven pulse channels (PRESERVED) ---
-    const auto& cb = ctx.audio.controlBus;
-
-    if (cb.kickTrigger) {
+    if (ctx.audio.isKickHit()) {
         m_kickPulse = 1.0f;
     }
     m_kickPulse = decay(m_kickPulse, dtSignal, 0.24f);
 
-    if (cb.snareTrigger) {
+    if (ctx.audio.isSnareHit()) {
         m_snareBurst = 1.0f;
     }
     m_snareBurst = decay(m_snareBurst, dtSignal, 0.15f);
 
-    if (cb.hihatTrigger) {
+    if (ctx.audio.isHihatHit()) {
         m_hihatShimmer = 1.0f;
     }
     m_hihatShimmer = decay(m_hihatShimmer, dtSignal, 0.08f);
@@ -215,7 +215,7 @@ void LGPBeatPrismOnsetIgniteEffect::render(plugins::EffectContext& ctx) {
     const uint8_t baseHue = static_cast<uint8_t>(m_hue);
 
     // --- Render ---
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, 30, ctx.getSafeDeltaSeconds());
 
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         const float d = static_cast<float>(dist) / static_cast<float>(HALF_LENGTH);

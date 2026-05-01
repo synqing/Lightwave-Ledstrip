@@ -8,6 +8,8 @@
 #include "../CoreEffects.h"
 #include <FastLED.h>
 #include <cmath>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -239,7 +241,7 @@ void BPMEnhancedEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
     // Fade for background wave trails
     // =========================================================================
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     // =========================================================================
     // DUAL-LAYER RENDER LOOP

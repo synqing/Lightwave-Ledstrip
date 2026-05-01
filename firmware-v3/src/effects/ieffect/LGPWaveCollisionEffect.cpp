@@ -9,6 +9,11 @@
 #include "../../validation/EffectValidationMacros.h"
 #include <FastLED.h>
 #include <cmath>
+#include "effects/PersistenceHelpers.h"
+#include "effects/math/Contrast.h"
+using lightwaveos::effects::math::applyContrast;
+using lightwaveos::effects::math::kSbK1SquareIter;
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -59,7 +64,7 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
             float chromaEnergy = 0.0f;
             for (uint8_t i = 0; i < 12; ++i) {
                 float bin = ctx.audio.getChroma(i);
-                float bright = bin * bin;
+                float bright = applyContrast(bin, kSbK1SquareIter);
                 bright *= 1.5f;
                 if (bright > 1.0f) bright = 1.0f;
                 chromaEnergy += bright * led_share;
@@ -169,7 +174,7 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
     VALIDATION_SUBMIT(::lightwaveos::validation::g_validationRing);
     m_prevPhaseDelta = phaseDelta;
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, ctx.fadeAmount, ctx.getSafeDeltaSeconds());
 
     // Anti-aliased collision core at true center (79.5) using SubpixelRenderer
     if (m_collisionBoost > 0.05f) {

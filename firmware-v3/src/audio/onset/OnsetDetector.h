@@ -61,6 +61,9 @@ struct OnsetResult {
     float    activity;       ///< 0..1 activity gate opening derived from raw RMS
     uint8_t  gate_flags;     ///< Bitmask of OnsetGateFlags for trace/debug
     uint16_t process_us;     ///< Self-timed processing duration (us)
+    uint16_t fft_frontend_us; ///< Hann + FFT + magnitude extraction duration (us)
+    uint16_t decision_us;     ///< Flux + threshold + event decision duration (us)
+    uint16_t flux_us;         ///< Four band-flux scans duration (us)
 };
 
 // ============================================================================

@@ -8,6 +8,8 @@
 #include <FastLED.h>
 #include <cmath>
 #include <cstring>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -49,7 +51,7 @@ void LGPGravitationalLensingEffect::render(plugins::EffectContext& ctx) {
         }
     }
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 20);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, 20, ctx.getSafeDeltaSeconds());
 
     // Generate light rays from center.
     // Halved the outer ray density (step 4 instead of 2) and the per-ray

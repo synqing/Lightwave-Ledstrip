@@ -16,6 +16,8 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include "effects/PersistenceHelpers.h"
+using lightwaveos::effects::persistence::fadeToBlackByDt;
 
 namespace lightwaveos {
 namespace effects {
@@ -180,7 +182,7 @@ void LGPFluxRiftEffect::render(plugins::EffectContext& ctx) {
     const float dtVisual = AudioReactivePolicy::visualDt(ctx);
     m_audioPresence = trackAudioPresence(m_audioPresence, ctx.audio.available, dtSignal);
     if (m_audioPresence <= 0.001f) {
-        fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
+        fadeToBlackByDt(ctx.leds, ctx.ledCount, 30, ctx.getSafeDeltaSeconds());
         return;
     }
     const float master = (ctx.brightness / 255.0f) * m_audioPresence;
@@ -205,7 +207,7 @@ void LGPFluxRiftEffect::render(plugins::EffectContext& ctx) {
     m_hue = smoothHue(m_hue, hueTarget, dtSignal, 0.45f);
     const uint8_t baseHue = static_cast<uint8_t>(m_hue);
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, 30, ctx.getSafeDeltaSeconds());
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         const float d = static_cast<float>(dist) / static_cast<float>(HALF_LENGTH);
         const float seam = tanhf((d - seamPos) * (8.0f + 16.0f * m_fluxEnv));
@@ -257,7 +259,7 @@ void LGPBeatPrismEffect::render(plugins::EffectContext& ctx) {
     const float dtVisual = AudioReactivePolicy::visualDt(ctx);
     m_audioPresence = trackAudioPresence(m_audioPresence, ctx.audio.available, dtSignal);
     if (m_audioPresence <= 0.001f) {
-        fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
+        fadeToBlackByDt(ctx.leds, ctx.ledCount, 30, ctx.getSafeDeltaSeconds());
         return;
     }
     const float master = (ctx.brightness / 255.0f) * m_audioPresence;
@@ -287,7 +289,7 @@ void LGPBeatPrismEffect::render(plugins::EffectContext& ctx) {
     m_hue = smoothHue(m_hue, hueTarget, dtSignal, 0.45f);
     const uint8_t baseHue = static_cast<uint8_t>(m_hue);
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, 30, ctx.getSafeDeltaSeconds());
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         const float d = static_cast<float>(dist) / static_cast<float>(HALF_LENGTH);
         const float spokes = fabsf(sinf((d * (5.5f + 13.0f * m_prism) - m_phase * 0.7f) * EX_PI));
@@ -338,7 +340,7 @@ void LGPHarmonicTideEffect::render(plugins::EffectContext& ctx) {
     const float dtVisual = AudioReactivePolicy::visualDt(ctx);
     m_audioPresence = trackAudioPresence(m_audioPresence, ctx.audio.available, dtSignal);
     if (m_audioPresence <= 0.001f) {
-        fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
+        fadeToBlackByDt(ctx.leds, ctx.ledCount, 30, ctx.getSafeDeltaSeconds());
         return;
     }
     const float master = (ctx.brightness / 255.0f) * m_audioPresence;
@@ -376,7 +378,7 @@ void LGPHarmonicTideEffect::render(plugins::EffectContext& ctx) {
     const uint8_t hueThird = static_cast<uint8_t>(ctx.gHue + thirdBin * binStep);
     const uint8_t hueFifth = static_cast<uint8_t>(ctx.gHue + fifthBin * binStep);
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, 30, ctx.getSafeDeltaSeconds());
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         const float d = static_cast<float>(dist) / static_cast<float>(HALF_LENGTH);
 
@@ -453,7 +455,7 @@ void LGPBassQuakeEffect::render(plugins::EffectContext& ctx) {
     const float dtVisual = AudioReactivePolicy::visualDt(ctx);
     m_audioPresence = trackAudioPresence(m_audioPresence, ctx.audio.available, dtSignal);
     if (m_audioPresence <= 0.001f) {
-        fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
+        fadeToBlackByDt(ctx.leds, ctx.ledCount, 30, ctx.getSafeDeltaSeconds());
         return;
     }
     const float master = (ctx.brightness / 255.0f) * m_audioPresence;
@@ -479,7 +481,7 @@ void LGPBassQuakeEffect::render(plugins::EffectContext& ctx) {
     m_hue = smoothHue(m_hue, hueTarget, dtSignal, 0.45f);
     const uint8_t baseHue = static_cast<uint8_t>(m_hue);
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, 30, ctx.getSafeDeltaSeconds());
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         const float d = static_cast<float>(dist) / static_cast<float>(HALF_LENGTH);
         const float compression = powf(clamp01f(1.0f - d), 0.55f + 2.30f * (1.0f - m_bassEnv));
@@ -529,7 +531,7 @@ void LGPTrebleNetEffect::render(plugins::EffectContext& ctx) {
     const float dtVisual = AudioReactivePolicy::visualDt(ctx);
     m_audioPresence = trackAudioPresence(m_audioPresence, ctx.audio.available, dtSignal);
     if (m_audioPresence <= 0.001f) {
-        fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
+        fadeToBlackByDt(ctx.leds, ctx.ledCount, 30, ctx.getSafeDeltaSeconds());
         return;
     }
     const float master = (ctx.brightness / 255.0f) * m_audioPresence;
@@ -553,7 +555,7 @@ void LGPTrebleNetEffect::render(plugins::EffectContext& ctx) {
     m_hue = smoothHue(m_hue, hueTarget, dtSignal, 0.45f);
     const uint8_t baseHue = static_cast<uint8_t>(m_hue);
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, 30, ctx.getSafeDeltaSeconds());
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         const float d = static_cast<float>(dist) / static_cast<float>(HALF_LENGTH);
 
@@ -608,7 +610,7 @@ void LGPRhythmicGateEffect::render(plugins::EffectContext& ctx) {
     const float dtVisual = AudioReactivePolicy::visualDt(ctx);
     m_audioPresence = trackAudioPresence(m_audioPresence, ctx.audio.available, dtSignal);
     if (m_audioPresence <= 0.001f) {
-        fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
+        fadeToBlackByDt(ctx.leds, ctx.ledCount, 30, ctx.getSafeDeltaSeconds());
         return;
     }
     const float master = (ctx.brightness / 255.0f) * m_audioPresence;
@@ -637,7 +639,7 @@ void LGPRhythmicGateEffect::render(plugins::EffectContext& ctx) {
     m_hue = smoothHue(m_hue, hueTarget, dtSignal, 0.45f);
     const uint8_t baseHue = static_cast<uint8_t>(m_hue);
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, 30, ctx.getSafeDeltaSeconds());
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         const float d = static_cast<float>(dist) / static_cast<float>(HALF_LENGTH);
 
@@ -691,7 +693,7 @@ void LGPSpectralKnotEffect::render(plugins::EffectContext& ctx) {
     const float dtVisual = AudioReactivePolicy::visualDt(ctx);
     m_audioPresence = trackAudioPresence(m_audioPresence, ctx.audio.available, dtSignal);
     if (m_audioPresence <= 0.001f) {
-        fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
+        fadeToBlackByDt(ctx.leds, ctx.ledCount, 30, ctx.getSafeDeltaSeconds());
         return;
     }
     const float master = (ctx.brightness / 255.0f) * m_audioPresence;
@@ -722,7 +724,7 @@ void LGPSpectralKnotEffect::render(plugins::EffectContext& ctx) {
     m_hue = smoothHue(m_hue, hueTarget, dtSignal, 0.45f);
     const uint8_t baseHue = static_cast<uint8_t>(m_hue);
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, 30, ctx.getSafeDeltaSeconds());
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         const float d = static_cast<float>(dist) / static_cast<float>(HALF_LENGTH);
 
@@ -776,7 +778,7 @@ void LGPSaliencyBloomEffect::render(plugins::EffectContext& ctx) {
     const float dtVisual = AudioReactivePolicy::visualDt(ctx);
     m_audioPresence = trackAudioPresence(m_audioPresence, ctx.audio.available, dtSignal);
     if (m_audioPresence <= 0.001f) {
-        fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
+        fadeToBlackByDt(ctx.leds, ctx.ledCount, 30, ctx.getSafeDeltaSeconds());
         return;
     }
     const float master = (ctx.brightness / 255.0f) * m_audioPresence;
@@ -802,7 +804,7 @@ void LGPSaliencyBloomEffect::render(plugins::EffectContext& ctx) {
     m_hue = smoothHue(m_hue, hueTarget, dtSignal, 0.45f);
     const uint8_t baseHue = static_cast<uint8_t>(m_hue);
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, 30, ctx.getSafeDeltaSeconds());
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         const float d = static_cast<float>(dist) / static_cast<float>(HALF_LENGTH);
 
@@ -853,7 +855,7 @@ void LGPTransientLatticeEffect::render(plugins::EffectContext& ctx) {
     const float dtVisual = AudioReactivePolicy::visualDt(ctx);
     m_audioPresence = trackAudioPresence(m_audioPresence, ctx.audio.available, dtSignal);
     if (m_audioPresence <= 0.001f) {
-        fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
+        fadeToBlackByDt(ctx.leds, ctx.ledCount, 30, ctx.getSafeDeltaSeconds());
         return;
     }
     const float master = (ctx.brightness / 255.0f) * m_audioPresence;
@@ -879,7 +881,7 @@ void LGPTransientLatticeEffect::render(plugins::EffectContext& ctx) {
     m_hue = smoothHue(m_hue, hueTarget, dtSignal, 0.45f);
     const uint8_t baseHue = static_cast<uint8_t>(m_hue);
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, 30, ctx.getSafeDeltaSeconds());
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         const float d = static_cast<float>(dist) / static_cast<float>(HALF_LENGTH);
 
@@ -932,7 +934,7 @@ void LGPWaveletMirrorEffect::render(plugins::EffectContext& ctx) {
     const float dtVisual = AudioReactivePolicy::visualDt(ctx);
     m_audioPresence = trackAudioPresence(m_audioPresence, ctx.audio.available, dtSignal);
     if (m_audioPresence <= 0.001f) {
-        fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
+        fadeToBlackByDt(ctx.leds, ctx.ledCount, 30, ctx.getSafeDeltaSeconds());
         return;
     }
     const float master = (ctx.brightness / 255.0f) * m_audioPresence;
@@ -966,7 +968,7 @@ void LGPWaveletMirrorEffect::render(plugins::EffectContext& ctx) {
     m_hue = smoothHue(m_hue, hueTarget, dtSignal, 0.45f);
     const uint8_t baseHue = static_cast<uint8_t>(m_hue);
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
+    fadeToBlackByDt(ctx.leds, ctx.ledCount, 30, ctx.getSafeDeltaSeconds());
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         const float d = static_cast<float>(dist) / static_cast<float>(HALF_LENGTH);
         const uint8_t idx = static_cast<uint8_t>((dist * 128u) / HALF_LENGTH);

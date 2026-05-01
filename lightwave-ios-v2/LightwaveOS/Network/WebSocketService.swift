@@ -47,6 +47,37 @@ enum WebSocketMessageType: String {
     case colourCorrectionSetAutoExposure = "colorCorrection.setAutoExposure"
     case colourCorrectionSetBrownGuardrail = "colorCorrection.setBrownGuardrail"
 
+    // MARK: Phase 2 — STM and VRMS streams
+    // Added 2026-05-01 (Task P2-2). Wire bindings:
+    //   - stm.subscribed / stm.unsubscribed: text acks emitted by
+    //     `WsStmCommands.cpp` after a client toggles STM streaming.
+    //   - vrms.subscribed / vrms.unsubscribed: text acks from
+    //     `WsStreamCommands.cpp` (FEATURE_VRMS_METRICS gate).
+    //   - vrms.frame: 10 Hz JSON broadcast carrying perceptual metrics
+    //     emitted by `WebServer.cpp` line 894.
+    // STM uses a 250-byte BINARY frame with magic 0xFD (no text type — handled
+    // entirely by `handleBinaryMessage`).
+    case stmSubscribed = "stm.subscribed"
+    case stmUnsubscribed = "stm.unsubscribed"
+    case vrmsSubscribed = "vrms.subscribed"
+    case vrmsUnsubscribed = "vrms.unsubscribed"
+    case vrmsFrame = "vrms.frame"
+
+    // MARK: Phase 2 — show transport WS commands
+    //
+    // Show playback transport (P2-4). The firmware emits `show.status` as the
+    // canonical playback push and acknowledges each transport command by
+    // echoing a `cmd`-prefixed object with `success: true`. iOS only needs the
+    // raw values listed here on the inbound path; outbound dispatch uses the
+    // string commands directly via `WebSocketService.send(...)`.
+    case showStatus = "show.status"
+    case showList = "show.list"
+    case showPlay = "show.play"
+    case showPause = "show.pause"
+    case showResume = "show.resume"
+    case showStop = "show.stop"
+    case showSeek = "show.seek"
+
     case unknown
 }
 
@@ -78,6 +109,21 @@ actor WebSocketService {
         case colourCorrectionSetGamma(WebSocketPayload)
         case colourCorrectionSetAutoExposure(WebSocketPayload)
         case colourCorrectionSetBrownGuardrail(WebSocketPayload)
+
+        // MARK: Phase 2 — STM and VRMS streams
+        // Added 2026-05-01 (Task P2-2). Carry decoded frame structs so consumers
+        // do not have to repeat the binary/JSON parsing.
+        case stmFrame(STMFrame)
+        case vrmsFrame(VRMSFrame, timestamp: UInt32)
+        case stmSubscriptionAck(WebSocketPayload)
+        case vrmsSubscriptionAck(WebSocketPayload)
+
+        // MARK: Phase 2 — show transport WS commands
+        // Firmware emits `show.status` on every playback transition. The other
+        // show.* responses are command acks; we surface them as `.showAck` so
+        // a UI can confirm dispatch without each command needing its own case.
+        case showStatus(WebSocketPayload)
+        case showAck(WebSocketPayload)
     }
 
     /// Sendable wrapper for [String: Any] JSON payloads
@@ -218,6 +264,95 @@ actor WebSocketService {
         send("audio.parameters.set", params: params)
     }
 
+    // MARK: Phase 2 — STM and VRMS streams
+
+    /// Subscribe to the firmware's STM (Spectral-Temporal Modulation) binary
+    /// stream. Frames arrive at ~30 FPS as 250-byte binary WebSocket messages
+    /// with magic 0xFD. The firmware emits a `stm.subscribed` text ack on
+    /// success, surfaced as `Event.stmSubscriptionAck`.
+    func subscribeSTM(requestId: String? = nil) {
+        var params: [String: Any] = [:]
+        if let requestId = requestId {
+            params["requestId"] = requestId
+        }
+        send("stm.subscribe", params: params)
+    }
+
+    /// Unsubscribe from the STM binary stream.
+    func unsubscribeSTM(requestId: String? = nil) {
+        var params: [String: Any] = [:]
+        if let requestId = requestId {
+            params["requestId"] = requestId
+        }
+        send("stm.unsubscribe", params: params)
+    }
+
+    /// Subscribe to the firmware's VRMS (Visual RMS) perceptual-metrics
+    /// stream. Frames arrive at 10 Hz as JSON text messages of type
+    /// `vrms.frame`, decoded by `handleTextMessage` into `VRMSFrame`.
+    func subscribeVRMS(requestId: String? = nil) {
+        var params: [String: Any] = [:]
+        if let requestId = requestId {
+            params["requestId"] = requestId
+        }
+        send("vrms.subscribe", params: params)
+    }
+
+    /// Unsubscribe from the VRMS metrics stream.
+    func unsubscribeVRMS(requestId: String? = nil) {
+        var params: [String: Any] = [:]
+        if let requestId = requestId {
+            params["requestId"] = requestId
+        }
+        send("vrms.unsubscribe", params: params)
+    }
+
+    // MARK: Phase 2 — show transport WS commands
+    //
+    // Outbound transport dispatch helpers. Each maps to a single-line `send`
+    // call to the firmware. Returning `Void` and being implicitly async (actor
+    // isolation) keeps the call sites compact. The firmware ack (`cmd` +
+    // `success`) is delivered via `.showAck` on the event stream; the
+    // canonical state update arrives as `.showStatus`.
+
+    /// `show.list` — request the catalogue of built-in and uploaded shows.
+    /// REST `getShows()` is the preferred read path; this is provided for
+    /// parity / debugging.
+    func sendShowList() {
+        send("show.list")
+    }
+
+    /// `show.play` — start playback of `showId`.
+    func sendShowPlay(showId: String) {
+        send("show.play", params: ["showId": showId])
+    }
+
+    /// `show.pause` — pause the currently playing show.
+    func sendShowPause() {
+        send("show.pause")
+    }
+
+    /// `show.resume` — resume from a paused show.
+    func sendShowResume() {
+        send("show.resume")
+    }
+
+    /// `show.stop` — stop the currently playing show.
+    func sendShowStop() {
+        send("show.stop")
+    }
+
+    /// `show.seek` — seek to `timeMs` within the current show.
+    func sendShowSeek(timeMs: Int) {
+        send("show.seek", params: ["timeMs": timeMs])
+    }
+
+    /// `show.status` — request a fresh playback status frame from the
+    /// firmware (firmware also broadcasts unsolicited).
+    func sendShowStatus() {
+        send("show.status")
+    }
+
     // MARK: - Private Connection Management
 
     private func performConnect() {
@@ -351,9 +486,41 @@ actor WebSocketService {
         case .colourCorrectionSetBrownGuardrail:
             eventContinuation?.yield(.colourCorrectionSetBrownGuardrail(payload))
 
+        // MARK: Phase 2 — STM and VRMS streams (text message dispatch)
+        case .stmSubscribed, .stmUnsubscribed:
+            eventContinuation?.yield(.stmSubscriptionAck(payload))
+
+        case .vrmsSubscribed, .vrmsUnsubscribed:
+            eventContinuation?.yield(.vrmsSubscriptionAck(payload))
+
+        case .vrmsFrame:
+            // The firmware emits VRMS as a JSON text message rather than a
+            // binary frame (see WebServer.cpp lines 884-924). Decode the
+            // envelope into our typed `VRMSFrame` struct.
+            if let frame = decodeVRMSFrame(from: data) {
+                eventContinuation?.yield(.vrmsFrame(frame.metrics, timestamp: frame.timestamp))
+            }
+
+        // MARK: Phase 2 — show transport WS commands
+        // `show.status` is the canonical playback frame and is yielded as a
+        // dedicated event. `show.list`, `show.play`, `show.pause`, `show.resume`,
+        // `show.stop`, `show.seek` arrive as command acks (with `cmd` and
+        // `success` keys); we yield them via `.showAck` so consumers can
+        // decide whether to surface them in UI.
+        case .showStatus:
+            eventContinuation?.yield(.showStatus(payload))
+
+        case .showList, .showPlay, .showPause, .showResume, .showStop, .showSeek:
+            eventContinuation?.yield(.showAck(payload))
+
         case .unknown:
             break
         }
+    }
+
+    /// Decode a `vrms.frame` JSON envelope from raw text-message bytes.
+    private func decodeVRMSFrame(from data: Data) -> VRMSEnvelope? {
+        try? JSONDecoder().decode(VRMSEnvelope.self, from: data)
     }
 
     // LED stream constants matching firmware LedStreamConfig
@@ -364,6 +531,19 @@ actor WebSocketService {
     private static let rgbPerStrip = 160 * 3      // 480 bytes
 
     private func handleBinaryMessage(_ data: Data) {
+        // MARK: Phase 2 — STM and VRMS streams (binary dispatch)
+        // STM frame: 250 bytes, magic 0xFD (first byte). Distinct from LED 0xFE
+        // and audio metrics 0x41 (low byte of little-endian 0x00445541).
+        if data.count == STMFrame.frameSize, data.first == STMFrame.magic {
+            if let frame = STMFrame(data: data) {
+                eventContinuation?.yield(.stmFrame(frame))
+                return
+            }
+            // Length matched but magic-aware decode failed — fall through and
+            // drop silently rather than misroute as another frame type.
+            return
+        }
+
         // Audio metrics frame: 464 bytes, magic 0x00445541
         if data.count == AudioMetricsFrame.frameSize {
             let magic = data.withUnsafeBytes { $0.load(as: UInt32.self) }
@@ -474,4 +654,71 @@ actor WebSocketService {
             performConnect()
         }
     }
+
+    // MARK: Phase 2 — preset CRUD WS commands
+    //
+    // Typed helpers around `send(_:params:)` for the effect / zone preset
+    // commands consumed by `PresetsViewModel`. Each method dispatches the
+    // exact WS command name registered by the firmware in
+    // `WsEffectPresetCommands.cpp` / `WsZonePresetCommands.cpp`. Broadcast
+    // responses (`effectPresets.saved` / `effectPresets.deleted` /
+    // `zonePresets.saved` / `zonePresets.deleted`) are decoded by the Phase 1
+    // broadcast cases at the top of this file.
+
+    /// Save the current live effect configuration into a slot.
+    func saveCurrentEffectPreset(slot: Int, name: String) {
+        send("effectPresets.saveCurrent", params: ["slot": slot, "name": name])
+    }
+
+    /// Apply a stored effect preset by slot id.
+    func loadEffectPreset(id: Int) {
+        send("effectPresets.load", params: ["id": id])
+    }
+
+    /// Delete an effect preset by slot id.
+    func deleteEffectPreset(id: Int) {
+        send("effectPresets.delete", params: ["id": id])
+    }
+
+    /// Save the current live zone configuration into a slot.
+    func saveCurrentZonePreset(slot: Int, name: String) {
+        send("zonePresets.saveCurrent", params: ["slot": slot, "name": name])
+    }
+
+    /// Apply a stored zone preset by id.
+    func loadZonePreset(id: Int) {
+        send("zonePresets.load", params: ["id": id])
+    }
+
+    /// Delete a user-saved zone preset by id. Built-in presets are
+    /// rejected by the firmware — UI must not call this for `builtin == true`
+    /// rows.
+    func deleteZonePreset(id: Int) {
+        send("zonePresets.delete", params: ["id": id])
+    }
 }
+
+// MARK: - Phase 2 — preset CRUD test seam
+
+/// Conform `WebSocketService` to the `PresetWebSocketCommanding` protocol so
+/// `PresetsViewModel` can dispatch commands without depending on the concrete
+/// actor type. Tests substitute a recording double.
+///
+/// The protocol takes `[String: any Sendable]` so the parameter map can cross
+/// the actor boundary under Swift 6 strict concurrency. Inside the actor the
+/// existing synchronous `send(_:params:)` is reused — the dictionary is
+/// upcast to `[String: Any]` once isolation is established.
+@available(iOS 17.0, *)
+extension WebSocketService: PresetWebSocketCommanding {
+    func sendCommand(_ command: String, params: [String: any Sendable]) async {
+        // Inside the actor's isolation domain we can safely upcast the
+        // Sendable map to `[String: Any]` for the existing fire-and-forget
+        // send path. The values are already concrete types (Int / String) so
+        // JSON-serialisation downstream is unaffected.
+        let anyParams: [String: Any] = params.reduce(into: [:]) { acc, kv in
+            acc[kv.key] = kv.value
+        }
+        send(command, params: anyParams)
+    }
+}
+

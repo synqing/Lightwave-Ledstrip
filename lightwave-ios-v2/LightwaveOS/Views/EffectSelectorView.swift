@@ -99,6 +99,25 @@ struct EffectSelectorView: View {
                     }
                     .foregroundStyle(Color.lwGold)
                 }
+
+                // MARK: Phase 2 — picker enhancements
+                // Power-user toggle: tap the flask icon to reveal experimental
+                // effects (tagged `isExperimental` by firmware). Visible items
+                // are marked with an "EXPT" badge in the card. Off by default.
+                ToolbarItem(placement: .primaryAction) {
+                    Button(action: { appVM.effects.toggleShowExperimental() }) {
+                        Image(systemName: appVM.effects.showExperimental
+                              ? "flask.fill"
+                              : "flask")
+                            .foregroundStyle(appVM.effects.showExperimental
+                                             ? Color.lwGold
+                                             : Color.lwTextSecondary)
+                    }
+                    .accessibilityLabel(Text(appVM.effects.showExperimental
+                        ? "Hide experimental effects"
+                        : "Show experimental effects"))
+                    .accessibilityHint(Text("Toggles visibility of experimental effects"))
+                }
             }
         }
     }
@@ -120,6 +139,11 @@ struct EffectSelectorView: View {
 
     private var filteredAndGroupedEffects: [(category: String, effects: [EffectMetadata])] {
         var effects = allEffects
+
+        // Phase 2 — picker enhancements: hide experimentals by default.
+        if !appVM.effects.showExperimental {
+            effects = effects.filter { !$0.isExperimental }
+        }
 
         // Filter by search text
         if !searchText.isEmpty {
@@ -199,6 +223,13 @@ struct EffectCard: View {
 
                         if effect.isAudioReactive {
                             EffectChip(title: "Audio", icon: "waveform", isHighlighted: true)
+                        }
+
+                        // Phase 2 — picker enhancements: visible only when the
+                        // power-user toggle is on (experimentals are hidden by
+                        // default, so this chip never renders in production).
+                        if effect.isExperimental {
+                            EffectChip(title: "EXPT", icon: "flask")
                         }
                     }
                 }

@@ -1,0 +1,207 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Screen reader only class for accessible labels */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+@layer utilities {
+  .touch-target {
+    @apply min-w-[44px] min-h-[44px];
+  }
+  
+  .tab-scroll {
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+  
+  .tab-scroll::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Fonts */
+.font-bebas {
+  font-family: 'Bebas Neue', sans-serif;
+}
+
+/* Animations from V4 HTML */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(34,221,136,0.5); }
+  50% { box-shadow: 0 0 16px rgba(34,221,136,0.8), 0 0 24px rgba(34,221,136,0.4); }
+}
+
+@keyframes pulse-glow-red {
+  0%, 100% { box-shadow: 0 0 8px rgba(239,68,68,0.5); }
+  50% { box-shadow: 0 0 16px rgba(239,68,68,0.8), 0 0 24px rgba(239,68,68,0.4); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-2px); }
+  75% { transform: translateX(2px); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes borderGlow {
+  0%, 100% { border-color: rgba(239,68,68,0.4); }
+  50% { border-color: rgba(239,68,68,0.8); }
+}
+
+.status-pulse-connected { animation: pulse-glow 2s ease-in-out infinite; }
+.status-pulse-disconnected { animation: pulse-glow-red 1s ease-in-out infinite; }
+.status-shake { animation: shake 0.3s ease-in-out; }
+
+.shimmer {
+  background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.03) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.disconnected-banner {
+  animation: slideDown 0.3s ease-out, borderGlow 2s ease-in-out infinite;
+}
+
+/* Card hover effects */
+.card-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 48px rgba(0,0,0,0.45);
+}
+
+/* Tab animations */
+.tab-underline {
+  transition: transform 0.25s ease-out, width 0.25s ease-out, left 0.25s ease-out;
+}
+
+.tab-btn span {
+  display: inline-block;
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+.tab-btn.active span {
+  transform: scale(1.02);
+}
+
+/* Button hover effects */
+.btn-primary {
+  transition: filter 0.2s ease, transform 0.2s ease;
+}
+.btn-primary:hover {
+  filter: brightness(1.1);
+  transform: scale(1.02);
+}
+
+.btn-secondary {
+  transition: background-color 0.2s ease;
+}
+.btn-secondary:hover {
+  background-color: rgba(255,255,255,0.08);
+}
+
+/* Slider thumb animations */
+.slider-thumb {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.slider-thumb.active,
+.slider-container:hover .slider-thumb {
+  transform: translateY(-50%) scale(1.2);
+  box-shadow: 0 0 12px rgba(255,184,77,0.6);
+}
+
+/* Effect list items */
+.effect-list-item {
+  transition: background-color 0.2s ease, border-left 0.2s ease;
+  border-left: 3px solid transparent;
+}
+.effect-list-item:hover {
+  background-color: rgba(255,255,255,0.06);
+  border-left-color: #ffb84d;
+}
+.effect-list-item:hover .star-icon {
+  color: #ffb84d !important;
+}
+
+/* Zone tabs */
+.zone-tab {
+  transition: transform 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+.zone-tab:not(.active):hover {
+  transform: scale(1.03);
+}
+
+/* Scene blocks */
+.scene-block {
+  cursor: grab;
+  user-select: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.scene-block:active { cursor: grabbing; }
+.scene-block.dragging {
+  transform: scale(1.05);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  z-index: 100;
+}
+
+/* Timeline drag-and-drop */
+.timeline-ghost {
+  position: fixed;
+  pointer-events: none;
+  opacity: 0.7;
+  z-index: 1000;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+
+.track-drop-target {
+  background: rgba(255,184,77,0.08) !important;
+  border-color: rgba(255,184,77,0.4) !important;
+}
+
+/* Writing mode for vertical zone labels */
+.writing-mode-vertical {
+  writing-mode: vertical-rl;
+}
+
+/* Keyframe diamonds */
+.keyframe-diamond { transition: transform 0.15s ease; }
+.keyframe-diamond:hover { transform: rotate(45deg) scale(1.3); }
+
+/* Effect cards */
+.effect-card {
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+.effect-card:hover {
+  transform: translateY(-2px) scale(1.02);
+  border-color: rgba(110, 231, 243, 0.4);
+}
+
+.telemetry-value {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Focus visible */
+*:focus-visible {
+  outline: 2px solid #ffb84d;
+  outline-offset: 2px;
+}

@@ -113,6 +113,15 @@ struct EffectsResponse: Codable, Sendable {
             let zoneAware: Bool?
             let dualStrip: Bool?
             let physicsBased: Bool?
+
+            // MARK: Phase 2 — isExperimental field
+            //
+            // Firmware emits `isExperimental` per effect (see
+            // `firmware-v3/src/network/webserver/handlers/EffectHandlers.cpp:173`
+            // — `effect["isExperimental"] = PatternRegistry::isExperimental(eid)`).
+            // Optional so legacy K1 firmware payloads (pre-flag) decode without
+            // throwing; nil is treated as non-experimental at the ViewModel layer.
+            let isExperimental: Bool?
         }
 
         struct Pagination: Codable, Sendable {
@@ -989,4 +998,139 @@ actor RESTClient {
             return nil
         }
     }
+
+    // MARK: Phase 2 — runtime parameter set
+    //
+    // End-user surface for live effect tuning. Per F-4 of the parity spec, every
+    // parameter with a non-empty `displayName` is exposed via a type-appropriate
+    // control: FLOAT → slider, INT → stepper, BOOL → toggle, ENUM → picker (integer
+    // keyed for now since firmware does not yet emit case names). The sheet is
+    // driven by these two endpoints:
+    //
+    //     GET  /api/v1/effects/parameters?effectId=<id>   → EffectParametersGet
+    //     POST /api/v1/effects/parameters                 → {effectId, parameters: {<name>: <value>}}
+    //
+    // The encode helper is a pure free static so tests can lock the wire shape
+    // without spinning up a URLProtocol mock.
+
+    /// Fetch the tunable runtime parameters for a single effect.
+    /// - Parameter effectId: The numeric effect identifier as returned by
+    ///   `/api/v1/effects`.
+    /// - Returns: The decoded `EffectParametersGet` envelope.
+    func getEffectParameters(effectId: Int) async throws -> EffectParametersGet {
+        // Firmware exposes the parameters list as the `data` payload of a
+        // standard envelope. Decode the envelope, then return its inner value.
+        struct Envelope: Codable, Sendable {
+            let success: Bool
+            let data: EffectParametersGet
+            let timestamp: Int?
+        }
+        let response: Envelope = try await request(
+            "GET",
+            path: "effects/parameters?effectId=\(effectId)"
+        )
+        return response.data
+    }
+
+    /// Push a new value for a single runtime parameter.
+    /// - Parameters:
+    ///   - effectId: The numeric effect identifier the parameter belongs to.
+    ///   - name: The programmatic parameter key (e.g. `"contrast"`).
+    ///   - value: The new value. The firmware expects a numeric form regardless
+    ///     of the underlying `ParameterType`; for BOOL pass `0.0` or `1.0`, for
+    ///     INT/ENUM pass a whole number, for FLOAT pass any value within the
+    ///     parameter's declared range.
+    func setRuntimeParameter(effectId: Int, name: String, value: Double) async throws {
+        let body = Self.encodeRuntimeParameterBody(
+            effectId: effectId,
+            name: name,
+            value: value
+        )
+        // Reach the JSON-Serialization codepath of `request(_:path:body:)` by
+        // round-tripping the bytes back into a `[String: Any]` so the body has
+        // the exact shape the contract documents.
+        guard let dict = try JSONSerialization.jsonObject(with: body) as? [String: Any] else {
+            throw APIClientError.encodingError
+        }
+        let _: GenericResponse = try await request(
+            "POST",
+            path: "effects/parameters",
+            body: dict
+        )
+    }
+
+    /// Encode the runtime-set body to JSON bytes.
+    ///
+    /// Wire shape (per `docs/protocol/k1-rest-contract.yaml`):
+    /// ```
+    /// {"effectId": 4878, "parameters": {"contrast": 1.5}}
+    /// ```
+    ///
+    /// Exposed as a `static` so unit tests can lock the shape without touching
+    /// the network layer. The body is deterministic and self-contained — no
+    /// shared state, no actor isolation, no URL state.
+    static func encodeRuntimeParameterBody(
+        effectId: Int,
+        name: String,
+        value: Double
+    ) -> Data {
+        // JSONSerialization preserves Double precision and avoids Swift's
+        // `Codable` JSONEncoder ambiguity around `[String: Any]`-shaped bodies.
+        let payload: [String: Any] = [
+            "effectId": effectId,
+            "parameters": [name: value]
+        ]
+        // The payload is a fixed, well-formed `[String: Any]` — JSONSerialization
+        // cannot fail on it. If it ever does, surfacing an empty `Data` is a
+        // strictly better failure mode than a fatal error during a slider drag.
+        return (try? JSONSerialization.data(withJSONObject: payload)) ?? Data()
+    }
+
+    // MARK: Phase 2 — preset CRUD
+    //
+    // The preset surface uses REST for reads (list + single fetch) and WS for
+    // mutations (saveCurrent / load / delete) so iOS receives the firmware's
+    // broadcast confirmations (`effectPresets.saved` etc., wired in
+    // `WebSocketService.swift`'s Phase 1 broadcast block).
+    //
+    // Endpoints (per `firmware-v3/src/network/webserver/V1ApiRoutes.cpp`
+    // lines 1267-1382):
+    //   GET    /api/v1/effect-presets         → list
+    //   GET    /api/v1/effect-presets/get?id= → detail (unused by P2-3 today)
+    //   POST   /api/v1/effect-presets/apply   → covered by WS effectPresets.load
+    //   DELETE /api/v1/effect-presets/delete  → covered by WS effectPresets.delete
+    //   GET    /api/v1/zone-presets           → list
+    //   GET    /api/v1/zone-presets/get?id=   → detail (unused by P2-3 today)
+    //   POST   /api/v1/zone-presets/apply     → covered by WS zonePresets.load
+    //   DELETE /api/v1/zone-presets/delete    → covered by WS zonePresets.delete
+
+    /// Fetch the user-saved effect-preset list.
+    func getEffectPresets() async throws -> EffectPresetsListResponse {
+        try await request("GET", path: "effect-presets")
+    }
+
+    /// Fetch the zone-preset list (built-in plus user-saved).
+    func getZonePresets() async throws -> ZonePresetsListResponse {
+        try await request("GET", path: "zone-presets")
+    }
+
+    // MARK: Phase 2 — show transport
+    //
+    // Read endpoints for the shows surface. Mutations (play / pause / resume /
+    // stop / seek) go over WebSocket so iOS receives broadcast confirmations
+    // and benefits from low-latency dispatch — see `WebSocketService` Phase 2
+    // additions. Out-of-scope for Phase 2: upload, delete, cue.inject.
+
+    /// `GET /api/v1/shows` — list built-in and uploaded shows.
+    func getShows() async throws -> ShowsListResponse {
+        try await request("GET", path: "shows")
+    }
+
+    /// `GET /api/v1/shows/current` — current playback frame (playing show,
+    /// elapsed/duration timestamps, paused flag).
+    func getCurrentShow() async throws -> CurrentShowResponse {
+        try await request("GET", path: "shows/current")
+    }
 }
+
+

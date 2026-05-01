@@ -40,31 +40,34 @@ What exactly does the operator look for, anchored to (clip, timestamp, measurabl
 - **Priority:** MEDIUM.
 - **Revisit trigger:** After C-2 lands; pre-flight to any sign-off harness build.
 
-### F-1 — Contract authority (HIGH)
+### F-1 — Contract authority (HIGH — DECIDED 2026-05-01)
 Is the YAML at `docs/protocol/k1-{rest,ws}-contract.yaml` source-of-truth, or has it drifted past usability? Audit found ~50 REST routes + ~40 WS commands in firmware are absent from the contract; 5 WS commands in YAML have firmware handlers commented out (`WsFilesystemCommands.cpp:21-25`).
-- **Blocks:** every iOS catch-up task (do we align iOS to contract or to firmware reality).
-- **Affected outputs:** ≥ 3.
-- **Priority:** HIGH.
-- **Revisit trigger:** Captain decision on contract reconciliation strategy (regenerate from firmware vs lock contract and bring firmware/iOS into line).
+- **Decision (current):** Firmware is source-of-truth at runtime. Contract YAML is a *regeneratable documentation artefact*, NOT a lock-and-conform document. iOS aligns to firmware reality directly; YAML reconciliation is a separate, deferrable docs task (regenerate from firmware route registry when needed).
+- **Reason:** Firmware is the running code; YAML drift does not break clients. Lock-and-conform creates a permanent governance burden that nobody owns. Pull-from-firmware is sustainable; iOS Phase 2 work targets firmware behaviour, not the contract artefact.
+- **Affected outputs:** ≥ 3 (Phase 2 iOS scope unblocked).
+- **Priority:** HIGH (decided; revisit if a third-party iOS client or compliance regime re-elevates contract authority).
+- **Revisit trigger:** External-consumer onboarding requiring a stable published contract, OR firmware route surface stabilises and contract regeneration becomes mechanical.
 
-### F-2 — Effect production cohort (HIGH)
+### F-2 — Effect production cohort (HIGH — DECIDED 2026-05-01)
 Of the 25+ new effects landed since iOS anchor `569d3e4b` (commits `f91619bf` 20 LGP AR variants, `99ca01a2` 11 K1 parity / Bloom V2, `9d068612`+`7a9ebd1a` 7 SB Waveform/Spectral incl. 0x130E, `4dfadc7b` 5 Beat Prism Onset, `39406e6b` Phase 5 exemplars), which are PRODUCTION (user-facing) vs EXPERIMENTAL (A/B research, dev-only)?
-- **Blocks:** effect-picker UX, palette/parameter wiring per effect, whether iOS hides experimental effect IDs.
-- **Affected outputs:** ≥ 3.
-- **Priority:** HIGH.
-- **Revisit trigger:** Captain effect-cohort declaration before iOS effect picker rebuild.
+- **Decision (current):** Resolved by the `isExperimental` metadata flag already shipped (CHANGELOG `### Added` 2026-04-26 entry — `PatternRegistry::isExperimental(EffectId)` emitted on `/api/v1/effects` and `effects.getMetadata`). iOS `EffectViewModel.filteredEffects()` already filters experimentals out of the default view. 13 effects tagged per Captain verdicts. Going forward, every new effect must be tagged at registration time.
+- **Reason:** Flag-based filtering is durable and scales with new effects; ad-hoc cohort lists rot. The mechanism is in firmware AND iOS; Phase 2 picker work just needs to surface a "show experimental" toggle for power users.
+- **Priority:** HIGH (decided; ongoing discipline to tag new effects at registration).
+- **Revisit trigger:** Tab5 client filtering need (currently architecturally deferred — Tab5's uint8 effect-index array can't key 16-bit namespaced EIDs).
 
-### F-3 — Path canonicalisation (MEDIUM)
+### F-3 — Path canonicalisation (MEDIUM — DECIDED 2026-05-01)
 Firmware accepts both modern (`/effects/current`, `/palettes/current`) and legacy (`/effects/set`, `/palettes/set`) paths. iOS currently uses legacy. Standardise on which?
-- **Blocks:** RESTClient refactor scope.
-- **Priority:** MEDIUM.
-- **Revisit trigger:** Captain decision before any RESTClient path refactor.
+- **Decision (current):** KEEP LEGACY paths. Firmware supports both; iOS uses legacy; no behavioural difference; no breakage. Migration to modern paths is a future hygiene task with no current payoff.
+- **Reason:** Refactor risk (across RESTClient + every callsite + every test) exceeds the cost of staying on legacy. Re-evaluate ONLY when firmware deprecates a legacy path.
+- **Priority:** MEDIUM (decided; no-op for Phase 2).
+- **Revisit trigger:** Firmware deprecation of a legacy path with a removal-by date.
 
-### F-4 — Runtime parameter UX scope (HIGH)
+### F-4 — Runtime parameter UX scope (HIGH — DECIDED 2026-05-01)
 Is `effects.parameters.set` an end-user surface (sliders in effect detail view) or developer-only (debug overlay)? Effect 0x130E exposes `silenceGate`, `decayBase`, `decaySlope`, `onsetBoost` and similar — not consumer-friendly knobs.
-- **Blocks:** depth of effect detail view rebuild in Phase 2.
-- **Priority:** HIGH.
-- **Revisit trigger:** Captain decision on user-vs-developer UX for runtime tuning.
+- **Decision (current):** END-USER surface. Phase 2 ships an effect-detail parameter sheet that exposes every parameter with a `displayName` field via type-appropriate controls — FLOAT → slider, INT → stepper, BOOL → toggle, ENUM → picker, `unknown` → slider over [min, max]. The `parameterType` infrastructure (Phase 1, post-`4398af3b`) drives the control choice.
+- **Reason:** 0x130E and similar parameters ARE tunable knobs that users will want for live performance contexts. Phase 1's decoder already classifies them; making them user-facing is the natural extension. Parameters without a `displayName` are treated as developer-only and hidden — that's the heuristic for "consumer-friendly".
+- **Priority:** HIGH (decided; Phase 2 SSA executes).
+- **Revisit trigger:** Captain UX feedback on the parameter sheet's first hardware test, OR firmware adds a `userFacing: bool` flag making the heuristic explicit.
 
 ---
 

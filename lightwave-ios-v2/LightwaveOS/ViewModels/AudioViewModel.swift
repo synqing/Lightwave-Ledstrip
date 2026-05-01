@@ -520,6 +520,50 @@ class AudioViewModel {
             }
         }
     }
+
+    // MARK: Phase 2 — STM and VRMS visualisation
+    // Added 2026-05-01 (Task P2-2). Holds the most recent STM and VRMS
+    // payloads streamed over WebSocket so the audio cards can refresh
+    // without re-deriving the data themselves.
+
+    /// Latest 250-byte STM frame decoded from the WS binary channel. `nil`
+    /// until the first frame arrives or after `reset()`.
+    var stmLatest: STMFrame?
+
+    /// Latest VRMS perceptual-metrics frame from the WS text channel.
+    var vrmsLatest: VRMSFrame?
+
+    /// Wall-clock time the last STM frame was received.
+    var lastSTMFrameAt: Date?
+
+    /// Firmware-provided timestamp (millis) of the last VRMS frame.
+    var lastVRMSTimestampMs: UInt32 = 0
+
+    /// Wall-clock time the last VRMS frame was received.
+    var lastVRMSFrameAt: Date?
+
+    /// Total STM frames received this session (diagnostic counter).
+    var stmFrameCount: Int = 0
+
+    /// Total VRMS frames received this session (diagnostic counter).
+    var vrmsFrameCount: Int = 0
+
+    /// Process an STM binary frame produced by the firmware's
+    /// `StmStreamBroadcaster`. Stores the frame and updates diagnostics.
+    func handleSTMFrame(_ frame: STMFrame) {
+        stmLatest = frame
+        lastSTMFrameAt = Date()
+        stmFrameCount += 1
+    }
+
+    /// Process a VRMS JSON-frame envelope decoded from a `vrms.frame`
+    /// text WebSocket message.
+    func handleVRMSFrame(_ frame: VRMSFrame, timestamp: UInt32) {
+        vrmsLatest = frame
+        lastVRMSTimestampMs = timestamp
+        lastVRMSFrameAt = Date()
+        vrmsFrameCount += 1
+    }
 }
 
 // MARK: - Mic Type

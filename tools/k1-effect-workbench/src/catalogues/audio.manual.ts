@@ -1,0 +1,88 @@
+import type { CatalogueEntry } from '../types';
+
+export const audioSignalCatalogue: CatalogueEntry[] = [
+  {
+    key: 'onset.kick.fired',
+    label: 'Kick event',
+    status: 'supported',
+    source: 'firmware-v3/src/plugins/api/OnsetContext.h:16-39',
+    rationale: 'Single-frame semantic event with reliability and strength fields.',
+  },
+  {
+    key: 'onset.snare.fired',
+    label: 'Snare event',
+    status: 'supported',
+    source: 'firmware-v3/src/plugins/api/OnsetContext.h:16-39',
+    rationale: 'Single-frame semantic event for accent bursts.',
+  },
+  {
+    key: 'onset.hihat.fired',
+    label: 'Hi-hat event',
+    status: 'supported',
+    source: 'firmware-v3/src/plugins/api/OnsetContext.h:16-39',
+    rationale: 'Single-frame semantic event for fine high-frequency accents.',
+  },
+  {
+    key: 'onset.transient.fired',
+    label: 'Broadband transient',
+    status: 'supported',
+    source: 'firmware-v3/src/plugins/api/EffectContext.h:300-307',
+    rationale: 'Discrete onset event, usable as a spawn trigger.',
+  },
+  {
+    key: 'chroma',
+    label: 'Chroma colour',
+    status: 'supported',
+    source: 'firmware-v3/src/plugins/api/EffectContext.h:276-287',
+    rationale: 'Pitch-class energy, suitable for harmonic colour selection.',
+  },
+  {
+    key: 'rms',
+    label: 'RMS level',
+    status: 'blocked',
+    source: 'firmware-v3/src/plugins/api/EffectContext.h:96-101',
+    rationale: 'Blocked for 0x1B04 dominant motion because it is a broadband continuous bridge.',
+  },
+  {
+    key: 'beatPhase',
+    label: 'Beat phase',
+    status: 'blocked',
+    source: 'firmware-v3/src/plugins/api/EffectContext.h:134-179',
+    rationale: 'Continuous timing state; blocked as dominant 0x1B04 motion because it can reintroduce carrier movement.',
+  },
+  {
+    key: 'kickLevel',
+    label: 'Kick held level',
+    status: 'blocked',
+    source: 'firmware-v3/src/plugins/api/EffectContext.h:317-332',
+    rationale: 'Held/energy level; use fired/reliable event state for event logic.',
+  },
+  {
+    key: 'bands',
+    label: 'Band magnitudes',
+    status: 'blocked',
+    source: 'firmware-v3/src/plugins/api/EffectContext.h:114-131',
+    rationale: 'Blocked for 0x1B04 dominant motion because it encourages continuous pumping.',
+  },
+  {
+    key: 'bins64',
+    label: '64 musical bins',
+    status: 'researchOnly',
+    source: 'firmware-v3/src/plugins/api/EffectContext.h:373-385',
+    rationale: 'Powerful spectrum surface; not needed for the 0x1B04 repair directive.',
+  },
+  {
+    key: 'hfTier1',
+    label: 'High-frequency semantic tier',
+    status: 'blocked',
+    source: 'firmware-v3/src/plugins/api/EffectContext.h:334-352',
+    rationale: 'HF semantic helpers exist but are not production-authorised until their gates pass.',
+  },
+  {
+    key: 'bins256',
+    label: '256-bin FFT',
+    status: 'researchOnly',
+    source: 'firmware-v3/src/audio/contracts/ControlBus.h',
+    rationale: 'Linear FFT surface is legacy/debug/research by default, not normal effect authoring API.',
+  },
+];

@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - ESP32-P4 Audio Pipeline & iOS App
 
 ### Added
+- **tools:** K1 Effect Repair Workbench v0 Track B — directive authoring, 0x1B04 rules audit, byte-strip capture renderer, capture frame parser, manual audio/visual/transport catalogues, and Phase 0/0.5 evidence reports under `firmware-v3/docs/effect-design/`. Prediction remains explicitly not proven.
 - **firmware:** Phase 1+2 visual pipeline reform substrate — Layer 4 render primitives (`drawDot`, `drawSpriteScrolled`, `fillFromBins`) and Layer 5 frame post-process (`applyFrameBlending`) at `firmware-v3/src/effects/render/`. Centre-origin, dual-strip, dt-correct, no-heap, < 0.3 ms each at 320 LEDs. Mood-controlled global persistence via `applyFrameBlending`. 14 native unit tests at `test/test_render_primitives/` (all passing). Unwired in this commit — Phase 5+ effect ports will consume the substrate. Refs: `firmware-v3/docs/research/spazz_redesign_2026-04-30/PIPELINE_REFORM.md`.
 
 ### Fixed

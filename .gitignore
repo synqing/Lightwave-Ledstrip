@@ -161,6 +161,7 @@ roadmap/
 
 # Node.js dependencies (never track)
 **/node_modules/
+tools/k1-effect-workbench/dist/
 
 # Build artifacts & code indexing
 build_output.txt

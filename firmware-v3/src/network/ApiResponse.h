@@ -142,6 +142,44 @@ inline void sendSuccessResponseLarge(AsyncWebServerRequest* request,
 }
 
 /**
+ * @brief Send a standardized success response by streaming JSON directly
+ *        to the response buffer (no intermediate String).
+ *
+ * Memory behaviour: the JsonDocument is kept on the local stack frame and
+ * serialised into the AsyncResponseStream's internal cbuf, then the
+ * JsonDocument is destroyed BEFORE request->send() is invoked. Compared to
+ * the String-based helper, this avoids the contiguous String allocation that
+ * fragmented the K1 V2 internal heap (~22.5 KB worst case for /api/v1/effects).
+ *
+ * For very large list responses (effects, palettes), prefer the
+ * per-item streaming pattern in the handler — write the JSON envelope and
+ * each item to the stream individually so the JsonDocument never holds the
+ * full payload simultaneously.
+ *
+ * @param request           The HTTP request to respond to.
+ * @param builder           Callback that populates the data object.
+ * @param initialBufferSize Initial size of the underlying cbuf. Pick a value
+ *                          larger than the typical response so cbuf::resize
+ *                          is rarely invoked. Defaults to 4 KB.
+ */
+inline void sendSuccessResponseStreamed(AsyncWebServerRequest* request,
+                                         std::function<void(JsonObject&)> builder,
+                                         size_t initialBufferSize = 4096) {
+    AsyncResponseStream* response = request->beginResponseStream("application/json", initialBufferSize);
+    {
+        JsonDocument doc;
+        doc["success"] = true;
+        JsonObject data = doc["data"].to<JsonObject>();
+        builder(data);
+        doc["timestamp"] = millis();
+        doc["version"] = API_VERSION;
+        // Serialise straight into the stream — no intermediate String.
+        serializeJson(doc, *response);
+    }  // JsonDocument destroyed here, before request->send() advances state.
+    request->send(response);
+}
+
+/**
  * @brief Send a standardized error response
  */
 inline void sendErrorResponse(AsyncWebServerRequest* request,

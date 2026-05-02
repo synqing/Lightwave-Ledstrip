@@ -109,31 +109,42 @@ void PaletteHandlers::handleList(AsyncWebServerRequest* request,
     uint16_t startIdx = (page - 1) * limit;
     uint16_t endIdx = startIdx + limit;
     if (endIdx > filteredCount) endIdx = filteredCount;
-    
+
     // Calculate actual offset (for V2 API compatibility)
     int actualOffset = startIdx;
 
-    // Build response - buffer sized for up to 50 palettes per page
-    JsonDocument doc;
-    doc["success"] = true;
-    doc["timestamp"] = millis();
-    doc["version"] = API_VERSION;
+    // -----------------------------------------------------------------
+    // Streamed JSON construction.
+    //
+    // Heap-fragmentation fix: previously this handler built the entire
+    // JsonDocument (~9 KB worst case for ~75 palettes) and serialised it
+    // into a String, which fragmented the K1 V2 internal heap. We now
+    // stream the response directly to the AsyncResponseStream, with one
+    // small JsonDocument per palette entry — peak heap during the loop
+    // is bounded by a single entry (~250 bytes) plus the cbuf which
+    // grows incrementally.
+    // -----------------------------------------------------------------
 
-    JsonObject data = doc["data"].to<JsonObject>();
+    AsyncResponseStream* response =
+        request->beginResponseStream("application/json", 2048);
 
-    // Categorize palettes (static counts, not affected by filters)
-    JsonObject categories = data["categories"].to<JsonObject>();
-    categories["artistic"] = CPT_CITY_END - CPT_CITY_START + 1;
-    categories["scientific"] = CRAMERI_END - CRAMERI_START + 1;
-    categories["lgpOptimized"] = COLORSPACE_END - COLORSPACE_START + 1;
+    response->print("{\"success\":true,\"data\":{");
 
-    JsonArray palettes = data["palettes"].to<JsonArray>();
+    // Static category counts (not affected by filters).
+    response->printf("\"categories\":{\"artistic\":%d,\"scientific\":%d,\"lgpOptimized\":%d},",
+                     (int)(CPT_CITY_END - CPT_CITY_START + 1),
+                     (int)(CRAMERI_END - CRAMERI_START + 1),
+                     (int)(COLORSPACE_END - COLORSPACE_START + 1));
 
-    // Second pass: add only the paginated subset of filtered palettes
+    response->print("\"palettes\":[");
+
+    // Second pass: add only the paginated subset of filtered palettes.
+    uint16_t writtenCount = 0;
     for (uint16_t idx = startIdx; idx < endIdx; idx++) {
         uint8_t i = filteredIds[idx];
+        if (writtenCount > 0) response->print(",");
 
-        JsonObject palette = palettes.add<JsonObject>();
+        JsonDocument palette;
         palette["id"] = i;
         palette["name"] = MasterPaletteNames[i];
         palette["category"] = getPaletteCategory(i);
@@ -150,27 +161,26 @@ void PaletteHandlers::handleList(AsyncWebServerRequest* request,
         // Metadata
         palette["avgBrightness"] = getPaletteAvgBrightness(i);
         palette["maxBrightness"] = getPaletteMaxBrightness(i);
+
+        serializeJson(palette, *response);
+        writtenCount++;
     }
 
-    // Add flat pagination fields for V2 API compatibility (matching V2PalettesList type)
-    data["total"] = filteredCount;
-    data["offset"] = actualOffset;
-    data["limit"] = limit;
-    // count will be set after palettes array is built
-    
-    // Add pagination object (for backward compatibility)
-    JsonObject pagination = data["pagination"].to<JsonObject>();
-    pagination["page"] = page;
-    pagination["limit"] = limit;
-    pagination["total"] = filteredCount;
-    pagination["pages"] = totalPages;
-    
-    // Set count field (number of palettes in this response)
-    data["count"] = palettes.size();
+    response->print("],");
 
-    String output;
-    serializeJson(doc, output);
-    request->send(HttpStatus::OK, "application/json", output);
+    // Flat pagination fields (V2PalettesList) and pagination object
+    // (backward compatible). count is the number of palettes emitted.
+    response->printf("\"total\":%u,\"offset\":%d,\"limit\":%u,",
+                     (unsigned)filteredCount, actualOffset, (unsigned)limit);
+    response->printf("\"pagination\":{\"page\":%u,\"limit\":%u,\"total\":%u,\"pages\":%u},",
+                     (unsigned)page, (unsigned)limit,
+                     (unsigned)filteredCount, (unsigned)totalPages);
+    response->printf("\"count\":%u", (unsigned)writtenCount);
+
+    response->printf("},\"timestamp\":%lu,\"version\":\"%s\"}",
+                     (unsigned long)millis(), API_VERSION);
+
+    request->send(response);
 }
 
 void PaletteHandlers::handleCurrent(AsyncWebServerRequest* request,

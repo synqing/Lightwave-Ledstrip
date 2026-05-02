@@ -76,147 +76,166 @@ void EffectHandlers::handleList(AsyncWebServerRequest* request, RendererActor* r
     int startIdx = (page - 1) * limit;
     int endIdx = startIdx + limit;
     if (endIdx > total) endIdx = total;
-    
+
     // Calculate offset (for V2 API compatibility) - use startIdx as the actual offset
     int offset = startIdx;
 
-    // Capture values for lambda
-    const int capturedPage = page;
-    const int capturedLimit = limit;
-    const int capturedTotal = total;
-    const int capturedPages = pages;
-    const int capturedStartIdx = startIdx;
-    const int capturedEndIdx = endIdx;
-    const int capturedOffset = offset;
-    const int capturedCategoryFilter = categoryFilter;
-    const bool capturedDetails = details;
+    // Helper lambdas — defined once and reused for both the filtered and
+    // unfiltered code paths.
+    auto getCategoryId = [](EffectId eid) -> int {
+        const PatternMetadata* meta = PatternRegistry::getPatternMetadata(eid);
+        if (!meta) return 3;  // Custom
+        switch (meta->family) {
+            case PatternFamily::FLUID_PLASMA: return 0;   // Classic
+            case PatternFamily::INTERFERENCE: return 1;   // Wave
+            case PatternFamily::GEOMETRIC:
+            case PatternFamily::PHYSICS_BASED:
+            case PatternFamily::MATHEMATICAL: return 2;   // Physics
+            default: return 3;                            // Custom
+        }
+    };
 
-    sendSuccessResponseLarge(request, [capturedPage, capturedLimit, capturedTotal,
-                                       capturedPages, capturedStartIdx, capturedEndIdx,
-                                       capturedOffset, capturedCategoryFilter, capturedDetails, renderer](JsonObject& data) {
-        // Add flat pagination fields for V2 API compatibility (matching V2EffectsList type)
-        data["total"] = capturedTotal;
-        data["offset"] = capturedOffset;
-        data["limit"] = capturedLimit;
-        // count will be set after effects array is built
-        
-        // Add pagination object (for backward compatibility)
-        JsonObject pagination = data["pagination"].to<JsonObject>();
-        pagination["page"] = capturedPage;
-        pagination["limit"] = capturedLimit;
-        pagination["total"] = capturedTotal;
-        pagination["pages"] = capturedPages;
+    auto getCategoryName = [](int categoryId) -> const char* {
+        switch (categoryId) {
+            case 0: return "Classic";
+            case 1: return "Wave";
+            case 2: return "Physics";
+            default: return "Custom";
+        }
+    };
 
-        // Helper lambda to get category from PatternMetadata family
-        auto getCategoryId = [](EffectId eid) -> int {
-            const PatternMetadata* meta = PatternRegistry::getPatternMetadata(eid);
-            if (!meta) return 3;  // Custom
-            switch (meta->family) {
-                case PatternFamily::FLUID_PLASMA: return 0;   // Classic
-                case PatternFamily::INTERFERENCE: return 1;   // Wave
-                case PatternFamily::GEOMETRIC:
-                case PatternFamily::PHYSICS_BASED:
-                case PatternFamily::MATHEMATICAL: return 2;   // Physics
-                default: return 3;                            // Custom
-            }
-        };
+    // -----------------------------------------------------------------
+    // Streamed JSON construction.
+    //
+    // Heap-fragmentation fix (K1 V2 internal heap shed): the previous
+    // implementation built a single JsonDocument holding the entire
+    // effects[] array (~22.5 KB worst case for limit=200) and serialised
+    // it into a String, which doubled to ~45 KB during concat. On a
+    // device with ~21 KB internal heap at boot this guaranteed
+    // fragmentation and latched the heap-shed at largest-block < 8 KB.
+    //
+    // Now we stream the response directly: the envelope is printed to
+    // the AsyncResponseStream, then each effect entry is built into a
+    // small temporary JsonDocument, serialised straight to the stream,
+    // and freed before the next entry. Peak heap during the loop is
+    // bounded by ONE entry (~150-300 bytes) plus the underlying cbuf
+    // which grows to roughly the response length but does so
+    // incrementally rather than via a doubling String.
+    // -----------------------------------------------------------------
 
-        auto getCategoryName = [](int categoryId) -> const char* {
-            switch (categoryId) {
-                case 0: return "Classic";
-                case 1: return "Wave";
-                case 2: return "Physics";
-                default: return "Custom";
-            }
-        };
+    AsyncResponseStream* response =
+        request->beginResponseStream("application/json", 4096);
 
-        // Build effects array with pagination
-        JsonArray effects = data["effects"].to<JsonArray>();
+    response->print("{\"success\":true,\"data\":{");
 
-        if (capturedCategoryFilter >= 0) {
-            int matchCount = 0;
-            int addedCount = 0;
+    // Flat pagination fields for V2 API compatibility (V2EffectsList).
+    response->printf("\"total\":%d,\"offset\":%d,\"limit\":%d,",
+                     total, offset, limit);
 
-            for (uint16_t i = 0; i < renderer->getEffectCount(); i++) {
-                EffectId eid = renderer->getEffectIdAt(i);
-                int effectCategory = getCategoryId(eid);
-                if (effectCategory == capturedCategoryFilter) {
-                    if (matchCount >= capturedStartIdx && addedCount < capturedLimit) {
-                        JsonObject effect = effects.add<JsonObject>();
-                        effect["id"] = eid;
-                        effect["name"] = renderer->getEffectName(eid);
-                        effect["category"] = getCategoryName(effectCategory);
-                        effect["categoryId"] = effectCategory;
+    // Pagination object for backward compatibility.
+    response->printf("\"pagination\":{\"page\":%d,\"limit\":%d,\"total\":%d,\"pages\":%d},",
+                     page, limit, total, pages);
 
-                        if (capturedDetails) {
-                            JsonObject features = effect["features"].to<JsonObject>();
-                            features["centerOrigin"] = true;
-                            features["usesSpeed"] = true;
-                            features["usesPalette"] = true;
-                            features["zoneAware"] = (effectCategory != 2);
-                        }
-                        addedCount++;
-                    }
-                    matchCount++;
-                }
-            }
-        } else {
-            for (int i = capturedStartIdx; i < capturedEndIdx; i++) {
-                EffectId eid = renderer->getEffectIdAt(i);
-                JsonObject effect = effects.add<JsonObject>();
+    response->print("\"effects\":[");
+
+    int writtenCount = 0;
+    if (categoryFilter >= 0) {
+        int matchCount = 0;
+        int addedCount = 0;
+        for (uint16_t i = 0; i < renderer->getEffectCount(); i++) {
+            EffectId eid = renderer->getEffectIdAt(i);
+            int effectCategory = getCategoryId(eid);
+            if (effectCategory != categoryFilter) continue;
+            if (matchCount >= startIdx && addedCount < limit) {
+                if (writtenCount > 0) response->print(",");
+                JsonDocument effect;
                 effect["id"] = eid;
                 effect["name"] = renderer->getEffectName(eid);
-                int categoryId = getCategoryId(eid);
-                effect["category"] = getCategoryName(categoryId);
-                effect["categoryId"] = categoryId;
-                effect["isAudioReactive"] = PatternRegistry::isAudioReactive(eid);
-                effect["isExperimental"] = PatternRegistry::isExperimental(eid);
+                effect["category"] = getCategoryName(effectCategory);
+                effect["categoryId"] = effectCategory;
 
-                // Query IEffect metadata if available
-                plugins::IEffect* ieffect = renderer->getEffectInstance(eid);
-                if (ieffect) {
-                    effect["isIEffect"] = true;
-                    const plugins::EffectMetadata& meta = ieffect->getMetadata();
-                    if (meta.description) {
-                        effect["description"] = meta.description;
-                    }
-                    effect["version"] = meta.version;
-                    if (meta.author) {
-                        effect["author"] = meta.author;
-                    }
-                    // Map EffectCategory to string
-                    const char* categoryNames[] = {
-                        "UNCATEGORIZED", "FIRE", "WATER", "NATURE", "GEOMETRIC",
-                        "QUANTUM", "SHOCKWAVE", "AMBIENT", "PARTY", "CUSTOM"
-                    };
-                    if ((uint8_t)meta.category < 10) {
-                        effect["ieffectCategory"] = categoryNames[(uint8_t)meta.category];
-                    }
-                } else {
-                    effect["isIEffect"] = false;
-                }
-
-                if (capturedDetails) {
+                if (details) {
                     JsonObject features = effect["features"].to<JsonObject>();
                     features["centerOrigin"] = true;
                     features["usesSpeed"] = true;
                     features["usesPalette"] = true;
-                    features["zoneAware"] = (categoryId != 2);
+                    features["zoneAware"] = (effectCategory != 2);
                 }
+                serializeJson(effect, *response);
+                addedCount++;
+                writtenCount++;
             }
+            matchCount++;
         }
+    } else {
+        for (int i = startIdx; i < endIdx; i++) {
+            EffectId eid = renderer->getEffectIdAt(i);
+            if (writtenCount > 0) response->print(",");
 
-        JsonArray categories = data["categories"].to<JsonArray>();
-        const char* categoryNames[] = {"Classic", "Wave", "Physics", "Custom"};
-        for (int i = 0; i < 4; i++) {
-            JsonObject cat = categories.add<JsonObject>();
-            cat["id"] = i;
-            cat["name"] = categoryNames[i];
+            JsonDocument effect;
+            effect["id"] = eid;
+            effect["name"] = renderer->getEffectName(eid);
+            int categoryId = getCategoryId(eid);
+            effect["category"] = getCategoryName(categoryId);
+            effect["categoryId"] = categoryId;
+            effect["isAudioReactive"] = PatternRegistry::isAudioReactive(eid);
+            effect["isExperimental"] = PatternRegistry::isExperimental(eid);
+
+            // Query IEffect metadata if available.
+            plugins::IEffect* ieffect = renderer->getEffectInstance(eid);
+            if (ieffect) {
+                effect["isIEffect"] = true;
+                const plugins::EffectMetadata& meta = ieffect->getMetadata();
+                if (meta.description) {
+                    effect["description"] = meta.description;
+                }
+                effect["version"] = meta.version;
+                if (meta.author) {
+                    effect["author"] = meta.author;
+                }
+                // Map EffectCategory to string.
+                const char* metaCategoryNames[] = {
+                    "UNCATEGORIZED", "FIRE", "WATER", "NATURE", "GEOMETRIC",
+                    "QUANTUM", "SHOCKWAVE", "AMBIENT", "PARTY", "CUSTOM"
+                };
+                if ((uint8_t)meta.category < 10) {
+                    effect["ieffectCategory"] = metaCategoryNames[(uint8_t)meta.category];
+                }
+            } else {
+                effect["isIEffect"] = false;
+            }
+
+            if (details) {
+                JsonObject features = effect["features"].to<JsonObject>();
+                features["centerOrigin"] = true;
+                features["usesSpeed"] = true;
+                features["usesPalette"] = true;
+                features["zoneAware"] = (categoryId != 2);
+            }
+            serializeJson(effect, *response);
+            writtenCount++;
         }
-        
-        // Set count field (number of effects in this response)
-        data["count"] = effects.size();
-    }, 4096);
+    }
+
+    response->print("],");
+
+    // Categories — fixed shape, four entries; safe to write inline.
+    response->print("\"categories\":[");
+    const char* categoryNames[] = {"Classic", "Wave", "Physics", "Custom"};
+    for (int i = 0; i < 4; i++) {
+        if (i > 0) response->print(",");
+        response->printf("{\"id\":%d,\"name\":\"%s\"}", i, categoryNames[i]);
+    }
+    response->print("],");
+
+    // count field (number of effects emitted in this response).
+    response->printf("\"count\":%d", writtenCount);
+
+    // Close data, add timestamp + version, close envelope.
+    response->printf("},\"timestamp\":%lu,\"version\":\"%s\"}",
+                     (unsigned long)millis(), API_VERSION);
+
+    request->send(response);
 }
 
 void EffectHandlers::handleCurrent(AsyncWebServerRequest* request, RendererActor* renderer) {

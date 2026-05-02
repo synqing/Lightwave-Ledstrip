@@ -38,9 +38,8 @@ struct DeviceTab: View {
                     )
 
                     DeviceInfoRow(
-                        label: "WiFi RSSI",
-                        value: wifiRssiText,
-                        valueColor: wifiRssiColor
+                        label: "AP Clients",
+                        value: wsClientsText
                     )
                 }
                 .listRowBackground(Color.lwCard)
@@ -159,24 +158,15 @@ struct DeviceTab: View {
         }
     }
 
-    private var wifiRssiText: String {
-        if let rssi = appVM.deviceStatus?.network?.rssi {
-            return "\(rssi) dBm"
-        }
-        return "—"
-    }
-
-    private var wifiRssiColor: Color {
-        guard let rssi = appVM.deviceStatus?.network?.rssi else {
-            return .lwTextTertiary
-        }
-        if rssi >= -50 {
-            return .lwSuccess
-        }
-        if rssi >= -70 {
-            return .lwGold
-        }
-        return .lwError
+    // K1 V2 is AP-ONLY (hard architectural rule — see firmware
+    // CLAUDE.md). The firmware gates `network.rssi` behind
+    // `WiFi.status() == WL_CONNECTED` which is permanently false on K1,
+    // so the legacy "WiFi RSSI" row was always rendering "—". Replaced
+    // with the AP-side connected-client count which firmware does
+    // populate via `wsClients`.
+    private var wsClientsText: String {
+        guard let count = appVM.deviceStatus?.wsClients else { return "—" }
+        return count == 1 ? "1 client" : "\(count) clients"
     }
 
     private var uptimeText: String {
@@ -206,12 +196,20 @@ struct DeviceTab: View {
     }
 
     private var freeHeapText: String {
+        // Firmware reports `freeHeap` in BYTES (ESP.getFreeHeap()).
+        // Convert to KB / MB for human display. K1 V2 typical baseline
+        // is ~150 KB; rendering anything as "MB" almost always means
+        // PSRAM pool, never internal heap.
         guard let heap = appVM.deviceStatus?.freeHeap else { return "—" }
-        if heap >= 1024 {
-            let mb = Double(heap) / 1024.0
+        if heap >= 1_048_576 {
+            let mb = Double(heap) / 1_048_576.0
             return String(format: "%.1f MB", mb)
         }
-        return "\(heap) KB"
+        if heap >= 1024 {
+            let kb = heap / 1024
+            return "\(kb) KB"
+        }
+        return "\(heap) B"
     }
 }
 
@@ -235,26 +233,6 @@ struct DeviceInfoRow: View {
                 .foregroundStyle(valueColor)
                 .monospacedDigit()
         }
-    }
-}
-
-// MARK: - Placeholder: WebSocket Inspector
-
-struct WebSocketInspectorView: View {
-    var body: some View {
-        VStack {
-            Text("WebSocket Inspector")
-                .font(.effectTitle)
-                .foregroundStyle(Color.lwTextPrimary)
-
-            Text("Coming soon")
-                .font(.caption)
-                .foregroundStyle(Color.lwTextSecondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.lwBase)
-        .navigationTitle("WebSocket Inspector")
-        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

@@ -119,13 +119,6 @@ struct EffectSelectorView: View {
                     .accessibilityHint(Text("Toggles visibility of experimental effects"))
                 }
             }
-            // Heap-stability mitigation: connect-time hydration only fetches
-            // the first page (`connectInitialLimit` rows). When the picker
-            // opens we lazy-load the rest so the category filter pills and
-            // grouped list reflect the full catalogue.
-            .task {
-                await appVM.effects.loadAllEffectsIfNeeded()
-            }
         }
     }
 

@@ -136,13 +136,6 @@ struct ZoneEffectSelectorView: View {
             .onChange(of: audioOnly) { _, newValue in
                 storedAudioOnly = newValue
             }
-            // Heap-stability mitigation: connect-time hydration only fetches
-            // the first effects page. Lazy-load the rest when the zone picker
-            // opens so categories and the audio-only filter reflect the full
-            // catalogue.
-            .task {
-                await appVM.effects.loadAllEffectsIfNeeded()
-            }
         }
     }
 

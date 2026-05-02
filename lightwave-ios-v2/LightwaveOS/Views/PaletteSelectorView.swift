@@ -43,14 +43,6 @@ struct PaletteSelectorView: View {
                     .foregroundStyle(Color.lwGold)
                 }
             }
-            // Heap-stability mitigation: palettes are no longer fetched on
-            // connect. The picker hydrates from the firmware on first open;
-            // `PaletteStore.all` defaults render immediately so the user
-            // never sees a blank grid. Subsequent opens are no-ops via the
-            // ViewModel's `hasHydrated` guard.
-            .task {
-                await appVM.palettes.loadPalettes()
-            }
         }
     }
 

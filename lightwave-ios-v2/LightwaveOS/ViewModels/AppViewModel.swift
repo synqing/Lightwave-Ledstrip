@@ -191,17 +191,19 @@ class AppViewModel {
 
             // Load initial state.
             //
-            // Heap-stability mitigation (firmware/heap-stability-day1):
-            //   - Effects: fetch only the first page (limit=20) — the rest is
-            //     paged in lazily by the picker. Reduces the connect-time
-            //     22.5 KB JSON to roughly 2-3 KB.
-            //   - Palettes: connect-time fetch removed entirely. The picker
-            //     hydrates on first open (PaletteStore.all defaults render
-            //     immediately so the UI never blanks).
-            //   - Parameters / zones / colour correction / audio tuning /
-            //     edge mixer: kept on connect — small JSON each.
-            log("Loading effects (initial page)...", category: "INIT")
+            // The iOS app is the user's interface to K1 — every effect, every
+            // palette must be available the moment the user opens a picker.
+            // Firmware-side streaming responses (β — `firmware/heap-stability-day1`
+            // commit 56110887) handle the heap impact of large list responses
+            // by streaming the JSON to the TCP buffer instead of materialising
+            // it in a single contiguous String. iOS therefore fetches the full
+            // catalogue on connect; the firmware-side fix is what enables this
+            // to be heap-safe.
+            log("Loading effects list...", category: "INIT")
             await effects.loadEffects()
+
+            log("Loading palettes list...", category: "INIT")
+            await palettes.loadPalettes()
 
             log("Loading parameters...", category: "INIT")
             await parameters.loadParameters()

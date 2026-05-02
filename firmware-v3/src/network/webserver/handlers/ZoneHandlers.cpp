@@ -430,10 +430,9 @@ void ZoneHandlers::handleConfigGet(AsyncWebServerRequest* request, lightwaveos::
         return;
     }
 
-    sendSuccessResponse(request, [composer](JsonObject& data) {
-        data["zoneCount"] = composer->getZoneCount();
-        data["message"] = "Zone config retrieval not fully implemented";
-    });
+    sendErrorResponse(request, HttpStatus::NOT_IMPLEMENTED,
+                      "NOT_IMPLEMENTED",
+                      "Zone configuration export not yet implemented (planned: A6 snapshot system, Phase 3)");
 }
 
 void ZoneHandlers::handleConfigSave(AsyncWebServerRequest* request, lightwaveos::zones::ZoneComposer* composer, void* zoneConfigMgr) {
@@ -444,10 +443,9 @@ void ZoneHandlers::handleConfigSave(AsyncWebServerRequest* request, lightwaveos:
         return;
     }
 
-    sendSuccessResponse(request, [](JsonObject& data) {
-        data["message"] = "Zone config save not fully implemented";
-        data["saved"] = false;
-    });
+    sendErrorResponse(request, HttpStatus::NOT_IMPLEMENTED,
+                      "NOT_IMPLEMENTED",
+                      "Zone configuration save not yet implemented (planned: A6 snapshot system, Phase 3)");
 }
 
 void ZoneHandlers::handleConfigLoad(AsyncWebServerRequest* request, lightwaveos::zones::ZoneComposer* composer, void* zoneConfigMgr, std::function<void()> broadcastZoneState) {
@@ -459,10 +457,9 @@ void ZoneHandlers::handleConfigLoad(AsyncWebServerRequest* request, lightwaveos:
         return;
     }
 
-    sendSuccessResponse(request, [](JsonObject& data) {
-        data["message"] = "Zone config load not fully implemented";
-        data["loaded"] = false;
-    });
+    sendErrorResponse(request, HttpStatus::NOT_IMPLEMENTED,
+                      "NOT_IMPLEMENTED",
+                      "Zone configuration load not yet implemented (planned: A6 snapshot system, Phase 3)");
 }
 
 // ============================================================================
@@ -476,11 +473,9 @@ void ZoneHandlers::handleTimingGet(AsyncWebServerRequest* request, lightwaveos::
         return;
     }
 
-    sendSuccessResponse(request, [composer](JsonObject& data) {
-        data["zoneCount"] = composer->getZoneCount();
-        // Timing stats would go here
-        data["message"] = "Zone timing not fully implemented";
-    });
+    sendErrorResponse(request, HttpStatus::NOT_IMPLEMENTED,
+                      "NOT_IMPLEMENTED",
+                      "Zone timing metrics not yet implemented (planned: A12, Phase 8)");
 }
 
 void ZoneHandlers::handleTimingReset(AsyncWebServerRequest* request, lightwaveos::zones::ZoneComposer* composer) {
@@ -490,10 +485,9 @@ void ZoneHandlers::handleTimingReset(AsyncWebServerRequest* request, lightwaveos
         return;
     }
 
-    sendSuccessResponse(request, [](JsonObject& data) {
-        data["message"] = "Zone timing reset not fully implemented";
-        data["reset"] = false;
-    });
+    sendErrorResponse(request, HttpStatus::NOT_IMPLEMENTED,
+                      "NOT_IMPLEMENTED",
+                      "Zone timing metrics not yet implemented (planned: A12, Phase 8)");
 }
 
 // ============================================================================
@@ -513,10 +507,9 @@ void ZoneHandlers::handleAudioConfigGet(AsyncWebServerRequest* request, uint8_t 
         return;
     }
 
-    sendSuccessResponse(request, [zoneId](JsonObject& data) {
-        data["zoneId"] = zoneId;
-        data["message"] = "Zone audio config not fully implemented";
-    });
+    sendErrorResponse(request, HttpStatus::NOT_IMPLEMENTED,
+                      "NOT_IMPLEMENTED",
+                      "Zone audio routing not yet implemented (planned: D-4/A3, Phase 1)");
 }
 
 void ZoneHandlers::handleAudioConfigSet(AsyncWebServerRequest* request, uint8_t* data, size_t len, uint8_t zoneId, lightwaveos::zones::ZoneComposer* composer, std::function<void()> broadcastZoneState) {
@@ -536,10 +529,9 @@ void ZoneHandlers::handleAudioConfigSet(AsyncWebServerRequest* request, uint8_t*
         return;
     }
 
-    sendSuccessResponse(request, [zoneId](JsonObject& respData) {
-        respData["zoneId"] = zoneId;
-        respData["message"] = "Zone audio config set not fully implemented";
-    });
+    sendErrorResponse(request, HttpStatus::NOT_IMPLEMENTED,
+                      "NOT_IMPLEMENTED",
+                      "Zone audio routing not yet implemented (planned: D-4/A3, Phase 1)");
 }
 
 // ============================================================================
@@ -559,10 +551,9 @@ void ZoneHandlers::handleBeatTriggerGet(AsyncWebServerRequest* request, uint8_t 
         return;
     }
 
-    sendSuccessResponse(request, [zoneId](JsonObject& data) {
-        data["zoneId"] = zoneId;
-        data["message"] = "Zone beat trigger not fully implemented";
-    });
+    sendErrorResponse(request, HttpStatus::NOT_IMPLEMENTED,
+                      "NOT_IMPLEMENTED",
+                      "Zone beat-trigger not yet implemented (planned: Phase 4 live performance controls)");
 }
 
 void ZoneHandlers::handleBeatTriggerSet(AsyncWebServerRequest* request, uint8_t* data, size_t len, uint8_t zoneId, lightwaveos::zones::ZoneComposer* composer, std::function<void()> broadcastZoneState) {
@@ -582,10 +573,9 @@ void ZoneHandlers::handleBeatTriggerSet(AsyncWebServerRequest* request, uint8_t*
         return;
     }
 
-    sendSuccessResponse(request, [zoneId](JsonObject& respData) {
-        respData["zoneId"] = zoneId;
-        respData["message"] = "Zone beat trigger set not fully implemented";
-    });
+    sendErrorResponse(request, HttpStatus::NOT_IMPLEMENTED,
+                      "NOT_IMPLEMENTED",
+                      "Zone beat-trigger not yet implemented (planned: Phase 4 live performance controls)");
 }
 
 // ============================================================================
@@ -603,10 +593,9 @@ void ZoneHandlers::handleReorder(AsyncWebServerRequest* request, uint8_t* data, 
         return;
     }
 
-    sendSuccessResponse(request, [](JsonObject& respData) {
-        respData["message"] = "Zone reorder not fully implemented";
-        respData["reordered"] = false;
-    });
+    sendErrorResponse(request, HttpStatus::NOT_IMPLEMENTED,
+                      "NOT_IMPLEMENTED",
+                      "Zone reorder not yet implemented (planned: A9, Phase 6 advanced layering)");
 }
 
 } // namespace handlers

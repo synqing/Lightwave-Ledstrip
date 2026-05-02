@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - ESP32-P4 Audio Pipeline & iOS App
 
 ### Added
+- **firmware/docs (zones) — Phase 0 closeout (2026-05-02):** Zone Composer Instrument Program contract clarity, regression scaffolding, and architectural decision record landed. Includes:
+  - **B1 (firmware):** 10 zones REST endpoints converted from misleading stubs to explicit HTTP 501 NOT_IMPLEMENTED with structured error bodies; pending real implementation when underlying engine capability lands. Refs: `firmware-v3/src/network/webserver/handlers/ZoneHandlers.cpp`.
+  - **B2 (docs):** Unified Zone Composer command matrix documenting REST/WS/SerialJSON command parity. Refs: `docs/protocol/zones-command-matrix.md`.
+  - **B5 (docs):** SerialJSON parity inventory with per-command gap audit (gap #5 — `zones.list` missing `zoneId`+`effectName` — backlogged into the wire-format migration). Refs: `docs/protocol/zones-serial-json-parity.md`.
+  - **ADR (docs):** Zone Composer architecture decision record — D-1 keystone, D-3 parameter routing, D-4 audio routing, blend-mode namespace, transport equivalence — with verification findings. Refs: `docs/adr/zone-composer-architecture-decisions.md`.
+  - **B7 (firmware/test):** BlendMode namespace native regression test guards `BlendMode`→`GradientBlendMode` rename. Refs: `firmware-v3/test/test_blend_mode_namespace/`, `firmware-v3/platformio.ini` (`[env:native_test_blend_mode_namespace]`).
+  - **D-8 (firmware/test):** Zone regression gate — invariants README + `zone_regression_smoke.py` I3 (50-toggle Triple Rings stress, heap-delta + zone-state preservation). I1/I2/I4 are TODO_PHASE1 stubs. Refs: `firmware-v3/scripts/zone_regression_smoke.py`, `firmware-v3/test/test_zone_regression_gate/README.md`.
+  - **E5 (tools):** Cross-transport zone-equivalence harness — REST/WS/SerialJSON parity validator with zone-speed test PASSING. Refs: `firmware-v3/tools/zone-equivalence-harness/`.
+  - **Blend-mode namespace rename (firmware):** `BlendMode` → `GradientBlendMode` migration to align with gradient module structure. Refs: `firmware-v3/src/effects/gradient/{GradientRamp,GradientTypes}.h`, `firmware-v3/src/effects/zones/BlendMode.h`, `firmware-v3/docs/gradient-system.md`.
+  - **Zone numbering convention:** Hardened to 1-indexed (Zone 1/2/3) across all docs, scripts, plans. Zone 0 references purged. Wire-format migration (zoneId 0→1-indexed across REST/WS/SerialJSON) backlogged for next phase.
+
+  [deferred hardware validation: REST 501 spot-check pending next hardware window]
 - **firmware:** Phase 1+2 visual pipeline reform substrate — Layer 4 render primitives (`drawDot`, `drawSpriteScrolled`, `fillFromBins`) and Layer 5 frame post-process (`applyFrameBlending`) at `firmware-v3/src/effects/render/`. Centre-origin, dual-strip, dt-correct, no-heap, < 0.3 ms each at 320 LEDs. Mood-controlled global persistence via `applyFrameBlending`. 14 native unit tests at `test/test_render_primitives/` (all passing). Unwired in this commit — Phase 5+ effect ports will consume the substrate. Refs: `firmware-v3/docs/research/spazz_redesign_2026-04-30/PIPELINE_REFORM.md`.
 
 ### Fixed

@@ -28,7 +28,7 @@ effect.render(ctx)          ← gradient kernel called HERE
 
 ```
 firmware-v3/src/effects/gradient/
-├── GradientTypes.h     — GradientStop, RepeatMode, InterpolationMode, BlendMode
+├── GradientTypes.h     — GradientStop, RepeatMode, InterpolationMode, GradientBlendMode
 ├── GradientRamp.h      — GradientRamp class: stops + sampling + blending
 └── GradientCoord.h     — K1 coordinate helpers: uCenter, uSigned, uLocal, edgeId
 ```
@@ -83,7 +83,7 @@ CRGB colour = ramp.sampleScaled(pos, ringCount, offset);  // Repeating
 
 ```cpp
 gradient::GradientRamp::blend(ctx.leds[i], gradColour,
-                               gradient::BlendMode::SCREEN, 200);
+                               gradient::GradientBlendMode::SCREEN, 200);
 ```
 
 ### Memory

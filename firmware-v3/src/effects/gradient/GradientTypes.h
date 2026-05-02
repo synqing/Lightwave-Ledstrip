@@ -63,8 +63,14 @@ enum class InterpolationMode : uint8_t {
 
 /**
  * @brief How a gradient layer composites onto existing LED data
+ *
+ * Renamed 2026-05-01 (B7 disambiguation) from `BlendMode` to `GradientBlendMode`
+ * to eliminate name-namespace ambiguity with `lightwaveos::zones::BlendMode`
+ * (8 modes, used by ZoneComposer). The two enums are intentionally separate:
+ * gradient blending operates on a single layer's stops; zone blending composites
+ * full per-zone render buffers. Do NOT re-introduce `BlendMode` in this namespace.
  */
-enum class BlendMode : uint8_t {
+enum class GradientBlendMode : uint8_t {
     REPLACE = 0,  ///< Overwrite destination completely
     ADD,          ///< Additive blend (clamped at 255)
     SCREEN,       ///< Screen blend: 255 - ((255-a) * (255-b) >> 8)

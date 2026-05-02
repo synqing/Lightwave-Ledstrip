@@ -8,6 +8,8 @@ abstract: "Canonical command matrix for Zone Composer. Single source of truth ac
 
 **Hard rule (Captain's invariant).** No new UI, hardware, or marketing surface exposes a capability until the engine state, transport command, readback state, and regression test all agree.
 
+**Wire-format note (2026-05-02 migration LANDED).** All `zoneId` values on the wire (REST request bodies, REST path parameters, WebSocket payloads, SerialJSON payloads) are 1-indexed: valid values are `1`, `2`, `3`. Wire value `0` is RESERVED and rejected with INVALID_VALUE / 400. The 1-indexed wire format matches the user-facing Zone 1/2/3 labels. Internal C++ array indexing is unchanged (0..2); translation is performed once at the network boundary. All examples below use the post-migration 1-indexed format.
+
 **Status legend.**
 - ✅ — implemented + verified
 - ⚠️ — partial (works but missing validation, error path, or readback consistency)
@@ -131,3 +133,4 @@ abstract: "Canonical command matrix for Zone Composer. Single source of truth ac
 | Date | Author | Change |
 |------|--------|--------|
 | 2026-05-01 | Claude (Phase 0 B2) | Created. Single source of truth for Zone Composer command coverage. Drafted from 5-SSA context report + verification pass V1-V6 + Phase 0 B1 disposition decisions. |
+| 2026-05-02 | Claude (B2 wire-format migration) | Added wire-format note: zoneId migrated to 1-indexed across REST/WS/SerialJSON. Internal C++ indexing unchanged. |

@@ -96,14 +96,18 @@ ZoneSetEffectDecodeResult WsZonesCodec::decodeZoneSetEffect(JsonObjectConst root
         return result;
     }
     
-    // Extract zoneId (required, 0-2)
+    // Extract zoneId (required, 1-indexed wire format: 1..3)
+    // Wire-format note (2026-05-02 migration): zoneId is 1-indexed on the wire.
+    // We store the WIRE value here; the dispatching handler translates to the
+    // 0-indexed internal index via wireZoneIdToInternal() before calling
+    // ZoneComposer setters.
     if (!root["zoneId"].is<int>()) {
         snprintf(result.errorMsg, MAX_ERROR_MSG, "Missing required field 'zoneId'");
         return result;
     }
     int zoneId = root["zoneId"].as<int>();
-    if (zoneId < 0 || zoneId > 3) {
-        snprintf(result.errorMsg, MAX_ERROR_MSG, "zoneId out of range (0-3): %d", zoneId);
+    if (zoneId < 1 || zoneId > 3) {
+        snprintf(result.errorMsg, MAX_ERROR_MSG, "zoneId out of range (1-3): %d", zoneId);
         return result;
     }
     result.request.zoneId = static_cast<uint8_t>(zoneId);
@@ -147,14 +151,18 @@ ZoneSetBrightnessDecodeResult WsZonesCodec::decodeZoneSetBrightness(JsonObjectCo
         return result;
     }
     
-    // Extract zoneId (required, 0-2)
+    // Extract zoneId (required, 1-indexed wire format: 1..3)
+    // Wire-format note (2026-05-02 migration): zoneId is 1-indexed on the wire.
+    // We store the WIRE value here; the dispatching handler translates to the
+    // 0-indexed internal index via wireZoneIdToInternal() before calling
+    // ZoneComposer setters.
     if (!root["zoneId"].is<int>()) {
         snprintf(result.errorMsg, MAX_ERROR_MSG, "Missing required field 'zoneId'");
         return result;
     }
     int zoneId = root["zoneId"].as<int>();
-    if (zoneId < 0 || zoneId > 3) {
-        snprintf(result.errorMsg, MAX_ERROR_MSG, "zoneId out of range (0-3): %d", zoneId);
+    if (zoneId < 1 || zoneId > 3) {
+        snprintf(result.errorMsg, MAX_ERROR_MSG, "zoneId out of range (1-3): %d", zoneId);
         return result;
     }
     result.request.zoneId = static_cast<uint8_t>(zoneId);
@@ -194,14 +202,18 @@ ZoneSetSpeedDecodeResult WsZonesCodec::decodeZoneSetSpeed(JsonObjectConst root) 
         return result;
     }
     
-    // Extract zoneId (required, 0-2)
+    // Extract zoneId (required, 1-indexed wire format: 1..3)
+    // Wire-format note (2026-05-02 migration): zoneId is 1-indexed on the wire.
+    // We store the WIRE value here; the dispatching handler translates to the
+    // 0-indexed internal index via wireZoneIdToInternal() before calling
+    // ZoneComposer setters.
     if (!root["zoneId"].is<int>()) {
         snprintf(result.errorMsg, MAX_ERROR_MSG, "Missing required field 'zoneId'");
         return result;
     }
     int zoneId = root["zoneId"].as<int>();
-    if (zoneId < 0 || zoneId > 3) {
-        snprintf(result.errorMsg, MAX_ERROR_MSG, "zoneId out of range (0-3): %d", zoneId);
+    if (zoneId < 1 || zoneId > 3) {
+        snprintf(result.errorMsg, MAX_ERROR_MSG, "zoneId out of range (1-3): %d", zoneId);
         return result;
     }
     result.request.zoneId = static_cast<uint8_t>(zoneId);
@@ -241,14 +253,18 @@ ZoneSetPaletteDecodeResult WsZonesCodec::decodeZoneSetPalette(JsonObjectConst ro
         return result;
     }
     
-    // Extract zoneId (required, 0-2)
+    // Extract zoneId (required, 1-indexed wire format: 1..3)
+    // Wire-format note (2026-05-02 migration): zoneId is 1-indexed on the wire.
+    // We store the WIRE value here; the dispatching handler translates to the
+    // 0-indexed internal index via wireZoneIdToInternal() before calling
+    // ZoneComposer setters.
     if (!root["zoneId"].is<int>()) {
         snprintf(result.errorMsg, MAX_ERROR_MSG, "Missing required field 'zoneId'");
         return result;
     }
     int zoneId = root["zoneId"].as<int>();
-    if (zoneId < 0 || zoneId > 3) {
-        snprintf(result.errorMsg, MAX_ERROR_MSG, "zoneId out of range (0-3): %d", zoneId);
+    if (zoneId < 1 || zoneId > 3) {
+        snprintf(result.errorMsg, MAX_ERROR_MSG, "zoneId out of range (1-3): %d", zoneId);
         return result;
     }
     result.request.zoneId = static_cast<uint8_t>(zoneId);
@@ -292,14 +308,18 @@ ZoneSetBlendDecodeResult WsZonesCodec::decodeZoneSetBlend(JsonObjectConst root) 
         return result;
     }
     
-    // Extract zoneId (required, 0-2)
+    // Extract zoneId (required, 1-indexed wire format: 1..3)
+    // Wire-format note (2026-05-02 migration): zoneId is 1-indexed on the wire.
+    // We store the WIRE value here; the dispatching handler translates to the
+    // 0-indexed internal index via wireZoneIdToInternal() before calling
+    // ZoneComposer setters.
     if (!root["zoneId"].is<int>()) {
         snprintf(result.errorMsg, MAX_ERROR_MSG, "Missing required field 'zoneId'");
         return result;
     }
     int zoneId = root["zoneId"].as<int>();
-    if (zoneId < 0 || zoneId > 3) {
-        snprintf(result.errorMsg, MAX_ERROR_MSG, "zoneId out of range (0-3): %d", zoneId);
+    if (zoneId < 1 || zoneId > 3) {
+        snprintf(result.errorMsg, MAX_ERROR_MSG, "zoneId out of range (1-3): %d", zoneId);
         return result;
     }
     result.request.zoneId = static_cast<uint8_t>(zoneId);
@@ -398,14 +418,15 @@ ZonesUpdateDecodeResult WsZonesCodec::decodeZonesUpdate(JsonObjectConst root) {
         return result;
     }
     
-    // Extract zoneId (required)
+    // Extract zoneId (required, 1-indexed wire format: 1..3)
+    // Wire-format note (2026-05-02 migration): zoneId is 1-indexed on the wire.
     if (!root["zoneId"].is<int>()) {
         snprintf(result.errorMsg, MAX_ERROR_MSG, "Missing required field 'zoneId'");
         return result;
     }
     int zoneId = root["zoneId"].as<int>();
-    if (zoneId < 0 || zoneId > 3) {
-        snprintf(result.errorMsg, MAX_ERROR_MSG, "zoneId out of range (0-3): %d", zoneId);
+    if (zoneId < 1 || zoneId > 3) {
+        snprintf(result.errorMsg, MAX_ERROR_MSG, "zoneId out of range (1-3): %d", zoneId);
         return result;
     }
     result.request.zoneId = static_cast<uint8_t>(zoneId);
@@ -532,13 +553,25 @@ ZonesSetLayoutDecodeResult WsZonesCodec::decodeZonesSetLayout(JsonObjectConst ro
             return result;
         }
         
+        // Wire-format note (2026-05-02 migration): segment zoneId is 1-indexed
+        // on the wire. The handler translates to internal 0-indexed before
+        // calling ZoneComposer::setLayout(); validate range here.
+        int segZoneId = zoneObj["zoneId"].as<int>();
+        if (segZoneId < 1 || segZoneId > static_cast<int>(ZonesSetLayoutRequest::MAX_ZONES)) {
+            snprintf(result.errorMsg, MAX_ERROR_MSG,
+                     "zones[%u].zoneId out of range (1-%u): %d",
+                     result.request.zoneCount,
+                     ZonesSetLayoutRequest::MAX_ZONES, segZoneId);
+            return result;
+        }
+
         ZoneSegmentRequest& seg = result.request.zones[result.request.zoneCount];
-        seg.zoneId = static_cast<uint8_t>(zoneObj["zoneId"].as<int>());
+        seg.zoneId = static_cast<uint8_t>(segZoneId);
         seg.s1LeftStart = static_cast<uint8_t>(zoneObj["s1LeftStart"].as<int>());
         seg.s1LeftEnd = static_cast<uint8_t>(zoneObj["s1LeftEnd"].as<int>());
         seg.s1RightStart = static_cast<uint8_t>(zoneObj["s1RightStart"].as<int>());
         seg.s1RightEnd = static_cast<uint8_t>(zoneObj["s1RightEnd"].as<int>());
-        
+
         result.request.zoneCount++;
     }
     
@@ -560,25 +593,30 @@ ZonesSetLayoutDecodeResult WsZonesCodec::decodeZonesSetLayout(JsonObjectConst ro
 void WsZonesCodec::encodeZonesGet(const ::lightwaveos::zones::ZoneComposer& composer, const ::lightwaveos::actors::RendererActor* renderer, JsonObject& data) {
     data["enabled"] = composer.isEnabled();
     data["zoneCount"] = composer.getZoneCount();
-    
-    // Include segment definitions
+
+    // Wire-format note (2026-05-02 migration): every zoneId emitted on the wire
+    // is 1-indexed (1..3). Internal storage (ZoneSegment.zoneId, array index i)
+    // stays 0-indexed; convert at the boundary by adding 1.
     JsonArray segmentsArray = data["segments"].to<JsonArray>();
     const zones::ZoneSegment* segments = composer.getZoneConfig();
     for (uint8_t i = 0; i < composer.getZoneCount(); i++) {
         JsonObject seg = segmentsArray.add<JsonObject>();
-        seg["zoneId"] = segments[i].zoneId;
+        seg["zoneId"] = static_cast<uint8_t>(segments[i].zoneId + 1);
         seg["s1LeftStart"] = segments[i].s1LeftStart;
         seg["s1LeftEnd"] = segments[i].s1LeftEnd;
         seg["s1RightStart"] = segments[i].s1RightStart;
         seg["s1RightEnd"] = segments[i].s1RightEnd;
         seg["totalLeds"] = segments[i].totalLeds;
     }
-    
-    // Include zone state
+
+    // Include zone state — `id` field carries the 1-indexed wire zoneId
+    // (internal `i` is 0..MAX_ZONES-1; wire value is `i + 1`).
     JsonArray zones = data["zones"].to<JsonArray>();
     for (uint8_t i = 0; i < composer.getZoneCount(); i++) {
         JsonObject zone = zones.add<JsonObject>();
-        zone["id"] = i;
+        const uint8_t wireZoneId = static_cast<uint8_t>(i + 1);
+        zone["id"] = wireZoneId;
+        zone["zoneId"] = wireZoneId;
         zone["enabled"] = composer.isZoneEnabled(i);
         zone["effectId"] = composer.getZoneEffect(i);
         if (renderer) {
@@ -609,9 +647,13 @@ void WsZonesCodec::encodeZoneEnabledChanged(bool enabled, JsonObject& data) {
     data["enabled"] = enabled;
 }
 
+// Wire-format note (2026-05-02 migration): all per-zone encoder functions
+// receive the INTERNAL 0-indexed zoneId from the handler and emit it on the
+// wire as 1-indexed (internal + 1). All ZoneComposer getters use the internal
+// index unchanged.
 void WsZonesCodec::encodeZonesChanged(uint8_t zoneId, const char* const updatedFields[], uint8_t updatedCount, const ::lightwaveos::zones::ZoneComposer& composer, const ::lightwaveos::actors::RendererActor* renderer, JsonObject& data) {
     (void)renderer;
-    data["zoneId"] = zoneId;
+    data["zoneId"] = static_cast<uint8_t>(zoneId + 1);
     JsonArray updated = data["updated"].to<JsonArray>();
     for (uint8_t i = 0; i < updatedCount; i++) {
         updated.add(updatedFields[i]);
@@ -626,7 +668,7 @@ void WsZonesCodec::encodeZonesChanged(uint8_t zoneId, const char* const updatedF
 }
 
 void WsZonesCodec::encodeZonesEffectChanged(uint8_t zoneId, EffectId effectId, const ::lightwaveos::zones::ZoneComposer& composer, const ::lightwaveos::actors::RendererActor* renderer, JsonObject& data) {
-    data["zoneId"] = zoneId;
+    data["zoneId"] = static_cast<uint8_t>(zoneId + 1);
     JsonObject current = data["current"].to<JsonObject>();
     current["effectId"] = effectId;
     current["effectName"] = renderer ? renderer->getEffectName(effectId) : "";
@@ -638,7 +680,7 @@ void WsZonesCodec::encodeZonesEffectChanged(uint8_t zoneId, EffectId effectId, c
 }
 
 void WsZonesCodec::encodeZonePaletteChanged(uint8_t zoneId, uint8_t paletteId, const ::lightwaveos::zones::ZoneComposer& composer, const ::lightwaveos::actors::RendererActor* renderer, JsonObject& data) {
-    data["zoneId"] = zoneId;
+    data["zoneId"] = static_cast<uint8_t>(zoneId + 1);
     JsonObject current = data["current"].to<JsonObject>();
     current["effectId"] = composer.getZoneEffect(zoneId);
     current["effectName"] = renderer ? renderer->getEffectName(composer.getZoneEffect(zoneId)) : "";
@@ -650,7 +692,7 @@ void WsZonesCodec::encodeZonePaletteChanged(uint8_t zoneId, uint8_t paletteId, c
 }
 
 void WsZonesCodec::encodeZoneBlendChanged(uint8_t zoneId, uint8_t blendMode, const ::lightwaveos::zones::ZoneComposer& composer, const ::lightwaveos::actors::RendererActor* renderer, JsonObject& data) {
-    data["zoneId"] = zoneId;
+    data["zoneId"] = static_cast<uint8_t>(zoneId + 1);
     JsonObject current = data["current"].to<JsonObject>();
     current["effectId"] = composer.getZoneEffect(zoneId);
     current["effectName"] = renderer ? renderer->getEffectName(composer.getZoneEffect(zoneId)) : "";

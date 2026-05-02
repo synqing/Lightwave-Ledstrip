@@ -429,6 +429,12 @@ commands:
     consumers: [ios]
 
   # ── Zones ──────────────────────────────────────────────────────────────
+  # Wire-format note (2026-05-02 migration): zoneId is 1-indexed across REST,
+  # WebSocket, and SerialJSON. Valid wire values are 1, 2, 3. Wire value 0
+  # is RESERVED and rejected with INVALID_VALUE. The 1-indexed wire format
+  # matches the user-facing Zone 1/2/3 labels (HARD RULE per
+  # feedback_zone_numbering.md). Internal C++ array indexing remains 0..2;
+  # translation is performed at the network boundary only.
   zone.enable:
     direction: "client -> K1"
     description: "Enable or disable the zone system globally"
@@ -441,9 +447,9 @@ commands:
 
   zone.enableZone:
     direction: "client -> K1"
-    description: "Enable or disable an individual zone"
+    description: "Enable or disable an individual zone (zoneId is 1-indexed)"
     request:
-      zoneId: { type: uint8, required: true }
+      zoneId: { type: uint8, required: true, min: 1, max: 3 }
       enabled: { type: bool, required: true }
       requestId: { type: string, optional: true }
     response: "none"
@@ -452,9 +458,9 @@ commands:
 
   zone.setEffect:
     direction: "client -> K1"
-    description: "Set effect for a specific zone"
+    description: "Set effect for a specific zone (zoneId is 1-indexed)"
     request:
-      zoneId: { type: uint8, required: true }
+      zoneId: { type: uint8, required: true, min: 1, max: 3 }
       effectId: { type: uint16, required: true }
       requestId: { type: string, optional: true }
     response:
@@ -464,9 +470,9 @@ commands:
 
   zone.setBrightness:
     direction: "client -> K1"
-    description: "Set brightness for a specific zone"
+    description: "Set brightness for a specific zone (zoneId is 1-indexed)"
     request:
-      zoneId: { type: uint8, required: true }
+      zoneId: { type: uint8, required: true, min: 1, max: 3 }
       brightness: { type: uint8, required: true }
       requestId: { type: string, optional: true }
     response:
@@ -476,9 +482,9 @@ commands:
 
   zone.setSpeed:
     direction: "client -> K1"
-    description: "Set speed for a specific zone"
+    description: "Set speed for a specific zone (zoneId is 1-indexed)"
     request:
-      zoneId: { type: uint8, required: true }
+      zoneId: { type: uint8, required: true, min: 1, max: 3 }
       speed: { type: uint8, required: true }
       requestId: { type: string, optional: true }
     response:
@@ -488,9 +494,9 @@ commands:
 
   zone.setPalette:
     direction: "client -> K1"
-    description: "Set palette for a specific zone"
+    description: "Set palette for a specific zone (zoneId is 1-indexed)"
     request:
-      zoneId: { type: uint8, required: true }
+      zoneId: { type: uint8, required: true, min: 1, max: 3 }
       paletteId: { type: uint8, required: true }
       requestId: { type: string, optional: true }
     response:
@@ -500,9 +506,9 @@ commands:
 
   zone.setBlend:
     direction: "client -> K1"
-    description: "Set blend mode for a specific zone"
+    description: "Set blend mode for a specific zone (zoneId is 1-indexed)"
     request:
-      zoneId: { type: uint8, required: true }
+      zoneId: { type: uint8, required: true, min: 1, max: 3 }
       blendMode: { type: uint8, required: true }
       requestId: { type: string, optional: true }
     response:
@@ -539,15 +545,15 @@ commands:
       data:
         enabled: bool
         zoneCount: uint8
-        segments: "array of zone segment definitions"
-        zones: "array of zone runtime state"
+        segments: "array of zone segment definitions (zoneId 1-indexed)"
+        zones: "array of zone runtime state (each row carries 1-indexed zoneId)"
     consumers: [tab5]
 
   zones.update:
     direction: "client -> K1"
-    description: "Update multiple zone properties at once"
+    description: "Update multiple zone properties at once (zoneId is 1-indexed)"
     request:
-      zoneId: { type: uint8, required: true }
+      zoneId: { type: uint8, required: true, min: 1, max: 3 }
       effectId: { type: uint16, optional: true }
       brightness: { type: uint8, optional: true }
       speed: { type: uint8, optional: true }
@@ -557,15 +563,15 @@ commands:
     response:
       type: "zones.changed"
       data:
-        zoneId: uint8
+        zoneId: { type: uint8, min: 1, max: 3 }
         updated: "array of field names"
     consumers: [tab5]
 
   zones.setEffect:
     direction: "client -> K1"
-    description: "Set effect for a zone (namespaced alias of zone.setEffect)"
+    description: "Set effect for a zone (namespaced alias of zone.setEffect, zoneId is 1-indexed)"
     request:
-      zoneId: { type: uint8, required: true }
+      zoneId: { type: uint8, required: true, min: 1, max: 3 }
       effectId: { type: uint16, required: true }
       requestId: { type: string, optional: true }
     response:
@@ -574,9 +580,9 @@ commands:
 
   zones.setLayout:
     direction: "client -> K1"
-    description: "Set zone segment layout"
+    description: "Set zone segment layout (each segment carries 1-indexed zoneId in 1..3)"
     request:
-      zones: "array of {zoneId, s1LeftStart, s1LeftEnd, s1RightStart, s1RightEnd}"
+      zones: "array of {zoneId (1..3), s1LeftStart, s1LeftEnd, s1RightStart, s1RightEnd}"
       requestId: { type: string, optional: true }
     response:
       type: "zones.layoutChanged"
@@ -1935,7 +1941,7 @@ broadcasts:
     trigger: "zone.enableZone command"
     type: "zone.zoneEnabledChanged"
     fields:
-      zoneId: uint8
+      zoneId: { type: uint8, min: 1, max: 3 }
       enabled: bool
     consumers: [tab5]
 

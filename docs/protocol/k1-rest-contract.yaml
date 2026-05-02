@@ -385,18 +385,82 @@ endpoints:
     description: "Set transition config"
 
   # ── Zones ──────────────────────────────────────────────────────────────
+  # Wire-format note (2026-05-02 migration): zoneId is 1-indexed across REST,
+  # WebSocket, and SerialJSON. Valid wire values are 1, 2, 3. Wire value 0
+  # is RESERVED and rejected with HTTP 400 INVALID_VALUE. The path-parameter
+  # `:zoneId` accepts only [1-3]; out-of-range yields 404 NOT_FOUND. The
+  # 1-indexed wire format matches the user-facing Zone 1/2/3 labels (HARD
+  # RULE per feedback_zone_numbering.md). Internal C++ array indexing
+  # remains 0..2; translation is performed at the network boundary only.
   /api/v1/zones:
     method: GET
-    description: "Get full zone state"
+    description: "Get full zone state (zone rows include 1-indexed zoneId)"
     consumers: [tab5, ios]
 
   /api/v1/zones/layout:
     method: POST
-    description: "Set zone layout (segment definitions)"
+    description: "Set zone layout (each segment carries 1-indexed zoneId in 1..3)"
+    request_body:
+      zones: "array of {zoneId (1..3), s1LeftStart, s1LeftEnd, s1RightStart, s1RightEnd}"
 
   /api/v1/zones/enabled:
     method: POST
     description: "Enable/disable zone system"
+
+  # Per-zone state setters (zoneId path param is 1-indexed: 1, 2, or 3)
+  /api/v1/zones/{zoneId}:
+    method: GET
+    description: "Get state for one zone (zoneId 1..3)"
+    path_params:
+      zoneId: { type: uint8, min: 1, max: 3 }
+
+  /api/v1/zones/{zoneId}/effect:
+    method: POST
+    description: "Set effect for one zone (zoneId 1..3)"
+    path_params:
+      zoneId: { type: uint8, min: 1, max: 3 }
+    request_body:
+      effectId: uint16
+
+  /api/v1/zones/{zoneId}/brightness:
+    method: POST
+    description: "Set brightness for one zone (zoneId 1..3)"
+    path_params:
+      zoneId: { type: uint8, min: 1, max: 3 }
+    request_body:
+      brightness: uint8
+
+  /api/v1/zones/{zoneId}/speed:
+    method: POST
+    description: "Set speed for one zone (zoneId 1..3, speed 1..100)"
+    path_params:
+      zoneId: { type: uint8, min: 1, max: 3 }
+    request_body:
+      speed: uint8
+
+  /api/v1/zones/{zoneId}/palette:
+    method: POST
+    description: "Set palette for one zone (zoneId 1..3)"
+    path_params:
+      zoneId: { type: uint8, min: 1, max: 3 }
+    request_body:
+      paletteId: uint8
+
+  /api/v1/zones/{zoneId}/blend:
+    method: POST
+    description: "Set blend mode for one zone (zoneId 1..3, blendMode 0..7)"
+    path_params:
+      zoneId: { type: uint8, min: 1, max: 3 }
+    request_body:
+      blendMode: uint8
+
+  /api/v1/zones/{zoneId}/enabled:
+    method: POST
+    description: "Enable/disable one zone (zoneId 1..3)"
+    path_params:
+      zoneId: { type: uint8, min: 1, max: 3 }
+    request_body:
+      enabled: bool
 
   /api/v1/zones/config:
     method: GET

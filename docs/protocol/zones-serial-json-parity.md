@@ -41,7 +41,7 @@ Captain's directive: order by leverage, do not implement blindly.
 
 **ZoneComposer method:** `setLayout(const ZoneSegment* segments, uint8_t count)` with `validateLayout()` (~50 lines of geometric/symmetry checks).
 
-**Implementation shape (proposed for Phase 2; **post-migration** wire format with `zoneId` 1-indexed per Captain's 2026-05-02 directive):**
+**Implementation shape (proposed for Phase 2; uses the 1-indexed wire format mandated by Captain's 2026-05-02 directive):**
 ```json
 {
   "type": "zones.setLayout",
@@ -55,7 +55,7 @@ Captain's directive: order by leverage, do not implement blindly.
 }
 ```
 
-> **Wire-format migration pending.** Firmware currently accepts `zoneId` as a 0-indexed array index (legacy from C++ internals). The 2026-05-02 doctrine requires 1-indexed wire format to match user-facing Zone 1/2/3 labels. Migration is a separate firmware change item logged in the program plan; until it lands, callers must send `zoneId` 1 less than the displayed Zone number. **All examples in this document use the post-migration 1-indexed format.**
+> **Wire-format migration LANDED 2026-05-02.** Firmware now accepts `zoneId` as 1-indexed (1, 2, 3) on every transport (REST, WebSocket, SerialJSON). Internal C++ array indices remain 0..2; translation happens once at the network boundary. Out-of-range wire values (0, 4+) are rejected with INVALID_VALUE. **All examples in this document use the canonical 1-indexed format.**
 
 Mirror response shape from `zones.setLayout` WS handler.
 
@@ -97,9 +97,13 @@ Mirror response shape from `zones.setLayout` WS handler.
 
 ### Gap 5 — `getZoneConfig` / readback (MEDIUM leverage)
 
-**Why this is #5.** SerialJSON has `zones.list` for current per-zone state, but has no readback that returns the zone SEGMENT GEOMETRY (the `ZoneSegment` array — s1LeftStart/End, s1RightStart/End per zone). After `setLayout` lands (Gap 1), agents need to verify the layout took effect.
+**Why this is #5.** SerialJSON has `zones.list` for current per-zone state. After `setLayout` lands (Gap 1), agents need to verify the layout took effect.
 
-**Existing transports:** REST `GET /api/v1/zones` includes the segment data. WS `zones.get` includes layout. SerialJSON `zones.list` does NOT include segment geometry — only per-zone effect/brightness/speed/palette/blend (verified `SerialJsonGateway.cpp:320-339`).
+**Existing transports:** REST `GET /api/v1/zones` includes the segment data. WS `zones.get` includes layout. SerialJSON `zones.list` returns per-zone effect/brightness/speed/palette/blend/enabled but NOT yet the segment geometry (s1LeftStart/End, s1RightStart/End per zone).
+
+**Status update 2026-05-02 (B2 migration):**
+- Field-level row parity gap CLOSED — SerialJSON `zones.list` now emits `zoneId` (1-indexed) and `effectName` (string) per row, matching REST `GET /api/v1/zones`.
+- Segment-geometry parity (the `segments[]` array) remains a Phase 2 task.
 
 **Implementation shape (Phase 2, after Gap 1):**
 - Either extend `zones.list` to include segment geometry in the response (preferred — single command)
@@ -179,3 +183,4 @@ After step 6, every effect's already-declared parameters become per-zone-tunable
 | Date | Author | Change |
 |------|--------|--------|
 | 2026-05-01 | Claude (Phase 0 B5) | Created. SerialJSON parity inventory ordered per Captain's directive. Gap 6 (zone.effects.parameters.set) marked as Phase 1 keystone gated on D-1 — not low-leverage, deferred for architectural reason. |
+| 2026-05-02 | Claude (B2 wire-format migration) | zoneId migration LANDED — wire format now 1-indexed across REST/WS/SerialJSON; per-row `zoneId` + `effectName` added to SerialJSON `zones.list` (Gap 5 row-parity portion closed; segment-geometry portion still Phase 2). |

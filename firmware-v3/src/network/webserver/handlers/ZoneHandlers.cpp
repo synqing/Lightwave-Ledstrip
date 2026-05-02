@@ -30,12 +30,14 @@ void ZoneHandlers::handleList(AsyncWebServerRequest* request, lightwaveos::actor
         data["enabled"] = composer->isEnabled();
         data["zoneCount"] = composer->getZoneCount();
 
-        // Include segment definitions
+        // Wire-format note (2026-05-02 migration): every zoneId emitted on the
+        // wire is 1-indexed (1..3). Internal C++ storage stays 0-indexed; the
+        // boundary translation is `wire = internal + 1`.
         JsonArray segmentsArray = data["segments"].to<JsonArray>();
         const lightwaveos::zones::ZoneSegment* segments = composer->getZoneConfig();
         for (uint8_t i = 0; i < composer->getZoneCount(); i++) {
             JsonObject seg = segmentsArray.add<JsonObject>();
-            seg["zoneId"] = segments[i].zoneId;
+            seg["zoneId"] = static_cast<uint8_t>(segments[i].zoneId + 1);
             seg["s1LeftStart"] = segments[i].s1LeftStart;
             seg["s1LeftEnd"] = segments[i].s1LeftEnd;
             seg["s1RightStart"] = segments[i].s1RightStart;
@@ -46,7 +48,9 @@ void ZoneHandlers::handleList(AsyncWebServerRequest* request, lightwaveos::actor
         JsonArray zones = data["zones"].to<JsonArray>();
         for (uint8_t i = 0; i < composer->getZoneCount(); i++) {
             JsonObject zone = zones.add<JsonObject>();
-            zone["id"] = i;
+            const uint8_t wireZoneId = static_cast<uint8_t>(i + 1);
+            zone["id"] = wireZoneId;
+            zone["zoneId"] = wireZoneId;
             zone["enabled"] = composer->isZoneEnabled(i);
             zone["effectId"] = composer->getZoneEffect(i);
             // SAFE: Uses cached state (no cross-core access)
@@ -114,9 +118,22 @@ void ZoneHandlers::handleLayout(AsyncWebServerRequest* request, uint8_t* data, s
             return;
         }
         
-        // DEFENSIVE CHECK: Validate zoneId before using as array index
-        uint8_t rawZoneId = zoneObj["zoneId"];
-        segments[i].zoneId = lightwaveos::network::validateZoneIdInRequest(rawZoneId);
+        // Wire-format migration (2026-05-02): segment zoneId on the wire is
+        // 1-indexed (1..3). Translate to 0-indexed internal storage which is
+        // what ZoneSegment.zoneId expects (matches the predefined ZONE_*_CONFIG
+        // arrays in ZoneDefinition.h).
+        uint8_t rawWireZoneId = zoneObj["zoneId"];
+        bool segZoneIdValid = false;
+        uint8_t internalSegZoneId = lightwaveos::network::wireZoneIdToInternal(
+            rawWireZoneId, segZoneIdValid);
+        if (!segZoneIdValid) {
+            sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                              ErrorCodes::INVALID_VALUE,
+                              "Segment zoneId out of range (must be 1-3)",
+                              "zoneId");
+            return;
+        }
+        segments[i].zoneId = internalSegZoneId;
         
         // DEFENSIVE CHECK: Validate LED indices against STRIP_LENGTH
         uint8_t s1LeftStart = zoneObj["s1LeftStart"];
@@ -173,16 +190,21 @@ void ZoneHandlers::handleGet(AsyncWebServerRequest* request, lightwaveos::actors
         return;
     }
 
+    // Wire-format migration (2026-05-02): path :zoneId is 1-indexed.
+    // extractZoneIdFromPath() now performs the wire→internal translation and
+    // returns 255 (sentinel) when the wire value is outside [1..3].
     uint8_t zoneId = extractZoneIdFromPath(request);
 
     if (zoneId >= composer->getZoneCount()) {
         sendErrorResponse(request, HttpStatus::NOT_FOUND,
-                          ErrorCodes::OUT_OF_RANGE, "Zone ID out of range");
+                          ErrorCodes::OUT_OF_RANGE, "Zone ID out of range (must be 1-3)");
         return;
     }
 
     sendSuccessResponse(request, [composer, zoneId, &cachedState](JsonObject& data) {
-        data["id"] = zoneId;
+        const uint8_t wireZoneId = static_cast<uint8_t>(zoneId + 1);
+        data["id"] = wireZoneId;
+        data["zoneId"] = wireZoneId;
         data["enabled"] = composer->isZoneEnabled(zoneId);
         EffectId effectId = composer->getZoneEffect(zoneId);
         data["effectId"] = effectId;
@@ -211,10 +233,12 @@ void ZoneHandlers::handleSetEffect(AsyncWebServerRequest* request, uint8_t* data
         return;
     }
 
+    // extractZoneIdFromPath() returns the internal 0-indexed zone index after
+    // wire→internal translation, or 255 if the wire path digit is out of range.
     uint8_t zoneId = extractZoneIdFromPath(request);
     if (zoneId >= composer->getZoneCount()) {
         sendErrorResponse(request, HttpStatus::NOT_FOUND,
-                          ErrorCodes::OUT_OF_RANGE, "Zone ID out of range");
+                          ErrorCodes::OUT_OF_RANGE, "Zone ID out of range (must be 1-3)");
         return;
     }
 
@@ -240,7 +264,7 @@ void ZoneHandlers::handleSetEffect(AsyncWebServerRequest* request, uint8_t* data
     composer->setZoneEffect(zoneId, effectId);
 
     sendSuccessResponse(request, [zoneId, effectId, &cachedState](JsonObject& respData) {
-        respData["zoneId"] = zoneId;
+        respData["zoneId"] = static_cast<uint8_t>(zoneId + 1);
         respData["effectId"] = effectId;
         // SAFE: Uses cached state (no cross-core access)
         if (const char* name = cachedState.findEffectName(effectId)) {
@@ -261,7 +285,7 @@ void ZoneHandlers::handleSetBrightness(AsyncWebServerRequest* request, uint8_t* 
     uint8_t zoneId = extractZoneIdFromPath(request);
     if (zoneId >= composer->getZoneCount()) {
         sendErrorResponse(request, HttpStatus::NOT_FOUND,
-                          ErrorCodes::OUT_OF_RANGE, "Zone ID out of range");
+                          ErrorCodes::OUT_OF_RANGE, "Zone ID out of range (must be 1-3)");
         return;
     }
 
@@ -272,7 +296,7 @@ void ZoneHandlers::handleSetBrightness(AsyncWebServerRequest* request, uint8_t* 
     composer->setZoneBrightness(zoneId, brightness);
 
     sendSuccessResponse(request, [zoneId, brightness](JsonObject& respData) {
-        respData["zoneId"] = zoneId;
+        respData["zoneId"] = static_cast<uint8_t>(zoneId + 1);
         respData["brightness"] = brightness;
     });
 
@@ -289,7 +313,7 @@ void ZoneHandlers::handleSetSpeed(AsyncWebServerRequest* request, uint8_t* data,
     uint8_t zoneId = extractZoneIdFromPath(request);
     if (zoneId >= composer->getZoneCount()) {
         sendErrorResponse(request, HttpStatus::NOT_FOUND,
-                          ErrorCodes::OUT_OF_RANGE, "Zone ID out of range");
+                          ErrorCodes::OUT_OF_RANGE, "Zone ID out of range (must be 1-3)");
         return;
     }
 
@@ -301,7 +325,7 @@ void ZoneHandlers::handleSetSpeed(AsyncWebServerRequest* request, uint8_t* data,
     composer->setZoneSpeed(zoneId, speed);
 
     sendSuccessResponse(request, [zoneId, speed](JsonObject& respData) {
-        respData["zoneId"] = zoneId;
+        respData["zoneId"] = static_cast<uint8_t>(zoneId + 1);
         respData["speed"] = speed;
     });
 
@@ -318,7 +342,7 @@ void ZoneHandlers::handleSetPalette(AsyncWebServerRequest* request, uint8_t* dat
     uint8_t zoneId = extractZoneIdFromPath(request);
     if (zoneId >= composer->getZoneCount()) {
         sendErrorResponse(request, HttpStatus::NOT_FOUND,
-                          ErrorCodes::OUT_OF_RANGE, "Zone ID out of range");
+                          ErrorCodes::OUT_OF_RANGE, "Zone ID out of range (must be 1-3)");
         return;
     }
 
@@ -337,7 +361,7 @@ void ZoneHandlers::handleSetPalette(AsyncWebServerRequest* request, uint8_t* dat
     composer->setZonePalette(zoneId, safe_palette);
 
     sendSuccessResponse(request, [zoneId, safe_palette](JsonObject& respData) {
-        respData["zoneId"] = zoneId;
+        respData["zoneId"] = static_cast<uint8_t>(zoneId + 1);
         respData["paletteId"] = safe_palette;
         respData["paletteName"] = MasterPaletteNames[safe_palette];
     });
@@ -355,7 +379,7 @@ void ZoneHandlers::handleSetBlend(AsyncWebServerRequest* request, uint8_t* data,
     uint8_t zoneId = extractZoneIdFromPath(request);
     if (zoneId >= composer->getZoneCount()) {
         sendErrorResponse(request, HttpStatus::NOT_FOUND,
-                          ErrorCodes::OUT_OF_RANGE, "Zone ID out of range");
+                          ErrorCodes::OUT_OF_RANGE, "Zone ID out of range (must be 1-3)");
         return;
     }
 
@@ -368,7 +392,7 @@ void ZoneHandlers::handleSetBlend(AsyncWebServerRequest* request, uint8_t* data,
     composer->setZoneBlendMode(zoneId, blendMode);
 
     sendSuccessResponse(request, [zoneId, blendModeVal, blendMode](JsonObject& respData) {
-        respData["zoneId"] = zoneId;
+        respData["zoneId"] = static_cast<uint8_t>(zoneId + 1);
         respData["blendMode"] = blendModeVal;
         respData["blendModeName"] = lightwaveos::zones::getBlendModeName(blendMode);
     });
@@ -386,7 +410,7 @@ void ZoneHandlers::handleSetEnabled(AsyncWebServerRequest* request, uint8_t* dat
     uint8_t zoneId = extractZoneIdFromPath(request);
     if (zoneId >= composer->getZoneCount()) {
         sendErrorResponse(request, HttpStatus::NOT_FOUND,
-                          ErrorCodes::OUT_OF_RANGE, "Zone ID out of range");
+                          ErrorCodes::OUT_OF_RANGE, "Zone ID out of range (must be 1-3)");
         return;
     }
 
@@ -397,7 +421,7 @@ void ZoneHandlers::handleSetEnabled(AsyncWebServerRequest* request, uint8_t* dat
     composer->setZoneEnabled(zoneId, enabled);
 
     sendSuccessResponse(request, [zoneId, enabled](JsonObject& respData) {
-        respData["zoneId"] = zoneId;
+        respData["zoneId"] = static_cast<uint8_t>(zoneId + 1);
         respData["enabled"] = enabled;
     });
 
@@ -405,17 +429,24 @@ void ZoneHandlers::handleSetEnabled(AsyncWebServerRequest* request, uint8_t* dat
 }
 
 uint8_t ZoneHandlers::extractZoneIdFromPath(AsyncWebServerRequest* request) {
-    // Extract zone ID from path like /api/v1/zones/2/effect
+    // Extract zone ID from path like /api/v1/zones/2/effect.
+    // Wire-format migration (2026-05-02): the path digit is a 1-indexed wire
+    // zoneId. Translate to internal 0-indexed and reject out-of-range with the
+    // sentinel value 255 (callers report HTTP 404 NOT_FOUND).
     String path = request->url();
-    // Find the digit after "/zones/"
     int zonesIdx = path.indexOf("/zones/");
     if (zonesIdx >= 0 && zonesIdx + 7 < path.length()) {
         char digit = path.charAt(zonesIdx + 7);
-        if (digit >= '0' && digit <= '9') {
-            return digit - '0';
+        if (digit >= '1' && digit <= '9') {  // explicit reject of '0'
+            uint8_t wireZoneId = static_cast<uint8_t>(digit - '0');
+            bool valid = false;
+            uint8_t internalZoneId = lightwaveos::network::wireZoneIdToInternal(wireZoneId, valid);
+            if (valid) {
+                return internalZoneId;
+            }
         }
     }
-    return 255;  // Invalid
+    return 255;  // Invalid (out of range or unparsable)
 }
 
 // ============================================================================

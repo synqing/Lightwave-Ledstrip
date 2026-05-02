@@ -960,14 +960,14 @@ void V1ApiRoutes::registerRoutes(
     );
 
     // Zone regex routes - GET /api/v1/zones/:id
-    registry.onGetRegex("^\\/api\\/v1\\/zones\\/([0-3])$", [ctx, server, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+    registry.onGetRegex("^\\/api\\/v1\\/zones\\/([1-3])$", [ctx, server, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
         handlers::ZoneHandlers::handleGet(request, ctx.orchestrator, server->getCachedRendererState(), ctx.zoneComposer);
     });
 
     // Zone regex routes - POST /api/v1/zones/:id/effect
-    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([0-3])\\/effect$",
+    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([1-3])\\/effect$",
         [](AsyncWebServerRequest* request) {},
         nullptr,
         [ctx, server, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
@@ -978,7 +978,7 @@ void V1ApiRoutes::registerRoutes(
     );
 
     // Zone regex routes - POST /api/v1/zones/:id/brightness
-    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([0-3])\\/brightness$",
+    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([1-3])\\/brightness$",
         [](AsyncWebServerRequest* request) {},
         nullptr,
         [ctx, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
@@ -989,7 +989,7 @@ void V1ApiRoutes::registerRoutes(
     );
 
     // Zone regex routes - POST /api/v1/zones/:id/speed
-    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([0-3])\\/speed$",
+    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([1-3])\\/speed$",
         [](AsyncWebServerRequest* request) {},
         nullptr,
         [ctx, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
@@ -1000,7 +1000,7 @@ void V1ApiRoutes::registerRoutes(
     );
 
     // Zone regex routes - POST /api/v1/zones/:id/palette
-    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([0-3])\\/palette$",
+    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([1-3])\\/palette$",
         [](AsyncWebServerRequest* request) {},
         nullptr,
         [ctx, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
@@ -1011,7 +1011,7 @@ void V1ApiRoutes::registerRoutes(
     );
 
     // Zone regex routes - POST /api/v1/zones/:id/blend
-    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([0-3])\\/blend$",
+    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([1-3])\\/blend$",
         [](AsyncWebServerRequest* request) {},
         nullptr,
         [ctx, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
@@ -1022,7 +1022,7 @@ void V1ApiRoutes::registerRoutes(
     );
 
     // Zone regex routes - POST /api/v1/zones/:id/enabled
-    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([0-3])\\/enabled$",
+    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([1-3])\\/enabled$",
         [](AsyncWebServerRequest* request) {},
         nullptr,
         [ctx, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
@@ -1115,64 +1115,86 @@ void V1ApiRoutes::registerRoutes(
 
     // ==================== Zone Audio Config Routes (Phase 2b.1) ====================
 
-    // GET /api/v1/zones/:id/audio - Get zone audio config
-    registry.onGetRegex("^\\/api\\/v1\\/zones\\/([0-3])\\/audio$", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+    // GET /api/v1/zones/:zoneId/audio - Get zone audio config
+    // Wire-format migration (2026-05-02): path :zoneId is 1-indexed (1..3);
+    // regex now restricts to [1-3]. Internal index is path-digit minus 1.
+    registry.onGetRegex("^\\/api\\/v1\\/zones\\/([1-3])\\/audio$", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        // Extract zone ID from URL
         String path = request->url();
         int zonesIdx = path.indexOf("/zones/");
-        uint8_t zoneId = (zonesIdx >= 0 && zonesIdx + 7 < path.length())
-            ? path.charAt(zonesIdx + 7) - '0'
-            : 255;
+        uint8_t zoneId = 255;
+        if (zonesIdx >= 0 && zonesIdx + 7 < path.length()) {
+            char d = path.charAt(zonesIdx + 7);
+            if (d >= '1' && d <= '9') {
+                bool ok = false;
+                zoneId = lightwaveos::network::wireZoneIdToInternal(static_cast<uint8_t>(d - '0'), ok);
+                if (!ok) zoneId = 255;
+            }
+        }
         handlers::ZoneHandlers::handleAudioConfigGet(request, zoneId, ctx.zoneComposer);
     });
 
-    // POST /api/v1/zones/:id/audio - Set zone audio config
-    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([0-3])\\/audio$",
+    // POST /api/v1/zones/:zoneId/audio - Set zone audio config
+    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([1-3])\\/audio$",
         [](AsyncWebServerRequest* request) {},
         nullptr,
         [ctx, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
-            // Extract zone ID from URL
             String path = request->url();
             int zonesIdx = path.indexOf("/zones/");
-            uint8_t zoneId = (zonesIdx >= 0 && zonesIdx + 7 < path.length())
-                ? path.charAt(zonesIdx + 7) - '0'
-                : 255;
+            uint8_t zoneId = 255;
+            if (zonesIdx >= 0 && zonesIdx + 7 < path.length()) {
+                char d = path.charAt(zonesIdx + 7);
+                if (d >= '1' && d <= '9') {
+                    bool ok = false;
+                    zoneId = lightwaveos::network::wireZoneIdToInternal(static_cast<uint8_t>(d - '0'), ok);
+                    if (!ok) zoneId = 255;
+                }
+            }
             handlers::ZoneHandlers::handleAudioConfigSet(request, data, len, zoneId, ctx.zoneComposer, broadcastZoneState);
         }
     );
 
     // ==================== Zone Beat Trigger Routes (Phase 2b.2) ====================
 
-    // GET /api/v1/zones/:id/beat-trigger - Get zone beat trigger config
-    registry.onGetRegex("^\\/api\\/v1\\/zones\\/([0-3])\\/beat-trigger$", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+    // GET /api/v1/zones/:zoneId/beat-trigger - Get zone beat trigger config
+    registry.onGetRegex("^\\/api\\/v1\\/zones\\/([1-3])\\/beat-trigger$", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        // Extract zone ID from URL
         String path = request->url();
         int zonesIdx = path.indexOf("/zones/");
-        uint8_t zoneId = (zonesIdx >= 0 && zonesIdx + 7 < path.length())
-            ? path.charAt(zonesIdx + 7) - '0'
-            : 255;
+        uint8_t zoneId = 255;
+        if (zonesIdx >= 0 && zonesIdx + 7 < path.length()) {
+            char d = path.charAt(zonesIdx + 7);
+            if (d >= '1' && d <= '9') {
+                bool ok = false;
+                zoneId = lightwaveos::network::wireZoneIdToInternal(static_cast<uint8_t>(d - '0'), ok);
+                if (!ok) zoneId = 255;
+            }
+        }
         handlers::ZoneHandlers::handleBeatTriggerGet(request, zoneId, ctx.zoneComposer);
     });
 
-    // POST /api/v1/zones/:id/beat-trigger - Set zone beat trigger config
-    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([0-3])\\/beat-trigger$",
+    // POST /api/v1/zones/:zoneId/beat-trigger - Set zone beat trigger config
+    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([1-3])\\/beat-trigger$",
         [](AsyncWebServerRequest* request) {},
         nullptr,
         [ctx, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
-            // Extract zone ID from URL
             String path = request->url();
             int zonesIdx = path.indexOf("/zones/");
-            uint8_t zoneId = (zonesIdx >= 0 && zonesIdx + 7 < path.length())
-                ? path.charAt(zonesIdx + 7) - '0'
-                : 255;
+            uint8_t zoneId = 255;
+            if (zonesIdx >= 0 && zonesIdx + 7 < path.length()) {
+                char d = path.charAt(zonesIdx + 7);
+                if (d >= '1' && d <= '9') {
+                    bool ok = false;
+                    zoneId = lightwaveos::network::wireZoneIdToInternal(static_cast<uint8_t>(d - '0'), ok);
+                    if (!ok) zoneId = 255;
+                }
+            }
             handlers::ZoneHandlers::handleBeatTriggerSet(request, data, len, zoneId, ctx.zoneComposer, broadcastZoneState);
         }
     );

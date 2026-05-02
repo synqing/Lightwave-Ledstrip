@@ -1402,7 +1402,12 @@ bool WebServer::executeBatchAction(const String& action, JsonVariant params) {
     }
     else if (action == "setZoneEffect" && m_zoneComposer) {
         if (!params.containsKey("zoneId") || !params.containsKey("effectId")) return false;
-        uint8_t zoneId = params["zoneId"];
+        // Wire-format migration (2026-05-02): zoneId on the wire is 1-indexed.
+        // Translate to 0-indexed internal index before calling the setter.
+        uint8_t wireZoneId = params["zoneId"];
+        bool zoneIdValid = false;
+        uint8_t zoneId = wireZoneIdToInternal(wireZoneId, zoneIdValid);
+        if (!zoneIdValid) return false;
         EffectId effectId = params["effectId"];
         m_zoneComposer->setZoneEffect(zoneId, effectId);
         return true;

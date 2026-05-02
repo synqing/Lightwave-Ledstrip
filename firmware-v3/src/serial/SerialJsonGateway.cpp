@@ -19,6 +19,7 @@
 #include "../plugins/api/IEffect.h"
 #include "../effects/zones/ZoneComposer.h"
 #include "../effects/zones/BlendMode.h"
+#include "../network/RequestValidator.h"  // wireZoneIdToInternal (2026-05-02 migration)
 #include "../effects/PatternRegistry.h"
 #include "../effects/enhancement/EdgeMixer.h"
 #include "../core/narrative/NarrativeEngine.h"
@@ -317,6 +318,10 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
     // ------------------------------------------------------------------
     // zones.list
     // ------------------------------------------------------------------
+    // Wire-format migration (2026-05-02): every emitted zoneId is 1-indexed
+    // (1..3); internal storage is 0-indexed.
+    // B5 SerialJSON parity gap #5: each row now also includes `zoneId`
+    // (1-indexed) and `effectName` (string), matching REST `GET /api/v1/zones`.
     else if (strcmp(type, "zones.list") == 0) {
         bool enabled = zoneComposer.isEnabled();
         uint8_t count = zoneComposer.getZoneCount();
@@ -326,11 +331,19 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
         JsonArray arr = respDoc["zones"].to<JsonArray>();
         for (uint8_t i = 0; i < count; i++) {
             JsonObject obj = arr.add<JsonObject>();
-            obj["id"] = i;
-            obj["effectId"] = zoneComposer.getZoneEffect(i);
+            const uint8_t wireZoneId = static_cast<uint8_t>(i + 1);
+            obj["id"] = wireZoneId;
+            obj["zoneId"] = wireZoneId;
+            EffectId eid = zoneComposer.getZoneEffect(i);
+            obj["effectId"] = eid;
+            if (renderer) {
+                const char* name = renderer->getEffectName(eid);
+                if (name) obj["effectName"] = name;
+            }
             obj["brightness"] = zoneComposer.getZoneBrightness(i);
             obj["speed"] = zoneComposer.getZoneSpeed(i);
             obj["palette"] = zoneComposer.getZonePalette(i);
+            obj["paletteId"] = zoneComposer.getZonePalette(i);  // alias matching REST
             obj["enabled"] = zoneComposer.isZoneEnabled(i);
         }
         Serial.printf("{\"type\":\"%s\",\"requestId\":\"%s\",\"success\":true,\"data\":", type, reqId);
@@ -612,18 +625,23 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
     // ------------------------------------------------------------------
     // zone.setEffect  (set effect on a specific zone)
     // ------------------------------------------------------------------
+    // Wire-format migration (2026-05-02): zoneId on the wire is 1-indexed
+    // (1..3); translate to 0-indexed internal index. Reject wire 0 / out-of-range.
     else if (strcmp(type, "zone.setEffect") == 0) {
         if (!doc["zoneId"].is<int>()) { serialJsonError(reqId, "missing zoneId"); return; }
         if (!doc["effectId"].is<int>()) { serialJsonError(reqId, "missing effectId"); return; }
-        uint8_t zoneId = doc["zoneId"];
+        uint8_t wireZoneId = doc["zoneId"];
         EffectId effectId = doc["effectId"];
 
+        bool zoneIdValid = false;
+        uint8_t zoneId = lightwaveos::network::wireZoneIdToInternal(wireZoneId, zoneIdValid);
+        if (!zoneIdValid) { serialJsonError(reqId, "zoneId out of range (must be 1-3)"); return; }
         if (zoneId >= zoneComposer.getZoneCount()) { serialJsonError(reqId, "zoneId out of range"); return; }
         if (renderer && !renderer->isEffectRegistered(effectId)) { serialJsonError(reqId, "effectId not registered"); return; }
 
         zoneComposer.setZoneEffect(zoneId, effectId);
         char buf[96];
-        snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"effectId\":%u}", (unsigned)zoneId, (unsigned)effectId);
+        snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"effectId\":%u}", (unsigned)wireZoneId, (unsigned)effectId);
         serialJsonResponse(type, reqId, buf);
     }
     // ------------------------------------------------------------------
@@ -632,14 +650,17 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
     else if (strcmp(type, "zone.setBrightness") == 0) {
         if (!doc["zoneId"].is<int>()) { serialJsonError(reqId, "missing zoneId"); return; }
         if (!doc["brightness"].is<int>()) { serialJsonError(reqId, "missing brightness"); return; }
-        uint8_t zoneId = doc["zoneId"];
+        uint8_t wireZoneId = doc["zoneId"];
         uint8_t brightness = doc["brightness"];
 
+        bool zoneIdValid = false;
+        uint8_t zoneId = lightwaveos::network::wireZoneIdToInternal(wireZoneId, zoneIdValid);
+        if (!zoneIdValid) { serialJsonError(reqId, "zoneId out of range (must be 1-3)"); return; }
         if (zoneId >= zoneComposer.getZoneCount()) { serialJsonError(reqId, "zoneId out of range"); return; }
 
         zoneComposer.setZoneBrightness(zoneId, brightness);
         char buf[96];
-        snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"brightness\":%u}", (unsigned)zoneId, (unsigned)brightness);
+        snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"brightness\":%u}", (unsigned)wireZoneId, (unsigned)brightness);
         serialJsonResponse(type, reqId, buf);
     }
     // ------------------------------------------------------------------
@@ -648,14 +669,17 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
     else if (strcmp(type, "zone.setSpeed") == 0) {
         if (!doc["zoneId"].is<int>()) { serialJsonError(reqId, "missing zoneId"); return; }
         if (!doc["speed"].is<int>()) { serialJsonError(reqId, "missing speed"); return; }
-        uint8_t zoneId = doc["zoneId"];
+        uint8_t wireZoneId = doc["zoneId"];
         uint8_t speed = doc["speed"];
 
+        bool zoneIdValid = false;
+        uint8_t zoneId = lightwaveos::network::wireZoneIdToInternal(wireZoneId, zoneIdValid);
+        if (!zoneIdValid) { serialJsonError(reqId, "zoneId out of range (must be 1-3)"); return; }
         if (zoneId >= zoneComposer.getZoneCount()) { serialJsonError(reqId, "zoneId out of range"); return; }
 
         zoneComposer.setZoneSpeed(zoneId, speed);
         char buf[96];
-        snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"speed\":%u}", (unsigned)zoneId, (unsigned)speed);
+        snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"speed\":%u}", (unsigned)wireZoneId, (unsigned)speed);
         serialJsonResponse(type, reqId, buf);
     }
     // ------------------------------------------------------------------
@@ -664,14 +688,17 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
     else if (strcmp(type, "zone.setPalette") == 0) {
         if (!doc["zoneId"].is<int>()) { serialJsonError(reqId, "missing zoneId"); return; }
         if (!doc["paletteId"].is<int>()) { serialJsonError(reqId, "missing paletteId"); return; }
-        uint8_t zoneId = doc["zoneId"];
+        uint8_t wireZoneId = doc["zoneId"];
         uint8_t paletteId = doc["paletteId"];
 
+        bool zoneIdValid = false;
+        uint8_t zoneId = lightwaveos::network::wireZoneIdToInternal(wireZoneId, zoneIdValid);
+        if (!zoneIdValid) { serialJsonError(reqId, "zoneId out of range (must be 1-3)"); return; }
         if (zoneId >= zoneComposer.getZoneCount()) { serialJsonError(reqId, "zoneId out of range"); return; }
 
         zoneComposer.setZonePalette(zoneId, paletteId);
         char buf[96];
-        snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"paletteId\":%u}", (unsigned)zoneId, (unsigned)paletteId);
+        snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"paletteId\":%u}", (unsigned)wireZoneId, (unsigned)paletteId);
         serialJsonResponse(type, reqId, buf);
     }
     // ------------------------------------------------------------------
@@ -680,15 +707,18 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
     else if (strcmp(type, "zone.setBlend") == 0) {
         if (!doc["zoneId"].is<int>()) { serialJsonError(reqId, "missing zoneId"); return; }
         if (!doc["blendMode"].is<int>()) { serialJsonError(reqId, "missing blendMode"); return; }
-        uint8_t zoneId = doc["zoneId"];
+        uint8_t wireZoneId = doc["zoneId"];
         uint8_t blendModeVal = doc["blendMode"];
 
+        bool zoneIdValid = false;
+        uint8_t zoneId = lightwaveos::network::wireZoneIdToInternal(wireZoneId, zoneIdValid);
+        if (!zoneIdValid) { serialJsonError(reqId, "zoneId out of range (must be 1-3)"); return; }
         if (zoneId >= zoneComposer.getZoneCount()) { serialJsonError(reqId, "zoneId out of range"); return; }
 
         lightwaveos::zones::BlendMode blendMode = static_cast<lightwaveos::zones::BlendMode>(blendModeVal);
         zoneComposer.setZoneBlendMode(zoneId, blendMode);
         char buf[96];
-        snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"blendMode\":%u}", (unsigned)zoneId, (unsigned)blendModeVal);
+        snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"blendMode\":%u}", (unsigned)wireZoneId, (unsigned)blendModeVal);
         serialJsonResponse(type, reqId, buf);
     }
     // ------------------------------------------------------------------
@@ -696,8 +726,11 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
     // ------------------------------------------------------------------
     else if (strcmp(type, "zones.update") == 0) {
         if (!doc["zoneId"].is<int>()) { serialJsonError(reqId, "missing zoneId"); return; }
-        uint8_t zoneId = doc["zoneId"];
+        uint8_t wireZoneId = doc["zoneId"];
 
+        bool zoneIdValid = false;
+        uint8_t zoneId = lightwaveos::network::wireZoneIdToInternal(wireZoneId, zoneIdValid);
+        if (!zoneIdValid) { serialJsonError(reqId, "zoneId out of range (must be 1-3)"); return; }
         if (zoneId >= zoneComposer.getZoneCount()) { serialJsonError(reqId, "zoneId out of range"); return; }
 
         if (doc.containsKey("effectId") && renderer) {
@@ -721,7 +754,7 @@ void processSerialJsonCommand(const String& json, const SerialJsonGatewayDeps& d
         }
 
         char buf[48];
-        snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"updated\":true}", (unsigned)zoneId);
+        snprintf(buf, sizeof(buf), "{\"zoneId\":%u,\"updated\":true}", (unsigned)wireZoneId);
         serialJsonResponse(type, reqId, buf);
     }
     // ------------------------------------------------------------------

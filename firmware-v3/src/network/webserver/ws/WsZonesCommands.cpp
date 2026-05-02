@@ -59,9 +59,12 @@ static void handleZoneEnable(AsyncWebSocketClient* client, JsonDocument& doc, co
 /**
  * @brief Per-zone enable/disable command
  *
- * Request:  {"type": "zone.enableZone", "zoneId": 0, "enabled": true}
- * Response: {"type": "zone.zoneEnabledChanged", "success": true, "data": {"zoneId": 0, "enabled": true}}
+ * Request:  {"type": "zone.enableZone", "zoneId": 1, "enabled": true}
+ * Response: {"type": "zone.zoneEnabledChanged", "success": true, "data": {"zoneId": 1, "enabled": true}}
  * Broadcast: Full zone state via broadcastZoneState()
+ *
+ * Wire-format note (2026-05-02 migration): zoneId is 1-indexed on the wire.
+ * Internal C++ array indexing remains 0-indexed; translation happens here.
  */
 static void handleZoneEnableZone(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     if (!ctx.zoneComposer) {
@@ -72,17 +75,22 @@ static void handleZoneEnableZone(AsyncWebSocketClient* client, JsonDocument& doc
 
     const char* requestId = doc["requestId"] | "";
 
-    // Validate zoneId
+    // Validate zoneId (1-indexed wire format: 1..3)
     if (!doc["zoneId"].is<uint8_t>()) {
         client->text(buildWsError(ErrorCodes::MISSING_FIELD, "Missing 'zoneId' field", requestId));
         return;
     }
-    uint8_t zoneId = doc["zoneId"].as<uint8_t>();
+    uint8_t wireZoneId = doc["zoneId"].as<uint8_t>();
 
-    // DEFENSIVE CHECK: Validate zoneId before array access
-    zoneId = lightwaveos::network::validateZoneIdInRequest(zoneId);
+    bool zoneIdValid = false;
+    uint8_t internalZoneId = lightwaveos::network::wireZoneIdToInternal(wireZoneId, zoneIdValid);
+    if (!zoneIdValid) {
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE,
+                                  "zoneId out of range (1-3)", requestId));
+        return;
+    }
 
-    if (zoneId >= ctx.zoneComposer->getZoneCount()) {
+    if (internalZoneId >= ctx.zoneComposer->getZoneCount()) {
         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid zoneId", requestId));
         return;
     }
@@ -94,15 +102,15 @@ static void handleZoneEnableZone(AsyncWebSocketClient* client, JsonDocument& doc
     }
     bool enabled = doc["enabled"].as<bool>();
 
-    ctx.zoneComposer->setZoneEnabled(zoneId, enabled);
+    ctx.zoneComposer->setZoneEnabled(internalZoneId, enabled);
 
     // Broadcast to all clients.
     // SSA-D Round 2 (2026-04-18): skip textAll during 600 ms post-connect
     // window. Other clients re-sync via broadcastZoneState() below which is
     // itself gated.
     if (ctx.ws && !(ctx.webServer && ctx.webServer->shouldDeferTextAll())) {
-        String eventOutput = buildWsResponse("zone.zoneEnabledChanged", requestId, [zoneId, enabled](JsonObject& data) {
-            data["zoneId"] = zoneId;
+        String eventOutput = buildWsResponse("zone.zoneEnabledChanged", requestId, [wireZoneId, enabled](JsonObject& data) {
+            data["zoneId"] = wireZoneId;
             data["enabled"] = enabled;
         });
         ctx.ws->textAll(eventOutput);
@@ -134,12 +142,19 @@ static void handleZoneSetEffect(AsyncWebSocketClient* client, JsonDocument& doc,
     }
     
     const codec::ZoneSetEffectRequest& req = decodeResult.request;
-    uint8_t zoneId = req.zoneId;
+    uint8_t wireZoneId = req.zoneId;  // 1-indexed wire value (codec validated 1..3)
     EffectId effectId = req.effectId;
     const char* requestId = req.requestId ? req.requestId : "";
 
-    // DEFENSIVE CHECK: Validate zoneId and effectId before array access
-    zoneId = lightwaveos::network::validateZoneIdInRequest(zoneId);
+    // Wire-format migration (2026-05-02): translate 1-indexed wire zoneId to
+    // 0-indexed internal index. Codec already range-checked 1..3; this is
+    // the canonical translation point.
+    bool zoneIdValid = false;
+    uint8_t zoneId = lightwaveos::network::wireZoneIdToInternal(wireZoneId, zoneIdValid);
+    if (!zoneIdValid) {
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE, "zoneId out of range (1-3)", requestId));
+        return;
+    }
     effectId = lightwaveos::network::validateEffectIdInRequest(effectId);
 
     if (zoneId >= ctx.zoneComposer->getZoneCount()) {
@@ -178,21 +193,27 @@ static void handleZoneSetBrightness(AsyncWebSocketClient* client, JsonDocument& 
     }
     
     const codec::ZoneSetBrightnessRequest& req = decodeResult.request;
-    uint8_t zoneId = req.zoneId;
+    uint8_t wireZoneId = req.zoneId;  // 1-indexed wire value (codec validated 1..3)
     uint8_t brightness = req.brightness;
     const char* requestId = req.requestId ? req.requestId : "";
-    
-    // DEFENSIVE CHECK: Validate zoneId before array access
-    zoneId = lightwaveos::network::validateZoneIdInRequest(zoneId);
-    
+
+    // Wire-format migration (2026-05-02): translate 1-indexed wire zoneId to
+    // 0-indexed internal index. Internal storage unchanged.
+    bool zoneIdValid = false;
+    uint8_t zoneId = lightwaveos::network::wireZoneIdToInternal(wireZoneId, zoneIdValid);
+    if (!zoneIdValid) {
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE, "zoneId out of range (1-3)", requestId));
+        return;
+    }
+
     if (zoneId >= ctx.zoneComposer->getZoneCount()) {
         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid zoneId", requestId));
         return;
     }
-    
+
     ctx.zoneComposer->setZoneBrightness(zoneId, brightness);
     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
-    
+
     const char* updatedFields[] = {"brightness"};
     String response = buildWsResponse("zones.changed", requestId, [&ctx, zoneId, updatedFields](JsonObject& data) {
         codec::WsZonesCodec::encodeZonesChanged(zoneId, updatedFields, 1, *ctx.zoneComposer, ctx.renderer, data);
@@ -217,21 +238,27 @@ static void handleZoneSetSpeed(AsyncWebSocketClient* client, JsonDocument& doc, 
     }
     
     const codec::ZoneSetSpeedRequest& req = decodeResult.request;
-    uint8_t zoneId = req.zoneId;
+    uint8_t wireZoneId = req.zoneId;  // 1-indexed wire value (codec validated 1..3)
     uint8_t speed = req.speed;
     const char* requestId = req.requestId ? req.requestId : "";
-    
-    // DEFENSIVE CHECK: Validate zoneId before array access
-    zoneId = lightwaveos::network::validateZoneIdInRequest(zoneId);
-    
+
+    // Wire-format migration (2026-05-02): translate 1-indexed wire zoneId to
+    // 0-indexed internal index. Internal storage unchanged.
+    bool zoneIdValid = false;
+    uint8_t zoneId = lightwaveos::network::wireZoneIdToInternal(wireZoneId, zoneIdValid);
+    if (!zoneIdValid) {
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE, "zoneId out of range (1-3)", requestId));
+        return;
+    }
+
     if (zoneId >= ctx.zoneComposer->getZoneCount()) {
         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid zoneId", requestId));
         return;
     }
-    
+
     ctx.zoneComposer->setZoneSpeed(zoneId, speed);
     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
-    
+
     const char* updatedFields[] = {"speed"};
     String response = buildWsResponse("zones.changed", requestId, [&ctx, zoneId, updatedFields](JsonObject& data) {
         codec::WsZonesCodec::encodeZonesChanged(zoneId, updatedFields, 1, *ctx.zoneComposer, ctx.renderer, data);
@@ -256,22 +283,28 @@ static void handleZoneSetPalette(AsyncWebSocketClient* client, JsonDocument& doc
     }
     
     const codec::ZoneSetPaletteRequest& req = decodeResult.request;
-    uint8_t zoneId = req.zoneId;
+    uint8_t wireZoneId = req.zoneId;  // 1-indexed wire value (codec validated 1..3)
     uint8_t paletteId = req.paletteId;
     const char* requestId = req.requestId ? req.requestId : "";
-    
-    // DEFENSIVE CHECK: Validate zoneId and paletteId before array access
-    zoneId = lightwaveos::network::validateZoneIdInRequest(zoneId);
+
+    // Wire-format migration (2026-05-02): translate 1-indexed wire zoneId to
+    // 0-indexed internal index. Internal storage unchanged.
+    bool zoneIdValid = false;
+    uint8_t zoneId = lightwaveos::network::wireZoneIdToInternal(wireZoneId, zoneIdValid);
+    if (!zoneIdValid) {
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE, "zoneId out of range (1-3)", requestId));
+        return;
+    }
     paletteId = lightwaveos::network::validatePaletteIdInRequest(paletteId);
-    
+
     if (zoneId >= ctx.zoneComposer->getZoneCount()) {
         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid zoneId", requestId));
         return;
     }
-    
+
     ctx.zoneComposer->setZonePalette(zoneId, paletteId);
     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
-    
+
     String response = buildWsResponse("zone.paletteChanged", requestId, [&ctx, zoneId, paletteId](JsonObject& data) {
         codec::WsZonesCodec::encodeZonePaletteChanged(zoneId, paletteId, *ctx.zoneComposer, ctx.renderer, data);
     });
@@ -295,22 +328,28 @@ static void handleZoneSetBlend(AsyncWebSocketClient* client, JsonDocument& doc, 
     }
     
     const codec::ZoneSetBlendRequest& req = decodeResult.request;
-    uint8_t zoneId = req.zoneId;
+    uint8_t wireZoneId = req.zoneId;  // 1-indexed wire value (codec validated 1..3)
     uint8_t blendModeVal = req.blendMode;
     const char* requestId = req.requestId ? req.requestId : "";
-    
-    // DEFENSIVE CHECK: Validate zoneId before array access
-    zoneId = lightwaveos::network::validateZoneIdInRequest(zoneId);
-    
+
+    // Wire-format migration (2026-05-02): translate 1-indexed wire zoneId to
+    // 0-indexed internal index. Internal storage unchanged.
+    bool zoneIdValid = false;
+    uint8_t zoneId = lightwaveos::network::wireZoneIdToInternal(wireZoneId, zoneIdValid);
+    if (!zoneIdValid) {
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE, "zoneId out of range (1-3)", requestId));
+        return;
+    }
+
     if (zoneId >= ctx.zoneComposer->getZoneCount()) {
         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid zoneId", requestId));
         return;
     }
-    
+
     lightwaveos::zones::BlendMode blendMode = static_cast<lightwaveos::zones::BlendMode>(blendModeVal);
     ctx.zoneComposer->setZoneBlendMode(zoneId, blendMode);
     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
-    
+
     String response = buildWsResponse("zone.blendChanged", requestId, [&ctx, zoneId, blendModeVal](JsonObject& data) {
         codec::WsZonesCodec::encodeZoneBlendChanged(zoneId, blendModeVal, *ctx.zoneComposer, ctx.renderer, data);
     });
@@ -400,12 +439,18 @@ static void handleZonesUpdate(AsyncWebSocketClient* client, JsonDocument& doc, c
     }
     
     const codec::ZonesUpdateRequest& req = decodeResult.request;
-    uint8_t zoneId = req.zoneId;
+    uint8_t wireZoneId = req.zoneId;  // 1-indexed wire value (codec validated 1..3)
     const char* requestId = req.requestId ? req.requestId : "";
-    
-    // DEFENSIVE CHECK: Validate zoneId before array access
-    zoneId = lightwaveos::network::validateZoneIdInRequest(zoneId);
-    
+
+    // Wire-format migration (2026-05-02): translate 1-indexed wire zoneId to
+    // 0-indexed internal index. Internal storage unchanged.
+    bool zoneIdValid = false;
+    uint8_t zoneId = lightwaveos::network::wireZoneIdToInternal(wireZoneId, zoneIdValid);
+    if (!zoneIdValid) {
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE, "zoneId out of range (1-3)", requestId));
+        return;
+    }
+
     if (zoneId >= ctx.zoneComposer->getZoneCount()) {
         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid zoneId", requestId));
         return;
@@ -490,12 +535,18 @@ static void handleZonesSetEffect(AsyncWebSocketClient* client, JsonDocument& doc
     }
     
     const codec::ZoneSetEffectRequest& req = decodeResult.request;
-    uint8_t zoneId = req.zoneId;
+    uint8_t wireZoneId = req.zoneId;  // 1-indexed wire value (codec validated 1..3)
     EffectId effectId = req.effectId;
     const char* requestId = req.requestId ? req.requestId : "";
 
-    // DEFENSIVE CHECK: Validate zoneId and effectId before array access
-    zoneId = lightwaveos::network::validateZoneIdInRequest(zoneId);
+    // Wire-format migration (2026-05-02): translate 1-indexed wire zoneId to
+    // 0-indexed internal index. Internal storage unchanged.
+    bool zoneIdValid = false;
+    uint8_t zoneId = lightwaveos::network::wireZoneIdToInternal(wireZoneId, zoneIdValid);
+    if (!zoneIdValid) {
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE, "zoneId out of range (1-3)", requestId));
+        return;
+    }
     effectId = lightwaveos::network::validateEffectIdInRequest(effectId);
 
     if (zoneId >= ctx.zoneComposer->getZoneCount()) {
@@ -539,18 +590,30 @@ static void handleZonesSetLayout(AsyncWebSocketClient* client, JsonDocument& doc
     
     const codec::ZonesSetLayoutRequest& req = decodeResult.request;
     const char* requestId = req.requestId ? req.requestId : "";
-    
+
     // Convert codec segments to ZoneSegment array
+    // Wire-format migration (2026-05-02): codec stores wire 1-indexed zoneId
+    // (1..3, range-checked at decode); translate to internal 0-indexed for
+    // ZoneSegment storage to match the predefined ZONE_*_CONFIG layouts in
+    // ZoneDefinition.h (which use 0-indexed zoneId internally).
     ZoneSegment segments[lightwaveos::zones::MAX_ZONES];
     uint8_t zoneCount = req.zoneCount;
-    
+
     for (uint8_t i = 0; i < zoneCount; i++) {
-        segments[i].zoneId = req.zones[i].zoneId;
+        bool segZoneIdValid = false;
+        uint8_t internalSegZoneId = lightwaveos::network::wireZoneIdToInternal(
+            req.zones[i].zoneId, segZoneIdValid);
+        if (!segZoneIdValid) {
+            client->text(buildWsError(ErrorCodes::INVALID_VALUE,
+                                       "Segment zoneId out of range (1-3)", requestId));
+            return;
+        }
+        segments[i].zoneId = internalSegZoneId;
         segments[i].s1LeftStart = req.zones[i].s1LeftStart;
         segments[i].s1LeftEnd = req.zones[i].s1LeftEnd;
         segments[i].s1RightStart = req.zones[i].s1RightStart;
         segments[i].s1RightEnd = req.zones[i].s1RightEnd;
-        
+
         // Calculate totalLeds
         uint8_t leftSize = segments[i].s1LeftEnd - segments[i].s1LeftStart + 1;
         uint8_t rightSize = segments[i].s1RightEnd - segments[i].s1RightStart + 1;

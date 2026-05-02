@@ -143,7 +143,8 @@ static void handleZonePresetsGet(AsyncWebSocketClient* client, JsonDocument& doc
             for (uint8_t i = 0; i < preset.zoneCount; i++) {
                 const ZonePresetEntry& entry = preset.zones[i];
                 JsonObject zone = zones.add<JsonObject>();
-                zone["zoneId"] = i;
+                // Wire-format migration (2026-05-02): emit zoneId 1-indexed.
+                zone["zoneId"] = static_cast<uint8_t>(i + 1);
                 zone["effectId"] = entry.effectId;
                 zone["paletteId"] = entry.paletteId;
                 zone["brightness"] = entry.brightness;

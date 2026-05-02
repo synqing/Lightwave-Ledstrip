@@ -30,8 +30,14 @@ export const v2Api = (client: V2Client) => ({
   parametersGet: () => client.get<V2Parameters>('/parameters'),
   parametersPatch: (partial: Partial<V2Parameters>) => client.patch<V2Parameters>('/parameters', partial),
 
-  effectsList: (opts?: { offset?: number; limit?: number }) =>
-    client.get<V2EffectsList>('/effects', { query: { offset: opts?.offset ?? 0, limit: opts?.limit ?? 50 } }),
+  effectsList: (opts?: { page?: number; offset?: number; limit?: number }) =>
+    client.get<V2EffectsList>('/effects', {
+      query: {
+        ...(opts?.page !== undefined ? { page: opts.page } : {}),
+        ...(opts?.offset !== undefined ? { offset: opts.offset } : {}),
+        limit: opts?.limit ?? 50,
+      },
+    }),
   effectsCurrent: () => client.get<V2EffectCurrent>('/effects/current'),
   effectsSetCurrent: (effectId: number) => client.put<V2EffectCurrent>('/effects/current', { effectId }),
   effectsCategories: () => client.get<V2EffectCategories>('/effects/categories'),
@@ -42,11 +48,13 @@ export const v2Api = (client: V2Client) => ({
   narrativeConfigSet: (config: Partial<V2NarrativeConfig>) => client.post<V2NarrativeConfig>('/narrative/config', config),
   zonesList: () => client.get<V2ZonesState>('/zones'),
   zonesSetLayout: (zones: V2ZoneSegment[]) => client.post<{ zoneCount: number }>('/zones/layout', { zones }),
+  // zoneId must be 1-indexed (1-3). Wire zoneId=0 returns HTTP 400 INVALID_VALUE. Post-B2 (d53092ad).
   zoneSetSpeed: (zoneId: number, speed: number) => client.post<{ zoneId: number; speed: number }>(`/zones/${zoneId}/speed`, { speed }),
-  palettesList: (opts?: { offset?: number; limit?: number; category?: string; warm?: boolean; cool?: boolean; calm?: boolean; vivid?: boolean; cvd?: boolean }) =>
+  palettesList: (opts?: { page?: number; offset?: number; limit?: number; category?: string; warm?: boolean; cool?: boolean; calm?: boolean; vivid?: boolean; cvd?: boolean }) =>
     client.get<V2PalettesList>('/palettes', {
       query: {
-        offset: opts?.offset ?? 0,
+        ...(opts?.page !== undefined ? { page: opts.page } : {}),
+        ...(opts?.offset !== undefined ? { offset: opts.offset } : {}),
         limit: opts?.limit ?? 100,
         category: opts?.category,
         warm: opts?.warm ? 'true' : undefined,

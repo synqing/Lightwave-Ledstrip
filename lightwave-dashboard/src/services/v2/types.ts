@@ -6,6 +6,7 @@ export type V2ErrorCode =
   | 'INVALID_JSON'
   | 'MISSING_FIELD'
   | 'OUT_OF_RANGE'
+  | 'INVALID_VALUE'   // Returned for zoneId=0 or out-of-range [1-3] (post-B2, commit d53092ad)
   | 'NOT_FOUND'
   | 'RATE_LIMITED'
   | 'METHOD_NOT_ALLOWED'
@@ -75,7 +76,9 @@ export interface V2DeviceOverview {
 export interface V2Parameters {
   brightness: number;
   speed: number;
-  mood: number;
+  /** hue is a global colour tint parameter (0-255). Present alongside mood on some firmware builds. */
+  hue?: number;
+  mood?: number;
   paletteId: number;
   intensity: number;
   saturation: number;
@@ -190,6 +193,7 @@ export interface V2NarrativeConfig {
 }
 
 export interface V2Zone {
+  /** Wire zone identifier. 1-indexed (1, 2, 3). zoneId=0 is reserved; K1 returns INVALID_VALUE. Post-B2 (d53092ad). */
   id: number;
   enabled: boolean;
   effectId: number;
@@ -202,6 +206,7 @@ export interface V2Zone {
 }
 
 export interface V2ZoneSegment {
+  /** Wire zone identifier. 1-indexed (1, 2, 3). zoneId=0 is reserved. Post-B2 (d53092ad). */
   zoneId: number;
   s1LeftStart: number;
   s1LeftEnd: number;
@@ -293,6 +298,7 @@ export type V2WsRequest = {
       durationVariance?: number;
     }
   | { type: 'zones.list' }
+  /** zoneId must be 1-indexed (1-3). Wire zoneId=0 returns error response. Post-B2 (d53092ad). */
   | { type: 'zones.update'; zoneId: number; effectId?: number; brightness?: number; speed?: number; paletteId?: number }
   | { type: 'zones.setLayout'; zones: V2ZoneSegment[] }
   | { type: 'ledStream.subscribe' }
@@ -304,6 +310,7 @@ export type V2WsEvent =
   | { type: 'parameters.changed'; updated: string[]; current: V2Parameters; timestamp: number }
   | { type: 'transition.started'; fromEffect: number; toEffect: number; transitionType: number; duration: number; timestamp: number }
   | { type: 'zones.list'; enabled: boolean; zoneCount: number; segments?: V2ZoneSegment[]; zones: V2Zone[]; timestamp: number }
+  /** zoneId is 1-indexed (1-3) in wire events. Post-B2 (d53092ad). */
   | { type: 'zones.changed'; zoneId: number; updated: string[]; current: Partial<V2Zone>; timestamp: number }
   | { type: 'zones.layoutChanged'; success: boolean; zoneCount: number; timestamp: number }
   | ({ type: string } & Record<string, unknown>);

@@ -2,6 +2,10 @@ import type { V2WsEvent, V2WsRequest } from './types';
 
 export type WsStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
+export interface V2WsClientOptions {
+  apiKey?: string;
+}
+
 // LED stream frame format constants
 export const LED_STREAM_MAGIC = 0xfe;
 export const LED_STREAM_VERSION_V1 = 1;
@@ -18,18 +22,30 @@ export const LED_FRAME_SIZE_V1 = FRAME_HEADER_SIZE + FRAME_PAYLOAD_SIZE; // 966 
 // Legacy frame format v0: [MAGIC][RGB×320] = 961 bytes
 export const LED_FRAME_SIZE_V0 = 1 + (TOTAL_LED_COUNT * 3); // 961 bytes
 
+/**
+ * Validates that a binary buffer is a well-formed LED stream frame.
+ * Accepts both v0 (legacy) and v1 (dual-strip) frame formats.
+ * Returns false if the magic byte is absent or the frame length is unrecognised.
+ */
+export function isValidLedStreamFrame(bytes: Uint8Array): boolean {
+  if (bytes[0] !== LED_STREAM_MAGIC) return false;
+  return bytes.length === LED_FRAME_SIZE_V0 || bytes.length === LED_FRAME_SIZE_V1;
+}
+
 export class V2WsClient {
   private ws: WebSocket | null = null;
   private status: WsStatus = 'disconnected';
   private url: string;
+  private options: V2WsClientOptions;
   private reconnectAttempt = 0;
   private reconnectTimer: number | null = null;
   private listeners = new Set<(event: V2WsEvent) => void>();
   private statusListeners = new Set<(status: WsStatus) => void>();
   private binaryListeners = new Set<(data: Uint8Array) => void>();
 
-  constructor(url: string) {
+  constructor(url: string, options: V2WsClientOptions = {}) {
     this.url = url;
+    this.options = options;
   }
 
   setUrl(url: string) {
@@ -50,15 +66,17 @@ export class V2WsClient {
     this.ws.binaryType = 'arraybuffer';
     this.ws.onopen = () => {
       this.reconnectAttempt = 0;
+      // Send API key authentication immediately after connection if configured
+      if (this.options.apiKey) {
+        this.ws?.send(JSON.stringify({ type: 'auth', apiKey: this.options.apiKey }));
+      }
       this.setStatus('connected');
     };
     this.ws.onmessage = (ev) => {
       // Handle binary LED frame data
       if (ev.data instanceof ArrayBuffer) {
         const bytes = new Uint8Array(ev.data);
-        // Accept both v0 (legacy) and v1 (dual-strip) formats
-        if (bytes[0] === LED_STREAM_MAGIC && 
-            (bytes.length === LED_FRAME_SIZE_V0 || bytes.length === LED_FRAME_SIZE_V1)) {
+        if (isValidLedStreamFrame(bytes)) {
           this.binaryListeners.forEach(l => l(bytes));
         }
         return;

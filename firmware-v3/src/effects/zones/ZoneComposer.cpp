@@ -87,16 +87,17 @@ static const ZonePreset PRESETS[] = {
         }
     },
 
-    // Preset 1: Dual Split (center vs outer) — Copper-palette holographic showcase
+    // Preset 1: Dual Split (center vs outer) — K1 Bloom (inner) + K1 Waveform (outer)
+    // Captain directive 2026-05-02: factory Dual Split = Bloom + Waveform.
     {
         .name = "Dual Split",
         .segments = ZONE_2_CONFIG,
         .zoneCount = 2,
         .zones = {
-            { .effectId = lightwaveos::EID_RIPPLE_ENHANCED, .brightness = 255, .speed = 5, .paletteId = 68,
-              .blendMode = BlendMode::ADDITIVE, .enabled = true },    // Ripple Enhanced / Copper (slow audio-reactive ripple)
-            { .effectId = lightwaveos::EID_LGP_HOLOGRAPHIC, .brightness = 255, .speed = 35, .paletteId = 68,
-              .blendMode = BlendMode::ADDITIVE, .enabled = true },    // LGP Holographic / Copper (fast holographic shimmer)
+            { .effectId = lightwaveos::EID_SB_K1_BLOOM, .brightness = 255, .speed = 15, .paletteId = 0,
+              .blendMode = BlendMode::OVERWRITE, .enabled = true },   // Zone 1 inner: 0x1301 K1 Bloom
+            { .effectId = lightwaveos::EID_SB_K1_WAVEFORM, .brightness = 255, .speed = 25, .paletteId = 0,
+              .blendMode = BlendMode::SCREEN, .enabled = true },      // Zone 2 outer: 0x1302 K1 Waveform (SCREEN blend over Bloom)
             { .effectId = lightwaveos::EID_LGP_HOLOGRAPHIC_AUTO_CYCLE, .brightness = 255, .speed = 15, .paletteId = 0,
               .blendMode = BlendMode::OVERWRITE, .enabled = false }
         }
@@ -564,6 +565,21 @@ void ZoneComposer::setZoneEffect(uint8_t zone, EffectId effectId) {
         memset(m_zoneBuffers + (static_cast<size_t>(safeZone) * static_cast<size_t>(TOTAL_LEDS)),
                0, static_cast<size_t>(TOTAL_LEDS) * sizeof(CRGB));
     }
+
+    // D-1 fix 2026-05-02: bring up the effect via init() so its PSRAM/state
+    // is allocated. RendererActor only init()s the global single-effect, so
+    // zone-only effects (e.g. K1 Bloom, K1 Waveform when used via Dual Split
+    // preset) would otherwise render BLACK because their internal buffers
+    // were never allocated.
+    if (m_renderer) {
+        plugins::IEffect* effect = m_renderer->getEffectInstance(effectId);
+        if (effect) {
+            m_zoneContext.ledCount = TOTAL_LEDS;
+            m_zoneContext.centerPoint = 79;
+            m_zoneContext.zoneId = safeZone;
+            effect->init(m_zoneContext);
+        }
+    }
 }
 
 void ZoneComposer::setZoneBrightness(uint8_t zone, uint8_t brightness) {
@@ -705,6 +721,25 @@ void ZoneComposer::loadPreset(uint8_t presetId) {
     // Copy zone states
     for (uint8_t i = 0; i < MAX_ZONES; i++) {
         m_zones[i] = preset.zones[i];
+    }
+
+    // D-1 fix 2026-05-02: init() each enabled zone's effect so its PSRAM/state
+    // is allocated. RendererActor only init()s the global single-effect, so
+    // zone-only effects (K1 Bloom, K1 Waveform via Dual Split, etc.) would
+    // otherwise render BLACK because their internal trail/scratch buffers were
+    // never allocated.
+    if (m_renderer) {
+        m_zoneContext.ledCount = TOTAL_LEDS;
+        m_zoneContext.centerPoint = 79;
+        for (uint8_t i = 0; i < m_zoneCount; i++) {
+            if (m_zones[i].enabled) {
+                plugins::IEffect* effect = m_renderer->getEffectInstance(m_zones[i].effectId);
+                if (effect) {
+                    m_zoneContext.zoneId = i;
+                    effect->init(m_zoneContext);
+                }
+            }
+        }
     }
 
     // Release store re-enables rendering after all state is consistent

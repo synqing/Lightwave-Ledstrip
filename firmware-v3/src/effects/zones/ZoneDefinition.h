@@ -62,22 +62,25 @@ constexpr ZoneSegment ZONE_1_CONFIG[1] = {
 /**
  * 2-Zone Layout (Dual Split):
  * Zone 0 = inner half (near centre), Zone 1 = outer half.
- * Default split at LED 60 per side:
- * - Zone 0 (INNER): 20 LEDs per side (40 total)
- * - Zone 1 (OUTER): 60 LEDs per side (120 total)
+ * Captain spec 2026-05-02:
+ * - Zone 1 (CENTRE): LEDs 50-109 (60 total — 30 each side of centre pair 79/80)
+ * - Zone 2 (OUTER):  LEDs 0-49 + 110-159 (100 total — 50 each side)
+ *
+ *    ZONE 2    |     ZONE 1     |    ZONE 2
+ *   [0----49]  |  [50--79|80--109]  | [110---159]
  */
 constexpr ZoneSegment ZONE_2_CONFIG[2] = {
-    // Zone 0: INNER (40 LEDs total)
+    // Array index 0 = Zone 1 (CENTRE, 60 LEDs total)
     { .zoneId = 0,
-      .s1LeftStart = 60, .s1LeftEnd = 79,
-      .s1RightStart = 80, .s1RightEnd = 99,
-      .totalLeds = 40 },
+      .s1LeftStart = 50, .s1LeftEnd = 79,
+      .s1RightStart = 80, .s1RightEnd = 109,
+      .totalLeds = 60 },
 
-    // Zone 1: OUTER (120 LEDs total)
+    // Array index 1 = Zone 2 (OUTER, 100 LEDs total)
     { .zoneId = 1,
-      .s1LeftStart = 0, .s1LeftEnd = 59,
-      .s1RightStart = 100, .s1RightEnd = 159,
-      .totalLeds = 120 }
+      .s1LeftStart = 0, .s1LeftEnd = 49,
+      .s1RightStart = 110, .s1RightEnd = 159,
+      .totalLeds = 100 }
 };
 
 // ==================== 3-Zone Configuration ====================

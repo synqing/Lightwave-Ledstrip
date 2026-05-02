@@ -21,6 +21,36 @@ class EffectViewModel {
     var selectedCategory: String = "All"
     var showAudioOnlyFilter: Bool = false
 
+    // MARK: - Pagination state (heap-stability mitigation)
+    //
+    // The connect-time effect hydration was previously a single 22.5 KB JSON
+    // blob (limit=200) that fragmented K1 V2's internal heap and latched the
+    // heap-shedding recovery. We now fetch the first `connectInitialLimit`
+    // effects on connect (small enough to fit in the EffectPill / first
+    // grid view) and lazy-load further pages as the user scrolls.
+    //
+    // `hasLoadedAllEffects` flips to true once a fetch returns fewer effects
+    // than `pageLimit` — the firmware has nothing more to give. `isLoadingPage`
+    // gates concurrent fetches so a fast scroll cannot trigger N parallel GETs.
+
+    /// Cap applied on the connect-time fetch. Tuned to keep the response under
+    /// ~3 KB which is comfortably below K1's largest free internal-heap block.
+    static let connectInitialLimit = 20
+
+    /// Page size for subsequent lazy fetches. Larger than the initial hydration
+    /// because by then the heap is no longer under the connect-time pressure.
+    static let pageLimit = 40
+
+    /// Set when the most recent fetch returned fewer rows than `pageLimit`,
+    /// indicating the firmware effect catalogue has been fully paged in.
+    @ObservationIgnored
+    private(set) var hasLoadedAllEffects = false
+
+    /// Re-entry guard for paginated fetches. Prevents a fast scroll from
+    /// firing multiple overlapping GETs.
+    @ObservationIgnored
+    private var isLoadingPage = false
+
     // MARK: - Dependencies
 
     var restClient: RESTClient?
@@ -83,11 +113,22 @@ class EffectViewModel {
 
     // MARK: - API Methods
 
+    /// Connect-time hydration: fetches only `connectInitialLimit` effects so the
+    /// JSON response stays small enough to avoid fragmenting K1 V2's internal
+    /// heap. Resets the pagination cursors. Subsequent pages are loaded lazily
+    /// via `loadNextPageIfNeeded(currentIndex:)` as the user scrolls or when
+    /// `loadAllEffectsIfNeeded()` is invoked from a code path that needs the
+    /// full catalogue.
     func loadEffects() async {
         guard let client = restClient else { return }
 
+        // Reset pagination state on each (re)connect so a previously-loaded
+        // catalogue does not bleed into a new device's hydration.
+        hasLoadedAllEffects = false
+        allEffects = []
+
         do {
-            let response = try await client.getEffects(page: 1, limit: 200)
+            let response = try await client.getEffects(page: 1, limit: Self.connectInitialLimit)
 
             // Decode with categoryId, isAudioReactive (API_AUDIT fix), and
             // isExperimental (Phase 2 — picker enhancements). Legacy firmware
@@ -104,10 +145,95 @@ class EffectViewModel {
                     categoryName: effect.categoryName
                 )
             }
-            print("Loaded \(allEffects.count) effects")
+
+            // If the firmware returned the full catalogue inside the initial
+            // page (small builds with <connectInitialLimit effects), latch
+            // hasLoadedAllEffects so we never bother paginating further.
+            if response.data.effects.count < Self.connectInitialLimit {
+                hasLoadedAllEffects = true
+            }
+            print("Loaded \(allEffects.count) effects (initial page)")
 
         } catch {
             print("Error loading effects: \(error)")
+        }
+    }
+
+    /// Fetch the next page of effects if the user has scrolled close to the
+    /// bottom of the loaded list. Idempotent: safe to call on every cell
+    /// appearance. The trigger threshold is intentionally lenient — fetching
+    /// one page early is far cheaper than the spinner the user would see if we
+    /// waited for the absolute final cell.
+    ///
+    /// - Parameter currentIndex: The index of the cell that just appeared.
+    func loadNextPageIfNeeded(currentIndex: Int) async {
+        guard !hasLoadedAllEffects, !isLoadingPage else { return }
+        // Trigger one full page before the end of the loaded list.
+        let triggerThreshold = max(0, allEffects.count - Self.pageLimit / 2)
+        guard currentIndex >= triggerThreshold else { return }
+        await loadNextPage()
+    }
+
+    /// Load the entire effect catalogue by paging until exhausted. Called by
+    /// surfaces that need every effect available before they can render
+    /// correctly (e.g. zone effect picker that displays the full grouped list
+    /// up-front). No-op once `hasLoadedAllEffects` is set.
+    func loadAllEffectsIfNeeded() async {
+        guard !hasLoadedAllEffects else { return }
+        // Page through until the firmware reports an empty / short page.
+        while !hasLoadedAllEffects && !isLoadingPage {
+            await loadNextPage()
+        }
+    }
+
+    /// Internal: fetch the next page based on the current loaded count.
+    /// Caller is responsible for the `hasLoadedAllEffects` / `isLoadingPage`
+    /// guards above.
+    ///
+    /// Page selection: the connect-time fetch returns `connectInitialLimit`
+    /// rows and we then issue `pageLimit`-sized requests starting from offset
+    /// `connectInitialLimit`. Because the firmware is page+limit-based rather
+    /// than offset-based, we walk pages with `limit = pageLimit`, skip the
+    /// initial-overlap rows by ID, and rely on the dedupe filter below to
+    /// drop any rows already in `allEffects`.
+    private func loadNextPage() async {
+        guard let client = restClient, !hasLoadedAllEffects, !isLoadingPage else { return }
+        isLoadingPage = true
+        defer { isLoadingPage = false }
+
+        // Compute the next page number. We walk pages of `pageLimit` rows;
+        // the page that begins at the row immediately after the loaded count
+        // is `(allEffects.count / pageLimit) + 1`. Integer-divide rounds
+        // toward zero, which is exactly the behaviour we want here.
+        let nextPage = (allEffects.count / Self.pageLimit) + 1
+
+        do {
+            let response = try await client.getEffects(page: nextPage, limit: Self.pageLimit)
+            let newEffects = response.data.effects.map { effect in
+                EffectMetadata(
+                    id: effect.id,
+                    name: effect.name,
+                    category: effect.category,
+                    categoryId: effect.categoryId,
+                    isAudioReactive: effect.isAudioReactive ?? false,
+                    isExperimental: effect.isExperimental ?? false,
+                    categoryName: effect.categoryName
+                )
+            }
+
+            // De-duplicate against the existing list. The initial connect
+            // fetch uses a smaller limit than the page fetch, so the first
+            // paginated page can overlap rows we already hold.
+            let existingIds = Set(allEffects.map(\.id))
+            let appended = newEffects.filter { !existingIds.contains($0.id) }
+            allEffects.append(contentsOf: appended)
+
+            if newEffects.count < Self.pageLimit {
+                hasLoadedAllEffects = true
+            }
+            print("Loaded next effects page \(nextPage): +\(appended.count) (total \(allEffects.count))")
+        } catch {
+            print("Error loading next effects page: \(error)")
         }
     }
 

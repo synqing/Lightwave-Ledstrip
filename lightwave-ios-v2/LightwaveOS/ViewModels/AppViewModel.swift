@@ -125,35 +125,33 @@ class AppViewModel {
         udpReceiver.start()
 
         // Wire UDP frame handlers
+        // Phase 3 disabled — heap-stability mitigation. WS subscribe calls are
+        // suppressed in WebSocketService, so the firmware never sends UDP
+        // frames. Closures are still registered but bodies are no-op'd
+        // defensively in case a stale broadcast arrives during a reconnect
+        // race. Re-enable by uncommenting the parse blocks below once the
+        // broadcaster fix lands.
+        // See docs/superpowers/ios-firmware-parity-phase-3-scoping.md.
         udpReceiver.onLedFrame = { [weak self] bytes in
-            guard let self = self else { return }
-            // Parse v1 frame: skip 4-byte header, extract RGB for both strips
-            guard bytes.count >= 966 else { return }
-            // Extract raw RGB data from dual-strip format
-            // Strip 0: bytes 5..484 (stripID + 160*3 RGB)
-            // Strip 1: bytes 486..965 (stripID + 160*3 RGB)
-            var ledData = [UInt8](repeating: 0, count: 960)
-            // Strip 0 RGB data starts at offset 5 (header=4, stripID=1)
-            for i in 0..<480 {
-                ledData[i] = bytes[5 + i]
-            }
-            // Strip 1 RGB data starts at offset 486 (4 + 1 + 480 + 1)
-            for i in 0..<480 {
-                ledData[480 + i] = bytes[486 + i]
-            }
-            self.ledData = ledData
-            if !self.isLEDStreamActive {
-                self.isLEDStreamActive = true
-                self.log("LED stream started (UDP)", category: "UDP")
-            }
+            guard self != nil else { return }
+            _ = bytes
+            // guard bytes.count >= 966 else { return }
+            // var ledData = [UInt8](repeating: 0, count: 960)
+            // for i in 0..<480 { ledData[i] = bytes[5 + i] }
+            // for i in 0..<480 { ledData[480 + i] = bytes[486 + i] }
+            // self.ledData = ledData
+            // if !self.isLEDStreamActive {
+            //     self.isLEDStreamActive = true
+            //     self.log("LED stream started (UDP)", category: "UDP")
+            // }
         }
 
         udpReceiver.onAudioFrame = { [weak self] data in
-            guard let self = self else { return }
-            // Parse binary audio metrics frame
-            if let frame = AudioMetricsFrame(data: data) {
-                self.audio.handleMetricsFrame(frame)
-            }
+            guard self != nil else { return }
+            _ = data
+            // if let frame = AudioMetricsFrame(data: data) {
+            //     self.audio.handleMetricsFrame(frame)
+            // }
         }
 
         // Create REST client
@@ -191,12 +189,19 @@ class AppViewModel {
             colourCorrection.restClient = client
             edgeMixer.ws = ws
 
-            // Load initial state
-            log("Loading effects list...", category: "INIT")
+            // Load initial state.
+            //
+            // Heap-stability mitigation (firmware/heap-stability-day1):
+            //   - Effects: fetch only the first page (limit=20) — the rest is
+            //     paged in lazily by the picker. Reduces the connect-time
+            //     22.5 KB JSON to roughly 2-3 KB.
+            //   - Palettes: connect-time fetch removed entirely. The picker
+            //     hydrates on first open (PaletteStore.all defaults render
+            //     immediately so the UI never blanks).
+            //   - Parameters / zones / colour correction / audio tuning /
+            //     edge mixer: kept on connect — small JSON each.
+            log("Loading effects (initial page)...", category: "INIT")
             await effects.loadEffects()
-
-            log("Loading palettes list...", category: "INIT")
-            await palettes.loadPalettes()
 
             log("Loading parameters...", category: "INIT")
             await parameters.loadParameters()
@@ -378,6 +383,48 @@ class AppViewModel {
                     // Update EdgeMixer from status broadcast
                     self.edgeMixer.updateFromStatus(payload.data)
 
+                    // Refresh device-telemetry fields from the WS status push.
+                    // Firmware emits fps, freeHeap, uptime, cpuPercent,
+                    // framesRendered, wsClients on every periodic status
+                    // broadcast (5 s cadence). Without this binding the
+                    // DeviceTab telemetry is artificially stuck on the 30 s
+                    // REST poll. We rebuild DeviceStatus from the WS payload,
+                    // falling back to the existing value for fields the
+                    // broadcast does not carry (network info, heapSize,
+                    // cpuFreq) so the REST safety-net stays intact.
+                    let prior = self.deviceStatus
+                    let uptime = (payload.data["uptime"] as? Int)
+                        ?? (payload.data["uptime"] as? Double).map { Int($0) }
+                        ?? prior?.uptime
+                        ?? 0
+                    let freeHeap = (payload.data["freeHeap"] as? Int)
+                        ?? (payload.data["freeHeap"] as? Double).map { Int($0) }
+                        ?? prior?.freeHeap
+                        ?? 0
+                    let fps: Float? = (payload.data["fps"] as? Double).map { Float($0) }
+                        ?? (payload.data["fps"] as? Int).map { Float($0) }
+                        ?? prior?.fps
+                    let cpuPercent: Float? = (payload.data["cpuPercent"] as? Double).map { Float($0) }
+                        ?? (payload.data["cpuPercent"] as? Int).map { Float($0) }
+                        ?? prior?.cpuPercent
+                    let framesRendered = (payload.data["framesRendered"] as? Int)
+                        ?? (payload.data["framesRendered"] as? Double).map { Int($0) }
+                        ?? prior?.framesRendered
+                    let wsClients = (payload.data["wsClients"] as? Int)
+                        ?? (payload.data["wsClients"] as? Double).map { Int($0) }
+                        ?? prior?.wsClients
+                    self.deviceStatus = DeviceStatusResponse.DeviceStatus(
+                        uptime: uptime,
+                        freeHeap: freeHeap,
+                        heapSize: prior?.heapSize,
+                        cpuFreq: prior?.cpuFreq,
+                        fps: fps,
+                        cpuPercent: cpuPercent,
+                        framesRendered: framesRendered,
+                        network: prior?.network,
+                        wsClients: wsClients
+                    )
+
                     self.log("Status update received", category: "WS")
 
                 case .edgeMixerUpdate(let payload):
@@ -386,8 +433,12 @@ class AppViewModel {
                 case .beat(let payload):
                     self.audio.handleBeatEvent(payload.data)
 
-                case .audioMetrics(let frame):
-                    self.audio.handleMetricsFrame(frame)
+                case .audioMetrics:
+                    // Phase 3 disabled — heap-stability mitigation. Stream
+                    // subscription is suppressed upstream in WebSocketService
+                    // so firmware should not emit; defensive no-op covers any
+                    // stale broadcast during reconnect.
+                    break
 
                 case .zoneUpdate(let payload):
                     self.zones.handleZoneUpdate(payload.data)
@@ -398,22 +449,23 @@ class AppViewModel {
                     self.parameters.updateFromStatus(payload.data)
                     self.log("Parameter update received", category: "WS")
 
-                case .ledData(let data):
-                    guard data.count == 960 else {
-                        self.log("Invalid LED data: \(data.count) bytes", category: "WS")
-                        return
-                    }
-                    self.ledData = [UInt8](data)
-                    if !self.isLEDStreamActive {
-                        self.isLEDStreamActive = true
-                        self.log("LED stream started", category: "WS")
-                    }
+                case .ledData:
+                    // Phase 3 disabled — see .audioMetrics above. Defensive no-op.
+                    break
 
                 case .connected:
                     self.log("WebSocket connected", category: "WS")
                     self.wsConnected = true
                     self.udpFallbackActive = false
                     self.udpSubscribeStart = nil
+                    // Heap-stability mitigation: K1 V2 gates the periodic
+                    // 5-second `status` broadcast behind `status.subscribe`.
+                    // Without this send, the iOS app receives no `.status`
+                    // events from the firmware. See WebSocketService.swift
+                    // `subscribeStatus()` for the wire-level details.
+                    Task { [weak self] in
+                        await self?.ws.subscribeStatus()
+                    }
                     self.startStreamSubscriptions()
                     self.startUdpHealthMonitor()
 
@@ -628,6 +680,22 @@ class AppViewModel {
     }
 
     // MARK: - Device Status Polling
+    //
+    // Heap-stability mitigation: K1 V2 now gates its periodic 5-second `status`
+    // WebSocket broadcast behind `status.subscribe` (see firmware
+    // streaming-and-status-gate). iOS subscribes on WS connect, so the
+    // real-time portion of the status (effect/palette/parameters/audio/edge
+    // mixer) is delivered push-based.
+    //
+    // The REST `getDeviceStatus()` call returns fields that the WS status
+    // handler does NOT consume in `consumeWebSocketEvents` — fps, freeHeap,
+    // heapSize, framesRendered, network.rssi, network.connected, uptime — used
+    // by `DeviceTab` and `PersistentStatusBar` for telemetry. Rather than
+    // remove polling entirely (option a) and lose that telemetry, we drop
+    // the cadence to 30s as a safety-net (option b). Net effect: ~93%
+    // reduction in status REST traffic (was every 2s, now every 30s) while
+    // preserving every UI surface.
+    private static let statusPollInterval: Duration = .seconds(30)
 
     private func startDeviceStatusPolling() {
         statusPollTask?.cancel()
@@ -635,7 +703,7 @@ class AppViewModel {
             guard let self else { return }
             while !Task.isCancelled {
                 await self.loadDeviceStatus()
-                try? await Task.sleep(for: .seconds(2))
+                try? await Task.sleep(for: Self.statusPollInterval)
             }
         }
     }

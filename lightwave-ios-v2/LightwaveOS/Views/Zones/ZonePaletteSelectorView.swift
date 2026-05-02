@@ -43,6 +43,12 @@ struct ZonePaletteSelectorView: View {
                     .foregroundStyle(Color.lwGold)
                 }
             }
+            // Heap-stability mitigation: palettes are no longer fetched on
+            // connect. Hydrate on first picker open; subsequent opens are
+            // no-ops via the ViewModel's `hasHydrated` guard.
+            .task {
+                await appVM.palettes.loadPalettes()
+            }
         }
     }
 

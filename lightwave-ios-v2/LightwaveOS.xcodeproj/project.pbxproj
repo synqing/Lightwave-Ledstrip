@@ -35,6 +35,7 @@
 		4C425AF22BF7A28DCC290BDA /* Rajdhani-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 8E59AECEC7E904EDD6218285 /* Rajdhani-Medium.ttf */; };
 		4D751605DDEF7E6FDFD34564 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB07CA24EADEF6BA881D646F /* ContentView.swift */; };
 		52210E5419973556A24AF67A /* WebSocketServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 938801B35C7257EBBD79FA9B /* WebSocketServiceTests.swift */; };
+		528E1EFA9E6AA202F785A5B3 /* WSInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C90492E297FEB5E3BB25C11 /* WSInspector.swift */; };
 		5459AE85295E1B2195C348FC /* NoveltyOnsetCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AE9C345B8D6E90338187465 /* NoveltyOnsetCard.swift */; };
 		5570105A1AFE44E78C87C12F /* EffectSelectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BEF66607D6EB7A86DAB1A24 /* EffectSelectorView.swift */; };
 		55BDAF64661B13330D6FAC75 /* DSPHealthCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84846BE14BEFB7AD1474515D /* DSPHealthCard.swift */; };
@@ -105,10 +106,12 @@
 		D7B1E0FA82137B04E351A3AC /* PrimaryControlsCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3683BF0C58E2D73196B6C24F /* PrimaryControlsCard.swift */; };
 		DAEE2833638579F4171A6742 /* RiveViewContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2532BA73C0A023E4FE6FFC5E /* RiveViewContainer.swift */; };
 		DB7A0B8FCD6D7AB7F0635D59 /* RiveCppRuntimeAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08AA2C21356E7DCE870D100D /* RiveCppRuntimeAdapter.swift */; };
+		DCA1DC0D389DEE00D5A42988 /* WebSocketInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47C20472C87749D898BBAB21 /* WebSocketInspectorView.swift */; };
 		DD03A1AAA86329C8F31ED5F8 /* ZoneViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CEDD5DA50941F20E512D1B2 /* ZoneViewModel.swift */; };
 		DD2A1545ECFBAFC9366C0222 /* ShowsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01B2B27348B24F57C57E84EE /* ShowsView.swift */; };
 		DD9590BF303220F7E3701DD7 /* EffectMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 455F2E537DDB7B2763EC9AD0 /* EffectMetadata.swift */; };
 		DDBC0920AD5A6D945CB1DB98 /* MetricBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = F83207D4D91AF3D90F889CB9 /* MetricBar.swift */; };
+		DDE1CE2C112B15B1357A2B25 /* WSInspectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6783AF3DCE1A38713113CAE9 /* WSInspectorTests.swift */; };
 		E16438903A79DAD6C1116BAC /* ShowSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6084AED231FB43666D9D107A /* ShowSummary.swift */; };
 		E458871C05CC13D387BE574E /* EffectParameterSheetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D533DB7D3C6E80EE1E1D1C9D /* EffectParameterSheetTests.swift */; };
 		E46DEF42288D99C02156DD24 /* BeatTempoCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD1DD439D8B2C8A802FC7B7A /* BeatTempoCard.swift */; };
@@ -127,6 +130,7 @@
 		F9B02ED4E22BECB3EFD01829 /* RESTClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DABC7E4FD7AB390A7413924 /* RESTClient.swift */; };
 		F9F00E9852A03ABB2DC113AD /* SpectrumVisualisationCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70BC4E2523308275C0B38ECC /* SpectrumVisualisationCard.swift */; };
 		F9F86388A7F4ACC8530A4B99 /* PresetsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F546C8A2C99339CAF146E5B8 /* PresetsView.swift */; };
+		FBEF5FA43C13DAA20217708E /* WSFrame.swift in Sources */ = {isa = PBXBuildFile; fileRef = A77842934F36CDD7CDE0C2D5 /* WSFrame.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -154,6 +158,7 @@
 		08C2D77D1CFF5748E86799D6 /* ZoneConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoneConfig.swift; sourceTree = "<group>"; };
 		09C42796DB076B87025D874C /* LightwaveOSUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LightwaveOSUITests.swift; sourceTree = "<group>"; };
 		0AE9C345B8D6E90338187465 /* NoveltyOnsetCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoveltyOnsetCard.swift; sourceTree = "<group>"; };
+		0C90492E297FEB5E3BB25C11 /* WSInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WSInspector.swift; sourceTree = "<group>"; };
 		0E14448B1A1EB8825BAEE891 /* ShowDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowDetail.swift; sourceTree = "<group>"; };
 		168C9F678A0019152BC2DB77 /* ZonePaletteSelectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZonePaletteSelectorView.swift; sourceTree = "<group>"; };
 		18BB5AEC76BDB1042E10C43A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -182,6 +187,7 @@
 		3FC37F84E5B0BF00C91DF3AE /* ShowViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowViewModelTests.swift; sourceTree = "<group>"; };
 		455F2E537DDB7B2763EC9AD0 /* EffectMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EffectMetadata.swift; sourceTree = "<group>"; };
 		456CA5276801070F23B37070 /* PlayTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayTab.swift; sourceTree = "<group>"; };
+		47C20472C87749D898BBAB21 /* WebSocketInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSocketInspectorView.swift; sourceTree = "<group>"; };
 		481774CD202BAE8F95CD880F /* VRMSFrame.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VRMSFrame.swift; sourceTree = "<group>"; };
 		4A06B1F5D1B76135389E8A37 /* DeviceDiscoveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceDiscoveryService.swift; sourceTree = "<group>"; };
 		4BEF66607D6EB7A86DAB1A24 /* EffectSelectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EffectSelectorView.swift; sourceTree = "<group>"; };
@@ -199,6 +205,7 @@
 		5FE0B2000D2C4873FDC10DF5 /* SystemState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemState.swift; sourceTree = "<group>"; };
 		6084AED231FB43666D9D107A /* ShowSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowSummary.swift; sourceTree = "<group>"; };
 		61D83CFB65D318279505DBE1 /* LWSlider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LWSlider.swift; sourceTree = "<group>"; };
+		6783AF3DCE1A38713113CAE9 /* WSInspectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WSInspectorTests.swift; sourceTree = "<group>"; };
 		67DF593AAC8E4A84C773C01E /* EdgeMixerConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EdgeMixerConfig.swift; sourceTree = "<group>"; };
 		6835286C5F9C9CFBB0342C18 /* StateCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StateCard.swift; sourceTree = "<group>"; };
 		6A5074FF917C2B57C4CE67E0 /* Palettes_Master.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Palettes_Master.json; sourceTree = "<group>"; };
@@ -235,6 +242,7 @@
 		9FEF47759DDA4F31A3A3E828 /* VRMSPerceptualCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VRMSPerceptualCard.swift; sourceTree = "<group>"; };
 		A0E5E9E104E8517B31A2FCD3 /* WebSocketService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSocketService.swift; sourceTree = "<group>"; };
 		A3494A9997E5BDD618C4F611 /* ZoneSegment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoneSegment.swift; sourceTree = "<group>"; };
+		A77842934F36CDD7CDE0C2D5 /* WSFrame.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WSFrame.swift; sourceTree = "<group>"; };
 		A7842D3CB7F30B82B6510791 /* ZoneEffectSelectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoneEffectSelectorView.swift; sourceTree = "<group>"; };
 		AA1C44B4393BF8BAEE1D5974 /* BeatPulse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeatPulse.swift; sourceTree = "<group>"; };
 		AE8390CC2910D822252527A7 /* JetBrainsMono-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "JetBrainsMono-Medium.ttf"; sourceTree = "<group>"; };
@@ -370,6 +378,7 @@
 				3FC37F84E5B0BF00C91DF3AE /* ShowViewModelTests.swift */,
 				9102B3CF3463BBE153C647AB /* STMVRMSStreamTests.swift */,
 				938801B35C7257EBBD79FA9B /* WebSocketServiceTests.swift */,
+				6783AF3DCE1A38713113CAE9 /* WSInspectorTests.swift */,
 			);
 			path = LightwaveOSTests;
 			sourceTree = "<group>";
@@ -381,6 +390,7 @@
 				3312C970BE3E5BC4D373D9AA /* DebugLogView.swift */,
 				F546C8A2C99339CAF146E5B8 /* PresetsView.swift */,
 				01B2B27348B24F57C57E84EE /* ShowsView.swift */,
+				47C20472C87749D898BBAB21 /* WebSocketInspectorView.swift */,
 			);
 			path = Device;
 			sourceTree = "<group>";
@@ -518,6 +528,7 @@
 				7DABC7E4FD7AB390A7413924 /* RESTClient.swift */,
 				5A666FDABA22F3869FE52E0A /* UDPStreamReceiver.swift */,
 				A0E5E9E104E8517B31A2FCD3 /* WebSocketService.swift */,
+				0C90492E297FEB5E3BB25C11 /* WSInspector.swift */,
 			);
 			path = Network;
 			sourceTree = "<group>";
@@ -578,6 +589,7 @@
 				5FE0B2000D2C4873FDC10DF5 /* SystemState.swift */,
 				3A450B5387DC386220A98816 /* TransitionConfig.swift */,
 				481774CD202BAE8F95CD880F /* VRMSFrame.swift */,
+				A77842934F36CDD7CDE0C2D5 /* WSFrame.swift */,
 				08C2D77D1CFF5748E86799D6 /* ZoneConfig.swift */,
 				C22F18DAE2719E6988E4786B /* ZonePreset.swift */,
 				B10E92030E48203074762509 /* ZonePresetSummary.swift */,
@@ -736,6 +748,7 @@
 				3AF06F3675C282D02B2BC195 /* RESTClientTests.swift in Sources */,
 				A4ED425E1472441EE75BC43C /* STMVRMSStreamTests.swift in Sources */,
 				BBE05304FBDAD5EA8E082361 /* ShowViewModelTests.swift in Sources */,
+				DDE1CE2C112B15B1357A2B25 /* WSInspectorTests.swift in Sources */,
 				52210E5419973556A24AF67A /* WebSocketServiceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -841,8 +854,11 @@
 				B871B0FF48E50BCFEACD90AD /* UDPStreamReceiver.swift in Sources */,
 				C95371588A09E95B766C3564 /* VRMSFrame.swift in Sources */,
 				D5D580DF1AAD7F2DE4B0713F /* VRMSPerceptualCard.swift in Sources */,
+				FBEF5FA43C13DAA20217708E /* WSFrame.swift in Sources */,
+				528E1EFA9E6AA202F785A5B3 /* WSInspector.swift in Sources */,
 				EAD83A8923DD6CA8F03A0887 /* WaterfallCanvas.swift in Sources */,
 				651D94812D47ACEF73F02D22 /* WaveformSpectrumCard.swift in Sources */,
+				DCA1DC0D389DEE00D5A42988 /* WebSocketInspectorView.swift in Sources */,
 				AA4974FFED4AA3412E9CCEFF /* WebSocketService.swift in Sources */,
 				F2115B1183C10DA720A36477 /* ZoneCard.swift in Sources */,
 				2DE021CF3623E96957E0FB5C /* ZoneConfig.swift in Sources */,

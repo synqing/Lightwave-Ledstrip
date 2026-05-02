@@ -64,6 +64,7 @@
 #include "webserver/ws/WsStmCommands.h"
 #endif
 #include "webserver/ws/WsStreamCommands.h"
+#include "webserver/ws/WsStatusCommands.h"
 #include "webserver/ws/WsModifierCommands.h"
 #if FEATURE_API_AUTH
 #include "webserver/ws/WsAuthCommands.h"
@@ -221,6 +222,9 @@ WebServer::WebServer(NodeOrchestrator& orchestrator, RendererNode* renderer)
     , m_orchestrator(orchestrator)
     , m_renderer(renderer)
 {
+#if defined(ESP32)
+    m_statusSubscribersMux = portMUX_INITIALIZER_UNLOCKED;
+#endif
 }
 
 WebServer::~WebServer() {
@@ -1321,6 +1325,10 @@ void WebServer::setupWebSocket() {
     webserver::ws::registerWsStimulusCommands(ctx);
     webserver::ws::registerWsDebugCommands(ctx);
     webserver::ws::registerWsStreamCommands(ctx);
+    // Status subscription gate (heap-shed mitigation 2026-05-01): periodic
+    // status JSON is no longer textAll() — clients must opt-in via
+    // status.subscribe to keep receiving broadcasts.
+    webserver::ws::registerWsStatusCommands(ctx);
 #if FEATURE_AUDIO_SYNC
     webserver::ws::registerWsStmCommands(ctx);
 #endif
@@ -1520,6 +1528,12 @@ void WebServer::handleWsDisconnect(AsyncWebSocketClient* client) {
 
     // Cleanup LED stream subscription
     setLEDStreamSubscription(client, false);
+
+    // Cleanup status broadcast subscription (heap-shed mitigation 2026-05-01).
+    // Without this, the status subscriber table keeps a dead client ID until
+    // the next broadcast iteration prunes it on send-failure. Removing on
+    // disconnect closes the window cleanly and matches the LED/log pattern.
+    setStatusSubscription(client, false);
 
     // Cleanup log stream subscription (forensic-audit P1-15)
     // Without this, the LogStream subscriber table keeps a dead handle until

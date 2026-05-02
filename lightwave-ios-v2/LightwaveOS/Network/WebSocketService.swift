@@ -193,25 +193,66 @@ actor WebSocketService {
         eventContinuation = nil
     }
 
-    /// Send a command with optional parameters
-    func send(_ command: String, params: [String: Any] = [:]) {
+    /// Send a command with optional parameters.
+    ///
+    /// `params` accepts `[String: any Sendable]` so call sites in
+    /// non-actor contexts pass values across the actor boundary cleanly
+    /// under Swift 6 strict concurrency. Internally we widen to
+    /// `[String: Any]` for `JSONSerialization`, which only ever runs on
+    /// this actor.
+    func send(_ command: String, params: [String: any Sendable] = [:]) {
         guard webSocketTask != nil else {
             print("WS send dropped (not connected): \(command)")
             return
         }
         var message: [String: Any] = ["type": command]
-        message.merge(params) { _, new in new }
+        for (key, value) in params {
+            message[key] = value
+        }
         sendRaw(message)
     }
 
+    /// Subscribe to periodic status broadcasts.
+    ///
+    /// Required for the iOS app to receive `.status` events from K1 V2
+    /// (commit firmware/streaming-and-status-gate). The firmware now gates
+    /// its 5-second status-broadcast loop behind this subscribe — without it
+    /// no periodic `.status` messages arrive, so the app would only see the
+    /// status payload on explicit changes. Sent automatically by
+    /// `AppViewModel.consumeWebSocketEvents` on the `.connected` event;
+    /// no other call site should need it.
+    func subscribeStatus() {
+        send("status.subscribe")
+    }
+
+    /// Unsubscribe from periodic status broadcasts. The companion to
+    /// `subscribeStatus()` above. Currently unused at the call-site level —
+    /// the WebSocket disconnect on backgrounding implicitly tears down the
+    /// firmware-side subscription — but exposed for completeness and future
+    /// use (e.g. a low-power mode that pauses telemetry without dropping the
+    /// socket).
+    func unsubscribeStatus() {
+        send("status.unsubscribe")
+    }
+
     /// Subscribe to LED stream
+    ///
+    /// Phase 3 disabled — heap-stability mitigation. K1 allocates a per-client
+    /// LED message queue (~7680 B = 8 frame slots × 960 B) on subscribe;
+    /// suppressing the upstream subscribe prevents the internal-heap
+    /// fragmentation that starves the firmware heap-shedding recovery path.
+    /// Re-enable by uncommenting the `send` line below once the broadcaster
+    /// fix lands. See docs/superpowers/ios-firmware-parity-phase-3-scoping.md.
     func subscribeLEDStream(udpPort: UInt16 = 41234) {
-        send("ledStream.subscribe", params: ["udpPort": Int(udpPort)])
+        _ = udpPort
+        // send("ledStream.subscribe", params: ["udpPort": Int(udpPort)])
     }
 
     /// Subscribe to LED stream via WebSocket (no UDP transport)
+    ///
+    /// Phase 3 disabled — see `subscribeLEDStream(udpPort:)` above.
     func subscribeLEDStreamWS() {
-        send("ledStream.subscribe")
+        // send("ledStream.subscribe")
     }
 
     /// Unsubscribe from LED stream
@@ -220,13 +261,18 @@ actor WebSocketService {
     }
 
     /// Subscribe to audio metrics stream
+    ///
+    /// Phase 3 disabled — see `subscribeLEDStream(udpPort:)` above.
     func subscribeAudioStream(udpPort: UInt16 = 41234) {
-        send("audio.subscribe", params: ["udpPort": Int(udpPort)])
+        _ = udpPort
+        // send("audio.subscribe", params: ["udpPort": Int(udpPort)])
     }
 
     /// Subscribe to audio metrics stream via WebSocket (no UDP transport)
+    ///
+    /// Phase 3 disabled — see `subscribeLEDStream(udpPort:)` above.
     func subscribeAudioStreamWS() {
-        send("audio.subscribe")
+        // send("audio.subscribe")
     }
 
     /// Unsubscribe from audio metrics stream
@@ -236,7 +282,7 @@ actor WebSocketService {
 
     /// Trigger a transition effect
     func triggerTransition(type: Int, duration: Int? = nil, toEffect: Int? = nil) {
-        var params: [String: Any] = ["type": type]
+        var params: [String: any Sendable] = ["type": type]
         if let duration = duration {
             params["duration"] = duration
         }
@@ -248,7 +294,7 @@ actor WebSocketService {
 
     /// Fetch current audio tuning parameters
     func sendAudioParametersGet(requestId: String? = nil) {
-        var params: [String: Any] = [:]
+        var params: [String: any Sendable] = [:]
         if let requestId = requestId {
             params["requestId"] = requestId
         }
@@ -256,7 +302,7 @@ actor WebSocketService {
     }
 
     /// Patch audio tuning parameters
-    func sendAudioParametersSet(payload: [String: Any], requestId: String? = nil) {
+    func sendAudioParametersSet(payload: [String: any Sendable], requestId: String? = nil) {
         var params = payload
         if let requestId = requestId {
             params["requestId"] = requestId
@@ -271,7 +317,7 @@ actor WebSocketService {
     /// with magic 0xFD. The firmware emits a `stm.subscribed` text ack on
     /// success, surfaced as `Event.stmSubscriptionAck`.
     func subscribeSTM(requestId: String? = nil) {
-        var params: [String: Any] = [:]
+        var params: [String: any Sendable] = [:]
         if let requestId = requestId {
             params["requestId"] = requestId
         }
@@ -280,7 +326,7 @@ actor WebSocketService {
 
     /// Unsubscribe from the STM binary stream.
     func unsubscribeSTM(requestId: String? = nil) {
-        var params: [String: Any] = [:]
+        var params: [String: any Sendable] = [:]
         if let requestId = requestId {
             params["requestId"] = requestId
         }
@@ -291,7 +337,7 @@ actor WebSocketService {
     /// stream. Frames arrive at 10 Hz as JSON text messages of type
     /// `vrms.frame`, decoded by `handleTextMessage` into `VRMSFrame`.
     func subscribeVRMS(requestId: String? = nil) {
-        var params: [String: Any] = [:]
+        var params: [String: any Sendable] = [:]
         if let requestId = requestId {
             params["requestId"] = requestId
         }
@@ -300,7 +346,7 @@ actor WebSocketService {
 
     /// Unsubscribe from the VRMS metrics stream.
     func unsubscribeVRMS(requestId: String? = nil) {
-        var params: [String: Any] = [:]
+        var params: [String: any Sendable] = [:]
         if let requestId = requestId {
             params["requestId"] = requestId
         }
@@ -421,6 +467,13 @@ actor WebSocketService {
     }
 
     private func handleTextMessage(_ text: String) {
+        // Inspector capture — non-blocking, O(1) actor send. Records the raw
+        // text BEFORE JSON parsing so malformed frames are still observable
+        // in the inspector. See WSInspector.swift for the ring-buffer details.
+        Task.detached(priority: .background) {
+            await WSInspector.shared.recordInboundText(text)
+        }
+
         guard let data = text.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return
@@ -531,6 +584,14 @@ actor WebSocketService {
     private static let rgbPerStrip = 160 * 3      // 480 bytes
 
     private func handleBinaryMessage(_ data: Data) {
+        // Inspector capture — non-blocking, O(1) actor send. We pass the
+        // raw `Data` so the inspector can read the magic byte and length;
+        // it does NOT retain the underlying bytes (would saturate the ring
+        // buffer at 30 FPS LED streaming).
+        Task.detached(priority: .background) {
+            await WSInspector.shared.recordInboundBinary(data)
+        }
+
         // MARK: Phase 2 — STM and VRMS streams (binary dispatch)
         // STM frame: 250 bytes, magic 0xFD (first byte). Distinct from LED 0xFE
         // and audio metrics 0x41 (low byte of little-endian 0x00445541).
@@ -591,6 +652,13 @@ actor WebSocketService {
     }
 
     private func sendText(_ text: String) async {
+        // Inspector capture — non-blocking, O(1) actor send. Records on
+        // every dispatch attempt; failures are still useful in the
+        // inspector because they show what the app TRIED to send.
+        Task.detached(priority: .background) {
+            await WSInspector.shared.recordOutboundText(text)
+        }
+
         do {
             try await webSocketTask?.send(.string(text))
         } catch {
@@ -711,14 +779,9 @@ actor WebSocketService {
 @available(iOS 17.0, *)
 extension WebSocketService: PresetWebSocketCommanding {
     func sendCommand(_ command: String, params: [String: any Sendable]) async {
-        // Inside the actor's isolation domain we can safely upcast the
-        // Sendable map to `[String: Any]` for the existing fire-and-forget
-        // send path. The values are already concrete types (Int / String) so
-        // JSON-serialisation downstream is unaffected.
-        let anyParams: [String: Any] = params.reduce(into: [:]) { acc, kv in
-            acc[kv.key] = kv.value
-        }
-        send(command, params: anyParams)
+        // `send(_:params:)` now accepts the same Sendable map type, so the
+        // protocol pass-through is a direct call — no upcast required.
+        send(command, params: params)
     }
 }
 

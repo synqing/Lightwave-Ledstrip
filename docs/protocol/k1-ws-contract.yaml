@@ -1615,6 +1615,35 @@ commands:
       type: "beat.unsubscribed"
     consumers: [ios]
 
+  # ── Status broadcast subscription (heap-shed mitigation 2026-05-01) ─────
+  # Periodic 5 s status JSON (and parameter-change re-broadcasts) is now
+  # gated behind explicit subscription. Without status.subscribe, K1 sends
+  # NO periodic status to the client. Mirrors the LED/audio/beat per-stream
+  # opt-in pattern. Existing clients MUST send status.subscribe on connect
+  # to preserve previous behaviour.
+  status.subscribe:
+    direction: "client -> K1"
+    description: "Subscribe to periodic status broadcasts (5 s cadence + parameter-change)"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "status.subscribed"
+      data:
+        clientId: uint32
+        periodMs: uint32  # nominal periodic cadence (5000)
+    consumers: [tab5, ios]
+
+  status.unsubscribe:
+    direction: "client -> K1"
+    description: "Unsubscribe from periodic status broadcasts"
+    request:
+      requestId: { type: string, optional: true }
+    response:
+      type: "status.unsubscribed"
+      data:
+        clientId: uint32
+    consumers: [tab5, ios]
+
   # ── OTA ────────────────────────────────────────────────────────────────
   ota.check:
     direction: "client -> K1"
@@ -1844,9 +1873,12 @@ commands:
 broadcasts:
 
   status:
-    direction: "K1 -> all clients"
-    trigger: "Periodic (5s) or after any parameter/effect change"
+    direction: "K1 -> subscribed clients only"
+    trigger: "Periodic (5s) or after any parameter/effect change — REQUIRES status.subscribe"
     type: "status"
+    subscription_required: true
+    subscribe_command: "status.subscribe"
+    unsubscribe_command: "status.unsubscribe"
     fields:
       effectId: uint16
       effectName: string
@@ -1872,7 +1904,10 @@ broadcasts:
       edgeMixerTemporal: uint8
       edgeMixerTemporalName: string
     consumers: [tab5, ios]
-    note: "Tab5 WsMessageRouter handles this as 'status' type"
+    note: |
+      Heap-shed mitigation 2026-05-01: status is no longer textAll().
+      Clients MUST send status.subscribe to receive these broadcasts.
+      Tab5 WsMessageRouter handles the type as 'status'.
 
   zones.list:
     direction: "K1 -> all clients"

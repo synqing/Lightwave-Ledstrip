@@ -118,7 +118,16 @@ namespace network {
 // events (WS message queue growth, broadcaster backlog). Hysteresis width
 // preserved at 10 KB (shed 18, resume 28).
 #ifndef LW_INTERNAL_HEAP_SHED_BELOW_BYTES
-#define LW_INTERNAL_HEAP_SHED_BELOW_BYTES (18U * 1024U)
+// Heap-stability mitigation 2026-05-02: lowered from 18 KB to 12 KB.
+// K1 V2 boot baseline measured at ~19 KB internal heap (heap=18948 in
+// boot validate). One WS client's AsyncWebSocketClient + AsyncClient +
+// lwIP TCP buffers (~5 KB) drops below 18 KB and trips shed without any
+// genuine memory pressure. 12 KB gives 6 KB of structural breathing room
+// for one client + transient broadcast traffic. Combined with the SSA-δ
+// PSRAM-allocated broadcast scratch buffers and the extended state-
+// broadcast subscriber gate, this prevents spurious latches without
+// disabling the watchdog for genuine memory pressure events.
+#define LW_INTERNAL_HEAP_SHED_BELOW_BYTES (12U * 1024U)
 #endif
 #ifndef LW_INTERNAL_HEAP_RESUME_ABOVE_BYTES
 #define LW_INTERNAL_HEAP_RESUME_ABOVE_BYTES (28U * 1024U)
@@ -140,7 +149,15 @@ namespace network {
 // total recovered to 12 KB but largest stuck at 3828 bytes for 3+ minutes,
 // with iOS unable to maintain a WS connection.
 #ifndef LW_INTERNAL_HEAP_LARGEST_BLOCK_RECOVERY_BYTES
-#define LW_INTERNAL_HEAP_LARGEST_BLOCK_RECOVERY_BYTES (8U * 1024U)
+// Heap-stability mitigation 2026-05-02: lowered from 8 KB to 4 KB.
+// Observed K1 V2 fragmentation pattern leaves largest free block at
+// 7668 B with one client connected (structural — same value across
+// many test runs). The 8 KB recovery gate cannot fire at this layout.
+// 4 KB matches typical WS allocation envelopes (status JSON ~700 B,
+// LED frame 966 B, audio frame 464 B all well below 4 KB) and lets
+// the latch clear once internal heap climbs above the (also lowered)
+// 12 KB shed floor.
+#define LW_INTERNAL_HEAP_LARGEST_BLOCK_RECOVERY_BYTES (4U * 1024U)
 #endif
 
 namespace WebServerConfig {
@@ -469,6 +486,33 @@ public:
      */
     bool hasLogStreamSubscribers() const;
 
+    /**
+     * @brief Subscribe/unsubscribe a WebSocket client to periodic status broadcasts
+     *
+     * Gates the 5-second periodic status JSON (and the parameter-change
+     * coalesced re-broadcast) behind explicit opt-in. Without an active
+     * subscription, K1 sends NO periodic status to the client — saving
+     * heap pressure on the AsyncWebSocket per-client message queue.
+     * Idempotent: re-subscribing the same client is a no-op success.
+     *
+     * @param client WebSocket client pointer
+     * @param subscribe true to subscribe, false to unsubscribe
+     * @return true if the subscription table accepted the change (or was
+     *         already in the requested state); false only when subscribing
+     *         and the fixed-size table is full.
+     */
+    bool setStatusSubscription(AsyncWebSocketClient* client, bool subscribe);
+
+    /**
+     * @brief Check if any clients are subscribed to status broadcasts
+     */
+    bool hasStatusSubscribers() const;
+
+    /**
+     * @brief Get current status subscriber count (for telemetry / logs)
+     */
+    size_t getStatusSubscriberCount() const;
+
 #if FEATURE_AUDIO_SYNC
     /**
      * @brief Broadcast audio frame data to subscribed clients
@@ -684,6 +728,16 @@ private:
     webserver::LedStreamBroadcaster* m_ledBroadcaster;
     // Reused LED scratch frame to avoid large loopTask stack frames. Allocated at begin().
     CRGB* m_ledFrameScratch;
+
+    // Status broadcast subscribers — gates the 5 s periodic status JSON
+    // (and parameter-change re-broadcasts) behind explicit opt-in. Capacity
+    // matches MAX_WS_CLIENTS upper bound (8). Mirrors the LED/audio
+    // SubscriptionManager pattern; thread-safety provided by m_statusSubscribersMux.
+    static constexpr size_t MAX_STATUS_SUBSCRIBERS = 8;
+    SubscriptionManager<MAX_STATUS_SUBSCRIBERS> m_statusSubscribers;
+#if defined(ESP32)
+    mutable portMUX_TYPE m_statusSubscribersMux;
+#endif
 
     // UDP streaming (bypasses TCP backpressure for LED/audio frames)
     webserver::UdpStreamer* m_udpStreamer;

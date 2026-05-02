@@ -19,6 +19,23 @@ class PaletteViewModel {
     var searchText: String = ""
     var selectedCategory: String = "All"
 
+    // MARK: - Lazy hydration (heap-stability mitigation)
+    //
+    // The palette list (limit=75) returns ~9 KB of JSON which, layered on top
+    // of the effects fetch and other connect-time GETs, contributed to the
+    // K1 V2 internal-heap fragmentation that latched heap-shedding. We now
+    // skip the network round-trip on connect and hydrate lazily the first
+    // time `loadPalettes()` is invoked from a UI surface — i.e. when the
+    // user opens the palette picker. The default `PaletteStore.all` covers
+    // every palette name and gradient at app start, so the picker has
+    // something to render before the network call resolves.
+
+    /// Set to `true` after the first network hydration completes (success or
+    /// failure). Subsequent calls to `loadPalettes()` become no-ops, preventing
+    /// the picker from re-fetching every time it's opened.
+    @ObservationIgnored
+    private var hasHydrated = false
+
     // MARK: - Dependencies
 
     var restClient: RESTClient?
@@ -67,8 +84,36 @@ class PaletteViewModel {
 
     // MARK: - API Methods
 
+    /// Hydrate the palette catalogue from the firmware. Called lazily by the
+    /// palette picker the first time it is opened — NOT from the connect path
+    /// (heap-stability mitigation, see `hasHydrated` above).
+    ///
+    /// Idempotent: subsequent invocations after a successful or failed
+    /// hydration become no-ops, so re-opening the picker does not repeatedly
+    /// hit the firmware. Callers that genuinely need a fresh fetch (e.g. a
+    /// "refresh palettes" admin button) should use `forceReloadPalettes()`.
     func loadPalettes() async {
+        guard !hasHydrated else { return }
+        await performPaletteFetch()
+    }
+
+    /// Force a re-hydration ignoring `hasHydrated`. Reserved for explicit user
+    /// gestures (pull-to-refresh, admin reload). Normal UI paths must use
+    /// `loadPalettes()`.
+    func forceReloadPalettes() async {
+        await performPaletteFetch()
+    }
+
+    /// Internal: perform the actual REST fetch and merge it into the local
+    /// catalogue. Updates `hasHydrated` so future `loadPalettes()` calls
+    /// short-circuit.
+    private func performPaletteFetch() async {
         guard let client = restClient else { return }
+
+        // Mark the hydration as having taken place even before the response
+        // returns — a second concurrent call entering through a different
+        // call site must not double-fetch.
+        hasHydrated = true
 
         do {
             let response = try await client.getPalettes(limit: 100)
@@ -107,6 +152,11 @@ class PaletteViewModel {
         } catch {
             print("Palette load failed, using fallback: \(error)")
             self.allPalettes = PaletteStore.all
+            // On failure clear `hasHydrated` so the picker retries on its next
+            // open. The first connect-time call is suppressed by AppViewModel,
+            // so the user-facing latency is bounded to a single picker-open
+            // event.
+            hasHydrated = false
         }
     }
 

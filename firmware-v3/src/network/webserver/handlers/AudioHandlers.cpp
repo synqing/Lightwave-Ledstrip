@@ -89,7 +89,9 @@ void AudioHandlers::handleParametersGet(AsyncWebServerRequest* request,
     audio::AudioContractTuning contract = renderer ? renderer->getAudioContractTuning()
                                                     : audio::clampAudioContractTuning(audio::AudioContractTuning{});
 
-    sendSuccessResponse(request, [frame, seq, &contract](JsonObject& data) {
+    // Streamed response — avoids the intermediate String allocation that
+    // fragmented K1 V2 internal heap on /api/v1/audio/parameters.
+    sendSuccessResponseStreamed(request, [frame, seq, &contract](JsonObject& data) {
         data["backend"] = "esv11";
         data["seq"] = seq;
 
@@ -122,7 +124,7 @@ void AudioHandlers::handleParametersGet(AsyncWebServerRequest* request,
         caps["bandCount"] = audio::CONTROLBUS_NUM_BANDS;
         caps["chromaCount"] = audio::CONTROLBUS_NUM_CHROMA;
         caps["waveformPoints"] = audio::CONTROLBUS_WAVEFORM_N;
-    });
+    }, 2048);
     freeControlBusFrameScratch(frame);
 #else
     audio::AudioPipelineTuning pipeline = audio->getPipelineTuning();
@@ -130,7 +132,11 @@ void AudioHandlers::handleParametersGet(AsyncWebServerRequest* request,
     audio::AudioContractTuning contract = renderer ? renderer->getAudioContractTuning()
                                                     : audio::clampAudioContractTuning(audio::AudioContractTuning{});
 
-    sendSuccessResponse(request, [&](JsonObject& data) {
+    // Streamed response — avoids the intermediate String allocation that
+    // fragmented K1 V2 internal heap on /api/v1/audio/parameters. The
+    // pipeline tuning payload is the largest of the three fragmenting
+    // endpoints (~6-8 KB nested) so we use a generous initial cbuf.
+    sendSuccessResponseStreamed(request, [&](JsonObject& data) {
         JsonObject pipelineObj = data["pipeline"].to<JsonObject>();
         pipelineObj["dcAlpha"] = pipeline.dcAlpha;
         pipelineObj["agcTargetRms"] = pipeline.agcTargetRms;
@@ -219,7 +225,7 @@ void AudioHandlers::handleParametersGet(AsyncWebServerRequest* request,
         caps["bandCount"] = audio::NUM_BANDS;
         caps["chromaCount"] = audio::CONTROLBUS_NUM_CHROMA;
         caps["waveformPoints"] = audio::CONTROLBUS_WAVEFORM_N;
-    });
+    }, 4096);
 #endif
 }
 

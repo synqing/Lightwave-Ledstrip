@@ -117,6 +117,11 @@ void WebServer::doBroadcastStatus() {
 
     if (m_ws->count() == 0) return;
 
+    // Heap-shed mitigation 2026-05-01: gate behind explicit subscription.
+    // No subscribers = no JSON build, no textAll, no per-client queue growth.
+    // Clients opt-in via status.subscribe (see WsStatusCommands.cpp).
+    if (!hasStatusSubscribers()) return;
+
     if (shouldDeferTextAll()) return;  // SSA-D Round 2 (2026-04-18)
 
     m_ws->cleanupClients();
@@ -248,9 +253,60 @@ void WebServer::doBroadcastStatus() {
     String output;
     serializeJson(doc, output);
 
-    if (m_ws && m_ws->count() > 0) {
-        if (!m_ws->availableForWriteAll()) return;
-        m_ws->textAll(output);
+    if (!m_ws || m_ws->count() == 0) return;
+    if (!m_ws->availableForWriteAll()) return;
+
+    // Iterate the subscriber set under the mux, snapshotting IDs so we don't
+    // hold the lock during send. Mirrors LedStreamBroadcaster::broadcast().
+    uint32_t ids[MAX_STATUS_SUBSCRIBERS];
+    size_t count = 0;
+#if defined(ESP32)
+    portENTER_CRITICAL(&m_statusSubscribersMux);
+#endif
+    count = m_statusSubscribers.count();
+    for (size_t i = 0; i < count && i < MAX_STATUS_SUBSCRIBERS; ++i) {
+        ids[i] = m_statusSubscribers.get(i);
+    }
+#if defined(ESP32)
+    portEXIT_CRITICAL(&m_statusSubscribersMux);
+#endif
+
+    uint32_t toRemove[MAX_STATUS_SUBSCRIBERS];
+    uint8_t removeCount = 0;
+
+    for (size_t i = 0; i < count; ++i) {
+        const uint32_t clientId = ids[i];
+        AsyncWebSocketClient* c = m_ws->client(clientId);
+        if (!c || c->status() != WS_CONNECTED) {
+            if (removeCount < MAX_STATUS_SUBSCRIBERS) {
+                toRemove[removeCount++] = clientId;
+            }
+            continue;
+        }
+        // Back-pressure guard: if the per-client queue already has pending
+        // frames, drop this status tick rather than enqueue another ~700 B
+        // payload. This is the whole point of the gate — protect the queue.
+        static constexpr size_t MAX_QUEUE_LEN_BEFORE_DROP = 1;
+        if (c->queueIsFull() || c->queueLen() > MAX_QUEUE_LEN_BEFORE_DROP) {
+            continue;
+        }
+        if (!c->canSend()) continue;
+        // Use m_ws->text(id, ...) to atomically resolve the client inside
+        // AsyncWebSocket and avoid the dangling-pointer race that LED
+        // streaming hit (see LedStreamBroadcaster.cpp:115 commentary).
+        m_ws->text(clientId, output);
+    }
+
+    if (removeCount > 0) {
+#if defined(ESP32)
+        portENTER_CRITICAL(&m_statusSubscribersMux);
+#endif
+        for (uint8_t r = 0; r < removeCount; ++r) {
+            m_statusSubscribers.remove(toRemove[r]);
+        }
+#if defined(ESP32)
+        portEXIT_CRITICAL(&m_statusSubscribersMux);
+#endif
     }
 }
 
@@ -499,6 +555,67 @@ bool WebServer::setLogStreamSubscription(AsyncWebSocketClient* client, bool subs
 
 bool WebServer::hasLogStreamSubscribers() const {
     return m_logBroadcaster && m_logBroadcaster->hasSubscribers();
+}
+
+// ============================================================================
+// Status Broadcast Subscription (heap-shed mitigation 2026-05-01)
+// ============================================================================
+//
+// Periodic status JSON is gated behind explicit subscription so that idle or
+// non-status-aware clients (e.g. clients only consuming LED/audio frames)
+// do not have a 5 s broadcast queued onto their AsyncWebSocket message
+// queue. Combined with parameter-change coalescing, this previously sat at
+// ~14 KB/sec/client of internal heap churn — pinning the heap-shed latch.
+
+bool WebServer::setStatusSubscription(AsyncWebSocketClient* client, bool subscribe) {
+    if (!client) return false;
+    const uint32_t clientId = client->id();
+    bool success = false;
+
+#if defined(ESP32)
+    portENTER_CRITICAL(&m_statusSubscribersMux);
+#endif
+    if (subscribe) {
+        success = m_statusSubscribers.add(clientId);
+    } else {
+        m_statusSubscribers.remove(clientId);
+        success = true;
+    }
+#if defined(ESP32)
+    portEXIT_CRITICAL(&m_statusSubscribersMux);
+#endif
+
+    if (subscribe && success) {
+        LW_LOGD("[WsStatus] Client %u subscribed to status", clientId);
+    } else if (!subscribe) {
+        LW_LOGD("[WsStatus] Client %u unsubscribed from status", clientId);
+    }
+
+    return success;
+}
+
+bool WebServer::hasStatusSubscribers() const {
+    bool has = false;
+#if defined(ESP32)
+    portENTER_CRITICAL(&m_statusSubscribersMux);
+#endif
+    has = m_statusSubscribers.count() > 0;
+#if defined(ESP32)
+    portEXIT_CRITICAL(&m_statusSubscribersMux);
+#endif
+    return has;
+}
+
+size_t WebServer::getStatusSubscriberCount() const {
+    size_t count = 0;
+#if defined(ESP32)
+    portENTER_CRITICAL(&m_statusSubscribersMux);
+#endif
+    count = m_statusSubscribers.count();
+#if defined(ESP32)
+    portEXIT_CRITICAL(&m_statusSubscribersMux);
+#endif
+    return count;
 }
 
 #if FEATURE_AUDIO_SYNC

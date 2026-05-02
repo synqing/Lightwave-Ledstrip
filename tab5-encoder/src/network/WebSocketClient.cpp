@@ -709,16 +709,24 @@ void WebSocketClient::sendZoneEnable(bool enable) {
     sendJSON("zone.enable", doc);
 }
 
+// Wire-format helper: translate internal 0-based zone index to 1-indexed wire
+// value per K1 contract (post-2026-05-02). Caller must have validated
+// zoneId < 3 already; this is purely the serialisation lift.
+static inline uint8_t toWireZoneId(uint8_t internalZoneId) {
+    return static_cast<uint8_t>(internalZoneId + 1);
+}
+
 void WebSocketClient::sendZoneEffect(uint8_t zoneId, uint16_t effectId) {
     if (!isConnected()) {
         return;
     }
 
-    // Map zoneId to rate limiter index (zoneId is 0-based internal)
-    uint8_t paramIndex = ParamIndex::ZONE1_EFFECT + (zoneId * 2);
+    // Validate INTERNAL 0-based zoneId before any indexing into rate limiter
+    // (paramIndex = ZONE1_EFFECT + zoneId*2). Range: 0..2.
     if (zoneId > 2) {
         return;
     }
+    uint8_t paramIndex = ParamIndex::ZONE1_EFFECT + (zoneId * 2);
 
     if (!canSend(paramIndex)) {
         // queueParameterChange stores uint8_t value; zone effects use direct send only
@@ -727,7 +735,7 @@ void WebSocketClient::sendZoneEffect(uint8_t zoneId, uint16_t effectId) {
     }
 
     JsonDocument doc;
-    doc["zoneId"] = zoneId;
+    doc["zoneId"] = toWireZoneId(zoneId);  // 0->1, 1->2, 2->3 (K1 wire-format 1-indexed)
     doc["effectId"] = static_cast<int>(effectId);  // Send as integer — K1 uses 16-bit hex IDs
     sendJSON("zone.setEffect", doc);
 }
@@ -737,12 +745,12 @@ void WebSocketClient::sendZoneBrightness(uint8_t zoneId, uint8_t value) {
         return;
     }
 
-    // Zone brightness uses rate limiter slot for zone effect (same encoder pair)
-    // Note: Brightness is no longer a parameter in new layout, but API still supports it
-    uint8_t paramIndex = ParamIndex::ZONE1_EFFECT + (zoneId * 2);
     if (zoneId > 2) {
         return;
     }
+    // Zone brightness uses rate limiter slot for zone effect (same encoder pair)
+    // Note: Brightness is no longer a parameter in new layout, but API still supports it
+    uint8_t paramIndex = ParamIndex::ZONE1_EFFECT + (zoneId * 2);
 
     if (!canSend(paramIndex)) {
         queueParameterChange(paramIndex, value, "zone.setBrightness", zoneId);
@@ -750,7 +758,7 @@ void WebSocketClient::sendZoneBrightness(uint8_t zoneId, uint8_t value) {
     }
 
     JsonDocument doc;
-    doc["zoneId"] = zoneId;
+    doc["zoneId"] = toWireZoneId(zoneId);
     doc["brightness"] = value;
     sendJSON("zone.setBrightness", doc);
 }
@@ -760,11 +768,11 @@ void WebSocketClient::sendZoneSpeed(uint8_t zoneId, uint8_t value) {
         return;
     }
 
-    // Zone speed uses rate limiter slots (indices 9, 11, 13)
-    uint8_t paramIndex = ParamIndex::ZONE1_SPEED + (zoneId * 2);
     if (zoneId > 2) {
         return;
     }
+    // Zone speed uses rate limiter slots (indices 9, 11, 13)
+    uint8_t paramIndex = ParamIndex::ZONE1_SPEED + (zoneId * 2);
 
     if (!canSend(paramIndex)) {
         queueParameterChange(paramIndex, value, "zone.setSpeed", zoneId);
@@ -772,7 +780,7 @@ void WebSocketClient::sendZoneSpeed(uint8_t zoneId, uint8_t value) {
     }
 
     JsonDocument doc;
-    doc["zoneId"] = zoneId;
+    doc["zoneId"] = toWireZoneId(zoneId);
     doc["speed"] = value;
     sendJSON("zone.setSpeed", doc);
 }
@@ -782,11 +790,11 @@ void WebSocketClient::sendZonePalette(uint8_t zoneId, uint8_t paletteId) {
         return;
     }
 
-    // Zone palette shares rate limit with zone effect (same encoder)
-    uint8_t paramIndex = ParamIndex::ZONE1_EFFECT + (zoneId * 2);
     if (zoneId > 2) {
         return;
     }
+    // Zone palette shares rate limit with zone effect (same encoder)
+    uint8_t paramIndex = ParamIndex::ZONE1_EFFECT + (zoneId * 2);
 
     if (!canSend(paramIndex)) {
         queueParameterChange(paramIndex, paletteId, "zone.setPalette", zoneId);
@@ -794,7 +802,7 @@ void WebSocketClient::sendZonePalette(uint8_t zoneId, uint8_t paletteId) {
     }
 
     JsonDocument doc;
-    doc["zoneId"] = zoneId;
+    doc["zoneId"] = toWireZoneId(zoneId);
     doc["paletteId"] = paletteId;
     sendJSON("zone.setPalette", doc);
 }
@@ -804,11 +812,11 @@ void WebSocketClient::sendZoneBlend(uint8_t zoneId, uint8_t blendMode) {
         return;
     }
 
-    // Zone blend uses rate limiter slot for zone effect (same encoder pair)
-    uint8_t paramIndex = ParamIndex::ZONE1_EFFECT + (zoneId * 2);
     if (zoneId > 2 || blendMode > 7) {
         return;
     }
+    // Zone blend uses rate limiter slot for zone effect (same encoder pair)
+    uint8_t paramIndex = ParamIndex::ZONE1_EFFECT + (zoneId * 2);
 
     if (!canSend(paramIndex)) {
         queueParameterChange(paramIndex, blendMode, "zone.setBlend", zoneId);
@@ -816,7 +824,7 @@ void WebSocketClient::sendZoneBlend(uint8_t zoneId, uint8_t blendMode) {
     }
 
     JsonDocument doc;
-    doc["zoneId"] = zoneId;
+    doc["zoneId"] = toWireZoneId(zoneId);
     doc["blendMode"] = blendMode;
     sendJSON("zone.setBlend", doc);
 }
@@ -841,13 +849,20 @@ void WebSocketClient::sendZonesSetLayout(const struct zones::ZoneSegment* segmen
         return;
     }
 
-    // Serialize segments array to JSON
+    // Serialize segments array to JSON.
+    // Internal segments[].zoneId is 0-based (0..2). K1 contract requires
+    // 1-indexed zoneId on the wire — translate per segment. Defensive:
+    // skip any segment whose internal zoneId is out of range (0..2).
     JsonDocument doc;
     JsonArray zonesArray = doc["zones"].to<JsonArray>();
 
     for (uint8_t i = 0; i < zoneCount; i++) {
+        if (segments[i].zoneId > 2) {
+            // Out-of-range internal id — skip rather than send wire 0 or >3
+            continue;
+        }
         JsonObject zoneObj = zonesArray.add<JsonObject>();
-        zoneObj["zoneId"] = segments[i].zoneId;
+        zoneObj["zoneId"] = toWireZoneId(segments[i].zoneId);
         zoneObj["s1LeftStart"] = segments[i].s1LeftStart;
         zoneObj["s1LeftEnd"] = segments[i].s1LeftEnd;
         zoneObj["s1RightStart"] = segments[i].s1RightStart;
@@ -1031,10 +1046,13 @@ void WebSocketClient::processSendQueue() {
             JsonDocument doc;
             const char* sendType = _sendQueue[i].type;  // Default to stored type
             
-            // Handle zone parameters vs global parameters
-            if (_sendQueue[i].zoneId < 4) {
-                // Zone parameter
-                doc["zoneId"] = _sendQueue[i].zoneId;
+            // Handle zone parameters vs global parameters.
+            // _sendQueue[i].zoneId stores the INTERNAL 0-based index (0..2)
+            // for zone parameters, or 255 for globals. Translate to 1-indexed
+            // wire format here; reject anything outside 0..2 defensively.
+            if (_sendQueue[i].zoneId <= 2) {
+                // Zone parameter — internal 0..2 maps to wire 1..3
+                doc["zoneId"] = toWireZoneId(_sendQueue[i].zoneId);
                 // Extract field name from type (e.g., "zone.setEffect" -> "effectId")
                 if (strstr(_sendQueue[i].type, "setEffect") != nullptr) {
                     doc["effectId"] = _sendQueue[i].value;

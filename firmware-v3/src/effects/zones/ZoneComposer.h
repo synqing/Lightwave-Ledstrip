@@ -20,10 +20,34 @@
 #include <atomic>
 #include <functional>
 #include "ZoneDefinition.h"
+#include "ZoneEffectPool.h"
 #include "BlendMode.h"
 #include "../../config/effect_ids.h"
 #include "../../core/actors/RendererActor.h"
 #include "../../plugins/api/EffectContext.h"
+
+// ============================================================================
+// D-1 Spike 1 — per-zone effect instance pool feature gate.
+//
+// 0 (default) = pool constructed but NOT active in the live render path.
+//               renderZone() still resolves effects via the registry singleton.
+//               setZoneEffect()/loadPreset() still call IEffect::init() (the
+//               2026-05-02 D-1 partial fix that prevented BLACK strips).
+// 1           = pool drives effect resolution. Each (effectId, zoneSlot) pair
+//               gets its own instance via the registered factory; zones running
+//               the SAME effectId no longer corrupt each other's internal state.
+//
+// Captain flips this to 1 after hardware validation of the prototype on a
+// dual-zone preset (e.g. K1 Bloom Zone 1 + K1 Bloom Zone 2 — same effect id
+// in two zones — must visually render two independent instances). Until then,
+// the live render path stays on the partial-fix code path that has shipped
+// hardware time on K1 V2.
+//
+// Refs: docs/adr/zone-composer-architecture-decisions.md § D-1
+// ============================================================================
+#ifndef K1_ZONE_INSTANCE_POOL_ENABLED
+#define K1_ZONE_INSTANCE_POOL_ENABLED 0
+#endif
 
 // Forward declaration for audio context
 namespace lightwaveos { namespace plugins { struct AudioContext; } }
@@ -254,6 +278,33 @@ private:
     float m_zoneTimeSecondsRaw[MAX_ZONES];
     float m_zoneFrameAccumulator[MAX_ZONES];
     uint32_t m_zoneFrameCount[MAX_ZONES];
+
+    // ==================== D-1 Per-Zone Effect Instance Pool ====================
+    // The pool guarantees per-zone IEffect state isolation when the same
+    // effectId is assigned to multiple zones simultaneously. Instances are
+    // acquired on the Core 0 command path (setZoneEffect, loadPreset) and
+    // cached in m_zoneActiveEffects[] for O(1) render-time access on Core 1.
+    //
+    // Refs: docs/adr/zone-composer-architecture-decisions.md § D-1
+    ZoneEffectPool m_effectPool;
+
+    // Cached pool pointer per zone slot — populated by acquireZoneEffect()
+    // whenever a zone's effectId changes. render() reads this directly to
+    // keep the hot path allocation-free.
+    plugins::IEffect* m_zoneActiveEffects[MAX_ZONES] = { nullptr };
+
+    /**
+     * @brief Resolve and cache the IEffect* for a zone via the pool.
+     *
+     * Called on the Core 0 command path. Safe to allocate. After this
+     * returns, m_zoneActiveEffects[safeZone] is a non-null pointer iff
+     * the registry knew the effect.
+     *
+     * @param safeZone Zone slot — caller MUST have validated < MAX_ZONES.
+     * @param effectId Stable namespaced effect ID.
+     * @return The acquired IEffect*, or nullptr if registry resolution failed.
+     */
+    plugins::IEffect* acquireZoneEffect(uint8_t safeZone, EffectId effectId);
 };
 
 } // namespace zones

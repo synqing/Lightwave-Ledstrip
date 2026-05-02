@@ -282,7 +282,7 @@ void ZoneComposer::renderZone(uint8_t zoneId, CRGB* leds, uint16_t numLeds,
 
     // Validate zoneId to prevent out-of-bounds access
     uint8_t safeZone = validateZoneId(zoneId);
-    
+
     // DEFENSIVE CHECK: Double-verify bounds before array access
     if (safeZone >= MAX_ZONES) {
         safeZone = 0;  // Fallback to zone 0 if still out of bounds
@@ -290,12 +290,25 @@ void ZoneComposer::renderZone(uint8_t zoneId, CRGB* leds, uint16_t numLeds,
     if (safeZone >= m_zoneCount) {
         safeZone = 0;  // Also check against actual zone count
     }
-    
+
     const ZoneState& zone = m_zones[safeZone];
     const ZoneSegment& seg = m_zoneConfig[safeZone];
 
-    // Get the IEffect instance
+#if K1_ZONE_INSTANCE_POOL_ENABLED
+    // D-1 Spike 1 (gate ON): read the per-zone IEffect* from the cache
+    // populated by acquireZoneEffect(). Each (effectId, zoneSlot) pair has
+    // its own instance when a factory is registered, so internal effect
+    // state (m_phase, accumulators, PSRAM trail buffers, ...) is isolated
+    // per zone. No allocation, no map lookup — just an array dereference.
+    plugins::IEffect* effect = m_zoneActiveEffects[safeZone];
+#else
+    // Pre-D-1 path (gate OFF — current default): resolve via registry
+    // singleton. Same instance is shared across zones running the same
+    // effectId; this is the known-bad behaviour the keystone exists to
+    // remove, but it has hardware time on K1 V2 and stays the production
+    // path until the pool is hardware-validated.
     plugins::IEffect* effect = m_renderer->getEffectInstance(zone.effectId);
+#endif
     if (!effect) {
         return;
     }
@@ -435,6 +448,16 @@ bool ZoneComposer::setLayout(const ZoneSegment* segments, uint8_t count) {
                static_cast<size_t>(MAX_ZONES) * static_cast<size_t>(TOTAL_LEDS) * sizeof(CRGB));
     }
 
+#if K1_ZONE_INSTANCE_POOL_ENABLED
+    // D-1 Spike 1 (gate ON): drop cached pool pointers for slots that are no
+    // longer part of the active layout. The pool entries themselves linger
+    // (cheap) — only the active-cache pointer is reset so renderZone() bails
+    // early until the next acquireZoneEffect() repopulates it.
+    for (uint8_t i = m_zoneCount; i < MAX_ZONES; ++i) {
+        m_zoneActiveEffects[i] = nullptr;
+    }
+#endif
+
     // Release store re-enables rendering; ensures all array writes above are
     // visible to Core 1 before it can see m_enabled=true again.
     m_enabled.store(wasEnabled, std::memory_order_release);
@@ -566,11 +589,20 @@ void ZoneComposer::setZoneEffect(uint8_t zone, EffectId effectId) {
                0, static_cast<size_t>(TOTAL_LEDS) * sizeof(CRGB));
     }
 
-    // D-1 fix 2026-05-02: bring up the effect via init() so its PSRAM/state
-    // is allocated. RendererActor only init()s the global single-effect, so
-    // zone-only effects (e.g. K1 Bloom, K1 Waveform when used via Dual Split
-    // preset) would otherwise render BLACK because their internal buffers
-    // were never allocated.
+#if K1_ZONE_INSTANCE_POOL_ENABLED
+    // D-1 Spike 1 (gate ON): route effect resolution through the per-zone
+    // instance pool so the same effectId in two zones gets two distinct
+    // instances with isolated state. acquireZoneEffect() also calls
+    // IEffect::init() so first-frame state is sane (subsumes the partial fix).
+    acquireZoneEffect(safeZone, effectId);
+#else
+    // D-1 partial fix (2026-05-02, gate OFF — current default): bring up the
+    // singleton effect via init() so its PSRAM trail/scratch state is
+    // allocated. RendererActor only init()s the global single-effect, so
+    // zone-only effects (e.g. K1 Bloom 0x1301, K1 Waveform 0x1302) would
+    // otherwise render BLACK because their internal buffers stayed nullptr.
+    // Same code path as the pre-keystone implementation; preserved verbatim
+    // until the pool is hardware-validated and the gate flips to 1.
     if (m_renderer) {
         plugins::IEffect* effect = m_renderer->getEffectInstance(effectId);
         if (effect) {
@@ -580,6 +612,7 @@ void ZoneComposer::setZoneEffect(uint8_t zone, EffectId effectId) {
             effect->init(m_zoneContext);
         }
     }
+#endif
 }
 
 void ZoneComposer::setZoneBrightness(uint8_t zone, uint8_t brightness) {
@@ -638,6 +671,16 @@ void ZoneComposer::setZoneEnabled(uint8_t zone, bool enabled) {
             memset(m_zoneBuffers + (static_cast<size_t>(safeZone) * static_cast<size_t>(TOTAL_LEDS)),
                    0, static_cast<size_t>(TOTAL_LEDS) * sizeof(CRGB));
         }
+#if K1_ZONE_INSTANCE_POOL_ENABLED
+        // D-1 Spike 1 (gate ON): acquire the pool slot for this zone if not
+        // already cached. Covers the case where a zone was loaded by preset
+        // with enabled=false and is now being switched on by a command —
+        // its IEffect must exist when render() runs.
+        if (m_zoneActiveEffects[safeZone] == nullptr &&
+            m_zones[safeZone].effectId != INVALID_EFFECT_ID) {
+            acquireZoneEffect(safeZone, m_zones[safeZone].effectId);
+        }
+#endif
     }
 }
 
@@ -723,11 +766,25 @@ void ZoneComposer::loadPreset(uint8_t presetId) {
         m_zones[i] = preset.zones[i];
     }
 
-    // D-1 fix 2026-05-02: init() each enabled zone's effect so its PSRAM/state
-    // is allocated. RendererActor only init()s the global single-effect, so
-    // zone-only effects (K1 Bloom, K1 Waveform via Dual Split, etc.) would
-    // otherwise render BLACK because their internal trail/scratch buffers were
-    // never allocated.
+#if K1_ZONE_INSTANCE_POOL_ENABLED
+    // D-1 Spike 1 (gate ON): for each enabled zone, route effect resolution
+    // through the per-zone instance pool so two zones running the same
+    // effectId each get their own instance with isolated internal state.
+    // acquireZoneEffect() calls IEffect::init() on first acquisition.
+    for (uint8_t i = 0; i < m_zoneCount; i++) {
+        if (m_zones[i].enabled) {
+            acquireZoneEffect(i, m_zones[i].effectId);
+        } else {
+            m_zoneActiveEffects[i] = nullptr;
+        }
+    }
+#else
+    // D-1 partial fix (gate OFF — current default): init() each enabled
+    // zone's effect on the singleton so its PSRAM/state is allocated.
+    // RendererActor only init()s the global single-effect, so zone-only
+    // effects (K1 Bloom, K1 Waveform via Dual Split, etc.) would otherwise
+    // render BLACK because their internal trail/scratch buffers were never
+    // allocated. Verbatim restoration of the partial-fix code path.
     if (m_renderer) {
         m_zoneContext.ledCount = TOTAL_LEDS;
         m_zoneContext.centerPoint = 79;
@@ -741,6 +798,7 @@ void ZoneComposer::loadPreset(uint8_t presetId) {
             }
         }
     }
+#endif
 
     // Release store re-enables rendering after all state is consistent
     m_enabled.store(wasEnabled, std::memory_order_release);
@@ -751,6 +809,50 @@ void ZoneComposer::loadPreset(uint8_t presetId) {
 const char* ZoneComposer::getPresetName(uint8_t presetId) {
     if (presetId >= NUM_PRESETS) return "Unknown";
     return PRESETS[presetId].name;
+}
+
+// ==================== D-1 Pool Helper ====================
+
+plugins::IEffect* ZoneComposer::acquireZoneEffect(uint8_t safeZone, EffectId effectId) {
+    // Caller MUST have validated safeZone — belt and braces.
+    if (safeZone >= MAX_ZONES) {
+        return nullptr;
+    }
+    if (effectId == INVALID_EFFECT_ID || m_renderer == nullptr) {
+        m_zoneActiveEffects[safeZone] = nullptr;
+        return nullptr;
+    }
+
+    // Pool resolves the (effectId, zoneSlot) → IEffect mapping. When a
+    // factory is registered for the effectId, this returns a fresh
+    // instance unique to (effectId, safeZone). Otherwise it falls back
+    // to the singleton (degraded mode — pre-D-1 behaviour, documented in
+    // the ADR).
+    plugins::IEffect* effect = m_effectPool.acquire(effectId, safeZone, *m_renderer);
+    if (effect == nullptr) {
+        // Pool exhausted, registry has no entry, or both. The previous
+        // cache pointer is now stale — clear it so renderZone() bails out
+        // rather than rendering through a corrupt pointer.
+        m_zoneActiveEffects[safeZone] = nullptr;
+        Serial.printf(
+            "[ZoneComposer] WARN: pool acquire failed for effect 0x%04X on zone %u\n",
+            static_cast<unsigned>(effectId), static_cast<unsigned>(safeZone));
+        return nullptr;
+    }
+
+    // First-touch lifecycle bring-up — IEffect::init() owns its own PSRAM
+    // allocations, smoothing buffers, and accumulators. Doing this here
+    // rather than in the pool keeps the pool generic. Calling init() on
+    // a re-acquired instance is harmless: existing effects clear and
+    // re-zero their state, which matches the user-visible "switching to
+    // this effect" semantic anyway.
+    m_zoneContext.ledCount = TOTAL_LEDS;
+    m_zoneContext.centerPoint = 79;
+    m_zoneContext.zoneId = safeZone;
+    effect->init(m_zoneContext);
+
+    m_zoneActiveEffects[safeZone] = effect;
+    return effect;
 }
 
 // ==================== Debug ====================

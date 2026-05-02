@@ -36,6 +36,7 @@
 #include "../../config/limits.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../../plugins/api/IEffectRegistry.h"
+#include "../../effects/zones/ZoneEffectPool.h"
 
 #include <atomic>
 
@@ -203,7 +204,9 @@ using EffectRenderFn = void (*)(RenderContext& ctx);
  * State changes (effect, brightness, etc.) are received as messages
  * and applied atomically before the next frame.
  */
-class RendererActor : public Actor, public plugins::IEffectRegistry {
+class RendererActor : public Actor,
+                      public plugins::IEffectRegistry,
+                      public lightwaveos::zones::IZoneEffectSource {
 public:
     /**
      * @brief Construct the RendererActor
@@ -284,6 +287,26 @@ public:
      */
     bool registerEffect(EffectId id, plugins::IEffect* effect) override;
 
+    /**
+     * @brief Register a per-zone instance factory (D-1 keystone).
+     *
+     * Effects opt in to per-zone state isolation by registering a factory
+     * function alongside their singleton. ZoneComposer's pool calls the
+     * factory once per `(effectId, zoneSlot)` pair to construct a fresh
+     * instance with independent internal state.
+     *
+     * Effects WITHOUT a factory continue to use the shared singleton in
+     * the zone path — for multi-zone use of the same effectId this
+     * preserves the pre-D-1 known-bad behaviour. See ADR D-1 for the
+     * migration plan.
+     *
+     * @param id Stable namespaced EffectId
+     * @param factory Factory function (returns a heap-allocated IEffect*)
+     * @return true if registered (effect was already known to the registry)
+     */
+    bool registerEffectFactory(EffectId id,
+                               lightwaveos::zones::EffectFactoryFn factory);
+
     // ========================================================================
     // IEffectRegistry Implementation
     // ========================================================================
@@ -323,7 +346,15 @@ public:
      * @param id Effect ID
      * @return IEffect pointer, or nullptr if not found
      */
-    plugins::IEffect* getEffectInstance(EffectId id) const;
+    plugins::IEffect* getEffectInstance(EffectId id) const override;
+
+    /**
+     * @brief Get registered factory for an effect ID (IZoneEffectSource).
+     * @param id Effect ID
+     * @return Factory function, or nullptr if no factory was registered.
+     */
+    lightwaveos::zones::EffectFactoryFn
+        getEffectFactory(EffectId id) const override;
 
     /**
      * @brief Validate effect ID exists in registry
@@ -751,6 +782,10 @@ private:
         const char* name;
         plugins::IEffect* effect;   // All effects are IEffect instances (native or adapter)
         plugins::runtime::LegacyEffectAdapter* legacyAdapter;  // Owned, nullptr if native
+        // D-1 keystone: optional per-zone instance factory. nullptr means the
+        // effect has not opted in to per-zone isolation; ZoneComposer falls
+        // back to the singleton for multi-zone use of the same effectId.
+        lightwaveos::zones::EffectFactoryFn factory;
         bool active;
     };
     EffectRegistration m_registry[MAX_EFFECTS];

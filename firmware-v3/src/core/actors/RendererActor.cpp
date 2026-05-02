@@ -207,6 +207,7 @@ RendererActor::RendererActor()
         m_registry[i].name = nullptr;
         m_registry[i].effect = nullptr;
         m_registry[i].legacyAdapter = nullptr;
+        m_registry[i].factory = nullptr;
         m_registry[i].active = false;
     }
 
@@ -330,6 +331,7 @@ bool RendererActor::registerEffect(EffectId id, const char* name, EffectRenderFn
     reg.name = name;
     reg.effect = adapter;
     reg.legacyAdapter = adapter;
+    reg.factory = nullptr;
     reg.active = true;
     m_registryCount++;
 
@@ -370,10 +372,27 @@ bool RendererActor::registerEffect(EffectId id, plugins::IEffect* effect)
     reg.name = meta.name;
     reg.effect = effect;
     reg.legacyAdapter = nullptr;
+    reg.factory = nullptr;
     reg.active = true;
     m_registryCount++;
 
     LW_LOGD("Registered effect 0x%04X: %s (IEffect native)", id, meta.name);
+    return true;
+}
+
+bool RendererActor::registerEffectFactory(EffectId id,
+                                          lightwaveos::zones::EffectFactoryFn factory)
+{
+    if (id == INVALID_EFFECT_ID || factory == nullptr) {
+        return false;
+    }
+    auto* existing = findById(id);
+    if (existing == nullptr) {
+        // Effect must be registered first; we attach the factory to its slot.
+        return false;
+    }
+    existing->factory = factory;
+    LW_LOGD("Registered factory for effect 0x%04X (D-1 per-zone isolation enabled)", id);
     return true;
 }
 
@@ -391,6 +410,7 @@ bool RendererActor::unregisterEffect(EffectId id)
     reg->active = false;
     reg->effect = nullptr;
     reg->name = nullptr;
+    reg->factory = nullptr;
 
     // Clean up legacy adapter if present
     if (reg->legacyAdapter != nullptr) {
@@ -442,6 +462,16 @@ plugins::IEffect* RendererActor::getEffectInstance(EffectId id) const
     const auto* reg = findById(id);
     if (reg) {
         return reg->effect;
+    }
+    return nullptr;
+}
+
+lightwaveos::zones::EffectFactoryFn
+RendererActor::getEffectFactory(EffectId id) const
+{
+    const auto* reg = findById(id);
+    if (reg) {
+        return reg->factory;
     }
     return nullptr;
 }

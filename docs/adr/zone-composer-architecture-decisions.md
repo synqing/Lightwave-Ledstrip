@@ -74,6 +74,72 @@ The effects in firmware-v3 are largely NOT stateless — they hold phase counter
 - **Performance test**: 3 simultaneous instances of same effect type → frame budget within 2.0 ms
 - **Memory test**: pool slot rotation cycles → no leaks (heap stable across N effect changes per zone)
 
+### Spike 1 — prototype implementation notes (2026-05-02)
+
+**Status:** Spike 1 prototype landed in firmware. Production switch is **hardware-gated** — D-3 (`zone.effects.parameters.set`) **remains blocked** until per-zone state isolation is confirmed on K1 V2 hardware with two zones running the same effectId.
+
+**Files added / changed:**
+- `firmware-v3/src/effects/zones/ZoneEffectPool.{h,cpp}` — new — pool keyed by `(effectId, zoneSlot)`, capacity `MAX_ZONES * 3 = 9` slots, depends on the new minimal `IZoneEffectSource` adapter interface so it is unit-testable on the host.
+- `firmware-v3/src/core/actors/RendererActor.{h,cpp}` — `EffectRegistration` gets an optional `EffectFactoryFn factory` field; new `registerEffectFactory(EffectId, factory)` API; `RendererActor` now also implements `IZoneEffectSource` so the pool can ask it for a singleton OR a factory.
+- `firmware-v3/src/effects/zones/ZoneComposer.{h,cpp}` — pool is constructed in every build; the live render path swap is gated behind `K1_ZONE_INSTANCE_POOL_ENABLED` (default `0`).
+- `firmware-v3/test/test_zone_effect_isolation/test_main.cpp` — 7 native unit tests pinning the pool contract; all pass under `pio test -e native_test_zone_effect_isolation`.
+
+**Feature gate**
+
+```cpp
+// ZoneComposer.h
+#ifndef K1_ZONE_INSTANCE_POOL_ENABLED
+#define K1_ZONE_INSTANCE_POOL_ENABLED 0
+#endif
+```
+
+- `0` (default) — pool is constructed but inactive. `renderZone()` still resolves effects via `m_renderer->getEffectInstance(zone.effectId)`; `setZoneEffect()` and `loadPreset()` still call `effect->init()` on the singleton (the 2026-05-02 D-1 *partial fix* that prevented BLACK strips). Verbatim restoration of pre-spike behaviour — keeps the production hardware path on code with hardware time on K1 V2.
+- `1` — `renderZone()` reads the cached `m_zoneActiveEffects[safeZone]` populated by `acquireZoneEffect()`. Each `(effectId, zoneSlot)` pair has its own `IEffect*` when a factory has been registered for the effect.
+
+**Pool design (refined from the original ADR sketch)**
+
+Original sketch | Spike 1 implementation
+--- | ---
+"`getOrCreateEffectInstance(effectId, slotKey)` on RendererActor" | Construction stays on the registry side via an optional `EffectFactoryFn`; pool is ZoneComposer-owned. Cleaner separation — RendererActor doesn't grow zone semantics, ZoneComposer doesn't grow registry semantics.
+"`init()` on first slot creation, `deinit()` on slot reuse" | `init()` called by `ZoneComposer::acquireZoneEffect()` (pool stays generic); old slots LINGER on zone-effect change rather than being torn down (cheap; saves re-allocation on toggle). LRU eviction explicitly out of scope — see follow-up below.
+"~3× in-use effects" PSRAM bound | Hard cap at 9 slots (`MAX_ZONES * 3`). At 9-slot saturation the pool refuses to allocate and surfaces `nullptr`; ZoneComposer logs a warning and the renderer bails out of that zone.
+
+**Singleton fallback (degraded mode).** Effects without a registered factory fall back to the registry singleton — for zone slot 0 only this is harmless; for slot 1 / 2 it RE-INTRODUCES the pre-D-1 singleton-share. Phase-2 work (out of scope for this spike) registers factories for the effects that actually need multi-zone state isolation: K1 Bloom (`0x1301`), K1 Waveform (`0x1302`), and the Enhanced LGP family used by Preset 2. Until then the gate stays off.
+
+**Measurements (esp32dev_audio_esv11_k1v2_32khz, gate off → on)**
+
+Metric | Gate OFF (production) | Gate ON (prototype) | Delta
+--- | --- | --- | ---
+RAM (.bss / .data) | 142 772 B | 142 772 B | **+0 B** — pool object is constructed in either case, layout-identical
+Flash | 2 446 913 B | 2 447 349 B | **+436 B** — pool-active code path
+Per-zone PSRAM | unchanged | +sizeof(effect's PSRAM block) per extra zone instance | depends on effect (K1 Bloom: ~720 B/instance × up to 2 extra = ~1.4 KB)
+Static pool table footprint | 9 × ~16 B + cache | same | ~157 B static DRAM (counted in the unchanged RAM total)
+Render-path lookup cost | O(N=162) linear scan over `m_registry[]` per zone per frame | O(1) — `m_zoneActiveEffects[safeZone]` array dereference | **gate-on is FASTER** on the hot path
+
+PSRAM headroom is generous (8 MB Octal) — even at 3 zones × 3 effect rotations × ~1 KB/effect the pool consumes ≪ 0.1 % of PSRAM. Render-path overhead is strictly negative when the gate is flipped on (one array dereference replaces a 162-entry linear scan), so the 2.0 ms ceiling is unaffected — actually slightly relaxed.
+
+**What the spike does NOT do (deferred follow-ups)**
+
+- Effect factories are not registered for any effect yet. Until they are, the pool's behaviour with the gate ON is **identical** to the gate OFF for any effect that does not opt in (singleton fallback). The very first registered factory will be K1 Bloom, immediately after hardware validation.
+- LRU eviction. At 9-slot saturation the pool refuses to allocate. Acceptable for typical sessions (3 zones × 3 rotations); flagged as a follow-up if production usage cycles effects more frequently than that.
+- Snapshot schemas (D-2 / A6) and persistence implications — out of spike scope; addressed when the gate flips.
+- E6 regression suite (cross-zone state divergence on hardware). Required before flipping the production gate.
+
+**Hardware validation gate (REQUIRED before flipping `K1_ZONE_INSTANCE_POOL_ENABLED` to 1):**
+
+1. Register a factory for `EID_SB_K1_BLOOM` (`0x1301`).
+2. Build with the gate on, flash K1 V2.
+3. Set zone preset = K1 Bloom in zone 1 + K1 Bloom in zone 2 (same effectId both zones).
+4. Verify both zones render with **independent** trail buffers and chroma states (visual check — they must drift apart, not stay locked in lockstep as they would under singleton sharing).
+5. Re-flash with the gate off, verify the partial-fix path still ships clean (no regressions).
+6. Repeat for `EID_SB_K1_WAVEFORM` (`0x1302`).
+
+**Status field summary**
+
+- Spike status: **prototype — hardware validation pending**
+- Production status: **NOT switched** — `K1_ZONE_INSTANCE_POOL_ENABLED = 0`
+- D-3 status: **remains BLOCKED** until hardware validation passes
+
 ---
 
 ## D-2 — Expression override semantics
@@ -340,3 +406,4 @@ Phase 0 B1 cleaned all 10 from fake-success placeholders to explicit `HttpStatus
 |------|--------|--------|
 | 2026-05-01 | Claude (claude-opus-4-7) | Created. Drafted from Captain's program plan review + 5-SSA context report. D-3 explicitly gated behind D-1 per Captain correction. Recommended defaults marked, alternatives rejected with reasoning. Verification pass dispatched in parallel to ground-truth claims V1-V6. |
 | 2026-05-01 | Claude (Captain sign-off) | Status DRAFT → APPROVED per Captain directive "ADR defaults approved for D-1 through D-5". Verification pass complete; V1-V6 findings recorded in Appendix A. D-1 → D-3 → D-4 → D-2 sequencing preserved. D-5 fixture constraint preserved. |
+| 2026-05-02 | agent:visual-fx-architect | D-1 § Spike 1 implementation notes added — pool prototype landed in firmware (`ZoneEffectPool`, `RendererActor::registerEffectFactory`, `ZoneComposer` gated swap). Production switch hardware-gated behind `K1_ZONE_INSTANCE_POOL_ENABLED` (default 0). RAM/Flash/timing measurements recorded; PSRAM headroom and 2.0 ms render budget unaffected. D-3 remains blocked pending hardware validation. |

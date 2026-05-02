@@ -58,7 +58,7 @@ struct ZonesTab: View {
             vm.zones.zoneCount = 2
             vm.zones.zones = [
                 ZoneConfig(
-                    id: 0,
+                    id: 1,
                     enabled: true,
                     effectId: 5,
                     effectName: "Ripple Enhanced",
@@ -70,7 +70,7 @@ struct ZonesTab: View {
                     blendModeName: "Additive"
                 ),
                 ZoneConfig(
-                    id: 1,
+                    id: 2,
                     enabled: true,
                     effectId: 12,
                     effectName: "LGP Holographic",
@@ -83,8 +83,8 @@ struct ZonesTab: View {
                 )
             ]
             vm.zones.segments = [
-                ZoneSegment(zoneId: 0, s1LeftStart: 40, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 119),
-                ZoneSegment(zoneId: 1, s1LeftStart: 0, s1LeftEnd: 39, s1RightStart: 120, s1RightEnd: 159)
+                ZoneSegment(zoneId: 1, s1LeftStart: 40, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 119),
+                ZoneSegment(zoneId: 2, s1LeftStart: 0, s1LeftEnd: 39, s1RightStart: 120, s1RightEnd: 159)
             ]
             vm.zones.presets = [
                 ZonePreset(id: 0, name: "Unified"),

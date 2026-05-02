@@ -18,6 +18,10 @@ enum APIClientError: LocalizedError {
     case decodingError(Error)
     case rateLimited
     case encodingError
+    /// Wire-format zoneId is out of the post-B2 firmware range (1..3).
+    /// Wire value 0 is RESERVED and rejected by the firmware. Raised by
+    /// `RESTClient` per-zone setters before any network round-trip.
+    case invalidZoneId(Int)
 
     var errorDescription: String? {
         switch self {
@@ -33,6 +37,8 @@ enum APIClientError: LocalizedError {
             return "Rate limit exceeded (20 req/s)"
         case .encodingError:
             return "Failed to encode request body"
+        case .invalidZoneId(let zoneId):
+            return "Invalid zoneId \(zoneId): wire-format zoneId must be 1..3 (0 is reserved)"
         }
     }
 }
@@ -764,6 +770,26 @@ actor RESTClient {
     }
 
     // MARK: - Zones Endpoints
+    //
+    // Wire-format note (2026-05-02 migration): the `zoneId` argument on each
+    // setter is the 1-indexed wire identifier (1..3) and is interpolated
+    // verbatim into the URL path (`/api/v1/zones/{zoneId}/...`). Firmware
+    // post-B2 (`d53092ad`) accepts only 1, 2, 3 on the wire. Wire value 0
+    // is RESERVED — firmware rejects it with HTTP 400 / `INVALID_VALUE`,
+    // and `GET /api/v1/zones/0` returns 404 NOT_FOUND because the path
+    // regex is now `[1-3]`. iOS internal `ZoneConfig.id` and
+    // `ZoneSegment.zoneId` mirror the wire format so no translation step
+    // is required at this boundary. The defensive guards below reject
+    // out-of-range zoneIds before they reach the firmware.
+
+    /// Validate that `zoneId` is in the 1-indexed wire range and throw
+    /// `APIClientError.invalidZoneId` if not. Centralises the boundary
+    /// check across all per-zone setters.
+    private static func validateWireZoneId(_ zoneId: Int) throws {
+        guard (1...3).contains(zoneId) else {
+            throw APIClientError.invalidZoneId(zoneId)
+        }
+    }
 
     func getZones() async throws -> ZonesResponse {
         try await request("GET", path: "zones")
@@ -774,26 +800,39 @@ actor RESTClient {
     }
 
     func setZoneEffect(zoneId: Int, effectId: Int) async throws {
+        try Self.validateWireZoneId(zoneId)
         let _: GenericResponse = try await request("POST", path: "zones/\(zoneId)/effect", body: ["effectId": effectId])
     }
 
     func setZoneBrightness(zoneId: Int, brightness: Int) async throws {
+        try Self.validateWireZoneId(zoneId)
         let _: GenericResponse = try await request("POST", path: "zones/\(zoneId)/brightness", body: ["brightness": brightness])
     }
 
     func setZoneSpeed(zoneId: Int, speed: Int) async throws {
+        try Self.validateWireZoneId(zoneId)
         let _: GenericResponse = try await request("POST", path: "zones/\(zoneId)/speed", body: ["speed": speed])
     }
 
     func setZonePalette(zoneId: Int, paletteId: Int) async throws {
+        try Self.validateWireZoneId(zoneId)
         let _: GenericResponse = try await request("POST", path: "zones/\(zoneId)/palette", body: ["paletteId": paletteId])
     }
 
     func setZoneBlendMode(zoneId: Int, blendMode: Int) async throws {
+        try Self.validateWireZoneId(zoneId)
         let _: GenericResponse = try await request("POST", path: "zones/\(zoneId)/blend", body: ["blendMode": blendMode])
     }
 
     func setZoneLayout(zones: [[String: Int]]) async throws {
+        // Defensive: each layout segment carries its own zoneId. Reject the
+        // batch if any segment uses the reserved 0 wire value before the
+        // request is dispatched.
+        for seg in zones {
+            if let zid = seg["zoneId"] {
+                try Self.validateWireZoneId(zid)
+            }
+        }
         let _: GenericResponse = try await request("POST", path: "zones/layout", body: ["zones": zones])
     }
 

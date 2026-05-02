@@ -11,6 +11,9 @@ struct ZonePaletteSelectorView: View {
     @Environment(AppViewModel.self) private var appVM
     @Environment(\.dismiss) private var dismiss
 
+    /// Wire-format zoneId (1-indexed, 1..3). Matches the `id` field on
+    /// `ZoneConfig` and the `zoneId` field on `ZoneSegment`. Sent verbatim on
+    /// `zone.setPalette` / `POST /api/v1/zones/{zoneId}/palette`.
     let zoneId: Int
 
     @State private var searchText = ""
@@ -51,7 +54,10 @@ struct ZonePaletteSelectorView: View {
     private var stickyHeader: some View {
         VStack(spacing: 12) {
             HStack {
-                ZoneSelectorChip(title: "ZONE \(zoneId + 1)", colour: Color.zoneColor(zoneId))
+                // Wire-format zoneId is already 1-indexed for display.
+                // `Color.zoneColor(_:)` expects a 0-based palette index, so
+                // translate at the call site.
+                ZoneSelectorChip(title: "ZONE \(zoneId)", colour: Color.zoneColor(max(0, zoneId - 1)))
                 Spacer()
             }
             .padding(.bottom, 4)

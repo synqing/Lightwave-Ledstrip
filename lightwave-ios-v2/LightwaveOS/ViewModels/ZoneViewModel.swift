@@ -61,6 +61,14 @@ class ZoneViewModel {
     }
 
     func setZoneEffect(zoneId: Int, effectId: Int, effectName: String? = nil) async {
+        // Wire-format guard (2026-05-02): firmware rejects zoneId == 0 with
+        // INVALID_VALUE. Refuse outbound sends so a UI bug never reaches the
+        // device. Valid wire values are 1..3.
+        guard (1...3).contains(zoneId) else {
+            print("[ZoneVM] setZoneEffect rejected: zoneId=\(zoneId) out of wire range 1..3")
+            return
+        }
+
         // Optimistic local update
         if let index = zones.firstIndex(where: { $0.id == zoneId }) {
             zones[index].effectId = effectId
@@ -88,6 +96,11 @@ class ZoneViewModel {
     }
 
     func setZonePalette(zoneId: Int, paletteId: Int, paletteName: String? = nil) async {
+        guard (1...3).contains(zoneId) else {
+            print("[ZoneVM] setZonePalette rejected: zoneId=\(zoneId) out of wire range 1..3")
+            return
+        }
+
         // Optimistic local update
         if let index = zones.firstIndex(where: { $0.id == zoneId }) {
             zones[index].paletteId = paletteId
@@ -115,6 +128,11 @@ class ZoneViewModel {
     }
 
     func setZoneBlend(zoneId: Int, blendMode: Int, blendModeName: String? = nil) async {
+        guard (1...3).contains(zoneId) else {
+            print("[ZoneVM] setZoneBlend rejected: zoneId=\(zoneId) out of wire range 1..3")
+            return
+        }
+
         // Optimistic local update
         if let index = zones.firstIndex(where: { $0.id == zoneId }) {
             zones[index].blendMode = blendMode
@@ -143,6 +161,10 @@ class ZoneViewModel {
 
     func setZoneSpeed(zoneId: Int, speed: Int) {
         guard restClient != nil || ws != nil else { return }
+        guard (1...3).contains(zoneId) else {
+            print("[ZoneVM] setZoneSpeed rejected: zoneId=\(zoneId) out of wire range 1..3")
+            return
+        }
 
         // Mark as pending to ignore WS updates
         pendingZoneSpeeds.insert(zoneId)
@@ -195,6 +217,10 @@ class ZoneViewModel {
 
     func setZoneBrightness(zoneId: Int, brightness: Int) {
         guard restClient != nil || ws != nil else { return }
+        guard (1...3).contains(zoneId) else {
+            print("[ZoneVM] setZoneBrightness rejected: zoneId=\(zoneId) out of wire range 1..3")
+            return
+        }
 
         // Mark as pending to ignore WS updates
         pendingZoneBrightness.insert(zoneId)
@@ -246,15 +272,22 @@ class ZoneViewModel {
 
     // MARK: - Boundary Model (centre-origin symmetric zone splits)
 
-    /// Extract boundary values from current segments
+    /// Extract boundary values from current segments.
+    ///
+    /// Wire-format note (2026-05-02 migration): segments arrive with 1-indexed
+    /// `zoneId` values (1, 2, 3). Internal Swift state mirrors the wire format,
+    /// so this lookup uses the same 1-indexed identifiers the firmware
+    /// transmits — no translation step required.
     func updateBoundariesFromSegments() {
         guard segments.count >= 2 else { return }
-        let z0 = segments.first(where: { $0.zoneId == 0 })
-        boundary0 = z0?.s1LeftStart ?? 55
+        // Zone 1 (innermost) determines b0 (inner/middle boundary).
+        let z1 = segments.first(where: { $0.zoneId == 1 })
+        boundary0 = z1?.s1LeftStart ?? 55
 
         if segments.count >= 3 {
-            let z1 = segments.first(where: { $0.zoneId == 1 })
-            boundary1 = z1?.s1LeftStart ?? 30
+            // Zone 2 (middle ring) determines b1 (middle/outer boundary).
+            let z2 = segments.first(where: { $0.zoneId == 2 })
+            boundary1 = z2?.s1LeftStart ?? 30
         }
     }
 
@@ -273,21 +306,27 @@ class ZoneViewModel {
         )
     }
 
-    /// Convert boundary values to zone segments
+    /// Convert boundary values to zone segments.
+    ///
+    /// Wire-format note (2026-05-02 migration): segments emit 1-indexed
+    /// `zoneId` values (1 = innermost, 2 = middle, 3 = outermost). These are
+    /// transmitted unchanged on REST `POST /api/v1/zones/layout` and WS
+    /// `zones.setLayout`; firmware translates 1..3 → internal 0..2 at the
+    /// boundary.
     func segmentsFromBoundaries() -> [ZoneSegment] {
         switch zoneCount {
         case 1:
-            return [makeSeg(zoneId: 0, leftStart: 0, leftEnd: Self.centerLeft)]
+            return [makeSeg(zoneId: 1, leftStart: 0, leftEnd: Self.centerLeft)]
         case 2:
             return [
-                makeSeg(zoneId: 0, leftStart: boundary0, leftEnd: Self.centerLeft),
-                makeSeg(zoneId: 1, leftStart: 0, leftEnd: boundary0 - 1)
+                makeSeg(zoneId: 1, leftStart: boundary0, leftEnd: Self.centerLeft),
+                makeSeg(zoneId: 2, leftStart: 0, leftEnd: boundary0 - 1)
             ]
         case 3:
             return [
-                makeSeg(zoneId: 0, leftStart: boundary0, leftEnd: Self.centerLeft),
-                makeSeg(zoneId: 1, leftStart: boundary1, leftEnd: boundary0 - 1),
-                makeSeg(zoneId: 2, leftStart: 0, leftEnd: boundary1 - 1)
+                makeSeg(zoneId: 1, leftStart: boundary0, leftEnd: Self.centerLeft),
+                makeSeg(zoneId: 2, leftStart: boundary1, leftEnd: boundary0 - 1),
+                makeSeg(zoneId: 3, leftStart: 0, leftEnd: boundary1 - 1)
             ]
         default:
             return []
@@ -429,6 +468,13 @@ class ZoneViewModel {
         if let zonesData = data["zones"] as? [[String: Any]] {
             self.zones = zonesData.compactMap { zone in
                 guard let id = zone["id"] as? Int else { return nil }
+                // Wire-format guard (2026-05-02): zoneId == 0 is RESERVED on
+                // the wire; firmware never emits it post-B2. Drop the row and
+                // log so a regression here is observable.
+                guard id != 0 else {
+                    print("[ZoneVM] Dropped wire zone row with reserved zoneId=0")
+                    return nil
+                }
                 let effectId = zone["effectId"] as? Int ?? 0
                 let speed = zone["speed"] as? Int ?? 15
                 let paletteId = zone["paletteId"] as? Int ?? 0
@@ -458,6 +504,14 @@ class ZoneViewModel {
                     let s1RightEnd = seg["s1RightEnd"] as? Int
                 else { return nil }
 
+                // Wire-format guard (2026-05-02): zoneId == 0 is RESERVED on
+                // the wire post-B2 migration. Drop the segment and log so
+                // protocol regressions surface in the iOS console.
+                guard zoneId != 0 else {
+                    print("[ZoneVM] Dropped wire segment with reserved zoneId=0")
+                    return nil
+                }
+
                 return ZoneSegment(
                     zoneId: zoneId,
                     s1LeftStart: s1LeftStart,
@@ -478,6 +532,13 @@ class ZoneViewModel {
         }
 
         if let zoneId = data["zoneId"] as? Int {
+            // Wire-format guard (2026-05-02): zoneId == 0 is RESERVED on the
+            // wire post-B2 migration. Ignore the broadcast rather than match
+            // it against an internal id of 0.
+            guard zoneId != 0 else {
+                print("[ZoneVM] Ignored zone update with reserved zoneId=0")
+                return
+            }
             guard let index = zones.firstIndex(where: { $0.id == zoneId }) else { return }
 
             let current = data["current"] as? [String: Any]

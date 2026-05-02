@@ -7,9 +7,15 @@
 
 import Foundation
 
-/// LED segment mapping for a zone (dual-strip symmetric layout)
+/// LED segment mapping for a zone (dual-strip symmetric layout).
+///
+/// Wire-format note (2026-05-02 migration): `zoneId` is the firmware
+/// `zoneId` as transmitted on REST and WebSocket. Valid wire values are
+/// 1, 2, 3. Wire value 0 is RESERVED and rejected by firmware. iOS
+/// internal storage matches the wire format exactly — segments emitted
+/// by `ZoneViewModel.segmentsFromBoundaries()` use 1-indexed identifiers.
 struct ZoneSegment: Codable, Sendable, Identifiable, Hashable {
-    /// Zone ID (0-3)
+    /// Wire-format zoneId (1-indexed, 1..3). Sent verbatim to firmware.
     let zoneId: Int
 
     var id: Int { zoneId }
@@ -98,7 +104,7 @@ struct ZoneSegment: Codable, Sendable, Identifiable, Hashable {
 #if DEBUG
 extension ZoneSegment {
     static let preview = ZoneSegment(
-        zoneId: 0,
+        zoneId: 1,
         s1LeftStart: 0,
         s1LeftEnd: 39,
         s1RightStart: 80,
@@ -107,7 +113,7 @@ extension ZoneSegment {
     )
 
     static let previewZone1 = ZoneSegment(
-        zoneId: 1,
+        zoneId: 2,
         s1LeftStart: 40,
         s1LeftEnd: 79,
         s1RightStart: 120,
@@ -116,7 +122,7 @@ extension ZoneSegment {
     )
 
     static let previewCentreZone = ZoneSegment(
-        zoneId: 0,
+        zoneId: 1,
         s1LeftStart: 65,
         s1LeftEnd: 79,
         s1RightStart: 80,

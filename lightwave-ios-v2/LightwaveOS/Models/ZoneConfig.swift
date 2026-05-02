@@ -7,9 +7,15 @@
 
 import Foundation
 
-/// Configuration for a single zone (0-3)
+/// Configuration for a single zone (wire-format `zoneId`, 1-indexed: 1..3).
+///
+/// Wire-format note (2026-05-02 migration): `id` is the firmware
+/// `zoneId` value as transmitted on REST and WebSocket. Valid wire values
+/// are 1, 2, 3. Wire value 0 is RESERVED and rejected by the firmware
+/// (HTTP 400 / `INVALID_VALUE`). iOS internal storage matches the wire
+/// format exactly — there is no intermediate translation layer.
 struct ZoneConfig: Codable, Sendable, Identifiable, Hashable {
-    /// Zone ID (0-3)
+    /// Wire-format zoneId (1-indexed, 1..3). Sent verbatim to firmware.
     let id: Int
 
     /// Whether this zone is active
@@ -162,7 +168,7 @@ enum BlendMode: Int, Codable, Sendable, CaseIterable, Identifiable {
 #if DEBUG
 extension ZoneConfig {
     static let preview = ZoneConfig(
-        id: 0,
+        id: 1,
         enabled: true,
         effectId: 0,
         effectName: "LGP Interference",
@@ -175,7 +181,7 @@ extension ZoneConfig {
     )
 
     static let previewDisabled = ZoneConfig(
-        id: 1,
+        id: 2,
         enabled: false,
         effectId: 12,
         effectName: "Beat Pulse",
@@ -188,7 +194,7 @@ extension ZoneConfig {
     )
 
     static let previewZone2 = ZoneConfig(
-        id: 2,
+        id: 3,
         enabled: true,
         effectId: 5,
         effectName: "Shockwave",

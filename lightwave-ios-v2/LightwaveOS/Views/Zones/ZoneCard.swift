@@ -159,18 +159,24 @@ struct ZoneCard: View {
         return segment.s1LeftStart > 0
     }
 
-    /// Returns the boundary index this zone's split slider controls, or nil if no slider
+    /// Returns the boundary index this zone's split slider controls, or nil if no slider.
+    ///
+    /// Wire-format note (2026-05-02): segment.zoneId is 1-indexed (1, 2, 3).
+    /// `boundary0` (returned 0) is the inner/middle split, `boundary1`
+    /// (returned 1) is the middle/outer split — these indices remain
+    /// 0-indexed because they label the boundary slots in the boundary
+    /// model, not the wire zoneId.
     private func boundaryIndexForZone(segment: ZoneSegment?) -> Int? {
         guard let segment = segment else { return nil }
 
         if appVM.zones.zoneCount == 2 {
-            // Only inner zone (zone 0) has a split slider
-            return segment.zoneId == 0 ? 0 : nil
+            // Only the innermost zone (Zone 1 on the wire) controls b0.
+            return segment.zoneId == 1 ? 0 : nil
         } else if appVM.zones.zoneCount == 3 {
-            // Zone 0 controls b0, Zone 1 controls b1, Zone 2 has no slider
+            // Zone 1 controls b0, Zone 2 controls b1, Zone 3 has no slider.
             switch segment.zoneId {
-            case 0: return 0
-            case 1: return 1
+            case 1: return 0
+            case 2: return 1
             default: return nil
             }
         }
@@ -334,7 +340,7 @@ private struct EffectNavigationRow: View {
                 .padding(.vertical, 8)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(Text("Select effect for zone \(zone.id + 1)"))
+            .accessibilityLabel(Text("Select effect for zone \(zone.id)"))
             .accessibilityValue(Text(zone.effectName ?? "Select Effect"))
             .accessibilityHint(Text("Opens the effect selector."))
 
@@ -404,7 +410,7 @@ private struct PaletteNavigationRow: View {
                 .padding(.vertical, 8)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(Text("Select palette for zone \(zone.id + 1)"))
+            .accessibilityLabel(Text("Select palette for zone \(zone.id)"))
             .accessibilityValue(Text(zone.paletteName ?? "Select Palette"))
             .accessibilityHint(Text("Opens the palette selector."))
 
@@ -583,7 +589,7 @@ private struct ZoneSplitSlider: View {
                 appVM.zones.zoneCount = 2
                 appVM.zones.zones = [
                     ZoneConfig(
-                        id: 0,
+                        id: 1,
                         enabled: true,
                         effectId: 5,
                         effectName: "Ripple Enhanced",
@@ -595,7 +601,7 @@ private struct ZoneSplitSlider: View {
                         blendModeName: "Additive"
                     ),
                     ZoneConfig(
-                        id: 1,
+                        id: 2,
                         enabled: true,
                         effectId: 12,
                         effectName: "LGP Holographic",
@@ -608,8 +614,8 @@ private struct ZoneSplitSlider: View {
                     )
                 ]
                 appVM.zones.segments = [
-                    ZoneSegment(zoneId: 0, s1LeftStart: 40, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 119),
-                    ZoneSegment(zoneId: 1, s1LeftStart: 0, s1LeftEnd: 39, s1RightStart: 120, s1RightEnd: 159)
+                    ZoneSegment(zoneId: 1, s1LeftStart: 40, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 119),
+                    ZoneSegment(zoneId: 2, s1LeftStart: 0, s1LeftEnd: 39, s1RightStart: 120, s1RightEnd: 159)
                 ]
                 appVM.effects.allEffects = [
                     EffectMetadata(id: 5, name: "Ripple Enhanced", category: "Centre-Origin", isAudioReactive: false),

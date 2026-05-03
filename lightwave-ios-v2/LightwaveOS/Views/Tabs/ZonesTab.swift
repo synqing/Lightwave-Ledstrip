@@ -23,13 +23,22 @@ struct ZonesTab: View {
                 ZoneHeaderCard()
                     .padding(.horizontal, 16)
 
-                // Zone cards (dynamically generated based on zone count)
+                // Zone cards (dynamically generated based on zone count).
+                //
+                // SwiftUI overload-resolution footgun: `ForEach(0..<runtimeUpper, id:\.self)`
+                // is silently treated as a constant-range form on iOS 17/18, so the
+                // rendered cardinality does not re-diff when `zoneCount` mutates.
+                // Iterating the Identifiable collection directly (keyed by
+                // `ZoneConfig.id`, which is the 1-indexed wire id) gives SwiftUI a
+                // stable identity it can diff cleanly across zone-count changes.
+                // `prefix(zoneCount)` keeps the visible cardinality bounded by the
+                // live zoneCount even if the firmware broadcast briefly contains
+                // more entries than zones currently rendered.
                 if app.zones.zonesEnabled {
-                    ForEach(0..<app.zones.zoneCount, id: \.self) { index in
-                        if index < app.zones.zones.count {
-                            ZoneCard(zoneIndex: index)
-                                .padding(.horizontal, 16)
-                        }
+                    ForEach(Array(app.zones.zones.prefix(app.zones.zoneCount).enumerated()),
+                            id: \.element.id) { (offset, _) in
+                        ZoneCard(zoneIndex: offset)
+                            .padding(.horizontal, 16)
                     }
                 }
             }

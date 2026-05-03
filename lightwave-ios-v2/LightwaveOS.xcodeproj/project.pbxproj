@@ -61,6 +61,7 @@
 		7BC7BCDD524D77A5D2AF0044 /* BeatEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CE2A301EC4BB1F6157369C3 /* BeatEvent.swift */; };
 		7EAF563DD7A9FD7FD55F114D /* PaletteLUT.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6416631D7DB3C5D87A0AB6B /* PaletteLUT.swift */; };
 		800432784DA7C15F40CA4A21 /* DeviceDiscoveryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A06B1F5D1B76135389E8A37 /* DeviceDiscoveryService.swift */; };
+		86498BC6CF6826E26618302A /* ZoneIdWireFormatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81C0592F5359D5CE0A0E4941 /* ZoneIdWireFormatTests.swift */; };
 		875A03C92461B87551C63749 /* EffectParameterDecodingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DAD7C3DDEAA8B611C9D96EA /* EffectParameterDecodingTests.swift */; };
 		8C47272C6B0E2AAD375FE43F /* EffectPresetSummary.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED6A8555DBB106289D79FE4D /* EffectPresetSummary.swift */; };
 		8E9DC9E316B17A9CC4D4551A /* STMSpectralCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D695AA5B9C1F60BD004F87A /* STMSpectralCard.swift */; };
@@ -225,6 +226,7 @@
 		7E185DC09E48C5BAB0DA19E5 /* LEDStripView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LEDStripView.swift; sourceTree = "<group>"; };
 		7E24D590F91011F14E7284A3 /* PaletteSelectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaletteSelectorView.swift; sourceTree = "<group>"; };
 		7EFBB5EBE67DC3FDB66CE5BF /* EffectPill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EffectPill.swift; sourceTree = "<group>"; };
+		81C0592F5359D5CE0A0E4941 /* ZoneIdWireFormatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoneIdWireFormatTests.swift; sourceTree = "<group>"; };
 		84846BE14BEFB7AD1474515D /* DSPHealthCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DSPHealthCard.swift; sourceTree = "<group>"; };
 		8654E76A2F4CB516999727B1 /* AudioMicroInteractionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMicroInteractionCard.swift; sourceTree = "<group>"; };
 		87205249A100EE9FB99CC9D8 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
@@ -379,6 +381,7 @@
 				9102B3CF3463BBE153C647AB /* STMVRMSStreamTests.swift */,
 				938801B35C7257EBBD79FA9B /* WebSocketServiceTests.swift */,
 				6783AF3DCE1A38713113CAE9 /* WSInspectorTests.swift */,
+				81C0592F5359D5CE0A0E4941 /* ZoneIdWireFormatTests.swift */,
 			);
 			path = LightwaveOSTests;
 			sourceTree = "<group>";
@@ -750,6 +753,7 @@
 				BBE05304FBDAD5EA8E082361 /* ShowViewModelTests.swift in Sources */,
 				DDE1CE2C112B15B1357A2B25 /* WSInspectorTests.swift in Sources */,
 				52210E5419973556A24AF67A /* WebSocketServiceTests.swift in Sources */,
+				86498BC6CF6826E26618302A /* ZoneIdWireFormatTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -162,6 +162,16 @@ void PaletteHandlers::handleList(AsyncWebServerRequest* request,
         palette["avgBrightness"] = getPaletteAvgBrightness(i);
         palette["maxBrightness"] = getPaletteMaxBrightness(i);
 
+        // Colour stops are NOT inlined here — iOS reads them from the
+        // bundled `Resources/Palettes/Palettes_Master.json` (75 palettes,
+        // ~64 KB, generated from this file's gradient tables). Embedding
+        // 75 × ~7 stops × per-iteration ArduinoJson allocation in the
+        // AsyncTCP request context starves loopTask on Core 1 and trips
+        // the FreeRTOS task watchdog (5 s threshold) — confirmed via
+        // backtrace 2026-05-03. The dedicated `/api/v1/palettes/{id}/swatch`
+        // endpoint (proposed; not yet implemented) is the right home for
+        // dynamic colour-stop refresh; the list endpoint stays light.
+
         serializeJson(palette, *response);
         writtenCount++;
     }

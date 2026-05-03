@@ -164,7 +164,30 @@ endpoints:
   # ── Palettes ───────────────────────────────────────────────────────────
   /api/v1/palettes:
     method: GET
-    description: "List all palettes"
+    description: "List all palettes (paginated)"
+    query_params:
+      offset: { type: int, optional: true, default: 0, note: "V2 pagination" }
+      page: { type: uint16, optional: true, default: 1, note: "Backward-compatible pagination" }
+      limit: { type: uint16, optional: true, default: 20, range: "1-100" }
+      category: { type: string, optional: true, enum: [artistic, scientific, lgpOptimized] }
+      warm: { type: bool, optional: true }
+      cool: { type: bool, optional: true }
+      calm: { type: bool, optional: true }
+      vivid: { type: bool, optional: true }
+      cvd: { type: bool, optional: true }
+    response_item_fields:
+      id: uint8
+      name: string
+      category: string
+      flags:
+        warm: bool
+        cool: bool
+        calm: bool
+        vivid: bool
+        cvdFriendly: bool
+        whiteHeavy: bool
+      avgBrightness: uint8
+      maxBrightness: uint8
     consumers: [ios]
 
   /api/v1/palettes/current:

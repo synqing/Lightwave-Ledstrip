@@ -756,6 +756,20 @@ private:
     uint8_t m_speed;
     uint8_t m_paletteIndex;
     uint8_t m_hue;
+    /**
+     * @brief Timestamp (millis()) of the most recent user-driven hue write.
+     *
+     * The render loop applies a slow `m_hue += 1` per-frame auto-rotation so
+     * palette-driven effects keep their colour rotation feel. Without
+     * gating, that auto-rotation overwrites a user-set hue value within
+     * ~4 s at 60 fps — making the iOS Hue slider feel non-functional.
+     *
+     * Gate: auto-rotation is suppressed for `kHueAutoRotatePauseMs` after
+     * each `handleSetHue()` call. Once that window elapses the rotation
+     * resumes, restoring "set and forget" feel for users who don't touch
+     * the slider after applying their colour preference.
+     */
+    uint32_t m_hueLastUserSetMs;
     uint8_t m_intensity;
     uint8_t m_saturation;
     uint8_t m_complexity;

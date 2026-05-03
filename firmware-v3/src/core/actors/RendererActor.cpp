@@ -58,6 +58,12 @@ using namespace lightwaveos::transitions;
 using namespace lightwaveos::palettes;
 
 namespace {
+// Hue auto-rotation pause window. After every user-driven `handleSetHue`
+// call, the per-frame `m_hue += 1` rotation is suppressed for this many
+// milliseconds. Once the window elapses, rotation resumes — restoring
+// "set and forget" feel for users who don't keep tweaking the slider
+// while preserving immediate slider responsiveness.
+constexpr uint32_t kHueAutoRotatePauseMs = 30000;
 
 /// Reinhard tone-map scale LUT (knee = 1.0).
 /// lut[avg] = round(255 * 255 / (avg + 255))
@@ -148,6 +154,7 @@ RendererActor::RendererActor()
     , m_speed(LedConfig::DEFAULT_SPEED)
     , m_paletteIndex(0)
     , m_hue(0)
+    , m_hueLastUserSetMs(0)
     , m_intensity(128)
     , m_saturation(255)
     , m_complexity(128)
@@ -1428,7 +1435,9 @@ void RendererActor::renderFrame()
     // v1 pattern: effect OR transition, never both
     if (m_transitionEngine && m_transitionEngine->isActive()) {
         m_transitionEngine->update();
-        m_hue += 1;
+        if (millis() - m_hueLastUserSetMs > kHueAutoRotatePauseMs) {
+            m_hue += 1;
+        }
         return;  // Skip all effect rendering
     }
 #endif
@@ -1704,7 +1713,9 @@ void RendererActor::renderFrame()
         renderStripIndependent(0, m_stripEffectId[0], deltaTimeMs);
         renderStripIndependent(1, m_stripEffectId[1], deltaTimeMs);
         m_effectContext.dualChannelMode = true;
-        m_hue += 1;
+        if (millis() - m_hueLastUserSetMs > kHueAutoRotatePauseMs) {
+            m_hue += 1;
+        }
         return;
     }
 
@@ -1719,7 +1730,9 @@ void RendererActor::renderFrame()
         m_zoneComposer->render(m_leds, LedConfig::TOTAL_LEDS,
                                &m_currentPalette, m_hue, m_frameCount, deltaTimeMs, nullptr);
 #endif
-        m_hue += 1;
+        if (millis() - m_hueLastUserSetMs > kHueAutoRotatePauseMs) {
+            m_hue += 1;
+        }
         return;
     }
 
@@ -1887,8 +1900,12 @@ void RendererActor::renderFrame()
         { TRACE_SCOPE("effect_render"); safeReg->effect->render(ctx); }
     }
 
-    // Increment hue for effects that use it
-    m_hue += 1;  // Slow rotation
+    // Increment hue for effects that use it (slow rotation), gated so a
+    // user-set hue from the iOS slider sticks for `kHueAutoRotatePauseMs`
+    // before rotation resumes.
+    if (millis() - m_hueLastUserSetMs > kHueAutoRotatePauseMs) {
+        m_hue += 1;
+    }
 }
 
 // =============================================================================
@@ -2359,9 +2376,14 @@ void RendererActor::handleSetVariation(uint8_t variation)
 
 void RendererActor::handleSetHue(uint8_t hue)
 {
+    // Always record the user-set timestamp — even if the value is unchanged,
+    // a slider re-touch should refresh the auto-rotation pause window so the
+    // user's currently-displayed colour sticks for another full window.
+    m_hueLastUserSetMs = millis();
     if (m_hue != hue) {
         m_hue = hue;
-        LW_LOGD("Hue: %d", m_hue);
+        LW_LOGD("Hue: %d (auto-rotate paused %u ms)", m_hue,
+                (unsigned)kHueAutoRotatePauseMs);
     }
 }
 

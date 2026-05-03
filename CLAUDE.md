@@ -77,16 +77,20 @@ Before your first action, answer this question honestly:
 
 If the answer is anything other than an unqualified YES, use the tools below to fill the gaps BEFORE writing code or making changes. The cost of one tool call is negligible. The cost of a confident mistake is an entire session.
 
-**Context tools available (memory search ORDER, fastest-narrowest first):**
+**Context tools available (memory/search ORDER, fastest-narrowest first):**
 1. `Bash($RECALL_CLI "[query]")` — **Crispy recall** — exact-match transcript search (FTS5 + semantic) over verbatim past sessions. Best when you remember a phrase, file, or symptom; returns matched-message IDs you then read with `$RECALL_CLI <session> <msg>` (auto-centres ~30/70 around match). Project-scoped by default.
-2. `mcp__plugin_claude-mem_mem-search__search("[topic]")` — **claude-mem** — extracted observations (decisions, bugfixes, discoveries) across sessions. Best for "have we made a decision about X" or pattern lookup.
-3. `mcp__plugin_claude-mem_mem-search__timeline()` — chronological session history (claude-mem).
-4. `mcp__auggie__codebase-retrieval("[query]")` — semantic codebase search (current source, not history).
-5. `mcp__plugin_episodic-memory_episodic-memory__search` — fallback episodic store.
-6. Reference files (see table below) — pre-extracted architecture, dependencies, FSMs.
-7. `~/.claude/projects/<slug>/memory/MEMORY.md` — **file-based auto-memory** — index of topic files (feedback rules, project state, references, user facts). Read its **Memory Protocol** header before writing or updating entries (frontmatter, naming, two-step add procedure, update-don't-duplicate rule, ≤200-line hygiene). Applies to all agents (Claude, Codex, sub-agents).
+2. `mcp__plugin_claude-mem_mcp-search__search(query, limit=3-5, project="Lightwave-Ledstrip")` — **claude-mem L1 index** — extracted observations (decisions, bugfixes, discoveries) across sessions. Search first; use `type`, `obs_type`, `dateStart`, `dateEnd`, and `orderBy` filters before fetching details.
+3. `mcp__plugin_claude-mem_mcp-search__timeline(anchor=<id>, depth_before=3, depth_after=3, project="Lightwave-Ledstrip")` — **claude-mem L2 timeline** — chronological context around a selected search hit.
+4. `mcp__plugin_claude-mem_mcp-search__get_observations(ids=[...])` — **claude-mem L3 details** — full narratives/facts/files for filtered IDs only. Batch multiple IDs in one call; never fetch all search hits.
+5. Current source truth — C++ symbols use clangd FIRST per the C++ gate below. For non-C++ structural code/doc navigation, prefer claude-mem Smart Explore tools when available: `smart_search` → `smart_outline` → `smart_unfold`; full file reads are the last step for large files.
+6. `mcp__auggie__codebase-retrieval("[query]")` — semantic codebase search (current source, not history) only if configured; see `docs/WORKFLOW_ROUTING.md` for live status.
+7. `mcp__plugin_episodic-memory_episodic-memory__search` — fallback episodic store if current claude-mem is unavailable or returns no useful observations.
+8. Reference files (see table below) — pre-extracted architecture, dependencies, FSMs.
+9. `~/.claude/projects/<slug>/memory/MEMORY.md` — **file-based auto-memory** — index of topic files (feedback rules, project state, references, user facts). Read its **Memory Protocol** header before writing or updating entries (frontmatter, naming, two-step add procedure, update-don't-duplicate rule, ≤200-line hygiene). Applies to all agents (Claude, Codex, sub-agents).
 
-Crispy returns raw transcripts (what was said). claude-mem returns synthesised observations (what was decided). MEMORY.md returns curated rules and state. They are NOT redundant — use 1 first when you recall wording, 2/3 when you only recall the topic.
+Crispy returns raw transcripts (what was said). claude-mem returns synthesised observations (what was decided). Source files return current implementation truth. MEMORY.md returns curated rules and state. They are NOT redundant — use `$RECALL_CLI` first when you recall wording; use claude-mem `search → timeline → get_observations` when you only recall the topic.
+
+If claude-mem emits a health/backlog/version warning, treat recent memory as possibly stale until you verify `/api/health`, `/api/version`, worker logs, or direct source/DB state. Do not silently fall back from a missing `mcp-search` tool to older `mem-search` or stale cache paths.
 
 **You are not expected to know everything from memory.** You ARE expected to know what you don't know and to look it up before acting.
 
@@ -555,7 +559,7 @@ Do NOT silently work around a Crispy warning. Surface it per the Tool Failure Pr
 
 If `$CRISPY_SOCK` is unset and `$RECALL_CLI` is absent (raw `claude` from a terminal, or inside Codex/Warp/another harness), Crispy is OFF. Do NOT call any `crispy:*` skill. Fall back to:
 
-- Memory search: `mcp__plugin_claude-mem_mem-search__search` and `episodic-memory` (skip the recall layer)
+- Memory search: `mcp__plugin_claude-mem_mcp-search__search` → `mcp__plugin_claude-mem_mcp-search__timeline` → `mcp__plugin_claude-mem_mcp-search__get_observations`; use `episodic-memory` only as fallback (skip the recall layer)
 - Planning: Superpowers (`/brainstorming` → `/writing-plans`) or GSD (`/gsd:plan-phase`) — both work without Crispy
 - Adversarial review: `/review` alone (no superthink multi-vendor parallel pass)
 - Handoff: `.claude/handoff.md` only (no in-session rotation)

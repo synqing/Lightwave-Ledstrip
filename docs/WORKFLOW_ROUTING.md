@@ -5,7 +5,7 @@ abstract: "Mandatory session-start routing table: maps tasks to specific MCP too
 # Workflow Routing — Tool & Skill Dispatch Guide
 
 > **This document is loaded via CLAUDE.md. Every CC session must follow these routing rules.**
-> Last updated: 31 Mar 2026
+> Last updated: 02 May 2026
 
 ---
 
@@ -22,11 +22,13 @@ This project has 29 skills, 13 MCP server groups (47 individual tools), and mult
 Before doing anything:
 
 1. **Read this file** (you're doing it now — good)
-2. **Check Claude-mem for recent context:**
+2. **Check Claude-mem for recent context using progressive disclosure:**
    ```
-   mcp__plugin_claude-mem_mcp-search__search("recent activity on [topic]")
-   mcp__plugin_claude-mem_mcp-search__timeline()
+   mcp__plugin_claude-mem_mcp-search__search(query="recent activity on [topic]", limit=3-5, project="<project>")
+   mcp__plugin_claude-mem_mcp-search__timeline(anchor=<selected_id>, depth_before=3, depth_after=3, project="<project>")
+   mcp__plugin_claude-mem_mcp-search__get_observations(ids=[<filtered_ids>])
    ```
+   Search is the L1 index, timeline is L2 context, and `get_observations` is L3 detail. Batch selected IDs and never fetch all hits just because they exist.
 3. **If the task touches code, query Auggie first:**
    ```
    mcp__auggie__codebase-retrieval("[what you're looking for]")
@@ -72,12 +74,11 @@ Before doing anything:
 
 | I need to... | Use this | How |
 |---|---|---|
-| Recall what happened in past sessions | `mcp__plugin_claude-mem_mcp-search__search` | Natural language query across session history |
-| Get observations from memory | `mcp__plugin_claude-mem_mcp-search__get_observations` | Structured facts stored by past sessions |
-| View session timeline | `mcp__plugin_claude-mem_mcp-search__timeline` | Chronological session activity |
-| Search MCP-specific memory | `mcp__plugin_claude-mem_mcp-search__search` | Tool usage history |
-| Get memory system help | `mcp__plugin_claude-mem_mcp-search__help` | When unsure how to query |
-| Read episodic memory | `mcp__plugin_episodic-memory_episodic-memory__read` | Detailed episode recall |
+| Recall what happened in past sessions | `mcp__plugin_claude-mem_mcp-search__search` | Start with `limit=3-5`; use `project`, `type`, `obs_type`, date, and `orderBy` filters before fetching details |
+| View session timeline | `mcp__plugin_claude-mem_mcp-search__timeline` | Chronological context around a selected result; use when narrative order matters |
+| Get observations from memory | `mcp__plugin_claude-mem_mcp-search__get_observations` | Full structured facts/narratives/files for filtered IDs only; batch IDs in one call |
+| Search MCP-specific memory | `mcp__plugin_claude-mem_mcp-search__search` | Tool usage history and prior work patterns |
+| Read episodic memory | `mcp__plugin_episodic-memory_episodic-memory__read` | Fallback detailed episode recall if current claude-mem tools are unavailable or insufficient |
 | Get current task list | `mcp__taskmaster-ai__get_tasks` **[NOT CONFIGURED — requires setup]** | Taskmaster project state |
 
 ### Browser & Testing

@@ -6,6 +6,10 @@ The Risk-Bounded Degraded Operation gate at the top of `CLAUDE.md` applies to **
 
 ESP32-S3 LED controller for a dual-strip Light Guide Plate. 320 WS2812 LEDs, 100+ effects, audio-reactive, web-controlled.
 
+## Memory And Claude-Mem Routing
+
+For prior-session context, follow root `CLAUDE.md` § Session Start and `docs/WORKFLOW_ROUTING.md` before searching ad hoc. Current claude-mem routing is `mcp__plugin_claude-mem_mcp-search__search` → `mcp__plugin_claude-mem_mcp-search__timeline` → `mcp__plugin_claude-mem_mcp-search__get_observations`; do not use stale `mem-search` tool names. Use `$RECALL_CLI` first for exact raw transcript phrases, claude-mem for synthesised observations and decisions, and direct source/DB/process checks for current truth. If claude-mem reports health, version, or backlog warnings, verify live state before trusting recent memory. Do not enable generated folder `CLAUDE.md` files or edit inside `<claude-mem-context>` blocks without an explicit Captain decision.
+
 ## Build (PlatformIO)
 
 ```bash

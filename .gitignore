@@ -58,6 +58,12 @@ wifi_credentials.ini
 # Local tooling caches
 .cache/
 
+# Playwright MCP snapshot dumps (session artefacts — do not track)
+.playwright-mcp/
+
+# Vite dependency pre-bundle cache (regenerated locally)
+lightwave-dashboard/.vite/
+
 # iOS build artifacts and design tool outputs
 lightwave-ios-v2/build/
 lightwave-ios-v2/docs/Rive/

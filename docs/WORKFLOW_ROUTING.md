@@ -65,14 +65,15 @@ Before doing anything:
 
 | I need to... | Use this | How |
 |---|---|---|
-| Search project documentation | `mcp__qmd__qmd_search` or `mcp__qmd__qmd_vector_search` | Keyword or semantic search across indexed docs |
-| Deep search with context | `mcp__qmd__qmd_deep_search` | Multi-step retrieval with reranking |
-| Get specific doc by path | `mcp__qmd__qmd_get` | Exact retrieval when you know the doc |
-| Check QMD index health | `mcp__qmd__qmd_status` | Verify collections are populated |
-| Look up library API docs (step 1) | `mcp__Context7__resolve-library-id` | Resolve library name to Context7 ID — call this FIRST |
-| Look up library API docs (step 2) | `mcp__Context7__get-library-docs` | Fetch version-specific docs using ID from step 1 |
+| Search project documentation | `rg -n "<term>" docs firmware-v3/docs` then Read the relevant section | Current default; QMD is not default-loaded |
+| Deep architecture search | NotebookLM query first, then current-source verification | Use for cross-subsystem rationale and constraints |
+| Get specific doc by path | Read the file directly | Exact retrieval when you know the doc |
+| Check QMD index health | `which qmd && qmd --version` plus MCP health, only if Captain restores QMD | QMD is removed from repo defaults |
+| Look up library API docs | Official vendor docs, local installed headers, or explicitly enabled Context7 | Context7 is optional/per-task, not mandatory |
 
-**QMD Status:** Run `mcp__qmd__qmd_status` to verify QMD is operational and check collection health. Re-index if needed: `scripts/setup-qmd.sh`
+**QMD Status:** QMD is not currently a protected or default-loaded route. It failed live smoke because `qmd` is not on PATH. Re-add it only after a future install/health proof.
+
+**Context7 Status:** Context7 is not default-loaded. Use it only after an explicit per-task enablement and a live availability check.
 
 **Auggie Status:** Auggie is not configured in this workspace. Do not route tasks to it until a future config change explicitly enables it.
 
@@ -82,7 +83,7 @@ Before doing anything:
 |---|---|---|
 | Understand subsystem architecture | `mcp__notebooklm-mcp__notebook_query` | Ask for ANSWER / CONSTRAINTS / KEY FILES / CROSS-REFS / WARNINGS |
 | Ask a broad whole-corpus architecture question | `mcp__notebooklm-mcp__notebook_query_start` then `mcp__notebooklm-mcp__notebook_query_status` | Use async mode when synchronous calls may exceed 60 s |
-| Verify current implementation before editing | Current source via clangd, QMD, or file read | NotebookLM is a snapshot, not current-source truth |
+| Verify current implementation before editing | Current source via clangd or file read | NotebookLM is a snapshot, not current-source truth |
 
 ### Memory & Context
 
@@ -178,7 +179,7 @@ IDEA → BRAINSTORM → DESIGN → PLAN → TEST-FIRST → IMPLEMENT → REVIEW 
 
 ### CLI Output Compression
 
-**RTK v0.34.2** operates at the Bash output compression layer (PreToolUse hook). It rewrites Bash commands before execution and compresses output — it does NOT replace or affect MCP tools (clangd, QMD, Context7), built-in tools (Read, Grep, Glob), or any skill. Configuration: `~/.config/rtk/config.toml`. Analytics: `rtk gain`. Hook integrity: `rtk verify`.
+**RTK v0.34.2** operates at the Bash output compression layer (PreToolUse hook). It rewrites Bash commands before execution and compresses output — it does NOT replace or affect MCP tools (clangd, NotebookLM, claude-mem), built-in tools (Read, Grep, Glob), or any skill. Configuration: `~/.config/rtk/config.toml`. Analytics: `rtk gain`. Hook integrity: `rtk verify`.
 
 ### Formatting & Output
 
@@ -201,7 +202,7 @@ IDEA → BRAINSTORM → DESIGN → PLAN → TEST-FIRST → IMPLEMENT → REVIEW 
 
 1. **Do NOT grep for code when clangd can find it.** `find_definition`, `find_references`, and `get_call_hierarchy` are faster and more accurate than text search for C++ symbols.
 
-2. **Do NOT search docs by reading files when QMD can search them.** `qmd_search` and `qmd_vector_search` cover indexed collections. Check `qmd_status` first — if collections show zero, QMD needs indexing (run `scripts/setup-qmd.sh` on host Mac with Node 22).
+2. **Do NOT trawl docs manually.** Use NotebookLM for architecture and targeted `rg`/Read for current files. QMD is not default-loaded; do not assume it exists.
 
 3. **Do NOT start coding without checking brainstorming + TDD skills.** The brainstorming skill refines ideas BEFORE you commit to an approach. The TDD skill ensures tests exist BEFORE implementation.
 
@@ -222,7 +223,8 @@ IDEA → BRAINSTORM → DESIGN → PLAN → TEST-FIRST → IMPLEMENT → REVIEW 
 ```
 Is this about C++ firmware code?
 ├── YES → clangd for navigation
-│         QMD for documentation, NotebookLM for architecture, Context7 for library APIs
+│         targeted rg/Read for documentation, NotebookLM for architecture,
+│         current vendor/local headers for library APIs
 │
 Is this about iOS / Swift?
 ├── YES → /iOS Expert skill + /ios-simulator-skill-main
@@ -239,7 +241,7 @@ Is this about testing a web UI?
 ├── YES → Playwright MCP tools + /webapp-testing or /playwright-skill
 │
 Is this a research task?
-├── YES → QMD (docs), NotebookLM (architecture), $RECALL_CLI (raw history),
+├── YES → targeted rg/Read (docs), NotebookLM (architecture), $RECALL_CLI (raw history),
 │         claude-mem (synthesised history), current source for implementation truth
 │
 Am I about to write code?
@@ -262,3 +264,4 @@ Am I finishing a branch?
 | 14 Mar 2026 | Dead reference cleanup. Marked 3 deleted skills (`supabase-expert`, `toon-formatter`, `theme-factory`) as REMOVED. Marked 4 unconfigured MCP servers (`auggie`, `nimbalyst-mcp`, `taskmaster-ai`, `figma`) as NOT CONFIGURED. Fixed `claude-mem` tool prefix (`mem-search` -> `mcp-search`). Replaced static status assertions with live-check instructions. Marked Ralph as NOT ACTIVE. |
 | 31 Mar 2026 | Added RTK v0.34.2 entry under Infrastructure & Tooling (CLI Output Compression subsection). |
 | 05 May 2026 | Aligned Phase 0 with `$RECALL_CLI` then claude-mem routing, added NotebookLM architecture routing, updated clangd compiledb env to ESV11 K1v2 32 kHz, and demoted inactive Auggie/Ralph guidance. |
+| 05 May 2026 | Removed QMD and Context7 as protected/default routes after live smoke failure/unproven health; retained NotebookLM for architecture and current-source verification for implementation truth. |

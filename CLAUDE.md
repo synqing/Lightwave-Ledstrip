@@ -106,7 +106,7 @@ READBACK:
 - Subsystem: [audio | effects | network | core | ios | tab5 | cross-cutting]
 - Reference files: [list which docs/reference/ files I will read first]
 - Hard constraints: [list applicable constraints — see table below]
-- Tool routing: [which tools I will use FIRST — clangd/QMD/Context7/subagent]
+- Tool routing: [which tools I will use FIRST — clangd/NotebookLM/Read/rg/subagent]
 - NotebookLM: [will I query the knowledge base before reading reference docs? If yes, the exact question I will ask. If no (e.g. trivial single-file edit), why not.]
 ```
 
@@ -118,8 +118,8 @@ READBACK:
 | Audio / effects | Centre origin 79/80 outward, no heap in render(), 2.0ms ceiling, no rainbows |
 | Network / WiFi | K1 current shipping mode is AP-only via `WIFI_AP_ONLY`. Goal-state is dual-mode AP OR STA, never concurrent AP+STA. Do not enable pure-STA validation, WiFi-mode rewrites, or `WIFI_AP_ONLY` / `m_forceApOnly` default changes without explicit Captain approval. |
 | Multi-file exploration | Delegate to subagent, 30K token budget per agent |
-| Documentation | QMD FIRST, Read as fallback |
-| External library APIs | Context7 FIRST, not training data |
+| Documentation | NotebookLM for architecture; targeted `rg`/Read for current files |
+| External library APIs | Current vendor docs or local headers; Context7 only when explicitly available for the task |
 | Any code changes | British English in comments/docs/logs/UI |
 
 **Reference files — read BEFORE exploring source code:**
@@ -160,18 +160,18 @@ These contain pre-extracted codebase structure, frameworks, dependencies, entryp
 
 **When grep IS appropriate:** string literals, log messages, comments, config values, or non-C++ files. grep is for TEXT. clangd is for CODE SYMBOLS.
 
-### Documentation Search — QMD FIRST, file reading LAST
+### Documentation Search — NotebookLM, rg, and Read
 
-**Gate rule:** When you need to find information in project documentation, query QMD before reading files. QMD searches across all indexed collections (firmware docs, War Room, landing page docs) with semantic matching.
+**Gate rule:** QMD is no longer a mandatory or default-loaded repo MCP. For architecture and cross-subsystem questions, query NotebookLM first, then verify against current source or docs. For current documentation lookup, use targeted `rg` to locate the relevant file and Read only the needed section. Do not trawl large doc trees sequentially.
 
 | I need to... | Call this | NOT this |
 |---|---|---|
-| Find docs about a topic | `mcp__qmd__qmd_search` or `mcp__qmd__qmd_vector_search` | ~~reading files one by one~~ |
-| Deep multi-step doc retrieval | `mcp__qmd__qmd_deep_search` | ~~loading 200+ line docs into context~~ |
-| Get a specific known doc | `mcp__qmd__qmd_get` | ~~Read tool (acceptable fallback)~~ |
-| Check what's indexed | `mcp__qmd__qmd_status` | ~~guessing~~ |
+| Understand architecture or design rationale | `mcp__notebooklm-mcp__notebook_query` | ~~Reading 5+ reference docs first~~ |
+| Find current docs about a topic | `rg -n "<term>" docs firmware-v3/docs` then Read the relevant section | ~~manual doc trawling~~ |
+| Get a specific known doc | Read the file directly | ~~loading unrelated docs~~ |
+| Search indexed docs with QMD | Only if QMD has been explicitly restored and verified in the current session | ~~assuming QMD exists~~ |
 
-**Fallback:** If QMD returns nothing or `qmd_status` shows zero collections, STOP and report: `[TOOL FAIL: QMD — not indexed]`. Ask the user whether to index it now or fall back to grep/Read. Do NOT silently switch.
+**QMD status:** `qmd` is not currently installed on PATH and is not a protected gate. If a future session restores QMD, verify `which qmd`, `qmd --version`, and MCP health before using it.
 
 ### Architectural Knowledge — NotebookLM FIRST, reference docs LAST
 
@@ -195,17 +195,17 @@ These contain pre-extracted codebase structure, frameworks, dependencies, entryp
 
 **Tool failure:** If `notebook_query` times out or errors and the async fallback also fails, STOP per the Tool Failure Protocol — do NOT silently fall back to reading reference docs without flagging the degradation. The doc-read fallback is acceptable only after explicit Captain approval.
 
-### Library APIs — Context7, not training data
+### Library APIs — Current Source First
 
-**Gate rule:** When referencing external library APIs (FastLED, ArduinoJSON, ESPAsyncWebServer, FreeRTOS, etc.), DSP formulae (FFT windowing, spectral centroid, onset detection, beat tracking), signal processing algorithms, or any domain-specific computation where parameter correctness matters — query Context7 for authoritative docs. Do NOT rely on training data.
+**Gate rule:** Context7 is no longer default-loaded or mandatory. When referencing external library APIs (FastLED, ArduinoJSON, ESPAsyncWebServer, FreeRTOS, etc.), DSP formulae, signal processing algorithms, or any domain-specific computation where parameter correctness matters, verify against current vendor documentation, local installed headers, or official source. Use Context7 only if it is explicitly enabled and verified for the task.
 
 | I need to... | Call this | NOT this |
 |---|---|---|
-| Check a FastLED/ArduinoJSON/FreeRTOS API | `mcp__Context7__resolve-library-id` then `mcp__Context7__get-library-docs` | ~~reciting from training data~~ |
-| Verify function signatures for an ESP-IDF call | `mcp__Context7__get-library-docs` with topic filter | ~~assuming parameter order~~ |
-| Look up a PlatformIO library method | Context7 first, then `mcp__clangd__get_hover` on the call site | ~~reading .pio/libdeps headers~~ |
+| Check a FastLED/ArduinoJSON/FreeRTOS API | Official docs or local installed headers, then cite the file/source | ~~reciting from training data~~ |
+| Verify function signatures for an ESP-IDF call | Local ESP-IDF headers/docs or official Espressif docs | ~~assuming parameter order~~ |
+| Look up a PlatformIO library method | `mcp__clangd__get_hover` on the call site plus local `.pio/libdeps` headers when needed | ~~guessing from memory~~ |
 
-**When training data IS acceptable:** Standard C/C++ library calls (`memcpy`, `printf`, `std::vector`), basic FreeRTOS primitives (`xTaskCreate`, `xQueueSend`) stable for 10+ years. If in doubt, check Context7.
+**When training data IS acceptable:** Standard C/C++ library calls (`memcpy`, `printf`, `std::vector`) and basic FreeRTOS primitives (`xTaskCreate`, `xQueueSend`) that have been stable for 10+ years. If parameter correctness matters, verify from a current source.
 
 ### Development Lifecycle
 
@@ -451,7 +451,7 @@ RTK (Rust Token Killer) v0.34.2 is a CLI proxy that compresses Bash command outp
 
 **What it does NOT affect:**
 - Built-in tools: Read, Grep, Glob (these bypass Bash entirely)
-- MCP tools: clangd, QMD, Context7, autocontext, devkg, episodic memory
+- MCP tools: clangd, NotebookLM, claude-mem, GitHub, Playwright, and explicitly enabled per-task tools
 - Serial monitor: `pio device monitor` (excluded — needs raw stream)
 
 **Configuration:** `~/.config/rtk/config.toml`. Excluded commands (pass through unmodified): `esptool.py`, `pio device monitor`, `capture`. Meta commands: `rtk gain` (savings report), `rtk verify` (config check), `rtk discover` (missed compression opportunities).
@@ -487,7 +487,7 @@ Read **only** when the task requires it — do not load eagerly. Exception: WORK
 | Timing & memory budgets | [firmware-v3/CONSTRAINTS.md](firmware-v3/CONSTRAINTS.md) | 170 | Performance work, memory optimisation |
 | Audio-reactive protocol | [firmware-v3/docs/audio-visual/audio-visual-semantic-mapping.md](firmware-v3/docs/audio-visual/audio-visual-semantic-mapping.md) | 467 | Writing/debugging audio-reactive effects |
 | Effect development standard | [firmware-v3/docs/EFFECT_DEVELOPMENT_STANDARD.md](firmware-v3/docs/EFFECT_DEVELOPMENT_STANDARD.md) | 500 | Creating or modifying effects |
-| Full REST API reference | [firmware-v3/docs/api/api-v1.md](firmware-v3/docs/api/api-v1.md) | 2,124 | API endpoint work — use QMD to search, do NOT read in full |
+| Full REST API reference | [firmware-v3/docs/api/api-v1.md](firmware-v3/docs/api/api-v1.md) | 2,124 | API endpoint work — use targeted `rg`/Read; protocol YAML remains canonical |
 | CQRS state architecture | [firmware-v3/docs/CQRS_STATE_ARCHITECTURE.md](firmware-v3/docs/CQRS_STATE_ARCHITECTURE.md) | 652 | State management, command dispatch |
 | MabuTrace tracing & Perfetto | [firmware-v3/docs/debugging/MABUTRACE_GUIDE.md](firmware-v3/docs/debugging/MABUTRACE_GUIDE.md) | ~200 | Capturing on-chip timeline traces; only when telemetry is needed |
 | Harness worker mode | [.claude/harness/HARNESS_RULES.md](.claude/harness/HARNESS_RULES.md) | 364 | Harness/test infrastructure |
@@ -525,16 +525,9 @@ Available notebooks (see `docs/tooling/notebooklm-bundles/NOTEBOOK_REGISTRY.md` 
 
 Cross-notebook is rate-limited — prefer single-notebook queries when one notebook clearly owns the answer.
 
-## autocontext — Evolved Strategy Scenarios
+## Removed Default MCP Surfaces
 
-autocontext MCP (`uv run autoctx mcp-serve`). Two scenarios seeded with LightwaveOS history:
-
-| Scenario | When to use |
-|----------|-------------|
-| `embedded_effect_design` | New LED effect — iterates against centre-origin, no-heap, dt-correction, audio-reactivity rubric (max 3 rounds, threshold 0.80) |
-| `ios_feature_implementation` | New SwiftUI feature — iterates against @Observable, debounce, 44pt, Codable, architecture rubric (max 3 rounds, threshold 0.82) |
-
-Use via `autocontext_run_improvement_loop(scenario_name="...", initial_output="<implementation>", max_rounds=3, quality_threshold=0.80)`. Playbooks accumulate in `knowledge/<scenario>/`.
+The following MCPs are not default-loaded for this repo unless Captain explicitly restores them for a task: QMD, Context7, autocontext, devkg, mcp-agent-mail, code-context, Blender, EasyEDA, Nogic, Stitch, DetailsPro, Twitter, Pathmode, Puppeteer, Stripe, Linear, Swift/iOS, and Vercel. NotebookLM remains preserved for architecture/reference routing.
 
 ## gstack
 

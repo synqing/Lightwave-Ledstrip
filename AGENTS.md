@@ -15,13 +15,14 @@ For prior-session context, follow root `CLAUDE.md` § Session Start and `docs/WO
 ```bash
 cd firmware-v3
 
-# Primary development profile (PipelineCore backend)
-pio run -e esp32dev_audio_pipelinecore
-pio run -e esp32dev_audio_pipelinecore -t upload
+# Canonical production profile (ESV11 K1v2, 32 kHz; [platformio] default_envs)
+pio run -e esp32dev_audio_esv11_k1v2_32khz
+pio run -e esp32dev_audio_esv11_k1v2_32khz -t upload
 
-# Alternative default profile (ESV11 backend; [platformio] default_envs)
+# Legacy/dev-only ESV11 profile
 pio run -e esp32dev_audio_esv11
-pio run -e esp32dev_audio_esv11 -t upload
+
+# PipelineCore exists in platformio.ini but is not production-active; do not use it for K1 production work.
 
 # Serial monitor
 pio device monitor -b 115200
@@ -32,14 +33,17 @@ pio device monitor -b 115200
 - **Centre origin**: All effects originate from LED 79/80 outward (or inward to 79/80). No linear sweeps.
 - **No rainbows**: No rainbow cycling or full hue-wheel sweeps.
 - **No heap alloc in render**: No `new`/`malloc`/`String` in `render()` paths. Use static buffers.
-- **120 FPS target**: Keep per-frame effect code under ~2 ms.
-- **British English** in comments and docs (centre, colour, initialise).
+- **120 FPS / 2.0 ms ceiling**: Keep per-frame effect code under 2.0 ms.
+- **dt-correct smoothing**: Temporal smoothing must use delta-time, not frame-count assumptions.
+- **Sub-8 ms audio-to-visual latency**: Preserve the end-to-end pipeline latency constraint.
+- **K1 is AP-only**: Never enable STA mode, AP+STA mode, STA validation envs, or WiFi-mode rewrites without explicit Captain approval.
+- **British English** in comments and docs (centre, colour, initialise, behaviour).
 
 ## Workflow Discipline (Agents)
 
 These rules were codified after the 2026-04-27/28 orchestration drift (see `~/.claude/plans/shit-got-fucked-but-groovy-neumann.md`). Follow them strictly.
 
-1. **Single source of truth for forward work is `BACKLOG.md`** (root). Do NOT write `.claude/handoff*.md` files containing forward TODO lists. Postmortems describing what shipped (with commit hashes) are fine; forward TODOs in `.claude/` are forbidden because they create re-prescription loops where the next session "applies patches" that already landed in commits the handoff didn't see.
+1. **Single source of truth for forward work is `BACKLOG.md`** (root). Do NOT write `.claude/handoff*.md` files containing forward task lists. Postmortems describing what shipped (with commit hashes) are fine; forward tasks in `.claude/` are forbidden because they create re-prescription loops where the next session "applies patches" that already landed in commits the handoff didn't see.
 
 2. **`feat(...)` commits MUST anchor to a Phase Move per the Synergy-Topology programme taxonomy in `BACKLOG.md`**, or be tagged `chore` / `fix` / `docs` / `ci` / `test` / `refactor`. A bare `feat(firmware): add X` body without a Phase Move reference (or without a `Captain visual sign-off:` line for Phase 5+ effect commits) is reviewable. The Phase 5 commit `39406e6b` violated this rule and bypassed the visual sign-off gate; do not repeat.
 

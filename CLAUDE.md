@@ -82,6 +82,7 @@ If the answer is anything other than an unqualified YES, use the tools below to 
 2. `mcp__plugin_claude-mem_mcp-search__search(query, limit=3-5, project="Lightwave-Ledstrip")` — **claude-mem L1 index** — extracted observations (decisions, bugfixes, discoveries) across sessions. Search first; use `type`, `obs_type`, `dateStart`, `dateEnd`, and `orderBy` filters before fetching details.
 3. `mcp__plugin_claude-mem_mcp-search__timeline(anchor=<id>, depth_before=3, depth_after=3, project="Lightwave-Ledstrip")` — **claude-mem L2 timeline** — chronological context around a selected search hit.
 4. `mcp__plugin_claude-mem_mcp-search__get_observations(ids=[...])` — **claude-mem L3 details** — full narratives/facts/files for filtered IDs only. Batch multiple IDs in one call; never fetch all search hits.
+4.5. `mcp__notebooklm-mcp__notebook_query(notebook_id="92d45c0b-83c7-4971-aa9a-2c9ee13b06d4", query="...")` — **NotebookLM knowledge oracle** — pre-indexed architectural knowledge across 127 sterilised sources. Returns structured answers in 5 mandatory sections: ANSWER / CONSTRAINTS / KEY FILES / CROSS-REFS / WARNINGS. Use for "what/why" questions about architecture, constraints, design decisions, and subsystem relationships before reading reference docs. Cuts cold-start cost from ~30K tokens (reading 5+ reference docs) to one API call. Prefer `notebook_query_start` + `notebook_query_status` (async) for broad multi-section questions — synchronous calls may exceed the 60 s socket timeout on whole-corpus retrieval. Do NOT use NotebookLM for code symbol navigation (use clangd), current file contents (use Read), git/session history (use Crispy `$RECALL_CLI` or claude-mem), or anything where freshness against today's HEAD matters (the notebook is a periodic snapshot — verify against current source before any code edit).
 5. Current source truth — C++ symbols use clangd FIRST per the C++ gate below. For non-C++ structural code/doc navigation, prefer claude-mem Smart Explore tools when available: `smart_search` → `smart_outline` → `smart_unfold`; full file reads are the last step for large files.
 6. `mcp__auggie__codebase-retrieval("[query]")` — semantic codebase search (current source, not history) only if configured; see `docs/WORKFLOW_ROUTING.md` for live status.
 7. `mcp__plugin_episodic-memory_episodic-memory__search` — fallback episodic store if current claude-mem is unavailable or returns no useful observations.
@@ -106,6 +107,7 @@ READBACK:
 - Reference files: [list which docs/reference/ files I will read first]
 - Hard constraints: [list applicable constraints — see table below]
 - Tool routing: [which tools I will use FIRST — clangd/QMD/Context7/subagent]
+- NotebookLM: [will I query the knowledge base before reading reference docs? If yes, the exact question I will ask. If no (e.g. trivial single-file edit), why not.]
 ```
 
 **Constraint readback table — read back ALL that apply to your task:**
@@ -114,7 +116,7 @@ READBACK:
 |---|---|
 | Any C++ source | clangd FIRST for symbols, grep for text only |
 | Audio / effects | Centre origin 79/80 outward, no heap in render(), 2.0ms ceiling, no rainbows |
-| Network / WiFi | K1 is AP-ONLY — NEVER enable STA mode |
+| Network / WiFi | K1 is AP-only. Never enable STA mode, AP+STA, STA validation envs, or WiFi-mode rewrites without explicit Captain approval. Historical STA/dual-mode material is referenced context only, not active instruction. |
 | Multi-file exploration | Delegate to subagent, 30K token budget per agent |
 | Documentation | QMD FIRST, Read as fallback |
 | External library APIs | Context7 FIRST, not training data |
@@ -170,6 +172,28 @@ These contain pre-extracted codebase structure, frameworks, dependencies, entryp
 | Check what's indexed | `mcp__qmd__qmd_status` | ~~guessing~~ |
 
 **Fallback:** If QMD returns nothing or `qmd_status` shows zero collections, STOP and report: `[TOOL FAIL: QMD — not indexed]`. Ask the user whether to index it now or fall back to grep/Read. Do NOT silently switch.
+
+### Architectural Knowledge — NotebookLM FIRST, reference docs LAST
+
+**Gate rule:** When you need to understand a subsystem's architecture, why a decision was made, what constraints apply across multiple files, or how two subsystems interact — query NotebookLM before reading any `docs/reference/*.md`, `EFFECT_DEVELOPMENT_STANDARD.md`, or cross-project docs. The notebook returns the structured answer in one call; reading the equivalent docs costs ~30K tokens.
+
+| I need to understand... | Call this | NOT this |
+|---|---|---|
+| A subsystem's architecture before touching code | `mcp__notebooklm-mcp__notebook_query` | ~~Reading 5+ reference docs~~ |
+| What constraints apply to a planned change | `mcp__notebooklm-mcp__notebook_query` | ~~Scanning CLAUDE.md sections~~ |
+| Why a design decision was made | `mcp__notebooklm-mcp__notebook_query` | ~~Grepping commit history~~ |
+| Cross-subsystem interactions (iOS↔firmware↔Tab5) | `mcp__notebooklm-mcp__notebook_query` or `cross_notebook_query` | ~~Spawning 3 subagents to read 3 codebase-maps~~ |
+| Where a C++ symbol is defined | `mcp__clangd__find_definition` | ~~notebook_query~~ |
+| Current file contents | `Read` | ~~notebook_query~~ |
+| What changed since last session | Crispy `$RECALL_CLI` / claude-mem | ~~notebook_query~~ |
+| Whole-corpus broad question (likely >60 s) | `notebook_query_start` + `notebook_query_status` | ~~`notebook_query` (will time out)~~ |
+
+**When NotebookLM is NOT acceptable:**
+- Any code edit that depends on today's HEAD state — the notebook is a snapshot, not a live mirror. After NotebookLM gives you the architectural answer, verify with clangd / Read before writing code.
+- Symbol navigation in C++ — clangd is canonical, NotebookLM is conceptual.
+- Git history forensics — use `git log` / `git blame`, not NotebookLM.
+
+**Tool failure:** If `notebook_query` times out or errors and the async fallback also fails, STOP per the Tool Failure Protocol — do NOT silently fall back to reading reference docs without flagging the degradation. The doc-read fallback is acceptable only after explicit Captain approval.
 
 ### Library APIs — Context7, not training data
 
@@ -233,7 +257,7 @@ Only after satisfying all four checks: proceed with commit.
 
 ## Hard Constraints
 
-- **K1 is AP-ONLY. NEVER enable STA mode.** K1 runs as a WiFi Access Point. Tab5 and iOS connect TO it. STA has never worked (driver-level auth failures, 6+ failed mitigations). See MEMORY.md `firmware_wifi_architecture.md` for full history. **Do not modify WiFi mode, add STA connection logic, or change AP configuration without explicit user approval.**
+- **K1 WiFi mode is AP-only.** Current shipping firmware uses `WIFI_AP_ONLY` in canonical ESV11 K1 build environments, and Tab5/iOS connect to K1's AP at `192.168.4.1`. Never enable STA mode, AP+STA mode, STA validation environments, WiFi-mode rewrites, or default changes to `WIFI_AP_ONLY` / `m_forceApOnly` without explicit Captain approval. Historical STA/dual-mode analysis may be kept as referenced forensic context, but it is not active instruction for agents.
 - **Audio playback safety**: Never generate, select, or play audio through speakers/headphones unless Captain has explicitly approved that exact source. Approval for one audio file does not authorise other files, synthetic fixtures, white/pink noise, hats, cymbals, speech, generated tones, or any agent-chosen sound. For AFS/runtime audio capture, the approved reference corpus is `/Users/spectrasynq/Workspace_Management/Software/hybrid-beat-tracker/tests/benchmark` unless Captain explicitly names a different source. Before any playback, state the exact file/source, output path/device if known, volume assumption, duration, and stop command. If a capture matrix needs noise or synthetic fixtures, ask first and wait.
 - **Centre origin**: All effects originate from LED 79/80 outward (or inward to 79/80). No linear sweeps. Applies to all render modes including zone-specific renders. Exception: zone ID `0xFF` (global render) where the physical centre is still 79/80.
 - **No rainbows**: No rainbow cycling or full hue-wheel sweeps.
@@ -249,9 +273,9 @@ Violations will be flagged and reverted.
 
 Only these entries are permitted at the project root (enforced by CI — see `.github/workflows/repo_hygiene_check.yml`):
 
-**Root files (12):** `README.md`, `LICENSE`, `NOTICE`, `CHANGELOG.md`, `CONTRIBUTING.md`, `TRADEMARK.md`, `CLAUDE.md`, `AGENTS.md`, `BACKLOG.md`, `.gitignore`, `.pre-commit-config.yaml`, `.mcp.json`, `.worktreeinclude`
+**Root files (13):** `README.md`, `LICENSE`, `NOTICE`, `CHANGELOG.md`, `CONTRIBUTING.md`, `TRADEMARK.md`, `CLAUDE.md`, `AGENTS.md`, `BACKLOG.md`, `.gitignore`, `.pre-commit-config.yaml`, `.mcp.json`, `.worktreeinclude`
 
-**Root directories (10+3 hidden):** `.git`, `.github`, `.claude`, `.codex`, `_archive`, `docs`, `firmware-v3`, `harness`, `instructions`, `k1-composer`, `lightwave-dashboard`, `lightwave-ios-v2`, `scripts`, `tab5-encoder`, `tools`
+**Root directories (11+4 hidden):** `.git`, `.github`, `.claude`, `.codex`, `_archive`, `docs`, `firmware-v3`, `harness`, `instructions`, `k1-composer`, `lightwave-dashboard`, `lightwave-ios-v2`, `scripts`, `tab5-encoder`, `tools`
 
 **Nothing else goes at root.** Governance docs → `instructions/`. Decision registers → `k1-launch-research/`. Launch materials → `~/SpectraSynq_K1_Launch_Planning/` (separate repo). Temp notes → `.claude/`. If you need a new root file, get explicit Captain approval first.
 
@@ -432,9 +456,9 @@ RTK (Rust Token Killer) v0.34.2 is a CLI proxy that compresses Bash command outp
 
 **Configuration:** `~/.config/rtk/config.toml`. Excluded commands (pass through unmodified): `esptool.py`, `pio device monitor`, `capture`. Meta commands: `rtk gain` (savings report), `rtk verify` (config check), `rtk discover` (missed compression opportunities).
 
-### Cross-Session Handoff Protocol
+### Cross-Session Continuity Protocol
 
-Two handoff mechanisms — they serve different purposes and BOTH may apply to the same incomplete work:
+Two continuity mechanisms serve different purposes. Neither may create `.claude/handoff*.md` forward task lists.
 
 **1. Crispy `/handoff` — IN-SESSION ROTATION** (when context bloat is degrading quality NOW):
 
@@ -442,17 +466,15 @@ Two handoff mechanisms — they serve different purposes and BOTH may apply to t
 /crispy:handoff <next-task-summary>
 ```
 
-Runs three steps automatically: `handoff-prompt-to` (distill into self-contained prompt), `reflect` (verify completeness against codebase), `clear-and-execute` (rotate into a fresh Crispy-managed session with context handed across IPC). Carries the prompt but does NOT capture failed approaches, blockers, or "do not retry" knowledge.
+Runs three steps automatically: `handoff-prompt-to` (distill into self-contained prompt), `reflect` (verify completeness against codebase), `clear-and-execute` (rotate into a fresh Crispy-managed session with context handed across IPC). Carries the prompt for in-session rotation only.
 
-**2. `.claude/handoff.md` — CROSS-SESSION PAPER TRAIL** (when you stop work for the day, hit a hardware blocker, or wait on the user):
+**2. `BACKLOG.md` — CROSS-SESSION FORWARD WORK**
 
-> **Does the next agent have everything it needs to continue this work without re-discovering anything I already learned?**
+`BACKLOG.md` is the single source of truth for forward work. Do NOT write `.claude/handoff*.md` files containing next steps, task lists, or future prescriptions. If work is incomplete, update the appropriate `BACKLOG.md` row with current state, blocker, evidence, and next action.
 
-If NO, create `.claude/handoff.md` (overwrite any existing one) with these sections: Current state | Decisions made (and why) | Failed approaches (do NOT retry) | Blocked on | Next steps (in order) | Files modified | Constraints encountered.
+Completed-work postmortems are allowed when they describe what shipped, cite commit hashes or artefact paths, and do not prescribe forward tasks. Failure notes belong in `BACKLOG.md` unless Captain explicitly asks for a separate postmortem document.
 
-**If running long AND work is incomplete, use both:** rotate via `/crispy:handoff` AND write `.claude/handoff.md` so the next session inherits failure history.
-
-**When to write:** Always if work is incomplete. Optional but appreciated for completed complex multi-session tasks. The next session's agent should delete `.claude/handoff.md` after reading it to prevent stale handoffs persisting.
+**If running long AND work is incomplete:** rotate via `/crispy:handoff` if available, then update `BACKLOG.md` rather than writing a forward handoff file.
 
 ## Further Docs
 
@@ -469,6 +491,39 @@ Read **only** when the task requires it — do not load eagerly. Exception: WORK
 | CQRS state architecture | [firmware-v3/docs/CQRS_STATE_ARCHITECTURE.md](firmware-v3/docs/CQRS_STATE_ARCHITECTURE.md) | 652 | State management, command dispatch |
 | MabuTrace tracing & Perfetto | [firmware-v3/docs/debugging/MABUTRACE_GUIDE.md](firmware-v3/docs/debugging/MABUTRACE_GUIDE.md) | ~200 | Capturing on-chip timeline traces; only when telemetry is needed |
 | Harness worker mode | [.claude/harness/HARNESS_RULES.md](.claude/harness/HARNESS_RULES.md) | 364 | Harness/test infrastructure |
+
+## NotebookLM Knowledge Base
+
+| Notebook | ID | Sources | Use when... |
+|---|---|---|---|
+| Lightwave-Ledstrip | `92d45c0b-83c7-4971-aa9a-2c9ee13b06d4` | 127 | Architecture, constraints, design decisions, cross-subsystem questions for firmware-v3, lightwave-ios-v2, tab5-encoder, protocol contracts, audio pipeline, WiFi, governance |
+
+Full SpectraSynq notebook registry (7 notebooks, IDs, source counts, bundle paths): [`notebooklm_bundles/NOTEBOOK_REGISTRY.md`](notebooklm_bundles/NOTEBOOK_REGISTRY.md).
+
+Custom system prompt (configured 2026-05-04, polished 2026-05-04 with WS contract-first gate) mandates a 5-section response format: ANSWER / CONSTRAINTS / KEY FILES / CROSS-REFS / WARNINGS. The prompt enforces British English, AP-only-WiFi sterilisation, no-heap-in-render warnings, centre-origin guidance on every effect-related answer, and the contract-first gate (`docs/protocol/k1-ws-contract.yaml` updated BEFORE implementation; the "regeneratable artefact" framing is reconciliation-only). If a response loses the structure or breaches sterilisation, re-run `chat_configure` per `notebooklm_bundles/CC_CLI_NOTEBOOKLM_INTEGRATION_PROMPT.md`.
+
+### Cross-notebook queries
+
+For questions spanning multiple SpectraSynq projects (e.g. "how does the marketing positioning of K1 align with the technical AP-only constraint?", "where does PRISM.studio reference K1 protocol contracts?"), use:
+
+```
+mcp__notebooklm-mcp__cross_notebook_query(
+    query="...",
+    notebook_names="Lightwave-Ledstrip, SpectraSynq.LandingPage"
+)
+```
+
+Available notebooks (see `notebooklm_bundles/NOTEBOOK_REGISTRY.md` for IDs, sources, last-sync dates):
+
+- **Lightwave-Ledstrip** — firmware/iOS/Tab5 codebase + protocol + governance (127 sources)
+- **K1 Testbed** — testbed/dev hardware + capture rigs (37 sources)
+- **War Room** — governance, doctrine, decision history (93 sources)
+- **K1 Launch Planning** — launch checklist, demo plans, gating (47 sources)
+- **K1 Marketing** — positioning, copy, banned language, audience (91 sources)
+- **SpectraSynq.LandingPage** — landing-page Next.js + R3F site (89 sources)
+- **PRISM.studio** — PRISM compositor/studio app (66 sources)
+
+Cross-notebook is rate-limited — prefer single-notebook queries when one notebook clearly owns the answer.
 
 ## autocontext — Evolved Strategy Scenarios
 
@@ -562,6 +617,6 @@ If `$CRISPY_SOCK` is unset and `$RECALL_CLI` is absent (raw `claude` from a term
 - Memory search: `mcp__plugin_claude-mem_mcp-search__search` → `mcp__plugin_claude-mem_mcp-search__timeline` → `mcp__plugin_claude-mem_mcp-search__get_observations`; use `episodic-memory` only as fallback (skip the recall layer)
 - Planning: Superpowers (`/brainstorming` → `/writing-plans`) or GSD (`/gsd:plan-phase`) — both work without Crispy
 - Adversarial review: `/review` alone (no superthink multi-vendor parallel pass)
-- Handoff: `.claude/handoff.md` only (no in-session rotation)
+- Forward work: update `BACKLOG.md`; do not create `.claude/handoff*.md` forward task lists
 
 Note Crispy unavailability in your output so the user can decide whether to relaunch in Cursor.

@@ -147,11 +147,12 @@ Canonical plan is `firmware-v3/docs/research/synergy-topology/Topology_Reconcili
 
 Original execution branch `feature/synergy-topology-phase-0-1` was folded into later work via merge `effa781d`. Current resume branch: `feature/synergy-topology-resume-2026-05-05`; keep new resume work isolated unless Captain redirects.
 
-### Phase 0 — Baseline Guardrails — PARTIAL / LEDGER RECONCILIATION REQUIRED
+### [DONE] ~~Phase 0 — Baseline Guardrails~~
 - Phase 0A kill-list lint shipped — commit b2cc2824
+- Move 0.1 Product Signature Filter-as-code accepted from the Phase 0A kill-list lint — commit b2cc2824
 - Move 0.2 centre-origin / brand-voice violation triage shipped — commit d4348f08
 - Move 0.2 follow-up recovery after sandbox-to-integration loss shipped — commit 6b1a222f
-- **Gate before new Phase >=1 firmware work:** Captain must accept the existing Phase 0A + Move 0.2 commits as satisfying `Topology_Reconciliation.md` §5 Move 0.1 Product Signature Filter-as-code and Move 0.2 centre-origin audit pass, or authorise a small Phase 0 close-out patch first. This prevents repeating the F12 failure mode documented in the resume brief.
+- **Gate resolved 2026-05-05:** Captain accepted the existing Phase 0A + Move 0.2 commits as satisfying `Topology_Reconciliation.md` §5 Move 0.1 Product Signature Filter-as-code and Move 0.2 centre-origin audit pass for this resume branch.
 
 ### Phase 1 — Infrastructure substrates — PARTIAL (5 landed, 2 owed)
 - Move 1.1 PersistenceHelpers — commit 6907404c
@@ -182,8 +183,8 @@ Original execution branch `feature/synergy-topology-phase-0-1` was folded into l
 - Move 4.4 F6 First-Light Ignition (cinematic boot effect) — commit 4d12edc5 (Captain hardware visual confirmed in commit body)
 - Move 4.3: not yet planned
 
-### Next Synergy-Topology re-entry recommendation — PENDING CAPTAIN RATIFICATION
-- First, resolve the Phase 0 ledger gate above.
+### Next Synergy-Topology re-entry recommendation — CAPTAIN RATIFIED 2026-05-05
+- Phase 0 ledger gate is resolved above.
 - Then close Phase 1 properly with Move 1.5 ControlBus render-side reuse refactor and Move 1.7 PerceptualJND constants.
 - Do not start Move 3.2 before LGP fringe-visibility data exists.
 - Do not finalise Phase 5 visual sign-off until C-1/C-2/C-5 calibration debt is resolved; C-3 also gates sign-off corpus composition.

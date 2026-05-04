@@ -40,11 +40,14 @@ What exactly does the operator look for, anchored to (clip, timestamp, measurabl
 - **Priority:** MEDIUM.
 - **Revisit trigger:** After C-2 lands; pre-flight to any sign-off harness build.
 
-### C-7 — K1 LGP perceptual JND floor (HIGH)
+### C-7 — K1 LGP perceptual JND floor (HIGH — MEASURED-DEGRADED 2026-05-05)
 What is the minimum perceptible brightness/contrast change through K1's actual LGP at customer viewing distance and normal viewing conditions?
 - **Blocks:** Phase 1 Move 1.7 PerceptualJND constants; INF-02 FramebufferLPF minimum cutoff bounds; PER-X minimum tau bounds; any claim that subtle motion/flicker thresholds are calibrated rather than inherited from ES/SB intuition.
-- **Priority:** HIGH.
-- **Revisit trigger:** Hardware measurement campaign using K1 + LGP at customer viewing distance, ideally with photometer data plus viewer pass/fail observations; record measured floor, viewing distance, ambient conditions, firmware build/env, palette/colour stimulus, refresh rate, and accepted constants.
+- **Measurement:** Captain observed the fixed `test_brightness_floor` harness on K1 hardware after flashing `test_brightness_floor` to MAC `b4:3a:45:a5:87:f8` over `/dev/cu.usbmodem2101`; LEDs were only visible from test level 4 onward in both Phase 1 and Phase 2. Test level 4 is `8.0%` perceptual in `firmware-v3/test/test_brightness_floor/main.cpp`.
+- **Accepted degraded constant:** use `8.0% perceptual` as the current minimum visible LGP brightness floor for Move 1.7 bounds until photometer data supersedes it.
+- **Remaining debt:** viewing distance, ambient conditions, observer count, and photometer readings were not captured; this is good enough to unblock placeholder-free constants, not good enough for final production photometry claims.
+- **Priority:** MEDIUM follow-up debt after Move 1.7; production photometry still owed, but placeholder-free constants are now unblocked.
+- **Revisit trigger:** Photometer-backed K1 + LGP measurement campaign at customer viewing distance, or Captain reports a different visible threshold under normal customer ambient conditions.
 
 ### F-1 — Contract authority (HIGH — DECIDED 2026-05-01)
 Is the YAML at `docs/protocol/k1-{rest,ws}-contract.yaml` source-of-truth, or has it drifted past usability? Audit found ~50 REST routes + ~40 WS commands in firmware are absent from the contract; 5 WS commands in YAML have firmware handlers commented out (`WsFilesystemCommands.cpp:21-25`).
@@ -160,14 +163,14 @@ Original execution branch `feature/synergy-topology-phase-0-1` was folded into l
 - Move 0.2 follow-up recovery after sandbox-to-integration loss shipped — commit 6b1a222f
 - **Gate resolved 2026-05-05:** Captain accepted the existing Phase 0A + Move 0.2 commits as satisfying `Topology_Reconciliation.md` §5 Move 0.1 Product Signature Filter-as-code and Move 0.2 centre-origin audit pass for this resume branch.
 
-### Phase 1 — Infrastructure substrates — PARTIAL (6 landed, 1 blocked)
+### Phase 1 — Infrastructure substrates — DONE-DEGRADED (7 landed)
 - Move 1.1 PersistenceHelpers — commit 6907404c
 - Move 1.2 EffectRoleFlags substrate — commit 7a077701
 - Move 1.3 FramebufferLPF — commit 00628fe7
 - Move 1.4 LayerStack composer — commit d2a7499f
 - Move 1.6 sinLUT256 + CFLSubstepGate — commit b62cc5d7
 - Move 1.5 ControlBus render-side reuse refactor — shipped in resume-branch Phase Move commit; expands generic AudioEffectMapping sources using existing ControlBusFrame fields only
-- Move 1.7 E-05 PerceptualJND calibration constants — BLOCKED on C-7; do not land placeholder constants. Requires empirical brightness/contrast JND floor under K1 hardware + LGP at customer viewing distance, then bake measured bounds into INF-02 cutoff limits and PER-X tau limits.
+- Move 1.7 E-05 PerceptualJND calibration constants — shipped in resume branch; `8.0% perceptual` floor captured in `effects/PerceptualJND.h`, INF-02 lower cutoff bound named, isolated native test added; photometer-grade calibration remains C-7 follow-up debt.
 
 ### [DONE] ~~Phase 1B — AFS v2 instrumentation + ControlBus contract lock~~
 - Phase 1B instrumentation — commit 19007888
@@ -191,7 +194,7 @@ Original execution branch `feature/synergy-topology-phase-0-1` was folded into l
 
 ### Next Synergy-Topology re-entry recommendation — CAPTAIN RATIFIED 2026-05-05
 - Phase 0 ledger gate is resolved above.
-- Move 1.5 is closed on this resume branch; keep Move 1.7 blocked until C-7 is measured.
+- Move 1.5 and Move 1.7 are closed on this resume branch; C-7 remains as photometer-grade follow-up debt, not a Phase 1 blocker.
 - Do not start Move 3.2 before LGP fringe-visibility data exists.
 - Do not finalise Phase 5 visual sign-off until C-1/C-2/C-5 calibration debt is resolved; C-3 also gates sign-off corpus composition.
 
